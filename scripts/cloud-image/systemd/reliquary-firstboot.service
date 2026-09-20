@@ -1,0 +1,17 @@
+[Unit]
+Description=Reliquary first-boot initialization (runs once)
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+Before=reliquary.service
+ConditionPathExists=/usr/local/sbin/reliquary-firstboot.sh
+ConditionPathExists=!/opt/Reliquary/.firstboot.done
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/reliquary-firstboot.sh
+RemainAfterExit=no
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target
