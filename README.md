@@ -1,17 +1,17 @@
-# reliquary
+# Reliquary
 
 基于 [Tencent WeKnora v0.8.0](https://github.com/Tencent/WeKnora/releases/tag/v0.8.0) 的首版源码底座。
-本仓库将项目与程序内部名称统一为 reliquary，保留上游功能、许可和第三方服务。
+本仓库的项目名称为 Reliquary，程序内部标识遵循各语言的大小写规范，保留上游功能、许可和第三方服务。
 
-- 仓库：http://192.168.1.146:3000/dikui/reliquary
+- 仓库：http://192.168.1.146:3000/dikui/Reliquary
 - 上游提交：`1edcd54b43606d9079bb36650efe3f68707a79ea`
 - 来源、命名范围与保留项：[UPSTREAM.md](UPSTREAM.md)
 
 ## 从源码启动
 
 ```bash
-git clone http://192.168.1.146:3000/dikui/reliquary.git
-cd reliquary
+git clone http://192.168.1.146:3000/dikui/Reliquary.git
+cd Reliquary
 cp .env.example .env
 # 按 .env 中的说明配置模型服务、数据库密码等参数。
 ./scripts/build_frontend_dist.sh
@@ -212,7 +212,7 @@ See [`cli/README.md`](./cli/README.md) for install + 5-minute quickstart and
 ### 📦 Installation & Launch
 
 ```bash
-git clone http://192.168.1.146:3000/dikui/reliquary.git
+git clone http://192.168.1.146:3000/dikui/Reliquary.git
 cd Reliquary
 cp .env.example .env   # Edit .env as needed, see comments in the file
 docker compose pull     # Pull the latest images
