@@ -663,7 +663,18 @@ func (s *knowledgeService) GetKnowledgeFile(ctx context.Context, id string) (io.
 		return nil, "", err
 	}
 
-	// Manual knowledge stores content in Metadata — stream it directly as a .md file.
+	// Intake originals are stored independently of the uploaded binary and DB row.
+	if intake, intakeErr := knowledge.IntakeMetadata(); intakeErr != nil {
+		return nil, "", intakeErr
+	} else if intake != nil {
+		if intake.OriginalPath == "" {
+			return nil, "", fmt.Errorf("original is not available")
+		}
+		kb, _ := s.kbService.GetKnowledgeBaseByID(ctx, knowledge.KnowledgeBaseID)
+		file, getErr := s.resolveFileServiceForPath(ctx, kb, intake.OriginalPath).GetFile(ctx, intake.OriginalPath)
+		return file, sanitizeManualDownloadFilename(knowledge.Title), getErr
+	}
+	// Legacy manual records still keep their body in metadata.
 	if knowledge.IsManual() {
 		meta, err := knowledge.ManualMetadata()
 		if err != nil {

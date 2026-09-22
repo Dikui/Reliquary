@@ -57,9 +57,13 @@ func (k *sweepFakeKS) GetRepository() interfaces.KnowledgeRepository { return k.
 
 func (k *sweepFakeKS) CreateKnowledgeFromURL(
 	_ context.Context, _ string, _ string, _ string, _ string, _ *bool,
-	_ string, _ []string, _ string, _ *types.KnowledgeProcessOverrides,
+	_ string, _ []string, _ string, _ *types.KnowledgeProcessOverrides, _ ...types.SourceInfo,
 ) (*types.Knowledge, error) {
 	return k.createURLKnowledge, nil
+}
+
+func (k *sweepFakeKS) ReviewKnowledgeIntake(context.Context, string, string, types.SourceInfo) (*types.Knowledge, error) {
+	return nil, nil
 }
 
 func (k *sweepFakeKS) DeleteKnowledge(ctx context.Context, id string) error {

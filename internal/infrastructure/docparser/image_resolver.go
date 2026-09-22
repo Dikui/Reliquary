@@ -84,20 +84,20 @@ func (r *ImageResolver) ResolveAndStore(
 	tenantID uint64,
 ) (updatedMarkdown string, images []StoredImage, err error) {
 	markdown := UnwrapLinkedImages(result.MarkdownContent)
-	md2, imgDataURIs, _ := r.ResolveDataURIImages(ctx, markdown, fileSvc, tenantID)
+	md2, imgDataURIs, resolveErr := r.ResolveDataURIImages(ctx, markdown, fileSvc, tenantID)
 	markdown = md2
 	images = append(images, imgDataURIs...)
 
-	md3, imgHTML, _ := r.ResolveHTMLDataURIImages(ctx, markdown, fileSvc, tenantID)
+	md3, imgHTML, htmlErr := r.ResolveHTMLDataURIImages(ctx, markdown, fileSvc, tenantID)
 	markdown = md3
 	images = append(images, imgHTML...)
 
-	md4, imgBare, _ := r.ResolveBareBase64Content(ctx, markdown, fileSvc, tenantID)
+	md4, imgBare, bareErr := r.ResolveBareBase64Content(ctx, markdown, fileSvc, tenantID)
 	markdown = md4
 	images = append(images, imgBare...)
 
 	if len(result.ImageRefs) == 0 {
-		return markdown, images, nil
+		return markdown, images, errors.Join(resolveErr, htmlErr, bareErr)
 	}
 
 	// Build a map of original_ref -> image ref for fast lookup
@@ -125,8 +125,9 @@ func (r *ImageResolver) ResolveAndStore(
 		}
 
 		// Find inline image bytes from the result
-		stored, ok := r.saveReferencedImage(ctx, fileSvc, tenantID, refPath, refMap, savedRefs)
-		if !ok {
+		stored, saveErr := r.saveReferencedImage(ctx, fileSvc, tenantID, refPath, refMap, savedRefs)
+		if saveErr != nil {
+			resolveErr = errors.Join(resolveErr, saveErr)
 			continue
 		}
 		images = appendStoredImage(images, stored)
@@ -137,11 +138,11 @@ func (r *ImageResolver) ResolveAndStore(
 		markdown = markdown[:absolutePathStart] + stored.ServingURL + markdown[absolutePathEnd:]
 	}
 
-	md5, imgRelativeHTML, _ := r.ResolveRelativeHTMLImages(ctx, markdown, fileSvc, tenantID, refMap, savedRefs)
+	md5, imgRelativeHTML, relativeErr := r.ResolveRelativeHTMLImages(ctx, markdown, fileSvc, tenantID, refMap, savedRefs)
 	markdown = md5
 	images = append(images, imgRelativeHTML...)
 
-	return markdown, images, nil
+	return markdown, images, errors.Join(resolveErr, htmlErr, bareErr, relativeErr)
 }
 
 func appendStoredImage(images []StoredImage, stored StoredImage) []StoredImage {
@@ -160,18 +161,14 @@ func (r *ImageResolver) saveReferencedImage(
 	refPath string,
 	refMap map[string]types.ImageRef,
 	savedRefs map[string]StoredImage,
-) (StoredImage, bool) {
+) (StoredImage, error) {
 	if stored, ok := savedRefs[refPath]; ok {
-		return stored, true
+		return stored, nil
 	}
 
 	ref, found := refMap[refPath]
 	if !found || len(ref.ImageData) == 0 {
-		return StoredImage{}, false
-	}
-
-	if !ref.IsOriginal && isIconImage(ref.ImageData) {
-		return StoredImage{}, false
+		return StoredImage{}, fmt.Errorf("image %q has no extracted bytes", refPath)
 	}
 
 	// Reuse a previously saved upload when the same source image (identified by
@@ -186,7 +183,7 @@ func (r *ImageResolver) saveReferencedImage(
 				MimeType:    cached.MimeType,
 			}
 			savedRefs[refPath] = stored
-			return stored, true
+			return stored, nil
 		}
 	}
 
@@ -201,8 +198,7 @@ func (r *ImageResolver) saveReferencedImage(
 	fileName := uuid.New().String() + ext
 	servingURL, saveErr := fileSvc.SaveBytes(ctx, ref.ImageData, tenantID, fileName, false)
 	if saveErr != nil {
-		log.Printf("WARN: failed to save image %s: %v", refPath, saveErr)
-		return StoredImage{}, false
+		return StoredImage{}, fmt.Errorf("save image %q: %w", refPath, saveErr)
 	}
 
 	stored := StoredImage{
@@ -214,7 +210,7 @@ func (r *ImageResolver) saveReferencedImage(
 	if ref.Filename != "" {
 		savedRefs["__filename__:"+ref.Filename] = stored
 	}
-	return stored, true
+	return stored, nil
 }
 
 func extFromMime(mime string) string {
@@ -236,14 +232,10 @@ func extFromMime(mime string) string {
 	}
 }
 
-// isProviderScheme checks if the path uses a provider:// scheme (local://, minio://, cos://, tos://).
+// isProviderScheme recognizes managed resource handles and storage paths.
 func isProviderScheme(p string) bool {
-	for _, prefix := range []string{"local://", "minio://", "cos://", "tos://", "s3://", "obs://"} {
-		if strings.HasPrefix(p, prefix) {
-			return true
-		}
-	}
-	return false
+	_, resource := types.ParseResourcePath(p)
+	return resource || types.ParseProviderScheme(p) != ""
 }
 
 // isWhitelistedImageHost checks if the image URL's host is in the whitelist.
@@ -363,6 +355,7 @@ func (r *ImageResolver) ResolveHTMLDataURIImages(
 	processed := 0
 	for i := len(matches) - 1; i >= 0; i-- {
 		if processed >= maxRemoteImages {
+			err = errors.Join(err, fmt.Errorf("HTML data URI image limit of %d reached", maxRemoteImages))
 			break
 		}
 		m := matches[i]
@@ -377,14 +370,11 @@ func (r *ImageResolver) ResolveHTMLDataURIImages(
 		}
 		data, decErr := decodeBase64Flexible(payload)
 		if decErr != nil {
-			log.Printf("WARN: HTML img data URI base64 decode failed: %v", decErr)
+			err = errors.Join(err, fmt.Errorf("decode HTML data URI image: %w", decErr))
 			continue
 		}
 		if len(data) > maxRemoteImageSize {
-			continue
-		}
-		if isIconImage(data) {
-			markdown = markdown[:m[0]] + markdown[m[1]:]
+			err = errors.Join(err, fmt.Errorf("HTML data URI image exceeds %d bytes", maxRemoteImageSize))
 			continue
 		}
 		ext := extFromMime(mimeType)
@@ -394,7 +384,7 @@ func (r *ImageResolver) ResolveHTMLDataURIImages(
 		fileName := uuid.New().String() + ext
 		servingURL, saveErr := fileSvc.SaveBytes(ctx, data, tenantID, fileName, false)
 		if saveErr != nil {
-			log.Printf("WARN: failed to save HTML img data URI image: %v", saveErr)
+			err = errors.Join(err, fmt.Errorf("save HTML data URI image: %w", saveErr))
 			continue
 		}
 		images = append(images, StoredImage{
@@ -405,7 +395,7 @@ func (r *ImageResolver) ResolveHTMLDataURIImages(
 		markdown = markdown[:m[0]] + fmt.Sprintf("![image](%s)", servingURL) + markdown[m[1]:]
 		processed++
 	}
-	return markdown, images, nil
+	return markdown, images, err
 }
 
 // ResolveRelativeHTMLImages finds HTML <img> tags whose src points at a
@@ -432,15 +422,16 @@ func (r *ImageResolver) ResolveRelativeHTMLImages(
 			continue
 		}
 
-		stored, ok := r.saveReferencedImage(ctx, fileSvc, tenantID, src, refMap, savedRefs)
-		if !ok {
+		stored, saveErr := r.saveReferencedImage(ctx, fileSvc, tenantID, src, refMap, savedRefs)
+		if saveErr != nil {
+			err = errors.Join(err, saveErr)
 			continue
 		}
 		images = appendStoredImage(images, stored)
 		markdown = markdown[:m[4]] + stored.ServingURL + markdown[m[5]:]
 	}
 
-	return markdown, images, nil
+	return markdown, images, err
 }
 
 // ---------------------------------------------------------------------------
@@ -466,15 +457,15 @@ func (r *ImageResolver) ResolveBareBase64Content(
 	fileSvc interfaces.FileService,
 	tenantID uint64,
 ) (updatedMarkdown string, images []StoredImage, err error) {
-	md, imgs1 := r.resolveBareDataURIs(ctx, markdown, fileSvc, tenantID)
+	md, imgs1, dataErr := r.resolveBareDataURIs(ctx, markdown, fileSvc, tenantID)
 	markdown = md
 	images = append(images, imgs1...)
 
-	md2, imgs2 := r.resolveBareBase64Prefix(ctx, markdown, fileSvc, tenantID)
+	md2, imgs2, base64Err := r.resolveBareBase64Prefix(ctx, markdown, fileSvc, tenantID)
 	markdown = md2
 	images = append(images, imgs2...)
 
-	return markdown, images, nil
+	return markdown, images, errors.Join(dataErr, base64Err)
 }
 
 func (r *ImageResolver) resolveBareDataURIs(
@@ -482,16 +473,18 @@ func (r *ImageResolver) resolveBareDataURIs(
 	markdown string,
 	fileSvc interfaces.FileService,
 	tenantID uint64,
-) (string, []StoredImage) {
+) (string, []StoredImage, error) {
 	matches := bareDataURIPattern.FindAllStringSubmatchIndex(markdown, -1)
 	if len(matches) == 0 {
-		return markdown, nil
+		return markdown, nil, nil
 	}
 
 	var images []StoredImage
+	var err error
 	processed := 0
 	for i := len(matches) - 1; i >= 0; i-- {
 		if processed >= maxRemoteImages {
+			err = errors.Join(err, fmt.Errorf("bare data URI image limit of %d reached", maxRemoteImages))
 			break
 		}
 		m := matches[i]
@@ -516,14 +509,11 @@ func (r *ImageResolver) resolveBareDataURIs(
 		}
 		data, decErr := decodeBase64Flexible(payload)
 		if decErr != nil {
-			log.Printf("WARN: bare data URI base64 decode failed: %v", decErr)
+			err = errors.Join(err, fmt.Errorf("decode bare data URI image: %w", decErr))
 			continue
 		}
 		if len(data) > maxRemoteImageSize {
-			continue
-		}
-		if isIconImage(data) {
-			markdown = markdown[:m[0]] + markdown[m[1]:]
+			err = errors.Join(err, fmt.Errorf("bare data URI image exceeds %d bytes", maxRemoteImageSize))
 			continue
 		}
 		ext := extFromMime(mimeType)
@@ -533,7 +523,7 @@ func (r *ImageResolver) resolveBareDataURIs(
 		fileName := uuid.New().String() + ext
 		servingURL, saveErr := fileSvc.SaveBytes(ctx, data, tenantID, fileName, false)
 		if saveErr != nil {
-			log.Printf("WARN: failed to save bare data URI image: %v", saveErr)
+			err = errors.Join(err, fmt.Errorf("save bare data URI image: %w", saveErr))
 			continue
 		}
 		images = append(images, StoredImage{
@@ -549,7 +539,7 @@ func (r *ImageResolver) resolveBareDataURIs(
 		}
 		processed++
 	}
-	return markdown, images
+	return markdown, images, err
 }
 
 func (r *ImageResolver) resolveBareBase64Prefix(
@@ -557,16 +547,18 @@ func (r *ImageResolver) resolveBareBase64Prefix(
 	markdown string,
 	fileSvc interfaces.FileService,
 	tenantID uint64,
-) (string, []StoredImage) {
+) (string, []StoredImage, error) {
 	matches := bareBase64CommaPrefixed.FindAllStringSubmatchIndex(markdown, -1)
 	if len(matches) == 0 {
-		return markdown, nil
+		return markdown, nil, nil
 	}
 
 	var images []StoredImage
+	var err error
 	processed := 0
 	for i := len(matches) - 1; i >= 0; i-- {
 		if processed >= maxRemoteImages {
+			err = errors.Join(err, fmt.Errorf("bare base64 image limit of %d reached", maxRemoteImages))
 			break
 		}
 		m := matches[i]
@@ -581,17 +573,15 @@ func (r *ImageResolver) resolveBareBase64Prefix(
 		}
 		data, decErr := decodeBase64Flexible(payload)
 		if decErr != nil {
+			err = errors.Join(err, fmt.Errorf("decode bare base64 image: %w", decErr))
 			continue
 		}
 		if len(data) > maxRemoteImageSize {
+			err = errors.Join(err, fmt.Errorf("bare base64 image exceeds %d bytes", maxRemoteImageSize))
 			continue
 		}
 		mimeType := sniffImageMime(data)
 		if mimeType == "" {
-			continue
-		}
-		if isIconImage(data) {
-			markdown = markdown[:m[0]] + markdown[m[1]:]
 			continue
 		}
 		ext := extFromMime(mimeType)
@@ -601,7 +591,7 @@ func (r *ImageResolver) resolveBareBase64Prefix(
 		fileName := uuid.New().String() + ext
 		servingURL, saveErr := fileSvc.SaveBytes(ctx, data, tenantID, fileName, false)
 		if saveErr != nil {
-			log.Printf("WARN: failed to save bare base64 image: %v", saveErr)
+			err = errors.Join(err, fmt.Errorf("save bare base64 image: %w", saveErr))
 			continue
 		}
 		images = append(images, StoredImage{
@@ -612,7 +602,7 @@ func (r *ImageResolver) resolveBareBase64Prefix(
 		markdown = markdown[:m[0]] + fmt.Sprintf("![image](%s)", servingURL) + markdown[m[1]:]
 		processed++
 	}
-	return markdown, images
+	return markdown, images, err
 }
 
 // ---------------------------------------------------------------------------
@@ -698,6 +688,7 @@ func (r *ImageResolver) ResolveDataURIImages(
 	processed := 0
 	for i := len(matches) - 1; i >= 0; i-- {
 		if processed >= maxRemoteImages {
+			err = errors.Join(err, fmt.Errorf("data URI image limit of %d reached", maxRemoteImages))
 			break
 		}
 		m := matches[i]
@@ -715,15 +706,11 @@ func (r *ImageResolver) ResolveDataURIImages(
 		}
 		data, decErr := decodeBase64Flexible(payload)
 		if decErr != nil {
-			log.Printf("WARN: data URI base64 decode failed: %v", decErr)
+			err = errors.Join(err, fmt.Errorf("decode data URI image: %w", decErr))
 			continue
 		}
 		if len(data) > maxRemoteImageSize {
-			log.Printf("WARN: data URI image exceeds size limit (%d bytes)", maxRemoteImageSize)
-			continue
-		}
-		if isIconImage(data) {
-			markdown = markdown[:m[0]] + markdown[m[1]:]
+			err = errors.Join(err, fmt.Errorf("data URI image exceeds %d bytes", maxRemoteImageSize))
 			continue
 		}
 		ext := extFromMime(mimeType)
@@ -733,7 +720,7 @@ func (r *ImageResolver) ResolveDataURIImages(
 		fileName := uuid.New().String() + ext
 		servingURL, saveErr := fileSvc.SaveBytes(ctx, data, tenantID, fileName, false)
 		if saveErr != nil {
-			log.Printf("WARN: failed to save data URI image: %v", saveErr)
+			err = errors.Join(err, fmt.Errorf("save data URI image: %w", saveErr))
 			continue
 		}
 		images = append(images, StoredImage{
@@ -744,13 +731,8 @@ func (r *ImageResolver) ResolveDataURIImages(
 		markdown = markdown[:m[4]] + servingURL + markdown[m[5]:]
 		processed++
 	}
-	return markdown, images, nil
+	return markdown, images, err
 }
-
-// errRemoteImageIsIcon marks the one skip reason worth aggregating: a page can
-// carry hundreds of tracking pixels and spacer GIFs, and a line for each would
-// drown the reasons an operator actually needs to see.
-var errRemoteImageIsIcon = errors.New("filtered out as icon")
 
 // remoteImageResult describes one image that was fetched successfully.
 type remoteImageResult struct {
@@ -790,10 +772,6 @@ func fetchAndStoreRemoteImage(
 	data, mimeType, err := downloadImage(ctx, client, imgURL)
 	if err != nil {
 		return nil, fmt.Errorf("download: %w", err)
-	}
-
-	if isIconImage(data) {
-		return nil, errRemoteImageIsIcon
 	}
 
 	if whitelisted {
@@ -838,14 +816,10 @@ type remotePassSpec struct {
 // that a partially resolved document can be explained afterwards.
 type remotePassStats struct {
 	resolved   int
-	iconSkips  int
 	overBudget int
 }
 
 func (s *remotePassStats) report(syntax string) {
-	if s.iconSkips > 0 {
-		log.Printf("INFO: skipped %d %s remote image(s) as icons", s.iconSkips, syntax)
-	}
 	if s.overBudget > 0 {
 		log.Printf(
 			"WARN: remote image limit of %d reached for %s images; %d reference(s) left unresolved",
@@ -866,15 +840,16 @@ func resolveRemoteImagePass(
 	client func() *http.Client,
 	fileSvc interfaces.FileService,
 	tenantID uint64,
-) (string, []StoredImage) {
+) (string, []StoredImage, error) {
 	matches := spec.Pattern.FindAllStringSubmatchIndex(markdown, -1)
 	if len(matches) == 0 {
-		return markdown, nil
+		return markdown, nil, nil
 	}
 
 	var (
 		images []StoredImage
 		stats  remotePassStats
+		err    error
 	)
 
 	for i := len(matches) - 1; i >= 0; i-- {
@@ -889,22 +864,19 @@ func resolveRemoteImagePass(
 		}
 
 		if ctx.Err() != nil {
-			log.Printf("WARN: remote image resolution cancelled: %v", ctx.Err())
+			err = errors.Join(err, fmt.Errorf("resolve %s remote images: %w", spec.Syntax, ctx.Err()))
 			break
 		}
 
 		if stats.resolved >= maxRemoteImages {
 			stats.overBudget++
+			err = errors.Join(err, fmt.Errorf("remote image limit of %d reached", maxRemoteImages))
 			continue
 		}
 
-		res, err := fetchAndStoreRemoteImage(ctx, client(), fileSvc, tenantID, imgURL)
-		if err != nil {
-			if errors.Is(err, errRemoteImageIsIcon) {
-				stats.iconSkips++
-			} else {
-				log.Printf("WARN: skipped %s remote image %s: %v", spec.Syntax, imgURL, err)
-			}
+		res, fetchErr := fetchAndStoreRemoteImage(ctx, client(), fileSvc, tenantID, imgURL)
+		if fetchErr != nil {
+			err = errors.Join(err, fmt.Errorf("resolve %s image %q: %w", spec.Syntax, imgURL, fetchErr))
 			continue
 		}
 		stats.resolved++
@@ -929,7 +901,7 @@ func resolveRemoteImagePass(
 	}
 
 	stats.report(spec.Syntax)
-	return markdown, images
+	return markdown, images, err
 }
 
 // htmlAttrSrc normalizes an HTML src attribute value into the URL to request.
@@ -982,7 +954,7 @@ func (r *ImageResolver) ResolveRemoteImages(
 
 	// Two scans, each with its own budget. Sharing one would let HTML images eat
 	// into the number of Markdown images a document already gets resolved today.
-	markdown, mdImages := resolveRemoteImagePass(ctx, markdown, remotePassSpec{
+	markdown, mdImages, markdownErr := resolveRemoteImagePass(ctx, markdown, remotePassSpec{
 		Pattern: imgMarkdownPattern,
 		// Group 2 of imgMarkdownPattern is the target; group 1 is the alt text.
 		URLGroup: 2,
@@ -990,7 +962,7 @@ func (r *ImageResolver) ResolveRemoteImages(
 		SrcOf:    markdownSrc,
 	}, client, fileSvc, tenantID)
 
-	markdown, htmlImages := resolveRemoteImagePass(ctx, markdown, remotePassSpec{
+	markdown, htmlImages, htmlErr := resolveRemoteImagePass(ctx, markdown, remotePassSpec{
 		Pattern:  imgHTMLSrc,
 		URLGroup: searchutil.HTMLImageSrcURLGroup,
 		Syntax:   "html",
@@ -999,7 +971,38 @@ func (r *ImageResolver) ResolveRemoteImages(
 
 	images = append(images, mdImages...)
 	images = append(images, htmlImages...)
-	return markdown, images, nil
+	return markdown, images, errors.Join(markdownErr, htmlErr)
+}
+
+// HasUnstoredImages reports content image references that still point outside
+// managed storage after resolution. It lets intake callers reject incomplete
+// content while legacy callers can retain their configured original URLs.
+func HasUnstoredImages(markdown string) bool {
+	for _, match := range scanMarkdownImageTargets(markdown) {
+		target := strings.TrimSpace(markdown[match.TargetStart:match.TargetEnd])
+		if strings.HasPrefix(target, "<") {
+			if end := strings.IndexByte(target, '>'); end > 0 {
+				target = target[1:end]
+			}
+		}
+		if target != "" && !isProviderScheme(target) && !strings.HasPrefix(target, "/files/") {
+			return true
+		}
+	}
+	for _, spec := range []remotePassSpec{
+		{Pattern: imgMarkdownPattern, URLGroup: 2, SrcOf: markdownSrc},
+		{Pattern: imgHTMLSrc, URLGroup: searchutil.HTMLImageSrcURLGroup, SrcOf: htmlAttrSrc},
+	} {
+		for _, m := range spec.Pattern.FindAllStringSubmatchIndex(markdown, -1) {
+			if start := m[2*spec.URLGroup]; start >= 0 {
+				target := spec.SrcOf(markdown[start:m[2*spec.URLGroup+1]])
+				if !isProviderScheme(target) && !strings.HasPrefix(target, "/files/") {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // downloadImage fetches an image from remoteURL using the provided SSRF-safe

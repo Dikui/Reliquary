@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -63,5 +64,31 @@ func TestPreviewKnowledgeFileForcesActiveContentDownload(t *testing.T) {
 	}
 	if got := w.Header().Get("Content-Disposition"); !strings.HasPrefix(got, "attachment") {
 		t.Fatalf("Content-Disposition = %q, want attachment", got)
+	}
+}
+
+func TestPreviewRangeCleansOnlyTemporaryCopy(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TMPDIR", tempDir)
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(middleware.ErrorHandler(), func(c *gin.Context) {
+		c.Set(types.TenantIDContextKey.String(), uint64(42))
+		c.Next()
+	})
+	h := &KnowledgeHandler{kgService: &previewKnowledgeServiceStub{filename: "original.md"}}
+	router.GET("/knowledge/:id/preview", h.PreviewKnowledgeFile)
+	for range 2 {
+		req := httptest.NewRequest(http.MethodGet, "/knowledge/k1/preview", nil)
+		req.Header.Set("Range", "bytes=0-5")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusPartialContent || w.Body.String() != "<html>" {
+			t.Fatalf("original must remain readable after preview cleanup: status=%d body=%q", w.Code, w.Body.String())
+		}
+		files, err := os.ReadDir(tempDir)
+		if err != nil || len(files) != 0 {
+			t.Fatalf("temporary preview was retained: files=%v err=%v", files, err)
+		}
 	}
 }

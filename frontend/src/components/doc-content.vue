@@ -25,6 +25,7 @@ import DocumentPreview from '@/components/document-preview.vue';
 import KnowledgeProcessingTimeline from '@/components/knowledge-processing-timeline.vue';
 import { resolveKnowledgeDownloadFileName } from '@/views/knowledge/knowledgeDownloadFileName';
 import { isKnownPreviewableExt, resolveFilePreviewExt } from '@/utils/filePreview';
+import { getApiBaseUrl } from '@/utils/api-base';
 
 const { t } = useI18n();
 const authStore = useAuthStore();
@@ -241,8 +242,74 @@ mermaid.initialize({
     topPadding: 50
   }
 });
-const props = defineProps(["visible", "details", "knowledgeType", "sourceInfo", "canEditKB", "canDownloadKB", "parse_status", "kbId"]);
-const emit = defineEmits(["closeDoc", "getDoc", "questionDeleted", "summaryStateChange"]);
+const props = defineProps(["visible", "details", "knowledgeType", "sourceInfo", "canEditKB", "canDownloadKB", "canReviewIntake", "parse_status", "kbId"]);
+const emit = defineEmits(["closeDoc", "getDoc", "questionDeleted", "summaryStateChange", "intakeReview"]);
+const intakeOriginal = ref('');
+const intakeOriginalOffset = ref(0);
+const intakeOriginalLoading = ref(false);
+const intakeOriginalDone = ref(false);
+const intakeOriginalError = ref('');
+let intakePreviewController: AbortController | null = null;
+let intakePreviewDecoder = new TextDecoder();
+const intake = computed(() => props.details?.metadata?.intake || {});
+const hasIntake = computed(() => Boolean(intake.value?.source));
+const intakeSourceInfo = computed(() => intake.value?.source_info || {});
+const isIntakeRejected = computed(() => props.details?.parse_status === 'rejected' && intake.value?.decision === 'rejected');
+const intakeOriginalURL = computed(() => {
+  const url = intakeSourceInfo.value?.original_url;
+  return typeof url === 'string' && /^https?:\/\//i.test(url) && isValidURL(url) ? url : '';
+});
+const intakeSourceDraft = ref({ author: '', original_url: '', published_at: '' });
+watch(intakeSourceInfo, (value) => { intakeSourceDraft.value = { ...value }; }, { immediate: true, deep: true });
+const resetIntakePreview = () => {
+  intakePreviewController?.abort();
+  intakePreviewController = null;
+  intakePreviewDecoder = new TextDecoder();
+  intakeOriginal.value = '';
+  intakeOriginalOffset.value = 0;
+  intakeOriginalDone.value = false;
+  intakeOriginalError.value = '';
+  intakeOriginalLoading.value = false;
+};
+const loadIntakeOriginal = async () => {
+  if (!props.details?.id || intakeOriginalLoading.value || intakeOriginalDone.value) return;
+  const id = props.details.id;
+  const controller = new AbortController();
+  intakePreviewController?.abort();
+  intakePreviewController = controller;
+  intakeOriginalLoading.value = true;
+  intakeOriginalError.value = '';
+  try {
+    const start = intakeOriginalOffset.value;
+    const response = await fetch(`${getApiBaseUrl()}/api/v1/knowledge/${props.details.id}/preview`, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('reliquary_token') || ''}`,
+        Range: `bytes=${start}-${start + 65535}`,
+        ...(localStorage.getItem('reliquary_selected_tenant_id') ? { 'X-Tenant-ID': localStorage.getItem('reliquary_selected_tenant_id')! } : {}),
+      },
+      signal: controller.signal,
+    });
+    if (response.status === 416) { intakeOriginalDone.value = true; return; }
+    if (!response.ok) throw new Error('preview failed');
+    const bytes = await response.arrayBuffer();
+    if (controller.signal.aborted || props.details?.id !== id) return;
+    intakeOriginal.value += intakePreviewDecoder.decode(bytes, { stream: true });
+    intakeOriginalOffset.value += bytes.byteLength;
+    const range = response.headers.get('Content-Range')?.match(/^bytes\s+\d+-(\d+)\/(\d+|\*)$/i);
+    const done = response.status === 200 || bytes.byteLength === 0 || (range?.[2] !== '*' && Number(range?.[1]) + 1 >= Number(range?.[2]));
+    if (done) {
+      intakeOriginal.value += intakePreviewDecoder.decode();
+      intakeOriginalDone.value = true;
+    }
+    await nextTick();
+    await runMarkdownPostRenderPipeline();
+  } catch (error: any) {
+    if (!controller.signal.aborted && props.details?.id === id) intakeOriginalError.value = error?.message || t('knowledgeBase.chunkLoadFailed');
+  } finally {
+    if (intakePreviewController === controller) intakeOriginalLoading.value = false;
+  }
+};
+watch(() => props.details?.id, resetIntakePreview);
 
 const applySummaryState = (summaryStatus?: string, description?: string) => {
   if (typeof summaryStatus === 'string' && summaryStatus) {
@@ -650,6 +717,7 @@ watch(() => props.details?.chunkLoading, (val) => {
   }
 });
 onUnmounted(() => {
+  resetIntakePreview();
   stopSummaryStatusPolling();
   window.removeEventListener('resize', onTraceDrawerWindowResize);
   cleanupTraceDrawerResize();
@@ -834,6 +902,7 @@ watch(() => viewMode.value, (mode) => {
 watch(() => props.visible, (visible) => {
   if (!visible) {
     cancelSummaryEdit();
+    resetIntakePreview();
   } else if (viewMode.value === 'chunks' || viewMode.value === 'merged') {
     runMarkdownPostRenderPipeline();
   }
@@ -941,6 +1010,7 @@ const processMarkdown = (markdownText) => {
   return result;
 };
 const handleClose = () => {
+  resetIntakePreview();
   emit("closeDoc", false);
   const scrollEl = document.querySelector('.doc-main-drawer .t-drawer__body') as HTMLElement | null;
   if (scrollEl) scrollEl.scrollTop = 0;
@@ -1669,6 +1739,24 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
               </span>
             </div>
           </div>
+        </section>
+
+        <section v-if="hasIntake" class="setting-drawer__section intake-review-panel">
+          <h4 class="setting-drawer__section-title">{{ isIntakeRejected ? $t('knowledgeBase.intakeWaiting') : $t('knowledgeBase.intakePreviewOriginal') }}</h4>
+          <p v-if="intake.reason">{{ intake.reason }}</p>
+          <p v-if="intakeSourceInfo.author">{{ $t('knowledgeBase.intakeAuthor') }}: {{ intakeSourceInfo.author }}</p>
+          <a v-if="intakeOriginalURL" :href="intakeOriginalURL" target="_blank" rel="noopener">{{ intakeOriginalURL }}</a>
+          <p v-if="intakeSourceInfo.published_at">{{ $t('knowledgeBase.intakePublishedAt') }}: {{ intakeSourceInfo.published_at }}</p>
+          <t-button v-if="intake.original_path" size="small" :loading="intakeOriginalLoading" :disabled="intakeOriginalDone" @click="loadIntakeOriginal">{{ intakeOriginal ? (intakeOriginalDone ? $t('knowledgeBase.intakePreviewOriginal') : $t('knowledgeBase.intakeLoadMore')) : $t('knowledgeBase.intakePreviewOriginal') }}</t-button>
+          <p v-if="intakeOriginalError" class="field-hint field-hint--error">{{ intakeOriginalError }}</p>
+          <div v-if="intakeOriginal" class="md-content" v-html="processMarkdown(intakeOriginal)" />
+          <template v-if="isIntakeRejected && canReviewIntake">
+            <t-input v-model="intakeSourceDraft.author" :placeholder="$t('knowledgeBase.intakeAuthor')" />
+            <t-input v-model="intakeSourceDraft.original_url" :placeholder="$t('knowledgeBase.intakeOriginalUrl')" />
+            <t-input v-model="intakeSourceDraft.published_at" :placeholder="$t('knowledgeBase.intakePublishedAt')" />
+            <t-button theme="primary" @click="emit('intakeReview', { action: 'retry', sourceInfo: intakeSourceDraft })">{{ $t('knowledgeBase.intakeRetry') }}</t-button>
+            <t-button theme="danger" variant="outline" @click="emit('intakeReview', { action: 'discard' })">{{ $t('knowledgeBase.intakeDiscard') }}</t-button>
+          </template>
         </section>
 
         <section v-if="details.id" class="setting-drawer__section metadata-section">

@@ -76,6 +76,11 @@ func authorizeKnowledgeInSearchTargets(
 		}
 		return nil, fmt.Errorf("document %s not found: %w", knowledgeID, err)
 	}
+	intake, err := knowledge.IntakeMetadata()
+	if err != nil || knowledge.ParseStatus == types.ParseStatusRejected ||
+		(intake != nil && intake.Decision != "approved") {
+		return nil, fmt.Errorf("document %s has not passed intake review", knowledgeID)
+	}
 	if !searchTargets.ContainsKB(knowledge.KnowledgeBaseID) {
 		return nil, fmt.Errorf("knowledge base %s is not within the current Agent scope", knowledge.KnowledgeBaseID)
 	}

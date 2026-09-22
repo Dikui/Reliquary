@@ -126,6 +126,11 @@ func (s *knowledgeService) DeleteKnowledge(ctx context.Context, id string) error
 		return err
 	}
 
+	if intake, _ := knowledge.IntakeMetadata(); intake != nil && intake.Decision == "rejected" {
+		_, err := s.ReviewKnowledgeIntake(ctx, id, "discard", types.SourceInfo{})
+		return err
+	}
+
 	// Mark as deleting first to prevent async task conflicts
 	// This ensures that any running async tasks will detect the deletion and abort
 	originalStatus := knowledge.ParseStatus
@@ -253,6 +258,14 @@ func (s *knowledgeService) DeleteKnowledge(ctx context.Context, id string) error
 		if err := kbFileSvc.DeleteFile(ctx, knowledge.FilePath); err != nil {
 			logger.GetLogger(ctx).WithField("error", err).Errorf("DeleteKnowledge delete file failed")
 		}
+	}
+	if intake, _ := knowledge.IntakeMetadata(); intake != nil {
+		if intake.OriginalPath != "" && intake.OriginalPath != knowledge.FilePath {
+			if err := kbFileSvc.DeleteFile(ctx, intake.OriginalPath); err != nil {
+				logger.GetLogger(ctx).WithField("error", err).Errorf("DeleteKnowledge delete intake original failed")
+			}
+		}
+		imageURLs = append(imageURLs, intake.Images...)
 	}
 	deleteExtractedImages(ctx, kbFileSvc, knowledgeResourceOwners(s.resourceCatalog, knowledge.ID), imageURLs)
 	tenantInfo := ctx.Value(types.TenantInfoContextKey).(*types.Tenant)
@@ -561,6 +574,26 @@ func (s *knowledgeService) DeleteKnowledgeList(ctx context.Context, ids []string
 	if err != nil {
 		return err
 	}
+	// Rejected intake rows retain their source specifically for the KB creator's
+	// decision. The async worker restores the submitting user in its context,
+	// so enforce the same boundary here rather than trusting enqueue callers.
+	userID, _ := types.UserIDFromContext(ctx)
+	for _, knowledge := range knowledgeList {
+		intake, intakeErr := knowledge.IntakeMetadata()
+		if intakeErr != nil {
+			return intakeErr
+		}
+		if intake == nil || intake.Decision != "rejected" {
+			continue
+		}
+		kb, kbErr := s.kbService.GetKnowledgeBaseByID(ctx, knowledge.KnowledgeBaseID)
+		if kbErr != nil {
+			return kbErr
+		}
+		if userID == "" || userID != kb.CreatorID {
+			return errors.New("only the knowledge base creator can delete rejected intake")
+		}
+	}
 
 	// Mark all as deleting first to prevent async task conflicts.
 	// Remember which entries still had queued / in-flight downstream tasks
@@ -605,17 +638,20 @@ func (s *knowledgeService) DeleteKnowledgeList(ctx context.Context, ids []string
 		logger.Errorf(ctx, "Failed to collect image URLs for batch cleanup: %v", err)
 	}
 	knowledgeToKB := make(map[string]string)
+	kbImageURLs := make(map[string][]string) // kbID → []imageURL
 	for _, k := range knowledgeList {
 		knowledgeToKB[k.ID] = k.KnowledgeBaseID
+		if intake, _ := k.IntakeMetadata(); intake != nil {
+			kbImageURLs[k.KnowledgeBaseID] = append(kbImageURLs[k.KnowledgeBaseID], intake.Images...)
+		}
 	}
 	kbImageInfos := make(map[string][]string) // kbID → []imageInfo JSON
 	for _, ci := range chunkImageInfos {
 		kbID := knowledgeToKB[ci.KnowledgeID]
 		kbImageInfos[kbID] = append(kbImageInfos[kbID], ci.ImageInfo)
 	}
-	kbImageURLs := make(map[string][]string) // kbID → []imageURL (deduplicated)
 	for kbID, infos := range kbImageInfos {
-		kbImageURLs[kbID] = collectImageURLs(ctx, infos)
+		kbImageURLs[kbID] = append(kbImageURLs[kbID], collectImageURLs(ctx, infos)...)
 	}
 	kbKnowledgeIDs := make(map[string][]string) // kbID → knowledge IDs releasing their claims
 	for _, k := range knowledgeList {
@@ -718,6 +754,11 @@ func (s *knowledgeService) DeleteKnowledgeList(ctx context.Context, ids []string
 			fSvc := kbFileServices[knowledge.KnowledgeBaseID]
 			if err := fSvc.DeleteFile(ctx, knowledge.FilePath); err != nil {
 				logger.GetLogger(ctx).WithField("error", err).Errorf("DeleteKnowledge delete file failed")
+			}
+		}
+		if intake, _ := knowledge.IntakeMetadata(); intake != nil && intake.OriginalPath != "" && intake.OriginalPath != knowledge.FilePath {
+			if err := kbFileServices[knowledge.KnowledgeBaseID].DeleteFile(ctx, intake.OriginalPath); err != nil {
+				logger.GetLogger(ctx).WithField("error", err).Errorf("DeleteKnowledge delete intake original failed")
 			}
 		}
 		storageAdjust -= knowledge.StorageSize

@@ -67,6 +67,9 @@ const (
 	// queued downstream tasks, but the knowledge row and any already-written
 	// chunks/index are kept so the user can re-trigger parsing via reparse.
 	ParseStatusCancelled = "cancelled"
+	// ParseStatusRejected is an intake decision: source content is retained for
+	// owner review but it is never a formal knowledge document.
+	ParseStatusRejected = "rejected"
 )
 
 // Summary status constants for async summary generation
@@ -263,6 +266,63 @@ type ManualKnowledgeMetadata struct {
 	UpdatedAt string `json:"updated_at"`
 }
 
+// SourceInfo is supplied or extracted source evidence. Values remain strings so
+// a publisher's original date precision is never invented by this service.
+type SourceInfo struct {
+	Author      string `json:"author,omitempty"`
+	OriginalURL string `json:"original_url,omitempty"`
+	PublishedAt string `json:"published_at,omitempty"`
+}
+
+// KnowledgeIntakeMetadata records the single-message intake decision. Original
+// bodies stay in object storage; this only contains the audit/display fields.
+type KnowledgeIntakeMetadata struct {
+	Source       string     `json:"source"`
+	OriginalPath string     `json:"original_path,omitempty"`
+	Images       []string   `json:"images,omitempty"`
+	Reason       string     `json:"reason,omitempty"`
+	Decision     string     `json:"decision"`
+	SourceInfo   SourceInfo `json:"source_info,omitempty"`
+}
+
+func (k *Knowledge) IntakeMetadata() (*KnowledgeIntakeMetadata, error) {
+	if k == nil || len(k.Metadata) == 0 {
+		return nil, nil
+	}
+	var raw struct {
+		Intake *KnowledgeIntakeMetadata `json:"intake"`
+	}
+	if err := json.Unmarshal(k.Metadata, &raw); err != nil {
+		return nil, err
+	}
+	return raw.Intake, nil
+}
+
+func (k *Knowledge) SetIntakeMetadata(intake *KnowledgeIntakeMetadata) error {
+	var raw map[string]json.RawMessage
+	if len(k.Metadata) > 0 && json.Unmarshal(k.Metadata, &raw) != nil {
+		return fmt.Errorf("invalid knowledge metadata")
+	}
+	if raw == nil {
+		raw = make(map[string]json.RawMessage)
+	}
+	if intake == nil {
+		delete(raw, "intake")
+	} else {
+		value, err := json.Marshal(intake)
+		if err != nil {
+			return err
+		}
+		raw["intake"] = value
+	}
+	value, err := json.Marshal(raw)
+	if err != nil {
+		return err
+	}
+	k.Metadata = JSON(value)
+	return nil
+}
+
 // ManualKnowledgePayload represents the payload for manual knowledge operations.
 type ManualKnowledgePayload struct {
 	Title         string                     `json:"title"`
@@ -271,6 +331,7 @@ type ManualKnowledgePayload struct {
 	TagIDs        []string                   `json:"tag_ids"`
 	Channel       string                     `json:"channel"`
 	ProcessConfig *KnowledgeProcessOverrides `json:"process_config,omitempty"`
+	SourceInfo    SourceInfo                 `json:"source_info,omitempty"`
 }
 
 // KnowledgeSearchScope defines a (tenant_id, knowledge_base_id) scope for knowledge search (e.g. own KBs + shared KBs).
@@ -345,7 +406,25 @@ func (k *Knowledge) SetManualMetadata(meta *ManualKnowledgeMetadata) error {
 	if err != nil {
 		return err
 	}
-	k.Metadata = jsonValue
+	var raw map[string]json.RawMessage
+	if len(k.Metadata) > 0 {
+		_ = json.Unmarshal(k.Metadata, &raw)
+	}
+	if raw == nil {
+		raw = make(map[string]json.RawMessage)
+	}
+	var manual map[string]json.RawMessage
+	if err := json.Unmarshal(jsonValue, &manual); err != nil {
+		return err
+	}
+	for key, value := range manual {
+		raw[key] = value
+	}
+	value, err := json.Marshal(raw)
+	if err != nil {
+		return err
+	}
+	k.Metadata = JSON(value)
 	return nil
 }
 

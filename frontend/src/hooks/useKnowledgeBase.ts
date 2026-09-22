@@ -34,6 +34,7 @@ export default function (knowledgeBaseId?: string) {
     summary_status: "",
     parse_status: "",
     error_message: "",
+	metadata: {} as Record<string, any>,
 	custom_metadata: {} as Record<string, unknown>,
     chunkLoading: false,
     chunkLoadError: "",
@@ -197,6 +198,7 @@ export default function (knowledgeBaseId?: string) {
       summary_status: "",
       parse_status: "",
       error_message: "",
+	  metadata: {},
 	  custom_metadata: {},
       chunkLoadError: "",
       tags: item?.tags ? [...item.tags] : [],
@@ -217,6 +219,7 @@ export default function (knowledgeBaseId?: string) {
             summary_status: data.summary_status || '',
             parse_status: data.parse_status || '',
             error_message: data.error_message || '',
+			metadata: data.metadata || {},
 			custom_metadata: data.custom_metadata || {},
             tags: data.tags?.length ? data.tags : (item?.tags || []),
           });

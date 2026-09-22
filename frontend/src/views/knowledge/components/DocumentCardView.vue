@@ -525,6 +525,9 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
           <t-tag size="small" theme="warning" variant="light-outline">{{ $t('knowledgeBase.draft') }}</t-tag>
           <span class="card-draft-tip">{{ $t('knowledgeBase.draftTip') }}</span>
         </div>
+        <div v-else-if="item.parse_status === 'rejected'" class="card-draft">
+          <t-tag size="small" theme="warning" variant="light-outline">{{ $t('knowledgeBase.intakeWaiting') }}</t-tag>
+        </div>
         <div
           v-else-if="item.parse_status === 'completed' && (item.summary_status === 'pending' || item.summary_status === 'processing')"
           class="card-analyze"

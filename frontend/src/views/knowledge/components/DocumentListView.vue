@@ -157,6 +157,9 @@ const computeStatus = (item: KnowledgeItem): StatusInfo => {
   if (item.parse_status === 'draft') {
     return { label: t('knowledgeBase.statusDraft'), theme: 'warning' };
   }
+  if (item.parse_status === 'rejected') {
+    return { label: t('knowledgeBase.intakeWaiting'), theme: 'warning' };
+  }
   // Legacy completed+summary_pending path: kept as a defensive fallback
   // for rows that bypassed finalizing (no enrichment configured, or
   // upgraded mid-flight from a pre-finalizing build).

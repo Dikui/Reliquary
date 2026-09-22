@@ -63,7 +63,7 @@ func (r *AnydocReader) Read(ctx context.Context, req *types.ReadRequest) (*types
 			req.FileName, converted.AssetsError)
 	}
 
-	return &types.ReadResult{
+	result := &types.ReadResult{
 		MarkdownContent: converted.Markdown,
 		ImageRefs:       imageRefsFromAssets(converted.Assets),
 		Metadata: map[string]string{
@@ -71,7 +71,11 @@ func (r *AnydocReader) Read(ctx context.Context, req *types.ReadRequest) (*types
 			"anydoc_version": anydoc.Version(),
 			"source_format":  format,
 		},
-	}, nil
+	}
+	if converted.AssetsError != nil {
+		result.Error = fmt.Sprintf("anydoc image extraction failed: %v", converted.AssetsError)
+	}
+	return result, nil
 }
 
 func pdfMarkdownIsEmpty(converted *anydoc.Result, err error) bool {

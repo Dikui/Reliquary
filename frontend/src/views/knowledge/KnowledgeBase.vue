@@ -39,6 +39,7 @@ import {
   moveKnowledgeToFolder,
   renameKnowledgeFolder,
   downKnowledgeDetails,
+  reviewKnowledge,
   type KnowledgeFolderTree,
 } from "@/api/knowledge-base/index";
 import { knowledgeSpansPayloadHasTrace } from '@/utils/knowledgeTrace';
@@ -75,6 +76,7 @@ import {
 import { useI18n } from 'vue-i18n';
 import { useMarqueeSelect } from '@/hooks/useMarqueeSelect';
 import type { ParserEngineInfo } from '@/api/system';
+import { getUploadFileKey } from './utils/uploadSources';
 const route = useRoute();
 const { t } = useI18n();
 const kbId = computed(() => (route.params as any).kbId as string || '');
@@ -584,6 +586,7 @@ const parseStatusOptions = computed(() => [
   { label: t('knowledgeBase.parseStatusCancelled'), value: 'cancelled' },
   { label: t('knowledgeBase.parseStatusFinalizing'), value: 'finalizing' },
   { label: t('knowledgeBase.parseStatusDraft'), value: 'draft' },
+  { label: t('knowledgeBase.intakeWaiting'), value: 'rejected' },
 ]);
 const selectedSource = ref('');
 // Source filter combines ingestion channels and the "manual"/"url" virtual
@@ -1650,6 +1653,7 @@ const executeUploadBatch = async (
     tagIds?: string[];
     /** Destination folder confirmed in the upload dialog; '' is the root. */
     targetFolder?: string;
+    sourceInfoByItem?: Record<string, { author?: string; original_url?: string; published_at?: string }>;
   } = {},
 ) => {
   const targetKbId = kbId.value;
@@ -1672,6 +1676,7 @@ const executeUploadBatch = async (
         tag_ids?: string[]
         fileName?: string
         process_config?: KnowledgeProcessOverrides
+        source_info?: { author?: string; original_url?: string; published_at?: string }
       } = { file, tag_ids: tagIdsToUpload };
 
       const fileName = getFolderUploadFileName(file, options.targetFolder || ROOT_FOLDER_PATH);
@@ -1679,6 +1684,8 @@ const executeUploadBatch = async (
       if (options.processConfig) {
         uploadData.process_config = options.processConfig;
       }
+      const sourceInfo = options.sourceInfoByItem?.[`file:${getUploadFileKey(file)}`]
+      if (sourceInfo && Object.values(sourceInfo).some(Boolean)) uploadData.source_info = sourceInfo
 
       const responseData: any = await uploadKnowledgeFile(targetKbId, uploadData);
       const isSuccess = responseData?.success || responseData?.code === 200 || responseData?.status === 'success' || (!responseData?.error && responseData);
@@ -1725,6 +1732,7 @@ const executeUrlImport = async (
   url: string,
   processConfig?: KnowledgeProcessOverrides,
   tagIds?: string[],
+  sourceInfo?: { author?: string; original_url?: string; published_at?: string },
 ) => {
   const targetKbId = kbId.value;
   if (!targetKbId) {
@@ -1738,6 +1746,7 @@ const executeUrlImport = async (
       url,
       tag_ids: tagIdsToUpload,
       process_config: processConfig,
+      source_info: sourceInfo,
     });
     window.dispatchEvent(new CustomEvent('knowledgeFileUploaded', {
       detail: { kbId: targetKbId },
@@ -1785,11 +1794,12 @@ const handleUploadConfirmResult = async (result: UploadConfirmResult) => {
       processConfig,
       tagIds,
       targetFolder: result.targetFolder || ROOT_FOLDER_PATH,
+      sourceInfoByItem: result.sourceInfoByItem,
     });
   }
 
   for (const url of urls) {
-    await executeUrlImport(url, processConfig, tagIds);
+    await executeUrlImport(url, processConfig, tagIds, result.sourceInfoByItem?.[`url:${url}`]);
   }
 };
 
@@ -2092,6 +2102,19 @@ const openKnowledgeItem = (item: KnowledgeCard) => {
   }
   openCardDetails(item);
 };
+
+const handleIntakeReview = async (payload: { action: 'retry' | 'discard'; sourceInfo?: { author?: string; original_url?: string; published_at?: string } }) => {
+  if (!details.id || !isOwner.value) return
+  try {
+    await reviewKnowledge(details.id, { action: payload.action, source_info: payload.sourceInfo })
+    MessagePlugin.success(t('knowledgeBase.intakeReviewSubmitted'))
+    details.parse_status = payload.action === 'retry' ? 'pending' : ''
+    resetPage()
+    await loadKnowledgeFiles(kbId.value)
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || t('knowledgeBase.intakeReviewFailed'))
+  }
+}
 
 const confirmBatchDelete = async () => {
   if (batchDeleting.value || batchReparsing.value || selectedIds.value.size === 0) return;
@@ -2606,7 +2629,7 @@ async function createNewSession(value: string): Promise<void> {
                     </div>
                   </div>
                 </div>
-                <template v-else-if="(cardList.length || currentChildFolders.length) && viewMode === 'grid'">
+                <template v-else-if="(cardList.length || currentChildFolders.length) && viewMode === 'grid' && selectedParseStatus !== 'rejected'">
                   <DocumentCardView
                     :items="cardList"
                     :folders="currentChildFolders" :folder-options="folderOptions"
@@ -2637,7 +2660,7 @@ async function createNewSession(value: string): Promise<void> {
                     @update:move-mode="(mode: any) => moveMode = mode"
                   />
                 </template>
-                <template v-else-if="(cardList.length || currentChildFolders.length) && viewMode === 'list'">
+                <template v-else-if="(cardList.length || currentChildFolders.length) && (viewMode === 'list' || selectedParseStatus === 'rejected')">
                   <DocumentListView :items="cardList" :folders="currentChildFolders" :folder-options="folderOptions"
                     :selected-ids="selectedIds" :tag-list="tagList"
                     :can-edit="canEdit" :can-download="canDownloadKnowledge" :can-mutate-knowledge="canMutateKnowledge"
@@ -2686,9 +2709,9 @@ async function createNewSession(value: string): Promise<void> {
       </template>
 
       <!-- DocContent drawer (shared by documents tab and wiki source refs) -->
-      <DocContent ref="docContentRef" :visible="isCardDetails" :details="details" :canEditKB="canEdit"
+      <DocContent ref="docContentRef" :visible="isCardDetails" :details="details" :canEditKB="canEdit" :can-review-intake="isOwner"
         :canDownloadKB="canDownloadKnowledge" :kbId="kbId"
-        @closeDoc="closeDoc" @getDoc="getDoc" @summaryStateChange="syncDocumentSummaryState">
+        @closeDoc="closeDoc" @getDoc="getDoc" @summaryStateChange="syncDocumentSummaryState" @intake-review="handleIntakeReview">
       </DocContent>
     </div>
   </template>

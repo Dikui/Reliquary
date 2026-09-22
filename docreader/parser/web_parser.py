@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
+from lxml import html as lxml_html
 from lxml.etree import XPath
 from playwright.async_api import Page, async_playwright
 from trafilatura import extract, utils, xpaths
@@ -94,6 +95,50 @@ def build_visible_text_fallback(visible_text: str, page_title: str = "") -> Opti
     if title and not text.startswith(title):
         return f"# {title}\n\n{text}"
     return text
+
+
+def extract_page_metadata(html: str, markdown: str, source_url: str, page_title: str) -> dict:
+    """Return only source-supplied web metadata; never fill unknown values."""
+    metadata = {}
+    fields = {
+        "title": ("title", "og:title", "twitter:title"),
+        "author": ("author", "article:author"),
+        "published_at": ("article:published_time", "date", "datePublished", "publishdate"),
+        "original_url": ("og:url", "twitter:url"),
+    }
+    values = {}
+    try:
+        tree = lxml_html.fromstring(html)
+        for meta in tree.xpath("//meta[@content]"):
+            name = (meta.get("property") or meta.get("name") or "").strip().lower()
+            value = (meta.get("content") or "").strip()
+            if name and value:
+                values.setdefault(name, value)
+        canonical = tree.xpath("string(//link[translate(@rel, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')='canonical']/@href)").strip()
+        if canonical:
+            values.setdefault("canonical", canonical)
+    except (ValueError, TypeError):
+        pass
+
+    for key, names in fields.items():
+        for name in names:
+            if value := values.get(name.lower()):
+                metadata[key] = value
+                break
+    if "original_url" not in metadata:
+        metadata["original_url"] = values.get("canonical") or source_url
+
+    for key, names in {"title": ("title",), "author": ("author",), "published_at": ("date", "published", "date_published"), "original_url": ("url",)}.items():
+        if key in metadata:
+            continue
+        for name in names:
+            match = re.search(rf"^{name}:\s*(.+)$", markdown, re.MULTILINE | re.IGNORECASE)
+            if match and match.group(1).strip():
+                metadata[key] = match.group(1).strip()
+                break
+    if "title" not in metadata and page_title.strip():
+        metadata["title"] = page_title.strip()
+    return metadata
 
 
 async def wait_for_rendered_content(page: Page) -> None:
@@ -285,25 +330,9 @@ class StdWebParser(BaseParser):
             logger.error("Failed to parse web page: %s", url)
             raise WebParseError(f"Failed to parse web page: {url}")
 
-        metadata = {}
-        title_match = re.search(r"^title:\s*(.+)", md_text, re.MULTILINE)
-        if title_match:
-            extracted_title = title_match.group(1).strip()
-            if extracted_title:
-                metadata["title"] = extracted_title
-                logger.info(
-                    f"Extracted article title from trafilatura: {extracted_title}"
-                )
-        elif scrape_result.page_title:
-            metadata["title"] = scrape_result.page_title.strip()
-            logger.info(
-                "Using page title from Playwright: %s", metadata["title"]
-            )
-        else:
-            logger.info(
-                "No title found in trafilatura output, first 200 chars: %r",
-                md_text[:200],
-            )
+        metadata = extract_page_metadata(
+            scrape_result.html, md_text, url, scrape_result.page_title
+        )
         return Document(content=md_text, metadata=metadata)
 
 

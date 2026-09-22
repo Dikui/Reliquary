@@ -93,8 +93,8 @@ func TestResolveRemoteImages_SSRFBlocked(t *testing.T) {
 	fSvc := &mockFileService{}
 
 	updated, images, err := resolver.ResolveRemoteImages(context.Background(), markdown, fSvc, 1)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "blocked by SSRF policy") {
+		t.Fatalf("expected SSRF failure, got %v", err)
 	}
 
 	// Both images should be left unchanged (SSRF blocked).
@@ -123,8 +123,8 @@ func TestResolveRemoteImages_NonImageContentType(t *testing.T) {
 	fSvc := &mockFileService{}
 
 	updated, images, err := resolver.ResolveRemoteImages(context.Background(), markdown, fSvc, 1)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "non-image content type") {
+		t.Fatalf("expected content-type failure, got %v", err)
 	}
 
 	if len(images) != 0 {
@@ -225,8 +225,8 @@ func TestResolveRemoteImages_Server404(t *testing.T) {
 	fSvc := &mockFileService{}
 
 	updated, images, err := resolver.ResolveRemoteImages(context.Background(), markdown, fSvc, 1)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "unexpected status 404") {
+		t.Fatalf("expected 404 failure, got %v", err)
 	}
 
 	if len(images) != 0 {

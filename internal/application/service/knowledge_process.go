@@ -2421,6 +2421,10 @@ func (s *knowledgeService) ReparseKnowledge(
 		return nil, err
 	}
 
+	if intake, _ := existing.IntakeMetadata(); intake != nil && (intake.Decision == "rejected" || intake.Decision == "error") {
+		return nil, werrors.NewBadRequestError("use the intake review action for this message")
+	}
+
 	// Allocate a fresh span tree attempt up front. Doing this BEFORE
 	// the cleanup + enqueue means: (a) the UI immediately sees a new
 	// attempt with all five stages back to "pending" instead of the
@@ -2483,6 +2487,19 @@ func (s *knowledgeService) ReparseKnowledge(
 		if metaErr != nil || meta == nil {
 			logger.Errorf(ctx, "Failed to get manual metadata for reparse: %v", metaErr)
 			return nil, werrors.NewBadRequestError("无法获取手工知识内容")
+		}
+
+		if intake, _ := existing.IntakeMetadata(); intake != nil {
+			file, _, err := s.GetKnowledgeFile(ctx, existing.ID)
+			if err != nil {
+				return nil, err
+			}
+			body, err := io.ReadAll(file)
+			file.Close()
+			if err != nil {
+				return nil, err
+			}
+			meta.Content = string(body)
 		}
 
 		resetKnowledgeForReparse(existing, kb)
@@ -3107,6 +3124,17 @@ func (s *knowledgeService) ProcessManualUpdate(ctx context.Context, t *asynq.Tas
 		return nil
 	}
 
+	if intake, _ := knowledge.IntakeMetadata(); intake != nil {
+		if intake.Decision == "rejected" || intake.Decision == "error" {
+			return nil
+		}
+		defer func() {
+			if knowledge.ParseStatus == types.ParseStatusFailed {
+				s.failIntake(ctx, knowledge)
+			}
+		}()
+	}
+
 	// Skip if already completed or being deleted
 	if knowledge.ParseStatus == types.ParseStatusCompleted {
 		logger.Infof(ctx, "ProcessManualUpdate: already completed, skipping: %s", payload.KnowledgeID)
@@ -3176,7 +3204,7 @@ func (s *knowledgeService) ProcessManualUpdate(ctx context.Context, t *asynq.Tas
 }
 
 // ProcessDocument handles Asynq document processing tasks
-func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) error {
+func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) (returnErr error) {
 	var payload types.DocumentProcessPayload
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
 		logger.Errorf(ctx, "failed to unmarshal document process task payload: %v", err)
@@ -3214,6 +3242,17 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) e
 
 	if knowledge == nil {
 		return nil
+	}
+
+	if intake, _ := knowledge.IntakeMetadata(); intake != nil {
+		if intake.Decision == "rejected" || intake.Decision == "error" {
+			return nil
+		}
+		defer func() {
+			if returnErr != nil || knowledge.ParseStatus == types.ParseStatusFailed {
+				s.failIntake(ctx, knowledge)
+			}
+		}()
 	}
 
 	// 检查是否正在删除 / 已被用户取消 - 如果是则直接退出
@@ -3384,6 +3423,11 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) e
 			return fmt.Errorf("failed to save downloaded file: %w", err)
 		}
 
+		knowledge.FilePath = filePath
+		if err := s.repo.UpdateKnowledge(ctx, knowledge); err != nil {
+			_ = fileSvc.DeleteFile(ctx, filePath)
+			return err
+		}
 		payload.FilePath = filePath
 		payload.FileName = resolvedFileName
 		payload.FileType = resolvedFileType
@@ -3509,8 +3553,14 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) e
 		fileSvc := s.resolveFileService(ctx, kb)
 		tenantID, _ := ctx.Value(types.TenantIDContextKey).(uint64)
 		updatedMarkdown, images, resolveErr := s.imageResolver.ResolveAndStore(ctx, convertResult, fileSvc, tenantID)
+		if err := s.recordIntakeImages(ctx, knowledge, images); err != nil {
+			return err
+		}
 		if resolveErr != nil {
 			logger.Warnf(ctx, "Image resolution partially failed: %v", resolveErr)
+			if intake, _ := knowledge.IntakeMetadata(); intake != nil {
+				return fmt.Errorf("resolve intake images: %w", resolveErr)
+			}
 		}
 		if updatedMarkdown != "" {
 			convertResult.MarkdownContent = updatedMarkdown
@@ -3520,13 +3570,24 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) e
 		// Resolve remote http(s) images (e.g. markdown external URLs) → download + upload to storage.
 		// ResolveAndStore handles inline bytes and base64; ResolveRemoteImages handles http/https URLs.
 		updatedContent, remoteImages, remoteErr := s.imageResolver.ResolveRemoteImages(ctx, convertResult.MarkdownContent, fileSvc, tenantID)
+		if err := s.recordIntakeImages(ctx, knowledge, remoteImages); err != nil {
+			return err
+		}
 		if remoteErr != nil {
 			logger.Warnf(ctx, "Remote image resolution partially failed: %v", remoteErr)
+			if intake, _ := knowledge.IntakeMetadata(); intake != nil {
+				return fmt.Errorf("resolve intake images: %w", remoteErr)
+			}
+		}
+		if updatedContent != "" {
+			convertResult.MarkdownContent = updatedContent
 		}
 		if len(remoteImages) > 0 {
 			logger.Infof(ctx, "Resolved %d remote images for knowledge %s", len(remoteImages), knowledge.ID)
-			convertResult.MarkdownContent = updatedContent
 			storedImages = append(storedImages, remoteImages...)
+		}
+		if intake, _ := knowledge.IntakeMetadata(); intake != nil && docparser.HasUnstoredImages(convertResult.MarkdownContent) {
+			return fmt.Errorf("intake has unstored content images")
 		}
 
 		logger.Infof(ctx, "Resolved %d total images for knowledge %s", len(storedImages), knowledge.ID)
@@ -3537,6 +3598,14 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) e
 	// chunk boundaries as well.
 	sanitizeReadResult(convertResult)
 	convertResult.MarkdownContent = chunker.NormalizeLineEndings(convertResult.MarkdownContent)
+	if intake, _ := knowledge.IntakeMetadata(); intake != nil {
+		if docparser.HasUnstoredImages(convertResult.MarkdownContent) {
+			return fmt.Errorf("intake has unstored content images")
+		}
+		if err := s.saveIntakeOriginal(ctx, kb, knowledge, convertResult.MarkdownContent, convertResult.Metadata); err != nil {
+			return err
+		}
+	}
 	chunkCfg := buildSplitterConfigFromChunking(eff.ChunkingConfig)
 
 	processOpts := ProcessChunksOptions{
@@ -3587,6 +3656,15 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) e
 	}
 
 	// Step 4: Process chunks (vectorize + index + enqueue async tasks)
+	if intake, _ := knowledge.IntakeMetadata(); intake != nil {
+		rejected, reviewErr := s.reviewIntake(ctx, kb, knowledge, convertResult.MarkdownContent)
+		if reviewErr != nil {
+			return reviewErr
+		}
+		if rejected {
+			return nil
+		}
+	}
 	s.processChunks(ctx, kb, knowledge, chunks, processOpts)
 
 	return nil

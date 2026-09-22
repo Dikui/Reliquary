@@ -39,6 +39,7 @@ type KnowledgeService interface {
 		tagIDs []string,
 		channel string,
 		processOverrides *types.KnowledgeProcessOverrides,
+		sourceInfo ...types.SourceInfo,
 	) (*types.Knowledge, error)
 	// CreateKnowledgeFromPassage creates knowledge from text passages.
 	// channel identifies the ingestion channel; empty defaults to "web".
@@ -105,6 +106,7 @@ type KnowledgeService interface {
 	DeleteKnowledgeList(ctx context.Context, ids []string) error
 	// GetKnowledgeFile retrieves the file associated with the knowledge.
 	GetKnowledgeFile(ctx context.Context, id string) (io.ReadCloser, string, error)
+	ReviewKnowledgeIntake(ctx context.Context, id, action string, sourceInfo types.SourceInfo) (*types.Knowledge, error)
 	// UpdateKnowledge updates knowledge information.
 	UpdateKnowledge(ctx context.Context, knowledge *types.Knowledge) error
 	// RegenerateKnowledgeSummary refreshes the document description and summary retrieval chunk.

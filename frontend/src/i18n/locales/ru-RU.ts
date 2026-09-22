@@ -4390,7 +4390,7 @@ export default {
     },
     success: {
       draftSaved: 'Черновик сохранён',
-      published: 'Знание опубликовано и начата индексация'
+      published: 'Сообщение отправлено и ожидает проверки'
     },
     warning: {
       selectKnowledgeBase: 'Пожалуйста, выберите целевую базу знаний',
@@ -6311,6 +6311,16 @@ export default {
     cancelParseFailed: 'Не удалось остановить, попробуйте позже',
     draft: 'Черновик',
     draftTip: 'Временно сохранён, не участвует в поиске',
+    intakeWaiting: 'Ожидает проверки',
+    intakeAuthor: 'Автор',
+    intakeOriginalUrl: 'Исходный URL',
+    intakePublishedAt: 'Дата публикации',
+    intakePreviewOriginal: 'Просмотреть оригинал',
+    intakeLoadMore: 'Загрузить ещё',
+    intakeRetry: 'Повторить проверку',
+    intakeDiscard: 'Удалить',
+    intakeReviewSubmitted: 'Проверка отправлена',
+    intakeReviewFailed: 'Не удалось выполнить проверку',
     untitledDocument: 'Документ без названия',
     deleteDocument: 'Удалить документ',
     moveDocument: 'Переместить в...',

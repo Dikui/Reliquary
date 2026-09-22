@@ -4392,7 +4392,7 @@ export default {
     },
     success: {
       draftSaved: '草稿已保存',
-      published: '知识已发布并开始索引'
+      published: '消息已提交，正在审核'
     },
     warning: {
       selectKnowledgeBase: '请选择目标知识库',
@@ -6313,6 +6313,16 @@ export default {
     cancelParseFailed: '停止失败，请稍后再试',
     draft: '草稿',
     draftTip: '暂存内容，未参与检索',
+    intakeWaiting: '待审核',
+    intakeAuthor: '作者',
+    intakeOriginalUrl: '原始链接',
+    intakePublishedAt: '发布时间',
+    intakePreviewOriginal: '预览原文',
+    intakeLoadMore: '加载更多',
+    intakeRetry: '重新审核',
+    intakeDiscard: '确认不收录',
+    intakeReviewSubmitted: '已提交审核',
+    intakeReviewFailed: '审核操作失败',
     untitledDocument: '未命名文档',
     deleteDocument: '删除文档',
     moveDocument: '移动到...',

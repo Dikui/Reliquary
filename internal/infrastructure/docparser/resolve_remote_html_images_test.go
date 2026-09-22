@@ -2,6 +2,7 @@ package docparser
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -346,8 +347,8 @@ func TestResolveRemoteImages_CancelledContextStops(t *testing.T) {
 	cancel()
 
 	_, images, err := NewImageResolver().ResolveRemoteImages(ctx, b.String(), &mockFileService{}, 42)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected cancellation, got %v", err)
 	}
 	if len(images) != 0 {
 		t.Errorf("expected no images after cancellation, got %d", len(images))

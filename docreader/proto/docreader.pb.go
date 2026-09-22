@@ -714,7 +714,7 @@ const file_docreader_proto_rawDesc = "" +
 	"\x04Read\x12\x16.docreader.ReadRequest\x1a\x17.docreader.ReadResponse\"\x00\x12G\n" +
 	"\n" +
 	"ReadStream\x12\x16.docreader.ReadRequest\x1a\x1d.docreader.ReadStreamResponse\"\x000\x01\x12N\n" +
-	"\vListEngines\x12\x1d.docreader.ListEnginesRequest\x1a\x1e.docreader.ListEnginesResponse\"\x00B5Z3reliquary/internal/docreader/protob\x06proto3"
+	"\vListEngines\x12\x1d.docreader.ListEnginesRequest\x1a\x1e.docreader.ListEnginesResponse\"\x00B$Z\"reliquary/internal/docreader/protob\x06proto3"
 
 var (
 	file_docreader_proto_rawDescOnce sync.Once

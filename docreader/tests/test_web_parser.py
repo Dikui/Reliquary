@@ -8,6 +8,7 @@ from docreader.parser.web_parser import (
     WebParser,
     _ScrapeResult,
     build_visible_text_fallback,
+    extract_page_metadata,
     extract_markdown_from_html,
     install_ssrf_route_guard,
 )
@@ -57,6 +58,22 @@ class TestWebParserHelpers(unittest.TestCase):
         text = "B" * 60
         md = build_visible_text_fallback(text, page_title="")
         self.assertEqual(md, text)
+
+    def test_extract_page_metadata_uses_page_values_without_crawl_defaults(self):
+        metadata = extract_page_metadata(
+            """<html><head>
+            <meta property="article:author" content="Ada">
+            <meta property="article:published_time" content="2025-01-02T03:04:05Z">
+            <link rel="canonical" href="https://example.com/canonical">
+            </head></html>""",
+            "article body",
+            "https://example.com/request",
+            "",
+        )
+        self.assertEqual(metadata["author"], "Ada")
+        self.assertEqual(metadata["published_at"], "2025-01-02T03:04:05Z")
+        self.assertEqual(metadata["original_url"], "https://example.com/canonical")
+        self.assertNotIn("title", metadata)
 
     def test_install_ssrf_route_guard_is_importable(self):
         self.assertTrue(callable(install_ssrf_route_guard))

@@ -147,7 +147,7 @@ func applyKnowledgeListFilter(query *gorm.DB, filter types.KnowledgeListFilter) 
 		// pipeline marks the row `deleting` before tearing down its resources; a
 		// row whose delete task exhausts its retries is flipped to `failed` by the
 		// dead-letter callback and stays visible so the failure remains actionable.
-		query = query.Where("parse_status <> ?", types.ParseStatusDeleting)
+		query = query.Where("parse_status NOT IN ?", []string{types.ParseStatusDeleting, types.ParseStatusRejected})
 	}
 	if !filter.UpdatedFrom.IsZero() {
 		query = query.Where("updated_at >= ?", filter.UpdatedFrom)
@@ -839,7 +839,8 @@ func (r *knowledgeRepository) SearchKnowledge(
 		Joins("JOIN knowledge_bases ON knowledge_bases.id = knowledges.knowledge_base_id").
 		Where("knowledges.tenant_id = ?", tenantID).
 		Where("knowledge_bases.type = ?", types.KnowledgeBaseTypeDocument).
-		Where("knowledges.deleted_at IS NULL")
+		Where("knowledges.deleted_at IS NULL").
+		Where("knowledges.parse_status <> ?", types.ParseStatusRejected)
 
 	// If keyword is provided, filter by file_name or title (case-insensitive).
 	if keyword != "" {
@@ -959,7 +960,8 @@ func (r *knowledgeRepository) SearchKnowledgeInScopes(
 		Joins("JOIN knowledge_bases ON knowledge_bases.id = knowledges.knowledge_base_id AND knowledge_bases.tenant_id = knowledges.tenant_id").
 		Where(scopeCondition, args...).
 		Where("knowledge_bases.type = ?", types.KnowledgeBaseTypeDocument).
-		Where("knowledges.deleted_at IS NULL")
+		Where("knowledges.deleted_at IS NULL").
+		Where("knowledges.parse_status <> ?", types.ParseStatusRejected)
 
 	if keyword != "" {
 		escaped := strings.ToLower(escapeLikeKeyword(keyword))

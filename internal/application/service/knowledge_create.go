@@ -187,6 +187,15 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 		return nil, err
 	}
 	knowledge.FilePath = filePath
+	{
+		if err := knowledge.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{
+			Source: "file", Decision: "pending",
+			SourceInfo: types.SourceInfo{Author: metadata["author"], OriginalURL: metadata["original_url"], PublishedAt: metadata["published_at"]},
+		}); err != nil {
+			_ = fileSvc.DeleteFile(ctx, filePath)
+			return nil, err
+		}
+	}
 
 	// Save knowledge record to database after the file is safely stored.
 	logger.Info(ctx, "Saving knowledge record to database")
@@ -295,15 +304,18 @@ func isFileURL(rawURL, fileName, fileType string) bool {
 
 func (s *knowledgeService) CreateKnowledgeFromURL(ctx context.Context,
 	kbID string, rawURL string, fileName string, fileType string, enableMultimodel *bool, title string, tagIDs []string, channel string,
-	processOverrides *types.KnowledgeProcessOverrides,
+	processOverrides *types.KnowledgeProcessOverrides, sourceInfos ...types.SourceInfo,
 ) (*types.Knowledge, error) {
+	if blockedIntakeURL(rawURL) {
+		return nil, werrors.NewBadRequestError("X/Twitter sources require Grok ingestion")
+	}
 	logger.Info(ctx, "Start creating knowledge from URL")
 	logger.Infof(ctx, "Knowledge base ID: %s, URL: %s", kbID, rawURL)
 
 	// Route to file_url logic when the URL points to a downloadable file
 	if isFileURL(rawURL, fileName, fileType) {
 		return s.createKnowledgeFromFileURL(
-			ctx, kbID, rawURL, fileName, fileType, enableMultimodel, title, tagIDs, channel, processOverrides,
+			ctx, kbID, rawURL, fileName, fileType, enableMultimodel, title, tagIDs, channel, processOverrides, sourceInfos...,
 		)
 	}
 
@@ -383,6 +395,18 @@ func (s *knowledgeService) CreateKnowledgeFromURL(ctx context.Context,
 		CreatedAt:        time.Now(),
 		UpdatedAt:        time.Now(),
 		EmbeddingModelID: kb.EmbeddingModelID,
+	}
+	{
+		source := types.SourceInfo{OriginalURL: rawURL}
+		if len(sourceInfos) > 0 {
+			source = sourceInfos[0]
+			if source.OriginalURL == "" {
+				source.OriginalURL = rawURL
+			}
+		}
+		if err := knowledge.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Source: "url", Decision: "pending", SourceInfo: source}); err != nil {
+			return nil, err
+		}
 	}
 
 	// Save knowledge record
@@ -508,7 +532,7 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 	title string,
 	tagIDs []string,
 	channel string,
-	processOverrides *types.KnowledgeProcessOverrides,
+	processOverrides *types.KnowledgeProcessOverrides, sourceInfos ...types.SourceInfo,
 ) (*types.Knowledge, error) {
 	logger.Info(ctx, "Start creating knowledge from file URL")
 	logger.Infof(ctx, "Knowledge base ID: %s, file URL: %s", kbID, fileURL)
@@ -619,6 +643,18 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 		CreatedAt:        time.Now(),
 		UpdatedAt:        time.Now(),
 		EmbeddingModelID: kb.EmbeddingModelID,
+	}
+	{
+		source := types.SourceInfo{OriginalURL: fileURL}
+		if len(sourceInfos) > 0 {
+			source = sourceInfos[0]
+			if source.OriginalURL == "" {
+				source.OriginalURL = fileURL
+			}
+		}
+		if err := knowledge.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Source: "url", Decision: "pending", SourceInfo: source}); err != nil {
+			return nil, err
+		}
 	}
 	if knowledge.Title == "" {
 		knowledge.Title = displayName
@@ -775,6 +811,7 @@ func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 	meta := types.NewManualKnowledgeMetadata(cleanContent, status, 1)
 
 	knowledge := &types.Knowledge{
+		ID:               uuid.New().String(),
 		TenantID:         tenantID,
 		KnowledgeBaseID:  kbID,
 		Type:             types.KnowledgeTypeManual,
@@ -793,6 +830,26 @@ func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 	if err := knowledge.SetManualMetadata(meta); err != nil {
 		logger.Errorf(ctx, "Failed to set manual metadata: %v", err)
 		return nil, err
+	}
+	// Keep the full message body
+	// outside the row so a rejected message can be previewed/retried without
+	// turning the metadata column into an unbounded original archive.
+	{
+		fileSvc := s.resolveFileService(ctx, kb)
+		originalPath, err := fileSvc.SaveBytes(ctx, []byte(cleanContent), tenantID, fileName, false)
+		if err != nil {
+			return nil, err
+		}
+		intake := &types.KnowledgeIntakeMetadata{Source: "manual", OriginalPath: originalPath, Decision: "pending", SourceInfo: payload.SourceInfo}
+		if err := knowledge.SetIntakeMetadata(intake); err != nil {
+			_ = fileSvc.DeleteFile(ctx, originalPath)
+			return nil, err
+		}
+		meta.Content = ""
+		if err := knowledge.SetManualMetadata(meta); err != nil {
+			_ = fileSvc.DeleteFile(ctx, originalPath)
+			return nil, err
+		}
 	}
 	knowledge.EnsureManualDefaults()
 
@@ -830,6 +887,7 @@ func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 			knowledge.ParseStatus = "failed"
 			knowledge.ErrorMessage = "Failed to enqueue processing task"
 			s.repo.UpdateKnowledge(ctx, knowledge)
+			s.failIntake(ctx, knowledge)
 			recordKBActivity(ctx, s.audit, tenantID, kbID, types.AuditActionKnowledgeCreated,
 				"knowledge", knowledge.ID, types.AuditOutcomeFailed, map[string]any{
 					"title": knowledge.Title, "source_type": "manual", "status": status,
@@ -1033,6 +1091,20 @@ func (s *knowledgeService) UpdateManualKnowledge(ctx context.Context,
 		return nil, err
 	}
 
+	if intake, _ := existing.IntakeMetadata(); intake != nil {
+		if intake.Decision == "rejected" && ctx.Value(types.UserIDContextKey) != kb.CreatorID {
+			return nil, werrors.NewForbiddenError("only the creator can review intake")
+		}
+		intake.SourceInfo = payload.SourceInfo
+		intake.Decision, intake.Reason = "pending", ""
+		if err := existing.SetIntakeMetadata(intake); err != nil {
+			return nil, err
+		}
+		if err := s.saveIntakeOriginal(ctx, kb, existing, cleanContent, nil); err != nil {
+			return nil, err
+		}
+	}
+
 	var version int
 	if meta, err := existing.ManualMetadata(); err == nil && meta != nil {
 		version = meta.Version + 1
@@ -1041,6 +1113,9 @@ func (s *knowledgeService) UpdateManualKnowledge(ctx context.Context,
 	}
 
 	meta := types.NewManualKnowledgeMetadata(cleanContent, status, version)
+	if intake, _ := existing.IntakeMetadata(); intake != nil {
+		meta.Content = ""
+	}
 	if err := existing.SetManualMetadata(meta); err != nil {
 		logger.Errorf(ctx, "Failed to set manual metadata during update: %v", err)
 		return nil, err
@@ -1149,6 +1224,7 @@ func (s *knowledgeService) markKnowledgeEnqueueFailed(ctx context.Context, knowl
 	if knowledge == nil {
 		return
 	}
+	defer s.failIntake(ctx, knowledge)
 	knowledge.ParseStatus = "failed"
 	knowledge.ErrorMessage = "Failed to enqueue processing task"
 	if err := s.repo.UpdateKnowledge(ctx, knowledge); err != nil {
@@ -1223,6 +1299,11 @@ func (s *knowledgeService) bindContentResources(
 func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 	kb *types.KnowledgeBase, knowledge *types.Knowledge, content string, doSync bool,
 ) {
+	defer func() {
+		if knowledge.ParseStatus == types.ParseStatusFailed {
+			s.failIntake(ctx, knowledge)
+		}
+	}()
 	clean := strings.TrimSpace(content)
 	if clean == "" {
 		return
@@ -1233,20 +1314,57 @@ func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 	var resolvedImages []docparser.StoredImage
 	if s.imageResolver != nil {
 		fileSvc := s.resolveFileService(ctx, kb)
-		afterDataURI, fromDataURI, _ := s.imageResolver.ResolveDataURIImages(ctx, clean, fileSvc, knowledge.TenantID)
+		afterDataURI, fromDataURI, dataErr := s.imageResolver.ResolveAndStore(ctx, &types.ReadResult{MarkdownContent: clean}, fileSvc, knowledge.TenantID)
+		if err := s.recordIntakeImages(ctx, knowledge, fromDataURI); err != nil {
+			knowledge.ParseStatus = types.ParseStatusFailed
+			return
+		}
+		if dataErr != nil {
+			if intake, _ := knowledge.IntakeMetadata(); intake != nil {
+				knowledge.ParseStatus, knowledge.ErrorMessage, knowledge.UpdatedAt = types.ParseStatusFailed, "failed to resolve intake images", time.Now()
+				_ = s.repo.UpdateKnowledge(ctx, knowledge)
+				return
+			}
+		}
 		if len(fromDataURI) > 0 {
 			logger.Infof(ctx, "Resolved %d data-URI images for manual knowledge %s", len(fromDataURI), knowledge.ID)
 			clean = afterDataURI
 			resolvedImages = append(resolvedImages, fromDataURI...)
 		}
 		updatedContent, storedImages, resolveErr := s.imageResolver.ResolveRemoteImages(ctx, clean, fileSvc, knowledge.TenantID)
+		if err := s.recordIntakeImages(ctx, knowledge, storedImages); err != nil {
+			knowledge.ParseStatus = types.ParseStatusFailed
+			return
+		}
 		if resolveErr != nil {
 			logger.Warnf(ctx, "Remote image resolution partially failed: %v", resolveErr)
+			if intake, _ := knowledge.IntakeMetadata(); intake != nil {
+				knowledge.ParseStatus, knowledge.ErrorMessage, knowledge.UpdatedAt = types.ParseStatusFailed, "failed to resolve intake images", time.Now()
+				_ = s.repo.UpdateKnowledge(ctx, knowledge)
+				return
+			}
+		}
+		if updatedContent != "" {
+			clean = updatedContent
 		}
 		if len(storedImages) > 0 {
 			logger.Infof(ctx, "Resolved %d remote images for manual knowledge %s", len(storedImages), knowledge.ID)
-			clean = updatedContent
 			resolvedImages = append(resolvedImages, storedImages...)
+		}
+		if intake, _ := knowledge.IntakeMetadata(); intake != nil && docparser.HasUnstoredImages(clean) {
+			knowledge.ParseStatus, knowledge.ErrorMessage, knowledge.UpdatedAt = types.ParseStatusFailed, "intake has unstored content images", time.Now()
+			_ = s.repo.UpdateKnowledge(ctx, knowledge)
+			return
+		}
+	}
+	if intake, _ := knowledge.IntakeMetadata(); intake != nil {
+		if docparser.HasUnstoredImages(clean) {
+			knowledge.ParseStatus = types.ParseStatusFailed
+			return
+		}
+		if err := s.saveIntakeOriginal(ctx, kb, knowledge, clean, nil); err != nil {
+			knowledge.ParseStatus = types.ParseStatusFailed
+			return
 		}
 	}
 
@@ -1311,6 +1429,16 @@ func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 		}
 	}
 
+	if intake, _ := knowledge.IntakeMetadata(); intake != nil {
+		rejected, err := s.reviewIntake(ctx, kb, knowledge, clean)
+		if err != nil {
+			knowledge.ParseStatus = types.ParseStatusFailed
+			return
+		}
+		if rejected {
+			return
+		}
+	}
 	if doSync {
 		s.processChunks(ctx, kb, knowledge, parsed, opts)
 		return

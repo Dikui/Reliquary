@@ -90,6 +90,20 @@ func TestAuthorizeKnowledgeInSearchTargetsAllowsBoundDocument(t *testing.T) {
 	}
 }
 
+func TestReadSourceDocumentExcludesUnapprovedIntake(t *testing.T) {
+	service := &scopeKnowledgeService{knowledge: &types.Knowledge{
+		ID: "waiting-message", KnowledgeBaseID: "kb-1", ParseStatus: "rejected",
+		Metadata: types.JSON(`{"intake":{"source":"manual","decision":"rejected","reason":"Unreasoned opinion"}}`),
+	}}
+	tool := NewWikiReadSourceDocTool(service, nil, types.SearchTargets{{
+		Type: types.SearchTargetTypeKnowledgeBase, KnowledgeBaseID: "kb-1",
+	}})
+	result, err := tool.Execute(context.Background(), []byte(`{"knowledge_id":"waiting-message"}`))
+	if err != nil || result == nil || result.Success {
+		t.Fatalf("waiting content must stay unavailable to synthesis: result=%+v err=%v", result, err)
+	}
+}
+
 func TestAuthorizeChunkInSearchTargetsRejectsDisabledFAQ(t *testing.T) {
 	chunkService := &scopeChunkService{chunk: &types.Chunk{
 		ID: "faq-1", KnowledgeID: "faq-document", KnowledgeBaseID: "kb-1",

@@ -82,8 +82,9 @@ func TestIsIconImage(t *testing.T) {
 
 // captureSaveBytes implements interfaces.FileService for tests; only SaveBytes records data.
 type captureSaveBytes struct {
-	saved [][]byte
-	urls  []string
+	saved      [][]byte
+	urls       []string
+	failOnCall int
 }
 
 func (c *captureSaveBytes) CheckConnectivity(context.Context) error { return nil }
@@ -93,10 +94,40 @@ func (c *captureSaveBytes) SaveFile(context.Context, *multipart.FileHeader, uint
 }
 
 func (c *captureSaveBytes) SaveBytes(_ context.Context, data []byte, _ uint64, fileName string, _ bool) (string, error) {
+	if c.failOnCall > 0 && len(c.urls)+1 == c.failOnCall {
+		return "", fmt.Errorf("storage unavailable")
+	}
 	c.saved = append(c.saved, append([]byte(nil), data...))
 	u := "local://test/" + fileName
 	c.urls = append(c.urls, u)
 	return u, nil
+}
+
+func TestResolveAndStoreReturnsImageSaveFailureAfterPartialSuccess(t *testing.T) {
+	png := createTestPNG(200, 150)
+	result := &types.ReadResult{
+		MarkdownContent: "![](images/first.png)\n![](images/second.png)",
+		ImageRefs: []types.ImageRef{
+			{Filename: "first.png", OriginalRef: "images/first.png", MimeType: "image/png", ImageData: png},
+			{Filename: "second.png", OriginalRef: "images/second.png", MimeType: "image/png", ImageData: png},
+		},
+	}
+	out, images, err := NewImageResolver().ResolveAndStore(context.Background(), result, &captureSaveBytes{failOnCall: 2}, 1)
+	if err == nil || !strings.Contains(err.Error(), "storage unavailable") {
+		t.Fatalf("expected storage failure, got %v", err)
+	}
+	if len(images) != 1 || !strings.Contains(out, "local://test/") || !strings.Contains(out, "images/") {
+		t.Fatalf("partial result was not preserved: images=%d markdown=%q", len(images), out)
+	}
+}
+
+func TestHasUnstoredImagesRejectsUnresolvedLocalAndRemoteReferences(t *testing.T) {
+	if !HasUnstoredImages("![](images/missing.png)") || !HasUnstoredImages(`<img src="https://example.com/image.png">`) {
+		t.Fatal("unresolved content image was not detected")
+	}
+	if HasUnstoredImages("![](resource://0123456789012345678901)\n![](storage://backend/local://images/saved.png)\n![](local://images/saved.png)\n<img src=\"/files/saved.png\">") {
+		t.Fatal("stored content image was reported as unresolved")
+	}
 }
 
 func (c *captureSaveBytes) GetFile(context.Context, string) (io.ReadCloser, error) {

@@ -7,6 +7,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -250,6 +251,27 @@ func (h *KnowledgeHandler) handleDuplicateKnowledgeError(c *gin.Context,
 func (h *KnowledgeHandler) enqueueKnowledgeListDelete(
 	ctx context.Context, tenantID uint64, ids []string,
 ) (string, error) {
+	entries, err := h.kgService.GetKnowledgeBatch(ctx, tenantID, ids)
+	if err != nil {
+		return "", err
+	}
+	for _, entry := range entries {
+		intake, err := entry.IntakeMetadata()
+		if err != nil {
+			return "", err
+		}
+		if intake == nil || intake.Decision != "rejected" {
+			continue
+		}
+		kb, err := h.kbService.GetKnowledgeBaseByID(ctx, entry.KnowledgeBaseID)
+		if err != nil {
+			return "", err
+		}
+		userID, _ := ctx.Value(types.UserIDContextKey).(string)
+		if userID == "" || userID != kb.CreatorID {
+			return "", errors.NewForbiddenError("only the knowledge base creator can discard intake")
+		}
+	}
 	payload := types.KnowledgeListDeletePayload{
 		TenantID:     tenantID,
 		KnowledgeIDs: ids,
@@ -304,6 +326,7 @@ func (h *KnowledgeHandler) enqueueKnowledgeListReparse(
 // @Param        file              formData  file    true   "上传的文件"
 // @Param        fileName          formData  string  false  "自定义文件名"
 // @Param        metadata          formData  string  false  "元数据JSON"
+// @Param        source_info       formData  string  false  "来源信息JSON"
 // @Param        enable_multimodel formData  bool    false  "启用多模态处理"
 // @Param        tag_ids       formData  string  false  "分类ID列表，逗号分隔"
 // @Param        process_config    formData  string  false  "处理配置JSON（KnowledgeProcessOverrides）"
@@ -374,16 +397,23 @@ func (h *KnowledgeHandler) CreateKnowledgeFromFile(c *gin.Context) {
 	logger.Infof(ctx, "File upload successful, filename: %s, size: %.2f KB", displayFileName, float64(file.Size)/1024)
 	logger.Infof(ctx, "Creating knowledge, knowledge base ID: %s, filename: %s", kbID, displayFileName)
 
-	// Parse metadata if provided
 	var metadata map[string]string
-	metadataStr := c.PostForm("metadata")
-	if metadataStr != "" {
-		if err := json.Unmarshal([]byte(metadataStr), &metadata); err != nil {
-			logger.Error(ctx, "Failed to parse metadata", err)
-			c.Error(errors.NewBadRequestError("Invalid metadata format").WithDetails(err.Error()))
+	if raw := c.PostForm("metadata"); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &metadata); err != nil {
+			c.Error(errors.NewBadRequestError("Invalid metadata format"))
 			return
 		}
-		logger.Infof(ctx, "Received file metadata: %s", secutils.SanitizeForLog(fmt.Sprintf("%v", metadata)))
+	}
+	if raw := c.PostForm("source_info"); raw != "" {
+		var source types.SourceInfo
+		if err := json.Unmarshal([]byte(raw), &source); err != nil {
+			c.Error(errors.NewBadRequestError("Invalid source_info format"))
+			return
+		}
+		if metadata == nil {
+			metadata = make(map[string]string)
+		}
+		metadata["author"], metadata["original_url"], metadata["published_at"] = source.Author, source.OriginalURL, source.PublishedAt
 	}
 
 	enableMultimodelForm := c.PostForm("enable_multimodel")
@@ -490,6 +520,7 @@ func (h *KnowledgeHandler) CreateKnowledgeFromURL(c *gin.Context) {
 		TagIDs           []string                         `json:"tag_ids"`
 		Channel          string                           `json:"channel"`
 		ProcessConfig    *types.KnowledgeProcessOverrides `json:"process_config"`
+		SourceInfo       types.SourceInfo                 `json:"source_info"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		logger.Error(ctx, "Failed to parse URL request", err)
@@ -518,7 +549,7 @@ func (h *KnowledgeHandler) CreateKnowledgeFromURL(c *gin.Context) {
 
 	// Create knowledge entry from the URL
 	knowledge, err := h.kgService.CreateKnowledgeFromURL(
-		ctx, kbID, req.URL, req.FileName, req.FileType, req.EnableMultimodel, req.Title, req.TagIDs, req.Channel, req.ProcessConfig,
+		ctx, kbID, req.URL, req.FileName, req.FileType, req.EnableMultimodel, req.Title, req.TagIDs, req.Channel, req.ProcessConfig, req.SourceInfo,
 	)
 	// Check for duplicate knowledge error
 	if err != nil {
@@ -1330,7 +1361,7 @@ func (h *KnowledgeHandler) DeleteKnowledge(c *gin.Context) {
 	taskID, err := h.enqueueKnowledgeListDelete(effCtx, effectiveTenantID, []string{id})
 	if err != nil {
 		logger.Errorf(ctx, "Failed to enqueue knowledge delete task: %v", err)
-		c.Error(errors.NewInternalServerError("Failed to enqueue delete task"))
+		c.Error(err)
 		return
 	}
 
@@ -1424,7 +1455,7 @@ func (h *KnowledgeHandler) BatchDeleteKnowledge(c *gin.Context) {
 	taskID, err := h.enqueueKnowledgeListDelete(ctx, effectiveTenantID, ids)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to enqueue batch knowledge delete task: %v", err)
-		c.Error(errors.NewInternalServerError("Failed to enqueue batch delete task"))
+		c.Error(err)
 		return
 	}
 
@@ -1622,6 +1653,24 @@ func (h *KnowledgeHandler) PreviewKnowledgeFile(c *gin.Context) {
 		return
 	}
 	defer file.Close()
+	// ServeContent needs a seeker for byte ranges. Keep the temporary copy local
+	// to this response; the stored source remains the authoritative original.
+	tmp, err := os.CreateTemp("", "reliquary-preview-*")
+	if err != nil {
+		c.Error(errors.NewInternalServerError("Failed to prepare preview").WithDetails(err.Error()))
+		return
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	defer tmp.Close()
+	if _, err := io.Copy(tmp, file); err != nil {
+		c.Error(errors.NewInternalServerError("Failed to prepare preview").WithDetails(err.Error()))
+		return
+	}
+	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+		c.Error(errors.NewInternalServerError("Failed to prepare preview").WithDetails(err.Error()))
+		return
+	}
 
 	contentType, inline := secutils.SafeContentTypeByFilename(filename)
 	c.Header("Content-Type", contentType)
@@ -1633,13 +1682,36 @@ func (h *KnowledgeHandler) PreviewKnowledgeFile(c *gin.Context) {
 	c.Header("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": filename}))
 	c.Header("Cache-Control", "private, max-age=3600")
 
-	c.Stream(func(w io.Writer) bool {
-		if _, err := io.Copy(w, file); err != nil {
-			logger.Errorf(ctx, "Failed to stream preview: %v", err)
-			return false
-		}
-		return false
-	})
+	http.ServeContent(c.Writer, c.Request, filename, time.Now(), tmp)
+}
+
+// ReviewKnowledgeIntake retries a rejected intake after correcting source
+// evidence, or removes it when the owner discards it.
+func (h *KnowledgeHandler) ReviewKnowledgeIntake(c *gin.Context) {
+	id := secutils.SanitizeForLog(c.Param("id"))
+	if id == "" {
+		c.Error(errors.NewBadRequestError("Knowledge ID cannot be empty"))
+		return
+	}
+	_, ctx, err := h.resolveKnowledgeAndValidateKBAccess(c, id, types.OrgRoleEditor)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	var req struct {
+		Action     string           `json:"action"`
+		SourceInfo types.SourceInfo `json:"source_info"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(errors.NewBadRequestError(err.Error()))
+		return
+	}
+	knowledge, err := h.kgService.ReviewKnowledgeIntake(ctx, id, req.Action, req.SourceInfo)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": knowledge})
 }
 
 // GetKnowledgeBatchRequest defines parameters for batch knowledge retrieval

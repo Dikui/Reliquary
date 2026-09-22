@@ -555,6 +555,16 @@ export default {
     cancelParseFailed: 'Failed to stop, please try again later',
     draft: 'Draft',
     draftTip: 'Temporarily saved and not included in retrieval',
+    intakeWaiting: 'Awaiting review',
+    intakeAuthor: 'Author',
+    intakeOriginalUrl: 'Original URL',
+    intakePublishedAt: 'Published at',
+    intakePreviewOriginal: 'Preview original',
+    intakeLoadMore: 'Load more',
+    intakeRetry: 'Retry review',
+    intakeDiscard: 'Discard',
+    intakeReviewSubmitted: 'Review submitted',
+    intakeReviewFailed: 'Review failed',
     untitledDocument: 'Untitled Document',
     deleteDocument: 'Delete Document',
     moveDocument: 'Move to...',
@@ -2378,7 +2388,7 @@ export default {
     },
     success: {
       draftSaved: 'Draft saved',
-      published: 'Knowledge published and indexing started'
+      published: 'Message submitted and under review'
     },
     form: {
       knowledgeBaseLabel: 'Target knowledge base',

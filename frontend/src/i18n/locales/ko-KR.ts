@@ -4390,7 +4390,7 @@ export default {
     },
     success: {
       draftSaved: '임시 저장됨',
-      published: '지식이 게시되고 인덱싱이 시작되었습니다'
+      published: '메시지가 제출되어 검토 중입니다'
     },
     warning: {
       selectKnowledgeBase: '대상 지식베이스를 선택해주세요',
@@ -6311,6 +6311,16 @@ export default {
     cancelParseFailed: '중지에 실패했습니다. 나중에 다시 시도해주세요',
     draft: '초안',
     draftTip: '임시 저장된 내용, 검색에 포함되지 않음',
+    intakeWaiting: '검토 대기 중',
+    intakeAuthor: '작성자',
+    intakeOriginalUrl: '원본 URL',
+    intakePublishedAt: '게시 시간',
+    intakePreviewOriginal: '원문 미리보기',
+    intakeLoadMore: '더 보기',
+    intakeRetry: '검토 다시 시도',
+    intakeDiscard: '폐기',
+    intakeReviewSubmitted: '검토가 제출되었습니다',
+    intakeReviewFailed: '검토에 실패했습니다',
     untitledDocument: '제목 없는 문서',
     deleteDocument: '문서 삭제',
     moveDocument: '이동...',

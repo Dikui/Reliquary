@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess'
 
 export type UploadConfirmMode = 'file' | 'url' | 'manual' | 'reparse'
+export interface IntakeSourceInfo { author?: string; original_url?: string; published_at?: string }
 
 export interface UploadConfirmManualSource {
   kbId: string
@@ -9,6 +10,7 @@ export interface UploadConfirmManualSource {
   title: string
   content: string
   tagIds?: string[]
+  sourceInfo?: IntakeSourceInfo
 }
 
 export interface UploadConfirmReparseSource {
@@ -33,6 +35,7 @@ export interface UploadConfirmResult {
    * the dialog.
    */
   targetFolder?: string
+  sourceInfoByItem?: Record<string, IntakeSourceInfo>
 }
 
 export interface OpenUploadConfirmOptions {

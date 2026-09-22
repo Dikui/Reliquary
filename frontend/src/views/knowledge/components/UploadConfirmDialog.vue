@@ -69,6 +69,11 @@
                   <p class="manual-source-meta">
                     {{ t('uploadConfirm.manualCharCount', { count: manualCharCount }) }}
                   </p>
+                  <div class="intake-source-fields">
+                    <t-input v-model="sourceInfo('manual').author" :placeholder="t('knowledgeBase.intakeAuthor')" />
+                    <t-input v-model="sourceInfo('manual').original_url" :placeholder="t('knowledgeBase.intakeOriginalUrl')" />
+                    <t-input v-model="sourceInfo('manual').published_at" :placeholder="t('knowledgeBase.intakePublishedAt')" />
+                  </div>
                 </div>
                 <div v-else-if="mode === 'reparse' && reparsePreview" class="manual-source-panel">
                   <p class="manual-source-title" :title="reparsePreview.fileName">
@@ -93,6 +98,11 @@
                     >
                       <t-icon name="close" />
                     </button>
+                    <div class="intake-source-fields">
+                      <t-input v-model="sourceInfo(urlSourceKey(url)).author" :placeholder="t('knowledgeBase.intakeAuthor')" />
+                      <t-input v-model="sourceInfo(urlSourceKey(url)).original_url" :placeholder="t('knowledgeBase.intakeOriginalUrl')" />
+                      <t-input v-model="sourceInfo(urlSourceKey(url)).published_at" :placeholder="t('knowledgeBase.intakePublishedAt')" />
+                    </div>
                   </li>
                   <li v-for="(file, index) in localFiles" :key="`${file.name}-${index}`" class="file-item">
                     <span class="file-icon-wrap">
@@ -116,6 +126,11 @@
                     >
                       <t-icon name="close" />
                     </button>
+                    <div class="intake-source-fields">
+                      <t-input v-model="sourceInfo(fileSourceKey(file)).author" :placeholder="t('knowledgeBase.intakeAuthor')" />
+                      <t-input v-model="sourceInfo(fileSourceKey(file)).original_url" :placeholder="t('knowledgeBase.intakeOriginalUrl')" />
+                      <t-input v-model="sourceInfo(fileSourceKey(file)).published_at" :placeholder="t('knowledgeBase.intakePublishedAt')" />
+                    </div>
                   </li>
                 </ul>
                 <div v-else-if="mode === 'file'" class="files-empty">{{ t('uploadConfirm.noItems') }}</div>
@@ -657,6 +672,10 @@ const uiStore = useUIStore()
 const allModels = ref<any[]>([])
 const localFiles = ref<File[]>([])
 const localUrls = ref<string[]>([])
+const sourceInfoByItem = ref<Record<string, { author?: string; original_url?: string; published_at?: string }>>({})
+const sourceInfo = (key: string) => sourceInfoByItem.value[key] ||= {}
+const fileSourceKey = (file: File) => `file:${getUploadFileKey(file)}`
+const urlSourceKey = (url: string) => `url:${url}`
 const availableTags = ref<Array<{ id: string; name: string }>>([])
 const selectedTagIds = ref<string[]>([])
 const tagsLoading = ref(false)
@@ -1290,6 +1309,10 @@ watch(
     if (!visible) return
     localFiles.value = props.mode === 'file' ? [...(props.files || [])] : []
     localUrls.value = props.mode === 'file' ? [...(props.urls || [])] : []
+    sourceInfoByItem.value = {}
+    if (props.mode === 'manual' && props.manualPreview?.sourceInfo) {
+      sourceInfoByItem.value.manual = { ...props.manualPreview.sourceInfo }
+    }
     selectedTagIds.value = props.mode === 'reparse' ? [] : [...(props.tagIds || [])]
     localTargetFolder.value = props.mode === 'file' ? (props.targetFolder || '') : ''
     pendingFolderPaths.value = []
@@ -1424,7 +1447,7 @@ const handleConfirm = () => {
       processConfig,
       mode: 'manual',
       tagIds: [...selectedTagIds.value],
-      manual: { ...props.manualPreview, tagIds: [...selectedTagIds.value] },
+      manual: { ...props.manualPreview, tagIds: [...selectedTagIds.value], sourceInfo: sourceInfo('manual') },
     })
   } else if (props.mode === 'reparse' && props.reparsePreview) {
     emit('confirm', { processConfig, mode: 'reparse', reparse: { ...props.reparsePreview } })
@@ -1436,6 +1459,7 @@ const handleConfirm = () => {
       files: [...localFiles.value],
       urls: [...localUrls.value],
       targetFolder: localTargetFolder.value,
+      sourceInfoByItem: sourceInfoByItem.value,
     })
   }
   emit('update:visible', false)
@@ -1637,6 +1661,7 @@ const handleConfirm = () => {
 }
 
 .file-item {
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1652,6 +1677,14 @@ const handleConfirm = () => {
   &:hover {
     background: var(--td-bg-color-container-hover);
   }
+}
+
+.intake-source-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+  gap: 6px;
+  padding-left: 32px;
 }
 
 .file-icon-wrap {

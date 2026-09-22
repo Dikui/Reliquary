@@ -8,6 +8,7 @@ import {
   listKnowledgeBases,
   getKnowledgeDetails,
   getKnowledgeBaseById,
+  previewKnowledgeFile,
   createManualKnowledge,
   updateManualKnowledge,
 } from '@/api/knowledge-base'
@@ -71,6 +72,7 @@ const mode = computed(() => uiStore.manualEditorMode)
 const knowledgeId = computed(() => uiStore.manualEditorKnowledgeId)
 const currentKnowledgeId = ref<string | null>(null)
 const manualTagIds = ref<string[]>([])
+const manualSourceInfo = ref<{ author?: string; original_url?: string; published_at?: string }>({})
 
 const form = reactive({
   kbId: '' as string,
@@ -485,7 +487,7 @@ const loadKnowledgeBases = async () => {
 
 const parseManualMetadata = (
   metadata: any,
-): { content: string; status: ManualStatus; updatedAt?: string } | null => {
+): { content: string; status: ManualStatus; updatedAt?: string; originalPath?: string; sourceInfo?: { author?: string; original_url?: string; published_at?: string } } | null => {
   if (!metadata) {
     return null
   }
@@ -500,6 +502,8 @@ const parseManualMetadata = (
         content: parsed.content || '',
         status,
         updatedAt: parsed.updated_at || parsed.updatedAt,
+        originalPath: parsed.intake?.original_path,
+        sourceInfo: parsed.intake?.source_info,
       }
     }
   } catch (error) {
@@ -529,6 +533,10 @@ const loadKnowledgeContent = async () => {
       uiStore.manualEditorInitialTitle ||
       ''
     form.content = meta?.content || uiStore.manualEditorInitialContent || ''
+    manualSourceInfo.value = { ...(meta?.sourceInfo || {}) }
+    if (!form.content && meta?.originalPath) {
+      form.content = await (await previewKnowledgeFile(currentKnowledgeId.value)).text()
+    }
     form.status = resolveManualKnowledgeStatus(meta?.status, data.parse_status)
     manualTagIds.value = (data.tags || []).map(tag => String(tag.id))
     if (meta?.updatedAt) {
@@ -559,6 +567,7 @@ const resetForm = () => {
   lastUpdatedAt.value = ''
   initialLoaded.value = false
   manualTagIds.value = mode.value === 'create' ? [...uiStore.selectedTagIds] : []
+  manualSourceInfo.value = {}
   selectionRange.start = 0
   selectionRange.end = 0
 }
@@ -623,10 +632,12 @@ const handleSave = async (targetStatus: ManualStatus) => {
       status: string
       tag_ids?: string[]
       process_config?: KnowledgeProcessOverrides
+      source_info?: { author?: string; original_url?: string; published_at?: string }
     } = {
       title: form.title.trim(),
       content: form.content,
       status: targetStatus,
+      source_info: { ...manualSourceInfo.value },
     }
     payload.tag_ids = [...manualTagIds.value]
 
@@ -653,11 +664,14 @@ const handleSave = async (targetStatus: ManualStatus) => {
             title: payload.title,
             content: payload.content,
             tagIds: [...manualTagIds.value],
+            sourceInfo: { ...manualSourceInfo.value },
           },
         })
         payload.process_config = confirmResult.processConfig
         manualTagIds.value = [...(confirmResult.tagIds || [])]
         payload.tag_ids = [...manualTagIds.value]
+        payload.source_info = confirmResult.manual?.sourceInfo
+        manualSourceInfo.value = { ...(payload.source_info || {}) }
       } catch {
         return
       }
