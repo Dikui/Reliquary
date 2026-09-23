@@ -51,10 +51,10 @@
 
         <!-- Active search results -->
         <template v-else>
-          <!-- Chunks (per file) -->
+          <!-- Knowledge messages (one representative match each) -->
           <ResultGroup v-if="isGroupVisible('chunks') && fileGroups.length" :label="t('commandPalette.group.chunks')"
-            :count="totalChunks">
-            <template v-for="(item, i) in flatChunkItems" :key="'c-' + item.file.knowledgeId + '-' + item.chunk.id">
+            :count="fileGroups.length">
+            <template v-for="(item, i) in flatChunkItems" :key="'c-' + item.file.knowledgeId">
               <ResultItem :index="flatIndexFor('chunks', i)" :selected="selectedIndex === flatIndexFor('chunks', i)"
                 :shortcut="shortcutFor(flatIndexFor('chunks', i))" icon-name="file"
                 :badge="item.chunk.match_type === 'vector' ? t('commandPalette.match.vector') : t('commandPalette.match.keyword')"
@@ -167,6 +167,7 @@ import { useCommandPaletteStore } from '@/stores/commandPalette'
 import { useAuthStore } from '@/stores/auth'
 import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities'
 import { useCmdkSearch, type CmdkFileGroup, type CmdkChunk, type CmdkMsgGroup } from './GlobalCommandPalette/useSearch'
+import { visibleFileChunks } from './GlobalCommandPalette/visibleFileChunks'
 import { highlightText } from './GlobalCommandPalette/useHighlight'
 import { useStartChat } from './GlobalCommandPalette/useStartChat'
 import { buildCommands, filterCommands } from './GlobalCommandPalette/commands'
@@ -198,7 +199,7 @@ const {
   fileGroups, messageGroups, kbMatches,
   knowledgeBases,
   agentMatches, sessionMatches,
-  totalChunks, totalMessages,
+  totalMessages,
   clearResults,
 } = useCmdkSearch({
   lockedKbIds: () => (activeKbScope.value ? [activeKbScope.value.id] : []),
@@ -228,16 +229,9 @@ const dialogVisible = computed<boolean>({
 interface FlatChunkItem { kind: 'chunk'; file: CmdkFileGroup; chunk: CmdkChunk }
 interface FlatMsgItem { kind: 'msg'; group: CmdkMsgGroup; msg: MessageSearchGroupItem }
 
-const flatChunkItems = computed<FlatChunkItem[]>(() => {
-  const out: FlatChunkItem[] = []
-  for (const f of fileGroups.value) {
-    for (const c of f.chunks) {
-      out.push({ kind: 'chunk', file: f, chunk: c })
-      if (out.length >= CHUNK_LIMIT) return out
-    }
-  }
-  return out
-})
+const flatChunkItems = computed<FlatChunkItem[]>(() =>
+  visibleFileChunks(fileGroups.value, CHUNK_LIMIT).map(item => ({ kind: 'chunk', ...item })),
+)
 
 const flatMessageItems = computed<FlatMsgItem[]>(() => {
   const out: FlatMsgItem[] = []
@@ -337,7 +331,7 @@ const flatItems = computed<FlatItem[]>(() => {
     } else if (g === 'chunks') {
       flatChunkItems.value.forEach((item) => {
         out.push({
-          key: `chunk:${item.chunk.id}`,
+          key: `knowledge:${item.file.knowledgeId}`,
           group: g,
           run: (ev) => (ev?.cmd ? cmdEnterChunk(item) : openChunk(item)),
         })

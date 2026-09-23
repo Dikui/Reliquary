@@ -79,6 +79,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const isStarredTag = (tag: Tag) => isConcreteTag(tag) && props.starredTagIds.has(tag.id);
+const displayTags = (tags?: Tag[]) => [...(tags || [])].sort((a, b) => Number(isStarredTag(b)) - Number(isStarredTag(a)));
 
 const {
   setupTagChipsObserver,
@@ -335,10 +336,10 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
         <div class="cell cell-tag">
           <template v-if="item.tags && item.tags.length > 0">
             <t-tooltip v-if="hasTagOverflow(item.id, (item.tags || []).length)"
-              :content="(item.tags || []).map((tag: Tag) => tagLabel(tag, t)).join(', ')" placement="top">
+              :content="displayTags(item.tags).map((tag: Tag) => `${isStarredTag(tag) ? '★ ' : ''}${tagLabel(tag, t)}`).join(', ')" placement="top">
               <div class="row-tag-chips" :ref="(el: any) => setupTagChipsObserver(el, item.id, (item.tags || []).length)"
                 :class="{ 'is-clickable': canEdit }" @click.stop="canEdit && emit('tag-edit', item)">
-                <t-tag v-for="tag in (item.tags || []).slice(0, getTagLimit(item.id))" :key="tag.id" size="small"
+                <t-tag v-for="tag in displayTags(item.tags).slice(0, getTagLimit(item.id))" :key="tag.id" size="small"
                   variant="light-outline" class="row-tag" :class="{ 'is-starred': isStarredTag(tag) }">
                   {{ isStarredTag(tag) ? '★ ' : '' }}{{ tagLabel(tag, t) }}
                 </t-tag>
@@ -347,7 +348,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
             </t-tooltip>
             <div v-else class="row-tag-chips" :ref="(el: any) => setupTagChipsObserver(el, item.id, (item.tags || []).length)"
               :class="{ 'is-clickable': canEdit }" @click.stop="canEdit && emit('tag-edit', item)">
-              <t-tag v-for="tag in (item.tags || []).slice(0, getTagLimit(item.id))" :key="tag.id" size="small"
+              <t-tag v-for="tag in displayTags(item.tags).slice(0, getTagLimit(item.id))" :key="tag.id" size="small"
                 variant="light-outline" class="row-tag" :class="{ 'is-starred': isStarredTag(tag) }">
                 {{ isStarredTag(tag) ? '★ ' : '' }}{{ tagLabel(tag, t) }}
               </t-tag>

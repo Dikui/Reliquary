@@ -1065,6 +1065,7 @@ func (r *knowledgeRepository) ListIDsByTagIDs(
 		Joins("JOIN knowledge_tag_relations ktr ON knowledges.id = ktr.knowledge_id").
 		Where("knowledges.tenant_id = ? AND knowledges.knowledge_base_id = ? AND ktr.tag_id IN (?)",
 			tenantID, kbID, tagIDs).
+		Where("knowledges.parse_status IN ?", []string{types.ParseStatusFinalizing, types.ParseStatusCompleted}).
 		Distinct("knowledges.id").
 		Pluck("knowledges.id", &ids).Error
 	return ids, err

@@ -48,7 +48,7 @@ func (s *userResourceFavoriteService) Add(
 		return ErrFavoriteEmptyID
 	}
 	if resourceType == types.ResourceTypeTag {
-		valid, err := s.repo.IsConcreteTag(ctx, resourceID)
+		valid, err := s.repo.IsConcreteTag(ctx, tenantID, resourceID)
 		if err != nil {
 			return err
 		}

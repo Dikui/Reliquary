@@ -289,12 +289,31 @@ func TestTagFavoriteOnlyAcceptsConcreteReferents(t *testing.T) {
 	require.NoError(t, db.Exec("UPDATE knowledge_tags SET kind = ? WHERE id = ? AND knowledge_base_id = ?", types.TagKindTopic, topicID, kbID).Error)
 	require.NoError(t, db.Exec("UPDATE knowledge_tags SET kind = ? WHERE id = ? AND knowledge_base_id = ?", types.TagKindNature, natureID, kbID).Error)
 	repo := &userResourceFavoriteRepository{db: db}
-	valid, err := repo.IsConcreteTag(context.Background(), topicID)
+	valid, err := repo.IsConcreteTag(context.Background(), 1, topicID)
 	require.NoError(t, err)
 	assert.True(t, valid)
-	valid, err = repo.IsConcreteTag(context.Background(), natureID)
+	valid, err = repo.IsConcreteTag(context.Background(), 1, natureID)
 	require.NoError(t, err)
 	assert.False(t, valid)
+	valid, err = repo.IsConcreteTag(context.Background(), 2, topicID)
+	require.NoError(t, err)
+	assert.False(t, valid, "another tenant cannot star this label")
+}
+
+func TestListIDsByTagIDsOnlyReturnsFormalMessages(t *testing.T) {
+	db := setupKnowledgeTagTestDB(t)
+	repo := &knowledgeRepository{db: db}
+	kbID, approvedID, tagID, _ := seedKnowledgeTagFixture(t, db)
+	rejectedID := uuid.New().String()
+	require.NoError(t, db.Exec(`
+		INSERT INTO knowledges (id, tenant_id, knowledge_base_id, type, title, parse_status)
+		VALUES (?, 1, ?, 'file', 'screened out', 'rejected')
+	`, rejectedID, kbID).Error)
+	require.NoError(t, repo.SetKnowledgeTags(context.Background(), approvedID, []string{tagID}))
+	require.NoError(t, repo.SetKnowledgeTags(context.Background(), rejectedID, []string{tagID}))
+	ids, err := repo.ListIDsByTagIDs(context.Background(), 1, kbID, []string{tagID})
+	require.NoError(t, err)
+	assert.Equal(t, []string{approvedID}, ids)
 }
 
 func TestBatchCountReferences_ScopedToKnowledgeBase(t *testing.T) {

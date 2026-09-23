@@ -13,6 +13,7 @@ import { useMenuStore } from '@/stores/menu';
 import { useUIStore } from '@/stores/ui';
 import { useOrganizationStore } from '@/stores/organization';
 import { useAuthStore } from '@/stores/auth';
+import { useCommandPaletteStore } from '@/stores/commandPalette';
 import { useChatResourcesStore } from '@/stores/chatResources';
 import { useEditorResourcesStore } from '@/stores/editorResources';
 import KnowledgeBaseEditorModal from './KnowledgeBaseEditorModal.vue';
@@ -20,6 +21,7 @@ const usemenuStore = useMenuStore();
 const uiStore = useUIStore();
 const orgStore = useOrganizationStore();
 const authStore = useAuthStore();
+const commandPalette = useCommandPaletteStore();
 const chatResources = useChatResourcesStore();
 const editorResources = useEditorResourcesStore();
 const router = useRouter();
@@ -2519,7 +2521,7 @@ async function createNewSession(value: string): Promise<void> {
                                 <span class="tag-filter-chip__label">{{ tagLabel(tag, t) }}</span>
                                 <span class="tag-filter-chip__count">{{ tag.knowledge_count || 0 }}</span>
                               </button>
-                              <button v-if="!isFAQ && isConcreteTag(tag)" type="button" class="tag-star-button"
+                              <button v-if="!isFAQ && isConcreteTag(tag) && Number(tag.tenant_id) === Number(authStore.effectiveTenantId)" type="button" class="tag-star-button"
                                 :aria-label="$t(starredTagIds.has(tag.id) ? 'knowledgeBase.tagUnstarAction' : 'knowledgeBase.tagStarAction', { name: tag.name })"
                                 :aria-pressed="starredTagIds.has(tag.id)" @click.stop="toggleTagStar(tag)">
                                 <t-icon :name="starredTagIds.has(tag.id) ? 'star-filled' : 'star'" size="13px" />
@@ -2615,6 +2617,9 @@ async function createNewSession(value: string): Promise<void> {
                 </div>
                 </div>
                 <div class="doc-filter-bar__trailing">
+                  <t-button v-if="!isFAQ" variant="text" size="small" @click="commandPalette.openPalette(docSearchKeyword.trim())">
+                    {{ $t('knowledgeBase.searchMessageContent') }}
+                  </t-button>
                   <div class="doc-view-toggle" role="group" :aria-label="$t('knowledgeBase.viewModeToggle')">
                     <t-tooltip :content="$t('knowledgeBase.viewModeGrid')" placement="top">
                       <button type="button" class="doc-view-toggle-btn" :class="{ active: viewMode === 'grid' }"

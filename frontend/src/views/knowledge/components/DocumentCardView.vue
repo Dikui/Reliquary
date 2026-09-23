@@ -84,6 +84,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const isStarredTag = (tag: Tag) => isConcreteTag(tag) && props.starredTagIds.has(tag.id);
+const displayTags = (tags?: Tag[]) => [...(tags || [])].sort((a, b) => Number(isStarredTag(b)) - Number(isStarredTag(a)));
 
 const {
   setupTagChipsObserver,
@@ -558,7 +559,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
               <template v-if="(item.tags || []).length > 0">
                 <t-tooltip
                   v-if="hasTagOverflow(item.id, (item.tags || []).length)"
-                  :content="(item.tags || []).map((tag: Tag) => tagLabel(tag, t)).join(', ')"
+                  :content="displayTags(item.tags).map((tag: Tag) => `${isStarredTag(tag) ? '★ ' : ''}${tagLabel(tag, t)}`).join(', ')"
                   placement="top"
                 >
                   <div
@@ -566,7 +567,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
                     :ref="(el: any) => setupTagChipsObserver(el, item.id, (item.tags || []).length)"
                     @click="emit('tag-edit', item)"
                   >
-                    <t-tag v-for="tag in (item.tags || []).slice(0, getTagLimit(item.id))" :key="tag.id" size="small" variant="light-outline" class="card-tag-chip" :class="{ 'is-starred': isStarredTag(tag) }">
+                    <t-tag v-for="tag in displayTags(item.tags).slice(0, getTagLimit(item.id))" :key="tag.id" size="small" variant="light-outline" class="card-tag-chip" :class="{ 'is-starred': isStarredTag(tag) }">
                       <span class="tag-text">{{ isStarredTag(tag) ? '★ ' : '' }}{{ tagLabel(tag, t) }}</span>
                     </t-tag>
                     <span class="card-tag-overflow">+{{ getOverflowCount(item.id, (item.tags || []).length) }}</span>
@@ -578,7 +579,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
                   :ref="(el: any) => setupTagChipsObserver(el, item.id, (item.tags || []).length)"
                   @click="emit('tag-edit', item)"
                 >
-                  <t-tag v-for="tag in (item.tags || []).slice(0, getTagLimit(item.id))" :key="tag.id" size="small" variant="light-outline" class="card-tag-chip" :class="{ 'is-starred': isStarredTag(tag) }">
+                  <t-tag v-for="tag in displayTags(item.tags).slice(0, getTagLimit(item.id))" :key="tag.id" size="small" variant="light-outline" class="card-tag-chip" :class="{ 'is-starred': isStarredTag(tag) }">
                     <span class="tag-text">{{ isStarredTag(tag) ? '★ ' : '' }}{{ tagLabel(tag, t) }}</span>
                   </t-tag>
                 </div>
@@ -592,14 +593,14 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
             <template v-else-if="(item.tags || []).length > 0">
               <t-tooltip
                 v-if="hasTagOverflow(item.id, (item.tags || []).length)"
-                :content="(item.tags || []).map((tag: Tag) => tagLabel(tag, t)).join(', ')"
+                :content="displayTags(item.tags).map((tag: Tag) => `${isStarredTag(tag) ? '★ ' : ''}${tagLabel(tag, t)}`).join(', ')"
                 placement="top"
               >
                 <div
                   class="card-tag-chips"
                   :ref="(el: any) => setupTagChipsObserver(el, item.id, (item.tags || []).length)"
                 >
-                  <t-tag v-for="tag in (item.tags || []).slice(0, getTagLimit(item.id))" :key="tag.id" size="small" variant="light-outline" class="card-tag-chip" :class="{ 'is-starred': isStarredTag(tag) }">
+                  <t-tag v-for="tag in displayTags(item.tags).slice(0, getTagLimit(item.id))" :key="tag.id" size="small" variant="light-outline" class="card-tag-chip" :class="{ 'is-starred': isStarredTag(tag) }">
                     <span class="tag-text">{{ isStarredTag(tag) ? '★ ' : '' }}{{ tagLabel(tag, t) }}</span>
                   </t-tag>
                   <span class="card-tag-overflow">+{{ getOverflowCount(item.id, (item.tags || []).length) }}</span>
@@ -610,7 +611,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
                 class="card-tag-chips"
                 :ref="(el: any) => setupTagChipsObserver(el, item.id, (item.tags || []).length)"
               >
-                <t-tag v-for="tag in (item.tags || []).slice(0, getTagLimit(item.id))" :key="tag.id" size="small" variant="light-outline" class="card-tag-chip" :class="{ 'is-starred': isStarredTag(tag) }">
+                <t-tag v-for="tag in displayTags(item.tags).slice(0, getTagLimit(item.id))" :key="tag.id" size="small" variant="light-outline" class="card-tag-chip" :class="{ 'is-starred': isStarredTag(tag) }">
                   <span class="tag-text">{{ isStarredTag(tag) ? '★ ' : '' }}{{ tagLabel(tag, t) }}</span>
                 </t-tag>
               </div>

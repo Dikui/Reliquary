@@ -6189,6 +6189,7 @@ export default {
     tagKindEvent: '事件',
     tagStarAction: '星标 {name}',
     tagUnstarAction: '取消星标 {name}',
+    searchMessageContent: '搜索消息内容',
     tagDeleteSuccess: '标签已删除',
     tagEditAction: '重命名',
     tagDeleteAction: '删除',

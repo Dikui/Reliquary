@@ -6187,6 +6187,7 @@ export default {
     tagKindEvent: 'Событие',
     tagStarAction: 'Отметить {name} звездой',
     tagUnstarAction: 'Убрать звезду с {name}',
+    searchMessageContent: 'Поиск по содержимому',
     tagDeleteSuccess: 'Тег удалён',
     tagEditAction: 'Переименовать',
     tagDeleteAction: 'Удалить',

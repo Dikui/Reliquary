@@ -428,6 +428,7 @@ export default {
     tagKindEvent: 'Event',
     tagStarAction: 'Star {name}',
     tagUnstarAction: 'Unstar {name}',
+    searchMessageContent: 'Search message content',
     tagDeleteSuccess: 'Tag deleted',
     tagEditAction: 'Rename',
     tagDeleteAction: 'Delete',
