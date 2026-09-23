@@ -134,7 +134,7 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 		// ponytail: page-wide fallback may reject decorative media on pages without a content container.
 		content = doc.Selection
 	}
-	if content.Find("iframe, video, audio, object, embed").Length() > 0 {
+	if content.Find("iframe, video, audio, object, embed, canvas").Length() > 0 {
 		return "", "", "", "", fmt.Errorf("article contains unsupported embedded media")
 	}
 

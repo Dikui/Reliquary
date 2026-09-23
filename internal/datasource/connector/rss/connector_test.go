@@ -345,6 +345,11 @@ func TestConnector_FetchIncremental_RejectsUnpreservedEmbeddedMedia(t *testing.T
 	if len(items) != 1 || items[0].Metadata["error"] == "" || len(items[0].Content) != 0 {
 		t.Fatalf("unpreserved embed must not enter knowledge intake: %#v", items)
 	}
+	f.articleEmbed = `<p>The chart below carries the measured results.</p><canvas></canvas>`
+	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
+	if err != nil || len(items) != 1 || items[0].Metadata["error"] == "" || len(items[0].Content) != 0 {
+		t.Fatalf("unpreserved canvas must not enter knowledge intake: items=%#v err=%v", items, err)
+	}
 	f.articleEmbed = ""
 	f.pageEmbed = `<iframe src="https://example.com/footer-ad"></iframe>`
 	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
