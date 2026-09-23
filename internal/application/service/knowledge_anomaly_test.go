@@ -43,6 +43,28 @@ func anomalyContext(user string) context.Context {
 	return context.WithValue(ctx, types.UserIDContextKey, user)
 }
 
+func TestKnowledgeAnomalyForMessagesReturnsRelevantDecisions(t *testing.T) {
+	db := anomalyTestDB(t)
+	svc := NewKnowledgeAnomalyService(db, nil, nil, nil)
+	ctx := anomalyContext("owner")
+	item, err := svc.Create(ctx, "kb", KnowledgeAnomalyInput{KnowledgeIDs: []string{"message", "second"}, Kind: "source_conflict", Description: "conflicting evidence"})
+	require.NoError(t, err)
+	_, err = svc.Resolve(ctx, "kb", item.ID, "resolved", "Use the later verified source")
+	require.NoError(t, err)
+	got, err := svc.ForMessages(ctx, []string{"kb"}, []string{"message"})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, "resolved", got[0].Status)
+	require.Equal(t, "Use the later verified source", got[0].DecisionNote)
+	got, err = svc.ForMessages(ctx, []string{"kb"}, []string{"unrelated"})
+	require.NoError(t, err)
+	require.Empty(t, got)
+	otherTenant := context.WithValue(ctx, types.TenantIDContextKey, uint64(2))
+	got, err = svc.ForMessages(otherTenant, []string{"kb"}, []string{"message"})
+	require.NoError(t, err)
+	require.Empty(t, got)
+}
+
 func TestKnowledgeAnomalyReviewerCannotApplyOwnerCan(t *testing.T) {
 	db := anomalyTestDB(t)
 	tagRepo := repository.NewKnowledgeTagRepository(db)

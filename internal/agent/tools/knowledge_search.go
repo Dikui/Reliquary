@@ -127,9 +127,16 @@ type KnowledgeSearchTool struct {
 	searchTargets        types.SearchTargets // Pre-computed unified search targets
 	rerankModel          rerank.Reranker
 	config               *config.Config // Global config for fallback values
+	sourceDisputes       func(context.Context, []string, []string) ([]types.KnowledgeAnomaly, error)
 
 	seenMu     sync.Mutex
 	seenChunks map[string]bool
+}
+
+// WithSourceDisputes attaches KB-scoped correction decisions to retrieved messages.
+func (t *KnowledgeSearchTool) WithSourceDisputes(lookup func(context.Context, []string, []string) ([]types.KnowledgeAnomaly, error)) *KnowledgeSearchTool {
+	t.sourceDisputes = lookup
+	return t
 }
 
 // NewKnowledgeSearchTool creates a new knowledge search tool
@@ -1131,6 +1138,28 @@ func (t *KnowledgeSearchTool) formatOutput(
 		}
 	}
 	ob.WriteString("</retrieval_statistics>\n")
+	if t.sourceDisputes != nil {
+		knowledgeIDs := make([]string, 0, len(knowledgeChunkMap))
+		for id := range knowledgeChunkMap {
+			knowledgeIDs = append(knowledgeIDs, id)
+		}
+		disputes, err := t.sourceDisputes(ctx, kbsToSearch, knowledgeIDs)
+		if err != nil {
+			logger.Warnf(ctx, "[Tool][KnowledgeSearch] Failed to load source disputes: %v", err)
+		} else if len(disputes) > 0 {
+			ob.WriteString("<source_disputes>\n")
+			for _, dispute := range disputes {
+				ob.WriteString(fmt.Sprintf("<dispute id=\"%s\" status=\"%s\" knowledge_ids=\"%s\">\n",
+					xmlEscape(dispute.ID), xmlEscape(dispute.Status), xmlEscape(strings.Join(dispute.KnowledgeIDs, ","))))
+				ob.WriteString("<description>" + xmlEscape(dispute.Description) + "</description>\n")
+				if dispute.DecisionNote != "" {
+					ob.WriteString("<owner_decision>" + xmlEscape(dispute.DecisionNote) + "</owner_decision>\n")
+				}
+				ob.WriteString("</dispute>\n")
+			}
+			ob.WriteString("</source_disputes>\n")
+		}
+	}
 	ob.WriteString("</search_results>")
 
 	output := ob.String()

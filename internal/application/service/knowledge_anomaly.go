@@ -69,6 +69,42 @@ func (s *KnowledgeAnomalyService) List(ctx context.Context, kbID string, offset 
 	return items, more, nil
 }
 
+// ForMessages returns source conflicts relevant to retrieved messages, so a
+// later answer can respect the owner's decision without rereading all reports.
+func (s *KnowledgeAnomalyService) ForMessages(ctx context.Context, kbIDs, messageIDs []string) ([]types.KnowledgeAnomaly, error) {
+	tenantID, ok := types.TenantIDFromContext(ctx)
+	if !ok || tenantID == 0 {
+		return nil, werrors.NewUnauthorizedError("workspace required")
+	}
+	if s.db == nil || len(kbIDs) == 0 || len(messageIDs) == 0 {
+		return nil, nil
+	}
+	// ponytail: scan conflicts in the selected bases; add a message-ID index if this becomes slow.
+	var candidates []types.KnowledgeAnomaly
+	if err := s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id IN ? AND kind = ? AND status IN ?",
+		tenantID, kbIDs, "source_conflict", []string{"pending", "applying", "resolved", "applied"}).
+		Order("updated_at DESC").Find(&candidates).Error; err != nil {
+		return nil, err
+	}
+	wanted := make(map[string]bool, len(messageIDs))
+	for _, id := range messageIDs {
+		wanted[id] = true
+	}
+	matched := make([]types.KnowledgeAnomaly, 0)
+	for _, candidate := range candidates {
+		for _, id := range candidate.KnowledgeIDs {
+			if wanted[id] {
+				matched = append(matched, candidate)
+				break
+			}
+		}
+		if len(matched) == 20 {
+			break
+		}
+	}
+	return matched, nil
+}
+
 func (s *KnowledgeAnomalyService) Create(ctx context.Context, kbID string, input KnowledgeAnomalyInput) (*types.KnowledgeAnomaly, error) {
 	kb, err := s.scopedKB(ctx, kbID)
 	if err != nil {
