@@ -155,6 +155,7 @@ func TestGetKnowledgeTags_ReturnsTagDetails(t *testing.T) {
 	repo := &knowledgeRepository{db: db}
 	_, knowledgeID, tagA, tagB := seedKnowledgeTagFixture(t, db)
 	ctx := context.Background()
+	require.NoError(t, db.Exec("UPDATE knowledge_tags SET kind = ? WHERE id = ?", types.TagKindTopic, tagA).Error)
 
 	require.NoError(t, repo.SetKnowledgeTags(ctx, knowledgeID, []string{tagA, tagB}))
 
@@ -165,6 +166,9 @@ func TestGetKnowledgeTags_ReturnsTagDetails(t *testing.T) {
 	names := map[string]bool{}
 	for _, tag := range tagMap[knowledgeID] {
 		names[tag.Name] = true
+		if tag.ID == tagA {
+			assert.Equal(t, types.TagKindTopic, tag.Kind)
+		}
 	}
 	assert.True(t, names["alpha"])
 	assert.True(t, names["beta"])
@@ -191,7 +195,10 @@ func TestManualCorrectionAndTagDeletionPreserveMessage(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{tagA}, added)
 	require.NoError(t, tags.Delete(ctx, 1, tagA))
-	var chunk struct { ID string; TagID *string }
+	var chunk struct {
+		ID    string
+		TagID *string
+	}
 	require.NoError(t, db.Table("chunks").Select("id, tag_id").Where("id = ?", "chunk").Scan(&chunk).Error)
 	assert.Equal(t, "chunk", chunk.ID)
 	assert.Nil(t, chunk.TagID)

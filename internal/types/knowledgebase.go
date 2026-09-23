@@ -179,6 +179,8 @@ type AutoTagConfig struct {
 	Enabled bool   `yaml:"enabled" json:"enabled"`
 	ModelID string `yaml:"model_id,omitempty" json:"model_id,omitempty"`
 	MaxTags int    `yaml:"max_tags,omitempty" json:"max_tags,omitempty"`
+	// Policy refines message classification while fixed tag kinds remain enforced by validation.
+	Policy string `yaml:"policy,omitempty" json:"policy,omitempty"`
 	// SkipIfTagged leaves documents that already carry tags untouched, so a
 	// deliberate manual classification is not diluted by model guesses. It is
 	// a pointer because the default is true: rows written before this field

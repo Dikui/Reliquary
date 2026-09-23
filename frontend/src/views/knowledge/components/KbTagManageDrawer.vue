@@ -61,10 +61,7 @@
                   <t-icon name="discount" size="15px" />
                 </span>
                 <select v-if="!isFaq" v-model="newTagKind" :aria-label="$t('knowledgeBase.tagKindLabel')">
-                  <option value="nature">{{ $t('knowledgeBase.tagKindNature') }}</option>
-                  <option value="topic">{{ $t('knowledgeBase.tagKindTopic') }}</option>
-                  <option value="object">{{ $t('knowledgeBase.tagKindObject') }}</option>
-                  <option value="event">{{ $t('knowledgeBase.tagKindEvent') }}</option>
+                  <option v-for="kind in tagKinds" :key="kind" :value="kind">{{ tagKindLabel(kind, t) }}</option>
                 </select>
                 <select v-if="!isFaq && newTagKind === 'nature'" v-model="newTagName" :aria-label="$t('knowledgeBase.tagNamePlaceholder')">
                   <option v-for="name in natureNames" :key="name" :value="name">{{ name }}</option>
@@ -118,10 +115,7 @@
                     <t-icon name="discount" size="15px" />
                   </span>
                   <select v-if="!isFaq" v-model="editingTagKind" :aria-label="$t('knowledgeBase.tagKindLabel')">
-                    <option value="nature">{{ $t('knowledgeBase.tagKindNature') }}</option>
-                    <option value="topic">{{ $t('knowledgeBase.tagKindTopic') }}</option>
-                    <option value="object">{{ $t('knowledgeBase.tagKindObject') }}</option>
-                    <option value="event">{{ $t('knowledgeBase.tagKindEvent') }}</option>
+                    <option v-for="kind in tagKinds" :key="kind" :value="kind">{{ tagKindLabel(kind, t) }}</option>
                   </select>
                   <select v-if="!isFaq && editingTagKind === 'nature'" v-model="editingTagName" :aria-label="$t('knowledgeBase.tagNamePlaceholder')">
                     <option v-for="name in natureNames" :key="name" :value="name">{{ name }}</option>
@@ -227,7 +221,7 @@
 import { ref, watch, nextTick, computed, type ComponentPublicInstance } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { MessagePlugin } from 'tdesign-vue-next';
-import { tagLabel } from '../tagLabel';
+import { tagLabel, tagKindLabel, tagKinds, natureNames } from '../tagLabel';
 import SettingDrawer from '@/components/settings/SettingDrawer.vue';
 import {
   listKnowledgeTags,
@@ -280,7 +274,6 @@ const creatingTag = ref(false);
 const creatingTagLoading = ref(false);
 const newTagName = ref('');
 const newTagKind = ref('topic');
-const natureNames = ['描述', '数据', '原理', '观点', '案例', '问题'];
 const tagDisplayName = (tag: TagRow) => tagLabel(tag, t);
 watch(newTagKind, (kind) => { newTagName.value = kind === 'nature' ? natureNames[0] : ''; });
 const newTagInputRef = ref<TagInputInstance | null>(null);

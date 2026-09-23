@@ -195,7 +195,7 @@ func TestAutoTagHandleCreatesBothAxesForApprovedMessageWithExistingTag(t *testin
 	intake := &types.KnowledgeIntakeMetadata{Decision: "approved"}
 	require.NoError(t, fixture.repo.knowledge.SetIntakeMetadata(intake))
 	fixture.repo.existing["doc"] = []*types.KnowledgeTag{{ID: "manual", Name: "existing"}}
-	fixture.service.kbService.(*autoTagKBService).kb.AutoTagConfig = nil
+	fixture.service.kbService.(*autoTagKBService).kb.AutoTagConfig = &types.AutoTagConfig{Policy: "Prefer specific events"}
 	require.NoError(t, fixture.handle(t))
 	tags := fixture.service.tagRepo.(*autoTagTagRepo).tags
 	created := map[string]string{}
@@ -206,6 +206,14 @@ func TestAutoTagHandleCreatesBothAxesForApprovedMessageWithExistingTag(t *testin
 	}
 	assert.Equal(t, map[string]string{"描述": "nature", "数据": "nature", "AI": "topic", "模型发布": "event"}, created)
 	assert.Len(t, fixture.repo.added, 4)
+	assert.Contains(t, fixture.chatModel.messages[0].Content, "Prefer specific events")
+}
+
+func TestAutoTagHandleRejectsMissingAxis(t *testing.T) {
+	fixture := newAutoTagFixture(t, `{"natures":["描述"],"referents":[]}`)
+	require.NoError(t, fixture.repo.knowledge.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "approved"}))
+	require.Error(t, fixture.handle(t))
+	assert.Empty(t, fixture.repo.added)
 }
 
 // A missing confidence must not be read as zero: models frequently omit the

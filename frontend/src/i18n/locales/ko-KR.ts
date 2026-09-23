@@ -3462,7 +3462,10 @@ export default {
         maxTagsLabel: '문서당 최대 태그 수',
         maxTagsDescription: '문서마다 기존 태그 1-10개를 자동 연결합니다.',
         skipIfTaggedLabel: '태그가 있는 문서 건너뛰기',
-        skipIfTaggedDescription: '활성화하면 업로드 시 수동으로 태그를 지정한 문서에는 자동 태그를 추가하지 않아 사용자의 분류 의도를 유지합니다.'
+        skipIfTaggedDescription: '활성화하면 업로드 시 수동으로 태그를 지정한 문서에는 자동 태그를 추가하지 않아 사용자의 분류 의도를 유지합니다.',
+        policyLabel: '메시지 태그 분류 정책',
+        policyDescription: '승인된 메시지의 내용 성격과 주제·대상·사건 태그를 선택하는 규칙입니다. 고정 분류와 출력 형식은 바꿀 수 없습니다.',
+        policyPlaceholder: '예: 예측을 발생한 사건으로 분류하지 않습니다.'
       }
     },
     asr: {

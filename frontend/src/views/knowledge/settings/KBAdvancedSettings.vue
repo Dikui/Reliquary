@@ -116,6 +116,20 @@
 
       <div class="setting-row setting-row-vertical">
         <div class="setting-info">
+          <label>{{ $t('knowledgeEditor.advanced.autoTag.policyLabel') }}</label>
+          <p class="desc">{{ $t('knowledgeEditor.advanced.autoTag.policyDescription') }}</p>
+        </div>
+        <t-textarea
+          v-model="localAutoTag.policy"
+          :maxlength="4000"
+          :autosize="{ minRows: 3, maxRows: 8 }"
+          :placeholder="$t('knowledgeEditor.advanced.autoTag.policyPlaceholder')"
+          @change="emitAutoTag"
+        />
+      </div>
+
+      <div class="setting-row setting-row-vertical">
+        <div class="setting-info">
           <label>{{ $t('knowledgeEditor.advanced.tableMetadataInstructions.label') }}</label>
           <p class="desc">{{ $t('knowledgeEditor.advanced.tableMetadataInstructions.description') }}</p>
         </div>
@@ -149,6 +163,7 @@ interface AutoTagConfig {
   modelId: string
   maxTags: number
   skipIfTagged: boolean
+  policy: string
 }
 
 interface Props {
@@ -177,7 +192,7 @@ const localQuestionGeneration = ref<QuestionGenerationConfig>(
 )
 
 const localAutoTag = ref<AutoTagConfig>(
-  props.autoTag ? { ...props.autoTag } : { enabled: false, modelId: '', maxTags: 3, skipIfTagged: true }
+  props.autoTag ? { ...props.autoTag } : { enabled: false, modelId: '', maxTags: 3, skipIfTagged: true, policy: '' }
 )
 
 watch(() => props.questionGeneration, (newVal) => {

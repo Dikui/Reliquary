@@ -3339,7 +3339,10 @@ export default {
         maxTagsLabel: 'Maximum tags per document',
         maxTagsDescription: 'Automatically associate 1-10 existing tags per document.',
         skipIfTaggedLabel: 'Skip documents that already have tags',
-        skipIfTaggedDescription: 'When enabled, documents tagged manually at upload time are left untouched, so a deliberate classification is not diluted.'
+        skipIfTaggedDescription: 'When enabled, documents tagged manually at upload time are left untouched, so a deliberate classification is not diluted.',
+        policyLabel: 'Message tagging policy',
+        policyDescription: 'Guides content-kind and topic/object/event tagging for approved messages; fixed categories and output format remain unchanged.',
+        policyPlaceholder: 'For example: prefer confirmed events and do not label predictions as completed events.'
       },
       tableMetadataInstructions: {
         label: 'Table Metadata Instructions',

@@ -3464,7 +3464,10 @@ export default {
         maxTagsLabel: '单篇文档最多标签数',
         maxTagsDescription: '每篇文档最多自动关联 1-10 个已有标签。',
         skipIfTaggedLabel: '跳过已有标签的文档',
-        skipIfTaggedDescription: '开启后，上传时已手动设置标签的文档不再自动打标签，避免覆盖人工分类意图。'
+        skipIfTaggedDescription: '开启后，上传时已手动设置标签的文档不再自动打标签，避免覆盖人工分类意图。',
+        policyLabel: '消息标签整理策略',
+        policyDescription: '用于已审核消息的内容性质及主题、对象、事件识别；固定类别和输出格式不能更改。',
+        policyPlaceholder: '例如：优先识别明确发生的事件，避免把预测写成已发生事件。'
       }
     },
     asr: {
