@@ -245,7 +245,7 @@ func (t *GrepChunksTool) appendSourceDisputes(ctx context.Context, output string
 		} else if len(disputes) > 0 {
 			var note strings.Builder
 			writeSourceDisputes(&note, disputes)
-			output += "\n" + note.String()
+			output = strings.TrimSuffix(output, "</grep_results>") + note.String() + "</grep_results>"
 		}
 	}
 

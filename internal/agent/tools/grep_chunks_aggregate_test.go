@@ -68,11 +68,11 @@ func TestGrepChunksIncludesRelevantSourceDispute(t *testing.T) {
 		}
 		return []types.KnowledgeAnomaly{{ID: "issue-1", Status: "pending", KnowledgeIDs: []string{"doc-1"}, Description: "sources disagree"}}, nil
 	})
-	got := tool.appendSourceDisputes(context.Background(), "<grep_results/>", []string{"kb-1"}, []chunkWithTitle{
+	got := tool.appendSourceDisputes(context.Background(), "<grep_results></grep_results>", []string{"kb-1"}, []chunkWithTitle{
 		{Chunk: types.Chunk{KnowledgeID: "doc-1"}},
 		{Chunk: types.Chunk{KnowledgeID: "doc-1"}},
 	})
-	if !called || !strings.Contains(got, `<source_disputes>`) || !strings.Contains(got, `sources disagree`) {
+	if !called || !strings.Contains(got, `<source_disputes>`) || !strings.Contains(got, `sources disagree`) || !strings.HasSuffix(got, "</source_disputes>\n</grep_results>") {
 		t.Fatalf("expected one relevant source dispute after grep results, got %q", got)
 	}
 }
