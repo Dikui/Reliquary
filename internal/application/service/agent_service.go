@@ -1107,7 +1107,8 @@ func (s *agentService) registerTools(
 			})
 		case tools.ToolKnowledgeApplyAnomaly:
 			anomalies := NewKnowledgeAnomalyService(s.db, s.knowledgeService, s.knowledgeTagService, s.audit)
-			toolToRegister = tools.NewKnowledgeApplyAnomalyTool(config.SearchTargets, func(ctx context.Context, kbID, anomalyID string) (string, error) {
+			approvalGate, _ := s.toolApprovalGate.(approval.RequiredApproval)
+			toolToRegister = tools.NewKnowledgeApplyAnomalyTool(config.SearchTargets, approvalGate, func(ctx context.Context, kbID, anomalyID string) (string, error) {
 				item, err := anomalies.Resolve(ctx, kbID, anomalyID, "apply", "")
 				if err != nil {
 					return "", err

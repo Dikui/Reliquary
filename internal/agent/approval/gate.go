@@ -104,6 +104,11 @@ type MCPApproval interface {
 	RequestAndWait(ctx context.Context, req PendingRequest) (Decision, error)
 }
 
+// RequiredApproval always asks the initiating user, independent of MCP policy.
+type RequiredApproval interface {
+	RequireAndWait(ctx context.Context, req PendingRequest) (Decision, error)
+}
+
 // OAuthPendingRequest carries everything needed to prompt the user to authorize
 // an OAuth-enabled MCP service mid-conversation and block until they do.
 type OAuthPendingRequest struct {
@@ -312,6 +317,13 @@ func (g *Gate) RequestAndWait(ctx context.Context, req PendingRequest) (Decision
 	}
 	if g.checker == nil {
 		return Decision{Approved: true}, nil
+	}
+	return g.RequireAndWait(ctx, req)
+}
+
+func (g *Gate) RequireAndWait(ctx context.Context, req PendingRequest) (Decision, error) {
+	if g == nil {
+		return Decision{}, fmt.Errorf("tool approval gate unavailable")
 	}
 	if req.EventBus == nil {
 		return Decision{}, fmt.Errorf("tool approval: EventBus is nil")
