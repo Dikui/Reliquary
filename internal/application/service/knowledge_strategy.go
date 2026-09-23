@@ -305,6 +305,21 @@ func (s *KnowledgeStrategyService) Activate(ctx context.Context, kbID, versionID
 		if selected.Status != "candidate" && selected.Status != "archived" {
 			return werrors.NewBadRequestError("strategy version is already active")
 		}
+		if selected.Status == "candidate" {
+			current, err := activeKnowledgeStrategyRules(ctx, tx, kb.TenantID, kb.ID)
+			if err != nil {
+				return err
+			}
+			if current != nil {
+				var before KnowledgeStrategyRules
+				if err := json.Unmarshal(selected.PreviousRules, &before); err != nil {
+					return err
+				}
+				if before != *current {
+					return werrors.NewBadRequestError("active strategy changed; propose a new candidate")
+				}
+			}
+		}
 		if err := tx.Model(&types.KnowledgeStrategyVersion{}).Where("tenant_id = ? AND knowledge_base_id = ? AND status = ?", kb.TenantID, kb.ID, "active").Update("status", "archived").Error; err != nil {
 			return err
 		}

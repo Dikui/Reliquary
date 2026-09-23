@@ -95,6 +95,11 @@ func TestKnowledgeStrategyCandidateTrialAndRestore(t *testing.T) {
 	active, err = activeKnowledgeStrategyRules(owner, db, 1, "kb")
 	require.NoError(t, err)
 	require.Equal(t, "Prefer detailed evidence", active.Filter)
+	stale := &types.KnowledgeStrategyVersion{ID: "stale", TenantID: 1, KnowledgeBaseID: "kb", Status: "candidate",
+		Rules: types.JSON(`{"filter":"stale"}`), PreviousRules: types.JSON(`{}`), SampleResults: types.JSON(`[]`), Reason: "stale proposal", CreatedBy: "owner"}
+	require.NoError(t, db.Create(stale).Error)
+	_, err = svc.Activate(owner, "kb", stale.ID)
+	require.Error(t, err, "a candidate trialed against an obsolete active strategy must not overwrite it")
 	targets := types.SearchTargets{&types.SearchTarget{Type: types.SearchTargetTypeKnowledgeBase, KnowledgeBaseID: "kb", TenantID: 1}}
 	researchPolicy, err := activeResearchPolicyForTargets(owner, db, targets)
 	require.NoError(t, err)
