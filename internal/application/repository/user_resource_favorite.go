@@ -78,3 +78,11 @@ func (r *userResourceFavoriteRepository) IsFavorite(
 	}
 	return true, nil
 }
+
+func (r *userResourceFavoriteRepository) IsConcreteTag(ctx context.Context, tagID string) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&types.KnowledgeTag{}).
+		Where("id = ? AND kind IN ?", tagID, []string{types.TagKindTopic, types.TagKindObject, types.TagKindEvent}).
+		Count(&count).Error
+	return count == 1, err
+}

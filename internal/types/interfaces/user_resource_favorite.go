@@ -22,6 +22,8 @@ type UserResourceFavoriteRepository interface {
 	// IsFavorite exists for the rare RPC where the caller wants a single
 	// boolean rather than the full list (e.g. a future GET-by-id endpoint).
 	IsFavorite(ctx context.Context, userID string, tenantID uint64, resourceType, resourceID string) (bool, error)
+	// IsConcreteTag keeps stars on topic/object/event labels only.
+	IsConcreteTag(ctx context.Context, tagID string) (bool, error)
 }
 
 // UserResourceFavoriteService wraps the repository with input validation

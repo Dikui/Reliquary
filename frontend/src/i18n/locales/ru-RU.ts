@@ -6185,6 +6185,8 @@ export default {
     tagKindTopic: 'Тема',
     tagKindObject: 'Объект',
     tagKindEvent: 'Событие',
+    tagStarAction: 'Отметить {name} звездой',
+    tagUnstarAction: 'Убрать звезду с {name}',
     tagDeleteSuccess: 'Тег удалён',
     tagEditAction: 'Переименовать',
     tagDeleteAction: 'Удалить',

@@ -6185,6 +6185,8 @@ export default {
     tagKindTopic: '주제',
     tagKindObject: '대상',
     tagKindEvent: '사건',
+    tagStarAction: '{name} 별표 표시',
+    tagUnstarAction: '{name} 별표 해제',
     tagDeleteSuccess: '태그가 삭제되었습니다',
     tagEditAction: '이름 변경',
     tagDeleteAction: '삭제',

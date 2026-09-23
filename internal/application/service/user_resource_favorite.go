@@ -14,6 +14,7 @@ import (
 var (
 	ErrFavoriteInvalidType = errors.New("invalid favorite resource type")
 	ErrFavoriteEmptyID     = errors.New("favorite resource id is required")
+	ErrFavoriteInvalidTag  = errors.New("only topic, object, and event tags can be starred")
 )
 
 type userResourceFavoriteService struct {
@@ -45,6 +46,15 @@ func (s *userResourceFavoriteService) Add(
 	}
 	if strings.TrimSpace(resourceID) == "" {
 		return ErrFavoriteEmptyID
+	}
+	if resourceType == types.ResourceTypeTag {
+		valid, err := s.repo.IsConcreteTag(ctx, resourceID)
+		if err != nil {
+			return err
+		}
+		if !valid {
+			return ErrFavoriteInvalidTag
+		}
 	}
 	_, err := s.repo.Add(ctx, userID, tenantID, resourceType, resourceID)
 	return err

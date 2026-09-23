@@ -426,6 +426,8 @@ export default {
     tagKindTopic: 'Topic',
     tagKindObject: 'Object',
     tagKindEvent: 'Event',
+    tagStarAction: 'Star {name}',
+    tagUnstarAction: 'Unstar {name}',
     tagDeleteSuccess: 'Tag deleted',
     tagEditAction: 'Rename',
     tagDeleteAction: 'Delete',

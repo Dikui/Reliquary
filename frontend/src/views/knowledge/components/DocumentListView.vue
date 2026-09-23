@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { tagLabel } from '../tagLabel';
+import { tagLabel, isConcreteTag } from '../tagLabel';
 import { formatFileSize, getFileIcon } from '@/utils/files';
 import { useTagChipsOverflow } from '@/composables/useTagChipsOverflow';
 import DocumentActionMenu from './DocumentActionMenu.vue';
@@ -39,6 +39,7 @@ const props = defineProps<{
   canMutateKnowledge: boolean;
   traceVisibleIds: Record<string, boolean>;
   tagList: Tag[];
+  starredTagIds: Set<string>;
   loading?: boolean;
   /** Sub-folders of the folder currently being browsed. */
   folders?: Array<{ path: string; name: string; total_count: number }>;
@@ -77,6 +78,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const isStarredTag = (tag: Tag) => isConcreteTag(tag) && props.starredTagIds.has(tag.id);
 
 const {
   setupTagChipsObserver,
@@ -337,8 +339,8 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
               <div class="row-tag-chips" :ref="(el: any) => setupTagChipsObserver(el, item.id, (item.tags || []).length)"
                 :class="{ 'is-clickable': canEdit }" @click.stop="canEdit && emit('tag-edit', item)">
                 <t-tag v-for="tag in (item.tags || []).slice(0, getTagLimit(item.id))" :key="tag.id" size="small"
-                  variant="light-outline" class="row-tag">
-                  {{ tagLabel(tag, t) }}
+                  variant="light-outline" class="row-tag" :class="{ 'is-starred': isStarredTag(tag) }">
+                  {{ isStarredTag(tag) ? '★ ' : '' }}{{ tagLabel(tag, t) }}
                 </t-tag>
                 <span class="row-tag-overflow">+{{ getOverflowCount(item.id, (item.tags || []).length) }}</span>
               </div>
@@ -346,8 +348,8 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
             <div v-else class="row-tag-chips" :ref="(el: any) => setupTagChipsObserver(el, item.id, (item.tags || []).length)"
               :class="{ 'is-clickable': canEdit }" @click.stop="canEdit && emit('tag-edit', item)">
               <t-tag v-for="tag in (item.tags || []).slice(0, getTagLimit(item.id))" :key="tag.id" size="small"
-                variant="light-outline" class="row-tag">
-                {{ tagLabel(tag, t) }}
+                variant="light-outline" class="row-tag" :class="{ 'is-starred': isStarredTag(tag) }">
+                {{ isStarredTag(tag) ? '★ ' : '' }}{{ tagLabel(tag, t) }}
               </t-tag>
             </div>
           </template>
@@ -771,6 +773,12 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
     max-width: 120px;
     display: inline-block;
   }
+}
+
+.row-tag.is-starred {
+  color: var(--td-warning-color);
+  border-color: var(--td-warning-color);
+  font-weight: 600;
 }
 
 .row-tag-chips {

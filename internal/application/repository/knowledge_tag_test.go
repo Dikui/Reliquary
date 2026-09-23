@@ -241,6 +241,7 @@ func TestApplyKnowledgeListFilter_TagIDsOrSemantics(t *testing.T) {
 	docA := uuid.New().String()
 	docB := uuid.New().String()
 	docC := uuid.New().String()
+	rejectedDoc := uuid.New().String()
 	tagA := uuid.New().String()
 	tagB := uuid.New().String()
 
@@ -253,12 +254,17 @@ func TestApplyKnowledgeListFilter_TagIDsOrSemantics(t *testing.T) {
 		`, row.id, kbID, row.title).Error)
 	}
 	require.NoError(t, db.Exec(`
+		INSERT INTO knowledges (id, tenant_id, knowledge_base_id, type, title, parse_status)
+		VALUES (?, 1, ?, 'file', 'screened out', 'rejected')
+	`, rejectedDoc, kbID).Error)
+	require.NoError(t, db.Exec(`
 		INSERT INTO knowledge_tags (id, seq_id, tenant_id, knowledge_base_id, name)
 		VALUES (?, 1, 1, ?, 't-a'), (?, 2, 1, ?, 't-b')
 	`, tagA, kbID, tagB, kbID).Error)
 	require.NoError(t, repo.SetKnowledgeTags(ctx, docA, []string{tagA}))
 	require.NoError(t, repo.SetKnowledgeTags(ctx, docB, []string{tagB}))
 	require.NoError(t, repo.SetKnowledgeTags(ctx, docC, []string{tagA, tagB}))
+	require.NoError(t, repo.SetKnowledgeTags(ctx, rejectedDoc, []string{tagA}))
 
 	query := db.WithContext(ctx).Model(&types.Knowledge{}).
 		Where("tenant_id = ? AND knowledge_base_id = ?", uint64(1), kbID)
@@ -269,6 +275,26 @@ func TestApplyKnowledgeListFilter_TagIDsOrSemantics(t *testing.T) {
 	var ids []string
 	require.NoError(t, query.Pluck("id", &ids).Error)
 	assert.ElementsMatch(t, []string{docA, docB, docC}, ids)
+
+	// A manual reassociation changes the next lookup without rebuilding an index.
+	require.NoError(t, repo.SetKnowledgeTags(ctx, docB, nil))
+	ids = nil
+	require.NoError(t, query.Pluck("id", &ids).Error)
+	assert.ElementsMatch(t, []string{docA, docC}, ids)
+}
+
+func TestTagFavoriteOnlyAcceptsConcreteReferents(t *testing.T) {
+	db := setupKnowledgeTagTestDB(t)
+	kbID, _, topicID, natureID := seedKnowledgeTagFixture(t, db)
+	require.NoError(t, db.Exec("UPDATE knowledge_tags SET kind = ? WHERE id = ? AND knowledge_base_id = ?", types.TagKindTopic, topicID, kbID).Error)
+	require.NoError(t, db.Exec("UPDATE knowledge_tags SET kind = ? WHERE id = ? AND knowledge_base_id = ?", types.TagKindNature, natureID, kbID).Error)
+	repo := &userResourceFavoriteRepository{db: db}
+	valid, err := repo.IsConcreteTag(context.Background(), topicID)
+	require.NoError(t, err)
+	assert.True(t, valid)
+	valid, err = repo.IsConcreteTag(context.Background(), natureID)
+	require.NoError(t, err)
+	assert.False(t, valid)
 }
 
 func TestBatchCountReferences_ScopedToKnowledgeBase(t *testing.T) {

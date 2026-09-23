@@ -6187,6 +6187,8 @@ export default {
     tagKindTopic: '主题',
     tagKindObject: '对象',
     tagKindEvent: '事件',
+    tagStarAction: '星标 {name}',
+    tagUnstarAction: '取消星标 {name}',
     tagDeleteSuccess: '标签已删除',
     tagEditAction: '重命名',
     tagDeleteAction: '删除',

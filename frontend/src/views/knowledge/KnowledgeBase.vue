@@ -52,7 +52,8 @@ import KbFolderTree from './components/KbFolderTree.vue';
 import TagEditDialog from './components/TagEditDialog.vue';
 import BatchTagDialog from './components/BatchTagDialog.vue';
 import KbTagManageDrawer from './components/KbTagManageDrawer.vue';
-import { tagLabel } from './tagLabel';
+import { tagLabel, isConcreteTag } from './tagLabel';
+import { listFavorites, addFavorite, removeFavorite } from '@/api/user-favorites';
 import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess';
 import { useUploadConfirmStore, type UploadConfirmResult } from '@/stores/uploadConfirm';
 import WikiBrowser from './wiki/WikiBrowser.vue';
@@ -690,6 +691,33 @@ const tagMap = computed<Record<string, any>>(() => {
   });
   return map;
 });
+const starredTagIds = ref<Set<string>>(new Set());
+watch(() => authStore.effectiveTenantId, async (tenantId) => {
+  starredTagIds.value = new Set();
+  if (!tenantId) return;
+  try {
+    const res = await listFavorites('tag');
+    if (authStore.effectiveTenantId === tenantId) {
+      starredTagIds.value = new Set((res?.data || []).map((entry) => entry.resource_id));
+    }
+  } catch (error) {
+    console.error('Failed to load starred tags', error);
+  }
+}, { immediate: true });
+const toggleTagStar = async (tag: { id: string; kind?: string }) => {
+  if (!isConcreteTag(tag)) return;
+  const wasStarred = starredTagIds.value.has(tag.id);
+  try {
+    if (wasStarred) await removeFavorite('tag', tag.id);
+    else await addFavorite('tag', tag.id);
+    const next = new Set(starredTagIds.value);
+    if (wasStarred) next.delete(tag.id);
+    else next.add(tag.id);
+    starredTagIds.value = next;
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || t('common.operationFailed'));
+  }
+};
 const sidebarCategoryCount = computed(() => tagTotal.value || tagList.value.length);
 const sidebarTags = computed(() => {
   const list = tagList.value;
@@ -2480,18 +2508,23 @@ async function createNewSession(value: string): Promise<void> {
                         </template>
                         <template v-else>
                           <div class="tag-filter-chips">
-                            <button
-                              v-for="tag in sidebarTags"
-                              :key="tag.id"
-                              type="button"
-                              class="tag-filter-chip"
-                              :class="{ active: isTagFilterActive(tag.id) }"
-                              :title="`${tagLabel(tag, t)} (${tag.knowledge_count || 0})`"
-                              @click="handleTagRowClick(tag.id)"
-                            >
-                              <span class="tag-filter-chip__label">{{ tagLabel(tag, t) }}</span>
-                              <span class="tag-filter-chip__count">{{ tag.knowledge_count || 0 }}</span>
-                            </button>
+                            <span v-for="tag in sidebarTags" :key="tag.id" class="tag-filter-item">
+                              <button
+                                type="button"
+                                class="tag-filter-chip"
+                                :class="{ active: isTagFilterActive(tag.id), 'is-starred': isConcreteTag(tag) && starredTagIds.has(tag.id) }"
+                                :title="`${tagLabel(tag, t)} (${tag.knowledge_count || 0})`"
+                                @click="handleTagRowClick(tag.id)"
+                              >
+                                <span class="tag-filter-chip__label">{{ tagLabel(tag, t) }}</span>
+                                <span class="tag-filter-chip__count">{{ tag.knowledge_count || 0 }}</span>
+                              </button>
+                              <button v-if="!isFAQ && isConcreteTag(tag)" type="button" class="tag-star-button"
+                                :aria-label="$t(starredTagIds.has(tag.id) ? 'knowledgeBase.tagUnstarAction' : 'knowledgeBase.tagStarAction', { name: tag.name })"
+                                :aria-pressed="starredTagIds.has(tag.id)" @click.stop="toggleTagStar(tag)">
+                                <t-icon :name="starredTagIds.has(tag.id) ? 'star-filled' : 'star'" size="13px" />
+                              </button>
+                            </span>
                           </div>
                           <div v-if="!sidebarTags.length" class="tag-empty-state">
                             {{ $t('knowledgeBase.tagEmptyResult') }}
@@ -2641,6 +2674,7 @@ async function createNewSession(value: string): Promise<void> {
                     :can-mutate-knowledge="canMutateKnowledge"
                     :trace-available-by-id="traceAvailableById"
                     :tag-list="tagList"
+                    :starred-tag-ids="starredTagIds"
                     :move-menu-mode="moveMenuMode"
                     :move-target-kbs="moveTargetKbs"
                     :move-targets-loading="moveTargetsLoading"
@@ -2663,7 +2697,7 @@ async function createNewSession(value: string): Promise<void> {
                 </template>
                 <template v-else-if="(cardList.length || currentChildFolders.length) && (viewMode === 'list' || selectedParseStatus === 'rejected')">
                   <DocumentListView :items="cardList" :folders="currentChildFolders" :folder-options="folderOptions"
-                    :selected-ids="selectedIds" :tag-list="tagList"
+                    :selected-ids="selectedIds" :tag-list="tagList" :starred-tag-ids="starredTagIds"
                     :can-edit="canEdit" :can-download="canDownloadKnowledge" :can-mutate-knowledge="canMutateKnowledge"
                     :trace-visible-ids="traceAvailableById"
                     :move-menu-mode="moveMenuMode"
@@ -2955,6 +2989,24 @@ async function createNewSession(value: string): Promise<void> {
     gap: 6px;
   }
 
+  .tag-filter-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .tag-star-button {
+    border: 0;
+    background: transparent;
+    color: var(--td-text-color-placeholder);
+    cursor: pointer;
+    padding: 2px;
+
+    &[aria-pressed='true'] {
+      color: var(--td-warning-color);
+    }
+  }
+
   .tag-filter-chip-skeleton {
     flex-shrink: 0;
   }
@@ -3003,6 +3055,11 @@ async function createNewSession(value: string): Promise<void> {
       &:hover {
         background-color: color-mix(in srgb, var(--td-brand-color) 10%, transparent);
       }
+    }
+
+    &.is-starred {
+      border-color: var(--td-warning-color);
+      font-weight: 600;
     }
   }
 
