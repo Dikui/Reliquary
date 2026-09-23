@@ -45,6 +45,7 @@ export const TOOL_CAPABILITY_REQUIREMENTS: Record<string, ToolRequirement> = {
   thinking: {},
   todo_write: {},
   knowledge_report_anomaly: {},
+  knowledge_apply_anomaly: {},
 
   // ---- RAG / chunk retrieval (need at least one chunk-indexed KB) ----
   // We use vector|keyword as the canonical "has RAG chunks" signal. FAQ KBs

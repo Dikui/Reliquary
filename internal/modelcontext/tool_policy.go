@@ -121,6 +121,9 @@ var toolHandlePolicies = map[string]toolHandlePolicy{
 	"knowledge_report_anomaly": {
 		sourceIDKeys: map[string]struct{}{"knowledge_base_id": {}, "knowledge_ids": {}},
 	},
+	"knowledge_apply_anomaly": {
+		sourceIDKeys: map[string]struct{}{"knowledge_base_id": {}},
+	},
 	"wiki_search": {
 		sourceIDKeys: map[string]struct{}{"knowledge_base_id": {}},
 		sourceOutput: true,

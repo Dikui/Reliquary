@@ -1064,6 +1064,8 @@ export default {
       wikiFlagIssueDesc: '사실 오류나 병합 충돌을 표시합니다',
       knowledgeReportAnomaly: '메시지 문제 신고',
       knowledgeReportAnomalyDesc: '지식베이스 소유자에게 수정 또는 태그 변경을 제안합니다',
+      knowledgeApplyAnomaly: '메시지 수정 적용',
+      knowledgeApplyAnomalyDesc: '소유자가 명시적으로 요청한 수정만 적용합니다',
       wikiWritePage: 'Wiki 생성/덮어쓰기',
       wikiWritePageDesc: '새 페이지 생성 또는 기존 페이지 완전 덮어쓰기',
       wikiReplaceText: 'Wiki 텍스트 교체',
@@ -6195,7 +6197,7 @@ export default {
     anomalies: {
       title: '메시지 이상', report: '이상 신고', messageId: '메시지 ID (쉼표로 구분)', description: '문제 또는 수정 제안 설명', submit: '제출',
       list: '이상 및 처리 기록', empty: '이상 없음', proposedTags: '제안된 태그', noTags: '태그 없음', proposedDelete: '태그 삭제 제안',
-      addTags: '태그 연결 추가', removeTags: '태그 연결 제거', loadMore: '이전 기록 더 보기',
+      addTags: '태그 연결 추가', removeTags: '태그 연결 제거', loadMore: '이전 기록 더 보기', loadMoreTags: '태그 더 보기', retry: '적용 재시도',
       proposal: { none: '문제만 신고', change_tags: '태그 연결 수정', delete_tag: '태그 삭제' },
       openMessage: '원문 및 이미지 보기', editTags: '태그 수정', apply: '승인 및 적용', resolved: '해결됨', dismiss: '무시', decision: '처리 결과',
       loadFailed: '이상을 불러오지 못했습니다', saveFailed: '저장하지 못했습니다', submitted: '이상이 제출되었습니다', saved: '처리 결과가 저장되었습니다',

@@ -75,6 +75,7 @@ const (
 	ToolWikiReadIssue          = "wiki_read_issue"
 	ToolWikiUpdateIssue        = "wiki_update_issue"
 	ToolKnowledgeReportAnomaly = "knowledge_report_anomaly"
+	ToolKnowledgeApplyAnomaly  = "knowledge_apply_anomaly"
 )
 
 // AvailableTool defines a simple tool metadata used by settings APIs.
@@ -114,6 +115,7 @@ func AvailableToolDefinitions() []AvailableTool {
 		{Name: ToolWikiReadIssue, Label: "查看Wiki问题", Description: "查看特定的Wiki页面问题详情"},
 		{Name: ToolWikiUpdateIssue, Label: "更新Wiki问题状态", Description: "更新特定的Wiki页面问题状态"},
 		{Name: ToolKnowledgeReportAnomaly, Label: "报告消息异常", Description: "提交消息纠错或标签建议，等待知识库本人处理"},
+		{Name: ToolKnowledgeApplyAnomaly, Label: "执行消息纠错", Description: "仅在知识库本人明确指示后执行指定纠错建议"},
 	}
 }
 

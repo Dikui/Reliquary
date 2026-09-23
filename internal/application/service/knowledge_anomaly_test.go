@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
@@ -29,8 +31,10 @@ func anomalyTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, db.AutoMigrate(&types.KnowledgeAnomaly{}))
 	require.NoError(t, db.Exec(`INSERT INTO knowledge_bases (id,tenant_id,creator_id) VALUES ('kb',1,'owner')`).Error)
 	require.NoError(t, db.Exec(`INSERT INTO knowledges (id,tenant_id,knowledge_base_id,parse_status) VALUES ('message',1,'kb','completed')`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO knowledges (id,tenant_id,knowledge_base_id,parse_status) VALUES ('second',1,'kb','completed')`).Error)
 	require.NoError(t, db.Exec(`INSERT INTO knowledge_tags (id,tenant_id,knowledge_base_id,name,kind) VALUES ('old',1,'kb','Old','topic'),('new',1,'kb','New','topic'),('keep',1,'kb','Keep','topic')`).Error)
 	require.NoError(t, db.Exec(`INSERT INTO knowledge_tag_relations (knowledge_id,tag_id) VALUES ('message','old'),('message','keep')`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO knowledge_tag_relations (knowledge_id,tag_id) VALUES ('second','old')`).Error)
 	return db
 }
 
@@ -46,7 +50,7 @@ func TestKnowledgeAnomalyReviewerCannotApplyOwnerCan(t *testing.T) {
 	svc := NewKnowledgeAnomalyService(db, knowledge, nil, nil)
 	reviewer := anomalyContext("reviewer")
 	item, err := svc.Create(reviewer, "kb", KnowledgeAnomalyInput{
-		KnowledgeIDs: []string{"message"}, Kind: "suspected_error", Description: "wrong topic",
+		KnowledgeIDs: []string{"message", "second"}, Kind: "suspected_error", Description: "wrong topic",
 		ProposalType: "change_tags", ProposedTagIDs: []string{"new"}, ProposedRemoveTagIDs: []string{"old"},
 	})
 	require.NoError(t, err)
@@ -63,12 +67,16 @@ func TestKnowledgeAnomalyReviewerCannotApplyOwnerCan(t *testing.T) {
 	require.NoError(t, db.Model(&types.KnowledgeTagRelation{}).Where("knowledge_id = ?", "message").Pluck("tag_id", &ids).Error)
 	sort.Strings(ids)
 	require.Equal(t, []string{"keep", "new"}, ids)
+	ids = nil
+	require.NoError(t, db.Model(&types.KnowledgeTagRelation{}).Where("knowledge_id = ?", "second").Pluck("tag_id", &ids).Error)
+	require.Equal(t, []string{"new"}, ids)
 	var persisted types.KnowledgeAnomaly
 	require.NoError(t, db.First(&persisted, "id = ?", item.ID).Error)
 	require.Equal(t, types.KnowledgeAnomalyTagChange{Added: []string{"new"}, Removed: []string{"old"}}, persisted.AppliedChanges["message"])
+	require.Equal(t, types.KnowledgeAnomalyTagChange{Added: []string{"new"}, Removed: []string{"old"}}, persisted.AppliedChanges["second"])
 	var decisions []types.KnowledgeTagManualDecision
 	require.NoError(t, db.Find(&decisions).Error)
-	require.Len(t, decisions, 2)
+	require.Len(t, decisions, 4)
 	require.Equal(t, "confirmed", decisions[0].Reason)
 }
 
@@ -90,4 +98,28 @@ func TestKnowledgeAnomalyTagDeletionKeepsMessage(t *testing.T) {
 	require.Zero(t, tagCount)
 	require.Zero(t, relationCount)
 	require.EqualValues(t, 1, messageCount)
+}
+
+func TestKnowledgeAnomalyApplyingCanRecoverAfterOutcomeWriteFailure(t *testing.T) {
+	db := anomalyTestDB(t)
+	tagRepo := repository.NewKnowledgeTagRepository(db)
+	knowledge := &knowledgeService{repo: repository.NewKnowledgeRepository(db), tagRepo: tagRepo}
+	svc := NewKnowledgeAnomalyService(db, knowledge, nil, nil)
+	item, err := svc.Create(anomalyContext("reviewer"), "kb", KnowledgeAnomalyInput{
+		KnowledgeIDs: []string{"message"}, Kind: "suspected_error", Description: "wrong topic",
+		ProposalType: "change_tags", ProposedTagIDs: []string{"new"}, ProposedRemoveTagIDs: []string{"old"},
+	})
+	require.NoError(t, err)
+	// Simulate a crash after the tag mutation and before the final decision write.
+	require.NoError(t, db.Exec(`DELETE FROM knowledge_tag_relations WHERE knowledge_id = 'message' AND tag_id = 'old'`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO knowledge_tag_relations (knowledge_id,tag_id) VALUES ('message','new')`).Error)
+	planned, err := json.Marshal(map[string]types.KnowledgeAnomalyTagChange{"message": {Added: []string{"new"}, Removed: []string{"old"}}})
+	require.NoError(t, err)
+	require.NoError(t, db.Model(&types.KnowledgeAnomaly{}).Where("id = ?", item.ID).Updates(map[string]any{
+		"status": "applying", "applied_changes": string(planned), "updated_at": time.Now().Add(-3 * time.Minute),
+	}).Error)
+	decided, err := svc.Resolve(anomalyContext("owner"), "kb", item.ID, "apply", "")
+	require.NoError(t, err)
+	require.Equal(t, "applied", decided.Status)
+	require.Equal(t, []string{"new"}, decided.AppliedChanges["message"].Added)
 }

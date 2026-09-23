@@ -96,7 +96,7 @@ func (s *KnowledgeAnomalyService) Create(ctx context.Context, kbID string, input
 			ids = append(ids, id)
 		}
 	}
-	if len(ids) > 8 || (len(ids) == 0 && input.ProposalType != "delete_tag") || (input.ProposalType == "change_tags" && len(ids) != 1) {
+	if len(ids) > 8 || (len(ids) == 0 && input.ProposalType != "delete_tag") {
 		return nil, werrors.NewBadRequestError("invalid related messages")
 	}
 	if len(ids) > 0 {
@@ -203,20 +203,24 @@ func (s *KnowledgeAnomalyService) Resolve(ctx context.Context, kbID, anomalyID, 
 		}
 		return nil, err
 	}
-	if item.Status != "pending" {
+	retrying := action == "apply" && item.Status == "applying"
+	if item.Status != "pending" && !retrying {
 		return nil, werrors.NewBadRequestError("anomaly already decided")
+	}
+	if retrying && time.Since(item.UpdatedAt) < 2*time.Minute {
+		return nil, werrors.NewBadRequestError("anomaly is still applying; retry after two minutes")
+	}
+	if retrying && note == "" {
+		note = item.DecisionNote
 	}
 	status, result, expectedStatus := action, "", "pending"
 	if action == "apply" {
 		if item.ProposalType != "change_tags" && item.ProposalType != "delete_tag" {
 			return nil, werrors.NewBadRequestError("anomaly has no executable proposal")
 		}
-		if item.ProposalType == "change_tags" && len(item.KnowledgeIDs) != 1 {
-			return nil, werrors.NewBadRequestError("tag proposal requires one message")
-		}
 		claim := s.db.WithContext(ctx).Model(&types.KnowledgeAnomaly{}).
-			Where("id = ? AND tenant_id = ? AND knowledge_base_id = ? AND status = ?", anomalyID, kb.TenantID, kb.ID, "pending").
-			Update("status", "applying")
+			Where("id = ? AND tenant_id = ? AND knowledge_base_id = ? AND status = ?", anomalyID, kb.TenantID, kb.ID, item.Status).
+			Updates(map[string]any{"status": "applying", "updated_at": time.Now(), "decided_by": actorID, "decision_note": note})
 		if claim.Error != nil {
 			return nil, claim.Error
 		}
@@ -237,37 +241,58 @@ func (s *KnowledgeAnomalyService) Resolve(ctx context.Context, kbID, anomalyID, 
 				applyErr = getErr
 				break
 			}
-			id := item.KnowledgeIDs[0]
-			selected := make(map[string]bool)
-			for _, tag := range current[id] {
-				selected[tag.ID] = true
+			updates := make(map[string][]string, len(item.KnowledgeIDs))
+			plannedChanges := make(map[string]types.KnowledgeAnomalyTagChange, len(item.KnowledgeIDs))
+			for _, id := range item.KnowledgeIDs {
+				selected := make(map[string]bool)
+				for _, tag := range current[id] {
+					selected[tag.ID] = true
+				}
+				change := types.KnowledgeAnomalyTagChange{Added: []string{}, Removed: []string{}}
+				for _, tagID := range item.ProposedTagIDs {
+					if !selected[tagID] {
+						selected[tagID] = true
+						change.Added = append(change.Added, tagID)
+					}
+				}
+				for _, tagID := range item.ProposedRemoveTagIDs {
+					if selected[tagID] {
+						delete(selected, tagID)
+						change.Removed = append(change.Removed, tagID)
+					}
+				}
+				finalIDs := make([]string, 0, len(selected))
+				for tagID := range selected {
+					finalIDs = append(finalIDs, tagID)
+				}
+				updates[id] = finalIDs
+				plannedChanges[id] = change
 			}
-			change := types.KnowledgeAnomalyTagChange{Added: []string{}, Removed: []string{}}
-			for _, tagID := range item.ProposedTagIDs {
-				if !selected[tagID] {
-					selected[tagID] = true
-					change.Added = append(change.Added, tagID)
+			if len(item.AppliedChanges) == 0 {
+				item.AppliedChanges = plannedChanges
+				changes, marshalErr := json.Marshal(item.AppliedChanges)
+				if marshalErr != nil {
+					applyErr = marshalErr
+					break
+				}
+				if saveErr := s.db.WithContext(ctx).Model(&types.KnowledgeAnomaly{}).Where("id = ? AND status = ?", item.ID, "applying").Update("applied_changes", string(changes)).Error; saveErr != nil {
+					applyErr = saveErr
+					break
 				}
 			}
-			for _, tagID := range item.ProposedRemoveTagIDs {
-				if selected[tagID] {
-					delete(selected, tagID)
-					change.Removed = append(change.Removed, tagID)
-				}
-			}
-			finalIDs := make([]string, 0, len(selected))
-			for tagID := range selected {
-				finalIDs = append(finalIDs, tagID)
-			}
-			applyErr = s.knowledge.UpdateKnowledgeTagBatch(ctx, kb.ID, map[string][]string{id: finalIDs}, reason)
-			item.AppliedChanges = map[string]types.KnowledgeAnomalyTagChange{id: change}
+			applyErr = s.knowledge.UpdateKnowledgeTagBatch(ctx, kb.ID, updates, reason)
 			result = "tags_updated"
 		case "delete_tag":
 			applyErr = s.tags.DeleteTag(ctx, item.ProposedDeleteTagID, false, false, nil)
+			if applyErr != nil && retrying {
+				var remaining int64
+				if countErr := s.db.WithContext(ctx).Model(&types.KnowledgeTag{}).Where("id = ? AND tenant_id = ? AND knowledge_base_id = ?", item.ProposedDeleteTagID, kb.TenantID, kb.ID).Count(&remaining).Error; countErr == nil && remaining == 0 {
+					applyErr = nil
+				}
+			}
 			result = "tag_deleted"
 		}
 		if applyErr != nil {
-			s.db.WithContext(ctx).Model(&types.KnowledgeAnomaly{}).Where("id = ? AND status = ?", item.ID, "applying").Update("status", "pending")
 			return nil, applyErr
 		}
 		status = "applied"

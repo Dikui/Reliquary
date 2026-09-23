@@ -14,6 +14,9 @@
         </template>
         <t-select v-if="proposalType === 'delete_tag'" v-model="proposedDeleteTagId" filterable :options="tagOptions"
           :placeholder="t('knowledgeBase.anomalies.proposedDelete')" />
+        <t-button v-if="proposalType !== 'none' && moreTags" variant="text" size="small" :loading="tagLoading" @click="loadTags(true)">
+          {{ t('knowledgeBase.anomalies.loadMoreTags') }}
+        </t-button>
         <t-button theme="primary" :loading="saving" :disabled="!canSubmit" @click="submitReport">
           {{ t('knowledgeBase.anomalies.submit') }}
         </t-button>
@@ -46,13 +49,13 @@
               <t-button v-if="isOwner && item.status === 'pending' && item.knowledge_ids.length === 1" variant="text" size="small"
                 @click="emit('edit-tags', item.knowledge_ids[0], item.id)">{{ t('knowledgeBase.anomalies.editTags') }}</t-button>
             </div>
-            <div v-if="item.status === 'pending' && isOwner" class="anomaly-item__decisions">
+            <div v-if="(item.status === 'pending' || item.status === 'applying') && isOwner" class="anomaly-item__decisions">
               <t-button v-if="item.proposal_type !== 'none'" size="small" theme="primary" :loading="decidingId === item.id"
-                @click="decide(item, 'apply')">{{ t('knowledgeBase.anomalies.apply') }}</t-button>
-              <t-button size="small" variant="outline" :loading="decidingId === item.id" @click="decide(item, 'resolved')">
+                @click="decide(item, 'apply')">{{ t(`knowledgeBase.anomalies.${item.status === 'applying' ? 'retry' : 'apply'}`) }}</t-button>
+              <t-button v-if="item.status === 'pending'" size="small" variant="outline" :loading="decidingId === item.id" @click="decide(item, 'resolved')">
                 {{ t('knowledgeBase.anomalies.resolved') }}
               </t-button>
-              <t-button size="small" variant="text" :loading="decidingId === item.id" @click="decide(item, 'dismiss')">
+              <t-button v-if="item.status === 'pending'" size="small" variant="text" :loading="decidingId === item.id" @click="decide(item, 'dismiss')">
                 {{ t('knowledgeBase.anomalies.dismiss') }}
               </t-button>
             </div>
@@ -99,6 +102,9 @@ const { t } = useI18n()
 const items = ref<KnowledgeAnomaly[]>([])
 const hasMore = ref(false)
 const availableTags = ref<Array<{ id: string; name: string }>>([])
+const tagPage = ref(1)
+const moreTags = ref(false)
+const tagLoading = ref(false)
 const loading = ref(false)
 const saving = ref(false)
 const decidingId = ref('')
@@ -136,12 +142,20 @@ async function load(more = false) {
 }
 defineExpose({ refresh: () => load() })
 
-async function loadTags() {
+async function loadTags(more = false) {
+  if (tagLoading.value) return
+  tagLoading.value = true
   try {
-    const response: any = await listKnowledgeTags(props.kbId, { page: 1, page_size: 1000 })
-    availableTags.value = response?.data?.data || []
+    const page = more ? tagPage.value + 1 : 1
+    const response: any = await listKnowledgeTags(props.kbId, { page, page_size: 1000 })
+    const data = response?.data?.data || []
+    availableTags.value = more ? [...availableTags.value, ...data] : data
+    tagPage.value = page
+    moreTags.value = availableTags.value.length < (response?.data?.total || 0)
   } catch (error: any) {
     MessagePlugin.error(error?.message || t('knowledgeBase.anomalies.loadFailed'))
+  } finally {
+    tagLoading.value = false
   }
 }
 

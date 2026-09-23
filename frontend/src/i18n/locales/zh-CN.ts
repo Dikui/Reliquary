@@ -1066,6 +1066,8 @@ export default {
       wikiFlagIssueDesc: '标记页面中存在的事实错误或合并冲突问题',
       knowledgeReportAnomaly: '报告消息异常',
       knowledgeReportAnomalyDesc: '提交消息纠错或标签建议，等待知识库本人处理',
+      knowledgeApplyAnomaly: '执行消息纠错',
+      knowledgeApplyAnomalyDesc: '仅在知识库本人明确指示后执行指定纠错建议',
       wikiWritePage: '创建/覆盖 Wiki',
       wikiWritePageDesc: '创建新页面或完全覆盖已有 Wiki 页面',
       wikiReplaceText: '局部替换 Wiki',
@@ -6197,7 +6199,7 @@ export default {
     anomalies: {
       title: '消息异常', report: '报告异常', messageId: '消息 ID（多个用逗号分隔）', description: '描述问题或修正建议', submit: '提交',
       list: '异常与处理记录', empty: '暂无异常', proposedTags: '建议关联标签', noTags: '不关联标签', proposedDelete: '建议删除标签',
-      addTags: '建议新增关联', removeTags: '建议移除关联', loadMore: '查看更多历史记录',
+      addTags: '建议新增关联', removeTags: '建议移除关联', loadMore: '查看更多历史记录', loadMoreTags: '加载更多标签', retry: '重试执行',
       proposal: { none: '仅报告问题', change_tags: '建议修改标签关联', delete_tag: '建议删除标签' },
       openMessage: '查看原文与图片', editTags: '修改标签', apply: '确认并执行', resolved: '已处理', dismiss: '忽略', decision: '处理结果',
       loadFailed: '加载异常失败', saveFailed: '保存失败', submitted: '异常已提交', saved: '处理结果已保存',

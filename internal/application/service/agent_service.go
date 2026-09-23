@@ -101,6 +101,7 @@ type agentService struct {
 	webSearchService      interfaces.WebSearchService
 	knowledgeBaseService  interfaces.KnowledgeBaseService
 	knowledgeService      interfaces.KnowledgeService
+	knowledgeTagService   interfaces.KnowledgeTagService
 	fileService           interfaces.FileService
 	chunkService          interfaces.ChunkService
 	duckdb                *sql.DB
@@ -108,6 +109,7 @@ type agentService struct {
 	wikiPageService       interfaces.WikiPageService
 	tenantService         interfaces.TenantService
 	messageService        interfaces.MessageService
+	audit                 interfaces.AuditLogService
 	memoryService         interfaces.MemoryService
 	storageResolver       interfaces.StorageBackendResolver
 	toolApprovalGate      approval.MCPApproval
@@ -123,6 +125,7 @@ func NewAgentService(
 	modelService interfaces.ModelService,
 	knowledgeBaseService interfaces.KnowledgeBaseService,
 	knowledgeService interfaces.KnowledgeService,
+	knowledgeTagService interfaces.KnowledgeTagService,
 	fileService interfaces.FileService,
 	chunkService interfaces.ChunkService,
 	mcpServiceService interfaces.MCPServiceService,
@@ -135,6 +138,7 @@ func NewAgentService(
 	wikiPageService interfaces.WikiPageService,
 	tenantService interfaces.TenantService,
 	messageService interfaces.MessageService,
+	audit interfaces.AuditLogService,
 	memoryService interfaces.MemoryService,
 	storageResolver interfaces.StorageBackendResolver,
 	toolApprovalGate approval.MCPApproval,
@@ -148,6 +152,7 @@ func NewAgentService(
 		modelService:          modelService,
 		knowledgeBaseService:  knowledgeBaseService,
 		knowledgeService:      knowledgeService,
+		knowledgeTagService:   knowledgeTagService,
 		fileService:           fileService,
 		chunkService:          chunkService,
 		mcpServiceService:     mcpServiceService,
@@ -160,6 +165,7 @@ func NewAgentService(
 		wikiPageService:       wikiPageService,
 		tenantService:         tenantService,
 		messageService:        messageService,
+		audit:                 audit,
 		memoryService:         memoryService,
 		storageResolver:       storageResolver,
 		toolApprovalGate:      toolApprovalGate,
@@ -888,6 +894,7 @@ func (s *agentService) registerTools(
 			tools.ToolDataAnalysis:           true,
 			tools.ToolDataSchema:             true,
 			tools.ToolKnowledgeReportAnomaly: true,
+			tools.ToolKnowledgeApplyAnomaly:  true,
 			// Wiki tools also require at least one KB in scope.
 			tools.ToolWikiReadPage:      true,
 			tools.ToolWikiSearch:        true,
@@ -1086,7 +1093,7 @@ func (s *agentService) registerTools(
 		case tools.ToolWikiUpdateIssue:
 			toolToRegister = tools.NewWikiUpdateIssueTool(s.wikiPageService, wikiKBIDs)
 		case tools.ToolKnowledgeReportAnomaly:
-			anomalies := NewKnowledgeAnomalyService(s.db, s.knowledgeService, nil, nil)
+			anomalies := NewKnowledgeAnomalyService(s.db, s.knowledgeService, nil, s.audit)
 			toolToRegister = tools.NewKnowledgeReportAnomalyTool(config.SearchTargets, func(ctx context.Context, input tools.KnowledgeAnomalyReport) (string, error) {
 				item, err := anomalies.Create(ctx, input.KnowledgeBaseID, KnowledgeAnomalyInput{
 					KnowledgeIDs: input.KnowledgeIDs, Kind: input.Kind, Description: input.Description,
@@ -1097,6 +1104,15 @@ func (s *agentService) registerTools(
 					return "", err
 				}
 				return item.ID, nil
+			})
+		case tools.ToolKnowledgeApplyAnomaly:
+			anomalies := NewKnowledgeAnomalyService(s.db, s.knowledgeService, s.knowledgeTagService, s.audit)
+			toolToRegister = tools.NewKnowledgeApplyAnomalyTool(config.SearchTargets, func(ctx context.Context, kbID, anomalyID string) (string, error) {
+				item, err := anomalies.Resolve(ctx, kbID, anomalyID, "apply", "")
+				if err != nil {
+					return "", err
+				}
+				return item.Result, nil
 			})
 		case tools.ToolWikiWritePage:
 			toolToRegister = tools.NewWikiWritePageTool(s.wikiPageService, wikiKBIDs, s.knowledgeService, wikiRoutes).
@@ -1146,6 +1162,7 @@ func filterSharedAgentWriteTools(allowed []string) []string {
 		tools.ToolWikiRenamePage:         true,
 		tools.ToolWikiDeletePage:         true,
 		tools.ToolKnowledgeReportAnomaly: true,
+		tools.ToolKnowledgeApplyAnomaly:  true,
 	}
 	filtered := make([]string, 0, len(allowed))
 	for _, name := range allowed {
