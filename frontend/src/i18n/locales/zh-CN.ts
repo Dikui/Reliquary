@@ -6217,9 +6217,10 @@ export default {
     },
     strategy: {
       title: '策略版本', hint: '选择 1–3 条已入库消息试跑。候选策略经确认后仅用于后续任务。',
-      instruction: '明确说明要怎样调整筛选或标签策略', samples: '消息 ID，多个用逗号分隔；可先在列表中选择',
+      instruction: '明确说明要怎样调整筛选、标签、采集或调研策略', samples: '消息 ID，多个用逗号分隔；可先在列表中选择',
       trial: '生成候选并试跑', empty: '暂无策略版本', filter: '质量筛选规则', tags: '标签规则', default: '使用默认规则',
       comparison: '查看真实消息新旧结果', oldFilter: '旧筛选', newFilter: '新筛选', oldTags: '旧标签', newTags: '新标签',
+      collection: '日常采集规则', research: '主动调研规则', oldCollection: '旧采集', newCollection: '新采集', oldResearch: '旧查询', newResearch: '新查询',
       activate: '确认生效', restore: '恢复此版本', confirmTitle: '确认策略版本', confirm: '生效后只影响后续任务，不自动重处理已有消息。',
       failed: '策略操作失败', candidateSaved: '候选策略已保存，请检查差异', activeSaved: '策略已生效',
       status: { candidate: '待确认', active: '当前生效', archived: '历史版本' },

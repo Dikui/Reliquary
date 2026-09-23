@@ -6215,9 +6215,10 @@ export default {
     },
     strategy: {
       title: '전략 버전', hint: '기존 메시지 1–3개로 시험합니다. 확인한 규칙은 이후 작업에만 적용됩니다.',
-      instruction: '필터 또는 태그 규칙 변경 내용을 입력하세요', samples: '메시지 ID(쉼표로 구분)',
+      instruction: '필터, 태그, 수집 또는 조사 규칙 변경 내용을 입력하세요', samples: '메시지 ID(쉼표로 구분)',
       trial: '후보 생성 및 시험', empty: '전략 버전 없음', filter: '품질 필터', tags: '태그 규칙', default: '기본 규칙',
       comparison: '실제 메시지 결과 비교', oldFilter: '이전 필터', newFilter: '새 필터', oldTags: '이전 태그', newTags: '새 태그',
+      collection: '일일 수집 규칙', research: '능동 조사 규칙', oldCollection: '이전 수집', newCollection: '새 수집', oldResearch: '이전 검색어', newResearch: '새 검색어',
       activate: '확인 후 적용', restore: '이 버전 복원', confirmTitle: '전략 버전 확인', confirm: '이후 작업에만 적용되며 기존 메시지는 자동 재처리하지 않습니다.',
       failed: '전략 작업 실패', candidateSaved: '후보가 저장되었습니다. 차이를 확인하세요.', activeSaved: '전략이 적용되었습니다.',
       status: { candidate: '확인 대기', active: '적용 중', archived: '이전 버전' },

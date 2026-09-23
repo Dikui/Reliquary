@@ -43,6 +43,17 @@ func intakeReviewPrompt(policy string) string {
 	return prompt
 }
 
+func intakeReviewPromptForMessage(rules *KnowledgeStrategyRules, channel string) string {
+	if rules == nil {
+		return intakeReviewPrompt("")
+	}
+	prompt := intakeReviewPrompt(rules.Filter)
+	if channel == types.ChannelRSS && rules.Collection != "" {
+		prompt += "\nDaily source collection policy (refine selection only; all source and completeness checks remain mandatory):\n" + rules.Collection
+	}
+	return prompt
+}
+
 // reviewIntake is deliberately strict: malformed model output is an execution
 // failure, never an implicit approval.
 func (s *knowledgeService) reviewIntake(ctx context.Context, kb *types.KnowledgeBase, knowledge *types.Knowledge, body string) (rejected bool, reviewErr error) {
@@ -98,11 +109,7 @@ func (s *knowledgeService) reviewIntake(ctx context.Context, kb *types.Knowledge
 	if err != nil {
 		return false, err
 	}
-	filterPolicy := ""
-	if policy != nil {
-		filterPolicy = policy.Filter
-	}
-	response, err := model.Chat(types.WithLLMCallMetadata(ctx, "intake_review", ""), []chat.Message{{Role: "system", Content: intakeReviewPrompt(filterPolicy)}, {Role: "user", Content: string(reviewInput)}}, &chat.ChatOptions{Temperature: 0})
+	response, err := model.Chat(types.WithLLMCallMetadata(ctx, "intake_review", ""), []chat.Message{{Role: "system", Content: intakeReviewPromptForMessage(policy, knowledge.Channel)}, {Role: "user", Content: string(reviewInput)}}, &chat.ChatOptions{Temperature: 0})
 	if err != nil || response == nil {
 		if err == nil {
 			err = fmt.Errorf("empty intake review response")

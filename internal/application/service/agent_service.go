@@ -1054,6 +1054,10 @@ func (s *agentService) registerTools(
 		case tools.ToolDatabaseQuery:
 			toolToRegister = tools.NewDatabaseQueryTool(s.db, config.SearchTargets)
 		case tools.ToolWebSearch:
+			researchPolicy, err := activeResearchPolicyForTargets(ctx, s.db, config.SearchTargets)
+			if err != nil {
+				return err
+			}
 			toolToRegister = tools.NewWebSearchTool(
 				s.webSearchService,
 				s.knowledgeBaseService,
@@ -1062,7 +1066,7 @@ func (s *agentService) registerTools(
 				sessionID,
 				config.WebSearchMaxResults,
 				config.WebSearchProviderID,
-			)
+			).WithResearchPolicy(chatModel, researchPolicy)
 			logger.Infof(ctx, "Registered web_search tool for session: %s, maxResults: %d, providerID: %s", sessionID, config.WebSearchMaxResults, config.WebSearchProviderID)
 
 		case tools.ToolWebFetch:

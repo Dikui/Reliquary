@@ -13,6 +13,10 @@ export interface KnowledgeStrategySample {
   new_filter: string
   old_tags: string
   new_tags: string
+  old_collection: string
+  new_collection: string
+  old_research: string
+  new_research: string
 }
 
 export interface KnowledgeStrategyVersion {

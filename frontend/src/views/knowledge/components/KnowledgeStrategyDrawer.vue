@@ -23,6 +23,12 @@
             <strong>{{ t('knowledgeBase.strategy.tags') }}</strong>
             <p>{{ t('knowledgeBase.strategy.oldTags') }}: {{ version.previous_rules?.tags || t('knowledgeBase.strategy.default') }}</p>
             <p>{{ t('knowledgeBase.strategy.newTags') }}: {{ version.rules.tags || t('knowledgeBase.strategy.default') }}</p>
+            <strong>{{ t('knowledgeBase.strategy.collection') }}</strong>
+            <p>{{ t('knowledgeBase.strategy.oldCollection') }}: {{ version.previous_rules?.collection || t('knowledgeBase.strategy.default') }}</p>
+            <p>{{ t('knowledgeBase.strategy.newCollection') }}: {{ version.rules.collection || t('knowledgeBase.strategy.default') }}</p>
+            <strong>{{ t('knowledgeBase.strategy.research') }}</strong>
+            <p>{{ t('knowledgeBase.strategy.oldResearch') }}: {{ version.previous_rules?.research || t('knowledgeBase.strategy.default') }}</p>
+            <p>{{ t('knowledgeBase.strategy.newResearch') }}: {{ version.rules.research || t('knowledgeBase.strategy.default') }}</p>
           </div>
           <details v-if="version.sample_results?.length">
             <summary>{{ t('knowledgeBase.strategy.comparison') }}</summary>
@@ -32,6 +38,10 @@
               <div>{{ t('knowledgeBase.strategy.newFilter') }}: {{ sample.new_filter }}</div>
               <div>{{ t('knowledgeBase.strategy.oldTags') }}: {{ sample.old_tags }}</div>
               <div>{{ t('knowledgeBase.strategy.newTags') }}: {{ sample.new_tags }}</div>
+              <div>{{ t('knowledgeBase.strategy.oldCollection') }}: {{ sample.old_collection }}</div>
+              <div>{{ t('knowledgeBase.strategy.newCollection') }}: {{ sample.new_collection }}</div>
+              <div>{{ t('knowledgeBase.strategy.oldResearch') }}: {{ sample.old_research }}</div>
+              <div>{{ t('knowledgeBase.strategy.newResearch') }}: {{ sample.new_research }}</div>
             </div>
           </details>
           <t-button v-if="version.status !== 'active'" size="small" variant="outline" :loading="activating === version.id"

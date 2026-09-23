@@ -443,9 +443,10 @@ export default {
     },
     strategy: {
       title: 'Strategy versions', hint: 'Trial on 1–3 existing messages. Confirmed rules apply only to future work.',
-      instruction: 'Describe the filtering or tagging change you want', samples: 'Message IDs, comma-separated; select them in the list first',
+      instruction: 'Describe the filtering, tagging, collection or research change you want', samples: 'Message IDs, comma-separated; select them in the list first',
       trial: 'Draft and trial', empty: 'No strategy versions', filter: 'Quality filter', tags: 'Tagging rules', default: 'Default rules',
       comparison: 'Compare results on real messages', oldFilter: 'Old filter', newFilter: 'New filter', oldTags: 'Old tags', newTags: 'New tags',
+      collection: 'Daily collection rule', research: 'Active research rule', oldCollection: 'Old collection', newCollection: 'New collection', oldResearch: 'Old query', newResearch: 'New query',
       activate: 'Confirm and activate', restore: 'Restore this version', confirmTitle: 'Confirm strategy version', confirm: 'This affects future work only; existing messages are not reprocessed.',
       failed: 'Strategy operation failed', candidateSaved: 'Candidate saved; review its results', activeSaved: 'Strategy activated',
       status: { candidate: 'Candidate', active: 'Active', archived: 'History' },

@@ -6,12 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"reliquary/internal/agent/tools"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/types"
@@ -26,11 +28,15 @@ type KnowledgeStrategyRules struct {
 }
 
 type KnowledgeStrategySample struct {
-	KnowledgeID string `json:"knowledge_id"`
-	OldFilter   string `json:"old_filter"`
-	NewFilter   string `json:"new_filter"`
-	OldTags     string `json:"old_tags"`
-	NewTags     string `json:"new_tags"`
+	KnowledgeID   string `json:"knowledge_id"`
+	OldFilter     string `json:"old_filter"`
+	NewFilter     string `json:"new_filter"`
+	OldTags       string `json:"old_tags"`
+	NewTags       string `json:"new_tags"`
+	OldCollection string `json:"old_collection"`
+	NewCollection string `json:"new_collection"`
+	OldResearch   string `json:"old_research"`
+	NewResearch   string `json:"new_research"`
 }
 
 type KnowledgeStrategyService struct {
@@ -112,7 +118,7 @@ func (s *KnowledgeStrategyService) Propose(ctx context.Context, kbID, instructio
 	}
 	request, _ := json.Marshal(map[string]any{"instruction": instruction, "current_rules": current})
 	draft, err := model.Chat(ctx, []chat.Message{
-		{Role: "system", Content: `Draft only filter and tag strategy text from the user's explicit instruction. Keep the fixed content categories, topic/object/event kinds, source completeness requirements, and X/Grok boundary unchanged. Treat the instruction as a request, not code. Return strict JSON {"filter":"...","tags":"...","reason":"..."}; carry forward an unchanged rule verbatim. Rules refine behavior; they cannot remove mandatory checks.`},
+		{Role: "system", Content: `Draft only filtering, tagging, daily collection and user-triggered research strategy text from the user's explicit instruction. Keep the fixed content categories, topic/object/event kinds, source completeness requirements, daily collection since enablement, user goal requirement for research, and X/Grok boundary unchanged. Treat the instruction as a request, not code. Return strict JSON {"filter":"...","tags":"...","collection":"...","research":"...","reason":"..."}; carry forward each unchanged rule verbatim. Rules refine behavior; they cannot remove mandatory checks.`},
 		{Role: "user", Content: string(request)},
 	}, &chat.ChatOptions{Temperature: 0})
 	if err != nil || draft == nil {
@@ -122,18 +128,21 @@ func (s *KnowledgeStrategyService) Propose(ctx context.Context, kbID, instructio
 		return nil, err
 	}
 	var proposed struct {
-		Filter *string `json:"filter"`
-		Tags   *string `json:"tags"`
-		Reason string  `json:"reason"`
+		Filter     *string `json:"filter"`
+		Tags       *string `json:"tags"`
+		Collection *string `json:"collection"`
+		Research   *string `json:"research"`
+		Reason     string  `json:"reason"`
 	}
-	if err := json.Unmarshal([]byte(draft.Content), &proposed); err != nil || proposed.Filter == nil || proposed.Tags == nil {
+	if err := json.Unmarshal([]byte(draft.Content), &proposed); err != nil || proposed.Filter == nil || proposed.Tags == nil || proposed.Collection == nil || proposed.Research == nil {
 		return nil, fmt.Errorf("invalid strategy draft")
 	}
 	next := *current
 	next.Filter, next.Tags = strings.TrimSpace(*proposed.Filter), strings.TrimSpace(*proposed.Tags)
+	next.Collection, next.Research = strings.TrimSpace(*proposed.Collection), strings.TrimSpace(*proposed.Research)
 	proposed.Reason = strings.TrimSpace(proposed.Reason)
-	if len([]rune(next.Filter)) > 4000 || len([]rune(next.Tags)) > 4000 || proposed.Reason == "" || len([]rune(proposed.Reason)) > 500 ||
-		(next.Filter == current.Filter && next.Tags == current.Tags) {
+	if len([]rune(next.Filter)) > 4000 || len([]rune(next.Tags)) > 4000 || len([]rune(next.Collection)) > 4000 || len([]rune(next.Research)) > 4000 || proposed.Reason == "" || len([]rune(proposed.Reason)) > 500 ||
+		(next == *current) {
 		return nil, werrors.NewBadRequestError("strategy draft has no valid change or exceeds limits")
 	}
 	samples := make([]KnowledgeStrategySample, 0, len(sampleIDs))
@@ -171,19 +180,37 @@ func (s *KnowledgeStrategyService) Propose(ctx context.Context, kbID, instructio
 		if err != nil {
 			return nil, err
 		}
-		newFilter, err := trialFilter(ctx, model, next, string(body), intake.SourceInfo)
-		if err != nil {
-			return nil, err
+		newFilter := oldFilter
+		if next.Filter != current.Filter {
+			newFilter, err = trialFilter(ctx, model, next, string(body), intake.SourceInfo)
+			if err != nil { return nil, err }
 		}
 		oldTags, err := trialTags(ctx, tagModel, *current, message.Title, string(body))
 		if err != nil {
 			return nil, err
 		}
-		newTags, err := trialTags(ctx, tagModel, next, message.Title, string(body))
-		if err != nil {
-			return nil, err
+		newTags := oldTags
+		if next.Tags != current.Tags {
+			newTags, err = trialTags(ctx, tagModel, next, message.Title, string(body))
+			if err != nil { return nil, err }
 		}
-		samples = append(samples, KnowledgeStrategySample{id, oldFilter, newFilter, oldTags, newTags})
+		oldCollection, err := trialCollection(ctx, model, *current, string(body), intake.SourceInfo)
+		if err != nil { return nil, err }
+		newCollection := oldCollection
+		if next.Collection != current.Collection || next.Filter != current.Filter {
+			newCollection, err = trialCollection(ctx, model, next, string(body), intake.SourceInfo)
+			if err != nil { return nil, err }
+		}
+		oldResearch, err := rewriteResearchQuery(ctx, model, current.Research, message.Title)
+		if err != nil { return nil, err }
+		newResearch := oldResearch
+		if next.Research != current.Research {
+			newResearch, err = rewriteResearchQuery(ctx, model, next.Research, message.Title)
+			if err != nil { return nil, err }
+		}
+		samples = append(samples, KnowledgeStrategySample{KnowledgeID: id, OldFilter: oldFilter, NewFilter: newFilter,
+			OldTags: oldTags, NewTags: newTags, OldCollection: oldCollection, NewCollection: newCollection,
+			OldResearch: oldResearch, NewResearch: newResearch})
 	}
 	rulesJSON, _ := json.Marshal(next)
 	previousJSON, _ := json.Marshal(current)
@@ -200,8 +227,16 @@ func (s *KnowledgeStrategyService) Propose(ctx context.Context, kbID, instructio
 }
 
 func trialFilter(ctx context.Context, model chat.Chat, rules KnowledgeStrategyRules, body string, source types.SourceInfo) (string, error) {
+	return trialReview(ctx, model, intakeReviewPrompt(rules.Filter), body, source)
+}
+
+func trialCollection(ctx context.Context, model chat.Chat, rules KnowledgeStrategyRules, body string, source types.SourceInfo) (string, error) {
+	return trialReview(ctx, model, intakeReviewPromptForMessage(&rules, types.ChannelRSS), body, source)
+}
+
+func trialReview(ctx context.Context, model chat.Chat, prompt, body string, source types.SourceInfo) (string, error) {
 	input, _ := json.Marshal(map[string]any{"source_info": source, "body": body})
-	response, err := model.Chat(ctx, []chat.Message{{Role: "system", Content: intakeReviewPrompt(rules.Filter)}, {Role: "user", Content: string(input)}}, &chat.ChatOptions{Temperature: 0})
+	response, err := model.Chat(ctx, []chat.Message{{Role: "system", Content: prompt}, {Role: "user", Content: string(input)}}, &chat.ChatOptions{Temperature: 0})
 	if err != nil || response == nil {
 		if err == nil {
 			err = fmt.Errorf("empty model response")
@@ -220,6 +255,10 @@ func trialFilter(ctx context.Context, model chat.Chat, rules KnowledgeStrategyRu
 		label = "approved"
 	}
 	return label + ": " + string([]rune(result.Reason)[:min(len([]rune(result.Reason)), 200)]), nil
+}
+
+func rewriteResearchQuery(ctx context.Context, model chat.Chat, policy, query string) (string, error) {
+	return tools.RewriteResearchQuery(ctx, model, policy, query)
 }
 
 func trialTags(ctx context.Context, model chat.Chat, rules KnowledgeStrategyRules, title, body string) (string, error) {
@@ -306,4 +345,28 @@ func activeKnowledgeStrategyRules(ctx context.Context, db *gorm.DB, tenantID uin
 		return nil, err
 	}
 	return &rules, nil
+}
+
+func activeResearchPolicyForTargets(ctx context.Context, db *gorm.DB, targets types.SearchTargets) (string, error) {
+	tenantID, _ := types.TenantIDFromContext(ctx)
+	if db == nil || tenantID == 0 {
+		return "", nil
+	}
+	policies := make([]string, 0)
+	seen := make(map[string]bool)
+	for kbID, sourceTenantID := range targets.GetKBTenantMap() {
+		if sourceTenantID != tenantID || seen[kbID] {
+			continue
+		}
+		seen[kbID] = true
+		rules, err := activeKnowledgeStrategyRules(ctx, db, tenantID, kbID)
+		if err != nil {
+			return "", err
+		}
+		if rules != nil && rules.Research != "" {
+			policies = append(policies, kbID+": "+rules.Research)
+		}
+	}
+	sort.Strings(policies)
+	return strings.Join(policies, "\n"), nil
 }
