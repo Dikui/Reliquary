@@ -64,16 +64,17 @@ const (
 	// skills switch and not a per-agent tool checkbox.
 	ToolShellExec = "shell_exec"
 	// Wiki-related tools (only available when wiki KBs are in scope)
-	ToolWikiReadPage      = "wiki_read_page"
-	ToolWikiWritePage     = "wiki_write_page"
-	ToolWikiReplaceText   = "wiki_replace_text"
-	ToolWikiRenamePage    = "wiki_rename_page"
-	ToolWikiDeletePage    = "wiki_delete_page"
-	ToolWikiSearch        = "wiki_search"
-	ToolWikiReadSourceDoc = "wiki_read_source_doc"
-	ToolWikiFlagIssue     = "wiki_flag_issue"
-	ToolWikiReadIssue     = "wiki_read_issue"
-	ToolWikiUpdateIssue   = "wiki_update_issue"
+	ToolWikiReadPage           = "wiki_read_page"
+	ToolWikiWritePage          = "wiki_write_page"
+	ToolWikiReplaceText        = "wiki_replace_text"
+	ToolWikiRenamePage         = "wiki_rename_page"
+	ToolWikiDeletePage         = "wiki_delete_page"
+	ToolWikiSearch             = "wiki_search"
+	ToolWikiReadSourceDoc      = "wiki_read_source_doc"
+	ToolWikiFlagIssue          = "wiki_flag_issue"
+	ToolWikiReadIssue          = "wiki_read_issue"
+	ToolWikiUpdateIssue        = "wiki_update_issue"
+	ToolKnowledgeReportAnomaly = "knowledge_report_anomaly"
 )
 
 // AvailableTool defines a simple tool metadata used by settings APIs.
@@ -112,6 +113,7 @@ func AvailableToolDefinitions() []AvailableTool {
 		{Name: ToolWikiDeletePage, Label: "删除Wiki", Description: "删除Wiki页面并自动清理关联死链"},
 		{Name: ToolWikiReadIssue, Label: "查看Wiki问题", Description: "查看特定的Wiki页面问题详情"},
 		{Name: ToolWikiUpdateIssue, Label: "更新Wiki问题状态", Description: "更新特定的Wiki页面问题状态"},
+		{Name: ToolKnowledgeReportAnomaly, Label: "报告消息异常", Description: "提交消息纠错或标签建议，等待知识库本人处理"},
 	}
 }
 

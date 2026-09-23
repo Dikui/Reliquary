@@ -1,7 +1,7 @@
 import { get, post } from '@/utils/request'
 
 export type KnowledgeAnomalyKind = 'suspected_error' | 'outdated' | 'source_conflict' | 'manual_conflict' | 'tag_deletion'
-export type KnowledgeAnomalyProposal = 'none' | 'set_tags' | 'delete_tag'
+export type KnowledgeAnomalyProposal = 'none' | 'change_tags' | 'delete_tag'
 
 export interface KnowledgeAnomaly {
   id: string
@@ -10,7 +10,9 @@ export interface KnowledgeAnomaly {
   description: string
   proposal_type: KnowledgeAnomalyProposal
   proposed_tag_ids: string[]
+  proposed_remove_tag_ids: string[]
   proposed_delete_tag_id: string
+  applied_changes: Record<string, { added: string[]; removed: string[] }>
   status: 'pending' | 'applying' | 'applied' | 'resolved' | 'dismiss'
   reported_by: string
   decided_by: string
@@ -23,13 +25,14 @@ export interface KnowledgeAnomaly {
 export type KnowledgeAnomalyInput = Pick<KnowledgeAnomaly, 'knowledge_ids' | 'kind' | 'description'> & {
   proposal_type?: KnowledgeAnomalyProposal
   proposed_tag_ids?: string[]
+  proposed_remove_tag_ids?: string[]
   proposed_delete_tag_id?: string
 }
 
 const base = (kbId: string) => `/api/v1/knowledge-bases/${encodeURIComponent(kbId)}/anomalies`
 
-export const listKnowledgeAnomalies = (kbId: string) =>
-  get<{ success: boolean; data: KnowledgeAnomaly[] }>(base(kbId))
+export const listKnowledgeAnomalies = (kbId: string, offset = 0) =>
+  get<{ success: boolean; data: KnowledgeAnomaly[]; has_more: boolean }>(`${base(kbId)}?offset=${offset}`)
 
 export const createKnowledgeAnomaly = (kbId: string, input: KnowledgeAnomalyInput) =>
   post<{ success: boolean; data: KnowledgeAnomaly }>(base(kbId), input)

@@ -1062,6 +1062,8 @@ export default {
       wikiReadSourceDocDesc: 'Глубокое чтение исходных документов, на которых построена Wiki-страница',
       wikiFlagIssue: 'Отметить проблему в Wiki',
       wikiFlagIssueDesc: 'Отметить фактические ошибки или конфликты слияния',
+      knowledgeReportAnomaly: 'Сообщить о проблеме сообщения',
+      knowledgeReportAnomalyDesc: 'Предложить исправление или изменение тегов владельцу базы знаний',
       wikiWritePage: 'Создать/перезаписать Wiki',
       wikiWritePageDesc: 'Создать новую или полностью перезаписать существующую страницу',
       wikiReplaceText: 'Заменить текст в Wiki',
@@ -6193,6 +6195,8 @@ export default {
     anomalies: {
       title: 'Проблемы сообщений', report: 'Сообщить о проблеме', messageId: 'ID сообщений (через запятую)', description: 'Опишите проблему или исправление', submit: 'Отправить',
       list: 'Проблемы и решения', empty: 'Проблем пока нет', proposedTags: 'Предлагаемые теги', noTags: 'Без тегов', proposedDelete: 'Предложено удалить тег',
+      addTags: 'Добавить связи тегов', removeTags: 'Удалить связи тегов', loadMore: 'Показать старые записи',
+      proposal: { none: 'Только сообщить', change_tags: 'Изменить связи тегов', delete_tag: 'Удалить тег' },
       openMessage: 'Открыть оригинал и изображения', editTags: 'Изменить теги', apply: 'Подтвердить и применить', resolved: 'Решено', dismiss: 'Отклонить', decision: 'Решение',
       loadFailed: 'Не удалось загрузить проблемы', saveFailed: 'Не удалось сохранить', submitted: 'Проблема отправлена', saved: 'Решение сохранено',
       deleteConfirmTitle: 'Подтвердите удаление тега', deleteConfirm: 'Удалить тег «{name}» и его связи? Сообщения и изображения сохранятся.',

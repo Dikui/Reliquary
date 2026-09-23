@@ -879,14 +879,15 @@ func (s *agentService) registerTools(
 	if !hasKnowledge {
 		filteredTools := make([]string, 0)
 		kbTools := map[string]bool{
-			tools.ToolKnowledgeSearch:     true,
-			tools.ToolGrepChunks:          true,
-			tools.ToolListKnowledgeChunks: true,
-			tools.ToolQueryKnowledgeGraph: true,
-			tools.ToolGetDocumentInfo:     true,
-			tools.ToolDatabaseQuery:       true,
-			tools.ToolDataAnalysis:        true,
-			tools.ToolDataSchema:          true,
+			tools.ToolKnowledgeSearch:        true,
+			tools.ToolGrepChunks:             true,
+			tools.ToolListKnowledgeChunks:    true,
+			tools.ToolQueryKnowledgeGraph:    true,
+			tools.ToolGetDocumentInfo:        true,
+			tools.ToolDatabaseQuery:          true,
+			tools.ToolDataAnalysis:           true,
+			tools.ToolDataSchema:             true,
+			tools.ToolKnowledgeReportAnomaly: true,
 			// Wiki tools also require at least one KB in scope.
 			tools.ToolWikiReadPage:      true,
 			tools.ToolWikiSearch:        true,
@@ -1084,6 +1085,19 @@ func (s *agentService) registerTools(
 			toolToRegister = tools.NewWikiReadIssueTool(s.wikiPageService, wikiKBIDs)
 		case tools.ToolWikiUpdateIssue:
 			toolToRegister = tools.NewWikiUpdateIssueTool(s.wikiPageService, wikiKBIDs)
+		case tools.ToolKnowledgeReportAnomaly:
+			anomalies := NewKnowledgeAnomalyService(s.db, s.knowledgeService, nil, nil)
+			toolToRegister = tools.NewKnowledgeReportAnomalyTool(config.SearchTargets, func(ctx context.Context, input tools.KnowledgeAnomalyReport) (string, error) {
+				item, err := anomalies.Create(ctx, input.KnowledgeBaseID, KnowledgeAnomalyInput{
+					KnowledgeIDs: input.KnowledgeIDs, Kind: input.Kind, Description: input.Description,
+					ProposalType: input.ProposalType, ProposedTagIDs: input.ProposedTagIDs,
+					ProposedRemoveTagIDs: input.ProposedRemoveTagIDs, ProposedDeleteTagID: input.ProposedDeleteTagID,
+				})
+				if err != nil {
+					return "", err
+				}
+				return item.ID, nil
+			})
 		case tools.ToolWikiWritePage:
 			toolToRegister = tools.NewWikiWritePageTool(s.wikiPageService, wikiKBIDs, s.knowledgeService, wikiRoutes).
 				WithSearchTargets(config.SearchTargets)
@@ -1125,12 +1139,13 @@ func (s *agentService) registerTools(
 // KB permission middleware because they execute inside the agent engine.
 func filterSharedAgentWriteTools(allowed []string) []string {
 	sourceWorkspaceWrites := map[string]bool{
-		tools.ToolWikiFlagIssue:   true,
-		tools.ToolWikiUpdateIssue: true,
-		tools.ToolWikiWritePage:   true,
-		tools.ToolWikiReplaceText: true,
-		tools.ToolWikiRenamePage:  true,
-		tools.ToolWikiDeletePage:  true,
+		tools.ToolWikiFlagIssue:          true,
+		tools.ToolWikiUpdateIssue:        true,
+		tools.ToolWikiWritePage:          true,
+		tools.ToolWikiReplaceText:        true,
+		tools.ToolWikiRenamePage:         true,
+		tools.ToolWikiDeletePage:         true,
+		tools.ToolKnowledgeReportAnomaly: true,
 	}
 	filtered := make([]string, 0, len(allowed))
 	for _, name := range allowed {

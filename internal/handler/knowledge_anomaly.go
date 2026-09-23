@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"reliquary/internal/application/service"
@@ -17,12 +18,17 @@ func NewKnowledgeAnomalyHandler(s *service.KnowledgeAnomalyService) *KnowledgeAn
 }
 
 func (h *KnowledgeAnomalyHandler) List(c *gin.Context) {
-	items, err := h.service.List(c.Request.Context(), c.Param("id"))
+	offset, err := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if err != nil || offset < 0 {
+		c.Error(werrors.NewBadRequestError("invalid anomaly offset"))
+		return
+	}
+	items, more, err := h.service.List(c.Request.Context(), c.Param("id"), offset)
 	if err != nil {
 		c.Error(err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": items})
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": items, "has_more": more})
 }
 
 func (h *KnowledgeAnomalyHandler) Create(c *gin.Context) {

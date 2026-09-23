@@ -432,6 +432,8 @@ export default {
     anomalies: {
       title: 'Message issues', report: 'Report issue', messageId: 'Message IDs (comma-separated)', description: 'Describe the issue or correction', submit: 'Submit',
       list: 'Issues and decisions', empty: 'No issues yet', proposedTags: 'Suggested tags', noTags: 'No tags', proposedDelete: 'Suggested tag deletion',
+      addTags: 'Add tag links', removeTags: 'Remove tag links', loadMore: 'Load older issues',
+      proposal: { none: 'Report only', change_tags: 'Change tag links', delete_tag: 'Delete a tag' },
       openMessage: 'View original and images', editTags: 'Edit tags', apply: 'Approve and apply', resolved: 'Mark resolved', dismiss: 'Dismiss', decision: 'Decision',
       loadFailed: 'Could not load issues', saveFailed: 'Could not save', submitted: 'Issue submitted', saved: 'Decision saved',
       deleteConfirmTitle: 'Confirm tag deletion', deleteConfirm: 'Delete tag "{name}" and its associations? Messages and images remain.',
@@ -5740,6 +5742,8 @@ export default {
       wikiReadSourceDocDesc: 'Dive into the original documents that a Wiki page is built from',
       wikiFlagIssue: 'Flag Wiki Issue',
       wikiFlagIssueDesc: 'Flag factual errors or merge conflicts on a Wiki page',
+      knowledgeReportAnomaly: 'Report message issue',
+      knowledgeReportAnomalyDesc: 'Suggest a correction or tag change for the knowledge base owner',
       wikiWritePage: 'Create / Overwrite Wiki',
       wikiWritePageDesc: 'Create a new page or fully overwrite an existing one',
       wikiReplaceText: 'Replace Text in Wiki',

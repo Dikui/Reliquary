@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -14,12 +15,13 @@ import (
 )
 
 type KnowledgeAnomalyInput struct {
-	KnowledgeIDs        []string `json:"knowledge_ids"`
-	Kind                string   `json:"kind"`
-	Description         string   `json:"description"`
-	ProposalType        string   `json:"proposal_type"`
-	ProposedTagIDs      []string `json:"proposed_tag_ids"`
-	ProposedDeleteTagID string   `json:"proposed_delete_tag_id"`
+	KnowledgeIDs         []string `json:"knowledge_ids"`
+	Kind                 string   `json:"kind"`
+	Description          string   `json:"description"`
+	ProposalType         string   `json:"proposal_type"`
+	ProposedTagIDs       []string `json:"proposed_tag_ids"`
+	ProposedRemoveTagIDs []string `json:"proposed_remove_tag_ids"`
+	ProposedDeleteTagID  string   `json:"proposed_delete_tag_id"`
 }
 
 type KnowledgeAnomalyService struct {
@@ -49,15 +51,22 @@ func (s *KnowledgeAnomalyService) scopedKB(ctx context.Context, kbID string) (*t
 	return &kb, nil
 }
 
-func (s *KnowledgeAnomalyService) List(ctx context.Context, kbID string) ([]types.KnowledgeAnomaly, error) {
+func (s *KnowledgeAnomalyService) List(ctx context.Context, kbID string, offset int) ([]types.KnowledgeAnomaly, bool, error) {
 	kb, err := s.scopedKB(ctx, kbID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	items := make([]types.KnowledgeAnomaly, 0)
 	err = s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id = ?", kb.TenantID, kb.ID).
-		Order("created_at DESC").Limit(100).Find(&items).Error
-	return items, err
+		Order("created_at DESC, id DESC").Offset(offset).Limit(51).Find(&items).Error
+	if err != nil {
+		return nil, false, err
+	}
+	more := len(items) > 50
+	if more {
+		items = items[:50]
+	}
+	return items, more, nil
 }
 
 func (s *KnowledgeAnomalyService) Create(ctx context.Context, kbID string, input KnowledgeAnomalyInput) (*types.KnowledgeAnomaly, error) {
@@ -75,7 +84,7 @@ func (s *KnowledgeAnomalyService) Create(ctx context.Context, kbID string, input
 	if !validKind[input.Kind] || input.Description == "" || len([]rune(input.Description)) > 2000 {
 		return nil, werrors.NewBadRequestError("invalid anomaly kind or description")
 	}
-	if input.ProposalType != "none" && input.ProposalType != "set_tags" && input.ProposalType != "delete_tag" {
+	if input.ProposalType != "none" && input.ProposalType != "change_tags" && input.ProposalType != "delete_tag" {
 		return nil, werrors.NewBadRequestError("invalid correction proposal")
 	}
 	ids := make([]string, 0, len(input.KnowledgeIDs))
@@ -87,7 +96,7 @@ func (s *KnowledgeAnomalyService) Create(ctx context.Context, kbID string, input
 			ids = append(ids, id)
 		}
 	}
-	if len(ids) > 8 || (len(ids) == 0 && input.ProposalType != "delete_tag") || (input.ProposalType == "set_tags" && len(ids) != 1) {
+	if len(ids) > 8 || (len(ids) == 0 && input.ProposalType != "delete_tag") || (input.ProposalType == "change_tags" && len(ids) != 1) {
 		return nil, werrors.NewBadRequestError("invalid related messages")
 	}
 	if len(ids) > 0 {
@@ -101,28 +110,24 @@ func (s *KnowledgeAnomalyService) Create(ctx context.Context, kbID string, input
 			return nil, werrors.NewBadRequestError("related messages must be formal messages in this knowledge base")
 		}
 	}
-	proposalTags := make([]string, 0, len(input.ProposedTagIDs))
-	if input.ProposalType == "set_tags" {
-		tagSeen := make(map[string]bool, len(input.ProposedTagIDs))
-		for _, id := range input.ProposedTagIDs {
-			id = strings.TrimSpace(id)
-			if id != "" && !tagSeen[id] {
-				tagSeen[id] = true
-				proposalTags = append(proposalTags, id)
-			}
+	proposalTags, removeTags := []string{}, []string{}
+	if input.ProposalType == "change_tags" {
+		proposalTags = normalizeAnomalyTagIDs(input.ProposedTagIDs)
+		removeTags = normalizeAnomalyTagIDs(input.ProposedRemoveTagIDs)
+		if len(proposalTags)+len(removeTags) == 0 || len(proposalTags)+len(removeTags) > 100 {
+			return nil, werrors.NewBadRequestError("invalid proposed tag changes")
 		}
-		if len(proposalTags) > 100 {
-			return nil, werrors.NewBadRequestError("too many proposed tags")
+		all := append(append([]string{}, proposalTags...), removeTags...)
+		if len(normalizeAnomalyTagIDs(all)) != len(all) {
+			return nil, werrors.NewBadRequestError("a tag cannot be both added and removed")
 		}
-		if len(proposalTags) > 0 {
-			var count int64
-			if err := s.db.WithContext(ctx).Model(&types.KnowledgeTag{}).
-				Where("tenant_id = ? AND knowledge_base_id = ? AND id IN ?", kb.TenantID, kb.ID, proposalTags).Count(&count).Error; err != nil {
-				return nil, err
-			}
-			if count != int64(len(proposalTags)) {
-				return nil, werrors.NewBadRequestError("proposed tags do not belong to this knowledge base")
-			}
+		var count int64
+		if err := s.db.WithContext(ctx).Model(&types.KnowledgeTag{}).
+			Where("tenant_id = ? AND knowledge_base_id = ? AND id IN ?", kb.TenantID, kb.ID, all).Count(&count).Error; err != nil {
+			return nil, err
+		}
+		if count != int64(len(all)) {
+			return nil, werrors.NewBadRequestError("proposed tags do not belong to this knowledge base")
 		}
 	}
 	deleteTagID := ""
@@ -148,7 +153,8 @@ func (s *KnowledgeAnomalyService) Create(ctx context.Context, kbID string, input
 	item := &types.KnowledgeAnomaly{
 		ID: uuid.NewString(), TenantID: kb.TenantID, KnowledgeBaseID: kb.ID,
 		KnowledgeIDs: ids, Kind: input.Kind, Description: input.Description,
-		ProposalType: input.ProposalType, ProposedTagIDs: proposalTags, ProposedDeleteTagID: deleteTagID,
+		ProposalType: input.ProposalType, ProposedTagIDs: proposalTags, ProposedRemoveTagIDs: removeTags,
+		ProposedDeleteTagID: deleteTagID, AppliedChanges: map[string]types.KnowledgeAnomalyTagChange{},
 		Status: "pending", ReportedBy: actorID, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.db.WithContext(ctx).Create(item).Error; err != nil {
@@ -157,6 +163,19 @@ func (s *KnowledgeAnomalyService) Create(ctx context.Context, kbID string, input
 	recordKBActivity(ctx, s.audit, kb.TenantID, kb.ID, types.AuditActionKnowledgeAnomalyReported, "knowledge_anomaly", item.ID,
 		types.AuditOutcomeSuccess, map[string]any{"kind": item.Kind, "knowledge_ids": item.KnowledgeIDs})
 	return item, nil
+}
+
+func normalizeAnomalyTagIDs(ids []string) []string {
+	out := make([]string, 0, len(ids))
+	seen := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id != "" && !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 // Resolve accepts or rejects a suggestion. Only the KB creator can decide;
@@ -189,10 +208,10 @@ func (s *KnowledgeAnomalyService) Resolve(ctx context.Context, kbID, anomalyID, 
 	}
 	status, result, expectedStatus := action, "", "pending"
 	if action == "apply" {
-		if item.ProposalType != "set_tags" && item.ProposalType != "delete_tag" {
+		if item.ProposalType != "change_tags" && item.ProposalType != "delete_tag" {
 			return nil, werrors.NewBadRequestError("anomaly has no executable proposal")
 		}
-		if item.ProposalType == "set_tags" && len(item.KnowledgeIDs) != 1 {
+		if item.ProposalType == "change_tags" && len(item.KnowledgeIDs) != 1 {
 			return nil, werrors.NewBadRequestError("tag proposal requires one message")
 		}
 		claim := s.db.WithContext(ctx).Model(&types.KnowledgeAnomaly{}).
@@ -207,13 +226,41 @@ func (s *KnowledgeAnomalyService) Resolve(ctx context.Context, kbID, anomalyID, 
 		expectedStatus = "applying"
 		var applyErr error
 		switch item.ProposalType {
-		case "set_tags":
+		case "change_tags":
 			reason := note
 			if reason == "" {
 				runes := []rune(item.Description)
 				reason = string(runes[:min(len(runes), 500)])
 			}
-			applyErr = s.knowledge.UpdateKnowledgeTagBatch(ctx, kb.ID, map[string][]string{item.KnowledgeIDs[0]: item.ProposedTagIDs}, reason)
+			current, getErr := s.knowledge.GetKnowledgeTags(ctx, item.KnowledgeIDs)
+			if getErr != nil {
+				applyErr = getErr
+				break
+			}
+			id := item.KnowledgeIDs[0]
+			selected := make(map[string]bool)
+			for _, tag := range current[id] {
+				selected[tag.ID] = true
+			}
+			change := types.KnowledgeAnomalyTagChange{Added: []string{}, Removed: []string{}}
+			for _, tagID := range item.ProposedTagIDs {
+				if !selected[tagID] {
+					selected[tagID] = true
+					change.Added = append(change.Added, tagID)
+				}
+			}
+			for _, tagID := range item.ProposedRemoveTagIDs {
+				if selected[tagID] {
+					delete(selected, tagID)
+					change.Removed = append(change.Removed, tagID)
+				}
+			}
+			finalIDs := make([]string, 0, len(selected))
+			for tagID := range selected {
+				finalIDs = append(finalIDs, tagID)
+			}
+			applyErr = s.knowledge.UpdateKnowledgeTagBatch(ctx, kb.ID, map[string][]string{id: finalIDs}, reason)
+			item.AppliedChanges = map[string]types.KnowledgeAnomalyTagChange{id: change}
 			result = "tags_updated"
 		case "delete_tag":
 			applyErr = s.tags.DeleteTag(ctx, item.ProposedDeleteTagID, false, false, nil)
@@ -226,7 +273,11 @@ func (s *KnowledgeAnomalyService) Resolve(ctx context.Context, kbID, anomalyID, 
 		status = "applied"
 	}
 	now := time.Now()
-	update := map[string]any{"status": status, "decided_by": actorID, "decision_note": note, "result": result, "decided_at": now, "updated_at": now}
+	changes, err := json.Marshal(item.AppliedChanges)
+	if err != nil {
+		return nil, err
+	}
+	update := map[string]any{"status": status, "decided_by": actorID, "decision_note": note, "result": result, "applied_changes": string(changes), "decided_at": now, "updated_at": now}
 	decision := s.db.WithContext(ctx).Model(&types.KnowledgeAnomaly{}).
 		Where("id = ? AND tenant_id = ? AND knowledge_base_id = ? AND status = ?", anomalyID, kb.TenantID, kb.ID, expectedStatus).Updates(update)
 	if decision.Error != nil {
@@ -237,6 +288,6 @@ func (s *KnowledgeAnomalyService) Resolve(ctx context.Context, kbID, anomalyID, 
 	}
 	item.Status, item.DecidedBy, item.DecisionNote, item.Result, item.DecidedAt, item.UpdatedAt = status, actorID, note, result, &now, now
 	recordKBActivity(ctx, s.audit, kb.TenantID, kb.ID, types.AuditActionKnowledgeAnomalyDecided, "knowledge_anomaly", item.ID,
-		types.AuditOutcomeSuccess, map[string]any{"action": action, "knowledge_ids": item.KnowledgeIDs, "result": result, "note": note})
+		types.AuditOutcomeSuccess, map[string]any{"action": action, "knowledge_ids": item.KnowledgeIDs, "result": result, "note": note, "changes": item.AppliedChanges, "deleted_tag_id": item.ProposedDeleteTagID})
 	return &item, nil
 }

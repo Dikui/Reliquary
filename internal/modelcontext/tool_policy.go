@@ -118,6 +118,9 @@ var toolHandlePolicies = map[string]toolHandlePolicy{
 	"wiki_flag_issue": {
 		sourceIDKeys: map[string]struct{}{"suspected_knowledge_ids": {}},
 	},
+	"knowledge_report_anomaly": {
+		sourceIDKeys: map[string]struct{}{"knowledge_base_id": {}, "knowledge_ids": {}},
+	},
 	"wiki_search": {
 		sourceIDKeys: map[string]struct{}{"knowledge_base_id": {}},
 		sourceOutput: true,

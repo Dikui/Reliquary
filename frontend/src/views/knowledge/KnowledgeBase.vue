@@ -55,6 +55,7 @@ import TagEditDialog from './components/TagEditDialog.vue';
 import BatchTagDialog from './components/BatchTagDialog.vue';
 import KbTagManageDrawer from './components/KbTagManageDrawer.vue';
 import KnowledgeAnomaliesDrawer from './components/KnowledgeAnomaliesDrawer.vue';
+import { decideKnowledgeAnomaly } from '@/api/knowledge-anomalies';
 import { tagLabel, isConcreteTag } from './tagLabel';
 import { listFavorites, addFavorite, removeFavorite } from '@/api/user-favorites';
 import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess';
@@ -542,16 +543,18 @@ const tagFilterCleared = ref(false);
 const tagManageDrawerVisible = ref(false);
 const anomalyDrawerVisible = ref(false);
 const anomalyKnowledgeId = ref('');
+const anomalyDrawerRef = ref<{ refresh: () => Promise<void> } | null>(null);
+const editingAnomalyId = ref('');
 const openAnomalyWindow = (knowledgeId = '') => {
   anomalyKnowledgeId.value = knowledgeId;
   isCardDetails.value = false;
   anomalyDrawerVisible.value = true;
 };
-const editAnomalyMessageTags = async (knowledgeId: string) => {
+const editAnomalyMessageTags = async (knowledgeId: string, anomalyId: string) => {
   try {
     const response = await getKnowledgeDetails(knowledgeId);
     if (response?.success && response.data) {
-      anomalyDrawerVisible.value = false;
+      editingAnomalyId.value = anomalyId;
       openTagEditDialog(response.data as KnowledgeCard);
     }
   } catch (error) {
@@ -786,13 +789,24 @@ const tagEditDialogVisible = ref(false);
 const tagEditTarget = ref<KnowledgeCard | null>(null);
 
 function openTagEditDialog(item: KnowledgeCard) {
+  if (!anomalyDrawerVisible.value) editingAnomalyId.value = '';
   tagEditTarget.value = item;
   tagEditDialogVisible.value = true;
 }
 
-function onTagEditConfirm(tagIds: string[]) {
-  if (tagEditTarget.value) {
-    handleKnowledgeTagChange(tagEditTarget.value.id, tagIds);
+async function onTagEditConfirm(tagIds: string[]) {
+  if (!tagEditTarget.value) return;
+  const oldIds = new Set((tagEditTarget.value.tags || []).map(tag => tag.id));
+  const changed = await handleKnowledgeTagChange(tagEditTarget.value.id, tagIds);
+  if (!changed || !editingAnomalyId.value) return;
+  const added = tagIds.filter(id => !oldIds.has(id));
+  const removed = [...oldIds].filter(id => !tagIds.includes(id));
+  try {
+    await decideKnowledgeAnomaly(kbId.value, editingAnomalyId.value, 'resolved', `+${added.join(',')} −${removed.join(',')}`.slice(0, 500));
+    await anomalyDrawerRef.value?.refresh();
+    editingAnomalyId.value = '';
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || t('knowledgeBase.anomalies.saveFailed'));
   }
 }
 const getPageSize = () => {
@@ -1060,8 +1074,10 @@ const handleKnowledgeTagChange = async (knowledgeId: string, tagIds: string[]) =
     resetPage(); // Reset page counter to 1 when reloading files after tag change
     loadKnowledgeFiles(kbId.value);
     loadTags(kbId.value, true);
+    return true;
   } catch (error: any) {
     MessagePlugin.error(error?.message || t('common.operationFailed'));
+    return false;
   }
 };
 
@@ -2816,9 +2832,9 @@ async function createNewSession(value: string): Promise<void> {
     :is-faq="isFAQ"
     @changed="onTagManageChanged"
   />
-  <KnowledgeAnomaliesDrawer v-if="!isFAQ" v-model:visible="anomalyDrawerVisible" :kb-id="kbId"
+  <KnowledgeAnomaliesDrawer v-if="!isFAQ" ref="anomalyDrawerRef" v-model:visible="anomalyDrawerVisible" :kb-id="kbId"
     :is-owner="isOwner" :initial-knowledge-id="anomalyKnowledgeId" :tags="tagList"
-    @open-message="(id) => { anomalyDrawerVisible = false; openSourceDoc(id) }"
+    @open-message="openSourceDoc"
     @edit-tags="editAnomalyMessageTags" @changed="() => { resetPage(); loadTags(kbId, true) }" />
 </template>
 <style>

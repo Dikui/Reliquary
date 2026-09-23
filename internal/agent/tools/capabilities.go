@@ -54,6 +54,7 @@ var ToolCapabilityRequirements = map[string]ToolRequirement{
 	// ---- base / reasoning (no KB dependency, no file consumption) ----
 	"thinking":   {},
 	"todo_write": {},
+	"knowledge_report_anomaly": {},
 
 	// ---- RAG / chunk retrieval (need at least one chunk-indexed KB) ----
 	"knowledge_search":      {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},

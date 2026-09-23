@@ -36,7 +36,7 @@ var versionedSQLiteColumns = map[string][]string{
 	"knowledge_tags":     {"kind"},                           // 000091
 }
 
-const expectedSQLiteMigrationVersion = 14
+const expectedSQLiteMigrationVersion = 15
 
 func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	repoRoot := sqliteRepoRoot(t)

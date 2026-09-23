@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -18,7 +19,7 @@ func anomalyTestDB(t *testing.T) *gorm.DB {
 	for _, ddl := range []string{
 		`CREATE TABLE knowledge_bases (id TEXT PRIMARY KEY, tenant_id INTEGER, creator_id TEXT, deleted_at DATETIME)`,
 		`CREATE TABLE knowledges (id TEXT PRIMARY KEY, tenant_id INTEGER, knowledge_base_id TEXT, parse_status TEXT, deleted_at DATETIME)`,
-		`CREATE TABLE knowledge_tags (id TEXT PRIMARY KEY, tenant_id INTEGER, knowledge_base_id TEXT, name TEXT, kind TEXT)`,
+		`CREATE TABLE knowledge_tags (id TEXT PRIMARY KEY, seq_id INTEGER, tenant_id INTEGER, knowledge_base_id TEXT, name TEXT, kind TEXT, color TEXT, sort_order INTEGER, created_at DATETIME, updated_at DATETIME)`,
 		`CREATE TABLE knowledge_tag_relations (knowledge_id TEXT, tag_id TEXT, created_at DATETIME, PRIMARY KEY (knowledge_id, tag_id))`,
 		`CREATE TABLE knowledge_tag_manual_decisions (knowledge_id TEXT, tag_id TEXT, selected BOOLEAN, actor_id TEXT, reason TEXT, updated_at DATETIME, PRIMARY KEY (knowledge_id, tag_id))`,
 		`CREATE TABLE chunks (id TEXT PRIMARY KEY, tenant_id INTEGER, tag_id TEXT, deleted_at DATETIME)`,
@@ -28,8 +29,8 @@ func anomalyTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, db.AutoMigrate(&types.KnowledgeAnomaly{}))
 	require.NoError(t, db.Exec(`INSERT INTO knowledge_bases (id,tenant_id,creator_id) VALUES ('kb',1,'owner')`).Error)
 	require.NoError(t, db.Exec(`INSERT INTO knowledges (id,tenant_id,knowledge_base_id,parse_status) VALUES ('message',1,'kb','completed')`).Error)
-	require.NoError(t, db.Exec(`INSERT INTO knowledge_tags (id,tenant_id,knowledge_base_id,name,kind) VALUES ('old',1,'kb','Old','topic'),('new',1,'kb','New','topic')`).Error)
-	require.NoError(t, db.Exec(`INSERT INTO knowledge_tag_relations (knowledge_id,tag_id) VALUES ('message','old')`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO knowledge_tags (id,tenant_id,knowledge_base_id,name,kind) VALUES ('old',1,'kb','Old','topic'),('new',1,'kb','New','topic'),('keep',1,'kb','Keep','topic')`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO knowledge_tag_relations (knowledge_id,tag_id) VALUES ('message','old'),('message','keep')`).Error)
 	return db
 }
 
@@ -46,20 +47,25 @@ func TestKnowledgeAnomalyReviewerCannotApplyOwnerCan(t *testing.T) {
 	reviewer := anomalyContext("reviewer")
 	item, err := svc.Create(reviewer, "kb", KnowledgeAnomalyInput{
 		KnowledgeIDs: []string{"message"}, Kind: "suspected_error", Description: "wrong topic",
-		ProposalType: "set_tags", ProposedTagIDs: []string{"new"},
+		ProposalType: "change_tags", ProposedTagIDs: []string{"new"}, ProposedRemoveTagIDs: []string{"old"},
 	})
 	require.NoError(t, err)
 	require.Error(t, func() error { _, err := svc.Resolve(reviewer, "kb", item.ID, "apply", ""); return err }())
 	var ids []string
 	require.NoError(t, db.Model(&types.KnowledgeTagRelation{}).Where("knowledge_id = ?", "message").Pluck("tag_id", &ids).Error)
-	require.Equal(t, []string{"old"}, ids)
+	sort.Strings(ids)
+	require.Equal(t, []string{"keep", "old"}, ids)
 
 	decided, err := svc.Resolve(anomalyContext("owner"), "kb", item.ID, "apply", "confirmed")
 	require.NoError(t, err)
 	require.Equal(t, "applied", decided.Status)
 	ids = nil
 	require.NoError(t, db.Model(&types.KnowledgeTagRelation{}).Where("knowledge_id = ?", "message").Pluck("tag_id", &ids).Error)
-	require.Equal(t, []string{"new"}, ids)
+	sort.Strings(ids)
+	require.Equal(t, []string{"keep", "new"}, ids)
+	var persisted types.KnowledgeAnomaly
+	require.NoError(t, db.First(&persisted, "id = ?", item.ID).Error)
+	require.Equal(t, types.KnowledgeAnomalyTagChange{Added: []string{"new"}, Removed: []string{"old"}}, persisted.AppliedChanges["message"])
 	var decisions []types.KnowledgeTagManualDecision
 	require.NoError(t, db.Find(&decisions).Error)
 	require.Len(t, decisions, 2)

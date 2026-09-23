@@ -689,6 +689,7 @@ const TOOL_NAME_KEYS: Record<string, string> = {
   wiki_read_page: 'agentEditor.tools.wikiReadPage',
   wiki_read_source_doc: 'agentStream.tools.wikiReadSourceDoc',
   wiki_flag_issue: 'agentEditor.tools.wikiFlagIssue',
+  knowledge_report_anomaly: 'agentEditor.tools.knowledgeReportAnomaly',
   wiki_write_page: 'agentEditor.tools.wikiWritePage',
   wiki_replace_text: 'agentEditor.tools.wikiReplaceText',
   wiki_rename_page: 'agentEditor.tools.wikiRenamePage',
