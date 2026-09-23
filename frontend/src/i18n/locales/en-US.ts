@@ -5745,6 +5745,8 @@ export default {
       wikiFlagIssueDesc: 'Flag factual errors or merge conflicts on a Wiki page',
       knowledgeReportAnomaly: 'Report message issue',
       knowledgeReportAnomalyDesc: 'Suggest a correction or tag change for the knowledge base owner',
+      knowledgeImportURL: 'Import research page',
+      knowledgeImportURLDesc: 'Fetch the original page for completeness, source, and quality review',
       knowledgeApplyAnomaly: 'Apply message correction',
       knowledgeApplyAnomalyDesc: 'Apply a specific correction only after the owner explicitly asks',
       wikiWritePage: 'Create / Overwrite Wiki',

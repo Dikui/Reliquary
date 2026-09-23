@@ -1065,6 +1065,8 @@ export default {
       wikiFlagIssueDesc: '사실 오류나 병합 충돌을 표시합니다',
       knowledgeReportAnomaly: '메시지 문제 신고',
       knowledgeReportAnomalyDesc: '지식베이스 소유자에게 수정 또는 태그 변경을 제안합니다',
+      knowledgeImportURL: '조사 페이지 가져오기',
+      knowledgeImportURLDesc: '원문을 가져와 완전성, 출처 및 품질 검토 후 저장합니다',
       knowledgeApplyAnomaly: '메시지 수정 적용',
       knowledgeApplyAnomalyDesc: '소유자가 명시적으로 요청한 수정만 적용합니다',
       wikiWritePage: 'Wiki 생성/덮어쓰기',

@@ -76,6 +76,7 @@ const (
 	ToolWikiUpdateIssue        = "wiki_update_issue"
 	ToolKnowledgeReportAnomaly = "knowledge_report_anomaly"
 	ToolKnowledgeApplyAnomaly  = "knowledge_apply_anomaly"
+	ToolKnowledgeImportURL     = "knowledge_import_url"
 )
 
 // AvailableTool defines a simple tool metadata used by settings APIs.
@@ -115,6 +116,7 @@ func AvailableToolDefinitions() []AvailableTool {
 		{Name: ToolWikiReadIssue, Label: "查看Wiki问题", Description: "查看特定的Wiki页面问题详情"},
 		{Name: ToolWikiUpdateIssue, Label: "更新Wiki问题状态", Description: "更新特定的Wiki页面问题状态"},
 		{Name: ToolKnowledgeReportAnomaly, Label: "报告消息异常", Description: "提交消息纠错或标签建议，等待知识库本人处理"},
+		{Name: ToolKnowledgeImportURL, Label: "调研网页入库", Description: "抓取原文并进入统一质量审核，审核前不作为正式消息"},
 		{Name: ToolKnowledgeApplyAnomaly, Label: "执行消息纠错", Description: "仅在知识库本人明确指示后执行指定纠错建议"},
 	}
 }
@@ -130,6 +132,7 @@ func DefaultAllowedTools() []string {
 		ToolQueryKnowledgeGraph,
 		ToolGetDocumentInfo,
 		ToolKnowledgeReportAnomaly,
+		ToolKnowledgeImportURL,
 		// Looking up what this user asked before is only ever a read of their
 		// own history, and it is what lets "上次你给我的那个配置" resolve at all
 		// without stuffing every past conversation into the context window.

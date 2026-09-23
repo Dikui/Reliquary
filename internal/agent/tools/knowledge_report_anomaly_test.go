@@ -33,5 +33,6 @@ func TestKnowledgeReportAnomalyToolRestrictsWorkspaceScope(t *testing.T) {
 
 func TestDefaultAgentCanReportKnowledgeConflict(t *testing.T) {
 	require.Contains(t, DefaultAllowedTools(), ToolKnowledgeReportAnomaly)
+	require.Contains(t, DefaultAllowedTools(), ToolKnowledgeImportURL)
 	require.NotContains(t, DefaultAllowedTools(), ToolKnowledgeApplyAnomaly)
 }

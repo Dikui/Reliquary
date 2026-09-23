@@ -894,6 +894,7 @@ func (s *agentService) registerTools(
 			tools.ToolDataAnalysis:           true,
 			tools.ToolDataSchema:             true,
 			tools.ToolKnowledgeReportAnomaly: true,
+			tools.ToolKnowledgeImportURL:     true,
 			tools.ToolKnowledgeApplyAnomaly:  true,
 			// Wiki tools also require at least one KB in scope.
 			tools.ToolWikiReadPage:      true,
@@ -1105,6 +1106,26 @@ func (s *agentService) registerTools(
 				}
 				return item.ID, nil
 			})
+		case tools.ToolKnowledgeImportURL:
+			toolToRegister = tools.NewKnowledgeImportURLTool(config.SearchTargets, func(ctx context.Context, input tools.KnowledgeImportURLInput) error {
+				tenantID, ok := types.TenantIDFromContext(ctx)
+				if !ok || tenantID == 0 {
+					return fmt.Errorf("workspace required")
+				}
+				userID, ok := types.UserIDFromContext(ctx)
+				if !ok || userID == "" || types.IsSyntheticUserID(userID) {
+					return fmt.Errorf("user required for knowledge intake")
+				}
+				kb, err := s.knowledgeBaseService.GetKnowledgeBaseByIDOnly(ctx, input.KnowledgeBaseID)
+				if err != nil {
+					return err
+				}
+				if kb == nil || kb.TenantID != tenantID || kb.CreatorID != userID {
+					return fmt.Errorf("only the knowledge base creator can import research")
+				}
+				_, err = s.knowledgeService.CreateKnowledgeFromURL(ctx, kb.ID, input.URL, "", "", nil, "", nil, "web_research", nil)
+				return err
+			})
 		case tools.ToolKnowledgeApplyAnomaly:
 			anomalies := NewKnowledgeAnomalyService(s.db, s.knowledgeService, s.knowledgeTagService, s.audit)
 			approvalGate, _ := s.toolApprovalGate.(approval.RequiredApproval)
@@ -1163,6 +1184,7 @@ func filterSharedAgentWriteTools(allowed []string) []string {
 		tools.ToolWikiRenamePage:         true,
 		tools.ToolWikiDeletePage:         true,
 		tools.ToolKnowledgeReportAnomaly: true,
+		tools.ToolKnowledgeImportURL:     true,
 		tools.ToolKnowledgeApplyAnomaly:  true,
 	}
 	filtered := make([]string, 0, len(allowed))

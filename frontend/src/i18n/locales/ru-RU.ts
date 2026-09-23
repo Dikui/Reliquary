@@ -1065,6 +1065,8 @@ export default {
       wikiFlagIssueDesc: 'Отметить фактические ошибки или конфликты слияния',
       knowledgeReportAnomaly: 'Сообщить о проблеме сообщения',
       knowledgeReportAnomalyDesc: 'Предложить исправление или изменение тегов владельцу базы знаний',
+      knowledgeImportURL: 'Импорт страницы исследования',
+      knowledgeImportURLDesc: 'Получить оригинал для проверки полноты, источника и качества',
       knowledgeApplyAnomaly: 'Применить исправление сообщения',
       knowledgeApplyAnomalyDesc: 'Применить конкретное исправление только по явному запросу владельца',
       wikiWritePage: 'Создать/перезаписать Wiki',

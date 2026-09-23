@@ -81,6 +81,7 @@ func TestFilterSharedAgentWriteTools(t *testing.T) {
 		tools.ToolWikiDeletePage,
 		tools.ToolWikiReadIssue,
 		tools.ToolWikiUpdateIssue,
+		tools.ToolKnowledgeImportURL,
 		tools.ToolWebSearch,
 	})
 

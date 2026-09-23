@@ -56,6 +56,8 @@ agent_type_presets:
         - "grep_chunks"
         - "list_knowledge_chunks"
         - "get_document_info"
+        - "knowledge_report_anomaly"
+        - "knowledge_import_url"
       retain_retrieval_history: false
       faq_priority_enabled: true
       kb_selection_mode: "all"
@@ -122,6 +124,8 @@ agent_type_presets:
         - "list_knowledge_chunks"
         - "get_document_info"
         - "wiki_flag_issue"
+        - "knowledge_report_anomaly"
+        - "knowledge_import_url"
       retain_retrieval_history: false
       faq_priority_enabled: true
       kb_selection_mode: "all"

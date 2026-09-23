@@ -1067,6 +1067,8 @@ export default {
       wikiFlagIssueDesc: '标记页面中存在的事实错误或合并冲突问题',
       knowledgeReportAnomaly: '报告消息异常',
       knowledgeReportAnomalyDesc: '提交消息纠错或标签建议，等待知识库本人处理',
+      knowledgeImportURL: '调研网页入库',
+      knowledgeImportURLDesc: '抓取原文并经过完整性、来源与质量审核后收录',
       knowledgeApplyAnomaly: '执行消息纠错',
       knowledgeApplyAnomalyDesc: '仅在知识库本人明确指示后执行指定纠错建议',
       wikiWritePage: '创建/覆盖 Wiki',
