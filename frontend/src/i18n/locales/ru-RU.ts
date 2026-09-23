@@ -727,7 +727,7 @@ export default {
       notion: 'Notion',
       yuque: 'Yuque (Юйцюэ)',
       ima: 'Tencent IMA',
-      rss: 'RSS / Atom / карта сайта',
+      rss: 'RSS / Atom / карта сайта / список статей',
       gitlab: 'GitLab'
     },
     logDetail: {

@@ -727,7 +727,7 @@ export default {
       notion: 'Notion',
       yuque: '위큐 (Yuque)',
       ima: 'Tencent IMA',
-      rss: 'RSS / Atom / 사이트맵',
+      rss: 'RSS / Atom / 사이트맵 / 글 목록',
       gitlab: 'GitLab'
     },
     logDetail: {

@@ -729,7 +729,7 @@ export default {
       notion: 'Notion',
       yuque: '语雀',
       ima: '腾讯 IMA',
-      rss: 'RSS / Atom / 站点地图',
+      rss: 'RSS / Atom / 站点地图 / 文章列表',
       gitlab: 'GitLab'
     },
     logDetail: {

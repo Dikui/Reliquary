@@ -6134,7 +6134,7 @@ export default {
       lark_drive: 'Lark Drive',
       notion: 'Notion',
       yuque: 'Yuque',
-      rss: 'RSS / Atom / Sitemap',
+      rss: 'RSS / Atom / Sitemap / Article listing',
       ima: 'Tencent IMA',
       gitlab: 'GitLab'
     },
