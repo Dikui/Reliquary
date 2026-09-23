@@ -262,6 +262,17 @@ func RegisterKnowledgeBaseActivityRoutes(r *gin.RouterGroup, auditHandler *handl
 // Tags are KB metadata: Viewer reads, Contributor writes. Per-KB
 // ownership granularity for tags is out of scope for PR 2; this is
 // purely role-based.
+func RegisterKnowledgeAnomalyRoutes(r *gin.RouterGroup, h *handler.KnowledgeAnomalyHandler, g *rbacGuards) {
+	if h == nil {
+		return
+	}
+	group := g.apiKeyGroup(r.Group("/knowledge-bases/:id/anomalies"), apiKeyIngest(apiKeyFullAccess()))
+	read := group.With(apiKeyRetrieve(apiKeyFullAccess()))
+	read.GET("", g.Viewer(), g.KBAccessRead("id"), h.List)
+	group.POST("", g.Viewer(), g.KBAccessRead("id"), h.Create)
+	group.POST("/:anomaly_id/decision", g.OwnedKBOrAdmin(), g.KBAccessWrite("id"), h.Resolve)
+}
+
 func RegisterKnowledgeTagRoutes(r *gin.RouterGroup, tagHandler *handler.TagHandler, g *rbacGuards) {
 	if tagHandler == nil {
 		return

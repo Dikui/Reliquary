@@ -243,7 +243,7 @@ mermaid.initialize({
   }
 });
 const props = defineProps(["visible", "details", "knowledgeType", "sourceInfo", "canEditKB", "canDownloadKB", "canReviewIntake", "parse_status", "kbId"]);
-const emit = defineEmits(["closeDoc", "getDoc", "questionDeleted", "summaryStateChange", "intakeReview"]);
+const emit = defineEmits(["closeDoc", "getDoc", "questionDeleted", "summaryStateChange", "intakeReview", "reportAnomaly"]);
 const intakeOriginal = ref('');
 const intakeOriginalOffset = ref(0);
 const intakeOriginalLoading = ref(false);
@@ -1659,6 +1659,11 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
             <div class="doc-drawer-header-title">{{ getDisplayTitle() }}</div>
           </div>
           <div class="header-actions">
+            <t-button v-if="details.id && ['finalizing', 'completed'].includes(details.parse_status)" class="header-action-btn" size="small"
+              variant="text" shape="square" :title="$t('knowledgeBase.anomalies.report')"
+              @click="emit('reportAnomaly', details.id)">
+              <template #icon><t-icon name="error-circle" size="16px" /></template>
+            </t-button>
             <t-button v-if="canDownloadKB && (details.type === 'file' || details.type === 'manual')" class="header-action-btn" size="small"
               variant="text" shape="square" theme="default" :title="$t('common.download') || 'Download'"
               @click="downloadFile()">

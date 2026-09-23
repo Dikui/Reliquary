@@ -20,6 +20,7 @@ var versionedSQLiteTables = []string{
 	"knowledge_processing_spans",
 	"knowledge_tag_relations",
 	"knowledge_tag_manual_decisions",
+	"knowledge_anomalies",
 }
 
 // versionedSQLiteColumns maps each existing table to the columns that the
@@ -35,7 +36,7 @@ var versionedSQLiteColumns = map[string][]string{
 	"knowledge_tags":     {"kind"},                           // 000091
 }
 
-const expectedSQLiteMigrationVersion = 13
+const expectedSQLiteMigrationVersion = 14
 
 func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	repoRoot := sqliteRepoRoot(t)

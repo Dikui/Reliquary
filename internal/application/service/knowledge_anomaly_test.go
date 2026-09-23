@@ -1,0 +1,87 @@
+package service
+
+import (
+	"context"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	"reliquary/internal/application/repository"
+	"reliquary/internal/types"
+)
+
+func anomalyTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	for _, ddl := range []string{
+		`CREATE TABLE knowledge_bases (id TEXT PRIMARY KEY, tenant_id INTEGER, creator_id TEXT, deleted_at DATETIME)`,
+		`CREATE TABLE knowledges (id TEXT PRIMARY KEY, tenant_id INTEGER, knowledge_base_id TEXT, parse_status TEXT, deleted_at DATETIME)`,
+		`CREATE TABLE knowledge_tags (id TEXT PRIMARY KEY, tenant_id INTEGER, knowledge_base_id TEXT, name TEXT, kind TEXT)`,
+		`CREATE TABLE knowledge_tag_relations (knowledge_id TEXT, tag_id TEXT, created_at DATETIME, PRIMARY KEY (knowledge_id, tag_id))`,
+		`CREATE TABLE knowledge_tag_manual_decisions (knowledge_id TEXT, tag_id TEXT, selected BOOLEAN, actor_id TEXT, reason TEXT, updated_at DATETIME, PRIMARY KEY (knowledge_id, tag_id))`,
+		`CREATE TABLE chunks (id TEXT PRIMARY KEY, tenant_id INTEGER, tag_id TEXT, deleted_at DATETIME)`,
+	} {
+		require.NoError(t, db.Exec(ddl).Error)
+	}
+	require.NoError(t, db.AutoMigrate(&types.KnowledgeAnomaly{}))
+	require.NoError(t, db.Exec(`INSERT INTO knowledge_bases (id,tenant_id,creator_id) VALUES ('kb',1,'owner')`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO knowledges (id,tenant_id,knowledge_base_id,parse_status) VALUES ('message',1,'kb','completed')`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO knowledge_tags (id,tenant_id,knowledge_base_id,name,kind) VALUES ('old',1,'kb','Old','topic'),('new',1,'kb','New','topic')`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO knowledge_tag_relations (knowledge_id,tag_id) VALUES ('message','old')`).Error)
+	return db
+}
+
+func anomalyContext(user string) context.Context {
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
+	return context.WithValue(ctx, types.UserIDContextKey, user)
+}
+
+func TestKnowledgeAnomalyReviewerCannotApplyOwnerCan(t *testing.T) {
+	db := anomalyTestDB(t)
+	tagRepo := repository.NewKnowledgeTagRepository(db)
+	knowledge := &knowledgeService{repo: repository.NewKnowledgeRepository(db), tagRepo: tagRepo}
+	svc := NewKnowledgeAnomalyService(db, knowledge, nil, nil)
+	reviewer := anomalyContext("reviewer")
+	item, err := svc.Create(reviewer, "kb", KnowledgeAnomalyInput{
+		KnowledgeIDs: []string{"message"}, Kind: "suspected_error", Description: "wrong topic",
+		ProposalType: "set_tags", ProposedTagIDs: []string{"new"},
+	})
+	require.NoError(t, err)
+	require.Error(t, func() error { _, err := svc.Resolve(reviewer, "kb", item.ID, "apply", ""); return err }())
+	var ids []string
+	require.NoError(t, db.Model(&types.KnowledgeTagRelation{}).Where("knowledge_id = ?", "message").Pluck("tag_id", &ids).Error)
+	require.Equal(t, []string{"old"}, ids)
+
+	decided, err := svc.Resolve(anomalyContext("owner"), "kb", item.ID, "apply", "confirmed")
+	require.NoError(t, err)
+	require.Equal(t, "applied", decided.Status)
+	ids = nil
+	require.NoError(t, db.Model(&types.KnowledgeTagRelation{}).Where("knowledge_id = ?", "message").Pluck("tag_id", &ids).Error)
+	require.Equal(t, []string{"new"}, ids)
+	var decisions []types.KnowledgeTagManualDecision
+	require.NoError(t, db.Find(&decisions).Error)
+	require.Len(t, decisions, 2)
+	require.Equal(t, "confirmed", decisions[0].Reason)
+}
+
+func TestKnowledgeAnomalyTagDeletionKeepsMessage(t *testing.T) {
+	db := anomalyTestDB(t)
+	tagService := &knowledgeTagService{repo: repository.NewKnowledgeTagRepository(db), kbService: &safeDeleteKBService{}}
+	svc := NewKnowledgeAnomalyService(db, nil, tagService, nil)
+	item, err := svc.Create(anomalyContext("system-1"), "kb", KnowledgeAnomalyInput{
+		KnowledgeIDs: []string{"message"}, Kind: "tag_deletion", Description: "duplicate tag",
+		ProposalType: "delete_tag", ProposedDeleteTagID: "old",
+	})
+	require.NoError(t, err)
+	_, err = svc.Resolve(anomalyContext("owner"), "kb", item.ID, "apply", "")
+	require.NoError(t, err)
+	var tagCount, relationCount, messageCount int64
+	require.NoError(t, db.Model(&types.KnowledgeTag{}).Where("id = ?", "old").Count(&tagCount).Error)
+	require.NoError(t, db.Model(&types.KnowledgeTagRelation{}).Where("tag_id = ?", "old").Count(&relationCount).Error)
+	require.NoError(t, db.Model(&types.Knowledge{}).Where("id = ?", "message").Count(&messageCount).Error)
+	require.Zero(t, tagCount)
+	require.Zero(t, relationCount)
+	require.EqualValues(t, 1, messageCount)
+}

@@ -54,6 +54,7 @@ import KbFolderTree from './components/KbFolderTree.vue';
 import TagEditDialog from './components/TagEditDialog.vue';
 import BatchTagDialog from './components/BatchTagDialog.vue';
 import KbTagManageDrawer from './components/KbTagManageDrawer.vue';
+import KnowledgeAnomaliesDrawer from './components/KnowledgeAnomaliesDrawer.vue';
 import { tagLabel, isConcreteTag } from './tagLabel';
 import { listFavorites, addFavorite, removeFavorite } from '@/api/user-favorites';
 import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess';
@@ -539,6 +540,24 @@ const tagFilterPanelVisible = ref(false);
 const tagFilterTriggerHover = ref(false);
 const tagFilterCleared = ref(false);
 const tagManageDrawerVisible = ref(false);
+const anomalyDrawerVisible = ref(false);
+const anomalyKnowledgeId = ref('');
+const openAnomalyWindow = (knowledgeId = '') => {
+  anomalyKnowledgeId.value = knowledgeId;
+  isCardDetails.value = false;
+  anomalyDrawerVisible.value = true;
+};
+const editAnomalyMessageTags = async (knowledgeId: string) => {
+  try {
+    const response = await getKnowledgeDetails(knowledgeId);
+    if (response?.success && response.data) {
+      anomalyDrawerVisible.value = false;
+      openTagEditDialog(response.data as KnowledgeCard);
+    }
+  } catch (error) {
+    MessagePlugin.error(t('knowledgeBase.anomalies.loadFailed'));
+  }
+};
 
 const showTagFilterClear = computed(
   () => selectedTagIds.value.length > 0 && tagFilterTriggerHover.value,
@@ -2401,6 +2420,12 @@ async function createNewSession(value: string): Promise<void> {
             </h2>
             <!-- 标题行右侧的动作锚点：聚拢"信息"和"设置"两个圆形按钮。 -->
             <div class="kb-title-actions">
+              <t-tooltip v-if="kbId" :content="$t('knowledgeBase.anomalies.title')" placement="top">
+                <button type="button" class="kb-settings-button" :aria-label="$t('knowledgeBase.anomalies.title')"
+                  @click="openAnomalyWindow()">
+                  <t-icon name="error-circle" size="16px" />
+                </button>
+              </t-tooltip>
               <KBInfoPopover v-if="kbInfo && !authStore.isLiteMode" :kb-info="kbInfo"
                 :supported-file-types="[...supportedFileTypes]" />
               <t-tooltip v-if="canManage" :content="$t('knowledgeBase.settings')" placement="top">
@@ -2751,7 +2776,8 @@ async function createNewSession(value: string): Promise<void> {
       <!-- DocContent drawer (shared by documents tab and wiki source refs) -->
       <DocContent ref="docContentRef" :visible="isCardDetails" :details="details" :canEditKB="canEdit" :can-review-intake="isOwner"
         :canDownloadKB="canDownloadKnowledge" :kbId="kbId"
-        @closeDoc="closeDoc" @getDoc="getDoc" @summaryStateChange="syncDocumentSummaryState" @intake-review="handleIntakeReview">
+        @closeDoc="closeDoc" @getDoc="getDoc" @summaryStateChange="syncDocumentSummaryState" @intake-review="handleIntakeReview"
+        @report-anomaly="openAnomalyWindow">
       </DocContent>
     </div>
   </template>
@@ -2790,6 +2816,10 @@ async function createNewSession(value: string): Promise<void> {
     :is-faq="isFAQ"
     @changed="onTagManageChanged"
   />
+  <KnowledgeAnomaliesDrawer v-if="!isFAQ" v-model:visible="anomalyDrawerVisible" :kb-id="kbId"
+    :is-owner="isOwner" :initial-knowledge-id="anomalyKnowledgeId" :tags="tagList"
+    @open-message="(id) => { anomalyDrawerVisible = false; openSourceDoc(id) }"
+    @edit-tags="editAnomalyMessageTags" @changed="() => { resetPage(); loadTags(kbId, true) }" />
 </template>
 <style>
 /* 下拉菜单容器样式已统一至 @/assets/dropdown-menu.less */
