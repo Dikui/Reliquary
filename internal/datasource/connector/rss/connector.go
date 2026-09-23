@@ -45,7 +45,9 @@ func (c *Connector) Validate(ctx context.Context, config *types.DataSourceConfig
 		}
 		if _, err := parser.Parse(bytes.NewReader(data)); err != nil {
 			if _, sitemapErr := parseSitemap(data); sitemapErr != nil || cfg.ArticlePathPrefix == "" {
-				return fmt.Errorf("parse feed %s: %w (sitemaps require article_path_prefix)", feedURL, err)
+				if _, listingErr := parseListing(data, feedURL, cfg.ArticlePathPrefix); listingErr != nil {
+					return fmt.Errorf("parse feed or article listing %s: %w", feedURL, listingErr)
+				}
 			}
 		}
 	}
@@ -107,6 +109,12 @@ func (c *Connector) ListResources(
 					}
 				}
 				res.Metadata = map[string]interface{}{"item_count": count}
+				out = append(out, res)
+				continue
+			}
+			if articles, listingErr := parseListing(data, feedURL, cfg.ArticlePathPrefix); listingErr == nil {
+				res.Name = firstNonEmpty(cfg.Publisher, feedURL)
+				res.Metadata = map[string]interface{}{"item_count": len(articles)}
 				out = append(out, res)
 				continue
 			}
@@ -232,25 +240,28 @@ func (c *Connector) walk(
 		fromSitemap := false
 		if err != nil {
 			entries, sitemapErr := parseSitemap(data)
-			if sitemapErr != nil || cfg.ArticlePathPrefix == "" {
-				logger.Warnf(ctx, "[RSS] sync: parse %s failed: %v", feedURL, err)
-				feedErrors = append(feedErrors, fmt.Sprintf("%s: invalid feed or sitemap configuration", feedURL))
-				copyFeedCursor(newCursor, prev, feedURL)
-				continue
-			}
 			fromSitemap = true
 			feed = &gofeed.Feed{Title: cfg.Publisher}
-			sitemapURL, _ := url.Parse(feedURL)
-			for _, entry := range entries {
-				if !sitemapArticleURL(entry.Loc, sitemapURL, cfg.ArticlePathPrefix) {
-					continue
+			if sitemapErr == nil && cfg.ArticlePathPrefix != "" {
+				sitemapURL, _ := url.Parse(feedURL)
+				for _, entry := range entries {
+					if !sitemapArticleURL(entry.Loc, sitemapURL, cfg.ArticlePathPrefix) {
+						continue
+					}
+					modified, valid := parseSiteDate(entry.LastMod)
+					if !valid {
+						continue
+					}
+					feed.Items = append(feed.Items, &gofeed.Item{GUID: entry.Loc, Link: entry.Loc,
+						Updated: entry.LastMod, UpdatedParsed: &modified})
 				}
-				modified, valid := parseSiteDate(entry.LastMod)
-				if !valid {
-					continue
-				}
-				feed.Items = append(feed.Items, &gofeed.Item{GUID: entry.Loc, Link: entry.Loc,
-					Updated: entry.LastMod, UpdatedParsed: &modified})
+			} else if articles, listingErr := parseListing(data, feedURL, cfg.ArticlePathPrefix); listingErr == nil {
+				feed.Items = articles
+			} else {
+				logger.Warnf(ctx, "[RSS] sync: parse %s failed: %v", feedURL, listingErr)
+				feedErrors = append(feedErrors, fmt.Sprintf("%s: invalid feed, sitemap or article listing", feedURL))
+				copyFeedCursor(newCursor, prev, feedURL)
+				continue
 			}
 		}
 

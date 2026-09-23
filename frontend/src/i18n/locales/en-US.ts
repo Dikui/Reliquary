@@ -6145,7 +6145,7 @@ export default {
       lark_drive: 'Sync documents, spreadsheets and files from a Lark Drive folder (Feishu international)',
       notion: 'Sync pages and databases from Notion',
       yuque: 'Sync documents from Yuque knowledge bases',
-      rss: 'Sync articles from RSS / Atom feeds or sitemaps',
+      rss: 'Sync articles from RSS / Atom feeds, sitemaps or listing pages',
       ima: 'Sync documents, notes and files from Tencent IMA knowledge bases (AI sessions and video parses are not supported)',
       gitlab: 'Sync files from GitLab projects'
     },
@@ -6172,10 +6172,10 @@ export default {
       baseUrl: 'Base URL (optional)',
       baseUrlHint: 'Leave empty to use the default public cloud address. For private/enterprise deployments or when accessing via reverse proxy, enter your custom address (e.g. https://api-proxy.example.com).',
       feedUrls: 'Feed URLs',
-      feedUrlsHint: 'One RSS / Atom feed or sitemap URL per line; multiple URLs are supported.',
+      feedUrlsHint: 'One RSS / Atom feed, sitemap or article listing URL per line; multiple URLs are supported.',
       feedPublisher: 'Publisher (when the feed has no author)',
       articlePathPrefix: 'Article path prefix',
-      articlePathPrefixHint: 'Required for sitemaps, for example /news/; leave blank for feeds. Publication dates come from articles.',
+      articlePathPrefixHint: 'Required for sitemaps and article listings, for example /news/; leave blank for feeds. Publication dates come from articles.',
       authHeaders: 'Custom headers (optional)',
       authHeadersHint: 'For private feeds. One per line in "Name: Value" form, e.g. Authorization: Bearer xxxx'
     },

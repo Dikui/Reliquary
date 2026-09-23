@@ -84,6 +84,35 @@ func TestSitemapUsesArticlePublicationDate(t *testing.T) {
 	}
 }
 
+func TestListingUsesArticlePublicationDateAndSameSiteLinks(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/articles":
+			fmt.Fprint(w, `<html><body><a href="/articles/current?tracking=1">Current</a><a href="/articles/old">Old</a><a href="/articles/undated">Undated</a><a href="/about">About</a><a href="https://outside.example/articles/foreign">Foreign</a></body></html>`)
+		case "/articles/current", "/articles/old", "/articles/undated":
+			date := map[string]string{"/articles/current": "Sep 24, 2026", "/articles/old": "Sep 20, 2026"}[r.URL.Path]
+			fmt.Fprintf(w, `<html><body><main><h1>Article</h1><div>%s</div><article>%s</article></main></body></html>`, date, longArticleBody)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	config := &types.DataSourceConfig{Settings: map[string]interface{}{
+		"feed_urls": server.URL + "/articles", "article_path_prefix": "/articles/", "publisher": "Example",
+	}, IngestSince: time.Date(2026, 9, 23, 0, 0, 0, 0, time.UTC)}
+	if err := NewConnector().Validate(context.Background(), config); err != nil {
+		t.Fatal(err)
+	}
+	items, _, err := NewConnector().FetchIncremental(context.Background(), config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 || items[0].URL != server.URL+"/articles/current" || items[0].Metadata["published_at"] != "Sep 24, 2026" ||
+		items[1].Metadata["error"] == "" || len(items[1].Content) != 0 {
+		t.Fatalf("listing must keep current original, reject undated, skip old/off-site: %+v", items)
+	}
+}
+
 // fakeFeed spins up an httptest server serving an RSS feed and article pages.
 type fakeFeed struct {
 	server             *httptest.Server

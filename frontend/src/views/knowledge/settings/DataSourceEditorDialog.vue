@@ -789,6 +789,7 @@ const rssPresets = [
   ['NVIDIA', 'https://blogs.nvidia.com/feed/', 'NVIDIA'],
   ['Hugging Face', 'https://huggingface.co/blog/feed.xml', 'Hugging Face'],
   ['TechCrunch AI', 'https://techcrunch.com/category/artificial-intelligence/feed/', 'TechCrunch'],
+  ['Artificial Analysis', 'https://artificialanalysis.ai/articles', 'Artificial Analysis', '/articles/'],
   ['Cursor', 'https://cursor.com/sitemap.xml', 'Cursor', '/blog/'],
   ['Ethan Mollick', 'https://www.oneusefulthing.org/feed', 'Ethan Mollick'],
   ['Latent Space', 'https://www.latent.space/feed', 'Latent Space'],

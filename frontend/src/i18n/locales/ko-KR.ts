@@ -701,10 +701,10 @@ export default {
       baseUrl: 'Base URL',
       baseUrlHint: "비워두면 기본 퍼블릭 클라우드 주소가 사용됩니다. 프라이빗/엔터프라이즈 배포거나 리버스 프록시를 통해 액세스해야 하는 경우 사용자 정의 주소를 입력하세요 (예: https://api-proxy.example.com)",
       feedUrls: '피드 주소',
-      feedUrlsHint: '한 줄에 하나씩 RSS / Atom 피드 또는 사이트맵 주소를 입력하세요. 여러 주소를 함께 입력할 수 있습니다.',
+      feedUrlsHint: '한 줄에 하나씩 RSS / Atom 피드, 사이트맵 또는 글 목록 주소를 입력하세요. 여러 주소를 함께 입력할 수 있습니다.',
       feedPublisher: '게시 주체 (피드에 작성자가 없는 경우)',
       articlePathPrefix: '문서 경로 접두사',
-      articlePathPrefixHint: '사이트맵에는 필수입니다(예: /news/). 일반 피드는 비워 두세요. 게시일은 문서에서 확인합니다.',
+      articlePathPrefixHint: '사이트맵과 글 목록에는 필수입니다(예: /news/). 일반 피드는 비워 두세요. 게시일은 문서에서 확인합니다.',
       authHeaders: '사용자 지정 헤더 (선택)',
       authHeadersHint: '비공개 피드 접근용. 한 줄에 하나씩 「이름: 값」 형식으로 입력하세요. 예: Authorization: Bearer xxxx'
     },
@@ -716,7 +716,7 @@ export default {
       notion: 'Notion에서 페이지 및 데이터베이스 동기화',
       yuque: '위큐 지식베이스에서 문서 동기화',
       ima: 'Tencent IMA 지식베이스에서 문서, 노트 및 파일 동기화 (AI 세션과 동영상 분석은 지원되지 않음)',
-      rss: 'RSS / Atom 피드 또는 사이트맵에서 글 동기화',
+      rss: 'RSS / Atom 피드, 사이트맵 또는 글 목록에서 글 동기화',
       gitlab: 'GitLab 프로젝트의 파일 동기화'
     },
     connector: {
