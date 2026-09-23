@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -44,6 +45,42 @@ func TestClientRejectsTruncatedArticle(t *testing.T) {
 	_, err := newClient(nil).fetch(context.Background(), server.URL, maxArticleSize, false)
 	if err == nil || !strings.Contains(err.Error(), "exceeds") {
 		t.Fatalf("oversized article must fail rather than be treated as complete: %v", err)
+	}
+}
+
+func TestSitemapUsesArticlePublicationDate(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/sitemap.xml":
+			fmt.Fprintf(w, `<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>http://%s/news/current</loc><lastmod>2026-09-24</lastmod></url><url><loc>http://%s/news/old</loc><lastmod>2026-09-24</lastmod></url><url><loc>http://%s/news/undated</loc><lastmod>2026-09-24</lastmod></url><url><loc>http://%s/about</loc><lastmod>2026-09-24</lastmod></url></urlset>`, r.Host, r.Host, r.Host, r.Host)
+		case "/news/current", "/news/old", "/news/undated":
+			date := map[string]string{"/news/current": "Sep 24, 2026", "/news/old": "Sep 20, 2026"}[r.URL.Path]
+			fmt.Fprintf(w, `<html><body><main><h1>Article</h1><div>%s</div><article>%s</article></main></body></html>`, date, longArticleBody)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	baseURL, _ := url.Parse(server.URL + "/sitemap.xml")
+	if sitemapArticleURL("https://outside.example/news/current", baseURL, "/news/") ||
+		sitemapArticleURL(server.URL+"/about", baseURL, "/news/") {
+		t.Fatal("sitemap discovery must stay on the configured site and article path")
+	}
+	config := &types.DataSourceConfig{Settings: map[string]interface{}{
+		"feed_urls": server.URL + "/sitemap.xml", "article_path_prefix": "/news/", "publisher": "Example",
+	}, IngestSince: time.Date(2026, 9, 23, 0, 0, 0, 0, time.UTC)}
+	items, _, err := NewConnector().FetchIncremental(context.Background(), config, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected current article plus undated error, got %d items", len(items))
+	}
+	if items[0].Metadata["published_at"] != "Sep 24, 2026" || len(items[0].Content) == 0 {
+		t.Fatalf("current article lost its actual publication evidence: %+v", items[0].Metadata)
+	}
+	if items[1].Metadata["error"] == "" || len(items[1].Content) != 0 || items[1].URL != "" {
+		t.Fatalf("undated article must not enter intake: %+v", items[1])
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -43,7 +44,9 @@ func (c *Connector) Validate(ctx context.Context, config *types.DataSourceConfig
 			return fmt.Errorf("fetch feed %s: %w", feedURL, err)
 		}
 		if _, err := parser.Parse(bytes.NewReader(data)); err != nil {
-			return fmt.Errorf("parse feed %s: %w", feedURL, err)
+			if _, sitemapErr := parseSitemap(data); sitemapErr != nil || cfg.ArticlePathPrefix == "" {
+				return fmt.Errorf("parse feed %s: %w (sitemaps require article_path_prefix)", feedURL, err)
+			}
 		}
 	}
 	return nil
@@ -94,6 +97,19 @@ func (c *Connector) ListResources(
 		}
 		feed, err := parser.Parse(bytes.NewReader(data))
 		if err != nil {
+			if entries, sitemapErr := parseSitemap(data); sitemapErr == nil && cfg.ArticlePathPrefix != "" {
+				res.Name = firstNonEmpty(cfg.Publisher, feedURL)
+				sitemapURL, _ := url.Parse(feedURL)
+				count := 0
+				for _, entry := range entries {
+					if sitemapArticleURL(entry.Loc, sitemapURL, cfg.ArticlePathPrefix) {
+						count++
+					}
+				}
+				res.Metadata = map[string]interface{}{"item_count": count}
+				out = append(out, res)
+				continue
+			}
 			logger.Warnf(ctx, "[RSS] list: parse %s failed: %v", feedURL, err)
 			res.Description = "parse failed: " + err.Error()
 			out = append(out, res)
@@ -213,11 +229,29 @@ func (c *Connector) walk(
 			continue
 		}
 		feed, err := parser.Parse(bytes.NewReader(data))
+		fromSitemap := false
 		if err != nil {
-			logger.Warnf(ctx, "[RSS] sync: parse %s failed: %v", feedURL, err)
-			feedErrors = append(feedErrors, fmt.Sprintf("%s: %v", feedURL, err))
-			copyFeedCursor(newCursor, prev, feedURL)
-			continue
+			entries, sitemapErr := parseSitemap(data)
+			if sitemapErr != nil || cfg.ArticlePathPrefix == "" {
+				logger.Warnf(ctx, "[RSS] sync: parse %s failed: %v", feedURL, err)
+				feedErrors = append(feedErrors, fmt.Sprintf("%s: invalid feed or sitemap configuration", feedURL))
+				copyFeedCursor(newCursor, prev, feedURL)
+				continue
+			}
+			fromSitemap = true
+			feed = &gofeed.Feed{Title: cfg.Publisher}
+			sitemapURL, _ := url.Parse(feedURL)
+			for _, entry := range entries {
+				if !sitemapArticleURL(entry.Loc, sitemapURL, cfg.ArticlePathPrefix) {
+					continue
+				}
+				modified, valid := parseSiteDate(entry.LastMod)
+				if !valid {
+					continue
+				}
+				feed.Items = append(feed.Items, &gofeed.Item{GUID: entry.Loc, Link: entry.Loc,
+					Updated: entry.LastMod, UpdatedParsed: &modified})
+			}
 		}
 
 		newCursor.FeedItems[feedURL] = make(map[string]string)
@@ -241,8 +275,11 @@ func (c *Connector) walk(
 				continue
 			}
 			published := item.PublishedParsed
+			if fromSitemap {
+				published = item.UpdatedParsed // discovery filter only; the article supplies the real publication date.
+			}
 			if published == nil || published.IsZero() {
-				logger.Warnf(ctx, "[RSS] skipping item without publication date: %s", itemID)
+				logger.Warnf(ctx, "[RSS] skipping item without date signal: %s", itemID)
 				continue
 			}
 			if !config.IngestSince.IsZero() && published.Before(config.IngestSince) {
@@ -268,6 +305,18 @@ func (c *Connector) walk(
 			}
 
 			resolved := c.resolveItem(ctx, cli, feed, item, feedURL, itemID, cfg.Publisher)
+			if fromSitemap && resolved.item.Metadata["error"] == "" {
+				actualDate, valid := parseSiteDate(resolved.item.Metadata["published_at"])
+				if !valid {
+					resolved.item.Content, resolved.item.URL = nil, ""
+					resolved.item.Metadata["error"] = "article publication date missing"
+				} else if !config.IngestSince.IsZero() && actualDate.Before(config.IngestSince) {
+					newCursor.FeedItems[feedURL][itemID] = resolved.fingerprint
+					newCursor.FeedSignals[feedURL][itemID] = feedSig
+					skipped++
+					continue
+				}
+			}
 			if resolved.item.Metadata["error"] != "" {
 				if prevItems[itemID] != "" {
 					newCursor.FeedItems[feedURL][itemID] = prevItems[itemID]
@@ -324,7 +373,7 @@ func (c *Connector) resolveItem(
 		return resolvedFeedItem{item: types.FetchedItem{ExternalID: itemExternalID(feedURL, itemID), Title: title,
 			Metadata: map[string]string{"error": "missing article URL", "channel": types.ChannelRSS}}}
 	}
-	contentHTML, articleTitle, articleByline, articleSiteName, err := cli.extractArticle(ctx, item.Link)
+	contentHTML, articleTitle, articleByline, articleSiteName, pagePublishedAt, err := cli.extractArticle(ctx, item.Link)
 	if err != nil {
 		logger.Warnf(ctx, "[RSS] full-text fetch failed for %s: %v", item.Link, err)
 		return resolvedFeedItem{item: types.FetchedItem{ExternalID: itemExternalID(feedURL, itemID), Title: title,
@@ -358,6 +407,10 @@ func (c *Connector) resolveItem(
 		publisher = articleSiteName
 	}
 
+	publishedAt := item.Published
+	if publishedAt == "" {
+		publishedAt = pagePublishedAt
+	}
 	return resolvedFeedItem{
 		fingerprint: contentFingerprint(content),
 		item: types.FetchedItem{
@@ -377,7 +430,7 @@ func (c *Connector) resolveItem(
 				"link":         item.Link,
 				"author":       author,
 				"publisher":    publisher,
-				"published_at": item.Published,
+				"published_at": publishedAt,
 			},
 		},
 	}

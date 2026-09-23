@@ -773,20 +773,23 @@ function selectType(def: ConnectorDef) {
   step.value = 1
 }
 
-function selectRssPreset(name: string, url: string, publisher: string) {
+function selectRssPreset(name: string, url: string, publisher: string, articlePathPrefix = '') {
   form.value.name = name
   form.value.config.settings.feed_urls = url
   form.value.config.settings.publisher = publisher
+  form.value.config.settings.article_path_prefix = articlePathPrefix
   form.value.sync_schedule = '0 0 2 * * *'
 }
 
 const rssPresets = [
   ['OpenAI', 'https://openai.com/news/rss.xml', 'OpenAI'],
+  ['Anthropic', 'https://www.anthropic.com/sitemap.xml', 'Anthropic', '/news/'],
   ['Simon Willison', 'https://simonwillison.net/atom/everything/', 'Simon Willison'],
   ['Google DeepMind', 'https://deepmind.google/blog/rss.xml', 'Google DeepMind'],
   ['NVIDIA', 'https://blogs.nvidia.com/feed/', 'NVIDIA'],
   ['Hugging Face', 'https://huggingface.co/blog/feed.xml', 'Hugging Face'],
   ['TechCrunch AI', 'https://techcrunch.com/category/artificial-intelligence/feed/', 'TechCrunch'],
+  ['Cursor', 'https://cursor.com/sitemap.xml', 'Cursor', '/blog/'],
   ['Ethan Mollick', 'https://www.oneusefulthing.org/feed', 'Ethan Mollick'],
   ['Latent Space', 'https://www.latent.space/feed', 'Latent Space'],
   ['宝玉', 'https://baoyu.io/feed.xml', '宝玉'],
@@ -1425,8 +1428,8 @@ const drawerConfirmText = computed(() => {
       <section v-if="form.type === 'rss'" class="setting-drawer__section">
         <h4 class="setting-drawer__section-title">{{ t('datasource.field.feedUrls') }}</h4>
         <div class="form-item rss-presets">
-          <t-button v-for="[name, url, publisher] in rssPresets" :key="url" variant="outline" size="small"
-            @click="selectRssPreset(name, url, publisher)">{{ name }}</t-button>
+          <t-button v-for="[name, url, publisher, articlePathPrefix] in rssPresets" :key="url" variant="outline" size="small"
+            @click="selectRssPreset(name, url, publisher, articlePathPrefix)">{{ name }}</t-button>
         </div>
         <div class="form-item">
           <label class="form-label required">{{ t('datasource.field.feedUrls') }}</label>
@@ -1442,6 +1445,11 @@ const drawerConfirmText = computed(() => {
         <div class="form-item">
           <label class="form-label">{{ t('datasource.field.feedPublisher') }}</label>
           <t-input v-model="form.config.settings.publisher" />
+        </div>
+        <div class="form-item">
+          <label class="form-label">{{ t('datasource.field.articlePathPrefix') }}</label>
+          <t-input v-model="form.config.settings.article_path_prefix" placeholder="/news/" />
+          <p class="form-desc">{{ t('datasource.field.articlePathPrefixHint') }}</p>
         </div>
       </section>
 

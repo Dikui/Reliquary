@@ -1,9 +1,8 @@
-// Package rss implements the RSS/Atom data source connector for Reliquary.
+// Package rss implements RSS/Atom and article-sitemap discovery for Reliquary.
 //
-// It syncs articles from one or more RSS/Atom/JSON feeds into a Reliquary
-// knowledge base. Each configured feed URL is treated as a selectable
-// resource; each feed item becomes a knowledge entry whose body is the
-// article's full text rendered as Markdown.
+// It syncs articles from RSS/Atom/JSON feeds or site URL sets into a Reliquary
+// knowledge base. Each configured URL is a selectable resource; articles are
+// fetched and converted to Markdown before the shared intake review.
 //
 // Capabilities:
 //   - Private feeds: optional custom HTTP headers (e.g. "Authorization: Bearer …")
@@ -14,7 +13,7 @@
 //   - Incremental: feed-level signals skip full-text article fetches when a feed
 //     entry is unchanged; content fingerprints detect feed-body changes. Article-
 //     only edits without feed updates may be missed until the feed entry changes.
-//     Deletions are NOT synced — feeds routinely drop old items.
+//     Deletions are NOT synced — feeds and sitemaps may drop old items.
 //
 // All outbound requests go through the SSRF-safe HTTP client so a malicious
 // feed cannot redirect Reliquary to internal services.
@@ -43,8 +42,9 @@ import (
 // may still carry feed_urls for backward compatibility with older rows.
 type Config struct {
 	// FeedURLs is a newline- or comma-separated list of feed URLs.
-	FeedURLs  string `json:"feed_urls"`
-	Publisher string `json:"publisher,omitempty"`
+	FeedURLs          string `json:"feed_urls"`
+	Publisher         string `json:"publisher,omitempty"`
+	ArticlePathPrefix string `json:"article_path_prefix,omitempty"`
 
 	// AuthHeaders is an optional newline-separated list of custom request
 	// headers in "Name: Value" form, applied only to feed fetches.
@@ -69,6 +69,12 @@ func parseConfig(config *types.DataSourceConfig) (*Config, error) {
 	}
 	if publisher, ok := config.Settings["publisher"].(string); ok {
 		cfg.Publisher = strings.TrimSpace(publisher)
+	}
+	if prefix, ok := config.Settings["article_path_prefix"].(string); ok {
+		cfg.ArticlePathPrefix = strings.TrimSpace(prefix)
+	}
+	if cfg.ArticlePathPrefix != "" && (!strings.HasPrefix(cfg.ArticlePathPrefix, "/") || strings.HasPrefix(cfg.ArticlePathPrefix, "//")) {
+		return nil, fmt.Errorf("%w: article_path_prefix must be an absolute path prefix", datasource.ErrInvalidConfig)
 	}
 	if len(cfg.feedURLList()) == 0 {
 		return nil, fmt.Errorf("%w: feed_urls is required", datasource.ErrInvalidCredentials)
