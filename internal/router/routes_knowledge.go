@@ -273,6 +273,17 @@ func RegisterKnowledgeAnomalyRoutes(r *gin.RouterGroup, h *handler.KnowledgeAnom
 	group.POST("/:anomaly_id/decision", g.OwnedKBOrAdmin(), g.KBAccessWrite("id"), h.Resolve)
 }
 
+func RegisterKnowledgeStrategyRoutes(r *gin.RouterGroup, h *handler.KnowledgeStrategyHandler, g *rbacGuards) {
+	if h == nil {
+		return
+	}
+	// Strategy text and previews are owner-only, including reads.
+	group := r.Group("/knowledge-bases/:id/strategies")
+	group.GET("", g.OwnedKBOrAdmin(), g.KBAccessRead("id"), h.List)
+	group.POST("", g.OwnedKBOrAdmin(), g.KBAccessWrite("id"), h.Propose)
+	group.POST("/:version_id/activate", g.OwnedKBOrAdmin(), g.KBAccessWrite("id"), h.Activate)
+}
+
 func RegisterKnowledgeTagRoutes(r *gin.RouterGroup, tagHandler *handler.TagHandler, g *rbacGuards) {
 	if tagHandler == nil {
 		return

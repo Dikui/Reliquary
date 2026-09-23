@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"gorm.io/gorm"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service/retriever"
 	"reliquary/internal/config"
@@ -45,6 +46,7 @@ var (
 // knowledgeService implements the knowledge service interface
 // service 实现知识服务接口
 type knowledgeService struct {
+	db              *gorm.DB
 	config          *config.Config
 	retrieveEngine  interfaces.RetrieveEngineRegistry
 	ownership       retriever.TenantStoreOwnership
@@ -91,6 +93,7 @@ const (
 
 // NewKnowledgeService creates a new knowledge service instance
 func NewKnowledgeService(
+	db *gorm.DB,
 	config *config.Config,
 	repo interfaces.KnowledgeRepository,
 	documentReader interfaces.DocumentReader,
@@ -120,6 +123,7 @@ func NewKnowledgeService(
 	audit interfaces.AuditLogService,
 ) (interfaces.KnowledgeService, error) {
 	return &knowledgeService{
+		db:              db,
 		config:          config,
 		repo:            repo,
 		kbService:       kbService,

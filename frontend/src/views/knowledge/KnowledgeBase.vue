@@ -55,6 +55,7 @@ import TagEditDialog from './components/TagEditDialog.vue';
 import BatchTagDialog from './components/BatchTagDialog.vue';
 import KbTagManageDrawer from './components/KbTagManageDrawer.vue';
 import KnowledgeAnomaliesDrawer from './components/KnowledgeAnomaliesDrawer.vue';
+import KnowledgeStrategyDrawer from './components/KnowledgeStrategyDrawer.vue';
 import { decideKnowledgeAnomaly } from '@/api/knowledge-anomalies';
 import { tagLabel, isConcreteTag } from './tagLabel';
 import { listFavorites, addFavorite, removeFavorite } from '@/api/user-favorites';
@@ -542,6 +543,7 @@ const tagFilterTriggerHover = ref(false);
 const tagFilterCleared = ref(false);
 const tagManageDrawerVisible = ref(false);
 const anomalyDrawerVisible = ref(false);
+const strategyDrawerVisible = ref(false);
 const anomalyKnowledgeId = ref('');
 const anomalyDrawerRef = ref<{ refresh: () => Promise<void> } | null>(null);
 const editingAnomalyId = ref('');
@@ -2436,6 +2438,12 @@ async function createNewSession(value: string): Promise<void> {
             </h2>
             <!-- 标题行右侧的动作锚点：聚拢"信息"和"设置"两个圆形按钮。 -->
             <div class="kb-title-actions">
+              <t-tooltip v-if="kbId && isOwner && !isFAQ" :content="$t('knowledgeBase.strategy.title')" placement="top">
+                <button type="button" class="kb-settings-button" :aria-label="$t('knowledgeBase.strategy.title')"
+                  @click="strategyDrawerVisible = true">
+                  <t-icon name="adjustment" size="16px" />
+                </button>
+              </t-tooltip>
               <t-tooltip v-if="kbId" :content="$t('knowledgeBase.anomalies.title')" placement="top">
                 <button type="button" class="kb-settings-button" :aria-label="$t('knowledgeBase.anomalies.title')"
                   @click="openAnomalyWindow()">
@@ -2836,6 +2844,8 @@ async function createNewSession(value: string): Promise<void> {
     :is-owner="isOwner" :initial-knowledge-id="anomalyKnowledgeId" :tags="tagList"
     @open-message="openSourceDoc"
     @edit-tags="editAnomalyMessageTags" @changed="() => { resetPage(); loadTags(kbId, true) }" />
+  <KnowledgeStrategyDrawer v-if="!isFAQ && isOwner" v-model:visible="strategyDrawerVisible" :kb-id="kbId"
+    :selected-ids="Array.from(selectedIds)" />
 </template>
 <style>
 /* 下拉菜单容器样式已统一至 @/assets/dropdown-menu.less */
