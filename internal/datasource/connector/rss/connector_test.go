@@ -36,6 +36,17 @@ const longArticleBody = `<p>This is the first paragraph of a reasonably long art
 	`<p>A third paragraph adds further substance, ensuring the article is unmistakably ` +
 	`the dominant readable region of the document under test.</p>`
 
+func TestClientRejectsTruncatedArticle(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(strings.Repeat("x", maxArticleSize+1)))
+	}))
+	defer server.Close()
+	_, err := newClient(nil).fetch(context.Background(), server.URL, maxArticleSize, false)
+	if err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("oversized article must fail rather than be treated as complete: %v", err)
+	}
+}
+
 // fakeFeed spins up an httptest server serving an RSS feed and article pages.
 type fakeFeed struct {
 	server             *httptest.Server
