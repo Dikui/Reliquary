@@ -1030,7 +1030,8 @@ func (s *agentService) registerTools(
 				s.cfg,
 			).WithSourceDisputes(NewKnowledgeAnomalyService(s.db, s.knowledgeService, s.knowledgeTagService, s.audit).ForMessages)
 		case tools.ToolGrepChunks:
-			toolToRegister = tools.NewGrepChunksTool(s.db, config.SearchTargets)
+			toolToRegister = tools.NewGrepChunksTool(s.db, config.SearchTargets).
+				WithSourceDisputes(NewKnowledgeAnomalyService(s.db, s.knowledgeService, s.knowledgeTagService, s.audit).ForMessages)
 			logger.Infof(ctx, "Registered grep_chunks tool with searchTargets: %d targets", len(config.SearchTargets))
 		case tools.ToolListKnowledgeChunks:
 			toolToRegister = tools.NewListKnowledgeChunksTool(s.knowledgeService, s.chunkService, config.SearchTargets)

@@ -1147,17 +1147,7 @@ func (t *KnowledgeSearchTool) formatOutput(
 		if err != nil {
 			logger.Warnf(ctx, "[Tool][KnowledgeSearch] Failed to load source disputes: %v", err)
 		} else if len(disputes) > 0 {
-			ob.WriteString("<source_disputes>\n")
-			for _, dispute := range disputes {
-				ob.WriteString(fmt.Sprintf("<dispute id=\"%s\" status=\"%s\" knowledge_ids=\"%s\">\n",
-					xmlEscape(dispute.ID), xmlEscape(dispute.Status), xmlEscape(strings.Join(dispute.KnowledgeIDs, ","))))
-				ob.WriteString("<description>" + xmlEscape(dispute.Description) + "</description>\n")
-				if dispute.DecisionNote != "" {
-					ob.WriteString("<owner_decision>" + xmlEscape(dispute.DecisionNote) + "</owner_decision>\n")
-				}
-				ob.WriteString("</dispute>\n")
-			}
-			ob.WriteString("</source_disputes>\n")
+			writeSourceDisputes(&ob, disputes)
 		}
 	}
 	ob.WriteString("</search_results>")
@@ -1181,6 +1171,20 @@ func (t *KnowledgeSearchTool) formatOutput(
 		Output:  output,
 		Data:    data,
 	}, nil
+}
+
+func writeSourceDisputes(ob *strings.Builder, disputes []types.KnowledgeAnomaly) {
+	ob.WriteString("<source_disputes>\n")
+	for _, dispute := range disputes {
+		ob.WriteString(fmt.Sprintf("<dispute id=\"%s\" status=\"%s\" knowledge_ids=\"%s\">\n",
+			xmlEscape(dispute.ID), xmlEscape(dispute.Status), xmlEscape(strings.Join(dispute.KnowledgeIDs, ","))))
+		ob.WriteString("<description>" + xmlEscape(dispute.Description) + "</description>\n")
+		if dispute.DecisionNote != "" {
+			ob.WriteString("<owner_decision>" + xmlEscape(dispute.DecisionNote) + "</owner_decision>\n")
+		}
+		ob.WriteString("</dispute>\n")
+	}
+	ob.WriteString("</source_disputes>\n")
 }
 
 // chunkRange represents a continuous range of chunk indices

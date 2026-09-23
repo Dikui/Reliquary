@@ -1,7 +1,9 @@
 package tools
 
 import (
+	"context"
 	"regexp"
+	"strings"
 	"testing"
 
 	"reliquary/internal/types"
@@ -54,5 +56,23 @@ func TestAggregateByKnowledge_mergesChunksFromSameDocument(t *testing.T) {
 	}
 	if byID["doc-2"].ChunkHitCount != 1 {
 		t.Fatalf("doc-2 chunk hits = %d, want 1", byID["doc-2"].ChunkHitCount)
+	}
+}
+
+func TestGrepChunksIncludesRelevantSourceDispute(t *testing.T) {
+	called := false
+	tool := (&GrepChunksTool{}).WithSourceDisputes(func(_ context.Context, kbIDs, knowledgeIDs []string) ([]types.KnowledgeAnomaly, error) {
+		called = true
+		if len(kbIDs) != 1 || kbIDs[0] != "kb-1" || len(knowledgeIDs) != 1 || knowledgeIDs[0] != "doc-1" {
+			t.Fatalf("unexpected dispute lookup scope: kb=%v docs=%v", kbIDs, knowledgeIDs)
+		}
+		return []types.KnowledgeAnomaly{{ID: "issue-1", Status: "pending", KnowledgeIDs: []string{"doc-1"}, Description: "sources disagree"}}, nil
+	})
+	got := tool.appendSourceDisputes(context.Background(), "<grep_results/>", []string{"kb-1"}, []chunkWithTitle{
+		{Chunk: types.Chunk{KnowledgeID: "doc-1"}},
+		{Chunk: types.Chunk{KnowledgeID: "doc-1"}},
+	})
+	if !called || !strings.Contains(got, `<source_disputes>`) || !strings.Contains(got, `sources disagree`) {
+		t.Fatalf("expected one relevant source dispute after grep results, got %q", got)
 	}
 }

@@ -65,11 +65,17 @@ type GrepChunksInput struct {
 // the snippet, mirroring the UX of wiki_search.
 type GrepChunksTool struct {
 	BaseTool
-	db            *gorm.DB
-	searchTargets types.SearchTargets
+	db             *gorm.DB
+	searchTargets  types.SearchTargets
+	sourceDisputes func(context.Context, []string, []string) ([]types.KnowledgeAnomaly, error)
 
 	mu         sync.Mutex
 	seenChunks map[string]bool
+}
+
+func (t *GrepChunksTool) WithSourceDisputes(lookup func(context.Context, []string, []string) ([]types.KnowledgeAnomaly, error)) *GrepChunksTool {
+	t.sourceDisputes = lookup
+	return t
 }
 
 // NewGrepChunksTool creates a new grep chunks tool
@@ -201,6 +207,7 @@ func (t *GrepChunksTool) Execute(ctx context.Context, args json.RawMessage) (*ty
 	}
 
 	output := t.formatOutput(ctx, finalResults, queries, compiled)
+	output = t.appendSourceDisputes(ctx, output, kbIDsForMeta, finalResults)
 
 	return &types.ToolResult{
 		Success: true,
@@ -220,6 +227,29 @@ func (t *GrepChunksTool) Execute(ctx context.Context, args json.RawMessage) (*ty
 			"display_type":       "grep_results",
 		},
 	}, nil
+}
+
+func (t *GrepChunksTool) appendSourceDisputes(ctx context.Context, output string, kbIDs []string, results []chunkWithTitle) string {
+	if t.sourceDisputes != nil && len(results) > 0 {
+		seen := make(map[string]bool)
+		ids := make([]string, 0, len(results))
+		for _, hit := range results {
+			if hit.KnowledgeID != "" && !seen[hit.KnowledgeID] {
+				seen[hit.KnowledgeID] = true
+				ids = append(ids, hit.KnowledgeID)
+			}
+		}
+		disputes, err := t.sourceDisputes(ctx, kbIDs, ids)
+		if err != nil {
+			logger.Warnf(ctx, "[Tool][GrepChunks] Failed to load source disputes: %v", err)
+		} else if len(disputes) > 0 {
+			var note strings.Builder
+			writeSourceDisputes(&note, disputes)
+			output += "\n" + note.String()
+		}
+	}
+
+	return output
 }
 
 type chunkWithTitle struct {
