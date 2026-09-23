@@ -578,7 +578,20 @@ func TestIngestItem_RSSUsesUnifiedIntakeWithSourceEvidence(t *testing.T) {
 	require.Equal(t, "Full original text", ks.payload.Content)
 	require.Equal(t, types.SourceInfo{Author: "Original Author", Publisher: "Publishing Institution", OriginalURL: "https://example.com/article", PublishedAt: "2026-09-23T08:30:00Z"}, ks.payload.SourceInfo)
 	require.Equal(t, "rss-source", ks.payload.SourceMetadata["datasource_id"])
+	require.NotEmpty(t, ks.payload.SourceMetadata["content_sha256"])
 	require.Equal(t, []string{"source-tag"}, ks.payload.TagIDs)
+	oldMetadata, err := json.Marshal(ks.payload.SourceMetadata)
+	require.NoError(t, err)
+	repo.knowledge = &types.Knowledge{ID: "old", Metadata: types.JSON(oldMetadata)}
+	_, err = svc.ingestItem(context.Background(), ds, &types.FetchedItem{
+		ExternalID: "feed-item", Title: "Article", Content: []byte("Full original text"), URL: "https://example.com/article",
+	}, nil)
+	var duplicate *types.DuplicateKnowledgeError
+	require.ErrorAs(t, err, &duplicate)
+	_, err = svc.ingestItem(context.Background(), ds, &types.FetchedItem{
+		ExternalID: "feed-item", Title: "Article", Content: []byte("Changed original text"), URL: "https://example.com/article",
+	}, nil)
+	require.ErrorContains(t, err, "requires update review")
 	require.Equal(t, types.ChannelRSS, ks.channel)
 }
 

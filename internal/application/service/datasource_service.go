@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1273,18 +1274,28 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 		if len(item.Content) == 0 || item.URL == "" {
 			return false, fmt.Errorf("RSS article body or original URL missing")
 		}
+		// ponytail: compare stored Markdown, not remote image bytes; add image fingerprints if in-place image edits matter.
+		contentHash := fmt.Sprintf("%x", sha256.Sum256(item.Content))
 		existing, err := s.knowledgeService.GetRepository().FindByDataSourceExternalID(
 			ctx, ds.TenantID, ds.KnowledgeBaseID, ds.ID, item.ExternalID)
 		if err != nil {
 			return false, err
 		}
 		if existing != nil {
-			return false, types.NewDuplicateFileError(existing)
+			var previous map[string]string
+			if err := json.Unmarshal(existing.Metadata, &previous); err != nil {
+				return false, fmt.Errorf("read existing RSS article fingerprint: %w", err)
+			}
+			if previous["content_sha256"] == contentHash {
+				return false, types.NewDuplicateFileError(existing)
+			}
+			return false, fmt.Errorf("RSS article changed and requires update review")
 		}
 		payload := &types.ManualKnowledgePayload{
 			Title: item.Title, Content: string(item.Content), Status: types.ManualKnowledgeStatusPublish,
 			TagIDs: tagIDs, SourceMetadata: map[string]string{
 				"external_id": item.ExternalID, "datasource_id": ds.ID, "source_resource_id": item.SourceResourceID,
+				"content_sha256": contentHash,
 			},
 			SourceInfo: types.SourceInfo{
 				Author: metadata["author"], Publisher: metadata["publisher"], OriginalURL: item.URL, PublishedAt: metadata["published_at"],
