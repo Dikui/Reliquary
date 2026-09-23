@@ -784,6 +784,7 @@ function selectRssPreset(name: string, url: string, publisher: string, articlePa
 const rssPresets = [
   ['OpenAI', 'https://openai.com/news/rss.xml', 'OpenAI'],
   ['Anthropic', 'https://www.anthropic.com/sitemap.xml', 'Anthropic', '/news/'],
+  ['Kimi', 'https://www.kimi.ai/blog/', 'Kimi', '/blog/'],
   ['Simon Willison', 'https://simonwillison.net/atom/everything/', 'Simon Willison'],
   ['Google DeepMind', 'https://deepmind.google/blog/rss.xml', 'Google DeepMind'],
   ['NVIDIA', 'https://blogs.nvidia.com/feed/', 'NVIDIA'],

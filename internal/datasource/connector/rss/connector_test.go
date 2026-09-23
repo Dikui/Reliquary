@@ -88,9 +88,9 @@ func TestListingUsesArticlePublicationDateAndSameSiteLinks(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/articles":
-			fmt.Fprint(w, `<html><body><a href="/articles/current?tracking=1">Current</a><a href="/articles/old">Old</a><a href="/articles/undated">Undated</a><a href="/about">About</a><a href="https://outside.example/articles/foreign">Foreign</a></body></html>`)
+			fmt.Fprint(w, `<html><body><a href="/articles/current?tracking=1">Current</a><div class="menu-card"><a href="/articles/current">Current</a><p class="card-date">2026-09-24</p></div><a href="/articles/old">Old</a><a href="/articles/undated">Undated</a><a href="/about">About</a><a href="https://outside.example/articles/foreign">Foreign</a></body></html>`)
 		case "/articles/current", "/articles/old", "/articles/undated":
-			date := map[string]string{"/articles/current": "Sep 24, 2026", "/articles/old": "Sep 20, 2026"}[r.URL.Path]
+			date := map[string]string{"/articles/old": "Sep 20, 2026"}[r.URL.Path]
 			fmt.Fprintf(w, `<html><body><main><h1>Article</h1><div>%s</div><article>%s</article></main></body></html>`, date, longArticleBody)
 		default:
 			http.NotFound(w, r)
@@ -107,7 +107,7 @@ func TestListingUsesArticlePublicationDateAndSameSiteLinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != 2 || items[0].URL != server.URL+"/articles/current" || items[0].Metadata["published_at"] != "Sep 24, 2026" ||
+	if len(items) != 2 || items[0].URL != server.URL+"/articles/current" || items[0].Metadata["published_at"] != "2026-09-24" ||
 		items[1].Metadata["error"] == "" || len(items[1].Content) != 0 {
 		t.Fatalf("listing must keep current original, reject undated, skip old/off-site: %+v", items)
 	}

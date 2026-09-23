@@ -22,7 +22,7 @@ func parseListing(data []byte, listingURL, pathPrefix string) ([]*gofeed.Item, e
 	if err != nil {
 		return nil, err
 	}
-	seen := make(map[string]bool)
+	seen := make(map[string]*gofeed.Item)
 	items := make([]*gofeed.Item, 0)
 	now := time.Now().UTC()
 	doc.Find("a[href]").EachWithBreak(func(_ int, a *goquery.Selection) bool {
@@ -34,12 +34,23 @@ func parseListing(data []byte, listingURL, pathPrefix string) ([]*gofeed.Item, e
 		resolved := base.ResolveReference(ref)
 		resolved.RawQuery, resolved.Fragment = "", ""
 		absolute := resolved.String()
-		if !sitemapArticleURL(absolute, base, pathPrefix) || seen[absolute] {
+		if !sitemapArticleURL(absolute, base, pathPrefix) {
 			return true
 		}
-		seen[absolute] = true
-		items = append(items, &gofeed.Item{GUID: absolute, Link: absolute,
-			Title: strings.TrimSpace(a.Text()), Updated: now.Format(time.RFC3339Nano), UpdatedParsed: &now})
+		date := strings.TrimSpace(a.Closest(".menu-card").Find(".card-date").First().Text())
+		if _, valid := parseSiteDate(date); !valid {
+			date = ""
+		}
+		if existing := seen[absolute]; existing != nil {
+			if existing.Published == "" {
+				existing.Published = date
+			}
+			return true
+		}
+		item := &gofeed.Item{GUID: absolute, Link: absolute, Title: strings.TrimSpace(a.Text()),
+			Published: date, Updated: now.Format(time.RFC3339Nano), UpdatedParsed: &now}
+		seen[absolute] = item
+		items = append(items, item)
 		// ponytail: inspect only the newest visible links; expand if a source paginates.
 		return len(items) < 50
 	})
