@@ -770,8 +770,10 @@ func (s *DataSourceService) ProcessSync(ctx context.Context, task *asynq.Task) e
 		return err
 	}
 
-	// Update cursor for next incremental sync
-	if nextCursor != nil {
+	// A failed RSS item must be retried tomorrow. Advancing the feed cursor here
+	// would make a successfully fetched but failed-to-ingest article invisible.
+	// ponytail: retry successful items too on a partial run; dedup skips them.
+	if nextCursor != nil && (ds.Type != types.ConnectorTypeRSS || result.Failed == 0) {
 		cursorJSON, _ := nextCursor.ToJSON()
 		ds.LastSyncCursor = cursorJSON
 	}

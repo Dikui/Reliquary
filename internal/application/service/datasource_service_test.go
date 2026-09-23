@@ -76,6 +76,37 @@ func TestProcessSyncRSSFailureKeepsSourceActiveForNextRun(t *testing.T) {
 	}
 }
 
+type partialRSSConnector struct{ deletedItemConnector }
+
+func (partialRSSConnector) Type() string { return types.ConnectorTypeRSS }
+func (partialRSSConnector) FetchIncremental(context.Context, *types.DataSourceConfig, *types.SyncCursor) ([]types.FetchedItem, *types.SyncCursor, error) {
+	return []types.FetchedItem{
+		{ExternalID: "ok", Title: "Article", URL: "https://example.com/article", Content: []byte("Full article"), Metadata: map[string]string{"published_at": "2026-09-23", "publisher": "Publisher"}},
+		{ExternalID: "failed", Title: "Missing article", Metadata: map[string]string{"error": "fetch failed"}},
+	}, &types.SyncCursor{ConnectorCursor: map[string]interface{}{"revision": "new"}}, nil
+}
+
+func TestProcessSyncRSSPartialFailureKeepsCursorForRetry(t *testing.T) {
+	configJSON, err := (&types.DataSourceConfig{Type: types.ConnectorTypeRSS}).ToJSON()
+	require.NoError(t, err)
+	ds := &types.DataSource{ID: "rss-partial", TenantID: 1, KnowledgeBaseID: "kb", Type: types.ConnectorTypeRSS,
+		Config: configJSON, Status: types.DataSourceStatusActive, LastSyncCursor: types.JSON(`{"revision":"old"}`)}
+	log := &types.SyncLog{ID: "rss-log", DataSourceID: ds.ID, TenantID: 1, Status: types.SyncLogStatusRunning}
+	logs := &processSyncSyncLogRepo{logs: map[string]*types.SyncLog{log.ID: log}}
+	registry := datasource.NewConnectorRegistry()
+	require.NoError(t, registry.Register(partialRSSConnector{}))
+	svc := &DataSourceService{dsRepo: newKBDeleteDSRepo(ds.KnowledgeBaseID, ds), syncLogRepo: logs,
+		kbService:         &processSyncKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, TenantID: 1}},
+		connectorRegistry: registry, tenantRepo: &processSyncTenantRepo{tenant: &types.Tenant{ID: 1}},
+		tagService: &processSyncTagService{}, knowledgeService: &rssIntakeKnowledgeService{repo: &deletionLookupKnowledgeRepo{}},
+	}
+	payload, err := json.Marshal(types.DataSourceSyncPayload{DataSourceID: ds.ID, TenantID: 1, SyncLogID: log.ID})
+	require.NoError(t, err)
+	require.NoError(t, svc.ProcessSync(context.Background(), asynq.NewTask(types.TypeDataSourceSync, payload)))
+	require.Equal(t, types.SyncLogStatusPartial, log.Status)
+	require.Equal(t, types.JSON(`{"revision":"old"}`), ds.LastSyncCursor)
+}
+
 type processSyncKBService struct {
 	getErr error
 	kb     *types.KnowledgeBase
