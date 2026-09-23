@@ -20,6 +20,8 @@ type KnowledgeTag struct {
 	KnowledgeBaseID string `json:"knowledge_base_id" gorm:"type:varchar(36);index"`
 	// Tag name, unique within the same knowledge base
 	Name string `json:"name"              gorm:"type:varchar(128);not null"`
+	// Kind is empty for legacy/FAQ tags; document labels use nature, topic, object or event.
+	Kind string `json:"kind" gorm:"type:varchar(16);not null;default:''"`
 	// Optional display color
 	Color string `json:"color"             gorm:"type:varchar(32)"`
 	// Sort order within the same knowledge base
@@ -29,6 +31,29 @@ type KnowledgeTag struct {
 	// Last updated time
 	UpdatedAt time.Time `json:"updated_at"`
 }
+
+const (
+	TagKindNature = "nature"
+	TagKindTopic  = "topic"
+	TagKindObject = "object"
+	TagKindEvent  = "event"
+)
+
+var ContentNatures = map[string]bool{
+	"描述": true, "数据": true, "原理": true, "观点": true, "案例": true, "问题": true,
+}
+
+// KnowledgeTagManualDecision preserves a user's explicit correction across later automatic tagging.
+type KnowledgeTagManualDecision struct {
+	KnowledgeID string    `gorm:"type:varchar(36);primaryKey"`
+	TagID       string    `gorm:"type:varchar(36);primaryKey"`
+	Selected    bool      `gorm:"not null"`
+	ActorID     string    `gorm:"type:varchar(36);not null"`
+	Reason      string    `gorm:"type:text"`
+	UpdatedAt   time.Time `gorm:"not null"`
+}
+
+func (KnowledgeTagManualDecision) TableName() string { return "knowledge_tag_manual_decisions" }
 
 // BeforeCreate ensures SeqID is populated for databases that don't support
 // autoIncrement on non-primary-key columns (e.g. SQLite).

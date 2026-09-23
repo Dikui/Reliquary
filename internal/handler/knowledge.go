@@ -2147,6 +2147,7 @@ func (h *KnowledgeHandler) CancelKnowledgeParse(c *gin.Context) {
 type knowledgeTagBatchRequest struct {
 	Updates map[string][]string `json:"updates" binding:"required,min=1"`
 	KBID    string              `json:"kb_id"` // Optional: scope to this KB (validates editor access and uses effective tenant for shared KB)
+	Reason  string              `json:"reason"`
 }
 
 // UpdateKnowledgeTagBatch godoc
@@ -2209,7 +2210,7 @@ func (h *KnowledgeHandler) UpdateKnowledgeTagBatch(c *gin.Context) {
 			ctx = effCtx
 		}
 	}
-	if err := h.kgService.UpdateKnowledgeTagBatch(ctx, authorizedKBID, req.Updates); err != nil {
+	if err := h.kgService.UpdateKnowledgeTagBatch(ctx, authorizedKBID, req.Updates, req.Reason); err != nil {
 		logger.ErrorWithFields(ctx, err, nil)
 		c.Error(err)
 		return

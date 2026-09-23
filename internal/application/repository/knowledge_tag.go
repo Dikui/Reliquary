@@ -17,38 +17,88 @@ func (r *knowledgeRepository) SetKnowledgeTags(
 	knowledgeID string,
 	tagIDs []string,
 ) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Delete all existing tag relations for this knowledge
-		if err := tx.Where("knowledge_id = ?", knowledgeID).
-			Delete(&types.KnowledgeTagRelation{}).Error; err != nil {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error { return replaceKnowledgeTags(tx, knowledgeID, tagIDs) })
+}
+
+func replaceKnowledgeTags(tx *gorm.DB, knowledgeID string, tagIDs []string) error {
+	// Delete all existing tag relations for this knowledge
+	if err := tx.Where("knowledge_id = ?", knowledgeID).
+		Delete(&types.KnowledgeTagRelation{}).Error; err != nil {
+		return err
+	}
+	// Insert new relations (skip empty and duplicate IDs)
+	if len(tagIDs) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(tagIDs))
+	now := time.Now()
+	relations := make([]types.KnowledgeTagRelation, 0, len(tagIDs))
+	for _, tagID := range tagIDs {
+		if tagID == "" {
+			continue
+		}
+		if _, dup := seen[tagID]; dup {
+			continue
+		}
+		seen[tagID] = struct{}{}
+		relations = append(relations, types.KnowledgeTagRelation{
+			KnowledgeID: knowledgeID,
+			TagID:       tagID,
+			CreatedAt:   now,
+		})
+	}
+	if len(relations) == 0 {
+		return nil
+	}
+	return tx.Create(&relations).Error
+}
+
+// SetKnowledgeTagsManually stores association changes and their provenance atomically.
+func (r *knowledgeRepository) SetKnowledgeTagsManually(ctx context.Context, knowledgeID string, tagIDs []string, actorID, reason string) (added, removed []string, err error) {
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var oldIDs []string
+		if err := tx.Model(&types.KnowledgeTagRelation{}).Where("knowledge_id = ?", knowledgeID).Pluck("tag_id", &oldIDs).Error; err != nil {
 			return err
 		}
-		// Insert new relations (skip empty and duplicate IDs)
-		if len(tagIDs) == 0 {
+		old := make(map[string]bool, len(oldIDs))
+		newTags := make(map[string]bool, len(tagIDs))
+		for _, id := range oldIDs {
+			old[id] = true
+		}
+		for _, id := range tagIDs {
+			if id != "" {
+				newTags[id] = true
+			}
+		}
+		for id := range newTags {
+			if !old[id] {
+				added = append(added, id)
+			}
+		}
+		for id := range old {
+			if !newTags[id] {
+				removed = append(removed, id)
+			}
+		}
+		if err := replaceKnowledgeTags(tx, knowledgeID, tagIDs); err != nil {
+			return err
+		}
+		decisions := make([]types.KnowledgeTagManualDecision, 0, len(added)+len(removed))
+		for _, id := range added {
+			decisions = append(decisions, types.KnowledgeTagManualDecision{KnowledgeID: knowledgeID, TagID: id, Selected: true, ActorID: actorID, Reason: reason, UpdatedAt: time.Now()})
+		}
+		for _, id := range removed {
+			decisions = append(decisions, types.KnowledgeTagManualDecision{KnowledgeID: knowledgeID, TagID: id, Selected: false, ActorID: actorID, Reason: reason, UpdatedAt: time.Now()})
+		}
+		if len(decisions) == 0 {
 			return nil
 		}
-		seen := make(map[string]struct{}, len(tagIDs))
-		now := time.Now()
-		relations := make([]types.KnowledgeTagRelation, 0, len(tagIDs))
-		for _, tagID := range tagIDs {
-			if tagID == "" {
-				continue
-			}
-			if _, dup := seen[tagID]; dup {
-				continue
-			}
-			seen[tagID] = struct{}{}
-			relations = append(relations, types.KnowledgeTagRelation{
-				KnowledgeID: knowledgeID,
-				TagID:       tagID,
-				CreatedAt:   now,
-			})
-		}
-		if len(relations) == 0 {
-			return nil
-		}
-		return tx.Create(&relations).Error
+		return tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "knowledge_id"}, {Name: "tag_id"}}, DoUpdates: clause.AssignmentColumns([]string{"selected", "actor_id", "reason", "updated_at"})}).Create(&decisions).Error
 	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return added, removed, nil
 }
 
 // AddKnowledgeTagRelations incrementally adds validated relations and never
@@ -77,6 +127,28 @@ func (r *knowledgeRepository) AddKnowledgeTagRelations(
 	}
 
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var blocked []string
+		if err := tx.Model(&types.KnowledgeTagManualDecision{}).
+			Where("knowledge_id = ? AND selected = ? AND tag_id IN ?", knowledgeID, false, unique).
+			Pluck("tag_id", &blocked).Error; err != nil {
+			return err
+		}
+		if len(blocked) > 0 {
+			blockedSet := make(map[string]bool, len(blocked))
+			for _, id := range blocked {
+				blockedSet[id] = true
+			}
+			kept := unique[:0]
+			for _, id := range unique {
+				if !blockedSet[id] {
+					kept = append(kept, id)
+				}
+			}
+			unique = kept
+			if len(unique) == 0 {
+				return nil
+			}
+		}
 		var knowledgeCount int64
 		if err := tx.Model(&types.Knowledge{}).
 			Where("id = ? AND tenant_id = ? AND knowledge_base_id = ? AND deleted_at IS NULL", knowledgeID, tenantID, kbID).
@@ -134,7 +206,7 @@ func (r *knowledgeRepository) GetKnowledgeTags(
 	var rows []relationWithTag
 	if err := r.db.WithContext(ctx).
 		Table("knowledge_tag_relations AS ktr").
-		Select("ktr.knowledge_id, kt.id, kt.seq_id, kt.tenant_id, kt.knowledge_base_id, kt.name, kt.color, kt.sort_order, kt.created_at, kt.updated_at").
+		Select("ktr.knowledge_id, kt.id, kt.seq_id, kt.tenant_id, kt.knowledge_base_id, kt.name, kt.kind, kt.color, kt.sort_order, kt.created_at, kt.updated_at").
 		Joins("JOIN knowledge_tags AS kt ON ktr.tag_id = kt.id").
 		Where("ktr.knowledge_id IN (?)", knowledgeIDs).
 		Find(&rows).Error; err != nil {
@@ -153,7 +225,10 @@ func (r *knowledgeRepository) DeleteKnowledgeTagRelations(
 	ctx context.Context,
 	knowledgeID string,
 ) error {
-	return r.db.WithContext(ctx).
-		Where("knowledge_id = ?", knowledgeID).
-		Delete(&types.KnowledgeTagRelation{}).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("knowledge_id = ?", knowledgeID).Delete(&types.KnowledgeTagManualDecision{}).Error; err != nil {
+			return err
+		}
+		return tx.Where("knowledge_id = ?", knowledgeID).Delete(&types.KnowledgeTagRelation{}).Error
+	})
 }

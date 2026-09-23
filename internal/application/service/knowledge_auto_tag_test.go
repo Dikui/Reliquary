@@ -10,6 +10,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -62,6 +63,20 @@ type autoTagTagRepo struct {
 	interfaces.KnowledgeTagRepository
 	tags  []*types.KnowledgeTag
 	total int64
+}
+
+func (r *autoTagTagRepo) GetByName(_ context.Context, _ uint64, _, name string, kind ...string) (*types.KnowledgeTag, error) {
+	for _, tag := range r.tags {
+		if tag.Name == name && len(kind) > 0 && tag.Kind == kind[0] {
+			return tag, nil
+		}
+	}
+	return nil, gorm.ErrRecordNotFound
+}
+
+func (r *autoTagTagRepo) Create(_ context.Context, tag *types.KnowledgeTag) error {
+	r.tags = append(r.tags, tag)
+	return nil
 }
 
 func (r *autoTagTagRepo) ListByKB(
@@ -173,6 +188,24 @@ func TestAutoTagHandleAttachesMatchedTags(t *testing.T) {
 	fixture := newAutoTagFixture(t, `{"matches":[{"index":1,"confidence":0.9}]}`)
 	require.NoError(t, fixture.handle(t))
 	assert.Equal(t, []string{"tag-a"}, fixture.repo.added)
+}
+
+func TestAutoTagHandleCreatesBothAxesForApprovedMessageWithExistingTag(t *testing.T) {
+	fixture := newAutoTagFixture(t, `{"natures":["描述","数据","不允许"],"referents":[{"kind":"topic","name":"AI"},{"kind":"event","name":"模型发布"},{"kind":"other","name":"忽略"}]}`)
+	intake := &types.KnowledgeIntakeMetadata{Decision: "approved"}
+	require.NoError(t, fixture.repo.knowledge.SetIntakeMetadata(intake))
+	fixture.repo.existing["doc"] = []*types.KnowledgeTag{{ID: "manual", Name: "existing"}}
+	fixture.service.kbService.(*autoTagKBService).kb.AutoTagConfig = nil
+	require.NoError(t, fixture.handle(t))
+	tags := fixture.service.tagRepo.(*autoTagTagRepo).tags
+	created := map[string]string{}
+	for _, tag := range tags {
+		if tag.Kind != "" {
+			created[tag.Name] = tag.Kind
+		}
+	}
+	assert.Equal(t, map[string]string{"描述": "nature", "数据": "nature", "AI": "topic", "模型发布": "event"}, created)
+	assert.Len(t, fixture.repo.added, 4)
 }
 
 // A missing confidence must not be read as zero: models frequently omit the

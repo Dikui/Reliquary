@@ -12,9 +12,9 @@ type KnowledgeTagService interface {
 	// ListTags lists all tags under a knowledge base with associated statistics.
 	ListTags(ctx context.Context, kbID string, page *types.Pagination, keyword string) (*types.PageResult, error)
 	// CreateTag creates a new tag under a knowledge base.
-	CreateTag(ctx context.Context, kbID string, name string, color string, sortOrder int) (*types.KnowledgeTag, error)
+	CreateTag(ctx context.Context, kbID string, name string, color string, sortOrder int, kind ...string) (*types.KnowledgeTag, error)
 	// UpdateTag updates tag basic information.
-	UpdateTag(ctx context.Context, id string, name *string, color *string, sortOrder *int) (*types.KnowledgeTag, error)
+	UpdateTag(ctx context.Context, id string, name *string, color *string, sortOrder *int, kind ...*string) (*types.KnowledgeTag, error)
 	// DeleteTag deletes a tag.
 	// When contentOnly=true, only deletes the content under the tag but keeps the tag itself.
 	// excludeIDs: IDs of chunks to exclude from deletion (only valid when deleting chunks)
@@ -36,7 +36,7 @@ type KnowledgeTagRepository interface {
 	GetByIDs(ctx context.Context, tenantID uint64, ids []string) ([]*types.KnowledgeTag, error)
 	// GetBySeqIDs retrieves multiple tags by their seq_ids in a single query.
 	GetBySeqIDs(ctx context.Context, tenantID uint64, seqIDs []int64) ([]*types.KnowledgeTag, error)
-	GetByName(ctx context.Context, tenantID uint64, kbID string, name string) (*types.KnowledgeTag, error)
+	GetByName(ctx context.Context, tenantID uint64, kbID string, name string, kind ...string) (*types.KnowledgeTag, error)
 	ListByKB(
 		ctx context.Context,
 		tenantID uint64,

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { tagLabel } from '../tagLabel';
 import { formatFileSize, getFileIcon } from '@/utils/files';
 import { useTagChipsOverflow } from '@/composables/useTagChipsOverflow';
 import DocumentActionMenu from './DocumentActionMenu.vue';
@@ -9,6 +10,7 @@ import FolderPickerMenu, { type FolderOption } from './FolderPickerMenu.vue';
 interface Tag {
   id: string;
   name: string;
+  kind?: string;
   color?: string;
 }
 
@@ -331,12 +333,12 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
         <div class="cell cell-tag">
           <template v-if="item.tags && item.tags.length > 0">
             <t-tooltip v-if="hasTagOverflow(item.id, (item.tags || []).length)"
-              :content="(item.tags || []).map((t: any) => t.name).join(', ')" placement="top">
+              :content="(item.tags || []).map((tag: Tag) => tagLabel(tag, t)).join(', ')" placement="top">
               <div class="row-tag-chips" :ref="(el: any) => setupTagChipsObserver(el, item.id, (item.tags || []).length)"
                 :class="{ 'is-clickable': canEdit }" @click.stop="canEdit && emit('tag-edit', item)">
                 <t-tag v-for="tag in (item.tags || []).slice(0, getTagLimit(item.id))" :key="tag.id" size="small"
                   variant="light-outline" class="row-tag">
-                  {{ tag.name }}
+                  {{ tagLabel(tag, t) }}
                 </t-tag>
                 <span class="row-tag-overflow">+{{ getOverflowCount(item.id, (item.tags || []).length) }}</span>
               </div>
@@ -345,7 +347,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
               :class="{ 'is-clickable': canEdit }" @click.stop="canEdit && emit('tag-edit', item)">
               <t-tag v-for="tag in (item.tags || []).slice(0, getTagLimit(item.id))" :key="tag.id" size="small"
                 variant="light-outline" class="row-tag">
-                {{ tag.name }}
+                {{ tagLabel(tag, t) }}
               </t-tag>
             </div>
           </template>

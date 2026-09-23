@@ -52,6 +52,7 @@ import KbFolderTree from './components/KbFolderTree.vue';
 import TagEditDialog from './components/TagEditDialog.vue';
 import BatchTagDialog from './components/BatchTagDialog.vue';
 import KbTagManageDrawer from './components/KbTagManageDrawer.vue';
+import { tagLabel } from './tagLabel';
 import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess';
 import { useUploadConfirmStore, type UploadConfirmResult } from '@/stores/uploadConfirm';
 import WikiBrowser from './wiki/WikiBrowser.vue';
@@ -2485,10 +2486,10 @@ async function createNewSession(value: string): Promise<void> {
                               type="button"
                               class="tag-filter-chip"
                               :class="{ active: isTagFilterActive(tag.id) }"
-                              :title="`${tag.name} (${tag.knowledge_count || 0})`"
+                              :title="`${tagLabel(tag, t)} (${tag.knowledge_count || 0})`"
                               @click="handleTagRowClick(tag.id)"
                             >
-                              <span class="tag-filter-chip__label">{{ tag.name }}</span>
+                              <span class="tag-filter-chip__label">{{ tagLabel(tag, t) }}</span>
                               <span class="tag-filter-chip__count">{{ tag.knowledge_count || 0 }}</span>
                             </button>
                           </div>

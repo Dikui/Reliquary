@@ -22,7 +22,7 @@
         <div v-if="selectedTagsList.length > 0" class="tag-edit-chips">
           <button v-for="tag in selectedTagsList" :key="tag.id" type="button" class="tag-edit-chip is-selected"
             :title="tag.name" @click="toggleTag(tag.id)">
-            {{ tag.name }}
+            {{ tagDisplayName(tag) }}
           </button>
         </div>
         <p v-else class="tag-edit-section-empty">{{ $t('knowledgeBase.tagEditNoSelected') }}</p>
@@ -53,19 +53,29 @@
           <button v-for="tag in availableTagsList" :key="tag.id" type="button" class="tag-edit-chip"
             :title="tag.knowledge_count !== undefined ? `${tag.name} (${tag.knowledge_count})` : tag.name"
             @click="toggleTag(tag.id)">
-            {{ tag.name }}
+            {{ tagDisplayName(tag) }}
           </button>
         </div>
         <div v-else class="tag-edit-section-empty tag-edit-section-empty--row">
           <span>{{ searchQuery.trim() ? $t('knowledgeBase.tagEmptyResult') : $t('knowledgeBase.noTags') }}</span>
-          <t-button v-if="searchQuery.trim()" variant="text" theme="default" size="small" :loading="creatingTag"
+          <t-button v-if="searchQuery.trim() && newTagKind !== 'nature'" variant="text" theme="default" size="small" :loading="creatingTag"
             @click="handleCreateTag">
             {{ $t('knowledgeBase.tagCreateAction') }} “{{ searchQuery.trim() }}”
           </t-button>
         </div>
         <div class="tag-edit-create-row">
-          <t-input v-model="newTagName" :placeholder="$t('knowledgeBase.tagNewPlaceholder')" size="small"
+          <select v-model="newTagKind" :aria-label="$t('knowledgeBase.tagKindLabel')">
+            <option value="nature">{{ $t('knowledgeBase.tagKindNature') }}</option>
+            <option value="topic">{{ $t('knowledgeBase.tagKindTopic') }}</option>
+            <option value="object">{{ $t('knowledgeBase.tagKindObject') }}</option>
+            <option value="event">{{ $t('knowledgeBase.tagKindEvent') }}</option>
+          </select>
+          <select v-if="newTagKind === 'nature'" v-model="newTagName" :aria-label="$t('knowledgeBase.tagNamePlaceholder')">
+            <option v-for="name in natureNames" :key="name" :value="name">{{ name }}</option>
+          </select>
+          <t-input v-else v-model="newTagName" :placeholder="$t('knowledgeBase.tagNewPlaceholder')" size="small"
             :maxlength="40" :disabled="creatingTag" @enter="handleAddNewTag" />
+          <t-button size="small" :loading="creatingTag" @click="handleAddNewTag">{{ $t('knowledgeBase.tagCreateAction') }}</t-button>
         </div>
       </section>
     </div>
@@ -90,11 +100,13 @@
 import { ref, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { MessagePlugin } from 'tdesign-vue-next';
+import { tagLabel } from '../tagLabel';
 import { createKnowledgeBaseTag } from '@/api/knowledge-base';
 
 interface Tag {
   id: string;
   name: string;
+  kind?: string;
   color?: string;
   knowledge_count?: number;
 }
@@ -122,6 +134,10 @@ const selectedSet = ref<Set<string>>(new Set());
 const creatingTag = ref(false);
 const saving = ref(false);
 const newTagName = ref('');
+const newTagKind = ref('topic');
+const natureNames = ['描述', '数据', '原理', '观点', '案例', '问题'];
+const tagDisplayName = (tag: Tag) => tagLabel(tag, t);
+watch(newTagKind, (kind) => { newTagName.value = kind === 'nature' ? natureNames[0] : ''; });
 
 watch(
   () => props.visible,
@@ -170,7 +186,7 @@ async function handleCreateTag() {
   if (!name) return;
   creatingTag.value = true;
   try {
-    const res: any = await createKnowledgeBaseTag(props.kbId, { name });
+    const res: any = await createKnowledgeBaseTag(props.kbId, { name, kind: newTagKind.value });
     const newTag = res?.data || res;
     const next = new Set(selectedSet.value);
     next.add(newTag.id);
@@ -188,7 +204,7 @@ async function handleCreateTag() {
 async function handleAddNewTag() {
   const name = newTagName.value.trim();
   if (!name) return;
-  const exists = props.tagList.find((t) => t.name === name);
+  const exists = props.tagList.find((t) => t.name === name && t.kind === newTagKind.value);
   if (exists) {
     const next = new Set(selectedSet.value);
     next.add(exists.id);
@@ -198,7 +214,7 @@ async function handleAddNewTag() {
   }
   creatingTag.value = true;
   try {
-    const res: any = await createKnowledgeBaseTag(props.kbId, { name });
+    const res: any = await createKnowledgeBaseTag(props.kbId, { name, kind: newTagKind.value });
     const newTag = res?.data || res;
     const next = new Set(selectedSet.value);
     next.add(newTag.id);

@@ -1419,7 +1419,7 @@ func (s *knowledgeService) getOrCreateTagInTarget(
 	}
 
 	// Try to find existing tag with same name in target KB
-	dstTag, err := s.tagRepo.GetByName(ctx, dstTenantID, dstKnowledgeBaseID, srcTag.Name)
+	dstTag, err := s.tagRepo.GetByName(ctx, dstTenantID, dstKnowledgeBaseID, srcTag.Name, srcTag.Kind)
 	if err == nil && dstTag != nil {
 		tagIDMapping[srcTagID] = dstTag.ID
 		return dstTag.ID
@@ -1436,6 +1436,7 @@ func (s *knowledgeService) getOrCreateTagInTarget(
 		TenantID:        dstTenantID,
 		KnowledgeBaseID: dstKnowledgeBaseID,
 		Name:            srcTag.Name,
+		Kind:            srcTag.Kind,
 		Color:           srcTag.Color,
 		SortOrder:       sortOrder,
 		CreatedAt:       time.Now(),

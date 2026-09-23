@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, onBeforeUnmount, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { tagLabel } from '../tagLabel';
 import { formatFileSize } from '@/utils/files';
 import { useTagChipsOverflow } from '@/composables/useTagChipsOverflow';
 import DocumentActionMenu from './DocumentActionMenu.vue';
@@ -10,6 +11,7 @@ import KnowledgeProcessingTimeline from '@/components/knowledge-processing-timel
 interface Tag {
   id: string;
   name: string;
+  kind?: string;
   color?: string;
 }
 
@@ -30,7 +32,7 @@ interface KnowledgeCard {
   isMore?: boolean;
   metadata?: any;
   error_message?: string;
-  tags?: Array<{ id: string; name: string; color?: string }>;
+  tags?: Tag[];
   source?: string;
   created_at?: string;
   file_size?: number | string;
@@ -554,7 +556,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
               <template v-if="(item.tags || []).length > 0">
                 <t-tooltip
                   v-if="hasTagOverflow(item.id, (item.tags || []).length)"
-                  :content="(item.tags || []).map((t: any) => t.name).join(', ')"
+                  :content="(item.tags || []).map((tag: Tag) => tagLabel(tag, t)).join(', ')"
                   placement="top"
                 >
                   <div
@@ -563,7 +565,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
                     @click="emit('tag-edit', item)"
                   >
                     <t-tag v-for="tag in (item.tags || []).slice(0, getTagLimit(item.id))" :key="tag.id" size="small" variant="light-outline" class="card-tag-chip">
-                      <span class="tag-text">{{ tag.name }}</span>
+                      <span class="tag-text">{{ tagLabel(tag, t) }}</span>
                     </t-tag>
                     <span class="card-tag-overflow">+{{ getOverflowCount(item.id, (item.tags || []).length) }}</span>
                   </div>
@@ -575,7 +577,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
                   @click="emit('tag-edit', item)"
                 >
                   <t-tag v-for="tag in (item.tags || []).slice(0, getTagLimit(item.id))" :key="tag.id" size="small" variant="light-outline" class="card-tag-chip">
-                    <span class="tag-text">{{ tag.name }}</span>
+                    <span class="tag-text">{{ tagLabel(tag, t) }}</span>
                   </t-tag>
                 </div>
               </template>
@@ -588,7 +590,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
             <template v-else-if="(item.tags || []).length > 0">
               <t-tooltip
                 v-if="hasTagOverflow(item.id, (item.tags || []).length)"
-                :content="(item.tags || []).map((t: any) => t.name).join(', ')"
+                :content="(item.tags || []).map((tag: Tag) => tagLabel(tag, t)).join(', ')"
                 placement="top"
               >
                 <div
@@ -596,7 +598,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
                   :ref="(el: any) => setupTagChipsObserver(el, item.id, (item.tags || []).length)"
                 >
                   <t-tag v-for="tag in (item.tags || []).slice(0, getTagLimit(item.id))" :key="tag.id" size="small" variant="light-outline" class="card-tag-chip">
-                    <span class="tag-text">{{ tag.name }}</span>
+                    <span class="tag-text">{{ tagLabel(tag, t) }}</span>
                   </t-tag>
                   <span class="card-tag-overflow">+{{ getOverflowCount(item.id, (item.tags || []).length) }}</span>
                 </div>
@@ -607,7 +609,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
                 :ref="(el: any) => setupTagChipsObserver(el, item.id, (item.tags || []).length)"
               >
                 <t-tag v-for="tag in (item.tags || []).slice(0, getTagLimit(item.id))" :key="tag.id" size="small" variant="light-outline" class="card-tag-chip">
-                  <span class="tag-text">{{ tag.name }}</span>
+                  <span class="tag-text">{{ tagLabel(tag, t) }}</span>
                 </t-tag>
               </div>
             </template>
@@ -677,7 +679,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
               variant="light-outline"
               class="card-popover-tag-chip"
             >
-              <span class="tag-text">{{ tag.name }}</span>
+              <span class="tag-text">{{ tagLabel(tag, t) }}</span>
             </t-tag>
           </div>
           <span class="card-popover-type">{{ getKnowledgeType(hoveredCardItem) }}</span>

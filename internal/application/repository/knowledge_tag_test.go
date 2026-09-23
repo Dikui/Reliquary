@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS knowledges (
     knowledge_base_id VARCHAR(36) NOT NULL,
     type VARCHAR(50) NOT NULL DEFAULT 'file',
     title VARCHAR(255) NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
     parse_status VARCHAR(50) NOT NULL DEFAULT 'completed',
     deleted_at DATETIME
 );
@@ -27,6 +28,7 @@ CREATE TABLE IF NOT EXISTS knowledge_tags (
     tenant_id INTEGER NOT NULL,
     knowledge_base_id VARCHAR(36) NOT NULL,
     name VARCHAR(128) NOT NULL,
+    kind VARCHAR(16) NOT NULL DEFAULT '',
     color VARCHAR(32),
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -36,6 +38,15 @@ CREATE TABLE IF NOT EXISTS knowledge_tag_relations (
     knowledge_id VARCHAR(36) NOT NULL,
     tag_id VARCHAR(36) NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (knowledge_id, tag_id)
+);
+CREATE TABLE IF NOT EXISTS knowledge_tag_manual_decisions (
+    knowledge_id VARCHAR(36) NOT NULL,
+    tag_id VARCHAR(36) NOT NULL,
+    selected BOOLEAN NOT NULL,
+    actor_id VARCHAR(36) NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    updated_at DATETIME NOT NULL,
     PRIMARY KEY (knowledge_id, tag_id)
 );
 CREATE TABLE IF NOT EXISTS chunks (
@@ -157,6 +168,46 @@ func TestGetKnowledgeTags_ReturnsTagDetails(t *testing.T) {
 	}
 	assert.True(t, names["alpha"])
 	assert.True(t, names["beta"])
+}
+
+func TestManualCorrectionAndTagDeletionPreserveMessage(t *testing.T) {
+	db := setupKnowledgeTagTestDB(t)
+	repo := &knowledgeRepository{db: db}
+	tags := &knowledgeTagRepository{db: db}
+	kbID, knowledgeID, tagA, tagB := seedKnowledgeTagFixture(t, db)
+	ctx := context.Background()
+	require.NoError(t, db.Exec(`UPDATE knowledges SET metadata = ? WHERE id = ?`, `{"intake":{"original_path":"original.md","images":["image.png"]}}`, knowledgeID).Error)
+	require.NoError(t, db.Exec(`INSERT INTO chunks (id, tenant_id, knowledge_base_id, tag_id) VALUES (?, 1, ?, ?)`, "chunk", kbID, tagA).Error)
+	require.NoError(t, repo.SetKnowledgeTags(ctx, knowledgeID, []string{tagA, tagB}))
+	added, removed, err := repo.SetKnowledgeTagsManually(ctx, knowledgeID, []string{tagB}, "owner", "wrong topic")
+	require.NoError(t, err)
+	assert.Empty(t, added)
+	assert.Equal(t, []string{tagA}, removed)
+	require.NoError(t, repo.AddKnowledgeTagRelations(ctx, 1, kbID, knowledgeID, []string{tagA}))
+	var count int64
+	require.NoError(t, db.Model(&types.KnowledgeTagRelation{}).Where("knowledge_id = ? AND tag_id = ?", knowledgeID, tagA).Count(&count).Error)
+	assert.Zero(t, count, "automatic tagging must respect manual removal")
+	added, _, err = repo.SetKnowledgeTagsManually(ctx, knowledgeID, []string{tagA, tagB}, "owner", "corrected")
+	require.NoError(t, err)
+	assert.Equal(t, []string{tagA}, added)
+	require.NoError(t, tags.Delete(ctx, 1, tagA))
+	var chunk struct { ID string; TagID *string }
+	require.NoError(t, db.Table("chunks").Select("id, tag_id").Where("id = ?", "chunk").Scan(&chunk).Error)
+	assert.Equal(t, "chunk", chunk.ID)
+	assert.Nil(t, chunk.TagID)
+	require.NoError(t, db.Model(&types.KnowledgeTagRelation{}).Where("knowledge_id = ?", knowledgeID).Count(&count).Error)
+	assert.Equal(t, int64(1), count)
+	var remaining types.KnowledgeTagRelation
+	require.NoError(t, db.Where("knowledge_id = ?", knowledgeID).First(&remaining).Error)
+	assert.Equal(t, tagB, remaining.TagID)
+	var record struct {
+		Title    string
+		Metadata string
+	}
+	require.NoError(t, db.Table("knowledges").Select("title, metadata").Where("id = ?", knowledgeID).Scan(&record).Error)
+	assert.Equal(t, "doc", record.Title)
+	assert.Contains(t, record.Metadata, "original.md")
+	assert.Contains(t, record.Metadata, "image.png")
 }
 
 func TestDeleteKnowledgeTagRelations(t *testing.T) {

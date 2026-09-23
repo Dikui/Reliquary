@@ -80,11 +80,13 @@ func (r *knowledgeTagRepository) GetBySeqIDs(ctx context.Context, tenantID uint6
 }
 
 // GetByName gets a knowledge tag by name
-func (r *knowledgeTagRepository) GetByName(ctx context.Context, tenantID uint64, kbID string, name string) (*types.KnowledgeTag, error) {
+func (r *knowledgeTagRepository) GetByName(ctx context.Context, tenantID uint64, kbID string, name string, kind ...string) (*types.KnowledgeTag, error) {
 	var tag types.KnowledgeTag
-	if err := r.db.WithContext(ctx).
-		Where("tenant_id = ? AND knowledge_base_id = ? AND name = ?", tenantID, kbID, name).
-		First(&tag).Error; err != nil {
+	query := r.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id = ? AND name = ?", tenantID, kbID, name)
+	if len(kind) > 0 {
+		query = query.Where("kind = ?", kind[0])
+	}
+	if err := query.First(&tag).Error; err != nil {
 		return nil, err
 	}
 	return &tag, nil
@@ -137,9 +139,18 @@ func (r *knowledgeTagRepository) ListByKB(
 
 // Delete deletes a knowledge tag
 func (r *knowledgeTagRepository) Delete(ctx context.Context, tenantID uint64, id string) error {
-	return r.db.WithContext(ctx).
-		Where("tenant_id = ? AND id = ?", tenantID, id).
-		Delete(&types.KnowledgeTag{}).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&types.Chunk{}).Where("tenant_id = ? AND tag_id = ?", tenantID, id).UpdateColumn("tag_id", nil).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("tag_id = ?", id).Delete(&types.KnowledgeTagRelation{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("tag_id = ?", id).Delete(&types.KnowledgeTagManualDecision{}).Error; err != nil {
+			return err
+		}
+		return tx.Where("tenant_id = ? AND id = ?", tenantID, id).Delete(&types.KnowledgeTag{}).Error
+	})
 }
 
 // CountReferences returns the number of knowledges and chunks that reference this tag

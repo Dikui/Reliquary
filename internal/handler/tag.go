@@ -111,6 +111,7 @@ func (h *TagHandler) ListTags(c *gin.Context) {
 
 type createTagRequest struct {
 	Name      string `json:"name"       binding:"required"`
+	Kind      string `json:"kind"`
 	Color     string `json:"color"`
 	SortOrder int    `json:"sort_order"`
 }
@@ -140,7 +141,7 @@ func (h *TagHandler) CreateTag(c *gin.Context) {
 	}
 
 	tag, err := h.tagService.CreateTag(ctx, kbID,
-		secutils.SanitizeForLog(req.Name), secutils.SanitizeForLog(req.Color), req.SortOrder)
+		secutils.SanitizeForLog(req.Name), secutils.SanitizeForLog(req.Color), req.SortOrder, req.Kind)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"kb_id": kbID,
@@ -157,6 +158,7 @@ func (h *TagHandler) CreateTag(c *gin.Context) {
 
 type updateTagRequest struct {
 	Name      *string `json:"name"`
+	Kind      *string `json:"kind"`
 	Color     *string `json:"color"`
 	SortOrder *int    `json:"sort_order"`
 }
@@ -191,7 +193,7 @@ func (h *TagHandler) UpdateTag(c *gin.Context) {
 		return
 	}
 
-	tag, err := h.tagService.UpdateTag(ctx, tagID, req.Name, req.Color, req.SortOrder)
+	tag, err := h.tagService.UpdateTag(ctx, tagID, req.Name, req.Color, req.SortOrder, req.Kind)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"tag_id": tagID,
@@ -208,7 +210,7 @@ func (h *TagHandler) UpdateTag(c *gin.Context) {
 
 // DeleteTag godoc
 // @Summary      删除标签
-// @Description  删除标签，可使用force=true强制删除被引用的标签，content_only=true仅删除标签下的内容而保留标签本身
+// @Description  文档知识库仅创建者可删除标签及关联，消息与图片保留；FAQ 可使用 force 或 content_only 删除内容
 // @Tags         标签管理
 // @Accept       json
 // @Produce      json

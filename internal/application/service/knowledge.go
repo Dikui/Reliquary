@@ -931,13 +931,19 @@ func (s *knowledgeService) UpdateKnowledgeTag(ctx context.Context, knowledgeID s
 		return err
 	}
 
-	return s.repo.SetKnowledgeTags(ctx, knowledgeID, tagIDs)
+	actorID, _ := types.UserIDFromContext(ctx)
+	added, removed, err := s.repo.SetKnowledgeTagsManually(ctx, knowledgeID, tagIDs, actorID, "")
+	if err == nil && (len(added) > 0 || len(removed) > 0) {
+		recordKBActivity(ctx, s.audit, tenantID, knowledge.KnowledgeBaseID, types.AuditActionTagUpdated,
+			"knowledge", knowledgeID, types.AuditOutcomeSuccess, map[string]any{"added_tag_ids": added, "removed_tag_ids": removed})
+	}
+	return err
 }
 
 // UpdateKnowledgeTagBatch updates tags for document knowledge items in batch.
 // authorizedKBID restricts all updates to knowledge items belonging to this KB;
 // pass empty string to skip the check (caller must ensure authorization by other means).
-func (s *knowledgeService) UpdateKnowledgeTagBatch(ctx context.Context, authorizedKBID string, updates map[string][]string) error {
+func (s *knowledgeService) UpdateKnowledgeTagBatch(ctx context.Context, authorizedKBID string, updates map[string][]string, reasons ...string) error {
 	if len(updates) == 0 {
 		return nil
 	}
@@ -1019,13 +1025,39 @@ func (s *knowledgeService) UpdateKnowledgeTagBatch(ctx context.Context, authoriz
 		}
 	}
 
-	// Set tags for each knowledge
+	actorID, _ := types.UserIDFromContext(ctx)
+	reason := ""
+	if len(reasons) > 0 {
+		reason = strings.TrimSpace(reasons[0])
+	}
+	if len([]rune(reason)) > 500 {
+		return werrors.NewBadRequestError("标签修正理由不能超过500字")
+	}
+	// Set tags for each knowledge and record explicit corrections.
 	for knowledgeID, tagIDs := range updates {
-		if err := s.repo.SetKnowledgeTags(ctx, knowledgeID, tagIDs); err != nil {
+		added, removed, err := s.repo.SetKnowledgeTagsManually(ctx, knowledgeID, tagIDs, actorID, reason)
+		if err != nil {
 			return err
+		}
+		if len(added) > 0 || len(removed) > 0 {
+			knowledge := findKnowledgeByID(knowledgeList, knowledgeID)
+			if knowledge != nil {
+				recordKBActivity(ctx, s.audit, tenantID, knowledge.KnowledgeBaseID, types.AuditActionTagUpdated,
+					"knowledge", knowledgeID, types.AuditOutcomeSuccess,
+					map[string]any{"added_tag_ids": added, "removed_tag_ids": removed, "reason": reason})
+			}
 		}
 	}
 
+	return nil
+}
+
+func findKnowledgeByID(list []*types.Knowledge, id string) *types.Knowledge {
+	for _, knowledge := range list {
+		if knowledge.ID == id {
+			return knowledge
+		}
+	}
 	return nil
 }
 

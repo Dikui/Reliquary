@@ -181,7 +181,7 @@ type KnowledgeService interface {
 	// UpdateKnowledgeTagBatch updates tag for document knowledge items in batch.
 	// authorizedKBID restricts all updates to knowledge items belonging to this KB;
 	// pass empty string to skip (caller must ensure authorization by other means).
-	UpdateKnowledgeTagBatch(ctx context.Context, authorizedKBID string, updates map[string][]string) error
+	UpdateKnowledgeTagBatch(ctx context.Context, authorizedKBID string, updates map[string][]string, reason ...string) error
 	// SetKnowledgeTags replaces all tags for a single knowledge entry.
 	SetKnowledgeTags(ctx context.Context, knowledgeID string, tagIDs []string) error
 	// GetKnowledgeTags returns tags for multiple knowledge IDs.
@@ -335,6 +335,8 @@ type KnowledgeRepository interface {
 	ListIDsByTagIDs(ctx context.Context, tenantID uint64, kbID string, tagIDs []string) ([]string, error)
 	// SetKnowledgeTags replaces all tags for a single knowledge entry (deletes old, inserts new).
 	SetKnowledgeTags(ctx context.Context, knowledgeID string, tagIDs []string) error
+	// SetKnowledgeTagsManually records explicit user corrections with the same transaction as the associations.
+	SetKnowledgeTagsManually(ctx context.Context, knowledgeID string, tagIDs []string, actorID, reason string) (added, removed []string, err error)
 	// AddKnowledgeTagRelations attaches tags without removing existing ones,
 	// after validating that the knowledge and every tag belong to the given
 	// tenant and knowledge base. Duplicate deliveries are idempotent.

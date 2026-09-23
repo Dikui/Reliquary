@@ -60,7 +60,16 @@
                 <span class="tag-tile__badge" aria-hidden="true">
                   <t-icon name="discount" size="15px" />
                 </span>
-                <t-input
+                <select v-if="!isFaq" v-model="newTagKind" :aria-label="$t('knowledgeBase.tagKindLabel')">
+                  <option value="nature">{{ $t('knowledgeBase.tagKindNature') }}</option>
+                  <option value="topic">{{ $t('knowledgeBase.tagKindTopic') }}</option>
+                  <option value="object">{{ $t('knowledgeBase.tagKindObject') }}</option>
+                  <option value="event">{{ $t('knowledgeBase.tagKindEvent') }}</option>
+                </select>
+                <select v-if="!isFaq && newTagKind === 'nature'" v-model="newTagName" :aria-label="$t('knowledgeBase.tagNamePlaceholder')">
+                  <option v-for="name in natureNames" :key="name" :value="name">{{ name }}</option>
+                </select>
+                <t-input v-else
                   ref="newTagInputRef"
                   v-model="newTagName"
                   size="small"
@@ -108,7 +117,16 @@
                   <span class="tag-tile__badge" aria-hidden="true">
                     <t-icon name="discount" size="15px" />
                   </span>
-                  <t-input
+                  <select v-if="!isFaq" v-model="editingTagKind" :aria-label="$t('knowledgeBase.tagKindLabel')">
+                    <option value="nature">{{ $t('knowledgeBase.tagKindNature') }}</option>
+                    <option value="topic">{{ $t('knowledgeBase.tagKindTopic') }}</option>
+                    <option value="object">{{ $t('knowledgeBase.tagKindObject') }}</option>
+                    <option value="event">{{ $t('knowledgeBase.tagKindEvent') }}</option>
+                  </select>
+                  <select v-if="!isFaq && editingTagKind === 'nature'" v-model="editingTagName" :aria-label="$t('knowledgeBase.tagNamePlaceholder')">
+                    <option v-for="name in natureNames" :key="name" :value="name">{{ name }}</option>
+                  </select>
+                  <t-input v-else
                     :ref="(el: any) => setEditingTagInputRef(el, tag.id)"
                     v-model="editingTagName"
                     size="small"
@@ -149,7 +167,7 @@
                     <t-icon name="discount" size="15px" />
                   </span>
                   <span class="tag-tile__text">
-                    <span class="tag-tile__name" :title="tag.name">{{ tag.name }}</span>
+                    <span class="tag-tile__name" :title="tag.name">{{ tagDisplayName(tag) }}</span>
                     <span class="tag-tile__count">
                       {{
                         isFaq
@@ -209,6 +227,7 @@
 import { ref, watch, nextTick, computed, type ComponentPublicInstance } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { MessagePlugin } from 'tdesign-vue-next';
+import { tagLabel } from '../tagLabel';
 import SettingDrawer from '@/components/settings/SettingDrawer.vue';
 import {
   listKnowledgeTags,
@@ -221,6 +240,7 @@ type TagRow = {
   id: string;
   seq_id: number;
   name: string;
+  kind?: string;
   knowledge_count?: number;
   chunk_count?: number;
 };
@@ -259,10 +279,18 @@ let searchDebounce: ReturnType<typeof setTimeout> | null = null;
 const creatingTag = ref(false);
 const creatingTagLoading = ref(false);
 const newTagName = ref('');
+const newTagKind = ref('topic');
+const natureNames = ['描述', '数据', '原理', '观点', '案例', '问题'];
+const tagDisplayName = (tag: TagRow) => tagLabel(tag, t);
+watch(newTagKind, (kind) => { newTagName.value = kind === 'nature' ? natureNames[0] : ''; });
 const newTagInputRef = ref<TagInputInstance | null>(null);
 
 const editingTagId = ref<string | null>(null);
 const editingTagName = ref('');
+const editingTagKind = ref('topic');
+watch(editingTagKind, (kind) => {
+  if (kind === 'nature' && !natureNames.includes(editingTagName.value)) editingTagName.value = natureNames[0];
+});
 const editingTagSubmitting = ref(false);
 const editingTagInputRefs = new Map<string, TagInputInstance | null>();
 
@@ -356,6 +384,7 @@ const startCreateTag = () => {
 const cancelCreateTag = () => {
   creatingTag.value = false;
   newTagName.value = '';
+  newTagKind.value = 'topic';
 };
 
 const submitCreateTag = async () => {
@@ -367,7 +396,7 @@ const submitCreateTag = async () => {
   }
   creatingTagLoading.value = true;
   try {
-    await createKnowledgeBaseTag(props.kbId, { name });
+    await createKnowledgeBaseTag(props.kbId, { name, kind: props.isFaq ? undefined : newTagKind.value });
     MessagePlugin.success(t('knowledgeBase.tagCreateSuccess'));
     cancelCreateTag();
     await loadTags(true);
@@ -383,6 +412,7 @@ const startEditTag = (tag: TagRow) => {
   cancelCreateTag();
   editingTagId.value = tag.id;
   editingTagName.value = tag.name;
+  editingTagKind.value = tag.kind || 'topic';
   nextTick(() => {
     editingTagInputRefs.get(tag.id)?.focus?.();
     editingTagInputRefs.get(tag.id)?.select?.();
@@ -392,6 +422,7 @@ const startEditTag = (tag: TagRow) => {
 const cancelEditTag = () => {
   editingTagId.value = null;
   editingTagName.value = '';
+  editingTagKind.value = 'topic';
 };
 
 const submitEditTag = async () => {
@@ -402,13 +433,13 @@ const submitEditTag = async () => {
     return;
   }
   const current = tags.value.find((tag) => tag.id === editingTagId.value);
-  if (current && name === current.name) {
+  if (current && name === current.name && (props.isFaq || editingTagKind.value === (current.kind || 'topic'))) {
     cancelEditTag();
     return;
   }
   editingTagSubmitting.value = true;
   try {
-    await updateKnowledgeBaseTag(props.kbId, editingTagId.value, { name });
+    await updateKnowledgeBaseTag(props.kbId, editingTagId.value, { name, kind: props.isFaq ? undefined : editingTagKind.value });
     MessagePlugin.success(t('knowledgeBase.tagEditSuccess'));
     cancelEditTag();
     await loadTags(true);
@@ -425,7 +456,7 @@ const deleteTag = async (tag: TagRow) => {
   cancelCreateTag();
   cancelEditTag();
   try {
-    await deleteKnowledgeBaseTag(props.kbId, tag.seq_id, { force: true });
+    await deleteKnowledgeBaseTag(props.kbId, tag.seq_id, { force: props.isFaq });
     MessagePlugin.success(t('knowledgeBase.tagDeleteSuccess'));
     await loadTags(true);
     emit('changed', { deletedTagId: tag.id });

@@ -466,7 +466,7 @@ export function listKnowledgeTags(
 
 export function createKnowledgeBaseTag(
   kbId: string,
-  data: { name: string; color?: string; sort_order?: number },
+  data: { name: string; kind?: string; color?: string; sort_order?: number },
 ) {
   return post(`/api/v1/knowledge-bases/${kbId}/tags`, data);
 }
@@ -474,7 +474,7 @@ export function createKnowledgeBaseTag(
 export function updateKnowledgeBaseTag(
   kbId: string,
   tagId: string,
-  data: { name?: string; color?: string; sort_order?: number },
+  data: { name?: string; kind?: string; color?: string; sort_order?: number },
 ) {
   return put(`/api/v1/knowledge-bases/${kbId}/tags/${tagId}`, data);
 }
@@ -484,7 +484,7 @@ export function deleteKnowledgeBaseTag(kbId: string, tagSeqId: number, params?: 
   return del(`/api/v1/knowledge-bases/${kbId}/tags/${tagSeqId}${forceQuery}`);
 }
 
-export function updateKnowledgeTagBatch(data: { updates: Record<string, string[]> }) {
+export function updateKnowledgeTagBatch(data: { updates: Record<string, string[]>; reason?: string }) {
   return put(`/api/v1/knowledge/tags`, data);
 }
 

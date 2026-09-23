@@ -22,7 +22,6 @@ import (
 type knowledgeTagService struct {
 	kbService      interfaces.KnowledgeBaseService
 	repo           interfaces.KnowledgeTagRepository
-	knowledgeRepo  interfaces.KnowledgeRepository
 	chunkRepo      interfaces.ChunkRepository
 	retrieveEngine interfaces.RetrieveEngineRegistry
 	ownership      retriever.TenantStoreOwnership
@@ -36,7 +35,6 @@ type knowledgeTagService struct {
 func NewKnowledgeTagService(
 	kbService interfaces.KnowledgeBaseService,
 	repo interfaces.KnowledgeTagRepository,
-	knowledgeRepo interfaces.KnowledgeRepository,
 	chunkRepo interfaces.ChunkRepository,
 	retrieveEngine interfaces.RetrieveEngineRegistry,
 	ownership retriever.TenantStoreOwnership,
@@ -48,7 +46,6 @@ func NewKnowledgeTagService(
 	return &knowledgeTagService{
 		kbService:      kbService,
 		repo:           repo,
-		knowledgeRepo:  knowledgeRepo,
 		chunkRepo:      chunkRepo,
 		retrieveEngine: retrieveEngine,
 		ownership:      ownership,
@@ -149,6 +146,7 @@ func (s *knowledgeTagService) CreateTag(
 	name string,
 	color string,
 	sortOrder int,
+	kinds ...string,
 ) (*types.KnowledgeTag, error) {
 	name = strings.TrimSpace(name)
 	if kbID == "" || name == "" {
@@ -158,9 +156,19 @@ func (s *knowledgeTagService) CreateTag(
 	if err != nil {
 		return nil, err
 	}
+	kind := ""
+	if kb.Type == types.KnowledgeBaseTypeDocument {
+		kind = types.TagKindTopic
+		if len(kinds) > 0 && kinds[0] != "" {
+			kind = kinds[0]
+		}
+		if !validDocumentTag(kind, name) {
+			return nil, werrors.NewBadRequestError("标签类别或名称无效")
+		}
+	}
 
 	// Check if tag with same name already exists
-	existingTag, err := s.repo.GetByName(ctx, kb.TenantID, kbID, name)
+	existingTag, err := s.repo.GetByName(ctx, kb.TenantID, kbID, name, kind)
 	if err == nil && existingTag != nil {
 		return nil, werrors.NewConflictError("标签名称已存在")
 	}
@@ -178,6 +186,7 @@ func (s *knowledgeTagService) CreateTag(
 		TenantID:        kb.TenantID,
 		KnowledgeBaseID: kb.ID,
 		Name:            name,
+		Kind:            kind,
 		Color:           strings.TrimSpace(color),
 		SortOrder:       sortOrder,
 		CreatedAt:       now,
@@ -187,7 +196,7 @@ func (s *knowledgeTagService) CreateTag(
 		return nil, err
 	}
 	recordKBActivity(ctx, s.audit, tag.TenantID, tag.KnowledgeBaseID, types.AuditActionTagCreated,
-		"knowledge_tag", tag.ID, types.AuditOutcomeSuccess, map[string]any{"name": tag.Name})
+		"knowledge_tag", tag.ID, types.AuditOutcomeSuccess, map[string]any{"name": tag.Name, "kind": tag.Kind})
 	return tag, nil
 }
 
@@ -198,6 +207,7 @@ func (s *knowledgeTagService) UpdateTag(
 	name *string,
 	color *string,
 	sortOrder *int,
+	kinds ...*string,
 ) (*types.KnowledgeTag, error) {
 	if id == "" {
 		return nil, werrors.NewBadRequestError("标签ID不能为空")
@@ -207,6 +217,16 @@ func (s *knowledgeTagService) UpdateTag(
 	if err != nil {
 		return nil, err
 	}
+	oldName, oldKind := tag.Name, tag.Kind
+	kb, err := s.kbService.GetKnowledgeBaseByID(ctx, tag.KnowledgeBaseID)
+	if err != nil {
+		return nil, err
+	}
+	if len(kinds) > 0 && kinds[0] != nil {
+		if kb.Type == types.KnowledgeBaseTypeDocument {
+			tag.Kind = *kinds[0]
+		}
+	}
 
 	if name != nil {
 		newName := strings.TrimSpace(*name)
@@ -214,6 +234,9 @@ func (s *knowledgeTagService) UpdateTag(
 			return nil, werrors.NewBadRequestError("标签名称不能为空")
 		}
 		tag.Name = newName
+	}
+	if tag.Kind != "" && !validDocumentTag(tag.Kind, tag.Name) {
+		return nil, werrors.NewBadRequestError("标签类别或名称无效")
 	}
 	if color != nil {
 		tag.Color = strings.TrimSpace(*color)
@@ -226,13 +249,24 @@ func (s *knowledgeTagService) UpdateTag(
 		return nil, err
 	}
 	recordKBActivity(ctx, s.audit, tag.TenantID, tag.KnowledgeBaseID, types.AuditActionTagUpdated,
-		"knowledge_tag", tag.ID, types.AuditOutcomeSuccess, map[string]any{"name": tag.Name})
+		"knowledge_tag", tag.ID, types.AuditOutcomeSuccess,
+		map[string]any{"old_name": oldName, "name": tag.Name, "old_kind": oldKind, "kind": tag.Kind})
 	return tag, nil
 }
 
-// DeleteTag deletes a tag. When force=true, also deletes all chunks under this tag.
-// For document-type knowledge bases, also deletes all knowledge files under this tag.
-// When contentOnly=true, only deletes the content under the tag but keeps the tag itself.
+func validDocumentTag(kind, name string) bool {
+	switch kind {
+	case types.TagKindNature:
+		return types.ContentNatures[name]
+	case types.TagKindTopic, types.TagKindObject, types.TagKindEvent:
+		return strings.TrimSpace(name) != "" && len([]rune(name)) <= 128
+	default:
+		return false
+	}
+}
+
+// DeleteTag removes document tags and associations without deleting documents.
+// FAQ tags retain their existing force/contentOnly chunk semantics.
 func (s *knowledgeTagService) DeleteTag(ctx context.Context, id string, force bool, contentOnly bool, excludeIDs []string) error {
 	if id == "" {
 		return werrors.NewBadRequestError("标签ID不能为空")
@@ -247,6 +281,22 @@ func (s *knowledgeTagService) DeleteTag(ctx context.Context, id string, force bo
 	kb, err := s.kbService.GetKnowledgeBaseByID(ctx, tag.KnowledgeBaseID)
 	if err != nil {
 		return err
+	}
+	if kb.Type == types.KnowledgeBaseTypeDocument {
+		userID, ok := types.UserIDFromContext(ctx)
+		if !ok || userID != kb.CreatorID {
+			return werrors.NewForbiddenError("仅知识库创建者可确认删除标签")
+		}
+		if contentOnly || len(excludeIDs) > 0 {
+			return werrors.NewBadRequestError("消息标签删除不能删除消息内容")
+		}
+		if err := s.repo.Delete(ctx, tenantID, id); err != nil {
+			return err
+		}
+		recordKBActivity(ctx, s.audit, tenantID, kb.ID, types.AuditActionTagDeleted,
+			"knowledge_tag", tag.ID, types.AuditOutcomeSuccess,
+			map[string]any{"name": tag.Name, "kind": tag.Kind, "relations_removed": true})
+		return nil
 	}
 
 	kCount, cCount, err := s.repo.CountReferences(ctx, tenantID, tag.KnowledgeBaseID, tag.ID)
@@ -275,52 +325,9 @@ func (s *knowledgeTagService) DeleteTag(ctx context.Context, id string, force bo
 		return nil
 	}
 
-	// Helper function to enqueue knowledge list delete task for document-type knowledge bases
-	enqueueKnowledgeDeleteTask := func() error {
-		if kb.Type != types.KnowledgeBaseTypeDocument {
-			return nil
-		}
-		// Get all knowledge IDs under this tag
-		knowledgeIDs, err := s.knowledgeRepo.ListIDsByTagIDs(ctx, tenantID, kb.ID, []string{tag.ID})
-		if err != nil {
-			logger.Errorf(ctx, "Failed to list knowledge IDs by tag ID %s: %v", tag.ID, err)
-			return werrors.NewInternalServerError("获取标签下的文档失败")
-		}
-		if len(knowledgeIDs) == 0 {
-			return nil
-		}
-		// Enqueue async task to delete knowledge files
-		payload := types.KnowledgeListDeletePayload{
-			TenantID:     tenantID,
-			KnowledgeIDs: knowledgeIDs,
-			Initiator:    types.TaskInitiatorFromContext(ctx),
-		}
-		langfuse.InjectTracing(ctx, &payload)
-		payloadBytes, err := json.Marshal(payload)
-		if err != nil {
-			logger.Errorf(ctx, "Failed to marshal knowledge list delete payload: %v", err)
-			return werrors.NewInternalServerError("删除标签下的文档失败")
-		}
-		task := asynq.NewTask(types.TypeKnowledgeListDelete, payloadBytes,
-			asynq.Queue(types.QueueMaintenance), asynq.MaxRetry(3), asynq.Timeout(2*time.Hour))
-		info, err := s.task.Enqueue(task)
-		if err != nil {
-			logger.Errorf(ctx, "Failed to enqueue knowledge list delete task: %v", err)
-			return werrors.NewInternalServerError("删除标签下的文档失败")
-		}
-		logger.Infof(ctx, "Enqueued knowledge list delete task %s for %d knowledge files under tag %s", info.ID, len(knowledgeIDs), tag.ID)
-		return nil
-	}
-
 	// contentOnly mode: only delete content, keep the tag
 	if contentOnly {
-		// For document-type KB, delete knowledge files first (which will also delete chunks)
-		if kb.Type == types.KnowledgeBaseTypeDocument && kCount > 0 {
-			if err := enqueueKnowledgeDeleteTask(); err != nil {
-				return err
-			}
-		} else if cCount > 0 {
-			// For FAQ-type KB, only delete chunks
+		if cCount > 0 {
 			if err := deleteChunksAndEnqueueIndexDelete(); err != nil {
 				return err
 			}
@@ -335,15 +342,9 @@ func (s *knowledgeTagService) DeleteTag(ctx context.Context, id string, force bo
 		return werrors.NewBadRequestError("标签仍有知识或FAQ条目引用，无法删除")
 	}
 
-	// When force=true, delete all content under this tag first
+	// FAQ force mode deletes chunks under this tag first.
 	if force {
-		// For document-type KB, delete knowledge files first (which will also delete chunks)
-		if kb.Type == types.KnowledgeBaseTypeDocument && kCount > 0 {
-			if err := enqueueKnowledgeDeleteTask(); err != nil {
-				return err
-			}
-		} else if cCount > 0 {
-			// For FAQ-type KB, only delete chunks
+		if cCount > 0 {
 			if err := deleteChunksAndEnqueueIndexDelete(); err != nil {
 				return err
 			}

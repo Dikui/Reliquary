@@ -177,8 +177,9 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 	willSpawnQuestion := willSpawnSummary && kb.NeedsEmbeddingModel() &&
 		eff.QuestionGenerationConfig.Enabled
 	willSpawnWiki := kb.IndexingStrategy.WikiEnabled && len(textChunks) > 0
-	willSpawnAutoTag := kb.Type == types.KnowledgeBaseTypeDocument &&
-		kb.AutoTagConfig != nil && kb.AutoTagConfig.Enabled && len(textChunks) > 0
+	intake, _ := knowledge.IntakeMetadata()
+	willSpawnAutoTag := kb.Type == types.KnowledgeBaseTypeDocument && len(textChunks) > 0 &&
+		((intake != nil && intake.Decision == "approved") || (kb.AutoTagConfig != nil && kb.AutoTagConfig.Enabled))
 	enqueuedAutoTag := false
 
 	// Question generation now fans out one subtask per plain text chunk
