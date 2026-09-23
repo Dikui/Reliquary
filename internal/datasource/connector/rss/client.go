@@ -10,6 +10,7 @@ import (
 	"time"
 
 	readability "codeberg.org/readeck/go-readability/v2"
+	"github.com/PuerkitoBio/goquery"
 	"reliquary/internal/utils"
 )
 
@@ -97,34 +98,49 @@ func (c *client) fetchFeed(ctx context.Context, feedURL string) ([]byte, error) 
 }
 
 // extractArticle fetches an article page and returns the readability-cleaned
-// main content as HTML, plus the extracted title (may be empty). Returns an
+// main content as HTML, plus the extracted title and source fields. Returns an
 // error if the page can't be fetched or no readable content is found.
-func (c *client) extractArticle(ctx context.Context, articleURL string) (contentHTML, title string, err error) {
+func (c *client) extractArticle(ctx context.Context, articleURL string) (contentHTML, title, byline, siteName string, err error) {
 	body, err := c.fetch(ctx, articleURL, maxArticleSize, false)
 	if err != nil {
-		return "", "", err
-	}
-	// Readability can discard embedded media before the caller sees the article.
-	// ponytail: page-wide check may reject unrelated embeds; narrow to the article DOM if this causes false positives.
-	markup := bytes.ToLower(body)
-	for _, tag := range [][]byte{[]byte("<iframe"), []byte("<video"), []byte("<audio"), []byte("<object"), []byte("<embed")} {
-		if bytes.Contains(markup, tag) {
-			return "", "", fmt.Errorf("article contains unsupported embedded media")
-		}
+		return "", "", "", "", err
 	}
 
 	pageURL, _ := url.Parse(articleURL)
 	article, err := readability.FromReader(bytes.NewReader(body), pageURL)
 	if err != nil {
-		return "", "", fmt.Errorf("readability parse: %w", err)
+		return "", "", "", "", fmt.Errorf("readability parse: %w", err)
 	}
 	if article.Node == nil {
-		return "", "", fmt.Errorf("no readable content extracted")
+		return "", "", "", "", fmt.Errorf("no readable content extracted")
+	}
+	// Readability can discard embeds. Inspect the longest article/main element
+	// in the source page so unrelated header/footer media do not block intake.
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
+	if err != nil {
+		return "", "", "", "", fmt.Errorf("article HTML parse: %w", err)
+	}
+	selection := doc.Find("article")
+	if selection.Length() == 0 {
+		selection = doc.Find("main")
+	}
+	var content *goquery.Selection
+	selection.Each(func(_ int, candidate *goquery.Selection) {
+		if content == nil || len(candidate.Text()) > len(content.Text()) {
+			content = candidate
+		}
+	})
+	if content == nil {
+		// ponytail: page-wide fallback may reject decorative media on pages without a content container.
+		content = doc.Selection
+	}
+	if content.Find("iframe, video, audio, object, embed").Length() > 0 {
+		return "", "", "", "", fmt.Errorf("article contains unsupported embedded media")
 	}
 
 	var buf bytes.Buffer
 	if err := article.RenderHTML(&buf); err != nil {
-		return "", "", fmt.Errorf("render article html: %w", err)
+		return "", "", "", "", fmt.Errorf("render article html: %w", err)
 	}
-	return buf.String(), article.Title(), nil
+	return buf.String(), article.Title(), article.Byline(), article.SiteName(), nil
 }

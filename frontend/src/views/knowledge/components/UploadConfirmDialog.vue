@@ -585,6 +585,7 @@ import FolderPickerMenu, { type FolderOption } from './FolderPickerMenu.vue'
 import { folderOptionFromPath, sortFolderOptions } from '../folderTree'
 import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess'
 import type {
+  IntakeSourceInfo,
   UploadConfirmManualSource,
   UploadConfirmMode,
   UploadConfirmReparseSource,
@@ -675,7 +676,7 @@ const uiStore = useUIStore()
 const allModels = ref<any[]>([])
 const localFiles = ref<File[]>([])
 const localUrls = ref<string[]>([])
-const sourceInfoByItem = ref<Record<string, { author?: string; publisher?: string; original_url?: string; published_at?: string }>>({})
+const sourceInfoByItem = ref<Record<string, IntakeSourceInfo>>({})
 const sourceInfo = (key: string) => sourceInfoByItem.value[key] ||= {}
 const fileSourceKey = (file: File) => `file:${getUploadFileKey(file)}`
 const urlSourceKey = (url: string) => `url:${url}`

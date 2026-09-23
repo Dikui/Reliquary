@@ -324,7 +324,7 @@ func (c *Connector) resolveItem(
 		return resolvedFeedItem{item: types.FetchedItem{ExternalID: itemExternalID(feedURL, itemID), Title: title,
 			Metadata: map[string]string{"error": "missing article URL", "channel": types.ChannelRSS}}}
 	}
-	contentHTML, articleTitle, err := cli.extractArticle(ctx, item.Link)
+	contentHTML, articleTitle, articleByline, articleSiteName, err := cli.extractArticle(ctx, item.Link)
 	if err != nil {
 		logger.Warnf(ctx, "[RSS] full-text fetch failed for %s: %v", item.Link, err)
 		return resolvedFeedItem{item: types.FetchedItem{ExternalID: itemExternalID(feedURL, itemID), Title: title,
@@ -351,8 +351,11 @@ func (c *Connector) resolveItem(
 	if item.Author != nil {
 		author = item.Author.Name
 	}
-	if publisher == "" && feed.Author != nil {
-		publisher = feed.Author.Name
+	if author == "" {
+		author = articleByline
+	}
+	if articleSiteName != "" {
+		publisher = articleSiteName
 	}
 
 	return resolvedFeedItem{

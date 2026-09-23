@@ -46,6 +46,8 @@ type fakeFeed struct {
 	failFeed           atomic.Bool
 	failArticle        atomic.Bool
 	articleEmbed       string
+	pageEmbed          string
+	articleByline      string
 }
 
 func newFakeFeed(t *testing.T) *fakeFeed {
@@ -65,9 +67,9 @@ func newFakeFeed(t *testing.T) *fakeFeed {
 			}
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprintf(w, `<!DOCTYPE html><html><head><title>%s</title></head>`+
-			`<body><nav>menu</nav><article><h1>Heading</h1>%s%s</article><footer>foot</footer></body></html>`,
-			"Full "+r.URL.Path, longArticleBody, f.articleEmbed)
+		fmt.Fprintf(w, `<!DOCTYPE html><html><head><title>%s</title><meta name="author" content="%s"></head>`+
+			`<body><nav>menu</nav><article><h1>Heading</h1>%s%s</article><footer>foot%s</footer></body></html>`,
+			"Full "+r.URL.Path, f.articleByline, longArticleBody, f.articleEmbed, f.pageEmbed)
 	})
 
 	mux.HandleFunc("/feed.xml", func(w http.ResponseWriter, r *http.Request) {
@@ -318,6 +320,7 @@ func TestConnector_FetchIncremental_StartsAtEnableTimeAndRetriesArticleFailure(t
 		t.Fatalf("article fetches = %d, want 1", got)
 	}
 	f.failArticle.Store(false)
+	f.articleByline = "Article Byline"
 	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
 	if err != nil {
 		t.Fatal(err)
@@ -325,7 +328,7 @@ func TestConnector_FetchIncremental_StartsAtEnableTimeAndRetriesArticleFailure(t
 	if len(items) != 1 || !strings.Contains(string(items[0].Content), "first paragraph") {
 		t.Fatalf("next run should retry the article and keep the full body, got %#v", items)
 	}
-	if items[0].Metadata["author"] != "" || items[0].Metadata["publisher"] != "Example Institution" || items[0].Metadata["published_at"] != "Tue, 03 Jan 2006 15:04:05 GMT" {
+	if items[0].Metadata["author"] != "Article Byline" || items[0].Metadata["publisher"] != "Example Institution" || items[0].Metadata["published_at"] != "Tue, 03 Jan 2006 15:04:05 GMT" {
 		t.Fatalf("publisher and original date must remain distinct from personal author: %#v", items[0].Metadata)
 	}
 }
@@ -335,12 +338,18 @@ func TestConnector_FetchIncremental_RejectsUnpreservedEmbeddedMedia(t *testing.T
 	f.articleEmbed = `<p>The next interactive chart is essential to understand this article and its results.</p><iframe src="https://example.com/important-chart"></iframe><p>The chart concludes the analysis.</p>`
 	cfg := makeConfig(f.feedURL(), "")
 	cfg.IngestSince = time.Date(2006, 1, 3, 0, 0, 0, 0, time.UTC)
-	items, _, err := NewConnector().FetchIncremental(context.Background(), cfg, nil)
+	items, cursor, err := NewConnector().FetchIncremental(context.Background(), cfg, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(items) != 1 || items[0].Metadata["error"] == "" || len(items[0].Content) != 0 {
 		t.Fatalf("unpreserved embed must not enter knowledge intake: %#v", items)
+	}
+	f.articleEmbed = ""
+	f.pageEmbed = `<iframe src="https://example.com/footer-ad"></iframe>`
+	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
+	if err != nil || len(items) != 1 || len(items[0].Content) == 0 {
+		t.Fatalf("footer embed must not block complete article: items=%#v err=%v", items, err)
 	}
 }
 

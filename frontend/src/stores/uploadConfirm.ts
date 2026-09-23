@@ -1,8 +1,9 @@
 import { defineStore } from 'pinia'
 import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess'
+import type { IntakeSourceInfo } from '@/api/knowledge-base'
+export type { IntakeSourceInfo } from '@/api/knowledge-base'
 
 export type UploadConfirmMode = 'file' | 'url' | 'manual' | 'reparse'
-export interface IntakeSourceInfo { author?: string; original_url?: string; published_at?: string }
 
 export interface UploadConfirmManualSource {
   kbId: string
