@@ -417,6 +417,9 @@ func (c *Connector) resolveItem(
 	if articleSiteName != "" {
 		publisher = articleSiteName
 	}
+	if strings.EqualFold(strings.TrimSpace(author), strings.TrimSpace(publisher)) {
+		author = "" // An organization is the publisher, not a separate personal author.
+	}
 
 	publishedAt := item.Published
 	if publishedAt == "" {

@@ -408,6 +408,11 @@ func TestConnector_FetchIncremental_StartsAtEnableTimeAndRetriesArticleFailure(t
 	if items[0].Metadata["author"] != "Article Byline" || items[0].Metadata["publisher"] != "Example Institution" || items[0].Metadata["published_at"] != "Tue, 03 Jan 2006 15:04:05 GMT" {
 		t.Fatalf("publisher and original date must remain distinct from personal author: %#v", items[0].Metadata)
 	}
+	f.articleByline = "Example Institution"
+	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
+	if err != nil || len(items) != 1 || items[0].Metadata["author"] != "" || items[0].Metadata["publisher"] != "Example Institution" {
+		t.Fatalf("organization byline should be recorded as publisher only: items=%#v err=%v", items, err)
+	}
 }
 
 func TestConnector_FetchIncremental_RejectsUnpreservedEmbeddedMedia(t *testing.T) {
