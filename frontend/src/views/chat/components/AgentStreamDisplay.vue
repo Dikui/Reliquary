@@ -381,6 +381,11 @@
                   :title="$t('agent.copy')">
                   <t-icon name="copy" />
                 </t-button>
+                <t-button v-if="ragMode" size="small" variant="outline" shape="round"
+                  :title="$t('common.download')"
+                  @click.stop="downloadTemporarySummary(getActualContent(event), session?.knowledge_references || [])">
+                  <t-icon name="download" />
+                </t-button>
                 <t-button size="small" variant="outline" shape="round" @click.stop="handleAddToKnowledge(event)"
                   :title="$t('agent.addToKnowledgeBase')">
                   <t-icon name="bookmark-add" />
@@ -625,6 +630,7 @@ import {
 import type { ProtectedFileAccessContext } from '@/utils/protectedFileAccess';
 import { unwrapFinalAnswerWrappers, thinkingEqualsAnswer } from '@/utils/finalAnswer';
 import { getAgentToolIconName } from '@/utils/agent-tool-icons';
+import { downloadTemporarySummary } from '@/utils/temporarySummary';
 import { getQueryText, getWikiPageText } from '@/utils/agent-tool-display';
 import {
   formatToolTitleWithDetail,

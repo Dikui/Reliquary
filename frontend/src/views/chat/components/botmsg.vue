@@ -16,6 +16,10 @@
             </div>
             <div v-if="session.isRagMode" class="rag-answer-stack">
                 <RagPipelineProgress :session="session" :embedded-mode="embeddedMode" />
+                <div v-if="formalReferences.length" class="knowledge-message-list">
+                    <strong>{{ t('chat.referencesDocCount', { count: formalDocumentCount }) }}</strong>
+                    <docInfo :session="formalSession" :embedded-mode="embeddedMode" content-only />
+                </div>
                 <AgentStreamDisplay v-if="session.isAgentMode" :session="session" :session-id="sessionId"
                     :user-query="userQuery" :rag-mode="true" :follow-up-loading="followUpLoading"
                     @render-complete-change="emit('render-complete-change', $event)" />
@@ -47,6 +51,11 @@
                 <t-button size="small" variant="outline" shape="round" @click.stop="handleCopyAnswer"
                     :title="$t('agent.copy')">
                     <t-icon name="copy" />
+                </t-button>
+                <t-button v-if="session.isRagMode" size="small" variant="outline" shape="round"
+                    :title="$t('common.download')"
+                    @click.stop="downloadTemporarySummary(getActualContent(), session.knowledge_references || [])">
+                    <t-icon name="download" />
                 </t-button>
                 <t-button size="small" variant="outline" shape="round" @click.stop="handleAddToKnowledge"
                     :title="$t('agent.addToKnowledgeBase')">
@@ -144,6 +153,7 @@ import { useChatCitationPopover } from '@/composables/useChatCitationPopover';
 import { useTypewriter } from '@/composables/useTypewriter';
 import { vStableHtml } from '@/directives/stableHtml';
 import { SKILL_ICON } from '@/types/mention';
+import { downloadTemporarySummary } from '@/utils/temporarySummary';
 
 ensureMermaidInitialized();
 
@@ -202,6 +212,11 @@ const props = defineProps({
         default: false
     }
 });
+
+const formalReferences = computed(() => (props.session?.knowledge_references || [])
+    .filter(item => item?.knowledge_id && item.chunk_type !== 'web_search' && item.chunk_type !== 'tool_result'));
+const formalDocumentCount = computed(() => new Set(formalReferences.value.map(item => item.knowledge_id)).size);
+const formalSession = computed(() => ({ ...props.session, knowledge_references: formalReferences.value }));
 
 const showRequestInfo = computed(() => !!(props.session?.request_id || props.session?.id));
 
@@ -455,6 +470,11 @@ onBeforeUnmount(() => {
     display: flex;
     flex-direction: column;
     gap: 0;
+}
+
+.knowledge-message-list {
+    padding: 8px 0;
+    strong { display: block; margin-bottom: 6px; }
 }
 
 // 内容包装器 - 与 Agent 模式的 answer 样式一致
