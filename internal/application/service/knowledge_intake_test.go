@@ -16,6 +16,13 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
+func TestBlockedIntakeURLRejectsXWithTrailingDNSDot(t *testing.T) {
+	for _, raw := range []string{"https://x.com./post/1", "https://www.x.com./post/1", "https://twitter.com../post/1"} {
+		require.True(t, blockedIntakeURL(raw), raw)
+	}
+	require.False(t, blockedIntakeURL("https://example.com/article"))
+}
+
 type intakeRepo struct {
 	interfaces.KnowledgeRepository
 	knowledge *types.Knowledge

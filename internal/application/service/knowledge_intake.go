@@ -23,7 +23,7 @@ func blockedIntakeURL(raw string) bool {
 	if err != nil || u.Hostname() == "" || u.User != nil || (u.Scheme != "http" && u.Scheme != "https") {
 		return true
 	}
-	host := strings.ToLower(u.Hostname())
+	host := strings.TrimRight(strings.ToLower(u.Hostname()), ".")
 	return host == "x.com" || strings.HasSuffix(host, ".x.com") || host == "twitter.com" || strings.HasSuffix(host, ".twitter.com")
 }
 
