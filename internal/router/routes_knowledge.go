@@ -282,6 +282,7 @@ func RegisterKnowledgeStrategyRoutes(r *gin.RouterGroup, h *handler.KnowledgeStr
 	group.GET("", g.OwnedKBOrAdmin(), g.KBAccessRead("id"), h.List)
 	group.POST("", g.OwnedKBOrAdmin(), g.KBAccessWrite("id"), h.Propose)
 	group.POST("/:version_id/activate", g.OwnedKBOrAdmin(), g.KBAccessWrite("id"), h.Activate)
+	group.POST("/reprocess", g.OwnedKBOrAdmin(), g.KBAccessWrite("id"), h.Reprocess)
 }
 
 func RegisterKnowledgeTagRoutes(r *gin.RouterGroup, tagHandler *handler.TagHandler, g *rbacGuards) {

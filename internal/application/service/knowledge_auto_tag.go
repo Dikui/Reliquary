@@ -341,36 +341,9 @@ func (s *KnowledgeAutoTagService) tagMessage(ctx context.Context, kb *types.Know
 	} else if kb.AutoTagConfig != nil {
 		policy = kb.AutoTagConfig.Policy
 	}
-	prompt := messageTagPrompt(policy)
-	result, err := model.Chat(types.WithLLMCallMetadata(ctx, "message_dual_tag", ""), []chat.Message{
-		{Role: "system", Content: prompt},
-		{Role: "user", Content: "<message>\n" + content + "\n</message>"},
-	}, &chat.ChatOptions{Temperature: 0.1, MaxTokens: 1024})
+	labels, err := classifyMessageTags(ctx, model, policy, content)
 	if err != nil {
 		return err
-	}
-	var parsed messageTagResponse
-	if err := common.ParseLLMJsonResponse(result.Content, &parsed); err != nil {
-		return err
-	}
-	labels := make([]messageReferent, 0, len(parsed.Natures)+len(parsed.Referents))
-	natureCount, referentCount := 0, 0
-	for _, name := range parsed.Natures[:min(len(parsed.Natures), len(types.ContentNatures))] {
-		name = strings.TrimSpace(name)
-		if types.ContentNatures[name] {
-			labels = append(labels, messageReferent{Kind: types.TagKindNature, Name: name})
-			natureCount++
-		}
-	}
-	for _, referent := range parsed.Referents[:min(len(parsed.Referents), 8)] {
-		referent.Name = strings.TrimSpace(referent.Name)
-		if validDocumentTag(referent.Kind, referent.Name) && referent.Kind != types.TagKindNature {
-			labels = append(labels, referent)
-			referentCount++
-		}
-	}
-	if natureCount == 0 || referentCount == 0 {
-		return fmt.Errorf("message tag model must return valid content kind and referent labels")
 	}
 	ids := make([]string, 0, len(labels))
 	for _, label := range labels {
@@ -392,6 +365,45 @@ func (s *KnowledgeAutoTagService) tagMessage(ctx context.Context, kb *types.Know
 		ids = append(ids, tag.ID)
 	}
 	return s.knowledgeRepo.AddKnowledgeTagRelations(ctx, kb.TenantID, kb.ID, knowledge.ID, ids)
+}
+
+func classifyMessageTags(ctx context.Context, model chat.Chat, policy, content string) ([]messageReferent, error) {
+	content = sampleLongContent(content, maximumAutoTagContentRunes)
+	prompt := messageTagPrompt(policy)
+	result, err := model.Chat(types.WithLLMCallMetadata(ctx, "message_dual_tag", ""), []chat.Message{
+		{Role: "system", Content: prompt},
+		{Role: "user", Content: "<message>\n" + content + "\n</message>"},
+	}, &chat.ChatOptions{Temperature: 0.1, MaxTokens: 1024})
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, fmt.Errorf("empty message tag response")
+	}
+	var parsed messageTagResponse
+	if err := common.ParseLLMJsonResponse(result.Content, &parsed); err != nil {
+		return nil, err
+	}
+	labels := make([]messageReferent, 0, len(parsed.Natures)+len(parsed.Referents))
+	natureCount, referentCount := 0, 0
+	for _, name := range parsed.Natures[:min(len(parsed.Natures), len(types.ContentNatures))] {
+		name = strings.TrimSpace(name)
+		if types.ContentNatures[name] {
+			labels = append(labels, messageReferent{Kind: types.TagKindNature, Name: name})
+			natureCount++
+		}
+	}
+	for _, referent := range parsed.Referents[:min(len(parsed.Referents), 8)] {
+		referent.Name = strings.TrimSpace(referent.Name)
+		if validDocumentTag(referent.Kind, referent.Name) && referent.Kind != types.TagKindNature {
+			labels = append(labels, referent)
+			referentCount++
+		}
+	}
+	if natureCount == 0 || referentCount == 0 {
+		return nil, fmt.Errorf("message tag model must return valid content kind and referent labels")
+	}
+	return labels, nil
 }
 
 func buildAutoTagDocumentContent(knowledge *types.Knowledge, chunks []*types.Chunk) string {

@@ -8,6 +8,18 @@
       <t-button :loading="saving" :disabled="!instruction || !sampleIDs.length || sampleIDs.length > 3" @click="propose">
         {{ t('knowledgeBase.strategy.trial') }}
       </t-button>
+      <div class="strategy-reprocess">
+        <h3>{{ t('knowledgeBase.strategy.reprocess') }}</h3>
+        <p>{{ t('knowledgeBase.strategy.reprocessHint') }}</p>
+        <t-radio-group v-model="scopeMode" :options="scopeOptions" />
+        <t-input v-if="scopeMode === 'messages'" v-model.trim="reprocessIDsText" :placeholder="t('knowledgeBase.strategy.samples')" />
+        <t-select v-else v-model="tagID" filterable :options="tagOptions" :placeholder="t('knowledgeBase.strategy.selectTag')" />
+        <t-button :loading="reprocessing" :disabled="scopeMode === 'messages' ? !reprocessIDs.length : !tagID" @click="reprocess">
+          {{ t('knowledgeBase.strategy.runReprocess') }}
+        </t-button>
+        <p v-if="lastResult">{{ t('knowledgeBase.strategy.reprocessResult', lastResult) }}</p>
+        <p v-for="error in lastResult?.errors || []" :key="error">{{ error }}</p>
+      </div>
       <t-loading :loading="loading" size="small">
         <t-empty v-if="!loading && !versions.length" :description="t('knowledgeBase.strategy.empty')" />
         <article v-for="version in versions" :key="version.id" class="strategy-version">
@@ -56,11 +68,12 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
-import { listKnowledgeStrategies, proposeKnowledgeStrategy, activateKnowledgeStrategy,
-  type KnowledgeStrategyVersion } from '@/api/knowledge-strategies'
+import { listKnowledgeStrategies, proposeKnowledgeStrategy, activateKnowledgeStrategy, reprocessKnowledge,
+  type KnowledgeStrategyVersion, type KnowledgeReprocessResult } from '@/api/knowledge-strategies'
 
-const props = defineProps<{ visible: boolean; kbId: string; selectedIds: string[] }>()
-const emit = defineEmits<{ 'update:visible': [value: boolean] }>()
+const props = defineProps<{ visible: boolean; kbId: string; selectedIds: string[]; initialTagId?: string;
+  tags: Array<{ id: string; name: string; kind?: string }> }>()
+const emit = defineEmits<{ 'update:visible': [value: boolean]; reprocessed: [] }>()
 const { t } = useI18n()
 const versions = ref<KnowledgeStrategyVersion[]>([])
 const instruction = ref('')
@@ -68,6 +81,18 @@ const sampleText = ref('')
 const loading = ref(false)
 const saving = ref(false)
 const activating = ref('')
+const reprocessing = ref(false)
+const lastResult = ref<KnowledgeReprocessResult | null>(null)
+const scopeMode = ref<'messages' | 'tag'>('messages')
+const scopeOptions = computed(() => [
+  { label: t('knowledgeBase.strategy.messagesScope'), value: 'messages' },
+  { label: t('knowledgeBase.strategy.tagScope'), value: 'tag' },
+])
+const reprocessIDsText = ref('')
+const reprocessIDs = computed(() => [...new Set(reprocessIDsText.value.split(',').map(id => id.trim()).filter(Boolean))])
+const tagID = ref('')
+const tagOptions = computed(() => props.tags.filter(tag => ['topic', 'object', 'event'].includes(tag.kind || ''))
+  .map(tag => ({ value: tag.id, label: tag.name })))
 const sampleIDs = computed(() => [...new Set(sampleText.value.split(',').map(id => id.trim()).filter(Boolean))])
 
 async function load() {
@@ -113,9 +138,29 @@ function activate(version: KnowledgeStrategyVersion) {
     } })
 }
 
+function reprocess() {
+  DialogPlugin.confirm({ header: t('knowledgeBase.strategy.reprocessConfirmTitle'), body: t('knowledgeBase.strategy.reprocessConfirm'),
+    onConfirm: async () => {
+      reprocessing.value = true
+      try {
+        const scope = scopeMode.value === 'tag' ? { tag_id: tagID.value } : { message_ids: reprocessIDs.value }
+        lastResult.value = (await reprocessKnowledge(props.kbId, scope)).data
+        emit('reprocessed')
+      } catch (error: any) {
+        MessagePlugin.error(error?.message || t('knowledgeBase.strategy.failed'))
+      } finally {
+        reprocessing.value = false
+      }
+    } })
+}
+
 watch(() => props.visible, visible => {
   if (visible) {
     sampleText.value = props.selectedIds.slice(0, 3).join(', ')
+    reprocessIDsText.value = props.selectedIds.join(', ')
+    tagID.value = props.initialTagId || ''
+    scopeMode.value = props.selectedIds.length ? 'messages' : 'tag'
+    lastResult.value = null
     load()
   }
 })
@@ -127,4 +172,6 @@ watch(() => props.visible, visible => {
 .strategy-version__head { display: flex; justify-content: space-between; gap: 12px; }
 .strategy-rule, .strategy-sample { padding: 8px 0; white-space: pre-wrap; }
 .strategy-rule p { margin: 4px 0 10px; }
+.strategy-reprocess { display: grid; gap: 10px; padding: 12px 0; border-top: 1px solid var(--td-component-stroke); }
+.strategy-reprocess p { margin: 0; }
 </style>

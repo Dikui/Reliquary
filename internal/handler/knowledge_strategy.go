@@ -50,3 +50,20 @@ func (h *KnowledgeStrategyHandler) Activate(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
 }
+
+func (h *KnowledgeStrategyHandler) Reprocess(c *gin.Context) {
+	var input struct {
+		MessageIDs []string `json:"message_ids"`
+		TagID      string   `json:"tag_id"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.Error(werrors.NewBadRequestError("invalid reprocessing scope"))
+		return
+	}
+	result, err := h.service.Reprocess(c.Request.Context(), c.Param("id"), input.MessageIDs, input.TagID)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": result})
+}

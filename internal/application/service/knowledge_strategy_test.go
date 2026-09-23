@@ -76,7 +76,7 @@ func TestKnowledgeStrategyCandidateTrialAndRestore(t *testing.T) {
 	require.NoError(t, message.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "approved", SourceInfo: types.SourceInfo{Publisher: "Publisher", OriginalURL: "https://example.org/report", PublishedAt: "2026-09-01"}}))
 	require.NoError(t, db.Exec(`INSERT INTO knowledges (id,tenant_id,knowledge_base_id,title,parse_status,metadata) VALUES (?,?,?,?,?,?)`, message.ID, message.TenantID, message.KnowledgeBaseID, message.Title, message.ParseStatus, string(message.Metadata)).Error)
 	kb := &types.KnowledgeBase{ID: "kb", TenantID: 1, CreatorID: "owner", SummaryModelID: "model"}
-	svc := NewKnowledgeStrategyService(db, strategyKB{kb: kb}, strategyOriginal{}, intakeModelService{chat: strategyChat{}}, nil)
+	svc := NewKnowledgeStrategyService(db, strategyKB{kb: kb}, strategyOriginal{}, intakeModelService{chat: strategyChat{}}, nil, nil)
 	owner := anomalyContext("owner")
 	version, err := svc.Propose(owner, "kb", "Tighten evidence screening and use specific names", []string{"sample"})
 	require.NoError(t, err)

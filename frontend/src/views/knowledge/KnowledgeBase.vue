@@ -2845,7 +2845,8 @@ async function createNewSession(value: string): Promise<void> {
     @open-message="openSourceDoc"
     @edit-tags="editAnomalyMessageTags" @changed="() => { resetPage(); loadTags(kbId, true) }" />
   <KnowledgeStrategyDrawer v-if="!isFAQ && isOwner" v-model:visible="strategyDrawerVisible" :kb-id="kbId"
-    :selected-ids="Array.from(selectedIds)" />
+    :selected-ids="Array.from(selectedIds)" :tags="tagList" :initial-tag-id="selectedTagIds[0] || ''"
+    @reprocessed="() => { resetPage(); loadTags(kbId, true) }" />
 </template>
 <style>
 /* 下拉菜单容器样式已统一至 @/assets/dropdown-menu.less */

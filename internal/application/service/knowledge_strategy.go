@@ -44,11 +44,12 @@ type KnowledgeStrategyService struct {
 	kb        interfaces.KnowledgeBaseService
 	knowledge interfaces.KnowledgeService
 	models    interfaces.ModelService
+	tags      interfaces.KnowledgeTagRepository
 	audit     interfaces.AuditLogService
 }
 
-func NewKnowledgeStrategyService(db *gorm.DB, kb interfaces.KnowledgeBaseService, knowledge interfaces.KnowledgeService, models interfaces.ModelService, audit interfaces.AuditLogService) *KnowledgeStrategyService {
-	return &KnowledgeStrategyService{db: db, kb: kb, knowledge: knowledge, models: models, audit: audit}
+func NewKnowledgeStrategyService(db *gorm.DB, kb interfaces.KnowledgeBaseService, knowledge interfaces.KnowledgeService, models interfaces.ModelService, tags interfaces.KnowledgeTagRepository, audit interfaces.AuditLogService) *KnowledgeStrategyService {
+	return &KnowledgeStrategyService{db: db, kb: kb, knowledge: knowledge, models: models, tags: tags, audit: audit}
 }
 
 func (s *KnowledgeStrategyService) scopedKB(ctx context.Context, kbID string, ownerOnly bool) (*types.KnowledgeBase, string, error) {
@@ -183,7 +184,9 @@ func (s *KnowledgeStrategyService) Propose(ctx context.Context, kbID, instructio
 		newFilter := oldFilter
 		if next.Filter != current.Filter {
 			newFilter, err = trialFilter(ctx, model, next, string(body), intake.SourceInfo)
-			if err != nil { return nil, err }
+			if err != nil {
+				return nil, err
+			}
 		}
 		oldTags, err := trialTags(ctx, tagModel, *current, message.Title, string(body))
 		if err != nil {
@@ -192,21 +195,31 @@ func (s *KnowledgeStrategyService) Propose(ctx context.Context, kbID, instructio
 		newTags := oldTags
 		if next.Tags != current.Tags {
 			newTags, err = trialTags(ctx, tagModel, next, message.Title, string(body))
-			if err != nil { return nil, err }
+			if err != nil {
+				return nil, err
+			}
 		}
 		oldCollection, err := trialCollection(ctx, model, *current, string(body), intake.SourceInfo)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		newCollection := oldCollection
 		if next.Collection != current.Collection || next.Filter != current.Filter {
 			newCollection, err = trialCollection(ctx, model, next, string(body), intake.SourceInfo)
-			if err != nil { return nil, err }
+			if err != nil {
+				return nil, err
+			}
 		}
 		oldResearch, err := rewriteResearchQuery(ctx, model, current.Research, message.Title)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		newResearch := oldResearch
 		if next.Research != current.Research {
 			newResearch, err = rewriteResearchQuery(ctx, model, next.Research, message.Title)
-			if err != nil { return nil, err }
+			if err != nil {
+				return nil, err
+			}
 		}
 		samples = append(samples, KnowledgeStrategySample{KnowledgeID: id, OldFilter: oldFilter, NewFilter: newFilter,
 			OldTags: oldTags, NewTags: newTags, OldCollection: oldCollection, NewCollection: newCollection,
@@ -262,33 +275,15 @@ func rewriteResearchQuery(ctx context.Context, model chat.Chat, policy, query st
 }
 
 func trialTags(ctx context.Context, model chat.Chat, rules KnowledgeStrategyRules, title, body string) (string, error) {
-	content := sampleLongContent(title+"\n\n"+body, maximumAutoTagContentRunes)
-	response, err := model.Chat(ctx, []chat.Message{{Role: "system", Content: messageTagPrompt(rules.Tags)}, {Role: "user", Content: "<message>\n" + content + "\n</message>"}}, &chat.ChatOptions{Temperature: 0.1, MaxTokens: 1024})
-	if err != nil || response == nil {
-		if err == nil {
-			err = fmt.Errorf("empty model response")
-		}
-		return "", fmt.Errorf("tag trial failed: %w", err)
+	labels, err := classifyMessageTags(ctx, model, rules.Tags, title+"\n\n"+body)
+	if err != nil {
+		return "", err
 	}
-	var result messageTagResponse
-	if json.Unmarshal([]byte(response.Content), &result) != nil {
-		return "", fmt.Errorf("invalid tag trial response")
+	parts := make([]string, 0, len(labels))
+	for _, label := range labels {
+		parts = append(parts, label.Kind+":"+label.Name)
 	}
-	labels := make([]string, 0, len(result.Natures)+len(result.Referents))
-	for _, nature := range result.Natures[:min(len(result.Natures), len(types.ContentNatures))] {
-		if types.ContentNatures[nature] {
-			labels = append(labels, nature)
-		}
-	}
-	for _, ref := range result.Referents[:min(len(result.Referents), 8)] {
-		if validDocumentTag(ref.Kind, ref.Name) && ref.Kind != types.TagKindNature {
-			labels = append(labels, ref.Kind+":"+ref.Name)
-		}
-	}
-	if len(result.Natures) == 0 || len(result.Referents) == 0 || len(labels) < 2 {
-		return "", fmt.Errorf("tag trial omitted required axes")
-	}
-	return strings.Join(labels, ", "), nil
+	return strings.Join(parts, ", "), nil
 }
 
 // Activate publishes a reviewed candidate or restores an archived version.

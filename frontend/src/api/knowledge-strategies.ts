@@ -41,3 +41,15 @@ export const proposeKnowledgeStrategy = (kbId: string, instruction: string, samp
 
 export const activateKnowledgeStrategy = (kbId: string, id: string) =>
   post<{ success: boolean; data: KnowledgeStrategyVersion }>(`${base(kbId)}/${encodeURIComponent(id)}/activate`, {})
+
+export interface KnowledgeReprocessResult {
+  processed: number
+  updated: number
+  flagged: number
+  conflicts: number
+  failed: number
+  errors: string[]
+}
+
+export const reprocessKnowledge = (kbId: string, scope: { message_ids?: string[]; tag_id?: string }) =>
+  post<{ success: boolean; data: KnowledgeReprocessResult }>(`${base(kbId)}/reprocess`, scope)

@@ -168,6 +168,7 @@ const (
 	AuditActionKnowledgeAnomalyDecided    AuditAction = "knowledge.anomaly_decided"
 	AuditActionKnowledgeStrategyProposed  AuditAction = "knowledge.strategy_proposed"
 	AuditActionKnowledgeStrategyActivated AuditAction = "knowledge.strategy_activated"
+	AuditActionKnowledgeReprocessed       AuditAction = "knowledge.reprocessed"
 
 	AuditActionTagCreated AuditAction = "tag.created"
 	AuditActionTagUpdated AuditAction = "tag.updated"
