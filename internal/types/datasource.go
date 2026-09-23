@@ -227,6 +227,8 @@ type DataSourceConfig struct {
 
 	// Connector-specific configuration
 	Settings map[string]interface{} `json:"settings"`
+	// IngestSince is supplied by the sync service, never persisted in connector settings.
+	IngestSince time.Time `json:"-"`
 
 	// MultimodalEnabled mirrors the target knowledge base's VLM/multimodal
 	// setting for the current sync run. The service populates it before each fetch

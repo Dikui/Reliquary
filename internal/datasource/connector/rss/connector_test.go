@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/mmcdole/gofeed"
 	"reliquary/internal/datasource"
@@ -43,6 +44,7 @@ type fakeFeed struct {
 	articleAuthHeaders []string
 	articleFetches     atomic.Int32
 	failFeed           atomic.Bool
+	failArticle        atomic.Bool
 }
 
 func newFakeFeed(t *testing.T) *fakeFeed {
@@ -52,6 +54,10 @@ func newFakeFeed(t *testing.T) *fakeFeed {
 
 	mux.HandleFunc("/article/", func(w http.ResponseWriter, r *http.Request) {
 		f.articleFetches.Add(1)
+		if f.failArticle.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
 		for k, vals := range r.Header {
 			if strings.EqualFold(k, "X-Test-Auth") && len(vals) > 0 && vals[0] != "" {
 				f.articleAuthHeaders = append(f.articleAuthHeaders, vals[0])
@@ -291,6 +297,31 @@ func TestConnector_FetchAll_FullTextMarkdown(t *testing.T) {
 	}
 	if !strings.HasSuffix(it.FileName, ".md") {
 		t.Errorf("FileName = %q, want .md suffix", it.FileName)
+	}
+}
+
+func TestConnector_FetchIncremental_StartsAtEnableTimeAndRetriesArticleFailure(t *testing.T) {
+	f := newFakeFeed(t)
+	cfg := makeConfig(f.feedURL(), "")
+	cfg.IngestSince = time.Date(2006, 1, 3, 0, 0, 0, 0, time.UTC)
+	f.failArticle.Store(true)
+	items, cursor, err := NewConnector().FetchIncremental(context.Background(), cfg, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].Metadata["error"] == "" || len(items[0].Content) != 0 || items[0].URL != "" {
+		t.Fatalf("failed article must be logged and withheld, got %#v", items)
+	}
+	if got := f.articleFetches.Load(); got != 1 {
+		t.Fatalf("article fetches = %d, want 1", got)
+	}
+	f.failArticle.Store(false)
+	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || !strings.Contains(string(items[0].Content), "first paragraph") {
+		t.Fatalf("next run should retry the article and keep the full body, got %#v", items)
 	}
 }
 

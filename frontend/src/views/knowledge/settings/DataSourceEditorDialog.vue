@@ -766,10 +766,18 @@ function selectType(def: ConnectorDef) {
   if (!def.available) return
   form.value.type = def.type
   form.value.name = t(`datasource.connector.${def.type}`)
+  if (def.type === 'rss') form.value.sync_schedule = '0 0 2 * * *'
   form.value.config.credentials = {}
   if (isGitLabConnector(def.type)) addGitLabProject()
   rssAuthHeaders.value = []
   step.value = 1
+}
+
+function selectRssPreset(name: string, url: string, publisher: string) {
+  form.value.name = name
+  form.value.config.settings.feed_urls = url
+  form.value.config.settings.publisher = publisher
+  form.value.sync_schedule = '0 0 2 * * *'
 }
 
 // --- Test connection (stateless, no DB write) ---
@@ -1405,6 +1413,10 @@ const drawerConfirmText = computed(() => {
       <section v-if="form.type === 'rss'" class="setting-drawer__section">
         <h4 class="setting-drawer__section-title">{{ t('datasource.field.feedUrls') }}</h4>
         <div class="form-item">
+          <t-button variant="outline" size="small" @click="selectRssPreset('OpenAI', 'https://openai.com/news/rss.xml', 'OpenAI')">OpenAI</t-button>
+          <t-button variant="outline" size="small" @click="selectRssPreset('Simon Willison', 'https://simonwillison.net/atom/everything/', 'Simon Willison')">Simon Willison</t-button>
+        </div>
+        <div class="form-item">
           <label class="form-label required">{{ t('datasource.field.feedUrls') }}</label>
           <t-textarea
             v-model="form.config.settings.feed_urls"
@@ -1414,6 +1426,10 @@ const drawerConfirmText = computed(() => {
             spellcheck="false"
           />
           <p class="form-desc">{{ t('datasource.field.feedUrlsHint') }}</p>
+        </div>
+        <div class="form-item">
+          <label class="form-label">{{ t('datasource.field.feedPublisher') }}</label>
+          <t-input v-model="form.config.settings.publisher" />
         </div>
       </section>
 

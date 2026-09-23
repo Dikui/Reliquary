@@ -827,6 +827,13 @@ func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 		FileName:         fileName,
 		FileType:         types.KnowledgeTypeManual,
 	}
+	if len(payload.SourceMetadata) > 0 {
+		metadata, err := json.Marshal(payload.SourceMetadata)
+		if err != nil {
+			return nil, err
+		}
+		knowledge.Metadata = types.JSON(metadata)
+	}
 	if err := knowledge.SetManualMetadata(meta); err != nil {
 		logger.Errorf(ctx, "Failed to set manual metadata: %v", err)
 		return nil, err

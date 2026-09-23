@@ -44,7 +44,8 @@ import (
 // may still carry feed_urls for backward compatibility with older rows.
 type Config struct {
 	// FeedURLs is a newline- or comma-separated list of feed URLs.
-	FeedURLs string `json:"feed_urls"`
+	FeedURLs  string `json:"feed_urls"`
+	Publisher string `json:"publisher,omitempty"`
 
 	// AuthHeaders is an optional newline-separated list of custom request
 	// headers in "Name: Value" form, applied only to feed fetches.
@@ -66,6 +67,9 @@ func parseConfig(config *types.DataSourceConfig) (*Config, error) {
 	}
 	if urls := feedURLsFromSettings(config.Settings); urls != "" {
 		cfg.FeedURLs = urls
+	}
+	if publisher, ok := config.Settings["publisher"].(string); ok {
+		cfg.Publisher = strings.TrimSpace(publisher)
 	}
 	if len(cfg.feedURLList()) == 0 {
 		return nil, fmt.Errorf("%w: feed_urls is required", datasource.ErrInvalidCredentials)

@@ -500,7 +500,11 @@ func (s *DataSourceService) ManualSync(ctx context.Context, dsID string) (*types
 		syncLog.ErrorMessage = err.Error()
 		_ = s.syncLogRepo.Update(ctx, syncLog)
 		if ds.Status != types.DataSourceStatusPaused {
-			ds.Status = types.DataSourceStatusError
+			if ds.Type == types.ConnectorTypeRSS {
+				ds.Status = types.DataSourceStatusActive
+			} else {
+				ds.Status = types.DataSourceStatusError
+			}
 		}
 		ds.ErrorMessage = fmt.Sprintf("Failed to enqueue sync: %v", err)
 		_ = s.dsRepo.Update(ctx, ds)
@@ -608,6 +612,14 @@ func (s *DataSourceService) ProcessSync(ctx context.Context, task *asynq.Task) e
 		}
 		return nil
 	}
+	wasPaused := ds.Status == types.DataSourceStatusPaused
+	defer func() {
+		// A transient RSS failure is visible in the log, but must not stop tomorrow's run.
+		if ds.Type == types.ConnectorTypeRSS && !wasPaused && ds.Status == types.DataSourceStatusError {
+			ds.Status = types.DataSourceStatusActive
+			_ = s.dsRepo.UpdateSyncState(ctx, ds)
+		}
+	}()
 
 	// Get sync log
 	syncLog, err := s.syncLogRepo.FindByID(ctx, payload.SyncLogID)
@@ -626,8 +638,6 @@ func (s *DataSourceService) ProcessSync(ctx context.Context, task *asynq.Task) e
 		_ = s.syncLogRepo.Update(ctx, syncLog)
 		return nil
 	}
-
-	wasPaused := ds.Status == types.DataSourceStatusPaused
 
 	// Get connector
 	connector, err := s.connectorRegistry.Get(ds.Type)
@@ -663,6 +673,9 @@ func (s *DataSourceService) ProcessSync(ctx context.Context, task *asynq.Task) e
 	// Surface the KB's multimodal/VLM state to the connector so it only extracts
 	// embedded images for OCR when the KB can actually ingest them (never persisted).
 	config.MultimodalEnabled = kb.IsMultimodalEnabled()
+	if ds.Type == types.ConnectorTypeRSS {
+		config.IngestSince = ds.CreatedAt
+	}
 
 	// Streaming path: connectors that support it interleave fetch→ingest→
 	// checkpoint so a large sync bounds memory and resumes after a timeout
@@ -1253,6 +1266,30 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 	}
 	for k, v := range item.Metadata {
 		metadata[k] = v
+	}
+	if ds.Type == types.ConnectorTypeRSS {
+		if len(item.Content) == 0 || item.URL == "" {
+			return false, fmt.Errorf("RSS article body or original URL missing")
+		}
+		existing, err := s.knowledgeService.GetRepository().FindByDataSourceExternalID(
+			ctx, ds.TenantID, ds.KnowledgeBaseID, ds.ID, item.ExternalID)
+		if err != nil {
+			return false, err
+		}
+		if existing != nil {
+			return false, types.NewDuplicateFileError(existing)
+		}
+		payload := &types.ManualKnowledgePayload{
+			Title: item.Title, Content: string(item.Content), Status: types.ManualKnowledgeStatusPublish,
+			TagIDs: tagIDs, SourceMetadata: map[string]string{
+				"external_id": item.ExternalID, "datasource_id": ds.ID, "source_resource_id": item.SourceResourceID,
+			},
+			SourceInfo: types.SourceInfo{
+				Author: metadata["author"], OriginalURL: item.URL, PublishedAt: metadata["published_at"],
+			},
+		}
+		_, err = s.knowledgeService.CreateKnowledgeFromManual(ctx, ds.KnowledgeBaseID, payload, channel)
+		return false, err
 	}
 
 	// Check if a knowledge item with this external_id already exists → delete it first (update)

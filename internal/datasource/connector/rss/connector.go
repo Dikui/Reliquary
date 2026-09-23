@@ -240,6 +240,15 @@ func (c *Connector) walk(
 			if itemID == "" {
 				continue
 			}
+			published := item.PublishedParsed
+			if published == nil || published.IsZero() {
+				logger.Warnf(ctx, "[RSS] skipping item without publication date: %s", itemID)
+				continue
+			}
+			if !config.IngestSince.IsZero() && published.Before(config.IngestSince) {
+				skipped++
+				continue
+			}
 
 			feedContent := firstNonEmpty(item.Content, item.Description)
 			feedSig := feedSignalFingerprint(item, feedContent)
@@ -258,7 +267,16 @@ func (c *Connector) walk(
 				}
 			}
 
-			resolved := c.resolveItem(ctx, cli, feed, item, feedURL, itemID, feedContent)
+			resolved := c.resolveItem(ctx, cli, feed, item, feedURL, itemID, cfg.Publisher)
+			if resolved.item.Metadata["error"] != "" {
+				if prevItems[itemID] != "" {
+					newCursor.FeedItems[feedURL][itemID] = prevItems[itemID]
+					newCursor.FeedSignals[feedURL][itemID] = prevSignals[itemID]
+				}
+				out = append(out, resolved.item)
+				kept++
+				continue
+			}
 			newCursor.FeedItems[feedURL][itemID] = resolved.fingerprint
 			newCursor.FeedSignals[feedURL][itemID] = feedSig
 
@@ -297,26 +315,32 @@ func (c *Connector) resolveItem(
 	cli *client,
 	feed *gofeed.Feed,
 	item *gofeed.Item,
-	feedURL, itemID, feedContent string,
+	feedURL, itemID, publisher string,
 ) resolvedFeedItem {
 	title := firstNonEmpty(item.Title, "untitled")
 
-	// Prefer full article text; fall back to feed-provided content on failure.
-	contentHTML := feedContent
-	if strings.TrimSpace(item.Link) != "" {
-		if articleHTML, articleTitle, err := cli.extractArticle(ctx, item.Link); err == nil {
-			contentHTML = articleHTML
-			if item.Title == "" && articleTitle != "" {
-				title = articleTitle
-			}
-		} else {
-			logger.Warnf(ctx, "[RSS] full-text fetch failed for %s (using feed content): %v", item.Link, err)
-		}
+	// A feed summary is never evidence that the article was fully captured.
+	if strings.TrimSpace(item.Link) == "" {
+		return resolvedFeedItem{item: types.FetchedItem{ExternalID: itemExternalID(feedURL, itemID), Title: title,
+			Metadata: map[string]string{"error": "missing article URL", "channel": types.ChannelRSS}}}
+	}
+	contentHTML, articleTitle, err := cli.extractArticle(ctx, item.Link)
+	if err != nil {
+		logger.Warnf(ctx, "[RSS] full-text fetch failed for %s: %v", item.Link, err)
+		return resolvedFeedItem{item: types.FetchedItem{ExternalID: itemExternalID(feedURL, itemID), Title: title,
+			Metadata: map[string]string{"error": "article fetch failed: " + err.Error(), "channel": types.ChannelRSS}}}
+	}
+	if item.Title == "" && articleTitle != "" {
+		title = articleTitle
 	}
 
 	content := htmlToMarkdown(contentHTML)
+	if strings.TrimSpace(content) == "" {
+		return resolvedFeedItem{item: types.FetchedItem{ExternalID: itemExternalID(feedURL, itemID), Title: title,
+			Metadata: map[string]string{"error": "article body is empty", "channel": types.ChannelRSS}}}
+	}
 
-	updatedAt := time.Now().UTC()
+	updatedAt := time.Time{}
 	switch {
 	case item.UpdatedParsed != nil && !item.UpdatedParsed.IsZero():
 		updatedAt = *item.UpdatedParsed
@@ -327,6 +351,12 @@ func (c *Connector) resolveItem(
 	author := ""
 	if item.Author != nil {
 		author = item.Author.Name
+	}
+	if author == "" && feed.Author != nil {
+		author = feed.Author.Name
+	}
+	if author == "" {
+		author = publisher
 	}
 
 	return resolvedFeedItem{
@@ -341,12 +371,13 @@ func (c *Connector) resolveItem(
 			UpdatedAt:        updatedAt,
 			SourceResourceID: feedURL,
 			Metadata: map[string]string{
-				"channel":    types.ChannelRSS,
-				"feed_url":   feedURL,
-				"feed_title": feed.Title,
-				"guid":       item.GUID,
-				"link":       item.Link,
-				"author":     author,
+				"channel":      types.ChannelRSS,
+				"feed_url":     feedURL,
+				"feed_title":   feed.Title,
+				"guid":         item.GUID,
+				"link":         item.Link,
+				"author":       author,
+				"published_at": item.Published,
 			},
 		},
 	}
