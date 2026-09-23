@@ -10,8 +10,7 @@
 //     are attached only to feed fetches, never to third-party article pages.
 //   - Full text: when an item exposes a link, the article page is fetched and
 //     run through a readability extractor; the cleaned HTML is converted to
-//     Markdown. Feed-provided content (content:encoded / description) is used
-//     as a fallback.
+//     Markdown. Feed-provided summaries never replace the original article.
 //   - Incremental: feed-level signals skip full-text article fetches when a feed
 //     entry is unchanged; content fingerprints detect feed-body changes. Article-
 //     only edits without feed updates may be missed until the feed entry changes.

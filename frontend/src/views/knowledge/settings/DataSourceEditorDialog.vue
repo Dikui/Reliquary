@@ -785,6 +785,7 @@ const rssPresets = [
   ['Simon Willison', 'https://simonwillison.net/atom/everything/', 'Simon Willison'],
   ['Google DeepMind', 'https://deepmind.google/blog/rss.xml', 'Google DeepMind'],
   ['NVIDIA', 'https://blogs.nvidia.com/feed/', 'NVIDIA'],
+  ['Hugging Face', 'https://huggingface.co/blog/feed.xml', 'Hugging Face'],
   ['TechCrunch AI', 'https://techcrunch.com/category/artificial-intelligence/feed/', 'TechCrunch'],
   ['Ethan Mollick', 'https://www.oneusefulthing.org/feed', 'Ethan Mollick'],
   ['Latent Space', 'https://www.latent.space/feed', 'Latent Space'],
