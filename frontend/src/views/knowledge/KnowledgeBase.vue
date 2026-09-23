@@ -1719,7 +1719,7 @@ const executeUploadBatch = async (
     tagIds?: string[];
     /** Destination folder confirmed in the upload dialog; '' is the root. */
     targetFolder?: string;
-    sourceInfoByItem?: Record<string, { author?: string; original_url?: string; published_at?: string }>;
+    sourceInfoByItem?: Record<string, { author?: string; publisher?: string; original_url?: string; published_at?: string }>;
   } = {},
 ) => {
   const targetKbId = kbId.value;
@@ -1742,7 +1742,7 @@ const executeUploadBatch = async (
         tag_ids?: string[]
         fileName?: string
         process_config?: KnowledgeProcessOverrides
-        source_info?: { author?: string; original_url?: string; published_at?: string }
+        source_info?: { author?: string; publisher?: string; original_url?: string; published_at?: string }
       } = { file, tag_ids: tagIdsToUpload };
 
       const fileName = getFolderUploadFileName(file, options.targetFolder || ROOT_FOLDER_PATH);
@@ -1798,7 +1798,7 @@ const executeUrlImport = async (
   url: string,
   processConfig?: KnowledgeProcessOverrides,
   tagIds?: string[],
-  sourceInfo?: { author?: string; original_url?: string; published_at?: string },
+  sourceInfo?: { author?: string; publisher?: string; original_url?: string; published_at?: string },
 ) => {
   const targetKbId = kbId.value;
   if (!targetKbId) {
@@ -2169,7 +2169,7 @@ const openKnowledgeItem = (item: KnowledgeCard) => {
   openCardDetails(item);
 };
 
-const handleIntakeReview = async (payload: { action: 'retry' | 'discard'; sourceInfo?: { author?: string; original_url?: string; published_at?: string } }) => {
+const handleIntakeReview = async (payload: { action: 'retry' | 'discard'; sourceInfo?: { author?: string; publisher?: string; original_url?: string; published_at?: string } }) => {
   if (!details.id || !isOwner.value) return
   try {
     await reviewKnowledge(details.id, { action: payload.action, source_info: payload.sourceInfo })

@@ -259,7 +259,7 @@ const intakeOriginalURL = computed(() => {
   const url = intakeSourceInfo.value?.original_url;
   return typeof url === 'string' && /^https?:\/\//i.test(url) && isValidURL(url) ? url : '';
 });
-const intakeSourceDraft = ref({ author: '', original_url: '', published_at: '' });
+const intakeSourceDraft = ref({ author: '', publisher: '', original_url: '', published_at: '' });
 watch(intakeSourceInfo, (value) => { intakeSourceDraft.value = { ...value }; }, { immediate: true, deep: true });
 const resetIntakePreview = () => {
   intakePreviewController?.abort();
@@ -1750,6 +1750,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
           <h4 class="setting-drawer__section-title">{{ isIntakeRejected ? $t('knowledgeBase.intakeWaiting') : $t('knowledgeBase.intakePreviewOriginal') }}</h4>
           <p v-if="intake.reason">{{ intake.reason }}</p>
           <p v-if="intakeSourceInfo.author">{{ $t('knowledgeBase.intakeAuthor') }}: {{ intakeSourceInfo.author }}</p>
+          <p v-if="intakeSourceInfo.publisher">{{ $t('knowledgeBase.intakePublisher') }}: {{ intakeSourceInfo.publisher }}</p>
           <a v-if="intakeOriginalURL" :href="intakeOriginalURL" target="_blank" rel="noopener">{{ intakeOriginalURL }}</a>
           <p v-if="intakeSourceInfo.published_at">{{ $t('knowledgeBase.intakePublishedAt') }}: {{ intakeSourceInfo.published_at }}</p>
           <t-button v-if="intake.original_path" size="small" :loading="intakeOriginalLoading" :disabled="intakeOriginalDone" @click="loadIntakeOriginal">{{ intakeOriginal ? (intakeOriginalDone ? $t('knowledgeBase.intakePreviewOriginal') : $t('knowledgeBase.intakeLoadMore')) : $t('knowledgeBase.intakePreviewOriginal') }}</t-button>
@@ -1757,6 +1758,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
           <div v-if="intakeOriginal" class="md-content" v-html="processMarkdown(intakeOriginal)" />
           <template v-if="isIntakeRejected && canReviewIntake">
             <t-input v-model="intakeSourceDraft.author" :placeholder="$t('knowledgeBase.intakeAuthor')" />
+            <t-input v-model="intakeSourceDraft.publisher" :placeholder="$t('knowledgeBase.intakePublisher')" />
             <t-input v-model="intakeSourceDraft.original_url" :placeholder="$t('knowledgeBase.intakeOriginalUrl')" />
             <t-input v-model="intakeSourceDraft.published_at" :placeholder="$t('knowledgeBase.intakePublishedAt')" />
             <t-button theme="primary" @click="emit('intakeReview', { action: 'retry', sourceInfo: intakeSourceDraft })">{{ $t('knowledgeBase.intakeRetry') }}</t-button>

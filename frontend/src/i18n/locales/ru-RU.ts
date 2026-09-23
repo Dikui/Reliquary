@@ -6343,6 +6343,7 @@ export default {
     draftTip: 'Временно сохранён, не участвует в поиске',
     intakeWaiting: 'Ожидает проверки',
     intakeAuthor: 'Автор',
+    intakePublisher: 'Издатель',
     intakeOriginalUrl: 'Исходный URL',
     intakePublishedAt: 'Дата публикации',
     intakePreviewOriginal: 'Просмотреть оригинал',

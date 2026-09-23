@@ -98,12 +98,19 @@ func (c *client) fetchFeed(ctx context.Context, feedURL string) ([]byte, error) 
 
 // extractArticle fetches an article page and returns the readability-cleaned
 // main content as HTML, plus the extracted title (may be empty). Returns an
-// error if the page can't be fetched or no readable content is found, so the
-// caller can fall back to feed-provided content.
+// error if the page can't be fetched or no readable content is found.
 func (c *client) extractArticle(ctx context.Context, articleURL string) (contentHTML, title string, err error) {
 	body, err := c.fetch(ctx, articleURL, maxArticleSize, false)
 	if err != nil {
 		return "", "", err
+	}
+	// Readability can discard embedded media before the caller sees the article.
+	// ponytail: page-wide check may reject unrelated embeds; narrow to the article DOM if this causes false positives.
+	markup := bytes.ToLower(body)
+	for _, tag := range [][]byte{[]byte("<iframe"), []byte("<video"), []byte("<audio"), []byte("<object"), []byte("<embed")} {
+		if bytes.Contains(markup, tag) {
+			return "", "", fmt.Errorf("article contains unsupported embedded media")
+		}
 	}
 
 	pageURL, _ := url.Parse(articleURL)

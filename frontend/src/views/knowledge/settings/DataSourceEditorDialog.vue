@@ -780,6 +780,17 @@ function selectRssPreset(name: string, url: string, publisher: string) {
   form.value.sync_schedule = '0 0 2 * * *'
 }
 
+const rssPresets = [
+  ['OpenAI', 'https://openai.com/news/rss.xml', 'OpenAI'],
+  ['Simon Willison', 'https://simonwillison.net/atom/everything/', 'Simon Willison'],
+  ['Google DeepMind', 'https://deepmind.google/blog/rss.xml', 'Google DeepMind'],
+  ['NVIDIA', 'https://blogs.nvidia.com/feed/', 'NVIDIA'],
+  ['TechCrunch AI', 'https://techcrunch.com/category/artificial-intelligence/feed/', 'TechCrunch'],
+  ['Ethan Mollick', 'https://www.oneusefulthing.org/feed', 'Ethan Mollick'],
+  ['Latent Space', 'https://www.latent.space/feed', 'Latent Space'],
+  ['宝玉', 'https://baoyu.io/feed.xml', '宝玉'],
+] as const
+
 // --- Test connection (stateless, no DB write) ---
 async function testConnection() {
   syncRssAuthHeadersToCredentials()
@@ -1412,9 +1423,9 @@ const drawerConfirmText = computed(() => {
 
       <section v-if="form.type === 'rss'" class="setting-drawer__section">
         <h4 class="setting-drawer__section-title">{{ t('datasource.field.feedUrls') }}</h4>
-        <div class="form-item">
-          <t-button variant="outline" size="small" @click="selectRssPreset('OpenAI', 'https://openai.com/news/rss.xml', 'OpenAI')">OpenAI</t-button>
-          <t-button variant="outline" size="small" @click="selectRssPreset('Simon Willison', 'https://simonwillison.net/atom/everything/', 'Simon Willison')">Simon Willison</t-button>
+        <div class="form-item rss-presets">
+          <t-button v-for="[name, url, publisher] in rssPresets" :key="url" variant="outline" size="small"
+            @click="selectRssPreset(name, url, publisher)">{{ name }}</t-button>
         </div>
         <div class="form-item">
           <label class="form-label required">{{ t('datasource.field.feedUrls') }}</label>
@@ -2181,6 +2192,12 @@ const drawerConfirmText = computed(() => {
 
 .form-item {
   margin-bottom: 0;
+}
+
+.rss-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .form-item--flat {

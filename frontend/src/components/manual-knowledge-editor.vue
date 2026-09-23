@@ -72,7 +72,7 @@ const mode = computed(() => uiStore.manualEditorMode)
 const knowledgeId = computed(() => uiStore.manualEditorKnowledgeId)
 const currentKnowledgeId = ref<string | null>(null)
 const manualTagIds = ref<string[]>([])
-const manualSourceInfo = ref<{ author?: string; original_url?: string; published_at?: string }>({})
+const manualSourceInfo = ref<{ author?: string; publisher?: string; original_url?: string; published_at?: string }>({})
 
 const form = reactive({
   kbId: '' as string,
@@ -487,7 +487,7 @@ const loadKnowledgeBases = async () => {
 
 const parseManualMetadata = (
   metadata: any,
-): { content: string; status: ManualStatus; updatedAt?: string; originalPath?: string; sourceInfo?: { author?: string; original_url?: string; published_at?: string } } | null => {
+): { content: string; status: ManualStatus; updatedAt?: string; originalPath?: string; sourceInfo?: { author?: string; publisher?: string; original_url?: string; published_at?: string } } | null => {
   if (!metadata) {
     return null
   }
@@ -632,7 +632,7 @@ const handleSave = async (targetStatus: ManualStatus) => {
       status: string
       tag_ids?: string[]
       process_config?: KnowledgeProcessOverrides
-      source_info?: { author?: string; original_url?: string; published_at?: string }
+      source_info?: { author?: string; publisher?: string; original_url?: string; published_at?: string }
     } = {
       title: form.title.trim(),
       content: form.content,

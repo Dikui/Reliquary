@@ -71,6 +71,7 @@
                   </p>
                   <div class="intake-source-fields">
                     <t-input v-model="sourceInfo('manual').author" :placeholder="t('knowledgeBase.intakeAuthor')" />
+                    <t-input v-model="sourceInfo('manual').publisher" :placeholder="t('knowledgeBase.intakePublisher')" />
                     <t-input v-model="sourceInfo('manual').original_url" :placeholder="t('knowledgeBase.intakeOriginalUrl')" />
                     <t-input v-model="sourceInfo('manual').published_at" :placeholder="t('knowledgeBase.intakePublishedAt')" />
                   </div>
@@ -100,6 +101,7 @@
                     </button>
                     <div class="intake-source-fields">
                       <t-input v-model="sourceInfo(urlSourceKey(url)).author" :placeholder="t('knowledgeBase.intakeAuthor')" />
+                      <t-input v-model="sourceInfo(urlSourceKey(url)).publisher" :placeholder="t('knowledgeBase.intakePublisher')" />
                       <t-input v-model="sourceInfo(urlSourceKey(url)).original_url" :placeholder="t('knowledgeBase.intakeOriginalUrl')" />
                       <t-input v-model="sourceInfo(urlSourceKey(url)).published_at" :placeholder="t('knowledgeBase.intakePublishedAt')" />
                     </div>
@@ -128,6 +130,7 @@
                     </button>
                     <div class="intake-source-fields">
                       <t-input v-model="sourceInfo(fileSourceKey(file)).author" :placeholder="t('knowledgeBase.intakeAuthor')" />
+                      <t-input v-model="sourceInfo(fileSourceKey(file)).publisher" :placeholder="t('knowledgeBase.intakePublisher')" />
                       <t-input v-model="sourceInfo(fileSourceKey(file)).original_url" :placeholder="t('knowledgeBase.intakeOriginalUrl')" />
                       <t-input v-model="sourceInfo(fileSourceKey(file)).published_at" :placeholder="t('knowledgeBase.intakePublishedAt')" />
                     </div>
@@ -672,7 +675,7 @@ const uiStore = useUIStore()
 const allModels = ref<any[]>([])
 const localFiles = ref<File[]>([])
 const localUrls = ref<string[]>([])
-const sourceInfoByItem = ref<Record<string, { author?: string; original_url?: string; published_at?: string }>>({})
+const sourceInfoByItem = ref<Record<string, { author?: string; publisher?: string; original_url?: string; published_at?: string }>>({})
 const sourceInfo = (key: string) => sourceInfoByItem.value[key] ||= {}
 const fileSourceKey = (file: File) => `file:${getUploadFileKey(file)}`
 const urlSourceKey = (url: string) => `url:${url}`

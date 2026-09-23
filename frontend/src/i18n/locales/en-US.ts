@@ -577,6 +577,7 @@ export default {
     draftTip: 'Temporarily saved and not included in retrieval',
     intakeWaiting: 'Awaiting review',
     intakeAuthor: 'Author',
+    intakePublisher: 'Publisher',
     intakeOriginalUrl: 'Original URL',
     intakePublishedAt: 'Published at',
     intakePreviewOriginal: 'Preview original',

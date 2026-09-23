@@ -154,9 +154,11 @@ func TestProcessDocumentIntakeQualityGate(t *testing.T) {
 		source     types.SourceInfo
 	}{
 		{"approved", intakeChat{response: `{"approved":true,"reason":"analysis"}`}, "", true, true, false, types.SourceInfo{}},
+		{"publisher without personal author", intakeChat{response: `{"approved":true,"reason":"reported facts"}`}, "", true, true, false, types.SourceInfo{Publisher: "Google DeepMind", OriginalURL: "https://example.com/post", PublishedAt: "2026-01-01"}},
 		{"rejected", intakeChat{response: `{"approved":false,"reason":"opinion only"}`}, types.ParseStatusRejected, true, false, false, types.SourceInfo{}},
 		{"model error", intakeChat{err: errors.New("model unavailable")}, types.ParseStatusFailed, false, false, true, types.SourceInfo{}},
 		{"unknown source evidence", intakeChat{}, types.ParseStatusRejected, true, false, false, types.SourceInfo{Author: "未知", OriginalURL: "https://example.com/post", PublishedAt: "未知"}},
+		{"placeholder author with publisher", intakeChat{}, types.ParseStatusRejected, true, false, false, types.SourceInfo{Author: "未知", Publisher: "Google DeepMind", OriginalURL: "https://example.com/post", PublishedAt: "2026-01-01"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -164,7 +166,7 @@ func TestProcessDocumentIntakeQualityGate(t *testing.T) {
 			source := types.SourceInfo{
 				Author: "Ada", OriginalURL: "https://example.com/post", PublishedAt: "2026-01-01",
 			}
-			if tt.source.Author != "" {
+			if tt.source.Author != "" || tt.source.Publisher != "" {
 				source = tt.source
 			}
 			require.NoError(t, knowledge.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Source: "manual", Decision: "pending", SourceInfo: source}))

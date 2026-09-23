@@ -333,7 +333,6 @@ func (c *Connector) resolveItem(
 	if item.Title == "" && articleTitle != "" {
 		title = articleTitle
 	}
-
 	content := htmlToMarkdown(contentHTML)
 	if strings.TrimSpace(content) == "" {
 		return resolvedFeedItem{item: types.FetchedItem{ExternalID: itemExternalID(feedURL, itemID), Title: title,
@@ -352,11 +351,8 @@ func (c *Connector) resolveItem(
 	if item.Author != nil {
 		author = item.Author.Name
 	}
-	if author == "" && feed.Author != nil {
-		author = feed.Author.Name
-	}
-	if author == "" {
-		author = publisher
+	if publisher == "" && feed.Author != nil {
+		publisher = feed.Author.Name
 	}
 
 	return resolvedFeedItem{
@@ -377,6 +373,7 @@ func (c *Connector) resolveItem(
 				"guid":         item.GUID,
 				"link":         item.Link,
 				"author":       author,
+				"publisher":    publisher,
 				"published_at": item.Published,
 			},
 		},

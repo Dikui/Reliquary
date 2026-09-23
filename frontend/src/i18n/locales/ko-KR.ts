@@ -6343,6 +6343,7 @@ export default {
     draftTip: '임시 저장된 내용, 검색에 포함되지 않음',
     intakeWaiting: '검토 대기 중',
     intakeAuthor: '작성자',
+    intakePublisher: '발행 주체',
     intakeOriginalUrl: '원본 URL',
     intakePublishedAt: '게시 시간',
     intakePreviewOriginal: '원문 미리보기',

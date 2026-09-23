@@ -63,7 +63,7 @@ func TestProcessSyncRSSFailureKeepsSourceActiveForNextRun(t *testing.T) {
 	logs := &processSyncSyncLogRepo{logs: map[string]*types.SyncLog{}}
 	svc := &DataSourceService{
 		dsRepo: newKBDeleteDSRepo(ds.KnowledgeBaseID, ds), syncLogRepo: logs,
-		kbService: &processSyncKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, TenantID: ds.TenantID}},
+		kbService:         &processSyncKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, TenantID: ds.TenantID}},
 		connectorRegistry: datasource.NewConnectorRegistry(),
 	}
 	for _, id := range []string{"first", "second"} {
@@ -539,13 +539,13 @@ func TestIngestItem_RSSUsesUnifiedIntakeWithSourceEvidence(t *testing.T) {
 	ds := &types.DataSource{ID: "rss-source", TenantID: 1, KnowledgeBaseID: "kb", Type: types.ConnectorTypeRSS}
 	updated, err := svc.ingestItem(context.Background(), ds, &types.FetchedItem{
 		ExternalID: "feed-item", Title: "Article", Content: []byte("Full original text"), URL: "https://example.com/article",
-		Metadata: map[string]string{"author": "Original Author", "published_at": "2026-09-23T08:30:00Z", "channel": types.ChannelRSS},
+		Metadata: map[string]string{"author": "Original Author", "publisher": "Publishing Institution", "published_at": "2026-09-23T08:30:00Z", "channel": types.ChannelRSS},
 	}, []string{"source-tag"})
 	require.NoError(t, err)
 	require.False(t, updated)
 	require.Equal(t, types.ManualKnowledgeStatusPublish, ks.payload.Status)
 	require.Equal(t, "Full original text", ks.payload.Content)
-	require.Equal(t, types.SourceInfo{Author: "Original Author", OriginalURL: "https://example.com/article", PublishedAt: "2026-09-23T08:30:00Z"}, ks.payload.SourceInfo)
+	require.Equal(t, types.SourceInfo{Author: "Original Author", Publisher: "Publishing Institution", OriginalURL: "https://example.com/article", PublishedAt: "2026-09-23T08:30:00Z"}, ks.payload.SourceInfo)
 	require.Equal(t, "rss-source", ks.payload.SourceMetadata["datasource_id"])
 	require.Equal(t, []string{"source-tag"}, ks.payload.TagIDs)
 	require.Equal(t, types.ChannelRSS, ks.channel)

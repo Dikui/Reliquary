@@ -234,7 +234,7 @@ export function uploadKnowledgeFile(
 // data.tag_ids: 可选，指定知识所属的多个标签 ID
 export function createKnowledgeFromURL(
   kbId: string,
-  data: { url: string; enable_multimodel?: boolean; tag_ids?: string[]; process_config?: KnowledgeProcessOverrides; source_info?: { author?: string; original_url?: string; published_at?: string } },
+  data: { url: string; enable_multimodel?: boolean; tag_ids?: string[]; process_config?: KnowledgeProcessOverrides; source_info?: { author?: string; publisher?: string; original_url?: string; published_at?: string } },
 ) {
   return post(`/api/v1/knowledge-bases/${kbId}/knowledge/url`, data);
 }
@@ -249,7 +249,7 @@ export function createManualKnowledge(
     status: string
     tag_ids?: string[]
     process_config?: KnowledgeProcessOverrides
-    source_info?: { author?: string; original_url?: string; published_at?: string }
+    source_info?: { author?: string; publisher?: string; original_url?: string; published_at?: string }
   },
 ) {
   return post(`/api/v1/knowledge-bases/${kbId}/knowledge/manual`, data);
@@ -383,7 +383,7 @@ export function previewKnowledgeFile(id: string) {
   return getDown(`/api/v1/knowledge/${id}/preview`);
 }
 
-export function reviewKnowledge(id: string, data: { action: 'retry' | 'discard'; source_info?: { author?: string; original_url?: string; published_at?: string } }) {
+export function reviewKnowledge(id: string, data: { action: 'retry' | 'discard'; source_info?: { author?: string; publisher?: string; original_url?: string; published_at?: string } }) {
   return post(`/api/v1/knowledge/${id}/review`, data);
 }
 

@@ -1285,7 +1285,7 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 				"external_id": item.ExternalID, "datasource_id": ds.ID, "source_resource_id": item.SourceResourceID,
 			},
 			SourceInfo: types.SourceInfo{
-				Author: metadata["author"], OriginalURL: item.URL, PublishedAt: metadata["published_at"],
+				Author: metadata["author"], Publisher: metadata["publisher"], OriginalURL: item.URL, PublishedAt: metadata["published_at"],
 			},
 		}
 		_, err = s.knowledgeService.CreateKnowledgeFromManual(ctx, ds.KnowledgeBaseID, payload, channel)

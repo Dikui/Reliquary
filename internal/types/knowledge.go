@@ -270,6 +270,7 @@ type ManualKnowledgeMetadata struct {
 // a publisher's original date precision is never invented by this service.
 type SourceInfo struct {
 	Author      string `json:"author,omitempty"`
+	Publisher   string `json:"publisher,omitempty"`
 	OriginalURL string `json:"original_url,omitempty"`
 	PublishedAt string `json:"published_at,omitempty"`
 }

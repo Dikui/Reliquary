@@ -6345,6 +6345,7 @@ export default {
     draftTip: '暂存内容，未参与检索',
     intakeWaiting: '待审核',
     intakeAuthor: '作者',
+    intakePublisher: '发布主体',
     intakeOriginalUrl: '原始链接',
     intakePublishedAt: '发布时间',
     intakePreviewOriginal: '预览原文',
