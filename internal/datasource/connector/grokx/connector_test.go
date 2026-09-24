@@ -49,7 +49,7 @@ func TestGrokDiscoveryNeverTreatsModelTextAsOriginal(t *testing.T) {
 		if len(body.Tools) != 1 || body.Tools[0].Type != "x_search" || len(body.Tools[0].Handles) != 1 || body.Tools[0].Handles[0] != "bcherny" || body.Tools[0].From != "2026-09-23" {
 			t.Fatalf("unexpected X Search scope: %+v", body.Tools)
 		}
-		response := `{"status":"completed","output":[{"type":"message","content":[{"text":"Model-generated alleged original post","annotations":[{"url":"https://x.com/bcherny/status/123"},{"url":"https://x.com/other/status/456"}]}]}],"usage":{"input_tokens":13,"cost_in_usd_ticks":150000,"server_side_tool_usage_details":{"x_posts_fetched":2}}}`
+		response := `{"status":"completed","output":[{"type":"message","content":[{"text":"Model-generated alleged original post","annotations":[{"url":"https://x.com/bcherny/status/123"},{"url":"https://x.com/other/status/456"}]}]}],"usage":{"input_tokens":13,"cost_in_usd_ticks":150000,"server_side_tool_usage_details":{"x_posts_fetched":2,"x_users_fetched":1}}}`
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(response)), Header: make(http.Header)}, nil
 	})}
 	if err := c.Validate(context.Background(), config); err != nil {
@@ -60,7 +60,7 @@ func TestGrokDiscoveryNeverTreatsModelTextAsOriginal(t *testing.T) {
 		t.Fatalf("model output was ingested or cursor missing: items=%d cursor=%+v", len(items), cursor)
 	}
 	var partial *datasource.PartialFetchError
-	if !errors.As(err, &partial) || !strings.Contains(err.Error(), "https://x.com/bcherny/status/123") || !strings.Contains(err.Error(), "cost_in_usd_ticks_api_reported=150000") || strings.Contains(err.Error(), "https://x.com/other/status/456") {
+	if !errors.As(err, &partial) || !strings.Contains(err.Error(), "https://x.com/bcherny/status/123") || !strings.Contains(err.Error(), "x_users_fetched=1") || !strings.Contains(err.Error(), "cost_in_usd_ticks_api_reported=150000") || strings.Contains(err.Error(), "https://x.com/other/status/456") {
 		t.Fatalf("unexpected discovery warning: %v", err)
 	}
 }

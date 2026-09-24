@@ -178,6 +178,7 @@ func (c *Connector) search(ctx context.Context, config *types.DataSourceConfig, 
 			Tool         struct {
 				SearchCalls  *int64 `json:"x_search_calls"`
 				PostsFetched *int64 `json:"x_posts_fetched"`
+				UsersFetched *int64 `json:"x_users_fetched"`
 			} `json:"server_side_tool_usage_details"`
 		} `json:"usage"`
 	}
@@ -213,7 +214,7 @@ func (c *Connector) search(ctx context.Context, config *types.DataSourceConfig, 
 	for _, field := range []struct {
 		name  string
 		value *int64
-	}{{"input_tokens", result.Usage.InputTokens}, {"output_tokens", result.Usage.OutputTokens}, {"x_search_calls", result.Usage.Tool.SearchCalls}, {"x_posts_fetched", result.Usage.Tool.PostsFetched}, {"cost_in_usd_ticks_api_reported", result.Usage.CostTicks}} {
+	}{{"input_tokens", result.Usage.InputTokens}, {"output_tokens", result.Usage.OutputTokens}, {"x_search_calls", result.Usage.Tool.SearchCalls}, {"x_posts_fetched", result.Usage.Tool.PostsFetched}, {"x_users_fetched", result.Usage.Tool.UsersFetched}, {"cost_in_usd_ticks_api_reported", result.Usage.CostTicks}} {
 		if field.value != nil {
 			metrics += fmt.Sprintf(" %s=%d", field.name, *field.value)
 		}
