@@ -501,7 +501,7 @@ func (s *DataSourceService) ManualSync(ctx context.Context, dsID string) (*types
 		syncLog.ErrorMessage = err.Error()
 		_ = s.syncLogRepo.Update(ctx, syncLog)
 		if ds.Status != types.DataSourceStatusPaused {
-			if ds.Type == types.ConnectorTypeRSS {
+			if ds.Type == types.ConnectorTypeRSS || ds.Type == types.ConnectorTypeGrokX {
 				ds.Status = types.DataSourceStatusActive
 			} else {
 				ds.Status = types.DataSourceStatusError
@@ -615,8 +615,8 @@ func (s *DataSourceService) ProcessSync(ctx context.Context, task *asynq.Task) e
 	}
 	wasPaused := ds.Status == types.DataSourceStatusPaused
 	defer func() {
-		// A transient RSS failure is visible in the log, but must not stop tomorrow's run.
-		if ds.Type == types.ConnectorTypeRSS && !wasPaused && ds.Status == types.DataSourceStatusError {
+		// A transient daily-source failure is visible in the log, but must not stop tomorrow's run.
+		if (ds.Type == types.ConnectorTypeRSS || ds.Type == types.ConnectorTypeGrokX) && !wasPaused && ds.Status == types.DataSourceStatusError {
 			ds.Status = types.DataSourceStatusActive
 			_ = s.dsRepo.UpdateSyncState(ctx, ds)
 		}
@@ -674,7 +674,7 @@ func (s *DataSourceService) ProcessSync(ctx context.Context, task *asynq.Task) e
 	// Surface the KB's multimodal/VLM state to the connector so it only extracts
 	// embedded images for OCR when the KB can actually ingest them (never persisted).
 	config.MultimodalEnabled = kb.IsMultimodalEnabled()
-	if ds.Type == types.ConnectorTypeRSS {
+	if ds.Type == types.ConnectorTypeRSS || ds.Type == types.ConnectorTypeGrokX {
 		config.IngestSince = ds.CreatedAt
 	}
 
@@ -784,7 +784,11 @@ func (s *DataSourceService) ProcessSync(ctx context.Context, task *asynq.Task) e
 	syncErrorMessage := ""
 	if len(fetchWarnings) > 0 {
 		syncStatus = types.SyncLogStatusPartial
-		syncErrorMessage = fmt.Sprintf("Some feeds failed: %s", strings.Join(fetchWarnings, "; "))
+		if ds.Type == types.ConnectorTypeGrokX {
+			syncErrorMessage = "Grok discovery lacks original evidence; see run details"
+		} else {
+			syncErrorMessage = fmt.Sprintf("Some feeds failed: %s", strings.Join(fetchWarnings, "; "))
+		}
 		for _, w := range fetchWarnings {
 			result.Errors = append(result.Errors, types.SyncItemError{Message: w})
 		}

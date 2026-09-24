@@ -277,6 +277,14 @@ var ConnectorMetadataRegistry = map[string]ConnectorMetadata{
 		AuthType:     "custom",
 		Capabilities: []string{"incremental"},
 	},
+	types.ConnectorTypeGrokX: {
+		Type:         types.ConnectorTypeGrokX,
+		Name:         "X discovery via Grok",
+		Description:  "Discover X post links; original content remains unverified",
+		Priority:     13,
+		AuthType:     "api_key",
+		Capabilities: []string{"incremental"},
+	},
 	types.ConnectorTypeGitLab: {
 		Type:         types.ConnectorTypeGitLab,
 		Name:         "GitLab",

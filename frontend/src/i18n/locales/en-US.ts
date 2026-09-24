@@ -6152,6 +6152,7 @@ export default {
       notion: 'Notion',
       yuque: 'Yuque',
       rss: 'RSS / Atom / Sitemap / Article listing',
+      grok_x: 'Grok X source',
       ima: 'Tencent IMA',
       gitlab: 'GitLab'
     },
@@ -6163,6 +6164,7 @@ export default {
       notion: 'Sync pages and databases from Notion',
       yuque: 'Sync documents from Yuque knowledge bases',
       rss: 'Sync articles from RSS / Atom feeds, sitemaps or listing pages',
+      grok_x: 'Discover X posts with Grok; do not ingest without verified original text and images',
       ima: 'Sync documents, notes and files from Tencent IMA knowledge bases (AI sessions and video parses are not supported)',
       gitlab: 'Sync files from GitLab projects'
     },
@@ -6194,7 +6196,10 @@ export default {
       articlePathPrefix: 'Article path prefix',
       articlePathPrefixHint: 'Required for sitemaps and article listings, for example /news/; leave blank for feeds. Publication dates come from articles.',
       authHeaders: 'Custom headers (optional)',
-      authHeadersHint: 'For private feeds. One per line in "Name: Value" form, e.g. Authorization: Bearer xxxx'
+      authHeadersHint: 'For private feeds. One per line in "Name: Value" form, e.g. Authorization: Bearer xxxx',
+      grokApiKey: 'Grok API key',
+      grokAccount: 'X account (create one source per account)',
+      grokEvidenceHint: 'Only discovered post links and usage are recorded. Posts without verified original text and image bytes are not added to the knowledge base.'
     },
     comingSoon: 'Coming soon',
     docHint: 'Get credentials at:',

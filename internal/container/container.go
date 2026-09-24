@@ -63,6 +63,7 @@ import (
 	"reliquary/internal/datasource/connector/feishu/drive"
 	"reliquary/internal/datasource/connector/feishu/wiki"
 	gitlabConnector "reliquary/internal/datasource/connector/gitlab"
+	grokXConnector "reliquary/internal/datasource/connector/grokx"
 	imaConnector "reliquary/internal/datasource/connector/ima"
 	notionConnector "reliquary/internal/datasource/connector/notion"
 	rssConnector "reliquary/internal/datasource/connector/rss"
@@ -1695,6 +1696,9 @@ func initConnectorRegistry() (*datasource.ConnectorRegistry, error) {
 	}
 	if err := registry.Register(rssConnector.NewConnector()); err != nil {
 		errs = errors.Join(errs, fmt.Errorf("register rss connector: %w", err))
+	}
+	if err := registry.Register(grokXConnector.NewConnector()); err != nil {
+		errs = errors.Join(errs, fmt.Errorf("register grok_x connector: %w", err))
 	}
 	if err := registry.Register(gitlabConnector.NewConnector()); err != nil {
 		errs = errors.Join(errs, fmt.Errorf("register gitlab connector: %w", err))

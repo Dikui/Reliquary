@@ -627,6 +627,13 @@ const connectorDefs = computed<ConnectorDef[]>(() => [
     ],
   },
   {
+    type: 'grok_x', available: true, docUrl: 'https://docs.x.ai/developers/tools/x-search',
+    permissionDocUrl: '', permissionPageUrl: '', requiredPermissions: [],
+    fields: [
+      { key: 'api_key', labelKey: 'datasource.field.grokApiKey', placeholder: 'xai-...', secret: true },
+    ],
+  },
+  {
     type: 'gitlab', available: true, docUrl: '', permissionDocUrl: '', permissionPageUrl: '', requiredPermissions: [],
     fields: [
       { key: 'base_url', labelKey: 'datasource.gitlab.baseUrl', placeholder: 'https://gitlab.example.com' },
@@ -766,7 +773,7 @@ function selectType(def: ConnectorDef) {
   if (!def.available) return
   form.value.type = def.type
   form.value.name = t(`datasource.connector.${def.type}`)
-  if (def.type === 'rss') form.value.sync_schedule = '0 0 2 * * *'
+  if (def.type === 'rss' || def.type === 'grok_x') form.value.sync_schedule = '0 0 2 * * *'
   form.value.config.credentials = {}
   if (isGitLabConnector(def.type)) addGitLabProject()
   rssAuthHeaders.value = []
@@ -802,6 +809,15 @@ const rssPresets = [
   ['Ethan Mollick', 'https://www.oneusefulthing.org/feed', 'Ethan Mollick'],
   ['Latent Space', 'https://www.latent.space/feed', 'Latent Space'],
   ['宝玉', 'https://baoyu.io/feed.xml', '宝玉'],
+] as const
+
+function selectGrokAccount(name: string, handle: string) {
+  form.value.name = name
+  form.value.config.settings.handle = handle
+}
+
+const grokAccounts = [
+  ['Boris Cherny', 'bcherny'], ['宝玉', 'dotey'], ['Tencent 腾讯', 'TencentGlobal'],
 ] as const
 
 // --- Test connection (stateless, no DB write) ---
@@ -1001,6 +1017,10 @@ function validateRssFeedUrls(): boolean {
 function validateStep1Fields(): boolean {
   syncRssAuthHeadersToCredentials()
   if (!validateRssFeedUrls()) return false
+  if (form.value.type === 'grok_x' && !form.value.config.settings.handle) {
+    MessagePlugin.warning(`${t('datasource.field.grokAccount')} ${t('datasource.isRequired')}`)
+    return false
+  }
   if (isEdit.value && credentialsConfigured.value && !replaceCredentialsMode.value) {
     return true
   }
@@ -1460,6 +1480,15 @@ const drawerConfirmText = computed(() => {
           <t-input v-model="form.config.settings.article_path_prefix" placeholder="/news/" />
           <p class="form-desc">{{ t('datasource.field.articlePathPrefixHint') }}</p>
         </div>
+      </section>
+
+      <section v-if="form.type === 'grok_x'" class="setting-drawer__section">
+        <h4 class="setting-drawer__section-title">{{ t('datasource.field.grokAccount') }}</h4>
+        <div class="form-item rss-presets">
+          <t-button v-for="[name, handle] in grokAccounts" :key="handle" variant="outline" size="small"
+            @click="selectGrokAccount(name, handle)">{{ name }} (@{{ handle }})</t-button>
+        </div>
+        <p class="form-desc">{{ t('datasource.field.grokEvidenceHint') }}</p>
       </section>
 
       <section class="setting-drawer__section">

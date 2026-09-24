@@ -58,21 +58,25 @@ func TestProcessSyncCancelsWhenKnowledgeBaseDeleted(t *testing.T) {
 	require.NotNil(t, updated.FinishedAt)
 }
 
-func TestProcessSyncRSSFailureKeepsSourceActiveForNextRun(t *testing.T) {
-	ds := &types.DataSource{ID: "rss-1", TenantID: 1, KnowledgeBaseID: "kb-1", Type: types.ConnectorTypeRSS, Status: types.DataSourceStatusActive}
-	logs := &processSyncSyncLogRepo{logs: map[string]*types.SyncLog{}}
-	svc := &DataSourceService{
-		dsRepo: newKBDeleteDSRepo(ds.KnowledgeBaseID, ds), syncLogRepo: logs,
-		kbService:         &processSyncKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, TenantID: ds.TenantID}},
-		connectorRegistry: datasource.NewConnectorRegistry(),
-	}
-	for _, id := range []string{"first", "second"} {
-		logs.logs[id] = &types.SyncLog{ID: id, DataSourceID: ds.ID, TenantID: ds.TenantID, Status: types.SyncLogStatusRunning}
-		payload, err := json.Marshal(types.DataSourceSyncPayload{DataSourceID: ds.ID, TenantID: ds.TenantID, SyncLogID: id})
-		require.NoError(t, err)
-		require.Error(t, svc.ProcessSync(context.Background(), asynq.NewTask(types.TypeDataSourceSync, payload)))
-		assert.Equal(t, types.SyncLogStatusFailed, logs.logs[id].Status)
-		assert.Equal(t, types.DataSourceStatusActive, ds.Status)
+func TestProcessSyncDailySourceFailureKeepsSourceActiveForNextRun(t *testing.T) {
+	for _, connectorType := range []string{types.ConnectorTypeRSS, types.ConnectorTypeGrokX} {
+		t.Run(connectorType, func(t *testing.T) {
+			ds := &types.DataSource{ID: connectorType + "-1", TenantID: 1, KnowledgeBaseID: "kb-1", Type: connectorType, Status: types.DataSourceStatusActive}
+			logs := &processSyncSyncLogRepo{logs: map[string]*types.SyncLog{}}
+			svc := &DataSourceService{
+				dsRepo: newKBDeleteDSRepo(ds.KnowledgeBaseID, ds), syncLogRepo: logs,
+				kbService:         &processSyncKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, TenantID: ds.TenantID}},
+				connectorRegistry: datasource.NewConnectorRegistry(),
+			}
+			for _, id := range []string{"first", "second"} {
+				logs.logs[id] = &types.SyncLog{ID: id, DataSourceID: ds.ID, TenantID: ds.TenantID, Status: types.SyncLogStatusRunning}
+				payload, err := json.Marshal(types.DataSourceSyncPayload{DataSourceID: ds.ID, TenantID: ds.TenantID, SyncLogID: id})
+				require.NoError(t, err)
+				require.Error(t, svc.ProcessSync(context.Background(), asynq.NewTask(types.TypeDataSourceSync, payload)))
+				assert.Equal(t, types.SyncLogStatusFailed, logs.logs[id].Status)
+				assert.Equal(t, types.DataSourceStatusActive, ds.Status)
+			}
+		})
 	}
 }
 
