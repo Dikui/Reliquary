@@ -152,17 +152,11 @@ func (s *knowledgeService) ReviewRSSUpdate(ctx context.Context, oldID string, pa
 	if err := s.repo.SetKnowledgeTags(ctx, candidate.ID, ids); err != nil {
 		return false, errors.Join(err, removeCandidate())
 	}
-	if err := s.DeleteKnowledge(ctx, old.ID); err != nil {
-		return false, err
-	}
-	if err := s.repo.HardDeleteKnowledge(ctx, tenantID, old.ID); err != nil {
-		return false, err
-	}
 	delete(staged.SourceMetadata, "rss_update_candidate")
 	staged.SourceMetadata["external_id"] = payload.SourceMetadata["external_id"]
 	var candidateMeta map[string]json.RawMessage
 	if err := json.Unmarshal(candidate.Metadata, &candidateMeta); err != nil {
-		return false, err
+		return false, errors.Join(err, removeCandidate())
 	}
 	delete(candidateMeta, "rss_update_candidate")
 	for _, key := range []string{"external_id", "content_sha256"} {
@@ -170,10 +164,18 @@ func (s *knowledgeService) ReviewRSSUpdate(ctx context.Context, oldID string, pa
 	}
 	metadata, err := json.Marshal(candidateMeta)
 	if err != nil {
-		return false, err
+		return false, errors.Join(err, removeCandidate())
 	}
 	candidate.Metadata, candidate.EnableStatus, candidate.UpdatedAt = types.JSON(metadata), "enabled", time.Now()
 	if err := s.repo.UpdateKnowledge(ctx, candidate); err != nil {
+		return false, errors.Join(err, removeCandidate())
+	}
+	// Make the reviewed replacement available before deleting the old row: a
+	// deletion failure may leave two copies, but must not remove the only copy.
+	if err := s.DeleteKnowledge(ctx, old.ID); err != nil {
+		return false, err
+	}
+	if err := s.repo.HardDeleteKnowledge(ctx, tenantID, old.ID); err != nil {
 		return false, err
 	}
 	if len(toAdd)+len(toRemove) > 0 {
