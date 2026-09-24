@@ -40,9 +40,18 @@ func parseListing(data []byte, listingURL, pathPrefix string) ([]*gofeed.Item, e
 		if !sitemapArticleURL(absolute, base, pathPrefix) {
 			return true
 		}
+		if strings.EqualFold(base.Hostname(), "cursor.com") && strings.HasPrefix(resolved.Path, "/blog/topic/") {
+			return true
+		}
 		date := strings.TrimSpace(a.Closest(".menu-card").Find(".card-date").First().Text())
 		if _, valid := parseSiteDate(date); !valid {
 			date = ""
+		}
+		signal := now
+		if raw, ok := a.Find("time[datetime]").First().Attr("datetime"); ok {
+			if parsed, valid := parseSiteDate(raw); valid {
+				signal = parsed
+			}
 		}
 		if existing := seen[absolute]; existing != nil {
 			if existing.Published == "" {
@@ -55,7 +64,7 @@ func parseListing(data []byte, listingURL, pathPrefix string) ([]*gofeed.Item, e
 			title = strings.TrimSpace(a.Text())
 		}
 		item := &gofeed.Item{GUID: absolute, Link: absolute, Title: title,
-			Published: date, Updated: now.Format(time.RFC3339Nano), UpdatedParsed: &now,
+			Published: date, Updated: signal.Format(time.RFC3339Nano), UpdatedParsed: &signal,
 			Custom: map[string]string{"listing_title_needs_article": "true"}}
 		seen[absolute] = item
 		items = append(items, item)

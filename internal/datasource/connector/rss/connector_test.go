@@ -167,6 +167,18 @@ func TestListingUsesArticlePublicationDateAndSameSiteLinks(t *testing.T) {
 	}
 }
 
+func TestCursorListingSkipsTopicsAndUsesCardTime(t *testing.T) {
+	page := []byte(`<a href="/blog/topic/research">Research Posts</a>` +
+		`<a href="/blog/old"><time dateTime="2026-09-02T12:00:00.000Z">Sep 2, 2026</time></a>` +
+		`<a href="/blog/current"><time dateTime="2026-09-23T12:00:00.000Z">Sep 23, 2026</time></a>`)
+	items, err := parseListing(page, "https://cursor.com/blog", "/blog/")
+	if err != nil || len(items) != 2 || items[0].Link != "https://cursor.com/blog/old" ||
+		items[0].UpdatedParsed.Format(time.RFC3339) != "2026-09-02T12:00:00Z" ||
+		items[1].UpdatedParsed.Format(time.RFC3339) != "2026-09-23T12:00:00Z" {
+		t.Fatalf("Cursor listing must exclude topics and retain article date signals: items=%+v err=%v", items, err)
+	}
+}
+
 func TestDeepSeekChangelogSplitsDatedEntries(t *testing.T) {
 	const pageURL = "https://api-docs.deepseek.com/zh-cn/updates/"
 	if !isDeepSeekUpdatesURL(pageURL) || isDeepSeekUpdatesURL("https://example.com/zh-cn/updates/") {
