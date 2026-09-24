@@ -167,7 +167,7 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 	}
 	if videoCount > 0 {
 		got := goquery.NewDocumentFromNode(article.Node).Find(`a[data-reliquary-video]`).Length()
-		if got == 0 {
+		if got == 0 && (content.Is("article") || content.Is("main")) {
 			// Readability can omit a video in the title/hero block while retaining the body.
 			content.Children().EachWithBreak(func(_ int, header *goquery.Selection) bool {
 				links := header.Find(`a[data-reliquary-video]`)

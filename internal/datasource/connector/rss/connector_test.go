@@ -70,6 +70,23 @@ func TestExtractArticleUsesLargestImageVariant(t *testing.T) {
 	}
 }
 
+func TestExtractArticleDoesNotRestorePageWideVideo(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/video.mp4" {
+			w.Header().Set("Content-Type", "video/mp4")
+			w.WriteHeader(http.StatusPartialContent)
+			_, _ = w.Write([]byte{0})
+			return
+		}
+		fmt.Fprintf(w, `<html><body><h1>Article</h1><div>%s</div><footer><video src="/video.mp4"></video></footer></body></html>`, longArticleBody)
+	}))
+	defer server.Close()
+	_, _, _, _, _, err := newClient(nil).extractArticle(context.Background(), server.URL+"/article")
+	if err == nil || !strings.Contains(err.Error(), "video links lost during extraction") {
+		t.Fatalf("page-wide fallback must not restore footer media: %v", err)
+	}
+}
+
 func TestClientRejectsTruncatedArticle(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(strings.Repeat("x", maxArticleSize+1)))
