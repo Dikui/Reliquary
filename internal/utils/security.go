@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -845,11 +844,7 @@ func SSRFSafeDialContext(ctx context.Context, network, addr string) (net.Conn, e
 
 	// If we get here, all IPs are safe. Pin the connection to the validated DNS
 	// answers; TLS still uses the request hostname for SNI/certificate checks.
-	// Prefer IPv4 when both families are available: an unreachable IPv6 address
-	// must not consume the entire caller deadline before IPv4 is tried.
-	sort.SliceStable(ips, func(i, j int) bool {
-		return ips[i].IP.To4() != nil && ips[j].IP.To4() == nil
-	})
+	// Keep the resolver's address order after validating all answers.
 	dialer := &net.Dialer{
 		Timeout:   3 * time.Second,
 		KeepAlive: 30 * time.Second,

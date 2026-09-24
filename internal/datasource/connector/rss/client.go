@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -146,6 +147,28 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 	}).Length() > 0 {
 		return "", "", "", "", "", fmt.Errorf("article contains unresolved content placeholder")
 	}
+	goquery.NewDocumentFromNode(article.Node).Find("img").Each(func(_ int, img *goquery.Selection) {
+		variants, ok := img.Attr("data-srcset")
+		if !ok {
+			variants, _ = img.Attr("srcset")
+		}
+		bestURL, bestSize := "", float64(0)
+		for _, variant := range strings.Split(variants, ",") {
+			fields := strings.Fields(variant)
+			if len(fields) != 2 || (!strings.HasSuffix(fields[1], "w") && !strings.HasSuffix(fields[1], "x")) {
+				continue
+			}
+			size, parseErr := strconv.ParseFloat(fields[1][:len(fields[1])-1], 64)
+			if parseErr == nil && size > bestSize {
+				bestURL, bestSize = fields[0], size
+			}
+		}
+		if bestURL != "" {
+			if variantURL, parseErr := url.Parse(bestURL); parseErr == nil {
+				img.SetAttr("src", pageURL.ResolveReference(variantURL).String())
+			}
+		}
+	})
 
 	var buf bytes.Buffer
 	if err := article.RenderHTML(&buf); err != nil {

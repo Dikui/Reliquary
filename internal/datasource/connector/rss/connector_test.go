@@ -55,6 +55,21 @@ func TestFetchArticleForResearchUsesOriginalPage(t *testing.T) {
 	}
 }
 
+func TestExtractArticleUsesLargestImageVariant(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintf(w, `<html><head><title>Image article</title></head><body><article><h1>Image article</h1>%s<img src="/blur.webp" data-srcset="/medium.webp 900w, /original.webp 2200w" alt="result"></article></body></html>`, longArticleBody)
+	}))
+	defer server.Close()
+
+	content, _, _, _, _, err := newClient(nil).extractArticle(context.Background(), server.URL+"/article")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(content, server.URL+"/original.webp") || strings.Contains(content, server.URL+"/blur.webp") {
+		t.Fatalf("article must preserve the largest available image instead of the blur preview: %s", content)
+	}
+}
+
 func TestClientRejectsTruncatedArticle(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(strings.Repeat("x", maxArticleSize+1)))
