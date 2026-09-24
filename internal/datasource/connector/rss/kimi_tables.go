@@ -28,39 +28,12 @@ func recoverKimiTables(doc *goquery.Document, content *goquery.Selection, pageUR
 	if placeholders.Length() == 0 {
 		return 0, nil
 	}
-	var stream strings.Builder
-	doc.Find("script").Each(func(_ int, script *goquery.Selection) {
-		text := strings.TrimSpace(script.Text())
-		const prefix = "self.__next_f.push("
-		if !strings.HasPrefix(text, prefix) || !strings.HasSuffix(text, ")") {
-			return
-		}
-		var call []json.RawMessage
-		if json.Unmarshal([]byte(text[len(prefix):len(text)-1]), &call) != nil || len(call) != 2 || string(call[0]) != "1" {
-			return
-		}
-		var chunk string
-		if json.Unmarshal(call[1], &chunk) == nil {
-			stream.WriteString(chunk)
-		}
-	})
-	flight := stream.String()
+	flight, chunks, err := kimiFlightData(doc)
+	if err != nil {
+		return 0, err
+	}
 	if flight == "" {
 		return 0, nil
-	}
-	chunks := map[string]json.RawMessage{}
-	for pos := 0; pos < len(flight); {
-		match := kimiFlightText.FindStringSubmatchIndex(flight[pos:])
-		if match == nil {
-			break
-		}
-		start := pos + match[1]
-		length, err := strconv.ParseUint(flight[pos+match[4]:pos+match[5]], 16, 32)
-		if err != nil || length > uint64(len(flight)-start) {
-			return 0, fmt.Errorf("Kimi embedded data truncated")
-		}
-		chunks[flight[pos+match[2]:pos+match[3]]] = json.RawMessage(flight[start : start+int(length)])
-		pos = start + int(length)
 	}
 	var chartTable, benchmarkTable string
 	for _, match := range kimiFlightComponent.FindAllStringSubmatchIndex(flight, -1) {
@@ -105,6 +78,44 @@ func recoverKimiTables(doc *goquery.Document, content *goquery.Selection, pageUR
 	chartPlaceholder.ReplaceWithHtml(chartTable)
 	benchmarkPlaceholder.ReplaceWithHtml(benchmarkTable)
 	return 2, nil
+}
+
+func kimiFlightData(doc *goquery.Document) (string, map[string]json.RawMessage, error) {
+	var stream strings.Builder
+	doc.Find("script").Each(func(_ int, script *goquery.Selection) {
+		text := strings.TrimSpace(script.Text())
+		const prefix = "self.__next_f.push("
+		if !strings.HasPrefix(text, prefix) || !strings.HasSuffix(text, ")") {
+			return
+		}
+		var call []json.RawMessage
+		if json.Unmarshal([]byte(text[len(prefix):len(text)-1]), &call) != nil || len(call) != 2 || string(call[0]) != "1" {
+			return
+		}
+		var chunk string
+		if json.Unmarshal(call[1], &chunk) == nil {
+			stream.WriteString(chunk)
+		}
+	})
+	flight := stream.String()
+	if flight == "" {
+		return "", nil, nil
+	}
+	chunks := map[string]json.RawMessage{}
+	for pos := 0; pos < len(flight); {
+		match := kimiFlightText.FindStringSubmatchIndex(flight[pos:])
+		if match == nil {
+			break
+		}
+		start := pos + match[1]
+		length, err := strconv.ParseUint(flight[pos+match[4]:pos+match[5]], 16, 32)
+		if err != nil || length > uint64(len(flight)-start) {
+			return "", nil, fmt.Errorf("Kimi embedded data truncated")
+		}
+		chunks[flight[pos+match[2]:pos+match[3]]] = json.RawMessage(flight[start : start+int(length)])
+		pos = start + int(length)
+	}
+	return flight, chunks, nil
 }
 
 func kimiValue(raw json.RawMessage) (string, error) {

@@ -96,6 +96,17 @@ func TestRecoverKimiTablesOnlyWhenEveryPlaceholderHasData(t *testing.T) {
 	}
 }
 
+func TestRenderKimiChatPreservesTranscriptAndOriginalImages(t *testing.T) {
+	raw := []byte(`{"messages":[{"role":"user","blocks":[{"text":{"content":"Find path"}},{"file":{"meta":{"name":"maze.jpg","contentType":"image/jpeg"},"blob":{"signUrl":"https://files.example/maze.jpg"}}}]},{"role":"assistant","blocks":[{"think":{"content":"Use BFS"}},{"tool":{"name":"ipython","args":"{\"code\":\"print(1)\"}","contents":[{"text":"done"},{"resourceLink":{"url":"https://files.example/preview.png","mimeType":"image/png","originalUrl":"https://files.example/original.png"}}]}},{"text":{"content":"Solved"}}]}]}`)
+	pageURL, _ := url.Parse("https://www.kimi.ai/blog/kimi-k2-5")
+	got, err := renderKimiChat(raw, pageURL)
+	if err != nil || strings.Count(got, "<img ") != 2 || !strings.Contains(got, "Find path") ||
+		!strings.Contains(got, "Use BFS") || !strings.Contains(got, "print(1)") ||
+		!strings.Contains(got, "https://files.example/original.png") || !strings.Contains(got, "Solved") {
+		t.Fatalf("chat transcript or original images lost: err=%v body=%s", err, got)
+	}
+}
+
 func TestExtractArticleDoesNotRestorePageWideVideo(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/video.mp4" {
