@@ -139,6 +139,13 @@ func TestArticlePublishedAtReadsStructuredDateAndFallsBackToHero(t *testing.T) {
 	if got := articlePublishedAt(structured, "https://mistral.ai/news/ocr-4/"); got != "2026-06-23T12:00:48.000Z" {
 		t.Fatalf("structured publication date = %q", got)
 	}
+	graph, err := goquery.NewDocumentFromReader(strings.NewReader(`<html><head><script type="application/ld+json">{"@graph":[{"@type":"NewsArticle","@id":"https://www.minimax.io/news/other#article","datePublished":"2026-02-01"},{"@type":"NewsArticle","@id":"https://www.minimax.io/news/minimax-speech-28#article","mainEntityOfPage":{"@type":"WebPage","@id":"https://www.minimax.io/news/minimax-speech-28"},"datePublished":"2026-01-23T00:00:00.000Z"}]}</script></head></html>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := articlePublishedAt(graph, "https://www.minimax.io/news/minimax-speech-28"); got != "2026-01-23T00:00:00.000Z" {
+		t.Fatalf("graph publication date = %q", got)
+	}
 	hero, err := goquery.NewDocumentFromReader(strings.NewReader(`<html><head><script type="application/ld+json">{"@type":"BlogPosting","mainEntityOfPage":"https://ai.meta.com/blog/model-release/","datePublished":"invalid"}</script></head><body><main><div><h1>Model release</h1><div><span>July 9, 2026</span><span>10 minute read</span></div></div></main></body></html>`))
 	if err != nil {
 		t.Fatal(err)
@@ -466,6 +473,16 @@ func TestConnector_FetchIncremental_RejectsUnpreservedEmbeddedMedia(t *testing.T
 	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
 	if err != nil || len(items) != 1 || items[0].Metadata["error"] == "" || len(items[0].Content) != 0 {
 		t.Fatalf("unpreserved canvas must not enter knowledge intake: items=%#v err=%v", items, err)
+	}
+	f.articleEmbed = `<h3>Full Benchmark Table</h3><div data-blog-hero-width="true"><div class="animate-pulse" style="min-height:360px"></div></div>`
+	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
+	if err != nil || len(items) != 1 || !strings.Contains(items[0].Metadata["error"], "unresolved content placeholder") || len(items[0].Content) != 0 {
+		t.Fatalf("unrendered benchmark table must not enter knowledge intake: items=%#v err=%v", items, err)
+	}
+	f.articleEmbed = `<a class="animate-pulse" href="/login"></a>`
+	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
+	if err != nil || len(items) != 1 || len(items[0].Content) == 0 {
+		t.Fatalf("empty animated link is not missing article content: items=%#v err=%v", items, err)
 	}
 	f.articleEmbed = ""
 	f.pageEmbed = `<iframe src="https://example.com/footer-ad"></iframe>`

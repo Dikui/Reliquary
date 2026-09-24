@@ -67,25 +67,34 @@ func articlePublishedAt(doc *goquery.Document, articleURL string) string {
 	}
 	var structuredDate string
 	doc.Find(`script[type="application/ld+json"]`).EachWithBreak(func(_ int, script *goquery.Selection) bool {
-		var article struct {
-			Type          string `json:"@type"`
-			URL           string `json:"url"`
-			ID            string `json:"@id"`
-			MainEntity    string `json:"mainEntityOfPage"`
-			DatePublished string `json:"datePublished"`
-		}
-		if json.Unmarshal([]byte(script.Text()), &article) != nil ||
-			(article.Type != "BlogPosting" && article.Type != "NewsArticle" && article.Type != "Article") {
+		var document map[string]interface{}
+		if json.Unmarshal([]byte(script.Text()), &document) != nil {
 			return true
 		}
+		candidates := []interface{}{document}
+		if graph, ok := document["@graph"].([]interface{}); ok {
+			candidates = append(candidates, graph...)
+		}
 		current, currentErr := url.Parse(articleURL)
-		for _, raw := range []string{article.MainEntity, article.URL, article.ID} {
-			claimed, err := url.Parse(raw)
-			if currentErr == nil && err == nil && claimed.Scheme == current.Scheme &&
-				strings.EqualFold(claimed.Host, current.Host) &&
-				strings.TrimRight(claimed.Path, "/") == strings.TrimRight(current.Path, "/") {
-				if _, valid := parseSiteDate(article.DatePublished); valid {
-					structuredDate = strings.TrimSpace(article.DatePublished)
+		for _, candidate := range candidates {
+			article, ok := candidate.(map[string]interface{})
+			if !ok || (article["@type"] != "BlogPosting" && article["@type"] != "NewsArticle" && article["@type"] != "Article") {
+				continue
+			}
+			date, _ := article["datePublished"].(string)
+			if _, valid := parseSiteDate(date); !valid {
+				continue
+			}
+			for _, value := range []interface{}{article["mainEntityOfPage"], article["url"], article["@id"]} {
+				if entity, ok := value.(map[string]interface{}); ok {
+					value = entity["@id"]
+				}
+				raw, _ := value.(string)
+				claimed, err := url.Parse(raw)
+				if currentErr == nil && err == nil && claimed.Scheme == current.Scheme &&
+					strings.EqualFold(claimed.Host, current.Host) &&
+					strings.TrimRight(claimed.Path, "/") == strings.TrimRight(current.Path, "/") {
+					structuredDate = strings.TrimSpace(date)
 					return false
 				}
 			}

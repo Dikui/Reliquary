@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	readability "codeberg.org/readeck/go-readability/v2"
@@ -139,6 +140,11 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 	}
 	if content.Find("iframe, video, audio, object, embed, canvas").Length() > 0 {
 		return "", "", "", "", "", fmt.Errorf("article contains unsupported embedded media")
+	}
+	if content.Find("div.animate-pulse").FilterFunction(func(_ int, node *goquery.Selection) bool {
+		return strings.TrimSpace(node.Text()) == "" && node.Find("img, picture, svg").Length() == 0
+	}).Length() > 0 {
+		return "", "", "", "", "", fmt.Errorf("article contains unresolved content placeholder")
 	}
 
 	var buf bytes.Buffer
