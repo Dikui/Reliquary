@@ -70,6 +70,32 @@ func TestExtractArticleUsesLargestImageVariant(t *testing.T) {
 	}
 }
 
+func TestRecoverKimiTablesOnlyWhenEveryPlaceholderHasData(t *testing.T) {
+	chart := `{"Overall Model Accuracy":[{"name":"Accuracy (%)","data":[{"name":"Model A","category":"Lab A","value":59.7}]}]}`
+	benchmark := `{"data":[{"benchmark":"Vision","type":"Open","scores":[{"model":"Model A","value":"69.7"}]}]}`
+	flight := fmt.Sprintf("1:T%x,%s\n2:T%x,%s\n", len(chart), chart, len(benchmark), benchmark) +
+		`3:["$","pre",null,{"className":"language-chartCompare","node":{"children":[{"type":"text","value":"$1"}]},"position":{}}]` + "\n" +
+		`4:["$","pre",null,{"className":"language-benchmarkTable","node":{"children":[{"type":"text","value":"$2"}]},"position":{}}]` + "\n"
+	call, _ := json.Marshal([]interface{}{1, flight})
+	page := `<html><body><article><h1>Report</h1><div data-blog-hero-width="true"><div class="animate-pulse"></div></div><div class="animate-pulse"></div></article><script>self.__next_f.push(` + string(call) + `)</script></body></html>`
+	pageURL, _ := url.Parse("https://www.kimi.ai/blog/perception-bench")
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(page))
+	if err != nil {
+		t.Fatal(err)
+	}
+	count, err := recoverKimiTables(doc, doc.Find("article"), pageURL)
+	if err != nil || count != 2 || doc.Find("article div.animate-pulse").Length() != 0 ||
+		!strings.Contains(doc.Find(`[data-blog-hero-width] [data-reliquary-kimi-table="benchmark"]`).Text(), "Vision") ||
+		!strings.Contains(doc.Find(`article > [data-reliquary-kimi-table="chart"]`).Text(), "Model A") {
+		t.Fatalf("complete Flight data must restore both tables: count=%d err=%v article=%s", count, err, doc.Find("article").Text())
+	}
+	doc, _ = goquery.NewDocumentFromReader(strings.NewReader(strings.Replace(page, `</article>`, `<div class="animate-pulse"></div></article>`, 1)))
+	count, err = recoverKimiTables(doc, doc.Find("article"), pageURL)
+	if err != nil || count != 0 || doc.Find("article div.animate-pulse").Length() != 3 {
+		t.Fatalf("unmatched placeholder must remain rejected: count=%d err=%v", count, err)
+	}
+}
+
 func TestExtractArticleDoesNotRestorePageWideVideo(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/video.mp4" {

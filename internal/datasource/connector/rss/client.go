@@ -148,10 +148,17 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 	if err != nil {
 		return "", "", "", "", "", err
 	}
+	recoveredTables, err := recoverKimiTables(doc, content, pageURL)
+	if err != nil {
+		return "", "", "", "", "", err
+	}
+	if recoveredTables > 0 && videoCount > 0 {
+		return "", "", "", "", "", fmt.Errorf("Kimi article with both embedded video and tables is unsupported")
+	}
 	if err := articleContentError(content); err != nil {
 		return "", "", "", "", "", err
 	}
-	if videoCount > 0 {
+	if videoCount > 0 || recoveredTables > 0 {
 		page, renderErr := doc.Html()
 		if renderErr != nil {
 			return "", "", "", "", "", fmt.Errorf("render article page: %w", renderErr)
@@ -186,6 +193,19 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 		if got != videoCount {
 			return "", "", "", "", "", fmt.Errorf("article video links lost during extraction")
 		}
+	}
+	if recoveredTables > 0 {
+		body := content.Find("div.max-w-none.markdown").First()
+		if body.Length() == 0 {
+			return "", "", "", "", "", fmt.Errorf("Kimi article body unavailable")
+		}
+		preferLargestImageVariant(body, pageURL)
+		absolutizeContentURLs(body, pageURL)
+		original, renderErr := body.Html()
+		if renderErr != nil || strings.Count(original, "data-reliquary-kimi-table") != recoveredTables {
+			return "", "", "", "", "", fmt.Errorf("Kimi article content lost during extraction")
+		}
+		return original, firstNonEmpty(sourceHeading, article.Title()), article.Byline(), article.SiteName(), articlePublishedAt(doc, articleURL), nil
 	}
 	preferLargestImageVariant(goquery.NewDocumentFromNode(article.Node).Selection, pageURL)
 
