@@ -44,11 +44,18 @@ func parseListing(data []byte, listingURL, pathPrefix string) ([]*gofeed.Item, e
 			return true
 		}
 		date := strings.TrimSpace(a.Closest(".menu-card").Find(".card-date").First().Text())
-		if _, valid := parseSiteDate(date); !valid {
-			date = ""
-		}
 		listingUpdatedAt := now
 		hasListingTime := false
+		if parsed, valid := parseSiteDate(date); valid {
+			listingUpdatedAt = parsed
+			if len(date) == len("2006-01-02") && date == parsed.Format("2006-01-02") {
+				// A day-only card cannot rule out an article published later that day.
+				listingUpdatedAt = parsed.Add(24*time.Hour - time.Nanosecond)
+			}
+			hasListingTime = true
+		} else {
+			date = ""
+		}
 		if raw, ok := a.Find("time[datetime]").First().Attr("datetime"); ok {
 			if parsed, valid := parseSiteDate(raw); valid {
 				listingUpdatedAt = parsed
@@ -71,7 +78,7 @@ func parseListing(data []byte, listingURL, pathPrefix string) ([]*gofeed.Item, e
 		}
 		item := &gofeed.Item{GUID: absolute, Link: absolute, Title: title,
 			Published: date, Updated: listingUpdatedAt.Format(time.RFC3339Nano), UpdatedParsed: &listingUpdatedAt,
-			Custom: map[string]string{"listing_title_needs_article": "true"}}
+			Custom: map[string]string{"from_listing": "true"}}
 		seen[absolute] = item
 		items = append(items, item)
 		// ponytail: inspect only the newest visible links; expand if a source paginates.

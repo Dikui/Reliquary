@@ -531,7 +531,7 @@ func (c *Connector) resolveItem(
 		return resolvedFeedItem{item: types.FetchedItem{ExternalID: itemExternalID(feedURL, itemID), Title: title,
 			Metadata: map[string]string{"error": stage + ": " + err.Error(), "channel": types.ChannelRSS}}}
 	}
-	if articleTitle != "" && (item.Title == "" || item.Custom["listing_title_needs_article"] == "true") {
+	if articleTitle != "" && (item.Title == "" || item.Custom["from_listing"] == "true") {
 		title = articleTitle
 	}
 	content := htmlToMarkdown(contentHTML)
@@ -563,7 +563,7 @@ func (c *Connector) resolveItem(
 	}
 
 	publishedAt := item.Published
-	if publishedAt == "" {
+	if pagePublishedAt != "" && (publishedAt == "" || item.Custom["from_listing"] == "true") {
 		publishedAt = pagePublishedAt
 	}
 	return resolvedFeedItem{

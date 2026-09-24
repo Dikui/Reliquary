@@ -168,10 +168,12 @@ func TestListingUsesArticlePublicationDateAndSameSiteLinks(t *testing.T) {
 		case "/articles/current", "/articles/old", "/articles/undated":
 			date := map[string]string{"/articles/old": "Sep 20, 2026"}[r.URL.Path]
 			heading := "Article"
+			publishedMeta := ""
 			if r.URL.Path == "/articles/current" {
 				heading = "Current"
+				publishedMeta = `<meta property="article:published_time" content="2026-09-24T16:30:00Z">`
 			}
-			fmt.Fprintf(w, `<html><body><main><article><h1>%s</h1><div>%s</div>%s</article></main></body></html>`, heading, date, longArticleBody)
+			fmt.Fprintf(w, `<html><head>%s</head><body><main><article><h1>%s</h1><div>%s</div>%s</article></main></body></html>`, publishedMeta, heading, date, longArticleBody)
 		default:
 			http.NotFound(w, r)
 		}
@@ -179,7 +181,7 @@ func TestListingUsesArticlePublicationDateAndSameSiteLinks(t *testing.T) {
 	defer server.Close()
 	config := &types.DataSourceConfig{Settings: map[string]interface{}{
 		"feed_urls": server.URL + "/articles", "article_path_prefix": "/articles/", "publisher": "Example",
-	}, IngestSince: time.Date(2026, 9, 23, 0, 0, 0, 0, time.UTC)}
+	}, IngestSince: time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)}
 	if err := NewConnector().Validate(context.Background(), config); err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +189,7 @@ func TestListingUsesArticlePublicationDateAndSameSiteLinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != 2 || items[0].URL != server.URL+"/articles/current" || items[0].Title != "Current" || items[0].Metadata["published_at"] != "2026-09-24" ||
+	if len(items) != 2 || items[0].URL != server.URL+"/articles/current" || items[0].Title != "Current" || items[0].Metadata["published_at"] != "2026-09-24T16:30:00Z" ||
 		items[1].Metadata["error"] == "" || len(items[1].Content) != 0 {
 		t.Fatalf("listing must keep current original, reject undated, skip old/off-site: %+v", items)
 	}
@@ -203,6 +205,19 @@ func TestCursorListingSkipsTopicsAndUsesCardTime(t *testing.T) {
 		items[0].UpdatedParsed.Format(time.RFC3339) != "2026-09-02T12:00:00Z" ||
 		items[1].UpdatedParsed.Format(time.RFC3339) != "2026-09-23T12:00:00Z" {
 		t.Fatalf("Cursor listing must exclude topics and retain article date signals: items=%+v err=%v", items, err)
+	}
+}
+
+func TestKimiListingUsesCardDateForDiscovery(t *testing.T) {
+	page := []byte(`<a href="/blog/kimi-k2">Kimi K2 in navigation</a>` +
+		`<div class="menu-card"><a href="/blog/kimi-k2">Kimi K2</a><p class="card-date">2025-07-11</p></div>` +
+		`<div class="menu-card"><a href="/blog/kimi-k3">Kimi K3</a><p class="card-date">2026-07-16</p></div>`)
+	items, err := parseListing(page, "https://www.kimi.ai/blog/", "/blog/")
+	if err != nil || len(items) != 2 || items[0].Published != "2025-07-11" ||
+		items[0].UpdatedParsed.Format("2006-01-02") != "2025-07-11" ||
+		items[1].UpdatedParsed.Format("2006-01-02") != "2026-07-16" ||
+		!items[1].UpdatedParsed.After(time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)) {
+		t.Fatalf("Kimi card dates must remain discovery signals after duplicate navigation links: items=%+v err=%v", items, err)
 	}
 }
 
