@@ -497,6 +497,15 @@ func TestBuildSystemPromptUsesInternalCitationSetting(t *testing.T) {
 	require.NotContains(t, prompt, "Source citations are enabled")
 }
 
+func TestKnowledgeAgentCustomPromptRetainsEvidenceRules(t *testing.T) {
+	prompt := BuildSystemPromptWithOptions(
+		[]*KnowledgeBaseInfo{{ID: "kb-1", Name: "Docs"}}, false, nil, "Custom agent prompt",
+	)
+	require.Contains(t, prompt, "Custom agent prompt")
+	require.Contains(t, prompt, "deliver supported findings even if evidence remains incomplete")
+	require.Contains(t, prompt, "Pending-review material is not formal evidence")
+}
+
 func newTestEngine(t *testing.T, chatModel chat.Chat, opts ...testEngineOption) *AgentEngine {
 	t.Helper()
 	cfg := &types.AgentConfig{

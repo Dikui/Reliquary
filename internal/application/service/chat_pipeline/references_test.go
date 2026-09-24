@@ -133,6 +133,7 @@ func TestPrepareMessagesWithModelContextSuppressesCitationsWhenDisabled(t *testi
 
 	messages, refs := prepareMessagesWithModelContext(context.Background(), manage)
 	require.Contains(t, messages[0].Content, "Source citations are disabled")
+	require.Contains(t, messages[0].Content, "identify missing evidence and conflicting sources")
 	require.Contains(t, messages[1].Content, `<chunk id="c1"`)
 	require.NotContains(t, messages[1].Content, "chunk-1")
 	require.Equal(t, "answer ", refs.DecodeOutputText(`answer <ref id="c1"/>`))

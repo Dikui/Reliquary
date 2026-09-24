@@ -99,6 +99,9 @@ func prepareMessagesWithHistory(chatManage *types.ChatManage) []chat.Message {
 	// placeholders have been rendered, so a remembered sentence can never be
 	// substituted into prompt structure.
 	systemPrompt += chatManage.MemoryPrompt
+	if len(chatManage.MergeResult) > 0 {
+		systemPrompt += "\n\nFor this knowledge-backed answer, compare relevant retrieved messages and cite the source of each conclusion. Deliver supported findings, identify missing evidence and conflicting sources, and do not state unsupported inferences as facts. Pending-review material is not formal evidence."
+	}
 
 	chatMessages := []chat.Message{
 		{Role: "system", Content: systemPrompt},

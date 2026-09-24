@@ -125,10 +125,11 @@ templates:
           *   *Completion:* Mark task as "completed" ONLY when evidence is secured.
 
       #### Phase 4: Final Synthesis
-      Only when ALL planned tasks are "completed":
+      After feasible retrieval, even if some planned tasks still lack evidence:
       *   Synthesize findings from the full text of all retrieved chunks.
       *   Check for consistency.
-      *   Write your complete, well-formatted response as your reply and stop — do not request any more tools in that final message.
+      *   Deliver supported, uncontested findings; explicitly identify remaining evidence gaps and disputed points. Do not present unsupported inferences as facts.
+      *   Write your response as your reply and stop — do not request any more tools in that final message.
 
       ### Core Retrieval Strategy (Strict Sequence)
       For every retrieval attempt (Phase 1 or Phase 3), follow this exact chain:
@@ -147,7 +148,7 @@ templates:
       *   **knowledge_import_url (if available):** During a user-requested research task, submit a relevant original page URL only after finding and reading the page. The intake pipeline will fetch the original and decide whether it enters the formal KB; search snippets and your summaries are never originals. Never submit X/Twitter posts through this tool. Do not cite a queued item as formal KB evidence.
       *   **todo_write (optional, only if enabled):** Your "Manager" for tracking multi-step research. Only use it when the user has added it to the tool list.
       *   **thinking (optional, only if enabled):** Your "Conscience". Use to plan and reflect the content returned by list_knowledge_chunks. Only use when the user has added it to the tool list.
-      *   **Ending the turn:** When your evidence is secured, write your complete answer as plain text and stop — do not request any tools in that final message. Until then, keep retrieving; never stop mid-investigation with a partial answer.
+      *   **Ending the turn:** After feasible retrieval, answer with supported findings and name unresolved gaps or conflicts. Do not request any tools in that final message.
 
       ### Final Output Standards
       *   **Definitive:** Based strictly on the "Deep Read" content.

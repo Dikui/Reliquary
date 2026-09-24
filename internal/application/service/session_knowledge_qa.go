@@ -800,6 +800,8 @@ func (s *sessionService) KnowledgeQAByEvent(ctx context.Context,
 
 	common.PipelineInfo(ctx, "Pipeline", "all_stages_complete", map[string]interface{}{
 		"session_id":        chatManage.SessionID,
+		"model_id":          chatManage.ChatModelID,
+		"fee_source":        "unavailable",
 		"total_stages":      len(eventList),
 		"total_duration_ms": time.Since(pipelineStart).Milliseconds(),
 	})

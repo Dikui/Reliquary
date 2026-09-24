@@ -31,7 +31,11 @@
                      with. -->
                 <RagPipelineProgress v-if="!session.isAgentMode && session.used_memories?.length"
                     :session="session" :embedded-mode="embeddedMode" memory-only />
-                <docInfo v-if="session.knowledge_references?.length" :session="session"></docInfo>
+                <div v-if="formalReferences.length" class="knowledge-message-list">
+                    <strong>{{ t('chat.referencesDocCount', { count: formalDocumentCount }) }}</strong>
+                    <docInfo :session="formalSession" :embedded-mode="embeddedMode" content-only />
+                </div>
+                <docInfo v-if="otherReferences.length" :session="otherSession" :embedded-mode="embeddedMode" />
                 <AgentStreamDisplay :session="session" :session-id="sessionId" :user-query="userQuery"
                     v-if="session.isAgentMode" :follow-up-loading="followUpLoading"
                     @render-complete-change="emit('render-complete-change', $event)" />
@@ -215,8 +219,11 @@ const props = defineProps({
 
 const formalReferences = computed(() => (props.session?.knowledge_references || [])
     .filter(item => item?.knowledge_id && item.chunk_type !== 'web_search' && item.chunk_type !== 'tool_result'));
+const otherReferences = computed(() => (props.session?.knowledge_references || [])
+    .filter(item => !formalReferences.value.includes(item)));
 const formalDocumentCount = computed(() => new Set(formalReferences.value.map(item => item.knowledge_id)).size);
 const formalSession = computed(() => ({ ...props.session, knowledge_references: formalReferences.value }));
+const otherSession = computed(() => ({ ...props.session, knowledge_references: otherReferences.value }));
 
 const showRequestInfo = computed(() => !!(props.session?.request_id || props.session?.id));
 

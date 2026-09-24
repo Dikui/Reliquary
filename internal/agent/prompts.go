@@ -409,6 +409,9 @@ func BuildSystemPromptWithOptions(
 	if options != nil && len(options.SkillsMetadata) > 0 {
 		basePrompt += formatSkillsMetadata(options.SkillsMetadata, options.ShellExecEnabled)
 	}
+	if len(knowledgeBases) > 0 {
+		basePrompt += "\n\nFor knowledge-backed answers, compare relevant retrieved messages and cite the source of each conclusion. After feasible retrieval, deliver supported findings even if evidence remains incomplete; identify missing evidence and conflicting sources, and do not state unsupported inferences as facts. Pending-review material is not formal evidence."
+	}
 
 	return basePrompt
 }
