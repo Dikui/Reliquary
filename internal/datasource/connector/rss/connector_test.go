@@ -122,7 +122,7 @@ func TestArticlePublishedAtReadsStructuredDateAndFallsBackToHero(t *testing.T) {
 	if got := articlePublishedAt(structured, "https://mistral.ai/news/ocr-4/"); got != "2026-06-23T12:00:48.000Z" {
 		t.Fatalf("structured publication date = %q", got)
 	}
-	hero, err := goquery.NewDocumentFromReader(strings.NewReader(`<html><head><script type="application/ld+json">{"datePublished":"invalid"}</script></head><body><main><div><h1>Model release</h1><div><span>July 9, 2026</span><span>10 minute read</span></div></div></main></body></html>`))
+	hero, err := goquery.NewDocumentFromReader(strings.NewReader(`<html><head><script type="application/ld+json">{"@type":"BlogPosting","mainEntityOfPage":"https://ai.meta.com/blog/model-release/","datePublished":"invalid"}</script></head><body><main><div><h1>Model release</h1><div><span>July 9, 2026</span><span>10 minute read</span></div></div></main></body></html>`))
 	if err != nil {
 		t.Fatal(err)
 	}
