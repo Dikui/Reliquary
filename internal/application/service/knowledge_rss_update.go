@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"reliquary/internal/logger"
 	"reliquary/internal/types"
 )
 
@@ -100,8 +99,13 @@ func (s *knowledgeService) ReviewRSSUpdate(ctx context.Context, oldID string, pa
 	if intake == nil || intake.Decision != "approved" || candidate.ProcessedAt == nil || candidate.ParseStatus == types.ParseStatusFailed || candidate.EnableStatus != "disabled" {
 		return false, errors.Join(fmt.Errorf("RSS update review or indexing failed"), removeCandidate())
 	}
-	// The candidate stays disabled until classification, manual decisions and the
-	// old article's removal have finished.
+	// Enrichment writes the whole message row. Promote only after those writes
+	// finish, then work from the latest row so they cannot hide the replacement.
+	candidate, err = s.waitRSSUpdateCandidate(ctx, tenantID, candidate.ID)
+	if err != nil {
+		return false, errors.Join(err, removeCandidate())
+	}
+	// Keep the candidate disabled while classification and manual decisions run.
 	classifier := &KnowledgeAutoTagService{db: s.db, knowledgeRepo: s.repo, tagRepo: s.tagRepo,
 		kbService: s.kbService, chunkService: s.chunkService, modelService: s.modelService}
 	if err := classifier.tagMessage(ctx, kb, candidate); err != nil {
@@ -160,6 +164,7 @@ func (s *knowledgeService) ReviewRSSUpdate(ctx context.Context, oldID string, pa
 		return false, errors.Join(err, removeCandidate())
 	}
 	delete(candidateMeta, "rss_update_candidate")
+	candidateMeta["status"], _ = json.Marshal(types.ManualKnowledgeStatusPublish)
 	for _, key := range []string{"external_id", "content_sha256"} {
 		candidateMeta[key], _ = json.Marshal(staged.SourceMetadata[key])
 	}
@@ -171,6 +176,16 @@ func (s *knowledgeService) ReviewRSSUpdate(ctx context.Context, oldID string, pa
 	if err := s.repo.UpdateKnowledge(ctx, candidate); err != nil {
 		return false, errors.Join(err, removeCandidate())
 	}
+	if len(toAdd)+len(toRemove) > 0 {
+		anomaly := &types.KnowledgeAnomaly{ID: uuid.NewString(), TenantID: tenantID, KnowledgeBaseID: kb.ID,
+			KnowledgeIDs: []string{candidate.ID}, Kind: "manual_conflict", Description: "Updated original conflicts with manual tag corrections",
+			ProposalType: "change_tags", ProposedTagIDs: toAdd, ProposedRemoveTagIDs: toRemove,
+			AppliedChanges: map[string]types.KnowledgeAnomalyTagChange{},
+			Status:         "pending", ReportedBy: "system:rss-update", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+		if err := s.db.WithContext(ctx).Create(anomaly).Error; err != nil {
+			return false, errors.Join(err, removeCandidate())
+		}
+	}
 	// Make the reviewed replacement available before deleting the old row: a
 	// deletion failure may leave two copies, but must not remove the only copy.
 	if err := s.DeleteKnowledge(ctx, old.ID); err != nil {
@@ -179,16 +194,29 @@ func (s *knowledgeService) ReviewRSSUpdate(ctx context.Context, oldID string, pa
 	if err := s.repo.HardDeleteKnowledge(ctx, tenantID, old.ID); err != nil {
 		return false, err
 	}
-	if len(toAdd)+len(toRemove) > 0 {
-		anomaly := &types.KnowledgeAnomaly{ID: uuid.NewString(), TenantID: tenantID, KnowledgeBaseID: kb.ID,
-			KnowledgeIDs: []string{candidate.ID}, Kind: "manual_conflict", Description: "Updated original conflicts with manual tag corrections",
-			ProposalType: "change_tags", ProposedTagIDs: toAdd, ProposedRemoveTagIDs: toRemove,
-			Status: "pending", ReportedBy: "system:rss-update", CreatedAt: time.Now(), UpdatedAt: time.Now()}
-		if err := s.db.WithContext(ctx).Create(anomaly).Error; err != nil {
-			logger.Warnf(ctx, "RSS update conflict anomaly could not be saved: %v", err)
-		}
-	}
 	recordKBActivity(ctx, s.audit, tenantID, kb.ID, types.AuditAction("knowledge.source_update"), "knowledge", candidate.ID, types.AuditOutcomeSuccess,
 		map[string]any{"replaced_knowledge_id": old.ID})
 	return false, nil
+}
+
+func (s *knowledgeService) waitRSSUpdateCandidate(ctx context.Context, tenantID uint64, id string) (*types.Knowledge, error) {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		candidate, err := s.repo.GetKnowledgeByID(ctx, tenantID, id)
+		if err != nil {
+			return nil, err
+		}
+		switch candidate.ParseStatus {
+		case types.ParseStatusCompleted:
+			return candidate, nil
+		case types.ParseStatusFailed, types.ParseStatusCancelled, types.ParseStatusRejected, types.ParseStatusDeleting:
+			return nil, fmt.Errorf("RSS update candidate ended in %s", candidate.ParseStatus)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+		}
+	}
 }

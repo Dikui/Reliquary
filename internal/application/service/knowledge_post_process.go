@@ -178,8 +178,11 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 		eff.QuestionGenerationConfig.Enabled
 	willSpawnWiki := kb.IndexingStrategy.WikiEnabled && len(textChunks) > 0
 	intake, _ := knowledge.IntakeMetadata()
+	var updateMetadata map[string]json.RawMessage
+	_ = json.Unmarshal(knowledge.Metadata, &updateMetadata)
 	willSpawnAutoTag := kb.Type == types.KnowledgeBaseTypeDocument && len(textChunks) > 0 &&
-		((intake != nil && intake.Decision == "approved") || (kb.AutoTagConfig != nil && kb.AutoTagConfig.Enabled))
+		((intake != nil && intake.Decision == "approved") || (kb.AutoTagConfig != nil && kb.AutoTagConfig.Enabled)) &&
+		string(updateMetadata["rss_update_candidate"]) != `"true"` // The update path classifies after enrichment and manual decisions.
 	enqueuedAutoTag := false
 
 	// Question generation now fans out one subtask per plain text chunk
