@@ -314,6 +314,7 @@ type fakeFeed struct {
 	failFeed           atomic.Bool
 	failArticle        atomic.Bool
 	articleEmbed       string
+	articleHero        string
 	pageEmbed          string
 	articleByline      string
 }
@@ -336,8 +337,8 @@ func newFakeFeed(t *testing.T) *fakeFeed {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		fmt.Fprintf(w, `<!DOCTYPE html><html><head><title>%s</title><meta name="author" content="%s"></head>`+
-			`<body><nav>menu</nav><article><h1>Heading</h1>%s%s</article><footer>foot%s</footer></body></html>`,
-			"Full "+r.URL.Path, f.articleByline, longArticleBody, f.articleEmbed, f.pageEmbed)
+			`<body><nav>menu</nav><article><div><h1>Heading</h1>%s</div><div>%s%s</div></article><footer>foot%s</footer></body></html>`,
+			"Full "+r.URL.Path, f.articleByline, f.articleHero, longArticleBody, f.articleEmbed, f.pageEmbed)
 	})
 	mux.HandleFunc("/video.mp4", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "video/mp4")
@@ -661,6 +662,13 @@ func TestConnector_FetchIncremental_RejectsUnpreservedEmbeddedMedia(t *testing.T
 	if err != nil || len(items) != 1 || items[0].Metadata["error"] != "" || !strings.Contains(string(items[0].Content), f.server.URL+"/video.mp4") {
 		t.Fatalf("verified custom video must survive extraction: items=%#v err=%v", items, err)
 	}
+	f.articleEmbed = ""
+	f.articleHero = `<video src="` + f.server.URL + `/video.mp4"></video>`
+	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
+	if err != nil || len(items) != 1 || items[0].Metadata["error"] != "" || !strings.HasPrefix(string(items[0].Content), "[播放原始视频]("+f.server.URL+"/video.mp4)") {
+		t.Fatalf("verified hero video must precede article body: items=%#v err=%v", items, err)
+	}
+	f.articleHero = ""
 	f.articleEmbed = `<h3>Full Benchmark Table</h3><div data-blog-hero-width="true"><div class="animate-pulse" style="min-height:360px"></div></div>`
 	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
 	if err != nil || len(items) != 1 || !strings.Contains(items[0].Metadata["error"], "unresolved content placeholder") || len(items[0].Content) != 0 {

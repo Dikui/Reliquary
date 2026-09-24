@@ -166,7 +166,24 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 		return "", "", "", "", "", fmt.Errorf("no readable content extracted")
 	}
 	if videoCount > 0 {
-		if got := goquery.NewDocumentFromNode(article.Node).Find(`a[data-reliquary-video]`).Length(); got != videoCount {
+		got := goquery.NewDocumentFromNode(article.Node).Find(`a[data-reliquary-video]`).Length()
+		if got == 0 {
+			// Readability can omit a video in the title/hero block while retaining the body.
+			content.Children().EachWithBreak(func(_ int, header *goquery.Selection) bool {
+				links := header.Find(`a[data-reliquary-video]`)
+				if header.Find("h1").Length() == 0 || links.Length() != videoCount {
+					return true
+				}
+				for i := links.Length() - 1; i >= 0; i-- {
+					video := links.Eq(i).Parent().Get(0)
+					video.Parent.RemoveChild(video)
+					article.Node.InsertBefore(video, article.Node.FirstChild)
+				}
+				got = videoCount
+				return false
+			})
+		}
+		if got != videoCount {
 			return "", "", "", "", "", fmt.Errorf("article video links lost during extraction")
 		}
 	}
