@@ -152,8 +152,8 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 		return "", "", "", "", "", fmt.Errorf("article contains unresolved content placeholder")
 	}
 	goquery.NewDocumentFromNode(article.Node).Find("img").Each(func(_ int, img *goquery.Selection) {
-		variants, ok := img.Attr("data-srcset")
-		if !ok {
+		variants, _ := img.Attr("data-srcset")
+		if strings.TrimSpace(variants) == "" {
 			variants, _ = img.Attr("srcset")
 		}
 		bestURL, bestSize := "", float64(0)
