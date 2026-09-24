@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/mmcdole/gofeed"
 	"reliquary/internal/datasource"
 	"reliquary/internal/types"
@@ -110,6 +111,23 @@ func TestListingUsesArticlePublicationDateAndSameSiteLinks(t *testing.T) {
 	if len(items) != 2 || items[0].URL != server.URL+"/articles/current" || items[0].Metadata["published_at"] != "2026-09-24" ||
 		items[1].Metadata["error"] == "" || len(items[1].Content) != 0 {
 		t.Fatalf("listing must keep current original, reject undated, skip old/off-site: %+v", items)
+	}
+}
+
+func TestArticlePublishedAtReadsStructuredAndHeroDates(t *testing.T) {
+	structured, err := goquery.NewDocumentFromReader(strings.NewReader(`<html><head><script type="application/ld+json">{"@type":"BlogPosting","datePublished":"2026-06-23T12:00:48.000Z","dateModified":"2026-09-10T14:01:55.122Z"}</script></head><body><article><h1>OCR</h1></article></body></html>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := articlePublishedAt(structured); got != "2026-06-23T12:00:48.000Z" {
+		t.Fatalf("structured publication date = %q", got)
+	}
+	hero, err := goquery.NewDocumentFromReader(strings.NewReader(`<html><body><main><div><h1>Model release</h1><div><span>July 9, 2026</span><span>10 minute read</span></div></div></main></body></html>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := articlePublishedAt(hero); got != "July 9, 2026" {
+		t.Fatalf("hero publication date = %q", got)
 	}
 }
 

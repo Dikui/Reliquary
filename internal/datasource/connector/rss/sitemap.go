@@ -1,6 +1,7 @@
 package rss
 
 import (
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"net/url"
@@ -52,12 +53,29 @@ func articlePublishedAt(doc *goquery.Document) string {
 			}
 		}
 	}
+	var structuredDate string
+	doc.Find(`script[type="application/ld+json"]`).EachWithBreak(func(_ int, script *goquery.Selection) bool {
+		var article struct {
+			DatePublished string `json:"datePublished"`
+		}
+		if json.Unmarshal([]byte(script.Text()), &article) == nil {
+			if _, valid := parseSiteDate(article.DatePublished); valid {
+				structuredDate = article.DatePublished
+				return false
+			}
+		}
+		return true
+	})
+	if structuredDate != "" {
+		return structuredDate
+	}
 	heading := doc.Find("article h1, main h1").First()
 	if heading.Length() == 0 {
 		heading = doc.Find("h1").First()
 	}
 	for _, candidate := range []string{
 		heading.Parent().Find("time").First().AttrOr("datetime", ""),
+		heading.Next().Find("time, span, p").First().Text(),
 		heading.Next().Find("time").First().AttrOr("datetime", ""),
 		heading.Next().Find("p").First().Text(),
 		heading.Next().Text(),
