@@ -7,7 +7,10 @@ import (
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -881,8 +884,8 @@ func (h *AuthHandler) SwitchTenant(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.NewAuthLoginResponse(resp))
 }
 
-// @Summary      自动初始化（Lite 桌面版）
-// @Description  Lite 版专用：首次启动时自动创建默认用户和空间并返回令牌，后续启动直接签发令牌，免除手动注册/登录流程
+// @Summary      自动初始化（Lite 桌面版及本地 QA）
+// @Description  Lite 版自动创建用户和空间；显式启用的本地 QA 环境可为既有测试用户签发令牌
 // @Tags         认证
 // @Accept       json
 // @Produce      json
@@ -893,8 +896,31 @@ func (h *AuthHandler) AutoSetup(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	if Edition != "lite" {
-		appErr := errors.NewForbiddenError("auto-setup is only available in lite edition")
-		c.Error(appErr)
+		email := strings.TrimSpace(os.Getenv("RELIQUARY_QA_AUTO_LOGIN_EMAIL"))
+		if !h.qaAutoLoginAllowed(c, email) {
+			c.Error(errors.NewForbiddenError("auto-setup is only available in lite edition or local QA"))
+			return
+		}
+		user, err := h.userService.GetUserByEmail(ctx, email)
+		if err != nil || user == nil || !user.IsActive || user.DeletedAt.Valid {
+			c.Error(errors.NewForbiddenError("QA user is unavailable"))
+			return
+		}
+		tenant, err := h.tenantService.GetTenantByID(ctx, user.TenantID)
+		if err != nil || tenant == nil {
+			c.Error(errors.NewForbiddenError("QA workspace is unavailable"))
+			return
+		}
+		accessToken, refreshToken, err := h.userService.GenerateTokens(ctx, user)
+		if err != nil {
+			c.Error(errors.NewInternalServerError("QA auto-login failed"))
+			return
+		}
+		c.JSON(http.StatusOK, dto.NewAuthLoginResponse(&types.LoginResponse{
+			Success: true, Message: "QA auto-login successful", User: user,
+			ActiveTenant: tenant, Memberships: h.userService.BuildLoginMemberships(ctx, user, tenant),
+			Token: accessToken, RefreshToken: refreshToken,
+		}))
 		return
 	}
 
@@ -956,6 +982,34 @@ func (h *AuthHandler) AutoSetup(c *gin.Context) {
 		Token:        accessToken,
 		RefreshToken: refreshToken,
 	}))
+}
+
+// QA auto-login only works for an explicitly named account on a local,
+// non-release server. Origin blocks a remote web page from reading its tokens.
+func (h *AuthHandler) qaAutoLoginAllowed(c *gin.Context, email string) bool {
+	if email == "" || gin.Mode() == gin.ReleaseMode || h.configInfo == nil || h.configInfo.Server == nil ||
+		!loopbackHost(h.configInfo.Server.Host) || !loopbackRemote(c.Request.RemoteAddr) ||
+		!loopbackOrigin(c.GetHeader("Origin")) {
+		return false
+	}
+	return true
+}
+
+func loopbackHost(host string) bool {
+	return strings.EqualFold(host, "localhost") || net.ParseIP(host).IsLoopback()
+}
+
+func loopbackRemote(remote string) bool {
+	host, _, err := net.SplitHostPort(remote)
+	return err == nil && net.ParseIP(host).IsLoopback()
+}
+
+func loopbackOrigin(origin string) bool {
+	if origin == "" {
+		return true
+	}
+	u, err := url.Parse(origin)
+	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && loopbackHost(u.Hostname())
 }
 
 // tenantNameOrEmpty returns t.Name when t is non-nil, "" otherwise.

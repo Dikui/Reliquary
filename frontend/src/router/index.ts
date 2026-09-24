@@ -13,7 +13,7 @@ const LITE_LAST_PATH_KEY = 'reliquary_lite_last_path'
 const AUTO_SETUP_FAILED_KEY = 'reliquary_auto_setup_failed'
 
 function shouldTryAutoSetup() {
-  return localStorage.getItem(AUTO_SETUP_FAILED_KEY) !== 'true'
+  return import.meta.env.VITE_QA_AUTO_LOGIN === 'true' || localStorage.getItem(AUTO_SETUP_FAILED_KEY) !== 'true'
 }
 
 function markAutoSetupFailed() {
@@ -221,19 +221,21 @@ const router = createRouter({
 
 // 持久化 auto-setup / login 返回的认证信息到 store
 function persistLoginResponse(authStore: ReturnType<typeof useAuthStore>, response: any) {
-  if (response.user && response.tenant && response.token) {
-    authStore.setUser(userInfoFromApi(response.user, response.tenant.id))
+  const tenant = response.active_tenant || response.tenant
+  if (response.user && tenant && response.token) {
+    authStore.setUser(userInfoFromApi(response.user, response.user.tenant_id ?? tenant.id))
     authStore.setToken(response.token)
     if (response.refresh_token) {
       authStore.setRefreshToken(response.refresh_token)
     }
     authStore.setTenant({
-      id: String(response.tenant.id) || '',
-      name: response.tenant.name || '',
+      id: String(tenant.id) || '',
+      name: tenant.name || '',
       owner_id: response.user.id || '',
-      created_at: response.tenant.created_at || new Date().toISOString(),
-      updated_at: response.tenant.updated_at || new Date().toISOString()
+      created_at: tenant.created_at || new Date().toISOString(),
+      updated_at: tenant.updated_at || new Date().toISOString()
     })
+    if (Array.isArray(response.memberships)) authStore.setMemberships(response.memberships)
   }
 }
 
@@ -378,7 +380,7 @@ router.beforeEach(async (to, from, next) => {
           const response = await autoSetup()
           if (response.success) {
             persistLoginResponse(authStore, response)
-            authStore.setLiteMode(true)
+            authStore.setLiteMode(import.meta.env.VITE_QA_AUTO_LOGIN !== 'true')
             next(to.fullPath)
             return
           } else {

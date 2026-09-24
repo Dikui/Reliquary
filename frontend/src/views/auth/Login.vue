@@ -813,11 +813,11 @@ onMounted(async () => {
   }
 
   const AUTO_SETUP_FAILED_KEY = 'reliquary_auto_setup_failed'
-  if (localStorage.getItem(AUTO_SETUP_FAILED_KEY) !== 'true') {
+  if (import.meta.env.VITE_QA_AUTO_LOGIN === 'true' || localStorage.getItem(AUTO_SETUP_FAILED_KEY) !== 'true') {
     try {
       const response = await autoSetup()
       if (response.success) {
-        authStore.setLiteMode(true)
+        authStore.setLiteMode(import.meta.env.VITE_QA_AUTO_LOGIN !== 'true')
         await persistLoginResponse(response)
         return
       } else {
