@@ -629,6 +629,14 @@ func TestIngestItem_RSSUsesUnifiedIntakeWithSourceEvidence(t *testing.T) {
 	}, nil)
 	require.ErrorContains(t, err, "model unavailable")
 	require.Equal(t, types.ChannelRSS, ks.channel)
+	repo.knowledge = nil
+	_, err = svc.ingestItem(context.Background(), ds, &types.FetchedItem{
+		ExternalID: "qwen:undated", Title: "Undated", Content: []byte("Original body"),
+		Metadata: map[string]string{"publisher": "Qwen", "intake_reject_reason": "Qwen article missing publication date"},
+	}, nil)
+	require.NoError(t, err)
+	require.Equal(t, "Qwen article missing publication date", ks.payload.SourceMetadata["intake_reject_reason"])
+	require.Empty(t, ks.payload.SourceInfo.OriginalURL)
 }
 
 func TestProcessSync_SyncDeletionsDeletesMatchingKnowledge(t *testing.T) {

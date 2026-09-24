@@ -1,6 +1,7 @@
 package rss
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -41,30 +42,53 @@ func parseQwenArticles(data []byte) ([]*gofeed.Item, error) {
 	items := make([]*gofeed.Item, 0, len(response.Data.Articles))
 	for _, article := range response.Data.Articles {
 		published, valid := parseSiteDate(article.Extra.Date)
-		if article.Path == "" || article.Title == "" || !valid {
-			return nil, fmt.Errorf("Qwen article missing path, title or publication date")
+		item := &gofeed.Item{Title: article.Title, Published: article.Extra.Date,
+			Author: &gofeed.Person{Name: article.Extra.Author}}
+		if valid {
+			item.PublishedParsed = &published
 		}
-		link := "https://qwen.ai/blog?id=" + url.QueryEscape(article.Path)
-		pageURL, _ := url.Parse(link)
-		doc, err := goquery.NewDocumentFromReader(strings.NewReader(article.Content))
-		if err != nil {
-			return nil, fmt.Errorf("parse Qwen article %s: %w", article.Path, err)
+		if article.Path == "" {
+			item.GUID = fmt.Sprintf("qwen:entry:%x", sha256.Sum256([]byte(article.Title+"\n"+article.Extra.Date+"\n"+article.Content)))
+		} else {
+			item.Link = "https://qwen.ai/blog?id=" + url.QueryEscape(article.Path)
+			item.GUID = item.Link
 		}
-		body := doc.Find(".post-content").First()
-		if body.Length() == 0 {
-			return nil, fmt.Errorf("Qwen article %s has no original body", article.Path)
+		var reason string
+		switch {
+		case article.Path == "":
+			reason = "Qwen article missing original URL"
+		case article.Title == "":
+			reason = "Qwen article missing title"
+		case !valid:
+			reason = "Qwen article missing publication date"
+		case article.Content == "":
+			reason = "Qwen article has no original body"
 		}
-		preferLargestImageVariant(body, pageURL)
-		absolutizeContentURLs(body, pageURL)
-		html, err := goquery.OuterHtml(body)
-		if err != nil {
-			return nil, fmt.Errorf("render Qwen article %s: %w", article.Path, err)
+		if article.Content != "" {
+			pageURL, _ := url.Parse(firstNonEmpty(item.Link, "https://qwen.ai/blog"))
+			doc, err := goquery.NewDocumentFromReader(strings.NewReader(article.Content))
+			if err != nil {
+				reason = fmt.Sprintf("parse Qwen article %s: %v", article.Path, err)
+			} else {
+				body := doc.Find(".post-content").First()
+				if body.Length() == 0 {
+					reason = "Qwen article has no original body"
+				} else if contentErr := articleContentError(body); contentErr != nil {
+					reason = fmt.Sprintf("Qwen article content failed: %v", contentErr)
+				} else {
+					preferLargestImageVariant(body, pageURL)
+					absolutizeContentURLs(body, pageURL)
+					item.Content, err = goquery.OuterHtml(body)
+					if err != nil {
+						reason = fmt.Sprintf("render Qwen article %s: %v", article.Path, err)
+					}
+				}
+			}
 		}
-		items = append(items, &gofeed.Item{
-			GUID: link, Link: link, Title: article.Title, Content: html,
-			Published: article.Extra.Date, PublishedParsed: &published,
-			Author: &gofeed.Person{Name: article.Extra.Author},
-		})
+		if reason != "" {
+			item.Custom = map[string]string{"error": reason}
+		}
+		items = append(items, item)
 	}
 	return items, nil
 }

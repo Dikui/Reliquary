@@ -187,23 +187,50 @@ func TestQwenOfficialArticleBody(t *testing.T) {
 	response, _ := json.Marshal(map[string]interface{}{
 		"success": true,
 		"data": map[string]interface{}{"articles": []map[string]interface{}{
+			{"path": "undated", "title": "Undated", "content": `<div class="post-content"><p>Original but no date</p></div>`},
 			{"path": "release", "title": "Release", "content": `<article><div class="post-content"><p>Full original article</p><img src="/blur.png" srcset="/full.png 1800w"><table><tr><th>Model</th><th>Score</th></tr><tr><td>Qwen</td><td>95</td></tr></table></div></article>`, "extra": map[string]string{"date": "2026-09-20T20:00:00+08:00", "author": "QwenTeam"}},
 			{"path": "video", "title": "Video", "content": `<article><div class="post-content"><p>Demo</p><video src="/demo.mp4"></video></div></article>`, "extra": map[string]string{"date": "2026-09-21T20:00:00+08:00", "author": "QwenTeam"}},
+			{"path": "empty", "title": "Empty", "content": `<article><p>No original article body</p></article>`, "extra": map[string]string{"date": "2026-09-22T20:00:00+08:00"}},
+			{"title": "No URL", "content": `<div class="post-content"><p>Original but no URL</p></div>`, "extra": map[string]string{"date": "2026-09-23T20:00:00+08:00"}},
 		}},
 	})
 	items, err := parseQwenArticles(response)
-	if err != nil || len(items) != 2 {
-		t.Fatalf("expected Qwen original articles: items=%d err=%v", len(items), err)
+	if err != nil || len(items) != 5 || items[0].Custom["error"] == "" || items[0].Content == "" ||
+		items[3].Custom["error"] == "" || items[3].Content != "" || items[4].Custom["error"] == "" || items[4].Content == "" {
+		t.Fatalf("malformed Qwen articles must fail independently: items=%+v err=%v", items, err)
 	}
-	good := NewConnector().resolveItem(context.Background(), newClient(nil), &gofeed.Feed{Title: "Qwen"}, items[0], "https://qwen.ai/blog", items[0].GUID, "Qwen", true).item
+	good := NewConnector().resolveItem(context.Background(), newClient(nil), &gofeed.Feed{Title: "Qwen"}, items[1], "https://qwen.ai/blog", items[1].GUID, "Qwen", true).item
 	if good.Metadata["error"] != "" || good.URL != "https://qwen.ai/blog?id=release" || good.Metadata["author"] != "QwenTeam" ||
 		good.Metadata["published_at"] != "2026-09-20T20:00:00+08:00" ||
 		!strings.Contains(string(good.Content), "https://qwen.ai/full.png") || !strings.Contains(string(good.Content), "| Model") {
 		t.Fatalf("Qwen body lost original content or source fields: %+v", good)
 	}
-	bad := NewConnector().resolveItem(context.Background(), newClient(nil), &gofeed.Feed{Title: "Qwen"}, items[1], "https://qwen.ai/blog", items[1].GUID, "Qwen", true).item
+	bad := NewConnector().resolveItem(context.Background(), newClient(nil), &gofeed.Feed{Title: "Qwen"}, items[2], "https://qwen.ai/blog", items[2].GUID, "Qwen", true).item
 	if bad.Metadata["error"] == "" || len(bad.Content) != 0 {
 		t.Fatalf("embedded media must not be silently dropped: %+v", bad)
+	}
+}
+
+func TestQwenMissingPathIdentitySurvivesReorder(t *testing.T) {
+	missingPath := map[string]interface{}{"title": "No URL", "content": `<div class="post-content"><p>Original body</p></div>`,
+		"extra": map[string]string{"date": "2026-09-23"}}
+	other := map[string]interface{}{"path": "other", "title": "Other", "content": `<div class="post-content"><p>Other body</p></div>`,
+		"extra": map[string]string{"date": "2026-09-24"}}
+	parse := func(articles []map[string]interface{}) []*gofeed.Item {
+		data, err := json.Marshal(map[string]interface{}{"success": true, "data": map[string]interface{}{"articles": articles}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		items, err := parseQwenArticles(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return items
+	}
+	first := parse([]map[string]interface{}{missingPath, other})
+	reordered := parse([]map[string]interface{}{other, missingPath})
+	if first[0].GUID == "" || first[0].GUID != reordered[1].GUID {
+		t.Fatalf("missing-path identity changed with list order: %q != %q", first[0].GUID, reordered[1].GUID)
 	}
 }
 

@@ -87,8 +87,17 @@ func (s *knowledgeService) reviewIntake(ctx context.Context, kb *types.Knowledge
 		recordKBActivity(ctx, s.audit, knowledge.TenantID, kb.ID, types.AuditAction("knowledge.intake_review"), "knowledge", knowledge.ID, outcome,
 			map[string]any{"title": knowledge.Title, "body_bytes": len(body), "file_bytes": knowledge.FileSize, "duration_ms": time.Since(started).Milliseconds(), "process_heap_bytes": memory.Alloc, "model_id": kb.SummaryModelID, "model_usage": usage, "fee_source": "unavailable"})
 	}()
-	if invalidIntakeEvidence(body, intake.SourceInfo) {
-		intake.Decision, intake.Reason = "rejected", "missing body or required source evidence"
+	var source struct {
+		RejectReason string `json:"intake_reject_reason"`
+	}
+	if err := json.Unmarshal(knowledge.Metadata, &source); err != nil {
+		return false, err
+	}
+	if source.RejectReason == "" && invalidIntakeEvidence(body, intake.SourceInfo) {
+		source.RejectReason = "missing body or required source evidence"
+	}
+	if source.RejectReason != "" {
+		intake.Decision, intake.Reason = "rejected", source.RejectReason
 		knowledge.ParseStatus, knowledge.EnableStatus = types.ParseStatusRejected, "disabled"
 		if err := knowledge.SetIntakeMetadata(intake); err != nil {
 			return false, err
@@ -192,6 +201,18 @@ func (s *knowledgeService) ReviewKnowledgeIntake(ctx context.Context, id, action
 	knowledge.ParseStatus, knowledge.ErrorMessage, knowledge.UpdatedAt = types.ParseStatusPending, "", time.Now()
 	if err := knowledge.SetIntakeMetadata(intake); err != nil {
 		return nil, err
+	}
+	var metadata map[string]json.RawMessage
+	if err := json.Unmarshal(knowledge.Metadata, &metadata); err != nil {
+		return nil, err
+	}
+	if _, forced := metadata["intake_reject_reason"]; forced {
+		delete(metadata, "intake_reject_reason")
+		value, err := json.Marshal(metadata)
+		if err != nil {
+			return nil, err
+		}
+		knowledge.Metadata = types.JSON(value)
 	}
 	if err := s.repo.UpdateKnowledge(ctx, knowledge); err != nil {
 		return nil, err

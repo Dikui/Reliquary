@@ -1278,7 +1278,7 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 		metadata[k] = v
 	}
 	if ds.Type == types.ConnectorTypeRSS {
-		if len(item.Content) == 0 || item.URL == "" {
+		if len(item.Content) == 0 || (item.URL == "" && metadata["intake_reject_reason"] == "") {
 			return false, fmt.Errorf("RSS article body or original URL missing")
 		}
 		// ponytail: compare stored Markdown, not remote image bytes; add image fingerprints if in-place image edits matter.
@@ -1308,6 +1308,9 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 			SourceInfo: types.SourceInfo{
 				Author: metadata["author"], Publisher: metadata["publisher"], OriginalURL: item.URL, PublishedAt: metadata["published_at"],
 			},
+		}
+		if reason := metadata["intake_reject_reason"]; reason != "" {
+			payload.SourceMetadata["intake_reject_reason"] = reason
 		}
 		if existing != nil {
 			rejected, err := s.knowledgeService.ReviewRSSUpdate(ctx, existing.ID, payload)

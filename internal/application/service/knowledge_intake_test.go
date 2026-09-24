@@ -234,6 +234,56 @@ func TestProcessDocumentIntakeQualityGate(t *testing.T) {
 	}
 }
 
+func TestReviewIntakeKeepsSourcedBodyWithExplicitRejection(t *testing.T) {
+	const reason = "Qwen article missing publication date"
+	knowledge := &types.Knowledge{ID: "qwen-article", TenantID: 1, KnowledgeBaseID: "kb",
+		Metadata: types.JSON(`{"intake_reject_reason":"Qwen article missing publication date"}`)}
+	require.NoError(t, knowledge.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{
+		Source: "manual", Decision: "pending", OriginalPath: "stored-original",
+		SourceInfo: types.SourceInfo{Publisher: "Qwen", OriginalURL: "https://qwen.ai/blog?id=article", PublishedAt: "2026-09-20"},
+	}))
+	repo := &intakeRepo{knowledge: knowledge}
+	svc := &knowledgeService{repo: repo}
+	rejected, err := svc.reviewIntake(context.Background(), &types.KnowledgeBase{ID: "kb", TenantID: 1}, knowledge, "Complete original body")
+	require.NoError(t, err)
+	require.True(t, rejected)
+	intake, err := repo.knowledge.IntakeMetadata()
+	require.NoError(t, err)
+	require.Equal(t, "rejected", intake.Decision)
+	require.Equal(t, reason, intake.Reason)
+	require.Equal(t, "stored-original", intake.OriginalPath)
+	require.Equal(t, types.ParseStatusRejected, repo.knowledge.ParseStatus)
+}
+
+func TestReviewKnowledgeIntakeCorrectionClearsQwenRejection(t *testing.T) {
+	knowledge := &types.Knowledge{ID: "qwen-article", TenantID: 1, KnowledgeBaseID: "kb", Type: "manual",
+		ParseStatus: types.ParseStatusRejected,
+		Metadata:    types.JSON(`{"intake_reject_reason":"Qwen article missing publication date"}`)}
+	require.NoError(t, knowledge.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{
+		Source: "manual", Decision: "rejected", Reason: "Qwen article missing publication date", OriginalPath: "original",
+		SourceInfo: types.SourceInfo{Publisher: "Qwen", OriginalURL: "https://qwen.ai/blog?id=article"},
+	}))
+	repo := &intakeRepo{knowledge: knowledge}
+	task := &intakeTask{}
+	svc := &knowledgeService{repo: repo, kbService: intakeKBService{creatorID: "owner"},
+		fileSvc:      &intakeFileService{saved: map[string][]byte{"original": []byte("Complete original body")}},
+		modelService: intakeModelService{chat: intakeChat{response: `{"approved":true,"reason":"sourced article"}`}}, task: task}
+	ctx := context.WithValue(context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1)), types.UserIDContextKey, "owner")
+	updated, err := svc.ReviewKnowledgeIntake(ctx, knowledge.ID, "retry", types.SourceInfo{PublishedAt: "2026-09-20"})
+	require.NoError(t, err)
+	require.Equal(t, 1, task.calls)
+	require.NotContains(t, string(updated.Metadata), "intake_reject_reason")
+	kb, err := svc.kbService.GetKnowledgeBaseByID(ctx, "kb")
+	require.NoError(t, err)
+	rejected, err := svc.reviewIntake(ctx, kb, updated, "Complete original body")
+	require.NoError(t, err)
+	require.False(t, rejected)
+	intake, err := repo.knowledge.IntakeMetadata()
+	require.NoError(t, err)
+	require.Equal(t, "approved", intake.Decision)
+	require.Equal(t, "2026-09-20", intake.SourceInfo.PublishedAt)
+}
+
 func TestReviewKnowledgeIntakeSourceReadFailureCleansPendingMessage(t *testing.T) {
 	for _, tt := range []struct {
 		name   string

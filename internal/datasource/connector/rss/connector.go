@@ -345,6 +345,38 @@ func (c *Connector) walk(
 			if itemID == "" {
 				continue
 			}
+			if reason := item.Custom["error"]; fromQwen && reason != "" {
+				if body := htmlToMarkdown(item.Content); body != "" {
+					signal := feedSignalFingerprint(item, item.Content)
+					if incremental && prevItems[itemID] != "" && prevSignals[itemID] == signal {
+						newCursor.FeedItems[feedURL][itemID] = prevItems[itemID]
+						newCursor.FeedSignals[feedURL][itemID] = signal
+						skipped++
+						continue
+					}
+					title := firstNonEmpty(item.Title, "Qwen article")
+					author := ""
+					if item.Author != nil {
+						author = item.Author.Name
+					}
+					out = append(out, types.FetchedItem{ExternalID: itemExternalID(feedURL, itemID), Title: title,
+						Content: []byte(body), ContentType: "text/markdown", FileName: sanitizeFileName(title) + ".md",
+						URL: item.Link, SourceResourceID: feedURL, Metadata: map[string]string{
+							"channel": types.ChannelRSS, "feed_url": feedURL, "feed_title": feed.Title,
+							"guid": item.GUID, "link": item.Link, "author": author, "publisher": cfg.Publisher,
+							"published_at": item.Published, "intake_reject_reason": reason,
+						}})
+					newCursor.FeedItems[feedURL][itemID] = contentFingerprint(body)
+					newCursor.FeedSignals[feedURL][itemID] = signal
+					kept++
+					continue
+				}
+				out = append(out, types.FetchedItem{ExternalID: itemExternalID(feedURL, itemID),
+					Title:    firstNonEmpty(item.Title, item.Link, item.GUID),
+					Metadata: map[string]string{"error": reason, "channel": types.ChannelRSS}})
+				kept++
+				continue
+			}
 			published := item.PublishedParsed
 			if fromSitemap {
 				published = item.UpdatedParsed // discovery filter only; the article supplies the real publication date.
