@@ -47,15 +47,21 @@ func parseListing(data []byte, listingURL, pathPrefix string) ([]*gofeed.Item, e
 		if _, valid := parseSiteDate(date); !valid {
 			date = ""
 		}
-		signal := now
+		listingUpdatedAt := now
+		hasListingTime := false
 		if raw, ok := a.Find("time[datetime]").First().Attr("datetime"); ok {
 			if parsed, valid := parseSiteDate(raw); valid {
-				signal = parsed
+				listingUpdatedAt = parsed
+				hasListingTime = true
 			}
 		}
 		if existing := seen[absolute]; existing != nil {
 			if existing.Published == "" {
 				existing.Published = date
+			}
+			if hasListingTime {
+				existing.Updated = listingUpdatedAt.Format(time.RFC3339Nano)
+				existing.UpdatedParsed = &listingUpdatedAt
 			}
 			return true
 		}
@@ -64,7 +70,7 @@ func parseListing(data []byte, listingURL, pathPrefix string) ([]*gofeed.Item, e
 			title = strings.TrimSpace(a.Text())
 		}
 		item := &gofeed.Item{GUID: absolute, Link: absolute, Title: title,
-			Published: date, Updated: signal.Format(time.RFC3339Nano), UpdatedParsed: &signal,
+			Published: date, Updated: listingUpdatedAt.Format(time.RFC3339Nano), UpdatedParsed: &listingUpdatedAt,
 			Custom: map[string]string{"listing_title_needs_article": "true"}}
 		seen[absolute] = item
 		items = append(items, item)

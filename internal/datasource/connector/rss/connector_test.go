@@ -169,6 +169,7 @@ func TestListingUsesArticlePublicationDateAndSameSiteLinks(t *testing.T) {
 
 func TestCursorListingSkipsTopicsAndUsesCardTime(t *testing.T) {
 	page := []byte(`<a href="/blog/topic/research">Research Posts</a>` +
+		`<a href="/blog/old">Old in navigation</a>` +
 		`<a href="/blog/old"><time dateTime="2026-09-02T12:00:00.000Z">Sep 2, 2026</time></a>` +
 		`<a href="/blog/current"><time dateTime="2026-09-23T12:00:00.000Z">Sep 23, 2026</time></a>`)
 	items, err := parseListing(page, "https://cursor.com/blog", "/blog/")
