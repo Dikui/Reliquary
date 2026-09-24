@@ -139,19 +139,36 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 		// ponytail: page-wide fallback may reject decorative media on pages without a content container.
 		content = doc.Selection
 	}
+	if err := articleContentError(content); err != nil {
+		return "", "", "", "", "", err
+	}
+	preferLargestImageVariant(goquery.NewDocumentFromNode(article.Node).Selection, pageURL)
+
+	var buf bytes.Buffer
+	if err := article.RenderHTML(&buf); err != nil {
+		return "", "", "", "", "", fmt.Errorf("render article html: %w", err)
+	}
+	return buf.String(), article.Title(), article.Byline(), article.SiteName(), articlePublishedAt(doc, articleURL), nil
+}
+
+func articleContentError(content *goquery.Selection) error {
 	if content.Find("iframe, video, audio, object, embed, canvas").Length() > 0 ||
 		content.Find("[or-mp4-video-url]").FilterFunction(func(_ int, node *goquery.Selection) bool {
 			value, _ := node.Attr("or-mp4-video-url")
 			return strings.TrimSpace(value) != ""
 		}).Length() > 0 {
-		return "", "", "", "", "", fmt.Errorf("article contains unsupported embedded media")
+		return fmt.Errorf("article contains unsupported embedded media")
 	}
 	if content.Find("div.animate-pulse").FilterFunction(func(_ int, node *goquery.Selection) bool {
 		return strings.TrimSpace(node.Text()) == "" && node.Find("img, picture, svg").Length() == 0
 	}).Length() > 0 {
-		return "", "", "", "", "", fmt.Errorf("article contains unresolved content placeholder")
+		return fmt.Errorf("article contains unresolved content placeholder")
 	}
-	goquery.NewDocumentFromNode(article.Node).Find("img").Each(func(_ int, img *goquery.Selection) {
+	return nil
+}
+
+func preferLargestImageVariant(content *goquery.Selection, pageURL *url.URL) {
+	content.Filter("img").AddSelection(content.Find("img")).Each(func(_ int, img *goquery.Selection) {
 		variants, _ := img.Attr("data-srcset")
 		if strings.TrimSpace(variants) == "" {
 			variants, _ = img.Attr("srcset")
@@ -173,10 +190,4 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 			}
 		}
 	})
-
-	var buf bytes.Buffer
-	if err := article.RenderHTML(&buf); err != nil {
-		return "", "", "", "", "", fmt.Errorf("render article html: %w", err)
-	}
-	return buf.String(), article.Title(), article.Byline(), article.SiteName(), articlePublishedAt(doc, articleURL), nil
 }

@@ -146,6 +146,40 @@ func TestListingUsesArticlePublicationDateAndSameSiteLinks(t *testing.T) {
 	}
 }
 
+func TestDeepSeekChangelogSplitsDatedEntries(t *testing.T) {
+	const pageURL = "https://api-docs.deepseek.com/zh-cn/updates/"
+	if !isDeepSeekUpdatesURL(pageURL) || isDeepSeekUpdatesURL("https://example.com/zh-cn/updates/") {
+		t.Fatal("changelog parser must be limited to the official updates page")
+	}
+	page := `<div class="theme-doc-markdown markdown"><div class="col col--12">` +
+		`<h2 id="date-one">时间: 2026-09-10</h2><h3 id="first">第一条<a href="#first">​</a></h3>` +
+		`<p>完整更新内容 <a href="/zh-cn/news/first">详情</a></p><img src="/blur.webp" srcset="/original.webp 2200w">` +
+		`<table><tr><th>Benchmark</th><th>Score</th></tr><tr><td>GPQA</td><td>90.9</td></tr></table>` +
+		`<h2 id="date-two">时间: 2026-08-21</h2><h3 id="second">第二条</h3><p>第二条正文</p></div></div>`
+	items, err := parseDeepSeekUpdates([]byte(page), pageURL)
+	if err != nil || len(items) != 2 {
+		t.Fatalf("expected two dated updates: items=%d err=%v", len(items), err)
+	}
+	if items[0].Link != pageURL+"#first" || items[0].Published != "2026-09-10" ||
+		!strings.Contains(items[0].Content, "https://api-docs.deepseek.com/zh-cn/news/first") ||
+		!strings.Contains(items[0].Content, "https://api-docs.deepseek.com/original.webp") ||
+		strings.Contains(items[0].Content, "第二条正文") {
+		t.Fatalf("first update lost its original boundary, date or resources: %+v", items[0])
+	}
+	resolved := NewConnector().resolveItem(context.Background(), newClient(nil), &gofeed.Feed{Title: "DeepSeek"}, items[0], pageURL, items[0].GUID, "DeepSeek", true)
+	if resolved.item.Metadata["error"] != "" || resolved.item.Metadata["published_at"] != "2026-09-10" ||
+		!strings.Contains(string(resolved.item.Content), "完整更新内容") ||
+		!strings.Contains(string(resolved.item.Content), "| Benchmark") ||
+		!strings.Contains(string(resolved.item.Content), "| GPQA") {
+		t.Fatalf("inline original should use the shared intake item: %+v", resolved.item)
+	}
+	items[0].Content = `<p>Demo</p><iframe src="https://example.com/demo"></iframe>`
+	resolved = NewConnector().resolveItem(context.Background(), newClient(nil), &gofeed.Feed{Title: "DeepSeek"}, items[0], pageURL, items[0].GUID, "DeepSeek", true)
+	if resolved.item.Metadata["error"] == "" || len(resolved.item.Content) != 0 {
+		t.Fatalf("unpreserved inline embed must not enter intake: %+v", resolved.item)
+	}
+}
+
 func TestArticlePublishedAtReadsStructuredDateAndFallsBackToHero(t *testing.T) {
 	structured, err := goquery.NewDocumentFromReader(strings.NewReader(`<html><head><script type="application/ld+json">{"@type":"BlogPosting","mainEntityOfPage":"https://mistral.ai/news/other/","datePublished":"2026-01-01"}</script><script type="application/ld+json">{"@type":"BlogPosting","mainEntityOfPage":"https://mistral.ai/news/ocr-4/","datePublished":"2026-06-23T12:00:48.000Z","dateModified":"2026-09-10T14:01:55.122Z"}</script></head><body><article><h1>OCR</h1></article></body></html>`))
 	if err != nil {

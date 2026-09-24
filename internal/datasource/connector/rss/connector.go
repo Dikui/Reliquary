@@ -9,7 +9,11 @@ import (
 	"strings"
 	"time"
 
-	htmltomd "github.com/JohannesKaufmann/html-to-markdown/v2"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/base"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/commonmark"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/table"
+	"github.com/PuerkitoBio/goquery"
 	"github.com/mmcdole/gofeed"
 	"reliquary/internal/datasource"
 	"reliquary/internal/logger"
@@ -44,6 +48,12 @@ func (c *Connector) Validate(ctx context.Context, config *types.DataSourceConfig
 			return fmt.Errorf("fetch feed %s: %w", feedURL, err)
 		}
 		if _, err := parser.Parse(bytes.NewReader(data)); err != nil {
+			if isDeepSeekUpdatesURL(feedURL) {
+				if _, changelogErr := parseDeepSeekUpdates(data, feedURL); changelogErr != nil {
+					return fmt.Errorf("parse changelog %s: %w", feedURL, changelogErr)
+				}
+				continue
+			}
 			if _, sitemapErr := parseSitemap(data); sitemapErr != nil || cfg.ArticlePathPrefix == "" {
 				if _, listingErr := parseListing(data, feedURL, cfg.ArticlePathPrefix); listingErr != nil {
 					return fmt.Errorf("parse feed or article listing %s: %w", feedURL, listingErr)
@@ -99,6 +109,18 @@ func (c *Connector) ListResources(
 		}
 		feed, err := parser.Parse(bytes.NewReader(data))
 		if err != nil {
+			if isDeepSeekUpdatesURL(feedURL) {
+				entries, changelogErr := parseDeepSeekUpdates(data, feedURL)
+				if changelogErr == nil {
+					res.Name = firstNonEmpty(cfg.Publisher, feedURL)
+					res.Metadata = map[string]interface{}{"item_count": len(entries)}
+					out = append(out, res)
+					continue
+				}
+				res.Description = "parse failed: " + changelogErr.Error()
+				out = append(out, res)
+				continue
+			}
 			if entries, sitemapErr := parseSitemap(data); sitemapErr == nil && cfg.ArticlePathPrefix != "" {
 				res.Name = firstNonEmpty(cfg.Publisher, feedURL)
 				sitemapURL, _ := url.Parse(feedURL)
@@ -238,28 +260,36 @@ func (c *Connector) walk(
 		}
 		feed, err := parser.Parse(bytes.NewReader(data))
 		fromSitemap := false
+		fromChangelog := false
 		if err != nil {
-			entries, sitemapErr := parseSitemap(data)
-			fromSitemap = true
 			feed = &gofeed.Feed{Title: cfg.Publisher}
-			if sitemapErr == nil && cfg.ArticlePathPrefix != "" {
-				sitemapURL, _ := url.Parse(feedURL)
-				for _, entry := range entries {
-					if !sitemapArticleURL(entry.Loc, sitemapURL, cfg.ArticlePathPrefix) {
-						continue
-					}
-					modified, valid := parseSiteDate(entry.LastMod)
-					if !valid {
-						continue
-					}
-					feed.Items = append(feed.Items, &gofeed.Item{GUID: entry.Loc, Link: entry.Loc,
-						Updated: entry.LastMod, UpdatedParsed: &modified})
-				}
-			} else if articles, listingErr := parseListing(data, feedURL, cfg.ArticlePathPrefix); listingErr == nil {
-				feed.Items = articles
+			err = nil
+			if isDeepSeekUpdatesURL(feedURL) {
+				feed.Items, err = parseDeepSeekUpdates(data, feedURL)
+				fromChangelog = true
 			} else {
-				logger.Warnf(ctx, "[RSS] sync: parse %s failed: %v", feedURL, listingErr)
-				feedErrors = append(feedErrors, fmt.Sprintf("%s: invalid feed, sitemap or article listing", feedURL))
+				entries, sitemapErr := parseSitemap(data)
+				fromSitemap = true
+				if sitemapErr == nil && cfg.ArticlePathPrefix != "" {
+					sitemapURL, _ := url.Parse(feedURL)
+					for _, entry := range entries {
+						if !sitemapArticleURL(entry.Loc, sitemapURL, cfg.ArticlePathPrefix) {
+							continue
+						}
+						modified, valid := parseSiteDate(entry.LastMod)
+						if !valid {
+							continue
+						}
+						feed.Items = append(feed.Items, &gofeed.Item{GUID: entry.Loc, Link: entry.Loc,
+							Updated: entry.LastMod, UpdatedParsed: &modified})
+					}
+				} else {
+					feed.Items, err = parseListing(data, feedURL, cfg.ArticlePathPrefix)
+				}
+			}
+			if err != nil {
+				logger.Warnf(ctx, "[RSS] sync: parse %s failed: %v", feedURL, err)
+				feedErrors = append(feedErrors, fmt.Sprintf("%s: %v", feedURL, err))
 				copyFeedCursor(newCursor, prev, feedURL)
 				continue
 			}
@@ -315,7 +345,7 @@ func (c *Connector) walk(
 				}
 			}
 
-			resolved := c.resolveItem(ctx, cli, feed, item, feedURL, itemID, cfg.Publisher)
+			resolved := c.resolveItem(ctx, cli, feed, item, feedURL, itemID, cfg.Publisher, fromChangelog)
 			if fromSitemap && resolved.item.Metadata["error"] == "" {
 				actualDate, valid := parseSiteDate(resolved.item.Metadata["published_at"])
 				if !valid {
@@ -368,14 +398,15 @@ type resolvedFeedItem struct {
 }
 
 // resolveItem assembles a FetchedItem for a single feed entry, resolving the
-// best available content (full-text article > feed content) and converting it
-// to Markdown.
+// best available content and converting it to Markdown. Only a parsed
+// changelog section is trusted as complete inline content; feeds are not.
 func (c *Connector) resolveItem(
 	ctx context.Context,
 	cli *client,
 	feed *gofeed.Feed,
 	item *gofeed.Item,
 	feedURL, itemID, publisher string,
+	inlineOriginal bool,
 ) resolvedFeedItem {
 	title := firstNonEmpty(item.Title, "untitled")
 
@@ -384,11 +415,26 @@ func (c *Connector) resolveItem(
 		return resolvedFeedItem{item: types.FetchedItem{ExternalID: itemExternalID(feedURL, itemID), Title: title,
 			Metadata: map[string]string{"error": "missing article URL", "channel": types.ChannelRSS}}}
 	}
-	contentHTML, articleTitle, articleByline, articleSiteName, pagePublishedAt, err := cli.extractArticle(ctx, item.Link)
+	var contentHTML, articleTitle, articleByline, articleSiteName, pagePublishedAt string
+	var err error
+	if inlineOriginal {
+		contentHTML, pagePublishedAt = item.Content, item.Published
+		var doc *goquery.Document
+		doc, err = goquery.NewDocumentFromReader(strings.NewReader(contentHTML))
+		if err == nil {
+			err = articleContentError(doc.Selection)
+		}
+	} else {
+		contentHTML, articleTitle, articleByline, articleSiteName, pagePublishedAt, err = cli.extractArticle(ctx, item.Link)
+	}
 	if err != nil {
-		logger.Warnf(ctx, "[RSS] full-text fetch failed for %s: %v", item.Link, err)
+		stage := "article fetch failed"
+		if inlineOriginal {
+			stage = "changelog entry failed"
+		}
+		logger.Warnf(ctx, "[RSS] %s for %s: %v", stage, item.Link, err)
 		return resolvedFeedItem{item: types.FetchedItem{ExternalID: itemExternalID(feedURL, itemID), Title: title,
-			Metadata: map[string]string{"error": "article fetch failed: " + err.Error(), "channel": types.ChannelRSS}}}
+			Metadata: map[string]string{"error": stage + ": " + err.Error(), "channel": types.ChannelRSS}}}
 	}
 	if item.Title == "" && articleTitle != "" {
 		title = articleTitle
@@ -453,7 +499,7 @@ func (c *Connector) resolveItem(
 // FetchArticle extracts a discovered page using the same full-text and source
 // evidence rules as RSS, without requiring the page to appear in a feed.
 func FetchArticle(ctx context.Context, articleURL string) (*types.FetchedItem, error) {
-	resolved := NewConnector().resolveItem(ctx, newClient(nil), &gofeed.Feed{}, &gofeed.Item{Link: articleURL}, "", articleURL, "")
+	resolved := NewConnector().resolveItem(ctx, newClient(nil), &gofeed.Feed{}, &gofeed.Item{Link: articleURL}, "", articleURL, "", false)
 	if reason := resolved.item.Metadata["error"]; reason != "" {
 		return nil, fmt.Errorf("fetch original article: %s", reason)
 	}
@@ -466,7 +512,8 @@ func htmlToMarkdown(html string) string {
 	if strings.TrimSpace(html) == "" {
 		return ""
 	}
-	md, err := htmltomd.ConvertString(html)
+	conv := converter.NewConverter(converter.WithPlugins(base.NewBasePlugin(), commonmark.NewCommonmarkPlugin(), table.NewTablePlugin(table.WithNewlineBehavior(table.NewlineBehaviorPreserve))))
+	md, err := conv.ConvertString(html)
 	if err != nil || strings.TrimSpace(md) == "" {
 		return strings.TrimSpace(html)
 	}
