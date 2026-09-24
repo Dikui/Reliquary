@@ -259,14 +259,28 @@ func TestCursorListingSkipsTopicsAndUsesCardTime(t *testing.T) {
 
 func TestKimiListingUsesCardDateForDiscovery(t *testing.T) {
 	page := []byte(`<a href="/blog/kimi-k2">Kimi K2 in navigation</a>` +
-		`<div class="menu-card"><a href="/blog/kimi-k2">Kimi K2</a><p class="card-date">2025-07-11</p></div>` +
+		`<div class="menu-card"><a href="/blog/kimi-k2/">Kimi K2</a><p class="card-date">2025-07-11</p></div>` +
 		`<div class="menu-card"><a href="/blog/kimi-k3">Kimi K3</a><p class="card-date">2026-07-16</p></div>`)
 	items, err := parseListing(page, "https://www.kimi.ai/blog/", "/blog/")
-	if err != nil || len(items) != 2 || items[0].Published != "2025-07-11" ||
+	if err != nil || len(items) != 2 || items[0].GUID != "https://www.kimi.ai/blog/kimi-k2" || items[0].Published != "2025-07-11" ||
 		items[0].UpdatedParsed.Format("2006-01-02") != "2025-07-11" ||
 		items[1].UpdatedParsed.Format("2006-01-02") != "2026-07-16" ||
 		!items[1].UpdatedParsed.After(time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)) {
 		t.Fatalf("Kimi card dates must remain discovery signals after duplicate navigation links: items=%+v err=%v", items, err)
+	}
+}
+
+func TestMistralPageAttributionSeparatesOrganizationsAndPeople(t *testing.T) {
+	pageURL, _ := url.Parse("https://mistral.ai/news/mistral-x-mozilla/")
+	for _, test := range []struct{ byline, author, publisher string }{
+		{"Mistral and Mozilla", "", "Mistral and Mozilla"},
+		{"Carlo Antonio Patti & Rasul Alakbarli", "Carlo Antonio Patti & Rasul Alakbarli", ""},
+	} {
+		doc, _ := goquery.NewDocumentFromReader(strings.NewReader(`<article><div><h1>News</h1><div><p>September 16, 2026</p><p>By ` + test.byline + `</p></div></div></article>`))
+		author, publisher := mistralPageAttribution(doc, pageURL)
+		if author != test.author || publisher != test.publisher {
+			t.Fatalf("byline %q became author=%q publisher=%q", test.byline, author, publisher)
+		}
 	}
 }
 

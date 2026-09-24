@@ -226,7 +226,35 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 	if err := article.RenderHTML(&buf); err != nil {
 		return "", "", "", "", "", fmt.Errorf("render article html: %w", err)
 	}
-	return buf.String(), firstNonEmpty(sourceHeading, article.Title()), article.Byline(), article.SiteName(), articlePublishedAt(doc, articleURL), nil
+	byline, siteName = article.Byline(), article.SiteName()
+	if author, publisher := mistralPageAttribution(doc, pageURL); author != "" || publisher != "" {
+		if author != "" {
+			byline = author
+		} else {
+			byline, siteName = "", publisher
+		}
+	}
+	return buf.String(), firstNonEmpty(sourceHeading, article.Title()), byline, siteName, articlePublishedAt(doc, articleURL), nil
+}
+
+func mistralPageAttribution(doc *goquery.Document, pageURL *url.URL) (author, publisher string) {
+	if pageURL == nil || pageURL.Hostname() != "mistral.ai" || !strings.HasPrefix(pageURL.Path, "/news/") {
+		return "", ""
+	}
+	doc.Find("h1").First().Parent().Find("p").EachWithBreak(func(_ int, paragraph *goquery.Selection) bool {
+		text := strings.TrimSpace(paragraph.Text())
+		if !strings.HasPrefix(text, "By ") {
+			return true
+		}
+		byline := strings.TrimSpace(strings.TrimPrefix(text, "By "))
+		if strings.HasPrefix(strings.ToLower(byline), "mistral") {
+			publisher = byline
+		} else {
+			author = byline
+		}
+		return false
+	})
+	return author, publisher
 }
 
 func (c *client) preserveVideoLinks(ctx context.Context, content *goquery.Selection, pageURL *url.URL) (int, error) {

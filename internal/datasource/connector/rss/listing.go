@@ -40,6 +40,7 @@ func parseListing(data []byte, listingURL, pathPrefix string) ([]*gofeed.Item, e
 		if !sitemapArticleURL(absolute, base, pathPrefix) {
 			return true
 		}
+		itemID := strings.TrimSuffix(absolute, "/")
 		if strings.EqualFold(base.Hostname(), "cursor.com") && strings.HasPrefix(resolved.Path, "/blog/topic/") {
 			return true
 		}
@@ -62,7 +63,7 @@ func parseListing(data []byte, listingURL, pathPrefix string) ([]*gofeed.Item, e
 				hasListingTime = true
 			}
 		}
-		if existing := seen[absolute]; existing != nil {
+		if existing := seen[itemID]; existing != nil {
 			if existing.Published == "" {
 				existing.Published = date
 			}
@@ -76,10 +77,10 @@ func parseListing(data []byte, listingURL, pathPrefix string) ([]*gofeed.Item, e
 		if title == "" {
 			title = strings.TrimSpace(a.Text())
 		}
-		item := &gofeed.Item{GUID: absolute, Link: absolute, Title: title,
+		item := &gofeed.Item{GUID: itemID, Link: absolute, Title: title,
 			Published: date, Updated: listingUpdatedAt.Format(time.RFC3339Nano), UpdatedParsed: &listingUpdatedAt,
 			Custom: map[string]string{"from_listing": "true"}}
-		seen[absolute] = item
+		seen[itemID] = item
 		items = append(items, item)
 		// ponytail: inspect only the newest visible links; expand if a source paginates.
 		return len(items) < 50

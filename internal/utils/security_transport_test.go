@@ -46,6 +46,9 @@ func TestSSRFSafeDialContextRejectsRestrictedPortAtFinalSink(t *testing.T) {
 // its own timeout and a redirect policy.
 func TestNewSSRFSafeTransport_SharedAcrossClients(t *testing.T) {
 	shared := NewSSRFSafeTransport(DefaultSSRFSafeHTTPClientConfig())
+	if shared.Proxy == nil {
+		t.Fatal("SSRF-safe transport must honor the configured system proxy")
+	}
 
 	cfg := DefaultSSRFSafeHTTPClientConfig()
 	cfg.Timeout = 15 * time.Second

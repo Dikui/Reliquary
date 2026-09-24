@@ -693,6 +693,7 @@ func NewSSRFSafeTransport(config SSRFSafeHTTPClientConfig) *http.Transport {
 	return &http.Transport{
 		DisableKeepAlives:  config.DisableKeepAlives,
 		DisableCompression: config.DisableCompression,
+		Proxy:              http.ProxyFromEnvironment,
 		// Dial with SSRF protection - validates resolved IPs before connecting
 		DialContext: SSRFSafeDialContext,
 	}
