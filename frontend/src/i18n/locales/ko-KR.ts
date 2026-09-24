@@ -6212,7 +6212,7 @@ export default {
       list: '이상 및 처리 기록', empty: '이상 없음', proposedTags: '제안된 태그', noTags: '태그 없음', proposedDelete: '태그 삭제 제안',
       addTags: '태그 연결 추가', removeTags: '태그 연결 제거', loadMore: '이전 기록 더 보기', loadMoreTags: '태그 더 보기', retry: '적용 재시도',
       proposal: { none: '문제만 신고', change_tags: '태그 연결 수정', delete_tag: '태그 삭제' },
-      openMessage: '원문 및 이미지 보기', editTags: '태그 수정', apply: '승인 및 적용', resolved: '해결됨', dismiss: '무시', decision: '처리 결과',
+      openMessage: '원문 및 이미지 보기', editTags: '태그 수정', apply: '승인 및 적용', resolved: '해결됨', dismiss: '무시', decision: '처리 결과', ownerDecision: '소유자 결정과 근거 (필수)',
       loadFailed: '이상을 불러오지 못했습니다', saveFailed: '저장하지 못했습니다', submitted: '이상이 제출되었습니다', saved: '처리 결과가 저장되었습니다',
       deleteConfirmTitle: '태그 삭제 확인', deleteConfirm: '"{name}" 태그와 연결을 삭제하시겠습니까? 메시지와 이미지는 유지됩니다.',
       kind: { suspected_error: '오류 의심', outdated: '오래된 내용', source_conflict: '출처 충돌', manual_conflict: '수동 수정 충돌', tag_deletion: '태그 삭제 제안' },

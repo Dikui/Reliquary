@@ -50,9 +50,12 @@
                 @click="emit('edit-tags', item.knowledge_ids[0], item.id)">{{ t('knowledgeBase.anomalies.editTags') }}</t-button>
             </div>
             <div v-if="(item.status === 'pending' || item.status === 'applying') && isOwner" class="anomaly-item__decisions">
+              <t-textarea v-if="item.kind === 'source_conflict' && item.status === 'pending'" v-model.trim="decisionNotes[item.id]"
+                :placeholder="t('knowledgeBase.anomalies.ownerDecision')" :maxlength="500" />
               <t-button v-if="item.proposal_type !== 'none'" size="small" theme="primary" :loading="decidingId === item.id"
                 @click="decide(item, 'apply')">{{ t(`knowledgeBase.anomalies.${item.status === 'applying' ? 'retry' : 'apply'}`) }}</t-button>
-              <t-button v-if="item.status === 'pending'" size="small" variant="outline" :loading="decidingId === item.id" @click="decide(item, 'resolved')">
+              <t-button v-if="item.status === 'pending'" size="small" variant="outline" :loading="decidingId === item.id"
+                :disabled="item.kind === 'source_conflict' && !decisionNotes[item.id]?.trim()" @click="decide(item, 'resolved')">
                 {{ t('knowledgeBase.anomalies.resolved') }}
               </t-button>
               <t-button v-if="item.status === 'pending'" size="small" variant="text" :loading="decidingId === item.id" @click="decide(item, 'dismiss')">
@@ -108,6 +111,7 @@ const tagLoading = ref(false)
 const loading = ref(false)
 const saving = ref(false)
 const decidingId = ref('')
+const decisionNotes = ref<Record<string, string>>({})
 const messageIds = ref('')
 const kind = ref<KnowledgeAnomalyKind>('suspected_error')
 const description = ref('')
@@ -193,7 +197,7 @@ async function submitReport() {
 async function runDecision(item: KnowledgeAnomaly, action: 'apply' | 'resolved' | 'dismiss') {
   decidingId.value = item.id
   try {
-    await decideKnowledgeAnomaly(props.kbId, item.id, action)
+    await decideKnowledgeAnomaly(props.kbId, item.id, action, decisionNotes.value[item.id] || '')
     MessagePlugin.success(t('knowledgeBase.anomalies.saved'))
     await load()
     emit('changed')

@@ -31,9 +31,9 @@ func (r *sourceRegistry) ModelOutput(result *types.ToolResult) string {
 	}
 	switch displayType {
 	case "grep_results":
-		return r.modelKnowledgeOutput("keyword", mapsValue(result.Data["chunk_results"]), result.Output)
+		return r.modelKnowledgeWithDisputes("keyword", mapsValue(result.Data["chunk_results"]), result.Output)
 	case "search_results":
-		return r.modelKnowledgeOutput("semantic", mapsValue(result.Data["results"]), result.Output)
+		return r.modelKnowledgeWithDisputes("semantic", mapsValue(result.Data["results"]), result.Output)
 	case "knowledge_chunks_list":
 		return r.modelKnowledgeChunksOutput(result.Data, result.Output)
 	case "document_info":
@@ -49,6 +49,20 @@ func (r *sourceRegistry) ModelOutput(result *types.ToolResult) string {
 		r.registerStructuredReferences(result.Output)
 		return r.CompactKnownText(result.Output)
 	}
+}
+
+func (r *sourceRegistry) modelKnowledgeWithDisputes(mode string, rows []map[string]interface{}, fallback string) string {
+	output := r.modelKnowledgeOutput(mode, rows, fallback)
+	start := strings.Index(fallback, "<source_disputes>")
+	if start < 0 || !strings.HasSuffix(output, "</retrieval>") {
+		return output
+	}
+	end := strings.Index(fallback[start:], "</source_disputes>")
+	if end < 0 {
+		return output
+	}
+	end += start + len("</source_disputes>")
+	return strings.TrimSuffix(output, "</retrieval>") + r.CompactKnownText(fallback[start:end]) + "\n</retrieval>"
 }
 
 // registerStructuredReferences registers durable IDs found under explicitly

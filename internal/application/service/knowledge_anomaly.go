@@ -243,6 +243,9 @@ func (s *KnowledgeAnomalyService) Resolve(ctx context.Context, kbID, anomalyID, 
 	if item.Status != "pending" && !retrying {
 		return nil, werrors.NewBadRequestError("anomaly already decided")
 	}
+	if item.Kind == "source_conflict" && action == "resolved" && note == "" {
+		return nil, werrors.NewBadRequestError("source conflict resolution requires an owner decision")
+	}
 	if retrying && time.Since(item.UpdatedAt) < 2*time.Minute {
 		return nil, werrors.NewBadRequestError("anomaly is still applying; retry after two minutes")
 	}

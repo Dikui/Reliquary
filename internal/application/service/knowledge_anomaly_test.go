@@ -49,6 +49,8 @@ func TestKnowledgeAnomalyForMessagesReturnsRelevantDecisions(t *testing.T) {
 	ctx := anomalyContext("owner")
 	item, err := svc.Create(ctx, "kb", KnowledgeAnomalyInput{KnowledgeIDs: []string{"message", "second"}, Kind: "source_conflict", Description: "conflicting evidence"})
 	require.NoError(t, err)
+	_, err = svc.Resolve(ctx, "kb", item.ID, "resolved", "")
+	require.Error(t, err)
 	_, err = svc.Resolve(ctx, "kb", item.ID, "resolved", "Use the later verified source")
 	require.NoError(t, err)
 	got, err := svc.ForMessages(ctx, []string{"kb"}, []string{"message"})

@@ -6212,7 +6212,7 @@ export default {
       list: 'Проблемы и решения', empty: 'Проблем пока нет', proposedTags: 'Предлагаемые теги', noTags: 'Без тегов', proposedDelete: 'Предложено удалить тег',
       addTags: 'Добавить связи тегов', removeTags: 'Удалить связи тегов', loadMore: 'Показать старые записи', loadMoreTags: 'Загрузить другие теги', retry: 'Повторить применение',
       proposal: { none: 'Только сообщить', change_tags: 'Изменить связи тегов', delete_tag: 'Удалить тег' },
-      openMessage: 'Открыть оригинал и изображения', editTags: 'Изменить теги', apply: 'Подтвердить и применить', resolved: 'Решено', dismiss: 'Отклонить', decision: 'Решение',
+      openMessage: 'Открыть оригинал и изображения', editTags: 'Изменить теги', apply: 'Подтвердить и применить', resolved: 'Решено', dismiss: 'Отклонить', decision: 'Решение', ownerDecision: 'Решение владельца и основание (обязательно)',
       loadFailed: 'Не удалось загрузить проблемы', saveFailed: 'Не удалось сохранить', submitted: 'Проблема отправлена', saved: 'Решение сохранено',
       deleteConfirmTitle: 'Подтвердите удаление тега', deleteConfirm: 'Удалить тег «{name}» и его связи? Сообщения и изображения сохранятся.',
       kind: { suspected_error: 'Возможная ошибка', outdated: 'Устаревшее содержимое', source_conflict: 'Противоречие источников', manual_conflict: 'Конфликт ручных правок', tag_deletion: 'Предложение удалить тег' },

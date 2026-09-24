@@ -434,7 +434,7 @@ export default {
       list: 'Issues and decisions', empty: 'No issues yet', proposedTags: 'Suggested tags', noTags: 'No tags', proposedDelete: 'Suggested tag deletion',
       addTags: 'Add tag links', removeTags: 'Remove tag links', loadMore: 'Load older issues', loadMoreTags: 'Load more tags', retry: 'Retry applying',
       proposal: { none: 'Report only', change_tags: 'Change tag links', delete_tag: 'Delete a tag' },
-      openMessage: 'View original and images', editTags: 'Edit tags', apply: 'Approve and apply', resolved: 'Mark resolved', dismiss: 'Dismiss', decision: 'Decision',
+      openMessage: 'View original and images', editTags: 'Edit tags', apply: 'Approve and apply', resolved: 'Mark resolved', dismiss: 'Dismiss', decision: 'Decision', ownerDecision: 'Owner decision and reasoning (required)',
       loadFailed: 'Could not load issues', saveFailed: 'Could not save', submitted: 'Issue submitted', saved: 'Decision saved',
       deleteConfirmTitle: 'Confirm tag deletion', deleteConfirm: 'Delete tag "{name}" and its associations? Messages and images remain.',
       kind: { suspected_error: 'Possible error', outdated: 'Outdated content', source_conflict: 'Source conflict', manual_conflict: 'Manual correction conflict', tag_deletion: 'Tag deletion suggestion' },

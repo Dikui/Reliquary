@@ -6214,7 +6214,7 @@ export default {
       list: '异常与处理记录', empty: '暂无异常', proposedTags: '建议关联标签', noTags: '不关联标签', proposedDelete: '建议删除标签',
       addTags: '建议新增关联', removeTags: '建议移除关联', loadMore: '查看更多历史记录', loadMoreTags: '加载更多标签', retry: '重试执行',
       proposal: { none: '仅报告问题', change_tags: '建议修改标签关联', delete_tag: '建议删除标签' },
-      openMessage: '查看原文与图片', editTags: '修改标签', apply: '确认并执行', resolved: '已处理', dismiss: '忽略', decision: '处理结果',
+      openMessage: '查看原文与图片', editTags: '修改标签', apply: '确认并执行', resolved: '已处理', dismiss: '忽略', decision: '处理结果', ownerDecision: '本人处理依据与结论（必填）',
       loadFailed: '加载异常失败', saveFailed: '保存失败', submitted: '异常已提交', saved: '处理结果已保存',
       deleteConfirmTitle: '确认删除标签', deleteConfirm: '删除标签“{name}”及其关联？消息和图片会保留。',
       kind: { suspected_error: '疑似错误', outdated: '内容过时', source_conflict: '来源矛盾', manual_conflict: '人工纠正冲突', tag_deletion: '标签删除建议' },

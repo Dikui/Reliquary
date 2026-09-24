@@ -234,6 +234,26 @@ func TestModelOutputGroupsChunksAndReusesAliasAcrossTools(t *testing.T) {
 	require.False(t, strings.Contains(second, "c2"))
 }
 
+func TestModelOutputKeepsSourceDisputesAfterKnowledgeCompaction(t *testing.T) {
+	for _, displayType := range []string{"grep_results", "search_results"} {
+		t.Run(displayType, func(t *testing.T) {
+			registry := newSourceRegistry()
+			row := map[string]interface{}{"chunk_id": "chunk-real", "knowledge_id": "doc-real", "knowledge_base_id": "kb-real", "content": "conflicting evidence"}
+			data := map[string]interface{}{"display_type": displayType}
+			if displayType == "grep_results" {
+				data["chunk_results"] = []map[string]interface{}{row}
+			} else {
+				data["results"] = []map[string]interface{}{row}
+			}
+			output := registry.ModelOutput(&types.ToolResult{Success: true, Data: data,
+				Output: `<source_disputes><dispute status="resolved" knowledge_ids="doc-real"><owner_decision>Use source A</owner_decision></dispute></source_disputes>`})
+			require.Contains(t, output, `<source_disputes>`)
+			require.Contains(t, output, `<owner_decision>Use source A</owner_decision>`)
+			require.NotContains(t, output, "doc-real")
+		})
+	}
+}
+
 func TestModelOutputRendersKnowledgeMetadataOncePerDocument(t *testing.T) {
 	registry := newSourceRegistry()
 	output := registry.ModelOutput(&types.ToolResult{

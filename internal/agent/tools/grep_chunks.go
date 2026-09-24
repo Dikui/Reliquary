@@ -18,7 +18,7 @@ import (
 
 var grepChunksTool = BaseTool{
 	name: ToolGrepChunks,
-	description: `Search knowledge base chunk content with a single POSIX regular expression, applied directly in the database (PostgreSQL ~* / MySQL/SQLite REGEXP, case-insensitive). Behaves like ` + "`grep -E -i`" + `.
+	description: `Search knowledge base chunk content with a single case-insensitive regular expression. Behaves like ` + "`grep -E -i`" + `.
 Pack multiple concepts into ONE regex using ` + "`|`" + ` alternation — do not call this tool repeatedly for synonyms.
 Returns matching chunks with a short cN chunk source ID, a parent dN document ID, and a <match> snippet around the first match.
 Examples:
@@ -57,7 +57,7 @@ type GrepChunksInput struct {
 
 // GrepChunksTool performs regex pattern matching across knowledge base chunks.
 // PostgreSQL: uses the case-insensitive POSIX operator ~*.
-// MySQL/SQLite: falls back to REGEXP.
+// MySQL uses REGEXP; SQLite scans scoped rows with Go's regexp package.
 //
 // The tool tracks previously-returned chunk IDs per-instance (one instance per
 // agent session) so that a subsequent search hitting the same chunk can be
@@ -142,7 +142,7 @@ func (t *GrepChunksTool) Execute(ctx context.Context, args json.RawMessage) (*ty
 	logger.Infof(ctx, "[Tool][GrepChunks] Queries: %v, Limit: %d, fullKBs: %d, knowledgeIDs: %d, tagScopes: %d",
 		queries, limit, len(fullKBIDs), len(knowledgeIDs), len(tagTargets))
 
-	results, err := t.searchChunks(ctx, queries, fullKBIDs, knowledgeIDs, tagTargets, kbTenantMap)
+	results, err := t.searchChunks(ctx, queries, compiled, fullKBIDs, knowledgeIDs, tagTargets, kbTenantMap)
 	if err != nil {
 		logger.Errorf(ctx, "[Tool][GrepChunks] Search failed: %v", err)
 		return &types.ToolResult{
@@ -268,15 +268,13 @@ type chunkWithTitle struct {
 
 // regexOperatorForDialect returns the SQL operator used to apply a POSIX
 // regular expression to a text column for the current dialect.
-// PostgreSQL ~* is case-insensitive by default; MySQL/SQLite REGEXP relies on
-// collation / driver extensions.
+// PostgreSQL ~* is case-insensitive by default; MySQL uses REGEXP.
 func (t *GrepChunksTool) regexOperatorForDialect() string {
 	switch t.db.Dialector.Name() {
 	case "postgres":
 		return "~*"
 	default:
-		// MySQL, SQLite (with the go-sqlite3 REGEXP extension), or anything else
-		// that understands the REGEXP keyword.
+		// MySQL or another dialect that understands the REGEXP keyword.
 		return "REGEXP"
 	}
 }
@@ -400,6 +398,7 @@ func scopeClause(
 func (t *GrepChunksTool) searchChunks(
 	ctx context.Context,
 	queries []string,
+	compiled []*regexp.Regexp,
 	kbIDs []string,
 	knowledgeIDs []string,
 	tagTargets []*types.SearchTarget,
@@ -409,8 +408,6 @@ func (t *GrepChunksTool) searchChunks(
 		logger.Warnf(ctx, "[Tool][GrepChunks] No kbIDs, knowledgeIDs, or tag scopes specified, returning empty results")
 		return nil, nil
 	}
-
-	regexOp := t.regexOperatorForDialect()
 
 	query := t.db.WithContext(ctx).Table("chunks").
 		Select("chunks.id, chunks.content, chunks.chunk_index, chunks.knowledge_id, "+
@@ -433,27 +430,46 @@ func (t *GrepChunksTool) searchChunks(
 		len(knowledgeIDs), len(tagTargets), len(kbIDs))
 	query = query.Where(scopeSQL, scopeArgs...)
 
-	// For MySQL/SQLite REGEXP case-insensitivity we rely on the column's default
-	// collation (utf8mb4_general_ci etc.) OR the driver's REGEXP implementation,
-	// which mirrors what wiki_search already ships in this codebase.
-	var regexConditions []string
-	var regexArgs []interface{}
-	for _, q := range queries {
-		// Match the regex against either the chunk body OR the owning
-		// knowledge's title, so a doc whose title matches (e.g. titled
-		// "图片素材") surfaces even when its body rarely repeats the term.
-		regexConditions = append(regexConditions,
-			fmt.Sprintf("(chunks.content %s ? OR knowledges.title %s ?)", regexOp, regexOp))
-		regexArgs = append(regexArgs, q, q)
-	}
-	query = query.Where("("+strings.Join(regexConditions, " OR ")+")", regexArgs...)
-
 	const maxFetchLimit = 500
-
 	var results []chunkWithTitle
-	if err := query.Order("chunks.created_at DESC").Limit(maxFetchLimit).Find(&results).Error; err != nil {
-		logger.Errorf(ctx, "[Tool][GrepChunks] Failed to fetch results: %v", err)
-		return nil, err
+	if t.db.Dialector.Name() == "sqlite" {
+		// ponytail: SQLite has no built-in REGEXP. Scan scoped rows in batches;
+		// add indexed candidates only if corpus size makes this slow.
+		const batchSize = 500
+		for offset := 0; len(results) < maxFetchLimit; offset += batchSize {
+			var batch []chunkWithTitle
+			if err := query.Order("chunks.created_at DESC, chunks.id DESC").Limit(batchSize).Offset(offset).Find(&batch).Error; err != nil {
+				return nil, err
+			}
+			for _, hit := range batch {
+				for _, re := range compiled {
+					if re.MatchString(hit.Content) || re.MatchString(hit.KnowledgeTitle) {
+						results = append(results, hit)
+						break
+					}
+				}
+				if len(results) == maxFetchLimit {
+					break
+				}
+			}
+			if len(batch) < batchSize {
+				break
+			}
+		}
+	} else {
+		regexOp := t.regexOperatorForDialect()
+		var regexConditions []string
+		var regexArgs []interface{}
+		for _, q := range queries {
+			regexConditions = append(regexConditions,
+				fmt.Sprintf("(chunks.content %s ? OR knowledges.title %s ?)", regexOp, regexOp))
+			regexArgs = append(regexArgs, q, q)
+		}
+		query = query.Where("("+strings.Join(regexConditions, " OR ")+")", regexArgs...)
+		if err := query.Order("chunks.created_at DESC, chunks.id DESC").Limit(maxFetchLimit).Find(&results).Error; err != nil {
+			logger.Errorf(ctx, "[Tool][GrepChunks] Failed to fetch results: %v", err)
+			return nil, err
+		}
 	}
 
 	if len(results) > 0 {
