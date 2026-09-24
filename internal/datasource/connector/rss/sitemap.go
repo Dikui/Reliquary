@@ -43,7 +43,7 @@ func parseSiteDate(value string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-func articlePublishedAt(doc *goquery.Document) string {
+func articlePublishedAt(doc *goquery.Document, articleURL string) string {
 	for _, selector := range []string{
 		`meta[property="article:published_time"]`, `meta[name="date"]`, `meta[itemprop="datePublished"]`,
 	} {
@@ -56,12 +56,26 @@ func articlePublishedAt(doc *goquery.Document) string {
 	var structuredDate string
 	doc.Find(`script[type="application/ld+json"]`).EachWithBreak(func(_ int, script *goquery.Selection) bool {
 		var article struct {
+			Type          string `json:"@type"`
+			URL           string `json:"url"`
+			ID            string `json:"@id"`
+			MainEntity    string `json:"mainEntityOfPage"`
 			DatePublished string `json:"datePublished"`
 		}
-		if json.Unmarshal([]byte(script.Text()), &article) == nil {
-			if _, valid := parseSiteDate(article.DatePublished); valid {
-				structuredDate = article.DatePublished
-				return false
+		if json.Unmarshal([]byte(script.Text()), &article) != nil ||
+			(article.Type != "BlogPosting" && article.Type != "NewsArticle" && article.Type != "Article") {
+			return true
+		}
+		current, currentErr := url.Parse(articleURL)
+		for _, raw := range []string{article.MainEntity, article.URL, article.ID} {
+			claimed, err := url.Parse(raw)
+			if currentErr == nil && err == nil && claimed.Scheme == current.Scheme &&
+				strings.EqualFold(claimed.Host, current.Host) &&
+				strings.TrimRight(claimed.Path, "/") == strings.TrimRight(current.Path, "/") {
+				if _, valid := parseSiteDate(article.DatePublished); valid {
+					structuredDate = strings.TrimSpace(article.DatePublished)
+					return false
+				}
 			}
 		}
 		return true

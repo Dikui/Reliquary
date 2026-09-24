@@ -114,19 +114,19 @@ func TestListingUsesArticlePublicationDateAndSameSiteLinks(t *testing.T) {
 	}
 }
 
-func TestArticlePublishedAtReadsStructuredAndHeroDates(t *testing.T) {
-	structured, err := goquery.NewDocumentFromReader(strings.NewReader(`<html><head><script type="application/ld+json">{"@type":"BlogPosting","datePublished":"2026-06-23T12:00:48.000Z","dateModified":"2026-09-10T14:01:55.122Z"}</script></head><body><article><h1>OCR</h1></article></body></html>`))
+func TestArticlePublishedAtReadsStructuredDateAndFallsBackToHero(t *testing.T) {
+	structured, err := goquery.NewDocumentFromReader(strings.NewReader(`<html><head><script type="application/ld+json">{"@type":"BlogPosting","mainEntityOfPage":"https://mistral.ai/news/other/","datePublished":"2026-01-01"}</script><script type="application/ld+json">{"@type":"BlogPosting","mainEntityOfPage":"https://mistral.ai/news/ocr-4/","datePublished":"2026-06-23T12:00:48.000Z","dateModified":"2026-09-10T14:01:55.122Z"}</script></head><body><article><h1>OCR</h1></article></body></html>`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := articlePublishedAt(structured); got != "2026-06-23T12:00:48.000Z" {
+	if got := articlePublishedAt(structured, "https://mistral.ai/news/ocr-4/"); got != "2026-06-23T12:00:48.000Z" {
 		t.Fatalf("structured publication date = %q", got)
 	}
-	hero, err := goquery.NewDocumentFromReader(strings.NewReader(`<html><body><main><div><h1>Model release</h1><div><span>July 9, 2026</span><span>10 minute read</span></div></div></main></body></html>`))
+	hero, err := goquery.NewDocumentFromReader(strings.NewReader(`<html><head><script type="application/ld+json">{"datePublished":"invalid"}</script></head><body><main><div><h1>Model release</h1><div><span>July 9, 2026</span><span>10 minute read</span></div></div></main></body></html>`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := articlePublishedAt(hero); got != "July 9, 2026" {
+	if got := articlePublishedAt(hero, "https://ai.meta.com/blog/model-release/"); got != "July 9, 2026" {
 		t.Fatalf("hero publication date = %q", got)
 	}
 }

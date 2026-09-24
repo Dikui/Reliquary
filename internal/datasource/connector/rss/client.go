@@ -145,5 +145,5 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 	if err := article.RenderHTML(&buf); err != nil {
 		return "", "", "", "", "", fmt.Errorf("render article html: %w", err)
 	}
-	return buf.String(), article.Title(), article.Byline(), article.SiteName(), articlePublishedAt(doc), nil
+	return buf.String(), article.Title(), article.Byline(), article.SiteName(), articlePublishedAt(doc, articleURL), nil
 }
