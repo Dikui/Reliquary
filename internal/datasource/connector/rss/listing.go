@@ -14,6 +14,9 @@ import (
 // parseListing discovers same-site article links from a public listing page.
 // Publication evidence still comes from each article, never the listing run.
 func parseListing(data []byte, listingURL, pathPrefix string) ([]*gofeed.Item, error) {
+	if isZhipuResearchURL(listingURL) {
+		return parseZhipuResearch(data)
+	}
 	base, err := url.Parse(listingURL)
 	if err != nil || pathPrefix == "" {
 		return nil, fmt.Errorf("invalid article listing configuration")

@@ -234,6 +234,28 @@ func TestQwenMissingPathIdentitySurvivesReorder(t *testing.T) {
 	}
 }
 
+func TestZhipuResearchDiscoversUnlinkedCurrentArticles(t *testing.T) {
+	const listingURL = "https://www.zhipuai.cn/zh/research"
+	if !isZhipuResearchURL(listingURL) || isZhipuResearchURL("https://example.com/zh/research") {
+		t.Fatal("Zhipu page-data parser must be limited to the official research listing")
+	}
+	flight := `6:["$","div",null,{"blogsItems":[{"id":163,"title_zh":"GLM-5.3-Flash","createAt":"2026-08-26T14:00:00.000Z"},{"id":162,"title_zh":"GLM-5.3","createAt":"2026-08-14T06:00:00.000Z"}]}]`
+	push, err := json.Marshal([]interface{}{1, flight})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := []byte("<html><script>self.__next_f.push(" + string(push) + ")</script></html>")
+	items, err := parseListing(page, listingURL, "/zh/research/")
+	if err != nil || len(items) != 2 {
+		t.Fatalf("expected both current articles without static anchors: items=%+v err=%v", items, err)
+	}
+	if items[0].Link != listingURL+"/163" || items[0].Title != "GLM-5.3-Flash" ||
+		items[0].Published != "" || items[0].UpdatedParsed == nil ||
+		time.Since(*items[0].UpdatedParsed) > time.Minute {
+		t.Fatalf("article discovery lost ID or used a discovery date as publication evidence: %+v", items[0])
+	}
+}
+
 func TestArticlePublishedAtReadsStructuredDateAndFallsBackToHero(t *testing.T) {
 	structured, err := goquery.NewDocumentFromReader(strings.NewReader(`<html><head><script type="application/ld+json">{"@type":"BlogPosting","mainEntityOfPage":"https://mistral.ai/news/other/","datePublished":"2026-01-01"}</script><script type="application/ld+json">{"@type":"BlogPosting","mainEntityOfPage":"https://mistral.ai/news/ocr-4/","datePublished":"2026-06-23T12:00:48.000Z","dateModified":"2026-09-10T14:01:55.122Z"}</script></head><body><article><h1>OCR</h1></article></body></html>`))
 	if err != nil {
