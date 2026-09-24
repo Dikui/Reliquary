@@ -27,16 +27,18 @@ func (c *client) recoverKimiK25(ctx context.Context, doc *goquery.Document, cont
 	if err != nil {
 		return 0, err
 	}
-	kinds := []string{"chartCompare", "videoList", "videoList", "singleChat", "videoList", "codeDemo", "codeDemo", "benchmarkTable"}
-	heights := []string{"160", "320", "320", "160", "320", "160", "160", "360"}
+	components := [...]struct{ kind, height string }{
+		{"chartCompare", "160"}, {"videoList", "320"}, {"videoList", "320"}, {"singleChat", "160"},
+		{"videoList", "320"}, {"codeDemo", "160"}, {"codeDemo", "160"}, {"benchmarkTable", "360"},
+	}
 	matches := kimiAnyComponent.FindAllStringSubmatchIndex(flight, -1)
-	if len(matches) != len(kinds) {
+	if len(matches) != len(components) {
 		return 0, nil
 	}
 	var rendered [8]string
 	for i, match := range matches {
 		kind := flight[match[2]:match[3]]
-		if kind != kinds[i] || !strings.Contains(placeholders.Eq(i).AttrOr("class", "")+placeholders.Eq(i).AttrOr("style", ""), heights[i]+"px") {
+		if kind != components[i].kind || !strings.Contains(placeholders.Eq(i).AttrOr("class", "")+placeholders.Eq(i).AttrOr("style", ""), components[i].height+"px") {
 			return 0, nil
 		}
 		boundary := strings.Index(flight[match[1]:], `"position":`)

@@ -96,7 +96,7 @@ func TestRecoverKimiTablesOnlyWhenEveryPlaceholderHasData(t *testing.T) {
 	}
 }
 
-func TestRenderKimiChatPreservesTranscriptAndOriginalImages(t *testing.T) {
+func TestRecoverKimiK25RestoresCompleteArticle(t *testing.T) {
 	raw := []byte(`{"messages":[{"role":"user","blocks":[{"text":{"content":"Find path"}},{"file":{"meta":{"name":"maze.jpg","contentType":"image/jpeg"},"blob":{"signUrl":"https://files.example/maze.jpg"}}}]},{"role":"assistant","blocks":[{"think":{"content":"Use BFS"}},{"tool":{"name":"ipython","args":"{\"code\":\"print(1)\"}","contents":[{"text":"done"},{"resourceLink":{"url":"https://files.example/preview.png","mimeType":"image/png","originalUrl":"https://files.example/original.png"}}]}},{"text":{"content":"Solved"}}]}]}`)
 	pageURL, _ := url.Parse("https://www.kimi.ai/blog/kimi-k2-5")
 	got, err := renderKimiChat(raw, pageURL)
@@ -104,6 +104,44 @@ func TestRenderKimiChatPreservesTranscriptAndOriginalImages(t *testing.T) {
 		!strings.Contains(got, "Use BFS") || !strings.Contains(got, "print(1)") ||
 		!strings.Contains(got, "https://files.example/original.png") || !strings.Contains(got, "Solved") {
 		t.Fatalf("chat transcript or original images lost: err=%v body=%s", err, got)
+	}
+
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "video/mp4")
+		w.WriteHeader(http.StatusPartialContent)
+		_, _ = w.Write([]byte{0})
+	}))
+	defer server.Close()
+	video := fmt.Sprintf(`{"column":1,"list":[{"url":%q,"type":"video","caption":"clip"}]}`, server.URL+"/clip.mp4")
+	demo := fmt.Sprintf(`[{"title":"demo","type":"video","result":%q}]`, server.URL+"/clip.mp4")
+	chart := `{"Overall Model Accuracy":[{"name":"Accuracy (%)","data":[{"name":"Model A","value":59.7}]}]}`
+	benchmark := `{"data":[{"benchmark":"Vision","scores":[{"model":"Model A","value":"69.7"}]}]}`
+	kinds := []string{"chartCompare", "videoList", "videoList", "singleChat", "videoList", "codeDemo", "codeDemo", "benchmarkTable"}
+	heights := []string{"160", "320", "320", "160", "320", "160", "160", "360"}
+	values := []string{chart, video, video, string(raw), video, demo, demo, benchmark}
+	var flight, placeholders strings.Builder
+	for i, kind := range kinds {
+		fmt.Fprintf(&flight, `%d:["$","pre",null,{"className":"language-%s","node":{"children":[{"type":"text","value":%q}]},"position":{}}]`+"\n", i+1, kind, values[i])
+		fmt.Fprintf(&placeholders, `<div class="animate-pulse" style="height:%spx"></div>`, heights[i])
+	}
+	call, _ := json.Marshal([]any{1, flight.String()})
+	page := `<html><body><article>` + placeholders.String() + `</article><script>self.__next_f.push(` + string(call) + `)</script></body></html>`
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(page))
+	if err != nil {
+		t.Fatal(err)
+	}
+	count, err := (&client{httpClient: server.Client()}).recoverKimiK25(context.Background(), doc, doc.Find("article"), pageURL)
+	article, _ := doc.Find("article").Html()
+	if err != nil || count != 8 || strings.Count(article, "data-reliquary-kimi-widget") != 8 ||
+		strings.Contains(article, "animate-pulse") || strings.Count(article, "data-reliquary-video") != 5 ||
+		!strings.Contains(article, "Vision") || !strings.Contains(article, "Find path") ||
+		!strings.Contains(article, "https://files.example/original.png") {
+		t.Fatalf("K2.5 widgets missing: count=%d err=%v article=%s", count, err, article)
+	}
+	doc, _ = goquery.NewDocumentFromReader(strings.NewReader(strings.Replace(page, "height:160px", "height:999px", 1)))
+	count, err = (&client{httpClient: server.Client()}).recoverKimiK25(context.Background(), doc, doc.Find("article"), pageURL)
+	if err != nil || count != 0 || doc.Find("article div.animate-pulse").Length() != 8 {
+		t.Fatalf("mismatched widget must remain unresolved: count=%d err=%v", count, err)
 	}
 }
 
