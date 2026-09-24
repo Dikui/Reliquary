@@ -256,6 +256,22 @@ func TestZhipuResearchDiscoversUnlinkedCurrentArticles(t *testing.T) {
 	}
 }
 
+func TestMiniMaxNewsDiscoversCurrentArticles(t *testing.T) {
+	const newsURL = "https://www.minimax.io/news"
+	if !isMiniMaxNewsURL(newsURL) || isMiniMaxNewsURL("https://example.com/news") {
+		t.Fatal("MiniMax news API must be limited to the official listing")
+	}
+	items, err := parseMiniMaxNews([]byte(`{"data":[{"slug":"minimax-h3-open-source","title":"MiniMax H3"},{"slug":"minimax-at-humanx-2026","title":"MiniMax at HumanX"}]}`))
+	if err != nil || len(items) != 2 {
+		t.Fatalf("expected current news links: items=%+v err=%v", items, err)
+	}
+	if items[0].Link != newsURL+"/minimax-h3-open-source" || items[0].Title != "MiniMax H3" ||
+		items[0].Published != "" || items[0].UpdatedParsed == nil ||
+		time.Since(*items[0].UpdatedParsed) > time.Minute {
+		t.Fatalf("news discovery lost original link or claimed an unverified publication date: %+v", items[0])
+	}
+}
+
 func TestArticlePublishedAtReadsStructuredDateAndFallsBackToHero(t *testing.T) {
 	structured, err := goquery.NewDocumentFromReader(strings.NewReader(`<html><head><script type="application/ld+json">{"@type":"BlogPosting","mainEntityOfPage":"https://mistral.ai/news/other/","datePublished":"2026-01-01"}</script><script type="application/ld+json">{"@type":"BlogPosting","mainEntityOfPage":"https://mistral.ai/news/ocr-4/","datePublished":"2026-06-23T12:00:48.000Z","dateModified":"2026-09-10T14:01:55.122Z"}</script></head><body><article><h1>OCR</h1></article></body></html>`))
 	if err != nil {

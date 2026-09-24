@@ -53,6 +53,12 @@ func (c *Connector) Validate(ctx context.Context, config *types.DataSourceConfig
 			}
 			continue
 		}
+		if isMiniMaxNewsURL(feedURL) {
+			if _, err := parseMiniMaxNews(data); err != nil {
+				return fmt.Errorf("parse MiniMax news %s: %w", feedURL, err)
+			}
+			continue
+		}
 		if _, err := parser.Parse(bytes.NewReader(data)); err != nil {
 			if isDeepSeekUpdatesURL(feedURL) {
 				if _, changelogErr := parseDeepSeekUpdates(data, feedURL); changelogErr != nil {
@@ -115,6 +121,17 @@ func (c *Connector) ListResources(
 		}
 		if isQwenBlogURL(feedURL) {
 			entries, err := parseQwenArticles(data)
+			if err == nil {
+				res.Name = firstNonEmpty(cfg.Publisher, feedURL)
+				res.Metadata = map[string]interface{}{"item_count": len(entries)}
+			} else {
+				res.Description = "parse failed: " + err.Error()
+			}
+			out = append(out, res)
+			continue
+		}
+		if isMiniMaxNewsURL(feedURL) {
+			entries, err := parseMiniMaxNews(data)
 			if err == nil {
 				res.Name = firstNonEmpty(cfg.Publisher, feedURL)
 				res.Metadata = map[string]interface{}{"item_count": len(entries)}
@@ -279,13 +296,17 @@ func (c *Connector) walk(
 		if isQwenBlogURL(feedURL) {
 			feed = &gofeed.Feed{Title: cfg.Publisher}
 			feed.Items, err = parseQwenArticles(data)
+		} else if isMiniMaxNewsURL(feedURL) {
+			feed = &gofeed.Feed{Title: cfg.Publisher}
+			feed.Items, err = parseMiniMaxNews(data)
 		} else {
 			feed, err = parser.Parse(bytes.NewReader(data))
 		}
-		fromSitemap := false
+		fromMiniMax := isMiniMaxNewsURL(feedURL)
+		needsArticleDate := fromMiniMax
 		fromChangelog := false
 		fromQwen := isQwenBlogURL(feedURL)
-		if err != nil && fromQwen {
+		if err != nil && (fromQwen || fromMiniMax) {
 			logger.Warnf(ctx, "[RSS] sync: parse %s failed: %v", feedURL, err)
 			feedErrors = append(feedErrors, fmt.Sprintf("%s: %v", feedURL, err))
 			copyFeedCursor(newCursor, prev, feedURL)
@@ -299,7 +320,7 @@ func (c *Connector) walk(
 				fromChangelog = true
 			} else {
 				entries, sitemapErr := parseSitemap(data)
-				fromSitemap = true
+				needsArticleDate = true
 				if sitemapErr == nil && cfg.ArticlePathPrefix != "" {
 					sitemapURL, _ := url.Parse(feedURL)
 					for _, entry := range entries {
@@ -378,7 +399,7 @@ func (c *Connector) walk(
 				continue
 			}
 			published := item.PublishedParsed
-			if fromSitemap {
+			if needsArticleDate {
 				published = item.UpdatedParsed // discovery filter only; the article supplies the real publication date.
 			}
 			if published == nil || published.IsZero() {
@@ -408,7 +429,7 @@ func (c *Connector) walk(
 			}
 
 			resolved := c.resolveItem(ctx, cli, feed, item, feedURL, itemID, cfg.Publisher, fromChangelog || fromQwen)
-			if fromSitemap && resolved.item.Metadata["error"] == "" {
+			if needsArticleDate && resolved.item.Metadata["error"] == "" {
 				actualDate, valid := parseSiteDate(resolved.item.Metadata["published_at"])
 				if !valid {
 					resolved.item.Content, resolved.item.URL = nil, ""

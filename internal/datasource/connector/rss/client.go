@@ -106,6 +106,9 @@ func (c *client) fetchSource(ctx context.Context, feedURL string) ([]byte, error
 	if isQwenBlogURL(feedURL) {
 		return c.fetchFeed(ctx, qwenArticlesURL)
 	}
+	if isMiniMaxNewsURL(feedURL) {
+		return c.fetchFeed(ctx, minimaxNewsAPIURL)
+	}
 	return c.fetchFeed(ctx, feedURL)
 }
 
