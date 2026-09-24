@@ -958,6 +958,7 @@ func (s *DataSourceService) applyFetchedItem(
 			result.Skipped++
 		case errors.Is(err, errRSSUpdateRejected):
 			result.Deleted++
+			recordSyncError(result, types.SyncItemError{Title: item.Title, Code: "rss_update_rejected", Message: err.Error()})
 		case item.Metadata["embedded_image"] == "true":
 			// An image extracted from a document for OCR is a best-effort
 			// enrichment, not the document itself. If the KB cannot ingest it
@@ -1306,8 +1307,11 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 		}
 		if existing != nil {
 			rejected, err := s.knowledgeService.ReviewRSSUpdate(ctx, existing.ID, payload)
-			if rejected && err == nil {
-				return false, errRSSUpdateRejected
+			if rejected {
+				if err == nil {
+					err = errRSSUpdateRejected
+				}
+				return false, err
 			}
 			return true, err
 		}

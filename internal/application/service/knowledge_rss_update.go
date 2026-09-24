@@ -94,7 +94,8 @@ func (s *knowledgeService) ReviewRSSUpdate(ctx context.Context, oldID string, pa
 		}
 		recordKBActivity(ctx, s.audit, tenantID, kb.ID, types.AuditAction("knowledge.source_update"), "knowledge", old.ID, types.AuditOutcomeDenied,
 			map[string]any{"reason": reason, "result": "original_deleted"})
-		return true, nil
+		brief := []rune(reason)
+		return true, fmt.Errorf("%w: %s; original deleted", errRSSUpdateRejected, string(brief[:min(len(brief), 200)]))
 	}
 	if intake == nil || intake.Decision != "approved" || candidate.ProcessedAt == nil || candidate.ParseStatus == types.ParseStatusFailed || candidate.EnableStatus != "disabled" {
 		return false, errors.Join(fmt.Errorf("RSS update review or indexing failed"), removeCandidate())

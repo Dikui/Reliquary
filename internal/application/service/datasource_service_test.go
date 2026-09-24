@@ -612,6 +612,13 @@ func TestIngestItem_RSSUsesUnifiedIntakeWithSourceEvidence(t *testing.T) {
 		ExternalID: "feed-item", Title: "Article", Content: []byte("Changed original text"), URL: "https://example.com/article",
 	}, nil)
 	require.ErrorIs(t, err, errRSSUpdateRejected)
+	result := &types.SyncResult{}
+	svc.applyFetchedItem(context.Background(), ds, &types.FetchedItem{
+		ExternalID: "feed-item", Title: "Article", Content: []byte("Changed original text"), URL: "https://example.com/article",
+	}, nil, result)
+	require.Equal(t, 1, result.Deleted)
+	require.Len(t, result.Errors, 1)
+	require.Equal(t, "rss_update_rejected", result.Errors[0].Code)
 	ks.rejected, ks.updateErr = false, errors.New("model unavailable")
 	_, err = svc.ingestItem(context.Background(), ds, &types.FetchedItem{
 		ExternalID: "feed-item", Title: "Article", Content: []byte("Changed original text"), URL: "https://example.com/article",
