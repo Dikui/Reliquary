@@ -196,6 +196,10 @@ func finalizeIndexedKnowledgeState(
 	}
 
 	knowledge.EnableStatus = "enabled"
+	var source map[string]json.RawMessage
+	if json.Unmarshal(knowledge.Metadata, &source) == nil && string(source["rss_update_candidate"]) == `"true"` {
+		knowledge.EnableStatus = "disabled"
+	}
 	knowledge.StorageSize = totalStorageSize
 	knowledge.ProcessedAt = &now
 	knowledge.UpdatedAt = now

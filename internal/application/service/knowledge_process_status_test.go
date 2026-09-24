@@ -80,6 +80,14 @@ func TestFinalizeIndexedKnowledgeState(t *testing.T) {
 	}
 }
 
+func TestFinalizeIndexedRSSUpdateCandidateStaysHidden(t *testing.T) {
+	knowledge := &types.Knowledge{Metadata: types.JSON(`{"rss_update_candidate":"true","intake":{"decision":"approved"}}`)}
+	finalizeIndexedKnowledgeState(knowledge, 12, 1, false, time.Now())
+	if knowledge.EnableStatus != "disabled" || knowledge.ProcessedAt == nil {
+		t.Fatalf("candidate state = %q, processed = %v", knowledge.EnableStatus, knowledge.ProcessedAt)
+	}
+}
+
 // TestMarkKnowledgeProcessingClearsPreviousAttemptError covers the transition
 // every worker performs before it starts a new attempt. A row that failed
 // earlier still carries that attempt's error_message, and leaving it in place

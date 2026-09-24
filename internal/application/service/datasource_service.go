@@ -956,6 +956,8 @@ func (s *DataSourceService) applyFetchedItem(
 			// Duplicate file/URL is not a failure — count as skipped.
 			logger.Infof(ctx, "item %q (external_id=%s) already exists, skipping", item.Title, item.ExternalID)
 			result.Skipped++
+		case errors.Is(err, errRSSUpdateRejected):
+			result.Deleted++
 		case item.Metadata["embedded_image"] == "true":
 			// An image extracted from a document for OCR is a best-effort
 			// enrichment, not the document itself. If the KB cannot ingest it
@@ -1282,14 +1284,15 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 			return false, err
 		}
 		if existing != nil {
-			var previous map[string]string
+			var previous map[string]json.RawMessage
 			if err := json.Unmarshal(existing.Metadata, &previous); err != nil {
 				return false, fmt.Errorf("read existing RSS article fingerprint: %w", err)
 			}
-			if previous["content_sha256"] == contentHash {
+			var previousHash string
+			_ = json.Unmarshal(previous["content_sha256"], &previousHash)
+			if previousHash == contentHash {
 				return false, types.NewDuplicateFileError(existing)
 			}
-			return false, fmt.Errorf("RSS article changed and requires update review")
 		}
 		payload := &types.ManualKnowledgePayload{
 			Title: item.Title, Content: string(item.Content), Status: types.ManualKnowledgeStatusPublish,
@@ -1300,6 +1303,13 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 			SourceInfo: types.SourceInfo{
 				Author: metadata["author"], Publisher: metadata["publisher"], OriginalURL: item.URL, PublishedAt: metadata["published_at"],
 			},
+		}
+		if existing != nil {
+			rejected, err := s.knowledgeService.ReviewRSSUpdate(ctx, existing.ID, payload)
+			if rejected && err == nil {
+				return false, errRSSUpdateRejected
+			}
+			return true, err
 		}
 		_, err = s.knowledgeService.CreateKnowledgeFromManual(ctx, ds.KnowledgeBaseID, payload, channel)
 		return false, err

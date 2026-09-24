@@ -552,15 +552,22 @@ func TestIngestItem_URLCreationAttachesDataSourceMetadata(t *testing.T) {
 
 type rssIntakeKnowledgeService struct {
 	interfaces.KnowledgeService
-	repo    interfaces.KnowledgeRepository
-	payload *types.ManualKnowledgePayload
-	channel string
+	repo      interfaces.KnowledgeRepository
+	payload   *types.ManualKnowledgePayload
+	channel   string
+	updatedID string
+	rejected  bool
+	updateErr error
 }
 
 func (s *rssIntakeKnowledgeService) GetRepository() interfaces.KnowledgeRepository { return s.repo }
 func (s *rssIntakeKnowledgeService) CreateKnowledgeFromManual(_ context.Context, _ string, payload *types.ManualKnowledgePayload, channel string) (*types.Knowledge, error) {
 	s.payload, s.channel = payload, channel
 	return &types.Knowledge{ID: "received"}, nil
+}
+func (s *rssIntakeKnowledgeService) ReviewRSSUpdate(_ context.Context, oldID string, payload *types.ManualKnowledgePayload) (bool, error) {
+	s.updatedID, s.payload = oldID, payload
+	return s.rejected, s.updateErr
 }
 
 func TestIngestItem_RSSUsesUnifiedIntakeWithSourceEvidence(t *testing.T) {
@@ -582,16 +589,34 @@ func TestIngestItem_RSSUsesUnifiedIntakeWithSourceEvidence(t *testing.T) {
 	require.Equal(t, []string{"source-tag"}, ks.payload.TagIDs)
 	oldMetadata, err := json.Marshal(ks.payload.SourceMetadata)
 	require.NoError(t, err)
+	var stored map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(oldMetadata, &stored))
+	stored["intake"] = json.RawMessage(`{"decision":"approved"}`)
+	oldMetadata, err = json.Marshal(stored)
+	require.NoError(t, err)
 	repo.knowledge = &types.Knowledge{ID: "old", Metadata: types.JSON(oldMetadata)}
 	_, err = svc.ingestItem(context.Background(), ds, &types.FetchedItem{
 		ExternalID: "feed-item", Title: "Article", Content: []byte("Full original text"), URL: "https://example.com/article",
 	}, nil)
 	var duplicate *types.DuplicateKnowledgeError
 	require.ErrorAs(t, err, &duplicate)
+	updated, err = svc.ingestItem(context.Background(), ds, &types.FetchedItem{
+		ExternalID: "feed-item", Title: "Article", Content: []byte("Changed original text"), URL: "https://example.com/article",
+	}, nil)
+	require.NoError(t, err)
+	require.True(t, updated)
+	require.Equal(t, "old", ks.updatedID)
+	require.Equal(t, "Changed original text", ks.payload.Content)
+	ks.rejected = true
 	_, err = svc.ingestItem(context.Background(), ds, &types.FetchedItem{
 		ExternalID: "feed-item", Title: "Article", Content: []byte("Changed original text"), URL: "https://example.com/article",
 	}, nil)
-	require.ErrorContains(t, err, "requires update review")
+	require.ErrorIs(t, err, errRSSUpdateRejected)
+	ks.rejected, ks.updateErr = false, errors.New("model unavailable")
+	_, err = svc.ingestItem(context.Background(), ds, &types.FetchedItem{
+		ExternalID: "feed-item", Title: "Article", Content: []byte("Changed original text"), URL: "https://example.com/article",
+	}, nil)
+	require.ErrorContains(t, err, "model unavailable")
 	require.Equal(t, types.ChannelRSS, ks.channel)
 }
 
