@@ -1071,16 +1071,12 @@ const getReferencesForDrawer = (
   const messageReferences = refsOverride?.length
     ? refsOverride
     : props.session?.knowledge_references;
-  if (messageReferences?.length) return messageReferences;
-
-  // Agent answers can already contain citation tags before the aggregated
-  // knowledge_references event is emitted (and some restored conversations do
-  // not have that aggregate at all). The completed retrieval tool events still
-  // carry the same source data, so use them to keep citation clicks in the
-  // references drawer instead of falling through to KB-page navigation.
-  return (props.session?.agentEventStream || []).flatMap((event) =>
+  const toolReferences = (props.session?.agentEventStream || []).flatMap((event) =>
     getToolReferenceItems(event),
   );
+  if (!messageReferences?.length) return toolReferences;
+  // Keep web and tool sources visible alongside the formal KB message list.
+  return [...messageReferences, ...toolReferences.filter((ref) => !ref.knowledge_id)];
 };
 
 const openReferencesDrawer = (

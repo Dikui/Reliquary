@@ -17,7 +17,7 @@
             <div v-if="session.isRagMode" class="rag-answer-stack">
                 <RagPipelineProgress :session="session" :embedded-mode="embeddedMode" />
                 <div v-if="formalReferences.length" class="knowledge-message-list">
-                    <strong>{{ t('chat.referencesDocCount', { count: formalDocumentCount }) }}</strong>
+                    <strong>{{ t('chat.referencesTitle', { count: formalMessageCount }) }}</strong>
                     <docInfo :session="formalSession" :embedded-mode="embeddedMode" content-only />
                 </div>
                 <AgentStreamDisplay v-if="session.isAgentMode" :session="session" :session-id="sessionId"
@@ -32,7 +32,7 @@
                 <RagPipelineProgress v-if="!session.isAgentMode && session.used_memories?.length"
                     :session="session" :embedded-mode="embeddedMode" memory-only />
                 <div v-if="formalReferences.length" class="knowledge-message-list">
-                    <strong>{{ t('chat.referencesDocCount', { count: formalDocumentCount }) }}</strong>
+                    <strong>{{ t('chat.referencesTitle', { count: formalMessageCount }) }}</strong>
                     <docInfo :session="formalSession" :embedded-mode="embeddedMode" content-only />
                 </div>
                 <docInfo v-if="otherReferences.length" :session="otherSession" :embedded-mode="embeddedMode" />
@@ -221,7 +221,7 @@ const formalReferences = computed(() => (props.session?.knowledge_references || 
     .filter(item => item?.knowledge_id && item.chunk_type !== 'web_search' && item.chunk_type !== 'tool_result'));
 const otherReferences = computed(() => (props.session?.knowledge_references || [])
     .filter(item => !formalReferences.value.includes(item)));
-const formalDocumentCount = computed(() => new Set(formalReferences.value.map(item => item.knowledge_id)).size);
+const formalMessageCount = computed(() => new Set(formalReferences.value.map(item => item.knowledge_id)).size);
 const formalSession = computed(() => ({ ...props.session, knowledge_references: formalReferences.value }));
 const otherSession = computed(() => ({ ...props.session, knowledge_references: otherReferences.value }));
 

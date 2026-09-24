@@ -753,6 +753,17 @@ func (e *AgentEngine) runReActIteration(
 	// 3. Act: Execute tool calls
 	e.executeToolCalls(ctx, response, &step, state.CurrentRound, sessionID, assistantMessageID)
 	toolCallCount = len(step.ToolCalls)
+	if refs := appendKnowledgeRefs(state, step); len(refs) > 0 {
+		e.eventBus.Emit(ctx, event.Event{
+			ID:        fmt.Sprintf("%s-references-%d", assistantMessageID, state.CurrentRound),
+			Type:      event.EventAgentReferences,
+			SessionID: sessionID,
+			Data: event.AgentReferencesData{
+				References: state.KnowledgeRefs,
+				Iteration:  state.CurrentRound,
+			},
+		})
+	}
 
 	// 4. Observe: Add tool results to messages and write to context
 	state.RoundSteps = append(state.RoundSteps, step)
