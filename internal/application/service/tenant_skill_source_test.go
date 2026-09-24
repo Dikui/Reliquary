@@ -33,7 +33,7 @@ func TestParseSkillSource(t *testing.T) {
 			in:   "https://clawhub.ai/lyingbug/weknora",
 			want: parsedSkillSource{
 				Kind: skillSourceRegistry, Registry: "https://clawhub.ai",
-				Owner: "lyingbug", Slug: "reliquary",
+				Owner: "lyingbug", Slug: "weknora",
 			},
 		},
 		{
