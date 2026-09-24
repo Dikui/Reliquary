@@ -52,7 +52,7 @@
                     :title="$t('agent.copy')">
                     <t-icon name="copy" />
                 </t-button>
-                <t-button v-if="session.isRagMode" size="small" variant="outline" shape="round"
+                <t-button v-if="session.isRagMode || formalReferences.length" size="small" variant="outline" shape="round"
                     :title="$t('common.download')"
                     @click.stop="downloadTemporarySummary(getActualContent(), session.knowledge_references || [])">
                     <t-icon name="download" />
