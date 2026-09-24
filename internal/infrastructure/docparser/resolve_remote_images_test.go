@@ -1,6 +1,7 @@
 package docparser
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -10,6 +11,19 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestDownloadImageKeepsLargeOriginal(t *testing.T) {
+	const imageBytes = 11_499_747 // Qwen-Drive's original PNG is larger than the old 10 MB cap.
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(bytes.Repeat([]byte{1}, imageBytes))
+	}))
+	defer ts.Close()
+	data, mimeType, err := downloadImage(context.Background(), ts.Client(), ts.URL)
+	if err != nil || len(data) != imageBytes || mimeType != "image/png" {
+		t.Fatalf("large original was not retained: size=%d mime=%q err=%v", len(data), mimeType, err)
+	}
+}
 
 // mockFileService is a minimal FileService implementation for testing.
 type mockFileService struct {

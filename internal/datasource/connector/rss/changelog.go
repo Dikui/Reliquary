@@ -50,17 +50,7 @@ func parseDeepSeekUpdates(data []byte, pageURL string) ([]*gofeed.Item, error) {
 		}
 		section := node.NextUntil("h2,h3")
 		preferLargestImageVariant(section, page)
-		section.Filter("a[href],img[src]").AddSelection(section.Find("a[href],img[src]")).Each(func(_ int, element *goquery.Selection) {
-			attr := "href"
-			if element.Is("img") {
-				attr = "src"
-			}
-			raw, _ := element.Attr(attr)
-			ref, err := url.Parse(strings.TrimSpace(raw))
-			if err == nil && ref.Scheme == "" {
-				element.SetAttr(attr, page.ResolveReference(ref).String())
-			}
-		})
+		absolutizeContentURLs(section, page)
 		var html strings.Builder
 		section.Each(func(_ int, part *goquery.Selection) {
 			if part.Is("hr") {

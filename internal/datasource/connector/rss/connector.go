@@ -43,9 +43,15 @@ func (c *Connector) Validate(ctx context.Context, config *types.DataSourceConfig
 	parser := gofeed.NewParser()
 
 	for _, feedURL := range cfg.feedURLList() {
-		data, err := cli.fetchFeed(ctx, feedURL)
+		data, err := cli.fetchSource(ctx, feedURL)
 		if err != nil {
 			return fmt.Errorf("fetch feed %s: %w", feedURL, err)
+		}
+		if isQwenBlogURL(feedURL) {
+			if _, err := parseQwenArticles(data); err != nil {
+				return fmt.Errorf("parse Qwen articles %s: %w", feedURL, err)
+			}
+			continue
 		}
 		if _, err := parser.Parse(bytes.NewReader(data)); err != nil {
 			if isDeepSeekUpdatesURL(feedURL) {
@@ -100,10 +106,21 @@ func (c *Connector) ListResources(
 			Name:       feedURL,
 			URL:        feedURL,
 		}
-		data, err := cli.fetchFeed(ctx, feedURL)
+		data, err := cli.fetchSource(ctx, feedURL)
 		if err != nil {
 			logger.Warnf(ctx, "[RSS] list: fetch %s failed: %v", feedURL, err)
 			res.Description = "fetch failed: " + err.Error()
+			out = append(out, res)
+			continue
+		}
+		if isQwenBlogURL(feedURL) {
+			entries, err := parseQwenArticles(data)
+			if err == nil {
+				res.Name = firstNonEmpty(cfg.Publisher, feedURL)
+				res.Metadata = map[string]interface{}{"item_count": len(entries)}
+			} else {
+				res.Description = "parse failed: " + err.Error()
+			}
 			out = append(out, res)
 			continue
 		}
@@ -251,16 +268,29 @@ func (c *Connector) walk(
 	var feedErrors []string
 
 	for _, feedURL := range feedURLs {
-		data, err := cli.fetchFeed(ctx, feedURL)
+		data, err := cli.fetchSource(ctx, feedURL)
 		if err != nil {
 			logger.Warnf(ctx, "[RSS] sync: fetch %s failed: %v", feedURL, err)
 			feedErrors = append(feedErrors, fmt.Sprintf("%s: %v", feedURL, err))
 			copyFeedCursor(newCursor, prev, feedURL)
 			continue
 		}
-		feed, err := parser.Parse(bytes.NewReader(data))
+		var feed *gofeed.Feed
+		if isQwenBlogURL(feedURL) {
+			feed = &gofeed.Feed{Title: cfg.Publisher}
+			feed.Items, err = parseQwenArticles(data)
+		} else {
+			feed, err = parser.Parse(bytes.NewReader(data))
+		}
 		fromSitemap := false
 		fromChangelog := false
+		fromQwen := isQwenBlogURL(feedURL)
+		if err != nil && fromQwen {
+			logger.Warnf(ctx, "[RSS] sync: parse %s failed: %v", feedURL, err)
+			feedErrors = append(feedErrors, fmt.Sprintf("%s: %v", feedURL, err))
+			copyFeedCursor(newCursor, prev, feedURL)
+			continue
+		}
 		if err != nil {
 			feed = &gofeed.Feed{Title: cfg.Publisher}
 			err = nil
@@ -345,7 +375,7 @@ func (c *Connector) walk(
 				}
 			}
 
-			resolved := c.resolveItem(ctx, cli, feed, item, feedURL, itemID, cfg.Publisher, fromChangelog)
+			resolved := c.resolveItem(ctx, cli, feed, item, feedURL, itemID, cfg.Publisher, fromChangelog || fromQwen)
 			if fromSitemap && resolved.item.Metadata["error"] == "" {
 				actualDate, valid := parseSiteDate(resolved.item.Metadata["published_at"])
 				if !valid {
@@ -399,7 +429,8 @@ type resolvedFeedItem struct {
 
 // resolveItem assembles a FetchedItem for a single feed entry, resolving the
 // best available content and converting it to Markdown. Only a parsed
-// changelog section is trusted as complete inline content; feeds are not.
+// changelog section or official article API body is trusted as complete inline
+// content; feeds are not.
 func (c *Connector) resolveItem(
 	ctx context.Context,
 	cli *client,
@@ -430,7 +461,7 @@ func (c *Connector) resolveItem(
 	if err != nil {
 		stage := "article fetch failed"
 		if inlineOriginal {
-			stage = "changelog entry failed"
+			stage = "original content failed"
 		}
 		logger.Warnf(ctx, "[RSS] %s for %s: %v", stage, item.Link, err)
 		return resolvedFeedItem{item: types.FetchedItem{ExternalID: itemExternalID(feedURL, itemID), Title: title,

@@ -611,11 +611,11 @@ func (r *ImageResolver) resolveBareBase64Prefix(
 
 const (
 	// maxRemoteImageSize is the maximum allowed size for a single remote image download.
-	maxRemoteImageSize = 10 * 1024 * 1024 // 10 MB
+	maxRemoteImageSize = 16 * 1024 * 1024 // 16 MB; current Qwen originals exceed 10 MB.
 	// maxRemoteImages is the maximum number of remote images to process per document.
 	maxRemoteImages = 30
 	// remoteImageFetchTimeout is the per-image HTTP request timeout.
-	remoteImageFetchTimeout = 15 * time.Second
+	remoteImageFetchTimeout = 60 * time.Second
 )
 
 // reLinkedImage matches the nested [![alt](img_url)](link_url) pattern where

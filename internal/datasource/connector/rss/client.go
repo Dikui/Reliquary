@@ -102,6 +102,13 @@ func (c *client) fetchFeed(ctx context.Context, feedURL string) ([]byte, error) 
 	return c.fetch(ctx, feedURL, maxFeedSize, true)
 }
 
+func (c *client) fetchSource(ctx context.Context, feedURL string) ([]byte, error) {
+	if isQwenBlogURL(feedURL) {
+		return c.fetchFeed(ctx, qwenArticlesURL)
+	}
+	return c.fetchFeed(ctx, feedURL)
+}
+
 // extractArticle fetches an article page and returns the readability-cleaned
 // main content as HTML, plus the extracted title and source fields. Returns an
 // error if the page can't be fetched or no readable content is found.
@@ -188,6 +195,20 @@ func preferLargestImageVariant(content *goquery.Selection, pageURL *url.URL) {
 			if variantURL, parseErr := url.Parse(bestURL); parseErr == nil {
 				img.SetAttr("src", pageURL.ResolveReference(variantURL).String())
 			}
+		}
+	})
+}
+
+func absolutizeContentURLs(content *goquery.Selection, pageURL *url.URL) {
+	content.Filter("a[href],img[src]").AddSelection(content.Find("a[href],img[src]")).Each(func(_ int, element *goquery.Selection) {
+		attr := "href"
+		if element.Is("img") {
+			attr = "src"
+		}
+		raw, _ := element.Attr(attr)
+		ref, err := url.Parse(strings.TrimSpace(raw))
+		if err == nil && ref.Scheme == "" {
+			element.SetAttr(attr, pageURL.ResolveReference(ref).String())
 		}
 	})
 }

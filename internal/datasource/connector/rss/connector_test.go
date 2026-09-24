@@ -180,6 +180,33 @@ func TestDeepSeekChangelogSplitsDatedEntries(t *testing.T) {
 	}
 }
 
+func TestQwenOfficialArticleBody(t *testing.T) {
+	if !isQwenBlogURL("https://qwen.ai/blog") || isQwenBlogURL("https://example.com/blog") {
+		t.Fatal("Qwen API route must be limited to the official blog")
+	}
+	response, _ := json.Marshal(map[string]interface{}{
+		"success": true,
+		"data": map[string]interface{}{"articles": []map[string]interface{}{
+			{"path": "release", "title": "Release", "content": `<article><div class="post-content"><p>Full original article</p><img src="/blur.png" srcset="/full.png 1800w"><table><tr><th>Model</th><th>Score</th></tr><tr><td>Qwen</td><td>95</td></tr></table></div></article>`, "extra": map[string]string{"date": "2026-09-20T20:00:00+08:00", "author": "QwenTeam"}},
+			{"path": "video", "title": "Video", "content": `<article><div class="post-content"><p>Demo</p><video src="/demo.mp4"></video></div></article>`, "extra": map[string]string{"date": "2026-09-21T20:00:00+08:00", "author": "QwenTeam"}},
+		}},
+	})
+	items, err := parseQwenArticles(response)
+	if err != nil || len(items) != 2 {
+		t.Fatalf("expected Qwen original articles: items=%d err=%v", len(items), err)
+	}
+	good := NewConnector().resolveItem(context.Background(), newClient(nil), &gofeed.Feed{Title: "Qwen"}, items[0], "https://qwen.ai/blog", items[0].GUID, "Qwen", true).item
+	if good.Metadata["error"] != "" || good.URL != "https://qwen.ai/blog?id=release" || good.Metadata["author"] != "QwenTeam" ||
+		good.Metadata["published_at"] != "2026-09-20T20:00:00+08:00" ||
+		!strings.Contains(string(good.Content), "https://qwen.ai/full.png") || !strings.Contains(string(good.Content), "| Model") {
+		t.Fatalf("Qwen body lost original content or source fields: %+v", good)
+	}
+	bad := NewConnector().resolveItem(context.Background(), newClient(nil), &gofeed.Feed{Title: "Qwen"}, items[1], "https://qwen.ai/blog", items[1].GUID, "Qwen", true).item
+	if bad.Metadata["error"] == "" || len(bad.Content) != 0 {
+		t.Fatalf("embedded media must not be silently dropped: %+v", bad)
+	}
+}
+
 func TestArticlePublishedAtReadsStructuredDateAndFallsBackToHero(t *testing.T) {
 	structured, err := goquery.NewDocumentFromReader(strings.NewReader(`<html><head><script type="application/ld+json">{"@type":"BlogPosting","mainEntityOfPage":"https://mistral.ai/news/other/","datePublished":"2026-01-01"}</script><script type="application/ld+json">{"@type":"BlogPosting","mainEntityOfPage":"https://mistral.ai/news/ocr-4/","datePublished":"2026-06-23T12:00:48.000Z","dateModified":"2026-09-10T14:01:55.122Z"}</script></head><body><article><h1>OCR</h1></article></body></html>`))
 	if err != nil {
