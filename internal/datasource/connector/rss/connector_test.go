@@ -121,7 +121,7 @@ func TestListingUsesArticlePublicationDateAndSameSiteLinks(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/articles":
-			fmt.Fprint(w, `<html><body><a href="/articles/current?tracking=1">Technical blog</a><div class="menu-card"><a href="/articles/current"><h3>Current</h3></a><p class="card-date">2026-09-24</p></div><a href="/articles/old">Old</a><a href="/articles/undated">Undated</a><a href="/about">About</a><a href="https://outside.example/articles/foreign">Foreign</a></body></html>`)
+			fmt.Fprint(w, `<html><body><a href="/articles/current?tracking=1"><h3>Technical blog</h3></a><div class="menu-card"><a href="/articles/current"><h3>Current</h3></a><p class="card-date">2026-09-24</p></div><a href="/articles/old">Old</a><a href="/articles/undated">Undated</a><a href="/about">About</a><a href="https://outside.example/articles/foreign">Foreign</a></body></html>`)
 		case "/articles/current", "/articles/old", "/articles/undated":
 			date := map[string]string{"/articles/old": "Sep 20, 2026"}[r.URL.Path]
 			heading := "Article"
@@ -341,8 +341,17 @@ func newFakeFeed(t *testing.T) *fakeFeed {
 	})
 	mux.HandleFunc("/video.mp4", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "video/mp4")
+		if r.Method != http.MethodGet || r.Header.Get("Range") != "bytes=0-0" {
+			http.Error(w, "expected bounded GET", http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusPartialContent)
+		_, _ = w.Write([]byte{0})
+	})
+	mux.HandleFunc("/head-only.mp4", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "video/mp4")
 		if r.Method != http.MethodHead {
-			http.Error(w, "HEAD only in test", http.StatusMethodNotAllowed)
+			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
 	})
 
@@ -633,6 +642,11 @@ func TestConnector_FetchIncremental_RejectsUnpreservedEmbeddedMedia(t *testing.T
 	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
 	if err != nil || len(items) != 1 || items[0].Metadata["error"] == "" || len(items[0].Content) != 0 {
 		t.Fatalf("unpreserved custom video must not enter knowledge intake: items=%#v err=%v", items, err)
+	}
+	f.articleEmbed = `<video src="` + f.server.URL + `/head-only.mp4"></video>`
+	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
+	if err != nil || len(items) != 1 || items[0].Metadata["error"] == "" || len(items[0].Content) != 0 {
+		t.Fatalf("HEAD-only video link must not enter knowledge intake: items=%#v err=%v", items, err)
 	}
 	f.articleEmbed = `<p>Before the demo.</p><video src="` + f.server.URL + `/video.mp4"></video><p>After the demo.</p>`
 	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)

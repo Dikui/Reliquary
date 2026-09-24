@@ -240,17 +240,22 @@ func (c *client) verifyVideoURL(ctx context.Context, rawURL string) error {
 	}
 	checkCtx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(checkCtx, http.MethodHead, rawURL, nil)
+	req, err := http.NewRequestWithContext(checkCtx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return fmt.Errorf("article video URL invalid: %w", err)
 	}
+	req.Header.Set("Range", "bytes=0-0")
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("article video unavailable: %w", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 || !strings.HasPrefix(strings.ToLower(resp.Header.Get("Content-Type")), "video/") {
+	if (resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent) || !strings.HasPrefix(strings.ToLower(resp.Header.Get("Content-Type")), "video/") {
 		return fmt.Errorf("article video unavailable: HTTP %d, type %s", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+	var firstByte [1]byte
+	if _, err := io.ReadFull(resp.Body, firstByte[:]); err != nil {
+		return fmt.Errorf("article video unavailable: %w", err)
 	}
 	return nil
 }
