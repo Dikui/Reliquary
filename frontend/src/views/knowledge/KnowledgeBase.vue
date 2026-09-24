@@ -556,8 +556,8 @@ const editAnomalyMessageTags = async (knowledgeId: string, anomalyId: string) =>
   try {
     const response = await getKnowledgeDetails(knowledgeId);
     if (response?.success && response.data) {
-      editingAnomalyId.value = anomalyId;
       openTagEditDialog(response.data as KnowledgeCard);
+      editingAnomalyId.value = anomalyId;
     }
   } catch (error) {
     MessagePlugin.error(t('knowledgeBase.anomalies.loadFailed'));
@@ -2843,7 +2843,7 @@ async function createNewSession(value: string): Promise<void> {
   <KnowledgeAnomaliesDrawer v-if="!isFAQ" ref="anomalyDrawerRef" v-model:visible="anomalyDrawerVisible" :kb-id="kbId"
     :is-owner="isOwner" :initial-knowledge-id="anomalyKnowledgeId" :tags="tagList"
     @open-message="openSourceDoc"
-    @edit-tags="editAnomalyMessageTags" @changed="() => { resetPage(); loadTags(kbId, true) }" />
+    @edit-tags="editAnomalyMessageTags" @changed="() => { resetPage(); loadKnowledgeFiles(kbId); loadTags(kbId, true) }" />
   <KnowledgeStrategyDrawer v-if="!isFAQ && isOwner" v-model:visible="strategyDrawerVisible" :kb-id="kbId"
     :selected-ids="Array.from(selectedIds)" :tags="tagList" :initial-tag-id="selectedTagIds[0] || ''"
     @reprocessed="() => { resetPage(); loadTags(kbId, true) }" />
