@@ -749,6 +749,11 @@ func TestFetchAll_MixedTypes(t *testing.T) {
 }
 
 func TestFetchAll_LogsSummaryWithSkipBreakdown(t *testing.T) {
+	t.Cleanup(logger.ConfigureFromEnv)
+	t.Setenv("LOG_LEVEL", "info")
+	t.Setenv("LOG_FORMAT", "%msg")
+	logger.ConfigureFromEnv()
+
 	nodes := []core.WikiNode{
 		{NodeToken: "nt1", ObjToken: "obj1", ObjType: "docx", Title: "Doc", NodeEditTime: "1711468800"},
 		{NodeToken: "nt4", ObjToken: "obj4", ObjType: "mindnote", Title: "Mind", NodeEditTime: "1711468800"},
@@ -759,7 +764,6 @@ func TestFetchAll_LogsSummaryWithSkipBreakdown(t *testing.T) {
 
 	var buf bytes.Buffer
 	logger.SetOutput(&buf)
-	defer logger.SetOutput(os.Stderr)
 
 	c := NewConnector(core.RegionFeishu)
 	if _, err := c.FetchAll(context.Background(), makeConfig(cfg, []string{"space1"}), []string{"space1"}); err != nil {
