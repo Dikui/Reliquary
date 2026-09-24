@@ -506,7 +506,18 @@ func (c *Connector) resolveItem(
 		var doc *goquery.Document
 		doc, err = goquery.NewDocumentFromReader(strings.NewReader(contentHTML))
 		if err == nil {
-			err = articleContentError(doc.Selection)
+			var pageURL *url.URL
+			pageURL, err = url.Parse(item.Link)
+			if err == nil {
+				var videoCount int
+				videoCount, err = cli.preserveVideoLinks(ctx, doc.Selection, pageURL)
+				if err == nil {
+					err = articleContentError(doc.Selection)
+				}
+				if err == nil && videoCount > 0 {
+					contentHTML, err = doc.Html()
+				}
+			}
 		}
 	} else {
 		contentHTML, articleTitle, articleByline, articleSiteName, pagePublishedAt, err = cli.extractArticle(ctx, item.Link)
@@ -520,7 +531,7 @@ func (c *Connector) resolveItem(
 		return resolvedFeedItem{item: types.FetchedItem{ExternalID: itemExternalID(feedURL, itemID), Title: title,
 			Metadata: map[string]string{"error": stage + ": " + err.Error(), "channel": types.ChannelRSS}}}
 	}
-	if item.Title == "" && articleTitle != "" {
+	if articleTitle != "" && (item.Title == "" || item.Custom["listing_title_needs_article"] == "true") {
 		title = articleTitle
 	}
 	content := htmlToMarkdown(contentHTML)

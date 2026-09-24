@@ -121,10 +121,14 @@ func TestListingUsesArticlePublicationDateAndSameSiteLinks(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/articles":
-			fmt.Fprint(w, `<html><body><a href="/articles/current?tracking=1"><h3>Current</h3><span>2026-09-24</span><span>Read more</span></a><div class="menu-card"><a href="/articles/current">Current</a><p class="card-date">2026-09-24</p></div><a href="/articles/old">Old</a><a href="/articles/undated">Undated</a><a href="/about">About</a><a href="https://outside.example/articles/foreign">Foreign</a></body></html>`)
+			fmt.Fprint(w, `<html><body><a href="/articles/current?tracking=1">Technical blog</a><div class="menu-card"><a href="/articles/current"><h3>Current</h3></a><p class="card-date">2026-09-24</p></div><a href="/articles/old">Old</a><a href="/articles/undated">Undated</a><a href="/about">About</a><a href="https://outside.example/articles/foreign">Foreign</a></body></html>`)
 		case "/articles/current", "/articles/old", "/articles/undated":
 			date := map[string]string{"/articles/old": "Sep 20, 2026"}[r.URL.Path]
-			fmt.Fprintf(w, `<html><body><main><h1>Article</h1><div>%s</div><article>%s</article></main></body></html>`, date, longArticleBody)
+			heading := "Article"
+			if r.URL.Path == "/articles/current" {
+				heading = "Current"
+			}
+			fmt.Fprintf(w, `<html><body><main><article><h1>%s</h1><div>%s</div>%s</article></main></body></html>`, heading, date, longArticleBody)
 		default:
 			http.NotFound(w, r)
 		}
@@ -189,7 +193,7 @@ func TestQwenOfficialArticleBody(t *testing.T) {
 		"data": map[string]interface{}{"articles": []map[string]interface{}{
 			{"path": "undated", "title": "Undated", "content": `<div class="post-content"><p>Original but no date</p></div>`},
 			{"path": "release", "title": "Release", "content": `<article><div class="post-content"><p>Full original article</p><img src="/blur.png" srcset="/full.png 1800w"><table><tr><th>Model</th><th>Score</th></tr><tr><td>Qwen</td><td>95</td></tr></table></div></article>`, "extra": map[string]string{"date": "2026-09-20T20:00:00+08:00", "author": "QwenTeam"}},
-			{"path": "video", "title": "Video", "content": `<article><div class="post-content"><p>Demo</p><video src="/demo.mp4"></video></div></article>`, "extra": map[string]string{"date": "2026-09-21T20:00:00+08:00", "author": "QwenTeam"}},
+			{"path": "video", "title": "Video", "content": `<article><div class="post-content"><p>Demo</p><video></video></div></article>`, "extra": map[string]string{"date": "2026-09-21T20:00:00+08:00", "author": "QwenTeam"}},
 			{"path": "empty", "title": "Empty", "content": `<article><p>No original article body</p></article>`, "extra": map[string]string{"date": "2026-09-22T20:00:00+08:00"}},
 			{"title": "No URL", "content": `<div class="post-content"><p>Original but no URL</p></div>`, "extra": map[string]string{"date": "2026-09-23T20:00:00+08:00"}},
 		}},
@@ -334,6 +338,12 @@ func newFakeFeed(t *testing.T) *fakeFeed {
 		fmt.Fprintf(w, `<!DOCTYPE html><html><head><title>%s</title><meta name="author" content="%s"></head>`+
 			`<body><nav>menu</nav><article><h1>Heading</h1>%s%s</article><footer>foot%s</footer></body></html>`,
 			"Full "+r.URL.Path, f.articleByline, longArticleBody, f.articleEmbed, f.pageEmbed)
+	})
+	mux.HandleFunc("/video.mp4", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "video/mp4")
+		if r.Method != http.MethodHead {
+			http.Error(w, "HEAD only in test", http.StatusMethodNotAllowed)
+		}
 	})
 
 	mux.HandleFunc("/feed.xml", func(w http.ResponseWriter, r *http.Request) {
@@ -619,10 +629,23 @@ func TestConnector_FetchIncremental_RejectsUnpreservedEmbeddedMedia(t *testing.T
 	if err != nil || len(items) != 1 || items[0].Metadata["error"] == "" || len(items[0].Content) != 0 {
 		t.Fatalf("unpreserved canvas must not enter knowledge intake: items=%#v err=%v", items, err)
 	}
-	f.articleEmbed = `<uni-inline-image or-mp4-video-url="https://example.com/demo.mp4"><p>Watch the model demo.</p></uni-inline-image>`
+	f.articleEmbed = `<uni-inline-image or-mp4-video-url="/missing.mp4"><p>Watch the model demo.</p></uni-inline-image>`
 	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
 	if err != nil || len(items) != 1 || items[0].Metadata["error"] == "" || len(items[0].Content) != 0 {
 		t.Fatalf("unpreserved custom video must not enter knowledge intake: items=%#v err=%v", items, err)
+	}
+	f.articleEmbed = `<p>Before the demo.</p><video src="` + f.server.URL + `/video.mp4"></video><p>After the demo.</p>`
+	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
+	if err != nil || len(items) != 1 || items[0].Metadata["error"] != "" ||
+		!strings.Contains(string(items[0].Content), f.server.URL+"/video.mp4") ||
+		!strings.Contains(string(items[0].Content), "播放原始视频") ||
+		!strings.Contains(string(items[0].Content), "Before the demo.") || !strings.Contains(string(items[0].Content), "After the demo.") {
+		t.Fatalf("verified article video must remain playable in its original context: items=%#v err=%v", items, err)
+	}
+	f.articleEmbed = `<uni-inline-image or-mp4-video-url="` + f.server.URL + `/video.mp4"><p>Watch the model demo.</p></uni-inline-image>`
+	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
+	if err != nil || len(items) != 1 || items[0].Metadata["error"] != "" || !strings.Contains(string(items[0].Content), f.server.URL+"/video.mp4") {
+		t.Fatalf("verified custom video must survive extraction: items=%#v err=%v", items, err)
 	}
 	f.articleEmbed = `<h3>Full Benchmark Table</h3><div data-blog-hero-width="true"><div class="animate-pulse" style="min-height:360px"></div></div>`
 	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)

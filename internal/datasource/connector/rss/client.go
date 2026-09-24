@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"net/url"
@@ -121,14 +122,6 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 		return "", "", "", "", "", err
 	}
 
-	pageURL, _ := url.Parse(articleURL)
-	article, err := readability.FromReader(bytes.NewReader(body), pageURL)
-	if err != nil {
-		return "", "", "", "", "", fmt.Errorf("readability parse: %w", err)
-	}
-	if article.Node == nil {
-		return "", "", "", "", "", fmt.Errorf("no readable content extracted")
-	}
 	// Readability can discard embeds. Inspect the longest article/main element
 	// in the source page so unrelated header/footer media do not block intake.
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
@@ -149,8 +142,33 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 		// ponytail: page-wide fallback may reject decorative media on pages without a content container.
 		content = doc.Selection
 	}
+	sourceHeading := strings.TrimSpace(content.Find("h1").First().Text())
+	pageURL, _ := url.Parse(articleURL)
+	videoCount, err := c.preserveVideoLinks(ctx, content, pageURL)
+	if err != nil {
+		return "", "", "", "", "", err
+	}
 	if err := articleContentError(content); err != nil {
 		return "", "", "", "", "", err
+	}
+	if videoCount > 0 {
+		page, renderErr := doc.Html()
+		if renderErr != nil {
+			return "", "", "", "", "", fmt.Errorf("render article page: %w", renderErr)
+		}
+		body = []byte(page)
+	}
+	article, err := readability.FromReader(bytes.NewReader(body), pageURL)
+	if err != nil {
+		return "", "", "", "", "", fmt.Errorf("readability parse: %w", err)
+	}
+	if article.Node == nil {
+		return "", "", "", "", "", fmt.Errorf("no readable content extracted")
+	}
+	if videoCount > 0 {
+		if got := goquery.NewDocumentFromNode(article.Node).Find(`a[data-reliquary-video]`).Length(); got != videoCount {
+			return "", "", "", "", "", fmt.Errorf("article video links lost during extraction")
+		}
 	}
 	preferLargestImageVariant(goquery.NewDocumentFromNode(article.Node).Selection, pageURL)
 
@@ -158,7 +176,83 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 	if err := article.RenderHTML(&buf); err != nil {
 		return "", "", "", "", "", fmt.Errorf("render article html: %w", err)
 	}
-	return buf.String(), article.Title(), article.Byline(), article.SiteName(), articlePublishedAt(doc, articleURL), nil
+	return buf.String(), firstNonEmpty(sourceHeading, article.Title()), article.Byline(), article.SiteName(), articlePublishedAt(doc, articleURL), nil
+}
+
+func (c *client) preserveVideoLinks(ctx context.Context, content *goquery.Selection, pageURL *url.URL) (int, error) {
+	count := 0
+	for _, selector := range []string{"[or-mp4-video-url]", "video"} {
+		var mediaErr error
+		content.Find(selector).EachWithBreak(func(_ int, node *goquery.Selection) bool {
+			raw, _ := node.Attr("or-mp4-video-url")
+			if raw == "" {
+				raw, _ = node.Attr("src")
+			}
+			if raw == "" {
+				raw, _ = node.Find("source[src]").First().Attr("src")
+			}
+			ref, err := url.Parse(strings.TrimSpace(raw))
+			if raw == "" || err != nil || ref.User != nil {
+				mediaErr = fmt.Errorf("article video has no usable source URL")
+				return false
+			}
+			videoURL := pageURL.ResolveReference(ref).String()
+			if err := c.verifyVideoURL(ctx, videoURL); err != nil {
+				mediaErr = err
+				return false
+			}
+			label, _ := node.Attr("or-mp4-video-title")
+			label = strings.TrimSpace(label)
+			if label == "" && !node.Is("video") {
+				label = strings.TrimSpace(node.Text())
+			}
+			if label == "" {
+				label = "播放原始视频"
+			}
+			poster := ""
+			if rawPoster, ok := node.Attr("poster"); ok && strings.TrimSpace(rawPoster) != "" {
+				posterRef, posterErr := url.Parse(strings.TrimSpace(rawPoster))
+				if posterErr != nil || posterRef.User != nil {
+					mediaErr = fmt.Errorf("article video poster URL invalid")
+					return false
+				}
+				posterURL := pageURL.ResolveReference(posterRef)
+				if posterURL.Scheme != "http" && posterURL.Scheme != "https" {
+					mediaErr = fmt.Errorf("article video poster URL invalid")
+					return false
+				}
+				poster = `<img src="` + html.EscapeString(posterURL.String()) + `" alt="视频封面">`
+			}
+			node.ReplaceWithHtml(`<p>` + poster + `<a data-reliquary-video="true" href="` + html.EscapeString(videoURL) + `">` + html.EscapeString(label) + `</a></p>`)
+			count++
+			return true
+		})
+		if mediaErr != nil {
+			return count, mediaErr
+		}
+	}
+	return count, nil
+}
+
+func (c *client) verifyVideoURL(ctx context.Context, rawURL string) error {
+	if err := utils.ValidateURLForSSRF(rawURL); err != nil {
+		return fmt.Errorf("article video URL rejected: %w", err)
+	}
+	checkCtx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(checkCtx, http.MethodHead, rawURL, nil)
+	if err != nil {
+		return fmt.Errorf("article video URL invalid: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("article video unavailable: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 || !strings.HasPrefix(strings.ToLower(resp.Header.Get("Content-Type")), "video/") {
+		return fmt.Errorf("article video unavailable: HTTP %d, type %s", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+	return nil
 }
 
 func articleContentError(content *goquery.Selection) error {
