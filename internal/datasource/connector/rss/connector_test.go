@@ -489,6 +489,11 @@ func TestConnector_FetchIncremental_RejectsUnpreservedEmbeddedMedia(t *testing.T
 	if err != nil || len(items) != 1 || items[0].Metadata["error"] == "" || len(items[0].Content) != 0 {
 		t.Fatalf("unpreserved canvas must not enter knowledge intake: items=%#v err=%v", items, err)
 	}
+	f.articleEmbed = `<uni-inline-image or-mp4-video-url="https://example.com/demo.mp4"><p>Watch the model demo.</p></uni-inline-image>`
+	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
+	if err != nil || len(items) != 1 || items[0].Metadata["error"] == "" || len(items[0].Content) != 0 {
+		t.Fatalf("unpreserved custom video must not enter knowledge intake: items=%#v err=%v", items, err)
+	}
 	f.articleEmbed = `<h3>Full Benchmark Table</h3><div data-blog-hero-width="true"><div class="animate-pulse" style="min-height:360px"></div></div>`
 	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
 	if err != nil || len(items) != 1 || !strings.Contains(items[0].Metadata["error"], "unresolved content placeholder") || len(items[0].Content) != 0 {

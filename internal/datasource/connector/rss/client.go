@@ -139,7 +139,11 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 		// ponytail: page-wide fallback may reject decorative media on pages without a content container.
 		content = doc.Selection
 	}
-	if content.Find("iframe, video, audio, object, embed, canvas").Length() > 0 {
+	if content.Find("iframe, video, audio, object, embed, canvas").Length() > 0 ||
+		content.Find("[or-mp4-video-url]").FilterFunction(func(_ int, node *goquery.Selection) bool {
+			value, _ := node.Attr("or-mp4-video-url")
+			return strings.TrimSpace(value) != ""
+		}).Length() > 0 {
 		return "", "", "", "", "", fmt.Errorf("article contains unsupported embedded media")
 	}
 	if content.Find("div.animate-pulse").FilterFunction(func(_ int, node *goquery.Selection) bool {
