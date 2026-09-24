@@ -1041,6 +1041,7 @@ const channelLabelMap: Record<string, string> = {
   // "飞书云盘" / "Lark 云盘", distinct from the wiki connector's "飞书".
   feishu_drive: 'knowledgeBase.channelFeishuDrive',
   lark_drive: 'knowledgeBase.channelLarkDrive',
+  rss: 'datasource.connector.rss',
   dingtalk: 'knowledgeBase.channelDingtalk',
   slack: 'knowledgeBase.channelSlack',
   im: 'knowledgeBase.channelIm',
@@ -1054,6 +1055,7 @@ const getChannelLabel = (channel: string) => {
 
 // 获取类型标签
 const getTypeLabel = () => {
+  if (props.details.channel === 'rss') return t('datasource.connector.rss');
   switch (props.details.type) {
     case 'url':
       return t('knowledgeBase.typeURL');
