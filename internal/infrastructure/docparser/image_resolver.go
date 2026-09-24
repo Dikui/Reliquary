@@ -12,7 +12,6 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
-	"log"
 	"mime"
 	"net/http"
 	"net/url"
@@ -354,8 +353,8 @@ func (r *ImageResolver) ResolveHTMLDataURIImages(
 
 	processed := 0
 	for i := len(matches) - 1; i >= 0; i-- {
-		if processed >= maxRemoteImages {
-			err = errors.Join(err, fmt.Errorf("HTML data URI image limit of %d reached", maxRemoteImages))
+		if processed >= maxInlineImages {
+			err = errors.Join(err, fmt.Errorf("HTML data URI image limit of %d reached", maxInlineImages))
 			break
 		}
 		m := matches[i]
@@ -483,8 +482,8 @@ func (r *ImageResolver) resolveBareDataURIs(
 	var err error
 	processed := 0
 	for i := len(matches) - 1; i >= 0; i-- {
-		if processed >= maxRemoteImages {
-			err = errors.Join(err, fmt.Errorf("bare data URI image limit of %d reached", maxRemoteImages))
+		if processed >= maxInlineImages {
+			err = errors.Join(err, fmt.Errorf("bare data URI image limit of %d reached", maxInlineImages))
 			break
 		}
 		m := matches[i]
@@ -557,8 +556,8 @@ func (r *ImageResolver) resolveBareBase64Prefix(
 	var err error
 	processed := 0
 	for i := len(matches) - 1; i >= 0; i-- {
-		if processed >= maxRemoteImages {
-			err = errors.Join(err, fmt.Errorf("bare base64 image limit of %d reached", maxRemoteImages))
+		if processed >= maxInlineImages {
+			err = errors.Join(err, fmt.Errorf("bare base64 image limit of %d reached", maxInlineImages))
 			break
 		}
 		m := matches[i]
@@ -612,8 +611,8 @@ func (r *ImageResolver) resolveBareBase64Prefix(
 const (
 	// maxRemoteImageSize is the maximum allowed size for a single remote image download.
 	maxRemoteImageSize = 16 * 1024 * 1024 // 16 MB; current Qwen originals exceed 10 MB.
-	// maxRemoteImages is the maximum number of remote images to process per document.
-	maxRemoteImages = 30
+	// maxInlineImages bounds embedded image decoding; remote images use request timeouts.
+	maxInlineImages = 30
 	// remoteImageFetchTimeout is the per-image HTTP request timeout.
 	remoteImageFetchTimeout = 60 * time.Second
 )
@@ -687,8 +686,8 @@ func (r *ImageResolver) ResolveDataURIImages(
 
 	processed := 0
 	for i := len(matches) - 1; i >= 0; i-- {
-		if processed >= maxRemoteImages {
-			err = errors.Join(err, fmt.Errorf("data URI image limit of %d reached", maxRemoteImages))
+		if processed >= maxInlineImages {
+			err = errors.Join(err, fmt.Errorf("data URI image limit of %d reached", maxInlineImages))
 			break
 		}
 		m := matches[i]
@@ -812,22 +811,6 @@ type remotePassSpec struct {
 	SrcOf    func(string) string
 }
 
-// remotePassStats accumulates the reasons a scan passed a reference over, so
-// that a partially resolved document can be explained afterwards.
-type remotePassStats struct {
-	resolved   int
-	overBudget int
-}
-
-func (s *remotePassStats) report(syntax string) {
-	if s.overBudget > 0 {
-		log.Printf(
-			"WARN: remote image limit of %d reached for %s images; %d reference(s) left unresolved",
-			maxRemoteImages, syntax, s.overBudget,
-		)
-	}
-}
-
 // resolveRemoteImagePass rewrites every remote http(s) reference matched by
 // spec.Pattern, replacing the span of its URL capture group with the URL the
 // image will be served from: the storage URL, or the normalized original for a
@@ -848,7 +831,6 @@ func resolveRemoteImagePass(
 
 	var (
 		images []StoredImage
-		stats  remotePassStats
 		err    error
 	)
 
@@ -868,19 +850,11 @@ func resolveRemoteImagePass(
 			break
 		}
 
-		if stats.resolved >= maxRemoteImages {
-			stats.overBudget++
-			err = errors.Join(err, fmt.Errorf("remote image limit of %d reached", maxRemoteImages))
-			continue
-		}
-
 		res, fetchErr := fetchAndStoreRemoteImage(ctx, client(), fileSvc, tenantID, imgURL)
 		if fetchErr != nil {
 			err = errors.Join(err, fmt.Errorf("resolve %s image %q: %w", spec.Syntax, imgURL, fetchErr))
 			continue
 		}
-		stats.resolved++
-
 		// A whitelisted host is served from where it already lives, so the
 		// document keeps pointing there. The span is still rewritten with the
 		// normalized URL: later stages both locate the image by searching the
@@ -900,7 +874,6 @@ func resolveRemoteImagePass(
 		markdown = markdown[:start] + servingURL + markdown[end:]
 	}
 
-	stats.report(spec.Syntax)
 	return markdown, images, err
 }
 
@@ -952,8 +925,8 @@ func (r *ImageResolver) ResolveRemoteImages(
 		return httpClient
 	}
 
-	// Two scans, each with its own budget. Sharing one would let HTML images eat
-	// into the number of Markdown images a document already gets resolved today.
+	// Scan Markdown and HTML references separately so each syntax keeps its
+	// existing URL normalization rules.
 	markdown, mdImages, markdownErr := resolveRemoteImagePass(ctx, markdown, remotePassSpec{
 		Pattern: imgMarkdownPattern,
 		// Group 2 of imgMarkdownPattern is the target; group 1 is the alt text.

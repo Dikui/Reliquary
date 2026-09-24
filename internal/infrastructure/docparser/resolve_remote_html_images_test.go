@@ -14,8 +14,7 @@ import (
 	secutils "reliquary/internal/utils"
 )
 
-// remoteImageServer serves a valid PNG for every request and counts the hits so
-// that budget and dedup behaviour can be asserted directly.
+// remoteImageServer serves a valid PNG for every request and counts the hits.
 func remoteImageServer(t *testing.T) (*httptest.Server, *int64) {
 	t.Helper()
 	var hits int64
@@ -92,24 +91,19 @@ func TestResolveRemoteImages_MarkdownAndHTMLBothResolved(t *testing.T) {
 	}
 }
 
-func TestResolveRemoteImages_IndependentBudgetPerSyntax(t *testing.T) {
+func TestResolveRemoteImages_MoreThanThirtyHTMLImages(t *testing.T) {
 	allowLocalhost(t)
-	ts, _ := remoteImageServer(t)
+	ts, hits := remoteImageServer(t)
 
-	// Adding HTML support must not reduce how many Markdown images a document
-	// already gets resolved: each syntax carries its own budget.
 	var b strings.Builder
-	for i := 0; i < maxRemoteImages; i++ {
-		fmt.Fprintf(&b, "![md%d](%s/md%d.png)\n\n", i, ts.URL, i)
-	}
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 33; i++ {
 		fmt.Fprintf(&b, "<img src=\"%s/html%d.png\">\n\n", ts.URL, i)
 	}
 
 	updated, images, _ := resolve(t, b.String())
 
-	if len(images) != maxRemoteImages+5 {
-		t.Fatalf("expected %d stored images, got %d", maxRemoteImages+5, len(images))
+	if len(images) != 33 || atomic.LoadInt64(hits) != 33 {
+		t.Fatalf("expected 33 fetched and stored images, got %d stored and %d fetched", len(images), atomic.LoadInt64(hits))
 	}
 	if strings.Contains(updated, ts.URL) {
 		t.Errorf("a remote URL survived: %s", updated)

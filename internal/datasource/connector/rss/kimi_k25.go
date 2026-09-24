@@ -41,24 +41,9 @@ func (c *client) recoverKimiK25(ctx context.Context, doc *goquery.Document, cont
 		if kind != components[i].kind || !strings.Contains(placeholders.Eq(i).AttrOr("class", "")+placeholders.Eq(i).AttrOr("style", ""), components[i].height+"px") {
 			return 0, nil
 		}
-		boundary := strings.Index(flight[match[1]:], `"position":`)
-		if boundary < 0 {
-			return 0, fmt.Errorf("Kimi K2.5 %s component incomplete", kind)
-		}
-		value := kimiComponentValue.FindStringSubmatch(flight[match[1] : match[1]+boundary])
-		if len(value) != 2 {
-			return 0, fmt.Errorf("Kimi K2.5 %s data unavailable", kind)
-		}
-		var source string
-		if err := json.Unmarshal([]byte(value[1]), &source); err != nil {
+		raw, err := kimiComponentRaw(flight, chunks, match)
+		if err != nil {
 			return 0, err
-		}
-		raw := json.RawMessage(source)
-		if strings.HasPrefix(source, "$") {
-			raw = chunks[strings.TrimPrefix(source, "$")]
-		}
-		if !json.Valid(raw) {
-			return 0, fmt.Errorf("Kimi K2.5 %s data invalid", kind)
 		}
 		switch kind {
 		case "chartCompare":
@@ -80,6 +65,30 @@ func (c *client) recoverKimiK25(ctx context.Context, doc *goquery.Document, cont
 		placeholders.Eq(i).ReplaceWithHtml(`<div data-reliquary-kimi-widget="true">` + body + `</div>`)
 	}
 	return len(rendered), nil
+}
+
+func kimiComponentRaw(flight string, chunks map[string]json.RawMessage, match []int) (json.RawMessage, error) {
+	kind := flight[match[2]:match[3]]
+	boundary := strings.Index(flight[match[1]:], `"position":`)
+	if boundary < 0 {
+		return nil, fmt.Errorf("Kimi %s component incomplete", kind)
+	}
+	value := kimiComponentValue.FindStringSubmatch(flight[match[1] : match[1]+boundary])
+	if len(value) != 2 {
+		return nil, fmt.Errorf("Kimi %s data unavailable", kind)
+	}
+	var source string
+	if err := json.Unmarshal([]byte(value[1]), &source); err != nil {
+		return nil, err
+	}
+	raw := json.RawMessage(source)
+	if strings.HasPrefix(source, "$") {
+		raw = chunks[strings.TrimPrefix(source, "$")]
+	}
+	if !json.Valid(raw) {
+		return nil, fmt.Errorf("Kimi %s data invalid", kind)
+	}
+	return raw, nil
 }
 
 func kimiMediaURL(raw string, pageURL *url.URL) (string, error) {
@@ -119,8 +128,12 @@ func (c *client) kimiVideoLink(ctx context.Context, raw, poster, label string, p
 
 func (c *client) renderKimiVideos(ctx context.Context, raw json.RawMessage, pageURL *url.URL) (string, error) {
 	var source struct {
-		Column int `json:"column"`
-		List   []struct {
+		Column     int `json:"column"`
+		Rounded    bool
+		FullWidth  bool
+		Title      string
+		TitleAlign string
+		List       []struct {
 			URL, Type, Poster, Caption string
 		} `json:"list"`
 	}
@@ -128,6 +141,9 @@ func (c *client) renderKimiVideos(ctx context.Context, raw json.RawMessage, page
 		return "", fmt.Errorf("Kimi video list incomplete: %v", err)
 	}
 	var out strings.Builder
+	if source.Title != "" {
+		out.WriteString("<h4>" + html.EscapeString(source.Title) + "</h4>")
+	}
 	for _, item := range source.List {
 		if item.Type != "video" {
 			return "", fmt.Errorf("Kimi video type unsupported: %s", item.Type)

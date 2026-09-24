@@ -152,11 +152,15 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 	if err != nil {
 		return "", "", "", "", "", err
 	}
+	recoveredK26, err := c.recoverKimiK26(ctx, doc, content, pageURL)
+	if err != nil {
+		return "", "", "", "", "", err
+	}
 	recoveredTables, err := recoverKimiTables(doc, content, pageURL)
 	if err != nil {
 		return "", "", "", "", "", err
 	}
-	recoveredWidgets := recoveredK25 + recoveredTables
+	recoveredWidgets := recoveredK25 + recoveredK26 + recoveredTables
 	if recoveredWidgets > 0 && videoCount > 0 {
 		return "", "", "", "", "", fmt.Errorf("Kimi article with both embedded video and tables is unsupported")
 	}
@@ -208,7 +212,7 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 		absolutizeContentURLs(body, pageURL)
 		original, renderErr := body.Html()
 		marker := "data-reliquary-kimi-table"
-		if recoveredK25 > 0 {
+		if recoveredK25+recoveredK26 > 0 {
 			marker = "data-reliquary-kimi-widget"
 		}
 		if renderErr != nil || strings.Count(original, marker) != recoveredWidgets {
