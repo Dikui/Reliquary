@@ -50,7 +50,11 @@ func parseListing(data []byte, listingURL, pathPrefix string) ([]*gofeed.Item, e
 			}
 			return true
 		}
-		item := &gofeed.Item{GUID: absolute, Link: absolute, Title: strings.TrimSpace(a.Text()),
+		title := strings.TrimSpace(a.Find("h1,h2,h3").First().Text())
+		if title == "" {
+			title = strings.TrimSpace(a.Text())
+		}
+		item := &gofeed.Item{GUID: absolute, Link: absolute, Title: title,
 			Published: date, Updated: now.Format(time.RFC3339Nano), UpdatedParsed: &now}
 		seen[absolute] = item
 		items = append(items, item)

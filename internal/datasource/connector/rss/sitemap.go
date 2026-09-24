@@ -105,6 +105,24 @@ func articlePublishedAt(doc *goquery.Document, articleURL string) string {
 		return structuredDate
 	}
 	current, currentErr := url.Parse(articleURL)
+	if currentErr == nil && strings.EqualFold(current.Host, "seed.bytedance.com") &&
+		strings.HasPrefix(current.Path, "/zh/blog/") {
+		var date string
+		doc.Find("p").EachWithBreak(func(_ int, label *goquery.Selection) bool {
+			if strings.TrimSpace(label.Text()) != "日期" {
+				return true
+			}
+			candidate := strings.TrimSpace(label.Next().Text())
+			if _, valid := parseSiteDate(candidate); valid {
+				date = candidate
+				return false
+			}
+			return true
+		})
+		if date != "" {
+			return date
+		}
+	}
 	var linkedDate string
 	doc.Find("a[href]").EachWithBreak(func(_ int, link *goquery.Selection) bool {
 		if currentErr != nil {

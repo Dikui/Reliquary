@@ -121,7 +121,7 @@ func TestListingUsesArticlePublicationDateAndSameSiteLinks(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/articles":
-			fmt.Fprint(w, `<html><body><a href="/articles/current?tracking=1">Current</a><div class="menu-card"><a href="/articles/current">Current</a><p class="card-date">2026-09-24</p></div><a href="/articles/old">Old</a><a href="/articles/undated">Undated</a><a href="/about">About</a><a href="https://outside.example/articles/foreign">Foreign</a></body></html>`)
+			fmt.Fprint(w, `<html><body><a href="/articles/current?tracking=1"><h3>Current</h3><span>2026-09-24</span><span>Read more</span></a><div class="menu-card"><a href="/articles/current">Current</a><p class="card-date">2026-09-24</p></div><a href="/articles/old">Old</a><a href="/articles/undated">Undated</a><a href="/about">About</a><a href="https://outside.example/articles/foreign">Foreign</a></body></html>`)
 		case "/articles/current", "/articles/old", "/articles/undated":
 			date := map[string]string{"/articles/old": "Sep 20, 2026"}[r.URL.Path]
 			fmt.Fprintf(w, `<html><body><main><h1>Article</h1><div>%s</div><article>%s</article></main></body></html>`, date, longArticleBody)
@@ -140,7 +140,7 @@ func TestListingUsesArticlePublicationDateAndSameSiteLinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != 2 || items[0].URL != server.URL+"/articles/current" || items[0].Metadata["published_at"] != "2026-09-24" ||
+	if len(items) != 2 || items[0].URL != server.URL+"/articles/current" || items[0].Title != "Current" || items[0].Metadata["published_at"] != "2026-09-24" ||
 		items[1].Metadata["error"] == "" || len(items[1].Content) != 0 {
 		t.Fatalf("listing must keep current original, reject undated, skip old/off-site: %+v", items)
 	}
@@ -273,6 +273,10 @@ func TestMiniMaxNewsDiscoversCurrentArticles(t *testing.T) {
 }
 
 func TestArticlePublishedAtReadsStructuredDateAndFallsBackToHero(t *testing.T) {
+	seed, err := goquery.NewDocumentFromReader(strings.NewReader(`<html><body><h1>EdgeBench</h1><aside><p>日期</p><p>2026-07-07</p></aside></body></html>`))
+	if err != nil || articlePublishedAt(seed, "https://seed.bytedance.com/zh/blog/edgebench") != "2026-07-07" {
+		t.Fatalf("Seed sidebar publication date not found: %v", err)
+	}
 	structured, err := goquery.NewDocumentFromReader(strings.NewReader(`<html><head><script type="application/ld+json">{"@type":"BlogPosting","mainEntityOfPage":"https://mistral.ai/news/other/","datePublished":"2026-01-01"}</script><script type="application/ld+json">{"@type":"BlogPosting","mainEntityOfPage":"https://mistral.ai/news/ocr-4/","datePublished":"2026-06-23T12:00:48.000Z","dateModified":"2026-09-10T14:01:55.122Z"}</script></head><body><article><h1>OCR</h1></article></body></html>`))
 	if err != nil {
 		t.Fatal(err)

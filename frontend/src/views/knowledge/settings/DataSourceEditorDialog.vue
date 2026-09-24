@@ -796,7 +796,7 @@ const rssPresets = [
   ['Kimi', 'https://www.kimi.ai/blog/', 'Kimi', '/blog/'],
   ['Z.ai', 'https://www.zhipuai.cn/zh/research', 'Z.ai', '/zh/research'],
   ['MiniMax', 'https://www.minimax.io/news', 'MiniMax', '/news'],
-  ['ByteDance Seed', 'https://seed.bytedance.com/zh/', 'ByteDance Seed', '/zh/'],
+  ['ByteDance Seed', 'https://seed.bytedance.com/zh/', 'ByteDance Seed', '/zh/blog/'],
   ['Simon Willison', 'https://simonwillison.net/atom/everything/', 'Simon Willison'],
   ['Google DeepMind', 'https://deepmind.google/blog/rss.xml', 'Google DeepMind'],
   ['Meta AI', 'https://ai.meta.com/blog/', 'Meta AI', '/blog/'],
