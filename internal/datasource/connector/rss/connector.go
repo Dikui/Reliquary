@@ -450,6 +450,16 @@ func (c *Connector) resolveItem(
 	}
 }
 
+// FetchArticle extracts a discovered page using the same full-text and source
+// evidence rules as RSS, without requiring the page to appear in a feed.
+func FetchArticle(ctx context.Context, articleURL string) (*types.FetchedItem, error) {
+	resolved := NewConnector().resolveItem(ctx, newClient(nil), &gofeed.Feed{}, &gofeed.Item{Link: articleURL}, "", articleURL, "")
+	if reason := resolved.item.Metadata["error"]; reason != "" {
+		return nil, fmt.Errorf("fetch original article: %s", reason)
+	}
+	return &resolved.item, nil
+}
+
 // htmlToMarkdown converts HTML to Markdown, returning the trimmed original on
 // conversion failure so we never silently drop content.
 func htmlToMarkdown(html string) string {

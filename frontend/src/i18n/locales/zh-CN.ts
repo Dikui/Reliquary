@@ -6268,6 +6268,7 @@ export default {
     typeFile: '文件',
     channelLabel: '来源渠道',
     channelWeb: '网页端',
+    channelWebResearch: '主动调研',
     channelApi: 'API',
     channelBrowserExtension: '浏览器插件',
     channelWechat: '微信',

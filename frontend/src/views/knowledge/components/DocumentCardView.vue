@@ -147,6 +147,7 @@ const formatDocTime = (time?: string) => {
 
 const getKnowledgeType = (item: KnowledgeCard) => {
   if (item.channel === 'rss') return t('datasource.connector.rss');
+  if (item.channel === 'web_research') return t('knowledgeBase.channelWebResearch');
   if (item.type === 'url') return t('knowledgeBase.typeURL') || 'URL';
   if (item.type === 'manual') return t('knowledgeBase.typeManual');
   if (item.file_type) return item.file_type.toUpperCase();
@@ -155,6 +156,7 @@ const getKnowledgeType = (item: KnowledgeCard) => {
 
 const channelLabelMap: Record<string, string> = {
   web: 'knowledgeBase.channelWeb',
+  web_research: 'knowledgeBase.channelWebResearch',
   api: 'knowledgeBase.channelApi',
   browser_extension: 'knowledgeBase.channelBrowserExtension',
   wechat: 'knowledgeBase.channelWechat',

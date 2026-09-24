@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,8 +36,19 @@ func sitemapArticleURL(raw string, sitemap *url.URL, pathPrefix string) bool {
 }
 
 func parseSiteDate(value string) (time.Time, bool) {
-	for _, layout := range []string{time.RFC3339Nano, time.RFC1123Z, time.RFC1123, "2006-01-02", "January 2, 2006", "Jan 2, 2006"} {
-		if date, err := time.Parse(layout, strings.TrimSpace(value)); err == nil {
+	value = strings.TrimSpace(value)
+	if parts := strings.Fields(value); len(parts) == 3 && len(parts[0]) > 2 {
+		day := parts[0]
+		switch day[len(day)-2:] {
+		case "st", "nd", "rd", "th":
+			if _, err := strconv.Atoi(day[:len(day)-2]); err == nil {
+				parts[0] = day[:len(day)-2]
+				value = strings.Join(parts, " ")
+			}
+		}
+	}
+	for _, layout := range []string{time.RFC3339Nano, time.RFC1123Z, time.RFC1123, "2006-01-02", "January 2, 2006", "Jan 2, 2006", "2 January 2006"} {
+		if date, err := time.Parse(layout, value); err == nil {
 			return date, true
 		}
 	}
@@ -82,6 +94,26 @@ func articlePublishedAt(doc *goquery.Document, articleURL string) string {
 	})
 	if structuredDate != "" {
 		return structuredDate
+	}
+	current, currentErr := url.Parse(articleURL)
+	var linkedDate string
+	doc.Find("a[href]").EachWithBreak(func(_ int, link *goquery.Selection) bool {
+		if currentErr != nil {
+			return false
+		}
+		claimed, err := current.Parse(link.AttrOr("href", ""))
+		if err != nil || !strings.EqualFold(claimed.Host, current.Host) || claimed.Path == "/" ||
+			!strings.HasPrefix(current.Path, strings.TrimRight(claimed.Path, "/")+"/") {
+			return true
+		}
+		if _, valid := parseSiteDate(link.Text()); valid {
+			linkedDate = strings.TrimSpace(link.Text())
+			return false
+		}
+		return true
+	})
+	if linkedDate != "" {
+		return linkedDate
 	}
 	heading := doc.Find("article h1, main h1").First()
 	if heading.Length() == 0 {

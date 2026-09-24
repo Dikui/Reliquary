@@ -488,6 +488,7 @@ export default {
     typeFile: 'File',
     channelLabel: 'Source Channel',
     channelWeb: 'Web',
+    channelWebResearch: 'Web research',
     channelApi: 'API',
     channelBrowserExtension: 'Browser Extension',
     channelWechat: 'WeChat',

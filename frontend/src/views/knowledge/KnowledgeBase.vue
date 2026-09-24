@@ -624,6 +624,7 @@ const sourceOptions = computed(() => [
   { label: t('knowledgeBase.sourceUpload'), value: 'web' },
   { label: t('knowledgeBase.sourceUrl'), value: 'url' },
   { label: t('knowledgeBase.sourceManual'), value: 'manual' },
+  { label: t('knowledgeBase.channelWebResearch'), value: 'web_research' },
   { label: t('datasource.connector.rss'), value: 'rss' },
   { label: t('knowledgeBase.sourceApi'), value: 'api' },
   { label: t('knowledgeBase.sourceBrowserExtension'), value: 'browser_extension' },

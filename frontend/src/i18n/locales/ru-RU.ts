@@ -6266,6 +6266,7 @@ export default {
     typeFile: 'Файл',
     channelLabel: 'Канал источника',
     channelWeb: 'Веб',
+    channelWebResearch: 'Веб-исследование',
     channelApi: 'API',
     channelBrowserExtension: 'Расширение браузера',
     channelWechat: 'WeChat',

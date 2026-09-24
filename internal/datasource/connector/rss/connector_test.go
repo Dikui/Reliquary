@@ -38,6 +38,23 @@ const longArticleBody = `<p>This is the first paragraph of a reasonably long art
 	`<p>A third paragraph adds further substance, ensuring the article is unmistakably ` +
 	`the dominant readable region of the document under test.</p>`
 
+func TestFetchArticleForResearchUsesOriginalPage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintf(w, `<html><head><title>Research Article</title><meta name="author" content="Ada Analyst"><meta property="og:site_name" content="Example Review"></head><body><article><h1>Research Article</h1>%s</article><p>Posted <a href="/2026/Sep/19/">19th September 2026</a></p></body></html>`, longArticleBody)
+	}))
+	defer server.Close()
+
+	articleURL := server.URL + "/2026/Sep/19/example"
+	article, err := FetchArticle(context.Background(), articleURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if article.URL != articleURL || article.Metadata["published_at"] != "19th September 2026" ||
+		article.Metadata["author"] != "Ada Analyst" || !strings.Contains(string(article.Content), "dominant readable region") {
+		t.Fatalf("research article lost original page evidence: %+v", article)
+	}
+}
+
 func TestClientRejectsTruncatedArticle(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(strings.Repeat("x", maxArticleSize+1)))

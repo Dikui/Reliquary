@@ -1031,6 +1031,7 @@ const getDisplayTitle = () => {
 
 const channelLabelMap: Record<string, string> = {
   web: 'knowledgeBase.channelWeb',
+  web_research: 'knowledgeBase.channelWebResearch',
   api: 'knowledgeBase.channelApi',
   browser_extension: 'knowledgeBase.channelBrowserExtension',
   wechat: 'knowledgeBase.channelWechat',
@@ -1056,6 +1057,7 @@ const getChannelLabel = (channel: string) => {
 // 获取类型标签
 const getTypeLabel = () => {
   if (props.details.channel === 'rss') return t('datasource.connector.rss');
+  if (props.details.channel === 'web_research') return t('knowledgeBase.typeURL');
   switch (props.details.type) {
     case 'url':
       return t('knowledgeBase.typeURL');

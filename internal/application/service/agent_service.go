@@ -15,6 +15,7 @@ import (
 	"reliquary/internal/agent/tools"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/config"
+	"reliquary/internal/datasource/connector/rss"
 	"reliquary/internal/event"
 	"reliquary/internal/logger"
 	"reliquary/internal/mcp"
@@ -1128,7 +1129,20 @@ func (s *agentService) registerTools(
 				if kb == nil || kb.TenantID != tenantID || kb.CreatorID != userID {
 					return fmt.Errorf("only the knowledge base creator can import research")
 				}
-				_, err = s.knowledgeService.CreateKnowledgeFromURL(ctx, kb.ID, input.URL, "", "", nil, "", nil, "web_research", nil)
+				if blockedIntakeURL(input.URL) {
+					return fmt.Errorf("X/Twitter sources require Grok ingestion")
+				}
+				article, err := rss.FetchArticle(ctx, input.URL)
+				if err != nil {
+					return err
+				}
+				_, err = s.knowledgeService.CreateKnowledgeFromManual(ctx, kb.ID, &types.ManualKnowledgePayload{
+					Title: article.Title, Content: string(article.Content), Status: types.ManualKnowledgeStatusPublish,
+					SourceInfo: types.SourceInfo{
+						Author: article.Metadata["author"], Publisher: article.Metadata["publisher"],
+						OriginalURL: input.URL, PublishedAt: article.Metadata["published_at"],
+					},
+				}, "web_research")
 				return err
 			})
 		case tools.ToolKnowledgeApplyAnomaly:

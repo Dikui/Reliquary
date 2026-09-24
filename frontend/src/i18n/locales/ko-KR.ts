@@ -6266,6 +6266,7 @@ export default {
     typeFile: '파일',
     channelLabel: '출처 채널',
     channelWeb: '웹',
+    channelWebResearch: '웹 조사',
     channelApi: 'API',
     channelBrowserExtension: '브라우저 확장',
     channelWechat: 'WeChat',

@@ -103,6 +103,7 @@ const totalChunkCount = computed(() =>
 
 const channelLabelMap: Record<string, string> = {
   web: 'knowledgeBase.channelWeb',
+  web_research: 'knowledgeBase.channelWebResearch',
   api: 'knowledgeBase.channelApi',
   browser_extension: 'knowledgeBase.channelBrowserExtension',
   wechat: 'knowledgeBase.channelWechat',
