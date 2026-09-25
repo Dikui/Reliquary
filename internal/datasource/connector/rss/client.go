@@ -142,6 +142,12 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 		// ponytail: page-wide fallback may reject decorative media on pages without a content container.
 		content = doc.Selection
 	}
+	if content.Is("main") {
+		articleBody := content.Find(".blog-content")
+		if articleBody.Length() == 1 && articleBody.Find("h1").Length() == 1 {
+			content = articleBody
+		}
+	}
 	sourceHeading := strings.TrimSpace(content.Find("h1").First().Text())
 	pageURL, _ := url.Parse(articleURL)
 	videoCount, err := c.preserveVideoLinks(ctx, content, pageURL)

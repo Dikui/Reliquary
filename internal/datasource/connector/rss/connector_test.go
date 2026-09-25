@@ -70,6 +70,26 @@ func TestExtractArticleUsesLargestImageVariant(t *testing.T) {
 	}
 }
 
+func TestExtractArticleIgnoresRelatedCardSkeleton(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := longArticleBody
+		if r.URL.Path == "/missing" {
+			body += `<div class="animate-pulse"></div>`
+		}
+		fmt.Fprintf(w, `<html><head><title>Robotics report</title></head><body><main><div class="blog-content"><h1>Robotics report</h1>%s</div><aside><div class="animate-pulse"></div><img src="/related.png" alt="Related article"></aside></main></body></html>`, body)
+	}))
+	defer server.Close()
+
+	content, _, _, _, _, err := newClient(nil).extractArticle(context.Background(), server.URL+"/complete")
+	if err != nil || !strings.Contains(content, "dominant readable region") {
+		t.Fatalf("related card skeleton must not block complete article: %v, %s", err, content)
+	}
+	_, _, _, _, _, err = newClient(nil).extractArticle(context.Background(), server.URL+"/missing")
+	if err == nil || !strings.Contains(err.Error(), "unresolved content placeholder") {
+		t.Fatalf("actual article placeholder must still be rejected: %v", err)
+	}
+}
+
 func TestRecoverKimiTablesOnlyWhenEveryPlaceholderHasData(t *testing.T) {
 	chart := `{"Overall Model Accuracy":[{"name":"Accuracy (%)","data":[{"name":"Model A","category":"Lab A","value":59.7}]}]}`
 	benchmark := `{"data":[{"benchmark":"Vision","type":"Open","scores":[{"model":"Model A","value":"69.7"}]}]}`
