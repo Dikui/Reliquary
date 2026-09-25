@@ -734,7 +734,7 @@ func (s *DataSourceService) ProcessSync(ctx context.Context, task *asynq.Task) e
 
 	// Process fetched items and write to knowledge base
 	var result = &types.SyncResult{
-		Total: len(items),
+		Total: len(items), Metrics: config.FetchMetrics,
 	}
 
 	// Set tenant context so KnowledgeService can resolve tenant info correctly

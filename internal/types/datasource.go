@@ -230,6 +230,8 @@ type DataSourceConfig struct {
 	Settings map[string]interface{} `json:"settings"`
 	// IngestSince is supplied by the sync service, never persisted in connector settings.
 	IngestSince time.Time `json:"-"`
+	// FetchMetrics is populated by connectors for the current run only.
+	FetchMetrics map[string]interface{} `json:"-"`
 
 	// MultimodalEnabled mirrors the target knowledge base's VLM/multimodal
 	// setting for the current sync run. The service populates it before each fetch
@@ -416,6 +418,7 @@ type SyncCursor struct {
 
 // SyncResult summarizes the outcome of a sync operation
 type SyncResult struct {
+	Metrics map[string]interface{} `json:"metrics,omitempty"`
 	// Total items processed
 	Total int `json:"total"`
 

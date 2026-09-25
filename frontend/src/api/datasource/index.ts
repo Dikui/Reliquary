@@ -38,6 +38,7 @@ export interface SyncItemError {
 }
 
 export interface SyncResultDetail {
+  metrics?: Record<string, string | number>
   total?: number
   created?: number
   updated?: number

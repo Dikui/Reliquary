@@ -277,6 +277,10 @@ const groupedLogs = computed(() => {
                   <span class="detail-label">{{ t('datasource.logMetric.total') }}</span>
                   <span>{{ log.items_total }}</span>
                 </div>
+                <div v-for="[name, value] in Object.entries(log.result?.metrics || {})" :key="name" class="detail-row">
+                  <span class="detail-label">{{ name }}</span>
+                  <span>{{ value }}</span>
+                </div>
                 <!-- Localised failure summary; raw error_message only for a
                      pure infra failure with no per-document detail. -->
                 <div v-if="log.items_failed > 0" class="tl-error">
