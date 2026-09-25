@@ -158,8 +158,9 @@ type xPost struct {
 }
 
 type xResponse struct {
-	Status     string `json:"status"`
-	OutputText string `json:"output_text"`
+	Status     string   `json:"status"`
+	OutputText string   `json:"output_text"`
+	Citations  []string `json:"citations"`
 	Output     []struct {
 		Type    string `json:"type"`
 		Content []struct {
@@ -264,6 +265,11 @@ func (c *Connector) search(ctx context.Context, config *types.DataSourceConfig, 
 func parsePosts(result xResponse, handle string, since, end time.Time) ([]types.FetchedItem, []string, error) {
 	var outputText strings.Builder
 	cited := make(map[string]bool)
+	for _, citation := range result.Citations {
+		if id := statusID(citation, handle); id != "" {
+			cited[id] = true
+		}
+	}
 	for _, output := range result.Output {
 		if output.Type != "message" {
 			continue
