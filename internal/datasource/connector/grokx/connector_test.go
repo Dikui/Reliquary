@@ -68,7 +68,7 @@ func TestGrokSearchCollectsCitedPostsAndRejectsUncitedPosts(t *testing.T) {
 		if body.Model != "grok-4.3" || body.Text.Format.Type != "json_object" || len(body.Tools) != 1 || body.Tools[0].Type != "x_search" || len(body.Tools[0].Handles) != 1 || body.Tools[0].Handles[0] != "bcherny" || body.Tools[0].From != since.Format("2006-01-02") {
 			t.Fatalf("unexpected X Search scope: %+v", body.Tools)
 		}
-		response, err := json.Marshal(map[string]interface{}{"status": "completed", "usage": map[string]interface{}{"input_tokens": 42}, "citations": []string{"https://x.com/bcherny/status/789", "https://x.com/dotey/status/456"}, "output": []interface{}{map[string]interface{}{"type": "message", "content": []interface{}{map[string]interface{}{"text": string(envelope), "annotations": []interface{}{map[string]string{"url": "https://x.com/bcherny/status/123"}}}}}}})
+		response, err := json.Marshal(map[string]interface{}{"status": "completed", "usage": map[string]interface{}{"input_tokens": 42}, "citations": []string{"https://x.com/bcherny/status/789", "https://x.com/dotey/status/456"}, "output": []interface{}{map[string]interface{}{"type": "message", "content": []interface{}{map[string]interface{}{"text": string(envelope), "annotations": []interface{}{map[string]string{"url": "https://x.com/i/status/123"}}}}}}})
 		if err != nil {
 			t.Fatal(err)
 		}

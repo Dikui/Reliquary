@@ -266,7 +266,7 @@ func parsePosts(result xResponse, handle string, since, end time.Time) ([]types.
 	var outputText strings.Builder
 	cited := make(map[string]bool)
 	for _, citation := range result.Citations {
-		if id := statusID(citation, handle); id != "" {
+		if id := citationID(citation, handle); id != "" {
 			cited[id] = true
 		}
 	}
@@ -279,7 +279,7 @@ func parsePosts(result xResponse, handle string, since, end time.Time) ([]types.
 				outputText.WriteString(part.Text)
 			}
 			for _, annotation := range part.Annotations {
-				if id := statusID(annotation.URL, handle); id != "" {
+				if id := citationID(annotation.URL, handle); id != "" {
 					cited[id] = true
 				}
 			}
@@ -402,4 +402,11 @@ func statusID(raw, handle string) string {
 		}
 	}
 	return parts[2]
+}
+
+func citationID(raw, handle string) string {
+	if id := statusID(raw, handle); id != "" {
+		return id
+	}
+	return statusID(raw, "i") // X Search also cites the canonical /i/status/{id} URL.
 }
