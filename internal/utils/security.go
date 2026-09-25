@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"html"
 	"log"
@@ -752,7 +753,64 @@ func (t *SSRFValidatingRoundTripper) RoundTrip(req *http.Request) (*http.Respons
 	if err := validateURLForSSRFForOutbound(req.URL.String()); err != nil {
 		return nil, fmt.Errorf("outbound request blocked by SSRF policy: %w", err)
 	}
+	if transport, ok := t.Base.(*http.Transport); ok && transport.Proxy != nil {
+		proxyURL, err := transport.Proxy(req)
+		if err != nil {
+			return nil, err
+		}
+		if proxyURL != nil && !IsSSRFWhitelisted(req.URL.Hostname()) {
+			return roundTripPinnedProxy(req, transport, proxyURL, net.DefaultResolver.LookupIPAddr)
+		}
+	}
 	return t.Base.RoundTrip(req)
+}
+
+// roundTripPinnedProxy sends the validated IP to the proxy, so proxy-side DNS
+// cannot redirect a public hostname to a private address. TLS still verifies
+// the original hostname. A dedicated transport keeps this SNI value per request.
+// ponytail: proxied requests do not pool connections; cache transports if throughput requires it.
+func roundTripPinnedProxy(req *http.Request, base *http.Transport, proxyURL *url.URL, resolve func(context.Context, string) ([]net.IPAddr, error)) (*http.Response, error) {
+	if proxyURL.Scheme != "http" {
+		return nil, fmt.Errorf("SSRF-safe proxy requires an HTTP proxy")
+	}
+	host := req.URL.Hostname()
+	port := req.URL.Port()
+	if port == "" {
+		port = "80"
+		if req.URL.Scheme == "https" {
+			port = "443"
+		}
+	}
+	ips, err := resolve(req.Context(), host)
+	if err != nil || len(ips) == 0 {
+		return nil, fmt.Errorf("proxy target DNS resolution failed for %s: %v", host, err)
+	}
+	for _, ip := range ips {
+		if restricted, reason := isRestrictedIP(ip.IP); restricted {
+			return nil, fmt.Errorf("proxy target blocked: %s resolves to restricted IP %s (%s)", host, ip.IP, reason)
+		}
+	}
+
+	pinned := req.Clone(req.Context())
+	pinned.URL.Host = net.JoinHostPort(ips[0].IP.String(), port)
+	if pinned.Host == "" {
+		pinned.Host = req.URL.Host
+	}
+	transport := base.Clone()
+	transport.Proxy = http.ProxyURL(proxyURL)
+	transport.DisableKeepAlives = true
+	if transport.TLSClientConfig == nil {
+		transport.TLSClientConfig = &tls.Config{}
+	} else {
+		transport.TLSClientConfig = transport.TLSClientConfig.Clone()
+	}
+	transport.TLSClientConfig.ServerName = host
+	resp, err := transport.RoundTrip(pinned)
+	transport.CloseIdleConnections()
+	if resp != nil {
+		resp.Request = req
+	}
+	return resp, err
 }
 
 // NewSSRFSafeHTTPClientWithTransport wraps a caller-supplied transport in an

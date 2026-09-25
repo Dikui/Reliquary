@@ -3,7 +3,10 @@ package utils
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -79,6 +82,43 @@ func TestNewSSRFSafeTransport_SharedAcrossClients(t *testing.T) {
 	}
 	if first.CheckRedirect == nil || second.CheckRedirect == nil {
 		t.Fatal("expected SSRF redirect policy to be set on both clients")
+	}
+}
+
+func TestPinnedProxyReceivesValidatedIP(t *testing.T) {
+	connectTarget := make(chan string, 1)
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		connectTarget <- r.Host
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer proxy.Close()
+	proxyURL, err := url.Parse(proxy.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequest(http.MethodGet, "https://public.example/article", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolve := func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("93.184.215.14")}}, nil
+	}
+	_, _ = roundTripPinnedProxy(req, &http.Transport{}, proxyURL, resolve)
+	select {
+	case got := <-connectTarget:
+		if got != "93.184.215.14:443" {
+			t.Fatalf("proxy CONNECT target = %q; want pinned public IP", got)
+		}
+	default:
+		t.Fatal("proxy did not receive CONNECT")
+	}
+
+	resolve = func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("93.184.215.14")}, {IP: net.ParseIP("127.0.0.1")}}, nil
+	}
+	_, err = roundTripPinnedProxy(req, &http.Transport{}, proxyURL, resolve)
+	if err == nil || !strings.Contains(err.Error(), "restricted IP") {
+		t.Fatalf("mixed public/private answers must be blocked, got %v", err)
 	}
 }
 
