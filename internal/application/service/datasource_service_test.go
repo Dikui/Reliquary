@@ -639,6 +639,23 @@ func TestIngestItem_RSSUsesUnifiedIntakeWithSourceEvidence(t *testing.T) {
 	require.Empty(t, ks.payload.SourceInfo.OriginalURL)
 }
 
+func TestIngestItem_GrokXUsesUnifiedIntakeWithSourceEvidence(t *testing.T) {
+	ks := &rssIntakeKnowledgeService{repo: &deletionLookupKnowledgeRepo{}}
+	svc := &DataSourceService{knowledgeService: ks}
+	ds := &types.DataSource{ID: "grok-source", TenantID: 1, KnowledgeBaseID: "kb", Type: types.ConnectorTypeGrokX}
+	updated, err := svc.ingestItem(context.Background(), ds, &types.FetchedItem{
+		ExternalID: "123", Title: "@bcherny: Exact source text", Content: []byte("Exact source text\n\n![X image](https://pbs.twimg.com/media/example.jpg)"),
+		URL: "https://x.com/bcherny/status/123", Metadata: map[string]string{"author": "@bcherny", "published_at": "2026-09-24T08:30:00Z", "channel": types.ConnectorTypeGrokX},
+	}, nil)
+	require.NoError(t, err)
+	require.False(t, updated)
+	require.Equal(t, types.ConnectorTypeGrokX, ks.channel)
+	require.Equal(t, "@bcherny", ks.payload.SourceInfo.Author)
+	require.Equal(t, "https://x.com/bcherny/status/123", ks.payload.SourceInfo.OriginalURL)
+	require.Equal(t, "2026-09-24T08:30:00Z", ks.payload.SourceInfo.PublishedAt)
+	require.Contains(t, ks.payload.Content, "![X image]")
+}
+
 func TestProcessSync_SyncDeletionsDeletesMatchingKnowledge(t *testing.T) {
 	h := newSyncDeletionHarness(t, true, "ds-delete-characterization", "log-delete-characterization", nil, nil)
 	updated, err := h.run(t)

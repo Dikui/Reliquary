@@ -280,7 +280,7 @@ var ConnectorMetadataRegistry = map[string]ConnectorMetadata{
 	types.ConnectorTypeGrokX: {
 		Type:         types.ConnectorTypeGrokX,
 		Name:         "X discovery via Grok",
-		Description:  "Discover X post links; original content remains unverified",
+		Description:  "Collect X posts through Grok X Search for source and quality review",
 		Priority:     13,
 		AuthType:     "api_key",
 		Capabilities: []string{"incremental"},

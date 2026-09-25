@@ -56,7 +56,7 @@ func intakeReviewPromptForMessage(rules *KnowledgeStrategyRules, channel string)
 		return intakeReviewPrompt("")
 	}
 	prompt := intakeReviewPrompt(rules.Filter)
-	if channel == types.ChannelRSS && rules.Collection != "" {
+	if (channel == types.ChannelRSS || channel == types.ConnectorTypeGrokX) && rules.Collection != "" {
 		prompt += "\nDaily source collection policy (refine selection only; all source and completeness checks remain mandatory):\n" + rules.Collection
 	}
 	return prompt

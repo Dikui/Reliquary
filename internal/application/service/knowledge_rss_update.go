@@ -23,8 +23,8 @@ func (s *knowledgeService) ReviewRSSUpdate(ctx context.Context, oldID string, pa
 	if err != nil {
 		return false, err
 	}
-	if old.Channel != types.ChannelRSS {
-		return false, fmt.Errorf("message is not an RSS article")
+	if old.Channel != types.ChannelRSS && old.Channel != types.ConnectorTypeGrokX {
+		return false, fmt.Errorf("message is not a daily-source article")
 	}
 	var oldMeta map[string]json.RawMessage
 	if err := json.Unmarshal(old.Metadata, &oldMeta); err != nil {
@@ -53,7 +53,7 @@ func (s *knowledgeService) ReviewRSSUpdate(ctx context.Context, oldID string, pa
 		}
 	}
 	staged.SourceMetadata["rss_update_candidate"] = "true"
-	candidate, err := s.CreateKnowledgeFromManual(ctx, kb.ID, &staged, types.ChannelRSS)
+	candidate, err := s.CreateKnowledgeFromManual(ctx, kb.ID, &staged, old.Channel)
 	if err != nil {
 		return false, err
 	}

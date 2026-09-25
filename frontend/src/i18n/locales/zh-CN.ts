@@ -711,7 +711,7 @@ export default {
       authHeadersHint: '用于访问私有订阅源，每行一个，格式为「名称: 值」，例如 Authorization: Bearer xxxx',
       grokApiKey: 'Grok API 密钥',
       grokAccount: 'X 账号（每个账号单独创建一个信源）',
-      grokEvidenceHint: '当前仅记录 Grok 发现的原帖链接与用量。缺少可核验的完整原文和图片原件时，不会加入知识库。'
+      grokEvidenceHint: '通过 Grok X Search 获取帖子内容；缺少正文、作者、发布时间或图片保存失败时不会入库。'
     },
     connectorDesc: {
       feishu: '同步飞书知识库中的文档、表格、文件',
@@ -722,7 +722,7 @@ export default {
       yuque: '同步语雀知识库中的文档',
       ima: '同步腾讯 IMA 知识库中的文档、笔记与文件（暂不支持 AI 会话与视频解析）',
       rss: '同步 RSS / Atom、站点地图或文章列表中的文章',
-      grok_x: '通过 Grok 发现 X 原帖；原文和图片未核验前不收录',
+      grok_x: '通过 Grok X Search 收集帖子并审核后入库',
       gitlab: '同步 GitLab 项目中的文件'
     },
     connector: {

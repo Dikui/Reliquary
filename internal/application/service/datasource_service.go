@@ -771,10 +771,10 @@ func (s *DataSourceService) ProcessSync(ctx context.Context, task *asynq.Task) e
 		return err
 	}
 
-	// A failed RSS item must be retried tomorrow. Advancing the feed cursor here
-	// would make a successfully fetched but failed-to-ingest article invisible.
+	// A failed daily-source item must be retried tomorrow. Advancing the cursor
+	// would make a successfully fetched but failed-to-ingest message invisible.
 	// ponytail: retry successful items too on a partial run; dedup skips them.
-	if nextCursor != nil && (ds.Type != types.ConnectorTypeRSS || result.Failed == 0) {
+	if nextCursor != nil && ((ds.Type != types.ConnectorTypeRSS && ds.Type != types.ConnectorTypeGrokX) || result.Failed == 0) {
 		cursorJSON, _ := nextCursor.ToJSON()
 		ds.LastSyncCursor = cursorJSON
 	}
@@ -785,7 +785,7 @@ func (s *DataSourceService) ProcessSync(ctx context.Context, task *asynq.Task) e
 	if len(fetchWarnings) > 0 {
 		syncStatus = types.SyncLogStatusPartial
 		if ds.Type == types.ConnectorTypeGrokX {
-			syncErrorMessage = "Grok discovery lacks original evidence; see run details"
+			syncErrorMessage = "Some Grok posts failed validation; see run details"
 		} else {
 			syncErrorMessage = fmt.Sprintf("Some feeds failed: %s", strings.Join(fetchWarnings, "; "))
 		}
@@ -1277,9 +1277,9 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 	for k, v := range item.Metadata {
 		metadata[k] = v
 	}
-	if ds.Type == types.ConnectorTypeRSS {
+	if ds.Type == types.ConnectorTypeRSS || ds.Type == types.ConnectorTypeGrokX {
 		if len(item.Content) == 0 || (item.URL == "" && metadata["intake_reject_reason"] == "") {
-			return false, fmt.Errorf("RSS article body or original URL missing")
+			return false, fmt.Errorf("source message body or original URL missing")
 		}
 		// ponytail: compare stored Markdown, not remote image bytes; add image fingerprints if in-place image edits matter.
 		contentHash := fmt.Sprintf("%x", sha256.Sum256(item.Content))

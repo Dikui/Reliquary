@@ -709,7 +709,7 @@ export default {
       authHeadersHint: '비공개 피드 접근용. 한 줄에 하나씩 「이름: 값」 형식으로 입력하세요. 예: Authorization: Bearer xxxx',
       grokApiKey: 'Grok API 키',
       grokAccount: 'X 계정 (계정마다 별도 소스 생성)',
-      grokEvidenceHint: '발견한 게시물 링크와 사용량만 기록합니다. 검증된 원문과 원본 이미지가 없으면 지식베이스에 추가하지 않습니다.'
+      grokEvidenceHint: '본문, 작성자, 게시 시각이 없거나 이미지를 저장할 수 없는 게시물은 지식베이스에 추가하지 않습니다.'
     },
     connectorDesc: {
       feishu: '페이슈 위키에서 문서, 스프레드시트, 파일 동기화',
@@ -720,7 +720,7 @@ export default {
       yuque: '위큐 지식베이스에서 문서 동기화',
       ima: 'Tencent IMA 지식베이스에서 문서, 노트 및 파일 동기화 (AI 세션과 동영상 분석은 지원되지 않음)',
       rss: 'RSS / Atom 피드, 사이트맵 또는 글 목록에서 글 동기화',
-      grok_x: 'Grok으로 X 게시물 검색; 원문과 이미지를 검증하기 전에는 수집하지 않음',
+      grok_x: 'Grok X Search로 게시물을 수집하고 검토한 후 추가',
       gitlab: 'GitLab 프로젝트의 파일 동기화'
     },
     connector: {

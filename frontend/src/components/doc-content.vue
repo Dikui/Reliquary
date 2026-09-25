@@ -1043,6 +1043,7 @@ const channelLabelMap: Record<string, string> = {
   feishu_drive: 'knowledgeBase.channelFeishuDrive',
   lark_drive: 'knowledgeBase.channelLarkDrive',
   rss: 'datasource.connector.rss',
+  grok_x: 'datasource.connector.grok_x',
   dingtalk: 'knowledgeBase.channelDingtalk',
   slack: 'knowledgeBase.channelSlack',
   im: 'knowledgeBase.channelIm',
@@ -1057,6 +1058,7 @@ const getChannelLabel = (channel: string) => {
 // 获取类型标签
 const getTypeLabel = () => {
   if (props.details.channel === 'rss') return t('datasource.connector.rss');
+  if (props.details.channel === 'grok_x') return t('datasource.connector.grok_x');
   if (props.details.channel === 'web_research') return t('knowledgeBase.typeURL');
   switch (props.details.type) {
     case 'url':

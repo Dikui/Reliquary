@@ -851,6 +851,9 @@ async function testConnection() {
         // validate-credentials is credentials-only; feed URLs live in settings.
         creds.feed_urls = form.value.config.settings.feed_urls
       }
+      if (form.value.type === 'grok_x' && form.value.config.settings.base_url) {
+        creds.base_url = form.value.config.settings.base_url
+      }
       await validateCredentials(form.value.type, creds)
     }
     testResult.value = 'success'
@@ -1487,6 +1490,10 @@ const drawerConfirmText = computed(() => {
         <div class="form-item rss-presets">
           <t-button v-for="[name, handle] in grokAccounts" :key="handle" variant="outline" size="small"
             @click="selectGrokAccount(name, handle)">{{ name }} (@{{ handle }})</t-button>
+        </div>
+        <div class="form-item">
+          <label class="form-label">{{ t('datasource.field.baseUrl') }}</label>
+          <t-input v-model="form.config.settings.base_url" placeholder="https://api.x.ai/v1" />
         </div>
         <p class="form-desc">{{ t('datasource.field.grokEvidenceHint') }}</p>
       </section>

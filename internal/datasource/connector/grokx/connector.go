@@ -12,22 +12,45 @@ import (
 	"time"
 
 	"reliquary/internal/datasource"
+	"reliquary/internal/logger"
 	"reliquary/internal/types"
+	"reliquary/internal/utils"
 )
 
-// X Search exposes citations and usage, not a guaranteed original post body or
-// original image bytes. This connector records discoveries but cannot ingest
-// them as knowledge until the API supplies verifiable originals.
+// Connector collects posts through Grok X Search and checks the returned
+// structured post against the cited status URL before intake.
 type Connector struct {
 	endpoint string
 	client   *http.Client
 }
 
 func NewConnector() *Connector {
-	return &Connector{endpoint: "https://api.x.ai", client: &http.Client{Timeout: 2 * time.Minute}}
+	cfg := utils.DefaultSSRFSafeHTTPClientConfig()
+	cfg.Timeout = 2 * time.Minute
+	return &Connector{endpoint: "https://api.x.ai", client: utils.NewSSRFSafeHTTPClient(cfg)}
 }
 
 func (c *Connector) Type() string { return types.ConnectorTypeGrokX }
+
+func (c *Connector) baseURL(config *types.DataSourceConfig) (string, error) {
+	base := strings.TrimRight(c.endpoint, "/") + "/v1"
+	configured, _ := config.Settings["base_url"].(string)
+	if configured == "" {
+		configured, _ = config.Credentials["base_url"].(string) // stateless connection test
+	}
+	if strings.TrimSpace(configured) == "" {
+		return base, nil
+	}
+	base = strings.TrimRight(strings.TrimSpace(configured), "/")
+	u, err := url.Parse(base)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return "", fmt.Errorf("%w: base_url must be an HTTPS API URL", datasource.ErrInvalidConfig)
+	}
+	if err := utils.ValidateURLForSSRF(base); err != nil {
+		return "", fmt.Errorf("%w: base_url: %v", datasource.ErrInvalidConfig, err)
+	}
+	return base, nil
+}
 
 func apiKey(config *types.DataSourceConfig) (string, error) {
 	if config == nil {
@@ -59,13 +82,17 @@ func (c *Connector) Validate(ctx context.Context, config *types.DataSourceConfig
 	if err != nil {
 		return err
 	}
+	base, err := c.baseURL(config)
+	if err != nil {
+		return err
+	}
 	// The credentials-only connection test has no settings; source creation does.
 	if config.Settings != nil {
 		if _, err := handle(config); err != nil {
 			return err
 		}
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.endpoint+"/v1/models", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/models", nil)
 	if err != nil {
 		return err
 	}
@@ -100,8 +127,8 @@ func (c *Connector) FetchAll(ctx context.Context, config *types.DataSourceConfig
 	if config == nil {
 		return nil, datasource.ErrInvalidConfig
 	}
-	_, err := c.search(ctx, config, resourceIDs, config.IngestSince)
-	return nil, err
+	items, _, err := c.search(ctx, config, resourceIDs, config.IngestSince)
+	return items, err
 }
 
 func (c *Connector) FetchIncremental(ctx context.Context, config *types.DataSourceConfig, cursor *types.SyncCursor) ([]types.FetchedItem, *types.SyncCursor, error) {
@@ -112,105 +139,111 @@ func (c *Connector) FetchIncremental(ctx context.Context, config *types.DataSour
 	if cursor != nil && cursor.LastSyncTime.After(since) {
 		since = cursor.LastSyncTime
 	}
-	end, err := c.search(ctx, config, config.ResourceIDs, since)
+	items, end, err := c.search(ctx, config, config.ResourceIDs, since)
 	if end.IsZero() {
-		return nil, nil, err
+		return items, nil, err
 	}
-	return nil, &types.SyncCursor{LastSyncTime: end}, err
+	return items, &types.SyncCursor{LastSyncTime: end}, err
 }
 
-func (c *Connector) search(ctx context.Context, config *types.DataSourceConfig, resourceIDs []string, since time.Time) (time.Time, error) {
+type xPost struct {
+	TweetID      string `json:"tweet_id"`
+	URL          string `json:"url"`
+	AuthorHandle string `json:"author_handle"`
+	Text         string `json:"text"`
+	CreatedAt    string `json:"created_at"`
+	PostType     string `json:"post_type"`
+	Media        []struct {
+		Type string `json:"type"`
+		URL  string `json:"url"`
+	} `json:"media"`
+}
+
+type xResponse struct {
+	Status     string `json:"status"`
+	OutputText string `json:"output_text"`
+	Output     []struct {
+		Type    string `json:"type"`
+		Content []struct {
+			Text        string `json:"text"`
+			Annotations []struct {
+				URL string `json:"url"`
+			} `json:"annotations"`
+		} `json:"content"`
+	} `json:"output"`
+	Usage struct {
+		InputTokens  *int64 `json:"input_tokens"`
+		OutputTokens *int64 `json:"output_tokens"`
+		CostTicks    *int64 `json:"cost_in_usd_ticks"`
+		Tool         struct {
+			SearchCalls  *int64 `json:"x_search_calls"`
+			PostsFetched *int64 `json:"x_posts_fetched"`
+			UsersFetched *int64 `json:"x_users_fetched"`
+		} `json:"server_side_tool_usage_details"`
+	} `json:"usage"`
+}
+
+func (c *Connector) search(ctx context.Context, config *types.DataSourceConfig, resourceIDs []string, since time.Time) ([]types.FetchedItem, time.Time, error) {
 	key, err := apiKey(config)
 	if err != nil {
-		return time.Time{}, err
+		return nil, time.Time{}, err
 	}
 	h, err := handle(config)
 	if err != nil {
-		return time.Time{}, err
+		return nil, time.Time{}, err
 	}
 	if len(resourceIDs) > 0 && (len(resourceIDs) != 1 || !strings.EqualFold(resourceIDs[0], h)) {
-		return time.Time{}, datasource.ErrResourceNotFound
+		return nil, time.Time{}, datasource.ErrResourceNotFound
 	}
 	if since.IsZero() {
-		return time.Time{}, fmt.Errorf("%w: source enablement time is missing", datasource.ErrInvalidConfig)
+		return nil, time.Time{}, fmt.Errorf("%w: source enablement time is missing", datasource.ErrInvalidConfig)
 	}
 	end := time.Now().UTC()
 	if since.After(end) {
-		return time.Time{}, fmt.Errorf("%w: source enablement time is in the future", datasource.ErrInvalidConfig)
+		return nil, time.Time{}, fmt.Errorf("%w: source enablement time is in the future", datasource.ErrInvalidConfig)
+	}
+	base, err := c.baseURL(config)
+	if err != nil {
+		return nil, time.Time{}, err
 	}
 	body, _ := json.Marshal(map[string]interface{}{
-		"model": "grok-4.7",
-		"input": []map[string]string{{"role": "user", "content": "Find recent original posts by @" + h + " in the specified date range. Cite each original post URL; do not include other accounts."}},
+		"model": "grok-4.3",
+		"input": []map[string]string{{"role": "user", "content": fmt.Sprintf(
+			"Use x_search to retrieve posts authored by @%s between %s and %s UTC. Return exact original text without translation, summary, or inference. Include replies and quotes, but not reposts of other authors. Never invent a status URL, author, timestamp, or media URL. Return only JSON: {\"handle\":%q,\"posts\":[{\"tweet_id\":\"123\",\"url\":\"https://x.com/%s/status/123\",\"author_handle\":%q,\"text\":\"exact post text\",\"created_at\":\"RFC3339 timestamp\",\"post_type\":\"original|reply|quote\",\"media\":[{\"type\":\"image|video|link\",\"url\":\"https://...\"}]}],\"warnings\":[]}. Return an empty posts array when none are found.",
+			h, since.UTC().Format(time.RFC3339), end.Format(time.RFC3339), h, h, h)}},
 		"tools": []map[string]interface{}{{
 			"type": "x_search", "allowed_x_handles": []string{h},
-			"from_date": since.UTC().Format("2006-01-02"), "to_date": end.Format("2006-01-02"),
+			"from_date": since.UTC().Format("2006-01-02"), "to_date": end.AddDate(0, 0, 1).Format("2006-01-02"),
 		}},
+		"text": map[string]interface{}{"format": map[string]string{"type": "json_object"}},
 	})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint+"/v1/responses", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/responses", bytes.NewReader(body))
 	if err != nil {
-		return time.Time{}, err
+		return nil, time.Time{}, err
 	}
 	req.Header.Set("Authorization", "Bearer "+key)
 	req.Header.Set("Content-Type", "application/json")
 	started := time.Now()
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("Grok X search failed: %w", err)
+		return nil, time.Time{}, fmt.Errorf("Grok X search failed: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return time.Time{}, fmt.Errorf("Grok X search returned HTTP %d", resp.StatusCode)
+		return nil, time.Time{}, fmt.Errorf("Grok X search returned HTTP %d", resp.StatusCode)
 	}
-	var result struct {
-		Status string `json:"status"`
-		Output []struct {
-			Type    string `json:"type"`
-			Content []struct {
-				Annotations []struct {
-					URL string `json:"url"`
-				} `json:"annotations"`
-			} `json:"content"`
-		} `json:"output"`
-		Usage struct {
-			InputTokens  *int64 `json:"input_tokens"`
-			OutputTokens *int64 `json:"output_tokens"`
-			CostTicks    *int64 `json:"cost_in_usd_ticks"`
-			Tool         struct {
-				SearchCalls  *int64 `json:"x_search_calls"`
-				PostsFetched *int64 `json:"x_posts_fetched"`
-				UsersFetched *int64 `json:"x_users_fetched"`
-			} `json:"server_side_tool_usage_details"`
-		} `json:"usage"`
-	}
+	var result xResponse
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&result); err != nil {
-		return time.Time{}, fmt.Errorf("decode Grok X search response: %w", err)
+		return nil, time.Time{}, fmt.Errorf("decode Grok X search response: %w", err)
 	}
 	if result.Status != "completed" {
-		return time.Time{}, fmt.Errorf("Grok X search status %q", result.Status)
+		return nil, time.Time{}, fmt.Errorf("Grok X search status %q", result.Status)
 	}
-	links := make(map[string]bool)
-	for _, out := range result.Output {
-		if out.Type != "message" {
-			continue
-		}
-		for _, content := range out.Content {
-			for _, annotation := range content.Annotations {
-				if originalPostURL(annotation.URL, h) {
-					links[annotation.URL] = true
-				}
-			}
-		}
+	items, details, err := parsePosts(result, h, since, end)
+	if err != nil {
+		return nil, time.Time{}, err
 	}
-	// The provider's generated text and citation links are never treated as
-	// original post content. These short warnings are the only sync output.
-	details := []string{fmt.Sprintf("@%s: %d cited posts need verifiable original text and image bytes; none entered the knowledge base", h, len(links))}
-	for link := range links {
-		if len(details) >= 20 {
-			break
-		}
-		details = append(details, link)
-	}
-	metrics := fmt.Sprintf("Grok X search duration_ms=%d", time.Since(started).Milliseconds())
+	metrics := fmt.Sprintf("Grok X search @%s model=grok-4.3 iterations=1 posts=%d warnings=%d duration_ms=%d", h, len(items), len(details), time.Since(started).Milliseconds())
 	for _, field := range []struct {
 		name  string
 		value *int64
@@ -219,23 +252,146 @@ func (c *Connector) search(ctx context.Context, config *types.DataSourceConfig, 
 			metrics += fmt.Sprintf(" %s=%d", field.name, *field.value)
 		}
 	}
-	details = append(details, metrics)
-	return end, &datasource.PartialFetchError{Details: details}
+	logger.Infof(ctx, "%s", metrics)
+	if len(details) > 0 {
+		return items, end, &datasource.PartialFetchError{Details: details}
+	}
+	return items, end, nil
 }
 
-func originalPostURL(raw, handle string) bool {
+func parsePosts(result xResponse, handle string, since, end time.Time) ([]types.FetchedItem, []string, error) {
+	var outputText strings.Builder
+	cited := make(map[string]bool)
+	for _, output := range result.Output {
+		if output.Type != "message" {
+			continue
+		}
+		for _, part := range output.Content {
+			if part.Text != "" {
+				outputText.WriteString(part.Text)
+			}
+			for _, annotation := range part.Annotations {
+				if id := statusID(annotation.URL, handle); id != "" {
+					cited[id] = true
+				}
+			}
+		}
+	}
+	text := strings.TrimSpace(outputText.String())
+	if text == "" {
+		text = strings.TrimSpace(result.OutputText)
+	}
+	text = strings.TrimPrefix(strings.TrimPrefix(text, "```json"), "```")
+	text = strings.TrimSpace(strings.TrimSuffix(text, "```"))
+	var envelope struct {
+		Handle   string   `json:"handle"`
+		Posts    []xPost  `json:"posts"`
+		Warnings []string `json:"warnings"`
+	}
+	if text == "" || json.Unmarshal([]byte(text), &envelope) != nil || !strings.EqualFold(strings.TrimPrefix(envelope.Handle, "@"), handle) {
+		return nil, nil, fmt.Errorf("Grok X search returned invalid structured posts")
+	}
+	items := make([]types.FetchedItem, 0, len(envelope.Posts))
+	details := make([]string, 0)
+	seen := make(map[string]bool)
+	for index, post := range envelope.Posts {
+		id := statusID(post.URL, handle)
+		reason := ""
+		switch {
+		case id == "" || !cited[id]:
+			reason = "direct status URL is not cited by X Search"
+		case post.TweetID != "" && post.TweetID != id:
+			reason = "tweet ID differs from status URL"
+		case !strings.EqualFold(strings.TrimPrefix(post.AuthorHandle, "@"), handle):
+			reason = "author differs from source account"
+		case strings.TrimSpace(post.Text) == "":
+			reason = "original text is missing"
+		case post.PostType != "original" && post.PostType != "reply" && post.PostType != "quote":
+			reason = "unsupported post type"
+		case post.Media == nil:
+			reason = "media inventory is missing"
+		}
+		published, dateErr := time.Parse(time.RFC3339, post.CreatedAt)
+		if reason == "" && (dateErr != nil || published.IsZero()) {
+			reason = "publication timestamp is missing or invalid"
+		}
+		if reason != "" {
+			if len(details) < 20 {
+				details = append(details, fmt.Sprintf("post %d: %s", index+1, reason))
+			}
+			continue
+		}
+		if published.Before(since) || published.After(end) || seen[id] {
+			continue
+		}
+		content := strings.TrimSpace(post.Text)
+		for _, media := range post.Media {
+			u, err := url.Parse(media.URL)
+			if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || strings.ContainsAny(media.URL, "()\r\n") {
+				reason = "media URL is invalid"
+				break
+			}
+			switch media.Type {
+			case "image":
+				if !strings.EqualFold(u.Hostname(), "pbs.twimg.com") || u.Port() != "" {
+					reason = "image is not on the original X media host"
+					break
+				}
+				content += "\n\n![X image](" + media.URL + ")"
+			case "video":
+				if !strings.EqualFold(u.Hostname(), "video.twimg.com") || u.Port() != "" {
+					reason = "video is not on the original X media host"
+					break
+				}
+				content += "\n\n[X video](" + media.URL + ")"
+			case "link":
+				content += "\n\n[Linked URL](" + media.URL + ")"
+			default:
+				reason = "unsupported media type"
+			}
+			if reason != "" {
+				break
+			}
+		}
+		if reason != "" {
+			if len(details) < 20 {
+				details = append(details, fmt.Sprintf("post %d: %s", index+1, reason))
+			}
+			continue
+		}
+		seen[id] = true
+		title := []rune(strings.Join(strings.Fields(post.Text), " "))
+		items = append(items, types.FetchedItem{
+			ExternalID: id, Title: "@" + handle + ": " + string(title[:min(len(title), 80)]),
+			Content: []byte(content), ContentType: "text/markdown", FileName: id + ".md",
+			URL: "https://x.com/" + handle + "/status/" + id, UpdatedAt: published,
+			SourceResourceID: handle, Metadata: map[string]string{
+				"channel": types.ConnectorTypeGrokX, "author": "@" + handle,
+				"published_at": published.Format(time.RFC3339Nano), "x_post_type": post.PostType,
+			},
+		})
+	}
+	if len(envelope.Warnings) > 0 {
+		details = append(details, fmt.Sprintf("Grok reported %d search warnings", len(envelope.Warnings)))
+	}
+	return items, details, nil
+}
+
+func statusID(raw, handle string) string {
 	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "https" || !strings.EqualFold(u.Hostname(), "x.com") {
-		return false
+	if err != nil || u.Scheme != "https" || !strings.EqualFold(u.Hostname(), "x.com") || u.User != nil || u.Port() != "" {
+		return ""
 	}
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-	if len(parts) != 3 || !strings.EqualFold(parts[0], handle) || parts[1] != "status" || parts[2] == "" {
-		return false
+	if len(parts) != 3 || parts[1] != "status" || parts[2] == "" ||
+		(handle != "" && !strings.EqualFold(parts[0], handle)) ||
+		(handle == "" && parts[0] == "") {
+		return ""
 	}
 	for _, digit := range parts[2] {
 		if digit < '0' || digit > '9' {
-			return false
+			return ""
 		}
 	}
-	return true
+	return parts[2]
 }

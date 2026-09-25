@@ -147,6 +147,7 @@ const formatDocTime = (time?: string) => {
 
 const getKnowledgeType = (item: KnowledgeCard) => {
   if (item.channel === 'rss') return t('datasource.connector.rss');
+  if (item.channel === 'grok_x') return t('datasource.connector.grok_x');
   if (item.channel === 'web_research') return t('knowledgeBase.channelWebResearch');
   if (item.type === 'url') return t('knowledgeBase.typeURL') || 'URL';
   if (item.type === 'manual') return t('knowledgeBase.typeManual');
@@ -167,6 +168,8 @@ const channelLabelMap: Record<string, string> = {
   slack: 'knowledgeBase.channelSlack',
   im: 'knowledgeBase.channelIm',
   ima: 'knowledgeBase.channelIma',
+  rss: 'datasource.connector.rss',
+  grok_x: 'datasource.connector.grok_x',
 };
 
 const getChannelLabel = (channel: string) => {
