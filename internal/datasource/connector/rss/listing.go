@@ -28,7 +28,12 @@ func parseListing(data []byte, listingURL, pathPrefix string) ([]*gofeed.Item, e
 	seen := make(map[string]*gofeed.Item)
 	items := make([]*gofeed.Item, 0)
 	now := time.Now().UTC()
-	doc.Find("a[href]").EachWithBreak(func(_ int, a *goquery.Selection) bool {
+	mistralNews := base.Hostname() == "mistral.ai" && base.Path == "/news/"
+	links := doc.Find("a[href]")
+	if mistralNews {
+		links = doc.Find("main article.js-post > a[href]")
+	}
+	links.EachWithBreak(func(_ int, a *goquery.Selection) bool {
 		link, _ := a.Attr("href")
 		ref, err := url.Parse(strings.TrimSpace(link))
 		if err != nil || ref.User != nil {
@@ -45,11 +50,14 @@ func parseListing(data []byte, listingURL, pathPrefix string) ([]*gofeed.Item, e
 			return true
 		}
 		date := strings.TrimSpace(a.Closest(".menu-card").Find(".card-date").First().Text())
+		if mistralNews {
+			date = strings.TrimSpace(a.Closest("article.js-post").Find("p.text-body-small.text-text-tertiary").First().Text())
+		}
 		listingUpdatedAt := now
 		hasListingTime := false
 		if parsed, valid := parseSiteDate(date); valid {
 			listingUpdatedAt = parsed
-			if len(date) == len("2006-01-02") && date == parsed.Format("2006-01-02") {
+			if !strings.Contains(date, ":") {
 				// A day-only card cannot rule out an article published later that day.
 				listingUpdatedAt = parsed.Add(24*time.Hour - time.Nanosecond)
 			}

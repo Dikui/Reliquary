@@ -290,6 +290,20 @@ func TestKimiListingUsesCardDateForDiscovery(t *testing.T) {
 	}
 }
 
+func TestMistralListingUsesOnlyDatedArticleCards(t *testing.T) {
+	page := []byte(`<header><a href="/news/old/">Old navigation item</a></header><main>` +
+		`<article class="js-post"><a href="/news/old/"><h3>Old</h3><p class="text-body-small text-text-tertiary">June 23, 2026</p></a></article>` +
+		`<article class="js-post"><a href="/news/current/"><h3>Current</h3><p class="text-body-small text-text-tertiary">September 16, 2026</p></a></article>` +
+		`</main>`)
+	items, err := parseListing(page, "https://mistral.ai/news/", "/news/")
+	if err != nil || len(items) != 2 || items[0].Title != "Old" || items[0].Published != "June 23, 2026" ||
+		items[1].Published != "September 16, 2026" ||
+		!items[1].UpdatedParsed.After(time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)) ||
+		items[1].UpdatedParsed.After(time.Date(2026, 9, 17, 0, 0, 0, 0, time.UTC)) {
+		t.Fatalf("Mistral listing must ignore navigation and retain day-precision date signals: items=%+v err=%v", items, err)
+	}
+}
+
 func TestMistralPageAttributionSeparatesOrganizationsAndPeople(t *testing.T) {
 	pageURL, _ := url.Parse("https://mistral.ai/news/mistral-x-mozilla/")
 	for _, test := range []struct{ byline, author, publisher string }{
