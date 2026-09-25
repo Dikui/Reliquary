@@ -3,7 +3,6 @@ package grokx
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -235,6 +234,17 @@ func (c *Connector) search(ctx context.Context, config *types.DataSourceConfig, 
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&result); err != nil {
 		return nil, time.Time{}, fmt.Errorf("decode Grok X search response: %w", err)
 	}
+	config.FetchMetrics = map[string]interface{}{
+		"model": "grok-4.3", "iterations": 1, "duration_ms": time.Since(started).Milliseconds(),
+	}
+	for _, field := range []struct {
+		name  string
+		value *int64
+	}{{"input_tokens", result.Usage.InputTokens}, {"output_tokens", result.Usage.OutputTokens}, {"x_search_calls", result.Usage.Tool.SearchCalls}, {"x_posts_fetched", result.Usage.Tool.PostsFetched}, {"x_users_fetched", result.Usage.Tool.UsersFetched}, {"cost_in_usd_ticks_api_reported", result.Usage.CostTicks}} {
+		if field.value != nil {
+			config.FetchMetrics[field.name] = *field.value
+		}
+	}
 	if result.Status != "completed" {
 		return nil, time.Time{}, fmt.Errorf("Grok X search status %q", result.Status)
 	}
@@ -242,22 +252,9 @@ func (c *Connector) search(ctx context.Context, config *types.DataSourceConfig, 
 	if err != nil {
 		return nil, time.Time{}, err
 	}
-	durationMS := time.Since(started).Milliseconds()
-	metrics := fmt.Sprintf("Grok X search @%s model=grok-4.3 iterations=1 posts=%d warnings=%d duration_ms=%d", h, len(items), len(details), durationMS)
-	config.FetchMetrics = map[string]interface{}{
-		"model": "grok-4.3", "iterations": 1, "posts": len(items),
-		"warnings": len(details), "duration_ms": durationMS,
-	}
-	for _, field := range []struct {
-		name  string
-		value *int64
-	}{{"input_tokens", result.Usage.InputTokens}, {"output_tokens", result.Usage.OutputTokens}, {"x_search_calls", result.Usage.Tool.SearchCalls}, {"x_posts_fetched", result.Usage.Tool.PostsFetched}, {"x_users_fetched", result.Usage.Tool.UsersFetched}, {"cost_in_usd_ticks_api_reported", result.Usage.CostTicks}} {
-		if field.value != nil {
-			metrics += fmt.Sprintf(" %s=%d", field.name, *field.value)
-			config.FetchMetrics[field.name] = *field.value
-		}
-	}
-	logger.Infof(ctx, "%s", metrics)
+	config.FetchMetrics["posts"] = len(items)
+	config.FetchMetrics["warnings"] = len(details)
+	logger.Infof(ctx, "Grok X search @%s metrics=%v", h, config.FetchMetrics)
 	if len(details) > 0 {
 		return items, end, &datasource.PartialFetchError{Details: details}
 	}
@@ -320,78 +317,60 @@ func parsePosts(result xResponse, handle string, since, end time.Time) ([]types.
 		if reason == "" && (dateErr != nil || published.IsZero()) {
 			reason = "publication timestamp is missing or invalid"
 		}
-		if seen[id] || (dateErr == nil && (published.Before(since) || published.After(end))) {
+		if reason != "" {
+			if len(details) < 20 {
+				details = append(details, fmt.Sprintf("post %d: %s", index+1, reason))
+			}
+			continue
+		}
+		if published.Before(since) || published.After(end) || seen[id] {
 			continue
 		}
 		content := strings.TrimSpace(post.Text)
-		mediaReason := ""
 		for _, media := range post.Media {
 			u, err := url.Parse(media.URL)
 			if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || strings.ContainsAny(media.URL, "()\r\n") {
-				mediaReason = "media URL is invalid"
+				reason = "media URL is invalid"
 				break
 			}
 			switch media.Type {
 			case "image":
 				if !strings.EqualFold(u.Hostname(), "pbs.twimg.com") || u.Port() != "" {
-					mediaReason = "image is not on the original X media host"
+					reason = "image is not on the original X media host"
 					break
 				}
 				content += "\n\n![X image](" + media.URL + ")"
 			case "video":
 				if !strings.EqualFold(u.Hostname(), "video.twimg.com") || u.Port() != "" {
-					mediaReason = "video is not on the original X media host"
+					reason = "video is not on the original X media host"
 					break
 				}
 				content += "\n\n[X video](" + media.URL + ")"
 			case "link":
 				content += "\n\n[Linked URL](" + media.URL + ")"
 			default:
-				mediaReason = "unsupported media type"
+				reason = "unsupported media type"
 			}
-			if mediaReason != "" {
+			if reason != "" {
 				break
 			}
-		}
-		if mediaReason != "" {
-			reason = mediaReason
 		}
 		if reason != "" {
 			if len(details) < 20 {
 				details = append(details, fmt.Sprintf("post %d: %s", index+1, reason))
 			}
-			if content == "" {
-				continue // no acquired original to show in the pending area
-			}
-			// Keep an incomplete model result separate from a previously
-			// approved original; it is not evidence that the source changed.
-			raw, _ := json.Marshal(post)
-			id = fmt.Sprintf("rejected:%x", sha256.Sum256(raw))[:33]
-		}
-		if seen[id] {
 			continue
 		}
 		seen[id] = true
 		title := []rune(strings.Join(strings.Fields(post.Text), " "))
-		metadata := map[string]string{
-			"channel": types.ConnectorTypeGrokX, "author": strings.TrimSpace(post.AuthorHandle),
-			"published_at": post.CreatedAt, "x_post_type": post.PostType,
-		}
-		if metadata["author"] != "" {
-			metadata["author"] = "@" + strings.TrimPrefix(metadata["author"], "@")
-		}
-		if reason != "" {
-			metadata["intake_reject_reason"] = reason
-		}
-		originalURL := ""
-		if statusID(post.URL, handle) != "" {
-			originalURL = post.URL
-		}
 		items = append(items, types.FetchedItem{
 			ExternalID: id, Title: "@" + handle + ": " + string(title[:min(len(title), 80)]),
 			Content: []byte(content), ContentType: "text/markdown", FileName: id + ".md",
-			URL: originalURL, UpdatedAt: published,
-			SourceResourceID: handle, Metadata: metadata,
+			URL: "https://x.com/" + handle + "/status/" + id, UpdatedAt: published,
+			SourceResourceID: handle, Metadata: map[string]string{
+				"channel": types.ConnectorTypeGrokX, "author": "@" + handle,
+				"published_at": published.Format(time.RFC3339Nano), "x_post_type": post.PostType,
+			},
 		})
 	}
 	if len(envelope.Warnings) > 0 {

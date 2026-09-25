@@ -723,6 +723,9 @@ func (s *DataSourceService) ProcessSync(ctx context.Context, task *asynq.Task) e
 		syncLog.Status = types.SyncLogStatusFailed
 		syncLog.FinishedAt = timePtr(time.Now().UTC())
 		syncLog.ErrorMessage = fmt.Sprintf("Fetch failed: %v", fetchErr)
+		if len(config.FetchMetrics) > 0 {
+			syncLog.Result, _ = (&types.SyncResult{Metrics: config.FetchMetrics}).ToJSON()
+		}
 		_ = s.syncLogRepo.Update(ctx, syncLog)
 		if !wasPaused {
 			ds.Status = types.DataSourceStatusError
