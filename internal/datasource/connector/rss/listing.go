@@ -29,6 +29,7 @@ func parseListing(data []byte, listingURL, pathPrefix string) ([]*gofeed.Item, e
 	items := make([]*gofeed.Item, 0)
 	now := time.Now().UTC()
 	mistralNews := base.Hostname() == "mistral.ai" && base.Path == "/news/"
+	metaBlog := base.Hostname() == "ai.meta.com" && base.Path == "/blog/"
 	links := doc.Find("a[href]")
 	if mistralNews {
 		links = doc.Find("main article.js-post > a[href]")
@@ -53,6 +54,16 @@ func parseListing(data []byte, listingURL, pathPrefix string) ([]*gofeed.Item, e
 		if mistralNews {
 			date = strings.TrimSpace(a.Closest("article.js-post").Find("p.text-body-small.text-text-tertiary").First().Text())
 		}
+		if metaBlog {
+			a.Closest("._amcy, ._amda").Find("._amun, ._amdj").EachWithBreak(func(_ int, node *goquery.Selection) bool {
+				candidate := strings.TrimSpace(node.Text())
+				if _, valid := parseSiteDate(candidate); valid {
+					date = candidate
+					return false
+				}
+				return true
+			})
+		}
 		listingUpdatedAt := now
 		hasListingTime := false
 		if parsed, valid := parseSiteDate(date); valid {
@@ -71,7 +82,14 @@ func parseListing(data []byte, listingURL, pathPrefix string) ([]*gofeed.Item, e
 				hasListingTime = true
 			}
 		}
+		title := strings.TrimSpace(a.Find("h1,h2,h3").First().Text())
+		if title == "" {
+			title = strings.TrimSpace(a.Text())
+		}
 		if existing := seen[itemID]; existing != nil {
+			if metaBlog && title != "" && title != "FEATURED" && (existing.Title == "" || existing.Title == "FEATURED") {
+				existing.Title = title
+			}
 			if existing.Published == "" {
 				existing.Published = date
 			}
@@ -80,10 +98,6 @@ func parseListing(data []byte, listingURL, pathPrefix string) ([]*gofeed.Item, e
 				existing.UpdatedParsed = &listingUpdatedAt
 			}
 			return true
-		}
-		title := strings.TrimSpace(a.Find("h1,h2,h3").First().Text())
-		if title == "" {
-			title = strings.TrimSpace(a.Text())
 		}
 		item := &gofeed.Item{GUID: itemID, Link: absolute, Title: title,
 			Published: date, Updated: listingUpdatedAt.Format(time.RFC3339Nano), UpdatedParsed: &listingUpdatedAt,

@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	readability "codeberg.org/readeck/go-readability/v2"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/mmcdole/gofeed"
 	"reliquary/internal/datasource"
@@ -301,6 +302,32 @@ func TestMistralListingUsesOnlyDatedArticleCards(t *testing.T) {
 		!items[1].UpdatedParsed.After(time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)) ||
 		items[1].UpdatedParsed.After(time.Date(2026, 9, 17, 0, 0, 0, 0, time.UTC)) {
 		t.Fatalf("Mistral listing must ignore navigation and retain day-precision date signals: items=%+v err=%v", items, err)
+	}
+}
+
+func TestMetaListingUsesCardDatesAndTitles(t *testing.T) {
+	page := []byte(`<div class="_amcy"><a href="/blog/old/">FEATURED</a><div><a href="/blog/old/">Old article</a><div class="_amun">July 9, 2026</div></div></div>` +
+		`<div class="_amda"><a href="/blog/current/"><img src="cover.webp"></a><div><a href="/blog/current/">Current article</a><div class="_amdj">Open Source</div><div class="_amdj">Jul 27, 2026</div></div></div>`)
+	items, err := parseListing(page, "https://ai.meta.com/blog/", "/blog/")
+	if err != nil || len(items) != 2 || items[0].Title != "Old article" || items[0].Published != "July 9, 2026" ||
+		items[1].Title != "Current article" || items[1].Published != "Jul 27, 2026" ||
+		!items[1].UpdatedParsed.After(time.Date(2026, 7, 27, 12, 0, 0, 0, time.UTC)) {
+		t.Fatalf("Meta listing must retain article titles and day-precision dates: items=%+v err=%v", items, err)
+	}
+}
+
+func TestMetaHeroImageRetained(t *testing.T) {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(`<div class="_amuh"><div><h1>Meta article</h1></div><div><img src="https://images.example/hero.png"></div></div><div id="body"><p>Article body</p></div>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	article := readability.Article{Node: doc.Find("#body").Get(0)}
+	pageURL, _ := url.Parse("https://ai.meta.com/blog/example/")
+	if err := preserveMetaHeroImage(doc, &article, pageURL); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := goquery.NewDocumentFromNode(article.Node).Find("img").First().Attr("src"); got != "https://images.example/hero.png" {
+		t.Fatalf("Meta article hero image lost: %q", got)
 	}
 }
 

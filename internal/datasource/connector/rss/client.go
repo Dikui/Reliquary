@@ -209,6 +209,9 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 			return "", "", "", "", "", fmt.Errorf("article video links lost during extraction")
 		}
 	}
+	if err := preserveMetaHeroImage(doc, &article, pageURL); err != nil {
+		return "", "", "", "", "", err
+	}
 	if recoveredWidgets > 0 {
 		body := content.Find("div.max-w-none.markdown").First()
 		if body.Length() == 0 {
@@ -241,6 +244,41 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 		}
 	}
 	return buf.String(), firstNonEmpty(sourceHeading, article.Title()), byline, siteName, articlePublishedAt(doc, articleURL), nil
+}
+
+func preserveMetaHeroImage(doc *goquery.Document, article *readability.Article, pageURL *url.URL) error {
+	if pageURL.Hostname() != "ai.meta.com" || !strings.HasPrefix(pageURL.Path, "/blog/") {
+		return nil
+	}
+	header := doc.Find("h1").First().Closest("._amuh")
+	if header.Length() != 1 {
+		return fmt.Errorf("Meta article header unavailable")
+	}
+	hero := header.Find("img[src]")
+	if hero.Length() > 1 {
+		return fmt.Errorf("Meta article hero image ambiguous")
+	}
+	if hero.Length() == 0 {
+		return nil
+	}
+	raw, _ := hero.Attr("src")
+	raw = strings.TrimSpace(raw)
+	ref, err := url.Parse(raw)
+	if raw == "" || err != nil || ref.User != nil || (ref.Scheme != "" && ref.Scheme != "http" && ref.Scheme != "https") {
+		return fmt.Errorf("Meta article hero image URL invalid")
+	}
+	imageURL := pageURL.ResolveReference(ref).String()
+	if goquery.NewDocumentFromNode(article.Node).Find("img[src]").FilterFunction(func(_ int, img *goquery.Selection) bool {
+		src, _ := img.Attr("src")
+		return src == imageURL
+	}).Length() > 0 {
+		return nil
+	}
+	hero.SetAttr("src", imageURL)
+	image := hero.Get(0)
+	image.Parent.RemoveChild(image)
+	article.Node.InsertBefore(image, article.Node.FirstChild)
+	return nil
 }
 
 func mistralPageAttribution(doc *goquery.Document, pageURL *url.URL) (author, publisher string) {
