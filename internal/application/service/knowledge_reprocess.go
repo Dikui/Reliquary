@@ -163,7 +163,7 @@ func (s *KnowledgeStrategyService) reprocessMessage(ctx context.Context, kb *typ
 	if len(body) > 800000 || strings.TrimSpace(string(body)) == "" {
 		return "", fmt.Errorf("original is empty or too large")
 	}
-	if invalidIntakeEvidence(string(body), intake.SourceInfo) {
+	if invalidIntakeEvidence(string(body), intake.SourceInfo, &message) {
 		_, err := NewKnowledgeAnomalyService(s.db, s.knowledge, nil, s.audit).Create(ctx, kb.ID, KnowledgeAnomalyInput{
 			KnowledgeIDs: []string{id}, Kind: "suspected_error", Description: "Historical strategy recheck: missing original or required source evidence"})
 		return "flagged", err

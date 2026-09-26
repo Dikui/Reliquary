@@ -16,11 +16,27 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-func TestBlockedIntakeURLRejectsXWithTrailingDNSDot(t *testing.T) {
+func TestIntakeXSourceEvidence(t *testing.T) {
 	for _, raw := range []string{"https://x.com./post/1", "https://www.x.com./post/1", "https://twitter.com../post/1"} {
 		require.True(t, blockedIntakeURL(raw), raw)
 	}
 	require.False(t, blockedIntakeURL("https://example.com/article"))
+	source := types.SourceInfo{Author: "@bcherny", OriginalURL: "https://x.com/bcherny/status/123", PublishedAt: "2026-09-24T08:30:00Z"}
+	knowledge := &types.Knowledge{Type: types.KnowledgeTypeManual, Channel: types.ConnectorTypeGrokX, Metadata: types.JSON(`{"datasource_id":"grok-source"}`)}
+	require.False(t, invalidIntakeEvidence("Grok post", source, knowledge))
+	knowledge.Metadata = nil
+	require.True(t, invalidIntakeEvidence("Grok post", source, knowledge), "manual channel spoofing must not bypass X intake")
+	knowledge.Metadata = types.JSON(`{"datasource_id":"grok-source"}`)
+	knowledge.Type = "file"
+	require.True(t, invalidIntakeEvidence("Grok post", source, knowledge), "file channel spoofing must not bypass X intake")
+	knowledge.Type = types.KnowledgeTypeManual
+	knowledge.Channel = "manual"
+	require.True(t, invalidIntakeEvidence("Grok post", source, knowledge))
+	knowledge.Channel = types.ConnectorTypeGrokX
+	source.OriginalURL = "https://x.com/bcherny/other/123"
+	require.True(t, invalidIntakeEvidence("Grok post", source, knowledge))
+	source.OriginalURL = "https://x.com/dotey/status/123"
+	require.True(t, invalidIntakeEvidence("Grok post", source, knowledge), "post author must match the URL account")
 }
 
 type intakeRepo struct {
@@ -159,17 +175,23 @@ func TestProcessDocumentIntakeQualityGate(t *testing.T) {
 		wantIndex  bool
 		wantErr    bool
 		source     types.SourceInfo
+		channel    string
 	}{
-		{"approved", intakeChat{response: `{"approved":true,"reason":"analysis"}`}, "", true, true, false, types.SourceInfo{}},
-		{"publisher without personal author", intakeChat{response: `{"approved":true,"reason":"reported facts"}`}, "", true, true, false, types.SourceInfo{Publisher: "Google DeepMind", OriginalURL: "https://example.com/post", PublishedAt: "2026-01-01"}},
-		{"rejected", intakeChat{response: `{"approved":false,"reason":"opinion only"}`}, types.ParseStatusRejected, true, false, false, types.SourceInfo{}},
-		{"model error", intakeChat{err: errors.New("model unavailable")}, types.ParseStatusFailed, false, false, true, types.SourceInfo{}},
-		{"unknown source evidence", intakeChat{}, types.ParseStatusRejected, true, false, false, types.SourceInfo{Author: "未知", OriginalURL: "https://example.com/post", PublishedAt: "未知"}},
-		{"placeholder author with publisher", intakeChat{}, types.ParseStatusRejected, true, false, false, types.SourceInfo{Author: "未知", Publisher: "Google DeepMind", OriginalURL: "https://example.com/post", PublishedAt: "2026-01-01"}},
+		{"approved", intakeChat{response: `{"approved":true,"reason":"analysis"}`}, "", true, true, false, types.SourceInfo{}, ""},
+		{"publisher without personal author", intakeChat{response: `{"approved":true,"reason":"reported facts"}`}, "", true, true, false, types.SourceInfo{Publisher: "Google DeepMind", OriginalURL: "https://example.com/post", PublishedAt: "2026-01-01"}, ""},
+		{"Grok post", intakeChat{response: `{"approved":true,"reason":"reported facts"}`}, "", true, true, false, types.SourceInfo{Author: "@bcherny", OriginalURL: "https://x.com/bcherny/status/123", PublishedAt: "2026-09-24T08:30:00Z"}, types.ConnectorTypeGrokX},
+		{"rejected", intakeChat{response: `{"approved":false,"reason":"opinion only"}`}, types.ParseStatusRejected, true, false, false, types.SourceInfo{}, ""},
+		{"model error", intakeChat{err: errors.New("model unavailable")}, types.ParseStatusFailed, false, false, true, types.SourceInfo{}, ""},
+		{"unknown source evidence", intakeChat{}, types.ParseStatusRejected, true, false, false, types.SourceInfo{Author: "未知", OriginalURL: "https://example.com/post", PublishedAt: "未知"}, ""},
+		{"placeholder author with publisher", intakeChat{}, types.ParseStatusRejected, true, false, false, types.SourceInfo{Author: "未知", Publisher: "Google DeepMind", OriginalURL: "https://example.com/post", PublishedAt: "2026-01-01"}, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			knowledge := &types.Knowledge{ID: "knowledge", TenantID: 1, KnowledgeBaseID: "kb", Type: "file", FileName: "message", FilePath: "input", ParseStatus: types.ParseStatusPending}
+			knowledge := &types.Knowledge{ID: "knowledge", TenantID: 1, KnowledgeBaseID: "kb", Type: "file", FileName: "message", FilePath: "input", ParseStatus: types.ParseStatusPending, Channel: tt.channel}
+			if tt.channel == types.ConnectorTypeGrokX {
+				knowledge.Type = types.KnowledgeTypeManual
+				knowledge.Metadata = types.JSON(`{"datasource_id":"grok-source"}`)
+			}
 			source := types.SourceInfo{
 				Author: "Ada", OriginalURL: "https://example.com/post", PublishedAt: "2026-01-01",
 			}

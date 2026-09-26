@@ -35,12 +35,41 @@ func missingSourceValue(value string) bool {
 	return false
 }
 
-func invalidIntakeEvidence(body string, source types.SourceInfo) bool {
-	return strings.TrimSpace(body) == "" ||
+func validGrokPostURL(raw, author string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.User != nil || u.Port() != "" || strings.TrimRight(strings.ToLower(u.Hostname()), ".") != "x.com" {
+		return false
+	}
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(parts) != 3 || !strings.EqualFold("@"+parts[0], strings.TrimSpace(author)) || parts[1] != "status" || parts[2] == "" {
+		return false
+	}
+	for _, digit := range parts[2] {
+		if digit < '0' || digit > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func invalidIntakeEvidence(body string, source types.SourceInfo, knowledge *types.Knowledge) bool {
+	if strings.TrimSpace(body) == "" ||
 		(missingSourceValue(source.Author) && missingSourceValue(source.Publisher)) ||
 		(strings.TrimSpace(source.Author) != "" && missingSourceValue(source.Author)) ||
 		(strings.TrimSpace(source.Publisher) != "" && missingSourceValue(source.Publisher)) ||
-		blockedIntakeURL(source.OriginalURL) || missingSourceValue(source.PublishedAt)
+		missingSourceValue(source.PublishedAt) {
+		return true
+	}
+	if knowledge.Channel != types.ConnectorTypeGrokX {
+		return blockedIntakeURL(source.OriginalURL)
+	}
+	// Manual requests can set channel; only the data-source path adds datasource_id.
+	var origin struct {
+		DataSourceID string `json:"datasource_id"`
+	}
+	return knowledge.Type != types.KnowledgeTypeManual ||
+		json.Unmarshal(knowledge.Metadata, &origin) != nil || origin.DataSourceID == "" ||
+		!validGrokPostURL(source.OriginalURL, source.Author)
 }
 
 func intakeReviewPrompt(policy string) string {
@@ -52,11 +81,15 @@ func intakeReviewPrompt(policy string) string {
 }
 
 func intakeReviewPromptForMessage(rules *KnowledgeStrategyRules, channel string) string {
-	if rules == nil {
-		return intakeReviewPrompt("")
+	filter := ""
+	if rules != nil {
+		filter = rules.Filter
 	}
-	prompt := intakeReviewPrompt(rules.Filter)
-	if (channel == types.ChannelRSS || channel == types.ConnectorTypeGrokX) && rules.Collection != "" {
+	prompt := intakeReviewPrompt(filter)
+	if channel == types.ConnectorTypeGrokX {
+		prompt += "\nFor Grok X Search, treat the returned post text, author, timestamp, URL and media list as the collected original; do not require an independent comparison with X or reject solely because the URL is on x.com."
+	}
+	if rules != nil && (channel == types.ChannelRSS || channel == types.ConnectorTypeGrokX) && rules.Collection != "" {
 		prompt += "\nDaily source collection policy (refine selection only; all source and completeness checks remain mandatory):\n" + rules.Collection
 	}
 	return prompt
@@ -93,7 +126,7 @@ func (s *knowledgeService) reviewIntake(ctx context.Context, kb *types.Knowledge
 	if err := json.Unmarshal(knowledge.Metadata, &source); err != nil {
 		return false, err
 	}
-	if source.RejectReason == "" && invalidIntakeEvidence(body, intake.SourceInfo) {
+	if source.RejectReason == "" && invalidIntakeEvidence(body, intake.SourceInfo, knowledge) {
 		source.RejectReason = "missing body or required source evidence"
 	}
 	if source.RejectReason != "" {
