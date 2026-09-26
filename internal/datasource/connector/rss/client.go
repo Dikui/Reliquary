@@ -77,6 +77,15 @@ func (c *client) fetch(ctx context.Context, rawURL string, maxSize int64, withAu
 		req.Header.Set("Accept",
 			"application/rss+xml, application/atom+xml, application/xml, text/xml, application/json, text/html;q=0.9, */*;q=0.8")
 	}
+	// OpenAI article pages challenge feed-style requests; request the original document.
+	if !withAuthHeaders && req.URL.Hostname() == "openai.com" && strings.HasPrefix(req.URL.Path, "/index/") {
+		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+		req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+		req.Header.Set("Sec-Fetch-Dest", "document")
+		req.Header.Set("Sec-Fetch-Mode", "navigate")
+		req.Header.Set("Sec-Fetch-Site", "none")
+		req.Header.Set("Sec-Fetch-User", "?1")
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

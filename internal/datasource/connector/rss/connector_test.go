@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -38,6 +39,43 @@ const longArticleBody = `<p>This is the first paragraph of a reasonably long art
 	`scoring heuristics confidently select this block over navigation and footer noise.</p>` +
 	`<p>A third paragraph adds further substance, ensuring the article is unmistakably ` +
 	`the dominant readable region of the document under test.</p>`
+
+type articleRequestTransport func(*http.Request) (*http.Response, error)
+
+func (f articleRequestTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestOpenAIArticleRequestsDocumentWithoutChangingFeedHeaders(t *testing.T) {
+	t.Setenv("SSRF_WHITELIST", "openai.com")
+	utils.ResetSSRFWhitelistForTest()
+	t.Cleanup(utils.ResetSSRFWhitelistForTest)
+	cli := newClient(map[string]string{"Authorization": "feed-only"})
+	cli.httpClient.Transport = articleRequestTransport(func(r *http.Request) (*http.Response, error) {
+		body := "feed"
+		if r.URL.Path == "/index/example" {
+			for key, want := range map[string]string{
+				"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+				"Accept-Language": "en-US,en;q=0.9", "Sec-Fetch-Dest": "document",
+				"Sec-Fetch-Mode": "navigate", "Sec-Fetch-Site": "none", "Sec-Fetch-User": "?1",
+				"User-Agent": defaultUserAgent, "Authorization": "",
+			} {
+				if got := r.Header.Get(key); got != want {
+					t.Errorf("article %s = %q, want %q", key, got, want)
+				}
+			}
+			body = `<html><head><title>Original article</title></head><body><article><h1>Original article</h1>` + longArticleBody + `<img src="https://images.ctfassets.net/example.png" alt="Content image"></article></body></html>`
+		} else if r.Header.Get("Sec-Fetch-Dest") != "" || !strings.Contains(r.Header.Get("Accept"), "application/rss+xml") || r.Header.Get("Authorization") != "feed-only" {
+			t.Error("document headers must not replace feed headers")
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header), Request: r}, nil
+	})
+	content, title, _, _, _, err := cli.extractArticle(context.Background(), "https://openai.com/index/example")
+	if err != nil || title != "Original article" || !strings.Contains(content, "dominant readable region") || !strings.Contains(content, "https://images.ctfassets.net/example.png") {
+		t.Fatalf("original article text or image missing: title=%q error=%v content=%s", title, err, content)
+	}
+	if _, err := cli.fetchFeed(context.Background(), "https://openai.com/news/rss.xml"); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestFetchArticleForResearchUsesOriginalPage(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
