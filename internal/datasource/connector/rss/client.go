@@ -148,7 +148,7 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 		}
 	})
 	if content == nil {
-		// ponytail: page-wide fallback may reject decorative media on pages without a content container.
+		// ponytail: page-wide fallback can include decorative media on pages without a content container.
 		content = doc.Selection
 	}
 	if content.Is("main") {
@@ -159,30 +159,32 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 	}
 	sourceHeading := strings.TrimSpace(content.Find("h1").First().Text())
 	pageURL, _ := url.Parse(articleURL)
+	hadVideo := content.Find("video, [or-mp4-video-url]").Length() > 0
 	videoCount, err := c.preserveVideoLinks(ctx, content, pageURL)
 	if err != nil {
 		return "", "", "", "", "", err
 	}
 	recoveredK25, err := c.recoverKimiK25(ctx, doc, content, pageURL)
-	if err != nil {
+	if err != nil && ctx.Err() != nil {
 		return "", "", "", "", "", err
 	}
-	recoveredK26, err := c.recoverKimiK26(ctx, doc, content, pageURL)
 	if err != nil {
+		recoveredK25 = 0
+	}
+	recoveredK26, err := c.recoverKimiK26(ctx, doc, content, pageURL)
+	if err != nil && ctx.Err() != nil {
 		return "", "", "", "", "", err
+	}
+	if err != nil {
+		recoveredK26 = 0
 	}
 	recoveredTables, err := recoverKimiTables(doc, content, pageURL)
 	if err != nil {
-		return "", "", "", "", "", err
+		recoveredTables = 0
 	}
 	recoveredWidgets := recoveredK25 + recoveredK26 + recoveredTables
-	if recoveredWidgets > 0 && videoCount > 0 {
-		return "", "", "", "", "", fmt.Errorf("Kimi article with both embedded video and tables is unsupported")
-	}
-	if err := articleContentError(content); err != nil {
-		return "", "", "", "", "", err
-	}
-	if videoCount > 0 || recoveredWidgets > 0 {
+	droppedComponents := discardUnsupportedComponents(content)
+	if hadVideo || recoveredWidgets > 0 || droppedComponents {
 		page, renderErr := doc.Html()
 		if renderErr != nil {
 			return "", "", "", "", "", fmt.Errorf("render article page: %w", renderErr)
@@ -196,7 +198,7 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 	if article.Node == nil {
 		return "", "", "", "", "", fmt.Errorf("no readable content extracted")
 	}
-	if videoCount > 0 {
+	if videoCount > 0 && recoveredWidgets == 0 {
 		got := goquery.NewDocumentFromNode(article.Node).Find(`a[data-reliquary-video]`).Length()
 		if got == 0 && (content.Is("article") || content.Is("main")) {
 			// Readability can omit a video in the title/hero block while retaining the body.
@@ -210,12 +212,8 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 					video.Parent.RemoveChild(video)
 					article.Node.InsertBefore(video, article.Node.FirstChild)
 				}
-				got = videoCount
 				return false
 			})
-		}
-		if got != videoCount {
-			return "", "", "", "", "", fmt.Errorf("article video links lost during extraction")
 		}
 	}
 	if err := preserveMetaHeroImage(doc, &article, pageURL); err != nil {
@@ -223,20 +221,18 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 	}
 	if recoveredWidgets > 0 {
 		body := content.Find("div.max-w-none.markdown").First()
-		if body.Length() == 0 {
-			return "", "", "", "", "", fmt.Errorf("Kimi article body unavailable")
+		if body.Length() > 0 {
+			preferLargestImageVariant(body, pageURL)
+			absolutizeContentURLs(body, pageURL)
+			original, renderErr := body.Html()
+			marker := "data-reliquary-kimi-table"
+			if recoveredK25+recoveredK26 > 0 {
+				marker = "data-reliquary-kimi-widget"
+			}
+			if renderErr == nil && strings.Count(original, marker) == recoveredWidgets {
+				return original, firstNonEmpty(sourceHeading, article.Title()), article.Byline(), article.SiteName(), articlePublishedAt(doc, articleURL), nil
+			}
 		}
-		preferLargestImageVariant(body, pageURL)
-		absolutizeContentURLs(body, pageURL)
-		original, renderErr := body.Html()
-		marker := "data-reliquary-kimi-table"
-		if recoveredK25+recoveredK26 > 0 {
-			marker = "data-reliquary-kimi-widget"
-		}
-		if renderErr != nil || strings.Count(original, marker) != recoveredWidgets {
-			return "", "", "", "", "", fmt.Errorf("Kimi article content lost during extraction")
-		}
-		return original, firstNonEmpty(sourceHeading, article.Title()), article.Byline(), article.SiteName(), articlePublishedAt(doc, articleURL), nil
 	}
 	preferLargestImageVariant(goquery.NewDocumentFromNode(article.Node).Selection, pageURL)
 
@@ -313,8 +309,7 @@ func mistralPageAttribution(doc *goquery.Document, pageURL *url.URL) (author, pu
 func (c *client) preserveVideoLinks(ctx context.Context, content *goquery.Selection, pageURL *url.URL) (int, error) {
 	count := 0
 	for _, selector := range []string{"[or-mp4-video-url]", "video"} {
-		var mediaErr error
-		content.Find(selector).EachWithBreak(func(_ int, node *goquery.Selection) bool {
+		content.Find(selector).Each(func(_ int, node *goquery.Selection) {
 			raw, _ := node.Attr("or-mp4-video-url")
 			if raw == "" {
 				raw, _ = node.Attr("src")
@@ -324,13 +319,13 @@ func (c *client) preserveVideoLinks(ctx context.Context, content *goquery.Select
 			}
 			ref, err := url.Parse(strings.TrimSpace(raw))
 			if raw == "" || err != nil || ref.User != nil {
-				mediaErr = fmt.Errorf("article video has no usable source URL")
-				return false
+				node.Remove()
+				return
 			}
 			videoURL := pageURL.ResolveReference(ref).String()
 			if err := c.verifyVideoURL(ctx, videoURL); err != nil {
-				mediaErr = err
-				return false
+				node.Remove()
+				return
 			}
 			label, _ := node.Attr("or-mp4-video-title")
 			label = strings.TrimSpace(label)
@@ -344,25 +339,21 @@ func (c *client) preserveVideoLinks(ctx context.Context, content *goquery.Select
 			if rawPoster, ok := node.Attr("poster"); ok && strings.TrimSpace(rawPoster) != "" {
 				posterRef, posterErr := url.Parse(strings.TrimSpace(rawPoster))
 				if posterErr != nil || posterRef.User != nil {
-					mediaErr = fmt.Errorf("article video poster URL invalid")
-					return false
+					node.Remove()
+					return
 				}
 				posterURL := pageURL.ResolveReference(posterRef)
 				if posterURL.Scheme != "http" && posterURL.Scheme != "https" {
-					mediaErr = fmt.Errorf("article video poster URL invalid")
-					return false
+					node.Remove()
+					return
 				}
 				poster = `<img src="` + html.EscapeString(posterURL.String()) + `" alt="视频封面">`
 			}
 			node.ReplaceWithHtml(`<p>` + poster + `<a data-reliquary-video="true" href="` + html.EscapeString(videoURL) + `">` + html.EscapeString(label) + `</a></p>`)
 			count++
-			return true
 		})
-		if mediaErr != nil {
-			return count, mediaErr
-		}
 	}
-	return count, nil
+	return count, ctx.Err()
 }
 
 func (c *client) verifyVideoURL(ctx context.Context, rawURL string) error {
@@ -391,20 +382,15 @@ func (c *client) verifyVideoURL(ctx context.Context, rawURL string) error {
 	return nil
 }
 
-func articleContentError(content *goquery.Selection) error {
-	if content.Find("iframe, video, audio, object, embed, canvas").Length() > 0 ||
-		content.Find("[or-mp4-video-url]").FilterFunction(func(_ int, node *goquery.Selection) bool {
-			value, _ := node.Attr("or-mp4-video-url")
-			return strings.TrimSpace(value) != ""
-		}).Length() > 0 {
-		return fmt.Errorf("article contains unsupported embedded media")
-	}
-	if content.Find("div.animate-pulse").FilterFunction(func(_ int, node *goquery.Selection) bool {
+func discardUnsupportedComponents(content *goquery.Selection) bool {
+	media := content.Find("iframe, video, audio, object, embed, canvas, [or-mp4-video-url]")
+	placeholders := content.Find("div.animate-pulse").FilterFunction(func(_ int, node *goquery.Selection) bool {
 		return strings.TrimSpace(node.Text()) == "" && node.Find("img, picture, svg").Length() == 0
-	}).Length() > 0 {
-		return fmt.Errorf("article contains unresolved content placeholder")
-	}
-	return nil
+	})
+	dropped := media.Length()+placeholders.Length() > 0
+	media.Remove()
+	placeholders.Remove()
+	return dropped
 }
 
 func preferLargestImageVariant(content *goquery.Selection, pageURL *url.URL) {

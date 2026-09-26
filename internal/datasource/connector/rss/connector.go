@@ -481,9 +481,8 @@ type resolvedFeedItem struct {
 }
 
 // resolveItem assembles a FetchedItem for a single feed entry, resolving the
-// best available content and converting it to Markdown. Only a parsed
-// changelog section or official article API body is trusted as complete inline
-// content; feeds are not.
+// best available content and converting it to Markdown. A parsed changelog
+// section or official article API body can be used inline; feed summaries cannot.
 func (c *Connector) resolveItem(
 	ctx context.Context,
 	cli *client,
@@ -509,12 +508,9 @@ func (c *Connector) resolveItem(
 			var pageURL *url.URL
 			pageURL, err = url.Parse(item.Link)
 			if err == nil {
-				var videoCount int
-				videoCount, err = cli.preserveVideoLinks(ctx, doc.Selection, pageURL)
+				_, err = cli.preserveVideoLinks(ctx, doc.Selection, pageURL)
 				if err == nil {
-					err = articleContentError(doc.Selection)
-				}
-				if err == nil && videoCount > 0 {
+					discardUnsupportedComponents(doc.Selection)
 					contentHTML, err = doc.Html()
 				}
 			}
@@ -602,14 +598,14 @@ func FetchArticle(ctx context.Context, articleURL string) (*types.FetchedItem, e
 }
 
 // htmlToMarkdown converts HTML to Markdown, returning the trimmed original on
-// conversion failure so we never silently drop content.
+// conversion failure so we never silently drop readable content.
 func htmlToMarkdown(html string) string {
 	if strings.TrimSpace(html) == "" {
 		return ""
 	}
 	conv := converter.NewConverter(converter.WithPlugins(base.NewBasePlugin(), commonmark.NewCommonmarkPlugin(), table.NewTablePlugin(table.WithNewlineBehavior(table.NewlineBehaviorPreserve))))
 	md, err := conv.ConvertString(html)
-	if err != nil || strings.TrimSpace(md) == "" {
+	if err != nil {
 		return strings.TrimSpace(html)
 	}
 	return strings.TrimSpace(md)

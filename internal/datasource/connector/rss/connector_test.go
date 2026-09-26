@@ -123,9 +123,9 @@ func TestExtractArticleIgnoresRelatedCardSkeleton(t *testing.T) {
 	if err != nil || !strings.Contains(content, "dominant readable region") {
 		t.Fatalf("related card skeleton must not block complete article: %v, %s", err, content)
 	}
-	_, _, _, _, _, err = newClient(nil).extractArticle(context.Background(), server.URL+"/missing")
-	if err == nil || !strings.Contains(err.Error(), "unresolved content placeholder") {
-		t.Fatalf("actual article placeholder must still be rejected: %v", err)
+	content, _, _, _, _, err = newClient(nil).extractArticle(context.Background(), server.URL+"/missing")
+	if err != nil || !strings.Contains(content, "dominant readable region") || strings.Contains(content, "animate-pulse") {
+		t.Fatalf("unresolved component must be omitted while keeping article text: %v, %s", err, content)
 	}
 }
 
@@ -215,9 +215,9 @@ func TestExtractArticleDoesNotRestorePageWideVideo(t *testing.T) {
 		fmt.Fprintf(w, `<html><body><h1>Article</h1><div>%s</div><footer><video src="/video.mp4"></video></footer></body></html>`, longArticleBody)
 	}))
 	defer server.Close()
-	_, _, _, _, _, err := newClient(nil).extractArticle(context.Background(), server.URL+"/article")
-	if err == nil || !strings.Contains(err.Error(), "video links lost during extraction") {
-		t.Fatalf("page-wide fallback must not restore footer media: %v", err)
+	content, _, _, _, _, err := newClient(nil).extractArticle(context.Background(), server.URL+"/article")
+	if err != nil || !strings.Contains(content, "dominant readable region") || strings.Contains(content, "/video.mp4") {
+		t.Fatalf("page-wide fallback must omit footer media and keep article text: %v, %s", err, content)
 	}
 }
 
@@ -412,8 +412,13 @@ func TestDeepSeekChangelogSplitsDatedEntries(t *testing.T) {
 	}
 	items[0].Content = `<p>Demo</p><iframe src="https://example.com/demo"></iframe>`
 	resolved = NewConnector().resolveItem(context.Background(), newClient(nil), &gofeed.Feed{Title: "DeepSeek"}, items[0], pageURL, items[0].GUID, "DeepSeek", true)
-	if resolved.item.Metadata["error"] == "" || len(resolved.item.Content) != 0 {
-		t.Fatalf("unpreserved inline embed must not enter intake: %+v", resolved.item)
+	if resolved.item.Metadata["error"] != "" || !strings.Contains(string(resolved.item.Content), "Demo") || strings.Contains(string(resolved.item.Content), "iframe") {
+		t.Fatalf("inline embed must be omitted while keeping article text: %+v", resolved.item)
+	}
+	items[0].Content = `<iframe src="https://example.com/demo"></iframe>`
+	resolved = NewConnector().resolveItem(context.Background(), newClient(nil), &gofeed.Feed{Title: "DeepSeek"}, items[0], pageURL, items[0].GUID, "DeepSeek", true)
+	if resolved.item.Metadata["error"] != "article body is empty" || len(resolved.item.Content) != 0 {
+		t.Fatalf("component-only article must still fail: %+v", resolved.item)
 	}
 }
 
@@ -442,9 +447,9 @@ func TestQwenOfficialArticleBody(t *testing.T) {
 		!strings.Contains(string(good.Content), "https://qwen.ai/full.png") || !strings.Contains(string(good.Content), "| Model") {
 		t.Fatalf("Qwen body lost original content or source fields: %+v", good)
 	}
-	bad := NewConnector().resolveItem(context.Background(), newClient(nil), &gofeed.Feed{Title: "Qwen"}, items[2], "https://qwen.ai/blog", items[2].GUID, "Qwen", true).item
-	if bad.Metadata["error"] == "" || len(bad.Content) != 0 {
-		t.Fatalf("embedded media must not be silently dropped: %+v", bad)
+	withVideo := NewConnector().resolveItem(context.Background(), newClient(nil), &gofeed.Feed{Title: "Qwen"}, items[2], "https://qwen.ai/blog", items[2].GUID, "Qwen", true).item
+	if withVideo.Metadata["error"] != "" || !strings.Contains(string(withVideo.Content), "Demo") || strings.Contains(string(withVideo.Content), "video") {
+		t.Fatalf("embedded media must be omitted while keeping Qwen article text: %+v", withVideo)
 	}
 }
 
@@ -855,35 +860,36 @@ func TestConnector_FetchIncremental_StartsAtEnableTimeAndRetriesArticleFailure(t
 	}
 }
 
-func TestConnector_FetchIncremental_RejectsUnpreservedEmbeddedMedia(t *testing.T) {
+func TestConnector_FetchIncremental_OmitsUnsupportedComponents(t *testing.T) {
 	f := newFakeFeed(t)
 	f.articleEmbed = `<p>The next interactive chart is essential to understand this article and its results.</p><iframe src="https://example.com/important-chart"></iframe><p>The chart concludes the analysis.</p>`
 	cfg := makeConfig(f.feedURL(), "")
 	cfg.IngestSince = time.Date(2006, 1, 3, 0, 0, 0, 0, time.UTC)
-	items, cursor, err := NewConnector().FetchIncremental(context.Background(), cfg, nil)
+	// Each component is a fresh fetch; an unchanged feed would skip a saved cursor.
+	items, _, err := NewConnector().FetchIncremental(context.Background(), cfg, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != 1 || items[0].Metadata["error"] == "" || len(items[0].Content) != 0 {
-		t.Fatalf("unpreserved embed must not enter knowledge intake: %#v", items)
+	if len(items) != 1 || items[0].Metadata["error"] != "" || !strings.Contains(string(items[0].Content), "The chart concludes the analysis.") || strings.Contains(string(items[0].Content), "iframe") {
+		t.Fatalf("iframe must be omitted while keeping article text: %#v", items)
 	}
 	f.articleEmbed = `<p>The chart below carries the measured results.</p><canvas></canvas>`
-	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
-	if err != nil || len(items) != 1 || items[0].Metadata["error"] == "" || len(items[0].Content) != 0 {
-		t.Fatalf("unpreserved canvas must not enter knowledge intake: items=%#v err=%v", items, err)
+	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, nil)
+	if err != nil || len(items) != 1 || items[0].Metadata["error"] != "" || !strings.Contains(string(items[0].Content), "measured results") || strings.Contains(string(items[0].Content), "canvas") {
+		t.Fatalf("canvas must be omitted while keeping article text: items=%#v err=%v", items, err)
 	}
 	f.articleEmbed = `<uni-inline-image or-mp4-video-url="/missing.mp4"><p>Watch the model demo.</p></uni-inline-image>`
-	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
-	if err != nil || len(items) != 1 || items[0].Metadata["error"] == "" || len(items[0].Content) != 0 {
-		t.Fatalf("unpreserved custom video must not enter knowledge intake: items=%#v err=%v", items, err)
+	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, nil)
+	if err != nil || len(items) != 1 || items[0].Metadata["error"] != "" || !strings.Contains(string(items[0].Content), "first paragraph") || strings.Contains(string(items[0].Content), "missing.mp4") {
+		t.Fatalf("unavailable video must be omitted while keeping article text: items=%#v err=%v", items, err)
 	}
 	f.articleEmbed = `<video src="` + f.server.URL + `/head-only.mp4"></video>`
-	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
-	if err != nil || len(items) != 1 || items[0].Metadata["error"] == "" || len(items[0].Content) != 0 {
-		t.Fatalf("HEAD-only video link must not enter knowledge intake: items=%#v err=%v", items, err)
+	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, nil)
+	if err != nil || len(items) != 1 || items[0].Metadata["error"] != "" || !strings.Contains(string(items[0].Content), "first paragraph") || strings.Contains(string(items[0].Content), "head-only.mp4") {
+		t.Fatalf("unverifiable video must be omitted while keeping article text: items=%#v err=%v", items, err)
 	}
 	f.articleEmbed = `<p>Before the demo.</p><video src="` + f.server.URL + `/video.mp4"></video><p>After the demo.</p>`
-	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
+	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, nil)
 	if err != nil || len(items) != 1 || items[0].Metadata["error"] != "" ||
 		!strings.Contains(string(items[0].Content), f.server.URL+"/video.mp4") ||
 		!strings.Contains(string(items[0].Content), "播放原始视频") ||
@@ -891,30 +897,30 @@ func TestConnector_FetchIncremental_RejectsUnpreservedEmbeddedMedia(t *testing.T
 		t.Fatalf("verified article video must remain playable in its original context: items=%#v err=%v", items, err)
 	}
 	f.articleEmbed = `<uni-inline-image or-mp4-video-url="` + f.server.URL + `/video.mp4"><p>Watch the model demo.</p></uni-inline-image>`
-	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
+	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, nil)
 	if err != nil || len(items) != 1 || items[0].Metadata["error"] != "" || !strings.Contains(string(items[0].Content), f.server.URL+"/video.mp4") {
 		t.Fatalf("verified custom video must survive extraction: items=%#v err=%v", items, err)
 	}
 	f.articleEmbed = ""
 	f.articleHero = `<video src="` + f.server.URL + `/video.mp4"></video>`
-	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
+	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, nil)
 	if err != nil || len(items) != 1 || items[0].Metadata["error"] != "" || !strings.HasPrefix(string(items[0].Content), "[播放原始视频]("+f.server.URL+"/video.mp4)") {
 		t.Fatalf("verified hero video must precede article body: items=%#v err=%v", items, err)
 	}
 	f.articleHero = ""
 	f.articleEmbed = `<h3>Full Benchmark Table</h3><div data-blog-hero-width="true"><div class="animate-pulse" style="min-height:360px"></div></div>`
-	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
-	if err != nil || len(items) != 1 || !strings.Contains(items[0].Metadata["error"], "unresolved content placeholder") || len(items[0].Content) != 0 {
-		t.Fatalf("unrendered benchmark table must not enter knowledge intake: items=%#v err=%v", items, err)
+	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, nil)
+	if err != nil || len(items) != 1 || items[0].Metadata["error"] != "" || !strings.Contains(string(items[0].Content), "Full Benchmark Table") || strings.Contains(string(items[0].Content), "animate-pulse") {
+		t.Fatalf("unrendered benchmark component must be omitted while keeping article text: items=%#v err=%v", items, err)
 	}
 	f.articleEmbed = `<a class="animate-pulse" href="/login"></a>`
-	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
+	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, nil)
 	if err != nil || len(items) != 1 || len(items[0].Content) == 0 {
 		t.Fatalf("empty animated link is not missing article content: items=%#v err=%v", items, err)
 	}
 	f.articleEmbed = ""
 	f.pageEmbed = `<iframe src="https://example.com/footer-ad"></iframe>`
-	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, cursor)
+	items, _, err = NewConnector().FetchIncremental(context.Background(), cfg, nil)
 	if err != nil || len(items) != 1 || len(items[0].Content) == 0 {
 		t.Fatalf("footer embed must not block complete article: items=%#v err=%v", items, err)
 	}

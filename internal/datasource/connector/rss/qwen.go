@@ -73,9 +73,8 @@ func parseQwenArticles(data []byte) ([]*gofeed.Item, error) {
 				body := doc.Find(".post-content").First()
 				if body.Length() == 0 {
 					reason = "Qwen article has no original body"
-				} else if contentErr := articleContentError(body); contentErr != nil {
-					reason = fmt.Sprintf("Qwen article content failed: %v", contentErr)
 				} else {
+					discardUnsupportedComponents(body)
 					preferLargestImageVariant(body, pageURL)
 					absolutizeContentURLs(body, pageURL)
 					item.Content, err = goquery.OuterHtml(body)

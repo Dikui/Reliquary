@@ -18,8 +18,7 @@ var kimiFlightValue = regexp.MustCompile(`"value":"\$([0-9a-f]+)"`)
 var kimiFlightComponent = regexp.MustCompile(`"className":"language-(chartCompare|benchmarkTable)"`)
 
 // recoverKimiTables restores chart/table data that Kimi streams separately
-// from the server-rendered article. Other unresolved widgets still fail the
-// ordinary completeness check.
+// from the server-rendered article.
 func recoverKimiTables(doc *goquery.Document, content *goquery.Selection, pageURL *url.URL) (int, error) {
 	if pageURL == nil || (pageURL.Hostname() != "www.kimi.ai" && pageURL.Hostname() != "kimi.ai") || !strings.HasPrefix(pageURL.Path, "/blog/") {
 		return 0, nil
