@@ -791,6 +791,7 @@ function selectRssPreset(name: string, url: string, publisher: string, articlePa
 const rssPresets = [
   ['OpenAI', 'https://openai.com/news/rss.xml', 'OpenAI'],
   ['Anthropic', 'https://www.anthropic.com/sitemap.xml', 'Anthropic', '/news/'],
+  ['claude.dev', 'https://claude.dev/rss.xml', 'Anthropic'],
   ['DeepSeek', 'https://api-docs.deepseek.com/zh-cn/updates/', 'DeepSeek', '/zh-cn/updates/'],
   ['Qwen', 'https://qwen.ai/blog', 'Qwen', '/blog'],
   ['Kimi', 'https://www.kimi.ai/blog/', 'Kimi', '/blog/'],

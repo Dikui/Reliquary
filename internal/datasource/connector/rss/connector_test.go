@@ -221,6 +221,24 @@ func TestExtractArticleDoesNotRestorePageWideVideo(t *testing.T) {
 	}
 }
 
+func TestExtractArticlePreservesExplicitBodyMedia(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/video.mp4" {
+			w.Header().Set("Content-Type", "video/mp4")
+			w.WriteHeader(http.StatusPartialContent)
+			_, _ = w.Write([]byte{0})
+			return
+		}
+		fmt.Fprintf(w, `<html><head><title>Article</title></head><body><h1>Article</h1><div id="body" class="prose">%s<figure class="art-video"><div><video src="/video.mp4" poster="/poster.jpg"></video><img src="/poster.jpg"></div></figure><p>Final article paragraph.</p></div><footer>Unrelated footer</footer></body></html>`, longArticleBody)
+	}))
+	defer server.Close()
+	content, _, _, _, _, err := newClient(nil).extractArticle(context.Background(), server.URL+"/article")
+	if err != nil || !strings.Contains(content, server.URL+"/video.mp4") || !strings.Contains(content, server.URL+"/poster.jpg") ||
+		strings.Count(content, "<img ") != 1 || !strings.Contains(content, "Final article paragraph.") || strings.Contains(content, "Unrelated footer") {
+		t.Fatalf("explicit article body must retain video link, poster, and ending: %v, %s", err, content)
+	}
+}
+
 func TestClientRejectsTruncatedArticle(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(strings.Repeat("x", maxArticleSize+1)))

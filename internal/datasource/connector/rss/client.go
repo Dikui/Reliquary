@@ -141,6 +141,9 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 	if selection.Length() == 0 {
 		selection = doc.Find("main")
 	}
+	if selection.Length() == 0 {
+		selection = doc.Find("div#body.prose")
+	}
 	var content *goquery.Selection
 	selection.Each(func(_ int, candidate *goquery.Selection) {
 		if content == nil || len(candidate.Text()) > len(content.Text()) {
@@ -197,6 +200,11 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 	}
 	if article.Node == nil {
 		return "", "", "", "", "", fmt.Errorf("no readable content extracted")
+	}
+	if content.Is("div#body.prose") {
+		// The explicit article body includes media figures that Readability can discard.
+		absolutizeContentURLs(content, pageURL)
+		article.Node = content.Get(0)
 	}
 	if videoCount > 0 && recoveredWidgets == 0 {
 		got := goquery.NewDocumentFromNode(article.Node).Find(`a[data-reliquary-video]`).Length()
@@ -348,6 +356,11 @@ func (c *client) preserveVideoLinks(ctx context.Context, content *goquery.Select
 					return
 				}
 				poster = `<img src="` + html.EscapeString(posterURL.String()) + `" alt="视频封面">`
+				node.Siblings().Filter("img").FilterFunction(func(_ int, image *goquery.Selection) bool {
+					src, _ := image.Attr("src")
+					imageRef, err := url.Parse(strings.TrimSpace(src))
+					return err == nil && pageURL.ResolveReference(imageRef).String() == posterURL.String()
+				}).Remove()
 			}
 			node.ReplaceWithHtml(`<p>` + poster + `<a data-reliquary-video="true" href="` + html.EscapeString(videoURL) + `">` + html.EscapeString(label) + `</a></p>`)
 			count++
