@@ -127,15 +127,18 @@ Examples:
 			// without it the raw escape hatch bypassed the "an agent cannot
 			// silently mutate" guarantee. POST stays ungated to match typed
 			// `create` (also ungated). GET/HEAD are reads.
+			var confirmationErr error
 			switch method {
 			case http.MethodDelete:
-				if err := cmdutil.ConfirmDestructive(f.Prompter(), opts.Yes, fopts.WantsJSON(), "delete", "endpoint", args[0], "api.delete", []string{"reliquary", "api", "-X", "DELETE", args[0], "-y"}); err != nil {
-					return err
-				}
+				confirmationErr = cmdutil.ConfirmDestructive(f.Prompter(), opts.Yes, fopts.WantsJSON(), "delete", "endpoint", args[0], "api.delete", apiRetryArgv(opts, method, args[0]))
 			case http.MethodPut, http.MethodPatch:
-				if err := cmdutil.ConfirmWrite(f.Prompter(), opts.Yes, fopts.WantsJSON(), "write", "endpoint", args[0], "api."+strings.ToLower(method), apiRetryArgv(opts, method, args[0])); err != nil {
-					return err
+				confirmationErr = cmdutil.ConfirmWrite(f.Prompter(), opts.Yes, fopts.WantsJSON(), "write", "endpoint", args[0], "api."+strings.ToLower(method), apiRetryArgv(opts, method, args[0]))
+			}
+			if confirmationErr != nil {
+				if typed, ok := confirmationErr.(*cmdutil.Error); ok && typed.Code == cmdutil.CodeInputConfirmationRequired && opts.Input == "-" {
+					typed.WithHint("After explicit user approval, re-run with -y/--yes and supply the same JSON body on stdin for --input -.")
 				}
+				return confirmationErr
 			}
 			cli, err := f.Client()
 			if err != nil {

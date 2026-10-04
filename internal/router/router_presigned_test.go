@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -13,11 +14,81 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	"reliquary/internal/application/repository"
+	"reliquary/internal/application/service"
+	"reliquary/internal/config"
 
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	secutils "reliquary/internal/utils"
 )
+
+func TestPresignedPreviewScopesResourcesBeforeIssuingGrants(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	baseDir := t.TempDir()
+	t.Setenv("LOCAL_STORAGE_BASE_DIR", baseDir)
+	t.Setenv("APP_EXTERNAL_URL", "https://example.test")
+	t.Setenv("SYSTEM_AES_KEY", "reliquary-test-aes-key-32bytes!!!")
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&types.StorageBackend{}, &types.StoredResource{}, &types.ResourceAccessGrant{}))
+	storageRepo := repository.NewStorageBackendRepository(db)
+	defaultBackend := &types.StorageBackend{TenantID: 1, Name: "default", Provider: "local"}
+	resourceBackend := &types.StorageBackend{TenantID: 1, Name: "resource", Provider: "local"}
+	require.NoError(t, storageRepo.Create(t.Context(), defaultBackend))
+	require.NoError(t, storageRepo.Create(t.Context(), resourceBackend))
+	tenant := &types.Tenant{ID: 1, DefaultStorageBackendID: &defaultBackend.ID}
+	catalog := service.NewResourceCatalog(repository.NewResourceRepository(db))
+	resolver := service.NewStorageBackendServiceWithResources(storageRepo, db, catalog)
+	// Registered resources use catalog ownership, even when the physical path has no tenant segment.
+	physical := writeTestFile(t, baseDir, "archive/synthetic.txt", "synthetic-resource")
+	reference, err := catalog.Register(t.Context(), 1, types.BuildStorageBackendPath(resourceBackend.ID, physical), interfaces.ResourceRegistration{OriginalName: "synthetic.txt"})
+	require.NoError(t, err)
+	otherReference, err := catalog.Register(t.Context(), 2, "local://2/other.txt", interfaces.ResourceRegistration{})
+	require.NoError(t, err)
+	enabled := true
+	cfg := &config.Config{Tenant: &config.TenantConfig{EnableRBAC: &enabled}}
+	preview := gin.New()
+	preview.Use(func(c *gin.Context) {
+		ctx := context.WithValue(c.Request.Context(), types.TenantInfoContextKey, tenant)
+		ctx = context.WithValue(ctx, types.TenantRoleContextKey, types.TenantRoleAdmin)
+		c.Request = c.Request.WithContext(ctx)
+		c.Next()
+	})
+	servePresignedPreview(preview, cfg, resolver, catalog)
+	allowed := httptest.NewRecorder()
+	preview.ServeHTTP(allowed, httptest.NewRequest(http.MethodGet, "/api/v1/files/presigned-preview?file_path="+url.QueryEscape(reference), nil))
+	require.Equal(t, http.StatusOK, allowed.Code, allowed.Body.String())
+	var result struct {
+		URL string `json:"url"`
+	}
+	require.NoError(t, json.Unmarshal(allowed.Body.Bytes(), &result))
+	grantURL, err := url.Parse(result.URL)
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(grantURL.Path, "/r/"))
+	public := gin.New()
+	serveResourceGrants(public, catalog, &stubTenantService{get: func(_ context.Context, id uint64) (*types.Tenant, error) {
+		require.Equal(t, tenant.ID, id)
+		return tenant, nil
+	}}, nil, resolver)
+	download := httptest.NewRecorder()
+	public.ServeHTTP(download, httptest.NewRequest(http.MethodGet, grantURL.RequestURI(), nil))
+	require.Equal(t, http.StatusOK, download.Code, download.Body.String())
+	require.Equal(t, "synthetic-resource", download.Body.String())
+	var grantsBefore int64
+	require.NoError(t, db.Model(&types.ResourceAccessGrant{}).Count(&grantsBefore).Error)
+	for _, path := range []string{otherReference, "local://2/other.txt"} {
+		denied := httptest.NewRecorder()
+		preview.ServeHTTP(denied, httptest.NewRequest(http.MethodGet, "/api/v1/files/presigned-preview?file_path="+url.QueryEscape(path), nil))
+		require.Equal(t, http.StatusForbidden, denied.Code, denied.Body.String())
+	}
+	var grantsAfter int64
+	require.NoError(t, db.Model(&types.ResourceAccessGrant{}).Count(&grantsAfter).Error)
+	require.Equal(t, grantsBefore, grantsAfter, "rejected previews must not issue access grants")
+}
 
 // stubTenantService is a minimal stub of interfaces.TenantService that only
 // implements GetTenantByID. Every other method panics — those code paths

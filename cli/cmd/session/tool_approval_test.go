@@ -58,14 +58,40 @@ func TestRunResolve_RejectWithReason(t *testing.T) {
 }
 
 func TestRunResolve_NoYesIsConfirmationRequired(t *testing.T) {
-	_, _ = iostreams.SetForTest(t)
-	svc := &fakeResolveSvc{}
-	err := runResolve(context.Background(), &ResolveOptions{PendingID: "p1"}, jsonOpts(), svc, &testutil.ConfirmPrompter{})
-	require.Error(t, err)
-	var typed *cmdutil.Error
-	require.ErrorAs(t, err, &typed)
-	assert.Equal(t, cmdutil.CodeInputConfirmationRequired, typed.Code)
-	assert.Empty(t, svc.gotPendingID, "SDK must not be called without confirmation")
+	for _, original := range []*ResolveOptions{
+		{PendingID: "p1", Reason: "safer target", ModifiedArgs: `{"path":"/safe target"}`},
+		{PendingID: "p1", Reject: true, Reason: "wrong target"},
+	} {
+		t.Run(decisionOf(original.Reject), func(t *testing.T) {
+			iostreams.SetForTest(t)
+			svc := &fakeResolveSvc{}
+			err := runResolve(context.Background(), original, jsonOpts(), svc, &testutil.ConfirmPrompter{})
+			var typed *cmdutil.Error
+			require.ErrorAs(t, err, &typed)
+			assert.Equal(t, cmdutil.CodeInputConfirmationRequired, typed.Code)
+			assert.Empty(t, svc.gotPendingID, "SDK must not be called without confirmation")
+			expected := []string{"reliquary", "session", "tool-approval", "resolve", "p1"}
+			if original.Reject {
+				expected = append(expected, "--reject")
+			} else {
+				expected = append(expected, "--modified-args", original.ModifiedArgs)
+			}
+			assert.Equal(t, append(expected, "--reason", original.Reason, "-y"), typed.RetryArgv)
+			cmd := newCmdResolve(nil)
+			cmd.Flags().BoolP("yes", "y", false, "")
+			require.NoError(t, cmd.Flags().Parse(typed.RetryArgv[5:]))
+			replay := &ResolveOptions{PendingID: typed.RetryArgv[4]}
+			replay.Yes, _ = cmd.Flags().GetBool("yes")
+			replay.Reject, _ = cmd.Flags().GetBool("reject")
+			replay.Reason, _ = cmd.Flags().GetString("reason")
+			replay.ModifiedArgs, _ = cmd.Flags().GetString("modified-args")
+			require.NoError(t, runResolve(context.Background(), replay, jsonOpts(), svc, &testutil.ConfirmPrompter{}))
+			assert.Equal(t, original.PendingID, svc.gotPendingID)
+			modified, err := validateModifiedArgs(original)
+			require.NoError(t, err)
+			assert.Equal(t, &sdk.ResolveToolApprovalRequest{Decision: decisionOf(original.Reject), Reason: original.Reason, ModifiedArgs: modified}, svc.gotReq)
+		})
+	}
 }
 
 func TestRunResolve_ModifiedArgsMustBeJSONObject(t *testing.T) {

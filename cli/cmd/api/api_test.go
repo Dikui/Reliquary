@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -326,22 +327,60 @@ func withRootHarness(api *cobra.Command, args ...string) *cobra.Command {
 // -y/--yes, must get input.confirmation_required + exit 10. Confirmation is
 // enforced in NewCmd.RunE (not runAPI), so the test drives the cobra cmd.
 func TestAPI_DELETE_RequiresConfirmation(t *testing.T) {
-	iostreams.SetForTest(t) // non-TTY
-	f := &cmdutil.Factory{
-		Client:   func() (*sdk.Client, error) { return nil, nil },
-		Prompter: func() prompt.Prompter { return prompt.AgentPrompter{} },
+	body := `{"name":"same target","enabled":true}`
+	inputPath := filepath.Join(t.TempDir(), "body.json")
+	if err := os.WriteFile(inputPath, []byte(body), 0600); err != nil {
+		t.Fatal(err)
 	}
-	root := withRootHarness(NewCmd(f), "/api/v1/knowledge-bases/kb_xxx", "-X", "DELETE")
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected confirmation_required error for DELETE without -y")
-	}
-	var ce *cmdutil.Error
-	if !asTypedError(err, &ce) || ce.Code != cmdutil.CodeInputConfirmationRequired {
-		t.Errorf("want input.confirmation_required, got %v", err)
-	}
-	if got := cmdutil.ExitCode(err); got != 10 {
-		t.Errorf("exit code = %d, want 10", got)
+	for _, flags := range [][]string{
+		{"-d", body}, {"--input", inputPath}, {"--input", "-"},
+		{"-F", "name=same target", "-F", "enabled=true"},
+	} {
+		t.Run(strings.Join(flags, " "), func(t *testing.T) {
+			iostreams.SetForTest(t)
+			called := false
+			cli, stop := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				called = true
+				got, err := io.ReadAll(r.Body)
+				if err != nil || r.Method != http.MethodDelete || r.URL.Path != "/api/v1/knowledge-bases/kb_xxx" {
+					t.Errorf("unexpected request: %s %s, read error: %v", r.Method, r.URL.Path, err)
+				}
+				var expected, actual any
+				_ = json.Unmarshal([]byte(body), &expected)
+				if err := json.Unmarshal(got, &actual); err != nil || !reflect.DeepEqual(expected, actual) {
+					t.Errorf("request body = %s, want %s", got, body)
+				}
+				w.WriteHeader(http.StatusOK)
+			})
+			defer stop()
+			f := &cmdutil.Factory{
+				Client:   func() (*sdk.Client, error) { return cli, nil },
+				Prompter: func() prompt.Prompter { return prompt.AgentPrompter{} },
+			}
+			args := append([]string{"/api/v1/knowledge-bases/kb_xxx", "-X", "DELETE"}, flags...)
+			err := withRootHarness(NewCmd(f), args...).Execute()
+			var ce *cmdutil.Error
+			if !asTypedError(err, &ce) || ce.Code != cmdutil.CodeInputConfirmationRequired {
+				t.Fatalf("want input.confirmation_required, got %v", err)
+			}
+			if called || cmdutil.ExitCode(err) != 10 {
+				t.Fatal("unconfirmed DELETE must stop with exit 10")
+			}
+			expected := append([]string{"reliquary", "api", "-X", "DELETE", args[0]}, flags...)
+			if !reflect.DeepEqual(ce.RetryArgv, append(expected, "-y")) {
+				t.Fatalf("retry argv lost body flags: %v", ce.RetryArgv)
+			}
+			if flags[0] == "--input" && flags[1] == "-" && !strings.Contains(ce.Hint, "same JSON body on stdin") {
+				t.Fatalf("stdin replay requirement missing: %q", ce.Hint)
+			}
+			iostreams.IO.In = strings.NewReader(body)
+			if err := withRootHarness(NewCmd(f), ce.RetryArgv[2:]...).Execute(); err != nil {
+				t.Fatal(err)
+			}
+			if !called {
+				t.Fatal("confirmed retry did not send DELETE")
+			}
+		})
 	}
 }
 

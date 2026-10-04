@@ -638,11 +638,7 @@ func (h *MCPServiceHandler) ResolveToolApproval(c *gin.Context) {
 	switch body.Decision {
 	case "approve":
 		dec.Approved = true
-		// Reject "null" / non-object payloads up front. Without this, "null"
-		// (4 bytes) passes the len>0 check and the downstream tool sees a nil
-		// argument map, silently losing the original args.
-		trimmed := strings.TrimSpace(string(body.ModifiedArgs))
-		if len(trimmed) > 0 && trimmed != "null" {
+		if len(body.ModifiedArgs) > 0 {
 			var probe map[string]interface{}
 			if err := json.Unmarshal(body.ModifiedArgs, &probe); err != nil || probe == nil {
 				c.Error(errors.NewBadRequestError("modified_args must be a non-null JSON object"))

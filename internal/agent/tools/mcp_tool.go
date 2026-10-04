@@ -158,13 +158,15 @@ func (t *MCPTool) Execute(ctx context.Context, args json.RawMessage) (*types.Too
 					}, nil
 				}
 				if len(decision.ModifiedArgs) > 0 {
-					args = decision.ModifiedArgs
-					if err := json.Unmarshal(args, &input); err != nil {
+					var modifiedInput MCPInput
+					if err := json.Unmarshal(decision.ModifiedArgs, &modifiedInput); err != nil || modifiedInput == nil {
 						return &types.ToolResult{
 							Success: false,
-							Error:   fmt.Sprintf("Invalid modified_args after approval: %v", err),
+							Error:   "Invalid modified_args after approval: must be a non-null JSON object",
 						}, nil
 					}
+					args = decision.ModifiedArgs
+					input = modifiedInput
 				}
 				// Approval may have consumed most/all of the per-tool exec budget set by the
 				// agent engine (act.go). Re-derive a fresh tool-exec ctx from ApprovalCtx so

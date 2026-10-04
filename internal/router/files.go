@@ -787,7 +787,7 @@ func presignedFileHandler(tenantService interfaces.TenantService, absDir string,
 //
 // Route:
 //   - GET /api/v1/files/presigned-preview?file_path=<provider://...>
-func servePresignedPreview(r *gin.Engine, cfg *config.Config, storageResolver interfaces.StorageBackendResolver) {
+func servePresignedPreview(r *gin.Engine, cfg *config.Config, storageResolver interfaces.StorageBackendResolver, resourceCatalog interfaces.ResourceCatalog) {
 	absDir := localStorageAbsDir()
 
 	// This route is registered on the engine root, NOT the /api/v1 group,
@@ -810,7 +810,22 @@ func servePresignedPreview(r *gin.Engine, cfg *config.Config, storageResolver in
 				return
 			}
 
-			backendID, provider := parseStorageTarget(filePath)
+			if strings.HasPrefix(filePath, types.ResourceScheme) && resourceCatalog == nil {
+				c.JSON(http.StatusServiceUnavailable, gin.H{"error": "resource catalog unavailable"})
+				return
+			}
+			resolvedPath, resourceResolved, ok := resolveCatalogResource(c, resourceCatalog, filePath, tenant.ID)
+			if !ok {
+				return
+			}
+			if !resourceResolved {
+				if err := secutils.ValidateStoragePathTenant(resolvedPath, tenant.ID); err != nil {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: file path not accessible"})
+					return
+				}
+			}
+
+			backendID, provider := parseStorageTarget(resolvedPath)
 			fileSvc, resolvedProvider, err := resolveFileService(ctx, tenant, backendID, provider, absDir, storageResolver)
 			if err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{

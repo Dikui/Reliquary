@@ -1,14 +1,62 @@
 package tools
 
 import (
+	"context"
+	"encoding/json"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	protocol "github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"reliquary/internal/agent/approval"
+	"reliquary/internal/event"
 	"reliquary/internal/mcp"
 	"reliquary/internal/types"
+	secutils "reliquary/internal/utils"
 )
+
+type modifiedArgsApproval struct{}
+
+func (modifiedArgsApproval) NeedsApproval(context.Context, uint64, string, string) bool {
+	return true
+}
+
+func (modifiedArgsApproval) RequestAndWait(context.Context, approval.PendingRequest) (approval.Decision, error) {
+	return approval.Decision{Approved: true, ModifiedArgs: json.RawMessage(`{"path":"approved.txt"}`)}, nil
+}
+
+func TestMCPToolExecuteUsesOnlyApprovedArguments(t *testing.T) {
+	t.Setenv("SSRF_WHITELIST", "127.0.0.1")
+	secutils.ResetSSRFWhitelistForTest()
+	t.Cleanup(secutils.ResetSSRFWhitelistForTest)
+	called := make(chan map[string]any, 1)
+	mcpServer := server.NewMCPServer("approval-test", "1.0")
+	mcpServer.AddTool(protocol.NewTool("read_file"), func(_ context.Context, req protocol.CallToolRequest) (*protocol.CallToolResult, error) {
+		called <- req.GetArguments()
+		return protocol.NewToolResultText("ok"), nil
+	})
+	httpServer := httptest.NewServer(server.NewStreamableHTTPServer(mcpServer))
+	t.Cleanup(httpServer.Close)
+	manager := mcp.NewMCPManager(nil)
+	t.Cleanup(manager.CloseAll)
+	tool := NewMCPTool(&types.MCPService{
+		ID: "approval-test", Name: "approval-test", Enabled: true,
+		TransportType: types.MCPTransportHTTPStreamable, URL: &httpServer.URL,
+	}, &types.MCPTool{Name: "read_file"}, manager, modifiedArgsApproval{}, 0)
+	ctx := WithToolExecContext(t.Context(), &ToolExecContext{EventBus: event.NewEventBus()})
+	result, err := tool.Execute(ctx, json.RawMessage(`{"path":"original.txt","recursive":true}`))
+	require.NoError(t, err)
+	require.True(t, result.Success, result.Error)
+	select {
+	case args := <-called:
+		require.Equal(t, map[string]any{"path": "approved.txt"}, args)
+	default:
+		t.Fatal("approved tool was not called")
+	}
+}
 
 // --- sanitizeName ---
 
