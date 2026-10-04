@@ -277,7 +277,7 @@ func DetectProvider(baseURL string) ProviderName {
 		return ProviderNvidia
 	case containsAny(baseURL, "api.novita.ai", "novita.ai"):
 		return ProviderNovita
-	case containsAny(baseURL, "reliquary.weixin.qq.com"):
+	case containsAny(baseURL, "weknora.weixin.qq.com"):
 		return ProviderWeKnoraCloud
 	default:
 		return ProviderGeneric

@@ -1,6 +1,10 @@
 import shutil
+import subprocess
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+
+from docreader.parser.excel_convert import convert_excel_to_xlsx_bytes
 
 from docreader.parser.ppt_convert import (
     convert_ppt_to_pptx_bytes,
@@ -18,6 +22,41 @@ PPTX_SAMPLE = TESTDATA / "pptx" / "en_marker.pptx"
 
 
 class TestPptConvert(unittest.TestCase):
+    def test_office_wrappers_preserve_conversion_retry_and_timeout(self):
+        for wrapper, module, suffix, target in (
+            (convert_excel_to_xlsx_bytes, "excel_convert", ".xls", "xlsx"),
+            (convert_ppt_to_pptx_bytes, "ppt_convert", ".ppt", "pptx"),
+        ):
+            with self.subTest(target=target):
+                calls = []
+
+                def run(cmd, **kwargs):
+                    calls.append(cmd)
+                    self.assertEqual(kwargs, {"capture_output": True, "timeout": 120})
+                    self.assertEqual(cmd[cmd.index("--convert-to") + 1], target)
+                    self.assertEqual(Path(cmd[-1]).read_bytes(), b"source")
+                    if len(calls) == 1:
+                        return subprocess.CompletedProcess(cmd, 1, stderr=b"busy")
+                    output = Path(cmd[cmd.index("--outdir") + 1]) / f"input.{target}"
+                    output.write_bytes(b"converted")
+                    return subprocess.CompletedProcess(cmd, 0, stderr=b"")
+
+                with patch(f"docreader.parser.{module}.find_soffice", return_value="soffice"), patch(
+                    "docreader.parser.office_convert.subprocess.run", side_effect=run
+                ), patch("docreader.parser.office_convert.time.sleep") as sleep:
+                    self.assertEqual(wrapper(b"source", suffix), b"converted")
+                sleep.assert_called_once_with(0.5)
+                self.assertEqual(len(calls), 2)
+                self.assertNotEqual(calls[0][2], calls[1][2])
+
+    def test_office_timeout_returns_none_without_retry(self):
+        with patch("docreader.parser.ppt_convert.find_soffice", return_value="soffice"), patch(
+            "docreader.parser.office_convert.subprocess.run",
+            side_effect=subprocess.TimeoutExpired("soffice", 120),
+        ) as run:
+            self.assertIsNone(convert_ppt_to_pptx_bytes(b"source"))
+        run.assert_called_once()
+
     def test_legacy_ppt_magic(self):
         if not LEGACY_PPT.is_file():
             self.skipTest("legacy PPT fixture not available")

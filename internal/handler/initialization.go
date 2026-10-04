@@ -103,7 +103,7 @@ type KBModelConfigRequest struct {
 	// 文档分块配置
 	DocumentSplitting struct {
 		ChunkSize         int                      `json:"chunkSize"`
-		ChunkOverlap      int                      `json:"chunkOverlap"`
+		ChunkOverlap      *int                     `json:"chunkOverlap,omitempty"`
 		Separators        []string                 `json:"separators"`
 		ParserEngineRules []types.ParserEngineRule `json:"parserEngineRules,omitempty"`
 		EnableParentChild bool                     `json:"enableParentChild"`
@@ -196,7 +196,7 @@ type InitializationRequest struct {
 
 	DocumentSplitting struct {
 		ChunkSize    int      `json:"chunkSize" binding:"required,min=100,max=10000"`
-		ChunkOverlap int      `json:"chunkOverlap" binding:"min=0"`
+		ChunkOverlap *int     `json:"chunkOverlap,omitempty" binding:"omitempty,min=0"`
 		Separators   []string `json:"separators" binding:"required,min=1"`
 	} `json:"documentSplitting" binding:"required"`
 
@@ -325,8 +325,9 @@ func (h *InitializationHandler) UpdateKBConfig(c *gin.Context) {
 	if req.DocumentSplitting.ChunkSize > 0 {
 		kb.ChunkingConfig.ChunkSize = req.DocumentSplitting.ChunkSize
 	}
-	if req.DocumentSplitting.ChunkOverlap >= 0 {
-		kb.ChunkingConfig.ChunkOverlap = req.DocumentSplitting.ChunkOverlap
+	if req.DocumentSplitting.ChunkOverlap != nil && *req.DocumentSplitting.ChunkOverlap >= 0 {
+		kb.ChunkingConfig.ChunkOverlap = *req.DocumentSplitting.ChunkOverlap
+		kb.ChunkingConfig.ChunkOverlapSet = true
 	}
 	if len(req.DocumentSplitting.Separators) > 0 {
 		kb.ChunkingConfig.Separators = req.DocumentSplitting.Separators
@@ -835,9 +836,12 @@ func (h *InitializationHandler) applyKnowledgeBaseInitialization(
 	kb.EmbeddingModelID = embeddingModelID
 
 	kb.ChunkingConfig = types.ChunkingConfig{
-		ChunkSize:    req.DocumentSplitting.ChunkSize,
-		ChunkOverlap: req.DocumentSplitting.ChunkOverlap,
-		Separators:   req.DocumentSplitting.Separators,
+		ChunkSize:  req.DocumentSplitting.ChunkSize,
+		Separators: req.DocumentSplitting.Separators,
+	}
+	if req.DocumentSplitting.ChunkOverlap != nil {
+		kb.ChunkingConfig.ChunkOverlap = *req.DocumentSplitting.ChunkOverlap
+		kb.ChunkingConfig.ChunkOverlapSet = true
 	}
 
 	if req.Multimodal.Enabled {
@@ -1530,9 +1534,11 @@ func (h *InitializationHandler) buildConfigResponse(ctx context.Context, models 
 	// 添加知识库的文档分割配置
 	if kb != nil {
 		ds := map[string]interface{}{
-			"chunkSize":    kb.ChunkingConfig.ChunkSize,
-			"chunkOverlap": kb.ChunkingConfig.ChunkOverlap,
-			"separators":   kb.ChunkingConfig.Separators,
+			"chunkSize":  kb.ChunkingConfig.ChunkSize,
+			"separators": kb.ChunkingConfig.Separators,
+		}
+		if kb.ChunkingConfig.ChunkOverlapSet || kb.ChunkingConfig.ChunkOverlap != 0 {
+			ds["chunkOverlap"] = kb.ChunkingConfig.ChunkOverlap
 		}
 		if kb.ChunkingConfig.Strategy != "" {
 			ds["strategy"] = kb.ChunkingConfig.Strategy

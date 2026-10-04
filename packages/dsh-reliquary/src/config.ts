@@ -89,11 +89,11 @@ export function normalizeBaseUrl(raw: string): string {
 
 function positiveInt(value: unknown, field: string, violations: string[]): number | undefined {
   if (value === undefined) return undefined
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
-    violations.push(`${field} must be a positive number, received ${JSON.stringify(value)}`)
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+    violations.push(`${field} must be a positive integer, received ${JSON.stringify(value)}`)
     return undefined
   }
-  return Math.floor(value)
+  return value
 }
 
 function stringList(value: unknown, field: string, violations: string[]): string[] | undefined {

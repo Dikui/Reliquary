@@ -567,14 +567,20 @@ func sortedEvidenceIDs(evidence map[string]types.KnowledgeEvidence) []string {
 	return ids
 }
 func contextFactInTimeRange(fact types.KnowledgeFact, evidence types.KnowledgeEvidence, q types.KnowledgeContextQuery) bool {
-	value := fact.EffectiveFrom
-	if value == nil {
-		value = parseContextTime(evidence.PublishedAt)
+	from, to := fact.EffectiveFrom, fact.EffectiveTo
+	// A partially specified validity interval is open at its missing endpoint.
+	// Only facts without either endpoint fall back to a publication-time point.
+	if from == nil && to == nil {
+		from = parseContextTime(evidence.PublishedAt)
+		to = from
+		if from == nil {
+			return q.Since == nil && q.Until == nil
+		}
 	}
-	if q.Since != nil && (value == nil || value.Before(*q.Since)) {
+	if q.Since != nil && to != nil && to.Before(*q.Since) {
 		return false
 	}
-	if q.Until != nil && (value == nil || value.After(*q.Until)) {
+	if q.Until != nil && from != nil && from.After(*q.Until) {
 		return false
 	}
 	return true

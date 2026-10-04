@@ -248,6 +248,8 @@ type ChunkingConfig struct {
 	ChunkSize int `yaml:"chunk_size"    json:"chunk_size"`
 	// Chunk overlap
 	ChunkOverlap int `yaml:"chunk_overlap" json:"chunk_overlap"`
+	// ChunkOverlapSet records JSON presence without changing the public payload.
+	ChunkOverlapSet bool `yaml:"-" json:"-"`
 	// Separators
 	Separators []string `yaml:"separators"    json:"separators"`
 	// ParserEngineRules configures which parser engine to use for each file type.
@@ -525,6 +527,38 @@ func ParseProviderScheme(filePath string) string {
 type ImageProcessingConfig struct {
 	// Model ID
 	ModelID string `yaml:"model_id" json:"model_id"`
+}
+
+// Preserve explicit zero through API decoding and persisted JSON. Omitted
+// overlap must remain omitted when a default Go config is saved and reloaded.
+func (c *ChunkingConfig) UnmarshalJSON(data []byte) error {
+	type plain ChunkingConfig
+	var value plain
+	payload := struct {
+		*plain
+		ChunkOverlap *int `json:"chunk_overlap"`
+	}{plain: &value}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return err
+	}
+	if payload.ChunkOverlap != nil {
+		value.ChunkOverlap = *payload.ChunkOverlap
+		value.ChunkOverlapSet = true
+	}
+	*c = ChunkingConfig(value)
+	return nil
+}
+
+func (c ChunkingConfig) MarshalJSON() ([]byte, error) {
+	type plain ChunkingConfig
+	var overlap *int
+	if c.ChunkOverlapSet || c.ChunkOverlap != 0 {
+		overlap = &c.ChunkOverlap
+	}
+	return json.Marshal(struct {
+		*plain
+		ChunkOverlap *int `json:"chunk_overlap,omitempty"`
+	}{plain: (*plain)(&c), ChunkOverlap: overlap})
 }
 
 // Value implements the driver.Valuer interface, used to convert ChunkingConfig to database value

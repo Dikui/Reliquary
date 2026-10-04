@@ -69,7 +69,7 @@ func TestFindIncompleteRef(t *testing.T) {
 	}
 }
 
-func TestFindIncompleteMarkdownImage(t *testing.T) {
+func TestFindIncompleteMarkdownLink(t *testing.T) {
 	tests := []struct {
 		name string
 		in   string
@@ -86,13 +86,13 @@ func TestFindIncompleteMarkdownImage(t *testing.T) {
 		{"destination with whitespace is prose, not a link", "![alt](see the figure below", -1},
 		{
 			"destination too long to be a link",
-			"![alt](" + strings.Repeat("x", maxIncompleteImageBytes),
+			"![alt](" + strings.Repeat("x", maxIncompleteLinkBytes),
 			-1,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, FindIncompleteMarkdownImage(tt.in), "FindIncompleteMarkdownImage(%q)", tt.in)
+			assert.Equal(t, tt.want, FindIncompleteMarkdownLink(tt.in), "FindIncompleteMarkdownLink(%q)", tt.in)
 		})
 	}
 }
@@ -134,6 +134,13 @@ func TestStreamRewriter_HoldsSplitReference(t *testing.T) {
 
 	assert.Empty(t, sr.Push(ctx, "answer-1", "", true, nil))
 	assert.Empty(t, sr.FlushAll(ctx), "nothing should remain held")
+
+	// A regular attachment may be split before the scheme is recognizable.
+	first = sr.Push(ctx, "attachment", "download: [file](resou", false, nil)
+	assert.Equal(t, "download: ", first)
+	second = sr.Push(ctx, "attachment", "rce://xifDo7NTSL300Lp1goVutw) done", false, nil)
+	assert.Equal(t, "[file](https://cdn.example.com/x.png) done", second)
+	assert.Empty(t, sr.FlushAll(ctx))
 }
 
 // Streams are keyed independently so interleaved events do not corrupt each
@@ -172,7 +179,7 @@ func TestStreamRewriter_FlushAllReleasesHeldTail(t *testing.T) {
 // prose can contain a literal "](", and a URL never runs this long.
 func TestStreamRewriter_LongUnclosedImageIsNotHeld(t *testing.T) {
 	sr := NewStreamRewriter(NewRewriter(stubResolver("https://cdn.example.com/x.png"), "TEST"))
-	chunk := "![never closed](" + strings.Repeat("x", maxIncompleteImageBytes)
+	chunk := "![never closed](" + strings.Repeat("x", maxIncompleteLinkBytes)
 	assert.Equal(t, chunk, sr.Push(context.Background(), "answer-1", chunk, false, nil))
 }
 

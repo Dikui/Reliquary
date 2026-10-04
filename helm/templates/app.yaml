@@ -4,6 +4,12 @@ SPDX-License-Identifier: MIT
 
 Reliquary Backend API Server Deployment and Service.
 */}}
+{{- if .Values.minio.enabled }}
+{{- fail "minio.enabled is unsupported: this chart does not deploy MinIO. Provision it separately and configure a storage backend in Reliquary." }}
+{{- end }}
+{{- if .Values.qdrant.enabled }}
+{{- fail "qdrant.enabled is unsupported: this chart does not deploy Qdrant. Provision it separately and configure a vector backend in Reliquary." }}
+{{- end }}
 {{- if .Values.app.enabled }}
 apiVersion: apps/v1
 kind: Deployment

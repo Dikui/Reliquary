@@ -191,7 +191,7 @@ func NormalizeSplitterConfig(cfg SplitterConfig) SplitterConfig {
 	if cfg.ChunkSize <= 0 {
 		cfg.ChunkSize = DefaultChunkSize
 	}
-	if cfg.ChunkOverlap <= 0 {
+	if cfg.ChunkOverlap < 0 || (cfg.ChunkOverlap == 0 && !cfg.ChunkOverlapSet) {
 		cfg.ChunkOverlap = DefaultChunkOverlap
 	}
 	if len(cfg.Separators) == 0 {
@@ -225,11 +225,12 @@ func DeriveParentChildConfigs(base SplitterConfig, parentSize, childSize int) (p
 		childSize = 384
 	}
 	parent = SplitterConfig{
-		ChunkSize:    parentSize,
-		ChunkOverlap: base.ChunkOverlap,
-		Separators:   base.Separators,
-		Strategy:     base.Strategy,
-		Languages:    base.Languages,
+		ChunkSize:       parentSize,
+		ChunkOverlap:    base.ChunkOverlap,
+		ChunkOverlapSet: base.ChunkOverlapSet,
+		Separators:      base.Separators,
+		Strategy:        base.Strategy,
+		Languages:       base.Languages,
 	}
 	child = SplitterConfig{
 		ChunkSize:    childSize,
@@ -238,6 +239,10 @@ func DeriveParentChildConfigs(base SplitterConfig, parentSize, childSize int) (p
 		Strategy:     base.Strategy,
 		TokenLimit:   base.TokenLimit,
 		Languages:    base.Languages,
+	}
+	if base.ChunkOverlapSet && base.ChunkOverlap == 0 {
+		child.ChunkOverlap = 0
+		child.ChunkOverlapSet = true
 	}
 	return
 }
@@ -321,15 +326,7 @@ func runTier(tier StrategyTier, text string, cfg SplitterConfig, profile *DocPro
 // that fits within that token limit (with a 10% safety factor). This makes
 // chunks safe for embedding APIs that have hard token caps.
 func ensureDefaults(cfg SplitterConfig) SplitterConfig {
-	if cfg.ChunkSize <= 0 {
-		cfg.ChunkSize = DefaultChunkSize
-	}
-	if cfg.ChunkOverlap <= 0 {
-		cfg.ChunkOverlap = DefaultChunkOverlap
-	}
-	if len(cfg.Separators) == 0 {
-		cfg.Separators = []string{"\n\n", "\n", "。"}
-	}
+	cfg = NormalizeSplitterConfig(cfg)
 	if cfg.TokenLimit > 0 {
 		lang := LangMixed
 		if len(cfg.Languages) > 0 {

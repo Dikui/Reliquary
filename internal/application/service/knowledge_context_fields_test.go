@@ -30,6 +30,8 @@ func TestKnowledgeContextSelectionFieldsPruneEvidenceAndPreserveSource(t *testin
 	require.Equal(t, "context window", facts[0].OriginalPredicate)
 	require.Equal(t, "k tokens", facts[0].Unit)
 	require.JSONEq(t, `256`, string(facts[0].Value))
+	facts[0].EffectiveFrom = parseContextTime("2025-01-01")
+	facts[0].EffectiveTo = parseContextTime("2027-01-01")
 	require.NoError(t, db.Create(&facts).Error)
 	maxLoaded := int64(0)
 	require.NoError(t, db.Callback().Query().After("gorm:query").Register("selection_evidence_rows", func(tx *gorm.DB) {
@@ -48,6 +50,14 @@ func TestKnowledgeContextSelectionFieldsPruneEvidenceAndPreserveSource(t *testin
 	allModels, err := svc.Query(ctx, "kb", types.KnowledgeContextQuery{Predicate: "context window", MinValue: &threshold, Unit: "tokens"})
 	require.NoError(t, err)
 	require.Len(t, allModels.Facts, 1, "a field query must also work without naming an object")
+	timeQuery := types.KnowledgeContextQuery{Predicate: "context_length", Since: parseContextTime("2026-01-01"), Until: parseContextTime("2026-02-01")}
+	withinValidity, err := svc.Query(ctx, "kb", timeQuery)
+	require.NoError(t, err)
+	require.Len(t, withinValidity.Facts, 1, "a fact spanning the query window must remain visible")
+	timeQuery.Since, timeQuery.Until = parseContextTime("2028-01-01"), nil
+	expired, err := svc.Query(ctx, "kb", timeQuery)
+	require.NoError(t, err)
+	require.Empty(t, expired.Facts, "a fact ending before the query window must be excluded")
 	wrongUnit, err := svc.Query(ctx, "kb", types.KnowledgeContextQuery{Entity: "A2", Predicate: "context_length", MinValue: &threshold, Unit: "bytes"})
 	require.NoError(t, err)
 	require.Empty(t, wrongUnit.Facts, "incompatible units cannot be compared")
@@ -56,6 +66,24 @@ func TestKnowledgeContextSelectionFieldsPruneEvidenceAndPreserveSource(t *testin
 	otherTenant := context.WithValue(ctx, types.TenantIDContextKey, uint64(10))
 	_, err = svc.Query(otherTenant, "kb", types.KnowledgeContextQuery{Entity: "A2"})
 	require.Error(t, err)
+}
+
+func TestContextFactTimeRangeMissingDates(t *testing.T) {
+	query := types.KnowledgeContextQuery{Since: parseContextTime("2026-01-01"), Until: parseContextTime("2026-02-01")}
+	// A known endpoint defines an open interval, regardless of publication time.
+	evidence := types.KnowledgeEvidence{PublishedAt: "2028-01-01"}
+	require.True(t, contextFactInTimeRange(types.KnowledgeFact{EffectiveFrom: query.Until}, evidence, query), "start boundary is inclusive; missing end is unbounded")
+	require.True(t, contextFactInTimeRange(types.KnowledgeFact{EffectiveTo: query.Since}, evidence, query), "end boundary is inclusive; missing start is unbounded")
+	// Without validity dates, publication time is a point rather than an open interval.
+	fact := types.KnowledgeFact{}
+	require.False(t, contextFactInTimeRange(fact, evidence, query))
+	evidence.PublishedAt = "2026-01-15"
+	require.True(t, contextFactInTimeRange(fact, evidence, query))
+	evidence.PublishedAt = "2025-01-01"
+	require.False(t, contextFactInTimeRange(fact, evidence, query))
+	evidence.PublishedAt = ""
+	require.False(t, contextFactInTimeRange(fact, evidence, query), "undated facts do not match a time filter")
+	require.True(t, contextFactInTimeRange(fact, evidence, types.KnowledgeContextQuery{}))
 }
 
 func TestWorkflowReportMaterialPreservesStructuredCorrectionsAndBackground(t *testing.T) {

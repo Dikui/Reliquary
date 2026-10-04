@@ -2,6 +2,7 @@ import logging
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, Optional, Tuple
+from urllib.parse import urlsplit, urlunsplit
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -37,19 +38,26 @@ def _get_bool(keys: Iterable[str], default: bool) -> bool:
     return str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
-def _mask_secret(v: str) -> str:
-    if not v:
-        return ""
-    if len(v) <= 6:
-        return "***"
-    return f"{v[:2]}***{v[-2:]}"
+def mask_proxy_url(value: str) -> str:
+    """Hide proxy userinfo while retaining its endpoint for diagnostics."""
+    try:
+        schemeless = "://" not in value and not value.startswith("//")
+        parts = urlsplit(f"//{value}" if schemeless else value)
+        if "@" not in parts.netloc:
+            return value
+        endpoint = parts.netloc.rsplit("@", 1)[1]
+        masked = urlunsplit(parts._replace(netloc=f"***@{endpoint}"))
+        return masked[2:] if schemeless else masked
+    except ValueError:
+        # Do not expose credentials when an invalid URL cannot be parsed.
+        return "***" if "@" in value else value
 
 
 @dataclass(frozen=True)
 class DocReaderConfig:
     # gRPC
     grpc_max_workers: int
-    grpc_max_file_size_mb: int
+    grpc_max_file_size_bytes: int
     grpc_port: int
 
     # Parser
@@ -79,7 +87,7 @@ def load_config() -> DocReaderConfig:
     """Load config from environment variables (lightweight version)."""
 
     grpc_max_workers = _get_int(["DOCREADER_GRPC_MAX_WORKERS", "GRPC_MAX_WORKERS"], 4)
-    grpc_max_file_size_mb = (
+    grpc_max_file_size_bytes = (
         _get_int(["DOCREADER_GRPC_MAX_FILE_SIZE_MB", "MAX_FILE_SIZE_MB"], 50)
         * 1024
         * 1024
@@ -130,7 +138,7 @@ def load_config() -> DocReaderConfig:
 
     return DocReaderConfig(
         grpc_max_workers=grpc_max_workers,
-        grpc_max_file_size_mb=grpc_max_file_size_mb,
+        grpc_max_file_size_bytes=grpc_max_file_size_bytes,
         grpc_port=grpc_port,
         docx_max_pages=docx_max_pages,
         markitdown_max_workers=markitdown_max_workers,
@@ -158,7 +166,7 @@ def dump_config(mask_secrets: bool = True) -> Dict[str, Any]:
     cfg = CONFIG
     d: Dict[str, Any] = {
         "DOCREADER_GRPC_MAX_WORKERS": cfg.grpc_max_workers,
-        "DOCREADER_GRPC_MAX_FILE_SIZE_MB": cfg.grpc_max_file_size_mb,
+        "DOCREADER_GRPC_MAX_FILE_SIZE_MB": cfg.grpc_max_file_size_bytes // (1024 * 1024),
         "DOCREADER_GRPC_PORT": cfg.grpc_port,
         "DOCREADER_DOCX_MAX_PAGES": cfg.docx_max_pages,
         "DOCREADER_MARKITDOWN_MAX_WORKERS": cfg.markitdown_max_workers,
@@ -177,6 +185,9 @@ def dump_config(mask_secrets: bool = True) -> Dict[str, Any]:
         "DOCREADER_EXTERNAL_HTTPS_PROXY": cfg.external_https_proxy,
         "DOCREADER_IMAGE_OUTPUT_DIR": cfg.image_output_dir,
     }
+    if mask_secrets:
+        for key in ("DOCREADER_EXTERNAL_HTTP_PROXY", "DOCREADER_EXTERNAL_HTTPS_PROXY"):
+            d[key] = mask_proxy_url(d[key])
     return d
 
 

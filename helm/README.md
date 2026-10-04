@@ -223,13 +223,20 @@ helm install reliquary ./helm \
 
 ### Optional Components
 
-These map to docker-compose profiles:
+This chart can deploy Neo4j as an optional component:
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `minio.enabled` | Enable MinIO storage | `false` |
 | `neo4j.enabled` | Enable Neo4j (GraphRAG) | `false` |
-| `qdrant.enabled` | Enable Qdrant vector DB | `false` |
+
+MinIO and Qdrant are not deployed by this chart. The legacy `minio.enabled`
+and `qdrant.enabled` switches must remain `false`; setting either to `true`
+fails chart rendering instead of reporting a component that was not deployed.
+Their former image and persistence settings have been removed because they had
+no effect. Provision these services separately. Then register their reachable
+endpoints and credentials under the workspace's storage or vector backend
+settings in Reliquary, and select the backend for the knowledge base. Docker
+Compose profiles do not apply to Helm installations.
 
 ## Security Best Practices
 

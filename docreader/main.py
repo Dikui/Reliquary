@@ -285,8 +285,8 @@ def main():
     server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=CONFIG.grpc_max_workers),
         options=[
-            ("grpc.max_send_message_length", CONFIG.grpc_max_file_size_mb),
-            ("grpc.max_receive_message_length", CONFIG.grpc_max_file_size_mb),
+            ("grpc.max_send_message_length", CONFIG.grpc_max_file_size_bytes),
+            ("grpc.max_receive_message_length", CONFIG.grpc_max_file_size_bytes),
         ],
         interceptors=interceptors,
     )

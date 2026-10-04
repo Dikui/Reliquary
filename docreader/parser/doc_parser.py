@@ -8,7 +8,7 @@ from typing import List, Optional
 
 import textract
 
-from docreader.config import CONFIG
+from docreader.config import CONFIG, mask_proxy_url
 from docreader.models.document import Document
 from docreader.parser.docx2_parser import Docx2Parser
 from docreader.utils.tempfile import TempDirContext, TempFileContext
@@ -73,7 +73,7 @@ class SandboxExecutor:
 
         logger.info(f"Executing command with proxy: {' '.join(cmd)}")
         if self.proxy:
-            logger.info(f"Using proxy: {self.proxy}")
+            logger.info("Using proxy: %s", mask_proxy_url(self.proxy))
 
         process = subprocess.Popen(
             cmd,

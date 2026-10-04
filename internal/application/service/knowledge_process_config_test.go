@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"testing"
@@ -14,6 +15,51 @@ import (
 
 func processConfigBoolPtr(v bool) *bool {
 	return &v
+}
+
+func TestChunkOverlapExplicitZeroAndOmittedDefaults(t *testing.T) {
+	t.Run("explicit zero", func(t *testing.T) {
+		var override types.ChunkingConfig
+		require.NoError(t, json.Unmarshal([]byte(`{"chunk_size":100,"chunk_overlap":0,"strategy":"legacy"}`), &override))
+		stored, err := override.Value()
+		require.NoError(t, err)
+		var reloaded types.ChunkingConfig
+		require.NoError(t, reloaded.Scan(stored))
+		require.True(t, reloaded.ChunkOverlapSet)
+		kb := &types.KnowledgeBase{ChunkingConfig: types.ChunkingConfig{ChunkOverlap: 30}}
+		eff := ResolveProcessConfig(kb, &types.KnowledgeProcessOverrides{ChunkingConfig: &reloaded})
+		cfg := buildSplitterConfigFromChunking(eff.ChunkingConfig)
+		require.Zero(t, cfg.ChunkOverlap)
+		text := strings.Repeat("An individual structured record.\n\n", 20)
+		chunks := chunker.Split(text, cfg)
+		require.Greater(t, len(chunks), 1)
+		for i := 1; i < len(chunks); i++ {
+			require.GreaterOrEqual(t, chunks[i].Start, chunks[i-1].End)
+		}
+		parent, child := buildParentChildConfigs(eff.ChunkingConfig, cfg)
+		require.Zero(t, parent.ChunkOverlap)
+		require.Zero(t, child.ChunkOverlap)
+		require.True(t, parent.ChunkOverlapSet)
+		require.True(t, child.ChunkOverlapSet)
+	})
+	t.Run("omitted", func(t *testing.T) {
+		var override types.ChunkingConfig
+		require.NoError(t, json.Unmarshal([]byte(`{"chunk_size":100}`), &override))
+		kb := &types.KnowledgeBase{ChunkingConfig: types.ChunkingConfig{ChunkOverlap: 30}}
+		eff := ResolveProcessConfig(kb, &types.KnowledgeProcessOverrides{ChunkingConfig: &override})
+		require.Equal(t, 30, buildSplitterConfigFromChunking(eff.ChunkingConfig).ChunkOverlap)
+		stored, err := (types.ChunkingConfig{}).Value()
+		require.NoError(t, err)
+		require.NotContains(t, string(stored.([]byte)), `"chunk_overlap"`)
+		var reloaded types.ChunkingConfig
+		require.NoError(t, reloaded.Scan(stored))
+		require.False(t, reloaded.ChunkOverlapSet)
+		cfg := buildSplitterConfigFromChunking(reloaded)
+		require.Equal(t, chunker.DefaultChunkOverlap, cfg.ChunkOverlap)
+		parent, child := buildParentChildConfigs(reloaded, cfg)
+		require.Equal(t, chunker.DefaultChunkOverlap, parent.ChunkOverlap)
+		require.Equal(t, child.ChunkSize/5, child.ChunkOverlap)
+	})
 }
 
 func testKBWithGraphEnabled(enabled bool) *types.KnowledgeBase {

@@ -411,9 +411,10 @@ func TestDuplicateKnowledgeBase_CreatesSettingsOnlyDuplicate(t *testing.T) {
 		CreatorID:   "source-owner",
 		IsTemporary: true,
 		ChunkingConfig: types.ChunkingConfig{
-			ChunkSize:    800,
-			ChunkOverlap: 80,
-			Separators:   []string{"\n\n", "."},
+			ChunkSize:       800,
+			ChunkOverlap:    80,
+			ChunkOverlapSet: true,
+			Separators:      []string{"\n\n", "."},
 			ParserEngineRules: []types.ParserEngineRule{{
 				FileTypes: []string{"pdf"},
 				Engine:    "docreader",

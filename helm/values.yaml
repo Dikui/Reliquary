@@ -418,21 +418,11 @@ secrets:
 # Optional Components (Profiles from docker-compose)
 # -----------------------------------------------------------------------------
 
-# -- MinIO configuration (S3-compatible storage)
-# Equivalent to: docker compose --profile minio
+# -- Legacy MinIO switch. This chart does not deploy MinIO.
+# Provision it separately and configure a storage backend in Reliquary.
 minio:
-  # -- Enable MinIO
+  # -- Must remain false; true fails chart rendering.
   enabled: false
-  image:
-    repository: minio/minio
-    tag: latest
-  # -- Root user
-  rootUser: minioadmin
-  # -- Root password (REQUIRED if enabled)
-  rootPassword: ""
-  persistence:
-    enabled: true
-    size: 20Gi
 
 # -- Neo4j configuration (Knowledge Graph)
 # Equivalent to: docker compose --profile neo4j
@@ -483,14 +473,8 @@ neo4j:
   # -- Affinity rules
   affinity: {}
 
-# -- Qdrant configuration (Vector Database)
-# Equivalent to: docker compose --profile qdrant
+# -- Legacy Qdrant switch. This chart does not deploy Qdrant.
+# Provision it separately and configure a vector backend in Reliquary.
 qdrant:
-  # -- Enable Qdrant as alternative vector store
+  # -- Must remain false; true fails chart rendering.
   enabled: false
-  image:
-    repository: qdrant/qdrant
-    tag: latest
-  persistence:
-    enabled: true
-    size: 10Gi

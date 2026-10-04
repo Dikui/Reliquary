@@ -30,9 +30,22 @@ test('a bad row fails the load and names every violation', () => {
     error => {
       assert.ok(error instanceof ConfigError)
       assert.match(error.message, /baseUrl must be an absolute URL/)
-      assert.match(error.message, /maxResults must be a positive number/)
+      assert.match(error.message, /maxResults must be a positive integer/)
       assert.match(error.message, /resourceUrls must be "handle" or "public"/)
       assert.match(error.message, /toolPrefix must match/)
+      return true
+    },
+  )
+})
+
+test('integer budgets accept one and reject fractional values during load', () => {
+  assert.equal(resolveConfig({ maxResults: 1, requestTimeoutMs: 1 }).maxResults, 1)
+  assert.throws(
+    () => resolveConfig({ maxResults: 0.5, requestTimeoutMs: 0.5 }),
+    error => {
+      assert.ok(error instanceof ConfigError)
+      assert.match(error.message, /maxResults must be a positive integer/)
+      assert.match(error.message, /requestTimeoutMs must be a positive integer/)
       return true
     },
   )

@@ -55,7 +55,7 @@ type PreviewChunkingRequest struct {
 // metadata that the preview path does not use.
 type PreviewChunkingPayload struct {
 	ChunkSize         int      `json:"chunk_size"`
-	ChunkOverlap      int      `json:"chunk_overlap"`
+	ChunkOverlap      *int     `json:"chunk_overlap,omitempty"`
 	Separators        []string `json:"separators"`
 	EnableParentChild bool     `json:"enable_parent_child"`
 	ParentChunkSize   int      `json:"parent_chunk_size"`
@@ -147,14 +147,19 @@ func PreviewChunking(c *gin.Context) {
 		return
 	}
 	text := chunker.NormalizeLineEndings(req.Text)
+	overlap := chunker.DefaultChunkOverlap
+	if req.ChunkingConfig.ChunkOverlap != nil {
+		overlap = *req.ChunkingConfig.ChunkOverlap
+	}
 
 	cfg := chunker.NormalizeSplitterConfig(chunker.SplitterConfig{
-		ChunkSize:    req.ChunkingConfig.ChunkSize,
-		ChunkOverlap: req.ChunkingConfig.ChunkOverlap,
-		Separators:   req.ChunkingConfig.Separators,
-		Strategy:     req.ChunkingConfig.Strategy,
-		TokenLimit:   req.ChunkingConfig.TokenLimit,
-		Languages:    req.ChunkingConfig.Languages,
+		ChunkSize:       req.ChunkingConfig.ChunkSize,
+		ChunkOverlap:    overlap,
+		ChunkOverlapSet: req.ChunkingConfig.ChunkOverlap != nil,
+		Separators:      req.ChunkingConfig.Separators,
+		Strategy:        req.ChunkingConfig.Strategy,
+		TokenLimit:      req.ChunkingConfig.TokenLimit,
+		Languages:       req.ChunkingConfig.Languages,
 	})
 
 	// Run the splitter on a goroutine so we can honor the request timeout.

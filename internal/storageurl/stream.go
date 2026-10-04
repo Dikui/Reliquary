@@ -32,26 +32,26 @@ func FindIncompleteRef(s string) int {
 	return loc[0]
 }
 
-// incompleteMarkdownImageSuffixRe matches a Markdown image whose destination URL
+// incompleteMarkdownLinkSuffixRe matches a Markdown link or image whose destination URL
 // (the parenthesized part) is not yet closed — e.g. "![alt](minio://part" or
 // "![alt](". Holding back only from "minio://" would flush "![alt](" to the
 // client and break the image once the URL arrives in the next chunk.
 //
-// The destination must be whitespace-free, and FindIncompleteMarkdownImage caps
+// The destination must be whitespace-free, and FindIncompleteMarkdownLink caps
 // its length: a URL contains neither whitespace nor a newline, and even a
 // presigned URL stays well under the cap. Without those limits, prose that
 // merely mentions an unclosed "…](" (an answer explaining Markdown syntax, or a
 // code sample) would look forever-unclosed and stall the rest of the stream.
-var incompleteMarkdownImageSuffixRe = regexp.MustCompile(`!\[[^\]]*\]\([^)\s]*$`)
+var incompleteMarkdownLinkSuffixRe = regexp.MustCompile(`!?\[[^\]]*\]\([^)\s]*$`)
 
-// maxIncompleteImageBytes bounds how much trailing text may be treated as an
-// unfinished Markdown image. Beyond it the text is not plausibly a link, so it
+// maxIncompleteLinkBytes bounds how much trailing text may be treated as an
+// unfinished Markdown link or image. Beyond it the text is not plausibly a link, so it
 // is flushed instead of buffered.
-const maxIncompleteImageBytes = 2048
+const maxIncompleteLinkBytes = 2048
 
-// FindIncompleteMarkdownImage returns the byte offset of an unclosed
-// `![alt](url` suffix at the end of s, or -1 if none.
-func FindIncompleteMarkdownImage(s string) int {
+// FindIncompleteMarkdownLink returns the byte offset of an unclosed
+// `[label](url` or `![alt](url` suffix at the end of s, or -1 if none.
+func FindIncompleteMarkdownLink(s string) int {
 	// Prefer pairing a trailing reference fragment with the nearest preceding
 	// `![…](` so alt text may itself contain ']' (e.g. `![a[b]](minio://part`).
 	if urlIdx := FindIncompleteRef(s); urlIdx >= 0 {
@@ -61,8 +61,8 @@ func FindIncompleteMarkdownImage(s string) int {
 			}
 		}
 	}
-	loc := incompleteMarkdownImageSuffixRe.FindStringIndex(s)
-	if loc == nil || len(s)-loc[0] > maxIncompleteImageBytes {
+	loc := incompleteMarkdownLinkSuffixRe.FindStringIndex(s)
+	if loc == nil || len(s)-loc[0] > maxIncompleteLinkBytes {
 		return -1
 	}
 	return loc[0]
@@ -72,7 +72,7 @@ func FindIncompleteMarkdownImage(s string) int {
 // or len(chunk) when the whole chunk can be emitted.
 func HoldbackCutoff(chunk string) int {
 	cutoff := len(chunk)
-	if idx := FindIncompleteMarkdownImage(chunk); idx >= 0 && idx < cutoff {
+	if idx := FindIncompleteMarkdownLink(chunk); idx >= 0 && idx < cutoff {
 		return idx
 	}
 	if idx := FindIncompleteRef(chunk); idx >= 0 && idx < cutoff {

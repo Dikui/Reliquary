@@ -62,7 +62,9 @@ type ImageRef struct {
 type SplitterConfig struct {
 	ChunkSize    int
 	ChunkOverlap int
-	Separators   []string
+	// ChunkOverlapSet distinguishes explicit zero from the omitted Go zero value.
+	ChunkOverlapSet bool
+	Separators      []string
 
 	// Strategy selects an adaptive tier. Empty = legacy (backwards-compatible).
 	// See strategy.go for valid values.
@@ -94,12 +96,8 @@ type SplitterConfig struct {
 // (Go DefaultConfig: 64, knowledge.go buildSplitterConfig: 50, Python
 // docreader: 100). All consolidated to 80 here.
 //
-// Existing knowledge bases that stored ChunkOverlap=0 in the DB pick
-// this 80 up on next re-index; their previously-indexed embeddings will
-// not match new ones bit-for-bit. Recall stays similar but search
-// ranking can shift slightly. To freeze the old behavior on a per-KB
-// basis, explicitly set ChunkingConfig.ChunkOverlap to 64 before
-// re-indexing.
+// Omitted overlap uses 80. Explicitly stored zero disables overlap on the
+// next re-index; existing embeddings are unchanged until re-indexing.
 const (
 	DefaultChunkSize    = 512
 	DefaultChunkOverlap = 80

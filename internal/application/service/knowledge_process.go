@@ -225,12 +225,13 @@ func buildSplitterConfig(kb *types.KnowledgeBase) chunker.SplitterConfig {
 
 func buildSplitterConfigFromChunking(cc types.ChunkingConfig) chunker.SplitterConfig {
 	return chunker.NormalizeSplitterConfig(chunker.SplitterConfig{
-		ChunkSize:    cc.ChunkSize,
-		ChunkOverlap: cc.ChunkOverlap,
-		Separators:   cc.Separators,
-		Strategy:     cc.Strategy,
-		TokenLimit:   cc.TokenLimit,
-		Languages:    cc.Languages,
+		ChunkSize:       cc.ChunkSize,
+		ChunkOverlap:    cc.ChunkOverlap,
+		ChunkOverlapSet: cc.ChunkOverlapSet,
+		Separators:      cc.Separators,
+		Strategy:        cc.Strategy,
+		TokenLimit:      cc.TokenLimit,
+		Languages:       cc.Languages,
 	})
 }
 

@@ -94,7 +94,7 @@ func TestPreviewChunking_HappyPath_AutoStrategy(t *testing.T) {
 		Text: "# Top\nintro paragraph here.\n\n## Section A\nbody A.\n\n## Section B\nbody B.",
 		ChunkingConfig: PreviewChunkingPayload{
 			ChunkSize:    200,
-			ChunkOverlap: 20,
+			ChunkOverlap: previewOverlap(20),
 			Separators:   []string{"\n\n", "\n"},
 			Strategy:     "auto",
 		},
@@ -154,7 +154,7 @@ func TestPreviewChunking_LegacyStrategy_NoProfile(t *testing.T) {
 		Text: "para one.\n\npara two.\n\npara three.\n\npara four.",
 		ChunkingConfig: PreviewChunkingPayload{
 			ChunkSize:    100,
-			ChunkOverlap: 10,
+			ChunkOverlap: previewOverlap(10),
 			Separators:   []string{"\n\n"},
 			Strategy:     "legacy",
 		},
@@ -178,7 +178,7 @@ func TestPreviewChunking_ChunkTruncation(t *testing.T) {
 		Text: strings.Repeat("x.\n\n", previewMaxChunks+50),
 		ChunkingConfig: PreviewChunkingPayload{
 			ChunkSize:    3,
-			ChunkOverlap: 0,
+			ChunkOverlap: previewOverlap(0),
 			Separators:   []string{"\n\n"},
 			Strategy:     "legacy",
 		},
@@ -202,7 +202,7 @@ func TestPreviewChunking_ParentChildMatchesIngestion(t *testing.T) {
 	text := strings.Repeat("## Record\n"+strings.Repeat("A sufficiently long entry body. ", 10)+"\n\n", 12)
 	payload := PreviewChunkingPayload{
 		ChunkSize:         300,
-		ChunkOverlap:      30,
+		ChunkOverlap:      previewOverlap(30),
 		Separators:        []string{"\n\n", "\n"},
 		EnableParentChild: true,
 		ParentChunkSize:   300,
@@ -216,7 +216,7 @@ func TestPreviewChunking_ParentChildMatchesIngestion(t *testing.T) {
 
 	base := chunker.NormalizeSplitterConfig(chunker.SplitterConfig{
 		ChunkSize:    payload.ChunkSize,
-		ChunkOverlap: payload.ChunkOverlap,
+		ChunkOverlap: *payload.ChunkOverlap,
 		Separators:   payload.Separators,
 		Strategy:     payload.Strategy,
 	})
@@ -247,7 +247,7 @@ func TestPreviewChunking_SingleLevelUnchanged(t *testing.T) {
 	text := strings.Repeat("Paragraph one.\n\nParagraph two.\n\n", 20)
 	payload := PreviewChunkingPayload{
 		ChunkSize:    200,
-		ChunkOverlap: 20,
+		ChunkOverlap: previewOverlap(20),
 		Separators:   []string{"\n\n", "\n"},
 		Strategy:     chunker.StrategyLegacy,
 	}
@@ -258,7 +258,7 @@ func TestPreviewChunking_SingleLevelUnchanged(t *testing.T) {
 
 	want, _ := chunker.SplitWithDiagnostics(text, chunker.NormalizeSplitterConfig(chunker.SplitterConfig{
 		ChunkSize:    payload.ChunkSize,
-		ChunkOverlap: payload.ChunkOverlap,
+		ChunkOverlap: *payload.ChunkOverlap,
 		Separators:   payload.Separators,
 		Strategy:     payload.Strategy,
 	}))
@@ -273,7 +273,7 @@ func TestPreviewChunking_ParentChildDefaultSizes(t *testing.T) {
 	text := strings.Repeat("## Record\n"+strings.Repeat("A sufficiently long entry body. ", 10)+"\n\n", 12)
 	payload := PreviewChunkingPayload{
 		ChunkSize:         300,
-		ChunkOverlap:      30,
+		ChunkOverlap:      previewOverlap(30),
 		Separators:        []string{"\n\n", "\n"},
 		EnableParentChild: true,
 		Strategy:          chunker.StrategyHeading,
@@ -285,7 +285,7 @@ func TestPreviewChunking_ParentChildDefaultSizes(t *testing.T) {
 
 	base := chunker.NormalizeSplitterConfig(chunker.SplitterConfig{
 		ChunkSize:    payload.ChunkSize,
-		ChunkOverlap: payload.ChunkOverlap,
+		ChunkOverlap: *payload.ChunkOverlap,
 		Separators:   payload.Separators,
 		Strategy:     payload.Strategy,
 	})
@@ -304,13 +304,13 @@ func TestPreviewChunking_LineEndingsMatchUpload(t *testing.T) {
 	pasted := strings.ReplaceAll(uploaded, "\r\n", "\n") // HTML textarea normalization
 	payload := PreviewChunkingPayload{
 		ChunkSize:    500,
-		ChunkOverlap: 20,
+		ChunkOverlap: previewOverlap(20),
 		Separators:   []string{"\n\n", "\n", "。", "！", "？", ";", "；"},
 		Strategy:     chunker.StrategyHeading,
 	}
 	actual := chunker.Split(chunker.NormalizeLineEndings(uploaded), chunker.NormalizeSplitterConfig(chunker.SplitterConfig{
 		ChunkSize:    payload.ChunkSize,
-		ChunkOverlap: payload.ChunkOverlap,
+		ChunkOverlap: *payload.ChunkOverlap,
 		Separators:   payload.Separators,
 		Strategy:     payload.Strategy,
 	}))
@@ -338,5 +338,33 @@ func TestPreviewChunking_LineEndingsMatchUpload(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func previewOverlap(value int) *int { return &value }
+
+func TestPreviewChunking_ExplicitZeroOverlap(t *testing.T) {
+	for _, parentChild := range []bool{false, true} {
+		payload := PreviewChunkingPayload{
+			ChunkSize: 100, ChunkOverlap: previewOverlap(0), Strategy: "legacy",
+			EnableParentChild: parentChild, ParentChunkSize: 200, ChildChunkSize: 100,
+		}
+		w, parsed := postPreview(t, PreviewChunkingRequest{
+			Text: strings.Repeat("An individual structured record.\n\n", 30), ChunkingConfig: payload,
+		})
+		if w.Code != http.StatusOK {
+			t.Fatalf("status %d: %s", w.Code, w.Body.String())
+		}
+		chunks := parsed["data"].(map[string]any)["chunks"].([]any)
+		if len(chunks) < 2 {
+			t.Fatal("expected multiple chunks")
+		}
+		for i := 1; i < len(chunks); i++ {
+			previous := chunks[i-1].(map[string]any)
+			current := chunks[i].(map[string]any)
+			if current["start"].(float64) < previous["end"].(float64) {
+				t.Fatalf("parent-child=%v: adjacent chunks overlap", parentChild)
+			}
+		}
 	}
 }
