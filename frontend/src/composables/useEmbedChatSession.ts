@@ -27,7 +27,7 @@ export function useEmbedChatSession(options: {
   sessionSig: Ref<string>
   visitorId: Ref<string>
   channelId: string
-  token: string
+  token: Ref<string>
   agentId: string
   kbIds: string[]
   allowWebSearch?: boolean
@@ -110,7 +110,7 @@ export function useEmbedChatSession(options: {
     postEmbedMessageReceived(options.channelId, options.sessionId.value, content)
     relayEmbedWebhookEvent(
       options.channelId,
-      options.token,
+      options.token.value,
       options.sessionId.value,
       options.sessionSig.value,
       { type: 'message_received', content },
@@ -191,7 +191,7 @@ export function useEmbedChatSession(options: {
 
     getEmbedMessageList(
       options.channelId,
-      options.token,
+      options.token.value,
       data.session_id,
       data.limit,
       data.created_at || undefined,
@@ -233,7 +233,7 @@ export function useEmbedChatSession(options: {
     if (messageId) {
       stopEmbedSession(
         options.channelId,
-        options.token,
+        options.token.value,
         options.sessionId.value,
         messageId,
         options.sessionSig.value,
@@ -291,7 +291,7 @@ export function useEmbedChatSession(options: {
     postEmbedMessageSent(options.channelId, options.sessionId.value, value)
     relayEmbedWebhookEvent(
       options.channelId,
-      options.token,
+      options.token.value,
       options.sessionId.value,
       options.sessionSig.value,
       { type: 'message_sent', query: value },
@@ -322,7 +322,7 @@ export function useEmbedChatSession(options: {
       suggestion_attribution: suggestionAttribution || undefined,
       method: 'POST',
       url: endpoint,
-      embed_token: options.token,
+      embed_token: options.token.value,
       embed_session_sig: options.sessionSig.value,
       embed_visitor_id: options.visitorId.value,
     })

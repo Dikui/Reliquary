@@ -156,6 +156,29 @@ func TestExtractionDecisionsPreserveCorrectionAfterSnapshot(t *testing.T) {
 	require.Equal(t, corrected.Content, items[0].Content)
 	require.Equal(t, types.MemoryOriginManual, items[0].Origin)
 	require.Equal(t, 5, items[0].Importance)
+
+	// The delete decision has already passed the service's origin check when
+	// the user corrects this second item immediately before the DB mutation.
+	task, err := svc.Remember(ctx, types.MemoryItem{
+		Kind: types.MemoryKindTask, Topic: "上线计划", Content: "周一上线",
+	})
+	require.NoError(t, err)
+	underlying := svc.repo
+	correctedBeforeDelete := false
+	svc.repo = &correctionInterleaveRepo{MemoryRepository: underlying, beforeReplace: func() {
+		_, err := svc.UpdateItem(ctx, task.ID, "周五上线", 4)
+		require.NoError(t, err)
+		correctedBeforeDelete = true
+	}}
+	svc.applyDecisions(ctx, scope, cfg, transcriptSegment{}, []*types.MemoryItem{task}, []extractionDecision{
+		{Action: "delete", Target: &target},
+	})
+	require.True(t, correctedBeforeDelete)
+	retained, err := svc.repo.GetItem(ctx, scope, task.ID)
+	require.NoError(t, err)
+	require.Equal(t, types.MemoryStatusActive, retained.Status)
+	require.Equal(t, types.MemoryOriginManual, retained.Origin)
+	require.Equal(t, "周五上线", retained.Content)
 }
 
 func TestExtractionAppliesUpdateAndDeleteDecisions(t *testing.T) {

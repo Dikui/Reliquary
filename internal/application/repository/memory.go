@@ -378,6 +378,43 @@ func (r *memoryRepository) SupersedeItem(
 		}).Error
 }
 
+func (r *memoryRepository) ReplaceExtractedItem(
+	ctx context.Context, scope interfaces.MemoryScope, id string, replacement *types.MemoryItem,
+) (bool, error) {
+	applied := false
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		supersededBy := ""
+		if replacement != nil {
+			supersededBy = replacement.ID
+		}
+		now := time.Now()
+		// Check the current origin in the mutation itself. A service snapshot
+		// can predate a user's correction, even when it was just re-read.
+		result := tx.Model(&types.MemoryItem{}).
+			Where("tenant_id = ? AND subject_id = ? AND id = ? AND status = ? AND origin <> ?",
+				scope.TenantID, scope.SubjectID, id, types.MemoryStatusActive, types.MemoryOriginManual).
+			Updates(map[string]interface{}{
+				"status": types.MemoryStatusSuperseded, "invalid_at": now,
+				"superseded_by": supersededBy, "updated_at": now,
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return nil
+		}
+		if replacement != nil {
+			// If insertion fails, the transaction restores the old active item.
+			if err := tx.Create(replacement).Error; err != nil {
+				return err
+			}
+		}
+		applied = true
+		return nil
+	})
+	return applied && err == nil, err
+}
+
 func (r *memoryRepository) DeleteItem(
 	ctx context.Context, scope interfaces.MemoryScope, id string,
 ) error {

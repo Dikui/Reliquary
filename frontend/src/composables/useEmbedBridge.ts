@@ -170,7 +170,8 @@ export function useEmbedBridge(channelId: Ref<string>) {
       sessionId.value = resolved.id
       sessionSig.value = resolved.sig
       writeStoredSession(id, resolved)
-      token.value = apiToken
+      // A host refresh can arrive while bootstrap requests are in flight.
+      if (token.value === embedToken) token.value = apiToken
       postEmbedReady(id)
     } catch (e: unknown) {
       bootstrapped = false
@@ -219,6 +220,11 @@ export function useEmbedBridge(channelId: Ref<string>) {
 
     removeTokenListener = onEmbedHostToken((providedToken, providedChannelId) => {
       if (providedChannelId && providedChannelId !== channelId.value) return
+      if (bootstrapped) {
+        // Refresh credentials without discarding the signed conversation.
+        if (isEmbedSessionToken(providedToken)) token.value = providedToken
+        return
+      }
       bootstrap(providedToken)
     })
 

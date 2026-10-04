@@ -74,7 +74,25 @@ func (e *evaluationMemoryStorage) register(params *types.EvaluationDetail) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	logger.Infof(context.Background(), "Registering evaluation task: %s", params.Task.ID)
-	e.store[params.Task.ID] = params
+	e.store[params.Task.ID] = cloneEvaluationDetail(params)
+}
+
+// Keep stored progress private so callers can serialize or modify snapshots
+// without sharing mutable task state with the background evaluation.
+func cloneEvaluationDetail(detail *types.EvaluationDetail) *types.EvaluationDetail {
+	result := *detail
+	if detail.Task != nil {
+		task := *detail.Task
+		result.Task = &task
+	}
+	if detail.Params != nil {
+		result.Params = detail.Params.Clone()
+	}
+	if detail.Metric != nil {
+		metric := *detail.Metric
+		result.Metric = &metric
+	}
+	return &result
 }
 
 func (e *evaluationMemoryStorage) get(taskID string) (*types.EvaluationDetail, error) {
@@ -85,7 +103,7 @@ func (e *evaluationMemoryStorage) get(taskID string) (*types.EvaluationDetail, e
 	if !ok {
 		return nil, errors.New("task not found")
 	}
-	return res, nil
+	return cloneEvaluationDetail(res), nil
 }
 
 func (e *evaluationMemoryStorage) update(taskID string, fn func(params *types.EvaluationDetail)) error {
@@ -308,24 +326,30 @@ func (e *EvaluationService) Evaluation(ctx context.Context,
 		logger.Infof(newCtx, "Background evaluation started for task ID: %s", taskID)
 
 		// Update task status to running
-		detail.Task.Status = types.EvaluationStatueRunning
+		e.evaluationMemoryStorage.update(taskID, func(params *types.EvaluationDetail) {
+			params.Task.Status = types.EvaluationStatueRunning
+		})
 		logger.Info(newCtx, "Evaluation task status set to running")
 
 		// Execute actual evaluation
 		if err := e.EvalDataset(newCtx, detail, knowledgeBaseID); err != nil {
-			detail.Task.Status = types.EvaluationStatueFailed
-			detail.Task.ErrMsg = err.Error()
+			e.evaluationMemoryStorage.update(taskID, func(params *types.EvaluationDetail) {
+				params.Task.Status = types.EvaluationStatueFailed
+				params.Task.ErrMsg = err.Error()
+			})
 			logger.Errorf(newCtx, "Evaluation task failed: %v, task ID: %s", err, taskID)
 			return
 		}
 
 		// Mark task as completed successfully
 		logger.Infof(newCtx, "Evaluation task completed successfully, task ID: %s", taskID)
-		detail.Task.Status = types.EvaluationStatueSuccess
+		e.evaluationMemoryStorage.update(taskID, func(params *types.EvaluationDetail) {
+			params.Task.Status = types.EvaluationStatueSuccess
+		})
 	}()
 
 	logger.Infof(ctx, "Evaluation task created successfully, task ID: %s", taskID)
-	return detail, nil
+	return cloneEvaluationDetail(detail), nil
 }
 
 // EvalDataset performs the actual evaluation of a dataset

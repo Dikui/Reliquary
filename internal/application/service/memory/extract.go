@@ -1129,8 +1129,12 @@ func (s *Service) applyDecisions(
 			// Superseding with no replacement keeps the note visible in the
 			// memory manager as something that stopped being true, which is
 			// more useful than it disappearing without explanation.
-			if err := s.repo.SupersedeItem(ctx, scope, target.ID, ""); err != nil {
+			appliedDelete, err := s.repo.ReplaceExtractedItem(ctx, scope, target.ID, nil)
+			if err != nil {
 				logger.Warnf(ctx, "memory: delete decision failed: %v", err)
+				continue
+			}
+			if !appliedDelete {
 				continue
 			}
 			seenTopics[key] = struct{}{}

@@ -13,9 +13,15 @@ func TestApplyResourceURLQuery(t *testing.T) {
 	}
 
 	q = url.Values{}
-	applyResourceURLQuery(q, &ResourceURLOptions{ResourceURLs: ResourceURLModeHandle})
+	applyResourceURLQuery(q, &ResourceURLOptions{})
 	if len(q) != 0 {
-		t.Fatalf("handle mode: got %v, want empty", q)
+		t.Fatalf("empty mode: got %v, want empty", q)
+	}
+
+	q = url.Values{}
+	applyResourceURLQuery(q, &ResourceURLOptions{ResourceURLs: ResourceURLModeHandle})
+	if got := q.Get("resource_urls"); got != "handle" {
+		t.Fatalf("handle mode: got %q, want handle", got)
 	}
 
 	q = url.Values{}

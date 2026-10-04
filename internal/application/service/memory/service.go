@@ -398,14 +398,23 @@ func (s *Service) write(
 	if stored.Origin == "" {
 		stored.Origin = types.MemoryOriginExtracted
 	}
-	if err := s.repo.CreateItem(ctx, stored); err != nil {
-		return nil, fmt.Errorf("create memory item: %w", err)
-	}
-	if existing != nil {
-		// Supersede rather than delete: the old statement keeps its content
-		// and gains invalid_at, so the memory manager can show what changed.
-		if err := s.repo.SupersedeItem(ctx, scope, existing.ID, stored.ID); err != nil {
-			logger.Warnf(ctx, "memory: supersede %s failed: %v", existing.ID, err)
+	if existing != nil && stored.Origin == types.MemoryOriginExtracted {
+		applied, err := s.repo.ReplaceExtractedItem(ctx, scope, existing.ID, stored)
+		if err != nil {
+			return nil, fmt.Errorf("replace extracted memory: %w", err)
+		}
+		if !applied {
+			return s.repo.GetItem(ctx, scope, existing.ID)
+		}
+	} else {
+		if err := s.repo.CreateItem(ctx, stored); err != nil {
+			return nil, fmt.Errorf("create memory item: %w", err)
+		}
+		if existing != nil {
+			// Preserve the old statement so the memory manager can show what changed.
+			if err := s.repo.SupersedeItem(ctx, scope, existing.ID, stored.ID); err != nil {
+				logger.Warnf(ctx, "memory: supersede %s failed: %v", existing.ID, err)
+			}
 		}
 	}
 

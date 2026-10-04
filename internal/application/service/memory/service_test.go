@@ -13,6 +13,7 @@ import (
 	"gorm.io/gorm/logger"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/types"
+	"reliquary/internal/types/interfaces"
 )
 
 // newMemoryHarness builds a service over a real SQLite database. The write
@@ -511,6 +512,28 @@ func TestUpdateItemMarksMemoryAsManual(t *testing.T) {
 	require.Contains(t, svc.Recall(ctx, "随便问点什么").Prompt, "喜欢简短的解释")
 }
 
+// Interleave a user's correction at the boundary preceding the real DB mutation.
+type correctionInterleaveRepo struct {
+	interfaces.MemoryRepository
+	afterFind     func()
+	beforeReplace func()
+}
+
+func (r *correctionInterleaveRepo) FindActiveByKey(ctx context.Context, scope interfaces.MemoryScope, key string) (*types.MemoryItem, error) {
+	item, err := r.MemoryRepository.FindActiveByKey(ctx, scope, key)
+	if err == nil && item != nil && r.afterFind != nil {
+		r.afterFind()
+	}
+	return item, err
+}
+
+func (r *correctionInterleaveRepo) ReplaceExtractedItem(ctx context.Context, scope interfaces.MemoryScope, id string, replacement *types.MemoryItem) (bool, error) {
+	if r.beforeReplace != nil {
+		r.beforeReplace()
+	}
+	return r.MemoryRepository.ReplaceExtractedItem(ctx, scope, id, replacement)
+}
+
 func TestManualCorrectionSurvivesExtractionAndAllowsExplicitReplacement(t *testing.T) {
 	svc, _, tenantRepo := newMemoryHarness(t)
 	ctx := enabledCtx(t, tenantRepo, 1, "alice")
@@ -518,11 +541,16 @@ func TestManualCorrectionSurvivesExtractionAndAllowsExplicitReplacement(t *testi
 		Kind: types.MemoryKindFact, Topic: "生产数据库", Content: "使用 MySQL",
 	})
 	require.NoError(t, err)
-	corrected, err := svc.UpdateItem(ctx, item.ID, "使用 PostgreSQL", 5)
-	require.NoError(t, err)
+	underlying := svc.repo
+	var corrected *types.MemoryItem
+	svc.repo = &correctionInterleaveRepo{MemoryRepository: underlying, afterFind: func() {
+		// Return the extracted snapshot only after the user's correction commits.
+		corrected, err = svc.UpdateItem(ctx, item.ID, "使用 PostgreSQL", 5)
+		require.NoError(t, err)
+	}}
 
 	retained, err := svc.Remember(ctx, types.MemoryItem{
-		Kind: types.MemoryKindFact, Topic: "生产数据库", Content: "使用 MySQL",
+		Kind: types.MemoryKindFact, Topic: "生产数据库", Content: "使用 Oracle",
 		Origin: types.MemoryOriginExtracted,
 	})
 	require.NoError(t, err)
@@ -533,6 +561,10 @@ func TestManualCorrectionSurvivesExtractionAndAllowsExplicitReplacement(t *testi
 	require.NoError(t, err)
 	require.Equal(t, int64(1), total)
 	require.Equal(t, 5, items[0].Importance)
+	_, all, err := svc.ListItems(ctx, "", 10, 0)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), all, "a protected replacement must not leave a new row")
+	svc.repo = underlying
 
 	replacement, err := svc.Remember(ctx, types.MemoryItem{
 		Kind: types.MemoryKindFact, Topic: "生产数据库", Content: "使用 SQLite",

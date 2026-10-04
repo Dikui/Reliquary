@@ -23,7 +23,7 @@ type ResourceURLOptions struct {
 }
 
 func applyResourceURLQuery(q url.Values, opts *ResourceURLOptions) {
-	if opts == nil || opts.ResourceURLs == "" || opts.ResourceURLs == ResourceURLModeHandle {
+	if opts == nil || opts.ResourceURLs == "" {
 		return
 	}
 	q.Set("resource_urls", string(opts.ResourceURLs))

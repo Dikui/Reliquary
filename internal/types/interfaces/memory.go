@@ -68,6 +68,9 @@ type MemoryRepository interface {
 	UpdateItemContent(ctx context.Context, scope MemoryScope, id, content, normalizedKey string, importance int) error
 	// SupersedeItem marks an outdated item as replaced by another one.
 	SupersedeItem(ctx context.Context, scope MemoryScope, id, supersededBy string) error
+	// ReplaceExtractedItem atomically replaces an active non-manual item.
+	// A nil replacement only supersedes the item. False means no change was made.
+	ReplaceExtractedItem(ctx context.Context, scope MemoryScope, id string, replacement *types.MemoryItem) (bool, error)
 	// DeleteItem physically removes one item. Forgetting means forgetting.
 	DeleteItem(ctx context.Context, scope MemoryScope, id string) error
 	// DeleteAll removes every item in the scope and returns how many were removed.
