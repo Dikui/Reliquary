@@ -124,6 +124,7 @@ export const useChatResourcesStore = defineStore('chatResources', () => {
       try {
         const res: any = await listKnowledgeBases()
         const data = res?.data && Array.isArray(res.data) ? res.data : []
+        if (kbAllGen !== gen) return []
         rawKnowledgeBases.value = data
         loadedAt.value.knowledgeBases = Date.now()
         const orgStore = useOrganizationStore()
@@ -349,6 +350,7 @@ export const useChatResourcesStore = defineStore('chatResources', () => {
       // 同时丢弃所有 inflight 句柄，否则失效后仍在飞行的请求会把旧数据写回缓存。
       inflight.clear()
       agentKbInflight.clear()
+      kbAllGen++
       kbAllInflight = null
       agentsLoadedLocale = ''
       bumpAgentsGeneration()
@@ -363,6 +365,7 @@ export const useChatResourcesStore = defineStore('chatResources', () => {
     if (keys.includes('knowledgeBases')) {
       agentKbCache.clear()
       agentKbInflight.clear()
+      kbAllGen++
       kbAllInflight = null
       invalidateKnowledgeBaseDetail()
     }

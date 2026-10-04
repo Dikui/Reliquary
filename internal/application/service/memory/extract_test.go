@@ -130,6 +130,34 @@ func TestExtractionReadsOnlyUserMessages(t *testing.T) {
 	require.Contains(t, models.lastPrompt, "帮我看看这个函数")
 }
 
+func TestExtractionDecisionsPreserveCorrectionAfterSnapshot(t *testing.T) {
+	svc, _, tenantRepo := newMemoryHarness(t)
+	ctx := enabledCtx(t, tenantRepo, 1, "alice")
+	item, err := svc.Remember(ctx, types.MemoryItem{
+		Kind: types.MemoryKindFact, Topic: "生产数据库", Content: "使用 MySQL",
+	})
+	require.NoError(t, err)
+	// Extraction's snapshot predates the user's correction.
+	corrected, err := svc.UpdateItem(ctx, item.ID, "使用 PostgreSQL", 5)
+	require.NoError(t, err)
+	scope, cfg, ok := svc.enabledScope(ctx)
+	require.True(t, ok)
+	target := 0
+	svc.applyDecisions(ctx, scope, cfg, transcriptSegment{}, []*types.MemoryItem{item}, []extractionDecision{
+		{Action: "update", Target: &target, Kind: types.MemoryKindFact, Topic: "数据库引擎", Content: "使用 MySQL"},
+		{Action: "delete", Target: &target},
+		{Action: "delete", Topic: "生产数据库"},
+	})
+
+	items, total, err := svc.ListItems(ctx, types.MemoryStatusActive, 10, 0)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), total)
+	require.Equal(t, corrected.ID, items[0].ID)
+	require.Equal(t, corrected.Content, items[0].Content)
+	require.Equal(t, types.MemoryOriginManual, items[0].Origin)
+	require.Equal(t, 5, items[0].Importance)
+}
+
 func TestExtractionAppliesUpdateAndDeleteDecisions(t *testing.T) {
 	svc, tenantRepo, messages, models, _ := newExtractionHarness(t)
 	tenantRepo.set(7, &types.MemoryConfig{Enabled: true, WriteMode: types.MemoryWriteAuto})

@@ -372,6 +372,12 @@ func (s *Service) write(
 		// The new statement subsumes the old one, so let it supersede.
 		existing = duplicate
 	}
+	if existing != nil && existing.Origin == types.MemoryOriginManual &&
+		(item.Origin == "" || item.Origin == types.MemoryOriginExtracted) {
+		// A user's correction takes precedence over later background extraction.
+		// Explicit and manual writes can still replace it.
+		return existing, nil
+	}
 
 	stored := &types.MemoryItem{
 		ID:              uuid.New().String(),

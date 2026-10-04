@@ -319,13 +319,24 @@ func (s *messageService) ClearSessionMessages(ctx context.Context, sessionID str
 		return err
 	}
 
-	// Async cleanup: delete associated Knowledge entries from the chat history KB
-	bgCtx := context.WithoutCancel(ctx)
-	go s.DeleteSessionKnowledge(bgCtx, sessionID)
+	// Capture knowledge IDs while the messages are still visible to the repository.
+	knowledgeIDs, err := s.messageRepo.GetKnowledgeIDsBySessionID(ctx, sessionID)
+	if err != nil {
+		logger.Errorf(ctx, "Failed to get knowledge IDs for session %s: %v", sessionID, err)
+		return err
+	}
 
 	if err := s.messageRepo.DeleteMessagesBySessionID(ctx, sessionID); err != nil {
 		logger.Errorf(ctx, "Failed to delete messages for session %s: %v", sessionID, err)
 		return err
+	}
+	if len(knowledgeIDs) > 0 {
+		bgCtx := context.WithoutCancel(ctx)
+		go func() {
+			if err := s.knowService.DeleteKnowledgeList(bgCtx, knowledgeIDs); err != nil {
+				logger.Warnf(bgCtx, "Failed to batch delete chat history knowledge for session %s: %v", sessionID, err)
+			}
+		}()
 	}
 	if s.suggestionRepo != nil {
 		if err := s.suggestionRepo.DeleteBySessionID(ctx, tenantID, sessionID); err != nil {

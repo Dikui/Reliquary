@@ -1097,6 +1097,14 @@ func (s *Service) applyDecisions(
 		if decision.Target != nil && *decision.Target >= 0 && *decision.Target < len(existing) {
 			target = existing[*decision.Target]
 		}
+		if target != nil && (action == "update" || action == "delete") {
+			// The user may have corrected this note while the model was running.
+			current, err := s.repo.GetItem(ctx, scope, target.ID)
+			if err != nil || current == nil || current.Origin == types.MemoryOriginManual {
+				continue
+			}
+			target = current
+		}
 		if target != nil && topic == "" {
 			topic = target.Topic
 		}
@@ -1114,6 +1122,9 @@ func (s *Service) applyDecisions(
 					continue
 				}
 				target = found
+			}
+			if target.Origin == types.MemoryOriginManual {
+				continue
 			}
 			// Superseding with no replacement keeps the note visible in the
 			// memory manager as something that stopped being true, which is

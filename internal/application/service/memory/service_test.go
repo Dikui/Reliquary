@@ -511,6 +511,41 @@ func TestUpdateItemMarksMemoryAsManual(t *testing.T) {
 	require.Contains(t, svc.Recall(ctx, "随便问点什么").Prompt, "喜欢简短的解释")
 }
 
+func TestManualCorrectionSurvivesExtractionAndAllowsExplicitReplacement(t *testing.T) {
+	svc, _, tenantRepo := newMemoryHarness(t)
+	ctx := enabledCtx(t, tenantRepo, 1, "alice")
+	item, err := svc.Remember(ctx, types.MemoryItem{
+		Kind: types.MemoryKindFact, Topic: "生产数据库", Content: "使用 MySQL",
+	})
+	require.NoError(t, err)
+	corrected, err := svc.UpdateItem(ctx, item.ID, "使用 PostgreSQL", 5)
+	require.NoError(t, err)
+
+	retained, err := svc.Remember(ctx, types.MemoryItem{
+		Kind: types.MemoryKindFact, Topic: "生产数据库", Content: "使用 MySQL",
+		Origin: types.MemoryOriginExtracted,
+	})
+	require.NoError(t, err)
+	require.Equal(t, corrected.ID, retained.ID)
+	require.Equal(t, corrected.Content, retained.Content)
+	require.Equal(t, types.MemoryOriginManual, retained.Origin)
+	items, total, err := svc.ListItems(ctx, types.MemoryStatusActive, 10, 0)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), total)
+	require.Equal(t, 5, items[0].Importance)
+
+	replacement, err := svc.Remember(ctx, types.MemoryItem{
+		Kind: types.MemoryKindFact, Topic: "生产数据库", Content: "使用 SQLite",
+		Origin: types.MemoryOriginExplicit,
+	})
+	require.NoError(t, err)
+	require.NotEqual(t, corrected.ID, replacement.ID)
+	items, total, err = svc.ListItems(ctx, types.MemoryStatusActive, 10, 0)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), total)
+	require.Equal(t, replacement.ID, items[0].ID)
+}
+
 func TestResidentBlockSurvivesCacheLoss(t *testing.T) {
 	svc, db, tenantRepo := newMemoryHarness(t)
 	ctx := enabledCtx(t, tenantRepo, 1, "alice")

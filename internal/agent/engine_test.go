@@ -404,14 +404,53 @@ func TestEstimateCurrentTokensDoesNotCountToolSchemasWithoutUsage(t *testing.T) 
 // not paying for one every round.
 type summarizerChat struct {
 	mockChat
-	calls int
+	calls   int
+	prompts []string
+	summary string
 }
 
 func (s *summarizerChat) Chat(
-	context.Context, []chat.Message, *chat.ChatOptions,
+	_ context.Context, messages []chat.Message, _ *chat.ChatOptions,
 ) (*types.ChatResponse, error) {
 	s.calls++
+	for _, msg := range messages {
+		s.prompts = append(s.prompts, msg.Content)
+	}
+	if s.summary != "" {
+		return &types.ChatResponse{Content: s.summary, FinishReason: "stop"}, nil
+	}
 	return &types.ChatResponse{Content: "## Goal\ndo the thing", FinishReason: "stop"}, nil
+}
+
+func TestOverflowRecoveryPreservesUserMessageAfterPreviousSummary(t *testing.T) {
+	const constraint = "USER_CONSTRAINT_PRESERVE_THIS"
+	model := &summarizerChat{
+		summary: constraint,
+		mockChat: mockChat{responses: []mockResponse{
+			{chunks: []types.StreamResponse{{ResponseType: types.ResponseTypeError, Content: "maximum context length exceeded", Done: true}}},
+			{chunks: []types.StreamResponse{{ResponseType: types.ResponseTypeAnswer, Content: "done", FinishReason: "stop", Done: true}}},
+		}},
+	}
+	engine := newTestEngine(t, model, withMaxContextTokens(40000), func(cfg *types.AgentConfig) {
+		cfg.CompactionKeepRecentTokens = 100
+	})
+	messages := []chat.Message{
+		{Role: "system", Content: "system"},
+		compaction.SummaryMessage("previous facts"),
+		{Role: "user", Content: constraint},
+		{Role: "assistant", Content: strings.Repeat("long previous result ", 5000)},
+		{Role: "user", Content: "continue"},
+	}
+	response, err := engine.callLLMWithRetry(t.Context(), &messages, nil, &types.AgentState{}, "continue", 0, "session")
+	require.NoError(t, err)
+	require.Equal(t, "done", response.Content)
+	require.Contains(t, strings.Join(model.prompts, "\n"), constraint, "the summarizer must receive the original user constraint")
+	require.Len(t, model.mockChat.calls, 2)
+	var retryContent string
+	for _, msg := range model.mockChat.calls[1] {
+		retryContent += msg.Content
+	}
+	require.Contains(t, retryContent, constraint)
 }
 
 // The bug this replaces: inside one ReAct turn nothing was compactable, so
