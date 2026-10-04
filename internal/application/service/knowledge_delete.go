@@ -169,6 +169,11 @@ func (s *knowledgeService) DeleteKnowledge(ctx context.Context, id string) error
 		imageInfoStrs = append(imageInfoStrs, ci.ImageInfo)
 	}
 	imageURLs := collectImageURLs(ctx, imageInfoStrs)
+	historicalImages, err := evidenceImageReferences(ctx, s.db, tenantID, []string{id})
+	if err != nil {
+		return err
+	}
+	imageURLs = append(imageURLs, historicalImages...)
 
 	wg := errgroup.Group{}
 	// Delete knowledge embeddings from vector store.
@@ -248,6 +253,11 @@ func (s *knowledgeService) DeleteKnowledge(ctx context.Context, id string) error
 	// row could leave a "file missing but row present" zombie that can neither be
 	// reparsed nor cleanly re-deleted (issue #2192). Orphaning a file after the
 	// row is gone is the tolerable failure mode instead.
+	if s.db != nil && s.db.Migrator().HasTable(&types.KnowledgeEvidence{}) {
+		if err := NewKnowledgeContextService(s.db, s.modelService).DeleteMessages(ctx, knowledge.KnowledgeBaseID, []string{id}); err != nil {
+			return err
+		}
+	}
 	if err := s.repo.DeleteKnowledge(ctx, tenantID, id); err != nil {
 		return err
 	}
@@ -641,6 +651,11 @@ func (s *knowledgeService) DeleteKnowledgeList(ctx context.Context, ids []string
 	kbImageURLs := make(map[string][]string) // kbID → []imageURL
 	for _, k := range knowledgeList {
 		knowledgeToKB[k.ID] = k.KnowledgeBaseID
+		historicalImages, err := evidenceImageReferences(ctx, s.db, tenantInfo.ID, []string{k.ID})
+		if err != nil {
+			return err
+		}
+		kbImageURLs[k.KnowledgeBaseID] = append(kbImageURLs[k.KnowledgeBaseID], historicalImages...)
 		if intake, _ := k.IntakeMetadata(); intake != nil {
 			kbImageURLs[k.KnowledgeBaseID] = append(kbImageURLs[k.KnowledgeBaseID], intake.Images...)
 		}
@@ -744,6 +759,13 @@ func (s *knowledgeService) DeleteKnowledgeList(ctx context.Context, ids []string
 	// gone avoids "file missing but row present" zombies that break reparse /
 	// re-delete when an earlier cleanup step failed (issue #2192). A failure below
 	// only orphans storage.
+	if s.db != nil && s.db.Migrator().HasTable(&types.KnowledgeEvidence{}) {
+		for kbID, sourceIDs := range kbKnowledgeIDs {
+			if err := NewKnowledgeContextService(s.db, s.modelService).DeleteMessages(ctx, kbID, sourceIDs); err != nil {
+				return err
+			}
+		}
+	}
 	if err := s.repo.DeleteKnowledgeList(ctx, tenantInfo.ID, ids); err != nil {
 		return err
 	}
@@ -856,6 +878,21 @@ func (s *knowledgeService) cleanupKnowledgeResources(ctx context.Context, knowle
 		imageInfoStrs = append(imageInfoStrs, ci.ImageInfo)
 	}
 	imageURLs := collectImageURLs(ctx, imageInfoStrs)
+	historicalImages, err := evidenceImageReferences(ctx, s.db, tenantInfo.ID, []string{knowledge.ID})
+	if err != nil {
+		return errors.Join(cleanupErr, err)
+	}
+	retained := map[string]bool{}
+	for _, ref := range historicalImages {
+		retained[ref] = true
+	}
+	deletableImages := imageURLs[:0]
+	for _, ref := range imageURLs {
+		if !retained[ref] {
+			deletableImages = append(deletableImages, ref)
+		}
+	}
+	imageURLs = deletableImages
 
 	if err := s.chunkService.DeleteChunksByKnowledgeID(ctx, knowledge.ID); err != nil {
 		logger.GetLogger(ctx).WithField("error", err).Error("Failed to delete manual knowledge chunks")

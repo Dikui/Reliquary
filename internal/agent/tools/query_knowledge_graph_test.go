@@ -98,87 +98,42 @@ func (s *stubKnowledgeBaseService) ProcessKBDelete(context.Context, *asynq.Task)
 	return nil
 }
 
-func TestQueryKnowledgeGraph_ReportsConfiguredEntityAndRelationTypes(t *testing.T) {
-	tool := NewQueryKnowledgeGraphTool(&stubKnowledgeBaseService{
-		kb: &types.KnowledgeBase{
-			ID: "kb-1",
-			ExtractConfig: &types.ExtractConfig{
-				Enabled: true,
-				Nodes: []*types.GraphNode{
-					{Name: "合同"},
-					{Name: "法务部门"},
-					{Name: "审批流程"},
-					{Name: "合同"},
-					nil,
-					{Name: ""},
-				},
-				Relations: []*types.GraphRelation{
-					{Type: "属于"},
-					{Type: "管理"},
-					{Type: "审批"},
-					{Type: "管理"},
-					{Type: ""},
-					nil,
-				},
-			},
-		},
-		results: []*types.SearchResult{
-			{
-				ID:             "chunk-approval-1",
-				Content:        "合同审批流程由法务部门与采购部门共同维护，法务部门负责合规审查。",
-				KnowledgeID:    "doc-approval",
-				KnowledgeTitle: "合同审批管理制度",
-				Score:          0.97,
-				MatchType:      types.MatchTypeEmbedding,
-			},
-			{
-				ID:             "chunk-approval-2",
-				Content:        "采购申请提交后进入合同审批流程，审批完成后归档到合同台账。",
-				KnowledgeID:    "doc-procurement",
-				KnowledgeTitle: "采购与合同协作规范",
-				Score:          0.89,
-				MatchType:      types.MatchTypeKeywords,
-			},
-			{
-				ID:             "chunk-approval-3",
-				Content:        "法务部门管理标准合同模板，并维护合同风险审查清单。",
-				KnowledgeID:    "doc-legal",
-				KnowledgeTitle: "法务部职责说明",
-				Score:          0.84,
-				MatchType:      types.MatchTypeEmbedding,
-			},
-		},
-	})
-
-	args, err := json.Marshal(QueryKnowledgeGraphInput{
-		KnowledgeBaseIDs: []string{"kb-1"},
-		Query:            "合同审批与法务协作",
-	})
-	require.NoError(t, err)
-
+func TestQueryKnowledgeGraphReturnsSourcedFactsAndRealRelations(t *testing.T) {
+	tool := NewQueryKnowledgeGraphTool(&stubKnowledgeBaseService{kb: &types.KnowledgeBase{ID: "kb"}}).
+		WithContextQuery(func(ctx context.Context, kbID string, q types.KnowledgeContextQuery) (*types.KnowledgeContextResult, error) {
+			require.Equal(t, "kb", kbID)
+			require.Equal(t, "Model A", q.Entity)
+			return &types.KnowledgeContextResult{
+				Entities: []types.KnowledgeEntity{{ID: "model", CanonicalName: "Model A"}, {ID: "vendor", CanonicalName: "Vendor"}},
+				Facts:    []types.KnowledgeFact{{ID: "fact", Kind: types.KnowledgeFactRelation, SubjectEntityID: "model", Predicate: "released_by", ObjectEntityID: "vendor", EvidenceID: "evidence", Quote: "Vendor released Model A."}},
+				Evidence: []types.KnowledgeEvidence{{ID: "evidence", KnowledgeID: "message", Body: "Vendor released Model A.", OriginalURL: "https://example.com/announcement"}},
+			}, nil
+		})
+	args, _ := json.Marshal(QueryKnowledgeGraphInput{KnowledgeBaseIDs: []string{"kb"}, Query: "Model A"})
 	result, err := tool.Execute(context.Background(), args)
 	require.NoError(t, err)
-	require.NotNil(t, result)
 	require.True(t, result.Success)
-	t.Logf("tool output:\n%s", result.Output)
+	assert.Contains(t, result.Output, "released_by")
+	assert.Contains(t, result.Output, "https://example.com/announcement")
+	graph := result.Data["graph_data"].(map[string]any)
+	require.Len(t, graph["edges"], 1)
+	edge := graph["edges"].([]map[string]any)[0]
+	assert.Equal(t, "model", edge["source"])
+	assert.Equal(t, "vendor", edge["target"])
+	assert.Equal(t, "evidence", edge["evidence_id"])
+	assert.NotContains(t, result.Output, "Chunk 1")
+}
 
-	assert.Contains(t, result.Output, "Entity Types (3)")
-	assert.Contains(t, result.Output, "Relationship Types (3)")
-	assert.NotContains(t, result.Output, "No entity types configured")
-	assert.NotContains(t, result.Output, "No relationship types configured")
-	assert.Contains(t, result.Output, "合同")
-	assert.Contains(t, result.Output, "法务部门")
-	assert.Contains(t, result.Output, "审批流程")
-	assert.Contains(t, result.Output, "管理")
-	assert.Contains(t, result.Output, "审批")
-	assert.Contains(t, result.Output, "✓ Found 3 relevant results (deduplicated)")
-	assert.Contains(t, result.Output, "Result #1:")
-	assert.Contains(t, result.Output, "Result #2:")
-	assert.Contains(t, result.Output, "Result #3:")
-	assert.Contains(t, result.Output, "合同审批管理制度")
-
-	graphConfig, ok := result.Data["graph_config"].(map[string]interface{})
-	require.True(t, ok)
-	assert.ElementsMatch(t, []string{"合同", "审批流程", "法务部门"}, graphConfig["nodes"])
-	assert.ElementsMatch(t, []string{"属于", "审批", "管理"}, graphConfig["relations"])
+func TestQueryKnowledgeGraphFailsClosedOutsideScope(t *testing.T) {
+	called := false
+	tool := NewQueryKnowledgeGraphTool(nil, types.SearchTargets{&types.SearchTarget{Type: types.SearchTargetTypeKnowledgeBase, KnowledgeBaseID: "allowed"}}).
+		WithContextQuery(func(context.Context, string, types.KnowledgeContextQuery) (*types.KnowledgeContextResult, error) {
+			called = true
+			return nil, nil
+		})
+	args, _ := json.Marshal(QueryKnowledgeGraphInput{KnowledgeBaseIDs: []string{"forbidden"}, Query: "Model A"})
+	result, err := tool.Execute(context.Background(), args)
+	require.Error(t, err)
+	require.False(t, result.Success)
+	require.False(t, called)
 }

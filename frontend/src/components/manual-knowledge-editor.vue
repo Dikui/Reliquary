@@ -685,13 +685,13 @@ const handleSave = async (targetStatus: ManualStatus) => {
       response = await updateManualKnowledge(currentKnowledgeId.value, payload)
     } else {
       response = await createManualKnowledge(form.kbId, payload)
-      knowledgeID = response?.data?.id || knowledgeID
-      currentKnowledgeId.value = knowledgeID || null
-      uiStore.manualEditorKnowledgeId = currentKnowledgeId.value
       kbId = form.kbId
     }
 
     if (response?.success) {
+      knowledgeID = response?.data?.id || knowledgeID
+      currentKnowledgeId.value = knowledgeID || null
+      uiStore.manualEditorKnowledgeId = currentKnowledgeId.value
       MessagePlugin.success(
         targetStatus === 'draft'
           ? t('manualEditor.success.draftSaved')

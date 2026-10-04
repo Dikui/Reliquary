@@ -30,6 +30,11 @@ func (s *knowledgeBaseService) processSearchResults(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
+	for id, knowledge := range knowledgeMap {
+		if knowledge.IsArchivedSource() || knowledge.IsSourceUpdateCandidate() || knowledge.ParseStatus == types.ParseStatusRejected {
+			delete(knowledgeMap, id)
+		}
+	}
 
 	// Batch fetch chunks (include shared KB chunks)
 	logger.Infof(ctx, "Fetching chunk data for %d IDs", len(index.chunkIDs))

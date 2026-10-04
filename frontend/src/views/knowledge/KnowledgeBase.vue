@@ -56,6 +56,7 @@ import BatchTagDialog from './components/BatchTagDialog.vue';
 import KbTagManageDrawer from './components/KbTagManageDrawer.vue';
 import KnowledgeAnomaliesDrawer from './components/KnowledgeAnomaliesDrawer.vue';
 import KnowledgeStrategyDrawer from './components/KnowledgeStrategyDrawer.vue';
+import KnowledgeWorkbench from './components/KnowledgeWorkbench.vue';
 import { decideKnowledgeAnomaly } from '@/api/knowledge-anomalies';
 import { tagLabel, isConcreteTag } from './tagLabel';
 import { listFavorites, addFavorite, removeFavorite } from '@/api/user-favorites';
@@ -94,7 +95,7 @@ const kbLoading = ref(false);
 const docListLoading = ref(true);
 const isFAQ = computed(() => (kbInfo.value?.type || '') === 'faq');
 const isWiki = computed(() => !!kbInfo.value?.indexing_strategy?.wiki_enabled);
-const validTabs = ['documents', 'wiki', 'graph'] as const
+const validTabs = ['documents', 'wiki', 'graph', 'context'] as const
 type KbTab = typeof validTabs[number]
 const initTab = validTabs.includes(route.query.tab as any) ? (route.query.tab as KbTab) : 'documents'
 const activeKbTab = ref<KbTab>(initTab);
@@ -2436,8 +2437,19 @@ async function createNewSession(value: string): Promise<void> {
                     </t-tooltip>
                   </span>
                 </t-tooltip>
+                <span class="breadcrumb-tab-sep">/</span>
+                <span :class="['breadcrumb-tab', { active: activeKbTab === 'context' }]"
+                  @click="activeKbTab = 'context'">{{ $t('knowledgeWorkbench.tabLabel') }}</span>
               </template>
-              <span v-else class="breadcrumb-current">{{ $t('knowledgeEditor.document.title') }}</span>
+              <template v-else>
+                <span :class="['breadcrumb-tab', { active: activeKbTab === 'documents' }]"
+                  @click="activeKbTab = 'documents'">{{ $t('knowledgeEditor.document.title') }}</span>
+                <template v-if="!isFAQ">
+                  <span class="breadcrumb-tab-sep">/</span>
+                  <span :class="['breadcrumb-tab', { active: activeKbTab === 'context' }]"
+                    @click="activeKbTab = 'context'">{{ $t('knowledgeWorkbench.tabLabel') }}</span>
+                </template>
+              </template>
             </h2>
             <!-- 标题行右侧的动作锚点：聚拢"信息"和"设置"两个圆形按钮。 -->
             <div class="kb-title-actions">
@@ -2462,7 +2474,7 @@ async function createNewSession(value: string): Promise<void> {
               </t-tooltip>
             </div>
           </div>
-          <p class="document-subtitle">{{ $t('knowledgeEditor.document.subtitle') }}</p>
+          <p v-if="activeKbTab !== 'context'" class="document-subtitle">{{ $t('knowledgeEditor.document.subtitle') }}</p>
           <p v-if="unsupportedFileTypes.length" class="parser-hint" @click="goToParserSettings">
             <t-icon name="info-circle" class="parser-hint-icon" />
             <span>{{$t('knowledgeBase.unsupportedTypesHint', {
@@ -2486,7 +2498,12 @@ async function createNewSession(value: string): Promise<void> {
           @view-graph="onViewWikiInGraph" />
       </div>
 
-      <template v-if="activeKbTab === 'documents' || !isWiki">
+      <div v-if="activeKbTab === 'context' && !isFAQ" class="knowledge-context-area">
+        <KnowledgeWorkbench v-if="kbId" :kb-id="kbId" :can-manage="canManage"
+          @open-source="openSourceDoc" />
+      </div>
+
+      <template v-if="activeKbTab === 'documents' || (!isWiki && activeKbTab !== 'context') || (isFAQ && activeKbTab === 'context')">
         <div class="knowledge-main">
           <KbFolderTree v-if="showFolderTree && !folderTreeCollapsed" :tree="folderTree" :selected-path="selectedFolderPath"
             :loading="folderTreeLoading" :can-edit="canEdit"

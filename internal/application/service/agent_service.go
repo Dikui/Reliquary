@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -28,6 +29,111 @@ import (
 )
 
 const MAX_ITERATIONS = 100 // Max iterations for agent execution
+
+// NewWorkflowSkillExecutor reuses the chat runtime's installed skills, personal
+// credentials, sandbox pinning and artifact downloads for persistent workflows.
+func NewWorkflowSkillExecutor(
+	agents interfaces.AgentService,
+	sessions interfaces.SessionService,
+	customAgents interfaces.CustomAgentService,
+	collector *ArtifactCollector,
+) WorkflowSkillExecutor {
+	return func(ctx context.Context, tenantID uint64, ownerID, kbID string, cfg WorkflowSkillConfig) (*WorkflowSkillResult, error) {
+		a, agentOK := agents.(*agentService)
+		s, sessionOK := sessions.(*sessionService)
+		if !agentOK || !sessionOK {
+			return nil, ErrWorkflowSkillUnavailable
+		}
+		activeTenant, _ := types.TenantIDFromContext(ctx)
+		activeOwner, _ := types.UserIDFromContext(ctx)
+		if activeTenant != tenantID || activeOwner != ownerID || cfg.RunID == "" || cfg.StepID == "" {
+			return nil, ErrWorkflowForbidden
+		}
+		customAgent, err := customAgents.GetAgentByID(ctx, cfg.AgentID)
+		if err != nil {
+			return nil, err
+		}
+		if customAgent == nil || (customAgent.TenantID != tenantID && !customAgent.IsBuiltin) {
+			return nil, ErrWorkflowForbidden
+		}
+		config := &types.AgentConfig{}
+		s.configureSkillsFromAgent(ctx, config, customAgent)
+		if !config.SkillsEnabled {
+			return nil, fmt.Errorf("the selected agent has no enabled skills")
+		}
+		// A run/step uses its own owner-scoped session. Its sandbox and files can
+		// be revisited through the existing session artifact endpoints.
+		description := "knowledge-workflow:" + cfg.RunID + ":" + cfg.StepID
+		var session types.Session
+		err = a.db.WithContext(ctx).Where("tenant_id = ? AND user_id = ? AND description = ?", tenantID, ownerID, description).First(&session).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			created, createErr := sessions.CreateSession(ctx, &types.Session{TenantID: tenantID, UserID: ownerID, Title: customAgent.Name + " · " + cfg.StepID, Description: description})
+			if createErr != nil {
+				return nil, createErr
+			}
+			session = *created
+		} else if err != nil {
+			return nil, err
+		}
+		var completed types.Message
+		err = a.db.WithContext(ctx).Where("session_id = ? AND request_id = ? AND is_completed = ?", session.ID, description, true).Order("created_at DESC").First(&completed).Error
+		if err == nil {
+			return workflowSkillMessageResult(&completed), nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		ctx = types.WithSessionID(ctx, session.ID)
+		ctx = types.WithSandboxTenantID(ctx, tenantID)
+		config.SandboxConfigID, config.TenantSkills = skillsForRun(ctx, s.sandboxPinner, s.sandboxConfigRepo, s.tenantSkillRepo, tenantID, session.ID, config.SandboxConfigID)
+		if len(config.TenantSkills) == 0 {
+			return nil, fmt.Errorf("the selected sandbox has no installed ready skills")
+		}
+		manager, err := a.initializeSkillsManager(ctx, session.ID, config, tools.NewToolRegistry())
+		if err != nil {
+			return nil, err
+		}
+		input, err := json.Marshal(tools.ExecuteSkillScriptInput{SkillName: cfg.SkillName, ScriptPath: cfg.ScriptPath, Args: cfg.Args, Input: cfg.Input})
+		if err != nil {
+			return nil, err
+		}
+		result, err := tools.NewExecuteSkillScriptTool(manager).Execute(ctx, input)
+		if err != nil {
+			return nil, err
+		}
+		if result == nil {
+			return nil, fmt.Errorf("skill execution returned no result")
+		}
+		// ponytail: a crash before this save may repeat the script; external-write
+		// skills must use their own idempotency key before enabling automatic retry.
+		durationMS, _ := result.Data["duration_ms"].(int64)
+		message, err := a.messageService.CreateMessage(ctx, &types.Message{SessionID: session.ID, RequestID: description, Role: "assistant", Content: result.Output, IsCompleted: false, AgentID: cfg.AgentID, Channel: "workflow", AgentDurationMs: durationMS})
+		if err != nil {
+			return nil, err
+		}
+		artifacts, err := collector.Collect(ctx, session.ID, message.ID, tenantID, manager.SkillOutputDir(session.ID, cfg.SkillName))
+		if err != nil {
+			return nil, fmt.Errorf("collect skill outputs: %w", err)
+		}
+		message.Artifacts = artifacts
+		message.IsCompleted = result.Success
+		if err := a.messageService.UpdateMessage(ctx, message); err != nil {
+			return nil, err
+		}
+		if !result.Success {
+			return nil, fmt.Errorf("skill execution failed: %s", result.Error)
+		}
+		return workflowSkillMessageResult(message), nil
+	}
+}
+
+func workflowSkillMessageResult(message *types.Message) *WorkflowSkillResult {
+	out := &WorkflowSkillResult{Output: message.Content, SessionID: message.SessionID, MessageID: message.ID, DurationMS: message.AgentDurationMs, Artifacts: append(types.MessageArtifacts(nil), message.Artifacts...)}
+	for i := range out.Artifacts {
+		out.Artifacts[i].URL = ""
+	}
+	return out
+}
 
 // dedupStrings removes duplicate strings while preserving the first occurrence order.
 func dedupStrings(in []string) []string {
@@ -1038,7 +1144,8 @@ func (s *agentService) registerTools(
 			toolToRegister = tools.NewListKnowledgeChunksTool(s.knowledgeService, s.chunkService, config.SearchTargets)
 		case tools.ToolQueryKnowledgeGraph:
 			toolToRegister = tools.NewQueryKnowledgeGraphTool(s.knowledgeBaseService, config.SearchTargets).
-				WithKnowledgeScope(s.knowledgeService)
+				WithKnowledgeScope(s.knowledgeService).
+				WithContextQuery(NewKnowledgeContextService(s.db, s.modelService).Query)
 		case tools.ToolGetDocumentInfo:
 			toolToRegister = tools.NewGetDocumentInfoTool(s.knowledgeService, s.chunkService, config.SearchTargets)
 		case tools.ToolSearchConversations:

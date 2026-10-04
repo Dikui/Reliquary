@@ -215,6 +215,11 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewKnowledgeTagService))
 	must(container.Provide(service.NewKnowledgeAnomalyService))
 	must(container.Provide(service.NewKnowledgeStrategyService))
+	must(container.Provide(service.NewKnowledgeContextService))
+	must(container.Provide(service.NewKnowledgeContextWorker))
+	must(container.Provide(service.NewWorkflowSkillExecutor))
+	must(container.Provide(service.NewKnowledgeWorkflowService))
+	must(container.Provide(func(s *service.KnowledgeContextService) interfaces.KnowledgeContextReader { return s }))
 	must(container.Provide(embedding.NewBatchEmbedder))
 	must(container.Provide(service.NewModelService))
 	must(container.Provide(service.NewDatasetService))
@@ -402,6 +407,8 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewKnowledgeHandler))
 	must(container.Provide(handler.NewKnowledgeAnomalyHandler))
 	must(container.Provide(handler.NewKnowledgeStrategyHandler))
+	must(container.Provide(handler.NewKnowledgeContextHandler))
+	must(container.Provide(handler.NewKnowledgeWorkflowHandler))
 	must(container.Provide(handler.NewChunkHandler))
 	must(container.Provide(handler.NewFAQHandler))
 	must(container.Provide(handler.NewTagHandler))
@@ -470,6 +477,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	// persistence succeeded immediately before trigger enqueue failed). Re-arm
 	// them only after the matching handlers are ready.
 	must(container.Invoke(recoverPendingWikiTasks))
+	must(container.Invoke(startKnowledgeWorkflowScheduler))
 
 	logger.Infof(ctx, "[Container] Container initialization completed successfully")
 	return container
@@ -1802,4 +1810,11 @@ func startAuditLogRetention(
 		runner.Stop()
 		return nil
 	})
+}
+
+func startKnowledgeWorkflowScheduler(svc *service.KnowledgeWorkflowService, cleaner interfaces.ResourceCleaner) {
+	if err := svc.Start(context.Background()); err != nil {
+		logger.Warnf(context.Background(), "[Container] knowledge workflow scheduler: %v", err)
+	}
+	cleaner.RegisterWithName("KnowledgeWorkflowScheduler", func() error { svc.Stop(); return nil })
 }

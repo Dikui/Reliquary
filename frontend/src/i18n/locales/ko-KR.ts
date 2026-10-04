@@ -1,4 +1,70 @@
 export default {
+  knowledgeStrategy: {
+    "evaluation": {
+      "title": "필터 평가",
+      "intro": "원문에 정답 라벨을 붙이고 개발 세트와 홀드아웃 세트에서 이전 규칙과 후보 규칙을 비교합니다. 홀드아웃은 조정에 사용하지 않습니다. 평가로 규칙이 활성화되지 않습니다.",
+      "format": "한 줄에 하나: knowledge_id, select|reject|either, development|holdout",
+      "run": "이 버전 평가",
+      "result": "평가 결과",
+      "invalidCount": "샘플을 1~20개 입력하세요.",
+      "invalidFormat": "각 줄에 ID, 유효한 라벨, 유효한 데이터 분할이 있어야 합니다.",
+      "duplicateIDs": "지식 ID는 한 번만 입력할 수 있습니다.",
+      "countedSamples": "지표에 포함된 샘플 {count}개",
+    "allSamples": "전체 샘플 {count}개",
+    "tp": "올바른 포함",
+    "fp": "잘못된 포함",
+    "fn": "누락된 포함",
+    "tn": "올바른 거부",
+    "correct": "정확함",
+    "incorrect": "오류",
+    "notCounted": "지표 제외",
+      "old": "이전 규칙",
+      "new": "후보 규칙",
+      "precision": "정밀도",
+      "recall": "재현율",
+      "mistakes": "잘못 판단한 샘플 {count}개",
+      "note": "“어느 쪽이든 가능” 샘플은 표시되지만 집계에서 제외됩니다. 분모가 0이면 정밀도 또는 재현율은 —로 표시됩니다.",
+      "labels": {
+        "select": "포함",
+        "reject": "거부",
+        "either": "어느 쪽이든 가능"
+      },
+      "splits": {
+        "development": "개발 세트",
+        "holdout": "홀드아웃 세트"
+      },
+      "decisions": {
+        "approved": "포함",
+        "rejected": "거부"
+      }
+    }
+  },
+  knowledgeWorkbench: {
+    fusion: {"minValue": "최소 값", "maxValue": "최대 값", "unit": "비교 단위", "queryHint": "주요 필드: context_length, local_deployment, license. 수치 비교에는 호환되는 단위가 필요합니다. 개수는 반환된 결과만 나타냅니다.", "originalField": "원본 필드 이름", "snapshotTitle": "인용 원문 확인", "quoteMissing": "이 인용문이 스냅샷과 정확히 일치하지 않습니다. 원문을 확인하세요. 위치를 추측하지 않습니다.", "sameStory": "관련된 이전 이벤트", "roundup": "요약 자료: 개별 이벤트와 별도로 유지", "current_period": "이번 기간 자료", "background": "과거 배경 자료", "unknown_date": "날짜 불명"},
+    tabLabel: '지식 워크벤치', title: '지식 워크벤치', subtitle: '사실, 이벤트, 출처를 검색하고 조사 과정을 추적 가능한 워크플로로 정리합니다.', sections: '지식 워크벤치 섹션', refresh: '새로고침', rebuild: '지식 컨텍스트 재구성', requestFailed: '요청에 실패했습니다. 다시 시도해 주세요.', emptyValue: '설정되지 않음', unknownDate: '시간 알 수 없음', facts: '사실', correct: '사실 수정', correctionSaved: '출처와 이력을 보존해 사실을 수정했습니다.', correctionTitle: '사실 수정', correctionIntro: '“{predicate}”의 새 버전을 만듭니다. 인용문은 출처 원문과 일치해야 합니다.', correctionValue: '수정된 값', correctionValueType: '값 유형', correctionUnit: '단위', correctionQuote: '출처 원문 인용', correctionNote: '수정 설명', correctionFrom: '시작 시점', correctionTo: '종료 시점', correctionValueInvalid: '선택한 유형에 맞는 값을 입력해 주세요.', cancel: '취소', factPeriod: '유효 기간', rebuildQueued: '{count}개 출처가 재구성 대기열에 추가되었습니다. 백그라운드 처리가 끝나면 결과가 갱신됩니다.', loadMore: '더 보기',
+    nav: { query: '구조화 검색', entities: '객체 및 사실', events: '이벤트 주목도', evidence: '출처 증거', workflows: '추적 워크플로', reports: '조사 보고서' },
+    query: { title: '지식 컨텍스트 검색', description: '객체, 속성, 관계, 시간 범위로 사실을 필터링하고 현재 값, 이력, 근거를 확인합니다.', entity: '객체 이름', entityPlaceholder: '예: Acme Inc.', predicate: '사실 속성', predicatePlaceholder: '예: 본사, 상태, 투자 단계', relation: '관계 유형', relationPlaceholder: '예: 투자, 인수, 협력', since: '시작', until: '종료', history: '대체된 사실 포함', submit: '검색', clear: '필터 지우기', resultCounts: '객체 {entities}개, 사실 {facts}개, 이벤트 {events}개, 증거 {evidence}개를 찾았습니다.', historyIncluded: '결과에 과거 버전이 포함되어 있습니다', empty: '일치하는 사실, 이벤트 또는 출처가 없습니다.' },
+    entities: { title: '객체 및 사실', description: '그래프 객체의 관계, 속성, 출처, 변경 이력을 확인합니다.', filter: '객체 필터', empty: '객체가 없습니다', unknownType: '분류되지 않음', aliases: '개 별칭', choose: '객체를 선택해 사실을 확인하세요', includeHistory: '과거 사실 포함', noFacts: '표시할 사실이 없습니다.', unknownObject: '알 수 없는 객체', merge: '중복 객체 병합', mergeTitle: '객체 병합', mergeHint: '유지할 대표 객체를 선택하세요. 사실, 관계, 별칭이 대상 객체로 이동합니다.', mergeSource: '병합할 객체', mergeTarget: '유지할 객체', mergeTargetPlaceholder: '유지할 객체 선택', mergeWarning: '병합하면 지식 컨텍스트의 객체 참조가 변경되며 여기서 되돌릴 수 없습니다.', mergeSaved: '객체를 병합했습니다' },
+    events: { title: '이벤트 주목도', description: '최근 이벤트를 중요도순으로 살펴보고 이유, 관련 객체, 증거를 확인합니다.', empty: '이벤트가 없습니다', event: '이벤트', heat: '중요도', sourceCount: '출처 {count}개', hideDetails: '상세 정보 숨기기', showDetails: '주목 이유 보기', whyHot: '중요도 및 주목도 이유', noReason: '주목 이유가 없습니다.', scored: '주목도 점수', attentionScore: '주목도 {score}', noSources: '연결된 출처가 없습니다.', noDescription: '이벤트 요약이 없습니다.' },
+    evidence: { title: '출처 증거', description: '출처 스냅샷, 버전, 추출 상태, 인용 정보를 확인합니다.', filter: '제목, 발행자 또는 URL 필터', empty: '출처 증거가 없습니다', source: '출처', openSnapshot: '출처 스냅샷 열기', openSource: '원본 링크 열기', openKnowledge: '원본 메시지 열기', version: '버전', hash: '콘텐츠 해시', extraction: '추출 상태', noBody: '출처 스냅샷에 본문이 없습니다.', untitled: '제목 없는 출처', status: { current: '현재 버전', superseded: '이전 버전' }, extractionStatus: { pending: '추출 대기', complete: '추출 완료', failed: '추출 실패' } },
+    factStatus: { current: '현재', superseded: '대체됨', corrected: '수정됨' },
+    factDifference: { conflict: '유효 기간이 겹치며 기록된 값이 다릅니다', potential: '확인 필요: 유효 날짜 정보가 불완전합니다' },
+    workflows: {
+      title: '추적 워크플로', description: '지식 검색, 지속 조사, 출처가 포함된 보고서를 조건, 사람 검토, Skill과 함께 예약합니다.', create: '워크플로 만들기', edit: '워크플로 편집', new: '워크플로 설정', cancel: '편집 취소', name: '이름', namePlaceholder: '예: 주간 경쟁사 동향 추적', descriptionField: '설명', cron: 'Cron 일정', manualOnly: '비워 두면 수동 실행만 가능', timezone: '시간대', enabled: '사용', disabled: '사용 안 함', steps: '워크플로 단계', stepsHint: '단계는 순서대로 실행됩니다. 의존성, 조건 분기, 검토 결과가 실행 기록에 저장됩니다.', addStep: '단계 추가', stepId: '단계 ID', remove: '단계 삭제', dependsOn: '선행 단계', onlyWhen: '조건이 일치할 때만 실행', save: '워크플로 저장', validation: '이름을 입력하고 각 단계에 고유한 ID를 지정하세요.', saved: '워크플로를 저장했습니다', run: '지금 실행', disable: '사용 중지', enable: '사용', noDescription: '설명 없음', runs: '실행 기록', selectWorkflow: '실행 기록을 보려면 워크플로를 선택하세요', noRuns: '실행 기록이 없습니다.', runDetail: '실행 상세', retry: '실패한 실행 재시도', resume: '일시 중지된 실행 재개', attempt: '{count}회 시도', reviewPending: '실행이 사람의 검토를 기다리고 있습니다.', approve: '승인 후 계속', reject: '실행 거부', runStarted: '워크플로를 시작했습니다', invalidArgs: 'Skill 단계 “{step}”의 인수는 문자열 JSON 배열이어야 합니다.', empty: '워크플로가 없습니다. 일간, 주간 또는 지속 조사 흐름을 만드세요.',
+      decision: { approve: '검토를 승인했습니다', reject: '실행을 거부했습니다' },
+      config: { query: '검색어', limit: '최대 결과 수', entity: '객체 이름 (필수)', predicate: '사실 속성', relation: '관계 유형', objectEntityId: '관련 객체 ID', since: '시작', until: '종료', includeHistory: '과거 사실 포함', maxResults: '웹 결과 최대 수 (30 이하)', provider: '검색 제공자 ID (선택)', ingest: '조사 결과를 지식 베이스에 추가', reportTitle: '보고서 제목', timeFrom: '보고서 시작일', timeTo: '보고서 종료일', timeWindow: '보고서 기간', days: '이동 기간 일수 (1–365)', timezone: '시간대', previousDay: '전날', previousWeek: '지난주', rollingDays: '최근 N일', prompt: '보고서 지침', slug: 'Wiki 페이지 슬러그', pageTitle: '페이지 제목', pageType: '페이지 유형', sourceStep: '콘텐츠 출처 단계', summary: '추가 요약', agentId: '에이전트 ID', skillName: 'Skill 이름', scriptPath: '스크립트 경로', inputStep: '입력 단계', input: '텍스트 입력', args: '인수 JSON 배열', conditionStep: '조건 데이터 단계', path: '결과 필드 경로', operator: '연산자 (exists / equals / not_equals / contains / gt / gte)', value: '비교 값', reviewMessage: '검토 안내' },
+      stepTypes: { search: '지식 검색', fact_query: '사실 검색', web_research: '웹 조사', report: '보고서 생성', wiki_update: 'Wiki 업데이트', skill: 'Skill 실행', condition: '조건', human_review: '사람 검토' },
+      runStatus: { queued: '대기열', running: '실행 중', waiting_ingestion: '출처 등록 대기', paused: '검토 대기', completed: '완료', failed: '실패', rejected: '거부됨', cancelled: '취소됨' },
+      stepStatus: { pending: '대기 중', running: '실행 중', waiting_ingestion: '출처 등록 대기', waiting_review: '검토 대기', succeeded: '완료', failed: '실패', skipped: '건너뜀', rejected: '거부됨' },
+      templates: {
+        daily: { title: '일간 브리핑', description: '매일 최근 지식을 검색하고 출처가 포함된 요약을 작성합니다.', searchQuery: '지식 베이스와 최근 업데이트에서 중요한 변화를 찾습니다', reportTitle: '일일 지식 업데이트', reportPrompt: '주요 변화와 영향, 출처를 요약하고 확인된 사실과 추가 검증이 필요한 내용을 구분하세요.' },
+        weekly: { title: '주간 사실 검토', description: '선택한 객체의 사실과 변경 사항을 매주 요약합니다.', reportTitle: '주간 사실 변경 사항', reportPrompt: '선택된 객체의 이번 주 사실 변경을 검토하고 날짜, 증거, 과거 차이를 보존하세요.' },
+        research: { title: '지속 조사 추적', description: '일정에 따라 웹을 조사하고 컨텍스트를 갱신해 추세 보고서를 작성합니다.', reportTitle: '지속 조사 보고서', reportPrompt: '웹 조사 결과와 기존 사실을 종합해 추세, 증거, 충돌, 미해결 질문을 설명하세요.' },
+        custom: { title: '사용자 지정 워크플로', description: '검색, 조사, 조건, Skill, 사람 검토를 직접 조합합니다.' }
+      }
+    },
+    reports: { title: '조사 보고서', description: '출처 인용이 포함된 워크플로 보고서를 읽고 Markdown으로 다운로드합니다.', empty: '조사 보고서가 없습니다.', download: 'Markdown 다운로드', citations: '인용 및 출처', noCitations: '첨부된 인용이 없습니다.' }
+  },
   platformApiKeys: {
     title: '플랫폼 API 키',
     description: '워크스페이스 간 자동화를 위한 플랫폼 자격 증명입니다. 워크스페이스 API에는 X-Tenant-ID를 사용하세요.',

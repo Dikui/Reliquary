@@ -25,13 +25,113 @@ func (s strategyKB) GetKnowledgeBaseByIDOnly(context.Context, string) (*types.Kn
 	return s.kb, nil
 }
 
-type strategyOriginal struct{ interfaces.KnowledgeService }
+type strategyOriginal struct {
+	interfaces.KnowledgeService
+	bodies  map[string]string
+	missing map[string]bool
+}
 
-func (strategyOriginal) GetKnowledgeFile(context.Context, string) (io.ReadCloser, string, error) {
+func (s strategyOriginal) GetKnowledgeFile(_ context.Context, id string) (io.ReadCloser, string, error) {
+	if s.missing[id] {
+		return nil, "", errors.New("original unavailable")
+	}
+	if body, ok := s.bodies[id]; ok {
+		return io.NopCloser(strings.NewReader(body)), "report.md", nil
+	}
 	return io.NopCloser(strings.NewReader("A sourced report with several observations and evidence.")), "report.md", nil
 }
 
+func TestKnowledgeStrategyEvaluationDevelopmentHoldoutAndScope(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(`CREATE TABLE knowledge_bases (id TEXT PRIMARY KEY, tenant_id INTEGER, deleted_at DATETIME)`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO knowledge_bases (id,tenant_id) VALUES ('kb',1)`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE knowledges (id TEXT PRIMARY KEY, tenant_id INTEGER, knowledge_base_id TEXT, title TEXT, channel TEXT, parse_status TEXT, metadata TEXT, deleted_at DATETIME)`).Error)
+	require.NoError(t, db.AutoMigrate(&types.KnowledgeStrategyVersion{}))
+
+	insert := func(id, kbID, status, decision string) {
+		t.Helper()
+		message := &types.Knowledge{ID: id, TenantID: 1, KnowledgeBaseID: kbID, Title: id, ParseStatus: status}
+		require.NoError(t, message.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: decision,
+			OriginalPath: "originals/" + id, SourceInfo: types.SourceInfo{Publisher: "Publisher", OriginalURL: "https://example.org/" + id, PublishedAt: "2026-09-01"}}))
+		require.NoError(t, db.Exec(`INSERT INTO knowledges (id,tenant_id,knowledge_base_id,title,channel,parse_status,metadata) VALUES (?,?,?,?,?,?,?)`,
+			message.ID, message.TenantID, message.KnowledgeBaseID, message.Title, message.Channel, message.ParseStatus, string(message.Metadata)).Error)
+	}
+	insert("dev-select", "kb", types.ParseStatusCompleted, "approved")
+	insert("test-reject", "kb", types.ParseStatusRejected, "rejected")
+	insert("dev-either", "kb", types.ParseStatusPending, "pending")
+	insert("foreign", "another-kb", types.ParseStatusCompleted, "approved")
+
+	version := &types.KnowledgeStrategyVersion{ID: "candidate", TenantID: 1, KnowledgeBaseID: "kb", Status: "candidate",
+		PreviousRules: types.JSON(`{"filter":""}`), Rules: types.JSON(`{"filter":"Prefer detailed evidence"}`), Reason: "evaluation fixture", SampleResults: types.JSON(`[]`), CreatedBy: "owner"}
+	require.NoError(t, db.Create(version).Error)
+	kb := &types.KnowledgeBase{ID: "kb", TenantID: 1, CreatorID: "owner", SummaryModelID: "model"}
+	svc := NewKnowledgeStrategyService(db, strategyKB{kb: kb}, strategyOriginal{}, intakeModelService{chat: strategyChat{}}, nil, nil)
+
+	result, err := svc.Evaluate(anomalyContext("owner"), "kb", version.ID, []KnowledgeStrategyEvaluationSample{
+		{KnowledgeID: "dev-select", Label: "select", Split: "development"},
+		{KnowledgeID: "test-reject", Label: "reject", Split: "holdout"},
+		{KnowledgeID: "dev-either", Label: "either", Split: "development"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Development.Samples, "either labels are excluded from confusion counts")
+	require.Equal(t, 1, result.Development.Old.TP)
+	require.Equal(t, 1, result.Development.New.FN)
+	require.Equal(t, 1, result.Holdout.Old.FP)
+	require.Equal(t, 1, result.Holdout.New.TN)
+	require.Nil(t, result.Holdout.New.Precision, "precision is null when no positive decisions exist")
+	require.Nil(t, result.Holdout.Old.Recall, "recall is null when there are no positive labels")
+	require.Nil(t, result.Cases[2].OldCorrect)
+	require.Nil(t, result.Cases[2].NewCorrect)
+	require.Equal(t, "approved", result.Cases[0].OldDecision)
+	require.Equal(t, "rejected", result.Cases[0].NewDecision)
+	var unchanged types.KnowledgeStrategyVersion
+	require.NoError(t, db.First(&unchanged, "id = ?", version.ID).Error)
+	require.Equal(t, "candidate", unchanged.Status)
+	require.JSONEq(t, string(version.PreviousRules), string(unchanged.PreviousRules))
+	require.JSONEq(t, string(version.Rules), string(unchanged.Rules))
+	require.JSONEq(t, `[]`, string(unchanged.SampleResults), "gold labels and evaluation results are not persisted")
+
+	_, err = svc.Evaluate(anomalyContext("reviewer"), "kb", version.ID, []KnowledgeStrategyEvaluationSample{{KnowledgeID: "dev-select", Label: "select", Split: "development"}})
+	require.Error(t, err, "only the KB owner can evaluate strategy samples")
+	_, err = svc.Evaluate(anomalyContext("owner"), "kb", version.ID, []KnowledgeStrategyEvaluationSample{{KnowledgeID: "foreign", Label: "select", Split: "development"}})
+	require.Error(t, err, "sample IDs are scoped to the requested tenant and KB")
+
+	missingOriginalSvc := NewKnowledgeStrategyService(db, strategyKB{kb: kb}, strategyOriginal{missing: map[string]bool{"test-reject": true}}, intakeModelService{chat: strategyChat{}}, nil, nil)
+	_, err = missingOriginalSvc.Evaluate(anomalyContext("owner"), "kb", version.ID, []KnowledgeStrategyEvaluationSample{{KnowledgeID: "test-reject", Label: "reject", Split: "holdout"}})
+	require.Error(t, err, "rejected samples without a retrievable original cannot be evaluated")
+}
+
 type strategyChat struct{}
+
+type strategyPromptRecorder struct{ prompts []string }
+
+func (s *strategyPromptRecorder) Chat(ctx context.Context, messages []chat.Message, options *chat.ChatOptions) (*types.ChatResponse, error) {
+	s.prompts = append(s.prompts, messages[0].Content)
+	return (strategyChat{}).Chat(ctx, messages, options)
+}
+
+func (*strategyPromptRecorder) ChatStream(context.Context, []chat.Message, *chat.ChatOptions) (<-chan types.StreamResponse, error) {
+	return nil, errors.New("not used")
+}
+func (*strategyPromptRecorder) GetModelName() string { return "strategy-recorder" }
+func (*strategyPromptRecorder) GetModelID() string   { return "strategy-recorder" }
+
+func TestKnowledgeStrategyEvaluationUsesFilterOnlyChannelRules(t *testing.T) {
+	model := &strategyPromptRecorder{}
+	rules := KnowledgeStrategyRules{Filter: "filter rule", Tags: "tag rule", Collection: "collection rule"}
+	_, _, err := strategyFilterDecision(context.Background(), model, rules, types.ChannelRSS, "original", types.SourceInfo{})
+	require.NoError(t, err)
+	require.Contains(t, model.prompts[0], "filter rule")
+	require.Contains(t, model.prompts[0], "Require the complete original")
+	require.NotContains(t, model.prompts[0], "tag rule")
+	require.NotContains(t, model.prompts[0], "collection rule")
+
+	_, _, err = strategyFilterDecision(context.Background(), model, rules, types.ConnectorTypeGrokX, "post", types.SourceInfo{})
+	require.NoError(t, err)
+	require.Contains(t, model.prompts[1], "For Grok X Search")
+	require.NotContains(t, model.prompts[1], "collection rule")
+}
 
 func (strategyChat) Chat(_ context.Context, messages []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
 	system := messages[0].Content

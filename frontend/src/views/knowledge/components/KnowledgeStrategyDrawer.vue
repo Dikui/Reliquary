@@ -8,6 +8,12 @@
       <t-button :loading="saving" :disabled="!instruction || !sampleIDs.length || sampleIDs.length > 3" @click="propose">
         {{ t('knowledgeBase.strategy.trial') }}
       </t-button>
+      <section class="strategy-evaluation-input">
+        <h3>{{ t('knowledgeStrategy.evaluation.title') }}</h3>
+        <p>{{ t('knowledgeStrategy.evaluation.intro') }}</p>
+        <t-textarea v-model="evaluationText" :placeholder="t('knowledgeStrategy.evaluation.format')" :autosize="{ minRows: 4, maxRows: 8 }" />
+        <p v-if="evaluationInputError" class="strategy-evaluation__error">{{ evaluationInputError }}</p>
+      </section>
       <div class="strategy-reprocess">
         <h3>{{ t('knowledgeBase.strategy.reprocess') }}</h3>
         <p>{{ t('knowledgeBase.strategy.reprocessHint') }}</p>
@@ -56,6 +62,37 @@
               <div>{{ t('knowledgeBase.strategy.newResearch') }}: {{ sample.new_research }}</div>
             </div>
           </details>
+          <t-button size="small" variant="outline" :loading="evaluating === version.id"
+            :disabled="evaluating !== '' || !evaluationText.trim()" @click="evaluate(version)">
+            {{ t('knowledgeStrategy.evaluation.run') }}
+          </t-button>
+          <p v-if="evaluationErrors[version.id]" class="strategy-evaluation__error">{{ evaluationErrors[version.id] }}</p>
+          <section v-if="evaluationResults[version.id]" class="strategy-evaluation-result">
+            <h4>{{ t('knowledgeStrategy.evaluation.result') }}</h4>
+            <div v-for="part in evaluationParts(version.id)" :key="part.key" class="strategy-evaluation-split">
+              <strong>{{ part.title }} · {{ t('knowledgeStrategy.evaluation.countedSamples', { count: part.result.samples }) }}</strong>
+              <div class="strategy-evaluation-compare">
+                <div v-for="column in [{ key: 'old', value: part.result.old }, { key: 'new', value: part.result.new }]" :key="column.key" class="strategy-evaluation-model">
+                  <strong>{{ t(`knowledgeStrategy.evaluation.${column.key}`) }}</strong>
+                  <div class="strategy-evaluation-counts">
+                    <span>{{ t('knowledgeStrategy.evaluation.tp') }} {{ column.value.tp }}</span><span>{{ t('knowledgeStrategy.evaluation.fp') }} {{ column.value.fp }}</span>
+                    <span>{{ t('knowledgeStrategy.evaluation.fn') }} {{ column.value.fn }}</span><span>{{ t('knowledgeStrategy.evaluation.tn') }} {{ column.value.tn }}</span>
+                  </div>
+                  <div>{{ t('knowledgeStrategy.evaluation.precision') }}: {{ formatMetric(column.value.precision) }}</div>
+                  <div>{{ t('knowledgeStrategy.evaluation.recall') }}: {{ formatMetric(column.value.recall) }}</div>
+                </div>
+              </div>
+            </div>
+            <details v-if="evaluationCasesFor(version.id).length">
+              <summary>{{ t('knowledgeStrategy.evaluation.allSamples', { count: evaluationCasesFor(version.id).length }) }} · {{ t('knowledgeStrategy.evaluation.mistakes', { count: evaluationErrorsFor(version.id).length }) }}</summary>
+              <div v-for="sample in evaluationCasesFor(version.id)" :key="sample.knowledge_id" class="strategy-sample">
+                <strong>{{ sample.knowledge_id }} · {{ t(`knowledgeStrategy.evaluation.labels.${sample.label}`) }} · {{ t(`knowledgeStrategy.evaluation.splits.${sample.split}`) }}</strong>
+                <div>{{ t('knowledgeStrategy.evaluation.old') }}: {{ t(`knowledgeStrategy.evaluation.decisions.${sample.old_decision}`) }} · {{ t(`knowledgeStrategy.evaluation.${sample.old_correct == null ? 'notCounted' : sample.old_correct ? 'correct' : 'incorrect'}`) }} — {{ sample.old_reason }}</div>
+                <div>{{ t('knowledgeStrategy.evaluation.new') }}: {{ t(`knowledgeStrategy.evaluation.decisions.${sample.new_decision}`) }} · {{ t(`knowledgeStrategy.evaluation.${sample.new_correct == null ? 'notCounted' : sample.new_correct ? 'correct' : 'incorrect'}`) }} — {{ sample.new_reason }}</div>
+              </div>
+            </details>
+            <p class="strategy-evaluation__note">{{ t('knowledgeStrategy.evaluation.note') }}</p>
+          </section>
           <t-button v-if="version.status !== 'active'" size="small" variant="outline" :loading="activating === version.id"
             @click="activate(version)">{{ t(version.status === 'candidate' ? 'knowledgeBase.strategy.activate' : 'knowledgeBase.strategy.restore') }}</t-button>
         </article>
@@ -69,7 +106,8 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import { listKnowledgeStrategies, proposeKnowledgeStrategy, activateKnowledgeStrategy, reprocessKnowledge,
-  type KnowledgeStrategyVersion, type KnowledgeReprocessResult } from '@/api/knowledge-strategies'
+  evaluateKnowledgeStrategy, type KnowledgeStrategyVersion, type KnowledgeReprocessResult,
+  type KnowledgeStrategyEvaluationResult, type KnowledgeStrategyEvaluationSample } from '@/api/knowledge-strategies'
 
 const props = defineProps<{ visible: boolean; kbId: string; selectedIds: string[]; initialTagId?: string;
   tags: Array<{ id: string; name: string; kind?: string }> }>()
@@ -81,6 +119,11 @@ const sampleText = ref('')
 const loading = ref(false)
 const saving = ref(false)
 const activating = ref('')
+const evaluating = ref('')
+const evaluationText = ref('')
+const evaluationInputError = ref('')
+const evaluationResults = ref<Record<string, KnowledgeStrategyEvaluationResult>>({})
+const evaluationErrors = ref<Record<string, string>>({})
 const reprocessing = ref(false)
 const lastResult = ref<KnowledgeReprocessResult | null>(null)
 const scopeMode = ref<'messages' | 'tag'>('messages')
@@ -122,6 +165,63 @@ async function propose() {
   }
 }
 
+function parseEvaluationSamples(): KnowledgeStrategyEvaluationSample[] {
+  const lines = evaluationText.value.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
+  if (!lines.length || lines.length > 20) throw new Error(t('knowledgeStrategy.evaluation.invalidCount'))
+  const samples = lines.map(line => {
+    const [knowledge_id, label, split, ...extra] = line.split(/[\t,]/).map(value => value.trim())
+    if (!knowledge_id || extra.length || !['select', 'reject', 'either'].includes(label) || !['development', 'holdout'].includes(split)) {
+      throw new Error(t('knowledgeStrategy.evaluation.invalidFormat'))
+    }
+    return { knowledge_id, label, split } as KnowledgeStrategyEvaluationSample
+  })
+  if (new Set(samples.map(sample => sample.knowledge_id)).size !== samples.length) {
+    throw new Error(t('knowledgeStrategy.evaluation.duplicateIDs'))
+  }
+  return samples
+}
+
+async function evaluate(version: KnowledgeStrategyVersion) {
+  evaluationInputError.value = ''
+  evaluationErrors.value[version.id] = ''
+  let samples: KnowledgeStrategyEvaluationSample[]
+  try {
+    samples = parseEvaluationSamples()
+  } catch (error: any) {
+    evaluationInputError.value = error?.message || t('knowledgeStrategy.evaluation.invalidFormat')
+    return
+  }
+  evaluating.value = version.id
+  try {
+    evaluationResults.value[version.id] = (await evaluateKnowledgeStrategy(props.kbId, version.id, samples)).data
+  } catch (error: any) {
+    evaluationErrors.value[version.id] = error?.message || t('knowledgeBase.strategy.failed')
+  } finally {
+    evaluating.value = ''
+  }
+}
+
+function evaluationParts(versionID: string) {
+  const result = evaluationResults.value[versionID]
+  if (!result) return []
+  return [
+    { key: 'development', title: t('knowledgeStrategy.evaluation.splits.development'), result: result.development },
+    { key: 'holdout', title: t('knowledgeStrategy.evaluation.splits.holdout'), result: result.holdout },
+  ]
+}
+
+function evaluationErrorsFor(versionID: string) {
+  return (evaluationResults.value[versionID]?.cases || []).filter(sample => sample.old_correct === false || sample.new_correct === false)
+}
+
+function evaluationCasesFor(versionID: string) {
+  return evaluationResults.value[versionID]?.cases || []
+}
+
+function formatMetric(value: number | null) {
+  return value == null ? '—' : `${(value * 100).toFixed(1)}%`
+}
+
 function activate(version: KnowledgeStrategyVersion) {
   DialogPlugin.confirm({ header: t('knowledgeBase.strategy.confirmTitle'), body: t('knowledgeBase.strategy.confirm'),
     onConfirm: async () => {
@@ -161,6 +261,10 @@ watch(() => props.visible, visible => {
     tagID.value = props.initialTagId || ''
     scopeMode.value = props.selectedIds.length ? 'messages' : 'tag'
     lastResult.value = null
+    evaluationResults.value = {}
+    evaluationErrors.value = {}
+    evaluationInputError.value = ''
+    evaluationText.value = ''
     load()
   }
 })
@@ -174,4 +278,14 @@ watch(() => props.visible, visible => {
 .strategy-rule p { margin: 4px 0 10px; }
 .strategy-reprocess { display: grid; gap: 10px; padding: 12px 0; border-top: 1px solid var(--td-component-stroke); }
 .strategy-reprocess p { margin: 0; }
+.strategy-evaluation-input, .strategy-evaluation-result { display: grid; gap: 10px; padding: 12px 0; border-top: 1px solid var(--td-component-stroke); }
+.strategy-evaluation-input h3, .strategy-evaluation-result h4 { margin: 0; }
+.strategy-evaluation-input p, .strategy-evaluation-result p { margin: 0; }
+.strategy-evaluation-compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 8px; }
+.strategy-evaluation-model { display: grid; gap: 5px; padding: 10px; border: 1px solid var(--td-component-stroke); border-radius: 6px; }
+.strategy-evaluation-counts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+.strategy-evaluation-split { display: grid; gap: 4px; }
+.strategy-evaluation__error { color: var(--td-error-color); }
+.strategy-evaluation__note { color: var(--td-text-color-secondary); }
+@media (max-width: 520px) { .strategy-evaluation-compare { grid-template-columns: 1fr; } }
 </style>

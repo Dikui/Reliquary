@@ -2,6 +2,8 @@ package chatpipeline
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	"reliquary/internal/types"
@@ -144,4 +146,41 @@ func containsString(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+type contextPipelineReader func(context.Context, string, types.KnowledgeContextQuery) (*types.KnowledgeContextResult, error)
+
+func (r contextPipelineReader) Query(ctx context.Context, id string, q types.KnowledgeContextQuery) (*types.KnowledgeContextResult, error) {
+	return r(ctx, id, q)
+}
+
+func TestStructuredContextComplementsScopedRAGAndFallsBack(t *testing.T) {
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
+	cm := &types.ChatManage{PipelineRequest: types.PipelineRequest{Query: "Acme revenue", SummaryConfig: types.SummaryConfig{ContextTemplate: "{{query}}\n{{contexts}}"}, SearchTargets: types.SearchTargets{{Type: types.SearchTargetTypeKnowledge, KnowledgeBaseID: "kb", TenantID: 9, KnowledgeIDs: []string{"allowed"}}}}, PipelineState: types.PipelineState{KnowledgeQueries: []types.KnowledgeContextQuery{{Entity: "Acme"}}, SearchResult: []*types.SearchResult{{KnowledgeBaseID: "kb", KnowledgeID: "allowed", Content: "original revenue evidence"}}}}
+	calls := 0
+	p := &PluginSearchParallel{contextReader: contextPipelineReader(func(scoped context.Context, id string, q types.KnowledgeContextQuery) (*types.KnowledgeContextResult, error) {
+		calls++
+		if types.MustTenantIDFromContext(scoped) != 9 || id != "kb" || len(q.KnowledgeIDs) != 1 || q.KnowledgeIDs[0] != "allowed" {
+			t.Fatalf("scope was widened: %#v", q)
+		}
+		return &types.KnowledgeContextResult{Facts: []types.KnowledgeFact{{ID: "fact", Predicate: "revenue", Quote: "quoted revenue", EvidenceID: "proof"}}, Evidence: []types.KnowledgeEvidence{{ID: "proof", KnowledgeID: "allowed", Body: "large original snapshot"}}}, nil
+	})}
+	p.searchStructuredContext(ctx, cm)
+	if calls != 2 || !strings.Contains(cm.KnowledgeContext, "quoted revenue") || strings.Contains(cm.KnowledgeContext, "large original snapshot") {
+		t.Fatalf("invalid structured context: %s", cm.KnowledgeContext)
+	}
+	cm.MergeResult = cm.SearchResult
+	if err := (&PluginIntoChatMessage{}).OnEvent(ctx, types.INTO_CHAT_MESSAGE, cm, func() *PluginError { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(cm.UserContent, "original revenue evidence") || !strings.Contains(cm.UserContent, "quoted revenue") {
+		t.Fatalf("hybrid context missing: %s", cm.UserContent)
+	}
+	p.contextReader = contextPipelineReader(func(context.Context, string, types.KnowledgeContextQuery) (*types.KnowledgeContextResult, error) {
+		return nil, errors.New("unavailable")
+	})
+	p.searchStructuredContext(ctx, cm)
+	if cm.KnowledgeContext != "" || len(cm.SearchResult) != 1 {
+		t.Fatal("context failure changed original RAG")
+	}
 }

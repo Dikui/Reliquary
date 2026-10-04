@@ -1,4 +1,70 @@
 export default {
+  knowledgeStrategy: {
+    "evaluation": {
+      "title": "筛选评测",
+      "intro": "为原始材料添加人工标签，分别比较旧规则与候选规则在开发集和留出集上的结果。留出集不用于调参；评测不会激活策略。",
+      "format": "每行一条：knowledge_id, select|reject|either, development|holdout",
+      "run": "评测此版本",
+      "result": "评测结果",
+      "invalidCount": "请输入 1 到 20 行样本。",
+      "invalidFormat": "每行需要包含知识 ID、有效标签和有效数据集。",
+      "duplicateIDs": "每个知识 ID 只能出现一次。",
+      "countedSamples": "{count} 条计入指标的样本",
+    "allSamples": "全部 {count} 条样本",
+    "tp": "正确收录",
+    "fp": "错误收录",
+    "fn": "遗漏收录",
+    "tn": "正确拒绝",
+    "correct": "正确",
+    "incorrect": "错误",
+    "notCounted": "不计入指标",
+      "old": "旧规则",
+      "new": "候选规则",
+      "precision": "精确率",
+      "recall": "召回率",
+      "mistakes": "{count} 条判断错误的样本",
+      "note": "“任一结果”样本会显示判断，但不计入统计。分母为零时，精确率或召回率显示为 —。",
+      "labels": {
+        "select": "应收录",
+        "reject": "应拒绝",
+        "either": "任一结果"
+      },
+      "splits": {
+        "development": "开发集",
+        "holdout": "留出集"
+      },
+      "decisions": {
+        "approved": "收录",
+        "rejected": "拒绝"
+      }
+    }
+  },
+  knowledgeWorkbench: {
+    fusion: {"minValue": "数值下限", "maxValue": "数值上限", "unit": "比较单位", "queryHint": "常用字段：context_length（上下文长度）、local_deployment（本地部署）、license（许可）。数值比较需要同类单位；结果数量只代表当前返回的资料。", "originalField": "原始字段名", "snapshotTitle": "核验引用原文", "quoteMissing": "这段引用没有在该快照中精确匹配。请核对原文；系统不会猜测位置。", "sameStory": "关联的先前事件", "roundup": "汇总材料：保持独立，不累加到各子事件", "current_period": "本期材料", "background": "历史背景", "unknown_date": "日期未知"},
+    tabLabel: '知识工作台', title: '知识工作台', subtitle: '按事实、事件和来源检索知识，并将研究过程沉淀为可追踪的工作流。', sections: '知识工作台功能', refresh: '刷新', rebuild: '重新构建知识上下文', requestFailed: '请求失败，请稍后重试。', emptyValue: '未填写', unknownDate: '时间未知', facts: '事实', correct: '纠正事实', correctionSaved: '事实纠正已保存，新事实保留了来源和历史。', correctionTitle: '纠正事实', correctionIntro: '为“{predicate}”提交新的事实版本。引用必须与来源原文一致。', correctionValue: '正确值', correctionValueType: '值类型', correctionUnit: '单位', correctionQuote: '来源原文引用', correctionNote: '纠正说明', correctionFrom: '生效开始时间', correctionTo: '生效结束时间', correctionValueInvalid: '请按类型输入有效值。', cancel: '取消', factPeriod: '有效时间', rebuildQueued: '已将 {count} 条来源加入重建队列；索引结果会在后台处理完成后更新。', loadMore: '加载更多',
+    nav: { query: '结构化检索', entities: '对象与事实', events: '事件热度', evidence: '来源证据', workflows: '跟踪工作流', reports: '研究报告' },
+    query: { title: '查询知识上下文', description: '按对象、属性、关系和时间范围筛选事实，并检查当前值与历史版本的来源。', entity: '对象名称', entityPlaceholder: '例如：Acme 公司', predicate: '事实属性', predicatePlaceholder: '例如：总部、状态、融资轮次', relation: '关系类型', relationPlaceholder: '例如：投资、收购、合作', since: '开始时间', until: '结束时间', history: '包含已替代的历史事实', submit: '查询', clear: '清空条件', resultCounts: '找到 {entities} 个对象、{facts} 条事实、{events} 个事件和 {evidence} 条证据。', historyIncluded: '结果包含历史版本', empty: '没有匹配的事实、事件或来源。' },
+    entities: { title: '对象与事实', description: '浏览知识图谱中的对象，检查关系、属性、来源与事实历史。', filter: '筛选对象', empty: '没有对象', unknownType: '未分类', aliases: '个别名', choose: '选择一个对象查看事实', includeHistory: '包含历史事实', noFacts: '这个对象还没有可显示的事实。', unknownObject: '未知对象', merge: '合并重复对象', mergeTitle: '合并对象', mergeHint: '选择保留为规范对象的目标。事实、关系和别名将转移到目标对象。', mergeSource: '待合并对象', mergeTarget: '保留对象', mergeTargetPlaceholder: '选择保留的对象', mergeWarning: '合并会重写知识上下文中的对象引用，且不能在此界面撤销。', mergeSaved: '对象已合并' },
+    events: { title: '事件热度', description: '按热度查看近期事件，展开理由、关联对象和支撑来源。', empty: '没有事件', event: '事件', heat: '热度', sourceCount: '{count} 个来源', hideDetails: '收起详情', showDetails: '查看热度依据', whyHot: '热度和关注度依据', noReason: '暂无热度说明。', scored: '系统关注度评分', attentionScore: '关注度 {score}', noSources: '尚无关联来源。', noDescription: '暂无事件摘要。' },
+    evidence: { title: '来源证据', description: '查看来源快照、版本、抽取状态和引用出处。', filter: '筛选标题、发布者或链接', empty: '没有来源证据', source: '来源', openSnapshot: '展开来源快照', openSource: '打开原始链接', openKnowledge: '打开原始消息', version: '版本', hash: '内容校验值', extraction: '抽取状态', noBody: '来源快照没有正文。', untitled: '无标题来源', status: { current: '当前版本', superseded: '旧版本' }, extractionStatus: { pending: '等待抽取', complete: '抽取完成', failed: '抽取失败' } },
+    factStatus: { current: '当前事实', superseded: '已替代', corrected: '已纠正' },
+    factDifference: { conflict: '有效期重叠：存在不同记载', potential: '待核实差异：有效时间信息不完整' },
+    workflows: {
+      title: '跟踪工作流', description: '定期查询知识、持续研究并生成带引用的报告；步骤可配置条件、人工审核和 Skill。', create: '新建工作流', edit: '编辑工作流', new: '配置工作流', cancel: '取消编辑', name: '名称', namePlaceholder: '例如：每周竞品动态追踪', descriptionField: '说明', cron: 'Cron 计划', manualOnly: '留空表示仅手动运行', timezone: '时区', enabled: '已启用', disabled: '已停用', steps: '执行步骤', stepsHint: '步骤按列表顺序执行；依赖、条件分支和人工审核会保留在运行记录中。', addStep: '添加步骤', stepId: '步骤 ID', remove: '删除步骤', dependsOn: '依赖步骤', onlyWhen: '仅在条件结果匹配时执行', save: '保存工作流', validation: '请填写名称，并确保每个步骤都有唯一 ID。', saved: '工作流已保存', run: '立即运行', disable: '停用', enable: '启用', noDescription: '无说明', runs: '运行记录', selectWorkflow: '选择工作流查看运行记录', noRuns: '还没有运行记录。', runDetail: '运行详情', retry: '重试失败步骤', resume: '恢复暂停的运行', attempt: '第 {count} 次尝试', reviewPending: '运行正等待人工审核。', approve: '批准并继续', reject: '拒绝运行', runStarted: '工作流已启动', invalidArgs: 'Skill 步骤“{step}”的参数必须是字符串数组 JSON。', empty: '还没有工作流。创建每日、每周或持续研究流程。',
+      decision: { approve: '已批准审核', reject: '已拒绝运行' },
+      config: { query: '查询内容', limit: '结果数量上限', entity: '对象名称（必填）', predicate: '事实属性', relation: '关系类型', objectEntityId: '关联对象 ID', since: '开始时间', until: '结束时间', includeHistory: '包含历史事实', maxResults: '网页结果上限（最多 30）', provider: '搜索服务 ID（可选）', ingest: '将研究结果导入知识库', reportTitle: '报告标题', timeFrom: '报告开始时间', timeTo: '报告结束时间', timeWindow: '报告时间窗口', days: '滚动天数（1–365）', timezone: '时区', previousDay: '前一天', previousWeek: '前一周', rollingDays: '最近 N 天', prompt: '报告要求', slug: 'Wiki 页面路径', pageTitle: '页面标题', pageType: '页面类型', sourceStep: '内容来源步骤', summary: '补充摘要', agentId: '智能体 ID', skillName: 'Skill 名称', scriptPath: '脚本路径', inputStep: '输入步骤', input: '文本输入', args: '参数 JSON 数组', conditionStep: '条件数据步骤', path: '输出字段路径', operator: '判断方式（exists / equals / not_equals / contains / gt / gte）', value: '比较值', reviewMessage: '审核提示' },
+      stepTypes: { search: '知识搜索', fact_query: '事实查询', web_research: '网页研究', report: '生成报告', wiki_update: '更新 Wiki', skill: '运行 Skill', condition: '条件判断', human_review: '人工审核' },
+      runStatus: { queued: '排队中', running: '运行中', waiting_ingestion: '等待来源入库', paused: '等待审核', completed: '已完成', failed: '失败', rejected: '已拒绝', cancelled: '已取消' },
+      stepStatus: { pending: '等待中', running: '运行中', waiting_ingestion: '等待来源入库', waiting_review: '等待审核', succeeded: '已完成', failed: '失败', skipped: '已跳过', rejected: '已拒绝' },
+      templates: {
+        daily: { title: '每日动态简报', description: '每天搜索最新知识并生成带引用的摘要。', searchQuery: '搜索知识库和近期动态中的重要变化', reportTitle: '每日知识动态', reportPrompt: '总结本次搜索中的关键变化、影响和来源，并区分已确认事实与待核实内容。' },
+        weekly: { title: '每周事实回顾', description: '每周汇总指定对象的事实及变化记录。', reportTitle: '每周事实变化', reportPrompt: '回顾所选对象在本周发生的事实变化，保留时间、证据和历史差异。' },
+        research: { title: '持续研究追踪', description: '定期进行网页研究、更新知识上下文并生成趋势报告。', reportTitle: '持续研究报告', reportPrompt: '综合网页研究结果和已有事实，给出趋势、证据、冲突与待验证问题。' },
+        custom: { title: '自定义流程', description: '从空白步骤开始组合查询、研究、条件、Skill 和人工审核。' }
+      }
+    },
+    reports: { title: '研究报告', description: '阅读工作流生成的报告、来源引用和可下载的 Markdown。', empty: '还没有研究报告。', download: '下载 Markdown', citations: '引用与来源', noCitations: '此报告没有附加引用。' }
+  },
   platformApiKeys: {
     title: '平台 API Key',
     description: '为跨空间自动化创建平台级凭据；调用空间接口时通过 X-Tenant-ID 指定目标空间。',

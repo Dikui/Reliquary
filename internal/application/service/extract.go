@@ -183,6 +183,7 @@ type ChunkExtractService struct {
 	modelService      interfaces.ModelService
 	knowledgeBaseRepo interfaces.KnowledgeBaseRepository
 	knowledgeRepo     interfaces.KnowledgeRepository
+	knowledgeService  interfaces.KnowledgeService
 	chunkRepo         interfaces.ChunkRepository
 	graphEngine       interfaces.RetrieveGraphRepository
 	// spanTracker records this graph-extract task's subspan under the
@@ -197,6 +198,7 @@ func NewChunkExtractService(
 	modelService interfaces.ModelService,
 	knowledgeBaseRepo interfaces.KnowledgeBaseRepository,
 	knowledgeRepo interfaces.KnowledgeRepository,
+	knowledgeService interfaces.KnowledgeService,
 	chunkRepo interfaces.ChunkRepository,
 	graphEngine interfaces.RetrieveGraphRepository,
 	spanTracker SpanTracker,
@@ -206,6 +208,7 @@ func NewChunkExtractService(
 		modelService:      modelService,
 		knowledgeBaseRepo: knowledgeBaseRepo,
 		knowledgeRepo:     knowledgeRepo,
+		knowledgeService:  knowledgeService,
 		chunkRepo:         chunkRepo,
 		graphEngine:       graphEngine,
 		spanTracker:       spanTracker,
@@ -267,7 +270,7 @@ func (s *ChunkExtractService) Handle(ctx context.Context, t *asynq.Task) error {
 		// payload field; legacy in-flight tasks without it are skipped.
 		finalizeSubtaskDetached(ctx, s.knowledgeRepo, p.KnowledgeID,
 			fmt.Sprintf("graph_chunk[%d]", p.ChunkIndex),
-			handleErr, false, isFinalAsynqAttempt(ctx))
+			handleErr, false, isFinalAsynqAttempt(ctx), sourceUpdatePromotionCallback(s.knowledgeService))
 		if gSpan == nil {
 			return
 		}

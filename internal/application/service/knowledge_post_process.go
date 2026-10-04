@@ -19,17 +19,19 @@ import (
 // KnowledgePostProcessService acts as an orchestrator for all post-processing tasks
 // after a document has been parsed and split into chunks (including multimodal OCR/Caption).
 type KnowledgePostProcessService struct {
-	knowledgeRepo interfaces.KnowledgeRepository
-	kbService     interfaces.KnowledgeBaseService
-	chunkService  interfaces.ChunkService
-	taskEnqueuer  interfaces.TaskEnqueuer
-	pendingRepo   interfaces.TaskPendingOpsRepository
-	redisClient   *redis.Client
-	spanTracker   SpanTracker
+	knowledgeRepo    interfaces.KnowledgeRepository
+	knowledgeService interfaces.KnowledgeService
+	kbService        interfaces.KnowledgeBaseService
+	chunkService     interfaces.ChunkService
+	taskEnqueuer     interfaces.TaskEnqueuer
+	pendingRepo      interfaces.TaskPendingOpsRepository
+	redisClient      *redis.Client
+	spanTracker      SpanTracker
 }
 
 func NewKnowledgePostProcessService(
 	knowledgeRepo interfaces.KnowledgeRepository,
+	knowledgeService interfaces.KnowledgeService,
 	kbService interfaces.KnowledgeBaseService,
 	chunkService interfaces.ChunkService,
 	taskEnqueuer interfaces.TaskEnqueuer,
@@ -38,13 +40,14 @@ func NewKnowledgePostProcessService(
 	spanTracker SpanTracker,
 ) interfaces.TaskHandler {
 	return &KnowledgePostProcessService{
-		knowledgeRepo: knowledgeRepo,
-		kbService:     kbService,
-		chunkService:  chunkService,
-		taskEnqueuer:  taskEnqueuer,
-		pendingRepo:   pendingRepo,
-		redisClient:   redisClient,
-		spanTracker:   spanTracker,
+		knowledgeRepo:    knowledgeRepo,
+		knowledgeService: knowledgeService,
+		kbService:        kbService,
+		chunkService:     chunkService,
+		taskEnqueuer:     taskEnqueuer,
+		pendingRepo:      pendingRepo,
+		redisClient:      redisClient,
+		spanTracker:      spanTracker,
 	}
 }
 
@@ -176,13 +179,11 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 	willSpawnSummary := len(textChunks) > 0
 	willSpawnQuestion := willSpawnSummary && kb.NeedsEmbeddingModel() &&
 		eff.QuestionGenerationConfig.Enabled
-	willSpawnWiki := kb.IndexingStrategy.WikiEnabled && len(textChunks) > 0
+	willSpawnWiki := kb.IndexingStrategy.WikiEnabled && len(textChunks) > 0 && !knowledge.IsSourceUpdateCandidate()
 	intake, _ := knowledge.IntakeMetadata()
-	var updateMetadata map[string]json.RawMessage
-	_ = json.Unmarshal(knowledge.Metadata, &updateMetadata)
 	willSpawnAutoTag := kb.Type == types.KnowledgeBaseTypeDocument && len(textChunks) > 0 &&
 		((intake != nil && intake.Decision == "approved") || (kb.AutoTagConfig != nil && kb.AutoTagConfig.Enabled)) &&
-		string(updateMetadata["rss_update_candidate"]) != `"true"` // The update path classifies after enrichment and manual decisions.
+		!knowledge.IsSourceUpdateCandidate() // The update path classifies after enrichment and manual decisions.
 	enqueuedAutoTag := false
 
 	// Question generation now fans out one subtask per plain text chunk
@@ -278,6 +279,11 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 		} else {
 			logger.Infof(ctx, "[KnowledgePostProcess] Knowledge %s marked completed (no enrichment subtasks).",
 				payload.KnowledgeID)
+			if promote := sourceUpdatePromotionCallback(s.knowledgeService); promote != nil {
+				if err := promote(ctx, payload.KnowledgeID); err != nil {
+					logger.Warnf(ctx, "[KnowledgePostProcess] Failed to promote source update %s: %v", payload.KnowledgeID, err)
+				}
+			}
 		}
 	default:
 		// Flip processing to finalizing before fan-out so a parallel
@@ -348,6 +354,15 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 	// duplicate post-process delivery that observes an already terminal row.
 	if willSpawnAutoTag {
 		enqueuedAutoTag = s.enqueueAutoTagTask(ctx, payload, attempt)
+	}
+	// Structured context is independently retryable; a model failure must not
+	// discard the approved source or prevent ordinary RAG from becoming available.
+	if kb.SummaryModelID != "" && len(textChunks) > 0 && !knowledge.IsSourceUpdateCandidate() {
+		if err := enqueueKnowledgeContext(ctx, s.taskEnqueuer, types.KnowledgeAutoTagPayload{
+			TenantID: payload.TenantID, KnowledgeBaseID: payload.KnowledgeBaseID, KnowledgeID: payload.KnowledgeID, Attempt: attempt,
+		}); err != nil {
+			logger.Warnf(ctx, "Failed to queue knowledge context for %s: %v", payload.KnowledgeID, err)
+		}
 	}
 
 	// 4. Spawn Summary and Question Tasks
@@ -454,12 +469,19 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 			for i := 0; i < shortfall; i++ {
 				rctx, cancel := context.WithTimeout(
 					context.WithoutCancel(ctx), finalizeSubtaskDetachedTimeout)
-				_, _, err := s.knowledgeRepo.FinalizeSubtask(rctx, payload.KnowledgeID)
+				_, promoted, err := s.knowledgeRepo.FinalizeSubtask(rctx, payload.KnowledgeID)
 				cancel()
 				if err != nil {
 					logger.Warnf(ctx, "[KnowledgePostProcess] Failed to release subtask slot for %s: %v",
 						payload.KnowledgeID, err)
 					break
+				}
+				if promoted {
+					if promote := sourceUpdatePromotionCallback(s.knowledgeService); promote != nil {
+						if err := promote(ctx, payload.KnowledgeID); err != nil {
+							logger.Warnf(ctx, "[KnowledgePostProcess] Failed to promote source update %s: %v", payload.KnowledgeID, err)
+						}
+					}
 				}
 			}
 		}

@@ -3,6 +3,8 @@
  * TypeScript interfaces for all tool result types
  */
 
+import type { KnowledgeContextResult } from '@/api/knowledge-context'
+
 // Relevance levels — values match the backend API response.
 // Display labels are resolved via i18n in SearchResults.vue and GraphQueryResults.vue.
 export type RelevanceLevel = 'High Relevance' | 'Medium Relevance' | 'Low Relevance' | 'Weak Relevance';
@@ -145,9 +147,21 @@ export interface DocumentInfoData {
 // Graph query results data
 export interface GraphQueryResultsData {
     display_type: 'graph_query_results';
-    results: SearchResultItem[];
-    count: number;
-    graph_config: GraphConfig;
+    knowledge_base_ids: string[];
+    contexts: Record<string, KnowledgeContextResult>;
+    graph_data: {
+        nodes: Array<{ id: string; label: string; type: string; kb_id: string }>;
+        edges: Array<{
+            id: string;
+            source: string;
+            target: string;
+            type: string;
+            evidence_id: string;
+            quote: string;
+        }>;
+        total_nodes: number;
+        total_edges: number;
+    };
 }
 
 // Thinking data

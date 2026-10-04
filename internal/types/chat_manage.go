@@ -115,19 +115,21 @@ type PipelineState struct {
 	Intent       QueryIntent `json:"intent,omitempty"`
 	History      []*History  `json:"history,omitempty"`
 
-	SearchResult         []*SearchResult   `json:"-"`
-	RerankResult         []*SearchResult   `json:"-"`
-	MergeResult          []*SearchResult   `json:"-"`
-	Entity               []string          `json:"-"`
-	EntityKBIDs          []string          `json:"-"`
-	EntityKnowledge      map[string]string `json:"-"`
-	GraphResult          *GraphData        `json:"-"`
-	UserContent          string            `json:"-"`
-	RenderedContexts     string            `json:"-"`
-	ChatResponse         *ChatResponse     `json:"-"`
-	ImageDescription     string            `json:"-"`
-	QuotedContext        string            `json:"-"` // Quoted message text, injected at LLM prompt stage
-	SystemPromptOverride string            `json:"-"`
+	SearchResult         []*SearchResult         `json:"-"`
+	RerankResult         []*SearchResult         `json:"-"`
+	MergeResult          []*SearchResult         `json:"-"`
+	Entity               []string                `json:"-"`
+	EntityKBIDs          []string                `json:"-"`
+	EntityKnowledge      map[string]string       `json:"-"`
+	GraphResult          *GraphData              `json:"-"`
+	KnowledgeQueries     []KnowledgeContextQuery `json:"-"`
+	KnowledgeContext     string                  `json:"-"`
+	UserContent          string                  `json:"-"`
+	RenderedContexts     string                  `json:"-"`
+	ChatResponse         *ChatResponse           `json:"-"`
+	ImageDescription     string                  `json:"-"`
+	QuotedContext        string                  `json:"-"` // Quoted message text, injected at LLM prompt stage
+	SystemPromptOverride string                  `json:"-"`
 	// MemoryPrompt is the long-term memory envelope appended to the system
 	// prompt for this turn, empty when memory is off or nothing matched.
 	MemoryPrompt string `json:"-"`
@@ -257,6 +259,8 @@ func (c *ChatManage) Clone() *ChatManage {
 			MemoryPrompt:         c.MemoryPrompt,
 			UsedMemories:         append(UsedMemories(nil), c.UsedMemories...),
 			RenderedContexts:     c.RenderedContexts,
+			KnowledgeQueries:     append([]KnowledgeContextQuery(nil), c.KnowledgeQueries...),
+			KnowledgeContext:     c.KnowledgeContext,
 			Entity:               entity,
 			EntityKBIDs:          entityKBIDs,
 			EntityKnowledge:      entityKnowledge,

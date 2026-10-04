@@ -54,7 +54,8 @@ type KnowledgeService interface {
 		payload *types.ManualKnowledgePayload,
 		channel string,
 	) (*types.Knowledge, error)
-	// ReviewRSSUpdate stages a changed article, reviews it, then replaces or removes the old message.
+	// ReviewRSSUpdate stages a changed article and promotes it after review.
+	// Approved originals remain as historical evidence; a rejected update does not delete them.
 	// rejected is true only when the new original failed quality review, not on execution errors.
 	ReviewRSSUpdate(ctx context.Context, oldID string, payload *types.ManualKnowledgePayload) (rejected bool, err error)
 	// GetKnowledgeByID retrieves knowledge by ID (uses tenant from context).

@@ -299,6 +299,37 @@ func (k *Knowledge) IntakeMetadata() (*KnowledgeIntakeMetadata, error) {
 	return raw.Intake, nil
 }
 
+// IsArchivedSource identifies a retained historical source, not current knowledge.
+func (k *Knowledge) IsArchivedSource() bool {
+	if k == nil {
+		return false
+	}
+	var meta struct {
+		SourceArchived bool `json:"source_archived"`
+	}
+	return json.Unmarshal(k.Metadata, &meta) == nil && meta.SourceArchived
+}
+
+// IsSourceUpdateCandidate keeps an unpromoted replacement out of current knowledge.
+func (k *Knowledge) IsSourceUpdateCandidate() bool {
+	if k == nil {
+		return false
+	}
+	var meta map[string]json.RawMessage
+	if json.Unmarshal(k.Metadata, &meta) != nil {
+		return false
+	}
+	for _, key := range []string{"source_update_candidate", "rss_update_candidate"} {
+		var flag bool
+		var text string
+		if (json.Unmarshal(meta[key], &flag) == nil && flag) ||
+			(json.Unmarshal(meta[key], &text) == nil && strings.EqualFold(text, "true")) {
+			return true
+		}
+	}
+	return false
+}
+
 func (k *Knowledge) SetIntakeMetadata(intake *KnowledgeIntakeMetadata) error {
 	var raw map[string]json.RawMessage
 	if len(k.Metadata) > 0 && json.Unmarshal(k.Metadata, &raw) != nil {

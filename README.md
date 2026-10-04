@@ -25,6 +25,8 @@ docker compose up -d --build
 Go 主模块为 `reliquary`，CLI 为 `reliquary/cli`，SDK 为 `reliquary/client`；
 环境变量前缀为 `RELIQUARY_`。此版本面向全新安装，不自动迁移旧 WeKnora 数据目录、数据库或浏览器设置。
 
+知识库新增对象与事实、证据历史、多源事件，以及定时研究和报告工作流。架构、配置、数据升级和使用方法见 [知识库融合说明](docs/知识库融合说明.md)。
+
 ## 上游功能与使用说明
 
 ## 📌 Overview

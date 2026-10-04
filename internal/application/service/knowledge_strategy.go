@@ -39,6 +39,46 @@ type KnowledgeStrategySample struct {
 	NewResearch   string `json:"new_research"`
 }
 
+type KnowledgeStrategyEvaluationSample struct {
+	KnowledgeID string `json:"knowledge_id"`
+	Label       string `json:"label"`
+	Split       string `json:"split"`
+}
+
+type KnowledgeStrategyConfusion struct {
+	TP        int      `json:"tp"`
+	FP        int      `json:"fp"`
+	FN        int      `json:"fn"`
+	TN        int      `json:"tn"`
+	Precision *float64 `json:"precision"`
+	Recall    *float64 `json:"recall"`
+}
+
+type KnowledgeStrategyEvaluationCase struct {
+	KnowledgeID string `json:"knowledge_id"`
+	Label       string `json:"label"`
+	Split       string `json:"split"`
+	OldDecision string `json:"old_decision"`
+	NewDecision string `json:"new_decision"`
+	OldReason   string `json:"old_reason"`
+	NewReason   string `json:"new_reason"`
+	OldCorrect  *bool  `json:"old_correct"`
+	NewCorrect  *bool  `json:"new_correct"`
+}
+
+type KnowledgeStrategyEvaluationSplit struct {
+	Old     KnowledgeStrategyConfusion `json:"old"`
+	New     KnowledgeStrategyConfusion `json:"new"`
+	Samples int                        `json:"samples"`
+}
+
+type KnowledgeStrategyEvaluation struct {
+	VersionID   string                            `json:"version_id"`
+	Development KnowledgeStrategyEvaluationSplit  `json:"development"`
+	Holdout     KnowledgeStrategyEvaluationSplit  `json:"holdout"`
+	Cases       []KnowledgeStrategyEvaluationCase `json:"cases"`
+}
+
 type KnowledgeStrategyService struct {
 	db        *gorm.DB
 	kb        interfaces.KnowledgeBaseService
@@ -237,6 +277,196 @@ func (s *KnowledgeStrategyService) Propose(ctx context.Context, kbID, instructio
 	recordKBActivity(ctx, s.audit, kb.TenantID, kb.ID, types.AuditActionKnowledgeStrategyProposed, "knowledge_strategy", version.ID,
 		types.AuditOutcomeSuccess, map[string]any{"reason": version.Reason, "sample_count": len(samples)})
 	return version, nil
+}
+
+// Evaluate runs labeled originals through the frozen previous and candidate
+// filter rules. It does not persist labels, decisions, or strategy changes.
+func (s *KnowledgeStrategyService) Evaluate(ctx context.Context, kbID, versionID string, samples []KnowledgeStrategyEvaluationSample) (*KnowledgeStrategyEvaluation, error) {
+	kb, _, err := s.scopedKB(ctx, kbID, true)
+	if err != nil {
+		return nil, err
+	}
+	if len(samples) == 0 || len(samples) > 20 {
+		return nil, werrors.NewBadRequestError("one to twenty labeled samples required")
+	}
+	samples = append([]KnowledgeStrategyEvaluationSample(nil), samples...)
+	var version types.KnowledgeStrategyVersion
+	if err := s.db.WithContext(ctx).Where("id = ? AND tenant_id = ? AND knowledge_base_id = ?", versionID, kb.TenantID, kb.ID).First(&version).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, werrors.NewNotFoundError("strategy version not found")
+		}
+		return nil, err
+	}
+	var oldRules, newRules KnowledgeStrategyRules
+	previousRules := version.PreviousRules
+	if len(previousRules) == 0 {
+		previousRules = types.JSON(`{}`)
+	}
+	if err := json.Unmarshal(previousRules, &oldRules); err != nil {
+		return nil, fmt.Errorf("invalid previous strategy rules: %w", err)
+	}
+	if err := json.Unmarshal(version.Rules, &newRules); err != nil {
+		return nil, fmt.Errorf("invalid candidate strategy rules: %w", err)
+	}
+	if strings.TrimSpace(kb.SummaryModelID) == "" {
+		return nil, werrors.NewBadRequestError("summary model required for strategy evaluation")
+	}
+
+	seen := make(map[string]bool, len(samples))
+	messages := make([]types.Knowledge, 0, len(samples))
+	bodies := make([]string, 0, len(samples))
+	for i := range samples {
+		sample := &samples[i]
+		sample.KnowledgeID = strings.TrimSpace(sample.KnowledgeID)
+		if sample.KnowledgeID == "" || seen[sample.KnowledgeID] ||
+			(sample.Label != "select" && sample.Label != "reject" && sample.Label != "either") ||
+			(sample.Split != "development" && sample.Split != "holdout") {
+			return nil, werrors.NewBadRequestError("samples need distinct IDs, a select/reject/either label, and a development/holdout split")
+		}
+		seen[sample.KnowledgeID] = true
+		var message types.Knowledge
+		if err := s.db.WithContext(ctx).Select("id", "tenant_id", "knowledge_base_id", "title", "channel", "parse_status", "metadata", "deleted_at").
+			Where("id = ? AND tenant_id = ? AND knowledge_base_id = ?", sample.KnowledgeID, kb.TenantID, kb.ID).First(&message).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, werrors.NewBadRequestError("sample must belong to this knowledge base and have an original")
+			}
+			return nil, err
+		}
+		if message.IsSourceUpdateCandidate() || !strategyEvaluationStatusAllowed(message.ParseStatus) {
+			return nil, werrors.NewBadRequestError("sample must be a formal, pending, or rejected source in this knowledge base")
+		}
+		intake, err := message.IntakeMetadata()
+		if err != nil {
+			return nil, werrors.NewBadRequestError("sample intake metadata is invalid")
+		}
+		if intake != nil && intake.Decision != "approved" && intake.Decision != "pending" && intake.Decision != "rejected" {
+			return nil, werrors.NewBadRequestError("sample must be a formal, pending, or rejected source")
+		}
+		switch message.ParseStatus {
+		case types.ParseStatusPending:
+			if intake == nil || intake.Decision != "pending" {
+				return nil, werrors.NewBadRequestError("pending sample original is unavailable")
+			}
+		case types.ParseStatusRejected:
+			if intake == nil || intake.Decision != "rejected" {
+				return nil, werrors.NewBadRequestError("rejected sample original is unavailable")
+			}
+		case types.ParseStatusFinalizing, types.ParseStatusCompleted:
+			if intake != nil && intake.Decision != "approved" {
+				return nil, werrors.NewBadRequestError("formal sample must have an approved original")
+			}
+		}
+		file, _, err := s.knowledge.GetKnowledgeFile(ctx, message.ID)
+		if err != nil || file == nil {
+			if file != nil {
+				_ = file.Close()
+			}
+			return nil, werrors.NewBadRequestError("sample original is unavailable")
+		}
+		body, readErr := io.ReadAll(io.LimitReader(file, 800001))
+		closeErr := file.Close()
+		if readErr != nil {
+			return nil, readErr
+		}
+		if closeErr != nil {
+			return nil, closeErr
+		}
+		if len(body) > 800000 || strings.TrimSpace(string(body)) == "" {
+			return nil, werrors.NewBadRequestError("sample original is empty or too large")
+		}
+		messages = append(messages, message)
+		bodies = append(bodies, string(body))
+	}
+
+	model, err := s.models.GetChatModel(ctx, kb.SummaryModelID)
+	if err != nil {
+		return nil, err
+	}
+	result := &KnowledgeStrategyEvaluation{VersionID: version.ID, Cases: make([]KnowledgeStrategyEvaluationCase, 0, len(samples))}
+	for i, sample := range samples {
+		message := messages[i]
+		var source types.SourceInfo
+		if intake, _ := message.IntakeMetadata(); intake != nil {
+			source = intake.SourceInfo
+		}
+		oldDecision, oldReason, err := strategyFilterDecision(ctx, model, oldRules, message.Channel, bodies[i], source)
+		if err != nil {
+			return nil, err
+		}
+		newDecision, newReason, err := strategyFilterDecision(ctx, model, newRules, message.Channel, bodies[i], source)
+		if err != nil {
+			return nil, err
+		}
+		item := KnowledgeStrategyEvaluationCase{KnowledgeID: sample.KnowledgeID, Label: sample.Label, Split: sample.Split,
+			OldDecision: oldDecision, NewDecision: newDecision, OldReason: oldReason, NewReason: newReason}
+		if sample.Label != "either" {
+			oldCorrect := (sample.Label == "select") == (oldDecision == "approved")
+			newCorrect := (sample.Label == "select") == (newDecision == "approved")
+			item.OldCorrect, item.NewCorrect = &oldCorrect, &newCorrect
+		}
+		result.Cases = append(result.Cases, item)
+		target := &result.Development
+		if sample.Split == "holdout" {
+			target = &result.Holdout
+		}
+		if sample.Label != "either" {
+			target.Samples++
+			addStrategyConfusion(&target.Old, sample.Label, oldDecision)
+			addStrategyConfusion(&target.New, sample.Label, newDecision)
+		}
+	}
+	setStrategyMetrics(&result.Development.Old)
+	setStrategyMetrics(&result.Development.New)
+	setStrategyMetrics(&result.Holdout.Old)
+	setStrategyMetrics(&result.Holdout.New)
+	return result, nil
+}
+
+func strategyEvaluationStatusAllowed(status string) bool {
+	switch status {
+	case types.ParseStatusPending, types.ParseStatusFinalizing, types.ParseStatusCompleted, types.ParseStatusRejected:
+		return true
+	default:
+		return false
+	}
+}
+
+func strategyFilterDecision(ctx context.Context, model chat.Chat, rules KnowledgeStrategyRules, channel, body string, source types.SourceInfo) (string, string, error) {
+	filterOnly := KnowledgeStrategyRules{Filter: rules.Filter}
+	result, err := trialReview(ctx, model, intakeReviewPromptForMessage(&filterOnly, channel), body, source)
+	if err != nil {
+		return "", "", err
+	}
+	decision, reason, ok := strings.Cut(result, ": ")
+	if !ok || (decision != "approved" && decision != "rejected") {
+		return "", "", fmt.Errorf("invalid filter trial decision")
+	}
+	return decision, reason, nil
+}
+
+func addStrategyConfusion(result *KnowledgeStrategyConfusion, label, decision string) {
+	selected := decision == "approved"
+	switch {
+	case label == "select" && selected:
+		result.TP++
+	case label == "reject" && selected:
+		result.FP++
+	case label == "select" && !selected:
+		result.FN++
+	case label == "reject" && !selected:
+		result.TN++
+	}
+}
+
+func setStrategyMetrics(result *KnowledgeStrategyConfusion) {
+	if denominator := result.TP + result.FP; denominator > 0 {
+		value := float64(result.TP) / float64(denominator)
+		result.Precision = &value
+	}
+	if denominator := result.TP + result.FN; denominator > 0 {
+		value := float64(result.TP) / float64(denominator)
+		result.Recall = &value
+	}
 }
 
 func trialFilter(ctx context.Context, model chat.Chat, rules KnowledgeStrategyRules, body string, source types.SourceInfo) (string, error) {

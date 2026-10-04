@@ -23,6 +23,7 @@ type PluginSearchParallel struct {
 	graphRepo     interfaces.RetrieveGraphRepository
 	chunkRepo     interfaces.ChunkRepository
 	knowledgeRepo interfaces.KnowledgeRepository
+	contextReader interfaces.KnowledgeContextReader
 
 	// Internal plugins
 	searchPlugin       *PluginSearch
@@ -44,6 +45,7 @@ func NewPluginSearchParallel(
 	graphRepository interfaces.RetrieveGraphRepository,
 	chunkRepository interfaces.ChunkRepository,
 	knowledgeRepository interfaces.KnowledgeRepository,
+	contextReader interfaces.KnowledgeContextReader,
 ) *PluginSearchParallel {
 	// Create internal plugins without registering them
 	searchPlugin := &PluginSearch{
@@ -74,6 +76,7 @@ func NewPluginSearchParallel(
 		graphRepo:            graphRepository,
 		chunkRepo:            chunkRepository,
 		knowledgeRepo:        knowledgeRepository,
+		contextReader:        contextReader,
 		searchPlugin:         searchPlugin,
 		searchEntityPlugin:   searchEntityPlugin,
 	}
@@ -105,6 +108,10 @@ func (p *PluginSearchParallel) OnEvent(ctx context.Context,
 		"rewrite_query": chatManage.RewriteQuery,
 	})
 
+	// Resolve structured lookups first. Original-text retrieval then supplies
+	// explanations, missing fields and conflicting evidence.
+	p.searchStructuredContext(ctx, chatManage)
+	structuredSources := append([]*types.SearchResult{}, chatManage.SearchResult...)
 	// Deep-copy to avoid concurrent read/write on shared slice fields
 	chunkCM := chatManage.Clone()
 	chunkCM.SearchResult = nil
@@ -153,8 +160,9 @@ func (p *PluginSearchParallel) OnEvent(ctx context.Context,
 	errs := RunParallel(tasks...)
 
 	// Merge results from both searches
-	chatManage.SearchResult = append(chunkCM.SearchResult, entityCM.SearchResult...)
+	chatManage.SearchResult = append(append(chunkCM.SearchResult, entityCM.SearchResult...), structuredSources...)
 	chatManage.SearchResult = removeDuplicateResults(chatManage.SearchResult)
+	p.searchStructuredContext(ctx, chatManage, true)
 
 	for name, err := range errs {
 		logger.Warnf(ctx, "[SearchParallel] %s error: %v", name, err.Err)
@@ -168,7 +176,7 @@ func (p *PluginSearchParallel) OnEvent(ctx context.Context,
 		"error_count":    len(errs),
 	})
 
-	if len(chatManage.SearchResult) == 0 {
+	if len(chatManage.SearchResult) == 0 && chatManage.KnowledgeContext == "" {
 		if err, ok := errs["chunk_search"]; ok {
 			return err
 		}

@@ -160,10 +160,16 @@ func (p *PluginSearchEntity) OnEvent(ctx context.Context,
 
 	knowledgeMap := map[string]*types.Knowledge{}
 	for _, knowledge := range knowledges {
+		if knowledge.IsArchivedSource() || knowledge.IsSourceUpdateCandidate() || knowledge.ParseStatus == types.ParseStatusRejected {
+			continue
+		}
 		knowledgeMap[knowledge.ID] = knowledge
 	}
 	var entityResults []*types.SearchResult
 	for _, chunk := range chunks {
+		if knowledgeMap[chunk.KnowledgeID] == nil {
+			continue
+		}
 		searchResult := chunk2SearchResult(chunk, knowledgeMap[chunk.KnowledgeID])
 		entityResults = append(entityResults, searchResult)
 	}

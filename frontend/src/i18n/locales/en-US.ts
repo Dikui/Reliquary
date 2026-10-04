@@ -1,4 +1,70 @@
 export default {
+  knowledgeStrategy: {
+    "evaluation": {
+      "title": "Filter evaluation",
+      "intro": "Label original messages and compare previous and candidate filters on development and holdout sets. Keep holdout out of tuning. Evaluation does not activate rules.",
+      "format": "One per line: knowledge_id, select|reject|either, development|holdout",
+      "run": "Evaluate this version",
+      "result": "Evaluation results",
+      "invalidCount": "Enter between 1 and 20 sample rows.",
+      "invalidFormat": "Each row must contain an ID, a valid label, and a valid split.",
+      "duplicateIDs": "Each knowledge ID can appear only once.",
+      "countedSamples": "{count} samples counted in metrics",
+    "allSamples": "All {count} samples",
+    "tp": "Correctly selected",
+    "fp": "Incorrectly selected",
+    "fn": "Missed selection",
+    "tn": "Correctly rejected",
+    "correct": "Correct",
+    "incorrect": "Incorrect",
+    "notCounted": "Not counted",
+      "old": "Previous rules",
+      "new": "Candidate rules",
+      "precision": "Precision",
+      "recall": "Recall",
+      "mistakes": "{count} examples with a wrong decision",
+      "note": "“Either” samples are shown but excluded from counts. Precision or recall is — when its denominator is zero.",
+      "labels": {
+        "select": "Select",
+        "reject": "Reject",
+        "either": "Either"
+      },
+      "splits": {
+        "development": "Development set",
+        "holdout": "Holdout set"
+      },
+      "decisions": {
+        "approved": "Approved",
+        "rejected": "Rejected"
+      }
+    }
+  },
+  knowledgeWorkbench: {
+    fusion: {"minValue": "Minimum value", "maxValue": "Maximum value", "unit": "Comparison unit", "queryHint": "Common fields: context_length, local_deployment, license. Numeric comparisons require compatible units. Counts describe the returned results only.", "originalField": "Original field label", "snapshotTitle": "Verify the source quote", "quoteMissing": "This quote does not exactly match the snapshot. Check the original text; no position is guessed.", "sameStory": "Related earlier event", "roundup": "Roundup: kept separate from the individual events", "current_period": "This period", "background": "Historical background", "unknown_date": "Unknown date"},
+    tabLabel: 'Knowledge Workbench', title: 'Knowledge Workbench', subtitle: 'Search facts, events, and sources, then turn research into trackable workflows.', sections: 'Knowledge workbench sections', refresh: 'Refresh', rebuild: 'Rebuild knowledge context', requestFailed: 'The request failed. Please try again.', emptyValue: 'Not set', unknownDate: 'Unknown time', facts: 'Facts', correct: 'Correct fact', correctionSaved: 'Fact correction saved with its source and history.', correctionTitle: 'Correct fact', correctionIntro: 'Create a new version of “{predicate}”. The quote must match the source text.', correctionValue: 'Correct value', correctionValueType: 'Value type', correctionUnit: 'Unit', correctionQuote: 'Verbatim source quote', correctionNote: 'Correction note', correctionFrom: 'Effective from', correctionTo: 'Effective until', correctionValueInvalid: 'Enter a valid value for the selected type.', cancel: 'Cancel', factPeriod: 'Effective period', rebuildQueued: '{count} sources were queued for rebuilding. Results will update after background processing finishes.', loadMore: 'Load more',
+    nav: { query: 'Structured query', entities: 'Entities & facts', events: 'Event attention', evidence: 'Source evidence', workflows: 'Tracking workflows', reports: 'Research reports' },
+    query: { title: 'Query knowledge context', description: 'Filter facts by entity, attribute, relation, and time, then inspect current values, history, and evidence.', entity: 'Entity name', entityPlaceholder: 'For example: Acme Inc.', predicate: 'Fact attribute', predicatePlaceholder: 'For example: headquarters, status, funding round', relation: 'Relation type', relationPlaceholder: 'For example: invested in, acquired, partnered with', since: 'From', until: 'Until', history: 'Include superseded facts', submit: 'Query', clear: 'Clear filters', resultCounts: 'Found {entities} entities, {facts} facts, {events} events, and {evidence} evidence items.', historyIncluded: 'Results include historical versions', empty: 'No matching facts, events, or sources.' },
+    entities: { title: 'Entities & facts', description: 'Browse graph entities and inspect their relations, attributes, sources, and history.', filter: 'Filter entities', empty: 'No entities found', unknownType: 'Uncategorized', aliases: 'aliases', choose: 'Select an entity to inspect its facts', includeHistory: 'Include historical facts', noFacts: 'This entity has no facts to show.', unknownObject: 'Unknown entity', merge: 'Merge duplicate', mergeTitle: 'Merge entities', mergeHint: 'Choose the canonical entity to keep. Facts, relations, and aliases will move to it.', mergeSource: 'Entity to merge', mergeTarget: 'Keep this entity', mergeTargetPlaceholder: 'Select the entity to keep', mergeWarning: 'Merging rewrites entity references in the knowledge context and cannot be undone here.', mergeSaved: 'Entities merged' },
+    events: { title: 'Event attention', description: 'Review recent events by heat and expand their reasons, related entities, and evidence.', empty: 'No events found', event: 'Event', heat: 'Heat', sourceCount: '{count} sources', hideDetails: 'Hide details', showDetails: 'Why it is trending', whyHot: 'Heat and attention reasons', noReason: 'No attention reason is available.', scored: 'Attention score', attentionScore: 'Attention {score}', noSources: 'No linked sources yet.', noDescription: 'No event summary available.' },
+    evidence: { title: 'Source evidence', description: 'Inspect source snapshots, versions, extraction status, and citations.', filter: 'Filter title, publisher, or URL', empty: 'No source evidence found', source: 'Source', openSnapshot: 'Open source snapshot', openSource: 'Open original link', openKnowledge: 'Open original message', version: 'Version', hash: 'Content hash', extraction: 'Extraction', noBody: 'This source snapshot has no body.', untitled: 'Untitled source', status: { current: 'Current version', superseded: 'Older version' }, extractionStatus: { pending: 'Pending extraction', complete: 'Extracted', failed: 'Extraction failed' } },
+    factStatus: { current: 'Current', superseded: 'Superseded', corrected: 'Corrected' },
+    factDifference: { conflict: 'Overlapping effective periods have different recorded values', potential: 'Possible discrepancy: effective dates are incomplete' },
+    workflows: {
+      title: 'Tracking workflows', description: 'Schedule knowledge queries, continuous research, and cited reports with conditions, human review, and Skills.', create: 'New workflow', edit: 'Edit workflow', new: 'Configure workflow', cancel: 'Cancel editing', name: 'Name', namePlaceholder: 'For example: Weekly competitor tracking', descriptionField: 'Description', cron: 'Cron schedule', manualOnly: 'Leave blank for manual runs only', timezone: 'Time zone', enabled: 'Enabled', disabled: 'Disabled', steps: 'Workflow steps', stepsHint: 'Steps run in order. Dependencies, branches, and reviews are kept in the run record.', addStep: 'Add step', stepId: 'Step ID', remove: 'Remove step', dependsOn: 'Depends on', onlyWhen: 'Run only when the condition matches', save: 'Save workflow', validation: 'Enter a name and ensure every step has a unique ID.', saved: 'Workflow saved', run: 'Run now', disable: 'Disable', enable: 'Enable', noDescription: 'No description', runs: 'Runs', selectWorkflow: 'Select a workflow to view its runs', noRuns: 'No runs yet.', runDetail: 'Run details', retry: 'Retry failed run', resume: 'Resume paused run', attempt: 'Attempt {count}', reviewPending: 'This run is waiting for human review.', approve: 'Approve and continue', reject: 'Reject run', runStarted: 'Workflow started', invalidArgs: 'Arguments for Skill step “{step}” must be a JSON array of strings.', empty: 'No workflows yet. Create a daily, weekly, or continuous research workflow.',
+      decision: { approve: 'Review approved', reject: 'Run rejected' },
+      config: { query: 'Query', limit: 'Maximum results', entity: 'Entity name (required)', predicate: 'Fact attribute', relation: 'Relation type', objectEntityId: 'Related entity ID', since: 'From', until: 'Until', includeHistory: 'Include historical facts', maxResults: 'Maximum web results (up to 30)', provider: 'Search provider ID (optional)', ingest: 'Ingest research results into the knowledge base', reportTitle: 'Report title', timeFrom: 'Report start date', timeTo: 'Report end date', timeWindow: 'Report time window', days: 'Rolling days (1–365)', timezone: 'Time zone', previousDay: 'Previous day', previousWeek: 'Previous week', rollingDays: 'Last N days', prompt: 'Report instructions', slug: 'Wiki page slug', pageTitle: 'Page title', pageType: 'Page type', sourceStep: 'Content source step', summary: 'Additional summary', agentId: 'Agent ID', skillName: 'Skill name', scriptPath: 'Script path', inputStep: 'Input step', input: 'Text input', args: 'Arguments JSON array', conditionStep: 'Condition data step', path: 'Output field path', operator: 'Operator (exists / equals / not_equals / contains / gt / gte)', value: 'Comparison value', reviewMessage: 'Review prompt' },
+      stepTypes: { search: 'Knowledge search', fact_query: 'Fact query', web_research: 'Web research', report: 'Generate report', wiki_update: 'Update Wiki', skill: 'Run Skill', condition: 'Condition', human_review: 'Human review' },
+      runStatus: { queued: 'Queued', running: 'Running', waiting_ingestion: 'Waiting for source intake', paused: 'Waiting for review', completed: 'Completed', failed: 'Failed', rejected: 'Rejected', cancelled: 'Cancelled' },
+      stepStatus: { pending: 'Pending', running: 'Running', waiting_ingestion: 'Waiting for source intake', waiting_review: 'Waiting for review', succeeded: 'Completed', failed: 'Failed', skipped: 'Skipped', rejected: 'Rejected' },
+      templates: {
+        daily: { title: 'Daily briefing', description: 'Search recent knowledge every day and produce a cited summary.', searchQuery: 'Find important changes in the knowledge base and recent updates', reportTitle: 'Daily knowledge updates', reportPrompt: 'Summarize key changes, their impact, and sources. Separate confirmed facts from items that need verification.' },
+        weekly: { title: 'Weekly fact review', description: 'Summarize facts and changes for a selected entity each week.', reportTitle: 'Weekly fact changes', reportPrompt: 'Review this week’s fact changes for the selected entity, preserving dates, evidence, and historical differences.' },
+        research: { title: 'Continuous research', description: 'Research the web on a schedule, update context, and report on trends.', reportTitle: 'Continuous research report', reportPrompt: 'Combine web research with existing facts to explain trends, evidence, conflicts, and open questions.' },
+        custom: { title: 'Custom workflow', description: 'Combine queries, research, conditions, Skills, and human review from scratch.' }
+      }
+    },
+    reports: { title: 'Research reports', description: 'Read workflow reports with source citations and download them as Markdown.', empty: 'No research reports yet.', download: 'Download Markdown', citations: 'Citations and sources', noCitations: 'This report has no attached citations.' }
+  },
   menu: {
     knowledgeBase: 'Knowledge Base',
     agents: 'Agents',

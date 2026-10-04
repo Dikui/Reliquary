@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+	"gorm.io/gorm"
 	"reliquary/internal/application/service/retriever"
 	"reliquary/internal/datasource"
 	apperrors "reliquary/internal/errors"
@@ -29,6 +30,7 @@ const kbTaskCleanupTimeout = 5 * time.Second
 
 // knowledgeBaseService implements the knowledge base service interface
 type knowledgeBaseService struct {
+	db              *gorm.DB
 	repo            interfaces.KnowledgeBaseRepository
 	kgRepo          interfaces.KnowledgeRepository
 	chunkRepo       interfaces.ChunkRepository
@@ -52,7 +54,7 @@ type knowledgeBaseService struct {
 }
 
 // NewKnowledgeBaseService creates a new knowledge base service
-func NewKnowledgeBaseService(repo interfaces.KnowledgeBaseRepository,
+func NewKnowledgeBaseService(db *gorm.DB, repo interfaces.KnowledgeBaseRepository,
 	kgRepo interfaces.KnowledgeRepository,
 	chunkRepo interfaces.ChunkRepository,
 	shareRepo interfaces.KBShareRepository,
@@ -74,6 +76,7 @@ func NewKnowledgeBaseService(repo interfaces.KnowledgeBaseRepository,
 	resourceCatalog interfaces.ResourceCatalog,
 ) interfaces.KnowledgeBaseService {
 	return &knowledgeBaseService{
+		db:              db,
 		repo:            repo,
 		kgRepo:          kgRepo,
 		chunkRepo:       chunkRepo,
@@ -734,6 +737,11 @@ func (s *knowledgeBaseService) DeleteKnowledgeBase(ctx context.Context, id strin
 		})
 		return err
 	}
+	if s.db != nil && s.db.Migrator().HasTable(&types.KnowledgeWorkflow{}) {
+		if err := s.disableKnowledgeWorkflows(ctx, id); err != nil {
+			logger.Warnf(ctx, "Stop deleted KB workflows: %v", err)
+		}
+	}
 	deletedName := ""
 	if kb != nil {
 		deletedName = kb.Name
@@ -915,6 +923,11 @@ func (s *knowledgeBaseService) ProcessKBDelete(ctx context.Context, t *asynq.Tas
 			imageInfoStrs = append(imageInfoStrs, ci.ImageInfo)
 		}
 		imageURLs := collectImageURLs(ctx, imageInfoStrs)
+		historicalImages, err := evidenceImageReferences(ctx, s.db, tenantID, knowledgeIDs)
+		if err != nil {
+			return err
+		}
+		imageURLs = append(imageURLs, historicalImages...)
 
 		// Delete all chunks
 		logger.Infof(ctx, "Deleting all chunks in knowledge base")
@@ -965,6 +978,10 @@ func (s *knowledgeBaseService) ProcessKBDelete(ctx context.Context, t *asynq.Tas
 			})
 			return err
 		}
+	}
+
+	if err := s.cleanupKnowledgeFusion(ctx, kbID); err != nil {
+		return err
 	}
 
 	logger.Infof(ctx, "KB delete task completed successfully, knowledge base ID: %s", kbID)
@@ -1348,4 +1365,40 @@ func cloneKnowledgeBaseConfiguration(sourceKB *types.KnowledgeBase) (*types.Know
 		return nil, err
 	}
 	return &targetKB, nil
+}
+
+func (s *knowledgeBaseService) disableKnowledgeWorkflows(ctx context.Context, kbID string) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		scope := func(q *gorm.DB) *gorm.DB {
+			return q.Where("tenant_id = ? AND knowledge_base_id = ?", types.MustTenantIDFromContext(ctx), kbID)
+		}
+		if err := scope(tx.Model(&types.KnowledgeWorkflow{})).Update("enabled", false).Error; err != nil {
+			return err
+		}
+		return scope(tx.Model(&types.KnowledgeWorkflowRun{})).Where("status IN ?", []string{types.WorkflowStatusQueued, types.WorkflowStatusRunning, types.WorkflowStatusPaused, types.WorkflowStatusWaitingIngestion}).Updates(map[string]any{"status": types.WorkflowStatusCancelled, "error": "knowledge base deleted", "updated_at": time.Now(), "next_run_at": nil}).Error
+	})
+}
+func (s *knowledgeBaseService) cleanupKnowledgeFusion(ctx context.Context, kbID string) error {
+	if s.db == nil {
+		return nil
+	}
+	if s.db.Migrator().HasTable(&types.KnowledgeWorkflow{}) {
+		if err := s.disableKnowledgeWorkflows(ctx, kbID); err != nil {
+			return err
+		}
+		if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			for _, model := range []any{&types.KnowledgeWorkflowStepRun{}, &types.KnowledgeWorkflowRun{}, &types.KnowledgeWorkflowReport{}, &types.KnowledgeWorkflow{}} {
+				if err := tx.Where("tenant_id = ? AND knowledge_base_id = ?", types.MustTenantIDFromContext(ctx), kbID).Delete(model).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+	if s.db.Migrator().HasTable(&types.KnowledgeEvidence{}) {
+		return NewKnowledgeContextService(s.db, s.modelService).DeleteKnowledgeBase(ctx, kbID)
+	}
+	return nil
 }

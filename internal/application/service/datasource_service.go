@@ -1251,8 +1251,8 @@ func (s *DataSourceService) validateDataSourceConfig(ctx context.Context, ds *ty
 	return connector.Validate(ctx, config)
 }
 
-// ingestItem writes a single FetchedItem into the knowledge base.
-// If a knowledge item with the same external_id already exists, it is deleted first (update = delete + re-create).
+// ingestItem writes a single FetchedItem into the knowledge base. Changed
+// connector content is staged under a new ID and promoted only after parsing.
 //
 // Routing logic:
 //   - Has Content bytes → CreateKnowledgeFromFile (走完整的文档解析 pipeline)
@@ -1329,28 +1329,56 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 		return false, err
 	}
 
-	// Check if a knowledge item with this external_id already exists → delete it first (update)
+	// Stage changed content under a new ID. The old source keeps its external
+	// identity and stays retrievable until the candidate is approved and parsed.
 	isUpdate := false
+	var existing *types.Knowledge
 	if item.ExternalID != "" {
 		repo := s.knowledgeService.GetRepository()
 		// Scope the lookup to items owned by this data source so identical
 		// external IDs from two data sources cannot collide or overwrite each
 		// other during updates.
-		existing, err := repo.FindByDataSourceExternalID(ctx, ds.TenantID, ds.KnowledgeBaseID, ds.ID, item.ExternalID)
+		found, err := repo.FindByDataSourceExternalID(ctx, ds.TenantID, ds.KnowledgeBaseID, ds.ID, item.ExternalID)
 		if err != nil {
 			logger.Warnf(ctx, "failed to check existing knowledge for external_id=%s: %v", item.ExternalID, err)
 			// Non-fatal: proceed with creation (may produce duplicate)
-		} else if existing != nil {
-			logger.Infof(ctx, "found existing knowledge %s for external_id=%s, deleting for update", existing.ID, item.ExternalID)
-			if err := s.knowledgeService.DeleteKnowledge(ctx, existing.ID); err != nil {
-				logger.Warnf(ctx, "failed to delete existing knowledge %s: %v", existing.ID, err)
-			} else {
-				if herr := repo.HardDeleteKnowledge(ctx, ds.TenantID, existing.ID); herr != nil {
-					logger.Warnf(ctx, "failed to hard-delete replaced knowledge %s: %v", existing.ID, herr)
-				}
-				isUpdate = true
+		} else {
+			existing = found
+		}
+	}
+	if existing != nil {
+		contentHash := ""
+		if len(item.Content) > 0 {
+			contentHash = fmt.Sprintf("%x", sha256.Sum256(item.Content))
+			oldMetadata := stringMetadata(existing.Metadata)
+			if existing.FileHash == contentHash || oldMetadata["content_sha256"] == contentHash {
+				return true, types.NewDuplicateFileError(existing)
 			}
 		}
+		pending, err := s.findPendingSourceUpdateCandidate(ctx, ds, item.ExternalID, contentHash)
+		if err != nil {
+			return false, err
+		}
+		if pending != nil {
+			if pending.ParseStatus == types.ParseStatusCompleted {
+				if promoter, ok := s.knowledgeService.(interface {
+					PromoteSourceUpdateCandidate(context.Context, string) error
+				}); ok {
+					if err := promoter.PromoteSourceUpdateCandidate(ctx, pending.ID); err != nil {
+						return false, err
+					}
+				}
+			}
+			return true, nil
+		}
+		if existing.ParseStatus == types.ParseStatusPending || existing.ParseStatus == types.ParseStatusProcessing || existing.ParseStatus == types.ParseStatusFinalizing {
+			return false, fmt.Errorf("existing source %s is still processing; retry the sync after it completes", existing.ID)
+		}
+		metadata, err = s.markSourceUpdateCandidate(ctx, ds, existing, metadata, contentHash, item.SubtreeKeep, item.ReplacesSubtree)
+		if err != nil {
+			return false, err
+		}
+		isUpdate = true
 	}
 
 	// Case 1: content already fetched → build a FileHeader from bytes and call CreateKnowledgeFromFile
@@ -1371,7 +1399,7 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 			nil,
 		); err != nil {
 			var dupErr *types.DuplicateKnowledgeError
-			if errors.As(err, &dupErr) && dupIsSameNode(dupErr, item) {
+			if errors.As(err, &dupErr) && dupIsSameNode(dupErr, item) && !isUpdate {
 				// Identical content is already present in the KB under THIS node's
 				// own external_id, so the parent effectively exists — reconcile the
 				// subtree so children removed from the doc do not linger.
@@ -1379,27 +1407,27 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 			}
 			return isUpdate, err
 		}
-		s.sweepStaleSubtree(ctx, ds, item)
+		if !isUpdate {
+			s.sweepStaleSubtree(ctx, ds, item)
+		}
 		return isUpdate, nil
 	}
 
 	// Case 2: only a remote URL — let Reliquary handle downloading and parsing
 	if item.URL != "" {
-		created, err := s.knowledgeService.CreateKnowledgeFromURL(
-			ctx,
-			ds.KnowledgeBaseID,
-			item.URL,
-			item.FileName,
-			"",  // auto-detect file type
-			nil, // use KB default for multimodal
-			item.Title,
-			tagIDs, // auto-tag from data source
-			channel,
-			nil,
-		)
+		var created *types.Knowledge
+		var err error
+		concrete, isConcrete := s.knowledgeService.(*knowledgeService)
+		if isUpdate && isConcrete {
+			created, err = concrete.createKnowledgeFromURL(ctx, ds.KnowledgeBaseID, item.URL, item.FileName, "", nil,
+				item.Title, tagIDs, channel, nil, metadata, true)
+		} else {
+			created, err = s.knowledgeService.CreateKnowledgeFromURL(ctx, ds.KnowledgeBaseID, item.URL, item.FileName, "", nil,
+				item.Title, tagIDs, channel, nil)
+		}
 		if err != nil {
 			var dupErr *types.DuplicateKnowledgeError
-			if errors.As(err, &dupErr) && dupIsSameNode(dupErr, item) {
+			if errors.As(err, &dupErr) && dupIsSameNode(dupErr, item) && !isUpdate {
 				// Identical content is already present in the KB under THIS node's
 				// own external_id, so the parent effectively exists — reconcile the
 				// subtree so children removed from the doc do not linger.
@@ -1410,21 +1438,81 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 		// URL-created knowledge has no metadata, so a later deletion could
 		// never find it. Attach the datasource keys on fresh creation only;
 		// the duplicate path reuses an existing row that must not be re-tagged.
-		if created != nil {
-			metadataBytes, mErr := json.Marshal(metadata)
-			if mErr != nil {
-				return isUpdate, fmt.Errorf("marshal datasource metadata: %w", mErr)
+		if created != nil && (!isConcrete || !isUpdate) {
+			if err := mergeStringMetadataIntoKnowledge(created, metadata); err != nil {
+				return isUpdate, err
 			}
-			created.Metadata = types.JSON(metadataBytes)
-			if uErr := s.knowledgeService.GetRepository().UpdateKnowledge(ctx, created); uErr != nil {
-				return isUpdate, fmt.Errorf("attach datasource metadata: %w", uErr)
+			if err := s.knowledgeService.GetRepository().UpdateKnowledge(ctx, created); err != nil {
+				return isUpdate, fmt.Errorf("attach datasource metadata: %w", err)
 			}
 		}
-		s.sweepStaleSubtree(ctx, ds, item)
+		if !isUpdate {
+			s.sweepStaleSubtree(ctx, ds, item)
+		}
 		return isUpdate, nil
 	}
 
 	return isUpdate, fmt.Errorf("item has neither content nor URL")
+}
+
+func (s *DataSourceService) markSourceUpdateCandidate(
+	ctx context.Context, ds *types.DataSource, old *types.Knowledge, metadata map[string]string,
+	contentHash string, subtreeKeep []string, replacesSubtree bool,
+) (map[string]string, error) {
+	if concrete, ok := s.knowledgeService.(*knowledgeService); ok {
+		if err := concrete.snapshotContextSource(ctx, old); err != nil {
+			return nil, fmt.Errorf("preserve replaced source evidence: %w", err)
+		}
+	}
+	result := make(map[string]string, len(metadata)+5)
+	for key, value := range metadata {
+		if key != "external_id" {
+			result[key] = value
+		}
+	}
+	result[sourceUpdateCandidateKey] = "true"
+	result[sourceUpdateReplacesKey] = old.ID
+	result[sourceUpdateExternalIDKey] = metadata["external_id"]
+	result[sourceUpdateDataSourceKey] = ds.ID
+	result[sourceUpdateEnableStatusKey] = old.EnableStatus
+	if contentHash != "" {
+		result["content_sha256"] = contentHash
+	}
+	if len(subtreeKeep) > 0 {
+		encoded, err := json.Marshal(subtreeKeep)
+		if err != nil {
+			return nil, err
+		}
+		result[sourceUpdateSubtreeKeepKey] = string(encoded)
+	}
+	result[sourceUpdateSubtreeReplaceKey] = fmt.Sprint(replacesSubtree)
+	return result, nil
+}
+
+func (s *DataSourceService) findPendingSourceUpdateCandidate(
+	ctx context.Context, ds *types.DataSource, externalID, contentHash string,
+) (*types.Knowledge, error) {
+	rows, err := s.knowledgeService.GetRepository().ListKnowledgeByKnowledgeBaseID(ctx, ds.TenantID, ds.KnowledgeBaseID)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		if !row.IsSourceUpdateCandidate() {
+			continue
+		}
+		meta := stringMetadata(row.Metadata)
+		if meta[sourceUpdateExternalIDKey] != externalID || meta[sourceUpdateDataSourceKey] != ds.ID {
+			continue
+		}
+		if contentHash != "" && meta["content_sha256"] != "" && meta["content_sha256"] != contentHash {
+			continue
+		}
+		switch row.ParseStatus {
+		case types.ParseStatusPending, types.ParseStatusProcessing, types.ParseStatusFinalizing, types.ParseStatusCompleted:
+			return row, nil
+		}
+	}
+	return nil, nil
 }
 
 // dupIsSameNode reports whether a duplicate-content error means the parent still

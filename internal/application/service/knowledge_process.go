@@ -196,8 +196,7 @@ func finalizeIndexedKnowledgeState(
 	}
 
 	knowledge.EnableStatus = "enabled"
-	var source map[string]json.RawMessage
-	if json.Unmarshal(knowledge.Metadata, &source) == nil && string(source["rss_update_candidate"]) == `"true"` {
+	if knowledge.IsSourceUpdateCandidate() {
 		knowledge.EnableStatus = "disabled"
 	}
 	knowledge.StorageSize = totalStorageSize
@@ -657,6 +656,10 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 
 	if err := s.repo.UpdateKnowledge(ctx, knowledge); err != nil {
 		logger.GetLogger(ctx).WithField("error", err).Errorf("processChunks update knowledge failed")
+	} else if knowledge.ParseStatus == types.ParseStatusCompleted {
+		if err := s.promoteSourceUpdateCandidate(ctx, knowledge.ID); err != nil {
+			logger.Warnf(ctx, "source update candidate promotion after indexing failed for %s: %v", knowledge.ID, err)
+		}
 	}
 
 	// Enqueue multimodal tasks for images (async, non-blocking)
@@ -1072,7 +1075,7 @@ func (s *knowledgeService) ProcessSummaryGeneration(ctx context.Context, t *asyn
 		// "finalizing". When we DO return an error asynq will retry, so
 		// we only drain on the final attempt.
 		finalizeSubtaskDetached(ctx, s.repo, payload.KnowledgeID, "summary",
-			retErr, false, isFinalAsynqAttempt(ctx))
+			retErr, false, isFinalAsynqAttempt(ctx), sourceUpdatePromotionCallback(s))
 		if span == nil {
 			return
 		}
@@ -1444,7 +1447,7 @@ func (s *knowledgeService) processQuestionGenerationForKnowledge(ctx context.Con
 	// unwind LIFO, so this one declared first executes last.
 	defer func() {
 		finalizeSubtaskDetached(ctx, s.repo, payload.KnowledgeID, "question_legacy",
-			retErr, superseded, isFinalAsynqAttempt(ctx))
+			retErr, superseded, isFinalAsynqAttempt(ctx), sourceUpdatePromotionCallback(s))
 	}()
 	defer func() {
 		logger.Infof(
@@ -1815,7 +1818,7 @@ func (s *knowledgeService) processQuestionGenerationForChunks(ctx context.Contex
 	defer func() {
 		finalizeSubtaskDetached(ctx, s.repo, payload.KnowledgeID,
 			fmt.Sprintf("question_batch[%d]", payload.BatchIndex),
-			retErr, superseded, isFinalAsynqAttempt(ctx))
+			retErr, superseded, isFinalAsynqAttempt(ctx), sourceUpdatePromotionCallback(s))
 	}()
 	defer func() {
 		logger.Infof(ctx,

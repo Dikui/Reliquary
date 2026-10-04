@@ -51,6 +51,22 @@ func (h *KnowledgeStrategyHandler) Activate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
 }
 
+func (h *KnowledgeStrategyHandler) Evaluate(c *gin.Context) {
+	var input struct {
+		Samples []service.KnowledgeStrategyEvaluationSample `json:"samples" binding:"required,min=1,max=20,dive"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.Error(werrors.NewBadRequestError("one to twenty labeled samples required"))
+		return
+	}
+	result, err := h.service.Evaluate(c.Request.Context(), c.Param("id"), c.Param("version_id"), input.Samples)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": result})
+}
+
 func (h *KnowledgeStrategyHandler) Reprocess(c *gin.Context) {
 	var input struct {
 		MessageIDs []string `json:"message_ids"`

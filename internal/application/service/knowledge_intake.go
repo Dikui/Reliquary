@@ -206,6 +206,11 @@ func (s *knowledgeService) ReviewKnowledgeIntake(ctx context.Context, id, action
 		if err := s.clearIntakeSource(ctx, knowledge); err != nil {
 			return nil, err
 		}
+		if s.db != nil && s.db.Migrator().HasTable(&types.KnowledgeEvidence{}) {
+			if err := NewKnowledgeContextService(s.db, s.modelService).DeleteMessages(ctx, kb.ID, []string{id}); err != nil {
+				return nil, err
+			}
+		}
 		if err := s.repo.DeleteKnowledgeTagRelations(ctx, id); err != nil {
 			return nil, err
 		}
