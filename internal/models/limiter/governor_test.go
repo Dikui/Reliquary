@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"reliquary/internal/types"
 )
 
@@ -130,4 +131,110 @@ func TestLocalLimiterReleaseIdempotent(t *testing.T) {
 	}
 	r2()
 	<-done
+}
+
+func waitForLocalWaiting(t *testing.T, l *localLimiter, waiting int64) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		stats, _ := l.RuntimeStats(context.Background())
+		return len(stats) == 1 && stats[0].Waiting == waiting
+	}, time.Second, time.Millisecond)
+}
+
+func receiveRelease(t *testing.T, ready <-chan func()) func() {
+	t.Helper()
+	select {
+	case release := <-ready:
+		return release
+	case <-time.After(time.Second):
+		t.Fatal("waiting acquire did not resume")
+		return nil
+	}
+}
+
+func TestLocalLimiterHotLimitsWakeExistingWaiters(t *testing.T) {
+	l := NewLocalLimiter().(*localLimiter)
+	SetGovernor(l, 1)
+	t.Cleanup(func() { SetGovernor(nil, 0) })
+	r1 := Gate(withBackground(), "m")
+	t.Cleanup(r1)
+	ready := make(chan func(), 1)
+	go func() { ready <- Gate(withBackground(), "m") }()
+	waitForLocalWaiting(t, l, 1)
+	SetGlobalLimit(2) // No new Acquire is needed to wake this waiter.
+	r2 := receiveRelease(t, ready)
+	t.Cleanup(r2)
+	go func() { ready <- Gate(withBackground(), "m") }()
+	waitForLocalWaiting(t, l, 1)
+	SetGlobalLimit(1)
+	r1()
+	r1() // Old holders still release once after both limit changes.
+	select {
+	case release := <-ready:
+		release()
+		t.Fatal("lowered limit must wait until active falls below one")
+	case <-time.After(30 * time.Millisecond):
+	}
+	stats, _ := l.RuntimeStats(context.Background())
+	require.Equal(t, int64(1), stats[0].Active)
+	require.Equal(t, 1, stats[0].Limit)
+	r2()
+	r3 := receiveRelease(t, ready)
+	t.Cleanup(r3)
+	go func() { ready <- Gate(withBackground(), "m") }()
+	waitForLocalWaiting(t, l, 1)
+	SetGlobalLimit(0) // Disabling the default must release existing waiters too.
+	r4 := receiveRelease(t, ready)
+	r3()
+	r4()
+	stats, _ = l.RuntimeStats(context.Background())
+	require.Zero(t, stats[0].Active)
+	require.Zero(t, stats[0].Waiting)
+	require.Zero(t, stats[0].Limit)
+
+	// A model's explicit cap is independent of the global default.
+	explicit := GateNamedN(withBackground(), "m", "", 1)
+	t.Cleanup(explicit)
+	go func() { ready <- GateNamedN(withBackground(), "m", "", 1) }()
+	waitForLocalWaiting(t, l, 1)
+	SetGlobalLimit(3)
+	stats, _ = l.RuntimeStats(context.Background())
+	require.Equal(t, 1, stats[0].Limit)
+	select {
+	case release := <-ready:
+		release()
+		t.Fatal("global limit must not override the model's explicit cap")
+	case <-time.After(30 * time.Millisecond):
+	}
+	explicit()
+	receiveRelease(t, ready)()
+}
+
+func TestLocalLimiterCancelledWaitDoesNotTakeOrReleaseSlot(t *testing.T) {
+	l := NewLocalLimiter().(*localLimiter)
+	held, err := l.Acquire(context.Background(), "m", 1)
+	require.NoError(t, err)
+	t.Cleanup(held)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	ready := make(chan func(), 1)
+	go func() {
+		release, err := l.Acquire(ctx, "m", 1)
+		require.NoError(t, err)
+		ready <- release
+	}()
+	waitForLocalWaiting(t, l, 1)
+	cancel()
+	release := receiveRelease(t, ready)
+	release()
+	release()
+	stats, _ := l.RuntimeStats(context.Background())
+	require.Equal(t, int64(1), stats[0].Active)
+	require.Zero(t, stats[0].Waiting)
+	held()
+	release, err = l.Acquire(ctx, "m", 1) // Already cancelled with a free slot.
+	require.NoError(t, err)
+	release()
+	stats, _ = l.RuntimeStats(context.Background())
+	require.Zero(t, stats[0].Active)
 }

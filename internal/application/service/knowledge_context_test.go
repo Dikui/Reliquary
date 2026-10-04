@@ -138,6 +138,7 @@ func TestKnowledgeContextProcessSnapshotCorrectionAndTenantScope(t *testing.T) {
 	}}
 	svc := NewKnowledgeContextService(db, knowledgeContextTestModelService{model: model})
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(9))
+	ctx = context.WithValue(ctx, types.UserIDContextKey, "reviewer")
 	require.NoError(t, svc.ProcessMessage(ctx, &k, body))
 	require.NoError(t, svc.ProcessMessage(ctx, &k, body))
 	require.Equal(t, 1, model.calls, "a completed evidence snapshot must make retries idempotent")
@@ -182,6 +183,12 @@ func TestKnowledgeContextProcessSnapshotCorrectionAndTenantScope(t *testing.T) {
 	require.Equal(t, 2, combined.Events[0].SourceCount)
 	require.Contains(t, combined.Entities[0].Aliases, "ACME Inc.")
 
+	_, anonymousCorrectionErr := svc.CorrectFact(context.WithValue(ctx, types.UserIDContextKey, ""), "kb", correctionTarget, types.KnowledgeFactCorrection{
+		Value: types.JSON(`"confirmed"`), ValueType: "string", Quote: body,
+		CorrectionNote: "No authenticated actor.",
+	})
+	require.Error(t, anonymousCorrectionErr, "a correction cannot be stored without an authenticated actor")
+
 	_, invalidCorrectionErr := svc.CorrectFact(ctx, "kb", correctionTarget, types.KnowledgeFactCorrection{
 		Value: types.JSON(`"not-a-number"`), ValueType: "number", Quote: body,
 		CorrectionNote: "This invalid typed value must not be stored.",
@@ -197,6 +204,11 @@ func TestKnowledgeContextProcessSnapshotCorrectionAndTenantScope(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, types.KnowledgeFactCurrent, corrected.Status)
+	require.Equal(t, "web_user:reviewer", corrected.CorrectionActor)
+	var storedCorrection types.KnowledgeFact
+	require.NoError(t, db.First(&storedCorrection, "id = ?", corrected.ID).Error)
+	require.Equal(t, corrected.CorrectionActor, storedCorrection.CorrectionActor)
+	require.Equal(t, correctionTarget, storedCorrection.SupersedesID)
 	current, err := svc.Query(ctx, "kb", types.KnowledgeContextQuery{KnowledgeIDs: []string{k.ID}})
 	require.NoError(t, err)
 	require.Len(t, current.Facts, 2)
@@ -204,6 +216,15 @@ func TestKnowledgeContextProcessSnapshotCorrectionAndTenantScope(t *testing.T) {
 	history, err := svc.Query(ctx, "kb", types.KnowledgeContextQuery{KnowledgeIDs: []string{k.ID}, IncludeHistory: true})
 	require.NoError(t, err)
 	require.Len(t, history.Facts, 3)
+	for _, fact := range history.Facts {
+		if fact.ID == correctionTarget {
+			require.Equal(t, corrected.ID, fact.CorrectedBy)
+			require.Empty(t, fact.CorrectionActor, "the original version must not be attributed to its corrector")
+		}
+		if fact.ID == corrected.ID {
+			require.Equal(t, "web_user:reviewer", fact.CorrectionActor)
+		}
+	}
 
 	updatedBody := body + " The closing is complete."
 	updatedEvidence, err := svc.SnapshotMessage(ctx, &k, updatedBody)

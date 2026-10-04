@@ -99,7 +99,9 @@ type KnowledgeFact struct {
 	SupersedesID      string     `json:"supersedes_id,omitempty" gorm:"type:varchar(36);not null;default:'';index"`
 	CorrectedBy       string     `json:"corrected_by,omitempty" gorm:"type:varchar(36);not null;default:''"`
 	CorrectionNote    string     `json:"correction_note,omitempty" gorm:"type:text;not null;default:''"`
-	CreatedAt         time.Time  `json:"created_at"`
+	// CorrectionActor identifies the authenticated principal that made this version.
+	CorrectionActor string    `json:"correction_actor,omitempty" gorm:"type:varchar(255);not null;default:''"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 func (KnowledgeFact) TableName() string { return "knowledge_context_facts" }

@@ -67,6 +67,7 @@ export interface KnowledgeFact {
   supersedes_id?: string
   corrected_by?: string
   correction_note?: string
+  correction_actor?: string
   created_at: string
 }
 

@@ -37,20 +37,20 @@ var versionedSQLiteTables = []string{
 // versionedSQLiteColumns maps each existing table to the columns that the
 // versioned migrations add and the SQLite baseline was missing.
 var versionedSQLiteColumns = map[string][]string{
-	"tenants":                          {"api_principal_config"},           // 000064
-	"users":                            {"is_system_admin"},                // 000053
-	"knowledges":                       {"pending_subtasks_count"},         // 000056
-	"messages":                         {"attachments", "usage"},           // 000034, 000085
-	"tenant_invitations":               {"token", "accepted_count"},        // 000054
-	"embed_channels":                   {"allow_memory"},                   // 000060
-	"mcp_oauth_tokens":                 {"principal_type", "principal_id"}, // 000064
-	"knowledge_tags":                   {"kind"},                           // 000091
-	"knowledge_context_event_evidence": {"relation", "related_event_id"},   // 000097
-	"knowledge_context_facts":          {"original_predicate"},             // 000097
-	"knowledge_context_evidence":       {"source_kind"},                    // 000097
+	"tenants":                          {"api_principal_config"},                   // 000064
+	"users":                            {"is_system_admin"},                        // 000053
+	"knowledges":                       {"pending_subtasks_count"},                 // 000056
+	"messages":                         {"attachments", "usage"},                   // 000034, 000085
+	"tenant_invitations":               {"token", "accepted_count"},                // 000054
+	"embed_channels":                   {"allow_memory"},                           // 000060
+	"mcp_oauth_tokens":                 {"principal_type", "principal_id"},         // 000064
+	"knowledge_tags":                   {"kind"},                                   // 000091
+	"knowledge_context_event_evidence": {"relation", "related_event_id"},           // 000097
+	"knowledge_context_facts":          {"original_predicate", "correction_actor"}, // 000097, 000098
+	"knowledge_context_evidence":       {"source_kind"},                            // 000097
 }
 
-const expectedSQLiteMigrationVersion = 19
+const expectedSQLiteMigrationVersion = 20
 
 func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	repoRoot := sqliteRepoRoot(t)

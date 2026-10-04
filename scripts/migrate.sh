@@ -51,7 +51,7 @@ else
     # Use Python to properly URL encode password if it contains special characters
     # This handles special characters in passwords correctly
     if command -v python3 &> /dev/null; then
-        ENCODED_PASSWORD=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$DB_PASSWORD', safe=''))")
+        ENCODED_PASSWORD=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$DB_PASSWORD")
     else
         # Fallback: try to use printf for basic encoding (may not work for all special chars)
         ENCODED_PASSWORD="$DB_PASSWORD"
@@ -63,18 +63,16 @@ fi
 case "$1" in
     up)
         echo "Running migrations up..."
-        echo "DB_URL: ${DB_URL}"
         echo "DB_USER: ${DB_USER}"
-        echo "DB_PASSWORD: ${DB_PASSWORD}"
         echo "DB_HOST: ${DB_HOST}"
         echo "DB_PORT: ${DB_PORT}"
         echo "DB_NAME: ${DB_NAME}"
         echo "MIGRATIONS_DIR: ${MIGRATIONS_DIR}"
-        migrate -path ${MIGRATIONS_DIR} -database ${DB_URL} up
+        migrate -path "${MIGRATIONS_DIR}" -database "${DB_URL}" up
         ;;
     down)
         echo "Running migrations down..."
-        migrate -path ${MIGRATIONS_DIR} -database ${DB_URL} down
+        migrate -path "${MIGRATIONS_DIR}" -database "${DB_URL}" down
         ;;
     create)
         if [ -z "$2" ]; then
@@ -90,7 +88,7 @@ case "$1" in
         ;;
     version)
         echo "Checking current migration version..."
-        migrate -path ${MIGRATIONS_DIR} -database ${DB_URL} version
+        migrate -path "${MIGRATIONS_DIR}" -database "${DB_URL}" version
         ;;
     force)
         if [ -z "$2" ]; then
@@ -111,7 +109,7 @@ case "$1" in
             exit 1
         fi
         echo "Migrating to version $2..."
-        migrate -path ${MIGRATIONS_DIR} -database ${DB_URL} goto $2
+        migrate -path "${MIGRATIONS_DIR}" -database "${DB_URL}" goto "$2"
         ;;
     *)
         echo "Usage: $0 {up|down|create <migration_name>|version|force <version>|goto <version>}"
@@ -119,4 +117,4 @@ case "$1" in
         ;;
 esac
 
-echo "Migration command completed successfully" 
+echo "Migration command completed successfully"

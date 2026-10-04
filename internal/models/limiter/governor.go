@@ -27,6 +27,9 @@ func SetGovernor(l ModelConcurrencyLimiter, limit int) {
 	defer governorMu.Unlock()
 	governor = l
 	governorN = limit
+	if local, ok := l.(*localLimiter); ok {
+		local.setDefaultLimit(limit)
+	}
 }
 
 // SetGlobalLimit updates ONLY the process-wide default per-model limit,
@@ -38,6 +41,9 @@ func SetGlobalLimit(limit int) {
 	governorMu.Lock()
 	defer governorMu.Unlock()
 	governorN = limit
+	if local, ok := governor.(*localLimiter); ok {
+		local.setDefaultLimit(limit)
+	}
 }
 
 // Gate acquires a per-model concurrency slot using the process-wide default
@@ -72,7 +78,13 @@ func GateNamedN(ctx context.Context, modelID, modelName string, modelLimit int) 
 	if named, ok := l.(interface{ SetModelName(string, string) }); ok {
 		named.SetModelName(modelID, modelName)
 	}
-	release, err := l.Acquire(ctx, modelID, limit)
+	var release func()
+	var err error
+	if local, ok := l.(*localLimiter); ok {
+		release, err = local.acquire(ctx, modelID, limit, modelLimit <= 0)
+	} else {
+		release, err = l.Acquire(ctx, modelID, limit)
+	}
 	if err != nil || release == nil {
 		return noop
 	}
@@ -104,45 +116,105 @@ func RuntimeStats(ctx context.Context) ([]RuntimeStat, bool, error) {
 // worker pool against one provider, so we still cap concurrency locally.
 type localLimiter struct {
 	mu      sync.Mutex
-	sems    map[string]chan struct{}
+	sems    map[string]*localSemaphore
 	tracked map[string]*trackedSemaphore
+}
+
+type localSemaphore struct {
+	active      int
+	limit       int
+	usesDefault bool
+	changed     chan struct{}
+}
+
+// Wake existing waiters while keeping holders attached to the same state.
+func (s *localSemaphore) notify() {
+	close(s.changed)
+	s.changed = make(chan struct{})
+}
+
+func (l *localLimiter) setDefaultLimit(limit int) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for key, sem := range l.sems {
+		if sem.usesDefault && sem.limit != limit {
+			sem.limit = limit
+			l.tracked[key].limit.Store(int64(limit))
+			sem.notify()
+		}
+	}
 }
 
 // NewLocalLimiter builds an in-process per-key concurrency limiter.
 func NewLocalLimiter() ModelConcurrencyLimiter {
-	return &localLimiter{sems: make(map[string]chan struct{}), tracked: make(map[string]*trackedSemaphore)}
+	return &localLimiter{sems: make(map[string]*localSemaphore), tracked: make(map[string]*trackedSemaphore)}
 }
 
 func (l *localLimiter) Acquire(ctx context.Context, key string, limit int) (func(), error) {
+	return l.acquire(ctx, key, limit, false)
+}
+
+func (l *localLimiter) acquire(ctx context.Context, key string, limit int, usesDefault bool) (func(), error) {
+	if usesDefault {
+		// Serialize registration with hot updates so an old Gate snapshot
+		// cannot restore the previous default after settings have changed.
+		governorMu.RLock()
+		limit = governorN
+	}
 	if l == nil || limit <= 0 || key == "" {
+		if usesDefault {
+			governorMu.RUnlock()
+		}
 		return noop, nil
 	}
 
 	l.mu.Lock()
-	sem, ok := l.sems[key]
+	sem := l.sems[key]
 	tracked := l.tracked[key]
 	if tracked == nil {
 		tracked = &trackedSemaphore{}
 		l.tracked[key] = tracked
 	}
 	tracked.limit.Store(int64(limit))
-	if !ok {
-		// Capacity is fixed at first use for a key; the limit is a
-		// process-wide constant, so it never changes across acquires.
-		sem = make(chan struct{}, limit)
+	if sem == nil {
+		sem = &localSemaphore{limit: limit, changed: make(chan struct{})}
 		l.sems[key] = sem
+	} else if sem.limit != limit {
+		sem.limit = limit
+		sem.notify()
 	}
-	l.mu.Unlock()
+	sem.usesDefault = usesDefault
+	if usesDefault {
+		governorMu.RUnlock()
+	}
 	tracked.waiting.Add(1)
 	defer tracked.waiting.Add(-1)
 
-	select {
-	case sem <- struct{}{}:
-		var once sync.Once
-		return func() { once.Do(func() { <-sem }) }, nil
-	case <-ctx.Done():
-		// Fail open on cancellation, mirroring the Redis limiter.
-		return noop, nil
+	for {
+		if ctx.Err() != nil {
+			l.mu.Unlock()
+			return noop, nil // Preserve the governor's cancellation fail-open contract.
+		}
+		if sem.limit <= 0 || sem.active < sem.limit {
+			sem.active++
+			l.mu.Unlock()
+			var once sync.Once
+			return func() {
+				once.Do(func() {
+					l.mu.Lock()
+					defer l.mu.Unlock()
+					sem.active--
+					sem.notify()
+				})
+			}, nil
+		}
+		changed := sem.changed
+		l.mu.Unlock()
+		select {
+		case <-changed:
+		case <-ctx.Done():
+		}
+		l.mu.Lock()
 	}
 }
 
@@ -153,7 +225,7 @@ func (l *localLimiter) RuntimeStats(_ context.Context) ([]RuntimeStat, error) {
 	for modelID, sem := range l.sems {
 		tracked := l.tracked[modelID]
 		name, _ := tracked.name.Load().(string)
-		stats = append(stats, RuntimeStat{ModelID: modelID, Name: name, Active: int64(len(sem)), Waiting: tracked.waiting.Load(), Limit: int(tracked.limit.Load())})
+		stats = append(stats, RuntimeStat{ModelID: modelID, Name: name, Active: int64(sem.active), Waiting: tracked.waiting.Load(), Limit: sem.limit})
 	}
 	sort.Slice(stats, func(i, j int) bool { return stats[i].ModelID < stats[j].ModelID })
 	return stats, nil

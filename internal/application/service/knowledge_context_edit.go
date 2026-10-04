@@ -19,6 +19,10 @@ func (s *KnowledgeContextService) CorrectFact(ctx context.Context, kbID, factID 
 	if err != nil {
 		return nil, err
 	}
+	actor, ok := types.PrincipalFromContext(ctx)
+	if !ok {
+		return nil, werrors.NewUnauthorizedError("authenticated correction actor required")
+	}
 	correction.Quote = strings.TrimSpace(correction.Quote)
 	correction.CorrectionNote = strings.TrimSpace(correction.CorrectionNote)
 	if correction.Quote == "" || correction.CorrectionNote == "" {
@@ -64,7 +68,8 @@ func (s *KnowledgeContextService) CorrectFact(ctx context.Context, kbID, factID 
 			Value: value, ValueType: correction.ValueType, Unit: correction.Unit,
 			EffectiveFrom: from, EffectiveTo: to, EvidenceID: old.EvidenceID,
 			Quote: correction.Quote, Status: types.KnowledgeFactCurrent,
-			SupersedesID: old.ID, CorrectionNote: correction.CorrectionNote, CreatedAt: time.Now(),
+			SupersedesID: old.ID, CorrectionNote: correction.CorrectionNote,
+			CorrectionActor: actor.StorageID(), CreatedAt: time.Now(),
 		}
 		if err := tx.Create(&newFact).Error; err != nil {
 			return err
