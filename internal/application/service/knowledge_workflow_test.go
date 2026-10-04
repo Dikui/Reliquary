@@ -415,4 +415,22 @@ func TestKnowledgeWorkflowRejectsOtherTenantAndUnsupportedStep(t *testing.T) {
 		Name: "Unsupported", Steps: []types.KnowledgeWorkflowStep{{ID: "step", Type: "external_publish", Config: map[string]any{}}},
 	})
 	require.ErrorIs(t, err, ErrWorkflowInvalid)
+
+	input := types.KnowledgeWorkflowInput{
+		Name: "Scheduled search", Schedule: types.KnowledgeWorkflowSchedule{Cron: "0 9 * * *"},
+		Steps: []types.KnowledgeWorkflowStep{{ID: "search", Type: types.WorkflowStepSearch, Config: map[string]any{"query": "source"}}},
+	}
+	require.NoError(t, validateWorkflowInput(input))
+	input.Schedule.Cron = "@daily"
+	require.ErrorIs(t, validateWorkflowInput(input), ErrWorkflowInvalid, "the schedule must use the same five fields as the scheduler")
+	input.Schedule.Cron = ""
+	input.Steps[0] = types.KnowledgeWorkflowStep{ID: "research", Type: types.WorkflowStepWebResearch, Config: map[string]any{"query": "source", "ingest": false}}
+	require.ErrorIs(t, validateWorkflowInput(input), ErrWorkflowInvalid)
+	input.Steps[0].Config["ingest"] = true
+	require.NoError(t, validateWorkflowInput(input))
+	input.Steps = append(input.Steps, types.KnowledgeWorkflowStep{ID: "condition", Type: types.WorkflowStepCondition,
+		Config: map[string]any{"step_id": "research", "path": "data.count", "operator": "gt", "value": "10"}})
+	require.ErrorIs(t, validateWorkflowInput(input), ErrWorkflowInvalid)
+	input.Steps[1].Config["value"] = 10
+	require.NoError(t, validateWorkflowInput(input))
 }

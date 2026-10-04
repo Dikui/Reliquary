@@ -52,7 +52,7 @@ func confirmCaveat(verb string) string {
 	switch verb {
 	case "edit":
 		return "This overwrites the current values."
-	default: // delete / remove — irreversible
+	default: // delete / remove - irreversible
 		return "This cannot be undone."
 	}
 }
@@ -70,7 +70,7 @@ func titleFirst(s string) string {
 // ConfirmDestructiveBatch is the multi-id flavor of ConfirmDestructive: same
 // behavior matrix (yes / non-TTY / TTY-prompt / user-no) but the prompt text
 // reflects the count, not a single id. Used by `doc delete <id> [<id>...]`
-// — one -y confirms all items in the batch.
+// - one -y confirms all items in the batch.
 //
 // Pass n = total count of items about to be deleted.
 // action is the namespaced action verb (e.g. "doc.delete") for the risk envelope.
@@ -126,8 +126,8 @@ func ConfirmDestructive(p prompt.Prompter, yes, jsonOut bool, verb, what, id, ac
 }
 
 // ConfirmWrite guards a reversible metadata write (kb / agent / doc update).
-// Same confirmation gate as ConfirmDestructive — a labeling-accuracy variant,
-// NOT a weaker gate — but tags the risk envelope at the "write" level so an
+// Same confirmation gate as ConfirmDestructive - a labeling-accuracy variant,
+// NOT a weaker gate - but tags the risk envelope at the "write" level so an
 // agent can distinguish a recoverable edit from an irreversible delete.
 func ConfirmWrite(p prompt.Prompter, yes, jsonOut bool, verb, what, id, action string, retryArgv []string) error {
 	return confirmGated(p, yes, jsonOut, verb, what, id, action, RiskWrite, retryArgv)

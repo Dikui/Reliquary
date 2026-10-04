@@ -55,6 +55,54 @@ func (c *knowledgeContextTestChat) Chat(_ context.Context, messages []chat.Messa
 func (c *knowledgeContextTestChat) GetModelName() string { return "context-test" }
 func (c *knowledgeContextTestChat) GetModelID() string   { return "context-test" }
 
+func TestKnowledgeContextCanonicalCollisionKeepsFactAndEventReferences(t *testing.T) {
+	db := knowledgeContextTestDB(t)
+	require.NoError(t, db.Exec(`ALTER TABLE knowledge_bases ADD COLUMN summary_model_id TEXT NOT NULL DEFAULT 'summary'`).Error)
+	body := "Alpha Inc and A Corp are names of Alpha. Alpha Inc has 10 staff. A Corp has 20 clients. Alpha Inc is also A Corp."
+	k := types.Knowledge{ID: "aliases-message", TenantID: 9, KnowledgeBaseID: "kb", Title: "Aliases",
+		ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	require.NoError(t, k.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "approved",
+		SourceInfo: types.SourceInfo{Publisher: "Publisher", OriginalURL: "https://example.com/aliases", PublishedAt: "2026-10-01"}}))
+	require.NoError(t, db.Create(&k).Error)
+	model := &knowledgeContextTestChat{response: `{
+		"entities":[
+			{"mention":"Alpha Inc","quote":"Alpha Inc and A Corp are names of Alpha.","canonical_name":"Alpha","entity_type":"organization","aliases":[]},
+			{"mention":"A Corp","quote":"Alpha Inc and A Corp are names of Alpha.","canonical_name":"Alpha","entity_type":"organization","aliases":[]}],
+		"facts":[
+			{"kind":"attribute","subject":"Alpha Inc","predicate":"staff","value":10,"value_type":"number","quote":"Alpha Inc has 10 staff."},
+			{"kind":"attribute","subject":"A Corp","predicate":"clients","value":20,"value_type":"number","quote":"A Corp has 20 clients."},
+			{"kind":"relation","subject":"Alpha Inc","predicate":"also_named","object":"A Corp","value_type":"entity","quote":"Alpha Inc is also A Corp."}],
+		"events":[{"title":"Alpha aliases recorded","event_type":"record","entity_mentions":["Alpha Inc","A Corp"],"quote":"Alpha Inc and A Corp are names of Alpha."}],
+		"attention":{"score":1,"reason":"recorded"}}`}
+	svc := NewKnowledgeContextService(db, knowledgeContextTestModelService{model: model})
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(9))
+	require.NoError(t, svc.ProcessMessage(ctx, &k, body))
+	var entities []types.KnowledgeEntity
+	var facts []types.KnowledgeFact
+	var events []types.KnowledgeEvent
+	var links []types.KnowledgeEventEvidence
+	require.NoError(t, db.Find(&entities).Error)
+	require.NoError(t, db.Find(&facts).Error)
+	require.NoError(t, db.Find(&events).Error)
+	require.NoError(t, db.Find(&links).Error)
+	require.Len(t, entities, 1)
+	require.Len(t, facts, 3)
+	for _, fact := range facts {
+		require.Equal(t, entities[0].ID, fact.SubjectEntityID)
+		if fact.Kind == types.KnowledgeFactRelation {
+			require.Equal(t, entities[0].ID, fact.ObjectEntityID)
+		}
+	}
+	require.Len(t, events, 1)
+	require.Equal(t, types.StringArray{entities[0].ID}, events[0].EntityIDs)
+	require.Len(t, links, 1)
+	require.Equal(t, types.StringArray{entities[0].ID}, links[0].EntityIDs, "source entity references must use the persisted identity")
+	result, err := svc.Query(ctx, "kb", types.KnowledgeContextQuery{EntityID: entities[0].ID})
+	require.NoError(t, err)
+	require.Len(t, result.Facts, 3)
+	require.Len(t, result.Events, 1)
+}
+
 func TestKnowledgeContextProcessSnapshotCorrectionAndTenantScope(t *testing.T) {
 	db := knowledgeContextTestDB(t)
 	require.NoError(t, db.Exec(`ALTER TABLE knowledge_bases ADD COLUMN summary_model_id TEXT NOT NULL DEFAULT ''`).Error)

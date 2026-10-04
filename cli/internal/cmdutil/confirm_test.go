@@ -75,6 +75,12 @@ func TestBuildRetryArgv_ScalarsAndSlices(t *testing.T) {
 
 	got := cmdutil.BuildRetryArgv(cmd, []string{"reliquary", "agent", "update", "ag_abc"},
 		"name", "add-kb", "format")
+	cmdutil.SetProfile("staging")
+	t.Cleanup(func() { cmdutil.SetProfile("") })
+	err := cmdutil.NewError(cmdutil.CodeInputConfirmationRequired, "approval").WithRetryArgv(got)
+	if len(err.RetryArgv) < 3 || err.RetryArgv[1] != "--profile" || err.RetryArgv[2] != "staging" {
+		t.Fatalf("retry lost profile: %v", err.RetryArgv)
+	}
 	// Visit order is lexicographical among changed flags.
 	want := []string{
 		"reliquary", "agent", "update", "ag_abc",

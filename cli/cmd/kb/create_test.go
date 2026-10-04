@@ -81,7 +81,7 @@ func TestCreate_HintsWhenNoEmbeddingModel(t *testing.T) {
 	assert.Contains(t, env.Meta.Hint, "kb config set", "unconfigured KB must hint the retrieval-readiness fix")
 }
 
-// A retrieval-ready KB (embedding model bound) carries no such hint — no noise.
+// A retrieval-ready KB (embedding model bound) carries no such hint - no noise.
 func TestCreate_NoHintWhenEmbeddingModelBound(t *testing.T) {
 	out, _ := iostreams.SetForTest(t)
 	svc := &fakeCreateSvc{resp: &sdk.KnowledgeBase{ID: "kb_x", Name: "n", EmbeddingModelID: "emb_1"}}

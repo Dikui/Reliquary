@@ -105,7 +105,8 @@ func validateWorkflowInput(in types.KnowledgeWorkflowInput) error {
 		return fmt.Errorf("%w: workflow must contain 1 to 100 steps", ErrWorkflowInvalid)
 	}
 	if strings.TrimSpace(in.Schedule.Cron) != "" {
-		if _, err := cron.ParseStandard(in.Schedule.Cron); err != nil {
+		parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+		if _, err := parser.Parse(in.Schedule.Cron); err != nil {
 			return fmt.Errorf("%w: invalid schedule cron: %v", ErrWorkflowInvalid, err)
 		}
 		if strings.TrimSpace(in.Schedule.Timezone) != "" {
@@ -204,6 +205,13 @@ func validateWorkflowStepConfig(step types.KnowledgeWorkflowStep) error {
 		if str("query") == "" {
 			return errors.New("query is required")
 		}
+		cfg, err := decodeWorkflowConfig[workflowResearchConfig](step.Config)
+		if err != nil {
+			return err
+		}
+		if cfg.Ingest != nil && !*cfg.Ingest {
+			return errors.New("web research must ingest sources through the existing intake review")
+		}
 		if max := workflowInt(step.Config["max_results"]); max > 30 {
 			return errors.New("max_results cannot exceed 30")
 		}
@@ -251,6 +259,15 @@ func validateWorkflowStepConfig(step types.KnowledgeWorkflowStep) error {
 		operator := str("operator")
 		if operator != "exists" && operator != "equals" && operator != "not_equals" && operator != "contains" && operator != "gt" && operator != "gte" {
 			return errors.New("unsupported condition operator")
+		}
+		if operator == "gt" || operator == "gte" {
+			cfg, err := decodeWorkflowConfig[workflowConditionConfig](step.Config)
+			if err != nil {
+				return err
+			}
+			if _, ok := workflowFloat(cfg.Value); !ok {
+				return errors.New("numeric condition requires numeric values")
+			}
 		}
 	case types.WorkflowStepHumanReview:
 		// A review step needs no additional fields; the persisted step itself is

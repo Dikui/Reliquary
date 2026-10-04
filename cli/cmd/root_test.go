@@ -12,6 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"reliquary/cli/internal/cmdutil"
+	"reliquary/cli/internal/config"
+	"reliquary/cli/internal/iostreams"
+	"reliquary/cli/internal/prompt"
+	sdk "reliquary/client"
 )
 
 func TestRoot_Help(t *testing.T) {
@@ -186,6 +190,42 @@ func TestResolveFormatEarly_DefaultsToEnvelope(t *testing.T) {
 			isEnvelope := strings.HasPrefix(strings.TrimSpace(buf.String()), "{")
 			assert.Equal(t, tc.want, isEnvelope,
 				"args=%v: got %q", tc.args, buf.String())
+		})
+	}
+}
+
+func TestRoot_ConfirmationRetryPinsProfile(t *testing.T) {
+	t.Setenv("RELIQUARY_PROFILE", "")
+	t.Cleanup(func() { cmdutil.SetProfile("") })
+	for _, tc := range []struct {
+		name       string
+		args, want []string
+	}{
+		{"configured default", []string{"api", "-X", "DELETE", "/api/v1/knowledge-bases/kb_x"}, []string{"reliquary", "--profile", "prod", "api", "-X", "DELETE", "/api/v1/knowledge-bases/kb_x", "-y"}},
+		{"explicit override", []string{"--profile", "staging", "kb", "delete", "kb_x"}, []string{"reliquary", "--profile", "staging", "kb", "delete", "kb_x", "-y"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _ = iostreams.SetForTest(t)
+			f := &cmdutil.Factory{
+				Config:   func() (*config.Config, error) { return &config.Config{CurrentProfile: "prod"}, nil },
+				Client:   func() (*sdk.Client, error) { return sdk.NewClient("http://unused.invalid"), nil },
+				Prompter: func() prompt.Prompter { return prompt.AgentPrompter{} },
+			}
+			root := NewRootCmd(f)
+			root.SetArgs(tc.args)
+			err := root.Execute()
+			require.Error(t, err)
+			typed := cmdutil.AsError(err)
+			require.NotNil(t, typed)
+			assert.Equal(t, cmdutil.CodeInputConfirmationRequired, typed.Code)
+			// A later profile switch must not alter the already issued approval request.
+			cmdutil.SetProfile("other")
+			assert.Equal(t, tc.want, cmdutil.ErrorToDetail(err).RetryArgv)
+			var stderr bytes.Buffer
+			cmdutil.PrintError(&stderr, err)
+			assert.Contains(t, stderr.String(), tc.want[2])
+			recovery := cmdutil.NewError(cmdutil.CodeAuthUnauthenticated, "login").WithRetryArgv([]string{"reliquary", "auth", "login"})
+			assert.Equal(t, []string{"reliquary", "auth", "login"}, recovery.RetryArgv)
 		})
 	}
 }

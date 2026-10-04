@@ -116,7 +116,7 @@ func New() *Factory {
 func buildClient(f *Factory) (*sdk.Client, error) {
 	// Env-credential injection: RELIQUARY_TOKEN (bearer) or RELIQUARY_API_KEY, with
 	// RELIQUARY_HOST (or the active profile's host), builds an ephemeral client
-	// that bypasses config.yaml + the keyring — the stateless headless / CI /
+	// that bypasses config.yaml + the keyring - the stateless headless / CI /
 	// agent path (no disk writes, no `auth login`).
 	if c, handled, err := buildClientFromEnv(f); handled {
 		return c, err
@@ -129,7 +129,7 @@ func buildClient(f *Factory) (*sdk.Client, error) {
 	if profileName == "" {
 		// Zero-state: no profile exists at all. The generic auth.unauthenticated
 		// default retry_argv is `auth login`, but that ALSO fails here (it needs
-		// an active profile) — an agent that execs retry_argv would loop. Point
+		// an active profile) - an agent that execs retry_argv would loop. Point
 		// hint + retry_argv at the real first step: create a profile.
 		return nil, NewError(CodeAuthUnauthenticated, "no profile configured").
 			WithHint("add one first: `reliquary profile add <name> --host <url> --use`, then `reliquary auth login` (or set RELIQUARY_API_KEY + RELIQUARY_HOST for headless use)").
@@ -203,8 +203,8 @@ func buildClient(f *Factory) (*sdk.Client, error) {
 
 // EnvCredential reports whether stateless env credentials are in effect and
 // which kind. Used by `auth status` / `config view` so their host / profile
-// output reflects that the env credential (and RELIQUARY_HOST) — not the config
-// profile — is what actually authenticated the client. Mirrors buildClientFromEnv's
+// output reflects that the env credential (and RELIQUARY_HOST) - not the config
+// profile - is what actually authenticated the client. Mirrors buildClientFromEnv's
 // precedence (RELIQUARY_TOKEN wins over RELIQUARY_API_KEY).
 func EnvCredential() (active bool, kind string) {
 	if strings.TrimSpace(os.Getenv("RELIQUARY_TOKEN")) != "" {
@@ -218,12 +218,12 @@ func EnvCredential() (active bool, kind string) {
 
 // buildClientFromEnv builds an ephemeral SDK client from RELIQUARY_TOKEN (bearer
 // JWT) or RELIQUARY_API_KEY when either is set, bypassing config.yaml + the
-// keyring entirely — the stateless path for headless / CI / agent use. Returns
+// keyring entirely - the stateless path for headless / CI / agent use. Returns
 // handled=false (fall through to the profile path) when neither var is set.
 //
 // Host resolution: RELIQUARY_HOST, else the active profile's host (so env creds
 // can target an already-configured host without re-specifying it). When a token
-// is supplied, no 401→refresh transport is attached — env creds are ephemeral,
+// is supplied, no 401→refresh transport is attached - env creds are ephemeral,
 // so a 401 propagates for the caller to supply a fresh token. RELIQUARY_TOKEN
 // wins over RELIQUARY_API_KEY if both are set.
 func buildClientFromEnv(f *Factory) (client *sdk.Client, handled bool, err error) {
@@ -255,18 +255,18 @@ func buildClientFromEnv(f *Factory) (client *sdk.Client, handled bool, err error
 
 // AddKBFlag registers the standard `--kb` flag that ResolveKB reads. Use this
 // instead of duplicating the flag declaration in every command that scopes to
-// a knowledge base — one source of truth for flag name and help text.
+// a knowledge base - one source of truth for flag name and help text.
 func AddKBFlag(cmd *cobra.Command) {
 	cmd.Flags().String("kb", "", "Knowledge base UUID or name (overrides env / project link)")
 }
 
 // AddIgnoredKBFlag registers a no-op --kb on id-addressed commands (doc view /
 // wait, chunk list / view). Those resolve a globally-unique doc/chunk id, so
-// --kb is redundant — but an agent flowing from `doc upload --kb X` naturally
+// --kb is redundant - but an agent flowing from `doc upload --kb X` naturally
 // carries it, and rejecting it with exit 2 is pure friction. Accepted and
 // ignored; declared here so schema still lists it truthfully.
 func AddIgnoredKBFlag(cmd *cobra.Command) {
-	cmd.Flags().String("kb", "", "Ignored — the id argument is globally unique; accepted for symmetry with `doc list`/`doc upload` so a carried-over --kb doesn't error")
+	cmd.Flags().String("kb", "", "Ignored - the id argument is globally unique; accepted for symmetry with `doc list`/`doc upload` so a carried-over --kb doesn't error")
 }
 
 // ResolveKB returns the active KB id for the running command, applying the
@@ -331,7 +331,7 @@ func (f *Factory) resolveKBFromEnvOrLink() (string, error) {
 // effect before any SDK call.
 //
 // Returns a typed error if the user passed an explicit --log-level with
-// an invalid value — matches the strictness of --format validation
+// an invalid value - matches the strictness of --format validation
 // (env values stay silent-fallthrough; flag values are strict).
 func (f *Factory) ApplyLogLevel(cmd *cobra.Command, stderr io.Writer) error {
 	if cmd != nil {

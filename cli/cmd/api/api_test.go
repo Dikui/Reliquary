@@ -603,3 +603,31 @@ func TestAPI_POST_NotGated(t *testing.T) {
 		t.Error("POST handler not called - POST must not be gated")
 	}
 }
+
+type failingResponseBody struct{ closed bool }
+
+func (b *failingResponseBody) Read(p []byte) (int, error) {
+	return copy(p, []byte(`{"data":[{"id":"partial"}]}`)), io.ErrUnexpectedEOF
+}
+func (b *failingResponseBody) Close() error { b.closed = true; return nil }
+
+func TestAPI_PaginatedBodyReadFailure(t *testing.T) {
+	out, _ := iostreams.SetForTest(t)
+	body := &failingResponseBody{}
+	calls := 0
+	svc := &fakeAPISvc{do: func(method, path string, _ any) (*http.Response, error) {
+		calls++
+		return &http.Response{StatusCode: http.StatusOK, Body: body}, nil
+	}}
+	err := runAPI(context.Background(), &Options{}, &cmdutil.FormatOptions{Mode: cmdutil.FormatJSON}, svc, "GET", "/api/v1/foo", true)
+	typed := cmdutil.AsError(err)
+	if typed == nil || typed.Code != cmdutil.CodeNetworkError {
+		t.Fatalf("want network.error, got %v", err)
+	}
+	if !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("lost read error: %v", err)
+	}
+	if !body.closed || calls != 1 || out.Len() != 0 {
+		t.Fatalf("closed=%v calls=%d output=%q", body.closed, calls, out.String())
+	}
+}

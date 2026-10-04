@@ -58,7 +58,7 @@ func TestKBCreate_DryRun_EmitsPlan(t *testing.T) {
 	out, _ := iostreams.SetForTest(t)
 	f := kbDryRunFactory(t)
 	root := withRootHarness(NewCmdCreate(f),
-		"foo", "--description", "bar", "--dry-run", "--format", "json")
+		"foo", "--description", "bar", "--embedding-model", "embed-name", "--chat-model", "chat-name", "--storage-provider", "S3", "--dry-run", "--format", "json")
 	require.NoError(t, root.Execute(), "dry-run must succeed (exit 0) without SDK")
 
 	var env struct {
@@ -78,6 +78,9 @@ func TestKBCreate_DryRun_EmitsPlan(t *testing.T) {
 	require.True(t, ok, "plan.args must be a map, got %T", env.Meta.Plan["args"])
 	assert.Equal(t, "foo", planArgs["name"], "plan.args.name must echo positional <name>")
 	assert.Equal(t, "bar", planArgs["description"], "plan.args.description must echo --description")
+	assert.Equal(t, "embed-name", planArgs["embedding-model"])
+	assert.Equal(t, "chat-name", planArgs["chat-model"])
+	assert.Equal(t, "S3", planArgs["storage-provider"])
 	assert.Nil(t, env.Data, "data must be omitted on dry-run (no real result)")
 }
 

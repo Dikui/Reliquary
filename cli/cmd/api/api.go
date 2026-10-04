@@ -65,7 +65,7 @@ DELETE / PUT / PATCH / HEAD / OPTIONS / TRACE / custom).
 Auth, tenant, and request-id headers are applied automatically from the
 active profile. In text mode (default) the raw server response body is written
 to stdout. In --format json the parsed server response is placed directly
-under envelope.data — drill in with --jq '.data...' at the server's own depth
+under envelope.data - drill in with --jq '.data...' at the server's own depth
 (e.g. '.data.data[]' for a list endpoint). Only -X DELETE is confirmation-gated.
 
 Examples:
@@ -86,7 +86,7 @@ Examples:
 				// --dry-run on the raw escape-hatch is only meaningful when a
 				// would-be mutation exists to preview. GET (default or explicit)
 				// is read-only with no side effect, so previewing it is a
-				// likely user error — signal it via FlagError exit 2 with the
+				// likely user error - signal it via FlagError exit 2 with the
 				// concrete repair. Use resolveMethod so --input auto-promotes
 				// GET → POST identically to the live path.
 				method := resolveMethod(opts)
@@ -162,9 +162,9 @@ Examples:
 			"reliquary api -X DELETE /api/v1/knowledge-bases/kb_x -y",
 			"echo '{\"name\":\"foo\"}' | reliquary api /api/v1/knowledge-bases --input -",
 		},
-		Output: "text mode (default): the raw server response body on stdout. json mode: the parsed server response is placed directly under envelope.data — project with --jq '.data...' at the server's own depth (e.g. '.data.data[]' for a list endpoint, '.data.data.id' for a created object). With --paginate, envelope.data is the merged {data, total}.",
+		Output: "text mode (default): the raw server response body on stdout. json mode: the parsed server response is placed directly under envelope.data - project with --jq '.data...' at the server's own depth (e.g. '.data.data[]' for a list endpoint, '.data.data.id' for a created object). With --paginate, envelope.data is the merged {data, total}.",
 		Warnings: []string{
-			"-X DELETE is destructive-gated and -X PUT/PATCH are write-gated (exit 10 / input.confirmation_required unless -y), matching typed delete/update. -X POST (create-shaped) and GET are unguarded — you own the safety of creates made through this escape hatch.",
+			"-X DELETE is destructive-gated and -X PUT/PATCH are write-gated (exit 10 / input.confirmation_required unless -y), matching typed delete/update. -X POST (create-shaped) and GET are unguarded - you own the safety of creates made through this escape hatch.",
 			"Raw passthrough: the typed error envelope does NOT fully apply. The server's own response goes under envelope.data at its native depth; a non-2xx HTTP status surfaces via the exit code, not a typed error.type/retry_argv. Do not rely on error.type/retryable for `api` the way you do for typed subcommands.",
 			"Raw HTTP passthrough; agents should prefer typed subcommands (kb/doc/session/...) when available.",
 		},
@@ -179,7 +179,7 @@ Examples:
 // The body is sent as a JSON document (the SDK marshals it as json.RawMessage),
 // so a non-JSON / malformed payload is validated and rejected here as
 // input.invalid_argument (exit 5). Without this, the failure surfaced from the
-// SDK's marshal step as a confusing network.error (exit 7, "retryable") —
+// SDK's marshal step as a confusing network.error (exit 7, "retryable") -
 // looping an agent on a body that can never be sent.
 func readInput(opts *Options) ([]byte, error) {
 	var b []byte
@@ -210,7 +210,7 @@ func readInput(opts *Options) ([]byte, error) {
 // resolveBody returns the request body bytes from -d/--data (inline) or
 // --input (file/stdin), or nil when neither is set. Inline --data is
 // validated as JSON here; --input is validated inside readInput. The two
-// flags are mutually exclusive — checked here (rather than cobra's
+// flags are mutually exclusive - checked here (rather than cobra's
 // MarkFlagsMutuallyExclusive, whose violation surfaces as an unclassified
 // internal.error / exit 1) so the conflict reports input.invalid_argument.
 func resolveBody(opts *Options) ([]byte, error) {
@@ -252,7 +252,7 @@ func hasBody(opts *Options) bool {
 // inferFieldValue maps a -F value string to a typed JSON scalar: literal
 // true/false/null and integer/float literals become typed JSON; everything
 // else stays a string. A value that looks numeric but must stay a string
-// (e.g. a zero-padded id "007") can't be forced here — use -d/--data or
+// (e.g. a zero-padded id "007") can't be forced here - use -d/--data or
 // --input for full control.
 func inferFieldValue(v string) any {
 	switch v {
@@ -387,8 +387,8 @@ func runAPISingle(ctx context.Context, opts *Options, fopts *cmdutil.FormatOptio
 }
 
 // emitRawBody writes a server response body under the active format. JSON mode
-// places the parsed body directly under envelope.data — no {status, headers,
-// body} wrapper — so `--jq '.data...'` projects at the server's own shape
+// places the parsed body directly under envelope.data - no {status, headers,
+// body} wrapper - so `--jq '.data...'` projects at the server's own shape
 // (e.g. `.data.data[]` for a list endpoint) rather than a triple-nested
 // `.data.body.data[]`; non-JSON decodes best-effort to a raw string. Text mode
 // writes the body verbatim with a trailing newline. Shared by the single and
@@ -438,8 +438,11 @@ func runAPIPaginated(ctx context.Context, opts *Options, fopts *cmdutil.FormatOp
 		if err != nil {
 			return cmdutil.WrapHTTP(err, "GET %s", curPath)
 		}
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
+		if err != nil {
+			return cmdutil.Wrapf(cmdutil.CodeNetworkError, err, "read response body")
+		}
 
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			code := cmdutil.ClassifyHTTPStatus(resp.StatusCode)
@@ -453,7 +456,7 @@ func runAPIPaginated(ctx context.Context, opts *Options, fopts *cmdutil.FormatOp
 			PageSize int               `json:"page_size"`
 		}
 		if err := json.Unmarshal(body, &pageResp); err != nil {
-			// Non-JSON response on first page — fall back through the envelope.
+			// Non-JSON response on first page - fall back through the envelope.
 			if page == 1 {
 				return emitRawBody(body, fopts)
 			}

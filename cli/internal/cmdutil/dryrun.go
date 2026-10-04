@@ -36,7 +36,7 @@ type DryRunPlan struct {
 
 // AddDryRunFlag registers --dry-run on a cobra command, binding to a bool
 // pointer. A bool is sufficient because the CLI is single-tenant and
-// self-hosted — there is no client/server distinction to encode.
+// self-hosted - there is no client/server distinction to encode.
 func AddDryRunFlag(cmd *cobra.Command, dest *bool) {
 	cmd.Flags().BoolVar(dest, "dry-run", false,
 		"Preview the action without executing (offline; no SDK calls, no file IO)")
@@ -78,7 +78,7 @@ func EmitDryRun(w io.Writer, fopts *FormatOptions, plan DryRunPlan) error {
 }
 
 // HandleDryRun bundles the dry-run preamble for mutation command RunE:
-// FormatOptions resolution + envelope emit. Returns (handled, err) — when
+// FormatOptions resolution + envelope emit. Returns (handled, err) - when
 // handled is true, RunE should return err immediately without doing any
 // SDK / Factory.Client() / ResolveKB / ConfirmDestructive work.
 //
@@ -92,7 +92,7 @@ func EmitDryRun(w io.Writer, fopts *FormatOptions, plan DryRunPlan) error {
 //	}
 //
 // The helper invokes ONLY local config reads (CheckFormatFlag,
-// IsStdoutTTY) — no SDK calls, no keyring writes, no file IO. Safe to
+// IsStdoutTTY) - no SDK calls, no keyring writes, no file IO. Safe to
 // call before any other RunE logic.
 //
 // The helper re-resolves FormatOptions internally so callsites stay

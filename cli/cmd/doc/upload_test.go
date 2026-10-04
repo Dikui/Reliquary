@@ -319,3 +319,24 @@ func TestUpload_Channel_DefaultStillAPI(t *testing.T) {
 	require.NoError(t, runUpload(context.Background(), opts, &cmdutil.FormatOptions{Mode: cmdutil.FormatText}, svc, "kb_xxx", path))
 	assert.Equal(t, uploadChannel, svc.got.channel)
 }
+
+func TestUpload_DryRun_ExplicitOptions(t *testing.T) {
+	out, _ := iostreams.SetForTest(t)
+	root := withRootHarnessDoc(NewCmdUpload(docDryRunFactory(t)),
+		"missing.pdf", "--kb", "raw-kb-name", "--name", "Custom.pdf", "--enable-multimodel=false",
+		"--metadata", "team=alpha", "--metadata", "team=beta", "--channel", "browser", "--dry-run", "--format", "json")
+	require.NoError(t, root.Execute())
+	var env struct {
+		Meta struct {
+			Plan struct {
+				Args map[string]any `json:"args"`
+			} `json:"plan"`
+		} `json:"meta"`
+	}
+	require.NoError(t, json.Unmarshal(out.Bytes(), &env))
+	assert.Equal(t, "raw-kb-name", env.Meta.Plan.Args["kb"])
+	assert.Equal(t, "Custom.pdf", env.Meta.Plan.Args["name"])
+	assert.Equal(t, "false", env.Meta.Plan.Args["enable-multimodel"])
+	assert.Equal(t, []any{"team=alpha", "team=beta"}, env.Meta.Plan.Args["metadata"])
+	assert.Equal(t, "browser", env.Meta.Plan.Args["channel"])
+}

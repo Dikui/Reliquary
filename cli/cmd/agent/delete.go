@@ -12,7 +12,7 @@ import (
 )
 
 // agentDeleteFields enumerates the JSON discovery fields for `agent delete`.
-// Result payload is a tiny {id, deleted} object — mirrors `kb delete`.
+// Result payload is a tiny {id, deleted} object - mirrors `kb delete`.
 var agentDeleteFields = []string{"id", "deleted"}
 
 type DeleteOptions struct {
@@ -32,7 +32,7 @@ type deleteResult struct {
 	Deleted bool   `json:"deleted"`
 }
 
-// Delete is NOT idempotent on a missing id — it surfaces resource.not_found
+// Delete is NOT idempotent on a missing id - it surfaces resource.not_found
 // rather than silently exiting 0. Idempotent-already-true semantics are
 // reserved for unlink-style local cleanups, not server-side resource removal.
 const agentDeleteLong = `Permanently delete a custom agent.
@@ -48,7 +48,7 @@ Typed exit codes:
 
 AI agents: This is a high-risk write. Without -y/--yes the CLI exits 10
 and writes input.confirmation_required to stderr. NEVER auto-pass -y
-without the user's explicit go-ahead — the exit-10 protocol exists
+without the user's explicit go-ahead - the exit-10 protocol exists
 exactly to guard against unintended deletes.`
 
 const agentDeleteExample = `  reliquary agent delete ag_abc           # interactive confirm

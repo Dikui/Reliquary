@@ -47,7 +47,7 @@ Pass -y/--yes (global flag) to skip the prompt (required in agent / CI / piped c
 
 AI agents: This is a high-risk write. Without -y/--yes the CLI exits 10
 and writes input.confirmation_required to stderr. NEVER auto-pass -y
-without the user's explicit go-ahead — the exit-10 protocol exists
+without the user's explicit go-ahead - the exit-10 protocol exists
 exactly to guard against unintended deletes.`,
 		Example: `  reliquary kb delete kb_abc                      # interactive confirm
   reliquary kb delete kb_abc -y                   # no prompt

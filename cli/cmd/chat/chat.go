@@ -12,7 +12,7 @@
 //     directly to iostreams.IO.Out as it arrives.
 //
 //   - NDJSON mode (--format ndjson): inject a CLI "init" event at stream
-//     head, then pass through every SDK event verbatim as NDJSON lines —
+//     head, then pass through every SDK event verbatim as NDJSON lines -
 //     the raw protocol trace, for debugging / advanced consumers.
 //
 // The SDK's KnowledgeQAStream callback contract is invoked sequentially on
@@ -77,7 +77,7 @@ answer back. By default a fresh session is created on first invocation; pass
 Modes:
   --format json (default):       one JSON envelope with answer events
   --format text:                 live human-readable answer stream
-  --format ndjson:               raw NDJSON event stream — init line (session_id,
+  --format ndjson:               raw NDJSON event stream - init line (session_id,
                                  kb_id) then SDK events verbatim. Debug / advanced.
 
 Pass --reference to include bounded kb_id/chunk_id reference indexes. Pass
@@ -185,7 +185,7 @@ func runChat(ctx context.Context, opts *Options, fopts *cmdutil.FormatOptions, s
 
 // runChatNDJSON handles the --format ndjson path: emits a CLI init event at
 // stream head, then passes every SDK event through verbatim as NDJSON lines.
-// No buffering — callers parse the stream incrementally.
+// No buffering - callers parse the stream incrementally.
 func runChatNDJSON(ctx context.Context, opts *Options, sessionID string, svc ChatService) error {
 	w := iostreams.IO.Out
 

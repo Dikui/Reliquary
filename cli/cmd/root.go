@@ -63,7 +63,7 @@ func resolveFormatEarly(args []string) {
 		// "json", "" (no flag/env), or an invalid value all route the cobra-side
 		// error through the JSON envelope. Cobra parse errors fire before
 		// PersistentPreRunE runs ResolveDefault, so we apply the same default
-		// here (DefaultFormatMode) — otherwise the error path would emit prose
+		// here (DefaultFormatMode) - otherwise the error path would emit prose
 		// while the success path emits the envelope.
 		cmdutil.SetFormatMode(string(cmdutil.DefaultFormatMode))
 	}
@@ -237,7 +237,7 @@ func addGlobalFlags(cmd *cobra.Command) {
 	// (e.g. `reliquary fooo --format json`) reach the typed-envelope guard
 	// instead of being rejected as "unknown flag" exit 2 by cobra. Commands
 	// that don't produce JSON output (e.g. `completion bash`) ignore the flag
-	// rather than error — the unified agent contract is worth the trade.
+	// rather than error - the unified agent contract is worth the trade.
 	pf.String("format", "", "Output format: text | json | ndjson (default: json; env: RELIQUARY_FORMAT)")
 	pf.StringP("jq", "q", "", "Filter JSON output using a jq `expression` (requires --format json|ndjson)")
 }

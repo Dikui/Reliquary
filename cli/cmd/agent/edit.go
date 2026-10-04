@@ -15,7 +15,7 @@ import (
 )
 
 // EditService is the narrow SDK surface this command depends on. The fetch
-// half (GetAgent) is mandatory because UpdateAgent is a full PUT — without
+// half (GetAgent) is mandatory because UpdateAgent is a full PUT - without
 // the pre-fetch baseline, any field not passed as a flag would silently
 // clobber to the zero value.
 type EditService interface {
@@ -81,7 +81,7 @@ nets out to no-op and prints a stderr warning.
 --config-file fully replaces the AgentConfig baseline (the same shape
 GenerateAgentSkeleton emits). Surgical flags then apply on top of that
 replaced baseline. To partially update one or two fields without
-touching the rest, use surgical flags alone — that path L-2 fetches
+touching the rest, use surgical flags alone - that path L-2 fetches
 current state and only mutates what's set. Precedence within a single
 invocation:
 

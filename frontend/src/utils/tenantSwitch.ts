@@ -11,10 +11,9 @@ import { updateMyPreferences } from '@/api/auth'
 const SAFE_FALLBACK_PATH = '/platform/knowledge-bases'
 
 /**
- * Return the URL to navigate to after a tenant switch. 目前始终返回 KB 列表
- * 作为登录页，保留函数签名是为了未来需要按路由做特殊处理时留个口子。
+ * Return the knowledge-base list URL after a tenant switch.
  */
-export function tenantSwitchTargetPath(_currentPath: string): string {
+export function tenantSwitchTargetPath(): string {
   return SAFE_FALLBACK_PATH
 }
 
@@ -22,7 +21,7 @@ export function tenantSwitchTargetPath(_currentPath: string): string {
  * Perform the post-switch navigation. 统一跳到 KB 列表。
  */
 export function navigateAfterTenantSwitch(): void {
-  window.location.href = tenantSwitchTargetPath(window.location.pathname)
+  window.location.href = tenantSwitchTargetPath()
 }
 
 // 切换成功后的 toast 跨 hard reload 传递：调用方在 reload 前把信息塞进

@@ -73,15 +73,6 @@ def _resolve_images(
     if not images:
         return "", []
 
-    mime_map = {
-        ".png": "image/png",
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".gif": "image/gif",
-        ".webp": "image/webp",
-        ".bmp": "image/bmp",
-    }
-
     refs = []
     for ref_path, b64data in images.items():
         try:
@@ -89,9 +80,7 @@ def _resolve_images(
         except Exception:
             img_bytes = b64data.encode("utf-8") if isinstance(b64data, str) else b64data
 
-        fname = os.path.basename(ref_path) or f"{uuid.uuid4().hex}.png"
-        ext = os.path.splitext(fname)[1].lower()
-        mime = mime_map.get(ext, "application/octet-stream")
+        fname, mime = _mime_for_ref(ref_path)
 
         refs.append(
             ImageRef(

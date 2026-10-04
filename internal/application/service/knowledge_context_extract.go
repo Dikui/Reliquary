@@ -187,10 +187,27 @@ func (s *KnowledgeContextService) ProcessMessage(ctx context.Context, k *types.K
 		if current.ExtractionStatus == types.KnowledgeExtractionComplete || current.Status != types.KnowledgeEvidenceCurrent {
 			return nil
 		}
-		if err := persistContextEntities(tx, entities); err != nil {
+		entityIDs, err := persistContextEntities(tx, entities)
+		if err != nil {
 			return err
 		}
+		remapIDs := func(ids types.StringArray) types.StringArray {
+			mapped := types.StringArray{}
+			for _, id := range ids {
+				if persistedID, ok := entityIDs[id]; ok {
+					id = persistedID
+				}
+				mapped = appendUniqueContextString(mapped, id)
+			}
+			return mapped
+		}
 		for _, fact := range facts {
+			if id, ok := entityIDs[fact.SubjectEntityID]; ok {
+				fact.SubjectEntityID = id
+			}
+			if id, ok := entityIDs[fact.ObjectEntityID]; ok {
+				fact.ObjectEntityID = id
+			}
 			if err := tx.Create(&fact).Error; err != nil {
 				return err
 			}
@@ -198,6 +215,8 @@ func (s *KnowledgeContextService) ProcessMessage(ctx context.Context, k *types.K
 		for i := range events {
 			resolution := &events[i]
 			event := &resolution.Event
+			event.EntityIDs = remapIDs(event.EntityIDs)
+			event.SourceEntityIDs = remapIDs(event.SourceEntityIDs)
 			var existing types.KnowledgeEvent
 			findErr := tx.Where("id = ? AND tenant_id = ? AND knowledge_base_id = ?", event.ID, tenantID, stored.KnowledgeBaseID).First(&existing).Error
 			if errors.Is(findErr, gorm.ErrRecordNotFound) {
@@ -725,8 +744,10 @@ func (s *KnowledgeContextService) matchContextEntity(ctx context.Context, model 
 	return matches[0].entity, nil
 }
 
-func persistContextEntities(tx *gorm.DB, entities []types.KnowledgeEntity) error {
+func persistContextEntities(tx *gorm.DB, entities []types.KnowledgeEntity) (map[string]string, error) {
+	entityIDs := make(map[string]string, len(entities))
 	for _, entity := range entities {
+		extractedID := entity.ID
 		aliasesToSave := append([]string{entity.CanonicalName}, entity.Aliases...)
 		var existing types.KnowledgeEntity
 		err := tx.Where("tenant_id = ? AND knowledge_base_id = ? AND normalized_name = ?",
@@ -735,10 +756,11 @@ func persistContextEntities(tx *gorm.DB, entities []types.KnowledgeEntity) error
 			aliasesToSave = append(aliasesToSave, existing.Aliases...)
 			entity = existing
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
+			return nil, err
 		} else if err := tx.Create(&entity).Error; err != nil {
-			return err
+			return nil, err
 		}
+		entityIDs[extractedID] = entity.ID
 		seen := make(map[string]bool)
 		for _, aliasText := range aliasesToSave {
 			aliasText = strings.TrimSpace(aliasText)
@@ -757,17 +779,17 @@ func persistContextEntities(tx *gorm.DB, entities []types.KnowledgeEntity) error
 				continue
 			}
 			if !errors.Is(findErr, gorm.ErrRecordNotFound) {
-				return findErr
+				return nil, findErr
 			}
 			alias := types.KnowledgeEntityAlias{ID: uuid.NewString(), TenantID: entity.TenantID,
 				KnowledgeBaseID: entity.KnowledgeBaseID, EntityID: entity.ID, Alias: aliasText,
 				NormalizedAlias: normalized, CreatedAt: time.Now()}
 			if err := tx.Create(&alias).Error; err != nil {
-				return err
+				return nil, err
 			}
 		}
 	}
-	return nil
+	return entityIDs, nil
 }
 
 func (s *KnowledgeContextService) resolveContextEvents(ctx context.Context, model chat.Chat, tenantID uint64, kbID string, input []contextExtractedEvent, mentions map[string]types.KnowledgeEntity) ([]contextEventResolution, error) {

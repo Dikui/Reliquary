@@ -124,7 +124,7 @@ without the user's explicit go-ahead.`,
 				// Resolve KB name → id before the destructive SDK call.
 				// Must use cmdutil.ResolveKBFlag (id-or-name, lists KBs and
 				// matches by name) rather than Factory.ResolveKB, which walks
-				// the project link — a destructive "empty the KB" must never
+				// the project link - a destructive "empty the KB" must never
 				// inherit an implicit linked KB.
 				kbID, err := cmdutil.ResolveKBFlag(c.Context(), cli, opts.KB)
 				if err != nil {
@@ -172,7 +172,7 @@ without the user's explicit go-ahead.`,
 			"reliquary doc delete doc_a doc_b doc_c -y",
 			"reliquary doc delete --all --kb=kb_x -y --format json",
 		},
-		Output: "envelope.data shape depends on the form: a single doc id -> {id, deleted:true}; multiple doc ids -> batch envelope (top-level status success|partial|error, ok=(failures==0), data per-item [{id, ok, error?}], meta.successes/failures — read data[].ok per id, ok:true overall does not survive a partial failure / exit 1); --all --kb -> {kb_id, deleted_count}.",
+		Output: "envelope.data shape depends on the form: a single doc id -> {id, deleted:true}; multiple doc ids -> batch envelope (top-level status success|partial|error, ok=(failures==0), data per-item [{id, ok, error?}], meta.successes/failures - read data[].ok per id, ok:true overall does not survive a partial failure / exit 1); --all --kb -> {kb_id, deleted_count}.",
 		Warnings: []string{
 			"Requires explicit user approval (exit 10 / input.confirmation_required); never auto-add -y.",
 			"doc delete is irreversible; loses the document + its chunks + embeddings.",

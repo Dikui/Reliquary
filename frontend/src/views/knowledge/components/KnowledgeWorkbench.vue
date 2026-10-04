@@ -207,7 +207,7 @@
             </p>
             <div class="event-row__meta">
               <span>{{ t('knowledgeWorkbench.events.sourceCount', { count: event.source_count }) }}</span>
-              <span>{{ formatDate(event.occurred_at || event.updated_at) }}</span>
+              <span>{{ formatDate(event.occurred_at) }}</span>
             </div>
             <div v-if="event.entity_ids?.length" class="chips">
               <span v-for="id in event.entity_ids" :key="id" class="chip">{{ entityName(id) }}</span>
@@ -353,7 +353,7 @@
                 <label class="span-two"><span>{{ t('knowledgeWorkbench.workflows.config.query') }}</span><t-input v-model="step.config.query" /></label>
                 <label><span>{{ t('knowledgeWorkbench.workflows.config.maxResults') }}</span><t-input-number v-model="step.config.max_results" :min="1" :max="50" /></label>
                 <label><span>{{ t('knowledgeWorkbench.workflows.config.provider') }}</span><t-input v-model="step.config.provider_id" /></label>
-                <label class="enable-toggle"><t-checkbox v-model="step.config.ingest">{{ t('knowledgeWorkbench.workflows.config.ingest') }}</t-checkbox></label>
+                <label class="enable-toggle"><t-checkbox :checked="true" disabled>{{ t('knowledgeWorkbench.workflows.config.ingest') }}</t-checkbox></label>
               </template>
               <template v-else-if="step.type === 'report'">
                 <label><span>{{ t('knowledgeWorkbench.workflows.config.reportTitle') }}</span><t-input v-model="step.config.title" /></label>
@@ -383,7 +383,11 @@
                 <label><span>{{ t('knowledgeWorkbench.workflows.config.conditionStep') }}</span><t-select v-model="step.config.step_id" :options="dependencyOptions(step)" /></label>
                 <label><span>{{ t('knowledgeWorkbench.workflows.config.path') }}</span><t-input v-model="step.config.path" /></label>
                 <label><span>{{ t('knowledgeWorkbench.workflows.config.operator') }}</span><t-select v-model="step.config.operator" :options="conditionOperatorOptions" /></label>
-                <label><span>{{ t('knowledgeWorkbench.workflows.config.value') }}</span><t-input v-model="step.config.value" /></label>
+                <label>
+                  <span>{{ t('knowledgeWorkbench.workflows.config.value') }}</span>
+                  <t-input-number v-if="step.config.operator === 'gt' || step.config.operator === 'gte'" v-model="step.config.value" />
+                  <t-input v-else v-model="step.config.value" />
+                </label>
               </template>
               <template v-else-if="step.type === 'human_review'">
                 <label class="span-two"><span>{{ t('knowledgeWorkbench.workflows.config.reviewMessage') }}</span><t-textarea v-model="step.config.message" :autosize="{ minRows: 2, maxRows: 4 }" /></label>
@@ -1333,7 +1337,7 @@ function makeStep(type: KnowledgeWorkflowStepType, index: number): KnowledgeWork
   const config: Record<string, unknown> = {
     search: { query: '', limit: 20 },
     fact_query: { entity: '', predicate: '', relation: '', object_entity_id: '', since: '', until: '', include_history: true, limit: 50 },
-    web_research: { query: '', max_results: 10, provider_id: '', ingest: false },
+    web_research: { query: '', max_results: 10, provider_id: '', ingest: true },
     report: { title: '', prompt: '', time_from: '', time_to: '', window: '', days: 7, timezone: 'Asia/Shanghai' },
     wiki_update: { slug: '', title: '', page_type: 'topic', summary: '', source_step: '' },
     skill: { agent_id: '', skill_name: '', script_path: '', args: [], args_text: '[]', input: '', input_step: '' },
@@ -1511,6 +1515,14 @@ function normalizeWorkflowInput(draft: KnowledgeWorkflowInput): KnowledgeWorkflo
     schedule: { cron: draft.schedule.cron?.trim() || '', timezone: draft.schedule.timezone?.trim() || 'Asia/Shanghai' },
     steps: draft.steps.map(step => {
       const config = { ...step.config }
+      if (step.type === 'web_research') config.ingest = true
+      if (step.type === 'condition' && (config.operator === 'gt' || config.operator === 'gte')) {
+        const value = typeof config.value === 'string' && config.value.trim() !== '' ? Number(config.value) : config.value
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          throw new Error(t('knowledgeWorkbench.workflows.invalidConditionValue', { step: step.id }))
+        }
+        config.value = value
+      }
       if (step.type === 'skill' && typeof config.args_text === 'string') {
         try {
           const args = config.args_text.trim() ? JSON.parse(config.args_text) : []
@@ -1702,7 +1714,7 @@ const EventCard = defineComponent({
       h('p', cardProps.event.description || t('knowledgeWorkbench.events.noDescription')),
       ...(cardProps.event.relations || []).filter(relation => relation.relation === 'same_story').map(relation => h('p', { class: 'event-card__meta' }, `${t('knowledgeWorkbench.fusion.sameStory')}: ${relation.related_title || relation.related_event_id}`)),
       h('div', { class: 'event-card__meta' }, [
-        `${t('knowledgeWorkbench.events.sourceCount', { count: cardProps.event.source_count })} · ${formatDate(cardProps.event.occurred_at || cardProps.event.updated_at)}`,
+        `${t('knowledgeWorkbench.events.sourceCount', { count: cardProps.event.source_count })} · ${formatDate(cardProps.event.occurred_at)}`,
       ]),
       ...cardProps.attention.map(item => h('p', { class: 'attention-reason', key: item.id }, [
         h('strong', item.reason || t('knowledgeWorkbench.events.scored')),
