@@ -24,7 +24,7 @@ const (
 )
 
 // chunkListFields enumerates the fields surfaced for `--format json` discovery on
-// `chunk list`. Mirrors sdk.Chunk json tags — all 23 fields are projectable
+// `chunk list`. Mirrors sdk.Chunk json tags - all 23 fields are projectable
 // because chunk list returns bare SDK objects.
 var chunkListFields = []string{
 	"id", "seq_id", "knowledge_id", "knowledge_base_id", "tenant_id",
@@ -57,7 +57,7 @@ const chunkListLong = `List chunks under a document in stored order.
 
 'chunk list --doc D' enumerates ALL chunks of document D in ChunkIndex
 order (the per-doc ordinal assigned at ingest time). This is the
-admin/debug surface for RAG retrieval — see what the chunking pipeline
+admin/debug surface for RAG retrieval - see what the chunking pipeline
 produced, audit content, find a chunk id to view/delete.
 
 For relevance-ranked retrieval (the RAG runtime surface), use
@@ -106,7 +106,7 @@ func NewCmdList(f *cmdutil.Factory) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&opts.DocID, "doc", "", "Document id (SDK knowledge_id) to enumerate chunks for")
 	_ = cmd.MarkFlagRequired("doc")
-	cmd.Flags().IntVarP(&opts.Limit, "limit", "L", defaultLimit, "Maximum results to return — client-side cap; meta.has_more/total_count report truncation (1..10000)")
+	cmd.Flags().IntVarP(&opts.Limit, "limit", "L", defaultLimit, "Maximum results to return - client-side cap; meta.has_more/total_count report truncation (1..10000)")
 	cmd.Flags().IntVar(&opts.PageSize, "page-size", defaultPageSize, "Items per server batch (1..1000)")
 	cmd.Flags().BoolVar(&opts.AllPages, "all-pages", false, "Walk all server pages until exhausted (or --limit hit)")
 	cmdutil.AddFormatFlag(cmd, chunkListFields...)

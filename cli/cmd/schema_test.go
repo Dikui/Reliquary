@@ -63,7 +63,7 @@ func TestSchema_SingleCommand(t *testing.T) {
 		flagNames[f.Name] = true
 	}
 	assert.True(t, flagNames["description"], "kb create local flags should include --description; got %v", flagNames)
-	// global persistent flags (--format, --profile) are inherited, not local —
+	// global persistent flags (--format, --profile) are inherited, not local -
 	// schema lists only command-specific flags.
 	assert.False(t, flagNames["profile"], "inherited global flags must be excluded")
 }
@@ -105,7 +105,7 @@ func TestSchema_SurfacesRisk(t *testing.T) {
 }
 
 // TestSchema_UnknownCommand: a bad path returns a typed unknown_subcommand
-// error (exit 5) with a did-you-mean hint — never a silent empty result.
+// error (exit 5) with a did-you-mean hint - never a silent empty result.
 func TestSchema_UnknownCommand(t *testing.T) {
 	iostreams.SetForTest(t)
 	root := NewRootCmd(cmdutil.New())

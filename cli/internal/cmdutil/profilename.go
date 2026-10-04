@@ -13,7 +13,7 @@ import (
 //
 // Crucially this also rejects shell metacharacters (space, `;`, `&`, `|`,
 // `$`, quotes, backticks, etc.), so the profile name remains safe to embed
-// in envelope.error.retry_argv — even an agent that joins the argv and exec's
+// in envelope.error.retry_argv - even an agent that joins the argv and exec's
 // `sh -c <joined>` cannot be tricked via a maliciously-named profile.
 func ValidateProfileName(name string) error {
 	if name == "" {

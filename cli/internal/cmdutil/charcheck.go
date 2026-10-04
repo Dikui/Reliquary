@@ -12,7 +12,7 @@ import (
 // whitespace \t \n \r), DEL, Unicode Bidi overrides/isolates, and zero-width
 // characters.
 //
-// These are rejected because CLI arguments are untrusted — in an agent-first
+// These are rejected because CLI arguments are untrusted - in an agent-first
 // CLI they frequently originate from an AI agent or upstream content. A
 // smuggled ANSI escape (ESC, U+001B) or Bidi override stored in a resource
 // name would execute in, or visually mislead, a human's terminal the moment
@@ -25,9 +25,9 @@ func unsafeRune(r rune) bool {
 	case r < 0x20 || r == 0x7f:
 		return true // C0 controls (includes ESC U+001B) and DEL
 	case r >= 0x202a && r <= 0x202e:
-		return true // LRE RLE PDF LRO RLO — Bidi overrides
+		return true // LRE RLE PDF LRO RLO - Bidi overrides
 	case r >= 0x2066 && r <= 0x2069:
-		return true // LRI RLI FSI PDI — Bidi isolates
+		return true // LRI RLI FSI PDI - Bidi isolates
 	case r == 0x200b || r == 0x200c || r == 0x200d || r == 0xfeff:
 		return true // zero-width space / non-joiner / joiner / BOM
 	}
@@ -62,7 +62,7 @@ func CheckSafeText(value, label string) error {
 //   - CheckSafeText: no positional argument or explicitly-set flag value may
 //     carry control / ANSI / Bidi / zero-width characters.
 //
-// Default (unchanged) flag values are not scanned — only what the caller
+// Default (unchanged) flag values are not scanned - only what the caller
 // actually supplied.
 func CheckSafeArgs(args []string, flags *pflag.FlagSet) error {
 	if err := checkNonEmptyArgs(args); err != nil {
@@ -86,7 +86,7 @@ func CheckSafeArgs(args []string, flags *pflag.FlagSet) error {
 }
 
 // checkNonEmptyArgs rejects empty / whitespace-only positional arguments before
-// any command logic runs — including the dry-run and exit-10 confirmation gates.
+// any command logic runs - including the dry-run and exit-10 confirmation gates.
 // Every positional in this CLI is an id, name, query, or path; none is
 // meaningfully empty. The common agent trigger is capturing an id from a failed
 // prior step (KB=$(reliquary kb create … --jq .data.id) when the create failed →
@@ -105,7 +105,7 @@ func checkNonEmptyArgs(args []string) error {
 			return &Error{
 				Code:    CodeInputInvalidArgument,
 				Message: fmt.Sprintf("argument %d is empty", i+1),
-				Hint:    "an empty id / name / query is never valid — verify the value you captured (e.g. from a prior --jq) is non-empty",
+				Hint:    "an empty id / name / query is never valid - verify the value you captured (e.g. from a prior --jq) is non-empty",
 			}
 		}
 	}

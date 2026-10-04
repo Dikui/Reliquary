@@ -28,7 +28,7 @@ type ViewOptions struct{}
 
 // ViewService is the narrow SDK surface this command depends on.
 // ListKnowledgeBases is used only to enrich is_pinned (the single-KB GET
-// doesn't carry per-user pin state — pin is a per-user list concept).
+// doesn't carry per-user pin state - pin is a per-user list concept).
 type ViewService interface {
 	GetKnowledgeBase(ctx context.Context, id string) (*sdk.KnowledgeBase, error)
 	ListKnowledgeBases(ctx context.Context) ([]sdk.KnowledgeBase, error)
@@ -89,7 +89,7 @@ func runView(ctx context.Context, opts *ViewOptions, fopts *cmdutil.FormatOption
 		return fopts.Emit(iostreams.IO.Out, kb, nil)
 	}
 	// Text mode: KEY: VALUE. Nested config structs (chunking_config,
-	// vlm_config, etc.) are intentionally omitted from the text render —
+	// vlm_config, etc.) are intentionally omitted from the text render -
 	// those are for `--format json | jq '.chunking_config'` workflows.
 	w := iostreams.IO.Out
 	fmt.Fprintf(w, "ID:        %s\n", kb.ID)

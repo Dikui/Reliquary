@@ -54,7 +54,7 @@ func NewCmdSearch(f *cmdutil.Factory) *cobra.Command {
 			// Validate static input (--limit / --mode) before building the
 			// client so a bad value returns input.invalid_argument (exit 5)
 			// instead of an auth error (exit 3) when the profile is
-			// unconfigured — an agent must see the real, fixable problem.
+			// unconfigured - an agent must see the real, fixable problem.
 			if err := validateSearchOpts(opts); err != nil {
 				return err
 			}
@@ -65,12 +65,12 @@ func NewCmdSearch(f *cmdutil.Factory) *cobra.Command {
 			return runSearch(c.Context(), opts, fopts, cli)
 		},
 	}
-	cmd.Flags().IntVarP(&opts.Limit, "limit", "L", 20, "Maximum results to return — server-side limit (1..1000; default 20 mirrors the server default)")
+	cmd.Flags().IntVarP(&opts.Limit, "limit", "L", 20, "Maximum results to return - server-side limit (1..1000; default 20 mirrors the server default)")
 	cmd.Flags().StringVar(&opts.Mode, "mode", "", "Search mode: keyword | vector | hybrid (omit for server default: hybrid)")
 	cmd.Flags().StringArrayVar(&opts.SessionIDs, "session", nil, "Restrict search to these session ids (repeatable)")
 	cmdutil.AddFormatFlag(cmd, messageSearchFields...)
 	cmdutil.SetAgentHelp(cmd, cmdutil.AgentHelp{
-		UsedFor:       "Search past Q&A pairs across chat history. This searches conversation messages — for RAG retrieval over documents use `reliquary search chunks` instead.",
+		UsedFor:       "Search past Q&A pairs across chat history. This searches conversation messages - for RAG retrieval over documents use `reliquary search chunks` instead.",
 		RequiredFlags: []string{"<query> (positional)"},
 		Examples: []string{
 			`reliquary message search "deploy steps"`,
@@ -96,8 +96,8 @@ func validateSearchOpts(opts *SearchOptions) error {
 	}
 	// Validate --mode against the closed server enum and normalize to the
 	// canonical (lowercase) form the server matches. An unrecognised mode
-	// matches no channel server-side and returns an empty set with no error —
-	// which an agent cannot tell apart from a genuine no-match — so reject it.
+	// matches no channel server-side and returns an empty set with no error -
+	// which an agent cannot tell apart from a genuine no-match - so reject it.
 	mode, err := cmdutil.ValidateEnum("mode", opts.Mode, messageSearchModes)
 	if err != nil {
 		return err

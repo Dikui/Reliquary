@@ -38,7 +38,7 @@ func GetProfile() string { return globalProfile }
 //     resource.locked, local.*, operation.failed, server.session_create_failed
 //     (workflow-level, see special case below), and any code outside the named
 //     buckets below
-//   - 2  cobra-parse problem (unrecognised flag, arg-count violation) —
+//   - 2  cobra-parse problem (unrecognised flag, arg-count violation) -
 //     typed input.unknown_subcommand from the guard maps to exit 5
 //     (input.* bucket); only ungated cobra prose lands here
 //   - 3  auth.*
@@ -103,7 +103,7 @@ func PrintError(w io.Writer, err error) {
 	}
 	// Typed *Error with Silent=true suppresses stderr emit while preserving
 	// the Code for ExitCode. Used by batch paths that already wrote per-item
-	// detail to stdout (cmdutil.RunBatch) — emitting a summary envelope on
+	// detail to stdout (cmdutil.RunBatch) - emitting a summary envelope on
 	// stderr would duplicate the failure signal.
 	if typed := AsError(err); typed != nil && typed.Silent {
 		return
@@ -226,11 +226,11 @@ func boolPtr(b bool) *bool { return &b }
 
 // retryableForCode classifies whether re-running the SAME command may succeed.
 // Pointer-to-true for transient failures, pointer-to-false for deterministic
-// ones, nil (omitted) when genuinely unknown — notably CodeInternalError and
+// ones, nil (omitted) when genuinely unknown - notably CodeInternalError and
 // any unlisted code (do NOT default to false).
 func retryableForCode(code ErrorCode) *bool {
 	switch code {
-	// Transient — retrying the same command may succeed.
+	// Transient - retrying the same command may succeed.
 	case CodeServerRateLimited, CodeServerTimeout, CodeNetworkError,
 		CodeOperationTimeout, CodeSSEStreamAborted:
 		return boolPtr(true)
@@ -238,7 +238,7 @@ func retryableForCode(code ErrorCode) *bool {
 	// transient server hiccup OR a deterministic server-side bug / mislabeled
 	// bad request, so blindly retrying risks a loop. Left unlisted → nil
 	// (unknown), so the agent decides rather than reading an optimistic true.
-	// Deterministic — same command will fail the same way.
+	// Deterministic - same command will fail the same way.
 	case CodeAuthUnauthenticated, CodeAuthTokenExpired, CodeAuthBadCredential,
 		CodeAuthForbidden, CodeAuthCrossTenantBlocked, CodeAuthTenantMismatch,
 		CodeInputInvalidArgument, CodeInputMissingFlag,

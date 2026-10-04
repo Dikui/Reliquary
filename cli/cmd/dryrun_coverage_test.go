@@ -53,12 +53,12 @@ var dryRunExpectation = map[string]bool{
 	// read-only inspection of the resolved config; no mutation, no network.
 	"config view": false,
 	"doctor":      false, "version": false,
-	// generate / stream ops — the session-creation side effect is incidental,
+	// generate / stream ops - the session-creation side effect is incidental,
 	// not a CRUD write; a no-SDK-call preview would be meaningless.
 	"chat": false, "session ask": false, "session resume": false,
 	// auth login VALIDATES credentials against the server and stores them; its
 	// whole purpose is the server round-trip, which a side-effect-free dry-run
-	// cannot exercise — so previewing it would be misleading. Exempt by design.
+	// cannot exercise - so previewing it would be misleading. Exempt by design.
 	"auth login": false,
 	// long-running stdio server, not a one-shot command.
 	"mcp serve": false,

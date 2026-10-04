@@ -53,7 +53,7 @@ Consult your MCP client's documentation for the exact config-file location.`,
 			"reliquary mcp serve",
 		},
 		Warnings: []string{
-			"this is a long-running stdio server, not a one-shot command — register it in your MCP client (command: reliquary, args: [mcp, serve])",
+			"this is a long-running stdio server, not a one-shot command - register it in your MCP client (command: reliquary, args: [mcp, serve])",
 			"exits with auth.unauthenticated at startup if no profile is configured",
 		},
 	})

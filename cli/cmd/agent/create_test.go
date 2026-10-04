@@ -153,7 +153,7 @@ func TestCreate_From_PreservesSourceFieldsNotOverridden(t *testing.T) {
 	// other 33 AgentConfig fields must round-trip from the copied agent.
 	// Pre-fix, runCreate built `cfg` from a zero AgentConfig{} baseline,
 	// so UpdateAgent shipped temperature=0.9 plus every other field
-	// zeroed — clobbering source SystemPrompt / AgentMode / KBs.
+	// zeroed - clobbering source SystemPrompt / AgentMode / KBs.
 	_, _ = iostreams.SetForTest(t)
 	svc := &fakeCreateSvc{
 		copyResp: &sdk.Agent{ID: "ag_clone", Config: &sdk.AgentConfig{

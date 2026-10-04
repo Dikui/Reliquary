@@ -102,7 +102,7 @@ func TestRunList_ServiceError_ReturnsError(t *testing.T) {
 }
 
 // TestRunList_NoHasMoreEvenWhenLimitFilled pins the contract that message
-// list never fabricates has_more — even a limit-filled batch (the case a
+// list never fabricates has_more - even a limit-filled batch (the case a
 // heuristic would flag) must not emit the key, because the server provides
 // no total/cursor and elsewhere has_more means client-side truncation.
 func TestRunList_NoHasMoreEvenWhenLimitFilled(t *testing.T) {

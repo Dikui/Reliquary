@@ -43,7 +43,7 @@ func TestGetRisk_NotFound(t *testing.T) {
 
 func TestGetRisk_NilAnnotationsMap(t *testing.T) {
 	cmd := &cobra.Command{Use: "list"}
-	// Annotations is nil — should not panic, return ok=false
+	// Annotations is nil - should not panic, return ok=false
 	assert.Nil(t, cmd.Annotations)
 	_, _, ok := GetRisk(cmd)
 	assert.False(t, ok)

@@ -15,7 +15,7 @@ func main() {
 	// (chat / agent invoke / doc wait) observe ctx.Done() and can run their
 	// cancellation cleanup paths (e.g., re-emit the auto-created session id
 	// so users can resume with --session). On signal-triggered cancellation
-	// the process exits 130 regardless of what Execute returned — matches
+	// the process exits 130 regardless of what Execute returned - matches
 	// the wire contract documented in cli/README.md "Exit codes".
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()

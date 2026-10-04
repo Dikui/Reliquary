@@ -79,7 +79,7 @@ func TestSessionsSearch_NetworkError(t *testing.T) {
 
 // TestSessionsSearch_RendersFuzzyTime is a regression guard for the v0.5
 // audit bug: `search sessions` printed UpdatedAt as the raw RFC3339 string
-// while `session list` ran it through text.FuzzyAgoStr — same SDK field,
+// while `session list` ran it through text.FuzzyAgoStr - same SDK field,
 // two human renderings. Asserts the human output now renders relative time
 // (and does NOT contain the RFC3339 "T" date/time separator).
 func TestSessionsSearch_RendersFuzzyTime(t *testing.T) {

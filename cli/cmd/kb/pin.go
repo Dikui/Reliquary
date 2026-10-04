@@ -21,10 +21,10 @@ type PinOptions struct {
 }
 
 // PinService is the narrow SDK surface this command depends on. The CLI
-// reads current state before toggling so `pin`/`unpin` are idempotent — the
+// reads current state before toggling so `pin`/`unpin` are idempotent - the
 // server endpoint is only a toggle. Pin state is read from the LIST endpoint:
 // the single-KB GET does not carry per-user pin state (pin is a per-user
-// list-ordering preference, surfaced where the user sees it — in `kb list`),
+// list-ordering preference, surfaced where the user sees it - in `kb list`),
 // so the list is the canonical source.
 type PinService interface {
 	ListKnowledgeBases(ctx context.Context) ([]sdk.KnowledgeBase, error)

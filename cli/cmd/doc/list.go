@@ -85,7 +85,7 @@ backend storage order is not guaranteed and varies between deployments.`,
 			// Validate static input (--page-size / --limit / --status) before
 			// resolving the KB or building the client so a bad value returns
 			// input.invalid_argument (exit 5) instead of an auth error (exit 3)
-			// when the profile is unconfigured — an agent must see the real,
+			// when the profile is unconfigured - an agent must see the real,
 			// fixable problem.
 			if err := validateListOpts(opts); err != nil {
 				return err
@@ -103,7 +103,7 @@ backend storage order is not guaranteed and varies between deployments.`,
 	}
 	cmdutil.AddKBFlag(cmd)
 	cmd.Flags().IntVar(&opts.PageSize, "page-size", 50, "Items per server batch (1..1000)")
-	cmd.Flags().IntVarP(&opts.Limit, "limit", "L", 30, "Maximum results to return — client-side cap; meta.has_more/total_count report the full size (1..10000)")
+	cmd.Flags().IntVarP(&opts.Limit, "limit", "L", 30, "Maximum results to return - client-side cap; meta.has_more/total_count report the full size (1..10000)")
 	cmd.Flags().BoolVar(&opts.AllPages, "all-pages", false, "Walk all server pages until exhausted (or --limit hit)")
 	cmd.Flags().StringVar(&opts.Status, "status", "", "Filter by parse status: pending | processing | completed | failed")
 	cmd.Flags().StringVar(&opts.Keyword, "keyword", "", "Server-side substring match against title / file_name (case-insensitive)")

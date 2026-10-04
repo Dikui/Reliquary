@@ -29,14 +29,14 @@ type UpdateOptions struct {
 type modelUpdateFlags struct{ displayName, description, baseURL, def bool }
 
 // UpdateService is the narrow SDK surface. UpdateModel is a full PUT, so the
-// fetch (GetModel) is mandatory — without the baseline, any field not touched
+// fetch (GetModel) is mandatory - without the baseline, any field not touched
 // by a flag would clobber to its zero value.
 type UpdateService interface {
 	GetModel(ctx context.Context, id string) (*sdk.Model, error)
 	UpdateModel(ctx context.Context, id string, req *sdk.UpdateModelRequest) (*sdk.Model, error)
 }
 
-// NewCmdUpdate builds `reliquary model update <model-id>` — update a registered
+// NewCmdUpdate builds `reliquary model update <model-id>` - update a registered
 // model in place (id preserved), so KBs / agents referencing it keep working.
 func NewCmdUpdate(f *cmdutil.Factory) *cobra.Command {
 	opts := &UpdateOptions{}
@@ -47,7 +47,7 @@ func NewCmdUpdate(f *cmdutil.Factory) *cobra.Command {
 reference it keep working (unlike delete + re-create, which orphans references).
 Rotate the provider key with --api-key-stdin, or change --base-url,
 --display-name, --description, extra --param entries, or --default. A model's
-type and source are immutable — register a new model to change them.
+type and source are immutable - register a new model to change them.
 
 Reversible write: without -y/--yes in a non-TTY / JSON context it exits 10
 (input.confirmation_required) without applying the change.`,

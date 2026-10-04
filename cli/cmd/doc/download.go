@@ -105,7 +105,7 @@ func runDownload(ctx context.Context, opts *DownloadOptions, fopts *cmdutil.Form
 		return err
 	}
 	if dest == "-" {
-		// Raw bytes go to stdout — suppress any JSON envelope regardless of
+		// Raw bytes go to stdout - suppress any JSON envelope regardless of
 		// --format json because both can't occupy stdout simultaneously.
 		_, err := io.Copy(iostreams.IO.Out, body)
 		return err

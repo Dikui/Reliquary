@@ -42,7 +42,7 @@ func TestKBConfig_EmitsConfig(t *testing.T) {
 }
 
 // TestKBConfig_SecretFree: the view type has no apiKey/baseUrl field, so the
-// JSON output can never carry provider credentials — the CLI never echoes the
+// JSON output can never carry provider credentials - the CLI never echoes the
 // keys the server returns for the web config form.
 func TestKBConfig_SecretFree(t *testing.T) {
 	out, _ := iostreams.SetForTest(t)

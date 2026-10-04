@@ -64,7 +64,7 @@ refresh semantic. Rotate the key in the server UI instead.`,
 			if name == "" {
 				if active, kind := cmdutil.EnvCredential(); active {
 					return cmdutil.NewError(cmdutil.CodeInputInvalidArgument,
-						"authenticated via "+kind+" (stateless env credential): there is no stored JWT to refresh — env credentials are supplied fresh each call, so no refresh is needed")
+						"authenticated via "+kind+" (stateless env credential): there is no stored JWT to refresh - env credentials are supplied fresh each call, so no refresh is needed")
 				}
 				return cmdutil.NewError(cmdutil.CodeAuthUnauthenticated,
 					"no active profile configured; run `reliquary auth login` to set one up")
@@ -127,7 +127,7 @@ func runRefresh(ctx context.Context, opts *RefreshOptions, fopts *cmdutil.Format
 	if name == "" {
 		if active, kind := cmdutil.EnvCredential(); active {
 			return cmdutil.NewError(cmdutil.CodeInputInvalidArgument,
-				"authenticated via "+kind+" (stateless env credential): there is no stored JWT to refresh — env credentials are supplied fresh each call, so no refresh is needed")
+				"authenticated via "+kind+" (stateless env credential): there is no stored JWT to refresh - env credentials are supplied fresh each call, so no refresh is needed")
 		}
 		return cmdutil.NewError(cmdutil.CodeAuthUnauthenticated,
 			"no active profile configured; run `reliquary auth login` to set one up")

@@ -77,7 +77,7 @@ For fail-fast semantics, use shell composition:
 			// The partition (completed/failed/timeout) is already on stdout via
 			// emitWaitResult. On aggregate failure we still need a non-zero exit,
 			// but the error is Silent so PrintError does NOT write a second,
-			// contradictory {ok:false} envelope to stderr — the agent reads the
+			// contradictory {ok:false} envelope to stderr - the agent reads the
 			// failure detail from the stdout partition + the exit code (1/124).
 			// Same contract as cmdutil.RunBatch.
 			switch res.ExitCode() {
@@ -105,7 +105,7 @@ For fail-fast semantics, use shell composition:
 		Output: "envelope.data is {completed:[], failed:[{id,message}], timeout:[]}",
 		Warnings: []string{
 			"exit code carries the aggregate result: 0 all completed, 1 any failed, 124 timeout",
-			"ok:true means the wait ran to a terminal state — NOT that every doc succeeded; branch on the exit code or inspect data.failed",
+			"ok:true means the wait ran to a terminal state - NOT that every doc succeeded; branch on the exit code or inspect data.failed",
 		},
 	})
 	return cmd
@@ -145,7 +145,7 @@ const (
 // bounded by maxConcurrentPolls. Returns the partitioned terminal state.
 // Always waits for every id (wait-all semantics).
 //
-// Duplicate ids are deduplicated at entry — polling the same id twice would
+// Duplicate ids are deduplicated at entry - polling the same id twice would
 // produce duplicate result entries and waste poll quota.
 //
 // Exponential backoff starts at opts.Interval, doubles each tick, caps at
@@ -167,7 +167,7 @@ func waitForDocs(ctx context.Context, ids []string, svc WaitService, opts WaitOp
 	defer cancel()
 
 	// Completed is non-omitempty (always present in the partition), so start it
-	// as an empty slice rather than nil — agents see `"completed":[]`, not null.
+	// as an empty slice rather than nil - agents see `"completed":[]`, not null.
 	result := &WaitResult{Completed: []string{}}
 	var mu sync.Mutex
 	addCompleted := func(id string) {
@@ -214,7 +214,7 @@ func waitForDocs(ctx context.Context, ids []string, svc WaitService, opts WaitOp
 
 				doc, err := svc.GetKnowledge(ctx, id)
 				if err != nil {
-					// Check Canceled first — SIGINT during an in-flight
+					// Check Canceled first - SIGINT during an in-flight
 					// request surfaces as a context-canceled error; it is
 					// not a real GetKnowledge failure.
 					if errors.Is(ctx.Err(), context.Canceled) {
@@ -241,11 +241,11 @@ func waitForDocs(ctx context.Context, ids []string, svc WaitService, opts WaitOp
 					// auto-enqueues). It never progresses on its own, so
 					// waiting would hang to the --timeout (124). Fail fast with
 					// the exact unblock command instead of silently polling.
-					addFailed(FailedDoc{ID: id, Message: "parse_status=draft: not queued for parsing — run `reliquary doc reparse " + id + "` to index it"})
+					addFailed(FailedDoc{ID: id, Message: "parse_status=draft: not queued for parsing - run `reliquary doc reparse " + id + "` to index it"})
 					return
 				}
 
-				// Not yet terminal — sleep with jitter, then exp-backoff.
+				// Not yet terminal - sleep with jitter, then exp-backoff.
 				jitter := time.Duration(rand.Int63n(int64(jitterMax)))
 				timer := time.NewTimer(interval + jitter)
 				select {

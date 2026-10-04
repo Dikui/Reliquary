@@ -75,7 +75,7 @@ For downstream KB reachability verification use 'reliquary agent check <id>'
 }
 
 // runAgentStatus is the testable core. Never errors for "agent not
-// reachable" — Reachable=false carries that signal.
+// reachable" - Reachable=false carries that signal.
 func runAgentStatus(ctx context.Context, svc AgentStatusService, id string) (*AgentStatusResult, error) {
 	a, err := svc.GetAgent(ctx, id)
 	if err != nil {

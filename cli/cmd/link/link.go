@@ -48,7 +48,7 @@ at the supplied knowledge base. Subsequent commands run from this directory
 overridden by the --kb flag or RELIQUARY_KB_ID env var.
 
 Pass the knowledge base as a positional argument (reliquary link <id-or-name>) or
-via --kb — the two are equivalent — for non-interactive use (scripts, CI). Run
+via --kb - the two are equivalent - for non-interactive use (scripts, CI). Run
 on a TTY without either to be prompted from the list of available KBs. Always
 overwrites any existing link - re-run to switch.
 
@@ -164,7 +164,7 @@ func resolveProfile(f *cmdutil.Factory) (string, error) {
 	}
 	if cfg.CurrentProfile == "" {
 		// `link` binds a directory to a profile+KB, so it needs a configured
-		// profile — env credentials (RELIQUARY_API_KEY) alone have no profile to
+		// profile - env credentials (RELIQUARY_API_KEY) alone have no profile to
 		// record. Point at profile setup (not `auth login`, which loops with no
 		// profile) and name the headless alternative so an env-cred agent isn't
 		// stranded on a misleading hint.

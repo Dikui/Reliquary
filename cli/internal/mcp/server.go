@@ -60,7 +60,7 @@ func RunStdio(ctx context.Context, svc ServiceClient) error {
 	registerTools(server, svc)
 	if err := server.Run(ctx, &mcpsdk.StdioTransport{}); err != nil {
 		// An MCP host shuts the server down by closing stdin (EOF) or cancelling
-		// the context — that is normal termination, not a failure, so exit 0.
+		// the context - that is normal termination, not a failure, so exit 0.
 		// Only a genuine transport fault is surfaced as an error.
 		if isCleanShutdown(err) {
 			return nil

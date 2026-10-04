@@ -78,7 +78,7 @@ Precedence when both a config file and hot-path flags are supplied:
 
 --from <id> copies an existing agent (SDK CopyAgent) then applies any
 hot-path overrides via UpdateAgent. --attach-kb on --from REPLACES the copied
-agent's KB list (not merge) — matches surgical-flag semantics.
+agent's KB list (not merge) - matches surgical-flag semantics.
 
 AI agents: writes a new resource server-side. Failure surfaces as a
 typed code on stderr: input.invalid_argument (bad flags, bad file, or
@@ -196,7 +196,7 @@ func NewCmdCreate(f *cmdutil.Factory) *cobra.Command {
 	}
 
 	// Required (enforced in PreRunE rather than cmd.MarkFlagRequired so
-	// --generate-skeleton can bypass it — cobra's MarkFlagRequired runs
+	// --generate-skeleton can bypass it - cobra's MarkFlagRequired runs
 	// before PreRunE and would otherwise block the skeleton path).
 	cmd.Flags().StringVar(&opts.Model, "model", "", "LLM model id or name (required, except with --generate-skeleton)")
 
@@ -238,7 +238,7 @@ func runCreate(ctx context.Context, opts *CreateOptions, fopts *cmdutil.FormatOp
 
 	// 1. Build base AgentConfig from --config-file (if any), else zero.
 	// (For --from, the copied agent's existing config becomes the base
-	// instead — set after CopyAgent below, before MergeAgentConfig.)
+	// instead - set after CopyAgent below, before MergeAgentConfig.)
 	var base sdk.AgentConfig
 	if opts.ConfigFileBody != nil {
 		parsed, err := cmdutil.LoadAgentConfig(opts.ConfigFileBody, opts.ConfigFileKind)

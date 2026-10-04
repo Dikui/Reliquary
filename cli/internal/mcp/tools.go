@@ -666,7 +666,7 @@ func addChunkList(server *mcpsdk.Server, svc chunkListService) {
 		// non-numeric values at schema validation (e.g. "limit":"50")
 		// before this handler runs. Default when unset; reject over-max
 		// (rather than silently clamping) so the agent's request is never
-		// quietly changed — matching search_chunks in this same file.
+		// quietly changed - matching search_chunks in this same file.
 		limit := in.Limit
 		if limit < 1 {
 			limit = chunkListDefaultLimit

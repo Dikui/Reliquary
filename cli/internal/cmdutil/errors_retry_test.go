@@ -35,7 +35,7 @@ func TestError_RetryArgv_EmptyByDefault(t *testing.T) {
 // TestErrorToDetail_CarriesExitCode verifies every error detail embeds the
 // authoritative exit_code so an agent can branch on a single JSON read without
 // observing $?. Regression: `input.invalid_argument` spans exit 2 (parse) and
-// exit 5 (typed value), so `type` alone was insufficient — exit_code
+// exit 5 (typed value), so `type` alone was insufficient - exit_code
 // disambiguates them in the envelope.
 func TestErrorToDetail_CarriesExitCode(t *testing.T) {
 	cases := []struct {

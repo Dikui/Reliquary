@@ -57,7 +57,7 @@ to see which mode each profile uses, and construct the matching HTTP header:
 				return err
 			}
 			// `auth token` is a scalar scripting helper (RELIQUARY_TOKEN=$(...)),
-			// so it defaults to the raw token — overriding the global json
+			// so it defaults to the raw token - overriding the global json
 			// default, the same way `doc download` streams raw bytes. Explicit
 			// --format json / RELIQUARY_FORMAT=json still emit the
 			// {token,mode,profile} envelope.
@@ -84,14 +84,14 @@ to see which mode each profile uses, and construct the matching HTTP header:
 		},
 		Output: "raw token on stdout (no envelope, no trailing newline) by default; --format json emits {token, mode, profile}",
 		Warnings: []string{
-			"default output is the bare token, NOT the JSON envelope — it is a scripting helper for shell capture",
+			"default output is the bare token, NOT the JSON envelope - it is a scripting helper for shell capture",
 		},
 	})
 	return cmd
 }
 
 func runToken(f *cmdutil.Factory, fopts *cmdutil.FormatOptions) error {
-	// Env credentials are the active credential on the headless path — `auth
+	// Env credentials are the active credential on the headless path - `auth
 	// token` must surface them (they ARE the token / api key) instead of
 	// erroring on the absence of a stored profile.
 	if active, kind := cmdutil.EnvCredential(); active {

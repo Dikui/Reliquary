@@ -33,7 +33,7 @@ func NewCmdReparse(f *cmdutil.Factory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "reparse <doc-id>",
 		Short: "Re-run parsing on a document",
-		Long: `Re-trigger server-side parsing of a document — the recovery path when a
+		Long: `Re-trigger server-side parsing of a document - the recovery path when a
 document's parse_status is failed, or after its source changed. The document
 keeps its id; parsing restarts asynchronously, so follow with
 'reliquary doc wait <doc-id>' to block until it reaches a terminal status.`,

@@ -154,7 +154,7 @@ func TestCreate_EmptyText_RejectsBeforeSDK(t *testing.T) {
 // TestCreate_AgentHelp_EmitsUsedFor verifies that when RELIQUARY_AGENT_HELP=1
 // the `doc create --help` path emits a JSON blob containing "used_for".
 // This is the representative test for 3.2; the mechanism is covered by
-// internal/cmdutil/agenthelp_test.go — we test the wiring here.
+// internal/cmdutil/agenthelp_test.go - we test the wiring here.
 func TestCreate_AgentHelp_EmitsUsedFor(t *testing.T) {
 	t.Setenv("RELIQUARY_AGENT_HELP", "1")
 	_, _ = iostreams.SetForTest(t)

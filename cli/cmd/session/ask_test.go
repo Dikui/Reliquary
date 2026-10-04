@@ -68,7 +68,7 @@ func referencesEvent(refs []*sdk.SearchResult) *sdk.AgentStreamResponse {
 	}
 }
 
-// textOpts returns a FormatOptions configured for the text render path —
+// textOpts returns a FormatOptions configured for the text render path -
 // the most common shape under test.
 func textOpts() *cmdutil.FormatOptions {
 	return &cmdutil.FormatOptions{Mode: cmdutil.FormatText}
@@ -555,7 +555,7 @@ func TestSessionAsk_FormatNDJSON_PassthroughsSDKEvents(t *testing.T) {
 }
 
 func TestSessionAsk_RequiresAgentFlag(t *testing.T) {
-	// Build the real cobra command with a nil factory — flag parsing happens
+	// Build the real cobra command with a nil factory - flag parsing happens
 	// before RunE so the factory is never dereferenced for this test.
 	f := &cmdutil.Factory{}
 	cmd := NewCmdAsk(f)

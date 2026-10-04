@@ -43,5 +43,5 @@ func emptyContentSearchHint(n int) string {
 	}
 	return "0 results: this may be no match, OR the KB has no indexed chunks. " +
 		"Check `reliquary kb status <kb>` (chunk_count) and `reliquary doc list --kb <kb>` (parse_status); " +
-		"documents in parse_status=draft are not indexed — run `reliquary doc reparse <doc-id>`."
+		"documents in parse_status=draft are not indexed - run `reliquary doc reparse <doc-id>`."
 }

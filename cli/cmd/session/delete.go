@@ -116,7 +116,7 @@ without the user's explicit go-ahead.`,
 			"reliquary session delete s_a s_b s_c -y",
 			"reliquary session delete s_abc -y --format json",
 		},
-		Output: "envelope.data shape depends on the form: a single session id -> {id, deleted:true}; multiple ids -> batch envelope (top-level status success|partial|error, ok=(failures==0), data per-item [{id, ok, error?}], meta.successes/failures — read data[].ok per id).",
+		Output: "envelope.data shape depends on the form: a single session id -> {id, deleted:true}; multiple ids -> batch envelope (top-level status success|partial|error, ok=(failures==0), data per-item [{id, ok, error?}], meta.successes/failures - read data[].ok per id).",
 		Warnings: []string{
 			"Requires explicit user approval (exit 10 / input.confirmation_required); never auto-add -y.",
 			"session delete is irreversible; loses the conversation + all messages + tool call history.",

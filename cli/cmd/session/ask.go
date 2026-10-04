@@ -38,7 +38,7 @@ type AskOptions struct {
 
 // AskService is the narrow SDK surface this command depends on.
 //
-// CreateSession is called when --session is omitted — sessions are
+// CreateSession is called when --session is omitted - sessions are
 // agent-agnostic at creation (verified against
 // internal/handler/session/handler.go CreateSession, which only persists
 // {title, description}). The agent ID is supplied per-request via
@@ -66,7 +66,7 @@ update / delete / status / check).
 Modes:
   --format json (default):       one JSON envelope with answer events
   --format text:                 live human-readable answer stream
-  --format ndjson:               raw NDJSON event stream — init line (session_id,
+  --format ndjson:               raw NDJSON event stream - init line (session_id,
                                  agent_id) then SDK agent events verbatim. Debug.
 
 Pass --reference to include bounded kb_id/chunk_id reference indexes. Pass
@@ -229,7 +229,7 @@ func runAskText(ctx context.Context, opts *AskOptions, sessionID string, autoCre
 		return cmdutil.WrapStream(streamErr, "agent-chat stream")
 	}
 
-	// Server closed cleanly but never sent a complete event — treat as aborted
+	// Server closed cleanly but never sent a complete event - treat as aborted
 	// so agents don't silently emit a truncated answer as ok=true.
 	if !projector.Done() {
 		return cmdutil.NewError(cmdutil.CodeSSEStreamAborted, "stream ended without a terminal event")

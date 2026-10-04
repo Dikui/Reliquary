@@ -28,7 +28,7 @@ func exitCodeRows() []exitCodeRow {
 		{4, "resource not found", "resource.not_found", "verify the resource id"},
 		{5, "invalid input value (typed validation, not a parse error)", "input.* (other than confirmation_required)", "adjust args, retry"},
 		{6, "rate limited", "server.rate_limited", "back off, retry"},
-		{7, "server / network error", "server.* (excl. rate_limited→6, session_create_failed→1), network.*", "transient — retry with backoff"},
+		{7, "server / network error", "server.* (excl. rate_limited→6, session_create_failed→1), network.*", "transient - retry with backoff"},
 		{10, "confirmation required (high-risk write)", "input.confirmation_required", "ask the human; retry with -y only after explicit approval"},
 		{124, "operation timeout", "operation.timeout", "raise --timeout or check the underlying job"},
 		{130, "cancelled by signal (SIGINT/SIGTERM)", "", "stop, do not retry"},

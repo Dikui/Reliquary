@@ -19,7 +19,7 @@ import (
 type CheckResult struct {
 	ID        string `json:"id"`
 	Reachable bool   `json:"reachable"`
-	// RetrievalReady is false when no embedding model is bound — the KB can never
+	// RetrievalReady is false when no embedding model is bound - the KB can never
 	// index/retrieve regardless of failed_count. Always emitted (no omitempty) so
 	// an unconfigured KB is not reported as silently healthy.
 	RetrievalReady  bool  `json:"retrieval_ready"`
@@ -49,8 +49,8 @@ func NewCmdCheck(f *cmdutil.Factory) *cobra.Command {
 		Long: `Active verification of a knowledge base.
 
 Performs 1 + N HTTP calls:
-  1   GET /kb/{id} — reachable + counts + processing state
-  N   page-walk doc list with parse_status=failed — failed_count
+  1   GET /kb/{id} - reachable + counts + processing state
+  N   page-walk doc list with parse_status=failed - failed_count
 
 Use 'reliquary kb status <id>' for a fast read-only health snapshot
 (1 HTTP call, no failed_count). Use 'kb check' when you need

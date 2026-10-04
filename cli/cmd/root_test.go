@@ -167,8 +167,8 @@ func TestRoot_ProfileFlagPropagation(t *testing.T) {
 }
 
 // resolveFormatEarly must default to the JSON envelope when no --format/env is
-// given, so cobra-side errors (unknown flag, arg-count) — which fire before
-// PersistentPreRunE runs ResolveDefault — emit a machine-readable envelope on
+// given, so cobra-side errors (unknown flag, arg-count) - which fire before
+// PersistentPreRunE runs ResolveDefault - emit a machine-readable envelope on
 // stderr, not bare prose. Regression for the success-path-defaults-to-json /
 // error-path-defaults-to-prose asymmetry.
 func TestResolveFormatEarly_DefaultsToEnvelope(t *testing.T) {

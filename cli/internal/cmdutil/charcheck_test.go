@@ -71,7 +71,7 @@ func TestCheckSafeArgs_PositionalAndFlags(t *testing.T) {
 
 // TestCheckSafeArgs_RejectsEmptyPositional pins that empty / whitespace-only
 // positional args are rejected as input.invalid_argument before any command
-// logic — the common agent failure of capturing an id from a failed prior step
+// logic - the common agent failure of capturing an id from a failed prior step
 // (KB=$(... --jq .data.id) → "") must surface clearly, not reach the server as
 // an empty path segment (mis-classified network.error) or a malformed
 // `delete  -y` confirmation. Empty FLAG values stay allowed (--description ""
@@ -98,7 +98,7 @@ func TestCheckSafeArgs_RejectsEmptyPositional(t *testing.T) {
 }
 
 // TestCheckSafeArgs_UnchangedFlagsNotScanned pins that default (unset) flag
-// values are not scanned — only what the caller supplied.
+// values are not scanned - only what the caller supplied.
 func TestCheckSafeArgs_UnchangedFlagsNotScanned(t *testing.T) {
 	fs := pflag.NewFlagSet("t", pflag.ContinueOnError)
 	// A default that (hypothetically) contains a control char must not trip

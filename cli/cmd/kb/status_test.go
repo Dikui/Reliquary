@@ -48,7 +48,7 @@ func TestRunStatus_ShallowFields(t *testing.T) {
 	}
 }
 
-// A KB with no embedding model can never retrieve — the health probe must say
+// A KB with no embedding model can never retrieve - the health probe must say
 // so (retrieval_ready=false), not report a silent all-green status.
 func TestRunStatus_RetrievalNotReadyWithoutEmbeddingModel(t *testing.T) {
 	svc := &fakeStatusSvc{kb: &sdk.KnowledgeBase{ID: "kb_x", KnowledgeCount: 1}}

@@ -172,7 +172,7 @@ func TestModelCreate_InvalidTypeRejected(t *testing.T) {
 		"my-model", "--type", "Bogus", "--source", "local", "--format", "json")
 	err := root.Execute()
 	require.Error(t, err)
-	// An unknown enum VALUE is input.invalid_argument (exit 5) — same as
+	// An unknown enum VALUE is input.invalid_argument (exit 5) - same as
 	// `model list`, not a cobra parse error (exit 2).
 	var ce *cmdutil.Error
 	require.ErrorAs(t, err, &ce)
@@ -225,7 +225,7 @@ func TestModelCreate_LocalRejectsProvider(t *testing.T) {
 }
 
 // TestModelCreate_RejectsProviderNameAsSource: a provider name is not a valid
-// --source (only local/remote) — guards the misleading-source regression.
+// --source (only local/remote) - guards the misleading-source regression.
 func TestModelCreate_RejectsProviderNameAsSource(t *testing.T) {
 	iostreams.SetForTest(t)
 	root := withRootHarnessModel(NewCmdCreate(modelDryRunFactory(t)),

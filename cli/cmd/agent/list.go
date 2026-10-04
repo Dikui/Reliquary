@@ -63,7 +63,7 @@ func NewCmdList(f *cmdutil.Factory) *cobra.Command {
 			return runList(c.Context(), opts, fopts, cli)
 		},
 	}
-	cmd.Flags().IntVarP(&opts.Limit, "limit", "L", 30, "Maximum results to return — client-side cap; meta.has_more/total_count report the full size (1..10000)")
+	cmd.Flags().IntVarP(&opts.Limit, "limit", "L", 30, "Maximum results to return - client-side cap; meta.has_more/total_count report the full size (1..10000)")
 	cmdutil.AddFormatFlag(cmd, agentListFields...)
 	cmdutil.SetAgentHelp(cmd, cmdutil.AgentHelp{
 		UsedFor:  "List custom agents visible to the active tenant. The SDK returns all agents in one call (no server-side pagination); meta.count reflects the full tenant set, --limit caps client-side.",
@@ -108,11 +108,11 @@ func runList(ctx context.Context, opts *ListOptions, fopts *cmdutil.FormatOption
 	sort.Slice(items, func(i, j int) bool {
 		return items[i].UpdatedAt.After(items[j].UpdatedAt)
 	})
-	// The agent list SDK is unpaginated — it returns every agent in one
-	// call — so the CLI holds the true total and can tell the caller
+	// The agent list SDK is unpaginated - it returns every agent in one
+	// call - so the CLI holds the true total and can tell the caller
 	// whether the client-side --limit dropped any. total_count is the full
 	// count; has_more flags that --limit truncated it (raise --limit to get
-	// the rest — there is no server cursor to continue with).
+	// the rest - there is no server cursor to continue with).
 	total := len(items)
 	truncated := false
 	if opts.Limit > 0 && len(items) > opts.Limit {

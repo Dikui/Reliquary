@@ -44,7 +44,7 @@ func TestClassifySDKError_SSEStreamTerminal(t *testing.T) {
 
 func TestClassifyHTTPError_500NotFoundRescue(t *testing.T) {
 	// Server's 1003 = ErrNotFound is the only typed "not found" code we
-	// rescue. 1007 = ErrInternalServer is the catch-all bucket — its
+	// rescue. 1007 = ErrInternalServer is the catch-all bucket - its
 	// presence around a "not found"-shaped message reflects a server-side
 	// classification gap, not an authoritative not-found signal, so we
 	// must NOT silently re-route it.

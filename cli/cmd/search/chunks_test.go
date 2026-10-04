@@ -145,7 +145,7 @@ func TestRunSearch_NilService(t *testing.T) {
 // (cmdutil.Factory.ResolveKB), matching `doc list` / `chat`; when nothing
 // resolves it reports the typed local.kb_id_required (exit 1), not a cobra
 // usage error. This is the inverse of the old lock test, which deliberately
-// blocked the link fallback for this read path — the asymmetry with `doc
+// blocked the link fallback for this read path - the asymmetry with `doc
 // list` was not worth keeping (a non-destructive search is the same risk
 // profile as a list). The destructive `doc delete --all` keeps its explicit
 // --kb rule; that safety guard is unrelated to this path.
@@ -171,7 +171,7 @@ func TestNewCmdChunks_NoKBUsesResolver(t *testing.T) {
 
 // TestNewCmdChunks_HonorsKBEnv proves the env fallback is wired: with
 // RELIQUARY_KB_ID set and no --kb, KB resolution succeeds (no kb-required
-// error) and the command proceeds to the client step — which here errors,
+// error) and the command proceeds to the client step - which here errors,
 // confirming we got past resolution using the env value alone.
 func TestNewCmdChunks_HonorsKBEnv(t *testing.T) {
 	iostreams.SetForTest(t)

@@ -1,4 +1,4 @@
-// Package linkcmd — dryrun_validation_test.go asserts that --dry-run on
+// Package linkcmd - dryrun_validation_test.go asserts that --dry-run on
 // link / unlink rejects identically to the live path. Before the surrounding
 // fix, validation lived in runX() and was reached only after HandleDryRun
 // short-circuited, so --dry-run accepted invocations the live path rejects.
@@ -21,7 +21,7 @@ import (
 	sdk "reliquary/client"
 )
 
-// linkDryRunFactory builds a Factory whose Client closure panics if invoked —
+// linkDryRunFactory builds a Factory whose Client closure panics if invoked -
 // dry-run must early-exit before any SDK call.
 func linkDryRunFactory(t *testing.T, cfg *config.Config) *cmdutil.Factory {
 	t.Helper()

@@ -91,7 +91,7 @@ func runView(ctx context.Context, fopts *cmdutil.FormatOptions, svc ViewService,
 // labels and order are pinned by snapshot tests so future drift surfaces
 // as test failure rather than silent divergence.
 func renderAgent(w io.Writer, a *sdk.Agent) {
-	// Identity is always rendered — id/name/created_at/updated_at are
+	// Identity is always rendered - id/name/created_at/updated_at are
 	// never meaningfully empty for a fetched Agent.
 	fmt.Fprintln(w, "Identity:")
 	fmt.Fprintf(w, "  ID:           %s\n", a.ID)
@@ -266,7 +266,7 @@ func renderAgent(w io.Writer, a *sdk.Agent) {
 	}
 	emit("Fallback", fb)
 
-	// Templates — system_prompt and context_template can be multi-line;
+	// Templates - system_prompt and context_template can be multi-line;
 	// render headed blocks rather than KV rows for readability.
 	if c.SystemPrompt != "" || c.ContextTemplate != "" {
 		fmt.Fprintln(w)

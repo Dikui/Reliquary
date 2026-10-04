@@ -77,7 +77,7 @@ applying the change.`,
 			}
 			// Resolve name-or-id for the model flags (a UUID passes through; a
 			// name is looked up among models of the expected type). Network read
-			// on the live path only — the dry-run above shows the raw refs.
+			// on the live path only - the dry-run above shows the raw refs.
 			if opts.ChatModel, err = cmdutil.ResolveModelRef(c.Context(), cli, opts.ChatModel, "KnowledgeQA"); err != nil {
 				return err
 			}
@@ -87,8 +87,8 @@ applying the change.`,
 			return runConfigSet(c.Context(), opts, fopts, cli, kbID)
 		},
 	}
-	cmd.Flags().StringVar(&opts.ChatModel, "chat-model", "", "Chat / LLM model id or name for generation & summary (required) — see `reliquary model list`")
-	cmd.Flags().StringVar(&opts.EmbeddingModel, "embedding-model", "", "Embedding model id or name for retrieval (required) — see `reliquary model list`")
+	cmd.Flags().StringVar(&opts.ChatModel, "chat-model", "", "Chat / LLM model id or name for generation & summary (required) - see `reliquary model list`")
+	cmd.Flags().StringVar(&opts.EmbeddingModel, "embedding-model", "", "Embedding model id or name for retrieval (required) - see `reliquary model list`")
 	cmdutil.AddFormatFlag(cmd, kbConfigFields...)
 	cmdutil.AddDryRunFlag(cmd, &opts.DryRun)
 	cmdutil.SetRisk(cmd, action)
@@ -137,7 +137,7 @@ func runConfigSet(ctx context.Context, opts *ConfigSetOptions, fopts *cmdutil.Fo
 		return cmdutil.WrapHTTP(err, "configure knowledge base %q", kbID)
 	}
 	// Re-read the server's resulting state (secret-free view) so the envelope
-	// reflects what stuck — the same shape `kb config` returns.
+	// reflects what stuck - the same shape `kb config` returns.
 	result, err := svc.GetInitializationConfig(ctx, kbID)
 	if err != nil || result == nil {
 		// The write succeeded; surface what we applied if the read-back failed.

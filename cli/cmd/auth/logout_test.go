@@ -48,7 +48,7 @@ func TestLogout_CurrentProfile(t *testing.T) {
 	}
 	require.NoError(t, runLogout(&LogoutOptions{Yes: true}, &cmdutil.FormatOptions{Mode: cmdutil.FormatText}, newLogoutFactory(t, cfg, store)))
 
-	assert.Equal(t, "prod", cfg.CurrentProfile, "active profile stays selected — logout clears creds, not the profile")
+	assert.Equal(t, "prod", cfg.CurrentProfile, "active profile stays selected - logout clears creds, not the profile")
 	require.Contains(t, cfg.Profiles, "prod", "profile stays registered after logout")
 	assert.Empty(t, cfg.Profiles["prod"].APIKeyRef, "credential ref cleared")
 	assert.Empty(t, cfg.Profiles["prod"].TokenRef, "credential ref cleared")

@@ -27,7 +27,7 @@ type ListOptions struct {
 	Limit     int
 	// Before filters to messages created before this RFC3339 timestamp.
 	// The server pages by time cursor (limit + before_time), not by page
-	// number — to walk further back, re-run with --before set to the
+	// number - to walk further back, re-run with --before set to the
 	// oldest created_at from the previous batch.
 	Before string
 }
@@ -64,7 +64,7 @@ func NewCmdList(f *cmdutil.Factory) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&opts.SessionID, "session", "", "Session id to load messages from")
 	_ = cmd.MarkFlagRequired("session")
-	cmd.Flags().IntVarP(&opts.Limit, "limit", "L", 30, "Maximum messages to return — server-side page size (1..1000)")
+	cmd.Flags().IntVarP(&opts.Limit, "limit", "L", 30, "Maximum messages to return - server-side page size (1..1000)")
 	cmd.Flags().StringVar(&opts.Before, "before", "", "Only messages created before this RFC3339 timestamp (time-cursor pagination)")
 	cmdutil.AddFormatFlag(cmd, messageListFields...)
 	cmdutil.SetAgentHelp(cmd, cmdutil.AgentHelp{

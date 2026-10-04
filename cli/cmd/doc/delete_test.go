@@ -71,7 +71,7 @@ func (f *fakeDeleteSvc) DeleteKnowledge(_ context.Context, id string) error {
 }
 
 // ---------------------------------------------------------------------------
-// Single-id tests — runDelete uses the simpler {id, deleted} payload.
+// Single-id tests - runDelete uses the simpler {id, deleted} payload.
 // ---------------------------------------------------------------------------
 
 func TestDelete_Success_WithForce(t *testing.T) {
@@ -284,7 +284,7 @@ func TestRunMultiDelete_ConfirmBatch_TTY_UserAborts(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Emit tests — JSON path now emits the batch envelope
+// Emit tests - JSON path now emits the batch envelope
 // ---------------------------------------------------------------------------
 
 // batchEnvelope is a minimal struct for parsing the batch envelope shape.
@@ -380,7 +380,7 @@ func TestEmitMultiDelete_UnsupportedFormat(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Batch envelope shape test — Task 2.6
+// Batch envelope shape test - Task 2.6
 // ---------------------------------------------------------------------------
 
 // TestDocDelete_MultiID_PartialFailure_BatchEnvelope verifies that when a

@@ -79,8 +79,8 @@ func TestAPI_GetSuccess_JSON(t *testing.T) {
 	if err := runAPI(context.Background(), &Options{}, &cmdutil.FormatOptions{Mode: cmdutil.FormatJSON}, cli, "GET", "/api/v1/foo", false); err != nil {
 		t.Fatalf("runAPI: %v", err)
 	}
-	// The server response is passed through directly under envelope.data — no
-	// {status, headers, body} wrapper — so consumers project at the server's
+	// The server response is passed through directly under envelope.data - no
+	// {status, headers, body} wrapper - so consumers project at the server's
 	// own depth (e.g. .data.value here).
 	var env struct {
 		OK   bool           `json:"ok"`
@@ -307,7 +307,7 @@ func TestAPI_PathWithoutSlash(t *testing.T) {
 // withRootHarness wraps `reliquary api ...` under a synthetic root cmd that
 // registers the global persistent flags (mirrors addGlobalFlags in
 // cmd/root.go). Required because api's NewCmd doesn't register --yes /
-// --format / --jq itself — it inherits them from root in production.
+// --format / --jq itself - it inherits them from root in production.
 func withRootHarness(api *cobra.Command, args ...string) *cobra.Command {
 	root := &cobra.Command{Use: "reliquary"}
 	pf := root.PersistentFlags()
@@ -543,7 +543,7 @@ func TestAPI_PaginateNoMetadataPassesThrough(t *testing.T) {
 // TestAPI_PaginateServerCapsPageSize covers the case where the user
 // requests --page_size=50 but the server caps page_size at a smaller
 // value (e.g. 2). Termination must count actually-collected records
-// (len(allData)) not requested-page-count (page*pageSize) — otherwise
+// (len(allData)) not requested-page-count (page*pageSize) - otherwise
 // we'd break early and silently truncate results.
 func TestAPI_PaginateServerCapsPageSize(t *testing.T) {
 	// User asks page_size=10; server only ever returns 2 per page (cap).
@@ -621,7 +621,7 @@ func TestAPI_PUT_RequiresConfirmation(t *testing.T) {
 }
 
 // TestAPI_POST_NotGated: POST is create-shaped and, like typed `kb create`,
-// intentionally ungated — it must reach the SDK without a confirmation gate.
+// intentionally ungated - it must reach the SDK without a confirmation gate.
 func TestAPI_POST_NotGated(t *testing.T) {
 	iostreams.SetForTest(t)
 	called := false

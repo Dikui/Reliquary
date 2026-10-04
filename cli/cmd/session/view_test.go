@@ -144,7 +144,7 @@ func TestView_Full_LimitInvalid_TooLarge(t *testing.T) {
 	assert.Contains(t, err.Error(), "input.invalid_argument")
 }
 
-// --limit without --full is rejected with input.invalid_argument — same
+// --limit without --full is rejected with input.invalid_argument - same
 // pattern as `--title` requires `--from-url` in `doc upload`.
 func TestView_LimitWithoutFull(t *testing.T) {
 	_, _ = iostreams.SetForTest(t)

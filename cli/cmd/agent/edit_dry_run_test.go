@@ -13,7 +13,7 @@ import (
 	sdk "reliquary/client"
 )
 
-// agentDryRunFactory builds a Factory whose Client closure panics if invoked —
+// agentDryRunFactory builds a Factory whose Client closure panics if invoked -
 // dry-run must early-exit before any SDK call.
 func agentDryRunFactory(t *testing.T) *cmdutil.Factory {
 	t.Helper()

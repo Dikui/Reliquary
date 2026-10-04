@@ -61,7 +61,7 @@ func (f *fakeChatService) KnowledgeQAStream(ctx context.Context, sessionID strin
 // var _ ChatService = (*sdk.Client)(nil) check at the bottom of chat.go.
 var _ ChatService = (*fakeChatService)(nil)
 
-// textOpts returns a FormatOptions configured for the text render path —
+// textOpts returns a FormatOptions configured for the text render path -
 // the most common shape under test.
 func textOpts() *cmdutil.FormatOptions {
 	return &cmdutil.FormatOptions{Mode: cmdutil.FormatText}

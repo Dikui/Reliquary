@@ -16,7 +16,7 @@ import (
 )
 
 // modelDryRunFactory builds a Factory whose Client / Prompter closures fail the
-// test if invoked — used by paths (flag validation, dry-run) that must not
+// test if invoked - used by paths (flag validation, dry-run) that must not
 // reach the SDK. For the confirmation test, a permissive factory is built inline.
 func modelDryRunFactory(t *testing.T) *cmdutil.Factory {
 	t.Helper()

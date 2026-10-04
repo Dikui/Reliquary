@@ -5,7 +5,7 @@
 //
 // Package name `configcmd` (not `config`) avoids colliding with the
 // internal/config package and matches the cmd-subpackage naming pattern.
-// The cobra Use: string is "config" — what users type.
+// The cobra Use: string is "config" - what users type.
 package configcmd
 
 import (

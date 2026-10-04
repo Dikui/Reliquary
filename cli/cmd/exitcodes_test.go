@@ -30,19 +30,19 @@ func TestExitCodesRows_MatrixSnapshot(t *testing.T) {
 		byCode[r.Code] = r
 	}
 
-	// exit 130 — produced by main.go signal guard, not ExitCode(); no typed code routes here
+	// exit 130 - produced by main.go signal guard, not ExitCode(); no typed code routes here
 	r130 := byCode[130]
 	assert.Equal(t, "cancelled by signal (SIGINT/SIGTERM)", r130.Meaning)
 	assert.Equal(t, "", r130.ErrorTypes, "exit 130 must have empty ErrorTypes (omitempty)")
 	assert.Equal(t, "stop, do not retry", r130.AgentAction)
 
-	// exit 1 — fallback bucket; operation.cancelled typed errors land here
+	// exit 1 - fallback bucket; operation.cancelled typed errors land here
 	r1 := byCode[1]
 	assert.Contains(t, r1.ErrorTypes, "operation.cancelled")
 	assert.Contains(t, r1.ErrorTypes, "server.session_create_failed")
 	assert.Contains(t, r1.ErrorTypes, "local.*")
 
-	// exit 7 — server transient, excluding the two special-cased server codes
+	// exit 7 - server transient, excluding the two special-cased server codes
 	r7 := byCode[7]
 	assert.Contains(t, r7.ErrorTypes, "network.*")
 	assert.Contains(t, r7.ErrorTypes, "rate_limited→6")

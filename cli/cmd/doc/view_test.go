@@ -265,7 +265,7 @@ func TestView_ErrorMessage_WarnPrefix(t *testing.T) {
 		t.Errorf("expected error message rendered:\n%s", got)
 	}
 	// Either ERROR: or a WARN-prefixed label is acceptable as a "warn"
-	// signal — assert at least one.
+	// signal - assert at least one.
 	if !strings.Contains(got, "ERROR:") && !strings.Contains(got, "WARN") {
 		t.Errorf("expected ERROR or WARN prefix on error line:\n%s", got)
 	}

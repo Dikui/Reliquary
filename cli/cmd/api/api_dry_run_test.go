@@ -15,7 +15,7 @@ import (
 	sdk "reliquary/client"
 )
 
-// apiDryRunFactory builds a Factory whose Client closure panics if invoked —
+// apiDryRunFactory builds a Factory whose Client closure panics if invoked -
 // dry-run must early-exit before any SDK call.
 func apiDryRunFactory(t *testing.T) *cmdutil.Factory {
 	t.Helper()
@@ -69,7 +69,7 @@ func TestApi_DryRunWithExplicitGet_FlagError(t *testing.T) {
 // explicit -X) must auto-promote GET → POST in the dry-run path too,
 // matching the live behavior in resolveMethod. Before the fix the dry-run
 // branch built `method` directly from `strings.ToUpper(opts.Method)`, which
-// is empty when -X is unset, then defaulted to GET — so --input was ignored
+// is empty when -X is unset, then defaulted to GET - so --input was ignored
 // at preview time, producing the misleading "GET is read-only" error.
 func TestApi_DryRunWithInputAutoPromotes_EmitsPlan(t *testing.T) {
 	out, _ := iostreams.SetForTest(t)
@@ -126,8 +126,8 @@ func TestApi_DryRunWithPost_EmitsPlan(t *testing.T) {
 	assert.Equal(t, "foo", body["name"])
 }
 
-// TestApi_FieldBody_TypedDryRun: -F/--field builds a typed JSON object body —
-// true/false/null and numbers are typed, everything else stays a string — and
+// TestApi_FieldBody_TypedDryRun: -F/--field builds a typed JSON object body -
+// true/false/null and numbers are typed, everything else stays a string - and
 // the resolved body is surfaced in the dry-run plan for agent inspection.
 func TestApi_FieldBody_TypedDryRun(t *testing.T) {
 	out, _ := iostreams.SetForTest(t)
@@ -169,7 +169,7 @@ func TestApi_FieldBody_AutoPromotesPost(t *testing.T) {
 	assert.Equal(t, "POST", env.Meta.Plan["method"], "-F must auto-promote GET -> POST")
 }
 
-// TestApi_FieldBody_ConflictsWithData: -F and -d are mutually exclusive — the
+// TestApi_FieldBody_ConflictsWithData: -F and -d are mutually exclusive - the
 // conflict is reported as input.invalid_argument (exit 5), consistent with the
 // existing -d/--input conflict.
 func TestApi_FieldBody_ConflictsWithData(t *testing.T) {

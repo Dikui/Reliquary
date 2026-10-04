@@ -163,7 +163,7 @@ func TestContinueStream_NotFound_MapsToResourceNotFound(t *testing.T) {
 
 // TestResume_TerminalStreamError_MapsToServerError pins that a terminal SSE
 // error frame (surfaced by the SDK as *SSEStreamError) classifies as
-// server.error (exit 7) — the SAME as chat / session ask. Guards against the
+// server.error (exit 7) - the SAME as chat / session ask. Guards against the
 // prior inconsistency where resume reported the identical server condition as
 // exit 1 while chat/ask reported exit 7.
 func TestResume_TerminalStreamError_MapsToServerError(t *testing.T) {
@@ -208,7 +208,7 @@ func TestContinueStream_RequiresSessionIDArg(t *testing.T) {
 	cmd.SetArgs([]string{"--message", "msg_abc"}) // missing positional
 	err := cmd.Execute()
 	require.Error(t, err, "expected ExactArgs(1) error when <session-id> is missing")
-	// Cobra reports "accepts 1 arg(s), received 0" — assert on substance,
+	// Cobra reports "accepts 1 arg(s), received 0" - assert on substance,
 	// not exit-code mapping (the latter happens in cmd/root, see
 	// TestContinueStream_RequiresMessageFlag note).
 	assert.True(t,

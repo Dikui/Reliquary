@@ -107,7 +107,7 @@ Credentials are persisted to the OS keyring when available; otherwise to a
 		Output:   "envelope.data is {profile, host, mode, email, tenant_id} on success (email matches `auth status`)",
 		Warnings: []string{
 			"a profile must exist and be active first (`reliquary profile add <n> --host <url> --use`)",
-			"password login is interactive-only (no flags) — agents must use --with-token with the key piped to stdin",
+			"password login is interactive-only (no flags) - agents must use --with-token with the key piped to stdin",
 		},
 	})
 	return cmd
@@ -121,7 +121,7 @@ Credentials are persisted to the OS keyring when available; otherwise to a
 func resolveActiveProfile(f *cmdutil.Factory) (name, host string, err error) {
 	// f.Config() already folds the global --profile / RELIQUARY_PROFILE override
 	// into cfg.CurrentProfile (same source f.ActiveProfile reads), so one load
-	// resolves the active profile — matches logout/refresh.
+	// resolves the active profile - matches logout/refresh.
 	cfg, err := f.Config()
 	if err != nil {
 		return "", "", err
@@ -130,7 +130,7 @@ func resolveActiveProfile(f *cmdutil.Factory) (name, host string, err error) {
 	if active == "" {
 		msg := "no active profile; run `reliquary profile add <name> --host <h> --use` first"
 		if envActive, kind := cmdutil.EnvCredential(); envActive {
-			msg = "no active profile to log in — you are already authenticated this session via " + kind +
+			msg = "no active profile to log in - you are already authenticated this session via " + kind +
 				"; `auth login` only persists a named profile, so run `reliquary profile add <name> --host <h> --use` first if you want one"
 		}
 		return "", "", cmdutil.NewError(cmdutil.CodeAuthUnauthenticated, msg)
@@ -195,7 +195,7 @@ func runLogin(ctx context.Context, opts *LoginOptions, fopts *cmdutil.FormatOpti
 		user, err := defaultAPIKeyValidator(ctx, opts.Host, key)
 		if err != nil {
 			// Transport errors (connection refused, DNS failure) must not be
-			// surfaced as auth.bad_credential — the key may be fine but the
+			// surfaced as auth.bad_credential - the key may be fine but the
 			// host is unreachable. Classify via WrapHTTP so network errors
 			// get CodeNetworkError and the hint points at `reliquary doctor`.
 			if cmdutil.ClassifyHTTPError(err) == cmdutil.CodeNetworkError {
@@ -230,7 +230,7 @@ func runLogin(ctx context.Context, opts *LoginOptions, fopts *cmdutil.FormatOpti
 	resp, err := svc.Login(ctx, sdk.LoginRequest{Email: opts.Email, Password: opts.Password})
 	if err != nil {
 		// Transport errors (connection refused, DNS failure) must not be
-		// surfaced as auth.bad_credential — credentials may be fine but the
+		// surfaced as auth.bad_credential - credentials may be fine but the
 		// host is unreachable. Classify so network errors get CodeNetworkError.
 		if cmdutil.ClassifyHTTPError(err) == cmdutil.CodeNetworkError {
 			return cmdutil.Wrapf(cmdutil.CodeNetworkError, err, "login: check host reachability")
@@ -319,7 +319,7 @@ type loginResult struct {
 	Mode    string `json:"mode"` // ModeBearer or ModeAPIKey
 	// Email is the authenticated principal's email. Named "email" (not
 	// "user") so the identity field matches `auth status`, which also
-	// exposes it as `email` — one key for one concept across both commands.
+	// exposes it as `email` - one key for one concept across both commands.
 	Email    string `json:"email,omitempty"`
 	TenantID uint64 `json:"tenant_id,omitempty"`
 }
@@ -346,7 +346,7 @@ func saveProfileRef(opts *LoginOptions, fopts *cmdutil.FormatOptions, f *cmdutil
 	}
 	if fopts.WantsJSON() {
 		// mode reflects the credential actually stored (passed by the caller),
-		// not whether the server happened to return a user — an API-key login
+		// not whether the server happened to return a user - an API-key login
 		// validates via /auth/me and DOES get a user, so deriving mode from
 		// user != nil would mislabel it as bearer.
 		result := loginResult{Profile: opts.Profile, Host: opts.Host, Mode: mode}

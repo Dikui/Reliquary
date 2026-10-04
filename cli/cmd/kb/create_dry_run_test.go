@@ -15,7 +15,7 @@ import (
 	sdk "reliquary/client"
 )
 
-// kbDryRunFactory builds a Factory whose Client closure panics if invoked —
+// kbDryRunFactory builds a Factory whose Client closure panics if invoked -
 // dry-run must early-exit before any SDK call. Prompter is similarly trapped:
 // dry-run is non-interactive by contract.
 func kbDryRunFactory(t *testing.T) *cmdutil.Factory {
@@ -87,7 +87,7 @@ func TestKBCreate_DryRun_EmitsPlan(t *testing.T) {
 // TestKBCreate_DryRun_RejectsInvalidStorageProvider: --dry-run must reject
 // the same invalid --storage-provider value the live path rejects. Before
 // the fix the enum check lived only in runCreate(), which HandleDryRun
-// short-circuited past — so --dry-run silently accepted "garbage".
+// short-circuited past - so --dry-run silently accepted "garbage".
 func TestKBCreate_DryRun_RejectsInvalidStorageProvider(t *testing.T) {
 	iostreams.SetForTest(t)
 	f := kbDryRunFactory(t)
@@ -96,7 +96,7 @@ func TestKBCreate_DryRun_RejectsInvalidStorageProvider(t *testing.T) {
 	err := root.Execute()
 	require.Error(t, err, "dry-run must reject invalid --storage-provider")
 
-	// The enum check returns input.invalid_argument (exit 5) — make sure the
+	// The enum check returns input.invalid_argument (exit 5) - make sure the
 	// dry-run path preserves that exact mapping (same as the live path).
 	assert.Equal(t, 5, cmdutil.ExitCode(err), "invalid --storage-provider must map to exit 5")
 }

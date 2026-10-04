@@ -41,7 +41,7 @@ type FormatOptions struct {
 // AddFormatFlag attaches the --jq projection field hints (in cmd.Long) for
 // commands that honor --format. The flags themselves are registered as
 // persistent globals at the root, so this helper no longer re-registers
-// them — it only appends documentation. Callers that don't need field
+// them - it only appends documentation. Callers that don't need field
 // hints can skip this call entirely.
 func AddFormatFlag(cmd *cobra.Command, fieldHints ...string) {
 	if len(fieldHints) > 0 {
@@ -50,7 +50,7 @@ func AddFormatFlag(cmd *cobra.Command, fieldHints ...string) {
 		// Fields live under .data in the {ok,data,meta} envelope, so --jq must
 		// be rooted there: `--jq '.data.<field>'` (object) or
 		// `--jq '.data[].<field>'` (list). A bare `--jq '.<field>'` matches the
-		// envelope top level and silently returns null — spell out the path so
+		// envelope top level and silently returns null - spell out the path so
 		// agents don't ship broken projections.
 		hdr := "\n\nJSON fields available under .data (project with --jq '.data.<field>', or '.data[].<field>' for lists):\n  " +
 			strings.Join(sorted, "\n  ")

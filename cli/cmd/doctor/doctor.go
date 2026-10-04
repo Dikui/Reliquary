@@ -405,14 +405,14 @@ func buildServices(f *cmdutil.Factory) (Services, error) {
 // mirror the client builder (buildClientFromEnv) so doctor probes the host the
 // real commands actually connect to; tier 1 is a doctor-local test/dev knob:
 //
-//  1. RELIQUARY_BASE_URL — doctor-only probe override (used by tests); NOT read
+//  1. RELIQUARY_BASE_URL - doctor-only probe override (used by tests); NOT read
 //     by the client builder, so setting it points doctor at a host no real
 //     command uses. Kept for test/dev harnesses; leave unset in normal use.
-//  2. RELIQUARY_HOST — when stateless env credentials (RELIQUARY_TOKEN /
+//  2. RELIQUARY_HOST - when stateless env credentials (RELIQUARY_TOKEN /
 //     RELIQUARY_API_KEY) are in effect, i.e. the headless agent path. Without
 //     this, `RELIQUARY_API_KEY=… RELIQUARY_HOST=… reliquary doctor` falsely reported
 //     "no host configured" and exited 1 while every other command worked.
-//  3. active profile host — the configured default.
+//  3. active profile host - the configured default.
 func resolveDoctorHost(cfg *config.Config) string {
 	host := ""
 	if ctx, ok := cfg.Profiles[cfg.CurrentProfile]; ok {

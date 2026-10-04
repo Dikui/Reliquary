@@ -17,7 +17,7 @@ import (
 )
 
 // modelListFields enumerates the fields surfaced for `--format json` discovery
-// on `model list`. The nested `parameters` object is omitted — use `--jq` for
+// on `model list`. The nested `parameters` object is omitted - use `--jq` for
 // it (and `model view` renders the full record).
 var modelListFields = []string{
 	"id", "name", "display_name", "type", "source",
@@ -80,7 +80,7 @@ func NewCmdList(f *cmdutil.Factory) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&opts.Type, "type", "", "Only show models of this type (Embedding, Rerank, KnowledgeQA, VLLM, ASR)")
 	cmd.Flags().StringVar(&opts.Source, "source", "", "Only show models from this provider (local, remote, openai, aliyun, …)")
-	cmd.Flags().IntVarP(&opts.Limit, "limit", "L", 30, "Maximum results to return — client-side cap; meta.has_more/total_count report the full size (1..10000)")
+	cmd.Flags().IntVarP(&opts.Limit, "limit", "L", 30, "Maximum results to return - client-side cap; meta.has_more/total_count report the full size (1..10000)")
 	cmdutil.AddFormatFlag(cmd, modelListFields...)
 	cmdutil.SetAgentHelp(cmd, cmdutil.AgentHelp{
 		UsedFor: "discover model ids for `agent create --model` and a KB's embedding/summary model",

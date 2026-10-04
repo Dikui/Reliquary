@@ -110,7 +110,7 @@ func TestUploadRecursive_PartialFailure_Exits1(t *testing.T) {
 	var typed *cmdutil.Error
 	require.ErrorAs(t, err, &typed)
 	// Any per-file failure aggregates to operation.failed (exit 1), matching the
-	// batch-delete contract — a partial failure (even a permanent one like a
+	// batch-delete contract - a partial failure (even a permanent one like a
 	// duplicate, which classifies as server.error per-file) must not surface as
 	// a retryable exit 7 an agent would loop on. Per-file codes live in the
 	// batch envelope.

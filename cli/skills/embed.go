@@ -1,7 +1,7 @@
 // Package skills embeds the bundled Agent Skills into the CLI binary so
 // `reliquary skills install` can write them out without a source checkout
 // (replacing the manual symlink-from-checkout MVP). The markdown under each
-// skill dir is the single source of truth — embedding it keeps the shipped
+// skill dir is the single source of truth - embedding it keeps the shipped
 // binary and the docs in lockstep (the parity tests guard the command/flag
 // vocabulary the skills reference).
 package skills

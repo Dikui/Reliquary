@@ -84,7 +84,7 @@ func TestAllCodes_DocumentedInAGENTS(t *testing.T) {
 // a code the CLI can emit.
 //
 // Without this direction a removed code lingers in the doc forever, and agents
-// branch on codes that will never arrive — the failure mode that left three
+// branch on codes that will never arrive - the failure mode that left three
 // `mcp.*` codes documented for two minor versions after they were deleted.
 func TestDocumentedCodes_RegisteredInAllCodes(t *testing.T) {
 	refSection := loadErrorReferenceSection(t)

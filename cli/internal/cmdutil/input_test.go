@@ -34,7 +34,7 @@ func TestParseTimeFlag(t *testing.T) {
 func TestValidateEnum(t *testing.T) {
 	allowed := []string{"keyword", "vector", "hybrid"}
 
-	// Empty value is "unset" — allowed, returns "".
+	// Empty value is "unset" - allowed, returns "".
 	if got, err := ValidateEnum("mode", "", allowed); err != nil || got != "" {
 		t.Errorf(`empty: got (%q, %v), want ("", nil)`, got, err)
 	}

@@ -9,7 +9,7 @@ import (
 // If v is a slice or array, each element gets its own line; otherwise v is
 // emitted as a single line. Per http://ndjson.org.
 //
-// HTML escaping is disabled (via WriteJSON) so '<', '>', '&' stay literal —
+// HTML escaping is disabled (via WriteJSON) so '<', '>', '&' stay literal -
 // cleaner for agent stream-parsers that don't need HTML-safe output.
 func WriteNDJSON(w io.Writer, v any) error {
 	rv := reflect.ValueOf(v)

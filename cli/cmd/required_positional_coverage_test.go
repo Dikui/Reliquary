@@ -28,7 +28,7 @@ func TestLeafCommandsDeclareRequiredPositional(t *testing.T) {
 	eachLeafCommand(root, func(c *cobra.Command) {
 		// Only flag a command whose Use carries a *positional* <...> placeholder
 		// (codebase convention). A <...> that follows a --flag is a flag value
-		// (e.g. "list --session <session-id>"), not a positional — skip those.
+		// (e.g. "list --session <session-id>"), not a positional - skip those.
 		if !hasPositionalPlaceholder(c.Use) {
 			return
 		}

@@ -59,7 +59,7 @@ Typed exit codes:
 
 AI agents: this is a high-risk write. Without -y/--yes the CLI exits 10
 and writes input.confirmation_required to stderr. NEVER auto-pass -y
-without the user's explicit go-ahead — the exit-10 protocol exists
+without the user's explicit go-ahead - the exit-10 protocol exists
 exactly to guard against unintended deletes.`
 
 const chunkDeleteExample = `  reliquary chunk delete chunk_abc --doc doc_xyz                  # interactive confirm
@@ -136,7 +136,7 @@ func NewCmdDelete(f *cmdutil.Factory) *cobra.Command {
 			"reliquary chunk delete c1 c2 c3 --doc doc_xyz -y",
 			"reliquary chunk delete chunk_abc --doc doc_xyz -y --format json",
 		},
-		Output: "envelope.data shape depends on the form: a single chunk id -> {id, deleted:true}; multiple ids -> batch envelope (top-level status success|partial|error, ok=(failures==0), data per-item [{id, ok, error?}], meta.successes/failures — read data[].ok per id).",
+		Output: "envelope.data shape depends on the form: a single chunk id -> {id, deleted:true}; multiple ids -> batch envelope (top-level status success|partial|error, ok=(failures==0), data per-item [{id, ok, error?}], meta.successes/failures - read data[].ok per id).",
 		Warnings: []string{
 			"Requires explicit user approval (exit 10 / input.confirmation_required); never auto-add -y.",
 			"chunk delete is irreversible; loses the chunk + breaks RAG retrieval coherence for downstream queries.",

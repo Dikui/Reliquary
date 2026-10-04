@@ -41,7 +41,7 @@ func runViewJSON(t *testing.T, f *cmdutil.Factory) viewEnvelope {
 
 // TestConfigView_ConfigProfileSource: with a current_profile set in config and
 // no flag/env override, config view reports the profile, its source, and the
-// host — and resolves the KB to "(unresolved)" (no --kb/env/link) without error.
+// host - and resolves the KB to "(unresolved)" (no --kb/env/link) without error.
 func TestConfigView_ConfigProfileSource(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	cfg := &config.Config{
@@ -78,8 +78,8 @@ func TestConfigView_ProfileOverrideSource(t *testing.T) {
 	assert.Equal(t, "--profile flag", env.Data.ProfileSource)
 }
 
-// TestConfigView_NoProfile: config view succeeds with an empty config —
-// active_profile "" / source "(none)" — never erroring on a fresh install.
+// TestConfigView_NoProfile: config view succeeds with an empty config -
+// active_profile "" / source "(none)" - never erroring on a fresh install.
 func TestConfigView_NoProfile(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	env := runViewJSON(t, networkFreeFactory(t))
@@ -89,7 +89,7 @@ func TestConfigView_NoProfile(t *testing.T) {
 }
 
 // networkFreeFactory builds a Factory whose Client closure fails the test if
-// invoked — config view must resolve everything locally (ResolveKBLocal,
+// invoked - config view must resolve everything locally (ResolveKBLocal,
 // ActiveProfile) and never build the SDK client.
 func networkFreeFactory(t *testing.T) *cmdutil.Factory {
 	t.Helper()

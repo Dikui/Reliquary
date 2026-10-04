@@ -1,11 +1,11 @@
-// Package cmdutil — batch.go provides reusable plumbing for multi-target
+// Package cmdutil - batch.go provides reusable plumbing for multi-target
 // mutations that emit the batch envelope.
 //
 // Three pieces:
 //   - BatchOutcome: per-target structured outcome (preserves argv order).
 //   - RunBatch: drives a slice of targets through a closure, collecting
 //     outcomes. Stops on context cancellation; keep-going on per-item err.
-//   - EmitBatch: renders the outcomes — JSON/NDJSON via output.WriteBatchEnvelope,
+//   - EmitBatch: renders the outcomes - JSON/NDJSON via output.WriteBatchEnvelope,
 //     text via per-item "OK <id>" / "FAIL <id>: <msg>".
 
 package cmdutil

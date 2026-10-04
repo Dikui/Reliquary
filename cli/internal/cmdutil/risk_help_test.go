@@ -41,7 +41,7 @@ func TestSetAgentHelp_NoRiskWhenUnannotated(t *testing.T) {
 		Short: "List knowledge bases.",
 		Long:  "List knowledge bases.",
 	}
-	// NO SetRisk call — cmd.Annotations stays nil
+	// NO SetRisk call - cmd.Annotations stays nil
 	SetAgentHelp(cmd, AgentHelp{UsedFor: "list KBs"})
 
 	var buf bytes.Buffer

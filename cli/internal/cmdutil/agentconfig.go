@@ -35,7 +35,7 @@ type AgentConfigFlags struct {
 
 // LoadAgentConfig parses YAML or JSON from r into an AgentConfig. kind is
 // "yaml" or "json" (typically inferred from file extension by the caller).
-// Returned errors carry no typed code — callers should wrap with
+// Returned errors carry no typed code - callers should wrap with
 // CodeInputInvalidArgument as the user-facing context.
 //
 // YAML route round-trips through JSON so the SDK's existing `json:` field

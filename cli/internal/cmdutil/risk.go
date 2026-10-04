@@ -32,7 +32,7 @@ func SetRisk(cmd *cobra.Command, action string) {
 	setRisk(cmd, RiskDestructive, action)
 }
 
-// SetWriteRisk mirrors SetRisk but tags the command at the "write" level —
+// SetWriteRisk mirrors SetRisk but tags the command at the "write" level -
 // used by update commands (kb / agent / doc update), which are reversible
 // metadata edits rather than irreversible destructive ops. They remain
 // confirmation-gated; only the level label differs.

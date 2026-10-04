@@ -14,12 +14,12 @@ import (
 const rfc3339Example = "2006-01-02T15:04:05Z"
 
 // ParseTimeFlag parses an RFC3339 time-flag value. An empty value is treated as
-// unset and returns (nil, nil) — callers use nil to mean "no bound". A
+// unset and returns (nil, nil) - callers use nil to mean "no bound". A
 // malformed value returns a CodeInputInvalidArgument error naming the label;
 // on success it returns the parsed time. label is used verbatim in the message
 // (e.g. "--start-time" for a CLI flag, "start_time" for an MCP tool field).
 //
-// One place owns the RFC3339 time-flag shape — the parse, error code, and
+// One place owns the RFC3339 time-flag shape - the parse, error code, and
 // wording consistency sibling of ValidateEnum.
 func ParseTimeFlag(label, value string) (*time.Time, error) {
 	if value == "" {
@@ -44,7 +44,7 @@ func ParseTimeFlag(label, value string) (*time.Time, error) {
 // server, which may be case-sensitive, receives a normalized value).
 //
 // This is the one place the "validate a flag against a closed enum" shape
-// lives — keeping the membership test, error code, and message wording
+// lives - keeping the membership test, error code, and message wording
 // consistent across every such flag instead of hand-rolling each.
 func ValidateEnum(flagName, value string, allowed []string) (string, error) {
 	if value == "" {
@@ -76,7 +76,7 @@ func EnumStrings[T ~string](xs []T) []string {
 
 // OpenInput returns a reader for path. If path == "-", returns stdin
 // (iostreams.IO.In). Otherwise opens the file. Caller is responsible
-// for closing if needed — for typical "-input <file>"/"--input -" CLI
+// for closing if needed - for typical "-input <file>"/"--input -" CLI
 // patterns the file is fully read before the command exits and OS
 // reclaims the FD, so closing is cosmetic.
 func OpenInput(path string) (io.Reader, error) {

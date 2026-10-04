@@ -44,7 +44,7 @@ func TestRAGFullLoop(t *testing.T) {
 	// Inject host + token as RELIQUARY_HOST / RELIQUARY_TOKEN env vars. The
 	// CLI's env-credential path (buildClientFromEnv) takes precedence
 	// over profile config, so this bypasses the secrets-store dance
-	// entirely — no keychain access, no file:// ref plumbing. This is
+	// entirely - no keychain access, no file:// ref plumbing. This is
 	// the most robust path for CI and local e2e alike.
 	env := append(os.Environ(),
 		"XDG_CONFIG_HOME="+xdg,

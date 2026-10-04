@@ -1,7 +1,7 @@
 // Package skillscmd holds the `reliquary skills` command tree: list the bundled
 // Agent Skills and install (write) them to an agent's skills directory. The
 // skill markdown is embedded in the binary (see cli/skills), so install works
-// without a source checkout — replacing the manual symlink-from-checkout MVP.
+// without a source checkout - replacing the manual symlink-from-checkout MVP.
 //
 // Package name `skillscmd` avoids colliding with the embed package `skills`.
 package skillscmd
@@ -62,7 +62,7 @@ func newCmdList() *cobra.Command {
 	}
 	cmdutil.AddFormatFlag(cmd, skillsListFields...)
 	cmdutil.SetAgentHelp(cmd, cmdutil.AgentHelp{
-		UsedFor:  "list the Agent Skills bundled in this CLI binary (name, description, file count) — discover what `reliquary skills install` would write",
+		UsedFor:  "list the Agent Skills bundled in this CLI binary (name, description, file count) - discover what `reliquary skills install` would write",
 		Examples: []string{"reliquary skills list --format json"},
 		Output:   "envelope.data is an array of {name, description, files[]}",
 	})
@@ -150,7 +150,7 @@ Existing files are left untouched unless --force is passed.`,
 }
 
 // resolveDir returns the explicit --dir or the default ~/.claude/skills. A
-// leading ~ in --dir is expanded to the home directory — otherwise a quoted
+// leading ~ in --dir is expanded to the home directory - otherwise a quoted
 // `--dir '~/foo'` (which the shell leaves literal) would create a bogus "~"
 // directory tree.
 func resolveDir(dir string) (string, error) {
@@ -167,7 +167,7 @@ func resolveDir(dir string) (string, error) {
 
 // expandTilde resolves a leading "~" or "~/" path segment to the user's home
 // directory. Other forms (including "~user" and a ~ that isn't the first
-// segment) are returned unchanged — matching the common shell behavior a CLI
+// segment) are returned unchanged - matching the common shell behavior a CLI
 // is expected to reproduce when it receives an unexpanded literal tilde.
 func expandTilde(path string) (string, error) {
 	if path != "~" && !strings.HasPrefix(path, "~/") {

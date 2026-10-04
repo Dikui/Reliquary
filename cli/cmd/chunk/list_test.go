@@ -107,7 +107,7 @@ func TestList_AllPages_LimitTruncatesAccumulated(t *testing.T) {
 		pages: [][]sdk.Chunk{
 			{{ID: "c1"}, {ID: "c2"}},
 			{{ID: "c3"}, {ID: "c4"}},
-			{{ID: "c5"}}, // should not be requested — limit hits first
+			{{ID: "c5"}}, // should not be requested - limit hits first
 		},
 		totals: []int64{5, 5, 5},
 		errs:   []error{nil, nil, nil},
@@ -130,7 +130,7 @@ func TestList_AllPages_LimitTruncatesAccumulated(t *testing.T) {
 
 // TestList_JSON_EmitsTotalCount pins that chunk list surfaces the document's
 // full chunk count as meta.total_count (like doc/session/kb/model list), not
-// just the returned count — an agent must be able to tell truncation from
+// just the returned count - an agent must be able to tell truncation from
 // completeness.
 func TestList_JSON_EmitsTotalCount(t *testing.T) {
 	out, _ := iostreams.SetForTest(t)

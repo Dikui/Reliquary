@@ -117,7 +117,7 @@ func TestDocsSearch_JSON(t *testing.T) {
 
 // TestDocsSearch_JSON_EmitsTotalCount pins that search docs surfaces the
 // server's full match total as meta.total_count (server-side keyword filter, so
-// total is the real match count) — parity with doc/session/chunk list.
+// total is the real match count) - parity with doc/session/chunk list.
 func TestDocsSearch_JSON_EmitsTotalCount(t *testing.T) {
 	out, _ := iostreams.SetForTest(t)
 	svc := &fakeDocsSearchSvc{

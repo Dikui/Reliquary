@@ -18,7 +18,7 @@ import (
 type StatusResult struct {
 	ID        string `json:"id"`
 	Reachable bool   `json:"reachable"`
-	// RetrievalReady is false when the KB has no embedding model bound — it can
+	// RetrievalReady is false when the KB has no embedding model bound - it can
 	// never index or retrieve until `kb config set` runs. Always emitted (no
 	// omitempty) so a not-ready KB is visible, not silently green.
 	RetrievalReady  bool  `json:"retrieval_ready"`

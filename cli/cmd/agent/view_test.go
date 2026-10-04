@@ -84,7 +84,7 @@ func TestRenderAgent_RendersAllGroupsWithOmitEmpty(t *testing.T) {
 			KBSelectionMode:    "selected",
 			KnowledgeBases:     []string{"kb_a"},
 			FAQPriorityEnabled: true,
-			WebSearchEnabled:   false, // zero — omitted in text
+			WebSearchEnabled:   false, // zero - omitted in text
 			FallbackStrategy:   "fixed",
 			FallbackResponse:   "I don't know.",
 		},
@@ -112,7 +112,7 @@ func TestRenderAgent_RendersAllGroupsWithOmitEmpty(t *testing.T) {
 	if strings.Contains(body, "Retrieval") {
 		t.Errorf("Retrieval section rendered with all-zero fields in:\n%s", body)
 	}
-	// Multi-turn section is all-zero too — must be suppressed.
+	// Multi-turn section is all-zero too - must be suppressed.
 	if strings.Contains(body, "Multi-turn") {
 		t.Errorf("Multi-turn section rendered with all-zero fields in:\n%s", body)
 	}

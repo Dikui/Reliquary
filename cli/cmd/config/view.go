@@ -18,7 +18,7 @@ import (
 )
 
 // viewFields enumerates the fields surfaced for `--format json` discovery on
-// `config view`. Flat shape — each entry is a top-level key of envelope.data.
+// `config view`. Flat shape - each entry is a top-level key of envelope.data.
 var viewFields = []string{
 	"active_profile", "profile_source", "auth_source", "host",
 	"kb_id", "kb_source",
@@ -130,7 +130,7 @@ func resolveView(cmd *cobra.Command, f *cmdutil.Factory) viewData {
 	}
 
 	// Auth source: stateless env credentials (RELIQUARY_TOKEN/RELIQUARY_API_KEY)
-	// override the profile + keyring for the actual client, so report that —
+	// override the profile + keyring for the actual client, so report that -
 	// otherwise host/profile above would silently describe a profile the env
 	// credential bypassed. RELIQUARY_HOST (when set) is the host that env cred
 	// authenticates against.
@@ -145,7 +145,7 @@ func resolveView(cmd *cobra.Command, f *cmdutil.Factory) viewData {
 		d.AuthSource = "(none)"
 	}
 
-	// KB id + source (never network — ResolveKBLocal).
+	// KB id + source (never network - ResolveKBLocal).
 	d.KBID, d.KBSource = resolveKB(cmd, f)
 
 	// Log level + source.
@@ -224,7 +224,7 @@ func resolveLogLevel(cmd *cobra.Command) (level, source string) {
 
 // resolveFormatDefault reports the configured default output format: the
 // config.yaml defaults.format value, else RELIQUARY_FORMAT, else the hard
-// default. This is the *default* used when --format is unset — not the
+// default. This is the *default* used when --format is unset - not the
 // per-invocation --format flag value.
 func resolveFormatDefault() string {
 	cfg, err := config.Load()

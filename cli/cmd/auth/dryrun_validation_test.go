@@ -1,4 +1,4 @@
-// Package auth — dryrun_validation_test.go asserts that --dry-run on
+// Package auth - dryrun_validation_test.go asserts that --dry-run on
 // auth subcommands rejects identically to the live path. Before the
 // surrounding fix, validation lived in runX() and was reached only after
 // HandleDryRun short-circuited, so --dry-run accepted invocations the live
@@ -22,7 +22,7 @@ import (
 	sdk "reliquary/client"
 )
 
-// authDryRunFactory builds a Factory whose Client closure panics if invoked —
+// authDryRunFactory builds a Factory whose Client closure panics if invoked -
 // dry-run must early-exit before any SDK call. Config is supplied via the cfg
 // argument so each test gets isolated state.
 func authDryRunFactory(t *testing.T, cfg *config.Config) *cmdutil.Factory {

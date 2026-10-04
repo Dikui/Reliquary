@@ -54,7 +54,7 @@ the answer with reliquary session resume.
 --modified-args replaces the tool call arguments on approve (JSON object).
 It conflicts with --reject (rejected calls never execute).
 
-AI agents: approving a tool call is the human-approval step itself — that
+AI agents: approving a tool call is the human-approval step itself - that
 is exactly what the exit-10 protocol guards. Without -y/--yes the CLI
 exits 10 and writes input.confirmation_required to stderr. Surface the
 pending tool call to the user and only pass -y after their explicit
@@ -89,7 +89,7 @@ func newCmdResolve(f *cmdutil.Factory) *cobra.Command {
 			opts.PendingID = args[0]
 			opts.Yes, _ = c.Flags().GetBool("yes")
 			// Validate inputs BEFORE the dry-run gate so --dry-run previews a
-			// valid action — an invalid --modified-args (e.g. "{}") must error
+			// valid action - an invalid --modified-args (e.g. "{}") must error
 			// the same way whether or not --dry-run is passed.
 			if _, err := validateModifiedArgs(opts); err != nil {
 				return err
@@ -131,7 +131,7 @@ func newCmdResolve(f *cmdutil.Factory) *cobra.Command {
 		Output: "envelope.data is {pending_id, decision (approve|reject), resolved:true}",
 		Warnings: []string{
 			"Requires explicit user approval (exit 10 / input.confirmation_required); never auto-add -y.",
-			"Approving executes the blocked tool call with the user's authority — show the user what tool/args are pending before resolving.",
+			"Approving executes the blocked tool call with the user's authority - show the user what tool/args are pending before resolving.",
 		},
 	})
 	return cmd

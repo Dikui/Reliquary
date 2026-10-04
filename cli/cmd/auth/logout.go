@@ -63,7 +63,7 @@ accepted until it expires.`,
 			if len(cfg.Profiles) == 0 {
 				if active, kind := cmdutil.EnvCredential(); active {
 					return cmdutil.NewError(cmdutil.CodeAuthUnauthenticated,
-						"authenticated via "+kind+" (stateless env credential) — nothing is stored to log out; unset "+kind+" to drop it")
+						"authenticated via "+kind+" (stateless env credential) - nothing is stored to log out; unset "+kind+" to drop it")
 				}
 				return cmdutil.NewError(cmdutil.CodeAuthUnauthenticated, "no profiles configured; nothing to log out")
 			}
@@ -90,7 +90,7 @@ accepted until it expires.`,
 	cmdutil.AddDryRunFlag(cmd, &opts.DryRun)
 	cmdutil.SetRisk(cmd, "auth.logout")
 	cmdutil.SetAgentHelp(cmd, cmdutil.AgentHelp{
-		UsedFor: "clear stored credentials for the active profile (or --all); the profile itself stays registered (host preserved) so `auth login` can re-auth it — use `profile remove` to delete the profile entirely",
+		UsedFor: "clear stored credentials for the active profile (or --all); the profile itself stays registered (host preserved) so `auth login` can re-auth it - use `profile remove` to delete the profile entirely",
 		Examples: []string{
 			"reliquary auth logout",
 			"reliquary --profile staging auth logout",
@@ -113,7 +113,7 @@ func runLogout(opts *LogoutOptions, fopts *cmdutil.FormatOptions, f *cmdutil.Fac
 	if len(cfg.Profiles) == 0 {
 		if active, kind := cmdutil.EnvCredential(); active {
 			return cmdutil.NewError(cmdutil.CodeAuthUnauthenticated,
-				"authenticated via "+kind+" (stateless env credential) — nothing is stored to log out; unset "+kind+" to drop it")
+				"authenticated via "+kind+" (stateless env credential) - nothing is stored to log out; unset "+kind+" to drop it")
 		}
 		return cmdutil.NewError(cmdutil.CodeAuthUnauthenticated, "no profiles configured; nothing to log out")
 	}
@@ -139,7 +139,7 @@ func runLogout(opts *LogoutOptions, fopts *cmdutil.FormatOptions, f *cmdutil.Fac
 	}
 	for _, name := range targets {
 		clearProfileSecrets(store, cfg.Profiles[name], name)
-		// Keep the profile registered (its host stays) — only clear the
+		// Keep the profile registered (its host stays) - only clear the
 		// credential refs so it reads as logged-out and can be re-authed with
 		// `auth login`. Deleting the profile entirely is `profile remove`'s job;
 		// that clean logout(who)/remove(what) split matches gh / lark.

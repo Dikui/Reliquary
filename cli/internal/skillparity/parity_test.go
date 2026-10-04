@@ -140,7 +140,7 @@ func TestSkillsReferenceLiveCommandsAndFlags(t *testing.T) {
 		}
 	}
 	if !checkedAny {
-		t.Fatal("parser resolved no reliquary commands from skills — check tokenizer")
+		t.Fatal("parser resolved no reliquary commands from skills - check tokenizer")
 	}
 }
 

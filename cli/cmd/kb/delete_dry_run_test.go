@@ -14,7 +14,7 @@ import (
 // TestKBDelete_DryRun_NoExit10: --dry-run must bypass ConfirmDestructive.
 // Non-TTY without -y normally yields exit 10 (CodeInputConfirmationRequired);
 // with --dry-run it must early-exit successfully (exit 0) because no real
-// delete happens — preview implies no execution, so the confirmation gate
+// delete happens - preview implies no execution, so the confirmation gate
 // is irrelevant.
 func TestKBDelete_DryRun_NoExit10(t *testing.T) {
 	out, _ := iostreams.SetForTest(t) // non-TTY

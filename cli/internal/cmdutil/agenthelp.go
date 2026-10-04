@@ -17,7 +17,7 @@ import (
 
 // AgentHelp is the structured help blob emitted when an agent invokes
 // `reliquary <command> --help` with RELIQUARY_AGENT_HELP=1. Distinct from
-// cobra's human help text — agent-readable JSON keyed by stable fields
+// cobra's human help text - agent-readable JSON keyed by stable fields
 // so an LLM doesn't need to scrape the human help table.
 //
 // Warnings surface both as a JSON field (agent introspection) and as an
@@ -41,7 +41,7 @@ const agentHelpAnnotation = "reliquary.agent_help"
 //
 // Routing:
 //   - RELIQUARY_AGENT_HELP=1: emit the AgentHelp JSON blob to stdout and
-//     return — agents get clean parseable JSON, no trailing prose.
+//     return - agents get clean parseable JSON, no trailing prose.
 //   - Otherwise (human help path): if cmd has risk annotations from SetRisk,
 //     prepend "Risk: <action> (<level>)" line; then render the normal human
 //     help via origHelp; then append the "AI agents:" Warnings block.

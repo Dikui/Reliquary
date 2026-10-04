@@ -25,7 +25,7 @@ func tokenTestFactory(t *testing.T, cfg *config.Config, store *secrets.MemStore)
 
 // TestAuthToken_DefaultIsRawToken locks the scripting contract: with no
 // explicit --format, `reliquary auth token` emits the raw token (so
-// RELIQUARY_TOKEN=$(reliquary auth token) works), NOT the JSON envelope — even
+// RELIQUARY_TOKEN=$(reliquary auth token) works), NOT the JSON envelope - even
 // though the global --format default is json. Explicit --format json still
 // emits the {token,mode,profile} envelope (covered by the JSON test below).
 func TestAuthToken_DefaultIsRawToken(t *testing.T) {

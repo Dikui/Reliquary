@@ -128,7 +128,7 @@ func runUploadRecursive(ctx context.Context, opts *UploadOptions, fopts *cmdutil
 		// carries per-file detail; without Silent the root error handler would
 		// print to stderr in addition. ExitCode still walks Code so the typed
 		// exit-code-by-class contract holds.
-		// Any per-file failure collapses to operation.failed (exit 1) — the
+		// Any per-file failure collapses to operation.failed (exit 1) - the
 		// per-file batch envelope carries each file's typed error, which is the
 		// authoritative signal (matches doc/session/chunk batch delete). A
 		// cancelled / timed-out batch keeps its context class (124 / 130) so a

@@ -1,4 +1,4 @@
-// stop.go implements `reliquary session stop` — cancel server-side generation
+// stop.go implements `reliquary session stop` - cancel server-side generation
 // for a specific assistant message under a known session.
 //
 // Unlike Ctrl-C (which only drops the local connection while the server keeps

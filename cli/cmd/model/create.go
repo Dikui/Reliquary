@@ -24,13 +24,13 @@ var modelCreateFields = []string{
 // createSourceValues is the restricted --source set for `model create`. The
 // server's CreateModel only special-cases "remote" (registered active, routed
 // to a provider API); every other source falls into the local Ollama download
-// path. So create offers exactly the two working modes — the provider identity
+// path. So create offers exactly the two working modes - the provider identity
 // for a remote model goes in --provider, not --source. (`model list --source`
 // still accepts the broad modelSourceValues for filtering pre-existing records.)
 var createSourceValues = []string{string(sdk.ModelSourceLocal), string(sdk.ModelSourceRemote)}
 
 // canonicalModelType maps the server's frontend term "chat" to the KnowledgeQA
-// enum — that is the server's own /models/providers vocabulary (see its
+// enum - that is the server's own /models/providers vocabulary (see its
 // frontendToModelType map). The other frontend terms (embedding / rerank /
 // vllm / asr) already match the enum case-insensitively, so no alias is needed.
 // Returns the input unchanged when it isn't an alias.
@@ -187,7 +187,7 @@ else goes through repeatable --param key=value.`,
 		Output: "envelope.data is the created Model object with id, name, type, source, parameters",
 		Warnings: []string{
 			"Two modes: --source local (Ollama pulls <name>, async) vs --source remote --provider <id> (provider API). A provider name is NOT a --source value.",
-			"Pass the API key via --api-key-stdin (piped), never as a flag — flag values leak into ps/history.",
+			"Pass the API key via --api-key-stdin (piped), never as a flag - flag values leak into ps/history.",
 			"A local model starts in a 'downloading' state and is unusable until the pull finishes; the embedding/chat call fails until then.",
 		},
 	})

@@ -40,9 +40,9 @@ func NewCmdCheck(f *cmdutil.Factory) *cobra.Command {
 		Long: `Active verification of a custom agent.
 
 Performs 1 + N HTTP calls:
-  1   GET /agents/{id} — reachable + model_id
+  1   GET /agents/{id} - reachable + model_id
   N   GET /kb/{kb_id} for each id in agent.config.knowledge_bases
-      — sets kb_scope_all_reachable = true iff every probe succeeds
+      - sets kb_scope_all_reachable = true iff every probe succeeds
 
 Use 'reliquary agent status <id>' for a fast read-only health snapshot
 (1 HTTP call, no KB probing). Use 'agent check' when you need to verify
@@ -78,7 +78,7 @@ the agent's downstream dependencies are all reachable.`,
 }
 
 // runAgentCheck is the testable core. Never errors for "agent not
-// reachable" — Reachable=false carries that signal.
+// reachable" - Reachable=false carries that signal.
 func runAgentCheck(ctx context.Context, svc AgentCheckService, id string) (*AgentCheckResult, error) {
 	a, err := svc.GetAgent(ctx, id)
 	if err != nil {

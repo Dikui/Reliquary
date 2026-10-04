@@ -89,7 +89,7 @@ func TestEveryLeafCommandDeclaresOutput(t *testing.T) {
 }
 
 // TestEveryLeafCommandHasExample enforces that every leaf ships at least one
-// runnable example — agents learn invocation shape from examples, not prose.
+// runnable example - agents learn invocation shape from examples, not prose.
 func TestEveryLeafCommandHasExample(t *testing.T) {
 	t.Setenv("RELIQUARY_AGENT_HELP", "1")
 	root := NewRootCmd(cmdutil.New())

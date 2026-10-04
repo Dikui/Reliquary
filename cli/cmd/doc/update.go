@@ -16,7 +16,7 @@ import (
 var docUpdateFields = []string{"id", "title", "description", "file_name", "parse_status"}
 
 // UpdateOptions captures `doc update` flag state. Title/Description are *string
-// so an unset flag is distinguishable from "set to empty" — only fields the
+// so an unset flag is distinguishable from "set to empty" - only fields the
 // user passed are changed; the rest are preserved via fetch-then-update.
 type UpdateOptions struct {
 	Title       *string
@@ -44,7 +44,7 @@ func NewCmdUpdate(f *cmdutil.Factory) *cobra.Command {
 		Short: "Update a document's title or description",
 		Long: `Update a document's title and/or description. At least one of --title /
 --description must be supplied; the document's content, file, and parse state are
-untouched (only the title and description are editable — re-upload to change the
+untouched (only the title and description are editable - re-upload to change the
 content).
 
 AI agents: this is a high-risk write. Without -y/--yes the CLI exits 10
@@ -103,7 +103,7 @@ to the user first.`,
 	cmdutil.AddDryRunFlag(cmd, &opts.DryRun)
 	cmdutil.SetWriteRisk(cmd, "doc.update")
 	cmdutil.SetAgentHelp(cmd, cmdutil.AgentHelp{
-		UsedFor:       "update a document's title or description (content is not editable — re-upload for that)",
+		UsedFor:       "update a document's title or description (content is not editable - re-upload for that)",
 		RequiredFlags: []string{"<doc-id> (positional)", "--title or --description (at least one)"},
 		Examples: []string{
 			`reliquary doc update doc_abc --title "Q3 Runbook" -y`,

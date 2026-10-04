@@ -15,7 +15,7 @@ type Envelope struct {
 	// Status is the batch tri-state outcome: "success" (all items ok),
 	// "partial" (some ok, some failed), or "error" (all failed). Set only by
 	// batch commands; omitted on ordinary single-result envelopes. `ok` stays
-	// authoritative — Status is an additive convenience for agents triaging
+	// authoritative - Status is an additive convenience for agents triaging
 	// multi-target results.
 	Status  string `json:"status,omitempty"`
 	Data    any    `json:"data,omitempty"`
@@ -45,7 +45,7 @@ type Meta struct {
 	// Non-batch commands leave these nil so they are omitted from the envelope.
 	Successes *int `json:"successes,omitempty"` // batch ops
 	Failures  *int `json:"failures,omitempty"`  // batch ops
-	// Hint is an optional actionable note on a SUCCESS envelope — e.g. an
+	// Hint is an optional actionable note on a SUCCESS envelope - e.g. an
 	// empty search explaining the KB may be unindexed, or a freshly-created
 	// draft document pointing at `doc reparse`. Distinct from error.hint;
 	// omitted when empty so it never adds noise to normal results.
@@ -64,7 +64,7 @@ type ErrDetail struct {
 	// ExitCode is the process exit code this error maps to, embedded so an
 	// agent can branch on a single JSON read without observing $?. Needed
 	// because one type (input.invalid_argument) spans exit 2 (parse) and
-	// exit 5 (typed value) — exit_code disambiguates them.
+	// exit 5 (typed value) - exit_code disambiguates them.
 	ExitCode int    `json:"exit_code,omitempty"`
 	Hint     string `json:"hint,omitempty"`
 	// RetryArgv is a directly-executable argv array (e.g.
@@ -83,7 +83,7 @@ type ErrDetail struct {
 
 // RiskDetail tags high-risk writes for the agent protocol. Surfaces in
 // error.risk on confirmation_required errors.
-// Level: "write" (reversible mutations — update) or "destructive" (delete);
+// Level: "write" (reversible mutations - update) or "destructive" (delete);
 // the "read" slot is reserved.
 type RiskDetail struct {
 	Level  string `json:"level"`

@@ -32,7 +32,7 @@ func TestWaitCmd_Shape(t *testing.T) {
 	if f := cmd.Flags().Lookup("keep-going"); f != nil {
 		t.Error("--keep-going should not be registered; wait is always wait-all")
 	}
-	// --format is a persistent root flag (v0.7), not per-command — skip its lookup here.
+	// --format is a persistent root flag (v0.7), not per-command - skip its lookup here.
 }
 
 func TestWaitCmd_DefaultFlagValues(t *testing.T) {

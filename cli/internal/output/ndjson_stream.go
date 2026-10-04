@@ -33,7 +33,7 @@ func WriteNDJSONLine(w io.Writer, v any) error {
 }
 
 // EmitInit writes the lifecycle init event to start an NDJSON stream.
-// MUST be called before any other writes to w within an NDJSON stream —
+// MUST be called before any other writes to w within an NDJSON stream -
 // agents key on lines[0].type == "init" to discover session/profile/kb
 // context. Sets Type=init regardless of caller-supplied value.
 func EmitInit(w io.Writer, ev InitEvent) error {

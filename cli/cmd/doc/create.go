@@ -1,4 +1,4 @@
-// Package doc — create.go implements `reliquary doc create --text "..."`.
+// Package doc - create.go implements `reliquary doc create --text "..."`.
 // Allows creating a knowledge entry directly from inline text content without
 // uploading a file or fetching a remote URL.
 package doc
@@ -143,7 +143,7 @@ func runCreate(ctx context.Context, opts *CreateOptions, fopts *cmdutil.FormatOp
 	// timeout or `search` into empty results.
 	var meta *output.Meta
 	if k.ParseStatus == "draft" {
-		meta = &output.Meta{Hint: "document created in parse_status=draft (not yet indexed) — run `reliquary doc reparse " + k.ID + "` to parse & make it searchable"}
+		meta = &output.Meta{Hint: "document created in parse_status=draft (not yet indexed) - run `reliquary doc reparse " + k.ID + "` to parse & make it searchable"}
 	}
 	if fopts.WantsJSON() {
 		return fopts.Emit(iostreams.IO.Out, k, meta)

@@ -32,7 +32,7 @@ type schemaFlag struct {
 
 // commandSchema is the full machine-readable contract for one command. It is a
 // superset of cmdutil.AgentHelp augmented with the resolved command path, the
-// destructive-write risk, and the command's local flags — so an agent can
+// destructive-write risk, and the command's local flags - so an agent can
 // learn how to invoke a command without scraping prose help.
 type commandSchema struct {
 	Command       string       `json:"command"`
@@ -55,12 +55,12 @@ type schemaIndexEntry struct {
 // it lists every leaf command and its purpose; with a command path it prints
 // that command's full contract. This makes the structured help (otherwise only
 // reachable via RELIQUARY_AGENT_HELP=1 on --help) a first-class, discoverable
-// command — mirroring how mainstream agent-first CLIs expose schema introspection.
+// command - mirroring how mainstream agent-first CLIs expose schema introspection.
 func newCmdSchema() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "schema [command...]",
 		Short: "Machine-readable contract for a command (or the whole surface)",
-		Long: `Print the machine-readable contract for a command, or — with no argument —
+		Long: `Print the machine-readable contract for a command, or - with no argument -
 an index of every command and what it is used for.
 
   reliquary schema                 # index: every leaf command + used_for
@@ -189,7 +189,7 @@ func writeCommandSchemaText(w io.Writer, cs commandSchema) error {
 		fmt.Fprintf(w, "\n%s\n", cs.UsedFor)
 	}
 	if cs.Risk != nil {
-		fmt.Fprintf(w, "\nRisk: %s (%s) — confirmation-gated (exit 10) unless -y\n", cs.Risk.Action, cs.Risk.Level)
+		fmt.Fprintf(w, "\nRisk: %s (%s) - confirmation-gated (exit 10) unless -y\n", cs.Risk.Action, cs.Risk.Level)
 	}
 	if len(cs.RequiredFlags) > 0 {
 		fmt.Fprintf(w, "\nRequired:\n")

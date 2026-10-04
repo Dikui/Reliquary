@@ -96,7 +96,7 @@ func runStatus(ctx context.Context, fopts *cmdutil.FormatOptions, f *cmdutil.Fac
 	// Effective host + auth source. Stateless env credentials
 	// (RELIQUARY_TOKEN/RELIQUARY_API_KEY) override the profile + keyring for the
 	// client, so report the host they authenticate against (RELIQUARY_HOST) and
-	// that they are in effect — not the bypassed config profile's host.
+	// that they are in effect - not the bypassed config profile's host.
 	host := ""
 	if c, ok := cfg.Profiles[cfg.CurrentProfile]; ok {
 		host = c.Host

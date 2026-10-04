@@ -1,4 +1,4 @@
-// Package profilecmd — dryrun_validation_test.go asserts that --dry-run on
+// Package profilecmd - dryrun_validation_test.go asserts that --dry-run on
 // profile subcommands rejects identically to the live path. Before the
 // surrounding fix, validation lived in runX() and was reached only after
 // HandleDryRun short-circuited, so --dry-run accepted invocations the live
@@ -23,7 +23,7 @@ import (
 )
 
 // profileDryRunFactory builds a Factory whose Client closure panics if
-// invoked — dry-run must early-exit before any SDK call.
+// invoked - dry-run must early-exit before any SDK call.
 func profileDryRunFactory(t *testing.T) *cmdutil.Factory {
 	t.Helper()
 	return &cmdutil.Factory{

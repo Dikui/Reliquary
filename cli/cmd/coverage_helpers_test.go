@@ -20,7 +20,7 @@ func eachLeafCommand(root *cobra.Command, fn func(*cobra.Command)) {
 			walk(k)
 		}
 		if c == root || realKids > 0 || exempt[c.Name()] {
-			return // group command or exempt — not a leaf
+			return // group command or exempt - not a leaf
 		}
 		fn(c)
 	}

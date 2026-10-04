@@ -1,9 +1,9 @@
-// Package doc — dryrun_validation_test.go asserts that --dry-run on
+// Package doc - dryrun_validation_test.go asserts that --dry-run on
 // doc subcommands rejects identically to the live path (validation must run
 // before previewing). Before the surrounding fix, validation lived in runX()
 // and was reached only after HandleDryRun
 // short-circuited, so --dry-run silently emitted plan envelopes for inputs
-// the live path would reject — agents got false-positive previews.
+// the live path would reject - agents got false-positive previews.
 package doc
 
 import (
@@ -21,7 +21,7 @@ import (
 	sdk "reliquary/client"
 )
 
-// docDryRunFactory builds a Factory whose Client closure panics if invoked —
+// docDryRunFactory builds a Factory whose Client closure panics if invoked -
 // dry-run must early-exit before any SDK call. Factory.ResolveKB is a method
 // that short-circuits when --kb is a uuid (IsKBID), so the tests below pass
 // a literal uuid to avoid the Client()-based name lookup path.
