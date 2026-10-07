@@ -23,7 +23,7 @@ import (
 // concurrencyChat throttles background LLM calls through a per-model
 // distributed semaphore. It is the outermost wrapper so the slot is held only
 // around the actual provider round-trip and the wait time is excluded from the
-// inner debug/langfuse timing.
+// inner debug timing.
 type concurrencyChat struct {
 	inner Chat
 	// limit is this model's configured per-model background cap; 0 falls back

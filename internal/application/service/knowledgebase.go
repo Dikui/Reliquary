@@ -12,12 +12,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"gorm.io/gorm"
+
 	"reliquary/internal/application/service/retriever"
 	"reliquary/internal/datasource"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
 	"reliquary/internal/storageallowlist"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	secutils "reliquary/internal/utils"
@@ -42,7 +42,6 @@ type knowledgeBaseService struct {
 	tenantRepo      interfaces.TenantRepository
 	fileSvc         interfaces.FileService
 	storageResolver interfaces.StorageBackendResolver
-	graphEngine     interfaces.RetrieveGraphRepository
 	asynqClient     interfaces.TaskEnqueuer
 	taskInspector   interfaces.TaskInspector
 	taskPendingRepo interfaces.TaskPendingOpsRepository
@@ -65,7 +64,6 @@ func NewKnowledgeBaseService(db *gorm.DB, repo interfaces.KnowledgeBaseRepositor
 	tenantRepo interfaces.TenantRepository,
 	fileSvc interfaces.FileService,
 	storageResolver interfaces.StorageBackendResolver,
-	graphEngine interfaces.RetrieveGraphRepository,
 	asynqClient interfaces.TaskEnqueuer,
 	taskInspector interfaces.TaskInspector,
 	taskPendingRepo interfaces.TaskPendingOpsRepository,
@@ -88,7 +86,6 @@ func NewKnowledgeBaseService(db *gorm.DB, repo interfaces.KnowledgeBaseRepositor
 		tenantRepo:      tenantRepo,
 		fileSvc:         fileSvc,
 		storageResolver: storageResolver,
-		graphEngine:     graphEngine,
 		asynqClient:     asynqClient,
 		taskInspector:   taskInspector,
 		taskPendingRepo: taskPendingRepo,
@@ -481,7 +478,7 @@ func (s *knowledgeBaseService) FillKnowledgeBaseCounts(ctx context.Context, kb *
 //
 //  1. ORM layer: the GORM tag `<-:create` on KnowledgeBase.VectorStoreID
 //     makes every UPDATE path (Save / Updates / Select-Updates) a no-op for
-//     that column. Verified by repository/knowledgebase_sqlite_test.go.
+//     that column. Verified by repository/knowledgebase_binding_test.go.
 //  2. Service layer: this method intentionally omits VectorStoreID from its
 //     parameter list, and the matching handler DTO UpdateKnowledgeBaseRequest
 //     omits the field as well. A reflection-based regression test
@@ -550,12 +547,7 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 			if kb.WikiConfig == nil && config.IndexingStrategy.WikiEnabled {
 				kb.WikiConfig = &types.WikiConfig{}
 			}
-			// Sync GraphEnabled → ExtractConfig
-			if kb.ExtractConfig != nil {
-				kb.ExtractConfig.Enabled = config.IndexingStrategy.GraphEnabled
-			} else if config.IndexingStrategy.GraphEnabled {
-				kb.ExtractConfig = &types.ExtractConfig{Enabled: true}
-			}
+
 		}
 	}
 	kb.UpdatedAt = time.Now()
@@ -789,7 +781,6 @@ func (s *knowledgeBaseService) DeleteKnowledgeBase(ctx context.Context, id strin
 		EffectiveEngines: tenantInfo.GetEffectiveEngines(),
 		VectorStoreID:    vectorStoreIDSnapshot, // snapshot taken before soft-delete
 	}
-	langfuse.InjectTracing(ctx, &payload)
 
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -952,21 +943,6 @@ func (s *knowledgeBaseService) ProcessKBDelete(ctx context.Context, t *asynq.Tas
 		if storageAdjust != 0 {
 			if err := s.tenantRepo.AdjustStorageUsed(ctx, tenantID, storageAdjust); err != nil {
 				logger.Warnf(ctx, "Failed to adjust tenant storage: %v", err)
-			}
-		}
-
-		// Delete knowledge graph data
-		logger.Infof(ctx, "Deleting knowledge graph data")
-		namespaces := make([]types.NameSpace, 0, len(knowledgeList))
-		for _, knowledge := range knowledgeList {
-			namespaces = append(namespaces, types.NameSpace{
-				KnowledgeBase: knowledge.KnowledgeBaseID,
-				Knowledge:     knowledge.ID,
-			})
-		}
-		if s.graphEngine != nil && len(namespaces) > 0 {
-			if err := s.graphEngine.DelGraph(ctx, namespaces); err != nil {
-				logger.Warnf(ctx, "Failed to delete knowledge graph: %v", err)
 			}
 		}
 
@@ -1167,7 +1143,7 @@ func (s *knowledgeBaseService) CopyKnowledgeBase(ctx context.Context,
 		}
 
 		// Defense 3: the concrete storage instance must match. Comparing only
-		// provider names would incorrectly allow COS-A -> COS-B clones.
+		// provider names would incorrectly allow S3-A -> S3-B clones.
 		if tenant, _ := ctx.Value(types.TenantInfoContextKey).(*types.Tenant); tenant != nil {
 			defaultID, defaultProvider := "", ""
 			if tenant.DefaultStorageBackendID != nil {

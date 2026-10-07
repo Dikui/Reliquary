@@ -114,7 +114,7 @@ export type Platform = 'mac' | 'windows' | 'linux'
 /**
  * Detect the host OS so the font picker can offer options the user will
  * actually see. Prefers navigator.userAgentData (modern Chromium, Edge,
- * current Wails WebView) and falls back to the UA string — older Safari
+ * current embedded browser) and falls back to the UA string — older Safari
  * and some Firefox builds still don't expose userAgentData.
  *
  * Unknown platforms fall back to Mac, which is the most common development
@@ -123,7 +123,7 @@ export type Platform = 'mac' | 'windows' | 'linux'
 export function detectPlatform(): Platform {
   if (typeof navigator === 'undefined') return 'mac'
 
-  // Modern: client hints (Chromium ≥ 90, Edge, Wails WebView on Win/Mac).
+  // Modern: client hints (Chromium ≥ 90, Edge).
   const uaData = (navigator as unknown as {
     userAgentData?: { platform?: string }
   }).userAgentData

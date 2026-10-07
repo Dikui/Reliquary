@@ -27,6 +27,7 @@ import (
 
 	"github.com/robfig/cron/v3"
 	"gorm.io/gorm"
+
 	"reliquary/internal/config"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
@@ -125,7 +126,7 @@ func (h *HousekeepingService) runSweep(ctx context.Context) {
 	// pipeline always has a recent span heartbeat even when the
 	// parent knowledge row is "frozen" mid-stage.
 	//
-	// Knowledge rows with no spans at all (lite mode, in-flight tasks
+	// Knowledge rows with no spans at all (in-memory fixtures, in-flight tasks
 	// from before this code shipped) fall back to the simple
 	// updated_at check — they have no heartbeat to consult.
 	// Include 'pending' so a task whose enqueue was lost is eventually
@@ -214,7 +215,7 @@ func (h *HousekeepingService) runSweep(ctx context.Context) {
 
 // filterByLastSpanActivity returns the subset of candidates whose most
 // recent span row predates `cutoff` — i.e. genuinely stuck. Candidates
-// with no span rows at all also pass through (they're lite-mode or
+// with no span rows at all also pass through (they're in-memory fixtures or
 // pre-instrumentation tasks; the simple updated_at check already proved
 // them stuck and we have no heartbeat to override that).
 func (h *HousekeepingService) filterByLastSpanActivity(ctx context.Context, candidates []types.Knowledge, cutoff time.Time) []types.Knowledge {
@@ -226,13 +227,8 @@ func (h *HousekeepingService) filterByLastSpanActivity(ctx context.Context, cand
 		ids = append(ids, k.ID)
 	}
 
-	// We scan MAX(updated_at) as string then parse client-side. That
-	// dodges the SQLite driver's well-known refusal to auto-convert
-	// aggregate datetime values into time.Time on its own — Postgres
-	// happily round-trips, but the same query shape must work in
-	// Lite mode too. Since we only compare against a cutoff, the
-	// parse layer below tries the formats both Postgres and SQLite
-	// emit and takes the first that parses.
+	// Scan aggregate timestamps as strings so PostgreSQL and test fixtures
+	// use the same cutoff comparison. Parse the supported timestamp formats.
 	type spanHeartbeat struct {
 		KnowledgeID string `gorm:"column:knowledge_id"`
 		LastSeen    string `gorm:"column:last_seen"`
@@ -346,7 +342,7 @@ func (h *HousekeepingService) filterOutQueued(
 	return out, skipped
 }
 
-// parseHeartbeatTime accepts the timestamp formats Postgres and SQLite
+// parseHeartbeatTime accepts the timestamp formats Postgres
 // emit for a TIMESTAMP column read back through MAX(). Returns false if
 // none parse — the caller treats unparseable rows as "no heartbeat",
 // which fails safe (the row gets recovered as stuck rather than

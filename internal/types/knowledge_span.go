@@ -13,8 +13,7 @@ import "time"
 //   - SpanKindSubSpan  — anything inside a stage (e.g. multimodal.image[i]).
 //     UI shows them as collapsible children.
 //   - SpanKindGeneration — a SubSpan that wraps an LLM/VLM call. Same UI
-//     treatment as SubSpan but tagged so we can stitch
-//     to the matching Langfuse generation.
+//     treatment as SubSpan but tagged to identify model calls.
 const (
 	SpanKindRoot       = "root"
 	SpanKindStage      = "stage"

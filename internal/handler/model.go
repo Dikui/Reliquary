@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
 	"reliquary/internal/application/service"
 	"reliquary/internal/errors"
 	"reliquary/internal/handler/dto"
@@ -454,7 +455,7 @@ func (h *ModelHandler) DebugModel(c *gin.Context) {
 			chatOpts.MaxTokens = *opts.MaxTokens
 		}
 		chatOpts.Thinking = opts.Thinking
-		chatConfig := chat.ConfigFromModel(model, "", "")
+		chatConfig := chat.ConfigFromModel(model)
 		thinkingControl := chat.EffectiveThinkingControl(chatConfig)
 		observations["stream"] = true
 		observations["requested_thinking"] = opts.Thinking != nil && *opts.Thinking
@@ -628,9 +629,6 @@ func (h *ModelHandler) UpdateModel(c *gin.Context) {
 	newParams.ParameterSize = model.Parameters.ParameterSize
 	if newParams.InterfaceType == "" {
 		newParams.InterfaceType = model.Parameters.InterfaceType
-	}
-	if newParams.AppID == "" {
-		newParams.AppID = model.Parameters.AppID
 	}
 	if newParams.ExtraConfig == nil {
 		newParams.ExtraConfig = model.Parameters.ExtraConfig

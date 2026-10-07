@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"reliquary/internal/types"
 )
 
@@ -47,13 +48,8 @@ func TestBuildIMFileServiceForProvider_FallbackToGlobal(t *testing.T) {
 	stub := &stubIMFileService{}
 	tenant := &types.Tenant{
 		StorageEngineConfig: &types.StorageEngineConfig{
-			DefaultProvider: "cos",
-			COS: &types.COSEngineConfig{
-				SecretID:   "id",
-				SecretKey:  "key",
-				BucketName: "bucket",
-				Region:     "ap-shanghai",
-			},
+			DefaultProvider: "s3",
+			S3:              &types.S3EngineConfig{AccessKey: "id", SecretKey: "key", BucketName: "bucket", Region: "us-east-1"},
 		},
 	}
 
@@ -68,13 +64,8 @@ func TestIMFileServiceResolver_CachesPerProvider(t *testing.T) {
 	stub := &stubIMFileService{}
 	tenant := &types.Tenant{
 		StorageEngineConfig: &types.StorageEngineConfig{
-			DefaultProvider: "cos",
-			COS: &types.COSEngineConfig{
-				SecretID:   "id",
-				SecretKey:  "key",
-				BucketName: "bucket",
-				Region:     "ap-shanghai",
-			},
+			DefaultProvider: "s3",
+			S3:              &types.S3EngineConfig{AccessKey: "id", SecretKey: "key", BucketName: "bucket", Region: "us-east-1"},
 		},
 	}
 	r := newIMFileServiceResolver(tenant, stub)
@@ -95,13 +86,8 @@ func TestRewriteStorageURLs_MinIOFallbackViaGlobal(t *testing.T) {
 	}
 	tenant := &types.Tenant{
 		StorageEngineConfig: &types.StorageEngineConfig{
-			DefaultProvider: "cos",
-			COS: &types.COSEngineConfig{
-				SecretID:   "id",
-				SecretKey:  "key",
-				BucketName: "bucket",
-				Region:     "ap-shanghai",
-			},
+			DefaultProvider: "s3",
+			S3:              &types.S3EngineConfig{AccessKey: "id", SecretKey: "key", BucketName: "bucket", Region: "us-east-1"},
 		},
 	}
 	in := `![知识助理"知识库"管理视图界面](minio://wizard-test/10000/exports/c91cf852.png)`
@@ -114,11 +100,11 @@ func TestRewriteStorageURLs_MinIOFallbackViaGlobal(t *testing.T) {
 func TestRewriteStorageURLs_ScopedPath(t *testing.T) {
 	stub := &stubIMFileService{
 		getFileURL: func(_ context.Context, filePath string) (string, error) {
-			assert.Equal(t, "storage://backend-a/cos://bucket/ap-test/10000/exports/a.png", filePath)
+			assert.Equal(t, "storage://backend-a/s3://bucket/ap-test/10000/exports/a.png", filePath)
 			return "https://storage.example/a.png", nil
 		},
 	}
-	input := "![img](storage://backend-a/cos://bucket/ap-test/10000/exports/a.png)"
+	input := "![img](storage://backend-a/s3://bucket/ap-test/10000/exports/a.png)"
 	output := rewriteStorageURLs(context.Background(), input, newIMFileServiceResolver(&types.Tenant{}, stub))
 	assert.Contains(t, output, "https://storage.example/a.png")
 }
@@ -129,7 +115,7 @@ func TestRewriteStorageURLs_ScopedPath(t *testing.T) {
 func TestRewriteStorageURLs_NonHTTPResultIsNoOp(t *testing.T) {
 	stub := &stubIMFileService{
 		getFileURL: func(_ context.Context, _ string) (string, error) {
-			return "storage://7cb970a6/oss://bcjy/10000/exports/a.png", nil
+			return "storage://7cb970a6/s3://bcjy/10000/exports/a.png", nil
 		},
 	}
 	in := "![img](resource://xifDo7NTSL300Lp1goVutw)"
@@ -160,7 +146,7 @@ func TestCleanIMContent_MinIOFallbackIntegration(t *testing.T) {
 		},
 	}
 	tenant := &types.Tenant{
-		StorageEngineConfig: &types.StorageEngineConfig{DefaultProvider: "cos"},
+		StorageEngineConfig: &types.StorageEngineConfig{DefaultProvider: "s3"},
 	}
 	in := "see ![x](minio://wizard-test/10000/exports/x.png) ok"
 	out := cleanIMContent(context.Background(), in, tenant, stub)

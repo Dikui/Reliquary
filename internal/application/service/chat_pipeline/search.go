@@ -9,7 +9,6 @@ import (
 	"reliquary/internal/config"
 	"reliquary/internal/logger"
 	"reliquary/internal/searchutil"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -608,18 +607,9 @@ func (p *PluginSearch) searchWebIfEnabled(ctx context.Context, chatManage *types
 		"tenant_id":   chatManage.TenantID,
 		"provider_id": providerID,
 	})
-	webCtx, webSpan := langfuse.GetManager().StartSpan(ctx, langfuse.SpanOptions{
-		Name: "web_search",
-		Input: map[string]interface{}{
-			"provider_id": providerID,
-			"query":       chatManage.RewriteQuery,
-			"max_results": webConfig.MaxResults,
-		},
-	})
+	webCtx := ctx
 	webResults, err := p.webSearchService.Search(webCtx, providerID, webConfig, chatManage.RewriteQuery)
-	webSpan.Finish(map[string]interface{}{
-		"hit_count": len(webResults),
-	}, nil, err)
+
 	if err != nil {
 		pipelineWarn(ctx, "Search", "web_search_error", map[string]interface{}{
 			"tenant_id": chatManage.TenantID,

@@ -303,9 +303,6 @@ definitions:
     - vector_store.created
     - vector_store.updated
     - vector_store.deleted
-    - opensearch.index_created
-    - opensearch.index_deleted
-    - opensearch.reindex_executed
     - system.setting_changed
     - system.admin_promoted
     - system.admin_revoked
@@ -483,25 +480,6 @@ definitions:
           existed decode to nil and must not silently flip to "always append".
         type: boolean
     type: object
-  github_com_Tencent_Reliquary_internal_types.COSEngineConfig:
-    properties:
-      app_id:
-        type: string
-      bucket_name:
-        type: string
-      path_prefix:
-        type: string
-      region:
-        type: string
-      secret_id:
-        type: string
-      secret_key:
-        type: string
-      temp_bucket_name:
-        type: string
-      temp_region:
-        type: string
-    type: object
   github_com_Tencent_Reliquary_internal_types.ChatHistoryConfig:
     properties:
       embedding_model_id:
@@ -582,63 +560,6 @@ definitions:
           TokenLimit caps chunk size in approximate tokens. 0 = use ChunkSize
           as a character count.
         type: integer
-    type: object
-  github_com_Tencent_Reliquary_internal_types.ConnectionConfig:
-    properties:
-      addr:
-        description: Common
-        type: string
-      api_key:
-        description: AES-GCM encrypted
-        type: string
-      database:
-        description: |-
-          Database name used by engines that support database-level namespaces
-          (currently Milvus, Tencent VectorDB, and Doris).
-        type: string
-      grpc_address:
-        description: Weaviate
-        type: string
-      host:
-        description: Qdrant
-        type: string
-      http_port:
-        description: |-
-          Doris: HTTP port for Stream Load API (FE default 8030).
-          Addr is reused for the MySQL protocol "host:9030"; HTTPPort + the host of Addr
-          together form the FE HTTP endpoint used by Stream Load.
-        type: integer
-      insecure_skip_verify:
-        description: |-
-          InsecureSkipVerify disables TLS certificate verification when
-          talking to the backing store over HTTPS. Defaults to false
-          (secure). Set to true ONLY for self-signed development clusters;
-          production deployments should provide trusted certificates via
-          the system CA pool. Cross-driver applicable but currently only
-          the OpenSearch driver (Phase 3) reads this field. Note: this
-          differs from the Qdrant-specific UseTLS below, which *enables*
-          TLS on gRPC connections — InsecureSkipVerify only controls
-          *verification* of an already-TLS connection.
-        type: boolean
-      password:
-        description: AES-GCM encrypted
-        type: string
-      port:
-        type: integer
-      scheme:
-        type: string
-      use_default_connection:
-        description: Postgres
-        type: boolean
-      use_tls:
-        type: boolean
-      username:
-        type: string
-      version:
-        description: |-
-          Version is the detected server version (e.g., "7.10.1", "16.2", "1.12.6").
-          Auto-populated by TestConnection on successful connectivity check.
-        type: string
     type: object
   github_com_Tencent_Reliquary_internal_types.ContextCompressionStrategy:
     enum:
@@ -1247,30 +1168,6 @@ definitions:
       truncate_prompt_tokens:
         type: integer
     type: object
-  github_com_Tencent_Reliquary_internal_types.ExtractConfig:
-    properties:
-      custom_instructions:
-        description: |-
-          CustomInstructions adds domain-specific extraction guidance while the
-          system keeps ownership of the structured graph output protocol.
-        type: string
-      enabled:
-        type: boolean
-      nodes:
-        items:
-          $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.GraphNode'
-        type: array
-      relations:
-        items:
-          $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.GraphRelation'
-        type: array
-      tags:
-        items:
-          type: string
-        type: array
-      text:
-        type: string
-    type: object
   github_com_Tencent_Reliquary_internal_types.FAQBatchUpsertPayload:
     properties:
       dry_run:
@@ -1426,95 +1323,14 @@ definitions:
       suppress_when_answer_asks_question:
         type: boolean
     type: object
-  github_com_Tencent_Reliquary_internal_types.GraphNode:
-    properties:
-      attributes:
-        items:
-          type: string
-        type: array
-      chunks:
-        items:
-          type: string
-        type: array
-      name:
-        type: string
-    type: object
-  github_com_Tencent_Reliquary_internal_types.GraphRelation:
-    properties:
-      node1:
-        type: string
-      node2:
-        type: string
-      type:
-        type: string
-    type: object
   github_com_Tencent_Reliquary_internal_types.ImageProcessingConfig:
     properties:
       model_id:
         description: Model ID
         type: string
     type: object
-  github_com_Tencent_Reliquary_internal_types.IndexConfig:
-    properties:
-      buckets_num:
-        description: 'Doris: number of buckets per table (DISTRIBUTED BY HASH ...
-          BUCKETS N)'
-        type: integer
-      collection_name:
-        description: Milvus
-        type: string
-      collection_prefix:
-        description: Qdrant, Weaviate
-        type: string
-      desired_shard_count:
-        description: 'Weaviate: number of shards per collection'
-        type: integer
-      hnsw_ef_construction:
-        description: 'OpenSearch: HNSW index-build candidate list size'
-        type: integer
-      hnsw_ef_search:
-        description: 'OpenSearch: HNSW search candidate list size (faiss; lucene reads
-          at query time)'
-        type: integer
-      hnsw_m:
-        description: |-
-          --- OpenSearch k-NN HNSW fields ---
-          All omitempty so other engines' serialized IndexConfig is unchanged.
-          Zero / empty values fall back to the driver defaults in buildInternalCfg.
-        type: integer
-      index_name:
-        description: '--- Existing fields ---'
-        type: string
-      knn_engine:
-        description: 'OpenSearch: k-NN backend ("lucene" | "faiss")'
-        type: string
-      number_of_replicas:
-        description: ES, OpenSearch
-        type: integer
-      number_of_shards:
-        description: ES, OpenSearch
-        type: integer
-      replica_number:
-        description: Milvus LoadCollection / Tencent VectorDB CreateCollection replicas
-        type: integer
-      replication_factor:
-        description: 'Qdrant, Weaviate: number of replicas'
-        type: integer
-      replication_num:
-        description: 'Doris: replication_num PROPERTIES'
-        type: integer
-      shard_number:
-        description: '--- Scalability fields ---'
-        type: integer
-      shards_num:
-        description: 'Milvus: number of shards per collection (CreateCollection)'
-        type: integer
-    type: object
   github_com_Tencent_Reliquary_internal_types.IndexingStrategy:
     properties:
-      graph_enabled:
-        description: GraphEnabled enables knowledge graph entity/relation extraction
-        type: boolean
       keyword_enabled:
         description: KeywordEnabled enables keyword-based (BM25) search
         type: boolean
@@ -1586,21 +1402,6 @@ definitions:
     - KBCloneStatusProcessing
     - KBCloneStatusCompleted
     - KBCloneStatusFailed
-  github_com_Tencent_Reliquary_internal_types.KS3EngineConfig:
-    properties:
-      access_key:
-        type: string
-      bucket_name:
-        type: string
-      endpoint:
-        type: string
-      path_prefix:
-        type: string
-      region:
-        type: string
-      secret_key:
-        type: string
-    type: object
   github_com_Tencent_Reliquary_internal_types.KnowledgeBase:
     properties:
       asr_config:
@@ -1646,10 +1447,6 @@ definitions:
       embedding_model_id:
         description: ID of the embedding model
         type: string
-      extract_config:
-        allOf:
-        - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.ExtractConfig'
-        description: Extract config
       faq_config:
         allOf:
         - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.FAQConfig'
@@ -1867,10 +1664,6 @@ definitions:
       chunking_config:
         $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.ChunkingConfig'
       enable_multimodel:
-        type: boolean
-      extract_config:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.ExtractConfig'
-      graph_enabled:
         type: boolean
       parser_engine_overrides:
         additionalProperties:
@@ -2470,9 +2263,6 @@ definitions:
     properties:
       api_key:
         type: string
-      app_id:
-        description: WeKnoraCloud 厂商专用凭证
-        type: string
       app_secret:
         description: AES-256 加密存储，实际承载上游 API Key
         type: string
@@ -2634,23 +2424,6 @@ definitions:
     - ModelTypeKnowledgeQA
     - ModelTypeVLLM
     - ModelTypeASR
-  github_com_Tencent_Reliquary_internal_types.OBSEngineConfig:
-    properties:
-      access_key:
-        type: string
-      bucket_name:
-        type: string
-      endpoint:
-        type: string
-      path_prefix:
-        type: string
-      region:
-        type: string
-      secret_key:
-        type: string
-      use_ssl:
-        type: boolean
-    type: object
   github_com_Tencent_Reliquary_internal_types.OIDCAuthURLResponse:
     properties:
       authorization_url:
@@ -2669,27 +2442,6 @@ definitions:
       provider_display_name:
         type: string
       success:
-        type: boolean
-    type: object
-  github_com_Tencent_Reliquary_internal_types.OSSEngineConfig:
-    properties:
-      access_key:
-        type: string
-      bucket_name:
-        type: string
-      endpoint:
-        type: string
-      path_prefix:
-        type: string
-      region:
-        type: string
-      secret_key:
-        type: string
-      temp_bucket_name:
-        type: string
-      temp_region:
-        type: string
-      use_temp_bucket:
         type: boolean
     type: object
   github_com_Tencent_Reliquary_internal_types.OrgMemberRole:
@@ -3092,16 +2844,6 @@ definitions:
   github_com_Tencent_Reliquary_internal_types.RetrieverEngineType:
     enum:
     - postgres
-    - elasticsearch
-    - infinity
-    - elasticfaiss
-    - qdrant
-    - milvus
-    - weaviate
-    - doris
-    - sqlite
-    - tencent_vectordb
-    - opensearch
     type: string
     x-enum-varnames:
     - PostgresRetrieverEngineType
@@ -3587,8 +3329,6 @@ definitions:
     properties:
       access_key_id:
         type: string
-      app_id:
-        type: string
       bucket_name:
         type: string
       endpoint:
@@ -3603,20 +3343,11 @@ definitions:
         type: string
       secret_access_key:
         type: string
-      temp_bucket_name:
-        type: string
-      temp_region:
-        type: string
       use_ssl:
-        type: boolean
-      use_temp_bucket:
         type: boolean
     type: object
   github_com_Tencent_Reliquary_internal_types.StorageConfig:
     properties:
-      app_id:
-        description: App ID (COS specific)
-        type: string
       bucket_name:
         description: Bucket Name
         type: string
@@ -3647,25 +3378,15 @@ definitions:
     type: object
   github_com_Tencent_Reliquary_internal_types.StorageEngineConfig:
     properties:
-      cos:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.COSEngineConfig'
       default_provider:
         description: '"local", "minio", "cos", "tos", "s3", "oss", "ks3", "obs"'
         type: string
-      ks3:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.KS3EngineConfig'
       local:
         $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.LocalEngineConfig'
       minio:
         $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.MinIOEngineConfig'
-      obs:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.OBSEngineConfig'
-      oss:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.OSSEngineConfig'
       s3:
         $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.S3EngineConfig'
-      tos:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.TOSEngineConfig'
     type: object
   github_com_Tencent_Reliquary_internal_types.StorageProviderConfig:
     properties:
@@ -3808,25 +3529,6 @@ definitions:
           ValueType is one of "int", "string", "bool". Service layer rejects
           updates whose payload type does not match; UI uses it to pick
           InputNumber vs Input vs Switch.
-        type: string
-    type: object
-  github_com_Tencent_Reliquary_internal_types.TOSEngineConfig:
-    properties:
-      access_key:
-        type: string
-      bucket_name:
-        type: string
-      endpoint:
-        type: string
-      path_prefix:
-        type: string
-      region:
-        type: string
-      secret_key:
-        type: string
-      temp_bucket_name:
-        type: string
-      temp_region:
         type: string
     type: object
   github_com_Tencent_Reliquary_internal_types.Tenant:
@@ -5042,21 +4744,6 @@ definitions:
     - source
     - type
     type: object
-  internal_handler.CreateStoreRequest:
-    properties:
-      connection_config:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.ConnectionConfig'
-      engine_type:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.RetrieverEngineType'
-      index_config:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.IndexConfig'
-      name:
-        type: string
-    required:
-    - connection_config
-    - engine_type
-    - name
-    type: object
   internal_handler.CreateSystemUserResponse:
     properties:
       generated_password:
@@ -5095,17 +4782,6 @@ definitions:
         description: ID of rerank model to use
         type: string
     type: object
-  internal_handler.FabriTextRequest:
-    properties:
-      model_id:
-        type: string
-      tags:
-        items:
-          type: string
-        type: array
-    required:
-    - model_id
-    type: object
   internal_handler.GetStorageEngineStatusResponse:
     properties:
       allowed_providers:
@@ -5137,8 +4813,6 @@ definitions:
       edition:
         type: string
       go_version:
-        type: string
-      graph_database_engine:
         type: string
       keyword_index_engine:
         type: string
@@ -5208,21 +4882,6 @@ definitions:
         type: object
       multimodal:
         properties:
-          cos:
-            properties:
-              appId:
-                type: string
-              bucketName:
-                type: string
-              pathPrefix:
-                type: string
-              region:
-                type: string
-              secretId:
-                type: string
-              secretKey:
-                type: string
-            type: object
           enabled:
             type: boolean
           minio:
@@ -5246,39 +4905,6 @@ definitions:
               modelName:
                 type: string
             type: object
-        type: object
-      nodeExtract:
-        properties:
-          enabled:
-            type: boolean
-          nodes:
-            items:
-              properties:
-                attributes:
-                  items:
-                    type: string
-                  type: array
-                name:
-                  type: string
-              type: object
-            type: array
-          relations:
-            items:
-              properties:
-                node1:
-                  type: string
-                node2:
-                  type: string
-                type:
-                  type: string
-              type: object
-            type: array
-          tags:
-            items:
-              type: string
-            type: array
-          text:
-            type: string
         type: object
       questionGeneration:
         properties:
@@ -5355,28 +4981,6 @@ definitions:
         properties:
           enabled:
             type: boolean
-        type: object
-      nodeExtract:
-        description: 知识图谱配置
-        properties:
-          customInstructions:
-            type: string
-          enabled:
-            type: boolean
-          nodes:
-            items:
-              $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.GraphNode'
-            type: array
-          relations:
-            items:
-              $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.GraphRelation'
-            type: array
-          tags:
-            items:
-              type: string
-            type: array
-          text:
-            type: string
         type: object
       questionGeneration:
         description: 问题生成配置
@@ -5809,23 +5413,13 @@ definitions:
     type: object
   internal_handler.StorageCheckRequest:
     properties:
-      cos:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.COSEngineConfig'
-      ks3:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.KS3EngineConfig'
       minio:
         $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.MinIOEngineConfig'
-      obs:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.OBSEngineConfig'
-      oss:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.OSSEngineConfig'
       provider:
         description: '"minio", "cos", "tos", "s3", "oss", "ks3", "obs"'
         type: string
       s3:
         $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.S3EngineConfig'
-      tos:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.TOSEngineConfig'
     type: object
   internal_handler.StorageCheckResponse:
     properties:
@@ -5870,31 +5464,6 @@ definitions:
         type: string
     required:
     - provider
-    type: object
-  internal_handler.TestStoreRequest:
-    properties:
-      connection_config:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.ConnectionConfig'
-      engine_type:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.RetrieverEngineType'
-    required:
-    - connection_config
-    - engine_type
-    type: object
-  internal_handler.TextRelationExtractionRequest:
-    properties:
-      model_id:
-        type: string
-      tags:
-        items:
-          type: string
-        type: array
-      text:
-        type: string
-    required:
-    - model_id
-    - tags
-    - text
     type: object
   internal_handler.UpdateAgentRequest:
     properties:
@@ -5963,13 +5532,6 @@ definitions:
         type: string
       parameters:
         $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WebSearchProviderParameters'
-    type: object
-  internal_handler.UpdateStoreRequest:
-    properties:
-      name:
-        type: string
-    required:
-    - name
     type: object
   internal_handler.UpdateSystemSettingRequest:
     properties:
@@ -6927,7 +6489,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: Lite 版专用：首次启动时自动创建默认用户和空间并返回令牌，后续启动直接签发令牌，免除手动注册/登录流程
+      description: "显式启用的本地 QA 环境可为既有测试用户签发令牌"
       produces:
       - application/json
       responses:
@@ -6939,7 +6501,7 @@ paths:
           description: 非 Lite 版本
           schema:
             $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      summary: 自动初始化（Lite 桌面版）
+      summary: "本地 QA 自动登录"
       tags:
       - 认证
   /auth/change-password:
@@ -8417,82 +7979,6 @@ paths:
       - Bearer: []
       - ApiKeyAuth: []
       summary: 测试Embedding模型
-      tags:
-      - 初始化
-  /initialization/extract/fabri-tag:
-    post:
-      consumes:
-      - application/json
-      description: 随机生成一组标签
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 生成的标签
-          schema:
-            additionalProperties: true
-            type: object
-      summary: 生成随机标签
-      tags:
-      - 初始化
-  /initialization/extract/fabri-text:
-    post:
-      consumes:
-      - application/json
-      description: 根据标签生成示例文本
-      parameters:
-      - description: 生成请求
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/internal_handler.FabriTextRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 生成的文本
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-      - Bearer: []
-      - ApiKeyAuth: []
-      summary: 生成示例文本
-      tags:
-      - 初始化
-  /initialization/extract/text-relation:
-    post:
-      consumes:
-      - application/json
-      description: 从文本中提取实体和关系
-      parameters:
-      - description: 提取请求
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/internal_handler.TextRelationExtractionRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 提取结果
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-      - Bearer: []
-      - ApiKeyAuth: []
-      summary: 提取文本关系
       tags:
       - 初始化
   /initialization/initialize/{kbId}:
@@ -13070,28 +12556,6 @@ paths:
       summary: 获取模型厂商列表
       tags:
       - 模型管理
-  /models/weknoracloud/status:
-    get:
-      description: 检查当前空间的 WeKnoraCloud 凭证是否完好；needs_reinit=true 表示需要重新保存
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 凭证状态
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: 服务器错误
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - Bearer: []
-      - ApiKeyAuth: []
-      summary: 检查 WeKnoraCloud 凭证状态
-      tags:
-      - WeKnoraCloud
   /organizations:
     get:
       description: 获取当前空间所属的所有组织，并附带各空间内知识库/智能体数量
@@ -16938,8 +16402,7 @@ paths:
       - User
   /vector-stores:
     get:
-      description: List all vector stores for the current workspace, including environment-configured
-        and user-created stores
+      description: "Report the read-only application PostgreSQL store without exposing credentials"
       produces:
       - application/json
       responses:
@@ -16956,88 +16419,12 @@ paths:
       security:
       - Bearer: []
       - ApiKeyAuth: []
-      summary: List vector stores
-      tags:
-      - VectorStore
-    post:
-      consumes:
-      - application/json
-      description: Create a new vector store configuration for the current workspace
-      parameters:
-      - description: Vector store configuration
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/internal_handler.CreateStoreRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created vector store
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Invalid request or validation error
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "409":
-          description: Duplicate endpoint and index
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-      - Bearer: []
-      - ApiKeyAuth: []
-      summary: Create vector store
+      summary: "Get PostgreSQL store status"
       tags:
       - VectorStore
   /vector-stores/{id}:
-    delete:
-      description: Soft-delete a vector store. Env stores cannot be deleted.
-      parameters:
-      - description: Vector store ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Deletion success
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Env store cannot be deleted
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Vector store not found
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - Bearer: []
-      - ApiKeyAuth: []
-      summary: Delete vector store
-      tags:
-      - VectorStore
     get:
-      description: Retrieve a single vector store by ID. Supports both DB stores and
-        env stores (__env_* IDs)
+      description: "Report the read-only application PostgreSQL store by its virtual ID"
       parameters:
       - description: Vector store ID
         in: path
@@ -17065,138 +16452,7 @@ paths:
       security:
       - Bearer: []
       - ApiKeyAuth: []
-      summary: Get vector store
-      tags:
-      - VectorStore
-    put:
-      consumes:
-      - application/json
-      description: Update a vector store (name only). Engine type, connection config,
-        and index config are immutable. Env stores cannot be modified.
-      parameters:
-      - description: Vector store ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Updated fields
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/internal_handler.UpdateStoreRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Updated vector store
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Env store or validation error
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Vector store not found
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - Bearer: []
-      - ApiKeyAuth: []
-      summary: Update vector store
-      tags:
-      - VectorStore
-  /vector-stores/{id}/test:
-    post:
-      description: Test connectivity of an existing saved or env store. Returns detected
-        server version. For DB stores, the version is automatically saved to connection_config.
-      parameters:
-      - description: Vector store ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Connection test result (success, version)
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Vector store not found
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - Bearer: []
-      - ApiKeyAuth: []
-      summary: Test vector store connection by ID
-      tags:
-      - VectorStore
-  /vector-stores/test:
-    post:
-      consumes:
-      - application/json
-      description: Test connectivity using provided credentials without persisting.
-        Returns detected server version.
-      parameters:
-      - description: Engine type and connection config
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/internal_handler.TestStoreRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Connection test result (success, version)
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Invalid request
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - Bearer: []
-      - ApiKeyAuth: []
-      summary: Test vector store connection with raw credentials
-      tags:
-      - VectorStore
-  /vector-stores/types:
-    get:
-      description: Return supported engine types with connection and index field schemas
-        for UI form generation
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: List of engine types with config schemas
-          schema:
-            additionalProperties: true
-            type: object
-      summary: List vector store types
+      summary: "Get PostgreSQL store status"
       tags:
       - VectorStore
   /web-search-providers/{id}:
@@ -17444,38 +16700,6 @@ paths:
       summary: 轮询微信二维码状态
       tags:
       - IM 渠道
-  /weknoracloud/credentials:
-    post:
-      consumes:
-      - application/json
-      description: 保存 APPID/APPSECRET 到当前空间配置（不自动创建模型）
-      parameters:
-      - description: '{app_id, app_secret}'
-        in: body
-        name: request
-        required: true
-        schema:
-          additionalProperties: true
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 'success: true'
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 请求参数错误
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - Bearer: []
-      - ApiKeyAuth: []
-      summary: 保存 WeKnoraCloud 凭证
-      tags:
-      - WeKnoraCloud
 securityDefinitions:
   ApiKeyAuth:
     description: API Key 认证：空间 Key 固定访问所属空间；平台 Key 调用空间接口时需同时传 X-Tenant-ID

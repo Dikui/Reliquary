@@ -51,14 +51,14 @@ func selectSessionBindingStore(
 // sessionExistenceLookup is the narrow slice of SessionRepository the
 // session existence checker actually needs. Declaring it here (rather than
 // depending on interfaces.SessionRepository) keeps the checker easy to test
-// and lets the container inject a nil repository in Lite mode without
+// and lets the container inject a nil repository in in-memory fixtures without
 // dragging the whole database contract along.
 type sessionExistenceLookup interface {
 	GetByID(ctx context.Context, tenantID uint64, id string) (*types.Session, error)
 }
 
 // sessionExistenceCheckerFor returns a SessionExistenceChecker backed by the
-// tenant session repository. When the repository is unavailable (Lite mode
+// tenant session repository. When the repository is unavailable (in-memory fixtures
 // without a database) the returned checker is permissive so single-process
 // deployments still work; multi-instance production paths always resolve a
 // real repository because the container refuses to boot without one.

@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"reliquary/internal/logger"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -51,22 +50,13 @@ func (s *Service) SearchMemory(
 ) interfaces.MemorySearchResult {
 	query = strings.TrimSpace(query)
 
-	searchCtx, searchSpan := langfuse.GetManager().StartSpan(ctx, langfuse.SpanOptions{
-		Name: "memory.search",
-		Input: map[string]interface{}{
-			"query": langfuse.TruncateRunes(query, recallQueryPreviewRunes),
-			"limit": limit,
-		},
-	})
+	searchCtx := ctx
 
 	scope, cfg, ok := s.enabledScope(searchCtx)
 	if !ok {
 		reason := s.scopeDisableReason(searchCtx)
 		logger.Infof(searchCtx, "memory: search skipped (%s)", reason)
-		searchSpan.Finish(langfuse.SummarizeMemoryRecallOutput(map[string]interface{}{
-			"outcome": "disabled",
-			"reason":  reason,
-		}, nil), nil, nil)
+
 		return interfaces.MemorySearchResult{}
 	}
 
@@ -74,10 +64,7 @@ func (s *Service) SearchMemory(
 	// "memory is off" still wins over "you asked for nothing": the caller
 	// needs the disabled answer even when its own arguments were malformed.
 	if query == "" {
-		searchSpan.Finish(langfuse.SummarizeMemoryRecallOutput(map[string]interface{}{
-			"outcome": "empty",
-			"reason":  "blank_query",
-		}, nil), nil, nil)
+
 		return interfaces.MemorySearchResult{Available: true}
 	}
 
@@ -91,10 +78,7 @@ func (s *Service) SearchMemory(
 	candidates, err := s.repo.ListActiveByKinds(searchCtx, scope, types.MemoryKinds, searchCandidatePool)
 	if err != nil {
 		logger.Warnf(searchCtx, "memory: load search candidates failed: %v", err)
-		searchSpan.Finish(langfuse.SummarizeMemoryRecallOutput(map[string]interface{}{
-			"outcome": "error",
-			"error":   err.Error(),
-		}, nil), nil, err)
+
 		return interfaces.MemorySearchResult{Available: true}
 	}
 
@@ -110,18 +94,6 @@ func (s *Service) SearchMemory(
 	logger.Infof(searchCtx,
 		"memory: search done subject=%s candidates=%d matched=%d mode=%s",
 		scope.SubjectID, len(candidates), len(matched), rankTrace.Mode)
-	searchSpan.Finish(langfuse.SummarizeMemoryRecallOutput(map[string]interface{}{
-		"outcome":         "ok",
-		"subject_id":      scope.SubjectID,
-		"candidate_count": len(candidates),
-		"lexical_hits":    rankTrace.LexicalHits,
-		"vector_hits":     rankTrace.VectorHits,
-		"vector_skip":     rankTrace.VectorSkipReason,
-		"ranking_mode":    rankTrace.Mode,
-		"matched_count":   len(matched),
-	}, matched), map[string]interface{}{
-		"tenant_id": scope.TenantID,
-	}, nil)
 
 	return interfaces.MemorySearchResult{Available: true, Items: matched}
 }

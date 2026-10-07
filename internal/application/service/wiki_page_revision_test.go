@@ -6,9 +6,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
 	"reliquary/internal/application/repository"
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 	ifaces "reliquary/internal/types/interfaces"
 )
@@ -19,8 +20,7 @@ type wikiRevisionTestHarness struct {
 
 func newWikiRevisionTestService(t *testing.T) (context.Context, wikiRevisionTestHarness, *gorm.DB) {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
-	require.NoError(t, err)
+	db := pgtest.OpenFixture(t)
 	require.NoError(t, db.AutoMigrate(&types.WikiFolder{}, &types.WikiPage{}, &types.WikiPageRevision{}))
 	repo := repository.NewWikiPageRepository(db)
 	svc := NewWikiPageService(repo, nil, nil, nil, nil)

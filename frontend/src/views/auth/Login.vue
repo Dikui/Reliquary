@@ -436,8 +436,6 @@ const inviteLookupLoading = ref(false)
 const languageOptions = [
   { value: 'zh-CN', label: '简体中文', shortLabel: '中文', flag: '🇨🇳' },
   { value: 'en-US', label: 'English', shortLabel: 'EN', flag: '🇺🇸' },
-  { value: 'ru-RU', label: 'Русский', shortLabel: 'RU', flag: '🇷🇺' },
-  { value: 'ko-KR', label: '한국어', shortLabel: '한국어', flag: '🇰🇷' }
 ]
 
 const currentLanguage = computed(() => locale.value)
@@ -758,7 +756,7 @@ const handleRegister = async () => {
   }
 }
 
-// Check if already logged in; for lite edition, attempt transparent auto-setup
+// Check if already logged in; attempt auto-setup only in explicit local QA mode
 onMounted(async () => {
   // Share-link landing: ?token=xxx switches the form into invite-
   // register mode before any other auto-flow (logged-in redirect /
@@ -813,11 +811,10 @@ onMounted(async () => {
   }
 
   const AUTO_SETUP_FAILED_KEY = 'reliquary_auto_setup_failed'
-  if (import.meta.env.VITE_QA_AUTO_LOGIN === 'true' || localStorage.getItem(AUTO_SETUP_FAILED_KEY) !== 'true') {
+  if (import.meta.env.VITE_QA_AUTO_LOGIN === 'true') {
     try {
       const response = await autoSetup()
       if (response.success) {
-        authStore.setLiteMode(import.meta.env.VITE_QA_AUTO_LOGIN !== 'true')
         await persistLoginResponse(response)
         return
       } else {

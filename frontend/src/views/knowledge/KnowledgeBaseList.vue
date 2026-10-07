@@ -1,21 +1,21 @@
 <template>
   <div class="kb-list-container">
-    <ListSpaceSidebar v-if="!authStore.isLiteMode" v-model="spaceSelection" :count-all="allKnowledgeBases"
+    <ListSpaceSidebar v-model="spaceSelection" :count-all="allKnowledgeBases"
       :count-mine="kbs.length" :count-by-org="effectiveSharedCountByOrg" :count-favorites="kbFavoritesCount"
       :count-recents="kbRecentsCount" />
     <div class="kb-list-content">
-      <div class="header" style="--wails-draggable: drag">
-        <div class="header-title" style="--wails-draggable: drag">
-          <div class="title-row" style="--wails-draggable: drag">
-            <h2 style="--wails-draggable: drag">{{ $t('knowledgeBase.title') }}</h2>
+      <div class="header">
+        <div class="header-title">
+          <div class="title-row">
+            <h2>{{ $t('knowledgeBase.title') }}</h2>
             <t-tooltip v-if="authStore.hasRole('contributor')" :content="$t('knowledgeList.create')" placement="bottom">
               <t-button variant="text" theme="default" size="small" class="header-action-btn"
-                data-guide="kb-list-create" style="--wails-draggable: no-drag" @click="handleCreateKnowledgeBase">
+                data-guide="kb-list-create" @click="handleCreateKnowledgeBase">
                 <template #icon><t-icon name="folder-add" size="16px" /></template>
               </t-button>
             </t-tooltip>
           </div>
-          <p class="header-subtitle" style="--wails-draggable: drag">{{ $t('knowledgeList.subtitle') }}</p>
+          <p class="header-subtitle">{{ $t('knowledgeList.subtitle') }}</p>
         </div>
       </div>
       <div class="kb-list-main">
@@ -25,7 +25,6 @@
              The backend `?creator=mine|others` param and the URL-state
              field are kept so a future "filter by member" entry point
              (e.g. clicking an avatar) can deep-link without re-plumbing. -->
-
 
         <!-- 未初始化知识库提示 -->
         <div v-if="hasUninitializedKbs" class="warning-banner">
@@ -261,12 +260,7 @@
                         <t-icon v-if="kb.isProcessing" name="loading" size="12px" class="processing-icon" />
                       </div>
                     </t-tooltip>
-                    <t-tooltip v-if="kb.extract_config?.enabled" :content="$t('knowledgeList.features.knowledgeGraph')"
-                      placement="top">
-                      <div class="feature-badge kg">
-                        <t-icon name="relation" size="14px" />
-                      </div>
-                    </t-tooltip>
+
                     <t-tooltip v-if="kb.vlm_config?.enabled" :content="$t('knowledgeList.features.multimodal')"
                       placement="top">
                       <div class="feature-badge multimodal">
@@ -287,7 +281,7 @@
                     </t-tooltip>
                   </div>
                 </div>
-                <div v-if="!authStore.isLiteMode && showKbOriginBadge(kb)" class="bottom-right">
+                <div v-if="showKbOriginBadge(kb)" class="bottom-right">
                   <ResourceOriginBadge :variant="kbOriginVariant(kb)" :creator-name="kb.creator_name" />
                 </div>
               </div>
@@ -338,12 +332,7 @@
                         }}</span>
                       </div>
                     </t-tooltip>
-                    <t-tooltip v-if="kb.extract_config?.enabled" :content="$t('knowledgeList.features.knowledgeGraph')"
-                      placement="top">
-                      <div class="feature-badge kg">
-                        <t-icon name="relation" size="14px" />
-                      </div>
-                    </t-tooltip>
+
                     <t-tooltip
                       v-if="kb.vlm_config?.enabled || (kb.storage_provider_config?.provider && kb.storage_provider_config.provider !== 'local')"
                       :content="$t('knowledgeList.features.multimodal')" placement="top">
@@ -494,12 +483,7 @@
                         <t-icon v-if="kb.isProcessing" name="loading" size="12px" class="processing-icon" />
                       </div>
                     </t-tooltip>
-                    <t-tooltip v-if="kb.extract_config?.enabled" :content="$t('knowledgeList.features.knowledgeGraph')"
-                      placement="top">
-                      <div class="feature-badge kg">
-                        <t-icon name="relation" size="14px" />
-                      </div>
-                    </t-tooltip>
+
                     <t-tooltip
                       v-if="kb.vlm_config?.enabled || (kb.storage_provider_config?.provider && kb.storage_provider_config.provider !== 'local')"
                       :content="$t('knowledgeList.features.multimodal')" placement="top">
@@ -522,7 +506,7 @@
                     </t-tooltip>
                   </div>
                 </div>
-                <div v-if="!authStore.isLiteMode && showKbOriginBadge(kb)" class="bottom-right">
+                <div v-if="showKbOriginBadge(kb)" class="bottom-right">
                   <ResourceOriginBadge :variant="kbOriginVariant(kb)" :creator-name="kb.creator_name" />
                 </div>
               </div>
@@ -851,7 +835,6 @@ interface KB {
   type?: 'document' | 'faq';
   showMore?: boolean;
   vlm_config?: { enabled?: boolean; model_id?: string };
-  extract_config?: { enabled?: boolean };
   storage_provider_config?: { provider?: string };
   storage_config?: { provider?: string; bucket_name?: string }; // legacy
   question_generation_config?: { enabled?: boolean; question_count?: number };
@@ -1955,7 +1938,6 @@ const handleUploadFinishedEvent = (event: Event) => {
   }
 }
 
-
 // 共享知识库卡片样式
 // 共享标识（文档类型默认绿色，位置贴右上角）
 .shared-badge {
@@ -2091,7 +2073,6 @@ const handleUploadFinishedEvent = (event: Event) => {
     max-width: fit-content;
   }
 }
-
 
 .warning-banner {
   display: flex;
@@ -2769,7 +2750,6 @@ const handleUploadFinishedEvent = (event: Event) => {
   font-size: 12px;
   font-weight: 400;
 }
-
 
 .empty-state {
   flex: 1;

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+
 	"reliquary/internal/errors"
 	"reliquary/internal/utils"
 )
@@ -110,9 +111,7 @@ const (
 	// live conversation flow, while message_history can expose historical
 	// messages across the tenant.
 	APIKeyCapabilityMessageHistory APIKeyCapability = "message_history"
-	// APIKeyCapabilityManageModels lets a key manage tenant model
-	// definitions, credentials, model checks, and WeKnoraCloud credentials.
-	APIKeyCapabilityManageModels APIKeyCapability = "manage_models"
+	APIKeyCapabilityManageModels   APIKeyCapability = "manage_models"
 	// APIKeyCapabilityManageMCPServices lets a key manage tenant MCP service
 	// definitions, credentials, tool policies, and per-principal OAuth state.
 	APIKeyCapabilityManageMCPServices APIKeyCapability = "manage_mcp_services"

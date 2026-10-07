@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"github.com/gin-gonic/gin"
+
 	"reliquary/internal/types/interfaces"
 )
 
@@ -9,14 +10,14 @@ import (
 // AuditServiceProvider to stash the running AuditLogService so that
 // middleware functions (rbac.go's RequireRole / RequireOwnershipOrRole)
 // can pull it out without needing the service threaded into their
-// signatures. Same pattern as the langfuse gin middleware.
+// signatures.
 const auditServiceContextKey = "reliquary.audit_service"
 
 // AuditServiceProvider returns a gin middleware that injects the audit
 // service into every request's gin.Context. Wiring is centralised in
 // router.NewRouter so each request gets the same instance for the
 // lifetime of the process; the middleware is a no-op when svc is nil
-// (e.g. lite mode where audit isn't configured) so the rbac reject
+// (e.g. in-memory fixtures where audit isn't configured) so the rbac reject
 // path degrades gracefully.
 func AuditServiceProvider(svc interfaces.AuditLogService) gin.HandlerFunc {
 	return func(c *gin.Context) {

@@ -12,6 +12,7 @@ import (
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
+
 	"reliquary/internal/types"
 )
 
@@ -25,10 +26,8 @@ type Config struct {
 	Audit           *AuditConfig           `yaml:"audit"            json:"audit"`
 	OIDCAuth        *OIDCAuthConfig        `yaml:"oidc_auth"        json:"oidc_auth"`
 	Models          []ModelConfig          `yaml:"models"           json:"models"`
-	VectorDatabase  *VectorDatabaseConfig  `yaml:"vector_database"  json:"vector_database"`
 	DocReader       *DocReaderConfig       `yaml:"docreader"        json:"docreader"`
 	StreamManager   *StreamManagerConfig   `yaml:"stream_manager"   json:"stream_manager"`
-	ExtractManager  *ExtractManagerConfig  `yaml:"extract"          json:"extract"`
 	WebSearch       *WebSearchConfig       `yaml:"web_search"       json:"web_search"`
 	PromptTemplates *PromptTemplatesConfig `yaml:"prompt_templates" json:"prompt_templates"`
 	IM              *IMConfig              `yaml:"im"               json:"im"`
@@ -86,10 +85,6 @@ type DocReaderConfig struct {
 	Transport string `yaml:"transport" json:"transport"`
 }
 
-type VectorDatabaseConfig struct {
-	Driver string `yaml:"driver" json:"driver"`
-}
-
 // ConversationConfig 对话服务配置
 type ConversationConfig struct {
 	MaxRounds            int            `yaml:"max_rounds"                       json:"max_rounds"`
@@ -110,8 +105,6 @@ type ConversationConfig struct {
 	RewritePromptID              string `yaml:"rewrite_prompt_id"                 json:"rewrite_prompt_id"`
 	GenerateSessionTitlePromptID string `yaml:"generate_session_title_prompt_id"  json:"generate_session_title_prompt_id"`
 	GenerateSummaryPromptID      string `yaml:"generate_summary_prompt_id"        json:"generate_summary_prompt_id"`
-	ExtractEntitiesPromptID      string `yaml:"extract_entities_prompt_id"        json:"extract_entities_prompt_id"`
-	ExtractRelationshipsPromptID string `yaml:"extract_relationships_prompt_id"   json:"extract_relationships_prompt_id"`
 	GenerateQuestionsPromptID    string `yaml:"generate_questions_prompt_id"      json:"generate_questions_prompt_id"`
 
 	// Resolved prompt text fields (populated by backfill, not from YAML)
@@ -120,8 +113,6 @@ type ConversationConfig struct {
 	RewritePromptUser          string `yaml:"-" json:"rewrite_prompt_user"`
 	GenerateSessionTitlePrompt string `yaml:"-" json:"generate_session_title_prompt"`
 	GenerateSummaryPrompt      string `yaml:"-" json:"generate_summary_prompt"`
-	ExtractEntitiesPrompt      string `yaml:"-" json:"extract_entities_prompt"`
-	ExtractRelationshipsPrompt string `yaml:"-" json:"extract_relationships_prompt"`
 	GenerateQuestionsPrompt    string `yaml:"-" json:"generate_questions_prompt"`
 
 	// IntentSystemPrompts maps intent values (e.g. "greeting", "chitchat") to
@@ -333,7 +324,7 @@ type PromptTemplateI18n struct {
 // 字段设计：每个模板最多由两部分组成 —— 系统侧 (content) 和用户侧 (user)。
 //   - content: 主要内容 / 系统 Prompt（所有模板都使用此字段）
 //   - user:    用户侧 Prompt（仅在需要 system+user 配对的模板中使用，如 rewrite、keywords_extraction）
-//   - i18n:    多语言 name/description，键为 locale（如 "zh-CN"、"en-US"、"ko-KR"），后端根据请求语言替换 Name/Description 再返回
+//   - i18n:    多语言 name/description，键为 locale（如 "zh-CN"、"en-US"），后端根据请求语言替换 Name/Description 再返回
 type PromptTemplate struct {
 	ID               string                        `yaml:"id"                 json:"id"`
 	Name             string                        `yaml:"name"               json:"name"`
@@ -363,7 +354,6 @@ type PromptTemplatesConfig struct {
 	GenerateSummary      []PromptTemplate `yaml:"generate_summary"       json:"generate_summary,omitempty"`
 	KeywordsExtraction   []PromptTemplate `yaml:"keywords_extraction"    json:"keywords_extraction,omitempty"`
 	AgentSystemPrompt    []PromptTemplate `yaml:"agent_system_prompt"    json:"agent_system_prompt,omitempty"`
-	GraphExtraction      []PromptTemplate `yaml:"graph_extraction"       json:"graph_extraction,omitempty"`
 	GenerateQuestions    []PromptTemplate `yaml:"generate_questions"     json:"generate_questions,omitempty"`
 	// IntentPrompts holds per-intent system prompt overrides (template ID = intent value).
 	IntentPrompts []PromptTemplate `yaml:"intent_prompts" json:"intent_prompts,omitempty"`
@@ -457,18 +447,6 @@ type RedisConfig struct {
 	DB       int           `yaml:"db"       json:"db"`       // Redis数据库
 	Prefix   string        `yaml:"prefix"   json:"prefix"`   // 键前缀
 	TTL      time.Duration `yaml:"ttl"      json:"ttl"`      // 过期时间(小时)
-}
-
-// ExtractManagerConfig 抽取管理器配置
-type ExtractManagerConfig struct {
-	ExtractGraph  *types.PromptTemplateStructured `yaml:"extract_graph"  json:"extract_graph"`
-	ExtractEntity *types.PromptTemplateStructured `yaml:"extract_entity" json:"extract_entity"`
-	FabriText     *FebriText                      `yaml:"fabri_text"     json:"fabri_text"`
-}
-
-type FebriText struct {
-	WithTag   string `yaml:"with_tag"    json:"with_tag"`
-	WithNoTag string `yaml:"with_no_tag" json:"with_no_tag"`
 }
 
 // resolvedConfigDir holds the directory of the loaded config file. Populated by
@@ -980,27 +958,7 @@ func backfillConversationDefaults(cfg *Config) {
 			fmt.Printf("Warning: generate_summary_prompt_id %q not found\n", conv.GenerateSummaryPromptID)
 		}
 	}
-	if conv.ExtractEntitiesPromptID != "" {
-		if t := FindTemplateByID(pt, conv.ExtractEntitiesPromptID); t != nil {
-			conv.ExtractEntitiesPrompt = t.Content
-		} else {
-			fmt.Printf("Warning: extract_entities_prompt_id %q not found\n", conv.ExtractEntitiesPromptID)
-		}
-	}
-	if conv.ExtractRelationshipsPromptID != "" {
-		if t := FindTemplateByID(pt, conv.ExtractRelationshipsPromptID); t != nil {
-			conv.ExtractRelationshipsPrompt = t.Content
-		} else {
-			fmt.Printf("Warning: extract_relationships_prompt_id %q not found\n", conv.ExtractRelationshipsPromptID)
-		}
-	}
-	if conv.GenerateQuestionsPromptID != "" {
-		if t := FindTemplateByID(pt, conv.GenerateQuestionsPromptID); t != nil {
-			conv.GenerateQuestionsPrompt = t.Content
-		} else {
-			fmt.Printf("Warning: generate_questions_prompt_id %q not found\n", conv.GenerateQuestionsPromptID)
-		}
-	}
+
 	if conv.Summary != nil {
 		if conv.Summary.PromptID != "" {
 			if t := FindTemplateByID(pt, conv.Summary.PromptID); t != nil {
@@ -1046,7 +1004,6 @@ func FindTemplateByID(pt *PromptTemplatesConfig, id string) *PromptTemplate {
 		pt.GenerateSummary,
 		pt.KeywordsExtraction,
 		pt.AgentSystemPrompt,
-		pt.GraphExtraction,
 		pt.GenerateQuestions,
 		pt.IntentPrompts,
 	} {
@@ -1097,7 +1054,6 @@ func loadPromptTemplates(configDir string) (*PromptTemplatesConfig, error) {
 		"generate_summary.yaml":       &config.GenerateSummary,
 		"keywords_extraction.yaml":    &config.KeywordsExtraction,
 		"agent_system_prompt.yaml":    &config.AgentSystemPrompt,
-		"graph_extraction.yaml":       &config.GraphExtraction,
 		"generate_questions.yaml":     &config.GenerateQuestions,
 		"intent_prompts.yaml":         &config.IntentPrompts,
 	}

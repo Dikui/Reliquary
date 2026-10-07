@@ -9,9 +9,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
+
 	"reliquary/internal/models/chat"
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -42,11 +42,10 @@ func (s strategyOriginal) GetKnowledgeFile(_ context.Context, id string) (io.Rea
 }
 
 func TestKnowledgeStrategyEvaluationDevelopmentHoldoutAndScope(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.Exec(`CREATE TABLE knowledge_bases (id TEXT PRIMARY KEY, tenant_id INTEGER, deleted_at DATETIME)`).Error)
+	db := pgtest.OpenFixture(t)
+	require.NoError(t, db.Exec(`CREATE TABLE knowledge_bases (id TEXT PRIMARY KEY, tenant_id INTEGER, deleted_at TIMESTAMPTZ)`).Error)
 	require.NoError(t, db.Exec(`INSERT INTO knowledge_bases (id,tenant_id) VALUES ('kb',1)`).Error)
-	require.NoError(t, db.Exec(`CREATE TABLE knowledges (id TEXT PRIMARY KEY, tenant_id INTEGER, knowledge_base_id TEXT, title TEXT, channel TEXT, parse_status TEXT, metadata TEXT, deleted_at DATETIME)`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE knowledges (id TEXT PRIMARY KEY, tenant_id INTEGER, knowledge_base_id TEXT, title TEXT, channel TEXT, parse_status TEXT, metadata JSONB, deleted_at TIMESTAMPTZ)`).Error)
 	require.NoError(t, db.AutoMigrate(&types.KnowledgeStrategyVersion{}))
 
 	insert := func(id, kbID, status, decision string) {
@@ -166,11 +165,10 @@ func (strategyChat) GetModelName() string { return "strategy" }
 func (strategyChat) GetModelID() string   { return "strategy" }
 
 func TestKnowledgeStrategyCandidateTrialAndRestore(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.Exec(`CREATE TABLE knowledge_bases (id TEXT PRIMARY KEY, tenant_id INTEGER, deleted_at DATETIME)`).Error)
+	db := pgtest.OpenFixture(t)
+	require.NoError(t, db.Exec(`CREATE TABLE knowledge_bases (id TEXT PRIMARY KEY, tenant_id INTEGER, deleted_at TIMESTAMPTZ)`).Error)
 	require.NoError(t, db.Exec(`INSERT INTO knowledge_bases (id,tenant_id) VALUES ('kb',1)`).Error)
-	require.NoError(t, db.Exec(`CREATE TABLE knowledges (id TEXT PRIMARY KEY, tenant_id INTEGER, knowledge_base_id TEXT, title TEXT, parse_status TEXT, metadata TEXT, deleted_at DATETIME)`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE knowledges (id TEXT PRIMARY KEY, tenant_id INTEGER, knowledge_base_id TEXT, title TEXT, parse_status TEXT, metadata JSONB, deleted_at TIMESTAMPTZ)`).Error)
 	require.NoError(t, db.AutoMigrate(&types.KnowledgeStrategyVersion{}))
 	message := &types.Knowledge{ID: "sample", TenantID: 1, KnowledgeBaseID: "kb", Title: "Report", ParseStatus: types.ParseStatusCompleted}
 	require.NoError(t, message.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "approved", SourceInfo: types.SourceInfo{Publisher: "Publisher", OriginalURL: "https://example.org/report", PublishedAt: "2026-09-01"}}))

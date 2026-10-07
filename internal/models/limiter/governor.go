@@ -110,10 +110,7 @@ func RuntimeStats(ctx context.Context) ([]RuntimeStat, bool, error) {
 }
 
 // localLimiter is an in-process (single-node) counting semaphore keyed by
-// model ID. It is the Lite-mode counterpart to the Redis limiter: Lite runs a
-// single process with no Redis, so a shared distributed semaphore is neither
-// available nor needed — but background ingestion can still burst the whole
-// worker pool against one provider, so we still cap concurrency locally.
+// model ID. It supports isolated tests without a distributed Redis semaphore.
 type localLimiter struct {
 	mu      sync.Mutex
 	sems    map[string]*localSemaphore

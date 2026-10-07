@@ -537,8 +537,6 @@ const defaultLocaleOptions = computed(() => ([
   { label: t('embedPublish.defaultLocaleBrowser'), value: '' },
   { label: '简体中文', value: 'zh-CN' },
   { label: 'English', value: 'en-US' },
-  { label: '한국어', value: 'ko-KR' },
-  { label: 'Русский', value: 'ru-RU' },
 ]))
 
 const channelMenuOptions = (ch: EmbedChannel) => {

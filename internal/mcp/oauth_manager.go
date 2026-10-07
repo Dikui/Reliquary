@@ -32,7 +32,7 @@ type OAuthManager struct {
 	states      *oauthStateStore
 }
 
-// NewOAuthManager constructs the OAuth manager. rdb may be nil (Lite mode),
+// NewOAuthManager constructs the OAuth manager. rdb may be nil (in-memory fixtures),
 // in which case in-flight authorization states are kept in memory.
 func NewOAuthManager(
 	repo interfaces.MCPOAuthRepository,

@@ -55,7 +55,7 @@ show_help() {
     echo "用法: $0 [命令] [选项]"
     echo ""
     echo "命令:"
-    echo "  start      启动基础设施服务（postgres, redis, docreader, langfuse）"
+    echo "  start      启动基础设施服务（postgres, redis, docreader）"
     echo "  stop       停止所有服务"
     echo "  restart    重启所有服务"
     echo "  logs       查看服务日志"
@@ -65,19 +65,13 @@ show_help() {
     echo "  help       显示此帮助信息"
     echo ""
     echo "可选 Profile（用于 start 命令）:"
+    echo "  --searxng     启动联网搜索"
     echo "  --minio       启动 MinIO 对象存储"
-    echo "  --qdrant      启动 Qdrant 向量数据库"
-    echo "  --neo4j       启动 Neo4j 图数据库"
-    echo "  --dex         启动 Dex（OIDC 身份认证）"
-    echo "  --langfuse    启动 Langfuse（默认已开启）"
-    echo "  --no-langfuse 不启动 Langfuse"
     echo "  --odl-hybrid  启动 OpenDataLoader hybrid（Docling，镜像较大，按需启用）"
-    echo "  --full        启动所有可选服务（不含 odl-hybrid，需另加 --odl-hybrid）"
+    echo "  --full        启动所有保留的可选服务（含 odl-hybrid）"
     echo ""
     echo "示例："
     echo "  $0 start                    # 启动基础服务"
-    echo "  $0 start --qdrant           # 启动基础服务 + Qdrant"
-    echo "  $0 start --dex             # 启动基础服务 + Dex"
     echo "  $0 start --odl-hybrid       # 启动基础服务 + OpenDataLoader hybrid"
     echo "  $0 start --full             # 启动所有服务"
     echo "  make dev-start DEV_ARGS=--odl-hybrid   # 同上（Makefile 传参）"
@@ -201,42 +195,23 @@ start_services() {
 
     if [ -n "${DEV_REMOTE_HOST:-}" ]; then
         log_warning "已配置 DEV_REMOTE_HOST=${DEV_REMOTE_HOST}，跳过本地 Docker 基础设施启动"
-        log_info "远程服务: PostgreSQL/Redis/DocReader/Langfuse → ${DEV_REMOTE_HOST}"
         log_info "接下来: make dev-app（本地后端）或 make dev-frontend（前端）"
         return 0
     fi
     
     # 解析 profile 参数
+    PROFILES=""
+    ENABLED_SERVICES=""
     shift  # 移除 "start" 命令本身
-    # 默认启动基础设施（postgres / redis / docreader）+ langfuse，
-    # 其余可选服务通过 --minio / --qdrant / --neo4j / --dex / --full 按需开启。
-    PROFILES="--profile langfuse"
-    ENABLED_SERVICES="langfuse"
     while [ $# -gt 0 ]; do
         case "$1" in
+            --searxng)
+                PROFILES="$PROFILES --profile searxng"
+                ENABLED_SERVICES="$ENABLED_SERVICES searxng"
+                ;;
             --minio)
                 PROFILES="$PROFILES --profile minio"
                 ENABLED_SERVICES="$ENABLED_SERVICES minio"
-                ;;
-            --qdrant)
-                PROFILES="$PROFILES --profile qdrant"
-                ENABLED_SERVICES="$ENABLED_SERVICES qdrant"
-                ;;
-            --neo4j)
-                PROFILES="$PROFILES --profile neo4j"
-                ENABLED_SERVICES="$ENABLED_SERVICES neo4j"
-                ;;
-            --dex)
-                PROFILES="$PROFILES --profile dex"
-                ENABLED_SERVICES="$ENABLED_SERVICES dex"
-                ;;
-            --langfuse)
-                PROFILES="$PROFILES --profile langfuse"
-                ENABLED_SERVICES="$ENABLED_SERVICES langfuse"
-                ;;
-            --no-langfuse)
-                PROFILES="${PROFILES//--profile langfuse/}"
-                ENABLED_SERVICES="${ENABLED_SERVICES//langfuse/}"
                 ;;
             --odl-hybrid)
                 if [[ "$ENABLED_SERVICES" != *"odl-hybrid"* ]]; then
@@ -244,8 +219,8 @@ start_services() {
                 fi
                 ;;
             --full)
-                PROFILES="--profile full"
-                ENABLED_SERVICES="minio qdrant neo4j dex"
+                PROFILES="--profile minio --profile searxng --profile odl-hybrid"
+                ENABLED_SERVICES="minio searxng odl-hybrid"
                 break
                 ;;
             *)
@@ -280,18 +255,6 @@ start_services() {
         # 根据启用的 profile 显示额外服务
         if [[ "$ENABLED_SERVICES" == *"minio"* ]]; then
             echo "  - MinIO:         localhost:9000 (Console: localhost:9001)"
-        fi
-        if [[ "$ENABLED_SERVICES" == *"qdrant"* ]]; then
-            echo "  - Qdrant:        localhost:6333 (gRPC: localhost:6334)"
-        fi
-        if [[ "$ENABLED_SERVICES" == *"neo4j"* ]]; then
-            echo "  - Neo4j:         localhost:7474 (Bolt: localhost:7687)"
-        fi
-        if [[ "$ENABLED_SERVICES" == *"dex"* ]]; then
-            echo "  - Dex:           localhost:5556"
-        fi
-        if [[ "$ENABLED_SERVICES" == *"langfuse"* ]]; then
-            echo "  - Langfuse:      http://localhost:${LANGFUSE_WEB_PORT:-3000}"
         fi
         if [[ "$ENABLED_SERVICES" == *"odl-hybrid"* ]]; then
             echo "  - ODL Hybrid:    http://localhost:${ODL_HYBRID_PORT:-5002} (health: /health)"
@@ -472,20 +435,11 @@ start_app() {
         export REDIS_ADDR="${REDIS_ADDR:-$DEV_REMOTE_HOST:6379}"
         export DOCREADER_ADDR="${DOCREADER_ADDR:-$DEV_REMOTE_HOST:50051}"
         export MINIO_ENDPOINT="${MINIO_ENDPOINT:-$DEV_REMOTE_HOST:9000}"
-        export MILVUS_ADDRESS="${MILVUS_ADDRESS:-$DEV_REMOTE_HOST:19530}"
-        export NEO4J_URI="${NEO4J_URI:-bolt://$DEV_REMOTE_HOST:7687}"
-        export QDRANT_HOST="${QDRANT_HOST:-$DEV_REMOTE_HOST}"
-        if [ -z "${LANGFUSE_HOST:-}" ] || [ "$LANGFUSE_HOST" = "http://langfuse-web:3000" ]; then
-            export LANGFUSE_HOST="http://${DEV_REMOTE_HOST}:3000"
-        fi
     else
         export DB_HOST=127.0.0.1
         export DOCREADER_ADDR=127.0.0.1:50051
         export MINIO_ENDPOINT=127.0.0.1:9000
         export REDIS_ADDR=127.0.0.1:6379
-        export MILVUS_ADDRESS=127.0.0.1:19530
-        export NEO4J_URI=bolt://127.0.0.1:7687
-        export QDRANT_HOST=127.0.0.1
     fi
     export DOCREADER_TRANSPORT="${DOCREADER_TRANSPORT:-grpc}"
 

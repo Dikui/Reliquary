@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+
 	"reliquary/internal/common"
 	"reliquary/internal/infrastructure/chunker"
 	"reliquary/internal/infrastructure/docparser"
@@ -321,7 +322,7 @@ func (s *temporaryDocumentService) Process(ctx context.Context, task *asynq.Task
 		if hasRetryCount && hasMaxRetry {
 			return parseErr
 		}
-		// Lite mode doesn't expose Asynq retry metadata in the context. Surface
+		// in-memory fixtures doesn't expose Asynq retry metadata in the context. Surface
 		// a terminal state immediately instead of leaving the UI spinning.
 		return nil
 	}
@@ -396,7 +397,6 @@ func (s *temporaryDocumentService) parse(ctx context.Context, document *types.Te
 	}
 	deps := docparser.ReaderDeps{Overrides: request.ParserEngineOverrides, Remote: s.documentReader}
 	if s.tenantService != nil {
-		deps.WeKnoraCloudCredentials = s.tenantService.GetWeKnoraCloudCredentials
 	}
 	reader, err := docparser.NewReader(ctx, parserEngine, strings.TrimPrefix(ext, "."), false, deps)
 	if err != nil {

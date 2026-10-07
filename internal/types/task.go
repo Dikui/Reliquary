@@ -76,7 +76,7 @@ var queueDefinitions = []QueueDefinition{
 		TypeSummaryGeneration, TypeDataTableSummary, TypeKnowledgeAutoTag,
 	}},
 	{Name: QueueMultimodal, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeImageMultimodal}},
-	{Name: QueueGraph, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeChunkExtract, TypeKnowledgeContext}},
+	{Name: QueueGraph, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeKnowledgeContext}},
 	{Name: QueueQuestion, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeQuestionGeneration}},
 	{Name: QueueMemory, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeMemoryExtract}},
 	{Name: QueueSync, Pool: WorkerPoolMaintenance, Weight: 2, TaskTypes: []string{TypeDataSourceSync}},
@@ -232,7 +232,6 @@ type WorkerServerStat struct {
 }
 
 const (
-	TypeChunkExtract             = "chunk:extract"
 	TypeDocumentProcess          = "document:process"       // 文档处理任务
 	TypeFAQImport                = "faq:import"             // FAQ导入任务（包含dry run模式）
 	TypeQuestionGeneration       = "question:generation"    // 问题生成任务
@@ -260,11 +259,10 @@ const (
 
 // MemoryExtractPayload carries everything the background distillation task
 // needs. Scope (tenant + subject) travels in the payload rather than being
-// read from the worker context: asynq and the Lite executor both start from a
+// read from the worker context: asynq and direct test handlers both start from a
 // bare context, so anything the request knew and the payload does not carry is
 // simply gone by the time the handler runs.
 type MemoryExtractPayload struct {
-	TracingContext
 	TenantID  uint64 `json:"tenant_id"`
 	SubjectID string `json:"subject_id"`
 	SessionID string `json:"session_id"`
@@ -279,27 +277,8 @@ type MemoryExtractPayload struct {
 	Language    string `json:"language,omitempty"`
 }
 
-// ExtractChunkPayload represents the extract chunk task payload
-type ExtractChunkPayload struct {
-	TracingContext
-	TenantID uint64 `json:"tenant_id"`
-	ChunkID  string `json:"chunk_id"`
-	ModelID  string `json:"model_id"`
-	// KnowledgeID + Attempt link the per-chunk extract back to the parent
-	// parse attempt's postprocess stage so the worker can record a
-	// postprocess.graph.chunk[i] subspan. 0 / "" means "skip span
-	// recording" for legacy in-flight tasks.
-	KnowledgeID string `json:"knowledge_id,omitempty"`
-	Attempt     int    `json:"attempt,omitempty"`
-	// ChunkIndex is the 0-based ordinal of this chunk inside the parent
-	// knowledge's text-chunk set, used as the subspan name suffix
-	// ("postprocess.graph.chunk[3]") so the timeline preserves order.
-	ChunkIndex int `json:"chunk_index,omitempty"`
-}
-
 // DocumentProcessPayload represents the document process task payload
 type DocumentProcessPayload struct {
-	TracingContext
 	RequestId                string   `json:"request_id"`
 	TenantID                 uint64   `json:"tenant_id"`
 	KnowledgeID              string   `json:"knowledge_id"`
@@ -325,7 +304,6 @@ type DocumentProcessPayload struct {
 
 // FAQImportPayload represents the FAQ import task payload (including dry run mode)
 type FAQImportPayload struct {
-	TracingContext
 	TenantID    uint64            `json:"tenant_id"`
 	TaskID      string            `json:"task_id"`
 	KBID        string            `json:"kb_id"`
@@ -342,7 +320,6 @@ type FAQImportPayload struct {
 
 // QuestionGenerationPayload represents the question generation task payload
 type QuestionGenerationPayload struct {
-	TracingContext
 	TenantID        uint64 `json:"tenant_id"`
 	KnowledgeBaseID string `json:"knowledge_base_id"`
 	KnowledgeID     string `json:"knowledge_id"`
@@ -363,7 +340,7 @@ type QuestionGenerationPayload struct {
 	// do a single embedding BatchIndex per batch. Empty means the legacy
 	// whole-knowledge mode (kept for in-flight tasks queued before fan-out
 	// shipped), where the handler iterates all text chunks itself.
-	// Following the ExtractChunkPayload precedent, we carry only chunk ids
+	// We carry only chunk ids
 	// (not their content) so the payload stays small and the worker reads
 	// fresh content at run time.
 	ChunkIDs []string `json:"chunk_ids,omitempty"`
@@ -386,7 +363,6 @@ type QuestionGenerationPayload struct {
 
 // SummaryGenerationPayload represents the summary generation task payload
 type SummaryGenerationPayload struct {
-	TracingContext
 	TenantID        uint64 `json:"tenant_id"`
 	KnowledgeBaseID string `json:"knowledge_base_id"`
 	KnowledgeID     string `json:"knowledge_id"`
@@ -403,7 +379,6 @@ type SummaryGenerationPayload struct {
 
 // KBClonePayload represents the knowledge base clone task payload
 type KBClonePayload struct {
-	TracingContext
 	TenantID  uint64        `json:"tenant_id"`
 	TaskID    string        `json:"task_id"`
 	SourceID  string        `json:"source_id"`
@@ -413,7 +388,6 @@ type KBClonePayload struct {
 
 // IndexDeletePayload represents the index delete task payload
 type IndexDeletePayload struct {
-	TracingContext
 	TenantID         uint64                  `json:"tenant_id"`
 	KnowledgeBaseID  string                  `json:"knowledge_base_id"`
 	EmbeddingModelID string                  `json:"embedding_model_id"`
@@ -428,7 +402,6 @@ type IndexDeletePayload struct {
 
 // KBDeletePayload represents the knowledge base delete task payload
 type KBDeletePayload struct {
-	TracingContext
 	TenantID         uint64                  `json:"tenant_id"`
 	KnowledgeBaseID  string                  `json:"knowledge_base_id"`
 	DataSourceIDs    []string                `json:"data_source_ids,omitempty"`
@@ -441,7 +414,6 @@ type KBDeletePayload struct {
 
 // KnowledgeListDeletePayload represents the batch knowledge delete task payload
 type KnowledgeListDeletePayload struct {
-	TracingContext
 	TenantID     uint64        `json:"tenant_id"`
 	KnowledgeIDs []string      `json:"knowledge_ids"`
 	Initiator    TaskInitiator `json:"initiator,omitempty"`
@@ -449,7 +421,6 @@ type KnowledgeListDeletePayload struct {
 
 // KnowledgeListReparsePayload represents the batch knowledge reparse task payload
 type KnowledgeListReparsePayload struct {
-	TracingContext
 	TenantID      uint64                     `json:"tenant_id"`
 	KnowledgeIDs  []string                   `json:"knowledge_ids"`
 	ProcessConfig *KnowledgeProcessOverrides `json:"process_config,omitempty"`
@@ -458,7 +429,6 @@ type KnowledgeListReparsePayload struct {
 
 // KnowledgeMovePayload represents the knowledge move task payload
 type KnowledgeMovePayload struct {
-	TracingContext
 	TenantID     uint64        `json:"tenant_id"`
 	TaskID       string        `json:"task_id"`
 	KnowledgeIDs []string      `json:"knowledge_ids"`
@@ -487,7 +457,6 @@ type KnowledgeMoveProgress struct {
 // ManualProcessPayload represents the manual knowledge processing task payload.
 // Used for both create (publish) and update operations.
 type ManualProcessPayload struct {
-	TracingContext
 	RequestId       string `json:"request_id"`
 	TenantID        uint64 `json:"tenant_id"`
 	KnowledgeID     string `json:"knowledge_id"`
@@ -498,7 +467,6 @@ type ManualProcessPayload struct {
 
 // ImageMultimodalPayload represents the image multimodal processing task payload.
 type ImageMultimodalPayload struct {
-	TracingContext
 	TenantID        uint64 `json:"tenant_id"`
 	KnowledgeID     string `json:"knowledge_id"`
 	KnowledgeBaseID string `json:"knowledge_base_id"`
@@ -521,7 +489,6 @@ type ImageMultimodalPayload struct {
 
 // KnowledgePostProcessPayload represents the knowledge post process task payload.
 type KnowledgePostProcessPayload struct {
-	TracingContext
 	TenantID        uint64 `json:"tenant_id"`
 	KnowledgeID     string `json:"knowledge_id"`
 	KnowledgeBaseID string `json:"knowledge_base_id"`
@@ -532,7 +499,6 @@ type KnowledgePostProcessPayload struct {
 // KnowledgeAutoTagPayload identifies a document whose parsed content should be
 // classified against the latest set of existing tags in its knowledge base.
 type KnowledgeAutoTagPayload struct {
-	TracingContext
 	TenantID        uint64 `json:"tenant_id"`
 	KnowledgeID     string `json:"knowledge_id"`
 	KnowledgeBaseID string `json:"knowledge_base_id"`

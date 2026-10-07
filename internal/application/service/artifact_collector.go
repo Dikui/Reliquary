@@ -25,9 +25,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"reliquary/internal/logger"
 	"reliquary/internal/sandbox"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -281,20 +281,6 @@ func (c *ArtifactCollector) collect(
 		logger.Infof(ctx, "[ArtifactCollector] skipped: empty outputDir (session=%s)", sessionID)
 		return nil, nil
 	}
-
-	ctx, span := langfuse.GetManager().StartSpan(ctx, langfuse.SpanOptions{
-		Name: "sandbox.collect_artifacts",
-		Input: map[string]interface{}{
-			"session_id": sessionID,
-			"message_id": messageID,
-			"output_dir": outputDir,
-		},
-	})
-	defer func() {
-		span.Finish(map[string]interface{}{
-			"artifact_count": len(artifacts),
-		}, nil, err)
-	}()
 
 	logger.Infof(ctx, "[ArtifactCollector] begin session=%s dir=%s", sessionID, outputDir)
 

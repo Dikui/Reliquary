@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+
 	"reliquary/internal/application/repository"
+	"reliquary/internal/testutil/sqlfixture"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -21,8 +22,8 @@ import (
 // mocked repository would assert the wrong thing.
 func newMemoryHarness(t *testing.T) (*Service, *gorm.DB, *stubTenantRepo) {
 	t.Helper()
-	db, err := gorm.Open(
-		sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())),
+	db, err := sqlfixture.Open(
+		fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name()),
 		&gorm.Config{Logger: logger.Discard},
 	)
 	require.NoError(t, err)

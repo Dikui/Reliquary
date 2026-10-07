@@ -14,13 +14,13 @@ import (
 // types.IsBackgroundTask; interactive query embedding is never gated.
 //
 // Placement note: unlike chat/vlm (outermost), this wrapper sits INNERMOST —
-// directly around the real embedder, BELOW the debug/langfuse decorators.
+// directly around the real embedder, BELOW the debug decorators.
 // BatchEmbedWithPool fans a batch out into per-sub-batch BatchEmbed calls
 // through the pooler, and the pooler invokes BatchEmbed on whichever Embedder
 // was threaded down as `model`. Sitting innermost is what routes those
 // per-sub-batch provider round-trips back through Gate, so the semaphore bounds
 // real concurrent provider calls rather than one coarse per-document unit. The
-// trade-off is that Gate wait time is included in debug/langfuse timing, which
+// trade-off is that Gate wait time is included in debug timing, which
 // is acceptable for background ingestion.
 type concurrencyEmbedder struct {
 	inner Embedder

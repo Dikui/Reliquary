@@ -83,9 +83,7 @@ func main() {
 
 		// Start the system_settings pubsub subscriber. Runs in its own
 		// goroutine and exits when ctx is cancelled at shutdown. Best-
-		// effort: an error here only warns (Redis may legitimately be
-		// disabled in lite-mode deployments — the service no-ops in
-		// that case anyway).
+		// effort: a subscription error is logged without blocking HTTP startup.
 		if err := systemSettingSvc.SubscribeRedis(ctx); err != nil {
 			logger.Warnf(ctx, "[system_settings] subscribe failed: %v", err)
 		}

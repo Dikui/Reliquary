@@ -5,20 +5,16 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/sashabaranov/go-openai"
+
 	"reliquary/internal/models/provider"
-	modelutils "reliquary/internal/models/utils"
 	"reliquary/internal/types"
 )
 
 // authCreds carries the credentials a providerAdapter needs to authenticate a
-// raw HTTP request. APIKey covers the common Bearer / api-key cases; AppID and
-// AppSecret are only used by signing providers (WeKnoraCloud).
+// raw HTTP request. APIKey covers the Bearer and api-key cases.
 type authCreds struct {
-	APIKey    string
-	AppID     string
-	AppSecret string
+	APIKey string
 }
 
 // providerAdapter captures everything provider-specific about an
@@ -77,47 +73,6 @@ func (baseProvider) ExtractToolCallMetadata(json.RawMessage) types.ToolCallMetad
 	return nil
 }
 func (baseProvider) InjectToolCallMetadata(map[string]any, types.ToolCallMetadata) {}
-
-// --- WeKnoraCloud: custom endpoint + request signing + multi-content downgrade ---
-
-type weKnoraCloudProvider struct{ baseProvider }
-
-func (weKnoraCloudProvider) Name() provider.ProviderName { return provider.ProviderWeKnoraCloud }
-
-func (weKnoraCloudProvider) Endpoint(baseURL, _ string, _ bool) string {
-	return strings.TrimRight(baseURL, "/") + "/api/v1/chat/completions"
-}
-
-func (weKnoraCloudProvider) ForceRawHTTP() bool { return true }
-
-func (weKnoraCloudProvider) Auth(req *http.Request, creds authCreds, body []byte) {
-	requestID := uuid.NewString()
-	headers := modelutils.Sign(creds.AppID, creds.AppSecret, requestID, string(body))
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-}
-
-// TransformMessages downgrades MultiContent to plain text while preserving
-// tool_calls / tool_call_id / name so the function-calling protocol keeps working.
-func (weKnoraCloudProvider) TransformMessages(messages []openai.ChatCompletionMessage) []openai.ChatCompletionMessage {
-	result := make([]openai.ChatCompletionMessage, 0, len(messages))
-	for _, m := range messages {
-		msg := m
-		if msg.Content == "" && len(msg.MultiContent) > 0 {
-			var textParts []string
-			for _, part := range msg.MultiContent {
-				if part.Type == openai.ChatMessagePartTypeText && part.Text != "" {
-					textParts = append(textParts, part.Text)
-				}
-			}
-			msg.Content = strings.Join(textParts, "\n")
-			msg.MultiContent = nil
-		}
-		result = append(result, msg)
-	}
-	return result
-}
 
 // --- Aliyun Qwen thinking models: enable_thinking (always sent, forced off non-stream) ---
 
@@ -277,7 +232,6 @@ func shapeOpenAIReasoning(req *openai.ChatCompletionRequest) {
 // providerRegistry is ordered: more specific adapters (those with a real
 // Matches predicate) must precede the generic catch-all for the same provider.
 var providerRegistry = []providerAdapter{
-	weKnoraCloudProvider{},
 	qwenThinkingProvider{},
 	lkeapProvider{},
 	deepseekProvider{},

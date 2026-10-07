@@ -16,11 +16,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+
 	"reliquary/internal/errors"
 	"reliquary/internal/event"
 	"reliquary/internal/logger"
 	"reliquary/internal/storageurl"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 	secutils "reliquary/internal/utils"
 )
@@ -438,15 +438,14 @@ func buildMessageExecutionContext(
 	locale := types.LanguageFromContextOrDefault(ctx)
 
 	snapshot := types.MessageExecutionContext{
-		KnowledgeBaseIDs:    knowledgeBaseIDs,
-		KnowledgeIDs:        knowledgeIDs,
-		TagIDs:              tagIDs,
-		TagScopes:           cloneTagScopes(tagScopes),
-		MCPServiceIDs:       mcpServiceIDs,
-		SkillNames:          skillNames,
-		WebSearchEnabled:    webSearchEnabled,
-		Locale:              locale,
-		LangfuseTraceparent: langfuse.TraceparentFromContext(ctx),
+		KnowledgeBaseIDs: knowledgeBaseIDs,
+		KnowledgeIDs:     knowledgeIDs,
+		TagIDs:           tagIDs,
+		TagScopes:        cloneTagScopes(tagScopes),
+		MCPServiceIDs:    mcpServiceIDs,
+		SkillNames:       skillNames,
+		WebSearchEnabled: webSearchEnabled,
+		Locale:           locale,
 	}
 	if agent == nil {
 		return snapshot, "", effectiveTenantID, modelOverride

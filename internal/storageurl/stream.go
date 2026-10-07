@@ -19,7 +19,7 @@ import (
 // incompleteRefSuffixRe matches a storage reference that reaches the end of the
 // string — it may continue in the next chunk.
 var incompleteRefSuffixRe = regexp.MustCompile(
-	`\b(?:resource|storage|local|minio|s3|cos|tos|oss|obs|ks3)://[^\s)\]>"]*$`,
+	`\b(?:resource|storage|local|minio|s3)://[^\s)\]>"]*$`,
 )
 
 // FindIncompleteRef returns the byte offset of a potentially truncated storage

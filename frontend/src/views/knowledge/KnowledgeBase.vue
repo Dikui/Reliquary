@@ -1267,7 +1267,6 @@ const handleFileUploaded = (event: CustomEvent) => {
   }
 };
 
-
 // 监听从菜单触发的URL导入事件
 const handleOpenURLImportDialog = (event: CustomEvent) => {
   const eventKbId = event.detail.kbId;
@@ -1489,7 +1488,6 @@ const updateStatus = (analyzeList: KnowledgeCard[]) => {
   }, 1500);
 };
 
-
 // 恢复文档处理状态（用于刷新后恢复）
 
 const closeDoc = () => {
@@ -1675,7 +1673,6 @@ const ensureDocumentKbReady = () => {
   }
   return true;
 };
-
 
 const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
 const AUDIO_EXTENSIONS = ['mp3', 'wav', 'm4a', 'flac', 'ogg'];
@@ -2465,7 +2462,7 @@ async function createNewSession(value: string): Promise<void> {
                   <t-icon name="error-circle" size="16px" />
                 </button>
               </t-tooltip>
-              <KBInfoPopover v-if="kbInfo && !authStore.isLiteMode" :kb-info="kbInfo"
+              <KBInfoPopover v-if="kbInfo" :kb-info="kbInfo"
                 :supported-file-types="[...supportedFileTypes]" />
               <t-tooltip v-if="canManage" :content="$t('knowledgeBase.settings')" placement="top">
                 <button type="button" class="kb-settings-button" :disabled="!kbId" @click="handleOpenKBSettings">
@@ -3791,7 +3788,6 @@ async function createNewSession(value: string): Promise<void> {
   }
 }
 
-
 .document-upload-input {
   display: none;
 }
@@ -3926,7 +3922,6 @@ async function createNewSession(value: string): Promise<void> {
   }
 }
 
-
 .card-bottom-right {
   flex: 1 1 auto;
   min-width: 0;
@@ -4049,7 +4044,6 @@ async function createNewSession(value: string): Promise<void> {
   padding: 60px 20px;
   min-height: 100%;
 }
-
 
 .card-menu {
   display: flex;

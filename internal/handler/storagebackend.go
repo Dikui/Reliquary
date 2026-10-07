@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/storageallowlist"
 	"reliquary/internal/types"
@@ -125,7 +126,7 @@ func (h *StorageBackendHandler) Create(c *gin.Context) {
 
 // Update godoc
 // @Summary      Update storage backend
-// @Description  Update a storage backend's mutable fields (name, credentials, status). Provider and physical location (endpoint, region, bucket, path prefix) are immutable; use storage migration to move data. Environment-sourced backends are read-only. Redacted secret placeholders preserve the stored credentials.
+// @Description  Update a storage backend's mutable fields (name, credentials, status). Provider and physical location (endpoint, region, bucket, path prefix) are immutable; create a new backend for a different location. Environment-sourced backends are read-only. Redacted secret placeholders preserve the stored credentials.
 // @Tags         StorageBackend
 // @Accept       json
 // @Produce      json
@@ -261,7 +262,7 @@ func (h *StorageBackendHandler) TestByID(c *gin.Context) {
 
 // Types godoc
 // @Summary      List allowed storage provider types
-// @Description  Return the storage provider types allowed by STORAGE_ALLOW_LIST for UI form generation (e.g. local, minio, cos, tos, s3, oss, ks3, obs).
+// @Description  Return the storage provider types allowed by STORAGE_ALLOW_LIST for UI form generation (e.g. local, minio, s3).
 // @Tags         StorageBackend
 // @Produce      json
 // @Success      200  {object}  map[string]interface{}   "List of allowed storage provider types"

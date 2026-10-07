@@ -119,3 +119,29 @@ func (p *PluginSearchParallel) recallContextSources(ctx context.Context, cm *typ
 		}
 	}
 }
+
+// chunk2SearchResult converts a chunk to a search result
+func chunk2SearchResult(chunk *types.Chunk, knowledge *types.Knowledge) *types.SearchResult {
+	return &types.SearchResult{
+		ID:                chunk.ID,
+		Content:           chunk.Content,
+		ContentRevision:   chunk.ContentRevision,
+		KnowledgeID:       chunk.KnowledgeID,
+		ChunkIndex:        chunk.ChunkIndex,
+		KnowledgeTitle:    knowledge.Title,
+		StartAt:           chunk.StartAt,
+		EndAt:             chunk.EndAt,
+		Seq:               chunk.ChunkIndex,
+		Score:             1.0,
+		MatchType:         types.MatchTypeGraph,
+		Metadata:          knowledge.GetMetadata(),
+		ChunkType:         string(chunk.ChunkType),
+		ParentChunkID:     chunk.ParentChunkID,
+		ImageInfo:         chunk.ImageInfo,
+		KnowledgeFilename: knowledge.FileName,
+		KnowledgeSource:   knowledge.Source,
+		KnowledgeChannel:  knowledge.Channel,
+		ChunkMetadata:     chunk.Metadata,
+		KnowledgeBaseID:   knowledge.KnowledgeBaseID,
+	}
+}

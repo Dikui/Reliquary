@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+
 	"reliquary/internal/utils"
 )
 
@@ -497,7 +498,6 @@ func (e *SyncItemError) UnmarshalJSON(b []byte) error {
 
 // DataSourceSyncPayload represents the asynq task payload for data source sync
 type DataSourceSyncPayload struct {
-	TracingContext
 	Initiator TaskInitiator `json:"initiator,omitempty"`
 	// Trigger distinguishes a user-requested run from a scheduler-created run.
 	Trigger string `json:"trigger,omitempty"`

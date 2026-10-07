@@ -39,9 +39,6 @@ func NormalizeKnowledgeBasePromptInstructions(kb *KnowledgeBase) {
 	if kb.QuestionGenerationConfig != nil {
 		kb.QuestionGenerationConfig.CustomInstructions = strings.TrimSpace(kb.QuestionGenerationConfig.CustomInstructions)
 	}
-	if kb.ExtractConfig != nil {
-		kb.ExtractConfig.CustomInstructions = strings.TrimSpace(kb.ExtractConfig.CustomInstructions)
-	}
 }
 
 // ValidateKnowledgeBasePromptInstructions checks length limits on KB-scoped
@@ -61,9 +58,6 @@ func ValidateKnowledgeBasePromptInstructions(kb *KnowledgeBase) error {
 	if kb.QuestionGenerationConfig != nil {
 		fields["question generation instructions"] = kb.QuestionGenerationConfig.CustomInstructions
 	}
-	if kb.ExtractConfig != nil {
-		fields["graph extraction instructions"] = kb.ExtractConfig.CustomInstructions
-	}
 	return validatePromptInstructionFields(fields)
 }
 
@@ -74,7 +68,6 @@ func ValidateEffectiveProcessPromptInstructions(eff EffectiveProcessConfig) erro
 		"table metadata instructions":      eff.ChunkingConfig.TableMetadataInstructions,
 		"image instructions":               eff.VLMConfig.CustomInstructions,
 		"question generation instructions": eff.QuestionGenerationConfig.CustomInstructions,
-		"graph extraction instructions":    eff.ExtractConfig.CustomInstructions,
 	}
 	return validatePromptInstructionFields(fields)
 }

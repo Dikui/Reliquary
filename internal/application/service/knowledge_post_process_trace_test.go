@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"reliquary/internal/types"
 )
 
@@ -13,7 +14,7 @@ func TestFinishRunningMultimodalStage_PreservesSkippedStage(t *testing.T) {
 	tracker, db := setupSpanTrackerTest(t)
 	ctx := context.Background()
 
-	_, attempt, err := tracker.OpenAttempt(ctx, "kid-multimodal-disabled", "")
+	_, attempt, err := tracker.OpenAttempt(ctx, "kid-multimodal-disabled")
 	require.NoError(t, err)
 	mm := tracker.BeginStage(ctx, "kid-multimodal-disabled", attempt, types.StageMultimodal, nil)
 	require.NotNil(t, mm)
@@ -35,7 +36,7 @@ func TestFinishRunningMultimodalStage_CompletesRunningStage(t *testing.T) {
 	tracker, db := setupSpanTrackerTest(t)
 	ctx := context.Background()
 
-	_, attempt, err := tracker.OpenAttempt(ctx, "kid-multimodal-enabled", "")
+	_, attempt, err := tracker.OpenAttempt(ctx, "kid-multimodal-enabled")
 	require.NoError(t, err)
 	mm := tracker.BeginStage(ctx, "kid-multimodal-enabled", attempt, types.StageMultimodal, nil)
 	require.NotNil(t, mm)

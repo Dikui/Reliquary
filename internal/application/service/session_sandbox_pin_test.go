@@ -5,10 +5,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
 	"reliquary/internal/sandbox"
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 )
 
@@ -25,8 +25,7 @@ func (m *pinTestManager) GetType() sandbox.SandboxType  { return m.typ }
 
 func newPinTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
-	require.NoError(t, err)
+	db := pgtest.OpenFixture(t)
 	require.NoError(t, db.Migrator().DropTable(&types.Session{}))
 	require.NoError(t, db.AutoMigrate(&types.Session{}))
 	require.NoError(t, db.Model(&types.Session{}).Create(map[string]any{

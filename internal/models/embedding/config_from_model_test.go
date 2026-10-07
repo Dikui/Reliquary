@@ -25,7 +25,7 @@ func TestConfigFromModel(t *testing.T) {
 		},
 	}
 
-	cfg := ConfigFromModel(m, "app", "secret")
+	cfg := ConfigFromModel(m)
 	if cfg.ModelID != "emb-1" || cfg.ModelName != "text-embedding-3-small" {
 		t.Errorf("identity mismatch: %+v", cfg)
 	}
@@ -40,8 +40,5 @@ func TestConfigFromModel(t *testing.T) {
 	}
 	if cfg.ExtraConfig["region"] != "us-east" {
 		t.Errorf("ExtraConfig not propagated: %+v", cfg.ExtraConfig)
-	}
-	if cfg.AppID != "app" || cfg.AppSecret != "secret" {
-		t.Errorf("cloud creds mismatch: %+v", cfg)
 	}
 }

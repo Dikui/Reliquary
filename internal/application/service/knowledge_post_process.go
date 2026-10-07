@@ -10,8 +10,8 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
+
 	"reliquary/internal/logger"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -211,10 +211,6 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 	// must match exactly how many batch tasks we enqueue below.
 	questionBatchCount := (len(questionChunks) + questionGenChunkBatchSize - 1) / questionGenChunkBatchSize
 
-	graphChunkCount := 0
-	if eff.GraphEnabled {
-		graphChunkCount = len(textChunks)
-	}
 	expectedSubtasks := 0
 	if willSpawnSummary {
 		expectedSubtasks++
@@ -223,7 +219,6 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 	if willSpawnWiki {
 		expectedSubtasks++
 	}
-	expectedSubtasks += graphChunkCount
 
 	// enteredFinalizing is set only when the processing-to-finalizing handoff
 	// actually seeded the counter. For Wiki-enabled knowledge, that handoff
@@ -396,22 +391,6 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 		}
 	}
 
-	// 5. Spawn Graph RAG Tasks — only when graph indexing is enabled in IndexingStrategy
-	enqueuedGraphCount := 0
-	if graphChunkCount > 0 {
-		logger.Infof(ctx, "[KnowledgePostProcess] Spawning Graph RAG extract tasks for %d text-like chunks", len(textChunks))
-		for i, chunk := range textChunks {
-			ok, err := NewChunkExtractTask(ctx, s.taskEnqueuer, payload.TenantID, chunk.ID, kb.SummaryModelID,
-				payload.KnowledgeID, attempt, i)
-			if err != nil {
-				logger.Errorf(ctx, "[KnowledgePostProcess] Failed to create chunk extract task for %s: %v", chunk.ID, err)
-			}
-			if ok {
-				enqueuedGraphCount++
-			}
-		}
-	}
-
 	// 6. Schedule the Wiki trigger. The durable per-knowledge op already owns
 	//    its finalizing slot because it was committed atomically with the state
 	//    transition above. A trigger failure is returned so the post-process
@@ -430,9 +409,9 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 	}
 
 	// Reconcile the seeded counter against what was actually enqueued.
-	// summary/question/graph each own a counted slot that ONLY their own
-	// task drains; a slot whose task was never enqueued (graph with NEO4J
-	// off, a transient enqueue/marshal failure, a nil enqueuer) has no owner
+	// summary/question each own a counted slot that ONLY their own
+	// task drains; a slot whose task was never enqueued because of an
+	// enqueue/marshal failure or a nil enqueuer has no owner
 	// and would otherwise strand the row in "finalizing". Release exactly the
 	// shortfall — each release is a clamped decrement that promotes the row to
 	// "completed" if it brings the counter to zero. Safe against fast workers:
@@ -448,14 +427,14 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 	// "finalizing". The bound is per-call (matches the helper) so a wedged
 	// connection can't pin the goroutine for the whole serial loop.
 	if enteredFinalizing {
-		plannedOwned := questionBatchCount + graphChunkCount
+		plannedOwned := questionBatchCount
 		if willSpawnSummary {
 			plannedOwned++
 		}
 		if willSpawnWiki {
 			plannedOwned++
 		}
-		actualOwned := enqueuedQuestionCount + enqueuedGraphCount
+		actualOwned := enqueuedQuestionCount
 		if enqueuedSummary {
 			actualOwned++
 		}
@@ -494,8 +473,6 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 		"enqueued_question_count": enqueuedQuestionCount,
 		"enqueued_wiki":           wikiSlotOwned && wikiEnqueueErr == nil,
 		"wiki_slot_owned":         wikiSlotOwned,
-		"enqueued_graph":          enqueuedGraphCount > 0,
-		"enqueued_graph_count":    enqueuedGraphCount,
 		"enqueued_auto_tag":       enqueuedAutoTag,
 	}
 	s.tracker().EndSpan(ctx, postSpan, postOutput)
@@ -530,7 +507,7 @@ func (s *KnowledgePostProcessService) enqueueAutoTagTask(
 		Language:        payload.Language,
 		Attempt:         attempt,
 	}
-	langfuse.InjectTracing(ctx, &taskPayload)
+
 	payloadBytes, err := json.Marshal(taskPayload)
 	if err != nil {
 		logger.Warnf(ctx, "[KnowledgePostProcess] Failed to marshal auto tag payload: %v", err)
@@ -561,7 +538,7 @@ func (s *KnowledgePostProcessService) enqueueSummaryGenerationTask(ctx context.C
 		Language:        payload.Language,
 		Attempt:         attempt,
 	}
-	langfuse.InjectTracing(ctx, &taskPayload)
+
 	payloadBytes, err := json.Marshal(taskPayload)
 	if err != nil {
 		logger.Warnf(ctx, "[KnowledgePostProcess] Failed to marshal summary generation payload: %v", err)
@@ -657,7 +634,6 @@ func (s *KnowledgePostProcessService) enqueueQuestionGenerationTasks(
 		}
 		batchIndex++
 
-		langfuse.InjectTracing(ctx, &taskPayload)
 		payloadBytes, err := json.Marshal(taskPayload)
 		if err != nil {
 			logger.Warnf(ctx, "[KnowledgePostProcess] Failed to marshal question generation payload for batch %d: %v", batchIndex-1, err)

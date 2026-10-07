@@ -84,7 +84,6 @@ var startupEnvVars = []envVarSpec{
 	{name: "DB_PORT"},
 	{name: "DB_USER"},
 	{name: "DB_NAME"},
-	{name: "DB_PATH"}, // sqlite
 	{name: "DB_PASSWORD", sensitive: true},
 	// Cache / queue
 	{name: "REDIS_ADDR"},
@@ -96,12 +95,8 @@ var startupEnvVars = []envVarSpec{
 	{name: "MINIO_ENDPOINT"},
 	{name: "MINIO_BUCKET_NAME"},
 	{name: "MINIO_SECRET_ACCESS_KEY", sensitive: true},
-	{name: "TOS_ENDPOINT"},
-	{name: "TOS_BUCKET_NAME"},
-	{name: "TOS_SECRET_KEY", sensitive: true},
 	// External services
 	{name: "DOCREADER_ADDR"},
-	{name: "RETRIEVE_DRIVER"},
 }
 
 // LogStartupEnv prints a single banner block summarising the curated set

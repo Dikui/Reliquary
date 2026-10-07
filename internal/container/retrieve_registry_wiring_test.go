@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"go.uber.org/dig"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"reliquary/internal/testutil/sqlfixture"
 
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service/retriever"
@@ -25,7 +25,7 @@ import (
 // dependencies still satisfies the interface and still serves lookups, so it
 // would pass every other test while silently never rebuilding anything.
 func TestRetrieveEngineRegistryWiring(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := sqlfixture.Open(":memory:", &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open in-mem db: %v", err)
 	}
@@ -39,7 +39,6 @@ func TestRetrieveEngineRegistryWiring(t *testing.T) {
 	}
 	provide(func() *gorm.DB { return db })
 	provide(func() *config.Config { return &config.Config{} })
-	provide(func() interfaces.AuditLogService { return &fakeAuditSvc{} })
 	provide(repository.NewVectorStoreRepository)
 	provide(NewEngineFactory)
 	provide(initRetrieveEngineRegistry)

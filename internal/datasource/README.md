@@ -84,7 +84,7 @@ internal/handler/
 internal/router/
 ├── router.go           # Route registration
 ├── task.go             # Asynq task registration
-└── sync_task.go        # Lite mode task registration
+└── scheduler.go        # Asynq task scheduling
 
 migrations/versioned/
 └── 000028_datasource_tables.up/down.sql  # Database schema
@@ -228,7 +228,7 @@ GET    /api/v1/datasource/types             # Available connectors
 ## Key Design Decisions
 
 1. **Adapter Pattern**: Each connector is a separate implementation, easy to add new ones
-2. **Async Task Queue**: Syncs are non-blocking, using asynq (or sync mode in Lite)
+2. **Async Task Queue**: Syncs are non-blocking, using asynq
 3. **Incremental Sync**: Supports cursor-based incremental syncs to minimize API calls
 4. **Encryption**: API keys/tokens stored encrypted with AES-256-GCM
 5. **Multi-tenant**: All operations are tenant-isolated

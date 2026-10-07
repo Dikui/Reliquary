@@ -13,15 +13,13 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"go.uber.org/dig"
 
+	_ "reliquary/docs" // swagger docs
 	"reliquary/internal/config"
 	"reliquary/internal/handler"
 	"reliquary/internal/handler/session"
 	"reliquary/internal/logger"
 	"reliquary/internal/middleware"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types/interfaces"
-
-	_ "reliquary/docs" // swagger docs
 )
 
 // RouterParams 路由参数
@@ -89,7 +87,6 @@ type RouterParams struct {
 	RedisClient                  *redis.Client
 	DataSourceHandler            *handler.DataSourceHandler
 	DataSourceCredentialsHandler *handler.DataSourceCredentialsHandler
-	WeKnoraCloudHandler          *handler.WeKnoraCloudHandler
 	WikiPageHandler              *handler.WikiPageHandler
 	MemoryHandler                *handler.MemoryHandler
 }
@@ -156,11 +153,6 @@ func NewRouter(params RouterParams) *gin.Engine {
 		r.Use(embedFrameAncestorsMiddleware(params.EmbedChannelService))
 	}
 
-	// 前端静态文件（仅 Lite 版本内嵌前端）
-	if handler.Edition == "lite" {
-		serveFrontendStatic(r)
-	}
-
 	// IM 回调路由（在认证中间件之前注册，使用各平台自身的签名验证）
 	RegisterIMRoutes(r, params.IMHandler)
 
@@ -183,7 +175,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 	// 认证中间件
 	r.Use(middleware.Auth(params.TenantService, params.UserService, params.TenantMemberService, params.TenantAPIKeyService, params.Config))
 
-	// 文件服务：统一代理本地/MinIO/COS/TOS存储后端（需要认证）
+	// 文件服务：统一代理本地和S3兼容存储后端（需要认证）
 	serveFilesWithResources(r, params.FileService, params.StorageBackendResolver, params.ResourceCatalog)
 
 	// Presigned file access: no auth required, signature-verified.
@@ -192,14 +184,10 @@ func NewRouter(params RouterParams) *gin.Engine {
 	// Diagnostic preview of presigned URLs (Admin only, behind auth middleware).
 	servePresignedPreview(r, params.Config, params.StorageBackendResolver, params.ResourceCatalog)
 
-	// Langfuse observability — only active when LANGFUSE_* env vars are set.
-	// The middleware is registered unconditionally; when disabled it's a no-op.
-	r.Use(langfuse.GinMiddleware())
-
 	// Audit log injection — middleware/rbac.go's reject paths and the
 	// admin-only /tenants/:id/audit-log endpoint pull the service out
 	// of the gin context. Provider is a no-op when AuditLogService is
-	// nil (e.g. lite mode without DB), so the rbac path degrades to
+	// nil (e.g. in-memory fixtures without DB), so the rbac path degrades to
 	// "log to stderr only" instead of crashing.
 	r.Use(middleware.AuditServiceProvider(params.AuditLogService))
 
@@ -293,7 +281,6 @@ func NewRouter(params RouterParams) *gin.Engine {
 		RegisterIMChannelRoutes(v1, params.IMHandler, rbacGuards)
 		RegisterEmbedChannelRoutes(v1, params.EmbedChannelHandler, rbacGuards)
 		RegisterDataSourceRoutes(v1, params.DataSourceHandler, params.DataSourceCredentialsHandler, rbacGuards)
-		RegisterWeKnoraCloudRoutes(v1, params.WeKnoraCloudHandler, rbacGuards)
 		RegisterWikiPageRoutes(v1, params.WikiPageHandler, rbacGuards)
 		RegisterMemoryRoutes(v1, params.MemoryHandler, rbacGuards)
 		RegisterChunkerDebugRoutes(v1, rbacGuards)

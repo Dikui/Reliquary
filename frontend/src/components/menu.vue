@@ -4,7 +4,7 @@
         <div class="logo_row" v-if="!uiStore.sidebarCollapsed">
             <div class="logo_box" @click="router.push('/platform/knowledge-bases')" style="cursor: pointer;">
                 <img class="logo" src="@/assets/img/reliquary.svg" alt="">
-                <sup v-if="isLiteEdition" class="lite-badge">Lite</sup>
+
             </div>
             <div class="logo_actions">
                 <t-tooltip placement="bottom">
@@ -255,7 +255,6 @@ import { MessagePlugin, DialogPlugin, Icon as TIcon } from "tdesign-vue-next";
 import UserMenu from '@/components/UserMenu.vue';
 import TenantSelector from '@/components/TenantSelector.vue';
 import { useI18n } from 'vue-i18n';
-import { getSystemInfo } from '@/api/system';
 
 const chatResources = useChatResourcesStore();
 // Platform logos reused from IMChannelsOverviewPanel — keeps the session list
@@ -340,7 +339,6 @@ const hasAnySession = computed(() =>
 type MenuItem = { title: string; icon: string; path: string; childrenPath?: string; children?: any[] };
 const { menuArr, visibleMenuArr } = storeToRefs(usemenuStore);
 let activeSubmenu = ref<string>('');
-const isLiteEdition = ref(false);
 
 // 批量管理状态
 const batchMode = ref(false)
@@ -432,7 +430,7 @@ const getIconActiveState = (itemPath: string) => {
     };
 };
 
-// 分离上下两部分菜单（使用 visibleMenuArr 以便 lite 模式过滤 logout）
+// 分离上下两部分菜单（使用 visibleMenuArr 过滤无权限入口）
 const topMenuItems = computed<MenuItem[]>(() => {
     return (visibleMenuArr.value as unknown as MenuItem[]).filter((item: MenuItem) =>
         item.path === 'knowledge-bases' || item.path === 'agents' || item.path === 'organizations' || item.path === 'creatChat'
@@ -672,7 +670,6 @@ const clearMessages = (item: any) => {
 const delCard = (item: any) => {
     removeSession(item.id).catch(() => MessagePlugin.error(t('chat.deleteSessionFailed')))
 }
-
 
 const debounce = (fn: (...args: any[]) => void, delay: number) => {
     let timer: ReturnType<typeof setTimeout>
@@ -976,14 +973,6 @@ onMounted(async () => {
 
     window.addEventListener(SESSION_MUTATION_EVENT, handleSessionMutation);
 
-    isLiteEdition.value = authStore.isLiteMode
-    getSystemInfo().then(res => {
-        if (res.data?.edition === 'lite') {
-            isLiteEdition.value = true
-            authStore.setLiteMode(true)
-        }
-    }).catch(() => { })
-
     await loadCurrentKbInfo((route.params as any)?.kbId as string)
 
     await loadSessionOriginMeta();
@@ -1159,7 +1148,6 @@ const onDragHandleMouseDown = (e: MouseEvent) => {
     document.addEventListener('mouseup', onMouseUp)
 }
 
-
 </script>
 <style lang="less" scoped>
 .aside_box {
@@ -1187,11 +1175,6 @@ const onDragHandleMouseDown = (e: MouseEvent) => {
     box-shadow: 1px 0 0 rgba(0, 0, 0, 0.02);
     transition: width 0.25s ease, min-width 0.25s ease;
     position: relative;
-
-    // macOS Wails 桌面：红绿灯位于 HiddenInset 标题栏区域，需让出顶部空间
-    html.wails-desktop & {
-        padding-top: 30px;
-    }
 
     &--collapsed {
         min-width: 60px;
@@ -1277,16 +1260,6 @@ const onDragHandleMouseDown = (e: MouseEvent) => {
             height: auto;
         }
 
-        .lite-badge {
-            margin-left: 2px;
-            align-self: flex-start;
-            margin-top: 2px;
-            font-size: 9px;
-            font-weight: 600;
-            color: var(--td-text-color-placeholder);
-            user-select: none;
-            white-space: nowrap;
-        }
     }
 
     .logo_img {
@@ -1369,7 +1342,6 @@ const onDragHandleMouseDown = (e: MouseEvent) => {
             background: var(--td-bg-color-sidebar);
         }
     }
-
 
     .upload-file-wrap {
         padding: 6px;

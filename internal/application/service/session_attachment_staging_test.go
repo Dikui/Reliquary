@@ -11,9 +11,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
 	"reliquary/internal/sandbox"
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 )
 
@@ -360,8 +361,7 @@ func TestStageSessionAttachmentsKeepsExistingURLWithoutLookup(t *testing.T) {
 
 func stagingTempDocDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
-	require.NoError(t, err)
+	db := pgtest.OpenFixture(t)
 	require.NoError(t, db.AutoMigrate(&types.TemporaryDocument{}))
 	return db
 }

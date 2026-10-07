@@ -11,6 +11,7 @@ import (
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+
 	filesvc "reliquary/internal/application/service/file"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/types"
@@ -84,7 +85,7 @@ func (s *StorageBackendService) Update(ctx context.Context, incoming *types.Stor
 	incoming.Provider = existing.Provider
 	incoming.Config = incoming.Config.MergeSecrets(existing.Config)
 	if incoming.Config.LocationKey(existing.Provider) != existing.Config.LocationKey(existing.Provider) {
-		return apperrors.NewBadRequestError("endpoint, region, bucket and path prefix are immutable; use storage migration instead")
+		return apperrors.NewBadRequestError("endpoint, region, bucket and path prefix are immutable; create a new storage backend instead")
 	}
 	if incoming.Status == "" {
 		incoming.Status = existing.Status
@@ -131,10 +132,8 @@ func (s *StorageBackendService) Update(ctx context.Context, incoming *types.Stor
 func (s *StorageBackendService) Delete(ctx context.Context, tenantID uint64, id string) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var backend types.StorageBackend
-		query := tx.Where("tenant_id = ? AND id = ?", tenantID, id)
-		if tx.Dialector.Name() == "postgres" {
-			query = query.Clauses(clause.Locking{Strength: "UPDATE"})
-		}
+		query := tx.Where("tenant_id = ? AND id = ?", tenantID, id).
+			Clauses(clause.Locking{Strength: "UPDATE"})
 		if err := query.First(&backend).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return apperrors.NewNotFoundError("storage backend not found")
@@ -177,10 +176,8 @@ func (s *StorageBackendService) Delete(ctx context.Context, tenantID uint64, id 
 func (s *StorageBackendService) SetDefault(ctx context.Context, tenantID uint64, id string) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var backend types.StorageBackend
-		query := tx.Where("tenant_id = ? AND id = ?", tenantID, id)
-		if tx.Dialector.Name() == "postgres" {
-			query = query.Clauses(clause.Locking{Strength: "UPDATE"})
-		}
+		query := tx.Where("tenant_id = ? AND id = ?", tenantID, id).
+			Clauses(clause.Locking{Strength: "UPDATE"})
 		if err := query.First(&backend).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return apperrors.NewNotFoundError("storage backend not found")
@@ -233,18 +230,8 @@ func (s *StorageBackendService) Test(ctx context.Context, backend *types.Storage
 			}
 		}
 		return filesvc.CheckMinioConnectivity(ctx, c.Endpoint, c.AccessKeyID, c.SecretAccessKey, c.BucketName, c.UseSSL)
-	case "cos":
-		return filesvc.CheckCosConnectivity(ctx, c.BucketName, c.Region, c.AccessKeyID, c.SecretAccessKey)
-	case "tos":
-		return filesvc.CheckTosConnectivity(ctx, c.Endpoint, c.Region, c.AccessKeyID, c.SecretAccessKey, c.BucketName)
 	case "s3":
 		return filesvc.CheckS3ConnectivityWithOptions(ctx, c.Endpoint, c.AccessKeyID, c.SecretAccessKey, c.BucketName, c.Region, c.ForcePathStyle)
-	case "oss":
-		return filesvc.CheckOssConnectivity(ctx, c.Endpoint, c.Region, c.AccessKeyID, c.SecretAccessKey, c.BucketName)
-	case "ks3":
-		return filesvc.CheckKS3Connectivity(ctx, c.Endpoint, c.Region, c.AccessKeyID, c.SecretAccessKey, c.BucketName)
-	case "obs":
-		return filesvc.CheckObsConnectivity(ctx, c.Endpoint, c.Region, c.AccessKeyID, c.SecretAccessKey, c.BucketName)
 	default:
 		return fmt.Errorf("unsupported storage provider: %s", backend.Provider)
 	}
@@ -366,7 +353,7 @@ func validateStorageBackendEndpoint(backend *types.StorageBackend) error {
 		return nil
 	}
 	endpoint := strings.TrimSpace(backend.Config.Endpoint)
-	if backend.Provider == "cos" || endpoint == "" {
+	if endpoint == "" {
 		return nil
 	}
 	if !strings.Contains(endpoint, "://") {

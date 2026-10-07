@@ -13,6 +13,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
+
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service/retriever"
 	"reliquary/internal/config"
@@ -65,13 +66,12 @@ type knowledgeService struct {
 	modelService    interfaces.ModelService
 	task            interfaces.TaskEnqueuer
 	taskInspector   interfaces.TaskInspector
-	graphEngine     interfaces.RetrieveGraphRepository
 	redisClient     *redis.Client
 	kbShareService  interfaces.KBShareService
 	imageResolver   *docparser.ImageResolver
 	taskPendingRepo interfaces.TaskPendingOpsRepository
 
-	// In-memory fallbacks for Lite mode (no Redis)
+	// In-memory fallbacks for in-memory fixtures (no Redis)
 	memFAQProgress      sync.Map // taskID -> *types.FAQImportProgress
 	memFAQRunningImport sync.Map // kbID -> *runningFAQImportInfo
 	wikiRepo            interfaces.WikiPageRepository
@@ -110,7 +110,6 @@ func NewKnowledgeService(
 	modelService interfaces.ModelService,
 	task interfaces.TaskEnqueuer,
 	taskInspector interfaces.TaskInspector,
-	graphEngine interfaces.RetrieveGraphRepository,
 	retrieveEngine interfaces.RetrieveEngineRegistry,
 	ownership retriever.TenantStoreOwnership,
 	redisClient *redis.Client,
@@ -140,7 +139,6 @@ func NewKnowledgeService(
 		modelService:    modelService,
 		task:            task,
 		taskInspector:   taskInspector,
-		graphEngine:     graphEngine,
 		retrieveEngine:  retrieveEngine,
 		ownership:       ownership,
 		redisClient:     redisClient,
@@ -155,7 +153,7 @@ func NewKnowledgeService(
 }
 
 // tracker returns a usable SpanTracker — falls back to a no-op when the
-// service was constructed without one (test harness, lite mode w/o repo).
+// service was constructed without one (test harness, in-memory fixtures w/o repo).
 // All pipeline call sites go through this so they never need a nil check.
 func (s *knowledgeService) tracker() SpanTracker {
 	if s.spanTracker == nil {

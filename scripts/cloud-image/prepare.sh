@@ -184,7 +184,6 @@ docker compose up -d
 echo "[prepare] 4.5/6 预拉 sandbox 镜像 (Agent Skills 用, 非常驻)"
 docker compose --profile full pull sandbox || true
 
-# 其他向量库 / 可观测组件 (qdrant, milvus, weaviate, doris, neo4j, langfuse-*, minio, dex)
 # 不预拉, 体积可省 5-15GB. 用户如需启用:
 #   cd /opt/Reliquary && docker compose --profile <name> up -d
 

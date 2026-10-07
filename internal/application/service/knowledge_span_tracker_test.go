@@ -10,14 +10,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
 	"reliquary/internal/application/repository"
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 )
 
-// span tracker tests use a real GORM-backed repo against an in-memory
-// SQLite DB. We do this instead of a stub repo because the cascade /
+// Span tracker tests use a real GORM-backed repo against isolated PostgreSQL
+// tables. We do this instead of a stub repo because the cascade /
 // LookupStage logic interacts non-trivially with the persistence layer
 // (UPSERT, MAX(attempt), parent IN ...) — a stub would let regressions
 // in those queries slip through.
@@ -28,7 +29,7 @@ import (
 // two too tightly).
 const spanTrackerTestDDL = `
 CREATE TABLE IF NOT EXISTS knowledge_processing_spans (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    id              BIGSERIAL PRIMARY KEY,
     knowledge_id    VARCHAR(64) NOT NULL,
     attempt         INTEGER     NOT NULL DEFAULT 1,
     span_id         VARCHAR(64) NOT NULL,
@@ -36,25 +37,24 @@ CREATE TABLE IF NOT EXISTS knowledge_processing_spans (
     name            VARCHAR(255) NOT NULL,
     kind            VARCHAR(16) NOT NULL,
     status          VARCHAR(16) NOT NULL,
-    input           TEXT,
-    output          TEXT,
-    metadata        TEXT,
+    input           JSONB,
+    output          JSONB,
+    metadata        JSONB,
     error_code      VARCHAR(64),
     error_message   TEXT,
     error_detail    TEXT,
-    started_at      DATETIME,
-    finished_at     DATETIME,
+    started_at      TIMESTAMPTZ,
+    finished_at     TIMESTAMPTZ,
     duration_ms     BIGINT,
-    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (knowledge_id, attempt, span_id)
 );
 `
 
 func setupSpanTrackerTest(t *testing.T) (SpanTracker, *gorm.DB) {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := pgtest.OpenFixture(t)
 	require.NoError(t, db.Exec(spanTrackerTestDDL).Error)
 	// Pass nil for the heartbeat db: these tests don't exercise
 	// heartbeat side-effects (those are covered in the housekeeping
@@ -72,12 +72,12 @@ func TestSpanTracker_OpenAttempt_AllocatesFreshNumbers(t *testing.T) {
 	tracker, db := setupSpanTrackerTest(t)
 	ctx := context.Background()
 
-	root1, n1, err := tracker.OpenAttempt(ctx, "kid", "trace-1")
+	root1, n1, err := tracker.OpenAttempt(ctx, "kid")
 	require.NoError(t, err)
 	require.NotNil(t, root1)
 	assert.Equal(t, 1, n1)
 
-	root2, n2, err := tracker.OpenAttempt(ctx, "kid", "trace-2")
+	root2, n2, err := tracker.OpenAttempt(ctx, "kid")
 	require.NoError(t, err)
 	require.NotNil(t, root2)
 	assert.Equal(t, 2, n2, "second OpenAttempt must allocate attempt 2")
@@ -101,7 +101,7 @@ func TestSpanTracker_FailSpan_CascadesDownstream(t *testing.T) {
 	tracker, db := setupSpanTrackerTest(t)
 	ctx := context.Background()
 
-	_, attempt, err := tracker.OpenAttempt(ctx, "kid", "")
+	_, attempt, err := tracker.OpenAttempt(ctx, "kid")
 	require.NoError(t, err)
 	require.Equal(t, 1, attempt)
 
@@ -151,7 +151,7 @@ func TestSpanTracker_LookupStage_FindsAcrossProcesses(t *testing.T) {
 	tracker, _ := setupSpanTrackerTest(t)
 	ctx := context.Background()
 
-	_, attempt, err := tracker.OpenAttempt(ctx, "kid", "")
+	_, attempt, err := tracker.OpenAttempt(ctx, "kid")
 	require.NoError(t, err)
 	mm := tracker.BeginStage(ctx, "kid", attempt, types.StageMultimodal, nil)
 	require.NotNil(t, mm)
@@ -220,7 +220,7 @@ func TestSpanTracker_BeginSubSpan_LongWikiPageName(t *testing.T) {
 	tracker, db := setupSpanTrackerTest(t)
 	ctx := context.Background()
 
-	_, attempt, err := tracker.OpenAttempt(ctx, "kid", "")
+	_, attempt, err := tracker.OpenAttempt(ctx, "kid")
 	require.NoError(t, err)
 	parent := tracker.BeginStage(ctx, "kid", attempt, types.StagePostProcess, nil)
 	require.NotNil(t, parent)
@@ -245,7 +245,7 @@ func TestSpanTracker_LookupSpanByName_FitsLongName(t *testing.T) {
 	tracker, _ := setupSpanTrackerTest(t)
 	ctx := context.Background()
 
-	_, attempt, err := tracker.OpenAttempt(ctx, "kid", "")
+	_, attempt, err := tracker.OpenAttempt(ctx, "kid")
 	require.NoError(t, err)
 	parent := tracker.BeginStage(ctx, "kid", attempt, types.StagePostProcess, nil)
 	require.NotNil(t, parent)
@@ -267,7 +267,7 @@ func TestSpanTracker_BeginSubSpan_HangsUnderParent(t *testing.T) {
 	tracker, db := setupSpanTrackerTest(t)
 	ctx := context.Background()
 
-	_, attempt, err := tracker.OpenAttempt(ctx, "kid", "")
+	_, attempt, err := tracker.OpenAttempt(ctx, "kid")
 	require.NoError(t, err)
 	parent := tracker.BeginStage(ctx, "kid", attempt, types.StageMultimodal, nil)
 	require.NotNil(t, parent)
@@ -300,7 +300,7 @@ func TestSpanTracker_BeginStage_ReentryIsIdempotent(t *testing.T) {
 	tracker, db := setupSpanTrackerTest(t)
 	ctx := context.Background()
 
-	_, attempt, err := tracker.OpenAttempt(ctx, "kid", "")
+	_, attempt, err := tracker.OpenAttempt(ctx, "kid")
 	require.NoError(t, err)
 
 	first := tracker.BeginStage(ctx, "kid", attempt, types.StageDocReader, types.JSONMap{"pages": 1})
@@ -336,7 +336,7 @@ func TestSpanTracker_FailSpan_CascadesDependentSubspans(t *testing.T) {
 	tracker, db := setupSpanTrackerTest(t)
 	ctx := context.Background()
 
-	_, attempt, err := tracker.OpenAttempt(ctx, "kid", "")
+	_, attempt, err := tracker.OpenAttempt(ctx, "kid")
 	require.NoError(t, err)
 
 	chunking := tracker.BeginStage(ctx, "kid", attempt, types.StageChunking, nil)
@@ -381,7 +381,7 @@ func TestPostprocessSubspan_AttachesUnderPostProcessStage(t *testing.T) {
 
 	// Set up the parent attempt with a closed postprocess stage — the
 	// async worker must still find it via LookupStage.
-	_, attempt, err := tracker.OpenAttempt(ctx, "kid", "lf-trace")
+	_, attempt, err := tracker.OpenAttempt(ctx, "kid")
 	require.NoError(t, err)
 
 	post := tracker.BeginStage(ctx, "kid", attempt, types.StagePostProcess, types.JSONMap{
@@ -442,35 +442,10 @@ func TestPostprocessSubspan_MissingParentFallsThrough(t *testing.T) {
 	assert.Nil(t, parent, "missing parent attempt yields nil, not an error")
 
 	// Open an attempt but never begin postprocess. Lookup must still nil.
-	_, attempt, err := tracker.OpenAttempt(ctx, "kid-no-postprocess", "")
+	_, attempt, err := tracker.OpenAttempt(ctx, "kid-no-postprocess")
 	require.NoError(t, err)
 	parent = tracker.LookupStage(ctx, "kid-no-postprocess", attempt, types.StagePostProcess)
 	assert.Nil(t, parent, "missing postprocess stage row yields nil")
-}
-
-// TestChunkExtractPayload_AttemptRoundTrip verifies the new fields
-// added to ExtractChunkPayload survive JSON marshal/unmarshal so a
-// cross-process asynq worker can recover the parent attempt + chunk
-// ordinal on the receiving side. Skipping this would let a typo in
-// the JSON tag silently zero the attempt and disable span recording.
-func TestChunkExtractPayload_AttemptRoundTrip(t *testing.T) {
-	in := types.ExtractChunkPayload{
-		TenantID:    42,
-		ChunkID:     "chunk-x",
-		ModelID:     "m1",
-		KnowledgeID: "kid-7",
-		Attempt:     3,
-		ChunkIndex:  9,
-	}
-	bytes, err := json.Marshal(in)
-	require.NoError(t, err)
-
-	var out types.ExtractChunkPayload
-	require.NoError(t, json.Unmarshal(bytes, &out))
-
-	assert.Equal(t, in.KnowledgeID, out.KnowledgeID)
-	assert.Equal(t, in.Attempt, out.Attempt)
-	assert.Equal(t, in.ChunkIndex, out.ChunkIndex)
 }
 
 // TestSummaryQuestionPayload_AttemptRoundTrip mirrors the above for the

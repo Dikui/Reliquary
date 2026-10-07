@@ -15,18 +15,15 @@ type IndexingStrategy struct {
 	KeywordEnabled bool `yaml:"keyword_enabled" json:"keyword_enabled"`
 	// WikiEnabled enables automatic wiki page generation from documents
 	WikiEnabled bool `yaml:"wiki_enabled" json:"wiki_enabled"`
-	// GraphEnabled enables knowledge graph entity/relation extraction
-	GraphEnabled bool `yaml:"graph_enabled" json:"graph_enabled"`
 }
 
 // DefaultIndexingStrategy returns the default strategy matching the legacy behavior:
-// vector and keyword indexing enabled, wiki and graph disabled.
+// vector and keyword indexing enabled, wiki disabled.
 func DefaultIndexingStrategy() IndexingStrategy {
 	return IndexingStrategy{
 		VectorEnabled:  true,
 		KeywordEnabled: true,
 		WikiEnabled:    false,
-		GraphEnabled:   false,
 	}
 }
 
@@ -36,19 +33,19 @@ func (s IndexingStrategy) NeedsEmbedding() bool {
 }
 
 // NeedsChunks returns true if any pipeline that requires document chunks is enabled.
-// Chunks are needed for vector indexing, keyword indexing, wiki generation, and graph extraction.
+// Chunks are needed for vector indexing, keyword indexing, and wiki generation.
 func (s IndexingStrategy) NeedsChunks() bool {
-	return s.VectorEnabled || s.KeywordEnabled || s.WikiEnabled || s.GraphEnabled
+	return s.VectorEnabled || s.KeywordEnabled || s.WikiEnabled
 }
 
 // HasAnyIndexing returns true if at least one indexing pipeline is enabled.
 func (s IndexingStrategy) HasAnyIndexing() bool {
-	return s.VectorEnabled || s.KeywordEnabled || s.WikiEnabled || s.GraphEnabled
+	return s.VectorEnabled || s.KeywordEnabled || s.WikiEnabled
 }
 
 // IsZero returns true if the strategy has no pipelines enabled (zero value).
 func (s IndexingStrategy) IsZero() bool {
-	return !s.VectorEnabled && !s.KeywordEnabled && !s.WikiEnabled && !s.GraphEnabled
+	return !s.VectorEnabled && !s.KeywordEnabled && !s.WikiEnabled
 }
 
 // Value implements the driver.Valuer interface for GORM serialization.

@@ -8,14 +8,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 )
 
 func TestSaveChunkRevisionIsAtomicAndOptimistic(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
-	require.NoError(t, err)
+	db := pgtest.OpenFixture(t)
 	require.NoError(t, db.AutoMigrate(&types.Chunk{}, &types.ChunkRevision{}))
 	repo := NewChunkRepository(db)
 	ctx := context.Background()

@@ -118,9 +118,6 @@ func RegisterInitializationRoutes(r *gin.RouterGroup, handler *handler.Initializ
 	g.apiKeyRoute(r, http.MethodPost, "/initialization/asr/check", apiKeyManageModels(apiKeyFullAccess()), g.Admin(), handler.CheckASRModel)
 	g.apiKeyRoute(r, http.MethodPost, "/initialization/multimodal/test", apiKeyManageModels(apiKeyFullAccess()), g.Admin(), handler.TestMultimodalFunction)
 
-	g.apiKeyRoute(r, http.MethodPost, "/initialization/extract/text-relation", apiKeyManageModels(apiKeyFullAccess()), g.Admin(), handler.ExtractTextRelations)
-	g.apiKeyRoute(r, http.MethodPost, "/initialization/extract/fabri-tag", apiKeyManageModels(apiKeyFullAccess()), g.Admin(), handler.FabriTag)
-	g.apiKeyRoute(r, http.MethodPost, "/initialization/extract/fabri-text", apiKeyManageModels(apiKeyFullAccess()), g.Admin(), handler.FabriText)
 }
 
 // RegisterMCPServiceRoutes registers MCP service routes.
@@ -236,27 +233,12 @@ func RegisterWebSearchProviderRoutes(
 	}
 }
 
-// RegisterVectorStoreRoutes registers CRUD routes for vector store configurations.
-//
-// Vector stores are tenant-level infrastructure; reads are Viewer+, all
-// writes (and connection tests, which probe external systems with stored
-// credentials) are Admin+.
+// RegisterVectorStoreRoutes exposes read-only PostgreSQL vector store status.
+// Vector stores are tenant-level infrastructure; reads require Viewer+.
 func RegisterVectorStoreRoutes(r *gin.RouterGroup, h *handler.VectorStoreHandler, g *rbacGuards) {
 	stores := g.apiKeyGroup(r.Group("/vector-stores"), apiKeyManageVectorStores(apiKeyFullAccess()))
-	{
-		// List available engine types (metadata for UI forms) — Viewer+
-		stores.GET("/types", g.Viewer(), h.ListStoreTypes)
-		// Test with raw credentials (no persistence) — Admin+
-		stores.POST("/test", g.Admin(), h.TestStoreRaw)
-		// CRUD
-		stores.POST("", g.Admin(), h.CreateStore)
-		stores.GET("", g.Viewer(), h.ListStores)
-		stores.GET("/:id", g.Viewer(), h.GetStore)
-		stores.PUT("/:id", g.Admin(), h.UpdateStore)
-		stores.DELETE("/:id", g.Admin(), h.DeleteStore)
-		// Test existing saved or env store — Admin+
-		stores.POST("/:id/test", g.Admin(), h.TestStoreByID)
-	}
+	stores.GET("", g.Viewer(), h.ListStores)
+	stores.GET("/:id", g.Viewer(), h.GetStore)
 }
 
 // RegisterStorageBackendRoutes manages concrete object/file storage instances.
@@ -323,13 +305,4 @@ func RegisterDataSourceRoutes(
 		ds.GET("/:id/logs", g.Viewer(), handler.GetSyncLogs)
 		ds.GET("/logs/:log_id", g.Viewer(), handler.GetSyncLog)
 	}
-}
-
-// RegisterWeKnoraCloudRoutes 注册 WeKnoraCloud 初始化路由
-// RegisterWeKnoraCloudRoutes registers the WeKnoraCloud credential
-// management endpoints. SaveCredentials persists external SaaS keys
-// for the tenant (Admin+), Status is a low-risk readiness probe (Viewer+).
-func RegisterWeKnoraCloudRoutes(r *gin.RouterGroup, handler *handler.WeKnoraCloudHandler, g *rbacGuards) {
-	g.apiKeyRoute(r, http.MethodPost, "/weknoracloud/credentials", apiKeyManageModels(apiKeyFullAccess()), g.Admin(), handler.SaveCredentials)
-	g.apiKeyRoute(r, http.MethodGet, "/models/weknoracloud/status", apiKeyManageModels(apiKeyFullAccess()), g.Viewer(), handler.Status)
 }

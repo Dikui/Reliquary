@@ -9,9 +9,7 @@ import (
 // TaskInspector abstracts queue inspection / cancellation against the
 // task backend. It is best-effort: implementations may scan a finite
 // number of tasks per call and return whatever count they could
-// affect. Lite mode (no Redis) ships a no-op implementation because
-// SyncTaskExecutor dispatches inline goroutines that cannot be
-// dequeued before they start.
+// affect. Tests can provide a lightweight implementation of this interface.
 //
 // Use cases today: user-initiated cancel of an in-progress knowledge
 // parse, which must remove downstream multimodal / post-process /
@@ -39,7 +37,7 @@ type TaskInspector interface {
 	//
 	// Best-effort and short-circuiting: it returns true as soon as the
 	// first match is seen. On backend error it returns (false, err);
-	// callers decide the fail-safe direction. Lite mode (no Redis)
+	// callers decide the fail-safe direction. in-memory fixtures (no Redis)
 	// always returns false — inline executors never queue, so the
 	// span/updated_at checks remain authoritative there.
 	HasQueuedTasksForKnowledge(ctx context.Context, knowledgeID string) (bool, error)
@@ -48,10 +46,8 @@ type TaskInspector interface {
 	// application enqueues into, for the System Admin runtime dashboard.
 	//
 	// The `supported` bool reports whether queue inspection is available
-	// on the current backend: true in asynq/Redis mode, false in Lite
-	// mode (no Redis) where tasks run inline and no queue exists. Callers
-	// use it to render an "unavailable in this deployment" state rather
-	// than an empty table.
+	// on the current backend. Callers use false to render an unavailable
+	// state rather than an empty table.
 	//
 	// Best-effort: a per-queue backend error is logged and that queue is
 	// surfaced as a zeroed row (so the full lane set stays visible) rather
@@ -84,7 +80,7 @@ type KnowledgeBaseTaskCanceller interface {
 
 // RuntimeTaskInspector is the optional operator surface implemented by queue
 // backends that retain inspectable task state. It is separate from
-// TaskInspector so Lite mode and light-weight tests do not need to implement
+// TaskInspector so in-memory fixtures and light-weight tests do not need to implement
 // queue mutations.
 type RuntimeTaskInspector interface {
 	ListRuntimeTasks(

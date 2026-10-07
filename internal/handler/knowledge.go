@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	goerrors "errors"
 	"fmt"
 	"io"
 	"mime"
@@ -12,10 +13,9 @@ import (
 	"strings"
 	"time"
 
-	goerrors "errors"
-
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
+
 	"reliquary/internal/agent/tools"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
@@ -23,7 +23,6 @@ import (
 	"reliquary/internal/errors"
 	"reliquary/internal/logger"
 	"reliquary/internal/middleware"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"reliquary/internal/utils"
@@ -277,7 +276,7 @@ func (h *KnowledgeHandler) enqueueKnowledgeListDelete(
 		KnowledgeIDs: ids,
 		Initiator:    types.TaskInitiatorFromContext(ctx),
 	}
-	langfuse.InjectTracing(ctx, &payload)
+
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return "", fmt.Errorf("marshal payload: %w", err)
@@ -302,7 +301,7 @@ func (h *KnowledgeHandler) enqueueKnowledgeListReparse(
 		ProcessConfig: processConfig,
 		Initiator:     types.TaskInitiatorFromContext(ctx),
 	}
-	langfuse.InjectTracing(ctx, &payload)
+
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return "", fmt.Errorf("marshal payload: %w", err)
@@ -685,7 +684,7 @@ func (h *KnowledgeHandler) GetKnowledge(c *gin.Context) {
 
 // GetKnowledgeSpans godoc
 // @Summary      获取知识文档解析的 Span 树（含历史尝试）
-// @Description  返回该知识在解析流水线的 trace tree（root → stage → subspan）：每段状态、耗时、input/output、错误码、langfuse_trace_id。支持 ?attempt=N 查看历史尝试；不传则返回最新尝试。前端用于渲染时间线 + 多模态/embedding 子节点 + 一键跳转 Langfuse。
+// @Description  返回该知识在解析流水线的 trace tree（root → stage → subspan）：每段状态、耗时、input/output、错误码。支持 ?attempt=N 查看历史尝试；不传则返回最新尝试。前端用于渲染时间线 + 多模态/embedding 子节点。
 // @Tags         知识管理
 // @Accept       json
 // @Produce      json
@@ -714,7 +713,7 @@ func (h *KnowledgeHandler) GetKnowledgeSpans(c *gin.Context) {
 	}
 
 	// Pick attempt: explicit ?attempt=N wins; otherwise pull the
-	// latest attempt from the spans table. Lite-mode / fresh installs
+	// latest attempt from the spans table. in-memory fixtures / fresh installs
 	// with zero rows fall through to attempt=0, in which case we
 	// return a placeholder tree (5 pending stages, no root, no
 	// children) so the UI still renders.
@@ -2626,7 +2625,6 @@ func (h *KnowledgeHandler) MoveKnowledge(c *gin.Context) {
 		Mode:         req.Mode,
 		Initiator:    types.TaskInitiatorFromContext(ctx),
 	}
-	langfuse.InjectTracing(ctx, &payload)
 
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {

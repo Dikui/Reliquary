@@ -13,10 +13,10 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+
 	"reliquary/internal/logger"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/searchutil"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -264,24 +264,6 @@ func (s *messageSuggestionService) generate(
 	// or after GinMiddleware has already ended the HTTP root. Resume the
 	// originating chat trace so chat.completion nests under that turn instead
 	// of auto-creating an orphan root.
-	ctx = langfuse.AttachTraceparent(ctx, message.ExecutionContext.LangfuseTraceparent)
-	ctx, span := langfuse.GetManager().StartSpan(ctx, langfuse.SpanOptions{
-		Name: "follow_up.suggestions",
-		Input: map[string]interface{}{
-			"session_id":           message.SessionID,
-			"assistant_message_id": message.ID,
-			"mode":                 config.Mode,
-		},
-		Metadata: map[string]interface{}{
-			"count":    config.Count,
-			"model_id": config.ModelID,
-		},
-	})
-	defer func() {
-		span.Finish(map[string]interface{}{
-			"question_count": len(questions),
-		}, nil, err)
-	}()
 
 	count := config.Count
 	if count < 1 {

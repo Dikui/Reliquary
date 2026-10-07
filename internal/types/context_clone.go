@@ -57,13 +57,9 @@ var contextCloneAcrossDetach = map[ContextKey]bool{
 	EmbedVisitorContextKey: true,
 
 	// Diagnostics and presentation that background work is expected to keep.
-	// The Langfuse trace in particular must stay alive so the LLM / embedder /
-	// reranker / VLM / ASR wrappers attach their generations to the trace
-	// GinMiddleware opened, rather than each auto-creating an orphan.
-	LoggerContextKey:        true,
-	RequestIDContextKey:     true,
-	LanguageContextKey:      true,
-	LangfuseTraceContextKey: true,
+	LoggerContextKey:    true,
+	RequestIDContextKey: true,
+	LanguageContextKey:  true,
 
 	// The agent-level opt-out from long-term memory. Recall is gated inside
 	// the QA services, but extraction, the explicit "remember this" route and

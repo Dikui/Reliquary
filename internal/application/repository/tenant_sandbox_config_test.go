@@ -5,18 +5,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 )
 
 func newSandboxConfigTestRepo(t *testing.T) (TenantSandboxConfigRepository, *gorm.DB) {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
-	require.NoError(t, err)
+	db := pgtest.OpenFixture(t)
 	require.NoError(t, db.AutoMigrate(&types.TenantSandboxConfigEntity{}))
 	// AutoMigrate cannot express the partial unique index, so add it here to
 	// match the production migration.

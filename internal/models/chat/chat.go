@@ -133,15 +133,12 @@ type ChatConfig struct {
 	ExtraConfig    map[string]string
 	// CustomHeaders 允许在调用远程 OpenAI 兼容 API 时附加自定义 HTTP 请求头（类似 OpenAI Python SDK 的 extra_headers）。
 	CustomHeaders map[string]string
-	AppID         string
-	AppSecret     string // 加密值，由工厂函数调用方传入，在 NewWeKnoraCloudChat 中使用前已解密
 }
 
 // ConfigFromModel 根据 types.Model 构造 ChatConfig。
 // 保证生产路径（service 层根据 DB 中的模型配置拉起实例）和测试路径
 // （handler 层根据前端表单临时拉起实例）走完全相同的字段映射，避免重复样板。
-// appID / appSecret 是已经解密/解析好的 WeKnoraCloud 凭证，调用方负责传入。
-func ConfigFromModel(m *types.Model, appID, appSecret string) *ChatConfig {
+func ConfigFromModel(m *types.Model) *ChatConfig {
 	if m == nil {
 		return nil
 	}
@@ -155,8 +152,6 @@ func ConfigFromModel(m *types.Model, appID, appSecret string) *ChatConfig {
 		MaxConcurrency: m.Parameters.MaxConcurrency,
 		ExtraConfig:    m.Parameters.ExtraConfig,
 		CustomHeaders:  m.Parameters.CustomHeaders,
-		AppID:          appID,
-		AppSecret:      appSecret,
 	}
 }
 
@@ -172,10 +167,9 @@ func NewChat(config *ChatConfig, ollamaService *ollama.OllamaService) (Chat, err
 	default:
 		return nil, fmt.Errorf("unsupported chat model source: %s", config.Source)
 	}
+	// Outermost: hold the per-model concurrency slot around the provider call,
+	// so semaphore wait time is excluded from debug timing.
 	c, err = wrapChatDebug(c, err)
-	c, err = wrapChatLangfuse(c, err)
-	// Outermost: hold the per-model concurrency slot only around the real
-	// provider round-trip, so the wait is excluded from debug/langfuse timing.
 	return wrapChatConcurrency(c, config.MaxConcurrency, err)
 }
 

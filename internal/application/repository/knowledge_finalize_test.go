@@ -10,8 +10,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 )
 
@@ -39,36 +40,25 @@ CREATE TABLE IF NOT EXISTS knowledges (
     file_path TEXT,
     file_hash VARCHAR(64),
     storage_size BIGINT NOT NULL DEFAULT 0,
-    metadata TEXT,
+    metadata JSONB,
     tag_id VARCHAR(36),
     summary_status VARCHAR(32) DEFAULT 'none',
-    last_faq_import_result TEXT DEFAULT NULL,
+    last_faq_import_result JSONB DEFAULT NULL,
     channel VARCHAR(50) NOT NULL DEFAULT 'web',
     pending_subtasks_count INT NOT NULL DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    processed_at DATETIME,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    processed_at TIMESTAMPTZ,
     error_message TEXT,
-    deleted_at DATETIME
+    deleted_at TIMESTAMPTZ
 );
 `
 
-// setupKnowledgeTestDB returns an in-memory SQLite db with the knowledges
-// table. SQLite has a single-writer constraint, so we cap MaxOpenConns at 1
-// and set a busy timeout: concurrent goroutines line up on the same
-// connection (just like production write workloads serialize at the row
-// level). This is enough to exercise the atomic semantics of the helpers
-// without flaking on "database table is locked".
+// setupKnowledgeTestDB creates an isolated PostgreSQL knowledge fixture.
 func setupKnowledgeTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	dsn := "file:" + uuid.New().String() + "?mode=memory&cache=shared&_busy_timeout=5000"
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
-	require.NoError(t, err)
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	sqlDB.SetMaxOpenConns(1)
+	db := pgtest.OpenFixture(t)
 	require.NoError(t, db.Exec(knowledgesTestDDL).Error)
-	t.Cleanup(func() { _ = sqlDB.Close() })
 	return db
 }
 

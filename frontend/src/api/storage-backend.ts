@@ -8,12 +8,8 @@ export interface StorageBackendConfig {
   secret_access_key?: string
   bucket_name?: string
   path_prefix?: string
-  app_id?: string
   use_ssl?: boolean
   force_path_style?: boolean
-  use_temp_bucket?: boolean
-  temp_bucket_name?: string
-  temp_region?: string
 }
 
 export interface StorageBackend {

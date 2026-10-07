@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	stderrors "errors"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
+
 	"reliquary/internal/agent/tools"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
@@ -18,7 +18,6 @@ import (
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
 	"reliquary/internal/storageurl"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"reliquary/internal/utils"
@@ -213,7 +212,7 @@ func sharedKBRow(
 // envDefaultStoreView returns the env-fallback store display enriched with
 // the configured env-store engine type when the service is available. The
 // service path populates EngineType so the caller can show "postgres" or
-// "qdrant" on the env-default badge instead of leaving it blank. A nil
+// "postgres" on the env-default badge instead of leaving it blank. A nil
 // service (e.g. in narrow unit-test setups) falls back to the bare default
 // display rather than failing the list response.
 func (h *KnowledgeBaseHandler) envDefaultStoreView(ctx context.Context) types.StoreDisplay {
@@ -396,11 +395,11 @@ func (h *KnowledgeBaseHandler) CreateKnowledgeBase(c *gin.Context) {
 		c.Error(apperrors.NewBadRequestError("Invalid request parameters").WithDetails(err.Error()))
 		return
 	}
-	if err := validateExtractConfig(req.ExtractConfig); err != nil {
-		logger.Error(ctx, "Invalid extract configuration", err)
-		c.Error(err)
+	if req.VectorStoreID != nil && strings.TrimSpace(*req.VectorStoreID) != "" && *req.VectorStoreID != "__env_postgres__" {
+		c.Error(apperrors.NewBadRequestError("Retrieval uses the application PostgreSQL database"))
 		return
 	}
+	req.VectorStoreID = nil
 	types.NormalizeKnowledgeBasePromptInstructions(&req)
 	if err := validateKnowledgeBasePromptInstructions(&req); err != nil {
 		c.Error(err)
@@ -1105,7 +1104,7 @@ func (h *KnowledgeBaseHandler) CopyKnowledgeBase(c *gin.Context) {
 			return
 		}
 		// Pre-flight defense 3: compare concrete instance IDs, not just the
-		// provider type (COS-A and COS-B are different physical stores).
+		// provider type (S3-A and S3-B are different physical stores).
 		if tenant, _ := ctx.Value(types.TenantInfoContextKey).(*types.Tenant); tenant != nil {
 			defaultID, defaultProvider := "", ""
 			if tenant.DefaultStorageBackendID != nil {
@@ -1136,7 +1135,6 @@ func (h *KnowledgeBaseHandler) CopyKnowledgeBase(c *gin.Context) {
 		TargetID:  req.TargetID,
 		Initiator: types.TaskInitiatorFromContext(ctx),
 	}
-	langfuse.InjectTracing(ctx, &payload)
 
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -1289,72 +1287,6 @@ func (h *KnowledgeBaseHandler) GetKBCloneProgress(c *gin.Context) {
 		"success": true,
 		"data":    progress,
 	})
-}
-
-// validateExtractConfig validates the graph configuration parameters
-func validateExtractConfig(config *types.ExtractConfig) error {
-	if config == nil {
-		return nil
-	}
-	if !config.Enabled {
-		config.Enabled = false
-		return nil
-	}
-	// Validate text field
-	if config.Text == "" {
-		return apperrors.NewBadRequestError("text cannot be empty")
-	}
-
-	// Validate tags field
-	if len(config.Tags) == 0 {
-		return apperrors.NewBadRequestError("tags cannot be empty")
-	}
-	for i, tag := range config.Tags {
-		if tag == "" {
-			return apperrors.NewBadRequestError("tag cannot be empty at index " + strconv.Itoa(i))
-		}
-	}
-
-	// Validate nodes
-	if len(config.Nodes) == 0 {
-		return apperrors.NewBadRequestError("nodes cannot be empty")
-	}
-	nodeNames := make(map[string]bool)
-	for i, node := range config.Nodes {
-		if node.Name == "" {
-			return apperrors.NewBadRequestError("node name cannot be empty at index " + strconv.Itoa(i))
-		}
-		// Check for duplicate node names
-		if nodeNames[node.Name] {
-			return apperrors.NewBadRequestError("duplicate node name: " + node.Name)
-		}
-		nodeNames[node.Name] = true
-	}
-
-	if len(config.Relations) == 0 {
-		return apperrors.NewBadRequestError("relations cannot be empty")
-	}
-	// Validate relations
-	for i, relation := range config.Relations {
-		if relation.Node1 == "" {
-			return apperrors.NewBadRequestError("relation node1 cannot be empty at index " + strconv.Itoa(i))
-		}
-		if relation.Node2 == "" {
-			return apperrors.NewBadRequestError("relation node2 cannot be empty at index " + strconv.Itoa(i))
-		}
-		if relation.Type == "" {
-			return apperrors.NewBadRequestError("relation type cannot be empty at index " + strconv.Itoa(i))
-		}
-		// Check if referenced nodes exist
-		if !nodeNames[relation.Node1] {
-			return apperrors.NewBadRequestError("relation references non-existent node1: " + relation.Node1)
-		}
-		if !nodeNames[relation.Node2] {
-			return apperrors.NewBadRequestError("relation references non-existent node2: " + relation.Node2)
-		}
-	}
-
-	return nil
 }
 
 func validateKnowledgeBasePromptInstructions(kb *types.KnowledgeBase) error {

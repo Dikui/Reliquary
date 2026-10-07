@@ -97,11 +97,11 @@ func TestValidateKBScopedStoragePath(t *testing.T) {
 
 	assert.NoError(t, ValidateKBScopedStoragePath("local://10008/exports/img.jpg", tenantID))
 	assert.NoError(t, ValidateKBScopedStoragePath("minio://bucket/10008/exports/uuid.png", tenantID))
-	assert.NoError(t, ValidateKBScopedStoragePath("oss://bucket/exports/10008/uuid.png", tenantID))
+	assert.NoError(t, ValidateKBScopedStoragePath("s3://bucket/exports/10008/uuid.png", tenantID))
 
 	// storage://<backendID>/ wrapped paths must resolve to the same tenant/exports scope.
 	assert.NoError(t, ValidateKBScopedStoragePath("storage://backend-a/local://10008/exports/img.jpg", tenantID))
-	assert.NoError(t, ValidateKBScopedStoragePath("storage://backend-a/cos://bucket/ap-test/10008/exports/a.png", tenantID))
+	assert.NoError(t, ValidateKBScopedStoragePath("storage://backend-a/s3://bucket/ap-test/10008/exports/a.png", tenantID))
 
 	assert.Error(t, ValidateKBScopedStoragePath("local://10008/knowledge-id/123.pdf", tenantID))
 	assert.Error(t, ValidateKBScopedStoragePath("local://9999/exports/img.jpg", tenantID))
@@ -118,14 +118,14 @@ func TestParseTenantIDFromStoragePath(t *testing.T) {
 		{"local://42/knowledge/file.pdf", 42},
 		{"minio://bucket/1/abc/img.png", 1},
 		{"s3://bucket/reliquary/1/abc/img.png", 1},
-		{"cos://bucket/region/prefix/1/abc/img.png", 1},
-		{"tos://bucket/1/abc/img.png", 1},
-		{"oss://bucket/reliquary/1/abc/img.png", 1},
+		{"s3://bucket/region/prefix/1/abc/img.png", 1},
+		{"s3://bucket/1/abc/img.png", 1},
+		{"s3://bucket/reliquary/1/abc/img.png", 1},
 		{"https://example.com/img.png", 0},
 		{"invalid", 0},
 		{"local://exports/file.csv", 0},
 		{"storage://backend-a/local://1/abc/img.png", 1},
-		{"storage://backend-a/cos://bucket/region/prefix/42/abc/img.png", 42},
+		{"storage://backend-a/s3://bucket/region/prefix/42/abc/img.png", 42},
 	}
 
 	for _, tt := range tests {

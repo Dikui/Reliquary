@@ -86,9 +86,6 @@ Reliquary `docker-compose.yml` 大量服务是 **profile 限定**，本镜像只
 | profile | 用途 |
 |---|---|
 | `minio` | 对象存储替代本地文件 |
-| `qdrant` / `milvus` / `weaviate` / `doris` | 替代 pgvector |
-| `neo4j` | GraphRAG 知识图谱 |
-| `langfuse` | 自建 Langfuse 可观测平台 |
 | `dex` | OIDC 登录 |
 | `odl-hybrid` | OpenDataLoader Docling hybrid（体积大，无预发布镜像，需 `--build`） |
 
@@ -96,9 +93,6 @@ Reliquary `docker-compose.yml` 大量服务是 **profile 限定**，本镜像只
 
 ```bash
 cd /opt/Reliquary
-docker compose --profile neo4j up -d                 # 启用 GraphRAG
-docker compose --profile langfuse up -d              # 启用自建 Langfuse
-docker compose --profile qdrant up -d                # 切换到 Qdrant
 docker compose --profile odl-hybrid up -d --build odl-hybrid  # Docling hybrid（按需）
 ```
 
@@ -262,7 +256,6 @@ sudo bash    /opt/reliquary-tools/scripts/cloud-image/cleanup.sh   # 制作新�
 
 ## 安全注意事项
 
-- 镜像里**不要**预置任何 LLM API Key、Langfuse Key、个人 SSH key
 - 数据库 / Redis / MinIO 端口默认仅对 docker 网络可见，不要在云防火墙里对外开放
 - `/root/reliquary-credentials.txt` 用 `umask 077` 创建，仅 root 可读
 - 每次重制镜像前必须执行 `cleanup.sh`，避免泄漏上一份测试数据 / SSH key / machine-id

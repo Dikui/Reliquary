@@ -8,22 +8,22 @@ import (
 )
 
 func TestStorageBackendPathRoundTrip(t *testing.T) {
-	path := BuildStorageBackendPath("backend-a", "cos://bucket/region/7/file.pdf")
+	path := BuildStorageBackendPath("backend-a", "s3://bucket/region/7/file.pdf")
 	id, inner, ok := ParseStorageBackendPath(path)
 	require.True(t, ok)
 	assert.Equal(t, "backend-a", id)
-	assert.Equal(t, "cos://bucket/region/7/file.pdf", inner)
-	assert.Equal(t, "cos", ParseProviderScheme(path))
+	assert.Equal(t, "s3://bucket/region/7/file.pdf", inner)
+	assert.Equal(t, "s3", ParseProviderScheme(path))
 }
 
 func TestSharesStorageBackendWithUsesConcreteInstance(t *testing.T) {
-	aID, bID := "cos-a", "cos-b"
-	a := &KnowledgeBase{StorageBackendID: &aID, StorageProviderConfig: &StorageProviderConfig{Provider: "cos"}}
-	b := &KnowledgeBase{StorageBackendID: &bID, StorageProviderConfig: &StorageProviderConfig{Provider: "cos"}}
-	assert.False(t, a.SharesStorageBackendWith(b, "", "cos"))
+	aID, bID := "s3-a", "s3-b"
+	a := &KnowledgeBase{StorageBackendID: &aID, StorageProviderConfig: &StorageProviderConfig{Provider: "s3"}}
+	b := &KnowledgeBase{StorageBackendID: &bID, StorageProviderConfig: &StorageProviderConfig{Provider: "s3"}}
+	assert.False(t, a.SharesStorageBackendWith(b, "", "s3"))
 
 	b.StorageBackendID = &aID
-	assert.True(t, a.SharesStorageBackendWith(b, "", "cos"))
+	assert.True(t, a.SharesStorageBackendWith(b, "", "s3"))
 }
 
 func TestNewStorageBackendResponseMasksCredentials(t *testing.T) {

@@ -63,7 +63,6 @@ const PARSER_ENGINE_NAMES = [
   'mineru_cloud',
   'paddleocr_vl',
   'paddleocr_vl_cloud',
-  'weknoracloud',
   'markitdown',
   'opendataloader',
 ] as const
@@ -100,7 +99,6 @@ const RUNTIME_TASK_TYPE_KEYS = [
   'tableSummary',
   'question',
   'multimodal',
-  'graph',
   'sync',
   'faqImport',
   'batchReparse',
@@ -196,8 +194,6 @@ test('prune rebuild restores registered audit keys from baked-in English default
   const emptyBundles = {
     'en-US': {},
     'zh-CN': {},
-    'ko-KR': {},
-    'ru-RU': {},
   } as Record<LocaleName, Record<string, unknown>>
   const rebuilt = rebuildPrunedLocales(emptyBundles, usage)
   const en = rebuilt['en-US'] as Record<string, unknown>

@@ -289,82 +289,6 @@
           </section>
         </template>
 
-        <!-- ===== cos ===== -->
-        <template v-else-if="currentEngine === 'cos'">
-          <section class="setting-drawer__section">
-            <h4 class="setting-drawer__section-title">{{ $t('settings.storage.credentialsSection', '凭证') }}</h4>
-            <div class="form-item">
-              <label class="form-label required">Secret ID</label>
-              <t-input v-model="config.cos.secret_id" :placeholder="$t('settings.storage.cosSecretIdPlaceholder')" clearable>
-                <template #prefix-icon><t-icon name="lock-on" /></template>
-              </t-input>
-            </div>
-            <div class="form-item">
-              <label class="form-label required">Secret Key</label>
-              <t-input v-model="config.cos.secret_key" type="password" :placeholder="$t('settings.storage.cosSecretKeyPlaceholder')" clearable>
-                <template #prefix-icon><t-icon name="lock-on" /></template>
-              </t-input>
-            </div>
-            <div class="form-item">
-              <label class="form-label required">App ID</label>
-              <t-input v-model="config.cos.app_id" :placeholder="$t('settings.storage.cosAppIdPlaceholder')" clearable />
-            </div>
-          </section>
-          <section class="setting-drawer__section">
-            <h4 class="setting-drawer__section-title">{{ $t('settings.storage.bucketSection', 'Bucket') }}</h4>
-            <div class="form-item">
-              <label class="form-label required">Region</label>
-              <t-input v-model="config.cos.region" placeholder="e.g. ap-guangzhou" clearable />
-            </div>
-            <div class="form-item">
-              <label class="form-label required">{{ $t('settings.storage.bucketName') }}</label>
-              <t-input v-model="config.cos.bucket_name" :placeholder="$t('settings.storage.bucketPlaceholder')" clearable />
-            </div>
-            <div class="form-item">
-              <label class="form-label">{{ $t('settings.storage.pathPrefix') }}</label>
-              <t-input v-model="config.cos.path_prefix" :placeholder="$t('settings.storage.prefixPlaceholder')" clearable />
-            </div>
-          </section>
-        </template>
-
-        <!-- ===== tos ===== -->
-        <template v-else-if="currentEngine === 'tos'">
-          <section class="setting-drawer__section">
-            <h4 class="setting-drawer__section-title">{{ $t('settings.storage.credentialsSection', '凭证') }}</h4>
-            <div class="form-item">
-              <label class="form-label required">Access Key</label>
-              <t-input v-model="config.tos.access_key" :placeholder="$t('settings.storage.tosAccessKeyPlaceholder')" clearable>
-                <template #prefix-icon><t-icon name="lock-on" /></template>
-              </t-input>
-            </div>
-            <div class="form-item">
-              <label class="form-label required">Secret Key</label>
-              <t-input v-model="config.tos.secret_key" type="password" :placeholder="$t('settings.storage.tosSecretKeyPlaceholder')" clearable>
-                <template #prefix-icon><t-icon name="lock-on" /></template>
-              </t-input>
-            </div>
-          </section>
-          <section class="setting-drawer__section">
-            <h4 class="setting-drawer__section-title">{{ $t('settings.storage.bucketSection', 'Bucket') }}</h4>
-            <div class="form-item">
-              <label class="form-label required">Endpoint</label>
-              <t-input v-model="config.tos.endpoint" placeholder="e.g. https://tos-cn-beijing.volces.com" clearable />
-            </div>
-            <div class="form-item">
-              <label class="form-label required">Region</label>
-              <t-input v-model="config.tos.region" placeholder="e.g. cn-beijing" clearable />
-            </div>
-            <div class="form-item">
-              <label class="form-label required">{{ $t('settings.storage.bucketName') }}</label>
-              <t-input v-model="config.tos.bucket_name" :placeholder="$t('settings.storage.bucketPlaceholder')" clearable />
-            </div>
-            <div class="form-item">
-              <label class="form-label">{{ $t('settings.storage.pathPrefix') }}</label>
-              <t-input v-model="config.tos.path_prefix" :placeholder="$t('settings.storage.prefixPlaceholder')" clearable />
-            </div>
-          </section>
-        </template>
-
         <!-- ===== s3 ===== -->
         <template v-else-if="currentEngine === 's3'">
           <section class="setting-drawer__section">
@@ -404,119 +328,6 @@
           </section>
         </template>
 
-        <!-- ===== oss ===== -->
-        <template v-else-if="currentEngine === 'oss'">
-          <section class="setting-drawer__section">
-            <h4 class="setting-drawer__section-title">{{ $t('settings.storage.credentialsSection', '凭证') }}</h4>
-            <div class="form-item">
-              <label class="form-label required">Access Key</label>
-              <t-input v-model="config.oss.access_key" :placeholder="$t('settings.storage.ossAccessKeyPlaceholder')" clearable>
-                <template #prefix-icon><t-icon name="lock-on" /></template>
-              </t-input>
-            </div>
-            <div class="form-item">
-              <label class="form-label required">Secret Key</label>
-              <t-input v-model="config.oss.secret_key" type="password" :placeholder="$t('settings.storage.ossSecretKeyPlaceholder')" clearable>
-                <template #prefix-icon><t-icon name="lock-on" /></template>
-              </t-input>
-            </div>
-          </section>
-          <section class="setting-drawer__section">
-            <h4 class="setting-drawer__section-title">{{ $t('settings.storage.bucketSection', 'Bucket') }}</h4>
-            <div class="form-item">
-              <label class="form-label required">Endpoint</label>
-              <t-input v-model="config.oss.endpoint" placeholder="e.g. https://oss-cn-hangzhou.aliyuncs.com" clearable />
-            </div>
-            <div class="form-item">
-              <label class="form-label required">Region</label>
-              <t-input v-model="config.oss.region" placeholder="e.g. cn-hangzhou" clearable />
-            </div>
-            <div class="form-item">
-              <label class="form-label required">{{ $t('settings.storage.bucketName') }}</label>
-              <t-input v-model="config.oss.bucket_name" :placeholder="$t('settings.storage.bucketPlaceholder')" clearable />
-            </div>
-            <div class="form-item">
-              <label class="form-label">{{ $t('settings.storage.pathPrefix') }}</label>
-              <t-input v-model="config.oss.path_prefix" :placeholder="$t('settings.storage.prefixPlaceholder')" clearable />
-            </div>
-          </section>
-        </template>
-
-        <!-- ===== ks3 ===== -->
-        <template v-else-if="currentEngine === 'ks3'">
-          <section class="setting-drawer__section">
-            <h4 class="setting-drawer__section-title">{{ $t('settings.storage.credentialsSection', '凭证') }}</h4>
-            <div class="form-item">
-              <label class="form-label required">Access Key</label>
-              <t-input v-model="config.ks3.access_key" :placeholder="$t('settings.storage.ks3AccessKeyPlaceholder')" clearable>
-                <template #prefix-icon><t-icon name="lock-on" /></template>
-              </t-input>
-            </div>
-            <div class="form-item">
-              <label class="form-label required">Secret Key</label>
-              <t-input v-model="config.ks3.secret_key" type="password" :placeholder="$t('settings.storage.ks3SecretKeyPlaceholder')" clearable>
-                <template #prefix-icon><t-icon name="lock-on" /></template>
-              </t-input>
-            </div>
-          </section>
-          <section class="setting-drawer__section">
-            <h4 class="setting-drawer__section-title">{{ $t('settings.storage.bucketSection', 'Bucket') }}</h4>
-            <div class="form-item">
-              <label class="form-label required">Endpoint</label>
-              <t-input v-model="config.ks3.endpoint" :placeholder="$t('settings.storage.ks3EndpointPlaceholder')" clearable />
-            </div>
-            <div class="form-item">
-              <label class="form-label required">Region</label>
-              <t-input v-model="config.ks3.region" :placeholder="$t('settings.storage.ks3RegionPlaceholder')" clearable />
-            </div>
-            <div class="form-item">
-              <label class="form-label required">{{ $t('settings.storage.bucketName') }}</label>
-              <t-input v-model="config.ks3.bucket_name" :placeholder="$t('settings.storage.bucketPlaceholder')" clearable />
-            </div>
-            <div class="form-item">
-              <label class="form-label">{{ $t('settings.storage.pathPrefix') }}</label>
-              <t-input v-model="config.ks3.path_prefix" :placeholder="$t('settings.storage.prefixPlaceholder')" clearable />
-            </div>
-          </section>
-        </template>
-
-        <!-- ===== obs ===== -->
-        <template v-else-if="currentEngine === 'obs'">
-          <section class="setting-drawer__section">
-            <h4 class="setting-drawer__section-title">{{ $t('settings.storage.credentialsSection', '凭证') }}</h4>
-            <div class="form-item">
-              <label class="form-label required">Access Key</label>
-              <t-input v-model="config.obs.access_key" :placeholder="$t('settings.storage.obsAccessKeyPlaceholder')" clearable>
-                <template #prefix-icon><t-icon name="lock-on" /></template>
-              </t-input>
-            </div>
-            <div class="form-item">
-              <label class="form-label required">Secret Key</label>
-              <t-input v-model="config.obs.secret_key" type="password" :placeholder="$t('settings.storage.obsSecretKeyPlaceholder')" clearable>
-                <template #prefix-icon><t-icon name="lock-on" /></template>
-              </t-input>
-            </div>
-          </section>
-          <section class="setting-drawer__section">
-            <h4 class="setting-drawer__section-title">{{ $t('settings.storage.bucketSection', 'Bucket') }}</h4>
-            <div class="form-item">
-              <label class="form-label required">Endpoint</label>
-              <t-input v-model="config.obs.endpoint" :placeholder="$t('settings.storage.obsEndpointPlaceholder')" clearable />
-            </div>
-            <div class="form-item">
-              <label class="form-label required">Region</label>
-              <t-input v-model="config.obs.region" :placeholder="$t('settings.storage.obsRegionPlaceholder')" clearable />
-            </div>
-            <div class="form-item">
-              <label class="form-label required">{{ $t('settings.storage.bucketName') }}</label>
-              <t-input v-model="config.obs.bucket_name" :placeholder="$t('settings.storage.bucketPlaceholder')" clearable />
-            </div>
-            <div class="form-item">
-              <label class="form-label">{{ $t('settings.storage.pathPrefix') }}</label>
-              <t-input v-model="config.obs.path_prefix" :placeholder="$t('settings.storage.prefixPlaceholder')" clearable />
-            </div>
-          </section>
-        </template>
       </div>
     </SettingDrawer>
   </div>
@@ -543,43 +354,14 @@ const defaultConfig = (): StorageEngineConfig => ({
   default_provider: 'local',
   local: { path_prefix: '' },
   minio: { mode: 'docker', endpoint: '', access_key_id: '', secret_access_key: '', bucket_name: '', use_ssl: false, path_prefix: '' },
-  cos: { secret_id: '', secret_key: '', region: '', bucket_name: '', app_id: '', path_prefix: '' },
-  tos: { endpoint: '', region: '', access_key: '', secret_key: '', bucket_name: '', path_prefix: '' },
   s3: { endpoint: '', region: '', access_key: '', secret_key: '', bucket_name: '', path_prefix: '' },
-  oss: {
-    endpoint: '',
-    region: '',
-    access_key: '',
-    secret_key: '',
-    bucket_name: '',
-    path_prefix: '',
-    use_temp_bucket: false,
-    temp_bucket_name: '',
-    temp_region: '',
-  },
-  ks3: {
-    endpoint: '',
-    region: '',
-    access_key: '',
-    secret_key: '',
-    bucket_name: '',
-    path_prefix: '',
-  },
-  obs: {
-    endpoint: '',
-    region: '',
-    access_key: '',
-    secret_key: '',
-    bucket_name: '',
-    path_prefix: '',
-  },
 })
 
 const loading = ref(true)
 const error = ref('')
 const config = ref<StorageEngineConfig>(defaultConfig())
 const allowedProviders = ref<string[] | null>(null)
-const engineStatus = ref<{ local: boolean; minio: boolean; cos: boolean }>({ local: true, minio: false, cos: true })
+const engineStatus = ref<{ local: boolean; minio: boolean;}>({ local: true, minio: false,})
 const minioEnvAvailable = ref(false)
 const saving = ref(false)
 const saveMessage = ref('')
@@ -587,18 +369,8 @@ const saveSuccess = ref(false)
 
 const checkingMinio = ref(false)
 const minioCheckResult = ref<{ ok: boolean; message: string; bucket_created?: boolean } | null>(null)
-const checkingCos = ref(false)
-const cosCheckResult = ref<{ ok: boolean; message: string } | null>(null)
-const checkingTos = ref(false)
-const tosCheckResult = ref<{ ok: boolean; message: string } | null>(null)
 const checkingS3 = ref(false)
 const s3CheckResult = ref<{ ok: boolean; message: string } | null>(null)
-const checkingOss = ref(false)
-const ossCheckResult = ref<{ ok: boolean; message: string } | null>(null)
-const checkingKs3 = ref(false)
-const ks3CheckResult = ref<{ ok: boolean; message: string } | null>(null)
-const checkingObs = ref(false)
-const obsCheckResult = ref<{ ok: boolean; message: string } | null>(null)
 
 const drawerVisible = ref(false)
 const currentEngine = ref<string | null>(null)
@@ -606,12 +378,7 @@ const currentEngine = ref<string | null>(null)
 const providerOptions = computed(() => [
   { value: 'local', label: t('settings.storage.engineLocal'), allowed: isProviderAllowed('local') },
   { value: 'minio', label: 'MinIO', allowed: isProviderAllowed('minio') },
-  { value: 'cos', label: t('settings.storage.engineCos'), allowed: isProviderAllowed('cos') },
-  { value: 'tos', label: t('settings.storage.engineTos'), allowed: isProviderAllowed('tos') },
   { value: 's3', label: 'AWS S3', allowed: isProviderAllowed('s3') },
-  { value: 'oss', label: t('settings.storage.engineOss'), allowed: isProviderAllowed('oss') },
-  { value: 'ks3', label: t('settings.storage.engineKs3'), allowed: isProviderAllowed('ks3') },
-  { value: 'obs', label: t('settings.storage.engineObs'), allowed: isProviderAllowed('obs') },
 ])
 
 const hasAllowedProviders = computed(() => (allowedProviders.value?.length ?? 0) > 0)
@@ -620,18 +387,8 @@ const currentCheckState = computed(() => {
   switch (currentEngine.value) {
     case 'minio':
       return { loading: checkingMinio.value, result: minioCheckResult.value, onCheck: onCheckMinio }
-    case 'cos':
-      return { loading: checkingCos.value, result: cosCheckResult.value, onCheck: onCheckCos }
-    case 'tos':
-      return { loading: checkingTos.value, result: tosCheckResult.value, onCheck: onCheckTos }
     case 's3':
       return { loading: checkingS3.value, result: s3CheckResult.value, onCheck: onCheckS3 }
-    case 'oss':
-      return { loading: checkingOss.value, result: ossCheckResult.value, onCheck: onCheckOss }
-    case 'ks3':
-      return { loading: checkingKs3.value, result: ks3CheckResult.value, onCheck: onCheckKs3 }
-    case 'obs':
-      return { loading: checkingObs.value, result: obsCheckResult.value, onCheck: onCheckObs }
     default:
       return { loading: false, result: null, onCheck: () => undefined }
   }
@@ -642,12 +399,7 @@ const drawerTitle = computed(() => {
   const titles: Record<string, string> = {
     local: t('settings.storage.localTitle'),
     minio: 'MinIO',
-    cos: t('settings.storage.cosTitle'),
-    tos: t('settings.storage.tosTitle'),
     s3: t('settings.storage.s3Title'),
-    oss: t('settings.storage.ossTitle'),
-    ks3: t('settings.storage.ks3Title'),
-    obs: t('settings.storage.obsTitle'),
   }
   return titles[currentEngine.value] || currentEngine.value
 })
@@ -680,25 +432,9 @@ const engineDescText = computed((): string => {
 // 控制台 / 文档外链 — 副标题尾部 inline 显示，与 ParserEngineSettings
 // 同款。各 provider 的 console / docs 链接来自原模板里的硬编码地址。
 const ENGINE_LINK_TABLE: Record<string, { console?: string; docs?: string }> = {
-  cos: {
-    console: 'https://console.cloud.tencent.com/cos',
-    docs: 'https://cloud.tencent.com/document/product/436',
-  },
-  tos: {
-    console: 'https://console.volcengine.com/tos',
-    docs: 'https://www.volcengine.com/docs/6349',
-  },
   s3: {
     console: 'https://aws.amazon.com/s3/',
     docs: 'https://docs.aws.amazon.com/s3/',
-  },
-  oss: {
-    console: 'https://oss.console.aliyun.com/',
-    docs: 'https://help.aliyun.com/zh/oss/',
-  },
-  obs: {
-    console: 'https://obs.huaweicloud.com/',
-    docs: 'https://support.huaweicloud.com/obs/',
   },
 }
 
@@ -727,16 +463,11 @@ const minioAvailable = computed(() => {
 
 // Single source-of-truth for the cards列 + 状态/标题查询。新增 provider 时
 // 在数组里加一项 + 翻译键即可，模板 v-for 自动跟进。
-type StorageProviderId = 'local' | 'minio' | 'cos' | 'tos' | 's3' | 'oss' | 'ks3' | 'obs'
+type StorageProviderId = 'local' | 'minio' | 's3'
 const STORAGE_PROVIDERS: { id: StorageProviderId }[] = [
   { id: 'local' },
   { id: 'minio' },
-  { id: 'cos' },
-  { id: 'tos' },
   { id: 's3' },
-  { id: 'oss' },
-  { id: 'ks3' },
-  { id: 'obs' },
 ]
 
 const providerTitle = (id: StorageProviderId): string => {
@@ -792,12 +523,7 @@ function openDrawer(engine: string) {
   drawerVisible.value = true
   saveMessage.value = ''
   minioCheckResult.value = null
-  cosCheckResult.value = null
-  tosCheckResult.value = null
   s3CheckResult.value = null
-  ossCheckResult.value = null
-  ks3CheckResult.value = null
-  obsCheckResult.value = null
 }
 
 async function loadConfig() {
@@ -819,26 +545,6 @@ async function loadConfig() {
               path_prefix: d.minio.path_prefix || '',
             }
           : defaultConfig().minio,
-        cos: d.cos
-          ? {
-              secret_id: d.cos.secret_id || '',
-              secret_key: d.cos.secret_key || '',
-              region: d.cos.region || '',
-              bucket_name: d.cos.bucket_name || '',
-              app_id: d.cos.app_id || '',
-              path_prefix: d.cos.path_prefix || '',
-            }
-          : defaultConfig().cos,
-        tos: d.tos
-          ? {
-              endpoint: d.tos.endpoint || '',
-              region: d.tos.region || '',
-              access_key: d.tos.access_key || '',
-              secret_key: d.tos.secret_key || '',
-              bucket_name: d.tos.bucket_name || '',
-              path_prefix: d.tos.path_prefix || '',
-            }
-          : defaultConfig().tos,
         s3: d.s3
           ? {
               endpoint: d.s3.endpoint || '',
@@ -849,39 +555,6 @@ async function loadConfig() {
               path_prefix: d.s3.path_prefix || '',
             }
           : defaultConfig().s3,
-        oss: d.oss
-          ? {
-              endpoint: d.oss.endpoint || '',
-              region: d.oss.region || '',
-              access_key: d.oss.access_key || '',
-              secret_key: d.oss.secret_key || '',
-              bucket_name: d.oss.bucket_name || '',
-              path_prefix: d.oss.path_prefix || '',
-              use_temp_bucket: d.oss.use_temp_bucket ?? false,
-              temp_bucket_name: d.oss.temp_bucket_name || '',
-              temp_region: d.oss.temp_region || '',
-            }
-          : defaultConfig().oss,
-        ks3: d.ks3
-          ? {
-              endpoint: d.ks3.endpoint || '',
-              region: d.ks3.region || '',
-              access_key: d.ks3.access_key || '',
-              secret_key: d.ks3.secret_key || '',
-              bucket_name: d.ks3.bucket_name || '',
-              path_prefix: d.ks3.path_prefix || '',
-            }
-          : defaultConfig().ks3,
-        obs: d.obs
-          ? {
-              endpoint: d.obs.endpoint || '',
-              region: d.obs.region || '',
-              access_key: d.obs.access_key || '',
-              secret_key: d.obs.secret_key || '',
-              bucket_name: d.obs.bucket_name || '',
-              path_prefix: d.obs.path_prefix || '',
-            }
-          : defaultConfig().obs,
       }
     }
   } catch {
@@ -896,17 +569,16 @@ async function loadStatus() {
     allowedProviders.value = res?.data?.allowed_providers?.length
       ? res.data.allowed_providers
       : engines.filter(e => e.allowed !== false).map(e => e.name)
-    const status = { local: true, minio: false, cos: true }
+    const status = { local: true, minio: false,}
     for (const e of engines) {
       if (e.name === 'local') status.local = e.available
       if (e.name === 'minio') status.minio = e.available
-      if (e.name === 'cos') status.cos = e.available
     }
     engineStatus.value = status
     minioEnvAvailable.value = res?.data?.minio_env_available ?? false
   } catch {
-    engineStatus.value = { local: true, minio: false, cos: true }
-    allowedProviders.value = ['local', 'minio', 'cos', 'tos', 's3', 'oss']
+    engineStatus.value = { local: true, minio: false,}
+    allowedProviders.value = ['local', 'minio', 's3']
     minioEnvAvailable.value = false
   }
 }
@@ -938,22 +610,6 @@ function buildPayload(): StorageEngineConfig {
       use_ssl: config.value.minio?.use_ssl ?? false,
       path_prefix: (config.value.minio?.path_prefix || '').trim(),
     },
-    cos: {
-      secret_id: (config.value.cos?.secret_id || '').trim(),
-      secret_key: (config.value.cos?.secret_key || '').trim(),
-      region: (config.value.cos?.region || '').trim(),
-      bucket_name: (config.value.cos?.bucket_name || '').trim(),
-      app_id: (config.value.cos?.app_id || '').trim(),
-      path_prefix: (config.value.cos?.path_prefix || '').trim(),
-    },
-    tos: {
-      endpoint: (config.value.tos?.endpoint || '').trim(),
-      region: (config.value.tos?.region || '').trim(),
-      access_key: (config.value.tos?.access_key || '').trim(),
-      secret_key: (config.value.tos?.secret_key || '').trim(),
-      bucket_name: (config.value.tos?.bucket_name || '').trim(),
-      path_prefix: (config.value.tos?.path_prefix || '').trim(),
-    },
     s3: {
       endpoint: (config.value.s3?.endpoint || '').trim(),
       region: (config.value.s3?.region || '').trim(),
@@ -961,33 +617,6 @@ function buildPayload(): StorageEngineConfig {
       secret_key: (config.value.s3?.secret_key || '').trim(),
       bucket_name: (config.value.s3?.bucket_name || '').trim(),
       path_prefix: (config.value.s3?.path_prefix || '').trim(),
-    },
-    oss: {
-      endpoint: (config.value.oss?.endpoint || '').trim(),
-      region: (config.value.oss?.region || '').trim(),
-      access_key: (config.value.oss?.access_key || '').trim(),
-      secret_key: (config.value.oss?.secret_key || '').trim(),
-      bucket_name: (config.value.oss?.bucket_name || '').trim(),
-      path_prefix: (config.value.oss?.path_prefix || '').trim(),
-      use_temp_bucket: config.value.oss?.use_temp_bucket ?? false,
-      temp_bucket_name: (config.value.oss?.temp_bucket_name || '').trim(),
-      temp_region: (config.value.oss?.temp_region || '').trim(),
-    },
-    ks3: {
-      endpoint: (config.value.ks3?.endpoint || '').trim(),
-      region: (config.value.ks3?.region || '').trim(),
-      access_key: (config.value.ks3?.access_key || '').trim(),
-      secret_key: (config.value.ks3?.secret_key || '').trim(),
-      bucket_name: (config.value.ks3?.bucket_name || '').trim(),
-      path_prefix: (config.value.ks3?.path_prefix || '').trim(),
-    },
-    obs: {
-      endpoint: (config.value.obs?.endpoint || '').trim(),
-      region: (config.value.obs?.region || '').trim(),
-      access_key: (config.value.obs?.access_key || '').trim(),
-      secret_key: (config.value.obs?.secret_key || '').trim(),
-      bucket_name: (config.value.obs?.bucket_name || '').trim(),
-      path_prefix: (config.value.obs?.path_prefix || '').trim(),
     },
   }
 }
@@ -1029,34 +658,6 @@ async function onCheckMinio() {
   }
 }
 
-async function onCheckCos() {
-  checkingCos.value = true
-  cosCheckResult.value = null
-  try {
-    const payload = buildPayload()
-    const res = await checkStorageEngine({ provider: 'cos', cos: payload.cos })
-    cosCheckResult.value = res?.data ?? { ok: false, message: t('settings.storage.unknownError') }
-  } catch (e: unknown) {
-    cosCheckResult.value = { ok: false, message: e instanceof Error ? e.message : t('settings.storage.requestFailed') }
-  } finally {
-    checkingCos.value = false
-  }
-}
-
-async function onCheckTos() {
-  checkingTos.value = true
-  tosCheckResult.value = null
-  try {
-    const payload = buildPayload()
-    const res = await checkStorageEngine({ provider: 'tos', tos: payload.tos })
-    tosCheckResult.value = res?.data ?? { ok: false, message: t('settings.storage.unknownError') }
-  } catch (e: unknown) {
-    tosCheckResult.value = { ok: false, message: e instanceof Error ? e.message : t('settings.storage.requestFailed') }
-  } finally {
-    checkingTos.value = false
-  }
-}
-
 async function onCheckS3() {
   checkingS3.value = true
   s3CheckResult.value = null
@@ -1068,48 +669,6 @@ async function onCheckS3() {
     s3CheckResult.value = { ok: false, message: e instanceof Error ? e.message : t('settings.storage.requestFailed') }
   } finally {
     checkingS3.value = false
-  }
-}
-
-async function onCheckOss() {
-  checkingOss.value = true
-  ossCheckResult.value = null
-  try {
-    const payload = buildPayload()
-    const res = await checkStorageEngine({ provider: 'oss', oss: payload.oss })
-    ossCheckResult.value = res?.data ?? { ok: false, message: t('settings.storage.unknownError') }
-  } catch (e: unknown) {
-    ossCheckResult.value = { ok: false, message: e instanceof Error ? e.message : t('settings.storage.requestFailed') }
-  } finally {
-    checkingOss.value = false
-  }
-}
-
-async function onCheckKs3() {
-  checkingKs3.value = true
-  ks3CheckResult.value = null
-  try {
-    const payload = buildPayload()
-    const res = await checkStorageEngine({ provider: 'ks3', ks3: payload.ks3 })
-    ks3CheckResult.value = res?.data ?? { ok: false, message: t('settings.storage.unknownError') }
-  } catch (e: unknown) {
-    ks3CheckResult.value = { ok: false, message: e instanceof Error ? e.message : t('settings.storage.requestFailed') }
-  } finally {
-    checkingKs3.value = false
-  }
-}
-
-async function onCheckObs() {
-  checkingObs.value = true
-  obsCheckResult.value = null
-  try {
-    const payload = buildPayload()
-    const res = await checkStorageEngine({ provider: 'obs', obs: payload.obs })
-    obsCheckResult.value = res?.data ?? { ok: false, message: t('settings.storage.unknownError') }
-  } catch (e: unknown) {
-    obsCheckResult.value = { ok: false, message: e instanceof Error ? e.message : t('settings.storage.requestFailed') }
-  } finally {
-    checkingObs.value = false
   }
 }
 
@@ -1289,29 +848,9 @@ onMounted(loadAll)
   background: rgba(225, 38, 38, 0.12);
   color: #C0382B;
 }
-.engine-card--cos .engine-card__badge {
-  background: rgba(0, 82, 217, 0.1);
-  color: #0052D9;
-}
-.engine-card--tos .engine-card__badge {
-  background: rgba(0, 137, 255, 0.12);
-  color: #0089FF;
-}
 .engine-card--s3 .engine-card__badge {
   background: rgba(255, 153, 0, 0.12);
   color: #D97706;
-}
-.engine-card--oss .engine-card__badge {
-  background: rgba(255, 90, 0, 0.12);
-  color: #E55A00;
-}
-.engine-card--ks3 .engine-card__badge {
-  background: rgba(7, 192, 95, 0.12);
-  color: #07A050;
-}
-.engine-card--obs .engine-card__badge {
-  background: rgba(206, 17, 38, 0.1);
-  color: #CE1126;
 }
 
 .engine-card__body {
@@ -1660,28 +1199,8 @@ onMounted(loadAll)
   background: rgba(225, 38, 38, 0.12);
   color: #C0382B;
 }
-.storage-engine-drawer--cos .setting-drawer__header-icon {
-  background: rgba(0, 82, 217, 0.1);
-  color: #0052D9;
-}
-.storage-engine-drawer--tos .setting-drawer__header-icon {
-  background: rgba(0, 137, 255, 0.12);
-  color: #0089FF;
-}
 .storage-engine-drawer--s3 .setting-drawer__header-icon {
   background: rgba(255, 153, 0, 0.12);
   color: #D97706;
-}
-.storage-engine-drawer--oss .setting-drawer__header-icon {
-  background: rgba(255, 90, 0, 0.12);
-  color: #E55A00;
-}
-.storage-engine-drawer--ks3 .setting-drawer__header-icon {
-  background: rgba(7, 192, 95, 0.12);
-  color: #07A050;
-}
-.storage-engine-drawer--obs .setting-drawer__header-icon {
-  background: rgba(206, 17, 38, 0.1);
-  color: #CE1126;
 }
 </style>

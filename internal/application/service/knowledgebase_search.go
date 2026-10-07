@@ -7,7 +7,6 @@ import (
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
 	"reliquary/internal/models/embedding"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 	secutils "reliquary/internal/utils"
 )
@@ -196,33 +195,10 @@ func (s *knowledgeBaseService) HybridSearch(ctx context.Context,
 		return nil, nil
 	}
 
-	// Execute retrieval with fan-out + score normalization (multi-store
-	// only) and a langfuse span around the entire retrieve step.
 	logger.Infof(ctx, "Starting multi-store retrieval, group count: %d", len(groups))
-	retrieveCtx, retrieveSpan := langfuse.GetManager().StartSpan(ctx, langfuse.SpanOptions{
-		Name: "retrieve",
-		Input: map[string]interface{}{
-			"query_text":             params.QueryText,
-			"kb_ids":                 searchKBIDs,
-			"knowledge_ids":          params.KnowledgeIDs,
-			"tag_ids":                params.TagIDs,
-			"scope_tag_ids":          params.ScopeTagIDs,
-			"match_count":            matchCount,
-			"vector_threshold":       params.VectorThreshold,
-			"keyword_threshold":      params.KeywordThreshold,
-			"disable_vector_match":   params.DisableVectorMatch,
-			"disable_keywords_match": params.DisableKeywordsMatch,
-			"group_count":            len(groups),
-		},
-		Metadata: map[string]interface{}{
-			"primary_kb_id":       kb.ID,
-			"primary_kb_type":     string(kb.Type),
-			"embedding_model_id":  kb.EmbeddingModelID,
-			"has_query_embedding": len(params.QueryEmbedding) > 0,
-		},
-	})
+	retrieveCtx := ctx
 	retrieveResults, err := s.retrieveFromStores(retrieveCtx, groups, retriever.EngineAwareNormalizer{})
-	retrieveSpan.Finish(langfuse.SummarizeRetrieveOutput(retrieveResults), nil, err)
+
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"knowledge_base_ids": searchKBIDs,

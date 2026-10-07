@@ -5,7 +5,6 @@
 ## 轻量化部署
 - [ ] Reliquary 官方提供原子化调用接口（Embedding、ReRank、LLM、文档解析等），并提供一定免费使用额度
 - [ ] Reliquary 官方提供完整云端服务，用户可在平台上直接体验 Reliquary 能力
-- [ ] 推出 Reliquary Lite 版本，供私有化部署需求不强的用户快速体验产品能力
 
 ## 知识理解
 - [x] 抽象整体文档解析模块，支持切换内置解析、MinerU 或其它解析方式

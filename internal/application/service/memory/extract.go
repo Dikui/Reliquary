@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+
 	"reliquary/internal/logger"
 	"reliquary/internal/models/chat"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -82,9 +82,8 @@ const (
 // always recorded against the subject; the timers only decide *when* a run
 // happens, never *whether* a message is considered.
 //
-// Everything the handler needs travels in the payload. Both asynq and the Lite
-// executor hand the handler a bare context, so any scope the request knew and
-// the payload does not carry is gone by the time the task runs.
+// Everything the handler needs travels in the payload. Asynq starts from a
+// bare context, so request scope must be carried explicitly.
 func (s *Service) ScheduleExtraction(ctx context.Context, sessionID, messageID, chatModelID string) {
 	scope, cfg, ok := s.enabledScope(ctx)
 	if !ok {
@@ -154,7 +153,7 @@ func (s *Service) enqueueExtraction(
 		ChatModelID: chatModelID,
 		Language:    types.LanguageNameFromContext(ctx),
 	}
-	langfuse.InjectTracing(ctx, &payload)
+
 	body, err := json.Marshal(payload)
 	if err != nil {
 		logger.Warnf(ctx, "memory: marshal extraction payload failed: %v", err)
@@ -367,7 +366,7 @@ func (s *Service) Handle(ctx context.Context, task *asynq.Task) error {
 
 	// Maintenance rides along on a background run that has already happened
 	// rather than needing its own scheduler, which keeps it working identically
-	// in Lite mode where there is no asynq worker to hold a periodic job.
+	// in in-memory fixtures where there is no asynq worker to hold a periodic job.
 	s.consolidateIfDue(ctx, scope, cfg, s.extractionModelID(ctx, cfg, payload))
 	return nil
 }

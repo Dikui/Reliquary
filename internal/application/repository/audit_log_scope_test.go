@@ -4,17 +4,13 @@ import (
 	"context"
 	"testing"
 
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
 
 func TestAuditLogRepositoryListFiltersKnowledgeBaseScope(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:audit-log-scope?mode=memory&cache=shared"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
+	db := pgtest.OpenFixture(t)
 	if err := db.AutoMigrate(&types.AuditLog{}); err != nil {
 		t.Fatalf("migrate audit log: %v", err)
 	}

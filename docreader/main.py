@@ -63,7 +63,7 @@ def _resolve_images(
     base64-encoded string or raw bytes.
 
     The Go App is solely responsible for persisting images to the configured
-    storage backend (local/minio/cos/tos). This function only decodes images
+    storage backend (local or S3-compatible). This function only decodes images
     and returns them as inline bytes via ImageRef.
 
     Returns ("", list[ImageRef]).  image_dir_path is always empty.

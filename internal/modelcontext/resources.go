@@ -30,7 +30,7 @@ import (
 var storedRefRE = regexp.MustCompile(
 	`resource://[0-9A-Za-z_-]{22}|` +
 		`(?:storage://[0-9A-Za-z_-]+/)?` +
-		`(?:local|minio|cos|tos|s3|oss|ks3|obs)://[^\s)\]>"']+|` +
+		`(?:local|minio|s3)://[^\s)\]>"']+|` +
 		`summary/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`,
 )
 

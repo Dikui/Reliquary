@@ -92,7 +92,7 @@ type KnowledgeBase struct {
 	// StorageBackendID binds this KB to one concrete storage instance. The
 	// legacy provider field remains readable during migration only.
 	StorageBackendID *string `yaml:"storage_backend_id" json:"storage_backend_id,omitempty" gorm:"column:storage_backend_id;type:varchar(36);default:null"`
-	// Deprecated: legacy COS config column. Kept for backward compatibility with old data.
+	// Deprecated: legacy storage config column. Kept for backward compatibility with old data.
 	StorageConfig StorageConfig `yaml:"-" json:"storage_config" gorm:"column:cos_config;type:json"`
 	// VectorStoreID references the VectorStore this knowledge base is bound to.
 	// When nil, the KB falls back to the workspace's effective engines derived from
@@ -102,7 +102,6 @@ type KnowledgeBase struct {
 	// KB update path, which omits this field from its update DTO.
 	VectorStoreID *string `yaml:"vector_store_id"         json:"vector_store_id,omitempty" gorm:"column:vector_store_id;type:varchar(36);<-:create"`
 	// Extract config
-	ExtractConfig *ExtractConfig `yaml:"extract_config"          json:"extract_config"          gorm:"column:extract_config;type:json"`
 	// FAQConfig stores FAQ specific configuration such as indexing strategy
 	FAQConfig *FAQConfig `yaml:"faq_config"              json:"faq_config"              gorm:"column:faq_config;type:json"`
 	// QuestionGenerationConfig stores question generation configuration for document knowledge bases
@@ -353,7 +352,7 @@ func normalizeParserFileType(fileType string) string {
 // StorageProviderConfig stores the KB-level storage provider selection.
 // Credentials are managed at the tenant level (StorageEngineConfig).
 type StorageProviderConfig struct {
-	Provider string `yaml:"provider" json:"provider"` // "local", "minio", "cos", "tos", "s3", "oss", "ks3", "obs"
+	Provider string `yaml:"provider" json:"provider"` // "local", "minio", "s3"
 }
 
 func (c StorageProviderConfig) Value() (driver.Value, error) {
@@ -371,24 +370,22 @@ func (c *StorageProviderConfig) Scan(value interface{}) error {
 	return json.Unmarshal(b, c)
 }
 
-// Deprecated: StorageConfig is the legacy COS configuration stored in the cos_config column.
+// Deprecated: StorageConfig is the legacy storage configuration stored in the cos_config column.
 // New code should use StorageProviderConfig. Kept for backward compatibility with old data.
 type StorageConfig struct {
-	// Secret ID (COS) / Access Key ID (S3, MinIO)
+	// Access Key ID (S3, MinIO)
 	SecretID string `yaml:"secret_id"   json:"secret_id"`
-	// Secret Key (COS) / Secret Access Key (S3, MinIO)
+	// Secret Access Key (S3, MinIO)
 	SecretKey string `yaml:"secret_key"  json:"secret_key"`
 	// Region
 	Region string `yaml:"region"      json:"region"`
 	// Bucket Name
 	BucketName string `yaml:"bucket_name" json:"bucket_name"`
-	// App ID (COS specific)
-	AppID string `yaml:"app_id"      json:"app_id"`
 	// Path Prefix
 	PathPrefix string `yaml:"path_prefix" json:"path_prefix"`
-	// Provider: "cos", "minio", "s3"
+	// Provider: "minio", "s3"
 	Provider string `yaml:"provider"    json:"provider"`
-	// Endpoint (S3 specific) - e.g., s3.amazonaws.com, oss-cn-hangzhou.aliyuncs.com
+	// Endpoint (S3 specific) - e.g., s3.amazonaws.com
 	Endpoint string `yaml:"endpoint"    json:"endpoint,omitempty"`
 	// UseSSL (S3 specific) - whether to use HTTPS
 	UseSSL bool `yaml:"use_ssl"     json:"use_ssl,omitempty"`
@@ -492,20 +489,14 @@ func (kb *KnowledgeBase) SharesStorageBackendWith(other *KnowledgeBase, defaultB
 
 // InferStorageFromFilePath deduces the storage provider from a file path format.
 // Used as a safety fallback when the KB's configured provider doesn't match the data.
-// Supports provider:// scheme (local://, minio://, cos://, tos://),
+// Supports provider:// scheme (local://, minio://, s3://),
 // unified /files/{provider}/... format, and legacy formats.
 func InferStorageFromFilePath(filePath string) string {
 	// Provider scheme format: provider://...
 	if p := ParseProviderScheme(filePath); p != "" {
 		return p
 	}
-	// Legacy formats
-	switch {
-	case strings.HasPrefix(filePath, "https://") && strings.Contains(filePath, ".cos."):
-		return "cos"
-	default:
-		return ""
-	}
+	return ""
 }
 
 // ParseProviderScheme extracts the provider from a provider:// scheme path.
@@ -515,7 +506,7 @@ func ParseProviderScheme(filePath string) string {
 	if _, inner, ok := ParseStorageBackendPath(filePath); ok {
 		filePath = inner
 	}
-	for _, provider := range []string{"local", "minio", "cos", "tos", "s3", "oss", "ks3", "obs", "dummy"} {
+	for _, provider := range []string{"local", "minio", "s3", "dummy"} {
 		if strings.HasPrefix(filePath, provider+"://") {
 			return provider
 		}
@@ -707,35 +698,6 @@ func (c *ASRConfig) Scan(value interface{}) error {
 	return json.Unmarshal(b, c)
 }
 
-// ExtractConfig represents the extract configuration for a knowledge base
-type ExtractConfig struct {
-	Enabled   bool             `yaml:"enabled"   json:"enabled"`
-	Text      string           `yaml:"text"      json:"text,omitempty"`
-	Tags      []string         `yaml:"tags"      json:"tags,omitempty"`
-	Nodes     []*GraphNode     `yaml:"nodes"     json:"nodes,omitempty"`
-	Relations []*GraphRelation `yaml:"relations" json:"relations,omitempty"`
-	// CustomInstructions adds domain-specific extraction guidance while the
-	// system keeps ownership of the structured graph output protocol.
-	CustomInstructions string `yaml:"custom_instructions,omitempty" json:"custom_instructions,omitempty"`
-}
-
-// Value implements the driver.Valuer interface, used to convert ExtractConfig to database value
-func (e ExtractConfig) Value() (driver.Value, error) {
-	return json.Marshal(e)
-}
-
-// Scan implements the sql.Scanner interface, used to convert database value to ExtractConfig
-func (e *ExtractConfig) Scan(value interface{}) error {
-	if value == nil {
-		return nil
-	}
-	b, ok := value.([]byte)
-	if !ok {
-		return nil
-	}
-	return json.Unmarshal(b, e)
-}
-
 // FAQConfig 存储 FAQ 知识库的特有配置
 type FAQConfig struct {
 	IndexMode         FAQIndexMode         `yaml:"index_mode"          json:"index_mode"`
@@ -800,10 +762,7 @@ func (kb *KnowledgeBase) EnsureDefaults() {
 	if kb.IndexingStrategy.IsZero() {
 		kb.IndexingStrategy = DefaultIndexingStrategy()
 	}
-	// Sync legacy ExtractConfig.Enabled → IndexingStrategy.GraphEnabled
-	if kb.ExtractConfig != nil && kb.ExtractConfig.Enabled && !kb.IndexingStrategy.GraphEnabled {
-		kb.IndexingStrategy.GraphEnabled = true
-	}
+
 }
 
 // KBCapabilities describes the functional features a knowledge base exposes.
@@ -817,7 +776,7 @@ type KBCapabilities struct {
 	Keyword bool `json:"keyword"`
 	// Wiki means the wiki feature is enabled and authored pages exist / will be generated.
 	Wiki bool `json:"wiki"`
-	// Graph means knowledge-graph extraction is enabled.
+	// Graph means structured knowledge context queries are supported.
 	Graph bool `json:"graph"`
 	// FAQ means the KB is a FAQ-type KB (Q/A pairs).
 	FAQ bool `json:"faq"`
@@ -833,7 +792,7 @@ func (kb *KnowledgeBase) Capabilities() KBCapabilities {
 		Vector:  kb.IsVectorEnabled(),
 		Keyword: kb.IsKeywordEnabled(),
 		Wiki:    kb.IsWikiEnabled(),
-		Graph:   kb.IsGraphEnabled(),
+		Graph:   kb.Type != KnowledgeBaseTypeFAQ,
 		FAQ:     kb.Type == KnowledgeBaseTypeFAQ,
 	}
 }
@@ -870,13 +829,6 @@ func (kb *KnowledgeBase) IsVectorEnabled() bool {
 // IsKeywordEnabled checks if keyword (BM25) search is enabled.
 func (kb *KnowledgeBase) IsKeywordEnabled() bool {
 	return kb != nil && kb.IndexingStrategy.KeywordEnabled
-}
-
-// IsGraphEnabled checks if knowledge graph extraction is enabled.
-// Requires both the IndexingStrategy flag and a valid ExtractConfig.
-func (kb *KnowledgeBase) IsGraphEnabled() bool {
-	return kb != nil && kb.IndexingStrategy.GraphEnabled &&
-		kb.ExtractConfig != nil && kb.ExtractConfig.Enabled
 }
 
 // NeedsEmbeddingModel returns true if any enabled pipeline requires an embedding model.

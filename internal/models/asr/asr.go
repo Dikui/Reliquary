@@ -42,7 +42,6 @@ type Config struct {
 
 // ConfigFromModel 根据 types.Model 构造 asr.Config。
 // 生产路径（从 DB 拉起）和测试连接路径（临时表单）共享这份映射。
-// 当前 ASR 不涉及 WeKnoraCloud 凭证，所以签名不含 appID/appSecret。
 func ConfigFromModel(m *types.Model) *Config {
 	if m == nil {
 		return nil
@@ -61,5 +60,5 @@ func ConfigFromModel(m *types.Model) *Config {
 // All ASR vendors use the OpenAI-compatible /v1/audio/transcriptions API.
 func NewASR(config *Config) (ASR, error) {
 	a, err := NewOpenAIASR(config)
-	return wrapASRLangfuse(a, err)
+	return a, err
 }

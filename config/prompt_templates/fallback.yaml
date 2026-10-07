@@ -14,9 +14,6 @@ templates:
       en-US:
         name: "Standard Fallback"
         description: "Friendly message with suggestions when unable to answer"
-      ko-KR:
-        name: "표준 폴백"
-        description: "친절하게 답변 및 제안을 드릴 수 없음을 알려드립니다."
     default: true
     content: |
       Sorry, I could not find content directly related to your question in the knowledge base.
@@ -41,9 +38,6 @@ templates:
       en-US:
         name: "Polite Fallback"
         description: "More polite and detailed unable-to-answer message"
-      ko-KR:
-        name: "정중한 폴백"
-        description: "더 정중하고 자세한 답변 불가 프롬프트"
     content: |
       I'm sorry, I'm currently unable to provide an accurate answer to your question. This may be because:
       - The question is beyond my knowledge scope
@@ -69,9 +63,6 @@ templates:
       en-US:
         name: "Brief Fallback"
         description: "Short unable-to-answer message"
-      ko-KR:
-        name: "간단한 폴백"
-        description: "대답할 수 없는 짧은 프롬프트"
     content: "Sorry, I'm unable to answer this question at the moment. Please try rephrasing your question, or contact customer support."
 
   # --- Model fallback prompt templates (for fallback_strategy = "model") ---
@@ -85,9 +76,6 @@ templates:
       en-US:
         name: "Model Fallback Prompt"
         description: "Prompt to guide model to answer with general knowledge"
-      ko-KR:
-        name: "모델 폴백 프롬프트"
-        description: "일반 지식을 바탕으로 모델이 답변하도록 안내하는 프롬프트"
     mode: "model"
     content: |
       No content directly matched the user's query via search. However, the knowledge base contains the following documents:
@@ -115,9 +103,6 @@ templates:
       en-US:
         name: "Standard Fallback Prompt"
         description: "Default prompt that delegates to the model when KB has no relevant results"
-      ko-KR:
-        name: "표준 폴백 프롬프트"
-        description: "KB에 관련 결과가 없을 때 모델에 위임하는 기본 프롬프트"
     mode: "model"
     content: |
       You are Reliquary, a professional and friendly AI assistant developed by Tencent.

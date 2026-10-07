@@ -6,17 +6,16 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
+
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 )
 
 func TestCreateTenantCreatesConcreteDefaultStorageBackend(t *testing.T) {
 	t.Setenv("STORAGE_TYPE", "local")
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := pgtest.OpenFixture(t)
 	require.NoError(t, db.AutoMigrate(&types.Tenant{}, &types.StorageBackend{}))
 	tenantRepo := repository.NewTenantRepository(db)
 	storageRepo := repository.NewStorageBackendRepository(db)

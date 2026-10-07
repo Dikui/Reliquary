@@ -32,7 +32,6 @@ import (
 	"sync"
 	"time"
 
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 )
 
@@ -171,7 +170,7 @@ func NewSessionBoundManager(deps SessionBoundManagerConfig) (*SessionBoundManage
 		)
 	}
 
-	client := wrapLangfuseRemoteClient(deps.Client)
+	client := deps.Client
 
 	lifecycle, err := newRemoteSessionLifecycle(
 		client,
@@ -304,22 +303,14 @@ func (m *SessionBoundManager) ensureSessionWorkspaceDirs(
 		return
 	}
 	execUser := DefaultSandboxExecUser
-	ctx, span := langfuse.GetManager().StartSpan(ctx, langfuse.SpanOptions{
-		Name: "sandbox.ensure_workspace",
-		Input: map[string]interface{}{
-			"input_dir":  SessionInputRoot,
-			"output_dir": outputDir,
-			"user":       execUser,
-		},
-		Metadata: sandboxHandleMeta(handle),
-	})
+
 	result, err := m.client.Exec(ctx, handle, RemoteExecRequest{
 		Shell:   true,
 		Command: workspaceBootstrapCommand(SessionInputRoot, outputDir),
 		User:    execUser,
 		Timeout: sessionArtifactDirBootstrapTimeout,
 	})
-	span.Finish(nil, nil, err)
+
 	switch {
 	case err != nil:
 		log.Printf(

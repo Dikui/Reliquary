@@ -8,9 +8,9 @@ import (
 	"io"
 	"os"
 	"regexp"
-	filesvc "reliquary/internal/application/service/file"
 	"strings"
 
+	filesvc "reliquary/internal/application/service/file"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -617,8 +617,8 @@ func (t *DataAnalysisTool) LoadFromKnowledge(ctx context.Context, knowledge *typ
 // semantics. It returns the temp path and a cleanup closure that removes the
 // temp file; the closure is always safe to call and is a no-op on failure.
 //
-// This hides storage-backend-specific URL schemes (local://, oss://, s3://,
-// minio://, cos://, …) behind the FileService.GetFile abstraction, so the
+// This hides storage-backend-specific URL schemes (local://, s3://, s3://,
+// minio://, s3://, …) behind the FileService.GetFile abstraction, so the
 // Data Analysis tool works identically across all deployments.
 func (t *DataAnalysisTool) materializeKnowledgeFile(ctx context.Context, knowledge *types.Knowledge) (string, func(), error) {
 	noop := func() {}

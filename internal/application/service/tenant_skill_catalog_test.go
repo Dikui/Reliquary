@@ -7,16 +7,15 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
+
 	"reliquary/internal/application/repository"
 	apperrors "reliquary/internal/errors"
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 )
 
 func TestListCatalogGroupsInstallsByDefinition(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:catalog-list?mode=memory&cache=shared"), &gorm.Config{})
-	require.NoError(t, err)
+	db := pgtest.OpenFixture(t)
 	require.NoError(t, db.AutoMigrate(
 		&types.TenantSkillEntity{}, &types.TenantSkillCatalogEntity{},
 		&types.TenantSkillSnapshotEntity{}, &types.TenantUserEnvVar{},
@@ -45,8 +44,7 @@ func TestListCatalogGroupsInstallsByDefinition(t *testing.T) {
 }
 
 func TestResolveCatalogFindsLegacySkillID(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:catalog-legacy?mode=memory&cache=shared"), &gorm.Config{})
-	require.NoError(t, err)
+	db := pgtest.OpenFixture(t)
 	require.NoError(t, db.AutoMigrate(
 		&types.TenantSkillEntity{}, &types.TenantSkillCatalogEntity{},
 		&types.TenantSkillSnapshotEntity{}, &types.TenantUserEnvVar{},
@@ -67,10 +65,9 @@ func TestResolveCatalogFindsLegacySkillID(t *testing.T) {
 	require.Equal(t, "local://7/tenant-skills/sk-old.zip", cat.BundleRef)
 }
 
-func catalogTestRepo(t *testing.T, dsn string) repository.TenantSkillRepository {
+func catalogTestRepo(t *testing.T) repository.TenantSkillRepository {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
-	require.NoError(t, err)
+	db := pgtest.OpenFixture(t)
 	require.NoError(t, db.AutoMigrate(
 		&types.TenantSkillEntity{}, &types.TenantSkillCatalogEntity{},
 		&types.TenantSkillSnapshotEntity{}, &types.TenantUserEnvVar{},
@@ -79,7 +76,7 @@ func catalogTestRepo(t *testing.T, dsn string) repository.TenantSkillRepository 
 }
 
 func TestListCatalogShowsInstallsWhoseCatalogWasDeleted(t *testing.T) {
-	repo := catalogTestRepo(t, "file:catalog-orphan?mode=memory&cache=shared")
+	repo := catalogTestRepo(t)
 	ctx := context.Background()
 	require.NoError(t, repo.CreateCatalog(ctx, &types.TenantSkillCatalogEntity{
 		ID: "cat-gone", TenantID: 7, Name: "pdf",
@@ -100,7 +97,7 @@ func TestListCatalogShowsInstallsWhoseCatalogWasDeleted(t *testing.T) {
 }
 
 func TestDeleteCatalogRefusesWhileARemovalIsInFlight(t *testing.T) {
-	repo := catalogTestRepo(t, "file:catalog-removing?mode=memory&cache=shared")
+	repo := catalogTestRepo(t)
 	ctx := context.Background()
 	require.NoError(t, repo.CreateCatalog(ctx, &types.TenantSkillCatalogEntity{
 		ID: "cat-pdf", TenantID: 7, Name: "pdf",

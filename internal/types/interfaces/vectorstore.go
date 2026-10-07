@@ -26,27 +26,8 @@ type EngineFactory func(ctx context.Context, store types.VectorStore) (RetrieveE
 // VectorStoreService defines the service interface for vector store management.
 // Tenant isolation is enforced by the handler layer (getOwnedStore pattern).
 type VectorStoreService interface {
-	// CreateStore validates and creates a new vector store.
-	CreateStore(ctx context.Context, store *types.VectorStore) error
-	// UpdateStore updates an existing vector store (name only).
-	UpdateStore(ctx context.Context, store *types.VectorStore) error
-	// DeleteStore deletes a vector store by tenant + id.
-	// Rejects deletion when any active knowledge base is bound to the store
-	// (binding guard); the caller must unbind or delete those KBs first.
-	DeleteStore(ctx context.Context, tenantID uint64, id string) error
-	// TestConnection tests connectivity to a vector database.
-	// Returns the detected server version on success (e.g., "7.10.1"), empty string if unknown.
-	//
-	// Validation-free: intended for trusted configs (env stores, stored
-	// configs already validated at create time). Handlers receiving raw
-	// user input MUST use TestRawConnection instead.
+	// TestConnection reports the shared PostgreSQL connection's status.
 	TestConnection(ctx context.Context, engineType types.RetrieverEngineType, config types.ConnectionConfig) (string, error)
-	// TestRawConnection validates raw user-supplied connection config
-	// (engine-type allowlist, required fields, SSRF policy) and then delegates
-	// to TestConnection. This is the entry point for unpersisted user input.
-	TestRawConnection(ctx context.Context, engineType types.RetrieverEngineType, config types.ConnectionConfig) (string, error)
-	// SaveDetectedVersion updates the connection_config.version for a stored vector store.
-	SaveDetectedVersion(ctx context.Context, store *types.VectorStore, version string) error
 
 	// ResolveStoreView returns the API-safe display projection of a single
 	// store ID, scoped to the given tenant. Tries DB stores first, then the
@@ -76,20 +57,8 @@ type VectorStoreService interface {
 	EnvDefaultStoreView(ctx context.Context) types.StoreDisplay
 }
 
-// VectorStoreRepository defines the repository interface for VectorStore CRUD.
+// VectorStoreRepository resolves existing knowledge-base bindings.
 type VectorStoreRepository interface {
-	// Create creates a new vector store
-	Create(ctx context.Context, store *types.VectorStore) error
-	// GetByID retrieves a vector store by ID within a tenant scope
 	GetByID(ctx context.Context, tenantID uint64, id string) (*types.VectorStore, error)
-	// List lists all vector stores for a tenant
 	List(ctx context.Context, tenantID uint64) ([]*types.VectorStore, error)
-	// Update updates a vector store (only mutable fields: name)
-	Update(ctx context.Context, store *types.VectorStore) error
-	// UpdateConnectionConfig updates only the connection_config column
-	UpdateConnectionConfig(ctx context.Context, store *types.VectorStore) error
-	// Delete soft-deletes a vector store
-	Delete(ctx context.Context, tenantID uint64, id string) error
-	// ExistsByEndpointAndIndex checks if a store with the same endpoint and index already exists
-	ExistsByEndpointAndIndex(ctx context.Context, tenantID uint64, engineType types.RetrieverEngineType, endpoint string, indexName string) (bool, error)
 }

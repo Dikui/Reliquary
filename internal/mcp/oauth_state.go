@@ -37,7 +37,7 @@ type OAuthState struct {
 
 // oauthStateStore persists in-flight OAuth states. Backed by Redis when
 // available (so the callback can land on any backend replica); falls back to
-// a TTL in-memory map for single-instance / Lite deployments.
+// a TTL in-memory map for in-memory test fixtures.
 type oauthStateStore struct {
 	rdb *redis.Client
 

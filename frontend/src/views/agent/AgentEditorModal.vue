@@ -2318,10 +2318,7 @@ const imageStorageOptions = computed(() => {
   return [
     { value: 'local', label: t('settings.storage.engineLocal'), disabled: false },
     { value: 'minio', label: 'MinIO', disabled: statusMap.minio === false },
-    { value: 'cos', label: t('settings.storage.engineCos'), disabled: statusMap.cos === false },
-    { value: 'tos', label: t('settings.storage.engineTos'), disabled: statusMap.tos === false },
     { value: 's3', label: 'Amazon S3', disabled: statusMap.s3 === false },
-    { value: 'oss', label: t('settings.storage.engineOss'), disabled: statusMap.oss === false },
   ];
 });
 
@@ -2680,7 +2677,7 @@ const navItems = computed(() => {
     items.push({ key: 'skills', icon: SKILL_ICON, label: t('agent.editor.skillsConfig') });
   }
   // 发布（仅编辑模式）
-  if (editorMode.value === 'edit' && editorAgent.value?.id && !editorAgent.value?.is_builtin && !authStore.isLiteMode) {
+  if (editorMode.value === 'edit' && editorAgent.value?.id && !editorAgent.value?.is_builtin) {
     items.push({ key: 'share', icon: 'share', label: t('knowledgeEditor.sidebar.share') });
   }
   return items;
@@ -4767,10 +4764,6 @@ const handleSave = async () => {
     }
   }
 
-
-
-
-
   // 校验占位符（普通模式 + 开启多轮对话改写）
   if (!isAgentMode.value && formData.value.config.multi_turn_enabled && formData.value.config.enable_rewrite) {
     const rewritePrompt = formData.value.config.rewrite_prompt_user || '';
@@ -6346,7 +6339,6 @@ const handleSave = async () => {
     font-style: normal;
   }
 }
-
 
 // textarea 与模板选择器容器
 .textarea-with-template {

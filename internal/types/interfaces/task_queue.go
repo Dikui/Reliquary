@@ -17,7 +17,7 @@ import (
 // Concurrency model: two consumption primitives coexist.
 //   - PeekBatch does NOT take row locks; consumers enforce per-(scope_id)
 //     serialization out-of-band (e.g. an external Redis lock). This is the
-//     original primitive and is still used by single-process (Lite) mode.
+//     original primitive and is still used by single-process (test fixtures) mode.
 //   - ClaimBatch DOES take row locks (SELECT ... FOR UPDATE SKIP LOCKED on
 //     Postgres) and marks rows with claimed_at, so multiple concurrent
 //     consumers of the same tuple pull DISJOINT rows without an external
@@ -55,7 +55,7 @@ type TaskPendingOpsRepository interface {
 	// a claimed-but-not-consumed row becomes immediately eligible for the
 	// next ClaimBatch. No-op for empty input. Used by the wiki retry path
 	// to re-queue a transiently-failed op without waiting for its claim to
-	// go stale. Harmless on rows that were never claimed (Lite mode).
+	// go stale. Harmless on rows that were never claimed (in-memory fixtures).
 	ReleaseByIDs(ctx context.Context, ids []int64) error
 
 	// DeleteByIDs removes the given rows. No-op for empty input. Used

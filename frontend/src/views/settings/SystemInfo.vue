@@ -33,11 +33,11 @@
               {{ systemInfo?.version || $t('system.unknown') }}
               <t-tag
                 v-if="systemInfo?.edition"
-                :theme="systemInfo.edition === 'lite' ? 'primary' : 'default'"
+                theme="default"
                 variant="light"
                 size="small"
                 style="margin-left: 8px;"
-              >{{ systemInfo.edition === 'lite' ? 'Lite' : 'Standard' }}</t-tag>
+              >{{ systemInfo.edition }}</t-tag>
               <span v-if="systemInfo?.commit_id" class="commit-info">
                 ({{ systemInfo.commit_id }})
               </span>
@@ -180,15 +180,6 @@
       </div>
 
       <!-- Graph Database Engine -->
-      <div class="setting-row">
-        <div class="setting-info">
-          <label>{{ $t('system.graphDatabaseEngineLabel') }}</label>
-          <p class="desc">{{ $t('system.graphDatabaseEngineDescription') }}</p>
-        </div>
-        <div class="setting-control">
-          <span class="info-value">{{ systemInfo?.graph_database_engine || $t('system.unknown') }}</span>
-        </div>
-      </div>
 
     </div>
   </div>
@@ -282,9 +273,9 @@ const loadInfo = async () => {
   try {
     loading.value = true
     error.value = ''
-    
+
     const systemResponse = await getSystemInfo()
-    
+
     if (systemResponse.data) {
       systemInfo.value = systemResponse.data
     } else {

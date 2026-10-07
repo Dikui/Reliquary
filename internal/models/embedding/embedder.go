@@ -8,7 +8,6 @@ import (
 	"reliquary/internal/logger"
 	"reliquary/internal/models/provider"
 	"reliquary/internal/models/utils/ollama"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 )
 
@@ -56,14 +55,11 @@ type Config struct {
 	ExtraConfig    map[string]string `json:"extra_config"`
 	// CustomHeaders 允许在调用远程 API 时附加自定义 HTTP 请求头（类似 OpenAI Python SDK 的 extra_headers）。
 	CustomHeaders map[string]string `json:"custom_headers"`
-	AppID         string
-	AppSecret     string // 加密值，工厂函数调用方传入，使用前已解密
 }
 
 // ConfigFromModel 根据 types.Model 构造 embedding.Config。
 // 生产路径（从 DB 拉起）和测试连接路径（临时表单）共享这份映射。
-// appID / appSecret 是已解密的 WeKnoraCloud 凭证，调用方负责传入。
-func ConfigFromModel(m *types.Model, appID, appSecret string) Config {
+func ConfigFromModel(m *types.Model) Config {
 	if m == nil {
 		return Config{}
 	}
@@ -80,8 +76,6 @@ func ConfigFromModel(m *types.Model, appID, appSecret string) Config {
 		MaxConcurrency:            m.Parameters.MaxConcurrency,
 		ExtraConfig:               m.Parameters.ExtraConfig,
 		CustomHeaders:             m.Parameters.CustomHeaders,
-		AppID:                     appID,
-		AppSecret:                 appSecret,
 	}
 }
 
@@ -94,16 +88,13 @@ func NewEmbedder(config Config, pooler EmbedderPooler, ollamaService *ollama.Oll
 	if setter, ok := e.(interface{ SetSupportsDimensionOverride(bool) }); ok {
 		setter.SetSupportsDimensionOverride(config.SupportsDimensionOverride)
 	}
-	// Innermost: gate the real provider round-trips (including the per-sub-batch
-	// pool callbacks) before debug/langfuse wrap for logging/tracing. See
-	// concurrencyEmbedder for why this sits below the observability decorators.
+	// Innermost: gate real provider calls, including per-sub-batch pool callbacks,
+	// before debug logging. See concurrencyEmbedder for the placement rationale.
 	e = wrapEmbeddingConcurrency(e, config.MaxConcurrency)
 	if logger.LLMDebugEnabled() {
 		e = &debugEmbedder{inner: e}
 	}
-	if langfuse.GetManager().Enabled() {
-		e = &langfuseEmbedder{inner: e}
-	}
+
 	return e, nil
 }
 
@@ -256,9 +247,6 @@ func newEmbedder(config Config, pooler EmbedderPooler, ollamaService *ollama.Oll
 				zhipuEmb.SetCustomHeaders(config.CustomHeaders)
 			}
 			embedder, err = zhipuEmb, zErr
-			return embedder, err
-		case provider.ProviderWeKnoraCloud:
-			embedder, err = NewWeKnoraCloudEmbedder(config)
 			return embedder, err
 		default:
 			// Use OpenAI-compatible embedder for other providers

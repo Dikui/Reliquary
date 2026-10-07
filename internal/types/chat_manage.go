@@ -119,9 +119,6 @@ type PipelineState struct {
 	RerankResult         []*SearchResult         `json:"-"`
 	MergeResult          []*SearchResult         `json:"-"`
 	Entity               []string                `json:"-"`
-	EntityKBIDs          []string                `json:"-"`
-	EntityKnowledge      map[string]string       `json:"-"`
-	GraphResult          *GraphData              `json:"-"`
 	KnowledgeQueries     []KnowledgeContextQuery `json:"-"`
 	KnowledgeContext     string                  `json:"-"`
 	UserContent          string                  `json:"-"`
@@ -200,12 +197,6 @@ func (c *ChatManage) Clone() *ChatManage {
 	entity := make([]string, len(c.Entity))
 	copy(entity, c.Entity)
 
-	entityKBIDs := make([]string, len(c.EntityKBIDs))
-	copy(entityKBIDs, c.EntityKBIDs)
-
-	entityKnowledge := make(map[string]string)
-	maps.Copy(entityKnowledge, c.EntityKnowledge)
-
 	return &ChatManage{
 		PipelineRequest: PipelineRequest{
 			Query:                    c.Query,
@@ -262,8 +253,6 @@ func (c *ChatManage) Clone() *ChatManage {
 			KnowledgeQueries:     append([]KnowledgeContextQuery(nil), c.KnowledgeQueries...),
 			KnowledgeContext:     c.KnowledgeContext,
 			Entity:               entity,
-			EntityKBIDs:          entityKBIDs,
-			EntityKnowledge:      entityKnowledge,
 		},
 	}
 }
@@ -277,7 +266,6 @@ const (
 	QUERY_UNDERSTAND       EventType = "query_understand"
 	CHUNK_SEARCH           EventType = "chunk_search"
 	CHUNK_SEARCH_PARALLEL  EventType = "chunk_search_parallel"
-	ENTITY_SEARCH          EventType = "entity_search"
 	CHUNK_RERANK           EventType = "chunk_rerank"
 	WEB_FETCH              EventType = "web_fetch"
 	CHUNK_MERGE            EventType = "chunk_merge"

@@ -280,7 +280,7 @@ func identityClaimString(v interface{}) string {
 
 // claimWikiIdentitySlug reserves one slug for a normalized (KB, page type,
 // title) identity before Reduce starts. Standard mode uses Redis so concurrent
-// batches/processes converge; the batch-local map covers Lite mode and a Redis
+// batches/processes converge; the batch-local map covers in-memory fixtures and a Redis
 // error. Only exact existing-page resolutions are authoritative and may
 // overwrite a provisional claim. Semantic LLM merges must SetNX so they cannot
 // split a title that another worker already reserved.

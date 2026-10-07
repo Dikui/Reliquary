@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"reliquary/internal/event"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -61,9 +60,8 @@ func (p *PluginMemoryRecall) OnEvent(ctx context.Context,
 	}
 
 	pipelineInfo(ctx, "MemoryRecall", "input", map[string]interface{}{
-		"session_id":    chatManage.SessionID,
-		"query_len":     len(chatManage.Query),
-		"query_preview": langfuse.TruncateRunes(chatManage.Query, 200),
+		"session_id": chatManage.SessionID,
+		"query_len":  len(chatManage.Query),
 	})
 
 	recall := p.memoryService.Recall(ctx, chatManage.Query)
@@ -88,12 +86,11 @@ func (p *PluginMemoryRecall) OnEvent(ctx context.Context,
 		}
 	}
 	pipelineInfo(ctx, "MemoryRecall", "output", map[string]interface{}{
-		"session_id":    chatManage.SessionID,
-		"items":         len(chatManage.UsedMemories),
-		"injected":      true,
-		"prompt_runes":  len([]rune(recall.Prompt)),
-		"memory_ids":    memoryIDs,
-		"query_preview": langfuse.TruncateRunes(chatManage.Query, 200),
+		"session_id":   chatManage.SessionID,
+		"items":        len(chatManage.UsedMemories),
+		"injected":     true,
+		"prompt_runes": len([]rune(recall.Prompt)),
+		"memory_ids":   memoryIDs,
 	})
 	return next()
 }

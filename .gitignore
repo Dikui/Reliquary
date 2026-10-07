@@ -29,8 +29,6 @@ logs/
 *.pid
 
 Reliquary
-Reliquary-lite
-cmd/desktop/build/bin/
 /models/
 test/data/mswag.txt
 data/files/
@@ -56,7 +54,6 @@ configure-ollama.sh
 fix-docker.sh
 
 # WeChat Mini Program local/private configuration
-miniprogram/project.private.config.json
 
 # Staging dir for the Docker sandbox self-check probe (removed after each run)
 .reliquary-sandbox-check-*

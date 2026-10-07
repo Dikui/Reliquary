@@ -310,7 +310,7 @@ type Service struct {
 	oauthManager *mcppkg.OAuthManager
 
 	// streamManager writes/reads QA events for distributed stop detection,
-	// consistent with the web StopSession mechanism. May be nil in Lite mode
+	// consistent with the web StopSession mechanism. May be nil in in-memory fixtures
 	// (but NewStreamManager always returns at least a memory implementation).
 	streamManager interfaces.StreamManager
 
@@ -350,7 +350,7 @@ type Service struct {
 
 	// redis is the optional Redis client for distributed state (dedup, rate
 	// limiting, leader election, cross-instance /stop). When nil the service
-	// falls back to local in-memory state (single-instance / Lite mode).
+	// falls back to local in-memory state (single-instance / in-memory fixtures).
 	redis *redis.Client
 
 	// instanceID uniquely identifies this service instance for leader election.
@@ -836,7 +836,7 @@ func resolveIMConfig(appCfg *config.Config) (workers, maxQueue, maxPerUser, glob
 
 // NewService creates a new IM service.
 // redisClient may be nil — in that case the service falls back to local
-// in-memory state (Lite / single-instance mode).
+// in-memory state (test fixtures mode).
 // cfg may be nil — in that case built-in defaults are used.
 func NewService(
 	db *gorm.DB,

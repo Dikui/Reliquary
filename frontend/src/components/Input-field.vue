@@ -407,7 +407,7 @@ const kbToScopeCaps = (kb: any): Partial<ScopeCapabilities> => {
     vector: s ? !!s.vector_enabled : false,
     keyword: s ? !!s.keyword_enabled : false,
     wiki: s ? !!s.wiki_enabled : false,
-    graph: s ? !!s.graph_enabled : false,
+    graph: kb?.type !== 'faq',
     faq: kb?.type === 'faq',
   };
 };

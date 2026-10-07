@@ -21,7 +21,7 @@ Reliquary 是一个基于 LLM 的开源企业知识框架，集 RAG 问答、ReA
 - **多源接入**：把分散内容统一抽取、清洗、向量化
 - **多策略检索**：稠密、稀疏、知识图谱多路召回 + RRF 融合
 - **可解释推理**：ReAct Agent 让推理链条可追踪、可干预
-- **可观测**：原生集成 Langfuse，每一步推理、每一次工具调用都有 trace
+- **可观测**：保留内部任务追踪与模型用量统计，便于排查问题
 
 ## 核心特性
 
@@ -29,17 +29,14 @@ Reliquary 是一个基于 LLM 的开源企业知识框架，集 RAG 问答、ReA
 
 兼容 20+ 主流 LLM：OpenAI、Anthropic、DeepSeek、Qwen、智谱、混元、Gemini，以及本地 Ollama。模型层抽象 \`Provider\` 接口，新增厂商只需实现 \`Chat()\` 方法并注册即可。
 
-### 多向量库支持
+### PostgreSQL 检索
 
-通过 \`RETRIEVE_DRIVER\` 环境变量切换：
+统一使用 ParadeDB 镜像中的 PostgreSQL：
 
 | 驱动 | 适合场景 |
 |------|---------|
-| pgvector | 已有 PostgreSQL，规模 < 1000 万 chunk |
-| Elasticsearch | 需要混合检索 + 关键词高亮 |
-| Milvus | 大规模、低延迟 |
-| Weaviate | 需要混合 BM25 + GraphQL 查询 |
-| Qdrant | 默认推荐，部署简单、性能均衡 |
+| pgvector | 向量检索 |
+| pg_search | 全文检索 |
 
 ### 数据源连接器
 
@@ -62,7 +59,7 @@ Reliquary 是一个基于 LLM 的开源企业知识框架，集 RAG 问答、ReA
 \`\`\`bash
 git clone http://192.168.1.146:3000/dikui/reliquary && cd Reliquary
 cp .env.example .env       # 修改你的模型与数据库配置
-make dev-start             # 启动 postgres / redis / qdrant
+make dev-start             # 启动 postgres / redis
 make dev-app               # 启动后端，热重载
 make dev-frontend          # 启动前端，自动刷新
 \`\`\`
@@ -89,7 +86,7 @@ Reliquary 后端采用清晰的分层架构：
 
 ### 检索流水线
 
-文档上传 → docreader 服务解析 → 分块（含父子分块） → 嵌入 → 写入向量库与图数据库 → 用户查询时多路召回 → RRF 融合 → 重排 → 返回。
+文档上传 → docreader 服务解析 → 分块（含父子分块） → 嵌入 → 写入 PostgreSQL → 用户查询时多路召回 → RRF 融合 → 重排 → 返回。
 
 ### Agent 编排
 
@@ -100,7 +97,7 @@ Agent 引擎执行经典 ReAct 循环：
 3. **Observe**：把工具返回值塞回上下文
 4. 重复 1-3 直到产出最终答案或达到最大迭代
 
-每一步都通过 SSE 流式返回前端，并写入 Langfuse trace 便于排查。
+每一步都通过 SSE 流式返回前端，并保留内部任务追踪便于排查。
 
 ## 进一步阅读
 
@@ -138,9 +135,8 @@ docker pull docker.m.daocloud.io/reliquary-ui:v0.5.0
 
 ## 配置
 
-### Q6: 如何切换向量库？
-修改 \`.env\` 中的 \`RETRIEVE_DRIVER\`，可选值：\`qdrant\` (默认) / \`pgvector\` / \`elasticsearch\` / \`milvus\` / \`weaviate\`。切换后需要重新嵌入存量数据。
-
+### Q6: 如何查看检索数据库状态？
+在设置中的 PostgreSQL 状态页检查可用性。所有知识库统一使用 PostgreSQL。
 ### Q7: 如何修改默认 chunk 大小？
 全局默认在 \`config/config.yaml\` 的 \`knowledge.chunking\` 段；单个知识库可在 UI 的"分块设置"页覆盖。修改后仅对新上传文档生效。
 
@@ -156,7 +152,7 @@ docker pull docker.m.daocloud.io/reliquary-ui:v0.5.0
 按这个顺序排查：
 
 1. 确认知识库状态为 \`completed\`，而不是 \`indexing\` 或 \`failed\`
-2. 检查向量库连接（默认 qdrant:6334），\`docker compose ps\` 看 qdrant 是否健康
+2. 检查 PostgreSQL 连接，\`docker compose ps\` 查看 postgres 服务是否健康
 3. 在管理页"重建索引"，确认嵌入模型工作正常
 4. 查看后端日志中 retriever 是否报 dimension mismatch
 
@@ -176,7 +172,7 @@ docker pull docker.m.daocloud.io/reliquary-ui:v0.5.0
 检查代理网络与 \`OPENAI_BASE_URL\` 配置；本地无外网时切换到 Ollama 或国内大模型。
 
 ### Q14: token 用量在哪里看？
-开启 Langfuse 后，每个会话、每次推理、每个工具调用的 token 消耗都有完整 trace，可按时间、空间、模型聚合。
+模型调用用量保存在 model_usage 表中，可在模型用量页面查看 token 消耗和调用次数。
 
 ### Q15: 如何接入私有 LLM？
 实现 \`internal/models/chat/provider/Provider\` 接口，注册到 provider 工厂，配置文件中加一条记录即可，约 100-200 行代码。
@@ -247,9 +243,9 @@ Agent 编排器负责 ReAct 循环，工具调用通过 MCP 协议或内置注�
 
 docker compose up -d
 
-3.2.2 Kubernetes Helm
+3.2.2 可选服务
 
-适合规模化部署。Helm chart 在 helm/ 目录，包含 statefulset、配置 secret、ingress 模版。可与现有 PG / Redis 集群对接。
+搜索、对象存储与增强 PDF 解析服务通过 Compose profile 按需启动。
 
 3.3 配置最佳实践
 
@@ -265,11 +261,11 @@ docker compose up -d
 
 4.2 备份与恢复
 
-PG 全量每日备份 + WAL 增量；MinIO/对象存储依赖云端版本管理。Qdrant 用 snapshot 接口定期落盘到对象存储。
+PG 全量每日备份 + WAL 增量；MinIO/对象存储依赖云端版本管理。本地磁盘卷单独定期备份。
 
 4.3 故障排查
 
-按"网关 → 业务 → 存储 → 模型"四个维度逐层排查。每层都有健康检查接口与 Langfuse trace 入口，组合起来可在 5 分钟内定位 80% 问题。`
+按"网关 → 业务 → 存储 → 模型"四个维度逐层排查。每层都有健康检查接口与内部任务追踪入口，组合起来可在 5 分钟内定位 80% 问题。`
 
 const PLAIN_SAMPLE = `知识库的检索质量受多个因素影响，最直接的是切分策略与嵌入模型的匹配度。切分过粗会导致单段语义混杂、相关度被稀释；切分过细则丢失上下文，单独检索某一段无法回答跨段问题。一般建议切分大小落在嵌入模型推荐窗口的 50%–80%，既保证语义完整又留出余量。常见嵌入模型如 BGE、Cohere 的 embed-v3 推荐窗口为 512 tokens，对应字符大致在 300–800 之间，因为中文一个字约 0.5–1.2 个 token，英文一个词约 1.3 个 token。
 

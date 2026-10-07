@@ -6,6 +6,7 @@ import (
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -31,7 +32,7 @@ func NewUserRepository(db *gorm.DB) interfaces.UserRepository {
 
 // CreateUser creates a user
 func (r *userRepository) CreateUser(ctx context.Context, user *types.User) error {
-	// users.tenant_id is nullable in both PostgreSQL and SQLite. GORM would
+	// users.tenant_id is nullable in both PostgreSQL. GORM would
 	// otherwise serialise the uint64 zero value as 0, which violates the
 	// PostgreSQL FK and loses the distinction between "not provisioned yet"
 	// and a real tenant. Omitting the column stores SQL NULL; reads hydrate it
@@ -205,12 +206,7 @@ func (r *userRepository) RevokeSystemAdmin(ctx context.Context, userID, actorID 
 	var revoked *types.User
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		locking := func(db *gorm.DB) *gorm.DB {
-			switch tx.Dialector.Name() {
-			case "postgres", "mysql":
-				return db.Clauses(clause.Locking{Strength: "UPDATE"})
-			default:
-				return db
-			}
+			return db.Clauses(clause.Locking{Strength: "UPDATE"})
 		}
 		var user types.User
 		if err := locking(tx).

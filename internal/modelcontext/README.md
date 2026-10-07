@@ -44,17 +44,6 @@ The registry owns codec ordering. Resource references are encoded before
 source IDs so a Wiki slug such as `summary/<knowledge-id>` cannot be corrupted
 into `summary/d1`.
 
-## Observability
-
-Langfuse generation observations contain the exact encoded payload sent to and
-returned by the model. Agent tool spans contain both `model_arguments` (the
-model-emitted handles) and `resolved_arguments` (the durable values actually
-executed), plus `argument_resolution` and any unresolved handles. Sensitive
-tools report only argument keys and resolution counts.
-
-Langfuse is an observer of this boundary; it must not implement another handle
-mapping.
-
 ## Built-in tool policies
 
 Canonical ID-bearing arguments for knowledge, graph, data, web, and Wiki tools

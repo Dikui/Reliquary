@@ -7,6 +7,7 @@ import (
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+
 	"reliquary/internal/common"
 	"reliquary/internal/types"
 )
@@ -63,7 +64,7 @@ func (r *knowledgeSpanRepository) Upsert(ctx context.Context, row *types.Knowled
 		row.Attempt = 1
 	}
 	// Error fields may originate from third-party parser/model responses.
-	// Normalize them at the persistence boundary so SQLite/PostgreSQL and the
+	// Normalize them at the persistence boundary so PostgreSQL and the
 	// tracing API never receive malformed UTF-8.
 	row.ErrorCode = common.CleanInvalidUTF8(row.ErrorCode)
 	row.ErrorMessage = common.CleanInvalidUTF8(row.ErrorMessage)
@@ -167,8 +168,7 @@ func (r *knowledgeSpanRepository) GetSpan(ctx context.Context, knowledgeID strin
 // flipping pending/running rows to cancelled. We bail when a level adds
 // zero rows (fixed point reached) or after a generous depth bound.
 //
-// Postgres-specific WITH RECURSIVE would be denser but harder to test on
-// the SQLite Lite backend. The iterative path stays portable.
+// The iterative path bounds traversal depth and is easy to exercise in fixtures.
 func (r *knowledgeSpanRepository) CancelDescendants(ctx context.Context, knowledgeID string, attempt int, parentSpanID, reason string) (int64, error) {
 	reason = common.CleanInvalidUTF8(reason)
 	frontier := []string{parentSpanID}

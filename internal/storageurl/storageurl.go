@@ -3,7 +3,7 @@
 //
 // Reliquary persists files behind two internal reference forms: the stable
 // `resource://<handle>` application identity and legacy/canonical provider
-// paths (`local://…`, `minio://…`, `storage://<backend-id>/cos://…`). Neither is
+// paths (`local://…`, `minio://…`, `storage://<backend-id>/s3://…`). Neither is
 // fetchable by a browser or a third-party app, which must otherwise call the
 // authenticated `/files` proxy for every image.
 //
@@ -30,11 +30,11 @@ import (
 var Pattern = regexp.MustCompile(
 	`\b(?:resource://[0-9A-Za-z_-]+|` +
 		`(?:storage://[0-9A-Za-z_-]+/)?` +
-		`(?:local|minio|s3|cos|tos|oss|obs|ks3)://[^\s)\]>"]+)`,
+		`(?:local|minio|s3)://[^\s)\]>"]+)`,
 )
 
 // IsHTTPURL reports whether s is an http(s) URL — the only form an external
-// client can fetch; any provider scheme (oss://, local://, …) is not. Scheme
+// client can fetch; any provider scheme (s3://, local://, …) is not. Scheme
 // match is case-insensitive per RFC 3986 §3.1: a backend may emit an
 // operator-configured host (e.g. OBS_PROXY_DOMAIN) with an uppercase scheme.
 func IsHTTPURL(s string) bool {

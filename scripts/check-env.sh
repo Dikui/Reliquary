@@ -89,13 +89,6 @@ if [ "$STORAGE_TYPE" = "minio" ]; then
     check_var "MINIO_BUCKET_NAME"
 fi
 
-if [ "$STORAGE_TYPE" = "tos" ]; then
-    check_var "TOS_ENDPOINT"
-    check_var "TOS_REGION"
-    check_var "TOS_ACCESS_KEY"
-    check_var "TOS_SECRET_KEY"
-    check_var "TOS_BUCKET_NAME"
-fi
 
 if [ "$STORAGE_TYPE" = "s3" ]; then
     check_var "S3_REGION"
@@ -199,7 +192,7 @@ else
     echo ""
     log_info "常见问题："
     echo "  - 如果 .env 文件不存在，请复制 .env.example"
-    echo "  - 确保 DB_DRIVER 设置为 'postgres' 或 'mysql'"
+    echo "  - 确保 DB_DRIVER 设置为 'postgres'"
     echo "  - 确保 Docker 服务正在运行"
 fi
 printf "%b\n" "${GREEN}========================================${NC}"

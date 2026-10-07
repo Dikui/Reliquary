@@ -2,9 +2,9 @@ package handler
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
+
 	"reliquary/internal/sandbox"
 )
 
@@ -63,11 +63,7 @@ func BuildDeploymentCapabilities(
 	edition string,
 	available DeploymentFeatureAvailability,
 ) DeploymentCapabilitiesData {
-	isLite := strings.EqualFold(strings.TrimSpace(edition), "lite")
-	organizations := supportedDeploymentCapability(available.Organizations && !isLite)
-	if isLite {
-		organizations.Reason = "not_supported_in_lite"
-	}
+	organizations := supportedDeploymentCapability(available.Organizations)
 
 	sandboxDocker := DeploymentCapability{
 		Supported: available.Sandbox && available.SandboxDocker,

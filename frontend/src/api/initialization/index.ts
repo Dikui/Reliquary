@@ -8,11 +8,6 @@ export interface ModelCredentialStatus {
     apiKey?: boolean;
 }
 
-export interface COSCredentialStatus {
-    secretId?: boolean;
-    secretKey?: boolean;
-}
-
 // 初始化配置数据类型
 export interface InitializationConfig {
     llm: {
@@ -42,7 +37,7 @@ export interface InitializationConfig {
     };
     multimodal: {
         enabled: boolean;
-        storageType: 'cos' | 'minio';
+        storageType: 'local' | 'minio' | 's3';
         vlm?: {
             modelName: string;
             baseUrl: string;
@@ -50,17 +45,6 @@ export interface InitializationConfig {
             apiKey?: string;
             interfaceType?: string; // "ollama" or "openai"
             credentials?: ModelCredentialStatus;
-        };
-        cos?: {
-            region: string;
-            bucketName: string;
-            appId: string;
-            pathPrefix?: string;
-            /** @deprecated Use credentials from GET responses */
-            secretId?: string;
-            /** @deprecated Use credentials from GET responses */
-            secretKey?: string;
-            credentials?: COSCredentialStatus;
         };
         minio?: {
             bucketName: string;
@@ -81,14 +65,7 @@ export interface InitializationConfig {
         languages?: string[];
     };
     // Frontend-only hint for storage selection UI
-    storageType?: 'cos' | 'minio';
-    nodeExtract: {
-        enabled: boolean,
-        text: string,
-        tags: string[],
-        nodes: Node[],
-        relations: Relation[]
-    }
+    storageType?: 'local' | 'minio' | 's3';
 }
 
 // 下载任务状态类型
@@ -145,17 +122,9 @@ export interface KBModelConfigRequest {
     multimodal: {
         enabled: boolean
     }
-    /** 存储引擎选择："local" | "minio" | "cos" | "obs" 等，影响文档上传与文档内图片存储 */
+    /** 存储引擎选择："local" | "minio" | "s3"，影响文档上传与文档内图片存储 */
     storageBackendId?: string
     storageProvider?: string
-    nodeExtract: {
-        enabled: boolean
-        text: string
-        tags: string[]
-        nodes: Node[]
-        relations: Relation[]
-        customInstructions?: string
-    }
     questionGeneration?: {
         enabled: boolean
         questionCount: number
@@ -286,7 +255,6 @@ export function listDownloadTasks(): Promise<DownloadTask[]> {
     });
 }
 
-
 export function getCurrentConfigByKB(kbId: string): Promise<InitializationConfig & { hasFiles: boolean }> {
     return new Promise((resolve, reject) => {
         get(`/api/v1/initialization/config/${kbId}`)
@@ -359,7 +327,6 @@ export function testEmbeddingModel(modelConfig: {
     });
 }
 
-
 export function checkRerankModel(modelConfig: {
     modelName: string;
     baseUrl: string;
@@ -411,14 +378,7 @@ export function testMultimodalFunction(testData: {
     vlm_base_url: string;
     vlm_api_key?: string;
     vlm_interface_type?: string;
-    storage_type?: 'cos' | 'minio';
-    // COS optional fields (required only when storage_type === 'cos')
-    cos_secret_id?: string;
-    cos_secret_key?: string;
-    cos_region?: string;
-    cos_bucket_name?: string;
-    cos_app_id?: string;
-    cos_path_prefix?: string;
+    storage_type?: 'local' | 'minio' | 's3';
     // MinIO optional fields
     minio_bucket_name?: string;
     minio_path_prefix?: string;
@@ -445,15 +405,6 @@ export function testMultimodalFunction(testData: {
         }
         if (testData.storage_type) {
             formData.append('storage_type', testData.storage_type);
-        }
-        // Append COS fields only when storage_type is COS
-        if (testData.storage_type === 'cos') {
-            if (testData.cos_secret_id) formData.append('cos_secret_id', testData.cos_secret_id);
-            if (testData.cos_secret_key) formData.append('cos_secret_key', testData.cos_secret_key);
-            if (testData.cos_region) formData.append('cos_region', testData.cos_region);
-            if (testData.cos_bucket_name) formData.append('cos_bucket_name', testData.cos_bucket_name);
-            if (testData.cos_app_id) formData.append('cos_app_id', testData.cos_app_id);
-            if (testData.cos_path_prefix) formData.append('cos_path_prefix', testData.cos_path_prefix);
         }
         // MinIO fields
         if (testData.minio_bucket_name) formData.append('minio_bucket_name', testData.minio_bucket_name);
@@ -493,43 +444,6 @@ export function testMultimodalFunction(testData: {
             })
             .catch((error: any) => {
                 console.error('Failed multimodal test:', error);
-                reject(error);
-            });
-    });
-}
-
-// 文本内容关系提取接口
-export interface TextRelationExtractionRequest {
-    text: string;
-    tags: string[];
-    model_id: string;
-}
-
-export interface Node {
-    name: string;
-    attributes: string[];
-}
-
-export interface Relation {
-    node1: string;
-    node2: string;
-    type: string;
-}
-
-export interface TextRelationExtractionResponse {
-    nodes: Node[];
-    relations: Relation[];
-}
-
-// 文本内容关系提取
-export function extractTextRelations(request: TextRelationExtractionRequest): Promise<TextRelationExtractionResponse> {
-    return new Promise((resolve, reject) => {
-        post('/api/v1/initialization/extract/text-relation', request, { timeout: 60000 })
-            .then((response: any) => {
-                resolve(response.data || { nodes: [], relations: [] });
-            })
-            .catch((error: any) => {
-                console.error('Failed to extract text relations:', error);
                 reject(error);
             });
     });

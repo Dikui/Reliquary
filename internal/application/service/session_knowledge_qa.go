@@ -13,7 +13,6 @@ import (
 	"reliquary/internal/logger"
 	"reliquary/internal/modelcontext"
 	"reliquary/internal/models/chat"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 )
 
@@ -33,15 +32,7 @@ func (s *sessionService) KnowledgeQA(
 		req.WebSearchEnabled,
 	)
 
-	// Span the request setup (KB / model resolution, search target building,
-	// agent override application). This covers the visible gap between trace
-	// start and the first stage observation in the Langfuse timeline.
-	setupCtx, setupSpan := langfuse.GetManager().StartSpan(ctx, langfuse.SpanOptions{
-		Name: "qa.setup",
-		Metadata: map[string]interface{}{
-			"session_id": req.Session.ID,
-		},
-	})
+	setupCtx := ctx
 	ctx = setupCtx
 
 	// Resolve knowledge bases using shared helper
@@ -215,11 +206,7 @@ func (s *sessionService) KnowledgeQA(
 	// bind script execution to a per-session MicroVM instance.
 	ctx = types.WithSessionID(ctx, req.Session.ID)
 	logger.Info(ctx, "Triggering question answering event")
-	setupSpan.Finish(map[string]interface{}{
-		"stages":             len(pipeline),
-		"knowledge_base_ids": knowledgeBaseIDs,
-		"search_targets":     len(searchTargets),
-	}, nil, nil)
+
 	err = s.KnowledgeQAByEvent(ctx, chatManage, pipeline)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
@@ -688,28 +675,10 @@ func (s *sessionService) KnowledgeQAByEvent(ctx context.Context,
 	var understandStart time.Time
 	for _, eventType := range eventList {
 		stageStart := time.Now()
-		// Wrap each pipeline stage in a Langfuse span so the trace timeline
-		// shows the gaps between LLM/embedding/rerank generations (the work
-		// that happens between them — vector DB search, merge, filter, prompt
-		// assembly — was previously invisible). Generations created inside
-		// the stage automatically nest under this span.
-		//
-		// CHAT_COMPLETION_STREAM is intentionally skipped: its OnEvent kicks
-		// off a streaming goroutine and returns immediately, so a span would
-		// finish well before the chat.completion.stream generation does. The
-		// generation already captures the full stream duration; adding a
-		// stage span here would just produce a child observation that
-		// visually exceeds its parent.
 		stageCtx := ctx
-		var stageSpan *langfuse.Span
+
 		if eventType != types.CHAT_COMPLETION_STREAM {
-			stageCtx, stageSpan = langfuse.GetManager().StartSpan(ctx, langfuse.SpanOptions{
-				Name: "pipeline." + string(eventType),
-				Metadata: map[string]interface{}{
-					"event_type": string(eventType),
-					"session_id": chatManage.SessionID,
-				},
-			})
+			stageCtx = ctx
 		}
 		if eventType == types.QUERY_UNDERSTAND && chatpipeline.ShouldEmitQueryUnderstandProgress(chatManage) {
 			understandStart = stageStart
@@ -743,15 +712,6 @@ func (s *sessionService) KnowledgeQAByEvent(ctx context.Context,
 			retrievalProgress = nil
 		}
 		stageDuration := time.Since(stageStart)
-		var spanErr error
-		if err != nil && err != chatpipeline.ErrSearchNothing {
-			spanErr = err.Err
-		}
-		if stageSpan != nil {
-			stageSpan.Finish(map[string]interface{}{
-				"duration_ms": stageDuration.Milliseconds(),
-			}, nil, spanErr)
-		}
 
 		// If the user stopped generation, the context is cancelled. A cancelled
 		// retrieval stage surfaces as ErrSearchNothing (the search goroutines
@@ -898,19 +858,8 @@ func (s *sessionService) SearchKnowledge(ctx context.Context,
 
 	for _, event := range searchEvents {
 		logger.Infof(ctx, "Starting to trigger search event: %v", event)
-		stageCtx, stageSpan := langfuse.GetManager().StartSpan(ctx, langfuse.SpanOptions{
-			Name: "pipeline." + string(event),
-			Metadata: map[string]interface{}{
-				"event_type": string(event),
-				"flow":       "search_knowledge",
-			},
-		})
+		stageCtx := ctx
 		err := s.eventManager.Trigger(stageCtx, event, chatManage)
-		var spanErr error
-		if err != nil && err != chatpipeline.ErrSearchNothing {
-			spanErr = err.Err
-		}
-		stageSpan.Finish(nil, nil, spanErr)
 
 		if err == chatpipeline.ErrSearchNothing {
 			logger.Warnf(ctx, "Event %v triggered, search result is empty", event)

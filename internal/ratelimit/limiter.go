@@ -1,5 +1,5 @@
 // Package ratelimit provides a Redis-backed sliding-window rate limiter with a
-// local in-memory fallback when Redis is unavailable (Lite / single-instance).
+// local in-memory fallback when Redis is unavailable (test fixtures).
 package ratelimit
 
 import (

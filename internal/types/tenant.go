@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 	"strings"
 	"time"
 
 	"gorm.io/gorm"
+
 	"reliquary/internal/utils"
 )
 
@@ -19,41 +19,6 @@ var retrieverEngineMapping = map[string][]RetrieverEngineParams{
 		{RetrieverType: KeywordsRetrieverType, RetrieverEngineType: PostgresRetrieverEngineType},
 		{RetrieverType: VectorRetrieverType, RetrieverEngineType: PostgresRetrieverEngineType},
 	},
-	"elasticsearch_v7": {
-		{RetrieverType: KeywordsRetrieverType, RetrieverEngineType: ElasticsearchRetrieverEngineType},
-	},
-	"elasticsearch_v8": {
-		{RetrieverType: KeywordsRetrieverType, RetrieverEngineType: ElasticsearchRetrieverEngineType},
-		{RetrieverType: VectorRetrieverType, RetrieverEngineType: ElasticsearchRetrieverEngineType},
-	},
-	"qdrant": {
-		{RetrieverType: KeywordsRetrieverType, RetrieverEngineType: QdrantRetrieverEngineType},
-		{RetrieverType: VectorRetrieverType, RetrieverEngineType: QdrantRetrieverEngineType},
-	},
-	"milvus": {
-		{RetrieverType: VectorRetrieverType, RetrieverEngineType: MilvusRetrieverEngineType},
-		{RetrieverType: KeywordsRetrieverType, RetrieverEngineType: MilvusRetrieverEngineType},
-	},
-	"weaviate": {
-		{RetrieverType: KeywordsRetrieverType, RetrieverEngineType: WeaviateRetrieverEngineType},
-		{RetrieverType: VectorRetrieverType, RetrieverEngineType: WeaviateRetrieverEngineType},
-	},
-	"doris": {
-		{RetrieverType: KeywordsRetrieverType, RetrieverEngineType: DorisRetrieverEngineType},
-		{RetrieverType: VectorRetrieverType, RetrieverEngineType: DorisRetrieverEngineType},
-	},
-	"sqlite": {
-		{RetrieverType: KeywordsRetrieverType, RetrieverEngineType: SQLiteRetrieverEngineType},
-		{RetrieverType: VectorRetrieverType, RetrieverEngineType: SQLiteRetrieverEngineType},
-	},
-	"tencent_vectordb": {
-		{RetrieverType: KeywordsRetrieverType, RetrieverEngineType: TencentVectorDBRetrieverEngineType},
-		{RetrieverType: VectorRetrieverType, RetrieverEngineType: TencentVectorDBRetrieverEngineType},
-	},
-	"opensearch": {
-		{RetrieverType: KeywordsRetrieverType, RetrieverEngineType: OpenSearchRetrieverEngineType},
-		{RetrieverType: VectorRetrieverType, RetrieverEngineType: OpenSearchRetrieverEngineType},
-	},
 }
 
 // GetRetrieverEngineMapping returns the retriever engine mapping
@@ -62,24 +27,11 @@ func GetRetrieverEngineMapping() map[string][]RetrieverEngineParams {
 	return retrieverEngineMapping
 }
 
+// GetDefaultRetrieverEngines returns the PostgreSQL retriever capabilities.
+
 // GetDefaultRetrieverEngines returns the default retriever engines based on RETRIEVE_DRIVER env
 func GetDefaultRetrieverEngines() []RetrieverEngineParams {
-	result := []RetrieverEngineParams{}
-	seen := make(map[string]bool)
-
-	for _, driver := range strings.Split(os.Getenv("RETRIEVE_DRIVER"), ",") {
-		driver = strings.TrimSpace(driver)
-		if params, ok := retrieverEngineMapping[driver]; ok {
-			for _, p := range params {
-				key := string(p.RetrieverType) + ":" + string(p.RetrieverEngineType)
-				if !seen[key] {
-					seen[key] = true
-					result = append(result, p)
-				}
-			}
-		}
-	}
-	return result
+	return append([]RetrieverEngineParams(nil), retrieverEngineMapping["postgres"]...)
 }
 
 // Tenant represents the tenant
@@ -106,9 +58,8 @@ type Tenant struct {
 	WebSearchConfig *WebSearchConfig `yaml:"web_search_config"   json:"web_search_config"   gorm:"type:jsonb"`
 	// Parser engine config overrides (MinerU endpoint, API key, etc.). Used when parsing documents; overrides env.
 	ParserEngineConfig *ParserEngineConfig `yaml:"parser_engine_config" json:"parser_engine_config" gorm:"type:jsonb"`
-	// Credentials config: third-party provider credentials (e.g. WeKnoraCloud AppID/AppSecret)
-	Credentials *CredentialsConfig `yaml:"credentials" json:"credentials" gorm:"type:jsonb"`
-	// Storage engine config: parameters for Local, MinIO, COS. Used for document/file storage and docreader.
+	// Credentials retains encrypted metadata from existing deployments.
+	Credentials         *CredentialsConfig   `yaml:"credentials" json:"credentials" gorm:"type:jsonb"`
 	StorageEngineConfig *StorageEngineConfig `yaml:"storage_engine_config" json:"storage_engine_config" gorm:"type:jsonb"`
 	// DefaultStorageBackendID is the workspace default concrete storage instance.
 	DefaultStorageBackendID *string `yaml:"default_storage_backend_id" json:"default_storage_backend_id,omitempty" gorm:"column:default_storage_backend_id;type:varchar(36)"`
@@ -249,17 +200,6 @@ func (c *APIPrincipalConfig) Scan(value interface{}) error {
 		c.HMACSecret = ""
 	}
 	return nil
-}
-
-// GetWeKnoraCloud returns the WeKnoraCloud credentials, or nil if not configured.
-func (c *CredentialsConfig) GetWeKnoraCloud() *WeKnoraCloudCredentials {
-	if c == nil || c.WeKnoraCloud == nil {
-		return nil
-	}
-	if c.WeKnoraCloud.AppID == "" || c.WeKnoraCloud.AppSecret == "" {
-		return nil
-	}
-	return c.WeKnoraCloud
 }
 
 // Value implements the driver.Valuer interface for CredentialsConfig
@@ -498,18 +438,13 @@ func (c *ParserEngineConfig) Scan(value interface{}) error {
 	return json.Unmarshal(b, c)
 }
 
-// StorageEngineConfig holds tenant-level storage engine parameters for Local, MinIO, COS, TOS, S3, OSS, KS3, and OBS.
+// StorageEngineConfig holds tenant-level local and S3-compatible storage parameters.
 // Knowledge bases select which provider to use; parameters are read from here.
 type StorageEngineConfig struct {
-	DefaultProvider string             `json:"default_provider"` // "local", "minio", "cos", "tos", "s3", "oss", "ks3", "obs"
+	DefaultProvider string             `json:"default_provider"` // "local", "minio", "s3"
 	Local           *LocalEngineConfig `json:"local,omitempty"`
 	MinIO           *MinIOEngineConfig `json:"minio,omitempty"`
-	COS             *COSEngineConfig   `json:"cos,omitempty"`
-	TOS             *TOSEngineConfig   `json:"tos,omitempty"`
 	S3              *S3EngineConfig    `json:"s3,omitempty"`
-	OSS             *OSSEngineConfig   `json:"oss,omitempty"`
-	KS3             *KS3EngineConfig   `json:"ks3,omitempty"`
-	OBS             *OBSEngineConfig   `json:"obs,omitempty"`
 }
 
 // LocalEngineConfig is for local file system storage (single-machine deployment only).
@@ -529,30 +464,6 @@ type MinIOEngineConfig struct {
 	PathPrefix      string `json:"path_prefix"`
 }
 
-// COSEngineConfig is for Tencent Cloud COS.
-type COSEngineConfig struct {
-	SecretID       string `json:"secret_id"`
-	SecretKey      string `json:"secret_key"`
-	Region         string `json:"region"`
-	BucketName     string `json:"bucket_name"`
-	AppID          string `json:"app_id"`
-	PathPrefix     string `json:"path_prefix"`
-	TempBucketName string `json:"temp_bucket_name"`
-	TempRegion     string `json:"temp_region"`
-}
-
-// TOSEngineConfig is for Volcengine TOS (火山引擎对象存储).
-type TOSEngineConfig struct {
-	Endpoint       string `json:"endpoint"`
-	Region         string `json:"region"`
-	AccessKey      string `json:"access_key"`
-	SecretKey      string `json:"secret_key"`
-	BucketName     string `json:"bucket_name"`
-	PathPrefix     string `json:"path_prefix"`
-	TempBucketName string `json:"temp_bucket_name"`
-	TempRegion     string `json:"temp_region"`
-}
-
 // S3EngineConfig is for AWS S3 and S3-compatible object storage.
 type S3EngineConfig struct {
 	Endpoint       string `json:"endpoint"`
@@ -563,40 +474,6 @@ type S3EngineConfig struct {
 	PathPrefix     string `json:"path_prefix"`
 	UseSSL         bool   `json:"use_ssl"`
 	ForcePathStyle bool   `json:"force_path_style"`
-}
-
-// OSSEngineConfig is for Alibaba Cloud OSS (对象存储服务).
-type OSSEngineConfig struct {
-	Endpoint       string `json:"endpoint"`
-	Region         string `json:"region"`
-	AccessKey      string `json:"access_key"`
-	SecretKey      string `json:"secret_key"`
-	BucketName     string `json:"bucket_name"`
-	PathPrefix     string `json:"path_prefix"`
-	UseTempBucket  bool   `json:"use_temp_bucket"`
-	TempBucketName string `json:"temp_bucket_name"`
-	TempRegion     string `json:"temp_region"`
-}
-
-// KS3EngineConfig is for Kingsoft Cloud KS3 object storage.
-type KS3EngineConfig struct {
-	Endpoint   string `json:"endpoint"`
-	Region     string `json:"region"`
-	AccessKey  string `json:"access_key"`
-	SecretKey  string `json:"secret_key"`
-	BucketName string `json:"bucket_name"`
-	PathPrefix string `json:"path_prefix"`
-}
-
-// OBSEngineConfig is for Huawei Cloud OBS (对象存储服务).
-type OBSEngineConfig struct {
-	Endpoint   string `json:"endpoint"`
-	Region     string `json:"region"`
-	AccessKey  string `json:"access_key"`
-	SecretKey  string `json:"secret_key"`
-	BucketName string `json:"bucket_name"`
-	PathPrefix string `json:"path_prefix"`
-	UseSSL     bool   `json:"use_ssl"`
 }
 
 // Value implements the driver.Valuer interface for StorageEngineConfig

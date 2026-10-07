@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/chunker"
 	"reliquary/internal/types"
@@ -62,13 +63,6 @@ func TestChunkOverlapExplicitZeroAndOmittedDefaults(t *testing.T) {
 	})
 }
 
-func testKBWithGraphEnabled(enabled bool) *types.KnowledgeBase {
-	return &types.KnowledgeBase{
-		IndexingStrategy: types.IndexingStrategy{GraphEnabled: enabled},
-		ExtractConfig:    &types.ExtractConfig{Enabled: enabled},
-	}
-}
-
 func TestResolveProcessConfig_OverridesChunkSize(t *testing.T) {
 	t.Parallel()
 
@@ -105,28 +99,6 @@ func TestResolveProcessConfig_OverrideTogglesParentChild(t *testing.T) {
 	require.True(t, effOn.ChunkingConfig.EnableParentChild)
 }
 
-func TestResolveProcessConfig_GraphDisabled(t *testing.T) {
-	t.Parallel()
-
-	kb := testKBWithGraphEnabled(true)
-	overrides := &types.KnowledgeProcessOverrides{GraphEnabled: processConfigBoolPtr(false)}
-	eff := ResolveProcessConfig(kb, overrides)
-	require.False(t, eff.GraphEnabled)
-}
-
-func TestResolveProcessConfig_GraphRequiresExtractEnabled(t *testing.T) {
-	t.Parallel()
-
-	kb := testKBWithGraphEnabled(true)
-	overrides := &types.KnowledgeProcessOverrides{
-		GraphEnabled:  processConfigBoolPtr(true),
-		ExtractConfig: &types.ExtractConfig{Enabled: false},
-	}
-	eff := ResolveProcessConfig(kb, overrides)
-	require.False(t, eff.ExtractConfig.Enabled)
-	require.False(t, eff.GraphEnabled)
-}
-
 func TestResolveProcessConfig_NilOverridesUsesKBDefaults(t *testing.T) {
 	t.Parallel()
 
@@ -138,8 +110,6 @@ func TestResolveProcessConfig_NilOverridesUsesKBDefaults(t *testing.T) {
 			Enabled:       true,
 			QuestionCount: 3,
 		},
-		IndexingStrategy: types.IndexingStrategy{GraphEnabled: true},
-		ExtractConfig:    &types.ExtractConfig{Enabled: true, Tags: []string{"tag-a"}},
 	}
 
 	eff := ResolveProcessConfig(kb, nil)
@@ -151,9 +121,6 @@ func TestResolveProcessConfig_NilOverridesUsesKBDefaults(t *testing.T) {
 	require.Equal(t, "asr-1", eff.ASRConfig.ModelID)
 	require.True(t, eff.QuestionGenerationConfig.Enabled)
 	require.Equal(t, 3, eff.QuestionGenerationConfig.QuestionCount)
-	require.True(t, eff.GraphEnabled)
-	require.True(t, eff.ExtractConfig.Enabled)
-	require.Equal(t, []string{"tag-a"}, eff.ExtractConfig.Tags)
 }
 
 func TestBuildSplitterConfigFromChunking_UsesEffectiveChunkingConfig(t *testing.T) {
@@ -313,28 +280,6 @@ func TestResolveProcessConfig_EnableMultimodelOverride(t *testing.T) {
 	require.False(t, eff.EnableMultimodel)
 }
 
-func TestResolveProcessConfig_ExtractConfigFieldMerge(t *testing.T) {
-	t.Parallel()
-
-	kb := &types.KnowledgeBase{
-		ExtractConfig: &types.ExtractConfig{
-			Enabled: true,
-			Text:    "base text",
-			Tags:    []string{"base-tag"},
-		},
-	}
-	overrides := &types.KnowledgeProcessOverrides{
-		ExtractConfig: &types.ExtractConfig{
-			Enabled: true,
-			Tags:    []string{"override-tag"},
-		},
-	}
-	eff := ResolveProcessConfig(kb, overrides)
-	require.True(t, eff.ExtractConfig.Enabled)
-	require.Equal(t, "base text", eff.ExtractConfig.Text)
-	require.Equal(t, []string{"override-tag"}, eff.ExtractConfig.Tags)
-}
-
 func TestResolveProcessConfig_PreservesKnowledgeBasePromptInstructions(t *testing.T) {
 	t.Parallel()
 
@@ -346,13 +291,11 @@ func TestResolveProcessConfig_PreservesKnowledgeBasePromptInstructions(t *testin
 		QuestionGenerationConfig: &types.QuestionGenerationConfig{
 			Enabled: true, QuestionCount: 3, CustomInstructions: "customer questions",
 		},
-		ExtractConfig: &types.ExtractConfig{Enabled: true, CustomInstructions: "contract entities"},
 	}
 	overrides := &types.KnowledgeProcessOverrides{
 		ChunkingConfig:           &types.ChunkingConfig{ChunkSize: 256},
 		VLMConfig:                &types.VLMConfig{Enabled: true, ModelID: "vlm-2"},
 		QuestionGenerationConfig: &types.QuestionGenerationConfig{Enabled: true, QuestionCount: 5},
-		ExtractConfig:            &types.ExtractConfig{Enabled: true},
 	}
 
 	eff := ResolveProcessConfig(kb, overrides)
@@ -360,7 +303,6 @@ func TestResolveProcessConfig_PreservesKnowledgeBasePromptInstructions(t *testin
 	require.Equal(t, "English", eff.VLMConfig.DescriptionLanguage)
 	require.Equal(t, "read labels", eff.VLMConfig.CustomInstructions)
 	require.Equal(t, "customer questions", eff.QuestionGenerationConfig.CustomInstructions)
-	require.Equal(t, "contract entities", eff.ExtractConfig.CustomInstructions)
 }
 
 func TestValidateProcessOverrides_RejectsOversizedInstructions(t *testing.T) {
@@ -446,13 +388,13 @@ func TestValidateProcessOverrides_ImageAllowsStorageFallback(t *testing.T) {
 
 	ctx := context.WithValue(context.Background(), types.TenantInfoContextKey, &types.Tenant{
 		StorageEngineConfig: &types.StorageEngineConfig{
-			COS: &types.COSEngineConfig{SecretID: "id"},
+			S3: &types.S3EngineConfig{AccessKey: "incomplete"},
 		},
 	})
 	kb := &types.KnowledgeBase{
 		VLMConfig: types.VLMConfig{Enabled: true, ModelID: "vlm-1"},
 	}
-	kb.SetStorageProvider("cos")
+	kb.SetStorageProvider("s3")
 
 	err := ValidateProcessOverrides(ctx, kb, &types.KnowledgeProcessOverrides{}, []string{"png"})
 	require.NoError(t, err)

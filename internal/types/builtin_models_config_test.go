@@ -8,8 +8,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	"reliquary/internal/testutil/sqlfixture"
 )
 
 // setupBuiltinModelsDB creates an in-memory SQLite DB with `models` migrated
@@ -18,7 +19,7 @@ import (
 // migrations produce.
 func setupBuiltinModelsDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := sqlfixture.Open(":memory:", &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&Model{}))
 	return db

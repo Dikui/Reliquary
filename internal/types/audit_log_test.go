@@ -29,10 +29,6 @@ func TestAuditAction_DotNamespaceConvention(t *testing.T) {
 		AuditActionVectorStoreCreated,
 		AuditActionVectorStoreUpdated,
 		AuditActionVectorStoreDeleted,
-		// OpenSearch namespace (Phase 3 PR 1 / #1440)
-		AuditActionOpenSearchIndexCreated,
-		AuditActionOpenSearchIndexDeleted,
-		AuditActionOpenSearchReindexExecuted,
 		// System namespace (this PR — system admin & settings)
 		AuditActionSystemSettingChanged,
 		AuditActionSystemAdminPromoted,
@@ -73,25 +69,6 @@ func TestAuditAction_VectorStoreNamespacePrefix(t *testing.T) {
 	}
 }
 
-// TestAuditAction_OpenSearchNamespacePrefix pins the three
-// opensearch.* actions added in Phase 3 PR 1 to their shared area
-// prefix. OpenSearch index lifecycle is a driver-specific concern
-// distinct from VectorStore lifecycle — both can co-occur for the
-// same logical operation (e.g. CreateVectorStore + IndexCreated).
-func TestAuditAction_OpenSearchNamespacePrefix(t *testing.T) {
-	cases := []AuditAction{
-		AuditActionOpenSearchIndexCreated,
-		AuditActionOpenSearchIndexDeleted,
-		AuditActionOpenSearchReindexExecuted,
-	}
-	for _, a := range cases {
-		assert.True(t,
-			strings.HasPrefix(string(a), "opensearch."),
-			"expected %q to start with 'opensearch.'", a,
-		)
-	}
-}
-
 // TestAuditAction_NoCollisionsAcrossNamespaces ensures no two
 // AuditAction constants share the same wire string. A duplicate would
 // silently merge two logical events into one entry in the audit-log
@@ -118,9 +95,6 @@ func TestAuditAction_NoCollisionsAcrossNamespaces(t *testing.T) {
 	register("AuditActionVectorStoreCreated", AuditActionVectorStoreCreated)
 	register("AuditActionVectorStoreUpdated", AuditActionVectorStoreUpdated)
 	register("AuditActionVectorStoreDeleted", AuditActionVectorStoreDeleted)
-	register("AuditActionOpenSearchIndexCreated", AuditActionOpenSearchIndexCreated)
-	register("AuditActionOpenSearchIndexDeleted", AuditActionOpenSearchIndexDeleted)
-	register("AuditActionOpenSearchReindexExecuted", AuditActionOpenSearchReindexExecuted)
 	register("AuditActionSystemSettingChanged", AuditActionSystemSettingChanged)
 	register("AuditActionSystemAdminPromoted", AuditActionSystemAdminPromoted)
 	register("AuditActionSystemAdminRevoked", AuditActionSystemAdminRevoked)
@@ -160,10 +134,9 @@ func TestAuditAction_SystemNamespacePrefix(t *testing.T) {
 	}
 }
 
-// TestAuditAction_SystemWireValues pins the exact wire strings for
-// the system.* actions. Audit-log consumers (Langfuse exporters,
-// the new frontend platform audit drawer, future SIEM integrations)
-// match on these strings; changing them is a breaking change.
+// TestAuditAction_SystemWireValues pins the exact wire strings for the system.*
+// actions. Audit-log consumers such as the platform audit drawer and SIEM
+// integrations match on these strings; changing them is a breaking change.
 func TestAuditAction_SystemWireValues(t *testing.T) {
 	cases := []struct {
 		constant AuditAction
@@ -186,7 +159,7 @@ func TestAuditAction_SystemWireValues(t *testing.T) {
 }
 
 // TestAuditAction_Phase3WireValues pins the exact wire strings for
-// the six new Phase 3 actions. The wire strings are the public
+// the three vector store actions. The wire strings are the public
 // contract for audit-log consumers; changing them is a breaking
 // change.
 func TestAuditAction_Phase3WireValues(t *testing.T) {
@@ -197,9 +170,6 @@ func TestAuditAction_Phase3WireValues(t *testing.T) {
 		{AuditActionVectorStoreCreated, "vector_store.created"},
 		{AuditActionVectorStoreUpdated, "vector_store.updated"},
 		{AuditActionVectorStoreDeleted, "vector_store.deleted"},
-		{AuditActionOpenSearchIndexCreated, "opensearch.index_created"},
-		{AuditActionOpenSearchIndexDeleted, "opensearch.index_deleted"},
-		{AuditActionOpenSearchReindexExecuted, "opensearch.reindex_executed"},
 	}
 	for _, c := range cases {
 		assert.Equal(t, c.wire, string(c.constant))

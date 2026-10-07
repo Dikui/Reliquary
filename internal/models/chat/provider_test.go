@@ -8,6 +8,7 @@ import (
 	"github.com/sashabaranov/go-openai"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"reliquary/internal/models/provider"
 	"reliquary/internal/types"
 )
@@ -37,7 +38,6 @@ func TestResolveProvider(t *testing.T) {
 		{"azure reasoning", provider.ProviderAzureOpenAI, "gpt-5-mini", azureReasoningProvider{}},
 		{"moonshot fixed temp", provider.ProviderMoonshot, "moonshot-v1-8k", moonshotProvider{}},
 		{"moonshot other falls back", provider.ProviderMoonshot, "kimi-latest", baseProvider{}},
-		{"weknora cloud", provider.ProviderWeKnoraCloud, "anything", weKnoraCloudProvider{}},
 		{"unknown falls back", provider.ProviderName("nope"), "x", baseProvider{}},
 	}
 	for _, tc := range cases {

@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
+
 	"reliquary/internal/application/repository"
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -35,14 +35,13 @@ func (s reprocessKnowledge) SetKnowledgeTags(ctx context.Context, id string, ids
 }
 
 func TestKnowledgeReprocessKeepsManualChoicesAndScope(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
-	require.NoError(t, err)
+	db := pgtest.OpenFixture(t)
 	for _, ddl := range []string{
-		`CREATE TABLE knowledge_bases (id TEXT PRIMARY KEY, tenant_id INTEGER, creator_id TEXT, deleted_at DATETIME)`,
-		`CREATE TABLE knowledges (id TEXT PRIMARY KEY, tenant_id INTEGER, knowledge_base_id TEXT, title TEXT, channel TEXT, parse_status TEXT, metadata TEXT, deleted_at DATETIME)`,
-		`CREATE TABLE knowledge_tags (id TEXT PRIMARY KEY, seq_id INTEGER, tenant_id INTEGER, knowledge_base_id TEXT, name TEXT, kind TEXT, color TEXT, sort_order INTEGER, created_at DATETIME, updated_at DATETIME)`,
-		`CREATE TABLE knowledge_tag_relations (knowledge_id TEXT, tag_id TEXT, created_at DATETIME, PRIMARY KEY (knowledge_id, tag_id))`,
-		`CREATE TABLE knowledge_tag_manual_decisions (knowledge_id TEXT, tag_id TEXT, selected BOOLEAN, actor_id TEXT, reason TEXT, updated_at DATETIME, PRIMARY KEY (knowledge_id, tag_id))`,
+		`CREATE TABLE knowledge_bases (id TEXT PRIMARY KEY, tenant_id INTEGER, creator_id TEXT, deleted_at TIMESTAMPTZ)`,
+		`CREATE TABLE knowledges (id TEXT PRIMARY KEY, tenant_id INTEGER, knowledge_base_id TEXT, title TEXT, channel TEXT, parse_status TEXT, metadata JSONB, deleted_at TIMESTAMPTZ)`,
+		`CREATE TABLE knowledge_tags (id TEXT PRIMARY KEY, seq_id INTEGER, tenant_id INTEGER, knowledge_base_id TEXT, name TEXT, kind TEXT, color TEXT, sort_order INTEGER, created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ)`,
+		`CREATE TABLE knowledge_tag_relations (knowledge_id TEXT, tag_id TEXT, created_at TIMESTAMPTZ, PRIMARY KEY (knowledge_id, tag_id))`,
+		`CREATE TABLE knowledge_tag_manual_decisions (knowledge_id TEXT, tag_id TEXT, selected BOOLEAN, actor_id TEXT, reason TEXT, updated_at TIMESTAMPTZ, PRIMARY KEY (knowledge_id, tag_id))`,
 	} {
 		require.NoError(t, db.Exec(ddl).Error)
 	}
@@ -65,7 +64,7 @@ func TestKnowledgeReprocessKeepsManualChoicesAndScope(t *testing.T) {
 	repo := repository.NewKnowledgeRepository(db)
 	kb := &types.KnowledgeBase{ID: "kb", TenantID: 1, CreatorID: "owner", SummaryModelID: "model"}
 	svc := NewKnowledgeStrategyService(db, strategyKB{kb: kb}, reprocessKnowledge{repo: repo}, intakeModelService{chat: strategyChat{}}, repository.NewKnowledgeTagRepository(db), nil)
-	_, err = svc.Reprocess(anomalyContext("reviewer"), "kb", []string{"selected"}, "")
+	_, err := svc.Reprocess(anomalyContext("reviewer"), "kb", []string{"selected"}, "")
 	require.Error(t, err)
 	_, err = svc.Reprocess(anomalyContext("owner"), "kb", []string{"selected", "missing"}, "")
 	require.Error(t, err)

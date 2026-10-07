@@ -37,7 +37,7 @@ type CreateOptions struct {
 
 // storageProviderValues mirrors the server enum in
 // internal/types/knowledgebase.go:StorageProviderConfig.Provider.
-var storageProviderValues = []string{"local", "minio", "cos", "tos", "s3", "oss", "ks3", "obs"}
+var storageProviderValues = []string{"local", "minio", "s3"}
 
 // CreateService is the narrow SDK surface this command depends on.
 // *sdk.Client satisfies it via duck typing.

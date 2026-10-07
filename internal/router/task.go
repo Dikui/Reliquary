@@ -12,11 +12,11 @@ import (
 
 	"github.com/hibiken/asynq"
 	"go.uber.org/dig"
+
 	"reliquary/internal/application/service"
 	"reliquary/internal/common"
 	"reliquary/internal/logger"
 	"reliquary/internal/middleware/asynqdl"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -38,7 +38,6 @@ type AsynqTaskParams struct {
 	KnowledgeBaseService interfaces.KnowledgeBaseService
 	TagService           interfaces.KnowledgeTagService
 	DataSourceService    interfaces.DataSourceService
-	ChunkExtractor       interfaces.TaskHandler `name:"chunkExtractor"`
 	DataTableSummary     interfaces.TaskHandler `name:"dataTableSummary"`
 	ImageMultimodal      interfaces.TaskHandler `name:"imageMultimodal"`
 	KnowledgePostProcess interfaces.TaskHandler `name:"knowledgePostProcess"`
@@ -253,16 +252,7 @@ func RunAsynqServer(params AsynqTaskParams) *asynq.ServeMux {
 	// downstream handlers (and their model calls) inherit the flag.
 	mux.Use(backgroundTaskMiddleware())
 
-	// Install Langfuse middleware BEFORE handler registration so every task
-	// type is automatically wrapped. When Langfuse is disabled the middleware
-	// is a pass-through; when enabled it resumes the upstream HTTP trace (if
-	// the payload carries one) or opens a standalone trace, then wraps the
-	// handler execution in a SPAN so all child generations (embedding / VLM /
-	// chat / rerank / ASR) nest correctly in the Langfuse UI.
-	mux.Use(langfuse.AsynqMiddleware())
-
 	// Register extract handlers - router will dispatch to appropriate handler
-	mux.HandleFunc(types.TypeChunkExtract, params.ChunkExtractor.Handle)
 	mux.HandleFunc(types.TypeDataTableSummary, params.DataTableSummary.Handle)
 
 	// Register document processing handler

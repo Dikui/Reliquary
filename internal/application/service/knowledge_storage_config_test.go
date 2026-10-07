@@ -11,9 +11,8 @@ import (
 // of (knowledgeService).buildStorageConfig: every provider listed in
 // types.StorageEngineConfig and types.ParseProviderScheme must produce a
 // fully-populated DocParserStorageConfig when the tenant carries the matching
-// engine config. Before issue #1117 was fixed, tos/s3/oss/ks3 fell through the
-// switch and produced a result with only Provider set, silently dropping the
-// bucket / endpoint / credentials and stalling docreader.
+// engine config. Each retained provider must keep the credentials and endpoint
+// needed by the document reader.
 func TestBuildStorageConfig_TenantMergeAllProviders(t *testing.T) {
 	t.Parallel()
 
@@ -25,7 +24,6 @@ func TestBuildStorageConfig_TenantMergeAllProviders(t *testing.T) {
 		bucket          string
 		accessKeyID     string
 		secretAccessKey string
-		appID           string
 		pathPrefix      string
 		endpoint        string
 	}
@@ -64,38 +62,6 @@ func TestBuildStorageConfig_TenantMergeAllProviders(t *testing.T) {
 			},
 		},
 		{
-			name:     "cos — appid carried through",
-			kbConfig: &types.StorageProviderConfig{Provider: "cos"},
-			tenant: &types.Tenant{StorageEngineConfig: &types.StorageEngineConfig{
-				COS: &types.COSEngineConfig{
-					Region: "ap-guangzhou", BucketName: "kb-cos-1255000000",
-					SecretID: "cos-sid", SecretKey: "cos-sk",
-					AppID: "1255000000", PathPrefix: "wk/",
-				},
-			}},
-			want: want{
-				provider: "COS", region: "ap-guangzhou", bucket: "kb-cos-1255000000",
-				accessKeyID: "cos-sid", secretAccessKey: "cos-sk",
-				appID: "1255000000", pathPrefix: "wk/",
-			},
-		},
-		{
-			name:     "tos — issue #1117 regression guard",
-			kbConfig: &types.StorageProviderConfig{Provider: "tos"},
-			tenant: &types.Tenant{StorageEngineConfig: &types.StorageEngineConfig{
-				TOS: &types.TOSEngineConfig{
-					Endpoint: "tos-cn-beijing.volces.com", Region: "cn-beijing",
-					AccessKey: "tos-ak", SecretKey: "tos-sk",
-					BucketName: "kb-tos", PathPrefix: "wk/",
-				},
-			}},
-			want: want{
-				provider: "TOS", endpoint: "tos-cn-beijing.volces.com", region: "cn-beijing",
-				accessKeyID: "tos-ak", secretAccessKey: "tos-sk",
-				bucket: "kb-tos", pathPrefix: "wk/",
-			},
-		},
-		{
 			name:     "s3 — issue #1117 regression guard",
 			kbConfig: &types.StorageProviderConfig{Provider: "s3"},
 			tenant: &types.Tenant{StorageEngineConfig: &types.StorageEngineConfig{
@@ -109,38 +75,6 @@ func TestBuildStorageConfig_TenantMergeAllProviders(t *testing.T) {
 				provider: "S3", endpoint: "s3.us-east-1.amazonaws.com", region: "us-east-1",
 				accessKeyID: "AKIA...", secretAccessKey: "s3-sk",
 				bucket: "kb-s3", pathPrefix: "wk/",
-			},
-		},
-		{
-			name:     "oss — issue #1117 regression guard",
-			kbConfig: &types.StorageProviderConfig{Provider: "oss"},
-			tenant: &types.Tenant{StorageEngineConfig: &types.StorageEngineConfig{
-				OSS: &types.OSSEngineConfig{
-					Endpoint: "oss-cn-hangzhou.aliyuncs.com", Region: "cn-hangzhou",
-					AccessKey: "oss-ak", SecretKey: "oss-sk",
-					BucketName: "kb-oss", PathPrefix: "wk/",
-				},
-			}},
-			want: want{
-				provider: "OSS", endpoint: "oss-cn-hangzhou.aliyuncs.com", region: "cn-hangzhou",
-				accessKeyID: "oss-ak", secretAccessKey: "oss-sk",
-				bucket: "kb-oss", pathPrefix: "wk/",
-			},
-		},
-		{
-			name:     "ks3 — added in #1109, must not regress",
-			kbConfig: &types.StorageProviderConfig{Provider: "ks3"},
-			tenant: &types.Tenant{StorageEngineConfig: &types.StorageEngineConfig{
-				KS3: &types.KS3EngineConfig{
-					Endpoint: "ks3-cn-beijing.ksyuncs.com", Region: "cn-beijing",
-					AccessKey: "ks3-ak", SecretKey: "ks3-sk",
-					BucketName: "kb-ks3", PathPrefix: "wk/",
-				},
-			}},
-			want: want{
-				provider: "KS3", endpoint: "ks3-cn-beijing.ksyuncs.com", region: "cn-beijing",
-				accessKeyID: "ks3-ak", secretAccessKey: "ks3-sk",
-				bucket: "kb-ks3", pathPrefix: "wk/",
 			},
 		},
 	}
@@ -176,9 +110,6 @@ func TestBuildStorageConfig_TenantMergeAllProviders(t *testing.T) {
 			if got.SecretAccessKey != tt.want.secretAccessKey {
 				t.Errorf("SecretAccessKey = %q, want %q", got.SecretAccessKey, tt.want.secretAccessKey)
 			}
-			if got.AppID != tt.want.appID {
-				t.Errorf("AppID = %q, want %q", got.AppID, tt.want.appID)
-			}
 			if got.PathPrefix != tt.want.pathPrefix {
 				t.Errorf("PathPrefix = %q, want %q", got.PathPrefix, tt.want.pathPrefix)
 			}
@@ -189,23 +120,18 @@ func TestBuildStorageConfig_TenantMergeAllProviders(t *testing.T) {
 	}
 }
 
-// TestBuildStorageConfig_LegacyPathOnlyForCOSAndMinIO verifies that the legacy
+// TestBuildStorageConfig_LegacyPathOnlyForMinIO verifies that the legacy
 // (kb.StorageConfig "cos_config" column) path is only used for the providers
-// that historically wrote into it — cos and minio. tos/s3/oss/ks3 must always
-// resolve through the tenant-merge path, so a populated legacy struct on those
-// providers is intentionally ignored rather than silently aliased onto the
-// wrong fields.
-func TestBuildStorageConfig_LegacyPathOnlyForCOSAndMinIO(t *testing.T) {
+// that historically used it. Local and S3 resolve through tenant settings.
+func TestBuildStorageConfig_LegacyPathOnlyForMinIO(t *testing.T) {
 	t.Parallel()
 
-	// Legacy StorageConfig with full COS-shape fields. cos+minio should pick it
-	// up; everything else falls through to the tenant merge.
+	// Legacy MinIO parameters are preserved; other providers use tenant settings.
 	legacy := types.StorageConfig{
 		SecretID:   "legacy-sid",
 		SecretKey:  "legacy-sk",
 		Region:     "ap-guangzhou",
 		BucketName: "legacy-bucket",
-		AppID:      "1255000000",
 		PathPrefix: "wk/",
 	}
 
@@ -214,16 +140,11 @@ func TestBuildStorageConfig_LegacyPathOnlyForCOSAndMinIO(t *testing.T) {
 		provider    string
 		wantBucket  string // populated when legacy path was taken
 		wantSecret  string
-		wantAppID   string
 		wantTenants bool // true when the test should fall through to tenant merge (empty result)
 	}{
-		{name: "cos uses legacy", provider: "cos", wantBucket: "legacy-bucket", wantSecret: "legacy-sid", wantAppID: "1255000000"},
-		{name: "minio uses legacy", provider: "minio", wantBucket: "legacy-bucket", wantSecret: "legacy-sid", wantAppID: "1255000000"},
+		{name: "minio uses legacy", provider: "minio", wantBucket: "legacy-bucket", wantSecret: "legacy-sid"},
 		{name: "local skips legacy", provider: "local", wantTenants: true},
-		{name: "tos skips legacy", provider: "tos", wantTenants: true},
 		{name: "s3 skips legacy", provider: "s3", wantTenants: true},
-		{name: "oss skips legacy", provider: "oss", wantTenants: true},
-		{name: "ks3 skips legacy", provider: "ks3", wantTenants: true},
 	}
 
 	for _, tt := range tests {
@@ -246,9 +167,9 @@ func TestBuildStorageConfig_LegacyPathOnlyForCOSAndMinIO(t *testing.T) {
 
 			if tt.wantTenants {
 				// Legacy path NOT taken → fields stay empty (Provider is the only thing set).
-				if got.BucketName != "" || got.AccessKeyID != "" || got.AppID != "" {
-					t.Errorf("provider=%s expected legacy path skipped, got bucket=%q ak=%q appid=%q",
-						tt.provider, got.BucketName, got.AccessKeyID, got.AppID)
+				if got.BucketName != "" || got.AccessKeyID != "" {
+					t.Errorf("provider=%s expected legacy path skipped, got bucket=%q ak=%q",
+						tt.provider, got.BucketName, got.AccessKeyID)
 				}
 				return
 			}
@@ -257,9 +178,6 @@ func TestBuildStorageConfig_LegacyPathOnlyForCOSAndMinIO(t *testing.T) {
 			}
 			if got.AccessKeyID != tt.wantSecret {
 				t.Errorf("AccessKeyID (mapped from legacy SecretID) = %q, want %q", got.AccessKeyID, tt.wantSecret)
-			}
-			if got.AppID != tt.wantAppID {
-				t.Errorf("AppID = %q, want %q", got.AppID, tt.wantAppID)
 			}
 		})
 	}
@@ -272,7 +190,7 @@ func TestBuildStorageConfig_LegacyPathOnlyForCOSAndMinIO(t *testing.T) {
 func TestBuildStorageConfig_NoTenantFallsThroughToEmpty(t *testing.T) {
 	t.Parallel()
 
-	for _, p := range []string{"local", "minio", "cos", "tos", "s3", "oss", "ks3"} {
+	for _, p := range []string{"local", "minio", "s3"} {
 		p := p
 		t.Run(p, func(t *testing.T) {
 			t.Parallel()

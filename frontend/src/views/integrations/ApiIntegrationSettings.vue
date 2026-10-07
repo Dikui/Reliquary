@@ -26,55 +26,6 @@
           </div>
         </div>
 
-        <template v-if="showDesktopPortSetting || showDesktopBindPublicSetting">
-          <div v-if="showDesktopPortSetting" class="row">
-            <div class="row-info">
-              <label>{{ $t('tenant.api.desktopPortLabel') }}</label>
-              <p>{{ $t('tenant.api.desktopPortDescription') }}</p>
-            </div>
-            <div class="row-control desktop-api-control">
-              <div class="desktop-port-input-wrap">
-                <t-input-number
-                  v-model="desktopPortInput"
-                  :min="0"
-                  :max="65535"
-                  theme="normal"
-                />
-              </div>
-              <t-button size="small" variant="text" @click="saveDesktopPort">
-                {{ $t('tenant.api.desktopPortSave') }}
-              </t-button>
-            </div>
-          </div>
-
-          <div v-if="showDesktopBindPublicSetting" class="row">
-            <div class="row-info">
-              <label>{{ $t('tenant.api.desktopBindPublicLabel') }}</label>
-              <p>{{ $t('tenant.api.desktopBindPublicDescription') }}</p>
-            </div>
-            <div class="row-control desktop-bind-public-control">
-              <t-switch v-model="desktopBindPublicInput" @change="onDesktopBindPublicChange" />
-            </div>
-          </div>
-
-          <div v-if="wailsApiLanBaseURL" class="row">
-            <div class="row-info">
-              <label>{{ $t('tenant.api.lanUrlLabel') }}</label>
-              <p>{{ $t('tenant.api.lanUrlDescription') }}</p>
-            </div>
-            <div class="row-control copy-field">
-              <t-input :model-value="wailsApiLanBaseURL" readonly class="mono-input" />
-              <t-button variant="text" :title="$t('tenant.api.lanUrlCopyTitle')" @click="copy(wailsApiLanBaseURL)">
-                <t-icon name="file-copy" />
-              </t-button>
-            </div>
-          </div>
-
-          <div v-if="showLanUrlUnavailableHint" class="row row--single">
-            <t-alert theme="warning" :message="$t('tenant.api.lanUrlUnavailable')" />
-          </div>
-        </template>
-
         <div class="row row--doc">
           <div class="row-info">
             <label>{{ $t('tenant.api.docLabel') }}</label>
@@ -733,13 +684,6 @@ const agentsError = ref('')
 const playgroundDrawerVisible = ref(false)
 const playgroundController = ref<AbortController | null>(null)
 const showHMACSecret = ref(false)
-const wailsApiBaseURL = ref<string | null>(null)
-const wailsApiLanBaseURL = ref<string | null>(null)
-const showDesktopPortSetting = ref(false)
-const showDesktopBindPublicSetting = ref(false)
-const desktopPortInput = ref<number | undefined>(0)
-const desktopBindPublicInput = ref(false)
-const desktopListenPublicActive = ref(false)
 
 const form = reactive({
   mode: 'tenant' as APIPrincipalMode,
@@ -901,24 +845,6 @@ function formatApiKeyAccessModeLabel(key: TenantAPIKey): string {
 
 type PlaygroundStatus = '' | 'running' | 'success' | 'failed' | 'stopped'
 
-type ReliquaryDesktopWindow = Window & {
-  __RELIQUARY_API_BASE__?: string
-  __RELIQUARY_API_LAN_BASE__?: string
-  go?: {
-    main?: {
-      App?: {
-        GetAPIBaseURL?: () => Promise<string> | string
-        GetAPILanBaseURL?: () => Promise<string> | string
-        GetDesktopHTTPPortSetting?: () => Promise<number> | number
-        GetDesktopHTTPBindPublicSetting?: () => Promise<boolean> | boolean
-        GetDesktopListenPublicActive?: () => Promise<boolean> | boolean
-        SetDesktopHTTPPortSetting?: (port: number) => Promise<void> | void
-        SetDesktopHTTPBindPublicSetting?: (v: boolean) => Promise<void> | void
-      }
-    }
-  }
-}
-
 const playground = reactive({
   agent_id: '',
   query: 'hello',
@@ -946,19 +872,10 @@ watch(playgroundDrawerVisible, (visible) => {
 })
 
 const apiBaseUrl = computed(() => {
-  if (wailsApiBaseURL.value) {
-    return wailsApiBaseURL.value
-  }
   const configured = getApiBaseUrl().trim().replace(/\/$/, '')
   const origin = typeof window !== 'undefined' && window.location.origin !== 'null' ? window.location.origin : ''
   return `${configured || origin}/api/v1`
 })
-
-const showLanUrlUnavailableHint = computed(() => (
-  showDesktopBindPublicSetting.value
-  && desktopListenPublicActive.value
-  && !wailsApiLanBaseURL.value
-))
 
 const tokenHeaderName = computed(() => DEFAULT_TOKEN_HEADER_NAME)
 
@@ -1312,124 +1229,6 @@ async function copy(text: string) {
   await copyWithToast(text, 'integrations.api.copySuccess')
 }
 
-async function tryLoadWailsApiBaseURL() {
-  const win = window as ReliquaryDesktopWindow
-  for (let i = 0; i < 40; i++) {
-    const injected = win.__RELIQUARY_API_BASE__
-    if (typeof injected === 'string' && injected.trim()) {
-      wailsApiBaseURL.value = injected.trim().replace(/\/$/, '')
-      await tryLoadWailsLanHints(win)
-      return
-    }
-    const fn = win.go?.main?.App?.GetAPIBaseURL
-    if (typeof fn === 'function') {
-      try {
-        const raw = await Promise.resolve(fn())
-        if (typeof raw === 'string' && raw.trim()) {
-          wailsApiBaseURL.value = raw.trim().replace(/\/$/, '')
-        }
-      } catch {
-        /* binding error */
-      }
-      await tryLoadWailsLanHints(win)
-      return
-    }
-    await new Promise((resolve) => setTimeout(resolve, 50))
-  }
-  await tryLoadWailsLanHints(win)
-}
-
-async function tryLoadWailsLanHints(win: ReliquaryDesktopWindow) {
-  const injectedLan = win.__RELIQUARY_API_LAN_BASE__
-  if (typeof injectedLan === 'string' && injectedLan.trim()) {
-    wailsApiLanBaseURL.value = injectedLan.trim().replace(/\/$/, '')
-  }
-  const fnLan = win.go?.main?.App?.GetAPILanBaseURL
-  if (typeof fnLan === 'function' && !wailsApiLanBaseURL.value) {
-    try {
-      const raw = await Promise.resolve(fnLan())
-      if (typeof raw === 'string' && raw.trim()) {
-        wailsApiLanBaseURL.value = raw.trim().replace(/\/$/, '')
-      }
-    } catch {
-      /* binding error */
-    }
-  }
-  const fnAct = win.go?.main?.App?.GetDesktopListenPublicActive
-  if (typeof fnAct === 'function') {
-    try {
-      desktopListenPublicActive.value = !!(await Promise.resolve(fnAct()))
-    } catch {
-      desktopListenPublicActive.value = false
-    }
-  }
-}
-
-function desktopPortBindingsAvailable(win: ReliquaryDesktopWindow) {
-  const app = win.go?.main?.App
-  return typeof app?.GetDesktopHTTPPortSetting === 'function' && typeof app?.SetDesktopHTTPPortSetting === 'function'
-}
-
-function desktopBindPublicBindingsAvailable(win: ReliquaryDesktopWindow) {
-  const app = win.go?.main?.App
-  return (
-    typeof app?.GetDesktopHTTPBindPublicSetting === 'function' &&
-    typeof app?.SetDesktopHTTPBindPublicSetting === 'function'
-  )
-}
-
-async function loadDesktopApiPrefs() {
-  const win = window as ReliquaryDesktopWindow
-  if (desktopPortBindingsAvailable(win)) {
-    showDesktopPortSetting.value = true
-    try {
-      const port = await Promise.resolve(win.go!.main!.App!.GetDesktopHTTPPortSetting!())
-      desktopPortInput.value = typeof port === 'number' ? port : 0
-    } catch {
-      desktopPortInput.value = 0
-    }
-  }
-  if (desktopBindPublicBindingsAvailable(win)) {
-    showDesktopBindPublicSetting.value = true
-    try {
-      const bind = await Promise.resolve(win.go!.main!.App!.GetDesktopHTTPBindPublicSetting!())
-      desktopBindPublicInput.value = !!bind
-    } catch {
-      desktopBindPublicInput.value = false
-    }
-  }
-}
-
-const onDesktopBindPublicChange = async (value: boolean) => {
-  const next = value === true
-  const fn = (window as ReliquaryDesktopWindow).go?.main?.App?.SetDesktopHTTPBindPublicSetting
-  if (typeof fn !== 'function') return
-  try {
-    await Promise.resolve(fn(next))
-    MessagePlugin.success(t('tenant.api.desktopBindPublicSaved'))
-  } catch (err: unknown) {
-    MessagePlugin.error(err instanceof Error ? err.message : t('tenant.api.desktopBindPublicSaveFailed'))
-    desktopBindPublicInput.value = !next
-  }
-}
-
-const saveDesktopPort = async () => {
-  const value = desktopPortInput.value
-  const port = typeof value === 'number' && !Number.isNaN(value) ? Math.floor(value) : 0
-  if (port < 0 || port > 65535) {
-    MessagePlugin.warning(t('tenant.api.desktopPortInvalid'))
-    return
-  }
-  const fn = (window as ReliquaryDesktopWindow).go?.main?.App?.SetDesktopHTTPPortSetting
-  if (typeof fn !== 'function') return
-  try {
-    await Promise.resolve(fn(port))
-    MessagePlugin.success(t('tenant.api.desktopPortSaved'))
-  } catch (err: unknown) {
-    MessagePlugin.error(err instanceof Error ? err.message : t('tenant.api.desktopPortSaveFailed'))
-  }
-}
-
 function openApiDoc() {
   window.open('http://192.168.1.146:3000/dikui/reliquary/src/branch/main/docs/api/README.md', '_blank')
 }
@@ -1735,8 +1534,6 @@ function stopPlayground() {
 }
 
 onMounted(async () => {
-  await tryLoadWailsApiBaseURL()
-  await loadDesktopApiPrefs()
   await load()
 })
 onBeforeUnmount(stopPlayground)
@@ -1797,32 +1594,6 @@ onBeforeUnmount(stopPlayground)
 
 .link-icon {
   font-size: 13px;
-}
-
-.desktop-api-control {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.desktop-port-input-wrap {
-  flex: 1;
-  min-width: 0;
-
-  :deep(.t-input-number),
-  :deep(.t-input__wrap) {
-    width: 100%;
-  }
-
-  :deep(input) {
-    font-family: var(--app-font-family-mono);
-    font-size: 12px;
-  }
-}
-
-.desktop-bind-public-control {
-  justify-content: flex-end;
-  padding-top: 4px;
 }
 
 .api-key-section {
@@ -2088,7 +1859,6 @@ onBeforeUnmount(stopPlayground)
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 
 .api-key-dialog {
   display: flex;

@@ -46,6 +46,10 @@ func TestTenantResponse_AdminGetsRedactedIntegrationConfigs(t *testing.T) {
 	assert.Equal(t, types.RedactedSecretPlaceholder, resp.ParserEngineConfig.MinerUAPIKey)
 	require.NotNil(t, resp.StorageEngineConfig.MinIO)
 	assert.Equal(t, types.RedactedSecretPlaceholder, resp.StorageEngineConfig.MinIO.SecretAccessKey)
+	require.NotNil(t, resp.Credentials)
+	require.NotNil(t, resp.Credentials.WeKnoraCloud)
+	assert.Equal(t, types.RedactedSecretPlaceholder, resp.Credentials.WeKnoraCloud.AppSecret)
+	assert.Equal(t, "wk-app-secret-def", tenant.Credentials.WeKnoraCloud.AppSecret)
 }
 
 func TestTenantResponsesCrossTenant_RedactsEvenForOwnerContext(t *testing.T) {

@@ -1696,7 +1696,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
           @update:summary="timelineSummary = $event" />
       </div>
 
-      <!-- 二级抽屉：完整 Langfuse-style waterfall -->
+      <!-- 二级抽屉：完整 processing waterfall -->
       <teleport to="body">
         <div v-if="timelineDrawerVisible" class="trace-drawer-resize-handle"
           :style="{ right: `${timelineDrawerWidth}px` }" role="separator" aria-orientation="vertical"

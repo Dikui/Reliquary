@@ -11,45 +11,20 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
 
-	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
 	_ "github.com/duckdb/duckdb-go/v2"
-	esv7 "github.com/elastic/go-elasticsearch/v7"
-	"github.com/elastic/go-elasticsearch/v8"
-	_ "github.com/go-sql-driver/mysql" // 给 Doris (database/sql) 注册 MySQL 协议驱动
-	"github.com/milvus-io/milvus/client/v2/milvusclient"
-	"github.com/neo4j/neo4j-go-driver/v6/neo4j"
 	"github.com/panjf2000/ants/v2"
-	"github.com/qdrant/go-client/qdrant"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/dig"
-	"google.golang.org/grpc"
 	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
-	"github.com/tencent/vectordatabase-sdk-go/tcvectordb"
-	"github.com/weaviate/weaviate-go-client/v5/weaviate"
-	"github.com/weaviate/weaviate-go-client/v5/weaviate/auth"
-	wgrpc "github.com/weaviate/weaviate-go-client/v5/weaviate/grpc"
 	"reliquary/internal/agent/approval"
 	"reliquary/internal/application/repository"
-	dorisRepo "reliquary/internal/application/repository/retriever/doris"
-	elasticsearchRepoV7 "reliquary/internal/application/repository/retriever/elasticsearch/v7"
-	elasticsearchRepoV8 "reliquary/internal/application/repository/retriever/elasticsearch/v8"
-	milvusRepo "reliquary/internal/application/repository/retriever/milvus"
-	neo4jRepo "reliquary/internal/application/repository/retriever/neo4j"
-	openSearchRepo "reliquary/internal/application/repository/retriever/opensearch"
 	postgresRepo "reliquary/internal/application/repository/retriever/postgres"
-	qdrantRepo "reliquary/internal/application/repository/retriever/qdrant"
-	sqliteRetrieverRepo "reliquary/internal/application/repository/retriever/sqlite"
-	tencentVectorDBRepo "reliquary/internal/application/repository/retriever/tencentvectordb"
-	weaviateRepo "reliquary/internal/application/repository/retriever/weaviate"
 	"reliquary/internal/application/service"
 	chatpipeline "reliquary/internal/application/service/chat_pipeline"
 	"reliquary/internal/application/service/file"
@@ -90,9 +65,7 @@ import (
 	"reliquary/internal/models/limiter"
 	"reliquary/internal/models/utils/ollama"
 	"reliquary/internal/router"
-	"reliquary/internal/storageallowlist"
 	"reliquary/internal/stream"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	secutils "reliquary/internal/utils"
@@ -116,13 +89,10 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	// Core infrastructure configuration
 	logger.Debugf(ctx, "[Container] Registering core infrastructure...")
 	must(container.Provide(config.LoadConfig))
-	must(container.Provide(initLangfuse))
 	must(container.Provide(initDatabase))
 	must(container.Provide(initFileService))
 	must(container.Provide(initRedisClient))
 	must(container.Provide(initAntsPool))
-
-	must(container.Invoke(registerLangfuseCleanup))
 
 	// Register goroutine pool cleanup handler
 	must(container.Invoke(registerPoolCleanup))
@@ -136,7 +106,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(initDocReaderClient))
 	must(container.Provide(docparser.NewImageResolver))
 	must(container.Provide(initOllamaService))
-	must(container.Provide(initNeo4jClient))
 	must(container.Provide(stream.NewStreamManager))
 	logger.Debugf(ctx, "[Container] Initializing DuckDB...")
 	must(container.Provide(NewDuckDB))
@@ -161,7 +130,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(repository.NewUserRepository))
 	must(container.Provide(repository.NewAuthTokenRepository))
 	must(container.Provide(repository.NewSystemSettingRepository))
-	must(container.Provide(neo4jRepo.NewNeo4jRepository))
 	must(container.Provide(repository.NewMCPServiceRepository))
 	must(container.Provide(repository.NewMCPToolApprovalRepository))
 	must(container.Provide(repository.NewMCPOAuthRepository))
@@ -237,10 +205,8 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(func(s *service.TenantSandboxConfigService) service.WorkspaceSandboxPolicy {
 		return s
 	}))
-	must(container.Provide(service.NewWeKnoraCloudService))
 
 	// Extract services - register individual extracters with names
-	must(container.Provide(service.NewChunkExtractService, dig.Name("chunkExtractor")))
 	must(container.Provide(service.NewDataTableSummaryService, dig.Name("dataTableSummary")))
 	must(container.Provide(service.NewImageMultimodalService, dig.Name("imageMultimodal")))
 	must(container.Provide(service.NewKnowledgePostProcessService, dig.Name("knowledgePostProcess")))
@@ -320,38 +286,17 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewArtifactCollectorFromSandboxManager))
 
 	logger.Debugf(ctx, "[Container] Registering task enqueuer...")
-	redisAvailable := os.Getenv("REDIS_ADDR") != ""
-	if redisAvailable {
-		must(container.Provide(router.NewAsyncqClient, dig.As(new(interfaces.TaskEnqueuer))))
-		// Dedicated pools guarantee capacity for each stage. The shared pool
-		// additionally subscribes to core/enrichment queues to provide elastic
-		// borrowing while post-process and maintenance remain hard-isolated.
-		must(container.Provide(router.NewCoreAsynqServer, dig.Name("coreAsynqServer")))
-		must(container.Provide(router.NewPostProcessAsynqServer, dig.Name("postProcessAsynqServer")))
-		must(container.Provide(router.NewEnrichmentAsynqServer, dig.Name("enrichmentAsynqServer")))
-		must(container.Provide(router.NewMaintenanceAsynqServer, dig.Name("maintenanceAsynqServer")))
-		must(container.Provide(router.NewSharedAsynqServer, dig.Name("sharedAsynqServer")))
-		must(container.Provide(router.NewWikiAsynqServer, dig.Name("wikiAsynqServer")))
-		// Asynq inspector for cancel-by-knowledge-id (best-effort
-		// dequeue of pending/scheduled/retry tasks + active-task cancel).
-		must(container.Provide(router.NewAsynqInspector))
-		must(container.Provide(router.NewAsynqTaskInspector))
-		// Install the distributed per-model chat concurrency governor. Only
-		// available with Redis (the shared semaphore backend); Lite mode is
-		// single-process and low-volume, so it runs ungated.
-		must(container.Invoke(registerModelConcurrencyLimiter))
-	} else {
-		syncExec := router.NewSyncTaskExecutor()
-		must(container.Provide(func() interfaces.TaskEnqueuer { return syncExec }))
-		must(container.Provide(func() *router.SyncTaskExecutor { return syncExec }))
-		// Lite mode: no Redis means no asynq inspector. SyncTaskExecutor
-		// dispatches inline goroutines that the checkpoint-based abort
-		// already handles.
-		must(container.Provide(router.NewNoopTaskInspector))
-		// Even without Redis, background ingestion/enrichment can burst the
-		// worker pool against one provider, so install an in-process governor.
-		must(container.Invoke(registerLiteModelConcurrencyLimiter))
-	}
+	must(container.Provide(router.NewAsyncqClient, dig.As(new(interfaces.TaskEnqueuer))))
+	// Dedicated pools guarantee capacity for each task stage.
+	must(container.Provide(router.NewCoreAsynqServer, dig.Name("coreAsynqServer")))
+	must(container.Provide(router.NewPostProcessAsynqServer, dig.Name("postProcessAsynqServer")))
+	must(container.Provide(router.NewEnrichmentAsynqServer, dig.Name("enrichmentAsynqServer")))
+	must(container.Provide(router.NewMaintenanceAsynqServer, dig.Name("maintenanceAsynqServer")))
+	must(container.Provide(router.NewSharedAsynqServer, dig.Name("sharedAsynqServer")))
+	must(container.Provide(router.NewWikiAsynqServer, dig.Name("wikiAsynqServer")))
+	must(container.Provide(router.NewAsynqInspector))
+	must(container.Provide(router.NewAsynqTaskInspector))
+	must(container.Invoke(registerModelConcurrencyLimiter))
 	must(container.Provide(service.NewTemporaryDocumentService))
 	must(container.Invoke(startTemporaryDocumentCleanup))
 
@@ -383,8 +328,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Invoke(chatpipeline.NewPluginQueryUnderstand))
 	must(container.Invoke(chatpipeline.NewPluginLoadHistory))
 	must(container.Invoke(chatpipeline.NewPluginMemoryRecall))
-	must(container.Invoke(chatpipeline.NewPluginExtractEntity))
-	must(container.Invoke(chatpipeline.NewPluginSearchEntity))
 	must(container.Invoke(chatpipeline.NewPluginSearchParallel))
 	must(container.Invoke(chatpipeline.NewPluginWikiBoost))
 	must(container.Invoke(chatpipeline.NewPluginMemoryAffinity))
@@ -456,7 +399,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Invoke(registerIMService))
 	must(container.Provide(handler.NewIMHandler))
 	must(container.Provide(handler.NewEmbedChannelHandler))
-	must(container.Provide(handler.NewWeKnoraCloudHandler))
 	logger.Debugf(ctx, "[Container] HTTP handlers registered")
 
 	// Wire the chat package's local image resolver so multimodal chat can read
@@ -467,14 +409,10 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	// Router configuration
 	logger.Debugf(ctx, "[Container] Registering router and starting task server...")
 	must(container.Provide(router.NewRouter))
-	if redisAvailable {
-		must(container.Invoke(router.RunAsynqServer))
-	} else {
-		must(container.Invoke(router.RegisterSyncHandlers))
-	}
+	must(container.Invoke(router.RunAsynqServer))
 	// Wiki operation rows are durable, while their wake-up triggers may be
-	// lost across a process restart (always in Lite mode, and in Redis mode if
-	// persistence succeeded immediately before trigger enqueue failed). Re-arm
+	// lost across a process restart if persistence succeeded immediately before
+	// trigger enqueue failed. Re-arm
 	// them only after the matching handlers are ready.
 	must(container.Invoke(recoverPendingWikiTasks))
 	must(container.Invoke(startKnowledgeWorkflowScheduler))
@@ -551,20 +489,7 @@ func must(err error) {
 	}
 }
 
-// initLangfuse initializes the Langfuse ingestion client.
-// Configuration is read from LANGFUSE_* environment variables (see
-// docs/langfuse.md). Returns a disabled manager if credentials are absent —
-// never an error — so deployments that don't use Langfuse are unaffected.
-func initLangfuse() (*langfuse.Manager, error) {
-	cfg := langfuse.LoadConfigFromEnv()
-	return langfuse.Init(cfg)
-}
-
-// defaultModelMaxConcurrency is the per-model cap on concurrent background
-// (ingestion/enrichment) chat calls when RELIQUARY_MODEL_MAX_CONCURRENCY /
-// model.max_concurrency is unset. summary / question / graph enrichment all
-// share the same model, so this bounds their combined pressure on one provider
-// across every replica. Interactive chat is never gated.
+// defaultModelMaxConcurrency caps per-model background requests.
 const defaultModelMaxConcurrency = 32
 
 // resolveModelMaxConcurrency reads the per-model background concurrency limit
@@ -580,8 +505,7 @@ func resolveModelMaxConcurrency(ss interfaces.SystemSettingService) int {
 }
 
 // registerModelConcurrencyLimiter builds the Redis-backed per-model background
-// concurrency governor (chat + vlm) and installs it. Only available with Redis
-// (the shared semaphore backend); Lite mode uses registerLiteModelConcurrencyLimiter.
+// concurrency governor (chat + vlm) and installs it.
 func registerModelConcurrencyLimiter(rdb *redis.Client, ss interfaces.SystemSettingService) {
 	limit := resolveModelMaxConcurrency(ss)
 	limiter.SetGovernor(limiter.NewRedisLimiter(rdb), limit)
@@ -594,27 +518,10 @@ func registerModelConcurrencyLimiter(rdb *redis.Client, ss interfaces.SystemSett
 		"[ModelLimiter] background model concurrency governed per-model, limit=%d (distributed via redis)", limit)
 }
 
-// registerLiteModelConcurrencyLimiter installs an in-process per-model governor
-// for Lite mode (no Redis). Lite runs a single process, so an in-process
-// semaphore is sufficient to keep a background ingestion storm from bursting
-// the whole worker pool against one provider.
-func registerLiteModelConcurrencyLimiter(ss interfaces.SystemSettingService) {
-	limit := resolveModelMaxConcurrency(ss)
-	limiter.SetGovernor(limiter.NewLocalLimiter(), limit)
-	if limit <= 0 {
-		logger.Infof(context.Background(),
-			"[ModelLimiter] background concurrency governor DISABLED (model.max_concurrency<=0)")
-		return
-	}
-	logger.Infof(context.Background(),
-		"[ModelLimiter] background model concurrency governed per-model, limit=%d (in-process, lite mode)", limit)
-}
-
 func initRedisClient() (*redis.Client, error) {
 	redisAddr := os.Getenv("REDIS_ADDR")
 	if redisAddr == "" {
-		logger.Infof(context.Background(), "[Redis] No REDIS_ADDR configured, Redis disabled (Lite mode)")
-		return nil, nil
+		return nil, fmt.Errorf("REDIS_ADDR is required")
 	}
 	db, err := strconv.Atoi(os.Getenv("REDIS_DB"))
 	if err != nil {
@@ -646,298 +553,48 @@ func initRedisClient() (*redis.Client, error) {
 // Returns:
 //   - Configured database connection
 //   - Error if connection fails
-func initDatabase(cfg *config.Config) (*gorm.DB, error) {
-	var dialector gorm.Dialector
-	var migrateDSN string
-	var sqliteDBPath string
-	switch os.Getenv("DB_DRIVER") {
-	case "postgres":
-		// DSN for GORM (key-value format)
-		gormDSN := fmt.Sprintf(
-			"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s TimeZone=UTC",
-			os.Getenv("DB_HOST"),
-			os.Getenv("DB_PORT"),
-			os.Getenv("DB_USER"),
-			os.Getenv("DB_PASSWORD"),
-			os.Getenv("DB_NAME"),
-			"disable",
-		)
-		dialector = postgres.Open(gormDSN)
-
-		// DSN for golang-migrate (URL format)
-		// URL-encode password to handle special characters like !@#
-		dbPassword := os.Getenv("DB_PASSWORD")
-		encodedPassword := url.QueryEscape(dbPassword)
-
-		// Check if postgres is in RETRIEVE_DRIVER to determine skip_embedding
-		retrieveDriver := strings.Split(os.Getenv("RETRIEVE_DRIVER"), ",")
-		skipEmbedding := "true"
-		if slices.Contains(retrieveDriver, "postgres") {
-			skipEmbedding = "false"
-		}
-		logger.Infof(context.Background(), "Skip embedding: %s", skipEmbedding)
-
-		migrateDSN = fmt.Sprintf(
-			"postgres://%s:%s@%s:%s/%s?sslmode=disable&options=-c%%20app.skip_embedding=%s",
-			os.Getenv("DB_USER"),
-			encodedPassword, // Use encoded password
-			os.Getenv("DB_HOST"),
-			os.Getenv("DB_PORT"),
-			os.Getenv("DB_NAME"),
-			skipEmbedding,
-		)
-
-		// Debug log (don't log password)
-		logger.Infof(context.Background(), "DB Config: user=%s host=%s port=%s dbname=%s",
-			os.Getenv("DB_USER"),
-			os.Getenv("DB_HOST"),
-			os.Getenv("DB_PORT"),
-			os.Getenv("DB_NAME"),
-		)
-	case "sqlite":
-		dbPath := os.Getenv("DB_PATH")
-		if dbPath == "" {
-			dbPath = "./data/reliquary.db"
-		}
-		if dir := filepath.Dir(dbPath); dir != "." && dir != "" {
-			if err := os.MkdirAll(dir, 0o755); err != nil {
-				return nil, fmt.Errorf("failed to create SQLite data directory %s: %w", dir, err)
-			}
-		}
-		sqlite_vec.Auto()
-		dsn := dbPath + "?_journal_mode=WAL&_busy_timeout=5000&_foreign_keys=on"
-		dialector = sqlite.Open(dsn)
-		sqliteDBPath = dbPath
-		migrateDSN = "sqlite3://" + dbPath
-		logger.Infof(context.Background(), "DB Config: driver=sqlite path=%s", dbPath)
-	default:
-		return nil, fmt.Errorf("unsupported database driver: %s", os.Getenv("DB_DRIVER"))
+func initDatabase(_ *config.Config) (*gorm.DB, error) {
+	driver := strings.TrimSpace(os.Getenv("DB_DRIVER"))
+	if driver != "" && driver != "postgres" {
+		return nil, fmt.Errorf("unsupported database driver: %s", driver)
 	}
-	db, err := gorm.Open(dialector, &gorm.Config{
-		NowFunc: func() time.Time {
-			return time.Now().UTC()
-		},
+	gormDSN := fmt.Sprintf(
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable TimeZone=UTC",
+		os.Getenv("DB_HOST"), os.Getenv("DB_PORT"), os.Getenv("DB_USER"),
+		os.Getenv("DB_PASSWORD"), os.Getenv("DB_NAME"),
+	)
+	db, err := gorm.Open(postgres.Open(gormDSN), &gorm.Config{
+		NowFunc: func() time.Time { return time.Now().UTC() },
 	})
 	if err != nil {
 		return nil, err
 	}
-
-	// Sanity check: dialect-specific code in services (notably the
-	// vector_stores delete guard) compares Dialector.Name() to "postgres" /
-	// "sqlite" string literals. A future driver swap that produces a
-	// different name (e.g., a wrapper dialect for managed PG) would silently
-	// fall back to the SQLite path, dropping the row-level X-lock. Catching
-	// the mismatch at startup is loud and inexpensive.
-	if name := db.Dialector.Name(); name != "postgres" && name != "sqlite" {
-		return nil, fmt.Errorf(
-			"unsupported gorm dialector %q; expected postgres or sqlite "+
-				"(see vectorStoreService.isPostgres for impact)", name)
-	}
-
-	if os.Getenv("DB_DRIVER") == "sqlite" {
-		sqlDB, err := db.DB()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get underlying sql.DB: %w", err)
-		}
-		if err := sqlDB.Ping(); err != nil {
-			return nil, fmt.Errorf("failed to ping SQLite database: %w", err)
-		}
-	}
-
-	// Run database migrations automatically (optional, can be disabled via env var)
-	// To disable auto-migration, set AUTO_MIGRATE=false
-	// To enable auto-recovery from dirty state, set AUTO_RECOVER_DIRTY=true
 	if os.Getenv("AUTO_MIGRATE") != "false" {
-		logger.Infof(context.Background(), "Running database migrations...")
-
-		autoRecover := os.Getenv("AUTO_RECOVER_DIRTY") != "false"
-		migrationOpts := database.MigrationOptions{
-			AutoRecoverDirty: autoRecover,
-			SQLiteDBPath:     sqliteDBPath,
-		}
-
-		// Run base migrations (all versioned migrations including embeddings)
-		// The embeddings migration will be conditionally executed based on skip_embedding parameter in DSN
-		if err := database.RunMigrationsWithOptions(migrateDSN, migrationOpts); err != nil {
-			// Log warning but don't fail startup - migrations might be handled externally
+		migrateDSN := fmt.Sprintf(
+			"postgres://%s:%s@%s:%s/%s?sslmode=disable&options=-c%%20app.skip_embedding=false",
+			os.Getenv("DB_USER"), url.QueryEscape(os.Getenv("DB_PASSWORD")),
+			os.Getenv("DB_HOST"), os.Getenv("DB_PORT"), os.Getenv("DB_NAME"),
+		)
+		opts := database.MigrationOptions{AutoRecoverDirty: os.Getenv("AUTO_RECOVER_DIRTY") != "false"}
+		if err := database.RunMigrationsWithOptions(migrateDSN, opts); err != nil {
 			logger.Warnf(context.Background(), "Database migration failed: %v", err)
-			logger.Warnf(
-				context.Background(),
-				"Continuing with application startup. Please run migrations manually if needed.",
-			)
+			logger.Warnf(context.Background(), "Continuing with application startup. Please run migrations manually if needed.")
 		}
-
-		// Post-migration: resolve __pending_env__ storage provider markers for historical KBs.
-		// The SQL migration marks KBs that have documents but no provider with "__pending_env__";
-		// we replace that with the actual STORAGE_TYPE from the environment.
-		resolveStorageProviderPending(db)
-		migrateLegacyStorageBackends(db)
-
-		// Post-migration: declarative built-in models from config/builtin_models.yaml (optional).
+		syncSequences(db)
+		resetPendingTasks(db)
 		if err := types.LoadBuiltinModelsConfig(context.Background(), db, config.ConfigDir()); err != nil {
 			logger.Warnf(context.Background(), "Load builtin models config failed: %v", err)
 		}
 	} else {
 		logger.Infof(context.Background(), "Auto-migration is disabled (AUTO_MIGRATE=false)")
 	}
-
-	// Get underlying SQL DB object
 	sqlDB, err := db.DB()
 	if err != nil {
 		return nil, err
 	}
-
-	// Configure connection pool parameters
-	if os.Getenv("DB_DRIVER") == "sqlite" {
-		// SQLite only supports one concurrent writer even in WAL mode.
-		// Limiting to a single open connection serialises all DB access and
-		// prevents "database is locked" errors from concurrent goroutines.
-		sqlDB.SetMaxOpenConns(1)
-	} else {
-		sqlDB.SetMaxIdleConns(10)
-	}
-	sqlDB.SetConnMaxLifetime(time.Duration(10) * time.Minute)
-
+	sqlDB.SetMaxIdleConns(10)
+	sqlDB.SetConnMaxLifetime(10 * time.Minute)
 	return db, nil
-}
-
-// resolveStorageProviderPending replaces the "__pending_env__" sentinel in
-// knowledge_bases.storage_provider_config with the actual STORAGE_TYPE from the environment.
-// This runs once after SQL migrations to bind historical KBs to their real storage provider.
-func resolveStorageProviderPending(db *gorm.DB) {
-	storageType := strings.TrimSpace(os.Getenv("STORAGE_TYPE"))
-	if storageType == "" {
-		storageType = "local"
-	}
-	storageType = strings.ToLower(storageType)
-
-	result := db.Exec(
-		`UPDATE knowledge_bases SET storage_provider_config = ? WHERE storage_provider_config IS NOT NULL AND storage_provider_config->>'provider' = '__pending_env__'`,
-		fmt.Sprintf(`{"provider":"%s"}`, storageType),
-	)
-	if result.Error != nil {
-		logger.Warnf(context.Background(), "Failed to resolve __pending_env__ storage providers: %v", result.Error)
-	} else if result.RowsAffected > 0 {
-		logger.Infof(context.Background(), "Resolved %d knowledge bases with __pending_env__ storage provider → %s", result.RowsAffected, storageType)
-	}
-
-	// Sync PostgreSQL sequences with actual MAX values to prevent duplicate key
-	// errors. The old code assigned seq_id via SELECT MAX()+1 in application
-	// code, which could push values past the DB sequence counter.
-	syncSequences(db)
-
-	// Reset any pending tasks left over from previous aborted runs (Lite App mode)
-	resetPendingTasks(db)
-}
-
-// migrateLegacyStorageBackends backfills the storage_backends table from each
-// workspace's legacy StorageEngineConfig (or environment defaults) and binds
-// existing knowledge bases to the resulting backend.
-//
-// The table, columns and indexes are created by the SQL migrations
-// (migrations/versioned/000068 for Postgres, migrations/sqlite/000000_init for
-// SQLite); this step only handles data that cannot be expressed portably in
-// SQL: environment snapshots, JSON→config mapping, AES-encrypted credentials,
-// UUID generation and the per-startup refresh of env-backed aliases.
-// The migration is idempotent: one legacy_alias row per tenant/provider.
-func migrateLegacyStorageBackends(db *gorm.DB) {
-	var tenants []*types.Tenant
-	if err := db.Find(&tenants).Error; err != nil {
-		logger.Warnf(context.Background(), "Failed to load workspaces for storage backend migration: %v", err)
-		return
-	}
-	if len(tenants) == 0 {
-		return
-	}
-
-	// Load every alias in a single query. Probing each tenant/provider pair with
-	// First() makes GORM log "record not found" for every miss, which floods the
-	// startup log with workspaces × providers lines on fresh installs.
-	var aliases []*types.StorageBackend
-	if err := db.Where("legacy_alias = ?", true).Find(&aliases).Error; err != nil {
-		logger.Warnf(context.Background(), "Failed to load legacy storage aliases: %v", err)
-		return
-	}
-	existingAliases := make(map[uint64]map[string]*types.StorageBackend, len(aliases))
-	for _, alias := range aliases {
-		byProvider := existingAliases[alias.TenantID]
-		if byProvider == nil {
-			byProvider = make(map[string]*types.StorageBackend)
-			existingAliases[alias.TenantID] = byProvider
-		}
-		byProvider[alias.Provider] = alias
-	}
-
-	for _, tenant := range tenants {
-		legacy := tenant.StorageEngineConfig
-		defaultProvider := ""
-		if legacy != nil {
-			defaultProvider = strings.ToLower(strings.TrimSpace(legacy.DefaultProvider))
-		}
-		if defaultProvider == "" {
-			defaultProvider = strings.ToLower(strings.TrimSpace(os.Getenv("STORAGE_TYPE")))
-		}
-		if defaultProvider == "" {
-			defaultProvider = "local"
-		}
-
-		backendIDs := make(map[string]string)
-		for _, provider := range storageallowlist.Supported() {
-			if existing := existingAliases[tenant.ID][provider]; existing != nil {
-				// Environment-backed aliases are snapshots, not user-owned config.
-				// Refresh them at every startup so credential rotation does not
-				// leave the persisted resolver on stale values. If the workspace
-				// later gains an explicit legacy config, promote the alias to user
-				// source and stop automatic refreshes.
-				if existing.Source == types.StorageBackendSourceEnv {
-					desired := types.StorageBackendFromLegacy(tenant.ID, provider, legacy)
-					if desired == nil && provider == defaultProvider {
-						desired = types.StorageBackendFromEnvironment(tenant.ID)
-					}
-					if desired != nil && desired.Provider == provider {
-						_ = db.Model(&types.StorageBackend{}).Where("id = ?", existing.ID).Updates(map[string]interface{}{
-							"name": desired.Name, "config": desired.Config, "source": desired.Source, "status": desired.Status, "updated_at": time.Now(),
-						}).Error
-					}
-				}
-				backendIDs[provider] = existing.ID
-				continue
-			}
-			backend := types.StorageBackendFromLegacy(tenant.ID, provider, legacy)
-			if backend == nil && provider == defaultProvider {
-				backend = types.StorageBackendFromEnvironment(tenant.ID)
-			}
-			if backend == nil {
-				continue
-			}
-			if err := db.Create(backend).Error; err != nil {
-				logger.Warnf(context.Background(), "Failed to migrate %s storage for workspace %d: %v", provider, tenant.ID, err)
-				continue
-			}
-			backendIDs[provider] = backend.ID
-		}
-		if tenant.DefaultStorageBackendID == nil {
-			if id := backendIDs[defaultProvider]; id != "" {
-				if err := db.Model(&types.Tenant{}).Where("id = ?", tenant.ID).Update("default_storage_backend_id", id).Error; err != nil {
-					logger.Warnf(context.Background(), "Failed to set default storage backend for workspace %d: %v", tenant.ID, err)
-				}
-			}
-		}
-
-		var kbs []*types.KnowledgeBase
-		if err := db.Where("tenant_id = ? AND storage_backend_id IS NULL", tenant.ID).Find(&kbs).Error; err != nil {
-			continue
-		}
-		for _, kb := range kbs {
-			provider := kb.GetStorageProvider()
-			if provider == "" {
-				provider = defaultProvider
-			}
-			if id := backendIDs[provider]; id != "" {
-				_ = db.Model(&types.KnowledgeBase{}).Where("id = ? AND storage_backend_id IS NULL", kb.ID).Update("storage_backend_id", id).Error
-			}
-		}
-	}
 }
 
 // syncSequences ensures PostgreSQL sequences for auto-increment columns (seq_id)
@@ -968,7 +625,7 @@ func syncSequences(db *gorm.DB) {
 
 // initFileService initializes file storage service
 // Creates the appropriate file storage service based on configuration
-// Supports multiple storage backends (MinIO, COS, local filesystem)
+// Supports local filesystem and S3-compatible storage
 // Parameters:
 //   - cfg: Application configuration
 //
@@ -984,489 +641,38 @@ func initFileService(cfg *config.Config, catalog interfaces.ResourceCatalog) (in
 }
 
 func initRawFileService(_ *config.Config) (interfaces.FileService, error) {
-	storageType := strings.TrimSpace(os.Getenv("STORAGE_TYPE"))
-	if storageType == "" {
-		storageType = "local"
-	}
-	switch storageType {
-	case "minio":
-		if os.Getenv("MINIO_ENDPOINT") == "" ||
-			os.Getenv("MINIO_ACCESS_KEY_ID") == "" ||
-			os.Getenv("MINIO_SECRET_ACCESS_KEY") == "" ||
-			os.Getenv("MINIO_BUCKET_NAME") == "" {
-			return nil, fmt.Errorf("missing MinIO configuration")
-		}
-		return file.NewMinioFileService(
-			os.Getenv("MINIO_ENDPOINT"),
-			os.Getenv("MINIO_ACCESS_KEY_ID"),
-			os.Getenv("MINIO_SECRET_ACCESS_KEY"),
-			os.Getenv("MINIO_BUCKET_NAME"),
-			strings.EqualFold(os.Getenv("MINIO_USE_SSL"), "true"),
-		)
-	case "cos":
-		if os.Getenv("COS_BUCKET_NAME") == "" ||
-			os.Getenv("COS_REGION") == "" ||
-			os.Getenv("COS_SECRET_ID") == "" ||
-			os.Getenv("COS_SECRET_KEY") == "" ||
-			os.Getenv("COS_PATH_PREFIX") == "" {
-			return nil, fmt.Errorf("missing COS configuration")
-		}
-		return file.NewCosFileServiceWithTempBucket(
-			os.Getenv("COS_BUCKET_NAME"),
-			os.Getenv("COS_REGION"),
-			os.Getenv("COS_SECRET_ID"),
-			os.Getenv("COS_SECRET_KEY"),
-			os.Getenv("COS_PATH_PREFIX"),
-			os.Getenv("COS_TEMP_BUCKET_NAME"),
-			os.Getenv("COS_TEMP_REGION"),
-		)
-	case "tos":
-		if os.Getenv("TOS_ENDPOINT") == "" ||
-			os.Getenv("TOS_REGION") == "" ||
-			os.Getenv("TOS_ACCESS_KEY") == "" ||
-			os.Getenv("TOS_SECRET_KEY") == "" ||
-			os.Getenv("TOS_BUCKET_NAME") == "" {
-			return nil, fmt.Errorf("missing TOS configuration")
-		}
-		return file.NewTosFileServiceWithTempBucket(
-			os.Getenv("TOS_ENDPOINT"),
-			os.Getenv("TOS_REGION"),
-			os.Getenv("TOS_ACCESS_KEY"),
-			os.Getenv("TOS_SECRET_KEY"),
-			os.Getenv("TOS_BUCKET_NAME"),
-			os.Getenv("TOS_PATH_PREFIX"),
-			os.Getenv("TOS_TEMP_BUCKET_NAME"), // 可选：临时桶名称（桶需配置生命周期规则自动过期）
-			os.Getenv("TOS_TEMP_REGION"),      // 可选：临时桶 region，默认与主桶相同
-		)
-	case "s3":
-		accessKey, secretKey := os.Getenv("S3_ACCESS_KEY"), os.Getenv("S3_SECRET_KEY")
-		if os.Getenv("S3_REGION") == "" ||
-			os.Getenv("S3_BUCKET_NAME") == "" ||
-			(accessKey == "") != (secretKey == "") {
-			return nil, fmt.Errorf("missing S3 configuration")
-		}
-		pathPrefix := os.Getenv("S3_PATH_PREFIX")
-		if pathPrefix == "" {
-			pathPrefix = "reliquary/"
-		}
-		return file.NewS3FileService(
-			os.Getenv("S3_ENDPOINT"),
-			accessKey,
-			secretKey,
-			os.Getenv("S3_BUCKET_NAME"),
-			os.Getenv("S3_REGION"),
-			pathPrefix,
-		)
-	case "obs":
-		if os.Getenv("OBS_ENDPOINT") == "" ||
-			os.Getenv("OBS_ACCESS_KEY") == "" ||
-			os.Getenv("OBS_SECRET_KEY") == "" ||
-			os.Getenv("OBS_BUCKET_NAME") == "" {
-			return nil, fmt.Errorf("missing OBS configuration")
-		}
-		obsRegion := os.Getenv("OBS_REGION")
-		obsPathPrefix := os.Getenv("OBS_PATH_PREFIX")
-		if obsPathPrefix == "" {
-			obsPathPrefix = "reliquary/"
-		}
-		return file.NewObsFileService(
-			os.Getenv("OBS_ENDPOINT"),
-			obsRegion,
-			os.Getenv("OBS_ACCESS_KEY"),
-			os.Getenv("OBS_SECRET_KEY"),
-			os.Getenv("OBS_BUCKET_NAME"),
-			obsPathPrefix,
-		)
-	case "oss":
-		if os.Getenv("OSS_ENDPOINT") == "" ||
-			os.Getenv("OSS_REGION") == "" ||
-			os.Getenv("OSS_ACCESS_KEY") == "" ||
-			os.Getenv("OSS_SECRET_KEY") == "" ||
-			os.Getenv("OSS_BUCKET_NAME") == "" {
-			return nil, fmt.Errorf("missing OSS configuration")
-		}
-		pathPrefix := os.Getenv("OSS_PATH_PREFIX")
-		if pathPrefix == "" {
-			pathPrefix = "reliquary/"
-		}
-		return file.NewOssFileServiceWithTempBucket(
-			os.Getenv("OSS_ENDPOINT"),
-			os.Getenv("OSS_REGION"),
-			os.Getenv("OSS_ACCESS_KEY"),
-			os.Getenv("OSS_SECRET_KEY"),
-			os.Getenv("OSS_BUCKET_NAME"),
-			pathPrefix,
-			os.Getenv("OSS_TEMP_BUCKET_NAME"),
-			os.Getenv("OSS_TEMP_REGION"),
-		)
-	case "local":
-		baseDir := os.Getenv("LOCAL_STORAGE_BASE_DIR")
-		if baseDir == "" {
-			baseDir = "/data/files"
-		}
-		externalURL := strings.TrimSpace(os.Getenv("APP_EXTERNAL_URL"))
-		return file.NewLocalFileService(baseDir, externalURL), nil
-	case "dummy":
-		return file.NewDummyFileService(), nil
-	default:
-		return nil, fmt.Errorf("unsupported storage type: %s", storageType)
-	}
+	backend := types.StorageBackendFromEnvironment(0)
+	cfg := backend.ToStorageEngineConfig()
+	svc, _, err := file.NewFileServiceFromStorageConfig(backend.Provider, cfg, os.Getenv("LOCAL_STORAGE_BASE_DIR"))
+	return svc, err
 }
 
-// initRetrieveEngineRegistry initializes the retrieval engine registry
-// Sets up and configures various search engine backends based on configuration
-// Supports multiple retrieval engines (PostgreSQL, ElasticsearchV7, ElasticsearchV8)
-// Parameters:
-//   - db: Database connection
-//   - cfg: Application configuration
-//
-// Returns:
-//   - Configured retrieval engine registry
-//   - Error if initialization fails
+// initRetrieveEngineRegistry registers the PostgreSQL hybrid search engine.
 func initRetrieveEngineRegistry(
-	db *gorm.DB, cfg *config.Config, auditSvc interfaces.AuditLogService,
+	db *gorm.DB, cfg *config.Config,
 	storeRepo interfaces.VectorStoreRepository, engineFactory interfaces.EngineFactory,
 ) (interfaces.RetrieveEngineRegistry, error) {
-	// storeRepo and engineFactory let the registry rebuild a store engine that
-	// is absent from this process, which happens when startup skipped it after
-	// a construction failure or when another instance registered it.
-	registry := retriever.NewRetrieveEngineRegistry(storeRepo, engineFactory)
-	retrieveDriver := strings.Split(os.Getenv("RETRIEVE_DRIVER"), ",")
-	log := logger.GetLogger(context.Background())
-	// Audit sink for OpenSearch driver events (index created / reindex). Driver
-	// events fire under a tenant-scoped ctx at indexing time; the env-path
-	// registration ctx below has no tenant, so those emits self-skip.
-	auditSink := newAuditSinkAdapter(auditSvc)
-
-	if slices.Contains(retrieveDriver, "postgres") {
-		postgresRepo := postgresRepo.NewPostgresRetrieveEngineRepository(db)
-		if err := registry.Register(
-			retriever.NewKVHybridRetrieveEngine(postgresRepo, types.PostgresRetrieverEngineType),
-		); err != nil {
-			log.Errorf("Register postgres retrieve engine failed: %v", err)
-		} else {
-			log.Infof("Register postgres retrieve engine success")
-		}
+	registry := retriever.NewRetrieveEngineRegistry(storeRepo, engineFactory).(*retriever.RetrieveEngineRegistry)
+	engine := retriever.NewKVHybridRetrieveEngine(
+		postgresRepo.NewPostgresRetrieveEngineRepository(db), types.PostgresRetrieverEngineType,
+	)
+	if err := registry.Register(engine); err != nil {
+		return nil, err
 	}
-	if slices.Contains(retrieveDriver, "sqlite") {
-		sqliteRepo := sqliteRetrieverRepo.NewSQLiteRetrieveEngineRepository(db)
-		if err := registry.Register(
-			retriever.NewKVHybridRetrieveEngine(sqliteRepo, types.SQLiteRetrieverEngineType),
-		); err != nil {
-			log.Errorf("Register sqlite retrieve engine failed: %v", err)
-		} else {
-			log.Infof("Register sqlite retrieve engine success")
-		}
-	}
-	if slices.Contains(retrieveDriver, "elasticsearch_v8") {
-		client, err := elasticsearch.NewTypedClient(elasticsearch.Config{
-			Addresses: []string{os.Getenv("ELASTICSEARCH_ADDR")},
-			Username:  os.Getenv("ELASTICSEARCH_USERNAME"),
-			Password:  os.Getenv("ELASTICSEARCH_PASSWORD"),
-		})
-		if err != nil {
-			log.Errorf("Create elasticsearch_v8 client failed: %v", err)
-		} else {
-			elasticsearchRepo := elasticsearchRepoV8.NewElasticsearchEngineRepository(client, cfg, nil)
-			if err := registry.Register(
-				retriever.NewKVHybridRetrieveEngine(
-					elasticsearchRepo, types.ElasticsearchRetrieverEngineType,
-				),
-			); err != nil {
-				log.Errorf("Register elasticsearch_v8 retrieve engine failed: %v", err)
-			} else {
-				log.Infof("Register elasticsearch_v8 retrieve engine success")
-			}
-		}
-	}
-
-	if slices.Contains(retrieveDriver, "elasticsearch_v7") {
-		client, err := esv7.NewClient(esv7.Config{
-			Addresses: []string{os.Getenv("ELASTICSEARCH_ADDR")},
-			Username:  os.Getenv("ELASTICSEARCH_USERNAME"),
-			Password:  os.Getenv("ELASTICSEARCH_PASSWORD"),
-		})
-		if err != nil {
-			log.Errorf("Create elasticsearch_v7 client failed: %v", err)
-		} else {
-			elasticsearchRepo := elasticsearchRepoV7.NewElasticsearchEngineRepository(client, cfg, nil)
-			if err := registry.Register(
-				retriever.NewKVHybridRetrieveEngine(
-					elasticsearchRepo, types.ElasticsearchRetrieverEngineType,
-				),
-			); err != nil {
-				log.Errorf("Register elasticsearch_v7 retrieve engine failed: %v", err)
-			} else {
-				log.Infof("Register elasticsearch_v7 retrieve engine success")
-			}
-		}
-	}
-
-	if slices.Contains(retrieveDriver, "opensearch") {
-		cc := &types.ConnectionConfig{
-			Addr:               os.Getenv("OPENSEARCH_ADDR"),
-			Username:           os.Getenv("OPENSEARCH_USERNAME"),
-			Password:           os.Getenv("OPENSEARCH_PASSWORD"),
-			InsecureSkipVerify: strings.EqualFold(os.Getenv("OPENSEARCH_INSECURE_SKIP_VERIFY"), "true"),
-		}
-		client, err := openSearchRepo.NewOpenSearchClient(cc)
-		if err != nil {
-			log.Errorf("Create opensearch client failed: %v", err)
-		} else if repo, err := openSearchRepo.NewRepository(
-			context.Background(), client, "", nil, openSearchRepo.WithAuditSink(auditSink),
-		); err != nil {
-			log.Errorf("Create opensearch repository failed: %v", err)
-		} else if err := registry.Register(
-			retriever.NewKVHybridRetrieveEngine(repo, types.OpenSearchRetrieverEngineType),
-		); err != nil {
-			log.Errorf("Register opensearch retrieve engine failed: %v", err)
-		} else {
-			log.Infof("Register opensearch retrieve engine success")
-		}
-	}
-
-	if slices.Contains(retrieveDriver, "qdrant") {
-		qdrantHost := os.Getenv("QDRANT_HOST")
-		if qdrantHost == "" {
-			qdrantHost = "localhost"
-		}
-
-		qdrantPort := 6334 // Default port
-		if portStr := os.Getenv("QDRANT_PORT"); portStr != "" {
-			if port, err := strconv.Atoi(portStr); err == nil {
-				qdrantPort = port
-			}
-		}
-
-		// API key for authentication (optional)
-		qdrantAPIKey := os.Getenv("QDRANT_API_KEY")
-
-		// TLS configuration (optional, defaults to false)
-		// Enable TLS unless explicitly set to "false" or "0" (case insensitive)
-		qdrantUseTLS := false
-		if useTLSStr := os.Getenv("QDRANT_USE_TLS"); useTLSStr != "" {
-			useTLSLower := strings.ToLower(strings.TrimSpace(useTLSStr))
-			qdrantUseTLS = useTLSLower != "false" && useTLSLower != "0"
-		}
-
-		log.Infof("Connecting to Qdrant at %s:%d (TLS: %v)", qdrantHost, qdrantPort, qdrantUseTLS)
-
-		client, err := qdrant.NewClient(&qdrant.Config{
-			Host:   qdrantHost,
-			Port:   qdrantPort,
-			APIKey: qdrantAPIKey,
-			UseTLS: qdrantUseTLS,
-		})
-		if err != nil {
-			log.Errorf("Create qdrant client failed: %v", err)
-		} else {
-			qdrantRepository := qdrantRepo.NewQdrantRetrieveEngineRepository(client, nil)
-			if err := registry.Register(
-				retriever.NewKVHybridRetrieveEngine(
-					qdrantRepository, types.QdrantRetrieverEngineType,
-				),
-			); err != nil {
-				log.Errorf("Register qdrant retrieve engine failed: %v", err)
-			} else {
-				log.Infof("Register qdrant retrieve engine success")
-			}
-		}
-	}
-	if slices.Contains(retrieveDriver, "weaviate") {
-		weaviateHost := os.Getenv("WEAVIATE_HOST")
-		if weaviateHost == "" {
-			// Docker compose default (service name inside network)
-			weaviateHost = "weaviate:8080"
-		}
-		weaviateGrpcAddress := os.Getenv("WEAVIATE_GRPC_ADDRESS")
-		if weaviateGrpcAddress == "" {
-			weaviateGrpcAddress = "weaviate:50051"
-		}
-		weaviateScheme := os.Getenv("WEAVIATE_SCHEME")
-		if weaviateScheme == "" {
-			weaviateScheme = "http"
-		}
-		var authConfig auth.Config
-		if strings.EqualFold(strings.TrimSpace(os.Getenv("WEAVIATE_AUTH_ENABLED")), "true") {
-			if apiKey := strings.TrimSpace(os.Getenv("WEAVIATE_API_KEY")); apiKey != "" {
-				authConfig = auth.ApiKey{Value: apiKey}
-			}
-		}
-		weaviateClient, err := weaviate.NewClient(weaviate.Config{
-			Host: weaviateHost,
-			GrpcConfig: &wgrpc.Config{
-				Host: weaviateGrpcAddress,
-			},
-			Scheme:     weaviateScheme,
-			AuthConfig: authConfig,
-		})
-		if err != nil {
-			log.Errorf("Create weaviate client failed: %v", err)
-		} else {
-			weaviateRepository := weaviateRepo.NewWeaviateRetrieveEngineRepository(weaviateClient, nil)
-			if err := registry.Register(
-				retriever.NewKVHybridRetrieveEngine(
-					weaviateRepository, types.WeaviateRetrieverEngineType,
-				),
-			); err != nil {
-				log.Errorf("Register weaviate retrieve engine failed: %v", err)
-			} else {
-				log.Infof("Register weaviate retrieve engine success")
-			}
-		}
-	}
-	if slices.Contains(retrieveDriver, "milvus") {
-		milvusCfg := milvusclient.ClientConfig{
-			DialOptions: []grpc.DialOption{grpc.WithTimeout(5 * time.Second)},
-		}
-		milvusAddress := os.Getenv("MILVUS_ADDRESS")
-		if milvusAddress == "" {
-			milvusAddress = "localhost:19530"
-		}
-		milvusCfg.Address = milvusAddress
-		milvusUsername := os.Getenv("MILVUS_USERNAME")
-		if milvusUsername != "" {
-			milvusCfg.Username = milvusUsername
-		}
-		milvusPassword := os.Getenv("MILVUS_PASSWORD")
-		if milvusPassword != "" {
-			milvusCfg.Password = milvusPassword
-		}
-		milvusDBName := os.Getenv("MILVUS_DB_NAME")
-		if milvusDBName != "" {
-			milvusCfg.DBName = milvusDBName
-		}
-		milvusCli, err := milvusclient.New(context.Background(), &milvusCfg)
-		if err != nil {
-			log.Errorf("Create milvus client failed: %v", err)
-		} else {
-			milvusRepository := milvusRepo.NewMilvusRetrieveEngineRepository(milvusCli, nil)
-			if err := registry.Register(
-				retriever.NewKVHybridRetrieveEngine(
-					milvusRepository, types.MilvusRetrieverEngineType,
-				),
-			); err != nil {
-				log.Errorf("Register milvus retrieve engine failed: %v", err)
-			} else {
-				log.Infof("Register milvus retrieve engine success")
-			}
-		}
-	}
-	if slices.Contains(retrieveDriver, "doris") {
-		dorisAddr := os.Getenv("DORIS_ADDR")
-		if dorisAddr == "" {
-			// docker-compose 默认服务名 + Doris FE MySQL 端口
-			dorisAddr = "doris-fe:9030"
-		}
-		dorisDatabase := os.Getenv("DORIS_DATABASE")
-		if dorisDatabase == "" {
-			dorisDatabase = "reliquary"
-		}
-		dorisUsername := os.Getenv("DORIS_USERNAME")
-		if dorisUsername == "" {
-			dorisUsername = "root"
-		}
-		dorisPassword := os.Getenv("DORIS_PASSWORD")
-		dorisHTTPPort := 8030
-		if portStr := os.Getenv("DORIS_HTTP_PORT"); portStr != "" {
-			if port, err := strconv.Atoi(portStr); err == nil {
-				dorisHTTPPort = port
-			}
-		}
-
-		dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=utf8mb4&parseTime=true&loc=Local&interpolateParams=true",
-			dorisUsername, dorisPassword, dorisAddr, dorisDatabase)
-		dorisDB, err := sql.Open("mysql", dsn)
-		if err != nil {
-			log.Errorf("Create doris client failed: %v", err)
-		} else {
-			dorisDB.SetMaxOpenConns(20)
-			dorisDB.SetMaxIdleConns(5)
-			dorisDB.SetConnMaxLifetime(time.Hour)
-
-			httpBase := "http://" + hostFromAddr(dorisAddr) + ":" + strconv.Itoa(dorisHTTPPort)
-			dorisRepository := dorisRepo.NewDorisRetrieveEngineRepository(
-				dorisDB, httpBase, dorisUsername, dorisPassword, dorisDatabase, nil,
-			)
-			if err := registry.Register(
-				retriever.NewKVHybridRetrieveEngine(
-					dorisRepository, types.DorisRetrieverEngineType,
-				),
-			); err != nil {
-				log.Errorf("Register doris retrieve engine failed: %v", err)
-			} else {
-				log.Infof("Register doris retrieve engine success: %s db=%s", dorisAddr, dorisDatabase)
-			}
-		}
-	}
-	if slices.Contains(retrieveDriver, "tencent_vectordb") {
-		addr := os.Getenv("TENCENT_VECTORDB_ADDR")
-		username := os.Getenv("TENCENT_VECTORDB_USERNAME")
-		apiKey := os.Getenv("TENCENT_VECTORDB_API_KEY")
-		if addr == "" || username == "" || apiKey == "" {
-			log.Errorf("Missing Tencent VectorDB configuration")
-		} else {
-			client, err := tcvectordb.NewRpcClient(addr, username, apiKey, &tcvectordb.ClientOption{
-				ReadConsistency: tcvectordb.EventualConsistency,
-				Timeout:         10 * time.Second,
-			})
-			if err != nil {
-				log.Errorf("Create tencent_vectordb client failed: %v", err)
-			} else {
-				tencentRepository := tencentVectorDBRepo.NewTencentVectorDBRetrieveEngineRepository(
-					client,
-					os.Getenv("TENCENT_VECTORDB_DATABASE"),
-					nil,
-				)
-				if err := registry.Register(
-					retriever.NewKVHybridRetrieveEngine(
-						tencentRepository, types.TencentVectorDBRetrieverEngineType,
-					),
-				); err != nil {
-					log.Errorf("Register tencent_vectordb retrieve engine failed: %v", err)
-				} else {
-					log.Infof("Register tencent_vectordb retrieve engine success")
-				}
-			}
-		}
-	}
-	// ─── DB store registration (byStoreID) ───
-	if storeReg, ok := registry.(*retriever.RetrieveEngineRegistry); ok {
-		loadDBStoresIntoRegistry(storeReg, db, cfg, auditSink)
-	}
-
-	return registry, nil
-}
-
-// loadDBStoresIntoRegistry loads VectorStore records from DB and registers them
-// in the registry's byStoreID map. Failures are logged and skipped (non-fatal).
-func loadDBStoresIntoRegistry(
-	storeRegistry interfaces.StoreRegistry, db *gorm.DB, cfg *config.Config, auditSink openSearchRepo.AuditSink,
-) {
-	ctx := context.Background()
-	log := logger.GetLogger(ctx)
-
 	var stores []types.VectorStore
-	// GORM soft delete automatically adds "deleted_at IS NULL" condition
 	if err := db.Find(&stores).Error; err != nil {
-		log.Warnf("Failed to load vector stores from DB: %v", err)
-		return
+		logger.Warnf(context.Background(), "Failed to load PostgreSQL vector stores: %v", err)
+		return registry, nil
 	}
-
-	if len(stores) == 0 {
-		return
-	}
-
-	log.Infof("Loading %d vector store(s) from database", len(stores))
 	for _, store := range stores {
-		svc, err := createEngineServiceFromStore(ctx, store, db, cfg, auditSink)
+		svc, err := engineFactory(context.Background(), store)
 		if err != nil {
-			log.Errorf("Failed to create engine for store %s (%s): %v", store.ID, store.Name, err)
+			logger.Warnf(context.Background(), "Failed to load vector store %s: %v", store.ID, err)
 			continue
 		}
-		storeRegistry.RegisterWithStoreID(store.ID, svc)
-		log.Infof("Registered DB vector store: id=%s, name=%s, engine=%s", store.ID, store.Name, store.EngineType)
+		registry.RegisterWithStoreID(store.ID, svc)
 	}
+	return registry, nil
 }
 
 // initAntsPool initializes the goroutine pool
@@ -1503,20 +709,6 @@ func registerPoolCleanup(pool *ants.Pool, cleaner interfaces.ResourceCleaner) {
 	})
 }
 
-// registerLangfuseCleanup ensures buffered Langfuse events are flushed on
-// shutdown. A 5-second timeout matches other external-service cleanups and
-// balances data durability against a slow remote endpoint holding up exit.
-func registerLangfuseCleanup(mgr *langfuse.Manager, cleaner interfaces.ResourceCleaner) {
-	if mgr == nil {
-		return
-	}
-	cleaner.RegisterWithName("Langfuse", func() error {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		return mgr.Shutdown(ctx)
-	})
-}
-
 // initDocReaderClient initializes the DocumentReader client (lightweight API).
 func initDocReaderClient(cfg *config.Config) (interfaces.DocumentReader, error) {
 	addr := strings.TrimSpace(os.Getenv("DOCREADER_ADDR"))
@@ -1550,47 +742,6 @@ func initDocReaderClient(cfg *config.Config) (interfaces.DocumentReader, error) 
 func initOllamaService() (*ollama.OllamaService, error) {
 	// Get Ollama service from existing factory function
 	return ollama.GetOllamaService()
-}
-
-func initNeo4jClient() (neo4j.Driver, error) {
-	ctx := context.Background()
-	if strings.ToLower(os.Getenv("NEO4J_ENABLE")) != "true" {
-		logger.Debugf(ctx, "NOT SUPPORT RETRIEVE GRAPH")
-		return nil, nil
-	}
-	uri := os.Getenv("NEO4J_URI")
-	username := os.Getenv("NEO4J_USERNAME")
-	password := os.Getenv("NEO4J_PASSWORD")
-
-	// Retry configuration
-	maxRetries := 30                 // Max retry attempts
-	retryInterval := 2 * time.Second // Wait between retries
-
-	var driver neo4j.Driver
-	var err error
-
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		driver, err = neo4j.NewDriver(uri, neo4j.BasicAuth(username, password, ""))
-		if err != nil {
-			logger.Warnf(ctx, "Failed to create Neo4j driver (attempt %d/%d): %v", attempt, maxRetries, err)
-			time.Sleep(retryInterval)
-			continue
-		}
-
-		err = driver.VerifyAuthentication(ctx, nil)
-		if err == nil {
-			if attempt > 1 {
-				logger.Infof(ctx, "Successfully connected to Neo4j after %d attempts", attempt)
-			}
-			return driver, nil
-		}
-
-		logger.Warnf(ctx, "Failed to verify Neo4j authentication (attempt %d/%d): %v", attempt, maxRetries, err)
-		driver.Close(ctx)
-		time.Sleep(retryInterval)
-	}
-
-	return nil, fmt.Errorf("failed to connect to Neo4j after %d attempts: %w", maxRetries, err)
 }
 
 func NewDuckDB() (*sql.DB, error) {

@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+
 	"reliquary/internal/datasource"
 	"reliquary/internal/logger"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	secutils "reliquary/internal/utils"
@@ -487,7 +487,6 @@ func (s *DataSourceService) ManualSync(ctx context.Context, dsID string) (*types
 		Initiator:    types.TaskInitiatorFromContext(ctx),
 		Trigger:      "manual",
 	}
-	langfuse.InjectTracing(ctx, payload)
 
 	payloadJSON, _ := json.Marshal(payload)
 	task := asynq.NewTask(types.TypeDataSourceSync, payloadJSON,

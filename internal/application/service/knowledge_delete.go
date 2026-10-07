@@ -9,6 +9,7 @@ import (
 
 	"github.com/hibiken/asynq"
 	"golang.org/x/sync/errgroup"
+
 	"reliquary/internal/application/service/retriever"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
@@ -147,7 +148,7 @@ func (s *knowledgeService) DeleteKnowledge(ctx context.Context, id string) error
 	// (multimodal / post-process / question / summary / graph extract).
 	// Worker checkpoints already drop them on the floor, but dequeuing
 	// here avoids waking workers just to no-op when the parse was still
-	// in flight at delete time. No-op in Lite mode and on completed rows
+	// in flight at delete time. No-op in in-memory fixtures and on completed rows
 	// (no queued descendants anyway).
 	if originalStatus == types.ParseStatusPending ||
 		originalStatus == types.ParseStatusProcessing {
@@ -224,16 +225,6 @@ func (s *knowledgeService) DeleteKnowledge(ctx context.Context, id string) error
 	wg.Go(func() error {
 		if err := s.chunkService.DeleteChunksByKnowledgeID(ctx, knowledge.ID); err != nil {
 			logger.GetLogger(ctx).WithField("error", err).Errorf("DeleteKnowledge delete chunks failed")
-			return err
-		}
-		return nil
-	})
-
-	// Delete the knowledge graph
-	wg.Go(func() error {
-		namespace := types.NameSpace{KnowledgeBase: knowledge.KnowledgeBaseID, Knowledge: knowledge.ID}
-		if err := s.graphEngine.DelGraph(ctx, []types.NameSpace{namespace}); err != nil {
-			logger.GetLogger(ctx).WithField("error", err).Errorf("DeleteKnowledge delete knowledge graph failed")
 			return err
 		}
 		return nil
@@ -730,22 +721,6 @@ func (s *knowledgeService) DeleteKnowledgeList(ctx context.Context, ids []string
 		return nil
 	})
 
-	// Delete the knowledge graph
-	wg.Go(func() error {
-		namespaces := []types.NameSpace{}
-		for _, knowledge := range knowledgeList {
-			namespaces = append(
-				namespaces,
-				types.NameSpace{KnowledgeBase: knowledge.KnowledgeBaseID, Knowledge: knowledge.ID},
-			)
-		}
-		if err := s.graphEngine.DelGraph(ctx, namespaces); err != nil {
-			logger.GetLogger(ctx).WithField("error", err).Errorf("DeleteKnowledge delete knowledge graph failed")
-			return err
-		}
-		return nil
-	})
-
 	if err = wg.Wait(); err != nil {
 		return err
 	}
@@ -903,12 +878,6 @@ func (s *knowledgeService) cleanupKnowledgeResources(ctx context.Context, knowle
 	// here are re-taken by triggerManualProcessing, which always runs after
 	// this cleanup and re-binds whatever the new body still references.
 	deleteExtractedImages(ctx, fileSvc, knowledgeResourceOwners(s.resourceCatalog, knowledge.ID), imageURLs)
-
-	namespace := types.NameSpace{KnowledgeBase: knowledge.KnowledgeBaseID, Knowledge: knowledge.ID}
-	if err := s.graphEngine.DelGraph(ctx, []types.NameSpace{namespace}); err != nil {
-		logger.GetLogger(ctx).WithField("error", err).Error("Failed to delete manual knowledge graph data")
-		cleanupErr = errors.Join(cleanupErr, err)
-	}
 
 	if knowledge.StorageSize > 0 {
 		tenantInfo.StorageUsed -= knowledge.StorageSize

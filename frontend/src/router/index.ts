@@ -1,5 +1,4 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import type { RouteLocationNormalized } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities'
 import { autoSetup, getCurrentUser, userInfoFromApi } from '@/api/auth'
@@ -7,34 +6,14 @@ import type { DeploymentCapabilityKey } from '@/config/deploymentCapabilities'
 import { MessagePlugin } from 'tdesign-vue-next'
 import i18n from '@/i18n'
 import { normalizeSettingsSection } from '@/config/settingsRoute'
-
-/** Lite /桌面 WebView 硬刷新时可能只打开 `/`，用 session 记住上次页面以便恢复 */
-const LITE_LAST_PATH_KEY = 'reliquary_lite_last_path'
 const AUTO_SETUP_FAILED_KEY = 'reliquary_auto_setup_failed'
 
 function shouldTryAutoSetup() {
-  return import.meta.env.VITE_QA_AUTO_LOGIN === 'true' || localStorage.getItem(AUTO_SETUP_FAILED_KEY) !== 'true'
+  return import.meta.env.VITE_QA_AUTO_LOGIN === 'true'
 }
 
 function markAutoSetupFailed() {
   localStorage.setItem(AUTO_SETUP_FAILED_KEY, 'true')
-}
-
-function isLiteEdition(authStore: ReturnType<typeof useAuthStore>) {
-  return authStore.isLiteMode || localStorage.getItem('reliquary_lite_mode') === 'true'
-}
-
-function isLiteSpaDefaultEntry(to: RouteLocationNormalized) {
-  return (
-    to.path === '/' ||
-    to.path === '/platform' ||
-    to.path === '/platform/knowledge-bases' ||
-    to.name === 'knowledgeBaseList'
-  )
-}
-
-function isSafeLiteRestoreTarget(path: string) {
-  return path.startsWith('/platform/') && !path.startsWith('/platform/organizations')
 }
 
 function hasPendingOIDCCallback() {
@@ -305,7 +284,6 @@ async function hydrateSessionFromToken(authStore: ReturnType<typeof useAuthStore
 }
 
 let autoSetupAttempted = false
-let liteDeepLinkRestoreDone = false
 
 // 路由守卫：检查认证状态和系统初始化状态
 router.beforeEach(async (to, from, next) => {
@@ -316,20 +294,6 @@ router.beforeEach(async (to, from, next) => {
   if (hasPendingOIDCCallback()) {
     next()
     return
-  }
-
-  // Lite：硬刷新后若落在默认首页，恢复本次会话中最后访问的 /platform 子路径
-  if (!liteDeepLinkRestoreDone) {
-    liteDeepLinkRestoreDone = true
-    if (isLiteEdition(authStore)) {
-      const saved = sessionStorage.getItem(LITE_LAST_PATH_KEY)
-      if (saved && isSafeLiteRestoreTarget(saved) && isLiteSpaDefaultEntry(to)) {
-        if (saved !== to.fullPath) {
-          next(saved)
-          return
-        }
-      }
-    }
   }
 
   // Tenantless onboarding still requires a valid user token even though it
@@ -380,7 +344,6 @@ router.beforeEach(async (to, from, next) => {
           const response = await autoSetup()
           if (response.success) {
             persistLoginResponse(authStore, response)
-            authStore.setLiteMode(import.meta.env.VITE_QA_AUTO_LOGIN !== 'true')
             next(to.fullPath)
             return
           } else {
@@ -423,13 +386,6 @@ router.beforeEach(async (to, from, next) => {
   }
 
   next()
-})
-
-router.afterEach((to) => {
-  if (!isLiteEdition(useAuthStore())) return
-  if (to.path === '/login') return
-  if (!to.path.startsWith('/platform')) return
-  sessionStorage.setItem(LITE_LAST_PATH_KEY, to.fullPath)
 })
 
 export default router

@@ -17,18 +17,18 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/sync/singleflight"
+
 	"reliquary/internal/agent"
 	"reliquary/internal/logger"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/searchutil"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
 
-// ErrWikiIngestConcurrent is returned by the wiki ingest handler in Lite mode
+// ErrWikiIngestConcurrent is returned by the wiki ingest handler in in-memory fixtures
 // when another batch is already running for the same KB (the in-process
-// liteLocks guard is held). The asynq/sync executor's RetryDelayFunc uses
+// localLocks guard is held). The asynq/sync executor's RetryDelayFunc uses
 // errors.Is on this sentinel to apply a short, fixed retry delay instead of
 // exponential backoff, so the deferred batch retries promptly once the active
 // one releases. Standard (Redis) mode no longer takes an exclusive per-KB
@@ -44,8 +44,8 @@ const (
 	// Phase 3 removed the exclusive per-KB Redis "batch in progress" lock
 	// (wiki:active:<kbID>). Standard mode now allows concurrent batches for
 	// one KB, kept safe by row claiming (claimPendingList) plus per-slug
-	// reduce locks (withSlugLock). Lite mode still serializes per KB via the
-	// in-process liteLocks map.
+	// reduce locks (withSlugLock). in-memory fixtures still serializes per KB via the
+	// in-process localLocks map.
 	//
 	// wikiClaimStaleAfter is how long a claimed-but-undrained ingest row
 	// waits before another worker may re-claim it. It MUST exceed the asynq
@@ -292,7 +292,6 @@ func WikiDeletedTombstoneKey(kbID, knowledgeID string) string {
 // the queue tuple (task_type, scope, scope_id) and process whatever rows
 // are queued under it.
 type WikiIngestPayload struct {
-	types.TracingContext
 	TenantID        uint64 `json:"tenant_id"`
 	KnowledgeBaseID string `json:"knowledge_base_id"`
 	Language        string `json:"language,omitempty"`
@@ -300,7 +299,6 @@ type WikiIngestPayload struct {
 
 // WikiRetractPayload is the asynq task payload for wiki content retraction
 type WikiRetractPayload struct {
-	types.TracingContext
 	TenantID        uint64   `json:"tenant_id"`
 	KnowledgeBaseID string   `json:"knowledge_base_id"`
 	KnowledgeID     string   `json:"knowledge_id"`
@@ -371,7 +369,7 @@ type wikiIngestService struct {
 	audit          interfaces.AuditLogService
 	pendingRepo    interfaces.TaskPendingOpsRepository
 	deadLetterRepo interfaces.TaskDeadLetterRepository
-	redisClient    *redis.Client // nil in Lite mode (no Redis)
+	redisClient    *redis.Client // nil only in test fixtures
 	// spanTracker lets per-document map work surface as a
 	// postprocess.wiki subspan in the knowledge trace tree. Async
 	// batch design means we look up the parent attempt by knowledge
@@ -379,13 +377,13 @@ type wikiIngestService struct {
 	// asynq payload, which is per-KB and would otherwise be ambiguous
 	// for the 5-docs-per-batch fan-out.
 	spanTracker SpanTracker
-	// liteLocks provides per-KB mutual exclusion in Lite mode (no Redis).
+	// localLocks provides per-KB mutual exclusion in in-memory fixtures (no Redis).
 	// Keys are kbID strings; values are unused (presence = locked).
-	liteLocks sync.Map
-	// liteFinalizeLocks is the Lite-mode counterpart of the Redis
+	localLocks sync.Map
+	// localFinalizeLocks is the in-memory fixtures counterpart of the Redis
 	// wiki:finalize:active:<kbID> lock, keeping two finalize runs for the
 	// same KB from overlapping when there is no Redis.
-	liteFinalizeLocks sync.Map
+	localFinalizeLocks sync.Map
 	// llmRequests coalesces byte-identical concurrent prompts within this
 	// process. Keys include tenant and model to preserve isolation.
 	llmRequests singleflight.Group
@@ -479,9 +477,9 @@ func (s *wikiIngestService) beginWikiSubspan(ctx context.Context, knowledgeID st
 // 30s window all coalesce: the first one to acquire the per-KB active
 // lock drains the batch; subsequent ones see an empty queue and exit.
 //
-// Lite mode (no Redis) still works as long as Postgres is reachable —
+// in-memory fixtures (no Redis) still works as long as Postgres is reachable —
 // the queue lives in PG, only the active-batch lock is Redis-only and
-// has a process-local fallback (liteLocks) inside the worker.
+// has a process-local fallback (localLocks) inside the worker.
 func enqueueWikiPendingOp(
 	ctx context.Context,
 	pendingRepo interfaces.TaskPendingOpsRepository,
@@ -570,7 +568,7 @@ func enqueueWikiIngestTrigger(
 		KnowledgeBaseID: kbID,
 		Language:        lang,
 	}
-	langfuse.InjectTracing(ctx, &trigger)
+
 	triggerBytes, err := json.Marshal(trigger)
 	if err != nil {
 		logger.Warnf(ctx, "wiki ingest: failed to marshal trigger task: %v", err)
@@ -643,7 +641,7 @@ func EnqueueWikiRetract(
 		KnowledgeBaseID: payload.KnowledgeBaseID,
 		Language:        payload.Language,
 	}
-	langfuse.InjectTracing(ctx, &trigger)
+
 	triggerBytes, _ := json.Marshal(trigger)
 	t := asynq.NewTask(types.TypeWikiIngest, triggerBytes,
 		asynq.Queue(types.QueueWiki),
@@ -790,11 +788,9 @@ func uniqueWikiFolderIDs(values []string) []string {
 // scheduleFinalize enqueues a debounced, coalesced KB-global finalize trigger.
 // asynq.TaskID ("wiki-finalize-<kbID>") makes concurrent schedules within the
 // debounce window collapse into one pending task; the conflict error is the
-// expected coalescing signal, not a failure. In Lite mode the sync executor
-// ignores TaskID, so finalize simply runs once per batch (acceptable at the
-// small scale Lite mode targets).
+// expected coalescing signal, not a failure.
 func (s *wikiIngestService) scheduleFinalize(ctx context.Context, payload WikiIngestPayload) {
-	langfuse.InjectTracing(ctx, &payload)
+
 	b, _ := json.Marshal(payload)
 	t := asynq.NewTask(types.TypeWikiFinalize, b,
 		asynq.Queue(types.QueueWiki),
@@ -817,7 +813,7 @@ func (s *wikiIngestService) scheduleFinalize(ctx context.Context, payload WikiIn
 // coalesce the only retry away. Duplicate retries are harmless because the
 // durable prune row is deleted exactly once and an empty lane is a no-op.
 func (s *wikiIngestService) scheduleFinalizeRetry(ctx context.Context, payload WikiIngestPayload) {
-	langfuse.InjectTracing(ctx, &payload)
+
 	b, _ := json.Marshal(payload)
 	t := asynq.NewTask(types.TypeWikiFinalize, b,
 		asynq.Queue(types.QueueWiki),
@@ -893,8 +889,8 @@ func (s *wikiIngestService) claimPendingList(ctx context.Context, kbID string, l
 // entity/concept slug; without this lock their GetPageBySlug→UpdatePage
 // cycles would race and lose one contribution.
 //
-// Redis mode only: in Lite mode a single process runs one batch per KB at a
-// time (liteLocks), so same-slug contention cannot occur and fn runs
+// Redis mode only: in in-memory fixtures a single process runs one batch per KB at a
+// time (localLocks), so same-slug contention cannot occur and fn runs
 // directly. Returns (false, nil) if the lock could not be acquired within
 // wikiSlugLockWait — the caller then treats the slug like a best-effort
 // reduce miss (matching pre-existing reduce-failure handling). On a Redis
@@ -954,8 +950,8 @@ return 1
 // run when the batch finishes; (nil, false) when the KB is already at
 // maxInflight, so the caller should reschedule and bail. A background renew
 // keeps the slot alive for the batch's duration; a crashed batch's slot simply
-// expires (wikiInflightTTL) and is purged by the next reserver. Lite mode has
-// no shared-pool contention (liteLocks already serialize per KB), so it always
+// expires (wikiInflightTTL) and is purged by the next reserver. in-memory fixtures has
+// no shared-pool contention (localLocks already serialize per KB), so it always
 // grants a no-op slot. Fails OPEN on a Redis error: a blip must not halt wiki
 // generation, and the pool size still bounds total work.
 func (s *wikiIngestService) reserveInflightSlot(ctx context.Context, kbID string, maxInflight int) (func(), bool) {
@@ -1009,7 +1005,7 @@ func (s *wikiIngestService) reserveInflightSlot(ctx context.Context, kbID string
 // follow-ups on completion, so the turned-away rows are guaranteed to drain
 // once a slot frees.
 func (s *wikiIngestService) scheduleCappedRetry(ctx context.Context, payload WikiIngestPayload) {
-	langfuse.InjectTracing(ctx, &payload)
+
 	b, _ := json.Marshal(payload)
 	t := asynq.NewTask(types.TypeWikiIngest, b,
 		asynq.Queue(types.QueueWiki),
@@ -1051,7 +1047,6 @@ func (s *wikiIngestService) scheduleStaleClaimRecheck(ctx context.Context, paylo
 
 	logger.Infof(ctx, "wiki ingest: %d rows for KB %s held by fresh claims, arming stale-claim recheck", count, payload.KnowledgeBaseID)
 
-	langfuse.InjectTracing(ctx, &payload)
 	b, _ := json.Marshal(payload)
 	t := asynq.NewTask(types.TypeWikiIngest, b,
 		asynq.Queue(types.QueueWiki),
@@ -1203,7 +1198,7 @@ func (s *wikiIngestService) requeueFailedOps(ctx context.Context, payload WikiIn
 		if count <= wikiMaxFailRetries {
 			// Release the claim so the row is immediately eligible for the
 			// next trigger's ClaimBatch instead of waiting out
-			// wikiClaimStaleAfter. No-op in Lite mode (row was peeked, never
+			// wikiClaimStaleAfter. No-op in in-memory fixtures (row was peeked, never
 			// claimed). ReleaseByIDs preserves fail_count, so the retry
 			// budget still counts down.
 			if err := s.pendingRepo.ReleaseByIDs(ctx, []int64{op.dbID}); err != nil {
@@ -1330,9 +1325,9 @@ type WikiBatchContext struct {
 	// reduce.
 	PlannedFolderID map[string]string
 
-	// identityClaims is the Lite-mode and Redis-error fallback for identity
-	// reservations. Map workers in one batch run concurrently even though Lite
-	// serializes batches, so they still need to converge before Reduce groups
+	// identityClaims supports test fixtures and Redis-error fallback for identity
+	// reservations. Map workers in one batch run concurrently and need to
+	// converge before Reduce groups
 	// updates by slug. The map is batch-scoped and disappears with the batch.
 	identityClaims sync.Map
 

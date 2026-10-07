@@ -74,7 +74,6 @@ export type VectorStoreSource = 'env' | 'user' | 'shared' | 'unavailable';
 export type VectorStoreStatus = 'available' | 'unavailable';
 
 export interface KnowledgeBaseStoreView {
-  vector_store_id?: string | null;
   vector_store_name?: string;
   vector_store_engine_type?: string;
   vector_store_source?: VectorStoreSource;
@@ -89,11 +88,6 @@ export function createKnowledgeBase(data: {
   embedding_model_id?: string;
   summary_model_id?: string;
   auto_tag_config?: { enabled: boolean; model_id?: string; max_tags?: number; skip_if_tagged?: boolean; policy?: string };
-  // Opt-in binding to a specific tenant-owned VectorStore. Omit (or
-  // send undefined / empty string) to fall back to the env-configured
-  // store. Immutable after creation — UpdateKnowledgeBase intentionally
-  // does not accept this field.
-  vector_store_id?: string;
   // Concrete tenant-owned storage instance. When omitted, the tenant default
   // backend is bound by the server at creation time.
   storage_backend_id?: string;
@@ -110,7 +104,6 @@ export function createKnowledgeBase(data: {
     model_id?: string;
     language?: string;
   };
-  extract_config?: any;
   faq_config?: { index_mode: string; question_index_mode?: string };
   wiki_config?: {
     synthesis_model_id?: string;
@@ -123,7 +116,6 @@ export function createKnowledgeBase(data: {
     vector_enabled: boolean;
     keyword_enabled: boolean;
     wiki_enabled: boolean;
-    graph_enabled: boolean;
   };
 }) {
   return post(`/api/v1/knowledge-bases`, data);
@@ -156,7 +148,6 @@ export function updateKnowledgeBase(id: string, data: {
       vector_enabled: boolean;
       keyword_enabled: boolean;
       wiki_enabled: boolean;
-      graph_enabled: boolean;
     };
   }
 }) {

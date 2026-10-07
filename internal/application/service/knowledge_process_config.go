@@ -44,8 +44,6 @@ func ResolveProcessConfig(kb *types.KnowledgeBase, overrides *types.KnowledgePro
 		VLMConfig:                kb.VLMConfig,
 		ASRConfig:                kb.ASRConfig,
 		QuestionGenerationConfig: defaultQuestionGenerationConfig(kb),
-		GraphEnabled:             kb.IsGraphEnabled(),
-		ExtractConfig:            derefExtractConfig(kb.ExtractConfig),
 	}
 	if overrides == nil {
 		return eff
@@ -80,16 +78,6 @@ func ResolveProcessConfig(kb *types.KnowledgeBase, overrides *types.KnowledgePro
 			eff.QuestionGenerationConfig.CustomInstructions = base.CustomInstructions
 		}
 	}
-	if overrides.GraphEnabled != nil {
-		eff.GraphEnabled = *overrides.GraphEnabled
-	}
-	if overrides.ExtractConfig != nil {
-		eff.ExtractConfig = mergeExtractConfig(eff.ExtractConfig, overrides.ExtractConfig)
-	}
-
-	// Match KnowledgeBase.IsGraphEnabled: graph fan-out requires extract to be on.
-	eff.GraphEnabled = eff.GraphEnabled && eff.ExtractConfig.Enabled
-
 	return eff
 }
 
@@ -239,13 +227,6 @@ func defaultQuestionGenerationConfig(kb *types.KnowledgeBase) types.QuestionGene
 	return *kb.QuestionGenerationConfig
 }
 
-func derefExtractConfig(cfg *types.ExtractConfig) types.ExtractConfig {
-	if cfg == nil {
-		return types.ExtractConfig{}
-	}
-	return *cfg
-}
-
 func mergeChunkingConfig(base types.ChunkingConfig, override *types.ChunkingConfig) types.ChunkingConfig {
 	if override == nil {
 		return base
@@ -284,30 +265,6 @@ func mergeChunkingConfig(base types.ChunkingConfig, override *types.ChunkingConf
 	}
 	if override.TableMetadataInstructions != "" {
 		result.TableMetadataInstructions = override.TableMetadataInstructions
-	}
-	return result
-}
-
-func mergeExtractConfig(base types.ExtractConfig, override *types.ExtractConfig) types.ExtractConfig {
-	if override == nil {
-		return base
-	}
-	result := base
-	result.Enabled = override.Enabled
-	if override.Text != "" {
-		result.Text = override.Text
-	}
-	if len(override.Tags) > 0 {
-		result.Tags = override.Tags
-	}
-	if len(override.Nodes) > 0 {
-		result.Nodes = override.Nodes
-	}
-	if len(override.Relations) > 0 {
-		result.Relations = override.Relations
-	}
-	if override.CustomInstructions != "" {
-		result.CustomInstructions = override.CustomInstructions
 	}
 	return result
 }

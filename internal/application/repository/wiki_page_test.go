@@ -10,15 +10,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 )
 
-// wikiPagesTestDDL is a minimal SQLite-compatible subset of the
-// production wiki_pages DDL (migrations/versioned/000037_wiki_and_indexing.up.sql).
-// JSONB is stored as TEXT in SQLite; the StringArray Scan/Value pair
-// handles the JSON round-trip unchanged.
+// wikiPagesTestDDL is a minimal PostgreSQL subset of the production wiki_pages
+// DDL (migrations/versioned/000037_wiki_and_indexing.up.sql).
 const wikiPagesTestDDL = `
 CREATE TABLE IF NOT EXISTS wiki_pages (
     id                VARCHAR(36) PRIMARY KEY,
@@ -32,27 +31,27 @@ CREATE TABLE IF NOT EXISTS wiki_pages (
     summary           TEXT NOT NULL DEFAULT '',
     parent_slug       VARCHAR(255) NOT NULL DEFAULT '',
     folder_id         VARCHAR(36) NOT NULL DEFAULT '',
-    category_path     TEXT DEFAULT '[]',
+    category_path     JSONB DEFAULT '[]',
     wiki_path         VARCHAR(1024) NOT NULL DEFAULT '',
     depth             INTEGER NOT NULL DEFAULT 0,
     sort_order        INTEGER NOT NULL DEFAULT 0,
-    source_refs       TEXT DEFAULT '[]',
-    chunk_refs        TEXT DEFAULT '[]',
-    in_links          TEXT DEFAULT '[]',
-    out_links         TEXT DEFAULT '[]',
-    page_metadata     TEXT DEFAULT '{}',
-    aliases           TEXT DEFAULT '[]',
+    source_refs       JSONB DEFAULT '[]',
+    chunk_refs        JSONB DEFAULT '[]',
+    in_links          JSONB DEFAULT '[]',
+    out_links         JSONB DEFAULT '[]',
+    page_metadata     JSONB DEFAULT '{}',
+    aliases           JSONB DEFAULT '[]',
     version           INTEGER NOT NULL DEFAULT 1,
     last_edit_source  VARCHAR(16) NOT NULL DEFAULT '',
     last_editor_id    VARCHAR(64) NOT NULL DEFAULT '',
-    created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
-    deleted_at        DATETIME
+    created_at        TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    deleted_at        TIMESTAMPTZ
 );
 `
 
 // wikiPageRevisionsTestDDL mirrors the production wiki_page_revisions DDL
-// (migrations/versioned/000075_wiki_page_revisions.up.sql) for SQLite.
+// (migrations/versioned/000075_wiki_page_revisions.up.sql) for PostgreSQL.
 const wikiPageRevisionsTestDDL = `
 CREATE TABLE IF NOT EXISTS wiki_page_revisions (
     id                VARCHAR(36) PRIMARY KEY,
@@ -66,17 +65,17 @@ CREATE TABLE IF NOT EXISTS wiki_page_revisions (
     status            VARCHAR(32) NOT NULL DEFAULT 'published',
     content           TEXT NOT NULL DEFAULT '',
     summary           TEXT NOT NULL DEFAULT '',
-    aliases           TEXT DEFAULT '[]',
+    aliases           JSONB DEFAULT '[]',
     edit_source       VARCHAR(16) NOT NULL DEFAULT '',
     editor_id         VARCHAR(64) NOT NULL DEFAULT '',
-    edited_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
-    created_at        DATETIME DEFAULT CURRENT_TIMESTAMP
+    edited_at         TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    created_at        TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_wiki_page_revisions_page_version
     ON wiki_page_revisions (page_id, version);
 `
 
-// wikiFoldersTestDDL mirrors the production wiki_folders DDL for SQLite.
+// wikiFoldersTestDDL mirrors the production wiki_folders DDL for PostgreSQL.
 const wikiFoldersTestDDL = `
 CREATE TABLE IF NOT EXISTS wiki_folders (
     id                VARCHAR(36) PRIMARY KEY,
@@ -87,16 +86,15 @@ CREATE TABLE IF NOT EXISTS wiki_folders (
     path              VARCHAR(1024) NOT NULL DEFAULT '',
     depth             INTEGER NOT NULL DEFAULT 0,
     sort_order        INTEGER NOT NULL DEFAULT 0,
-    created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
-    deleted_at        DATETIME
+    created_at        TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    deleted_at        TIMESTAMPTZ
 );
 `
 
 func setupWikiPagesTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := pgtest.OpenFixture(t)
 	require.NoError(t, db.Exec(wikiPagesTestDDL).Error)
 	require.NoError(t, db.Exec(wikiFoldersTestDDL).Error)
 	for _, stmt := range strings.Split(strings.TrimSpace(wikiPageRevisionsTestDDL), ";") {
@@ -126,6 +124,7 @@ func makeWikiPage(kbID, slug, pageType, status string) *types.WikiPage {
 		Status:          status,
 		Content:         "body of " + slug,
 		Summary:         "summary of " + slug,
+		CategoryPath:    types.StringArray{},
 		WikiPath:        pageType + "/" + title,
 		Version:         1,
 		CreatedAt:       time.Now(),
@@ -406,7 +405,7 @@ func TestListByTypeLight_ClampsLimit(t *testing.T) {
 	assert.LessOrEqual(t, len(clampedEntries), 200)
 }
 
-func TestCountOrphans_SQLiteCountsEmptyInLinks(t *testing.T) {
+func TestCountOrphansCountsEmptyInLinks(t *testing.T) {
 	db := setupWikiPagesTestDB(t)
 	repo := NewWikiPageRepository(db)
 	ctx := context.Background()

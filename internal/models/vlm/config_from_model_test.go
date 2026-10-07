@@ -19,7 +19,7 @@ func TestConfigFromModel_RemoteDefaultsToOpenAI(t *testing.T) {
 			CustomHeaders: map[string]string{"H": "v"},
 		},
 	}
-	cfg := ConfigFromModel(m, "app", "secret")
+	cfg := ConfigFromModel(m)
 	if cfg.InterfaceType != "openai" {
 		t.Errorf("expected openai default for remote, got %q", cfg.InterfaceType)
 	}
@@ -29,9 +29,6 @@ func TestConfigFromModel_RemoteDefaultsToOpenAI(t *testing.T) {
 	if cfg.Extra["x"] != "y" {
 		t.Errorf("ExtraConfig not propagated as Extra: %+v", cfg.Extra)
 	}
-	if cfg.AppID != "app" || cfg.AppSecret != "secret" {
-		t.Errorf("cloud creds mismatch: %+v", cfg)
-	}
 }
 
 func TestConfigFromModel_LocalDefaultsToOllama(t *testing.T) {
@@ -39,7 +36,7 @@ func TestConfigFromModel_LocalDefaultsToOllama(t *testing.T) {
 		Name:   "qwen2-vl",
 		Source: types.ModelSourceLocal,
 	}
-	cfg := ConfigFromModel(m, "", "")
+	cfg := ConfigFromModel(m)
 	if cfg.InterfaceType != "ollama" {
 		t.Errorf("expected ollama default for local, got %q", cfg.InterfaceType)
 	}
@@ -53,7 +50,7 @@ func TestConfigFromModel_RespectsExplicitInterface(t *testing.T) {
 			InterfaceType: "ollama",
 		},
 	}
-	if got := ConfigFromModel(m, "", "").InterfaceType; got != "ollama" {
+	if got := ConfigFromModel(m).InterfaceType; got != "ollama" {
 		t.Errorf("expected explicit interface to win, got %q", got)
 	}
 }

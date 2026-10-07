@@ -10,6 +10,7 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
+
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -37,7 +38,7 @@ type asynqTaskInspector struct {
 // the cancel path remains usable when the inspector failed to init.
 func NewAsynqTaskInspector(inspector *asynq.Inspector, redisClient *redis.Client) interfaces.TaskInspector {
 	if inspector == nil || redisClient == nil {
-		return noopTaskInspector{}
+		panic("task inspection requires Redis and an asynq inspector")
 	}
 	return &asynqTaskInspector{inspector: inspector, redis: redisClient}
 }
@@ -91,7 +92,6 @@ var taskTypesForKnowledgeCancel = map[string]struct{}{
 	types.TypeKnowledgePostProcess: {},
 	types.TypeQuestionGeneration:   {},
 	types.TypeSummaryGeneration:    {},
-	types.TypeChunkExtract:         {},
 }
 
 // listPageSize caps each Redis LIST call. Asynq pages tasks, so we
@@ -1055,43 +1055,4 @@ func matchesKnowledgeBase(
 		return true
 	}
 	return false
-}
-
-// noopTaskInspector is the Lite-mode (no Redis) inspector. Inline
-// goroutines spawned by SyncTaskExecutor cannot be dequeued before
-// they start; the checkpoint-based abort in worker code is the only
-// stop signal in that mode.
-type noopTaskInspector struct{}
-
-// NewNoopTaskInspector returns a no-op TaskInspector for Lite mode.
-func NewNoopTaskInspector() interfaces.TaskInspector { return noopTaskInspector{} }
-
-func (noopTaskInspector) CancelTasksForKnowledge(
-	ctx context.Context, knowledgeID string,
-) (int, int, error) {
-	return 0, 0, nil
-}
-
-// HasQueuedTasksForKnowledge always reports false in Lite mode: inline
-// executors never enqueue, so there is no backlog to protect against and
-// the housekeeping sweep's span/updated_at checks stay authoritative.
-func (noopTaskInspector) HasQueuedTasksForKnowledge(
-	ctx context.Context, knowledgeID string,
-) (bool, error) {
-	return false, nil
-}
-
-// QueueStats reports "not supported" in Lite mode: there is no Redis /
-// asynq backend to inspect, so the runtime dashboard renders an
-// "unavailable in this deployment" state instead of an empty table.
-func (noopTaskInspector) QueueStats(
-	ctx context.Context,
-) ([]types.QueueStat, bool, error) {
-	return nil, false, nil
-}
-
-func (noopTaskInspector) WorkerServerStats(
-	ctx context.Context,
-) ([]types.WorkerServerStat, bool, error) {
-	return nil, false, nil
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/require"
+
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -117,14 +118,6 @@ func (r parentChildRetrieveRegistry) GetRetrieveEngineService(
 	return r.engine, nil
 }
 
-type parentChildGraphRepo struct {
-	interfaces.RetrieveGraphRepository
-}
-
-func (parentChildGraphRepo) DelGraph(context.Context, []types.NameSpace) error {
-	return nil
-}
-
 type parentChildTenantRepo struct {
 	interfaces.TenantRepository
 }
@@ -163,7 +156,6 @@ func TestProcessChunksIndexesEveryTextChild(t *testing.T) {
 		chunkService:   chunkService,
 		modelService:   parentChildModelService{embedder: parentChildEmbedder{}},
 		retrieveEngine: parentChildRetrieveRegistry{engine: retrieveEngine},
-		graphEngine:    parentChildGraphRepo{},
 		tenantRepo:     parentChildTenantRepo{},
 		task:           parentChildTaskEnqueuer{},
 	}

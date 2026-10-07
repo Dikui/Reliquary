@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/sashabaranov/go-openai"
+
 	"reliquary/internal/logger"
 	"reliquary/internal/models/provider"
 	"reliquary/internal/types"
@@ -27,8 +28,6 @@ type RemoteAPIChat struct {
 	baseURL   string
 	apiKey    string
 	provider  provider.ProviderName
-	appID     string
-	appSecret string
 	// customHeaders 为用户在模型配置中指定的自定义 HTTP 请求头（类似 OpenAI Python SDK 的 extra_headers）。
 	customHeaders map[string]string
 
@@ -89,14 +88,6 @@ func NewRemoteAPIChat(chatConfig *ChatConfig) (*RemoteAPIChat, error) {
 			modelName = override
 		}
 	}
-	if providerName == provider.ProviderWeKnoraCloud {
-		if chatConfig.AppID == "" {
-			return nil, fmt.Errorf("WeKnoraCloud provider: AppID is required")
-		}
-		if chatConfig.AppSecret == "" {
-			return nil, fmt.Errorf("WeKnoraCloud provider: AppSecret is required")
-		}
-	}
 
 	return &RemoteAPIChat{
 		modelName:        modelName,
@@ -105,8 +96,6 @@ func NewRemoteAPIChat(chatConfig *ChatConfig) (*RemoteAPIChat, error) {
 		baseURL:          strings.TrimRight(config.BaseURL, "/"),
 		apiKey:           apiKey,
 		provider:         providerName,
-		appID:            chatConfig.AppID,
-		appSecret:        chatConfig.AppSecret,
 		customHeaders:    chatConfig.CustomHeaders,
 		adapter:          resolveProvider(providerName, modelName),
 		thinkingOverride: parseThinkingOverride(chatConfig.ExtraConfig),
@@ -115,7 +104,7 @@ func NewRemoteAPIChat(chatConfig *ChatConfig) (*RemoteAPIChat, error) {
 
 // authCreds bundles the credentials passed to the adapter's Auth method.
 func (c *RemoteAPIChat) authCreds() authCreds {
-	return authCreds{APIKey: c.apiKey, AppID: c.appID, AppSecret: c.appSecret}
+	return authCreds{APIKey: c.apiKey}
 }
 
 // shapedRequest builds the standard request and applies the adapter's message

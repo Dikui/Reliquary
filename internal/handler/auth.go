@@ -2,11 +2,9 @@ package handler
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	stderrors "errors"
-	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -884,104 +882,43 @@ func (h *AuthHandler) SwitchTenant(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.NewAuthLoginResponse(resp))
 }
 
-// @Summary      自动初始化（Lite 桌面版及本地 QA）
-// @Description  Lite 版自动创建用户和空间；显式启用的本地 QA 环境可为既有测试用户签发令牌
+// @Summary      本地 QA 自动登录
+// @Description  显式启用的本地 QA 环境可为既有测试用户签发令牌
 // @Tags         认证
 // @Accept       json
 // @Produce      json
 // @Success      200  {object}  types.LoginResponse
-// @Failure      403  {object}  errors.AppError  "非 Lite 版本"
+// @Failure      403  {object}  errors.AppError "未启用本地 QA 登录"
 // @Router       /auth/auto-setup [post]
 func (h *AuthHandler) AutoSetup(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	if Edition != "lite" {
-		email := strings.TrimSpace(os.Getenv("RELIQUARY_QA_AUTO_LOGIN_EMAIL"))
-		if !h.qaAutoLoginAllowed(c, email) {
-			c.Error(errors.NewForbiddenError("auto-setup is only available in lite edition or local QA"))
-			return
-		}
-		user, err := h.userService.GetUserByEmail(ctx, email)
-		if err != nil || user == nil || !user.IsActive || user.DeletedAt.Valid {
-			c.Error(errors.NewForbiddenError("QA user is unavailable"))
-			return
-		}
-		tenant, err := h.tenantService.GetTenantByID(ctx, user.TenantID)
-		if err != nil || tenant == nil {
-			c.Error(errors.NewForbiddenError("QA workspace is unavailable"))
-			return
-		}
-		accessToken, refreshToken, err := h.userService.GenerateTokens(ctx, user)
-		if err != nil {
-			c.Error(errors.NewInternalServerError("QA auto-login failed"))
-			return
-		}
-		c.JSON(http.StatusOK, dto.NewAuthLoginResponse(&types.LoginResponse{
-			Success: true, Message: "QA auto-login successful", User: user,
-			ActiveTenant: tenant, Memberships: h.userService.BuildLoginMemberships(ctx, user, tenant),
-			Token: accessToken, RefreshToken: refreshToken,
-		}))
+	email := strings.TrimSpace(os.Getenv("RELIQUARY_QA_AUTO_LOGIN_EMAIL"))
+	if !h.qaAutoLoginAllowed(c, email) {
+		c.Error(errors.NewForbiddenError("auto-setup is only available in local QA"))
 		return
 	}
-
-	const defaultEmail = "admin@reliquary.local"
-
-	user, _ := h.userService.GetUserByEmail(ctx, defaultEmail)
-	if user == nil {
-		logger.Info(ctx, "Auto-setup: creating default user and tenant for lite edition")
-
-		randomBytes := make([]byte, 24)
-		if _, err := rand.Read(randomBytes); err != nil {
-			appErr := errors.NewInternalServerError("auto-setup failed: unable to generate credentials")
-			c.Error(appErr)
-			return
-		}
-		randomPassword := base64.RawURLEncoding.EncodeToString(randomBytes)
-		randomUsername := fmt.Sprintf("user_%s", base64.RawURLEncoding.EncodeToString(randomBytes[:6]))
-
-		_, err := h.userService.Register(ctx, &types.RegisterRequest{
-			Username: randomUsername,
-			Email:    defaultEmail,
-			Password: randomPassword,
-		})
-		if err != nil {
-			logger.Errorf(ctx, "Auto-setup: failed to register default user: %v", err)
-			appErr := errors.NewInternalServerError("auto-setup failed").WithDetails(err.Error())
-			c.Error(appErr)
-			return
-		}
-		user, _ = h.userService.GetUserByEmail(ctx, defaultEmail)
-		if user == nil {
-			appErr := errors.NewInternalServerError("auto-setup failed: user not found after registration")
-			c.Error(appErr)
-			return
-		}
+	user, err := h.userService.GetUserByEmail(ctx, email)
+	if err != nil || user == nil || !user.IsActive || user.DeletedAt.Valid {
+		c.Error(errors.NewForbiddenError("QA user is unavailable"))
+		return
 	}
-
+	tenant, err := h.tenantService.GetTenantByID(ctx, user.TenantID)
+	if err != nil || tenant == nil {
+		c.Error(errors.NewForbiddenError("QA workspace is unavailable"))
+		return
+	}
 	accessToken, refreshToken, err := h.userService.GenerateTokens(ctx, user)
 	if err != nil {
-		logger.Errorf(ctx, "Auto-setup: failed to generate tokens: %v", err)
-		appErr := errors.NewInternalServerError("auto-setup failed").WithDetails(err.Error())
-		c.Error(appErr)
+		c.Error(errors.NewInternalServerError("QA auto-login failed"))
 		return
 	}
-
-	tenant, _ := h.tenantService.GetTenantByID(ctx, user.TenantID)
-
-	logger.Info(ctx, "Auto-setup: completed successfully")
 	c.JSON(http.StatusOK, dto.NewAuthLoginResponse(&types.LoginResponse{
-		Success:      true,
-		Message:      "Auto-setup successful",
-		User:         user,
-		ActiveTenant: tenant,
-		Memberships: []types.Membership{{
-			TenantID:   user.TenantID,
-			TenantName: tenantNameOrEmpty(tenant),
-			Role:       types.TenantRoleOwner,
-		}},
-		Token:        accessToken,
-		RefreshToken: refreshToken,
+		Success: true, Message: "QA auto-login successful", User: user,
+		ActiveTenant: tenant, Memberships: h.userService.BuildLoginMemberships(ctx, user, tenant),
+		Token: accessToken, RefreshToken: refreshToken,
 	}))
+	return
 }
 
 // QA auto-login only works for an explicitly named account on a local,
@@ -1012,9 +949,7 @@ func loopbackOrigin(origin string) bool {
 	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && loopbackHost(u.Hostname())
 }
 
-// tenantNameOrEmpty returns t.Name when t is non-nil, "" otherwise.
-// Used by AutoSetup to populate Membership.TenantName without crashing
-// if the tenant lookup failed.
+// tenantNameOrEmpty returns the tenant name when available.
 func tenantNameOrEmpty(t *types.Tenant) string {
 	if t == nil {
 		return ""

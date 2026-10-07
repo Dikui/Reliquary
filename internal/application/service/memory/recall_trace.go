@@ -3,7 +3,6 @@ package memory
 import (
 	"context"
 
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -144,29 +143,10 @@ func (s *Service) selectRecallWithTrace(
 		return nil, trace
 	}
 
-	_, lexSpan := langfuse.GetManager().StartSpan(ctx, langfuse.SpanOptions{
-		Name: "memory.recall.lexical",
-		Input: map[string]interface{}{
-			"query":      langfuse.TruncateRunes(query, recallQueryPreviewRunes),
-			"candidates": len(candidates),
-		},
-	})
 	lexical := lexicalRanking(query, candidates)
 	trace.LexicalHits = len(lexical)
-	lexSpan.Finish(map[string]interface{}{
-		"hits": trace.LexicalHits,
-	}, nil, nil)
 
-	vecCtx, vecSpan := langfuse.GetManager().StartSpan(ctx, langfuse.SpanOptions{
-		Name: "memory.recall.vector",
-		Input: map[string]interface{}{
-			"query":      langfuse.TruncateRunes(query, recallQueryPreviewRunes),
-			"candidates": len(candidates),
-		},
-		Metadata: map[string]interface{}{
-			"vector_enabled": cfg != nil && cfg.VectorRecallEnabled(),
-		},
-	})
+	vecCtx := ctx
 	vector, vectorSkip := s.vectorRanking(vecCtx, scope, cfg, query, candidates)
 	trace.VectorHits = len(vector)
 	trace.VectorSkipReason = vectorSkip
@@ -176,7 +156,6 @@ func (s *Service) selectRecallWithTrace(
 	if vectorSkip != "" {
 		vecOut["skip_reason"] = vectorSkip
 	}
-	vecSpan.Finish(vecOut, nil, nil)
 
 	if len(vector) == 0 {
 		trace.Mode = "lexical_only"

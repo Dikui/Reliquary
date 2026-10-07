@@ -32,7 +32,6 @@ export interface SystemInfo {
   go_version?: string
   keyword_index_engine?: string
   vector_store_engine?: string
-  graph_database_engine?: string
   minio_enabled?: boolean
   db_version?: string
   /** Human-readable error message when the startup migration failed.
@@ -174,56 +173,13 @@ export function reconnectDocReader(addr: string): Promise<ParserEnginesResponse 
 // ---- 存储引擎配置（空间级，供文档/图片存储与 docreader 使用） ----
 
 export interface StorageEngineConfig {
-  default_provider: string // "local" | "minio" | "cos" | "tos" | "s3" | "oss" | "ks3" | "obs"
+  default_provider: string // "local" | "minio" | "s3"
   local: { path_prefix: string }
   minio: { mode: string; endpoint: string; access_key_id: string; secret_access_key: string; bucket_name: string; use_ssl: boolean; path_prefix: string }
-  cos: {
-    secret_id: string
-    secret_key: string
-    region: string
-    bucket_name: string
-    app_id: string
-    path_prefix: string
-  }
-  tos: {
-    endpoint: string
-    region: string
-    access_key: string
-    secret_key: string
-    bucket_name: string
-    path_prefix: string
-  }
   s3: {
     endpoint: string // optional for standard AWS S3
     region: string
     access_key: string // both keys empty => AWS default credential chain
-    secret_key: string
-    bucket_name: string
-    path_prefix: string
-  }
-  oss: {
-    endpoint: string
-    region: string
-    access_key: string
-    secret_key: string
-    bucket_name: string
-    path_prefix: string
-    use_temp_bucket: boolean
-    temp_bucket_name: string
-    temp_region: string
-  }
-  ks3: {
-    endpoint: string
-    region: string
-    access_key: string
-    secret_key: string
-    bucket_name: string
-    path_prefix: string
-  }
-  obs: {
-    endpoint: string
-    region: string
-    access_key: string
     secret_key: string
     bucket_name: string
     path_prefix: string
@@ -256,14 +212,9 @@ export function getStorageEngineStatus(): Promise<{ data: GetStorageEngineStatus
 }
 
 export interface StorageCheckRequest {
-  provider: string // "minio" | "cos" | "tos" | "s3" | "oss" | "ks3" | "obs"
+  provider: string // "minio" | "s3"
   minio?: StorageEngineConfig['minio']
-  cos?: StorageEngineConfig['cos']
-  tos?: StorageEngineConfig['tos']
   s3?: StorageEngineConfig['s3']
-  oss?: StorageEngineConfig['oss']
-  ks3?: StorageEngineConfig['ks3']
-  obs?: StorageEngineConfig['obs']
 }
 
 export interface StorageCheckResponse {
@@ -612,9 +563,7 @@ export interface ModelRuntimeStat {
 }
 
 /**
- * Runtime queue dashboard payload. `available` is false in Lite mode
- * (no Redis/asynq) — render an "unavailable in this deployment" state
- * rather than an empty table. Each pool includes both configured per-process
+ * Runtime queue dashboard payload. Each pool includes configured per-process
  * concurrency and live cluster capacity/active workers aggregated from asynq
  * server heartbeats.
  */

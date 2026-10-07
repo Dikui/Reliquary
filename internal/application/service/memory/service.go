@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"reliquary/internal/config"
 	"reliquary/internal/logger"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -111,21 +111,13 @@ func (s *Service) enabledScope(ctx context.Context) (interfaces.MemoryScope, *ty
 // and never returns an error: memory is an enhancement, so any failure has to
 // degrade into an ordinary answer rather than into a failed request.
 func (s *Service) Recall(ctx context.Context, query string) interfaces.MemoryRecall {
-	recallCtx, recallSpan := langfuse.GetManager().StartSpan(ctx, langfuse.SpanOptions{
-		Name: "memory.recall",
-		Input: map[string]interface{}{
-			"query": langfuse.TruncateRunes(query, recallQueryPreviewRunes),
-		},
-	})
+	recallCtx := ctx
 
 	scope, cfg, ok := s.enabledScope(recallCtx)
 	if !ok {
 		reason := s.scopeDisableReason(recallCtx)
 		logger.Infof(recallCtx, "memory: recall skipped (%s)", reason)
-		recallSpan.Finish(langfuse.SummarizeMemoryRecallOutput(map[string]interface{}{
-			"outcome": "disabled",
-			"reason":  reason,
-		}, nil), nil, nil)
+
 		return interfaces.MemoryRecall{}
 	}
 
@@ -137,13 +129,7 @@ func (s *Service) Recall(ctx context.Context, query string) interfaces.MemoryRec
 			logger.Warnf(recallCtx, "memory: load subject for recall failed: %v", err)
 		}
 		logger.Infof(recallCtx, "memory: recall skipped (%s)", reason)
-		recallSpan.Finish(langfuse.SummarizeMemoryRecallOutput(map[string]interface{}{
-			"outcome":    "empty",
-			"reason":     reason,
-			"subject_id": scope.SubjectID,
-		}, nil), map[string]interface{}{
-			"tenant_id": scope.TenantID,
-		}, nil)
+
 		return interfaces.MemoryRecall{}
 	}
 
@@ -200,9 +186,7 @@ func (s *Service) Recall(ctx context.Context, query string) interfaces.MemoryRec
 		logger.Infof(recallCtx,
 			"memory: recall empty subject=%s resident=%d candidates=%d mode=%s",
 			scope.SubjectID, len(residentItems), len(candidates), rankTrace.Mode)
-		recallSpan.Finish(langfuse.SummarizeMemoryRecallOutput(emptyMeta, nil), map[string]interface{}{
-			"tenant_id": scope.TenantID,
-		}, nil)
+
 		return interfaces.MemoryRecall{}
 	}
 
@@ -222,26 +206,6 @@ func (s *Service) Recall(ctx context.Context, query string) interfaces.MemoryRec
 		"memory: recall done subject=%s used=%d matched=%d interest_injected=%d interest_relevant=%d mode=%s prompt_runes=%d",
 		scope.SubjectID, len(used), len(matched), len(selectedInterests), len(relevantInterests),
 		rankTrace.Mode, len([]rune(prompt)))
-	recallSpan.Finish(langfuse.SummarizeMemoryRecallOutput(map[string]interface{}{
-		"outcome":           "ok",
-		"subject_id":        scope.SubjectID,
-		"resident_count":    len(residentItems),
-		"block_runes":       len([]rune(block)),
-		"candidate_count":   len(candidates),
-		"lexical_hits":      rankTrace.LexicalHits,
-		"vector_hits":       rankTrace.VectorHits,
-		"vector_skip":       rankTrace.VectorSkipReason,
-		"ranking_mode":      rankTrace.Mode,
-		"fused_candidates":  rankTrace.FusedCandidates,
-		"matched_count":     len(matched),
-		"interest_total":    len(interests),
-		"interest_injected": len(selectedInterests),
-		"interest_relevant": len(relevantInterests),
-		"used_count":        len(used),
-		"prompt_runes":      len([]rune(prompt)),
-	}, used), map[string]interface{}{
-		"tenant_id": scope.TenantID,
-	}, nil)
 
 	return interfaces.MemoryRecall{Prompt: prompt, Items: used}
 }
@@ -922,21 +886,9 @@ const retrievalBackgroundRuneBudget = 240
 // Like Recall this makes no model call: it is two indexed reads plus string
 // assembly, because it runs before the first token of every retrieval turn.
 func (s *Service) RetrievalContextFor(ctx context.Context) interfaces.RetrievalContext {
-	condCtx, condSpan := langfuse.GetManager().StartSpan(ctx, langfuse.SpanOptions{
-		Name: "memory.retrieval_context",
-	})
+	condCtx := ctx
 	scope, cfg, ok := s.enabledScope(condCtx)
 	if !ok || !cfg.RetrievalConditioningEnabled() {
-		reason := "disabled"
-		if !ok {
-			reason = s.scopeDisableReason(condCtx)
-		} else if !cfg.RetrievalConditioningEnabled() {
-			reason = "retrieval_conditioning_disabled"
-		}
-		condSpan.Finish(map[string]interface{}{
-			"outcome": "skipped",
-			"reason":  reason,
-		}, nil, nil)
 		return interfaces.RetrievalContext{}
 	}
 
@@ -944,10 +896,7 @@ func (s *Service) RetrievalContextFor(ctx context.Context) interfaces.RetrievalC
 		[]string{types.MemoryKindProfile, types.MemoryKindInterest}, 30)
 	if err != nil {
 		logger.Warnf(condCtx, "memory: load retrieval context failed: %v", err)
-		condSpan.Finish(map[string]interface{}{
-			"outcome": "error",
-			"error":   err.Error(),
-		}, nil, err)
+
 		return interfaces.RetrievalContext{}
 	}
 
@@ -989,11 +938,7 @@ func (s *Service) RetrievalContextFor(ctx context.Context) interfaces.RetrievalC
 	logger.Infof(condCtx,
 		"memory: retrieval context subject=%s interests=%d documents=%d items=%d",
 		scope.SubjectID, len(interests), len(documents), len(used))
-	condSpan.Finish(langfuse.SummarizeRetrievalContextOutput(
-		retrievalCtx.Background, retrievalCtx.Interests, retrievalCtx.Documents, retrievalCtx.Items,
-	), map[string]interface{}{
-		"tenant_id": scope.TenantID,
-	}, nil)
+
 	return retrievalCtx
 }
 

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -61,7 +62,7 @@ func TestDeleteKnowledgeListIntakeOwnershipAndResources(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &intakeDeleteRepo{knowledge: makeKnowledge()}
 			files := &intakeFileService{saved: map[string][]byte{"upload": {}, "original": {}, "image": {}}}
-			svc := &knowledgeService{repo: repo, kbService: intakeDeleteKB{creator: "creator"}, fileSvc: files, chunkService: intakeDeleteChunks{repo: intakeDeleteChunkRepo{}}, graphEngine: parentChildGraphRepo{}, tenantRepo: intakeTenantRepo{}}
+			svc := &knowledgeService{repo: repo, kbService: intakeDeleteKB{creator: "creator"}, fileSvc: files, chunkService: intakeDeleteChunks{repo: intakeDeleteChunkRepo{}}, tenantRepo: intakeTenantRepo{}}
 			ctx := context.WithValue(context.Background(), types.TenantInfoContextKey, &types.Tenant{ID: 1})
 			ctx = context.WithValue(ctx, types.TenantIDContextKey, uint64(1))
 			ctx = context.WithValue(ctx, types.UserIDContextKey, tt.user)

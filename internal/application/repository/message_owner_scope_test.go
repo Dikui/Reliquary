@@ -4,8 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 )
 
@@ -16,12 +17,9 @@ import (
 
 // Session.BeforeCreate assigns a fresh UUID, so the ids are read back rather
 // than assumed.
-func newOwnerScopeDB(t *testing.T, name string) (*gorm.DB, map[string]string) {
+func newOwnerScopeDB(t *testing.T) (*gorm.DB, map[string]string) {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open("file:"+name+"?mode=memory&cache=shared"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
+	db := pgtest.OpenFixture(t)
 	if err := db.AutoMigrate(&types.Session{}, &types.Message{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -42,7 +40,7 @@ func newOwnerScopeDB(t *testing.T, name string) (*gorm.DB, map[string]string) {
 }
 
 func TestOwnedSessionIDsExcludesOtherPeople(t *testing.T) {
-	db, ids := newOwnerScopeDB(t, "owner-scope-owned")
+	db, ids := newOwnerScopeDB(t)
 	repo := NewMessageRepository(db)
 
 	owned, err := repo.OwnedSessionIDs(context.Background(), 7, "web_user:alice",
@@ -66,7 +64,7 @@ func TestOwnedSessionIDsExcludesOtherPeople(t *testing.T) {
 }
 
 func TestOwnedSessionIDsWithoutAnOwnerKeepsWorkspaceScope(t *testing.T) {
-	db, ids := newOwnerScopeDB(t, "owner-scope-noowner")
+	db, ids := newOwnerScopeDB(t)
 	repo := NewMessageRepository(db)
 
 	// An empty owner means "no per-user narrowing", which is what admin-console

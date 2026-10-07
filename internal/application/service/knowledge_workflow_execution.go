@@ -173,7 +173,7 @@ func (s *KnowledgeWorkflowService) createAndEnqueue(ctx context.Context, run *ty
 	return s.GetRun(ctx, run.KnowledgeBaseID, run.ID)
 }
 
-// Handle is the asynq/Lite task entry point. Successful step outputs are
+// Handle is the asynq task entry point. Successful step outputs are
 // persisted before advancing, so retries resume at the first incomplete step.
 func (s *KnowledgeWorkflowService) Handle(ctx context.Context, task *asynq.Task) error {
 	if task == nil || task.Type() != TypeKnowledgeWorkflowRun {
@@ -1497,7 +1497,7 @@ func (s *KnowledgeWorkflowService) attachTenantInfo(ctx context.Context, tenantI
 	if err := s.db.WithContext(ctx).Where("id = ?", tenantID).First(&tenant).Error; err != nil {
 		return ctx, err
 	}
-	// Request contexts keep the resolved tenant object. Asynq and the Lite
-	// executor use a bare worker context, so restore the same data from DB.
+	// Request contexts keep the resolved tenant object. Asynq uses a bare
+	// worker context, so restore the same data from DB.
 	return context.WithValue(ctx, types.TenantInfoContextKey, &tenant), nil
 }

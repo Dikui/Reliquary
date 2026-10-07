@@ -169,9 +169,9 @@ func TestBuildKBResponse_KeepsVectorStoreIDForOwnerKB(t *testing.T) {
 		VectorStoreID:    &storeID,
 	}
 	view := types.StoreDisplay{
-		Name:       "prod-es",
+		Name:       "prod-postgres",
 		Source:     types.StoreSourceUser,
-		EngineType: "elasticsearch",
+		EngineType: "postgres",
 		Status:     "available",
 	}
 	got := buildKBResponse(kb, view, nil)
@@ -182,7 +182,7 @@ func TestBuildKBResponse_KeepsVectorStoreIDForOwnerKB(t *testing.T) {
 	if m["vector_store_id"] != storeID {
 		t.Fatalf("owner KB must keep vector_store_id, got %v", m["vector_store_id"])
 	}
-	if m["vector_store_name"] != "prod-es" {
+	if m["vector_store_name"] != "prod-postgres" {
 		t.Fatalf("owner KB must surface store name, got %v", m["vector_store_name"])
 	}
 }

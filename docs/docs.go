@@ -791,7 +791,7 @@ const docTemplate = `{
         },
         "/auth/auto-setup": {
             "post": {
-                "description": "Lite 版专用：首次启动时自动创建默认用户和空间并返回令牌，后续启动直接签发令牌，免除手动注册/登录流程",
+                "description": "显式启用的本地 QA 环境可为既有测试用户签发令牌",
                 "consumes": [
                     "application/json"
                 ],
@@ -801,7 +801,7 @@ const docTemplate = `{
                 "tags": [
                     "认证"
                 ],
-                "summary": "自动初始化（Lite 桌面版）",
+                "summary": "本地 QA 自动登录",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -3074,128 +3074,6 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "测试结果",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/initialization/extract/fabri-tag": {
-            "post": {
-                "description": "随机生成一组标签",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "初始化"
-                ],
-                "summary": "生成随机标签",
-                "responses": {
-                    "200": {
-                        "description": "生成的标签",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/initialization/extract/fabri-text": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "根据标签生成示例文本",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "初始化"
-                ],
-                "summary": "生成示例文本",
-                "parameters": [
-                    {
-                        "description": "生成请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.FabriTextRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "生成的文本",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/initialization/extract/text-relation": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "从文本中提取实体和关系",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "初始化"
-                ],
-                "summary": "提取文本关系",
-                "parameters": [
-                    {
-                        "description": "提取请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.TextRelationExtractionRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "提取结果",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -10248,42 +10126,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/models/weknoracloud/status": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "检查当前空间的 WeKnoraCloud 凭证是否完好；needs_reinit=true 表示需要重新保存",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "WeKnoraCloud"
-                ],
-                "summary": "检查 WeKnoraCloud 凭证状态",
-                "responses": {
-                    "200": {
-                        "description": "凭证状态",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/models/{id}": {
             "get": {
                 "security": [
@@ -16300,14 +16142,14 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "List all vector stores for the current workspace, including environment-configured and user-created stores",
+                "description": "Report the read-only application PostgreSQL store without exposing credentials",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "VectorStore"
                 ],
-                "summary": "List vector stores",
+                "summary": "Get PostgreSQL store status",
                 "responses": {
                     "200": {
                         "description": "List of vector stores (env + DB)",
@@ -16318,143 +16160,6 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Create a new vector store configuration for the current workspace",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "VectorStore"
-                ],
-                "summary": "Create vector store",
-                "parameters": [
-                    {
-                        "description": "Vector store configuration",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.CreateStoreRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created vector store",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request or validation error",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "409": {
-                        "description": "Duplicate endpoint and index",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/vector-stores/test": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Test connectivity using provided credentials without persisting. Returns detected server version.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "VectorStore"
-                ],
-                "summary": "Test vector store connection with raw credentials",
-                "parameters": [
-                    {
-                        "description": "Engine type and connection config",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.TestStoreRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Connection test result (success, version)",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/vector-stores/types": {
-            "get": {
-                "description": "Return supported engine types with connection and index field schemas for UI form generation",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "VectorStore"
-                ],
-                "summary": "List vector store types",
-                "responses": {
-                    "200": {
-                        "description": "List of engine types with config schemas",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -16473,14 +16178,14 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Retrieve a single vector store by ID. Supports both DB stores and env stores (__env_* IDs)",
+                "description": "Report the read-only application PostgreSQL store by its virtual ID",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "VectorStore"
                 ],
-                "summary": "Get vector store",
+                "summary": "Get PostgreSQL store status",
                 "parameters": [
                     {
                         "type": "string",
@@ -16493,184 +16198,6 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "Vector store details",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Vector store not found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "put": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Update a vector store (name only). Engine type, connection config, and index config are immutable. Env stores cannot be modified.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "VectorStore"
-                ],
-                "summary": "Update vector store",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Vector store ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Updated fields",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.UpdateStoreRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Updated vector store",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Env store or validation error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Vector store not found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Soft-delete a vector store. Env stores cannot be deleted.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "VectorStore"
-                ],
-                "summary": "Delete vector store",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Vector store ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Deletion success",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Env store cannot be deleted",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Vector store not found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/vector-stores/{id}/test": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Test connectivity of an existing saved or env store. Returns detected server version. For DB stores, the version is automatically saved to connection_config.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "VectorStore"
-                ],
-                "summary": "Test vector store connection by ID",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Vector store ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Connection test result (success, version)",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -17087,57 +16614,6 @@ const docTemplate = `{
                     }
                 }
             }
-        },
-        "/weknoracloud/credentials": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "保存 APPID/APPSECRET 到当前空间配置（不自动创建模型）",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "WeKnoraCloud"
-                ],
-                "summary": "保存 WeKnoraCloud 凭证",
-                "parameters": [
-                    {
-                        "description": "{app_id, app_secret}",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "success: true",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
         }
     },
     "definitions": {
@@ -17539,9 +17015,6 @@ const docTemplate = `{
                 "vector_store.created",
                 "vector_store.updated",
                 "vector_store.deleted",
-                "opensearch.index_created",
-                "opensearch.index_deleted",
-                "opensearch.reindex_executed",
                 "system.setting_changed",
                 "system.admin_promoted",
                 "system.admin_revoked",
@@ -17744,35 +17217,6 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_Tencent_Reliquary_internal_types.COSEngineConfig": {
-            "type": "object",
-            "properties": {
-                "app_id": {
-                    "type": "string"
-                },
-                "bucket_name": {
-                    "type": "string"
-                },
-                "path_prefix": {
-                    "type": "string"
-                },
-                "region": {
-                    "type": "string"
-                },
-                "secret_id": {
-                    "type": "string"
-                },
-                "secret_key": {
-                    "type": "string"
-                },
-                "temp_bucket_name": {
-                    "type": "string"
-                },
-                "temp_region": {
-                    "type": "string"
-                }
-            }
-        },
         "github_com_Tencent_Reliquary_internal_types.ChatHistoryConfig": {
             "type": "object",
             "properties": {
@@ -17845,63 +17289,6 @@ const docTemplate = `{
                 "token_limit": {
                     "description": "TokenLimit caps chunk size in approximate tokens. 0 = use ChunkSize\nas a character count.",
                     "type": "integer"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.ConnectionConfig": {
-            "type": "object",
-            "properties": {
-                "addr": {
-                    "description": "Common",
-                    "type": "string"
-                },
-                "api_key": {
-                    "description": "AES-GCM encrypted",
-                    "type": "string"
-                },
-                "database": {
-                    "description": "Database name used by engines that support database-level namespaces\n(currently Milvus, Tencent VectorDB, and Doris).",
-                    "type": "string"
-                },
-                "grpc_address": {
-                    "description": "Weaviate",
-                    "type": "string"
-                },
-                "host": {
-                    "description": "Qdrant",
-                    "type": "string"
-                },
-                "http_port": {
-                    "description": "Doris: HTTP port for Stream Load API (FE default 8030).\nAddr is reused for the MySQL protocol \"host:9030\"; HTTPPort + the host of Addr\ntogether form the FE HTTP endpoint used by Stream Load.",
-                    "type": "integer"
-                },
-                "insecure_skip_verify": {
-                    "description": "InsecureSkipVerify disables TLS certificate verification when\ntalking to the backing store over HTTPS. Defaults to false\n(secure). Set to true ONLY for self-signed development clusters;\nproduction deployments should provide trusted certificates via\nthe system CA pool. Cross-driver applicable but currently only\nthe OpenSearch driver (Phase 3) reads this field. Note: this\ndiffers from the Qdrant-specific UseTLS below, which *enables*\nTLS on gRPC connections — InsecureSkipVerify only controls\n*verification* of an already-TLS connection.",
-                    "type": "boolean"
-                },
-                "password": {
-                    "description": "AES-GCM encrypted",
-                    "type": "string"
-                },
-                "port": {
-                    "type": "integer"
-                },
-                "scheme": {
-                    "type": "string"
-                },
-                "use_default_connection": {
-                    "description": "Postgres",
-                    "type": "boolean"
-                },
-                "use_tls": {
-                    "type": "boolean"
-                },
-                "username": {
-                    "type": "string"
-                },
-                "version": {
-                    "description": "Version is the detected server version (e.g., \"7.10.1\", \"16.2\", \"1.12.6\").\nAuto-populated by TestConnection on successful connectivity check.",
-                    "type": "string"
                 }
             }
         },
@@ -18555,39 +17942,6 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_Tencent_Reliquary_internal_types.ExtractConfig": {
-            "type": "object",
-            "properties": {
-                "custom_instructions": {
-                    "description": "CustomInstructions adds domain-specific extraction guidance while the\nsystem keeps ownership of the structured graph output protocol.",
-                    "type": "string"
-                },
-                "enabled": {
-                    "type": "boolean"
-                },
-                "nodes": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.GraphNode"
-                    }
-                },
-                "relations": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.GraphRelation"
-                    }
-                },
-                "tags": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "text": {
-                    "type": "string"
-                }
-            }
-        },
         "github_com_Tencent_Reliquary_internal_types.FAQBatchUpsertPayload": {
             "type": "object",
             "required": [
@@ -18817,40 +18171,6 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_Tencent_Reliquary_internal_types.GraphNode": {
-            "type": "object",
-            "properties": {
-                "attributes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "chunks": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "name": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.GraphRelation": {
-            "type": "object",
-            "properties": {
-                "node1": {
-                    "type": "string"
-                },
-                "node2": {
-                    "type": "string"
-                },
-                "type": {
-                    "type": "string"
-                }
-            }
-        },
         "github_com_Tencent_Reliquary_internal_types.ImageProcessingConfig": {
             "type": "object",
             "properties": {
@@ -18860,82 +18180,9 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_Tencent_Reliquary_internal_types.IndexConfig": {
-            "type": "object",
-            "properties": {
-                "buckets_num": {
-                    "description": "Doris: number of buckets per table (DISTRIBUTED BY HASH ... BUCKETS N)",
-                    "type": "integer"
-                },
-                "collection_name": {
-                    "description": "Milvus",
-                    "type": "string"
-                },
-                "collection_prefix": {
-                    "description": "Qdrant, Weaviate",
-                    "type": "string"
-                },
-                "desired_shard_count": {
-                    "description": "Weaviate: number of shards per collection",
-                    "type": "integer"
-                },
-                "hnsw_ef_construction": {
-                    "description": "OpenSearch: HNSW index-build candidate list size",
-                    "type": "integer"
-                },
-                "hnsw_ef_search": {
-                    "description": "OpenSearch: HNSW search candidate list size (faiss; lucene reads at query time)",
-                    "type": "integer"
-                },
-                "hnsw_m": {
-                    "description": "--- OpenSearch k-NN HNSW fields ---\nAll omitempty so other engines' serialized IndexConfig is unchanged.\nZero / empty values fall back to the driver defaults in buildInternalCfg.",
-                    "type": "integer"
-                },
-                "index_name": {
-                    "description": "--- Existing fields ---",
-                    "type": "string"
-                },
-                "knn_engine": {
-                    "description": "OpenSearch: k-NN backend (\"lucene\" | \"faiss\")",
-                    "type": "string"
-                },
-                "number_of_replicas": {
-                    "description": "ES, OpenSearch",
-                    "type": "integer"
-                },
-                "number_of_shards": {
-                    "description": "ES, OpenSearch",
-                    "type": "integer"
-                },
-                "replica_number": {
-                    "description": "Milvus LoadCollection / Tencent VectorDB CreateCollection replicas",
-                    "type": "integer"
-                },
-                "replication_factor": {
-                    "description": "Qdrant, Weaviate: number of replicas",
-                    "type": "integer"
-                },
-                "replication_num": {
-                    "description": "Doris: replication_num PROPERTIES",
-                    "type": "integer"
-                },
-                "shard_number": {
-                    "description": "--- Scalability fields ---",
-                    "type": "integer"
-                },
-                "shards_num": {
-                    "description": "Milvus: number of shards per collection (CreateCollection)",
-                    "type": "integer"
-                }
-            }
-        },
         "github_com_Tencent_Reliquary_internal_types.IndexingStrategy": {
             "type": "object",
             "properties": {
-                "graph_enabled": {
-                    "description": "GraphEnabled enables knowledge graph entity/relation extraction",
-                    "type": "boolean"
-                },
                 "keyword_enabled": {
                     "description": "KeywordEnabled enables keyword-based (BM25) search",
                     "type": "boolean"
@@ -19030,29 +18277,6 @@ const docTemplate = `{
                 "KBCloneStatusFailed"
             ]
         },
-        "github_com_Tencent_Reliquary_internal_types.KS3EngineConfig": {
-            "type": "object",
-            "properties": {
-                "access_key": {
-                    "type": "string"
-                },
-                "bucket_name": {
-                    "type": "string"
-                },
-                "endpoint": {
-                    "type": "string"
-                },
-                "path_prefix": {
-                    "type": "string"
-                },
-                "region": {
-                    "type": "string"
-                },
-                "secret_key": {
-                    "type": "string"
-                }
-            }
-        },
         "github_com_Tencent_Reliquary_internal_types.KnowledgeBase": {
             "type": "object",
             "properties": {
@@ -19111,14 +18335,6 @@ const docTemplate = `{
                 "embedding_model_id": {
                     "description": "ID of the embedding model",
                     "type": "string"
-                },
-                "extract_config": {
-                    "description": "Extract config",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ExtractConfig"
-                        }
-                    ]
                 },
                 "faq_config": {
                     "description": "FAQConfig stores FAQ specific configuration such as indexing strategy",
@@ -19414,12 +18630,6 @@ const docTemplate = `{
                     "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ChunkingConfig"
                 },
                 "enable_multimodel": {
-                    "type": "boolean"
-                },
-                "extract_config": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ExtractConfig"
-                },
-                "graph_enabled": {
                     "type": "boolean"
                 },
                 "parser_engine_overrides": {
@@ -20162,10 +19372,6 @@ const docTemplate = `{
                 "api_key": {
                     "type": "string"
                 },
-                "app_id": {
-                    "description": "WeKnoraCloud 厂商专用凭证",
-                    "type": "string"
-                },
                 "app_secret": {
                     "description": "AES-256 加密存储，实际承载上游 API Key",
                     "type": "string"
@@ -20336,32 +19542,6 @@ const docTemplate = `{
                 "ModelTypeASR"
             ]
         },
-        "github_com_Tencent_Reliquary_internal_types.OBSEngineConfig": {
-            "type": "object",
-            "properties": {
-                "access_key": {
-                    "type": "string"
-                },
-                "bucket_name": {
-                    "type": "string"
-                },
-                "endpoint": {
-                    "type": "string"
-                },
-                "path_prefix": {
-                    "type": "string"
-                },
-                "region": {
-                    "type": "string"
-                },
-                "secret_key": {
-                    "type": "string"
-                },
-                "use_ssl": {
-                    "type": "boolean"
-                }
-            }
-        },
         "github_com_Tencent_Reliquary_internal_types.OIDCAuthURLResponse": {
             "type": "object",
             "properties": {
@@ -20389,38 +19569,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "success": {
-                    "type": "boolean"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.OSSEngineConfig": {
-            "type": "object",
-            "properties": {
-                "access_key": {
-                    "type": "string"
-                },
-                "bucket_name": {
-                    "type": "string"
-                },
-                "endpoint": {
-                    "type": "string"
-                },
-                "path_prefix": {
-                    "type": "string"
-                },
-                "region": {
-                    "type": "string"
-                },
-                "secret_key": {
-                    "type": "string"
-                },
-                "temp_bucket_name": {
-                    "type": "string"
-                },
-                "temp_region": {
-                    "type": "string"
-                },
-                "use_temp_bucket": {
                     "type": "boolean"
                 }
             }
@@ -20960,17 +20108,7 @@ const docTemplate = `{
         "github_com_Tencent_Reliquary_internal_types.RetrieverEngineType": {
             "type": "string",
             "enum": [
-                "postgres",
-                "elasticsearch",
-                "infinity",
-                "elasticfaiss",
-                "qdrant",
-                "milvus",
-                "weaviate",
-                "doris",
-                "sqlite",
-                "tencent_vectordb",
-                "opensearch"
+                "postgres"
             ],
             "x-enum-varnames": [
                 "PostgresRetrieverEngineType",
@@ -21581,9 +20719,6 @@ const docTemplate = `{
                 "access_key_id": {
                     "type": "string"
                 },
-                "app_id": {
-                    "type": "string"
-                },
                 "bucket_name": {
                     "type": "string"
                 },
@@ -21605,16 +20740,7 @@ const docTemplate = `{
                 "secret_access_key": {
                     "type": "string"
                 },
-                "temp_bucket_name": {
-                    "type": "string"
-                },
-                "temp_region": {
-                    "type": "string"
-                },
                 "use_ssl": {
-                    "type": "boolean"
-                },
-                "use_temp_bucket": {
                     "type": "boolean"
                 }
             }
@@ -21622,10 +20748,6 @@ const docTemplate = `{
         "github_com_Tencent_Reliquary_internal_types.StorageConfig": {
             "type": "object",
             "properties": {
-                "app_id": {
-                    "description": "App ID (COS specific)",
-                    "type": "string"
-                },
                 "bucket_name": {
                     "description": "Bucket Name",
                     "type": "string"
@@ -21667,15 +20789,9 @@ const docTemplate = `{
         "github_com_Tencent_Reliquary_internal_types.StorageEngineConfig": {
             "type": "object",
             "properties": {
-                "cos": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.COSEngineConfig"
-                },
                 "default_provider": {
                     "description": "\"local\", \"minio\", \"cos\", \"tos\", \"s3\", \"oss\", \"ks3\", \"obs\"",
                     "type": "string"
-                },
-                "ks3": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.KS3EngineConfig"
                 },
                 "local": {
                     "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.LocalEngineConfig"
@@ -21683,17 +20799,8 @@ const docTemplate = `{
                 "minio": {
                     "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.MinIOEngineConfig"
                 },
-                "obs": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.OBSEngineConfig"
-                },
-                "oss": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.OSSEngineConfig"
-                },
                 "s3": {
                     "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.S3EngineConfig"
-                },
-                "tos": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.TOSEngineConfig"
                 }
             }
         },
@@ -21866,35 +20973,6 @@ const docTemplate = `{
                 },
                 "value_type": {
                     "description": "ValueType is one of \"int\", \"string\", \"bool\". Service layer rejects\nupdates whose payload type does not match; UI uses it to pick\nInputNumber vs Input vs Switch.",
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.TOSEngineConfig": {
-            "type": "object",
-            "properties": {
-                "access_key": {
-                    "type": "string"
-                },
-                "bucket_name": {
-                    "type": "string"
-                },
-                "endpoint": {
-                    "type": "string"
-                },
-                "path_prefix": {
-                    "type": "string"
-                },
-                "region": {
-                    "type": "string"
-                },
-                "secret_key": {
-                    "type": "string"
-                },
-                "temp_bucket_name": {
-                    "type": "string"
-                },
-                "temp_region": {
                     "type": "string"
                 }
             }
@@ -23460,28 +22538,6 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handler.CreateStoreRequest": {
-            "type": "object",
-            "required": [
-                "connection_config",
-                "engine_type",
-                "name"
-            ],
-            "properties": {
-                "connection_config": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ConnectionConfig"
-                },
-                "engine_type": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.RetrieverEngineType"
-                },
-                "index_config": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.IndexConfig"
-                },
-                "name": {
-                    "type": "string"
-                }
-            }
-        },
         "internal_handler.CreateSystemUserResponse": {
             "type": "object",
             "properties": {
@@ -23535,23 +22591,6 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handler.FabriTextRequest": {
-            "type": "object",
-            "required": [
-                "model_id"
-            ],
-            "properties": {
-                "model_id": {
-                    "type": "string"
-                },
-                "tags": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
         "internal_handler.GetStorageEngineStatusResponse": {
             "type": "object",
             "properties": {
@@ -23592,9 +22631,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "go_version": {
-                    "type": "string"
-                },
-                "graph_database_engine": {
                     "type": "string"
                 },
                 "keyword_index_engine": {
@@ -23701,29 +22737,6 @@ const docTemplate = `{
                 "multimodal": {
                     "type": "object",
                     "properties": {
-                        "cos": {
-                            "type": "object",
-                            "properties": {
-                                "appId": {
-                                    "type": "string"
-                                },
-                                "bucketName": {
-                                    "type": "string"
-                                },
-                                "pathPrefix": {
-                                    "type": "string"
-                                },
-                                "region": {
-                                    "type": "string"
-                                },
-                                "secretId": {
-                                    "type": "string"
-                                },
-                                "secretKey": {
-                                    "type": "string"
-                                }
-                            }
-                        },
                         "enabled": {
                             "type": "boolean"
                         },
@@ -23758,57 +22771,6 @@ const docTemplate = `{
                                     "type": "string"
                                 }
                             }
-                        }
-                    }
-                },
-                "nodeExtract": {
-                    "type": "object",
-                    "properties": {
-                        "enabled": {
-                            "type": "boolean"
-                        },
-                        "nodes": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "attributes": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "string"
-                                        }
-                                    },
-                                    "name": {
-                                        "type": "string"
-                                    }
-                                }
-                            }
-                        },
-                        "relations": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "node1": {
-                                        "type": "string"
-                                    },
-                                    "node2": {
-                                        "type": "string"
-                                    },
-                                    "type": {
-                                        "type": "string"
-                                    }
-                                }
-                            }
-                        },
-                        "tags": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
-                        },
-                        "text": {
-                            "type": "string"
                         }
                     }
                 },
@@ -23913,39 +22875,6 @@ const docTemplate = `{
                     "properties": {
                         "enabled": {
                             "type": "boolean"
-                        }
-                    }
-                },
-                "nodeExtract": {
-                    "description": "知识图谱配置",
-                    "type": "object",
-                    "properties": {
-                        "customInstructions": {
-                            "type": "string"
-                        },
-                        "enabled": {
-                            "type": "boolean"
-                        },
-                        "nodes": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.GraphNode"
-                            }
-                        },
-                        "relations": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.GraphRelation"
-                            }
-                        },
-                        "tags": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
-                        },
-                        "text": {
-                            "type": "string"
                         }
                     }
                 },
@@ -24541,20 +23470,8 @@ const docTemplate = `{
         "internal_handler.StorageCheckRequest": {
             "type": "object",
             "properties": {
-                "cos": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.COSEngineConfig"
-                },
-                "ks3": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.KS3EngineConfig"
-                },
                 "minio": {
                     "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.MinIOEngineConfig"
-                },
-                "obs": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.OBSEngineConfig"
-                },
-                "oss": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.OSSEngineConfig"
                 },
                 "provider": {
                     "description": "\"minio\", \"cos\", \"tos\", \"s3\", \"oss\", \"ks3\", \"obs\"",
@@ -24562,9 +23479,6 @@ const docTemplate = `{
                 },
                 "s3": {
                     "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.S3EngineConfig"
-                },
-                "tos": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.TOSEngineConfig"
                 }
             }
         },
@@ -24630,43 +23544,6 @@ const docTemplate = `{
                     "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.WebSearchProviderParameters"
                 },
                 "provider": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_handler.TestStoreRequest": {
-            "type": "object",
-            "required": [
-                "connection_config",
-                "engine_type"
-            ],
-            "properties": {
-                "connection_config": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ConnectionConfig"
-                },
-                "engine_type": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.RetrieverEngineType"
-                }
-            }
-        },
-        "internal_handler.TextRelationExtractionRequest": {
-            "type": "object",
-            "required": [
-                "model_id",
-                "tags",
-                "text"
-            ],
-            "properties": {
-                "model_id": {
-                    "type": "string"
-                },
-                "tags": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "text": {
                     "type": "string"
                 }
             }
@@ -24773,17 +23650,6 @@ const docTemplate = `{
                 },
                 "parameters": {
                     "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.WebSearchProviderParameters"
-                }
-            }
-        },
-        "internal_handler.UpdateStoreRequest": {
-            "type": "object",
-            "required": [
-                "name"
-            ],
-            "properties": {
-                "name": {
-                    "type": "string"
                 }
             }
         },

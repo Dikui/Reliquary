@@ -9,7 +9,6 @@ source: OIDC认证调用流程.md
 
 本文档说明 Reliquary 当前 OIDC 登录能力的实际调用过程，覆盖前后端完整链路。
 
-> OIDC 认证是标准版多空间场景下的登录方式，[Lite 版](../项目概述/Lite与标准版区别.md)不需要
 
 ## 整体设计说明
 
@@ -78,7 +77,6 @@ Provider 回调后端 `/auth/oidc/callback`，后端用 `code` 换 token、拉�
 ## 相关主题
 
 - [共享空间说明](../安全认证/共享空间说明.md) — 多空间场景下的用户与组织管理
-- [Lite与标准版区别](../项目概述/Lite与标准版区别.md) — Lite 版无需 OIDC（单空间）
 - [API文档概览](../API参考/API文档概览.md) — API 认证机制
 
 ---
@@ -87,5 +85,4 @@ Provider 回调后端 `/auth/oidc/callback`，后端用 `code` 换 token、拉�
 
 - [Home](../Home.md) — Wiki 首页导航
 - [共享空间说明](../安全认证/共享空间说明.md) — OIDC 创建的用户与空间可用于共享空间
-- [Lite与标准版区别](../项目概述/Lite与标准版区别.md) — Lite 不需要 OIDC（单空间无需注册）
 - [API文档概览](../API参考/API文档概览.md) — API 的认证机制与 OIDC JWT 相关

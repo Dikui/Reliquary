@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+
 	"reliquary/internal/common"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -268,7 +269,7 @@ func (r *knowledgeRepository) RenameKnowledgeFolderPath(
 	}
 
 	// The rewrite is done row by row rather than with SQL string functions so it
-	// behaves identically on PostgreSQL and SQLite.
+	// behaves identically on PostgreSQL.
 	var rows []*types.Knowledge
 	if err := r.db.WithContext(ctx).
 		Select("id", "folder_path").
@@ -591,7 +592,7 @@ func (r *knowledgeRepository) UpdateActiveDeletingKnowledgeColumns(
 //
 // The implementation is two statements (atomic decrement, then a guarded
 // promote UPDATE) because GORM does not expose a portable RETURNING
-// across PostgreSQL and SQLite. The promote UPDATE's WHERE clause
+// across PostgreSQL. The promote UPDATE's WHERE clause
 // (parse_status='finalizing' AND pending_subtasks_count=0) makes it
 // safe to run from any number of concurrent callers — at most one wins.
 func (r *knowledgeRepository) FinalizeSubtask(
@@ -769,7 +770,7 @@ func (r *knowledgeRepository) FindByMetadataKeyPrefix(
 	// The prefix pattern stays a bind parameter: an unnamed prepared statement is
 	// custom-planned with the actual value, so LIKE 'prefix%' still extracts the
 	// prefix and drives the index. The explicit ESCAPE '\' keeps backslash-escaped
-	// wildcards (e.g. \_) literal on both PostgreSQL and SQLite.
+	// wildcards (e.g. \_) literal on both PostgreSQL.
 	keyExpr := "metadata->>'" + strings.ReplaceAll(key, "'", "''") + "'"
 	err := r.db.WithContext(ctx).
 		Where("tenant_id = ? AND knowledge_base_id = ? AND deleted_at IS NULL", tenantID, kbID).

@@ -9,7 +9,7 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-// PluginSearchParallel implements parallel search functionality combining chunk search and entity search
+// PluginSearchParallel implements structured context and chunk search
 type PluginSearchParallel struct {
 	// Chunk search dependencies
 	knowledgeBaseService interfaces.KnowledgeBaseService
@@ -19,15 +19,8 @@ type PluginSearchParallel struct {
 	tenantService        interfaces.TenantService
 	sessionService       interfaces.SessionService
 
-	// Entity search dependencies
-	graphRepo     interfaces.RetrieveGraphRepository
-	chunkRepo     interfaces.ChunkRepository
-	knowledgeRepo interfaces.KnowledgeRepository
 	contextReader interfaces.KnowledgeContextReader
-
-	// Internal plugins
-	searchPlugin       *PluginSearch
-	searchEntityPlugin *PluginSearchEntity
+	searchPlugin  *PluginSearch
 }
 
 // NewPluginSearchParallel creates a new parallel search plugin
@@ -42,9 +35,6 @@ func NewPluginSearchParallel(
 	sessionService interfaces.SessionService,
 	webSearchStateService interfaces.WebSearchStateService,
 	webSearchProviderRepo interfaces.WebSearchProviderRepository,
-	graphRepository interfaces.RetrieveGraphRepository,
-	chunkRepository interfaces.ChunkRepository,
-	knowledgeRepository interfaces.KnowledgeRepository,
 	contextReader interfaces.KnowledgeContextReader,
 ) *PluginSearchParallel {
 	// Create internal plugins without registering them
@@ -60,12 +50,6 @@ func NewPluginSearchParallel(
 		webSearchProviderRepo: webSearchProviderRepo,
 	}
 
-	searchEntityPlugin := &PluginSearchEntity{
-		graphRepo:     graphRepository,
-		chunkRepo:     chunkRepository,
-		knowledgeRepo: knowledgeRepository,
-	}
-
 	res := &PluginSearchParallel{
 		knowledgeBaseService: knowledgeBaseService,
 		knowledgeService:     knowledgeService,
@@ -73,12 +57,8 @@ func NewPluginSearchParallel(
 		webSearchService:     webSearchService,
 		tenantService:        tenantService,
 		sessionService:       sessionService,
-		graphRepo:            graphRepository,
-		chunkRepo:            chunkRepository,
-		knowledgeRepo:        knowledgeRepository,
 		contextReader:        contextReader,
 		searchPlugin:         searchPlugin,
-		searchEntityPlugin:   searchEntityPlugin,
 	}
 	eventManager.Register(res)
 	return res
@@ -89,7 +69,7 @@ func (p *PluginSearchParallel) ActivationEvents() []types.EventType {
 	return []types.EventType{types.CHUNK_SEARCH_PARALLEL}
 }
 
-// OnEvent handles parallel search events - runs chunk search and entity search concurrently
+// OnEvent handles search events using structured context and chunk retrieval
 func (p *PluginSearchParallel) OnEvent(ctx context.Context,
 	eventType types.EventType, chatManage *types.ChatManage, next func() *PluginError,
 ) *PluginError {
@@ -115,69 +95,28 @@ func (p *PluginSearchParallel) OnEvent(ctx context.Context,
 	// Deep-copy to avoid concurrent read/write on shared slice fields
 	chunkCM := chatManage.Clone()
 	chunkCM.SearchResult = nil
-	entityCM := chatManage.Clone()
-	entityCM.SearchResult = nil
-
 	noop := func() *PluginError { return nil }
-
-	tasks := []ParallelTask{
-		{
-			Name: "chunk_search",
-			Run: func() *PluginError {
-				err := p.searchPlugin.OnEvent(ctx, types.CHUNK_SEARCH, chunkCM, noop)
-				pipelineInfo(ctx, "SearchParallel", "chunk_search_done", map[string]interface{}{
-					"result_count": len(chunkCM.SearchResult),
-					"has_error":    err != nil && err != ErrSearchNothing,
-				})
-				if err == ErrSearchNothing {
-					return nil
-				}
-				return err
-			},
-		},
-		{
-			Name: "entity_search",
-			Run: func() *PluginError {
-				if len(chatManage.Entity) == 0 {
-					pipelineInfo(ctx, "SearchParallel", "entity_search_skip", map[string]interface{}{
-						"reason": "no_entities",
-					})
-					return nil
-				}
-				err := p.searchEntityPlugin.OnEvent(ctx, types.ENTITY_SEARCH, entityCM, noop)
-				pipelineInfo(ctx, "SearchParallel", "entity_search_done", map[string]interface{}{
-					"result_count": len(entityCM.SearchResult),
-					"has_error":    err != nil && err != ErrSearchNothing,
-				})
-				if err == ErrSearchNothing {
-					return nil
-				}
-				return err
-			},
-		},
+	err := p.searchPlugin.OnEvent(ctx, types.CHUNK_SEARCH, chunkCM, noop)
+	if err == ErrSearchNothing {
+		err = nil
+	}
+	if err != nil {
+		logger.Warnf(ctx, "[SearchParallel] chunk search error: %v", err.Err)
 	}
 
-	errs := RunParallel(tasks...)
-
-	// Merge results from both searches
-	chatManage.SearchResult = append(append(chunkCM.SearchResult, entityCM.SearchResult...), structuredSources...)
+	// Merge chunk results with structured evidence sources
+	chatManage.SearchResult = append(chunkCM.SearchResult, structuredSources...)
 	chatManage.SearchResult = removeDuplicateResults(chatManage.SearchResult)
 	p.searchStructuredContext(ctx, chatManage, true)
 
-	for name, err := range errs {
-		logger.Warnf(ctx, "[SearchParallel] %s error: %v", name, err.Err)
-	}
-
 	pipelineInfo(ctx, "SearchParallel", "complete", map[string]interface{}{
-		"session_id":     chatManage.SessionID,
-		"chunk_results":  len(chunkCM.SearchResult),
-		"entity_results": len(entityCM.SearchResult),
-		"total_results":  len(chatManage.SearchResult),
-		"error_count":    len(errs),
+		"session_id":    chatManage.SessionID,
+		"chunk_results": len(chunkCM.SearchResult),
+		"total_results": len(chatManage.SearchResult),
+		"has_error":     err != nil,
 	})
-
 	if len(chatManage.SearchResult) == 0 && chatManage.KnowledgeContext == "" {
-		if err, ok := errs["chunk_search"]; ok {
+		if err != nil {
 			return err
 		}
 		return ErrSearchNothing

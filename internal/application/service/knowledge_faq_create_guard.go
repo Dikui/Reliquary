@@ -24,7 +24,7 @@ const faqCreateGuardTTL = 60 * time.Second
 const faqCreateGuardReleaseTimeout = 2 * time.Second
 
 // faqCreateInflight is the single-instance fallback used when Redis is absent
-// (Lite mode) or momentarily unreachable.
+// (in-memory fixtures) or momentarily unreachable.
 var faqCreateInflight sync.Map // guard key -> struct{}
 
 // faqCreateGuardKey derives the guard key from the standard question. The

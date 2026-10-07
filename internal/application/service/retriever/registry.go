@@ -182,7 +182,7 @@ func (r *RetrieveEngineRegistry) GetAllRetrieveEngineServices() []interfaces.Ret
 
 // RegisterWithStoreID registers an engine service by VectorStore ID.
 // Unlike Register(), the same EngineType can be registered multiple times
-// with different StoreIDs (e.g., two Elasticsearch clusters).
+// with different StoreIDs (e.g., two bound instances).
 // Upsert semantics: existing entry is overwritten silently.
 func (r *RetrieveEngineRegistry) RegisterWithStoreID(storeID string, svc interfaces.RetrieveEngineService) {
 	r.mu.Lock()
@@ -331,7 +331,7 @@ func (r *RetrieveEngineRegistry) GetOrLoadByStoreID(
 // UnregisterByStoreID removes an engine service from the byStoreID map.
 // Idempotent: returns silently if the storeID is not found.
 //
-// NOTE: gRPC-based clients (Qdrant, Milvus) hold connections that are not closed here.
+// The PostgreSQL engines share the application database connection.
 // Known Phase 1 limitation — store deletion is rare, connections cleaned up on process exit.
 // Phase 2 should add Close() to RetrieveEngineService interface and call it here.
 func (r *RetrieveEngineRegistry) UnregisterByStoreID(storeID string) {

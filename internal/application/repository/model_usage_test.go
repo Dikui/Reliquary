@@ -18,13 +18,13 @@ CREATE TABLE IF NOT EXISTS custom_agents (
     name VARCHAR(255) NOT NULL,
     description TEXT,
     avatar VARCHAR(64),
-    is_builtin BOOLEAN NOT NULL DEFAULT 0,
+    is_builtin BOOLEAN NOT NULL DEFAULT false,
     tenant_id INTEGER NOT NULL,
     created_by VARCHAR(36),
-    config TEXT NOT NULL DEFAULT '{}',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    deleted_at DATETIME,
+    config JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMPTZ,
     PRIMARY KEY (id, tenant_id)
 );
 `

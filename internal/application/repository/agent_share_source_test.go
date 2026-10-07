@@ -5,22 +5,21 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
+
+	"reliquary/internal/testutil/pgtest"
 )
 
 func TestGetShareByAgentIDAndSourceForTenantDisambiguatesSource(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:agent-share-source?mode=memory&cache=shared"), &gorm.Config{})
-	require.NoError(t, err)
+	db := pgtest.OpenFixture(t)
 	statements := []string{
 		`CREATE TABLE agent_shares (
 			id TEXT PRIMARY KEY, agent_id TEXT, organization_id TEXT,
 			shared_by_user_id TEXT, source_tenant_id INTEGER, permission TEXT,
-			created_at DATETIME, updated_at DATETIME, deleted_at DATETIME
+			created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ, deleted_at TIMESTAMPTZ
 		)`,
 		`CREATE TABLE organization_tenant_members (organization_id TEXT, tenant_id INTEGER)`,
-		`CREATE TABLE organizations (id TEXT PRIMARY KEY, deleted_at DATETIME)`,
-		`CREATE TABLE custom_agents (id TEXT, tenant_id INTEGER, deleted_at DATETIME)`,
+		`CREATE TABLE organizations (id TEXT PRIMARY KEY, deleted_at TIMESTAMPTZ)`,
+		`CREATE TABLE custom_agents (id TEXT, tenant_id INTEGER, deleted_at TIMESTAMPTZ)`,
 		`INSERT INTO organizations(id) VALUES ('org')`,
 		`INSERT INTO organization_tenant_members(organization_id, tenant_id) VALUES ('org', 7)`,
 		`INSERT INTO custom_agents(id, tenant_id) VALUES ('builtin-smart-reasoning', 42), ('builtin-smart-reasoning', 84)`,

@@ -8,46 +8,44 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
 
 // taskPendingOpsTestDDL mirrors the production schema in
-// migrations/versioned/000041_task_queue_and_wiki_indexes.up.sql but uses
-// SQLite-compatible types. INTEGER PRIMARY KEY AUTOINCREMENT preserves
-// the monotonically-increasing ID semantics PeekBatch/cursor pagination
-// rely on. JSONB → TEXT is fine since GORM round-trips json.RawMessage
-// as bytes either way.
+// migrations/versioned/000041_task_queue_and_wiki_indexes.up.sql. BIGSERIAL
+// preserves the increasing ID semantics used by PeekBatch and cursor pagination.
 const taskPendingOpsTestDDL = `
 CREATE TABLE IF NOT EXISTS task_pending_ops (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    id          BIGSERIAL PRIMARY KEY,
     tenant_id   INTEGER NOT NULL,
     task_type   VARCHAR(64) NOT NULL,
     scope       VARCHAR(32) NOT NULL,
     scope_id    VARCHAR(64) NOT NULL,
     op          VARCHAR(32) NOT NULL,
     dedup_key   VARCHAR(128) NOT NULL DEFAULT '',
-    payload     TEXT NOT NULL DEFAULT '{}',
+    payload     JSONB NOT NULL DEFAULT '{}',
     fail_count  INTEGER NOT NULL DEFAULT 0,
-    enqueued_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    claimed_at  DATETIME
+    enqueued_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    claimed_at  TIMESTAMPTZ
 );
 `
 
 const taskDeadLettersTestDDL = `
 CREATE TABLE IF NOT EXISTS task_dead_letters (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    id          BIGSERIAL PRIMARY KEY,
     tenant_id   INTEGER NOT NULL,
     task_type   VARCHAR(64) NOT NULL,
     scope       VARCHAR(32) NOT NULL,
     scope_id    VARCHAR(64) NOT NULL,
     related_id  VARCHAR(64) NOT NULL DEFAULT '',
-    payload     TEXT NOT NULL,
+    payload     JSONB NOT NULL,
     last_error  TEXT NOT NULL DEFAULT '',
     fail_count  INTEGER NOT NULL,
-    failed_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+    failed_at   TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 `
 
@@ -55,7 +53,7 @@ const taskQueueKnowledgeBaseTestDDL = `
 CREATE TABLE IF NOT EXISTS knowledge_bases (
     id         VARCHAR(64) PRIMARY KEY,
     tenant_id  INTEGER NOT NULL,
-    deleted_at DATETIME
+    deleted_at TIMESTAMPTZ
 );
 `
 
@@ -66,15 +64,14 @@ CREATE TABLE IF NOT EXISTS knowledges (
     knowledge_base_id      VARCHAR(64) NOT NULL,
     parse_status           VARCHAR(32) NOT NULL,
     pending_subtasks_count INTEGER NOT NULL DEFAULT 0,
-    updated_at             DATETIME,
-    deleted_at             DATETIME
+    updated_at             TIMESTAMPTZ,
+    deleted_at             TIMESTAMPTZ
 );
 `
 
 func setupTaskQueueTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := pgtest.OpenFixture(t)
 	require.NoError(t, db.Exec(taskPendingOpsTestDDL).Error)
 	require.NoError(t, db.Exec(taskDeadLettersTestDDL).Error)
 	return db
@@ -131,7 +128,7 @@ func TestTaskPendingOps_SeedKnowledgeFinalizingWithPendingOpCommitsTogether(t *t
 
 func TestTaskPendingOps_SeedKnowledgeFinalizingRollsBackWhenPendingOpInsertFails(t *testing.T) {
 	db, seeder := setupFinalizingPendingOpTest(t)
-	require.NoError(t, db.Exec(`DROP TABLE task_pending_ops`).Error)
+	require.NoError(t, db.Exec(`ALTER TABLE task_pending_ops ADD CONSTRAINT force_insert_failure CHECK (false)`).Error)
 	op := makePendingOp(types.TypeWikiIngest, types.TaskScopeKnowledgeBase, "kb-1", "ingest", "knowledge-1", []byte(`{}`))
 
 	promoted, err := seeder.SeedKnowledgeFinalizingWithPendingOp(
@@ -350,7 +347,7 @@ func TestTaskPendingOps_EnqueueIfKnowledgeBaseActive(t *testing.T) {
 	require.NoError(t, db.Exec(`CREATE TABLE knowledge_bases (
 		id VARCHAR(64) PRIMARY KEY,
 		tenant_id INTEGER NOT NULL,
-		deleted_at DATETIME
+		deleted_at TIMESTAMPTZ
 	)`).Error)
 	require.NoError(t, db.Exec(
 		"INSERT INTO knowledge_bases (id, tenant_id, deleted_at) VALUES (?, ?, NULL), (?, ?, ?)",

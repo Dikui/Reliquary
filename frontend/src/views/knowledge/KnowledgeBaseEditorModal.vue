@@ -201,13 +201,7 @@
                 <div v-show="currentSection === 'vectorStore'" class="section">
                   <KBVectorStoreSettings
                     v-if="formData"
-                    :mode="editorMode"
-                    :vector-store-id="formData.vectorStoreId"
-                    :bound-source="formData.vectorStoreInfo?.source"
-                    :bound-name="formData.vectorStoreInfo?.name"
-                    :bound-engine-type="formData.vectorStoreInfo?.engineType"
                     :bound-status="formData.vectorStoreInfo?.status"
-                    @update:vector-store-id="handleVectorStoreIdUpdate"
                   />
                 </div>
 
@@ -392,17 +386,6 @@
                   </div>
                 </div>
 
-                <!-- 知识图谱 -->
-                <div v-if="!isFAQ && currentSection === 'graph'" class="section">
-                  <GraphSettings
-                    v-if="formData"
-                    :graph-extract="formData.nodeExtractConfig"
-                    :model-id="formData.modelConfig.llmModelId"
-                    :all-models="allModels"
-                    @update:graphExtract="handleNodeExtractUpdate"
-                  />
-                </div>
-
                 <!-- 高级设置 -->
                 <div v-if="!isFAQ" v-show="currentSection === 'advanced'" class="section">
                   <KBAdvancedSettings
@@ -485,7 +468,6 @@ import KBChunkingSettings from './settings/KBChunkingSettings.vue'
 import KBVectorStoreSettings from './settings/KBVectorStoreSettings.vue'
 import KBAdvancedSettings from './settings/KBAdvancedSettings.vue'
 import ModelSelector from '@/components/ModelSelector.vue'
-import GraphSettings from './settings/GraphSettings.vue'
 import KBShareSettings from './settings/KBShareSettings.vue'
 import DataSourceSettings from './settings/DataSourceSettings.vue'
 import KnowledgeBaseActivitySettings from './settings/KnowledgeBaseActivitySettings.vue'
@@ -546,7 +528,6 @@ const saving = ref(false)
 const loading = ref(false)
 const allModels = ref<any[]>([])
 const hasFiles = ref(false)
-const initialStorageProvider = ref<string>('')
 /** Tenant-wide default from Settings → Storage engine (used when creating a KB). */
 const tenantDefaultStorageProvider = ref('local')
 const initialIndexingStrategy = ref<any>(null)
@@ -604,9 +585,6 @@ const navItems = computed(() => {
   const items: { key: string; icon: string; label: string; badge?: number }[] = [
     { key: 'basic', icon: 'info-circle', label: t('knowledgeEditor.sidebar.basic') },
     { key: 'models', icon: 'control-platform', label: t('knowledgeEditor.sidebar.models') },
-    // VectorStore binding section — present in both create and edit
-    // modes. Create mode shows a dropdown; edit mode shows the bound
-    // store read-only with an immutability hint.
     { key: 'vectorStore', icon: 'data-base', label: t('knowledgeEditor.sidebar.vectorStore') }
   ]
   if (formData.value?.type === 'faq') {
@@ -618,14 +596,13 @@ const navItems = computed(() => {
       { key: 'asr', icon: 'sound', label: t('knowledgeEditor.sidebar.asr') },
       { key: 'storage', icon: 'cloud', label: t('knowledgeEditor.sidebar.storage') },
       { key: 'chunking', icon: 'file-copy', label: t('knowledgeEditor.sidebar.chunking') },
-      { key: 'graph', icon: 'chart-bubble', label: t('knowledgeEditor.sidebar.graph') },
       { key: 'advanced', icon: 'setting', label: t('knowledgeEditor.sidebar.advanced') }
     )
     if (editorMode.value === 'edit' && activeKbId.value) {
       items.push({ key: 'datasource', icon: 'cloud-download', label: t('knowledgeEditor.sidebar.datasource'), badge: dsCount.value || undefined })
     }
   }
-  if (editorMode.value === 'edit' && activeKbId.value && !authStore.isLiteMode) {
+  if (editorMode.value === 'edit' && activeKbId.value) {
     items.push({ key: 'share', icon: 'share', label: t('knowledgeEditor.sidebar.share') })
   }
   if (canViewActivity.value) {
@@ -648,7 +625,7 @@ const navGroups = computed(() => {
     {
       key: 'processing',
       label: t('knowledgeEditor.navGroups.processing'),
-      items: pickItems(['parser', 'chunking', 'multimodal', 'asr', 'graph', 'advanced']),
+      items: pickItems(['parser', 'chunking', 'multimodal', 'asr', 'advanced']),
     },
     {
       key: 'data',
@@ -755,21 +732,6 @@ const initFormData = (type: 'document' | 'faq' = 'document') => {
       modelId: '',
       language: ''
     },
-    nodeExtractConfig: {
-      enabled: false,
-      text: '',
-      tags: [] as string[],
-      nodes: [] as Array<{
-        name: string
-        attributes: string[]
-      }>,
-      relations: [] as Array<{
-        node1: string
-        node2: string
-        type: string
-      }>,
-      customInstructions: ''
-    },
     questionGenerationConfig: {
       enabled: true,
       questionCount: 3,
@@ -793,12 +755,7 @@ const initFormData = (type: 'document' | 'faq' = 'document') => {
       vectorEnabled: true,
       keywordEnabled: true,
       wikiEnabled: false,
-      graphEnabled: false,
     },
-    // Vector-store binding. Empty string means "use the env-configured
-    // store"; create mode defaults to that, edit mode loads the
-    // existing binding from the KB response below.
-    vectorStoreId: '' as string,
     vectorStoreInfo: {
       source: undefined as string | undefined,
       name: undefined as string | undefined,
@@ -835,7 +792,7 @@ const loadKBData = async (
 ) => {
   const kbId = kbIdOverride ?? activeKbId.value
   if (editorMode.value !== 'edit' || !kbId) return
-  
+
   loading.value = true
   try {
     const [kbInfo, filesResult] = await Promise.all([
@@ -844,7 +801,7 @@ const loadKBData = async (
     ])
 
     if (!isCurrentKBLoad(generation, kbId)) return
-    
+
     if (!kbInfo || !kbInfo.data) {
       throw new Error(t('knowledgeEditor.messages.notFound'))
     }
@@ -899,17 +856,6 @@ const loadKBData = async (
         modelId: kb.asr_config?.model_id || '',
         language: kb.asr_config?.language || ''
       },
-      nodeExtractConfig: {
-        enabled: kb.extract_config?.enabled || false,
-        text: kb.extract_config?.text || '',
-        tags: kb.extract_config?.tags || [],
-        nodes: (kb.extract_config?.nodes || []).map((node: any) => ({
-          name: node.name,
-          attributes: node.attributes || []
-        })),
-        relations: kb.extract_config?.relations || [],
-        customInstructions: kb.extract_config?.custom_instructions || ''
-      },
       questionGenerationConfig: {
         enabled: kb.question_generation_config?.enabled || false,
         questionCount: kb.question_generation_config?.question_count || 3,
@@ -940,15 +886,7 @@ const loadKBData = async (
         vectorEnabled: kb.indexing_strategy?.vector_enabled ?? true,
         keywordEnabled: kb.indexing_strategy?.keyword_enabled ?? true,
         wikiEnabled: kb.indexing_strategy?.wiki_enabled ?? false,
-        graphEnabled: kb.indexing_strategy?.graph_enabled ?? false,
       },
-      // Vector-store binding. vectorStoreId is editor-only state; it
-      // is only included in the create request, never the update
-      // request, because the binding is immutable after creation.
-      // vectorStoreInfo carries the read-only display fields that the
-      // edit view renders below; they come straight from the KB
-      // response.
-      vectorStoreId: '',
       vectorStoreInfo: {
         source: kb.vector_store_source,
         name: kb.vector_store_name,
@@ -956,7 +894,6 @@ const loadKBData = async (
         status: kb.vector_store_status,
       },
     }
-    initialStorageProvider.value = formData.value.storageProvider
     initialIndexingStrategy.value = { ...formData.value.indexingStrategy }
   } catch (error) {
     if (!isCurrentKBLoad(generation, kbId)) return
@@ -1119,25 +1056,9 @@ function resolvedStorageProvider(): string {
   return tenantDefaultStorageProvider.value || 'local'
 }
 
-const handleVectorStoreIdUpdate = (id: string) => {
-  if (formData.value) {
-    // Empty string here means "use system default" (env-store fallback).
-    // The create-payload assembly below converts this back to `omit` so
-    // the backend stores NULL — keeping the wire shape identical to
-    // pre-Phase-2 clients.
-    formData.value.vectorStoreId = id || ''
-  }
-}
-
 const handleQuestionGenerationUpdate = (config: any) => {
   if (formData.value) {
     formData.value.questionGenerationConfig = { ...config }
-  }
-}
-
-const handleNodeExtractUpdate = (config: any) => {
-  if (formData.value) {
-    formData.value.nodeExtractConfig = { ...config }
   }
 }
 
@@ -1155,7 +1076,7 @@ const validateForm = (): boolean => {
   // 验证索引策略 — 文档类型至少需要开启一种
   if (formData.value.type !== 'faq') {
     const s = formData.value.indexingStrategy
-    if (s && !s.vectorEnabled && !s.keywordEnabled && !s.wikiEnabled && !s.graphEnabled) {
+    if (s && !s.vectorEnabled && !s.keywordEnabled && !s.wikiEnabled) {
       MessagePlugin.warning(t('knowledgeEditor.indexing.atLeastOne'))
       currentSection.value = 'basic'
       return false
@@ -1222,15 +1143,6 @@ const buildSubmitData = () => {
     summary_model_id: formData.value.modelConfig.llmModelId
   }
 
-  // Vector-store binding. Only attach the field when the user actively
-  // selected a non-default store. The server treats an empty string as
-  // NULL, but keeping the field absent on the wire matches what a
-  // client that doesn't know about this binding would send — which
-  // makes A/B response diffs easier to read.
-  if (formData.value.vectorStoreId) {
-    data.vector_store_id = formData.value.vectorStoreId
-  }
-
   // 添加多模态配置
   data.vlm_config = {
     enabled: formData.value.multimodalConfig.enabled,
@@ -1262,9 +1174,6 @@ const buildSubmitData = () => {
   data.storage_config = {
     provider: storageProvider
   }
-
-  // 添加知识图谱配置 — now synced via indexingStrategy.graphEnabled
-  // extract_config is sent below along with indexing_strategy
 
   // 添加问题生成配置
   if (formData.value.questionGenerationConfig?.enabled) {
@@ -1314,20 +1223,6 @@ const buildSubmitData = () => {
       vector_enabled: formData.value.indexingStrategy?.vectorEnabled ?? true,
       keyword_enabled: formData.value.indexingStrategy?.keywordEnabled ?? true,
       wiki_enabled: formData.value.indexingStrategy?.wikiEnabled ?? false,
-      graph_enabled: formData.value.indexingStrategy?.graphEnabled ?? false,
-    }
-  }
-
-  // Always persist extract_config so the toggle state from GraphSettings is saved,
-  // regardless of whether the graph indexing strategy is currently enabled.
-  if (formData.value.nodeExtractConfig) {
-    data.extract_config = {
-      enabled: !!formData.value.nodeExtractConfig.enabled,
-      text: formData.value.nodeExtractConfig.text || '',
-      tags: formData.value.nodeExtractConfig.tags || [],
-      nodes: formData.value.nodeExtractConfig.nodes || [],
-      relations: formData.value.nodeExtractConfig.relations || [],
-      custom_instructions: formData.value.nodeExtractConfig.customInstructions || ''
     }
   }
 
@@ -1341,28 +1236,6 @@ const handleSubmit = async () => {
   }
 
   // 编辑模式下，若已有文件且存储引擎发生了变化，弹窗确认
-  if (
-    editorMode.value === 'edit' &&
-    hasFiles.value &&
-    formData.value &&
-    initialStorageProvider.value &&
-    formData.value.storageProvider !== initialStorageProvider.value
-  ) {
-    const dialog = DialogPlugin.confirm({
-      header: t('common.confirm'),
-      body: t('knowledgeEditor.messages.storageChangeConfirm'),
-      confirmBtn: t('common.confirm'),
-      cancelBtn: t('common.cancel'),
-      onConfirm: () => {
-        dialog.destroy()
-        doSubmit()
-      },
-      onCancel: () => {
-        dialog.destroy()
-      },
-    })
-    return
-  }
 
   doSubmit()
 }
@@ -1418,7 +1291,6 @@ const doSubmit = async () => {
           vector_enabled: formData.value.indexingStrategy?.vectorEnabled ?? true,
           keyword_enabled: formData.value.indexingStrategy?.keywordEnabled ?? true,
           wiki_enabled: formData.value.indexingStrategy?.wikiEnabled ?? false,
-          graph_enabled: formData.value.indexingStrategy?.graphEnabled ?? false,
         }
       }
       await updateKnowledgeBase(kbId, {
@@ -1454,14 +1326,6 @@ const doSubmit = async () => {
         },
         storageBackendId: formData.value?.storageBackendId || '',
         storageProvider: data.storage_provider_config?.provider || data.storage_config?.provider || 'local',
-        nodeExtract: {
-          enabled: data.extract_config?.enabled || false,
-          text: data.extract_config?.text || '',
-          tags: data.extract_config?.tags || [],
-          nodes: data.extract_config?.nodes || [],
-          relations: data.extract_config?.relations || [],
-          customInstructions: data.extract_config?.custom_instructions || ''
-        },
         questionGeneration: {
           enabled: data.question_generation_config?.enabled || false,
           questionCount: data.question_generation_config?.question_count || 3,
@@ -1479,8 +1343,7 @@ const doSubmit = async () => {
         const strategyChanged = (
           curr.vectorEnabled !== prev.vectorEnabled ||
           curr.keywordEnabled !== prev.keywordEnabled ||
-          curr.wikiEnabled !== prev.wikiEnabled ||
-          curr.graphEnabled !== prev.graphEnabled
+          curr.wikiEnabled !== prev.wikiEnabled
         )
         if (strategyChanged) {
           const dialog = DialogPlugin.confirm({
@@ -1511,23 +1374,7 @@ const doSubmit = async () => {
     }
   } catch (error: any) {
     console.error('Knowledge base operation failed:', error)
-    // Vector-store-binding error codes from the server. Both indicate
-    // the selected store cannot be used: 2200 is "the binding itself
-    // is invalid" (e.g. unknown id, foreign tenant), 2201 is "the
-    // store is currently unreachable". For either, swap in a localized
-    // message and jump the user back to the Vector Store section so
-    // they can pick a different store or fall back to the system
-    // default.
-    const code = error?.response?.data?.error?.code ?? error?.code
-    if (code === 2200) {
-      MessagePlugin.error(t('knowledgeEditor.errors.vectorStoreBindingInvalid'))
-      currentSection.value = 'vectorStore'
-    } else if (code === 2201) {
-      MessagePlugin.error(t('knowledgeEditor.errors.vectorStoreUnavailable'))
-      currentSection.value = 'vectorStore'
-    } else {
-      MessagePlugin.error(error?.message || t('common.operationFailed'))
-    }
+    MessagePlugin.error(error?.message || t('common.operationFailed'))
   } finally {
     saving.value = false
   }
@@ -1539,7 +1386,6 @@ const resetState = () => {
   currentSection.value = 'basic'
   formData.value = null
   hasFiles.value = false
-  initialStorageProvider.value = ''
   tenantDefaultStorageProvider.value = 'local'
   initialIndexingStrategy.value = null
   saving.value = false
@@ -1566,17 +1412,17 @@ watch(() => props.visible, async (newVal) => {
     resetState()
     loading.value = true
     const targetKbId = props.kbId
-    
+
     // 检查是否有初始 section，如果有则跳转
     if (uiStore.kbEditorInitialSection) {
       currentSection.value = uiStore.kbEditorInitialSection
     }
-    
+
     // 加载模型列表与空间默认存储引擎（创建 KB 时即使用，不依赖是否打开「存储引擎」Tab）
     await Promise.all([loadAllModels(), loadTenantDefaultStorageProvider()])
 
     if (generation !== kbEditorLoadGeneration || !props.visible) return
-    
+
     // 根据模式加载数据
     if (props.mode === 'edit' && targetKbId) {
       await loadKBData(targetKbId, generation)

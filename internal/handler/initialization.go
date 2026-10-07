@@ -6,7 +6,6 @@ import (
 	stderrors "errors"
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
@@ -17,8 +16,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/ollama/ollama/api"
+
 	"reliquary/internal/application/repository"
-	chatpipeline "reliquary/internal/application/service/chat_pipeline"
 	"reliquary/internal/assets"
 	"reliquary/internal/config"
 	"reliquary/internal/errors"
@@ -27,7 +26,6 @@ import (
 	"reliquary/internal/models/asr"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
-	"reliquary/internal/models/provider"
 	"reliquary/internal/models/rerank"
 	"reliquary/internal/models/utils/ollama"
 	"reliquary/internal/types"
@@ -125,19 +123,9 @@ type KBModelConfigRequest struct {
 		Enabled bool `json:"enabled"`
 	} `json:"multimodal"`
 
-	// 存储引擎选择（"local" | "minio" | "cos"），影响文档上传与文档内图片存储，参数从全局设置读取
+	// 存储引擎选择（"local" | "minio" | "s3"），影响文档上传与文档内图片存储，参数从全局设置读取
 	StorageProvider  string `json:"storageProvider"`
 	StorageBackendID string `json:"storageBackendId"`
-
-	// 知识图谱配置
-	NodeExtract struct {
-		Enabled            bool                  `json:"enabled"`
-		Text               string                `json:"text"`
-		Tags               []string              `json:"tags"`
-		Nodes              []types.GraphNode     `json:"nodes"`
-		Relations          []types.GraphRelation `json:"relations"`
-		CustomInstructions string                `json:"customInstructions"`
-	} `json:"nodeExtract"`
 
 	// 问题生成配置
 	QuestionGeneration struct {
@@ -180,15 +168,7 @@ type InitializationRequest struct {
 			InterfaceType string `json:"interfaceType"` // "ollama" or "openai"
 		} `json:"vlm,omitempty"`
 		StorageType string `json:"storageType"`
-		COS         *struct {
-			SecretID   string `json:"secretId"`
-			SecretKey  string `json:"secretKey"`
-			Region     string `json:"region"`
-			BucketName string `json:"bucketName"`
-			AppID      string `json:"appId"`
-			PathPrefix string `json:"pathPrefix"`
-		} `json:"cos,omitempty"`
-		Minio *struct {
+		Minio       *struct {
 			BucketName string `json:"bucketName"`
 			PathPrefix string `json:"pathPrefix"`
 		} `json:"minio,omitempty"`
@@ -199,21 +179,6 @@ type InitializationRequest struct {
 		ChunkOverlap *int     `json:"chunkOverlap,omitempty" binding:"omitempty,min=0"`
 		Separators   []string `json:"separators" binding:"required,min=1"`
 	} `json:"documentSplitting" binding:"required"`
-
-	NodeExtract struct {
-		Enabled bool     `json:"enabled"`
-		Text    string   `json:"text"`
-		Tags    []string `json:"tags"`
-		Nodes   []struct {
-			Name       string   `json:"name"`
-			Attributes []string `json:"attributes"`
-		} `json:"nodes"`
-		Relations []struct {
-			Node1 string `json:"node1"`
-			Node2 string `json:"node2"`
-			Type  string `json:"type"`
-		} `json:"relations"`
-	} `json:"nodeExtract"`
 
 	QuestionGeneration struct {
 		Enabled       bool `json:"enabled"`
@@ -383,7 +348,7 @@ func (h *InitializationHandler) UpdateKBConfig(c *gin.Context) {
 		if oldID != "" && oldID != backend.ID {
 			knowledgeList, listErr := h.knowledgeService.ListPagedKnowledgeByKnowledgeBaseID(ctx, kbIdStr, &types.Pagination{Page: 1, PageSize: 1}, types.KnowledgeListFilter{})
 			if listErr == nil && knowledgeList != nil && knowledgeList.Total > 0 {
-				c.Error(errors.NewBadRequestError("Storage backend cannot be changed while the knowledge base contains files; migrate storage first"))
+				c.Error(errors.NewBadRequestError("Storage backend cannot be changed while the knowledge base contains files"))
 				return
 			}
 		}
@@ -411,37 +376,6 @@ func (h *InitializationHandler) UpdateKBConfig(c *gin.Context) {
 		}
 	}
 	kb.SetStorageProvider(provider)
-
-	// 更新知识图谱配置
-	if req.NodeExtract.Enabled {
-		// 转换 Nodes 和 Relations 为指针类型
-		nodes := make([]*types.GraphNode, len(req.NodeExtract.Nodes))
-		for i := range req.NodeExtract.Nodes {
-			nodes[i] = &req.NodeExtract.Nodes[i]
-		}
-		relations := make([]*types.GraphRelation, len(req.NodeExtract.Relations))
-		for i := range req.NodeExtract.Relations {
-			relations[i] = &req.NodeExtract.Relations[i]
-		}
-
-		kb.ExtractConfig = &types.ExtractConfig{
-			Enabled:            req.NodeExtract.Enabled,
-			Text:               req.NodeExtract.Text,
-			Tags:               req.NodeExtract.Tags,
-			Nodes:              nodes,
-			Relations:          relations,
-			CustomInstructions: strings.TrimSpace(req.NodeExtract.CustomInstructions),
-		}
-	} else if kb.ExtractConfig != nil {
-		kb.ExtractConfig.Enabled = false
-	} else {
-		kb.ExtractConfig = &types.ExtractConfig{Enabled: false}
-	}
-	if err := validateExtractConfig(kb.ExtractConfig); err != nil {
-		logger.Error(ctx, "Invalid extract configuration", err)
-		c.Error(err)
-		return
-	}
 
 	// 更新问题生成配置
 	if req.QuestionGeneration.Enabled {
@@ -607,7 +541,7 @@ func (h *InitializationHandler) validateInitializationConfigs(ctx context.Contex
 	if err := validateRerankConfig(ctx, req); err != nil {
 		return err
 	}
-	return validateNodeExtractConfig(ctx, req)
+	return nil
 }
 
 func (h *InitializationHandler) validateMultimodalConfig(ctx context.Context, req *InitializationRequest) error {
@@ -629,13 +563,6 @@ func (h *InitializationHandler) validateMultimodalConfig(ctx context.Context, re
 	}
 
 	switch storageType {
-	case "cos":
-		if req.Multimodal.COS == nil || req.Multimodal.COS.SecretID == "" || req.Multimodal.COS.SecretKey == "" ||
-			req.Multimodal.COS.Region == "" || req.Multimodal.COS.BucketName == "" ||
-			req.Multimodal.COS.AppID == "" {
-			logger.Error(ctx, "COS configuration incomplete")
-			return errors.NewBadRequestError("COS配置不完整")
-		}
 	case "minio":
 		if req.Multimodal.Minio == nil || req.Multimodal.Minio.BucketName == "" ||
 			os.Getenv("MINIO_ACCESS_KEY_ID") == "" || os.Getenv("MINIO_SECRET_ACCESS_KEY") == "" {
@@ -653,25 +580,6 @@ func validateRerankConfig(ctx context.Context, req *InitializationRequest) error
 	if req.Rerank.ModelName == "" || req.Rerank.BaseURL == "" {
 		logger.Error(ctx, "Rerank configuration incomplete")
 		return errors.NewBadRequestError("Rerank配置不完整")
-	}
-	return nil
-}
-
-func validateNodeExtractConfig(ctx context.Context, req *InitializationRequest) error {
-	if !req.NodeExtract.Enabled {
-		return nil
-	}
-	if strings.ToLower(os.Getenv("NEO4J_ENABLE")) != "true" {
-		logger.Error(ctx, "Node Extractor configuration incomplete")
-		return errors.NewBadRequestError("请正确配置环境变量NEO4J_ENABLE")
-	}
-	if req.NodeExtract.Text == "" || len(req.NodeExtract.Tags) == 0 {
-		logger.Error(ctx, "Node Extractor configuration incomplete")
-		return errors.NewBadRequestError("Node Extractor配置不完整")
-	}
-	if len(req.NodeExtract.Nodes) == 0 || len(req.NodeExtract.Relations) == 0 {
-		logger.Error(ctx, "Node Extractor configuration incomplete")
-		return errors.NewBadRequestError("请先提取实体和关系")
 	}
 	return nil
 }
@@ -850,20 +758,6 @@ func (h *InitializationHandler) applyKnowledgeBaseInitialization(
 			ModelID: vlmModelID,
 		}
 		switch req.Multimodal.StorageType {
-		case "cos":
-			if req.Multimodal.COS != nil {
-				kb.SetStorageProvider("cos")
-				// Legacy: also write to cos_config for backward compat with old code paths
-				kb.StorageConfig = types.StorageConfig{
-					Provider:   req.Multimodal.StorageType,
-					BucketName: req.Multimodal.COS.BucketName,
-					AppID:      req.Multimodal.COS.AppID,
-					PathPrefix: req.Multimodal.COS.PathPrefix,
-					SecretID:   req.Multimodal.COS.SecretID,
-					SecretKey:  req.Multimodal.COS.SecretKey,
-					Region:     req.Multimodal.COS.Region,
-				}
-			}
 		case "minio":
 			if req.Multimodal.Minio != nil {
 				kb.SetStorageProvider("minio")
@@ -883,28 +777,6 @@ func (h *InitializationHandler) applyKnowledgeBaseInitialization(
 		kb.StorageConfig = types.StorageConfig{}
 	}
 
-	if req.NodeExtract.Enabled {
-		kb.ExtractConfig = &types.ExtractConfig{
-			Text:      req.NodeExtract.Text,
-			Tags:      req.NodeExtract.Tags,
-			Nodes:     make([]*types.GraphNode, 0),
-			Relations: make([]*types.GraphRelation, 0),
-		}
-		for _, rnode := range req.NodeExtract.Nodes {
-			node := &types.GraphNode{
-				Name:       rnode.Name,
-				Attributes: rnode.Attributes,
-			}
-			kb.ExtractConfig.Nodes = append(kb.ExtractConfig.Nodes, node)
-		}
-		for _, relation := range req.NodeExtract.Relations {
-			kb.ExtractConfig.Relations = append(kb.ExtractConfig.Relations, &types.GraphRelation{
-				Node1: relation.Node1,
-				Node2: relation.Node2,
-				Type:  relation.Type,
-			})
-		}
-	}
 }
 
 func extractModelIDs(processedModels []*types.Model) (embeddingModelID, llmModelID, vlmModelID string) {
@@ -1565,41 +1437,12 @@ func (h *InitializationHandler) buildConfigResponse(ctx context.Context, models 
 			multimodal := config["multimodal"].(map[string]interface{})
 			multimodal["storageType"] = effectiveProvider
 			switch effectiveProvider {
-			case "cos":
-				multimodal["cos"] = map[string]interface{}{
-					"region":     kb.StorageConfig.Region,
-					"bucketName": kb.StorageConfig.BucketName,
-					"appId":      kb.StorageConfig.AppID,
-					"pathPrefix": kb.StorageConfig.PathPrefix,
-					"credentials": map[string]bool{
-						"secretId":  kb.StorageConfig.SecretID != "",
-						"secretKey": kb.StorageConfig.SecretKey != "",
-					},
-				}
 			case "minio":
 				multimodal["minio"] = map[string]interface{}{
 					"bucketName": kb.StorageConfig.BucketName,
 					"pathPrefix": kb.StorageConfig.PathPrefix,
 				}
 			}
-		}
-	}
-
-	if kb.ExtractConfig != nil {
-		nodeExtract := map[string]interface{}{
-			"enabled":   kb.ExtractConfig.Enabled,
-			"text":      kb.ExtractConfig.Text,
-			"tags":      kb.ExtractConfig.Tags,
-			"nodes":     kb.ExtractConfig.Nodes,
-			"relations": kb.ExtractConfig.Relations,
-		}
-		if kb.ExtractConfig.CustomInstructions != "" {
-			nodeExtract["customInstructions"] = kb.ExtractConfig.CustomInstructions
-		}
-		config["nodeExtract"] = nodeExtract
-	} else {
-		config["nodeExtract"] = map[string]interface{}{
-			"enabled": false,
 		}
 	}
 
@@ -1729,22 +1572,6 @@ func (h *InitializationHandler) buildTestModel(
 	}
 }
 
-// resolveTenantWeKnoraCloudCreds 从当前空间上下文里取出 WeKnoraCloud 凭证，
-// 供测试连接端点补齐 appID/appSecret。与 service.resolveWeKnoraCloudCredentials
-// 对应，但因为 handler 还没有被注入 tenantService（历史原因），暂时从
-// TenantInfoFromContext 读取，等效果相同。
-func (h *InitializationHandler) resolveTenantWeKnoraCloudCreds(ctx context.Context) (string, string, bool) {
-	tenantInfo, ok := types.TenantInfoFromContext(ctx)
-	if !ok {
-		return "", "", false
-	}
-	creds := tenantInfo.Credentials.GetWeKnoraCloud()
-	if creds == nil {
-		return "", "", true
-	}
-	return creds.AppID, creds.AppSecret, true
-}
-
 // CheckRemoteModel godoc
 // @Summary      检查远程模型
 // @Description  检查远程API模型连接是否正常
@@ -1781,15 +1608,9 @@ func (h *InitializationHandler) CheckRemoteModel(c *gin.Context) {
 		c.Error(errors.NewBadRequestError(utils.FormatSSRFError("Base URL", req.BaseURL, err)))
 		return
 	}
-	appID, appSecret, ok := h.resolveTenantWeKnoraCloudCreds(ctx)
-	if !ok {
-		logger.Error(ctx, "Tenant info not found")
-		c.Error(errors.NewBadRequestError("空间信息未找到"))
-		return
-	}
 
 	model := h.buildTestModel(&req, types.ModelTypeKnowledgeQA, types.ModelSourceRemote)
-	available, message := h.checkChatModelConnection(ctx, model, appID, appSecret)
+	available, message := h.checkChatModelConnection(ctx, model)
 
 	logger.Infof(ctx, "Remote model check completed, available: %v, message: %s", available, message)
 
@@ -1855,15 +1676,8 @@ func (h *InitializationHandler) TestEmbeddingModel(c *gin.Context) {
 		}
 	}
 
-	appID, appSecret, ok := h.resolveTenantWeKnoraCloudCreds(ctx)
-	if !ok {
-		logger.Error(ctx, "Tenant info not found")
-		c.Error(errors.NewBadRequestError("空间信息未找到"))
-		return
-	}
-
 	model := h.buildTestModel(&req, types.ModelTypeEmbedding, types.ModelSourceRemote)
-	emb, err := embedding.NewEmbedder(embedding.ConfigFromModel(model, appID, appSecret), h.pooler, h.ollamaService)
+	emb, err := embedding.NewEmbedder(embedding.ConfigFromModel(model), h.pooler, h.ollamaService)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{"model": utils.SanitizeForLog(req.ModelName)})
 		c.JSON(http.StatusOK, gin.H{
@@ -1917,9 +1731,9 @@ func classifyConnectionError(errMsg string) string {
 // 与生产路径走完全相同的 ConfigFromModel → NewChat 流程，因此 CustomHeaders、
 // ExtraConfig、Provider 等字段都会被正确透传。
 func (h *InitializationHandler) checkChatModelConnection(
-	ctx context.Context, model *types.Model, appID, appSecret string,
+	ctx context.Context, model *types.Model,
 ) (bool, string) {
-	chatInstance, err := chat.NewChat(chat.ConfigFromModel(model, appID, appSecret), h.ollamaService)
+	chatInstance, err := chat.NewChat(chat.ConfigFromModel(model), h.ollamaService)
 	if err != nil {
 		return false, fmt.Sprintf("创建聊天实例失败: %v", err)
 	}
@@ -1953,9 +1767,9 @@ func (h *InitializationHandler) checkChatModelConnection(
 // checkRerankModelConnection 使用 rerank 模块做一次最小化调用来测试连通性与鉴权。
 // 与生产路径共用 ConfigFromModel，所有字段（CustomHeaders 等）都透传。
 func (h *InitializationHandler) checkRerankModelConnection(
-	ctx context.Context, model *types.Model, appID, appSecret string,
+	ctx context.Context, model *types.Model,
 ) (bool, string) {
-	reranker, err := rerank.NewReranker(rerank.ConfigFromModel(model, appID, appSecret))
+	reranker, err := rerank.NewReranker(rerank.ConfigFromModel(model, decryptModelAppSecret(model.Parameters.AppSecret)))
 	if err != nil {
 		return false, fmt.Sprintf("创建Reranker失败: %v", err)
 	}
@@ -2007,19 +1821,8 @@ func (h *InitializationHandler) CheckRerankModel(c *gin.Context) {
 		return
 	}
 
-	appID, appSecret, ok := h.resolveTenantWeKnoraCloudCreds(ctx)
-	if !ok {
-		logger.Error(ctx, "Tenant info not found")
-		c.Error(errors.NewBadRequestError("空间信息未找到"))
-		return
-	}
-
 	model := h.buildTestModel(&req, types.ModelTypeRerank, types.ModelSourceRemote)
-	if providerName := provider.ProviderName(model.Parameters.Provider); providerName == provider.ProviderLKEAP || providerName == provider.ProviderVolcengine {
-		appID = ""
-		appSecret = decryptModelAppSecret(model.Parameters.AppSecret)
-	}
-	available, message := h.checkRerankModelConnection(ctx, model, appID, appSecret)
+	available, message := h.checkRerankModelConnection(ctx, model)
 
 	logger.Infof(ctx, "Rerank model check completed, available: %v, message: %s", available, message)
 
@@ -2069,8 +1872,7 @@ func (h *InitializationHandler) CheckASRModel(c *gin.Context) {
 		return
 	}
 
-	// 用统一构造器生成测试用 *types.Model（ASR 不涉及 WeKnoraCloud 凭证），
-	// 发送一段极短的静默 WAV 音频验证 /v1/audio/transcriptions 端点可达。
+	// 用统一构造器生成测试模型，并发送极短的静默 WAV 验证端点可达。
 	model := h.buildTestModel(&req, types.ModelTypeASR, types.ModelSourceRemote)
 	asrInstance, err := asr.NewASR(asr.ConfigFromModel(model))
 	if err != nil {
@@ -2130,33 +1932,6 @@ func (h *InitializationHandler) CheckASRModel(c *gin.Context) {
 	})
 }
 
-// 使用结构体解析表单数据
-type testMultimodalForm struct {
-	VLMModel         string `form:"vlm_model"`
-	VLMBaseURL       string `form:"vlm_base_url"`
-	VLMAPIKey        string `form:"vlm_api_key"`
-	VLMInterfaceType string `form:"vlm_interface_type"`
-
-	StorageType string `form:"storage_type"`
-
-	// COS 配置
-	COSSecretID   string `form:"cos_secret_id"`
-	COSSecretKey  string `form:"cos_secret_key"`
-	COSRegion     string `form:"cos_region"`
-	COSBucketName string `form:"cos_bucket_name"`
-	COSAppID      string `form:"cos_app_id"`
-	COSPathPrefix string `form:"cos_path_prefix"`
-
-	// MinIO 配置（当存储为 minio 时）
-	MinioBucketName string `form:"minio_bucket_name"`
-	MinioPathPrefix string `form:"minio_path_prefix"`
-
-	// 文档切分配置（字符串后续自行解析，以避免类型绑定失败）
-	ChunkSize     string `form:"chunk_size"`
-	ChunkOverlap  string `form:"chunk_overlap"`
-	SeparatorsRaw string `form:"separators"`
-}
-
 // TestMultimodalFunction godoc
 // @Summary      测试多模态功能
 // @Description  上传图片测试多模态处理功能
@@ -2168,7 +1943,7 @@ type testMultimodalForm struct {
 // @Param        vlm_base_url      formData  string  true   "VLM Base URL"
 // @Param        vlm_api_key       formData  string  false  "VLM API Key"
 // @Param        vlm_interface_type formData string  false  "VLM接口类型"
-// @Param        storage_type      formData  string  true   "存储类型(cos/minio)"
+// @Param        storage_type      formData  string  true   "存储类型(local/minio/s3)"
 // @Success      200               {object}  map[string]interface{}  "测试结果"
 // @Failure      400               {object}  errors.AppError         "请求参数错误"
 // @Security     Bearer
@@ -2206,15 +1981,6 @@ func (h *InitializationHandler) TestMultimodalFunction(c *gin.Context) {
 	}
 
 	switch req.StorageType {
-	case "cos":
-		// 必填：SecretID/SecretKey/Region/BucketName/AppID；PathPrefix 可选
-		if req.COSSecretID == "" || req.COSSecretKey == "" ||
-			req.COSRegion == "" || req.COSBucketName == "" ||
-			req.COSAppID == "" {
-			logger.Error(ctx, "COS configuration is required")
-			c.Error(errors.NewBadRequestError("COS配置信息不能为空"))
-			return
-		}
 	case "minio":
 		if req.MinioBucketName == "" {
 			logger.Error(ctx, "MinIO configuration is required")
@@ -2379,227 +2145,28 @@ func (h *InitializationHandler) testMultimodalWithDocReader(
 	return result, nil
 }
 
-// TextRelationExtractionRequest 文本关系提取请求结构
-type TextRelationExtractionRequest struct {
-	Text    string   `json:"text"     binding:"required"`
-	Tags    []string `json:"tags"     binding:"required"`
-	ModelID string   `json:"model_id" binding:"required"`
-}
+// 使用结构体解析表单数据
+type testMultimodalForm struct {
+	VLMModel         string `form:"vlm_model"`
+	VLMBaseURL       string `form:"vlm_base_url"`
+	VLMAPIKey        string `form:"vlm_api_key"`
+	VLMInterfaceType string `form:"vlm_interface_type"`
 
-// TextRelationExtractionResponse 文本关系提取响应结构
-type TextRelationExtractionResponse struct {
-	Nodes     []*types.GraphNode     `json:"nodes"`
-	Relations []*types.GraphRelation `json:"relations"`
-}
+	StorageType string `form:"storage_type"`
 
-// ExtractTextRelations godoc
-// @Summary      提取文本关系
-// @Description  从文本中提取实体和关系
-// @Tags         初始化
-// @Accept       json
-// @Produce      json
-// @Param        request  body      TextRelationExtractionRequest  true  "提取请求"
-// @Success      200      {object}  map[string]interface{}         "提取结果"
-// @Failure      400      {object}  errors.AppError                "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /initialization/extract/text-relation [post]
-func (h *InitializationHandler) ExtractTextRelations(c *gin.Context) {
-	ctx := c.Request.Context()
+	COSSecretID   string `form:"cos_secret_id"`
+	COSSecretKey  string `form:"cos_secret_key"`
+	COSRegion     string `form:"cos_region"`
+	COSBucketName string `form:"cos_bucket_name"`
+	COSAppID      string `form:"cos_app_id"`
+	COSPathPrefix string `form:"cos_path_prefix"`
 
-	var req TextRelationExtractionRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		logger.Error(ctx, "文本关系提取请求参数错误")
-		c.Error(errors.NewBadRequestError("文本关系提取请求参数错误"))
-		return
-	}
+	// MinIO 配置（当存储为 minio 时）
+	MinioBucketName string `form:"minio_bucket_name"`
+	MinioPathPrefix string `form:"minio_path_prefix"`
 
-	// 验证文本内容
-	if len(req.Text) == 0 {
-		c.Error(errors.NewBadRequestError("文本内容不能为空"))
-		return
-	}
-
-	if len(req.Text) > 5000 {
-		c.Error(errors.NewBadRequestError("文本内容长度不能超过5000字符"))
-		return
-	}
-
-	// 验证标签
-	if len(req.Tags) == 0 {
-		c.Error(errors.NewBadRequestError("至少需要选择一个关系标签"))
-		return
-	}
-
-	// 根据模型ID获取chat模型
-	chatModel, err := h.modelService.GetChatModel(ctx, req.ModelID)
-	if err != nil {
-		logger.Error(ctx, "获取模型失败", err)
-		c.Error(errors.NewBadRequestError("获取模型失败: " + err.Error()))
-		return
-	}
-
-	// 调用模型服务进行文本关系提取
-	result, err := h.extractRelationsFromText(ctx, req.Text, req.Tags, chatModel)
-	if err != nil {
-		logger.Error(ctx, "文本关系提取失败", err)
-		c.Error(errors.NewInternalServerError("文本关系提取失败: " + err.Error()))
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    result,
-	})
-}
-
-// extractRelationsFromText 从文本中提取关系
-func (h *InitializationHandler) extractRelationsFromText(
-	ctx context.Context,
-	text string,
-	tags []string,
-	chatModel chat.Chat,
-) (*TextRelationExtractionResponse, error) {
-	template := &types.PromptTemplateStructured{
-		Description: h.config.ExtractManager.ExtractGraph.Description,
-		Tags:        tags,
-		Examples:    h.config.ExtractManager.ExtractGraph.Examples,
-	}
-
-	extractor := chatpipeline.NewExtractor(chatModel, template)
-	graph, err := extractor.Extract(ctx, text)
-	if err != nil {
-		logger.Error(ctx, "文本关系提取失败", err)
-		return nil, err
-	}
-	extractor.RemoveUnknownRelation(ctx, graph)
-
-	result := &TextRelationExtractionResponse{
-		Nodes:     graph.Node,
-		Relations: graph.Relation,
-	}
-
-	return result, nil
-}
-
-// FabriTextRequest is a request for generating example text
-type FabriTextRequest struct {
-	Tags    []string `json:"tags"`
-	ModelID string   `json:"model_id" binding:"required"`
-}
-
-// FabriTextResponse is a response for generating example text
-type FabriTextResponse struct {
-	Text string `json:"text"`
-}
-
-// FabriText godoc
-// @Summary      生成示例文本
-// @Description  根据标签生成示例文本
-// @Tags         初始化
-// @Accept       json
-// @Produce      json
-// @Param        request  body      FabriTextRequest  true  "生成请求"
-// @Success      200      {object}  map[string]interface{}  "生成的文本"
-// @Failure      400      {object}  errors.AppError         "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /initialization/extract/fabri-text [post]
-func (h *InitializationHandler) FabriText(c *gin.Context) {
-	ctx := c.Request.Context()
-
-	var req FabriTextRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		logger.Error(ctx, "failed to parse fabri text request")
-		c.Error(errors.NewBadRequestError("invalid fabri text request parameters"))
-		return
-	}
-
-	chatModel, err := h.modelService.GetChatModel(ctx, req.ModelID)
-	if err != nil {
-		logger.Error(ctx, "获取模型失败", err)
-		c.Error(errors.NewBadRequestError("获取模型失败: " + err.Error()))
-		return
-	}
-
-	result, err := h.fabriText(ctx, req.Tags, chatModel)
-	if err != nil {
-		logger.Error(ctx, "failed to generate fabri text", err)
-		c.Error(errors.NewInternalServerError("failed to generate fabri text: " + err.Error()))
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    FabriTextResponse{Text: result},
-	})
-}
-
-// fabriText generates example text
-func (h *InitializationHandler) fabriText(ctx context.Context, tags []string, chatModel chat.Chat) (string, error) {
-	content := h.config.ExtractManager.FabriText.WithNoTag
-	if len(tags) > 0 {
-		tagStr, _ := json.Marshal(tags)
-		content = fmt.Sprintf(h.config.ExtractManager.FabriText.WithTag, string(tagStr))
-	}
-
-	think := false
-	result, err := chatModel.Chat(ctx, []chat.Message{
-		{Role: "user", Content: content},
-	}, &chat.ChatOptions{
-		Temperature: 0.3,
-		MaxTokens:   4096,
-		Thinking:    &think,
-	})
-	if err != nil {
-		logger.Error(ctx, "生成示例文本失败", err)
-		return "", err
-	}
-	return result.Content, nil
-}
-
-// FabriTagRequest is a request for generating tags
-type FabriTagRequest struct{}
-
-// FabriTagResponse is a response for generating tags
-type FabriTagResponse struct {
-	Tags []string `json:"tags"`
-}
-
-var tagOptions = []string{
-	"Content", "Culture", "Person", "Event", "Time", "Location",
-	"Work", "Author", "Relation", "Attribute",
-}
-
-// FabriTag godoc
-// @Summary      生成随机标签
-// @Description  随机生成一组标签
-// @Tags         初始化
-// @Accept       json
-// @Produce      json
-// @Success      200  {object}  map[string]interface{}  "生成的标签"
-// @Router       /initialization/extract/fabri-tag [post]
-func (h *InitializationHandler) FabriTag(c *gin.Context) {
-	tagRandom := RandomSelect(tagOptions, rand.Intn(len(tagOptions)-1)+1)
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    FabriTagResponse{Tags: tagRandom},
-	})
-}
-
-// RandomSelect selects random strings
-func RandomSelect(strs []string, n int) []string {
-	if n <= 0 {
-		return []string{}
-	}
-	result := make([]string, len(strs))
-	copy(result, strs)
-	rand.Shuffle(len(result), func(i, j int) {
-		result[i], result[j] = result[j], result[i]
-	})
-
-	if n > len(strs) {
-		n = len(strs)
-	}
-	return result[:n]
+	// 文档切分配置（字符串后续自行解析，以避免类型绑定失败）
+	ChunkSize     string `form:"chunk_size"`
+	ChunkOverlap  string `form:"chunk_overlap"`
+	SeparatorsRaw string `form:"separators"`
 }

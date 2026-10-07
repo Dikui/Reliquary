@@ -145,7 +145,7 @@ func SafeFileName(fileName string) (string, error) {
 	return base, nil
 }
 
-// SafeObjectKey 校验对象存储的 key（如 COS/MinIO objectName），禁止包含 ".." 等路径遍历
+// SafeObjectKey 校验对象存储的 key（如 S3 objectName），禁止包含 ".." 等路径遍历
 func SafeObjectKey(objectKey string) error {
 	if objectKey == "" {
 		return fmt.Errorf("object key cannot be empty")
@@ -171,8 +171,7 @@ func IsValidURL(url string) bool {
 	// proxies; provider schemes remain supported for legacy stored content.
 	allowedProtocols := []string{
 		"http://", "https://", "resource://", "storage://", "local://", "minio://",
-		"cos://", "tos://", "s3://", "oss://", "ks3://", "obs://",
-	}
+		"s3://"}
 	isAllowed := false
 	for _, protocol := range allowedProtocols {
 		if strings.HasPrefix(strings.ToLower(url), protocol) {
@@ -968,7 +967,7 @@ type ssrfWhitelistConfig struct {
 //  2. ENV fallback — sync.Once-cached parse of SSRF_WHITELIST and
 //     SSRF_WHITELIST_EXTRA. Used during the startup window before
 //     the service has finished its preload, and on deployments that
-//     don't run system_settings (lite mode).
+//     don't run system_settings (in-memory fixtures).
 func loadSSRFWhitelist() *ssrfWhitelistConfig {
 	if cur := ssrfWhitelistAtomic.Load(); cur != nil {
 		return cur

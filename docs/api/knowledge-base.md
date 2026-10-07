@@ -7,7 +7,7 @@
 - 知识库类型 `type` 为 `document`（文档）或 `faq`（FAQ），默认 `document`。
 - JSON 中对象存储相关字段：**`storage_config`** 为序列化字段名（对应数据库列 `cos_config`，兼容旧数据）。旧客户端若仍发送或接收 `cos_config`，服务端会兼容解析；新集成请使用 **`storage_config`**。
 - **`storage_provider_config`** 为新版存储提供者选择（如 `{"provider": "local"}`），与空间级存储引擎凭证配合使用；无配置时可为 `null`。
-- 嵌套配置对象：`chunking_config`、`image_processing_config`、`vlm_config`、`asr_config`、`extract_config`、`faq_config`、`question_generation_config`、`auto_tag_config`。其中 `extract_config`、`faq_config`、`question_generation_config`、`auto_tag_config` 允许为 `null`。
+- 嵌套配置对象：`chunking_config`、`image_processing_config`、`vlm_config`、`asr_config`、`faq_config`、`question_generation_config`、`auto_tag_config`。其中 `faq_config`、`question_generation_config`、`auto_tag_config` 允许为 `null`。
 - **`vector_store_id`** 为知识库绑定的向量存储 ID（参见 [vector-store.md](./vector-store.md)）。未指定（或 `null`/`""`）时使用空间级默认的环境变量存储；一旦创建即不可修改。详情接口返回时会附带 `vector_store_name` / `vector_store_source` / `vector_store_engine_type` / `vector_store_status` 四个只读元数据字段，用于前端展示。
 
 | 方法   | 路径                                      | 描述                     |
@@ -42,8 +42,7 @@
 | vlm_config                    | object  | 否   | VLM（视觉模型）配置                                             |
 | asr_config                    | object  | 否   | ASR（语音识别）配置                                             |
 | storage_provider_config       | object  | 否   | 存储提供者选择，如 `{"provider": "local"}`                      |
-| storage_config                | object  | 否   | 旧版 COS 存储凭证（兼容字段，新集成留空即可）                   |
-| extract_config                | object  | 否   | 图谱抽取配置；`enabled=true` 时需提供 `text`/`tags`/`nodes`/`relations` |
+| storage_config                | object  | 否   | 兼容字段，新集成留空即可                   |
 | faq_config                    | object  | 否   | FAQ 配置（仅 FAQ 类型知识库需要）                               |
 | question_generation_config    | object  | 否   | 问题生成配置                                                    |
 | auto_tag_config               | object  | 否   | 文档自动标签配置，默认关闭；仅适用于 `document` 类型知识库      |
@@ -102,7 +101,6 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases' \
         "app_id": "",
         "path_prefix": ""
     },
-    "extract_config": null,
     "faq_config": null,
     "question_generation_config": {
         "enabled": false,
@@ -171,7 +169,6 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases' \
             "app_id": "",
             "path_prefix": ""
         },
-        "extract_config": null,
         "faq_config": null,
         "question_generation_config": {
             "enabled": false,
@@ -189,9 +186,9 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases' \
         "chunk_count": 0,
         "processing_count": 0,
         "vector_store_id": "550e8400-e29b-41d4-a716-446655440000",
-        "vector_store_name": "elasticsearch-hot",
+        "vector_store_name": "postgres",
         "vector_store_source": "user",
-        "vector_store_engine_type": "elasticsearch",
+        "vector_store_engine_type": "postgres",
         "vector_store_status": "available",
         "created_at": "2025-08-12T11:30:09.206238645+08:00",
         "updated_at": "2025-08-12T11:30:09.206238854+08:00",
@@ -223,7 +220,7 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases' \
 | `vector_store_id`          | string | 绑定的向量存储 ID（创建时未指定时为 `null`，从响应中省略）                                                  |
 | `vector_store_name`        | string | 绑定存储的展示名。未绑定时返回 `"System default"`；跨空间共享 KB 视图中被隐藏                              |
 | `vector_store_source`      | string | `"user"`（DB 中创建的存储）/ `"env"`（环境变量虚拟存储）/ `"shared"`（跨空间共享 KB）/ `"unavailable"`（绑定的存储已不可解析） |
-| `vector_store_engine_type` | string | 引擎类型（`elasticsearch` / `qdrant` / `milvus` 等）。`shared` / `unavailable` 时为空                       |
+| `vector_store_engine_type` | string | 引擎类型（固定为 `postgres`）。`shared` / `unavailable` 时为空                       |
 | `vector_store_status`      | string | `"available"` / `"unavailable"`。`unavailable` 表示绑定的存储已被删除或不在内存注册表中，UI 可据此提示用户重新绑定 |
 
 **错误码（Phase 2 新增）**:
@@ -704,7 +701,6 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases/kb-00000001/move-t
                 "app_id": "",
                 "path_prefix": ""
             },
-            "extract_config": null,
             "faq_config": null,
             "question_generation_config": null,
             "is_pinned": false,

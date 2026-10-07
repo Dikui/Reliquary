@@ -57,7 +57,6 @@ type DocParserStorageConfig struct {
 	BucketName      string
 	AccessKeyID     string
 	SecretAccessKey string
-	AppID           string
 	PathPrefix      string
 	Endpoint        string
 }

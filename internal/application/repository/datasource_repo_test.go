@@ -7,16 +7,19 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 )
 
 func setupDataSourceRepoTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := pgtest.OpenFixture(t)
 	require.NoError(t, db.AutoMigrate(&types.DataSource{}, &types.SyncLog{}))
+	// These CRUD tests retain the original JSON serialization assertions.
+	require.NoError(t, db.Exec(`ALTER TABLE data_sources ALTER COLUMN last_sync_result TYPE JSON USING last_sync_result::json`).Error)
+	require.NoError(t, db.Exec(`ALTER TABLE sync_logs ALTER COLUMN result TYPE JSON USING result::json`).Error)
 	return db
 }
 
@@ -130,7 +133,7 @@ func TestDataSourceRepositoryCreatePersistsEnabledSyncDeletions(t *testing.T) {
 	assert.True(t, stored.SyncDeletions)
 }
 
-func TestDataSourceRepositoryDeleteSoftDeletesOnSQLite(t *testing.T) {
+func TestDataSourceRepositoryDeleteSoftDeletes(t *testing.T) {
 	db := setupDataSourceRepoTestDB(t)
 	repo := NewDataSourceRepository(db)
 	ctx := context.Background()

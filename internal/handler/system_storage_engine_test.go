@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"reliquary/internal/storageallowlist"
 	"reliquary/internal/types"
 )
@@ -33,87 +34,9 @@ func (f *fakeStorageBackendRepo) FindLegacyAlias(context.Context, uint64, string
 	return nil, nil
 }
 
-func TestGetStorageEngineStatus_IncludesOBS(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	t.Setenv(storageallowlist.AllowListEnv, "")
-
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/system/storage-engine-status", nil)
-
-	h := &SystemHandler{}
-	h.GetStorageEngineStatus(c)
-
-	require.Equal(t, http.StatusOK, w.Code)
-
-	var resp struct {
-		Code int `json:"code"`
-		Data struct {
-			Engines []StorageEngineStatusItem `json:"engines"`
-		} `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	require.Equal(t, 0, resp.Code)
-
-	names := make([]string, 0, len(resp.Data.Engines))
-	obsStatus := StorageEngineStatusItem{}
-	for _, engine := range resp.Data.Engines {
-		names = append(names, engine.Name)
-		if engine.Name == "obs" {
-			obsStatus = engine
-		}
-	}
-	assert.Contains(t, names, "obs")
-	assert.True(t, obsStatus.Allowed)
-	assert.False(t, obsStatus.Available)
-}
-
-func TestGetStorageEngineStatus_OBSConfiguredFromTenant(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	t.Setenv(storageallowlist.AllowListEnv, "")
-
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/system/storage-engine-status", nil)
-	tenant := &types.Tenant{
-		StorageEngineConfig: &types.StorageEngineConfig{
-			OBS: &types.OBSEngineConfig{
-				Endpoint:   "obs.example.com",
-				Region:     "cn-north-4",
-				AccessKey:  "ak",
-				SecretKey:  "sk",
-				BucketName: "bucket",
-			},
-		},
-	}
-	c.Set(types.TenantInfoContextKey.String(), tenant)
-
-	h := &SystemHandler{}
-	h.GetStorageEngineStatus(c)
-
-	require.Equal(t, http.StatusOK, w.Code)
-
-	var resp struct {
-		Data struct {
-			Engines []StorageEngineStatusItem `json:"engines"`
-		} `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-
-	var obsStatus *StorageEngineStatusItem
-	for i := range resp.Data.Engines {
-		if resp.Data.Engines[i].Name == "obs" {
-			obsStatus = &resp.Data.Engines[i]
-			break
-		}
-	}
-	require.NotNil(t, obsStatus)
-	assert.True(t, obsStatus.Available)
-}
-
-// A workspace that configured COS only through the new multi-instance Storage
-// settings (storage_backends), with an empty legacy StorageEngineConfig, must
-// still be reported as available.
+// A workspace that configured S3 only through Storage settings
+// (storage_backends), with an empty legacy StorageEngineConfig, must still
+// be reported as available.
 func TestGetStorageEngineStatus_AvailableFromActiveBackend(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv(storageallowlist.AllowListEnv, "")
@@ -124,7 +47,7 @@ func TestGetStorageEngineStatus_AvailableFromActiveBackend(t *testing.T) {
 	c.Set(types.TenantInfoContextKey.String(), &types.Tenant{ID: 42})
 
 	h := &SystemHandler{storageBackendRepo: &fakeStorageBackendRepo{backends: []*types.StorageBackend{
-		{Provider: "cos", Status: types.StorageBackendStatusActive},
+		{Provider: "minio", Status: types.StorageBackendStatusActive},
 		{Provider: "s3", Status: types.StorageBackendStatusDisabled},
 	}}}
 	h.GetStorageEngineStatus(c)
@@ -142,6 +65,6 @@ func TestGetStorageEngineStatus_AvailableFromActiveBackend(t *testing.T) {
 	for _, engine := range resp.Data.Engines {
 		status[engine.Name] = engine.Available
 	}
-	assert.True(t, status["cos"], "active COS backend should be available")
+	assert.True(t, status["minio"], "active MinIO backend should be available")
 	assert.False(t, status["s3"], "disabled S3 backend should not be available")
 }

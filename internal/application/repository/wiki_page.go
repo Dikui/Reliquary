@@ -10,6 +10,7 @@ import (
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -31,16 +32,9 @@ func NewWikiPageRepository(db *gorm.DB) interfaces.WikiPageRepository {
 }
 
 func (r *wikiPageRepository) wikiCategoryRankOrder() string {
-	if r.db != nil && r.db.Dialector != nil && r.db.Dialector.Name() == "sqlite" {
-		return "CASE WHEN COALESCE(json_array_length(category_path), 0) > 0 THEN 0 ELSE 1 END ASC"
-	}
 	return "CASE WHEN COALESCE(jsonb_array_length(category_path), 0) > 0 THEN 0 ELSE 1 END ASC"
 }
-
 func (r *wikiPageRepository) wikiEmptyInLinksPredicate() string {
-	if r.db != nil && r.db.Dialector != nil && r.db.Dialector.Name() == "sqlite" {
-		return "(in_links IS NULL OR json_array_length(in_links) = 0)"
-	}
 	return "(in_links IS NULL OR in_links = '[]'::JSONB)"
 }
 
@@ -331,7 +325,7 @@ func (r *wikiPageRepository) List(ctx context.Context, req *types.WikiPageListRe
 	// is a cached column (= len(category_path)); `category_path` is a JSON column
 	// whose stored text is json.Marshal of the cleaned path, so we compare
 	// against the same encoding. Postgres needs an explicit jsonb cast for array
-	// equality; SQLite stores JSON as TEXT and compares directly.
+	// equality.
 	if req.FolderID != nil {
 		query = query.Where("folder_id = ?", *req.FolderID)
 	}
@@ -340,11 +334,7 @@ func (r *wikiPageRepository) List(ctx context.Context, req *types.WikiPageListRe
 	}
 	if wantPath := types.CleanWikiCategoryPath(req.CategoryPath); len(wantPath) > 0 {
 		if encoded, err := json.Marshal([]string(wantPath)); err == nil {
-			if r.db.Dialector != nil && r.db.Dialector.Name() == "postgres" {
-				query = query.Where("category_path::jsonb = ?::jsonb", string(encoded))
-			} else {
-				query = query.Where("category_path = ?", string(encoded))
-			}
+			query = query.Where("category_path::jsonb = ?::jsonb", string(encoded))
 		}
 	}
 
@@ -1055,13 +1045,7 @@ func (r *wikiPageRepository) FindSimilarPages(
 	return out, nil
 }
 
-func wikiNormalizedTitleSQL(db *gorm.DB) string {
-	if db != nil && db.Dialector != nil && db.Dialector.Name() == "sqlite" {
-		// SQLite has no POSIX [[:space:]]. Strip the common separators that
-		// model formatting drift actually produces; callers still re-check
-		// with the Go identity fold so extras cannot leak through.
-		return "lower(replace(replace(replace(replace(replace(replace(title, ' ', ''), char(9), ''), char(10), ''), char(13), ''), char(160), ''), char(12288), ''))"
-	}
+func wikiNormalizedTitleSQL(_ *gorm.DB) string {
 	return "regexp_replace(lower(title), '[[:space:]]+', '', 'g')"
 }
 

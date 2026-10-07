@@ -10,10 +10,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"gorm.io/gorm"
+
 	"reliquary/internal/application/service/retriever"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -385,7 +385,7 @@ func (s *knowledgeTagService) enqueueIndexDeleteTask(ctx context.Context,
 		EffectiveEngines: effectiveEngines,
 		VectorStoreID:    vectorStoreID,
 	}
-	langfuse.InjectTracing(ctx, &payload)
+
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to marshal index delete payload: %v", err)

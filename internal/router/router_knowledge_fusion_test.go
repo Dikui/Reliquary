@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -16,16 +14,16 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
 	"reliquary/internal/agent/tools"
 	apprepo "reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
 	"reliquary/internal/config"
-	"reliquary/internal/database"
 	"reliquary/internal/handler"
 	"reliquary/internal/middleware"
 	chatmodel "reliquary/internal/models/chat"
+	"reliquary/internal/testutil/sqlfixture"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -76,7 +74,7 @@ type fusionEnvelope struct {
 }
 
 func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
-	db := fusionMigratedSQLite(t)
+	db := fusionFixtureDB(t)
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sqlDB.Close() })
@@ -91,7 +89,7 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 	}))
 	kbRepo := apprepo.NewKnowledgeBaseRepository(db)
 	knowledgeRepo := apprepo.NewKnowledgeRepository(db)
-	kbService := service.NewKnowledgeBaseService(db, kbRepo, knowledgeRepo, nil, nil, nil, nil, nil, nil, nil,
+	kbService := service.NewKnowledgeBaseService(db, kbRepo, knowledgeRepo, nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	kb := &types.KnowledgeBase{
 		ID: fusionKBID, Name: "Fusion KB", TenantID: fusionTenantID, CreatorID: fusionOwnerID,
@@ -100,7 +98,7 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 	require.NoError(t, kbRepo.CreateKnowledgeBase(ctx, kb))
 
 	knowledge, err := service.NewKnowledgeService(db, nil, knowledgeRepo, nil, kbService, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, fusionModelService{model: fusionChat{}}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+		nil, nil, nil, nil, fusionModelService{model: fusionChat{}}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	source := &types.Knowledge{
 		ID: fusionSourceID, TenantID: fusionTenantID, KnowledgeBaseID: fusionKBID,
@@ -250,18 +248,16 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, crossTenantRec.Code, "another tenant must not read the evidence snapshot")
 }
 
-func fusionMigratedSQLite(t *testing.T) *gorm.DB {
+func fusionFixtureDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	db, err := sqlfixture.Open("file:"+t.Name()+"?mode=memory&cache=shared", &gorm.Config{})
 	require.NoError(t, err)
-	previousDir, err := os.Getwd()
-	require.NoError(t, err)
-	require.NoError(t, os.Chdir(repoRoot))
-	t.Cleanup(func() { _ = os.Chdir(previousDir) })
-	dbPath := filepath.Join(t.TempDir(), "knowledge-fusion.sqlite")
-	require.NoError(t, database.RunMigrationsWithOptions("sqlite3://unused", database.MigrationOptions{SQLiteDBPath: dbPath}))
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
-	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&types.Tenant{}, &types.TenantMember{}, &types.KnowledgeBase{}, &types.Knowledge{},
+		&types.KnowledgeTag{}, &types.KnowledgeTagRelation{}, &types.Chunk{},
+		&types.KnowledgeEntity{}, &types.KnowledgeEntityAlias{}, &types.KnowledgeEvidence{}, &types.KnowledgeFact{},
+		&types.KnowledgeEvent{}, &types.KnowledgeEventEvidence{}, &types.KnowledgeAttention{},
+		&types.KnowledgeWorkflow{}, &types.KnowledgeWorkflowRun{}, &types.KnowledgeWorkflowStepRun{}, &types.KnowledgeWorkflowReport{},
+		&types.KnowledgeStrategyVersion{}, &types.AuditLog{}))
 	return db
 }
 

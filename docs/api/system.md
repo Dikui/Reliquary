@@ -14,7 +14,7 @@
 
 ## GET `/system/capabilities` - 获取部署能力清单
 
-返回当前部署版本，以及各功能模块是否已在后端注册对应路由。`supported: false` 表示 SPA 应隐藏相关入口；字段缺失或接口不可用时不应据此清空整个菜单（fail-open），但 Lite 版会始终将 `organizations` 标记为不支持。
+返回当前部署版本，以及各功能模块是否已在后端注册对应路由。`supported: false` 表示 SPA 应隐藏相关入口；字段缺失或接口不可用时不应据此清空整个菜单（fail-open）。
 
 **权限**：Viewer+（租户成员）；任意有效 API Key 可读（`apiKeyAny`）。
 
@@ -50,19 +50,6 @@ curl --location 'http://localhost:8080/api/v1/system/capabilities' \
 }
 ```
 
-Lite 版示例（共享空间不可用）:
-
-```json
-{
-  "capabilities": {
-    "organizations": {
-      "supported": false,
-      "reason": "not_supported_in_lite"
-    }
-  }
-}
-```
-
 ## GET `/system/info` - 获取系统信息
 
 **请求**:
@@ -83,9 +70,8 @@ curl --location 'http://localhost:8080/api/v1/system/info' \
         "commit_id": "a1b2c3d",
         "build_time": "2025-08-12T08:00:00Z",
         "go_version": "go1.21.5",
-        "keyword_index_engine": "bleve",
-        "vector_store_engine": "milvus",
-        "graph_database_engine": "neo4j",
+        "keyword_index_engine": "postgres",
+        "vector_store_engine": "postgres",
         "minio_enabled": true,
         "db_version": "20250810_001"
     },
@@ -198,19 +184,9 @@ curl --location 'http://localhost:8080/api/v1/system/storage-engine-status' \
                 "description": "MinIO 对象存储"
             },
             {
-                "name": "cos",
-                "available": false,
-                "description": "腾讯云 COS 对象存储"
-            },
-            {
                 "name": "s3",
                 "available": false,
-                "description": "AWS S3 对象存储"
-            },
-            {
-                "name": "oss",
-                "available": false,
-                "description": "阿里云 OSS 对象存储"
+                "description": "S3 兼容对象存储"
             }
         ],
         "minio_env_available": true

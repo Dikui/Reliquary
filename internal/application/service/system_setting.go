@@ -316,14 +316,14 @@ var registry = map[string]settingSpec{
 //   - The publishing replica skips its own messages by matching
 //     OriginID against its instanceID.
 //
-// When Redis is nil (lite mode / REDIS_ADDR unset), every code path
+// When Redis is nil (in-memory fixtures / REDIS_ADDR unset), every code path
 // degrades back to P1 behaviour: no cache invalidation, but local
 // edits still take effect (since Update does write the local cache
 // inline). This is the right behaviour for single-replica deployments.
 type systemSettingService struct {
 	repo  interfaces.SystemSettingRepository
 	audit interfaces.AuditLogService
-	rdb   *redis.Client // may be nil in lite mode
+	rdb   *redis.Client // may be nil in test fixtures
 	cfg   *config.Config
 
 	// instanceID disambiguates this replica from its peers in the
@@ -1082,7 +1082,7 @@ func (s *systemSettingService) Reset(ctx context.Context, key string) error {
 
 // SubscribeRedis starts a single goroutine that subscribes to the
 // pubsub channel and refreshes the local cache when peers publish
-// changes. Idempotent (subOnce). When Redis is nil (lite mode) returns
+// changes. Idempotent (subOnce). When Redis is nil (in-memory fixtures) returns
 // nil immediately — single-replica deployments don't need pubsub
 // because Update already writes the local cache inline.
 //

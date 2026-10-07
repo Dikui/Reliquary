@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"gorm.io/gorm"
+
 	"reliquary/internal/logger"
 	"reliquary/internal/searchutil"
 	"reliquary/internal/types"
@@ -57,7 +58,7 @@ type GrepChunksInput struct {
 
 // GrepChunksTool performs regex pattern matching across knowledge base chunks.
 // PostgreSQL: uses the case-insensitive POSIX operator ~*.
-// MySQL uses REGEXP; SQLite scans scoped rows with Go's regexp package.
+// Matching uses PostgreSQL case-insensitive regular expressions.
 //
 // The tool tracks previously-returned chunk IDs per-instance (one instance per
 // agent session) so that a subsequent search hitting the same chunk can be
@@ -269,15 +270,6 @@ type chunkWithTitle struct {
 // regexOperatorForDialect returns the SQL operator used to apply a POSIX
 // regular expression to a text column for the current dialect.
 // PostgreSQL ~* is case-insensitive by default; MySQL uses REGEXP.
-func (t *GrepChunksTool) regexOperatorForDialect() string {
-	switch t.db.Dialector.Name() {
-	case "postgres":
-		return "~*"
-	default:
-		// MySQL or another dialect that understands the REGEXP keyword.
-		return "REGEXP"
-	}
-}
 
 // resolveGrepScope splits search targets into full-KB, specific-knowledge, and
 // tag-constrained KB scopes. Tag scopes stay as tag IDs so the chunk query can
@@ -432,44 +424,16 @@ func (t *GrepChunksTool) searchChunks(
 
 	const maxFetchLimit = 500
 	var results []chunkWithTitle
-	if t.db.Dialector.Name() == "sqlite" {
-		// ponytail: SQLite has no built-in REGEXP. Scan scoped rows in batches;
-		// add indexed candidates only if corpus size makes this slow.
-		const batchSize = 500
-		for offset := 0; len(results) < maxFetchLimit; offset += batchSize {
-			var batch []chunkWithTitle
-			if err := query.Order("chunks.created_at DESC, chunks.id DESC").Limit(batchSize).Offset(offset).Find(&batch).Error; err != nil {
-				return nil, err
-			}
-			for _, hit := range batch {
-				for _, re := range compiled {
-					if re.MatchString(hit.Content) || re.MatchString(hit.KnowledgeTitle) {
-						results = append(results, hit)
-						break
-					}
-				}
-				if len(results) == maxFetchLimit {
-					break
-				}
-			}
-			if len(batch) < batchSize {
-				break
-			}
-		}
-	} else {
-		regexOp := t.regexOperatorForDialect()
-		var regexConditions []string
-		var regexArgs []interface{}
-		for _, q := range queries {
-			regexConditions = append(regexConditions,
-				fmt.Sprintf("(chunks.content %s ? OR knowledges.title %s ?)", regexOp, regexOp))
-			regexArgs = append(regexArgs, q, q)
-		}
-		query = query.Where("("+strings.Join(regexConditions, " OR ")+")", regexArgs...)
-		if err := query.Order("chunks.created_at DESC, chunks.id DESC").Limit(maxFetchLimit).Find(&results).Error; err != nil {
-			logger.Errorf(ctx, "[Tool][GrepChunks] Failed to fetch results: %v", err)
-			return nil, err
-		}
+	var regexConditions []string
+	var regexArgs []interface{}
+	for _, queryText := range queries {
+		regexConditions = append(regexConditions, "(chunks.content ~* ? OR knowledges.title ~* ?)")
+		regexArgs = append(regexArgs, queryText, queryText)
+	}
+	query = query.Where("("+strings.Join(regexConditions, " OR ")+")", regexArgs...)
+	if err := query.Order("chunks.created_at DESC, chunks.id DESC").Limit(maxFetchLimit).Find(&results).Error; err != nil {
+		logger.Errorf(ctx, "[Tool][GrepChunks] Failed to fetch results: %v", err)
+		return nil, err
 	}
 
 	if len(results) > 0 {

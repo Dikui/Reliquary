@@ -1,4 +1,4 @@
-.PHONY: help build run test clean docker-build-app docker-build-docreader docker-build-frontend docker-build-all docker-run migrate-up migrate-down docker-restart docker-stop start-all stop-all start-ollama stop-ollama build-images build-images-app build-images-docreader build-images-frontend clean-images check-env list-containers pull-images show-platform dev-start dev-stop dev-restart dev-logs dev-status dev-app dev-frontend docs install-swagger build-lite run-lite package-lite anydoc-lib build-anydoc
+.PHONY: help build run test clean docker-build-app docker-build-docreader docker-build-frontend docker-build-all docker-run migrate-up migrate-down docker-restart docker-stop start-all stop-all start-ollama stop-ollama build-images build-images-app build-images-docreader build-images-frontend clean-images check-env list-containers pull-images show-platform dev-start dev-stop dev-restart dev-logs dev-status dev-app dev-frontend docs install-swagger anydoc-lib build-anydoc
 
 # Show help
 help:
@@ -8,6 +8,7 @@ help:
 	@echo "  build             构建应用"
 	@echo "  run               运行应用"
 	@echo "  test              运行测试"
+	@echo "  test-pg           运行含 PostgreSQL 集成用例的测试（设置 RELIQUARY_TEST_PG_DSN）"
 	@echo "  anydoc-lib        构建 anydoc 静态库（需要 Rust 工具链）"
 	@echo "  build-anydoc      构建带 anydoc 解析引擎的应用"
 	@echo "  clean             清理构建文件"
@@ -61,11 +62,6 @@ help:
 	@echo "                    已 make anydoc-lib 时自动链接 anydoc 引擎"
 	@echo "  dev-frontend      启动前端（本地运行，需先运行 dev-start）"
 	@echo ""
-	@echo "Lite 模式（零外部依赖）:"
-	@echo "  build-lite        构建 Lite 版本（先构建前端到 web/，再构建 Go；SKIP_FRONTEND=1 跳过前端）"
-	@echo "  run-lite          构建并启动 Lite 版本"
-	@echo "  package-lite      构建并打包 Lite 发行包（tarball）"
-	@echo "  package-mac-app   构建并打包 macOS 桌面应用 (.app)"
 
 # Go related variables
 BINARY_NAME=Reliquary
@@ -106,6 +102,14 @@ run: build
 # Run tests
 test:
 	go test -v ./...
+
+.PHONY: test-pg
+export RELIQUARY_TEST_PG_DSN
+
+# Run PostgreSQL integration tests against an explicitly configured test server.
+test-pg:
+	@test -n "$$RELIQUARY_TEST_PG_DSN" || (echo "Set RELIQUARY_TEST_PG_DSN to a PostgreSQL test connection URL"; exit 1)
+	go test -count=1 -v ./...
 
 # Clean build artifacts
 clean:
@@ -246,7 +250,6 @@ deps:
 	go mod download
 
 # Build for production
-# google.golang.org/protobuf/reflect/protoregistry.conflictPolicy=warn for qdrant milvus proto conflict
 # GO_BUILD_TAGS adds optional build tags, e.g. GO_BUILD_TAGS=anydoc to link the
 # in-process office document parser (run `make anydoc-lib` first).
 build-prod:
@@ -257,41 +260,8 @@ build-prod:
 	CGO_LDFLAGS="$$(if [ "$$(uname)" = 'Darwin' ]; then echo '-Wl,-no_warn_duplicate_libraries'; fi)" \
 	BUILD_TIME=$${BUILD_TIME:-unknown}; \
 	GO_VERSION=$${GO_VERSION:-unknown}; \
-	LDFLAGS="-X 'reliquary/internal/handler.Version=$$VERSION' -X 'reliquary/internal/handler.Edition=standard' -X 'reliquary/internal/handler.CommitID=$$COMMIT_ID' -X 'reliquary/internal/handler.BuildTime=$$BUILD_TIME' -X 'reliquary/internal/handler.GoVersion=$$GO_VERSION' -X 'google.golang.org/protobuf/reflect/protoregistry.conflictPolicy=warn'"; \
+	LDFLAGS="-X 'reliquary/internal/handler.Version=$$VERSION' -X 'reliquary/internal/handler.Edition=standard' -X 'reliquary/internal/handler.CommitID=$$COMMIT_ID' -X 'reliquary/internal/handler.BuildTime=$$BUILD_TIME' -X 'reliquary/internal/handler.GoVersion=$$GO_VERSION'"; \
 	go build -tags "$(GO_BUILD_TAGS)" -ldflags="-w -s $$LDFLAGS" -o $(BINARY_NAME) $(MAIN_PATH)
-
-# Build Lite version (single binary, SQLite + in-memory queue)
-# 会先构建前端到 web/，再构建 Go 二进制；SKIP_FRONTEND=1 可跳过前端
-build-lite:
-	@if [ -f frontend/package.json ] && [ "$${SKIP_FRONTEND:-}" != "1" ]; then \
-		echo ">> Building frontend for Lite..."; \
-		(cd frontend && npm ci --prefer-offline && npm run build) && \
-		rm -rf web && cp -r frontend/dist web; \
-	elif [ "$${SKIP_FRONTEND:-}" = "1" ]; then \
-		echo ">> Skipping frontend (SKIP_FRONTEND=1)"; \
-	else \
-		echo ">> No frontend/package.json, skipping frontend"; \
-	fi
-	export EDITION=lite; \
-	eval "$$(./scripts/get_version.sh env)"; \
-	LDFLAGS="$$(./scripts/get_version.sh ldflags) -X 'google.golang.org/protobuf/reflect/protoregistry.conflictPolicy=warn'"; \
-	CGO_ENABLED=1 \
-	CGO_CFLAGS="-Wno-deprecated-declarations" \
-	CGO_LDFLAGS="$$(if [ "$$(uname)" = 'Darwin' ]; then echo '-Wl,-no_warn_duplicate_libraries'; fi)" \
-	go build -tags "sqlite_fts5" -ldflags="-w -s $$LDFLAGS" -o $(BINARY_NAME)-lite $(MAIN_PATH)
-
-# Run Lite version with .env.lite defaults
-run-lite: build-lite
-	@if [ ! -f .env.lite ]; then echo "Error: .env.lite not found"; exit 1; fi
-	@set -a && . ./.env.lite && set +a && ./$(BINARY_NAME)-lite
-
-# Package Lite version into distributable tarball
-package-lite:
-	./scripts/package-lite.sh
-
-# Package Mac App
-package-mac-app:
-	./scripts/package-mac-app.sh
 
 download_spatial:
 	go run cmd/download/duckdb/duckdb.go
@@ -346,5 +316,4 @@ dev-app:
 
 dev-frontend:
 	./scripts/dev.sh frontend
-
 

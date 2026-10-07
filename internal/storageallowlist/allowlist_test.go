@@ -16,12 +16,12 @@ func TestAllowedMap_DefaultAllowsAll(t *testing.T) {
 }
 
 func TestAllowedMap_RespectsEnv(t *testing.T) {
-	t.Setenv(AllowListEnv, "minio,cos")
+	t.Setenv(AllowListEnv, "minio,s3")
 	allowed := AllowedMap()
 	assert.True(t, allowed["minio"])
-	assert.True(t, allowed["cos"])
+	assert.True(t, allowed["s3"])
 	assert.False(t, allowed["local"])
-	assert.False(t, allowed["obs"])
+	assert.False(t, allowed["unsupported"])
 }
 
 func TestFirstAllowed(t *testing.T) {
@@ -30,8 +30,8 @@ func TestFirstAllowed(t *testing.T) {
 }
 
 func TestAllowedList(t *testing.T) {
-	t.Setenv(AllowListEnv, "obs,minio")
-	assert.Equal(t, []string{"minio", "obs"}, AllowedList())
+	t.Setenv(AllowListEnv, "s3,minio")
+	assert.Equal(t, []string{"minio", "s3"}, AllowedList())
 }
 
 func TestIsAllowed_EmptyProvider(t *testing.T) {

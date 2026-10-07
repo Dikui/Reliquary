@@ -290,7 +290,7 @@ export async function register(data: RegisterRequest): Promise<RegisterResponse>
 }
 
 /**
- * Lite 版自动初始化（创建默认用户/空间 + 签发令牌）
+ * 本地 QA 自动初始化（创建默认用户/空间 + 签发令牌）
  */
 export async function autoSetup(): Promise<LoginResponse> {
   try {
@@ -477,10 +477,6 @@ export async function validateToken(): Promise<{ success: boolean; valid?: boole
     }
   }
 }
-
-
-
-
 
 // ---- share-link registration --------------------------------------------
 

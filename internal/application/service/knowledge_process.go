@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+
 	"reliquary/internal/application/service/retriever"
 	"reliquary/internal/common"
 	werrors "reliquary/internal/errors"
@@ -21,7 +22,6 @@ import (
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/searchutil"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	secutils "reliquary/internal/utils"
@@ -314,13 +314,6 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 		} else {
 			logger.Infof(ctx, "Successfully deleted existing index data for knowledge: %s", knowledge.ID)
 		}
-	}
-
-	// 删除知识图谱数据（如果存在）
-	namespace := types.NameSpace{KnowledgeBase: knowledge.KnowledgeBaseID, Knowledge: knowledge.ID}
-	if err := s.graphEngine.DelGraph(ctx, []types.NameSpace{namespace}); err != nil {
-		logger.Warnf(ctx, "Failed to delete existing graph data (may not exist): %v", err)
-		// 不返回错误，继续处理
 	}
 
 	logger.Infof(ctx, "Cleanup completed, starting to process new chunks")
@@ -682,7 +675,7 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 			Language:        lang,
 			Attempt:         attemptFromCtx(ctx),
 		}
-		langfuse.InjectTracing(ctx, &postProcessPayload)
+
 		payloadBytes, err := json.Marshal(postProcessPayload)
 		if err == nil {
 			task := asynq.NewTask(types.TypeKnowledgePostProcess, payloadBytes,
@@ -2440,7 +2433,7 @@ func (s *knowledgeService) ReparseKnowledge(
 	// fallback path won't double-allocate when payload.Attempt is
 	// already set on the queued task.
 	reparseAttempt := 0
-	if root, n, err := s.tracker().OpenAttempt(ctx, existing.ID, ""); err == nil && root != nil {
+	if root, n, err := s.tracker().OpenAttempt(ctx, existing.ID); err == nil && root != nil {
 		reparseAttempt = n
 	} else if err != nil {
 		logger.Warnf(ctx, "[Reparse] OpenAttempt failed for %s: %v (will fall back in worker)", existing.ID, err)
@@ -2581,7 +2574,6 @@ func (s *knowledgeService) ReparseKnowledge(
 			Attempt:                  reparseAttempt,
 		}
 
-		langfuse.InjectTracing(ctx, &taskPayload)
 		payloadBytes, err := json.Marshal(taskPayload)
 		if err != nil {
 			logger.Errorf(ctx, "Failed to marshal reparse task payload: %v", err)
@@ -2635,7 +2627,6 @@ func (s *knowledgeService) ReparseKnowledge(
 			Attempt:                  reparseAttempt,
 		}
 
-		langfuse.InjectTracing(ctx, &taskPayload)
 		payloadBytes, err := json.Marshal(taskPayload)
 		if err != nil {
 			logger.Errorf(ctx, "Failed to marshal file URL reparse task payload: %v", err)
@@ -2686,7 +2677,6 @@ func (s *knowledgeService) ReparseKnowledge(
 			Attempt:                  reparseAttempt,
 		}
 
-		langfuse.InjectTracing(ctx, &taskPayload)
 		payloadBytes, err := json.Marshal(taskPayload)
 		if err != nil {
 			logger.Errorf(ctx, "Failed to marshal URL reparse task payload: %v", err)
@@ -2747,7 +2737,7 @@ func resetKnowledgeForReparse(knowledge *types.Knowledge, kb *types.KnowledgeBas
 //     bails (see processChunks / ProcessDocument / downstream handlers).
 //   - The asynq inspector (if available) dequeues pending / scheduled / retry
 //     tasks for this knowledge_id across all queues used by the pipeline
-//     and signals active workers to stop. Lite mode (no Redis) skips the
+//     and signals active workers to stop. in-memory fixtures (no Redis) skips the
 //     dequeue step — the checkpoint-based abort is the only stop signal there.
 //   - Idempotent: re-calling on an already-cancelled row is a no-op.
 //
@@ -2840,7 +2830,7 @@ func (s *knowledgeService) CancelKnowledgeParse(
 
 // dequeueKnowledgeTasks asks the task inspector to remove any queued
 // tasks for this knowledge and signal active workers to stop. Safe to
-// call when the inspector is a no-op (Lite mode).
+// call when the inspector is a no-op (in-memory fixtures).
 func (s *knowledgeService) dequeueKnowledgeTasks(ctx context.Context, knowledgeID string) {
 	if s.taskInspector == nil {
 		return
@@ -3185,7 +3175,7 @@ func (s *knowledgeService) ProcessManualUpdate(ctx context.Context, t *asynq.Tas
 	// spans and KnowledgePostProcess falls back to LatestAttempt — piling
 	// this run's summary/wiki subspans onto the previous attempt's trace.
 	attempt := 0
-	if root, n, err := s.tracker().OpenAttempt(ctx, knowledge.ID, payload.LangfuseTraceID); err == nil && root != nil {
+	if root, n, err := s.tracker().OpenAttempt(ctx, knowledge.ID); err == nil && root != nil {
 		attempt = n
 	} else if err != nil {
 		logger.Warnf(ctx, "ProcessManualUpdate: OpenAttempt failed for %s: %v", knowledge.ID, err)
@@ -3334,7 +3324,7 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) (
 	// fall back to OpenAttempt.
 	attempt := payload.Attempt
 	if attempt <= 0 {
-		if root, n, err := s.tracker().OpenAttempt(ctx, knowledge.ID, payload.LangfuseTraceID); err == nil && root != nil {
+		if root, n, err := s.tracker().OpenAttempt(ctx, knowledge.ID); err == nil && root != nil {
 			attempt = n
 		}
 	}
@@ -3903,9 +3893,8 @@ func (s *knowledgeService) resolveDocReader(
 	ctx context.Context, engine, fileType string, isURL bool, overrides map[string]string,
 ) interfaces.DocReader {
 	reader, err := docparser.NewReader(ctx, engine, fileType, isURL, docparser.ReaderDeps{
-		Overrides:               overrides,
-		Remote:                  s.documentReader,
-		WeKnoraCloudCredentials: s.tenantService.GetWeKnoraCloudCredentials,
+		Overrides: overrides,
+		Remote:    s.documentReader,
 	})
 	if err != nil {
 		logger.Warnf(ctx, "[resolveDocReader] engine=%q fileType=%q unusable: %v", engine, fileType, err)
@@ -3982,7 +3971,6 @@ func (s *knowledgeService) enqueueImageMultimodalTasks(
 			ImageIndex:      idx,
 		}
 
-		langfuse.InjectTracing(ctx, &payload)
 		payloadBytes, err := json.Marshal(payload)
 		if err != nil {
 			logger.Warnf(ctx, "Failed to marshal image multimodal payload: %v", err)

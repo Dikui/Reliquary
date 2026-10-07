@@ -8,23 +8,23 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
 	"reliquary/internal/application/repository"
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 )
 
 func anomalyTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
-	require.NoError(t, err)
+	db := pgtest.OpenFixture(t)
 	for _, ddl := range []string{
-		`CREATE TABLE knowledge_bases (id TEXT PRIMARY KEY, tenant_id INTEGER, creator_id TEXT, deleted_at DATETIME)`,
-		`CREATE TABLE knowledges (id TEXT PRIMARY KEY, tenant_id INTEGER, knowledge_base_id TEXT, parse_status TEXT, deleted_at DATETIME)`,
-		`CREATE TABLE knowledge_tags (id TEXT PRIMARY KEY, seq_id INTEGER, tenant_id INTEGER, knowledge_base_id TEXT, name TEXT, kind TEXT, color TEXT, sort_order INTEGER, created_at DATETIME, updated_at DATETIME)`,
-		`CREATE TABLE knowledge_tag_relations (knowledge_id TEXT, tag_id TEXT, created_at DATETIME, PRIMARY KEY (knowledge_id, tag_id))`,
-		`CREATE TABLE knowledge_tag_manual_decisions (knowledge_id TEXT, tag_id TEXT, selected BOOLEAN, actor_id TEXT, reason TEXT, updated_at DATETIME, PRIMARY KEY (knowledge_id, tag_id))`,
-		`CREATE TABLE chunks (id TEXT PRIMARY KEY, tenant_id INTEGER, tag_id TEXT, deleted_at DATETIME)`,
+		`CREATE TABLE knowledge_bases (id TEXT PRIMARY KEY, tenant_id INTEGER, creator_id TEXT, deleted_at TIMESTAMPTZ)`,
+		`CREATE TABLE knowledges (id TEXT PRIMARY KEY, tenant_id INTEGER, knowledge_base_id TEXT, parse_status TEXT, deleted_at TIMESTAMPTZ)`,
+		`CREATE TABLE knowledge_tags (id TEXT PRIMARY KEY, seq_id INTEGER, tenant_id INTEGER, knowledge_base_id TEXT, name TEXT, kind TEXT, color TEXT, sort_order INTEGER, created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ)`,
+		`CREATE TABLE knowledge_tag_relations (knowledge_id TEXT, tag_id TEXT, created_at TIMESTAMPTZ, PRIMARY KEY (knowledge_id, tag_id))`,
+		`CREATE TABLE knowledge_tag_manual_decisions (knowledge_id TEXT, tag_id TEXT, selected BOOLEAN, actor_id TEXT, reason TEXT, updated_at TIMESTAMPTZ, PRIMARY KEY (knowledge_id, tag_id))`,
+		`CREATE TABLE chunks (id TEXT PRIMARY KEY, tenant_id INTEGER, tag_id TEXT, deleted_at TIMESTAMPTZ)`,
 	} {
 		require.NoError(t, db.Exec(ddl).Error)
 	}

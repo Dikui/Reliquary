@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"reliquary/internal/application/service/retriever"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/models/embedding"
@@ -66,7 +67,7 @@ func TestHasMixedEngineTypes(t *testing.T) {
 		}, false},
 		{"two different", []*types.RetrieveResult{
 			{RetrieverEngineType: types.PostgresRetrieverEngineType},
-			{RetrieverEngineType: types.ElasticsearchRetrieverEngineType},
+			{RetrieverEngineType: types.RetrieverEngineType("test-engine-a")},
 		}, true},
 		{"empty + nonempty engine", []*types.RetrieveResult{
 			{RetrieverEngineType: ""},
@@ -83,18 +84,7 @@ func TestHasMixedEngineTypes(t *testing.T) {
 
 func TestIsKnownEngineType(t *testing.T) {
 	t.Parallel()
-	known := []types.RetrieverEngineType{
-		types.PostgresRetrieverEngineType,
-		types.ElasticsearchRetrieverEngineType,
-		types.ElasticFaissRetrieverEngineType,
-		types.MilvusRetrieverEngineType,
-		types.QdrantRetrieverEngineType,
-		types.WeaviateRetrieverEngineType,
-		types.SQLiteRetrieverEngineType,
-		types.InfinityRetrieverEngineType,
-		types.TencentVectorDBRetrieverEngineType,
-		types.DorisRetrieverEngineType,
-	}
+	known := []types.RetrieverEngineType{types.PostgresRetrieverEngineType}
 	for _, k := range known {
 		if !isKnownEngineType(k) {
 			t.Errorf("expected %s to be known", k)
@@ -577,20 +567,9 @@ func TestRetrieveFromStores_MultiGroupParallel_Concat(t *testing.T) {
 
 func TestRetrieveFromStores_MixedEngine_Normalizes(t *testing.T) {
 	t.Parallel()
-	// EngineAwareNormalizer policy in effect:
-	//   - ES / ElasticFaiss / OpenSearch / Weaviate / Postgres / SQLite /
-	//     Qdrant / TencentVectorDB / Doris surface non-negative cosine in
-	//     [0, 1] when the value reaches the normalizer (Lucene script_score
-	//     non-negative invariant for ES; k-NN plugin SpaceType.COSINESIMIL
-	//     pre-translation for OpenSearch; engine-internal conversions for
-	//     the rest) → passthrough via clamp01.
-	//   - Milvus is the only engine in this codebase that still surfaces
-	//     the raw signed cosine in [-1, 1] → cosine-shift via (score + 1) / 2.
-	//
-	// First sub-case below pins the ES passthrough; the Milvus sub-case
-	// pins the cosine-shift path so the [-1, 1] branch stays under coverage.
+	// Mocks use distinct engine labels to exercise score fusion and clamping.
 	fakeES := &fakeRetrieveEngineService{
-		engineType: types.ElasticsearchRetrieverEngineType,
+		engineType: types.RetrieverEngineType("test-engine-a"),
 		support:    []types.RetrieverType{types.VectorRetrieverType},
 		canned:     []*types.IndexWithScore{{ChunkID: "es1", Score: 1.0}}, // top cosine
 	}
@@ -623,7 +602,7 @@ func TestRetrieveFromStores_MixedEngine_Normalizes(t *testing.T) {
 	// (below PG 0.8, so PG out-ranks ES — the property the old cosine-shift
 	// test asserted, restated for the passthrough policy).
 	fakeES2 := &fakeRetrieveEngineService{
-		engineType: types.ElasticsearchRetrieverEngineType,
+		engineType: types.RetrieverEngineType("test-engine-a"),
 		support:    []types.RetrieverType{types.VectorRetrieverType},
 		canned:     []*types.IndexWithScore{{ChunkID: "es2", Score: 0.3}},
 	}
@@ -647,34 +626,6 @@ func TestRetrieveFromStores_MixedEngine_Normalizes(t *testing.T) {
 	assert.InDelta(t, 0.3, scoresByChunk2["es2"], 1e-9)
 	assert.InDelta(t, 0.8, scoresByChunk2["pg2"], 1e-9)
 
-	// Milvus cosine-shift coverage: raw -0.4 → (−0.4 + 1) / 2 = 0.3.
-	// Milvus is now the only engine in this switch that still uses the
-	// signed-cosine branch; without this case the [-1, 1] arm would be
-	// uncovered by the mixed-engine integration test.
-	fakeMilvus := &fakeRetrieveEngineService{
-		engineType: types.MilvusRetrieverEngineType,
-		support:    []types.RetrieverType{types.VectorRetrieverType},
-		canned:     []*types.IndexWithScore{{ChunkID: "mv1", Score: -0.4}},
-	}
-	fakePG3 := &fakeRetrieveEngineService{
-		engineType: types.PostgresRetrieverEngineType,
-		support:    []types.RetrieverType{types.VectorRetrieverType},
-		canned:     []*types.IndexWithScore{{ChunkID: "pg3", Score: 0.8}},
-	}
-	groups3 := []*storeGroup{
-		{Engine: buildBoundComposite(t, fakeMilvus), BaseParams: vectorParams("q"), TopK: 50, KBIDs: []string{"kb-mv"}},
-		{Engine: buildBoundComposite(t, fakePG3), BaseParams: vectorParams("q"), TopK: 50, KBIDs: []string{"kb-pg3"}},
-	}
-	res3, err := s.retrieveFromStores(context.Background(), groups3, retriever.EngineAwareNormalizer{})
-	require.NoError(t, err)
-	scoresByChunk3 := map[string]float64{}
-	for _, rr := range res3 {
-		for _, hit := range rr.Results {
-			scoresByChunk3[hit.ChunkID] = hit.Score
-		}
-	}
-	assert.InDelta(t, 0.3, scoresByChunk3["mv1"], 1e-9)
-	assert.InDelta(t, 0.8, scoresByChunk3["pg3"], 1e-9)
 }
 
 func TestRetrieveFromStores_KeywordPassthroughOnMixed(t *testing.T) {
@@ -683,7 +634,7 @@ func TestRetrieveFromStores_KeywordPassthroughOnMixed(t *testing.T) {
 	// types, the keyword score is NOT rescaled (BM25 unbounded — RRF
 	// fusion handles via rank).
 	fakeES := &fakeRetrieveEngineService{
-		engineType: types.ElasticsearchRetrieverEngineType,
+		engineType: types.RetrieverEngineType("test-engine-a"),
 		support:    []types.RetrieverType{types.VectorRetrieverType},
 		canned:     []*types.IndexWithScore{{ChunkID: "v1", Score: 1.0}},
 	}

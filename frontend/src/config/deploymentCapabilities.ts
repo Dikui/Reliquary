@@ -28,15 +28,8 @@ export type DeploymentCapabilityMap = Partial<Record<DeploymentCapabilityKey, De
 export function isDeploymentCapabilitySupported(
   capabilities: DeploymentCapabilityMap,
   key?: DeploymentCapabilityKey,
-  options?: { liteMode?: boolean; edition?: string },
 ): boolean {
   if (!key) return true
-  if (key === 'organizations') {
-    const isLite =
-      options?.liteMode === true ||
-      options?.edition?.trim().toLowerCase() === 'lite'
-    if (isLite) return false
-  }
   // Docker talks to a local Engine API (often docker.sock = host root), so
   // missing or failed capability probes must not leave the picker visible.
   if (key === 'settings.sandbox.docker') {

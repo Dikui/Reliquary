@@ -4,11 +4,11 @@ import { test } from 'node:test'
 import { BUILT_IN_DEFAULT, resolveDefaultLocale } from './resolveDefaultLocale.ts'
 
 test('resolveDefaultLocale prefers runtime over build-time default', () => {
-  assert.equal(resolveDefaultLocale('en-US', 'ru-RU'), 'en-US')
+  assert.equal(resolveDefaultLocale('en-US', 'zh-CN'), 'en-US')
 })
 
 test('resolveDefaultLocale falls back to build-time then built-in default', () => {
-  assert.equal(resolveDefaultLocale('', 'ko-KR'), 'ko-KR')
+  assert.equal(resolveDefaultLocale('', 'en-US'), 'en-US')
   assert.equal(resolveDefaultLocale(undefined, undefined), BUILT_IN_DEFAULT)
 })
 

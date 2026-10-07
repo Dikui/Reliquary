@@ -11,7 +11,7 @@
  * 这里把该决策收敛成单一真相源，渲染组件只需声明作用域，不再各自拼 URL。
  */
 
-export const PROVIDER_SCHEME_PATTERN = 'resource|local|minio|cos|tos|s3|oss|ks3|obs';
+export const PROVIDER_SCHEME_PATTERN = 'resource|local|minio|s3';
 
 const PROVIDER_FILE_SCHEME_RE = new RegExp(`^(${PROVIDER_SCHEME_PATTERN}):\\/\\/\\S+$`, 'i');
 const STORAGE_BACKEND_FILE_SCHEME_RE = new RegExp(

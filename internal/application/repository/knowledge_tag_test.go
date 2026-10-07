@@ -18,9 +18,9 @@ CREATE TABLE IF NOT EXISTS knowledges (
     knowledge_base_id VARCHAR(36) NOT NULL,
     type VARCHAR(50) NOT NULL DEFAULT 'file',
     title VARCHAR(255) NOT NULL DEFAULT '',
-    metadata TEXT NOT NULL DEFAULT '{}',
+    metadata JSONB NOT NULL DEFAULT '{}',
     parse_status VARCHAR(50) NOT NULL DEFAULT 'completed',
-    deleted_at DATETIME
+    deleted_at TIMESTAMPTZ
 );
 CREATE TABLE IF NOT EXISTS knowledge_tags (
     id VARCHAR(36) PRIMARY KEY,
@@ -31,13 +31,13 @@ CREATE TABLE IF NOT EXISTS knowledge_tags (
     kind VARCHAR(16) NOT NULL DEFAULT '',
     color VARCHAR(32),
     sort_order INTEGER NOT NULL DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS knowledge_tag_relations (
     knowledge_id VARCHAR(36) NOT NULL,
     tag_id VARCHAR(36) NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (knowledge_id, tag_id)
 );
 CREATE TABLE IF NOT EXISTS knowledge_tag_manual_decisions (
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS knowledge_tag_manual_decisions (
     selected BOOLEAN NOT NULL,
     actor_id VARCHAR(36) NOT NULL,
     reason TEXT NOT NULL DEFAULT '',
-    updated_at DATETIME NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
     PRIMARY KEY (knowledge_id, tag_id)
 );
 CREATE TABLE IF NOT EXISTS chunks (
@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS chunks (
     tenant_id INTEGER NOT NULL,
     knowledge_base_id VARCHAR(36) NOT NULL,
     tag_id VARCHAR(36),
-    deleted_at DATETIME
+    deleted_at TIMESTAMPTZ
 );
 `
 

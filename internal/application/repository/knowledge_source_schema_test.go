@@ -4,50 +4,29 @@ import (
 	"strings"
 	"testing"
 
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 )
 
 func TestKnowledgeSourceSchemaAllowsObjectStorageURLs(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:knowledge_source_schema?mode=memory&cache=shared"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	sqlDB, err := db.DB()
-	if err != nil {
-		t.Fatalf("get sqlite handle: %v", err)
-	}
-	sqlDB.SetMaxOpenConns(1)
+	db := pgtest.OpenFixture(t)
 	if err := db.AutoMigrate(&types.Knowledge{}); err != nil {
 		t.Fatalf("auto migrate knowledge: %v", err)
 	}
 
-	var sourceType string
-	rows, err := db.Raw("PRAGMA table_info(knowledges)").Rows()
-	if err != nil {
+	var column struct {
+		DataType               string
+		CharacterMaximumLength int
+	}
+	if err := db.Raw(`
+		SELECT data_type, character_maximum_length
+		FROM information_schema.columns
+		WHERE table_schema = current_schema() AND table_name = 'knowledges' AND column_name = 'source'
+	`).Scan(&column).Error; err != nil {
 		t.Fatalf("inspect knowledge schema: %v", err)
 	}
-
-	for rows.Next() {
-		var cid int
-		var name, typ string
-		var notNull int
-		var defaultValue any
-		var pk int
-		if err := rows.Scan(&cid, &name, &typ, &notNull, &defaultValue, &pk); err != nil {
-			t.Fatalf("scan column info: %v", err)
-		}
-		if name == "source" {
-			sourceType = strings.ToLower(typ)
-			break
-		}
-	}
-	if err := rows.Close(); err != nil {
-		t.Fatalf("close column info rows: %v", err)
-	}
-	if sourceType != "varchar(2048)" {
-		t.Fatalf("knowledge source column type = %q, want varchar(2048)", sourceType)
+	if column.DataType != "character varying" || column.CharacterMaximumLength != 2048 {
+		t.Fatalf("knowledge source column type = %q(%d), want varchar(2048)", column.DataType, column.CharacterMaximumLength)
 	}
 
 	longURL := "https://example-bucket.cos.ap-beijing.myqcloud.com/test/" +

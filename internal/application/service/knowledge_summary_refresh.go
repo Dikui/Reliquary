@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
-	"reliquary/internal/tracing/langfuse"
+
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -79,7 +79,7 @@ func restoreSummaryRefreshTenantInfo(
 
 // enqueueSummaryRefresh marks an existing summary as queued and enqueues an
 // independent refresh task. The pending status is written before Enqueue
-// because the Lite executor may run the task synchronously inside Enqueue.
+// because direct test handlers may run the task synchronously inside Enqueue.
 func enqueueSummaryRefresh(
 	ctx context.Context,
 	repo interfaces.KnowledgeRepository,
@@ -121,7 +121,7 @@ func enqueueSummaryRefresh(
 		Attempt:         tracker.LatestAttempt(ctx, knowledge.ID),
 		Refresh:         true,
 	}
-	langfuse.InjectTracing(ctx, &payload)
+
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		markFailed()

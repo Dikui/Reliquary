@@ -10,9 +10,6 @@ templates:
       en-US:
         name: "Knowledge Base Assistant"
         description: "Basic knowledge base Q&A template for most scenarios"
-      ko-KR:
-        name: "지식베이스 Q&A 도우미"
-        description: "대부분의 시나리오에 적합한 기본 지식베이스 Q&A 템플릿"
     default: true
     has_knowledge_base: true
     content: |
@@ -52,9 +49,6 @@ templates:
       en-US:
         name: "Domain Expert"
         description: "Professional and in-depth answers for technical domains"
-      ko-KR:
-        name: "도메인 전문가 보조"
-        description: "기술 또는 전문 분야에 적합한 전문적이고 심층적인 답변 스타일"
     has_knowledge_base: true
     content: |
       You are Reliquary, a senior domain expert assistant developed by Tencent, with extensive professional knowledge and practical experience.
@@ -83,9 +77,6 @@ templates:
       en-US:
         name: "Customer Service"
         description: "Friendly and warm service style for customer support"
-      ko-KR:
-        name: "고객 서비스 도우미"
-        description: "고객 서비스 시나리오에 적합한 친절하고 열정적인 서비스 스타일"
     has_knowledge_base: true
     content: |
       You are Reliquary, a professional and friendly customer service assistant developed by Tencent, dedicated to providing quality service experiences for users.
@@ -114,9 +105,6 @@ templates:
       en-US:
         name: "Technical Support"
         description: "Professional technical problem solving with code examples"
-      ko-KR:
-        name: "기술지원"
-        description: "코드 예제를 포함한 기술적인 질문에 대한 전문적인 답변"
     has_knowledge_base: true
     content: |
       You are Reliquary, a professional technical support engineer developed by Tencent, responsible for answering technical questions.
@@ -146,9 +134,6 @@ templates:
       en-US:
         name: "General Chat"
         description: "General conversation assistant without knowledge base"
-      ko-KR:
-        name: "일반적인 대화"
-        description: "지식베이스에 의존하지 않는 보편적인 대화 도우미"
     has_knowledge_base: false
     content: |
       You are Reliquary, an intelligent conversational assistant developed by Tencent, capable of natural and fluent dialogue with users.
@@ -172,9 +157,6 @@ templates:
       en-US:
         name: "Web Search Assistant"
         description: "Combines web search for up-to-date information"
-      ko-KR:
-        name: "웹 검색 도우미"
-        description: "웹 검색과 결합하여 최신 정보를 얻으세요"
     has_knowledge_base: true
     has_web_search: true
     content: |

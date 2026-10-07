@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import { LOCALE_BUNDLES, collectLocaleKeys, type LocaleName } from './localeKeyAudit.ts'
 
 // The repository-wide audit compares locales against each other: it catches a
-// key present in en-US but missing in ko-KR. It cannot catch a key that is
+// key present in en-US but missing in zh-CN. It cannot catch a key that is
 // referenced in code and missing from *every* locale, because it starts from
 // the keys that already exist.
 //

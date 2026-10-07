@@ -17,13 +17,8 @@ import (
 	"reliquary/internal/logger"
 	"reliquary/internal/modelcontext"
 	"reliquary/internal/models/chat"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 )
-
-// langfuseQueryPreview caps the query length we ship as the agent.execute
-// span input — long quoted-context queries can be many KB of prose.
-const langfuseQueryPreview = 2000
 
 // AgentEngine is the core engine for running ReAct agents.
 //
@@ -263,41 +258,6 @@ func (e *AgentEngine) Execute(
 		"context_msgs": len(llmContext),
 	})
 
-	// Open a top-level Langfuse span so the agent run — including every
-	// round's LLM call and every tool execution — groups under a single
-	// node in the Langfuse UI instead of being flat children of the HTTP
-	// trace. No-op when Langfuse is disabled.
-	imgCount := 0
-	if len(imageURLs) > 0 {
-		imgCount = len(imageURLs[0])
-	}
-	kbIDs := make([]string, 0, len(e.knowledgeBasesInfo))
-	for _, kb := range e.knowledgeBasesInfo {
-		if kb != nil {
-			kbIDs = append(kbIDs, kb.ID)
-		}
-	}
-	spanCtx, agentSpan := langfuse.GetManager().StartSpan(ctx, langfuse.SpanOptions{
-		Name: "agent.execute",
-		Input: map[string]interface{}{
-			"query":        truncateRunes(query, langfuseQueryPreview),
-			"query_len":    len(query),
-			"context_msgs": len(llmContext),
-			"image_count":  imgCount,
-		},
-		Metadata: map[string]interface{}{
-			"session_id":          sessionID,
-			"message_id":          messageID,
-			"max_iterations":      e.config.MaxIterations,
-			"parallel_tool_calls": e.config.ParallelToolCalls,
-			"web_search":          e.config.WebSearchEnabled,
-			"multi_turn":          e.config.MultiTurnEnabled,
-			"knowledge_base_ids":  kbIDs,
-			"allowed_tools":       e.config.AllowedTools,
-		},
-	})
-	ctx = spanCtx
-
 	// Initialize state
 	state := &types.AgentState{
 		RoundSteps:    []types.AgentStep{},
@@ -342,7 +302,7 @@ func (e *AgentEngine) Execute(
 				SessionID: sessionID,
 			},
 		})
-		finishAgentSpan(agentSpan, state, err)
+
 		return nil, err
 	}
 
@@ -354,35 +314,8 @@ func (e *AgentEngine) Execute(
 		"steps":      len(state.RoundSteps),
 		"complete":   state.IsComplete,
 	})
-	finishAgentSpan(agentSpan, state, nil)
-	return state, nil
-}
 
-// finishAgentSpan records the final outcome of an agent execution onto the
-// top-level Langfuse span. Extracted so the same payload is used for both
-// success and error return paths in Execute().
-func finishAgentSpan(span *langfuse.Span, state *types.AgentState, err error) {
-	if span == nil {
-		return
-	}
-	totalToolCalls := 0
-	for _, step := range state.RoundSteps {
-		totalToolCalls += len(step.ToolCalls)
-	}
-	output := map[string]interface{}{
-		"rounds":           state.CurrentRound,
-		"steps":            len(state.RoundSteps),
-		"tool_calls":       totalToolCalls,
-		"complete":         state.IsComplete,
-		"final_answer_len": len(state.FinalAnswer),
-		"final_answer":     truncateRunes(state.FinalAnswer, langfuseQueryPreview),
-	}
-	span.Finish(output, map[string]interface{}{
-		"rounds":     state.CurrentRound,
-		"steps":      len(state.RoundSteps),
-		"tool_calls": totalToolCalls,
-		"complete":   state.IsComplete,
-	}, err)
+	return state, nil
 }
 
 // truncateRunes caps s to n runes and appends "…" when truncated. Identical
@@ -477,10 +410,6 @@ loop:
 		default:
 		}
 
-		// Each iteration runs inside an "agent.round.<N>" Langfuse span.
-		// We execute the body in a closure so `defer span.Finish()` fires at
-		// every exit path (break/continue/next) without having to sprinkle
-		// manual finish calls throughout the many branches below.
 		outcome, iterErr := e.runReActIteration(ctx, state, &messages, tools,
 			sessionID, messageID, query, &emptyRetries, &consecutiveSameContent, &lastResponseContent)
 		if iterErr != nil {
@@ -543,54 +472,12 @@ func (e *AgentEngine) runReActIteration(
 	roundStart := time.Now()
 	round := state.CurrentRound + 1
 
-	// Open the round-level Langfuse span. Any chat/tool calls made inside
-	// this iteration will attach under it via ctx, giving the UI a clean
-	// trace → agent.execute → agent.round.N → (chat + tools) structure.
-	ctx, roundSpan := langfuse.GetManager().StartSpan(parentCtx, langfuse.SpanOptions{
-		Name: fmt.Sprintf("agent.round.%d", round),
-		Input: map[string]interface{}{
-			"round":          round,
-			"message_count":  len(*messagesPtr),
-			"max_iterations": e.config.MaxIterations,
-		},
-		Metadata: map[string]interface{}{
-			"iteration":  state.CurrentRound,
-			"round":      round,
-			"session_id": sessionID,
-		},
-	})
+	ctx := parentCtx
 
 	var (
 		response      *types.ChatResponse
 		toolCallCount int
 	)
-	defer func() {
-		if roundSpan == nil {
-			return
-		}
-		out := map[string]interface{}{
-			"round":      round,
-			"outcome":    outcome.String(),
-			"tool_calls": toolCallCount,
-		}
-		if response != nil {
-			out["has_tool_calls"] = len(response.ToolCalls) > 0
-			out["finish_reason"] = response.FinishReason
-			out["content_len"] = len(response.Content)
-			if response.Usage.TotalTokens > 0 {
-				out["prompt_tokens"] = response.Usage.PromptTokens
-				out["completion_tokens"] = response.Usage.CompletionTokens
-				out["total_tokens"] = response.Usage.TotalTokens
-			}
-		}
-		out["duration_ms"] = time.Since(roundStart).Milliseconds()
-		roundSpan.Finish(out, map[string]interface{}{
-			"round":       round,
-			"tool_calls":  toolCallCount,
-			"outcome":     outcome.String(),
-			"duration_ms": time.Since(roundStart).Milliseconds(),
-		}, retErr)
-	}()
 
 	// Compact older history before the next assistant response when the
 	// estimate is over the threshold. The trigger is estimateCurrentTokens —
@@ -778,7 +665,7 @@ func (e *AgentEngine) runReActIteration(
 	return iterOutcomeNext, nil
 }
 
-// String returns a stable label for Langfuse output payloads.
+// String returns a stable label for the iteration control-flow outcome.
 func (o iterOutcome) String() string {
 	switch o {
 	case iterOutcomeNext:

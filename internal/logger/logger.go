@@ -3,6 +3,7 @@ package logger
 import (
 	"context"
 	"fmt"
+	"gopkg.in/natefinch/lumberjack.v2"
 	"io"
 	"os"
 	"path"
@@ -15,7 +16,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/trace"
-	"gopkg.in/natefinch/lumberjack.v2"
+
 	"reliquary/internal/types"
 )
 
@@ -343,7 +344,7 @@ func resolveLogPathFromEnv() string {
 	if logPath := strings.TrimSpace(os.Getenv("LOG_PATH")); logPath != "" {
 		return filepath.Clean(logPath)
 	}
-	return defaultMacAppLogPath()
+	return ""
 }
 
 // resolveLogFormatFromEnv 从环境变量 LOG_FORMAT 读取自定义日志格式模板。
@@ -351,28 +352,6 @@ func resolveLogPathFromEnv() string {
 // %d=时间 %level=级别 %thread=goroutine %logger=caller %traceId=请求ID %msg=消息+结构化字段
 func resolveLogFormatFromEnv() string {
 	return strings.TrimSpace(os.Getenv("LOG_FORMAT"))
-}
-
-func defaultMacAppLogPath() string {
-	execPath, err := os.Executable()
-	if err != nil || !strings.Contains(execPath, ".app/Contents/MacOS") {
-		return ""
-	}
-
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-
-	appName := "Reliquary Lite"
-	if idx := strings.Index(execPath, ".app/Contents/MacOS"); idx >= 0 {
-		bundleName := filepath.Base(execPath[:idx+4])
-		if trimmed := strings.TrimSuffix(bundleName, ".app"); trimmed != "" {
-			appName = trimmed
-		}
-	}
-
-	return filepath.Join(homeDir, "Library", "Logs", appName, appName+".log")
 }
 
 func openLogFile(logPath string) (io.WriteCloser, error) {
@@ -517,12 +496,6 @@ func CloneContext(ctx context.Context) context.Context {
 		}
 	}
 
-	// Preserve the active OpenTelemetry span across the rebuild. The Langfuse
-	// *Trace handle above carries the trace id, but span PARENTING flows through
-	// the OTel span context (trace.SpanFromContext), which CloneContext would
-	// otherwise drop — orphaning child spans opened after a CloneContext (e.g.
-	// the agent engine's agent.execute becoming a separate trace from the HTTP
-	// root). Re-inject the recording span so children stitch to the same trace.
 	if sp := trace.SpanFromContext(ctx); sp.IsRecording() {
 		newCtx = trace.ContextWithSpan(newCtx, sp)
 	}
@@ -530,17 +503,10 @@ func CloneContext(ctx context.Context) context.Context {
 	return newCtx
 }
 
-// CloneContextWithoutTrace copies the same identity keys as CloneContext but
-// drops the Langfuse *Trace handle and the OpenTelemetry span. Use it for
-// background work that must keep tenant/session identity yet must not attach
-// child spans (Docker Engine HTTP, idle sweeps, image pulls kicked off after
-// a tool has returned) onto the originating chat trace.
+// CloneContextWithoutTrace copies identity keys into a detached background context.
 func CloneContextWithoutTrace(ctx context.Context) context.Context {
 	newCtx := context.Background()
 	for _, k := range types.ContextKeysClonedAcrossDetach() {
-		if k == types.LangfuseTraceContextKey {
-			continue
-		}
 		if v := ctx.Value(k); v != nil {
 			newCtx = context.WithValue(newCtx, k, v)
 		}

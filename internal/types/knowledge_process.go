@@ -8,8 +8,6 @@ type KnowledgeProcessOverrides struct {
 	VLMConfig                *VLMConfig                `json:"vlm_config,omitempty"`
 	ASRConfig                *ASRConfig                `json:"asr_config,omitempty"`
 	QuestionGenerationConfig *QuestionGenerationConfig `json:"question_generation_config,omitempty"`
-	GraphEnabled             *bool                     `json:"graph_enabled,omitempty"`
-	ExtractConfig            *ExtractConfig            `json:"extract_config,omitempty"`
 	// ParserEngineOverrides passes key-value configuration to docreader parsers
 	// (e.g. pdf_force_scanned=true). Merged with workspace-level overrides in the
 	// parse pipeline; per-upload values take priority on conflict.
@@ -23,6 +21,4 @@ type EffectiveProcessConfig struct {
 	VLMConfig                VLMConfig
 	ASRConfig                ASRConfig
 	QuestionGenerationConfig QuestionGenerationConfig
-	GraphEnabled             bool
-	ExtractConfig            ExtractConfig
 }

@@ -25,8 +25,7 @@ type pendingWikiScope struct {
 // recoverPendingWikiTasks recreates one trigger per pending wiki queue lane.
 //
 // task_pending_ops is deliberately durable, but the trigger that wakes its
-// consumer is not durable in Lite mode (SyncTaskExecutor is process-local) and
-// may also be absent after an interrupted Redis enqueue. Running this after all
+// consumer may be absent after an interrupted Redis enqueue. Running this after all
 // handlers are registered closes that gap. Duplicate triggers are harmless:
 // ingest claims/peeks disjoint rows and finalize coalesces its pending lane.
 func recoverPendingWikiTasks(db *gorm.DB, task interfaces.TaskEnqueuer) {

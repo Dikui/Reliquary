@@ -36,7 +36,7 @@ func extractTask(t *testing.T, payload types.MemoryExtractPayload) *asynq.Task {
 }
 
 // TestExtractionRebuildsScopeFromPayload is the regression this whole payload
-// shape exists for. Both asynq and the Lite executor hand the handler a bare
+// shape exists for. Both asynq and direct test handlers hand the handler a bare
 // context, so the task must reconstruct the workspace and subject itself. A
 // handler that read them from ctx would "succeed" while writing nothing.
 func TestExtractionRebuildsScopeFromPayload(t *testing.T) {

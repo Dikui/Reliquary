@@ -9,8 +9,8 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/robfig/cron/v3"
+
 	"reliquary/internal/logger"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -170,7 +170,7 @@ func (s *Scheduler) triggerSync(dataSourceID string, tenantID uint64) {
 		ForceFull:    false,
 		Trigger:      "schedule",
 	}
-	langfuse.InjectTracing(ctx, payload)
+
 	payloadJSON, _ := json.Marshal(payload)
 	task := asynq.NewTask(types.TypeDataSourceSync, payloadJSON)
 

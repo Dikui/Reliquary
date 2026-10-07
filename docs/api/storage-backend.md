@@ -2,7 +2,7 @@
 
 [返回目录](./README.md)
 
-存储后端（StorageBackend）API 用于管理空间的对象/文件存储实例。一个空间可以注册多个存储实例（`local`、`minio`、`cos`、`tos`、`s3`、`oss`、`ks3`、`obs`），并将不同知识库绑定到不同实例；空间维度还有一个默认实例（`default_storage_backend_id`），未显式绑定的新知识库使用该默认实例。
+存储后端（StorageBackend）API 用于管理空间的对象/文件存储实例。一个空间可以注册多个存储实例（`local`、`minio`、`s3`），并将不同知识库绑定到不同实例；空间维度还有一个默认实例（`default_storage_backend_id`），未显式绑定的新知识库使用该默认实例。
 
 接口同时管理用户创建的实例（`source: "user"`）以及从环境变量快照生成的只读实例（`source: "env"`）。存储后端 CRUD 需要 **Admin+** 角色；对 API Key 需具备 `manage_storage_backends` capability（或 full-access）。
 
@@ -27,20 +27,16 @@
 | 字段                | 类型    | 说明                                                          |
 | ------------------- | ------- | ------------------------------------------------------------- |
 | mode                | string  | MinIO 模式：`docker`（复用环境变量凭据）或 `remote`            |
-| endpoint            | string  | 对象存储 endpoint（COS 使用 region，不需要 endpoint）          |
+| endpoint            | string  | 对象存储 endpoint          |
 | region              | string  | 区域                                                          |
-| access_key_id       | string  | 访问密钥 ID（COS 对应 SecretID）；响应中掩码                   |
-| secret_access_key   | string  | 访问密钥 Secret（COS 对应 SecretKey）；响应中掩码             |
+| access_key_id       | string  | 访问密钥 ID；响应中掩码                   |
+| secret_access_key   | string  | 访问密钥 Secret；响应中掩码             |
 | bucket_name         | string  | Bucket 名称                                                   |
 | path_prefix         | string  | 对象前缀，必须为相对路径，禁止 `/` 开头或 `..` 上跳            |
-| app_id              | string  | 腾讯云 COS AppID                                              |
 | use_ssl             | boolean | 是否使用 SSL                                                  |
 | force_path_style    | boolean | S3 是否使用 path-style 寻址                                   |
-| use_temp_bucket     | boolean | OSS 是否使用临时 bucket                                       |
-| temp_bucket_name    | string  | 临时 bucket 名称                                              |
-| temp_region         | string  | 临时 bucket 区域                                              |
 
-> `endpoint`、`region`、`bucket_name`、`path_prefix` 决定对象的物理位置，**创建后不可变更**（更新时会被拒绝）；如需迁移请使用存储迁移流程。凭据可通过更新单独轮换。
+> `endpoint`、`region`、`bucket_name`、`path_prefix` 决定对象的物理位置，**创建后不可变更**（更新时会被拒绝）；新建实例只用于后续入库，现有数据不自动迁移。凭据可通过更新单独轮换。
 
 ## GET `/storage-backends/types` - 获取允许的存储类型
 
@@ -58,7 +54,7 @@ curl --location 'http://localhost:8080/api/v1/storage-backends/types' \
 ```json
 {
     "success": true,
-    "data": ["local", "minio", "cos", "s3"]
+    "data": ["local", "minio", "s3"]
 }
 ```
 

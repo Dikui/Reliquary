@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+
 	"reliquary/internal/utils"
 )
 
@@ -148,10 +149,8 @@ type ModelParameters struct {
 	// across all replicas. 0 (the default) means "fall back to the
 	// process-wide model.max_concurrency". Interactive user-facing calls are
 	// never gated. Only chat / vlm / embedding honour this (see limiter.Gate).
-	MaxConcurrency int `yaml:"max_concurrency,omitempty" json:"max_concurrency,omitempty"`
-	// WeKnoraCloud 厂商专用凭证
-	AppID     string `yaml:"app_id,omitempty"     json:"app_id,omitempty"`
-	AppSecret string `yaml:"app_secret,omitempty" json:"app_secret,omitempty"` // AES-256 加密存储，实际承载上游 API Key
+	MaxConcurrency int    `yaml:"max_concurrency,omitempty" json:"max_concurrency,omitempty"`
+	AppSecret      string `yaml:"app_secret,omitempty" json:"app_secret,omitempty"` // AES-256 加密存储，实际承载上游 API Key
 }
 
 // Per-response redaction for Model now lives in dto.NewModelResponse. The
@@ -162,7 +161,6 @@ type ModelParameters struct {
 
 // ModelIDMaxLen is the upper bound on `models.id`. Matches the actual
 // schema width on both PostgreSQL (varchar(64) in migrations/versioned/
-// 000000_init.up.sql) and SQLite (varchar(64) in migrations/sqlite/
 // 000000_init.up.sql). Loaders that accept user-provided ids (e.g. the
 // built-in models YAML loader) must reject anything longer to avoid a
 // "value too long for type" failure at INSERT time.
@@ -171,14 +169,14 @@ const ModelIDMaxLen = 64
 // DefaultBuiltinModelTenantID is the tenant id that built-in models are
 // assigned to when YAML does not specify one. Kept in sync with the seed
 // value of tenants_id_seq in migrations/versioned/000000_init.up.sql
-// (and the equivalent SQLite init); changing one without the other will
+// Changing one without the other will
 // break visibility of built-in models for the default tenant.
 const DefaultBuiltinModelTenantID uint64 = 10000
 
 // Model represents the AI model
 type Model struct {
 	// Unique identifier of the model. The actual DB schema width is
-	// varchar(64) on both PostgreSQL and SQLite (see ModelIDMaxLen);
+	// varchar(64) on both PostgreSQL (see ModelIDMaxLen);
 	// GORM's struct tag is documented to match so AutoMigrate paths
 	// produce the same shape.
 	ID string `yaml:"id"          json:"id"          gorm:"type:varchar(64);primaryKey"`
@@ -205,7 +203,7 @@ type Model struct {
 	// builtin-models loader leaves these untouched.
 	// "yaml" = declared in config/builtin_models.yaml; on every startup the
 	// loader UPSERTs the YAML set and soft-deletes YAML-managed rows whose
-	// id is no longer present in the file. Future origins (e.g. "helm",
+	// id is no longer present in the file. Future origins (e.g. "automation",
 	// "operator") can claim their own slice without interfering.
 	ManagedBy string `yaml:"managed_by"  json:"managed_by,omitempty"  gorm:"type:varchar(32);default:''"`
 	// Model status, default: active, possible: downloading, download_failed

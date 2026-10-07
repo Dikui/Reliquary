@@ -6,16 +6,15 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
+
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 )
 
 func TestTenantAPIKeyRepositoryPersistsUTCExpiry(t *testing.T) {
 	t.Setenv("TZ", "Asia/Shanghai")
 
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
-	require.NoError(t, err)
+	db := pgtest.OpenFixture(t)
 	require.NoError(t, db.AutoMigrate(&types.TenantAPIKey{}))
 
 	repo := NewTenantAPIKeyRepository(db)
@@ -44,8 +43,7 @@ func TestTenantAPIKeyRepositoryPersistsUTCExpiry(t *testing.T) {
 // TestTenantAPIKeyRepositoryUpdateIsTenantScoped 验证通用更新不会越过租户边界。
 // 输入同租户和其他租户的 Key；前者更新全部可配置字段，后者必须返回未找到。
 func TestTenantAPIKeyRepositoryUpdateIsTenantScoped(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
-	require.NoError(t, err)
+	db := pgtest.OpenFixture(t)
 	require.NoError(t, db.AutoMigrate(&types.TenantAPIKey{}))
 	repo := NewTenantAPIKeyRepository(db)
 	ctx := context.Background()

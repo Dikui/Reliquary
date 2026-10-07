@@ -14,11 +14,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"golang.org/x/sync/errgroup"
+
 	"reliquary/internal/agent"
 	apprepo "reliquary/internal/application/repository"
 	"reliquary/internal/logger"
 	"reliquary/internal/models/chat"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 )
 
@@ -49,7 +49,6 @@ func (s *wikiIngestService) scheduleFollowUp(ctx context.Context, payload WikiIn
 
 	logger.Infof(ctx, "wiki ingest: %d more documents pending for KB %s, scheduling follow-up in %s", count, payload.KnowledgeBaseID, delay)
 
-	langfuse.InjectTracing(ctx, &payload)
 	payloadBytes, _ := json.Marshal(payload)
 	t := asynq.NewTask(types.TypeWikiIngest, payloadBytes,
 		asynq.Queue(types.QueueWiki),
@@ -263,19 +262,16 @@ func (s *wikiIngestService) ProcessWikiIngest(ctx context.Context, t *asynq.Task
 	//     5-doc batch at a time. Same-slug reduce safety is provided by
 	//     withSlugLock, not by a batch-wide lock.
 	//
-	//   - Lite mode (no Redis, single process): keep the in-process
-	//     liteLocks guard so exactly one batch per KB runs at a time. Lite
-	//     targets small/local scale where serial-per-KB is simplest and the
-	//     claiming machinery (which needs FOR UPDATE SKIP LOCKED) buys
-	//     nothing.
+	//   - Tests without Redis use a process-local lock to serialize a KB
+	//     while retaining the same processing assertions.
 	if s.redisClient == nil {
-		mode = "lite"
-		if _, loaded := s.liteLocks.LoadOrStore(payload.KnowledgeBaseID, struct{}{}); loaded {
+		mode = "local"
+		if _, loaded := s.localLocks.LoadOrStore(payload.KnowledgeBaseID, struct{}{}); loaded {
 			exitStatus = "active_lock_conflict"
-			logger.Infof(ctx, "wiki ingest: another batch active for KB %s (lite lock), deferring to asynq retry", payload.KnowledgeBaseID)
+			logger.Infof(ctx, "wiki ingest: another batch active for KB %s (local lock), deferring to asynq retry", payload.KnowledgeBaseID)
 			return ErrWikiIngestConcurrent
 		}
-		defer s.liteLocks.Delete(payload.KnowledgeBaseID)
+		defer s.localLocks.Delete(payload.KnowledgeBaseID)
 	}
 
 	kb, err := s.kbService.GetKnowledgeBaseByIDOnly(ctx, payload.KnowledgeBaseID)
@@ -343,7 +339,7 @@ func (s *wikiIngestService) ProcessWikiIngest(ctx context.Context, t *asynq.Task
 	defer releaseSlot()
 
 	// Standard mode claims rows (marks claimed_at, disjoint across concurrent
-	// batches); Lite mode peeks under its in-process lock.
+	// batches); in-memory fixtures peeks under its in-process lock.
 	var pendingOps []WikiPendingOp
 	var peekedIDs []int64
 	var loadErr error
@@ -385,7 +381,7 @@ func (s *wikiIngestService) ProcessWikiIngest(ctx context.Context, t *asynq.Task
 	// wikiClaimStaleAfter (~90m). On the normal path claimsSettled flips true
 	// once the rows reach their terminal state, making this a no-op. Uses a
 	// bounded detached cleanup context because ctx may already be cancelled on
-	// the timeout path. Lite mode peeks without claiming, so there is nothing
+	// the timeout path. in-memory fixtures peeks without claiming, so there is nothing
 	// to release.
 	claimsSettled := false
 	if s.redisClient != nil && len(peekedIDs) > 0 {
@@ -633,7 +629,7 @@ func (s *wikiIngestService) ProcessWikiIngest(ctx context.Context, t *asynq.Task
 				reduceErr      error
 			)
 			// Serialize same-slug read-modify-write across concurrent batches
-			// (standard mode). runs fn directly in Lite mode.
+			// (standard mode). runs fn directly in in-memory fixtures.
 			acquired, lockErr := s.withSlugLock(reduceCtx, payload.KnowledgeBaseID, slug, func() error {
 				changed, affectedType, additionFailed, reduceErr = s.reduceSlugUpdates(
 					reduceCtx, chatModel, payload.KnowledgeBaseID, slug, updates, payload.TenantID, batchCtx, kidToWikiSpan)
@@ -965,10 +961,10 @@ func (s *wikiIngestService) ProcessWikiFinalize(ctx context.Context, t *asynq.Ta
 			}
 		}()
 	} else {
-		if _, loaded := s.liteFinalizeLocks.LoadOrStore(payload.KnowledgeBaseID, struct{}{}); loaded {
+		if _, loaded := s.localFinalizeLocks.LoadOrStore(payload.KnowledgeBaseID, struct{}{}); loaded {
 			return nil
 		}
-		defer s.liteFinalizeLocks.Delete(payload.KnowledgeBaseID)
+		defer s.localFinalizeLocks.Delete(payload.KnowledgeBaseID)
 	}
 
 	rows, err := s.pendingRepo.PeekBatch(ctx, wikiFinalizeTaskType, wikiTaskScope, payload.KnowledgeBaseID, wikiFinalizeMaxRows)

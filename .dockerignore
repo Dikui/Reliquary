@@ -38,11 +38,9 @@ temp/
 
 # 本地构建产物 / 二进制
 Reliquary
-Reliquary-lite
 /server
 /dist/
 /build/
-cmd/desktop/build/bin/
 
 # 本地数据 / 模型文件
 /models/
@@ -54,7 +52,6 @@ test/data/mswag.txt
 
 # 敏感文件
 .env
-.env.lite
 *.pem
 *.key
 *.crt

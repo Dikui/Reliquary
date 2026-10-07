@@ -73,7 +73,7 @@ INIT_RERANK_MODEL_API_KEY=your_rerank_model_api_key
 # 启动 MinIO 服务
 docker-compose --profile minio up -d
 
-# 或者启动完整服务（包括 MinIO、Neo4j、Qdrant）
+# 或者启动完整服务（包括 MinIO、联网搜索与可选 PDF 解析服务）
 docker-compose --profile full up -d
 ```
 
@@ -179,27 +179,13 @@ docker compose restart app
 ```
 
 
-## 9. 如何开启和查看 Langfuse 可观测性追踪？
-
-Reliquary 支持通过 Langfuse 对 Agent 的 ReAct 循环、大模型 Token 消耗、工具调用以及异步任务流水线进行全链路追踪。
-
-**开启步骤**：
-1. 准备一个可用的 Langfuse 实例（支持云端版或私有部署版）。
-2. 在 `.env` 文件中配置以下环境变量：
-```bash
-LANGFUSE_PUBLIC_KEY=pk-lf-...
-LANGFUSE_SECRET_KEY=sk-lf-...
-LANGFUSE_HOST=https://cloud.langfuse.com # 或你的私有部署地址
-```
-3. 重启服务后，系统会自动对所有支持的模型调用和 Agent 运行轨迹进行追踪，你可以在 Langfuse 的 Traces 面板中直观地看到每次对话和后台任务的详细执行瀑布图与 Token 统计。
-
 ## 10. 什么是 Wiki 模式？如何使用？
 
 Wiki 模式允许 Agent 根据原始文档自动生成并维护一套结构化、相互链接的 Markdown Wiki 知识库，从而实现复杂知识的体系化沉淀和图谱化。
 
 **使用方法**：
 1. 进入指定**知识库的设置** -> **索引策略 (Indexing Strategy)**。
-2. 开启 **Wiki** 索引功能（可同时结合开启**知识图谱**）。
+2. 开启 **Wiki** 索引功能。
 3. 当你向该知识库上传文档时，系统会自动触发异步任务，通过大模型提取文档中的实体与核心概念，并自动生成结构化的 Wiki 页面及页面间的知识图谱链接。
 4. 你可以在该知识库的“Wiki”标签页中，使用专用的 Wiki 浏览器查阅、管理页面，并通过可视化的知识图谱查看不同内容之间的关联关系。
 
@@ -235,18 +221,11 @@ Wiki 模式允许 Agent 根据原始文档自动生成并维护一套结构化�
 
 ## 14. 文档解析卡在「处理中」/ 解析追踪时间线打不开怎么办？
 
-0.6.1 起每个文档解析都会记录一棵 Langfuse 风格的 Span 树（`knowledge_processing_spans` 表），可在知识库卡片菜单或卡片上的「Trace」入口打开侧边时间线，逐阶段查看进度。常见情况：
+0.6.1 起每个文档解析都会记录一棵 文档处理 Span 树（`knowledge_processing_spans` 表），可在知识库卡片菜单或卡片上的「Trace」入口打开侧边时间线，逐阶段查看进度。常见情况：
 
 - **文档长时间停在「处理中」**：先打开时间线看是哪个阶段没有推进（解析 / 切分 / 向量化 / 后处理）。0.6.1 已修复多数「卡死」场景，并加入看门狗轮询；如确认是某次解析挂死，可在时间线面板点击「中止解析」，文档会进入 finalizing 后处理状态后结束。
 - **时间线一直显示「更新中」但无数据**：通常是轮询请求静默失败（网络 / 反向代理截断 SSE）。0.6.1 会显式暴露轮询失败，刷新页面或检查 Nginx 是否缓冲了响应即可。
 - **升级后没有时间线数据**：确认数据库迁移 `000055_knowledge_processing_spans`、`000056_knowledge_pending_subtasks` 已执行（服务启动会自动迁移）。
-
-## 15. 如何启用 OpenSearch 作为向量库？
-
-0.6.1 新增了 OpenSearch 向量库驱动（k-NN）。在 **设置 → 向量库** 中新增 OpenSearch 引擎并填写连接地址、凭据即可；KB 可绑定该向量库。注意：
-
-- 连接地址会经过 SSRF 策略校验，内网 / 回环地址需符合放行规则；可用「测试连接」先行校验。
-- 集成测试与索引映射细节见 [`docs/dev/opensearch-integration-test.md`](./dev/opensearch-integration-test.md)。
 
 ## 16. 内置模型（builtin models）如何用 YAML 声明式管理？
 
@@ -262,9 +241,9 @@ Wiki 模式允许 Agent 根据原始文档自动生成并维护一套结构化�
 
 ## 18. 上传时如何自定义解析配置（process_config）？
 
-0.6.2 起，文件 / URL / 文件夹上传可携带 `process_config`（`KnowledgeProcessOverrides`），在**本次批次**内覆盖知识库默认的解析引擎、分块、多模态（VLM / ASR）、问题生成、图谱抽取等设置，而不会改动 KB 全局配置。Web UI 在上传前会弹出确认对话框供调整；API 与 `reliquary doc upload` 传同名 JSON 即可。
+0.6.2 起，文件 / URL / 文件夹上传可携带 `process_config`（`KnowledgeProcessOverrides`），在**本次批次**内覆盖知识库默认的解析引擎、分块、多模态（VLM / ASR）、问题生成等设置，而不会改动 KB 全局配置。Web UI 在上传前会弹出确认对话框供调整；API 与 `reliquary doc upload` 传同名 JSON 即可。
 
-- **与 KB 默认配置的关系**：未传的字段沿用 KB 默认值；`graph_enabled` 仅在 `extract_config.enabled` 为 true 时生效。
+- **与 KB 默认配置的关系**：未传的字段沿用 KB 默认值。
 - **重新解析**：`POST /knowledge/:id/reparse` 可在 body 中传 `process_config` 以新配置重跑解析，覆盖项会写入 `knowledge.metadata.process_overrides`。
 - **图片 / 音频校验**：批次含图片时需 KB 已配置 VLM；含音频时需已配置 ASR，否则上传会被拒绝。
 - 详见 [`docs/api/knowledge.md`](./api/knowledge.md)。
@@ -332,7 +311,7 @@ SystemAdmin 可在 **系统管理 → 平台 API Key** 创建 `scope_type=platfo
 
 ## 29. 一个空间如何绑定多个对象存储实例？
 
-0.7.0 支持**多实例存储后端**（迁移 `000068_storage_backends`）。一个空间可注册多个存储实例（`local` / `minio` / `cos` / `tos` / `s3` / `oss` / `ks3` / `obs`），不同知识库绑定到不同实例，空间维度还有一个默认实例：
+0.7.0 支持**多实例存储后端**（迁移 `000068_storage_backends`）。一个空间可注册多个存储实例（`local` / `minio` / `s3`），不同知识库绑定到不同实例，空间维度还有一个默认实例：
 
 - 在 **设置 → 存储后端** 创建/测试/设为默认（需 Admin+；API Key 需 `manage_storage_backends` 能力）。
 - 未显式绑定的新知识库使用空间默认实例；响应中的 `access_key_id` / `secret_access_key` 会被掩码，更新时提交掩码占位符不会覆盖库中真实凭据。
@@ -372,10 +351,6 @@ SystemAdmin 可在 **系统管理 → 平台 API Key** 创建 `scope_type=platfo
 
 - **火山引擎 Rerank**：在 **设置 → 模型** 中添加 Rerank 模型并选择火山引擎。当单次请求文档数超过 API 上限时，客户端会自动分批发送并合并结果。vLLM Rerank 现默认不再发送 `truncate_prompt_tokens` 以提升兼容性。
 - **智谱 AI 网络搜索**：在 **设置 → 网络搜索** 中选择智谱 AI 作为搜索供应商并填写凭据即可，用于 Agent 联网检索。
-
-## 37. 升级到 0.7.1 后对话记忆（Memory）设置消失了？还需要 Neo4j 吗？
-
-0.7.1 **移除了基于 Neo4j 的会话记忆（episodic memory）** 功能，相关 API 字段、设置项与嵌入开关一并下线，对话不再依赖 Neo4j 做记忆召回。**注意：知识图谱（GraphRAG / 图检索）仍然使用 Neo4j**，因此若你启用了图谱检索，Neo4j 依旧是必需组件，无需移除部署。若你此前仅为记忆功能部署 Neo4j 且未使用图谱，可按需精简。
 
 ## 38. 官方文档在哪里看？如何本地或独立部署文档站？
 
@@ -465,9 +440,9 @@ docker run -d -p 8081:8081 reliquary-docs
 
 环境变量分两层：**空间级**（Admin，该空间所有人共用）和**个人级**（`/api/v1/me/env-vars`，值永远不会读回）。技能声明的 `RELIQUARY_*` 凭据可以按人填写。卸载沙箱里的技能不会删掉目录里的安装包。
 
-## 47. 0.7.1 删了 Neo4j 会话记忆，0.8.0 的「长期记忆」是一回事吗？
+## 47. 长期记忆如何工作？
 
-不是。0.7.1 去掉的是旧版 **Neo4j episodic conversation memory**；**知识图谱（GraphRAG）仍然用 Neo4j**。0.8.0 的长期记忆是全新产品（迁移 `000084_memory`）：
+长期记忆使用 PostgreSQL 持久保存（迁移 `000084_memory`）：
 
 - 空间管理员先打开，用户还可以再关掉自己的；
 - 类型：`profile` / `preference` / `fact` / `task` / `interest`；

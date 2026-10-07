@@ -187,18 +187,12 @@ func (s *knowledgeService) buildStorageConfig(ctx context.Context, kb *types.Kno
 	}
 
 	// Backward compatibility: if legacy cos_config has full params for the chosen provider, use them.
-	// Note: legacy StorageConfig predates tos/s3/oss/ks3, so those providers always
-	// resolve via the tenant-merge path below. Listing them here keeps the fall-through
-	// intentional (instead of an unrecognised provider silently sliding past the switch).
-	// See issue #1117: provider enum was missing tos/s3/oss in this switch.
 	sc := &kb.StorageConfig
 	hasKBFull := false
 	switch provider {
-	case "cos":
-		hasKBFull = sc.SecretID != "" && sc.BucketName != ""
 	case "minio":
 		hasKBFull = sc.BucketName != ""
-	case "local", "tos", "s3", "oss", "ks3", "obs":
+	case "local", "s3":
 		hasKBFull = false
 	}
 
@@ -211,7 +205,6 @@ func (s *knowledgeService) buildStorageConfig(ctx context.Context, kb *types.Kno
 			BucketName:      sc.BucketName,
 			AccessKeyID:     sc.SecretID,
 			SecretAccessKey: sc.SecretKey,
-			AppID:           sc.AppID,
 			PathPrefix:      sc.PathPrefix,
 		}
 	}
@@ -249,24 +242,6 @@ func (s *knowledgeService) buildStorageConfig(ctx context.Context, kb *types.Kno
 					out.SecretAccessKey = os.Getenv("MINIO_SECRET_ACCESS_KEY")
 				}
 			}
-		case "cos":
-			if sec.COS != nil {
-				out.Region = sec.COS.Region
-				out.BucketName = sec.COS.BucketName
-				out.AccessKeyID = sec.COS.SecretID
-				out.SecretAccessKey = sec.COS.SecretKey
-				out.AppID = sec.COS.AppID
-				out.PathPrefix = sec.COS.PathPrefix
-			}
-		case "tos":
-			if sec.TOS != nil {
-				out.Endpoint = sec.TOS.Endpoint
-				out.Region = sec.TOS.Region
-				out.AccessKeyID = sec.TOS.AccessKey
-				out.SecretAccessKey = sec.TOS.SecretKey
-				out.BucketName = sec.TOS.BucketName
-				out.PathPrefix = sec.TOS.PathPrefix
-			}
 		case "s3":
 			if sec.S3 != nil {
 				out.Endpoint = sec.S3.Endpoint
@@ -275,33 +250,6 @@ func (s *knowledgeService) buildStorageConfig(ctx context.Context, kb *types.Kno
 				out.SecretAccessKey = sec.S3.SecretKey
 				out.BucketName = sec.S3.BucketName
 				out.PathPrefix = sec.S3.PathPrefix
-			}
-		case "oss":
-			if sec.OSS != nil {
-				out.Endpoint = sec.OSS.Endpoint
-				out.Region = sec.OSS.Region
-				out.AccessKeyID = sec.OSS.AccessKey
-				out.SecretAccessKey = sec.OSS.SecretKey
-				out.BucketName = sec.OSS.BucketName
-				out.PathPrefix = sec.OSS.PathPrefix
-			}
-		case "ks3":
-			if sec.KS3 != nil {
-				out.Endpoint = sec.KS3.Endpoint
-				out.Region = sec.KS3.Region
-				out.AccessKeyID = sec.KS3.AccessKey
-				out.SecretAccessKey = sec.KS3.SecretKey
-				out.BucketName = sec.KS3.BucketName
-				out.PathPrefix = sec.KS3.PathPrefix
-			}
-		case "obs":
-			if sec.OBS != nil {
-				out.Endpoint = sec.OBS.Endpoint
-				out.Region = sec.OBS.Region
-				out.AccessKeyID = sec.OBS.AccessKey
-				out.SecretAccessKey = sec.OBS.SecretKey
-				out.BucketName = sec.OBS.BucketName
-				out.PathPrefix = sec.OBS.PathPrefix
 			}
 		}
 	}

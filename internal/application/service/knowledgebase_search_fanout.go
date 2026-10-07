@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"golang.org/x/sync/errgroup"
+
 	"reliquary/internal/application/service/retriever"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
@@ -174,20 +175,7 @@ func hasMixedEngineTypes(results []*types.RetrieveResult) bool {
 // caller of Normalize to deduplicate "unknown engine" WARN logs per
 // request.
 func isKnownEngineType(t types.RetrieverEngineType) bool {
-	switch t {
-	case types.ElasticsearchRetrieverEngineType,
-		types.ElasticFaissRetrieverEngineType,
-		types.MilvusRetrieverEngineType,
-		types.PostgresRetrieverEngineType,
-		types.QdrantRetrieverEngineType,
-		types.WeaviateRetrieverEngineType,
-		types.SQLiteRetrieverEngineType,
-		types.InfinityRetrieverEngineType,
-		types.TencentVectorDBRetrieverEngineType,
-		types.DorisRetrieverEngineType:
-		return true
-	}
-	return false
+	return t == types.PostgresRetrieverEngineType
 }
 
 // multiStoreRetrieveTimeout reads MULTI_STORE_RETRIEVE_TIMEOUT_SEC; falls

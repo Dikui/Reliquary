@@ -7,17 +7,17 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+
+	"reliquary/internal/application/repository"
+	chatpipeline "reliquary/internal/application/service/chat_pipeline"
 	"reliquary/internal/config"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/event"
 	"reliquary/internal/logger"
 	"reliquary/internal/models/chat"
+	"reliquary/internal/sandbox"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
-
-	"reliquary/internal/application/repository"
-	chatpipeline "reliquary/internal/application/service/chat_pipeline"
-	"reliquary/internal/sandbox"
 )
 
 func sessionUserIDFromContext(ctx context.Context) string {
@@ -877,9 +877,6 @@ func (s *sessionService) GenerateTitleAsync(
 	tenantID := ctx.Value(types.TenantIDContextKey)
 	requestID := ctx.Value(types.RequestIDContextKey)
 	language := ctx.Value(types.LanguageContextKey)
-	// Keep the Langfuse trace handle so the async title generation shows up
-	// as a child of the same trace as the originating chat request.
-	langfuseTrace := ctx.Value(types.LangfuseTraceContextKey)
 	go func() {
 		bgCtx := context.Background()
 		if tenantID != nil {
@@ -890,9 +887,6 @@ func (s *sessionService) GenerateTitleAsync(
 		}
 		if language != nil {
 			bgCtx = context.WithValue(bgCtx, types.LanguageContextKey, language)
-		}
-		if langfuseTrace != nil {
-			bgCtx = context.WithValue(bgCtx, types.LangfuseTraceContextKey, langfuseTrace)
 		}
 
 		// Skip if title already exists

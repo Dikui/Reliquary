@@ -12,7 +12,7 @@
  *   Reliquary.openWithQuery('How do I reset my password?')
  *     Opens the panel (if closed) and sends the query when the iframe is ready.
  *   Reliquary.setLocale('en-US')
- *     Switch embed UI language (zh-CN | en-US | ko-KR | ru-RU).
+ *     Switch embed UI language (zh-CN | en-US).
  *
  * Secure mode (recommended): instead of `token`, pass `tokenEndpoint` — a URL on
  * your own backend that returns { token: "ems_...", expiresIn: 1800 }. Your

@@ -541,14 +541,6 @@
                     </div>
                   </div>
 
-                  <div v-if="isGraphSectionAvailable" v-show="activeSection === 'graph'" class="section">
-                    <GraphSettings
-                      :graph-extract="uiState.nodeExtractConfig"
-                      :model-id="llmModelId"
-                      :all-models="allModels"
-                      @update:graphExtract="handleNodeExtractUpdate"
-                    />
-                  </div>
                 </div>
 
               <footer class="modal-footer">
@@ -573,7 +565,6 @@ import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import ModelSelector from '@/components/ModelSelector.vue'
 import KBParserSettings from '../settings/KBParserSettings.vue'
-import GraphSettings from '../settings/GraphSettings.vue'
 import { useChatResourcesStore } from '@/stores/chatResources'
 import { useEditorResourcesStore } from '@/stores/editorResources'
 import { useUIStore } from '@/stores/ui'
@@ -595,7 +586,7 @@ import type {
 const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp']
 const AUDIO_EXTENSIONS = ['mp3', 'wav', 'm4a', 'flac', 'ogg']
 
-type ConfigSectionKey = 'tags' | 'parser' | 'chunking' | 'multimodal' | 'asr' | 'question' | 'graph'
+type ConfigSectionKey = 'tags' | 'parser' | 'chunking' | 'multimodal' | 'asr' | 'question'
 type IssueSectionKey = 'multimodal' | 'asr'
 
 interface ChunkingUIConfig {
@@ -621,15 +612,6 @@ interface UploadUIState {
   multimodalConfig: { enabled: boolean; vllmModelId: string; descriptionLanguage?: string; customInstructions?: string }
   asrConfig: { enabled: boolean; modelId: string; language: string }
   questionGenerationConfig: { enabled: boolean; questionCount: number; customInstructions?: string }
-  nodeExtractConfig: {
-    enabled: boolean
-    text: string
-    tags: string[]
-    nodes: Array<{ name: string; attributes: string[] }>
-    relations: Array<{ node1: string; node2: string; type: string }>
-    customInstructions?: string
-  }
-  graphEnabled: boolean
   pdfForceScanned: boolean
 }
 
@@ -867,8 +849,6 @@ const tagOptions = computed(() => availableTags.value.map(tag => ({
   value: tag.id,
 })))
 
-const llmModelId = computed(() => props.kbInfo?.summary_model_id || '')
-
 const hasImages = computed(() => {
   if (props.mode === 'manual' && props.manualPreview?.content) {
     const content = props.manualPreview.content
@@ -879,15 +859,6 @@ const hasImages = computed(() => {
 
 const hasAudio = computed(() => {
   return batchFileExts.value.some(ext => AUDIO_EXTENSIONS.includes(ext))
-})
-
-const isGraphDatabaseEnabled = computed(() => {
-  const engine = editorResources.systemInfo?.graph_database_engine
-  return !!engine && engine !== 'Not Enabled'
-})
-
-const isGraphSectionAvailable = computed(() => {
-  return isGraphDatabaseEnabled.value && uiState.value.graphEnabled
 })
 
 const showMultimodalModelError = computed(() => {
@@ -960,9 +931,6 @@ const navItems = computed(() => {
     issueSectionKeys.value.has('asr'),
   )
   push('question', 'chat', t('knowledgeEditor.advanced.questionGeneration.label'))
-  if (isGraphSectionAvailable.value) {
-    push('graph', 'chart-bubble', t('knowledgeEditor.sidebar.graph'))
-  }
   return items
 })
 
@@ -1029,16 +997,6 @@ function getSectionNavStatus(
         status: t('uploadConfirm.summaryQuestionCountValue', { count: question.questionCount }),
       }
     }
-    case 'graph': {
-      if (!uiState.value.graphEnabled || !uiState.value.nodeExtractConfig.enabled) {
-        return { status: t('uploadConfirm.statusOff'), statusTone: 'muted' }
-      }
-      const tagCount = uiState.value.nodeExtractConfig.tags?.length ?? 0
-      if (tagCount > 0) {
-        return { status: t('uploadConfirm.summaryGraphTagsValue', { count: tagCount }) }
-      }
-      return { status: t('uploadConfirm.statusOn') }
-    }
     default:
       return { status: '' }
   }
@@ -1095,15 +1053,6 @@ function createDefaultUIState(): UploadUIState {
     multimodalConfig: { enabled: false, vllmModelId: '', descriptionLanguage: '', customInstructions: '' },
     asrConfig: { enabled: false, modelId: '', language: '' },
     questionGenerationConfig: { enabled: true, questionCount: 3, customInstructions: '' },
-    nodeExtractConfig: {
-      enabled: false,
-      text: '',
-      tags: [],
-      nodes: [],
-      relations: [],
-      customInstructions: '',
-    },
-    graphEnabled: false,
     pdfForceScanned: false,
   }
 }
@@ -1144,18 +1093,6 @@ function initFromKbInfo(kb: any) {
       questionCount: kb.question_generation_config?.question_count || 3,
       customInstructions: kb.question_generation_config?.custom_instructions || '',
     },
-    nodeExtractConfig: {
-      enabled: !!kb.extract_config?.enabled && !!kb.indexing_strategy?.graph_enabled,
-      text: kb.extract_config?.text || '',
-      tags: kb.extract_config?.tags || [],
-      nodes: (kb.extract_config?.nodes || []).map((node: any) => ({
-        name: node.name,
-        attributes: node.attributes || [],
-      })),
-      relations: kb.extract_config?.relations || [],
-      customInstructions: kb.extract_config?.custom_instructions || '',
-    },
-    graphEnabled: kb.indexing_strategy?.graph_enabled ?? false,
     pdfForceScanned: false,
   }
 }
@@ -1194,15 +1131,6 @@ function buildProcessOverrides(): KnowledgeProcessOverrides {
       enabled: state.questionGenerationConfig.enabled,
       question_count: state.questionGenerationConfig.questionCount,
       custom_instructions: state.questionGenerationConfig.customInstructions,
-    },
-    graph_enabled: state.nodeExtractConfig.enabled && state.graphEnabled,
-    extract_config: {
-      enabled: state.nodeExtractConfig.enabled,
-      text: state.nodeExtractConfig.text,
-      tags: state.nodeExtractConfig.tags,
-      nodes: state.nodeExtractConfig.nodes,
-      relations: state.nodeExtractConfig.relations,
-      custom_instructions: state.nodeExtractConfig.customInstructions,
     },
   }
 
@@ -1251,17 +1179,6 @@ function applyOverridesToState(o?: KnowledgeProcessOverrides | null) {
     if (qg.question_count != null) s.questionGenerationConfig.questionCount = qg.question_count
     if (qg.custom_instructions != null) s.questionGenerationConfig.customInstructions = qg.custom_instructions
   }
-  const ec = o.extract_config
-  if (ec) {
-    if (ec.enabled != null) s.nodeExtractConfig.enabled = ec.enabled
-    if (ec.text != null) s.nodeExtractConfig.text = ec.text
-    if (ec.tags) s.nodeExtractConfig.tags = ec.tags
-    if (ec.nodes) s.nodeExtractConfig.nodes = ec.nodes.map(n => ({ name: n.name, attributes: n.attributes || [] }))
-    if (ec.relations) s.nodeExtractConfig.relations = ec.relations
-    if (ec.custom_instructions != null) s.nodeExtractConfig.customInstructions = ec.custom_instructions
-  }
-  if (o.graph_enabled != null) s.graphEnabled = o.graph_enabled
-  s.nodeExtractConfig.enabled = s.nodeExtractConfig.enabled && s.graphEnabled
   if (o.parser_engine_overrides && o.parser_engine_overrides.pdf_force_scanned === 'true') {
     s.pdfForceScanned = true
   } else {
@@ -1275,14 +1192,6 @@ async function loadModels() {
     allModels.value = chatResources.allModels || []
   } catch {
     allModels.value = []
-  }
-}
-
-async function loadSystemInfo() {
-  try {
-    await editorResources.ensureSystemInfo()
-  } catch {
-    // Graph section falls back to hidden when system info is unavailable.
   }
 }
 
@@ -1328,16 +1237,9 @@ watch(
     activeSection.value = getDefaultSection()
     chunkingMoreOpen.value = false
     loadModels()
-    loadSystemInfo()
     loadTags()
   },
 )
-
-watch(isGraphSectionAvailable, (available) => {
-  if (!available && activeSection.value === 'graph') {
-    activeSection.value = getDefaultSection()
-  }
-})
 
 const appendFiles = (incoming: File[]) => {
   const existingKeys = new Set(localFiles.value.map(getUploadFileKey))
@@ -1397,11 +1299,6 @@ const handleAddVLLMModel = () => {
 
 const handleAddASRModel = () => {
   uiStore.openSettings('models', 'asr')
-}
-
-const handleNodeExtractUpdate = (config: UploadUIState['nodeExtractConfig']) => {
-  uiState.value.nodeExtractConfig = { ...config }
-  uiState.value.graphEnabled = config.enabled
 }
 
 const validateBeforeConfirm = (): boolean => {

@@ -705,7 +705,6 @@ const TOOL_NAME_KEYS: Record<string, string> = {
   wiki_read_issue: 'agentEditor.tools.wikiReadIssue',
   wiki_update_issue: 'agentEditor.tools.wikiUpdateIssue',
   todo_write: 'agentStream.tools.todoWrite',
-  knowledge_graph_extract: 'agentStream.tools.knowledgeGraphExtract',
   thinking: 'agentStream.tools.thinking',
   attachment_parsing: 'agentStream.tools.attachmentParsing',
   image_analysis: 'agentStream.tools.imageAnalysis',
@@ -1538,7 +1537,6 @@ watch(eventStream, (stream) => {
   }
 }, { deep: true, immediate: true });
 
-
 // Check if conversation is done (based on answer event with done=true or stop event)
 const isConversationDone = computed(() => {
   const stream = eventStream.value;
@@ -2239,15 +2237,9 @@ const handleCitationActivate = (el: HTMLElement) => {
   }
   if (!url) return;
   try {
-    // @ts-ignore: Wails runtime check
-    if (window.runtime && window.runtime.BrowserOpenURL) {
-      // @ts-ignore
-      window.runtime.BrowserOpenURL(url);
-    } else {
-      const newWindow = window.open(url, '_blank', 'noopener,noreferrer');
-      if (!newWindow) {
-        window.location.assign(url);
-      }
+    const newWindow = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!newWindow) {
+      window.location.assign(url);
     }
   } catch {
     window.location.assign(url);
@@ -2381,17 +2373,6 @@ const onRootClick = (e: Event) => {
     return;
   }
 
-  // Handle generic a clicks (especially in Wails desktop)
-  const aEl = target.closest?.('a') as HTMLAnchorElement | null;
-  // @ts-ignore
-  if (aEl && aEl.href && window.runtime && window.runtime.BrowserOpenURL) {
-    if (aEl.href.startsWith('http://') || aEl.href.startsWith('https://')) {
-      e.preventDefault();
-      // @ts-ignore
-      window.runtime.BrowserOpenURL(aEl.href);
-      return;
-    }
-  }
 };
 
 const onRootKeydown = (e: KeyboardEvent) => {
@@ -3503,7 +3484,6 @@ const handleAddToKnowledge = (answerEvent: any) => {
     flex-shrink: 1;
   }
 }
-
 
 @keyframes fadeInUp {
   from {

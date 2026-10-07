@@ -1,13 +1,12 @@
 // Package service: span tracker.
 //
 // SpanTracker is the pipeline-facing facade for recording per-attempt
-// progress trees. It mirrors Langfuse's vocabulary (root / span /
-// generation) so the UI's mental model matches what operators already use
-// for LLM call observability.
+// progress trees. The root, stage, subspan and generation
+// records describe the pipeline for the frontend progress timeline.
 //
 // Lifecycle:
 //
-//	attempt := tracker.OpenAttempt(ctx, knowledgeID, langfuseTraceID)
+//	attempt := tracker.OpenAttempt(ctx, knowledgeID)
 //	  // creates the root span; every subsequent Begin* call uses this attempt
 //
 //	stage := tracker.BeginStage(ctx, knowledgeID, attempt, types.StageDocReader, input)
@@ -34,6 +33,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+
 	"reliquary/internal/application/repository"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
@@ -86,7 +86,7 @@ type SpanTracker interface {
 	// OpenAttempt creates a new root span for (knowledgeID,
 	// nextAttempt) and returns its number plus the root *Span. Call
 	// at the start of a parse / reparse, before any other Begin*.
-	OpenAttempt(ctx context.Context, knowledgeID, langfuseTraceID string) (root *Span, attempt int, err error)
+	OpenAttempt(ctx context.Context, knowledgeID string) (root *Span, attempt int, err error)
 
 	// LatestAttempt returns the highest attempt number recorded for
 	// the knowledge, or 0 if it's never been parsed. Used by the API
@@ -101,8 +101,7 @@ type SpanTracker interface {
 
 	// BeginSubSpan creates a child span under parent. parent may be a
 	// stage span (for multimodal.image[i] / embedding.batch[i]) or
-	// another subspan. kind is "subspan" or "generation" — generations
-	// will be stitched to a Langfuse generation by trace_id.
+	// another subspan. kind is "subspan" or "generation".
 	BeginSubSpan(ctx context.Context, parent *Span, name, kind string, input types.JSONMap) *Span
 
 	// EndSpan marks span as done with optional output. Safe with nil.
@@ -225,7 +224,7 @@ func (t *spanTracker) touchKnowledgeHeartbeat(ctx context.Context, knowledgeID, 
 
 func newSpanID() string {
 	// Stripping the dashes saves 4 bytes per row — JSON parsers don't
-	// care, and operators paste these into queries / Langfuse where a
+	// care, and operators paste these into queries where a
 	// hex-only ID is friendlier.
 	return strings.ReplaceAll(uuid.NewString(), "-", "")
 }
@@ -246,18 +245,13 @@ func (t *spanTracker) takeStart(spanID string) (time.Time, bool) {
 	return v, ok
 }
 
-func (t *spanTracker) OpenAttempt(ctx context.Context, knowledgeID, langfuseTraceID string) (*Span, int, error) {
+func (t *spanTracker) OpenAttempt(ctx context.Context, knowledgeID string) (*Span, int, error) {
 	attempt, err := t.repo.NextAttempt(ctx, knowledgeID)
 	if err != nil {
 		return nil, 0, err
 	}
 	now := time.Now()
 	rootID := newSpanID()
-	meta := types.JSONMap{}
-	if langfuseTraceID != "" {
-		// The frontend renders a "open in Langfuse" link from this.
-		meta["langfuse_trace_id"] = langfuseTraceID
-	}
 	row := &types.KnowledgeProcessingSpan{
 		KnowledgeID: knowledgeID,
 		Attempt:     attempt,
@@ -265,7 +259,6 @@ func (t *spanTracker) OpenAttempt(ctx context.Context, knowledgeID, langfuseTrac
 		Name:        "knowledge_processing",
 		Kind:        types.SpanKindRoot,
 		Status:      types.SpanStatusRunning,
-		Metadata:    meta,
 		StartedAt:   &now,
 	}
 	if err := t.repo.Upsert(ctx, row); err != nil {
@@ -854,10 +847,10 @@ func (t *spanTracker) AbortAttempt(ctx context.Context, knowledgeID string, atte
 		types.SpanStatusCancelled, nil, errorCode, errorMessage)
 }
 
-// noopSpanTracker collapses every method to a no-op for tests/lite.
+// noopSpanTracker collapses every method to a no-op for tests.
 type noopSpanTracker struct{}
 
-func (noopSpanTracker) OpenAttempt(_ context.Context, _, _ string) (*Span, int, error) {
+func (noopSpanTracker) OpenAttempt(_ context.Context, _ string) (*Span, int, error) {
 	return nil, 0, nil
 }
 func (noopSpanTracker) LatestAttempt(_ context.Context, _ string) int { return 0 }

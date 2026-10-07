@@ -5,10 +5,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
 	"reliquary/internal/application/repository"
 	apperrors "reliquary/internal/errors"
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 )
 
@@ -43,8 +44,7 @@ func testAPITenantKeyScopeContext(tenantID uint64, keyID uint64) context.Context
 func newTestSessionService(t *testing.T) (*sessionService, *gorm.DB) {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := pgtest.OpenFixture(t)
 	require.NoError(t, db.AutoMigrate(&types.Session{}))
 
 	return &sessionService{
@@ -508,7 +508,7 @@ func TestGetSessionDeniesEmbedRuntimeFromReadingForeignEmbedSession(t *testing.T
 }
 
 // testListSessionsIMChannelSession lets QueryPaged's LEFT JOIN resolve against a
-// real table in the in-memory SQLite database.
+// real table in the isolated PostgreSQL database.
 type testListSessionsIMChannelSession struct {
 	ID          uint64 `gorm:"primaryKey;autoIncrement"`
 	SessionID   string `gorm:"column:session_id"`

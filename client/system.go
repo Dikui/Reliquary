@@ -8,19 +8,18 @@ import (
 
 // SystemInfo represents system version and configuration information
 type SystemInfo struct {
-	Version             string `json:"version"`
-	Edition             string `json:"edition"`
-	CommitID            string `json:"commit_id,omitempty"`
-	BuildTime           string `json:"build_time,omitempty"`
-	GoVersion           string `json:"go_version,omitempty"`
-	KeywordIndexEngine  string `json:"keyword_index_engine,omitempty"`
-	VectorStoreEngine   string `json:"vector_store_engine,omitempty"`
-	GraphDatabaseEngine string `json:"graph_database_engine,omitempty"`
-	MinioEnabled        bool   `json:"minio_enabled,omitempty"`
-	DBVersion           string `json:"db_version,omitempty"`
-	DBMigrationError    string `json:"db_migration_error,omitempty"`
-	StartedAt           string `json:"started_at,omitempty"`
-	UptimeSeconds       int64  `json:"uptime_seconds,omitempty"`
+	Version            string `json:"version"`
+	Edition            string `json:"edition"`
+	CommitID           string `json:"commit_id,omitempty"`
+	BuildTime          string `json:"build_time,omitempty"`
+	GoVersion          string `json:"go_version,omitempty"`
+	KeywordIndexEngine string `json:"keyword_index_engine,omitempty"`
+	VectorStoreEngine  string `json:"vector_store_engine,omitempty"`
+	MinioEnabled       bool   `json:"minio_enabled,omitempty"`
+	DBVersion          string `json:"db_version,omitempty"`
+	DBMigrationError   string `json:"db_migration_error,omitempty"`
+	StartedAt          string `json:"started_at,omitempty"`
+	UptimeSeconds      int64  `json:"uptime_seconds,omitempty"`
 }
 
 // ParserEngine represents a document parser engine
@@ -50,10 +49,7 @@ type StorageEngineStatusResponse struct {
 type StorageCheckRequest struct {
 	Provider string          `json:"provider"`
 	MinIO    json.RawMessage `json:"minio,omitempty"`
-	COS      json.RawMessage `json:"cos,omitempty"`
-	TOS      json.RawMessage `json:"tos,omitempty"`
 	S3       json.RawMessage `json:"s3,omitempty"`
-	OBS      json.RawMessage `json:"obs,omitempty"`
 }
 
 // StorageCheckResponse is the response for storage engine check

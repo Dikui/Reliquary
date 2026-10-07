@@ -1525,7 +1525,7 @@ func (h *TenantHandler) updateTenantParserEngineConfigInternal(c *gin.Context) {
 	})
 }
 
-// GetTenantStorageEngineConfig returns the tenant's storage engine config (Local, MinIO, COS parameters).
+// GetTenantStorageEngineConfig returns the tenant's storage engine config (Local and S3-compatible storage parameters).
 func (h *TenantHandler) GetTenantStorageEngineConfig(c *gin.Context) {
 	ctx := c.Request.Context()
 	tenant, _ := types.TenantInfoFromContext(ctx)

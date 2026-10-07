@@ -39,26 +39,6 @@ export interface QuestionGenerationConfigOverride {
   custom_instructions?: string
 }
 
-export interface GraphNodeOverride {
-  name: string
-  attributes?: string[]
-}
-
-export interface GraphRelationOverride {
-  node1: string
-  node2: string
-  type: string
-}
-
-export interface ExtractConfigOverride {
-  enabled?: boolean
-  text?: string
-  tags?: string[]
-  nodes?: GraphNodeOverride[]
-  relations?: GraphRelationOverride[]
-  custom_instructions?: string
-}
-
 export interface KnowledgeProcessOverrides {
   parser_engine_rules?: ParserEngineRule[]
   chunking_config?: ChunkingConfigOverride
@@ -66,7 +46,5 @@ export interface KnowledgeProcessOverrides {
   vlm_config?: VLMConfigOverride
   asr_config?: ASRConfigOverride
   question_generation_config?: QuestionGenerationConfigOverride
-  graph_enabled?: boolean
-  extract_config?: ExtractConfigOverride
   parser_engine_overrides?: Record<string, string>
 }

@@ -13,12 +13,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
+
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service/retriever"
 	"reliquary/internal/logger"
 	"reliquary/internal/models/utils/ollama"
 	"reliquary/internal/models/vlm"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	secutils "reliquary/internal/utils"
@@ -401,7 +401,7 @@ func (s *ImageMultimodalService) shouldDropOrphanedMultimodal(
 }
 
 // isFinalAsynqAttempt reports whether the current task context belongs to the
-// last retry attempt before Asynq (or the Lite executor) archives the task. We use
+// last retry attempt before Asynq (or direct test handlers) archives the task. We use
 // this to flip multimodal finalize semantics: during normal retries we skip
 // counter decrement (the retry might still succeed), but on the final attempt
 // we count the image regardless of outcome so a permanently-failing image
@@ -601,7 +601,7 @@ func (s *ImageMultimodalService) resolveFileServiceForPayload(ctx context.Contex
 }
 
 // readImageBytes loads the image bytes for a multimodal payload.
-//   - For provider:// URLs (local://, minio://, s3://, cos://, ...) it reads via
+//   - For provider:// URLs (local://, minio://, s3://, s3://, ...) it reads via
 //     the resolved FileService and NEVER falls back to HTTP — handing a
 //     provider:// URL to the HTTP downloader is what caused issue #1282.
 //   - For legacy in-flight payloads with ImageLocalPath set, it tries the local
@@ -689,7 +689,7 @@ func (s *ImageMultimodalService) enqueueKnowledgePostProcessTask(ctx context.Con
 		KnowledgeBaseID: payload.KnowledgeBaseID,
 		Language:        payload.Language,
 	}
-	langfuse.InjectTracing(ctx, &taskPayload)
+
 	payloadBytes, err := json.Marshal(taskPayload)
 	if err != nil {
 		logger.Warnf(ctx, "[ImageMultimodal] Failed to marshal post process payload: %v", err)

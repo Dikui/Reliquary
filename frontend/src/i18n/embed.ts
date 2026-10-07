@@ -328,7 +328,6 @@ const messages = {
         "getRelatedDocuments": "查找相关文档",
         "getDocumentContent": "获取文档内容",
         "todoWrite": "计划管理",
-        "knowledgeGraphExtract": "知识图谱抽取",
         "thinking": "思考",
         "imageAnalysis": "查看图片内容",
         "queryUnderstand": "理解问题",
@@ -855,7 +854,6 @@ const messages = {
         "getRelatedDocuments": "Find Related Documents",
         "getDocumentContent": "Get Document Content",
         "todoWrite": "Plan Management",
-        "knowledgeGraphExtract": "Knowledge Graph Extraction",
         "thinking": "Thinking",
         "imageAnalysis": "Image Analysis",
         "queryUnderstand": "Understand Query",
@@ -1057,212 +1055,7 @@ const messages = {
   }
 } as const
 
-type MessageTree = Record<string, unknown>
-
-function deepMerge<T extends MessageTree>(base: T, patch: MessageTree): T {
-  const out: MessageTree = { ...base }
-  for (const key of Object.keys(patch)) {
-    const patchVal = patch[key]
-    const baseVal = base[key]
-    if (
-      patchVal &&
-      typeof patchVal === 'object' &&
-      !Array.isArray(patchVal) &&
-      baseVal &&
-      typeof baseVal === 'object' &&
-      !Array.isArray(baseVal)
-    ) {
-      out[key] = deepMerge(baseVal as MessageTree, patchVal as MessageTree)
-    } else {
-      out[key] = patchVal
-    }
-  }
-  return out as T
-}
-
-const koEmbedPublish = {
-  embedPublish: {
-    title: '웹 페이지 임베드',
-    description: '에이전트를 웹 페이지에 임베드하여 방문자가 페이지 내 채팅창 또는 플로팅 버튼으로 대화할 수 있게 합니다.',
-    create: '새 임베드 채널',
-    empty: '임베드 채널 없음',
-    unnamed: '이름 없는 채널',
-    loading: '로딩 중...',
-    awaitingToken: '호스트 페이지에서 토큰 제공 대기 중…',
-    defaultChatTitle: 'AI 어시스턴트',
-    newChat: '새 대화',
-    preview: '미리보기',
-    previewIframeHint: 'iframe 임베드가 외부 페이지에서 어떻게 보이는지 시뮬레이션합니다.',
-    previewWidgetHint: '모의 호스트 페이지에서 플로팅 위젯을 표시합니다.',
-    previewMockPage: '모의 호스트 페이지',
-    previewLoading: '미리보기 로딩 중…',
-    channelDisabled: '임베드 채널이 비활성화되었습니다. 에이전트 편집기 → 웹 페이지 임베드에서 다시 활성화하세요',
-    invalidChannel: '잘못된 임베드 채널',
-    sessionFailed: '대화 세션을 생성할 수 없습니다. 나중에 다시 시도하세요',
-    missingChannel: '임베드 채널 또는 토큰 없음',
-    loadError: '로드 실패',
-  },
-  common: {
-    loading: '로딩 중...',
-    confirm: '확인',
-    cancel: '취소',
-    copy: '복사',
-    copied: '복사됨',
-  },
-  error: {
-    tokenNotFound: '로그인 토큰을 찾을 수 없습니다. 다시 로그인하세요',
-    invalidImageLink: '잘못된 이미지 링크',
-    streamFailed: '스트림 연결 실패',
-  },
-  chat: {
-    suggestedQuestions: '이렇게 물어보세요',
-    suggestedQuestionsLoading: '로딩 중...',
-    followUpQuestions: '이어서 질문',
-    followUpQuestionsLoading: '추천 질문 로딩 중',
-    thinkingAlt: '생각 중',
-    preparingAnswer: '답변을 준비하고 있습니다…',
-    connectingModelAndGeneratingAnswer: '모델에 연결하여 답변을 생성하고 있습니다…',
-    modelStillResponding: '모델 응답이 평소보다 오래 걸리고 있습니다. 계속 기다리는 중…',
-    refreshSuggestedQuestions: '다른 질문',
-    imageTooMany: '이미지는 최대 5장까지 업로드할 수 있습니다',
-    imageTypeSizeError: 'JPG/PNG/GIF/WEBP만 지원하며, 각 파일은 10MB 이하여야 합니다',
-    imageReadFailed: '이미지를 읽지 못했습니다',
-  },
-  input: {
-    placeholder: '모델에 직접 질문하세요',
-    stopGeneration: '생성 중지',
-    send: '보내기',
-    webSearch: {
-      label: '웹 검색',
-      toggleOn: '웹 검색 켜기',
-      toggleOff: '웹 검색 끄기',
-      agentDisabled: '이 에이전트에서는 웹 검색이 활성화되지 않았습니다',
-    },
-    imageUpload: {
-      label: '이미지 업로드',
-      tooltip: '이미지 업로드',
-      agentDisabled: '이 에이전트에서는 이미지 업로드가 활성화되지 않았습니다',
-    },
-    messages: {
-      webSearchEnabled: '웹 검색이 켜졌습니다',
-      webSearchDisabled: '웹 검색이 꺼졌습니다',
-      stopSuccess: '생성이 중지되었습니다',
-      stopFailed: '중지에 실패했습니다. 다시 시도하세요',
-    },
-  },
-  agentStream: {
-    mcpOAuth: {
-      waiting: '인증 대기 · {target}',
-      waitingStatus: '인증 대기',
-      targetWithTool: '{service} › {tool}',
-      titleWithService: 'OAuth · {service}',
-      titleWithTool: 'OAuth · {service} › {tool}',
-      authorize: '인증하기',
-      skip: '건너뛰기',
-      countdownShort: '{seconds}초',
-      authorizedTag: '인증됨',
-      timedOutTag: '인증 시간 초과',
-      canceledTag: '취소됨',
-      authorizedToast: '인증 성공, 계속 진행 중',
-      startFailed: '인증 시작 실패',
-      resumeFailed: '실행 재개 실패, 다시 시도하세요',
-      skipFailed: '건너뛰기 실패, 다시 시도하세요',
-    },
-  },
-} as const
-
-const ruEmbedPublish = {
-  embedPublish: {
-    title: 'Встраивание на веб-страницу',
-    description: 'Встройте агента на свою веб-страницу: посетители смогут общаться через встроенное окно чата или плавающую кнопку.',
-    create: 'Новый канал встраивания',
-    empty: 'Каналов встраивания пока нет',
-    unnamed: 'Без названия',
-    loading: 'Загрузка...',
-    awaitingToken: 'Ожидание токена от страницы-хоста…',
-    defaultChatTitle: 'AI-ассистент',
-    newChat: 'Новый чат',
-    preview: 'Предпросмотр',
-    previewIframeHint: 'Как iframe выглядит на сторонней странице.',
-    previewWidgetHint: 'Плавающий виджет на mock-странице.',
-    previewMockPage: 'Mock-страница хоста',
-    previewLoading: 'Загрузка предпросмотра…',
-    channelDisabled: 'Канал встраивания отключён. Включите в редакторе агента → Встраивание на веб-страницу',
-    invalidChannel: 'Недействительный канал встраивания',
-    sessionFailed: 'Не удалось создать сессию чата, попробуйте позже',
-    missingChannel: 'Отсутствует канал встраивания или токен',
-    loadError: 'Не удалось загрузить',
-  },
-  common: {
-    loading: 'Загрузка...',
-    confirm: 'Подтвердить',
-    cancel: 'Отмена',
-    copy: 'Копировать',
-    copied: 'Скопировано',
-  },
-  error: {
-    tokenNotFound: 'Токен входа не найден, войдите снова',
-    invalidImageLink: 'Недействительная ссылка на изображение',
-    streamFailed: 'Ошибка потокового соединения',
-  },
-  chat: {
-    suggestedQuestions: 'Вы можете спросить так',
-    suggestedQuestionsLoading: 'Загрузка...',
-    followUpQuestions: 'Спрашивайте дальше',
-    followUpQuestionsLoading: 'Загрузка рекомендуемых вопросов',
-    thinkingAlt: 'Обдумывание...',
-    preparingAnswer: 'Подготовка ответа…',
-    connectingModelAndGeneratingAnswer: 'Подключение к модели и создание ответа…',
-    modelStillResponding: 'Модель отвечает дольше обычного, продолжаем ждать…',
-    refreshSuggestedQuestions: 'Ещё',
-    imageTooMany: 'Можно загрузить не более 5 изображений',
-    imageTypeSizeError: 'Поддерживаются только JPG/PNG/GIF/WEBP, каждый файл до 10 МБ',
-    imageReadFailed: 'Не удалось прочитать изображение',
-  },
-  input: {
-    placeholder: 'Задайте вопрос модели',
-    stopGeneration: 'Остановить генерацию',
-    send: 'Отправить',
-    webSearch: {
-      label: 'Веб-поиск',
-      toggleOn: 'Включить веб-поиск',
-      toggleOff: 'Выключить веб-поиск',
-      agentDisabled: 'Веб-поиск не включён для этого агента',
-    },
-    imageUpload: {
-      label: 'Загрузить изображение',
-      tooltip: 'Загрузить изображение',
-      agentDisabled: 'Загрузка изображений не включена для этого агента',
-    },
-    messages: {
-      webSearchEnabled: 'Веб-поиск включён',
-      webSearchDisabled: 'Веб-поиск выключен',
-      stopSuccess: 'Генерация остановлена',
-      stopFailed: 'Не удалось остановить. Попробуйте снова.',
-    },
-  },
-  agentStream: {
-    mcpOAuth: {
-      waiting: 'Ожидание авторизации · {target}',
-      waitingStatus: 'Ожидание авторизации',
-      targetWithTool: '{service} › {tool}',
-      titleWithService: 'OAuth · {service}',
-      titleWithTool: 'OAuth · {service} › {tool}',
-      authorize: 'Авторизовать',
-      skip: 'Пропустить',
-      countdownShort: '{seconds} с',
-      authorizedTag: 'Авторизовано',
-      timedOutTag: 'Время авторизации истекло',
-      canceledTag: 'Отменено',
-      authorizedToast: 'Авторизация успешна, продолжаем',
-      startFailed: 'Не удалось начать авторизацию',
-      resumeFailed: 'Не удалось возобновить выполнение, повторите попытку',
-      skipFailed: 'Не удалось пропустить, повторите попытку',
-    },
-  },
-} as const
-
-const SUPPORTED_LOCALES = ['zh-CN', 'en-US', 'ko-KR', 'ru-RU'] as const
+const SUPPORTED_LOCALES = ['zh-CN', 'en-US'] as const
 export type EmbedLocale = (typeof SUPPORTED_LOCALES)[number]
 
 /** Isolated from the main app `locale` key so embed preview never hijacks admin UI language. */
@@ -1272,8 +1065,6 @@ export const EMBED_LOCALE_STORAGE_KEY = 'reliquary-embed-locale'
 export function normalizeEmbedLocale(raw: string): EmbedLocale {
   const s = raw.trim().toLowerCase()
   if (s.startsWith('en')) return 'en-US'
-  if (s.startsWith('ko')) return 'ko-KR'
-  if (s.startsWith('ru')) return 'ru-RU'
   if (s.startsWith('zh')) return 'zh-CN'
   const exact = SUPPORTED_LOCALES.find((l) => l.toLowerCase() === s)
   return exact || 'zh-CN'
@@ -1316,8 +1107,6 @@ const i18n = createI18n({
   messages: {
     'zh-CN': messages['zh-CN'],
     'en-US': messages['en-US'],
-    'ko-KR': deepMerge(messages['en-US'], koEmbedPublish),
-    'ru-RU': deepMerge(messages['en-US'], ruEmbedPublish),
   },
 })
 

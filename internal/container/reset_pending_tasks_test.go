@@ -2,16 +2,15 @@ package container
 
 import (
 	"encoding/json"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"reliquary/internal/application/service"
+	"reliquary/internal/testutil/sqlfixture"
 	"reliquary/internal/types"
 )
 
@@ -88,7 +87,7 @@ CREATE TABLE IF NOT EXISTS knowledge_bases (
 
 func setupResetPendingDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := sqlfixture.Open(":memory:", &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.Exec(resetPendingKnowledgeDDL).Error)
 	require.NoError(t, db.Exec(resetPendingSyncLogDDL).Error)
@@ -96,25 +95,6 @@ func setupResetPendingDB(t *testing.T) *gorm.DB {
 	require.NoError(t, db.Exec(resetPendingOpsDDL).Error)
 	require.NoError(t, db.Exec(resetPendingKnowledgeBasesDDL).Error)
 	return db
-}
-
-func TestResetPendingTasks_KnowledgeFindThenUpdate(t *testing.T) {
-	db := setupResetPendingDB(t)
-	stale := time.Now().Add(-2 * time.Hour)
-	require.NoError(t, db.Exec(
-		`INSERT INTO knowledges (id, parse_status, updated_at) VALUES (?, ?, ?)`,
-		"k-stuck", types.ParseStatusProcessing, stale,
-	).Error)
-
-	os.Unsetenv("REDIS_ADDR")
-	resetPendingTasks(db)
-
-	var status, errMsg string
-	require.NoError(t, db.Raw(
-		`SELECT parse_status, error_message FROM knowledges WHERE id = ?`, "k-stuck",
-	).Row().Scan(&status, &errMsg))
-	assert.Equal(t, types.ParseStatusFailed, status)
-	assert.Contains(t, errMsg, "application restart")
 }
 
 func TestResetPendingTasks_KnowledgeFreshInDistributedMode(t *testing.T) {
@@ -187,55 +167,6 @@ func TestResetPendingTasks_DistributedSummaryTaskSurvivesRestart(t *testing.T) {
 	assert.Equal(t, types.SummaryStatusProcessing, status)
 }
 
-func TestResetPendingTasks_DurableWikiOpSurvivesLiteRestart(t *testing.T) {
-	db := setupResetPendingDB(t)
-	require.NoError(t, db.Exec(
-		`INSERT INTO knowledges (id, parse_status, pending_subtasks_count)
-		 VALUES (?, ?, 1)`, "k-wiki", types.ParseStatusFinalizing,
-	).Error)
-	require.NoError(t, db.Exec(
-		`INSERT INTO task_pending_ops
-		 (tenant_id, task_type, scope, scope_id, op, dedup_key, payload)
-		 VALUES (7, ?, ?, 'kb-wiki', 'ingest', 'k-wiki', '{}')`,
-		types.TypeWikiIngest, types.TaskScopeKnowledgeBase,
-	).Error)
-
-	os.Unsetenv("REDIS_ADDR")
-	resetPendingTasks(db)
-
-	var status string
-	var pending int
-	require.NoError(t, db.Raw(
-		`SELECT parse_status, pending_subtasks_count FROM knowledges WHERE id = ?`, "k-wiki",
-	).Row().Scan(&status, &pending))
-	assert.Equal(t, types.ParseStatusFinalizing, status)
-	assert.Equal(t, 1, pending, "resumed wiki worker still owns its finalizing slot")
-}
-
-func TestResetPendingTasks_LiteWikiDoesNotHideOtherLostSubtasks(t *testing.T) {
-	db := setupResetPendingDB(t)
-	require.NoError(t, db.Exec(
-		`INSERT INTO knowledges (id, parse_status, pending_subtasks_count)
-		 VALUES (?, ?, 2)`, "k-wiki-plus-summary", types.ParseStatusFinalizing,
-	).Error)
-	require.NoError(t, db.Exec(
-		`INSERT INTO task_pending_ops
-		 (tenant_id, task_type, scope, scope_id, op, dedup_key, payload)
-		 VALUES (7, ?, ?, 'kb-wiki', 'ingest', 'k-wiki-plus-summary', '{}')`,
-		types.TypeWikiIngest, types.TaskScopeKnowledgeBase,
-	).Error)
-
-	os.Unsetenv("REDIS_ADDR")
-	resetPendingTasks(db)
-
-	var status string
-	require.NoError(t, db.Raw(
-		`SELECT parse_status FROM knowledges WHERE id = ?`, "k-wiki-plus-summary",
-	).Row().Scan(&status))
-	assert.Equal(t, types.ParseStatusFailed, status,
-		"a durable wiki op cannot recover another lost in-memory subtask")
-}
-
 func TestResetPendingTasks_SyncLogStaleRunning(t *testing.T) {
 	db := setupResetPendingDB(t)
 	stale := time.Now().Add(-2 * time.Hour)
@@ -254,43 +185,6 @@ func TestResetPendingTasks_SyncLogStaleRunning(t *testing.T) {
 	).Row().Scan(&status, &finishedAt))
 	assert.Equal(t, types.SyncLogStatusFailed, status)
 	require.NotNil(t, finishedAt)
-}
-
-func TestResetPendingTasks_SyncLogLiteMode(t *testing.T) {
-	db := setupResetPendingDB(t)
-	os.Unsetenv("REDIS_ADDR")
-	require.NoError(t, db.Exec(
-		`INSERT INTO sync_logs (id, status, started_at) VALUES (?, ?, ?)`,
-		"sync-lite", types.SyncLogStatusRunning, time.Now(),
-	).Error)
-
-	resetPendingTasks(db)
-
-	var status string
-	require.NoError(t, db.Raw(
-		`SELECT status FROM sync_logs WHERE id = ?`, "sync-lite",
-	).Row().Scan(&status))
-	assert.Equal(t, types.SyncLogStatusFailed, status)
-}
-
-func TestStuckKnowledgeParseQuery_ReuseAfterFindDoesNotBreakUpdate(t *testing.T) {
-	db := setupResetPendingDB(t)
-	stale := time.Now().Add(-2 * time.Hour)
-	require.NoError(t, db.Exec(
-		`INSERT INTO knowledges (id, parse_status, updated_at) VALUES (?, ?, ?)`,
-		"k-reuse", types.ParseStatusProcessing, stale,
-	).Error)
-
-	var rows []types.Knowledge
-	q := stuckKnowledgeParseQuery(db)
-	require.NoError(t, q.Select("id").Find(&rows).Error)
-	require.Len(t, rows, 1)
-
-	result := stuckKnowledgeParseQuery(db).Updates(map[string]interface{}{
-		"parse_status": types.ParseStatusFailed,
-	})
-	require.NoError(t, result.Error)
-	assert.Equal(t, int64(1), result.RowsAffected)
 }
 
 type recordingTaskEnqueuer struct {

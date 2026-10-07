@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+
 	"reliquary/internal/config"
 	"reliquary/internal/handler"
 	"reliquary/internal/middleware"
@@ -37,11 +38,10 @@ import (
 //	      like Owner; Contributor in someone else's KB acts like
 //	      Viewer" hold uniformly.
 //
-//	NO  — Tenant-wide infrastructure: Model, VectorStore, IM channel,
-//	      WebSearchProvider, DataSource, MCPService, WeKnoraCloud
-//	      credentials.
+//	NO  — Tenant-wide infrastructure: Model, IM channel,
+//	      WebSearchProvider, DataSource, MCPService.
 //	      => Mutating routes use Admin().
-//	      There is no "creator-of-the-vector-store" concept; configuring
+//	      There is no "creator-of-the-infrastructure" concept; configuring
 //	      it affects everyone, so only Admin+ may touch it.
 //
 //	ENTRY POINT — Routes that CREATE a new owned resource (POST
@@ -77,7 +77,7 @@ import (
 //   - As Viewer: read everything, mutate nothing.
 //   - Creating new resources (KB, agent, chat session) requires being
 //     at least Contributor.
-//   - Configuring tenant infrastructure (models, vector stores, IM,
+//   - Configuring tenant infrastructure (models, IM,
 //     etc.) requires Admin+.
 //
 // If a route makes a Contributor surprised that they CAN'T do

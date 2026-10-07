@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"reliquary/internal/types"
 )
 
@@ -113,19 +114,14 @@ func TestFindIncompleteXMLTag(t *testing.T) {
 	}
 }
 
-func TestResolveIMFileServiceForPath_LocalSchemeDespiteCOSDefault(t *testing.T) {
+func TestResolveIMFileServiceForPath_LocalSchemeDespiteS3Default(t *testing.T) {
 	t.Setenv("SYSTEM_AES_KEY", "reliquary-test-aes-key-32bytes!!!")
 	t.Setenv("APP_EXTERNAL_URL", "https://reliquary.example.com")
 
 	tenant := &types.Tenant{
 		StorageEngineConfig: &types.StorageEngineConfig{
-			DefaultProvider: "cos",
-			COS: &types.COSEngineConfig{
-				SecretID:   "id",
-				SecretKey:  "key",
-				BucketName: "bucket",
-				Region:     "ap-shanghai",
-			},
+			DefaultProvider: "s3",
+			S3:              &types.S3EngineConfig{AccessKey: "id", SecretKey: "key", BucketName: "bucket", Region: "us-east-1"},
 		},
 	}
 	svc := resolveIMFileServiceForPath(tenant, "local://10000/exports/img.png", nil)
@@ -141,13 +137,8 @@ func TestRewriteStorageURLs_LocalUsesPresignedAPI(t *testing.T) {
 
 	tenant := &types.Tenant{
 		StorageEngineConfig: &types.StorageEngineConfig{
-			DefaultProvider: "cos",
-			COS: &types.COSEngineConfig{
-				SecretID:   "id",
-				SecretKey:  "key",
-				BucketName: "bucket",
-				Region:     "ap-shanghai",
-			},
+			DefaultProvider: "s3",
+			S3:              &types.S3EngineConfig{AccessKey: "id", SecretKey: "key", BucketName: "bucket", Region: "us-east-1"},
 		},
 	}
 
@@ -157,29 +148,32 @@ func TestRewriteStorageURLs_LocalUsesPresignedAPI(t *testing.T) {
 	assert.NotContains(t, out, "myqcloud.com")
 }
 
-func TestRewriteStorageURLs_COSPathNotSignedAsLocalKey(t *testing.T) {
-	// Without real COS credentials, GetFileURL may fail; ensure we never embed
-	// local:// as a COS object key when rewriting fails.
-	tenant := &types.Tenant{
-		StorageEngineConfig: &types.StorageEngineConfig{
-			DefaultProvider: "cos",
-			COS: &types.COSEngineConfig{
-				SecretID:   "id",
-				SecretKey:  "key",
-				BucketName: "test-bucket",
-				Region:     "ap-shanghai",
-				PathPrefix: "reliquary",
-			},
-		},
-	}
-	path := "cos://test-bucket/ap-shanghai/reliquary/10000/exports/abc.png"
-	svc := resolveIMFileServiceForPath(tenant, path, nil)
-	require.NotNil(t, svc)
+func TestSimulateIMStreamFlush_CompleteImageInOnePart(t *testing.T) {
+	one := `![x](minio://wizard-test/10000/exports/uuid.png) tail`
+	sent, rem := simulateIMStreamFlush([]string{one})
+	require.Empty(t, rem)
+	require.Len(t, sent, 1)
+	assert.Equal(t, one, sent[0])
+}
 
-	in := "![img](" + path + ")"
-	out := rewriteStorageURLs(context.Background(), in, newIMFileServiceResolver(tenant, nil))
-	if out != in {
-		assert.False(t, strings.Contains(out, "local%3A"), "COS URL must not treat local:// as object key")
+func TestHoldbackCutoff_BracketInAlt(t *testing.T) {
+	in := "text ![a[b]](minio://wizard-test/10000/exp"
+	want := strings.Index(in, "![a[b]]")
+	require.GreaterOrEqual(t, want, 0)
+	assert.Equal(t, want, holdbackCutoff(in))
+}
+
+func TestSimulateIMStreamFlush_BracketInAltMiddleImage(t *testing.T) {
+	part1 := "### 1\n![ok](minio://wizard-test/10000/exports/ok.png)\n\n### 2\n"
+	part2 := "![a[b]](minio://wizard-test/10000/exports/c91cf852"
+	part3 := "-suffix.png)\n"
+
+	sent, rem := simulateIMStreamFlush([]string{part1, part2, part3})
+	require.Empty(t, rem)
+	joined := strings.Join(sent, "")
+	assert.Contains(t, joined, "![a[b]](minio://wizard-test/10000/exports/c91cf852-suffix.png)")
+	for _, chunk := range sent {
+		assert.False(t, orphanMarkdownImageOpenRe.MatchString(chunk))
 	}
 }
 
@@ -221,7 +215,7 @@ func TestHoldbackCutoff(t *testing.T) {
 		},
 		{
 			"bare truncated scoped URL without markdown wrapper",
-			"prefix storage://backend-a/cos://bucket/10000/exp",
+			"prefix storage://backend-a/s3://bucket/10000/exp",
 			7,
 		},
 	}
@@ -242,6 +236,46 @@ func TestHoldbackCutoff(t *testing.T) {
 	}
 }
 
+func TestCleanIMContent_AfterStreamReassembly(t *testing.T) {
+	t.Setenv("SYSTEM_AES_KEY", "reliquary-test-aes-key-32bytes!!!")
+	t.Setenv("APP_EXTERNAL_URL", "https://reliquary.example.com")
+
+	tenant := &types.Tenant{
+		StorageEngineConfig: &types.StorageEngineConfig{
+			DefaultProvider: "s3",
+			S3:              &types.S3EngineConfig{AccessKey: "id", SecretKey: "key", BucketName: "bucket", Region: "us-east-1"},
+		},
+	}
+
+	parts := []string{
+		`![知识助理"知识库"管理视图界面](local://10000/exports/c91cf852`,
+		`-9c72-f549da25619a.png)`,
+	}
+	sent, rem := simulateIMStreamFlush(parts)
+	require.Empty(t, rem)
+	joined := strings.Join(sent, "")
+	out := cleanIMContent(context.Background(), joined, tenant, nil)
+	assert.Contains(t, out, "/api/v1/files/presigned")
+	assert.NotContains(t, out, "local://10000")
+}
+
+func TestRewriteStorageURLs_MultipleImagesInOneChunk(t *testing.T) {
+	t.Setenv("SYSTEM_AES_KEY", "reliquary-test-aes-key-32bytes!!!")
+	t.Setenv("APP_EXTERNAL_URL", "https://reliquary.example.com")
+
+	tenant := &types.Tenant{
+		StorageEngineConfig: &types.StorageEngineConfig{DefaultProvider: "s3"},
+	}
+
+	doc := "### 1\n\n![a](local://10000/exports/bb524693.png)\n\n### 2\n\n" +
+		`![知识助理"知识库"管理视图界面](local://10000/exports/c91cf852.png)` + "\n\n### 3\n\n" +
+		"![c](local://10000/exports/a0423e91.png)\n"
+
+	out := rewriteStorageURLs(context.Background(), doc, newIMFileServiceResolver(tenant, nil))
+	assert.NotContains(t, out, "local://")
+	assert.Equal(t, 3, strings.Count(out, "/api/v1/files/presigned"))
+}
+
 // simulateIMStreamFlushStep mirrors one handleMessageStream flush (see flush() in service.go).
 func simulateIMStreamFlushStep(holdback, incoming string, final bool) (sent, newHoldback string) {
 	chunk := holdback + incoming
@@ -258,6 +292,20 @@ func simulateIMStreamFlushStep(holdback, incoming string, final bool) (sent, new
 	return chunk, holdback
 }
 
+// orphanMarkdownImageOpenRe detects a flush chunk that ends with an opened Markdown
+// image (](...) without the URL — the bug we fixed.
+var orphanMarkdownImageOpenRe = regexp.MustCompile(`!\[[^\]]*\]\(\s*$`)
+
+func TestSimulateIMStreamFlush_BareProviderURLStillHeld(t *testing.T) {
+	s1, hb1 := simulateIMStreamFlushStep("", "intro ", false)
+	assert.Equal(t, "intro ", s1)
+
+	s2, hb2 := simulateIMStreamFlushStep(hb1, "minio://wizard-test/10000/exp", false)
+	assert.Empty(t, s2)
+	require.NotEmpty(t, hb2)
+	assert.True(t, strings.HasPrefix(hb2, "minio://wizard-test/10000/exp"))
+}
+
 // simulateIMStreamFlush mirrors handleMessageStream's flush/holdback logic (non-final
 // flushes apply holdbackCutoff; final flush sends everything).
 func simulateIMStreamFlush(parts []string) (sent []string, remainder string) {
@@ -272,10 +320,6 @@ func simulateIMStreamFlush(parts []string) (sent []string, remainder string) {
 	}
 	return sent, pending
 }
-
-// orphanMarkdownImageOpenRe detects a flush chunk that ends with an opened Markdown
-// image (](...) without the URL — the bug we fixed.
-var orphanMarkdownImageOpenRe = regexp.MustCompile(`!\[[^\]]*\]\(\s*$`)
 
 func TestSimulateIMStreamFlush_MiddleImageNotSplit(t *testing.T) {
 	// Reproduces the user report: three images; the middle one was split at minio://.
@@ -327,88 +371,4 @@ func TestSimulateIMStreamFlush_FirstChunkHoldsMiddleImagePrefix(t *testing.T) {
 	assert.True(t, strings.HasPrefix(hb2, "![知识助理"),
 		"holdback should include full markdown image prefix, got %q", hb2)
 	assert.False(t, orphanMarkdownImageOpenRe.MatchString(s1))
-}
-
-func TestSimulateIMStreamFlush_CompleteImageInOnePart(t *testing.T) {
-	one := `![x](minio://wizard-test/10000/exports/uuid.png) tail`
-	sent, rem := simulateIMStreamFlush([]string{one})
-	require.Empty(t, rem)
-	require.Len(t, sent, 1)
-	assert.Equal(t, one, sent[0])
-}
-
-func TestSimulateIMStreamFlush_BareProviderURLStillHeld(t *testing.T) {
-	s1, hb1 := simulateIMStreamFlushStep("", "intro ", false)
-	assert.Equal(t, "intro ", s1)
-
-	s2, hb2 := simulateIMStreamFlushStep(hb1, "minio://wizard-test/10000/exp", false)
-	assert.Empty(t, s2)
-	require.NotEmpty(t, hb2)
-	assert.True(t, strings.HasPrefix(hb2, "minio://wizard-test/10000/exp"))
-}
-
-func TestCleanIMContent_AfterStreamReassembly(t *testing.T) {
-	t.Setenv("SYSTEM_AES_KEY", "reliquary-test-aes-key-32bytes!!!")
-	t.Setenv("APP_EXTERNAL_URL", "https://reliquary.example.com")
-
-	tenant := &types.Tenant{
-		StorageEngineConfig: &types.StorageEngineConfig{
-			DefaultProvider: "cos",
-			COS: &types.COSEngineConfig{
-				SecretID:   "id",
-				SecretKey:  "key",
-				BucketName: "bucket",
-				Region:     "ap-shanghai",
-			},
-		},
-	}
-
-	parts := []string{
-		`![知识助理"知识库"管理视图界面](local://10000/exports/c91cf852`,
-		`-9c72-f549da25619a.png)`,
-	}
-	sent, rem := simulateIMStreamFlush(parts)
-	require.Empty(t, rem)
-	joined := strings.Join(sent, "")
-	out := cleanIMContent(context.Background(), joined, tenant, nil)
-	assert.Contains(t, out, "/api/v1/files/presigned")
-	assert.NotContains(t, out, "local://10000")
-}
-
-func TestHoldbackCutoff_BracketInAlt(t *testing.T) {
-	in := "text ![a[b]](minio://wizard-test/10000/exp"
-	want := strings.Index(in, "![a[b]]")
-	require.GreaterOrEqual(t, want, 0)
-	assert.Equal(t, want, holdbackCutoff(in))
-}
-
-func TestSimulateIMStreamFlush_BracketInAltMiddleImage(t *testing.T) {
-	part1 := "### 1\n![ok](minio://wizard-test/10000/exports/ok.png)\n\n### 2\n"
-	part2 := "![a[b]](minio://wizard-test/10000/exports/c91cf852"
-	part3 := "-suffix.png)\n"
-
-	sent, rem := simulateIMStreamFlush([]string{part1, part2, part3})
-	require.Empty(t, rem)
-	joined := strings.Join(sent, "")
-	assert.Contains(t, joined, "![a[b]](minio://wizard-test/10000/exports/c91cf852-suffix.png)")
-	for _, chunk := range sent {
-		assert.False(t, orphanMarkdownImageOpenRe.MatchString(chunk))
-	}
-}
-
-func TestRewriteStorageURLs_MultipleImagesInOneChunk(t *testing.T) {
-	t.Setenv("SYSTEM_AES_KEY", "reliquary-test-aes-key-32bytes!!!")
-	t.Setenv("APP_EXTERNAL_URL", "https://reliquary.example.com")
-
-	tenant := &types.Tenant{
-		StorageEngineConfig: &types.StorageEngineConfig{DefaultProvider: "cos"},
-	}
-
-	doc := "### 1\n\n![a](local://10000/exports/bb524693.png)\n\n### 2\n\n" +
-		`![知识助理"知识库"管理视图界面](local://10000/exports/c91cf852.png)` + "\n\n### 3\n\n" +
-		"![c](local://10000/exports/a0423e91.png)\n"
-
-	out := rewriteStorageURLs(context.Background(), doc, newIMFileServiceResolver(tenant, nil))
-	assert.NotContains(t, out, "local://")
-	assert.Equal(t, 3, strings.Count(out, "/api/v1/files/presigned"))
 }

@@ -14,11 +14,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
+
 	"reliquary/internal/application/service/retriever"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
 	"reliquary/internal/models/embedding"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 	secutils "reliquary/internal/utils"
 )
@@ -171,7 +171,6 @@ func (s *knowledgeService) UpsertFAQEntries(ctx context.Context,
 		taskPayload.Entries = payload.Entries
 	}
 
-	langfuse.InjectTracing(ctx, &taskPayload)
 	payloadBytes, err := json.Marshal(taskPayload)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to marshal FAQ import task payload: %v", err)

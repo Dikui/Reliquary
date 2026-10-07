@@ -27,33 +27,6 @@
   document.documentElement.style.colorScheme=t==='dark'?'dark':'light';
   document.body.style.background=bg;
   document.body.style.minHeight='100%';
-  try{
-    var w=window.runtime;
-    if(w){
-      if(t==='dark'){
-        if(w.WindowSetDarkTheme)w.WindowSetDarkTheme();
-        if(w.WindowSetBackgroundColour)w.WindowSetBackgroundColour(24,24,24,255);
-      }else{
-        if(w.WindowSetLightTheme)w.WindowSetLightTheme();
-        if(w.WindowSetBackgroundColour)w.WindowSetBackgroundColour(238,238,238,255);
-      }
-    }
-  }catch(_){}
-})();
-</script>
-<script>
-(function(){
-  try {
-    if (localStorage.getItem('reliquary_lite_mode') !== 'true') return;
-    var saved = sessionStorage.getItem('reliquary_lite_last_path');
-    if (!saved || saved.indexOf('/platform/') !== 0 || saved.indexOf('/platform/organizations') === 0) return;
-    var path = window.location.pathname;
-    if (path !== '/' && path !== '/platform' && path !== '/platform/knowledge-bases') return;
-    var target = saved.indexOf('#') >= 0 ? saved.slice(0, saved.indexOf('#')) : saved;
-    if (!target) return;
-    var current = window.location.pathname + window.location.search;
-    if (target !== current) window.history.replaceState(window.history.state, '', target);
-  } catch (e) {}
 })();
 </script>
 <script src="/config.js"></script>

@@ -7,8 +7,7 @@
 // SQL-query failures by task type, scope, or tenant.
 //
 // The package is intentionally separate from /internal/middleware (which
-// is gin-only) and from /internal/tracing/langfuse (which has its own
-// mux.Use). Putting it in its own package keeps the import graph tidy:
+// is gin-only). Putting it in its own package keeps the import graph tidy:
 // it depends on types/interfaces and asynq, nothing else inside the
 // project.
 package asynqdl
@@ -19,6 +18,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -27,7 +27,7 @@ import (
 // Middleware returns an asynq.MiddlewareFunc that records dead-lettered
 // tasks. It is safe to install before any other asynq middleware: the
 // inner handler's return value is forwarded verbatim, so every layer
-// (langfuse tracing, business handlers) still sees the original
+// (including business handlers) still sees the original
 // error/result.
 //
 // Behaviour:

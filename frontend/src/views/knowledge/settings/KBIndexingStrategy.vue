@@ -41,25 +41,9 @@
         <slot name="wiki-settings" />
       </template>
 
-      <!-- Knowledge Graph -->
-      <div class="setting-row">
-        <div class="setting-info">
-          <label>{{ $t('knowledgeEditor.indexing.graphTitle') }}</label>
-          <p class="desc">{{ $t('knowledgeEditor.indexing.graphDesc') }}</p>
-        </div>
-        <div class="setting-control">
-          <t-switch
-            :model-value="modelValue.graphEnabled"
-            @change="(val: boolean) => update('graphEnabled', val)"
-            size="medium"
-          />
-        </div>
-      </div>
 
-      <!-- Graph sub-settings (inline when enabled) -->
-      <template v-if="modelValue.graphEnabled">
-        <slot name="graph-settings" />
-      </template>
+
+
     </div>
   </div>
 </template>
@@ -71,7 +55,6 @@ export interface IndexingStrategy {
   vectorEnabled: boolean
   keywordEnabled: boolean
   wikiEnabled: boolean
-  graphEnabled: boolean
 }
 
 const props = defineProps<{

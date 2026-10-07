@@ -5,7 +5,6 @@ import { useI18n } from 'vue-i18n'
 import { copyWithToast } from '@/utils/clipboard'
 import { getKnowledgeSpans, reparseKnowledge, cancelKnowledgeParse, getKnowledgeDetails } from '@/api/knowledge-base/index'
 import {
-  groupPostprocessGraphSpans,
   knowledgeSpansPayloadHasTrace,
   summarizePostprocessTasks,
   type KnowledgeTraceNode,
@@ -152,7 +151,7 @@ const stages = computed<SpanNode[]>(() => {
   const byName = new Map<string, SpanNode>()
   for (const c of children) {
     if (c && c.kind === 'stage' && c.name) {
-      byName.set(c.name, c.name === 'postprocess' ? groupPostprocessGraphSpans(c) : c)
+      byName.set(c.name, c)
     }
   }
   return STAGES.map((n) => byName.get(n) || ({ name: n, kind: 'stage', status: 'pending' } as SpanNode))
@@ -201,7 +200,7 @@ function formatSpanDuration(node: SpanNode): string {
 
 function isPolling(status?: string): boolean {
   // finalizing is the post-process fan-out window — subspans
-  // (summary / question / graph.chunk[*]) are still actively producing
+  // (summary / question) are still actively producing
   // events, so we must keep polling and drawing LIVE.
   return status === 'pending' || status === 'processing' || status === 'finalizing'
 }
@@ -215,7 +214,7 @@ function isHardTerminal(status?: string): boolean {
 }
 
 // True if any node in the trace is still running/pending. Crucial for
-// postprocess — its subspans (summary/question/graph.chunk[*]) run
+// postprocess — its subspans (summary/question) run
 // asynchronously AFTER the main pipeline closes, so parse_status
 // flips to 'completed' while there's plenty of work still happening.
 // Without checking the tree we'd stop polling at that moment and
@@ -277,7 +276,7 @@ function spanTreeLastActivity(node?: SpanNode): number {
   return max
 }
 
-// Async post-pipeline tasks (summary, question, graph.chunk[*],
+// Async post-pipeline tasks (summary, question,
 // wiki) open their postprocess.* subspans AFTER the parse pipeline
 // has finalised — wiki in particular fires 30s after enqueue thanks
 // to wikiIngestDelay. At that exact moment parse_status is already
@@ -322,7 +321,7 @@ const isWithinQuiesceGrace = computed<boolean>(() => {
 //     hidden badge driver):
 //     Strict mode. Poll ONLY while the parse pipeline itself is
 //     non-terminal. Post-pipeline async work (wiki / summary /
-//     question / graph subspans) is intentionally ignored —
+//     question subspans) is intentionally ignored —
 //     otherwise the hidden mount would keep firing /spans every
 //     2s until those finish, even though the user has closed the
 //     trace drawer and is only looking at the header badge (whose
@@ -672,7 +671,7 @@ const totalMs = computed<number>(() => {
   if (t0.value === null || tEnd.value === null) return 0
   // The trace's own duration_ms only covers the parsing pipeline up to
   // FinalizeAttempt. Async post-processing subspans (summary / question /
-  // graph) keep producing rows AFTER the root closes — so the time axis
+  // Wiki) keep producing rows AFTER the root closes — so the time axis
   // must scale to the latest descendant end, otherwise their bars get
   // clipped past the right edge. Take the max of (root duration, observed
   // span tail) regardless of polling state.
@@ -951,9 +950,6 @@ function localizedStatus(status: string): string {
 function rowLabel(row: FlatRow): string {
   if (row.isRoot) return t('knowledgeStages.root')
   if (row.isStage) return t(`knowledgeStages.stage.${row.node.name}`)
-  if (row.node.name === 'postprocess.graph') return t('knowledgeStages.processConfig.graph')
-  const graphChunk = /^postprocess\.graph\.chunk\[(\d+)\]$/.exec(row.node.name)
-  if (graphChunk) return `${t('knowledgeStages.processConfig.graph')} #${Number(graphChunk[1]) + 1}`
   return row.node.name
 }
 
@@ -1139,7 +1135,7 @@ const viewingLatestAttempt = computed<boolean>(() => {
 })
 
 // The authoritative status for the header badge. During the async
-// post-pipeline window (summary / question / graph / wiki), the latest
+// post-pipeline window (summary / question / wiki), the latest
 // attempt's ROOT span closes — so trace.status reads 'done' — while
 // those subspans can still be running or can later make the knowledge fail.
 // The latest knowledge row is therefore authoritative for ALL statuses,
@@ -1389,9 +1385,6 @@ const processConfigLines = computed<string[]>(() => {
     lines.push(`${t(k('question'))}: ${qg.enabled ? t(k('questionOn'), { n: qg.question_count ?? 3 }) : t(k('off'))}`)
   }
 
-  const graph = o.graph_enabled ?? o.extract_config?.enabled
-  if (graph != null) lines.push(`${t(k('graph'))}: ${onOff(graph)}`)
-
   return lines.length ? lines : [t('knowledgeStages.processConfig.kbDefault')]
 })
 </script>
@@ -1419,7 +1412,7 @@ const processConfigLines = computed<string[]>(() => {
     </template>
 
     <!-- =========================================================
-         FULL MODE — Langfuse-style waterfall, lives inside the
+         FULL MODE — processing waterfall, lives inside the
          secondary drawer. Bottom-docked detail panel.
          ========================================================= -->
     <template v-else>

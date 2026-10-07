@@ -102,7 +102,7 @@ export function sanitizeHTML(html: string): string {
   if (!html || typeof html !== 'string') {
     return '';
   }
-  
+
   try {
     const preparedHTML = protectProviderImageSrcInHTML(html);
     return sanitizeWithSecurityHooks(
@@ -239,7 +239,7 @@ export function escapeHTML(text: string): string {
   if (!text || typeof text !== 'string') {
     return '';
   }
-  
+
   const map: { [key: string]: string } = {
     '&': '&amp;',
     '<': '&lt;',
@@ -250,7 +250,7 @@ export function escapeHTML(text: string): string {
     '`': '&#x60;',
     '=': '&#x3D;'
   };
-  
+
   return text.replace(/[&<>"'`=\/]/g, (s) => map[s]);
 }
 
@@ -277,7 +277,7 @@ export function isValidURL(url: string): boolean {
   if (isProviderFileURL(trimmed)) {
     return true;
   }
-  
+
   try {
     const urlObj = new URL(trimmed);
     return ['http:', 'https:'].includes(urlObj.protocol);
@@ -295,14 +295,14 @@ export function safeMarkdownToHTML(markdown: string): string {
   if (!markdown || typeof markdown !== 'string') {
     return '';
   }
-  
+
   // 首先转义可能的 HTML 标签
   const escapedMarkdown = markdown
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
     .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
     .replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, '')
     .replace(/<embed\b[^<]*(?:(?!<\/embed>)<[^<]*)*<\/embed>/gi, '');
-  
+
   return escapedMarkdown;
 }
 
@@ -315,15 +315,15 @@ export function sanitizeUserInput(input: string): string {
   if (!input || typeof input !== 'string') {
     return '';
   }
-  
+
   // 移除控制字符
   let cleaned = input.replace(/[\x00-\x1F\x7F-\x9F]/g, '');
-  
+
   // 限制长度
   if (cleaned.length > 10000) {
     cleaned = cleaned.substring(0, 10000);
   }
-  
+
   return cleaned.trim();
 }
 
@@ -336,7 +336,7 @@ export function isValidImageURL(url: string): boolean {
   if (!isValidURL(url)) {
     return false;
   }
-  
+
   return true;
 }
 
@@ -351,13 +351,13 @@ export function createSafeImage(src: string, alt: string = '', title: string = '
   if (!isValidImageURL(src)) {
     return '';
   }
-  
+
   // src is validated by isValidImageURL; keep URL structure unchanged.
   // Only escape quotes to avoid breaking attributes.
   const safeSrc = src.replace(/"/g, '&quot;');
   const safeAlt = escapeHTML(alt);
   const safeTitle = escapeHTML(title);
-  
+
   return `<img src="${safeSrc}" alt="${safeAlt}" title="${safeTitle}" class="markdown-image" style="max-width: 100%; height: auto;">`;
 }
 
@@ -477,7 +477,7 @@ export async function hydrateProtectedFileImages(
   }
 
   const images = root.querySelectorAll<HTMLImageElement>(
-    'img[data-protected-src], img[src^="resource://"], img[src^="storage://"], img[src^="local://"], img[src^="minio://"], img[src^="cos://"], img[src^="tos://"], img[src^="s3://"], img[src^="oss://"], img[src^="ks3://"], img[src^="obs://"]',
+    'img[data-protected-src], img[src^="resource://"], img[src^="storage://"], img[src^="local://"], img[src^="minio://"], img[src^="s3://"]',
   );
   if (!images.length) {
     return;

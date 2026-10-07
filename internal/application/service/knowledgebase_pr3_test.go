@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
+
 	"reliquary/internal/application/service/retriever"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/storageallowlist"
@@ -175,10 +176,10 @@ func TestCreateKnowledgeBase_DefaultStorageProviderFromTenant(t *testing.T) {
 
 	kbExplicit, err := svc.CreateKnowledgeBase(ctxWithTenantStorage(1, "minio"), &types.KnowledgeBase{
 		Name:                  "kb2",
-		StorageProviderConfig: &types.StorageProviderConfig{Provider: "cos"},
+		StorageProviderConfig: &types.StorageProviderConfig{Provider: "s3"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, "cos", kbExplicit.GetStorageProvider())
+	assert.Equal(t, "s3", kbExplicit.GetStorageProvider())
 }
 
 func TestCreateKnowledgeBase_DefaultStorageProviderRespectsAllowList(t *testing.T) {
@@ -426,19 +427,13 @@ func TestDuplicateKnowledgeBase_CreatesSettingsOnlyDuplicate(t *testing.T) {
 		VLMConfig:             types.VLMConfig{Enabled: true, ModelID: "vlm-1"},
 		ASRConfig:             types.ASRConfig{Enabled: true, ModelID: "asr-1", Language: "zh"},
 		StorageProviderConfig: &types.StorageProviderConfig{Provider: "local"},
-		ExtractConfig: &types.ExtractConfig{
-			Enabled: true,
-			Text:    "extract entities",
-			Tags:    []string{"product"},
-			Nodes:   []*types.GraphNode{{Name: "Product"}},
-		},
+
 		QuestionGenerationConfig: &types.QuestionGenerationConfig{Enabled: true, QuestionCount: 5},
 		WikiConfig:               &types.WikiConfig{SynthesisModelID: "wiki-llm", MaxPagesPerIngest: 12},
 		IndexingStrategy: types.IndexingStrategy{
 			VectorEnabled:  true,
 			KeywordEnabled: true,
 			WikiEnabled:    true,
-			GraphEnabled:   true,
 		},
 		IsPinned:        true,
 		KnowledgeCount:  9,
@@ -468,8 +463,6 @@ func TestDuplicateKnowledgeBase_CreatesSettingsOnlyDuplicate(t *testing.T) {
 	assert.Equal(t, source.ASRConfig, target.ASRConfig)
 	require.NotNil(t, target.StorageProviderConfig)
 	assert.Equal(t, "local", target.StorageProviderConfig.Provider)
-	require.NotNil(t, target.ExtractConfig)
-	assert.Equal(t, source.ExtractConfig.Text, target.ExtractConfig.Text)
 	require.NotNil(t, target.QuestionGenerationConfig)
 	assert.Equal(t, 5, target.QuestionGenerationConfig.QuestionCount)
 	require.NotNil(t, target.WikiConfig)

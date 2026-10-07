@@ -10,7 +10,6 @@ import (
 
 	"reliquary/internal/models/rerank"
 	"reliquary/internal/searchutil"
-	"reliquary/internal/tracing/langfuse"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -87,29 +86,8 @@ func (p *PluginRerank) OnEvent(ctx context.Context,
 		candidatesToRerank = append(candidatesToRerank, result)
 	}
 
-	passagesPreview := langfuse.SummarizePassagePreviews(candidatesToRerank, passages, 25)
-	rerankCtx, rerankSpan := langfuse.GetManager().StartSpan(ctx, langfuse.SpanOptions{
-		Name: "rerank",
-		Input: map[string]interface{}{
-			"query":            chatManage.RewriteQuery,
-			"candidate_count":  len(candidatesToRerank),
-			"rerank_model_id":  chatManage.RerankModelID,
-			"threshold":        chatManage.RerankThreshold,
-			"rerank_top_k":     chatManage.RerankTopK,
-			"faq_priority":     chatManage.FAQPriorityEnabled,
-			"faq_score_boost":  chatManage.FAQScoreBoost,
-			"passages_preview": passagesPreview,
-		},
-		Metadata: map[string]interface{}{
-			"session_id": chatManage.SessionID,
-		},
-	})
+	rerankCtx := ctx
 	ctx = rerankCtx
-	spanOutput := map[string]interface{}{}
-	var spanErr error
-	defer func() {
-		rerankSpan.Finish(spanOutput, nil, spanErr)
-	}()
 
 	pipelineInfo(ctx, "Rerank", "build_passages", map[string]interface{}{
 		"total_cnt":     len(chatManage.SearchResult),
@@ -117,8 +95,6 @@ func (p *PluginRerank) OnEvent(ctx context.Context,
 	})
 
 	var rerankResp []rerank.RankResult
-	var rawRerankResp []rerank.RankResult
-	thresholdDegraded := false
 
 	// Only call rerank model if there are candidates
 	if len(candidatesToRerank) > 0 {
@@ -135,18 +111,12 @@ func (p *PluginRerank) OnEvent(ctx context.Context,
 				"candidate_cnt": len(candidatesToRerank),
 			})
 			chatManage.SearchResult = candidatesToRerank
-			spanOutput = map[string]interface{}{
-				"stage":           "api_error_fallback",
-				"candidate_count": len(candidatesToRerank),
-				"error":           rerankErr.Error(),
-			}
+
 			return next()
 		}
-		rawRerankResp = append([]rerank.RankResult(nil), rerankResp...)
 
 		// If no results and threshold is high enough, try with lower threshold
 		if len(rerankResp) == 0 && originalThreshold > 0.3 {
-			thresholdDegraded = true
 			degradedThreshold := originalThreshold * 0.7
 			if degradedThreshold < 0.3 {
 				degradedThreshold = 0.3
@@ -167,15 +137,9 @@ func (p *PluginRerank) OnEvent(ctx context.Context,
 					"candidate_cnt": len(candidatesToRerank),
 				})
 				chatManage.SearchResult = candidatesToRerank
-				spanOutput = map[string]interface{}{
-					"stage":              "api_error_fallback",
-					"candidate_count":    len(candidatesToRerank),
-					"threshold_degraded": thresholdDegraded,
-					"error":              rerankErr.Error(),
-				}
+
 				return next()
 			}
-			rawRerankResp = append([]rerank.RankResult(nil), rerankResp...)
 		}
 	}
 
@@ -238,78 +202,14 @@ func (p *PluginRerank) OnEvent(ctx context.Context,
 		pipelineWarn(ctx, "Rerank", "output", map[string]interface{}{
 			"filtered_cnt": 0,
 		})
-		spanOutput = buildRerankSpanOutput(
-			candidatesToRerank,
-			passages,
-			rawRerankResp,
-			reranked,
-			nil,
-			chatManage,
-			thresholdDegraded,
-		)
+
 		return ErrSearchNothing
 	}
 
-	spanOutput = buildRerankSpanOutput(
-		candidatesToRerank,
-		passages,
-		rawRerankResp,
-		reranked,
-		chatManage.RerankResult,
-		chatManage,
-		thresholdDegraded,
-	)
 	pipelineInfo(ctx, "Rerank", "output", map[string]interface{}{
 		"filtered_cnt": len(chatManage.RerankResult),
 	})
 	return next()
-}
-
-func buildRerankSpanOutput(
-	candidates []*types.SearchResult,
-	passages []string,
-	modelScores []rerank.RankResult,
-	composite []*types.SearchResult,
-	final []*types.SearchResult,
-	chatManage *types.ChatManage,
-	thresholdDegraded bool,
-) map[string]interface{} {
-	modelRows := make([]map[string]interface{}, 0, len(modelScores))
-	for i, rr := range modelScores {
-		row := map[string]interface{}{
-			"rank":        i + 1,
-			"index":       rr.Index,
-			"model_score": rr.RelevanceScore,
-		}
-		if rr.Index >= 0 && rr.Index < len(candidates) {
-			row["chunk_id"] = candidates[rr.Index].ID
-			row["knowledge_id"] = candidates[rr.Index].KnowledgeID
-			row["knowledge_title"] = candidates[rr.Index].KnowledgeTitle
-			row["match_type"] = candidates[rr.Index].MatchType
-			row["retrieval_score"] = candidates[rr.Index].Score
-			if rr.Index < len(passages) {
-				row["preview"] = langfuse.TruncateRunes(passages[rr.Index], 160)
-			}
-		}
-		modelRows = append(modelRows, row)
-	}
-
-	out := map[string]interface{}{
-		"candidate_count":    len(candidates),
-		"model_result_count": len(modelScores),
-		"composite_count":    len(composite),
-		"final_count":        len(final),
-		"threshold":          chatManage.RerankThreshold,
-		"rerank_top_k":       chatManage.RerankTopK,
-		"threshold_degraded": thresholdDegraded,
-		"model_scores":       langfuse.SummarizeRankScores(modelRows, 50),
-		"composite_results":  langfuse.SummarizeSearchResults(composite, 25),
-		"final_results":      langfuse.SummarizeSearchResults(final, 25),
-	}
-	if len(modelScores) > 50 {
-		out["model_scores_truncated"] = len(modelScores) - 50
-	}
-	return out
 }
 
 // rerank performs the actual reranking operation with given query and passages

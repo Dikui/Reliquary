@@ -17,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/google/uuid"
+
 	"reliquary/internal/logger"
 	"reliquary/internal/types/interfaces"
 	"reliquary/internal/utils"
@@ -27,6 +28,7 @@ type s3FileService struct {
 	client     *s3.Client
 	bucketName string
 	pathPrefix string
+	scheme     string
 }
 
 // newS3Client creates a bare s3FileService with just the SDK client initialised.
@@ -196,10 +198,17 @@ func CheckS3ConnectivityWithOptions(ctx context.Context, endpoint, accessKey, se
 	return svc.CheckConnectivity(ctx)
 }
 
-// parseS3FilePath extracts the object name from a provider scheme: s3://{bucket}/{objectKey}
+func (s *s3FileService) providerScheme() string {
+	if s.scheme != "" {
+		return s.scheme
+	}
+	return "s3"
+}
+
+// parseS3FilePath extracts the object key from this service's provider scheme.
 func (s *s3FileService) parseS3FilePath(filePath string) (string, error) {
-	// Provider scheme format: s3://{bucket}/{objectKey}
-	const prefix = "s3://"
+	// Provider scheme format: {scheme}://{bucket}/{objectKey}
+	prefix := s.providerScheme() + "://"
 	if !strings.HasPrefix(filePath, prefix) {
 		return "", fmt.Errorf("invalid S3 file path: %s", filePath)
 	}
@@ -250,7 +259,7 @@ func (s *s3FileService) SaveFile(ctx context.Context,
 		return "", fmt.Errorf("failed to upload file to S3: %w", err)
 	}
 
-	return fmt.Sprintf("s3://%s/%s", s.bucketName, objectName), nil
+	return fmt.Sprintf("%s://%s/%s", s.providerScheme(), s.bucketName, objectName), nil
 }
 
 // GetFile gets a file from S3
@@ -291,7 +300,7 @@ func (s *s3FileService) DeleteFile(ctx context.Context, filePath string) error {
 
 // CopyFile copies an existing S3 object to a new knowledge-owned object using a
 // server-side CopyObject (no data leaves S3). The destination uses the same
-// layout as SaveFile. Returns ErrCrossBackendCopy when srcPath is not an s3:// path.
+// layout as SaveFile. Returns ErrCrossBackendCopy when the source scheme or bucket differs.
 func (s *s3FileService) CopyFile(ctx context.Context,
 	srcPath string, tenantID uint64, knowledgeID string,
 ) (string, error) {
@@ -315,7 +324,7 @@ func (s *s3FileService) CopyFile(ctx context.Context,
 		return "", fmt.Errorf("failed to copy file in S3: %w", err)
 	}
 
-	newPath := fmt.Sprintf("s3://%s/%s", s.bucketName, destKey)
+	newPath := fmt.Sprintf("%s://%s/%s", s.providerScheme(), s.bucketName, destKey)
 	logger.Infof(ctx, "Copied S3 object %s to %s", srcPath, newPath)
 	return newPath, nil
 }
@@ -343,7 +352,7 @@ func (s *s3FileService) SaveBytes(ctx context.Context, data []byte, tenantID uin
 		return "", fmt.Errorf("failed to upload bytes to S3: %w", err)
 	}
 
-	return fmt.Sprintf("s3://%s/%s", s.bucketName, objectName), nil
+	return fmt.Sprintf("%s://%s/%s", s.providerScheme(), s.bucketName, objectName), nil
 }
 
 // GetFileURL returns a presigned download URL for the file

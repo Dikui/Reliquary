@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"reliquary/internal/middleware"
 	"reliquary/internal/types"
 )
@@ -49,9 +50,6 @@ func (s *stubTenantService) BulkSetStorageQuota(context.Context, int64) (int64, 
 func (s *stubTenantService) GetTenantByIDForUser(context.Context, uint64, string) (*types.Tenant, error) {
 	return s.tenant, nil
 }
-func (s *stubTenantService) GetWeKnoraCloudCredentials(context.Context) *types.WeKnoraCloudCredentials {
-	return nil
-}
 
 func newTenantHandlerTestEngine(t *testing.T, role types.TenantRole, tenant *types.Tenant) *gin.Engine {
 	t.Helper()
@@ -76,18 +74,18 @@ func newTenantHandlerTestEngine(t *testing.T, role types.TenantRole, tenant *typ
 	return r
 }
 
-func TestListTenantsViewerDoesNotLeakSecrets(t *testing.T) {
+func TestGetTenantKVViewerForbiddenForSecretKeys(t *testing.T) {
 	tenant := secretTenantFixture()
 	engine := newTenantHandlerTestEngine(t, types.TenantRoleViewer, tenant)
 
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/tenants", nil)
-	engine.ServeHTTP(rec, req)
-	require.Equal(t, http.StatusOK, rec.Code)
-
-	body := rec.Body.String()
-	assert.NotContains(t, body, "tenant-api-key-123")
-	assert.NotContains(t, body, "parser-secret-123")
+	for _, key := range []string{"web-search-config", "parser-engine-config", "storage-engine-config"} {
+		t.Run(key, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/tenants/kv/"+key, nil)
+			engine.ServeHTTP(rec, req)
+			require.Equal(t, http.StatusForbidden, rec.Code)
+		})
+	}
 }
 
 func TestGetTenantViewerDoesNotLeakSecrets(t *testing.T) {
@@ -101,18 +99,18 @@ func TestGetTenantViewerDoesNotLeakSecrets(t *testing.T) {
 	assert.NotContains(t, rec.Body.String(), "tenant-api-key-123")
 }
 
-func TestGetTenantKVViewerForbiddenForSecretKeys(t *testing.T) {
+func TestListTenantsViewerDoesNotLeakSecrets(t *testing.T) {
 	tenant := secretTenantFixture()
 	engine := newTenantHandlerTestEngine(t, types.TenantRoleViewer, tenant)
 
-	for _, key := range []string{"web-search-config", "parser-engine-config", "storage-engine-config"} {
-		t.Run(key, func(t *testing.T) {
-			rec := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, "/tenants/kv/"+key, nil)
-			engine.ServeHTTP(rec, req)
-			require.Equal(t, http.StatusForbidden, rec.Code)
-		})
-	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/tenants", nil)
+	engine.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	body := rec.Body.String()
+	assert.NotContains(t, body, "tenant-api-key-123")
+	assert.NotContains(t, body, "parser-secret-123")
 }
 
 func TestGetTenantKVAdminReturnsRedactedSecrets(t *testing.T) {

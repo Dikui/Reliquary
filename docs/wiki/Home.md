@@ -21,8 +21,6 @@ aliases: [Home, Index, wiki首页]
 
 | 页面 | 简介 |
 |------|------|
-| [知识图谱](核心功能/知识图谱.md) | Neo4j 知识图谱的快速开始与使用 |
-| [开启知识图谱功能](核心功能/开启知识图谱功能.md) | 知识图谱功能的完整启用流程 |
 | [MCP功能使用说明](核心功能/MCP功能使用说明.md) | MCP 服务的用户操作指南 |
 | [内置MCP服务管理](核心功能/内置MCP服务管理.md) | 内置 MCP 服务的系统级管理 |
 | [内置模型管理](核心功能/内置模型管理.md) | 内置模型的系统级管理 |
@@ -35,7 +33,6 @@ aliases: [Home, Index, wiki首页]
 | [IM集成开发](集成扩展/IM集成开发.md) | 企业即时通讯平台接入开发 |
 | [数据源导入开发](集成扩展/数据源导入开发.md) | 外部平台数据自动同步与导入 |
 | [添加网络搜索引擎](集成扩展/添加网络搜索引擎.md) | 扩展新的网络搜索 Provider |
-| [集成向量数据库](集成扩展/集成向量数据库.md) | 集成新的向量数据库检索引擎 |
 
 ## 安全与认证
 
@@ -80,10 +77,8 @@ graph TB
     Home --> API参考
 
     项目概述 --> ROADMAP[版本路线图]
-    项目概述 --> LITE[Lite与标准版区别]
 
     核心功能 --> KG[知识图谱]
-    核心功能 --> KGSetup[开启知识图谱功能]
     核心功能 --> MCP[MCP功能使用说明]
     核心功能 --> BuiltinMCP[内置MCP服务管理]
     核心功能 --> BuiltinModel[内置模型管理]
@@ -92,7 +87,6 @@ graph TB
     集成扩展 --> IM[IM集成开发]
     集成扩展 --> DS[数据源导入开发]
     集成扩展 --> WebSearch[添加网络搜索引擎]
-    集成扩展 --> VecDB[集成向量数据库]
 
     安全认证 --> OIDC[OIDC认证调用流程]
     安全认证 --> RBAC[空间RBAC说明]
@@ -114,7 +108,6 @@ graph TB
     OIDC -.-> RBAC
     RBAC -.-> SharedSpace
     OIDC -.-> SharedSpace
-    LITE -.-> SharedSpace
     WebSearch -.-> VecDB
     DevGuide -.-> QuickDev
     FAQ -.-> DevGuide

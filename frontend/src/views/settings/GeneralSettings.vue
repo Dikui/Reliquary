@@ -21,8 +21,6 @@
           >
             <t-option value="zh-CN" :label="$t('language.zhCN')">{{ $t('language.zhCN') }}</t-option>
             <t-option value="en-US" :label="$t('language.enUS')">{{ $t('language.enUS') }}</t-option>
-            <t-option value="ru-RU" :label="$t('language.ruRU')">{{ $t('language.ruRU') }}</t-option>
-            <t-option value="ko-KR" :label="$t('language.koKR')">{{ $t('language.koKR') }}</t-option>
           </t-select>
         </div>
       </div>
@@ -121,18 +119,6 @@
         </div>
       </div>
 
-      <!-- 自动下载更新开关 (Lite edition only) -->
-      <div class="setting-row" v-if="authStore.isLiteMode">
-        <div class="setting-info">
-          <label>{{ $t('settings.autoCheckUpdate') }}</label>
-          <p class="desc">{{ $t('settings.autoCheckUpdateDesc') }}</p>
-        </div>
-        <div class="setting-control">
-          <t-switch
-            v-model="isAutoCheckUpdateEnabled"
-          />
-        </div>
-      </div>
     </div>
   </div>
 </template>
@@ -141,8 +127,7 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
-import { useSettingsStore } from '@/stores/settings'
-import { useAuthStore } from '@/stores/auth'
+import { SUPPORTED_LOCALES } from '@/i18n/resolveDefaultLocale'
 import { useTheme, type ThemeMode } from '@/composables/useTheme'
 import {
   useFont,
@@ -156,8 +141,6 @@ import {
 } from '@/composables/useFont'
 
 const { t, locale } = useI18n()
-const settingsStore = useSettingsStore()
-const authStore = useAuthStore()
 const { currentTheme, setTheme } = useTheme()
 const {
   currentSans,
@@ -203,26 +186,11 @@ const monoFontOptions = computed<{ value: MonoFontKey; label: string; preview: s
 const currentSansStack = computed(() => SANS_STACKS[localSansFont.value] ?? SANS_STACKS.system)
 const currentMonoStack = computed(() => MONO_STACKS[localMonoFont.value] ?? MONO_STACKS.system)
 
-// 自动检查更新状态
-const isAutoCheckUpdateEnabled = computed({
-  get: () => settingsStore.isAutoCheckUpdateEnabled,
-  set: (val) => {
-    settingsStore.toggleAutoCheckUpdate(val)
-    if (val) {
-      // @ts-ignore
-      if (window.go && window.go.main && window.go.main.App && window.go.main.App.AutoCheckForUpdates) {
-        // @ts-ignore
-        window.go.main.App.AutoCheckForUpdates()
-      }
-    }
-  }
-})
-
 // 初始化加载
 onMounted(() => {
   // 从 localStorage 加载语言设置
   const savedLocale = localStorage.getItem('locale')
-  if (savedLocale) {
+  if (savedLocale && (SUPPORTED_LOCALES as readonly string[]).includes(savedLocale)) {
     localLanguage.value = savedLocale
     locale.value = savedLocale
   } else {

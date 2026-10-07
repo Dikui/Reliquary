@@ -4,16 +4,14 @@ import (
 	"context"
 	"testing"
 
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 )
 
 func TestUserRepositoryTenantlessCreateAndUpdateKeepNullTenantID(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:user_tenantless?mode=memory&cache=shared"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
+	db := pgtest.OpenFixture(t)
 	if err := db.AutoMigrate(&types.Tenant{}, &types.User{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

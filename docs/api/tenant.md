@@ -550,7 +550,7 @@ curl --location 'http://localhost:8080/api/v1/tenants' \
 | `conversation-config`  | 普通模式会话/对话配置        |
 | `prompt-templates`     | 系统提示词模板（只读，按用户语言本地化） |
 | `parser-engine-config` | 解析引擎配置（如 MinerU）    |
-| `storage-engine-config`| 存储引擎配置（Local/MinIO/COS） |
+| `storage-engine-config`| 存储引擎配置（Local/S3 兼容） |
 | `chat-history-config`  | 聊天历史索引配置             |
 | `retrieval-config`     | 全局检索配置                 |
 

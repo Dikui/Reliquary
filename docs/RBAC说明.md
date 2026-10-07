@@ -254,7 +254,7 @@ v1 不支持。这个矩阵刻意保持成一个小固定格（Viewer < Contribu
 ## 十、测试与可观测性
 
 - `make test` 覆盖 `internal/middleware/rbac_test.go`、`internal/handler/rbac_lookups_test.go`、`internal/application/service/audit_log_test.go`、`internal/middleware/rbac_audit_test.go` 等约 25 个用例。
-- Langfuse / OpenTelemetry span 上携带解析后的 `TenantRole` 和 `TenantID`，一次被拒绝的请求在 trace 中即可看到对应角色，不需要再去手工关联日志。
+- OpenTelemetry span 上携带解析后的 `TenantRole` 和 `TenantID`，一次被拒绝的请求在 trace 中即可看到对应角色，不需要再去手工关联日志。
 
 ## 相关文档
 

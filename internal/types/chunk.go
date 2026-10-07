@@ -84,7 +84,7 @@ func (f ChunkFlags) ToggleFlag(flag ChunkFlags) ChunkFlags {
 
 // ImageInfo 表示与 Chunk 关联的图片信息
 type ImageInfo struct {
-	// 图片URL（COS）
+	// 图片URL
 	URL string `json:"url"          gorm:"type:text"`
 	// 原始图片URL
 	OriginalURL string `json:"original_url" gorm:"type:text"`
@@ -208,35 +208,4 @@ func (c *Chunk) EmbeddingContent() string {
 		return body
 	}
 	return c.ContextHeader + "\n\n" + body
-}
-
-// AssignChunkSeqIDs assigns sequential SeqIDs to a batch of chunks that have SeqID == 0.
-// Must be called before CreateInBatches for SQLite compatibility.
-func AssignChunkSeqIDs(tx *gorm.DB, chunks []*Chunk) error {
-	needAssign := false
-	for _, c := range chunks {
-		if c.SeqID == 0 {
-			needAssign = true
-			break
-		}
-	}
-	if !needAssign {
-		return nil
-	}
-
-	var maxSeqID *int64
-	if err := tx.Unscoped().Model(&Chunk{}).Select("MAX(seq_id)").Scan(&maxSeqID).Error; err != nil {
-		return err
-	}
-	next := int64(1)
-	if maxSeqID != nil {
-		next = *maxSeqID + 1
-	}
-	for _, c := range chunks {
-		if c.SeqID == 0 {
-			c.SeqID = next
-			next++
-		}
-	}
-	return nil
 }

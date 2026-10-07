@@ -1,7 +1,6 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import { getDeploymentCapabilities } from '@/api/system'
-import { useAuthStore } from '@/stores/auth'
 import {
   isDeploymentCapabilitySupported,
   type DeploymentCapabilityKey,
@@ -39,11 +38,7 @@ export const useDeploymentCapabilitiesStore = defineStore('deploymentCapabilitie
   }
 
   const isSupported = (key?: DeploymentCapabilityKey) => {
-    const authStore = useAuthStore()
-    return isDeploymentCapabilitySupported(capabilities.value, key, {
-      liteMode: authStore.isLiteMode,
-      edition: edition.value,
-    })
+    return isDeploymentCapabilitySupported(capabilities.value, key)
   }
 
   return {

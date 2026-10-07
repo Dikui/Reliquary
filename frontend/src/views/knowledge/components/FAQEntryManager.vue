@@ -40,7 +40,7 @@
             </h2>
             <div class="kb-title-actions">
               <KBInfoPopover
-                v-if="kbInfo && !authStore.isLiteMode"
+                v-if="kbInfo"
                 :kb-info="kbInfo"
               />
               <t-tooltip v-if="canManage" :content="$t('knowledgeBase.settings')" placement="top">
@@ -1336,7 +1336,6 @@ const searchForm = reactive({
   vectorThreshold: 0.7,
   matchCount: 10,
 })
-
 
 const getTagName = (tagId?: number) => {
   if (!tagId) return t('knowledgeBase.untagged')
@@ -3348,7 +3347,6 @@ watch(() => entries.value.map(e => ({
   }
 }
 
-
 // 导入结果入口：默认仅图标，hover / 点击展开浮层
 .faq-import-host {
   position: relative;
@@ -3405,7 +3403,6 @@ watch(() => entries.value.map(e => ({
     }
   }
 }
-
 
 // FAQ 导入提示条（紧凑单行）
 .faq-import-strip {
@@ -3550,7 +3547,6 @@ watch(() => entries.value.map(e => ({
   }
 }
 
-
 .tag-filter-bar {
   display: flex;
   align-items: center;
@@ -3562,7 +3558,6 @@ watch(() => entries.value.map(e => ({
     font-size: 14px;
   }
 }
-
 
 .kb-settings-button {
   width: 30px;
@@ -4086,7 +4081,6 @@ watch(() => entries.value.map(e => ({
   padding: 8px 0;
   font-family: var(--app-font-family);
 }
-
 
 .faq-load-more,
 .faq-no-more {
@@ -4665,7 +4659,6 @@ watch(() => entries.value.map(e => ({
   width: 100%;
   margin-top: 8px;
 }
-
 
 .item-row {
   display: flex;

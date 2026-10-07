@@ -7,16 +7,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
+
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 )
 
 func TestStorageBackendResolverScopesPathsAndTenant(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := pgtest.OpenFixture(t)
 	require.NoError(t, db.AutoMigrate(&types.StorageBackend{}))
 	repo := repository.NewStorageBackendRepository(db)
 	backend := &types.StorageBackend{TenantID: 7, Name: "Local A", Provider: "local", Config: types.StorageBackendConfig{}, LegacyAlias: true}
@@ -43,8 +42,7 @@ func TestStorageBackendResolverScopesPathsAndTenant(t *testing.T) {
 
 func TestResolveFileServiceUsesWorkspaceDefaultForStubTenant(t *testing.T) {
 	t.Setenv("STORAGE_TYPE", "local")
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := pgtest.OpenFixture(t)
 	require.NoError(t, db.AutoMigrate(&types.Tenant{}, &types.StorageBackend{}))
 
 	tenantRepo := repository.NewTenantRepository(db)
@@ -67,8 +65,7 @@ func TestResolveFileServiceUsesWorkspaceDefaultForStubTenant(t *testing.T) {
 
 func TestResolveFileServiceFallsBackToEnvWhenWorkspaceHasNoBackend(t *testing.T) {
 	t.Setenv("STORAGE_TYPE", "local")
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := pgtest.OpenFixture(t)
 	require.NoError(t, db.AutoMigrate(&types.Tenant{}, &types.StorageBackend{}))
 	require.NoError(t, db.Create(&types.Tenant{ID: 9, Name: "legacy"}).Error)
 

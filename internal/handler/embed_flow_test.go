@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+
 	"reliquary/internal/application/service"
 	"reliquary/internal/middleware"
 	"reliquary/internal/types"
@@ -116,8 +117,121 @@ func (f *flowTenantSvc) SearchTenants(context.Context, string, uint64, int, int)
 func (f *flowTenantSvc) GetTenantByIDForUser(context.Context, uint64, string) (*types.Tenant, error) {
 	return f.tenant, nil
 }
-func (f *flowTenantSvc) GetWeKnoraCloudCredentials(context.Context) *types.WeKnoraCloudCredentials {
-	return nil
+
+type badReader struct{}
+
+func (badReader) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
+
+func TestPatchEmbedChatPayloadAgentMode(t *testing.T) {
+	ch := &types.EmbedChannel{AgentID: "agent-embed-99"}
+	patched, err := patchEmbedChatPayload(bytes.NewReader(nil), ch, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(patched, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["agent_id"] != "agent-embed-99" {
+		t.Fatalf("agent_id = %v", payload["agent_id"])
+	}
+	if payload["agent_enabled"] != true {
+		t.Fatalf("agent_enabled = %v, want true", payload["agent_enabled"])
+	}
+}
+
+func TestPatchEmbedChatPayloadInvalidBody(t *testing.T) {
+	ch := &types.EmbedChannel{AgentID: "agent-1"}
+	_, err := patchEmbedChatPayload(badReader{}, ch, false)
+	if err == nil || !strings.Contains(err.Error(), "invalid embed chat request body") {
+		t.Fatalf("expected invalid body error, got %v", err)
+	}
+}
+
+func TestPatchEmbedChatPayloadInjectsAgentID(t *testing.T) {
+	ch := &types.EmbedChannel{AgentID: "agent-embed-42"}
+	body := `{"query":"hello","agent_id":"client-override","web_search_enabled":true}`
+
+	patched, err := patchEmbedChatPayload(strings.NewReader(body), ch, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(patched, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["agent_id"] != "agent-embed-42" {
+		t.Fatalf("agent_id = %v, want channel agent", payload["agent_id"])
+	}
+	if payload["query"] != "hello" {
+		t.Fatalf("query = %v, want preserved client field", payload["query"])
+	}
+	if payload["web_search_enabled"] != false {
+		t.Fatalf("web_search_enabled = %v, want false", payload["web_search_enabled"])
+	}
+	if payload["agent_enabled"] != false {
+		t.Fatalf("agent_enabled = %v, want false for knowledge mode", payload["agent_enabled"])
+	}
+	kbIDs, ok := payload["knowledge_base_ids"].([]any)
+	if !ok || len(kbIDs) != 0 {
+		t.Fatalf("knowledge_base_ids = %v, want empty slice", payload["knowledge_base_ids"])
+	}
+}
+
+func TestPatchEmbedChatPayloadWebSearchRequiresClientOptIn(t *testing.T) {
+	ch := &types.EmbedChannel{AgentID: "agent-1", AllowWebSearch: true}
+	body := `{"query":"hello","web_search_enabled":false}`
+
+	patched, err := patchEmbedChatPayload(strings.NewReader(body), ch, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(patched, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["web_search_enabled"] != false {
+		t.Fatalf("web_search_enabled = %v, want false when visitor did not opt in", payload["web_search_enabled"])
+	}
+
+	bodyOn := `{"query":"hello","web_search_enabled":true}`
+	patchedOn, err := patchEmbedChatPayload(strings.NewReader(bodyOn), ch, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payloadOn map[string]any
+	if err := json.Unmarshal(patchedOn, &payloadOn); err != nil {
+		t.Fatal(err)
+	}
+	if payloadOn["web_search_enabled"] != true {
+		t.Fatalf("web_search_enabled = %v, want true when channel allows and visitor opted in", payloadOn["web_search_enabled"])
+	}
+}
+
+func TestPatchEmbedChatPayloadInvalidJSON(t *testing.T) {
+	ch := &types.EmbedChannel{AgentID: "agent-1"}
+	_, err := patchEmbedChatPayload(strings.NewReader("{not-json"), ch, false)
+	if err == nil || !strings.Contains(err.Error(), "invalid embed chat json") {
+		t.Fatalf("expected invalid json error, got %v", err)
+	}
+}
+
+func TestPatchEmbedChatPayloadKeepsAttachmentIDsWhenUploadAllowed(t *testing.T) {
+	ch := &types.EmbedChannel{AgentID: "agent-1", AllowFileUpload: true}
+	body := `{"query":"hello","attachment_ids":["doc-1","doc-2"]}`
+
+	patched, err := patchEmbedChatPayload(strings.NewReader(body), ch, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(patched, &payload); err != nil {
+		t.Fatal(err)
+	}
+	ids, ok := payload["attachment_ids"].([]any)
+	if !ok || len(ids) != 2 {
+		t.Fatalf("attachment_ids = %v, want preserved when upload allowed", payload["attachment_ids"])
+	}
 }
 
 func TestEmbedExchangeFlowIntegration(t *testing.T) {
@@ -182,83 +296,6 @@ func TestEmbedExchangeFlowIntegration(t *testing.T) {
 	}
 }
 
-func TestPatchEmbedChatPayloadInjectsAgentID(t *testing.T) {
-	ch := &types.EmbedChannel{AgentID: "agent-embed-42"}
-	body := `{"query":"hello","agent_id":"client-override","web_search_enabled":true}`
-
-	patched, err := patchEmbedChatPayload(strings.NewReader(body), ch, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(patched, &payload); err != nil {
-		t.Fatal(err)
-	}
-	if payload["agent_id"] != "agent-embed-42" {
-		t.Fatalf("agent_id = %v, want channel agent", payload["agent_id"])
-	}
-	if payload["query"] != "hello" {
-		t.Fatalf("query = %v, want preserved client field", payload["query"])
-	}
-	if payload["web_search_enabled"] != false {
-		t.Fatalf("web_search_enabled = %v, want false", payload["web_search_enabled"])
-	}
-	if payload["agent_enabled"] != false {
-		t.Fatalf("agent_enabled = %v, want false for knowledge mode", payload["agent_enabled"])
-	}
-	kbIDs, ok := payload["knowledge_base_ids"].([]any)
-	if !ok || len(kbIDs) != 0 {
-		t.Fatalf("knowledge_base_ids = %v, want empty slice", payload["knowledge_base_ids"])
-	}
-}
-
-func TestPatchEmbedChatPayloadWebSearchRequiresClientOptIn(t *testing.T) {
-	ch := &types.EmbedChannel{AgentID: "agent-1", AllowWebSearch: true}
-	body := `{"query":"hello","web_search_enabled":false}`
-
-	patched, err := patchEmbedChatPayload(strings.NewReader(body), ch, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(patched, &payload); err != nil {
-		t.Fatal(err)
-	}
-	if payload["web_search_enabled"] != false {
-		t.Fatalf("web_search_enabled = %v, want false when visitor did not opt in", payload["web_search_enabled"])
-	}
-
-	bodyOn := `{"query":"hello","web_search_enabled":true}`
-	patchedOn, err := patchEmbedChatPayload(strings.NewReader(bodyOn), ch, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var payloadOn map[string]any
-	if err := json.Unmarshal(patchedOn, &payloadOn); err != nil {
-		t.Fatal(err)
-	}
-	if payloadOn["web_search_enabled"] != true {
-		t.Fatalf("web_search_enabled = %v, want true when channel allows and visitor opted in", payloadOn["web_search_enabled"])
-	}
-}
-
-func TestPatchEmbedChatPayloadWebSearchBlockedWhenChannelDisabled(t *testing.T) {
-	ch := &types.EmbedChannel{AgentID: "agent-1", AllowWebSearch: false}
-	body := `{"query":"hello","web_search_enabled":true}`
-
-	patched, err := patchEmbedChatPayload(strings.NewReader(body), ch, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(patched, &payload); err != nil {
-		t.Fatal(err)
-	}
-	if payload["web_search_enabled"] != false {
-		t.Fatalf("web_search_enabled = %v, want false when channel disallows web search", payload["web_search_enabled"])
-	}
-}
-
 func TestPatchEmbedChatPayloadStripsAttachmentsWhenUploadDisabled(t *testing.T) {
 	ch := &types.EmbedChannel{AgentID: "agent-1", AllowFileUpload: false}
 	body := `{"query":"hello","images":[{"data":"x"}],"attachment_uploads":[{"file_name":"a.pdf"}],"attachment_ids":["doc-1"]}`
@@ -278,9 +315,9 @@ func TestPatchEmbedChatPayloadStripsAttachmentsWhenUploadDisabled(t *testing.T) 
 	}
 }
 
-func TestPatchEmbedChatPayloadKeepsAttachmentIDsWhenUploadAllowed(t *testing.T) {
-	ch := &types.EmbedChannel{AgentID: "agent-1", AllowFileUpload: true}
-	body := `{"query":"hello","attachment_ids":["doc-1","doc-2"]}`
+func TestPatchEmbedChatPayloadWebSearchBlockedWhenChannelDisabled(t *testing.T) {
+	ch := &types.EmbedChannel{AgentID: "agent-1", AllowWebSearch: false}
+	body := `{"query":"hello","web_search_enabled":true}`
 
 	patched, err := patchEmbedChatPayload(strings.NewReader(body), ch, false)
 	if err != nil {
@@ -290,46 +327,7 @@ func TestPatchEmbedChatPayloadKeepsAttachmentIDsWhenUploadAllowed(t *testing.T) 
 	if err := json.Unmarshal(patched, &payload); err != nil {
 		t.Fatal(err)
 	}
-	ids, ok := payload["attachment_ids"].([]any)
-	if !ok || len(ids) != 2 {
-		t.Fatalf("attachment_ids = %v, want preserved when upload allowed", payload["attachment_ids"])
+	if payload["web_search_enabled"] != false {
+		t.Fatalf("web_search_enabled = %v, want false when channel disallows web search", payload["web_search_enabled"])
 	}
 }
-
-func TestPatchEmbedChatPayloadAgentMode(t *testing.T) {
-	ch := &types.EmbedChannel{AgentID: "agent-embed-99"}
-	patched, err := patchEmbedChatPayload(bytes.NewReader(nil), ch, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(patched, &payload); err != nil {
-		t.Fatal(err)
-	}
-	if payload["agent_id"] != "agent-embed-99" {
-		t.Fatalf("agent_id = %v", payload["agent_id"])
-	}
-	if payload["agent_enabled"] != true {
-		t.Fatalf("agent_enabled = %v, want true", payload["agent_enabled"])
-	}
-}
-
-func TestPatchEmbedChatPayloadInvalidJSON(t *testing.T) {
-	ch := &types.EmbedChannel{AgentID: "agent-1"}
-	_, err := patchEmbedChatPayload(strings.NewReader("{not-json"), ch, false)
-	if err == nil || !strings.Contains(err.Error(), "invalid embed chat json") {
-		t.Fatalf("expected invalid json error, got %v", err)
-	}
-}
-
-func TestPatchEmbedChatPayloadInvalidBody(t *testing.T) {
-	ch := &types.EmbedChannel{AgentID: "agent-1"}
-	_, err := patchEmbedChatPayload(badReader{}, ch, false)
-	if err == nil || !strings.Contains(err.Error(), "invalid embed chat request body") {
-		t.Fatalf("expected invalid body error, got %v", err)
-	}
-}
-
-type badReader struct{}
-
-func (badReader) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }

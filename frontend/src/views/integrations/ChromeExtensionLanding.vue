@@ -103,7 +103,7 @@ const { apiBaseUrlDisplay } = useApiBaseUrlDisplay()
 
 const capabilityKeys = ['qa', 'clip', 'notes', 'shortcuts'] as const
 const scenarioKeys = ['research', 'learning', 'tech', 'work'] as const
-const stepKeys = ['api', 'port', 'install', 'connect'] as const
+const stepKeys = ['api', 'install', 'connect'] as const
 
 const capabilityIcons: Record<(typeof capabilityKeys)[number], string> = {
   qa: 'chat-bubble',

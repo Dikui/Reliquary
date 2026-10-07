@@ -15,12 +15,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
 	"reliquary/internal/config"
-
+	"reliquary/internal/testutil/sqlfixture"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	secutils "reliquary/internal/utils"
@@ -32,7 +32,7 @@ func TestPresignedPreviewScopesResourcesBeforeIssuingGrants(t *testing.T) {
 	t.Setenv("LOCAL_STORAGE_BASE_DIR", baseDir)
 	t.Setenv("APP_EXTERNAL_URL", "https://example.test")
 	t.Setenv("SYSTEM_AES_KEY", "reliquary-test-aes-key-32bytes!!!")
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := sqlfixture.Open(":memory:", &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&types.StorageBackend{}, &types.StoredResource{}, &types.ResourceAccessGrant{}))
 	storageRepo := repository.NewStorageBackendRepository(db)
@@ -137,8 +137,67 @@ func (s *stubTenantService) GetTenantByIDForUser(context.Context, uint64, string
 	panic("unexpected")
 }
 
-func (s *stubTenantService) GetWeKnoraCloudCredentials(context.Context) *types.WeKnoraCloudCredentials {
-	panic("unexpected")
+// writeTestFile creates baseDir/<relPath> with the given content and returns
+// the matching `local://<relPath>` storage path.
+func writeTestFile(t *testing.T, baseDir, relPath, content string) string {
+	t.Helper()
+	full := filepath.Join(baseDir, filepath.FromSlash(relPath))
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	return "local://" + relPath
+}
+
+func TestPresignedFile_HEAD_Returns200WithoutBody(t *testing.T) {
+	engine, baseDir, signURL := setupPresignedTestServer(t)
+	storagePath := writeTestFile(t, baseDir, "1/img.png", "PNG-BYTES")
+
+	req := httptest.NewRequest(http.MethodHead, signURL(storagePath, 1, time.Hour), nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d (body=%q)", got, want, w.Body.String())
+	}
+	if got := w.Header().Get("Content-Type"); got != "image/png" {
+		t.Fatalf("Content-Type = %q, want image/png", got)
+	}
+	// HEAD must not stream the body — protects backing storage from a
+	// full read on every IM preview probe.
+	if w.Body.Len() != 0 {
+		t.Fatalf("HEAD response body should be empty, got %d bytes", w.Body.Len())
+	}
+}
+
+func TestPresignedFile_MissingFile_404(t *testing.T) {
+	engine, _, signURL := setupPresignedTestServer(t)
+
+	// A legitimately signed URL pointing at a file that does not exist.
+	req := httptest.NewRequest(http.MethodGet, signURL("local://1/nope.png", 1, time.Hour), nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+	if got, want := w.Code, http.StatusNotFound; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+}
+
+func TestPresignedFile_GET_ReturnsContent(t *testing.T) {
+	engine, baseDir, signURL := setupPresignedTestServer(t)
+	storagePath := writeTestFile(t, baseDir, "1/img.png", "PNG-BYTES")
+
+	req := httptest.NewRequest(http.MethodGet, signURL(storagePath, 1, time.Hour), nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+	if got := w.Body.String(); got != "PNG-BYTES" {
+		t.Fatalf("body = %q, want %q", got, "PNG-BYTES")
+	}
 }
 
 // setupPresignedTestServer wires presignedFileHandler with a real local file
@@ -184,57 +243,6 @@ func setupPresignedTestServer(t *testing.T) (engine *gin.Engine, baseDir string,
 	}
 
 	return engine, baseDir, signURL
-}
-
-// writeTestFile creates baseDir/<relPath> with the given content and returns
-// the matching `local://<relPath>` storage path.
-func writeTestFile(t *testing.T, baseDir, relPath, content string) string {
-	t.Helper()
-	full := filepath.Join(baseDir, filepath.FromSlash(relPath))
-	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-	return "local://" + relPath
-}
-
-func TestPresignedFile_HEAD_Returns200WithoutBody(t *testing.T) {
-	engine, baseDir, signURL := setupPresignedTestServer(t)
-	storagePath := writeTestFile(t, baseDir, "1/img.png", "PNG-BYTES")
-
-	req := httptest.NewRequest(http.MethodHead, signURL(storagePath, 1, time.Hour), nil)
-	w := httptest.NewRecorder()
-	engine.ServeHTTP(w, req)
-
-	if got, want := w.Code, http.StatusOK; got != want {
-		t.Fatalf("status = %d, want %d (body=%q)", got, want, w.Body.String())
-	}
-	if got := w.Header().Get("Content-Type"); got != "image/png" {
-		t.Fatalf("Content-Type = %q, want image/png", got)
-	}
-	// HEAD must not stream the body — protects backing storage from a
-	// full read on every IM preview probe.
-	if w.Body.Len() != 0 {
-		t.Fatalf("HEAD response body should be empty, got %d bytes", w.Body.Len())
-	}
-}
-
-func TestPresignedFile_GET_ReturnsContent(t *testing.T) {
-	engine, baseDir, signURL := setupPresignedTestServer(t)
-	storagePath := writeTestFile(t, baseDir, "1/img.png", "PNG-BYTES")
-
-	req := httptest.NewRequest(http.MethodGet, signURL(storagePath, 1, time.Hour), nil)
-	w := httptest.NewRecorder()
-	engine.ServeHTTP(w, req)
-
-	if got, want := w.Code, http.StatusOK; got != want {
-		t.Fatalf("status = %d, want %d", got, want)
-	}
-	if got := w.Body.String(); got != "PNG-BYTES" {
-		t.Fatalf("body = %q, want %q", got, "PNG-BYTES")
-	}
 }
 
 func TestPresignedFile_ForcesActiveContentDownload(t *testing.T) {
@@ -292,17 +300,5 @@ func TestPresignedFile_MissingParams_400(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "missing required parameters") {
 		t.Fatalf("body = %q, want missing-params error", w.Body.String())
-	}
-}
-
-func TestPresignedFile_MissingFile_404(t *testing.T) {
-	engine, _, signURL := setupPresignedTestServer(t)
-
-	// A legitimately signed URL pointing at a file that does not exist.
-	req := httptest.NewRequest(http.MethodGet, signURL("local://1/nope.png", 1, time.Hour), nil)
-	w := httptest.NewRecorder()
-	engine.ServeHTTP(w, req)
-	if got, want := w.Code, http.StatusNotFound; got != want {
-		t.Fatalf("status = %d, want %d", got, want)
 	}
 }

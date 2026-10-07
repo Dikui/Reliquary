@@ -27,7 +27,7 @@ func TestConfigFromModel(t *testing.T) {
 		},
 	}
 
-	cfg := ConfigFromModel(m, "app-id", "app-secret")
+	cfg := ConfigFromModel(m)
 	if cfg == nil {
 		t.Fatal("ConfigFromModel returned nil")
 	}
@@ -47,13 +47,10 @@ func TestConfigFromModel(t *testing.T) {
 		cfg.CustomHeaders["X-Trace-ID"] != "t-1" {
 		t.Errorf("CustomHeaders not propagated: %+v", cfg.CustomHeaders)
 	}
-	if cfg.AppID != "app-id" || cfg.AppSecret != "app-secret" {
-		t.Errorf("cloud credentials not propagated: %+v", cfg)
-	}
 }
 
 func TestConfigFromModel_Nil(t *testing.T) {
-	if got := ConfigFromModel(nil, "", ""); got != nil {
+	if got := ConfigFromModel(nil); got != nil {
 		t.Fatalf("expected nil for nil model, got %+v", got)
 	}
 }
