@@ -1,6 +1,17 @@
 <template>
     <div class="main" ref="dropzone">
-        <Menu></Menu>
+        <Menu v-if="!compactNavigation" />
+        <div v-else class="mobile-navigation-bar">
+            <t-button variant="text" :aria-label="t('menu.expandSidebar')" @click="mobileSidebarOpen = true">
+                <template #icon><t-icon name="menu" /></template>
+                {{ t('menu.expandSidebar') }}
+            </t-button>
+        </div>
+        <t-drawer v-if="compactNavigation" v-model:visible="mobileSidebarOpen" placement="left"
+            :header="t('menu.knowledgeBase')" :footer="false" size="min(280px, 90vw)"
+            drawer-class-name="platform-mobile-navigation">
+            <Menu mobile-overlay @close="mobileSidebarOpen = false" />
+        </t-drawer>
         <div v-if="isRouterAlive" class="platform-route-outlet">
             <RouterView />
         </div>
@@ -39,6 +50,14 @@ const router = useRouter();
 const commandPaletteStore = useCommandPaletteStore();
 let ismask = ref(false)
 const { t } = useI18n();
+const navigationMedia = window.matchMedia('(max-width: 640px)');
+const compactNavigation = ref(navigationMedia.matches);
+const mobileSidebarOpen = ref(false);
+const updateNavigationLayout = (event: MediaQueryListEvent) => {
+    compactNavigation.value = event.matches;
+    mobileSidebarOpen.value = false;
+};
+watch(() => route.fullPath, () => { mobileSidebarOpen.value = false; });
 
 const isRouterAlive = ref(true)
 const reloadApp = () => {
@@ -163,6 +182,7 @@ const handleGlobalDrop = async (event: DragEvent) => {
 
 // 组件挂载时添加全局事件监听器
 onMounted(() => {
+    navigationMedia.addEventListener('change', updateNavigationLayout);
     document.addEventListener('dragenter', handleGlobalDragEnter, true);
     document.addEventListener('dragover', handleGlobalDragOver, true);
     document.addEventListener('dragleave', handleGlobalDragLeave, true);
@@ -191,6 +211,7 @@ function maybeOpenCmdkFromRoute() {
 
 // 组件卸载时移除全局事件监听器
 onUnmounted(() => {
+    navigationMedia.removeEventListener('change', updateNavigationLayout);
     document.removeEventListener('dragenter', handleGlobalDragEnter, true);
     document.removeEventListener('dragover', handleGlobalDragOver, true);
     document.removeEventListener('dragleave', handleGlobalDragLeave, true);
@@ -204,7 +225,7 @@ onUnmounted(() => {
     align-items: stretch;
     width: 100%;
     height: 100%;
-    min-width: 600px;
+    min-width: 0;
     min-height: 0;
     /* 统一整页背景，让左侧菜单与右侧内容区视觉连贯 */
     background: var(--td-bg-color-container);
@@ -218,6 +239,33 @@ onUnmounted(() => {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+}
+
+.mobile-navigation-bar {
+    flex-shrink: 0;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--td-component-stroke);
+}
+
+.platform-mobile-navigation {
+    .t-drawer__body {
+        padding: 0;
+        overflow: hidden;
+    }
+
+    .aside_box {
+        width: 100%;
+        min-width: 0;
+        height: 100%;
+        border-right: 0;
+    }
+}
+
+@media (max-width: 640px) {
+    .main {
+        flex-direction: column;
+        overflow: hidden;
+    }
 }
 
 .upload-mask {

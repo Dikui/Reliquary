@@ -9,7 +9,8 @@
 
     <template v-if="draft">
       <div class="editor-heading"><h3>{{ selectedId ? t('knowledgeDomains.edit') : t('knowledgeDomains.create') }}</h3><t-button variant="text" :disabled="saving" @click="closeEditor">{{ t('common.back') }}</t-button></div>
-      <t-tabs v-model="editorTab">
+      <t-select v-if="selectedId" v-model="editorTab" class="domain-mobile-nav" :options="editorTabOptions" :aria-label="t('knowledgeDomains.edit')" :popup-props="{ zIndex: 6200 }" />
+      <t-tabs v-model="editorTab" class="domain-editor-tabs">
         <t-tab-panel value="template" :label="t('knowledgeDomains.template')">
           <form novalidate class="domain-form" @submit.prevent="saveDomain">
             <label><span>{{ t('knowledgeDomains.name') }}</span><t-input v-model="draft.name" :disabled="!canEdit || saving" :maxlength="255" /></label>
@@ -62,6 +63,7 @@ import ModelTierEditor from '@/components/ModelTierEditor.vue'
 import DomainFieldEditor from './DomainFieldEditor.vue'
 import DomainTemplateEditor from './DomainTemplateEditor.vue'
 import { copyDomainInput, emptyDomainField, emptyKnowledgeDomain, templateFieldFromOpenField, validateDomainInput } from './domainTemplate'
+import { domainErrorMessage } from './domainErrors'
 const { t } = useI18n()
 const auth = useAuthStore()
 const confirmDelete = useConfirmDelete()
@@ -78,6 +80,10 @@ const selectedDomain = computed(() => domains.value.find(domain => domain.id ===
 const draft = ref<KnowledgeDomainInput | null>(null)
 const savedDraft = ref('')
 const editorTab = ref('template')
+const editorTabOptions = computed(() => [
+  { value: 'template', label: t('knowledgeDomains.template') },
+  { value: 'consolidation', label: t('knowledgeDomains.consolidation') },
+])
 const saving = ref(false)
 const deletingId = ref('')
 const openFields = ref<DomainOpenField[]>([])
@@ -100,7 +106,9 @@ const mappingOptions = computed(() => (selectedDomain.value?.fields || []).map(f
 const domainColumns = computed(() => [{ colKey: 'name', title: t('knowledgeDomains.name'), width: 180 }, { colKey: 'description', title: t('knowledgeDomains.domainDescription') }, { colKey: 'types', title: t('knowledgeDomains.entityTypes') }, { colKey: 'actions', title: t('knowledgeDomains.actions'), width: 160 }])
 const openFieldColumns = computed(() => [{ colKey: 'name', title: t('knowledgeDomains.openField'), width: 160 }, { colKey: 'count', title: t('knowledgeDomains.count'), width: 90 }, { colKey: 'example', title: t('knowledgeDomains.examples') }, ...(canEdit.value ? [{ colKey: 'actions', title: t('knowledgeDomains.actions'), width: 180 }] : [])])
 function data<T>(response: DomainEnvelope<T>): T { if (!response.success) throw new Error(response.error || response.message || t('knowledgeDomains.failed')); return response.data }
-function errorMessage(cause: unknown): string { return cause instanceof Error ? cause.message : t('knowledgeDomains.failed') }
+function errorMessage(cause: unknown): string {
+  return domainErrorMessage(cause, t('knowledgeDomains.failed'), count => t('knowledgeDomains.deleteReferenced', { count }, count))
+}
 function formatValue(value: unknown): string { return typeof value === 'string' ? value : JSON.stringify(value) || t('knowledgeWorkbench.emptyValue') }
 async function loadDomains() {
   const request = ++listRequest
@@ -170,7 +178,8 @@ onMounted(loadDomains)
 onBeforeUnmount(() => { listRequest++; fieldsRequest++ })
 </script>
 <style scoped lang="less">
-.domain-settings { color: var(--td-text-color-primary); display: flex; flex-direction: column; gap: 18px; }
+.domain-settings { color: var(--td-text-color-primary); display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.domain-mobile-nav { display: none; }
 .domain-header, .editor-heading, .domain-list-toolbar, .consolidation-header, .domain-name, .table-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .domain-header h2 { margin: 0; font-size: 20px; }
 .domain-header p, .consolidation-header p { color: var(--td-text-color-secondary); line-height: 1.6; }
@@ -185,5 +194,12 @@ onBeforeUnmount(() => { listRequest++; fieldsRequest++ })
 .open-field-example q { color: var(--td-text-color-secondary); font-size: 12px; }
 code { overflow-wrap: anywhere; }
 :deep(textarea) { resize: none; }
-@media (max-width: 600px) { .domain-header, .consolidation-header { align-items: flex-start; flex-direction: column; } .domain-list-toolbar { flex-wrap: wrap; } }
+@media (max-width: 600px) {
+  .domain-header, .consolidation-header { align-items: flex-start; flex-direction: column; }
+  .domain-list-toolbar { flex-wrap: wrap; }
+  .domain-mobile-nav { display: block; }
+  .domain-editor-tabs > :deep(.t-tabs__header) { display: none; }
+  .domain-actions { flex-wrap: wrap; }
+  :deep(.t-table__content) { overflow-x: auto; }
+}
 </style>

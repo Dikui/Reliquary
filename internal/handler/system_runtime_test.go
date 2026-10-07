@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -480,30 +481,73 @@ func TestListRuntimeTasksRejectsUnknownState(t *testing.T) {
 	}
 }
 
-func TestRuntimeTaskCancelUsesDomainCancellationWithTaskTenant(t *testing.T) {
+func TestRuntimeTaskCancelUsesSingleTeamContext(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	inspector := &runtimeTaskTestInspector{tasks: []types.RuntimeTaskInfo{{
-		ID: "task-cancel", Queue: types.QueueDefault, Type: types.TypeDocumentProcess,
-		State: types.RuntimeTaskActive, TenantID: 42, KnowledgeID: "knowledge-42",
-		AllowedActions: []types.RuntimeTaskAction{types.RuntimeTaskActionCancel},
-	}}}
-	canceller := &runtimeKnowledgeCancelTest{}
-	handler := &SystemHandler{taskInspector: inspector, knowledgeSvc: canceller}
-	recorder := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Params = gin.Params{
-		{Key: "queue", Value: types.QueueDefault},
-		{Key: "task_id", Value: "task-cancel"},
-		{Key: "action", Value: string(types.RuntimeTaskActionCancel)},
-	}
-	ctx.Request = httptest.NewRequest(http.MethodPost, "/cancel", nil)
+	for _, tenantID := range []uint64{0, types.SingleTenantID} {
+		t.Run(strconv.FormatUint(tenantID, 10), func(t *testing.T) {
+			inspector := &runtimeTaskTestInspector{tasks: []types.RuntimeTaskInfo{{
+				ID: "task-cancel", Queue: types.QueueDefault, Type: types.TypeDocumentProcess,
+				State: types.RuntimeTaskActive, TenantID: tenantID, KnowledgeID: "knowledge-1",
+				AllowedActions: []types.RuntimeTaskAction{types.RuntimeTaskActionCancel},
+			}}}
+			canceller := &runtimeKnowledgeCancelTest{}
+			handler := &SystemHandler{taskInspector: inspector, knowledgeSvc: canceller}
+			recorder := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(recorder)
+			ctx.Params = gin.Params{
+				{Key: "queue", Value: types.QueueDefault},
+				{Key: "task_id", Value: "task-cancel"},
+				{Key: "action", Value: string(types.RuntimeTaskActionCancel)},
+			}
+			ctx.Request = httptest.NewRequest(http.MethodPost, "/cancel", nil)
+			ctx.Request = ctx.Request.WithContext(context.WithValue(ctx.Request.Context(), types.TenantIDContextKey, uint64(999)))
 
-	handler.MutateRuntimeTask(ctx)
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, body=%s", recorder.Code, recorder.Body.String())
+			handler.MutateRuntimeTask(ctx)
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("status = %d, body=%s", recorder.Code, recorder.Body.String())
+			}
+			if canceller.tenantID != types.SingleTenantID || canceller.knowledgeID != "knowledge-1" {
+				t.Fatalf("domain cancellation context mismatch: %+v", canceller)
+			}
+		})
 	}
-	if canceller.tenantID != 42 || canceller.knowledgeID != "knowledge-42" {
-		t.Fatalf("domain cancellation context mismatch: %+v", canceller)
+}
+
+func TestRuntimeTaskActionsRejectForeignTenantBeforeMutation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, tenantID := range []uint64{2, 42} {
+		for _, action := range []types.RuntimeTaskAction{
+			types.RuntimeTaskActionCancel, types.RuntimeTaskActionRunNow, types.RuntimeTaskActionDelete,
+		} {
+			t.Run(strconv.FormatUint(tenantID, 10)+"/"+string(action), func(t *testing.T) {
+				inspector := &runtimeTaskTestInspector{tasks: []types.RuntimeTaskInfo{{
+					ID: "task-foreign", Queue: types.QueueDefault, Type: types.TypeDocumentProcess,
+					State: types.RuntimeTaskArchived, TenantID: tenantID, KnowledgeID: "foreign-knowledge",
+					AllowedActions: []types.RuntimeTaskAction{
+						types.RuntimeTaskActionCancel, types.RuntimeTaskActionRunNow, types.RuntimeTaskActionDelete,
+					},
+				}}}
+				canceller := &runtimeKnowledgeCancelTest{}
+				handler := &SystemHandler{taskInspector: inspector, knowledgeSvc: canceller}
+				recorder := httptest.NewRecorder()
+				ctx, _ := gin.CreateTestContext(recorder)
+				ctx.Params = gin.Params{
+					{Key: "queue", Value: types.QueueDefault},
+					{Key: "task_id", Value: "task-foreign"},
+					{Key: "action", Value: string(action)},
+				}
+				ctx.Request = httptest.NewRequest(http.MethodPost, "/actions/"+string(action), nil)
+
+				handler.MutateRuntimeTask(ctx)
+				if recorder.Code != http.StatusForbidden {
+					t.Fatalf("status = %d, body=%s", recorder.Code, recorder.Body.String())
+				}
+				if inspector.retriedTask != "" || inspector.deletedTask != "" || inspector.forceDeleted != "" ||
+					inspector.cancelKnowledge != "" || canceller.knowledgeID != "" {
+					t.Fatalf("foreign task caused mutation: inspector=%+v cancellation=%+v", inspector, canceller)
+				}
+			})
+		}
 	}
 }
 
@@ -511,7 +555,7 @@ func TestRuntimeTaskCancelPurgesOrphanWhenKnowledgeGone(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	inspector := &runtimeTaskTestInspector{tasks: []types.RuntimeTaskInfo{{
 		ID: "task-orphan", Queue: types.QueueMultimodal, Type: types.TypeImageMultimodal,
-		State: types.RuntimeTaskRetry, TenantID: 42, KnowledgeID: "knowledge-gone",
+		State: types.RuntimeTaskRetry, TenantID: types.SingleTenantID, KnowledgeID: "knowledge-gone",
 		AllowedActions: []types.RuntimeTaskAction{types.RuntimeTaskActionCancel},
 	}}}
 	canceller := &runtimeKnowledgeCancelTest{err: repository.ErrKnowledgeNotFound}
@@ -541,7 +585,7 @@ func TestRuntimeTaskCancelPurgesOrphanAfterSiblingSweep(t *testing.T) {
 		cancelDeleted: 2,
 		tasks: []types.RuntimeTaskInfo{{
 			ID: "task-orphan", Queue: types.QueueMultimodal, Type: types.TypeImageMultimodal,
-			State: types.RuntimeTaskArchived, TenantID: 42, KnowledgeID: "knowledge-gone",
+			State: types.RuntimeTaskArchived, TenantID: types.SingleTenantID, KnowledgeID: "knowledge-gone",
 			AllowedActions: []types.RuntimeTaskAction{types.RuntimeTaskActionCancel},
 		}},
 	}
@@ -575,7 +619,7 @@ func TestRuntimeTaskCancelPurgesOrphanWhenSweepAlreadyRemovedTask(t *testing.T) 
 		getRuntimeErrFrom: 2,
 		tasks: []types.RuntimeTaskInfo{{
 			ID: "task-orphan", Queue: types.QueueMultimodal, Type: types.TypeImageMultimodal,
-			State: types.RuntimeTaskRetry, TenantID: 42, KnowledgeID: "knowledge-gone",
+			State: types.RuntimeTaskRetry, TenantID: types.SingleTenantID, KnowledgeID: "knowledge-gone",
 			AllowedActions: []types.RuntimeTaskAction{types.RuntimeTaskActionCancel},
 		}},
 	}

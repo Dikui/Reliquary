@@ -69,6 +69,12 @@
               </div>
             </div>
 
+            <div class="settings-mobile-nav">
+              <span>{{ $t('general.settings') }}</span>
+              <t-select :value="currentSection" :options="navItems.map(item => ({ value: item.key, label: item.label }))"
+                :aria-label="$t('general.settings')" :popup-props="{ zIndex: 6200 }" @change="handleMobileSectionChange" />
+            </div>
+
             <!-- 右侧内容区域 -->
             <div class="settings-content">
               <div class="content-wrapper" :class="{
@@ -468,6 +474,11 @@ const handleNavClick = async (item: any) => {
   syncSettingsRoute(item.key)
 }
 
+const handleMobileSectionChange = (value: unknown) => {
+  const item = navItems.value.find(item => item.key === value)
+  if (item) void handleNavClick(item)
+}
+
 // 子菜单点击处理
 const handleSubMenuClick = (parentKey: string, childKey: string) => {
   currentSection.value = parentKey
@@ -505,7 +516,7 @@ const handleClose = async () => {
   // 如果当前路由是设置页，返回上一页
   if (route.path === '/platform/settings') {
     const sec = route.query.section
-    if (sec === 'system-global' || sec === 'runtime-queues' || sec === 'system-audit-log') {
+    if (!router.options.history.state.back || sec === 'system-global' || sec === 'runtime-queues' || sec === 'system-audit-log') {
       router.push('/platform/knowledge-bases')
     } else {
       router.back()
@@ -859,9 +870,13 @@ onUnmounted(() => {
 /* 右侧内容区域 */
 .settings-content {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   overflow-y: auto;
   background-color: var(--td-bg-color-container);
 }
+
+.settings-mobile-nav { display: none; }
 
 .content-wrapper {
   // Bumped from 600 to 760 when the modal grew from 900→1080 (see
@@ -985,5 +1000,29 @@ onUnmounted(() => {
     max-width: 360px;
     line-height: 1.6;
   }
+}
+
+@media (max-width: 640px) {
+  .settings-overlay { padding: 12px; }
+  .settings-modal { max-height: calc(100dvh - 24px); }
+  .settings-container { flex-direction: column; }
+  .settings-sidebar { display: none; }
+  .settings-mobile-nav {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    gap: 8px;
+    padding: 16px 56px 16px 16px;
+    border-bottom: 1px solid var(--td-component-stroke);
+    background: var(--td-bg-color-settings-modal);
+    color: var(--td-text-color-primary);
+  }
+  .content-wrapper, .content-wrapper--wide, .content-wrapper--full {
+    width: 100%;
+    max-width: none;
+    box-sizing: border-box;
+    padding: 20px 16px;
+  }
+  .section { min-width: 0; }
 }
 </style>

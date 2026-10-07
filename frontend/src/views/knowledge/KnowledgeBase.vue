@@ -2349,18 +2349,22 @@ async function createNewSession(value: string): Promise<void> {
             </div>
           </div>
           <p v-if="activeKbTab !== 'context'" class="document-subtitle">{{ $t('knowledgeEditor.document.subtitle') }}</p>
-          <p v-if="unsupportedFileTypes.length" class="parser-hint" @click="goToParserSettings">
+          <p v-if="unsupportedFileTypes.length" class="parser-hint knowledge-header-hint" @click="goToParserSettings">
             <t-icon name="info-circle" class="parser-hint-icon" />
-            <span>{{$t('knowledgeBase.unsupportedTypesHint', {
+            <span class="knowledge-header-hint__text">{{$t('knowledgeBase.unsupportedTypesHint', {
               types: unsupportedFileTypes.map(t => '.' + t).join('、')
             })
               }}</span>
-            <span class="parser-hint-link">{{ $t('knowledgeBase.goToParserSettings') }} →</span>
+            <button type="button" class="parser-hint-link knowledge-header-hint__action" @click.stop="goToParserSettings">
+              {{ $t('knowledgeBase.goToParserSettings') }} →
+            </button>
           </p>
-          <p v-if="missingStorageEngine" class="storage-engine-warning" @click="handleOpenKBSettings">
+          <p v-if="missingStorageEngine" class="storage-engine-warning knowledge-header-hint" @click="handleOpenKBSettings">
             <t-icon name="info-circle" class="warning-icon" />
-            <span>{{ $t('knowledgeBase.missingStorageEngine') }}</span>
-            <span class="warning-link">{{ $t('knowledgeBase.goToStorageSettings') }} →</span>
+            <span class="knowledge-header-hint__text">{{ $t('knowledgeBase.missingStorageEngine') }}</span>
+            <button type="button" class="warning-link knowledge-header-hint__action" @click.stop="handleOpenKBSettings">
+              {{ $t('knowledgeBase.goToStorageSettings') }} →
+            </button>
           </p>
         </div>
       </div>
@@ -2788,11 +2792,12 @@ async function createNewSession(value: string): Promise<void> {
   gap: 20px;
   height: 100%;
   flex: 1;
-  width: 100%;
+  width: auto;
   min-width: 0;
   padding: 24px 32px 0px;
   box-sizing: border-box;
 }
+
 
 // Breadcrumb tab switch (文档/Wiki in breadcrumb)
 .breadcrumb-tab {
@@ -2845,6 +2850,14 @@ async function createNewSession(value: string): Promise<void> {
   min-height: 0;
   background: transparent;
   border: none;
+}
+
+.knowledge-context-area {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 // 标签筛选浮层：点击工具栏入口展开，不占文档列表横向空间
@@ -3624,6 +3637,20 @@ async function createNewSession(value: string): Promise<void> {
       color: var(--td-brand-color);
       margin-left: 2px;
       white-space: nowrap;
+    }
+  }
+
+  .knowledge-header-hint__action {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+
+    &:focus-visible {
+      outline: 2px solid var(--td-brand-color);
+      outline-offset: 2px;
     }
   }
 
@@ -4566,4 +4593,59 @@ async function createNewSession(value: string): Promise<void> {
 .del-card {
   vertical-align: middle;
 }
+@media (max-width: 640px) {
+  .knowledge-layout {
+    margin: 0;
+    padding: 16px 12px 0;
+    gap: 12px;
+    min-height: 0;
+  }
+
+  .document-header {
+    min-width: 0;
+
+    .document-header-title,
+    .document-title-row {
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    .document-breadcrumb {
+      flex-wrap: wrap;
+      min-width: 0;
+      font-size: 16px;
+      overflow-wrap: anywhere;
+    }
+
+    .breadcrumb-link {
+      max-width: 100%;
+      white-space: normal;
+      text-align: left;
+    }
+
+    .knowledge-header-hint {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: start;
+      min-width: 0;
+      max-width: 100%;
+
+      .knowledge-header-hint__action {
+        grid-column: 2;
+        justify-self: start;
+        margin-left: 0;
+        max-width: 100%;
+        white-space: normal;
+      }
+    }
+
+    .knowledge-header-hint__text {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      white-space: normal;
+    }
+
+  }
+}
+
 </style>

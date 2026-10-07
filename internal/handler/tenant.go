@@ -768,9 +768,14 @@ func (h *TenantHandler) GetTenantKV(c *gin.Context) {
 	key := secutils.SanitizeForLog(c.Param("key"))
 
 	switch key {
-	case "web-search-config", "parser-engine-config", "storage-engine-config":
+	case "web-search-config", "parser-engine-config":
 		if !dto.CanViewIntegrationSecrets(ctx) {
 			c.Error(errors.NewForbiddenError("integration configuration requires admin access"))
+			return
+		}
+	case "storage-engine-config":
+		if !dto.CanViewIntegrationSecrets(ctx) && !dto.RoleFromContext(ctx).HasPermission(types.TenantRoleContributor) {
+			c.Error(errors.NewForbiddenError("storage configuration requires contributor access"))
 			return
 		}
 	}
@@ -994,6 +999,16 @@ func (h *TenantHandler) GetTenantStorageEngineConfig(c *gin.Context) {
 	if tenant == nil {
 		logger.Error(ctx, "Workspace is empty")
 		c.Error(errors.NewBadRequestError("Workspace is empty"))
+		return
+	}
+	if !dto.CanViewIntegrationSecrets(ctx) {
+		// Content editors only need the team's default provider to create a KB.
+		// Connection details and credential fields remain admin-only.
+		provider := ""
+		if tenant.StorageEngineConfig != nil {
+			provider = tenant.StorageEngineConfig.DefaultProvider
+		}
+		c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"default_provider": provider}})
 		return
 	}
 	data := types.StorageEngineConfigForResponse(tenant.StorageEngineConfig, true)

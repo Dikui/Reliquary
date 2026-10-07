@@ -1237,6 +1237,10 @@ func (h *SystemHandler) mutateRuntimeTask(c *gin.Context, action types.RuntimeTa
 		c.JSON(http.StatusConflict, gin.H{"error": "Task is no longer available"})
 		return
 	}
+	if task.TenantID != 0 && task.TenantID != types.SingleTenantID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Task does not belong to the team workspace"})
+		return
+	}
 	if !task.Allows(action) {
 		c.JSON(http.StatusConflict, gin.H{"error": "Action is not allowed for the current task state"})
 		return
@@ -1250,11 +1254,11 @@ func (h *SystemHandler) mutateRuntimeTask(c *gin.Context, action types.RuntimeTa
 	}
 	switch action {
 	case types.RuntimeTaskActionCancel:
-		if h.knowledgeSvc == nil || task.TenantID == 0 || task.KnowledgeID == "" {
+		if h.knowledgeSvc == nil || task.KnowledgeID == "" {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Business cancellation is unavailable"})
 			return
 		}
-		cancelCtx := context.WithValue(c.Request.Context(), types.TenantIDContextKey, task.TenantID)
+		cancelCtx := context.WithValue(c.Request.Context(), types.TenantIDContextKey, types.SingleTenantID)
 		if _, err = h.knowledgeSvc.CancelKnowledgeParse(cancelCtx, task.KnowledgeID); err != nil {
 			if isKnowledgeGone(err) {
 				if h.purgeOrphanRuntimeTask(c.Request.Context(), inspector, queue, taskID, task.KnowledgeID) {
@@ -1353,7 +1357,7 @@ func (h *SystemHandler) MutateRuntimeTask(c *gin.Context) {
 	h.mutateRuntimeTask(c, types.RuntimeTaskAction(c.Param("action")))
 }
 
-// PurgeArchivedRuntimeTasks clears every archived (finally-failed) task in one
+// PurgeArchivedRuntimeTasks clears the team's archived (finally-failed) tasks in one
 // queue. It only touches the archived dead-letter set — live pending/active/
 // scheduled/retry tasks are untouched — and mirrors single-record delete
 // semantics by leaving business state as-is (archived tasks already had their

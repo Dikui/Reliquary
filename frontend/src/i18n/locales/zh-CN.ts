@@ -1,4 +1,11 @@
 export default {
+  navigation: {
+    removedFeature: '此功能已移除，已返回知识库列表。',
+    pageNotFound: '页面不存在',
+    pageNotFoundDescription: '请检查页面地址，或返回知识库列表继续使用。',
+    returnToKnowledgeBases: '返回知识库列表',
+  },
+
   modelTiers: {
   configureTeam: '设置团队档位',
   configureDomains: '设置领域档位',
@@ -147,6 +154,7 @@ export default {
     "failed": "操作失败，请重试。",
     "deleteTitle": "删除领域",
     "deleteHint": "有知识库引用的领域不能删除。",
+    "deleteReferenced": "该领域正被 {count} 个知识库使用，无法删除。",
     "deleteConfirm": "删除领域“{name}”？有知识库引用的领域不能删除。",
     "discardTitle": "放弃未保存的修改",
     "discardHint": "本次修改尚未保存，返回后将丢弃这些修改。",
@@ -228,6 +236,18 @@ export default {
     }
   },
   knowledgeWorkbench: {
+    nameEmbeddings: {
+      title: '对象名称向量',
+      pending: '对象名称向量待重建数量：{count}',
+      unknown: '暂不可用',
+      rebuild: '立即重建',
+      latest: '最近一次重建：{status}，已处理 {processed}/{total} 个对象',
+      noRun: '尚无重建记录',
+      failure: '失败原因：{reason}',
+      queued: '对象名称向量重建已加入队列',
+      status: { pending: '等待执行', running: '正在重建', completed: '已完成', failed: '失败' },
+    },
+
     scope: {"label": "查询范围", "knowledge_base": "当前知识库", "domain": "领域下全部知识库", "team": "全团队", "selectDomain": "选择查询领域", "sourceKb": "来源知识库", "detailHint": "对象身份在团队内统一，以下事实和事件汇总所有知识库的来源。", "workflowHint": "工作流和报告保留在当前知识库；事实查询步骤可以设置独立范围。"},
     fusion: {"minValue": "数值下限", "maxValue": "数值上限", "unit": "比较单位", "queryHint": "使用领域模板中的字段或别名查询。数值比较需要同一单位族；结果数量只代表当前返回的资料。", "originalField": "原始字段名", "snapshotTitle": "核验引用原文", "quoteMissing": "这段引用没有在该快照中精确匹配。请核对原文；系统不会猜测位置。", "sameStory": "关联的先前事件", "roundup": "汇总材料：保持独立，不累加到各子事件", "current_period": "本期材料", "background": "历史背景", "unknown_date": "日期未知"},
     tabLabel: '知识工作台', title: '知识工作台', subtitle: "管理和组织文档知识库", sections: '知识工作台功能', refresh: '刷新', rebuild: '重新构建知识上下文', requestFailed: '请求失败，请稍后重试。', emptyValue: '未填写', unknownDate: '时间未知', facts: '事实', correct: '纠正事实', correctionSaved: '事实纠正已保存，新事实保留了来源和历史。', correctionTitle: '纠正事实', correctionIntro: '为“{predicate}”提交新的事实版本。引用必须与来源原文一致。', correctionValue: '正确值', correctionValueType: '值类型', correctionUnit: '单位', correctionQuote: '来源原文引用', correctionNote: '纠正说明', correctionFrom: '生效开始时间', correctionTo: '生效结束时间', correctionValueInvalid: '请按类型输入有效值。', cancel: '取消', factPeriod: '有效时间', rebuildQueued: '已将 {count} 条来源加入重建队列；索引结果会在后台处理完成后更新。', loadMore: '加载更多',
@@ -5689,7 +5709,7 @@ export default {
         },
         name: {
           title: '填写名称',
-          desc: "取一个便于识别的名称，例如「产品手册」或「客服 文档」。描述可选填。"
+          desc: "取一个便于识别的名称，例如「产品手册」或「服务指南」。描述可选填。"
         },
         type: {
           title: '选择知识库类型',
@@ -5732,7 +5752,7 @@ export default {
       steps: {
         create: {
           title: '创建第一个知识库',
-          desc: "知识库用来存放文档与 文档。点击下方高亮的「新建知识库」按钮，我们会带你完成表单填写。"
+          desc: "知识库用来收录文档和网页。点击下方高亮的「新建知识库」按钮，我们会带你完成表单填写。"
         }
       }
     }
@@ -5767,7 +5787,7 @@ export default {
       },
       knowledge: {
         title: '创建你的知识库',
-        desc: "知识库是一切的起点：上传文档、网页或 文档，Reliquary 会自动解析并建立索引。点击这里进入知识库。"
+        desc: "知识库是一切的起点：收录文档或网页，Reliquary 会自动解析并建立索引。点击这里进入知识库。"
       },
       welcome: {
         title: '欢迎使用 Reliquary',

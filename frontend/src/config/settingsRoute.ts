@@ -1,4 +1,5 @@
 import { INTEGRATION_TABS, type IntegrationTab } from './integrations'
+import { SETTINGS_SECTION_MIN_ROLE, SYSTEM_ADMIN_SETTINGS_SECTIONS } from './settingsAccess'
 
 export const INTEGRATION_SECTION_PREFIX = 'integration-'
 
@@ -41,7 +42,9 @@ export function normalizeSettingsSection(section: string, tab?: string | null): 
   if (isBareIntegrationTab(section)) {
     return integrationSectionKey(section)
   }
-  return section
+  if (isIntegrationSection(section) || SYSTEM_ADMIN_SETTINGS_SECTIONS.has(section)
+    || Object.hasOwn(SETTINGS_SECTION_MIN_ROLE, section)) return section
+  return 'general'
 }
 
 /**

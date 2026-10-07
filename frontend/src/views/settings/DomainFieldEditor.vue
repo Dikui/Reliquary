@@ -20,8 +20,8 @@ const typeOptions = computed(() => props.entityTypes.map(value => ({ value, labe
 const unitOptions = computed(() => props.unitFamilies.map(family => ({ value: family.key, label: `${family.key} (${family.canonical_unit})` })))
 </script>
 <style scoped lang="less">
-.domain-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.domain-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; min-width: 0; }
 label { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .full-width { grid-column: 1 / -1; }
-@media (max-width: 600px) { .domain-field-grid { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .domain-field-grid { grid-template-columns: minmax(0, 1fr); } }
 </style>

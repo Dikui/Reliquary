@@ -19,6 +19,9 @@
               <div class="sidebar-header">
                 <h2 class="sidebar-title">{{ editorMode === 'create' ? $t('knowledgeEditor.titleCreate') : $t('knowledgeEditor.titleEdit') }}</h2>
               </div>
+              <t-select v-model="currentSection" class="mobile-section-select"
+                :aria-label="$t('general.settings')"
+                :options="navItems.map(item => ({ value: item.key, label: item.label }))" />
               <div class="settings-nav" data-guide="kb-editor-sidebar">
                 <template v-for="group in navGroups" :key="group.key">
                   <div class="nav-group-title">{{ group.label }}</div>
@@ -1579,6 +1582,8 @@ watch(() => chatResources.allModels, (list) => {
 
 .settings-content {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1919,6 +1924,103 @@ watch(() => chatResources.allModels, (list) => {
     color: var(--td-error-color);
     margin-left: 2px;
     font-weight: 500;
+  }
+}
+
+.mobile-section-select {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .settings-modal {
+    width: calc(100vw - 24px);
+    height: calc(100dvh - 24px);
+    max-height: none;
+  }
+
+  .settings-container {
+    flex-direction: column;
+  }
+
+  .settings-sidebar {
+    width: 100%;
+    border-right: 0;
+    border-bottom: 1px solid var(--td-component-stroke);
+  }
+
+  .sidebar-header {
+    padding: 16px 56px 12px 16px;
+    border-bottom: 0;
+  }
+
+  .close-btn {
+    top: 12px;
+    right: 12px;
+  }
+
+  .settings-nav {
+    display: none;
+  }
+
+  .mobile-section-select {
+    display: block;
+    width: calc(100% - 32px);
+    margin: 0 16px 12px;
+  }
+
+  .content-wrapper {
+    padding: 16px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .settings-footer {
+    padding: 12px 16px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .settings-footer-note {
+    flex-basis: 100%;
+  }
+
+  .settings-footer-actions {
+    flex-wrap: wrap;
+  }
+
+  .kb-multimodal-settings .setting-row,
+  :deep(.setting-row),
+  :deep(.kb-parser-settings--embedded .setting-row) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .kb-multimodal-settings .setting-info,
+  :deep(.setting-info),
+  :deep(.kb-parser-settings--embedded .setting-info) {
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: 100%;
+    padding-right: 0;
+  }
+
+  .kb-multimodal-settings .setting-control,
+  :deep(.setting-control) {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  :deep(.setting-control .t-select),
+  :deep(.setting-control .t-input-number) {
+    min-width: 0 !important;
+    max-width: 100%;
+  }
+
+  :deep(.t-radio-group) {
+    max-width: 100%;
+    flex-wrap: wrap;
   }
 }
 </style>

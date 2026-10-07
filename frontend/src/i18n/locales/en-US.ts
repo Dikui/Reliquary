@@ -1,4 +1,11 @@
 export default {
+  navigation: {
+    removedFeature: 'This feature has been removed. You have been returned to the knowledge base list.',
+    pageNotFound: 'Page not found',
+    pageNotFoundDescription: 'Check the page address or return to your knowledge bases.',
+    returnToKnowledgeBases: 'Return to knowledge bases',
+  },
+
   modelTiers: {
   configureTeam: 'Configure team tiers',
   configureDomains: 'Configure domain tiers',
@@ -147,6 +154,7 @@ export default {
     "failed": "The operation failed. Try again.",
     "deleteTitle": "Delete domain",
     "deleteHint": "A domain used by a knowledge base cannot be deleted.",
+    "deleteReferenced": "This domain is used by {count} knowledge base and cannot be deleted. | This domain is used by {count} knowledge bases and cannot be deleted.",
     "deleteConfirm": "Delete domain “{name}”? Domains used by knowledge bases cannot be deleted.",
     "discardTitle": "Discard unsaved changes",
     "discardHint": "These changes have not been saved. Going back will discard them.",
@@ -228,6 +236,18 @@ export default {
     }
   },
   knowledgeWorkbench: {
+    nameEmbeddings: {
+      title: 'Object name embeddings',
+      pending: 'Object names pending rebuild: {count}',
+      unknown: 'Unavailable',
+      rebuild: 'Rebuild now',
+      latest: 'Latest rebuild: {status}, {processed}/{total} objects processed',
+      noRun: 'No rebuild has run yet',
+      failure: 'Failure reason: {reason}',
+      queued: 'Object name embedding rebuild queued',
+      status: { pending: 'Pending', running: 'Running', completed: 'Completed', failed: 'Failed' },
+    },
+
     scope: {"label": "Query scope", "knowledge_base": "Current knowledge base", "domain": "All knowledge bases in a domain", "team": "Entire team", "selectDomain": "Select a query domain", "sourceKb": "Source knowledge base", "detailHint": "Entity identities are shared across the team. The facts and events below include sources from every knowledge base.", "workflowHint": "Workflows and reports belong to the current knowledge base. Fact query steps can use a separate scope."},
     fusion: {"minValue": "Minimum value", "maxValue": "Maximum value", "unit": "Comparison unit", "queryHint": "Query using fields or aliases from domain templates. Numeric comparisons require compatible units from the same family; counts describe only the returned records.", "originalField": "Original field label", "snapshotTitle": "Verify the source quote", "quoteMissing": "This quote does not exactly match the snapshot. Check the original text; no position is guessed.", "sameStory": "Related earlier event", "roundup": "Roundup: kept separate from the individual events", "current_period": "This period", "background": "Historical background", "unknown_date": "Unknown date"},
     tabLabel: 'Knowledge Workbench', title: 'Knowledge Workbench', subtitle: "Manage and organize document knowledge bases", sections: 'Knowledge workbench sections', refresh: 'Refresh', rebuild: 'Rebuild knowledge context', requestFailed: 'The request failed. Please try again.', emptyValue: 'Not set', unknownDate: 'Unknown time', facts: 'Facts', correct: 'Correct fact', correctionSaved: 'Fact correction saved with its source and history.', correctionTitle: 'Correct fact', correctionIntro: 'Create a new version of “{predicate}”. The quote must match the source text.', correctionValue: 'Correct value', correctionValueType: 'Value type', correctionUnit: 'Unit', correctionQuote: 'Verbatim source quote', correctionNote: 'Correction note', correctionFrom: 'Effective from', correctionTo: 'Effective until', correctionValueInvalid: 'Enter a valid value for the selected type.', cancel: 'Cancel', factPeriod: 'Effective period', rebuildQueued: '{count} sources were queued for rebuilding. Results will update after background processing finishes.', loadMore: 'Load more',
@@ -323,7 +343,7 @@ export default {
       },
       knowledge: {
         title: 'Create your knowledge base',
-        desc: "Everything starts here: upload documents, web pages or documents and Reliquary parses and indexes them automatically. Click here to open knowledge bases."
+        desc: "Everything starts here: add documents or web pages and Reliquary parses and indexes them automatically. Click here to open knowledge bases."
       },
       chat: {
         title: 'Start an AI chat',
@@ -358,7 +378,7 @@ export default {
       steps: {
         create: {
           title: 'Create your first knowledge base',
-          desc: "Knowledge bases hold documents and documents. Click the highlighted \"New knowledge base\" button below and we will walk you through the form."
+          desc: "Knowledge bases hold documents and web pages. Click the highlighted \"New knowledge base\" button below and we will walk you through the form."
         }
       }
     },

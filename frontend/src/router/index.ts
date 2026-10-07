@@ -5,151 +5,12 @@ import { getCurrentUser, userInfoFromApi } from '@/api/auth'
 import type { DeploymentCapabilityKey } from '@/config/deploymentCapabilities'
 import { MessagePlugin } from 'tdesign-vue-next'
 import i18n from '@/i18n'
-import { normalizeSettingsSection } from '@/config/settingsRoute'
+import { createApplicationRoutes } from './routes'
+import { notifyRemovedFeatureRedirect } from './routeFallbacks'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
-  routes: [
-    {
-      path: "/",
-      redirect: "/platform/knowledge-bases",
-    },
-    {
-      path: "/login",
-      name: "login",
-      component: () => import("../views/auth/Login.vue"),
-      meta: { requiresAuth: false, requiresInit: false }
-    },
-    {
-      path: "/register",
-      name: "registerByInvite",
-      component: () => import("../views/auth/Login.vue"),
-      meta: { requiresAuth: false, requiresInit: false }
-    },
-    {
-      path: "/knowledgeBase",
-      name: "home",
-      component: () => import("../views/knowledge/KnowledgeBase.vue"),
-      meta: { requiresInit: true, requiresAuth: true }
-    },
-    {
-      path: "/platform",
-      name: "Platform",
-      redirect: "/platform/knowledge-bases",
-      component: () => import("../views/platform/index.vue"),
-      meta: { requiresInit: true, requiresAuth: true },
-      children: [
-        {
-          path: "tenant",
-          redirect: "/platform/settings"
-        },
-        {
-          path: "settings",
-          name: "settings",
-          component: () => import("../views/settings/Settings.vue"),
-          meta: { requiresInit: true, requiresAuth: true }
-        },
-        {
-          path: "knowledge-bases",
-          name: "knowledgeBaseList",
-          component: () => import("../views/knowledge/KnowledgeBaseList.vue"),
-          meta: { requiresInit: true, requiresAuth: true }
-        },
-        {
-          path: "knowledge-bases/:kbId",
-          name: "knowledgeBaseDetail",
-          component: () => import("../views/knowledge/KnowledgeBase.vue"),
-          meta: { requiresInit: true, requiresAuth: true }
-        },
-        {
-          path: "knowledge-search",
-          // 旧路径保留为重定向，打开全局命令面板（⌘K），带上可选的 q 参数
-          redirect: (to) => {
-            const q = to.query.q
-            return {
-              path: '/platform/knowledge-bases',
-              query: typeof q === 'string' ? { cmdk: q } : { cmdk: '' },
-            }
-          },
-        },
-        {
-          path: "agents",
-          name: "agentList",
-          component: () => import("../views/agent/AgentList.vue"),
-          meta: { requiresInit: true, requiresAuth: true, requiredCapability: 'agents' }
-        },
-        {
-          path: "integrations",
-          redirect: (to) => {
-            const tab = typeof to.query.tab === 'string' ? to.query.tab : undefined
-            const incoming = typeof to.query.section === 'string' ? to.query.section : 'integrations'
-            const rest = { ...to.query }
-            delete rest.tab
-            return {
-              path: '/platform/settings',
-              query: {
-                ...rest,
-                section: normalizeSettingsSection(incoming, tab),
-              },
-            }
-          },
-          meta: { requiresInit: true, requiresAuth: true }
-        },
-        {
-          path: "creatChat",
-          name: "globalCreatChat",
-          component: () => import("../views/creatChat/creatChat.vue"),
-          meta: { requiresInit: true, requiresAuth: true }
-        },
-        {
-          path: "knowledge-bases/:kbId/creatChat",
-          name: "kbCreatChat",
-          component: () => import("../views/creatChat/creatChat.vue"),
-          meta: { requiresInit: true, requiresAuth: true }
-        },
-        {
-          path: "chat/:chatid",
-          name: "chat",
-          component: () => import("../views/chat/index.vue"),
-          meta: { requiresInit: true, requiresAuth: true }
-        },
-        // Compatibility redirects for /platform/system/* URLs. System
-        // administration surfaces live as dedicated sections inside the
-        // standard Settings modal; keep stable URLs for bookmarks and
-        // external links.
-        {
-          path: "system",
-          redirect: { path: "/platform/settings", query: { section: "system-global" } },
-          meta: { requiresInit: true, requiresAuth: true, requiresSystemAdmin: true },
-        },
-        {
-          path: "system/settings",
-          name: "systemSettings",
-          redirect: { path: "/platform/settings", query: { section: "system-global" } },
-          meta: { requiresInit: true, requiresAuth: true, requiresSystemAdmin: true },
-        },
-        {
-          path: "system/admins",
-          name: "systemAdmins",
-          redirect: { path: "/platform/settings", query: { section: "system-global" } },
-          meta: { requiresInit: true, requiresAuth: true, requiresSystemAdmin: true },
-        },
-        {
-          path: "system/queues",
-          name: "systemQueues",
-          redirect: { path: "/platform/settings", query: { section: "runtime-queues" } },
-          meta: { requiresInit: true, requiresAuth: true, requiresSystemAdmin: true },
-        },
-      ],
-    },
-    // Dev-only markdown rendering test page
-    ...(import.meta.env.DEV ? [{
-      path: '/platform/dev/markdown',
-      name: 'markdownTest',
-      component: () => import('../views/dev/MarkdownTestPage.vue'),
-      meta: { requiresAuth: false, requiresInit: false }
-    }] : []),
-  ],
+  routes: createApplicationRoutes(import.meta.env.DEV),
 });
 
 async function hydrateSessionFromToken(authStore: ReturnType<typeof useAuthStore>) {
@@ -227,12 +88,10 @@ router.beforeEach(async (to, from, next) => {
   if (to.meta.requiresAuth !== false) {
     if (!authStore.isLoggedIn) {
       const restored = await hydrateSessionFromToken(authStore)
-      if (restored) {
-        next(to.fullPath)
+      if (!restored) {
+        next('/login')
         return
       }
-      next('/login')
-      return
     }
   }
 
@@ -264,6 +123,12 @@ router.beforeEach(async (to, from, next) => {
   }
 
   next()
+})
+
+router.afterEach((to, _from, failure) => {
+  if (!failure) {
+    notifyRemovedFeatureRedirect(to, () => MessagePlugin.info(i18n.global.t('navigation.removedFeature')))
+  }
 })
 
 export default router

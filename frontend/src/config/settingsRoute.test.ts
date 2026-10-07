@@ -71,3 +71,18 @@ test('canonical settings query skips a redundant replace', () => {
     false,
   )
 })
+
+test('deleted and unknown settings sections fall back to the default section', () => {
+  for (const section of ['integration-embed', 'platform-api-keys', 'organizations', 'made-up', '']) {
+    assert.equal(normalizeSettingsSection(section), 'general')
+    assert.deepEqual(buildSettingsRouteQuery(normalizeSettingsSection(section), {
+      section,
+      tab: 'embed',
+      agentId: 'removed-agent',
+    }), { section: 'general' })
+  }
+  for (const section of ['general', 'domains', 'tenant', 'members', 'system-global', 'runtime-queues', 'system-audit-log']) {
+    assert.equal(normalizeSettingsSection(section), section)
+  }
+  assert.equal(normalizeSettingsSection('integrations', 'embed'), 'integration-im')
+})

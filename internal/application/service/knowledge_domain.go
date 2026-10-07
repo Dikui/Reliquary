@@ -177,7 +177,10 @@ func (s *KnowledgeDomainService) Delete(ctx context.Context, id string) error {
 			return err
 		}
 		if count > 0 {
-			return apperrors.NewConflictError("knowledge domain is referenced by knowledge bases")
+			return apperrors.NewKnowledgeDomainReferencedError(
+				fmt.Sprintf("knowledge domain is referenced by %d knowledge bases", count),
+				types.KnowledgeDomainReferenceDetails{KnowledgeBaseCount: count},
+			)
 		}
 		return tx.Delete(domain).Error
 	})

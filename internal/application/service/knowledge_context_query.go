@@ -331,7 +331,7 @@ func (s *KnowledgeContextService) queryContext(ctx context.Context, kbID string,
 	if err := eventQuery.Order(eventOrder).Find(&events).Error; err != nil {
 		return nil, err
 	}
-	var selectedEvents []types.KnowledgeEvent
+	selectedEvents := make([]types.KnowledgeEvent, 0, len(events))
 	for _, event := range events {
 		var links []types.KnowledgeEventEvidence
 		if err := s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id IN ? AND event_id = ? AND evidence_id IN ?", tenantID, kbIDs, event.ID, evidenceIDs).Find(&links).Error; err != nil {

@@ -38,7 +38,7 @@ type KnowledgeEntity struct {
 	MergedIntoID             string                           `json:"merged_into_id,omitempty" gorm:"type:varchar(36);not null;default:''"`
 	CreatedAt                time.Time                        `json:"created_at"`
 	UpdatedAt                time.Time                        `json:"updated_at"`
-	Aliases                  []string                         `json:"aliases,omitempty" gorm:"-"`
+	Aliases                  []string                         `json:"aliases" gorm:"-"`
 	AliasResolutions         []KnowledgeEntityAlias           `json:"-" gorm:"-"`
 	MergeSuggestions         []KnowledgeEntityMergeSuggestion `json:"-" gorm:"-"`
 }
@@ -99,7 +99,7 @@ type KnowledgeEvidence struct {
 	Publisher          string      `json:"publisher,omitempty" gorm:"type:text;not null;default:''"`
 	OriginalURL        string      `json:"original_url,omitempty" gorm:"type:text;not null;default:''"`
 	PublishedAt        string      `json:"published_at,omitempty" gorm:"type:text;not null;default:''"`
-	ImageRefs          StringArray `json:"image_refs,omitempty" gorm:"type:json"`
+	ImageRefs          StringArray `json:"image_refs" gorm:"type:json"`
 	SourceKind         string      `json:"source_kind,omitempty" gorm:"type:varchar(32);not null;default:''"`
 	Status             string      `json:"status" gorm:"type:varchar(16);not null;default:'current';index"`
 	ExtractionStatus   string      `json:"extraction_status" gorm:"type:varchar(16);not null;default:'pending';index"`
@@ -146,7 +146,7 @@ func (KnowledgeFact) TableName() string { return "knowledge_context_facts" }
 // KnowledgeEvent represents one real-world change, possibly reported by many
 // messages. Evidence links and attention assessments are stored separately.
 type KnowledgeEvent struct {
-	Sources         []KnowledgeContextSource `json:"sources,omitempty" gorm:"-"`
+	Sources         []KnowledgeContextSource `json:"sources" gorm:"-"`
 	ID              string                   `json:"id" gorm:"type:varchar(36);primaryKey"`
 	TenantID        uint64                   `json:"tenant_id" gorm:"not null;index:idx_kcevent_scope"`
 	KnowledgeBaseID string                   `json:"knowledge_base_id" gorm:"type:varchar(36);not null;index:idx_kcevent_scope"`
@@ -154,14 +154,14 @@ type KnowledgeEvent struct {
 	EventType       string                   `json:"event_type,omitempty" gorm:"type:varchar(128);not null;default:''"`
 	Description     string                   `json:"description,omitempty" gorm:"type:text;not null;default:''"`
 	OccurredAt      *time.Time               `json:"occurred_at,omitempty" gorm:"index"`
-	EntityIDs       StringArray              `json:"entity_ids,omitempty" gorm:"type:json"`
-	EvidenceIDs     StringArray              `json:"evidence_ids,omitempty" gorm:"type:json"`
+	EntityIDs       StringArray              `json:"entity_ids" gorm:"type:json"`
+	EvidenceIDs     StringArray              `json:"evidence_ids" gorm:"type:json"`
 	SourceCount     int                      `json:"source_count" gorm:"not null;default:0"`
 	Heat            float64                  `json:"heat" gorm:"not null;default:0"`
 	CreatedAt       time.Time                `json:"created_at"`
 	UpdatedAt       time.Time                `json:"updated_at"`
 	SourceEntityIDs StringArray              `json:"-" gorm:"-"`
-	Relations       []KnowledgeEventRelation `json:"relations,omitempty" gorm:"-"`
+	Relations       []KnowledgeEventRelation `json:"relations" gorm:"-"`
 }
 
 func (KnowledgeEvent) TableName() string { return "knowledge_context_events" }

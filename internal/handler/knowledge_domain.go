@@ -108,6 +108,7 @@ func (h *KnowledgeDomainHandler) Update(c *gin.Context) {
 // @Produce json
 // @Param id path string true "Domain ID"
 // @Success 200 {object} map[string]interface{}
+// @Failure 409 {object} map[string]interface{} "Domain is referenced by active knowledge bases"
 // @Security Bearer
 // @Security ApiKeyAuth
 // @Router /knowledge-domains/{id} [delete]

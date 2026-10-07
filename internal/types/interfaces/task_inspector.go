@@ -97,9 +97,10 @@ type RuntimeTaskInspector interface {
 	// operator-facing AllowedActions. Used when the business row is already
 	// gone but a retry/pending task survived (orphan cleanup).
 	ForceDeleteRuntimeTask(ctx context.Context, queue, taskID string) (supported bool, err error)
-	// PurgeArchivedRuntimeTasks removes every archived (finally-failed) task
-	// from one queue in a single call and returns how many records were
-	// deleted. It only ever touches the archived (dead-letter) set, so live
+	// PurgeArchivedRuntimeTasks removes team and legacy tenantless archived
+	// (finally-failed) tasks from one queue and returns the deletion count.
+	// Other tenants and invalid payloads remain available for diagnostics.
+	// It only ever touches the archived (dead-letter) set, so live
 	// pending/active/scheduled/retry tasks are never affected. Business state
 	// is intentionally left untouched: archived tasks have already had their
 	// document status flipped to "failed" on their last retry, mirroring the

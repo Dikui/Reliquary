@@ -179,6 +179,17 @@ func RegisterSystemAdminRoutes(
 		// Reads return raw model rows / arrays (no `gin.H{"data":...}`
 		// wrapping), matching the project's axios interceptor convention
 		// — see frontend/src/utils/request.ts:97.
+		// The single-team deployment keeps these JWT-only system admin routes.
+		adminRoutes.GET("/settings", handler.ListSystemSettings)
+		adminRoutes.GET("/settings/:key", handler.GetSystemSetting)
+		adminRoutes.PUT("/settings/:key", handler.UpdateSystemSetting)
+		adminRoutes.DELETE("/settings/:key", handler.ResetSystemSetting)
+
+		// Queue operations expose safe task projections and state-checked actions.
+		adminRoutes.GET("/runtime/queues", handler.GetRuntimeQueues)
+		adminRoutes.GET("/runtime/queues/:queue/tasks", handler.ListRuntimeTasks)
+		adminRoutes.POST("/runtime/queues/:queue/tasks/:task_id/actions/:action", handler.MutateRuntimeTask)
+		adminRoutes.DELETE("/runtime/queues/:queue/archived", handler.PurgeArchivedRuntimeTasks)
 
 		// Platform-wide audit feed (tenant_id=0 rows). Covers
 		// system.setting_changed / system.admin_promoted /

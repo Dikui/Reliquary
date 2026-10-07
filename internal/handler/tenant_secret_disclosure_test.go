@@ -145,6 +145,40 @@ func TestGetTenantKVViewerAllowedForNonSecretKey(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 }
 
+func TestGetTenantKVContributorStorageConfigContainsOnlyDefaultProvider(t *testing.T) {
+	tenant := secretTenantFixture()
+	tenant.StorageEngineConfig.DefaultProvider = "minio"
+	tenant.StorageEngineConfig.Local = &types.LocalEngineConfig{PathPrefix: "/private/storage"}
+	tenant.StorageEngineConfig.MinIO.Endpoint = "https://storage.example.test"
+	tenant.StorageEngineConfig.MinIO.AccessKeyID = "minio-access-key"
+	tenant.StorageEngineConfig.S3 = &types.S3EngineConfig{AccessKey: "s3-access-key", SecretKey: "s3-secret-key"}
+	engine := newTenantHandlerTestEngine(t, types.TenantRoleContributor, tenant)
+
+	rec := httptest.NewRecorder()
+	engine.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/tenants/kv/storage-engine-config", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.JSONEq(t, `{"success":true,"data":{"default_provider":"minio"}}`, rec.Body.String())
+	assert.Equal(t, "minio-secret-789", tenant.StorageEngineConfig.MinIO.SecretAccessKey)
+	assert.Equal(t, "s3-secret-key", tenant.StorageEngineConfig.S3.SecretKey)
+
+	write := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPut, "/tenants/kv/storage-engine-config", strings.NewReader(`{"default_provider":"local"}`))
+	request.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(write, request)
+	require.Equal(t, http.StatusForbidden, write.Code)
+	assert.Equal(t, "minio", tenant.StorageEngineConfig.DefaultProvider)
+}
+
+func TestGetTenantKVContributorStorageConfigWithoutStoredConfig(t *testing.T) {
+	tenant := secretTenantFixture()
+	tenant.StorageEngineConfig = nil
+	engine := newTenantHandlerTestEngine(t, types.TenantRoleContributor, tenant)
+	rec := httptest.NewRecorder()
+	engine.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/tenants/kv/storage-engine-config", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.JSONEq(t, `{"success":true,"data":{"default_provider":""}}`, rec.Body.String())
+}
+
 func TestPutTenantParserConfigAdminPreservesRedactedSecrets(t *testing.T) {
 	tenant := secretTenantFixture()
 	engine := newTenantHandlerTestEngine(t, types.TenantRoleAdmin, tenant)

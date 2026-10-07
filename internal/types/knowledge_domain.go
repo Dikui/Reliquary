@@ -65,3 +65,8 @@ type DomainFieldMapping struct {
 	OpenField string `json:"open_field"`
 	FieldKey  string `json:"field_key"`
 }
+
+// KnowledgeDomainReferenceDetails explains why a domain cannot be deleted.
+type KnowledgeDomainReferenceDetails struct {
+	KnowledgeBaseCount int64 `json:"knowledge_base_count"`
+}

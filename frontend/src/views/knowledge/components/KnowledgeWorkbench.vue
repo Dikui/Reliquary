@@ -17,6 +17,30 @@
       </div>
     </header>
 
+    <section v-if="canRebuildNameEmbeddings" class="name-embedding-rebuild" :aria-label="t('knowledgeWorkbench.nameEmbeddings.title')">
+      <div class="name-embedding-rebuild__summary">
+        <div>
+          <h3>{{ t('knowledgeWorkbench.nameEmbeddings.title') }}</h3>
+          <p role="status">{{ t('knowledgeWorkbench.nameEmbeddings.pending', { count: nameEmbeddingStatus?.pending_count ?? (nameEmbeddingStatusLoading ? t('common.loading') : t('knowledgeWorkbench.nameEmbeddings.unknown')) }) }}</p>
+        </div>
+        <div class="name-embedding-rebuild__actions">
+          <t-button variant="text" :loading="nameEmbeddingStatusLoading" :disabled="nameEmbeddingRebuilding" @click="loadNameEmbeddingStatus">{{ t('knowledgeWorkbench.refresh') }}</t-button>
+          <t-button variant="outline" :loading="nameEmbeddingRebuilding" :disabled="nameEmbeddingStatusLoading || !nameEmbeddingStatus?.pending_count || nameEmbeddingBusy" @click="rebuildNameEmbeddings">{{ t('knowledgeWorkbench.nameEmbeddings.rebuild') }}</t-button>
+        </div>
+      </div>
+      <p v-if="nameEmbeddingStatus?.latest_run" class="name-embedding-rebuild__latest" role="status">
+        {{ t('knowledgeWorkbench.nameEmbeddings.latest', {
+          status: nameEmbeddingRunStatus,
+          processed: nameEmbeddingStatus.latest_run.processed_count,
+          total: nameEmbeddingStatus.latest_run.total_count,
+        }) }}
+        <span>{{ formatDate(nameEmbeddingStatus.latest_run.finished_at || nameEmbeddingStatus.latest_run.started_at || nameEmbeddingStatus.latest_run.created_at) }}</span>
+      </p>
+      <p v-else-if="nameEmbeddingStatus" class="muted">{{ t('knowledgeWorkbench.nameEmbeddings.noRun') }}</p>
+      <p v-if="nameEmbeddingStatus?.latest_run?.error" class="run-error" role="alert">{{ t('knowledgeWorkbench.nameEmbeddings.failure', { reason: nameEmbeddingStatus.latest_run.error }) }}</p>
+      <p v-if="nameEmbeddingError" class="run-error" role="alert">{{ nameEmbeddingError }}</p>
+    </section>
+
     <div class="workbench-scope" v-if="!['workflows', 'reports'].includes(activeSection)">
       <label><span>{{ t('knowledgeWorkbench.scope.label') }}</span><t-select v-model="queryScope" :options="scopeOptions" :aria-label="t('knowledgeWorkbench.scope.label')" /></label>
       <label v-if="queryScope === 'domain'"><span>{{ t('knowledgeDomains.title') }}</span><t-select v-model="queryDomainId" filterable :loading="domainsLoading" :options="domainOptions" :placeholder="t('knowledgeWorkbench.scope.selectDomain')" /></label>
@@ -113,7 +137,7 @@
           <h4>{{ t('knowledgeWorkbench.events.title') }}</h4>
           <EventCard v-for="event in queryResult.events" :key="event.id" :event="event"
             :attention="queryResult.attention.filter(item => item.event_id === event.id)"
-            :evidence="queryResult.evidence" @open-evidence="openEvidence" />
+            :evidence="eventEvidence(event, queryResult.evidence)" @open-evidence="openEvidence" />
         </div>
         <div v-if="queryResult.evidence.length" class="result-group">
           <h4>{{ t('knowledgeWorkbench.evidence.title') }}</h4>
@@ -175,17 +199,17 @@
                       {{ t('knowledgeWorkbench.entities.includeHistory') }}
                     </t-checkbox>
                   </div>
-                  <t-empty v-if="!entityContext?.facts.length" :description="t('knowledgeWorkbench.entities.noFacts')" />
+                  <t-empty v-if="!entityContext?.facts?.length" :description="t('knowledgeWorkbench.entities.noFacts')" />
                   <FactCard v-for="fact in entityContext?.facts || []" :key="fact.id" :fact="fact"
-                    :facts="entityContext?.facts || []" :entities="entityContext?.entities || [selectedEntity]" :evidence="entityContext?.evidence || []"
+                    :facts="entityContext?.facts || []" :entities="entityContext?.entities?.length ? entityContext.entities : [selectedEntity]" :evidence="entityContext?.evidence || []"
                     :can-manage="canManage" @correct="startCorrection" @open-evidence="openEvidence"
                     @open-source="emit('open-source', $event)" />
                 </div>
-                <div class="result-group" v-if="entityContext?.events.length">
+                <div class="result-group" v-if="entityContext?.events?.length">
                   <h4>{{ t('knowledgeWorkbench.events.title') }}</h4>
                   <EventCard v-for="event in entityContext.events" :key="event.id" :event="event"
-                    :attention="entityContext.attention.filter(item => item.event_id === event.id)"
-                    :evidence="entityContext.evidence.filter(item => event.evidence_ids?.includes(item.id))" @open-evidence="openEvidence" />
+                    :attention="(entityContext.attention || []).filter(item => item.event_id === event.id)"
+                    :evidence="eventEvidence(event, entityContext.evidence)" @open-evidence="openEvidence" />
                 </div>
               </t-loading>
             </template>
@@ -239,7 +263,7 @@
             <t-loading :loading="eventLoadingId === event.id" size="small">
               <div class="result-group">
                 <h5>{{ t('knowledgeWorkbench.events.whyHot') }}</h5>
-                <p v-if="!eventContexts[event.id]?.attention.length" class="muted">{{ t('knowledgeWorkbench.events.noReason') }}</p>
+                <p v-if="!eventContexts[event.id]?.attention?.length" class="muted">{{ t('knowledgeWorkbench.events.noReason') }}</p>
                 <div v-for="reason in eventContexts[event.id]?.attention || []" :key="reason.id" class="attention-reason">
                   <strong>{{ reason.reason || t('knowledgeWorkbench.events.scored') }}</strong>
                   <span>{{ t('knowledgeWorkbench.events.attentionScore', { score: formatHeat(reason.score) }) }}</span>
@@ -247,11 +271,11 @@
               </div>
               <div class="result-group">
                 <h5>{{ t('knowledgeWorkbench.evidence.title') }}</h5>
-                <EvidenceCard v-for="item in eventContexts[event.id]?.evidence || []" :key="item.id"
+                <EvidenceCard v-for="item in eventEvidence(event, eventContexts[event.id]?.evidence)" :key="item.id"
                   :evidence="item" :expanded="expandedEvidenceId === item.id"
                   :loading="evidenceLoadingId === item.id" :snapshot="evidenceSnapshots[item.id]"
                   @toggle="openEvidence(item.id)" @open-source="emit('open-source', $event)" />
-                <p v-if="!eventContexts[event.id]?.evidence.length" class="muted">{{ t('knowledgeWorkbench.events.noSources') }}</p>
+                <p v-if="!eventEvidence(event, eventContexts[event.id]?.evidence).length" class="muted">{{ t('knowledgeWorkbench.events.noSources') }}</p>
               </div>
             </t-loading>
           </div>
@@ -628,6 +652,8 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import MergeSuggestions from './MergeSuggestions.vue'
 import EvidenceExtractionDetails from './EvidenceExtractionDetails.vue'
+import { eventEvidence, normalizeKnowledgeContextResult } from './knowledgeContextDisplay'
+import { useAuthStore } from '@/stores/auth'
 import { listKnowledgeDomains, type KnowledgeDomain } from '@/api/knowledge-domains'
 import { knowledgeContextScopeParams } from '@/api/knowledge-context-scope'
 import { safeMarkdownToHTML } from '@/utils/security'
@@ -642,6 +668,8 @@ import {
   listKnowledgeContextEvents,
   listKnowledgeContextEvidence,
   queryKnowledgeContext,
+  getKnowledgeNameEmbeddingRebuildStatus,
+  rebuildKnowledgeNameEmbeddings,
   type KnowledgeAttention,
   type KnowledgeContextQuery,
   type KnowledgeContextScope,
@@ -650,6 +678,7 @@ import {
   type KnowledgeEvidence,
   type KnowledgeEvent,
   type KnowledgeFact,
+  type KnowledgeNameEmbeddingRebuildStatus,
 } from '@/api/knowledge-context'
 import {
   createKnowledgeWorkflow,
@@ -676,6 +705,8 @@ import {
 const props = defineProps<{ kbId: string; domainId?: string; canManage: boolean }>()
 const emit = defineEmits<{ 'open-source': [knowledgeId: string] }>()
 const { t } = useI18n()
+const authStore = useAuthStore()
+const canRebuildNameEmbeddings = computed(() => authStore.hasRole('admin'))
 const pageSize = 50
 const queryScope = ref<KnowledgeContextScope>('knowledge_base')
 const queryDomainId = ref(props.domainId || '')
@@ -760,6 +791,18 @@ const merging = ref(false)
 const correctionVisible = ref(false)
 const correcting = ref(false)
 const rebuilding = ref(false)
+const nameEmbeddingStatus = ref<KnowledgeNameEmbeddingRebuildStatus | null>(null)
+const nameEmbeddingStatusLoading = ref(false)
+const nameEmbeddingRebuilding = ref(false)
+const nameEmbeddingError = ref('')
+const nameEmbeddingBusy = computed(() => ['pending', 'running'].includes(nameEmbeddingStatus.value?.latest_run?.status || ''))
+const nameEmbeddingRunStatus = computed(() => {
+  const status = nameEmbeddingStatus.value?.latest_run?.status || ''
+  return ['pending', 'running', 'completed', 'failed'].includes(status)
+    ? t(`knowledgeWorkbench.nameEmbeddings.status.${status}`) : status
+})
+let nameEmbeddingRequest = 0
+let nameEmbeddingPollTimer: ReturnType<typeof setTimeout> | null = null
 
 const workflows = ref<KnowledgeWorkflow[]>([])
 const workflowsLoading = ref(false)
@@ -838,6 +881,55 @@ function envelopeData<T>(response: { success: boolean; data: T; error?: string }
 function getErrorMessage(error: unknown): string {
   if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') return error.message
   return t('knowledgeWorkbench.requestFailed')
+}
+
+function clearNameEmbeddingPolling() {
+  if (nameEmbeddingPollTimer) clearTimeout(nameEmbeddingPollTimer)
+  nameEmbeddingPollTimer = null
+}
+
+function updateNameEmbeddingPolling() {
+  clearNameEmbeddingPolling()
+  if (canRebuildNameEmbeddings.value && nameEmbeddingBusy.value) {
+    nameEmbeddingPollTimer = setTimeout(() => { void loadNameEmbeddingStatus() }, 5000)
+  }
+}
+
+async function loadNameEmbeddingStatus() {
+  if (!canRebuildNameEmbeddings.value || nameEmbeddingRebuilding.value) return
+  const request = ++nameEmbeddingRequest
+  nameEmbeddingStatusLoading.value = true
+  nameEmbeddingError.value = ''
+  try {
+    const status = envelopeData(await getKnowledgeNameEmbeddingRebuildStatus())
+    if (request === nameEmbeddingRequest) {
+      nameEmbeddingStatus.value = status
+      updateNameEmbeddingPolling()
+    }
+  } catch (error) {
+    if (request === nameEmbeddingRequest) {
+      nameEmbeddingError.value = getErrorMessage(error)
+      clearNameEmbeddingPolling()
+    }
+  } finally { if (request === nameEmbeddingRequest) nameEmbeddingStatusLoading.value = false }
+}
+
+async function rebuildNameEmbeddings() {
+  if (!canRebuildNameEmbeddings.value || nameEmbeddingRebuilding.value || nameEmbeddingBusy.value || !nameEmbeddingStatus.value?.pending_count) return
+  const request = ++nameEmbeddingRequest
+  clearNameEmbeddingPolling()
+  nameEmbeddingRebuilding.value = true
+  nameEmbeddingError.value = ''
+  try {
+    const status = envelopeData(await rebuildKnowledgeNameEmbeddings())
+    if (request === nameEmbeddingRequest) {
+      nameEmbeddingStatus.value = status
+      MessagePlugin.success(t('knowledgeWorkbench.nameEmbeddings.queued'))
+      updateNameEmbeddingPolling()
+    }
+  } catch (error) {
+    if (request === nameEmbeddingRequest) nameEmbeddingError.value = getErrorMessage(error)
+  } finally { if (request === nameEmbeddingRequest) nameEmbeddingRebuilding.value = false }
 }
 
 async function refreshAll() {
@@ -963,7 +1055,7 @@ async function runQuery() {
       max_value: queryForm.max_value === '' ? undefined : Number(queryForm.max_value),
       unit: queryForm.unit || undefined,
     }))
-    if (generation === contextGeneration) queryResult.value = envelopeData(response)
+    if (generation === contextGeneration) queryResult.value = normalizeKnowledgeContextResult(envelopeData(response))
   } catch (error) { if (generation === contextGeneration) loadError.value = getErrorMessage(error) }
   finally { if (generation === contextGeneration) queryLoading.value = false }
 }
@@ -995,7 +1087,7 @@ async function loadEntityContext() {
   entityContextLoading.value = true
   try {
     const result = envelopeData(await getGlobalKnowledgeEntityContext(entityId, showEntityHistory.value))
-    if (generation === contextGeneration && selectedEntity.value?.id === entityId) entityContext.value = result
+    if (generation === contextGeneration && selectedEntity.value?.id === entityId) entityContext.value = normalizeKnowledgeContextResult(result)
   } catch (error) { if (generation === contextGeneration) loadError.value = getErrorMessage(error) }
   finally { if (generation === contextGeneration) entityContextLoading.value = false }
 }
@@ -1011,7 +1103,7 @@ async function toggleEvent(eventId: string) {
   eventLoadingId.value = eventId
   try {
     const result = envelopeData(await queryKnowledgeContext(props.kbId, makeQuery({ event_id: eventId })))
-    if (generation === contextGeneration) eventContexts.value[eventId] = result
+    if (generation === contextGeneration) eventContexts.value[eventId] = normalizeKnowledgeContextResult(result)
   } catch (error) { loadError.value = getErrorMessage(error) }
   finally { if (generation === contextGeneration) eventLoadingId.value = '' }
 }
@@ -1725,7 +1817,16 @@ watch([() => props.kbId, queryScope, queryDomainId], async () => {
 }, { immediate: true })
 
 watch(selectedRun, updateRunPolling)
-onBeforeUnmount(() => { contextGeneration++; snapshotRequest++; clearRunPolling() })
+watch(canRebuildNameEmbeddings, allowed => {
+  nameEmbeddingRequest++
+  clearNameEmbeddingPolling()
+  nameEmbeddingStatus.value = null
+  nameEmbeddingStatusLoading.value = false
+  nameEmbeddingRebuilding.value = false
+  nameEmbeddingError.value = ''
+  if (allowed) void loadNameEmbeddingStatus()
+}, { immediate: true })
+onBeforeUnmount(() => { contextGeneration++; snapshotRequest++; nameEmbeddingRequest++; clearRunPolling(); clearNameEmbeddingPolling() })
 
 const FactCard = defineComponent({
   name: 'KnowledgeWorkbenchFactCard',
@@ -1807,7 +1908,7 @@ const EventCard = defineComponent({
         h('strong', item.reason || t('knowledgeWorkbench.events.scored')),
         h('span', t('knowledgeWorkbench.events.attentionScore', { score: formatHeat(item.score) })),
       ])),
-      ...cardProps.evidence.map(item => h('button', {
+      ...eventEvidence(cardProps.event, cardProps.evidence).map(item => h('button', {
         key: item.id,
         type: 'button',
         class: 'text-link',
@@ -1835,8 +1936,10 @@ const EvidenceCard = defineComponent({
         ]),
         h('div', { class: 'evidence-card__meta' }, [
           `${t('knowledgeWorkbench.scope.sourceKb')}: ${cardProps.evidence.knowledge_base_name || cardProps.evidence.knowledge_base_id}`,
-          [cardProps.evidence.publisher, cardProps.evidence.author, cardProps.evidence.published_at ? formatDate(cardProps.evidence.published_at) : ''].filter(Boolean).join(' · '),
-        ]),
+          cardProps.evidence.publisher,
+          cardProps.evidence.author,
+          cardProps.evidence.published_at ? formatDate(cardProps.evidence.published_at) : '',
+        ].filter(Boolean).map((text, index) => h('span', { key: index }, [index ? h('span', { class: 'evidence-card__separator', 'aria-hidden': 'true' }, ' · ') : null, text]))),
         h(EvidenceExtractionDetails, { evidence: cardProps.snapshot || cardProps.evidence, compact: !cardProps.expanded }),
         cardProps.evidence.source_kind === 'roundup' ? h('p', { class: 'evidence-card__meta' }, t('knowledgeWorkbench.fusion.roundup')) : null,
         safeExternalUrl(cardProps.evidence.original_url) ? h('a', { href: safeExternalUrl(cardProps.evidence.original_url), target: '_blank', rel: 'noopener noreferrer' }, t('knowledgeWorkbench.evidence.openSource')) : null,
@@ -1860,9 +1963,15 @@ const EvidenceCard = defineComponent({
 <style scoped lang="less">
 .workbench-scope { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
 .workbench-scope label { display: flex; flex-direction: column; gap: 6px; min-width: min(260px, 100%); }
-.knowledge-workbench { color: var(--td-text-color-primary); padding: 20px 22px 34px; }
+.knowledge-workbench { color: var(--td-text-color-primary); padding: 20px 22px 34px; min-width: 0; max-width: 100%; box-sizing: border-box; overflow-wrap: anywhere; }
+.name-embedding-rebuild { margin-bottom: 20px; padding: 12px 14px; border: 1px solid var(--td-border-level-1-color); border-radius: var(--td-radius-medium); background: var(--td-bg-color-container); }
+.name-embedding-rebuild__summary { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.name-embedding-rebuild h3 { margin: 0; font-size: 14px; }
+.name-embedding-rebuild p { margin: 6px 0 0; font-size: 12px; }
+.name-embedding-rebuild__actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.name-embedding-rebuild__latest { display: flex; flex-wrap: wrap; gap: 8px; color: var(--td-text-color-secondary); }
 .snapshot-hash { overflow-wrap: anywhere; color: var(--td-text-color-secondary); font-size: 12px; }
-.evidence-snapshot__body mark { background: var(--td-warning-color-2); color: var(--td-text-color-primary); border-radius: 2px; }
+:deep(.evidence-snapshot__body mark) { background: var(--td-warning-color-2); color: var(--td-text-color-primary); border-radius: 2px; }
 .workbench-header, .panel-heading, .workflow-editor__header, .workflow-steps-heading, .group-heading,
 .workflow-list__heading, .run-detail__heading, .event-row__title, .report-view > header {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
@@ -1870,22 +1979,22 @@ const EvidenceCard = defineComponent({
 .workbench-header { margin-bottom: 18px; }
 .workbench-header h2, .panel-heading h3, .entity-detail h3, .report-view h4 { margin: 0; }
 .workbench-header p, .panel-heading p, .workflow-steps-heading p, .group-heading p { margin: 4px 0 0; color: var(--td-text-color-secondary); font-size: 13px; }
-.workbench-header__actions { display: flex; gap: 8px; }
+.workbench-header__actions { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
 .workbench-nav { display: flex; gap: 6px; overflow-x: auto; border-bottom: 1px solid var(--td-border-level-1-color); margin: 0 -4px 18px; padding: 0 4px; }
 .workbench-nav__item { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--td-text-color-secondary); padding: 10px 12px; cursor: pointer; }
 .workbench-nav__item:hover, .workbench-nav__item.active { color: var(--td-brand-color); }
 .workbench-nav__item.active { border-bottom-color: var(--td-brand-color); font-weight: 600; }
 .workbench-nav__count { min-width: 19px; padding: 1px 6px; border-radius: 10px; background: var(--td-bg-color-component); font-size: 11px; text-align: center; }
-.workbench-panel { min-height: 360px; }
+.workbench-panel { min-height: 360px; min-width: 0; }
 .panel-heading { margin-bottom: 16px; }
 .panel-search { max-width: 260px; }
 .query-form, .workflow-form-grid, .step-config { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .query-form { padding: 16px; border: 1px solid var(--td-border-level-1-color); border-radius: 8px; background: var(--td-bg-color-container); }
 label { display: flex; flex-direction: column; gap: 6px; color: var(--td-text-color-secondary); font-size: 12px; min-width: 0; }
 .history-toggle, .enable-toggle { justify-content: flex-end; align-self: end; min-height: 32px; }
-.query-form__actions { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; }
+.query-form__actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
 .native-input { box-sizing: border-box; min-height: 32px; width: 100%; padding: 4px 9px; border: 1px solid var(--td-border-level-2-color); border-radius: 3px; background: var(--td-bg-color-container); color: var(--td-text-color-primary); font: inherit; }
-.result-summary { display: flex; gap: 12px; align-items: center; color: var(--td-text-color-secondary); font-size: 12px; padding: 12px 0 4px; }
+.result-summary { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; color: var(--td-text-color-secondary); font-size: 12px; padding: 12px 0 4px; }
 .history-note, .eyebrow { color: var(--td-brand-color); font-size: 11px; font-weight: 600; letter-spacing: .02em; }
 .result-group { margin-top: 20px; }
 .result-group h4, .result-group h5 { margin: 0 0 10px; }
@@ -1893,22 +2002,24 @@ label { display: flex; flex-direction: column; gap: 6px; color: var(--td-text-co
   border: 1px solid var(--td-border-level-1-color); border-radius: 8px; background: var(--td-bg-color-container);
 }
 .fact-card, .event-card { padding: 14px 16px; margin: 8px 0; }
-.fact-card__heading, .fact-card__meta, .fact-card__actions, .event-card__heading, .event-card__meta, .evidence-card__meta,
+:deep(.fact-card__heading), :deep(.fact-card__meta), :deep(.fact-card__actions), :deep(.event-card__heading), :deep(.event-card__meta), :deep(.evidence-card__meta),
 .event-row__meta, .workflow-list__actions, .review-actions, .drawer-form__actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.fact-card__heading { justify-content: space-between; }
-.fact-expression { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.fact-expression > span { color: var(--td-text-color-secondary); }
-.fact-status { border-radius: 10px; padding: 2px 8px; background: var(--td-bg-color-component); font-size: 11px; }
-.fact-status.is-current { color: var(--td-success-color); }
-.fact-status.is-corrected { color: var(--td-warning-color); }
-.fact-difference { margin: 2px 0 0; padding: 6px 9px; border: 1px solid var(--td-warning-color-focus); border-radius: 5px; color: var(--td-warning-color); font-size: 12px; }
-.fact-difference.is-conflict { border-color: var(--td-error-color); color: var(--td-error-color); }
-.fact-card__meta, .event-card__meta { margin-top: 8px; color: var(--td-text-color-placeholder); font-size: 11px; }
-.fact-card blockquote { border-left: 2px solid var(--td-brand-color); color: var(--td-text-color-secondary); margin: 10px 0; padding-left: 10px; }
-.fact-card__correction { margin: 6px 0; color: var(--td-warning-color); font-size: 12px; }
-.fact-card__actions { margin-top: 8px; }
-.text-link { padding: 0; border: 0; background: none; color: var(--td-brand-color); cursor: pointer; font: inherit; font-size: 12px; text-decoration: none; }
-.text-link:hover, a:hover { text-decoration: underline; }
+:deep(.fact-card__heading) { justify-content: space-between; }
+:deep(.fact-expression) { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+:deep(.fact-expression > span) { color: var(--td-text-color-secondary); }
+:deep(.fact-status) { border-radius: 10px; padding: 2px 8px; background: var(--td-bg-color-component); font-size: 11px; }
+:deep(.fact-status.is-current) { color: var(--td-success-color); }
+:deep(.fact-status.is-corrected) { color: var(--td-warning-color); }
+:deep(.fact-difference) { margin: 2px 0 0; padding: 6px 9px; border: 1px solid var(--td-warning-color-focus); border-radius: 5px; color: var(--td-warning-color); font-size: 12px; }
+:deep(.fact-difference.is-conflict) { border-color: var(--td-error-color); color: var(--td-error-color); }
+:deep(.fact-card__meta), :deep(.event-card__meta) { margin-top: 8px; color: var(--td-text-color-placeholder); font-size: 11px; }
+:deep(.fact-card blockquote) { border-left: 2px solid var(--td-brand-color); color: var(--td-text-color-secondary); margin: 10px 0; padding-left: 10px; }
+:deep(.fact-card__correction) { margin: 6px 0; color: var(--td-warning-color); font-size: 12px; }
+:deep(.fact-card__actions) { margin-top: 8px; }
+:deep(.text-link) { padding: 0; border: 0; background: none; color: var(--td-brand-color); cursor: pointer; font: inherit; font-size: 12px; text-decoration: none; text-align: left; overflow-wrap: anywhere; white-space: normal; }
+:deep(.text-link:hover), a:hover { text-decoration: underline; }
+:deep(.text-link:focus-visible), :deep(.evidence-card__open:focus-visible), .workbench-nav__item:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
+:deep(.event-card .text-link) { display: block; margin-top: 8px; }
 .entity-layout { display: grid; grid-template-columns: minmax(230px, 300px) minmax(0, 1fr); gap: 14px; min-height: 360px; }
 .entity-list { padding: 6px; max-height: 660px; overflow: auto; }
 .entity-list__item { display: flex; width: 100%; align-items: center; gap: 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; color: inherit; padding: 10px 8px; cursor: pointer; }
@@ -1933,16 +2044,19 @@ label { display: flex; flex-direction: column; gap: 6px; color: var(--td-text-co
 .event-heat small { color: var(--td-text-color-placeholder); font-size: 10px; }
 .event-row__meta { color: var(--td-text-color-placeholder); font-size: 11px; margin-bottom: 8px; }
 .event-row__details { border-top: 1px solid var(--td-border-level-1-color); background: var(--td-bg-color-container-hover); padding: 0 16px 14px; }
-.attention-reason { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; background: var(--td-bg-color-container); border-radius: 6px; margin: 6px 0; font-size: 12px; }
-.attention-reason span { color: var(--td-text-color-secondary); white-space: nowrap; }
+:deep(.attention-reason) { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; background: var(--td-bg-color-container); border-radius: 6px; margin: 6px 0; font-size: 12px; }
+:deep(.attention-reason span) { color: var(--td-text-color-secondary); white-space: nowrap; }
 .evidence-card { margin: 8px 0; overflow: hidden; }
-.evidence-card__main { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 14px; }
-.evidence-card__open { display: flex; flex-direction: column; gap: 4px; padding: 0; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; }
-.evidence-card__version { color: var(--td-text-color-placeholder); font-size: 11px; }
-.evidence-card__meta { justify-content: flex-end; color: var(--td-text-color-placeholder); font-size: 11px; }
-.evidence-snapshot { border-top: 1px solid var(--td-border-level-1-color); padding: 12px 14px; background: var(--td-bg-color-container-hover); }
-.evidence-snapshot__meta { display: flex; flex-wrap: wrap; gap: 12px; color: var(--td-text-color-placeholder); font-size: 11px; margin-bottom: 10px; }
-.evidence-snapshot__body { max-height: 420px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; color: var(--td-text-color-primary); font: inherit; font-size: 12px; line-height: 1.6; }
+:deep(.evidence-card__main) { display: flex; flex-direction: column; align-items: stretch; gap: 10px; padding: 12px 14px; min-width: 0; }
+:deep(.evidence-card__open) { display: flex; flex-direction: column; gap: 4px; padding: 0; border: 0; background: transparent; color: var(--td-text-color-primary); text-align: left; cursor: pointer; font: inherit; overflow-wrap: anywhere; }
+:deep(.evidence-card__open:hover strong) { color: var(--td-brand-color); }
+:deep(.evidence-card__version) { color: var(--td-text-color-placeholder); font-size: 11px; }
+:deep(.evidence-card__meta) { justify-content: flex-start; gap: 0; color: var(--td-text-color-secondary); font-size: 11px; }
+:deep(.evidence-card__separator) { white-space: pre; }
+:deep(.evidence-card__main > a) { color: var(--td-brand-color); font-size: 12px; }
+:deep(.evidence-snapshot) { border-top: 1px solid var(--td-border-level-1-color); padding: 12px 14px; background: var(--td-bg-color-container-hover); }
+:deep(.evidence-snapshot__meta) { display: flex; flex-wrap: wrap; gap: 12px; color: var(--td-text-color-placeholder); font-size: 11px; margin-bottom: 10px; }
+:deep(.evidence-snapshot__body) { max-height: 420px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; color: var(--td-text-color-primary); font: inherit; font-size: 12px; line-height: 1.6; }
 .workflow-editor { margin-bottom: 20px; padding: 16px; border: 1px solid var(--td-brand-color-light); border-radius: 10px; background: var(--td-bg-color-container); }
 .workflow-editor__header { margin-bottom: 14px; }
 .workflow-editor__header h4 { margin: 0; }
@@ -2017,6 +2131,13 @@ label { display: flex; flex-direction: column; gap: 6px; color: var(--td-text-co
   .knowledge-workbench { padding: 14px 10px 24px; }
   .workbench-header, .panel-heading { align-items: flex-start; flex-direction: column; }
   .workbench-header__actions { flex-wrap: wrap; }
+  .workbench-header__actions, .query-form__actions, .name-embedding-rebuild__actions { width: 100%; }
+  .workbench-header__actions :deep(.t-button), .query-form__actions :deep(.t-button), .name-embedding-rebuild__actions :deep(.t-button) { max-width: 100%; height: auto; min-height: 32px; white-space: normal; }
+  .workbench-header__actions :deep(.t-button__text), .query-form__actions :deep(.t-button__text), .name-embedding-rebuild__actions :deep(.t-button__text) { white-space: normal; overflow-wrap: anywhere; }
+  .workbench-scope label { width: 100%; min-width: 0; }
+  .workbench-scope :deep(.t-select), .workbench-scope :deep(.t-select__wrap), .query-form :deep(.t-input__wrap), .panel-search { max-width: 100%; min-width: 0; }
+  .workbench-nav { flex-wrap: wrap; overflow-x: visible; }
+  .workbench-nav__item { white-space: normal; padding: 10px 8px; }
   .query-form, .workflow-form-grid, .step-config { grid-template-columns: 1fr; }
   .span-two { grid-column: auto; }
   .workflow-step__top { grid-template-columns: 26px 1fr; }
@@ -2024,6 +2145,8 @@ label { display: flex; flex-direction: column; gap: 6px; color: var(--td-text-co
   .step-order { justify-content: flex-end; }
   .template-grid { grid-template-columns: 1fr; }
   .event-row__title { align-items: flex-start; }
+  .entity-detail__header, .group-heading, :deep(.attention-reason) { flex-wrap: wrap; }
+  :deep(.attention-reason span) { white-space: normal; }
   .report-view > header { align-items: flex-start; flex-direction: column; }
 }
 </style>

@@ -1,12 +1,12 @@
 <template>
-  <div class="user-menu" :class="{ 'user-menu--collapsed': uiStore.sidebarCollapsed }" ref="menuRef">
+  <div class="user-menu" :class="{ 'user-menu--collapsed': sidebarCollapsed }" ref="menuRef">
     <!-- 用户按钮 -->
     <div class="user-button" data-guide="user-menu" @click="toggleMenu">
       <div class="user-avatar">
         <img v-if="userAvatar" :src="userAvatar" :alt="$t('common.avatar')" />
         <span v-else class="avatar-placeholder">{{ userInitial }}</span>
       </div>
-      <template v-if="!uiStore.sidebarCollapsed">
+      <template v-if="!sidebarCollapsed">
         <div class="user-info">
 
           <div class="user-name">{{ userName }}</div>
@@ -144,6 +144,8 @@ const { t } = useI18n()
 
 const router = useRouter()
 const uiStore = useUIStore()
+const props = defineProps<{ collapsed?: boolean }>()
+const sidebarCollapsed = computed(() => props.collapsed ?? uiStore.sidebarCollapsed)
 const authStore = useAuthStore()
 const { formatRole, roleIcon } = useRoleLabel()
 

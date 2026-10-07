@@ -143,46 +143,6 @@ var registry = map[string]settingSpec{
 		Description: "是否启用复杂密码。开启后密码必须包含大小写字母、数字和特殊字符。" +
 			"修改后立即生效，只影响新注册用户或新密码修改/重置操作。特殊字符包含：!@#$%^&*()_+-=[]{}|;:,.<>?",
 	},
-	// tenant.max_owned_per_user caps how many tenants a single non-superuser
-	// can create (and Own) via self-service POST /tenants. Read on every
-	// request — UI edits take effect immediately, no restart required. The
-	// EnvName is the same RELIQUARY_TENANT_MAX_OWNED_PER_USER that
-	// applyAuthAndTenantDefaults parses at boot, so a deployment that
-	// hasn't created a DB row keeps reading from env exactly as before.
-	// 0 = use the in-code default (10); negative = disable the cap entirely.
-	// tenant.default_storage_quota_gb is the default storage quota (in GB)
-	// applied to a newly-created tenant when the caller doesn't specify
-	// one explicitly. Read at create time only — changing the value does
-	// NOT retroactively resize already-existing tenants (they keep the
-	// quota stored on their row at creation; superusers can edit
-	// individual tenants via the existing tenant-update path).
-	// 0 or negative = use the in-code default (10 GB).
-	"tenant.default_storage_quota_gb": {
-		Type:     "int",
-		EnvName:  "RELIQUARY_TENANT_DEFAULT_STORAGE_QUOTA_GB",
-		Default:  int64(10),
-		Category: "tenant",
-		Description: "新建空间时默认分配的存储配额（GB），包含向量、原文、文本、索引等。" +
-			"仅在创建时读取，修改后只对之后新建的空间生效，不会回写已存在的空间。" +
-			"0 或负数表示使用内置默认值 10GB。",
-	},
-	// tenant.auto_create_api_key restores the legacy behaviour where creating
-	// a tenant also minted a full-access API key and returned its plaintext
-	// token in the create response. Newer versions stopped doing this (keys
-	// are created explicitly via tenant_api_keys), which is a breaking change
-	// for integrations that relied on the create response carrying a key.
-	// Deployments that need the old behaviour set this to true (or the
-	// RELIQUARY_TENANT_AUTO_CREATE_API_KEY env var). Default false keeps the
-	// current, safer no-implicit-key behaviour. Read at create time only.
-	"tenant.auto_create_api_key": {
-		Type:     "bool",
-		EnvName:  "RELIQUARY_TENANT_AUTO_CREATE_API_KEY",
-		Default:  false,
-		Category: "tenant",
-		Description: "创建空间时是否自动生成一个全量权限（full_access）的 API Key，并在创建接口的响应中返回其明文 token。" +
-			"用于兼容旧版本「创建空间即下发默认 API Key」的行为（属于破坏性变更的回退开关）。" +
-			"每次创建空间时实时读取，修改后立即生效。默认 false（不自动创建，需通过 API Key 管理显式创建）。",
-	},
 	// tenant.auto_accept_invitation: invite = auto-join switch (default false).
 	"tenant.auto_accept_invitation": {
 		Type:     "bool",
@@ -714,10 +674,12 @@ func (s *systemSettingService) List(ctx context.Context) ([]*types.SystemSetting
 	for _, row := range rows {
 		byKey[row.Key] = row
 	}
-	// asynq.concurrency was the old fixed-ratio aggregate. Keeping an old DB
-	// row visible would suggest it still controls runtime capacity, so retire it
-	// explicitly while preserving all genuinely unknown rows for diagnostics.
-	delete(byKey, "asynq.concurrency")
+	// Retired aggregate concurrency and tenant-creation settings have no
+	// consumers. Hide their persisted rows so the UI cannot offer obsolete
+	// configuration, while preserving other unknown rows for diagnostics.
+	for _, key := range []string{"asynq.concurrency", "tenant.auto_create_api_key", "tenant.default_storage_quota_gb"} {
+		delete(byKey, key)
+	}
 
 	keys := make([]string, 0, len(registry))
 	for key := range registry {

@@ -279,8 +279,11 @@ func runtimePayloadTime(value int64) *time.Time {
 
 func runtimeTaskActions(info types.RuntimeTaskInfo) []types.RuntimeTaskAction {
 	actions := make([]types.RuntimeTaskAction, 0, 3)
+	if info.TenantID != 0 && info.TenantID != types.SingleTenantID {
+		return actions
+	}
 	if _, cancellable := taskTypesForKnowledgeCancel[info.Type]; cancellable &&
-		info.TenantID > 0 && info.KnowledgeID != "" {
+		info.KnowledgeID != "" {
 		switch info.State {
 		case types.RuntimeTaskPending, types.RuntimeTaskActive,
 			types.RuntimeTaskScheduled, types.RuntimeTaskRetry:
@@ -302,7 +305,7 @@ func projectRuntimeTask(task *asynq.TaskInfo, worker runtimeWorkerMetadata) (typ
 		return types.RuntimeTaskInfo{}, err
 	}
 	probe := runtimeTaskPayloadProbe{}
-	_ = json.Unmarshal(task.Payload, &probe)
+	payloadValid := json.Unmarshal(task.Payload, &probe) == nil
 	kbID := probe.KnowledgeBaseID
 
 	enqueuedAt := probe.EnqueuedAt
@@ -337,7 +340,10 @@ func projectRuntimeTask(task *asynq.TaskInfo, worker runtimeWorkerMetadata) (typ
 		SyncLogID:       probe.SyncLogID,
 		KnowledgeCount:  len(probe.KnowledgeIDs),
 	}
-	info.AllowedActions = runtimeTaskActions(info)
+	info.AllowedActions = []types.RuntimeTaskAction{}
+	if payloadValid {
+		info.AllowedActions = runtimeTaskActions(info)
+	}
 	return info, nil
 }
 
@@ -675,16 +681,75 @@ func (a *asynqTaskInspector) ForceDeleteRuntimeTask(ctx context.Context, queue, 
 	return true, a.inspector.DeleteTask(queue, taskID)
 }
 
-// PurgeArchivedRuntimeTasks clears the whole archived (dead-letter) set for one
-// queue. asynq's DeleteAllArchivedTasks scopes strictly to the archived list,
-// so pending/active/scheduled/retry work is never at risk.
+// Archived deletion checks state and the inspected message atomically so a
+// concurrent run-now or payload update cannot turn the purge into live deletion.
+var deleteArchivedRuntimeTaskScript = redis.NewScript(`
+if redis.call("HGET", KEYS[2], "state") ~= "archived" or
+   redis.call("HGET", KEYS[2], "msg") ~= ARGV[2] then
+    return 0
+end
+if redis.call("ZREM", KEYS[1], ARGV[1]) == 0 then
+    return 0
+end
+local unique_key = redis.call("HGET", KEYS[2], "unique_key")
+if unique_key and unique_key ~= "" and redis.call("GET", unique_key) == ARGV[1] then
+    redis.call("DEL", unique_key)
+end
+return redis.call("DEL", KEYS[2])
+`)
+
+func (a *asynqTaskInspector) deleteArchivedRuntimeTask(
+	ctx context.Context, queue, taskID, message string,
+) (int, error) {
+	archivedKey, _ := runtimeTaskStateKey(queue, types.RuntimeTaskArchived)
+	taskKey := "asynq:{" + queue + "}:t:" + taskID
+	deleted, err := deleteArchivedRuntimeTaskScript.Run(ctx, a.redis,
+		[]string{archivedKey, taskKey}, taskID, message).Int()
+	return deleted, err
+}
+
+// PurgeArchivedRuntimeTasks deletes only team or legacy tenantless archived
+// tasks. Other tenants, invalid payloads, and live tasks remain untouched.
 func (a *asynqTaskInspector) PurgeArchivedRuntimeTasks(ctx context.Context, queue string) (int, bool, error) {
-	if a == nil || a.inspector == nil {
+	if a == nil || a.inspector == nil || a.redis == nil {
 		return 0, false, nil
 	}
-	deleted, err := a.inspector.DeleteAllArchivedTasks(queue)
+	archivedKey, _ := runtimeTaskStateKey(queue, types.RuntimeTaskArchived)
+	// Snapshot IDs before deleting so retained foreign tasks and mutations do
+	// not shift pagination offsets and skip eligible records.
+	ids, err := a.redis.ZRange(ctx, archivedKey, 0, -1).Result()
 	if err != nil {
 		return 0, true, err
+	}
+	deleted := 0
+	for _, taskID := range ids {
+		if err := ctx.Err(); err != nil {
+			return deleted, true, err
+		}
+		taskKey := "asynq:{" + queue + "}:t:" + taskID
+		message, err := a.redis.HGet(ctx, taskKey, "msg").Result()
+		if errors.Is(err, redis.Nil) {
+			continue
+		}
+		if err != nil {
+			return deleted, true, err
+		}
+		task, err := a.inspector.GetTaskInfo(queue, taskID)
+		if errors.Is(err, asynq.ErrTaskNotFound) || errors.Is(err, asynq.ErrQueueNotFound) {
+			continue
+		}
+		if err != nil {
+			return deleted, true, err
+		}
+		info, err := projectRuntimeTask(task, runtimeWorkerMetadata{})
+		if err != nil || !info.Allows(types.RuntimeTaskActionDelete) {
+			continue
+		}
+		count, err := a.deleteArchivedRuntimeTask(ctx, queue, taskID, message)
+		if err != nil {
+			return deleted, true, err
+		}
+		deleted += count
 	}
 	return deleted, true, nil
 }

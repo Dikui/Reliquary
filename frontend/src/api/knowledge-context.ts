@@ -226,3 +226,31 @@ export const acceptKnowledgeMergeSuggestion = (id: string) =>
   post<KnowledgeContextActionEnvelope>(`/api/v1/knowledge-context/merge-suggestions/${encodeURIComponent(id)}/accept`, {})
 export const rejectKnowledgeMergeSuggestion = (id: string) =>
   post<KnowledgeContextActionEnvelope>(`/api/v1/knowledge-context/merge-suggestions/${encodeURIComponent(id)}/reject`, {})
+
+export interface KnowledgeNameEmbeddingRebuildRun {
+  id: string
+  status: 'pending' | 'running' | 'completed' | 'failed' | string
+  reason: string
+  error?: string
+  model_id: string
+  dimension: number
+  processed_count: number
+  total_count: number
+  model_calls: number
+  attempts: number
+  created_at: string
+  updated_at: string
+  started_at?: string
+  finished_at?: string
+}
+
+export interface KnowledgeNameEmbeddingRebuildStatus {
+  pending_count: number
+  latest_run?: KnowledgeNameEmbeddingRebuildRun | null
+}
+
+const nameEmbeddingRebuildPath = '/api/v1/knowledge-context/name-embeddings/rebuild'
+export const getKnowledgeNameEmbeddingRebuildStatus = () =>
+  get<KnowledgeContextEnvelope<KnowledgeNameEmbeddingRebuildStatus>>(nameEmbeddingRebuildPath)
+export const rebuildKnowledgeNameEmbeddings = () =>
+  post<KnowledgeContextEnvelope<KnowledgeNameEmbeddingRebuildStatus>>(nameEmbeddingRebuildPath, {})

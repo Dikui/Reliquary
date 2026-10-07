@@ -1,7 +1,8 @@
 <template>
   <div class="domain-template-editor">
     <label class="template-label"><span>{{ t('knowledgeDomains.entityTypes') }}</span><t-tag-input v-model="draft.entity_types" :disabled="disabled" :placeholder="t('knowledgeDomains.tagHint')" /></label>
-    <t-tabs v-model="tab">
+    <t-select v-model="tab" class="template-mobile-nav" :options="tabOptions" :aria-label="t('knowledgeDomains.template')" :popup-props="{ zIndex: 6200 }" />
+    <t-tabs v-model="tab" class="template-tabs">
       <t-tab-panel value="fields" :label="t('knowledgeDomains.fields')">
         <p class="template-hint">{{ t('knowledgeDomains.fieldsHint') }}</p>
         <article v-for="(field, index) in draft.fields" :key="index" class="template-entry">
@@ -60,10 +61,17 @@ const draft = defineModel<KnowledgeDomainInput>({ required: true })
 defineProps<{ disabled?: boolean }>()
 const { t } = useI18n()
 const tab = ref('fields')
+const tabOptions = computed(() => [
+  { value: 'fields', label: t('knowledgeDomains.fields') },
+  { value: 'relations', label: t('knowledgeDomains.relations') },
+  { value: 'units', label: t('knowledgeDomains.unitFamilies') },
+  { value: 'hints', label: t('knowledgeDomains.extractionHints') },
+])
 const typeOptions = computed(() => draft.value.entity_types.map(value => ({ value, label: value })))
 </script>
 <style scoped lang="less">
-.domain-template-editor { display: flex; flex-direction: column; gap: 18px; }
+.domain-template-editor { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.template-mobile-nav { display: none; }
 .template-label, .entry-grid label, .unit-entry label { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .template-entry { border: 1px solid var(--td-component-stroke); border-radius: var(--td-radius-large); padding: 16px; margin: 14px 0; }
 .entry-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 8px; overflow-wrap: anywhere; }
@@ -72,5 +80,11 @@ const typeOptions = computed(() => draft.value.entity_types.map(value => ({ valu
 .full-width { grid-column: 1 / -1; }
 .template-hint { color: var(--td-text-color-secondary); line-height: 1.6; }
 :deep(textarea) { resize: none; }
-@media (max-width: 600px) { .entry-grid, .unit-entry { grid-template-columns: 1fr; } }
+@media (max-width: 600px) {
+  .template-mobile-nav { display: block; }
+  .template-tabs > :deep(.t-tabs__header) { display: none; }
+  .template-entry { padding: 12px; }
+  .entry-grid, .unit-entry { grid-template-columns: minmax(0, 1fr); }
+  .unit-entry :deep(.t-input-number) { width: 100%; }
+}
 </style>
