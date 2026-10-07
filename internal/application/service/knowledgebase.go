@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service/retriever"
@@ -117,6 +118,9 @@ func (s *knowledgeBaseService) CreateKnowledgeBase(ctx context.Context,
 	}
 	kb.CreatedAt = time.Now()
 	kb.TenantID = types.MustTenantIDFromContext(ctx)
+	if err := s.validateKnowledgeBaseDomain(ctx, kb.TenantID, kb.DomainID); err != nil {
+		return nil, err
+	}
 	kb.UpdatedAt = time.Now()
 	if uid, ok := types.UserIDFromContext(ctx); ok && !types.IsSyntheticUserID(uid) {
 		kb.CreatorID = uid
@@ -145,7 +149,7 @@ func (s *knowledgeBaseService) CreateKnowledgeBase(ctx context.Context,
 
 	logger.Infof(ctx, "Creating knowledge base, ID: %s, tenant ID: %d, name: %s", kb.ID, kb.TenantID, kb.Name)
 
-	if err := s.repo.CreateKnowledgeBase(ctx, kb); err != nil {
+	if err := s.persistKnowledgeBase(ctx, kb, true); err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"knowledge_base_id": kb.ID,
 			"tenant_id":         kb.TenantID,
@@ -190,6 +194,55 @@ func (s *knowledgeBaseService) applyAndValidateStorageBackend(ctx context.Contex
 	kb.StorageBackendID = &backend.ID
 	kb.SetStorageProvider(backend.Provider)
 	return nil
+}
+
+func (s *knowledgeBaseService) validateKnowledgeBaseDomain(ctx context.Context, tenantID uint64, domainID string) error {
+	if strings.TrimSpace(domainID) == "" {
+		return apperrors.NewBadRequestError("domain_id is required")
+	}
+	// In-memory repository doubles omit the database; production always has it.
+	if s.db == nil {
+		return nil
+	}
+	if _, err := getKnowledgeDomain(ctx, s.db, tenantID, domainID, false); err != nil {
+		if appErr, ok := apperrors.IsAppError(err); ok && appErr.Code == apperrors.ErrNotFound {
+			return apperrors.NewBadRequestError("domain_id must reference an existing team domain")
+		}
+		return err
+	}
+	return nil
+}
+
+// The row lock keeps domain deletion and knowledge-base writes consistent.
+func (s *knowledgeBaseService) persistKnowledgeBase(ctx context.Context, kb *types.KnowledgeBase, create bool) error {
+	persist := func(repo interfaces.KnowledgeBaseRepository) error {
+		if create {
+			return repo.CreateKnowledgeBase(ctx, kb)
+		}
+		return repo.UpdateKnowledgeBase(ctx, kb)
+	}
+	if s.db == nil {
+		return persist(s.repo)
+	}
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if !create {
+			var active types.KnowledgeBase
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Where("tenant_id = ? AND id = ?", kb.TenantID, kb.ID).First(&active).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return apperrors.NewNotFoundError("knowledge base not found")
+				}
+				return err
+			}
+		}
+		var domain types.KnowledgeDomain
+		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("tenant_id = ? AND id = ?", kb.TenantID, kb.DomainID).First(&domain).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return apperrors.NewBadRequestError("domain_id must reference an existing team domain")
+			}
+			return err
+		}
+		return persist(repository.NewKnowledgeBaseRepository(tx))
+	})
 }
 
 // applyTenantDefaultStorageProvider fills an empty KB storage provider from the
@@ -463,6 +516,7 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 	name string,
 	description string,
 	config *types.KnowledgeBaseConfig,
+	domainIDs ...string,
 ) (*types.KnowledgeBase, error) {
 	if id == "" {
 		logger.Error(ctx, "Knowledge base ID is empty")
@@ -481,6 +535,15 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 	}
 
 	changedFields := make([]string, 0, 3)
+	if len(domainIDs) > 0 {
+		if err := s.validateKnowledgeBaseDomain(ctx, kb.TenantID, domainIDs[0]); err != nil {
+			return nil, err
+		}
+		if kb.DomainID != domainIDs[0] {
+			changedFields = append(changedFields, "domain_id")
+			kb.DomainID = domainIDs[0]
+		}
+	}
 	if kb.Name != name {
 		changedFields = append(changedFields, "name")
 	}
@@ -523,7 +586,7 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 	kb.EnsureDefaults()
 
 	logger.Info(ctx, "Saving knowledge base update")
-	if err := s.repo.UpdateKnowledgeBase(ctx, kb); err != nil {
+	if err := s.persistKnowledgeBase(ctx, kb, false); err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"knowledge_base_id": id,
 		})
@@ -1107,6 +1170,7 @@ func (s *knowledgeBaseService) CopyKnowledgeBase(ctx context.Context,
 			Type:                  sourceKB.Type,
 			Description:           sourceKB.Description,
 			TenantID:              tenantID,
+			DomainID:              sourceKB.DomainID,
 			ChunkingConfig:        sourceKB.ChunkingConfig,
 			ImageProcessingConfig: sourceKB.ImageProcessingConfig,
 			EmbeddingModelID:      sourceKB.EmbeddingModelID,
@@ -1125,7 +1189,7 @@ func (s *knowledgeBaseService) CopyKnowledgeBase(ctx context.Context,
 			targetKB.CreatorID = uid
 		}
 		targetKB.EnsureDefaults()
-		if err := s.repo.CreateKnowledgeBase(ctx, targetKB); err != nil {
+		if err := s.persistKnowledgeBase(ctx, targetKB, true); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -1182,7 +1246,7 @@ func (s *knowledgeBaseService) DuplicateKnowledgeBase(
 		}
 	}
 
-	if err := s.repo.CreateKnowledgeBase(ctx, targetKB); err != nil {
+	if err := s.persistKnowledgeBase(ctx, targetKB, true); err != nil {
 		return nil, err
 	}
 	recordKBActivity(ctx, s.audit, tenantID, targetKB.ID, types.AuditActionKBDuplicated,

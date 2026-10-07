@@ -1059,6 +1059,8 @@ definitions:
       - KBCloneStatusFailed
   github_com_Tencent_Reliquary_internal_types.KnowledgeBase:
     properties:
+      domain_id:
+        type: string
       asr_config:
         allOf:
           - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.ASRConfig'
@@ -4663,6 +4665,8 @@ definitions:
     type: object
   internal_handler.UpdateKnowledgeBaseRequest:
     properties:
+      domain_id:
+        type: string
       config:
         $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.KnowledgeBaseConfig'
       description:
@@ -5113,6 +5117,172 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  reliquary_internal_types.DomainField:
+    properties:
+      aliases:
+        items:
+          type: string
+        type: array
+      entity_types:
+        items:
+          type: string
+        type: array
+      key:
+        type: string
+      label:
+        type: string
+      unit_family:
+        type: string
+      value_type:
+        type: string
+    type: object
+  reliquary_internal_types.DomainFieldMapping:
+    properties:
+      field_key:
+        type: string
+      open_field:
+        type: string
+    type: object
+  reliquary_internal_types.DomainRelation:
+    properties:
+      aliases:
+        items:
+          type: string
+        type: array
+      key:
+        type: string
+      label:
+        type: string
+      object_types:
+        items:
+          type: string
+        type: array
+      subject_types:
+        items:
+          type: string
+        type: array
+    type: object
+  reliquary_internal_types.DomainUnit:
+    properties:
+      aliases:
+        items:
+          type: string
+        type: array
+      factor:
+        type: number
+      name:
+        type: string
+    type: object
+  reliquary_internal_types.DomainUnitFamily:
+    properties:
+      canonical_unit:
+        type: string
+      key:
+        type: string
+      units:
+        items:
+          $ref: '#/definitions/reliquary_internal_types.DomainUnit'
+        type: array
+    type: object
+  reliquary_internal_types.KnowledgeContextQuery:
+    properties:
+      domain_id:
+        type: string
+      entity:
+        type: string
+      entity_id:
+        type: string
+      event_id:
+        type: string
+      include_history:
+        type: boolean
+      knowledge_base_id:
+        type: string
+      knowledge_ids:
+        items:
+          type: string
+        type: array
+      limit:
+        type: integer
+      max_value:
+        type: number
+      min_value:
+        type: number
+      object_entity_id:
+        type: string
+      offset:
+        type: integer
+      predicate:
+        type: string
+      relation:
+        type: string
+      scope:
+        type: string
+      since:
+        type: string
+      unit:
+        type: string
+      until:
+        type: string
+    type: object
+  reliquary_internal_types.KnowledgeDomain:
+    properties:
+      created_at:
+        type: string
+      created_by:
+        type: string
+      deleted_at:
+        $ref: '#/definitions/gorm.DeletedAt'
+      description:
+        type: string
+      entity_types:
+        items:
+          type: string
+        type: array
+      extraction_hints:
+        type: string
+      fields:
+        items:
+          $ref: '#/definitions/reliquary_internal_types.DomainField'
+        type: array
+      id:
+        type: string
+      is_builtin:
+        type: boolean
+      name:
+        type: string
+      relations:
+        items:
+          $ref: '#/definitions/reliquary_internal_types.DomainRelation'
+        type: array
+      tenant_id:
+        type: integer
+      unit_families:
+        items:
+          $ref: '#/definitions/reliquary_internal_types.DomainUnitFamily'
+        type: array
+      updated_at:
+        type: string
+    type: object
+  reliquary_internal_types.KnowledgeFactCorrection:
+    properties:
+      correction_note:
+        type: string
+      effective_from:
+        type: string
+      effective_to:
+        type: string
+      quote:
+        type: string
+      unit:
+        type: string
+      value:
+        items:
+          type: integer
+        type: array
+      value_type:
+        type: string
     type: object
 info:
   contact:
@@ -13828,6 +13998,494 @@ paths:
       summary: 获取可用网络搜索 Provider 列表
       tags:
         - 网络搜索
+  /knowledge-context/entities:
+    get:
+      parameters:
+      - description: Query scope
+        enum:
+        - knowledge_base
+        - domain
+        - team
+        in: query
+        name: scope
+        type: string
+      - description: Knowledge base for knowledge_base scope
+        in: query
+        name: knowledge_base_id
+        type: string
+      - description: Domain for domain scope
+        in: query
+        name: domain_id
+        type: string
+      - description: Object name or alias
+        in: query
+        name: entity
+        type: string
+      - description: Page size (1-100)
+        in: query
+        name: limit
+        type: integer
+      - description: Page offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: List global objects
+      tags:
+      - Knowledge Context
+  /knowledge-context/entities/{entity_id}:
+    get:
+      parameters:
+      - description: Global object ID
+        in: path
+        name: entity_id
+        required: true
+        type: string
+      - description: Include historical facts and evidence (default true)
+        in: query
+        name: include_history
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: View a global object with source knowledge bases
+      tags:
+      - Knowledge Context
+  /knowledge-context/events:
+    get:
+      parameters:
+      - description: Query scope
+        enum:
+        - knowledge_base
+        - domain
+        - team
+        in: query
+        name: scope
+        type: string
+      - description: Knowledge base for knowledge_base scope
+        in: query
+        name: knowledge_base_id
+        type: string
+      - description: Domain for domain scope
+        in: query
+        name: domain_id
+        type: string
+      - description: Related global object
+        in: query
+        name: entity_id
+        type: string
+      - description: Page size (1-100)
+        in: query
+        name: limit
+        type: integer
+      - description: Page offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: List events by scope
+      tags:
+      - Knowledge Context
+  /knowledge-context/query:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Scope and structured conditions
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/reliquary_internal_types.KnowledgeContextQuery'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Sourced entities, facts and events
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: Query structured knowledge
+      tags:
+      - Knowledge Context
+  /knowledge-domains:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: List knowledge domains
+      tags:
+      - Knowledge domains
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Domain template
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/reliquary_internal_types.KnowledgeDomain'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: Create a knowledge domain
+      tags:
+      - Knowledge domains
+  /knowledge-domains/{id}:
+    delete:
+      parameters:
+      - description: Domain ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: Delete an unused custom knowledge domain
+      tags:
+      - Knowledge domains
+    get:
+      parameters:
+      - description: Domain ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: Get a knowledge domain
+      tags:
+      - Knowledge domains
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Domain ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Domain template
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/reliquary_internal_types.KnowledgeDomain'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: Update a knowledge domain
+      tags:
+      - Knowledge domains
+  /knowledge-domains/{id}/field-mappings:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Domain ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Field mapping
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/reliquary_internal_types.DomainFieldMapping'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: Map an open field to a template field alias
+      tags:
+      - Knowledge domains
+  /knowledge-domains/{id}/fields:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Domain ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: New template field
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/reliquary_internal_types.DomainField'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: Add an open field as a template field
+      tags:
+      - Knowledge domains
+  /knowledge-domains/{id}/open-fields:
+    get:
+      parameters:
+      - description: Domain ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: List unmapped open fields with counts and sample facts
+      tags:
+      - Knowledge domains
+  /knowledge-context/entities/merge:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Global object IDs
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            keep_entity_id:
+              type: string
+            merge_entity_id:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: Merge global objects
+      tags:
+      - Knowledge Context
+  /knowledge-context/evidence:
+    get:
+      parameters:
+      - description: Query scope
+        enum:
+        - knowledge_base
+        - domain
+        - team
+        in: query
+        name: scope
+        type: string
+      - description: Knowledge base for knowledge_base scope
+        in: query
+        name: knowledge_base_id
+        type: string
+      - description: Domain for domain scope
+        in: query
+        name: domain_id
+        type: string
+      - description: Related global object
+        in: query
+        name: entity_id
+        type: string
+      - description: Related event
+        in: query
+        name: event_id
+        type: string
+      - description: Page size (1-100)
+        in: query
+        name: limit
+        type: integer
+      - description: Page offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: List evidence by scope
+      tags:
+      - Knowledge Context
+  /knowledge-context/evidence/{evidence_id}:
+    get:
+      parameters:
+      - description: Evidence ID
+        in: path
+        name: evidence_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: View source evidence
+      tags:
+      - Knowledge Context
+  /knowledge-context/facts/{fact_id}/correction:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Fact ID
+        in: path
+        name: fact_id
+        required: true
+        type: string
+      - description: Fact correction
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/reliquary_internal_types.KnowledgeFactCorrection'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: Correct a sourced fact
+      tags:
+      - Knowledge Context
 securityDefinitions:
   ApiKeyAuth:
     description: 团队 API Key 认证，访问唯一团队空间

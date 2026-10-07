@@ -18,6 +18,7 @@ import (
 	configcmd "reliquary/cli/cmd/config"
 	"reliquary/cli/cmd/doc"
 	"reliquary/cli/cmd/doctor"
+	"reliquary/cli/cmd/domain"
 	"reliquary/cli/cmd/kb"
 	linkcmd "reliquary/cli/cmd/link"
 	mcpcmd "reliquary/cli/cmd/mcp"
@@ -200,6 +201,7 @@ a curated read-only MCP tool surface for AI agents.`,
 	cmd.AddCommand(search.NewCmdSearch(f))
 	cmd.AddCommand(doctor.NewCmd(f))
 	cmd.AddCommand(kb.NewCmd(f))
+	cmd.AddCommand(domain.NewCmd(f))
 	cmd.AddCommand(profilecmd.NewCmd(f))
 	cmd.AddCommand(configcmd.NewCmd(f))
 	cmd.AddCommand(linkcmd.NewCmd(f))

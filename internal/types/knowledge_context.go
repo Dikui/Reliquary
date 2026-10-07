@@ -21,14 +21,14 @@ const (
 	KnowledgeEvidenceSourceKindRoundup   = "roundup"
 )
 
-// KnowledgeEntity is a canonical object shared by messages in one knowledge base.
+// KnowledgeEntity is a canonical object shared by the whole team space.
 type KnowledgeEntity struct {
 	ID              string    `json:"id" gorm:"type:varchar(36);primaryKey"`
 	TenantID        uint64    `json:"tenant_id" gorm:"not null;uniqueIndex:idx_kce_canonical"`
-	KnowledgeBaseID string    `json:"knowledge_base_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_kce_canonical"`
+	KnowledgeBaseID string    `json:"knowledge_base_id,omitempty" gorm:"type:varchar(36);default:null"`
 	CanonicalName   string    `json:"canonical_name" gorm:"type:varchar(512);not null"`
 	NormalizedName  string    `json:"-" gorm:"type:varchar(512);not null;uniqueIndex:idx_kce_canonical"`
-	EntityType      string    `json:"entity_type" gorm:"type:varchar(128);not null;default:''"`
+	EntityType      string    `json:"entity_type" gorm:"type:varchar(128);not null;default:'';uniqueIndex:idx_kce_canonical"`
 	Description     string    `json:"description,omitempty" gorm:"type:text;not null;default:''"`
 	MergedIntoID    string    `json:"merged_into_id,omitempty" gorm:"type:varchar(36);not null;default:''"`
 	CreatedAt       time.Time `json:"created_at"`
@@ -40,9 +40,10 @@ func (KnowledgeEntity) TableName() string { return "knowledge_context_entities" 
 
 // KnowledgeEntityAlias stores normalized names used to resolve future mentions.
 type KnowledgeEntityAlias struct {
+	EntityType      string    `json:"entity_type" gorm:"type:varchar(128);not null;default:'';uniqueIndex:idx_kcea_alias"`
 	ID              string    `json:"id" gorm:"type:varchar(36);primaryKey"`
 	TenantID        uint64    `json:"tenant_id" gorm:"not null;uniqueIndex:idx_kcea_alias"`
-	KnowledgeBaseID string    `json:"knowledge_base_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_kcea_alias"`
+	KnowledgeBaseID string    `json:"knowledge_base_id,omitempty" gorm:"type:varchar(36);default:null"`
 	EntityID        string    `json:"entity_id" gorm:"type:varchar(36);not null;index"`
 	Alias           string    `json:"alias" gorm:"type:varchar(512);not null"`
 	NormalizedAlias string    `json:"normalized_alias" gorm:"type:varchar(512);not null;uniqueIndex:idx_kcea_alias"`
@@ -54,25 +55,26 @@ func (KnowledgeEntityAlias) TableName() string { return "knowledge_context_entit
 // KnowledgeEvidence is an immutable source snapshot. Body is kept with its hash
 // so facts and reports can resolve their citations after a message is updated.
 type KnowledgeEvidence struct {
-	ID               string      `json:"id" gorm:"type:varchar(36);primaryKey"`
-	TenantID         uint64      `json:"tenant_id" gorm:"not null;index:idx_kcevid_message;uniqueIndex:idx_kcevid_version;index:idx_kcevid_hash"`
-	KnowledgeBaseID  string      `json:"knowledge_base_id" gorm:"type:varchar(36);not null;index:idx_kcevid_message;uniqueIndex:idx_kcevid_version;index:idx_kcevid_hash"`
-	KnowledgeID      string      `json:"knowledge_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_kcevid_version;index:idx_kcevid_hash"`
-	Version          int         `json:"version" gorm:"not null;uniqueIndex:idx_kcevid_version"`
-	BodyHash         string      `json:"body_hash" gorm:"type:char(64);not null;index:idx_kcevid_hash"`
-	SupersededByID   string      `json:"superseded_by_id,omitempty" gorm:"type:varchar(36);not null;default:''"`
-	Title            string      `json:"title" gorm:"type:text;not null;default:''"`
-	Body             string      `json:"body" gorm:"type:text;not null"`
-	Author           string      `json:"author,omitempty" gorm:"type:text;not null;default:''"`
-	Publisher        string      `json:"publisher,omitempty" gorm:"type:text;not null;default:''"`
-	OriginalURL      string      `json:"original_url,omitempty" gorm:"type:text;not null;default:''"`
-	PublishedAt      string      `json:"published_at,omitempty" gorm:"type:text;not null;default:''"`
-	ImageRefs        StringArray `json:"image_refs,omitempty" gorm:"type:json"`
-	SourceKind       string      `json:"source_kind,omitempty" gorm:"type:varchar(32);not null;default:''"`
-	Status           string      `json:"status" gorm:"type:varchar(16);not null;default:'current';index"`
-	ExtractionStatus string      `json:"extraction_status" gorm:"type:varchar(16);not null;default:'pending';index"`
-	ExtractionError  string      `json:"extraction_error,omitempty" gorm:"type:text;not null;default:''"`
-	CreatedAt        time.Time   `json:"created_at"`
+	KnowledgeBaseName string      `json:"knowledge_base_name,omitempty" gorm:"-"`
+	ID                string      `json:"id" gorm:"type:varchar(36);primaryKey"`
+	TenantID          uint64      `json:"tenant_id" gorm:"not null;index:idx_kcevid_message;uniqueIndex:idx_kcevid_version;index:idx_kcevid_hash"`
+	KnowledgeBaseID   string      `json:"knowledge_base_id" gorm:"type:varchar(36);not null;index:idx_kcevid_message;uniqueIndex:idx_kcevid_version;index:idx_kcevid_hash"`
+	KnowledgeID       string      `json:"knowledge_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_kcevid_version;index:idx_kcevid_hash"`
+	Version           int         `json:"version" gorm:"not null;uniqueIndex:idx_kcevid_version"`
+	BodyHash          string      `json:"body_hash" gorm:"type:char(64);not null;index:idx_kcevid_hash"`
+	SupersededByID    string      `json:"superseded_by_id,omitempty" gorm:"type:varchar(36);not null;default:''"`
+	Title             string      `json:"title" gorm:"type:text;not null;default:''"`
+	Body              string      `json:"body" gorm:"type:text;not null"`
+	Author            string      `json:"author,omitempty" gorm:"type:text;not null;default:''"`
+	Publisher         string      `json:"publisher,omitempty" gorm:"type:text;not null;default:''"`
+	OriginalURL       string      `json:"original_url,omitempty" gorm:"type:text;not null;default:''"`
+	PublishedAt       string      `json:"published_at,omitempty" gorm:"type:text;not null;default:''"`
+	ImageRefs         StringArray `json:"image_refs,omitempty" gorm:"type:json"`
+	SourceKind        string      `json:"source_kind,omitempty" gorm:"type:varchar(32);not null;default:''"`
+	Status            string      `json:"status" gorm:"type:varchar(16);not null;default:'current';index"`
+	ExtractionStatus  string      `json:"extraction_status" gorm:"type:varchar(16);not null;default:'pending';index"`
+	ExtractionError   string      `json:"extraction_error,omitempty" gorm:"type:text;not null;default:''"`
+	CreatedAt         time.Time   `json:"created_at"`
 }
 
 func (KnowledgeEvidence) TableName() string { return "knowledge_context_evidence" }
@@ -80,6 +82,7 @@ func (KnowledgeEvidence) TableName() string { return "knowledge_context_evidence
 // KnowledgeFact is a sourced assertion. Relations use ObjectEntityID; scalar
 // attributes use Value, ValueType, and Unit. Conflicting assertions coexist.
 type KnowledgeFact struct {
+	KnowledgeBaseName string     `json:"knowledge_base_name,omitempty" gorm:"-"`
 	ID                string     `json:"id" gorm:"type:varchar(36);primaryKey"`
 	TenantID          uint64     `json:"tenant_id" gorm:"not null;index:idx_kcf_scope"`
 	KnowledgeBaseID   string     `json:"knowledge_base_id" gorm:"type:varchar(36);not null;index:idx_kcf_scope"`
@@ -109,6 +112,7 @@ func (KnowledgeFact) TableName() string { return "knowledge_context_facts" }
 // KnowledgeEvent represents one real-world change, possibly reported by many
 // messages. Evidence links and attention assessments are stored separately.
 type KnowledgeEvent struct {
+	Sources         []KnowledgeContextSource `json:"sources,omitempty" gorm:"-"`
 	ID              string                   `json:"id" gorm:"type:varchar(36);primaryKey"`
 	TenantID        uint64                   `json:"tenant_id" gorm:"not null;index:idx_kcevent_scope"`
 	KnowledgeBaseID string                   `json:"knowledge_base_id" gorm:"type:varchar(36);not null;index:idx_kcevent_scope"`
@@ -176,22 +180,30 @@ type KnowledgeAttention struct {
 
 func (KnowledgeAttention) TableName() string { return "knowledge_context_attention" }
 
+type KnowledgeContextSource struct {
+	KnowledgeBaseID   string `json:"knowledge_base_id"`
+	KnowledgeBaseName string `json:"knowledge_base_name"`
+}
+
 type KnowledgeContextQuery struct {
-	KnowledgeIDs   []string   `json:"knowledge_ids,omitempty"`
-	EntityID       string     `json:"entity_id,omitempty"`
-	Entity         string     `json:"entity,omitempty"`
-	Predicate      string     `json:"predicate,omitempty"`
-	Relation       string     `json:"relation,omitempty"`
-	ObjectEntityID string     `json:"object_entity_id,omitempty"`
-	MinValue       *float64   `json:"min_value,omitempty"`
-	MaxValue       *float64   `json:"max_value,omitempty"`
-	Unit           string     `json:"unit,omitempty"`
-	EventID        string     `json:"event_id,omitempty"`
-	Since          *time.Time `json:"since,omitempty"`
-	Until          *time.Time `json:"until,omitempty"`
-	IncludeHistory bool       `json:"include_history,omitempty"`
-	Limit          int        `json:"limit,omitempty"`
-	Offset         int        `json:"offset,omitempty"`
+	Scope           string     `json:"scope,omitempty"`
+	DomainID        string     `json:"domain_id,omitempty"`
+	KnowledgeBaseID string     `json:"knowledge_base_id,omitempty"`
+	KnowledgeIDs    []string   `json:"knowledge_ids,omitempty"`
+	EntityID        string     `json:"entity_id,omitempty"`
+	Entity          string     `json:"entity,omitempty"`
+	Predicate       string     `json:"predicate,omitempty"`
+	Relation        string     `json:"relation,omitempty"`
+	ObjectEntityID  string     `json:"object_entity_id,omitempty"`
+	MinValue        *float64   `json:"min_value,omitempty"`
+	MaxValue        *float64   `json:"max_value,omitempty"`
+	Unit            string     `json:"unit,omitempty"`
+	EventID         string     `json:"event_id,omitempty"`
+	Since           *time.Time `json:"since,omitempty"`
+	Until           *time.Time `json:"until,omitempty"`
+	IncludeHistory  bool       `json:"include_history,omitempty"`
+	Limit           int        `json:"limit,omitempty"`
+	Offset          int        `json:"offset,omitempty"`
 }
 
 type KnowledgeContextResult struct {

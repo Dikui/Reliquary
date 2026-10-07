@@ -51,6 +51,7 @@ func (s *stubKnowledgeBaseService) UpdateKnowledgeBase(
 	string,
 	string,
 	*types.KnowledgeBaseConfig,
+	...string,
 ) (*types.KnowledgeBase, error) {
 	return nil, nil
 }
@@ -136,4 +137,43 @@ func TestQueryKnowledgeGraphFailsClosedOutsideScope(t *testing.T) {
 	require.Error(t, err)
 	require.False(t, result.Success)
 	require.False(t, called)
+}
+
+func TestQueryKnowledgeGraphTeamAndDomainScopes(t *testing.T) {
+	for _, scope := range []string{"team", "domain"} {
+		t.Run(scope, func(t *testing.T) {
+			calls := 0
+			tool := NewQueryKnowledgeGraphTool(nil).WithContextQuery(func(ctx context.Context, kbID string, q types.KnowledgeContextQuery) (*types.KnowledgeContextResult, error) {
+				calls++
+				require.Empty(t, kbID)
+				require.Equal(t, scope, q.Scope)
+				require.Equal(t, "energy", q.DomainID)
+				return &types.KnowledgeContextResult{Entities: []types.KnowledgeEntity{{ID: "company", CanonicalName: "Acme"}}, Facts: []types.KnowledgeFact{{KnowledgeBaseID: "one", KnowledgeBaseName: "First", Quote: "Acme"}, {KnowledgeBaseID: "two", KnowledgeBaseName: "Second", Quote: "Acme"}}}, nil
+			})
+			args, _ := json.Marshal(QueryKnowledgeGraphInput{Scope: scope, DomainID: "energy", Query: "Acme"})
+			result, err := tool.Execute(context.Background(), args)
+			require.NoError(t, err)
+			require.True(t, result.Success)
+			require.Equal(t, 1, calls)
+			require.Contains(t, result.Output, "First")
+			require.Contains(t, result.Output, "Second")
+		})
+	}
+}
+
+func TestQueryKnowledgeGraphTeamScopePreservesTargetsAndDeduplicatesObjects(t *testing.T) {
+	targets := types.SearchTargets{{KnowledgeBaseID: "one", Type: types.SearchTargetTypeKnowledgeBase}, {KnowledgeBaseID: "two", Type: types.SearchTargetTypeKnowledge, KnowledgeIDs: []string{"selected"}}}
+	queried := map[string][]string{}
+	tool := NewQueryKnowledgeGraphTool(nil, targets).WithContextQuery(func(ctx context.Context, kbID string, q types.KnowledgeContextQuery) (*types.KnowledgeContextResult, error) {
+		queried[kbID] = q.KnowledgeIDs
+		require.Empty(t, q.Scope, "each authorized target keeps its narrower query scope")
+		return &types.KnowledgeContextResult{Entities: []types.KnowledgeEntity{{ID: "company", CanonicalName: "Acme"}}}, nil
+	})
+	args, _ := json.Marshal(QueryKnowledgeGraphInput{Scope: "team", Query: "Acme"})
+	result, err := tool.Execute(context.Background(), args)
+	require.NoError(t, err)
+	require.True(t, result.Success)
+	require.Len(t, queried, 2)
+	require.Equal(t, []string{"selected"}, queried["two"])
+	require.Equal(t, 1, result.Data["graph_data"].(map[string]any)["total_nodes"])
 }

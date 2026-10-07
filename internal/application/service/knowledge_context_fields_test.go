@@ -24,7 +24,7 @@ func TestKnowledgeContextSelectionFieldsPruneEvidenceAndPreserveSource(t *testin
 	}
 	require.NoError(t, db.Create(&types.KnowledgeEntityAlias{ID: "alias", TenantID: 9, KnowledgeBaseID: "kb", EntityID: "model-a", Alias: "A2", NormalizedAlias: "a2"}).Error)
 	evidence := &types.KnowledgeEvidence{ID: "model-a-evidence", TenantID: 9, KnowledgeBaseID: "kb"}
-	facts, err := materializeContextFacts([]contextExtractedFact{{Kind: "attribute", Subject: "A2", Predicate: "context window", Value: json.RawMessage(`256`), ValueType: "number", Unit: "k tokens", Quote: "model-a context window 256 k tokens"}}, map[string]types.KnowledgeEntity{"a2": {ID: "model-a"}}, evidence)
+	facts, err := materializeContextFacts([]contextExtractedFact{{Kind: "attribute", Subject: "A2", Predicate: "context window", Value: json.RawMessage(`256`), ValueType: "number", Unit: "k tokens", Quote: "model-a context window 256 k tokens"}}, map[string]types.KnowledgeEntity{"a2": {ID: "model-a"}}, evidence, BuiltinAIKnowledgeDomain())
 	require.NoError(t, err)
 	require.Equal(t, "context_length", facts[0].Predicate)
 	require.Equal(t, "context window", facts[0].OriginalPredicate)

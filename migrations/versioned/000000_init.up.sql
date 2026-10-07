@@ -613,11 +613,33 @@ CREATE TABLE public.knowledge_anomalies (
 -- Name: knowledge_bases; Type: TABLE; Schema: public
 --
 
+CREATE TABLE public.knowledge_domains (
+    id character varying(36) NOT NULL PRIMARY KEY,
+    tenant_id integer NOT NULL,
+    name character varying(255) NOT NULL,
+    description text DEFAULT '' NOT NULL,
+    entity_types jsonb DEFAULT '[]'::jsonb NOT NULL,
+    fields jsonb DEFAULT '[]'::jsonb NOT NULL,
+    relations jsonb DEFAULT '[]'::jsonb NOT NULL,
+    unit_families jsonb DEFAULT '[]'::jsonb NOT NULL,
+    extraction_hints text DEFAULT '' NOT NULL,
+    is_builtin boolean DEFAULT false NOT NULL,
+    created_by character varying(36) DEFAULT '' NOT NULL,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    deleted_at timestamp with time zone
+);
+
+CREATE UNIQUE INDEX idx_knowledge_domains_team_name ON public.knowledge_domains (tenant_id, name) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX idx_knowledge_domains_builtin ON public.knowledge_domains (tenant_id) WHERE is_builtin AND deleted_at IS NULL;
+CREATE INDEX idx_knowledge_domains_deleted_at ON public.knowledge_domains (deleted_at);
+
 CREATE TABLE public.knowledge_bases (
     id character varying(36) DEFAULT public.uuid_generate_v4() NOT NULL,
     name character varying(255) NOT NULL,
     description text,
     tenant_id integer NOT NULL,
+    domain_id character varying(36) NOT NULL REFERENCES public.knowledge_domains(id),
     chunking_config jsonb DEFAULT '{"chunk_size": 512, "chunk_overlap": 50, "split_markers": ["\n\n", "\n", "。"], "keep_separator": true}'::jsonb NOT NULL,
     image_processing_config jsonb DEFAULT '{"model_id": "", "enable_multimodal": false}'::jsonb NOT NULL,
     embedding_model_id character varying(64) NOT NULL,
@@ -642,6 +664,8 @@ CREATE TABLE public.knowledge_bases (
     storage_backend_id character varying(36),
     auto_tag_config jsonb
 );
+
+CREATE INDEX idx_knowledge_bases_domain ON public.knowledge_bases (tenant_id, domain_id) WHERE deleted_at IS NULL;
 
 
 --
@@ -714,7 +738,7 @@ CREATE TABLE public.knowledge_context_attention (
 CREATE TABLE public.knowledge_context_entities (
     id character varying(36) NOT NULL,
     tenant_id bigint NOT NULL,
-    knowledge_base_id character varying(36) NOT NULL,
+    knowledge_base_id character varying(36),
     canonical_name character varying(512) NOT NULL,
     normalized_name character varying(512) NOT NULL,
     entity_type character varying(128) DEFAULT ''::character varying NOT NULL,
@@ -732,7 +756,8 @@ CREATE TABLE public.knowledge_context_entities (
 CREATE TABLE public.knowledge_context_entity_aliases (
     id character varying(36) NOT NULL,
     tenant_id bigint NOT NULL,
-    knowledge_base_id character varying(36) NOT NULL,
+    knowledge_base_id character varying(36),
+    entity_type character varying(128) DEFAULT ''::character varying NOT NULL,
     entity_id character varying(36) NOT NULL,
     alias character varying(512) NOT NULL,
     normalized_alias character varying(512) NOT NULL,
@@ -3534,28 +3559,28 @@ CREATE INDEX idx_kca_scope_score ON public.knowledge_context_attention USING btr
 -- Name: idx_kce_canonical; Type: INDEX; Schema: public
 --
 
-CREATE UNIQUE INDEX idx_kce_canonical ON public.knowledge_context_entities USING btree (tenant_id, knowledge_base_id, normalized_name);
+CREATE UNIQUE INDEX idx_kce_canonical ON public.knowledge_context_entities USING btree (tenant_id, entity_type, normalized_name);
 
 
 --
 -- Name: idx_kce_scope_name; Type: INDEX; Schema: public
 --
 
-CREATE INDEX idx_kce_scope_name ON public.knowledge_context_entities USING btree (tenant_id, knowledge_base_id, canonical_name);
+CREATE INDEX idx_kce_scope_name ON public.knowledge_context_entities USING btree (tenant_id, entity_type, canonical_name);
 
 
 --
 -- Name: idx_kcea_alias; Type: INDEX; Schema: public
 --
 
-CREATE UNIQUE INDEX idx_kcea_alias ON public.knowledge_context_entity_aliases USING btree (tenant_id, knowledge_base_id, normalized_alias);
+CREATE UNIQUE INDEX idx_kcea_alias ON public.knowledge_context_entity_aliases USING btree (tenant_id, entity_type, normalized_alias);
 
 
 --
 -- Name: idx_kcea_entity; Type: INDEX; Schema: public
 --
 
-CREATE INDEX idx_kcea_entity ON public.knowledge_context_entity_aliases USING btree (tenant_id, knowledge_base_id, entity_id);
+CREATE INDEX idx_kcea_entity ON public.knowledge_context_entity_aliases USING btree (tenant_id, entity_id);
 
 
 --

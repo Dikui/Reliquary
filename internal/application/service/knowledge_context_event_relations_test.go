@@ -195,7 +195,7 @@ func TestProjectVisibleContextEventRelationsChecksBothEvidenceEnds(t *testing.T)
 	service := NewKnowledgeContextService(db, nil)
 	visibleSourceEvidence := map[string]types.KnowledgeEvidence{"followup-evidence": evidence[0]}
 	query := types.KnowledgeContextQuery{KnowledgeIDs: []string{"followup-source", "visible-target-source", "denied-target-source"}}
-	require.NoError(t, service.projectVisibleEventRelations(context.Background(), 9, "kb", events[:3], visibleSourceEvidence, query))
+	require.NoError(t, service.projectVisibleEventRelations(context.Background(), 9, []string{"kb"}, events[:3], visibleSourceEvidence, query))
 	require.Len(t, events[0].Relations, 1)
 	require.Equal(t, "visible-target-event", events[0].Relations[0].RelatedEventID)
 	require.Equal(t, "Earlier launch report", events[0].Relations[0].RelatedTitle)
@@ -206,6 +206,6 @@ func TestProjectVisibleContextEventRelationsChecksBothEvidenceEnds(t *testing.T)
 	require.Empty(t, events[2].Relations[0].RelatedEventID, "unrelated classification has no graph target")
 
 	query.KnowledgeIDs = []string{"followup-source"}
-	require.NoError(t, service.projectVisibleEventRelations(context.Background(), 9, "kb", events[:3], visibleSourceEvidence, query))
+	require.NoError(t, service.projectVisibleEventRelations(context.Background(), 9, []string{"kb"}, events[:3], visibleSourceEvidence, query))
 	require.Empty(t, events[0].Relations, "a visible source outside the requested message set is not a visible relation target")
 }

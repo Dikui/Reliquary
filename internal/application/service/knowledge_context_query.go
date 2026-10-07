@@ -16,7 +16,8 @@ import (
 
 // contextQueryCandidates reads identifiers and object names, not source bodies.
 // Event candidates expand to every source of that event, preserving aggregates.
-func (s *KnowledgeContextService) contextQueryCandidates(ctx context.Context, tenantID uint64, kbID string, q types.KnowledgeContextQuery) ([]string, []string, bool, error) {
+func (s *KnowledgeContextService) contextQueryCandidates(ctx context.Context, scope *contextQueryScope, q types.KnowledgeContextQuery) ([]string, []string, bool, error) {
+	tenantID, kbIDs := scope.tenantID, scope.kbIDs
 	if q.Entity == "" && q.EntityID == "" && q.EventID == "" && q.Predicate == "" && q.Relation == "" {
 		return nil, nil, false, nil
 	}
@@ -25,7 +26,7 @@ func (s *KnowledgeContextService) contextQueryCandidates(ctx context.Context, te
 		entityIDs = []string{q.EntityID}
 	} else if q.Entity != "" {
 		var entities []types.KnowledgeEntity
-		if err := s.db.WithContext(ctx).Select("id", "canonical_name").Where("tenant_id = ? AND knowledge_base_id = ? AND merged_into_id = ''", tenantID, kbID).Find(&entities).Error; err != nil {
+		if err := s.db.WithContext(ctx).Select("id", "canonical_name").Where("tenant_id = ? AND merged_into_id = ''", tenantID).Find(&entities).Error; err != nil {
 			return nil, nil, true, err
 		}
 		matched := map[string]bool{}
@@ -36,7 +37,7 @@ func (s *KnowledgeContextService) contextQueryCandidates(ctx context.Context, te
 			}
 		}
 		var aliases []types.KnowledgeEntityAlias
-		if err := s.db.WithContext(ctx).Select("entity_id", "alias").Where("tenant_id = ? AND knowledge_base_id = ?", tenantID, kbID).Find(&aliases).Error; err != nil {
+		if err := s.db.WithContext(ctx).Select("entity_id", "alias").Where("tenant_id = ?", tenantID).Find(&aliases).Error; err != nil {
 			return nil, nil, true, err
 		}
 		for _, alias := range aliases {
@@ -54,29 +55,24 @@ func (s *KnowledgeContextService) contextQueryCandidates(ctx context.Context, te
 	}
 	var evidenceIDs []string
 	if len(entityIDs) > 0 || q.Predicate != "" || q.Relation != "" {
-		facts := s.db.WithContext(ctx).Model(&types.KnowledgeFact{}).Where("tenant_id = ? AND knowledge_base_id = ?", tenantID, kbID)
+		facts := s.db.WithContext(ctx).Model(&types.KnowledgeFact{}).Where("tenant_id = ? AND knowledge_base_id IN ?", tenantID, kbIDs)
 		if len(entityIDs) > 0 {
 			facts = facts.Where("(subject_entity_id IN ? OR object_entity_id IN ?)", entityIDs, entityIDs)
 		}
 		if !q.IncludeHistory {
 			facts = facts.Where("status = ?", types.KnowledgeFactCurrent)
 		}
-		if q.Predicate != "" {
-			facts = facts.Where("lower(predicate) IN ?", contextFieldNames(q.Predicate))
-		}
-		if q.Relation != "" {
-			facts = facts.Where("kind = ? AND lower(predicate) IN ?", types.KnowledgeFactRelation, contextFieldNames(q.Relation))
-		}
+		facts = scope.factFields(facts, q)
 		if q.ObjectEntityID != "" {
 			facts = facts.Where("object_entity_id = ?", q.ObjectEntityID)
 		}
 		if len(entityIDs) == 0 && q.EventID == "" {
 			var values []types.KnowledgeFact
-			if err := facts.Select("evidence_id", "kind", "value_type", "value", "unit").Find(&values).Error; err != nil {
+			if err := facts.Select("evidence_id", "knowledge_base_id", "kind", "value_type", "value", "unit").Find(&values).Error; err != nil {
 				return nil, nil, true, err
 			}
 			for _, fact := range values {
-				if contextFactMatchesValue(fact, q) {
+				if contextFactMatchesValue(scope.domains[fact.KnowledgeBaseID], fact, q) {
 					evidenceIDs = append(evidenceIDs, fact.EvidenceID)
 				}
 			}
@@ -86,7 +82,7 @@ func (s *KnowledgeContextService) contextQueryCandidates(ctx context.Context, te
 			return nil, nil, true, err
 		}
 	}
-	links := s.db.WithContext(ctx).Model(&types.KnowledgeEventEvidence{}).Where("tenant_id = ? AND knowledge_base_id = ?", tenantID, kbID)
+	links := s.db.WithContext(ctx).Model(&types.KnowledgeEventEvidence{}).Where("tenant_id = ? AND knowledge_base_id IN ?", tenantID, kbIDs)
 	if q.EventID != "" {
 		links = links.Where("event_id = ?", q.EventID)
 	} else {
@@ -99,7 +95,7 @@ func (s *KnowledgeContextService) contextQueryCandidates(ctx context.Context, te
 			args = append(args, "%"+literal+"%")
 		}
 		linkedEvents := links.Session(&gorm.Session{}).Select("event_id").Where("("+strings.Join(conditions, " OR ")+")", args...)
-		links = s.db.WithContext(ctx).Model(&types.KnowledgeEventEvidence{}).Where("tenant_id = ? AND knowledge_base_id = ? AND event_id IN (?)", tenantID, kbID, linkedEvents)
+		links = s.db.WithContext(ctx).Model(&types.KnowledgeEventEvidence{}).Where("tenant_id = ? AND knowledge_base_id IN ? AND event_id IN (?)", tenantID, kbIDs, linkedEvents)
 	}
 	var eventEvidenceIDs []string
 	if err := links.Distinct("evidence_id").Pluck("evidence_id", &eventEvidenceIDs).Error; err != nil {
@@ -127,6 +123,9 @@ func (s *KnowledgeContextService) scopedKnowledgeBase(ctx context.Context, kbID 
 	if err != nil {
 		return 0, err
 	}
+	if err := types.AuthorizeTenantAPIKeyKnowledgeBases(ctx, kbID); err != nil {
+		return 0, err
+	}
 	if strings.TrimSpace(kbID) == "" {
 		return 0, werrors.NewBadRequestError("knowledge base ID is required")
 	}
@@ -141,10 +140,67 @@ func (s *KnowledgeContextService) scopedKnowledgeBase(ctx context.Context, kbID 
 }
 
 func (s *KnowledgeContextService) Query(ctx context.Context, kbID string, q types.KnowledgeContextQuery) (*types.KnowledgeContextResult, error) {
-	tenantID, err := s.scopedKnowledgeBase(ctx, kbID)
+	return s.queryContext(ctx, kbID, q, true)
+}
+
+// EntityDetail includes team history by default, without list pagination.
+func (s *KnowledgeContextService) EntityDetail(ctx context.Context, entityID string, history ...bool) (*types.KnowledgeContextResult, error) {
+	tenantID, err := s.requireTenant(ctx)
 	if err != nil {
 		return nil, err
 	}
+	if err := s.authorizeContextEntity(ctx, tenantID, entityID); err != nil {
+		return nil, err
+	}
+	includeHistory := true
+	if len(history) > 0 {
+		includeHistory = history[0]
+	}
+	result, err := s.queryContext(ctx, "", types.KnowledgeContextQuery{Scope: "team", EntityID: entityID, IncludeHistory: includeHistory}, false)
+	if err != nil {
+		return nil, err
+	}
+	if len(result.Entities) == 0 {
+		// An identity remains visible when all its assertions belong to history.
+		tenantID, err := s.requireTenant(ctx)
+		if err != nil {
+			return nil, err
+		}
+		var entity types.KnowledgeEntity
+		if err := s.db.WithContext(ctx).Where("tenant_id = ? AND id = ? AND merged_into_id = ''", tenantID, entityID).First(&entity).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, werrors.NewNotFoundError("knowledge entity not found")
+			}
+			return nil, err
+		}
+		var aliases []types.KnowledgeEntityAlias
+		if err := s.db.WithContext(ctx).Where("tenant_id = ? AND entity_id = ?", tenantID, entityID).Order("normalized_alias ASC").Find(&aliases).Error; err != nil {
+			return nil, err
+		}
+		if key, ok := types.TenantAPIKeyScopeFromContext(ctx); ok && key.IsKnowledgeBaseRestricted() {
+			entity.Description = ""
+			if !key.AllowsKnowledgeBase(entity.KnowledgeBaseID) {
+				entity.KnowledgeBaseID = ""
+			}
+		} else {
+			for _, alias := range aliases {
+				entity.Aliases = append(entity.Aliases, alias.Alias)
+			}
+		}
+		result.Entities = []types.KnowledgeEntity{entity}
+	}
+	return result, nil
+}
+
+func (s *KnowledgeContextService) queryContext(ctx context.Context, kbID string, q types.KnowledgeContextQuery, paginated bool) (*types.KnowledgeContextResult, error) {
+	scope, err := s.resolveContextQueryScope(ctx, kbID, q)
+	if err != nil {
+		return nil, err
+	}
+	tenantID, kbIDs := scope.tenantID, scope.kbIDs
+	key, _ := types.TenantAPIKeyScopeFromContext(ctx)
+	limitedEntities := len(q.KnowledgeIDs) > 0 || key.IsKnowledgeBaseRestricted()
+	projectEventSources := len(q.KnowledgeIDs) > 0 || scope.kind != "team" || key.IsKnowledgeBaseRestricted()
 	result := &types.KnowledgeContextResult{
 		Entities: []types.KnowledgeEntity{}, Facts: []types.KnowledgeFact{},
 		Events: []types.KnowledgeEvent{}, Evidence: []types.KnowledgeEvidence{}, Attention: []types.KnowledgeAttention{},
@@ -160,9 +216,12 @@ func (s *KnowledgeContextService) Query(ctx context.Context, kbID string, q type
 	if (q.MinValue != nil || q.MaxValue != nil) && strings.TrimSpace(q.Predicate) == "" {
 		return nil, werrors.NewBadRequestError("numeric comparison requires an attribute predicate")
 	}
+	if len(kbIDs) == 0 {
+		return result, nil
+	}
 	// Resolve names using small object records, then fetch bodies only for the
 	// linked evidence. Authorization still runs before any result is returned.
-	candidateEvidenceIDs, candidateEntityIDs, narrowed, err := s.contextQueryCandidates(ctx, tenantID, kbID, q)
+	candidateEvidenceIDs, candidateEntityIDs, narrowed, err := s.contextQueryCandidates(ctx, scope, q)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +229,7 @@ func (s *KnowledgeContextService) Query(ctx context.Context, kbID string, q type
 		return result, nil
 	}
 
-	evidenceQuery := s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id = ?", tenantID, kbID)
+	evidenceQuery := s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id IN ?", tenantID, kbIDs)
 	if !q.IncludeHistory {
 		evidenceQuery = evidenceQuery.Where("status = ?", types.KnowledgeEvidenceCurrent)
 	}
@@ -184,7 +243,7 @@ func (s *KnowledgeContextService) Query(ctx context.Context, kbID string, q type
 	if err := evidenceQuery.Order("created_at DESC, id DESC").Find(&evidence).Error; err != nil {
 		return nil, err
 	}
-	evidence, err = s.visibleContextEvidence(ctx, tenantID, kbID, evidence, q.IncludeHistory)
+	evidence, err = s.visibleContextEvidence(ctx, tenantID, "", evidence, q.IncludeHistory)
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +257,7 @@ func (s *KnowledgeContextService) Query(ctx context.Context, kbID string, q type
 
 	if q.EventID != "" {
 		var links []types.KnowledgeEventEvidence
-		if err := s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id = ? AND event_id = ?", tenantID, kbID, q.EventID).Find(&links).Error; err != nil {
+		if err := s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id IN ? AND event_id = ?", tenantID, kbIDs, q.EventID).Find(&links).Error; err != nil {
 			return nil, err
 		}
 		linked := make(map[string]bool, len(links))
@@ -216,16 +275,11 @@ func (s *KnowledgeContextService) Query(ctx context.Context, kbID string, q type
 	}
 
 	evidenceIDs := sortedEvidenceIDs(allowed)
-	factQuery := s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id = ? AND evidence_id IN ?", tenantID, kbID, evidenceIDs)
+	factQuery := s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id IN ? AND evidence_id IN ?", tenantID, kbIDs, evidenceIDs)
 	if !q.IncludeHistory {
 		factQuery = factQuery.Where("status = ?", types.KnowledgeFactCurrent)
 	}
-	if q.Predicate != "" {
-		factQuery = factQuery.Where("lower(predicate) IN ?", contextFieldNames(q.Predicate))
-	}
-	if q.Relation != "" {
-		factQuery = factQuery.Where("kind = ? AND lower(predicate) IN ?", types.KnowledgeFactRelation, contextFieldNames(q.Relation))
-	}
+	factQuery = scope.factFields(factQuery, q)
 	if q.EntityID != "" {
 		factQuery = factQuery.Where("(subject_entity_id = ? OR object_entity_id = ?)", q.EntityID, q.EntityID)
 	}
@@ -244,13 +298,14 @@ func (s *KnowledgeContextService) Query(ctx context.Context, kbID string, q type
 	filteredFacts := make([]types.KnowledgeFact, 0, len(facts))
 	for _, fact := range facts {
 		source := allowed[fact.EvidenceID]
-		if !contextFactInTimeRange(fact, source, q) || !contextFactMatchesValue(fact, q) {
+		if !contextFactInTimeRange(fact, source, q) || !contextFactMatchesValue(scope.domains[fact.KnowledgeBaseID], fact, q) {
 			continue
 		}
 		if fact.OriginalPredicate == "" {
 			fact.OriginalPredicate = fact.Predicate
 		}
-		fact.Predicate = canonicalContextField(fact.Predicate)
+		fact.Predicate = canonicalContextField(scope.domains[fact.KnowledgeBaseID], fact.Predicate)
+		fact.KnowledgeBaseName = scope.names[fact.KnowledgeBaseID]
 		filteredFacts = append(filteredFacts, fact)
 		entityIDs[fact.SubjectEntityID] = true
 		if fact.ObjectEntityID != "" {
@@ -260,13 +315,13 @@ func (s *KnowledgeContextService) Query(ctx context.Context, kbID string, q type
 	facts = filteredFacts
 
 	permittedEvents := s.db.WithContext(ctx).Model(&types.KnowledgeEventEvidence{}).
-		Select("event_id").Where("tenant_id = ? AND knowledge_base_id = ? AND evidence_id IN ?", tenantID, kbID, evidenceIDs)
-	eventQuery := s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id = ? AND id IN (?)", tenantID, kbID, permittedEvents)
+		Select("event_id").Where("tenant_id = ? AND knowledge_base_id IN ? AND evidence_id IN ?", tenantID, kbIDs, evidenceIDs)
+	eventQuery := s.db.WithContext(ctx).Where("tenant_id = ? AND id IN (?)", tenantID, permittedEvents)
 	if q.EventID != "" {
 		eventQuery = eventQuery.Where("id = ?", q.EventID)
 	}
 	eventOrder := "occurred_at DESC, updated_at DESC, id DESC"
-	if len(q.KnowledgeIDs) > 0 {
+	if projectEventSources {
 		// Aggregate timestamps may come from sources outside this query's scope.
 		// Use a stable ID order here; the final order is based on the projected
 		// dates and evidence from visible sources only.
@@ -279,7 +334,7 @@ func (s *KnowledgeContextService) Query(ctx context.Context, kbID string, q type
 	var selectedEvents []types.KnowledgeEvent
 	for _, event := range events {
 		var links []types.KnowledgeEventEvidence
-		if err := s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id = ? AND event_id = ? AND evidence_id IN ?", tenantID, kbID, event.ID, evidenceIDs).Find(&links).Error; err != nil {
+		if err := s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id IN ? AND event_id = ? AND evidence_id IN ?", tenantID, kbIDs, event.ID, evidenceIDs).Find(&links).Error; err != nil {
 			return nil, err
 		}
 		visibleIDs := types.StringArray{}
@@ -291,6 +346,16 @@ func (s *KnowledgeContextService) Query(ctx context.Context, kbID string, q type
 				visibleIDs = appendUniqueContextString(visibleIDs, link.EvidenceID)
 				visibleEntityIDs = unionStringArrays(visibleEntityIDs, link.EntityIDs)
 				visibleEvidence = append(visibleEvidence, item)
+				found := false
+				for _, source := range event.Sources {
+					if source.KnowledgeBaseID == item.KnowledgeBaseID {
+						found = true
+						break
+					}
+				}
+				if !found {
+					event.Sources = append(event.Sources, types.KnowledgeContextSource{KnowledgeBaseID: item.KnowledgeBaseID, KnowledgeBaseName: scope.names[item.KnowledgeBaseID]})
+				}
 				if visibleSummary == nil || contextEventLinkNewer(link, *visibleSummary, allowed) {
 					copyLink := link
 					visibleSummary = &copyLink
@@ -305,7 +370,10 @@ func (s *KnowledgeContextService) Query(ctx context.Context, kbID string, q type
 		}
 		event.EvidenceIDs = visibleIDs
 		event.EntityIDs = visibleEntityIDs
-		if len(q.KnowledgeIDs) > 0 {
+		if key.IsKnowledgeBaseRestricted() && !key.AllowsKnowledgeBase(event.KnowledgeBaseID) {
+			event.KnowledgeBaseID = visibleEvidence[0].KnowledgeBaseID
+		}
+		if projectEventSources {
 			if visibleSummary == nil {
 				continue
 			}
@@ -346,7 +414,7 @@ func (s *KnowledgeContextService) Query(ctx context.Context, kbID string, q type
 		}
 	}
 	events = selectedEvents
-	if err := s.projectVisibleEventRelations(ctx, tenantID, kbID, events, allowed, q); err != nil {
+	if err := s.projectVisibleEventRelations(ctx, tenantID, kbIDs, events, allowed, q); err != nil {
 		return nil, err
 	}
 
@@ -359,7 +427,7 @@ func (s *KnowledgeContextService) Query(ctx context.Context, kbID string, q type
 			return result, nil
 		}
 		var entities []types.KnowledgeEntity
-		if err := s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id = ? AND id IN ? AND merged_into_id = ''", tenantID, kbID, candidates).Find(&entities).Error; err != nil {
+		if err := s.db.WithContext(ctx).Where("tenant_id = ? AND id IN ? AND merged_into_id = ''", tenantID, candidates).Find(&entities).Error; err != nil {
 			return nil, err
 		}
 		matched := make(map[string]bool)
@@ -369,11 +437,11 @@ func (s *KnowledgeContextService) Query(ctx context.Context, kbID string, q type
 			}
 		}
 		var aliases []types.KnowledgeEntityAlias
-		if err := s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id = ? AND entity_id IN ?", tenantID, kbID, candidates).Find(&aliases).Error; err != nil {
+		if err := s.db.WithContext(ctx).Where("tenant_id = ? AND entity_id IN ?", tenantID, candidates).Find(&aliases).Error; err != nil {
 			return nil, err
 		}
 		for _, alias := range aliases {
-			if (len(q.KnowledgeIDs) == 0 || contextAliasVisible(alias.Alias, evidence)) && strings.Contains(normalizeContextName(alias.Alias), normalizeContextName(q.Entity)) {
+			if (!limitedEntities || contextAliasVisible(alias.Alias, evidence)) && strings.Contains(normalizeContextName(alias.Alias), normalizeContextName(q.Entity)) {
 				matched[alias.EntityID] = true
 			}
 		}
@@ -381,7 +449,7 @@ func (s *KnowledgeContextService) Query(ctx context.Context, kbID string, q type
 		events = filterContextEventsByEntity(events, matched)
 		entityIDs = matched
 	}
-	if len(q.KnowledgeIDs) > 0 {
+	if projectEventSources {
 		sort.SliceStable(events, func(i, j int) bool {
 			leftTime := contextEventVisibleSortTime(events[i], allowed)
 			rightTime := contextEventVisibleSortTime(events[j], allowed)
@@ -406,24 +474,27 @@ func (s *KnowledgeContextService) Query(ctx context.Context, kbID string, q type
 		for id := range entityIDs {
 			ids = append(ids, id)
 		}
-		if err := s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id = ? AND id IN ? AND merged_into_id = ''", tenantID, kbID, ids).Order("canonical_name ASC, id ASC").Find(&result.Entities).Error; err != nil {
+		if err := s.db.WithContext(ctx).Where("tenant_id = ? AND id IN ? AND merged_into_id = ''", tenantID, ids).Order("canonical_name ASC, id ASC").Find(&result.Entities).Error; err != nil {
 			return nil, err
 		}
 		var aliases []types.KnowledgeEntityAlias
-		if err := s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id = ? AND entity_id IN ?", tenantID, kbID, ids).Order("normalized_alias ASC").Find(&aliases).Error; err != nil {
+		if err := s.db.WithContext(ctx).Where("tenant_id = ? AND entity_id IN ?", tenantID, ids).Order("normalized_alias ASC").Find(&aliases).Error; err != nil {
 			return nil, err
 		}
 		byID := make(map[string]*types.KnowledgeEntity, len(result.Entities))
 		for i := range result.Entities {
-			if len(q.KnowledgeIDs) > 0 {
+			if limitedEntities {
 				result.Entities[i].Description = ""
+				if key.IsKnowledgeBaseRestricted() && !key.AllowsKnowledgeBase(result.Entities[i].KnowledgeBaseID) {
+					result.Entities[i].KnowledgeBaseID = ""
+				}
 			}
 			byID[result.Entities[i].ID] = &result.Entities[i]
 		}
 		for _, alias := range aliases {
-			if entity := byID[alias.EntityID]; entity != nil && (len(q.KnowledgeIDs) == 0 || contextAliasVisible(alias.Alias, evidence)) {
+			if entity := byID[alias.EntityID]; entity != nil && (!limitedEntities || contextAliasVisible(alias.Alias, evidence)) {
 				entity.Aliases = append(entity.Aliases, alias.Alias)
-				if len(q.KnowledgeIDs) > 0 {
+				if limitedEntities {
 					entity.Description = ""
 				}
 			}
@@ -433,10 +504,13 @@ func (s *KnowledgeContextService) Query(ctx context.Context, kbID string, q type
 	// above is derived from all matching facts and events before their pages are
 	// sliced, so offset-based entity loading doesn't skip an object merely
 	// because its fact fell on another page.
-	result.Entities = paginateContext(result.Entities, q)
-
-	result.Facts = paginateContextFacts(facts, q)
-	result.Events = paginateContextEvents(events, q)
+	result.Facts = facts
+	result.Events = events
+	if paginated {
+		result.Entities = paginateContext(result.Entities, q)
+		result.Facts = paginateContextFacts(facts, q)
+		result.Events = paginateContextEvents(events, q)
+	}
 	pageEntityIDs := make(map[string]bool, len(result.Entities))
 	for _, entity := range result.Entities {
 		pageEntityIDs[entity.ID] = true
@@ -472,6 +546,7 @@ func (s *KnowledgeContextService) Query(ctx context.Context, kbID string, q type
 	}
 	for _, item := range evidence {
 		if visibleEvidenceIDs[item.ID] {
+			item.KnowledgeBaseName = scope.names[item.KnowledgeBaseID]
 			result.Evidence = append(result.Evidence, item)
 		}
 	}
@@ -480,7 +555,7 @@ func (s *KnowledgeContextService) Query(ctx context.Context, kbID string, q type
 		for id := range visibleEvidenceIDs {
 			ids = append(ids, id)
 		}
-		if err := s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id = ? AND evidence_id IN ?", tenantID, kbID, ids).Order("score DESC, created_at DESC").Find(&result.Attention).Error; err != nil {
+		if err := s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id IN ? AND evidence_id IN ?", tenantID, kbIDs, ids).Order("score DESC, created_at DESC").Find(&result.Attention).Error; err != nil {
 			return nil, err
 		}
 	}
@@ -502,11 +577,15 @@ func (s *KnowledgeContextService) ListEvents(ctx context.Context, kbID string, q
 	return result.Events, nil
 }
 func (s *KnowledgeContextService) ListEvidence(ctx context.Context, kbID string, q types.KnowledgeContextQuery) ([]types.KnowledgeEvidence, error) {
-	tenantID, err := s.scopedKnowledgeBase(ctx, kbID)
+	scope, err := s.resolveContextQueryScope(ctx, kbID, q)
 	if err != nil {
 		return nil, err
 	}
-	query := s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id = ?", tenantID, kbID)
+	if len(scope.kbIDs) == 0 {
+		return []types.KnowledgeEvidence{}, nil
+	}
+	tenantID := scope.tenantID
+	query := s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id IN ?", tenantID, scope.kbIDs)
 	if !q.IncludeHistory {
 		query = query.Where("status = ?", types.KnowledgeEvidenceCurrent)
 	}
@@ -521,20 +600,34 @@ func (s *KnowledgeContextService) ListEvidence(ctx context.Context, kbID string,
 	if err != nil {
 		return nil, err
 	}
+	for i := range items {
+		items[i].KnowledgeBaseName = scope.names[items[i].KnowledgeBaseID]
+	}
 	return paginateContext(items, q), nil
 }
 
 func (s *KnowledgeContextService) GetEvidence(ctx context.Context, kbID, evidenceID string) (*types.KnowledgeEvidence, error) {
-	tenantID, err := s.scopedKnowledgeBase(ctx, kbID)
+	tenantID, err := s.requireTenant(ctx)
 	if err != nil {
 		return nil, err
 	}
+	if kbID != "" {
+		if _, err := s.scopedKnowledgeBase(ctx, kbID); err != nil {
+			return nil, err
+		}
+	}
 	var evidence types.KnowledgeEvidence
-	if err := s.db.WithContext(ctx).Where("id = ? AND tenant_id = ? AND knowledge_base_id = ?", evidenceID, tenantID, kbID).First(&evidence).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("id = ? AND tenant_id = ?", evidenceID, tenantID).First(&evidence).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, werrors.NewNotFoundError("knowledge evidence not found")
 		}
 		return nil, err
+	}
+	if err := types.AuthorizeTenantAPIKeyKnowledgeBases(ctx, evidence.KnowledgeBaseID); err != nil {
+		return nil, err
+	}
+	if kbID != "" && evidence.KnowledgeBaseID != kbID {
+		return nil, werrors.NewNotFoundError("knowledge evidence not found")
 	}
 	visible, err := s.visibleContextEvidence(ctx, tenantID, kbID, []types.KnowledgeEvidence{evidence}, true)
 	if err != nil {
@@ -543,6 +636,11 @@ func (s *KnowledgeContextService) GetEvidence(ctx context.Context, kbID, evidenc
 	if len(visible) == 0 {
 		return nil, werrors.NewNotFoundError("knowledge evidence not found")
 	}
+	var base types.KnowledgeBase
+	if err := s.db.WithContext(ctx).Select("name").Where("tenant_id = ? AND id = ?", tenantID, evidence.KnowledgeBaseID).First(&base).Error; err != nil {
+		return nil, err
+	}
+	evidence.KnowledgeBaseName = base.Name
 	return &evidence, nil
 }
 
@@ -674,7 +772,7 @@ func (s *KnowledgeContextService) visibleContextEvidence(ctx context.Context, te
 	}
 	var sources []types.Knowledge
 	if err := s.db.WithContext(ctx).Select("id", "tenant_id", "knowledge_base_id", "parse_status", "enable_status", "metadata").
-		Where("tenant_id = ? AND knowledge_base_id = ? AND id IN ?", tenantID, kbID, uniqueContextIDs(ids)).Find(&sources).Error; err != nil {
+		Where("tenant_id = ? AND id IN ?", tenantID, uniqueContextIDs(ids)).Find(&sources).Error; err != nil {
 		return nil, err
 	}
 	byID := make(map[string]types.Knowledge, len(sources))

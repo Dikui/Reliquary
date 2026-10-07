@@ -97,15 +97,29 @@
 
     }
 
-/* 全局深色模式滚动条样式 */
-:root[theme-mode="dark"] *::-webkit-scrollbar-thumb {
-    background-color: #4b4b4b !important;
+/* Product-owned scrolling surfaces inherit one theme baseline. */
+:root {
+    --app-scrollbar-thumb: var(--td-gray-color-5);
+    --app-scrollbar-track: transparent;
+    --app-scrollbar-hover: var(--td-gray-color-6);
+    --app-scrollbar-active: var(--td-gray-color-7);
 }
-:root[theme-mode="dark"] *::-webkit-scrollbar-thumb:hover {
-    background-color: #5e5e5e !important;
+:root[theme-mode="dark"] {
+    --app-scrollbar-thumb: var(--td-gray-color-10);
+    --app-scrollbar-hover: var(--td-gray-color-9);
+    --app-scrollbar-active: var(--td-gray-color-8);
 }
-:root[theme-mode="dark"] *::-webkit-scrollbar-track {
-    background-color: transparent !important;
+html, body, #app, #app *, .t-popup, .t-popup *, .t-dialog, .t-dialog *, .t-drawer, .t-drawer * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--app-scrollbar-thumb) var(--app-scrollbar-track);
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background-color: var(--app-scrollbar-thumb); border-radius: var(--td-radius-medium); }
+*::-webkit-scrollbar-thumb:hover { background-color: var(--app-scrollbar-hover); }
+*::-webkit-scrollbar-thumb:active { background-color: var(--app-scrollbar-active); }
+*::-webkit-scrollbar-track { background-color: var(--app-scrollbar-track); }
+@media (forced-colors: active) {
+    html, body, #app, #app *, .t-popup, .t-popup *, .t-dialog, .t-dialog *, .t-drawer, .t-drawer * { scrollbar-color: auto; }
 }
 
 /* 深色模式下反转黑色图片图标（more.png 等通过 <img> 加载的图标） */

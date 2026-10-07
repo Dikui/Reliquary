@@ -36,3 +36,7 @@ test('system administration settings stay explicitly system-admin-only', () => {
     ['system-global', 'runtime-queues', 'system-audit-log'],
   )
 })
+
+test('domains remain readable by all team members', () => {
+  assert.equal(SETTINGS_SECTION_MIN_ROLE.domains, 'viewer')
+})

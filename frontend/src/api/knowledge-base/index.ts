@@ -64,6 +64,7 @@ export interface KnowledgeBaseStoreView {
 }
 
 export function createKnowledgeBase(data: {
+  domain_id: string;
   name: string;
   description?: string;
   type?: 'document';
@@ -111,6 +112,7 @@ export function getKnowledgeBaseById(id: string, options?: { agent_id?: string }
 }
 
 export function updateKnowledgeBase(id: string, data: {
+  domain_id?: string;
   name: string;
   description?: string;
   config?: {

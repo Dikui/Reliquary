@@ -30,6 +30,7 @@ func ExampleUsage() {
 	// 1. Create a knowledge base
 	fmt.Println("1. Creating knowledge base...")
 	kb := &KnowledgeBase{
+		DomainID:    "knowledge-domain-id",
 		Name:        "Test Knowledge Base",
 		Description: "This is a test knowledge base",
 		ChunkingConfig: ChunkingConfig{

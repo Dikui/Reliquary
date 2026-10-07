@@ -2373,7 +2373,7 @@ async function createNewSession(value: string): Promise<void> {
       </div>
 
       <div v-if="activeKbTab === 'context'" class="knowledge-context-area">
-        <KnowledgeWorkbench v-if="kbId" :kb-id="kbId" :can-manage="canManage"
+        <KnowledgeWorkbench v-if="kbId" :kb-id="kbId" :domain-id="kbInfo?.domain_id" :can-manage="canManage"
           @open-source="openSourceDoc" />
       </div>
 

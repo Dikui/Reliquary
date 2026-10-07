@@ -16,7 +16,7 @@ import (
 // `kb view`. Lists the KnowledgeBase top-level json tags; nested config
 // structs are omitted (use --jq for those).
 var kbViewFields = []string{
-	"id", "name", "type", "description",
+	"id", "name", "type", "description", "domain_id",
 	"is_temporary", "is_pinned",
 	"embedding_model_id", "summary_model_id",
 	"knowledge_count", "chunk_count",

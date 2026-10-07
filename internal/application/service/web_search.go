@@ -167,6 +167,7 @@ func (s *WebSearchService) CompressWithRAG(
 	}
 	if createdKB == nil {
 		kb := &types.KnowledgeBase{
+			DomainID:         BuiltinAIKnowledgeDomainID,
 			Name:             fmt.Sprintf("tmp-websearch-%d", time.Now().UnixNano()),
 			Description:      "Ephemeral search compression KB",
 			IsTemporary:      true,

@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS knowledge_bases (
     name VARCHAR(255) NOT NULL,
     description TEXT,
     tenant_id INTEGER NOT NULL,
+    domain_id VARCHAR(36) NOT NULL,
     type VARCHAR(32) NOT NULL DEFAULT 'document',
     chunking_config JSONB NOT NULL DEFAULT '{}',
     image_processing_config JSONB NOT NULL DEFAULT '{}',
@@ -61,6 +62,7 @@ func setupKBTestDB(t *testing.T) *gorm.DB {
 // custom JSON valuers.
 func makeKB(vectorStoreID *string) *types.KnowledgeBase {
 	return &types.KnowledgeBase{
+		DomainID:         "test-domain",
 		ID:               uuid.New().String(),
 		Name:             "test-kb",
 		TenantID:         1,

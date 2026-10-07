@@ -1,4 +1,6 @@
 import { get, post } from '@/utils/request'
+import { knowledgeContextBasePath, type KnowledgeContextScopeParams } from './knowledge-context-scope'
+export type { KnowledgeContextScope } from './knowledge-context-scope'
 
 export interface KnowledgeContextEnvelope<T> {
   success: boolean
@@ -14,7 +16,7 @@ export interface KnowledgeContextActionEnvelope {
 export interface KnowledgeEntity {
   id: string
   tenant_id: number
-  knowledge_base_id: string
+  knowledge_base_id?: string | null
   canonical_name: string
   normalized_name?: string
   entity_type: string
@@ -29,6 +31,7 @@ export interface KnowledgeEvidence {
   id: string
   tenant_id: number
   knowledge_base_id: string
+  knowledge_base_name?: string
   knowledge_id: string
   version: number
   body_hash: string
@@ -51,6 +54,7 @@ export interface KnowledgeFact {
   id: string
   tenant_id: number
   knowledge_base_id: string
+  knowledge_base_name?: string
   subject_entity_id: string
   kind: 'attribute' | 'relation' | string
   predicate: string
@@ -75,12 +79,14 @@ export interface KnowledgeEvent {
   id: string
   tenant_id: number
   knowledge_base_id: string
+  knowledge_base_name?: string
   title: string
   event_type?: string
   description?: string
   occurred_at?: string
   entity_ids?: string[]
   evidence_ids?: string[]
+  sources?: Array<{ knowledge_base_id: string; knowledge_base_name: string }>
   source_count: number
   heat: number
   created_at: string
@@ -104,7 +110,7 @@ export interface KnowledgeAttention {
   created_at: string
 }
 
-export interface KnowledgeContextQuery {
+export interface KnowledgeContextQuery extends KnowledgeContextScopeParams {
   knowledge_ids?: string[]
   entity_id?: string
   entity?: string
@@ -141,7 +147,7 @@ export interface KnowledgeFactCorrection {
 }
 
 const base = (kbId: string) => `/api/v1/knowledge-bases/${encodeURIComponent(kbId)}/context`
-export interface KnowledgeContextListParams {
+export interface KnowledgeContextListParams extends KnowledgeContextScopeParams {
   entity?: string
   entity_id?: string
   predicate?: string
@@ -166,16 +172,16 @@ function queryString(params?: KnowledgeContextListParams): string {
 }
 
 export const queryKnowledgeContext = (kbId: string, query: KnowledgeContextQuery) =>
-  post<KnowledgeContextEnvelope<KnowledgeContextResult>>(`${base(kbId)}/query`, query)
+  post<KnowledgeContextEnvelope<KnowledgeContextResult>>(`${knowledgeContextBasePath(kbId, query.scope)}/query`, query)
 
 export const listKnowledgeContextEntities = (kbId: string, params?: KnowledgeContextListParams) =>
-  get<KnowledgeContextEnvelope<KnowledgeEntity[]>>(`${base(kbId)}/entities${queryString(params)}`)
+  get<KnowledgeContextEnvelope<KnowledgeEntity[]>>(`${knowledgeContextBasePath(kbId, params?.scope)}/entities${queryString(params)}`)
 
 export const listKnowledgeContextEvents = (kbId: string, params?: KnowledgeContextListParams) =>
-  get<KnowledgeContextEnvelope<KnowledgeEvent[]>>(`${base(kbId)}/events${queryString(params)}`)
+  get<KnowledgeContextEnvelope<KnowledgeEvent[]>>(`${knowledgeContextBasePath(kbId, params?.scope)}/events${queryString(params)}`)
 
 export const listKnowledgeContextEvidence = (kbId: string, params?: KnowledgeContextListParams) =>
-  get<KnowledgeContextEnvelope<KnowledgeEvidence[]>>(`${base(kbId)}/evidence${queryString(params)}`)
+  get<KnowledgeContextEnvelope<KnowledgeEvidence[]>>(`${knowledgeContextBasePath(kbId, params?.scope)}/evidence${queryString(params)}`)
 
 export const getKnowledgeEvidence = (kbId: string, evidenceId: string) =>
   get<KnowledgeContextEnvelope<KnowledgeEvidence>>(`${base(kbId)}/evidence/${encodeURIComponent(evidenceId)}`)
@@ -195,3 +201,12 @@ export const rebuildKnowledgeContext = (kbId: string, knowledgeIds?: string[]) =
   post<KnowledgeContextEnvelope<{ queued: number }>>(`${base(kbId)}/rebuild`, {
     knowledge_ids: knowledgeIds,
   })
+
+export const getGlobalKnowledgeEntityContext = (entityId: string, includeHistory = true) =>
+  get<KnowledgeContextEnvelope<KnowledgeContextResult>>(`/api/v1/knowledge-context/entities/${encodeURIComponent(entityId)}?include_history=${includeHistory}`)
+export const getGlobalKnowledgeEvidence = (evidenceId: string) =>
+  get<KnowledgeContextEnvelope<KnowledgeEvidence>>(`/api/v1/knowledge-context/evidence/${encodeURIComponent(evidenceId)}`)
+export const correctGlobalKnowledgeFact = (factId: string, correction: KnowledgeFactCorrection) =>
+  post<KnowledgeContextEnvelope<KnowledgeFact>>(`/api/v1/knowledge-context/facts/${encodeURIComponent(factId)}/correction`, correction)
+export const mergeGlobalKnowledgeEntities = (input: { keep_entity_id: string; merge_entity_id: string }) =>
+  post<KnowledgeContextActionEnvelope>('/api/v1/knowledge-context/entities/merge', input)

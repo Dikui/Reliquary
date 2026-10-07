@@ -561,6 +561,7 @@ type UpdateKnowledgeBaseRequest struct {
 	Name        string                     `json:"name"        binding:"required"`
 	Description string                     `json:"description"`
 	Config      *types.KnowledgeBaseConfig `json:"config"`
+	DomainID    *string                    `json:"domain_id"`
 }
 
 // UpdateKnowledgeBase godoc
@@ -587,8 +588,7 @@ func (h *KnowledgeBaseHandler) UpdateKnowledgeBase(c *gin.Context) {
 		return
 	}
 
-	// Only admin/editor can update knowledge base
-	if permission != types.TenantRoleAdmin && permission != types.TenantRoleContributor {
+	if !permission.HasPermission(types.TenantRoleContributor) {
 		c.Error(apperrors.NewForbiddenError("No permission to update knowledge base"))
 		return
 	}
@@ -616,9 +616,17 @@ func (h *KnowledgeBaseHandler) UpdateKnowledgeBase(c *gin.Context) {
 		secutils.SanitizeForLog(id), secutils.SanitizeForLog(req.Name))
 
 	// Update the knowledge base
-	kb, err := h.service.UpdateKnowledgeBase(ctx, id, req.Name, req.Description, req.Config)
+	var domainIDs []string
+	if req.DomainID != nil {
+		domainIDs = []string{*req.DomainID}
+	}
+	kb, err := h.service.UpdateKnowledgeBase(ctx, id, req.Name, req.Description, req.Config, domainIDs...)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, nil)
+		if appErr, ok := apperrors.IsAppError(err); ok {
+			c.Error(appErr)
+			return
+		}
 		c.Error(apperrors.NewInternalServerError(err.Error()))
 		return
 	}
@@ -655,9 +663,8 @@ func (h *KnowledgeBaseHandler) DeleteKnowledgeBase(c *gin.Context) {
 		return
 	}
 
-	// Only owner (admin with matching tenant) can delete knowledge base
 	tenantID, _ := c.Get(types.TenantIDContextKey.String())
-	if kb.TenantID != tenantID.(uint64) || permission != types.TenantRoleAdmin {
+	if kb.TenantID != tenantID.(uint64) || !permission.HasPermission(types.TenantRoleAdmin) {
 		c.Error(apperrors.NewForbiddenError("Only knowledge base owner can delete"))
 		return
 	}

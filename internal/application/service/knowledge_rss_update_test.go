@@ -101,6 +101,8 @@ func TestSourceUpdateCandidatePromotesAfterEvidenceIsReady(t *testing.T) {
 	require.NoError(t, candidate.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "approved"}))
 	require.NoError(t, db.Create(&candidate).Error)
 	require.NoError(t, repo.SetKnowledgeTags(ctx, candidate.ID, []string{"candidate-auto", "manual-remove"}))
+	_, err = contextService.SnapshotMessage(ctx, &candidate, candidateBody)
+	require.ErrorContains(t, err, "not promoted", "the public snapshot entry still rejects unpromoted candidates")
 	require.NoError(t, svc.promoteSourceUpdateCandidate(ctx, candidate.ID))
 
 	updatedOld, err := repo.GetKnowledgeByID(ctx, 9, old.ID)

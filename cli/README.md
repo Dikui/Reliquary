@@ -332,7 +332,7 @@ Add `--dry-run` to any mutation command to preview the would-be action without e
 
 ```bash
 # Preview a kb create without actually creating
-reliquary kb create --name "test-kb" --description "for review" --dry-run
+reliquary kb create "test-kb" --domain "domain-id" --description "for review" --dry-run
 
 # Output (single line; pretty-printed here for readability):
 # {
@@ -341,7 +341,7 @@ reliquary kb create --name "test-kb" --description "for review" --dry-run
 #     "dry_run": true,
 #     "plan": {
 #       "action": "kb.create",
-#       "args": {"name": "test-kb", "description": "for review"}
+#       "args": {"name": "test-kb", "domain_id": "domain-id", "description": "for review"}
 #     }
 #   }
 # }

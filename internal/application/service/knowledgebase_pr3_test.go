@@ -170,11 +170,11 @@ func TestCreateKnowledgeBase_DefaultStorageProviderFromTenant(t *testing.T) {
 	repo := newFakeKBRepo()
 	svc := newPR3KBService(repo, &fakeRegistry{registered: map[string]struct{}{}}, &fakeOwnership{})
 
-	kb, err := svc.CreateKnowledgeBase(ctxWithTenantStorage(1, "minio"), &types.KnowledgeBase{Name: "kb"})
+	kb, err := svc.CreateKnowledgeBase(ctxWithTenantStorage(1, "minio"), &types.KnowledgeBase{DomainID: "test-domain", Name: "kb"})
 	require.NoError(t, err)
 	assert.Equal(t, "minio", kb.GetStorageProvider())
 
-	kbExplicit, err := svc.CreateKnowledgeBase(ctxWithTenantStorage(1, "minio"), &types.KnowledgeBase{
+	kbExplicit, err := svc.CreateKnowledgeBase(ctxWithTenantStorage(1, "minio"), &types.KnowledgeBase{DomainID: "test-domain",
 		Name:                  "kb2",
 		StorageProviderConfig: &types.StorageProviderConfig{Provider: "s3"},
 	})
@@ -187,11 +187,11 @@ func TestCreateKnowledgeBase_DefaultStorageProviderRespectsAllowList(t *testing.
 	repo := newFakeKBRepo()
 	svc := newPR3KBService(repo, &fakeRegistry{registered: map[string]struct{}{}}, &fakeOwnership{})
 
-	kb, err := svc.CreateKnowledgeBase(ctxWithTenantStorage(1, ""), &types.KnowledgeBase{Name: "kb"})
+	kb, err := svc.CreateKnowledgeBase(ctxWithTenantStorage(1, ""), &types.KnowledgeBase{DomainID: "test-domain", Name: "kb"})
 	require.NoError(t, err)
 	assert.Equal(t, "minio", kb.GetStorageProvider())
 
-	kbDisallowedDefault, err := svc.CreateKnowledgeBase(ctxWithTenantStorage(1, "local"), &types.KnowledgeBase{Name: "kb2"})
+	kbDisallowedDefault, err := svc.CreateKnowledgeBase(ctxWithTenantStorage(1, "local"), &types.KnowledgeBase{DomainID: "test-domain", Name: "kb2"})
 	require.NoError(t, err)
 	assert.Equal(t, "minio", kbDisallowedDefault.GetStorageProvider())
 }
@@ -209,7 +209,7 @@ func TestCreateKnowledgeBase_VectorStoreBinding(t *testing.T) {
 			&fakeRegistry{registered: registered},
 			&fakeOwnership{owned: map[string]uint64{validKBStoreUUID: 1}},
 		)
-		kb, err := svc.CreateKnowledgeBase(ctxWithTenant(1), &types.KnowledgeBase{Name: "kb"})
+		kb, err := svc.CreateKnowledgeBase(ctxWithTenant(1), &types.KnowledgeBase{DomainID: "test-domain", Name: "kb"})
 		require.NoError(t, err)
 		assert.Nil(t, kb.VectorStoreID)
 		assert.Len(t, repo.rows, 1)
@@ -222,7 +222,7 @@ func TestCreateKnowledgeBase_VectorStoreBinding(t *testing.T) {
 			&fakeOwnership{},
 		)
 		empty := ""
-		kb, err := svc.CreateKnowledgeBase(ctxWithTenant(1), &types.KnowledgeBase{Name: "kb", VectorStoreID: &empty})
+		kb, err := svc.CreateKnowledgeBase(ctxWithTenant(1), &types.KnowledgeBase{DomainID: "test-domain", Name: "kb", VectorStoreID: &empty})
 		require.NoError(t, err)
 		assert.Nil(t, kb.VectorStoreID)
 	})
@@ -234,7 +234,7 @@ func TestCreateKnowledgeBase_VectorStoreBinding(t *testing.T) {
 			&fakeOwnership{},
 		)
 		bad := "not-a-uuid"
-		_, err := svc.CreateKnowledgeBase(ctxWithTenant(1), &types.KnowledgeBase{Name: "kb", VectorStoreID: &bad})
+		_, err := svc.CreateKnowledgeBase(ctxWithTenant(1), &types.KnowledgeBase{DomainID: "test-domain", Name: "kb", VectorStoreID: &bad})
 		require.Error(t, err)
 		appErr, ok := apperrors.IsAppError(err)
 		require.True(t, ok)
@@ -250,7 +250,7 @@ func TestCreateKnowledgeBase_VectorStoreBinding(t *testing.T) {
 			&fakeOwnership{owned: map[string]uint64{validKBStoreUUID: 1}},
 		)
 		id := validKBStoreUUID
-		kb, err := svc.CreateKnowledgeBase(ctxWithTenant(1), &types.KnowledgeBase{Name: "kb", VectorStoreID: &id})
+		kb, err := svc.CreateKnowledgeBase(ctxWithTenant(1), &types.KnowledgeBase{DomainID: "test-domain", Name: "kb", VectorStoreID: &id})
 		require.NoError(t, err)
 		require.NotNil(t, kb.VectorStoreID)
 		assert.Equal(t, validKBStoreUUID, *kb.VectorStoreID)
@@ -263,7 +263,7 @@ func TestCreateKnowledgeBase_VectorStoreBinding(t *testing.T) {
 			&fakeOwnership{owned: map[string]uint64{validKBStoreUUID: 2}}, // owned by tenant 2
 		)
 		id := validKBStoreUUID
-		_, err := svc.CreateKnowledgeBase(ctxWithTenant(1), &types.KnowledgeBase{Name: "kb", VectorStoreID: &id})
+		_, err := svc.CreateKnowledgeBase(ctxWithTenant(1), &types.KnowledgeBase{DomainID: "test-domain", Name: "kb", VectorStoreID: &id})
 		require.Error(t, err)
 		appErr, ok := apperrors.IsAppError(err)
 		require.True(t, ok)
@@ -277,7 +277,7 @@ func TestCreateKnowledgeBase_VectorStoreBinding(t *testing.T) {
 			&fakeOwnership{owned: map[string]uint64{validKBStoreUUID: 1}},
 		)
 		id := validKBStoreUUID
-		_, err := svc.CreateKnowledgeBase(ctxWithTenant(1), &types.KnowledgeBase{Name: "kb", VectorStoreID: &id})
+		_, err := svc.CreateKnowledgeBase(ctxWithTenant(1), &types.KnowledgeBase{DomainID: "test-domain", Name: "kb", VectorStoreID: &id})
 		require.Error(t, err)
 		appErr, ok := apperrors.IsAppError(err)
 		require.True(t, ok)
@@ -291,7 +291,7 @@ func TestCreateKnowledgeBase_VectorStoreBinding(t *testing.T) {
 			&fakeOwnership{err: stderrors.New("db down")},
 		)
 		id := validKBStoreUUID
-		_, err := svc.CreateKnowledgeBase(ctxWithTenant(1), &types.KnowledgeBase{Name: "kb", VectorStoreID: &id})
+		_, err := svc.CreateKnowledgeBase(ctxWithTenant(1), &types.KnowledgeBase{DomainID: "test-domain", Name: "kb", VectorStoreID: &id})
 		require.Error(t, err)
 		appErr, ok := apperrors.IsAppError(err)
 		require.True(t, ok)
@@ -311,7 +311,7 @@ func TestCreateKnowledgeBase_VectorStoreBinding(t *testing.T) {
 
 func TestCopyKnowledgeBase_Defenses(t *testing.T) {
 	mkKB := func(id string, tenant uint64, embed string, vsid *string) *types.KnowledgeBase {
-		return &types.KnowledgeBase{
+		return &types.KnowledgeBase{DomainID: "test-domain",
 			ID: id, Name: id, TenantID: tenant, EmbeddingModelID: embed, VectorStoreID: vsid,
 		}
 	}
@@ -328,6 +328,7 @@ func TestCopyKnowledgeBase_Defenses(t *testing.T) {
 		require.NotNil(t, src.VectorStoreID)
 		require.NotNil(t, tgt.VectorStoreID)
 		assert.Equal(t, *src.VectorStoreID, *tgt.VectorStoreID, "M17: VectorStoreID preserved")
+		assert.Equal(t, src.DomainID, tgt.DomainID)
 
 		// Reload from fake repo and re-verify
 		stored := repo.rows[tgt.ID]
@@ -403,7 +404,7 @@ func TestCopyKnowledgeBase_Defenses(t *testing.T) {
 
 func TestDuplicateKnowledgeBase_CreatesSettingsOnlyDuplicate(t *testing.T) {
 	repo := newFakeKBRepo()
-	source := &types.KnowledgeBase{
+	source := &types.KnowledgeBase{DomainID: "test-domain",
 		ID:          "src",
 		Name:        "Source KB",
 		Type:        types.KnowledgeBaseTypeDocument,
@@ -454,6 +455,7 @@ func TestDuplicateKnowledgeBase_CreatesSettingsOnlyDuplicate(t *testing.T) {
 	assert.Equal(t, "copy-user", target.CreatorID)
 	assert.Equal(t, "Source KB 副本", target.Name)
 	assert.Equal(t, source.Description, target.Description)
+	assert.Equal(t, source.DomainID, target.DomainID)
 	assert.Equal(t, source.ChunkingConfig, target.ChunkingConfig)
 	assert.Equal(t, source.ImageProcessingConfig, target.ImageProcessingConfig)
 	assert.Equal(t, source.EmbeddingModelID, target.EmbeddingModelID)
@@ -481,13 +483,13 @@ func TestDuplicateKnowledgeBase_CreatesSettingsOnlyDuplicate(t *testing.T) {
 
 func TestDuplicateKnowledgeBase_UsesDistinctNameWhenDuplicateExists(t *testing.T) {
 	repo := newFakeKBRepo()
-	repo.rows["src"] = &types.KnowledgeBase{
+	repo.rows["src"] = &types.KnowledgeBase{DomainID: "test-domain",
 		ID:       "src",
 		Name:     "Source KB",
 		Type:     types.KnowledgeBaseTypeDocument,
 		TenantID: 1,
 	}
-	repo.rows["existing-copy"] = &types.KnowledgeBase{
+	repo.rows["existing-copy"] = &types.KnowledgeBase{DomainID: "test-domain",
 		ID:       "existing-copy",
 		Name:     "Source KB 副本",
 		Type:     types.KnowledgeBaseTypeDocument,
@@ -503,7 +505,7 @@ func TestDuplicateKnowledgeBase_UsesDistinctNameWhenDuplicateExists(t *testing.T
 
 func TestDuplicateKnowledgeBase_UsesLocalizedEnglishSuffix(t *testing.T) {
 	repo := newFakeKBRepo()
-	repo.rows["src"] = &types.KnowledgeBase{
+	repo.rows["src"] = &types.KnowledgeBase{DomainID: "test-domain",
 		ID:       "src",
 		Name:     "Source KB",
 		Type:     types.KnowledgeBaseTypeDocument,

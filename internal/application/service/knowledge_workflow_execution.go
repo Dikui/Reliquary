@@ -42,18 +42,21 @@ type workflowSearchConfig struct {
 }
 
 type workflowFactConfig struct {
-	Entity         string   `json:"entity"`
-	EntityID       string   `json:"entity_id"`
-	Predicate      string   `json:"predicate"`
-	Relation       string   `json:"relation"`
-	ObjectEntityID string   `json:"object_entity_id"`
-	MinValue       *float64 `json:"min_value,omitempty"`
-	MaxValue       *float64 `json:"max_value,omitempty"`
-	Unit           string   `json:"unit,omitempty"`
-	Since          string   `json:"since"`
-	Until          string   `json:"until"`
-	IncludeHistory bool     `json:"include_history"`
-	Limit          int      `json:"limit"`
+	Scope           string   `json:"scope,omitempty"`
+	DomainID        string   `json:"domain_id,omitempty"`
+	KnowledgeBaseID string   `json:"knowledge_base_id,omitempty"`
+	Entity          string   `json:"entity"`
+	EntityID        string   `json:"entity_id"`
+	Predicate       string   `json:"predicate"`
+	Relation        string   `json:"relation"`
+	ObjectEntityID  string   `json:"object_entity_id"`
+	MinValue        *float64 `json:"min_value,omitempty"`
+	MaxValue        *float64 `json:"max_value,omitempty"`
+	Unit            string   `json:"unit,omitempty"`
+	Since           string   `json:"since"`
+	Until           string   `json:"until"`
+	IncludeHistory  bool     `json:"include_history"`
+	Limit           int      `json:"limit"`
 }
 
 type workflowResearchConfig struct {
@@ -898,7 +901,7 @@ func (s *KnowledgeWorkflowService) executeFactQuery(ctx context.Context, wf *typ
 	if err != nil {
 		return workflowStepOutput{}, err
 	}
-	query := types.KnowledgeContextQuery{Entity: cfg.Entity, EntityID: cfg.EntityID, Predicate: cfg.Predicate, Relation: cfg.Relation, ObjectEntityID: cfg.ObjectEntityID, MinValue: cfg.MinValue, MaxValue: cfg.MaxValue, Unit: cfg.Unit, IncludeHistory: cfg.IncludeHistory, Limit: cfg.Limit}
+	query := types.KnowledgeContextQuery{Scope: cfg.Scope, DomainID: cfg.DomainID, KnowledgeBaseID: cfg.KnowledgeBaseID, Entity: cfg.Entity, EntityID: cfg.EntityID, Predicate: cfg.Predicate, Relation: cfg.Relation, ObjectEntityID: cfg.ObjectEntityID, MinValue: cfg.MinValue, MaxValue: cfg.MaxValue, Unit: cfg.Unit, IncludeHistory: cfg.IncludeHistory, Limit: cfg.Limit}
 	query.Since, err = parseWorkflowTime(cfg.Since)
 	if err != nil {
 		return workflowStepOutput{}, fmt.Errorf("since: %w", err)

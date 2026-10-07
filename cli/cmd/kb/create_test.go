@@ -35,7 +35,7 @@ func TestCreate_Success_Text(t *testing.T) {
 		Description:      "team docs",
 		EmbeddingModelID: "model_x",
 	}}
-	opts := &CreateOptions{
+	opts := &CreateOptions{DomainID: "domain-ai",
 		Name:           "Marketing",
 		Description:    "team docs",
 		EmbeddingModel: "model_x",
@@ -45,6 +45,7 @@ func TestCreate_Success_Text(t *testing.T) {
 	// Body sent to SDK matches flags.
 	require.NotNil(t, svc.got)
 	assert.Equal(t, "Marketing", svc.got.Name)
+	assert.Equal(t, "domain-ai", svc.got.DomainID)
 	assert.Equal(t, "team docs", svc.got.Description)
 	assert.Equal(t, "model_x", svc.got.EmbeddingModelID)
 
@@ -59,7 +60,7 @@ func TestCreate_Success_Text(t *testing.T) {
 func TestCreate_Success_OmitsEmbeddingModelWhenEmpty(t *testing.T) {
 	_, _ = iostreams.SetForTest(t)
 	svc := &fakeCreateSvc{resp: &sdk.KnowledgeBase{ID: "kb_x", Name: "n"}}
-	opts := &CreateOptions{Name: "n"}
+	opts := &CreateOptions{DomainID: "domain-ai", Name: "n"}
 	require.NoError(t, runCreate(context.Background(), opts, &cmdutil.FormatOptions{Mode: cmdutil.FormatText}, svc))
 
 	require.NotNil(t, svc.got)
@@ -71,7 +72,7 @@ func TestCreate_Success_OmitsEmbeddingModelWhenEmpty(t *testing.T) {
 func TestCreate_HintsWhenNoEmbeddingModel(t *testing.T) {
 	out, _ := iostreams.SetForTest(t)
 	svc := &fakeCreateSvc{resp: &sdk.KnowledgeBase{ID: "kb_x", Name: "n"}}
-	require.NoError(t, runCreate(context.Background(), &CreateOptions{Name: "n"}, &cmdutil.FormatOptions{Mode: cmdutil.FormatJSON}, svc))
+	require.NoError(t, runCreate(context.Background(), &CreateOptions{DomainID: "domain-ai", Name: "n"}, &cmdutil.FormatOptions{Mode: cmdutil.FormatJSON}, svc))
 	var env struct {
 		Meta struct {
 			Hint string `json:"hint"`
@@ -85,7 +86,7 @@ func TestCreate_HintsWhenNoEmbeddingModel(t *testing.T) {
 func TestCreate_NoHintWhenEmbeddingModelBound(t *testing.T) {
 	out, _ := iostreams.SetForTest(t)
 	svc := &fakeCreateSvc{resp: &sdk.KnowledgeBase{ID: "kb_x", Name: "n", EmbeddingModelID: "emb_1"}}
-	require.NoError(t, runCreate(context.Background(), &CreateOptions{Name: "n", EmbeddingModel: "emb_1"}, &cmdutil.FormatOptions{Mode: cmdutil.FormatJSON}, svc))
+	require.NoError(t, runCreate(context.Background(), &CreateOptions{DomainID: "domain-ai", Name: "n", EmbeddingModel: "emb_1"}, &cmdutil.FormatOptions{Mode: cmdutil.FormatJSON}, svc))
 	var env struct {
 		Meta *struct {
 			Hint string `json:"hint"`
@@ -102,7 +103,7 @@ func TestCreate_NoHintWhenEmbeddingModelBound(t *testing.T) {
 func TestCreate_ChatModelSetsSummaryModelID(t *testing.T) {
 	_, _ = iostreams.SetForTest(t)
 	svc := &fakeCreateSvc{resp: &sdk.KnowledgeBase{ID: "kb_x", Name: "n"}}
-	opts := &CreateOptions{Name: "n", EmbeddingModel: "emb_x", ChatModel: "chat_x"}
+	opts := &CreateOptions{DomainID: "domain-ai", Name: "n", EmbeddingModel: "emb_x", ChatModel: "chat_x"}
 	require.NoError(t, runCreate(context.Background(), opts, &cmdutil.FormatOptions{Mode: cmdutil.FormatText}, svc))
 
 	require.NotNil(t, svc.got)
@@ -113,7 +114,7 @@ func TestCreate_ChatModelSetsSummaryModelID(t *testing.T) {
 func TestCreate_NameRequired(t *testing.T) {
 	_, _ = iostreams.SetForTest(t)
 	svc := &fakeCreateSvc{}
-	err := runCreate(context.Background(), &CreateOptions{}, &cmdutil.FormatOptions{Mode: cmdutil.FormatText}, svc)
+	err := runCreate(context.Background(), &CreateOptions{DomainID: "domain-ai"}, &cmdutil.FormatOptions{Mode: cmdutil.FormatText}, svc)
 	require.Error(t, err)
 
 	var typed *cmdutil.Error
@@ -122,10 +123,18 @@ func TestCreate_NameRequired(t *testing.T) {
 	assert.Nil(t, svc.got, "service must not be called when name is missing")
 }
 
+func TestCreate_DomainRequired(t *testing.T) {
+	svc := &fakeCreateSvc{}
+	err := runCreate(context.Background(), &CreateOptions{Name: "Research"}, &cmdutil.FormatOptions{Mode: cmdutil.FormatJSON}, svc)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--domain")
+	assert.Nil(t, svc.got)
+}
+
 func TestCreate_NameWhitespaceOnly(t *testing.T) {
 	_, _ = iostreams.SetForTest(t)
 	svc := &fakeCreateSvc{}
-	err := runCreate(context.Background(), &CreateOptions{Name: "   "}, &cmdutil.FormatOptions{Mode: cmdutil.FormatText}, svc)
+	err := runCreate(context.Background(), &CreateOptions{DomainID: "domain-ai", Name: "   "}, &cmdutil.FormatOptions{Mode: cmdutil.FormatText}, svc)
 	require.Error(t, err)
 
 	var typed *cmdutil.Error
@@ -136,7 +145,7 @@ func TestCreate_NameWhitespaceOnly(t *testing.T) {
 func TestCreate_HTTPError_500(t *testing.T) {
 	_, _ = iostreams.SetForTest(t)
 	svc := &fakeCreateSvc{err: errors.New("HTTP error 500: internal")}
-	err := runCreate(context.Background(), &CreateOptions{Name: "x"}, &cmdutil.FormatOptions{Mode: cmdutil.FormatText}, svc)
+	err := runCreate(context.Background(), &CreateOptions{DomainID: "domain-ai", Name: "x"}, &cmdutil.FormatOptions{Mode: cmdutil.FormatText}, svc)
 	require.Error(t, err)
 
 	var typed *cmdutil.Error
@@ -147,7 +156,7 @@ func TestCreate_HTTPError_500(t *testing.T) {
 func TestCreate_HTTPError_409Conflict(t *testing.T) {
 	_, _ = iostreams.SetForTest(t)
 	svc := &fakeCreateSvc{err: errors.New("HTTP error 409: name exists")}
-	err := runCreate(context.Background(), &CreateOptions{Name: "dup"}, &cmdutil.FormatOptions{Mode: cmdutil.FormatText}, svc)
+	err := runCreate(context.Background(), &CreateOptions{DomainID: "domain-ai", Name: "dup"}, &cmdutil.FormatOptions{Mode: cmdutil.FormatText}, svc)
 	require.Error(t, err)
 
 	var typed *cmdutil.Error
@@ -158,7 +167,7 @@ func TestCreate_HTTPError_409Conflict(t *testing.T) {
 func TestCreate_JSONOutput(t *testing.T) {
 	out, _ := iostreams.SetForTest(t)
 	svc := &fakeCreateSvc{resp: &sdk.KnowledgeBase{ID: "kb_99", Name: "Eng"}}
-	opts := &CreateOptions{Name: "Eng"}
+	opts := &CreateOptions{DomainID: "domain-ai", Name: "Eng"}
 	require.NoError(t, runCreate(context.Background(), opts, &cmdutil.FormatOptions{Mode: cmdutil.FormatJSON}, svc))
 
 	got := out.String()
@@ -175,7 +184,7 @@ func TestCreate_JSONOutput(t *testing.T) {
 func TestCreate_StorageProvider_InjectsRequest(t *testing.T) {
 	_, _ = iostreams.SetForTest(t)
 	svc := &fakeCreateSvc{resp: &sdk.KnowledgeBase{ID: "kb_s", Name: "n"}}
-	opts := &CreateOptions{Name: "n", StorageProvider: "Local"}
+	opts := &CreateOptions{DomainID: "domain-ai", Name: "n", StorageProvider: "Local"}
 	require.NoError(t, runCreate(context.Background(), opts, &cmdutil.FormatOptions{Mode: cmdutil.FormatText}, svc))
 
 	require.NotNil(t, svc.got.StorageProviderConfig)
@@ -185,7 +194,7 @@ func TestCreate_StorageProvider_InjectsRequest(t *testing.T) {
 func TestCreate_StorageProvider_InvalidValueReturnsInputError(t *testing.T) {
 	_, _ = iostreams.SetForTest(t)
 	svc := &fakeCreateSvc{}
-	opts := &CreateOptions{Name: "n", StorageProvider: "azure"}
+	opts := &CreateOptions{DomainID: "domain-ai", Name: "n", StorageProvider: "azure"}
 	err := runCreate(context.Background(), opts, &cmdutil.FormatOptions{Mode: cmdutil.FormatText}, svc)
 	require.Error(t, err)
 
@@ -203,7 +212,7 @@ func TestCreate_StorageProvider_InvalidValueReturnsInputError(t *testing.T) {
 func TestCreate_StorageProvider_OmittedWhenEmpty(t *testing.T) {
 	_, _ = iostreams.SetForTest(t)
 	svc := &fakeCreateSvc{resp: &sdk.KnowledgeBase{ID: "kb_n", Name: "n"}}
-	opts := &CreateOptions{Name: "n"} // no --storage-provider
+	opts := &CreateOptions{DomainID: "domain-ai", Name: "n"} // no --storage-provider
 	require.NoError(t, runCreate(context.Background(), opts, &cmdutil.FormatOptions{Mode: cmdutil.FormatText}, svc))
 
 	assert.Nil(t, svc.got.StorageProviderConfig, "empty flag must omit StorageProviderConfig (let server pick default)")

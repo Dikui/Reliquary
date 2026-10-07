@@ -312,6 +312,7 @@ ALTER TABLE IF EXISTS ONLY public.knowledge_context_event_evidence DROP CONSTRAI
 ALTER TABLE IF EXISTS ONLY public.knowledge_context_entity_aliases DROP CONSTRAINT IF EXISTS knowledge_context_entity_aliases_pkey;
 ALTER TABLE IF EXISTS ONLY public.knowledge_context_entities DROP CONSTRAINT IF EXISTS knowledge_context_entities_pkey;
 ALTER TABLE IF EXISTS ONLY public.knowledge_context_attention DROP CONSTRAINT IF EXISTS knowledge_context_attention_pkey;
+ALTER TABLE IF EXISTS ONLY public.knowledge_bases DROP CONSTRAINT IF EXISTS knowledge_bases_domain_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.knowledge_bases DROP CONSTRAINT IF EXISTS knowledge_bases_pkey;
 ALTER TABLE IF EXISTS ONLY public.knowledge_anomalies DROP CONSTRAINT IF EXISTS knowledge_anomalies_pkey;
 ALTER TABLE IF EXISTS ONLY public.im_channels DROP CONSTRAINT IF EXISTS im_channels_pkey;
@@ -404,6 +405,7 @@ DROP TABLE IF EXISTS public.knowledge_context_entity_aliases;
 DROP TABLE IF EXISTS public.knowledge_context_entities;
 DROP TABLE IF EXISTS public.knowledge_context_attention;
 DROP TABLE IF EXISTS public.knowledge_bases;
+DROP TABLE IF EXISTS public.knowledge_domains;
 DROP TABLE IF EXISTS public.knowledge_anomalies;
 DROP TABLE IF EXISTS public.im_channels;
 DROP TABLE IF EXISTS public.im_channel_sessions;

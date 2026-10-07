@@ -160,6 +160,15 @@
                         />
                       </div>
 
+                      <div class="form-item">
+                        <label class="form-label required">{{ $t('knowledgeDomains.title') }}</label>
+                        <t-select v-model="formData.domainId" :options="domainOptions" filterable
+                          :loading="domainsLoading" :disabled="domainsLoading || !!domainsError"
+                          :placeholder="$t('knowledgeDomains.selectDomain')" :aria-label="$t('knowledgeDomains.title')"
+                          :popup-props="{ zIndex: 6200 }" />
+                        <p class="form-tip">{{ $t('knowledgeDomains.kbDomainHint') }}</p>
+                        <p v-if="domainsError" class="form-tip" role="alert">{{ domainsError }} <t-button variant="text" @click="loadDomains">{{ $t('knowledgeDomains.retry') }}</t-button></p>
+                      </div>
                       <div class="form-item" data-guide="kb-create-name">
                         <label class="form-label required">{{ $t('knowledgeEditor.basic.nameLabel') }}</label>
                         <t-input 
@@ -417,6 +426,7 @@ import KbCreateContextualGuide from '@/components/KbCreateContextualGuide.vue'
 import { KB_EDITOR_FOCUS_SECTION_EVENT, markContextualGuideDone } from '@/config/contextualGuides'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { createKnowledgeBase, getKnowledgeBaseById, listKnowledgeFiles, updateKnowledgeBase, rebuildKBIndex } from '@/api/knowledge-base'
+import { listKnowledgeDomains, type KnowledgeDomain } from '@/api/knowledge-domains'
 import { updateKBConfig, type KBModelConfigRequest } from '@/api/initialization'
 import { useChatResourcesStore } from '@/stores/chatResources'
 import { selectInitialModelId } from '@/utils/modelDefaults'
@@ -488,6 +498,22 @@ onBeforeUnmount(() => {
 })
 const saving = ref(false)
 const loading = ref(false)
+const domains = ref<KnowledgeDomain[]>([])
+const domainsLoading = ref(false)
+const domainsError = ref('')
+const domainOptions = computed(() => domains.value.map(domain => ({ value: domain.id, label: domain.name })))
+async function loadDomains() {
+  const generation = kbEditorLoadGeneration
+  domainsLoading.value = true
+  domainsError.value = ''
+  try {
+    const response = await listKnowledgeDomains()
+    if (generation !== kbEditorLoadGeneration || !props.visible) return
+    if (!response.success) throw new Error(response.error || response.message || t('knowledgeDomains.loadFailed'))
+    domains.value = response.data || []
+  } catch { if (generation === kbEditorLoadGeneration) domainsError.value = t('knowledgeDomains.loadFailed') }
+  finally { if (generation === kbEditorLoadGeneration) domainsLoading.value = false }
+}
 const allModels = ref<any[]>([])
 const hasFiles = ref(false)
 /** Tenant-wide default from Settings → Storage engine (used when creating a KB). */
@@ -611,6 +637,7 @@ const initFormData = (type: 'document' = 'document') => {
     type,
     name: '',
     description: '',
+    domainId: '',
     modelConfig: {
       llmModelId: '',
       embeddingModelId: '',
@@ -726,6 +753,7 @@ const loadKBData = async (
     const kbType = (kb.type as 'document') || 'document'
     formData.value = {
       type: kbType,
+      domainId: kb.domain_id || '',
       name: kb.name || '',
       description: kb.description || '',
       modelConfig: {
@@ -973,6 +1001,12 @@ const handleQuestionGenerationUpdate = (config: any) => {
 const validateForm = (): boolean => {
   if (!formData.value) return false
 
+  if (!formData.value.domainId) {
+    MessagePlugin.warning(t('knowledgeDomains.domainRequired'))
+    currentSection.value = 'basic'
+    return false
+  }
+
   // 验证基本信息
   if (!formData.value.name || !formData.value.name.trim()) {
     MessagePlugin.warning(t('knowledgeEditor.messages.nameRequired'))
@@ -1021,6 +1055,7 @@ const buildSubmitData = () => {
   if (!formData.value) return null
 
   const data: any = {
+    domain_id: formData.value.domainId,
     name: formData.value.name,
     description: formData.value.description,
     type: formData.value.type,
@@ -1187,6 +1222,7 @@ const doSubmit = async () => {
         }
 
       await updateKnowledgeBase(kbId, {
+        domain_id: data.domain_id,
         name: data.name,
         description: data.description,
         config: updateConfig
@@ -1310,7 +1346,7 @@ watch(() => props.visible, async (newVal) => {
     }
 
     // 加载模型列表与空间默认存储引擎（创建 KB 时即使用，不依赖是否打开「存储引擎」Tab）
-    await Promise.all([loadAllModels(), loadTenantDefaultStorageProvider()])
+    await Promise.all([loadAllModels(), loadTenantDefaultStorageProvider(), loadDomains()])
 
     if (generation !== kbEditorLoadGeneration || !props.visible) return
 

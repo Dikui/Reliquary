@@ -72,9 +72,10 @@
             <!-- 右侧内容区域 -->
             <div class="settings-content">
               <div class="content-wrapper" :class="{
-                'content-wrapper--wide': currentSection === 'members',
+                'content-wrapper--wide': currentSection === 'members' || currentSection === 'domains',
                 'content-wrapper--full': SYSTEM_ADMIN_SECTIONS.has(currentSection) || isIntegrationSection(currentSection),
               }">
+                <!-- 角色不允许访问当前 section（deep-link 进来或角色降级）时，优先于具体 section 渲染。
                      正常导航走 navItems filter 不会到这里，但 watch(navItems) 的 fallback 会在角色降级
                      的瞬间触发；这一段做兜底兼容旧 URL。 -->
                 <div v-if="!canSeeSection(currentSection)" class="section role-denied">
@@ -187,6 +188,8 @@
                     <TenantMembers />
                   </div>
 
+                  <div v-if="currentSection === 'domains'" class="section"><DomainSettings /></div>
+
                   <!-- 发布集成 -->
                   <div v-if="isIntegrationSection(currentSection)" class="section">
                     <IntegrationSettingsSection :tab="integrationTabFromSection(currentSection)" />
@@ -233,6 +236,7 @@ import StorageEngineSettings from './StorageBackendSettings.vue'
 import SandboxSettings from './SandboxSettings.vue'
 import SkillSettings from './SkillSettings.vue'
 import TenantMembers from './TenantMembers.vue'
+import DomainSettings from './DomainSettings.vue'
 import SystemSettings from '@/views/system/SystemSettings.vue'
 import RuntimeQueues from '@/views/system/RuntimeQueues.vue'
 import SystemAuditLog from '@/views/system/SystemAuditLog.vue'
@@ -368,6 +372,7 @@ const navItems = computed(() => {
     { key: 'envvars', icon: 'key', label: t('envVarSettings.title') },
     { key: 'tenant', icon: 'user-circle', label: t('settings.tenantInfo') },
     { key: 'members', icon: 'usergroup', label: t('tenantMember.title') },
+    { key: 'domains', icon: 'layers', label: t('knowledgeDomains.title') },
     ...integrationItems,
   ]
   // currentTenantRole 为空表示「membership 还没加载」—— 比起渲染整套
@@ -395,7 +400,7 @@ const navGroups = computed<NavGroup[]>(() => {
     {
       key: 'workspace',
       label: t('settings.navGroups.workspace'),
-      items: pickItems(['tenant', 'members', 'chathistory', 'memory']),
+      items: pickItems(['tenant', 'members', 'domains', 'chathistory', 'memory']),
     },
     {
       key: 'models_runtime',

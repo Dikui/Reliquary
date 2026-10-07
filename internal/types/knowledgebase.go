@@ -47,6 +47,8 @@ type KnowledgeBase struct {
 	Description string `yaml:"description"             json:"description"`
 	// Workspace ID
 	TenantID uint64 `yaml:"tenant_id"               json:"tenant_id"`
+	// DomainID selects the editable template used for this knowledge base.
+	DomainID string `yaml:"domain_id" json:"domain_id" gorm:"type:varchar(36);not null"`
 	// CreatorID records the user who created this team knowledge base.
 	CreatorID string `yaml:"creator_id"              json:"creator_id"              gorm:"type:varchar(36);index"`
 	// Chunking configuration

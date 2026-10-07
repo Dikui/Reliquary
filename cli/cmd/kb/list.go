@@ -21,7 +21,7 @@ import (
 // / extract) are intentionally omitted - users wanting those can use `--jq`
 // against the full object.
 var kbListFields = []string{
-	"id", "name", "type", "description",
+	"id", "name", "type", "description", "domain_id",
 	"is_temporary", "is_pinned",
 	"embedding_model_id", "summary_model_id",
 	"knowledge_count", "chunk_count",

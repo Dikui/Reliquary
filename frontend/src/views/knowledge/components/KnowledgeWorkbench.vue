@@ -17,6 +17,13 @@
       </div>
     </header>
 
+    <div class="workbench-scope" v-if="!['workflows', 'reports'].includes(activeSection)">
+      <label><span>{{ t('knowledgeWorkbench.scope.label') }}</span><t-select v-model="queryScope" :options="scopeOptions" :aria-label="t('knowledgeWorkbench.scope.label')" /></label>
+      <label v-if="queryScope === 'domain'"><span>{{ t('knowledgeDomains.title') }}</span><t-select v-model="queryDomainId" filterable :loading="domainsLoading" :options="domainOptions" :placeholder="t('knowledgeWorkbench.scope.selectDomain')" /></label>
+    </div>
+    <p v-if="domainLoadError" class="run-error" role="alert">{{ domainLoadError }} <t-button variant="text" :loading="domainsLoading" @click="loadDomains">{{ t('knowledgeDomains.retry') }}</t-button></p>
+    <p v-if="['workflows', 'reports'].includes(activeSection)" class="muted">{{ t('knowledgeWorkbench.scope.workflowHint') }}</p>
+
     <nav class="workbench-nav" :aria-label="t('knowledgeWorkbench.sections')">
       <button v-for="section in sections" :key="section.id" type="button"
         :class="['workbench-nav__item', { active: activeSection === section.id }]"
@@ -39,15 +46,15 @@
       <div class="query-form">
         <label>
           <span>{{ t('knowledgeWorkbench.query.entity') }}</span>
-          <t-input v-model.trim="queryForm.entity" clearable :placeholder="t('knowledgeWorkbench.query.entityPlaceholder')" @enter="runQuery" />
+          <t-input v-model.trim="queryForm.entity" clearable :placeholder="t('knowledgeWorkbench.query.entityPlaceholder')" @enter="onQueryEnter" />
         </label>
         <label>
           <span>{{ t('knowledgeWorkbench.query.predicate') }}</span>
-          <t-input v-model.trim="queryForm.predicate" clearable :placeholder="t('knowledgeWorkbench.query.predicatePlaceholder')" @enter="runQuery" />
+          <t-input v-model.trim="queryForm.predicate" clearable :placeholder="t('knowledgeWorkbench.query.predicatePlaceholder')" @enter="onQueryEnter" />
         </label>
         <label>
           <span>{{ t('knowledgeWorkbench.query.relation') }}</span>
-          <t-input v-model.trim="queryForm.relation" clearable :placeholder="t('knowledgeWorkbench.query.relationPlaceholder')" @enter="runQuery" />
+          <t-input v-model.trim="queryForm.relation" clearable :placeholder="t('knowledgeWorkbench.query.relationPlaceholder')" @enter="onQueryEnter" />
         </label>
         <label>
           <span>{{ t('knowledgeWorkbench.query.since') }}</span>
@@ -70,11 +77,11 @@
         </label>
         <label>
           <span>{{ t('knowledgeWorkbench.fusion.unit') }}</span>
-          <t-input v-model.trim="queryForm.unit" clearable placeholder="tokens" />
+          <t-input v-model.trim="queryForm.unit" clearable :placeholder="t('knowledgeWorkbench.fusion.unit')" />
         </label>
         <p class="span-two">{{ t('knowledgeWorkbench.fusion.queryHint') }}</p>
         <div class="query-form__actions">
-          <t-button theme="primary" :loading="queryLoading" @click="runQuery">
+          <t-button theme="primary" :loading="queryLoading" :disabled="queryScope === 'domain' && !queryDomainId" @click="runQuery">
             <template #icon><t-icon name="search" /></template>
             {{ t('knowledgeWorkbench.query.submit') }}
           </t-button>
@@ -159,6 +166,7 @@
                   {{ t('knowledgeWorkbench.entities.merge') }}
                 </t-button>
               </div>
+              <p class="muted">{{ t('knowledgeWorkbench.scope.detailHint') }}</p>
               <t-loading :loading="entityContextLoading" show-overlay>
                 <div class="result-group">
                   <div class="group-heading">
@@ -172,6 +180,12 @@
                     :facts="entityContext?.facts || []" :entities="entityContext?.entities || [selectedEntity]" :evidence="entityContext?.evidence || []"
                     :can-manage="canManage" @correct="startCorrection" @open-evidence="openEvidence"
                     @open-source="emit('open-source', $event)" />
+                </div>
+                <div class="result-group" v-if="entityContext?.events.length">
+                  <h4>{{ t('knowledgeWorkbench.events.title') }}</h4>
+                  <EventCard v-for="event in entityContext.events" :key="event.id" :event="event"
+                    :attention="entityContext.attention.filter(item => item.event_id === event.id)"
+                    :evidence="entityContext.evidence.filter(item => event.evidence_ids?.includes(item.id))" @open-evidence="openEvidence" />
                 </div>
               </t-loading>
             </template>
@@ -208,6 +222,7 @@
             <div class="event-row__meta">
               <span>{{ t('knowledgeWorkbench.events.sourceCount', { count: event.source_count }) }}</span>
               <span>{{ formatDate(event.occurred_at) }}</span>
+              <span>{{ t('knowledgeWorkbench.scope.sourceKb') }}: {{ (event.sources || []).map(source => source.knowledge_base_name || source.knowledge_base_id).join('、') || event.knowledge_base_name || event.knowledge_base_id }}</span>
             </div>
             <div v-if="event.entity_ids?.length" class="chips">
               <span v-for="id in event.entity_ids" :key="id" class="chip">{{ entityName(id) }}</span>
@@ -337,6 +352,8 @@
                 <label><span>{{ t('knowledgeWorkbench.workflows.config.limit') }}</span><t-input-number v-model="step.config.limit" :min="1" :max="100" /></label>
               </template>
               <template v-else-if="step.type === 'fact_query'">
+                <label><span>{{ t('knowledgeWorkbench.scope.label') }}</span><t-select v-model="step.config.scope" :options="scopeOptions" /></label>
+                <label v-if="step.config.scope === 'domain'"><span>{{ t('knowledgeDomains.title') }}</span><t-select v-model="step.config.domain_id" filterable :options="domainOptions" /></label>
                 <label><span>{{ t('knowledgeWorkbench.workflows.config.entity') }}</span><t-input v-model="step.config.entity" /></label>
                 <label><span>{{ t('knowledgeWorkbench.workflows.config.predicate') }}</span><t-input v-model="step.config.predicate" /></label>
                 <label><span>{{ t('knowledgeWorkbench.workflows.config.relation') }}</span><t-input v-model="step.config.relation" /></label>
@@ -604,12 +621,15 @@
 import { computed, defineComponent, h, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
+import { listKnowledgeDomains, type KnowledgeDomain } from '@/api/knowledge-domains'
+import { knowledgeContextScopeParams } from '@/api/knowledge-context-scope'
 import { safeMarkdownToHTML } from '@/utils/security'
 import { downloadArtifact, type ArtifactMeta } from '@/api/chat/index'
 import {
-  correctKnowledgeFact,
-  getKnowledgeEvidence,
-  mergeKnowledgeEntities,
+  correctGlobalKnowledgeFact,
+  getGlobalKnowledgeEvidence,
+  getGlobalKnowledgeEntityContext,
+  mergeGlobalKnowledgeEntities,
   rebuildKnowledgeContext,
   listKnowledgeContextEntities,
   listKnowledgeContextEvents,
@@ -617,6 +637,7 @@ import {
   queryKnowledgeContext,
   type KnowledgeAttention,
   type KnowledgeContextQuery,
+  type KnowledgeContextScope,
   type KnowledgeContextResult,
   type KnowledgeEntity,
   type KnowledgeEvidence,
@@ -645,10 +666,26 @@ import {
   type KnowledgeWorkflowStepType,
 } from '@/api/knowledge-workflows'
 
-const props = defineProps<{ kbId: string; canManage: boolean }>()
+const props = defineProps<{ kbId: string; domainId?: string; canManage: boolean }>()
 const emit = defineEmits<{ 'open-source': [knowledgeId: string] }>()
 const { t } = useI18n()
 const pageSize = 50
+const queryScope = ref<KnowledgeContextScope>('knowledge_base')
+const queryDomainId = ref(props.domainId || '')
+const domains = ref<KnowledgeDomain[]>([])
+const domainsLoading = ref(false)
+const domainLoadError = ref('')
+const scopeOptions = computed(() => ['knowledge_base', 'domain', 'team'].map(value => ({ value, label: t(`knowledgeWorkbench.scope.${value}`) })))
+const domainOptions = computed(() => domains.value.map(domain => ({ value: domain.id, label: domain.name })))
+const scopeParams = computed(() => knowledgeContextScopeParams(queryScope.value, props.kbId, queryDomainId.value))
+let contextGeneration = 0
+async function loadDomains() {
+  domainsLoading.value = true
+  domainLoadError.value = ''
+  try { const response = await listKnowledgeDomains(); if (!response.success) throw new Error(response.error || response.message || t('knowledgeDomains.loadFailed')); domains.value = response.data || [] }
+  catch (error) { domainLoadError.value = getErrorMessage(error) }
+  finally { domainsLoading.value = false }
+}
 
 type SectionId = 'query' | 'entities' | 'events' | 'evidence' | 'workflows' | 'reports'
 const sections: Array<{ id: SectionId }> = [
@@ -796,15 +833,17 @@ function getErrorMessage(error: unknown): string {
 }
 
 async function refreshAll() {
-  if (!props.kbId) return
+  if (!props.kbId || (queryScope.value === 'domain' && !queryDomainId.value)) return
+  const generation = contextGeneration
   loading.value = true
   loadError.value = ''
   try {
     const [entityResponse, eventResponse, evidenceResponse] = await Promise.all([
-      listKnowledgeContextEntities(props.kbId, { limit: pageSize, offset: 0 }),
-      listKnowledgeContextEvents(props.kbId, { limit: pageSize, offset: 0 }),
-      listKnowledgeContextEvidence(props.kbId, { limit: pageSize, offset: 0 }),
+      listKnowledgeContextEntities(props.kbId, { ...scopeParams.value, limit: pageSize, offset: 0 }),
+      listKnowledgeContextEvents(props.kbId, { ...scopeParams.value, limit: pageSize, offset: 0 }),
+      listKnowledgeContextEvidence(props.kbId, { ...scopeParams.value, limit: pageSize, offset: 0 }),
     ])
+    if (generation !== contextGeneration) return
     entities.value = envelopeData(entityResponse) || []
     events.value = envelopeData(eventResponse) || []
     evidence.value = envelopeData(evidenceResponse) || []
@@ -820,49 +859,58 @@ async function refreshAll() {
       if (current) await loadEntityContext()
     }
   } catch (error) {
-    loadError.value = getErrorMessage(error)
+    if (generation === contextGeneration) loadError.value = getErrorMessage(error)
   } finally {
-    loading.value = false
+    if (generation === contextGeneration) loading.value = false
   }
 }
 
 async function loadEntities(loadMore = false) {
+  if (queryScope.value === 'domain' && !queryDomainId.value) return
+  const generation = contextGeneration
   entitiesLoading.value = true
   try {
     const offset = loadMore ? entityOffset.value : 0
-    const items = envelopeData(await listKnowledgeContextEntities(props.kbId, { limit: pageSize, offset })) || []
+    const items = envelopeData(await listKnowledgeContextEntities(props.kbId, { ...scopeParams.value, limit: pageSize, offset })) || []
+    if (generation !== contextGeneration) return
     entities.value = loadMore ? [...entities.value, ...items] : items
     entityOffset.value = offset + items.length
     hasMoreEntities.value = items.length === pageSize
   } catch (error) {
-    loadError.value = getErrorMessage(error)
-  } finally { entitiesLoading.value = false }
+    if (generation === contextGeneration) loadError.value = getErrorMessage(error)
+  } finally { if (generation === contextGeneration) entitiesLoading.value = false }
 }
 
 async function loadEvents(loadMore = false) {
+  if (queryScope.value === 'domain' && !queryDomainId.value) return
+  const generation = contextGeneration
   eventsLoading.value = true
   try {
     const offset = loadMore ? eventOffset.value : 0
-    const items = envelopeData(await listKnowledgeContextEvents(props.kbId, { limit: pageSize, offset })) || []
+    const items = envelopeData(await listKnowledgeContextEvents(props.kbId, { ...scopeParams.value, limit: pageSize, offset })) || []
+    if (generation !== contextGeneration) return
     events.value = loadMore ? [...events.value, ...items] : items
     eventOffset.value = offset + items.length
     hasMoreEvents.value = items.length === pageSize
   }
-  catch (error) { loadError.value = getErrorMessage(error) }
-  finally { eventsLoading.value = false }
+  catch (error) { if (generation === contextGeneration) loadError.value = getErrorMessage(error) }
+  finally { if (generation === contextGeneration) eventsLoading.value = false }
 }
 
 async function loadEvidence(loadMore = false) {
+  if (queryScope.value === 'domain' && !queryDomainId.value) return
+  const generation = contextGeneration
   evidenceLoading.value = true
   try {
     const offset = loadMore ? evidenceOffset.value : 0
-    const items = envelopeData(await listKnowledgeContextEvidence(props.kbId, { limit: pageSize, offset })) || []
+    const items = envelopeData(await listKnowledgeContextEvidence(props.kbId, { ...scopeParams.value, limit: pageSize, offset })) || []
+    if (generation !== contextGeneration) return
     evidence.value = loadMore ? [...evidence.value, ...items] : items
     evidenceOffset.value = offset + items.length
     hasMoreEvidence.value = items.length === pageSize
   }
-  catch (error) { loadError.value = getErrorMessage(error) }
-  finally { evidenceLoading.value = false }
+  catch (error) { if (generation === contextGeneration) loadError.value = getErrorMessage(error) }
+  finally { if (generation === contextGeneration) evidenceLoading.value = false }
 }
 
 async function selectSection(section: SectionId) {
@@ -877,6 +925,7 @@ async function selectSection(section: SectionId) {
 
 function makeQuery(extra: Partial<KnowledgeContextQuery> = {}): KnowledgeContextQuery {
   const query: KnowledgeContextQuery = {
+    ...scopeParams.value,
     include_history: true,
     limit: 100,
     ...extra,
@@ -884,7 +933,13 @@ function makeQuery(extra: Partial<KnowledgeContextQuery> = {}): KnowledgeContext
   return query
 }
 
+function onQueryEnter(_value: unknown, context: { e: KeyboardEvent }) {
+  if (!context.e.isComposing) void runQuery()
+}
+
 async function runQuery() {
+  if (queryLoading.value || (queryScope.value === 'domain' && !queryDomainId.value)) return
+  const generation = contextGeneration
   queryLoading.value = true
   loadError.value = ''
   try {
@@ -899,9 +954,9 @@ async function runQuery() {
       max_value: queryForm.max_value === '' ? undefined : Number(queryForm.max_value),
       unit: queryForm.unit || undefined,
     }))
-    queryResult.value = envelopeData(response)
-  } catch (error) { loadError.value = getErrorMessage(error) }
-  finally { queryLoading.value = false }
+    if (generation === contextGeneration) queryResult.value = envelopeData(response)
+  } catch (error) { if (generation === contextGeneration) loadError.value = getErrorMessage(error) }
+  finally { if (generation === contextGeneration) queryLoading.value = false }
 }
 
 function clearQuery() {
@@ -925,17 +980,19 @@ async function selectEntity(entity: KnowledgeEntity) {
 
 async function loadEntityContext() {
   if (!selectedEntity.value) return
+  const generation = contextGeneration
+  const entityId = selectedEntity.value.id
+  entityContext.value = null
   entityContextLoading.value = true
   try {
-    entityContext.value = envelopeData(await queryKnowledgeContext(props.kbId, makeQuery({
-      entity_id: selectedEntity.value.id,
-      include_history: showEntityHistory.value,
-    })))
-  } catch (error) { loadError.value = getErrorMessage(error) }
-  finally { entityContextLoading.value = false }
+    const result = envelopeData(await getGlobalKnowledgeEntityContext(entityId, showEntityHistory.value))
+    if (generation === contextGeneration && selectedEntity.value?.id === entityId) entityContext.value = result
+  } catch (error) { if (generation === contextGeneration) loadError.value = getErrorMessage(error) }
+  finally { if (generation === contextGeneration) entityContextLoading.value = false }
 }
 
 async function toggleEvent(eventId: string) {
+  const generation = contextGeneration
   if (expandedEventId.value === eventId) {
     expandedEventId.value = ''
     return
@@ -944,9 +1001,10 @@ async function toggleEvent(eventId: string) {
   if (eventContexts.value[eventId]) return
   eventLoadingId.value = eventId
   try {
-    eventContexts.value[eventId] = envelopeData(await queryKnowledgeContext(props.kbId, makeQuery({ event_id: eventId })))
+    const result = envelopeData(await queryKnowledgeContext(props.kbId, makeQuery({ event_id: eventId })))
+    if (generation === contextGeneration) eventContexts.value[eventId] = result
   } catch (error) { loadError.value = getErrorMessage(error) }
-  finally { eventLoadingId.value = '' }
+  finally { if (generation === contextGeneration) eventLoadingId.value = '' }
 }
 
 async function openEvidence(evidenceId: string, quote?: string) {
@@ -958,7 +1016,7 @@ async function openEvidence(evidenceId: string, quote?: string) {
     selectedSnapshot.value = null
     selectedQuote.value = quote
     try {
-      const snapshot = evidenceSnapshots[evidenceId] || envelopeData(await getKnowledgeEvidence(props.kbId, evidenceId))
+      const snapshot = evidenceSnapshots[evidenceId] || envelopeData(await getGlobalKnowledgeEvidence(evidenceId))
       if (request !== snapshotRequest) return
       selectedSnapshot.value = snapshot
       evidenceSnapshots[evidenceId] = selectedSnapshot.value
@@ -975,14 +1033,14 @@ async function openEvidence(evidenceId: string, quote?: string) {
   expandedEvidenceId.value = evidenceId
   if (evidenceSnapshots[evidenceId]) return
   evidenceLoadingId.value = evidenceId
-  try { evidenceSnapshots[evidenceId] = envelopeData(await getKnowledgeEvidence(props.kbId, evidenceId)) }
+  try { evidenceSnapshots[evidenceId] = envelopeData(await getGlobalKnowledgeEvidence(evidenceId)) }
   catch (error) { loadError.value = getErrorMessage(error) }
   finally { evidenceLoadingId.value = '' }
 }
 
 async function showEvidenceInList(evidenceId: string) {
   try {
-    const snapshot = evidenceSnapshots[evidenceId] || envelopeData(await getKnowledgeEvidence(props.kbId, evidenceId))
+    const snapshot = evidenceSnapshots[evidenceId] || envelopeData(await getGlobalKnowledgeEvidence(evidenceId))
     evidenceSnapshots[evidenceId] = snapshot
     if (!evidence.value.some(item => item.id === evidenceId)) evidence.value.unshift(snapshot)
     activeSection.value = 'evidence'
@@ -1129,7 +1187,7 @@ async function saveCorrection() {
   }
   correcting.value = true
   try {
-    envelopeData(await correctKnowledgeFact(props.kbId, edit.fact.id, {
+    envelopeData(await correctGlobalKnowledgeFact(edit.fact.id, {
       value,
       value_type: edit.valueType || undefined,
       unit: edit.unit || undefined,
@@ -1156,7 +1214,7 @@ async function mergeEntities() {
   if (!selectedEntity.value || !mergeTargetId.value) return
   merging.value = true
   try {
-    const result = await mergeKnowledgeEntities(props.kbId, {
+    const result = await mergeGlobalKnowledgeEntities({
       keep_entity_id: mergeTargetId.value,
       merge_entity_id: selectedEntity.value.id,
     })
@@ -1336,7 +1394,7 @@ async function downloadStepArtifact(artifact: WorkflowStepArtifact) {
 function makeStep(type: KnowledgeWorkflowStepType, index: number): KnowledgeWorkflowStep {
   const config: Record<string, unknown> = {
     search: { query: '', limit: 20 },
-    fact_query: { entity: '', predicate: '', relation: '', object_entity_id: '', since: '', until: '', include_history: true, limit: 50 },
+    fact_query: { scope: 'knowledge_base', entity: '', predicate: '', relation: '', object_entity_id: '', since: '', until: '', include_history: true, limit: 50 },
     web_research: { query: '', max_results: 10, provider_id: '', ingest: true },
     report: { title: '', prompt: '', time_from: '', time_to: '', window: '', days: 7, timezone: 'Asia/Shanghai' },
     wiki_update: { slug: '', title: '', page_type: 'topic', summary: '', source_step: '' },
@@ -1516,6 +1574,7 @@ function normalizeWorkflowInput(draft: KnowledgeWorkflowInput): KnowledgeWorkflo
     steps: draft.steps.map(step => {
       const config = { ...step.config }
       if (step.type === 'web_research') config.ingest = true
+      if (step.type === 'fact_query' && config.scope === 'domain' && !config.domain_id) throw new Error(t('knowledgeDomains.domainRequired'))
       if (step.type === 'condition' && (config.operator === 'gt' || config.operator === 'gte')) {
         const value = typeof config.value === 'string' && config.value.trim() !== '' ? Number(config.value) : config.value
         if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -1616,7 +1675,23 @@ function safeFilename(value: string) {
   return (value || 'report').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').trim() || 'report'
 }
 
-watch(() => props.kbId, async () => {
+watch(() => props.domainId, id => { if (!queryDomainId.value) queryDomainId.value = id || '' })
+watch([() => props.kbId, queryScope, queryDomainId], async () => {
+  contextGeneration++
+  loading.value = false
+  entitiesLoading.value = false
+  eventsLoading.value = false
+  evidenceLoading.value = false
+  queryLoading.value = false
+  entityContextLoading.value = false
+  expandedEventId.value = ''
+  eventContexts.value = {}
+  entityOffset.value = 0
+  eventOffset.value = 0
+  evidenceOffset.value = 0
+  hasMoreEntities.value = false
+  hasMoreEvents.value = false
+  hasMoreEvidence.value = false
   snapshotRequest++
   snapshotVisible.value = false
   snapshotLoading.value = false
@@ -1636,11 +1711,12 @@ watch(() => props.kbId, async () => {
   reports.value = []
   selectedReport.value = null
   clearRunPolling()
+  if (!domains.value.length) await loadDomains()
   await refreshAll()
 }, { immediate: true })
 
 watch(selectedRun, updateRunPolling)
-onBeforeUnmount(clearRunPolling)
+onBeforeUnmount(() => { contextGeneration++; snapshotRequest++; clearRunPolling() })
 
 const FactCard = defineComponent({
   name: 'KnowledgeWorkbenchFactCard',
@@ -1679,6 +1755,7 @@ const FactCard = defineComponent({
       h('div', { class: 'fact-card__meta' }, [
         h('span', `${t('knowledgeWorkbench.factPeriod')}: ${formatDate(cardProps.fact.effective_from)}${cardProps.fact.effective_to ? ` — ${formatDate(cardProps.fact.effective_to)}` : ''}`),
         h('span', `${t('knowledgeWorkbench.evidence.source')}: ${sourceTitle.value || cardProps.fact.evidence_id.slice(0, 8)}`),
+        h('span', `${t('knowledgeWorkbench.scope.sourceKb')}: ${cardProps.fact.knowledge_base_name || cardProps.fact.knowledge_base_id}`),
         cardProps.fact.original_predicate && cardProps.fact.original_predicate !== cardProps.fact.predicate
           ? h('span', `${t('knowledgeWorkbench.fusion.originalField')}: ${cardProps.fact.original_predicate}`) : null,
       ]),
@@ -1716,6 +1793,7 @@ const EventCard = defineComponent({
       h('div', { class: 'event-card__meta' }, [
         `${t('knowledgeWorkbench.events.sourceCount', { count: cardProps.event.source_count })} · ${formatDate(cardProps.event.occurred_at)}`,
       ]),
+      h('p', { class: 'event-card__meta' }, `${t('knowledgeWorkbench.scope.sourceKb')}: ${(cardProps.event.sources || []).map(source => source.knowledge_base_name || source.knowledge_base_id).join('、') || cardProps.event.knowledge_base_name || cardProps.event.knowledge_base_id}`),
       ...cardProps.attention.map(item => h('p', { class: 'attention-reason', key: item.id }, [
         h('strong', item.reason || t('knowledgeWorkbench.events.scored')),
         h('span', t('knowledgeWorkbench.events.attentionScore', { score: formatHeat(item.score) })),
@@ -1747,6 +1825,7 @@ const EvidenceCard = defineComponent({
           h('span', { class: 'evidence-card__version' }, `v${cardProps.evidence.version} · ${t(`knowledgeWorkbench.evidence.status.${cardProps.evidence.status}`)}`),
         ]),
         h('div', { class: 'evidence-card__meta' }, [
+          `${t('knowledgeWorkbench.scope.sourceKb')}: ${cardProps.evidence.knowledge_base_name || cardProps.evidence.knowledge_base_id}`,
           [cardProps.evidence.publisher, cardProps.evidence.author, cardProps.evidence.published_at ? formatDate(cardProps.evidence.published_at) : ''].filter(Boolean).join(' · '),
         ]),
         cardProps.evidence.source_kind === 'roundup' ? h('p', { class: 'evidence-card__meta' }, t('knowledgeWorkbench.fusion.roundup')) : null,
@@ -1770,6 +1849,8 @@ const EvidenceCard = defineComponent({
 </script>
 
 <style scoped lang="less">
+.workbench-scope { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
+.workbench-scope label { display: flex; flex-direction: column; gap: 6px; min-width: min(260px, 100%); }
 .knowledge-workbench { color: var(--td-text-color-primary); padding: 20px 22px 34px; }
 .snapshot-hash { overflow-wrap: anywhere; color: var(--td-text-color-secondary); font-size: 12px; }
 .evidence-snapshot__body mark { background: var(--td-warning-color-2); color: var(--td-text-color-primary); border-radius: 2px; }

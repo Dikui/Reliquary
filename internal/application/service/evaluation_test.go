@@ -41,9 +41,12 @@ type evaluationSnapshotKB struct {
 }
 
 func (evaluationSnapshotKB) GetKnowledgeBaseByID(context.Context, string) (*types.KnowledgeBase, error) {
-	return &types.KnowledgeBase{}, nil
+	return &types.KnowledgeBase{DomainID: "evaluation-source-domain"}, nil
 }
-func (evaluationSnapshotKB) CreateKnowledgeBase(context.Context, *types.KnowledgeBase) (*types.KnowledgeBase, error) {
+func (evaluationSnapshotKB) CreateKnowledgeBase(_ context.Context, kb *types.KnowledgeBase) (*types.KnowledgeBase, error) {
+	if kb.DomainID != "evaluation-source-domain" {
+		return nil, errors.New("evaluation did not inherit its source domain")
+	}
 	return &types.KnowledgeBase{ID: "evaluation-kb"}, nil
 }
 func (evaluationSnapshotKB) DeleteKnowledgeBase(context.Context, string) error { return nil }

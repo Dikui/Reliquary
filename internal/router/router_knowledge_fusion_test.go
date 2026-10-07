@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -23,7 +24,7 @@ import (
 	"reliquary/internal/handler"
 	"reliquary/internal/middleware"
 	chatmodel "reliquary/internal/models/chat"
-	"reliquary/internal/testutil/sqlfixture"
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -73,15 +74,17 @@ type fusionEnvelope struct {
 	Error   any             `json:"error"`
 }
 
+func TestMain(m *testing.M) {
+	os.Exit(pgtest.Run(m))
+}
+
 func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 	db := fusionFixtureDB(t)
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = sqlDB.Close() })
 
 	ctx := fusionContext(fusionTenantID, fusionOwnerID, types.TenantRoleContributor)
 	now := time.Now().UTC()
 	require.NoError(t, db.Create(&types.Tenant{ID: fusionTenantID, Name: "Fusion tenant", Business: "test"}).Error)
+	require.NoError(t, db.Create(&types.User{ID: fusionOwnerID, Username: fusionOwnerID, Email: "fusion@example.test", PasswordHash: "test-only", TenantID: fusionTenantID, IsActive: true}).Error)
 	memberRepo := apprepo.NewTenantMemberRepository(db)
 	require.NoError(t, memberRepo.Create(ctx, &types.TenantMember{
 		UserID: fusionOwnerID, TenantID: fusionTenantID, Role: types.TenantRoleContributor,
@@ -92,9 +95,11 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 	kbService := service.NewKnowledgeBaseService(db, kbRepo, knowledgeRepo, nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	kb := &types.KnowledgeBase{
-		ID: fusionKBID, Name: "Fusion KB", TenantID: fusionTenantID, CreatorID: fusionOwnerID,
+		DomainID: service.BuiltinAIKnowledgeDomainID,
+		ID:       fusionKBID, Name: "Fusion KB", TenantID: fusionTenantID, CreatorID: fusionOwnerID,
 		Type: "document", EmbeddingModelID: "unused", SummaryModelID: "fusion-deterministic",
 	}
+	kb.EnsureDefaults()
 	require.NoError(t, kbRepo.CreateKnowledgeBase(ctx, kb))
 
 	knowledge, err := service.NewKnowledgeService(db, nil, knowledgeRepo, nil, kbService, nil, nil, nil, nil, nil,
@@ -250,14 +255,8 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 
 func fusionFixtureDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := sqlfixture.Open("file:"+t.Name()+"?mode=memory&cache=shared", &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&types.Tenant{}, &types.TenantMember{}, &types.KnowledgeBase{}, &types.Knowledge{},
-		&types.KnowledgeTag{}, &types.KnowledgeTagRelation{}, &types.Chunk{},
-		&types.KnowledgeEntity{}, &types.KnowledgeEntityAlias{}, &types.KnowledgeEvidence{}, &types.KnowledgeFact{},
-		&types.KnowledgeEvent{}, &types.KnowledgeEventEvidence{}, &types.KnowledgeAttention{},
-		&types.KnowledgeWorkflow{}, &types.KnowledgeWorkflowRun{}, &types.KnowledgeWorkflowStepRun{}, &types.KnowledgeWorkflowReport{},
-		&types.KnowledgeStrategyVersion{}, &types.AuditLog{}))
+	db := pgtest.Open(t)
+	require.NoError(t, db.Create(service.BuiltinAIKnowledgeDomain()).Error)
 	return db
 }
 

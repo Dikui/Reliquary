@@ -25,6 +25,7 @@ export const SETTINGS_SECTION_MIN_ROLE: Record<string, SettingsRoleKey> = {
   userprofile: 'viewer',
   tenant: 'viewer',
   members: 'viewer',
+  domains: 'viewer',
   mymemory: 'viewer',
   memory: 'admin',
   // Every member fills in their own environment variables; the workspace-wide

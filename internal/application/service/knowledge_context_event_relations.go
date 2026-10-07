@@ -15,7 +15,7 @@ import (
 func (s *KnowledgeContextService) projectVisibleEventRelations(
 	ctx context.Context,
 	tenantID uint64,
-	kbID string,
+	kbIDs []string,
 	events []types.KnowledgeEvent,
 	visibleEvidence map[string]types.KnowledgeEvidence,
 	q types.KnowledgeContextQuery,
@@ -34,8 +34,8 @@ func (s *KnowledgeContextService) projectVisibleEventRelations(
 	visibleEvidenceIDs := sortedEvidenceIDs(visibleEvidence)
 	var sourceLinks []types.KnowledgeEventEvidence
 	if err := s.db.WithContext(ctx).
-		Where("tenant_id = ? AND knowledge_base_id = ? AND event_id IN ? AND evidence_id IN ? AND relation IN ?",
-			tenantID, kbID, eventIDs, visibleEvidenceIDs, []string{
+		Where("tenant_id = ? AND knowledge_base_id IN ? AND event_id IN ? AND evidence_id IN ? AND relation IN ?",
+			tenantID, kbIDs, eventIDs, visibleEvidenceIDs, []string{
 				types.KnowledgeEventRelationSameOccurrence, types.KnowledgeEventRelationSameStory,
 				types.KnowledgeEventRelationUnrelated,
 			}).
@@ -64,7 +64,7 @@ func (s *KnowledgeContextService) projectVisibleEventRelations(
 	}
 
 	permittedEvidenceQuery := s.db.WithContext(ctx).Model(&types.KnowledgeEvidence{}).
-		Select("id").Where("tenant_id = ? AND knowledge_base_id = ?", tenantID, kbID)
+		Select("id").Where("tenant_id = ? AND knowledge_base_id IN ?", tenantID, kbIDs)
 	if !q.IncludeHistory {
 		permittedEvidenceQuery = permittedEvidenceQuery.Where("status = ?", types.KnowledgeEvidenceCurrent)
 	}
@@ -73,8 +73,8 @@ func (s *KnowledgeContextService) projectVisibleEventRelations(
 	}
 	var targetLinks []types.KnowledgeEventEvidence
 	if err := s.db.WithContext(ctx).
-		Where("tenant_id = ? AND knowledge_base_id = ? AND event_id IN ? AND evidence_id IN (?)",
-			tenantID, kbID, relatedIDs, permittedEvidenceQuery).
+		Where("tenant_id = ? AND knowledge_base_id IN ? AND event_id IN ? AND evidence_id IN (?)",
+			tenantID, kbIDs, relatedIDs, permittedEvidenceQuery).
 		Order("created_at DESC, id DESC").Find(&targetLinks).Error; err != nil {
 		return err
 	}
@@ -92,11 +92,11 @@ func (s *KnowledgeContextService) projectVisibleEventRelations(
 	var targetEvidence []types.KnowledgeEvidence
 	if err := s.db.WithContext(ctx).
 		Select("id", "knowledge_id", "title", "published_at", "status").
-		Where("tenant_id = ? AND knowledge_base_id = ? AND id IN ?", tenantID, kbID, targetEvidenceIDs).
+		Where("tenant_id = ? AND knowledge_base_id IN ? AND id IN ?", tenantID, kbIDs, targetEvidenceIDs).
 		Find(&targetEvidence).Error; err != nil {
 		return err
 	}
-	visibleTargets, err := s.visibleContextEvidence(ctx, tenantID, kbID, targetEvidence, q.IncludeHistory)
+	visibleTargets, err := s.visibleContextEvidence(ctx, tenantID, "", targetEvidence, q.IncludeHistory)
 	if err != nil {
 		return err
 	}
@@ -176,6 +176,6 @@ func clearContextEventRelationsTo(tx *gorm.DB, tenantID uint64, kbID string, eve
 		return nil
 	}
 	return tx.Model(&types.KnowledgeEventEvidence{}).
-		Where("tenant_id = ? AND knowledge_base_id = ? AND related_event_id IN ?", tenantID, kbID, eventIDs).
+		Where("tenant_id = ? AND related_event_id IN ?", tenantID, eventIDs).
 		Updates(map[string]any{"relation": "", "related_event_id": ""}).Error
 }

@@ -168,6 +168,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewKnowledgeAnomalyService))
 	must(container.Provide(service.NewKnowledgeStrategyService))
 	must(container.Provide(service.NewKnowledgeContextService))
+	must(container.Provide(service.NewKnowledgeDomainService))
 	must(container.Provide(service.NewKnowledgeContextWorker))
 	must(container.Provide(service.NewWorkflowSkillExecutor))
 	must(container.Provide(service.NewKnowledgeWorkflowService))
@@ -334,6 +335,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewKnowledgeAnomalyHandler))
 	must(container.Provide(handler.NewKnowledgeStrategyHandler))
 	must(container.Provide(handler.NewKnowledgeContextHandler))
+	must(container.Provide(handler.NewKnowledgeDomainHandler))
 	must(container.Provide(handler.NewKnowledgeWorkflowHandler))
 	must(container.Provide(handler.NewChunkHandler))
 	must(container.Provide(handler.NewTagHandler))
@@ -560,15 +562,18 @@ func initDatabase(_ *config.Config) (*gorm.DB, error) {
 			return nil, fmt.Errorf("database migration failed: %w", err)
 		}
 		syncSequences(db)
-		if err := service.EnsureSingleTeamSpace(context.Background(), db); err != nil {
-			return nil, err
-		}
 		resetPendingTasks(db)
 		if err := types.LoadBuiltinModelsConfig(context.Background(), db, config.ConfigDir()); err != nil {
 			logger.Warnf(context.Background(), "Load builtin models config failed: %v", err)
 		}
 	} else {
 		logger.Infof(context.Background(), "Auto-migration is disabled (AUTO_MIGRATE=false)")
+	}
+	if err := service.EnsureSingleTeamSpace(context.Background(), db); err != nil {
+		return nil, err
+	}
+	if err := service.EnsureBuiltinKnowledgeDomains(context.Background(), db); err != nil {
+		return nil, fmt.Errorf("initialize built-in knowledge domains: %w", err)
 	}
 	sqlDB, err := db.DB()
 	if err != nil {

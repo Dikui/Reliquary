@@ -18,7 +18,7 @@ import (
 // its top-level json tags. Nested config objects are intentionally omitted -
 // users wanting them can drop the projection or use --jq.
 var kbCreateFields = []string{
-	"id", "name", "type", "description",
+	"id", "name", "type", "description", "domain_id",
 	"is_temporary", "is_pinned",
 	"embedding_model_id", "summary_model_id",
 	"knowledge_count", "chunk_count",
@@ -28,6 +28,7 @@ var kbCreateFields = []string{
 
 type CreateOptions struct {
 	Name            string
+	DomainID        string
 	Description     string
 	EmbeddingModel  string
 	ChatModel       string
@@ -60,6 +61,9 @@ func NewCmdCreate(f *cmdutil.Factory) *cobra.Command {
 			}
 			fopts.ResolveDefault(iostreams.IO.IsStdoutTTY())
 			opts.Name = args[0]
+			if strings.TrimSpace(opts.DomainID) == "" {
+				return cmdutil.NewError(cmdutil.CodeInputInvalidArgument, "knowledge domain is required; pass --domain <domain-id>")
+			}
 			// Validate --storage-provider enum before the dry-run gate so
 			// --dry-run rejects identically to the live path. ValidateEnum
 			// returns input.invalid_argument (exit 5) and normalizes to the
@@ -73,6 +77,7 @@ func NewCmdCreate(f *cmdutil.Factory) *cobra.Command {
 			planArgs := map[string]any{
 				"name":        opts.Name,
 				"description": opts.Description,
+				"domain_id":   opts.DomainID,
 			}
 			for _, name := range []string{"embedding-model", "chat-model", "storage-provider"} {
 				if c.Flags().Changed(name) {
@@ -106,6 +111,8 @@ func NewCmdCreate(f *cmdutil.Factory) *cobra.Command {
 			return runCreate(c.Context(), opts, fopts, cli)
 		},
 	}
+	cmd.Flags().StringVar(&opts.DomainID, "domain", "", "Required knowledge domain ID (see reliquary domain list)")
+	_ = cmd.MarkFlagRequired("domain")
 	cmd.Flags().StringVar(&opts.Description, "description", "", "Knowledge base description (optional)")
 	cmd.Flags().StringVar(&opts.EmbeddingModel, "embedding-model", "", "Embedding model id or name (optional; makes the KB retrieval-ready at creation)")
 	cmd.Flags().StringVar(&opts.ChatModel, "chat-model", "", "Chat/LLM model id or name (optional; pre-set the KB's answer model at creation)")
@@ -115,11 +122,11 @@ func NewCmdCreate(f *cmdutil.Factory) *cobra.Command {
 	cmdutil.AddDryRunFlag(cmd, &opts.DryRun)
 	cmdutil.SetAgentHelp(cmd, cmdutil.AgentHelp{
 		UsedFor:       "Create a new knowledge base with the given name. Emits the created KB object with its id.",
-		RequiredFlags: []string{"<name> (positional)"},
+		RequiredFlags: []string{"<name> (positional)", "--domain"},
 		Examples: []string{
-			`reliquary kb create "Eng Docs"`,
-			`reliquary kb create "Eng Docs" --embedding-model text-embedding-3-small --chat-model gpt-4o-mini  # retrieval-ready in one step`,
-			`reliquary kb create "Eng Docs" --jq .data.id   # capture id to chain into doc upload --kb`,
+			`reliquary kb create "Eng Docs" --domain <domain-id>`,
+			`reliquary kb create "Eng Docs" --domain <domain-id> --embedding-model text-embedding-3-small --chat-model gpt-4o-mini  # retrieval-ready in one step`,
+			`reliquary kb create "Eng Docs" --domain <domain-id> --jq .data.id   # capture id to chain into doc upload --kb`,
 		},
 		Output: "envelope.data is the created KnowledgeBase object with id, name, type, embedding_model_id, summary_model_id",
 	})
@@ -133,7 +140,12 @@ func runCreate(ctx context.Context, opts *CreateOptions, fopts *cmdutil.FormatOp
 		return cmdutil.NewError(cmdutil.CodeInputInvalidArgument, "knowledge base name is required")
 	}
 
+	if strings.TrimSpace(opts.DomainID) == "" {
+		return cmdutil.NewError(cmdutil.CodeInputInvalidArgument, "knowledge domain is required; pass --domain <domain-id>")
+	}
+
 	req := &sdk.KnowledgeBase{
+		DomainID:    opts.DomainID,
 		Name:        opts.Name,
 		Description: opts.Description,
 	}

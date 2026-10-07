@@ -58,7 +58,7 @@ func TestKBCreate_DryRun_EmitsPlan(t *testing.T) {
 	out, _ := iostreams.SetForTest(t)
 	f := kbDryRunFactory(t)
 	root := withRootHarness(NewCmdCreate(f),
-		"foo", "--description", "bar", "--embedding-model", "embed-name", "--chat-model", "chat-name", "--storage-provider", "S3", "--dry-run", "--format", "json")
+		"foo", "--domain", "domain-ai", "--description", "bar", "--embedding-model", "embed-name", "--chat-model", "chat-name", "--storage-provider", "S3", "--dry-run", "--format", "json")
 	require.NoError(t, root.Execute(), "dry-run must succeed (exit 0) without SDK")
 
 	var env struct {
@@ -92,7 +92,7 @@ func TestKBCreate_DryRun_RejectsInvalidStorageProvider(t *testing.T) {
 	iostreams.SetForTest(t)
 	f := kbDryRunFactory(t)
 	root := withRootHarness(NewCmdCreate(f),
-		"foo", "--storage-provider", "garbage", "--dry-run", "--format", "json")
+		"foo", "--domain", "domain-ai", "--storage-provider", "garbage", "--dry-run", "--format", "json")
 	err := root.Execute()
 	require.Error(t, err, "dry-run must reject invalid --storage-provider")
 

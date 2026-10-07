@@ -54,6 +54,15 @@ func TestEdit_RequiresAtLeastOneFlag(t *testing.T) {
 	assert.Contains(t, typed.Hint, "--description")
 }
 
+func TestEdit_DomainOnlyPreservesNameAndDescription(t *testing.T) {
+	iostreams.SetForTest(t)
+	svc := &fakeEditSvc{current: &sdk.KnowledgeBase{ID: "kb", Name: "Research", Description: "Sources", DomainID: "old"}, resp: &sdk.KnowledgeBase{ID: "kb", DomainID: "new"}}
+	require.NoError(t, runEdit(context.Background(), &EditOptions{DomainID: stringPtr("new")}, &cmdutil.FormatOptions{Mode: cmdutil.FormatJSON}, svc, "kb"))
+	assert.Equal(t, "new", svc.gotReq.DomainID)
+	assert.Equal(t, "Research", svc.gotReq.Name)
+	assert.Equal(t, "Sources", svc.gotReq.Description)
+}
+
 // When only --name is passed, the request must carry the user's new name
 // AND the current Description (preserved via the fetch). Sending Description=""
 // would clobber the server-side value because UpdateKnowledgeBaseRequest

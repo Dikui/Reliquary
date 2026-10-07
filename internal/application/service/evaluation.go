@@ -188,6 +188,7 @@ func (e *EvaluationService) Evaluation(ctx context.Context,
 		}
 
 		kb, err := e.knowledgeBaseService.CreateKnowledgeBase(ctx, &types.KnowledgeBase{
+			DomainID:         BuiltinAIKnowledgeDomainID,
 			Name:             "evaluation",
 			Description:      "evaluation",
 			EmbeddingModelID: embeddingModelID,
@@ -209,6 +210,7 @@ func (e *EvaluationService) Evaluation(ctx context.Context,
 		}
 
 		kb, err = e.knowledgeBaseService.CreateKnowledgeBase(ctx, &types.KnowledgeBase{
+			DomainID:         kb.DomainID,
 			Name:             "evaluation",
 			Description:      "evaluation",
 			EmbeddingModelID: kb.EmbeddingModelID,

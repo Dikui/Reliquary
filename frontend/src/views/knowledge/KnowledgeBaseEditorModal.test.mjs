@@ -30,3 +30,11 @@ test('shows a post-create hint after the first successful save', () => {
   assert.match(source, /settings-footer-note/)
   assert.match(source, /knowledgeEditor\.postCreateHint\.followUpDesc/)
 })
+
+test('knowledge base creation and editing require and send the selected domain', () => {
+  assert.match(source, /v-model="formData.domainId"/)
+  assert.match(source, /if \(!formData\.value\.domainId\)/)
+  assert.match(source, /domainId: kb\.domain_id \|\| ''/)
+  assert.match(source, /domain_id: formData\.value\.domainId/)
+  assert.match(source, /updateKnowledgeBase\(kbId, \{\s*domain_id: data\.domain_id/)
+})

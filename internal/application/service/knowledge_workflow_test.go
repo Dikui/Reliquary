@@ -164,8 +164,12 @@ func (s *workflowTestTaskQueue) Enqueue(task *asynq.Task, _ ...asynq.Option) (*a
 func workflowTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db := pgtest.OpenFixture(t)
-	require.NoError(t, db.AutoMigrate(&types.Tenant{}, &types.User{}, &types.KnowledgeBase{}, &types.Knowledge{}, &types.Chunk{}, &types.KnowledgeEvidence{}, &types.KnowledgeWorkflow{}, &types.KnowledgeWorkflowRun{}, &types.KnowledgeWorkflowStepRun{}, &types.KnowledgeWorkflowReport{}))
+	require.NoError(t, db.AutoMigrate(&types.Tenant{}, &types.User{}, &types.KnowledgeDomain{}, &types.KnowledgeBase{}, &types.Knowledge{}, &types.Chunk{}, &types.KnowledgeEvidence{}, &types.KnowledgeWorkflow{}, &types.KnowledgeWorkflowRun{}, &types.KnowledgeWorkflowStepRun{}, &types.KnowledgeWorkflowReport{}))
 	require.NoError(t, db.Create(&types.Tenant{ID: 1, Name: "tenant"}).Error)
+	domain := BuiltinAIKnowledgeDomain()
+	domain.ID = "ai"
+	domain.TenantID = 1
+	require.NoError(t, db.Create(domain).Error)
 	return db
 }
 
@@ -176,7 +180,7 @@ func workflowTestContext(user string, tenantID uint64) context.Context {
 
 func TestKnowledgeWorkflowPausesForReviewAndResumesWithoutRepeatingSuccess(t *testing.T) {
 	db := workflowTestDB(t)
-	kb := &workflowTestKBService{kb: &types.KnowledgeBase{ID: "kb", TenantID: 1, CreatorID: "owner"}}
+	kb := &workflowTestKBService{kb: &types.KnowledgeBase{ID: "kb", TenantID: 1, DomainID: "ai", CreatorID: "owner"}}
 	require.NoError(t, db.Create(kb.kb).Error)
 	require.NoError(t, db.Create(&types.Knowledge{ID: "source-1", TenantID: 1, KnowledgeBaseID: "kb", Title: "Source", ParseStatus: types.ParseStatusCompleted, Metadata: types.JSON(`{"intake":{"decision":"approved","source_info":{"original_url":"https://example.com/source"}}}`)}).Error)
 	require.NoError(t, db.Create(&types.KnowledgeEvidence{ID: "source-evidence", TenantID: 1, KnowledgeBaseID: "kb", KnowledgeID: "source-1", Version: 1, BodyHash: strings.Repeat("a", 64), Title: "Source", Body: "An approved evidence excerpt from the source.", OriginalURL: "https://example.com/source", Status: types.KnowledgeEvidenceCurrent, ExtractionStatus: types.KnowledgeExtractionPending, CreatedAt: time.Now()}).Error)
@@ -233,7 +237,7 @@ func TestKnowledgeWorkflowPausesForReviewAndResumesWithoutRepeatingSuccess(t *te
 
 func TestKnowledgeWorkflowWaitsForWebIntakeDecisionWithoutDuplicateIngest(t *testing.T) {
 	db := workflowTestDB(t)
-	kb := &workflowTestKBService{kb: &types.KnowledgeBase{ID: "kb", TenantID: 1, CreatorID: "owner", SummaryModelID: "summary-model"}}
+	kb := &workflowTestKBService{kb: &types.KnowledgeBase{ID: "kb", TenantID: 1, DomainID: "ai", CreatorID: "owner", SummaryModelID: "summary-model"}}
 	require.NoError(t, db.Create(kb.kb).Error)
 	queue := &workflowTestTaskQueue{}
 	item := &types.Knowledge{
@@ -404,7 +408,7 @@ func TestWorkflowReportRangeUsesTimezoneAndCalendarBoundaries(t *testing.T) {
 
 func TestKnowledgeWorkflowRejectsOtherTenantAndUnsupportedStep(t *testing.T) {
 	db := workflowTestDB(t)
-	kb := &workflowTestKBService{kb: &types.KnowledgeBase{ID: "kb", TenantID: 1, CreatorID: "owner"}}
+	kb := &workflowTestKBService{kb: &types.KnowledgeBase{ID: "kb", TenantID: 1, DomainID: "ai", CreatorID: "owner"}}
 	svc := NewKnowledgeWorkflowService(db, kb, workflowTestKnowledgeService{}, nil, nil, nil, nil,
 		workflowTestMembers{member: &types.TenantMember{UserID: "owner", TenantID: 1, Role: types.TenantRoleContributor, Status: types.TenantMemberStatusActive}}, &workflowTestTaskQueue{}, nil)
 	_, err := svc.Create(workflowTestContext("owner", 2), "kb", types.KnowledgeWorkflowInput{

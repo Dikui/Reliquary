@@ -3,6 +3,7 @@ package kb
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -15,7 +16,7 @@ import (
 // `kb update`. The result is the updated KnowledgeBase; mirrors the kb
 // top-level json tags.
 var kbEditFields = []string{
-	"id", "name", "type", "description",
+	"id", "name", "type", "description", "domain_id",
 	"is_temporary", "is_pinned",
 	"embedding_model_id", "summary_model_id",
 	"knowledge_count", "chunk_count",
@@ -31,6 +32,7 @@ type EditOptions struct {
 	// clear the description.
 	Name        *string
 	Description *string
+	DomainID    *string
 	Yes         bool // sourced from global -y/--yes persistent flag
 	DryRun      bool
 }
@@ -49,7 +51,7 @@ type EditService interface {
 // --description must be provided.
 func NewCmdEdit(f *cmdutil.Factory) *cobra.Command {
 	opts := &EditOptions{}
-	var name, desc string
+	var name, desc, domainID string
 	cmd := &cobra.Command{
 		Use:   "update <kb-id>",
 		Short: "Update a knowledge base's name or description",
@@ -74,16 +76,22 @@ to the user first.`,
 			if c.Flag("description").Changed {
 				opts.Description = &desc
 			}
+			if c.Flags().Changed("domain") {
+				opts.DomainID = &domainID
+				if strings.TrimSpace(domainID) == "" {
+					return cmdutil.NewError(cmdutil.CodeInputInvalidArgument, "--domain must contain a knowledge domain ID")
+				}
+			}
 			id := args[0]
 			// Validate pure-local "at least one mutation flag" before the
 			// dry-run gate so --dry-run rejects identically to the live path.
 			// Same typed Error as runEdit so live behavior is unchanged, just
 			// earlier.
-			if opts.Name == nil && opts.Description == nil {
+			if opts.Name == nil && opts.Description == nil && opts.DomainID == nil {
 				return &cmdutil.Error{
 					Code:    cmdutil.CodeInputMissingFlag,
-					Message: "kb update requires at least one of --name or --description",
-					Hint:    "pass --name <name> and/or --description <desc>",
+					Message: "kb update requires at least one of --name, --description or --domain",
+					Hint:    "pass --name <name>, --description <desc> or --domain <id>",
 				}
 			}
 			planArgs := map[string]any{"kb": id}
@@ -92,6 +100,9 @@ to the user first.`,
 			}
 			if opts.Description != nil {
 				planArgs["description"] = *opts.Description
+			}
+			if opts.DomainID != nil {
+				planArgs["domain_id"] = *opts.DomainID
 			}
 			if handled, err := cmdutil.HandleDryRun(c, opts.DryRun, cmdutil.DryRunPlan{
 				Action: "kb.update",
@@ -105,13 +116,14 @@ to the user first.`,
 			}
 			// Build a retry command from the flags the user actually passed so
 			// agents can re-invoke with -y after explicit human approval.
-			retryCmd := cmdutil.BuildRetryArgv(c, []string{"reliquary", "kb", "update", id}, "name", "description", "format")
+			retryCmd := cmdutil.BuildRetryArgv(c, []string{"reliquary", "kb", "update", id}, "name", "description", "domain", "format")
 			if err := cmdutil.ConfirmWrite(f.Prompter(), opts.Yes, fopts.WantsJSON(), "update", "knowledge base", id, "kb.update", retryCmd); err != nil {
 				return err
 			}
 			return runEdit(c.Context(), opts, fopts, cli, id)
 		},
 	}
+	cmd.Flags().StringVar(&domainID, "domain", "", "New knowledge domain ID")
 	cmd.Flags().StringVar(&name, "name", "", "New name (omit to leave unchanged)")
 	cmd.Flags().StringVar(&desc, "description", "", "New description (omit to leave unchanged)")
 	cmdutil.AddFormatFlag(cmd, kbEditFields...)
@@ -134,11 +146,14 @@ to the user first.`,
 }
 
 func runEdit(ctx context.Context, opts *EditOptions, fopts *cmdutil.FormatOptions, svc EditService, id string) error {
-	if opts.Name == nil && opts.Description == nil {
+	if opts.DomainID != nil && strings.TrimSpace(*opts.DomainID) == "" {
+		return cmdutil.NewError(cmdutil.CodeInputInvalidArgument, "--domain must contain a knowledge domain ID")
+	}
+	if opts.Name == nil && opts.Description == nil && opts.DomainID == nil {
 		return &cmdutil.Error{
 			Code:    cmdutil.CodeInputMissingFlag,
-			Message: "kb update requires at least one of --name or --description",
-			Hint:    "pass --name <name> and/or --description <desc>",
+			Message: "kb update requires at least one of --name, --description or --domain",
+			Hint:    "pass --name <name>, --description <desc> or --domain <id>",
 		}
 	}
 
@@ -152,12 +167,17 @@ func runEdit(ctx context.Context, opts *EditOptions, fopts *cmdutil.FormatOption
 	req := &sdk.UpdateKnowledgeBaseRequest{
 		Name:        current.Name,
 		Description: current.Description,
+		DomainID:    current.DomainID,
 	}
 	if opts.Name != nil {
 		req.Name = *opts.Name
 	}
 	if opts.Description != nil {
 		req.Description = *opts.Description
+	}
+
+	if opts.DomainID != nil {
+		req.DomainID = *opts.DomainID
 	}
 
 	updated, err := svc.UpdateKnowledgeBase(ctx, id, req)

@@ -20,6 +20,8 @@ import (
 // decision rather than silently inheriting "no preview".
 var dryRunExpectation = map[string]bool{
 	// --- mutations: MUST have --dry-run ---
+	"domain create": true, "domain edit": true, "domain delete": true,
+	"domain list": false, "domain view": false,
 	"kb create": true, "kb update": true, "kb delete": true, "kb pin": true, "kb unpin": true,
 	"kb config set": true, // binds models to a KB (state change)
 	"model create":  true, "model update": true, "model delete": true,

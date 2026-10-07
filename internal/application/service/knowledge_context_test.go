@@ -20,9 +20,13 @@ import (
 func knowledgeContextTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db := pgtest.OpenFixture(t)
-	require.NoError(t, db.Exec(`CREATE TABLE knowledge_bases (id TEXT PRIMARY KEY, tenant_id INTEGER NOT NULL, deleted_at TIMESTAMPTZ)`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE knowledge_bases (id TEXT PRIMARY KEY, tenant_id INTEGER NOT NULL, name TEXT NOT NULL DEFAULT 'Test knowledge base', domain_id TEXT NOT NULL DEFAULT 'ai', deleted_at TIMESTAMPTZ)`).Error)
 	require.NoError(t, db.AutoMigrate(&types.Knowledge{}, &types.KnowledgeEntity{}, &types.KnowledgeEntityAlias{}, &types.KnowledgeEvidence{},
-		&types.KnowledgeFact{}, &types.KnowledgeEvent{}, &types.KnowledgeEventEvidence{}, &types.KnowledgeAttention{}))
+		&types.KnowledgeFact{}, &types.KnowledgeEvent{}, &types.KnowledgeEventEvidence{}, &types.KnowledgeAttention{}, &types.KnowledgeDomain{}, &types.AuditLog{}))
+	domain := BuiltinAIKnowledgeDomain()
+	domain.ID = "ai"
+	domain.TenantID = 9
+	require.NoError(t, db.Create(domain).Error)
 	require.NoError(t, db.Exec(`INSERT INTO knowledge_bases(id,tenant_id) VALUES ('kb',9)`).Error)
 	return db
 }
