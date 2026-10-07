@@ -12,7 +12,7 @@ const (
 )
 
 // UserResourceFavorite is a per-(user, tenant) star on a single resource.
-// See migration 000047 for the schema rationale (composite key, no FK,
+// See the baseline migration for the schema rationale (composite key, no FK,
 // tenant-scoped on purpose).
 type UserResourceFavorite struct {
 	UserID       string    `json:"user_id"       gorm:"type:varchar(36);primaryKey"`

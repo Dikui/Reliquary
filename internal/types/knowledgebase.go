@@ -114,7 +114,7 @@ type KnowledgeBase struct {
 	// Pipelines: vector search, keyword search, wiki generation, knowledge graph extraction.
 	IndexingStrategy IndexingStrategy `yaml:"indexing_strategy"       json:"indexing_strategy"       gorm:"column:indexing_strategy;type:json"`
 	// IsPinned and PinnedAt are computed per-caller from user_kb_pins
-	// (see migration 000050). They used to be stored on the row itself,
+	// (see the baseline migration). They used to be stored on the row itself,
 	// which made pinning a workspace-wide ordering decision gated behind
 	// the kb-edit RBAC guard. The columns are still present in legacy
 	// schemas for rollback safety but are no longer read or written by

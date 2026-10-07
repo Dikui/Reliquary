@@ -14,7 +14,7 @@ import (
 	"reliquary/internal/types"
 )
 
-// spansTestDDL mirrors the PostgreSQL columns used from migration 000053.
+// spansTestDDL mirrors the PostgreSQL columns used from the baseline migration.
 const spansTestDDL = `
 CREATE TABLE IF NOT EXISTS knowledge_processing_spans (
     id              BIGSERIAL PRIMARY KEY,

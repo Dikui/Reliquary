@@ -2,10 +2,44 @@
 
 This guide is linked from the system info page when Reliquary's startup database
 migration fails. It covers the most common causes, how to diagnose them, and
-how to recover without losing data.
+how to recover within the current migration history.
 
 If none of these match your situation, jump to
 [Reporting an issue](#reporting-an-issue) at the bottom.
+
+---
+
+## Single baseline and database rebuild
+
+On 2026-10-07, migrations `000000` through `000098` from commit `45daf07`
+were compressed into `migrations/versioned/000000_init.up.sql` and its
+matching down migration. A fresh database reaches version `0` after applying
+this baseline. Future schema changes continue from version `000001`.
+
+The baseline includes `uuid-ossp`, `vector`, `pg_trgm`, and `pg_search`,
+78 application tables, and their final indexes, constraints, functions,
+and trigger. Running the old migration history on an empty database leaves
+every application table empty, so the baseline has no seed table rows.
+The old built-in agent inserts, RBAC membership inserts, and Skill catalog
+inserts all depended on existing tenants, users, or installed skills. The
+initial tenant sequence state is preserved so the first tenant ID is `10000`.
+
+Databases created with the old migration history **cannot be upgraded in
+place**, including old databases whose recorded version is already `0`.
+Stop Reliquary, provision a new empty database or recreate its PostgreSQL
+data volume, point the database configuration at it, and restart with
+`AUTO_MIGRATE=true`. Existing data is discarded during this rebuild. Do not
+use `force 0` or delete `schema_migrations` to claim that an old schema is
+the new baseline; changing the recorded version does not create the schema.
+
+The Compose PostgreSQL service uses `paradedb/paradedb:v0.22.2-pg17`.
+Both `docker-compose.yml` and `docker-compose.dev.yml` mount only their
+PostgreSQL data volume and do not mount `migrations/paradedb/` into
+`/docker-entrypoint-initdb.d`. Those files are legacy manual initialization
+and demonstration scripts, including a separate Chinese search demo table.
+They are not part of startup migrations and must not initialize the new
+baseline database. Startup and `scripts/migrate.sh` use only
+`migrations/versioned/`.
 
 ---
 
@@ -62,8 +96,8 @@ CREATE EXTENSION IF NOT EXISTS pg_search;    -- only on ParadeDB
 SELECT extname, extversion FROM pg_extension WHERE extname IN ('pg_trgm','vector','pg_search');
 ```
 
-Then restart Reliquary. The next startup will pick up where the failing
-migration left off.
+Then clear any dirty migration state as described below and restart
+Reliquary to retry the failing migration.
 
 If `CREATE EXTENSION` itself errors with **"could not open extension control
 file"** or **"permission denied"**, the extension is not installed on your
@@ -88,8 +122,10 @@ database is in dirty state at version N. ...
 # Check the recorded version
 make migrate-version
 
-# Force the version to the last successful migration (N - 1 in the message)
-make migrate-force version=<N-1>
+# After checking and cleaning up any partially applied objects, reset a failed
+# baseline at N = 0. For later migrations, use the previous available version
+# shown in the startup error instead of -1.
+make migrate-force version=-1
 
 # Re-run pending migrations
 make migrate-up
@@ -99,6 +135,14 @@ After that, restart Reliquary.
 
 Or set `AUTO_RECOVER_DIRTY=true` (the default in recent versions) and just
 restart — startup will perform the same `force` + retry automatically.
+
+For a failure at baseline version `0`, there is no previous migration:
+`make migrate-force version=-1` clears the recorded version so the baseline
+can run again. Clean up partial objects first, or rebuild this fresh
+database. Forcing version `0` would mark the baseline complete and skip it.
+The baseline creates tables directly and is not intended to be reapplied
+over an existing schema. Automatic dirty recovery resets the migration
+state; it does not remove partially created objects.
 
 ### 3. Insufficient privileges on the database role
 
@@ -129,9 +173,11 @@ migration will retry the index build.
 ### 5. Schema drift from manual edits
 
 If you previously edited tables / columns by hand and a later migration
-expects the original shape, it will fail with mismatched-type errors. The
-safest recovery is to align the live schema with the previous successful
-migration's `*.up.sql` and then re-run pending migrations.
+expects the original shape, it will fail with mismatched-type errors.
+Compare the live schema with `000000_init.up.sql` and any later successfully
+applied migrations, correct the drift, and retry the pending migration.
+If the database belongs to the old history ending at `000098`, follow the
+database rebuild procedure above.
 
 ---
 
@@ -142,7 +188,8 @@ migration's `*.up.sql` and then re-run pending migrations.
    container log shows the same content with stack context.
 2. **Identify the failing migration**: the version number in the error (or
    `make migrate-version`) points to a file under `migrations/versioned/`.
-   Open `migrations/versioned/<version>_*.up.sql` and look for the statement
+   Version `0` points to `migrations/versioned/000000_init.up.sql`.
+   For later versions, open the corresponding `*.up.sql` and find the statement
    matching the error type (extension, index, function, foreign key, …).
 3. **Run the failing statement manually** against the DB using `psql`. The
    error will be far more specific than the migration wrapper's.

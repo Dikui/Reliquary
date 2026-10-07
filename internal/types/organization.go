@@ -74,7 +74,7 @@ type Organization struct {
 	// the org's "owning tenant": its membership row in
 	// organization_tenant_members is undeletable / unchangeable so
 	// the org can never be orphaned even if the owner user later
-	// switches tenants or is soft-deleted. See migration 000046.
+	// switches tenants or is soft-deleted. See the baseline migration.
 	OwnerTenantID uint64 `json:"owner_tenant_id" gorm:"not null;index"`
 	// Unique invitation code for joining the organization
 	InviteCode string `json:"invite_code" gorm:"type:varchar(32);uniqueIndex"`
@@ -408,7 +408,7 @@ type OrganizationResponse struct {
 	Avatar      string `json:"avatar,omitempty"`
 	OwnerID     string `json:"owner_id"`
 	// OwnerTenantID is the persisted owner workspace of the organization
-	// (Plan 3, migration 000046). Frontend uses this to identify the
+	// (Plan 3, baseline schema). Frontend uses this to identify the
 	// "owner row" in the workspace-keyed members list — comparing
 	// member.tenant_id against owner_tenant_id is the post-Plan-3
 	// equivalent of the old member.user_id == owner_id check.

@@ -98,7 +98,7 @@ type TenantAPIKeyRepository interface {
 	UpdateAPIKeyHash(ctx context.Context, id uint64, hash string) error
 	UpdateAPIKeyLastUsed(ctx context.Context, id uint64, at time.Time) error
 	// ListKeysWithPlaceholderHash returns keys whose key_hash is still the
-	// migration placeholder (never authenticated since the 000065 upgrade),
+	// legacy migration placeholder (not yet authenticated),
 	// so the real SHA-256 hash can be computed and backfilled.
 	ListKeysWithPlaceholderHash(ctx context.Context) ([]*types.TenantAPIKey, error)
 	// HasKeysWithPlaceholderHash is a cheap existence probe used at startup

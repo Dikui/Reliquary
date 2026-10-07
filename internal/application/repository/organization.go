@@ -21,7 +21,7 @@ var (
 // organizationRepository implements OrganizationRepository.
 //
 // Plan 3 of #1303 lifts membership from per-user to per-tenant (see
-// migration 000045). All "member" methods on this repo now operate on
+// the baseline migration). All "member" methods on this repo now operate on
 // the (org, tenant) tuple; the underlying table is
 // organization_tenant_members.
 type organizationRepository struct {

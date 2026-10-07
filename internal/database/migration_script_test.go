@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestMigrationScriptEncodesPasswordAsData(t *testing.T) {
+func TestMigrationScriptEncodesPasswordAndResetsBaseline(t *testing.T) {
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("migration password encoding requires python3")
 	}
@@ -49,6 +49,17 @@ func TestMigrationScriptEncodesPasswordAsData(t *testing.T) {
 	decodedPassword, ok := databaseURL.User.Password()
 	require.True(t, ok)
 	require.Equal(t, password, decodedPassword)
+	require.NotContains(t, string(output), password)
+	require.NotContains(t, string(output), args[3], "the script must not print credentials")
+
+	force := exec.Command("bash", script, "force", "-1")
+	force.Env = cmd.Env
+	output, err = force.CombinedOutput()
+	require.NoError(t, err, "%s", output)
+	arguments, err = os.ReadFile(capture)
+	require.NoError(t, err)
+	forceArgs := strings.Split(strings.TrimSuffix(string(arguments), "\n"), "\n")
+	require.Equal(t, append(args[:4], "force", "--", "-1"), forceArgs)
 	require.NotContains(t, string(output), password)
 	require.NotContains(t, string(output), args[3], "the script must not print credentials")
 }

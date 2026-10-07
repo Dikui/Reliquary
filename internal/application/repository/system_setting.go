@@ -11,7 +11,7 @@ import (
 )
 
 // systemSettingRepository implements interfaces.SystemSettingRepository
-// against the system_settings table (migration 000053). The table is
+// against the system_settings table (the baseline migration). The table is
 // system-scoped (no tenant_id column) and intentionally tiny — single-
 // digit rows in P1 — so List does not paginate.
 type systemSettingRepository struct {

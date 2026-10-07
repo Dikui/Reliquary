@@ -19,7 +19,7 @@ import (
 // knowledgesTestDDL mirrors the columns of `knowledges` that
 // SetFinalizing / FinalizeSubtask / UpdateKnowledge actually read or write.
 // We inline the DDL (instead of AutoMigrate) so the schema is explicit,
-// and we include pending_subtasks_count from migration 000056 plus the
+// and we include pending_subtasks_count from the baseline migration plus the
 // processing/finalizing/completed columns the helpers care about.
 const knowledgesTestDDL = `
 CREATE TABLE IF NOT EXISTS knowledges (

@@ -18365,7 +18365,7 @@ const docTemplate = `{
                     ]
                 },
                 "is_pinned": {
-                    "description": "IsPinned and PinnedAt are computed per-caller from user_kb_pins\n(see migration 000050). They used to be stored on the row itself,\nwhich made pinning a workspace-wide ordering decision gated behind\nthe kb-edit RBAC guard. The columns are still present in legacy\nschemas for rollback safety but are no longer read or written by\nthe application — both fields are tagged ` + "`" + `gorm:\"-\"` + "`" + ` so GORM\nignores them on every CRUD call and the list handler stamps them\nafter enriching with the caller's pin set.",
+                    "description": "IsPinned and PinnedAt are computed per-caller from user_kb_pins\n(see the baseline migration). They used to be stored on the row itself,\nwhich made pinning a workspace-wide ordering decision gated behind\nthe kb-edit RBAC guard. The columns are still present in legacy\nschemas for rollback safety but are no longer read or written by\nthe application — both fields are tagged ` + "`" + `gorm:\"-\"` + "`" + ` so GORM\nignores them on every CRUD call and the list handler stamps them\nafter enriching with the caller's pin set.",
                     "type": "boolean"
                 },
                 "is_processing": {
@@ -19673,7 +19673,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "owner_tenant_id": {
-                    "description": "OwnerTenantID is the persisted owner workspace of the organization\n(Plan 3, migration 000046). Frontend uses this to identify the\n\"owner row\" in the workspace-keyed members list — comparing\nmember.tenant_id against owner_tenant_id is the post-Plan-3\nequivalent of the old member.user_id == owner_id check.",
+                    "description": "OwnerTenantID is the persisted owner workspace of the organization\n(Plan 3, baseline schema). Frontend uses this to identify the\n\"owner row\" in the workspace-keyed members list — comparing\nmember.tenant_id against owner_tenant_id is the post-Plan-3\nequivalent of the old member.user_id == owner_id check.",
                     "type": "integer"
                 },
                 "pending_join_request_count": {

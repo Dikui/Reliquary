@@ -37,9 +37,9 @@ Owner 的数量约束是“至少一位”，而不是“只能一位”。系�
 
 ## 三、资源归属模型
 
-光有角色矩阵不够，否则 Contributor 之间可以互相破坏。为此在迁移 `000043` 中给关键表加了 `creator_id`：
+光有角色矩阵不够，否则 Contributor 之间可以互相破坏。为此在数据库基线 `000000_init` 中为关键表定义了 `creator_id`：
 
-- `knowledge_bases.creator_id` —— 老数据回填为该空间的 Owner；空串/NULL 表示「空间共有，仅 Admin+ 可变更」。
+- `knowledge_bases.creator_id` —— 创建者标识；空串/NULL 表示「空间共有，仅 Admin+ 可变更」。
 - `custom_agents.creator_id` —— Agent 创建者。
 - `custom_agents.runnable_by_viewer` —— 默认 `true`，允许 Viewer 在对话中调用该 Agent；置 `false` 则提升到 Contributor 起步。
 
@@ -178,7 +178,7 @@ export RELIQUARY_TENANT_ENABLE_RBAC=false
 # 重启服务即可回到观察模式
 ```
 
-`tenant_members` 行与 `creator_id` 列保留，下次再启用无需重做回填。除非彻底放弃这个功能，否则**不要**回滚 `000043` / `000044` 迁移——`down.sql` 会丢弃 `tenant_members` 和 `audit_logs` 整张表。
+`tenant_members` 行与 `creator_id` 列保留，下次再启用无需修改数据库。**不要**通过回滚数据库基线关闭 RBAC——`000000_init.down.sql` 会删除全部业务表，包括 `tenant_members` 和 `audit_logs`。
 
 ## 八、前端表现
 

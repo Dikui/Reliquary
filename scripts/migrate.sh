@@ -20,7 +20,7 @@ DB_USER=${DB_USER:-postgres}
 DB_PASSWORD=${DB_PASSWORD:-postgres}
 DB_NAME=${DB_NAME:-Reliquary}
 
-# Use versioned migrations directory
+# The 2026-10-07 baseline starts at version 0. Older databases must be recreated.
 MIGRATIONS_DIR="${MIGRATIONS_DIR:-migrations/versioned}"
 
 # Check if migrate tool is installed
@@ -94,11 +94,13 @@ case "$1" in
         if [ -z "$2" ]; then
             echo "Error: Version number is required"
             echo "Usage: $0 force <version>"
-            echo "Note: Use -1 to reset to no version (allows re-running all migrations)"
+            echo "Note: After removing partial migration objects, use -1 to retry the baseline"
+            echo "Force only changes migration history; older databases must be recreated"
             exit 1
         fi
         VERSION="$2"
         echo "Forcing migration version to $VERSION..."
+        echo "Force only changes migration history; resolve partial SQL changes before retrying"
         # Use env to pass the command, avoiding shell flag parsing issues with negative numbers
         env migrate -path "${MIGRATIONS_DIR}" -database "${DB_URL}" force -- "$VERSION"
         ;;

@@ -213,7 +213,7 @@ migrate-create:
 migrate-force:
 	@if [ -z "$(version)" ]; then \
 		echo "Error: version is required"; \
-		echo "Usage: make migrate-force version=4"; \
+		echo "Usage: make migrate-force version=0 (completed baseline) or version=-1 (retry after cleanup)"; \
 		exit 1; \
 	fi
 	./scripts/migrate.sh force $(version)
@@ -221,7 +221,7 @@ migrate-force:
 migrate-goto:
 	@if [ -z "$(version)" ]; then \
 		echo "Error: version is required"; \
-		echo "Usage: make migrate-goto version=3"; \
+		echo "Usage: make migrate-goto version=0"; \
 		exit 1; \
 	fi
 	./scripts/migrate.sh goto $(version)

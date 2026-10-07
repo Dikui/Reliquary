@@ -216,7 +216,7 @@ func RegisterKnowledgeBaseRoutes(r *gin.RouterGroup, handler *handler.KnowledgeB
 		kbManagement.PUT("/:id", g.OwnedKBOrAdmin(), g.KBAccessWrite("id"), handler.UpdateKnowledgeBase)
 		kbManagement.DELETE("/:id", g.OwnedKBOrAdmin(), g.KBAccessWrite("id"), handler.DeleteKnowledgeBase)
 		// 置顶/取消置顶知识库 — 创建者本人 OR Admin+ 且对 KB 有 write 权限
-		// Pin state is now per-(user, kb) (migration 000050). Anyone with
+		// Pin state is now per-(user, kb) (the baseline migration). Anyone with
 		// at least Viewer-level read access to the KB — including users
 		// who reached it via a shared agent — may pin it for themselves;
 		// no edit permission is required. The OwnedKBOrAdmin guard was

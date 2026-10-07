@@ -1979,8 +1979,8 @@ func formatExistingTaxonomyForPrompt(paths [][]string) string {
 // state before re-ingest so the reduce phase can reconcile additions vs
 // retractions.
 //
-// Backed by idx_wiki_pages_source_refs (GIN jsonb_path_ops, migration
-// 000041) and the legacy text-index fallback for "kid|title" entries.
+// Backed by idx_wiki_pages_source_refs (GIN jsonb_path_ops, baseline
+// schema) and the legacy text-index fallback for "kid|title" entries.
 // We project to slugs only — no need to load full row content for a
 // per-doc snapshot.
 //
@@ -2288,9 +2288,8 @@ func xmlEscape(s string) string {
 // the candidate set. This replaces the legacy "ListAllPages + Go-side
 // surface-form Jaccard" path that scaled O(P × N) on large KBs.
 //
-// The KB-id-keyed query relies on idx_wiki_pages_title_trgm (added in
-// migration 000041); pg_search environments load pg_trgm in the same
-// init step (see migrations/paradedb/00-init-db.sql).
+// The KB-id-keyed query relies on idx_wiki_pages_title_trgm and pg_trgm,
+// both created by migrations/versioned/000000_init.up.sql.
 func (s *wikiIngestService) deduplicateExtractedBatch(
 	ctx context.Context,
 	chatModel chat.Chat,

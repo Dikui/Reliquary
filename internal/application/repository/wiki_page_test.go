@@ -17,7 +17,7 @@ import (
 )
 
 // wikiPagesTestDDL is a minimal PostgreSQL subset of the production wiki_pages
-// DDL (migrations/versioned/000037_wiki_and_indexing.up.sql).
+// DDL (migrations/versioned/000000_init.up.sql).
 const wikiPagesTestDDL = `
 CREATE TABLE IF NOT EXISTS wiki_pages (
     id                VARCHAR(36) PRIMARY KEY,
@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS wiki_pages (
 `
 
 // wikiPageRevisionsTestDDL mirrors the production wiki_page_revisions DDL
-// (migrations/versioned/000075_wiki_page_revisions.up.sql) for PostgreSQL.
+// (migrations/versioned/000000_init.up.sql) for PostgreSQL.
 const wikiPageRevisionsTestDDL = `
 CREATE TABLE IF NOT EXISTS wiki_page_revisions (
     id                VARCHAR(36) PRIMARY KEY,

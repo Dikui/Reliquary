@@ -69,7 +69,7 @@ type TenantInvitation struct {
 	// share-link rows the field is the empty-string sentinel — there
 	// is no specific invitee yet; whoever holds the link can register.
 	// The (tenant_id, invitee_user_id) partial unique index in
-	// migration 000054 was relaxed to skip empty values so multiple
+	// the baseline migration skips empty values so multiple
 	// share-link rows can coexist per tenant.
 	InviteeUserID string `json:"invitee_user_id" gorm:"type:varchar(36);not null;default:'';index"`
 	// Token holds the plaintext registration token for share-link

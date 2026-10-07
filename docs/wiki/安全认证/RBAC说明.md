@@ -41,9 +41,9 @@ Owner 的数量约束是“至少一位”，而不是“只能一位”。系�
 
 ## 资源归属
 
-迁移 `000043` 在关键表加上 `creator_id`：
+数据库基线 `000000_init` 在关键表定义 `creator_id`：
 
-- `knowledge_bases.creator_id` —— 老数据回填为该空间的 Owner；
+- `knowledge_bases.creator_id` —— 创建者标识；空值表示空间共有资源；
 - `custom_agents.creator_id` + `runnable_by_viewer`（默认 `true`，允许 Viewer 在对话中调用）。
 
 子资源沿 `chunk → knowledge → kb → creator_id` 链回溯。

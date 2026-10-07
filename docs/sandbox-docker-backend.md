@@ -193,7 +193,7 @@ socket 改成非 root 组的 `660`。
 回收路径依赖 ledger 能给每张快照命名，而 `snapshot_id` 只有在 provider 应答之后才写得下来。
 进程死在 commit 与那次写入之间，就会留下一张谁都叫不出名字的快照：`PruneSupersededSnapshots`
 因为状态是 `building` 而跳过它，`ReconcileSnapshots` 只告警不删，配置删除时空 `snapshot_id`
-被当成「无需释放」。因此 `planned_name` 在 commit **之前**就落库（迁移 000088），之后靠
+被当成「无需释放」。因此 `planned_name` 在 commit **之前**就落库（字段已纳入 `000000_init` 基线），之后靠
 provider 的 `ListSnapshots` 按名字认领：Cube / E2B 会把请求的名字回显在 `Names` 里，Docker 的
 ID 本身就是这个名字加上 `reliquary-skill/` 前缀。两条路径会用它——周期清理里的
 `reapAbandonedBuilds`，以及配置删除时的 `resolveAbandonedBuildIDs`（配置一删，周期清理就再也

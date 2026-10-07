@@ -1468,7 +1468,7 @@ definitions:
       is_pinned:
         description: |-
           IsPinned and PinnedAt are computed per-caller from user_kb_pins
-          (see migration 000050). They used to be stored on the row itself,
+          (see the baseline migration). They used to be stored on the row itself,
           which made pinning a workspace-wide ordering decision gated behind
           the kb-edit RBAC guard. The columns are still present in legacy
           schemas for rollback safety but are no longer read or written by
@@ -2515,7 +2515,7 @@ definitions:
       owner_tenant_id:
         description: |-
           OwnerTenantID is the persisted owner workspace of the organization
-          (Plan 3, migration 000046). Frontend uses this to identify the
+          (Plan 3, baseline schema). Frontend uses this to identify the
           "owner row" in the workspace-keyed members list — comparing
           member.tenant_id against owner_tenant_id is the post-Plan-3
           equivalent of the old member.user_id == owner_id check.

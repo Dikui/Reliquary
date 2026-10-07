@@ -23,7 +23,7 @@ docker compose up -d --build
 使用本项目请采用上述源码构建方式。
 
 Go 主模块为 `reliquary`，CLI 为 `reliquary/cli`，SDK 为 `reliquary/client`；
-环境变量前缀为 `RELIQUARY_`。此版本面向全新安装，不自动迁移旧 WeKnora 数据目录、数据库或浏览器设置。
+环境变量前缀为 `RELIQUARY_`。此版本面向全新安装，不自动迁移旧 WeKnora 数据目录、数据库或浏览器设置。2026-10-07 已将 PostgreSQL `000000` 至 `000098` 迁移压缩为新的 `000000_init` 基线，旧 Reliquary 数据库也必须重建，不能原地升级；操作说明见 [数据库迁移排障](docs/migration-troubleshooting.md#single-baseline-and-database-rebuild)。
 
 知识库新增对象与事实、证据历史、多源事件，以及定时研究和报告工作流。架构、配置、数据升级和使用方法见 [知识库融合说明](docs/知识库融合说明.md)。
 

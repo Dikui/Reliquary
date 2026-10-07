@@ -16,7 +16,7 @@ import (
 )
 
 // taskPendingOpsTestDDL mirrors the production schema in
-// migrations/versioned/000041_task_queue_and_wiki_indexes.up.sql. BIGSERIAL
+// migrations/versioned/000000_init.up.sql. BIGSERIAL
 // preserves the increasing ID semantics used by PeekBatch and cursor pagination.
 const taskPendingOpsTestDDL = `
 CREATE TABLE IF NOT EXISTS task_pending_ops (

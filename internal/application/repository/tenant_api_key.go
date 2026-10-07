@@ -128,10 +128,9 @@ func (r *tenantAPIKeyRepository) UpdateAPIKeyHash(ctx context.Context, id uint64
 		Update("key_hash", hash).Error
 }
 
-// placeholderKeyHashPrefix mirrors the value written by migration
-// 000065_tenant_api_keys.up.sql ('migrated-tenant-' || id). Rows still
-// carrying it have never been authenticated since the upgrade, so their
-// key_hash is not the real SHA-256 of the API key yet.
+// placeholderKeyHashPrefix identifies legacy keys whose hash is a
+// placeholder ('migrated-tenant-' || id). Rows still carrying it do
+// not yet contain a real SHA-256 hash of the API key.
 const placeholderKeyHashPrefix = "migrated-tenant-"
 
 func (r *tenantAPIKeyRepository) HasKeysWithPlaceholderHash(ctx context.Context) (bool, error) {

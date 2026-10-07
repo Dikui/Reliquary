@@ -155,7 +155,7 @@ func (r *userRepository) ListUsers(ctx context.Context, offset, limit int) ([]*t
 
 // ListSystemAdmins lists users where is_system_admin = true.
 //
-// Walks idx_users_is_system_admin (created in migration 000052), so the
+// Walks idx_users_is_system_admin (created in the baseline migration), so the
 // query stays cheap even on a large users table — only the small subset
 // of system admins is scanned. Returns total count alongside the page so
 // the management UI can render pagination without a second roundtrip.

@@ -9,7 +9,7 @@ import (
 // UserResourceFavoriteRepository is the storage contract for per-user
 // favorited resources. Implementations are expected to be tenant-aware
 // (queries always include tenant_id) so a user switching tenants sees
-// only that tenant's favorites — matches the PK shape in migration 000047.
+// only that tenant's favorites — matches the PK shape in the baseline migration.
 type UserResourceFavoriteRepository interface {
 	// List returns favorites for (userID, tenantID, resourceType), newest first.
 	List(ctx context.Context, userID string, tenantID uint64, resourceType string) ([]*types.UserResourceFavorite, error)

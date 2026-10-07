@@ -11,7 +11,7 @@ import (
 // SystemSetting is a platform-wide (NOT workspace-scoped) tunable that
 // SystemAdmins can edit at runtime via the management UI without
 // restarting the service. Persisted in the system_settings table
-// (migration 000053).
+// (the baseline migration).
 //
 // The 3-tier resolver in service.SystemSettingService reads in priority
 // order: DB row > os.Getenv(EnvName) > built-in default. The Service
@@ -61,7 +61,7 @@ type SystemSetting struct {
 	LastModifiedByName string `gorm:"-" json:"last_modified_by_name,omitempty"`
 }
 
-// TableName pins the schema to migration 000053 — GORM's default
+// TableName pins the schema to the baseline migration — GORM's default
 // pluralisation would yield "system_settings" anyway, but spelling it
 // out shields against future renames.
 func (SystemSetting) TableName() string {

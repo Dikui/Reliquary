@@ -87,7 +87,7 @@ internal/router/
 └── scheduler.go        # Asynq task scheduling
 
 migrations/versioned/
-└── 000028_datasource_tables.up/down.sql  # Database schema
+└── 000000_init.up/down.sql  # Database schema
 ```
 
 ## Data Models

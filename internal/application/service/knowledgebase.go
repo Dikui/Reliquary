@@ -570,8 +570,8 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 }
 
 // TogglePinKnowledgeBase toggles whether the calling user has pinned
-// this knowledge base. Pin state is per-(user, kb) as of migration
-// 000050; previously this method flipped a tenant-wide column on the
+// this knowledge base. Pin state is per-(user, kb) in the baseline
+// schema; previously this method flipped a tenant-wide column on the
 // KB row which broke down under RBAC (only Admin/creator could pin,
 // and the pin reordered the list for everyone in the tenant). The
 // public signature is unchanged so the HTTP handler / CLI / SDK don't

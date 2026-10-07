@@ -497,7 +497,7 @@ func (r *wikiPageRepository) ListBySourceRef(ctx context.Context, kbID string, s
 //
 // Backed by idx_wiki_pages_source_refs (GIN jsonb_path_ops) for the
 // containment branch and idx_wiki_pages_source_refs_text for the legacy
-// text-LIKE branch — both added in migration 000041.
+// text-LIKE branch — both added in the baseline migration.
 func (r *wikiPageRepository) ListSlugsBySourceRef(ctx context.Context, kbID string, sourceKnowledgeID string) ([]string, error) {
 	needle, err := json.Marshal([]string{sourceKnowledgeID})
 	if err != nil {
@@ -996,7 +996,7 @@ func (r *wikiPageRepository) ListByTypeRecent(
 // FindSimilarPages returns the top-k entity/concept pages whose lowercase
 // title is most similar to the given query under PostgreSQL pg_trgm
 // trigram similarity. Backed by idx_wiki_pages_title_trgm (GIN
-// gin_trgm_ops, migration 000041). Used by the dedup pre-filter to
+// gin_trgm_ops, the baseline migration). Used by the dedup pre-filter to
 // surface candidate merge targets without loading every entity/concept
 // page into Go.
 //

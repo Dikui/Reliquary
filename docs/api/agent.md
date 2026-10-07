@@ -513,7 +513,7 @@ curl --location 'http://localhost:8080/api/v1/agents/placeholders' \
 | `question_suggestions.follow_ups.knowledge_fallback` | bool | true | 模型失败时使用知识库候选补位 |
 | `question_suggestions.follow_ups.allow_regenerate` | bool | false | 是否允许用户换一批 |
 
-旧 `suggested_prompts` 会在数据库迁移时一次性写入 `starters.items`，API 不再接受该字段。
+API 不再接受旧 `suggested_prompts` 字段，请使用 `question_suggestions.starters.items`。当前数据库使用 `000000_init` 新基线，旧数据库必须重建，不再执行旧字段回填。
 
 ### 高级设置
 

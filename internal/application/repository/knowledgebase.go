@@ -76,7 +76,7 @@ func (r *knowledgeBaseRepository) ListKnowledgeBases(ctx context.Context) ([]*ty
 //
 // Ordering used to also include `is_pinned DESC, pinned_at DESC` so the
 // repository would return tenant-wide pinned rows first. That column is
-// no longer the source of truth (see migration 000050) — pin state is
+// no longer the source of truth (see the baseline migration) — pin state is
 // now per (user, kb) and applied by the service layer after enrichment.
 // We keep `created_at DESC` here so callers that don't enrich (chat
 // pipeline, agent editor, IM commands) still get a stable ordering.

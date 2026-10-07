@@ -888,7 +888,7 @@ func (h *OrganizationHandler) LeaveOrganization(c *gin.Context) {
 	// Check if caller's tenant is the owner tenant. Post-Plan-3, "owner
 	// can't leave" is a tenant-level rule: the owner_tenant_id row is the
 	// one that may not depart the org. Legacy rows with OwnerTenantID == 0
-	// fall back to the user-level rule so we don't break pre-000046 data.
+	// fall back to the user-level rule for rows without a persisted owner tenant.
 	org, err := h.orgService.GetOrganization(ctx, orgID)
 	if err != nil {
 		c.Error(apperrors.NewNotFoundError("Organization not found"))
@@ -1767,7 +1767,7 @@ func (h *OrganizationHandler) toOrgResponse(ctx context.Context, org *types.Orga
 	currentTenantID := types.MustTenantIDFromContext(ctx)
 	// Post-Plan-3 the canonical "is the caller the owner side?" check
 	// is tenant-based: org.OwnerTenantID is the pinned column; legacy
-	// rows with OwnerTenantID == 0 (pre-000046, unlikely in prod)
+	// rows with OwnerTenantID == 0 (unlikely with the baseline schema)
 	// fall back to the user-id check so we don't show the wrong tenant
 	// as "owner" in those edge cases.
 	isOwner := false
