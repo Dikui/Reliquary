@@ -274,21 +274,26 @@ func TestP3EventRecallRequiresObjectsAndSevenDayWindow(t *testing.T) {
 	db, ctx, svc := p3ContextFixture(t)
 	timeAt := time.Date(2026, 10, 7, 0, 0, 0, 0, time.UTC)
 	old := timeAt.Add(-8 * 24 * time.Hour)
+	require.NoError(t, db.Create(&[]types.KnowledgeEntity{p3Entity("object", "Object", "company"), p3Entity("other", "Other", "company")}).Error)
 	records := []types.KnowledgeEvent{{ID: "inside", TenantID: 1, KnowledgeBaseID: "p3-kb", Title: "Inside", OccurredAt: &timeAt, EntityIDs: types.StringArray{"object"}, CreatedAt: time.Now(), UpdatedAt: time.Now()}, {ID: "outside", TenantID: 1, KnowledgeBaseID: "p3-kb", Title: "Outside", OccurredAt: &old, EntityIDs: types.StringArray{"object"}, CreatedAt: time.Now(), UpdatedAt: time.Now()}, {ID: "other-object", TenantID: 1, KnowledgeBaseID: "p3-kb", Title: "Other", OccurredAt: &timeAt, EntityIDs: types.StringArray{"other"}, CreatedAt: time.Now(), UpdatedAt: time.Now()}, {ID: "no-date", TenantID: 1, KnowledgeBaseID: "p3-kb", Title: "Unknown", EntityIDs: types.StringArray{"object"}, CreatedAt: time.Now(), UpdatedAt: time.Now()}}
 	require.NoError(t, db.Create(&records).Error)
+	seedContextEventEntities(t, db, records...)
 	input := contextExtractedEvent{Title: "Object release", OccurredAt: "2026-10-07", Quote: "Object release on 2026-10-07", EntityMentions: []string{"Object"}}
 	candidates, err := svc.recallContextEvents(ctx, 1, input, types.StringArray{"object"})
 	require.NoError(t, err)
 	require.Len(t, candidates, 2)
 	for _, candidate := range candidates {
 		require.Contains(t, []string{"inside", "no-date"}, candidate.ID)
+		require.Equal(t, types.StringArray{"object"}, candidate.EntityIDs, "judgment payloads retain the recalled event's objects")
 	}
 	for _, source := range []struct{ id, published string }{{"published-inside", "2026-10-08"}, {"published-outside", "2026-09-29"}, {"published-invalid", "2026-02-31"}} {
 		event := types.KnowledgeEvent{ID: source.id, TenantID: 1, KnowledgeBaseID: "p3-kb", Title: source.id, EntityIDs: types.StringArray{"object"}, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 		require.NoError(t, db.Create(&event).Error)
 		evidence := p3Evidence(t, db, source.id)
 		require.NoError(t, db.Model(evidence).Update("published_at", source.published).Error)
-		require.NoError(t, db.Create(&types.KnowledgeEventEvidence{ID: uuid.NewString(), TenantID: 1, KnowledgeBaseID: "p3-kb", EventID: event.ID, EvidenceID: evidence.ID, EntityIDs: types.StringArray{"object"}, CreatedAt: time.Now()}).Error)
+		link := types.KnowledgeEventEvidence{ID: uuid.NewString(), TenantID: 1, KnowledgeBaseID: "p3-kb", EventID: event.ID, EvidenceID: evidence.ID, EntityIDs: types.StringArray{"object"}, CreatedAt: time.Now()}
+		require.NoError(t, db.Create(&link).Error)
+		seedContextEventEvidenceEntities(t, db, link)
 	}
 	candidates, err = svc.recallContextEvents(ctx, 1, input, types.StringArray{"object"})
 	require.NoError(t, err)
@@ -397,6 +402,7 @@ func TestP3ConcurrentMessagesUpdateEventsInOppositeOrders(t *testing.T) {
 	occurred := time.Date(2026, 10, 7, 0, 0, 0, 0, time.UTC)
 	records := []types.KnowledgeEvent{{ID: "event-a", TenantID: 1, KnowledgeBaseID: "p3-kb", Title: "Change one", OccurredAt: &occurred, EntityIDs: types.StringArray{"alpha", "beta"}, EvidenceIDs: types.StringArray{}, CreatedAt: time.Now(), UpdatedAt: time.Now()}, {ID: "event-b", TenantID: 1, KnowledgeBaseID: "p3-kb", Title: "Change two", OccurredAt: &occurred, EntityIDs: types.StringArray{"alpha", "beta"}, EvidenceIDs: types.StringArray{}, CreatedAt: time.Now(), UpdatedAt: time.Now()}}
 	require.NoError(t, db.Create(&records).Error)
+	seedContextEventEntities(t, db, records...)
 	bodyAlpha := "Alpha changed one. Alpha changed two."
 	bodyBeta := "Beta changed one. Beta changed two."
 	sources := []*types.Knowledge{p3Message(t, db, "events-alpha", bodyAlpha), p3Message(t, db, "events-beta", bodyBeta)}
@@ -460,6 +466,7 @@ func TestP3ConcurrentMessagesUpdateEventsInOppositeOrders(t *testing.T) {
 	require.Equal(t, 4, model.count("event"))
 	var events []types.KnowledgeEvent
 	require.NoError(t, db.Find(&events).Error)
+	require.NoError(t, loadContextEventEntityIDs(db, 1, events))
 	require.Len(t, events, 2)
 	for _, event := range events {
 		require.Len(t, event.EvidenceIDs, 2)

@@ -153,26 +153,22 @@ func (s *KnowledgeContextService) MergeEntities(ctx context.Context, kbID, keepE
 		if err := tx.Where("tenant_id = ? AND (subject_entity_id = ? OR object_entity_id = ?)", tenantID, merged.ID, merged.ID).Find(&previousFacts).Error; err != nil {
 			return err
 		}
-		if err := tx.Where("tenant_id = ?", tenantID).Find(&previousLinks).Error; err != nil {
+		if err := tx.Where(`tenant_id = ? AND (event_id, evidence_id) IN (
+			SELECT event_id, evidence_id FROM knowledge_context_event_evidence_entities WHERE tenant_id = ? AND entity_id = ?
+		)`, tenantID, tenantID, merged.ID).Find(&previousLinks).Error; err != nil {
 			return err
 		}
-		if err := tx.Where("tenant_id = ?", tenantID).Find(&previousEvents).Error; err != nil {
+		if err := loadContextEventEvidenceEntityIDs(tx, tenantID, previousLinks); err != nil {
 			return err
 		}
-		filteredLinks := previousLinks[:0]
-		for _, link := range previousLinks {
-			if containsString(link.EntityIDs, merged.ID) {
-				filteredLinks = append(filteredLinks, link)
-			}
+		if err := tx.Where(`tenant_id = ? AND id IN (
+			SELECT event_id FROM knowledge_context_event_entities WHERE tenant_id = ? AND entity_id = ?
+		)`, tenantID, tenantID, merged.ID).Find(&previousEvents).Error; err != nil {
+			return err
 		}
-		previousLinks = filteredLinks
-		filteredEvents := previousEvents[:0]
-		for _, event := range previousEvents {
-			if containsString(event.EntityIDs, merged.ID) {
-				filteredEvents = append(filteredEvents, event)
-			}
+		if err := loadContextEventEntityIDs(tx, tenantID, previousEvents); err != nil {
+			return err
 		}
-		previousEvents = filteredEvents
 		var aliases []types.KnowledgeEntityAlias
 		if err := tx.Where("tenant_id = ? AND entity_id = ?", tenantID, merged.ID).Find(&aliases).Error; err != nil {
 			return err
@@ -202,43 +198,8 @@ func (s *KnowledgeContextService) MergeEntities(ctx context.Context, kbID, keepE
 		if err := tx.Model(&types.KnowledgeFact{}).Where("tenant_id = ? AND object_entity_id = ?", tenantID, merged.ID).Update("object_entity_id", keep.ID).Error; err != nil {
 			return err
 		}
-		var eventLinks []types.KnowledgeEventEvidence
-		if err := tx.Where("tenant_id = ?", tenantID).Find(&eventLinks).Error; err != nil {
+		if err := mergeContextEventEntities(tx, tenantID, keep.ID, merged.ID); err != nil {
 			return err
-		}
-		for _, link := range eventLinks {
-			if !containsString(link.EntityIDs, merged.ID) {
-				continue
-			}
-			link.EntityIDs = appendUniqueContextString(link.EntityIDs, keep.ID)
-			out := types.StringArray{}
-			for _, id := range link.EntityIDs {
-				if id != merged.ID {
-					out = appendUniqueContextString(out, id)
-				}
-			}
-			if err := tx.Model(&link).Update("entity_ids", out).Error; err != nil {
-				return err
-			}
-		}
-		var events []types.KnowledgeEvent
-		if err := tx.Where("tenant_id = ?", tenantID).Find(&events).Error; err != nil {
-			return err
-		}
-		for _, event := range events {
-			if !containsString(event.EntityIDs, merged.ID) {
-				continue
-			}
-			event.EntityIDs = appendUniqueContextString(event.EntityIDs, keep.ID)
-			out := types.StringArray{}
-			for _, id := range event.EntityIDs {
-				if id != merged.ID {
-					out = appendUniqueContextString(out, id)
-				}
-			}
-			if err := tx.Model(&event).Update("entity_ids", out).Error; err != nil {
-				return err
-			}
 		}
 		if err := tx.Model(&merged).Update("merged_into_id", keep.ID).Error; err != nil {
 			return err

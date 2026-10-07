@@ -154,7 +154,7 @@ type KnowledgeEvent struct {
 	EventType       string                   `json:"event_type,omitempty" gorm:"type:varchar(128);not null;default:''"`
 	Description     string                   `json:"description,omitempty" gorm:"type:text;not null;default:''"`
 	OccurredAt      *time.Time               `json:"occurred_at,omitempty" gorm:"index"`
-	EntityIDs       StringArray              `json:"entity_ids" gorm:"type:json"`
+	EntityIDs       StringArray              `json:"entity_ids" gorm:"-"`
 	EvidenceIDs     StringArray              `json:"evidence_ids" gorm:"type:json"`
 	SourceCount     int                      `json:"source_count" gorm:"not null;default:0"`
 	Heat            float64                  `json:"heat" gorm:"not null;default:0"`
@@ -181,7 +181,7 @@ type KnowledgeEventEvidence struct {
 	KnowledgeBaseID   string      `json:"knowledge_base_id" gorm:"type:varchar(36);not null;index:idx_kcee_scope;index:idx_kcee_related_event,priority:2"`
 	EventID           string      `json:"event_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_kcee_pair"`
 	EvidenceID        string      `json:"evidence_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_kcee_pair;index"`
-	EntityIDs         StringArray `json:"entity_ids" gorm:"type:json;not null"`
+	EntityIDs         StringArray `json:"entity_ids" gorm:"-"`
 	SourceTitle       string      `json:"source_title" gorm:"type:varchar(512);not null;default:''"`
 	SourceEventType   string      `json:"source_event_type" gorm:"type:varchar(128);not null;default:''"`
 	SourceDescription string      `json:"source_description" gorm:"type:text;not null;default:''"`
@@ -193,6 +193,29 @@ type KnowledgeEventEvidence struct {
 }
 
 func (KnowledgeEventEvidence) TableName() string { return "knowledge_context_event_evidence" }
+
+// KnowledgeEventEntity is one unique object on an event's timeline.
+// Its supporting sources are recorded by KnowledgeEventEvidenceEntity.
+type KnowledgeEventEntity struct {
+	TenantID uint64 `json:"tenant_id" gorm:"primaryKey;autoIncrement:false;index:idx_kceentity_object,priority:1"`
+	EventID  string `json:"event_id" gorm:"type:varchar(36);primaryKey;index:idx_kceentity_object,priority:3"`
+	EntityID string `json:"entity_id" gorm:"type:varchar(36);primaryKey;index:idx_kceentity_object,priority:2"`
+}
+
+func (KnowledgeEventEntity) TableName() string { return "knowledge_context_event_entities" }
+
+// KnowledgeEventEvidenceEntity preserves which source supports an object
+// association, so deleting or restricting a source can remove its contribution.
+type KnowledgeEventEvidenceEntity struct {
+	TenantID   uint64 `json:"tenant_id" gorm:"primaryKey;autoIncrement:false"`
+	EventID    string `json:"event_id" gorm:"type:varchar(36);primaryKey"`
+	EvidenceID string `json:"evidence_id" gorm:"type:varchar(36);primaryKey"`
+	EntityID   string `json:"entity_id" gorm:"type:varchar(36);primaryKey"`
+}
+
+func (KnowledgeEventEvidenceEntity) TableName() string {
+	return "knowledge_context_event_evidence_entities"
+}
 
 // KnowledgeAttention records the independent reason an otherwise eligible
 // message or event is useful to follow; it never participates in intake quality.

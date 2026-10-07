@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strings"
 
@@ -123,8 +122,9 @@ func (s *KnowledgeContextService) authorizeContextEntity(ctx context.Context, te
 	if count > 0 {
 		return nil
 	}
-	entityIDs, _ := json.Marshal([]string{entityID})
-	if err := s.db.WithContext(ctx).Model(&types.KnowledgeEventEvidence{}).Where("tenant_id = ? AND knowledge_base_id IN ? AND evidence_id IN (?) AND entity_ids::jsonb @> ?::jsonb", tenantID, []string(key.KnowledgeBaseIDs), evidenceIDs, string(entityIDs)).Count(&count).Error; err != nil {
+	if err := s.db.WithContext(ctx).Model(&types.KnowledgeEventEvidenceEntity{}).
+		Joins("JOIN knowledge_context_event_evidence links ON links.tenant_id = knowledge_context_event_evidence_entities.tenant_id AND links.event_id = knowledge_context_event_evidence_entities.event_id AND links.evidence_id = knowledge_context_event_evidence_entities.evidence_id").
+		Where("knowledge_context_event_evidence_entities.tenant_id = ? AND links.knowledge_base_id IN ? AND knowledge_context_event_evidence_entities.evidence_id IN (?) AND knowledge_context_event_evidence_entities.entity_id = ?", tenantID, []string(key.KnowledgeBaseIDs), evidenceIDs, entityID).Count(&count).Error; err != nil {
 		return err
 	}
 	if count > 0 {

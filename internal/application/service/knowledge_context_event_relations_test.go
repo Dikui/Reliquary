@@ -56,12 +56,17 @@ func TestResolveContextEventsRelationClasses(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			db := knowledgeContextTestDB(t)
 			oldTime := time.Now().UTC().Add(-220 * 24 * time.Hour)
+			require.NoError(t, db.Create(&[]types.KnowledgeEntity{
+				{ID: "acme", TenantID: 9, CanonicalName: "Acme", NormalizedName: "acme"},
+				{ID: "other", TenantID: 9, CanonicalName: "Other", NormalizedName: "other"},
+			}).Error)
 			oldEvents := []types.KnowledgeEvent{
 				{ID: "old-event", TenantID: 9, KnowledgeBaseID: "kb", Title: "Launch announced", EntityIDs: types.StringArray{"acme"}, OccurredAt: &oldTime, CreatedAt: oldTime, UpdatedAt: oldTime},
 				{ID: "undated-event", TenantID: 9, KnowledgeBaseID: "kb", Title: "Earlier change without a date", EntityIDs: types.StringArray{"acme"}, CreatedAt: oldTime, UpdatedAt: oldTime},
 				{ID: "other-entity-event", TenantID: 9, KnowledgeBaseID: "kb", Title: "Different object", EntityIDs: types.StringArray{"other"}, CreatedAt: oldTime, UpdatedAt: oldTime},
 			}
 			require.NoError(t, db.Create(&oldEvents).Error)
+			seedContextEventEntities(t, db, oldEvents...)
 
 			var observedCandidateIDs []string
 			model := &knowledgeContextTestChat{reply: func(messages []chat.Message) string {

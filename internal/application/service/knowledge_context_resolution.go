@@ -542,7 +542,7 @@ func (s *KnowledgeContextService) recallContextEvents(ctx context.Context, tenan
 		}
 	}
 	var candidates []types.KnowledgeEvent
-	query := s.db.WithContext(ctx).Model(&types.KnowledgeEvent{}).Where("knowledge_context_events.tenant_id=? AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(knowledge_context_events.entity_ids::jsonb) AS related(id) WHERE related.id IN ?)", tenantID, []string(entityIDs))
+	query := s.db.WithContext(ctx).Model(&types.KnowledgeEvent{}).Where("knowledge_context_events.tenant_id=? AND EXISTS (SELECT 1 FROM knowledge_context_event_entities related WHERE related.tenant_id = knowledge_context_events.tenant_id AND related.event_id = knowledge_context_events.id AND related.entity_id IN ?)", tenantID, []string(entityIDs))
 	if currentTime != nil {
 		// Publication strings are parsed by PostgreSQL only after a strict timestamp guard.
 		query = query.Where(`(knowledge_context_events.occurred_at BETWEEN ? AND ?) OR (knowledge_context_events.occurred_at IS NULL AND (NOT EXISTS (
@@ -552,8 +552,13 @@ func (s *KnowledgeContextService) recallContextEvents(ctx context.Context, tenan
    WHERE links.tenant_id=knowledge_context_events.tenant_id AND links.event_id=knowledge_context_events.id AND
    CASE WHEN source.published_at ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}($|T)' AND pg_input_is_valid(source.published_at, 'timestamptz') THEN source.published_at::timestamptz END BETWEEN ? AND ?)))`, currentTime.Add(-7*24*time.Hour), currentTime.Add(7*24*time.Hour), currentTime.Add(-7*24*time.Hour), currentTime.Add(7*24*time.Hour))
 	}
-	err := query.Order("knowledge_context_events.occurred_at DESC NULLS LAST, knowledge_context_events.updated_at DESC, knowledge_context_events.id").Limit(contextRecallLimit("RELIQUARY_CONTEXT_EVENT_TOP_K", 10)).Find(&candidates).Error
-	return candidates, err
+	if err := query.Order("knowledge_context_events.occurred_at DESC NULLS LAST, knowledge_context_events.updated_at DESC, knowledge_context_events.id").Limit(contextRecallLimit("RELIQUARY_CONTEXT_EVENT_TOP_K", 10)).Find(&candidates).Error; err != nil {
+		return nil, err
+	}
+	if err := loadContextEventEntityIDs(s.db.WithContext(ctx), tenantID, candidates); err != nil {
+		return nil, err
+	}
+	return candidates, nil
 }
 func (s *KnowledgeContextService) resolveContextEvents(ctx context.Context, model chat.Chat, tenantID uint64, kbID string, input []contextExtractedEvent, mentions map[string]types.KnowledgeEntity) ([]contextEventResolution, error) {
 	resolved := make([]contextEventResolution, 0, len(input))

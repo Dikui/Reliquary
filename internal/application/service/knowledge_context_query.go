@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"math"
 	"sort"
@@ -86,15 +85,10 @@ func (s *KnowledgeContextService) contextQueryCandidates(ctx context.Context, sc
 	if q.EventID != "" {
 		links = links.Where("event_id = ?", q.EventID)
 	} else {
-		conditions := make([]string, 0, len(entityIDs))
-		args := make([]any, 0, len(entityIDs))
-		for _, id := range entityIDs {
-			encoded, _ := json.Marshal(id)
-			conditions = append(conditions, "CAST(entity_ids AS TEXT) LIKE ? ESCAPE '!' ")
-			literal := strings.NewReplacer("!", "!!", "%", "!%", "_", "!_").Replace(string(encoded))
-			args = append(args, "%"+literal+"%")
-		}
-		linkedEvents := links.Session(&gorm.Session{}).Select("event_id").Where("("+strings.Join(conditions, " OR ")+")", args...)
+		linkedEvents := s.db.WithContext(ctx).Model(&types.KnowledgeEventEvidenceEntity{}).
+			Select("knowledge_context_event_evidence_entities.event_id").
+			Joins("JOIN knowledge_context_event_evidence links ON links.tenant_id = knowledge_context_event_evidence_entities.tenant_id AND links.event_id = knowledge_context_event_evidence_entities.event_id AND links.evidence_id = knowledge_context_event_evidence_entities.evidence_id").
+			Where("knowledge_context_event_evidence_entities.tenant_id = ? AND links.knowledge_base_id IN ? AND knowledge_context_event_evidence_entities.entity_id IN ?", tenantID, kbIDs, entityIDs)
 		links = s.db.WithContext(ctx).Model(&types.KnowledgeEventEvidence{}).Where("tenant_id = ? AND knowledge_base_id IN ? AND event_id IN (?)", tenantID, kbIDs, linkedEvents)
 	}
 	var eventEvidenceIDs []string
@@ -331,12 +325,26 @@ func (s *KnowledgeContextService) queryContext(ctx context.Context, kbID string,
 	if err := eventQuery.Order(eventOrder).Find(&events).Error; err != nil {
 		return nil, err
 	}
-	selectedEvents := make([]types.KnowledgeEvent, 0, len(events))
-	for _, event := range events {
+	linksByEvent := make(map[string][]types.KnowledgeEventEvidence, len(events))
+	if len(events) > 0 {
+		eventIDs := make([]string, 0, len(events))
+		for _, event := range events {
+			eventIDs = append(eventIDs, event.ID)
+		}
 		var links []types.KnowledgeEventEvidence
-		if err := s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id IN ? AND event_id = ? AND evidence_id IN ?", tenantID, kbIDs, event.ID, evidenceIDs).Find(&links).Error; err != nil {
+		if err := s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id IN ? AND event_id IN ? AND evidence_id IN ?", tenantID, kbIDs, eventIDs, evidenceIDs).Find(&links).Error; err != nil {
 			return nil, err
 		}
+		if err := loadContextEventEvidenceEntityIDs(s.db.WithContext(ctx), tenantID, links); err != nil {
+			return nil, err
+		}
+		for _, link := range links {
+			linksByEvent[link.EventID] = append(linksByEvent[link.EventID], link)
+		}
+	}
+	selectedEvents := make([]types.KnowledgeEvent, 0, len(events))
+	for _, event := range events {
+		links := linksByEvent[event.ID]
 		visibleIDs := types.StringArray{}
 		visibleEntityIDs := types.StringArray{}
 		visibleEvidence := make([]types.KnowledgeEvidence, 0, len(links))

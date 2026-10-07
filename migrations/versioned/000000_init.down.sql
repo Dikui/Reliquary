@@ -3,6 +3,11 @@
 
 BEGIN;
 
+DROP TABLE IF EXISTS public.knowledge_context_event_evidence_entities;
+DROP TABLE IF EXISTS public.knowledge_context_event_entities;
+ALTER TABLE IF EXISTS public.knowledge_context_events DROP CONSTRAINT IF EXISTS uq_kcevent_team_id;
+ALTER TABLE IF EXISTS public.knowledge_context_entities DROP CONSTRAINT IF EXISTS uq_kcentity_team_id;
+
 ALTER TABLE IF EXISTS ONLY public.tenant_api_keys DROP CONSTRAINT IF EXISTS tenant_api_keys_tenant_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.sync_logs DROP CONSTRAINT IF EXISTS sync_logs_data_source_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.resource_bindings DROP CONSTRAINT IF EXISTS resource_bindings_resource_id_fkey;

@@ -825,7 +825,6 @@ CREATE TABLE public.knowledge_context_event_evidence (
     knowledge_base_id character varying(36) NOT NULL,
     event_id character varying(36) NOT NULL,
     evidence_id character varying(36) NOT NULL,
-    entity_ids jsonb DEFAULT '[]'::jsonb NOT NULL,
     source_title character varying(512) DEFAULT ''::character varying NOT NULL,
     source_event_type character varying(128) DEFAULT ''::character varying NOT NULL,
     source_description text DEFAULT ''::text NOT NULL,
@@ -849,7 +848,6 @@ CREATE TABLE public.knowledge_context_events (
     event_type character varying(128) DEFAULT ''::character varying NOT NULL,
     description text DEFAULT ''::text NOT NULL,
     occurred_at timestamp with time zone,
-    entity_ids jsonb DEFAULT '[]'::jsonb NOT NULL,
     evidence_ids jsonb DEFAULT '[]'::jsonb NOT NULL,
     source_count integer DEFAULT 0 NOT NULL,
     heat double precision DEFAULT 0 NOT NULL,
@@ -3650,6 +3648,33 @@ CREATE INDEX idx_kcee_evidence ON public.knowledge_context_event_evidence USING 
 --
 
 CREATE UNIQUE INDEX idx_kcee_pair ON public.knowledge_context_event_evidence USING btree (tenant_id, event_id, evidence_id);
+
+-- Event objects have one identity per event and retain source-level support.
+ALTER TABLE public.knowledge_context_events ADD CONSTRAINT uq_kcevent_team_id UNIQUE (tenant_id, id);
+ALTER TABLE public.knowledge_context_entities ADD CONSTRAINT uq_kcentity_team_id UNIQUE (tenant_id, id);
+
+CREATE TABLE public.knowledge_context_event_entities (
+    tenant_id bigint NOT NULL,
+    event_id character varying(36) NOT NULL,
+    entity_id character varying(36) NOT NULL,
+    PRIMARY KEY (tenant_id, event_id, entity_id),
+    FOREIGN KEY (tenant_id, event_id) REFERENCES public.knowledge_context_events (tenant_id, id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id, entity_id) REFERENCES public.knowledge_context_entities (tenant_id, id) ON DELETE CASCADE
+);
+CREATE INDEX idx_kceentity_object ON public.knowledge_context_event_entities (tenant_id, entity_id, event_id);
+
+CREATE TABLE public.knowledge_context_event_evidence_entities (
+    tenant_id bigint NOT NULL,
+    event_id character varying(36) NOT NULL,
+    evidence_id character varying(36) NOT NULL,
+    entity_id character varying(36) NOT NULL,
+    PRIMARY KEY (tenant_id, event_id, evidence_id, entity_id),
+    FOREIGN KEY (tenant_id, event_id, entity_id) REFERENCES public.knowledge_context_event_entities (tenant_id, event_id, entity_id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id, event_id, evidence_id) REFERENCES public.knowledge_context_event_evidence (tenant_id, event_id, evidence_id) ON DELETE CASCADE
+);
+CREATE INDEX idx_kceee_evidence ON public.knowledge_context_event_evidence_entities (tenant_id, evidence_id, event_id, entity_id);
+CREATE INDEX idx_kceee_object ON public.knowledge_context_event_evidence_entities (tenant_id, entity_id, evidence_id, event_id);
+
 
 
 --

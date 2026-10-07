@@ -271,11 +271,10 @@ func (s *KnowledgeContextService) ProcessMessage(ctx context.Context, k *types.K
 			} else if findErr != nil {
 				return findErr
 			} else {
-				existing.EntityIDs = unionStringArrays(existing.EntityIDs, event.EntityIDs)
 				if existing.OccurredAt == nil {
 					existing.OccurredAt = event.OccurredAt
 				}
-				if err := tx.Model(&existing).Updates(map[string]any{"entity_ids": existing.EntityIDs, "occurred_at": existing.OccurredAt, "updated_at": time.Now()}).Error; err != nil {
+				if err := tx.Model(&existing).Updates(map[string]any{"occurred_at": existing.OccurredAt, "updated_at": time.Now()}).Error; err != nil {
 					return err
 				}
 				sourceEntityIDs := event.SourceEntityIDs
@@ -702,8 +701,10 @@ func attachContextEventEvidence(tx *gorm.DB, tenantID uint64, kbID string, event
 	if err := tx.Where("tenant_id = ? AND knowledge_base_id = ? AND event_id = ? AND evidence_id = ?", tenantID, kbID, event.ID, evidence.ID).First(&stored).Error; err != nil {
 		return err
 	}
-	stored.EntityIDs = unionStringArrays(stored.EntityIDs, link.EntityIDs)
-	updates := map[string]any{"entity_ids": stored.EntityIDs}
+	if err := attachContextEventEntities(tx, tenantID, event.ID, evidence.ID, link.EntityIDs); err != nil {
+		return err
+	}
+	updates := map[string]any{}
 	if stored.Relation == "" && link.Relation != "" {
 		stored.Relation = link.Relation
 		updates["relation"] = stored.Relation
@@ -740,11 +741,10 @@ func updateContextEventHeat(tx *gorm.DB, tenantID uint64, kbID string, event *ty
 	if err := tx.Where("tenant_id = ? AND event_id = ?", tenantID, event.ID).Find(&links).Error; err != nil {
 		return err
 	}
-	var evidenceIDs, entityIDs types.StringArray
+	var evidenceIDs types.StringArray
 	var currentEvidence []types.KnowledgeEvidence
 	for _, link := range links {
 		evidenceIDs = appendUniqueContextString(evidenceIDs, link.EvidenceID)
-		entityIDs = unionStringArrays(entityIDs, link.EntityIDs)
 		var evidence types.KnowledgeEvidence
 		if err := tx.Where("id = ? AND tenant_id = ? AND knowledge_base_id = ? AND status = ?",
 			link.EvidenceID, tenantID, link.KnowledgeBaseID, types.KnowledgeEvidenceCurrent).First(&evidence).Error; err == nil {
@@ -753,13 +753,20 @@ func updateContextEventHeat(tx *gorm.DB, tenantID uint64, kbID string, event *ty
 			return err
 		}
 	}
+	if err := pruneContextEventEntities(tx, tenantID, event.ID); err != nil {
+		return err
+	}
+	projected := []types.KnowledgeEvent{*event}
+	if err := loadContextEventEntityIDs(tx, tenantID, projected); err != nil {
+		return err
+	}
 	event.EvidenceIDs = evidenceIDs
-	event.EntityIDs = entityIDs
+	event.EntityIDs = projected[0].EntityIDs
 	event.SourceCount, event.Heat = contextHeat(currentEvidence, contextHeatWindow, contextHeatHalfLife)
 	event.UpdatedAt = time.Now()
 	if err := tx.Model(&types.KnowledgeEvent{}).
 		Where("id = ? AND tenant_id = ?", event.ID, tenantID).
-		Updates(map[string]any{"evidence_ids": event.EvidenceIDs, "entity_ids": event.EntityIDs, "source_count": event.SourceCount, "heat": event.Heat, "updated_at": event.UpdatedAt}).Error; err != nil {
+		Updates(map[string]any{"evidence_ids": event.EvidenceIDs, "source_count": event.SourceCount, "heat": event.Heat, "updated_at": event.UpdatedAt}).Error; err != nil {
 		return err
 	}
 	return nil

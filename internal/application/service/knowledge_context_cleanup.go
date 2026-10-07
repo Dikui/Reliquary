@@ -52,6 +52,9 @@ func (s *KnowledgeContextService) purgeKnowledgeTx(tx *gorm.DB, tenantID uint64,
 	if err := tx.Model(&types.KnowledgeEventEvidence{}).Where("tenant_id = ? AND knowledge_base_id = ? AND evidence_id IN ?", tenantID, kbID, evidenceIDs).Distinct().Pluck("event_id", &eventIDs).Error; err != nil {
 		return err
 	}
+	if err := tx.Where("tenant_id = ? AND evidence_id IN ?", tenantID, evidenceIDs).Delete(&types.KnowledgeEventEvidenceEntity{}).Error; err != nil {
+		return err
+	}
 	for _, model := range []any{&types.KnowledgeEntityMergeSuggestion{}, &types.KnowledgeAttention{}, &types.KnowledgeEventEvidence{}, &types.KnowledgeFact{}, &types.KnowledgeEvidence{}} {
 		column := "evidence_id"
 		if _, ok := model.(*types.KnowledgeEvidence); ok {
@@ -75,6 +78,9 @@ func (s *KnowledgeContextService) purgeKnowledgeTx(tx *gorm.DB, tenantID uint64,
 		}
 		if count == 0 {
 			if err := clearContextEventRelationsTo(tx, tenantID, kbID, []string{eventID}); err != nil {
+				return err
+			}
+			if err := tx.Where("tenant_id = ? AND event_id = ?", tenantID, eventID).Delete(&types.KnowledgeEventEntity{}).Error; err != nil {
 				return err
 			}
 			if err := tx.Delete(&event).Error; err != nil {
@@ -115,6 +121,9 @@ func (s *KnowledgeContextService) DeleteKnowledgeBase(ctx context.Context, kbID 
 			Updates(map[string]any{"evidence_id": "", "quote": ""}).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("tenant_id = ? AND evidence_id IN (?)", tenantID, sourceEvidenceIDs).Delete(&types.KnowledgeEventEvidenceEntity{}).Error; err != nil {
+			return err
+		}
 		for _, model := range []any{&types.KnowledgeEntityMergeSuggestion{}, &types.KnowledgeAttention{}, &types.KnowledgeEventEvidence{}, &types.KnowledgeFact{}, &types.KnowledgeEvidence{}} {
 			if err := tx.Where("tenant_id = ? AND knowledge_base_id = ?", tenantID, kbID).Delete(model).Error; err != nil {
 				return err
@@ -134,6 +143,9 @@ func (s *KnowledgeContextService) DeleteKnowledgeBase(ctx context.Context, kbID 
 			}
 			if len(links) == 0 {
 				if err := clearContextEventRelationsTo(tx, tenantID, kbID, []string{eventID}); err != nil {
+					return err
+				}
+				if err := tx.Where("tenant_id = ? AND event_id = ?", tenantID, eventID).Delete(&types.KnowledgeEventEntity{}).Error; err != nil {
 					return err
 				}
 				if err := tx.Delete(&event).Error; err != nil {
@@ -175,14 +187,14 @@ func (s *KnowledgeContextService) pruneContextEntities(tx *gorm.DB, tenantID uin
 		used[fact.SubjectEntityID] = true
 		used[fact.ObjectEntityID] = true
 	}
-	var links []types.KnowledgeEventEvidence
-	if err := tx.Where("tenant_id = ? AND evidence_id IN (?)", tenantID, evidenceIDs).Find(&links).Error; err != nil {
+	var eventEntityIDs []string
+	if err := tx.Model(&types.KnowledgeEventEvidenceEntity{}).
+		Where("tenant_id = ? AND evidence_id IN (?)", tenantID, evidenceIDs).
+		Distinct().Pluck("entity_id", &eventEntityIDs).Error; err != nil {
 		return err
 	}
-	for _, link := range links {
-		for _, id := range link.EntityIDs {
-			used[id] = true
-		}
+	for _, id := range eventEntityIDs {
+		used[id] = true
 	}
 	var entities []types.KnowledgeEntity
 	if err := tx.Where("tenant_id = ?", tenantID).Find(&entities).Error; err != nil {
@@ -196,6 +208,9 @@ func (s *KnowledgeContextService) pruneContextEntities(tx *gorm.DB, tenantID uin
 			return err
 		}
 		if err := tx.Where("tenant_id = ? AND entity_id = ?", tenantID, entity.ID).Delete(&types.KnowledgeEntityAlias{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("tenant_id = ? AND entity_id = ?", tenantID, entity.ID).Delete(&types.KnowledgeEventEntity{}).Error; err != nil {
 			return err
 		}
 		if err := tx.Delete(&entity).Error; err != nil {

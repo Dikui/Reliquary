@@ -285,7 +285,9 @@ func TestP2RestrictedAPIKeyScopesGlobalReadsAndEdits(t *testing.T) {
 	event := types.KnowledgeEvent{ID: "shared-event", TenantID: 9, KnowledgeBaseID: "kb", Title: "Private aggregate title", Description: "Private aggregate description", OccurredAt: parseContextTime("2025-01-01"), EntityIDs: types.StringArray{"shared"}}
 	require.NoError(t, db.Create(&event).Error)
 	for _, kbID := range []string{"kb", "energy-one"} {
-		require.NoError(t, db.Create(&types.KnowledgeEventEvidence{ID: "link-" + kbID, TenantID: 9, KnowledgeBaseID: kbID, EventID: event.ID, EvidenceID: kbID, EntityIDs: types.StringArray{"shared"}, SourceTitle: "Allowed source title", SourceDescription: "Allowed source description"}).Error)
+		link := types.KnowledgeEventEvidence{ID: "link-" + kbID, TenantID: 9, KnowledgeBaseID: kbID, EventID: event.ID, EvidenceID: kbID, EntityIDs: types.StringArray{"shared"}, SourceTitle: "Allowed source title", SourceDescription: "Allowed source description"}
+		require.NoError(t, db.Create(&link).Error)
+		seedContextEventEvidenceEntities(t, db, link)
 	}
 	for _, fullAccess := range []bool{false, true} {
 		keyCtx := types.WithTenantAPIKeyScope(ctx, types.TenantAPIKeyScope{KeyID: 1, FullAccess: fullAccess, KnowledgeBaseIDs: types.StringArray{"energy-one"}, Capabilities: types.StringArray{"retrieve", "ingest"}})
@@ -336,4 +338,67 @@ func TestP2RestrictedAPIKeyScopesGlobalReadsAndEdits(t *testing.T) {
 	var privateFact types.KnowledgeFact
 	require.NoError(t, db.First(&privateFact, "id = ?", "kb").Error)
 	require.Equal(t, types.KnowledgeFactCurrent, privateFact.Status)
+}
+
+func TestP2RestrictedAPIKeyAuthorizesObjectsThroughEventSources(t *testing.T) {
+	db, ctx, svc := p2ContextFixture(t)
+	entities := []types.KnowledgeEntity{
+		{ID: "event-visible", TenantID: 9, KnowledgeBaseID: "kb", CanonicalName: "Visible object", NormalizedName: "visible object", EntityType: "company", Description: "Description from the private origin"},
+		{ID: "event-private", TenantID: 9, KnowledgeBaseID: "kb", CanonicalName: "Private object", NormalizedName: "private object", EntityType: "company"},
+	}
+	require.NoError(t, db.Create(&entities).Error)
+	for _, kbID := range []string{"kb", "energy-one"} {
+		p2ContextMessage(t, db, "event-source-"+kbID, kbID, "Objects changed.")
+		require.NoError(t, db.Create(&types.KnowledgeEvidence{
+			ID: "event-evidence-" + kbID, TenantID: 9, KnowledgeBaseID: kbID, KnowledgeID: "event-source-" + kbID,
+			Version: 1, BodyHash: strings.Repeat("a", 64), Body: "Objects changed.", Status: types.KnowledgeEvidenceCurrent,
+		}).Error)
+	}
+	event := types.KnowledgeEvent{ID: "event-only-shared", TenantID: 9, KnowledgeBaseID: "kb", Title: "Shared change", EvidenceIDs: types.StringArray{"event-evidence-kb", "event-evidence-energy-one"}}
+	require.NoError(t, db.Create(&event).Error)
+	links := []types.KnowledgeEventEvidence{
+		{ID: "event-private-link", TenantID: 9, KnowledgeBaseID: "kb", EventID: event.ID, EvidenceID: "event-evidence-kb", EntityIDs: types.StringArray{"event-private"}, SourceTitle: "Private source change"},
+		{ID: "event-visible-link", TenantID: 9, KnowledgeBaseID: "energy-one", EventID: event.ID, EvidenceID: "event-evidence-energy-one", EntityIDs: types.StringArray{"event-visible"}, SourceTitle: "Visible source change"},
+	}
+	require.NoError(t, db.Create(&links).Error)
+	seedContextEventEvidenceEntities(t, db, links...)
+
+	for _, fullAccess := range []bool{false, true} {
+		keyCtx := types.WithTenantAPIKeyScope(ctx, types.TenantAPIKeyScope{KeyID: 1, FullAccess: fullAccess, KnowledgeBaseIDs: types.StringArray{"energy-one"}, Capabilities: types.StringArray{"retrieve"}})
+		detail, err := svc.EntityDetail(keyCtx, "event-visible")
+		require.NoError(t, err, "an event source in an allowed base authorizes its object without any facts")
+		require.Empty(t, detail.Facts)
+		require.Len(t, detail.Events, 1)
+		require.Equal(t, types.StringArray{"event-visible"}, detail.Events[0].EntityIDs)
+		require.Equal(t, "Visible source change", detail.Events[0].Title)
+		require.Equal(t, "energy-one", detail.Events[0].KnowledgeBaseID)
+		require.Len(t, detail.Entities, 1)
+		require.Empty(t, detail.Entities[0].Description)
+		require.Empty(t, detail.Entities[0].KnowledgeBaseID)
+		_, err = svc.EntityDetail(keyCtx, "event-private")
+		require.ErrorContains(t, err, "API key scope does not allow this knowledge object", "aggregate object membership alone cannot authorize a private source's object")
+		require.ErrorContains(t, svc.authorizeContextEntity(keyCtx, 10, "event-visible"), "API key scope does not allow this knowledge object")
+		for _, query := range []types.KnowledgeContextQuery{
+			{Scope: "team", EntityID: "event-visible"},
+			{Scope: "domain", DomainID: "energy", Entity: "Visible object"},
+			{Scope: "knowledge_base", KnowledgeBaseID: "energy-one", EntityID: "event-visible"},
+		} {
+			result, err := svc.Query(keyCtx, "", query)
+			require.NoError(t, err)
+			require.Len(t, result.Events, 1)
+			require.Equal(t, event.ID, result.Events[0].ID)
+			require.Equal(t, types.StringArray{"event-visible"}, result.Events[0].EntityIDs)
+		}
+		result, err := svc.Query(keyCtx, "", types.KnowledgeContextQuery{Scope: "team", EntityID: "event-private"})
+		require.NoError(t, err)
+		require.Empty(t, result.Events)
+	}
+
+	team, err := svc.Query(ctx, "", types.KnowledgeContextQuery{Scope: "team", EntityID: "event-private"})
+	require.NoError(t, err)
+	require.Len(t, team.Events, 1)
+	require.ElementsMatch(t, []string{"event-private", "event-visible"}, []string(team.Events[0].EntityIDs))
+	privateScope, err := svc.Query(ctx, "", types.KnowledgeContextQuery{Scope: "knowledge_base", KnowledgeBaseID: "kb", EntityID: "event-visible"})
+	require.NoError(t, err)
+	require.Empty(t, privateScope.Events, "object filters use the selected sources instead of the event's aggregate objects")
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"reliquary/internal/models/chat"
 	"reliquary/internal/testutil/pgtest"
@@ -24,13 +25,41 @@ func knowledgeContextTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, db.Exec(`INSERT INTO tenants(id) VALUES (9)`).Error)
 	require.NoError(t, db.Exec(`CREATE TABLE knowledge_bases (id TEXT PRIMARY KEY, tenant_id INTEGER NOT NULL, name TEXT NOT NULL DEFAULT 'Test knowledge base', domain_id TEXT NOT NULL DEFAULT 'ai', model_tiers JSONB NOT NULL DEFAULT '{}', embedding_model_id TEXT DEFAULT '', auto_tag_config JSONB, deleted_at TIMESTAMPTZ)`).Error)
 	require.NoError(t, db.AutoMigrate(&types.Knowledge{}, &types.KnowledgeEntity{}, &types.KnowledgeEntityAlias{}, &types.KnowledgeEvidence{},
-		&types.KnowledgeEntityMergeSuggestion{}, &types.KnowledgeFact{}, &types.KnowledgeEvent{}, &types.KnowledgeEventEvidence{}, &types.KnowledgeAttention{}, &types.KnowledgeDomain{}, &types.AuditLog{}))
+		&types.KnowledgeEntityMergeSuggestion{}, &types.KnowledgeFact{}, &types.KnowledgeEvent{}, &types.KnowledgeEventEvidence{},
+		&types.KnowledgeEventEntity{}, &types.KnowledgeEventEvidenceEntity{}, &types.KnowledgeAttention{}, &types.KnowledgeDomain{}, &types.AuditLog{}))
 	domain := BuiltinAIKnowledgeDomain()
 	domain.ID = "ai"
 	domain.TenantID = 9
 	require.NoError(t, db.Create(domain).Error)
 	require.NoError(t, db.Exec(`INSERT INTO knowledge_bases(id,tenant_id) VALUES ('kb',9)`).Error)
 	return db
+}
+
+func seedContextEventEntities(t *testing.T, db *gorm.DB, events ...types.KnowledgeEvent) {
+	t.Helper()
+	var rows []types.KnowledgeEventEntity
+	for _, event := range events {
+		for _, entityID := range event.EntityIDs {
+			rows = append(rows, types.KnowledgeEventEntity{TenantID: event.TenantID, EventID: event.ID, EntityID: entityID})
+		}
+	}
+	if len(rows) > 0 {
+		require.NoError(t, db.Clauses(clause.OnConflict{DoNothing: true}).Create(&rows).Error)
+	}
+}
+
+func seedContextEventEvidenceEntities(t *testing.T, db *gorm.DB, links ...types.KnowledgeEventEvidence) {
+	t.Helper()
+	var rows []types.KnowledgeEventEvidenceEntity
+	for _, link := range links {
+		seedContextEventEntities(t, db, types.KnowledgeEvent{TenantID: link.TenantID, ID: link.EventID, EntityIDs: link.EntityIDs})
+		for _, entityID := range link.EntityIDs {
+			rows = append(rows, types.KnowledgeEventEvidenceEntity{TenantID: link.TenantID, EventID: link.EventID, EvidenceID: link.EvidenceID, EntityID: entityID})
+		}
+	}
+	if len(rows) > 0 {
+		require.NoError(t, db.Clauses(clause.OnConflict{DoNothing: true}).Create(&rows).Error)
+	}
 }
 
 type knowledgeContextTestModelService struct {
@@ -97,6 +126,8 @@ func TestKnowledgeContextCanonicalCollisionKeepsFactAndEventReferences(t *testin
 	require.NoError(t, db.Find(&facts).Error)
 	require.NoError(t, db.Find(&events).Error)
 	require.NoError(t, db.Find(&links).Error)
+	require.NoError(t, loadContextEventEntityIDs(db, 9, events))
+	require.NoError(t, loadContextEventEvidenceEntityIDs(db, 9, links))
 	require.Len(t, entities, 1)
 	require.Len(t, facts, 3)
 	for _, fact := range facts {
@@ -322,6 +353,7 @@ func TestKnowledgeContextQueryRestrictsAggregatesToAuthorizedMessages(t *testing
 		{ID: "denied-link", TenantID: 9, KnowledgeBaseID: "kb", EventID: event.ID, EvidenceID: "denied-evidence", EntityIDs: types.StringArray{"denied-entity"}, SourceTitle: "PRIVATE HIDDEN EVENT", SourceEventType: "private type", SourceDescription: "PRIVATE HIDDEN DESCRIPTION", SourceOccurredAt: &privateEventTime, CreatedAt: now},
 	}
 	require.NoError(t, db.Create(&links).Error)
+	seedContextEventEvidenceEntities(t, db, links...)
 	attention := []types.KnowledgeAttention{
 		{ID: "allowed-attention", TenantID: 9, KnowledgeBaseID: "kb", EvidenceID: "allowed-evidence", Reason: "authorized", CreatedAt: now},
 		{ID: "allowed-newer-attention", TenantID: 9, KnowledgeBaseID: "kb", EvidenceID: "allowed-newer-evidence", Reason: "newer authorized", CreatedAt: now},
