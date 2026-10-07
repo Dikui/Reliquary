@@ -185,7 +185,11 @@ func contextBodyFromChunks(ctx context.Context, chunks interfaces.ChunkService, 
 		if body.Len() > 0 {
 			body.WriteString("\n\n")
 		}
-		body.WriteString(chunk.Content)
+		content := chunk.SourceContent
+		if content == "" {
+			content = chunk.Content
+		}
+		body.WriteString(content)
 	}
 	if strings.TrimSpace(body.String()) == "" {
 		return "", errors.New("no source text available for context")
