@@ -114,6 +114,7 @@ export interface KnowledgeWorkflowCitation {
 }
 
 export interface KnowledgeWorkflowReport {
+  excluded_missing_published_at_count?: number
   id: string
   tenant_id: number
   knowledge_base_id: string
@@ -191,5 +192,5 @@ export const getKnowledgeWorkflowReport = (kbId: string, reportId: string) =>
     `${reportBase(kbId)}/${encodeURIComponent(reportId)}`,
   )
 
-export const downloadKnowledgeWorkflowReport = (kbId: string, reportId: string) =>
-  getDown(`${reportBase(kbId)}/${encodeURIComponent(reportId)}/download`)
+export const downloadKnowledgeWorkflowReport = (kbId: string, reportId: string, format: 'markdown' | 'json' = 'markdown') =>
+  getDown(`${reportBase(kbId)}/${encodeURIComponent(reportId)}/download${format === 'json' ? '?format=json' : ''}`)

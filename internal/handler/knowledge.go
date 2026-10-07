@@ -148,12 +148,19 @@ func (h *KnowledgeHandler) handleDuplicateKnowledgeError(c *gin.Context,
 	if dupErr, ok := err.(*types.DuplicateKnowledgeError); ok {
 		ctx := c.Request.Context()
 		logger.Warnf(ctx, "Detected duplicate %s: %s", duplicateType, secutils.SanitizeForLog(dupErr.Error()))
-		c.JSON(http.StatusConflict, gin.H{
+		if knowledge == nil {
+			knowledge = dupErr.Knowledge
+		}
+		response := gin.H{
 			"success": false,
 			"message": dupErr.Error(),
 			"data":    knowledge, // knowledge contains the existing document
 			"code":    fmt.Sprintf("duplicate_%s", duplicateType),
-		})
+		}
+		if knowledge != nil && knowledge.DuplicateMatchMethod != "" {
+			response["match_method"] = knowledge.DuplicateMatchMethod
+		}
+		c.JSON(http.StatusConflict, response)
 		return true
 	}
 	return false
@@ -262,7 +269,7 @@ func (h *KnowledgeHandler) CreateKnowledgeFromFile(c *gin.Context) {
 	ctx = context.WithValue(ctx, types.TenantIDContextKey, effectiveTenantID)
 
 	// Check write permission
-	if permission != types.TenantRoleAdmin && permission != types.TenantRoleContributor {
+	if !permission.HasPermission(types.TenantRoleContributor) {
 		c.Error(errors.NewForbiddenError("No permission to create knowledge"))
 		return
 	}
@@ -418,7 +425,7 @@ func (h *KnowledgeHandler) CreateKnowledgeFromURL(c *gin.Context) {
 	ctx = context.WithValue(ctx, types.TenantIDContextKey, effectiveTenantID)
 
 	// Check write permission
-	if permission != types.TenantRoleAdmin && permission != types.TenantRoleContributor {
+	if !permission.HasPermission(types.TenantRoleContributor) {
 		c.Error(errors.NewForbiddenError("No permission to create knowledge"))
 		return
 	}
@@ -516,7 +523,7 @@ func (h *KnowledgeHandler) CreateManualKnowledge(c *gin.Context) {
 	ctx = context.WithValue(ctx, types.TenantIDContextKey, effectiveTenantID)
 
 	// Check write permission
-	if permission != types.TenantRoleAdmin && permission != types.TenantRoleContributor {
+	if !permission.HasPermission(types.TenantRoleContributor) {
 		c.Error(errors.NewForbiddenError("No permission to create knowledge"))
 		return
 	}
@@ -530,6 +537,9 @@ func (h *KnowledgeHandler) CreateManualKnowledge(c *gin.Context) {
 
 	knowledge, err := h.kgService.CreateKnowledgeFromManual(ctx, kbID, &req, req.Channel)
 	if err != nil {
+		if h.handleDuplicateKnowledgeError(c, err, knowledge, "manual") {
+			return
+		}
 		if appErr, ok := errors.IsAppError(err); ok {
 			c.Error(appErr)
 			return
@@ -1132,7 +1142,7 @@ func (h *KnowledgeHandler) RenameKnowledgeFolder(c *gin.Context) {
 		c.Error(err)
 		return
 	}
-	if permission != types.TenantRoleAdmin && permission != types.TenantRoleContributor {
+	if !permission.HasPermission(types.TenantRoleContributor) {
 		c.Error(errors.NewForbiddenError("No permission to modify knowledge"))
 		return
 	}
@@ -1191,7 +1201,7 @@ func (h *KnowledgeHandler) requireKnowledgeWriteAccess(
 	if err != nil {
 		return "", 0, err
 	}
-	if permission != types.TenantRoleAdmin && permission != types.TenantRoleContributor {
+	if !permission.HasPermission(types.TenantRoleContributor) {
 		return "", 0, errors.NewForbiddenError("No permission to modify knowledge")
 	}
 	if err := h.requireKBOwnershipOrAdmin(c, kbID); err != nil {
@@ -1330,7 +1340,7 @@ func (h *KnowledgeHandler) BatchDeleteKnowledge(c *gin.Context) {
 		c.Error(err)
 		return
 	}
-	if permission != types.TenantRoleAdmin && permission != types.TenantRoleContributor {
+	if !permission.HasPermission(types.TenantRoleContributor) {
 		c.Error(errors.NewForbiddenError("No permission to delete knowledge"))
 		return
 	}
@@ -1405,9 +1415,9 @@ func (h *KnowledgeHandler) ClearKnowledgeBaseContents(c *gin.Context) {
 		return
 	}
 
-	// Only owner (admin with matching tenant) can clear knowledge base contents
+	// Team administrators may clear contents in their own tenant.
 	tenantID := c.GetUint64(types.TenantIDContextKey.String())
-	if kb.TenantID != tenantID || permission != types.TenantRoleAdmin {
+	if kb.TenantID != tenantID || !permission.HasPermission(types.TenantRoleAdmin) {
 		c.Error(errors.NewForbiddenError("Only knowledge base owner can clear contents"))
 		return
 	}
@@ -2026,7 +2036,7 @@ func (h *KnowledgeHandler) UpdateKnowledgeTagBatch(c *gin.Context) {
 			c.Error(err)
 			return
 		}
-		if permission != types.TenantRoleAdmin && permission != types.TenantRoleContributor {
+		if !permission.HasPermission(types.TenantRoleContributor) {
 			c.Error(errors.NewForbiddenError("No permission to update knowledge tags"))
 			return
 		}
@@ -2528,7 +2538,7 @@ func (h *KnowledgeHandler) BatchReparseKnowledge(c *gin.Context) {
 		c.Error(err)
 		return
 	}
-	if permission != types.TenantRoleAdmin && permission != types.TenantRoleContributor {
+	if !permission.HasPermission(types.TenantRoleContributor) {
 		c.Error(errors.NewForbiddenError("no permission to reparse knowledge in this kb"))
 		return
 	}

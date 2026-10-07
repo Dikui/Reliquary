@@ -6,6 +6,8 @@ type NullableContextResult = {
 
 export function normalizeKnowledgeContextResult(result?: NullableContextResult | null): KnowledgeContextResult {
   return {
+    excluded_missing_published_at_count: result?.excluded_missing_published_at_count ?? 0,
+    published_at_missing_source_ids: result?.published_at_missing_source_ids ?? [],
     entities: Array.isArray(result?.entities) ? result.entities : [],
     facts: Array.isArray(result?.facts) ? result.facts : [],
     events: Array.isArray(result?.events) ? result.events : [],

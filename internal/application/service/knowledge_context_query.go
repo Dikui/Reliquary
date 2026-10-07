@@ -269,6 +269,12 @@ func (s *KnowledgeContextService) queryContext(ctx context.Context, kbID string,
 	}
 
 	evidenceIDs := sortedEvidenceIDs(allowed)
+	missingSources := contextMissingPublicationSources(allowed)
+	result.ExcludedMissingPublishedAtCount = len(missingSources)
+	result.PublishedAtMissingSourceIDs = []string{}
+	if q.Since != nil || q.Until != nil {
+		result.PublishedAtMissingSourceIDs = missingSources
+	}
 	factQuery := s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id IN ? AND evidence_id IN ?", tenantID, kbIDs, evidenceIDs)
 	if !q.IncludeHistory {
 		factQuery = factQuery.Where("status = ?", types.KnowledgeFactCurrent)
@@ -415,7 +421,15 @@ func (s *KnowledgeContextService) queryContext(ctx context.Context, kbID string,
 		if !contextEventInTimeRange(event, visibleEvidence, q) {
 			continue
 		}
-		event.SourceCount, event.Heat = contextHeat(currentEvidence, contextHeatWindow, contextHeatHalfLife)
+		for _, item := range currentEvidence {
+			event.RepostSources = append(event.RepostSources, item.RepostSources...)
+		}
+		event.SourceCount, event.Heat = contextHeatWithReposts(currentEvidence, event.RepostSources)
+		currentByID := make(map[string]types.KnowledgeEvidence, len(currentEvidence))
+		for _, item := range currentEvidence {
+			currentByID[item.ID] = item
+		}
+		event.ExcludedMissingPublishedAtCount = len(contextMissingPublicationSources(currentByID))
 		selectedEvents = append(selectedEvents, event)
 		for _, id := range event.EntityIDs {
 			entityIDs[id] = true
@@ -585,6 +599,27 @@ func (s *KnowledgeContextService) ListEvents(ctx context.Context, kbID string, q
 	return result.Events, nil
 }
 func (s *KnowledgeContextService) ListEvidence(ctx context.Context, kbID string, q types.KnowledgeContextQuery) ([]types.KnowledgeEvidence, error) {
+	items, err := s.listEvidenceCandidates(ctx, kbID, q)
+	if err != nil {
+		return nil, err
+	}
+	return paginateContext(items, q), nil
+}
+
+// ListEvidenceWithPublicationStats counts eligible sources before pagination.
+func (s *KnowledgeContextService) ListEvidenceWithPublicationStats(ctx context.Context, kbID string, q types.KnowledgeContextQuery) ([]types.KnowledgeEvidence, int, error) {
+	items, err := s.listEvidenceCandidates(ctx, kbID, q)
+	if err != nil {
+		return nil, 0, err
+	}
+	byID := make(map[string]types.KnowledgeEvidence, len(items))
+	for _, item := range items {
+		byID[item.ID] = item
+	}
+	return paginateContext(items, q), len(contextMissingPublicationSources(byID)), nil
+}
+
+func (s *KnowledgeContextService) listEvidenceCandidates(ctx context.Context, kbID string, q types.KnowledgeContextQuery) ([]types.KnowledgeEvidence, error) {
 	scope, err := s.resolveContextQueryScope(ctx, kbID, q)
 	if err != nil {
 		return nil, err
@@ -611,7 +646,7 @@ func (s *KnowledgeContextService) ListEvidence(ctx context.Context, kbID string,
 	for i := range items {
 		items[i].KnowledgeBaseName = scope.names[items[i].KnowledgeBaseID]
 	}
-	return paginateContext(items, q), nil
+	return items, nil
 }
 
 func (s *KnowledgeContextService) GetEvidence(ctx context.Context, kbID, evidenceID string) (*types.KnowledgeEvidence, error) {
@@ -748,7 +783,7 @@ func contextAliasVisible(alias string, evidence []types.KnowledgeEvidence) bool 
 		return false
 	}
 	for _, item := range evidence {
-		if strings.Contains(strings.ToLower(item.Body), wanted) {
+		if verbatimQuote(strings.ToLower(item.Body), wanted) {
 			return true
 		}
 	}
@@ -812,6 +847,23 @@ func (s *KnowledgeContextService) visibleContextEvidence(ctx context.Context, te
 		if _, ok := byID[item.KnowledgeID]; ok {
 			visible = append(visible, item)
 		}
+	}
+	visibleKnowledgeIDs := make([]string, 0, len(visible))
+	visibleKBIDs := make([]string, 0, len(visible))
+	for _, item := range visible {
+		visibleKnowledgeIDs = append(visibleKnowledgeIDs, item.KnowledgeID)
+		visibleKBIDs = append(visibleKBIDs, item.KnowledgeBaseID)
+	}
+	reposts, err := loadKnowledgeRepostSources(s.db.WithContext(ctx), tenantID, visibleKnowledgeIDs, uniqueContextIDs(visibleKBIDs))
+	if err != nil {
+		return nil, err
+	}
+	byKnowledge := make(map[string][]types.KnowledgeRepostSource)
+	for _, source := range reposts {
+		byKnowledge[source.KnowledgeID] = append(byKnowledge[source.KnowledgeID], source)
+	}
+	for i := range visible {
+		visible[i].RepostSources = byKnowledge[visible[i].KnowledgeID]
 	}
 	return visible, nil
 }

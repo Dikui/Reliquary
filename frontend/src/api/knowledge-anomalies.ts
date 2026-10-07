@@ -1,6 +1,8 @@
 import { get, post } from '@/utils/request'
 
-export type KnowledgeAnomalyKind = 'suspected_error' | 'outdated' | 'source_conflict' | 'manual_conflict' | 'tag_deletion'
+export const KNOWLEDGE_ANOMALY_KINDS = ['suspected_error', 'outdated', 'source_conflict', 'manual_conflict', 'tag_deletion', 'source_adapter_failed'] as const
+export type KnowledgeAnomalyKind = typeof KNOWLEDGE_ANOMALY_KINDS[number]
+export type KnowledgeAnomalyReportKind = Exclude<KnowledgeAnomalyKind, 'source_adapter_failed'>
 export type KnowledgeAnomalyProposal = 'none' | 'change_tags' | 'delete_tag'
 
 export interface KnowledgeAnomaly {
@@ -8,6 +10,10 @@ export interface KnowledgeAnomaly {
   knowledge_ids: string[]
   kind: KnowledgeAnomalyKind
   description: string
+  site?: string
+  source_url?: string
+  adapter?: string
+  reason?: string
   proposal_type: KnowledgeAnomalyProposal
   proposed_tag_ids: string[]
   proposed_remove_tag_ids: string[]
@@ -22,7 +28,8 @@ export interface KnowledgeAnomaly {
   decided_at?: string
 }
 
-export type KnowledgeAnomalyInput = Pick<KnowledgeAnomaly, 'knowledge_ids' | 'kind' | 'description'> & {
+export type KnowledgeAnomalyInput = Pick<KnowledgeAnomaly, 'knowledge_ids' | 'description'> & {
+  kind: KnowledgeAnomalyReportKind
   proposal_type?: KnowledgeAnomalyProposal
   proposed_tag_ids?: string[]
   proposed_remove_tag_ids?: string[]

@@ -22,6 +22,7 @@ import { diffWikiLines, type WikiDiffLine } from '@/utils/wikiLineDiff';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '@/stores/auth';
 import DocumentPreview from '@/components/document-preview.vue';
+import RepostSources from '@/views/knowledge/components/RepostSources.vue';
 import KnowledgeProcessingTimeline from '@/components/knowledge-processing-timeline.vue';
 import { resolveKnowledgeDownloadFileName } from '@/views/knowledge/knowledgeDownloadFileName';
 import { isKnownPreviewableExt, resolveFilePreviewExt } from '@/utils/filePreview';
@@ -466,8 +467,11 @@ function onTraceDrawerResizeEnd() {
 }
 
 function onTraceDrawerWindowResize() {
+  drawerViewportWidth.value = window.innerWidth;
   timelineDrawerWidth.value = clampTraceDrawerWidth(timelineDrawerWidth.value);
-  mainDrawerWidth.value = clampMainDrawerWidth(mainDrawerWidth.value);
+  if (!isMainDrawerNarrow.value) {
+    mainDrawerWidth.value = clampMainDrawerWidth(mainDrawerWidth.value);
+  }
 }
 
 function cleanupTraceDrawerResize() {
@@ -484,6 +488,9 @@ const MAIN_DRAWER_DEFAULT_WIDTH = 654;
 const MAIN_DRAWER_MIN_WIDTH = 480;
 
 const mainDrawerWidth = ref(MAIN_DRAWER_DEFAULT_WIDTH);
+const drawerViewportWidth = ref(typeof window === 'undefined' ? 1440 : window.innerWidth);
+const isMainDrawerNarrow = computed(() => drawerViewportWidth.value <= 720);
+const mainDrawerSize = computed(() => isMainDrawerNarrow.value ? '100vw' : `${mainDrawerWidth.value}px`);
 const mainDrawerResizing = ref(false);
 
 let mainResizeStartX = 0;
@@ -502,7 +509,9 @@ function loadMainDrawerWidth() {
     const raw = localStorage.getItem(MAIN_DRAWER_WIDTH_KEY);
     const parsed = raw ? parseInt(raw, 10) : NaN;
     if (!Number.isNaN(parsed)) {
-      mainDrawerWidth.value = clampMainDrawerWidth(parsed);
+      mainDrawerWidth.value = isMainDrawerNarrow.value
+        ? Math.max(MAIN_DRAWER_MIN_WIDTH, Math.min(1600, parsed))
+        : clampMainDrawerWidth(parsed);
     }
   } catch {
     /* ignore quota / private mode */
@@ -510,6 +519,7 @@ function loadMainDrawerWidth() {
 }
 
 function onMainDrawerResizeStart(e: MouseEvent) {
+  if (isMainDrawerNarrow.value) return;
   mainDrawerResizing.value = true;
   mainResizeStartX = e.clientX;
   mainResizeStartWidth = mainDrawerWidth.value;
@@ -1643,12 +1653,12 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
 <template>
   <div class="doc_content" ref="mdContentWrap">
     <teleport to="body">
-      <div v-if="visible" class="doc-drawer-resize-handle" :style="{ right: `${mainDrawerWidth}px` }" role="separator"
+      <div v-if="visible && !isMainDrawerNarrow" class="doc-drawer-resize-handle" :style="{ right: `${mainDrawerWidth}px` }" role="separator"
         aria-orientation="vertical" @mousedown.prevent="onMainDrawerResizeStart">
         <div class="doc-drawer-resize-line" />
       </div>
     </teleport>
-    <t-drawer :visible="visible" :zIndex="2000" :size="`${mainDrawerWidth}px`" attach="body" :closeBtn="true"
+    <t-drawer :visible="visible" :zIndex="2000" :size="mainDrawerSize" attach="body" :closeBtn="true"
       :footer="false" :class="['doc-main-drawer', { 'doc-main-drawer--resizing': mainDrawerResizing }]"
       @close="handleClose">
       <template #header>
@@ -1765,6 +1775,10 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
             <t-button theme="primary" @click="emit('intakeReview', { action: 'retry', sourceInfo: intakeSourceDraft })">{{ $t('knowledgeBase.intakeRetry') }}</t-button>
             <t-button theme="danger" variant="outline" @click="emit('intakeReview', { action: 'discard' })">{{ $t('knowledgeBase.intakeDiscard') }}</t-button>
           </template>
+        </section>
+
+        <section v-if="details.repost_sources?.length" class="setting-drawer__section doc-repost-section">
+          <RepostSources :sources="details.repost_sources" />
         </section>
 
         <section v-if="details.id" class="setting-drawer__section metadata-section">
@@ -2377,6 +2391,27 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
   gap: 4px;
 }
 
+.doc-drawer-header,
+.doc-drawer-body,
+.doc-drawer-body .setting-drawer__section {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+}
+
+.doc-drawer-body :deep(a) {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.doc-drawer-body :deep(.md-content img) {
+  max-width: min(444px, 100%);
+}
+
 .doc-drawer-body .setting-drawer__section {
   padding: 12px 0 16px;
   border-bottom: 1px solid var(--td-component-stroke);
@@ -2760,12 +2795,17 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
 
 // URL链接区域
 .url_link_box {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   border-radius: 4px;
   background: var(--td-bg-color-container-hover);
   padding: 8px 12px;
 
   .url_link {
     display: flex;
+    min-width: 0;
+    max-width: 100%;
     align-items: center;
     gap: 8px;
     color: var(--td-brand-color);
@@ -2773,8 +2813,12 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
 
     .url_text {
       flex: 1;
+      min-width: 0;
+      max-width: 100%;
       font-size: 13px;
-      word-break: break-all;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     .jump-icon {
@@ -3341,6 +3385,24 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
 
   .t-drawer__body {
     padding: 16px 18px;
+  }
+}
+
+.t-drawer.doc-main-drawer {
+  .t-drawer__content-wrapper {
+    max-width: 100vw;
+    min-width: 0;
+  }
+
+  .t-drawer__content,
+  .t-drawer__body {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .t-drawer__body {
+    overflow-x: hidden;
   }
 }
 

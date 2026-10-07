@@ -6,6 +6,18 @@ import type { AuditLog, AuditOutcome, ListAuditLogResponse } from '@/api/tenant/
 export type KnowledgeBaseActivity = AuditLog;
 export interface IntakeSourceInfo { author?: string; publisher?: string; original_url?: string; published_at?: string }
 
+export type KnowledgeDuplicateCode = 'duplicate_manual' | 'duplicate_file' | 'duplicate_url';
+export type KnowledgeDuplicateMatchMethod = 'url' | 'file_hash' | 'content_hash' | 'simhash';
+
+/** The method describes this intake attempt, independently of older repost sources. */
+export interface KnowledgeDuplicateResponse {
+  success: false;
+  code: KnowledgeDuplicateCode;
+  match_method?: KnowledgeDuplicateMatchMethod;
+  message?: string;
+  data?: { id: string; knowledge_base_id?: string; title?: string; file_name?: string };
+}
+
 export interface ListKnowledgeBaseActivityParams {
   after_id?: number;
   limit?: number;

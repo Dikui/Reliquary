@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import SettingDrawer from '@/components/settings/SettingDrawer.vue'
+import KnowledgeDuplicateNotice from '@/components/KnowledgeDuplicateNotice.vue'
+import { useKnowledgeDuplicates } from '@/hooks/useKnowledgeDuplicates'
+import type { KnowledgeDuplicateNotice as DuplicateNotice } from '@/utils/knowledgeDuplicate'
 import { marked } from 'marked'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useUIStore } from '@/stores/ui'
@@ -78,6 +81,11 @@ const form = reactive({
   content: '',
   status: 'draft' as ManualStatus,
 })
+const { duplicateNotices, showDuplicate, dismissDuplicate, clearDuplicateNotices, openDuplicate } = useKnowledgeDuplicates(() => form.kbId)
+
+const viewDuplicate = async (duplicate: DuplicateNotice) => {
+  if (await openDuplicate(duplicate)) uiStore.closeManualEditor()
+}
 
 const initialLoaded = ref(false)
 const kbOptions = ref<KnowledgeBaseOption[]>([])
@@ -541,6 +549,7 @@ const loadKnowledgeContent = async () => {
 }
 
 const resetForm = () => {
+  clearDuplicateNotices()
   currentKnowledgeId.value = knowledgeId.value || null
   form.kbId = uiStore.manualEditorKBId || ''
   form.title = uiStore.manualEditorInitialTitle || ''
@@ -671,6 +680,7 @@ const handleSave = async (targetStatus: ManualStatus) => {
       kbId = form.kbId
     }
 
+    if (showDuplicate(response, form.title)) return
     if (response?.success) {
       knowledgeID = response?.data?.id || knowledgeID
       currentKnowledgeId.value = knowledgeID || null
@@ -693,6 +703,7 @@ const handleSave = async (targetStatus: ManualStatus) => {
       MessagePlugin.error(message)
     }
   } catch (error: any) {
+    if (showDuplicate(error, form.title)) return
     const message = error?.error?.message || error?.message || t('manualEditor.error.saveFailed')
     MessagePlugin.error(message)
   } finally {
@@ -789,6 +800,8 @@ onBeforeUnmount(() => {
     </template>
 
     <div class="manual-editor" v-if="initialLoaded">
+      <KnowledgeDuplicateNotice v-for="duplicate in duplicateNotices" :key="duplicate.id || duplicate.code"
+        :duplicate="duplicate" @open="viewDuplicate" @dismiss="dismissDuplicate" />
       <section class="setting-drawer__section">
         <h4 class="setting-drawer__section-title">{{ $t('manualEditor.section.basic') }}</h4>
 

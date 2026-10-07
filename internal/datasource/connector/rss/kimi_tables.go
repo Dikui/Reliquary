@@ -2,6 +2,7 @@ package rss
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -20,9 +21,6 @@ var kimiFlightComponent = regexp.MustCompile(`"className":"language-(chartCompar
 // recoverKimiTables restores chart/table data that Kimi streams separately
 // from the server-rendered article.
 func recoverKimiTables(doc *goquery.Document, content *goquery.Selection, pageURL *url.URL) (int, error) {
-	if pageURL == nil || (pageURL.Hostname() != "www.kimi.ai" && pageURL.Hostname() != "kimi.ai") || !strings.HasPrefix(pageURL.Path, "/blog/") {
-		return 0, nil
-	}
 	placeholders := content.Find("div.animate-pulse")
 	if placeholders.Length() == 0 {
 		return 0, nil
@@ -215,4 +213,31 @@ func renderKimiBenchmark(raw json.RawMessage) (string, error) {
 		return "", fmt.Errorf("Kimi benchmark data empty")
 	}
 	return out.String(), nil
+}
+
+func kimiTablesAdapter() SiteAdapter {
+	return SiteAdapter{Name: "kimi-tables", Rules: []SiteRule{{Domains: []string{"www.kimi.ai", "kimi.ai"}, Path: "/blog/", Prefix: true, ExcludePaths: []string{"/blog/kimi-k2-5", "/blog/kimi-k2-6"}}}, Recover: func(ctx context.Context, page *SitePage) SiteRecovery {
+		if page.Content.Find("div.animate-pulse").Length() == 0 {
+			return SiteRecovery{Success: true}
+		}
+		count, err := recoverKimiTables(page.Document, page.Content, page.URL)
+		if err != nil {
+			return SiteRecovery{Reason: err.Error()}
+		}
+		if count == 0 {
+			return SiteRecovery{Reason: "expected widgets or embedded data unavailable"}
+		}
+		body := page.Content.Find("div.max-w-none.markdown").First()
+		if body.Length() == 0 {
+			body = page.Content
+		}
+		discardUnsupportedComponents(body)
+		preferLargestImageVariant(body, page.URL)
+		absolutizeContentURLs(body, page.URL)
+		content, err := body.Html()
+		if err != nil {
+			return SiteRecovery{Reason: err.Error()}
+		}
+		return SiteRecovery{Success: true, ContentHTML: content}
+	}}
 }

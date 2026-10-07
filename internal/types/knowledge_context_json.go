@@ -22,6 +22,7 @@ func (r KnowledgeContextResult) MarshalJSON() ([]byte, error) {
 	out.Events = contextResponseList(out.Events)
 	out.Evidence = contextResponseList(out.Evidence)
 	out.Attention = contextResponseList(out.Attention)
+	out.PublishedAtMissingSourceIDs = contextResponseList(out.PublishedAtMissingSourceIDs)
 	return json.Marshal(out)
 }
 

@@ -139,18 +139,19 @@ type KnowledgeWorkflowCitation struct {
 }
 
 type KnowledgeWorkflowReport struct {
-	ID              string                      `json:"id" gorm:"type:varchar(36);primaryKey"`
-	TenantID        uint64                      `json:"tenant_id" gorm:"not null;index:idx_kwreport_scope"`
-	KnowledgeBaseID string                      `json:"knowledge_base_id" gorm:"type:varchar(36);not null;index:idx_kwreport_scope"`
-	WorkflowID      string                      `json:"workflow_id" gorm:"type:varchar(36);not null;index"`
-	RunID           string                      `json:"run_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_kwreport_step"`
-	StepID          string                      `json:"step_id" gorm:"type:varchar(128);not null;uniqueIndex:idx_kwreport_step"`
-	Title           string                      `json:"title" gorm:"type:varchar(512);not null"`
-	Markdown        string                      `json:"markdown" gorm:"type:text;not null"`
-	Citations       []KnowledgeWorkflowCitation `json:"citations" gorm:"serializer:json;type:jsonb;not null"`
-	TimeFrom        *time.Time                  `json:"time_from,omitempty"`
-	TimeTo          *time.Time                  `json:"time_to,omitempty"`
-	CreatedAt       time.Time                   `json:"created_at"`
+	ExcludedMissingPublishedAtCount int                         `json:"excluded_missing_published_at_count" gorm:"not null;default:0"`
+	ID                              string                      `json:"id" gorm:"type:varchar(36);primaryKey"`
+	TenantID                        uint64                      `json:"tenant_id" gorm:"not null;index:idx_kwreport_scope"`
+	KnowledgeBaseID                 string                      `json:"knowledge_base_id" gorm:"type:varchar(36);not null;index:idx_kwreport_scope"`
+	WorkflowID                      string                      `json:"workflow_id" gorm:"type:varchar(36);not null;index"`
+	RunID                           string                      `json:"run_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_kwreport_step"`
+	StepID                          string                      `json:"step_id" gorm:"type:varchar(128);not null;uniqueIndex:idx_kwreport_step"`
+	Title                           string                      `json:"title" gorm:"type:varchar(512);not null"`
+	Markdown                        string                      `json:"markdown" gorm:"type:text;not null"`
+	Citations                       []KnowledgeWorkflowCitation `json:"citations" gorm:"serializer:json;type:jsonb;not null"`
+	TimeFrom                        *time.Time                  `json:"time_from,omitempty"`
+	TimeTo                          *time.Time                  `json:"time_to,omitempty"`
+	CreatedAt                       time.Time                   `json:"created_at"`
 }
 
 func (KnowledgeWorkflowReport) TableName() string { return "knowledge_workflow_reports" }

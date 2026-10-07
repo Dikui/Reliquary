@@ -6,6 +6,7 @@ export interface KnowledgeContextEnvelope<T> {
   success: boolean
   data: T
   error?: string
+  excluded_missing_published_at_count?: number
 }
 
 export interface KnowledgeContextActionEnvelope {
@@ -42,6 +43,8 @@ export interface KnowledgeEvidence {
   publisher?: string
   original_url?: string
   published_at?: string
+  published_at_missing?: boolean
+  repost_sources?: KnowledgeRepostSource[]
   image_refs?: string[]
   status: 'current' | 'superseded' | string
   extraction_status: 'pending' | 'complete' | 'failed' | string
@@ -92,6 +95,8 @@ export interface KnowledgeEvent {
   evidence_ids?: string[]
   sources?: Array<{ knowledge_base_id: string; knowledge_base_name: string }>
   source_count: number
+  excluded_missing_published_at_count?: number
+  repost_sources?: KnowledgeRepostSource[]
   heat: number
   created_at: string
   updated_at: string
@@ -133,11 +138,24 @@ export interface KnowledgeContextQuery extends KnowledgeContextScopeParams {
 }
 
 export interface KnowledgeContextResult {
+  excluded_missing_published_at_count?: number
+  published_at_missing_source_ids?: string[]
   entities: KnowledgeEntity[]
   facts: KnowledgeFact[]
   events: KnowledgeEvent[]
   evidence: KnowledgeEvidence[]
   attention: KnowledgeAttention[]
+}
+
+export interface KnowledgeRepostSource {
+  id: string
+  knowledge_id: string
+  original_url?: string
+  publisher?: string
+  author?: string
+  published_at?: string
+  published_at_missing?: boolean
+  match_method: string
 }
 
 export interface KnowledgeFactCorrection {

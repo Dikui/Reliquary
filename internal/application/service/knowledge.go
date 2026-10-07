@@ -482,6 +482,12 @@ func (s *knowledgeService) GetKnowledgeByID(ctx context.Context, id string) (*ty
 		return nil, err
 	}
 
+	reposts, err := loadKnowledgeRepostSources(s.db, tenantID, []string{knowledge.ID}, []string{knowledge.KnowledgeBaseID})
+	if err != nil {
+		return nil, err
+	}
+	knowledge.RepostSources = reposts
+
 	// Load tags for this knowledge
 	tagMap, err := s.repo.GetKnowledgeTags(ctx, []string{knowledge.ID})
 	if err != nil {

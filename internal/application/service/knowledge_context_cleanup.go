@@ -33,6 +33,9 @@ func (s *KnowledgeContextService) purgeKnowledgeTx(tx *gorm.DB, tenantID uint64,
 	if knowledgeID == "" {
 		return errors.New("knowledge ID is required")
 	}
+	if err := tx.Where("tenant_id = ? AND knowledge_id = ?", tenantID, knowledgeID).Delete(&types.KnowledgeRepostSource{}).Error; err != nil {
+		return err
+	}
 	var evidence []types.KnowledgeEvidence
 	if err := tx.Where("tenant_id = ? AND knowledge_base_id = ? AND knowledge_id = ?", tenantID, kbID, knowledgeID).Find(&evidence).Error; err != nil {
 		return err
@@ -105,6 +108,9 @@ func (s *KnowledgeContextService) DeleteKnowledgeBase(ctx context.Context, kbID 
 	}
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := lockContextTeam(tx, tenantID); err != nil {
+			return err
+		}
+		if err := tx.Where("tenant_id = ? AND knowledge_base_id = ?", tenantID, kbID).Delete(&types.KnowledgeRepostSource{}).Error; err != nil {
 			return err
 		}
 		var eventIDs []string

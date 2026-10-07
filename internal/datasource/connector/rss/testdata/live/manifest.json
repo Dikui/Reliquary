@@ -1,0 +1,179 @@
+[
+  {
+    "fixture": "cursor.html",
+    "url": "https://cursor.com/blog/",
+    "fetched_at": "2026-10-07T20:43:50.913306+00:00",
+    "http_status": "200",
+    "original_sha256": "08a10cb298c9cf13404b93c525f406f10ffa428805afcfd89b3e0410d5049db7",
+    "saved_sha256": "0e83d3963fb84981918f883f0a9122d7cc7d1bd40d89fabf6e601aa60e38c33b",
+    "saved_bytes": 409053,
+    "transformation": "删除外部脚本、CSS 与无关内联脚本，保留 DOM 与 Flight 或 LD JSON"
+  },
+  {
+    "fixture": "deepseek.html",
+    "url": "https://api-docs.deepseek.com/zh-cn/updates",
+    "fetched_at": "2026-10-07T20:43:48.963046+00:00",
+    "http_status": "200",
+    "original_sha256": "eb4ee7949f034cc07e597e178e5dae78744d11af011a3f0f5592251af866876e",
+    "saved_sha256": "8f3dc60da3303ac031cd2ca6955250442b05462994b7d0b0f06c8ce7384380f8",
+    "saved_bytes": 44946,
+    "transformation": "删除外部脚本、CSS 与无关内联脚本，保留 DOM 与 Flight 或 LD JSON"
+  },
+  {
+    "fixture": "kimi-k25.html",
+    "url": "https://www.kimi.ai/blog/kimi-k2-5",
+    "fetched_at": "2026-10-07T20:43:45.632988+00:00",
+    "http_status": "200",
+    "original_sha256": "c121decac8993bf24a14edae3ed440dfe3345e44a1db06799218a7628e02aaa7",
+    "saved_sha256": "aebe699ae903d783a7d3285d8f43821b38dd3d0d8ba4b5c16357891ce96f8012",
+    "saved_bytes": 542992,
+    "transformation": "删除外部脚本、CSS 与无关内联脚本，保留 DOM 与 Flight 或 LD JSON"
+  },
+  {
+    "fixture": "kimi-k26.html",
+    "url": "https://www.kimi.ai/blog/kimi-k2-6",
+    "fetched_at": "2026-10-07T20:43:45.454078+00:00",
+    "http_status": "200",
+    "original_sha256": "f836e0e2251fdfa718eecfd69bbf13007eba6483008d0edca32cfce3f64bbbeb",
+    "saved_sha256": "9b819115b5752e00ccac4eb87bf060f1a08b7477d0718fad4aca97309dfebb30",
+    "saved_bytes": 349706,
+    "transformation": "删除外部脚本、CSS 与无关内联脚本，保留 DOM 与 Flight 或 LD JSON"
+  },
+  {
+    "fixture": "kimi-listing.html",
+    "url": "https://www.kimi.ai/blog/",
+    "fetched_at": "2026-10-07T20:43:45.295848+00:00",
+    "http_status": "200",
+    "original_sha256": "09c78ee85c1ef9d4d628f4c4bdda56b6b938727ee4a3de5e95cc406908ef40b4",
+    "saved_sha256": "84993b7f96ebd824cf73a27c1626a9469463b67bdfcd1277fe5cd2608d8d0ad3",
+    "saved_bytes": 180541,
+    "transformation": "删除外部脚本、CSS 与无关内联脚本，保留 DOM 与 Flight 或 LD JSON"
+  },
+  {
+    "fixture": "kimi-tables.html",
+    "url": "https://www.kimi.ai/blog/perception-bench",
+    "fetched_at": "2026-10-07T20:43:45.548127+00:00",
+    "http_status": "200",
+    "original_sha256": "7a26ab2cee64fc51c7b9ff95d12db5b40c0aed037a68b9e7c9a4e76d67c07d8a",
+    "saved_sha256": "50cef4088a2143bc2390697f516bd34cd4ecb7e75a31dd9405d68189a65407e6",
+    "saved_bytes": 297930,
+    "transformation": "删除外部脚本、CSS 与无关内联脚本，保留 DOM 与 Flight 或 LD JSON"
+  },
+  {
+    "fixture": "meta-listing.html",
+    "url": "https://ai.meta.com/blog/",
+    "fetched_at": "2026-10-07T20:43:51.972526+00:00",
+    "http_status": "200",
+    "original_sha256": "1c6725fa884cbf0b23a8a247fb568e208a478cda5893d5438732b8501699bc01",
+    "saved_sha256": "96b3df715f71df5f157c6d284a129f660a268ea684b4b04e670e1c607c735001",
+    "saved_bytes": 73776,
+    "transformation": "删除外部脚本、CSS 与无关内联脚本，保留 DOM 与 Flight 或 LD JSON"
+  },
+  {
+    "fixture": "meta.html",
+    "url": "https://ai.meta.com/blog/introducing-muse-spark-meta-model-api/",
+    "fetched_at": "2026-10-07T20:46:09.645525+00:00",
+    "http_status": "200",
+    "original_sha256": "f1a47914f4b3afca9c422d3e118e0d2c95d75622a376fde973816bf6cd6405ef",
+    "saved_sha256": "1055912853d1332e51fac6d2e5e142615bcbf8ce9af81db49778f79f53931ca0",
+    "saved_bytes": 77599,
+    "transformation": "删除外部脚本、CSS 与无关内联脚本，保留 DOM 与 Flight 或 LD JSON"
+  },
+  {
+    "fixture": "minimax-api.json",
+    "url": "https://www.minimax.io/api/news?page=1&locale=en",
+    "fetched_at": "2026-10-07T20:43:47.669279+00:00",
+    "http_status": "200",
+    "original_sha256": "9ba85fcd85077c6067951560494f3806ac9937db2bf699c7bb096a0a80d29e1b",
+    "saved_sha256": "9ba85fcd85077c6067951560494f3806ac9937db2bf699c7bb096a0a80d29e1b",
+    "saved_bytes": 2995,
+    "transformation": "API 原响应"
+  },
+  {
+    "fixture": "minimax.html",
+    "url": "https://www.minimax.io/news",
+    "fetched_at": "2026-10-07T20:43:47.273635+00:00",
+    "http_status": "200",
+    "original_sha256": "428d3dd715706e5f42c0bcdce98aad2336d4aa44bb7925d3e0c5adf95603bcc4",
+    "saved_sha256": "ecbc4fcfede3ccffe6ba5ea5816b66b00e53f61597a4227fac058b9b5af85e50",
+    "saved_bytes": 48791,
+    "transformation": "删除外部脚本、CSS 与无关内联脚本，保留 DOM 与 Flight 或 LD JSON"
+  },
+  {
+    "fixture": "mistral-listing.html",
+    "url": "https://mistral.ai/news/",
+    "fetched_at": "2026-10-07T20:43:49.593430+00:00",
+    "http_status": "200",
+    "original_sha256": "4cfa5cb2af04e49554724f9088c870e93b0554516b2998cd838825a3d63cce3f",
+    "saved_sha256": "61d36636adf91738617a4d517e89c155bfa41249ff2c7b2d2ba9f7e84a3e1539",
+    "saved_bytes": 1202950,
+    "transformation": "删除外部脚本、CSS 与无关内联脚本，保留 DOM 与 Flight 或 LD JSON"
+  },
+  {
+    "fixture": "mistral.html",
+    "url": "https://mistral.ai/news/ocr-4/",
+    "fetched_at": "2026-10-07T20:43:49.330102+00:00",
+    "http_status": "200",
+    "original_sha256": "268a971bcac07e1a8a85d3f0b1032790825df1cac1ecc4ef0cc5499e64860d8a",
+    "saved_sha256": "5962ef224b19df40266b59c7889c08f762c94127d32aa3ea4abeeebaa43211be",
+    "saved_bytes": 222543,
+    "transformation": "删除外部脚本、CSS 与无关内联脚本，保留 DOM 与 Flight 或 LD JSON"
+  },
+  {
+    "fixture": "openai.html",
+    "url": "https://openai.com/index/introducing-gpt-5/",
+    "fetched_at": "2026-10-07T20:43:50.667809+00:00",
+    "http_status": "403",
+    "original_sha256": "6148215fdd4adfdda95da262b85d8bba0d3853d2ae89feccda49bfb4e8848b6c",
+    "saved_sha256": "be7b0fc1a07ccb7021cafcf2aa8e3a1a4b8412a78e704c1145d042dbc2acb7d5",
+    "saved_bytes": 4718,
+    "transformation": "删除外部脚本、CSS 与无关内联脚本，保留 DOM 与 Flight 或 LD JSON",
+    "limitation": "HTTP 403 页面，不是正常文章成功样本"
+  },
+  {
+    "fixture": "qwen-api.json",
+    "url": "https://qwen.ai/api/v2/article/retrieval?type=qwen_ai&language=en-US",
+    "fetched_at": "2026-10-07T20:43:48.400376+00:00",
+    "http_status": "200",
+    "original_sha256": "3731461e7e11fb4a257a163dea22d0490526f867c79933898bcc76e619343244",
+    "saved_sha256": "57be4f11dcaaccf5fecdd86016b1cfcba0ff5081d91c32ea83e81a1a63bf09ff",
+    "saved_bytes": 28531,
+    "transformation": "保留官方 API 第一条完整文章，未改文章字段"
+  },
+  {
+    "fixture": "qwen-article.html",
+    "url": "https://qwen.ai/blog?id=qwen-deepresearch",
+    "fetched_at": "2026-10-07T20:43:48.400376+00:00",
+    "http_status": "200",
+    "original_sha256": "3731461e7e11fb4a257a163dea22d0490526f867c79933898bcc76e619343244",
+    "saved_sha256": "86777e1ea562670bc106214c61339754391b6e3e157280c7a0cd619ed84a7759",
+    "saved_bytes": 23983,
+    "transformation": "保存官方 API 第一条文章的完整 content 字段，未改正文"
+  },
+  {
+    "fixture": "qwen.html",
+    "url": "https://qwen.ai/blog",
+    "fetched_at": "2026-10-07T20:43:46.911269+00:00",
+    "http_status": "200",
+    "original_sha256": "1237040b7e9f58460b1cb7f759591163fcc39709c2d925c8b21a69b266940c27",
+    "saved_sha256": "5ed24e59e95dcdc1cbe7e31eedeb33f79482497018ae367858054b74fb2c8d80",
+    "saved_bytes": 78525,
+    "transformation": "删除外部脚本、CSS 与无关内联脚本，保留 DOM 与 Flight 或 LD JSON"
+  },
+  {
+    "fixture": "seed.html",
+    "url": "https://seed.bytedance.com/zh/blog/edgebench",
+    "fetched_at": "2026-10-07T20:43:51.292913+00:00",
+    "http_status": "200",
+    "original_sha256": "f72aa4e09852525805148136bdfc0b928f51cdac0aa8c68231d6f199f3c9b276",
+    "saved_sha256": "8f58e2ebec6a1d1b9b0e79ed351751f69061ada38afa2c5c44339ecf7dde9a0e",
+    "saved_bytes": 598,
+    "transformation": "删除外部脚本、CSS 与无关内联脚本，保留 DOM 与 Flight 或 LD JSON",
+    "limitation": "HTTP 200 客户端 shell，无服务端文章正文，用于恢复失败回归"
+  },
+  {
+    "fixture": "../zhipu.html",
+    "url": "https://www.zhipuai.cn/zh/research",
+    "limitation": "curl TLS protocol version 与 Python OpenSSL WRONG_VERSION_NUMBER；没有真实 HTML，合成最小结构仅覆盖历史格式，不代表真实站点验收"
+  }
+]

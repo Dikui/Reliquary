@@ -28,11 +28,12 @@ type workflowReportStructure struct {
 }
 
 type workflowReportMaterial struct {
-	TimeFrom   *time.Time                `json:"time_from,omitempty"`
-	TimeTo     *time.Time                `json:"time_to,omitempty"`
-	Evidence   []workflowReportEvidence  `json:"evidence"`
-	Structured []workflowReportStructure `json:"structured"`
-	Coverage   string                    `json:"coverage"`
+	ExcludedMissingPublishedAtCount int                       `json:"excluded_missing_published_at_count"`
+	TimeFrom                        *time.Time                `json:"time_from,omitempty"`
+	TimeTo                          *time.Time                `json:"time_to,omitempty"`
+	Evidence                        []workflowReportEvidence  `json:"evidence"`
+	Structured                      []workflowReportStructure `json:"structured"`
+	Coverage                        string                    `json:"coverage"`
 }
 
 func workflowEvidenceRole(citation types.KnowledgeWorkflowCitation, from, to *time.Time, loc *time.Location) string {
@@ -57,11 +58,22 @@ func workflowEvidenceRole(citation types.KnowledgeWorkflowCitation, from, to *ti
 func buildWorkflowReportMaterial(outputs map[string]workflowStepOutput, from, to *time.Time, loc *time.Location) (workflowReportMaterial, []types.KnowledgeWorkflowCitation) {
 	material := workflowReportMaterial{TimeFrom: from, TimeTo: to, Evidence: []workflowReportEvidence{}, Structured: []workflowReportStructure{}, Coverage: "Selected workflow results; pagination and extraction gaps may limit coverage. Not an exhaustive census."}
 	all := gatherWorkflowCitations(outputs)
+	missing := map[string]bool{}
+	if from != nil || to != nil {
+		for _, citation := range all {
+			if workflowPublicationMissing(citation, loc) {
+				missing[workflowMissingSourceID(citation)] = true
+			}
+		}
+	}
 	citations := make([]types.KnowledgeWorkflowCitation, 0, min(30, len(all)))
 	// Prioritize this period before background so a busy history cannot displace
 	// current evidence from the fixed report budget.
 	for _, role := range []string{"current_period", "background", "unknown_date"} {
 		for _, citation := range all {
+			if (from != nil || to != nil) && workflowPublicationMissing(citation, loc) {
+				continue
+			}
 			if len(citations) == 30 {
 				break
 			}
@@ -97,6 +109,9 @@ func buildWorkflowReportMaterial(outputs map[string]workflowStepOutput, from, to
 		var contextResult types.KnowledgeContextResult
 		if json.Unmarshal(encoded, &contextResult) != nil {
 			continue
+		}
+		for _, sourceID := range contextResult.PublishedAtMissingSourceIDs {
+			missing[sourceID] = true
 		}
 		entry := workflowReportStructure{StepID: id, Entities: []types.KnowledgeEntity{}, Facts: []map[string]any{}, Events: []map[string]any{}}
 		usedEntities := map[string]bool{}
@@ -151,5 +166,21 @@ func buildWorkflowReportMaterial(outputs map[string]workflowStepOutput, from, to
 			material.Structured = append(material.Structured, entry)
 		}
 	}
+	material.ExcludedMissingPublishedAtCount = len(missing)
 	return material, citations
+}
+
+func workflowMissingSourceID(citation types.KnowledgeWorkflowCitation) string {
+	if citation.KnowledgeID != "" {
+		return "knowledge:" + citation.KnowledgeID
+	}
+	if citation.EvidenceID != "" {
+		return "evidence:" + citation.EvidenceID
+	}
+	return "citation:" + citation.Kind + ":" + citation.URL + ":" + citation.ID
+}
+
+func workflowPublicationMissing(citation types.KnowledgeWorkflowCitation, loc *time.Location) bool {
+	value, err := parseWorkflowTimeInLocation(citation.PublishedAt, loc, false)
+	return err != nil || value == nil
 }

@@ -1,6 +1,7 @@
 package rss
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -59,8 +60,6 @@ func parseQwenArticles(data []byte) ([]*gofeed.Item, error) {
 			reason = "Qwen article missing original URL"
 		case article.Title == "":
 			reason = "Qwen article missing title"
-		case !valid:
-			reason = "Qwen article missing publication date"
 		case article.Content == "":
 			reason = "Qwen article has no original body"
 		}
@@ -90,4 +89,24 @@ func parseQwenArticles(data []byte) ([]*gofeed.Item, error) {
 		items = append(items, item)
 	}
 	return items, nil
+}
+
+func qwenAdapter() SiteAdapter {
+	return SiteAdapter{Name: "qwen", Rules: []SiteRule{{Domains: []string{"qwen.ai"}, Path: "/blog"}}, Recover: func(_ context.Context, page *SitePage) SiteRecovery {
+		body := page.Document.Find(".post-content").First()
+		if body.Length() == 0 {
+			return SiteRecovery{Reason: "Qwen original article body unavailable"}
+		}
+		discardUnsupportedComponents(body)
+		preferLargestImageVariant(body, page.URL)
+		absolutizeContentURLs(body, page.URL)
+		html, err := goquery.OuterHtml(body)
+		if err != nil {
+			return SiteRecovery{Reason: err.Error()}
+		}
+		return SiteRecovery{Success: true, ContentHTML: html}
+	}, discovery: &siteDiscovery{
+		sourceURL: qwenArticlesURL, inlineOriginal: true, needsArticleDate: false,
+		parse: func(data []byte, raw string) ([]*gofeed.Item, error) { return parseQwenArticles(data) },
+	}}
 }

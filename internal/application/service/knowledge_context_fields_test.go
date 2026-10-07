@@ -105,10 +105,10 @@ func TestWorkflowReportMaterialPreservesStructuredCorrectionsAndBackground(t *te
 		{ID: "evidence:future", EvidenceID: "future", Quote: "future material", PublishedAt: "2026-10-08"},
 	}}}
 	material, citations := buildWorkflowReportMaterial(outputs, &from, &to, time.UTC)
-	require.Len(t, citations, 3)
+	require.Len(t, citations, 2)
 	require.Equal(t, "current_period", material.Evidence[0].Role)
 	require.Equal(t, "background", material.Evidence[1].Role)
-	require.Equal(t, "unknown_date", material.Evidence[2].Role)
+	require.Equal(t, 1, material.ExcludedMissingPublishedAtCount)
 	require.Len(t, material.Structured, 1)
 	require.Len(t, material.Structured[0].Facts, 1)
 	require.Len(t, material.Structured[0].Events, 1)

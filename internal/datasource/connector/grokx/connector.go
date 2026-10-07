@@ -320,8 +320,11 @@ func parsePosts(result xResponse, handle string, since, end time.Time) ([]types.
 			reason = "media inventory is missing"
 		}
 		published, dateErr := time.Parse(time.RFC3339, post.CreatedAt)
-		if reason == "" && (dateErr != nil || published.IsZero()) {
-			reason = "publication timestamp is missing or invalid"
+		publishedAt := ""
+		if dateErr == nil && !published.IsZero() {
+			publishedAt = published.Format(time.RFC3339Nano)
+		} else {
+			published = time.Time{}
 		}
 		if reason != "" {
 			if len(details) < 20 {
@@ -329,7 +332,7 @@ func parsePosts(result xResponse, handle string, since, end time.Time) ([]types.
 			}
 			continue
 		}
-		if published.Before(since) || published.After(end) || seen[id] {
+		if (!published.IsZero() && (published.Before(since) || published.After(end))) || seen[id] {
 			continue
 		}
 		content := strings.TrimSpace(post.Text)
@@ -375,7 +378,7 @@ func parsePosts(result xResponse, handle string, since, end time.Time) ([]types.
 			URL: "https://x.com/" + handle + "/status/" + id, UpdatedAt: published,
 			SourceResourceID: handle, Metadata: map[string]string{
 				"channel": types.ConnectorTypeGrokX, "author": "@" + handle,
-				"published_at": published.Format(time.RFC3339Nano), "x_post_type": post.PostType,
+				"published_at": publishedAt, "x_post_type": post.PostType,
 			},
 		})
 	}

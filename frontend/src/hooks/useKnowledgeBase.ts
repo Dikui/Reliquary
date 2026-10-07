@@ -13,12 +13,15 @@ import { knowledgeStore } from "@/stores/knowledge";
 import { useUIStore } from "@/stores/ui";
 import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
+import type { KnowledgeRepostSource } from '@/api/knowledge-context';
+import { useKnowledgeDuplicates } from './useKnowledgeDuplicates';
 
 export default function (knowledgeBaseId?: string) {
   const usemenuStore = knowledgeStore();
   const route = useRoute();
   const { t } = useI18n();
   const { cardList, total } = storeToRefs(usemenuStore);
+  const duplicates = useKnowledgeDuplicates(() => (route.params as any)?.kbId || knowledgeBaseId);
   let moreIndex = ref(-1);
   const details = reactive({
     title: "",
@@ -39,6 +42,7 @@ export default function (knowledgeBaseId?: string) {
     chunkLoading: false,
     chunkLoadError: "",
     tags: [] as Array<{ id: string; name: string; color?: string }>,
+    repost_sources: [] as KnowledgeRepostSource[],
   });
   let knowledgeListGeneration = 0;
   let chunkRequestGeneration = 0;
@@ -165,20 +169,23 @@ export default function (knowledgeBaseId?: string) {
     const uiStore = useUIStore();
     const tagIdsToUpload = uiStore.selectedTagIds.length > 0 ? [...uiStore.selectedTagIds] : undefined;
 
-    uploadKnowledgeFile(currentKbId, { file, tag_ids: tagIdsToUpload })
+    return uploadKnowledgeFile(currentKbId, { file, tag_ids: tagIdsToUpload })
       .then((result: any) => {
+        if (duplicates.showDuplicate(result, file.name)) return;
         if (result.success) {
           MessagePlugin.info(t('knowledgeBase.uploadSuccess'));
           getKnowled({ page: 1, page_size: 35 }, currentKbId);
         } else {
           const errorMessage = result.error?.message || result.message || t('knowledgeBase.uploadFailed');
-          MessagePlugin.error(result.code === 'duplicate_file' ? t('knowledgeBase.fileExists') : errorMessage);
+          MessagePlugin.error(errorMessage);
         }
-        uploadInput.value.value = "";
       })
       .catch((err: any) => {
+        if (duplicates.showDuplicate(err, file.name)) return;
         const errorMessage = err.error?.message || err.message || t('knowledgeBase.uploadFailed');
-        MessagePlugin.error(err.code === 'duplicate_file' ? t('knowledgeBase.fileExists') : errorMessage);
+        MessagePlugin.error(errorMessage);
+      })
+      .finally(() => {
         uploadInput.value.value = "";
       });
   };
@@ -202,9 +209,11 @@ export default function (knowledgeBaseId?: string) {
 	  custom_metadata: {},
       chunkLoadError: "",
       tags: item?.tags ? [...item.tags] : [],
+      repost_sources: [],
     });
     getKnowledgeDetails(item.id)
       .then((result: any) => {
+        if (activeKnowledgeId !== item.id) return;
         if (result.success && result.data) {
           const { data } = result;
           Object.assign(details, {
@@ -222,6 +231,7 @@ export default function (knowledgeBaseId?: string) {
 			metadata: data.metadata || {},
 			custom_metadata: data.custom_metadata || {},
             tags: data.tags?.length ? data.tags : (item?.tags || []),
+            repost_sources: Array.isArray(data.repost_sources) ? data.repost_sources : [],
           });
         }
       })
@@ -260,6 +270,7 @@ export default function (knowledgeBaseId?: string) {
       });
   };
   return {
+    ...duplicates,
     cardList,
     moreIndex,
     getKnowled,

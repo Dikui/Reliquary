@@ -16,9 +16,6 @@ var kimiAnyComponent = regexp.MustCompile(`"className":"language-([^"]+)"`)
 var kimiComponentValue = regexp.MustCompile(`"value":("(?:[^"\\]|\\.)*")`)
 
 func (c *client) recoverKimiK25(ctx context.Context, doc *goquery.Document, content *goquery.Selection, pageURL *url.URL) (int, error) {
-	if pageURL == nil || (pageURL.Hostname() != "www.kimi.ai" && pageURL.Hostname() != "kimi.ai") || pageURL.Path != "/blog/kimi-k2-5" {
-		return 0, nil
-	}
 	placeholders := content.Find("div.animate-pulse")
 	if placeholders.Length() != 8 {
 		return 0, nil
@@ -286,4 +283,29 @@ func renderKimiChatTool(raw json.RawMessage, pageURL *url.URL) (string, error) {
 		}
 	}
 	return out.String(), nil
+}
+
+func kimiK25Adapter() SiteAdapter {
+	return SiteAdapter{Name: "kimi-k25", Rules: []SiteRule{{Domains: []string{"www.kimi.ai", "kimi.ai"}, Path: "/blog/kimi-k2-5", Prefix: false}}, Recover: func(ctx context.Context, page *SitePage) SiteRecovery {
+
+		count, err := page.client.recoverKimiK25(ctx, page.Document, page.Content, page.URL)
+		if err != nil {
+			return SiteRecovery{Reason: err.Error()}
+		}
+		if count == 0 {
+			return SiteRecovery{Reason: "expected widgets or embedded data unavailable"}
+		}
+		body := page.Content.Find("div.max-w-none.markdown").First()
+		if body.Length() == 0 {
+			body = page.Content
+		}
+		discardUnsupportedComponents(body)
+		preferLargestImageVariant(body, page.URL)
+		absolutizeContentURLs(body, page.URL)
+		content, err := body.Html()
+		if err != nil {
+			return SiteRecovery{Reason: err.Error()}
+		}
+		return SiteRecovery{Success: true, ContentHTML: content}
+	}}
 }

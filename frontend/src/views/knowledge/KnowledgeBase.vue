@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, watch, reactive, computed, nextTick } from "vue";
 import { MessagePlugin } from "tdesign-vue-next";
 import DocContent from "@/components/doc-content.vue";
+import KnowledgeDuplicateNotice from '@/components/KnowledgeDuplicateNotice.vue';
 import useKnowledgeBase from '@/hooks/useKnowledgeBase';
 import { useRoute, useRouter } from 'vue-router';
 import EmptyKnowledge from '@/components/empty-knowledge.vue';
@@ -248,7 +249,8 @@ const canMutateKnowledge = computed(() => authStore.hasRole('contributor'));
 const canDownloadKnowledge = computed(() => authStore.hasRole('contributor'));
 
 const knowledgeList = ref<Array<{ id: string; name: string; type?: string }>>([]);
-let { cardList, total, moreIndex, details, getKnowled, delKnowledge, openMore, onVisibleChange: _onVisibleChange, getCardDetails, getfDetails } = useKnowledgeBase(kbId.value)
+let { cardList, total, moreIndex, details, getKnowled, delKnowledge, openMore, onVisibleChange: _onVisibleChange, getCardDetails, getfDetails,
+  duplicateNotices, showDuplicate, dismissDuplicate, clearDuplicateNotices, openDuplicate } = useKnowledgeBase(kbId.value)
 
 const showKbDetailContextualGuide = computed(() => {
   return Boolean(kbId.value)
@@ -1053,6 +1055,7 @@ watch(activeKbTab, (tab) => {
 })
 
 watch(() => kbId.value, (newKbId, oldKbId) => {
+  if (newKbId !== oldKbId) clearDuplicateNotices();
   if (!newKbId) {
     kbInfo.value = null;
     cardList.value = [];
@@ -1608,7 +1611,7 @@ const executeUploadBatch = async (
 ) => {
   const targetKbId = kbId.value;
   if (!targetKbId || files.length === 0) {
-    return { successCount: 0, failCount: files.length };
+    return { successCount: 0, failCount: files.length, duplicateCount: 0 };
   }
 
   const tagIdsToUpload = options.tagIds && options.tagIds.length > 0
@@ -1616,6 +1619,7 @@ const executeUploadBatch = async (
     : undefined;
   let successCount = 0;
   let failCount = 0;
+  let duplicateCount = 0;
   const totalCount = files.length;
   const hasFolderPaths = files.some(isFolderUpload);
 
@@ -1638,7 +1642,11 @@ const executeUploadBatch = async (
       if (sourceInfo && Object.values(sourceInfo).some(Boolean)) uploadData.source_info = sourceInfo
 
       const responseData: any = await uploadKnowledgeFile(targetKbId, uploadData);
-      const isSuccess = responseData?.success || responseData?.code === 200 || responseData?.status === 'success' || (!responseData?.error && responseData);
+      if (showDuplicate(responseData, file.name)) {
+        duplicateCount++;
+        continue;
+      }
+      const isSuccess = responseData?.success || responseData?.code === 200 || responseData?.status === 'success' || (responseData?.success !== false && !responseData?.error && responseData);
       if (isSuccess) {
         successCount++;
       } else {
@@ -1650,19 +1658,17 @@ const executeUploadBatch = async (
           } else if (responseData?.message) {
             errorMessage = responseData.message;
           }
-          if (responseData?.code === 'duplicate_file' || responseData?.error?.code === 'duplicate_file') {
-            errorMessage = t('knowledgeBase.fileExists');
-          }
           MessagePlugin.error(errorMessage);
         }
       }
     } catch (error: any) {
+      if (showDuplicate(error, file.name)) {
+        duplicateCount++;
+        continue;
+      }
       failCount++;
       if (totalCount === 1) {
         let errorMessage = error?.error?.message || error?.message || t('knowledgeBase.uploadFailed');
-        if (error?.code === 'duplicate_file') {
-          errorMessage = t('knowledgeBase.fileExists');
-        }
         MessagePlugin.error(errorMessage);
       }
     }
@@ -1674,8 +1680,10 @@ const executeUploadBatch = async (
     }));
   }
 
-  showUploadResultMessages(successCount, failCount, totalCount, hasFolderPaths ? 'folder' : 'document');
-  return { successCount, failCount };
+  if (successCount > 0 || failCount > 0) {
+    showUploadResultMessages(successCount, failCount, totalCount, hasFolderPaths ? 'folder' : 'document');
+  }
+  return { successCount, failCount, duplicateCount };
 };
 
 const executeUrlImport = async (
@@ -1698,10 +1706,11 @@ const executeUrlImport = async (
       process_config: processConfig,
       source_info: sourceInfo,
     });
+    if (showDuplicate(responseData, url)) return;
     window.dispatchEvent(new CustomEvent('knowledgeFileUploaded', {
       detail: { kbId: targetKbId },
     }));
-    const isSuccess = responseData?.success || responseData?.code === 200 || responseData?.status === 'success' || (!responseData?.error && responseData);
+    const isSuccess = responseData?.success || responseData?.code === 200 || responseData?.status === 'success' || (responseData?.success !== false && !responseData?.error && responseData);
     if (isSuccess) {
       MessagePlugin.success(t('knowledgeBase.urlImportSuccess'));
     } else {
@@ -1711,16 +1720,11 @@ const executeUrlImport = async (
       } else if (responseData?.message) {
         errorMessage = responseData.message;
       }
-      if (responseData?.code === 'duplicate_url' || responseData?.error?.code === 'duplicate_url') {
-        errorMessage = t('knowledgeBase.urlExists');
-      }
       MessagePlugin.error(errorMessage);
     }
   } catch (error: any) {
+    if (showDuplicate(error, url)) return;
     let errorMessage = error?.error?.message || error?.message || t('knowledgeBase.urlImportFailed');
-    if (error?.code === 'duplicate_url') {
-      errorMessage = t('knowledgeBase.urlExists');
-    }
     MessagePlugin.error(errorMessage);
   }
 };
@@ -2264,6 +2268,10 @@ async function createNewSession(value: string): Promise<void> {
 
 <template>
   <div class="knowledge-layout">
+      <div v-if="duplicateNotices.length" class="knowledge-duplicate-notices">
+        <KnowledgeDuplicateNotice v-for="duplicate in duplicateNotices" :key="duplicate.id || duplicate.inputLabel"
+          :duplicate="duplicate" @open="openDuplicate" @dismiss="dismissDuplicate" />
+      </div>
       <div class="document-header">
         <div class="document-header-title">
           <div class="document-title-row">
@@ -2796,6 +2804,15 @@ async function createNewSession(value: string): Promise<void> {
   min-width: 0;
   padding: 24px 32px 0px;
   box-sizing: border-box;
+}
+
+.knowledge-duplicate-notices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+  max-height: 30vh;
+  overflow-y: auto;
 }
 
 

@@ -572,7 +572,7 @@ func (s *KnowledgeWorkflowService) currentRole(ctx context.Context, tenantID uin
 	if err != nil {
 		return "", err
 	}
-	if member == nil || member.Status != types.TenantMemberStatusActive {
+	if member == nil || member.Status != types.TenantMemberStatusActive || !member.Role.IsValid() {
 		return "", ErrWorkflowForbidden
 	}
 	return member.Role, nil

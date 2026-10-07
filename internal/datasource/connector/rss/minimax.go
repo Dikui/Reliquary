@@ -51,3 +51,10 @@ func parseMiniMaxNews(data []byte) ([]*gofeed.Item, error) {
 	// ponytail: read the newest page; add pagination if more than one page is published between daily syncs.
 	return items, nil
 }
+
+func minimaxAdapter() SiteAdapter {
+	return SiteAdapter{Name: "minimax", Rules: []SiteRule{{Domains: []string{"www.minimax.io"}, Path: "/news"}}, discovery: &siteDiscovery{
+		sourceURL: minimaxNewsAPIURL, inlineOriginal: false, needsArticleDate: true,
+		parse: func(data []byte, raw string) ([]*gofeed.Item, error) { return parseMiniMaxNews(data) },
+	}}
+}

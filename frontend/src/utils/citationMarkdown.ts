@@ -196,6 +196,7 @@ const HTML_PLACEHOLDER_RE = /@@RELIQUARY_HTML_PLACEHOLDER_(\d+)@@/g
 export function extractCitationHtmlPlaceholders(
   contentStr: string,
   refs?: CitationKnowledgeRef[] | null,
+  convertWikiLinks = true,
 ): { content: string; htmlSnippets: string[] } {
   const htmlSnippets: string[] = []
   const storeHtml = (html: string): string => {
@@ -204,9 +205,11 @@ export function extractCitationHtmlPlaceholders(
     return `@@RELIQUARY_HTML_PLACEHOLDER_${idx}@@`
   }
 
-  const content = contentStr
+  let content = contentStr
     .replace(KB_WEB_TAG_RE, (match) => storeHtml(preprocessCitationTags(match, refs)))
-    .replace(/\[\[([^\]]+)\]\]/g, (match) => storeHtml(preprocessCitationTags(match, refs)))
+  if (convertWikiLinks) {
+    content = content.replace(/\[\[([^\]]+)\]\]/g, (match) => storeHtml(preprocessCitationTags(match, refs)))
+  }
 
   return { content, htmlSnippets }
 }

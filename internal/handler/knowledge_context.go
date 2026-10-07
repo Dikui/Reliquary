@@ -200,12 +200,12 @@ func (h *KnowledgeContextHandler) Evidence(c *gin.Context) {
 		c.Error(err)
 		return
 	}
-	items, err := h.service.ListEvidence(c.Request.Context(), c.Param("id"), q)
+	items, excludedCount, err := h.service.ListEvidenceWithPublicationStats(c.Request.Context(), c.Param("id"), q)
 	if err != nil {
 		c.Error(err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": items})
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": items, "excluded_missing_published_at_count": excludedCount})
 }
 
 // GetEvidence returns a source evidence record.

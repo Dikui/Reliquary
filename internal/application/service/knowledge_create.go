@@ -94,6 +94,9 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 		return nil, err
 	}
 	if exists {
+		if err := s.recordKnownMessageRepost(ctx, existingKnowledge, kbID, types.SourceInfo{Author: metadata["author"], Publisher: metadata["publisher"], OriginalURL: metadata["original_url"], PublishedAt: metadata["published_at"]}, "file_hash"); err != nil {
+			return nil, err
+		}
 		logger.Infof(ctx, "File already exists: %s", fileName)
 		// Update creation time for existing knowledge
 		if err := s.repo.UpdateKnowledgeColumn(ctx, existingKnowledge.ID, "created_at", time.Now()); err != nil {
@@ -185,7 +188,7 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 	{
 		if err := knowledge.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{
 			Source: "file", Decision: "pending",
-			SourceInfo: types.SourceInfo{Author: metadata["author"], OriginalURL: metadata["original_url"], PublishedAt: metadata["published_at"]},
+			SourceInfo: types.SourceInfo{Author: metadata["author"], Publisher: metadata["publisher"], OriginalURL: metadata["original_url"], PublishedAt: metadata["published_at"]},
 		}); err != nil {
 			_ = fileSvc.DeleteFile(ctx, filePath)
 			return nil, err
@@ -194,11 +197,15 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 
 	// Save knowledge record to database after the file is safely stored.
 	logger.Info(ctx, "Saving knowledge record to database")
-	if err := s.repo.CreateKnowledge(ctx, knowledge); err != nil {
-		logger.Errorf(ctx, "Failed to create knowledge record, ID: %s, error: %v", knowledge.ID, err)
+	duplicate, err := s.createMessageWithDeduplication(ctx, knowledge, "")
+	if err != nil || duplicate != nil {
 		if deleteErr := fileSvc.DeleteFile(ctx, filePath); deleteErr != nil {
-			logger.Errorf(ctx, "Failed to delete saved file after knowledge creation failed, path: %s, error: %v", filePath, deleteErr)
+			return nil, deleteErr
 		}
+		if duplicate != nil && err == nil {
+			return duplicate, types.NewDuplicateFileError(duplicate)
+		}
+		logger.Errorf(ctx, "Failed to create knowledge record, ID: %s, error: %v", knowledge.ID, err)
 		return nil, err
 	}
 	// Set tag relations
@@ -356,6 +363,24 @@ func (s *knowledgeService) createKnowledgeFromURL(ctx context.Context,
 	logger.Infof(ctx, "Checking if URL exists, tenant ID: %d", tenantID)
 	fileHash := calculateStr(url)
 	if !skipDuplicate {
+		incoming := &types.Knowledge{TenantID: tenantID, KnowledgeBaseID: kbID, Source: url}
+		source := types.SourceInfo{OriginalURL: url}
+		if len(sourceInfos) > 0 {
+			source = sourceInfos[0]
+			if source.OriginalURL == "" {
+				source.OriginalURL = url
+			}
+		}
+		if err := incoming.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{SourceInfo: source}); err != nil {
+			return nil, err
+		}
+		existing, err := s.checkMessageDuplicate(ctx, incoming, "")
+		if err != nil {
+			return nil, err
+		}
+		if existing != nil {
+			return existing, types.NewDuplicateURLError(existing)
+		}
 		exists, existingKnowledge, err := s.repo.CheckKnowledgeExists(ctx, tenantID, kbID, &types.KnowledgeCheckParams{
 			Type:     "url",
 			URL:      url,
@@ -366,6 +391,9 @@ func (s *knowledgeService) createKnowledgeFromURL(ctx context.Context,
 			return nil, err
 		}
 		if exists {
+			if err := s.recordKnownMessageRepost(ctx, existingKnowledge, kbID, source, "url"); err != nil {
+				return nil, err
+			}
 			logger.Infof(ctx, "URL already exists: %s", url)
 			// Update creation time for existing knowledge
 			existingKnowledge.CreatedAt = time.Now()
@@ -430,7 +458,17 @@ func (s *knowledgeService) createKnowledgeFromURL(ctx context.Context,
 		return nil, err
 	}
 
-	if err := s.repo.CreateKnowledge(ctx, knowledge); err != nil {
+	setMessageFingerprint(knowledge, "")
+	if skipDuplicate {
+		err = s.repo.CreateKnowledge(ctx, knowledge)
+	} else {
+		var existing *types.Knowledge
+		existing, err = s.createMessageWithDeduplication(ctx, knowledge, "")
+		if err == nil && existing != nil {
+			return existing, types.NewDuplicateURLError(existing)
+		}
+	}
+	if err != nil {
 		logger.Errorf(ctx, "Failed to create knowledge record: %v", err)
 		return nil, err
 	}
@@ -609,6 +647,24 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 	tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
 	fileHash := calculateStr(fileURL)
 	if !skipDuplicate {
+		incoming := &types.Knowledge{TenantID: tenantID, KnowledgeBaseID: kbID, Source: fileURL}
+		source := types.SourceInfo{OriginalURL: fileURL}
+		if len(sourceInfos) > 0 {
+			source = sourceInfos[0]
+			if source.OriginalURL == "" {
+				source.OriginalURL = fileURL
+			}
+		}
+		if err := incoming.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{SourceInfo: source}); err != nil {
+			return nil, err
+		}
+		existing, err := s.checkMessageDuplicate(ctx, incoming, "")
+		if err != nil {
+			return nil, err
+		}
+		if existing != nil {
+			return existing, types.NewDuplicateURLError(existing)
+		}
 		exists, existingKnowledge, err := s.repo.CheckKnowledgeExists(ctx, tenantID, kbID, &types.KnowledgeCheckParams{
 			Type:     "file_url",
 			URL:      fileURL,
@@ -619,6 +675,9 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 			return nil, err
 		}
 		if exists {
+			if err := s.recordKnownMessageRepost(ctx, existingKnowledge, kbID, source, "url"); err != nil {
+				return nil, err
+			}
 			logger.Infof(ctx, "File URL already exists: %s", fileURL)
 			existingKnowledge.CreatedAt = time.Now()
 			existingKnowledge.UpdatedAt = time.Now()
@@ -689,7 +748,17 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 		}
 	}
 
-	if err := s.repo.CreateKnowledge(ctx, knowledge); err != nil {
+	setMessageFingerprint(knowledge, "")
+	if skipDuplicate {
+		err = s.repo.CreateKnowledge(ctx, knowledge)
+	} else {
+		var existing *types.Knowledge
+		existing, err = s.createMessageWithDeduplication(ctx, knowledge, "")
+		if err == nil && existing != nil {
+			return existing, types.NewDuplicateURLError(existing)
+		}
+	}
+	if err != nil {
 		logger.Errorf(ctx, "Failed to create knowledge record: %v", err)
 		return nil, err
 	}
@@ -826,6 +895,27 @@ func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 		title = fmt.Sprintf("Knowledge-%s", now.Format("20060102-150405"))
 	}
 
+	if status == types.ManualKnowledgeStatusPublish {
+		incoming := &types.Knowledge{TenantID: tenantID, KnowledgeBaseID: kbID}
+		if len(payload.SourceMetadata) > 0 {
+			metadata, err := json.Marshal(payload.SourceMetadata)
+			if err != nil {
+				return nil, err
+			}
+			incoming.Metadata = types.JSON(metadata)
+		}
+		if err := incoming.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{SourceInfo: payload.SourceInfo}); err != nil {
+			return nil, err
+		}
+		existing, err := s.checkMessageDuplicate(ctx, incoming, cleanContent)
+		if err != nil {
+			return nil, err
+		}
+		if existing != nil {
+			return existing, &types.DuplicateKnowledgeError{Message: "Message already exists", Knowledge: existing}
+		}
+	}
+
 	fileName := ensureManualFileName(title)
 	meta := types.NewManualKnowledgeMetadata(cleanContent, status, 1)
 
@@ -889,9 +979,22 @@ func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 		}
 	}
 
-	if err := s.repo.CreateKnowledge(ctx, knowledge); err != nil {
-		logger.Errorf(ctx, "Failed to create manual knowledge record: %v", err)
-		return nil, err
+	var existing *types.Knowledge
+	if status == types.ManualKnowledgeStatusPublish {
+		existing, err = s.createMessageWithDeduplication(ctx, knowledge, cleanContent)
+	} else {
+		err = s.repo.CreateKnowledge(ctx, knowledge)
+	}
+	if err != nil || existing != nil {
+		if intake, _ := knowledge.IntakeMetadata(); intake != nil && intake.OriginalPath != "" {
+			if cleanupErr := s.resolveFileService(ctx, kb).DeleteFile(ctx, intake.OriginalPath); cleanupErr != nil {
+				return nil, cleanupErr
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return existing, &types.DuplicateKnowledgeError{Message: "Message already exists", Knowledge: existing}
 	}
 	// Set tag relations
 	if err := s.setAndAttachKnowledgeTags(ctx, tenantID, kbID, knowledge, payload.TagIDs); err != nil {
@@ -1488,6 +1591,20 @@ func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 			return
 		}
 	}
+	if intake, _ := knowledge.IntakeMetadata(); intake != nil && intake.Decision != "approved" {
+		existing, err := s.checkMessageDuplicate(ctx, knowledge, clean)
+		if err != nil {
+			knowledge.ParseStatus = types.ParseStatusFailed
+			return
+		}
+		if existing != nil {
+			if err := s.stopDuplicateProcessing(ctx, knowledge); err != nil {
+				knowledge.ParseStatus = types.ParseStatusFailed
+			}
+			return
+		}
+	}
+
 	if intake, _ := knowledge.IntakeMetadata(); intake != nil {
 		if docparser.HasUnstoredImages(clean) {
 			knowledge.ParseStatus = types.ParseStatusFailed

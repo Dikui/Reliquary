@@ -276,13 +276,13 @@ func TestSitemapUsesArticlePublicationDate(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(items) != 2 {
-		t.Fatalf("expected current article plus undated error, got %d items", len(items))
+		t.Fatalf("expected current article plus undated original, got %d items", len(items))
 	}
 	if items[0].Metadata["published_at"] != "Sep 24, 2026" || len(items[0].Content) == 0 {
 		t.Fatalf("current article lost its actual publication evidence: %+v", items[0].Metadata)
 	}
-	if items[1].Metadata["error"] == "" || len(items[1].Content) != 0 || items[1].URL != "" {
-		t.Fatalf("undated article must not enter intake: %+v", items[1])
+	if items[1].Metadata["error"] != "" || len(items[1].Content) == 0 || items[1].URL == "" || items[1].Metadata["published_at"] != "" || items[1].Metadata["published_at_missing"] != "true" {
+		t.Fatalf("undated article must retain original content and an explicit missing flag: %+v", items[1])
 	}
 }
 
@@ -316,8 +316,8 @@ func TestListingUsesArticlePublicationDateAndSameSiteLinks(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(items) != 2 || items[0].URL != server.URL+"/articles/current" || items[0].Title != "Current" || items[0].Metadata["published_at"] != "2026-09-24T16:30:00Z" ||
-		items[1].Metadata["error"] == "" || len(items[1].Content) != 0 {
-		t.Fatalf("listing must keep current original, reject undated, skip old/off-site: %+v", items)
+		items[1].Metadata["error"] != "" || len(items[1].Content) == 0 || items[1].Metadata["published_at"] != "" || items[1].Metadata["published_at_missing"] != "true" {
+		t.Fatalf("listing must keep dated and undated originals, skip old/off-site: %+v", items)
 	}
 }
 
@@ -455,7 +455,7 @@ func TestQwenOfficialArticleBody(t *testing.T) {
 		}},
 	})
 	items, err := parseQwenArticles(response)
-	if err != nil || len(items) != 5 || items[0].Custom["error"] == "" || items[0].Content == "" ||
+	if err != nil || len(items) != 5 || items[0].Custom["error"] != "" || items[0].Content == "" ||
 		items[3].Custom["error"] == "" || items[3].Content != "" || items[4].Custom["error"] == "" || items[4].Content == "" {
 		t.Fatalf("malformed Qwen articles must fail independently: items=%+v err=%v", items, err)
 	}

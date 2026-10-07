@@ -317,6 +317,9 @@ type Resource struct {
 
 // FetchedItem represents a single document/content item fetched from external source
 type FetchedItem struct {
+	// AdapterFailures preserves recoverable source parsing failures for intake.
+	AdapterFailures []SourceAdapterFailure `json:"adapter_failures,omitempty"`
+
 	// Unique ID in the external system
 	ExternalID string `json:"external_id"`
 
@@ -382,6 +385,14 @@ type FetchedItem struct {
 	// nil and empty are equivalent here; the omitempty tag is for API/debug
 	// exposure only and must not be relied on to distinguish "unset" from "empty".
 	SubtreeKeep []string `json:"subtree_keep,omitempty"`
+}
+
+// SourceAdapterFailure identifies an original page whose site adapter failed.
+type SourceAdapterFailure struct {
+	Adapter string `json:"adapter"`
+	Site    string `json:"site"`
+	URL     string `json:"url"`
+	Reason  string `json:"reason"`
 }
 
 // SubtreeChildID builds the external_id of a sub-item fanned out from a parent

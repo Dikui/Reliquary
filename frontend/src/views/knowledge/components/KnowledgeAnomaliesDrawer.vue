@@ -1,5 +1,5 @@
 <template>
-  <t-drawer :visible="visible" :zIndex="1900" :header="t('knowledgeBase.anomalies.title')" size="560px" :footer="false"
+  <t-drawer :visible="visible" :zIndex="1900" :header="t('knowledgeBase.anomalies.title')" size="min(560px, 100vw)" :footer="false"
     @close="emit('update:visible', false)">
     <div class="anomaly-window">
       <div class="anomaly-report">
@@ -33,8 +33,29 @@
                 {{ t(`knowledgeBase.anomalies.status.${item.status}`) }}
               </t-tag>
             </div>
-            <p>{{ item.description }}</p>
-            <div class="anomaly-item__meta">{{ item.reported_by }} · {{ new Date(item.created_at).toLocaleString() }}</div>
+            <p v-if="item.description && (item.kind !== 'source_adapter_failed' || item.description !== adapterReason(item))">{{ item.description }}</p>
+            <dl v-if="item.kind === 'source_adapter_failed'" class="anomaly-item__source">
+              <div v-if="item.site">
+                <dt>{{ t('knowledgeBase.anomalies.site') }}</dt>
+                <dd>{{ item.site }}</dd>
+              </div>
+              <div v-if="item.source_url">
+                <dt>{{ t('knowledgeBase.anomalies.sourceUrl') }}</dt>
+                <dd>
+                  <a v-if="safeExternalUrl(item.source_url)" :href="safeExternalUrl(item.source_url)" target="_blank" rel="noopener noreferrer">{{ item.source_url }}</a>
+                  <span v-else>{{ item.source_url }}</span>
+                </dd>
+              </div>
+              <div v-if="item.adapter">
+                <dt>{{ t('knowledgeBase.anomalies.adapter') }}</dt>
+                <dd>{{ item.adapter }}</dd>
+              </div>
+              <div v-if="adapterReason(item)">
+                <dt>{{ t('knowledgeBase.anomalies.reason') }}</dt>
+                <dd>{{ adapterReason(item) }}</dd>
+              </div>
+            </dl>
+            <div class="anomaly-item__meta">{{ item.reported_by || t('knowledgeBase.anomalies.systemReporter') }} · {{ new Date(item.created_at).toLocaleString(locale) }}</div>
             <div v-if="item.proposal_type === 'change_tags'" class="anomaly-item__proposal">
               + {{ item.proposed_tag_ids.map(tagName).join('、') || t('knowledgeBase.anomalies.noTags') }}
               <br />− {{ item.proposed_remove_tag_ids.map(tagName).join('、') || t('knowledgeBase.anomalies.noTags') }}
@@ -63,7 +84,7 @@
               </t-button>
             </div>
             <div v-if="item.decided_at" class="anomaly-item__result">
-              {{ t('knowledgeBase.anomalies.decision') }}: {{ item.decided_by }} · {{ new Date(item.decided_at).toLocaleString() }}
+              {{ t('knowledgeBase.anomalies.decision') }}: {{ item.decided_by }} · {{ new Date(item.decided_at).toLocaleString(locale) }}
               <span v-if="item.result"> · {{ t(`knowledgeBase.anomalies.result.${item.result}`) }}</span>
               <span v-if="item.decision_note"> · {{ item.decision_note }}</span>
               <span v-for="(change, id) in item.applied_changes || {}" :key="id">
@@ -84,9 +105,10 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
+import { safeExternalUrl } from '@/utils/externalUrl'
 import { listKnowledgeTags } from '@/api/knowledge-base'
 import { listKnowledgeAnomalies, createKnowledgeAnomaly, decideKnowledgeAnomaly,
-  type KnowledgeAnomaly, type KnowledgeAnomalyKind, type KnowledgeAnomalyProposal } from '@/api/knowledge-anomalies'
+  type KnowledgeAnomaly, type KnowledgeAnomalyKind, type KnowledgeAnomalyReportKind, type KnowledgeAnomalyProposal } from '@/api/knowledge-anomalies'
 
 const props = defineProps<{
   visible: boolean
@@ -101,7 +123,7 @@ const emit = defineEmits<{
   'edit-tags': [id: string, anomalyId: string]
   changed: []
 }>()
-const { t } = useI18n()
+const { t, te, locale } = useI18n()
 const items = ref<KnowledgeAnomaly[]>([])
 const hasMore = ref(false)
 const availableTags = ref<Array<{ id: string; name: string }>>([])
@@ -113,14 +135,18 @@ const saving = ref(false)
 const decidingId = ref('')
 const decisionNotes = ref<Record<string, string>>({})
 const messageIds = ref('')
-const kind = ref<KnowledgeAnomalyKind>('suspected_error')
+const kind = ref<KnowledgeAnomalyReportKind>('suspected_error')
 const description = ref('')
 const proposalType = ref<KnowledgeAnomalyProposal>('none')
 const proposedTagIds = ref<string[]>([])
 const proposedRemoveTagIds = ref<string[]>([])
 const proposedDeleteTagId = ref('')
-const kinds: KnowledgeAnomalyKind[] = ['suspected_error', 'outdated', 'source_conflict', 'manual_conflict', 'tag_deletion']
-const kindLabel = (value: KnowledgeAnomalyKind) => t(`knowledgeBase.anomalies.kind.${value}`)
+const kinds: KnowledgeAnomalyReportKind[] = ['suspected_error', 'outdated', 'source_conflict', 'manual_conflict', 'tag_deletion']
+const kindLabel = (value: KnowledgeAnomalyKind) => {
+  const key = `knowledgeBase.anomalies.kind.${value}`
+  return te(key) ? t(key) : `${t('knowledgeBase.anomalies.kind.other')} (${value})`
+}
+const adapterReason = (item: KnowledgeAnomaly) => item.reason || item.description
 const kindOptions = computed(() => kinds.map(value => ({ value, label: kindLabel(value) })))
 const proposalOptions = computed(() => (['none', 'change_tags', 'delete_tag'] as KnowledgeAnomalyProposal[])
   .map(value => ({ value, label: t(`knowledgeBase.anomalies.proposal.${value}`) })))
@@ -223,8 +249,8 @@ function decide(item: KnowledgeAnomaly, action: 'apply' | 'resolved' | 'dismiss'
 </script>
 
 <style scoped>
-.anomaly-window { display: grid; gap: 24px; }
-.anomaly-report, .anomaly-list { display: grid; gap: 12px; }
+.anomaly-window { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
+.anomaly-report, .anomaly-list { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 12px; }
 .anomaly-report h3, .anomaly-list h3 { margin: 0; font-size: 15px; }
 .anomaly-item { padding: 14px 0; border-top: 1px solid var(--td-component-stroke); }
 .anomaly-item__head, .anomaly-item__actions, .anomaly-item__decisions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -232,4 +258,12 @@ function decide(item: KnowledgeAnomaly, action: 'apply' | 'resolved' | 'dismiss'
 .anomaly-item p { margin: 8px 0; white-space: pre-wrap; }
 .anomaly-item__meta, .anomaly-item__proposal, .anomaly-item__result { color: var(--td-text-color-secondary); font-size: 12px; margin-top: 8px; }
 .anomaly-item__actions, .anomaly-item__decisions { margin-top: 10px; }
+.anomaly-item__source { display: grid; gap: 6px; margin: 10px 0; font-size: 12px; }
+.anomaly-item__source > div { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 12px; }
+.anomaly-item__source dt { color: var(--td-text-color-secondary); }
+.anomaly-item__source dd { margin: 0; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.anomaly-item__source a { color: var(--td-brand-color); cursor: pointer; }
+.anomaly-item__source a:hover { text-decoration: underline; }
+.anomaly-item__source a:active { color: var(--td-brand-color-active); }
+.anomaly-item__source a:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
 </style>

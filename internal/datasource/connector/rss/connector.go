@@ -1,7 +1,6 @@
 package rss
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -24,7 +23,16 @@ import (
 var _ datasource.Connector = (*Connector)(nil)
 
 // Connector implements datasource.Connector for RSS/Atom/JSON feeds.
-type Connector struct{}
+type Connector struct {
+	clientFactory func(map[string]string) *client
+}
+
+func (c *Connector) sourceClient(headers map[string]string) *client {
+	if c.clientFactory != nil {
+		return c.clientFactory(headers)
+	}
+	return newClient(headers)
+}
 
 // NewConnector creates a new RSS connector.
 func NewConnector() *Connector { return &Connector{} }
@@ -39,38 +47,10 @@ func (c *Connector) Validate(ctx context.Context, config *types.DataSourceConfig
 	if err != nil {
 		return err
 	}
-	cli := newClient(cfg.parseHeaders())
-	parser := gofeed.NewParser()
-
+	cli := c.sourceClient(cfg.parseHeaders())
 	for _, feedURL := range cfg.feedURLList() {
-		data, err := cli.fetchSource(ctx, feedURL)
-		if err != nil {
-			return fmt.Errorf("fetch feed %s: %w", feedURL, err)
-		}
-		if isQwenBlogURL(feedURL) {
-			if _, err := parseQwenArticles(data); err != nil {
-				return fmt.Errorf("parse Qwen articles %s: %w", feedURL, err)
-			}
-			continue
-		}
-		if isMiniMaxNewsURL(feedURL) {
-			if _, err := parseMiniMaxNews(data); err != nil {
-				return fmt.Errorf("parse MiniMax news %s: %w", feedURL, err)
-			}
-			continue
-		}
-		if _, err := parser.Parse(bytes.NewReader(data)); err != nil {
-			if isDeepSeekUpdatesURL(feedURL) {
-				if _, changelogErr := parseDeepSeekUpdates(data, feedURL); changelogErr != nil {
-					return fmt.Errorf("parse changelog %s: %w", feedURL, changelogErr)
-				}
-				continue
-			}
-			if _, sitemapErr := parseSitemap(data); sitemapErr != nil || cfg.ArticlePathPrefix == "" {
-				if _, listingErr := parseListing(data, feedURL, cfg.ArticlePathPrefix); listingErr != nil {
-					return fmt.Errorf("parse feed or article listing %s: %w", feedURL, listingErr)
-				}
-			}
+		if _, err := c.readSource(ctx, cli, cfg, feedURL); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -100,8 +80,7 @@ func (c *Connector) ListResources(
 	if err != nil {
 		return nil, err
 	}
-	cli := newClient(cfg.parseHeaders())
-	parser := gofeed.NewParser()
+	cli := c.sourceClient(cfg.parseHeaders())
 
 	feedURLs := cfg.feedURLList()
 	out := make([]types.Resource, 0, len(feedURLs))
@@ -112,73 +91,14 @@ func (c *Connector) ListResources(
 			Name:       feedURL,
 			URL:        feedURL,
 		}
-		data, err := cli.fetchSource(ctx, feedURL)
+		source, err := c.readSource(ctx, cli, cfg, feedURL)
 		if err != nil {
-			logger.Warnf(ctx, "[RSS] list: fetch %s failed: %v", feedURL, err)
-			res.Description = "fetch failed: " + err.Error()
-			out = append(out, res)
-			continue
-		}
-		if isQwenBlogURL(feedURL) {
-			entries, err := parseQwenArticles(data)
-			if err == nil {
-				res.Name = firstNonEmpty(cfg.Publisher, feedURL)
-				res.Metadata = map[string]interface{}{"item_count": len(entries)}
-			} else {
-				res.Description = "parse failed: " + err.Error()
-			}
-			out = append(out, res)
-			continue
-		}
-		if isMiniMaxNewsURL(feedURL) {
-			entries, err := parseMiniMaxNews(data)
-			if err == nil {
-				res.Name = firstNonEmpty(cfg.Publisher, feedURL)
-				res.Metadata = map[string]interface{}{"item_count": len(entries)}
-			} else {
-				res.Description = "parse failed: " + err.Error()
-			}
-			out = append(out, res)
-			continue
-		}
-		feed, err := parser.Parse(bytes.NewReader(data))
-		if err != nil {
-			if isDeepSeekUpdatesURL(feedURL) {
-				entries, changelogErr := parseDeepSeekUpdates(data, feedURL)
-				if changelogErr == nil {
-					res.Name = firstNonEmpty(cfg.Publisher, feedURL)
-					res.Metadata = map[string]interface{}{"item_count": len(entries)}
-					out = append(out, res)
-					continue
-				}
-				res.Description = "parse failed: " + changelogErr.Error()
-				out = append(out, res)
-				continue
-			}
-			if entries, sitemapErr := parseSitemap(data); sitemapErr == nil && cfg.ArticlePathPrefix != "" {
-				res.Name = firstNonEmpty(cfg.Publisher, feedURL)
-				sitemapURL, _ := url.Parse(feedURL)
-				count := 0
-				for _, entry := range entries {
-					if sitemapArticleURL(entry.Loc, sitemapURL, cfg.ArticlePathPrefix) {
-						count++
-					}
-				}
-				res.Metadata = map[string]interface{}{"item_count": count}
-				out = append(out, res)
-				continue
-			}
-			if articles, listingErr := parseListing(data, feedURL, cfg.ArticlePathPrefix); listingErr == nil {
-				res.Name = firstNonEmpty(cfg.Publisher, feedURL)
-				res.Metadata = map[string]interface{}{"item_count": len(articles)}
-				out = append(out, res)
-				continue
-			}
 			logger.Warnf(ctx, "[RSS] list: parse %s failed: %v", feedURL, err)
 			res.Description = "parse failed: " + err.Error()
 			out = append(out, res)
 			continue
 		}
+		feed := source.feed
 		if title := strings.TrimSpace(feed.Title); title != "" {
 			res.Name = title
 		}
@@ -273,8 +193,7 @@ func (c *Connector) walk(
 		feedURLs = cfg.feedURLList()
 	}
 
-	cli := newClient(cfg.parseHeaders())
-	parser := gofeed.NewParser()
+	cli := c.sourceClient(cfg.parseHeaders())
 
 	newCursor := &rssCursor{
 		LastSyncTime: time.Now().UTC(),
@@ -285,65 +204,21 @@ func (c *Connector) walk(
 	var feedErrors []string
 
 	for _, feedURL := range feedURLs {
-		data, err := cli.fetchSource(ctx, feedURL)
+		source, err := c.readSource(ctx, cli, cfg, feedURL)
 		if err != nil {
-			logger.Warnf(ctx, "[RSS] sync: fetch %s failed: %v", feedURL, err)
-			feedErrors = append(feedErrors, fmt.Sprintf("%s: %v", feedURL, err))
-			copyFeedCursor(newCursor, prev, feedURL)
-			continue
-		}
-		var feed *gofeed.Feed
-		if isQwenBlogURL(feedURL) {
-			feed = &gofeed.Feed{Title: cfg.Publisher}
-			feed.Items, err = parseQwenArticles(data)
-		} else if isMiniMaxNewsURL(feedURL) {
-			feed = &gofeed.Feed{Title: cfg.Publisher}
-			feed.Items, err = parseMiniMaxNews(data)
-		} else {
-			feed, err = parser.Parse(bytes.NewReader(data))
-		}
-		fromMiniMax := isMiniMaxNewsURL(feedURL)
-		needsArticleDate := fromMiniMax
-		fromChangelog := false
-		fromQwen := isQwenBlogURL(feedURL)
-		if err != nil && (fromQwen || fromMiniMax) {
 			logger.Warnf(ctx, "[RSS] sync: parse %s failed: %v", feedURL, err)
 			feedErrors = append(feedErrors, fmt.Sprintf("%s: %v", feedURL, err))
 			copyFeedCursor(newCursor, prev, feedURL)
+			if source != nil && len(source.failures) > 0 {
+				out = append(out, types.FetchedItem{ExternalID: itemExternalID(feedURL, feedURL), Title: feedURL, AdapterFailures: source.failures, Metadata: map[string]string{"error": err.Error(), "channel": types.ChannelRSS}})
+			}
 			continue
 		}
-		if err != nil {
-			feed = &gofeed.Feed{Title: cfg.Publisher}
-			err = nil
-			if isDeepSeekUpdatesURL(feedURL) {
-				feed.Items, err = parseDeepSeekUpdates(data, feedURL)
-				fromChangelog = true
-			} else {
-				entries, sitemapErr := parseSitemap(data)
-				needsArticleDate = true
-				if sitemapErr == nil && cfg.ArticlePathPrefix != "" {
-					sitemapURL, _ := url.Parse(feedURL)
-					for _, entry := range entries {
-						if !sitemapArticleURL(entry.Loc, sitemapURL, cfg.ArticlePathPrefix) {
-							continue
-						}
-						modified, valid := parseSiteDate(entry.LastMod)
-						if !valid {
-							continue
-						}
-						feed.Items = append(feed.Items, &gofeed.Item{GUID: entry.Loc, Link: entry.Loc,
-							Updated: entry.LastMod, UpdatedParsed: &modified})
-					}
-				} else {
-					feed.Items, err = parseListing(data, feedURL, cfg.ArticlePathPrefix)
-				}
-			}
-			if err != nil {
-				logger.Warnf(ctx, "[RSS] sync: parse %s failed: %v", feedURL, err)
-				feedErrors = append(feedErrors, fmt.Sprintf("%s: %v", feedURL, err))
-				copyFeedCursor(newCursor, prev, feedURL)
-				continue
-			}
+		feed := source.feed
+		needsArticleDate := source.needsArticleDate
+		if len(source.failures) > 0 {
+			out = append(out, adapterFailureNotice(feedURL, feedURL, feedURL, source.failures))
+			source.failures = nil
 		}
 
 		newCursor.FeedItems[feedURL] = make(map[string]string)
@@ -366,7 +241,23 @@ func (c *Connector) walk(
 			if itemID == "" {
 				continue
 			}
-			if reason := item.Custom["error"]; fromQwen && reason != "" {
+			if reason := item.Custom["error"]; source.inlineOriginal && reason != "" {
+				failures := append([]types.SourceAdapterFailure(nil), source.failures...)
+				if adapter := cli.adapterRegistry().discoveryFor(feedURL); adapter != nil {
+					pageURL, _ := url.Parse(firstNonEmpty(item.Link, feedURL))
+					failures = append(failures, sourceAdapterFailure(adapter.Name, pageURL, reason))
+				}
+				if item.Link != "" {
+					recovered := c.resolveItem(ctx, cli, feed, item, feedURL, itemID, cfg.Publisher, false)
+					if recovered.item.Metadata["error"] == "" {
+						recovered.item.AdapterFailures = append(recovered.item.AdapterFailures, failures...)
+						out = append(out, recovered.item)
+						newCursor.FeedItems[feedURL][itemID] = recovered.fingerprint
+						newCursor.FeedSignals[feedURL][itemID] = feedSignalFingerprint(item, item.Content)
+						kept++
+						continue
+					}
+				}
 				if body := htmlToMarkdown(item.Content); body != "" {
 					signal := feedSignalFingerprint(item, item.Content)
 					if incremental && prevItems[itemID] != "" && prevSignals[itemID] == signal {
@@ -375,12 +266,12 @@ func (c *Connector) walk(
 						skipped++
 						continue
 					}
-					title := firstNonEmpty(item.Title, "Qwen article")
+					title := firstNonEmpty(item.Title, "untitled")
 					author := ""
 					if item.Author != nil {
 						author = item.Author.Name
 					}
-					out = append(out, types.FetchedItem{ExternalID: itemExternalID(feedURL, itemID), Title: title,
+					out = append(out, types.FetchedItem{ExternalID: itemExternalID(feedURL, itemID), Title: title, AdapterFailures: failures,
 						Content: []byte(body), ContentType: "text/markdown", FileName: sanitizeFileName(title) + ".md",
 						URL: item.Link, SourceResourceID: feedURL, Metadata: map[string]string{
 							"channel": types.ChannelRSS, "feed_url": feedURL, "feed_title": feed.Title,
@@ -392,7 +283,7 @@ func (c *Connector) walk(
 					kept++
 					continue
 				}
-				out = append(out, types.FetchedItem{ExternalID: itemExternalID(feedURL, itemID),
+				out = append(out, types.FetchedItem{ExternalID: itemExternalID(feedURL, itemID), AdapterFailures: failures,
 					Title:    firstNonEmpty(item.Title, item.Link, item.GUID),
 					Metadata: map[string]string{"error": reason, "channel": types.ChannelRSS}})
 				kept++
@@ -402,11 +293,7 @@ func (c *Connector) walk(
 			if needsArticleDate {
 				published = item.UpdatedParsed // discovery filter only; the article supplies the real publication date.
 			}
-			if published == nil || published.IsZero() {
-				logger.Warnf(ctx, "[RSS] skipping item without date signal: %s", itemID)
-				continue
-			}
-			if !config.IngestSince.IsZero() && published.Before(config.IngestSince) {
+			if published != nil && !published.IsZero() && !config.IngestSince.IsZero() && published.Before(config.IngestSince) {
 				skipped++
 				continue
 			}
@@ -428,13 +315,14 @@ func (c *Connector) walk(
 				}
 			}
 
-			resolved := c.resolveItem(ctx, cli, feed, item, feedURL, itemID, cfg.Publisher, fromChangelog || fromQwen)
+			resolved := c.resolveItem(ctx, cli, feed, item, feedURL, itemID, cfg.Publisher, source.inlineOriginal)
+			resolved.item.AdapterFailures = append(resolved.item.AdapterFailures, source.failures...)
 			if needsArticleDate && resolved.item.Metadata["error"] == "" {
 				actualDate, valid := parseSiteDate(resolved.item.Metadata["published_at"])
-				if !valid {
-					resolved.item.Content, resolved.item.URL = nil, ""
-					resolved.item.Metadata["error"] = "article publication date missing"
-				} else if !config.IngestSince.IsZero() && actualDate.Before(config.IngestSince) {
+				if valid && !config.IngestSince.IsZero() && actualDate.Before(config.IngestSince) {
+					if len(resolved.item.AdapterFailures) > 0 {
+						out = append(out, adapterFailureNotice(feedURL, itemID, resolved.item.Title, resolved.item.AdapterFailures))
+					}
 					newCursor.FeedItems[feedURL][itemID] = resolved.fingerprint
 					newCursor.FeedSignals[feedURL][itemID] = feedSig
 					skipped++
@@ -453,7 +341,7 @@ func (c *Connector) walk(
 			newCursor.FeedItems[feedURL][itemID] = resolved.fingerprint
 			newCursor.FeedSignals[feedURL][itemID] = feedSig
 
-			if incremental && prevItems != nil && prevItems[itemID] == resolved.fingerprint {
+			if incremental && prevItems != nil && prevItems[itemID] == resolved.fingerprint && len(resolved.item.AdapterFailures) == 0 {
 				skipped++
 				continue
 			}
@@ -500,6 +388,7 @@ func (c *Connector) resolveItem(
 	}
 	var contentHTML, articleTitle, articleByline, articleSiteName, pagePublishedAt string
 	var err error
+	var failures []types.SourceAdapterFailure
 	if inlineOriginal {
 		contentHTML, pagePublishedAt = item.Content, item.Published
 		var doc *goquery.Document
@@ -516,7 +405,10 @@ func (c *Connector) resolveItem(
 			}
 		}
 	} else {
-		contentHTML, articleTitle, articleByline, articleSiteName, pagePublishedAt, err = cli.extractArticle(ctx, item.Link)
+		var article extractedArticle
+		article, err = cli.extractArticleWithFailures(ctx, item.Link)
+		contentHTML, articleTitle, articleByline, articleSiteName, pagePublishedAt = article.contentHTML, article.title, article.byline, article.siteName, article.publishedAt
+		failures = article.failures
 	}
 	if err != nil {
 		stage := "article fetch failed"
@@ -525,7 +417,7 @@ func (c *Connector) resolveItem(
 		}
 		logger.Warnf(ctx, "[RSS] %s for %s: %v", stage, item.Link, err)
 		return resolvedFeedItem{item: types.FetchedItem{ExternalID: itemExternalID(feedURL, itemID), Title: title,
-			Metadata: map[string]string{"error": stage + ": " + err.Error(), "channel": types.ChannelRSS}}}
+			AdapterFailures: failures, Metadata: map[string]string{"error": stage + ": " + err.Error(), "channel": types.ChannelRSS}}}
 	}
 	if articleTitle != "" && (item.Title == "" || item.Custom["from_listing"] == "true") {
 		title = articleTitle
@@ -533,7 +425,7 @@ func (c *Connector) resolveItem(
 	content := htmlToMarkdown(contentHTML)
 	if strings.TrimSpace(content) == "" {
 		return resolvedFeedItem{item: types.FetchedItem{ExternalID: itemExternalID(feedURL, itemID), Title: title,
-			Metadata: map[string]string{"error": "article body is empty", "channel": types.ChannelRSS}}}
+			AdapterFailures: failures, Metadata: map[string]string{"error": "article body is empty", "channel": types.ChannelRSS}}}
 	}
 
 	updatedAt := time.Time{}
@@ -559,12 +451,20 @@ func (c *Connector) resolveItem(
 	}
 
 	publishedAt := item.Published
+	if _, valid := parseSiteDate(publishedAt); !valid && item.PublishedParsed == nil {
+		publishedAt = ""
+	}
 	if pagePublishedAt != "" && (publishedAt == "" || item.Custom["from_listing"] == "true") {
 		publishedAt = pagePublishedAt
+	}
+	publishedAtMissing := "false"
+	if publishedAt == "" {
+		publishedAtMissing = "true"
 	}
 	return resolvedFeedItem{
 		fingerprint: contentFingerprint(content),
 		item: types.FetchedItem{
+			AdapterFailures:  failures,
 			ExternalID:       itemExternalID(feedURL, itemID),
 			Title:            title,
 			Content:          []byte(content),
@@ -574,14 +474,15 @@ func (c *Connector) resolveItem(
 			UpdatedAt:        updatedAt,
 			SourceResourceID: feedURL,
 			Metadata: map[string]string{
-				"channel":      types.ChannelRSS,
-				"feed_url":     feedURL,
-				"feed_title":   feed.Title,
-				"guid":         item.GUID,
-				"link":         item.Link,
-				"author":       author,
-				"publisher":    publisher,
-				"published_at": publishedAt,
+				"channel":              types.ChannelRSS,
+				"feed_url":             feedURL,
+				"feed_title":           feed.Title,
+				"guid":                 item.GUID,
+				"link":                 item.Link,
+				"author":               author,
+				"publisher":            publisher,
+				"published_at":         publishedAt,
+				"published_at_missing": publishedAtMissing,
 			},
 		},
 	}
@@ -592,7 +493,7 @@ func (c *Connector) resolveItem(
 func FetchArticle(ctx context.Context, articleURL string) (*types.FetchedItem, error) {
 	resolved := NewConnector().resolveItem(ctx, newClient(nil), &gofeed.Feed{}, &gofeed.Item{Link: articleURL}, "", articleURL, "", false)
 	if reason := resolved.item.Metadata["error"]; reason != "" {
-		return nil, fmt.Errorf("fetch original article: %s", reason)
+		return &resolved.item, fmt.Errorf("fetch original article: %s", reason)
 	}
 	return &resolved.item, nil
 }
@@ -609,4 +510,9 @@ func htmlToMarkdown(html string) string {
 		return strings.TrimSpace(html)
 	}
 	return strings.TrimSpace(md)
+}
+
+func adapterFailureNotice(feedURL, itemID, title string, failures []types.SourceAdapterFailure) types.FetchedItem {
+	return types.FetchedItem{ExternalID: itemExternalID(feedURL, itemID) + ":adapter-diagnostic", Title: title,
+		AdapterFailures: append([]types.SourceAdapterFailure(nil), failures...), Metadata: map[string]string{"adapter_failure_only": "true", "channel": types.ChannelRSS}}
 }

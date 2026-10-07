@@ -1,0 +1,16 @@
+{
+  "success": true,
+  "data": {
+    "articles": [
+      {
+        "path": "release",
+        "title": "Qwen release",
+        "content": "<html><head><title>Qwen release</title></head><body><article><h1>Qwen release</h1><div class=\"post-content\"><p>The source article describes measured results, original methods, and publicly released model capabilities. Its complete prose remains readable when a site widget cannot be restored.</p><p>The source article describes measured results, original methods, and publicly released model capabilities. Its complete prose remains readable when a site widget cannot be restored.</p><p>The source article describes measured results, original methods, and publicly released model capabilities. Its complete prose remains readable when a site widget cannot be restored.</p><p>The source article describes measured results, original methods, and publicly released model capabilities. Its complete prose remains readable when a site widget cannot be restored.</p><p>The source article describes measured results, original methods, and publicly released model capabilities. Its complete prose remains readable when a site widget cannot be restored.</p><p>The source article describes measured results, original methods, and publicly released model capabilities. Its complete prose remains readable when a site widget cannot be restored.</p><table><tr><th>Model</th><th>Score</th></tr><tr><td>Qwen</td><td>95</td></tr></table></div></article></body></html>",
+        "extra": {
+          "date": "2026-09-24",
+          "author": "QwenTeam"
+        }
+      }
+    ]
+  }
+}

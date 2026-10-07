@@ -49,7 +49,7 @@ func (r TenantRole) Level() int {
 // HasPermission reports whether r is at least as privileged as required.
 // Used by RequireRole-style middleware to gate endpoints.
 func (r TenantRole) HasPermission(required TenantRole) bool {
-	return r.Level() >= required.Level()
+	return r.IsValid() && required.IsValid() && r.Level() >= required.Level()
 }
 
 // TenantMemberStatus enumerates the lifecycle states of a membership row.

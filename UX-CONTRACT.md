@@ -27,6 +27,9 @@ Reliquary serves a small team that collects source material and checks entities,
 | Merge suggestions | MergeSuggestions and shared useConfirmDelete | Global entity merge API and ADR 0002 | Pending, accepted and rejected | Backend lifecycle tests; browser verification |
 | Model call budgets | ModelCallSummary | Evidence model_calls and processing spans | Evidence details and processing details | Span budget validation test; browser verification |
 | CRUD | Knowledge domain API and settings view | DomainSettings.vue | Return to list on domain save; stay on consolidation after mapping | Template validation tests and backend domain tests |
+| Duplicate intake | KnowledgeDuplicateNotice and useKnowledgeDuplicates | Message intake API 409 with optional match_method | Manual, URL and file intake | Actual SFC and hook regression tests |
+| Repost sources | RepostSources | Knowledge detail and context APIs | Message preview, evidence and event heat details | Shared component and full SFC regression tests |
+| Research report body | ReportMarkdown with existing chat Markdown renderer and sanitizer | Workflow report Markdown and citations | Report body, Markdown and JSON downloads | Markdown nodes, evidence navigation and download request tests |
 
 ## Flow ledger
 
@@ -37,6 +40,7 @@ Reliquary serves a small team that collects source material and checks entities,
 | Map or create a template field | Dialog controls disabled | Refresh selected domain and open-field statistics, remain in consolidation | Keep dialog values and show inline error |
 | Query context | Existing loading controls | Keep query and show source-labelled results | Preserve query, show error and allow retry |
 | View entity | Clear previous detail and show loading indicator | Show facts and events from all team knowledge bases | Preserve selection and show error |
+| Collect a duplicate | Existing intake busy controls | Keep a localized notice with an explicit view-existing-message action | Preserve the manual draft; URL and file batches count duplicates separately from failed inputs |
 
 Built in domain deletion stays disabled with an explanation. Viewers can browse domains; only owner and admin roles see mutations. The server remains authoritative for permissions.
 
@@ -57,3 +61,11 @@ Team model tier saves stay in space settings. Domain and knowledge base override
 Merge suggestions use explicit load more with twenty rows per request and transient local status filters, consistent with other context lists. Scope and status changes invalidate old requests. Accepting names both objects and the team-wide consequences in the shared confirmation dialog. Rejecting keeps the objects separate. Both actions refresh the list, retain the filter and announce success through MessagePlugin. Viewers see source evidence and status; contributor and administrator mutations remain subject to server authorization.
 
 Evidence cards and the source snapshot drawer display complete or partial extraction with processed and total segment counts. The same model-call table shows stage, tier and count in evidence and processing details. Existing native date fields remain platform owned as documented above. No new date picker, scrollbar owner or runtime token system is introduced.
+
+## P4 source verification
+
+Duplicate notices use the current intake response to distinguish near duplicates. Historical repost records do not determine that message. Viewing the existing message uses the current knowledge base's document-opening event or the existing knowledge_id route parameter. A manual editor closes only after that explicit action. Source lists show publisher, original URL, publication time or a missing marker, and the matching method. Opening another message clears the old source list and ignores responses for the previous selection.
+
+Message details fill the viewport at widths of 720px or less. The desktop drawer width remains the user's preferred width, including after a narrow viewport is restored to desktop. Narrow details hide the desktop resize handle. At every width, padded detail content stays within the drawer and long source URLs wrap without horizontal drawer scrolling. Original source links, reposts, evidence, report citations and anomaly links retain their full address and share the same wrapping behavior on desktop and narrow screens. Code and tables may keep their own bounded scrolling regions. The anomaly drawer also stays within the viewport while retaining its desktop width.
+
+Adapter failures display a localized type with site, source URL, adapter and reason. All source URLs pass through the shared absolute HTTP(S) URL helper; other values remain plain escaped text. Report bodies use the existing Markdown rendering and sanitization path with Wiki conversion disabled. Valid report citation buttons open the existing evidence snapshot and preserve its quote; code examples and link labels keep their literal citation text, including nested labels such as [[C1]](URL). Wiki pages retain their existing Wiki link conversion. Download actions disable concurrent downloads and release temporary links and object URLs after completion or failure. Browser checks for this fix are deferred to the separately requested review.

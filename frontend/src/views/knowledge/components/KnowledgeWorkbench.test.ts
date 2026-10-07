@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import test from 'node:test'
+import test, { mock } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc'
@@ -8,6 +8,9 @@ import { createSSRApp, defineComponent, h, nextTick, onServerPrefetch } from 'vu
 import ts from 'typescript'
 import * as display from './knowledgeContextDisplay'
 import * as scope from '../../../api/knowledge-context-scope'
+import * as markdownCitation from '../../../utils/markdownCitation'
+import { compiledSFCStyleRules, LONG_SOURCE_URL, styleDeclarationsAtWidth } from '../../../utils/sfcStyleTestHelpers'
+import { reportCitationClick, reportMarkdownTestComponent } from './reportMarkdownTestHarness'
 import type { KnowledgeEntity, KnowledgeEvent, KnowledgeEvidence, KnowledgeFact } from '../../../api/knowledge-context'
 
 const require = createRequire(import.meta.url)
@@ -40,9 +43,9 @@ const event = {
 
 type Scenario = (state: any, beforeUnmount: () => void) => Promise<void>
 async function renderWorkbench({
-  role = 'contributor', result = {}, scenario = async () => {}, status = { pending_count: 1, latest_run: null },
-}: { role?: string; result?: object; scenario?: Scenario; status?: object } = {}) {
-  const requests = { status: 0, rebuild: 0, query: [] as any[] }
+  role = 'contributor', result = {}, scenario = async () => {}, status = { pending_count: 1, latest_run: null }, workflows = {},
+}: { role?: string; result?: object; scenario?: Scenario; status?: object; workflows?: object } = {}) {
+  const requests = { status: 0, rebuild: 0, query: [] as any[], snapshots: [] as string[] }
   const cleanupCallbacks: Array<() => void> = []
   const envelope = (data: unknown) => Promise.resolve({ success: true, data })
   const api = {
@@ -50,6 +53,7 @@ async function renderWorkbench({
     listKnowledgeContextEvents: () => envelope([]),
     listKnowledgeContextEvidence: () => envelope(evidence),
     getGlobalKnowledgeEntityContext: () => envelope(result),
+    getGlobalKnowledgeEvidence: (id: string) => { requests.snapshots.push(id); return envelope({ id, body: 'Acme 发布了 **新模型**。' }) },
     queryKnowledgeContext: (_kbId: string, query: object) => { requests.query.push(query); return envelope(result) },
     getKnowledgeNameEmbeddingRebuildStatus: () => { requests.status++; return envelope(status) },
     rebuildKnowledgeNameEmbeddings: () => {
@@ -58,20 +62,24 @@ async function renderWorkbench({
     },
   }
   const emptyComponent = defineComponent({ setup: () => () => null })
+  const reportComponent = reportMarkdownTestComponent()
   const modules: Record<string, unknown> = {
     vue: { ...require('vue'), onBeforeUnmount: (callback: () => void) => { cleanupCallbacks.push(callback) } },
     'tdesign-vue-next': { MessagePlugin: { success() {} } },
     'vue-i18n': { useI18n: () => ({ t: (key: string, params?: object) => params ? `${key} ${JSON.stringify(params)}` : key }) },
     './MergeSuggestions.vue': { __esModule: true, default: emptyComponent },
     './EvidenceExtractionDetails.vue': { __esModule: true, default: emptyComponent },
+    './RepostSources.vue': { __esModule: true, default: emptyComponent },
+    './ReportMarkdown.vue': { __esModule: true, default: reportComponent },
     './knowledgeContextDisplay': display,
     '@/stores/auth': { useAuthStore: () => ({ hasRole: () => ['admin', 'owner'].includes(role) }) },
     '@/api/knowledge-domains': { listKnowledgeDomains: () => envelope([]) },
     '@/api/knowledge-context-scope': scope,
     '@/api/knowledge-context': api,
-    '@/api/knowledge-workflows': {},
+    '@/api/knowledge-workflows': workflows,
     '@/api/chat/index': {},
     '@/utils/security': { safeMarkdownToHTML: (value: string) => value },
+    '@/utils/markdownCitation': markdownCitation,
   }
   function evaluate(code: string) {
     const module = { exports: {} as any }
@@ -83,8 +91,10 @@ async function renderWorkbench({
   const component = evaluate(script.content).default
   component.ssrRender = evaluate(template.code).ssrRender
   const setup = component.setup
+  let workbenchState: any
   component.setup = (props: object, context: object) => {
     const state = setup(props, context)
+    workbenchState = state
     onServerPrefetch(async () => {
       try {
         await state.refreshAll()
@@ -108,7 +118,7 @@ async function renderWorkbench({
   app.config.errorHandler = error => { errors.push(error) }
   const html = await renderToString(app)
   assert.deepEqual(errors, [], 'the actual Vue template and nested cards render without an exception')
-  return { html, requests }
+  return { html, requests, state: workbenchState, reportState: reportComponent.testState }
 }
 
 for (const events of [[], null]) {
@@ -196,6 +206,15 @@ test('latest rebuild failures remain visible and evidence metadata has a separat
   assert.match(html, /Team library<\/span><span[^>]*><span class="evidence-card__separator"[^>]*> · <\/span>Publisher/)
 })
 
+test('workbench displays missing publication exclusions returned by the query', async () => {
+  const { html } = await renderWorkbench({
+    result: { excluded_missing_published_at_count: 7 },
+    scenario: state => state.runQuery(),
+  })
+  assert.match(html, /knowledgeWorkbench.sourceTime.excluded/)
+  assert.match(html, /&quot;count&quot;:7/)
+})
+
 test('unmount cancels name embedding polling and invalidates outstanding status requests', async () => {
   await renderWorkbench({
     role: 'admin',
@@ -206,6 +225,131 @@ test('unmount cancels name embedding polling and invalidates outstanding status 
       beforeUnmount()
       assert.equal(state.nameEmbeddingPollTimer, null)
       assert.equal(state.nameEmbeddingRequest, request + 1)
+    },
+  })
+})
+
+const report = {
+  id: 'report-1', title: 'Weekly/report', markdown: '# Weekly report\n\nRelease [C1]',
+  created_at: '2026-10-08T00:00:00Z', excluded_missing_published_at_count: 2,
+  citations: [{ id: 'C1', kind: 'evidence', evidence_id: 'report-evidence', quote: 'Acme 发布了 新模型。' }],
+}
+
+test('workbench evidence and report sources preserve complete long URLs without changing link labels', async () => {
+  const { html: evidenceHtml } = await renderWorkbench({
+    result: { evidence: [{ ...evidence[0], title: LONG_SOURCE_URL, original_url: LONG_SOURCE_URL }] },
+    scenario: state => state.runQuery(),
+  })
+  assert.ok(evidenceHtml.includes(`href="${LONG_SOURCE_URL}"`))
+  assert.ok(evidenceHtml.includes(`<strong>${LONG_SOURCE_URL}</strong>`))
+  assert.match(evidenceHtml, /class="source-url"[^>]*>knowledgeWorkbench.evidence.openSource<\/a>/)
+  const longReport = { ...report, markdown: LONG_SOURCE_URL,
+    citations: [{ ...report.citations[0], title: LONG_SOURCE_URL, quote: LONG_SOURCE_URL, url: LONG_SOURCE_URL }] }
+  const { html: reportHtml } = await renderWorkbench({ scenario: async state => {
+    state.activeSection.value = 'reports'
+    state.reports.value = [longReport]
+    state.selectedReport.value = longReport
+  } })
+  assert.ok(reportHtml.includes(`>${LONG_SOURCE_URL}</a>`))
+  assert.ok(reportHtml.includes(`href="${LONG_SOURCE_URL}" target="_blank" rel="noopener noreferrer">knowledgeWorkbench.evidence.openSource</a>`))
+  assert.ok(reportHtml.includes(`“${LONG_SOURCE_URL}”`))
+})
+
+test('compiled workbench CSS lets evidence and citation flex items shrink at desktop and narrow widths', async () => {
+  const rules = await compiledSFCStyleRules(new URL('./KnowledgeWorkbench.vue', import.meta.url))
+  for (const width of [1440, 390]) {
+    for (const selector of ['.evidence-card', '.evidence-card__main', '.evidence-card__main > *', '.report-view', '.citation-card']) {
+      const style = styleDeclarationsAtWidth(rules, selector, width)
+      assert.equal(style['min-width'], '0', `${selector} at ${width}`)
+      assert.equal(style['max-width'], '100%', `${selector} at ${width}`)
+      assert.equal(style['box-sizing'], 'border-box', `${selector} at ${width}`)
+      assert.notEqual(style.overflow, 'hidden', `${selector} must not clip long source text`)
+    }
+    const source = styleDeclarationsAtWidth(rules, '.source-url', width)
+    assert.equal(source['min-width'], '0')
+    assert.equal(source['max-width'], '100%')
+    assert.equal(source['white-space'], 'normal')
+    assert.equal(source['overflow-wrap'], 'anywhere')
+    const header = styleDeclarationsAtWidth(rules, '.report-view > header', width)
+    assert.equal(header['flex-wrap'], 'wrap')
+    assert.equal(styleDeclarationsAtWidth(rules, '.report-view > header > div', width)['min-width'], '0')
+    assert.equal(styleDeclarationsAtWidth(rules, '.citation-card__actions', width)['flex-wrap'], 'wrap')
+  }
+})
+
+test('report citation buttons use the workbench snapshot and original quote highlighting', async () => {
+  const { html, requests, state, reportState } = await renderWorkbench({
+    scenario: async state => {
+      state.activeSection.value = 'reports'
+      state.reports.value = [report]
+      state.selectedReport.value = report
+    },
+  })
+  assert.match(html, /<h1>Weekly report<\/h1>/)
+  assert.match(html, /knowledgeWorkbench.reports.downloadJson/)
+  assert.match(html, /knowledgeWorkbench.reports.download/)
+  assert.match(html, /&quot;count&quot;:2/)
+  reportState.openCitation(reportCitationClick('C1'))
+  await Promise.resolve()
+  await nextTick()
+  assert.deepEqual(requests.snapshots, ['report-evidence'])
+  assert.equal(state.snapshotVisible.value, true)
+  assert.equal(state.selectedQuote.value, report.citations[0].quote)
+  assert.equal(state.selectedSnapshot.value.id, 'report-evidence')
+  assert.deepEqual(state.snapshotSegments.value.filter((segment: any) => segment.match).map((segment: any) => segment.text), ['Acme 发布了 **新模型**。'])
+})
+
+test('report JSON and Markdown downloads request the chosen format and clean up attachments', async t => {
+  const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document')
+  const links: any[] = []
+  Object.defineProperty(globalThis, 'document', { configurable: true, value: {
+    createElement: () => {
+      const link = { href: '', download: '', clicks: 0, removed: false, click() { this.clicks++ }, remove() { this.removed = true } }
+      links.push(link)
+      return link
+    },
+    body: { appendChild() {} },
+  } })
+  t.after(() => {
+    if (originalDocument) Object.defineProperty(globalThis, 'document', originalDocument)
+    else Reflect.deleteProperty(globalThis, 'document')
+  })
+  const revoked: string[] = []
+  mock.method(URL, 'createObjectURL', () => `blob:report-${links.length}`)
+  mock.method(URL, 'revokeObjectURL', (url: string) => revoked.push(url))
+  t.after(() => mock.restoreAll())
+  const requested: unknown[][] = []
+  await renderWorkbench({
+    workflows: { downloadKnowledgeWorkflowReport: (...args: unknown[]) => { requested.push(args); return Promise.resolve(new Blob(['report'])) } },
+    scenario: async state => {
+      await state.downloadReport(report, 'json')
+      await state.downloadReport(report)
+      assert.equal(state.reportDownloading.value, '')
+    },
+  })
+  assert.deepEqual(requested, [['kb-a', 'report-1', 'json'], ['kb-a', 'report-1', 'markdown']])
+  assert.deepEqual(links.map(link => link.download), ['Weekly_report.json', 'Weekly_report.md'])
+  assert.ok(links.every(link => link.clicks === 1 && link.removed))
+  assert.deepEqual(revoked, ['blob:report-0', 'blob:report-1'])
+})
+
+test('a pending report download blocks a second request and errors restore the action', async () => {
+  let reject!: (error: Error) => void
+  let requested = 0
+  await renderWorkbench({
+    workflows: { downloadKnowledgeWorkflowReport: () => {
+      requested++
+      return new Promise((_resolve, fail) => { reject = fail })
+    } },
+    scenario: async state => {
+      const pending = state.downloadReport(report, 'json')
+      await state.downloadReport(report, 'markdown')
+      assert.equal(requested, 1)
+      assert.equal(state.reportDownloading.value, 'json')
+      reject(new Error('Report download unavailable'))
+      await pending
+      assert.equal(state.reportDownloading.value, '')
+      assert.equal(state.loadError.value, 'Report download unavailable')
     },
   })
 })

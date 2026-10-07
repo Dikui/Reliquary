@@ -108,3 +108,39 @@ func TestRequireRole_NilConfigFailsOpen(t *testing.T) {
 		t.Fatalf("nil config must fail open, got %d", w.Code)
 	}
 }
+
+func TestRequireRolePermissionMatrix(t *testing.T) {
+	required := []types.TenantRole{types.TenantRoleViewer, types.TenantRoleContributor, types.TenantRoleAdmin, types.TenantRoleOwner}
+	cases := []struct {
+		role    types.TenantRole
+		allowed [4]bool
+	}{
+		{types.TenantRoleViewer, [4]bool{true, false, false, false}},
+		{types.TenantRoleContributor, [4]bool{true, true, false, false}},
+		{types.TenantRoleAdmin, [4]bool{true, true, true, false}},
+		{types.TenantRoleOwner, [4]bool{true, true, true, true}},
+	}
+	for _, tc := range cases {
+		for i, floor := range required {
+			t.Run(string(tc.role)+"/"+string(floor), func(t *testing.T) {
+				response := rbacTestHarness(tc.role, "member", RequireRole(floor, cfgRBAC(true)))
+				want := http.StatusForbidden
+				if tc.allowed[i] {
+					want = http.StatusOK
+				}
+				if response.Code != want {
+					t.Fatalf("role=%s required=%s HTTP=%d want=%d", tc.role, floor, response.Code, want)
+				}
+			})
+		}
+	}
+}
+
+func TestRequireRoleRejectsUnknownRequirement(t *testing.T) {
+	for _, role := range []types.TenantRole{types.TenantRoleViewer, types.TenantRoleContributor, types.TenantRoleAdmin, types.TenantRoleOwner} {
+		response := rbacTestHarness(role, "member", RequireRole("invalid-required-role", cfgRBAC(true)))
+		if response.Code != http.StatusForbidden {
+			t.Fatalf("invalid role floor must reject %s, HTTP=%d", role, response.Code)
+		}
+	}
+}

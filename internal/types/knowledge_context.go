@@ -85,30 +85,32 @@ func (KnowledgeEntityMergeSuggestion) TableName() string {
 // KnowledgeEvidence is an immutable source snapshot. Body is kept with its hash
 // so facts and reports can resolve their citations after a message is updated.
 type KnowledgeEvidence struct {
-	KnowledgeBaseName  string      `json:"knowledge_base_name,omitempty" gorm:"-"`
-	ID                 string      `json:"id" gorm:"type:varchar(36);primaryKey"`
-	TenantID           uint64      `json:"tenant_id" gorm:"not null;index:idx_kcevid_message;uniqueIndex:idx_kcevid_version;index:idx_kcevid_hash"`
-	KnowledgeBaseID    string      `json:"knowledge_base_id" gorm:"type:varchar(36);not null;index:idx_kcevid_message;uniqueIndex:idx_kcevid_version;index:idx_kcevid_hash"`
-	KnowledgeID        string      `json:"knowledge_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_kcevid_version;index:idx_kcevid_hash"`
-	Version            int         `json:"version" gorm:"not null;uniqueIndex:idx_kcevid_version"`
-	BodyHash           string      `json:"body_hash" gorm:"type:char(64);not null;index:idx_kcevid_hash"`
-	SupersededByID     string      `json:"superseded_by_id,omitempty" gorm:"type:varchar(36);not null;default:''"`
-	Title              string      `json:"title" gorm:"type:text;not null;default:''"`
-	Body               string      `json:"body" gorm:"type:text;not null"`
-	Author             string      `json:"author,omitempty" gorm:"type:text;not null;default:''"`
-	Publisher          string      `json:"publisher,omitempty" gorm:"type:text;not null;default:''"`
-	OriginalURL        string      `json:"original_url,omitempty" gorm:"type:text;not null;default:''"`
-	PublishedAt        string      `json:"published_at,omitempty" gorm:"type:text;not null;default:''"`
-	ImageRefs          StringArray `json:"image_refs" gorm:"type:json"`
-	SourceKind         string      `json:"source_kind,omitempty" gorm:"type:varchar(32);not null;default:''"`
-	Status             string      `json:"status" gorm:"type:varchar(16);not null;default:'current';index"`
-	ExtractionStatus   string      `json:"extraction_status" gorm:"type:varchar(16);not null;default:'pending';index"`
-	ExtractionCoverage string      `json:"extraction_coverage" gorm:"type:varchar(16);not null;default:'complete'"`
-	ProcessedSegments  int         `json:"processed_segments" gorm:"not null;default:0"`
-	TotalSegments      int         `json:"total_segments" gorm:"not null;default:0"`
-	ModelCalls         JSON        `json:"model_calls" gorm:"type:jsonb;not null;default:'[]'"`
-	ExtractionError    string      `json:"extraction_error,omitempty" gorm:"type:text;not null;default:''"`
-	CreatedAt          time.Time   `json:"created_at"`
+	RepostSources      []KnowledgeRepostSource `json:"repost_sources" gorm:"-"`
+	KnowledgeBaseName  string                  `json:"knowledge_base_name,omitempty" gorm:"-"`
+	ID                 string                  `json:"id" gorm:"type:varchar(36);primaryKey"`
+	TenantID           uint64                  `json:"tenant_id" gorm:"not null;index:idx_kcevid_message;uniqueIndex:idx_kcevid_version;index:idx_kcevid_hash"`
+	KnowledgeBaseID    string                  `json:"knowledge_base_id" gorm:"type:varchar(36);not null;index:idx_kcevid_message;uniqueIndex:idx_kcevid_version;index:idx_kcevid_hash"`
+	KnowledgeID        string                  `json:"knowledge_id" gorm:"type:varchar(36);not null;uniqueIndex:idx_kcevid_version;index:idx_kcevid_hash"`
+	Version            int                     `json:"version" gorm:"not null;uniqueIndex:idx_kcevid_version"`
+	BodyHash           string                  `json:"body_hash" gorm:"type:char(64);not null;index:idx_kcevid_hash"`
+	SupersededByID     string                  `json:"superseded_by_id,omitempty" gorm:"type:varchar(36);not null;default:''"`
+	Title              string                  `json:"title" gorm:"type:text;not null;default:''"`
+	Body               string                  `json:"body" gorm:"type:text;not null"`
+	Author             string                  `json:"author,omitempty" gorm:"type:text;not null;default:''"`
+	Publisher          string                  `json:"publisher,omitempty" gorm:"type:text;not null;default:''"`
+	OriginalURL        string                  `json:"original_url,omitempty" gorm:"type:text;not null;default:''"`
+	PublishedAt        string                  `json:"published_at,omitempty" gorm:"type:text;not null;default:''"`
+	PublishedAtMissing bool                    `json:"published_at_missing" gorm:"not null;default:false"`
+	ImageRefs          StringArray             `json:"image_refs" gorm:"type:json"`
+	SourceKind         string                  `json:"source_kind,omitempty" gorm:"type:varchar(32);not null;default:''"`
+	Status             string                  `json:"status" gorm:"type:varchar(16);not null;default:'current';index"`
+	ExtractionStatus   string                  `json:"extraction_status" gorm:"type:varchar(16);not null;default:'pending';index"`
+	ExtractionCoverage string                  `json:"extraction_coverage" gorm:"type:varchar(16);not null;default:'complete'"`
+	ProcessedSegments  int                     `json:"processed_segments" gorm:"not null;default:0"`
+	TotalSegments      int                     `json:"total_segments" gorm:"not null;default:0"`
+	ModelCalls         JSON                    `json:"model_calls" gorm:"type:jsonb;not null;default:'[]'"`
+	ExtractionError    string                  `json:"extraction_error,omitempty" gorm:"type:text;not null;default:''"`
+	CreatedAt          time.Time               `json:"created_at"`
 }
 
 func (KnowledgeEvidence) TableName() string { return "knowledge_context_evidence" }
@@ -146,22 +148,24 @@ func (KnowledgeFact) TableName() string { return "knowledge_context_facts" }
 // KnowledgeEvent represents one real-world change, possibly reported by many
 // messages. Evidence links and attention assessments are stored separately.
 type KnowledgeEvent struct {
-	Sources         []KnowledgeContextSource `json:"sources" gorm:"-"`
-	ID              string                   `json:"id" gorm:"type:varchar(36);primaryKey"`
-	TenantID        uint64                   `json:"tenant_id" gorm:"not null;index:idx_kcevent_scope"`
-	KnowledgeBaseID string                   `json:"knowledge_base_id" gorm:"type:varchar(36);not null;index:idx_kcevent_scope"`
-	Title           string                   `json:"title" gorm:"type:varchar(512);not null"`
-	EventType       string                   `json:"event_type,omitempty" gorm:"type:varchar(128);not null;default:''"`
-	Description     string                   `json:"description,omitempty" gorm:"type:text;not null;default:''"`
-	OccurredAt      *time.Time               `json:"occurred_at,omitempty" gorm:"index"`
-	EntityIDs       StringArray              `json:"entity_ids" gorm:"-"`
-	EvidenceIDs     StringArray              `json:"evidence_ids" gorm:"type:json"`
-	SourceCount     int                      `json:"source_count" gorm:"not null;default:0"`
-	Heat            float64                  `json:"heat" gorm:"not null;default:0"`
-	CreatedAt       time.Time                `json:"created_at"`
-	UpdatedAt       time.Time                `json:"updated_at"`
-	SourceEntityIDs StringArray              `json:"-" gorm:"-"`
-	Relations       []KnowledgeEventRelation `json:"relations" gorm:"-"`
+	ExcludedMissingPublishedAtCount int                      `json:"excluded_missing_published_at_count" gorm:"-"`
+	RepostSources                   []KnowledgeRepostSource  `json:"repost_sources" gorm:"-"`
+	Sources                         []KnowledgeContextSource `json:"sources" gorm:"-"`
+	ID                              string                   `json:"id" gorm:"type:varchar(36);primaryKey"`
+	TenantID                        uint64                   `json:"tenant_id" gorm:"not null;index:idx_kcevent_scope"`
+	KnowledgeBaseID                 string                   `json:"knowledge_base_id" gorm:"type:varchar(36);not null;index:idx_kcevent_scope"`
+	Title                           string                   `json:"title" gorm:"type:varchar(512);not null"`
+	EventType                       string                   `json:"event_type,omitempty" gorm:"type:varchar(128);not null;default:''"`
+	Description                     string                   `json:"description,omitempty" gorm:"type:text;not null;default:''"`
+	OccurredAt                      *time.Time               `json:"occurred_at,omitempty" gorm:"index"`
+	EntityIDs                       StringArray              `json:"entity_ids" gorm:"-"`
+	EvidenceIDs                     StringArray              `json:"evidence_ids" gorm:"type:json"`
+	SourceCount                     int                      `json:"source_count" gorm:"not null;default:0"`
+	Heat                            float64                  `json:"heat" gorm:"not null;default:0"`
+	CreatedAt                       time.Time                `json:"created_at"`
+	UpdatedAt                       time.Time                `json:"updated_at"`
+	SourceEntityIDs                 StringArray              `json:"-" gorm:"-"`
+	Relations                       []KnowledgeEventRelation `json:"relations" gorm:"-"`
 }
 
 func (KnowledgeEvent) TableName() string { return "knowledge_context_events" }
@@ -264,11 +268,13 @@ type KnowledgeContextQuery struct {
 }
 
 type KnowledgeContextResult struct {
-	Entities  []KnowledgeEntity    `json:"entities"`
-	Facts     []KnowledgeFact      `json:"facts"`
-	Events    []KnowledgeEvent     `json:"events"`
-	Evidence  []KnowledgeEvidence  `json:"evidence"`
-	Attention []KnowledgeAttention `json:"attention"`
+	ExcludedMissingPublishedAtCount int                  `json:"excluded_missing_published_at_count"`
+	PublishedAtMissingSourceIDs     []string             `json:"published_at_missing_source_ids"`
+	Entities                        []KnowledgeEntity    `json:"entities"`
+	Facts                           []KnowledgeFact      `json:"facts"`
+	Events                          []KnowledgeEvent     `json:"events"`
+	Evidence                        []KnowledgeEvidence  `json:"evidence"`
+	Attention                       []KnowledgeAttention `json:"attention"`
 }
 
 type KnowledgeFactCorrection struct {

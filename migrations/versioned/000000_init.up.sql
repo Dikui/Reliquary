@@ -605,6 +605,10 @@ CREATE TABLE public.knowledge_anomalies (
     updated_at timestamp with time zone NOT NULL,
     decided_at timestamp with time zone,
     proposed_remove_tag_ids text DEFAULT '[]'::text NOT NULL,
+    site text DEFAULT '' NOT NULL,
+    source_url text DEFAULT '' NOT NULL,
+    reason text DEFAULT '' NOT NULL,
+    adapter text DEFAULT '' NOT NULL,
     applied_changes text DEFAULT '{}'::text NOT NULL
 );
 
@@ -874,6 +878,7 @@ CREATE TABLE public.knowledge_context_evidence (
     publisher text DEFAULT ''::text NOT NULL,
     original_url text DEFAULT ''::text NOT NULL,
     published_at text DEFAULT ''::text NOT NULL,
+    published_at_missing boolean DEFAULT false NOT NULL,
     image_refs jsonb DEFAULT '[]'::jsonb NOT NULL,
     status character varying(16) DEFAULT 'current'::character varying NOT NULL,
     extraction_status character varying(16) DEFAULT 'pending'::character varying NOT NULL,
@@ -1054,7 +1059,8 @@ CREATE TABLE public.knowledge_workflow_reports (
     citations jsonb NOT NULL,
     time_from timestamp with time zone,
     time_to timestamp with time zone,
-    created_at timestamp with time zone NOT NULL
+    created_at timestamp with time zone NOT NULL,
+    excluded_missing_published_at_count integer DEFAULT 0 NOT NULL
 );
 
 
@@ -1145,6 +1151,10 @@ CREATE TABLE public.knowledges (
     file_size bigint,
     file_path text,
     file_hash character varying(64),
+    normalized_url text DEFAULT '' NOT NULL,
+    content_hash character(64) DEFAULT '' NOT NULL,
+    content_sim_hash bigint DEFAULT 0 NOT NULL,
+    content_rune_count integer DEFAULT 0 NOT NULL,
     storage_size bigint DEFAULT 0 NOT NULL,
     metadata jsonb,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
@@ -1165,6 +1175,30 @@ CREATE TABLE public.knowledges (
 --
 
 COMMENT ON COLUMN public.knowledges.channel IS 'Source channel of the knowledge: web, api, feishu';
+
+
+CREATE TABLE public.knowledge_repost_sources (
+    id character varying(36) NOT NULL PRIMARY KEY,
+    tenant_id bigint NOT NULL,
+    knowledge_base_id character varying(36) NOT NULL,
+    knowledge_id character varying(36) NOT NULL,
+    original_url text DEFAULT '' NOT NULL,
+    normalized_url text DEFAULT '' NOT NULL,
+    source_fingerprint character(64) NOT NULL,
+    author text DEFAULT '' NOT NULL,
+    publisher text DEFAULT '' NOT NULL,
+    published_at text DEFAULT '' NOT NULL,
+    published_at_missing boolean DEFAULT false NOT NULL,
+    match_method character varying(16) NOT NULL CHECK (match_method IN ('url', 'content_hash', 'simhash', 'file_hash')),
+    sim_hash_distance integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT idx_repost_origin UNIQUE (tenant_id, knowledge_id, source_fingerprint)
+);
+CREATE INDEX idx_repost_knowledge ON public.knowledge_repost_sources (tenant_id, knowledge_id);
+CREATE INDEX idx_repost_url ON public.knowledge_repost_sources (tenant_id, knowledge_base_id, normalized_url);
+CREATE INDEX idx_knowledge_normalized_url ON public.knowledges (tenant_id, knowledge_base_id, normalized_url) WHERE deleted_at IS NULL AND normalized_url <> '';
+CREATE INDEX idx_knowledge_content_hash ON public.knowledges (tenant_id, knowledge_base_id, content_hash) WHERE deleted_at IS NULL AND content_hash <> '';
+CREATE INDEX idx_knowledge_simhash_candidates ON public.knowledges (tenant_id, knowledge_base_id, content_rune_count) WHERE deleted_at IS NULL AND content_rune_count >= 100;
 
 
 --

@@ -75,3 +75,10 @@ func parseDeepSeekUpdates(data []byte, pageURL string) ([]*gofeed.Item, error) {
 	}
 	return items, nil
 }
+
+func deepSeekAdapter() SiteAdapter {
+	return SiteAdapter{Name: "deepseek", Rules: []SiteRule{{Domains: []string{"api-docs.deepseek.com"}, Path: "/zh-cn/updates"}}, discovery: &siteDiscovery{
+		sourceURL: "", inlineOriginal: true, needsArticleDate: false,
+		parse: func(data []byte, raw string) ([]*gofeed.Item, error) { return parseDeepSeekUpdates(data, raw) },
+	}}
+}

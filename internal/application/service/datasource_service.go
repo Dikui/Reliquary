@@ -876,6 +876,24 @@ func (s *DataSourceService) applyFetchedItem(
 	ctx context.Context, ds *types.DataSource, item *types.FetchedItem,
 	tagIDs []string, result *types.SyncResult,
 ) {
+	if len(item.AdapterFailures) > 0 {
+		knowledge, ok := s.knowledgeService.(*knowledgeService)
+		var err error
+		if !ok {
+			err = fmt.Errorf("source adapter anomaly recorder unavailable")
+		} else {
+			err = knowledge.recordSourceAdapterFailures(ctx, ds.TenantID, ds.KnowledgeBaseID, item.AdapterFailures)
+		}
+		if err != nil {
+			result.Failed++
+			recordSyncError(result, types.SyncItemError{Title: item.Title, Code: "source_adapter_anomaly_failed", Message: err.Error()})
+			return
+		}
+	}
+	if item.Metadata["adapter_failure_only"] == "true" {
+		result.Skipped++
+		return
+	}
 	if item.IsDeleted {
 		if !ds.SyncDeletions {
 			// Sync deletion disabled: neither count nor delete.

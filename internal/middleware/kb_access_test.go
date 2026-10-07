@@ -54,20 +54,30 @@ func TestIsResourceNotFound_RecognisesKnowledgeSentinel(t *testing.T) {
 // ---------- EnableRBAC=false rollout window ----------
 
 func TestRequireKBAccessTeamRoleMatrix(t *testing.T) {
-	for _, role := range []types.TenantRole{types.TenantRoleOwner, types.TenantRoleAdmin, types.TenantRoleContributor, types.TenantRoleViewer} {
-		for _, required := range []types.TenantRole{types.TenantRoleViewer, types.TenantRoleContributor} {
-			t.Run(string(role)+"/"+string(required), func(t *testing.T) {
+	required := []types.TenantRole{types.TenantRoleViewer, types.TenantRoleContributor, types.TenantRoleAdmin, types.TenantRoleOwner}
+	cases := []struct {
+		role    types.TenantRole
+		allowed [4]bool
+	}{
+		{types.TenantRoleViewer, [4]bool{true, false, false, false}},
+		{types.TenantRoleContributor, [4]bool{true, true, false, false}},
+		{types.TenantRoleAdmin, [4]bool{true, true, true, false}},
+		{types.TenantRoleOwner, [4]bool{true, true, true, true}},
+	}
+	for _, tc := range cases {
+		for i, floor := range required {
+			t.Run(string(tc.role)+"/"+string(floor), func(t *testing.T) {
 				c, _ := gin.CreateTestContext(httptest.NewRecorder())
 				c.Params = gin.Params{{Key: "id", Value: "kb"}}
 				ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
-				ctx = context.WithValue(ctx, types.TenantRoleContextKey, role)
+				ctx = context.WithValue(ctx, types.TenantRoleContextKey, tc.role)
 				c.Request = httptest.NewRequest("GET", "/", nil).WithContext(ctx)
-				RequireKBAccess(KBIDFromParam("id"), required, &stubKBLookup{kbs: map[string]*types.KnowledgeBase{"kb": {ID: "kb", TenantID: 1, CreatorID: "another-member"}}}, cfgRBAC(true))(c)
-				require.Equal(t, !role.HasPermission(required), c.IsAborted())
+				RequireKBAccess(KBIDFromParam("id"), floor, &stubKBLookup{kbs: map[string]*types.KnowledgeBase{"kb": {ID: "kb", TenantID: 1, CreatorID: "another-member"}}}, cfgRBAC(true))(c)
+				require.Equal(t, !tc.allowed[i], c.IsAborted())
 				if !c.IsAborted() {
 					a, ok := KBAccessFromContext(c)
 					require.True(t, ok)
-					require.Equal(t, role, a.Permission)
+					require.Equal(t, tc.role, a.Permission)
 				}
 			})
 		}

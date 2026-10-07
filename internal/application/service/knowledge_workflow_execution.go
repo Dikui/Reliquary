@@ -795,7 +795,7 @@ func (s *KnowledgeWorkflowService) citationForKnowledge(ctx context.Context, wf 
 func workflowCitationFromEvidence(k *types.Knowledge, evidence types.KnowledgeEvidence, candidateQuote string) types.KnowledgeWorkflowCitation {
 	quote := evidence.Body
 	candidateQuote = strings.TrimSpace(candidateQuote)
-	if candidateQuote != "" && strings.Contains(evidence.Body, candidateQuote) {
+	if candidateQuote != "" && verbatimQuote(evidence.Body, candidateQuote) {
 		quote = candidateQuote
 	}
 	info := types.SourceInfo{}
@@ -1100,7 +1100,7 @@ func (s *KnowledgeWorkflowService) executeReport(ctx context.Context, wf *types.
 	var existing types.KnowledgeWorkflowReport
 	err := s.db.WithContext(ctx).Where("run_id = ? AND step_id = ?", run.ID, step.ID).First(&existing).Error
 	if err == nil {
-		return workflowStepOutput{Data: map[string]any{"report_id": existing.ID, "title": existing.Title, "markdown": existing.Markdown}, Text: existing.Markdown, Sources: existing.Citations, ReportID: existing.ID}, nil
+		return workflowReportOutput(existing), nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return workflowStepOutput{}, err
@@ -1118,6 +1118,9 @@ func (s *KnowledgeWorkflowService) executeReport(ctx context.Context, wf *types.
 	}
 	material, citations := buildWorkflowReportMaterial(outputs, timeFrom, timeTo, location)
 	if len(citations) == 0 {
+		if material.ExcludedMissingPublishedAtCount > 0 {
+			return s.saveWorkflowReport(ctx, wf, run, step, cfg.Title, "没有可引用的已知发布时间来源。", citations, timeFrom, timeTo, material.ExcludedMissingPublishedAtCount)
+		}
 		return workflowStepOutput{}, errors.New("report generation requires approved, source-linked evidence")
 	}
 	refs := make([]string, 0, len(citations))
@@ -1160,11 +1163,19 @@ func (s *KnowledgeWorkflowService) executeReport(ctx context.Context, wf *types.
 			return workflowStepOutput{}, fmt.Errorf("report contains unknown citation [%s]", marker[1])
 		}
 	}
-	ctx, err = s.refreshWorkflowAuthorization(ctx, wf)
+	return s.saveWorkflowReport(ctx, wf, run, step, cfg.Title, strings.TrimSpace(response.Content), citations, timeFrom, timeTo, material.ExcludedMissingPublishedAtCount)
+}
+
+func workflowReportOutput(report types.KnowledgeWorkflowReport) workflowStepOutput {
+	return workflowStepOutput{Data: map[string]any{"report_id": report.ID, "title": report.Title, "markdown": report.Markdown, "excluded_missing_published_at_count": report.ExcludedMissingPublishedAtCount}, Text: report.Markdown, Sources: report.Citations, ReportID: report.ID}
+}
+
+func (s *KnowledgeWorkflowService) saveWorkflowReport(ctx context.Context, wf *types.KnowledgeWorkflow, run *types.KnowledgeWorkflowRun, step types.KnowledgeWorkflowStep, title, body string, citations []types.KnowledgeWorkflowCitation, timeFrom, timeTo *time.Time, excludedCount int) (workflowStepOutput, error) {
+	ctx, err := s.refreshWorkflowAuthorization(ctx, wf)
 	if err != nil {
 		return workflowStepOutput{}, fmt.Errorf("workflow authorization changed before report save: %w", err)
 	}
-	markdown := strings.TrimSpace(response.Content) + "\n\n## 来源\n"
+	markdown := body + fmt.Sprintf("\n\n因缺少发布时间被排除的来源数：%d。\n\n## 来源\n", excludedCount)
 	for _, citation := range citations {
 		entry := fmt.Sprintf("- [%s] %s", citation.ID, citation.Title)
 		switch citation.Role {
@@ -1185,8 +1196,9 @@ func (s *KnowledgeWorkflowService) executeReport(ctx context.Context, wf *types.
 	}
 	report := types.KnowledgeWorkflowReport{
 		ID: uuid.NewString(), TenantID: run.TenantID, KnowledgeBaseID: run.KnowledgeBaseID,
-		WorkflowID: wf.ID, RunID: run.ID, StepID: step.ID, Title: cfg.Title,
+		WorkflowID: wf.ID, RunID: run.ID, StepID: step.ID, Title: title,
 		Markdown: markdown, Citations: citations, TimeFrom: timeFrom, TimeTo: timeTo,
+		ExcludedMissingPublishedAtCount: excludedCount,
 	}
 	if err := s.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "run_id"}, {Name: "step_id"}}, DoNothing: true}).Create(&report).Error; err != nil {
 		return workflowStepOutput{}, err
@@ -1194,7 +1206,7 @@ func (s *KnowledgeWorkflowService) executeReport(ctx context.Context, wf *types.
 	if err := s.db.WithContext(ctx).Where("run_id = ? AND step_id = ?", run.ID, step.ID).First(&report).Error; err != nil {
 		return workflowStepOutput{}, err
 	}
-	return workflowStepOutput{Data: map[string]any{"report_id": report.ID, "title": report.Title, "markdown": report.Markdown}, Text: report.Markdown, Sources: report.Citations, ReportID: report.ID}, nil
+	return workflowReportOutput(report), nil
 }
 
 func workflowReportRange(cfg workflowReportConfig, now time.Time) (*time.Time, *time.Time, *time.Location, error) {
@@ -1261,6 +1273,9 @@ func parseWorkflowTimeInLocation(raw string, loc *time.Location, inclusiveDateEn
 		if parsed, err := time.Parse(layout, raw); err == nil {
 			return &parsed, nil
 		}
+	}
+	if parsed, err := time.ParseInLocation("2006-01-02 15:04:05", raw, loc); err == nil {
+		return &parsed, nil
 	}
 	return nil, fmt.Errorf("invalid time %q; use RFC3339 or YYYY-MM-DD", raw)
 }

@@ -14,6 +14,7 @@ import (
 
 	readability "codeberg.org/readeck/go-readability/v2"
 	"github.com/PuerkitoBio/goquery"
+	"reliquary/internal/types"
 	"reliquary/internal/utils"
 )
 
@@ -35,6 +36,7 @@ const (
 type client struct {
 	httpClient *http.Client
 	headers    map[string]string
+	adapters   *SiteAdapterRegistry
 }
 
 func newClient(headers map[string]string) *client {
@@ -77,14 +79,8 @@ func (c *client) fetch(ctx context.Context, rawURL string, maxSize int64, withAu
 		req.Header.Set("Accept",
 			"application/rss+xml, application/atom+xml, application/xml, text/xml, application/json, text/html;q=0.9, */*;q=0.8")
 	}
-	// OpenAI article pages challenge feed-style requests; request the original document.
-	if !withAuthHeaders && req.URL.Hostname() == "openai.com" && strings.HasPrefix(req.URL.Path, "/index/") {
-		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-		req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-		req.Header.Set("Sec-Fetch-Dest", "document")
-		req.Header.Set("Sec-Fetch-Mode", "navigate")
-		req.Header.Set("Sec-Fetch-Site", "none")
-		req.Header.Set("Sec-Fetch-User", "?1")
+	if !withAuthHeaders {
+		c.adapterRegistry().configureRequest(req)
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -113,103 +109,80 @@ func (c *client) fetchFeed(ctx context.Context, feedURL string) ([]byte, error) 
 }
 
 func (c *client) fetchSource(ctx context.Context, feedURL string) ([]byte, error) {
-	if isQwenBlogURL(feedURL) {
-		return c.fetchFeed(ctx, qwenArticlesURL)
-	}
-	if isMiniMaxNewsURL(feedURL) {
-		return c.fetchFeed(ctx, minimaxNewsAPIURL)
-	}
-	return c.fetchFeed(ctx, feedURL)
+	return c.fetchFeed(ctx, c.adapterRegistry().sourceURL(feedURL))
 }
 
 // extractArticle fetches an article page and returns the readability-cleaned
 // main content as HTML, plus the extracted title and source fields. Returns an
 // error if the page can't be fetched or no readable content is found.
+type extractedArticle struct {
+	contentHTML, title, byline, siteName, publishedAt string
+	failures                                          []types.SourceAdapterFailure
+}
+
 func (c *client) extractArticle(ctx context.Context, articleURL string) (contentHTML, title, byline, siteName, publishedAt string, err error) {
+	article, err := c.extractArticleWithFailures(ctx, articleURL)
+	return article.contentHTML, article.title, article.byline, article.siteName, article.publishedAt, err
+}
+
+func (c *client) extractArticleWithFailures(ctx context.Context, articleURL string) (extractedArticle, error) {
 	body, err := c.fetch(ctx, articleURL, maxArticleSize, false)
 	if err != nil {
-		return "", "", "", "", "", err
+		return extractedArticle{}, err
 	}
+	return c.extractArticleBody(ctx, body, articleURL)
+}
 
-	// Readability can discard embeds. Inspect the longest article/main element
-	// in the source page so unrelated header/footer media do not block intake.
+// extractArticleBody separates pure page extraction from HTTP for offline regression tests.
+func (c *client) extractArticleBody(ctx context.Context, body []byte, articleURL string) (extractedArticle, error) {
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
 	if err != nil {
-		return "", "", "", "", "", fmt.Errorf("article HTML parse: %w", err)
+		return extractedArticle{}, fmt.Errorf("article HTML parse: %w", err)
 	}
-	selection := doc.Find("article")
-	if selection.Length() == 0 {
-		selection = doc.Find("main")
-	}
-	if selection.Length() == 0 {
-		selection = doc.Find("div#body.prose")
-	}
-	var content *goquery.Selection
-	selection.Each(func(_ int, candidate *goquery.Selection) {
-		if content == nil || len(candidate.Text()) > len(content.Text()) {
-			content = candidate
-		}
-	})
-	if content == nil {
-		// ponytail: page-wide fallback can include decorative media on pages without a content container.
-		content = doc.Selection
-	}
-	if content.Is("main") {
-		articleBody := content.Find(".blog-content")
-		if articleBody.Length() == 1 && articleBody.Find("h1").Length() == 1 {
-			content = articleBody
-		}
-	}
+	content := genericArticleContent(doc)
 	sourceHeading := strings.TrimSpace(content.Find("h1").First().Text())
-	pageURL, _ := url.Parse(articleURL)
-	hadVideo := content.Find("video, [or-mp4-video-url]").Length() > 0
+	pageURL, err := url.Parse(articleURL)
+	if err != nil {
+		return extractedArticle{}, err
+	}
 	videoCount, err := c.preserveVideoLinks(ctx, content, pageURL)
 	if err != nil {
-		return "", "", "", "", "", err
+		return extractedArticle{}, err
 	}
-	recoveredK25, err := c.recoverKimiK25(ctx, doc, content, pageURL)
-	if err != nil && ctx.Err() != nil {
-		return "", "", "", "", "", err
-	}
+	// Generic fallback discards unresolved components from a separate document.
+	// Adapters retain the original placeholders and streamed data for recovery.
+	genericHTML, err := doc.Html()
 	if err != nil {
-		recoveredK25 = 0
+		return extractedArticle{}, err
 	}
-	recoveredK26, err := c.recoverKimiK26(ctx, doc, content, pageURL)
-	if err != nil && ctx.Err() != nil {
-		return "", "", "", "", "", err
-	}
+	genericDoc, err := goquery.NewDocumentFromReader(strings.NewReader(genericHTML))
 	if err != nil {
-		recoveredK26 = 0
+		return extractedArticle{}, err
 	}
-	recoveredTables, err := recoverKimiTables(doc, content, pageURL)
+	genericContent := genericArticleContent(genericDoc)
+	discardUnsupportedComponents(genericContent)
+	genericHTML, err = genericDoc.Html()
 	if err != nil {
-		recoveredTables = 0
+		return extractedArticle{}, err
 	}
-	recoveredWidgets := recoveredK25 + recoveredK26 + recoveredTables
-	droppedComponents := discardUnsupportedComponents(content)
-	if hadVideo || recoveredWidgets > 0 || droppedComponents {
-		page, renderErr := doc.Html()
-		if renderErr != nil {
-			return "", "", "", "", "", fmt.Errorf("render article page: %w", renderErr)
-		}
-		body = []byte(page)
-	}
-	article, err := readability.FromReader(bytes.NewReader(body), pageURL)
+	article, err := readability.FromReader(strings.NewReader(genericHTML), pageURL)
+	var genericErr error
 	if err != nil {
-		return "", "", "", "", "", fmt.Errorf("readability parse: %w", err)
+		genericErr = fmt.Errorf("readability parse: %w", err)
 	}
 	if article.Node == nil {
-		return "", "", "", "", "", fmt.Errorf("no readable content extracted")
+		if genericErr == nil {
+			genericErr = fmt.Errorf("no readable content extracted")
+		}
+		article.Node = genericContent.Get(0)
 	}
-	if content.Is("div#body.prose") {
-		// The explicit article body includes media figures that Readability can discard.
-		absolutizeContentURLs(content, pageURL)
-		article.Node = content.Get(0)
+	if genericContent.Is("div#body.prose") {
+		absolutizeContentURLs(genericContent, pageURL)
+		article.Node = genericContent.Get(0)
 	}
-	if videoCount > 0 && recoveredWidgets == 0 {
+	if videoCount > 0 {
 		got := goquery.NewDocumentFromNode(article.Node).Find(`a[data-reliquary-video]`).Length()
 		if got == 0 && (content.Is("article") || content.Is("main")) {
-			// Readability can omit a video in the title/hero block while retaining the body.
 			content.Children().EachWithBreak(func(_ int, header *goquery.Selection) bool {
 				links := header.Find(`a[data-reliquary-video]`)
 				if header.Find("h1").Length() == 0 || links.Length() != videoCount {
@@ -224,94 +197,32 @@ func (c *client) extractArticle(ctx context.Context, articleURL string) (content
 			})
 		}
 	}
-	if err := preserveMetaHeroImage(doc, &article, pageURL); err != nil {
-		return "", "", "", "", "", err
+	page := &SitePage{Document: doc, Content: content, URL: pageURL, Article: &article, client: c}
+	recovered, failures := c.adapterRegistry().recover(ctx, page)
+	if ctx.Err() != nil {
+		return extractedArticle{failures: failures}, ctx.Err()
 	}
-	if recoveredWidgets > 0 {
-		body := content.Find("div.max-w-none.markdown").First()
-		if body.Length() > 0 {
-			preferLargestImageVariant(body, pageURL)
-			absolutizeContentURLs(body, pageURL)
-			original, renderErr := body.Html()
-			marker := "data-reliquary-kimi-table"
-			if recoveredK25+recoveredK26 > 0 {
-				marker = "data-reliquary-kimi-widget"
-			}
-			if renderErr == nil && strings.Count(original, marker) == recoveredWidgets {
-				return original, firstNonEmpty(sourceHeading, article.Title()), article.Byline(), article.SiteName(), articlePublishedAt(doc, articleURL), nil
-			}
-		}
+	if genericErr != nil && strings.TrimSpace(recovered.ContentHTML) == "" {
+		return extractedArticle{failures: failures}, genericErr
 	}
+	article = *page.Article
 	preferLargestImageVariant(goquery.NewDocumentFromNode(article.Node).Selection, pageURL)
-
 	var buf bytes.Buffer
 	if err := article.RenderHTML(&buf); err != nil {
-		return "", "", "", "", "", fmt.Errorf("render article html: %w", err)
+		return extractedArticle{failures: failures}, fmt.Errorf("render article html: %w", err)
 	}
-	byline, siteName = article.Byline(), article.SiteName()
-	if author, publisher := mistralPageAttribution(doc, pageURL); author != "" || publisher != "" {
-		if author != "" {
-			byline = author
-		} else {
-			byline, siteName = "", publisher
+	result := extractedArticle{contentHTML: firstNonEmpty(recovered.ContentHTML, buf.String()), title: firstNonEmpty(sourceHeading, article.Title()),
+		byline: article.Byline(), siteName: article.SiteName(), publishedAt: firstNonEmpty(recovered.PublishedAt, articlePublishedAt(doc, articleURL)), failures: failures}
+	if recovered.Author != "" {
+		result.byline = recovered.Author
+	}
+	if recovered.Publisher != "" {
+		result.siteName = recovered.Publisher
+		if recovered.Author == "" {
+			result.byline = ""
 		}
 	}
-	return buf.String(), firstNonEmpty(sourceHeading, article.Title()), byline, siteName, articlePublishedAt(doc, articleURL), nil
-}
-
-func preserveMetaHeroImage(doc *goquery.Document, article *readability.Article, pageURL *url.URL) error {
-	if pageURL.Hostname() != "ai.meta.com" || !strings.HasPrefix(pageURL.Path, "/blog/") {
-		return nil
-	}
-	header := doc.Find("h1").First().Closest("._amuh")
-	if header.Length() != 1 {
-		return fmt.Errorf("Meta article header unavailable")
-	}
-	hero := header.Find("img[src]")
-	if hero.Length() > 1 {
-		return fmt.Errorf("Meta article hero image ambiguous")
-	}
-	if hero.Length() == 0 {
-		return nil
-	}
-	raw, _ := hero.Attr("src")
-	raw = strings.TrimSpace(raw)
-	ref, err := url.Parse(raw)
-	if raw == "" || err != nil || ref.User != nil || (ref.Scheme != "" && ref.Scheme != "http" && ref.Scheme != "https") {
-		return fmt.Errorf("Meta article hero image URL invalid")
-	}
-	imageURL := pageURL.ResolveReference(ref).String()
-	if goquery.NewDocumentFromNode(article.Node).Find("img[src]").FilterFunction(func(_ int, img *goquery.Selection) bool {
-		src, _ := img.Attr("src")
-		return src == imageURL
-	}).Length() > 0 {
-		return nil
-	}
-	hero.SetAttr("src", imageURL)
-	image := hero.Get(0)
-	image.Parent.RemoveChild(image)
-	article.Node.InsertBefore(image, article.Node.FirstChild)
-	return nil
-}
-
-func mistralPageAttribution(doc *goquery.Document, pageURL *url.URL) (author, publisher string) {
-	if pageURL == nil || pageURL.Hostname() != "mistral.ai" || !strings.HasPrefix(pageURL.Path, "/news/") {
-		return "", ""
-	}
-	doc.Find("h1").First().Parent().Find("p").EachWithBreak(func(_ int, paragraph *goquery.Selection) bool {
-		text := strings.TrimSpace(paragraph.Text())
-		if !strings.HasPrefix(text, "By ") {
-			return true
-		}
-		byline := strings.TrimSpace(strings.TrimPrefix(text, "By "))
-		if strings.HasPrefix(strings.ToLower(byline), "mistral") {
-			publisher = byline
-		} else {
-			author = byline
-		}
-		return false
-	})
-	return author, publisher
+	return result, nil
 }
 
 func (c *client) preserveVideoLinks(ctx context.Context, content *goquery.Selection, pageURL *url.URL) (int, error) {

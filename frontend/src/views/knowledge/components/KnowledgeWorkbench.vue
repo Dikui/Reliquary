@@ -114,6 +114,7 @@
       </div>
 
       <div v-if="queryResult" class="query-results">
+        <p class="muted" role="status">{{ t('knowledgeWorkbench.sourceTime.excluded', { count: queryResult.excluded_missing_published_at_count || 0 }) }}</p>
         <div class="result-summary">
           <span>{{ t('knowledgeWorkbench.query.resultCounts', {
             entities: queryResult.entities.length,
@@ -260,6 +261,8 @@
             </t-button>
           </div>
           <div v-if="expandedEventId === event.id" class="event-row__details">
+            <p class="muted">{{ t('knowledgeWorkbench.sourceTime.excluded', { count: event.excluded_missing_published_at_count || 0 }) }}</p>
+            <RepostSources :sources="event.repost_sources" />
             <t-loading :loading="eventLoadingId === event.id" size="small">
               <div class="result-group">
                 <h5>{{ t('knowledgeWorkbench.events.whyHot') }}</h5>
@@ -295,6 +298,7 @@
           :placeholder="t('knowledgeWorkbench.evidence.filter')" />
       </div>
       <t-loading :loading="evidenceLoading" show-overlay>
+        <p class="muted" role="status">{{ t('knowledgeWorkbench.sourceTime.excluded', { count: evidenceExcludedCount }) }}</p>
         <t-empty v-if="!filteredEvidence.length" :description="t('knowledgeWorkbench.evidence.empty')" />
         <EvidenceCard v-for="item in filteredEvidence" :key="item.id" :evidence="item"
           :expanded="expandedEvidenceId === item.id" :loading="evidenceLoadingId === item.id"
@@ -561,6 +565,7 @@
             </button>
           </div>
           <article v-if="selectedReport" class="report-view">
+            <p class="muted" role="status">{{ t('knowledgeWorkbench.sourceTime.excluded', { count: selectedReport.excluded_missing_published_at_count || 0 }) }}</p>
             <header>
               <div>
                 <h4>{{ selectedReport.title }}</h4>
@@ -569,12 +574,18 @@
                   <span v-if="!selectedReport.time_from && !selectedReport.time_to">{{ formatDate(selectedReport.created_at) }}</span>
                 </p>
               </div>
-              <t-button variant="outline" :loading="reportDownloading" @click="downloadReport(selectedReport)">
-                <template #icon><t-icon name="download" /></template>
-                {{ t('knowledgeWorkbench.reports.download') }}
-              </t-button>
+              <div class="report-downloads">
+                <t-button variant="outline" :disabled="!!reportDownloading" :loading="reportDownloading === 'markdown'" @click="downloadReport(selectedReport)">
+                  <template #icon><t-icon name="download" /></template>
+                  {{ t('knowledgeWorkbench.reports.download') }}
+                </t-button>
+                <t-button variant="outline" :disabled="!!reportDownloading" :loading="reportDownloading === 'json'" @click="downloadReport(selectedReport, 'json')">
+                  <template #icon><t-icon name="download" /></template>
+                  {{ t('knowledgeWorkbench.reports.downloadJson') }}
+                </t-button>
+              </div>
             </header>
-            <div class="report-markdown" v-html="safeMarkdownToHTML(selectedReport.markdown)" />
+            <ReportMarkdown :markdown="selectedReport.markdown" :citations="selectedReport.citations || []" @open-evidence="openEvidence" />
             <div class="report-citations">
               <h5>{{ t('knowledgeWorkbench.reports.citations') }}</h5>
               <t-empty v-if="!selectedReport.citations?.length" :description="t('knowledgeWorkbench.reports.noCitations')" />
@@ -583,11 +594,11 @@
                 <small v-if="citation.role">{{ t(`knowledgeWorkbench.fusion.${citation.role}`) }}</small>
                 <p v-if="citation.quote">“{{ citation.quote }}”</p>
                 <small>{{ citation.published_at ? formatDate(citation.published_at) : '' }}</small>
-                <div>
-                  <t-button v-if="citation.evidence_id" size="small" variant="text" @click="openEvidence(citation.evidence_id, citation.quote)">
+                <div class="citation-card__actions">
+                  <t-button v-if="citation.evidence_id" size="small" variant="text" @click="openEvidence(citation.evidence_id, citation.quote || '')">
                     {{ t('knowledgeWorkbench.evidence.openSnapshot') }}
                   </t-button>
-                  <a v-if="safeExternalUrl(citation.url)" :href="safeExternalUrl(citation.url)" target="_blank" rel="noopener noreferrer">{{ t('knowledgeWorkbench.evidence.openSource') }}</a>
+                  <a v-if="safeExternalUrl(citation.url)" class="source-url" :href="safeExternalUrl(citation.url)" target="_blank" rel="noopener noreferrer">{{ t('knowledgeWorkbench.evidence.openSource') }}</a>
                 </div>
               </article>
             </div>
@@ -603,6 +614,8 @@
           <h3>{{ selectedSnapshot.title }}</h3>
           <p>v{{ selectedSnapshot.version }} · {{ t(`knowledgeWorkbench.evidence.status.${selectedSnapshot.status}`) }}</p>
           <EvidenceExtractionDetails :evidence="selectedSnapshot" />
+          <p v-if="selectedSnapshot.published_at_missing" class="muted">{{ t('knowledgeWorkbench.sourceTime.missing') }}</p>
+          <RepostSources :sources="selectedSnapshot.repost_sources" />
           <p class="snapshot-hash">{{ t('knowledgeWorkbench.evidence.hash') }}: {{ selectedSnapshot.body_hash }}</p>
           <blockquote v-if="selectedQuote">{{ selectedQuote }}</blockquote>
           <p v-if="selectedQuote && !snapshotSegments.some(segment => segment.match)" role="status">
@@ -652,11 +665,13 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import MergeSuggestions from './MergeSuggestions.vue'
 import EvidenceExtractionDetails from './EvidenceExtractionDetails.vue'
+import RepostSources from './RepostSources.vue'
+import ReportMarkdown from './ReportMarkdown.vue'
 import { eventEvidence, normalizeKnowledgeContextResult } from './knowledgeContextDisplay'
 import { useAuthStore } from '@/stores/auth'
 import { listKnowledgeDomains, type KnowledgeDomain } from '@/api/knowledge-domains'
 import { knowledgeContextScopeParams } from '@/api/knowledge-context-scope'
-import { safeMarkdownToHTML } from '@/utils/security'
+import { markdownCitationSegments } from '@/utils/markdownCitation'
 import { downloadArtifact, type ArtifactMeta } from '@/api/chat/index'
 import {
   correctGlobalKnowledgeFact,
@@ -736,6 +751,7 @@ const loadError = ref('')
 const entitiesLoading = ref(false)
 const eventsLoading = ref(false)
 const evidenceLoading = ref(false)
+const evidenceExcludedCount = ref(0)
 const entities = ref<KnowledgeEntity[]>([])
 const events = ref<KnowledgeEvent[]>([])
 const evidence = ref<KnowledgeEvidence[]>([])
@@ -769,21 +785,7 @@ const snapshotBody = ref<HTMLElement | null>(null)
 let snapshotRequest = 0
 const snapshotSegments = computed(() => {
   const body = selectedSnapshot.value?.body || ''
-  const quoted = selectedQuote.value
-  // Report excerpts carry a trailing ellipsis. Match their exact prefix only;
-  // never use fuzzy matching to guess a source location.
-  const quote = body.includes(quoted) ? quoted : quoted.endsWith('…') ? quoted.slice(0, -1) : quoted
-  const segments: Array<{ text: string; match: boolean }> = []
-  let offset = 0
-  let start = quote ? body.indexOf(quote) : -1
-  while (start >= 0 && segments.length < 100) {
-    if (start > offset) segments.push({ text: body.slice(offset, start), match: false })
-    segments.push({ text: quote, match: true })
-    offset = start + quote.length
-    start = body.indexOf(quote, offset)
-  }
-  if (offset < body.length) segments.push({ text: body.slice(offset), match: false })
-  return segments
+  return markdownCitationSegments(body, selectedQuote.value)
 })
 const mergeVisible = ref(false)
 const mergeTargetId = ref('')
@@ -818,7 +820,7 @@ const downloadingArtifactKey = ref('')
 const reports = ref<KnowledgeWorkflowReport[]>([])
 const reportsLoading = ref(false)
 const selectedReport = ref<KnowledgeWorkflowReport | null>(null)
-const reportDownloading = ref(false)
+const reportDownloading = ref<'markdown' | 'json' | ''>('')
 const workflowDraftId = ref('')
 const workflowDraft = ref<KnowledgeWorkflowInput | null>(null)
 const workflowSaving = ref(false)
@@ -947,6 +949,7 @@ async function refreshAll() {
     entities.value = envelopeData(entityResponse) || []
     events.value = envelopeData(eventResponse) || []
     evidence.value = envelopeData(evidenceResponse) || []
+    evidenceExcludedCount.value = evidenceResponse.excluded_missing_published_at_count || 0
     entityOffset.value = entities.value.length
     eventOffset.value = events.value.length
     evidenceOffset.value = evidence.value.length
@@ -1004,8 +1007,10 @@ async function loadEvidence(loadMore = false) {
   evidenceLoading.value = true
   try {
     const offset = loadMore ? evidenceOffset.value : 0
-    const items = envelopeData(await listKnowledgeContextEvidence(props.kbId, { ...scopeParams.value, limit: pageSize, offset })) || []
+    const response = await listKnowledgeContextEvidence(props.kbId, { ...scopeParams.value, limit: pageSize, offset })
+    const items = envelopeData(response) || []
     if (generation !== contextGeneration) return
+    evidenceExcludedCount.value = response.excluded_missing_published_at_count || 0
     evidence.value = loadMore ? [...evidence.value, ...items] : items
     evidenceOffset.value = offset + items.length
     hasMoreEvidence.value = items.length === pageSize
@@ -1756,20 +1761,25 @@ async function selectReport(report: KnowledgeWorkflowReport) {
   catch (error) { loadError.value = getErrorMessage(error) }
 }
 
-async function downloadReport(report: KnowledgeWorkflowReport) {
-  reportDownloading.value = true
+async function downloadReport(report: KnowledgeWorkflowReport, format: 'markdown' | 'json' = 'markdown') {
+  if (reportDownloading.value) return
+  reportDownloading.value = format
+  let url = ''
+  let link: HTMLAnchorElement | null = null
   try {
-    const file = await downloadKnowledgeWorkflowReport(props.kbId, report.id)
-    const url = URL.createObjectURL(file)
-    const link = document.createElement('a')
+    const file = await downloadKnowledgeWorkflowReport(props.kbId, report.id, format)
+    url = URL.createObjectURL(file)
+    link = document.createElement('a')
     link.href = url
-    link.download = `${safeFilename(report.title)}.md`
+    link.download = `${safeFilename(report.title)}.${format === 'json' ? 'json' : 'md'}`
     document.body.appendChild(link)
     link.click()
-    link.remove()
-    URL.revokeObjectURL(url)
   } catch (error) { loadError.value = getErrorMessage(error) }
-  finally { reportDownloading.value = false }
+  finally {
+    link?.remove()
+    if (url) URL.revokeObjectURL(url)
+    reportDownloading.value = ''
+  }
 }
 
 function safeFilename(value: string) {
@@ -1941,8 +1951,10 @@ const EvidenceCard = defineComponent({
           cardProps.evidence.published_at ? formatDate(cardProps.evidence.published_at) : '',
         ].filter(Boolean).map((text, index) => h('span', { key: index }, [index ? h('span', { class: 'evidence-card__separator', 'aria-hidden': 'true' }, ' · ') : null, text]))),
         h(EvidenceExtractionDetails, { evidence: cardProps.snapshot || cardProps.evidence, compact: !cardProps.expanded }),
+        cardProps.evidence.published_at_missing ? h('p', { class: 'evidence-card__meta' }, t('knowledgeWorkbench.sourceTime.missing')) : null,
+        h(RepostSources, { sources: cardProps.evidence.repost_sources }),
         cardProps.evidence.source_kind === 'roundup' ? h('p', { class: 'evidence-card__meta' }, t('knowledgeWorkbench.fusion.roundup')) : null,
-        safeExternalUrl(cardProps.evidence.original_url) ? h('a', { href: safeExternalUrl(cardProps.evidence.original_url), target: '_blank', rel: 'noopener noreferrer' }, t('knowledgeWorkbench.evidence.openSource')) : null,
+        safeExternalUrl(cardProps.evidence.original_url) ? h('a', { class: 'source-url', href: safeExternalUrl(cardProps.evidence.original_url), target: '_blank', rel: 'noopener noreferrer' }, t('knowledgeWorkbench.evidence.openSource')) : null,
         cardProps.evidence.knowledge_id ? h('button', { type: 'button', class: 'text-link', onClick: () => cardEmit('openSource', cardProps.evidence.knowledge_id) }, t('knowledgeWorkbench.evidence.openKnowledge')) : null,
       ]),
       cardProps.expanded ? h('div', { class: 'evidence-snapshot' }, cardProps.loading
@@ -2046,14 +2058,16 @@ label { display: flex; flex-direction: column; gap: 6px; color: var(--td-text-co
 .event-row__details { border-top: 1px solid var(--td-border-level-1-color); background: var(--td-bg-color-container-hover); padding: 0 16px 14px; }
 :deep(.attention-reason) { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; background: var(--td-bg-color-container); border-radius: 6px; margin: 6px 0; font-size: 12px; }
 :deep(.attention-reason span) { color: var(--td-text-color-secondary); white-space: nowrap; }
-.evidence-card { margin: 8px 0; overflow: hidden; }
-:deep(.evidence-card__main) { display: flex; flex-direction: column; align-items: stretch; gap: 10px; padding: 12px 14px; min-width: 0; }
-:deep(.evidence-card__open) { display: flex; flex-direction: column; gap: 4px; padding: 0; border: 0; background: transparent; color: var(--td-text-color-primary); text-align: left; cursor: pointer; font: inherit; overflow-wrap: anywhere; }
+.evidence-card { margin: 8px 0; min-width: 0; max-width: 100%; box-sizing: border-box; }
+:deep(.evidence-card__main) { display: flex; flex-direction: column; align-items: stretch; gap: 10px; padding: 12px 14px; min-width: 0; max-width: 100%; box-sizing: border-box; }
+:deep(.evidence-card__main > *) { min-width: 0; max-width: 100%; box-sizing: border-box; }
+:deep(.evidence-card__open) { display: flex; flex-direction: column; gap: 4px; padding: 0; border: 0; background: transparent; color: var(--td-text-color-primary); text-align: left; cursor: pointer; font: inherit; overflow-wrap: anywhere; white-space: normal; }
 :deep(.evidence-card__open:hover strong) { color: var(--td-brand-color); }
 :deep(.evidence-card__version) { color: var(--td-text-color-placeholder); font-size: 11px; }
 :deep(.evidence-card__meta) { justify-content: flex-start; gap: 0; color: var(--td-text-color-secondary); font-size: 11px; }
 :deep(.evidence-card__separator) { white-space: pre; }
 :deep(.evidence-card__main > a) { color: var(--td-brand-color); font-size: 12px; }
+:deep(.source-url) { min-width: 0; max-width: 100%; overflow-wrap: anywhere; word-break: normal; white-space: normal; }
 :deep(.evidence-snapshot) { border-top: 1px solid var(--td-border-level-1-color); padding: 12px 14px; background: var(--td-bg-color-container-hover); }
 :deep(.evidence-snapshot__meta) { display: flex; flex-wrap: wrap; gap: 12px; color: var(--td-text-color-placeholder); font-size: 11px; margin-bottom: 10px; }
 :deep(.evidence-snapshot__body) { max-height: 420px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; color: var(--td-text-color-primary); font: inherit; font-size: 12px; line-height: 1.6; }
@@ -2106,18 +2120,20 @@ label { display: flex; flex-direction: column; gap: 6px; color: var(--td-text-co
 .report-list__item { display: flex; flex-direction: column; gap: 5px; text-align: left; color: inherit; border: 1px solid var(--td-border-level-1-color); border-radius: 7px; padding: 10px; background: var(--td-bg-color-container); cursor: pointer; }
 .report-list__item.selected { border-color: var(--td-brand-color); }
 .report-list__item small { color: var(--td-text-color-placeholder); }
-.report-view { padding: 16px; min-width: 0; }
-.report-view > header { border-bottom: 1px solid var(--td-border-level-1-color); padding-bottom: 12px; }
+.report-view { padding: 16px; min-width: 0; max-width: 100%; box-sizing: border-box; }
+.report-view > header { border-bottom: 1px solid var(--td-border-level-1-color); padding-bottom: 12px; flex-wrap: wrap; }
+.report-view > header > div { min-width: 0; max-width: 100%; }
 .report-view > header p { color: var(--td-text-color-placeholder); font-size: 11px; margin: 5px 0 0; }
-.report-markdown { line-height: 1.7; overflow-wrap: anywhere; }
+.report-downloads { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; max-width: 100%; }
 .report-markdown :deep(table) { border-collapse: collapse; width: 100%; }
 .report-markdown :deep(th), .report-markdown :deep(td) { border: 1px solid var(--td-border-level-1-color); padding: 6px 8px; }
-.report-citations { border-top: 1px solid var(--td-border-level-1-color); padding-top: 12px; }
+.report-citations { border-top: 1px solid var(--td-border-level-1-color); padding-top: 12px; min-width: 0; max-width: 100%; }
 .report-citations h5 { margin: 0 0 10px; }
-.citation-card { border: 1px solid var(--td-border-level-1-color); border-radius: 7px; padding: 10px; margin: 7px 0; font-size: 12px; }
+.citation-card { border: 1px solid var(--td-border-level-1-color); border-radius: 7px; padding: 10px; margin: 7px 0; font-size: 12px; min-width: 0; max-width: 100%; box-sizing: border-box; overflow-wrap: anywhere; }
+.citation-card__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
 .citation-card p { color: var(--td-text-color-secondary); }
 .citation-card small { color: var(--td-text-color-placeholder); }
-.citation-card a { color: var(--td-brand-color); margin-left: 8px; }
+.citation-card a { color: var(--td-brand-color); }
 .drawer-form { display: flex; flex-direction: column; gap: 14px; }
 .drawer-form > p { color: var(--td-text-color-secondary); margin-top: 0; }
 .drawer-form__actions { justify-content: flex-end; margin-top: 6px; }

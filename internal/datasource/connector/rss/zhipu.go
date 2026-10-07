@@ -76,3 +76,10 @@ func parseZhipuResearch(data []byte) ([]*gofeed.Item, error) {
 	}
 	return items, nil
 }
+
+func zhipuAdapter() SiteAdapter {
+	return SiteAdapter{Name: "zhipu", Rules: []SiteRule{{Domains: []string{"www.zhipuai.cn"}, Path: "/zh/research"}}, discovery: &siteDiscovery{
+		sourceURL: "", inlineOriginal: false, needsArticleDate: true,
+		parse: func(data []byte, raw string) ([]*gofeed.Item, error) { return parseZhipuResearch(data) },
+	}}
+}

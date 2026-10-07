@@ -1,4 +1,4 @@
-import { marked, type Renderer } from 'marked'
+import { Marked, marked, type Renderer } from 'marked'
 import markedKatex from 'marked-katex-extension'
 import type { Tokens } from 'marked'
 
@@ -44,6 +44,14 @@ export type RenderChatMarkdownOptions = {
   cachedMermaidSvgHtml?: CachedMermaidSvgHtml
   injectCachedMermaidSvg?: (html: string, cachedSvgHtml?: CachedMermaidSvgHtml) => string
   prepareMarkdown?: (markdown: string, cachedSvgHtml?: CachedMermaidSvgHtml) => string
+  /** Reports use standard Markdown links without the chat Wiki shorthand. */
+  convertWikiLinks?: boolean
+  /** An isolated parser prevents other views' global extensions from leaking in. */
+  markdownParser?: Marked
+}
+
+export function createIsolatedMarkdownParser(): Marked {
+  return new Marked({ breaks: true, gfm: true }, markedKatex({ throwOnError: false, nonStandard: true }))
 }
 
 export function configureMarkedForChatMarkdown(): void {
@@ -455,7 +463,7 @@ export function renderChatMarkdown(rawMarkdown: unknown, options: RenderChatMark
   const rawText = typeof rawMarkdown === 'string' ? rawMarkdown : String(rawMarkdown || '')
   if (!rawText.trim()) return ''
 
-  configureMarkedForChatMarkdown()
+  if (!options.markdownParser) configureMarkedForChatMarkdown()
 
   const streamingSafeText = options.streaming
     ? stripTrailingStreamingListMarker(stripTrailingStreamingHorizontalRule(rawText))
@@ -489,9 +497,9 @@ export function renderChatMarkdown(rawMarkdown: unknown, options: RenderChatMark
   // Convert <kb>/<web>/wiki tags to HTML placeholders before escapeMarkdown so
   // agent sanitizers (e.g. UUID stripping) cannot damage chunk_id attributes.
   const { content: markdownWithPlaceholders, htmlSnippets } =
-    extractCitationHtmlPlaceholders(flankingSafeMarkdown, options.knowledgeReferences)
+    extractCitationHtmlPlaceholders(flankingSafeMarkdown, options.knowledgeReferences, options.convertWikiLinks)
   const escapedMarkdown = options.escapeMarkdown(markdownWithPlaceholders)
-  const html = marked.parse(markdownWithPlaceholders, {
+  const html = (options.markdownParser || marked).parse(markdownWithPlaceholders, {
     renderer: options.renderer,
     breaks: true,
     async: false,

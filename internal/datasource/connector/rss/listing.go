@@ -14,9 +14,15 @@ import (
 // parseListing discovers same-site article links from a public listing page.
 // Publication evidence still comes from each article, never the listing run.
 func parseListing(data []byte, listingURL, pathPrefix string) ([]*gofeed.Item, error) {
-	if isZhipuResearchURL(listingURL) {
-		return parseZhipuResearch(data)
+	if adapter := defaultSiteAdapters().discoveryFor(listingURL); adapter != nil {
+		return adapter.discovery.parse(data, listingURL)
 	}
+	return parseGenericListing(data, listingURL, pathPrefix)
+}
+
+// parseGenericListing is the fallback after a site discovery adapter fails.
+// It deliberately avoids dispatching the same failed discovery adapter again.
+func parseGenericListing(data []byte, listingURL, pathPrefix string) ([]*gofeed.Item, error) {
 	base, err := url.Parse(listingURL)
 	if err != nil || pathPrefix == "" {
 		return nil, fmt.Errorf("invalid article listing configuration")
@@ -28,11 +34,10 @@ func parseListing(data []byte, listingURL, pathPrefix string) ([]*gofeed.Item, e
 	seen := make(map[string]*gofeed.Item)
 	items := make([]*gofeed.Item, 0)
 	now := time.Now().UTC()
-	mistralNews := base.Hostname() == "mistral.ai" && base.Path == "/news/"
-	metaBlog := base.Hostname() == "ai.meta.com" && base.Path == "/blog/"
+	profile := defaultSiteAdapters().listingFor(base)
 	links := doc.Find("a[href]")
-	if mistralNews {
-		links = doc.Find("main article.js-post > a[href]")
+	if profile != nil && profile.selector != "" {
+		links = doc.Find(profile.selector)
 	}
 	links.EachWithBreak(func(_ int, a *goquery.Selection) bool {
 		link, _ := a.Attr("href")
@@ -47,22 +52,12 @@ func parseListing(data []byte, listingURL, pathPrefix string) ([]*gofeed.Item, e
 			return true
 		}
 		itemID := strings.TrimSuffix(absolute, "/")
-		if strings.EqualFold(base.Hostname(), "cursor.com") && strings.HasPrefix(resolved.Path, "/blog/topic/") {
+		if profile != nil && profile.skip != nil && profile.skip(resolved) {
 			return true
 		}
-		date := strings.TrimSpace(a.Closest(".menu-card").Find(".card-date").First().Text())
-		if mistralNews {
-			date = strings.TrimSpace(a.Closest("article.js-post").Find("p.text-body-small.text-text-tertiary").First().Text())
-		}
-		if metaBlog {
-			a.Closest("._amcy, ._amda").Find("._amun, ._amdj").EachWithBreak(func(_ int, node *goquery.Selection) bool {
-				candidate := strings.TrimSpace(node.Text())
-				if _, valid := parseSiteDate(candidate); valid {
-					date = candidate
-					return false
-				}
-				return true
-			})
+		date := ""
+		if profile != nil && profile.date != nil {
+			date = profile.date(a)
 		}
 		listingUpdatedAt := now
 		hasListingTime := false
@@ -87,7 +82,7 @@ func parseListing(data []byte, listingURL, pathPrefix string) ([]*gofeed.Item, e
 			title = strings.TrimSpace(a.Text())
 		}
 		if existing := seen[itemID]; existing != nil {
-			if metaBlog && title != "" && title != "FEATURED" && (existing.Title == "" || existing.Title == "FEATURED") {
+			if profile != nil && profile.improveTitle != nil && profile.improveTitle(existing.Title, title) {
 				existing.Title = title
 			}
 			if existing.Published == "" {

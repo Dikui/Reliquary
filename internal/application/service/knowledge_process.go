@@ -3620,6 +3620,18 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) (
 	// chunk boundaries as well.
 	sanitizeReadResult(convertResult)
 	convertResult.MarkdownContent = chunker.NormalizeLineEndings(convertResult.MarkdownContent)
+	if err := hydrateMessageSource(knowledge, convertResult.Metadata); err != nil {
+		return err
+	}
+	if intake, _ := knowledge.IntakeMetadata(); intake != nil && intake.Decision != "approved" {
+		existing, err := s.checkMessageDuplicate(ctx, knowledge, convertResult.MarkdownContent)
+		if err != nil {
+			return err
+		}
+		if existing != nil {
+			return s.stopDuplicateProcessing(ctx, knowledge)
+		}
+	}
 	if intake, _ := knowledge.IntakeMetadata(); intake != nil {
 		if docparser.HasUnstoredImages(convertResult.MarkdownContent) {
 			return fmt.Errorf("intake has unstored content images")
@@ -3628,6 +3640,7 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) (
 			return err
 		}
 	}
+
 	chunkCfg := buildSplitterConfigFromChunking(eff.ChunkingConfig)
 
 	processOpts := ProcessChunksOptions{

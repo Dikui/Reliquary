@@ -236,6 +236,7 @@ export default {
     }
   },
   knowledgeWorkbench: {
+    sourceTime: { excluded: '因缺少发布时间被排除的来源数：{count}', missing: '缺少发布时间', reposts: '转载来源', unknownPublisher: '未知发布者', matchMethod: '判重方式', matchMethods: { url: '规范化 URL', content_hash: '正文相同', simhash: '近似重复', file_hash: '文件相同', other: '其他方式' } },
     nameEmbeddings: {
       title: '对象名称向量',
       pending: '对象名称向量待重建数量：{count}',
@@ -273,7 +274,7 @@ export default {
         custom: { title: '自定义流程', description: '从空白步骤开始组合查询、研究、条件、Skill 和人工审核。' }
       }
     },
-    reports: { title: '研究报告', description: '阅读工作流生成的报告、来源引用和可下载的 Markdown。', empty: '还没有研究报告。', download: '下载 Markdown', citations: '引用与来源', noCitations: '此报告没有附加引用。' }
+    reports: { title: '研究报告', description: '阅读工作流生成的报告、来源引用，可下载 Markdown 或 JSON。', empty: '还没有研究报告。', download: '下载 Markdown', downloadJson: '下载 JSON', citations: '引用与来源', noCitations: '此报告没有附加引用。' }
   },
   tenantInvitation: {
     inboxTooltip: '查看待接受的邀请',
@@ -5244,13 +5245,14 @@ export default {
     searchMessageContent: '搜索消息内容',
     anomalies: {
       title: '消息异常', report: '报告异常', messageId: '消息 ID（多个用逗号分隔）', description: '描述问题或修正建议', submit: '提交',
+      site: '站点', sourceUrl: '来源 URL', adapter: '适配器', reason: '失败原因', systemReporter: '系统',
       list: '异常与处理记录', empty: '暂无异常', proposedTags: '建议关联标签', noTags: '不关联标签', proposedDelete: '建议删除标签',
       addTags: '建议新增关联', removeTags: '建议移除关联', loadMore: '查看更多历史记录', loadMoreTags: '加载更多标签', retry: '重试执行',
       proposal: { none: '仅报告问题', change_tags: '建议修改标签关联', delete_tag: '建议删除标签' },
       openMessage: '查看原文与图片', editTags: '修改标签', apply: '确认并执行', resolved: '已处理', dismiss: '忽略', decision: '处理结果', ownerDecision: '本人处理依据与结论（必填）',
       loadFailed: '加载异常失败', saveFailed: '保存失败', submitted: '异常已提交', saved: '处理结果已保存',
       deleteConfirmTitle: '确认删除标签', deleteConfirm: '删除标签“{name}”及其关联？消息和图片会保留。',
-      kind: { suspected_error: '疑似错误', outdated: '内容过时', source_conflict: '来源矛盾', manual_conflict: '人工纠正冲突', tag_deletion: '标签删除建议' },
+      kind: { suspected_error: '疑似错误', outdated: '内容过时', source_conflict: '来源矛盾', manual_conflict: '人工纠正冲突', tag_deletion: '标签删除建议', source_adapter_failed: '站点适配器失败', other: '其他异常' },
       status: { pending: '待处理', applying: '执行中', applied: '已执行', resolved: '已处理', dismiss: '已忽略' },
       result: { tags_updated: '消息标签已更新', tag_deleted: '标签及关联已删除，消息保留' },
     },
@@ -5278,6 +5280,10 @@ export default {
     uploadSuccess: '文件上传成功！',
     uploadFailed: '文件上传失败！',
     fileExists: '文件已存在',
+    duplicateFound: '该消息已存在',
+    duplicateSimilarFound: '与已有消息高度相似',
+    viewExistingMessage: '查看已有消息',
+    dismissDuplicateNotice: '关闭重复提示',
     uploadAllSuccess: '成功上传 {count} 个文件！',
     uploadPartialSuccess: '上传完成：成功 {success} 个，失败 {fail} 个',
     uploadAllFailed: '所有文件上传失败',

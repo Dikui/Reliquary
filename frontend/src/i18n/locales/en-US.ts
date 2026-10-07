@@ -236,6 +236,7 @@ export default {
     }
   },
   knowledgeWorkbench: {
+    sourceTime: { excluded: 'Sources excluded because publication time is missing: {count}', missing: 'Publication time missing', reposts: 'Repost sources', unknownPublisher: 'Unknown publisher', matchMethod: 'Duplicate detection', matchMethods: { url: 'Normalized URL', content_hash: 'Identical content', simhash: 'Near duplicate', file_hash: 'Identical file', other: 'Other method' } },
     nameEmbeddings: {
       title: 'Object name embeddings',
       pending: 'Object names pending rebuild: {count}',
@@ -273,7 +274,7 @@ export default {
         custom: { title: 'Custom workflow', description: 'Combine queries, research, conditions, Skills, and human review from scratch.' }
       }
     },
-    reports: { title: 'Research reports', description: 'Read workflow reports with source citations and download them as Markdown.', empty: 'No research reports yet.', download: 'Download Markdown', citations: 'Citations and sources', noCitations: 'This report has no attached citations.' }
+    reports: { title: 'Research reports', description: 'Read workflow reports with source citations and download them as Markdown or JSON.', empty: 'No research reports yet.', download: 'Download Markdown', downloadJson: 'Download JSON', citations: 'Citations and sources', noCitations: 'This report has no attached citations.' }
   },
   menu: {
     knowledgeBase: 'Knowledge Base',
@@ -691,13 +692,14 @@ export default {
     searchMessageContent: 'Search message content',
     anomalies: {
       title: 'Message issues', report: 'Report issue', messageId: 'Message IDs (comma-separated)', description: 'Describe the issue or correction', submit: 'Submit',
+      site: 'Site', sourceUrl: 'Source URL', adapter: 'Adapter', reason: 'Failure reason', systemReporter: 'System',
       list: 'Issues and decisions', empty: 'No issues yet', proposedTags: 'Suggested tags', noTags: 'No tags', proposedDelete: 'Suggested tag deletion',
       addTags: 'Add tag links', removeTags: 'Remove tag links', loadMore: 'Load older issues', loadMoreTags: 'Load more tags', retry: 'Retry applying',
       proposal: { none: 'Report only', change_tags: 'Change tag links', delete_tag: 'Delete a tag' },
       openMessage: 'View original and images', editTags: 'Edit tags', apply: 'Approve and apply', resolved: 'Mark resolved', dismiss: 'Dismiss', decision: 'Decision', ownerDecision: 'Owner decision and reasoning (required)',
       loadFailed: 'Could not load issues', saveFailed: 'Could not save', submitted: 'Issue submitted', saved: 'Decision saved',
       deleteConfirmTitle: 'Confirm tag deletion', deleteConfirm: 'Delete tag "{name}" and its associations? Messages and images remain.',
-      kind: { suspected_error: 'Possible error', outdated: 'Outdated content', source_conflict: 'Source conflict', manual_conflict: 'Manual correction conflict', tag_deletion: 'Tag deletion suggestion' },
+      kind: { suspected_error: 'Possible error', outdated: 'Outdated content', source_conflict: 'Source conflict', manual_conflict: 'Manual correction conflict', tag_deletion: 'Tag deletion suggestion', source_adapter_failed: 'Site adapter failed', other: 'Other issue' },
       status: { pending: 'Pending', applying: 'Applying', applied: 'Applied', resolved: 'Resolved', dismiss: 'Dismissed' },
       result: { tags_updated: 'Message tags updated', tag_deleted: 'Tag and links removed; messages kept' },
     },
@@ -725,6 +727,10 @@ export default {
     uploadSuccess: 'File uploaded successfully!',
     uploadFailed: 'File upload failed!',
     fileExists: 'File already exists',
+    duplicateFound: 'This message already exists',
+    duplicateSimilarFound: 'This message is highly similar to an existing message',
+    viewExistingMessage: 'View existing message',
+    dismissDuplicateNotice: 'Dismiss duplicate notice',
     uploadAllSuccess: 'Successfully uploaded {count} files!',
     uploadPartialSuccess: 'Upload completed: {success} succeeded, {fail} failed',
     uploadAllFailed: 'All files failed to upload',

@@ -1228,6 +1228,11 @@ func (s *agentService) registerTools(
 					return fmt.Errorf("X/Twitter sources require Grok ingestion")
 				}
 				article, err := rss.FetchArticle(ctx, input.URL)
+				if article != nil {
+					if recordErr := recordSourceAdapterFailures(ctx, s.db, tenantID, kb.ID, article.AdapterFailures); recordErr != nil {
+						return recordErr
+					}
+				}
 				if err != nil {
 					return err
 				}

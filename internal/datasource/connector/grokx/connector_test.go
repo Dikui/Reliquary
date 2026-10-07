@@ -16,6 +16,21 @@ import (
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
+func TestGrokKeepsCitedPostWithoutPublicationTime(t *testing.T) {
+	now := time.Now().UTC()
+	result := xResponse{
+		OutputText: `{"handle":"bcherny","posts":[{"tweet_id":"123","url":"https://x.com/bcherny/status/123","author_handle":"bcherny","text":"Undated original text","created_at":"","post_type":"original","media":[]}],"warnings":[]}`,
+		Citations:  []string{"https://x.com/bcherny/status/123"},
+	}
+	items, details, err := parsePosts(result, "bcherny", now.Add(-time.Hour), now)
+	if err != nil || len(details) != 0 || len(items) != 1 {
+		t.Fatalf("undated cited original was lost: items=%v details=%v err=%v", items, details, err)
+	}
+	if items[0].Metadata["published_at"] != "" || !items[0].UpdatedAt.IsZero() {
+		t.Fatalf("collection time became publication time: %+v", items[0])
+	}
+}
+
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
 func TestGrokSearchCollectsCitedPostsAndRejectsUncitedPosts(t *testing.T) {

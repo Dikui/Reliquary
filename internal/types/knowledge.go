@@ -165,7 +165,14 @@ type Knowledge struct {
 	// File size of the knowledge
 	FileSize int64 `json:"file_size"`
 	// File hash of the knowledge
-	FileHash string `json:"file_hash"`
+	FileHash         string                  `json:"file_hash"`
+	NormalizedURL    string                  `json:"-" gorm:"type:text;not null;default:''"`
+	ContentHash      string                  `json:"-" gorm:"type:char(64);not null;default:''"`
+	ContentSimHash   int64                   `json:"-" gorm:"not null;default:0"`
+	ContentRuneCount int                     `json:"-" gorm:"not null;default:0"`
+	RepostSources    []KnowledgeRepostSource `json:"repost_sources" gorm:"-"`
+	// DuplicateMatchMethod describes this intake attempt, not stored provenance.
+	DuplicateMatchMethod string `json:"-" gorm:"-"`
 	// File path of the knowledge
 	FilePath string `json:"file_path"`
 	// Storage size of the knowledge

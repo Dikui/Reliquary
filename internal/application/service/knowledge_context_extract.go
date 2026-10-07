@@ -401,7 +401,7 @@ func (s *KnowledgeContextService) snapshotFormalMessage(ctx context.Context, ten
 		ID: uuid.NewString(), TenantID: tenantID, KnowledgeBaseID: k.KnowledgeBaseID,
 		KnowledgeID: k.ID, BodyHash: bodyHash, Title: k.Title, Body: body,
 		Author: source.Author, Publisher: source.Publisher, OriginalURL: source.OriginalURL,
-		PublishedAt: source.PublishedAt, ImageRefs: imageRefs,
+		PublishedAt: source.PublishedAt, PublishedAtMissing: parseContextTime(source.PublishedAt) == nil, ImageRefs: imageRefs,
 		Status: types.KnowledgeEvidenceCurrent, ExtractionStatus: types.KnowledgeExtractionPending,
 		CreatedAt: time.Now(),
 	}
@@ -490,9 +490,14 @@ func validateContextExtraction(ex contextExtraction, body string) error {
 	if ex.SourceKind != "" && ex.SourceKind != types.KnowledgeEvidenceSourceKindRoundup {
 		return errors.New("knowledge context source kind is invalid")
 	}
+	normalizedBody := normalizeMarkdownCitationSource(body, false).text
+	sourceQuote := func(quote string) bool {
+		normalizedQuote := normalizeMarkdownCitationSource(quote, false).text
+		return normalizedQuote != "" && strings.Contains(normalizedBody, normalizedQuote)
+	}
 	for _, entity := range ex.Entities {
 		if strings.TrimSpace(entity.Mention) == "" || strings.TrimSpace(entity.Canonical) == "" ||
-			!verbatimQuote(body, entity.Quote) || !strings.Contains(entity.Quote, entity.Mention) {
+			!sourceQuote(entity.Quote) || !verbatimQuote(entity.Quote, entity.Mention) {
 			return errors.New("knowledge context entity lacks a verbatim identifying quote")
 		}
 	}
@@ -505,12 +510,12 @@ func validateContextExtraction(ex contextExtraction, body string) error {
 			return errors.New("knowledge context fact kind is invalid")
 		}
 		if strings.TrimSpace(fact.Subject) == "" || strings.TrimSpace(fact.Predicate) == "" ||
-			!mentions[normalizeContextName(fact.Subject)] || !verbatimQuote(body, fact.Quote) ||
-			!strings.Contains(fact.Quote, fact.Subject) {
+			!mentions[normalizeContextName(fact.Subject)] || !sourceQuote(fact.Quote) ||
+			!verbatimQuote(fact.Quote, fact.Subject) {
 			return errors.New("knowledge context fact lacks a quoted subject or source excerpt")
 		}
 		if fact.Kind == types.KnowledgeFactRelation {
-			if strings.TrimSpace(fact.Object) == "" || !mentions[normalizeContextName(fact.Object)] || !strings.Contains(fact.Quote, fact.Object) {
+			if strings.TrimSpace(fact.Object) == "" || !mentions[normalizeContextName(fact.Object)] || !verbatimQuote(fact.Quote, fact.Object) {
 				return errors.New("knowledge context relation lacks a quoted object")
 			}
 		} else if !validContextValue(fact.Value, strings.TrimSpace(fact.ValueType)) {
@@ -519,14 +524,14 @@ func validateContextExtraction(ex contextExtraction, body string) error {
 	}
 	if ex.SourceKind != types.KnowledgeEvidenceSourceKindRoundup {
 		for _, event := range ex.Events {
-			if strings.TrimSpace(event.Title) == "" || !verbatimQuote(body, event.Quote) || len(event.EntityMentions) == 0 {
+			if strings.TrimSpace(event.Title) == "" || !sourceQuote(event.Quote) || len(event.EntityMentions) == 0 {
 				return errors.New("knowledge context event lacks a specific quoted change")
 			}
 			if event.OccurredAt != "" && verifiedContextTime(event.OccurredAt, event.Quote) == nil {
 				return errors.New("knowledge context event time is not quoted precisely by its source")
 			}
 			for _, mention := range event.EntityMentions {
-				if !mentions[normalizeContextName(mention)] || !strings.Contains(event.Quote, mention) {
+				if !mentions[normalizeContextName(mention)] || !verbatimQuote(event.Quote, mention) {
 					return errors.New("knowledge context event mentions an unverified entity")
 				}
 			}
@@ -546,8 +551,8 @@ func validateContextExtraction(ex contextExtraction, body string) error {
 }
 
 func verbatimQuote(body, quote string) bool {
-	quote = strings.TrimSpace(quote)
-	return quote != "" && strings.Contains(body, quote)
+	normalizedQuote := normalizeMarkdownCitationSource(quote, false).text
+	return normalizedQuote != "" && strings.Contains(normalizeMarkdownCitationSource(body, false).text, normalizedQuote)
 }
 
 func normalizeContextName(value string) string {
@@ -613,7 +618,7 @@ func materializeContextFacts(input []contextExtractedFact, mentions map[string]t
 			SubjectEntityID: subject.ID, Kind: item.Kind, Predicate: predicate, OriginalPredicate: originalPredicate,
 			Value: types.JSON(item.Value), ValueType: valueType, Unit: strings.TrimSpace(item.Unit),
 			ObjectEntityID: objectID, EffectiveFrom: from, EffectiveTo: to,
-			EvidenceID: evidence.ID, Quote: strings.TrimSpace(item.Quote), Status: types.KnowledgeFactCurrent,
+			EvidenceID: evidence.ID, Quote: item.Quote, Status: types.KnowledgeFactCurrent,
 			CreatedAt: time.Now(),
 		})
 	}
@@ -762,7 +767,15 @@ func updateContextEventHeat(tx *gorm.DB, tenantID uint64, kbID string, event *ty
 	}
 	event.EvidenceIDs = evidenceIDs
 	event.EntityIDs = projected[0].EntityIDs
-	event.SourceCount, event.Heat = contextHeat(currentEvidence, contextHeatWindow, contextHeatHalfLife)
+	knowledgeIDs := make([]string, 0, len(currentEvidence))
+	for _, item := range currentEvidence {
+		knowledgeIDs = append(knowledgeIDs, item.KnowledgeID)
+	}
+	reposts, err := loadKnowledgeRepostSources(tx, tenantID, knowledgeIDs, nil)
+	if err != nil {
+		return err
+	}
+	event.SourceCount, event.Heat = contextHeatWithReposts(currentEvidence, reposts)
 	event.UpdatedAt = time.Now()
 	if err := tx.Model(&types.KnowledgeEvent{}).
 		Where("id = ? AND tenant_id = ?", event.ID, tenantID).

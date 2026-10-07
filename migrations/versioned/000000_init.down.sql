@@ -3,6 +3,8 @@
 
 BEGIN;
 
+DROP TABLE IF EXISTS public.knowledge_repost_sources;
+
 DROP TABLE IF EXISTS public.knowledge_context_event_evidence_entities;
 DROP TABLE IF EXISTS public.knowledge_context_event_entities;
 ALTER TABLE IF EXISTS public.knowledge_context_events DROP CONSTRAINT IF EXISTS uq_kcevent_team_id;

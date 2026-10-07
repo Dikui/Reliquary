@@ -11,6 +11,10 @@ type KnowledgeAnomaly struct {
 	KnowledgeIDs         []string                             `json:"knowledge_ids" gorm:"serializer:json;type:text"`
 	Kind                 string                               `json:"kind" gorm:"type:varchar(32);not null"`
 	Description          string                               `json:"description" gorm:"type:text;not null"`
+	Site                 string                               `json:"site,omitempty" gorm:"type:varchar(255)"`
+	SourceURL            string                               `json:"source_url,omitempty" gorm:"type:text"`
+	Reason               string                               `json:"reason,omitempty" gorm:"type:text"`
+	Adapter              string                               `json:"adapter,omitempty" gorm:"type:varchar(64)"`
 	ProposalType         string                               `json:"proposal_type" gorm:"type:varchar(16);not null;default:'none'"`
 	ProposedTagIDs       []string                             `json:"proposed_tag_ids" gorm:"serializer:json;type:text"`
 	ProposedRemoveTagIDs []string                             `json:"proposed_remove_tag_ids" gorm:"serializer:json;type:text"`
