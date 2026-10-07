@@ -19,9 +19,7 @@ type TenantSandboxConfigRepository interface {
 	Create(ctx context.Context, e *types.TenantSandboxConfigEntity) error
 	GetByID(ctx context.Context, tenantID uint64, id string) (*types.TenantSandboxConfigEntity, error)
 	ListByTenant(ctx context.Context, tenantID uint64) ([]*types.TenantSandboxConfigEntity, error)
-	// ListAll is the housekeeping scan. Unlike every other method it is not
-	// tenant-scoped: the stuck-run reaper and snapshot reconcile have to walk
-	// every workspace. Do not use it on a request path.
+	// ListAll is the housekeeping scan of the team sandbox configurations.
 	ListAll(ctx context.Context) ([]*types.TenantSandboxConfigEntity, error)
 	Update(ctx context.Context, e *types.TenantSandboxConfigEntity) error
 	SoftDelete(ctx context.Context, tenantID uint64, id string) error
@@ -81,7 +79,8 @@ func (r *tenantSandboxConfigRepository) ListAll(
 ) ([]*types.TenantSandboxConfigEntity, error) {
 	var list []*types.TenantSandboxConfigEntity
 	err := r.db.WithContext(ctx).
-		Order("tenant_id ASC, created_at ASC").
+		Where("tenant_id = ?", types.SingleTenantID).
+		Order("created_at ASC").
 		Find(&list).Error
 	if err != nil {
 		return nil, err

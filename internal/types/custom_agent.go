@@ -226,14 +226,6 @@ type CustomAgentConfig struct {
 	// quick-answer / RAG-style agents do not want the added latency.
 	DataAnalysisEnabled bool `yaml:"data_analysis_enabled" json:"data_analysis_enabled"`
 
-	// ===== FAQ Strategy Settings =====
-	// Whether FAQ priority strategy is enabled (FAQ answers prioritized over document chunks)
-	FAQPriorityEnabled bool `yaml:"faq_priority_enabled" json:"faq_priority_enabled"`
-	// FAQ direct answer threshold - if similarity > this value, use FAQ answer directly
-	FAQDirectAnswerThreshold float64 `yaml:"faq_direct_answer_threshold" json:"faq_direct_answer_threshold"`
-	// FAQ score boost multiplier - FAQ results score multiplied by this factor
-	FAQScoreBoost float64 `yaml:"faq_score_boost" json:"faq_score_boost"`
-
 	// ===== Web Search Settings =====
 	// Whether web search is enabled
 	WebSearchEnabled bool `yaml:"web_search_enabled" json:"web_search_enabled"`
@@ -558,10 +550,8 @@ func (a *CustomAgent) IsAgentMode() bool {
 // SuggestedQuestion 推荐问题
 type SuggestedQuestion struct {
 	// 问题文本
-	Question string `json:"question"`
-	// 来源类型: "agent_config", "faq", "document", "wiki"
-	Source string `json:"source"`
-	// 来源知识库ID（仅 faq/document/wiki 来源时有值）
+	Question        string `json:"question"`
+	Source          string `json:"source"`
 	KnowledgeBaseID string `json:"knowledge_base_id,omitempty"`
 }
 

@@ -41,7 +41,7 @@ func TestAutoTagConfigSkipIfTaggedHonoursExplicitFalse(t *testing.T) {
 }
 
 func TestEnsureDefaultsClearsAutoTagConfigForNonDocumentKnowledgeBases(t *testing.T) {
-	for _, kbType := range []string{KnowledgeBaseTypeFAQ, KnowledgeBaseTypeWiki} {
+	for _, kbType := range []string{KnowledgeBaseTypeWiki} {
 		kb := &KnowledgeBase{
 			Type:          kbType,
 			AutoTagConfig: &AutoTagConfig{Enabled: true},

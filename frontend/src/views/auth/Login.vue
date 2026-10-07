@@ -225,14 +225,9 @@
                 </t-button>
               </div>
 
-              <div v-if="oidcEnabled" class="oidc-divider">
-                <span>{{ $t('auth.orContinueWith') }}</span>
-              </div>
 
-              <t-button v-if="oidcEnabled" theme="default" size="large" block :loading="oidcLoading" :disabled="loading"
-                class="oidc-button" @click="handleOIDCLogin">
-                {{ oidcLoading ? $t('auth.redirectingToOIDC') : oidcLoginText }}
-              </t-button>
+
+
             </t-form>
 
             <!-- Features list -->
@@ -353,9 +348,6 @@ import 'swiper/css/pagination'
 import {
   login,
   register,
-  getOIDCAuthorizationURL,
-  getOIDCConfig,
-  autoSetup,
   getAuthConfig,
   userInfoFromApi,
   getInvitationByToken,
@@ -410,15 +402,10 @@ const registerFormRef = ref()
 
 // State management
 const loading = ref(false)
-const oidcLoading = ref(false)
 const isRegisterMode = ref(false)
 const showLanguageMenu = ref(false)
-const oidcEnabled = ref(false)
-const oidcProviderName = ref('')
-// registrationEnabled defaults to true so that on first paint the Register
-// link is visible; the actual mode is fetched from /auth/config in onMounted.
-// In invite_only mode the link/card are hidden.
-const registrationEnabled = ref(true)
+// Registration follows the server bootstrap state.
+const registrationEnabled = ref(false)
 const complexPasswordEnabled = ref(false)
 
 // invite-link state. When the URL carries ?token=xxx we resolve it to
@@ -439,12 +426,6 @@ const languageOptions = [
 ]
 
 const currentLanguage = computed(() => locale.value)
-const oidcLoginText = computed(() => {
-  if (oidcProviderName.value) {
-    return t('auth.oidcLoginWithProvider', { provider: oidcProviderName.value })
-  }
-  return t('auth.oidcLogin')
-})
 const currentLangOption = computed(() => languageOptions.find(l => l.value === currentLanguage.value))
 
 // Login form data
@@ -541,17 +522,8 @@ onBeforeUnmount(() => {
 })
 
 const persistLoginResponse = async (response: any, skipRedirect = false) => {
-  // Backend renamed `tenant` to `active_tenant` and added `memberships`
-  // when tenant-level RBAC landed (issue #1303). The two are otherwise
-  // identical — `active_tenant` is the tenant whose ID is encoded in the
-  // JWT, defaulting to the user's home tenant on a fresh login.
   const activeTenant = response.active_tenant || response.tenant
   if (response.user && response.token) {
-    // user.tenant_id must be the user's HOME tenant (the immutable row
-    // on the users table); useHomeTenant() and the home-badge logic both
-    // assume so. The ACTIVE tenant (which can differ from home when the
-    // server honoured a remembered last-active-tenant preference) is
-    // expressed separately via setSelectedTenant below.
     const homeTenantIdRaw = response.user.tenant_id ?? activeTenant?.id ?? ''
     authStore.setUser(userInfoFromApi(response.user, homeTenantIdRaw))
     authStore.setToken(response.token)
@@ -572,77 +544,25 @@ const persistLoginResponse = async (response: any, skipRedirect = false) => {
     if (Array.isArray(response.memberships)) {
       authStore.setMemberships(response.memberships)
     }
-    // If the backend dropped us into a non-home tenant (honoured a
-    // remembered "last active tenant" preference), set the override so
-    // subsequent requests carry X-Tenant-ID and the UI stays consistent.
-    // Otherwise clear any stale override left in localStorage by a
-    // previous session for a different account.
-    const activeIdNum = Number(activeTenant?.id)
-    const homeIdNum = Number(homeTenantIdRaw)
-    if (Number.isFinite(activeIdNum) && Number.isFinite(homeIdNum) && activeIdNum !== homeIdNum) {
-      authStore.setSelectedTenant(activeIdNum, activeTenant?.name || null)
-    } else {
-      authStore.setSelectedTenant(null, null)
-    }
   }
 
-  // Pull runtime capabilities (including whether ordinary users may create
-  // workspaces) before entering the main UI so create actions never flash
-  // briefly when the deployment is invitation-only.
+  // Load the current team role before entering the main UI.
   await authStore.refreshFromAuthMe()
   await nextTick()
   if (skipRedirect) return
-  router.replace(authStore.hasValidTenant ? '/platform/knowledge-bases' : '/onboarding/workspace')
-}
-
-const getBackendOIDCRedirectURI = () => `${window.location.origin}/api/v1/auth/oidc/callback`
-
-const loadOIDCConfig = async () => {
-  try {
-    const response = await getOIDCConfig()
-    oidcEnabled.value = !!response.success && !!response.enabled
-    oidcProviderName.value = response.provider_display_name || ''
-  } catch {
-    oidcEnabled.value = false
-    oidcProviderName.value = ''
-  }
+  router.replace('/platform/knowledge-bases')
 }
 
 // loadAuthConfig fetches /auth/config and caches whether self-service
-// registration is allowed. Failures fall back to "enabled" so a transient
-// network glitch doesn't lock new users out of an open deployment.
+// registration is allowed. A failed fetch keeps registration hidden.
 const loadAuthConfig = async () => {
   try {
     const response = await getAuthConfig()
     registrationEnabled.value = response.registration_mode !== 'invite_only'
     complexPasswordEnabled.value = response.complex_password_enabled
   } catch {
-    registrationEnabled.value = true
+    registrationEnabled.value = false
     complexPasswordEnabled.value = false
-  }
-}
-
-const handleOIDCLogin = async () => {
-  try {
-    oidcLoading.value = true
-    const response = await getOIDCAuthorizationURL(getBackendOIDCRedirectURI())
-    const authorizationURL = response.authorization_url
-
-    if (!response.success || !authorizationURL) {
-      MessagePlugin.error(response.message || t('auth.oidcLoginFailed'))
-      return
-    }
-
-    // 跳转 IdP 会丢失 URL 中的 token，暂存到 sessionStorage，回调后由 App.vue 兑换。
-    if (inviteToken.value) {
-      sessionStorage.setItem('reliquary_pending_invite_token', inviteToken.value)
-    }
-    window.location.href = authorizationURL
-  } catch (error: any) {
-    console.error('OIDC 登录跳转失败:', error)
-    MessagePlugin.error(error.message || t('auth.oidcLoginFailed'))
-  } finally {
-    oidcLoading.value = false
   }
 }
 
@@ -756,11 +676,10 @@ const handleRegister = async () => {
   }
 }
 
-// Check if already logged in; attempt auto-setup only in explicit local QA mode
+// Resolve invitations before redirecting an existing login session.
 onMounted(async () => {
   // Share-link landing: ?token=xxx switches the form into invite-
-  // register mode before any other auto-flow (logged-in redirect /
-  // auto-setup / OIDC) gets a chance to redirect. Resolution failure
+  // register mode before a logged-in session redirects. Resolution failure
   // surfaces inline; the user can still log in normally if they
   // already have an account. We check this BEFORE the isLoggedIn
   // redirect so an existing session doesn't bounce the user to
@@ -777,13 +696,11 @@ onMounted(async () => {
         inviteLookup.value = resp.data
       } else {
         inviteLookupError.value = resp.message || t('inviteRegister.invalidBody')
-        loadOIDCConfig()
         loadAuthConfig()
         return
       }
     } catch {
       inviteLookupError.value = t('inviteRegister.invalidBody')
-      loadOIDCConfig()
       loadAuthConfig()
       return
     } finally {
@@ -796,12 +713,11 @@ onMounted(async () => {
       return
     }
 
-    // 3. 未登录：按注册模式决定界面。invite_only 停在登录页、登录后再兑换；self_serve 保持注册流程。
+    // 3. 未登录：有效邀请链接显示邀请注册表单。
     const cfg = await getAuthConfig()
     const inviteOnly = cfg.registration_mode === 'invite_only'
     registrationEnabled.value = !inviteOnly
-    isRegisterMode.value = !inviteOnly
-    loadOIDCConfig()
+    isRegisterMode.value = true
     return
   }
 
@@ -810,22 +726,6 @@ onMounted(async () => {
     return
   }
 
-  const AUTO_SETUP_FAILED_KEY = 'reliquary_auto_setup_failed'
-  if (import.meta.env.VITE_QA_AUTO_LOGIN === 'true') {
-    try {
-      const response = await autoSetup()
-      if (response.success) {
-        await persistLoginResponse(response)
-        return
-      } else {
-        localStorage.setItem(AUTO_SETUP_FAILED_KEY, 'true')
-      }
-    } catch {
-      localStorage.setItem(AUTO_SETUP_FAILED_KEY, 'true')
-    }
-  }
-
-  loadOIDCConfig()
   loadAuthConfig()
 })
 </script>
@@ -1536,36 +1436,9 @@ onMounted(async () => {
   margin: 20px 0 16px 0;
 }
 
-.oidc-divider {
-  position: relative;
-  margin: 4px 0 6px;
-  text-align: center;
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
 
-  span {
-    position: relative;
-    z-index: 1;
-    padding: 0 12px;
-    background: rgba(255, 255, 255, 0.95);
-  }
 
-  &::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 50%;
-    border-top: 1px solid var(--td-component-stroke);
-  }
-}
 
-.oidc-button {
-  height: 46px;
-  border-radius: 8px;
-  font-size: 15px;
-  font-weight: 500;
-}
 
 .form-footer {
   text-align: center;

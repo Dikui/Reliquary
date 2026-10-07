@@ -3,7 +3,7 @@
     <h1 class="page-title">Markdown Rendering Test</h1>
     <p class="page-desc">
       Dev-only page for visual regression testing of chat answer markdown
-      (same typography as botmsg / AgentStreamDisplay / embed).
+      (same typography as botmsg / AgentStreamDisplay).
       Add new test cases or paste arbitrary markdown in the editor below.
     </p>
 
@@ -646,7 +646,7 @@ watch(customInput, () => {
   }
 }
 
-// Chat answer markdown — shared with botmsg / AgentStreamDisplay / embed
+// Chat answer markdown uses the botmsg and AgentStreamDisplay styles.
 .markdown-content {
   // Dev page intentionally uses the same chat Markdown mixin as runtime chat.
   // Keep visual changes in chat-markdown.less so this page remains a regression target.

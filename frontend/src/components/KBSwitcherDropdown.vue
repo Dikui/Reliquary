@@ -62,8 +62,6 @@ const { t } = useI18n()
 
 // Sort the list with the current KB pinned to the top so users always
 // see "where they are" without scrolling. The rest preserves the
-// caller's order (typically "mine first, then shared"); we don't
-// re-sort alphabetically because that loses the recency / share-source
 // signal embedded in the input order.
 const sortedList = computed<KBEntry[]>(() => {
   const all = props.kbList || []
@@ -73,7 +71,7 @@ const sortedList = computed<KBEntry[]>(() => {
 })
 
 const iconFor = (type?: string): string => {
-  if (type === 'faq') return 'chat-bubble-help'
+
   return 'folder'
 }
 

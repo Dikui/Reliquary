@@ -52,39 +52,6 @@ func TestRecordKBActivityCarriesInitiatorAndTaskMetadata(t *testing.T) {
 	}
 }
 
-func TestFAQImportCompletedOutcome(t *testing.T) {
-	cases := []struct {
-		success, failed, skipped int
-		outcome                  types.AuditOutcome
-	}{
-		{10, 0, 0, types.AuditOutcomeSuccess},
-		{8, 2, 0, types.AuditOutcomePartial},
-		{5, 1, 2, types.AuditOutcomePartial},
-		{0, 1, 1, types.AuditOutcomePartial},
-		{0, 2, 0, types.AuditOutcomeFailed},
-		{0, 0, 2, types.AuditOutcomeFailed},
-	}
-	for _, tc := range cases {
-		outcome := faqImportCompletedOutcome(tc.success, tc.failed, tc.skipped)
-		if outcome != tc.outcome {
-			t.Fatalf("faqImportCompletedOutcome(%d,%d,%d) = %s, want %s",
-				tc.success, tc.failed, tc.skipped, outcome, tc.outcome)
-		}
-	}
-}
-
-func TestFAQImportActivityDetails(t *testing.T) {
-	payload := &types.FAQImportPayload{Mode: types.FAQBatchModeAppend}
-	progress := &types.FAQImportProgress{SuccessCount: 0, FailedCount: 1, Total: 2}
-	details := faqImportActivityDetails(payload, progress, 2)
-	if details["count"] != 0 {
-		t.Fatalf("count = %#v, want 0", details["count"])
-	}
-	if details["total"] != 2 || details["failed"] != 1 || details["skipped"] != 1 {
-		t.Fatalf("details = %#v", details)
-	}
-}
-
 func TestKBActivityAppendSampleTitles(t *testing.T) {
 	details := map[string]any{"count": 3}
 	kbActivityAppendSampleTitles(details, "  Alpha  ", "Beta", "Alpha", "Gamma")

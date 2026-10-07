@@ -3,7 +3,6 @@ package interfaces
 import (
 	"context"
 
-	"github.com/hibiken/asynq"
 	"reliquary/internal/types"
 )
 
@@ -16,13 +15,9 @@ type KnowledgeTagService interface {
 	// UpdateTag updates tag basic information.
 	UpdateTag(ctx context.Context, id string, name *string, color *string, sortOrder *int, kind ...*string) (*types.KnowledgeTag, error)
 	// DeleteTag deletes a tag.
-	// When contentOnly=true, only deletes the content under the tag but keeps the tag itself.
-	// excludeIDs: IDs of chunks to exclude from deletion (only valid when deleting chunks)
-	DeleteTag(ctx context.Context, id string, force bool, contentOnly bool, excludeIDs []string) error
+	DeleteTag(ctx context.Context, id string) error
 	// FindOrCreateTagByName finds a tag by name or creates it if not exists.
 	FindOrCreateTagByName(ctx context.Context, kbID string, name string) (*types.KnowledgeTag, error)
-	// ProcessIndexDelete handles async index deletion task
-	ProcessIndexDelete(ctx context.Context, t *asynq.Task) error
 }
 
 // KnowledgeTagRepository defines persistence operations for tags.

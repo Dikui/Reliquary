@@ -100,14 +100,7 @@ class MCPAuthMiddleware:
 
 
 def _normalize_kb_entries(resp: object) -> list[Dict]:
-    """Flatten owned and shared knowledge-base list API responses.
-
-    GET /knowledge-bases returns ``data: [{id, name, ...}, ...]`` (see
-    KnowledgeBaseHandler.buildKBListResponse).
-
-    GET /shared-knowledge-bases returns ``data: [{knowledge_base: {id, name,
-    ...}, share_id, ...}, ...]`` (see organization handler sharedKBRow).
-    """
+    """Normalize knowledge-base list API responses."""
     data = resp.get("data", resp) if isinstance(resp, dict) else resp
     if isinstance(data, dict):
         data = data.get("list", data.get("items", []))
@@ -115,10 +108,7 @@ def _normalize_kb_entries(resp: object) -> list[Dict]:
     for item in (data or []):
         if not isinstance(item, dict):
             continue
-        nested = item.get("knowledge_base")
-        if isinstance(nested, dict) and nested.get("id"):
-            out.append(nested)
-        elif item.get("id"):
+        if item.get("id"):
             out.append(item)
     return out
 
@@ -183,26 +173,12 @@ class ReliquaryClient:
             logger.error(f"API request failed: {e}")
             raise
 
-    # Tenant Management - Methods for managing multi-tenant configurations
-    def create_tenant(
-        self, name: str, description: str, business: str, retriever_engines: Dict
-    ) -> Dict:
-        """Create a new tenant with specified configuration"""
-        data = {
-            "name": name,
-            "description": description,
-            "business": business,
-            "retriever_engines": retriever_engines,  # Configuration for search engines
-        }
-        return self._request("POST", "/tenants", json=data)
+    # Team configuration
 
     def get_tenant(self, tenant_id: str) -> Dict:
         """Get tenant information"""
         return self._request("GET", f"/tenants/{tenant_id}")
 
-    def list_tenants(self) -> Dict:
-        """List all tenants"""
-        return self._request("GET", "/tenants")
 
     # Knowledge Base Management - Methods for managing knowledge bases
     def create_knowledge_base(self, name: str, description: str, config: Dict) -> Dict:
@@ -218,9 +194,6 @@ class ReliquaryClient:
         """List all knowledge bases"""
         return self._request("GET", "/knowledge-bases")
 
-    def list_shared_knowledge_bases(self) -> Dict:
-        """List knowledge bases shared from other workspaces"""
-        return self._request("GET", "/shared-knowledge-bases")
 
     def get_knowledge_base(self, kb_id: str) -> Dict:
         """Get knowledge base details"""
@@ -278,15 +251,14 @@ class ReliquaryClient:
         """
         if self._UUID_RE.match(kb_id_or_name):
             return kb_id_or_name
-        # Search own + shared knowledge bases for a name match
+        # Search team knowledge bases for a name match
         needle = kb_id_or_name.lower()
-        for source in (self.list_knowledge_bases, self.list_shared_knowledge_bases):
-            for kb in _normalize_kb_entries(source()):
-                if kb.get("name", "").lower() == needle:
-                    return kb["id"]
+        for kb in _normalize_kb_entries(self.list_knowledge_bases()):
+            if kb.get("name", "").lower() == needle:
+                return kb["id"]
         raise ValueError(
             f"Knowledge base {kb_id_or_name!r} not found. "
-            "Use list_knowledge_bases or list_shared_knowledge_bases to see available IDs and names."
+            "Use list_knowledge_bases to see available IDs and names."
         )
 
     def hybrid_search(self, kb_id: str, query: str, config: Dict) -> Dict:
@@ -629,27 +601,8 @@ client = ReliquaryClient(RELIQUARY_BASE_URL, RELIQUARY_API_KEY)
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
-def create_tenant(
-    name: str,
-    description: str,
-    business: str,
-    retriever_engines: dict | None = None,
-) -> dict:
-    """Create a new tenant in Reliquary."""
-    engines = retriever_engines or {
-        "engines": [
-            {"retriever_type": "keywords", "retriever_engine_type": "postgres"},
-            {"retriever_type": "vector", "retriever_engine_type": "postgres"},
-        ]
-    }
-    return client.create_tenant(name, description, business, engines)
 
 
-@mcp.tool()
-def list_tenants() -> dict:
-    """List all tenants."""
-    return client.list_tenants()
 
 
 @mcp.tool()
@@ -679,10 +632,6 @@ def list_knowledge_bases() -> dict:
     return client.list_knowledge_bases()
 
 
-@mcp.tool()
-def list_shared_knowledge_bases() -> dict:
-    """List knowledge bases shared from other workspaces."""
-    return client.list_shared_knowledge_bases()
 
 
 @mcp.tool()
@@ -708,7 +657,7 @@ def hybrid_search(
     """Perform hybrid (vector + keyword) search in a knowledge base.
 
     kb_id may be a UUID or a knowledge-base name (resolved automatically).
-    Use list_knowledge_bases or list_shared_knowledge_bases to discover available knowledge bases.
+    Use list_knowledge_bases to discover available knowledge bases.
     """
     config = {
         "vector_threshold": vector_threshold,
@@ -859,7 +808,7 @@ async def chat(
 
     ALWAYS provide knowledge_base_ids (names like 'my-knowledge-base' or UUIDs) so
     retrieval can run — without them the answer is based on LLM knowledge only.
-    Use list_knowledge_bases or list_shared_knowledge_bases to discover available knowledge bases.
+    Use list_knowledge_bases to discover available knowledge bases.
     For multi-step reasoning or tool-calling use agent_chat instead.
     """
     kb_ids = (
@@ -916,7 +865,7 @@ async def agent_chat(
             if needs_kbs:
                 all_kbs = _normalize_kb_entries(
                     client.list_knowledge_bases()
-                ) + _normalize_kb_entries(client.list_shared_knowledge_bases())
+                )
                 seen_ids: set[str] = set()
                 unique_kbs: list[Dict] = []
                 for kb in all_kbs:

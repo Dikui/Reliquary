@@ -104,22 +104,22 @@ func TestReadSourceDocumentExcludesUnapprovedIntake(t *testing.T) {
 	}
 }
 
-func TestAuthorizeChunkInSearchTargetsRejectsDisabledFAQ(t *testing.T) {
+func TestAuthorizeChunkInSearchTargetsRejectsDisabledDocument(t *testing.T) {
 	chunkService := &scopeChunkService{chunk: &types.Chunk{
-		ID: "faq-1", KnowledgeID: "faq-document", KnowledgeBaseID: "kb-1",
-		ChunkType: types.ChunkTypeFAQ, IsEnabled: false,
+		ID: "document-1", KnowledgeID: "document-source", KnowledgeBaseID: "kb-1",
+		ChunkType: types.ChunkTypeText, IsEnabled: false,
 	}}
 	knowledgeService := &scopeKnowledgeService{knowledge: &types.Knowledge{
-		ID: "faq-document", KnowledgeBaseID: "kb-1",
+		ID: "document-source", KnowledgeBaseID: "kb-1",
 	}}
 	targets := types.SearchTargets{{
 		Type: types.SearchTargetTypeKnowledgeBase, KnowledgeBaseID: "kb-1",
 	}}
 
 	if _, err := authorizeChunkInSearchTargets(
-		context.Background(), targets, "faq-1", chunkService, knowledgeService,
+		context.Background(), targets, "document-1", chunkService, knowledgeService,
 	); err == nil {
-		t.Fatal("disabled FAQ chunk must not be authorized for Agent tools")
+		t.Fatal("disabled document chunk must not be authorized for Agent tools")
 	}
 }
 

@@ -37,7 +37,7 @@
                                 :style="{ transitionDelay: sqCardsRevealed ? `${index * 50}ms` : '0ms' }"
                                 @click="handleSuggestedQuestionClick(item.question)">
                                 <span class="suggested-question-text">{{ item.question }}</span>
-                                <span v-if="item.source === 'faq'" class="suggested-question-badge faq">FAQ</span>
+
                             </div>
                         </div>
                     </div>

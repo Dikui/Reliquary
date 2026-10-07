@@ -142,7 +142,7 @@ func isContextError(err error) bool {
 //
 // Use this for 23 synchronous call sites across the application services.
 // Async task handlers that cannot rely on ctx-based TenantInfo (currently:
-// ProcessKBDeleteTask, ProcessIndexDelete) must use
+// ProcessKBDeleteTask) must use
 // CreateRetrieveEngineFromPayload instead.
 func CreateRetrieveEngineForKB(
 	ctx context.Context,

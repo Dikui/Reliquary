@@ -23,6 +23,7 @@ import (
 type stubRegisterUserService struct {
 	interfaces.UserService
 	register func(ctx context.Context, req *types.RegisterRequest) (*types.User, error)
+	hasUsers bool
 }
 
 func (s *stubRegisterUserService) Register(ctx context.Context, req *types.RegisterRequest) (*types.User, error) {
@@ -82,14 +83,14 @@ func TestRegister_InviteOnlyRejects(t *testing.T) {
 	// already hides the sign-up link via /auth/config; this is the
 	// server-side enforcement for direct API hits.
 	called := false
-	us := &stubRegisterUserService{
+	us := &stubRegisterUserService{hasUsers: true,
 		register: func(context.Context, *types.RegisterRequest) (*types.User, error) {
 			called = true
 			return &types.User{ID: "u1"}, nil
 		},
 	}
 	h := NewAuthHandler(&config.Config{
-		Auth: &config.AuthConfig{RegistrationMode: config.AuthRegistrationModeInviteOnly},
+		Auth: &config.AuthConfig{},
 	}, us, nil, nil, nil)
 
 	w := doRegister(t, newRegisterTestRouter(h), validRegisterBody())
@@ -110,14 +111,14 @@ func TestRegister_SelfServeAllowsRegistration(t *testing.T) {
 	us := &stubRegisterUserService{
 		register: func(_ context.Context, req *types.RegisterRequest) (*types.User, error) {
 			called = true
-			if req.TenantProvisioning != types.TenantProvisioningCreatePersonal {
-				t.Fatalf("default provisioning = %q, want create_personal", req.TenantProvisioning)
+			if req.InvitationToken != "" {
+				t.Fatalf("default provisioning = %q, want create_personal", req.InvitationToken)
 			}
 			return &types.User{ID: "u1", Email: "alice@example.com"}, nil
 		},
 	}
 	h := NewAuthHandler(&config.Config{
-		Auth: &config.AuthConfig{RegistrationMode: config.AuthRegistrationModeSelfServe},
+		Auth: &config.AuthConfig{},
 	}, us, nil, nil, nil)
 
 	w := doRegister(t, newRegisterTestRouter(h), validRegisterBody())
@@ -129,35 +130,11 @@ func TestRegister_SelfServeAllowsRegistration(t *testing.T) {
 	}
 }
 
-func TestRegister_TenantlessProvisioningFromConfig(t *testing.T) {
-	us := &stubRegisterUserService{
-		register: func(_ context.Context, req *types.RegisterRequest) (*types.User, error) {
-			if req.TenantProvisioning != types.TenantProvisioningTenantless {
-				t.Fatalf("provisioning = %q, want tenantless", req.TenantProvisioning)
-			}
-			return &types.User{ID: "u1", Email: "alice@example.com"}, nil
-		},
-	}
-	h := NewAuthHandler(&config.Config{
-		Auth: &config.AuthConfig{
-			RegistrationMode:  config.AuthRegistrationModeSelfServe,
-			DefaultTenantMode: config.AuthDefaultTenantModeTenantless,
-		},
-	}, us, nil, nil, nil)
-
-	w := doRegister(t, newRegisterTestRouter(h), validRegisterBody())
-	if w.Code != http.StatusCreated {
-		t.Fatalf("tenantless self-serve registration got %d body=%s", w.Code, w.Body.String())
-	}
-}
-
 func TestGetAuthConfigExposesComplexPassword(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	h := &AuthHandler{
-		configInfo: &config.Config{Auth: &config.AuthConfig{
-			RegistrationMode: config.AuthRegistrationModeSelfServe,
-		}},
-		systemSettingSvc: &tenantPolicySettingService{enabled: true},
+		configInfo:       &config.Config{Auth: &config.AuthConfig{}},
+		systemSettingSvc: &passwordPolicySettingService{enabled: true},
 	}
 	r := gin.New()
 	r.GET("/auth/config", h.GetAuthConfig)
@@ -208,7 +185,7 @@ func TestRegister_PreservesPasswordBytes(t *testing.T) {
 		},
 	}
 	h := NewAuthHandler(&config.Config{
-		Auth: &config.AuthConfig{RegistrationMode: config.AuthRegistrationModeSelfServe},
+		Auth: &config.AuthConfig{},
 	}, us, nil, nil, nil)
 
 	body := validRegisterBody()
@@ -223,3 +200,5 @@ func TestRegister_PreservesPasswordBytes(t *testing.T) {
 			gotPassword, originalPassword)
 	}
 }
+
+func (s *stubRegisterUserService) HasTeamUsers(context.Context) (bool, error) { return s.hasUsers, nil }

@@ -214,7 +214,7 @@ func normalizeAnomalyTagIDs(ids []string) []string {
 	return out
 }
 
-// Resolve accepts or rejects a suggestion. Only the KB creator can decide;
+// Resolve accepts or rejects a suggestion. A team editor can decide;
 // a reviewer with read access cannot use this path to mutate knowledge.
 func (s *KnowledgeAnomalyService) Resolve(ctx context.Context, kbID, anomalyID, action, note string) (*types.KnowledgeAnomaly, error) {
 	kb, err := s.scopedKB(ctx, kbID)
@@ -222,8 +222,8 @@ func (s *KnowledgeAnomalyService) Resolve(ctx context.Context, kbID, anomalyID, 
 		return nil, err
 	}
 	actorID, ok := types.UserIDFromContext(ctx)
-	if !ok || actorID != kb.CreatorID || types.IsSyntheticUserID(actorID) {
-		return nil, werrors.NewForbiddenError("only the knowledge base creator can decide anomalies")
+	if !ok || !types.TenantRoleFromContext(ctx).HasPermission(types.TenantRoleContributor) || types.IsSyntheticUserID(actorID) {
+		return nil, werrors.NewForbiddenError("a team editor is required to decide anomalies")
 	}
 	if action != "apply" && action != "resolved" && action != "dismiss" {
 		return nil, werrors.NewBadRequestError("invalid decision")
@@ -322,7 +322,7 @@ func (s *KnowledgeAnomalyService) Resolve(ctx context.Context, kbID, anomalyID, 
 			applyErr = s.knowledge.UpdateKnowledgeTagBatch(ctx, kb.ID, updates, reason)
 			result = "tags_updated"
 		case "delete_tag":
-			applyErr = s.tags.DeleteTag(ctx, item.ProposedDeleteTagID, false, false, nil)
+			applyErr = s.tags.DeleteTag(ctx, item.ProposedDeleteTagID)
 			if applyErr != nil && retrying {
 				var remaining int64
 				if countErr := s.db.WithContext(ctx).Model(&types.KnowledgeTag{}).Where("id = ? AND tenant_id = ? AND knowledge_base_id = ?", item.ProposedDeleteTagID, kb.TenantID, kb.ID).Count(&remaining).Error; countErr == nil && remaining == 0 {

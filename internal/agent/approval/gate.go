@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	redis "github.com/redis/go-redis/v9"
 	"os"
 	"strings"
 	"sync"
@@ -13,7 +14,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	"reliquary/internal/config"
 	"reliquary/internal/event"
 	"reliquary/internal/logger"

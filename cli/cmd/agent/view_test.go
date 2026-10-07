@@ -77,22 +77,21 @@ func TestRenderAgent_RendersAllGroupsWithOmitEmpty(t *testing.T) {
 		ID:   "ag_abc",
 		Name: "Test",
 		Config: &sdk.AgentConfig{
-			AgentMode:          "smart-reasoning",
-			SystemPrompt:       "You help users.",
-			ModelID:            "model-x",
-			Temperature:        0.7,
-			KBSelectionMode:    "selected",
-			KnowledgeBases:     []string{"kb_a"},
-			FAQPriorityEnabled: true,
-			WebSearchEnabled:   false, // zero - omitted in text
-			FallbackStrategy:   "fixed",
-			FallbackResponse:   "I don't know.",
+			AgentMode:        "smart-reasoning",
+			SystemPrompt:     "You help users.",
+			ModelID:          "model-x",
+			Temperature:      0.7,
+			KBSelectionMode:  "selected",
+			KnowledgeBases:   []string{"kb_a"},
+			WebSearchEnabled: false, // zero - omitted in text
+			FallbackStrategy: "fixed",
+			FallbackResponse: "I don't know.",
 		},
 	}
 	renderAgent(iostreams.IO.Out, ag)
 	body := out.String()
 	// Group labels appear:
-	for _, label := range []string{"Identity", "LLM", "KB attachment", "FAQ", "Fallback", "Templates"} {
+	for _, label := range []string{"Identity", "LLM", "KB attachment", "Fallback", "Templates"} {
 		if !strings.Contains(body, label) {
 			t.Errorf("missing group label %q in:\n%s", label, body)
 		}
@@ -137,7 +136,7 @@ func TestView_Text_OmitsEmptyFields(t *testing.T) {
 		t.Errorf("non-builtin should not render Builtin: line, got:\n%s", got)
 	}
 	// With Config==nil none of the grouped config sections should appear.
-	for _, label := range []string{"LLM:", "KB attachment:", "Retrieval:", "Query rewrite:", "Tools:", "FAQ:", "Web search:", "Multi-turn:", "Fallback:", "Templates:"} {
+	for _, label := range []string{"LLM:", "KB attachment:", "Retrieval:", "Query rewrite:", "Tools:", "Web search:", "Multi-turn:", "Fallback:", "Templates:"} {
 		if strings.Contains(got, label) {
 			t.Errorf("nil Config should not render %q, got:\n%s", label, got)
 		}

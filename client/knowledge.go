@@ -104,7 +104,7 @@ type KnowledgeProcessOverrides struct {
 //   - metadata: Optional metadata for the knowledge entry
 //   - enableMultimodel: Optional flag to enable multimodal processing
 //   - customFileName: Optional custom file name (useful for folder uploads with path)
-//   - channel: Optional ingestion channel (e.g. "web", "api", "wechat"); empty defaults to "web"
+//   - channel: Optional ingestion channel (e.g. "web", "api"); empty defaults to "web"
 //   - processConfig: Optional parse config overrides (serialized as process_config form field)
 func (c *Client) CreateKnowledgeFromFile(ctx context.Context,
 	knowledgeBaseID string, filePath string, metadata map[string]string, enableMultimodel *bool, customFileName string, channel string,

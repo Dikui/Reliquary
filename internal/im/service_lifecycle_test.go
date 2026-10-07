@@ -432,3 +432,47 @@ func TestLeadershipLossStopsAdapterAndSchedulesRecovery(t *testing.T) {
 		t.Fatalf("leader retry goroutines after duplicate loss = %d, want one", retryCount)
 	}
 }
+
+func TestCreateChannelUsesSingleTeam(t *testing.T) {
+	db := newLifecycleTestDB(t)
+	svc := newLifecycleTestService(db, nil, "instance-one")
+	t.Cleanup(svc.Stop)
+	channel := &IMChannel{
+		ID: "single-team-channel", TenantID: 42, AgentID: "agent-1",
+		Platform: string(PlatformFeishu), Enabled: false,
+		Credentials: types.JSON(`{"app_id":"team-bot"}`),
+	}
+	if err := svc.CreateChannel(channel); err != nil {
+		t.Fatalf("CreateChannel() error = %v", err)
+	}
+	stored, err := svc.GetChannelByID(channel.ID)
+	if err != nil {
+		t.Fatalf("GetChannelByID() error = %v", err)
+	}
+	if stored.TenantID != types.SingleTenantID {
+		t.Fatalf("TenantID = %d, want %d", stored.TenantID, types.SingleTenantID)
+	}
+}
+
+func TestStartChannelRejectsOtherTeam(t *testing.T) {
+	svc := newLifecycleTestService(nil, nil, "instance-one")
+	t.Cleanup(svc.Stop)
+	counters := &lifecycleFactoryCounters{}
+	svc.RegisterAdapterFactory("test", counters.factory())
+	channel := &IMChannel{ID: "other-team-channel", TenantID: 42, Platform: "test"}
+	if err := svc.StartChannel(channel); err == nil {
+		t.Fatal("StartChannel() should reject a channel outside the team")
+	}
+	if starts := counters.starts.Load(); starts != 0 {
+		t.Fatalf("adapter starts = %d, want 0", starts)
+	}
+}
+
+func TestUpdateChannelRejectsOtherTeam(t *testing.T) {
+	svc := newLifecycleTestService(nil, nil, "instance-one")
+	t.Cleanup(svc.Stop)
+	channel := &IMChannel{ID: "other-team-channel", TenantID: 2, Platform: string(PlatformFeishu)}
+	if err := svc.UpdateChannel(channel); err == nil {
+		t.Fatal("UpdateChannel() should reject a channel outside the team")
+	}
+}

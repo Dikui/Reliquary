@@ -1,4 +1,3 @@
-// Shared content renderer for the post-login and post-tenant-switch
 // NotifyPlugin cards. Both cards present the same shape ("you are in
 // <workspace> as <role>"), so we render them with a unified visual
 // language to keep the two surfaces consistent.

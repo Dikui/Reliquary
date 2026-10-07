@@ -269,27 +269,3 @@ func TestCreateInvitation_AutoAcceptEnabled_NilMemberServiceReturns500(t *testin
 		t.Fatal("memberService nil must not silently fall back to invitation flow")
 	}
 }
-
-func TestCreateInvitation_AutoAccept_AdoptsTenantlessInviteeHomeTenant(t *testing.T) {
-	users := &autoAcceptUserSvc{
-		user: &types.User{ID: "u-bob", Email: "bob@x.com", Username: "bob", TenantID: 0},
-	}
-	members := &autoAcceptMemberSvc{}
-	invites := &autoAcceptInvitationSvc{}
-	h := &TenantInvitationHandler{
-		invitationService: invites,
-		userService:       users,
-		memberService:     members,
-		systemSettingSvc:  &autoAcceptSettingSvc{enabled: true},
-	}
-	r := newAutoAcceptTestRouter(h)
-
-	w := postAutoAcceptInvitation(t, r, `{"email":"bob@x.com","role":"contributor"}`)
-	if w.Code != http.StatusCreated {
-		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
-	}
-	if !users.updateCalled || users.updatedTenant != 7 {
-		t.Fatalf("tenantless invitee should adopt tenant 7, updateCalled=%v updatedTenant=%d",
-			users.updateCalled, users.updatedTenant)
-	}
-}

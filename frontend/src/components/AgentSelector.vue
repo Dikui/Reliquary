@@ -53,28 +53,8 @@
             </div>
           </div>
 
-          <!-- 共享给我 -->
-          <div v-if="sharedAgentsList.length > 0" class="agent-group">
-            <div class="agent-group-title">{{ $t('agent.tabs.sharedToMe') }}</div>
-            <div v-for="shared in sharedAgentsList" :key="`${shared.agent.id}-${shared.source_tenant_id}`"
-              class="agent-option" :class="{ selected: isSharedAgentSelected(shared) }"
-              @mouseenter="onSharedOptionEnter(shared, $event)" @mouseleave="onOptionLeave"
-              @click="selectSharedAgent(shared)">
-              <AgentAvatar :name="shared.agent.name" size="small" />
-              <span class="agent-option-name">{{ shared.agent.name }}</span>
-              <span class="shared-tag">{{ $t('agent.selector.sharedLabel') }}</span>
-              <div v-if="getAgentNotReadyLabels(shared.agent, String(shared.source_tenant_id)).length"
-                class="agent-option-actions">
-                <t-tooltip
-                  :content="$t('agent.selector.notReadyHint', { items: formatNotReadyHint(shared.agent, String(shared.source_tenant_id)) })"
-                  placement="top">
-                  <TIcon name="error-circle" size="14px" class="not-ready-icon" @click.stop />
-                </t-tooltip>
-              </div>
-            </div>
-          </div>
 
-          <div v-if="builtinAgents.length === 0 && customAgents.length === 0 && sharedAgentsList.length === 0"
+          <div v-if="builtinAgents.length === 0 && customAgents.length === 0"
             class="agent-option empty">
             {{ $t('agent.noAgents') }}
           </div>
@@ -106,7 +86,7 @@
                   :class="{ 'detail-header-action--warn': activeDetailNotReadyLabels.length }" :title="activeDetailNotReadyLabels.length
                     ? $t('agent.selector.configureAction')
                     : $t('agent.selector.goToSettings')"
-                  @click="goToSettings(activeDetail.agent, activeDetail.sourceTenantId)">
+                  @click="goToSettings(activeDetail.agent)">
                   <TIcon :name="activeDetailNotReadyLabels.length ? 'jump' : 'setting'" size="14px" />
                 </button>
               </div>
@@ -116,8 +96,7 @@
                 <span class="detail-not-ready-label">{{ $t('agent.selector.notReadyStatus') }}</span>
                 <span v-for="item in activeDetailNotReadyLabels" :key="item" class="detail-not-ready-item">{{ item
                   }}</span>
-                <span v-if="activeDetail.sourceTenantId && activeDetailNotReadyLabels.length"
-                  class="detail-not-ready-shared-hint">{{ $t('agent.selector.sharedNotReadyContact') }}</span>
+
               </div>
             </div>
           </div>
@@ -162,17 +141,7 @@
             </div>
           </div>
 
-          <div v-if="activeDetail.sharedMeta?.org_name || activeDetail.sharedMeta?.shared_by_username"
-            class="detail-meta">
-            <div v-if="activeDetail.sharedMeta.org_name" class="detail-meta-row">
-              <img src="@/assets/img/organization-green.svg" class="detail-meta-icon" alt="" aria-hidden="true" />
-              <span>{{ activeDetail.sharedMeta.org_name }}</span>
-            </div>
-            <div v-if="activeDetail.sharedMeta.shared_by_username" class="detail-meta-row">
-              <img src="@/assets/img/user.svg" class="detail-meta-icon" alt="" aria-hidden="true" />
-              <span>{{ activeDetail.sharedMeta.shared_by_username }}</span>
-            </div>
-          </div>
+
         </div>
       </div>
     </div>
@@ -180,22 +149,21 @@
 </template>
 
 <script setup lang="ts">
+import { useAuthStore } from '@/stores/auth';
 import { ref, computed, watch, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import { Icon as TIcon, Tooltip as TTooltip } from 'tdesign-vue-next';
 import { type CustomAgent, BUILTIN_QUICK_ANSWER_ID, BUILTIN_SMART_REASONING_ID } from '@/api/agent';
 import AgentAvatar from '@/components/AgentAvatar.vue';
-import { useOrganizationStore } from '@/stores/organization';
 import { useSettingsStore } from '@/stores/settings';
-import type { SharedAgentInfo } from '@/api/organization';
 import { getRootZoom, rectToCssPx, cssViewportSize } from '@/utils/zoom';
 import { type ModelConfig } from '@/api/model';
 import {
   getAgentNotReadyReasonKeys,
   resolveAgentNotReadySection,
   resolveAgentNotReadyHighlight,
-  canLocallyConfigureAgent,
+
   type AgentNotReadyReasonKey,
 } from '@/utils/agent-readiness';
 import { formatLocalizedList } from '@/utils/format-list';
@@ -207,10 +175,10 @@ import {
 
 const { t, locale } = useI18n();
 const router = useRouter();
-const orgStore = useOrganizationStore();
 const settingsStore = useSettingsStore();
 const chatResources = useChatResourcesStore();
 
+const authStore = useAuthStore();
 const props = defineProps<{
   visible: boolean;
   anchorEl?: HTMLElement;
@@ -221,17 +189,11 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'close'): void;
-  (e: 'select', agent: CustomAgent, sourceTenantId?: string): void;
-  (e: 'not-ready', agent: CustomAgent, labels: string[], keys: AgentNotReadyReasonKey[], sourceTenantId?: string): void;
+  (e: 'select', agent: CustomAgent): void;
+  (e: 'not-ready', agent: CustomAgent, labels: string[], keys: AgentNotReadyReasonKey[]): void;
 }>();
 
 type AgentDetailTarget = {
-  agent: CustomAgent;
-  sourceTenantId?: string;
-  sharedMeta?: { org_name?: string; shared_by_username?: string; web_search_ready?: boolean };
-};
-
-type SharedAgentSelection = Omit<SharedAgentInfo, 'agent'> & {
   agent: CustomAgent;
 };
 
@@ -263,47 +225,21 @@ const builtinAgents = computed(() => {
 });
 
 const customAgents = computed(() => agentsList.value.filter(a => !a.is_builtin));
+const isMyAgentSelected = (agent: CustomAgent) => props.currentAgentId === agent.id;
 
-const toCustomAgent = (agent: SharedAgentInfo['agent']): CustomAgent => ({
-  is_builtin: false,
-  config: {},
-  ...agent,
-});
+const isDetailCurrent = computed(() => activeDetail.value ? isMyAgentSelected(activeDetail.value.agent) : false);
 
-const sharedAgentsList = computed<SharedAgentSelection[]>(() =>
-  (orgStore.sharedAgents || [])
-    .filter(shared => !shared.disabled_by_me)
-    .map(shared => ({ ...shared, agent: toCustomAgent(shared.agent) })),
-);
-
-const currentAgentSourceTenantId = computed(() => settingsStore.selectedAgentSourceTenantId ?? null);
-
-const isSharedAgentSelected = (shared: SharedAgentSelection) =>
-  props.currentAgentId === shared.agent.id && currentAgentSourceTenantId.value === String(shared.source_tenant_id);
-
-const isMyAgentSelected = (agent: CustomAgent) =>
-  props.currentAgentId === agent.id && !currentAgentSourceTenantId.value;
-
-const isDetailCurrent = computed(() => {
-  const detail = activeDetail.value;
-  if (!detail) return false;
-  if (detail.sourceTenantId) {
-    return props.currentAgentId === detail.agent.id
-      && currentAgentSourceTenantId.value === detail.sourceTenantId;
-  }
-  return isMyAgentSelected(detail.agent);
-});
 
 const activeDetailNotReadyLabels = computed(() => {
   const detail = activeDetail.value;
   if (!detail) return [];
-  return getAgentNotReadyLabels(detail.agent, detail.sourceTenantId);
+  return getAgentNotReadyLabels(detail.agent);
 });
 
 const canShowDetailHeaderAction = computed(() => {
   const detail = activeDetail.value;
   if (!detail) return false;
-  if (canLocallyConfigureAgent(detail.sourceTenantId)) return true;
+  if (authStore.hasRole('contributor')) return true;
   return activeDetailNotReadyLabels.value.length === 0;
 });
 
@@ -325,7 +261,6 @@ const isWebSearchReadyForAgent = (agent: CustomAgent): boolean => {
   return isAgentWebSearchReady(
     agent.config,
     webSearchProviders.value,
-    activeDetail.value?.sourceTenantId ? activeDetail.value.sharedMeta?.web_search_ready : undefined,
   );
 };
 
@@ -387,30 +322,28 @@ const formatAgentNotReadyReasons = (
   });
 };
 
-const getAgentNotReadyReasonKeysFor = (agent: CustomAgent, sourceTenantId?: string) => {
+const getAgentNotReadyReasonKeysFor = (agent: CustomAgent) => {
   const isAgentMode = agent.config?.agent_mode === 'smart-reasoning';
-  const isSharedAgent = !!sourceTenantId;
   return getAgentNotReadyReasonKeys(agent.config, modelsList.value, {
     isAgentMode,
-    isSharedAgent,
   });
 };
 
-const getAgentNotReadyLabels = (agent: CustomAgent, sourceTenantId?: string): string[] => {
+const getAgentNotReadyLabels = (agent: CustomAgent): string[] => {
   return formatAgentNotReadyReasons(
-    getAgentNotReadyReasonKeysFor(agent, sourceTenantId),
+    getAgentNotReadyReasonKeysFor(agent),
     agent.is_builtin,
   );
 };
 
-const formatNotReadyHint = (agent: CustomAgent, sourceTenantId?: string): string => {
-  return formatLocalizedList(getAgentNotReadyLabels(agent, sourceTenantId), locale.value);
+const formatNotReadyHint = (agent: CustomAgent): string => {
+  return formatLocalizedList(getAgentNotReadyLabels(agent), locale.value);
 };
 
-const emitAgentNotReady = (agent: CustomAgent, sourceTenantId?: string) => {
-  const keys = getAgentNotReadyReasonKeysFor(agent, sourceTenantId);
+const emitAgentNotReady = (agent: CustomAgent) => {
+  const keys = getAgentNotReadyReasonKeysFor(agent);
   const labels = formatAgentNotReadyReasons(keys, agent.is_builtin);
-  emit('not-ready', agent, labels, keys, sourceTenantId);
+  emit('not-ready', agent, labels, keys);
 };
 
 const clearDetailHideTimer = () => {
@@ -468,19 +401,11 @@ const scheduleDetailPanelPosition = () => {
   });
 };
 
-const onOptionEnter = (agent: CustomAgent, event: MouseEvent, sourceTenantId?: string, sharedMeta?: AgentDetailTarget['sharedMeta']) => {
+const onOptionEnter = (agent: CustomAgent, event: MouseEvent) => {
   clearDetailHideTimer();
   detailAnchorEl.value = event.currentTarget as HTMLElement;
-  activeDetail.value = { agent, sourceTenantId, sharedMeta };
+  activeDetail.value = { agent };
   scheduleDetailPanelPosition();
-};
-
-const onSharedOptionEnter = (shared: SharedAgentSelection, event: MouseEvent) => {
-  onOptionEnter(shared.agent, event, String(shared.source_tenant_id), {
-    org_name: shared.org_name,
-    shared_by_username: shared.shared_by_username,
-    web_search_ready: shared.web_search_ready,
-  });
 };
 
 const onOptionLeave = () => {
@@ -512,20 +437,11 @@ const selectAgent = (agent: CustomAgent) => {
   emit('select', agent);
 };
 
-const selectSharedAgent = (shared: SharedAgentSelection) => {
-  const sourceTenantId = String(shared.source_tenant_id);
-  if (getAgentNotReadyLabels(shared.agent, sourceTenantId).length > 0) {
-    emitAgentNotReady(shared.agent, sourceTenantId);
+const goToSettings = (agent: CustomAgent) => {
+  if (!authStore.hasRole('contributor') && getAgentNotReadyLabels(agent).length > 0) {
     return;
   }
-  emit('select', shared.agent, sourceTenantId);
-};
-
-const goToSettings = (agent: CustomAgent, sourceTenantId?: string) => {
-  if (!canLocallyConfigureAgent(sourceTenantId) && getAgentNotReadyLabels(agent, sourceTenantId).length > 0) {
-    return;
-  }
-  const reasonKeys = getAgentNotReadyReasonKeysFor(agent, sourceTenantId);
+  const reasonKeys = getAgentNotReadyReasonKeysFor(agent);
   const section = reasonKeys.length > 0 ? resolveAgentNotReadySection(reasonKeys) : 'basic';
   const highlight = resolveAgentNotReadyHighlight(reasonKeys);
   hideDetailPanel();
@@ -536,7 +452,6 @@ const goToSettings = (agent: CustomAgent, sourceTenantId?: string) => {
       edit: agent.id,
       section,
       ...(highlight ? { highlight } : {}),
-      ...(sourceTenantId ? { sourceTenantId } : {}),
     },
   });
 };
@@ -754,12 +669,7 @@ watch(activeDetail, (detail) => {
   line-height: 22px;
 }
 
-.shared-tag {
-  font-size: 10px;
-  color: var(--td-text-color-placeholder);
-  flex-shrink: 0;
-  line-height: 22px;
-}
+
 
 .agent-option-actions {
   display: flex;
@@ -959,14 +869,7 @@ watch(activeDetail, (detail) => {
   background: var(--td-bg-color-container);
 }
 
-.detail-not-ready-shared-hint {
-  display: block;
-  width: 100%;
-  margin-top: 2px;
-  font-size: 10px;
-  line-height: 1.4;
-  color: var(--td-text-color-placeholder);
-}
+
 
 .detail-desc {
   margin: 0 0 8px;

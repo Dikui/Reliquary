@@ -48,11 +48,8 @@ const iconName = computed(() => {
     case 'env':
     case 'user':
       // Both env- and user-bound KBs sit on top of a vector store; the
-      // distinction is purely organizational (configured at process
       // start vs. created in the UI), so they share the same icon.
       return 'data-base'
-    case 'shared':
-      return 'share'
     case 'unavailable':
     default:
       return 'help-circle'
@@ -61,7 +58,6 @@ const iconName = computed(() => {
 
 const displayName = computed(() => {
   if (effectiveSource.value === 'env') return t('vectorStoreBadge.systemDefault')
-  if (effectiveSource.value === 'shared') return t('vectorStoreBadge.sharedFromOrg')
   return props.name || t('vectorStoreBadge.unknownStore')
 })
 </script>
@@ -89,10 +85,7 @@ const displayName = computed(() => {
   color: var(--td-success-color-7, #00754a);
 }
 
-.vs-badge-shared {
-  background: var(--td-warning-color-1, #fff1e9);
-  color: var(--td-warning-color-7, #b85b00);
-}
+
 
 .vs-badge-warn {
   background: var(--td-error-color-1, #fde9e6);

@@ -6,9 +6,8 @@ const RECENT_KEY_PREFIX = 'reliquary_cmdk_recent'
 const RECENT_LIMIT = 4
 
 // recentKey scopes "recent searches" to the active (user, tenant) pair.
-// The previous global key leaked queries between users sharing a browser
-// and across tenant switches inside the same account. Falling back to
-// "anon" keeps the palette functional before login finishes hydrating.
+// Separate recent searches for users sharing a browser. The "anon" key
+// keeps the palette functional before login finishes hydrating.
 function recentKey(userId: string | null | undefined, tenantId: number | string | null | undefined): string {
   const u = userId ? String(userId) : 'anon'
   const t = tenantId !== null && tenantId !== undefined && tenantId !== '' ? String(tenantId) : 'none'
@@ -75,9 +74,7 @@ export const useCommandPaletteStore = defineStore('commandPalette', () => {
     }
   }
 
-  // Reload recent queries whenever the active user or tenant changes
-  // (login, logout, tenant switch). Each (user, tenant) pair has its own
-  // localStorage namespace so queries don't bleed across identities.
+  // Reload recent queries when login or logout changes the active user.
   watch(
     () => {
       const auth = useAuthStore()

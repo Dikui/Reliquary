@@ -8,17 +8,14 @@ export type AgentNotReadyReasonKey = 'summary_model' | 'rerank_model' | 'allowed
  * model. Merely having some built-in/default model in the tenant must not hide
  * incomplete agent configuration.
  *
- * For shared agents the model belongs to the source tenant, so the caller can
  * require a non-empty ID but must leave existence validation to the backend.
  */
 export function agentHasConfiguredChatModel(
   config: Pick<CustomAgentConfig, 'model_id'> | undefined,
   models: Pick<ModelConfig, 'id' | 'type'>[],
-  sourceModelIsRemote = false,
 ): boolean {
   const modelID = config?.model_id?.trim()
   if (!modelID) return false
-  if (sourceModelIsRemote) return true
   return models.some(model => model.type === 'KnowledgeQA' && model.id === modelID)
 }
 
@@ -48,19 +45,17 @@ export function getAgentNotReadyReasonKeys(
     'model_id' | 'rerank_model_id' | 'kb_selection_mode' | 'allowed_tools' | 'agent_mode'
   > | undefined,
   models: Pick<ModelConfig, 'id' | 'type'>[],
-  options: { isAgentMode: boolean; isSharedAgent: boolean },
+  options: { isAgentMode: boolean },
 ): AgentNotReadyReasonKey[] {
   const reasons: AgentNotReadyReasonKey[] = []
 
-  if (!agentHasConfiguredChatModel(config, models, options.isSharedAgent)) {
+  if (!agentHasConfiguredChatModel(config, models)) {
     reasons.push('summary_model')
   }
 
   if (options.isAgentMode && agentRequiresRerankModel(config)) {
     const rerankModelID = config?.rerank_model_id?.trim()
-    const rerankExists = !!rerankModelID && (
-      options.isSharedAgent
-      || models.some(model => model.type === 'Rerank' && model.id === rerankModelID)
+    const rerankExists = !!rerankModelID && (models.some(model => model.type === 'Rerank' && model.id === rerankModelID)
     )
     if (!rerankExists) {
       reasons.push('rerank_model')
@@ -68,11 +63,6 @@ export function getAgentNotReadyReasonKeys(
   }
 
   return reasons
-}
-
-/** Shared agents are owned by another tenant; receivers cannot edit their config. */
-export function canLocallyConfigureAgent(sourceTenantId?: string): boolean {
-  return !sourceTenantId
 }
 
 /** Map missing-config reasons to the agent editor section that fixes them. */

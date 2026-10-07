@@ -26,13 +26,8 @@ func newTestResolver(t *testing.T, loader TenantSandboxConfigLoader) (TenantSand
 	fallback := NewDisabledManager()
 	resolver, err := NewTenantSandboxResolver(TenantSandboxResolverDeps{
 		GlobalConfig: &Config{
-			Type:           SandboxTypeE2B,
+			Type:           SandboxTypeDocker,
 			DefaultTimeout: 60 * time.Second,
-			E2BAPIKey:      "global-key",
-			E2BAPIURL:      "https://203.0.113.30",
-			E2BTemplate:    "global-template",
-			E2BSandboxTTL:  time.Minute,
-			E2BHTTPTimeout: 30 * time.Second,
 		},
 		DefaultManager: fallback,
 		Loader:         loader,
@@ -46,7 +41,7 @@ func newTestResolver(t *testing.T, loader TenantSandboxConfigLoader) (TenantSand
 func TestResolveEmptyConfigIDIsDisabled(t *testing.T) {
 	resolver, _ := newTestResolver(t, &stubTenantConfigLoader{})
 
-	mgr, err := resolver.Resolve(context.Background(), 42, "")
+	mgr, err := resolver.Resolve(context.Background(), types.SingleTenantID, "")
 
 	require.NoError(t, err)
 	require.Equal(t, SandboxTypeDisabled, mgr.GetType())
@@ -59,7 +54,7 @@ func TestResolveRefusesCordonedConfig(t *testing.T) {
 		result: ResolvedTenantSandboxConfig{Found: true, Cordoned: true},
 	})
 
-	mgr, err := resolver.Resolve(context.Background(), 7, "cfg-a")
+	mgr, err := resolver.Resolve(context.Background(), types.SingleTenantID, "cfg-a")
 
 	require.Nil(t, mgr)
 	require.ErrorIs(t, err, ErrSandboxConfigCordoned)
@@ -72,33 +67,31 @@ func TestResolveRefusesMissingConfig(t *testing.T) {
 		result: ResolvedTenantSandboxConfig{Found: false},
 	})
 
-	mgr, err := resolver.Resolve(context.Background(), 7, "cfg-gone")
+	mgr, err := resolver.Resolve(context.Background(), types.SingleTenantID, "cfg-gone")
 
 	require.Nil(t, mgr)
 	require.ErrorIs(t, err, ErrSandboxConfigNotFound)
 }
 
-// Construction must not perform a Health round-trip (it happens per request).
-// A tenant that chose E2B must fail at first use if that backend is unreachable,
-// rather than substituting a different execution environment.
 func TestResolveBuildsRemoteManagerWithoutHealthProbe(t *testing.T) {
+	t.Setenv(DockerBackendEnabledEnv, "true")
 	resolver, fallback := newTestResolver(t, &stubTenantConfigLoader{
 		result: ResolvedTenantSandboxConfig{
 			Config: &types.TenantSandboxConfig{
-				SandboxType: "e2b",
-				E2B: &types.E2BSandboxConfig{
-					APIKey: "tenant-key", TemplateID: "tenant-template",
+				SandboxType: "docker",
+				Docker: &types.DockerSandboxConfig{
+					Image: "tenant-template", Host: "unix:///var/run/docker.sock",
 				},
 			},
 			Found: true,
 		},
 	})
 
-	mgr, err := resolver.Resolve(context.Background(), 42, "cfg-a")
+	mgr, err := resolver.Resolve(context.Background(), types.SingleTenantID, "cfg-a")
 
 	require.NoError(t, err)
 	require.NotSame(t, fallback, mgr)
-	require.Equal(t, SandboxTypeE2B, mgr.GetType())
+	require.Equal(t, SandboxTypeDocker, mgr.GetType())
 }
 
 // Docker is a session-scoped backend like the MicroVM ones: it must resolve to
@@ -124,7 +117,7 @@ func TestResolveBuildsSessionBoundManagerForDocker(t *testing.T) {
 		},
 	})
 
-	mgr, err := resolver.Resolve(context.Background(), 42, "cfg-docker")
+	mgr, err := resolver.Resolve(context.Background(), types.SingleTenantID, "cfg-docker")
 
 	require.NoError(t, err)
 	require.NotSame(t, fallback, mgr)
@@ -153,7 +146,7 @@ func TestResolveRefusesDockerWhenDisabled(t *testing.T) {
 		},
 	})
 
-	mgr, err := resolver.Resolve(context.Background(), 42, "cfg-docker")
+	mgr, err := resolver.Resolve(context.Background(), types.SingleTenantID, "cfg-docker")
 
 	require.Nil(t, mgr)
 	require.ErrorIs(t, err, ErrDockerBackendDisabled)
@@ -170,7 +163,7 @@ func TestResolveRefusesDockerConfigWithoutImage(t *testing.T) {
 		},
 	})
 
-	mgr, err := resolver.Resolve(context.Background(), 42, "cfg-docker")
+	mgr, err := resolver.Resolve(context.Background(), types.SingleTenantID, "cfg-docker")
 
 	require.Nil(t, mgr)
 	require.ErrorIs(t, err, ErrSandboxConfigIncomplete)
@@ -187,7 +180,7 @@ func TestResolveRefusesStoredLocalConfig(t *testing.T) {
 		},
 	})
 
-	mgr, err := resolver.Resolve(context.Background(), 42, "cfg-local")
+	mgr, err := resolver.Resolve(context.Background(), types.SingleTenantID, "cfg-local")
 
 	require.Nil(t, mgr)
 	require.ErrorIs(t, err, ErrUnsupportedSandboxType)
@@ -196,12 +189,13 @@ func TestResolveRefusesStoredLocalConfig(t *testing.T) {
 // No caching: the loader is consulted on every Resolve, which is what makes a
 // config change take effect on the next request with no invalidation step.
 func TestResolveBuildsFreshManagerEveryCall(t *testing.T) {
+	t.Setenv(DockerBackendEnabledEnv, "true")
 	loader := &stubTenantConfigLoader{
 		result: ResolvedTenantSandboxConfig{
 			Config: &types.TenantSandboxConfig{
-				SandboxType: "e2b",
-				E2B: &types.E2BSandboxConfig{
-					APIKey: "tenant-key", TemplateID: "tenant-template",
+				SandboxType: "docker",
+				Docker: &types.DockerSandboxConfig{
+					Image: "tenant-template", Host: "unix:///var/run/docker.sock",
 				},
 			},
 			Found: true,
@@ -209,11 +203,22 @@ func TestResolveBuildsFreshManagerEveryCall(t *testing.T) {
 	}
 	resolver, _ := newTestResolver(t, loader)
 
-	first, err := resolver.Resolve(context.Background(), 42, "cfg-a")
+	first, err := resolver.Resolve(context.Background(), types.SingleTenantID, "cfg-a")
 	require.NoError(t, err)
-	second, err := resolver.Resolve(context.Background(), 42, "cfg-a")
+	second, err := resolver.Resolve(context.Background(), types.SingleTenantID, "cfg-a")
 	require.NoError(t, err)
 
 	require.NotSame(t, first, second)
 	require.Equal(t, 2, loader.hits)
+}
+
+func TestResolveRejectsOtherTeamBeforeLoading(t *testing.T) {
+	loader := &stubTenantConfigLoader{}
+	resolver, _ := newTestResolver(t, loader)
+	for _, tenantID := range []uint64{0, 2} {
+		mgr, err := resolver.Resolve(context.Background(), tenantID, "cfg-team")
+		require.Error(t, err)
+		require.Nil(t, mgr)
+	}
+	require.Zero(t, loader.hits)
 }

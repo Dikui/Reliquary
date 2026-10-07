@@ -31,28 +31,7 @@ func ParseStorageBackendPath(path string) (backendID, providerPath string, ok bo
 const (
 	// KnowledgeBaseTypeDocument represents the document knowledge base type
 	KnowledgeBaseTypeDocument = "document"
-	KnowledgeBaseTypeFAQ      = "faq"
 	KnowledgeBaseTypeWiki     = "wiki"
-)
-
-// FAQIndexMode represents the FAQ index mode: only index questions or index questions and answers
-type FAQIndexMode string
-
-const (
-	// FAQIndexModeQuestionOnly only index questions and similar questions
-	FAQIndexModeQuestionOnly FAQIndexMode = "question_only"
-	// FAQIndexModeQuestionAnswer index questions and answers together
-	FAQIndexModeQuestionAnswer FAQIndexMode = "question_answer"
-)
-
-// FAQQuestionIndexMode represents the FAQ question index mode: index together or index separately
-type FAQQuestionIndexMode string
-
-const (
-	// FAQQuestionIndexModeCombined index questions and similar questions together
-	FAQQuestionIndexModeCombined FAQQuestionIndexMode = "combined"
-	// FAQQuestionIndexModeSeparate index questions and similar questions separately
-	FAQQuestionIndexModeSeparate FAQQuestionIndexMode = "separate"
 )
 
 // KnowledgeBase represents a knowledge base entity
@@ -61,7 +40,6 @@ type KnowledgeBase struct {
 	ID string `yaml:"id"                      json:"id"                      gorm:"type:varchar(36);primaryKey"`
 	// Name of the knowledge base
 	Name string `yaml:"name"                    json:"name"`
-	// Type of the knowledge base (document, faq, etc.)
 	Type string `yaml:"type"                    json:"type"                    gorm:"type:varchar(32);default:'document'"`
 	// Whether this knowledge base is temporary (ephemeral) and should be hidden from UI
 	IsTemporary bool `yaml:"is_temporary"            json:"is_temporary"            gorm:"default:false"`
@@ -69,11 +47,7 @@ type KnowledgeBase struct {
 	Description string `yaml:"description"             json:"description"`
 	// Workspace ID
 	TenantID uint64 `yaml:"tenant_id"               json:"tenant_id"`
-	// CreatorID records the user ID of whoever originally created the KB.
-	// Used by the workspace-level RBAC middleware to let Contributors edit
-	// their own KBs without granting them access to everyone else's.
-	// Nullable for backward compatibility with rows created before the
-	// RBAC migration backfilled the column to the workspace Owner.
+	// CreatorID records the user who created this team knowledge base.
 	CreatorID string `yaml:"creator_id"              json:"creator_id"              gorm:"type:varchar(36);index"`
 	// Chunking configuration
 	ChunkingConfig ChunkingConfig `yaml:"chunking_config"         json:"chunking_config"         gorm:"type:json"`
@@ -102,8 +76,6 @@ type KnowledgeBase struct {
 	// KB update path, which omits this field from its update DTO.
 	VectorStoreID *string `yaml:"vector_store_id"         json:"vector_store_id,omitempty" gorm:"column:vector_store_id;type:varchar(36);<-:create"`
 	// Extract config
-	// FAQConfig stores FAQ specific configuration such as indexing strategy
-	FAQConfig *FAQConfig `yaml:"faq_config"              json:"faq_config"              gorm:"column:faq_config;type:json"`
 	// QuestionGenerationConfig stores question generation configuration for document knowledge bases
 	QuestionGenerationConfig *QuestionGenerationConfig `yaml:"question_generation_config" json:"question_generation_config" gorm:"column:question_generation_config;type:json"`
 	// AutoTagConfig controls asynchronous association of existing tags after parsing.
@@ -134,13 +106,10 @@ type KnowledgeBase struct {
 	// Knowledge count (not stored in database, calculated on query)
 	KnowledgeCount int64 `yaml:"knowledge_count"         json:"knowledge_count"         gorm:"-"`
 	// Chunk count (not stored in database, calculated on query)
-	ChunkCount int64 `yaml:"chunk_count"             json:"chunk_count"             gorm:"-"`
-	// IsProcessing indicates if there is a processing import task (for FAQ type knowledge bases)
-	IsProcessing bool `yaml:"is_processing"           json:"is_processing"           gorm:"-"`
+	ChunkCount   int64 `yaml:"chunk_count"             json:"chunk_count"             gorm:"-"`
+	IsProcessing bool  `yaml:"is_processing"           json:"is_processing"           gorm:"-"`
 	// ProcessingCount indicates the number of knowledge items being processed (for document type knowledge bases)
 	ProcessingCount int64 `yaml:"processing_count"        json:"processing_count"        gorm:"-"`
-	// ShareCount indicates the number of organizations this knowledge base is shared with (not stored in database)
-	ShareCount int64 `yaml:"share_count"             json:"share_count"             gorm:"-"`
 	// CreatorName 是 CreatorID 对应用户的展示名（username / email 等），
 	// 仅在列表场景由 handler 批量回填，不落库；为空表示创建者无法解析（用户已删除、
 	// CreatorID 为空的老数据等）。前端用它在卡片来源徽章上做 mine vs workspace 的二分。
@@ -153,8 +122,6 @@ type KnowledgeBaseConfig struct {
 	ChunkingConfig ChunkingConfig `yaml:"chunking_config"         json:"chunking_config"`
 	// Image processing configuration
 	ImageProcessingConfig ImageProcessingConfig `yaml:"image_processing_config" json:"image_processing_config"`
-	// FAQ configuration (only for FAQ type knowledge bases)
-	FAQConfig *FAQConfig `yaml:"faq_config"              json:"faq_config"`
 	// Wiki configuration (only for wiki-enabled knowledge bases)
 	WikiConfig *WikiConfig `yaml:"wiki_config"             json:"wiki_config"`
 	// AutoTagConfig controls optional automatic association of existing KB tags.
@@ -698,29 +665,6 @@ func (c *ASRConfig) Scan(value interface{}) error {
 	return json.Unmarshal(b, c)
 }
 
-// FAQConfig 存储 FAQ 知识库的特有配置
-type FAQConfig struct {
-	IndexMode         FAQIndexMode         `yaml:"index_mode"          json:"index_mode"`
-	QuestionIndexMode FAQQuestionIndexMode `yaml:"question_index_mode" json:"question_index_mode"`
-}
-
-// Value implements driver.Valuer
-func (f FAQConfig) Value() (driver.Value, error) {
-	return json.Marshal(f)
-}
-
-// Scan implements sql.Scanner
-func (f *FAQConfig) Scan(value interface{}) error {
-	if value == nil {
-		return nil
-	}
-	b, ok := value.([]byte)
-	if !ok {
-		return nil
-	}
-	return json.Unmarshal(b, f)
-}
-
 // EnsureDefaults 确保类型与配置具备默认值
 func (kb *KnowledgeBase) EnsureDefaults() {
 	if kb == nil {
@@ -730,29 +674,11 @@ func (kb *KnowledgeBase) EnsureDefaults() {
 		kb.Type = KnowledgeBaseTypeDocument
 	}
 	// Clear type-specific configs that don't belong
-	if kb.Type != KnowledgeBaseTypeFAQ {
-		kb.FAQConfig = nil
-	}
+
 	if kb.Type != KnowledgeBaseTypeDocument {
 		kb.AutoTagConfig = nil
 	} else if kb.AutoTagConfig != nil {
 		kb.AutoTagConfig.Normalize()
-	}
-	// Set defaults for FAQ
-	if kb.Type == KnowledgeBaseTypeFAQ {
-		if kb.FAQConfig == nil {
-			kb.FAQConfig = &FAQConfig{
-				IndexMode:         FAQIndexModeQuestionAnswer,
-				QuestionIndexMode: FAQQuestionIndexModeCombined,
-			}
-			return
-		}
-		if kb.FAQConfig.IndexMode == "" {
-			kb.FAQConfig.IndexMode = FAQIndexModeQuestionAnswer
-		}
-		if kb.FAQConfig.QuestionIndexMode == "" {
-			kb.FAQConfig.QuestionIndexMode = FAQQuestionIndexModeCombined
-		}
 	}
 
 	// Ensure IndexingStrategy has defaults.
@@ -778,8 +704,6 @@ type KBCapabilities struct {
 	Wiki bool `json:"wiki"`
 	// Graph means structured knowledge context queries are supported.
 	Graph bool `json:"graph"`
-	// FAQ means the KB is a FAQ-type KB (Q/A pairs).
-	FAQ bool `json:"faq"`
 }
 
 // Capabilities returns the computed capability flags for this KB.
@@ -792,8 +716,7 @@ func (kb *KnowledgeBase) Capabilities() KBCapabilities {
 		Vector:  kb.IsVectorEnabled(),
 		Keyword: kb.IsKeywordEnabled(),
 		Wiki:    kb.IsWikiEnabled(),
-		Graph:   kb.Type != KnowledgeBaseTypeFAQ,
-		FAQ:     kb.Type == KnowledgeBaseTypeFAQ,
+		Graph:   true,
 	}
 }
 

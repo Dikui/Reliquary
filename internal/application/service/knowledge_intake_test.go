@@ -128,7 +128,8 @@ func TestReviewKnowledgeIntakeSourceReadFailureCleansPendingMessage(t *testing.T
 			files := &intakeFileService{getErr: tt.getErr, saved: map[string][]byte{"input": []byte("upload"), "original": tt.body, "image": []byte("image")}}
 			task := &intakeTask{}
 			svc := &knowledgeService{repo: repo, kbService: intakeKBService{creatorID: "owner"}, fileSvc: files, task: task}
-			ctx := context.WithValue(context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1)), types.UserIDContextKey, "owner")
+			ctx := context.WithValue(context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1)), types.UserIDContextKey, "other-editor")
+			ctx = context.WithValue(ctx, types.TenantRoleContextKey, types.TenantRoleContributor)
 
 			_, err := svc.ReviewKnowledgeIntake(ctx, knowledge.ID, "retry", types.SourceInfo{})
 			require.Error(t, err)
@@ -266,7 +267,8 @@ func TestReviewKnowledgeIntakeCorrectionClearsQwenRejection(t *testing.T) {
 	svc := &knowledgeService{repo: repo, kbService: intakeKBService{creatorID: "owner"},
 		fileSvc:      &intakeFileService{saved: map[string][]byte{"original": []byte("Complete original body")}},
 		modelService: intakeModelService{chat: intakeChat{response: `{"approved":true,"reason":"sourced article"}`}}, task: task}
-	ctx := context.WithValue(context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1)), types.UserIDContextKey, "owner")
+	ctx := context.WithValue(context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1)), types.UserIDContextKey, "other-editor")
+	ctx = context.WithValue(ctx, types.TenantRoleContextKey, types.TenantRoleContributor)
 	updated, err := svc.ReviewKnowledgeIntake(ctx, knowledge.ID, "retry", types.SourceInfo{PublishedAt: "2026-09-20"})
 	require.NoError(t, err)
 	require.Equal(t, 1, task.calls)

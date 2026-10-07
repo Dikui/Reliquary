@@ -1,11 +1,9 @@
 package service
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"reliquary/internal/types"
 )
@@ -40,34 +38,4 @@ func TestNormalizedMatchCount(t *testing.T) {
 			assert.Equal(t, tt.want, normalizedMatchCount(tt.requested))
 		})
 	}
-}
-
-// TestIterativeRetrieve_CapsSeedTopK guards the FAQ iterative path against an
-// unbounded caller-supplied MatchCount. The seed is MatchCount*3 and doubles
-// each round, so without the cap a single request could ask a vector store for
-// hundreds of thousands of rows.
-func TestIterativeRetrieve_CapsSeedTopK(t *testing.T) {
-	t.Parallel()
-	// canned is nil, so the first iteration retrieves nothing and the loop
-	// breaks — leaving group.TopK at exactly the seed value under test.
-	empty := &fakeRetrieveEngineService{
-		engineType: types.PostgresRetrieverEngineType,
-		support:    []types.RetrieverType{types.VectorRetrieverType},
-	}
-	groups := []*storeGroup{
-		{
-			Engine:     buildBoundComposite(t, empty),
-			BaseParams: vectorParams("q"),
-			TopK:       50,
-			KBIDs:      []string{"kb-1"},
-		},
-	}
-	s := &knowledgeBaseService{}
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
-
-	results, err := s.iterativeRetrieveWithDeduplication(ctx, groups, 100000, "q")
-	require.NoError(t, err)
-	assert.Empty(t, results)
-	assert.Equal(t, maxRetrievalPoolSize, groups[0].TopK,
-		"seed TopK must be capped at the retrieval pool bound")
 }

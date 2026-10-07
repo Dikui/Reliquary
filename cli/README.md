@@ -308,7 +308,7 @@ targets common workflows, not 1:1 API parity. Examples of deep
 operations that intentionally go through `reliquary api`:
 
 - **Tuning a KB's nested config** — chunking strategy, summary model,
-  multimodal extraction defaults, FAQ thresholds, VLM model. Use
+  multimodal extraction defaults, VLM model. Use
   `reliquary api PUT /api/v1/knowledge-bases/<id> --input -` with a JSON
   body matching the server's `UpdateKnowledgeBaseRequest`. (Note: the
   storage provider is set once at create time via
@@ -319,7 +319,7 @@ operations that intentionally go through `reliquary api`:
 - **Per-request `session ask --agent` overrides** — same shape via
   `reliquary api POST /api/v1/agent-chat/<session-id> --input -`.
 - **Operations without a CLI verb** — register / change-password /
-  OIDC flows, organization / sharing endpoints, tenant management.
+  team member management.
 
 `reliquary api --help` documents the raw passthrough. Run
 `reliquary doctor` first to verify auth and base URL.

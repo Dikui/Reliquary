@@ -212,14 +212,15 @@ func (t *wikiReadSourceDocTool) Execute(ctx context.Context, args json.RawMessag
 			PageSize: pageSize,
 		}
 
-		chunks, total, err := t.chunkService.GetRepository().ListPagedChunksByKnowledgeID(
-			ctx,
+		chunks, total, err := t.chunkService.GetRepository().ListPagedChunksByKnowledgeID(ctx,
 			knowledge.TenantID,
 			knowledgeID,
 			pagination,
-			[]types.ChunkType{types.ChunkTypeText, types.ChunkTypeFAQ},
-			nil, "", "", "", "", &enabled,
-		)
+			[]types.ChunkType{types.ChunkTypeText},
+			nil,
+			"",
+			"",
+			&enabled)
 		if err != nil {
 			return &types.ToolResult{Success: false, Error: fmt.Sprintf("Failed to list chunks: %v", err)}, nil
 		}

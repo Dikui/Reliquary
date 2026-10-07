@@ -231,26 +231,8 @@ build_sandbox_image() {
         return 1
     fi
 
-    # Cube 从镜像直接构建模板，并以 :49983/health 探活，缺 envd 必然失败，
-    # 因此 Cube 用的是注入了 envd 的变体镜像。详见 docs/sandbox-cluster.md。
-    # 固定 linux/amd64：envd 的来源镜像 cubesandbox-base 不发布 arm64。
-    log_info "构建沙箱镜像 Cube 变体 (reliquary-sandbox:main-cube)..."
-
-    docker build \
-        --platform linux/amd64 \
-        -f docker/Dockerfile.sandbox \
-        --target cube \
-        -t reliquary-sandbox:latest-cube \
-        -t reliquary-sandbox:main-cube \
-        .
-
-    if [ $? -eq 0 ]; then
-        log_success "沙箱镜像构建成功"
-        return 0
-    else
-        log_error "沙箱镜像 Cube 变体构建失败"
-        return 1
-    fi
+    log_success "沙箱镜像构建成功"
+    return 0
 }
 
 # 构建所有镜像
@@ -336,9 +318,7 @@ clean_images() {
     docker rmi reliquary-docreader:latest 2>/dev/null || true
     docker rmi reliquary-ui:latest 2>/dev/null || true
     docker rmi reliquary-sandbox:latest 2>/dev/null || true
-    docker rmi reliquary-sandbox:latest-cube 2>/dev/null || true
     docker rmi reliquary-sandbox:main 2>/dev/null || true
-    docker rmi reliquary-sandbox:main-cube 2>/dev/null || true
     
     docker image prune -f
     

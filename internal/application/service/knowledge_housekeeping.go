@@ -20,12 +20,12 @@ package service
 
 import (
 	"context"
+	"github.com/robfig/cron/v3"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/robfig/cron/v3"
 	"gorm.io/gorm"
 
 	"reliquary/internal/config"

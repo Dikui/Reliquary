@@ -20,20 +20,6 @@ import (
 	secutils "reliquary/internal/utils"
 )
 
-// files.go hosts every file-proxy surface the router exposes:
-//
-//   - /files                              tenant-scoped raw storage proxy
-//   - /api/v1/knowledge-bases/:id/files   KB-scoped proxy (shared-KB images)
-//   - /api/v1/sessions/:id/messages/:message_id/files
-//                                          message-scoped proxy (shared-agent output)
-//   - /api/v1/files/presigned             HMAC-signed anonymous access (IM)
-//   - /api/v1/files/presigned-preview     Admin-only URL diagnostics
-//   - /r/:token                           short-lived capability URLs
-//
-// The handlers differ in how they authenticate and which tenant owns the
-// object, but share the same storage plumbing — the helpers directly below
-// are that shared plumbing.
-
 // getRouteRegistrar is the minimal registration surface serveFiles* needs;
 // both *gin.Engine and *gin.RouterGroup satisfy it, which keeps the file
 // routes testable without building a full engine.
@@ -51,15 +37,6 @@ type messageFileLookup interface {
 // sharedAgentFileLookup verifies that a source workspace's agent is still
 // shared to the caller. Revoking the share therefore also revokes historical
 // message-file access.
-type sharedAgentFileLookup interface {
-	GetSharedAgentForTenant(
-		ctx context.Context,
-		tenantID uint64,
-		callerTenantRole types.TenantRole,
-		agentID string,
-		sourceTenantID ...uint64,
-	) (*types.CustomAgent, error)
-}
 
 // localStorageBaseDir resolves LOCAL_STORAGE_BASE_DIR with the container
 // default.
@@ -209,11 +186,7 @@ func streamStoredFile(c *gin.Context, reader io.ReadCloser, contentType string, 
 	}
 }
 
-// newFileServeHandler builds the file-proxy handler. It reads the tenant from
-// the request context (set by whichever auth middleware precedes it), so the
-// same handler backs both the authenticated /files route and the embed route
-// (where EmbedAuth injects the channel's tenant). Tenant ownership of the
-// requested path is enforced via ValidateStoragePathTenant either way.
+// newFileServeHandler builds a file proxy that verifies the active team owns the path.
 func newFileServeHandler(
 	globalFileService interfaces.FileService,
 	storageResolver interfaces.StorageBackendResolver,
@@ -372,18 +345,6 @@ func serveResourceGrants(
 	r.HEAD("/r/:token", handler)
 }
 
-// serveKBScopedFiles registers the KB-scoped file proxy used to render images
-// embedded in a knowledge base's content (chunks / wiki pages). Unlike the
-// tenant-scoped /files route — which enforces file_path.tenant == caller.tenant
-// and therefore cannot serve objects owned by another tenant — this route is
-// gated by RequireKBAccess. That guard resolves org-shared / agent-visible KBs
-// and rewrites the request context's tenant ID to the KB's *owner* (source)
-// tenant, so images stored under the owner tenant (local://<owner>/exports/...)
-// become reachable by tenants that legitimately share the KB, while still
-// enforcing that the requested path belongs to that owner tenant.
-//
-// Route:
-//   - GET /api/v1/knowledge-bases/:id/files?file_path=<provider://...>
 func serveKBScopedFiles(
 	r *gin.RouterGroup,
 	g *rbacGuards,
@@ -393,14 +354,6 @@ func serveKBScopedFiles(
 	resourceCatalogs ...interfaces.ResourceCatalog,
 ) {
 	logger.Infof(context.Background(), "[Router] Serving KB-scoped files from /knowledge-bases/:id/files")
-	// API-key access mirrors /files: KB-restricted keys are denied (an
-	// arbitrary file_path under the KB owner tenant cannot be bounded to a
-	// key's allow-list), while full-access and tenant-wide retrieve keys pass
-	// — KBAccessRead still confines them to KBs they may read (own /
-	// org-shared / agent-visible), exactly as it does for a JWT Viewer. The
-	// route is declared to the gate with the retrieve policy so it is reachable
-	// at all; AllowFileServeAPIKey then applies the stricter not-KB-restricted
-	// constraint.
 	g.apiKeyRoute(r, http.MethodGet, "/knowledge-bases/:id/files",
 		apiKeyRetrieve(apiKeyFullAccess()),
 		middleware.AllowFileServeAPIKey(),
@@ -415,12 +368,6 @@ func serveKBScopedFiles(
 	)
 }
 
-// newKBScopedFileServeHandler builds the handler backing serveKBScopedFiles.
-// The effective (owner) tenant is taken from the request context, which
-// RequireKBAccess has already rewritten to the KB's source tenant. The owner
-// tenant's storage config is loaded via TenantService so the file is fetched
-// from the backend that actually holds it — the caller's own storage config is
-// irrelevant here.
 func newKBScopedFileServeHandler(
 	tenantService interfaces.TenantService,
 	globalFileService interfaces.FileService,
@@ -456,10 +403,6 @@ func newKBScopedFileServeHandlerWithResources(
 			return
 		}
 
-		// RequireKBAccess rewrote the request context tenant ID to the KB's
-		// owner (source) tenant for shared KBs; for own KBs it equals the
-		// caller's tenant. Either way it is the tenant that owns this KB's
-		// storage objects, so the requested path must belong to it.
 		ownerTenantID, ok := types.TenantIDFromContext(ctx)
 		if !ok || ownerTenantID == 0 {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized: workspace context missing"})
@@ -508,17 +451,9 @@ func newKBScopedFileServeHandlerWithResources(
 	}
 }
 
-// newMessageScopedFileServeHandler serves resources rendered inside one
-// assistant message. The message service first proves that the caller owns the
-// containing session. For cross-workspace resources we then require the
-// message's agent to still be shared from the resource-owning workspace.
-//
-// The owner tenant comes from the resource registry whenever possible. This
-// also keeps old messages (written before agent_tenant_id was populated)
-// readable without accepting a client-provided source workspace ID.
+// newMessageScopedFileServeHandler verifies session access and team ownership of message files.
 func newMessageScopedFileServeHandler(
 	messageService messageFileLookup,
-	agentShareService sharedAgentFileLookup,
 	tenantService interfaces.TenantService,
 	globalFileService interfaces.FileService,
 	storageResolver interfaces.StorageBackendResolver,
@@ -560,38 +495,15 @@ func newMessageScopedFileServeHandler(
 			}
 		}
 
-		ownerTenantID := message.AgentTenantID
+		ownerTenantID := callerTenantID
 		if resource != nil {
 			ownerTenantID = resource.TenantID
-			// A modern message records its source tenant. A resource from any
-			// other tenant cannot be smuggled through that message even if the
-			// caller happens to have another shared agent with the same ID.
-			if message.AgentTenantID != 0 && message.AgentTenantID != ownerTenantID {
-				c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: resource not accessible from this message"})
-				return
-			}
-		}
-		if ownerTenantID == 0 {
-			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: message resource workspace missing"})
-			return
+
 		}
 
 		if ownerTenantID != callerTenantID {
-			if message.AgentID == "" || agentShareService == nil {
-				c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: shared agent access required"})
-				return
-			}
-			agent, shareErr := agentShareService.GetSharedAgentForTenant(
-				ctx,
-				callerTenantID,
-				types.TenantRoleFromContext(ctx),
-				message.AgentID,
-				ownerTenantID,
-			)
-			if shareErr != nil || agent == nil || agent.TenantID != ownerTenantID {
-				c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: shared agent access revoked"})
-				return
-			}
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: resource outside team"})
+			return
 		}
 
 		// Registered resources carry authoritative tenant ownership. Legacy
@@ -652,7 +564,6 @@ func serveMessageScopedFiles(
 	r *gin.RouterGroup,
 	g *rbacGuards,
 	messageService interfaces.MessageService,
-	agentShareService interfaces.AgentShareService,
 	tenantService interfaces.TenantService,
 	globalFileService interfaces.FileService,
 	storageResolver interfaces.StorageBackendResolver,
@@ -666,7 +577,6 @@ func serveMessageScopedFiles(
 		g.Viewer(),
 		newMessageScopedFileServeHandler(
 			messageService,
-			agentShareService,
 			tenantService,
 			globalFileService,
 			storageResolver,

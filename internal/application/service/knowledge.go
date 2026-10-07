@@ -5,13 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	redis "github.com/redis/go-redis/v9"
 	"io"
 	"reflect"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
 	"reliquary/internal/application/repository"
@@ -67,15 +66,12 @@ type knowledgeService struct {
 	task            interfaces.TaskEnqueuer
 	taskInspector   interfaces.TaskInspector
 	redisClient     *redis.Client
-	kbShareService  interfaces.KBShareService
 	imageResolver   *docparser.ImageResolver
 	taskPendingRepo interfaces.TaskPendingOpsRepository
 
 	// In-memory fallbacks for in-memory fixtures (no Redis)
-	memFAQProgress      sync.Map // taskID -> *types.FAQImportProgress
-	memFAQRunningImport sync.Map // kbID -> *runningFAQImportInfo
-	wikiRepo            interfaces.WikiPageRepository
-	wikiService         interfaces.WikiPageService
+	wikiRepo    interfaces.WikiPageRepository
+	wikiService interfaces.WikiPageService
 
 	// spanTracker records the per-attempt span tree for the parsing
 	// pipeline. Best-effort: a nil tracker (test harness) is safely
@@ -88,7 +84,6 @@ type knowledgeService struct {
 const (
 	manualContentMaxLength = 200000
 	manualFileExtension    = ".md"
-	faqImportBatchSize     = 50 // 每批处理的FAQ条目数
 )
 
 // NewKnowledgeService creates a new knowledge service instance
@@ -113,7 +108,6 @@ func NewKnowledgeService(
 	retrieveEngine interfaces.RetrieveEngineRegistry,
 	ownership retriever.TenantStoreOwnership,
 	redisClient *redis.Client,
-	kbShareService interfaces.KBShareService,
 	imageResolver *docparser.ImageResolver,
 	wikiRepo interfaces.WikiPageRepository,
 	wikiService interfaces.WikiPageService,
@@ -142,7 +136,6 @@ func NewKnowledgeService(
 		retrieveEngine:  retrieveEngine,
 		ownership:       ownership,
 		redisClient:     redisClient,
-		kbShareService:  kbShareService,
 		imageResolver:   imageResolver,
 		wikiRepo:        wikiRepo,
 		wikiService:     wikiService,
@@ -506,37 +499,6 @@ func (s *knowledgeService) GetKnowledgeByIDOnly(ctx context.Context, id string) 
 	return s.repo.GetKnowledgeByIDOnly(ctx, id)
 }
 
-// GetOwningKBCreatorID walks knowledge_id -> kb_id -> KB.CreatorID for
-// the per-KB ownership lookups in handler/rbac_lookups.go (PR 5, #1303).
-// Both fetches are tenant-scoped (GetKnowledgeByID reads tenant from
-// ctx; GetKnowledgeBaseByID is then constrained to the same tenant by
-// the KB service), so a cross-tenant id surfaces as the underlying
-// "not found" error and the caller maps it to ErrResourceNotFound. The
-// KB row itself is not returned so callers can't accidentally widen
-// their scope past "needed the creator id".
-func (s *knowledgeService) GetOwningKBCreatorID(ctx context.Context, knowledgeID string) (string, error) {
-	// Resolve via the repository directly: ownership only needs the
-	// knowledge -> kb_id link, so we deliberately skip the service-level
-	// GetKnowledgeByID (which also eagerly loads tags) to keep this lookup
-	// minimal and tenant-scoped.
-	tenantID, ok := ctx.Value(types.TenantIDContextKey).(uint64)
-	if !ok {
-		return "", werrors.NewUnauthorizedError("Workspace ID not found in context")
-	}
-	knowledge, err := s.repo.GetKnowledgeByID(ctx, tenantID, knowledgeID)
-	if err != nil {
-		return "", err
-	}
-	kb, err := s.kbService.GetKnowledgeBaseByID(ctx, knowledge.KnowledgeBaseID)
-	if err != nil {
-		return "", err
-	}
-	if kb == nil {
-		return "", repository.ErrKnowledgeBaseNotFound
-	}
-	return kb.CreatorID, nil
-}
-
 // ListKnowledgeByKnowledgeBaseID returns all knowledge entries in a knowledge base
 func (s *knowledgeService) ListKnowledgeByKnowledgeBaseID(ctx context.Context,
 	kbID string,
@@ -783,53 +745,6 @@ func (s *knowledgeService) GetKnowledgeBatch(ctx context.Context,
 	return s.repo.GetKnowledgeBatch(ctx, tenantID, ids)
 }
 
-// GetKnowledgeBatchWithSharedAccess retrieves knowledge by IDs, including items from shared KBs the user has access to.
-// Used when building search targets so that @mentioned files from shared KBs are included.
-func (s *knowledgeService) GetKnowledgeBatchWithSharedAccess(ctx context.Context,
-	tenantID uint64, ids []string,
-) ([]*types.Knowledge, error) {
-	if len(ids) == 0 {
-		return nil, nil
-	}
-	ownList, err := s.repo.GetKnowledgeBatch(ctx, tenantID, ids)
-	if err != nil {
-		return nil, err
-	}
-	foundSet := make(map[string]bool)
-	for _, k := range ownList {
-		if k != nil {
-			foundSet[k.ID] = true
-		}
-	}
-	userIDVal := ctx.Value(types.UserIDContextKey)
-	if userIDVal == nil {
-		return ownList, nil
-	}
-	userID, ok := userIDVal.(string)
-	if !ok || userID == "" {
-		return ownList, nil
-	}
-	// Plan 3: shared-KB permission is keyed on (tenant, tenant_role)
-	// rather than user. callerTenantRole drives the 3-D cap.
-	callerTenantRole := types.TenantRoleFromContext(ctx)
-	for _, id := range ids {
-		if foundSet[id] {
-			continue
-		}
-		k, err := s.repo.GetKnowledgeByIDOnly(ctx, id)
-		if err != nil || k == nil || k.KnowledgeBaseID == "" {
-			continue
-		}
-		hasPermission, err := s.kbShareService.HasTenantKBPermission(ctx, k.KnowledgeBaseID, tenantID, callerTenantRole, types.OrgRoleViewer)
-		if err != nil || !hasPermission {
-			continue
-		}
-		foundSet[k.ID] = true
-		ownList = append(ownList, k)
-	}
-	return ownList, nil
-}
-
 // SetKnowledgeTags replaces all tags for a single knowledge entry.
 func (s *knowledgeService) SetKnowledgeTags(ctx context.Context, knowledgeID string, tagIDs []string) error {
 	return s.repo.SetKnowledgeTags(ctx, knowledgeID, tagIDs)
@@ -1072,8 +987,6 @@ func findKnowledgeByID(list []*types.Knowledge, id string) *types.Knowledge {
 	return nil
 }
 
-// SearchKnowledge searches knowledge items by keyword across the tenant and shared knowledge bases.
-// fileTypes: optional list of file extensions to filter by (e.g., ["csv", "xlsx"])
 func (s *knowledgeService) SearchKnowledge(ctx context.Context, keyword string, offset, limit int, fileTypes []string) ([]*types.Knowledge, bool, int64, error) {
 	tenantID, ok := ctx.Value(types.TenantIDContextKey).(uint64)
 	if !ok {
@@ -1092,33 +1005,12 @@ func (s *knowledgeService) SearchKnowledge(ctx context.Context, keyword string, 
 		}
 	}
 
-	// Shared knowledge bases (document type only). Plan 3 of #1303 keys
-	// the share lookup on (tenantID, callerTenantRole); userID is no
-	// longer load-bearing for org-share access.
-	if userIDVal := ctx.Value(types.UserIDContextKey); userIDVal != nil {
-		if userID, ok := userIDVal.(string); ok && userID != "" {
-			callerTenantRole := types.TenantRoleFromContext(ctx)
-			sharedList, err := s.kbShareService.ListSharedKnowledgeBases(ctx, tenantID, callerTenantRole)
-			if err == nil {
-				for _, info := range sharedList {
-					if info != nil && info.KnowledgeBase != nil && info.KnowledgeBase.Type == types.KnowledgeBaseTypeDocument {
-						scopes = append(scopes, types.KnowledgeSearchScope{
-							TenantID: info.SourceTenantID,
-							KBID:     info.KnowledgeBase.ID,
-						})
-					}
-				}
-			}
-		}
-	}
-
 	if len(scopes) == 0 {
 		return nil, false, 0, nil
 	}
 	return s.repo.SearchKnowledgeInScopes(ctx, scopes, keyword, offset, limit, fileTypes)
 }
 
-// SearchKnowledgeForScopes searches knowledge within the given scopes (e.g. for shared agent context).
 func (s *knowledgeService) SearchKnowledgeForScopes(ctx context.Context, scopes []types.KnowledgeSearchScope, keyword string, offset, limit int, fileTypes []string) ([]*types.Knowledge, bool, int64, error) {
 	if len(scopes) == 0 {
 		return nil, false, 0, nil

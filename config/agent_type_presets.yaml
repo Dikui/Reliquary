@@ -16,33 +16,31 @@
 #   any_of:   KB must expose at least ONE of the listed capability names.
 #   all_of:   KB must expose ALL of the listed capability names.
 #   none_of:  KB must expose NONE of the listed capability names.
-# Capability names: vector, keyword, wiki, graph, faq.
 # An empty kb_filter (or kb_filter absent) means "any KB is allowed".
 #
 # NOTE: In the default "tool-driven" mode, the frontend DERIVES the any_of
 # predicate from `config.allowed_tools` via `deriveKbFilterFromTools` (see
 # `frontend/src/utils/tool-capabilities.ts`). You only need to write an
 # explicit `kb_filter` here when the preset requires a business rule that
-# can't be inferred from the tools alone (e.g. `none_of: [faq]` on
 # data-analysis). Keeping the map lean avoids the "two sources of truth"
 # drift that used to plague this file.
 
 agent_type_presets:
   # --------------------------------------------------------------------------
   # RAG Q&A — classic evidence-based retrieval over chunk indexes.
-  # Best for document / FAQ KBs without wiki.
+  # Best for document KBs without wiki.
   # --------------------------------------------------------------------------
   - id: "rag-qa"
     i18n:
       default:
         label: "RAG Q&A"
-        description: "Evidence-based retrieval over document chunks. Best for document or FAQ KBs without Wiki."
+        description: "Evidence-based retrieval over document chunks. Best for document KBs without Wiki."
       zh-CN:
         label: "RAG 问答"
-        description: "基于文档分块的检索式问答，适合未启用 Wiki 的文档 / FAQ 知识库。"
+        description: "基于文档分块的检索式问答，适合未启用 Wiki 的文档知识库。"
       zh-TW:
         label: "RAG 問答"
-        description: "基於文件分塊的檢索式問答，適合未啟用 Wiki 的文件 / FAQ 知識庫。"
+        description: "基於文件分塊的檢索式問答，適合未啟用 Wiki 的文件知識庫。"
     config:
       system_prompt_id: "progressive_rag_agent"
       temperature: 0.7
@@ -59,7 +57,6 @@ agent_type_presets:
         - "knowledge_report_anomaly"
         - "knowledge_import_url"
       retain_retrieval_history: false
-      faq_priority_enabled: true
       kb_selection_mode: "all"
     # kb_filter derived from allowed_tools: any_of = [vector, keyword]
 
@@ -127,14 +124,12 @@ agent_type_presets:
         - "knowledge_report_anomaly"
         - "knowledge_import_url"
       retain_retrieval_history: false
-      faq_priority_enabled: true
       kb_selection_mode: "all"
     # Hybrid is meant to be the most flexible preset: the agent adapts at
     # runtime based on what each KB exposes.
     #  - KB has wiki + chunks  → full "wiki-first, RAG-verify" workflow
     #  - KB has only chunks    → fallback to pure RAG (see prompt's "Fallback rules")
     #  - KB has only wiki      → fallback to wiki-only answering
-    #  - FAQ KB                → allowed; knowledge_search still works on FAQ chunks
     # kb_filter derived from allowed_tools: any_of = [vector, keyword, wiki].
     # We only require that the KB expose AT LEAST ONE retrievable surface so
     # the agent has SOMETHING to call. KBs with zero indexing (e.g. graph-only
@@ -179,11 +174,8 @@ agent_type_presets:
     # ChunkTypeTableColumn chunks, which are produced by the normal RAG
     # ingestion pipeline (vector / keyword indexing on). The any_of predicate
     # is derived automatically from allowed_tools; we only need to add the
-    # FAQ exclusion here since it's a business rule the tool map can't express
-    # (FAQ KBs technically have vector/keyword chunks but they're Q&A pairs,
     # not tabular data, so data_schema would produce garbage on them).
     kb_filter:
-      none_of: ["faq"]
 
   # --------------------------------------------------------------------------
   # Custom — no preset; user configures everything by hand.

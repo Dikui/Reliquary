@@ -823,7 +823,6 @@ function keyCapabilityLabels(key: TenantAPIKey): string[] {
     manage_web_search: t('integrations.api.capabilityManageWebSearch'),
     run_evaluations: t('integrations.api.capabilityRunEvaluations'),
     manage_members: t('integrations.api.capabilityManageMembers'),
-    manage_spaces: t('integrations.api.capabilityManageSpaces'),
     manage_tenant_settings: t('integrations.api.capabilityManageTenantSettings'),
   }
   return (key.capabilities ?? [])
@@ -1103,7 +1102,7 @@ async function loadAPIKeys() {
 async function loadKnowledgeBaseOptions() {
   knowledgeBasesLoading.value = true
   try {
-    const resp: any = await listKnowledgeBases({ creator: 'all' })
+    const resp: any = await listKnowledgeBases()
     const rows = Array.isArray(resp?.data) ? resp.data : []
     knowledgeBases.value = rows.map((item: any) => ({
       id: String(item.id),
@@ -1120,7 +1119,7 @@ async function loadAgents() {
   agentsLoading.value = true
   agentsError.value = ''
   try {
-    const resp = await listAgents({ creator: 'all' }) as any
+    const resp = await listAgents() as any
     agents.value = Array.isArray(resp?.data) ? resp.data : []
     ensurePlaygroundAgent()
   } catch (err: any) {

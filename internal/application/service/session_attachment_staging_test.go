@@ -123,7 +123,7 @@ func TestStageSessionAttachmentsReconcilesAndSkipsExisting(t *testing.T) {
 	require.NoError(t, err)
 	stalePath := sandbox.SessionInputRoot + "/stale/old.txt"
 	manager := &stagingSandboxManager{
-		sandboxType: sandbox.SandboxTypeCube,
+		sandboxType: sandbox.SandboxTypeDocker,
 		files:       map[string][]byte{stalePath: []byte("old")},
 	}
 	fileService := &stagingFileService{
@@ -219,7 +219,7 @@ func TestStageSessionAttachmentsResolvesURLFromTemporaryDocument(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	manager := &stagingSandboxManager{sandboxType: sandbox.SandboxTypeCube}
+	manager := &stagingSandboxManager{sandboxType: sandbox.SandboxTypeDocker}
 	fileService := &stagingFileService{
 		files: map[string][]byte{resourceRef: []byte("content")},
 	}
@@ -248,7 +248,7 @@ func TestStageSessionAttachmentsResolvesURLFromTemporaryDocument(t *testing.T) {
 
 func TestStageSessionAttachmentsSkipsMissingTemporaryDocument(t *testing.T) {
 	db := stagingTempDocDB(t)
-	manager := &stagingSandboxManager{sandboxType: sandbox.SandboxTypeCube}
+	manager := &stagingSandboxManager{sandboxType: sandbox.SandboxTypeDocker}
 	fileService := &stagingFileService{files: map[string][]byte{}}
 	service := &agentService{
 		db:              db,
@@ -288,7 +288,7 @@ func TestStageSessionAttachmentsIgnoresWrongTenant(t *testing.T) {
 		ExpiresAt:   time.Now().Add(time.Hour),
 	}).Error)
 
-	manager := &stagingSandboxManager{sandboxType: sandbox.SandboxTypeCube}
+	manager := &stagingSandboxManager{sandboxType: sandbox.SandboxTypeDocker}
 	fileService := &stagingFileService{
 		files: map[string][]byte{resourceRef: []byte("content")},
 	}
@@ -337,7 +337,7 @@ func TestStageSessionAttachmentsKeepsExistingURLWithoutLookup(t *testing.T) {
 		ExpiresAt:   time.Now().Add(time.Hour),
 	}).Error)
 
-	manager := &stagingSandboxManager{sandboxType: sandbox.SandboxTypeCube}
+	manager := &stagingSandboxManager{sandboxType: sandbox.SandboxTypeDocker}
 	fileService := &stagingFileService{
 		files: map[string][]byte{attachment.URL: []byte("keep")},
 	}

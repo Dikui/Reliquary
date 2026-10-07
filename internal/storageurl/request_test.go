@@ -201,20 +201,6 @@ func TestDefaultMode(t *testing.T) {
 	assert.Equal(t, ModeHandle, DefaultMode(ctx), "a typo must degrade to the safe default")
 }
 
-// Anonymous surfaces (embed channels) pin the mode: neither the query parameter
-// nor the deployment default may hand a visitor a credential-free URL. The
-// downgrade is silent so a client that forwards the parameter keeps working.
-func TestResolveMode_ForcedHandleModeWins(t *testing.T) {
-	t.Setenv(EnvVar, "public")
-	ctx := WithForcedHandleMode(context.Background())
-
-	for _, queryValue := range []string{"", "public", "handle", "nonsense"} {
-		mode, err := ResolveMode(ctx, queryValue)
-		require.NoError(t, err, "queryValue=%q", queryValue)
-		assert.Equal(t, ModeHandle, mode, "queryValue=%q", queryValue)
-	}
-}
-
 // A KB-restricted API key is denied the /files proxy, so it must not receive
 // anonymous file URLs through this parameter either.
 func TestResolveMode_RejectsPublicForKBRestrictedKey(t *testing.T) {

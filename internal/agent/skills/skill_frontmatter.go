@@ -2,12 +2,11 @@ package skills
 
 import (
 	"fmt"
+	"gopkg.in/yaml.v3"
 	"reflect"
 	"regexp"
 	"strings"
 	"unicode"
-
-	"gopkg.in/yaml.v3"
 )
 
 // UnmarshalSkillFrontmatter decodes the YAML between SKILL.md's --- markers.

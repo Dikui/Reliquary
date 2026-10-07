@@ -28,8 +28,7 @@ type RetrieveParams struct {
 	KnowledgeBaseIDs []string
 	// Knowledge IDs
 	KnowledgeIDs []string
-	// Tag IDs for filtering (used for FAQ priority filtering)
-	TagIDs []string
+	TagIDs       []string
 	// Excluded knowledge IDs
 	ExcludeKnowledgeIDs []string
 	// Excluded chunk IDs
@@ -37,8 +36,7 @@ type RetrieveParams struct {
 	// Number of results to return
 	TopK int
 	// Similarity threshold
-	Threshold float64
-	// Knowledge type (e.g., "faq", "manual") - determines which index to use
+	Threshold     float64
 	KnowledgeType string
 	// Additional parameters, different retrievers may require different parameters
 	AdditionalParams map[string]interface{}

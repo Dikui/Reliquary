@@ -720,12 +720,6 @@ func (r *knowledgeRepository) CountKnowledgeByStatus(
 	return count, nil
 }
 
-// SearchKnowledge searches knowledge items by keyword across the tenant
-// If keyword is empty, returns recent files
-// Only returns documents from document-type knowledge bases (excludes FAQ)
-// Returns (results, hasMore, error)
-// FindByMetadataKey finds a knowledge item by a key-value pair in the metadata JSON column.
-// Uses Postgres jsonb operator: metadata->>'key' = 'value'.
 func (r *knowledgeRepository) FindByMetadataKey(
 	ctx context.Context,
 	tenantID uint64,

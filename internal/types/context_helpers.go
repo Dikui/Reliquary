@@ -150,19 +150,9 @@ func IsSystemAdminFromContext(ctx context.Context) bool {
 	return v
 }
 
-// SessionTenantIDFromContext extracts the session-owner tenant ID from ctx.
-// Falls back to TenantIDFromContext when the session key is absent.
-func SessionTenantIDFromContext(ctx context.Context) (uint64, bool) {
-	v, ok := ctx.Value(SessionTenantIDContextKey).(uint64)
-	if ok && v != 0 {
-		return v, true
-	}
-	return TenantIDFromContext(ctx)
-}
+func SessionTenantIDFromContext(ctx context.Context) (uint64, bool) { return TenantIDFromContext(ctx) }
 
-// WithSessionID returns a derived context carrying the current session ID.
-// Stateful sandbox backends (e.g. CubeSandbox) rely on this key to route
-// script execution to the per-session persistent MicroVM instance.
+// WithSessionID carries the session ID for Docker execution.
 func WithSessionID(ctx context.Context, sessionID string) context.Context {
 	if sessionID == "" {
 		return ctx
@@ -180,10 +170,7 @@ func SessionIDFromContext(ctx context.Context) (string, bool) {
 	return v, ok && v != ""
 }
 
-// WithSandboxTenantID records the session-owner tenant that session→sandbox
-// bindings must be keyed by, independently of the tenant the rest of the
-// pipeline runs as. Callers set it wherever they swap TenantIDContextKey for a
-// shared agent's workspace.
+// WithSandboxTenantID carries the team ID for background Docker operations.
 func WithSandboxTenantID(ctx context.Context, tenantID uint64) context.Context {
 	if tenantID == 0 {
 		return ctx
@@ -191,10 +178,7 @@ func WithSandboxTenantID(ctx context.Context, tenantID uint64) context.Context {
 	return context.WithValue(ctx, SandboxTenantIDContextKey, tenantID)
 }
 
-// SandboxTenantIDFromContext returns the tenant to key session→sandbox
-// bindings by. It falls back to TenantIDFromContext, which is correct for every
-// path that never borrows another workspace's tenant: there the request tenant
-// already IS the session owner.
+// SandboxTenantIDFromContext resolves the team ID for Docker bindings.
 func SandboxTenantIDFromContext(ctx context.Context) (uint64, bool) {
 	if ctx == nil {
 		return 0, false

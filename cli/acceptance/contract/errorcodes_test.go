@@ -151,8 +151,6 @@ func identToErrorCode(name string) (cmdutil.ErrorCode, bool) {
 		return cmdutil.CodeAuthBadCredential, true
 	case "CodeAuthForbidden":
 		return cmdutil.CodeAuthForbidden, true
-	case "CodeAuthCrossTenantBlocked":
-		return cmdutil.CodeAuthCrossTenantBlocked, true
 	case "CodeAuthTenantMismatch":
 		return cmdutil.CodeAuthTenantMismatch, true
 	case "CodeResourceNotFound":

@@ -1,6 +1,5 @@
 /**
  * Helpers for short-TTL caches of API payloads that vary by Accept-Language
- * (built-in agent names/descriptions, shared-agent lists, …).
  *
  * The request must stamp the locale it was *started* with. Stamping
  * getCurrentLanguage() after await lets a zh-CN response be marked fresh for

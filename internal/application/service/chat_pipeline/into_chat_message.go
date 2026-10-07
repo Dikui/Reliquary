@@ -39,34 +39,6 @@ func (p *PluginIntoChatMessage) OnEvent(ctx context.Context,
 		"template_len":     len(chatManage.SummaryConfig.ContextTemplate),
 	})
 
-	// Separate FAQ and document results when FAQ priority is enabled
-	var faqResults, docResults []*types.SearchResult
-	var hasHighConfidenceFAQ bool
-
-	if chatManage.FAQPriorityEnabled {
-		for _, result := range chatManage.MergeResult {
-			if result.ChunkType == string(types.ChunkTypeFAQ) {
-				faqResults = append(faqResults, result)
-				// Check if this FAQ has high confidence (above direct answer threshold)
-				if result.Score >= chatManage.FAQDirectAnswerThreshold && !hasHighConfidenceFAQ {
-					hasHighConfidenceFAQ = true
-					pipelineInfo(ctx, "IntoChatMessage", "high_confidence_faq", map[string]interface{}{
-						"chunk_id":  result.ID,
-						"score":     fmt.Sprintf("%.4f", result.Score),
-						"threshold": chatManage.FAQDirectAnswerThreshold,
-					})
-				}
-			} else {
-				docResults = append(docResults, result)
-			}
-		}
-		pipelineInfo(ctx, "IntoChatMessage", "faq_separation", map[string]interface{}{
-			"faq_count":           len(faqResults),
-			"doc_count":           len(docResults),
-			"has_high_confidence": hasHighConfidenceFAQ,
-		})
-	}
-
 	// 验证用户查询的安全性
 	safeQuery, isValid := utils.ValidateInput(chatManage.Query)
 	if !isValid {
@@ -127,44 +99,19 @@ func (p *PluginIntoChatMessage) OnEvent(ctx context.Context,
 
 	// Collect unique document metadata (title + description), once per knowledge
 	allResults := chatManage.MergeResult
-	if chatManage.FAQPriorityEnabled && len(faqResults) > 0 {
-		allResults = append(faqResults, docResults...)
-	}
+
 	docHeader := buildDocumentHeader(allResults)
 	if docHeader != "" {
 		contextsBuilder.WriteString(docHeader)
 		contextsBuilder.WriteString("\n")
 	}
 
-	// Build contexts string based on FAQ priority strategy
-	if chatManage.FAQPriorityEnabled && len(faqResults) > 0 {
-		contextsBuilder.WriteString("<source type=\"faq\" priority=\"high\">\n")
-		for i, result := range faqResults {
-			passage := getEnrichedPassageForChat(ctx, result)
-			if hasHighConfidenceFAQ && i == 0 {
-				contextsBuilder.WriteString(fmt.Sprintf("<context id=\"FAQ-%d\" match=\"exact\">%s</context>\n", i+1, passage))
-			} else {
-				contextsBuilder.WriteString(fmt.Sprintf("<context id=\"FAQ-%d\">%s</context>\n", i+1, passage))
-			}
+	for i, result := range chatManage.MergeResult {
+		passage := getEnrichedPassageForChat(ctx, result)
+		if i > 0 {
+			contextsBuilder.WriteString("\n")
 		}
-		contextsBuilder.WriteString("</source>\n")
-
-		if len(docResults) > 0 {
-			contextsBuilder.WriteString("<source type=\"document\" priority=\"supplementary\">\n")
-			for i, result := range docResults {
-				passage := getEnrichedPassageForChat(ctx, result)
-				contextsBuilder.WriteString(fmt.Sprintf("<context id=\"DOC-%d\">%s</context>\n", i+1, passage))
-			}
-			contextsBuilder.WriteString("</source>")
-		}
-	} else {
-		for i, result := range chatManage.MergeResult {
-			passage := getEnrichedPassageForChat(ctx, result)
-			if i > 0 {
-				contextsBuilder.WriteString("\n")
-			}
-			contextsBuilder.WriteString(fmt.Sprintf("<context id=\"%d\">%s</context>", i+1, passage))
-		}
+		contextsBuilder.WriteString(fmt.Sprintf("<context id=\"%d\">%s</context>", i+1, passage))
 	}
 
 	chatManage.RenderedContexts = contextsBuilder.String()
@@ -194,7 +141,6 @@ func (p *PluginIntoChatMessage) OnEvent(ctx context.Context,
 	pipelineInfo(ctx, "IntoChatMessage", "output", map[string]interface{}{
 		"session_id":                 chatManage.SessionID,
 		"user_content_len":           len(chatManage.UserContent),
-		"faq_priority":               chatManage.FAQPriorityEnabled,
 		"intent":                     chatManage.Intent,
 		"image_description":          chatManage.ImageDescription,
 		"chat_model_supports_vision": chatManage.ChatModelSupportsVision,

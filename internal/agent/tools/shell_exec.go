@@ -1,14 +1,14 @@
 // Package tools — shell_exec.
 //
 // General shell command execution primitive for the agent. The LLM can freely
-// explore and operate inside its session-scoped Cube MicroVM: inspect files,
+// explore and operate inside its session-scoped Docker container: inspect files,
 // transform data, run programs, install dependencies, and prepare or verify
 // skill outputs.
 //
 // Design notes:
 //
 //   - Session-sandbox capability: registration is feature-gated on the
-//     sandbox backend exposing SandboxCommandExecutor (Cube, E2B, Docker).
+//     sandbox backend exposing SandboxCommandExecutor (Docker).
 //     shell_exec never runs on the Reliquary host.
 //   - Session-scoped: the sandbox is resolved from ToolExecContext.SessionID
 //     so the LLM cannot execute against a foreign session, and installed
@@ -66,7 +66,7 @@ type SandboxCommandExecutor interface {
 // bounding the LLM context blast radius.
 const (
 	// defaultShellExecWorkDir is where commands land when the caller omits
-	// work_dir. Matches CubeSandbox.Execute's remote directory convention.
+	// work_dir. Matches the Docker sandbox directory convention.
 	defaultShellExecWorkDir = "/workspace"
 	// defaultShellExecTimeout is applied when the caller omits timeout_sec.
 	// 120s is enough for most pip installs; heavier installs can opt in via
@@ -91,7 +91,7 @@ const (
 )
 
 // Blacklist patterns. These are cheap sanity checks, not a security
-// perimeter — the Cube MicroVM session isolation is the real perimeter.
+// perimeter. Docker container session isolation provides the boundary.
 // The intent is to prevent the LLM from bricking its own session with a
 // hallucinated one-liner (e.g. `rm -rf /`).
 //
@@ -242,7 +242,7 @@ var shellExecTool = BaseTool{
   are refused up-front. Cleaning up your own scratch dir (e.g.
   ` + "`rm -rf /workspace/tmp`" + `) is fine.
 - Only available when the session sandbox advertises a command executor
-  (Cube, E2B, Docker). The command never runs on the Reliquary host.`,
+  (Docker). The command never runs on the Reliquary host.`,
 	schema: utils.GenerateSchema[ShellExecInput](),
 }
 
@@ -344,7 +344,7 @@ type SkillEnvCapture func(ctx context.Context, skillName string, pairs map[strin
 
 // NewShellExecTool constructs the tool. `executor` MUST NOT be nil:
 // callers should feature-gate registration when the sandbox backend
-// does not support ad-hoc shell execution (i.e. is not Cube).
+// does not support ad-hoc shell execution (i.e. is disabled).
 func NewShellExecTool(executor SandboxCommandExecutor, envResolver skills.SkillEnvResolver) *ShellExecTool {
 	return &ShellExecTool{
 		BaseTool:     shellExecTool,

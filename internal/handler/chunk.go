@@ -13,20 +13,6 @@ import (
 	secutils "reliquary/internal/utils"
 )
 
-// ChunkHandler defines HTTP handlers for chunk operations.
-//
-// All KB-access checks (own / org-shared / via shared agent) are now
-// performed by the route-level g.KBAccessRead*FromKnowledgeIDParam /
-// g.KBAccessWrite*FromKnowledgeIDParam / g.KBAccess*FromChunkIDParam
-// guards in router.go — the guard rewrites c.Request.Context() to
-// carry the effective tenant ID, so the handler reads tenant from
-// context the way it always did.
-//
-// kgService is retained because the route-level *creator-ownership*
-// lookup KBCreatorLookupFromKnowledgeIDParam still walks
-// knowledge_id -> kb_id to resolve creator_id (separate axis from
-// access — that lookup answers "is the caller the creator of THIS
-// resource", not "does the caller's tenant have access").
 type ChunkHandler struct {
 	service   interfaces.ChunkService
 	kgService interfaces.KnowledgeService
@@ -39,7 +25,7 @@ func NewChunkHandler(service interfaces.ChunkService, kgService interfaces.Knowl
 
 // GetChunkByIDOnly godoc
 // @Summary      通过ID获取分块
-// @Description  仅通过分块ID获取分块详情（不需要knowledge_id）；支持共享知识库下的分块访问
+// @Description  仅通过分块ID获取分块详情（不需要knowledge_id）
 // @Tags         分块管理
 // @Accept       json
 // @Produce      json
@@ -133,8 +119,6 @@ func (h *ChunkHandler) ListKnowledgeChunks(c *gin.Context) {
 		}
 	}
 
-	// The route-level guard has rewritten the request's tenant context
-	// to the effective tenant for shared KBs.
 	result, err := h.service.ListPagedChunksByKnowledgeID(ctx, knowledgeID, &pagination, chunkType)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, nil)

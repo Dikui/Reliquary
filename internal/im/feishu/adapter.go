@@ -87,10 +87,6 @@ func NewAdapter(region Region, appID, appSecret, verificationToken, encryptKey, 
 	}, nil
 }
 
-// validateAPIBaseURL checks that a custom Feishu/Lark API base URL uses an
-// http(s) scheme and passes SSRF validation. Empty or the region default is
-// allowed without further checks. Mirrors wecom.validateEndpointURL but allows
-// plain http for internal-network reverse proxies that terminate TLS at nginx.
 func validateAPIBaseURL(endpoint, defaultEndpoint string) error {
 	if endpoint == "" || endpoint == defaultEndpoint {
 		return nil

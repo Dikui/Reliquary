@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"gorm.io/gorm"
 
@@ -171,19 +170,15 @@ func (r *chunkRepository) ListChunksByKnowledgeIDAndTypes(
 }
 
 // ListPagedChunksByKnowledgeID lists chunks for a knowledge ID with pagination
-func (r *chunkRepository) ListPagedChunksByKnowledgeID(
-	ctx context.Context,
+func (r *chunkRepository) ListPagedChunksByKnowledgeID(ctx context.Context,
 	tenantID uint64,
 	knowledgeID string,
 	page *types.Pagination,
 	chunkType []types.ChunkType,
 	tagIDs []string,
 	keyword string,
-	searchField string,
 	sortOrder string,
-	knowledgeType string,
-	isEnabled *bool,
-) ([]*types.Chunk, int64, error) {
+	isEnabled *bool) ([]*types.Chunk, int64, error) {
 	var chunks []*types.Chunk
 	var total int64
 	keyword = strings.TrimSpace(keyword)
@@ -200,23 +195,7 @@ func (r *chunkRepository) ListPagedChunksByKnowledgeID(
 		if keyword != "" {
 			like := "%" + keyword + "%"
 
-			// Document type: search content only
-			if knowledgeType != types.KnowledgeTypeFAQ {
-				db = db.Where("content LIKE ?", like)
-				return db
-			}
-
-			// FAQ type: search based on searchField
-			switch searchField {
-			case "standard_question":
-				db = db.Where("metadata->>'standard_question' ILIKE ?", like)
-			case "similar_questions":
-				db = db.Where("(metadata->'similar_questions')::text ILIKE ?", like)
-			case "answers":
-				db = db.Where("(metadata->'answers')::text ILIKE ?", like)
-			default:
-				db = db.Where("(content ILIKE ? OR metadata::text ILIKE ?)", like, like)
-			}
+			db = db.Where("content LIKE ?", like)
 		}
 		return db
 	}
@@ -233,18 +212,11 @@ func (r *chunkRepository) ListPagedChunksByKnowledgeID(
 
 	// Determine sort order based on knowledge type
 	var orderClause string
-	if knowledgeType == types.KnowledgeTypeFAQ {
-		// FAQ: sort by updated_at
-		orderClause = "updated_at DESC"
-		if sortOrder == "asc" {
-			orderClause = "updated_at ASC"
-		}
-	} else {
-		// Document: sort by chunk_index
-		orderClause = "chunk_index ASC"
-		if sortOrder == "desc" {
-			orderClause = "chunk_index DESC"
-		}
+
+	// Document: sort by chunk_index
+	orderClause = "chunk_index ASC"
+	if sortOrder == "desc" {
+		orderClause = "chunk_index DESC"
 	}
 
 	if err := dataQuery.
@@ -601,175 +573,6 @@ func (r *chunkRepository) DeleteUnindexedChunks(
 	return chunks, nil
 }
 
-// ListAllFAQChunksByKnowledgeID lists all FAQ chunks for a knowledge ID (only essential fields for efficiency)
-// Uses batch query to handle large datasets
-func (r *chunkRepository) ListAllFAQChunksByKnowledgeID(
-	ctx context.Context,
-	tenantID uint64,
-	knowledgeID string,
-) ([]*types.Chunk, error) {
-	const batchSize = 1000 // 每批查询1000条
-	var allChunks []*types.Chunk
-	offset := 0
-
-	for {
-		var batchChunks []*types.Chunk
-		if err := r.db.WithContext(ctx).
-			Select("id, content_hash").
-			Where("tenant_id = ? AND knowledge_id = ? AND chunk_type = ?", tenantID, knowledgeID, types.ChunkTypeFAQ).
-			Offset(offset).
-			Limit(batchSize).
-			Find(&batchChunks).Error; err != nil {
-			return nil, err
-		}
-
-		// 如果没有查询到数据，说明已经查询完毕
-		if len(batchChunks) == 0 {
-			break
-		}
-
-		allChunks = append(allChunks, batchChunks...)
-
-		// 如果返回的数据少于批次大小，说明已经是最后一批
-		if len(batchChunks) < batchSize {
-			break
-		}
-
-		offset += batchSize
-	}
-
-	return allChunks, nil
-}
-
-// ListAllFAQChunksWithMetadataByKnowledgeBaseID lists all FAQ chunks for a knowledge base ID
-// Returns ID and Metadata fields for duplicate question checking
-// Uses batch query to handle large datasets
-func (r *chunkRepository) ListAllFAQChunksWithMetadataByKnowledgeBaseID(
-	ctx context.Context,
-	tenantID uint64,
-	kbID string,
-) ([]*types.Chunk, error) {
-	const batchSize = 1000 // 每批查询1000条
-	var allChunks []*types.Chunk
-	offset := 0
-
-	for {
-		var batchChunks []*types.Chunk
-		if err := r.db.WithContext(ctx).
-			Select("id, metadata").
-			Where("tenant_id = ? AND knowledge_base_id = ? AND chunk_type = ? AND status = ?",
-				tenantID, kbID, types.ChunkTypeFAQ, types.ChunkStatusIndexed).
-			Offset(offset).
-			Limit(batchSize).
-			Find(&batchChunks).Error; err != nil {
-			return nil, err
-		}
-
-		// 如果没有查询到数据，说明已经查询完毕
-		if len(batchChunks) == 0 {
-			break
-		}
-
-		allChunks = append(allChunks, batchChunks...)
-
-		// 如果返回的数据少于批次大小，说明已经是最后一批
-		if len(batchChunks) < batchSize {
-			break
-		}
-
-		offset += batchSize
-	}
-
-	return allChunks, nil
-}
-
-// FindFAQChunkWithDuplicateQuestion finds a single FAQ chunk whose standard_question or
-// similar_questions overlap with the given question list.
-// Uses PostgreSQL JSON queries.
-func (r *chunkRepository) FindFAQChunkWithDuplicateQuestion(
-	ctx context.Context,
-	tenantID uint64,
-	kbID string,
-	excludeChunkID string,
-	questions []string,
-) (*types.Chunk, error) {
-	if len(questions) == 0 {
-		return nil, nil
-	}
-
-	// Every non-deleted status counts, including ChunkStatusStored: a chunk that
-	// is written but not yet indexed is a sibling create still in flight, and
-	// skipping it lets a retried request insert a second row for the same
-	// question. Soft-deleted rows are excluded by GORM.
-	db := r.db.WithContext(ctx).
-		Select("id, metadata").
-		Where("tenant_id = ? AND knowledge_base_id = ? AND chunk_type = ? AND status IN (?) AND id != ?",
-			tenantID, kbID, types.ChunkTypeFAQ,
-			[]int{
-				int(types.ChunkStatusDefault),
-				int(types.ChunkStatusStored),
-				int(types.ChunkStatusIndexed),
-			},
-			excludeChunkID)
-
-	db = db.Where(
-		"(metadata->>'standard_question' IN ? OR EXISTS ("+
-			"SELECT 1 FROM jsonb_array_elements_text("+
-			"COALESCE(metadata->'similar_questions', '[]'::jsonb)) elem "+
-			"WHERE elem.value IN ?))", questions, questions)
-
-	var chunk types.Chunk
-	if err := db.Limit(1).Find(&chunk).Error; err != nil {
-		return nil, err
-	}
-	if chunk.ID == "" {
-		return nil, nil
-	}
-	return &chunk, nil
-}
-
-// ListAllFAQChunksForExport lists all FAQ chunks for export with full metadata, tag_id, is_enabled, and flags.
-// Uses batch query to handle large datasets.
-func (r *chunkRepository) ListAllFAQChunksForExport(
-	ctx context.Context,
-	tenantID uint64,
-	knowledgeID string,
-) ([]*types.Chunk, error) {
-	const batchSize = 1000 // 每批查询1000条
-	var allChunks []*types.Chunk
-	offset := 0
-
-	for {
-		var batchChunks []*types.Chunk
-		if err := r.db.WithContext(ctx).
-			Select("id, metadata, tag_id, is_enabled, flags").
-			Where("tenant_id = ? AND knowledge_id = ? AND chunk_type = ? AND status = ?",
-				tenantID, knowledgeID, types.ChunkTypeFAQ, types.ChunkStatusIndexed).
-			Order("created_at ASC").
-			Offset(offset).
-			Limit(batchSize).
-			Find(&batchChunks).Error; err != nil {
-			return nil, err
-		}
-
-		// 如果没有查询到数据，说明已经查询完毕
-		if len(batchChunks) == 0 {
-			break
-		}
-
-		allChunks = append(allChunks, batchChunks...)
-
-		// 如果返回的数据少于批次大小，说明已经是最后一批
-		if len(batchChunks) < batchSize {
-			break
-		}
-
-		offset += batchSize
-	}
-
-	return allChunks, nil
-}
-
 // UpdateChunkFlagsBatch updates flags for multiple chunks in batch using SQL CASE expressions.
 // This is more efficient than updating chunks one by one.
 // setFlags: map of chunk ID to flags to set (OR operation)
@@ -850,306 +653,6 @@ func (r *chunkRepository) UpdateChunkFlagsBatch(
 	}
 
 	return r.db.WithContext(ctx).Exec(sql, args...).Error
-}
-
-// UpdateChunkFieldsByTagID updates fields for all chunks with the specified tag ID.
-// Returns the list of affected chunk IDs for syncing with retriever engines.
-// newTagID: if not nil, updates tag_id to this value (empty string means uncategorized)
-func (r *chunkRepository) UpdateChunkFieldsByTagID(
-	ctx context.Context,
-	tenantID uint64,
-	kbID string,
-	tagID string,
-	isEnabled *bool,
-	setFlags types.ChunkFlags,
-	clearFlags types.ChunkFlags,
-	newTagID *string,
-	excludeIDs []string,
-) ([]string, error) {
-	// First, get the IDs of chunks that will be affected (for is_enabled sync)
-	var affectedIDs []string
-	if isEnabled != nil {
-		var chunks []*types.Chunk
-		query := r.db.WithContext(ctx).
-			Select("id").
-			Where("tenant_id = ? AND knowledge_base_id = ? AND chunk_type = ?",
-				tenantID, kbID, types.ChunkTypeFAQ)
-		if tagID != "" {
-			query = query.Where("tag_id = ?", tagID)
-		}
-
-		if len(excludeIDs) > 0 {
-			query = query.Where("id NOT IN ?", excludeIDs)
-		}
-
-		// Only get chunks that need to change
-		query = query.Where("is_enabled != ?", *isEnabled)
-		if err := query.Find(&chunks).Error; err != nil {
-			return nil, err
-		}
-		for _, c := range chunks {
-			affectedIDs = append(affectedIDs, c.ID)
-		}
-	}
-
-	// Build update query
-	updates := map[string]interface{}{
-		"updated_at": time.Now(),
-	}
-
-	if isEnabled != nil {
-		updates["is_enabled"] = *isEnabled
-	}
-
-	// Handle newTagID update
-	if newTagID != nil {
-		updates["tag_id"] = *newTagID
-	}
-
-	query := r.db.WithContext(ctx).Model(&types.Chunk{}).
-		Where("tenant_id = ? AND knowledge_base_id = ? AND chunk_type = ?",
-			tenantID, kbID, types.ChunkTypeFAQ)
-
-	if tagID != "" {
-		query = query.Where("tag_id = ?", tagID)
-	}
-
-	if len(excludeIDs) > 0 {
-		query = query.Where("id NOT IN ?", excludeIDs)
-	}
-
-	// Handle flags update
-	if setFlags != 0 || clearFlags != 0 {
-		flagsExpr := "flags"
-		if setFlags != 0 {
-			flagsExpr = fmt.Sprintf("(%s | %d)", flagsExpr, int(setFlags))
-		}
-		if clearFlags != 0 {
-			flagsExpr = fmt.Sprintf("(%s & ~%d)", flagsExpr, int(clearFlags))
-		}
-		updates["flags"] = r.db.Raw(flagsExpr)
-	}
-
-	if err := query.Updates(updates).Error; err != nil {
-		return nil, err
-	}
-
-	return affectedIDs, nil
-}
-
-type chunkIDHash struct {
-	ID          string `gorm:"column:id"`
-	ContentHash string `gorm:"column:content_hash"`
-}
-
-const faqChunkDiffBatchSize = 5000
-
-// listFAQChunkIDHashesByKB loads id/content_hash pairs for all FAQ chunks in a KB.
-func (r *chunkRepository) listFAQChunkIDHashesByKB(
-	ctx context.Context,
-	tenantID uint64,
-	kbID string,
-) ([]chunkIDHash, error) {
-	var all []chunkIDHash
-	var lastID string
-
-	for {
-		var batch []chunkIDHash
-		query := r.db.WithContext(ctx).Model(&types.Chunk{}).
-			Select("id, content_hash").
-			Where("tenant_id = ? AND knowledge_base_id = ? AND chunk_type = ?",
-				tenantID, kbID, types.ChunkTypeFAQ).
-			Order("id ASC").
-			Limit(faqChunkDiffBatchSize)
-		if lastID != "" {
-			query = query.Where("id > ?", lastID)
-		}
-		if err := query.Find(&batch).Error; err != nil {
-			return nil, err
-		}
-		if len(batch) == 0 {
-			break
-		}
-		all = append(all, batch...)
-		lastID = batch[len(batch)-1].ID
-		if len(batch) < faqChunkDiffBatchSize {
-			break
-		}
-	}
-	return all, nil
-}
-
-func diffFAQChunkIDsByContentHash(src, dst []chunkIDHash) (
-	chunksToAdd, chunksToDelete []string,
-	matched []types.FAQChunkSyncPair,
-) {
-	dstHashes := make(map[string]struct{}, len(dst))
-	dstIDByHash := make(map[string]string, len(dst))
-	dstIDsByHash := make(map[string][]string, len(dst))
-	for _, pair := range dst {
-		dstHashes[pair.ContentHash] = struct{}{}
-		if _, ok := dstIDByHash[pair.ContentHash]; !ok {
-			dstIDByHash[pair.ContentHash] = pair.ID
-		}
-		dstIDsByHash[pair.ContentHash] = append(dstIDsByHash[pair.ContentHash], pair.ID)
-	}
-	srcHashes := make(map[string]struct{}, len(src))
-	for _, pair := range src {
-		srcHashes[pair.ContentHash] = struct{}{}
-	}
-
-	for _, pair := range src {
-		if _, exists := dstHashes[pair.ContentHash]; !exists {
-			chunksToAdd = append(chunksToAdd, pair.ID)
-			continue
-		}
-		if dstID, ok := dstIDByHash[pair.ContentHash]; ok {
-			matched = append(matched, types.FAQChunkSyncPair{
-				SrcChunkID: pair.ID,
-				DstChunkID: dstID,
-			})
-		}
-	}
-	for _, pair := range dst {
-		if _, exists := srcHashes[pair.ContentHash]; !exists {
-			chunksToDelete = append(chunksToDelete, pair.ID)
-		}
-	}
-	for hash, ids := range dstIDsByHash {
-		if hash == "" || len(ids) <= 1 {
-			continue
-		}
-		if _, inSrc := srcHashes[hash]; !inSrc {
-			continue
-		}
-		canonical := dstIDByHash[hash]
-		for _, id := range ids {
-			if id != canonical {
-				chunksToDelete = append(chunksToDelete, id)
-			}
-		}
-	}
-	return chunksToAdd, chunksToDelete, matched
-}
-
-// FAQChunkDiff compares FAQ chunks between two knowledge bases and returns the differences.
-// Returns: chunksToAdd (IDs of chunks in src whose content_hash is not in dst),
-//
-//	chunksToDelete (IDs of chunks in dst whose content_hash is not in src, plus
-//	duplicate dst chunks that share a content_hash with another dst chunk when
-//	that hash still exists in src)
-func (r *chunkRepository) FAQChunkDiff(
-	ctx context.Context,
-	srcTenantID uint64, srcKBID string,
-	dstTenantID uint64, dstKBID string,
-) (*types.FAQChunkDiffResult, error) {
-	srcPairs, err := r.listFAQChunkIDHashesByKB(ctx, srcTenantID, srcKBID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list source FAQ chunks: %w", err)
-	}
-	dstPairs, err := r.listFAQChunkIDHashesByKB(ctx, dstTenantID, dstKBID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list destination FAQ chunks: %w", err)
-	}
-
-	add, del, matched := diffFAQChunkIDsByContentHash(srcPairs, dstPairs)
-	return &types.FAQChunkDiffResult{
-		ChunksToAdd:    add,
-		ChunksToDelete: del,
-		MatchedPairs:   matched,
-	}, nil
-}
-
-// ListFAQChunkStatusByIDs loads status fields for FAQ clone sync.
-func (r *chunkRepository) ListFAQChunkStatusByIDs(
-	ctx context.Context,
-	tenantID uint64,
-	ids []string,
-) (map[string]*types.FAQChunkStatus, error) {
-	if len(ids) == 0 {
-		return map[string]*types.FAQChunkStatus{}, nil
-	}
-	const batchSize = 5000
-	var chunks []*types.Chunk
-	for i := 0; i < len(ids); i += batchSize {
-		end := i + batchSize
-		if end > len(ids) {
-			end = len(ids)
-		}
-		var batch []*types.Chunk
-		if err := r.db.WithContext(ctx).
-			Select("id, tag_id, is_enabled, flags, metadata").
-			Where("tenant_id = ? AND id IN ?", tenantID, ids[i:end]).
-			Find(&batch).Error; err != nil {
-			return nil, err
-		}
-		chunks = append(chunks, batch...)
-	}
-	out := make(map[string]*types.FAQChunkStatus, len(chunks))
-	for _, chunk := range chunks {
-		strategy := types.AnswerStrategyAll
-		if meta, err := chunk.FAQMetadata(); err == nil && meta != nil {
-			strategy = meta.AnswerStrategy
-		}
-		out[chunk.ID] = &types.FAQChunkStatus{
-			ID:             chunk.ID,
-			TagID:          chunk.TagID,
-			IsEnabled:      chunk.IsEnabled,
-			Flags:          chunk.Flags,
-			AnswerStrategy: strategy,
-			Metadata:       chunk.Metadata,
-		}
-	}
-	return out, nil
-}
-
-// ListRecommendedFAQChunks lists FAQ chunks with the recommended flag set.
-// Filter by explicitly selected kbIDs, knowledgeIDs, and/or FAQ tagIDs (OR relationship).
-// Returns up to `limit` chunks sorted by updated_at descending.
-func (r *chunkRepository) ListRecommendedFAQChunks(
-	ctx context.Context,
-	tenantID uint64,
-	kbIDs []string,
-	knowledgeIDs []string,
-	tagIDs []string,
-	limit int,
-) ([]*types.Chunk, error) {
-	if limit <= 0 {
-		limit = 10
-	}
-	if len(kbIDs) == 0 && len(knowledgeIDs) == 0 && len(tagIDs) == 0 {
-		return nil, nil
-	}
-	var chunks []*types.Chunk
-	query := r.db.WithContext(ctx).
-		Select("id, knowledge_id, knowledge_base_id, chunk_type, metadata, flags, updated_at").
-		Where("tenant_id = ? AND chunk_type = ? AND status IN ? AND is_enabled = ? AND flags & ? != 0",
-			tenantID, types.ChunkTypeFAQ, []int{int(types.ChunkStatusIndexed), int(types.ChunkStatusDefault)}, true, int(types.ChunkFlagRecommended))
-	var scopeClauses []string
-	var scopeArgs []interface{}
-	if len(kbIDs) > 0 {
-		scopeClauses = append(scopeClauses, "knowledge_base_id IN ?")
-		scopeArgs = append(scopeArgs, kbIDs)
-	}
-	if len(knowledgeIDs) > 0 {
-		scopeClauses = append(scopeClauses, "knowledge_id IN ?")
-		scopeArgs = append(scopeArgs, knowledgeIDs)
-	}
-	if len(tagIDs) > 0 {
-		scopeClauses = append(scopeClauses, "tag_id IN ?")
-		scopeArgs = append(scopeArgs, tagIDs)
-	}
-	query = query.Where("("+strings.Join(scopeClauses, " OR ")+")", scopeArgs...)
-
-	orderClause := "RANDOM()"
-
-	if err := query.
-		Order(orderClause).
-		Limit(limit).
-		Find(&chunks).Error; err != nil {
-		return nil, err
-	}
-	return chunks, nil
 }
 
 // ListRecentDocumentChunksWithQuestions lists recent document chunks that have generated questions.

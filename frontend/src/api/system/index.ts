@@ -1,28 +1,4 @@
 import { get, post, put, del, patch, postUpload } from '@/utils/request'
-import type { CreatedTenantAPIKey, TenantAPIKey, TenantAPIKeyCapability } from '@/api/tenant'
-
-export interface CreatePlatformAPIKeyPayload {
-  name: string
-  capabilities: TenantAPIKeyCapability[]
-  expires_at_unix?: number
-}
-
-export async function listPlatformAPIKeys(): Promise<{ success: boolean; data?: TenantAPIKey[] }> {
-  return await get('/api/v1/system/admin/api-keys') as unknown as { success: boolean; data?: TenantAPIKey[] }
-}
-
-export async function createPlatformAPIKey(
-  payload: CreatePlatformAPIKeyPayload,
-): Promise<{ success: boolean; data?: CreatedTenantAPIKey }> {
-  return await post('/api/v1/system/admin/api-keys', payload) as unknown as {
-    success: boolean
-    data?: CreatedTenantAPIKey
-  }
-}
-
-export async function deletePlatformAPIKey(keyId: number): Promise<{ success: boolean }> {
-  return await del(`/api/v1/system/admin/api-keys/${keyId}`) as unknown as { success: boolean }
-}
 
 export interface SystemInfo {
   version: string
@@ -451,29 +427,6 @@ export async function resetSystemSetting(key: string): Promise<void> {
   await del(`/api/v1/system/admin/settings/${encodeURIComponent(key)}`)
 }
 
-/**
- * Result of POST /system/admin/tenants/apply-default-storage-quota.
- * `affected` is the count of tenant rows whose storage_quota was
- * overwritten; `quota_bytes` is the value written.
- */
-export interface ApplyDefaultStorageQuotaResult {
-  affected: number
-  quota_bytes: number
-  quota_gb: number
-}
-
-/**
- * Apply the current `tenant.default_storage_quota_gb` setting to every
- * existing tenant. Reads the resolved setting server-side (DB > ENV >
- * default), then writes that quota to every row. SystemAdmin only.
- *
- * Idempotent: running twice with the same setting has the same effect.
- */
-export async function applyDefaultStorageQuotaToAllTenants(): Promise<ApplyDefaultStorageQuotaResult> {
-  const response = await post('/api/v1/system/admin/tenants/apply-default-storage-quota')
-  return response as unknown as ApplyDefaultStorageQuotaResult
-}
-
 // ---- Platform Audit Log (system-scope) ----
 
 // We reuse the AuditLog / ListAuditLogParams types from the tenant
@@ -678,27 +631,6 @@ export interface SandboxVolumeMountConfig {
   volume_owner_fingerprint?: string
 }
 
-export interface SandboxCubeConfig {
-  api_url?: string
-  proxy_url?: string
-  sandbox_domain?: string
-  api_key?: string
-  template_id?: string
-  http_timeout_sec?: number
-  cube_sandbox_ttl_seconds?: number
-  dns_servers?: string[]
-}
-
-export interface SandboxE2BConfig {
-  api_url?: string
-  proxy_url?: string
-  sandbox_domain?: string
-  api_key?: string
-  template_id?: string
-  http_timeout_sec?: number
-  e2b_sandbox_ttl_seconds?: number
-}
-
 export interface SandboxSkillImage {
   snapshot_id?: string
   generation?: number
@@ -716,8 +648,6 @@ export interface SandboxConfig {
   skill_image?: SandboxSkillImage
   skill_rollout?: 'next_turn' | 'new_session'
   network?: SandboxNetworkPolicy
-  cube?: SandboxCubeConfig
-  e2b?: SandboxE2BConfig
   docker?: SandboxDockerConfig
 }
 
@@ -735,36 +665,6 @@ export interface SandboxDockerConfig {
   http_timeout_sec?: number
 }
 
-/** One injected credential header on a Cube L7 rule. */
-export interface SandboxCubeHeaderInject {
-  header: string
-  /** Masked as '***' in responses; send the placeholder back to keep it. */
-  secret?: string
-  /** Defaults to '${SECRET}' server-side. */
-  format?: string
-}
-
-/** One CubeEgress L7 rule. Match fields are AND-ed; methods are OR-ed. */
-export interface SandboxCubeEgressRule {
-  name: string
-  scheme?: string
-  sni?: string
-  host?: string
-  methods?: string[]
-  path?: string
-  /** Absent means allow. A deny rule still needs host or sni. */
-  deny?: boolean
-  audit?: string
-  inject?: SandboxCubeHeaderInject[]
-}
-
-/** One E2B per-host request transform. host must also be in allow_out. */
-export interface SandboxE2BHostRule {
-  host: string
-  /** Values are masked as '***' in responses. */
-  headers?: Record<string, string>
-}
-
 /**
  * Network policy for every sandbox created from this config. Absent fields
  * mean egress allowed. Inbound is always credential-required:
@@ -773,11 +673,6 @@ export interface SandboxE2BHostRule {
 export interface SandboxNetworkPolicy {
   deny_egress_by_default?: boolean
   /** Ignored. Inbound is always credential-required. */
-  allow_public_inbound?: boolean
-  allow_out?: string[]
-  deny_out?: string[]
-  cube_rules?: SandboxCubeEgressRule[]
-  e2b_host_rules?: SandboxE2BHostRule[]
 }
 
 /** `ok: null` means the probe was not executed in this run. */
@@ -853,7 +748,7 @@ export interface SandboxInventory {
 }
 
 /** Sandbox backends managed as named workspace configurations. */
-export const NAMED_SANDBOX_BACKEND_TYPES = ['cube', 'e2b', 'docker'] as const
+export const NAMED_SANDBOX_BACKEND_TYPES = ['docker'] as const
 
 export function isNamedSandboxBackend(type: string): boolean {
   return (NAMED_SANDBOX_BACKEND_TYPES as readonly string[]).includes(type)
@@ -942,7 +837,6 @@ export function querySandboxTemplates(payload: {
  * stored config as-is.
  *
  * `deep` additionally creates and destroys one sandbox, which is the only way
- * to validate the template ID, Cube's proxy data plane and outbound egress.
  * It consumes real sandbox time.
  */
 export function checkSandboxConfig(payload: {

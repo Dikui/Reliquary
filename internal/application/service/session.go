@@ -43,13 +43,6 @@ func runtimeMayBypassAdminConsoleRead(
 	case types.PrincipalAPITenant, types.PrincipalAPIExternalUser:
 		ownerID := types.SessionOwnerIDFromContext(ctx)
 		return types.IsAPISessionOwnerID(session.UserID) && session.UserID == ownerID
-	case types.PrincipalEmbedSession:
-		// An embed widget runs as a Viewer but is the legitimate owner of its own
-		// channel session (verified upstream by ensureEmbedSession, including the
-		// signed handle). Allow it to read exactly the session it owns; the owner
-		// scope in repo.Get already confines it to that single row.
-		ownerID := types.SessionOwnerIDFromContext(ctx)
-		return session.UserID == ownerID
 	default:
 		return false
 	}
@@ -123,7 +116,6 @@ type sessionService struct {
 	chunkService          interfaces.ChunkService                // Service for chunk operations
 	webSearchStateRepo    interfaces.WebSearchStateService       // Service for web search state
 	webSearchProviderRepo interfaces.WebSearchProviderRepository // Repository for web search provider entities
-	kbShareService        interfaces.KBShareService              // Service for KB sharing operations
 	suggestionRepo        interfaces.MessageSuggestionRepository
 	sandboxMgr            sandbox.Manager // Default sandbox backend; used to reclaim per-session MicroVMs on delete
 	sandboxResolver       sandbox.TenantSandboxResolver
@@ -150,7 +142,6 @@ func NewSessionService(cfg *config.Config,
 	agentService interfaces.AgentService,
 	webSearchStateRepo interfaces.WebSearchStateService,
 	webSearchProviderRepo interfaces.WebSearchProviderRepository,
-	kbShareService interfaces.KBShareService,
 	suggestionRepo interfaces.MessageSuggestionRepository,
 	sandboxMgr sandbox.Manager,
 	sandboxResolver sandbox.TenantSandboxResolver,
@@ -173,7 +164,6 @@ func NewSessionService(cfg *config.Config,
 		agentService:          agentService,
 		webSearchStateRepo:    webSearchStateRepo,
 		webSearchProviderRepo: webSearchProviderRepo,
-		kbShareService:        kbShareService,
 		suggestionRepo:        suggestionRepo,
 		sandboxMgr:            sandboxMgr,
 		sandboxResolver:       sandboxResolver,
@@ -672,7 +662,7 @@ func (s *sessionService) DeleteAllSessions(ctx context.Context) error {
 // the configured sandbox backend supports session-scoped instances.
 //
 // Only SessionBoundManager implements the DestroySession method, which every
-// session-scoped backend resolves to (Cube, E2B, Docker). For Disabled
+// session-scoped backend resolves to (Docker). For Disabled
 // the type assertion fails and the call is a no-op — that backend holds no
 // resources keyed on session ID.
 //
@@ -872,8 +862,6 @@ func (s *sessionService) GenerateTitleAsync(
 	modelID string,
 	eventBus *event.EventBus,
 ) {
-	// Use context tenant (effective tenant when using shared agent) so ListModels/GetChatModel find the agent's model.
-	// The session row itself is still updated by its persisted tenant/user owner scope.
 	tenantID := ctx.Value(types.TenantIDContextKey)
 	requestID := ctx.Value(types.RequestIDContextKey)
 	language := ctx.Value(types.LanguageContextKey)

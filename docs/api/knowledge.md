@@ -276,7 +276,7 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases/kb-00000001/knowle
 | `keyword`      | string  | -    | 按标题/内容关键词过滤                                                                               |
 | `file_type`    | string  | -    | 按单个文件扩展名过滤（如 `pdf`）；特殊值 `manual` / `url` 命中 `type` 列                              |
 | `parse_status` | string  | -    | 按解析状态过滤：`pending` / `processing` / `completed` / `failed`                                    |
-| `source`       | string  | -    | 按来源/渠道过滤：`web` / `api` / `browser_extension` / `feishu` / `notion` / `yuque` / `wechat` 等； 特殊值 `manual` / `url` 命中 `type` 列 |
+| `source`       | string  | -    | 按来源/渠道过滤：`web` / `api` / `feishu` / `notion` / `yuque` 等； 特殊值 `manual` / `url` 命中 `type` 列 |
 | `start_time`   | string  | -    | 更新时间起点，接受 RFC3339 (`2024-05-01T00:00:00+08:00`) 或 `YYYY-MM-DD HH:MM:SS` / `YYYY-MM-DD`     |
 | `end_time`     | string  | -    | 更新时间终点，格式同 `start_time`                                                                   |
 | `folder_path`  | string  | -    | 按文件夹路径筛选；**仅当传入该参数时启用文件夹维度**。空字符串表示知识库根目录（不含子文件夹中的文档）；不传则列出全部文件夹下的文档（扁平视图） |
@@ -392,7 +392,7 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases/kb-00000001/knowle
 
 ## POST `/knowledge/folder` - 批量移动知识到文件夹
 
-批量修改知识条目的 `folder_path`，仅调整归类，**不会**重新解析、分块或向量化。目标路径不存在时会自动创建；空路径表示移回知识库根目录。需要 editor/admin 且为 KB 创建者或 Admin+。
+批量修改知识条目的 `folder_path`，仅调整归类，**不会**重新解析、分块或向量化。目标路径不存在时会自动创建；空路径表示移回知识库根目录。需要 owner / admin / contributor 角色。
 
 **请求体**:
 
@@ -454,8 +454,7 @@ curl --location --request DELETE 'http://localhost:8080/api/v1/knowledge-bases/k
 | 字段        | 类型     | 必填 | 说明                                                                  |
 | ----------- | -------- | ---- | --------------------------------------------------------------------- |
 | `ids`       | string[] | 是   | 知识 ID，重复 `ids=...` 传多个                                        |
-| `kb_id`     | string   | 否   | 限定知识库范围；共享知识库场景下用于按 KB 校验权限并解析有效空间       |
-| `agent_id`  | string   | 否   | 共享 Agent ID；按 Agent 所属空间拉取，常用于共享场景刷新后的文件回填   |
+| `kb_id`     | string   | 否   | 限定知识库范围并校验团队权限       |
 
 **请求**:
 
@@ -805,7 +804,7 @@ curl --location --request PUT 'http://localhost:8080/api/v1/knowledge/image/4c4e
 | 字段      | 类型                       | 必填 | 说明                                                                       |
 | --------- | -------------------------- | ---- | -------------------------------------------------------------------------- |
 | `updates` | object<string, string\|null> | 是   | 知识 ID → 标签 ID 的映射；值为 `null` 表示清除该条知识的标签                |
-| `kb_id`   | string                     | 否   | 限定知识库范围；指定时按该 KB 校验编辑权限（共享 KB 场景必填）             |
+| `kb_id`   | string                     | 否   | 限定知识库范围；指定时按该 KB 校验编辑权限             |
 
 未传 `kb_id` 时，服务会从 `updates` 中取首个 knowledge ID 推断其所属知识库并据此鉴权。
 
@@ -832,7 +831,7 @@ curl --location --request PUT 'http://localhost:8080/api/v1/knowledge/tags' \
 
 ## GET `/knowledge/search` - 跨知识库搜索/过滤知识
 
-按关键词在当前空间（含已共享给当前空间）的知识中检索；可按文件类型过滤；指定 `agent_id` 时按共享 Agent 所配置的知识库范围检索。
+按关键词检索团队知识，可按文件类型过滤。
 
 **查询参数**:
 
@@ -842,7 +841,6 @@ curl --location --request PUT 'http://localhost:8080/api/v1/knowledge/tags' \
 | `offset`     | integer | 0    | 偏移量                                                                |
 | `limit`      | integer | 20   | 返回条数                                                              |
 | `file_types` | string  | -    | 逗号分隔的扩展名列表，例如 `txt,pdf,docx`                            |
-| `agent_id`   | string  | -    | 共享 Agent ID；按该 Agent 的 KB 选择模式（`all`/`selected`/`none`）限定范围 |
 
 **请求**:
 

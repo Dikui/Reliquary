@@ -47,18 +47,15 @@ func formatDocSummary(summary string, maxLen int) string {
 
 // RecentDocInfo contains brief information about a recently added document
 type RecentDocInfo struct {
-	ChunkID             string
-	KnowledgeBaseID     string
-	KnowledgeID         string
-	Title               string
-	Description         string
-	FileName            string
-	FileSize            int64
-	Type                string
-	CreatedAt           string // Formatted time string
-	FAQStandardQuestion string
-	FAQSimilarQuestions []string
-	FAQAnswers          []string
+	ChunkID         string
+	KnowledgeBaseID string
+	KnowledgeID     string
+	Title           string
+	Description     string
+	FileName        string
+	FileSize        int64
+	Type            string
+	CreatedAt       string // Formatted time string
 }
 
 // SelectedDocumentInfo contains summary information about a user-selected document (via @ mention).
@@ -89,7 +86,7 @@ type PinnedSkillInfo struct {
 type KnowledgeBaseInfo struct {
 	ID          string
 	Name        string
-	Type        string // Knowledge base type: "document" or "faq"
+	Type        string // Knowledge base type: "document" or "messages-history"
 	Description string
 	DocCount    int
 	// Capabilities lists the retrieval surfaces this KB exposes. Any subset of
@@ -149,49 +146,28 @@ func formatKnowledgeBaseList(kbInfos []*KnowledgeBaseInfo) string {
 		}
 
 		if len(kb.RecentDocs) > 0 {
-			if kbType == "faq" {
-				b.WriteString("<faq_entries>\n")
-				for j, doc := range kb.RecentDocs {
-					if j >= 10 {
-						break
-					}
-					question := doc.FAQStandardQuestion
-					if question == "" {
-						question = doc.FileName
-					}
-					b.WriteString(fmt.Sprintf("<faq chunk_id=\"%s\" knowledge_id=\"%s\" created_at=\"%s\">\n",
-						doc.ChunkID, doc.KnowledgeID, doc.CreatedAt))
-					b.WriteString(fmt.Sprintf("<question>%s</question>\n", question))
-					if len(doc.FAQAnswers) > 0 {
-						for _, ans := range doc.FAQAnswers {
-							b.WriteString(fmt.Sprintf("<answer>%s</answer>\n", ans))
-						}
-					}
-					b.WriteString("</faq>\n")
+
+			b.WriteString("<recent_documents>\n")
+			for j, doc := range kb.RecentDocs {
+				if j >= 2 {
+					break
 				}
-				b.WriteString("</faq_entries>\n")
-			} else {
-				b.WriteString("<recent_documents>\n")
-				for j, doc := range kb.RecentDocs {
-					if j >= 2 {
-						break
-					}
-					docName := doc.Title
-					if docName == "" {
-						docName = doc.FileName
-					}
-					fileSize := formatFileSize(doc.FileSize)
-					b.WriteString(fmt.Sprintf("<document knowledge_id=\"%s\" type=\"%s\" file_size=\"%s\" created_at=\"%s\">\n",
-						doc.KnowledgeID, doc.Type, fileSize, doc.CreatedAt))
-					b.WriteString(fmt.Sprintf("<name>%s</name>\n", docName))
-					if doc.Description != "" {
-						summary := formatDocSummary(doc.Description, 120)
-						b.WriteString(fmt.Sprintf("<summary>%s</summary>\n", summary))
-					}
-					b.WriteString("</document>\n")
+				docName := doc.Title
+				if docName == "" {
+					docName = doc.FileName
 				}
-				b.WriteString("</recent_documents>\n")
+				fileSize := formatFileSize(doc.FileSize)
+				b.WriteString(fmt.Sprintf("<document knowledge_id=\"%s\" type=\"%s\" file_size=\"%s\" created_at=\"%s\">\n",
+					doc.KnowledgeID, doc.Type, fileSize, doc.CreatedAt))
+				b.WriteString(fmt.Sprintf("<name>%s</name>\n", docName))
+				if doc.Description != "" {
+					summary := formatDocSummary(doc.Description, 120)
+					b.WriteString(fmt.Sprintf("<summary>%s</summary>\n", summary))
+				}
+				b.WriteString("</document>\n")
 			}
+			b.WriteString("</recent_documents>\n")
+
 		}
 		b.WriteString("</knowledge_base>\n")
 	}
@@ -294,7 +270,7 @@ func formatSkillsMetadata(skillsMetadata []*skills.SkillMetadata, shellExecEnabl
 		// is all in shell_exec's own description, which ships with the tools on
 		// every request and so is never further away than this paragraph.
 		builder.WriteString("- `shell_exec(command, work_dir, timeout_sec, max_output_bytes, max_stderr_bytes, env)`: ")
-		builder.WriteString("Freely execute shell commands and explore the current session's isolated Cube ")
+		builder.WriteString("Freely execute shell commands and explore the current session's isolated Docker ")
 		builder.WriteString("sandbox. Read its tool description before the first call — it says which work ")
 		builder.WriteString("belongs here and which belongs to `execute_skill_script`\n")
 	}

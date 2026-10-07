@@ -131,44 +131,6 @@ $$;
 
 
 --
--- Name: agent_shares; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.agent_shares (
-    id character varying(36) DEFAULT public.uuid_generate_v4() NOT NULL,
-    agent_id character varying(36) NOT NULL,
-    organization_id character varying(36) NOT NULL,
-    shared_by_user_id character varying(36) NOT NULL,
-    source_tenant_id integer NOT NULL,
-    permission character varying(32) DEFAULT 'viewer'::character varying NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    deleted_at timestamp with time zone
-);
-
-
---
--- Name: TABLE agent_shares; Type: COMMENT; Schema: public
---
-
-COMMENT ON TABLE public.agent_shares IS 'Custom agent sharing records to organizations';
-
-
---
--- Name: COLUMN agent_shares.source_tenant_id; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.agent_shares.source_tenant_id IS 'Original tenant ID of the agent';
-
-
---
--- Name: COLUMN agent_shares.permission; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.agent_shares.permission IS 'Access permission: viewer or editor';
-
-
---
 -- Name: audit_logs; Type: TABLE; Schema: public
 --
 
@@ -401,150 +363,6 @@ CREATE TABLE public.data_sources (
 
 
 --
--- Name: embed_channels; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.embed_channels (
-    id character varying(36) DEFAULT public.uuid_generate_v4() NOT NULL,
-    tenant_id bigint NOT NULL,
-    agent_id character varying(36) DEFAULT 'builtin-quick-answer'::character varying NOT NULL,
-    name character varying(255) DEFAULT ''::character varying NOT NULL,
-    enabled boolean DEFAULT true NOT NULL,
-    publish_token character varying(64) DEFAULT ''::character varying NOT NULL,
-    allowed_origins jsonb DEFAULT '[]'::jsonb NOT NULL,
-    welcome_message text DEFAULT ''::text NOT NULL,
-    rate_limit_per_minute integer DEFAULT 30 NOT NULL,
-    rate_limit_per_day integer DEFAULT 10000 NOT NULL,
-    primary_color character varying(32) DEFAULT ''::character varying NOT NULL,
-    page_title character varying(255) DEFAULT ''::character varying NOT NULL,
-    header_title_mode character varying(32) DEFAULT 'channel'::character varying NOT NULL,
-    show_suggested_questions boolean DEFAULT true NOT NULL,
-    widget_position character varying(32) DEFAULT 'bottom-right'::character varying NOT NULL,
-    allow_web_search boolean DEFAULT false NOT NULL,
-    allow_memory boolean DEFAULT false NOT NULL,
-    allow_file_upload boolean DEFAULT false NOT NULL,
-    default_locale character varying(16) DEFAULT ''::character varying NOT NULL,
-    webhook_url character varying(512) DEFAULT ''::character varying NOT NULL,
-    webhook_secret character varying(128) DEFAULT ''::character varying NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    deleted_at timestamp with time zone
-);
-
-
---
--- Name: TABLE embed_channels; Type: COMMENT; Schema: public
---
-
-COMMENT ON TABLE public.embed_channels IS 'Web embed channels for publishing agent chat to external sites via iframe';
-
-
---
--- Name: COLUMN embed_channels.publish_token; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.embed_channels.publish_token IS 'Plaintext scoped token (em_ prefix); rotatable from management UI';
-
-
---
--- Name: COLUMN embed_channels.allowed_origins; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.embed_channels.allowed_origins IS 'JSON array of allowed HTTP(S) origins for embed API requests; empty rejects all (management UI requires at least one)';
-
-
---
--- Name: COLUMN embed_channels.rate_limit_per_minute; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.embed_channels.rate_limit_per_minute IS 'Per-IP per-minute request cap for the public embed endpoints';
-
-
---
--- Name: COLUMN embed_channels.rate_limit_per_day; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.embed_channels.rate_limit_per_day IS 'Channel-wide daily total request cap across all IPs; bounds cost/abuse since the publish token is publicly visible';
-
-
---
--- Name: COLUMN embed_channels.primary_color; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.embed_channels.primary_color IS 'CSS color for embed widget accent (e.g. #0052d9)';
-
-
---
--- Name: COLUMN embed_channels.page_title; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.embed_channels.page_title IS 'Browser tab title for the embed page';
-
-
---
--- Name: COLUMN embed_channels.header_title_mode; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.embed_channels.header_title_mode IS 'Embed header title source: channel (fixed page title) or session (auto-generated after first message)';
-
-
---
--- Name: COLUMN embed_channels.show_suggested_questions; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.embed_channels.show_suggested_questions IS 'When true, embed chat shows suggested starter questions before the first visitor message';
-
-
---
--- Name: COLUMN embed_channels.widget_position; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.embed_channels.widget_position IS 'Floating widget corner: bottom-right, bottom-left, top-right, top-left';
-
-
---
--- Name: COLUMN embed_channels.allow_web_search; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.embed_channels.allow_web_search IS 'When true, embed chat may show web search toggle; visitor must opt in per message';
-
-
---
--- Name: COLUMN embed_channels.allow_memory; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.embed_channels.allow_memory IS 'When true, embed chat may use agent memory; client cannot override when false';
-
-
---
--- Name: COLUMN embed_channels.allow_file_upload; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.embed_channels.allow_file_upload IS 'When true, embed chat may send images; client cannot override when false';
-
-
---
--- Name: COLUMN embed_channels.default_locale; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.embed_channels.default_locale IS 'Default visitor UI locale (zh-CN, en-US, ko-KR, ru-RU); empty follows browser';
-
-
---
--- Name: COLUMN embed_channels.webhook_url; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.embed_channels.webhook_url IS 'HTTPS endpoint for outbound message_sent / message_received events';
-
-
---
--- Name: COLUMN embed_channels.webhook_secret; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.embed_channels.webhook_secret IS 'Optional HMAC-SHA256 secret for X-Reliquary-Signature header';
-
-
---
 -- Name: embeddings; Type: TABLE; Schema: public
 --
 
@@ -618,7 +436,7 @@ COMMENT ON TABLE public.im_channel_sessions IS 'Maps IM platform channels to Rel
 -- Name: COLUMN im_channel_sessions.platform; Type: COMMENT; Schema: public
 --
 
-COMMENT ON COLUMN public.im_channel_sessions.platform IS 'IM platform identifier: wecom, feishu, etc.';
+COMMENT ON COLUMN public.im_channel_sessions.platform IS 'IM platform identifier: feishu';
 
 
 --
@@ -719,7 +537,7 @@ COMMENT ON COLUMN public.im_channels.agent_id IS 'Agent ID this channel is bound
 -- Name: COLUMN im_channels.platform; Type: COMMENT; Schema: public
 --
 
-COMMENT ON COLUMN public.im_channels.platform IS 'IM platform: wecom, feishu';
+COMMENT ON COLUMN public.im_channels.platform IS 'IM platform: feishu';
 
 
 --
@@ -747,14 +565,14 @@ COMMENT ON COLUMN public.im_channels.output_mode IS 'Output mode: stream (real-t
 -- Name: COLUMN im_channels.credentials; Type: COMMENT; Schema: public
 --
 
-COMMENT ON COLUMN public.im_channels.credentials IS 'Platform credentials (JSONB): WeCom webhook={corp_id,agent_secret,token,encoding_aes_key,corp_agent_id}, WeCom ws={bot_id,bot_secret}, Feishu={app_id,app_secret,verification_token,encrypt_key}';
+COMMENT ON COLUMN public.im_channels.credentials IS 'Feishu credentials (JSONB): app_id, app_secret, verification_token, encrypt_key';
 
 
 --
 -- Name: COLUMN im_channels.bot_identity; Type: COMMENT; Schema: public
 --
 
-COMMENT ON COLUMN public.im_channels.bot_identity IS 'Unique bot identity derived from credentials (e.g. wecom:ws:{bot_id}, feishu:{app_id}). Used to prevent duplicate bot bindings.';
+COMMENT ON COLUMN public.im_channels.bot_identity IS 'Unique bot identity derived from credentials (feishu:{app_id}). Used to prevent duplicate bot bindings.';
 
 
 --
@@ -762,44 +580,6 @@ COMMENT ON COLUMN public.im_channels.bot_identity IS 'Unique bot identity derive
 --
 
 COMMENT ON COLUMN public.im_channels.session_mode IS 'Session resolution mode: user (per user+chat, default) or thread (per thread)';
-
-
---
--- Name: kb_shares; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.kb_shares (
-    id character varying(36) DEFAULT public.uuid_generate_v4() NOT NULL,
-    knowledge_base_id character varying(36) NOT NULL,
-    organization_id character varying(36) NOT NULL,
-    shared_by_user_id character varying(36) NOT NULL,
-    source_tenant_id integer NOT NULL,
-    permission character varying(32) DEFAULT 'viewer'::character varying NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    deleted_at timestamp with time zone
-);
-
-
---
--- Name: TABLE kb_shares; Type: COMMENT; Schema: public
---
-
-COMMENT ON TABLE public.kb_shares IS 'Knowledge base sharing records to organizations';
-
-
---
--- Name: COLUMN kb_shares.source_tenant_id; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.kb_shares.source_tenant_id IS 'Original tenant ID of the knowledge base for cross-tenant embedding model access';
-
-
---
--- Name: COLUMN kb_shares.permission; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.kb_shares.permission IS 'Access permission level: admin, editor, or viewer';
 
 
 --
@@ -850,7 +630,6 @@ CREATE TABLE public.knowledge_bases (
     deleted_at timestamp with time zone,
     is_temporary boolean DEFAULT false NOT NULL,
     type character varying(32) DEFAULT 'document'::character varying NOT NULL,
-    faq_config jsonb,
     question_generation_config jsonb,
     storage_provider_config jsonb,
     is_pinned boolean DEFAULT false NOT NULL,
@@ -1297,7 +1076,6 @@ CREATE TABLE public.knowledges (
     error_message text,
     deleted_at timestamp with time zone,
     summary_status character varying(32) DEFAULT 'none'::character varying,
-    last_faq_import_result json,
     channel character varying(50) DEFAULT 'web'::character varying NOT NULL,
     pending_subtasks_count integer DEFAULT 0 NOT NULL,
     custom_metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
@@ -1309,7 +1087,7 @@ CREATE TABLE public.knowledges (
 -- Name: COLUMN knowledges.channel; Type: COMMENT; Schema: public
 --
 
-COMMENT ON COLUMN public.knowledges.channel IS 'Source channel of the knowledge: web, api, browser_extension, wechat, etc.';
+COMMENT ON COLUMN public.knowledges.channel IS 'Source channel of the knowledge: web, api, feishu';
 
 
 --
@@ -1560,7 +1338,6 @@ CREATE TABLE public.message_suggestion_sets (
     session_id character varying(36) NOT NULL,
     assistant_message_id character varying(36) NOT NULL,
     agent_id character varying(36) DEFAULT ''::character varying NOT NULL,
-    agent_tenant_id integer DEFAULT 0 NOT NULL,
     placement character varying(32) NOT NULL,
     config_hash character varying(64) NOT NULL,
     locale character varying(16) DEFAULT ''::character varying NOT NULL,
@@ -1605,7 +1382,6 @@ CREATE TABLE public.messages (
     rendered_content text DEFAULT ''::text NOT NULL,
     attachments jsonb DEFAULT '[]'::jsonb,
     agent_id character varying(36) DEFAULT ''::character varying NOT NULL,
-    agent_tenant_id integer DEFAULT 0 NOT NULL,
     model_id character varying(64) DEFAULT ''::character varying NOT NULL,
     execution_context jsonb DEFAULT '{}'::jsonb NOT NULL,
     artifacts jsonb DEFAULT '[]'::jsonb,
@@ -1663,236 +1439,6 @@ CREATE TABLE public.models (
     is_builtin boolean DEFAULT false NOT NULL,
     managed_by character varying(32) DEFAULT ''::character varying NOT NULL
 );
-
-
---
--- Name: organization_join_requests; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.organization_join_requests (
-    id character varying(36) DEFAULT public.uuid_generate_v4() NOT NULL,
-    organization_id character varying(36) NOT NULL,
-    user_id character varying(36) NOT NULL,
-    tenant_id integer NOT NULL,
-    status character varying(32) DEFAULT 'pending'::character varying NOT NULL,
-    requested_role character varying(32) DEFAULT 'viewer'::character varying NOT NULL,
-    request_type character varying(32) DEFAULT 'join'::character varying NOT NULL,
-    prev_role character varying(32),
-    message text,
-    reviewed_by character varying(36),
-    reviewed_at timestamp with time zone,
-    review_message text,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
-);
-
-
---
--- Name: TABLE organization_join_requests; Type: COMMENT; Schema: public
---
-
-COMMENT ON TABLE public.organization_join_requests IS 'Join requests for organizations that require approval';
-
-
---
--- Name: COLUMN organization_join_requests.status; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.organization_join_requests.status IS 'Request status: pending, approved, rejected';
-
-
---
--- Name: COLUMN organization_join_requests.requested_role; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.organization_join_requests.requested_role IS 'Role requested by the applicant: admin, editor, viewer';
-
-
---
--- Name: COLUMN organization_join_requests.request_type; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.organization_join_requests.request_type IS 'join for new member, upgrade for role upgrade';
-
-
---
--- Name: COLUMN organization_join_requests.message; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.organization_join_requests.message IS 'Optional message from the requester';
-
-
---
--- Name: COLUMN organization_join_requests.reviewed_by; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.organization_join_requests.reviewed_by IS 'User ID of the admin who reviewed the request';
-
-
---
--- Name: COLUMN organization_join_requests.review_message; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.organization_join_requests.review_message IS 'Optional message from the reviewer';
-
-
---
--- Name: organization_members_pre_plan3; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.organization_members_pre_plan3 (
-    id character varying(36) DEFAULT public.uuid_generate_v4() NOT NULL,
-    organization_id character varying(36) NOT NULL,
-    user_id character varying(36) NOT NULL,
-    tenant_id integer NOT NULL,
-    role character varying(32) DEFAULT 'viewer'::character varying NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
-);
-
-
---
--- Name: TABLE organization_members_pre_plan3; Type: COMMENT; Schema: public
---
-
-COMMENT ON TABLE public.organization_members_pre_plan3 IS 'Members of organizations with their roles';
-
-
---
--- Name: COLUMN organization_members_pre_plan3.tenant_id; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.organization_members_pre_plan3.tenant_id IS 'The tenant ID that the member belongs to';
-
-
---
--- Name: COLUMN organization_members_pre_plan3.role; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.organization_members_pre_plan3.role IS 'Member role: admin, editor, or viewer';
-
-
---
--- Name: organization_tenant_members; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.organization_tenant_members (
-    id character varying(36) DEFAULT public.uuid_generate_v4() NOT NULL,
-    organization_id character varying(36) NOT NULL,
-    tenant_id integer NOT NULL,
-    role character varying(32) DEFAULT 'viewer'::character varying NOT NULL,
-    representative_user_id character varying(36) DEFAULT ''::character varying NOT NULL,
-    joined_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
-);
-
-
---
--- Name: TABLE organization_tenant_members; Type: COMMENT; Schema: public
---
-
-COMMENT ON TABLE public.organization_tenant_members IS 'Plan 3: Tenants (not users) are organization members.';
-
-
---
--- Name: COLUMN organization_tenant_members.role; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.organization_tenant_members.role IS 'Tenant role inside the org: admin | editor | viewer.';
-
-
---
--- Name: COLUMN organization_tenant_members.representative_user_id; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.organization_tenant_members.representative_user_id IS 'Display-only: the user who first brought this tenant into the org.';
-
-
---
--- Name: organizations; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.organizations (
-    id character varying(36) DEFAULT public.uuid_generate_v4() NOT NULL,
-    name character varying(255) NOT NULL,
-    description text,
-    owner_id character varying(36) NOT NULL,
-    invite_code character varying(32),
-    require_approval boolean DEFAULT false,
-    invite_code_expires_at timestamp with time zone,
-    invite_code_validity_days smallint DEFAULT 7 NOT NULL,
-    avatar character varying(512) DEFAULT ''::character varying,
-    searchable boolean DEFAULT false NOT NULL,
-    member_limit integer DEFAULT 50 NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    deleted_at timestamp with time zone,
-    owner_tenant_id bigint NOT NULL
-);
-
-
---
--- Name: TABLE organizations; Type: COMMENT; Schema: public
---
-
-COMMENT ON TABLE public.organizations IS 'Organizations for cross-tenant collaboration';
-
-
---
--- Name: COLUMN organizations.owner_id; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.organizations.owner_id IS 'User ID of the organization owner';
-
-
---
--- Name: COLUMN organizations.invite_code; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.organizations.invite_code IS 'Unique invitation code for joining the organization';
-
-
---
--- Name: COLUMN organizations.require_approval; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.organizations.require_approval IS 'Whether joining this organization requires admin approval';
-
-
---
--- Name: COLUMN organizations.invite_code_expires_at; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.organizations.invite_code_expires_at IS 'When the current invite code expires; NULL means no expiry (legacy)';
-
-
---
--- Name: COLUMN organizations.invite_code_validity_days; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.organizations.invite_code_validity_days IS 'Invite link validity in days: 0=never expire, 1/7/30 days';
-
-
---
--- Name: COLUMN organizations.searchable; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.organizations.searchable IS 'When true, space appears in search and can be joined by org ID';
-
-
---
--- Name: COLUMN organizations.member_limit; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.organizations.member_limit IS 'Max members allowed; 0 means no limit';
-
-
---
--- Name: COLUMN organizations.owner_tenant_id; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.organizations.owner_tenant_id IS 'Plan 3 (#1303): owning tenant; cannot be removed/downgraded from OTM.';
 
 
 --
@@ -2270,7 +1816,7 @@ CREATE TABLE public.temporary_documents (
 
 CREATE TABLE public.tenant_api_keys (
     id bigint NOT NULL,
-    tenant_id integer,
+    tenant_id integer NOT NULL DEFAULT 1 CHECK (tenant_id = 1),
     name character varying(128) NOT NULL,
     key_hash character varying(64) NOT NULL,
     api_key text DEFAULT ''::text NOT NULL,
@@ -2281,9 +1827,7 @@ CREATE TABLE public.tenant_api_keys (
     expires_at timestamp with time zone,
     revoked_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    scope_type character varying(16) DEFAULT 'tenant'::character varying NOT NULL,
-    CONSTRAINT chk_tenant_api_keys_scope CHECK (((((scope_type)::text = 'tenant'::text) AND (tenant_id IS NOT NULL)) OR (((scope_type)::text = 'platform'::text) AND (tenant_id IS NULL) AND (full_access = false))))
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
 
@@ -2304,18 +1848,6 @@ CREATE SEQUENCE public.tenant_api_keys_id_seq
 --
 
 ALTER SEQUENCE public.tenant_api_keys_id_seq OWNED BY public.tenant_api_keys.id;
-
-
---
--- Name: tenant_disabled_shared_agents; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.tenant_disabled_shared_agents (
-    tenant_id bigint NOT NULL,
-    agent_id character varying(36) NOT NULL,
-    source_tenant_id bigint NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
-);
 
 
 --
@@ -2590,7 +2122,7 @@ COMMENT ON COLUMN public.tenant_user_env_vars.value IS 'AES-GCM encrypted. Never
 --
 
 CREATE TABLE public.tenants (
-    id integer NOT NULL,
+    id integer NOT NULL CHECK (id = 1),
     name character varying(255) NOT NULL,
     description text,
     retriever_engines jsonb DEFAULT '[]'::jsonb NOT NULL,
@@ -2720,13 +2252,11 @@ CREATE TABLE public.users (
     email character varying(255) NOT NULL,
     password_hash character varying(255) NOT NULL,
     avatar character varying(500),
-    tenant_id integer,
+    tenant_id integer NOT NULL DEFAULT 1 CHECK (tenant_id = 1),
     is_active boolean DEFAULT true NOT NULL,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     deleted_at timestamp with time zone,
-    can_access_all_tenants boolean DEFAULT false NOT NULL,
-    preferences jsonb DEFAULT '{}'::jsonb NOT NULL,
     is_system_admin boolean DEFAULT false NOT NULL
 );
 
@@ -2786,12 +2316,6 @@ COMMENT ON COLUMN public.users.tenant_id IS 'Tenant ID that the user belongs to'
 
 COMMENT ON COLUMN public.users.is_active IS 'Whether the user is active';
 
-
---
--- Name: COLUMN users.preferences; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.users.preferences IS 'Per-user JSON preferences (memory toggle, future UI knobs)';
 
 
 --
@@ -3026,14 +2550,6 @@ ALTER TABLE ONLY public.tenants ALTER COLUMN id SET DEFAULT nextval('public.tena
 
 
 --
--- Name: agent_shares agent_shares_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.agent_shares
-    ADD CONSTRAINT agent_shares_pkey PRIMARY KEY (id);
-
-
---
 -- Name: audit_logs audit_logs_pkey; Type: CONSTRAINT; Schema: public
 --
 
@@ -3082,14 +2598,6 @@ ALTER TABLE ONLY public.data_sources
 
 
 --
--- Name: embed_channels embed_channels_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.embed_channels
-    ADD CONSTRAINT embed_channels_pkey PRIMARY KEY (id);
-
-
---
 -- Name: embeddings embeddings_pkey; Type: CONSTRAINT; Schema: public
 --
 
@@ -3111,14 +2619,6 @@ ALTER TABLE ONLY public.im_channel_sessions
 
 ALTER TABLE ONLY public.im_channels
     ADD CONSTRAINT im_channels_pkey PRIMARY KEY (id);
-
-
---
--- Name: kb_shares kb_shares_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.kb_shares
-    ADD CONSTRAINT kb_shares_pkey PRIMARY KEY (id);
 
 
 --
@@ -3418,38 +2918,6 @@ ALTER TABLE ONLY public.models
 
 
 --
--- Name: organization_join_requests organization_join_requests_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.organization_join_requests
-    ADD CONSTRAINT organization_join_requests_pkey PRIMARY KEY (id);
-
-
---
--- Name: organization_members_pre_plan3 organization_members_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.organization_members_pre_plan3
-    ADD CONSTRAINT organization_members_pkey PRIMARY KEY (id);
-
-
---
--- Name: organization_tenant_members organization_tenant_members_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.organization_tenant_members
-    ADD CONSTRAINT organization_tenant_members_pkey PRIMARY KEY (id);
-
-
---
--- Name: organizations organizations_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.organizations
-    ADD CONSTRAINT organizations_pkey PRIMARY KEY (id);
-
-
---
 -- Name: resource_access_grants resource_access_grants_pkey; Type: CONSTRAINT; Schema: public
 --
 
@@ -3567,14 +3035,6 @@ ALTER TABLE ONLY public.tenant_api_keys
 
 ALTER TABLE ONLY public.tenant_api_keys
     ADD CONSTRAINT tenant_api_keys_pkey PRIMARY KEY (id);
-
-
---
--- Name: tenant_disabled_shared_agents tenant_disabled_shared_agents_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.tenant_disabled_shared_agents
-    ADD CONSTRAINT tenant_disabled_shared_agents_pkey PRIMARY KEY (tenant_id, agent_id, source_tenant_id);
 
 
 --
@@ -3774,41 +3234,6 @@ CREATE INDEX embeddings_search_idx ON public.embeddings USING bm25 (id, knowledg
 --
 
 CREATE UNIQUE INDEX embeddings_unique_source ON public.embeddings USING btree (source_id, source_type);
-
-
---
--- Name: idx_agent_shares_agent_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_agent_shares_agent_id ON public.agent_shares USING btree (agent_id);
-
-
---
--- Name: idx_agent_shares_agent_org; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_agent_shares_agent_org ON public.agent_shares USING btree (agent_id, source_tenant_id, organization_id) WHERE (deleted_at IS NULL);
-
-
---
--- Name: idx_agent_shares_deleted_at; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_agent_shares_deleted_at ON public.agent_shares USING btree (deleted_at);
-
-
---
--- Name: idx_agent_shares_org_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_agent_shares_org_id ON public.agent_shares USING btree (organization_id);
-
-
---
--- Name: idx_agent_shares_source_tenant; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_agent_shares_source_tenant ON public.agent_shares USING btree (source_tenant_id);
 
 
 --
@@ -4015,34 +3440,6 @@ CREATE INDEX idx_data_sources_type ON public.data_sources USING btree (type);
 
 
 --
--- Name: idx_embed_channels_agent; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_embed_channels_agent ON public.embed_channels USING btree (agent_id);
-
-
---
--- Name: idx_embed_channels_deleted; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_embed_channels_deleted ON public.embed_channels USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
-
-
---
--- Name: idx_embed_channels_publish_token; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_embed_channels_publish_token ON public.embed_channels USING btree (publish_token) WHERE (((publish_token)::text <> ''::text) AND (deleted_at IS NULL));
-
-
---
--- Name: idx_embed_channels_tenant; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_embed_channels_tenant ON public.embed_channels USING btree (tenant_id);
-
-
---
 -- Name: idx_embeddings_is_enabled; Type: INDEX; Schema: public
 --
 
@@ -4117,41 +3514,6 @@ CREATE INDEX idx_im_channels_deleted ON public.im_channels USING btree (deleted_
 --
 
 CREATE INDEX idx_im_channels_tenant ON public.im_channels USING btree (tenant_id);
-
-
---
--- Name: idx_kb_shares_deleted_at; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_kb_shares_deleted_at ON public.kb_shares USING btree (deleted_at);
-
-
---
--- Name: idx_kb_shares_kb_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_kb_shares_kb_id ON public.kb_shares USING btree (knowledge_base_id);
-
-
---
--- Name: idx_kb_shares_kb_org; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_kb_shares_kb_org ON public.kb_shares USING btree (knowledge_base_id, organization_id) WHERE (deleted_at IS NULL);
-
-
---
--- Name: idx_kb_shares_org_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_kb_shares_org_id ON public.kb_shares USING btree (organization_id);
-
-
---
--- Name: idx_kb_shares_source_tenant; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_kb_shares_source_tenant ON public.kb_shares USING btree (source_tenant_id);
 
 
 --
@@ -4715,118 +4077,6 @@ CREATE INDEX idx_models_type ON public.models USING btree (type);
 
 
 --
--- Name: idx_org_join_requests_org_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_org_join_requests_org_id ON public.organization_join_requests USING btree (organization_id);
-
-
---
--- Name: idx_org_join_requests_org_user_pending; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_org_join_requests_org_user_pending ON public.organization_join_requests USING btree (organization_id, user_id) WHERE ((status)::text = 'pending'::text);
-
-
---
--- Name: idx_org_join_requests_status; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_org_join_requests_status ON public.organization_join_requests USING btree (status);
-
-
---
--- Name: idx_org_join_requests_type; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_org_join_requests_type ON public.organization_join_requests USING btree (request_type);
-
-
---
--- Name: idx_org_join_requests_user_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_org_join_requests_user_id ON public.organization_join_requests USING btree (user_id);
-
-
---
--- Name: idx_org_members_org_user_pre_plan3; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_org_members_org_user_pre_plan3 ON public.organization_members_pre_plan3 USING btree (organization_id, user_id);
-
-
---
--- Name: idx_org_members_role_pre_plan3; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_org_members_role_pre_plan3 ON public.organization_members_pre_plan3 USING btree (role);
-
-
---
--- Name: idx_org_members_tenant_id_pre_plan3; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_org_members_tenant_id_pre_plan3 ON public.organization_members_pre_plan3 USING btree (tenant_id);
-
-
---
--- Name: idx_org_members_user_id_pre_plan3; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_org_members_user_id_pre_plan3 ON public.organization_members_pre_plan3 USING btree (user_id);
-
-
---
--- Name: idx_org_tenant_members_by_tenant; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_org_tenant_members_by_tenant ON public.organization_tenant_members USING btree (tenant_id);
-
-
---
--- Name: idx_org_tenant_members_role; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_org_tenant_members_role ON public.organization_tenant_members USING btree (organization_id, role);
-
-
---
--- Name: idx_org_tenant_members_unique; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_org_tenant_members_unique ON public.organization_tenant_members USING btree (organization_id, tenant_id);
-
-
---
--- Name: idx_organizations_deleted_at; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_organizations_deleted_at ON public.organizations USING btree (deleted_at);
-
-
---
--- Name: idx_organizations_invite_code; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_organizations_invite_code ON public.organizations USING btree (invite_code) WHERE ((invite_code IS NOT NULL) AND (deleted_at IS NULL));
-
-
---
--- Name: idx_organizations_owner_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_organizations_owner_id ON public.organizations USING btree (owner_id);
-
-
---
--- Name: idx_organizations_owner_tenant; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_organizations_owner_tenant ON public.organizations USING btree (owner_tenant_id);
-
-
---
 -- Name: idx_resource_access_grants_expires; Type: INDEX; Schema: public
 --
 
@@ -5037,24 +4287,10 @@ CREATE INDEX idx_tenant_api_keys_revoked_at ON public.tenant_api_keys USING btre
 
 
 --
--- Name: idx_tenant_api_keys_scope_type; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_tenant_api_keys_scope_type ON public.tenant_api_keys USING btree (scope_type);
-
-
---
 -- Name: idx_tenant_api_keys_tenant; Type: INDEX; Schema: public
 --
 
 CREATE INDEX idx_tenant_api_keys_tenant ON public.tenant_api_keys USING btree (tenant_id);
-
-
---
--- Name: idx_tenant_disabled_shared_agents_tenant_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_tenant_disabled_shared_agents_tenant_id ON public.tenant_disabled_shared_agents USING btree (tenant_id);
 
 
 --
@@ -5422,13 +4658,6 @@ CREATE INDEX idx_wiki_pages_tree ON public.wiki_pages USING btree (knowledge_bas
 
 
 --
--- Name: uq_org_join_requests_pending_per_tenant; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX uq_org_join_requests_pending_per_tenant ON public.organization_join_requests USING btree (organization_id, tenant_id, request_type) WHERE ((status)::text = 'pending'::text);
-
-
---
 -- Name: uq_tenant_sandbox_configs_tenant_name; Type: INDEX; Schema: public
 --
 
@@ -5464,22 +4693,6 @@ CREATE TRIGGER trigger_mcp_services_updated_at BEFORE UPDATE ON public.mcp_servi
 
 
 --
--- Name: agent_shares agent_shares_agent_id_source_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.agent_shares
-    ADD CONSTRAINT agent_shares_agent_id_source_tenant_id_fkey FOREIGN KEY (agent_id, source_tenant_id) REFERENCES public.custom_agents(id, tenant_id) ON DELETE CASCADE;
-
-
---
--- Name: agent_shares agent_shares_organization_id_fkey; Type: FK CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.agent_shares
-    ADD CONSTRAINT agent_shares_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
-
-
---
 -- Name: auth_tokens fk_auth_tokens_user; Type: FK CONSTRAINT; Schema: public
 --
 
@@ -5492,7 +4705,7 @@ ALTER TABLE ONLY public.auth_tokens
 --
 
 ALTER TABLE ONLY public.users
-    ADD CONSTRAINT fk_users_tenant FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE SET NULL;
+    ADD CONSTRAINT fk_users_tenant FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
 
 
 --
@@ -5501,22 +4714,6 @@ ALTER TABLE ONLY public.users
 
 ALTER TABLE ONLY public.im_channel_sessions
     ADD CONSTRAINT im_channel_sessions_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.sessions(id) ON DELETE CASCADE;
-
-
---
--- Name: kb_shares kb_shares_knowledge_base_id_fkey; Type: FK CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.kb_shares
-    ADD CONSTRAINT kb_shares_knowledge_base_id_fkey FOREIGN KEY (knowledge_base_id) REFERENCES public.knowledge_bases(id) ON DELETE CASCADE;
-
-
---
--- Name: kb_shares kb_shares_organization_id_fkey; Type: FK CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.kb_shares
-    ADD CONSTRAINT kb_shares_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
 
 --
@@ -5565,30 +4762,6 @@ ALTER TABLE ONLY public.message_suggestion_events
 
 ALTER TABLE ONLY public.message_suggestion_sets
     ADD CONSTRAINT message_suggestion_sets_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
-
-
---
--- Name: organization_join_requests organization_join_requests_organization_id_fkey; Type: FK CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.organization_join_requests
-    ADD CONSTRAINT organization_join_requests_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
-
-
---
--- Name: organization_members_pre_plan3 organization_members_organization_id_fkey; Type: FK CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.organization_members_pre_plan3
-    ADD CONSTRAINT organization_members_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
-
-
---
--- Name: organization_tenant_members organization_tenant_members_organization_id_fkey; Type: FK CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.organization_tenant_members
-    ADD CONSTRAINT organization_tenant_members_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
 
 --

@@ -9,7 +9,7 @@ import (
 
 func TestSnapshotManagerFromDetectsCapability(t *testing.T) {
 	t.Run("client implementing the interface is returned", func(t *testing.T) {
-		client := newFakeRemoteClient(SandboxTypeCube)
+		client := newFakeRemoteClient(SandboxTypeDocker)
 		client.capabilities.SupportsSnapshots = true
 
 		mgr, ok := SnapshotManagerFrom(client)
@@ -28,7 +28,7 @@ func TestSnapshotManagerFromDetectsCapability(t *testing.T) {
 	})
 
 	t.Run("interface without SupportsSnapshots is rejected", func(t *testing.T) {
-		client := newFakeRemoteClient(SandboxTypeCube)
+		client := newFakeRemoteClient(SandboxTypeDocker)
 		client.capabilities.SupportsSnapshots = false
 
 		mgr, ok := SnapshotManagerFrom(client)
@@ -40,7 +40,7 @@ func TestSnapshotManagerFromDetectsCapability(t *testing.T) {
 
 func TestFakeSnapshotRoundTrip(t *testing.T) {
 	ctx := context.Background()
-	client := newFakeRemoteClient(SandboxTypeCube)
+	client := newFakeRemoteClient(SandboxTypeDocker)
 
 	ref, err := client.CreateSnapshot(ctx, "sb-1", "reliquary-sk-abc-g1")
 	require.NoError(t, err)

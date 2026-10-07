@@ -16,7 +16,6 @@ import type { SpotlightGuideStep } from '@/types/spotlightGuide'
 
 const props = defineProps<{
   when: boolean
-  isFaq: boolean
   needsEmbedding: boolean
 }>()
 
@@ -38,14 +37,14 @@ const guideSteps = computed<SpotlightGuideStep[]>(() => {
     },
   ]
 
-  if (!props.isFaq) {
+
     steps.push({
       key: 'indexing',
       target: '[data-guide="kb-create-indexing"]',
       placement: 'right',
       before: () => focusKbEditorSection('basic'),
     })
-  }
+
 
   steps.push(
     {
@@ -72,7 +71,7 @@ const guideSteps = computed<SpotlightGuideStep[]>(() => {
     })
   }
 
-  if (!props.isFaq) {
+
     steps.push(
       {
         key: 'parser',
@@ -117,15 +116,7 @@ const guideSteps = computed<SpotlightGuideStep[]>(() => {
         optional: true,
       },
     )
-  } else {
-    steps.push({
-      key: 'faq',
-      target: '[data-guide="kb-editor-nav-faq"]',
-      placement: 'right',
-      before: () => focusKbEditorSection('faq'),
-      optional: true,
-    })
-  }
+
 
   steps.push({
     key: 'submit',

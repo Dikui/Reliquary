@@ -416,16 +416,12 @@ test('renderChatMarkdown preserves citations, math, and sanitized output through
 
 test('resolveCitationChunkId maps context index to retrieval chunk UUID', () => {
   const refs = [
-    { id: 'uuid-chunk-1', knowledge_title: 'Doc A', chunk_type: 'faq' },
-    { id: 'uuid-chunk-2', knowledge_title: 'FAQ TEST - FAQ', chunk_type: 'faq' },
+    { id: 'uuid-chunk-1', knowledge_title: 'Doc A', chunk_type: 'text' },
+    { id: 'uuid-chunk-2', knowledge_title: 'Doc B', chunk_type: 'text' },
   ]
 
   assert.equal(
-    resolveCitationChunkId('2', { doc: 'FAQ TEST - FAQ' }, refs),
-    'uuid-chunk-2',
-  )
-  assert.equal(
-    resolveCitationChunkId('FAQ-2', { doc: 'FAQ TEST - FAQ' }, refs),
+    resolveCitationChunkId('2', { doc: 'Doc B' }, refs),
     'uuid-chunk-2',
   )
   assert.equal(
@@ -465,14 +461,14 @@ test('renderChatMarkdown resolves indexed chunk_id when knowledge references are
   })
 
   const html = renderChatMarkdown(
-    'See <kb doc="Sample FAQ" chunk_id="2" />',
+    'See <kb doc="Sample document" chunk_id="2" />',
     {
       renderer,
       escapeMarkdown: (text) => text,
       sanitizeHtml: (html) => html,
       knowledgeReferences: [
-        { id: 'resolved-chunk-id', knowledge_title: 'Sample FAQ', chunk_type: 'faq' },
-        { id: 'other-chunk', knowledge_title: 'Other FAQ', chunk_type: 'faq' },
+        { id: 'resolved-chunk-id', knowledge_title: 'Sample document', chunk_type: 'text' },
+        { id: 'other-chunk', knowledge_title: 'Other document', chunk_type: 'text' },
       ],
     },
   )
@@ -482,8 +478,8 @@ test('renderChatMarkdown resolves indexed chunk_id when knowledge references are
 })
 
 test('joinCitationTagsToPreviousLine removes blank lines before citation tags', () => {
-  const input = 'Setup is complete.\n\n<kb doc="faq.pdf" chunk_id="1" />'
-  assert.equal(joinCitationTagsToPreviousLine(input), 'Setup is complete. <kb doc="faq.pdf" chunk_id="1" />')
+  const input = 'Setup is complete.\n\n<kb doc="guide.pdf" chunk_id="1" />'
+  assert.equal(joinCitationTagsToPreviousLine(input), 'Setup is complete. <kb doc="guide.pdf" chunk_id="1" />')
 })
 
 test('joinCitationTagsToPreviousLine inlines consecutive citation tags across single newlines', () => {

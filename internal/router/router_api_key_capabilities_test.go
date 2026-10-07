@@ -48,73 +48,6 @@ func TestConversationRoutesDeclareChatCapability(t *testing.T) {
 	}
 }
 
-func TestPlatformControlPlaneRoutesDeclarePlatformCapabilities(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	g := &rbacGuards{}
-	v1 := gin.New().Group("/api/v1")
-	RegisterSystemAdminRoutes(v1, &handler.SystemHandler{}, nil, g)
-
-	cases := []struct {
-		method     string
-		path       string
-		capability types.APIKeyCapability
-	}{
-		{http.MethodGet, "/api/v1/system/admin/settings", types.APIKeyCapabilitySystemSettingsRead},
-		{http.MethodPut, "/api/v1/system/admin/settings/:key", types.APIKeyCapabilitySystemSettingsManage},
-		{http.MethodGet, "/api/v1/system/admin/runtime/queues", types.APIKeyCapabilitySystemRuntimeRead},
-		{http.MethodPost, "/api/v1/system/admin/runtime/queues/:queue/tasks/:task_id/actions/:action", types.APIKeyCapabilitySystemRuntimeManage},
-		{http.MethodDelete, "/api/v1/system/admin/runtime/queues/:queue/archived", types.APIKeyCapabilitySystemRuntimeManage},
-	}
-	for _, tc := range cases {
-		policy := mustLookupAPIKeyPolicy(t, g, tc.method, tc.path)
-		if !policy.PlatformOnly {
-			t.Fatalf("%s %s must be platform-only", tc.method, tc.path)
-		}
-		if !policyHasCapability(policy, tc.capability) {
-			t.Fatalf("%s %s capabilities = %#v, want %s", tc.method, tc.path, policy.Capabilities, tc.capability)
-		}
-	}
-	if _, ok := g.apiKeyAuthorizer.Lookup(http.MethodPost, "/api/v1/system/admin/api-keys"); ok {
-		t.Fatal("platform API keys must not create other platform API keys")
-	}
-}
-
-func TestPlatformTenantLifecycleRoutesDeclarePlatformCapabilities(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	g := &rbacGuards{}
-	v1 := gin.New().Group("/api/v1")
-	RegisterTenantRoutes(
-		v1,
-		&handler.TenantHandler{},
-		&handler.TenantMemberHandler{},
-		&handler.TenantInvitationHandler{},
-		nil,
-		g,
-	)
-
-	cases := []struct {
-		method     string
-		path       string
-		capability types.APIKeyCapability
-	}{
-		{http.MethodGet, "/api/v1/tenants/all", types.APIKeyCapabilitySystemTenantsRead},
-		{http.MethodGet, "/api/v1/tenants/search", types.APIKeyCapabilitySystemTenantsRead},
-		{http.MethodPost, "/api/v1/tenants", types.APIKeyCapabilitySystemTenantsManage},
-		{http.MethodGet, "/api/v1/tenants/:id", types.APIKeyCapabilitySystemTenantsRead},
-		{http.MethodPut, "/api/v1/tenants/:id", types.APIKeyCapabilitySystemTenantsManage},
-		{http.MethodDelete, "/api/v1/tenants/:id", types.APIKeyCapabilitySystemTenantsManage},
-	}
-	for _, tc := range cases {
-		policy := mustLookupAPIKeyPolicy(t, g, tc.method, tc.path)
-		if !policy.PlatformOnly {
-			t.Fatalf("%s %s must be platform-only", tc.method, tc.path)
-		}
-		if !policyHasCapability(policy, tc.capability) {
-			t.Fatalf("%s %s capabilities = %#v, want %s", tc.method, tc.path, policy.Capabilities, tc.capability)
-		}
-	}
-}
-
 func TestMessageHistoryRoutesDeclareMessageHistoryCapability(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	g := &rbacGuards{}
@@ -294,7 +227,6 @@ func TestKnowledgeReadRoutesDeclareRetrieveCapability(t *testing.T) {
 
 	RegisterKnowledgeBaseRoutes(v1, &handler.KnowledgeBaseHandler{}, g)
 	RegisterKnowledgeRoutes(v1, &handler.KnowledgeHandler{}, g)
-	RegisterFAQRoutes(v1, &handler.FAQHandler{}, g)
 	RegisterKnowledgeTagRoutes(v1, &handler.TagHandler{}, g)
 	RegisterChatRoutes(v1, &sessionhandler.Handler{}, g)
 	RegisterInitializationRoutes(v1, &handler.InitializationHandler{}, g)
@@ -310,7 +242,6 @@ func TestKnowledgeReadRoutesDeclareRetrieveCapability(t *testing.T) {
 		{http.MethodGet, "/api/v1/knowledge-bases/:id/knowledge"},
 		{http.MethodGet, "/api/v1/knowledge/:id"},
 		{http.MethodGet, "/api/v1/knowledge/:id/download"},
-		{http.MethodPost, "/api/v1/knowledge-bases/:id/faq/search"},
 		{http.MethodGet, "/api/v1/knowledge-bases/:id/tags"},
 		{http.MethodPost, "/api/v1/knowledge-search"},
 		{http.MethodGet, "/api/v1/initialization/config/:kbId"},
@@ -344,7 +275,6 @@ func TestTenantInfrastructureRoutesDeclareSpecificCapabilities(t *testing.T) {
 	RegisterVectorStoreRoutes(v1, &handler.VectorStoreHandler{}, g)
 	RegisterStorageBackendRoutes(v1, &handler.StorageBackendHandler{}, g)
 	RegisterSandboxConfigRoutes(v1, &handler.SandboxConfigHandler{}, &handler.SandboxSkillHandler{}, g)
-	RegisterEmbedChannelRoutes(v1, &handler.EmbedChannelHandler{}, g)
 	RegisterIMChannelRoutes(v1, &handler.IMHandler{}, g)
 	RegisterDataSourceRoutes(v1, &handler.DataSourceHandler{}, &handler.DataSourceCredentialsHandler{}, g)
 
@@ -358,7 +288,7 @@ func TestTenantInfrastructureRoutesDeclareSpecificCapabilities(t *testing.T) {
 		path   string
 		cap    types.APIKeyCapability
 	}{
-		{http.MethodGet, "/api/v1/tenants", types.APIKeyCapabilityManageTenantSettings},
+		{http.MethodGet, "/api/v1/tenants/:id", types.APIKeyCapabilityManageTenantSettings},
 		{http.MethodGet, "/api/v1/models", types.APIKeyCapabilityManageModels},
 		{http.MethodDelete, "/api/v1/models/:id", types.APIKeyCapabilityManageModels},
 		{http.MethodPost, "/api/v1/evaluation", types.APIKeyCapabilityRunEvaluations},
@@ -367,7 +297,6 @@ func TestTenantInfrastructureRoutesDeclareSpecificCapabilities(t *testing.T) {
 		{http.MethodGet, "/api/v1/web-search-providers", types.APIKeyCapabilityManageWebSearch},
 		{http.MethodGet, "/api/v1/vector-stores", types.APIKeyCapabilityManageVectorStores},
 		{http.MethodGet, "/api/v1/storage-backends", types.APIKeyCapabilityManageStorageBackends},
-		{http.MethodGet, "/api/v1/embed-channels", types.APIKeyCapabilityManageChannels},
 		{http.MethodGet, "/api/v1/im-channels", types.APIKeyCapabilityManageChannels},
 		{http.MethodGet, "/api/v1/datasource", types.APIKeyCapabilityManageDataSources},
 	}
@@ -472,7 +401,6 @@ func TestTenantMemberRoutesDeclareManageMembersCapability(t *testing.T) {
 		path   string
 	}{
 		{http.MethodGet, "/api/v1/tenants/:id/members"},
-		{http.MethodPost, "/api/v1/tenants/:id/members"},
 		{http.MethodPut, "/api/v1/tenants/:id/members/:user_id"},
 		{http.MethodDelete, "/api/v1/tenants/:id/members/:user_id"},
 		{http.MethodGet, "/api/v1/tenants/:id/invitations"},
@@ -495,69 +423,6 @@ func TestTenantMemberRoutesDeclareManageMembersCapability(t *testing.T) {
 
 	if _, ok := g.apiKeyAuthorizer.Lookup(http.MethodPost, "/api/v1/tenants/:id/leave"); ok {
 		t.Fatal("tenant leave route should remain default-deny for API keys")
-	}
-}
-
-func TestOrganizationRoutesDeclareManageSpacesCapability(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	g := &rbacGuards{}
-	v1 := gin.New().Group("/api/v1")
-
-	RegisterOrganizationRoutes(v1, &handler.OrganizationHandler{}, g)
-
-	cases := []struct {
-		method string
-		path   string
-	}{
-		{http.MethodPost, "/api/v1/organizations"},
-		{http.MethodGet, "/api/v1/organizations"},
-		{http.MethodPost, "/api/v1/organizations/join"},
-		{http.MethodGet, "/api/v1/organizations/search"},
-		{http.MethodPut, "/api/v1/organizations/:id"},
-		{http.MethodPost, "/api/v1/organizations/:id/invite-code"},
-		{http.MethodGet, "/api/v1/organizations/:id/members"},
-		{http.MethodPut, "/api/v1/organizations/:id/members/:tenant_id"},
-		{http.MethodGet, "/api/v1/shared-knowledge-bases"},
-		{http.MethodGet, "/api/v1/shared-agents"},
-		{http.MethodPost, "/api/v1/shared-agents/disabled"},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
-			policy := mustLookupAPIKeyPolicy(t, g, tc.method, tc.path)
-			if !policy.RequireFullAccess {
-				t.Fatal("policy should require full access without a matching capability")
-			}
-			if !policyHasCapability(policy, types.APIKeyCapabilityManageSpaces) {
-				t.Fatalf("policy capabilities = %#v, want manage_spaces", policy.Capabilities)
-			}
-		})
-	}
-
-	// KB/agent share management is open to full-access keys (tenant-wide
-	// authority) but never via a capability.
-	shareRoutes := []struct {
-		method string
-		path   string
-	}{
-		{http.MethodPost, "/api/v1/knowledge-bases/:id/shares"},
-		{http.MethodGet, "/api/v1/knowledge-bases/:id/shares"},
-		{http.MethodPut, "/api/v1/knowledge-bases/:id/shares/:share_id"},
-		{http.MethodDelete, "/api/v1/knowledge-bases/:id/shares/:share_id"},
-		{http.MethodPost, "/api/v1/agents/:id/shares"},
-		{http.MethodGet, "/api/v1/agents/:id/shares"},
-		{http.MethodDelete, "/api/v1/agents/:id/shares/:share_id"},
-	}
-	for _, tc := range shareRoutes {
-		t.Run("share "+tc.method+" "+tc.path, func(t *testing.T) {
-			policy := mustLookupAPIKeyPolicy(t, g, tc.method, tc.path)
-			if !policy.RequireFullAccess {
-				t.Fatal("share route should require full access for API keys")
-			}
-			if len(policy.Capabilities) != 0 {
-				t.Fatalf("share route must not be granted by any capability: %#v", policy.Capabilities)
-			}
-		})
 	}
 }
 
@@ -629,25 +494,6 @@ func TestKBCloneProgressRouteRequiresRetrieveOrManageKbsCapability(t *testing.T)
 	}
 	if !policyHasCapability(policy, types.APIKeyCapabilityManageKnowledgeBases) {
 		t.Fatalf("policy capabilities = %#v, want manage_kbs", policy.Capabilities)
-	}
-}
-
-func TestFAQImportProgressRouteRequiresRetrieveOrIngestCapability(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	g := &rbacGuards{}
-	v1 := gin.New().Group("/api/v1")
-
-	RegisterFAQRoutes(v1, &handler.FAQHandler{}, g)
-
-	policy := mustLookupAPIKeyPolicy(t, g, http.MethodGet, "/api/v1/faq/import/progress/:task_id")
-	if !policy.RequireFullAccess {
-		t.Fatal("policy should require full access without a matching capability")
-	}
-	if !policyHasCapability(policy, types.APIKeyCapabilityRetrieve) {
-		t.Fatalf("policy capabilities = %#v, want retrieve", policy.Capabilities)
-	}
-	if !policyHasCapability(policy, types.APIKeyCapabilityIngest) {
-		t.Fatalf("policy capabilities = %#v, want ingest", policy.Capabilities)
 	}
 }
 

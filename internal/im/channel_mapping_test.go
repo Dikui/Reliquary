@@ -14,18 +14,9 @@ func TestIMPlatformToChannel(t *testing.T) {
 	cases := map[string]string{
 		"feishu": types.ChannelFeishu,
 		"lark":   types.ChannelFeishu,
-		"Lark":   types.ChannelFeishu, // matching is case-insensitive
-		"wechat": types.ChannelWechat,
-		"wecom":  types.ChannelWecom,
-		"wxwork": types.ChannelWecom,
-
-		"dingtalk": types.ChannelDingtalk,
-		"slack":    types.ChannelSlack,
-		// Platforms without a dedicated channel fall back to the generic one.
-		"telegram": types.ChannelIM,
-		"":         types.ChannelIM,
+		"Lark":   types.ChannelFeishu,
+		"":       types.ChannelIM,
 	}
-
 	for platform, want := range cases {
 		if got := imPlatformToChannel(platform); got != want {
 			t.Errorf("imPlatformToChannel(%q) = %q, want %q", platform, got, want)

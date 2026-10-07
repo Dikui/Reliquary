@@ -8,9 +8,9 @@ import (
 )
 
 func TestWithIMIdentity(t *testing.T) {
-	const tenantID uint64 = 42
+	const tenantID = types.SingleTenantID
 	msg := &IncomingMessage{Platform: PlatformFeishu, UserID: "open-id-1"}
-	ctx := withIMIdentity(context.Background(), tenantID, "channel-1", msg)
+	ctx := withIMIdentity(context.Background(), "channel-1", msg)
 
 	gotTenant, ok := types.TenantIDFromContext(ctx)
 	if !ok || gotTenant != tenantID {
@@ -21,7 +21,7 @@ func TestWithIMIdentity(t *testing.T) {
 	if !ok || userID == "" {
 		t.Fatalf("UserID = %q (ok=%v), want non-empty synthetic user", userID, ok)
 	}
-	if want := "system-42"; userID != want {
+	if want := "system-1"; userID != want {
 		t.Fatalf("UserID = %q, want %q", userID, want)
 	}
 
@@ -31,8 +31,7 @@ func TestWithIMIdentity(t *testing.T) {
 		t.Fatalf("IsSyntheticUserID(%q) = false, want true", userID)
 	}
 
-	// Non-empty UserID is the gate the shared-KB resolution relies on; without
-	// it Organization-shared KBs are silently skipped on the IM path.
+	// Signed callbacks receive read permissions for team knowledge.
 	if role := types.TenantRoleFromContext(ctx); role != types.TenantRoleViewer {
 		t.Fatalf("TenantRole = %v, want %v", role, types.TenantRoleViewer)
 	}
@@ -41,7 +40,7 @@ func TestWithIMIdentity(t *testing.T) {
 	if !ok {
 		t.Fatalf("Principal missing")
 	}
-	if principal.Type != types.PrincipalIMUser || principal.ID != "42:channel-1:feishu:open-id-1" {
+	if principal.Type != types.PrincipalIMUser || principal.ID != "1:channel-1:feishu:open-id-1" {
 		t.Fatalf("Principal = %#v, want im_user for the external IM user", principal)
 	}
 

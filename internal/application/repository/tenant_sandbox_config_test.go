@@ -33,15 +33,15 @@ func TestSandboxConfigRepoIsolatesTenants(t *testing.T) {
 		ID:          "cfg-a",
 		TenantID:    1,
 		Name:        "prod",
-		SandboxType: "e2b",
-		Config:      &types.TenantSandboxConfig{SandboxType: "e2b"},
+		SandboxType: "docker",
+		Config:      &types.TenantSandboxConfig{SandboxType: "docker"},
 	}))
 	require.NoError(t, repo.Create(ctx, &types.TenantSandboxConfigEntity{
 		ID:          "cfg-b",
 		TenantID:    2,
 		Name:        "prod",
-		SandboxType: "e2b",
-		Config:      &types.TenantSandboxConfig{SandboxType: "e2b"},
+		SandboxType: "docker",
+		Config:      &types.TenantSandboxConfig{SandboxType: "docker"},
 	}))
 
 	// Same name in a different workspace is fine; cross-tenant reads are not.
@@ -53,6 +53,10 @@ func TestSandboxConfigRepoIsolatesTenants(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, list, 1)
 	require.Equal(t, "cfg-a", list[0].ID)
+	all, err := repo.ListAll(ctx)
+	require.NoError(t, err)
+	require.Len(t, all, 1, "housekeeping must only inspect the team")
+	require.Equal(t, "cfg-a", all[0].ID)
 }
 
 func TestSandboxConfigRepoRejectsDuplicateNameInTenant(t *testing.T) {
@@ -64,8 +68,8 @@ func TestSandboxConfigRepoRejectsDuplicateNameInTenant(t *testing.T) {
 			ID:          id,
 			TenantID:    1,
 			Name:        "prod",
-			SandboxType: "e2b",
-			Config:      &types.TenantSandboxConfig{SandboxType: "e2b"},
+			SandboxType: "docker",
+			Config:      &types.TenantSandboxConfig{SandboxType: "docker"},
 		}
 	}
 	require.NoError(t, repo.Create(ctx, base("cfg-1")))
@@ -80,8 +84,8 @@ func TestSandboxConfigRepoSoftDeleteHidesRow(t *testing.T) {
 		ID:          "cfg-a",
 		TenantID:    1,
 		Name:        "prod",
-		SandboxType: "e2b",
-		Config:      &types.TenantSandboxConfig{SandboxType: "e2b"},
+		SandboxType: "docker",
+		Config:      &types.TenantSandboxConfig{SandboxType: "docker"},
 	}))
 	require.NoError(t, repo.SoftDelete(ctx, 1, "cfg-a"))
 
@@ -98,8 +102,8 @@ func TestSandboxConfigRepoCordonRoundTrip(t *testing.T) {
 		ID:          "cfg-a",
 		TenantID:    1,
 		Name:        "prod",
-		SandboxType: "e2b",
-		Config:      &types.TenantSandboxConfig{SandboxType: "e2b"},
+		SandboxType: "docker",
+		Config:      &types.TenantSandboxConfig{SandboxType: "docker"},
 	}))
 
 	at := time.Now().UTC().Truncate(time.Second)

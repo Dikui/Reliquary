@@ -131,21 +131,6 @@ func (s *knowledgeBaseService) retrieveFromStores(
 	return all, nil
 }
 
-// paramsWithTopK builds a fresh []RetrieveParams for a group. BaseParams
-// stay immutable; only TopK is overridden. This isolates iterative FAQ's
-// TopK mutation from the goroutines that read params inside Retrieve,
-// so no aliasing assumption is required for the outer slice (and -race
-// will not flag this path).
-//
-// The value-copy of each RetrieveParams shallow-copies its reference
-// fields (Embedding, KnowledgeBaseIDs, TagIDs, KnowledgeIDs,
-// AdditionalParams). All fan-out goroutines from a single
-// retrieveFromStores call therefore share the same backing arrays for
-// those fields. Every retriever implementation today treats them as
-// read-only, so this is safe — but the immutability of reference
-// fields is a caller contract. If a future retriever ever mutates
-// Embedding in-place (e.g. to L2-normalize), -race will surface the
-// regression.
 func paramsWithTopK(g *storeGroup) []types.RetrieveParams {
 	out := make([]types.RetrieveParams, len(g.BaseParams))
 	for i, p := range g.BaseParams {

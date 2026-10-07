@@ -374,39 +374,11 @@
             something.
           -->
           <div
-            v-if="hasOverride(item) || hasBulkAction(item)"
+            v-if="hasOverride(item)"
             class="setting-control-actions"
           >
-            <!--
-              Per-key bulk action. Currently only one key
-              (tenant.default_storage_quota_gb) carries one — clicking
-              writes the current setting value onto every existing
-              tenant. We do this as a separate explicit action rather
-              than auto-cascade on save so a SystemAdmin who tweaks the
-              default while triaging a single new-tenant question
-              doesn't accidentally rewrite production quotas. Hidden
-              when the row is dirty because applying a not-yet-saved
-              value would confuse "what just happened".
-            -->
-            <t-popconfirm
-              v-if="hasBulkAction(item)"
-              :content="bulkActionConfirmBody(item)"
-              :confirm-btn="{ content: t('system.globalSettings.bulkApply.confirmBtn'), theme: 'primary' }"
-              :cancel-btn="{ content: t('system.globalSettings.confirm.cancelBtn') }"
-              placement="left"
-              @confirm="runBulkAction(item)"
-            >
-              <t-button
-                variant="text"
-                size="small"
-                :disabled="savingKey === item.key || isDirty(item)"
-                :title="t('system.globalSettings.bulkApply.tooltip')"
-                class="setting-bulk-btn"
-              >
-                <template #icon><t-icon name="usergroup" /></template>
-                {{ t('system.globalSettings.bulkApply.label') }}
-              </t-button>
-            </t-popconfirm>
+
+
 
             <t-popconfirm
               v-if="hasOverride(item)"
@@ -513,7 +485,6 @@ import {
   listSystemSettings,
   updateSystemSetting,
   resetSystemSetting,
-  applyDefaultStorageQuotaToAllTenants,
   listSystemAdmins,
   promoteUserToSystemAdmin,
   revokeSystemAdmin,
@@ -658,9 +629,6 @@ const SETTINGS_SECTION_KEYS: Record<Exclude<SettingsSection, 'other'>, readonly 
   access: [
     'auth.registration_mode',
     'auth.complex_password_enabled',
-    'auth.default_tenant_mode',
-    'tenant.self_service_creation_enabled',
-    'tenant.max_owned_per_user',
   ],
   tenant: [
     'tenant.default_storage_quota_gb',
@@ -1128,50 +1096,9 @@ function highRiskConfirmBody(item: SystemSettingItem, value: unknown): string {
   })
 }
 
-// hasBulkAction tells the template whether the current row carries an
-// extra "apply to existing data" action beyond plain save/reset.
-// Currently only `tenant.default_storage_quota_gb` does — saving the
-// setting only affects future tenants, so the bulk button is the
-// escape hatch for "rewrite all current tenants too".
-function hasBulkAction(item: SystemSettingItem): boolean {
-  return item.key === 'tenant.default_storage_quota_gb'
-}
-
 async function refreshSandboxDockerCapability(key: string) {
   if (key !== 'sandbox.docker_enabled') return
   await deploymentCapabilities.ensureLoaded(true)
-}
-
-function bulkActionConfirmBody(item: SystemSettingItem): string {
-  // Use the canonical (saved) value, not the in-progress edit, so the
-  // operator sees exactly what will be written. The button is disabled
-  // when the row is dirty (see template), so item.value is the value
-  // that's currently in effect for new tenants.
-  const v = item.value
-  const valueText = v === null || v === undefined ? '' : String(v)
-  return t('system.globalSettings.bulkApply.confirmBody', { value: valueText })
-}
-
-async function runBulkAction(item: SystemSettingItem) {
-  if (!hasBulkAction(item)) return
-  savedKey.value = null
-  savingKey.value = item.key
-  try {
-    const result = await applyDefaultStorageQuotaToAllTenants()
-    MessagePlugin.success(
-      t('system.globalSettings.bulkApply.success', {
-        count: result.affected,
-        gb: result.quota_gb,
-      }),
-    )
-    markSettingSaved(item)
-  } catch (err: any) {
-    const msg = err?.message || t('system.globalSettings.bulkApply.failed')
-    saveAnnouncement.value = msg
-    MessagePlugin.error(msg)
-  } finally {
-    savingKey.value = null
-  }
 }
 
 // resetSetting drops the DB override and reloads the row so the UI

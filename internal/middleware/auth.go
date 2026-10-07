@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	jwt "github.com/golang-jwt/jwt/v5"
 	"net/http"
 	"slices"
 	"strconv"
@@ -12,7 +13,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 	"reliquary/internal/config"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
@@ -34,10 +34,9 @@ var (
 
 // 无需认证的API列表
 var noAuthAPI = map[string][]string{
-	"/health":                 {"GET"},
-	"/api/v1/auth/register":   {"POST"},
-	"/api/v1/auth/login":      {"POST"},
-	"/api/v1/auth/auto-setup": {"POST"},
+	"/health":               {"GET"},
+	"/api/v1/auth/register": {"POST"},
+	"/api/v1/auth/login":    {"POST"},
 	// Share-link surfaces accept a plaintext invite token from anonymous
 	// callers (an invitee who hasn't registered yet). They are registered
 	// as public routes in RegisterAuthRoutes and rate-limited by IP, so the
@@ -47,16 +46,12 @@ var noAuthAPI = map[string][]string{
 	"/api/v1/auth/invitations/lookup": {"POST"},
 	"/api/v1/auth/register-by-invite": {"POST"},
 	"/api/v1/auth/config":             {"GET"},
-	"/api/v1/auth/oidc/config":        {"GET"},
-	"/api/v1/auth/oidc/url":           {"GET"},
-	"/api/v1/auth/oidc/start":         {"GET"},
-	"/api/v1/auth/oidc/callback":      {"GET"},
 	// MCP OAuth provider redirect: the third-party authorization server
 	// redirects the browser here without a Reliquary bearer token. The request
 	// is authenticated by the opaque, single-use `state` parameter instead.
 	"/api/v1/mcp-oauth/callback": {"GET"},
 	"/api/v1/auth/refresh":       {"POST"},
-	// IM platforms (Feishu, Slack, etc.) commonly issue a HEAD request
+	// Feishu commonly issue a HEAD request
 	// before GET to validate Content-Type / Content-Length when rendering
 	// image previews — both verbs must be allowed for image links to work.
 	"/api/v1/files/presigned": {"GET", "HEAD"},
@@ -75,41 +70,6 @@ func isNoAuthAPI(path string, method string) bool {
 		}
 	}
 	return false
-}
-
-// isTenantOptionalAPI lists authenticated identity-level operations that are
-// meaningful before a user belongs to any tenant. Every other authenticated
-// route remains tenant-scoped and returns TENANT_REQUIRED when the JWT and
-// request headers do not resolve a tenant.
-func isTenantOptionalAPI(path, method string) bool {
-	switch {
-	case path == "/api/v1/auth/me" && (method == http.MethodGet || method == http.MethodPut):
-		return true
-	case path == "/api/v1/auth/me/preferences" && method == http.MethodPut:
-		return true
-	case path == "/api/v1/auth/logout" && method == http.MethodPost:
-		return true
-	case path == "/api/v1/auth/change-password" && method == http.MethodPost:
-		return true
-	case path == "/api/v1/auth/validate" && method == http.MethodGet:
-		return true
-	case path == "/api/v1/auth/switch-tenant" && method == http.MethodPost:
-		return true
-	case path == "/api/v1/tenants" && method == http.MethodPost:
-		return true
-	case strings.HasPrefix(path, "/api/v1/me/invitations"):
-		return true
-	default:
-		return false
-	}
-}
-
-func attachTenantlessUserContext(c *gin.Context, user *types.User) {
-	applyAuthSession(c, authSession{
-		User:        user,
-		Principal:   types.Principal{Type: types.PrincipalWebUser, ID: user.ID},
-		SystemAdmin: user.IsSystemAdmin,
-	})
 }
 
 // Auth 认证中间件。按顺序尝试三条通道：
@@ -209,21 +169,6 @@ func authenticateJWTUser(
 		return false
 	}
 
-	if targetTenantID == 0 {
-		// 无可用空间：身份级路由（/auth/me 等）放行为 tenantless 会话，
-		// 其余路由返回 TENANT_REQUIRED 让前端引导用户创建/加入空间。
-		if isTenantOptionalAPI(c.Request.URL.Path, c.Request.Method) {
-			attachTenantlessUserContext(c, user)
-			return true
-		}
-		c.JSON(http.StatusConflict, gin.H{
-			"error": "Workspace required",
-			"code":  "TENANT_REQUIRED",
-		})
-		c.Abort()
-		return false
-	}
-
 	// 获取空间信息（X-Tenant-ID 切换路径已在 resolveTargetTenant 内取到，
 	// 避免二次查库）。
 	if tenant == nil {
@@ -266,106 +211,28 @@ func authenticateJWTUser(
 	return true
 }
 
-// resolveTargetTenant decides which tenant this request operates in.
-//
-// Priority:
-//  1. X-Tenant-ID header — must parse to a positive integer, the user must
-//     be allowed to access it (home tenant / cross-tenant superuser / active
-//     membership, see IsTenantAccessible) and the tenant must exist. The
-//     fetched tenant is returned so the caller doesn't refetch it.
-//  2. JWT tenant claim (falling back to user.TenantID when the claim is 0).
-//  3. First active membership — lets a tenantless session become usable as
-//     soon as an invitation is accepted (see resolveFirstMembershipTarget).
-//
-// Returns ok=false when the response has already been written (malformed
-// header, inaccessible or missing target tenant). targetTenantID == 0 with
-// ok=true means "authenticated but no usable workspace" — the caller decides
-// between tenantless routes and TENANT_REQUIRED.
-func resolveTargetTenant(
-	c *gin.Context,
-	tenantService interfaces.TenantService,
-	memberService interfaces.TenantMemberService,
-	cfg *config.Config,
-	user *types.User,
-	jwtTenantID uint64,
-) (targetTenantID uint64, tenant *types.Tenant, crossTenantSwitch bool, ok bool) {
-	ctx := c.Request.Context()
-
-	// 默认 target = JWT 里的 tenant_id（来自登录或 /auth/switch-tenant），
-	// 兼容 ValidateToken 的 fallback：claim 缺失时 jwtTenantID == user.TenantID。
-	targetTenantID = jwtTenantID
-	if targetTenantID == 0 {
-		targetTenantID = user.TenantID
+// resolveTargetTenant requires both the user and token to belong to the team.
+// A legacy X-Tenant-ID header is accepted only when it names that same team.
+func resolveTargetTenant(c *gin.Context, tenantService interfaces.TenantService, memberService interfaces.TenantMemberService, cfg *config.Config, user *types.User, jwtTenantID uint64) (uint64, *types.Tenant, bool, bool) {
+	if user == nil || user.TenantID != types.SingleTenantID || jwtTenantID != types.SingleTenantID {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid team workspace"})
+		c.Abort()
+		return 0, nil, false, false
 	}
-
-	if tenantHeader := c.GetHeader("X-Tenant-ID"); tenantHeader != "" {
-		// 解析目标空间ID。畸形 / 零值必须显式拒绝：静默忽略会让坏掉的
-		// 前端/SDK 悄悄写错空间，反而看不到问题。与 RequirePathTenantMatch
-		// 中对 :id 的校验保持一致（非空、可解析、>0）。
-		parsedTenantID, err := strconv.ParseUint(tenantHeader, 10, 64)
-		if err != nil || parsedTenantID == 0 {
-			logger.Warnf(ctx, "Invalid X-Tenant-ID header from user=%s: %q (err=%v)", user.ID, tenantHeader, err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid X-Tenant-ID header"})
+	if raw := c.GetHeader("X-Tenant-ID"); raw != "" {
+		id, err := strconv.ParseUint(raw, 10, 64)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid team workspace header"})
 			c.Abort()
 			return 0, nil, false, false
 		}
-		// 检查用户是否有权限访问目标空间：自家空间、跨空间超管、或
-		// 有 active membership 行——三选一，由 IsTenantAccessible 统一判定。
-		if !IsTenantAccessible(ctx, user, parsedTenantID, memberService, cfg) {
-			logger.Warnf(ctx, "User %s attempted to access tenant %d without permission", user.ID, parsedTenantID)
-			c.JSON(http.StatusForbidden, gin.H{
-				"error": "Forbidden: insufficient permissions to access target workspace",
-			})
+		if id != types.SingleTenantID {
+			c.JSON(http.StatusForbidden, gin.H{"error": "only the team workspace is available"})
 			c.Abort()
 			return 0, nil, false, false
 		}
-		// 验证目标空间是否存在
-		targetTenant, err := tenantService.GetTenantByID(ctx, parsedTenantID)
-		if err != nil || targetTenant == nil {
-			logger.Warnf(ctx, "Error getting target tenant by ID: %v, tenantID: %d", err, parsedTenantID)
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid target workspace ID"})
-			c.Abort()
-			return 0, nil, false, false
-		}
-		logger.Infof(ctx, "User %s switching to tenant %d", user.ID, parsedTenantID)
-		return parsedTenantID, targetTenant, parsedTenantID != user.TenantID, true
 	}
-
-	if targetTenantID == 0 {
-		targetTenantID = resolveFirstMembershipTarget(ctx, user, memberService, tenantService)
-	}
-	return targetTenantID, nil, targetTenantID != user.TenantID, true
-}
-
-// resolveFirstMembershipTarget lets a tenantless session immediately become
-// usable once an active membership exists (for example after accepting its
-// first invitation or being added directly by an administrator). The user
-// service persists the same earliest-membership choice on the next token
-// issuance; middleware keeps the current JWT usable until then.
-func resolveFirstMembershipTarget(
-	ctx context.Context,
-	user *types.User,
-	memberService interfaces.TenantMemberService,
-	tenantService interfaces.TenantService,
-) uint64 {
-	if user == nil || memberService == nil || tenantService == nil {
-		return 0
-	}
-	members, err := memberService.ListByUser(ctx, user.ID)
-	if err != nil {
-		logger.Warnf(ctx, "Failed to list memberships for tenantless user %s: %v", user.ID, err)
-		return 0
-	}
-	for _, member := range members {
-		if member == nil || member.TenantID == 0 || member.Status != types.TenantMemberStatusActive {
-			continue
-		}
-		tenant, err := tenantService.GetTenantByID(ctx, member.TenantID)
-		if err == nil && tenant != nil {
-			return member.TenantID
-		}
-	}
-	return 0
+	return types.SingleTenantID, nil, false, true
 }
 
 func authenticateAPIKeyRequest(
@@ -385,51 +252,22 @@ func authenticateAPIKeyRequest(
 		return false
 	}
 
-	if key.IsPlatform() {
-		tenantHeader := strings.TrimSpace(c.GetHeader("X-Tenant-ID"))
-		if tenantHeader == "" {
-			if !isPlatformTenantOptionalAPI(c.Request.URL.Path, c.Request.Method) {
-				c.JSON(http.StatusConflict, gin.H{
-					"error": "Workspace required: platform API keys must send X-Tenant-ID",
-					"code":  "TENANT_REQUIRED",
-				})
-				c.Abort()
-				return false
-			}
-			attachPlatformAPIKeyAuthContext(c, key)
-		} else {
-			targetTenantID, parseErr := strconv.ParseUint(tenantHeader, 10, 64)
-			if parseErr != nil || targetTenantID == 0 {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid X-Tenant-ID header"})
-				c.Abort()
-				return false
-			}
-			attachAPIKeyAuthContext(c, tenantService, userService, targetTenantID, key)
-		}
-	} else {
-		tenantID := key.TenantIDValue()
-		if tenantID == 0 {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: invalid API key scope"})
+	tenantID := key.TenantIDValue()
+	if tenantID != types.SingleTenantID {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid team API key scope"})
+		c.Abort()
+		return false
+	}
+	if raw := c.GetHeader("X-Tenant-ID"); raw != "" {
+		id, err := strconv.ParseUint(raw, 10, 64)
+		if err != nil || id != types.SingleTenantID {
+			c.JSON(http.StatusForbidden, gin.H{"error": "only the team workspace is available"})
 			c.Abort()
 			return false
 		}
-		if tenantHeader := strings.TrimSpace(c.GetHeader("X-Tenant-ID")); tenantHeader != "" {
-			requestedTenantID, parseErr := strconv.ParseUint(tenantHeader, 10, 64)
-			if parseErr != nil || requestedTenantID == 0 {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid X-Tenant-ID header"})
-				c.Abort()
-				return false
-			}
-			if requestedTenantID != tenantID {
-				c.JSON(http.StatusForbidden, gin.H{
-					"error": "Forbidden: workspace API key cannot switch workspaces",
-				})
-				c.Abort()
-				return false
-			}
-		}
-		attachAPIKeyAuthContext(c, tenantService, userService, tenantID, key)
 	}
+	attachAPIKeyAuthContext(c, tenantService, userService, types.SingleTenantID, key)
+
 	if c.IsAborted() {
 		return false
 	}
@@ -437,52 +275,6 @@ func authenticateAPIKeyRequest(
 	// is enforced by middleware.APIKeyRouteAuthorizer on the /api/v1 group.
 	// Key-management and any other undeclared route is denied there.
 	return true
-}
-
-func isPlatformTenantOptionalAPI(path, method string) bool {
-	path = strings.TrimSuffix(strings.TrimSpace(path), "/")
-	// 精确匹配 admin 控制面前缀（"/api/v1/system/admin" 本身或其子路径）。
-	// 裸 HasPrefix 会误放行诸如 "/api/v1/system/admin-foo" 的同前缀路径。
-	if path == "/api/v1/system/admin" || strings.HasPrefix(path, "/api/v1/system/admin/") {
-		return true
-	}
-	if method == http.MethodGet && (path == "/api/v1/tenants/all" || path == "/api/v1/tenants/search") {
-		return true
-	}
-	return method == http.MethodPost && path == "/api/v1/tenants"
-}
-
-func attachPlatformAPIKeyAuthContext(c *gin.Context, key *types.TenantAPIKey) {
-	principal, user := platformAPIKeyIdentity(key)
-	applyAuthSession(c, authSession{
-		User:      user,
-		Principal: principal,
-		// This role context exists only for legacy guard compatibility after
-		// RequireRole short-circuits API-key principals; the key's real
-		// authority is its platform capabilities enforced by the APIKeyGate.
-		Role: types.TenantRoleViewer,
-		APIKeyScope: &types.TenantAPIKeyScope{
-			KeyID:        key.ID,
-			ScopeType:    types.APIKeyScopePlatform,
-			FullAccess:   false,
-			Capabilities: key.Capabilities,
-		},
-	})
-}
-
-func platformAPIKeyIdentity(key *types.TenantAPIKey) (types.Principal, *types.User) {
-	keyID := uint64(0)
-	if key != nil {
-		keyID = key.ID
-	}
-	principal := types.Principal{Type: types.PrincipalAPIPlatform, ID: strconv.FormatUint(keyID, 10)}
-	userID := principal.StorageID()
-	return principal, &types.User{
-		ID:       userID,
-		Username: userID,
-		Email:    fmt.Sprintf("platform-api-key-%d@api-key.local", keyID),
-		IsActive: true,
-	}
 }
 
 func attachAPIKeyAuthContext(
@@ -502,40 +294,32 @@ func attachAPIKeyAuthContext(
 
 	var user *types.User
 	var principal types.Principal
-	if key != nil && key.IsPlatform() {
-		// A platform key keeps one stable machine identity while selecting the
-		// target workspace through X-Tenant-ID. Tenant API-principal modes and
-		// tenant-owned synthetic users must not rewrite that identity.
-		principal, user = platformAPIKeyIdentity(key)
-		user.TenantID = tenantID
-	} else {
-		user, err = userService.GetUserByTenantID(c.Request.Context(), tenantID)
-		if err != nil || user == nil {
-			user = &types.User{
-				ID:       fmt.Sprintf("system-%d", tenantID),
-				Username: fmt.Sprintf("system-%d", tenantID),
-				Email:    fmt.Sprintf("system-%d@api-key.local", tenantID),
-				TenantID: tenantID,
-				IsActive: true,
-			}
-			logger.Infof(c.Request.Context(),
-				"No user found for tenant %d via API key, using synthetic system user %s", tenantID, user.ID)
-		}
 
-		var principalErr error
-		principal, principalErr = resolveAPIPrincipal(c.Request.Context(), t, c.Request.Header)
-		if principalErr != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": apiPrincipalAuthErrorMessage(principalErr)})
-			c.Abort()
-			return
+	user, err = userService.GetUserByTenantID(c.Request.Context(), tenantID)
+	if err != nil || user == nil {
+		user = &types.User{
+			ID:       fmt.Sprintf("system-%d", tenantID),
+			Username: fmt.Sprintf("system-%d", tenantID),
+			Email:    fmt.Sprintf("system-%d@api-key.local", tenantID),
+			TenantID: tenantID,
+			IsActive: true,
 		}
+		logger.Infof(c.Request.Context(),
+			"No user found for tenant %d via API key, using synthetic system user %s", tenantID, user.ID)
 	}
 
+	var principalErr error
+	principal, principalErr = resolveAPIPrincipal(c.Request.Context(), t, c.Request.Header)
+	if principalErr != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": apiPrincipalAuthErrorMessage(principalErr)})
+		c.Abort()
+		return
+	}
 	// This role context exists only for legacy guard compatibility after
 	// RequireRole short-circuits API-key principals. The API key's real
 	// authority is FullAccess + Capabilities + KnowledgeBaseIDs.
 	apiKeyTenantRoleContext := types.TenantRoleViewer
-	fullAccess := key != nil && key.FullAccess && !key.IsPlatform()
+	fullAccess := key != nil && key.FullAccess
 	if fullAccess {
 		apiKeyTenantRoleContext = types.TenantRoleOwner
 	}
@@ -549,7 +333,6 @@ func attachAPIKeyAuthContext(
 	if key != nil {
 		session.APIKeyScope = &types.TenantAPIKeyScope{
 			KeyID:            key.ID,
-			ScopeType:        key.ScopeType,
 			FullAccess:       fullAccess,
 			KnowledgeBaseIDs: key.KnowledgeBaseIDs,
 			Capabilities:     key.Capabilities,
@@ -747,81 +530,13 @@ func principalTenantIDFromClaims(claims jwt.MapClaims) uint64 {
 // The boolean second return value reports whether enforcement should reject
 // the request. It is true whenever a usable role was found OR fail-open
 // applies; false only when we want callers to abort with 403.
-func resolveTenantRole(
-	ctx context.Context,
-	memberService interfaces.TenantMemberService,
-	user *types.User,
-	targetTenantID uint64,
-	crossTenantSwitch bool,
-	cfg *config.Config,
-) (types.TenantRole, bool) {
-	// 1. 正常成员关系
-	member, err := memberService.GetMembership(ctx, user.ID, targetTenantID)
-	if err == nil && member != nil && member.Status == types.TenantMemberStatusActive {
-		logger.Infof(ctx,
-			"[auth] resolveTenantRole step1 hit: user=%s tenant=%d row_role=%s row_status=%s",
-			user.ID, targetTenantID, member.Role, member.Status)
-		return member.Role, true
-	}
-	if err != nil {
-		logger.Warnf(ctx, "tenant_members lookup failed user=%s tenant=%d: %v",
-			user.ID, targetTenantID, err)
-		// Fall through; treat lookup errors the same as "no membership
-		// found" so a transient DB hiccup doesn't lock everyone out.
-	} else {
-		var statusInfo string
-		if member == nil {
-			statusInfo = "no_row"
-		} else {
-			statusInfo = "row_exists status=" + string(member.Status) + " role=" + string(member.Role)
-		}
-		logger.Warnf(ctx,
-			"[auth] resolveTenantRole step1 miss: user=%s tenant=%d (%s)",
-			user.ID, targetTenantID, statusInfo)
-	}
-
-	// 2. 跨空间超管直通：CanAccessAllTenants 用户切到别的空间时不强制要求 membership。
-	//    注意：这里只授予临时 Admin 角色，不写入 tenant_members，避免"看一眼别人空间"
-	//    意外升级为持久化所有权。
-	if crossTenantSwitch && user.CanAccessAllTenants {
-		logger.Infof(ctx,
-			"[auth] resolveTenantRole step2 (cross-tenant superuser) -> Admin: user=%s tenant=%d",
-			user.ID, targetTenantID)
-		return types.TenantRoleAdmin, true
-	}
-
-	// 3. 孤儿空间自愈：仅当用户登录的是自己的 home tenant、且该空间尚无任何活跃成员时
-	//    允许自动晋升为 Owner。跨空间 switch / JWT 指向他人空间的场景一律不进入此分支，
-	//    防止越权获得他人空间的 Owner 权限。
-	isHomeTenant := !crossTenantSwitch && targetTenantID == user.TenantID
-	if isHomeTenant {
-		hasAny, anyErr := memberService.HasAnyMembers(ctx, targetTenantID)
-		if anyErr == nil && !hasAny {
-			if _, e := memberService.AddMember(
-				ctx, user.ID, targetTenantID, types.TenantRoleOwner, nil,
-			); e == nil {
-				logger.Infof(ctx,
-					"[audit] Auto-promoted user %s to Owner of orphan tenant %d (home_tenant=true)",
-					user.ID, targetTenantID,
-				)
-				return types.TenantRoleOwner, true
-			} else {
-				logger.Warnf(ctx, "Failed to auto-promote user %s in tenant %d: %v",
-					user.ID, targetTenantID, e)
-			}
-		}
-	}
-
-	// 4. 兜底：根据 EnableRBAC 决定 fail-closed 还是 fail-open
-	if cfg != nil && cfg.Tenant.IsRBACEnforced() {
-		logger.Warnf(ctx,
-			"[auth] resolveTenantRole step4 fail-closed (EnableRBAC=true): user=%s tenant=%d",
-			user.ID, targetTenantID)
+func resolveTenantRole(ctx context.Context, memberService interfaces.TenantMemberService, user *types.User, targetTenantID uint64, crossTenantSwitch bool, cfg *config.Config) (types.TenantRole, bool) {
+	if memberService == nil || user == nil || targetTenantID != types.SingleTenantID {
 		return "", false
 	}
-	logger.Warnf(ctx,
-		"[auth] resolveTenantRole step4 fail-open (EnableRBAC=false) -> Admin: user=%s tenant=%d",
-		user.ID, targetTenantID)
-	// fail-open 期间保持现有行为（每个登录用户在自己空间里都是"管理员"）。
-	return types.TenantRoleAdmin, true
+	member, err := memberService.GetMembership(ctx, user.ID, types.SingleTenantID)
+	if err != nil || member == nil || member.Status != types.TenantMemberStatusActive || !member.Role.IsValid() {
+		return "", false
+	}
+	return member.Role, true
 }

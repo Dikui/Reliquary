@@ -40,7 +40,12 @@ func anomalyTestDB(t *testing.T) *gorm.DB {
 
 func anomalyContext(user string) context.Context {
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
-	return context.WithValue(ctx, types.UserIDContextKey, user)
+	ctx = context.WithValue(ctx, types.UserIDContextKey, user)
+	role := types.TenantRoleContributor
+	if user == "reviewer" {
+		role = types.TenantRoleViewer
+	}
+	return context.WithValue(ctx, types.TenantRoleContextKey, role)
 }
 
 func TestKnowledgeAnomalyForMessagesReturnsRelevantDecisions(t *testing.T) {
@@ -67,7 +72,7 @@ func TestKnowledgeAnomalyForMessagesReturnsRelevantDecisions(t *testing.T) {
 	require.Empty(t, got)
 }
 
-func TestKnowledgeAnomalyReviewerCannotApplyOwnerCan(t *testing.T) {
+func TestKnowledgeAnomalyViewerCannotApplyTeamEditorCan(t *testing.T) {
 	db := anomalyTestDB(t)
 	tagRepo := repository.NewKnowledgeTagRepository(db)
 	knowledge := &knowledgeService{repo: repository.NewKnowledgeRepository(db), tagRepo: tagRepo}
@@ -84,7 +89,7 @@ func TestKnowledgeAnomalyReviewerCannotApplyOwnerCan(t *testing.T) {
 	sort.Strings(ids)
 	require.Equal(t, []string{"keep", "old"}, ids)
 
-	decided, err := svc.Resolve(anomalyContext("owner"), "kb", item.ID, "apply", "confirmed")
+	decided, err := svc.Resolve(anomalyContext("other-editor"), "kb", item.ID, "apply", "confirmed")
 	require.NoError(t, err)
 	require.Equal(t, "applied", decided.Status)
 	ids = nil

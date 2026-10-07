@@ -1,10 +1,5 @@
 <template>
-  <!-- 全局右上角"待处理邀请"铃铛。
-       - 与原先 UserMenu 中铃铛的逻辑一致：只在 pendingInvitationCount > 0 时渲染，
-         空收件箱场景不占用角落像素。
-       - 固定定位、z-index 远低于 t-drawer 默认 2500，业务页面右侧抽屉（FAQ、KB 调试、
-         Tenant 审计、SettingDrawer 等）弹出时会自然覆盖铃铛，不需要特意联动隐藏。
-       - 点击铃铛复用同一份 MyInvitationsDialog，行为与之前一致。 -->
+
   <template v-if="pendingInvitationCount > 0">
     <t-badge :count="pendingInvitationCount" :max-count="99" :offset="[6, 4]"
       class="global-invitation-bell">

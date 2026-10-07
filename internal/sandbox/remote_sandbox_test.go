@@ -9,7 +9,7 @@ import (
 
 func TestExecuteOnHandleRunsRemoteScriptWithoutUploading(t *testing.T) {
 	ctx := context.Background()
-	client := newFakeRemoteClient(SandboxTypeCube)
+	client := newFakeRemoteClient(SandboxTypeDocker)
 	sb := NewRemoteSandbox(client, RemoteCreateRequest{})
 	handle, err := client.Create(ctx, RemoteCreateRequest{TemplateID: "tpl"})
 	require.NoError(t, err)
@@ -37,7 +37,7 @@ func TestExecuteOnHandleRunsRemoteScriptWithoutUploading(t *testing.T) {
 
 func TestExecuteOnHandleNestedRemoteScriptUsesSkillRootVenv(t *testing.T) {
 	ctx := context.Background()
-	client := newFakeRemoteClient(SandboxTypeCube)
+	client := newFakeRemoteClient(SandboxTypeDocker)
 	sb := NewRemoteSandbox(client, RemoteCreateRequest{})
 	handle, err := client.Create(ctx, RemoteCreateRequest{TemplateID: "tpl"})
 	require.NoError(t, err)
@@ -57,7 +57,7 @@ func TestExecuteOnHandleNestedRemoteScriptUsesSkillRootVenv(t *testing.T) {
 
 func TestExecuteOnHandleRejectsRemoteScriptOutsideSkillRoot(t *testing.T) {
 	ctx := context.Background()
-	client := newFakeRemoteClient(SandboxTypeCube)
+	client := newFakeRemoteClient(SandboxTypeDocker)
 	sb := NewRemoteSandbox(client, RemoteCreateRequest{})
 	handle, err := client.Create(ctx, RemoteCreateRequest{TemplateID: "tpl"})
 	require.NoError(t, err)
@@ -77,7 +77,7 @@ func TestExecuteOnHandleRejectsRemoteScriptOutsideSkillRoot(t *testing.T) {
 
 func TestExecuteOnHandleRunsWorkspaceScriptWithExplicitSkillDir(t *testing.T) {
 	ctx := context.Background()
-	client := newFakeRemoteClient(SandboxTypeCube)
+	client := newFakeRemoteClient(SandboxTypeDocker)
 	sb := NewRemoteSandbox(client, RemoteCreateRequest{})
 	handle, err := client.Create(ctx, RemoteCreateRequest{TemplateID: "tpl"})
 	require.NoError(t, err)
@@ -104,7 +104,7 @@ func TestExecuteOnHandleRunsWorkspaceScriptWithExplicitSkillDir(t *testing.T) {
 
 func TestExecuteOnHandleRejectsWorkspaceScriptWithoutSkillDir(t *testing.T) {
 	ctx := context.Background()
-	client := newFakeRemoteClient(SandboxTypeCube)
+	client := newFakeRemoteClient(SandboxTypeDocker)
 	sb := NewRemoteSandbox(client, RemoteCreateRequest{})
 	handle, err := client.Create(ctx, RemoteCreateRequest{TemplateID: "tpl"})
 	require.NoError(t, err)
@@ -117,7 +117,7 @@ func TestExecuteOnHandleRejectsWorkspaceScriptWithoutSkillDir(t *testing.T) {
 
 func TestExecuteOnHandleRejectsWorkspaceInputEvenWithSkillDir(t *testing.T) {
 	ctx := context.Background()
-	client := newFakeRemoteClient(SandboxTypeCube)
+	client := newFakeRemoteClient(SandboxTypeDocker)
 	sb := NewRemoteSandbox(client, RemoteCreateRequest{})
 	handle, err := client.Create(ctx, RemoteCreateRequest{TemplateID: "tpl"})
 	require.NoError(t, err)

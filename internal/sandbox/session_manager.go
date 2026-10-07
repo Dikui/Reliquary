@@ -1,25 +1,3 @@
-// Package sandbox: session-bound Manager.
-//
-// SessionBoundManager keeps one persistent remote sandbox per tenant session.
-// It delegates all provider-specific work to a RemoteSandboxClient adapter and
-// treats the authoritative session→sandbox binding as external state that
-// lives in SessionSandboxBindingStore (Redis in production, memory in tests
-// and single-process deployments). This makes the manager provider-neutral
-// (Cube , E2B) and multi-instance safe: two Reliquary processes
-// concurrently servicing the same session never allocate duplicate sandboxes,
-// and a restart never loses the session's remote resource.
-//
-// Semantics:
-//   - An Execute call with a non-empty ExecuteConfig.SessionID resolves the
-//     session's remote sandbox (creating it lazily) and runs the script on
-//     the resolved handle. All resolution goes through the lifecycle
-//     coordinator so create/recover/replace/delete are serialised by the
-//     distributed lifecycle lock.
-//   - An Execute call with an empty SessionID falls through to a stateless
-//     RemoteSandbox, which allocates a fresh sandbox, runs the script, and
-//     tears the sandbox down after Execute returns.
-//   - Cube and E2B reap idle sandboxes themselves. Docker has no provider TTL,
-//     so that backend runs its own idle sweep against activity-marker mtimes.
 package sandbox
 
 import (
@@ -39,10 +17,6 @@ import (
 // file storage. Generated artifacts must remain under SessionOutputRoot.
 const SessionInputRoot = "/workspace/input"
 
-// SessionOutputRoot is where skill scripts write artifacts for collection.
-// The skills manager injects this path via skillOutputEnvVar; Execute
-// materialises the directory via envd before the script runs so scripts
-// do not depend on the template user being able to mkdir under /workspace.
 const SessionOutputRoot = "/workspace/output"
 
 // skillOutputEnvVar matches the skills manager's RELIQUARY_SKILL_OUTPUT_DIR.
@@ -146,10 +120,6 @@ func NewSessionBoundManager(deps SessionBoundManagerConfig) (*SessionBoundManage
 	// applied here: this constructor also serves named configs, which must be
 	// told what they are missing rather than handed a built-in localhost value.
 	switch provider {
-	case SandboxTypeCube:
-		applyCubeRuntimeDefaults(cfg)
-	case SandboxTypeE2B:
-		applyE2BRuntimeDefaults(cfg)
 	case SandboxTypeDocker:
 		applyDockerRuntimeDefaults(cfg)
 	}
@@ -644,9 +614,6 @@ func (m *SessionBoundManager) WriteSessionFile(
 	if err != nil {
 		return err
 	}
-	// resetSkillDir already created this folder with mkdir -p. Cube's MakeDir
-	// then reports the existing directory as an error; ignoreExistingDir keeps
-	// that from aborting the seed of SKILL.md.
 	if err := ignoreExistingDir(m.client.MakeDir(ctx, handle, path.Dir(clean))); err != nil {
 		return fmt.Errorf("sandbox: create install directory: %w", err)
 	}
@@ -891,8 +858,7 @@ func (m *SessionBoundManager) lookupSessionHandle(
 		return nil, false, nil
 	}
 	handle, err := m.client.Connect(ctx, RemoteConnectRequest{
-		SandboxID:          binding.SandboxID,
-		TrafficAccessToken: binding.TrafficAccessToken,
+		SandboxID: binding.SandboxID,
 	})
 	if err != nil {
 		if CanReplaceRemoteBinding(err) {
@@ -904,7 +870,6 @@ func (m *SessionBoundManager) lookupSessionHandle(
 		handle.Provider() != m.client.Provider() {
 		return nil, false, errors.New("sandbox: remote handle does not match binding")
 	}
-	persistInboundToken(ctx, m.bindings, key, *binding, handle)
 	return handle, true, nil
 }
 
@@ -950,17 +915,7 @@ func (m *SessionBoundManager) listFilesRecursive(
 	return files, nil
 }
 
-// sessionKey resolves the tenant-scoped binding key. Tenant ID comes from the
-// request context; empty tenant is treated as a caller error to keep session
-// bindings globally addressable in Redis.
-//
-// It reads the session-owner tenant rather than the ambient request tenant so
-// that a shared agent — which runs under the agent owner's workspace so its
-// models, KBs and named sandbox configs resolve there — still binds its sandbox
-// under the session's own tenant. Session deletion tears the sandbox down from a
-// request that knows only that tenant, so any other choice would strand the
-// MicroVM. SandboxTenantIDFromContext falls back to the request tenant, which
-// is already the session owner on every non-borrowed path.
+// sessionKey resolves the team and session used to bind the Docker container.
 func (m *SessionBoundManager) sessionKey(
 	ctx context.Context,
 	sessionID string,
@@ -968,6 +923,9 @@ func (m *SessionBoundManager) sessionKey(
 	tenantID, ok := types.SandboxTenantIDFromContext(ctx)
 	if !ok || tenantID == 0 {
 		return SessionSandboxKey{}, errors.New("sandbox: tenant ID missing from context")
+	}
+	if tenantID != types.SingleTenantID {
+		return SessionSandboxKey{}, errors.New("sandbox: session must belong to the team")
 	}
 	key := SessionSandboxKey{TenantID: tenantID, SessionID: strings.TrimSpace(sessionID)}
 	if err := key.Validate(); err != nil {
@@ -1064,51 +1022,10 @@ func cleanSessionWorkDir(workDir string, allowSkillsRoot bool) (string, error) {
 	)
 }
 
-// buildSessionCreateRequest projects Config into a provider-neutral remote
-// create request. The metadata block is populated per-session by the
-// lifecycle coordinator; env vars propagate as-is.
-//
-// The provider parameter (derived from RemoteSandboxClient.Provider()) is the
-// authoritative source of identity — it selects the correct Config fields so
-// Cube and E2B never read each other's templates or TTLs.
 func buildSessionCreateRequest(provider RemoteProvider, cfg *Config) (RemoteCreateRequest, error) {
 	envVars := withWorkspaceEnvDefaults(cloneMetadata(cfg.EnvVars))
 
 	switch provider {
-	case SandboxTypeCube:
-		ttl := cfg.CubeSandboxTTL
-		if ttl <= 0 {
-			ttl = DefaultCubeSandboxTTL
-		}
-		return RemoteCreateRequest{
-			TemplateID: cfg.CubeTemplate,
-			EnvVars:    envVars,
-			Network:    cfg.Network,
-			Timeout: RemoteTimeoutPolicy{
-				Mode:       RemoteTimeoutExplicit,
-				Value:      ttl,
-				Action:     RemoteOnTimeoutPause,
-				AutoResume: true,
-			},
-		}, nil
-
-	case SandboxTypeE2B:
-		ttl := cfg.E2BSandboxTTL
-		if ttl <= 0 {
-			ttl = DefaultE2BSandboxTTL
-		}
-		return RemoteCreateRequest{
-			TemplateID: cfg.E2BTemplate,
-			EnvVars:    envVars,
-			Network:    cfg.Network,
-			Timeout: RemoteTimeoutPolicy{
-				Mode:       RemoteTimeoutExplicit,
-				Value:      ttl,
-				Action:     RemoteOnTimeoutPause,
-				AutoResume: true,
-			},
-		}, nil
-
 	case SandboxTypeDocker:
 		ttl := cfg.DockerIdleTTL
 		if ttl <= 0 {
@@ -1141,29 +1058,15 @@ func buildSessionCreateRequest(provider RemoteProvider, cfg *Config) (RemoteCrea
 	}
 }
 
-// effectiveHTTPTimeout returns the HTTP timeout for health probes and API
-// calls against the provider's control plane. The provider parameter is
-// authoritative: Cube and E2B each read their own timeout field and fall back
-// to their own package-level default.
 func effectiveHTTPTimeout(provider RemoteProvider, cfg *Config) time.Duration {
 	switch provider {
-	case SandboxTypeCube:
-		if cfg.CubeHTTPTimeout > 0 {
-			return cfg.CubeHTTPTimeout
-		}
-		return DefaultCubeHTTPTimeout
-	case SandboxTypeE2B:
-		if cfg.E2BHTTPTimeout > 0 {
-			return cfg.E2BHTTPTimeout
-		}
-		return DefaultE2BHTTPTimeout
 	case SandboxTypeDocker:
 		if cfg.DockerHTTPTimeout > 0 {
 			return cfg.DockerHTTPTimeout
 		}
 		return DefaultDockerHTTPTimeout
 	default:
-		return DefaultCubeHTTPTimeout
+		return DefaultDockerHTTPTimeout
 	}
 }
 

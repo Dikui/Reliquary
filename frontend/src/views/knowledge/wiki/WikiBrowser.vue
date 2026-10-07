@@ -850,7 +850,6 @@ const props = defineProps<{
   // canEdit 由父组件 KnowledgeBase.vue 透传（与 canEdit computed 同源）。
   // 控制 AutoFix / FixIssue / IgnoreIssue 三个写操作按钮的可见性，
   // 对应后端 g.OwnedWikiKBOrAdmin() 守卫（KB creator OR Admin+ OR
-  // org-share editor）。父组件没传时按 false 兜底，避免漏 gate。
   canEdit?: boolean
 }>()
 
@@ -860,8 +859,6 @@ const emit = defineEmits<{
   (e: 'view-graph', slug: string): void
 }>()
 
-// Wiki content can reference objects owned by the KB's source tenant (shared
-// KBs), which the tenant-scoped /files proxy rejects as cross-tenant.
 const kbFileAccess = computed<ProtectedFileAccessContext>(() => ({
   mode: 'knowledgeBase',
   kbId: props.knowledgeBaseId,

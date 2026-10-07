@@ -128,15 +128,6 @@ func (s *bindingStoreFaults) DeleteIfMatch(
 	return s.base.DeleteIfMatch(ctx, key, provider, sandboxID)
 }
 
-func (s *bindingStoreFaults) ReplaceTrafficTokenIfMatch(
-	ctx context.Context,
-	key SessionSandboxKey,
-	expected SessionSandboxBinding,
-	token string,
-) (bool, error) {
-	return s.base.ReplaceTrafficTokenIfMatch(ctx, key, expected, token)
-}
-
 func (s *bindingStoreFaults) InvalidateByConfig(
 	ctx context.Context,
 	tenantID uint64,
@@ -182,55 +173,11 @@ func newTestRemoteSessionLifecycle(
 	return lifecycle
 }
 
-func TestCreateAndBindPersistsInboundToken(t *testing.T) {
-	client := newFakeRemoteClient(SandboxTypeCube)
-	client.trafficAccessToken = "traffic-token"
+func TestCreateAndBindDockerSandbox(t *testing.T) {
+	client := newFakeRemoteClient(SandboxTypeDocker)
 	store := NewMemorySessionSandboxBindingStore()
 	lifecycle := newTestRemoteSessionLifecycle(
 		t, client, store, &fakeSessionExistenceChecker{exists: true},
-	)
-	key := SessionSandboxKey{TenantID: 1, SessionID: "session-1"}
-
-	_, err := lifecycle.Resolve(context.Background(), key)
-	require.NoError(t, err)
-
-	binding, err := store.Get(context.Background(), key)
-	require.NoError(t, err)
-	require.Equal(t, "traffic-token", binding.TrafficAccessToken,
-		"the token is issued once, so the binding is the only place it survives a pause")
-}
-
-func TestCreateAndBindRejectsTokenlessSandboxWhenInboundClosed(t *testing.T) {
-	closed := false
-	client := newFakeRemoteClient(SandboxTypeE2B)
-	client.trafficAccessToken = ""
-	store := NewMemorySessionSandboxBindingStore()
-	lifecycle := newTestRemoteSessionLifecycleWithPolicy(
-		t, client, store, &fakeSessionExistenceChecker{exists: true},
-		RemoteNetworkPolicy{AllowPublicTraffic: &closed},
-	)
-	key := SessionSandboxKey{TenantID: 1, SessionID: "session-1"}
-
-	_, err := lifecycle.Resolve(context.Background(), key)
-
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "inbound traffic token missing")
-	creates, _, _, _, deletes := client.counts()
-	require.Equal(t, 1, creates)
-	require.Equal(t, 1, deletes, "the unusable sandbox must be destroyed, not bound")
-	binding, err := store.Get(context.Background(), key)
-	require.NoError(t, err)
-	require.Nil(t, binding, "an empty token must not be persisted")
-}
-
-func TestCreateAndBindAllowsTokenlessSandboxWhenProviderHasNoInboundCredential(t *testing.T) {
-	closed := false
-	client := newFakeRemoteClient(SandboxTypeDocker)
-	client.omitsInboundTokenCarrier = true
-	store := NewMemorySessionSandboxBindingStore()
-	lifecycle := newTestRemoteSessionLifecycleWithPolicy(
-		t, client, store, &fakeSessionExistenceChecker{exists: true},
-		RemoteNetworkPolicy{AllowPublicTraffic: &closed},
 	)
 	key := SessionSandboxKey{TenantID: 1, SessionID: "session-1"}
 
@@ -243,74 +190,9 @@ func TestCreateAndBindAllowsTokenlessSandboxWhenProviderHasNoInboundCredential(t
 	require.Zero(t, deletes)
 }
 
-func TestCreateAndBindPersistsTokenWhenInboundClosed(t *testing.T) {
-	closed := false
-	client := newFakeRemoteClient(SandboxTypeCube)
-	client.trafficAccessToken = "traffic-token"
-	store := NewMemorySessionSandboxBindingStore()
-	lifecycle := newTestRemoteSessionLifecycleWithPolicy(
-		t, client, store, &fakeSessionExistenceChecker{exists: true},
-		RemoteNetworkPolicy{AllowPublicTraffic: &closed},
-	)
-	key := SessionSandboxKey{TenantID: 1, SessionID: "session-1"}
-
-	_, err := lifecycle.Resolve(context.Background(), key)
-	require.NoError(t, err)
-
-	binding, err := store.Get(context.Background(), key)
-	require.NoError(t, err)
-	require.Equal(t, "traffic-token", binding.TrafficAccessToken)
-}
-
-func TestResolveReconnectPassesStoredInboundToken(t *testing.T) {
-	client := newFakeRemoteClient(SandboxTypeCube)
-	client.trafficAccessToken = "traffic-token"
-	store := NewMemorySessionSandboxBindingStore()
-	lifecycle := newTestRemoteSessionLifecycle(
-		t, client, store, &fakeSessionExistenceChecker{exists: true},
-	)
-	key := SessionSandboxKey{TenantID: 1, SessionID: "session-1"}
-
-	_, err := lifecycle.Resolve(context.Background(), key)
-	require.NoError(t, err)
-	_, err = lifecycle.Resolve(context.Background(), key)
-	require.NoError(t, err)
-
-	client.mu.Lock()
-	connects := append([]RemoteConnectRequest(nil), client.connects...)
-	client.mu.Unlock()
-	require.Len(t, connects, 1)
-	require.Equal(t, "traffic-token", connects[0].TrafficAccessToken)
-}
-
-func TestResolveReconnectPersistsProviderReissuedInboundToken(t *testing.T) {
-	client := newFakeRemoteClient(SandboxTypeCube)
-	client.trafficAccessToken = "create-token"
-	store := NewMemorySessionSandboxBindingStore()
-	lifecycle := newTestRemoteSessionLifecycle(
-		t, client, store, &fakeSessionExistenceChecker{exists: true},
-	)
-	key := SessionSandboxKey{TenantID: 1, SessionID: "session-1"}
-
-	_, err := lifecycle.Resolve(context.Background(), key)
-	require.NoError(t, err)
-
-	client.mu.Lock()
-	client.connectTrafficToken = "rotated-token"
-	client.mu.Unlock()
-
-	_, err = lifecycle.Resolve(context.Background(), key)
-	require.NoError(t, err)
-
-	binding, err := store.Get(context.Background(), key)
-	require.NoError(t, err)
-	require.Equal(t, "rotated-token", binding.TrafficAccessToken,
-		"a token the provider reissued on connect must replace the stored copy")
-}
-
 func TestRemoteSessionLifecycleCreatesOnceAcrossCoordinators(t *testing.T) {
 	store := NewMemorySessionSandboxBindingStore()
-	client := newFakeRemoteClient(SandboxTypeCube)
+	client := newFakeRemoteClient(SandboxTypeDocker)
 	checker := &fakeSessionExistenceChecker{exists: true}
 	first := newTestRemoteSessionLifecycle(t, client, store, checker)
 	second := newTestRemoteSessionLifecycle(t, client, store, checker)
@@ -342,7 +224,7 @@ func TestRemoteSessionLifecycleCreatesOnceAcrossCoordinators(t *testing.T) {
 
 func TestRemoteSessionLifecycleAllowsDifferentKeysInParallel(t *testing.T) {
 	store := NewMemorySessionSandboxBindingStore()
-	client := newFakeRemoteClient(SandboxTypeCube)
+	client := newFakeRemoteClient(SandboxTypeDocker)
 	checker := &fakeSessionExistenceChecker{exists: true}
 	lifecycle := newTestRemoteSessionLifecycle(t, client, store, checker)
 	firstKey := SessionSandboxKey{TenantID: 42, SessionID: "session-a"}
@@ -401,13 +283,13 @@ func TestRemoteSessionLifecycleReplacesOnlyTerminalBinding(t *testing.T) {
 		{
 			name:    "unavailable error",
 			state:   RemoteStateRunning,
-			getErr:  NewRemoteError(SandboxTypeCube, "Get", RemoteErrorKindUnavailable, "offline", nil),
+			getErr:  NewRemoteError(SandboxTypeDocker, "Get", RemoteErrorKindUnavailable, "offline", nil),
 			wantErr: true,
 		},
 		{
 			name:    "internal error",
 			state:   RemoteStateRunning,
-			getErr:  NewRemoteError(SandboxTypeCube, "Get", RemoteErrorKindInternal, "unknown", nil),
+			getErr:  NewRemoteError(SandboxTypeDocker, "Get", RemoteErrorKindInternal, "unknown", nil),
 			wantErr: true,
 		},
 	}
@@ -415,7 +297,7 @@ func TestRemoteSessionLifecycleReplacesOnlyTerminalBinding(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store := NewMemorySessionSandboxBindingStore()
-			client := newFakeRemoteClient(SandboxTypeCube)
+			client := newFakeRemoteClient(SandboxTypeDocker)
 			checker := &fakeSessionExistenceChecker{exists: true}
 			lifecycle := newTestRemoteSessionLifecycle(t, client, store, checker)
 			key := SessionSandboxKey{TenantID: 42, SessionID: "session-a"}
@@ -446,35 +328,8 @@ func TestRemoteSessionLifecycleReplacesOnlyTerminalBinding(t *testing.T) {
 	}
 }
 
-func TestRemoteSessionLifecycleProviderMismatchNeverUsesOldID(t *testing.T) {
-	store := NewMemorySessionSandboxBindingStore()
-	client := newFakeRemoteClient(SandboxTypeE2B)
-	checker := &fakeSessionExistenceChecker{exists: true}
-	lifecycle := newTestRemoteSessionLifecycle(t, client, store, checker)
-	key := SessionSandboxKey{TenantID: 42, SessionID: "session-a"}
-	old := validSessionSandboxBinding(key, "cube-old")
-	old.Provider = SandboxTypeCube
-	created, err := store.Create(context.Background(), key, old)
-	require.NoError(t, err)
-	require.True(t, created)
-
-	handle, err := lifecycle.Resolve(context.Background(), key)
-	require.NoError(t, err)
-	require.Equal(t, SandboxTypeE2B, handle.Provider())
-	creates, connects, gets, _, deletes := client.counts()
-	require.Equal(t, 1, creates)
-	require.Zero(t, connects)
-	require.Zero(t, gets)
-	require.Zero(t, deletes)
-
-	binding, err := store.Get(context.Background(), key)
-	require.NoError(t, err)
-	require.Equal(t, SandboxTypeE2B, binding.Provider)
-	require.Equal(t, handle.ID(), binding.SandboxID)
-}
-
 func TestRemoteSessionLifecycleRecoversOldestMetadataCandidate(t *testing.T) {
-	for _, provider := range []RemoteProvider{SandboxTypeCube, SandboxTypeE2B} {
+	for _, provider := range []RemoteProvider{SandboxTypeDocker} {
 		t.Run(string(provider), func(t *testing.T) {
 			store := NewMemorySessionSandboxBindingStore()
 			client := newFakeRemoteClient(provider)
@@ -497,7 +352,7 @@ func TestRemoteSessionLifecycleRecoversOldestMetadataCandidate(t *testing.T) {
 }
 
 func TestRemoteSessionLifecycleDeletesDuplicateMetadataCandidates(t *testing.T) {
-	for _, provider := range []RemoteProvider{SandboxTypeCube, SandboxTypeE2B} {
+	for _, provider := range []RemoteProvider{SandboxTypeDocker} {
 		t.Run(string(provider), func(t *testing.T) {
 			store := NewMemorySessionSandboxBindingStore()
 			client := newFakeRemoteClient(provider)
@@ -519,82 +374,11 @@ func TestRemoteSessionLifecycleDeletesDuplicateMetadataCandidates(t *testing.T) 
 	}
 }
 
-func newTestRemoteSessionLifecycleWithPolicy(
-	t *testing.T,
-	client RemoteSandboxClient,
-	store SessionSandboxBindingStore,
-	checker SessionExistenceChecker,
-	policy RemoteNetworkPolicy,
-) *remoteSessionLifecycle {
-	t.Helper()
-	lifecycle, err := newRemoteSessionLifecycle(
-		client,
-		store,
-		checker,
-		RemoteCreateRequest{
-			TemplateID: "template-a",
-			Network:    policy,
-			Timeout: RemoteTimeoutPolicy{
-				Mode:   RemoteTimeoutExplicit,
-				Value:  time.Hour,
-				Action: RemoteOnTimeoutPause,
-			},
-		},
-		time.Second,
-		"",
-	)
-	require.NoError(t, err)
-	return lifecycle
-}
-
-// A metadata-adopted sandbox has no binding to supply its inbound token. When
-// the policy closed inbound, adopting it would bind a sandbox whose every
-// data-plane call answers 403 — and 403 is RemoteErrorKindAuthentication, which
-// CanReplaceRemoteBinding refuses to replace, so the session would stay wedged
-// until an operator intervened. Creating a fresh sandbox is the only recovery.
-func TestRemoteSessionLifecycleSkipsTokenlessAdoptionWhenInboundClosed(t *testing.T) {
-	closed := false
-	client := newFakeRemoteClient(SandboxTypeE2B)
-	client.trafficAccessToken = "fresh-token"
-	store := NewMemorySessionSandboxBindingStore()
-	lifecycle := newTestRemoteSessionLifecycleWithPolicy(
-		t, client, store, &fakeSessionExistenceChecker{exists: true},
-		RemoteNetworkPolicy{AllowPublicTraffic: &closed},
-	)
-	key := SessionSandboxKey{TenantID: 42, SessionID: "session-a"}
-	client.addSandbox("orphan", "template-a", RemoteStateRunning, lifecycle.metadata(key), time.Unix(100, 0))
-
-	handle, err := lifecycle.Resolve(context.Background(), key)
-
-	require.NoError(t, err)
-	require.NotEqual(t, "orphan", handle.ID())
-	creates, _, _, _, _ := client.counts()
-	require.Equal(t, 1, creates)
-	binding, err := store.Get(context.Background(), key)
-	require.NoError(t, err)
-	require.Equal(t, handle.ID(), binding.SandboxID)
-	require.Equal(t, "fresh-token", binding.TrafficAccessToken)
-	// The abandoned sandbox is deleted, not left behind. Nothing in-tree
-	// reclaims orphans (ReapOrphanSandboxes has no production caller), and
-	// without this every binding loss would strand one more paused sandbox.
-	require.False(t, client.hasSandbox("orphan"))
-	_, _, _, _, deletes := client.counts()
-	require.Equal(t, 1, deletes)
-}
-
-// Docker has no inbound credential at all, so its handle does not implement
-// RemoteInboundTokenCarrier and InboundTokenOf always returns "". The guard
-// must not read that as a lost credential: Docker never had the 403 wedge, and
-// firing here would destroy a healthy container and its /workspace on every
-// binding loss — on precisely the single-node deployment the guard was for.
-func TestRemoteSessionLifecycleAdoptsWhenProviderHasNoInboundCredential(t *testing.T) {
-	closed := false
+func TestRemoteSessionLifecycleAdoptsDockerSandbox(t *testing.T) {
 	client := newFakeRemoteClient(SandboxTypeDocker)
-	client.omitsInboundTokenCarrier = true
 	store := NewMemorySessionSandboxBindingStore()
-	lifecycle := newTestRemoteSessionLifecycleWithPolicy(
+	lifecycle := newTestRemoteSessionLifecycle(
 		t, client, store, &fakeSessionExistenceChecker{exists: true},
-		RemoteNetworkPolicy{AllowPublicTraffic: &closed},
 	)
 	key := SessionSandboxKey{TenantID: 42, SessionID: "session-a"}
 	client.addSandbox("existing", "template-a", RemoteStateRunning, lifecycle.metadata(key), time.Unix(100, 0))
@@ -608,51 +392,8 @@ func TestRemoteSessionLifecycleAdoptsWhenProviderHasNoInboundCredential(t *testi
 	require.Zero(t, deletes)
 }
 
-func TestRemoteSessionLifecycleAdoptsWhenProviderReissuesInboundToken(t *testing.T) {
-	closed := false
-	client := newFakeRemoteClient(SandboxTypeE2B)
-	client.trafficAccessToken = "reissued-token"
-	client.reissuesTokenOnConnect = true
-	store := NewMemorySessionSandboxBindingStore()
-	lifecycle := newTestRemoteSessionLifecycleWithPolicy(
-		t, client, store, &fakeSessionExistenceChecker{exists: true},
-		RemoteNetworkPolicy{AllowPublicTraffic: &closed},
-	)
-	key := SessionSandboxKey{TenantID: 42, SessionID: "session-a"}
-	client.addSandbox("orphan", "template-a", RemoteStateRunning, lifecycle.metadata(key), time.Unix(100, 0))
-
-	handle, err := lifecycle.Resolve(context.Background(), key)
-
-	require.NoError(t, err)
-	require.Equal(t, "orphan", handle.ID())
-	creates, _, _, _, _ := client.counts()
-	require.Zero(t, creates)
-	binding, err := store.Get(context.Background(), key)
-	require.NoError(t, err)
-	require.Equal(t, "reissued-token", binding.TrafficAccessToken)
-}
-
-func TestRemoteSessionLifecycleAdoptsTokenlessSandboxWhenInboundPublic(t *testing.T) {
-	open := true
-	client := newFakeRemoteClient(SandboxTypeE2B)
-	store := NewMemorySessionSandboxBindingStore()
-	lifecycle := newTestRemoteSessionLifecycleWithPolicy(
-		t, client, store, &fakeSessionExistenceChecker{exists: true},
-		RemoteNetworkPolicy{AllowPublicTraffic: &open},
-	)
-	key := SessionSandboxKey{TenantID: 42, SessionID: "session-a"}
-	client.addSandbox("orphan", "template-a", RemoteStateRunning, lifecycle.metadata(key), time.Unix(100, 0))
-
-	handle, err := lifecycle.Resolve(context.Background(), key)
-
-	require.NoError(t, err)
-	require.Equal(t, "orphan", handle.ID())
-	creates, _, _, _, _ := client.counts()
-	require.Zero(t, creates)
-}
-
 func TestRemoteSessionLifecycleStopsDuplicateCleanupAfterLockLoss(t *testing.T) {
-	for _, provider := range []RemoteProvider{SandboxTypeCube, SandboxTypeE2B} {
+	for _, provider := range []RemoteProvider{SandboxTypeDocker} {
 		t.Run(string(provider), func(t *testing.T) {
 			base := NewMemorySessionSandboxBindingStore()
 			store := &cancelableLifecycleStore{SessionSandboxBindingStore: base}
@@ -682,7 +423,7 @@ func TestRemoteSessionLifecycleStopsDuplicateCleanupAfterLockLoss(t *testing.T) 
 	}
 }
 
-func TestE2BRemoteSessionLifecycleBindingStoreContract(t *testing.T) {
+func TestDockerRemoteSessionLifecycleBindingStoreContract(t *testing.T) {
 	tests := []struct {
 		name     string
 		newStore func(*testing.T) SessionSandboxBindingStore
@@ -705,25 +446,25 @@ func TestE2BRemoteSessionLifecycleBindingStoreContract(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store := tt.newStore(t)
-			client := newFakeRemoteClient(SandboxTypeE2B)
+			client := newFakeRemoteClient(SandboxTypeDocker)
 			checker := &fakeSessionExistenceChecker{exists: true}
 			first := newTestRemoteSessionLifecycle(t, client, store, checker)
 			second := newTestRemoteSessionLifecycle(t, client, store, checker)
-			key := SessionSandboxKey{TenantID: 42, SessionID: "session-e2b"}
+			key := SessionSandboxKey{TenantID: 42, SessionID: "session-docker"}
 
 			firstHandle, err := first.Resolve(context.Background(), key)
 			require.NoError(t, err)
 			secondHandle, err := second.Resolve(context.Background(), key)
 			require.NoError(t, err)
 			require.Equal(t, firstHandle.ID(), secondHandle.ID())
-			require.Equal(t, SandboxTypeE2B, secondHandle.Provider())
+			require.Equal(t, SandboxTypeDocker, secondHandle.Provider())
 
 			creates, _, _, _, _ := client.counts()
 			require.Equal(t, 1, creates)
 			binding, err := store.Get(context.Background(), key)
 			require.NoError(t, err)
 			require.NotNil(t, binding)
-			require.Equal(t, SandboxTypeE2B, binding.Provider)
+			require.Equal(t, SandboxTypeDocker, binding.Provider)
 			require.Equal(t, firstHandle.ID(), binding.SandboxID)
 
 			require.NoError(t, second.Destroy(context.Background(), key))
@@ -737,7 +478,7 @@ func TestE2BRemoteSessionLifecycleBindingStoreContract(t *testing.T) {
 
 func TestRemoteSessionLifecycleCleansCreatedSandboxWhenSessionDisappears(t *testing.T) {
 	store := NewMemorySessionSandboxBindingStore()
-	client := newFakeRemoteClient(SandboxTypeCube)
+	client := newFakeRemoteClient(SandboxTypeDocker)
 	checker := &fakeSessionExistenceChecker{results: []bool{true, false}}
 	lifecycle := newTestRemoteSessionLifecycle(t, client, store, checker)
 	key := SessionSandboxKey{TenantID: 42, SessionID: "session-a"}
@@ -755,7 +496,7 @@ func TestRemoteSessionLifecycleCleansCreatedSandboxWhenSessionDisappears(t *test
 
 func TestRemoteSessionLifecycleCleansCreatedSandboxAfterCallerCancellation(t *testing.T) {
 	store := NewMemorySessionSandboxBindingStore()
-	client := newFakeRemoteClient(SandboxTypeCube)
+	client := newFakeRemoteClient(SandboxTypeDocker)
 	checker := &fakeSessionExistenceChecker{exists: true}
 	lifecycle := newTestRemoteSessionLifecycle(t, client, store, checker)
 	key := SessionSandboxKey{TenantID: 42, SessionID: "session-a"}
@@ -767,7 +508,7 @@ func TestRemoteSessionLifecycleCleansCreatedSandboxAfterCallerCancellation(t *te
 	handle, err := lifecycle.Resolve(ctx, key)
 	require.ErrorIs(t, err, context.Canceled)
 	require.Nil(t, handle)
-	require.False(t, client.hasSandbox("cube-1"))
+	require.False(t, client.hasSandbox("docker-1"))
 	creates, _, _, _, deletes := client.counts()
 	require.Equal(t, 1, creates)
 	require.Equal(t, 1, deletes)
@@ -778,7 +519,7 @@ func TestRemoteSessionLifecycleCleansCreatedSandboxAfterCallerCancellation(t *te
 
 func TestRemoteSessionLifecycleCleansCreateLoserAndUsesWinner(t *testing.T) {
 	base := NewMemorySessionSandboxBindingStore()
-	client := newFakeRemoteClient(SandboxTypeCube)
+	client := newFakeRemoteClient(SandboxTypeDocker)
 	checker := &fakeSessionExistenceChecker{exists: true}
 	key := SessionSandboxKey{TenantID: 42, SessionID: "session-a"}
 	client.addSandbox("winner", "template-a", RemoteStateRunning, nil, time.Now())
@@ -805,7 +546,7 @@ func TestRemoteSessionLifecycleCleansCreateLoserAndUsesWinner(t *testing.T) {
 
 func TestRemoteSessionLifecycleDoesNotDeleteCreatedSandboxChosenAsWinner(t *testing.T) {
 	base := NewMemorySessionSandboxBindingStore()
-	client := newFakeRemoteClient(SandboxTypeCube)
+	client := newFakeRemoteClient(SandboxTypeDocker)
 	checker := &fakeSessionExistenceChecker{exists: true}
 	key := SessionSandboxKey{TenantID: 42, SessionID: "session-a"}
 	store := &bindingStoreFaults{base: base, forceCreateFalse: true}
@@ -813,7 +554,7 @@ func TestRemoteSessionLifecycleDoesNotDeleteCreatedSandboxChosenAsWinner(t *test
 		created, err := base.Create(
 			context.Background(),
 			key,
-			validSessionSandboxBinding(key, "cube-1"),
+			validSessionSandboxBinding(key, "docker-1"),
 		)
 		require.NoError(t, err)
 		require.True(t, created)
@@ -822,8 +563,8 @@ func TestRemoteSessionLifecycleDoesNotDeleteCreatedSandboxChosenAsWinner(t *test
 
 	handle, err := lifecycle.Resolve(context.Background(), key)
 	require.NoError(t, err)
-	require.Equal(t, "cube-1", handle.ID())
-	require.True(t, client.hasSandbox("cube-1"))
+	require.Equal(t, "docker-1", handle.ID())
+	require.True(t, client.hasSandbox("docker-1"))
 	_, _, _, _, deletes := client.counts()
 	require.Zero(t, deletes)
 }
@@ -832,15 +573,15 @@ func TestRemoteSessionLifecycleCleansCreatedSandboxWhenBindingWriteFails(t *test
 	base := NewMemorySessionSandboxBindingStore()
 	bindErr := errors.New("binding write failed")
 	cleanupErr := NewRemoteError(
-		SandboxTypeCube,
+		SandboxTypeDocker,
 		"Delete",
 		RemoteErrorKindUnavailable,
 		"cleanup unavailable",
 		nil,
 	)
 	store := &bindingStoreFaults{base: base, createErr: bindErr}
-	client := newFakeRemoteClient(SandboxTypeCube)
-	client.deleteErrs["cube-1"] = cleanupErr
+	client := newFakeRemoteClient(SandboxTypeDocker)
+	client.deleteErrs["docker-1"] = cleanupErr
 	lifecycle := newTestRemoteSessionLifecycle(
 		t,
 		client,
@@ -863,9 +604,9 @@ func TestRemoteSessionLifecycleCleansCreatedSandboxWhenBindingWriteFails(t *test
 
 func TestRemoteSessionLifecycleDoesNotCreateWhenRecoveryListFails(t *testing.T) {
 	store := NewMemorySessionSandboxBindingStore()
-	client := newFakeRemoteClient(SandboxTypeCube)
+	client := newFakeRemoteClient(SandboxTypeDocker)
 	listErr := NewRemoteError(
-		SandboxTypeCube,
+		SandboxTypeDocker,
 		"List",
 		RemoteErrorKindUnavailable,
 		"list unavailable",
@@ -926,7 +667,7 @@ func TestRemoteSessionLifecycleFailsClosedOnBindingErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := newFakeRemoteClient(SandboxTypeCube)
+			client := newFakeRemoteClient(SandboxTypeDocker)
 			lifecycle := newTestRemoteSessionLifecycle(
 				t,
 				client,
@@ -947,7 +688,7 @@ func TestRemoteSessionLifecycleFailsClosedOnBindingErrors(t *testing.T) {
 
 func TestRemoteSessionLifecycleSerializesResolveAndDestroy(t *testing.T) {
 	store := NewMemorySessionSandboxBindingStore()
-	client := newFakeRemoteClient(SandboxTypeCube)
+	client := newFakeRemoteClient(SandboxTypeDocker)
 	checker := &fakeSessionExistenceChecker{exists: true}
 	lifecycle := newTestRemoteSessionLifecycle(t, client, store, checker)
 	key := SessionSandboxKey{TenantID: 42, SessionID: "session-a"}
@@ -993,7 +734,7 @@ func TestRemoteSessionLifecycleSerializesResolveAndDestroy(t *testing.T) {
 
 func TestRemoteSessionLifecycleDoesNotCreateForDeletedSession(t *testing.T) {
 	store := NewMemorySessionSandboxBindingStore()
-	client := newFakeRemoteClient(SandboxTypeCube)
+	client := newFakeRemoteClient(SandboxTypeDocker)
 	checker := &fakeSessionExistenceChecker{exists: false}
 	lifecycle := newTestRemoteSessionLifecycle(t, client, store, checker)
 	key := SessionSandboxKey{TenantID: 42, SessionID: "session-a"}
@@ -1008,7 +749,7 @@ func TestRemoteSessionLifecycleDoesNotCreateForDeletedSession(t *testing.T) {
 
 func TestRemoteSessionLifecycleCleansBindingAfterSessionDeletion(t *testing.T) {
 	store := NewMemorySessionSandboxBindingStore()
-	client := newFakeRemoteClient(SandboxTypeCube)
+	client := newFakeRemoteClient(SandboxTypeDocker)
 	checker := &fakeSessionExistenceChecker{exists: true}
 	lifecycle := newTestRemoteSessionLifecycle(t, client, store, checker)
 	key := SessionSandboxKey{TenantID: 42, SessionID: "session-a"}
@@ -1029,7 +770,7 @@ func TestRemoteSessionLifecycleCleansBindingAfterSessionDeletion(t *testing.T) {
 func TestRemoteSessionLifecycleDestroySemantics(t *testing.T) {
 	t.Run("transient delete preserves binding", func(t *testing.T) {
 		store := NewMemorySessionSandboxBindingStore()
-		client := newFakeRemoteClient(SandboxTypeCube)
+		client := newFakeRemoteClient(SandboxTypeDocker)
 		lifecycle := newTestRemoteSessionLifecycle(
 			t,
 			client,
@@ -1039,7 +780,7 @@ func TestRemoteSessionLifecycleDestroySemantics(t *testing.T) {
 		key := SessionSandboxKey{TenantID: 42, SessionID: "session-a"}
 		client.addSandbox("existing", "template-a", RemoteStateRunning, nil, time.Now())
 		client.deleteErrs["existing"] = NewRemoteError(
-			SandboxTypeCube,
+			SandboxTypeDocker,
 			"Delete",
 			RemoteErrorKindUnavailable,
 			"offline",
@@ -1061,7 +802,7 @@ func TestRemoteSessionLifecycleDestroySemantics(t *testing.T) {
 
 	t.Run("not found delete removes binding", func(t *testing.T) {
 		store := NewMemorySessionSandboxBindingStore()
-		client := newFakeRemoteClient(SandboxTypeCube)
+		client := newFakeRemoteClient(SandboxTypeDocker)
 		lifecycle := newTestRemoteSessionLifecycle(
 			t,
 			client,
@@ -1083,35 +824,11 @@ func TestRemoteSessionLifecycleDestroySemantics(t *testing.T) {
 		require.Nil(t, binding)
 	})
 
-	t.Run("provider mismatch only deletes binding", func(t *testing.T) {
-		store := NewMemorySessionSandboxBindingStore()
-		client := newFakeRemoteClient(SandboxTypeE2B)
-		lifecycle := newTestRemoteSessionLifecycle(
-			t,
-			client,
-			store,
-			&fakeSessionExistenceChecker{exists: true},
-		)
-		key := SessionSandboxKey{TenantID: 42, SessionID: "session-a"}
-		old := validSessionSandboxBinding(key, "cube-old")
-		old.Provider = SandboxTypeCube
-		created, err := store.Create(context.Background(), key, old)
-		require.NoError(t, err)
-		require.True(t, created)
-
-		require.NoError(t, lifecycle.Destroy(context.Background(), key))
-		_, _, _, _, deletes := client.counts()
-		require.Zero(t, deletes)
-		binding, err := store.Get(context.Background(), key)
-		require.NoError(t, err)
-		require.Nil(t, binding)
-	})
-
 	t.Run("binding delete failure is reported after remote deletion", func(t *testing.T) {
 		base := NewMemorySessionSandboxBindingStore()
 		deleteErr := errors.New("binding delete failed")
 		store := &bindingStoreFaults{base: base, deleteErr: deleteErr}
-		client := newFakeRemoteClient(SandboxTypeCube)
+		client := newFakeRemoteClient(SandboxTypeDocker)
 		lifecycle := newTestRemoteSessionLifecycle(
 			t,
 			client,
@@ -1171,7 +888,7 @@ type lifecycleFixture struct {
 
 func newLifecycleFixture(t *testing.T) *lifecycleFixture {
 	t.Helper()
-	client := newFakeRemoteClient(SandboxTypeCube)
+	client := newFakeRemoteClient(SandboxTypeDocker)
 	bindings := NewMemorySessionSandboxBindingStore()
 	checker := &fakeSessionExistenceChecker{exists: true}
 	lifecycle, err := newRemoteSessionLifecycle(
@@ -1342,7 +1059,7 @@ func TestInvalidateStaysWithinTheWorkspace(t *testing.T) {
 func newTestLifecycleWithConfigID(t *testing.T, configID string) *remoteSessionLifecycle {
 	t.Helper()
 	lifecycle, err := newRemoteSessionLifecycle(
-		newFakeRemoteClient(SandboxTypeCube),
+		newFakeRemoteClient(SandboxTypeDocker),
 		NewMemorySessionSandboxBindingStore(),
 		&fakeSessionExistenceChecker{exists: true},
 		RemoteCreateRequest{TemplateID: "template-a"},

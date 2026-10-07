@@ -21,208 +21,40 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-// testGlobalSandboxConfig supplies built-in runtime tuning values. Named
-// configs inherit none of the provider fields from it; it is here so the service
-// under test is wired the way production wires it.
 func testGlobalSandboxConfig() *sandbox.Config {
 	cfg := sandbox.DefaultConfig()
-	cfg.Type = sandbox.SandboxTypeE2B
-	cfg.E2BAPIURL = "https://api.e2b.app"
-	cfg.E2BSandboxDomain = "e2b.app"
-	cfg.E2BAPIKey = "global-key"
-	cfg.E2BTemplate = "global-template"
+	cfg.Type = sandbox.SandboxTypeDocker
+	cfg.DockerImage = "global-image"
 	return cfg
 }
 
-func TestSandboxConfigHasSecretsIncludesInjectedHeaders(t *testing.T) {
-	cfg := &types.TenantSandboxConfig{
-		Network: &types.SandboxNetworkPolicy{
-			CubeRules: []types.CubeEgressRule{{
-				Inject: []types.CubeHeaderInject{{Secret: "cube-secret"}},
-			}},
-		},
-	}
-	require.True(t, sandboxConfigHasSecrets(cfg))
-
-	cfg.Network.CubeRules = nil
-	cfg.Network.E2BHostRules = []types.E2BHostRule{{
-		Headers: map[string]string{"X-Key": "e2b-secret"},
-	}}
-	require.True(t, sandboxConfigHasSecrets(cfg))
-
-	cfg.Network = &types.SandboxNetworkPolicy{
-		DenyEgressByDefault: true,
-		CubeRules: []types.CubeEgressRule{{
-			Inject: []types.CubeHeaderInject{{Header: "X-Key"}},
-		}},
-	}
-	require.False(t, sandboxConfigHasSecrets(cfg))
-}
-
-func e2bCfg(key, url, domain, template string, ttl int) *types.TenantSandboxConfig {
-	return &types.TenantSandboxConfig{
-		SandboxType: "e2b",
-		E2B: &types.E2BSandboxConfig{
-			APIKey: key, APIURL: url, SandboxDomain: domain, TemplateID: template,
-			E2BSandboxTTLSeconds: ttl,
-		},
-	}
-}
-
-func cubeCfg(key, apiURL, proxyURL, domain string) *types.TenantSandboxConfig {
-	return &types.TenantSandboxConfig{
-		SandboxType: "cube",
-		Cube: &types.CubeSandboxConfig{
-			APIKey: key, APIURL: apiURL, ProxyURL: proxyURL, SandboxDomain: domain,
-		},
-	}
+func dockerCfg(certPath, endpoint, unused, image string, ttl int) *types.TenantSandboxConfig {
+	return &types.TenantSandboxConfig{SandboxType: "docker", Docker: &types.DockerSandboxConfig{TLSCertPath: certPath, Host: "unix:///" + strings.TrimPrefix(endpoint, "https://"), Image: image, IdleTTLSeconds: ttl}}
 }
 
 func TestSandboxIdentityChanged(t *testing.T) {
-	tests := []struct {
-		name     string
-		old, new *types.TenantSandboxConfig
-		want     bool
+	base := dockerCfg("certs", "daemon.sock", "", "image-a", 300)
+	for _, tt := range []struct {
+		name    string
+		next    *types.TenantSandboxConfig
+		changed bool
 	}{
-		// Control plane: losing these loses the ability to clean up, and the
-		// leak bills forever.
-		{
-			name: "api key rotation changes identity",
-			old:  e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
-			new:  e2bCfg("key-b", "https://api.e2b.app", "e2b.app", "t1", 300),
-			want: true,
-		},
-		{
-			name: "endpoint change changes identity",
-			old:  e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
-			new:  e2bCfg("key-a", "https://self.hosted", "e2b.app", "t1", 300),
-			want: true,
-		},
-		{
-			name: "provider switch changes identity",
-			old:  e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
-			new:  cubeCfg("key-a", "https://cube.example.com", "https://proxy.example.com", "cube.app"),
-			want: true,
-		},
-		// Data plane: the control plane still works so cleanup stays possible,
-		// but every envd request now goes to the wrong host, so every live
-		// session on this config fails at once.
-		{
-			name: "e2b sandbox domain change strands live sessions",
-			old:  e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
-			new:  e2bCfg("key-a", "https://api.e2b.app", "e2b.dev", "t1", 300),
-			want: true,
-		},
-		{
-			name: "cube proxy url change strands live sessions",
-			old:  cubeCfg("key-a", "https://cube.example.com", "https://proxy.example.com", "cube.app"),
-			new:  cubeCfg("key-a", "https://cube.example.com", "https://proxy2.example.com", "cube.app"),
-			want: true,
-		},
-		{
-			name: "cube sandbox domain change strands live sessions",
-			old:  cubeCfg("key-a", "https://cube.example.com", "https://proxy.example.com", "cube.app"),
-			new:  cubeCfg("key-a", "https://cube.example.com", "https://proxy.example.com", "cube2.app"),
-			want: true,
-		},
-		// Not identity changes: these only shape FUTURE sandboxes, so refusing
-		// them would be pure friction.
-		{
-			name: "template change only affects future sandboxes",
-			old:  e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
-			new:  e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t2", 300),
-			want: false,
-		},
-		{
-			name: "ttl change is not an identity change",
-			old:  e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
-			new:  e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 900),
-			want: false,
-		},
-		{
-			name: "cube dns change only affects future templates",
-			old:  cubeCfg("key-a", "https://cube.example.com", "https://proxy.example.com", "cube.app"),
-			new: func() *types.TenantSandboxConfig {
-				cfg := cubeCfg("key-a", "https://cube.example.com", "https://proxy.example.com", "cube.app")
-				cfg.Cube.DNSServers = []string{"8.8.8.8"}
-				return cfg
-			}(),
-			want: false,
-		},
-		{
-			name: "private endpoint policy changes transport identity",
-			old:  e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
-			new: func() *types.TenantSandboxConfig {
-				cfg := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
-				cfg.AllowPrivateEndpoints = true
-				return cfg
-			}(),
-			want: true,
-		},
-		{
-			// Nothing is inherited, so filling in an endpoint that was blank
-			// really does re-point the config at a different account.
-			name: "filling in a blank endpoint changes identity",
-			old: &types.TenantSandboxConfig{
-				SandboxType: "e2b",
-				E2B:         &types.E2BSandboxConfig{APIKey: "key-a"},
-			},
-			new:  e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 0),
-			want: true,
-		},
-		{
-			// Only the ACTIVE provider's fields describe where the sandboxes
-			// are; a leftover sub-struct from an earlier switch must not count.
-			name: "inactive provider fields are ignored",
-			old: &types.TenantSandboxConfig{
-				SandboxType: "e2b",
-				E2B:         &types.E2BSandboxConfig{APIKey: "key-a"},
-				Cube:        &types.CubeSandboxConfig{APIKey: "stale-a"},
-			},
-			new: &types.TenantSandboxConfig{
-				SandboxType: "e2b",
-				E2B:         &types.E2BSandboxConfig{APIKey: "key-a"},
-				Cube:        &types.CubeSandboxConfig{APIKey: "stale-b"},
-			},
-			want: false,
-		},
-		{
-			name: "no previous config means nothing to strand",
-			old:  nil,
-			new:  e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
-			want: false,
-		},
+		{"certificate path changes identity", dockerCfg("other-certs", "daemon.sock", "", "image-a", 300), true},
+		{"daemon changes identity", dockerCfg("certs", "other.sock", "", "image-a", 300), true},
+		{"image affects future sessions", dockerCfg("certs", "daemon.sock", "", "image-b", 300), false},
+		{"ttl affects future sessions", dockerCfg("certs", "daemon.sock", "", "image-a", 900), false},
+	} {
+		t.Run(tt.name, func(t *testing.T) { require.Equal(t, tt.changed, SandboxIdentityChanged(base, tt.next)) })
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			require.Equal(t, tt.want, SandboxIdentityChanged(tt.old, tt.new))
-		})
-	}
+	private := *base
+	private.AllowPrivateEndpoints = true
+	require.True(t, SandboxIdentityChanged(base, &private))
+	require.False(t, SandboxIdentityChanged(nil, base))
 }
 
-// The UI never sends the real API key back - it echoes a mask. Comparing the
-// incoming payload directly would therefore report an identity change on EVERY
-// save and make the config permanently uneditable. This pins the required
-// ordering: merge first, judge second.
-func TestSandboxIdentityChangedAfterMaskMerge(t *testing.T) {
-	stored := e2bCfg("real-key", "https://api.e2b.app", "e2b.app", "t1", 300)
-	incoming := e2bCfg(types.RedactedSecretPlaceholder, "https://api.e2b.app", "e2b.app", "t1", 300)
-
-	merged := types.MergeSandboxConfigForUpdate(incoming, stored)
-
-	require.False(t,
-		SandboxIdentityChanged(stored, merged),
-		"a masked key that merges back to the stored one is not a rotation")
-}
-
-// An admin re-points a config precisely because its old endpoint died, so the
-// verdict must not depend on that endpoint being reachable or even resolvable.
-// Routing this through the SSRF-guarding resolver would lock the config down at
-// the worst possible moment.
 func TestSandboxIdentityChangedJudgesUnreachableOldEndpoint(t *testing.T) {
-	dead := cubeCfg("key-a", "https://decommissioned.invalid", "https://proxy.invalid", "cube.app")
-	live := cubeCfg("key-a", "https://cube.example.com", "https://proxy.invalid", "cube.app")
-
+	dead := dockerCfg("certs", "decommissioned.sock", "", "image", 300)
+	live := dockerCfg("certs", "current.sock", "", "image", 300)
 	require.True(t, SandboxIdentityChanged(dead, live))
 	require.False(t, SandboxIdentityChanged(dead, dead))
 }
@@ -410,6 +242,7 @@ func newTestConfigService(
 	agents stubAgentRepo,
 ) *TenantSandboxConfigService {
 	t.Helper()
+	t.Setenv(sandbox.DockerBackendEnabledEnv, "true")
 	if client == nil {
 		client = &stubProviderClient{}
 	}
@@ -428,7 +261,7 @@ func TestQueryTemplatesEnsuresMissingReliquaryTemplate(t *testing.T) {
 	svc := newTestConfigService(t, &fakeConfigRepo{}, client, stubAgentRepo{})
 
 	result, err := svc.QueryTemplates(context.Background(), 7, SandboxTemplateQueryInput{
-		Config:         e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "", 300),
+		Config:         dockerCfg("cert-a", "daemon.sock", "", "", 300),
 		EnsureStandard: true,
 	})
 
@@ -452,7 +285,7 @@ func TestQueryTemplatesCollapsesConcurrentProvisioning(t *testing.T) {
 		go func() {
 			defer group.Done()
 			_, err := svc.QueryTemplates(context.Background(), 7, SandboxTemplateQueryInput{
-				Config:         e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "", 300),
+				Config:         dockerCfg("cert-a", "daemon.sock", "", "", 300),
 				EnsureStandard: true,
 			})
 			require.NoError(t, err)
@@ -469,9 +302,9 @@ func TestQueryTemplatesProvisionsPerClusterIndependently(t *testing.T) {
 	client := &stubProviderClient{}
 	svc := newTestConfigService(t, &fakeConfigRepo{}, client, stubAgentRepo{})
 
-	for _, key := range []string{"key-a", "key-b"} {
+	for _, key := range []string{"cert-a", "cert-b"} {
 		_, err := svc.QueryTemplates(context.Background(), 7, SandboxTemplateQueryInput{
-			Config:         e2bCfg(key, "https://api.e2b.app", "e2b.app", "", 300),
+			Config:         dockerCfg(key, "daemon.sock", "", "", 300),
 			EnsureStandard: true,
 		})
 		require.NoError(t, err)
@@ -494,7 +327,7 @@ func TestQueryTemplatesReprovisionsOverFailedStandardTemplate(t *testing.T) {
 	svc := newTestConfigService(t, &fakeConfigRepo{}, client, stubAgentRepo{})
 
 	result, err := svc.QueryTemplates(context.Background(), 7, SandboxTemplateQueryInput{
-		Config:         e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "", 300),
+		Config:         dockerCfg("cert-a", "daemon.sock", "", "", 300),
 		EnsureStandard: true,
 	})
 
@@ -515,7 +348,7 @@ func TestQueryTemplatesReportsFailedStandardTemplateWithoutEnsure(t *testing.T) 
 	svc := newTestConfigService(t, &fakeConfigRepo{}, client, stubAgentRepo{})
 
 	result, err := svc.QueryTemplates(context.Background(), 7, SandboxTemplateQueryInput{
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "", 300),
+		Config: dockerCfg("cert-a", "daemon.sock", "", "", 300),
 	})
 
 	require.NoError(t, err)
@@ -539,7 +372,7 @@ func TestQueryTemplatesSurfacesFailedEnsureWithoutProvisioning(t *testing.T) {
 	svc := newTestConfigService(t, &fakeConfigRepo{}, client, stubAgentRepo{})
 
 	result, err := svc.QueryTemplates(context.Background(), 7, SandboxTemplateQueryInput{
-		Config:         e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "", 300),
+		Config:         dockerCfg("cert-a", "daemon.sock", "", "", 300),
 		EnsureStandard: true,
 	})
 
@@ -562,7 +395,7 @@ func TestQueryTemplatesReplaceStandardRequiresConfigID(t *testing.T) {
 	svc := newTestConfigService(t, &fakeConfigRepo{}, client, stubAgentRepo{})
 
 	_, err := svc.QueryTemplates(context.Background(), 7, SandboxTemplateQueryInput{
-		Config:          e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "", 300),
+		Config:          dockerCfg("cert-a", "daemon.sock", "", "", 300),
 		ReplaceStandard: true,
 	})
 	require.Error(t, err)
@@ -570,9 +403,9 @@ func TestQueryTemplatesReplaceStandardRequiresConfigID(t *testing.T) {
 }
 
 func TestQueryTemplatesReplaceStandardPersistsNewTemplateID(t *testing.T) {
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "tpl-old", 300)
+	stored := dockerCfg("cert-a", "daemon.sock", "", "tpl-old", 300)
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
-		ID: "cfg-a", TenantID: 7, SandboxType: "e2b", Config: stored,
+		ID: "cfg-a", TenantID: 7, SandboxType: "docker", Config: stored,
 	}}
 	client := &stubProviderClient{
 		templates: []sandbox.RemoteTemplate{
@@ -597,7 +430,7 @@ func TestQueryTemplatesReplaceStandardPersistsNewTemplateID(t *testing.T) {
 	require.Equal(t, []string{"tpl-old"}, client.deletedTemplates)
 	require.True(t, result.Provisioned)
 	require.Equal(t, "tpl-new", result.StandardTemplateID)
-	require.Equal(t, "tpl-new", repo.entity.Config.E2B.TemplateID,
+	require.Equal(t, "tpl-new", repo.entity.Config.Docker.Image,
 		"rebuild must write the new template id so sessions do not keep targeting the deleted one")
 	require.Len(t, result.Templates, 2)
 	require.Equal(t, "tpl-new", result.Templates[0].ID)
@@ -605,9 +438,9 @@ func TestQueryTemplatesReplaceStandardPersistsNewTemplateID(t *testing.T) {
 }
 
 func TestQueryTemplatesReplaceStandardKeepsOldTemplateWhileReplacementBuilds(t *testing.T) {
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "tpl-old", 300)
+	stored := dockerCfg("cert-a", "daemon.sock", "", "tpl-old", 300)
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
-		ID: "cfg-a", TenantID: 7, SandboxType: "e2b", Config: stored,
+		ID: "cfg-a", TenantID: 7, SandboxType: "docker", Config: stored,
 	}}
 	client := &stubProviderClient{
 		templates: []sandbox.RemoteTemplate{
@@ -629,7 +462,7 @@ func TestQueryTemplatesReplaceStandardKeepsOldTemplateWhileReplacementBuilds(t *
 	require.NoError(t, err)
 	require.Empty(t, client.deletedTemplates,
 		"a building replacement must not retire the spawnable template")
-	require.Equal(t, "tpl-old", repo.entity.Config.E2B.TemplateID,
+	require.Equal(t, "tpl-old", repo.entity.Config.Docker.Image,
 		"sessions must keep the previous READY id until the replacement can spawn")
 	require.Equal(t, "tpl-old", result.StandardTemplateID)
 	require.True(t, result.Provisioned)
@@ -642,10 +475,10 @@ func TestQueryTemplatesReplaceStandardKeepsOldTemplateWhileReplacementBuilds(t *
 }
 
 func TestQueryTemplatesReplaceStandardKeepsOldTemplateWhenPersistFails(t *testing.T) {
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "tpl-old", 300)
+	stored := dockerCfg("cert-a", "daemon.sock", "", "tpl-old", 300)
 	repo := &fakeConfigRepo{
 		entity: &types.TenantSandboxConfigEntity{
-			ID: "cfg-a", TenantID: 7, SandboxType: "e2b", Config: stored,
+			ID: "cfg-a", TenantID: 7, SandboxType: "docker", Config: stored,
 		},
 		updateErr: stderrors.New("db write failed"),
 	}
@@ -669,7 +502,7 @@ func TestQueryTemplatesReplaceStandardKeepsOldTemplateWhenPersistFails(t *testin
 	require.NoError(t, err)
 	require.Empty(t, client.deletedTemplates,
 		"a persist failure must not retire the previous spawnable template")
-	require.Equal(t, "tpl-old", repo.entity.Config.E2B.TemplateID)
+	require.Equal(t, "tpl-old", repo.entity.Config.Docker.Image)
 	require.Equal(t, "tpl-old", result.StandardTemplateID)
 	ids := make([]string, 0, len(result.Templates))
 	for _, item := range result.Templates {
@@ -680,9 +513,9 @@ func TestQueryTemplatesReplaceStandardKeepsOldTemplateWhenPersistFails(t *testin
 }
 
 func TestQueryTemplatesReplaceStandardRefusesWhenSkillIsInstalling(t *testing.T) {
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
+	stored := dockerCfg("cert-a", "daemon.sock", "", "t1", 300)
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
-		ID: "cfg-a", TenantID: 7, SandboxType: "e2b", Config: stored,
+		ID: "cfg-a", TenantID: 7, SandboxType: "docker", Config: stored,
 	}}
 	client := &stubProviderClient{
 		templates: []sandbox.RemoteTemplate{
@@ -708,15 +541,15 @@ func TestQueryTemplatesReplaceStandardRefusesWhenSkillIsInstalling(t *testing.T)
 }
 
 func TestQueryTemplatesReplaceStandardRefusesWhenSiblingHasSkillSnapshot(t *testing.T) {
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
-	sibling := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
+	stored := dockerCfg("cert-a", "daemon.sock", "", "t1", 300)
+	sibling := dockerCfg("cert-a", "daemon.sock", "", "t1", 300)
 	sibling.SkillImage = &types.SkillImageConfig{SnapshotID: "snap-1"}
 	repo := &fakeConfigRepo{
 		entity: &types.TenantSandboxConfigEntity{
-			ID: "cfg-a", TenantID: 7, SandboxType: "e2b", Config: stored,
+			ID: "cfg-a", TenantID: 7, SandboxType: "docker", Config: stored,
 		},
 		others: []*types.TenantSandboxConfigEntity{{
-			ID: "cfg-b", TenantID: 7, SandboxType: "e2b", Config: sibling,
+			ID: "cfg-b", TenantID: 7, SandboxType: "docker", Config: sibling,
 		}},
 	}
 	client := &stubProviderClient{
@@ -739,10 +572,11 @@ func TestQueryTemplatesReplaceStandardRefusesWhenSiblingHasSkillSnapshot(t *test
 }
 
 func TestQueryTemplatesReplaceStandardRefusesWhenSkillSnapshotExists(t *testing.T) {
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
+	t.Setenv(sandbox.DockerBackendEnabledEnv, "true")
+	stored := dockerCfg("cert-a", "daemon.sock", "", "t1", 300)
 	stored.SkillImage = &types.SkillImageConfig{SnapshotID: "snap-1"}
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
-		ID: "cfg-a", TenantID: 7, SandboxType: "e2b", Config: stored,
+		ID: "cfg-a", TenantID: 7, SandboxType: "docker", Config: stored,
 	}}
 	client := &stubProviderClient{
 		templates: []sandbox.RemoteTemplate{
@@ -759,7 +593,7 @@ func TestQueryTemplatesReplaceStandardRefusesWhenSkillSnapshotExists(t *testing.
 
 	_, err := svc.QueryTemplates(context.Background(), 7, SandboxTemplateQueryInput{
 		ConfigID:        "cfg-a",
-		Config:          e2bCfg(types.RedactedSecretPlaceholder, "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config:          dockerCfg("cert-a", "daemon.sock", "", "t1", 300),
 		ReplaceStandard: true,
 	})
 	require.ErrorIs(t, err, ErrSkillSnapshotBlocksTemplateChange)
@@ -768,20 +602,20 @@ func TestQueryTemplatesReplaceStandardRefusesWhenSkillSnapshotExists(t *testing.
 
 func TestUpdateRefusesTemplateChangeWhenSkillSnapshotExists(t *testing.T) {
 	t.Setenv("SYSTEM_AES_KEY", strings.Repeat("k", 32))
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
+	stored := dockerCfg("cert-a", "daemon.sock", "", "t1", 300)
 	stored.SkillImage = &types.SkillImageConfig{SnapshotID: "snap-1"}
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
 		ID:          "cfg-a",
 		TenantID:    7,
 		Name:        "prod",
-		SandboxType: "e2b",
+		SandboxType: "docker",
 		Config:      stored,
 	}}
 	svc := newTestConfigService(t, repo, &stubProviderClient{}, stubAgentRepo{})
 
 	_, err := svc.Update(context.Background(), 7, "cfg-a", UpdateSandboxConfigInput{
 		Name:   "prod",
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t2", 300),
+		Config: dockerCfg("cert-a", "daemon.sock", "", "t2", 300),
 	})
 	require.ErrorIs(t, err, ErrSkillSnapshotBlocksTemplateChange)
 	require.Nil(t, repo.updated)
@@ -789,20 +623,20 @@ func TestUpdateRefusesTemplateChangeWhenSkillSnapshotExists(t *testing.T) {
 
 func TestUpdateRefusesIdentityChangeWhenSkillSnapshotExists(t *testing.T) {
 	t.Setenv("SYSTEM_AES_KEY", strings.Repeat("k", 32))
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
+	stored := dockerCfg("cert-a", "daemon.sock", "", "t1", 300)
 	stored.SkillImage = &types.SkillImageConfig{SnapshotID: "snap-1"}
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
 		ID:          "cfg-a",
 		TenantID:    7,
 		Name:        "prod",
-		SandboxType: "e2b",
+		SandboxType: "docker",
 		Config:      stored,
 	}}
 	svc := newTestConfigService(t, repo, &stubProviderClient{}, stubAgentRepo{})
 
 	_, err := svc.Update(context.Background(), 7, "cfg-a", UpdateSandboxConfigInput{
 		Name:   "prod",
-		Config: e2bCfg("key-b", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config: dockerCfg("cert-b", "daemon.sock", "", "t1", 300),
 	})
 	require.ErrorIs(t, err, ErrSkillSnapshotBlocksTemplateChange)
 	require.Nil(t, repo.updated)
@@ -810,12 +644,12 @@ func TestUpdateRefusesIdentityChangeWhenSkillSnapshotExists(t *testing.T) {
 
 func TestUpdateRefusesIdentityChangeWhileSkillIsInstalling(t *testing.T) {
 	t.Setenv("SYSTEM_AES_KEY", strings.Repeat("k", 32))
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
+	stored := dockerCfg("cert-a", "daemon.sock", "", "t1", 300)
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
 		ID:          "cfg-a",
 		TenantID:    7,
 		Name:        "prod",
-		SandboxType: "e2b",
+		SandboxType: "docker",
 		Config:      stored,
 	}}
 	svc := newTestConfigService(t, repo, &stubProviderClient{}, stubAgentRepo{})
@@ -826,16 +660,16 @@ func TestUpdateRefusesIdentityChangeWhileSkillIsInstalling(t *testing.T) {
 
 	_, err := svc.Update(context.Background(), 7, "cfg-a", UpdateSandboxConfigInput{
 		Name:   "prod",
-		Config: e2bCfg("key-b", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config: dockerCfg("cert-b", "daemon.sock", "", "t1", 300),
 	})
 	require.ErrorIs(t, err, ErrSkillSnapshotBlocksTemplateChange)
 	require.Nil(t, repo.updated)
 }
 
 func TestQueryTemplatesEnsureAndReplaceDoNotShareSingleflight(t *testing.T) {
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
+	stored := dockerCfg("cert-a", "daemon.sock", "", "t1", 300)
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
-		ID: "cfg-a", TenantID: 7, SandboxType: "e2b", Config: stored,
+		ID: "cfg-a", TenantID: 7, SandboxType: "docker", Config: stored,
 	}}
 	client := &stubProviderClient{
 		templates: []sandbox.RemoteTemplate{
@@ -875,46 +709,20 @@ func TestQueryTemplatesEnsureAndReplaceDoNotShareSingleflight(t *testing.T) {
 	require.Equal(t, int32(1), client.replaceCalls.Load())
 }
 
-func TestUpdateRefusesDNSChangeWhenSkillSnapshotExists(t *testing.T) {
-	t.Setenv("SYSTEM_AES_KEY", strings.Repeat("k", 32))
-	stored := cubeCfg("key-a", "https://203.0.113.10", "https://203.0.113.11", "cube.app")
-	stored.Cube.TemplateID = "tpl-1"
-	stored.Cube.DNSServers = []string{"8.8.8.8"}
-	stored.SkillImage = &types.SkillImageConfig{SnapshotID: "snap-1"}
-	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
-		ID:          "cfg-a",
-		TenantID:    7,
-		Name:        "prod",
-		SandboxType: "cube",
-		Config:      stored,
-	}}
-	svc := newTestConfigService(t, repo, &stubProviderClient{}, stubAgentRepo{})
-
-	next := cubeCfg("key-a", "https://203.0.113.10", "https://203.0.113.11", "cube.app")
-	next.Cube.TemplateID = "tpl-1"
-	next.Cube.DNSServers = []string{"1.1.1.1"}
-	_, err := svc.Update(context.Background(), 7, "cfg-a", UpdateSandboxConfigInput{
-		Name:   "prod",
-		Config: next,
-	})
-	require.ErrorIs(t, err, ErrSkillSnapshotBlocksTemplateChange)
-	require.Nil(t, repo.updated)
-}
-
 func TestUpdateRefusesPrivateEndpointChangeWhenSkillSnapshotExists(t *testing.T) {
 	t.Setenv("SYSTEM_AES_KEY", strings.Repeat("k", 32))
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
+	stored := dockerCfg("cert-a", "daemon.sock", "", "t1", 300)
 	stored.SkillImage = &types.SkillImageConfig{SnapshotID: "snap-1"}
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
 		ID:          "cfg-a",
 		TenantID:    7,
 		Name:        "prod",
-		SandboxType: "e2b",
+		SandboxType: "docker",
 		Config:      stored,
 	}}
 	svc := newTestConfigService(t, repo, &stubProviderClient{}, stubAgentRepo{})
 
-	next := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
+	next := dockerCfg("cert-a", "daemon.sock", "", "t1", 300)
 	next.AllowPrivateEndpoints = true
 	_, err := svc.Update(context.Background(), 7, "cfg-a", UpdateSandboxConfigInput{
 		Name:   "prod",
@@ -932,7 +740,7 @@ func TestQueryTemplatesDeduplicatesSameProviderTemplateID(t *testing.T) {
 	svc := newTestConfigService(t, &fakeConfigRepo{}, client, stubAgentRepo{})
 
 	result, err := svc.QueryTemplates(context.Background(), 7, SandboxTemplateQueryInput{
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "", 300),
+		Config: dockerCfg("cert-a", "daemon.sock", "", "", 300),
 	})
 
 	require.NoError(t, err)
@@ -940,25 +748,6 @@ func TestQueryTemplatesDeduplicatesSameProviderTemplateID(t *testing.T) {
 	require.Equal(t, "project-b89e/reliquary", result.Templates[0].Name)
 	require.Equal(t, "ready", result.Templates[0].Status)
 	require.Equal(t, "tpl-reliquary", result.StandardTemplateID)
-}
-
-func TestQueryTemplatesResolvesMaskedStoredCredential(t *testing.T) {
-	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
-		ID: "cfg-a", TenantID: 7, SandboxType: "e2b",
-		Config: e2bCfg("stored-secret", "https://api.e2b.app", "e2b.app", "old", 300),
-	}}
-	svc := NewTenantSandboxConfigService(repo, stubAgentRepo{}, sandbox.DefaultConfig(), nil, nil)
-	client := &stubProviderClient{templates: []sandbox.RemoteTemplate{{ID: "tpl-a", Name: "a", Status: "ready"}}}
-	svc.newClient = func(cfg *sandbox.Config) (sandbox.ConfigSandboxClient, error) {
-		require.Equal(t, "stored-secret", cfg.E2BAPIKey)
-		return client, nil
-	}
-
-	_, err := svc.QueryTemplates(context.Background(), 7, SandboxTemplateQueryInput{
-		ConfigID: "cfg-a",
-		Config:   e2bCfg(types.RedactedSecretPlaceholder, "https://api.e2b.app", "e2b.app", "", 300),
-	})
-	require.NoError(t, err)
 }
 
 // An identity change while sandboxes are alive must be refused, and the stored
@@ -969,8 +758,8 @@ func TestUpdateRefusesIdentityChangeWhileSandboxesLive(t *testing.T) {
 		ID:          "cfg-a",
 		TenantID:    7,
 		Name:        "prod",
-		SandboxType: "e2b",
-		Config:      e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		SandboxType: "docker",
+		Config:      dockerCfg("cert-a", "daemon.sock", "", "t1", 300),
 	}}
 	svc := newTestConfigService(t, repo, &stubProviderClient{inventories: [][]sandbox.RemoteSandboxSummary{{
 		{ID: "sb-1", Metadata: map[string]string{sandbox.MetadataSessionIDKey(): "s-1"}},
@@ -978,7 +767,7 @@ func TestUpdateRefusesIdentityChangeWhileSandboxesLive(t *testing.T) {
 
 	_, err := svc.Update(context.Background(), 7, "cfg-a", UpdateSandboxConfigInput{
 		Name:   "prod",
-		Config: e2bCfg("key-b", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config: dockerCfg("cert-b", "daemon.sock", "", "t1", 300),
 	})
 
 	require.ErrorIs(t, err, ErrSandboxesStillLive)
@@ -994,14 +783,14 @@ func TestUpdateIdentityChangeCordonsThenWrites(t *testing.T) {
 		ID:          "cfg-a",
 		TenantID:    7,
 		Name:        "prod",
-		SandboxType: "e2b",
-		Config:      e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		SandboxType: "docker",
+		Config:      dockerCfg("cert-a", "daemon.sock", "", "t1", 300),
 	}}
 	svc := newTestConfigService(t, repo, nil, stubAgentRepo{})
 
 	_, err := svc.Update(context.Background(), 7, "cfg-a", UpdateSandboxConfigInput{
 		Name:   "prod",
-		Config: e2bCfg("key-b", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config: dockerCfg("cert-b", "daemon.sock", "", "t1", 300),
 	})
 
 	require.NoError(t, err)
@@ -1016,14 +805,14 @@ func TestUpdateNonIdentityEditSkipsCordon(t *testing.T) {
 		ID:          "cfg-a",
 		TenantID:    7,
 		Name:        "prod",
-		SandboxType: "e2b",
-		Config:      e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		SandboxType: "docker",
+		Config:      dockerCfg("cert-a", "daemon.sock", "", "t1", 300),
 	}}
 	svc := newTestConfigService(t, repo, client, stubAgentRepo{})
 
 	_, err := svc.Update(context.Background(), 7, "cfg-a", UpdateSandboxConfigInput{
 		Name:   "prod renamed",
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 900),
+		Config: dockerCfg("cert-a", "daemon.sock", "", "t1", 900),
 	})
 
 	require.NoError(t, err)
@@ -1038,7 +827,7 @@ func TestUpdateNonIdentityEditSkipsCordon(t *testing.T) {
 // every session still boots the base template.
 func TestUpdateKeepsSkillImageWhenEditorOmitsIt(t *testing.T) {
 	t.Setenv("SYSTEM_AES_KEY", strings.Repeat("k", 32))
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
+	stored := dockerCfg("cert-a", "daemon.sock", "", "t1", 300)
 	stored.SkillImage = &types.SkillImageConfig{
 		SnapshotID:       "snap-2",
 		Generation:       2,
@@ -1049,14 +838,14 @@ func TestUpdateKeepsSkillImageWhenEditorOmitsIt(t *testing.T) {
 		ID:          "cfg-a",
 		TenantID:    7,
 		Name:        "prod",
-		SandboxType: "e2b",
+		SandboxType: "docker",
 		Config:      stored,
 	}}
 	svc := newTestConfigService(t, repo, &stubProviderClient{}, stubAgentRepo{})
 
 	updated, err := svc.Update(context.Background(), 7, "cfg-a", UpdateSandboxConfigInput{
 		Name:   "prod",
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 900),
+		Config: dockerCfg("cert-a", "daemon.sock", "", "t1", 900),
 	})
 
 	require.NoError(t, err)
@@ -1072,8 +861,8 @@ func TestUpdateRefusalCarriesInventory(t *testing.T) {
 		ID:          "cfg-a",
 		TenantID:    7,
 		Name:        "prod",
-		SandboxType: "e2b",
-		Config:      e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		SandboxType: "docker",
+		Config:      dockerCfg("cert-a", "daemon.sock", "", "t1", 300),
 	}}
 	svc := newTestConfigService(t, repo, &stubProviderClient{inventories: [][]sandbox.RemoteSandboxSummary{{
 		{ID: "sb-1", Metadata: map[string]string{sandbox.MetadataSessionIDKey(): "s-1"}},
@@ -1082,7 +871,7 @@ func TestUpdateRefusalCarriesInventory(t *testing.T) {
 
 	_, err := svc.Update(context.Background(), 7, "cfg-a", UpdateSandboxConfigInput{
 		Name:   "prod",
-		Config: e2bCfg("key-b", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config: dockerCfg("cert-b", "daemon.sock", "", "t1", 300),
 	})
 
 	var liveErr *SandboxesStillLiveError
@@ -1103,14 +892,14 @@ func TestUpdateSweepsSandboxCreatedDuringCordonWindow(t *testing.T) {
 		ID:          "cfg-a",
 		TenantID:    7,
 		Name:        "prod",
-		SandboxType: "e2b",
-		Config:      e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		SandboxType: "docker",
+		Config:      dockerCfg("cert-a", "daemon.sock", "", "t1", 300),
 	}, onUpdate: cancel}
 	svc := newTestConfigService(t, repo, client, stubAgentRepo{})
 
 	_, err := svc.Update(ctx, 7, "cfg-a", UpdateSandboxConfigInput{
 		Name:   "prod",
-		Config: e2bCfg("key-b", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config: dockerCfg("cert-b", "daemon.sock", "", "t1", 300),
 	})
 
 	require.NoError(t, err)
@@ -1126,14 +915,14 @@ func TestUpdateClearsCordonWhenRequestContextCancelled(t *testing.T) {
 		ID:          "cfg-a",
 		TenantID:    7,
 		Name:        "prod",
-		SandboxType: "e2b",
-		Config:      e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		SandboxType: "docker",
+		Config:      dockerCfg("cert-a", "daemon.sock", "", "t1", 300),
 	}, onSetCordon: cancel}
 	svc := newTestConfigService(t, repo, nil, stubAgentRepo{})
 
 	_, err := svc.Update(ctx, 7, "cfg-a", UpdateSandboxConfigInput{
 		Name:   "prod",
-		Config: e2bCfg("key-b", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config: dockerCfg("cert-b", "daemon.sock", "", "t1", 300),
 	})
 
 	require.NoError(t, err)
@@ -1146,8 +935,8 @@ func TestDeleteRefusesWhileSandboxesLive(t *testing.T) {
 		ID:          "cfg-a",
 		TenantID:    7,
 		Name:        "prod",
-		SandboxType: "e2b",
-		Config:      e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		SandboxType: "docker",
+		Config:      dockerCfg("cert-a", "daemon.sock", "", "t1", 300),
 	}}
 	svc := newTestConfigService(t, repo, &stubProviderClient{inventories: [][]sandbox.RemoteSandboxSummary{{
 		{ID: "sb-1", Metadata: map[string]string{sandbox.MetadataSessionIDKey(): "s-1"}},
@@ -1169,8 +958,8 @@ func TestDeleteRefusesWhileSandboxesLive(t *testing.T) {
 // the two it is, because only this one is force-overridable.
 func TestDeleteRefusesWhenInventoryUnverifiable(t *testing.T) {
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
-		ID: "cfg-a", TenantID: 7, Name: "prod", SandboxType: "e2b",
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		ID: "cfg-a", TenantID: 7, Name: "prod", SandboxType: "docker",
+		Config: dockerCfg("cert-a", "daemon.sock", "", "t1", 300),
 	}}
 	svc := newTestConfigService(t, repo, nil, stubAgentRepo{})
 	svc.newClient = func(*sandbox.Config) (sandbox.ConfigSandboxClient, error) {
@@ -1188,8 +977,8 @@ func TestDeleteRefusesWhenInventoryUnverifiable(t *testing.T) {
 // vanished must remain removable once an admin takes responsibility.
 func TestDeleteForceRemovesConfigWithUnverifiableInventory(t *testing.T) {
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
-		ID: "cfg-a", TenantID: 7, Name: "prod", SandboxType: "e2b",
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		ID: "cfg-a", TenantID: 7, Name: "prod", SandboxType: "docker",
+		Config: dockerCfg("cert-a", "daemon.sock", "", "t1", 300),
 	}}
 	svc := newTestConfigService(t, repo, nil, stubAgentRepo{})
 	svc.newClient = func(*sandbox.Config) (sandbox.ConfigSandboxClient, error) {
@@ -1205,8 +994,8 @@ func TestDeleteForceRemovesConfigWithUnverifiableInventory(t *testing.T) {
 // whole flow exists to prevent.
 func TestDeleteForceStillRefusesVerifiedLiveSandboxes(t *testing.T) {
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
-		ID: "cfg-a", TenantID: 7, Name: "prod", SandboxType: "e2b",
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		ID: "cfg-a", TenantID: 7, Name: "prod", SandboxType: "docker",
+		Config: dockerCfg("cert-a", "daemon.sock", "", "t1", 300),
 	}}
 	svc := newTestConfigService(t, repo, &stubProviderClient{inventories: [][]sandbox.RemoteSandboxSummary{{
 		{ID: "sb-1", Metadata: map[string]string{sandbox.MetadataSessionIDKey(): "s-1"}},
@@ -1222,8 +1011,8 @@ func TestDeleteForceStillRefusesVerifiedLiveSandboxes(t *testing.T) {
 // an unreachable provider is a flag rather than an error.
 func TestInventoryMarksUnverifiableInsteadOfFailing(t *testing.T) {
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
-		ID: "cfg-a", TenantID: 7, Name: "prod", SandboxType: "e2b",
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		ID: "cfg-a", TenantID: 7, Name: "prod", SandboxType: "docker",
+		Config: dockerCfg("cert-a", "daemon.sock", "", "t1", 300),
 	}}
 	svc := newTestConfigService(t, repo, nil, stubAgentRepo{names: []string{"analyst"}})
 	svc.newClient = func(*sandbox.Config) (sandbox.ConfigSandboxClient, error) {
@@ -1244,8 +1033,8 @@ func TestInventoryMarksUnverifiableInsteadOfFailing(t *testing.T) {
 func TestUpdateProceedsWhenInventoryUnverifiable(t *testing.T) {
 	t.Setenv("SYSTEM_AES_KEY", strings.Repeat("k", 32))
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
-		ID: "cfg-a", TenantID: 7, Name: "prod", SandboxType: "e2b",
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		ID: "cfg-a", TenantID: 7, Name: "prod", SandboxType: "docker",
+		Config: dockerCfg("cert-a", "daemon.sock", "", "t1", 300),
 	}}
 	svc := newTestConfigService(t, repo, nil, stubAgentRepo{})
 	svc.newClient = func(*sandbox.Config) (sandbox.ConfigSandboxClient, error) {
@@ -1254,13 +1043,13 @@ func TestUpdateProceedsWhenInventoryUnverifiable(t *testing.T) {
 
 	updated, err := svc.Update(context.Background(), 7, "cfg-a", UpdateSandboxConfigInput{
 		Name:   "prod",
-		Config: e2bCfg("key-b", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config: dockerCfg("cert-b", "daemon.sock", "", "t1", 300),
 	})
 
 	require.NoError(t, err)
 	require.NotNil(t, updated)
 	require.NotNil(t, repo.updated)
-	require.Equal(t, "key-b", repo.updated.Config.E2B.APIKey)
+	require.Equal(t, "cert-b", repo.updated.Config.Docker.TLSCertPath)
 	require.Equal(t, []string{"get", "cordon", "write", "uncordon"}, repo.events)
 }
 
@@ -1269,8 +1058,8 @@ func TestDeleteSoftDeletesWhenEmpty(t *testing.T) {
 		ID:          "cfg-a",
 		TenantID:    7,
 		Name:        "prod",
-		SandboxType: "e2b",
-		Config:      e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		SandboxType: "docker",
+		Config:      dockerCfg("cert-a", "daemon.sock", "", "t1", 300),
 	}}
 	svc := newTestConfigService(t, repo, nil, stubAgentRepo{})
 
@@ -1299,149 +1088,31 @@ func TestDeleteAndInventoryReportMissingConfig(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, appErr.HTTPCode)
 }
 
-func TestSanitizeSandboxConfigPreservesRedactedSecret(t *testing.T) {
-	t.Setenv("SYSTEM_AES_KEY", strings.Repeat("k", 32))
-	existing := &types.TenantSandboxConfig{
-		SandboxType: "e2b",
-		E2B: &types.E2BSandboxConfig{
-			APIKey: "stored-key", APIURL: "https://203.0.113.10", TemplateID: "t1",
-		},
-	}
-	incoming := &types.TenantSandboxConfig{
-		SandboxType: "e2b",
-		E2B: &types.E2BSandboxConfig{
-			APIKey:     types.RedactedSecretPlaceholder,
-			APIURL:     "https://203.0.113.10",
-			TemplateID: "t1",
-		},
-	}
-
-	out, err := SanitizeSandboxConfig(incoming, existing)
-
-	require.NoError(t, err)
-	require.Equal(t, "stored-key", out.E2B.APIKey)
-}
-
-func TestSanitizeSandboxConfigRejectsDomainAllowWithoutDenyAll(t *testing.T) {
-	_, err := SanitizeSandboxConfig(&types.TenantSandboxConfig{
-		SandboxType: "cube",
-		Cube: &types.CubeSandboxConfig{
-			APIURL: "https://cube.example.com", ProxyURL: "https://cube.example.com",
-			SandboxDomain: "cube.app", TemplateID: "tpl-1",
-		},
-		Network: &types.SandboxNetworkPolicy{AllowOut: []string{"api.example.com"}},
-	}, nil)
-
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "0.0.0.0/0")
-}
-
 func TestSanitizeSandboxConfigPreservesSkillImage(t *testing.T) {
-	t.Setenv("SYSTEM_AES_KEY", strings.Repeat("k", 32))
-	existing := &types.TenantSandboxConfig{
-		SandboxType: "e2b",
-		E2B: &types.E2BSandboxConfig{
-			APIKey: "stored-key", APIURL: "https://203.0.113.10", TemplateID: "t1",
-		},
-		SkillImage: &types.SkillImageConfig{SnapshotID: "snap-1", OwnerFingerprint: "fp-1"},
-	}
-	incoming := &types.TenantSandboxConfig{
-		SandboxType: "e2b",
-		E2B: &types.E2BSandboxConfig{
-			APIKey:     types.RedactedSecretPlaceholder,
-			APIURL:     "https://203.0.113.10",
-			TemplateID: "t1",
-		},
-		SkillImage: &types.SkillImageConfig{SnapshotID: "forged-snap"},
-	}
-
+	t.Setenv(sandbox.DockerBackendEnabledEnv, "true")
+	existing := dockerCfg("", "daemon.sock", "", "image", 300)
+	existing.SkillImage = &types.SkillImageConfig{SnapshotID: "snap-1", OwnerFingerprint: "fp-1"}
+	incoming := dockerCfg("", "daemon.sock", "", "image", 300)
+	incoming.SkillImage = &types.SkillImageConfig{SnapshotID: "forged"}
 	out, err := SanitizeSandboxConfig(incoming, existing)
-
 	require.NoError(t, err)
-	require.Equal(t, "snap-1", out.SkillImage.SnapshotID,
-		"the sandbox config API must not let a client plant or wipe the skill image")
+	require.Equal(t, "snap-1", out.SkillImage.SnapshotID)
 }
 
 func TestSanitizeSandboxConfigRejectsUnknownSkillRollout(t *testing.T) {
-	t.Setenv("SYSTEM_AES_KEY", strings.Repeat("k", 32))
-	incoming := &types.TenantSandboxConfig{
-		SandboxType:  "e2b",
-		SkillRollout: "whenever",
-		E2B: &types.E2BSandboxConfig{
-			APIKey: "stored-key", APIURL: "https://203.0.113.10", TemplateID: "t1",
-		},
-	}
-
+	t.Setenv(sandbox.DockerBackendEnabledEnv, "true")
+	incoming := dockerCfg("", "daemon.sock", "", "image", 300)
+	incoming.SkillRollout = "whenever"
 	_, err := SanitizeSandboxConfig(incoming, nil)
-
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "skill_rollout")
 }
 
-// Nothing is inherited from the deployment, so an incomplete config has to be
-// refused when it is saved rather than at the first sandbox allocation.
 func TestSanitizeSandboxConfigRejectsIncompleteConfig(t *testing.T) {
-	t.Setenv("SYSTEM_AES_KEY", strings.Repeat("k", 32))
-	incoming := &types.TenantSandboxConfig{
-		SandboxType: "cube",
-		Cube:        &types.CubeSandboxConfig{APIURL: "https://203.0.113.10"},
-	}
-
-	_, err := SanitizeSandboxConfig(incoming, nil)
-
+	t.Setenv(sandbox.DockerBackendEnabledEnv, "true")
+	_, err := SanitizeSandboxConfig(&types.TenantSandboxConfig{SandboxType: "docker"}, nil)
 	require.ErrorIs(t, err, sandbox.ErrSandboxConfigIncomplete)
-	require.Contains(t, err.Error(), "proxy_url")
-}
-
-// A masked key must still count as present: the merge restores it before the
-// completeness check runs, otherwise every edit of a saved config would be
-// rejected for a missing credential it never stopped having.
-func TestSanitizeSandboxConfigCountsRedactedSecretAsPresent(t *testing.T) {
-	t.Setenv("SYSTEM_AES_KEY", strings.Repeat("k", 32))
-	existing := &types.TenantSandboxConfig{
-		SandboxType: "e2b",
-		E2B:         &types.E2BSandboxConfig{APIKey: "stored-key", TemplateID: "t1"},
-	}
-	incoming := &types.TenantSandboxConfig{
-		SandboxType: "e2b",
-		E2B: &types.E2BSandboxConfig{
-			APIKey: types.RedactedSecretPlaceholder, TemplateID: "t2",
-		},
-	}
-
-	out, err := SanitizeSandboxConfig(incoming, existing)
-
-	require.NoError(t, err)
-	require.Equal(t, "t2", out.E2B.TemplateID)
-}
-
-func TestSanitizeSandboxConfigRejectsInvalidCubeDNS(t *testing.T) {
-	t.Setenv("SYSTEM_AES_KEY", strings.Repeat("k", 32))
-	incoming := &types.TenantSandboxConfig{
-		SandboxType: "cube",
-		Cube: &types.CubeSandboxConfig{
-			APIURL: "https://203.0.113.20", DNSServers: []string{"dns.google"},
-		},
-	}
-
-	_, err := SanitizeSandboxConfig(incoming, nil)
-
-	var appErr *apperrors.AppError
-	require.ErrorAs(t, err, &appErr)
-	require.Equal(t, http.StatusBadRequest, appErr.HTTPCode)
-	require.Contains(t, err.Error(), "dns.google")
-}
-
-func TestSanitizeSandboxConfigRejectsUnsafeURL(t *testing.T) {
-	t.Setenv("SYSTEM_AES_KEY", strings.Repeat("k", 32))
-	incoming := &types.TenantSandboxConfig{
-		SandboxType: "e2b",
-		E2B:         &types.E2BSandboxConfig{APIURL: "http://169.254.169.254"},
-	}
-
-	_, err := SanitizeSandboxConfig(incoming, nil)
-
-	require.ErrorIs(t, err, sandbox.ErrUnsafeOutboundURL)
+	require.Contains(t, err.Error(), "image")
 }
 
 func TestSanitizeSandboxConfigRejectsUnknownType(t *testing.T) {
@@ -1456,15 +1127,18 @@ func TestSanitizeSandboxConfigRejectsUnknownType(t *testing.T) {
 // Without an AES key the Value() hook would write these secrets as plaintext,
 // so saving must be refused rather than silently downgrading storage security.
 func TestSanitizeSandboxConfigRefusesSecretsWithoutAESKey(t *testing.T) {
+	t.Setenv(sandbox.DockerBackendEnabledEnv, "true")
 	t.Setenv("SYSTEM_AES_KEY", "")
 	incoming := &types.TenantSandboxConfig{
-		SandboxType: "e2b",
-		E2B:         &types.E2BSandboxConfig{APIKey: "plaintext-risk"},
+		SandboxType: "docker",
+		Docker:      &types.DockerSandboxConfig{Image: "image", Host: "unix:///daemon.sock"},
+		EnvVars:     map[string]string{"TOKEN": "plaintext-risk"},
 	}
 
 	_, err := SanitizeSandboxConfig(incoming, nil)
 
 	require.Error(t, err)
+	require.Contains(t, err.Error(), "SYSTEM_AES_KEY")
 
 	// A config without secrets is still allowed in that deployment.
 	sandbox.ClearDockerBackendEnabledOverride()
@@ -1528,8 +1202,8 @@ func TestCreateRejectsDockerWithoutImage(t *testing.T) {
 func TestCreateRejectsDockerWhenDisabled(t *testing.T) {
 	sandbox.ClearDockerBackendEnabledOverride()
 	t.Cleanup(sandbox.ClearDockerBackendEnabledOverride)
-	t.Setenv(sandbox.DockerBackendEnabledEnv, "")
 	svc := newTestConfigService(t, &fakeConfigRepo{}, nil, stubAgentRepo{})
+	t.Setenv(sandbox.DockerBackendEnabledEnv, "")
 
 	_, err := svc.Create(context.Background(), 7, CreateSandboxConfigInput{
 		Name: "docker-dev",
@@ -1689,8 +1363,8 @@ func TestDeleteMarksBuildingSnapshotsWhenProviderHasNoSnapshotClient(t *testing.
 // so once this row is gone nothing can reach that snapshot again.
 func TestDeleteReleasesAnAbandonedBuildByPlannedName(t *testing.T) {
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
-		ID: "cfg-a", TenantID: 7, Name: "prod", SandboxType: "e2b",
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		ID: "cfg-a", TenantID: 7, Name: "prod", SandboxType: "docker",
+		Config: dockerCfg("cert-a", "daemon.sock", "", "t1", 300),
 	}}
 	skills := &deleteSkillStore{
 		snapshots: []*types.TenantSkillSnapshotEntity{{
@@ -1723,8 +1397,8 @@ func TestDeleteReleasesAnAbandonedBuildByPlannedName(t *testing.T) {
 // never happened, so there is no provider resource to release.
 func TestDeleteAcceptsAnAbandonedBuildThatNeverCommitted(t *testing.T) {
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
-		ID: "cfg-a", TenantID: 7, Name: "prod", SandboxType: "e2b",
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		ID: "cfg-a", TenantID: 7, Name: "prod", SandboxType: "docker",
+		Config: dockerCfg("cert-a", "daemon.sock", "", "t1", 300),
 	}}
 	skills := &deleteSkillStore{
 		snapshots: []*types.TenantSkillSnapshotEntity{{
@@ -1748,8 +1422,6 @@ func TestDeleteAcceptsAnAbandonedBuildThatNeverCommitted(t *testing.T) {
 	require.True(t, repo.deleted)
 }
 
-// snapshotReleaseFixture drives Delete through a provider that also implements
-// snapshot deletion, which is the production Cube/E2B split.
 type snapshotReleaseFixture struct {
 	events []string
 	repo   *eventRecordingConfigRepo
@@ -1790,8 +1462,8 @@ func newSnapshotReleaseFixture(t *testing.T, failDelete map[string]error) *snaps
 		files: &deleteBundleResolver{},
 	}
 	inner := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
-		ID: "cfg-a", TenantID: 7, Name: "prod", SandboxType: "e2b",
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		ID: "cfg-a", TenantID: 7, Name: "prod", SandboxType: "docker",
+		Config: dockerCfg("cert-a", "daemon.sock", "", "t1", 300),
 	}}
 	fx.repo = &eventRecordingConfigRepo{fakeConfigRepo: inner, events: &fx.events}
 	client := &snapshotReleaseClient{events: &fx.events, failDelete: failDelete}

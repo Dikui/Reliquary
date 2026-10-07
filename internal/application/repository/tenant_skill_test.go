@@ -113,30 +113,40 @@ func TestListStaleInstallingFindsAbandonedRuns(t *testing.T) {
 	cutoff := time.Now().Add(-time.Hour)
 
 	oldInstalling := skillRow("sk-old-install", "cfg-1", "old-install")
+	oldInstalling.TenantID = types.SingleTenantID
 	sinceOld := cutoff.Add(-time.Hour)
 	oldInstalling.InstallingSince = &sinceOld
 	require.NoError(t, repo.CreateSkill(ctx, oldInstalling))
 
 	oldRemoving := skillRow("sk-old-remove", "cfg-1", "old-remove")
+	oldRemoving.TenantID = types.SingleTenantID
 	oldRemoving.Status = types.SkillStatusRemoving
 	sinceRemove := cutoff.Add(-30 * time.Minute)
 	oldRemoving.InstallingSince = &sinceRemove
 	require.NoError(t, repo.CreateSkill(ctx, oldRemoving))
 
 	fresh := skillRow("sk-new", "cfg-1", "new")
+	fresh.TenantID = types.SingleTenantID
 	now := time.Now()
 	fresh.InstallingSince = &now
 	require.NoError(t, repo.CreateSkill(ctx, fresh))
 
 	ready := skillRow("sk-ready", "cfg-1", "ready")
+	ready.TenantID = types.SingleTenantID
 	ready.Status = types.SkillStatusReady
 	readySince := cutoff.Add(-2 * time.Hour)
 	ready.InstallingSince = &readySince
 	require.NoError(t, repo.CreateSkill(ctx, ready))
 
 	atCutoff := skillRow("sk-at-cutoff", "cfg-1", "at-cutoff")
+	atCutoff.TenantID = types.SingleTenantID
 	atCutoff.InstallingSince = &cutoff
 	require.NoError(t, repo.CreateSkill(ctx, atCutoff))
+
+	otherTeam := skillRow("sk-other-team", "cfg-1", "other-team")
+	otherTeam.TenantID = 2
+	otherTeam.InstallingSince = &sinceOld
+	require.NoError(t, repo.CreateSkill(ctx, otherTeam))
 
 	stale, err := repo.ListStaleInstalling(ctx, cutoff)
 	require.NoError(t, err)

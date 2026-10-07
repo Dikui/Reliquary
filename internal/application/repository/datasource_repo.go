@@ -51,6 +51,7 @@ func (r *DataSourceRepository) FindByID(ctx context.Context, id string) (*types.
 	var ds types.DataSource
 	if err := r.db.WithContext(ctx).
 		Where("id = ?", id).
+		Where("tenant_id = ?", types.SingleTenantID).
 		Where("deleted_at IS NULL").
 		First(&ds).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -141,6 +142,7 @@ func (r *DataSourceRepository) FindActive(ctx context.Context) ([]*types.DataSou
 	var dataSources []*types.DataSource
 	if err := r.db.WithContext(ctx).
 		Where("status = ?", types.DataSourceStatusActive).
+		Where("tenant_id = ?", types.SingleTenantID).
 		Where("deleted_at IS NULL").
 		Where("sync_schedule != ''").
 		Order("created_at DESC").

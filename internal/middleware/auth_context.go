@@ -7,34 +7,20 @@ import (
 	"reliquary/internal/types"
 )
 
-// authSession is the resolved identity an auth middleware attaches to the
-// request. One struct + one apply function replaces the five near-identical
-// "c.Set + context.WithValue" blocks that used to live in the JWT branch,
-// the tenantless branch, both API-key attach helpers and EmbedAuth — keeping
-// the gin-keys surface (c.Keys) and the request-context surface in lockstep
-// is exactly the invariant that was easy to break when each caller wrote the
-// pairs out by hand.
+// authSession attaches a team identity to both Gin and request contexts.
 type authSession struct {
 	// User is the authenticated (possibly synthetic) user. Required.
 	User      *types.User
 	Principal types.Principal
-	// TenantID / Tenant scope the request to a workspace. TenantID == 0 means
-	// a tenantless session (identity-level routes only) and attaches neither
-	// key. Tenant may be nil even when TenantID is set (not expected today,
-	// but the helper stays tolerant).
+	// TenantID and Tenant identify the single team workspace.
 	TenantID uint64
 	Tenant   *types.Tenant
-	// Role is the caller's resolved role inside TenantID. Empty string means
-	// "attach no role key" (tenantless sessions); readers then fall back to
-	// TenantRoleFromContext's fail-closed Viewer default.
+	// Role is the caller's active team membership role.
 	Role        types.TenantRole
 	SystemAdmin bool
 	// APIKeyScope marks machine principals; the APIKeyGate authorizes them
 	// per-route from this scope.
 	APIKeyScope *types.TenantAPIKeyScope
-	// Extra carries surface-specific context values (e.g. the authenticated
-	// embed channel) that must be visible on both surfaces like the rest.
-	Extra map[types.ContextKey]any
 }
 
 // applyAuthSession writes the session onto BOTH context surfaces of the
@@ -72,9 +58,6 @@ func applyAuthSession(c *gin.Context, s authSession) {
 	set(types.SystemAdminContextKey, s.SystemAdmin)
 	if s.APIKeyScope != nil {
 		ctx = types.WithTenantAPIKeyScope(ctx, *s.APIKeyScope)
-	}
-	for key, v := range s.Extra {
-		set(key, v)
 	}
 
 	c.Request = c.Request.WithContext(ctx)

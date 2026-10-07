@@ -35,10 +35,8 @@ curl --location 'http://localhost:8080/api/v1/system/capabilities' \
   "data": {
     "edition": "standard",
     "capabilities": {
-      "organizations": { "supported": true },
       "agents": { "supported": true },
       "integrations.im": { "supported": true },
-      "integrations.embed": { "supported": false, "reason": "route_not_registered" },
       "integrations.api": { "supported": true },
       "settings.mcp": { "supported": true },
       "settings.websearch": { "supported": true },

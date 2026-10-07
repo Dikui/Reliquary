@@ -14,7 +14,7 @@ interface Settings {
   agentConfig: AgentConfig;
   selectedKnowledgeBases: string[];  // 当前选中的知识库ID列表
   selectedFiles: string[]; // 当前选中的文件ID列表
-  selectedFileKbMap: Record<string, string>; // 文件ID -> 知识库ID，用于刷新后带 kb_id 拉取共享知识库文件
+  selectedFileKbMap: Record<string, string>; // 文件ID -> 知识库ID，用于刷新后带 kb_id 拉取文件
   selectedTags: Array<{ id: string; name: string; kbId: string; kbName?: string }>;
   selectedMCPServices: string[];
   selectedSkills: string[];
@@ -24,7 +24,6 @@ interface Settings {
   webSearchEnabled: boolean;  // 网络搜索是否启用
   conversationModels: ConversationModels;
   selectedAgentId: string;  // 当前选中的智能体ID
-  selectedAgentSourceTenantId: string | null;// 是否自动检查并下载更新
 }
 
 // Agent 配置接口
@@ -103,7 +102,6 @@ const defaultSettings: Settings = {
     selectedChatModelId: "",  // 用户当前选择的对话模型ID
   },
   selectedAgentId: BUILTIN_QUICK_ANSWER_ID,  // 默认选中快速问答模式
-  selectedAgentSourceTenantId: null as string | null,
 };
 
 export const useSettingsStore = defineStore("settings", {
@@ -167,8 +165,6 @@ export const useSettingsStore = defineStore("settings", {
 
     // 当前选中的智能体ID
     selectedAgentId: (state) => state.settings.selectedAgentId || BUILTIN_QUICK_ANSWER_ID,
-    // 共享智能体来源空间 ID（可选）
-    selectedAgentSourceTenantId: (state) => state.settings.selectedAgentSourceTenantId ?? null,
   },
 
   actions: {
@@ -435,10 +431,8 @@ export const useSettingsStore = defineStore("settings", {
       };
     },
 
-    // 选择智能体（sourceTenantId 仅在使用共享智能体时传入）
-    selectAgent(agentId: string, sourceTenantId?: string | null) {
+    selectAgent(agentId: string) {
       this.settings.selectedAgentId = agentId;
-      this.settings.selectedAgentSourceTenantId = (sourceTenantId != null && sourceTenantId !== "") ? sourceTenantId : null;
       // 智能体配置只决定是否具备网络搜索能力，不替用户决定是否在本轮使用。
       // 每次选择智能体都默认关闭，之后只能由用户从输入框主动开启。
       this.settings.webSearchEnabled = false;
@@ -503,7 +497,6 @@ export const useSettingsStore = defineStore("settings", {
         }
         if (typeof state.agent_id === "string" && state.agent_id) {
           this.settings.selectedAgentId = state.agent_id;
-          // 上次记录是自有 agent 还是共享 agent，目前服务端不区分回传 sourceTenantId。
           // 与 selectAgent() 不同，这里**不**重置 KB/文件选择 —— 因为我们紧接着
           // 就要用 state 里的 KB/文件覆盖，不需要先清空再写。
         }

@@ -3,6 +3,7 @@ package handler
 import (
 	stderrors "errors"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -143,11 +144,11 @@ func (h *MCPOAuthHandler) Callback(c *gin.Context) {
 	const fallbackRedirect = "/"
 
 	if providerErr != "" {
-		c.Redirect(http.StatusFound, fallbackRedirect+"#mcp_oauth_error="+urlQueryEscape(providerErr))
+		c.Redirect(http.StatusFound, fallbackRedirect+"#mcp_oauth_error="+url.QueryEscape(providerErr))
 		return
 	}
 	if state == "" || code == "" {
-		c.Redirect(http.StatusFound, fallbackRedirect+"#mcp_oauth_error="+urlQueryEscape("missing_code_or_state"))
+		c.Redirect(http.StatusFound, fallbackRedirect+"#mcp_oauth_error="+url.QueryEscape("missing_code_or_state"))
 		return
 	}
 
@@ -157,7 +158,7 @@ func (h *MCPOAuthHandler) Callback(c *gin.Context) {
 	}
 	if err != nil {
 		logger.Errorf(ctx, "MCP OAuth callback failed: %v", err)
-		c.Redirect(http.StatusFound, frontendRedirect+"#mcp_oauth_error="+urlQueryEscape("authorization_failed"))
+		c.Redirect(http.StatusFound, frontendRedirect+"#mcp_oauth_error="+url.QueryEscape("authorization_failed"))
 		return
 	}
 	// The old transport may have been created with an OAuth client registration

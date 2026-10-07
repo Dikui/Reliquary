@@ -245,7 +245,7 @@ test('skill env save completion removes exactly its own in-flight entry', () => 
 
 test('sandboxGroupsWithVars keeps only configs that already have stored values', () => {
   const populated = sandboxGroupsWithVars([
-    config('c1', 'cube-TEST'),
+    config('c1', 'docker-TEST'),
     config('c2', 'Docker-Test', [envVar({ name: 'PROXY', source: 'user' })]),
     config('c3', 'Empty', []),
   ])
@@ -271,7 +271,7 @@ test('skillSecretCards lifts declared skills out of config groups and skips empt
     config('c2', 'Docker-Test', [], [
       skill('reliquary', 'reliquary', [envVar({ name: 'RELIQUARY_API_KEY', required: true })]),
     ]),
-    config('c1', 'cube-TEST'),
+    config('c1', 'docker-TEST'),
     config('c3', 'Other', [], [skill('empty', 'empty', [])]),
   ])
 

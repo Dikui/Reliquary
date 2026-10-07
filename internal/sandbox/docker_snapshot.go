@@ -20,13 +20,6 @@ const (
 	dockerSkillSnapshotSourceLabel = "com.reliquary.sandbox.skill-snapshot-source"
 )
 
-// CreateSnapshot commits the container's filesystem into a tagged local image.
-//
-// The Engine pauses the container for the duration of the commit unless we
-// opt out (we do not): that is the same "provider pauses while snapshotting"
-// contract Cube and E2B honour. The resulting tag is a template ID — Create
-// accepts it as RemoteCreateRequest.TemplateID — so the skill install path
-// needs no Docker-specific branch past this adapter.
 func (c *DockerRemoteClient) CreateSnapshot(
 	ctx context.Context, sandboxID string, name string,
 ) (RemoteSnapshotRef, error) {

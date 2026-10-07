@@ -22,7 +22,7 @@ import (
 const artifactOutputEnvVar = "RELIQUARY_SKILL_OUTPUT_DIR"
 
 // sessionInputEnvVar points skill scripts at user-uploaded files restored into
-// the current session's Cube. Inputs are separate from generated artifacts.
+// the current session's Docker sandbox. Inputs are separate from generated artifacts.
 const sessionInputEnvVar = "RELIQUARY_SESSION_INPUT_DIR"
 
 // artifactHistoryEnvVar is the name of the environment variable that points
@@ -61,8 +61,8 @@ func InjectedSandboxEnvVars() []string {
 // defaultArtifactOutputDir is used when neither the environment variable
 // (RELIQUARY_SKILL_OUTPUT_DIR) nor the ExecuteConfig.Env has an override.
 // /workspace/output sits inside the base sandbox image's writable tree and
-// is guaranteed to survive across Execute calls for the same session (Cube
-// SessionBoundManager keeps the MicroVM alive between calls).
+// is guaranteed to survive across Execute calls for the same session (the
+// SessionBoundManager keeps the container alive between calls).
 const defaultArtifactOutputDir = "/workspace/output"
 
 // ArtifactOutputDir returns the absolute path (inside the sandbox) where

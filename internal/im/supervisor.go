@@ -7,12 +7,6 @@ import (
 	"reliquary/internal/logger"
 )
 
-// defaultRecycleInterval is how often a supervised long connection is proactively
-// torn down and rebuilt. Some IM SDKs (e.g. DingTalk, Feishu) delegate reconnection
-// to internal logic that can silently enter a "zombie" state on long-running
-// connections — the connection object stays alive but no longer receives messages.
-// Periodically recreating the connection bounds the worst-case outage to this
-// interval, on top of whatever auto-reconnect the SDK already provides.
 const defaultRecycleInterval = 6 * time.Hour
 
 // defaultSupervisorRetryDelay is the backoff applied after a failed connect attempt.
@@ -20,7 +14,6 @@ const defaultSupervisorRetryDelay = 5 * time.Second
 
 // SupervisorConfig configures RunSupervised.
 type SupervisorConfig struct {
-	// Name identifies the supervised connection in logs (e.g. "DingTalk channel xxx").
 	Name string
 
 	// MaxConnAge is the interval between proactive reconnections.

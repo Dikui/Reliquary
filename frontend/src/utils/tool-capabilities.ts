@@ -14,7 +14,6 @@
  *   - keyword: keyword/BM25 chunk index
  *   - wiki:    Wiki page indexing
  *   - graph:   knowledge graph index
- *   - faq:     FAQ-type KB (question/answer pairs as chunks)
  *
  * Requirement semantics:
  *   - `anyOf`: KB scope must expose at least ONE listed capability.
@@ -26,7 +25,7 @@
  * "always available" so new tools don't silently start disabled.
  */
 
-export type KBCapability = 'vector' | 'keyword' | 'wiki' | 'graph' | 'faq';
+export type KBCapability = 'vector' | 'keyword' | 'wiki' | 'graph';
 
 export interface ToolRequirement {
   anyOf?: KBCapability[];
@@ -49,9 +48,7 @@ export const TOOL_CAPABILITY_REQUIREMENTS: Record<string, ToolRequirement> = {
   knowledge_apply_anomaly: {},
 
   // ---- RAG / chunk retrieval (need at least one chunk-indexed KB) ----
-  // We use vector|keyword as the canonical "has RAG chunks" signal. FAQ KBs
   // also expose chunks, but the current UX message bucket is "RAG KB"; once
-  // we add a dedicated `requiresFaqKb` i18n key we can include `faq` here.
   knowledge_search:      { anyOf: ['vector', 'keyword'], consumesFiles: true },
   grep_chunks:           { anyOf: ['vector', 'keyword'], consumesFiles: true },
   list_knowledge_chunks: { anyOf: ['vector', 'keyword'], consumesFiles: true },
@@ -86,14 +83,13 @@ export interface ScopeCapabilities {
   keyword: boolean;
   wiki: boolean;
   graph: boolean;
-  faq: boolean;
-}
+  }
 
 /**
  * Machine-readable reason a tool is unsatisfiable. Map to a user-facing
  * string via i18n on the caller side (see `AgentEditorModal.vue`).
  */
-export type RequirementMissKind = 'none' | 'needsKb' | 'needsRag' | 'needsWiki' | 'needsGraph' | 'needsFaq';
+export type RequirementMissKind = 'none' | 'needsKb' | 'needsRag' | 'needsWiki' | 'needsGraph';
 
 /**
  * Evaluate whether a tool's requirements are satisfied by the scope.
@@ -136,7 +132,6 @@ function primaryMissKind(c: KBCapability): RequirementMissKind {
   switch (c) {
     case 'wiki':    return 'needsWiki';
     case 'graph':   return 'needsGraph';
-    case 'faq':     return 'needsFaq';
     case 'vector':
     case 'keyword': return 'needsRag';
   }

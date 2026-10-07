@@ -18,9 +18,7 @@
             <div class="kb-info-card-row">
               <span class="kb-info-card-label">{{ t('knowledgeBase.infoCard.type') }}</span>
               <span class="kb-info-card-value">
-                {{ kbInfo.type === 'faq'
-                  ? t('knowledgeEditor.basic.typeFAQ')
-                  : t('knowledgeEditor.basic.typeDocument') }}
+                {{ t('knowledgeEditor.basic.typeDocument') }}
               </span>
             </div>
             <div v-if="kbInfo.description" class="kb-info-card-row">
@@ -59,23 +57,9 @@
                 <span class="kb-info-card-hint">{{ accessPermissionSummary }}</span>
               </span>
             </div>
-            <div v-if="currentSharedKb" class="kb-info-card-row">
-              <span class="kb-info-card-label">{{ t('knowledgeBase.accessInfo.fromOrg') }}</span>
-              <span class="kb-info-card-value">
-                「{{ currentSharedKb.org_name }}」 · {{ t('knowledgeBase.accessInfo.sharedAt') }}
-                {{ formatStringDate(new Date(currentSharedKb.shared_at)) }}
-              </span>
-            </div>
-            <div v-else-if="effectiveKBPermission" class="kb-info-card-row">
-              <span class="kb-info-card-label">{{ t('knowledgeBase.infoCard.source') }}</span>
-              <span class="kb-info-card-value">{{ t('knowledgeList.detail.sourceTypeAgent') }}</span>
-            </div>
-            <div v-if="(kbInfo.share_count ?? 0) > 0" class="kb-info-card-row">
-              <span class="kb-info-card-label">{{ t('knowledgeBase.infoCard.sharedTo') }}</span>
-              <span class="kb-info-card-value">
-                {{ t('knowledgeList.sharedToOrgs', { count: kbInfo.share_count }) }}
-              </span>
-            </div>
+
+
+
           </section>
           <section v-if="capabilities.length" class="setting-drawer__section">
             <h4 class="setting-drawer__section-title">
@@ -168,7 +152,6 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VectorStoreBadge from '@/components/VectorStoreBadge.vue'
-import { useOrganizationStore } from '@/stores/organization'
 import { useAuthStore } from '@/stores/auth'
 import { formatStringDate } from '@/utils'
 
@@ -180,64 +163,17 @@ const props = defineProps<{
   // Optional pre-computed list of supported file extensions (e.g.
   // ["pdf", "docx", …]). The popover does not fetch parser engines on
   // its own — call sites that already know which formats are reachable
-  // pass them in; FAQ KBs simply omit the prop.
   supportedFileTypes?: string[]
 }>()
 
 const { t } = useI18n()
-const orgStore = useOrganizationStore()
 const authStore = useAuthStore()
 
-// "Owner" here mirrors the per-page guards: the original creator
-// (creator_id) — not "in my tenant". creator_id is unset for legacy
-// KBs created before that gate existed; those fall through to the
-// role/share check.
-const isOwner = computed<boolean>(() => {
-  const kb = props.kbInfo
-  if (!kb) return false
-  const creatorId = kb.creator_id || ''
-  const userId = authStore.user?.id || ''
-  if (!creatorId) return false
-  return creatorId === userId
-})
-
-const currentSharedKb = computed(() => {
-  const id = props.kbInfo?.id
-  if (!id) return null
-  return orgStore.sharedKnowledgeBases?.find?.((s: any) => s.knowledge_base?.id === id) ?? null
-})
-
-const isViaShare = computed<boolean>(() => !!currentSharedKb.value)
-
-const effectiveKBPermission = computed<string>(() => {
-  const id = props.kbInfo?.id || ''
-  return orgStore.getKBPermission?.(id) || props.kbInfo?.my_permission || ''
-})
-
-const accessRoleLabel = computed<string>(() => {
-  if (!isViaShare.value && isOwner.value) return t('knowledgeBase.accessInfo.roleOwner')
-  const perm = effectiveKBPermission.value
-  if (perm) return t(`organization.role.${perm}`)
-  return '--'
-})
-
-const accessPermissionSummary = computed<string>(() => {
-  if (!isViaShare.value && isOwner.value) return t('knowledgeBase.accessInfo.permissionOwner')
-  const perm = effectiveKBPermission.value
-  if (perm === 'admin') return t('knowledgeBase.accessInfo.permissionAdmin')
-  if (perm === 'editor') return t('knowledgeBase.accessInfo.permissionEditor')
-  if (perm === 'viewer') return t('knowledgeBase.accessInfo.permissionViewer')
-  return '--'
-})
-
+const effectiveKBPermission = computed(() => authStore.currentTenantRole)
+const accessRoleLabel = computed(() => t(`tenantMember.role.${effectiveKBPermission.value}`))
+const accessPermissionSummary = computed(() => { const role = effectiveKBPermission.value; if (role === 'owner') return t('knowledgeBase.accessInfo.permissionOwner'); if (role === 'admin') return t('knowledgeBase.accessInfo.permissionAdmin'); if (role === 'contributor') return t('knowledgeBase.accessInfo.permissionEditor'); return t('knowledgeBase.accessInfo.permissionViewer') })
 type RoleTheme = 'success' | 'primary' | 'warning' | 'default'
-const roleTagTheme = computed<RoleTheme>(() => {
-  if (!isViaShare.value && isOwner.value) return 'success'
-  const perm = effectiveKBPermission.value
-  if (perm === 'admin') return 'primary'
-  if (perm === 'editor') return 'warning'
-  return 'default'
-})
+const roleTagTheme = computed<RoleTheme>(() => { const role = effectiveKBPermission.value; return role === 'owner' ? 'success' : role === 'admin' ? 'primary' : role === 'contributor' ? 'warning' : 'default' })
 
 // KB.UpdatedAt is auto-bumped by GORM only when the KB row itself is
 // touched (rename, config edit, …). For a freshly created KB whose
@@ -290,7 +226,7 @@ const chunkingStrategyLabel = computed<string>(() => {
 
 const chunkingRows = computed<Array<{ key: string; label: string; value: string }>>(() => {
   const kb: any = props.kbInfo
-  if (!kb || kb.type === 'faq') return []
+  if (!kb) return []
   const cfg = kb.chunking_config
   if (!cfg) return []
   const rows: Array<{ key: string; label: string; value: string }> = []
@@ -339,20 +275,11 @@ const statRows = computed<Array<{ key: string; label: string; value: number | st
   const kb: any = props.kbInfo
   if (!kb) return []
   const items: Array<{ key: string; label: string; value: number | string }> = []
-  // FAQ KBs store every Q/A pair as a chunk, so chunk_count is the
   // user-facing entry total. Document KBs use knowledge_count for the
   // file-level total (chunk_count there counts internal splits and is
   // not meaningful to surface here). Mirrors the same branching used
   // by the list card.
-  if (kb.type === 'faq') {
-    if (typeof kb.chunk_count === 'number') {
-      items.push({
-        key: 'faq',
-        label: t('knowledgeBase.infoCard.faqCount'),
-        value: kb.chunk_count,
-      })
-    }
-  } else if (typeof kb.knowledge_count === 'number') {
+  if (typeof kb.knowledge_count === 'number') {
     items.push({
       key: 'knowledge',
       label: t('knowledgeBase.infoCard.documentCount'),

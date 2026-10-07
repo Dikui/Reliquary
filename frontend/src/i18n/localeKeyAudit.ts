@@ -93,7 +93,6 @@ const EXTRA_PREFIXES = [
   'system.globalSettings.runtime.queueNames.',
   'system.globalSettings.runtime.queueDescriptions.',
   'system.globalSettings.runtime.tasks.taskTypes.',
-  'organization.role.',
   'inviteRegister.',
   'modelSettings.builtinModels.',
 ] as const
@@ -109,8 +108,6 @@ export const CRITICAL_LOCALE_KEYS = [
   'model.editor.description.chat',
   'model.editor.description.asr',
   'inviteRegister.emailPlaceholder',
-  'knowledgeList.sections.tenantOthers',
-  'agent.sections.tenantOthers',
 ] as const
 
 function addPrefix(usage: I18nUsage, prefix: string): void {

@@ -6,26 +6,18 @@ import (
 	"gorm.io/gorm"
 )
 
-// TenantRole represents a user's role inside a single tenant.
-//
-// Tenant roles govern intra-tenant authority (who can create/edit/delete
-// resources, manage tenant settings, etc.) and are orthogonal to the
-// OrgMemberRole defined in organization.go, which governs cross-tenant
-// sharing. A user may therefore carry different TenantRole values in
-// different tenants (one TenantMember row per (user, tenant) pair).
 type TenantRole string
 
 const (
 	// TenantRoleOwner has full control over the tenant, including tenant
-	// deletion, ownership transfer, and managing tenant API keys.
+	// membership roles and managing team API keys.
 	TenantRoleOwner TenantRole = "owner"
 	// TenantRoleAdmin manages users, integrations, and tenant-scoped
 	// configuration such as model providers, vector stores, MCP services
-	// and IM channels, but cannot delete the tenant or change Owners.
+	// and IM channels, but cannot change Owners.
 	TenantRoleAdmin TenantRole = "admin"
 	// TenantRoleContributor can create knowledge bases and agents, and edit
-	// the ones they created. They have read access to everything else in
-	// the tenant.
+	// all team content.
 	TenantRoleContributor TenantRole = "contributor"
 	// TenantRoleViewer has read-only access to tenant resources and can
 	// run agents that are explicitly marked as runnable by viewers.
@@ -80,9 +72,7 @@ const (
 // TenantMember represents the (user, tenant) membership record that
 // carries the user's TenantRole for that specific tenant.
 //
-// A user has one TenantMember row per tenant they belong to. The home
-// tenant recorded on User.TenantID is always one of these rows; additional
-// rows are created when an admin adds the user to another tenant.
+// Every registered team member has one membership in the single team tenant.
 type TenantMember struct {
 	// Surrogate primary key.
 	ID uint64 `json:"id" gorm:"primaryKey;autoIncrement"`
@@ -113,7 +103,7 @@ func (TenantMember) TableName() string {
 
 // Membership is the login-response-friendly projection of a TenantMember
 // joined with tenant name. Returned as part of LoginResponse so the
-// frontend can render a tenant switcher and gate UI by role.
+// frontend can display the team and gate UI by role.
 type Membership struct {
 	TenantID   uint64     `json:"tenant_id"`
 	TenantName string     `json:"tenant_name"`

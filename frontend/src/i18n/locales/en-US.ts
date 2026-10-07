@@ -41,7 +41,7 @@ export default {
   },
   knowledgeWorkbench: {
     fusion: {"minValue": "Minimum value", "maxValue": "Maximum value", "unit": "Comparison unit", "queryHint": "Common fields: context_length, local_deployment, license. Numeric comparisons require compatible units. Counts describe the returned results only.", "originalField": "Original field label", "snapshotTitle": "Verify the source quote", "quoteMissing": "This quote does not exactly match the snapshot. Check the original text; no position is guessed.", "sameStory": "Related earlier event", "roundup": "Roundup: kept separate from the individual events", "current_period": "This period", "background": "Historical background", "unknown_date": "Unknown date"},
-    tabLabel: 'Knowledge Workbench', title: 'Knowledge Workbench', subtitle: 'Search facts, events, and sources, then turn research into trackable workflows.', sections: 'Knowledge workbench sections', refresh: 'Refresh', rebuild: 'Rebuild knowledge context', requestFailed: 'The request failed. Please try again.', emptyValue: 'Not set', unknownDate: 'Unknown time', facts: 'Facts', correct: 'Correct fact', correctionSaved: 'Fact correction saved with its source and history.', correctionTitle: 'Correct fact', correctionIntro: 'Create a new version of “{predicate}”. The quote must match the source text.', correctionValue: 'Correct value', correctionValueType: 'Value type', correctionUnit: 'Unit', correctionQuote: 'Verbatim source quote', correctionNote: 'Correction note', correctionFrom: 'Effective from', correctionTo: 'Effective until', correctionValueInvalid: 'Enter a valid value for the selected type.', cancel: 'Cancel', factPeriod: 'Effective period', rebuildQueued: '{count} sources were queued for rebuilding. Results will update after background processing finishes.', loadMore: 'Load more',
+    tabLabel: 'Knowledge Workbench', title: 'Knowledge Workbench', subtitle: "Manage and organize document knowledge bases", sections: 'Knowledge workbench sections', refresh: 'Refresh', rebuild: 'Rebuild knowledge context', requestFailed: 'The request failed. Please try again.', emptyValue: 'Not set', unknownDate: 'Unknown time', facts: 'Facts', correct: 'Correct fact', correctionSaved: 'Fact correction saved with its source and history.', correctionTitle: 'Correct fact', correctionIntro: 'Create a new version of “{predicate}”. The quote must match the source text.', correctionValue: 'Correct value', correctionValueType: 'Value type', correctionUnit: 'Unit', correctionQuote: 'Verbatim source quote', correctionNote: 'Correction note', correctionFrom: 'Effective from', correctionTo: 'Effective until', correctionValueInvalid: 'Enter a valid value for the selected type.', cancel: 'Cancel', factPeriod: 'Effective period', rebuildQueued: '{count} sources were queued for rebuilding. Results will update after background processing finishes.', loadMore: 'Load more',
     nav: { query: 'Structured query', entities: 'Entities & facts', events: 'Event attention', evidence: 'Source evidence', workflows: 'Tracking workflows', reports: 'Research reports' },
     query: { title: 'Query knowledge context', description: 'Filter facts by entity, attribute, relation, and time, then inspect current values, history, and evidence.', entity: 'Entity name', entityPlaceholder: 'For example: Acme Inc.', predicate: 'Fact attribute', predicatePlaceholder: 'For example: headquarters, status, funding round', relation: 'Relation type', relationPlaceholder: 'For example: invested in, acquired, partnered with', since: 'From', until: 'Until', history: 'Include superseded facts', submit: 'Query', clear: 'Clear filters', resultCounts: 'Found {entities} entities, {facts} facts, {events} events, and {evidence} evidence items.', historyIncluded: 'Results include historical versions', empty: 'No matching facts, events, or sources.' },
     entities: { title: 'Entities & facts', description: 'Browse graph entities and inspect their relations, attributes, sources, and history.', filter: 'Filter entities', empty: 'No entities found', unknownType: 'Uncategorized', aliases: 'aliases', choose: 'Select an entity to inspect its facts', includeHistory: 'Include historical facts', noFacts: 'This entity has no facts to show.', unknownObject: 'Unknown entity', merge: 'Merge duplicate', mergeTitle: 'Merge entities', mergeHint: 'Choose the canonical entity to keep. Facts, relations, and aliases will move to it.', mergeSource: 'Entity to merge', mergeTarget: 'Keep this entity', mergeTargetPlaceholder: 'Select the entity to keep', mergeWarning: 'Merging rewrites entity references in the knowledge context and cannot be undone here.', mergeSaved: 'Entities merged' },
@@ -69,7 +69,6 @@ export default {
   menu: {
     knowledgeBase: 'Knowledge Base',
     agents: 'Agents',
-    organizations: 'Shared Spaces',
     newChat: 'New Chat',
     settings: 'System Settings',
     logout: 'Logout',
@@ -135,7 +134,7 @@ export default {
       },
       knowledge: {
         title: 'Create your knowledge base',
-        desc: 'Everything starts here: upload documents, web pages or FAQs and Reliquary parses and indexes them automatically. Click here to open knowledge bases.'
+        desc: "Everything starts here: upload documents, web pages or documents and Reliquary parses and indexes them automatically. Click here to open knowledge bases."
       },
       chat: {
         title: 'Start an AI chat',
@@ -170,7 +169,7 @@ export default {
       steps: {
         create: {
           title: 'Create your first knowledge base',
-          desc: 'Knowledge bases hold documents and FAQs. Click the highlighted "New knowledge base" button below and we will walk you through the form.'
+          desc: "Knowledge bases hold documents and documents. Click the highlighted \"New knowledge base\" button below and we will walk you through the form."
         }
       }
     },
@@ -209,11 +208,11 @@ export default {
       steps: {
         type: {
           title: 'Choose a type',
-          desc: 'Document bases are for PDFs, Word files, and similar uploads. FAQ bases are for question–answer pairs. The type cannot be changed later.'
+          desc: "Document knowledge bases parse PDF, Word, and other files. Configure retrieval and Wiki as needed."
         },
         name: {
           title: 'Enter a name',
-          desc: 'Pick a clear name such as "Product manual" or "Support FAQ". Description is optional.'
+          desc: "Pick a clear name such as \"Product manual\" or \"Support documents\". Description is optional."
         },
         indexing: {
           title: 'Indexing capabilities',
@@ -254,10 +253,6 @@ export default {
         multimodalVllm: {
           title: 'Choose a VLM model',
           desc: 'Multimodal requires a VLM. Add one in system settings if the list is empty.'
-        },
-        faq: {
-          title: 'FAQ indexing',
-          desc: 'Choose how Q&A pairs are indexed. You can add FAQ entries after creation.'
         },
         submit: {
           title: 'Create the knowledge base',
@@ -375,7 +370,6 @@ export default {
   listSpaceSidebar: {
     all: 'All',
     workspace: 'Workspace',
-    spaces: 'Shared with me',
     favorites: 'Starred',
     recents: 'Recent'
   },
@@ -385,24 +379,17 @@ export default {
     tenant: 'Workspace',
     tenantTooltip: 'Created by another member of this workspace',
     tenantTooltipWithCreator: 'Created by {creator}',
-    space: 'Space',
-    spaceTooltip: 'Shared via space "{space}"',
-    spaceTooltipWithTenant: 'Shared via space "{space}" · from {tenant}',
-    shared: 'External',
-    sharedTooltip: 'Accessed from an external workspace via a shared space'
   },
   knowledgeBase: {
+    channelLarkDrive: 'Lark Drive',
     title: 'Knowledge Base',
     fileContent: 'File Content',
     accessInfo: {
       myRole: 'My role',
-      roleOwner: 'Owner',
       permissionOwner: 'Edit, manage settings, delete knowledge base',
-      permissionAdmin: 'Edit, manage sharing',
-      permissionEditor: 'Edit documents and tags',
+      permissionAdmin: "Can edit, manage settings, and delete knowledge bases",
+      permissionEditor: "Can edit, manage settings, and delete knowledge bases",
       permissionViewer: 'View and search only',
-      fromOrg: 'From space',
-      sharedAt: 'Shared at',
       lastUpdated: 'Last updated'
     },
     infoCard: {
@@ -416,12 +403,10 @@ export default {
       type: 'Type',
       createdAt: 'Created at',
       source: 'Source',
-      sharedTo: 'Shared to',
       enabled: 'Enabled',
       vectorStore: 'Vector store',
       fileStorage: 'File storage',
       documentCount: 'Documents',
-      faqCount: 'FAQs',
       supportedFileTypes: 'Accepted formats',
       chunking: 'Chunking',
       parentShort: 'parent',
@@ -476,7 +461,6 @@ export default {
     tagManageLink: 'Manage tags…',
     tagManageListSection: 'Tags',
     tagManageDocCount: '{count} documents',
-    tagManageFaqCount: '{count} FAQ entries',
     tagSelectedCount: '{count} selected',
     tagNewPlaceholder: 'New tag name, press Enter to add',
     untagged: 'Untagged',
@@ -558,13 +542,8 @@ export default {
     channelWebResearch: 'Web research',
     channelApi: 'API',
     channelBrowserExtension: 'Browser Extension',
-    channelWechat: 'WeChat',
-    channelWecom: 'WeCom',
     channelFeishu: 'Feishu',
     channelFeishuDrive: 'Feishu Drive',
-    channelLarkDrive: 'Lark Drive',
-    channelDingtalk: 'DingTalk',
-    channelSlack: 'Slack',
     channelIm: 'IM Channel',
     channelNotion: 'Notion',
     channelYuque: 'Yuque',
@@ -938,7 +917,7 @@ export default {
     contextCompactedSummary: '{before} → {after} tokens',
     contextCompactedDegraded: 'Summary unavailable, raw transcript kept',
     title: 'Agents',
-    subtitle: 'Configure and manage your agents to customize conversation behavior and capabilities',
+    subtitle: "Manage and organize document knowledge bases",
     createAgent: 'Create Agent',
     builtin: 'Built-in',
     disabled: 'Disabled',
@@ -971,22 +950,10 @@ export default {
       multiTurn: 'Multi-turn Conversation'
     },
     tabs: {
-      sharedToMe: 'Shared to Me'
-    },
-    sections: {
-      builtin: 'Built-in',
-      mine: 'Created by me',
-      tenantOthers: 'Workspace · Other members',
-      tenantReadonly: 'Workspace · View only',
-      sharedByMe: 'Shared by me',
-      sharedEditable: 'Shared with me · Can edit',
-      sharedReadonly: 'Shared with me · View only'
     },
     empty: {
       title: 'No Custom Agents',
       description: 'Click the button in the top right to create your first agent',
-      sharedTitle: 'No shared agents yet',
-      sharedDescription: 'You can join a space or ask others to share agents with you',
       favoritesTitle: 'No favorites yet',
       favoritesDescription: 'Star an agent from its card to add it here',
       recentsTitle: 'Nothing here yet',
@@ -995,25 +962,6 @@ export default {
     detail: {
       title: 'Agent Details',
       useInChat: 'Use in Chat'
-    },
-    shareScope: {
-      title: 'Share Scope',
-      desc: 'Space members have read-only access to this agent and will use it according to your current configuration; your changes to the agent will sync to shared spaces. To allow space members to edit knowledge base content, share the knowledge base to the space.',
-      knowledgeBase: 'Knowledge bases',
-      chatModel: 'Chat model',
-      rerankModel: 'Rerank model',
-      webSearch: 'Web search',
-      mcp: 'MCP services',
-      kbAll: 'All knowledge bases',
-      kbSelected: '{count} selected',
-      kbNone: 'None',
-      modelConfigured: 'Configured',
-      modelNotSet: 'Not set',
-      enabled: 'On',
-      disabled: 'Off',
-      mcpAll: 'All services',
-      mcpSelected: '{count} selected',
-      mcpNone: 'None'
     },
     delete: {
       confirmTitle: 'Delete Agent',
@@ -1040,8 +988,8 @@ export default {
       },
       postCreateHint: {
         title: 'Created successfully',
-        footer: 'Keep adjusting settings, configure sharing and publishing, then click "Save and Close".',
-        integrationDesc: 'Go to Integrations to configure IM, web embed, and other publishing channels',
+        footer: "Continue configuring the agent and Feishu channels, then click Save and close.",
+        integrationDesc: "Configure Feishu and team API keys in Integrations.",
       },
       basicInfo: 'Basic Info',
       basicInfoDesc: 'Configure agent name, description, and run mode',
@@ -1052,7 +1000,7 @@ export default {
       toolsConfig: 'Tools',
       toolsConfigDesc: 'Configure tools available to the Agent',
       knowledgeConfig: 'Knowledge Base',
-      knowledgeConfigDesc: 'Configure knowledge base scope and FAQ strategy for the agent',
+      knowledgeConfigDesc: "Configure the knowledge base scope for the agent",
       webSearchConfig: 'Web Search',
       webSearchConfigDesc: 'Configure web search capabilities for the agent',
       agentId: 'Agent ID',
@@ -1091,7 +1039,6 @@ export default {
       selectKnowledgeBases: 'Select Knowledge Bases',
       selectKnowledgeBasesDesc: 'Select knowledge bases to associate (including collaborative ones)',
       myKnowledgeBases: 'My Knowledge Bases',
-      sharedKnowledgeBases: 'Collaborative Knowledge Bases',
       retrieveKBOnlyWhenMentioned: 'Retrieve Only When Mentioned',
       retrieveKBOnlyWhenMentionedDesc: 'Off: auto-retrieve configured KBs; On: retrieve only when user {\'@\'} mentions',
       rerankModel: 'ReRank Model',
@@ -1165,11 +1112,9 @@ export default {
       title: 'Select Agent',
       current: 'Current',
       goToSettings: 'Settings',
-      sharedLabel: 'Shared',
       notReadyHint: 'Not ready. Configure: {items}',
       notReadyStatus: 'Setup needed',
       configureAction: 'Configure',
-      sharedNotReadyContact: 'Ask the sharing organization admin to finish setup',
       capabilitiesSection: 'Capabilities',
       webSearchCapability: 'Web search',
       imageUploadCapability: 'Image upload',
@@ -1187,20 +1132,19 @@ export default {
     parserEngine: 'Parser Engine',
     storageEngine: 'Storage Engine',
     sandbox: {
+      allowPrivateEndpointsHint: "Allow connections to a Docker daemon on a private network.",
       title: 'Sandbox Config',
       description: 'Configure isolated runtimes for agent skill scripts. Each agent picks one workspace config.',
       pageHintTitle: 'What is a sandbox?',
-      pageHint: 'A sandbox is the isolated environment where agent skill scripts run. A workspace can have several configs (Docker, E2B, CubeSandbox); each agent picks one. Skills are installed on the Skill Management page into the selected config\'s image. Scripts stay disabled until a config is selected.',
-      editorDescription: 'Configure a workspace runtime. Docker, CubeSandbox, and E2B use the same management flow.',
+      pageHint: "A sandbox is the isolated environment where agent skill scripts run. Add Docker configurations and let each agent select one. Skills are installed into the selected image.",
+      editorDescription: "Configure a Docker runtime for the team.",
       stepConnection: 'Connect',
-      stepTemplate: 'Template',
       stepRuntime: 'Runtime',
       stepSkills: 'Skills',
       stepSkillsLocked: 'Skills are installed into this config\'s image. Save the config first, then come back to this step.',
       setupProgress: 'Sandbox setup progress',
       stepDescriptions: {
-        connection: 'Configure the backend and verify the connection before loading templates.',
-        template: 'Choose a ready template returned by the connected cluster.',
+        connection: "Configure the Docker image and daemon, then verify the connection.",
         runtime: 'Configure execution settings, environment variables, and when skill image updates apply, then save.',
         skills: 'Install skills into this config\'s sandbox image. Once the config is saved you can come back any time.',
       },
@@ -1212,20 +1156,18 @@ export default {
       backendType: 'Sandbox type',
       backendTypePlaceholder: 'Select a sandbox type',
       scriptPolicyLabel: 'Allow skill scripts to run in sandboxes',
-      scriptPolicyDesc: 'When off, agents in this workspace can only read skill content. Remote sandboxes already running are released once their sessions end.',
+      scriptPolicyDesc: "When off, agents in this workspace can only read skill content.",
       backendDescriptions: {
-        cube: 'Self-hosted MicroVM cluster for private or on-premises deployments',
-        e2b: 'Managed MicroVM service or an E2B-compatible deployment',
         docker: 'Keep a long-lived container per session on this Reliquary host; scripts and files stay in that container',
       },
       dockerDisabledAlert: 'Docker sandbox is not enabled on this deployment',
       dockerDisabledHint: 'A local docker.sock is equivalent to root on the host. For a single-machine private install, a system admin can enable it under Settings → System settings → Network security.',
       dockerDisabledCard: 'Docker sandbox is disabled on this deployment; this config will not create containers',
-      dockerHostRisk: 'Empty or unix:// uses the Docker daemon on the Reliquary host, which is equivalent to root on that machine. Use this only for a private single-node install. Prefer Cube or E2B when multiple workspaces share a host. Remote tcp:// endpoints require a TLS certificate directory.',
+      dockerHostRisk: "Empty or unix:// uses the Docker daemon on the Reliquary host. Remote tcp:// endpoints require a TLS certificate directory.",
       addConfig: 'Add sandbox',
       viewClusterGuide: 'Cluster setup guide',
       configName: 'Config name',
-      configNamePlaceholder: 'e.g. Production E2B',
+      configNamePlaceholder: "e.g. Production Docker",
       configNameRequired: 'Please enter a config name',
       configDescription: 'Description',
       configDescriptionPlaceholder: 'Optional, helps tell several configs of the same type apart',
@@ -1234,26 +1176,12 @@ export default {
       sectionBasic: 'Basic information',
       sectionConnection: 'Cluster connection',
       sectionRuntimeEnvironment: 'Runtime environment',
-      sectionTemplate: 'Runtime template',
       sectionRuntime: 'Execution settings',
       sectionNetwork: 'Network policy',
       sectionEnvironment: 'Environment variables',
       networkHint: 'Controls outbound networking for every sandbox using this configuration. Changes affect only newly created sandboxes; existing sandboxes keep their policy until reclaimed.',
       egressDefault: 'Default egress',
-      egressAllowAll: 'Allow public network (default)',
-      egressDenyAll: 'Deny by default',
       egressPrecedence: 'Evaluation order: allow, deny, then the default. Allow rules take precedence over deny rules.',
-      allowOut: 'Allowed destinations',
-      allowOutPlaceholder: 'Domain / IP / CIDR, for example *.example.com',
-      allowOutHelp: 'Supports IPv4, CIDR, domains, and single-label wildcards such as *.example.com (which do not match the root domain).',
-      denyOut: 'Denied destinations',
-      denyOutPlaceholder: 'IP / CIDR only, for example 169.254.169.254/32',
-      denyOutHelp: 'Deny rules match destination IP only, so domains are not supported.',
-      domainAllowNeedsDenyAll: 'When allowed destinations contain a domain, also choose “Deny by default” or add 0.0.0.0/0 to denied destinations; otherwise the allowlist is ineffective.',
-      cubeL7Rules: 'HTTP access rules (L7)',
-      cubeL7RulesHelp: 'Every rule requires host or sni; the network layer derives allowed targets only from those fields. Fields are AND-ed and methods are OR-ed. Applies only to HTTP 80 / HTTPS 443. Rules are first-match-wins from top to bottom.',
-      e2bHostRules: 'Host request transforms',
-      e2bHostRulesHelp: 'Inject headers by host. A rule does not authorize egress; its host must also appear in allowed destinations.',
       ruleUntitled: 'Untitled rule',
       expandRule: 'Expand rule',
       collapseRule: 'Collapse rule',
@@ -1272,13 +1200,11 @@ export default {
       ruleInject: 'Inject headers',
       headerName: 'Header name',
       headerValue: 'Header value',
-      addTarget: 'Add destination',
       addRule: 'Add rule',
       addHeader: 'Add header',
       removeRule: 'Remove rule',
       noConfigs: 'No sandbox yet. Agents without a workspace configuration will not run skill scripts.',
-      identityFieldHint: 'While this config owns sandboxes, these cannot be changed: backend type, API endpoint, API key, sandbox domain, proxy endpoint.',
-      connectionLockedBySkills: 'This sandbox already has skills. Connection, credentials, and DNS would retarget the skill snapshot, and DNS only applies after a template rebuild. Create a new sandbox instead.',
+      connectionLockedBySkills: "This sandbox has installed skills. Changing its connection would change where the skill image runs. Create another configuration.",
       connectionLockedByInFlight: 'A skill is still installing or being removed. Connection, credentials, and DNS cannot change until that finishes.',
       viewSandboxes: 'Running instances',
       inventoryTitle: 'Running instances',
@@ -1308,13 +1234,12 @@ export default {
       disableScripts: 'Disable sandbox execution',
       enableScripts: 'Enable sandbox execution',
       disableScriptsConfirm:
-        'All agents in this workspace — will no longer run skill scripts in a sandbox. They can still read skill content. Existing remote sandboxes are not destroyed automatically; end or delete the related sessions to release them. Continue?',
+        "Disable skill scripts for all agents in this workspace? Agents can still read skill content.",
       scriptsDisabled: 'Sandbox execution disabled for this workspace',
       scriptsEnabled: 'Sandbox execution restored for this workspace',
       policySaveFailed: 'Failed to update sandbox execution policy',
       legacyConfig: 'Deprecated',
       namedBackendHint: 'Workspace configuration is the only runtime source. Agents without one cannot execute skill scripts.',
-      reliquaryTemplateTitle: 'Reliquary standard template',
       reliquaryDockerImage: 'Reliquary standard image',
       reliquaryDockerImageHint: 'Each session gets its own long-lived container. Scripts, shell commands and files all share it until the session ends or the idle timeout reclaims it.',
       reliquaryTemplateOverview: 'Reliquary provides the standard runtime. Templates are discovered after connecting and the standard one is created when missing.',
@@ -1327,81 +1252,22 @@ export default {
       cardVolumeMounted: 'Volume mounted',
       cardEnvVars: '{count} env vars',
       cardPrivateEndpoints: 'Private endpoints allowed',
-      templateNotConfigured: 'Template not configured',
       imageNotConfigured: 'Image not configured',
-      templateApplied: 'Applied',
-      refreshTemplates: 'Refresh templates',
-      templateSelectHelp: 'Templates are loaded from this cluster. The saved configuration stores the ID automatically.',
-      templateSelectPlaceholder: 'Connect to the cluster to load templates',
-      templateLoadHint: 'Enter the cluster connection and refresh. If there is no Reliquary standard template, click Create; after changing DNS or the image, click Delete and rebuild.',
       templateLoadFailed: 'Failed to load templates',
-      standardTemplateProvisioning: 'The Reliquary standard template is being created. Refresh shortly to see its status.',
-      standardTemplateReplaced: 'The previous standard template was deleted and a rebuild has started. Wait until it is ready.',
-      templateNotReady: 'The selected template is not ready. Refresh and wait for the build to finish.',
       connectionPassed: 'Connection verified. Templates below are loaded from this cluster.',
       connectionPassedTitle: 'Cluster connected',
-      templateStepHint: 'This step only lists templates already on the cluster; it does not create one automatically. Click Create Reliquary standard template if none exists, or Delete and rebuild after changing DNS or the image. You can continue after a template is ready.',
-      loadingTemplates: 'Loading templates from the cluster...',
-      templateBuildingHint: 'The standard template is being built. This list will refresh.',
-      templateUntaggedHint: 'The builds finished but none carries the default tag, so sandbox creation cannot resolve this template. Delete it in E2B and refresh; Reliquary will rebuild it.',
-      templateFailedReason: 'Build failed: {reason}',
-      noTemplates: 'No templates were returned by this cluster.',
-      reliquaryStandardTemplate: 'Reliquary standard template',
-      createStandardTemplate: 'Create',
-      createStandardTemplateHint: 'Built with the current connection settings, including DNS. After changing those settings, rebuild from the card.',
-      replaceStandardTemplate: 'Rebuild',
-      replaceStandardTemplateConfirm: 'Rebuild the Reliquary standard template with the current settings, including DNS. The previous spawnable template is not deleted until the replacement is ready.',
       templateLockedBySkills: 'This sandbox already has skills. The skill environment is bound to the current snapshot, so the runtime template cannot be changed or rebuilt. Create a new sandbox and install skills from the new template.',
       templateLockedByInFlight: 'A skill is still installing or being removed. The runtime template cannot be changed or rebuilt until that finishes.',
-      templateUnnamed: 'Unnamed template',
-      templateFieldImage: 'Image',
-      templateFieldVersion: 'Version',
-      templateFieldId: 'ID',
-      templateFieldCreated: 'Created',
-      templateFieldInstance: 'Instance type',
-      templateFieldNetwork: 'Network',
-      templateFieldInternet: 'Internet access',
-      templateInternetOn: 'On',
-      templateInternetOff: 'Off',
-      templateReadyHint: 'Template “{name}” is ready and selected.',
-      templateProvisioningHint: 'A template is still being built. The status refreshes automatically.',
-      templateStatuses: {
-        ready: 'Ready',
-        building: 'Building',
-        untagged: 'No default tag',
-        failed: 'Failed',
-        unknown: 'Unknown',
-      },
       allowPrivateEndpoints: 'Allow private cluster endpoints',
-      allowPrivateEndpointsHint: 'Use for self-hosted private control planes. Link-local and cloud metadata addresses remain blocked.',
-      howToBuildTemplate: 'Sandbox cluster setup and template guide',
       noEnvVars: 'No additional environment variables. Add only values required by skills.',
       fieldRequired: 'Required',
-      cubeApiKeyOptional: 'Optional — leave empty for an unauthenticated self-hosted CubeSandbox',
-      cubeApiKeyWhere: 'How to enable auth on a self-hosted cluster',
-      cubeDnsServers: 'DNS servers',
-      cubeDnsServersHelp: 'Optional. Nameserver IPs written into the Reliquary standard template. Leave empty to use the cluster default (commonly 119.29.29.29). If UDP/53 to public resolvers is blocked, use reachable addresses from the Cube host\'s /etc/resolv.conf, excluding 10/8, 172.16/12, and 192.168/16. Existing standard templates take effect only after Rebuild on the template card.',
-      cubeDnsServersPlaceholder: 'e.g. 8.8.8.8, press Enter to add',
-      e2bApiKeyHelp: 'Create one on the API Keys page of the E2B dashboard; it usually starts with e2b_.',
-      e2bApiKeyWhere: 'Get an API key from the E2B dashboard',
       apiKeyPlaceholder: 'Paste the API key',
-      secretConfigured: 'Key configured (not shown again); enter a new value to rotate',
       secretKeepHint: 'Configured — leave empty to keep it',
-      e2bApiUrlOptional: 'Optional — the SDK default is used when empty',
-      e2bDomainOptional: 'Optional — the SDK default is used when empty',
-      e2bProxyUrlOptional: 'Data-plane gateway of a self-hosted E2B-compatible cluster. Leave empty to reach sandboxes through the sandbox domain, as E2B Cloud expects.',
       backends: {
         disabled: 'Disabled',
         local: 'Local process',
         docker: 'Docker',
-        cube: 'CubeSandbox',
-        e2b: 'E2B',
       },
-      apiUrl: 'API endpoint',
-      proxyUrl: 'Proxy endpoint',
-      sandboxDomain: 'Sandbox domain',
-      apiKey: 'API key',
-      templateId: 'Template ID',
       httpTimeout: 'HTTP timeout (s)',
       httpTimeoutHelp: 'How long a management call to the backend may take before the endpoint counts as unreachable. Empty means 30 seconds.',
       sandboxTtl: 'Sandbox TTL (s)',
@@ -1577,7 +1443,7 @@ export default {
     skills: {
       title: 'Skill Management',
       description: 'Skills live in the workspace catalog. Register them first, then install onto one or more sandboxes. An agent can only enable skills that are ready on its sandbox.',
-      helpTooltip: 'A catalog skill does not have to be installed anywhere. Scripts only run after the skill is installed into the sandbox image the agent uses. Docker, Cube, and E2B images are not interchangeable — install once per sandbox.',
+      helpTooltip: "Scripts run after the skill is installed into the Docker image selected by the agent.",
       goSandboxSettings: 'Configure sandboxes',
       noConfigsDesc: 'No sandbox yet. Skills need an image to install into.',
       addSkill: 'Add skill',
@@ -1596,9 +1462,9 @@ export default {
       installSkill: 'Add skill',
       installDrawerDesc: 'Install into the {name} image.',
       installToSandbox: 'Install onto sandbox',
-      installToSandboxDesc: 'Each sandbox backend needs its own install. Docker, Cube, and E2B images are not interchangeable.',
+      installToSandboxDesc: "Install the skill into each selected Docker sandbox image.",
       pickSandboxes: 'Install onto sandboxes',
-      pickSandboxesHint: 'The skill is written into the image used by each selected sandbox. Docker, Cube, and E2B images are not interchangeable — install once per sandbox. You can skip this and install later from the catalog.',
+      pickSandboxesHint: "Install the skill into the selected Docker images. You can also install it later from the catalog.",
       noSandboxToInstall: 'No sandbox is available to install into.',
       noInstalls: 'Not installed on any sandbox',
       installedOn: 'Installed on',
@@ -2113,11 +1979,7 @@ export default {
   auth: {
     login: 'Login',
     logout: 'Logout',
-    oidcLogin: 'Sign in with OIDC',
-    oidcLoginWithProvider: 'Sign in with {provider}',
-    redirectingToOIDC: 'Redirecting to identity provider...',
     orContinueWith: 'Or continue with',
-    oidcLoginFailed: 'OIDC login failed',
     username: 'Username',
     email: 'Email',
     password: 'Password',
@@ -2159,20 +2021,6 @@ export default {
     loginError: 'Login error, please check email or password',
     loginErrorRetry: 'Login error, please try again later',
     registerError: 'Registration error, please try again later',
-    workspaceOnboarding: {
-      title: 'Choose your workspace',
-      description: 'Create a workspace to get started, or accept an invitation to join one that already exists.',
-      create: 'Create workspace',
-      invitations: 'View invitations',
-      loadingPolicy: 'Checking the available workspace options…',
-      policyLoadFailed: 'Workspace permissions could not be loaded. Check your connection and try again.',
-      retry: 'Reload',
-      inviteOnlyTitle: 'Waiting for a workspace invitation',
-      inviteOnlyDescription: 'Personal workspace creation is disabled. View and accept an invitation from a workspace administrator.',
-      inviteOnlyNotice: 'This account can only join an existing workspace by invitation',
-      help: 'You can create a workspace now or return later to accept an invitation.',
-      inviteOnlyHelp: 'No invitation yet? Send your registered email address to a workspace administrator and ask them to invite you.'
-    }
   },
   authStore: {
     errors: {
@@ -2183,6 +2031,7 @@ export default {
     }
   },
   common: {
+    copyCode: "Copy code",
     add: 'Add',
     me: 'Me',
     confirm: 'Confirm',
@@ -2242,7 +2091,6 @@ export default {
   },
   mentionDetail: {
     readOnlyFromAgent: 'Read-only in this conversation; not shown in Knowledge Base list',
-    faqCount: '{count} Q&A entries',
     kbCount: '{count} documents',
     belongsToKb: 'Knowledge base: ',
     belongsToOrg: 'Space: ',
@@ -2363,7 +2211,6 @@ export default {
     customAgentMissingRerankModel: 'Rerank model',
     goToAgentEditor: 'Go to configure →',
     agentNotReadyDetail: 'Agent "{agentName}" is not ready. Please configure: {reasons}',
-    sharedAgentNotReadyDetail: 'Shared agent "{agentName}" is not ready (missing: {reasons}). Ask the sharing organization admin to finish setup.',
     webSearch: {
       toggleOn: 'Enable Web Search',
       toggleOff: 'Disable Web Search',
@@ -2372,7 +2219,6 @@ export default {
     knowledgeBase: 'Knowledge Base',
     knowledgeBaseWithCount: 'Knowledge Base ({count})',
     notConfigured: 'Not configured',
-    sharedAgentModelLabel: 'Model from shared agent',
     noModel: 'No available models',
     stopGeneration: 'Stop Generation',
     send: 'Send',
@@ -2407,14 +2253,11 @@ export default {
   },
   knowledgeList: {
     create: 'Create Knowledge Base',
-    subtitle: 'Manage and organize your knowledge bases, supporting document-based and FAQ-based knowledge bases',
-    sharedToOrgs: 'Shared to {count} space(s)',
+    subtitle: "Manage and organize document knowledge bases",
     uninitializedBanner: 'Some knowledge bases are not initialized. Configure model information in settings before adding documents.',
     empty: {
       title: 'No knowledge bases yet',
       description: 'Click "Create Knowledge Base" in the top-right corner to add your first one.',
-      sharedTitle: 'No shared knowledge bases',
-      sharedDescription: 'You can join a shared space or request others to share knowledge bases with you',
       favoritesTitle: 'No favorites yet',
       favoritesDescription: 'Star a knowledge base from its card to add it here',
       recentsTitle: 'Nothing here yet',
@@ -2436,35 +2279,11 @@ export default {
       unpinSuccess: 'Unpinned',
       failed: 'Operation failed'
     },
-    sections: {
-      pinned: 'Pinned',
-      mine: 'Created by me',
-      tenantOthers: 'Workspace · Other members',
-      tenantReadonly: 'Workspace · View only',
-      sharedByMe: 'Shared by me',
-      sharedEditable: 'Shared with me · Can edit',
-      sharedReadonly: 'Shared with me · View only'
-    },
     messages: {
       deleted: 'Knowledge base deleted',
       deleteFailed: 'Failed to delete knowledge base',
       duplicateSuccess: 'Knowledge base duplicate created (content not included)',
       duplicateFailed: 'Failed to create knowledge base duplicate'
-    },
-    detail: {
-      title: 'Shared Knowledge Base',
-      sourceType: 'Source',
-      sourceTypeKbShare: 'KB shared directly to this space',
-      sourceTypeAgent: 'Visible via shared agent',
-      sourceOrg: 'Space',
-      sourceFromAgent: 'Agent',
-      agentKbStrategy: 'Agent KB strategy',
-      agentKbStrategyAll: 'All knowledge bases',
-      agentKbStrategySelected: 'Selected knowledge bases',
-      agentKbStrategyNone: 'No knowledge bases',
-      sharedAt: 'Shared At',
-      myPermission: 'My Permission',
-      goToKb: 'Go to Knowledge Base'
     },
     features: {
       multimodal: 'Multimodal',
@@ -2481,133 +2300,6 @@ export default {
       errorTip: 'Some files failed to upload. Please check the notifications.',
       unknownKb: 'Knowledge Base {id}'
     }
-  },
-  embedPublish: {
-    create: 'New embed channel',
-    channelsTitle: 'Embed channels',
-    disabled: 'Disabled',
-    empty: 'No embed channels yet',
-    allowedOrigins: 'Allowed origins',
-    embedCode: 'Embed code',
-    widgetCode: 'Widget script',
-    copyCode: 'Copy code',
-    channelKey: 'Channel key',
-    channelKeyDesc: 'Long-lived secret for third-party site integration—store it safely',
-    channelKeyHint: 'Failed to load the channel key. Close and reopen this channel, or refresh the page.',
-    channelKeyLoadFailed: 'Failed to load channel key',
-    channelKeyUnavailable: 'Key unavailable',
-    resetKeyTitle: 'Reset channel key',
-    resetKeyConfirmOk: 'Reset',
-    resetKeyConfirmBody: 'After reset, the old channel key is revoked immediately. Every deployed embed snippet must use the new key to keep working. This cannot be undone.',
-    resetKeySuccess: 'Channel key reset—the new key is shown in the input field',
-    resetKeyFailed: 'Failed to reset channel key',
-    copyChannelKeyTitle: 'Copy channel key',
-    revealKey: 'Reveal key',
-    hideKey: 'Hide key',
-    createTitle: 'New embed channel',
-    name: 'Name',
-    nameDesc: 'For admin lists and channel identification',
-    namePlaceholder: 'e.g. Website support',
-    nameDefaultHint: 'Defaults to "{agent} · Web Embed" when an agent is selected. Leave blank on save to use the default name.',
-    defaultChannelName: 'Web Embed',
-    defaultChannelNameWithAgent: '{agent} · Web Embed',
-    welcomeMessage: 'Welcome message',
-    welcomePlaceholder: 'Hi! How can I help you?',
-    welcomeMessageDesc: 'Shown in the embed chat before the visitor sends their first message; leave blank to hide',
-    showSuggestedQuestions: 'Suggested questions',
-    showSuggestedQuestionsDesc: 'Show starter prompts before the first visitor message, from agent config and linked knowledge bases',
-    originsHint: 'One full origin per line (e.g. https://shop.example.com), at least one required; *.example.com subdomain wildcards supported',
-    originsRequired: 'At least one allowed origin is required',
-    originsInvalid: 'Invalid origin: {origin}',
-    originsWildcardProd: 'Wildcard origin \'*\' is not allowed in production',
-    originsPlaceholder: 'https://shop.example.com',
-    rateLimitLabel: 'Requests per minute',
-    rateLimitDesc: 'Per visitor IP, max embed API requests per minute; excess requests are temporarily rejected. Default 30.',
-    rateLimitDayLabel: 'Daily request cap',
-    rateLimitDayDesc: 'Channel-wide total requests allowed per day (across all visitor IPs); bounds abuse cost if the publish token is copied. Default 10000.',
-    publishTokenWarning: 'The publish token appears in plain text in the embed page source — anyone visiting the host site can read it. Treat it as a publishable key, not a secret: never embed an agent that exposes sensitive data, always configure the origin allowlist and request caps, and rotate the token immediately if it leaks.',
-    primaryColor: 'Primary color',
-    pageTitle: 'Page title',
-    pageTitleDesc: 'Shown to visitors in chat header and browser tab; takes priority over name',
-    pageTitlePlaceholder: 'AI Assistant',
-    headerTitleMode: 'Header title',
-    headerTitleModeChannel: 'Fixed channel title',
-    headerTitleModeSession: 'Follow session title',
-    headerTitleModeDesc: 'Fixed: always show the page title. Session: auto-title from the first message; falls back to page title until generated.',
-    tokenHint: 'Failed to load the channel key. Close and reopen this channel.',
-    createdWithToken: 'Embed channel created — the channel key is shown below',
-    created: 'Embed channel created',
-    updated: 'Embed channel updated',
-    saveFailed: 'Save failed',
-    deleted: 'Deleted',
-    copied: 'Embed code copied',
-    loadError: 'Failed to load',
-    missingChannel: 'Missing embed channel or token',
-    invalidChannel: 'Invalid embed channel',
-    sessionFailed: 'Failed to create chat session, please try again',
-    channelDisabled: 'This embed channel is disabled. Re-enable it under Agent editor → Web Page Embed',
-    loading: 'Loading...',
-    tabIframe: 'iframe',
-    tabWidget: 'Widget',
-    tabSecure: 'Secure mode',
-    widgetPosition: 'Widget position',
-    widgetPreview: 'Widget preview',
-    positionBottomRight: 'Bottom right',
-    positionBottomLeft: 'Bottom left',
-    positionTopRight: 'Top right',
-    positionTopLeft: 'Top left',
-    tokenCopied: 'Channel key copied',
-    awaitingToken: 'Waiting for host page to provide token…',
-    preview: 'Preview',
-    previewIframeHint: 'Shows how the iframe embed looks on a third-party page (same as the copied snippet).',
-    previewWidgetHint: 'Shows the floating widget on a mock host page. On a real site the host passes the token via postMessage.',
-    previewMockPage: 'Mock host page',
-    previewLoading: 'Loading preview…',
-    previewUnavailable: 'Preview is unavailable. Ensure the channel is enabled and Redis is available.',
-    defaultChatTitle: 'AI Assistant',
-    newChat: 'New chat',
-    sectionChannel: 'Channel info',
-    sectionSecurity: 'Security & rate limit',
-    sectionCapabilities: 'Chat capabilities',
-    allowWebSearch: 'Show web search toggle',
-    allowWebSearchDesc: 'When enabled, visitors see a web search button in the input area and can turn it on or off themselves; it stays off by default. The button appears only if the bound agent has web search enabled.',
-    allowFileUpload: 'Show file upload',
-    allowFileUploadDesc: 'When enabled, visitors can upload images and document attachments. Requires the bound agent to support image upload.',
-    webhookUrl: 'Webhook URL',
-    webhookUrlPlaceholder: 'https://your-server.example.com/reliquary/embed-events',
-    webhookUrlDesc: 'Optional. Reliquary POSTs message_sent / message_received events to this HTTPS endpoint.',
-    webhookSecret: 'Webhook secret',
-    webhookSecretPlaceholder: 'HMAC-SHA256 secret (X-Reliquary-Signature header)',
-    webhookSecretKeep: 'Leave blank to keep the saved secret',
-    webhookSecretDesc: 'Optional. When set, request bodies are signed for verification on your server.',
-    agentWebSearchDisabledHint: 'This agent does not have web search enabled. Visitors will not see the web search button until you enable it in agent settings.',
-    agentImageUploadDisabledHint: 'This agent does not have image upload enabled. Visitors will not see the upload button until you enable it in agent settings.',
-    sectionAppearance: 'Appearance',
-    sectionDeploy: 'Deploy to site',
-    sectionWebhook: 'Event callbacks',
-    stepChannel: 'Channel info',
-    stepSecurity: 'Security',
-    stepCapabilities: 'Capabilities',
-    stepAppearance: 'Appearance',
-    stepWebhook: 'Webhooks',
-    stepDeploy: 'Deploy',
-    deployIntro: 'Choose an embed style and copy the snippet below into your site. View or rotate the channel key at the bottom when you need credentials.',
-    deployStepEmbed: 'Copy embed code',
-    deployStepEmbedDesc: 'Pick an embed style and paste the snippet into your site.',
-    embedIframeDesc: 'Embed the full chat in a fixed page area.',
-    embedWidgetDesc: 'Floating launcher in a corner; click to open the chat panel.',
-    embedSecureDesc: 'Recommended: the publish token stays on your own backend and the page only receives short-lived tokens, so the long-lived secret never reaches the browser.',
-    deployAfterSaveHint: 'After saving, you can copy the channel key and embed code here.',
-    widgetTokenNote: 'Widget scripts must include the channel key; iframe embeds exchange credentials automatically on load.',
-    secureTokenNote: 'The page no longer carries the publish token; it points at a token endpoint on your backend (data-token-endpoint). Your backend exchanges the publish token for a 30-minute short-lived token and returns it to the page; the widget auto-refreshes before expiry.',
-    secureServerLabel: 'Server-side token endpoint example (publish token stays on the server)',
-    tabServerNode: 'Node.js',
-    tabServerGo: 'Go',
-    enabled: 'Enable channel',
-    deleteConfirm: 'Delete this embed channel? Deployed snippets will stop working.',
-    defaultLocale: 'Default language',
-    defaultLocaleDesc: 'Visitor UI language when chat opens; empty follows the browser or host Widget setLocale().',
-    defaultLocaleBrowser: 'Browser / host default'
   },
   knowledgeEditor: {
     activity: {
@@ -2650,10 +2342,8 @@ export default {
       targets: {
         knowledge_base: 'Knowledge base',
         knowledge: 'Knowledge',
-        faq_entry: 'FAQ entry',
         knowledge_tag: 'Tag',
         data_source: 'Data source',
-        knowledge_base_share: 'Share',
         knowledge_move: 'Knowledge move',
         wiki: 'Wiki'
       },
@@ -2706,13 +2396,7 @@ export default {
         'datasource.sync_failed': 'Data source sync failed',
         'datasource.paused': 'Data source paused',
         'datasource.resumed': 'Data source resumed',
-        'kb.share_added': 'Share added',
-        'kb.share_permission_changed': 'Share permission changed',
-        'kb.share_removed': 'Share removed',
         'wiki.content_changed': 'Wiki content changed',
-        'faq.import_started': 'FAQ import started',
-        'faq.import_completed': 'FAQ import completed',
-        'faq.import_failed': 'FAQ import failed'
       },
       outcomes: {
         accepted: 'Accepted',
@@ -2758,11 +2442,9 @@ export default {
       chunking: 'Chunking Settings',
       storage: 'Storage Engine',
       advanced: 'Advanced Settings',
-      faq: 'FAQ Settings',
       multimodal: 'Image Processing',
       asr: 'Audio',
       datasource: 'Data Sources',
-      share: 'Sharing',
       activity: 'Activity'
     },
     errors: {
@@ -2774,8 +2456,7 @@ export default {
       kbIdDesc: 'Use this ID to target the knowledge base in API integrations',
       typeLabel: 'Knowledge Base Type',
       typeDocument: 'Document-based',
-      typeFAQ: 'FAQ Q&A',
-      typeDescription: 'FAQ suits structured Q&A datasets; document type supports file parsing and chunking; Wiki type auto-builds interlinked knowledge pages via LLM.',
+      typeDescription: "Document knowledge bases support file parsing and chunking. Wiki builds interlinked knowledge pages.",
       nameLabel: 'Knowledge Base Name',
       namePlaceholder: 'Enter knowledge base name',
       descriptionLabel: 'Knowledge Base Description',
@@ -2994,16 +2675,8 @@ export default {
     },
     postCreateHint: {
       title: 'Created successfully',
-      footer: 'Keep adjusting settings, configure sharing and data sources, then click "Save and Close".',
-      followUpDesc: 'Configure data sources on the left, or use Share Management to publish to spaces',
-    },
-    share: {
-      description: 'Share the knowledge base with spaces so members can access and use it',
-      hintTitle: 'Sharing notes',
-      addShare: 'Share',
-      unshareConfirm: 'Are you sure you want to unshare from "{name}"?',
-      tip1: 'After sharing, space members will access this knowledge base based on the assigned permissions',
-      tip2: 'Editable permission allows members to modify content; Read-only permission only allows retrieval and Q&A'
+      footer: "Continue configuring settings and data sources, then click Save and close.",
+      followUpDesc: "Configure data sources from the left sidebar.",
     },
     messages: {
       loadModelsFailed: 'Failed to load model list',
@@ -3017,109 +2690,10 @@ export default {
       missingId: 'Knowledge base ID is missing',
       buildDataFailed: 'Failed to construct submission data',
       updateSuccess: 'Configuration saved successfully',
-      indexModeRequired: 'Please select an indexing mode for FAQ knowledge bases',
     },
     document: {
       title: 'Document Management',
-      subtitle: 'Click or drag-and-drop to upload documents; multiple formats are parsed automatically with intelligent chunking for a searchable knowledge base'
-    },
-    faq: {
-      title: 'FAQ Configuration',
-      subtitle: 'Manage FAQ entries with batch import, edit, and search testing',
-      description: 'Configure indexing strategy and guidance for FAQ-style knowledge bases',
-      indexModeLabel: 'Indexing Mode',
-      indexModeDescription: 'Question-only indexing improves precision, question+answer improves recall.',
-      questionIndexModeLabel: 'Question Indexing Mode',
-      questionIndexModeDescription: 'Combined: Standard and similar questions are indexed together. Separate: Each question is indexed independently for more precise retrieval but requires more storage.',
-      entryGuide: 'Each FAQ entry contains a primary question, similar questions, negative examples, and multiple answers. Manage them in the FAQ knowledge base detail view.',
-      tagDesc: 'Select tags for FAQ entries',
-      tagPlaceholder: 'Select tags',
-      modes: {
-        questionOnly: 'Questions only',
-        questionAnswer: 'Question + answer',
-        combined: 'Combined',
-        separate: 'Separate'
-      },
-      standardQuestion: 'Primary Question',
-      standardQuestionDesc: 'Set the standard phrasing of the question — this is the most common way users ask it.',
-      answers: 'Answers',
-      answersDesc: 'Provide complete and accurate answer content. Multiple answers can be added to cover different scenarios.',
-      similarQuestions: 'Similar Questions',
-      similarQuestionsDesc: 'Add questions with the same meaning but different phrasing to help the system better match user queries.',
-      negativeQuestions: 'Negative Examples',
-      negativeQuestionsDesc: 'Add questions that should not match this answer, to exclude false positives.',
-      editorCreate: 'Create FAQ Entry',
-      editorEdit: 'Edit FAQ Entry',
-      answerPlaceholder: 'Enter answer content, supports multi-line text, press Ctrl+Enter or click button to add',
-      similarPlaceholder: 'Enter similar question and click plus icon to add',
-      negativePlaceholder: 'Enter negative example and click plus icon to add',
-      answerRequired: 'Please provide at least one answer',
-      emptyTitle: 'No FAQ entries',
-      emptyDesc: 'Click "Create FAQ Entry" above to get started',
-      searchPlaceholder: 'Search standard questions...',
-      searchTest: 'Search Test',
-      createGroup: 'New',
-      searchTestTitle: 'FAQ Search Test',
-      queryLabel: 'Query',
-      queryPlaceholder: 'Enter a question to search',
-      vectorThresholdDesc: 'Range 0-1, default 0.7',
-      matchCountLabel: 'Result Count',
-      matchCountDesc: 'Range 1-50, default 10',
-      searchButton: 'Search',
-      searching: 'Searching...',
-      searchResults: 'Search Results',
-      noResults: 'No matching FAQ entries found',
-      matchedQuestion: 'Matched',
-      matchTypeEmbedding: 'Vector Match',
-      matchTypeKeywords: 'Keyword Match',
-      similarityThresholdLabel: 'Similarity Threshold',
-      statusEnabled: 'Enabled',
-      statusDisabled: 'Disabled',
-      statusEnableSuccess: 'FAQ entry enabled',
-      statusDisableSuccess: 'FAQ entry disabled',
-      statusUpdateFailed: 'Failed to update status',
-      recommended: 'Recommend',
-      recommendedEnabled: 'Recommendation enabled',
-      recommendedDisabled: 'Recommendation disabled',
-      recommendedDisableSuccess: 'FAQ entry recommendation disabled',
-      recommendedUpdateFailed: 'Failed to update recommendation status',
-      batchUpdateTag: 'Batch Set Tags',
-      batchUpdateTagTip: 'Set tags for {count} selected entries',
-      batchEnable: 'Enable selected',
-      batchDisable: 'Disable selected',
-      batchDelete: 'Delete selected',
-      confirmBatchDelete: 'Delete the selected {count} FAQ entries? This action cannot be undone.',
-      batchDeleteSuccess: 'Deleted {count} FAQ entries'
-    },
-    faqImport: {
-      title: 'Batch Import FAQ',
-      modeLabel: 'Import Mode',
-      appendMode: 'Append',
-      replaceMode: 'Replace existing entries',
-      fileLabel: 'Select File',
-      fileTip: 'Supports JSON / CSV / Excel. CSV/Excel headers: Tag (required), Question (required), Similar Questions (optional, separate with ##), Negative Questions (optional, separate with ##), Bot Answers (required, separate with ##), Reply All (optional, default FALSE), Disabled (optional, default FALSE), Exclude from Recommendations (optional, default FALSE). Legacy header "Category" and old format (standard_question, answers, similar_questions, negative_questions) are also supported.',
-      clickToUpload: 'Click to upload file',
-      dragDropTip: 'or drag and drop file here',
-      importButton: 'Import FAQ',
-      deleteSuccess: 'Selected entries deleted',
-      previewCount: '{count} entries parsed',
-      previewMore: '{count} more entries not shown',
-      importSuccess: 'Import completed',
-      parseFailed: 'Failed to parse file',
-      invalidJSON: 'Invalid JSON format',
-      unsupportedFormat: 'Unsupported file format',
-      selectFile: 'Please select a file to import first',
-      downloadExample: 'Download Example',
-      downloadExampleJSON: 'Download JSON Example',
-      downloadExampleCSV: 'Download CSV Example',
-      downloadExampleExcel: 'Download Excel Example'
-    },
-    faqExport: {
-      exportButton: 'Export',
-      exportCSV: 'Export CSV',
-      exportJSON: 'Export JSON',
-      exportSuccess: 'Export successful',
-      exportFailed: 'Export failed'
+      subtitle: "Manage and organize document knowledge bases"
     },
     models: {
       title: 'Model Configuration',
@@ -3138,10 +2712,10 @@ export default {
       title: 'Chunking Settings',
       description: 'Controls how uploaded documents are split before embedding. Defaults work for most cases — tune only when retrieval quality is off.',
       sizeLabel: 'Chunk Size',
-      sizeDescription: 'Maximum characters per chunk (100–4000). Default 512 ≈ 100–130 English tokens. Smaller for FAQs (200–400), larger for narrative documents (1000–2000).',
+      sizeDescription: "Maximum characters per chunk (100 to 4000). Default 512. Adjust for the structure and length of the document.",
       characters: 'characters',
       overlapLabel: 'Chunk Overlap',
-      overlapDescription: 'Characters shared between adjacent chunks (0–500). Default 80 ≈ 15% of size — sweet spot per current research. Use 0 for FAQs/structured data, 150–200 for long-form narratives.',
+      overlapDescription: "Characters repeated between adjacent chunks (0 to 500). Default 80. Use less for structured data and more for long narratives.",
       separatorsLabel: 'Separators',
       separatorsDescription: 'Characters or strings the splitter prefers when cutting. Higher-priority separators are tried first; the default order favors paragraph → sentence → punctuation breaks.',
       separatorsPlaceholder: 'Select or customize separators',
@@ -3156,7 +2730,7 @@ export default {
         space: 'Space ( )'
       },
       parentChildLabel: 'Parent-Child Chunking',
-      parentChildDescription: 'Two-level chunking: small child chunks are vector-matched (precise hits) but the larger parent chunk is returned to the LLM (richer context). Recommended for long documents (>10 pages); skip for short FAQs to save storage.',
+      parentChildDescription: "Small child chunks provide precise matches, while larger parent chunks give the model richer context. Recommended for long documents.",
       parentChunkSizeLabel: 'Parent Chunk Size',
       parentChunkSizeDescription: 'Size of the context chunk returned to the LLM (512–8192). Default 4096 ≈ 1000 English tokens, fits comfortably in any modern LLM context window.',
       childChunkSizeLabel: 'Child Chunk Size',
@@ -3201,8 +2775,8 @@ export default {
         samplePlaceholder: 'Paste a Markdown / plain-text snippet to see how the current configuration would chunk it…',
         presetLabel: 'Load sample:',
         samples: {
+      support: "Support guide",
           markdown: 'Markdown doc',
-          faq: 'FAQ list',
           chapter: 'PDF chapters',
           plain: 'Plain prose'
         },
@@ -3344,9 +2918,6 @@ export default {
     navigateToDocument: 'View document details',
     chunkIdLabel: 'Chunk ID:',
     documentIdLabel: 'Document ID:',
-    faqIdLabel: 'FAQ ID:',
-    faqContainerIdLabel: 'Container ID:',
-    faqAnswersLabel: 'Answers:',
     chunkOrdinal: 'Chunk {index}',
     previewContent: 'Preview content',
     noPlanSteps: 'No detailed steps provided',
@@ -3444,13 +3015,6 @@ export default {
   tenant: {
     title: 'Workspace Information',
     currentTenant: 'Current Workspace',
-    switchTenant: 'Switch workspace',
-    switcher: {
-      menuLabel: 'Switch workspace',
-      currentBadge: 'Current',
-      homeTooltip: 'Your home workspace',
-      empty: 'You only belong to one workspace'
-    },
     sectionDescription: 'View detailed configuration for the workspace',
     statusActive: 'Active',
     statusInactive: 'Not activated',
@@ -3460,28 +3024,7 @@ export default {
     retry: 'Retry',
     unknown: 'Unknown',
     formatError: 'Format error',
-    searchPlaceholder: 'Search by name or enter workspace ID...',
-    noMatch: 'No matching workspaces found',
-    switchSuccessTitle: 'Workspace switched',
-    switchSuccessContent: 'You are now in {name}',
-    loadTenantsFailed: 'Failed to load workspace list',
     loading: 'Loading...',
-    loadMore: 'Load more',
-    create: {
-      action: 'Create new workspace',
-      dialogTitle: 'Create new workspace',
-      dialogSubtitle: 'A workspace has its own knowledge bases and members. You will become the owner of the new workspace.',
-      nameLabel: 'Workspace name',
-      namePlaceholder: 'e.g. My new project',
-      nameRequired: 'Please enter a workspace name',
-      descriptionLabel: 'Description (optional)',
-      descriptionPlaceholder: 'Briefly describe what this workspace is for',
-      submit: 'Create',
-      cancel: 'Cancel',
-      success: 'Workspace created successfully',
-      failed: 'Failed to create workspace',
-      disabled: 'This system only allows joining workspaces by invitation. You cannot create one yourself.'
-    },
     details: {
       idLabel: 'Workspace ID',
       idDescription: 'Unique identifier of your workspace',
@@ -3520,18 +3063,6 @@ export default {
       title: 'Leave this workspace',
       desc: 'Ends your membership in this workspace. You will lose access to its knowledge bases and agents. You can be invited again later.',
       button: 'Leave workspace'
-    },
-    deleteDangerZone: {
-      title: 'Delete this workspace',
-      desc: 'Delete the whole workspace and its configuration. Members will no longer be able to access its knowledge bases, agents, or API key.',
-      button: 'Delete workspace',
-      confirmTitle: 'Delete this workspace?',
-      confirmBody: 'This will delete "{name}" and make its knowledge bases, agents, members, and API key unavailable. This action cannot be undone.',
-      confirmHint: 'Type the workspace name "{name}" to confirm deletion.',
-      confirm: 'Delete workspace',
-      nameMismatch: 'Workspace name does not match',
-      success: 'Workspace deleted',
-      failed: 'Failed to delete workspace'
     },
     messages: {
       fetchFailed: 'Failed to fetch workspace information',
@@ -3592,7 +3123,7 @@ export default {
     },
     globalSettings: {
       title: 'System Settings',
-      description: 'Platform-wide runtime configuration. Saves take effect immediately for every workspace. Visible and editable by system administrators only.',
+      description: "System runtime settings take effect immediately after saving. Only system administrators can view and edit them.",
       loading: 'Loading...',
       empty: 'No configurable system settings available',
       saving: 'Saving',
@@ -3615,12 +3146,12 @@ export default {
         access: {
           tab: 'Accounts & access {count}',
           title: 'Accounts & access',
-          description: 'Manage system administrators, public registration, and workspace-creation rules.'
+          description: "Manage system administrators, initial registration, and account security."
         },
         tenant: {
           tab: 'Workspace defaults {count}',
           title: 'Workspace defaults',
-          description: 'Set initial quotas and compatibility behavior for new workspaces without rewriting existing workspaces.'
+          description: "Set the initial team quota and compatibility behavior."
         },
         runtime: {
           tab: 'Runtime & concurrency {count}',
@@ -3779,7 +3310,6 @@ export default {
             question: 'Question generation',
             multimodal: 'Image multimodal processing',
             sync: 'Data-source sync',
-            faqImport: 'FAQ import',
             batchReparse: 'Batch reparse',
             batchDelete: 'Batch delete',
             move: 'Document move',
@@ -3842,7 +3372,7 @@ export default {
           postprocess: 'Parse finalization, enrichment fan-out',
           summary: 'Document & table summaries',
           sync: 'Manual & scheduled sync',
-          low: 'FAQ import, batch reparse, cleanup',
+          low: "Batch reparse and cleanup",
           multimodal: 'Image OCR, vision captions',
           graph: 'Knowledge context extraction and organization',
           question: 'Chunk-level question generation',
@@ -3852,7 +3382,6 @@ export default {
       keyLabels: {
         auth: {
           registration_mode: 'Self-service registration mode',
-          default_tenant_mode: 'Default workspace provisioning',
           complex_password_enabled: 'Require complex password'
         },
         ssrf: {
@@ -3862,10 +3391,8 @@ export default {
           docker_enabled: 'Enable Docker sandbox'
         },
         tenant: {
-          max_owned_per_user: 'Max workspaces owned per user',
-          self_service_creation_enabled: 'Allow self-service workspace creation',
-          default_storage_quota_gb: 'Default storage quota for new workspaces (GB)',
-          auto_create_api_key: 'Automatically create an API key for new workspaces',
+          default_storage_quota_gb: "Initial team storage quota (GB)",
+          auto_create_api_key: "Create an API key when initializing the team",
           auto_accept_invitation: 'Auto-join invited registered users'
         },
         asynq: {
@@ -3883,7 +3410,6 @@ export default {
       keyDescriptions: {
         auth: {
           registration_mode: 'Self-service registration mode. self_serve = anyone can register an account; invite_only = public registration is disabled and only Owners/Admins can invite. Takes effect immediately after saving, but use self_serve with care (the public internet will send spam sign-ups).',
-          default_tenant_mode: 'Workspace provisioning after public registration. create_personal creates an Owner workspace; tenantless creates only the account until the user accepts an invitation or creates a workspace. Applies to new users only.',
           complex_password_enabled: 'Whether to require complex passwords. When enabled, passwords must contain uppercase and lowercase letters, numbers, and special characters. Changes take effect immediately and only apply to newly registered users or new password changes/resets. Special characters include {specialChars}'
         },
         ssrf: {
@@ -3893,10 +3419,8 @@ export default {
           docker_enabled: 'Allow the Docker sandbox backend. A local docker.sock is equivalent to root on the host, so this stays off by default. Only a system admin can turn it on; the change takes effect immediately. Enable it only on a private single-node install that mounts the daemon socket or uses a TLS-protected remote tcp:// endpoint.'
         },
         tenant: {
-          max_owned_per_user: 'Maximum number of workspaces a non-superuser may own via self-service creation. Read on every workspace creation and takes effect immediately after saving. 0 uses the built-in default of 10; a negative value disables the cap entirely (not recommended on public deployments).',
-          self_service_creation_enabled: 'Whether non-superusers may create workspaces themselves. When disabled, regular users can only join existing workspaces by invitation; cross-workspace superusers remain exempt. Takes effect immediately.',
-          default_storage_quota_gb: 'Default storage quota (GB) assigned when a new workspace is created, covering vectors, originals, text, indexes, and related data. Read only at creation time — changes apply to newly created workspaces only and do not retroactively update existing workspaces. 0 or a negative value uses the built-in default of 10 GB.',
-          auto_create_api_key: 'Automatically creates a full_access API key for a new workspace and returns its plaintext token in the create response. Use only for integrations that depend on the legacy behavior; it is disabled by default and explicit API-key creation is recommended.',
+          default_storage_quota_gb: "Default storage quota assigned during team initialization, covering vectors, originals, text, indexes, and related data. Changes do not alter an existing team quota. Zero or negative values use the built-in default of 10 GB.",
+          auto_create_api_key: "Automatically generate a full_access API key during team initialization. Disabled by default; create keys explicitly in API key management.",
           auto_accept_invitation: 'When enabled, inviting a registered user by email adds them as a member immediately instead of waiting for inbox confirmation. When off, the invitee must accept from their inbox. Takes effect immediately.'
         },
         asynq: {
@@ -3917,10 +3441,6 @@ export default {
             self_serve: 'Self-service (anyone can register)',
             invite_only: 'Invite only (public registration disabled)'
           },
-          default_tenant_mode: {
-            create_personal: 'Create personal workspace',
-            tenantless: 'Do not create a workspace'
-          }
         }
       },
       confirm: {
@@ -3969,7 +3489,7 @@ export default {
         confirm: {
           promote: {
             header: 'Promote to system administrator',
-            body: 'Promote {email} to system administrator? This user will gain platform-level privileges: access to every workspace, system settings, and the admin roster itself.',
+            body: "Grant system administrator access to {email}? They will be able to change system settings and manage other administrators.",
             confirmBtn: 'Promote'
           },
           revoke: {
@@ -3994,14 +3514,6 @@ export default {
         confirmBtn: 'Confirm reset',
         success: 'Password reset; the user\'s existing sessions were revoked',
         failed: 'Failed to reset password',
-      },
-      bulkApply: {
-        label: 'Apply to all existing workspaces',
-        tooltip: 'Saving the value only affects new workspaces by default; click here to also overwrite every existing workspace.',
-        confirmBtn: 'Confirm apply',
-        confirmBody: 'Overwrite the storage quota of every existing workspace to {value} GB. Workspaces whose quota was tuned manually by operations will also be overwritten. Continue?',
-        success: 'Updated storage quota for {count} workspaces to {gb} GB',
-        failed: 'Failed to apply to all workspaces'
       },
       audit: {
         tabLabel: 'Audit log',
@@ -4030,8 +3542,6 @@ export default {
         action: {
           'system.setting_changed': 'System setting changed',
           'system.admin_promoted': 'System admin granted',
-          'system.api_key_created': 'Platform API key created',
-          'system.api_key_revoked': 'Platform API key revoked',
           'system.admin_revoked': 'System admin revoked',
           'system.user_password_reset': 'User password reset',
           'system.queue_task_retried': 'Failed task run again',
@@ -4045,8 +3555,6 @@ export default {
           denied: 'Denied'
         },
         target: {
-          bulkQuota: 'Bulk sync: default storage quota',
-          bulkQuotaDiff: 'Applied to {count} workspaces ({gb} GB)',
           promoteIdempotent: 'Target was already a system admin (idempotent)',
           revokeNoop: 'Target was not a system admin (idempotent)',
           requiredRole: 'Required role: {role}',
@@ -4101,7 +3609,6 @@ export default {
       registerFailed: 'Registration failed',
       getUserFailed: 'Failed to get user info',
       getTenantFailed: 'Failed to get workspace info',
-      updatePreferencesFailed: 'Failed to update preferences',
       refreshTokenFailed: 'Token refresh failed',
       logoutFailed: 'Logout failed',
       validateTokenFailed: 'Token validation failed'
@@ -4113,13 +3620,10 @@ export default {
       deleteFailed: 'Failed to delete model'
     },
     tenant: {
-      listFailed: 'Failed to list workspaces',
-      searchFailed: 'Failed to search workspaces',
       getApiPrincipalConfigFailed: 'Failed to get API principal config',
       updateApiPrincipalConfigFailed: 'Failed to update API principal config',
       createApiPrincipalTestTokenFailed: 'Failed to create API test token',
       updateFailed: 'Failed to update workspace information',
-      deleteFailed: 'Failed to delete workspace'
     },
     initialization: {
       checkFailed: 'Check failed',
@@ -4438,7 +3942,7 @@ export default {
     multimodalParsing: 'Multimodal Document Parsing',
     hybridSearchEngine: 'Hybrid Search + Knowledge Graph',
     ragQandA: 'ReAct Agent Q&A',
-    independentTenant: 'Independent Workspace',
+    independentTenant: "Team collaboration",
     fullApiAccess: 'Full API Access',
     knowledgeBaseManagement: 'Knowledge Base Management',
     carousel: {
@@ -4641,8 +4145,8 @@ export default {
     copySuffix: ' Copy',
     builtinModels: {
       title: 'Built-in Models',
-      description: 'Built-in models are visible to all workspaces. Sensitive information is hidden, and they cannot be edited or deleted.',
-      descriptionAdmin: 'Built-in models are visible to all workspaces. System administrators can edit configuration and credentials; deletion remains deployment-managed.',
+      description: "Built-in models are visible to team members. Sensitive information is hidden, and they cannot be edited or deleted.",
+      descriptionAdmin: "Built-in models are visible to team members. System administrators can edit configuration and credentials; deletion remains deployment-managed.",
       viewGuide: 'View Built-in Models Guide'
     },
     builtinTag: 'Built-in',
@@ -4839,313 +4343,6 @@ export default {
     withKnowledgeBase: 'KB',
     withWebSearch: 'Web Search'
   },
-  organization: {
-    title: 'Shared Spaces',
-    subtitle: 'Create or join shared spaces so multiple workspaces can collaborate and share knowledge bases and agents',
-    createOrg: 'Create Shared Space',
-    joinOrg: 'Join Shared Space',
-    name: 'Shared Space Name',
-    namePlaceholder: 'Enter shared space name',
-    nameRequired: 'Please enter shared space name',
-    avatar: 'Shared Space Avatar',
-    avatarClear: 'Clear',
-    avatarPickerHint: 'Choose an emoji as shared space avatar',
-    description: 'Shared Space Description',
-    descriptionPlaceholder: 'Enter shared space description (optional)',
-    noDescription: 'No description',
-    memberCount: 'Member count',
-    owner: 'Creator',
-    inviteCode: 'Invite Code',
-    inviteCodePlaceholder: 'Enter invite code',
-    inviteCodeRequired: 'Please enter invite code',
-    refreshInviteCode: 'Refresh Invite Code',
-    inviteCodeRefreshed: 'Invite code refreshed',
-    inviteCodeRefreshFailed: 'Failed to refresh invite code',
-    rbac: {
-      needTenantAdminTip: 'This action requires the admin role (or higher) in the current workspace. Please contact the workspace owner.',
-      cannotCreate: 'Your workspace role is insufficient to create a shared space',
-      cannotJoin: 'Your workspace role is insufficient to join or request to join a shared space',
-      cannotManage: 'Your workspace role is insufficient to manage this shared space'
-    },
-    join: {
-      title: 'Join Shared Space',
-      joining: 'Joining shared space...',
-      success: 'Successfully joined shared space!',
-      failed: 'Failed to join shared space',
-      noCode: 'Invite code not found',
-      goToOrganizations: 'Go to Shared Spaces',
-      confirmTitle: 'Confirm Join Shared Space',
-      confirm: 'Confirm Join',
-      preview: 'Preview & Join',
-      memberCount: '{count} members',
-      shareCount: '{count} shared knowledge bases',
-      agentShareCount: '{count} agents',
-      alreadyMember: 'You are already a member of this shared space',
-      invalidCode: 'Invalid invite code',
-      byInviteCode: 'Enter invite code',
-      searchSpaces: 'Search shared spaces',
-      searchSpacesDesc: 'Browse or search shared spaces that are open for discovery; join without an invite code',
-      searchSpacesPlaceholder: 'Search by shared space name, description or ID',
-      spaceId: 'Shared Space ID',
-      noSearchResult: 'No matching shared spaces',
-      noSearchableSpaces: 'No discoverable shared spaces yet, or try a search',
-      memberLimitReached: 'Full',
-      backToSearch: 'Back to search'
-    },
-    invite: {
-      loading: 'Loading...',
-      previewTitle: 'Join Shared Space',
-      inputDesc: 'Enter the invite code (or paste from an invite link) to view the shared space and join',
-      previewAction: 'View',
-      primaryJoin: 'Join',
-      invalidCode: 'Invite code is invalid or expired',
-      previewFailed: 'Preview failed, please try again',
-      knowledgeBases: 'Knowledge Bases',
-      agents: 'Agents',
-      alreadyMember: 'You are already a member of this shared space',
-      submitRequest: 'Request to Join',
-      requireApprovalTip: 'This shared space requires admin approval to join',
-      approvalLabel: 'Join method',
-      needApproval: 'Requires approval',
-      noApproval: 'No approval required',
-      defaultRoleAfterJoin: 'Default role after joining: {role}',
-      requestRole: 'Requested role',
-      selectRole: 'Select role',
-      messagePlaceholder: 'Optional: message (e.g. intro or reason to join)',
-      applicationNote: 'Application note (optional)',
-      joinSuccess: 'Successfully joined shared space!',
-      joinFailed: 'Failed to join, please try again',
-      requestSubmitted: 'Request submitted, please wait for admin approval',
-      requestFailed: 'Failed to submit request, please try again',
-      viewOrganization: 'View Shared Space'
-    },
-    leave: 'Leave Shared Space',
-    leaveConfirmTitle: 'Leave Shared Space',
-    leaveConfirmMessage: 'Are you sure you want to leave shared space "{name}"? You will no longer have access to knowledge bases shared in this shared space.',
-    leaveSuccess: 'Left shared space successfully',
-    leaveFailed: 'Failed to leave shared space',
-    deleteConfirmTitle: 'Delete Shared Space',
-    deleteConfirmMessage: 'Are you sure you want to delete shared space "{name}"? All members will be removed. This action cannot be undone.',
-    deleteSuccess: 'Shared space deleted',
-    deleteFailed: 'Failed to delete shared space',
-    createSuccess: 'Shared space created successfully',
-    createFailed: 'Failed to create shared space',
-    joinSuccess: 'Joined shared space successfully',
-    joinFailed: 'Failed to join shared space',
-    manageMembers: 'Manage Members',
-    noMembers: 'No members',
-    members: {
-      listTitle: 'Shared space members',
-      searchPlaceholder: 'Search members…',
-      loading: 'Loading members…',
-      emptySearch: 'No members matching "{q}"',
-      columns: {
-        member: 'Member',
-        role: 'Role',
-        joinedAt: 'Joined',
-        operations: 'Actions'
-      }
-    },
-    joinRequests: {
-      listTitle: 'Pending requests',
-      searchPlaceholder: 'Search applicants…',
-      loading: 'Loading requests…',
-      emptySearch: 'No requests matching "{q}"',
-      typeJoin: 'Join',
-      typeUpgrade: 'Upgrade',
-      rejectConfirm: 'Reject this request?',
-      approveTitle: 'Approve request',
-      approveDesc: 'Assign a role for "{name}" after approval',
-      columns: {
-        applicant: 'Applicant',
-        type: 'Type',
-        requestedRole: 'Requested role',
-        message: 'Note',
-        appliedAt: 'Applied'
-      }
-    },
-    sharedResources: {
-      kbListTitle: 'Shared knowledge bases',
-      agentListTitle: 'Shared agents',
-      loading: 'Loading…',
-      columns: {
-        name: 'Name',
-        sharedBy: 'Shared by',
-        sharedAt: 'Shared at',
-        permission: 'Permission'
-      }
-    },
-    roleUpdated: 'Role updated',
-    roleUpdateFailed: 'Failed to update role',
-    memberRemoved: 'Member removed',
-    memberRemoveFailed: 'Failed to remove member',
-    empty: 'You have not joined any shared space yet',
-    emptyDesc: 'Create a shared space or join an existing one with an invite code',
-    createdByMe: 'Created by me',
-    joinedByMe: 'Joined',
-    emptyCreated: 'You have not created any shared space yet',
-    emptyCreatedDesc: 'Click "Create Shared Space" to create a new one',
-    emptyJoined: 'You have not joined any shared space yet',
-    emptyJoinedDesc: 'Join an existing shared space with an invite code',
-    role: {
-      admin: 'Admin',
-      editor: 'Editor',
-      viewer: 'Viewer'
-    },
-    detail: {
-      removeMemberConfirm: 'Are you sure you want to remove "{name}"?',
-      removeMember: 'Remove Member'
-    },
-    settings: {
-      editTitle: 'Shared Space Settings',
-      membersDesc: 'View and manage shared space members and their roles. Each member represents a workspace — all users in the same workspace share access to this shared space.',
-      permissionsIconHint: 'View role permissions',
-      sharedDesc: 'View all knowledge bases shared to this shared space',
-      noSharedKB: 'No shared knowledge bases yet',
-      noSharedKBTip: 'Knowledge base owners can share their knowledge bases to this shared space in KB settings',
-      sharedAgents: 'Shared Agents',
-      noSharedAgents: 'No shared agents yet',
-      sharedAgentsDesc: 'Agents shared to this shared space; members can use them in chat',
-      sharedAgentsKbHint: 'Knowledge bases linked to an agent are only available (read-only) when members use that agent in a conversation (via {\'@\'}). They do not appear in the Knowledge Base list. To let members see or edit a knowledge base in the list, share that knowledge base to this shared space separately.',
-      sharedAgentsKbHintShort: 'Agent-linked knowledge is read-only in chat; share the KB to this space if members should see or edit it in the list.',
-      noSharedAgentsTip: 'Admins can share agents to this shared space from agent settings',
-      sharePermissionLabel: 'Shared space permission',
-      myPermissionLabel: 'Effective',
-      permissionCalcFormula: 'Shared space permission is set when sharing; effective permission is the lower of that and your shared space role',
-      permissionCalcTip: 'Effective permission is the lower of shared space permission and your role here; viewers get at most read-only on this KB.',
-      inviteMembers: 'Invite Members',
-      inviteMembersDesc: 'Invite others to join the shared space via code or link',
-      inviteLink: 'Invite Link',
-      inviteLinkValidity: 'Invite link validity',
-      inviteLinkValidityDesc: 'Validity period for newly generated invite links',
-      validity1Day: '1 day',
-      validity7Days: '7 days',
-      validity30Days: '30 days',
-      validityNever: 'Never expire',
-      remainingValidity: 'Expires in {n} days',
-      remainingValidityNever: 'Never expire',
-      remainingValidityExpired: 'Expired',
-      removeShareFromOrg: 'Remove from shared space',
-      removeShareConfirm: 'Remove "{name}" from this shared space? Members will no longer have access to this knowledge base.',
-      removeAgentShareConfirm: 'Remove "{name}" from this shared space? Members will no longer have access to this agent.',
-      removeShareSuccess: 'Removed from shared space',
-      removeShareFailed: 'Failed to remove, please try again',
-      requireApproval: 'Require Approval',
-      requireApprovalDesc: 'When enabled, new members need admin approval to join',
-      searchable: 'Open for search',
-      searchableDesc: 'When enabled, this shared space appears in the "Join Shared Space" search list; others can search and request to join without an invite code',
-      memberLimit: 'Member limit',
-      memberLimitDesc: 'No new members can be added when the limit is reached; 0 means unlimited',
-      memberLimitPlaceholder: '0 = unlimited',
-      memberLimitHint: 'Current members: {count}',
-      joinRequests: 'Join Requests',
-      joinRequestsDesc: 'Review pending requests to join the shared space',
-      noPendingRequests: 'No pending requests',
-      pendingJoinRequestsBadge: 'Pending join requests to review',
-      pendingReview: 'Pending',
-      assignRole: 'Assign role',
-      approve: 'Approve',
-      reject: 'Reject',
-      approveSuccess: 'Request approved',
-      rejectSuccess: 'Request rejected',
-      reviewFailed: 'Operation failed, please try again'
-    },
-    navGroups: {
-      basic: 'Basic',
-      management: 'Members & Collaboration',
-      resources: 'Shared Resources'
-    },
-    editor: {
-      navBasic: 'Basic Info',
-      navPermissions: 'Permissions',
-      navJoin: 'Join Shared Space',
-      basicTitle: 'Basic Information',
-      basicDesc: 'Set the shared space name and description for easy identification',
-      nameTip: 'Use your team or project name for easy identification',
-      descriptionTip: 'Describe the purpose and goals of the shared space to help members understand it',
-      permissionsTitle: 'Member Permissions',
-      permissionsDesc: 'Understand the permission scope of different roles for knowledge bases and agents in the shared space',
-      permissionFeature: 'Permission Feature',
-      fullAccess: 'Full Access',
-      editAccess: 'Edit Access',
-      viewAccess: 'View Only',
-      adminPerm1: 'Manage shared space settings, members, and knowledge base & agent sharing',
-      adminPerm2: 'Share and manage knowledge bases and agents',
-      adminPerm3: 'Edit shared knowledge base content',
-      adminPerm4: 'View and search knowledge bases',
-      useSharedAgentsPerm: 'Use shared agents',
-      shareKBPerm: 'Share knowledge bases to shared space',
-      editorPerm1: 'Edit shared knowledge base content',
-      editorPerm2: 'View and search knowledge bases',
-      editorPerm3: 'Manage shared space settings and members',
-      viewerPerm1: 'View and search knowledge bases',
-      viewerPerm2: 'Edit knowledge base content',
-      viewerPerm3: 'Manage shared space settings',
-      ownerNote: 'As the shared space creator, you will automatically become an admin with full permissions.',
-      joinTitle: 'Join Shared Space',
-      joinDesc: 'Join an existing shared space with an invite code to access shared knowledge bases and agents',
-      joinIllustration: 'Enter the invite code provided by the shared space admin to join',
-      inviteCodeTip: 'The invite code is generated by shared space admins, please ask them for it',
-      howToGetCode: 'How to get an invite code?',
-      step1: 'Contact the admin of the shared space you want to join',
-      step2: 'Ask them to share the shared space invite code',
-      step3: 'Paste the invite code in the input field above'
-    },
-    upgrade: {
-      requestUpgrade: 'Request upgrade',
-      pending: 'Pending review',
-      dialogTitle: 'Request upgrade',
-      dialogDesc: 'Your role updates after a space admin approves.',
-      currentRole: 'Current Role',
-      selectRole: 'Request Role',
-      reason: 'Reason (Optional)',
-      reasonPlaceholder: 'Please briefly explain why you need higher permissions...',
-      submitBtn: 'Submit Request',
-      submitSuccess: 'Upgrade request submitted, waiting for admin approval',
-      submitFailed: 'Failed to submit request'
-    },
-    addMember: {
-      button: 'Add Member',
-      dialogTitle: 'Add Member',
-      tipTenant: 'Membership is at the workspace level: once a workspace joins, all of its users share access to this space. Results below are deduplicated by workspace.',
-      searchTenant: 'Select Workspace',
-      searchTenantPlaceholder: 'Search by workspace name...',
-      searchTenantHint: 'Type at least 2 characters; results are deduplicated by workspace and exclude workspaces already in this space',
-      selectRole: 'Assign Role',
-      confirmBtn: 'Add',
-      success: 'Member added successfully',
-      failed: 'Failed to add member'
-    },
-    share: {
-      title: 'Share to Shared Space',
-      selectOrg: 'Select Shared Space',
-      selectOrgPlaceholder: 'Select a shared space to share with',
-      permission: 'Permission',
-      permissionTip: 'Editable permission allows members to modify knowledge base content, Read-only permission only allows search and Q&A',
-      shareSuccess: 'Knowledge base shared',
-      shareFailed: 'Failed to share',
-      unshareSuccess: 'Share cancelled',
-      unshareFailed: 'Failed to cancel share',
-      sharedTo: 'Shared to',
-      noShares: 'Not shared to any shared space yet',
-      searchPlaceholder: 'Search shared spaces…',
-      loading: 'Loading…',
-      emptySearch: 'No shared spaces matching "{q}"',
-      addShareDialogTitle: 'Share to shared space',
-      unshareAction: 'Remove share',
-      columns: {
-        space: 'Shared Space',
-        permission: 'Permission',
-        sharedAt: 'Shared',
-        operations: 'Actions'
-      },
-      sharedKnowledgeBase: 'Shared Knowledge Base',
-      agentShareDesc: 'Share this agent to a shared space so members can use it',
-      sharedFrom: 'From',
-      permissionReadonly: 'Read-only',
-      permissionEditable: 'Editable'
-    }
-  },
   preview: {
     tab: 'Preview',
     loading: 'Loading document preview...',
@@ -5188,7 +4385,6 @@ export default {
       newChat: 'New conversation',
       knowledgeBases: 'Open knowledge bases',
       agents: 'Open agents',
-      organizations: 'Open shared spaces',
       settings: 'Open settings',
       productTour: 'Product tour'
     },
@@ -5219,7 +4415,6 @@ export default {
   },
   vectorStoreBadge: {
     systemDefault: 'System default',
-    sharedFromOrg: 'Shared from another organization',
     unknownStore: 'Unknown store',
     unavailable: 'Unavailable'
   },
@@ -5361,7 +4556,7 @@ export default {
       writeSandboxFile: 'Write sandbox file',
       editSandboxFile: 'Edit sandbox file',
       shellExec: 'Run sandbox command',
-      dataAnalysis: 'Data Analysis',
+      dataAnalysis: "Requires RAG",
       dataSchema: 'Data Schema',
       databaseQuery: 'Database Query'
     },
@@ -5398,7 +4593,6 @@ export default {
       getDocument: 'Get document: {title}',
       document: 'Document',
       listChunks: 'View {title}',
-      listFaqEntry: 'View FAQ: {question}',
       deepThinking: 'Deep Thinking'
     },
     plan: {
@@ -5419,7 +4613,6 @@ export default {
       chunkHits: '{count} chunks',
       keywordHits: '{count} hits',
       titleMatch: 'title',
-      faqEntry: 'FAQ entry'
     },
     knowledgeChunksList: {
       chunkRange: 'Loaded {fetched} / {total} chunks',
@@ -5577,7 +4770,7 @@ export default {
       webSearchMaxResults: 'Maximum number of results returned per search',
       webFetchEnabled: 'After reranking, auto-fetch full page content from top web results for better answers',
       webFetchTopN: 'Maximum number of web pages to fetch after reranking',
-      retrievalSection: 'Configure knowledge base retrieval, ranking, and FAQ priority strategy',
+      retrievalSection: "Configure knowledge retrieval and ranking",
       queryExpansion: 'Automatically expand query terms to improve recall',
       embeddingTopK: 'Maximum number of results from vector retrieval',
       keywordThreshold: 'Minimum relevance score for keyword retrieval',
@@ -5605,7 +4798,7 @@ export default {
       getDocInfoDesc: 'View document metadata',
       dbQuery: 'Query Database',
       dbQueryDesc: 'Query information from the database',
-      dataAnalysis: 'Data Analysis',
+      dataAnalysis: "Requires RAG",
       dataAnalysisDesc: 'Understand data files and perform data analysis',
       dataSchema: 'View Data Schema',
       dataSchemaDesc: 'Get metadata of tabular files',
@@ -5656,23 +4849,10 @@ export default {
       effectiveDesc: 'Computed from the current config — these are the tools the agent will actually be able to call',
       effectiveEmpty: 'No tool available — the agent will fall back to plain model chat'
     },
-    embed: {
-      title: 'Web Page Embed',
-      description: 'Embed this agent on your website so visitors can chat via an in-page window or floating launcher. Knowledge scope follows this agent.'
-    },
     im: {
       title: 'IM Integration',
-      description: 'Connect agent to instant messaging platforms like WeCom, Feishu, Lark, Slack, Telegram, DingTalk, Mattermost, WeChat, QQBot and Yunzhijia',
+      description: "Connect the agent to Feishu",
       feishu: 'Feishu',
-      lark: 'Lark',
-      slack: 'Slack',
-      telegram: 'Telegram',
-      dingtalk: 'DingTalk',
-      mattermost: 'Mattermost',
-      wecom: 'WeCom',
-      wechat: 'WeChat',
-      qqbot: 'QQBot',
-      yunzhijia: 'Yunzhijia',
       addChannel: 'Add Channel',
       channelsTitle: 'IM Channels',
       disabled: 'Disabled',
@@ -5690,44 +4870,9 @@ export default {
       empty: 'No IM channels yet',
       unnamed: 'Unnamed Channel',
       docLink: 'Integration Guide',
-      wecomConsole: 'WeCom Admin Console',
       feishuConsole: 'Feishu Open Platform',
-      larkConsole: 'Lark Open Platform',
-      slackConsole: 'Slack API Console',
-      telegramConsole: 'Telegram BotFather',
-      dingtalkConsole: 'DingTalk Open Platform',
-      dingtalkCardTemplateId: 'Card Template ID (optional)',
-      dingtalkCardTemplateIdHint: 'Create an AI Card template at open-dev.dingtalk.com/fe/card to enable streaming output with typewriter effect',
-      mattermostConsole: 'Mattermost integrations',
-      qqbotConsole: 'QQ Open Platform',
-      qqbotAPIBaseURLHint: 'Optional. Leave empty to use the default production API endpoint.',
-      qqbotGatewayURLHint: 'Optional. Leave empty to fetch the common WebSocket gateway automatically.',
-      yunzhijiaConsole: 'Yunzhijia Open Platform',
-      yunzhijiaRobotDoc: 'Robot messaging docs',
-      yunzhijiaImageDoc: 'Developer platform (images)',
-      yunzhijiaModeHint: 'Supports Webhook and WebSocket; WebSocket mode does not require a public callback URL.',
-      yunzhijiaSendMsgUrl: 'Send Message URL',
-      yunzhijiaSendMsgUrlHint: 'Used for robot replies.',
-      yunzhijiaSecret: 'Signature Secret (optional)',
-      yunzhijiaSecretPlaceholder: 'HmacSHA1 signature secret from Yunzhijia robot settings',
-      yunzhijiaSecretHint: 'If configured, incoming callbacks will be verified using HmacSHA1 signature',
-      yunzhijiaAppId: 'App ID (image download)',
-      yunzhijiaAppIdPlaceholder: 'Yunzhijia Open Platform App ID',
-      yunzhijiaAppSecret: 'App Secret (image download)',
-      yunzhijiaAppSecretPlaceholder: 'Yunzhijia Open Platform App Secret',
-      yunzhijiaAppCredentialHint: 'Used to obtain appAccessToken and download images sent by users.',
-      yunzhijiaTimeout: 'HTTP Timeout (seconds)',
-      yunzhijiaTimeoutHint: 'Timeout for sending replies via Send Message URL, default 10 seconds',
-      yunzhijiaAllowedHostSuffix: 'Allowed Host Suffix',
-      yunzhijiaAllowedHostSuffixHint: 'Restrict Send Message URL host to this suffix for security (e.g. yunzhijia.com)',
-      yunzhijiaSendMsgUrlRequired: 'Enter the Send Message URL from Yunzhijia robot settings',
-      mattermostModeHint: 'Mattermost only supports Webhook mode (outgoing webhook + bot token).',
-      mattermostPostToMain: 'Post replies in channel timeline',
-      mattermostPostToMainHint: 'When on, bot replies are new top-level posts in the channel. When off (default), they stay in the thread and the main view only shows “N replies”.',
       modeHint: 'WebSocket is recommended for easier setup',
       consoleTip: 'to get credentials',
-      wecomWSEndpointHint: 'Optional. For private WeCom deployments, enter a custom WebSocket address. Leave empty to use the default public cloud endpoint. For internal network addresses, add the hostname to the SSRF_WHITELIST env var.',
-      wecomAPIBaseURLHint: 'Optional. For private WeCom deployments, enter a custom API base URL. Leave empty to use the default public cloud endpoint. For internal network addresses, add the hostname to the SSRF_WHITELIST env var.',
       feishuAPIBaseURLHint: 'Optional. Leave empty if the server can reach the internet directly; if a proxy is required to access Feishu, enter the reverse proxy URL (e.g. nginx, http://host:port). For internal network addresses, add the hostname to the SSRF_WHITELIST env var.',
       fileKnowledgeBase: 'File Storage Knowledge Base',
       fileKnowledgeBasePlaceholder: 'Select a knowledge base (optional)',
@@ -5736,13 +4881,6 @@ export default {
       sessionModeUser: 'Per User (default)',
       sessionModeThread: 'Per Thread',
       sessionModeHint: 'User mode: each person has their own conversation. Use /clear to start fresh. Thread mode: each message thread is a separate conversation. Multiple people can collaborate in the same thread.',
-      wechatScanBind: 'Scan to bind WeChat',
-      wechatScanning: 'Scan the QR code with WeChat',
-      wechatBindSuccess: 'WeChat bound successfully',
-      wechatRebind: 'Rebind',
-      wechatHint: 'Requires iOS WeChat 8.0.70+, direct messages only',
-      wechatQRExpired: 'QR code expired, please try again',
-      wechatBinding: 'Binding...',
       sectionChannel: 'Channel info',
       sectionConnection: 'Connection',
       sectionCredentials: 'Platform credentials',
@@ -5767,7 +4905,7 @@ export default {
         ragQa: 'RAG retrieval not enabled',
         wikiQa: 'Wiki not enabled',
         hybridRagWiki: 'No retrieval surface enabled',
-        dataAnalysis: 'Requires RAG (FAQ not supported)',
+        dataAnalysis: "Requires RAG",
         quickAnswer: 'Quick Answer mode requires RAG retrieval',
         generic: 'Not compatible with current type'
       },
@@ -5825,19 +4963,7 @@ export default {
       waitTimeoutLabel: 'Attachment Parse Wait Timeout (s)',
       waitTimeoutDesc: 'How long a chat turn waits for still-parsing attachments before proceeding with only the finished ones. Raise for large / scanned files. 0 uses the global default.'
     },
-    faq: {
-      title: 'FAQ Priority Strategy',
-      enableLabel: 'Enable FAQ Priority',
-      enableDesc: 'FAQ answers will be prioritized over regular documents, improving response accuracy',
-      thresholdLabel: 'Direct Answer Threshold',
-      thresholdDesc: 'When the similarity between the question and FAQ exceeds this value, use the FAQ answer directly',
-      boostLabel: 'FAQ Score Boost',
-      boostDesc: 'Multiply FAQ relevance scores by this factor to rank them higher'
-    },
-    dataAnalysis: {
-      enableLabel: 'Enable Tabular Data Analysis',
-      enableDesc: 'When the retrieved chunks come from a CSV/Excel file, ask the LLM to generate a DuckDB SQL query before answering. This adds one extra LLM call and several seconds of latency, so only enable it when you actually need SQL-style analysis.'
-    },
+    dataAnalysis: "Requires RAG",
     fallback: {
       fixed: 'Fixed Response',
       model: 'Model Generated'
@@ -5855,28 +4981,6 @@ export default {
       excel: 'Excel Spreadsheets (.xlsx/.xls)',
       imageLabel: 'Images',
       image: 'Image Files (.jpg/.jpeg/.png)'
-    }
-  },
-  faqManager: {
-    import: {
-      recentResult: 'Recent Import Results',
-      totalData: 'Total Data',
-      success: 'Successful',
-      added: 'Added',
-      merged: 'Merged',
-      partialFailed: 'Partially Failed',
-      failed: 'Failed',
-      skipped: 'Skipped',
-      progressHint: 'Validating and importing FAQ data...',
-      downloadReasons: 'Download Reasons',
-      appendMode: 'Append Mode',
-      replaceMode: 'Replace Mode',
-      importing: 'Importing...',
-      importDone: 'Import Complete',
-      importFailed: 'Import Failed',
-      waiting: 'Waiting...',
-      importInProgress: 'Import is in progress, please wait for it to complete',
-      noFailedRecords: 'No failed records available for download'
     }
   },
   mermaid: {
@@ -6146,14 +5250,13 @@ export default {
     title: 'Publish & Integrations',
     tabs: {
       im: 'IM Integration',
-      embed: 'Web Embed',
       api: 'API Integration',
       chrome: 'Chrome Extension',
       claw: 'Claw Skill'
     },
     api: {
       title: 'API Integration',
-      subtitle: 'Integrate via REST API and configure how requests identify end users.',
+      subtitle: "Manage and organize document knowledge bases",
       loading: 'Loading API integration settings...',
       retry: 'Retry',
       copy: 'Copy',
@@ -6190,7 +5293,7 @@ export default {
       capabilityReadAgents: 'Read agents',
       capabilityReadAgentsHint: 'List agents, read agent details, presets, and suggested questions. Does not allow chat or agent edits.',
       capabilityIngest: 'Write KB content',
-      capabilityIngestHint: 'Let this key write content into its allowed knowledge bases (upload documents, edit chunks/FAQ/tags/wiki). It cannot create knowledge bases or agents, cannot clear a knowledge base, and stays bounded to the selected knowledge bases.',
+      capabilityIngestHint: "Write documents, chunks, tags, and wiki content into allowed knowledge bases. This scope cannot create knowledge bases or agents, or clear a knowledge base.",
       capabilityManageKbs: 'Manage knowledge bases',
       capabilityManageKbsHint: 'Let this key manage the full knowledge-base lifecycle: create, copy, update, and delete knowledge bases and change their initialization/configuration. Operations on existing knowledge bases (copy/update/delete) stay bounded by the selected scope; creating a new knowledge base is unrestricted (the new KB belongs to this space).',
       capabilityManageAgents: 'Manage agents',
@@ -6204,7 +5307,7 @@ export default {
       capabilityManageDatasources: 'Manage data sources',
       capabilityManageDatasourcesHint: 'Manage data-source connectors, credentials, resource selection, and sync jobs. Knowledge-base scope still applies when a source is bound to a KB.',
       capabilityManageChannels: 'Manage channels',
-      capabilityManageChannelsHint: 'Manage agent embed channels, IM channels, and WeChat QR binding flows.',
+      capabilityManageChannelsHint: "Manage Feishu channels for agents.",
       capabilityManageVectorStores: 'Manage retrieval infrastructure',
       capabilityManageVectorStoresHint: 'Manage vector-store configuration plus parser, document reader, and storage engine connectivity checks.',
       capabilityManageStorageBackends: 'Manage storage backends',
@@ -6215,10 +5318,8 @@ export default {
       capabilityRunEvaluationsHint: 'Run evaluation jobs and read evaluation results.',
       capabilityManageMembers: 'Manage members',
       capabilityManageMembersHint: 'List and manage workspace members, roles, invitations, and invite links. Does not include API key management, workspace deletion, or ownership transfer.',
-      capabilityManageSpaces: 'Manage spaces',
-      capabilityManageSpacesHint: 'Manage organization spaces, join flows, space membership, invitations, and shared-space visibility. Does not grant KB or agent share management.',
       capabilityManageTenantSettings: 'Manage workspace settings',
-      capabilityManageTenantSettingsHint: 'Read and update workspace-level integration settings such as API end-user identity mode, request header configuration, and workspace KV settings. Does not include API key management, member management, workspace deletion, or ownership transfer.',
+      capabilityManageTenantSettingsHint: "Read and update team integration settings such as API end-user identity mode, request header configuration, and team KV settings. Does not include API key management, member management, or ownership transfer.",
       apiKeyKnowledgeScope: 'Knowledge bases',
       apiKeyKnowledgeScopePlaceholder: 'Leave empty to allow all knowledge bases',
       allKnowledgeBases: 'All knowledge bases',
@@ -6317,117 +5418,10 @@ export default {
     imOverview: {
       title: 'Connected IM channels'
     },
-    embedOverview: {
-      title: 'Web embed channels'
-    },
     agentEditor: {
       label: 'Publish channels',
       desc: 'Publish this agent to IM platforms or websites. Manage in Integrations.'
     },
-    chrome: {
-      title: 'Knowledge Assistant',
-      subtitle: 'For self-hosted Reliquary: ask questions in a sidebar, clip web pages, and save Markdown notes into your knowledge bases while you browse.',
-      capabilitiesTitle: 'Core capabilities',
-      capabilities: {
-        qa: {
-          title: 'Knowledge-base Q&A',
-          desc: 'Sidebar chat with multi-KB switching and fast/deep/precise answer modes—ask without leaving the page.'
-        },
-        clip: {
-          title: 'One-click web capture',
-          desc: 'Save page URLs, AI-extract main content, or manually select regions into a target knowledge base.'
-        },
-        notes: {
-          title: 'Markdown quick notes',
-          desc: 'Built-in Markdown editor for ideas and notes, saved to your knowledge base in one click.'
-        },
-        shortcuts: {
-          title: 'Keyboard shortcuts',
-          desc: 'Customize shortcuts to ask questions, open the sidebar, and speed up daily workflows.'
-        }
-      },
-      scenarios: {
-        research: 'Daily research',
-        learning: 'Study notes',
-        tech: 'Technical references',
-        work: 'Work knowledge'
-      },
-      stepsTitle: 'Setup steps',
-      steps: {
-        api: {
-          title: 'Get API credentials',
-          desc: 'Copy your API Key and base URL from Settings → API Info.'
-        },
-        install: {
-          title: 'Install the extension',
-          desc: 'Install “Knowledge Assistant” from the Chrome Web Store.'
-        },
-        connect: {
-          title: 'Connect in the extension',
-          desc: 'Open extension settings, choose enterprise/developer mode, and enter the service API URL and API Key. Your current API URL is shown below.'
-        }
-      },
-      openApiSettings: 'Open API Info',
-      copy: 'Copy',
-      copySuccess: 'API URL copied',
-      installCta: 'Chrome Web Store',
-      installCtaHint: 'Official extension · opens in a new tab',
-      storeMeta: 'Chrome Web Store · v1.0.0'
-    },
-    claw: {
-      title: 'Reliquary Skill',
-      subtitle: 'Import documents and run hybrid retrieval (vector + keyword) via the Reliquary REST API—for uploads, URL imports, Markdown entries, and cross-KB search.',
-      capabilitiesTitle: 'Skill capabilities',
-      capabilities: {
-        upload: {
-          title: 'Upload files',
-          desc: 'Upload PDF, Word, Excel, and more; automatic parsing and vectorization.'
-        },
-        url: {
-          title: 'Import URLs',
-          desc: 'Fetch web pages by URL into a knowledge base with parse-status polling.'
-        },
-        manual: {
-          title: 'Write Markdown',
-          desc: 'Create or edit knowledge entries as Markdown—ideal for meeting notes.'
-        },
-        search: {
-          title: 'Hybrid search',
-          desc: 'Per-KB hybrid-search and cross-KB knowledge-search combining vector and keyword recall.'
-        },
-        browse: {
-          title: 'Browse knowledge',
-          desc: 'List knowledge bases and entries, view details, and manage imported content.'
-        }
-      },
-      stepsTitle: 'Setup steps',
-      steps: {
-        api: {
-          title: 'Get API credentials',
-          desc: 'Copy API Key and base URL from Settings → API Info.'
-        },
-        env: {
-          title: 'Configure environment',
-          desc: 'Set RELIQUARY_BASE_URL and RELIQUARY_API_KEY in your shell or ~/.zshrc / ~/.bashrc. The example below uses your current API base URL—replace the API Key with your actual value.'
-        },
-        install: {
-          title: 'Install the skill',
-          desc: 'Run the command below in an environment with the OpenClaw CLI installed, or follow the ClawHub page instructions.'
-        },
-        verify: {
-          title: 'Verify connection',
-          desc: 'Ask the agent to list knowledge bases or run a search to confirm credentials and connectivity.'
-        }
-      },
-      openApiSettings: 'Open API Info',
-      copy: 'Copy',
-      copyEnvSuccess: 'Environment example copied',
-      copyCmdSuccess: 'Install command copied',
-      ecosystemNote: 'Skill hosted on ClawHub ({\'@\'}lyingbug/reliquary). See the ClawHub page for full API docs and version history.',
-      installCta: 'Open ClawHub',
-      installCtaHint: 'Install Reliquary Skill · opens in a new tab',
-      hubMeta: 'ClawHub · {\'@\'}lyingbug/reliquary · MIT-0'
-    }
   },
   credential: {
     configured: 'Configured',
@@ -6461,8 +5455,6 @@ export default {
       failed: 'Failed to change password. Check that your current password is correct.',
       policyFailed: 'New password must be 8-32 characters and include letters and numbers',
       sameAsCurrent: 'New password must differ from your current password',
-      oidcOnlyDescription: 'Your account was created via OIDC sign-in and has no known local password yet.',
-      oidcOnlyNotice: 'Ask a system administrator to reset your password, or keep signing in with OIDC. Self-service change requires your current password.',
     },
   },
   tenantMember: {
@@ -6620,7 +5612,7 @@ export default {
     },
     myInbox: {
       title: 'My invitations',
-      description: 'Invitations from other workspaces. Accept to join with the assigned role.',
+      description: 'Review invitations to join the team.',
       empty: 'No pending invitations.',
       acceptButton: 'Accept',
       declineButton: 'Decline',
@@ -6640,54 +5632,4 @@ export default {
       generic: 'Something went wrong. Please try again.'
     }
   },
-  platformApiKeys: {
-    title: 'Platform API Keys',
-    description: 'Create platform credentials for cross-workspace automation. Use X-Tenant-ID for workspace APIs.',
-    securityNotice: 'Platform API keys can target any workspace. Grant only required capabilities; plaintext is shown once.',
-    create: 'Create platform API key',
-    createDescription: 'Platform keys are not bound to a workspace; capabilities still limit every operation.',
-    loading: 'Loading…',
-    empty: 'No platform API keys',
-    name: 'Name',
-    namePlaceholder: 'For example: central operations automation',
-    key: 'Key',
-    capability: 'Capabilities',
-    capabilityMore: '+{count}',
-    viewAllCapabilities: 'View all capabilities',
-    capabilityHint: 'Workspace capabilities apply to the X-Tenant-ID target; system capabilities apply to control-plane APIs.',
-    lastUsed: 'Last used',
-    createdAt: 'Created',
-    actions: 'Actions',
-    never: 'Never',
-    systemCapabilityGroup: 'Platform control plane',
-    capabilities: {
-      tenantsRead: 'Read workspaces',
-      tenantsManage: 'Manage workspaces',
-      settingsRead: 'Read system settings',
-      settingsManage: 'Manage system settings',
-      runtimeRead: 'Read runtime',
-      runtimeManage: 'Manage runtime',
-      auditRead: 'Read system audit'
-    },
-    capabilityHints: {
-      tenantsRead: 'List, search, and inspect every workspace.',
-      tenantsManage: 'Create, update, delete workspaces and apply global workspace settings.',
-      settingsRead: 'Read platform runtime settings.',
-      settingsManage: 'Update and reset platform runtime settings.',
-      runtimeRead: 'Inspect task queues and task details.',
-      runtimeManage: 'Retry, run, cancel, or delete runtime tasks.',
-      auditRead: 'Read platform audit events.'
-    },
-    createdTitle: 'Platform API key created',
-    createdDescription: 'Copy and store this key now. The full value will not be shown again.',
-    copy: 'Copy key',
-    copySuccess: 'Key copied',
-    deleteConfirm: 'Delete “{name}”? Automation using this key will stop immediately.',
-    deleteSuccess: 'Platform API key deleted',
-    deleteFailed: 'Failed to delete platform API key',
-    nameRequired: 'Enter a name',
-    capabilityRequired: 'Select at least one capability',
-    loadFailed: 'Failed to load platform API keys',
-    createFailed: 'Failed to create platform API key'
-  }
 }

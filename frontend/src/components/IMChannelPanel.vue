@@ -146,7 +146,7 @@
 
       <!-- Step 2: Connection -->
       <div v-else-if="wizardStep === 1" class="im-step-body">
-        <section v-if="formData.platform !== 'wechat'" class="setting-drawer__section im-drawer__section">
+        <section  class="setting-drawer__section im-drawer__section">
           <h4 class="setting-drawer__section-title">{{ $t('agentEditor.im.sectionAccess') }}</h4>
 
           <div class="form-item">
@@ -154,7 +154,7 @@
             <div class="option-chips">
               <button type="button" class="option-chip"
                 :class="{ 'option-chip--active': formData.mode === 'websocket' }"
-                :disabled="formData.platform === 'mattermost'"
+                :disabled="false"
                 @click="formData.mode = 'websocket'">
                 WebSocket
               </button>
@@ -164,9 +164,7 @@
               </button>
             </div>
             <p class="form-desc">
-              {{ formData.platform === 'mattermost' ? $t('agentEditor.im.mattermostModeHint') :
-                formData.platform === 'yunzhijia' ? $t('agentEditor.im.yunzhijiaModeHint') :
-                  $t('agentEditor.im.modeHint') }}
+              {{ $t('agentEditor.im.modeHint') }}
             </p>
           </div>
 
@@ -243,336 +241,32 @@
         <section class="setting-drawer__section im-drawer__section">
           <h4 class="setting-drawer__section-title">{{ $t('agentEditor.im.sectionCredentials') }}</h4>
           <div class="drawer-form">
-            <!-- WeCom credentials -->
-            <template v-if="formData.platform === 'wecom'">
-              <div class="platform-link-hint">
-                <a href="https://work.weixin.qq.com/" target="_blank" rel="noopener noreferrer" class="doc-link">
-                  {{ $t('agentEditor.im.wecomConsole') }}
-                  <t-icon name="link" class="link-icon" />
-                </a>
-                <span class="hint-text">{{ $t('agentEditor.im.consoleTip') }}</span>
-              </div>
-              <template v-if="formData.mode === 'websocket'">
-                <div class="form-item">
-                  <label class="form-label">Bot ID</label>
-                  <t-input v-model="formData.credentials.bot_id" placeholder="Bot ID" />
-                </div>
-                <div class="form-item">
-                  <label class="form-label">Bot Secret</label>
-                  <t-input v-model="formData.credentials.bot_secret" type="password" placeholder="Bot Secret" />
-                </div>
-                <div class="form-item">
-                  <label class="form-label">WebSocket Endpoint</label>
-                  <t-input v-model="formData.credentials.ws_endpoint" placeholder="wss://openws.work.weixin.qq.com" />
-                  <p class="form-desc">{{ $t('agentEditor.im.wecomWSEndpointHint') }}</p>
-                </div>
-              </template>
-              <template v-else>
-                <div class="form-item">
-                  <label class="form-label">Corp ID</label>
-                  <t-input v-model="formData.credentials.corp_id" placeholder="Corp ID" />
-                </div>
-                <div class="form-item">
-                  <label class="form-label">Agent Secret</label>
-                  <t-input v-model="formData.credentials.agent_secret" type="password" placeholder="Agent Secret" />
-                </div>
-                <div class="form-item">
-                  <label class="form-label">Token</label>
-                  <t-input v-model="formData.credentials.token" placeholder="Token" />
-                </div>
-                <div class="form-item">
-                  <label class="form-label">EncodingAESKey</label>
-                  <t-input v-model="formData.credentials.encoding_aes_key" placeholder="EncodingAESKey" />
-                </div>
-                <div class="form-item">
-                  <label class="form-label">Corp Agent ID</label>
-                  <t-input-number v-model="formData.credentials.corp_agent_id" placeholder="Corp Agent ID"
-                    style="width: 100%;" />
-                </div>
-                <div class="form-item">
-                  <label class="form-label">API Base URL</label>
-                  <t-input v-model="formData.credentials.api_base_url" placeholder="https://qyapi.weixin.qq.com" />
-                  <p class="form-desc">{{ $t('agentEditor.im.wecomAPIBaseURLHint') }}</p>
-                </div>
-              </template>
-            </template>
+
+
 
             <!-- Feishu / Lark credentials — same fields, different open platform -->
-            <template v-if="formData.platform === 'feishu' || formData.platform === 'lark'">
-              <div class="platform-link-hint">
-                <a :href="openPlatformConsole.url" target="_blank" rel="noopener noreferrer" class="doc-link">
-                  {{ $t(openPlatformConsole.labelKey) }}
-                  <t-icon name="link" class="link-icon" />
-                </a>
-                <span class="hint-text">{{ $t('agentEditor.im.consoleTip') }}</span>
-              </div>
-              <div class="form-item">
-                <label class="form-label">App ID</label>
-                <t-input v-model="formData.credentials.app_id" placeholder="App ID" />
-              </div>
-              <div class="form-item">
-                <label class="form-label">App Secret</label>
-                <t-input v-model="formData.credentials.app_secret" type="password" placeholder="App Secret" />
-              </div>
-              <div class="form-item">
-                <label class="form-label">Base URL</label>
-                <t-input v-model="formData.credentials.api_base_url" placeholder="https://open.feishu.cn" />
-                <p class="form-desc">{{ $t('agentEditor.im.feishuAPIBaseURLHint') }}</p>
-              </div>
-              <template v-if="formData.mode === 'webhook'">
-                <div class="form-item">
-                  <label class="form-label">Verification Token</label>
-                  <t-input v-model="formData.credentials.verification_token" placeholder="Verification Token" />
-                </div>
-                <div class="form-item">
-                  <label class="form-label">Encrypt Key</label>
-                  <t-input v-model="formData.credentials.encrypt_key" type="password" placeholder="Encrypt Key" />
-                </div>
-              </template>
-            </template>
 
-            <!-- Slack credentials -->
-            <template v-if="formData.platform === 'slack'">
-              <div class="platform-link-hint">
-                <a href="https://api.slack.com/apps" target="_blank" rel="noopener noreferrer" class="doc-link">
-                  {{ $t('agentEditor.im.slackConsole') }}
-                  <t-icon name="link" class="link-icon" />
-                </a>
-                <span class="hint-text">{{ $t('agentEditor.im.consoleTip') }}</span>
-              </div>
-              <template v-if="formData.mode === 'websocket'">
-                <div class="form-item">
-                  <label class="form-label">App Token</label>
-                  <t-input v-model="formData.credentials.app_token" type="password" placeholder="xapp-..." />
-                </div>
-                <div class="form-item">
-                  <label class="form-label">Bot Token</label>
-                  <t-input v-model="formData.credentials.bot_token" type="password" placeholder="xoxb-..." />
-                </div>
-              </template>
-              <template v-else>
-                <div class="form-item">
-                  <label class="form-label">Bot Token</label>
-                  <t-input v-model="formData.credentials.bot_token" type="password" placeholder="xoxb-..." />
-                </div>
-                <div class="form-item">
-                  <label class="form-label">Signing Secret</label>
-                  <t-input v-model="formData.credentials.signing_secret" type="password" placeholder="Signing Secret" />
-                </div>
-              </template>
-            </template>
 
-            <!-- Telegram credentials -->
-            <template v-if="formData.platform === 'telegram'">
-              <div class="platform-link-hint">
-                <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer" class="doc-link">
-                  {{ $t('agentEditor.im.telegramConsole') }}
-                  <t-icon name="link" class="link-icon" />
-                </a>
-                <span class="hint-text">{{ $t('agentEditor.im.consoleTip') }}</span>
-              </div>
-              <div class="form-item">
-                <label class="form-label">Bot Token</label>
-                <t-input v-model="formData.credentials.bot_token" type="password" placeholder="123456789:AABBccdd..." />
-              </div>
-              <template v-if="formData.mode === 'webhook'">
-                <div class="form-item">
-                  <label class="form-label">Secret Token</label>
-                  <t-input v-model="formData.credentials.secret_token" type="password"
-                    placeholder="Secret Token (optional)" />
-                </div>
-              </template>
-            </template>
 
-            <!-- DingTalk credentials -->
-            <template v-if="formData.platform === 'dingtalk'">
-              <div class="platform-link-hint">
-                <a href="https://open.dingtalk.com/" target="_blank" rel="noopener noreferrer" class="doc-link">
-                  {{ $t('agentEditor.im.dingtalkConsole') }}
-                  <t-icon name="link" class="link-icon" />
-                </a>
-                <span class="hint-text">{{ $t('agentEditor.im.consoleTip') }}</span>
-              </div>
-              <div class="form-item">
-                <label class="form-label">Client ID (AppKey)</label>
-                <t-input v-model="formData.credentials.client_id" placeholder="Client ID / AppKey" />
-              </div>
-              <div class="form-item">
-                <label class="form-label">Client Secret (AppSecret)</label>
-                <t-input v-model="formData.credentials.client_secret" type="password"
-                  placeholder="Client Secret / AppSecret" />
-              </div>
-              <div class="form-item">
-                <label class="form-label">{{ $t('agentEditor.im.dingtalkCardTemplateId') }}</label>
-                <t-input v-model="formData.credentials.card_template_id"
-                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.schema" />
-                <p class="form-desc">{{ $t('agentEditor.im.dingtalkCardTemplateIdHint') }}</p>
-              </div>
-            </template>
 
-            <!-- QQBot credentials -->
-            <template v-if="formData.platform === 'qqbot'">
-              <div class="platform-link-hint">
-                <a href="https://q.qq.com/" target="_blank" rel="noopener noreferrer" class="doc-link">
-                  {{ $t('agentEditor.im.qqbotConsole') }}
-                  <t-icon name="link" class="link-icon" />
-                </a>
-                <span class="hint-text">{{ $t('agentEditor.im.consoleTip') }}</span>
-              </div>
-              <div class="form-item">
-                <label class="form-label">App ID</label>
-                <t-input v-model="formData.credentials.app_id" placeholder="QQBot App ID" />
-              </div>
-              <div class="form-item">
-                <label class="form-label">App Secret</label>
-                <t-input v-model="formData.credentials.client_secret" type="password" placeholder="QQBot App Secret" />
-              </div>
-              <div class="form-item">
-                <label class="form-label">API Base URL</label>
-                <t-input v-model="formData.credentials.api_base_url" placeholder="https://api.sgroup.qq.com" />
-                <p class="form-desc">{{ $t('agentEditor.im.qqbotAPIBaseURLHint') }}</p>
-              </div>
-              <div class="form-item">
-                <label class="form-label">Gateway URL</label>
-                <t-input v-model="formData.credentials.gateway_url" placeholder="wss://api.sgroup.qq.com/websocket/" />
-                <p class="form-desc">{{ $t('agentEditor.im.qqbotGatewayURLHint') }}</p>
-              </div>
-            </template>
 
-            <!-- Mattermost credentials -->
-            <template v-if="formData.platform === 'mattermost'">
-              <div class="platform-link-hint">
-                <a href="https://developers.mattermost.com/integrate/webhooks/outgoing/" target="_blank"
-                  rel="noopener noreferrer" class="doc-link">
-                  {{ $t('agentEditor.im.mattermostConsole') }}
-                  <t-icon name="link" class="link-icon" />
-                </a>
-                <span class="hint-text">{{ $t('agentEditor.im.consoleTip') }}</span>
-              </div>
-              <div class="form-item">
-                <label class="form-label">Site URL</label>
-                <t-input v-model="formData.credentials.site_url" placeholder="https://mattermost.example.com" />
-              </div>
-              <div class="form-item">
-                <label class="form-label">Bot Token</label>
-                <t-input v-model="formData.credentials.bot_token" type="password" placeholder="Bot Token" />
-              </div>
-              <div class="form-item">
-                <label class="form-label">Outgoing Webhook Token</label>
-                <t-input v-model="formData.credentials.outgoing_token" type="password"
-                  placeholder="Token from Outgoing Webhook" />
-              </div>
-              <div class="form-item">
-                <label class="form-label">Bot User ID</label>
-                <t-input v-model="formData.credentials.bot_user_id" placeholder="Optional — filter bot self-messages" />
-              </div>
-              <div class="settings-group">
-                <div class="setting-row setting-row--last">
-                  <div class="setting-info">
-                    <label>{{ $t('agentEditor.im.mattermostPostToMain') }}</label>
-                    <p class="desc">{{ $t('agentEditor.im.mattermostPostToMainHint') }}</p>
-                  </div>
-                  <div class="setting-control">
-                    <t-switch :value="!!formData.credentials.post_to_main" size="small"
-                      @change="(v: boolean) => { formData.credentials.post_to_main = v }" />
-                  </div>
-                </div>
-              </div>
-            </template>
 
-            <!-- Yunzhijia credentials -->
-            <template v-if="formData.platform === 'yunzhijia'">
-              <div class="form-item">
-                <label class="form-label required">{{ $t('agentEditor.im.yunzhijiaSendMsgUrl') }}</label>
-                <t-input v-model="formData.credentials.send_msg_url"
-                  placeholder="https://www.yunzhijia.com/gateway/robot/webhook/send?yzjtype=0&yzjtoken=..." />
-                <p class="form-desc">
-                  {{ $t('agentEditor.im.yunzhijiaSendMsgUrlHint') }}
-                  <a href="https://www.yunzhijia.com/opendocs/docs.html#/guide/im/robot" target="_blank"
-                    rel="noopener noreferrer" class="doc-link">
-                    {{ $t('agentEditor.im.yunzhijiaRobotDoc') }}
-                  </a>
-                </p>
-              </div>
-              <div class="form-item">
-                <label class="form-label">{{ $t('agentEditor.im.yunzhijiaSecret') }}</label>
-                <t-input v-model="formData.credentials.secret" type="password"
-                  :placeholder="$t('agentEditor.im.yunzhijiaSecretPlaceholder')" />
-                <p class="form-desc">{{ $t('agentEditor.im.yunzhijiaSecretHint') }}</p>
-              </div>
-              <div class="form-item">
-                <label class="form-label">{{ $t('agentEditor.im.yunzhijiaAppId') }}</label>
-                <t-input v-model="formData.credentials.app_id"
-                  :placeholder="$t('agentEditor.im.yunzhijiaAppIdPlaceholder')" />
-                <p class="form-desc">
-                  {{ $t('agentEditor.im.yunzhijiaAppCredentialHint') }}
-                  <a href="https://www.yunzhijia.com/developers/" target="_blank" rel="noopener noreferrer"
-                    class="doc-link">
-                    {{ $t('agentEditor.im.yunzhijiaImageDoc') }}
-                  </a>
-                </p>
-              </div>
-              <div class="form-item">
-                <label class="form-label">{{ $t('agentEditor.im.yunzhijiaAppSecret') }}</label>
-                <t-input v-model="formData.credentials.app_secret" type="password"
-                  :placeholder="$t('agentEditor.im.yunzhijiaAppSecretPlaceholder')" />
-              </div>
-              <div class="form-item">
-                <label class="form-label">{{ $t('agentEditor.im.yunzhijiaTimeout') }}</label>
-                <t-input-number v-model="formData.credentials.timeout_seconds" placeholder="10" :min="1" :max="60"
-                  style="width: 100%;" />
-                <p class="form-desc">{{ $t('agentEditor.im.yunzhijiaTimeoutHint') }}</p>
-              </div>
-              <div class="form-item">
-                <label class="form-label required">{{ $t('agentEditor.im.yunzhijiaAllowedHostSuffix') }}</label>
-                <t-input v-model="formData.credentials.allowed_webhook_host_suffix" placeholder="yunzhijia.com" />
-                <p class="form-desc">{{ $t('agentEditor.im.yunzhijiaAllowedHostSuffixHint') }}</p>
-              </div>
-            </template>
 
-            <!-- WeChat credentials (QR code binding) -->
-            <template v-if="formData.platform === 'wechat'">
-              <p class="form-desc">{{ $t('agentEditor.im.wechatHint') }}</p>
 
-              <!-- Already bound state -->
-              <div v-if="wechatBound" class="wechat-bound-status">
-                <t-icon name="check-circle-filled" class="bound-icon" />
-                <span>{{ $t('agentEditor.im.wechatBindSuccess') }}</span>
-                <t-button size="small" variant="outline" theme="default" @click="startWeChatBinding">
-                  {{ $t('agentEditor.im.wechatRebind') }}
-                </t-button>
-              </div>
 
-              <!-- QR code binding flow -->
-              <div v-else class="wechat-qr-section">
-                <!-- Initial state: show bind button -->
-                <div v-if="!wechatQRImgUrl" class="wechat-bind-action">
-                  <t-button theme="default" variant="outline" :loading="wechatLoading" @click="startWeChatBinding">
-                    <template #icon><t-icon name="scan" /></template>
-                    {{ $t('agentEditor.im.wechatScanBind') }}
-                  </t-button>
-                </div>
 
-                <!-- QR code displayed -->
-                <div v-else class="wechat-qr-display">
-                  <div class="qr-container">
-                    <img :src="wechatQRImgUrl" alt="WeChat QR Code" class="qr-image" />
-                    <div v-if="wechatQRStatus === 'expired'" class="qr-expired-overlay" @click="startWeChatBinding">
-                      <t-icon name="refresh" class="refresh-icon" />
-                      <span>{{ $t('agentEditor.im.wechatQRExpired') }}</span>
-                    </div>
-                  </div>
-                  <p class="qr-hint">
-                    <template v-if="wechatQRStatus === 'scaned'">
-                      {{ $t('agentEditor.im.wechatBinding') }}
-                    </template>
-                    <template v-else>
-                      {{ $t('agentEditor.im.wechatScanning') }}
-                    </template>
-                  </p>
-                </div>
-              </div>
-            </template>
+
+
+
+
+
+
+
+
+
+
+
+
           </div>
         </section>
       </div>
@@ -586,8 +280,7 @@ import { useI18n } from 'vue-i18n';
 import { MessagePlugin } from 'tdesign-vue-next';
 import { copyWithToast } from '@/utils/clipboard';
 import {
-  listIMChannels, createIMChannel, updateIMChannel, deleteIMChannel, toggleIMChannel,
-  getWeChatQRCode, pollWeChatQRCodeStatus, listAllIMChannels, listAgents,
+  listAllIMChannels, listAgents, listIMChannels, createIMChannel, updateIMChannel, deleteIMChannel, toggleIMChannel,
   type IMChannelOverview, type CustomAgent,
 } from '@/api/agent';
 import { useChatResourcesStore } from '@/stores/chatResources';
@@ -595,30 +288,12 @@ import type { IMChannel } from '@/api/agent';
 import { useAuthStore } from '@/stores/auth';
 import SettingDrawer from '@/components/settings/SettingDrawer.vue';
 import IntegrationsAgentFilter from '@/components/IntegrationsAgentFilter.vue';
-import wecomLogo from '@/assets/img/im/wecom.svg';
 import feishuLogo from '@/assets/img/im/feishu.svg';
-import larkLogo from '@/assets/img/im/lark.svg';
-import slackLogo from '@/assets/img/im/slack.svg';
-import telegramLogo from '@/assets/img/im/telegram.svg';
-import dingtalkLogo from '@/assets/img/im/dingtalk.svg';
-import mattermostLogo from '@/assets/img/im/mattermost.svg';
-import wechatLogo from '@/assets/img/im/wechat.svg';
-import qqbotLogo from '@/assets/img/im/qqbot.png';
-import yunzhijiaLogo from '@/assets/img/im/yunzhijia.svg';
 
 type IMPlatform = IMChannel['platform'];
 
 const PLATFORM_LOGO: Record<string, string> = {
-  wecom: wecomLogo,
   feishu: feishuLogo,
-  lark: larkLogo,
-  slack: slackLogo,
-  telegram: telegramLogo,
-  dingtalk: dingtalkLogo,
-  mattermost: mattermostLogo,
-  wechat: wechatLogo,
-  qqbot: qqbotLogo,
-  yunzhijia: yunzhijiaLogo,
 };
 
 const platformLogo = (platform: string): string => (platform ? PLATFORM_LOGO[platform] || '' : '');
@@ -661,25 +336,12 @@ const drawerConfirmText = computed(() =>
 );
 
 const platformOptions = computed(() => ([
-  { value: 'wecom' as IMPlatform, label: t('agentEditor.im.wecom'), logo: wecomLogo },
   { value: 'feishu' as IMPlatform, label: t('agentEditor.im.feishu'), logo: feishuLogo },
-  { value: 'lark' as IMPlatform, label: t('agentEditor.im.lark'), logo: larkLogo },
-  { value: 'slack' as IMPlatform, label: t('agentEditor.im.slack'), logo: slackLogo },
-  { value: 'telegram' as IMPlatform, label: t('agentEditor.im.telegram'), logo: telegramLogo },
-  { value: 'dingtalk' as IMPlatform, label: t('agentEditor.im.dingtalk'), logo: dingtalkLogo },
-  { value: 'mattermost' as IMPlatform, label: t('agentEditor.im.mattermost'), logo: mattermostLogo },
-  { value: 'wechat' as IMPlatform, label: t('agentEditor.im.wechat'), logo: wechatLogo },
-  { value: 'qqbot' as IMPlatform, label: t('agentEditor.im.qqbot'), logo: qqbotLogo },
-  { value: 'yunzhijia' as IMPlatform, label: t('agentEditor.im.yunzhijia'), logo: yunzhijiaLogo },
 ]));
 
 // Feishu and Lark are the same product on separate clouds, so each has its own
 // open platform console. Bots must be created on the one matching the channel.
-const openPlatformConsole = computed(() =>
-  formData.value.platform === 'lark'
-    ? { url: 'https://open.larksuite.com/', labelKey: 'agentEditor.im.larkConsole' }
-    : { url: 'https://open.feishu.cn/', labelKey: 'agentEditor.im.feishuConsole' },
-);
+const openPlatformConsole = computed(() => ({ url: 'https://open.feishu.cn/', labelKey: 'agentEditor.im.feishuConsole' }));
 
 const drawerTitle = computed(() => {
   if (editingChannel.value) {
@@ -712,22 +374,13 @@ async function handleDrawerConfirm() {
 // Knowledge base options for file-to-KB feature
 const knowledgeBases = ref<{ id: string; name: string }[]>([]);
 
-// WeChat QR code binding state
-const wechatQRContent = ref('');  // raw text to encode as QR code
-const wechatQRImgUrl = ref('');   // generated QR image URL
-const wechatQRCode = ref('');     // opaque token for polling status
-const wechatQRStatus = ref<string>('');
-const wechatLoading = ref(false);
-let wechatPollActive = false;
-let wechatPollTimer: ReturnType<typeof setTimeout> | null = null;
-
 const defaultCredentials = (): Record<string, any> => ({});
 
 const formData = ref({
   target_agent_id: '',
-  platform: 'wecom' as IMPlatform,
+  platform: 'feishu' as IMPlatform,
   name: '',
-  mode: 'websocket' as 'webhook' | 'websocket' | 'longpoll',
+  mode: 'websocket' as 'webhook' | 'websocket',
   output_mode: 'stream' as 'stream' | 'full',
   session_mode: 'user' as 'user' | 'thread',
   knowledge_base_id: '',
@@ -779,143 +432,19 @@ function defaultChannelName(platform: string = formData.value.platform): string 
 function resolvedChannelName(): string {
   return formData.value.name.trim() || defaultChannelName();
 }
+function platformSupportsThread(platform: string): boolean { return platform === 'feishu'; }
 
-function platformSupportsThread(platform: string): boolean {
-  return ['slack', 'mattermost', 'feishu', 'lark', 'telegram', 'yunzhijia'].includes(platform);
-}
 
 watch(
   () => formData.value.platform,
   (p) => {
-    if (p === 'mattermost') {
-      formData.value.mode = 'webhook';
-      if (typeof formData.value.credentials.post_to_main !== 'boolean') {
-        formData.value.credentials.post_to_main = false;
-      }
-    }
+
     if (!platformSupportsThread(p)) {
       formData.value.session_mode = 'user';
     }
   },
 );
-// Whether WeChat credentials are already bound
-const wechatBound = computed(() => {
-  return formData.value.platform === 'wechat' &&
-    formData.value.credentials.bot_token &&
-    formData.value.credentials.ilink_bot_id;
-});
-
-
-function onPlatformChange(val: string | number | boolean) {
-  if (editingChannel.value) return;
-  formData.value.credentials = defaultCredentials();
-  stopWeChatPolling();
-  wechatQRContent.value = '';
-  wechatQRImgUrl.value = '';
-  wechatQRCode.value = '';
-  wechatQRStatus.value = '';
-  // WeChat uses fixed mode/output
-  if (val === 'wechat') {
-    formData.value.mode = 'longpoll';
-    formData.value.output_mode = 'full';
-  } else if (val === 'mattermost' || val === 'yunzhijia') {
-    formData.value.mode = 'webhook';
-    formData.value.output_mode = 'stream';
-    if (val === 'yunzhijia') {
-      formData.value.credentials = {
-        timeout_seconds: 10,
-        allowed_webhook_host_suffix: 'yunzhijia.com',
-      };
-    }
-  } else {
-    formData.value.mode = 'websocket';
-    formData.value.output_mode = 'stream';
-  }
-  if (!channelNameTouched.value) {
-    formData.value.name = defaultChannelName(String(val));
-  }
-}
-
-function normalizeYunzhijiaCredentials() {
-  if (formData.value.platform !== 'yunzhijia') return;
-  if (!formData.value.credentials.allowed_webhook_host_suffix) {
-    formData.value.credentials.allowed_webhook_host_suffix = 'yunzhijia.com';
-  }
-  if (!formData.value.credentials.timeout_seconds) {
-    formData.value.credentials.timeout_seconds = 10;
-  }
-}
-
-async function startWeChatBinding() {
-  stopWeChatPolling();
-  wechatLoading.value = true;
-  wechatQRContent.value = '';
-  wechatQRImgUrl.value = '';
-  wechatQRStatus.value = '';
-
-  try {
-    const res = await getWeChatQRCode();
-    // qrcode_url is the text content to encode as QR code (e.g. a weixin:// URL)
-    wechatQRContent.value = res.data.qrcode_url;
-    wechatQRCode.value = res.data.qrcode;
-    wechatQRStatus.value = 'wait';
-
-    // Generate QR code image via public API (no extra npm dependency needed)
-    wechatQRImgUrl.value = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(res.data.qrcode_url)}`;
-
-    // Start long-polling for scan status
-    startStatusPolling();
-  } catch (e: any) {
-    MessagePlugin.error(e?.message || 'Failed to generate QR code');
-  } finally {
-    wechatLoading.value = false;
-  }
-}
-
-function startStatusPolling() {
-  wechatPollActive = true;
-  pollOnce();
-}
-
-async function pollOnce() {
-  if (!wechatPollActive) return;
-  try {
-    const statusRes = await pollWeChatQRCodeStatus(wechatQRCode.value);
-    if (!wechatPollActive) return;
-    wechatQRStatus.value = statusRes.data.status;
-
-    if (statusRes.data.status === 'confirmed' && statusRes.data.credentials) {
-      formData.value.credentials = {
-        bot_token: statusRes.data.credentials.bot_token,
-        ilink_bot_id: statusRes.data.credentials.ilink_bot_id,
-        ilink_user_id: statusRes.data.credentials.ilink_user_id,
-      };
-      stopWeChatPolling();
-      wechatQRContent.value = '';
-      wechatQRImgUrl.value = '';
-      MessagePlugin.success(t('agentEditor.im.wechatBindSuccess'));
-      return;
-    }
-    if (statusRes.data.status === 'expired') {
-      stopWeChatPolling();
-      return;
-    }
-  } catch {
-    // transient error
-  }
-  // Schedule next poll with a short delay (the backend already long-polled ~35s)
-  if (wechatPollActive) {
-    wechatPollTimer = setTimeout(pollOnce, 500);
-  }
-}
-
-function stopWeChatPolling() {
-  wechatPollActive = false;
-  if (wechatPollTimer) {
-    clearTimeout(wechatPollTimer);
-    wechatPollTimer = null;
-  }
-}
+function onPlatformChange(val: string | number | boolean) { if (editingChannel.value) return; formData.value.credentials = defaultCredentials(); formData.value.mode = 'websocket'; formData.value.output_mode = 'stream'; if (!channelNameTouched.value) formData.value.name = defaultChannelName(String(val)); }
 
 async function loadChannels() {
   loading.value = true;
@@ -987,7 +516,6 @@ async function editChannel(channel: IMChannel | IMChannelOverview) {
     knowledge_base_id: fullChannel.knowledge_base_id || '',
     credentials: { ...fullChannel.credentials },
   };
-  normalizeYunzhijiaCredentials();
   showCreateDialog.value = true;
 }
 
@@ -996,15 +524,10 @@ function resetForm() {
   editingEnabled.value = true;
   wizardStep.value = 0;
   channelNameTouched.value = false;
-  stopWeChatPolling();
-  wechatQRContent.value = '';
-  wechatQRImgUrl.value = '';
-  wechatQRCode.value = '';
-  wechatQRStatus.value = '';
   formData.value = {
     target_agent_id: filterAgentId.value || '',
-    platform: 'wecom',
-    name: defaultChannelName('wecom'),
+    platform: 'feishu',
+    name: defaultChannelName('feishu'),
     mode: 'websocket',
     output_mode: 'stream',
     session_mode: 'user',
@@ -1016,20 +539,8 @@ function resetForm() {
 async function handleSave() {
   saving.value = true;
   try {
-    // For WeChat, validate that credentials are bound
-    if (formData.value.platform === 'wechat' && !formData.value.credentials.bot_token) {
-      MessagePlugin.warning(t('agentEditor.im.wechatScanBind'));
-      return;
-    }
-    if (formData.value.platform === 'yunzhijia') {
-      // normalize fills in the default allowed host suffix, so only the send URL
-      // needs explicit validation here.
-      normalizeYunzhijiaCredentials();
-      if (!String(formData.value.credentials.send_msg_url || '').trim()) {
-        MessagePlugin.warning(t('agentEditor.im.yunzhijiaSendMsgUrlRequired'));
-        return;
-      }
-    }
+
+
 
     if (editingChannel.value) {
       await updateIMChannel(editingChannel.value.id, {
@@ -1101,7 +612,6 @@ watch(filterAgentId, (id) => {
 });
 
 onUnmounted(() => {
-  stopWeChatPolling();
 });
 </script>
 
@@ -1377,42 +887,13 @@ onUnmounted(() => {
   }
 }
 
-// --- WeChat QR code binding ---
-.wechat-bound-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  background: rgba(7, 193, 96, 0.06);
-  border: 1px solid rgba(7, 193, 96, 0.2);
-  border-radius: 8px;
-  font-size: 14px;
-  color: var(--td-text-color-primary);
 
-  .bound-icon {
-    font-size: 18px;
-    color: #07c160;
-  }
-}
 
-.wechat-qr-section {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-}
 
-.wechat-bind-action {
-  padding: 24px 0;
-}
 
-.wechat-qr-display {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 16px 0;
-}
+
+
+
 
 .qr-container {
   position: relative;

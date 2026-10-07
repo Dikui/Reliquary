@@ -187,10 +187,10 @@ func TestLevelColorFor(t *testing.T) {
 func TestCloneContextPreservesPrincipal(t *testing.T) {
 	t.Parallel()
 
-	ctx := types.WithPrincipal(context.Background(), types.EmbedSessionPrincipal(10000, "ch1", "sess1"))
+	ctx := types.WithPrincipal(context.Background(), types.Principal{Type: types.PrincipalAPIExternalUser, ID: "1:external-alice"})
 	cloned := CloneContext(ctx)
 
-	if got := types.SessionOwnerIDFromContext(cloned); got != "embed_session:10000:ch1:sess1" {
+	if got := types.SessionOwnerIDFromContext(cloned); got != "api_external_user:1:external-alice" {
 		t.Fatalf("SessionOwnerIDFromContext(cloned) = %q", got)
 	}
 }
@@ -214,15 +214,13 @@ func TestCloneContextPreservesTenantAPIKeyScope(t *testing.T) {
 	}
 }
 
-// setupSSEStream builds its async context through CloneContext, so dropping
-// this key here would silently re-key every session→sandbox binding onto the
-// tenant a shared agent borrowed — stranding the MicroVM at session deletion.
+// Background execution preserves the team ID needed to release Docker sessions.
 func TestCloneContextPreservesSandboxTenantID(t *testing.T) {
 	t.Parallel()
 
-	const sessionOwner, agentOwner = uint64(7), uint64(99)
+	const sessionOwner = uint64(1)
 
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, agentOwner)
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, sessionOwner)
 	ctx = types.WithSandboxTenantID(ctx, sessionOwner)
 	cloned := CloneContext(ctx)
 

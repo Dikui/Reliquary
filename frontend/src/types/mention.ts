@@ -9,11 +9,10 @@ export interface MentionItem {
   type: MentionItemType;
   group?: string;
   description?: string;
-  kbType?: 'document' | 'faq';
+  kbType?: 'document';
   count?: number;
   kbName?: string;
   kbId?: string;
-  orgName?: string;
   serviceId?: string;
   serviceName?: string;
   skillName?: string;
@@ -24,7 +23,7 @@ export interface MentionRequestItem {
   id: string;
   name: string;
   type: MentionItemType;
-  kb_type?: 'document' | 'faq';
+  kb_type?: 'document';
   kb_id?: string;
   kb_name?: string;
   service_id?: string;

@@ -17,7 +17,7 @@ import (
 
 // uploadChannel is the default ingestion-channel tag the server records for
 // CLI uploads. Distinct from "web" (browser UI), "browser_extension"
-// (one-click capture), and "wechat" (mini-program). The server uses this only
+// (one-click capture). The server uses this only
 // for analytics. Users can override via --channel for cross-tool replay.
 const uploadChannel = "api"
 

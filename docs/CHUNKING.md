@@ -43,8 +43,8 @@ and falls through to the next tier.
 
 | Setting | Range | Default | Sweet spot for… |
 |---------|-------|---------|-----------------|
-| **Chunk size** | 100–4000 chars | 512 | Default works for most cases. 200–400 for FAQs / atomic Q&A. 1000–2000 for narrative documents. |
-| **Chunk overlap** | 0–500 chars | 80 (~15%) | 0 for FAQs and structured records. 80 (default) for general documents. 150–200 for argumentative texts where reasoning crosses chunks. |
+| **Chunk size** | 100–4000 chars | 512 | Default works for most cases. 200–400 for atomic Q&A. 1000–2000 for narrative documents. |
+| **Chunk overlap** | 0–500 chars | 80 (~15%) | 0 for structured records. 80 (default) for general documents. 150–200 for argumentative texts where reasoning crosses chunks. |
 | **Separators** | string list | `["\n\n", "\n", "。", "！", "？", ";", "；"]` | Order matters — splitter tries higher-priority separators first and only falls back to lower ones when a piece is still oversize. |
 
 ### Parent-Child chunking
@@ -54,7 +54,7 @@ and **parent chunks** (larger, returned to the LLM for context).
 
 | Setting | Range | Default | Notes |
 |---------|-------|---------|-------|
-| **Enable parent-child** | toggle | on | Recommended for documents > 10 pages. Skip for short FAQs to halve storage cost. |
+| **Enable parent-child** | toggle | on | Recommended for documents > 10 pages. Skip for short documents to halve storage cost. |
 | **Parent chunk size** | 512–8192 chars | 4096 (~1000 EN tokens) | Larger for long-context LLMs (Claude, GPT-4-Turbo). Smaller (1024–2048) for local LLMs with 4k contexts. |
 | **Child chunk size** | 64–2048 chars | 384 (~95 EN tokens) | 128–256 for Q&A-style precise matching. 512–1024 if your embedder accepts >1000 tokens (E5 / BGE-large). |
 
@@ -84,7 +84,7 @@ chunks always fit even for CJK content (which is denser per character).
 
 | Workload | Strategy | ChunkSize | Overlap | Parent-Child |
 |----------|----------|-----------|---------|--------------|
-| FAQ / Q&A knowledge base | `auto` (likely picks legacy) | 200–400 | 0 | off |
+| Short Q&A documents | `auto` (likely picks legacy) | 200–400 | 0 | off |
 | Markdown documentation / wikis | `auto` (picks heading) | 512 | 80 | on |
 | PDF reports with page breaks | `auto` (picks heuristic) | 800–1200 | 100–150 | on |
 | Long-form narrative (books, articles) | `auto` (picks recursive) | 1000–2000 | 150–200 | on |

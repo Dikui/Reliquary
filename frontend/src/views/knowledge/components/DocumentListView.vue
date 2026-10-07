@@ -121,10 +121,6 @@ const getSourceInfo = (item: KnowledgeItem): { icon: string; label: string } => 
   if (ch === 'yuque') return { icon: 'cloud-download', label: t('knowledgeBase.channelYuque') };
   if (ch === 'gitlab') return { icon: 'cloud-download', label: t('knowledgeBase.channelGitLab') };
   if (ch === 'ima') return { icon: 'cloud-download', label: t('knowledgeBase.channelIma') };
-  if (ch === 'wechat') return { icon: 'cloud-download', label: t('knowledgeBase.channelWechat') };
-  if (ch === 'wecom') return { icon: 'cloud-download', label: t('knowledgeBase.channelWecom') };
-  if (ch === 'dingtalk') return { icon: 'cloud-download', label: t('knowledgeBase.channelDingtalk') };
-  if (ch === 'slack') return { icon: 'cloud-download', label: t('knowledgeBase.channelSlack') };
   if (ch === 'im') return { icon: 'cloud-download', label: t('knowledgeBase.channelIm') };
   if (ch === 'rss' || ch === 'grok_x') return { icon: 'cloud-download', label: t(`datasource.connector.${ch}`) };
   if (item.type === 'url') return { icon: 'link', label: t('knowledgeBase.channelUrl') };

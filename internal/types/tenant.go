@@ -501,7 +501,7 @@ func (c *StorageEngineConfig) Scan(value interface{}) error {
 // It is self-contained: provider fields are not inherited from process
 // environment. Leaving a required provider field empty is rejected on save.
 type TenantSandboxConfig struct {
-	// SandboxType is cube, e2b, or docker; disabled is the hidden policy row.
+	// SandboxType is docker; disabled is the hidden policy row.
 	SandboxType string `json:"sandbox_type,omitempty"`
 
 	// ── 通用配置（跨后端生效）──────────────────────────────────
@@ -520,13 +520,6 @@ type TenantSandboxConfig struct {
 	// These become visible to all scripts running in the tenant's
 	// sandboxes — do not place secrets here that scripts must not access.
 	EnvVars map[string]string `json:"env_vars,omitempty"`
-
-	// VolumeMount configures an optional shared volume mounted into every
-	// sandbox created for this tenant. Currently used for tenant-installed
-	// skills, but the configuration itself is skill-agnostic and can serve
-	// any volume-mount use case (shared datasets, pre-installed toolchains,
-	// etc.).
-	VolumeMount *VolumeMountConfig `json:"volume_mount,omitempty"`
 
 	// SkillImage points at the snapshot that carries this config's installed
 	// skills. Empty means "use the base template". Written only by the skill
@@ -548,58 +541,7 @@ type TenantSandboxConfig struct {
 	Network *SandboxNetworkPolicy `json:"network,omitempty"`
 
 	// ── 后端专属配置（同一时刻只有一个生效，由 SandboxType 决定）───
-
-	Cube   *CubeSandboxConfig   `json:"cube,omitempty"`
-	E2B    *E2BSandboxConfig    `json:"e2b,omitempty"`
 	Docker *DockerSandboxConfig `json:"docker,omitempty"`
-}
-
-// CubeSandboxConfig addresses one CubeSandbox deployment. APIURL, ProxyURL,
-// SandboxDomain and TemplateID are all required; APIKey is optional because the
-// common single-node setup runs unauthenticated.
-type CubeSandboxConfig struct {
-	APIURL        string `json:"api_url,omitempty"`
-	ProxyURL      string `json:"proxy_url,omitempty"`
-	SandboxDomain string `json:"sandbox_domain,omitempty"`
-	APIKey        string `json:"api_key,omitempty"` // 加密
-	TemplateID    string `json:"template_id,omitempty"`
-
-	// HTTPTimeoutSec bounds each HTTP call to the sandbox control plane.
-	// 0 means use the built-in default (30s), never the deployment's value.
-	HTTPTimeoutSec int `json:"http_timeout_sec,omitempty"`
-
-	CubeSandboxTTLSeconds int `json:"cube_sandbox_ttl_seconds,omitempty"`
-
-	// DNSServers are Cube template nameserver IPs. Empty uses Cubelet's default.
-	DNSServers []string `json:"dns_servers,omitempty"`
-}
-
-// E2BSandboxConfig addresses one E2B-protocol control plane: E2B Cloud, a
-// self-hosted E2B Infrastructure, or any E2B-compatible implementation
-// (CubeSandbox, Agent-Sandbox, …). APIKey and TemplateID are required; APIURL
-// and SandboxDomain are optional because go-e2b resolves both on its own when
-// they are empty.
-type E2BSandboxConfig struct {
-	APIURL        string `json:"api_url,omitempty"`
-	SandboxDomain string `json:"sandbox_domain,omitempty"`
-	APIKey        string `json:"api_key,omitempty"` // 加密
-	TemplateID    string `json:"template_id,omitempty"`
-
-	// ProxyURL is the data-plane gateway that fronts envd. E2B Cloud resolves
-	// "<port>-<sandboxID>.<sandbox_domain>" through public DNS and TLS, so it
-	// needs no value here. Self-hosted E2B-compatible control planes usually
-	// serve every sandbox from one gateway address and expect the sandbox
-	// authority in the Host header; setting this makes Reliquary dial the
-	// gateway directly instead of requiring wildcard DNS and a certificate
-	// for the sandbox domain. An "http://" gateway also downgrades the
-	// data-plane scheme, which the E2B SDK otherwise pins to https.
-	ProxyURL string `json:"proxy_url,omitempty"`
-
-	// HTTPTimeoutSec bounds each HTTP call to the sandbox control plane.
-	// 0 means use the built-in default (30s), never the deployment's value.
-	HTTPTimeoutSec int `json:"http_timeout_sec,omitempty"`
-
-	E2BSandboxTTLSeconds int `json:"e2b_sandbox_ttl_seconds,omitempty"`
 }
 
 // DockerSandboxConfig addresses one Docker daemon. Image is required and plays
@@ -652,37 +594,6 @@ type DockerSandboxConfig struct {
 	HTTPTimeoutSec int `json:"http_timeout_sec,omitempty"`
 }
 
-// VolumeMountConfig configures a shared volume mount into every sandbox
-// created for this tenant. Currently implemented for E2B volumes (used to
-// share tenant-installed skills across sandbox sessions), but the schema is
-// intentionally skill-agnostic so it can serve other volume-based use cases
-// in the future.
-type VolumeMountConfig struct {
-	// Enabled toggles the volume mount for this tenant.
-	Enabled bool `json:"enabled"`
-
-	// MountPath is the sandbox-internal path where the volume is mounted.
-	// Default: /reliquary/tenant/skills (customizable per use case).
-	MountPath string `json:"mount_path,omitempty"`
-
-	// Provider identifies the volume backend. Currently "e2b" or "cube".
-	Provider string `json:"provider,omitempty"`
-
-	// VolumeID is the provider-specific volume identifier, populated after
-	// EnsureVolume / CreateVolume succeeds.
-	VolumeID string `json:"volume_id,omitempty"`
-
-	// VolumeName is the human-readable volume name, e.g.
-	// "reliquary-tenant-<id>-skills".
-	VolumeName string `json:"volume_name,omitempty"`
-
-	// VolumeOwnerFingerprint = sha256(provider + APIKey + APIURL).
-	// Used to detect when the tenant switched to a different backend or
-	// API key, at which point the volume is no longer reachable and must
-	// be recreated.
-	VolumeOwnerFingerprint string `json:"volume_owner_fingerprint,omitempty"`
-}
-
 const (
 	// SkillRolloutNextTurn rebuilds a live session's sandbox on its next chat
 	// turn after the skill image changes. This is the default.
@@ -725,7 +636,7 @@ type SkillImageConfig struct {
 }
 
 // Value implements the driver.Valuer interface. Every secret-bearing field
-// (Cube.APIKey, E2B.APIKey, all EnvVars values, and injected header values) is
+// (all EnvVars values) is
 // encrypted before persisting. EnvVars are included because environment
 // variables routinely carry credentials, and their values are handed to tenant
 // scripts verbatim. The receiver is never mutated: nested structs and the map
@@ -748,16 +659,6 @@ func (c *TenantSandboxConfig) Value() (driver.Value, error) {
 		return encrypted
 	}
 
-	if c.Cube != nil {
-		cube := *c.Cube
-		cube.APIKey = encrypt(cube.APIKey)
-		cp.Cube = &cube
-	}
-	if c.E2B != nil {
-		e2b := *c.E2B
-		e2b.APIKey = encrypt(e2b.APIKey)
-		cp.E2B = &e2b
-	}
 	// Keys stay readable so operators can still see which variables are set.
 	if len(c.EnvVars) > 0 {
 		envVars := make(map[string]string, len(c.EnvVars))
@@ -765,11 +666,6 @@ func (c *TenantSandboxConfig) Value() (driver.Value, error) {
 			envVars[name] = encrypt(value)
 		}
 		cp.EnvVars = envVars
-	}
-	// Injected headers are the sandbox-side way to call an API without the
-	// credential ever entering the sandbox, so their values are secrets.
-	if c.Network != nil {
-		cp.Network = c.Network.CloneWithSecrets(encrypt)
 	}
 
 	return json.Marshal(&cp)
@@ -803,21 +699,8 @@ func (c *TenantSandboxConfig) Scan(value interface{}) error {
 		return ""
 	}
 
-	if c.Cube != nil {
-		c.Cube.APIKey = decrypt(c.Cube.APIKey, "cube.api_key")
-	}
-	if c.E2B != nil {
-		c.E2B.APIKey = decrypt(c.E2B.APIKey, "e2b.api_key")
-	}
 	for name, stored := range c.EnvVars {
 		c.EnvVars[name] = decrypt(stored, "env_vars."+name)
-	}
-	if c.Network != nil {
-		// CloneWithSecrets has no rule/header context, so rotated-key failures
-		// share one label rather than identifying the individual credential.
-		c.Network = c.Network.CloneWithSecrets(func(stored string) string {
-			return decrypt(stored, "network.injected_header")
-		})
 	}
 
 	return nil

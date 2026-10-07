@@ -15,10 +15,7 @@ import (
 )
 
 // validIMPlatforms is the set of supported IM platforms.
-var validIMPlatforms = map[string]bool{
-	"wecom": true, "feishu": true, "lark": true, "slack": true, "telegram": true, "dingtalk": true,
-	"mattermost": true, "wechat": true, "qqbot": true, "yunzhijia": true,
-}
+var validIMPlatforms = map[string]bool{"feishu": true, "lark": true}
 
 // invalidIMPlatformError is the 400 message listing the accepted platforms. It
 // is derived from validIMPlatforms so the two cannot drift apart as platforms
@@ -95,21 +92,11 @@ func (h *IMHandler) CreateIMChannel(c *gin.Context) {
 	if req.Enabled != nil {
 		channel.Enabled = *req.Enabled
 	}
-	// WeChat uses long-polling mode and full output only
-	if req.Platform == "wechat" {
-		channel.Mode = "longpoll"
-		channel.OutputMode = "full"
-	} else {
-		if channel.Mode == "" {
-			if channel.Platform == "mattermost" || channel.Platform == "yunzhijia" {
-				channel.Mode = "webhook"
-			} else {
-				channel.Mode = "websocket"
-			}
-		}
-		if channel.OutputMode == "" {
-			channel.OutputMode = "stream"
-		}
+	if channel.Mode == "" {
+		channel.Mode = "websocket"
+	}
+	if channel.OutputMode == "" {
+		channel.OutputMode = "stream"
 	}
 	if channel.Credentials == nil {
 		channel.Credentials = types.JSON("{}")
@@ -337,16 +324,6 @@ func (h *IMHandler) ToggleIMChannel(c *gin.Context) {
 }
 
 func writeIMCallbackACK(c *gin.Context, platform string) {
-	if platform == "yunzhijia" {
-		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"data": gin.H{
-				"type":    2,
-				"content": "",
-			},
-		})
-		return
-	}
 
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
@@ -416,11 +393,7 @@ func (h *IMHandler) IMCallback(c *gin.Context) {
 
 	// If nil, it's a non-message event - just acknowledge
 	if msg == nil {
-		if channel.Platform == "mattermost" {
-			logger.Infof(ctx, "[IM] Mattermost callback ignored (no message): path_channel_id=%s — check: (1) trigger word must be the *first word* of the post; (2) if channel+trigger are both set, post must be in that channel; (3) bot_user_id must not match the sender", channelID)
-		} else {
-			logger.Infof(ctx, "[IM] Callback parsed no message to process platform=%s path_channel_id=%s", channel.Platform, channelID)
-		}
+		logger.Infof(ctx, "[IM] Callback parsed no message to process platform=%s path_channel_id=%s", channel.Platform, channelID)
 		writeIMCallbackACK(c, channel.Platform)
 		return
 	}

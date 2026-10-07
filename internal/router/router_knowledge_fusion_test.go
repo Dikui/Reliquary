@@ -90,7 +90,7 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 	kbRepo := apprepo.NewKnowledgeBaseRepository(db)
 	knowledgeRepo := apprepo.NewKnowledgeRepository(db)
 	kbService := service.NewKnowledgeBaseService(db, kbRepo, knowledgeRepo, nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+		nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	kb := &types.KnowledgeBase{
 		ID: fusionKBID, Name: "Fusion KB", TenantID: fusionTenantID, CreatorID: fusionOwnerID,
 		Type: "document", EmbeddingModelID: "unused", SummaryModelID: "fusion-deterministic",
@@ -98,7 +98,7 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 	require.NoError(t, kbRepo.CreateKnowledgeBase(ctx, kb))
 
 	knowledge, err := service.NewKnowledgeService(db, nil, knowledgeRepo, nil, kbService, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, fusionModelService{model: fusionChat{}}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+		nil, nil, nil, nil, fusionModelService{model: fusionChat{}}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	source := &types.Knowledge{
 		ID: fusionSourceID, TenantID: fusionTenantID, KnowledgeBaseID: fusionKBID,
@@ -142,11 +142,11 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 	taskQueue := &fusionTaskQueue{}
 	workflowService := service.NewKnowledgeWorkflowService(db, kbService, knowledge, contextService, nil, nil,
 		modelService, memberRepo, taskQueue, nil)
-	kbHandler := handler.NewKnowledgeBaseHandler(kbService, knowledge, nil, nil, nil, nil, nil, nil, nil)
+	kbHandler := handler.NewKnowledgeBaseHandler(kbService, knowledge, nil, nil, nil, nil, nil)
 	contextHandler := handler.NewKnowledgeContextHandler(contextService, contextWorker)
 	workflowHandler := handler.NewKnowledgeWorkflowHandler(workflowService)
 	enabled := true
-	guards := newRBACGuards(&config.Config{Tenant: &config.TenantConfig{EnableRBAC: &enabled}}, kbHandler, nil, nil, nil, nil, kbService, knowledge, nil, nil, nil)
+	guards := newRBACGuards(&config.Config{Tenant: &config.TenantConfig{EnableRBAC: &enabled}}, kbHandler, nil, nil, nil, nil, kbService, knowledge, nil)
 	engine := gin.New()
 	engine.Use(middleware.ErrorHandler(), fusionIdentityMiddleware())
 	v1 := engine.Group("/api/v1")

@@ -96,10 +96,6 @@ func authorizeKnowledgeInSearchTargets(
 	return knowledge, nil
 }
 
-// authorizeChunkInSearchTargets is the chunk/FAQ counterpart of
-// authorizeKnowledgeInSearchTargets. A chunk ID is accepted only after the
-// server resolves its owning document and validates that document against the
-// full KB/document/tag scope.
 func authorizeChunkInSearchTargets(
 	ctx context.Context,
 	searchTargets types.SearchTargets,

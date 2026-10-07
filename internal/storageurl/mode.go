@@ -42,27 +42,6 @@ const (
 var ErrPublicModeForbidden = errors.New(
 	"resource_urls=public is not available for a knowledge-base-restricted API key")
 
-// forcedHandleKey marks a request that must never receive public URLs, whatever
-// the query parameter or the deployment default says.
-type forcedHandleKey struct{}
-
-// WithForcedHandleMode pins a request to ModeHandle. Anonymous surfaces use it:
-// an embed visitor is authorized only by the channel's session handle, so it
-// must keep fetching images through the channel-scoped `/embed/…/files` proxy
-// instead of receiving a shareable, credential-free URL.
-func WithForcedHandleMode(ctx context.Context) context.Context {
-	return context.WithValue(ctx, forcedHandleKey{}, true)
-}
-
-// HandleModeForced reports whether ctx was pinned by WithForcedHandleMode.
-func HandleModeForced(ctx context.Context) bool {
-	if ctx == nil {
-		return false
-	}
-	forced, _ := ctx.Value(forcedHandleKey{}).(bool)
-	return forced
-}
-
 // ParseMode validates a mode supplied by a client or by configuration. An empty
 // value yields ModeHandle so an unset parameter or setting keeps the default.
 func ParseMode(raw string) (Mode, error) {
@@ -118,24 +97,16 @@ func DefaultMode(ctx context.Context) Mode {
 }
 
 // ResolveMode combines the per-request query value with the deployment default,
-// then applies the two limits that no caller may opt out of.
+// then enforces the API key scope.
 //
 // An explicit query value wins over the deployment default; an invalid one is
 // returned as an error so integrators find their typo instead of silently
 // receiving handles.
 //
-// Limits:
-//   - A ctx pinned by WithForcedHandleMode (anonymous embed traffic) is silently
-//     downgraded rather than rejected, so an embed client that happens to send
-//     the parameter keeps working — it just never gets a public URL.
-//   - A knowledge-base-restricted API key is rejected with
-//     ErrPublicModeForbidden. Such a key is already denied the `/files` proxy,
-//     so handing it anonymous file URLs would widen its scope from "chunk text"
-//     to "file bytes" through the back door.
+// A knowledge-base-restricted API key cannot request public file URLs.
+// Such a key only grants access to indexed content, so ResolveMode returns
+// ErrPublicModeForbidden rather than widening access to file bytes.
 func ResolveMode(ctx context.Context, queryValue string) (Mode, error) {
-	if HandleModeForced(ctx) {
-		return ModeHandle, nil
-	}
 	mode, err := requestedMode(ctx, queryValue)
 	if err != nil {
 		return ModeHandle, err

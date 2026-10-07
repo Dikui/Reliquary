@@ -46,11 +46,7 @@ export interface SearchResultItem {
     knowledge_title: string;
     match_type: string;
     knowledge_base_type?: string;
-    // FAQ entries share the owning document's title; the standard question
     // gives each entry a distinct, human-readable label.
-    faq_standard_question?: string;
-    faq_similar_questions?: string[];
-    faq_answers?: string[];
 }
 
 // Chunk item
@@ -115,13 +111,8 @@ export interface KnowledgeBaseListData {
 // Document info data
 export interface DocumentInfoDocument {
     knowledge_id?: string;
-    faq_id?: string;
     chunk_id?: string;
     title: string;
-    faq_question?: string;
-    faq_answers?: string[];
-    faq_similar_questions?: string[];
-    is_faq?: boolean;
     description?: string;
     type?: string;
     source?: string;
@@ -248,7 +239,6 @@ export interface GrepKnowledgeResult {
     knowledge_id: string;
     knowledge_base_id: string;
     knowledge_title: string;
-    faq_question?: string;
     title_match?: boolean;
     chunk_hit_count: number;
     match_snippet?: string;
@@ -257,17 +247,14 @@ export interface GrepKnowledgeResult {
     distinct_patterns: number;
 }
 
-// Per-chunk grep hit (preferred for UI — one row per FAQ entry or chunk)
 export interface GrepChunkResult {
     chunk_id: string;
-    faq_id?: string;
     knowledge_id: string;
     knowledge_base_id: string;
     knowledge_title: string;
     chunk_type?: string;
     index?: number;
     chunk_index?: number;
-    faq_question?: string;
     title_match?: boolean;
     match_snippet?: string;
     score?: number;
@@ -297,8 +284,6 @@ export interface KnowledgeChunksListData {
     fetched_chunks?: number;
     page?: number;
     page_size?: number;
-    faq_question?: string;
-    faq_id?: string;
     single_chunk?: boolean;
 }
 

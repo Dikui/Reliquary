@@ -90,7 +90,6 @@ func (c *IndexConfig) Scan(value interface{}) error {
 const (
 	StoreSourceEnv         = "env"
 	StoreSourceUser        = "user"
-	StoreSourceShared      = "shared"
 	StoreSourceUnavailable = "unavailable"
 )
 
@@ -126,17 +125,6 @@ func UnavailableStoreDisplay() StoreDisplay {
 	return StoreDisplay{
 		Source: StoreSourceUnavailable,
 		Status: "unavailable",
-	}
-}
-
-// SharedStoreDisplay is returned for cross-tenant shared KB views so that
-// the underlying owner-tenant store's name and engine remain hidden — only
-// the fact that "this KB is shared" leaks, which is already implied by the
-// share grant itself.
-func SharedStoreDisplay() StoreDisplay {
-	return StoreDisplay{
-		Source: StoreSourceShared,
-		Status: "available",
 	}
 }
 

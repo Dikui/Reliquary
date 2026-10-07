@@ -3,74 +3,27 @@
     :style="{ width: isDragging ? `${dragWidth}px` : undefined }">
     <!-- Collapsed: icon strip -->
     <div v-if="!isExpanded" class="icon-strip">
-      <template v-if="mode === 'resource'">
-        <t-tooltip v-if="!hideAll" :content="tooltipText($t('listSpaceSidebar.all'), countAll)" placement="right"
+      <t-tooltip v-if="!hideAll" :content="tooltipText($t('listSpaceSidebar.all'), countAll)" placement="right"
           :show-arrow="false">
           <div class="icon-item-labeled" :class="{ active: selected === 'all' }" @click="select('all')">
             <t-icon name="layers" size="16px" />
             <span class="icon-label">{{ $t('listSpaceSidebar.all') }}</span>
           </div>
-        </t-tooltip>
-        <t-tooltip v-if="showFavorites" :content="tooltipText($t('listSpaceSidebar.favorites'), countFavorites)"
+        </t-tooltip><t-tooltip v-if="showFavorites" :content="tooltipText($t('listSpaceSidebar.favorites'), countFavorites)"
           placement="right" :show-arrow="false">
           <div class="icon-item-labeled" :class="{ active: selected === 'favorites' }" @click="select('favorites')">
             <t-icon name="star" size="16px" />
             <span class="icon-label">{{ $t('listSpaceSidebar.favorites') }}</span>
           </div>
-        </t-tooltip>
-        <t-tooltip v-if="showRecents" :content="tooltipText($t('listSpaceSidebar.recents'), countRecents)"
+        </t-tooltip><t-tooltip v-if="showRecents" :content="tooltipText($t('listSpaceSidebar.recents'), countRecents)"
           placement="right" :show-arrow="false">
           <div class="icon-item-labeled" :class="{ active: selected === 'recents' }" @click="select('recents')">
             <t-icon name="history" size="16px" />
             <span class="icon-label">{{ $t('listSpaceSidebar.recents') }}</span>
           </div>
         </t-tooltip>
-        <t-tooltip :content="tooltipText(workspaceLabel, countMine)" placement="right" :show-arrow="false">
-          <div class="icon-item-labeled workspace-item" :class="{ active: selected === 'mine' }"
-            @click="select('mine')">
-            <t-icon name="system-sum" size="16px" />
-            <span class="icon-label">{{ workspaceLabel }}</span>
-          </div>
-        </t-tooltip>
-        <!-- Shared spaces group: per-org/space entries only. We dropped
-             the aggregate "协作" / shared-with-me entry — its meaning
-             oscillated between "everything shared to me" and "things I
-             can edit", and either reading duplicated information already
-             visible on the per-space entries below. -->
-        <template v-if="organizationsWithCount.length">
-          <div class="icon-strip-divider" />
-          <t-tooltip v-for="org in organizationsWithCount" :key="org.id"
-            :content="tooltipText(org.name, getOrgCount(org.id))" placement="right" :show-arrow="false">
-            <div class="icon-item-labeled" :class="{ active: selected === org.id }" @click="select(org.id)">
-              <SpaceAvatar :name="org.name" :avatar="org.avatar" size="small" />
-              <span class="icon-label">{{ truncateLabel(org.name) }}</span>
-            </div>
-          </t-tooltip>
-        </template>
-      </template>
 
-      <template v-else>
-        <t-tooltip :content="tooltipText($t('listSpaceSidebar.all'), countAll)" placement="right" :show-arrow="false">
-          <div class="icon-item-labeled" :class="{ active: selected === 'all' }" @click="select('all')">
-            <t-icon name="layers" size="16px" />
-            <span class="icon-label">{{ $t('listSpaceSidebar.all') }}</span>
-          </div>
-        </t-tooltip>
-        <t-tooltip :content="tooltipText($t('organization.createdByMe'), countCreated)" placement="right"
-          :show-arrow="false">
-          <div class="icon-item-labeled" :class="{ active: selected === 'created' }" @click="select('created')">
-            <t-icon name="usergroup-add" size="16px" />
-            <span class="icon-label">{{ $t('organization.createdByMe') }}</span>
-          </div>
-        </t-tooltip>
-        <t-tooltip :content="tooltipText($t('organization.joinedByMe'), countJoined)" placement="right"
-          :show-arrow="false">
-          <div class="icon-item-labeled" :class="{ active: selected === 'joined' }" @click="select('joined')">
-            <t-icon name="usergroup" size="16px" />
-            <span class="icon-label">{{ $t('organization.joinedByMe') }}</span>
-          </div>
-        </t-tooltip>
-      </template>
+
     </div>
 
     <!-- Expanded: full nav panel -->
@@ -83,64 +36,23 @@
         <span v-if="countAll !== undefined" class="item-count">{{ countAll }}</span>
       </div>
 
-      <template v-if="mode === 'resource'">
-        <div v-if="showFavorites" class="sidebar-item" :class="{ active: selected === 'favorites' }"
+      <div v-if="showFavorites" class="sidebar-item" :class="{ active: selected === 'favorites' }"
           @click="select('favorites')">
           <div class="item-left">
             <t-icon name="star" class="item-icon" />
             <span class="item-label">{{ $t('listSpaceSidebar.favorites') }}</span>
           </div>
           <span v-if="countFavorites > 0" class="item-count">{{ countFavorites }}</span>
-        </div>
-        <div v-if="showRecents" class="sidebar-item" :class="{ active: selected === 'recents' }"
+        </div><div v-if="showRecents" class="sidebar-item" :class="{ active: selected === 'recents' }"
           @click="select('recents')">
           <div class="item-left">
             <t-icon name="history" class="item-icon" />
             <span class="item-label">{{ $t('listSpaceSidebar.recents') }}</span>
           </div>
           <span v-if="countRecents > 0" class="item-count">{{ countRecents }}</span>
-        </div>
-        <div v-if="(showFavorites || showRecents)" class="sidebar-divider" />
-        <div class="sidebar-item" :class="{ active: selected === 'mine' }" @click="select('mine')">
-          <div class="item-left">
-            <t-icon name="system-sum" class="item-icon" />
-            <span class="item-label">{{ workspaceLabel }}</span>
-          </div>
-          <span v-if="countMine !== undefined" class="item-count">{{ countMine }}</span>
-        </div>
-        <!-- Shared spaces group — per-org entries only; the aggregate
-             entry was removed (see collapsed strip for rationale). -->
-        <template v-if="organizationsWithCount.length">
-          <div class="sidebar-section">
-            <span class="section-title">{{ $t('listSpaceSidebar.spaces') }}</span>
-          </div>
-          <div v-for="org in organizationsWithCount" :key="org.id" class="sidebar-item org-item"
-            :class="{ active: selected === org.id }" @click="select(org.id)">
-            <div class="item-left">
-              <SpaceAvatar :name="org.name" :avatar="org.avatar" size="small" class="item-avatar" />
-              <span class="item-label" :title="org.name">{{ org.name }}</span>
-            </div>
-            <span v-if="getOrgCount(org.id) !== undefined" class="item-count">{{ getOrgCount(org.id) }}</span>
-          </div>
-        </template>
-      </template>
+        </div><div v-if="(showFavorites || showRecents)" class="sidebar-divider" />
 
-      <template v-else>
-        <div class="sidebar-item" :class="{ active: selected === 'created' }" @click="select('created')">
-          <div class="item-left">
-            <t-icon name="usergroup-add" class="item-icon" />
-            <span class="item-label">{{ $t('organization.createdByMe') }}</span>
-          </div>
-          <span v-if="countCreated !== undefined" class="item-count">{{ countCreated }}</span>
-        </div>
-        <div class="sidebar-item" :class="{ active: selected === 'joined' }" @click="select('joined')">
-          <div class="item-left">
-            <t-icon name="usergroup" class="item-icon" />
-            <span class="item-label">{{ $t('organization.joinedByMe') }}</span>
-          </div>
-          <span v-if="countJoined !== undefined" class="item-count">{{ countJoined }}</span>
-        </div>
-      </template>
+
     </nav>
 
     <!-- Drag handle on the right edge -->
@@ -154,8 +66,6 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Icon as TIcon } from 'tdesign-vue-next'
-import SpaceAvatar from './SpaceAvatar.vue'
-import { useOrganizationStore } from '@/stores/organization'
 
 const COLLAPSED_WIDTH = 56
 const EXPANDED_WIDTH = 208
@@ -163,14 +73,10 @@ const SNAP_THRESHOLD = 120
 
 const props = withDefaults(
   defineProps<{
-    mode?: 'resource' | 'organization'
     modelValue: string
     collapsedKey?: string
     countAll?: number
     countMine?: number
-    countByOrg?: Record<string, number>
-    countCreated?: number
-    countJoined?: number
     hideAll?: boolean
     /** Favorites entry. Only meaningful in resource mode. */
     countFavorites?: number
@@ -180,13 +86,9 @@ const props = withDefaults(
     showRecents?: boolean
   }>(),
   {
-    mode: 'resource',
     collapsedKey: 'sidebar-collapsed-list',
     countAll: undefined,
     countMine: undefined,
-    countByOrg: () => ({}),
-    countCreated: undefined,
-    countJoined: undefined,
     hideAll: false,
     countFavorites: 0,
     showFavorites: true,
@@ -249,41 +151,17 @@ function truncateLabel(text: string, max = 4): string {
 const emit = defineEmits<{
   'update:modelValue': [value: string]
 }>()
-
-const orgStore = useOrganizationStore()
 const { t } = useI18n()
 const selected = computed({
   get: () => props.modelValue,
   set: (v: string) => emit('update:modelValue', v)
 })
 
-// workspaceLabel is the unified label for the tenant-owned bucket.
-// Earlier iterations rendered the active tenant's display name here, but
-// long names (e.g. "wizardlab Test Team") got truncated to unreadable
-// stubs ("wiza…") in the collapsed strip and competed visually with the
-// org/space entries below. A constant i18n label sidesteps both issues;
-// the tenant identity is already conveyed by the dedicated TenantSelector
-// in the global header, so we don't lose information.
-const workspaceLabel = computed(() => t('listSpaceSidebar.workspace'))
-
-const organizations = computed(() => orgStore.organizations || [])
-
-const organizationsWithCount = computed(() => {
-  if (props.mode !== 'resource') return organizations.value
-  return organizations.value.filter((org) => (props.countByOrg?.[org.id] ?? 0) > 0)
-})
-
 function select(value: string) {
   selected.value = value
 }
 
-function getOrgCount(orgId: string): number | undefined {
-  const n = props.countByOrg?.[orgId]
-  return n === undefined ? undefined : n
-}
-
 onMounted(() => {
-  orgStore.fetchOrganizations()
 })
 
 onBeforeUnmount(() => {

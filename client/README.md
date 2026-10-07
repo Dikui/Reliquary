@@ -9,7 +9,7 @@
 1. **会话管理**：创建、获取、更新和删除会话
 2. **知识库管理**：创建、获取、更新和删除知识库
 3. **知识管理**：添加、获取和删除知识内容
-4. **空间管理**：空间的CRUD操作
+4. **空间管理**：查看和更新团队设置
 5. **知识问答**：支持普通问答和流式问答
 6. **Agent问答**：支持基于Agent的智能问答，包含思考过程、工具调用和反思
 7. **分块管理**：查询、更新和删除知识分块
@@ -17,7 +17,7 @@
 9. **模型管理**：创建、获取、更新和删除模型
 10. **沙箱技能**：向沙箱配置安装技能（zip 上传，或从 ClawHub / SkillHub / GitHub 等来源），并配置技能所需的环境变量
 11. **长期记忆**：当前用户的跨会话记忆（设置开关、条目增删改、确认/否决、主题、文档亲和度、导出、立刻整理）
-12. **认证**：登录、刷新令牌、切换激活空间（`SwitchTenant` 会写入最近活跃租户偏好）
+12. **认证**：登录和刷新令牌
 
 ## 使用方法
 
@@ -36,26 +36,6 @@ apiClient := client.NewClient(
     client.WithToken("your-auth-token"),
     client.WithTimeout(30*time.Second),
 )
-```
-
-### 空间配置
-
-客户端支持通过 `WithTenantID` 设置默认空间，请求时会自动携带 `X-Tenant-ID` 请求头：
-
-```go
-tenantID := uint64(10000)
-apiClient := client.NewClient(
-    "http://api.example.com",
-    client.WithToken("your-auth-token"),
-    client.WithTenantID(tenantID),
-)
-```
-
-如果某个请求需要临时切换空间，可以在 `context` 中设置 `TenantID`，值可以是 `uint64`、`*uint64` 或字符串形式的数字，客户端会优先使用该值：
-
-```go
-ctx := context.WithValue(context.Background(), "TenantID", uint64(10000))
-// 调用任意客户端方法时传入 ctx，即可切换到空间 10000
 ```
 
 ### 示例：创建知识库并上传文件

@@ -358,7 +358,7 @@ func (m *recordingSandboxManager) Execute(
 
 func (m *recordingSandboxManager) Cleanup(context.Context) error { return nil }
 func (m *recordingSandboxManager) GetSandbox() sandbox.Sandbox   { return nil }
-func (m *recordingSandboxManager) GetType() sandbox.SandboxType  { return sandbox.SandboxTypeCube }
+func (m *recordingSandboxManager) GetType() sandbox.SandboxType  { return sandbox.SandboxTypeDocker }
 
 // preloadedSkillDir writes one deployment-preloaded skill to a temp directory
 // and returns the search root it lives under.

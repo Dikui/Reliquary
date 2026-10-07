@@ -47,15 +47,6 @@ func (r *tenantAPIKeyRepository) ListAPIKeys(ctx context.Context, tenantID uint6
 	return keys, err
 }
 
-func (r *tenantAPIKeyRepository) ListPlatformAPIKeys(ctx context.Context) ([]*types.TenantAPIKey, error) {
-	var keys []*types.TenantAPIKey
-	err := r.db.WithContext(ctx).
-		Where("scope_type = ? AND revoked_at IS NULL", types.APIKeyScopePlatform).
-		Order("created_at DESC").
-		Find(&keys).Error
-	return keys, err
-}
-
 // UpdateAPIKey 更新租户 API Key 的可配置属性。
 // tenant_id 和 scope_type 同时参与条件，避免跨租户或误改平台级 Key。
 func (r *tenantAPIKeyRepository) UpdateAPIKey(
@@ -63,8 +54,8 @@ func (r *tenantAPIKeyRepository) UpdateAPIKey(
 ) (*types.TenantAPIKey, error) {
 	res := r.db.WithContext(ctx).
 		Model(&types.TenantAPIKey{}).
-		Where("id = ? AND tenant_id = ? AND scope_type = ? AND revoked_at IS NULL",
-			id, tenantID, types.APIKeyScopeTenant).
+		Where("id = ? AND tenant_id = ? AND revoked_at IS NULL",
+			id, tenantID).
 		Updates(map[string]any{
 			"name":               update.Name,
 			"full_access":        update.FullAccess,
@@ -96,21 +87,6 @@ func (r *tenantAPIKeyRepository) RevokeAPIKey(ctx context.Context, tenantID uint
 	res := r.db.WithContext(ctx).
 		Model(&types.TenantAPIKey{}).
 		Where("id = ? AND tenant_id = ? AND revoked_at IS NULL", id, tenantID).
-		Update("revoked_at", &now)
-	if res.Error != nil {
-		return res.Error
-	}
-	if res.RowsAffected == 0 {
-		return ErrTenantAPIKeyNotFound
-	}
-	return nil
-}
-
-func (r *tenantAPIKeyRepository) RevokePlatformAPIKey(ctx context.Context, id uint64) error {
-	now := time.Now().UTC()
-	res := r.db.WithContext(ctx).
-		Model(&types.TenantAPIKey{}).
-		Where("id = ? AND scope_type = ? AND revoked_at IS NULL", id, types.APIKeyScopePlatform).
 		Update("revoked_at", &now)
 	if res.Error != nil {
 		return res.Error

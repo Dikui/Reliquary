@@ -100,7 +100,6 @@ X-Request-ID: unique_request_id
   仍可回退到 `/files` 代理。详见 `.env.example` 中的 `APP_EXTERNAL_URL` 说明。
 - **直链是限时匿名可读的**（Reliquary 签发的 grant 2 小时，MinIO 预签名 24 小时）。任何拿到链接的
   人在过期前都能读取该文件，请勿写入日志或转发给不应看到该文件的一方。
-- **嵌入式（embed）渠道不支持该参数。** 其访客是匿名的，`/api/v1/embed/...` 下的接口会强制使用
   `handle`（即使传了 `?resource_urls=public`、或部署默认是 `public`），图片仍走渠道维度的鉴权代理。
 - **限定知识库的 API Key 不能使用 `public`**，返回 `403`。这类 Key 本身也被拒绝访问 `/files`
   代理，若能拿到匿名直链等于绕过同一道限制。改用 `handle` 即可正常调用。
@@ -113,14 +112,12 @@ Reliquary API 按功能分为以下几类：
 
 | 分类 | 描述 | 文档链接 |
 |------|------|----------|
-| 认证管理 | 用户注册、登录、令牌管理；OIDC 流程 | [auth.md](./auth.md) · [OIDC认证调用流程.md](../OIDC认证调用流程.md) |
 | 空间管理 | 创建和管理空间账户 | [tenant.md](./tenant.md) |
 | 知识库管理 | 创建、查询和管理知识库 | [knowledge-base.md](./knowledge-base.md) |
 | 知识管理 | 上传、检索和管理知识内容 | [knowledge.md](./knowledge.md) |
 | 模型管理 | 配置和管理各种AI模型 | [model.md](./model.md) |
 | 分块管理 | 管理知识的分块内容 | [chunk.md](./chunk.md) |
 | 标签管理 | 管理知识库的标签分类 | [tag.md](./tag.md) |
-| FAQ管理 | 管理FAQ问答对 | [faq.md](./faq.md) |
 | 智能体管理 | 创建和管理自定义智能体 | [agent.md](./agent.md) |
 | 会话管理 | 创建和管理对话会话 | [session.md](./session.md) |
 | 知识搜索 | 在知识库中搜索内容 | [knowledge-search.md](./knowledge-search.md) |
@@ -130,11 +127,10 @@ Reliquary API 按功能分为以下几类：
 | 初始化管理 | 知识库模型配置与 Ollama 管理 | [initialization.md](./initialization.md) |
 | 系统管理 | 系统信息、解析引擎、存储引擎 | [system.md](./system.md) |
 | MCP 服务 | MCP 工具服务管理 | [mcp-service.md](./mcp-service.md) |
-| 组织管理 | 组织、成员、知识库/智能体共享 | [organization.md](./organization.md) |
 | Skills | 预装与已安装的智能体技能、技能环境变量 | [skill.md](./skill.md) |
 | 长期记忆 | 当前用户的跨会话记忆（设置、条目、主题、文档亲和度、导出、整理） | [memory.md](./memory.md) |
 | 网络搜索 | 网络搜索服务商 | [web-search.md](./web-search.md) |
 | 向量存储 | 向量数据库连接管理 | [vector-store.md](./vector-store.md) |
 | 存储后端 | 对象/文件存储实例（多实例）管理 | [storage-backend.md](./storage-backend.md) |
-| IM 渠道 | 企业微信 / 飞书 / Slack 等 IM 平台对接，含渠道 CRUD 与回调 | [../IM集成开发文档.md](../IM集成开发文档.md) |
+| IM 渠道 | 飞书 IM 对接，含渠道 CRUD 与回调 | [../IM集成开发文档.md](../IM集成开发文档.md) |
 | 数据源导入 | 飞书 / 企微 / Notion / Confluence 等外部数据源接入与同步 | [../数据源导入开发文档.md](../数据源导入开发文档.md) |

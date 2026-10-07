@@ -100,7 +100,6 @@ const RUNTIME_TASK_TYPE_KEYS = [
   'question',
   'multimodal',
   'sync',
-  'faqImport',
   'batchReparse',
   'batchDelete',
   'move',

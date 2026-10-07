@@ -257,9 +257,6 @@ const allCommands = computed(() => {
     if (command.id === 'open-agents') {
       return deploymentCapabilities.isSupported('agents')
     }
-    if (command.id === 'open-organizations') {
-      return authStore.hasRole('admin') && deploymentCapabilities.isSupported('organizations')
-    }
     return true
   })
 })

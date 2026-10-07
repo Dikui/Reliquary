@@ -1,4 +1,4 @@
-// Sidebar session list source filter: web chats default, optional IM / embed buckets.
+// Sidebar session list source filter: web chats default, optional IM buckets.
 
 export const DEFAULT_SESSION_BUCKET_KEY = 'web'
 

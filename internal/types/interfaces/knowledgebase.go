@@ -34,14 +34,6 @@ type KnowledgeBaseService interface {
 	//   - Possible errors such as not existing, insufficient permissions, etc.
 	GetKnowledgeBaseByID(ctx context.Context, id string) (*types.KnowledgeBase, error)
 
-	// GetKnowledgeBaseByIDOnly retrieves knowledge base by ID without tenant filter
-	// Used for cross-tenant shared KB access where permission is checked elsewhere
-	// Parameters:
-	//   - ctx: Context information
-	//   - id: Unique identifier of the knowledge base
-	// Returns:
-	//   - Knowledge base object, if found
-	//   - Possible errors such as not existing, etc.
 	GetKnowledgeBaseByIDOnly(ctx context.Context, id string) (*types.KnowledgeBase, error)
 
 	// GetKnowledgeBasesByIDsOnly retrieves knowledge bases by IDs without tenant filter (batch).
@@ -57,7 +49,6 @@ type KnowledgeBaseService interface {
 	//   - List of knowledge base objects
 	//   - Possible errors such as insufficient permissions, etc.
 	ListKnowledgeBases(ctx context.Context) ([]*types.KnowledgeBase, error)
-	// ListKnowledgeBasesByTenantID lists all knowledge bases for a specific tenant (e.g. for shared agent context).
 	ListKnowledgeBasesByTenantID(ctx context.Context, tenantID uint64) ([]*types.KnowledgeBase, error)
 
 	// UpdateKnowledgeBase updates knowledge base information
@@ -116,9 +107,6 @@ type KnowledgeBaseService interface {
 	//   - Possible errors such as not existing, insufficient permissions, etc.
 	CopyKnowledgeBase(ctx context.Context, src string, dst string) (*types.KnowledgeBase, *types.KnowledgeBase, error)
 
-	// DuplicateKnowledgeBase creates a new settings-only knowledge base duplicate.
-	// It does not copy knowledge entries, chunks, FAQ rows, wiki pages, indexes,
-	// data sources, shares, pins, or task state. A new UUID is always generated.
 	DuplicateKnowledgeBase(ctx context.Context, src string) (*types.KnowledgeBase, error)
 
 	// GetRepository gets the knowledge base repository

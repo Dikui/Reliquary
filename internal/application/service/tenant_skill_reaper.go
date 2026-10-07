@@ -2,10 +2,10 @@ package service
 
 import (
 	"context"
+	"github.com/robfig/cron/v3"
 	"strings"
 	"time"
 
-	"github.com/robfig/cron/v3"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/logger"
 	"reliquary/internal/sandbox"
@@ -402,12 +402,6 @@ func configuredSandboxTTL(cfg *types.TenantSandboxConfig) time.Duration {
 		return 0
 	}
 	seconds := 0
-	if cfg.Cube != nil && cfg.Cube.CubeSandboxTTLSeconds > seconds {
-		seconds = cfg.Cube.CubeSandboxTTLSeconds
-	}
-	if cfg.E2B != nil && cfg.E2B.E2BSandboxTTLSeconds > seconds {
-		seconds = cfg.E2B.E2BSandboxTTLSeconds
-	}
 	// Docker's equivalent is the idle TTL: the daemon has none of its own, so
 	// that is how long a container created from the previous image may still
 	// be sitting there unused.
@@ -664,11 +658,6 @@ func (s *TenantSkillService) buildStillRunning(
 	return false
 }
 
-// matchSnapshotByName finds the provider snapshot a planned name refers to.
-//
-// Cube and E2B mint their own ID and echo the requested name in Names. Docker's
-// ID *is* the name, prefixed with the local repository it commits into, which
-// is why a trailing path segment counts as a match.
 func matchSnapshotByName(listed []sandbox.RemoteSnapshotRef, plannedName string) string {
 	want := strings.TrimSpace(plannedName)
 	if want == "" {

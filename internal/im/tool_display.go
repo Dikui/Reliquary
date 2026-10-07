@@ -503,9 +503,6 @@ func imToolHeaderSummary(step IMToolStep) string {
 		}
 	case "list_knowledge_chunks":
 		if data != nil {
-			if question, ok := data["faq_question"].(string); ok && strings.TrimSpace(question) != "" {
-				return fmt.Sprintf("查看 FAQ：%s", strings.TrimSpace(question))
-			}
 			if _, ok := data["fetched_chunks"]; ok {
 				title := "文档"
 				if t, ok := data["knowledge_title"].(string); ok && strings.TrimSpace(t) != "" {

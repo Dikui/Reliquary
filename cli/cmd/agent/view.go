@@ -41,7 +41,7 @@ func NewCmdView(f *cmdutil.Factory) *cobra.Command {
 		Short: "Show a custom agent's configuration",
 		Long: `Renders the agent's metadata and full AgentConfig as grouped KV
 sections (Identity / LLM / KB attachment / Retrieval / Query rewrite /
-Tools / FAQ / Web search / Multi-turn / Fallback / Templates). Zero-value
+Tools / Web search / Multi-turn / Fallback / Templates). Zero-value
 fields are omitted; sections with no set fields are suppressed entirely.
 
 Pass --format json for the bare SDK Agent object (config nested, not flattened).
@@ -219,19 +219,6 @@ func renderAgent(w io.Writer, a *sdk.Agent) {
 		tools = append(tools, row{"Supported file types", strings.Join(c.SupportedFileTypes, ", ")})
 	}
 	emit("Tools", tools)
-
-	// FAQ
-	faq := []row{}
-	if c.FAQPriorityEnabled {
-		faq = append(faq, row{"FAQ priority", "enabled"})
-	}
-	if c.FAQDirectAnswerThreshold != 0 {
-		faq = append(faq, row{"FAQ direct-answer threshold", fmt.Sprintf("%g", c.FAQDirectAnswerThreshold)})
-	}
-	if c.FAQScoreBoost != 0 {
-		faq = append(faq, row{"FAQ score boost", fmt.Sprintf("%g", c.FAQScoreBoost)})
-	}
-	emit("FAQ", faq)
 
 	// Web search
 	web := []row{}

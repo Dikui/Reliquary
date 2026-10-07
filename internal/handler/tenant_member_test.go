@@ -137,7 +137,7 @@ func newTestMemberHandler(ms interfaces.TenantMemberService, us interfaces.UserS
 // per-handler tests below assert it through this layer.
 func memberTestRouter(h *TenantMemberHandler) *gin.Engine {
 	return memberTestRouterWithCfg(h, &config.Config{
-		Tenant: &config.TenantConfig{EnableCrossTenantAccess: true},
+		Tenant: &config.TenantConfig{},
 	})
 }
 
@@ -634,72 +634,6 @@ func TestTenantMember_RejectsCrossTenantURL_Leave(t *testing.T) {
 		memberCtxOpts{callerID: "u1", tenantID: 1})
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d", w.Code)
-	}
-}
-
-func TestTenantMember_CrossTenantSuperuserBypassesURLCheck(t *testing.T) {
-	// CanAccessAllTenants + EnableCrossTenantAccess is the documented
-	// escape hatch (mirrors middleware/rbac.go). Once flipped on, an
-	// org-level operator can drive any tenant's member list from any
-	// session — including a session whose active tenant != URL.
-	called := false
-	ms := &stubMemberService{
-		listTenant: func(_ context.Context, tenantID uint64) ([]*types.TenantMember, error) {
-			called = true
-			if tenantID != 5 {
-				t.Fatalf("expected tenant 5 to reach service, got %d", tenantID)
-			}
-			return nil, nil
-		},
-	}
-	us := &stubMemberUserService{
-		getByID: func(_ context.Context, _ string) (*types.User, error) { return nil, apprepo.ErrUserNotFound },
-	}
-	h := newTestMemberHandler(ms, us)
-	w := doJSONWithCtx(t, memberTestRouter(h), http.MethodGet, "/tenants/5/members", nil,
-		memberCtxOpts{
-			callerID: "u-superuser",
-			tenantID: 1,
-			user:     &types.User{ID: "u-superuser", CanAccessAllTenants: true},
-		})
-	if w.Code != http.StatusOK {
-		t.Fatalf("superuser bypass must reach service, got %d body=%s", w.Code, w.Body.String())
-	}
-	if !called {
-		t.Fatalf("service must be reached for the superuser bypass")
-	}
-}
-
-func TestTenantMember_SuperuserBypassRequiresFeatureFlag(t *testing.T) {
-	// Just having user.CanAccessAllTenants on the User struct is not
-	// enough — the cluster operator must also have flipped
-	// cfg.Tenant.EnableCrossTenantAccess. Otherwise a stale token
-	// claim couldn't be revoked operationally.
-	called := false
-	ms := &stubMemberService{
-		listTenant: func(_ context.Context, _ uint64) ([]*types.TenantMember, error) {
-			called = true
-			return nil, nil
-		},
-	}
-	// Build the router with the flag explicitly off — the carve-out
-	// now lives in middleware.RequirePathTenantMatch, which the router
-	// helper mounts.
-	h := NewTenantMemberHandler(ms, &stubMemberUserService{})
-	router := memberTestRouterWithCfg(h, &config.Config{
-		Tenant: &config.TenantConfig{EnableCrossTenantAccess: false},
-	})
-	w := doJSONWithCtx(t, router, http.MethodGet, "/tenants/5/members", nil,
-		memberCtxOpts{
-			callerID: "u-superuser",
-			tenantID: 1,
-			user:     &types.User{ID: "u-superuser", CanAccessAllTenants: true},
-		})
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("expected 403 when feature flag is off, got %d body=%s", w.Code, w.Body.String())
-	}
-	if called {
-		t.Fatalf("service must not be reached without the feature flag")
 	}
 }
 

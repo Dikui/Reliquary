@@ -33,34 +33,6 @@ echo "RELIQUARY_API_KEY=your_api_key_here" >> .env
 
 以下是各种 MCP 工具的使用示例：
 
-### 空间管理
-
-#### 创建空间
-```json
-{
-  "tool": "create_tenant",
-  "arguments": {
-    "name": "我的公司",
-    "description": "公司知识管理系统",
-    "business": "technology",
-    "retriever_engines": {
-      "engines": [
-        {"retriever_type": "keywords", "retriever_engine_type": "postgres"},
-        {"retriever_type": "vector", "retriever_engine_type": "postgres"}
-      ]
-    }
-  }
-}
-```
-
-#### 列出所有空间
-```json
-{
-  "tool": "list_tenants",
-  "arguments": {}
-}
-```
-
 ### 知识库管理
 
 #### 创建知识库
@@ -267,18 +239,6 @@ echo "RELIQUARY_API_KEY=your_api_key_here" >> .env
 python main.py --verbose
 
 # 2. 在 MCP 客户端中执行以下步骤：
-```
-
-#### 步骤 1: 创建空间
-```json
-{
-  "tool": "create_tenant",
-  "arguments": {
-    "name": "技术文档中心",
-    "description": "公司技术文档知识管理",
-    "business": "technology"
-  }
-}
 ```
 
 #### 步骤 2: 创建知识库

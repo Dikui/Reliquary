@@ -1,8 +1,6 @@
 package im
 
 import (
-	"crypto/sha256"
-	"fmt"
 	"testing"
 
 	"gorm.io/gorm"
@@ -58,7 +56,7 @@ func TestIMChannelBeforeCreate_SessionModeDefault(t *testing.T) {
 			ch := &IMChannel{
 				TenantID:    1,
 				AgentID:     "agent-1",
-				Platform:    "slack",
+				Platform:    "feishu",
 				SessionMode: tt.inputMode,
 				Credentials: []byte("{}"),
 			}
@@ -77,7 +75,7 @@ func TestIMChannelBeforeCreate_InvalidSessionMode(t *testing.T) {
 	ch := &IMChannel{
 		TenantID:    1,
 		AgentID:     "agent-1",
-		Platform:    "slack",
+		Platform:    "feishu",
 		SessionMode: "invalid",
 		Credentials: []byte("{}"),
 	}
@@ -162,47 +160,9 @@ func TestComputeBotIdentity_LarkWithoutAppID(t *testing.T) {
 	}
 }
 
-func TestIMChannelComputeBotIdentity_YunzhijiaUsesYZJToken(t *testing.T) {
-	makeChannel := func(sendMsgURL string) *IMChannel {
-		return &IMChannel{
-			Platform: "yunzhijia",
-			Credentials: []byte(fmt.Sprintf(
-				`{"send_msg_url":%q}`,
-				sendMsgURL,
-			)),
-		}
-	}
-
-	first := makeChannel("https://open.yunzhijia.com/gateway/robot/webhook/send?yzjtoken=token-a&foo=1")
-	second := makeChannel("https://open.yunzhijia.com/gateway/robot/webhook/send?yzjtoken=token-b&foo=1")
-	firstWant := fmt.Sprintf("yunzhijia:%x", sha256.Sum256([]byte("token-a")))
-	secondWant := fmt.Sprintf("yunzhijia:%x", sha256.Sum256([]byte("token-b")))
-	if first.computeBotIdentity() != firstWant {
-		t.Errorf("first identity = %q, want %q", first.computeBotIdentity(), firstWant)
-	}
-	if second.computeBotIdentity() != secondWant {
-		t.Errorf("second identity = %q, want %q", second.computeBotIdentity(), secondWant)
-	}
-	if first.computeBotIdentity() == second.computeBotIdentity() {
-		t.Error("different yzjtoken values must produce different Yunzhijia bot identities")
-	}
-
-	sameTokenDifferentQuery := makeChannel(
-		"https://open.yunzhijia.com/gateway/robot/webhook/send?foo=2&yzjtoken=token-a",
-	)
-	if sameTokenDifferentQuery.computeBotIdentity() != first.computeBotIdentity() {
-		t.Error("same yzjtoken must produce the same Yunzhijia bot identity")
-	}
-
-	missingToken := makeChannel("https://open.yunzhijia.com/gateway/robot/webhook/send?foo=1")
-	if missingToken.computeBotIdentity() != "" {
-		t.Errorf("missing yzjtoken identity = %q, want empty", missingToken.computeBotIdentity())
-	}
-}
-
 func TestChannelSessionThreadIDField(t *testing.T) {
 	cs := ChannelSession{
-		Platform: "slack",
+		Platform: "feishu",
 		UserID:   "U123",
 		ChatID:   "C456",
 		ThreadID: "1234567890.123456",
@@ -213,7 +173,7 @@ func TestChannelSessionThreadIDField(t *testing.T) {
 
 	// empty ThreadID for user-mode sessions
 	csUser := ChannelSession{
-		Platform: "slack",
+		Platform: "feishu",
 		UserID:   "U123",
 		ChatID:   "C456",
 	}

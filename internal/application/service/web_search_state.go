@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	redis "github.com/redis/go-redis/v9"
 	"strings"
 
-	"github.com/redis/go-redis/v9"
 	"reliquary/internal/logger"
 	"reliquary/internal/types/interfaces"
 )

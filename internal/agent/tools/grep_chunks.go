@@ -31,7 +31,6 @@ IMPORTANT — JSON escaping: every backslash in a regex MUST be written as \\ in
 Use this to locate candidate chunks by exact identifiers, error codes, product names, or recurring terms.
 
 ## Deep read after grep:
-- **FAQ hit** (chunk type faq): call list_knowledge_chunks with **faq_id=cN** from the grep result (NOT the parent dN document ID).
 - **Document hit**: call list_knowledge_chunks with **knowledge_id=dN**, or get_document_info with **knowledge_ids=[dN]**.`,
 	schema: json.RawMessage(`{
   "type": "object",
@@ -258,13 +257,8 @@ type chunkWithTitle struct {
 	KnowledgeTitle  string  `json:"knowledge_title"   gorm:"column:knowledge_title"`
 	MatchScore      float64 `json:"match_score"       gorm:"column:match_score"`
 	MatchedPatterns int     `json:"matched_patterns"`
-	// TitleMatch is true when the query regex matches the owning knowledge's
-	// TITLE (not just chunk body). A doc literally titled "图片素材" is the most
-	// on-topic hit for the query "图片素材", yet its body may mention the term far
-	// less than long FAQ docs that repeat it — so title hits are floated to the
-	// very top of both the per-chunk and per-knowledge ordering.
-	TitleMatch      bool `json:"title_match"`
-	TotalChunkCount int  `json:"total_chunk_count" gorm:"column:total_chunk_count"`
+	TitleMatch      bool    `json:"title_match"`
+	TotalChunkCount int     `json:"total_chunk_count" gorm:"column:total_chunk_count"`
 }
 
 // regexOperatorForDialect returns the SQL operator used to apply a POSIX
@@ -503,29 +497,13 @@ func (t *GrepChunksTool) formatOutput(
 		snippet := extractChunkMatchSnippet(&r.Chunk, compiled)
 
 		extraAttr := ""
-		if q := faqStandardQuestion(&r.Chunk); q != "" {
-			extraAttr = fmt.Sprintf(" faq_question=\"%s\"", xmlEscape(q))
-		}
-		isFAQ := r.ChunkType == types.ChunkTypeFAQ
 
 		t.mu.Lock()
 		seen := t.seenChunks[r.ID]
 		t.seenChunks[r.ID] = true
 		t.mu.Unlock()
 
-		if isFAQ {
-			if seen {
-				fmt.Fprintf(&b,
-					"<faq faq_id=\"%s\" knowledge_title=\"%s\"%s index=\"%d\" score=\"%.3f\" already_seen=\"true\">\n",
-					xmlEscape(r.ID), xmlEscape(r.KnowledgeTitle),
-					extraAttr, r.ChunkIndex, r.MatchScore)
-			} else {
-				fmt.Fprintf(&b,
-					"<faq faq_id=\"%s\" knowledge_title=\"%s\"%s index=\"%d\" score=\"%.3f\">\n",
-					xmlEscape(r.ID), xmlEscape(r.KnowledgeTitle),
-					extraAttr, r.ChunkIndex, r.MatchScore)
-			}
-		} else if seen {
+		if seen {
 			fmt.Fprintf(&b,
 				"<chunk chunk_id=\"%s\" knowledge_id=\"%s\" knowledge_title=\"%s\"%s chunk_index=\"%d\" score=\"%.3f\" already_seen=\"true\">\n",
 				xmlEscape(r.ID), xmlEscape(r.KnowledgeID), xmlEscape(r.KnowledgeTitle),
@@ -548,11 +526,9 @@ func (t *GrepChunksTool) formatOutput(
 		} else if snippet != "" {
 			b.WriteString(fmt.Sprintf("<match_snippet>%s</match_snippet>\n", xmlEscape(snippet)))
 		}
-		if isFAQ {
-			b.WriteString("</faq>\n")
-		} else {
-			b.WriteString("</chunk>\n")
-		}
+
+		b.WriteString("</chunk>\n")
+
 	}
 
 	b.WriteString("</grep_results>")
@@ -561,13 +537,9 @@ func (t *GrepChunksTool) formatOutput(
 }
 
 type knowledgeAggregation struct {
-	KnowledgeID     string `json:"knowledge_id"`
-	KnowledgeBaseID string `json:"knowledge_base_id"`
-	KnowledgeTitle  string `json:"knowledge_title"`
-	// FAQQuestion is the standard question of the first matched FAQ entry in
-	// this knowledge. FAQ entries share the owning knowledge's title, so the
-	// frontend uses this to give the row a distinct, human-readable label.
-	FAQQuestion      string         `json:"faq_question,omitempty"`
+	KnowledgeID      string         `json:"knowledge_id"`
+	KnowledgeBaseID  string         `json:"knowledge_base_id"`
+	KnowledgeTitle   string         `json:"knowledge_title"`
 	TitleMatch       bool           `json:"title_match"`
 	ChunkHitCount    int            `json:"chunk_hit_count"`
 	TotalChunkCount  int            `json:"total_chunk_count"`
@@ -623,11 +595,7 @@ func (t *GrepChunksTool) aggregateByKnowledge(
 		if chunk.TitleMatch {
 			entry.TitleMatch = true
 		}
-		if entry.FAQQuestion == "" {
-			if q := faqStandardQuestion(&chunk.Chunk); q != "" {
-				entry.FAQQuestion = q
-			}
-		}
+
 		if entry.MatchSnippet == "" {
 			if snippet := extractChunkMatchSnippet(&chunk.Chunk, compiled); snippet != "" {
 				entry.MatchSnippet = snippet
@@ -679,14 +647,12 @@ func (t *GrepChunksTool) aggregateByKnowledge(
 
 type grepChunkResult struct {
 	ChunkID         string  `json:"chunk_id,omitempty"`
-	FAQID           string  `json:"faq_id,omitempty"`
 	KnowledgeID     string  `json:"knowledge_id"`
 	KnowledgeBaseID string  `json:"knowledge_base_id"`
 	KnowledgeTitle  string  `json:"knowledge_title"`
 	ChunkType       string  `json:"chunk_type"`
 	Index           int     `json:"index,omitempty"`
 	ChunkIndex      int     `json:"chunk_index,omitempty"`
-	FAQQuestion     string  `json:"faq_question,omitempty"`
 	TitleMatch      bool    `json:"title_match,omitempty"`
 	MatchSnippet    string  `json:"match_snippet,omitempty"`
 	Score           float64 `json:"score"`
@@ -707,11 +673,7 @@ func buildGrepChunkResults(results []chunkWithTitle, compiled []*regexp.Regexp) 
 			MatchSnippet:    extractChunkMatchSnippet(&r.Chunk, compiled),
 			Score:           r.MatchScore,
 		}
-		if r.ChunkType == types.ChunkTypeFAQ {
-			item.FAQID = r.ID
-			item.Index = r.ChunkIndex
-			item.FAQQuestion = faqStandardQuestion(&r.Chunk)
-		} else {
+		{
 			item.ChunkID = r.ID
 			item.ChunkIndex = r.ChunkIndex
 		}
@@ -751,16 +713,8 @@ func countRegexHits(content string, compiled []*regexp.Regexp, patterns []string
 	return counts
 }
 
-// extractChunkMatchSnippet returns a preview for tool output. FAQ chunks only
-// surface the matched question plus answers from metadata (answers are not
-// stored in chunk content for question_only index mode). Other chunk types
-// use regex context around the first body match.
 func extractChunkMatchSnippet(chunk *types.Chunk, compiled []*regexp.Regexp) string {
-	if chunk != nil && chunk.ChunkType == types.ChunkTypeFAQ {
-		if s := faqMatchSnippet(chunk, compiled); s != "" {
-			return s
-		}
-	}
+
 	if chunk == nil {
 		return ""
 	}

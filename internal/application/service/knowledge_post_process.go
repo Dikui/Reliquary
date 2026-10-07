@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	redis "github.com/redis/go-redis/v9"
 	"sort"
 	"time"
 
 	"github.com/hibiken/asynq"
-	"github.com/redis/go-redis/v9"
 
 	"reliquary/internal/logger"
 	"reliquary/internal/types"

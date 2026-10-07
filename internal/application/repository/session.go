@@ -182,7 +182,6 @@ func (r *sessionRepository) QueryPaged(
 	applySource := func(db *gorm.DB) *gorm.DB {
 		src := strings.TrimSpace(q.Source)
 		lower := strings.ToLower(src)
-		embedPrefix := types.EmbedSessionMarkerPrefix
 		switch lower {
 		case "":
 			return db
@@ -198,26 +197,10 @@ func (r *sessionRepository) QueryPaged(
 				types.SessionOwnerAPIExternalUserPrefix+"%",
 			)
 		case "web":
-			// User web chats only — exclude embed-widget sessions (same IM-null
-			// row) and API-key sessions (surfaced only in the admin-only "api"
-			// bucket). The user_id NULL check keeps legacy tenant-level web rows
-			// visible, since "col NOT LIKE ?" is unknown (not true) for NULL.
-			return db.Where(
-				"ics.id IS NULL AND (s.description = '' OR s.description NOT LIKE ?) "+
-					"AND (s.user_id IS NULL OR (s.user_id NOT LIKE ? AND s.user_id NOT LIKE ?))",
-				embedPrefix+"%",
-				types.SessionOwnerAPITenantKeyPrefix+"%",
-				types.SessionOwnerAPIExternalUserPrefix+"%",
-			)
-		case "embed":
-			return db.Where("ics.id IS NULL AND s.description LIKE ?", embedPrefix+"%")
+			return db.Where("ics.id IS NULL AND (s.user_id IS NULL OR (s.user_id NOT LIKE ? AND s.user_id NOT LIKE ?))", types.SessionOwnerAPITenantKeyPrefix+"%", types.SessionOwnerAPIExternalUserPrefix+"%")
+
 		default:
-			if strings.HasPrefix(lower, "embed:") {
-				channelID := strings.TrimSpace(src[len("embed:"):])
-				if channelID != "" {
-					return db.Where("ics.id IS NULL AND s.description = ?", embedPrefix+channelID)
-				}
-			}
+
 			return db.Where("ics.platform = ?", lower)
 		}
 	}

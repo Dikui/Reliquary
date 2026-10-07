@@ -58,39 +58,40 @@ func TestListPagedChunksByKnowledgeID_FiltersEnabledState(t *testing.T) {
 	repo := NewChunkRepository(db)
 	ctx := context.Background()
 
-	enabledChunk := makeChunk("kb-1", "faq-knowledge", types.ChunkTypeFAQ)
-	disabledChunk := makeChunk("kb-1", "faq-knowledge", types.ChunkTypeFAQ)
+	enabledChunk := makeChunk("kb-1", "document-knowledge", types.ChunkTypeText)
+	disabledChunk := makeChunk("kb-1", "document-knowledge", types.ChunkTypeText)
 	require.NoError(t, repo.CreateChunks(ctx, []*types.Chunk{enabledChunk, disabledChunk}))
 	require.NoError(t, db.Model(&types.Chunk{}).
 		Where("id = ?", disabledChunk.ID).
 		Update("is_enabled", false).Error)
 
 	enabled := true
-	chunks, total, err := repo.ListPagedChunksByKnowledgeID(
-		ctx, 1, "faq-knowledge", &types.Pagination{Page: 1, PageSize: 20},
-		[]types.ChunkType{types.ChunkTypeFAQ}, nil, "", "", "", types.KnowledgeTypeFAQ, &enabled,
-	)
+	chunks, total, err := repo.ListPagedChunksByKnowledgeID(ctx,
+		1,
+		"document-knowledge",
+		&types.Pagination{Page: 1, PageSize: 20},
+		[]types.ChunkType{types.ChunkTypeText},
+		nil,
+		"",
+		"",
+		&enabled)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), total)
 	require.Len(t, chunks, 1)
 	assert.Equal(t, enabledChunk.ID, chunks[0].ID)
 
-	allChunks, allTotal, err := repo.ListPagedChunksByKnowledgeID(
-		ctx, 1, "faq-knowledge", &types.Pagination{Page: 1, PageSize: 20},
-		[]types.ChunkType{types.ChunkTypeFAQ}, nil, "", "", "", types.KnowledgeTypeFAQ, nil,
-	)
+	allChunks, allTotal, err := repo.ListPagedChunksByKnowledgeID(ctx,
+		1,
+		"document-knowledge",
+		&types.Pagination{Page: 1, PageSize: 20},
+		[]types.ChunkType{types.ChunkTypeText},
+		nil,
+		"",
+		"",
+		nil)
 	require.NoError(t, err)
 	assert.Equal(t, int64(2), allTotal)
 	assert.Len(t, allChunks, 2)
-}
-
-func makeSuggestedFAQChunk(t *testing.T, kbID, knowledgeID, tagID, question string) *types.Chunk {
-	t.Helper()
-	chunk := makeChunk(kbID, knowledgeID, types.ChunkTypeFAQ)
-	chunk.TagID = tagID
-	chunk.Flags = types.ChunkFlagRecommended
-	require.NoError(t, chunk.SetFAQMetadata(&types.FAQChunkMetadata{StandardQuestion: question}))
-	return chunk
 }
 
 func makeSuggestedDocumentChunk(t *testing.T, kbID, knowledgeID, question string) *types.Chunk {
@@ -100,40 +101,6 @@ func makeSuggestedDocumentChunk(t *testing.T, kbID, knowledgeID, question string
 		GeneratedQuestions: []types.GeneratedQuestion{{ID: uuid.NewString(), Question: question}},
 	}))
 	return chunk
-}
-
-func TestListRecommendedFAQChunks_FiltersByTagWithoutWideningToParentKB(t *testing.T) {
-	db := setupChunkTestDB(t)
-	repo := NewChunkRepository(db)
-	ctx := context.Background()
-
-	selectedTag := uuid.NewString()
-	otherTag := uuid.NewString()
-	selected := makeSuggestedFAQChunk(t, "kb-1", "faq-knowledge", selectedTag, "selected question")
-	other := makeSuggestedFAQChunk(t, "kb-1", "faq-knowledge", otherTag, "other question")
-	require.NoError(t, repo.CreateChunks(ctx, []*types.Chunk{selected, other}))
-
-	got, err := repo.ListRecommendedFAQChunks(ctx, 1, nil, nil, []string{selectedTag}, 10)
-	require.NoError(t, err)
-	require.Len(t, got, 1)
-	assert.Equal(t, selected.ID, got[0].ID)
-}
-
-func TestListRecommendedFAQChunks_UnionsOnlyExplicitScopes(t *testing.T) {
-	db := setupChunkTestDB(t)
-	repo := NewChunkRepository(db)
-	ctx := context.Background()
-
-	selectedTag := uuid.NewString()
-	tagged := makeSuggestedFAQChunk(t, "kb-tag", "faq-tag", selectedTag, "tagged question")
-	explicitKB := makeSuggestedFAQChunk(t, "kb-explicit", "faq-explicit", uuid.NewString(), "explicit KB question")
-	unselected := makeSuggestedFAQChunk(t, "kb-other", "faq-other", uuid.NewString(), "unselected question")
-	require.NoError(t, repo.CreateChunks(ctx, []*types.Chunk{tagged, explicitKB, unselected}))
-
-	got, err := repo.ListRecommendedFAQChunks(ctx, 1, []string{"kb-explicit"}, nil, []string{selectedTag}, 10)
-	require.NoError(t, err)
-	require.Len(t, got, 2)
-	assert.ElementsMatch(t, []string{tagged.ID, explicitKB.ID}, []string{got[0].ID, got[1].ID})
 }
 
 func TestListRecentDocumentChunksWithQuestions_KnowledgeScopeDoesNotIncludeSiblingDocuments(t *testing.T) {
@@ -176,7 +143,7 @@ func TestUpdateChunkPersistsContent(t *testing.T) {
 	kbID := uuid.New().String()
 	knowledgeID := uuid.New().String()
 
-	chunk := makeChunk(kbID, knowledgeID, "faq")
+	chunk := makeChunk(kbID, knowledgeID, "text")
 	require.NoError(t, db.WithContext(ctx).Create(chunk).Error)
 
 	// Test updating a chunk field ; verifies no NOW() related errors

@@ -140,8 +140,6 @@ func (s *sessionService) KnowledgeQA(
 		},
 	}
 
-	// Apply custom agent overrides (system prompt, temperature, retrieval params,
-	// rewrite, fallback, FAQ strategy, history turns)
 	s.applyAgentOverridesToChatManage(ctx, req.CustomAgent, chatManage)
 
 	// An agent may opt out of long-term memory. The preference is per-request
@@ -201,8 +199,7 @@ func (s *sessionService) KnowledgeQA(
 		len(pipeline), hasKB, req.WebSearchEnabled, hasHistory)
 
 	// Start knowledge QA event processing (set session tenant so pipeline session/message lookups use session owner)
-	ctx = context.WithValue(ctx, types.SessionTenantIDContextKey, req.Session.TenantID)
-	// Propagate the session ID so stateful sandbox backends (CubeSandbox) can
+	// Propagate the session ID so the Docker sandbox can
 	// bind script execution to a per-session MicroVM instance.
 	ctx = types.WithSessionID(ctx, req.Session.ID)
 	logger.Info(ctx, "Triggering question answering event")
@@ -236,10 +233,9 @@ func (s *sessionService) selectChatModelID(
 	knowledgeBaseIDs []string,
 	knowledgeIDs []string,
 ) (string, error) {
-	// If no knowledge base IDs but have knowledge IDs, derive KB IDs from knowledge IDs (include shared KB files)
 	if len(knowledgeBaseIDs) == 0 && len(knowledgeIDs) > 0 {
 		tenantID := types.MustTenantIDFromContext(ctx)
-		knowledgeList, err := s.knowledgeService.GetKnowledgeBatchWithSharedAccess(ctx, tenantID, knowledgeIDs)
+		knowledgeList, err := s.knowledgeService.GetKnowledgeBatch(ctx, tenantID, knowledgeIDs)
 		if err != nil {
 			logger.Warnf(ctx, "Failed to get knowledge batch for model selection: %v", err)
 		} else {
@@ -309,16 +305,6 @@ func (s *sessionService) selectChatModelID(
 	return "", fmt.Errorf("no chat model ID available: no knowledge bases configured and no available models")
 }
 
-// resolveKnowledgeBasesFromAgent resolves knowledge base IDs based on agent's KBSelectionMode.
-// sessionTenantID is the tenant of the current session (caller); it is compared with
-// customAgent.TenantID to detect the shared-agent scenario and avoid leaking the
-// current user's personal shared KBs into the agent's retrieval scope.
-//
-// Returns the resolved knowledge base IDs based on the selection mode:
-//   - "all": fetches all knowledge bases for the tenant
-//   - "selected": uses the explicitly configured knowledge bases
-//   - "none": returns empty slice
-//   - default: falls back to configured knowledge bases for backward compatibility
 func (s *sessionService) resolveKnowledgeBasesFromAgent(
 	ctx context.Context,
 	customAgent *types.CustomAgent,
@@ -351,58 +337,14 @@ func (s *sessionService) resolveKnowledgeBasesFromAgent(
 		if err != nil {
 			logger.Warnf(ctx, "Failed to list all knowledge bases: %v", err)
 		}
-		kbIDSet := make(map[string]bool)
 		kbIDs := make([]string, 0, len(allKBs))
-		ownSkipped := 0
 		for _, kb := range allKBs {
 			if !accept(kb) {
-				ownSkipped++
 				continue
 			}
 			kbIDs = append(kbIDs, kb.ID)
-			kbIDSet[kb.ID] = true
 		}
 
-		// For shared agents (session tenant != agent tenant), only use the agent
-		// tenant's own KBs. Including the current user's shared KBs would leak
-		// unrelated KBs from other organisations into the agent's retrieval scope.
-		isSharedAgent := sessionTenantID != 0 && sessionTenantID != customAgent.TenantID
-		sharedSkipped := 0
-		if !isSharedAgent {
-			tenantID := types.MustTenantIDFromContext(ctx)
-			userIDVal := ctx.Value(types.UserIDContextKey)
-			if userIDVal != nil {
-				if userID, ok := userIDVal.(string); ok && userID != "" && s.kbShareService != nil {
-					callerTenantRole := types.TenantRoleFromContext(ctx)
-					sharedList, err := s.kbShareService.ListSharedKnowledgeBases(ctx, tenantID, callerTenantRole)
-					if err != nil {
-						logger.Warnf(ctx, "Failed to list shared knowledge bases: %v", err)
-					} else {
-						for _, info := range sharedList {
-							if info == nil || info.KnowledgeBase == nil || kbIDSet[info.KnowledgeBase.ID] {
-								continue
-							}
-							if !accept(info.KnowledgeBase) {
-								sharedSkipped++
-								continue
-							}
-							kbIDs = append(kbIDs, info.KnowledgeBase.ID)
-							kbIDSet[info.KnowledgeBase.ID] = true
-						}
-					}
-				}
-			}
-		} else {
-			logger.Infof(ctx, "Shared agent detected (session tenant %d != agent tenant %d): skipping user's shared KBs",
-				sessionTenantID, customAgent.TenantID)
-		}
-
-		if ownSkipped+sharedSkipped > 0 {
-			logger.Infof(ctx,
-				"KBSelectionMode=all: tool-capability filter removed %d own + %d shared KBs (agent=%s, tools=%v)",
-				ownSkipped, sharedSkipped, customAgent.ID, customAgent.Config.AllowedTools)
-		}
-		logger.Infof(ctx, "KBSelectionMode=all: loaded %d knowledge bases (own + shared)", len(kbIDs))
 		return kbIDs
 	case "selected":
 		logger.Infof(ctx, "KBSelectionMode=selected: using %d configured knowledge bases", len(customAgent.Config.KnowledgeBases))
@@ -419,12 +361,6 @@ func (s *sessionService) resolveKnowledgeBasesFromAgent(
 	}
 }
 
-// buildSearchTargets computes the unified search targets from knowledgeBaseIDs and knowledgeIDs.
-// tenantID is the retrieval scope: session.TenantID or effective tenant from shared agent (set by handler).
-// This is called once at the request entry point to avoid repeated queries later in the pipeline.
-// Logic:
-//   - For each knowledgeBaseID: resolve actual TenantID (own, org-shared, or in retrieval-tenant scope for shared agent)
-//   - For each knowledgeID: find its knowledgeBaseID; if the KB is already in the list, skip; otherwise add SearchTargetTypeKnowledge
 func (s *sessionService) buildSearchTargets(
 	ctx context.Context,
 	tenantID uint64,
@@ -442,7 +378,6 @@ func (s *sessionService) buildSearchTargets(
 	fullKBSet := make(map[string]bool)
 
 	// First pass: batch-fetch KBs, then resolve tenant per ID (tenant scope already set by caller)
-	callerTenantRole := types.TenantRoleFromContext(ctx)
 	kbIDsToFetch := append([]string(nil), knowledgeBaseIDs...)
 	for kbID := range tagIDsByKB {
 		kbIDsToFetch = append(kbIDsToFetch, kbID)
@@ -461,7 +396,6 @@ func (s *sessionService) buildSearchTargets(
 			}
 		}
 	}
-	userID, _ := types.UserIDFromContext(ctx)
 	resolveKBTenant := func(kbID string) uint64 {
 		if kbTenantMap[kbID] != 0 {
 			return kbTenantMap[kbID]
@@ -471,13 +405,6 @@ func (s *sessionService) buildSearchTargets(
 			kbTenantMap[kbID] = tenantID
 		} else if kb.TenantID == tenantID {
 			kbTenantMap[kbID] = tenantID
-		} else if s.kbShareService != nil && userID != "" {
-			hasAccess, _ := s.kbShareService.HasTenantKBPermission(ctx, kbID, tenantID, callerTenantRole, types.OrgRoleViewer)
-			if hasAccess {
-				kbTenantMap[kbID] = kb.TenantID
-			} else {
-				kbTenantMap[kbID] = tenantID
-			}
 		} else {
 			kbTenantMap[kbID] = tenantID
 		}
@@ -501,9 +428,8 @@ func (s *sessionService) buildSearchTargets(
 
 	kbToKnowledgeIDs := make(map[string][]string)
 
-	// Process individual knowledge IDs (include shared KB files the user has access to)
 	if len(knowledgeIDs) > 0 {
-		knowledgeList, err := s.knowledgeService.GetKnowledgeBatchWithSharedAccess(ctx, tenantID, knowledgeIDs)
+		knowledgeList, err := s.knowledgeService.GetKnowledgeBatch(ctx, tenantID, knowledgeIDs)
 		if err != nil {
 			logger.Warnf(ctx, "Failed to get knowledge batch for search targets: %v", err)
 			return targets, nil // Return what we have, don't fail
@@ -550,50 +476,29 @@ func (s *sessionService) buildSearchTargets(
 			continue
 		}
 		kbTenant := resolveKBTenant(kbID)
-		kb := kbByID[kbID]
 		explicitKnowledgeIDs := uniqueNonEmptyStrings(kbToKnowledgeIDs[kbID])
 
-		useDocumentTagResolution := kb == nil || kb.Type != types.KnowledgeBaseTypeFAQ
-		if kb == nil {
-			logger.Warnf(ctx, "Knowledge base metadata missing for tag scope, kb_id=%s, using document tag resolution", kbID)
-		}
-		if useDocumentTagResolution {
-			tagKnowledgeIDs, err := s.knowledgeService.ListKnowledgeIDsByTagIDs(ctx, kbTenant, kbID, tagIDs)
-			if err != nil {
-				return nil, fmt.Errorf("resolve knowledge IDs for tag scope kb_id=%s: %w", kbID, err)
-			}
-			if len(explicitKnowledgeIDs) > 0 {
-				tagKnowledgeIDs = intersectStrings(tagKnowledgeIDs, explicitKnowledgeIDs)
-			}
-			tagKnowledgeIDs = uniqueNonEmptyStrings(tagKnowledgeIDs)
-			if len(tagKnowledgeIDs) == 0 {
-				continue
-			}
-			targets = append(targets, &types.SearchTarget{
-				Type:                    types.SearchTargetTypeKnowledge,
-				KnowledgeBaseID:         kbID,
-				TenantID:                kbTenant,
-				KnowledgeIDs:            tagKnowledgeIDs,
-				ScopeTagIDs:             append([]string(nil), tagIDs...),
-				DisableRecallThresholds: true,
-			})
-			continue
-		}
-
-		target := &types.SearchTarget{
-			Type:                    types.SearchTargetTypeKnowledgeBase,
-			KnowledgeBaseID:         kbID,
-			TenantID:                kbTenant,
-			TagIDs:                  append([]string(nil), tagIDs...),
-			ScopeTagIDs:             append([]string(nil), tagIDs...),
-			DisableRecallThresholds: true,
+		tagKnowledgeIDs, err := s.knowledgeService.ListKnowledgeIDsByTagIDs(ctx, kbTenant, kbID, tagIDs)
+		if err != nil {
+			return nil, fmt.Errorf("resolve knowledge IDs for tag scope kb_id=%s: %w", kbID, err)
 		}
 		if len(explicitKnowledgeIDs) > 0 {
-			target.Type = types.SearchTargetTypeKnowledge
-			target.KnowledgeIDs = explicitKnowledgeIDs
-			target.DisableRecallThresholds = true
+			tagKnowledgeIDs = intersectStrings(tagKnowledgeIDs, explicitKnowledgeIDs)
 		}
-		targets = append(targets, target)
+		tagKnowledgeIDs = uniqueNonEmptyStrings(tagKnowledgeIDs)
+		if len(tagKnowledgeIDs) == 0 {
+			continue
+		}
+		targets = append(targets, &types.SearchTarget{
+			Type:                    types.SearchTargetTypeKnowledge,
+			KnowledgeBaseID:         kbID,
+			TenantID:                kbTenant,
+			KnowledgeIDs:            tagKnowledgeIDs,
+			ScopeTagIDs:             append([]string(nil), tagIDs...),
+			DisableRecallThresholds: true,
+		})
+		continue
+
 	}
 
 	logger.Infof(ctx, "Built %d search targets: %d full KB, %d partial/tag KB, kbTenantMap=%v",

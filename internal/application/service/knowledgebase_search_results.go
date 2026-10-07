@@ -24,9 +24,8 @@ func (s *knowledgeBaseService) processSearchResults(ctx context.Context,
 	// Collect all knowledge and chunk IDs, track scores and match info
 	index := s.buildChunkIndex(chunks)
 
-	// Batch fetch knowledge data (include shared KB so cross-tenant retrieval works)
 	logger.Infof(ctx, "Fetching knowledge data for %d IDs", len(index.knowledgeIDs))
-	knowledgeMap, err := s.fetchKnowledgeDataWithShared(ctx, tenantID, index.knowledgeIDs)
+	knowledgeMap, err := s.fetchKnowledgeData(ctx, tenantID, index.knowledgeIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -36,9 +35,8 @@ func (s *knowledgeBaseService) processSearchResults(ctx context.Context,
 		}
 	}
 
-	// Batch fetch chunks (include shared KB chunks)
 	logger.Infof(ctx, "Fetching chunk data for %d IDs", len(index.chunkIDs))
-	allChunks, err := s.listChunksByIDWithShared(ctx, tenantID, index.chunkIDs)
+	allChunks, err := s.chunkRepo.ListChunksByID(ctx, tenantID, index.chunkIDs)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"tenant_id": tenantID,
@@ -58,7 +56,7 @@ func (s *knowledgeBaseService) processSearchResults(ctx context.Context,
 		additionalChunkIDs := s.collectEnrichmentChunkIDs(ctx, allChunks, index)
 		if len(additionalChunkIDs) > 0 {
 			logger.Infof(ctx, "Fetching %d additional chunks", len(additionalChunkIDs))
-			additionalChunks, err := s.listChunksByIDWithShared(ctx, tenantID, additionalChunkIDs)
+			additionalChunks, err := s.chunkRepo.ListChunksByID(ctx, tenantID, additionalChunkIDs)
 			if err != nil {
 				logger.Warnf(ctx, "Failed to fetch some additional chunks: %v", err)
 			} else {
@@ -72,7 +70,7 @@ func (s *knowledgeBaseService) processSearchResults(ctx context.Context,
 					parentIDs := s.collectParentChunkIDs(additionalChunks, index)
 					if len(parentIDs) > 0 {
 						logger.Infof(ctx, "Fetching %d second-level parent chunks", len(parentIDs))
-						parentChunks, err := s.listChunksByIDWithShared(ctx, tenantID, parentIDs)
+						parentChunks, err := s.chunkRepo.ListChunksByID(ctx, tenantID, parentIDs)
 						if err != nil {
 							logger.Warnf(ctx, "Failed to fetch second-level parent chunks: %v", err)
 						} else {
@@ -352,7 +350,6 @@ func (s *knowledgeBaseService) isSearchableChunk(chunk *types.Chunk) bool {
 	return slices.Contains([]types.ChunkType{
 		types.ChunkTypeText, types.ChunkTypeSummary,
 		types.ChunkTypeTableColumn, types.ChunkTypeTableSummary,
-		types.ChunkTypeFAQ,
 		types.ChunkTypeImageOCR, types.ChunkTypeImageCaption,
 	}, chunk.ChunkType)
 }

@@ -11,7 +11,6 @@ import KBSwitcherDropdown from '@/components/KBSwitcherDropdown.vue';
 import { getSessionsList, createSessions, generateSessionsTitle } from "@/api/chat/index";
 import { useMenuStore } from '@/stores/menu';
 import { useUIStore } from '@/stores/ui';
-import { useOrganizationStore } from '@/stores/organization';
 import { useAuthStore } from '@/stores/auth';
 import { useCommandPaletteStore } from '@/stores/commandPalette';
 import { useChatResourcesStore } from '@/stores/chatResources';
@@ -19,7 +18,6 @@ import { useEditorResourcesStore } from '@/stores/editorResources';
 import KnowledgeBaseEditorModal from './KnowledgeBaseEditorModal.vue';
 const usemenuStore = useMenuStore();
 const uiStore = useUIStore();
-const orgStore = useOrganizationStore();
 const authStore = useAuthStore();
 const commandPalette = useCommandPaletteStore();
 const chatResources = useChatResourcesStore();
@@ -45,7 +43,6 @@ import {
   type KnowledgeFolderTree,
 } from "@/api/knowledge-base/index";
 import { knowledgeSpansPayloadHasTrace } from '@/utils/knowledgeTrace';
-import FAQEntryManager from './components/FAQEntryManager.vue';
 import DocumentListView from './components/DocumentListView.vue';
 import DocumentCardView from './components/DocumentCardView.vue';
 import DocumentBatchBar from './components/DocumentBatchBar.vue';
@@ -93,7 +90,6 @@ const uploadSourceRef = ref<InstanceType<typeof KbUploadSourceDropdown> | null>(
 const uploading = ref(false);
 const kbLoading = ref(false);
 const docListLoading = ref(true);
-const isFAQ = computed(() => (kbInfo.value?.type || '') === 'faq');
 const isWiki = computed(() => !!kbInfo.value?.indexing_strategy?.wiki_enabled);
 const validTabs = ['documents', 'wiki', 'graph', 'context'] as const
 type KbTab = typeof validTabs[number]
@@ -181,7 +177,7 @@ onUnmounted(() => {
   clearWikiStatusProbes()
 })
 const missingStorageEngine = computed(() => {
-  if (!kbInfo.value || isFAQ.value) return false
+  if (!kbInfo.value) return false
   // storage_backend_id is authoritative; storage_provider_config.provider is a
   // compatibility projection for older clients. Either being present means the
   // KB has a bound storage instance and uploads should not be blocked.
@@ -246,107 +242,16 @@ const goToParserSettings = () => {
   }
 }
 
-// Permission control: check if current user owns this KB or has edit/manage permission
-//
-// "Owner" here is "the original creator of this KB" (PR 5 introduced
-// CreatorID). The previous version compared kb.tenant_id to the active
-// tenant id, which only answers "is this KB inside our tenant" — that
-// is true even for a Viewer in someone else's tenant, so the gate
-// silently bypassed every role check below. Now we require an explicit
-// creator match, and the role-aware fallbacks below decide whether a
-// non-creator may edit / manage.
-const isOwner = computed(() => {
-  if (!kbInfo.value) return false;
-  const creatorId = (kbInfo.value as any).creator_id || '';
-  const userId = authStore.user?.id || '';
-  // creator_id may be empty for legacy KBs created before PR 5; treat
-  // those as tenant-owned so the role gate applies (Admin+ can manage,
-  // Viewer cannot).
-  if (!creatorId) return false;
-  return creatorId === userId;
-});
-
-// Current KB's shared record (when accessed via organization share)
-const currentSharedKb = computed(() =>
-  orgStore.sharedKnowledgeBases.find((s) => s.knowledge_base?.id === kbId.value) ?? null,
-);
-
-// Accessed via organization share: when the KB shows up in our
-// sharedKnowledgeBases list it means we reached it through a shared space,
-// not because we own/manage it in our tenant. In that case the user's local
-// tenant role does NOT grant edit/manage — only the share grant does.
-// Without this guard a local tenant Admin would see edit/upload entries on
-// a read-only shared KB and get 403'd by the backend on click.
-//
-// Note: tenant_id comparison alone is unreliable — a user can be a member of
-// both the source and receiving tenants, and currentTenantId reflects the
-// active switcher rather than "how this KB became visible to me". Presence
-// in the share list is the authoritative signal.
-const isViaShare = computed(() => !!currentSharedKb.value);
-
-// Can edit: when accessed via an organization share, ONLY the share grant
-// counts — even if the current user happens to be the original creator of
-// the KB. The backend's RBAC middleware authorizes based on the active
-// tenant, not on creator_id, so a creator viewing their own KB from a
-// different tenant context will be 403'd on write. Otherwise: KB creator
-// (any role) or tenant Admin+ in the home tenant.
-//
-// hasRole('contributor') is intentionally NOT here — being a Contributor
-// in a tenant does not by itself grant edit on someone else's KB.
-const canEdit = computed(() => {
-  if (isViaShare.value) return orgStore.canEditKB(kbId.value, false);
-  if (isOwner.value) return true;
-  if (authStore.hasRole('admin')) return true;
-  return orgStore.canEditKB(kbId.value, false);
-});
-
-// Can manage (delete, settings, etc.): same isViaShare-first rule. For
-// shared KBs only an 'admin' share grant qualifies — editor/viewer (and
-// even being the creator viewed via share) never grant delete/settings.
-const canManage = computed(() => {
-  if (isViaShare.value) return orgStore.canManageKB(kbId.value, false);
-  if (isOwner.value) return true;
-  if (authStore.hasRole('admin')) return true;
-  return orgStore.canManageKB(kbId.value, false);
-});
-
-// The activity feed exposes owner-side actor and configuration summaries.
-// It lives in KB settings (KnowledgeBaseEditorModal) for Owner/Admin in the home tenant.
-
-// Can mutate knowledge (move / batch-delete): the backend gate for these
-// two endpoints is g.Contributor(), so the caller MUST be Contributor+
-// in their tenant on top of having KB edit permission. Without the extra
-// role check, an org-share-editor whose tenant role is Viewer would see
-// the "Move" / "Batch manage" entries and 403 on click. For shared KBs
-// the local tenant role is irrelevant — canEdit already encodes the share
-// grant, so trust it.
-const canMutateKnowledge = computed(() => {
-  if (!canEdit.value) return false;
-  if (isViaShare.value) return true;
-  if (isOwner.value) return true;
-  if (authStore.hasRole('admin')) return true;
-  return authStore.hasRole('contributor');
-});
-
-// Effective permission: from direct org share list or from GET /knowledge-bases/:id (e.g. agent-visible KB)
-const effectiveKBPermission = computed(() => orgStore.getKBPermission(kbId.value) || kbInfo.value?.my_permission || '');
-
-// Downloading returns the original source file, which is intentionally more
-// restrictive than viewing parsed content or using the preview tab. A tenant
-// Viewer can never download; for cross-tenant KBs the effective share
-// permission must additionally be Editor or Admin.
-const canDownloadKnowledge = computed(() => {
-  if (!authStore.hasRole('contributor')) return false;
-  const permission = effectiveKBPermission.value;
-  return !permission || permission === 'owner' || permission === 'admin' || permission === 'editor';
-});
+const canEdit = computed(() => authStore.hasRole('contributor'));
+const canManage = computed(() => authStore.hasRole('contributor'));
+const canMutateKnowledge = computed(() => authStore.hasRole('contributor'));
+const canDownloadKnowledge = computed(() => authStore.hasRole('contributor'));
 
 const knowledgeList = ref<Array<{ id: string; name: string; type?: string }>>([]);
 let { cardList, total, moreIndex, details, getKnowled, delKnowledge, openMore, onVisibleChange: _onVisibleChange, getCardDetails, getfDetails } = useKnowledgeBase(kbId.value)
 
 const showKbDetailContextualGuide = computed(() => {
   return Boolean(kbId.value)
-    && !isFAQ.value
     && canEdit.value
     && !docListLoading.value
     && cardList.value.length === 0;
@@ -636,10 +541,6 @@ const sourceOptions = computed(() => [
   { label: t('knowledgeBase.channelYuque'), value: 'yuque' },
   { label: t('knowledgeBase.channelGitLab'), value: 'gitlab' },
   { label: t('knowledgeBase.channelIma'), value: 'ima' },
-  { label: t('knowledgeBase.channelWechat'), value: 'wechat' },
-  { label: t('knowledgeBase.channelWecom'), value: 'wecom' },
-  { label: t('knowledgeBase.channelDingtalk'), value: 'dingtalk' },
-  { label: t('knowledgeBase.channelSlack'), value: 'slack' },
   { label: t('knowledgeBase.channelIm'), value: 'im' },
 ]);
 // Date range as [start, end] in "YYYY-MM-DD" form (t-date-range-picker default).
@@ -673,7 +574,7 @@ const folderTreeCollapsed = ref(readStoredFlag(FOLDER_TREE_COLLAPSED_KEY));
 const hasFolders = computed(() => (folderTree.value?.folders?.length ?? 0) > 0);
 // The folder column only earns its space once the knowledge base actually has
 // folders, so knowledge bases filled with single-file uploads look unchanged.
-const showFolderTree = computed(() => !isFAQ.value && hasFolders.value);
+const showFolderTree = computed(() => hasFolders.value);
 // Browsing lists one folder's own contents; filtering searches its whole
 // subtree. There is no mode switch: the list follows what the user is doing.
 const isFiltering = computed(() =>
@@ -831,9 +732,9 @@ const getTagName = (tagId?: string | number) => {
 
 const loadKnowledgeFiles = (kbIdValue: string): Promise<void> => {
   if (!kbIdValue) return Promise.resolve();
-  if (!isFAQ.value) {
+
     docListLoading.value = true;
-  }
+
   return getKnowled(
     {
       page: 1,
@@ -842,7 +743,7 @@ const loadKnowledgeFiles = (kbIdValue: string): Promise<void> => {
     },
     kbIdValue,
   ).finally(() => {
-    if (isCurrentKb(kbIdValue) && !isFAQ.value) {
+    if (isCurrentKb(kbIdValue)) {
       docListLoading.value = false;
     }
   });
@@ -851,7 +752,7 @@ const loadKnowledgeFiles = (kbIdValue: string): Promise<void> => {
 const isCurrentKb = (targetKbId: string) => targetKbId === kbId.value;
 
 const loadFolderTree = async (kbIdValue: string) => {
-  if (!kbIdValue || isFAQ.value) {
+  if (!kbIdValue) {
     folderTree.value = null;
     return;
   }
@@ -1105,14 +1006,10 @@ const loadKnowledgeBaseInfo = async (targetKbId: string, force = false) => {
     uiStore.clearSelectedTagIds();
     // 重置store中的标签选择状态，避免上传文档时自动带上之前选择的标签
     uiStore.clearSelectedTagIds();
-    if (!isFAQ.value) {
+
       loadKnowledgeFiles(targetKbId);
       void loadFolderTree(targetKbId);
-    } else {
-      cardList.value = [];
-      total.value = 0;
-      folderTree.value = null;
-    }
+
     loadTags(targetKbId, true);
   } catch (error) {
     if (!isCurrentKb(targetKbId)) return;
@@ -1137,20 +1034,7 @@ const loadKnowledgeList = async () => {
       type: item.type || 'document',
     }));
 
-    // Also include shared knowledge bases from orgStore
-    const sharedKbs = (orgStore.sharedKnowledgeBases || [])
-      .filter(s => s.knowledge_base != null)
-      .map(s => ({
-        id: String(s.knowledge_base.id),
-        name: s.knowledge_base.name,
-        type: s.knowledge_base.type || 'document',
-      }));
-
-    // Merge and deduplicate by id (my KBs take precedence)
-    const myKbIds = new Set(myKbs.map(kb => kb.id));
-    const uniqueSharedKbs = sharedKbs.filter(kb => !myKbIds.has(kb.id));
-
-    knowledgeList.value = [...myKbs, ...uniqueSharedKbs];
+    knowledgeList.value = myKbs;
   } catch (error) {
     console.error('Failed to load knowledge list:', error);
   }
@@ -1245,7 +1129,7 @@ watch([selectedParseStatus, selectedSource, updatedTimeRange], () => {
 // 切换目录只改变列表范围，行为与其他筛选一致。浏览态与筛选态之间的切换由各筛选项
 // 自身的 watcher 触发刷新，这里不重复请求。
 watch(selectedFolderPath, () => {
-  if (!kbId.value || isFAQ.value) return;
+  if (!kbId.value) return;
   clearSelection();
   resetPage();
   loadKnowledgeFiles(kbId.value);
@@ -1255,7 +1139,7 @@ watch(selectedFolderPath, () => {
 const handleFileUploaded = (event: CustomEvent) => {
   const uploadedKbId = event.detail.kbId;
   console.log('接收到文件上传事件，上传的知识库ID:', uploadedKbId, '当前知识库ID:', kbId.value);
-  if (uploadedKbId && uploadedKbId === kbId.value && !isFAQ.value) {
+  if (uploadedKbId && uploadedKbId === kbId.value) {
     console.log('匹配当前知识库，开始刷新文件列表');
     // 如果上传的文件属于当前知识库，使用 loadKnowledgeFiles 刷新文件列表
     resetPage(); // Reset page counter when reloading files after upload
@@ -1271,7 +1155,7 @@ const handleFileUploaded = (event: CustomEvent) => {
 const handleOpenURLImportDialog = (event: CustomEvent) => {
   const eventKbId = event.detail.kbId;
   console.log('接收到URL导入对话框打开事件，知识库ID:', eventKbId, '当前知识库ID:', kbId.value);
-  if (eventKbId && eventKbId === kbId.value && !isFAQ.value) {
+  if (eventKbId && eventKbId === kbId.value) {
     if (ensureDocumentKbReady()) {
       uploadSourceRef.value?.openUrlDialog();
     }
@@ -1284,7 +1168,7 @@ const handleOpenURLImportDialog = (event: CustomEvent) => {
 const handleKnowledgeFileDrop = (event: CustomEvent) => {
   const eventKbId = event.detail?.kbId;
   const files = Array.isArray(event.detail?.files) ? event.detail.files : [];
-  if (eventKbId !== kbId.value || isFAQ.value || files.length === 0) return;
+  if (eventKbId !== kbId.value || files.length === 0) return;
   handleUploadSourceFiles(files);
 };
 
@@ -1374,7 +1258,7 @@ onUnmounted(() => {
   }
 });
 watch(() => cardList.value, (newValue) => {
-  if (isFAQ.value) return;
+
   docListLoading.value = false;
 
   // Auto-open document if navigated with ?knowledge_id=xxx.
@@ -1633,7 +1517,7 @@ const stopMovePoll = () => {
 };
 
 const manualEditorSuccess = ({ kbId: savedKbId }: { kbId: string; knowledgeId: string; status: 'draft' | 'publish' }) => {
-  if (savedKbId === kbId.value && !isFAQ.value) {
+  if (savedKbId === kbId.value) {
     resetPage(); // Reset page counter when reloading files after manual edit
     loadKnowledgeFiles(savedKbId);
     void loadFolderTree(savedKbId);
@@ -1648,10 +1532,7 @@ const documentTitle = computed(() => {
 });
 
 const ensureDocumentKbReady = () => {
-  if (isFAQ.value) {
-    MessagePlugin.warning(t('knowledgeBase.operationNotSupportedForType'));
-    return false;
-  }
+
   if (!kbId.value) {
     MessagePlugin.warning(t('knowledgeEditor.messages.missingId'));
     return false;
@@ -1940,7 +1821,7 @@ const handleKnowledgeDropdownSelect = (data: { value: string }) => {
 };
 
 const handleManualEdit = (index: number, item: KnowledgeCard) => {
-  if (isFAQ.value) return;
+
   if (cardList.value[index]) {
     cardList.value[index].isMore = false;
   }
@@ -1975,7 +1856,7 @@ const handleViewTrace = (index: number, item: KnowledgeCard) => {
 };
 
 const confirmRebuildKnowledge = async (index: number, item: KnowledgeCard) => {
-  if (isFAQ.value) return;
+
   if (!canEdit.value) return;
   if (!item?.id) {
     MessagePlugin.warning(t('knowledgeEditor.messages.missingId'));
@@ -2038,7 +1919,7 @@ const submitReparse = async (id: string, processConfig?: KnowledgeProcessOverrid
 };
 
 const handleScroll = () => {
-  if (isFAQ.value) return;
+
   if (docListLoading.value) return;
   if (scrollLoading) return;
   const currentKbId = kbId.value;
@@ -2151,7 +2032,7 @@ const {
   itemSelector: '.knowledge-card[data-select-id], .doc-list-row[data-select-id]',
   selectedIds,
   getItemId: (el) => el.dataset.selectId || null,
-  enabled: computed(() => canEdit.value && !isFAQ.value && cardList.value.length > 0),
+  enabled: computed(() => canEdit.value && cardList.value.length > 0),
   onSelectionStart: () => {
     batchMode.value = true;
   },
@@ -2173,7 +2054,7 @@ const openKnowledgeItem = (item: KnowledgeCard) => {
 };
 
 const handleIntakeReview = async (payload: { action: 'retry' | 'discard'; sourceInfo?: IntakeSourceInfo }) => {
-  if (!details.id || !isOwner.value) return
+  if (!details.id || !canManage.value) return
   try {
     await reviewKnowledge(details.id, { action: payload.action, source_info: payload.sourceInfo })
     MessagePlugin.success(t('knowledgeBase.intakeReviewSubmitted'))
@@ -2382,8 +2263,7 @@ async function createNewSession(value: string): Promise<void> {
 </script>
 
 <template>
-  <template v-if="!isFAQ">
-    <div class="knowledge-layout">
+  <div class="knowledge-layout">
       <div class="document-header">
         <div class="document-header-title">
           <div class="document-title-row">
@@ -2441,16 +2321,13 @@ async function createNewSession(value: string): Promise<void> {
               <template v-else>
                 <span :class="['breadcrumb-tab', { active: activeKbTab === 'documents' }]"
                   @click="activeKbTab = 'documents'">{{ $t('knowledgeEditor.document.title') }}</span>
-                <template v-if="!isFAQ">
-                  <span class="breadcrumb-tab-sep">/</span>
-                  <span :class="['breadcrumb-tab', { active: activeKbTab === 'context' }]"
+                <span class="breadcrumb-tab-sep">/</span><span :class="['breadcrumb-tab', { active: activeKbTab === 'context' }]"
                     @click="activeKbTab = 'context'">{{ $t('knowledgeWorkbench.tabLabel') }}</span>
-                </template>
               </template>
             </h2>
             <!-- 标题行右侧的动作锚点：聚拢"信息"和"设置"两个圆形按钮。 -->
             <div class="kb-title-actions">
-              <t-tooltip v-if="kbId && isOwner && !isFAQ" :content="$t('knowledgeBase.strategy.title')" placement="top">
+              <t-tooltip v-if="kbId && canManage" :content="$t('knowledgeBase.strategy.title')" placement="top">
                 <button type="button" class="kb-settings-button" :aria-label="$t('knowledgeBase.strategy.title')"
                   @click="strategyDrawerVisible = true">
                   <t-icon name="adjustment" size="16px" />
@@ -2464,7 +2341,7 @@ async function createNewSession(value: string): Promise<void> {
               </t-tooltip>
               <KBInfoPopover v-if="kbInfo" :kb-info="kbInfo"
                 :supported-file-types="[...supportedFileTypes]" />
-              <t-tooltip v-if="canManage" :content="$t('knowledgeBase.settings')" placement="top">
+              <t-tooltip v-if="authStore.hasRole('viewer')" :content="$t('knowledgeBase.settings')" placement="top">
                 <button type="button" class="kb-settings-button" :disabled="!kbId" @click="handleOpenKBSettings">
                   <t-icon name="setting" size="16px" />
                 </button>
@@ -2495,12 +2372,12 @@ async function createNewSession(value: string): Promise<void> {
           @view-graph="onViewWikiInGraph" />
       </div>
 
-      <div v-if="activeKbTab === 'context' && !isFAQ" class="knowledge-context-area">
+      <div v-if="activeKbTab === 'context'" class="knowledge-context-area">
         <KnowledgeWorkbench v-if="kbId" :kb-id="kbId" :can-manage="canManage"
           @open-source="openSourceDoc" />
       </div>
 
-      <template v-if="activeKbTab === 'documents' || (!isWiki && activeKbTab !== 'context') || (isFAQ && activeKbTab === 'context')">
+      <template v-if="activeKbTab === 'documents' || (!isWiki && activeKbTab !== 'context') || false">
         <div class="knowledge-main">
           <KbFolderTree v-if="showFolderTree && !folderTreeCollapsed" :tree="folderTree" :selected-path="selectedFolderPath"
             :loading="folderTreeLoading" :can-edit="canEdit"
@@ -2587,7 +2464,7 @@ async function createNewSession(value: string): Promise<void> {
                                 <span class="tag-filter-chip__label">{{ tagLabel(tag, t) }}</span>
                                 <span class="tag-filter-chip__count">{{ tag.knowledge_count || 0 }}</span>
                               </button>
-                              <button v-if="!isFAQ && isConcreteTag(tag) && Number(tag.tenant_id) === Number(authStore.effectiveTenantId)" type="button" class="tag-star-button"
+                              <button v-if="isConcreteTag(tag) && Number(tag.tenant_id) === Number(authStore.effectiveTenantId)" type="button" class="tag-star-button"
                                 :aria-label="$t(starredTagIds.has(tag.id) ? 'knowledgeBase.tagUnstarAction' : 'knowledgeBase.tagStarAction', { name: tag.name })"
                                 :aria-pressed="starredTagIds.has(tag.id)" @click.stop="toggleTagStar(tag)">
                                 <t-icon :name="starredTagIds.has(tag.id) ? 'star-filled' : 'star'" size="13px" />
@@ -2683,7 +2560,7 @@ async function createNewSession(value: string): Promise<void> {
                 </div>
                 </div>
                 <div class="doc-filter-bar__trailing">
-                  <t-button v-if="!isFAQ" variant="text" size="small" @click="commandPalette.openPalette(docSearchKeyword.trim())">
+                  <t-button  variant="text" size="small" @click="commandPalette.openPalette(docSearchKeyword.trim())">
                     {{ $t('knowledgeBase.searchMessageContent') }}
                   </t-button>
                   <div class="doc-view-toggle" role="group" :aria-label="$t('knowledgeBase.viewModeToggle')">
@@ -2815,18 +2692,13 @@ async function createNewSession(value: string): Promise<void> {
       </template>
 
       <!-- DocContent drawer (shared by documents tab and wiki source refs) -->
-      <DocContent ref="docContentRef" :visible="isCardDetails" :details="details" :canEditKB="canEdit" :can-review-intake="isOwner"
+      <DocContent ref="docContentRef" :visible="isCardDetails" :details="details" :canEditKB="canEdit" :can-review-intake="canManage"
         :canDownloadKB="canDownloadKnowledge" :kbId="kbId"
         @closeDoc="closeDoc" @getDoc="getDoc" @summaryStateChange="syncDocumentSummaryState" @intake-review="handleIntakeReview"
         @report-anomaly="openAnomalyWindow">
       </DocContent>
     </div>
-  </template>
-  <template v-else>
-    <div class="faq-manager-wrapper">
-      <FAQEntryManager v-if="kbId" :kb-id="kbId" />
-    </div>
-  </template>
+
 
   <!-- 知识库编辑器（创建/编辑统一组件） -->
   <KnowledgeBaseEditorModal :visible="uiStore.showKBEditorModal" :mode="uiStore.kbEditorMode"
@@ -2851,17 +2723,16 @@ async function createNewSession(value: string): Promise<void> {
     @tag-created="loadTags(kbId, true)" @open-manage="openTagManageFromBatchDialog" />
 
   <KbTagManageDrawer
-    v-if="!isFAQ"
+
     v-model:visible="tagManageDrawerVisible"
     :kb-id="kbId"
-    :is-faq="isFAQ"
     @changed="onTagManageChanged"
   />
-  <KnowledgeAnomaliesDrawer v-if="!isFAQ" ref="anomalyDrawerRef" v-model:visible="anomalyDrawerVisible" :kb-id="kbId"
-    :is-owner="isOwner" :initial-knowledge-id="anomalyKnowledgeId" :tags="tagList"
+  <KnowledgeAnomaliesDrawer  ref="anomalyDrawerRef" v-model:visible="anomalyDrawerVisible" :kb-id="kbId"
+    :is-owner="canManage" :initial-knowledge-id="anomalyKnowledgeId" :tags="tagList"
     @open-message="openSourceDoc"
     @edit-tags="editAnomalyMessageTags" @changed="() => { resetPage(); loadKnowledgeFiles(kbId); loadTags(kbId, true) }" />
-  <KnowledgeStrategyDrawer v-if="!isFAQ && isOwner" v-model:visible="strategyDrawerVisible" :kb-id="kbId"
+  <KnowledgeStrategyDrawer v-if="canManage" v-model:visible="strategyDrawerVisible" :kb-id="kbId"
     :selected-ids="Array.from(selectedIds)" :tags="tagList" :initial-tag-id="selectedTagIds[0] || ''"
     @reprocessed="() => { resetPage(); loadTags(kbId, true) }" />
 </template>
@@ -3932,13 +3803,7 @@ async function createNewSession(value: string): Promise<void> {
   overflow: hidden;
 }
 
-.faq-manager-wrapper {
-  flex: 1;
-  min-height: 0;
-  padding: 24px 32px;
-  overflow-y: auto;
-  margin: 0 16px 0 4px;
-}
+
 
 @media (max-width: 1250px) and (min-width: 1045px) {
   .answers-input {

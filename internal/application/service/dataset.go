@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	parquet "github.com/parquet-go/parquet-go"
 
-	"github.com/parquet-go/parquet-go"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"

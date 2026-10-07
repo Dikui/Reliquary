@@ -112,30 +112,6 @@ func (r *sourceRegistry) modelDocumentInfoOutput(rows []map[string]interface{}, 
 	for _, row := range rows {
 		knowledgeID := stringValue(row, "knowledge_id")
 		docHandle := r.RegisterDocument(knowledgeID)
-		if boolValue(row, "is_faq") {
-			chunkID := stringValue(row, "faq_id")
-			if chunkID == "" {
-				continue
-			}
-			title := firstNonEmpty(stringValue(row, "faq_question"), stringValue(row, "title"))
-			chunkHandle := r.RegisterChunk(ChunkReference{
-				ChunkID:       chunkID,
-				KnowledgeID:   knowledgeID,
-				DocumentTitle: title,
-				ChunkType:     "faq",
-			})
-			fmt.Fprintf(&b, "  <document id=\"%s\" type=\"faq\">\n", escapeAttr(docHandle))
-			fmt.Fprintf(&b, "    <chunk id=\"%s\" type=\"faq\">\n", escapeAttr(chunkHandle))
-			if title != "" {
-				fmt.Fprintf(&b, "      <question>%s</question>\n", escapeText(title))
-			}
-			for _, answer := range stringSliceValue(row["faq_answers"]) {
-				fmt.Fprintf(&b, "      <answer>%s</answer>\n", escapeText(answer))
-			}
-			b.WriteString("    </chunk>\n  </document>\n")
-			count++
-			continue
-		}
 
 		if docHandle == "" {
 			continue
@@ -175,8 +151,6 @@ type modelChunk struct {
 	view       string
 	match      string
 	content    string
-	question   string
-	answers    []string
 	images     []map[string]interface{}
 	docRealID  string
 	kbRealID   string
@@ -187,7 +161,7 @@ type modelChunk struct {
 func (r *sourceRegistry) modelKnowledgeOutput(mode string, rows []map[string]interface{}, fallback string) string {
 	chunks := make([]modelChunk, 0, len(rows))
 	for idx, row := range rows {
-		chunkID := firstNonEmpty(stringValue(row, "chunk_id"), stringValue(row, "faq_id"), stringValue(row, "id"))
+		chunkID := firstNonEmpty(stringValue(row, "chunk_id"), stringValue(row, "id"))
 		knowledgeID := stringValue(row, "knowledge_id")
 		kbID := firstNonEmpty(stringValue(row, "knowledge_base_id"), stringValue(row, "knowledge_base"))
 		title := firstNonEmpty(stringValue(row, "knowledge_title"), stringValue(row, "title"))
@@ -195,9 +169,7 @@ func (r *sourceRegistry) modelKnowledgeOutput(mode string, rows []map[string]int
 			continue
 		}
 		chunkType := stringValue(row, "chunk_type")
-		if stringValue(row, "faq_id") != "" && chunkType == "" {
-			chunkType = "faq"
-		}
+
 		chunkIndex := intValue(row, "chunk_index")
 		if chunkIndex == 0 {
 			chunkIndex = intValue(row, "index")
@@ -221,8 +193,6 @@ func (r *sourceRegistry) modelKnowledgeOutput(mode string, rows []map[string]int
 			view:       viewForRow(row, mode),
 			match:      firstNonEmpty(stringValue(row, "match_snippet"), stringValue(row, "matched_content")),
 			content:    stringValue(row, "content"),
-			question:   firstNonEmpty(stringValue(row, "faq_question"), stringValue(row, "faq_standard_question")),
-			answers:    stringSliceValue(row["faq_answers"]),
 			images:     mapsValue(row["images"]),
 			docRealID:  knowledgeID,
 			kbRealID:   kbID,
@@ -325,18 +295,14 @@ func renderKnowledgeChunks(mode string, chunks []modelChunk) string {
 				fmt.Fprintf(&b, " type=\"%s\"", escapeAttr(chunk.chunkType))
 			}
 			b.WriteString(">\n")
-			if chunk.question != "" {
-				fmt.Fprintf(&b, "      <question>%s</question>\n", escapeText(chunk.question))
-			}
+
 			if chunk.match != "" {
 				fmt.Fprintf(&b, "      <match>%s</match>\n", escapeText(chunk.match))
 			}
 			if chunk.content != "" {
 				fmt.Fprintf(&b, "      <content>%s</content>\n", escapeText(chunk.content))
 			}
-			for _, answer := range chunk.answers {
-				fmt.Fprintf(&b, "      <answer>%s</answer>\n", escapeText(answer))
-			}
+
 			for _, image := range chunk.images {
 				imageURL := stringValue(image, "url")
 				if imageURL == "" {

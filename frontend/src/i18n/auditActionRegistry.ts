@@ -33,8 +33,6 @@ export const TENANT_MEMBER_AUDIT_ACTIONS = [
 export const SYSTEM_GLOBAL_AUDIT_ACTIONS = [
   'system.setting_changed',
   'system.admin_promoted',
-  'system.api_key_created',
-  'system.api_key_revoked',
   'system.admin_revoked',
   'system.user_password_reset',
   'system.queue_task_retried',
@@ -73,13 +71,7 @@ export const KB_ACTIVITY_ACTIONS = [
   'datasource.sync_failed',
   'datasource.paused',
   'datasource.resumed',
-  'kb.share_added',
-  'kb.share_permission_changed',
-  'kb.share_removed',
   'wiki.content_changed',
-  'faq.import_started',
-  'faq.import_completed',
-  'faq.import_failed',
 ] as const
 
 /** KB activity outcome column / filter values (`AuditOutcome` subset used in activity UI). */

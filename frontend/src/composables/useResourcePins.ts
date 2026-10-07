@@ -1,11 +1,8 @@
 // useResourcePins – per-(user, tenant) favorites + per-user recents for
 // KBs and custom agents.
 //
-// Favorites are DB-backed (see migration 000047) so they sync across
-// devices and survive a logout. They are scoped per (user, tenant) on
-// the server, which means switching tenants automatically re-points the
-// reads — see `refresh()` and the tenant-change watcher inside the
-// composable.
+// Favorites are DB-backed so they sync across devices and survive logout.
+// The server scopes favorites to each team member.
 //
 // Recents stay in localStorage. They're a personal navigation aid, not a
 // shareable resource; round-tripping every card click through the
@@ -134,10 +131,7 @@ async function fetchFavorites(type: ResourceType): Promise<void> {
   return inFlight[type]!
 }
 
-// Invalidate caches when the active tenant changes — favorites are
-// (user, tenant)-scoped on the server, so a tenant switch means the
-// currently loaded list belongs to the *previous* tenant. We trigger one
-// watcher at module load so any later switch refetches automatically.
+// Refresh favorites when team authentication becomes available or clears.
 let tenantWatcherInstalled = false
 function installTenantWatcher(): void {
   if (tenantWatcherInstalled) return

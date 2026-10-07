@@ -58,11 +58,6 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 		return nil, err
 	}
 
-	// FAQ knowledge bases should not accept file uploads — use the FAQ import API instead
-	if kb.Type == types.KnowledgeBaseTypeFAQ {
-		return nil, werrors.NewBadRequestError("FAQ 知识库不支持文件上传，请使用 FAQ 导入功能")
-	}
-
 	if err := s.checkStorageEngineConfigured(ctx, kb); err != nil {
 		return nil, err
 	}
@@ -558,10 +553,6 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 	if err != nil {
 		logger.Errorf(ctx, "Failed to get knowledge base: %v", err)
 		return nil, err
-	}
-
-	if kb.Type == types.KnowledgeBaseTypeFAQ {
-		return nil, werrors.NewBadRequestError("FAQ 知识库不支持文件上传，请使用 FAQ 导入功能")
 	}
 
 	if err := s.checkStorageEngineConfigured(ctx, kb); err != nil {
@@ -1149,8 +1140,8 @@ func (s *knowledgeService) UpdateManualKnowledge(ctx context.Context,
 	}
 
 	if intake != nil {
-		if intake.Decision == "rejected" && ctx.Value(types.UserIDContextKey) != kb.CreatorID {
-			return nil, werrors.NewForbiddenError("only the creator can review intake")
+		if intake.Decision == "rejected" && !types.TenantRoleFromContext(ctx).HasPermission(types.TenantRoleContributor) {
+			return nil, werrors.NewForbiddenError("a team editor is required to review intake")
 		}
 		intake.SourceInfo = mergeSourceInfo(intake.SourceInfo, payload.SourceInfo)
 		intake.Decision, intake.Reason = "pending", ""

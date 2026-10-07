@@ -74,7 +74,6 @@ type MessageSuggestionSet struct {
 	SessionID          string          `json:"session_id" gorm:"type:varchar(36);not null;index"`
 	AssistantMessageID string          `json:"assistant_message_id" gorm:"type:varchar(36);not null;index"`
 	AgentID            string          `json:"agent_id" gorm:"type:varchar(36);not null;index"`
-	AgentTenantID      uint64          `json:"-" gorm:"not null;default:0"`
 	Placement          string          `json:"placement" gorm:"type:varchar(32);not null"`
 	ConfigHash         string          `json:"config_hash" gorm:"type:varchar(64);not null"`
 	Locale             string          `json:"locale" gorm:"type:varchar(16);not null;default:''"`

@@ -640,22 +640,19 @@ const addForm = reactive<{ email: string; role: TenantRole }>({
 // Role-aware gates. The server enforces every mutation; UI gates here
 // are presentational only, matching the security note in stores/auth.ts.
 const currentRole = computed<TenantRole | ''>(() => (authStore.currentTenantRole || '') as TenantRole | '')
-// Cross-tenant superusers (org-level operators) bypass the Owner gate
 // on the server (see middleware/rbac.go RequireRole). The UI must
 // mirror that or the buttons would be invisible to the exact admins
 // who actually need them. Local Owners of their own tenant come in via
 // the role branch.
 const canManage = computed(
-  () => currentRole.value === 'owner' || authStore.canAccessAllTenants === true,
+  () => currentRole.value === 'owner',
 )
-// Admin+ (and cross-tenant superusers) can view the audit log. Mirrors
 // the server's g.Admin() guard on /tenants/:id/audit-log so we don't
 // render a tab that would just 403.
 const canViewAudit = computed(
   () =>
     currentRole.value === 'owner' ||
-    currentRole.value === 'admin' ||
-    authStore.canAccessAllTenants === true,
+    currentRole.value === 'admin',
 )
 const currentUserId = computed(() => authStore.user?.id ?? '')
 
@@ -1437,10 +1434,7 @@ async function removeRow(row: TenantMember) {
   }
 }
 
-// Re-load whenever the active tenant resolves (or changes via the
-// tenant switcher). onMounted alone would race with auth-store
-// hydration — currentTenantId is often 0 at the moment this component
-// mounts on a cold reload.
+// Load members when team authentication resolves after a cold reload.
 watch(
   activeTenantId,
   (id) => {

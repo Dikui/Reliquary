@@ -58,7 +58,6 @@ export const CONTEXTUAL_GUIDE_TOURS: Record<ContextualGuideTourId, ContextualGui
       },
     ],
   },
-  // 步骤由 KbCreateContextualGuide.vue 按文档库/FAQ 动态组装
   kbCreate: {
     storageKey: 'reliquary:contextual-guide-kb-create:v3',
     stepI18nPrefix: 'contextualGuide.kbCreate.steps',

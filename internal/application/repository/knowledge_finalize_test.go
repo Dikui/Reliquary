@@ -43,7 +43,6 @@ CREATE TABLE IF NOT EXISTS knowledges (
     metadata JSONB,
     tag_id VARCHAR(36),
     summary_status VARCHAR(32) DEFAULT 'none',
-    last_faq_import_result JSONB DEFAULT NULL,
     channel VARCHAR(50) NOT NULL DEFAULT 'web',
     pending_subtasks_count INT NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,

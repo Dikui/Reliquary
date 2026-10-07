@@ -303,9 +303,6 @@ function auditDetailsObject(row: AuditLog): Record<string, unknown> | null {
 function auditTargetKey(row: AuditLog): string {
   const details = auditDetailsObject(row)
   if (row.action === 'system.setting_changed') {
-    if (row.target_type === 'tenant_storage_quota') {
-      return t('system.globalSettings.audit.target.bulkQuota')
-    }
     if (details && typeof details.key === 'string' && details.key) return details.key
     return row.target_id || row.target_type || ''
   }
@@ -345,17 +342,6 @@ function auditTargetDiff(row: AuditLog): string {
   const details = auditDetailsObject(row)
   if (!details) return ''
   if (row.action === 'system.setting_changed') {
-    if (row.target_type === 'tenant_storage_quota') {
-      const affected = typeof details.affected === 'number' ? details.affected : null
-      const gb = typeof details.quota_gb === 'number' ? details.quota_gb : null
-      if (affected !== null && gb !== null) {
-        return t('system.globalSettings.audit.target.bulkQuotaDiff', {
-          count: String(affected),
-          gb: String(gb),
-        })
-      }
-      return ''
-    }
     return formatSettingDiff(details)
   }
   if (row.action === 'system.admin_promoted' && typeof details.idempotent === 'boolean') {

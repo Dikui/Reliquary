@@ -8,14 +8,14 @@ import {
 } from './deploymentCapabilities'
 
 test('capability filtering is fail-open unless backend explicitly disables a feature', () => {
-  assert.equal(isDeploymentCapabilitySupported({}, 'organizations'), true)
+  assert.equal(isDeploymentCapabilitySupported({}, 'agents'), true)
 
   const capabilities: DeploymentCapabilityMap = {
-    organizations: { supported: false, reason: 'feature_disabled' },
-    agents: { supported: true },
+    agents: { supported: false, reason: 'feature_disabled' },
+    'integrations.im': { supported: true },
   }
-  assert.equal(isDeploymentCapabilitySupported(capabilities, 'organizations'), false)
-  assert.equal(isDeploymentCapabilitySupported(capabilities, 'agents'), true)
+  assert.equal(isDeploymentCapabilitySupported(capabilities, 'agents'), false)
+  assert.equal(isDeploymentCapabilitySupported(capabilities, 'integrations.im'), true)
 })
 
 test('only route-backed settings sections require deployment capabilities', () => {

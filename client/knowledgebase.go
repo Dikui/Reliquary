@@ -24,7 +24,6 @@ type KnowledgeBase struct {
 	TenantID              uint64                 `json:"tenant_id"`
 	ChunkingConfig        ChunkingConfig         `json:"chunking_config"`
 	ImageProcessingConfig ImageProcessingConfig  `json:"image_processing_config"`
-	FAQConfig             *FAQConfig             `json:"faq_config"`
 	EmbeddingModelID      string                 `json:"embedding_model_id"`
 	SummaryModelID        string                 `json:"summary_model_id"`
 	VLMConfig             VLMConfig              `json:"vlm_config"`
@@ -45,7 +44,6 @@ type KnowledgeBase struct {
 type KnowledgeBaseConfig struct {
 	ChunkingConfig        ChunkingConfig        `json:"chunking_config"`
 	ImageProcessingConfig ImageProcessingConfig `json:"image_processing_config"`
-	FAQConfig             *FAQConfig            `json:"faq_config"`
 	AutoTagConfig         *AutoTagConfig        `json:"auto_tag_config,omitempty"`
 }
 
@@ -54,12 +52,6 @@ type ChunkingConfig struct {
 	ChunkSize    int      `json:"chunk_size"`    // Chunk size
 	ChunkOverlap int      `json:"chunk_overlap"` // Overlap size
 	Separators   []string `json:"separators"`    // Separators
-}
-
-// FAQConfig represents faq-specific configuration
-type FAQConfig struct {
-	IndexMode         string `json:"index_mode"`
-	QuestionIndexMode string `json:"question_index_mode"`
 }
 
 // ImageProcessingConfig represents image processing configuration
@@ -226,7 +218,6 @@ type SearchResult struct {
 	KnowledgeSource   string            `json:"knowledge_source"`
 	KnowledgeChannel  string            `json:"knowledge_channel"`
 	// MatchedContent is the actual content that was matched in vector search
-	// For FAQ: this is the matched question text (standard or similar question)
 	MatchedContent string `json:"matched_content,omitempty"`
 	// KnowledgeBaseID identifies the KB that produced this hit. It is required
 	// for agent runs that search more than one knowledge base.

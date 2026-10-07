@@ -193,14 +193,12 @@ Wiki 模式允许 Agent 根据原始文档自动生成并维护一套结构化�
 
 ## 11. 升级到 0.6.0 后，原本能做的操作变成了「权限不足」？
 
-0.6.0 引入了空间内 RBAC（角色矩阵 + 资源归属），所有写入接口都会按角色 + `creator_id` 鉴权。常见现象：
+团队使用 owner / admin / contributor / viewer 角色。写入接口按角色鉴权，`creator_id` 只记录创建者。常见现象：
 
-- **看得到但点不动**：你大概率是该资源的 `Viewer` 或非创建者的 `Contributor`，UI 已经把写操作隐藏/置灰。检查 **用户菜单 → 当前工作区** 角色徽章。
-- **共享空间里的 KB / Agent**：他人共享给你的 KB 默认按 `Viewer` 看待；要写需要在源空间里被授予 `Admin+`。
-- **API Key 调用**：`X-API-Key` 合成虚拟用户固定为所属空间的 `Admin`（仅删除空间需 `Owner`），脚本一般无需迁移。
-- **跨空间超管**：要 `User.CanAccessAllTenants=true` 且 `enable_cross_tenant_access=true`，并通过 `X-Tenant-ID` 切空间。
+- **看得到但点不动**：你大概率是该资源的 `Viewer` ，UI 已经把写操作隐藏/置灰。检查 **用户菜单 → 当前工作区** 角色徽章。
+- **API Key 调用**：`X-API-Key` 合成虚拟用户按检索、入库或完整范围鉴权。
 
-如需临时回退到「仅审计、不拦截」灰度窗口，可在配置里设置 `tenant.enable_rbac=false`（或环境变量 `RELIQUARY_TENANT_ENABLE_RBAC=false`）。完整的角色矩阵和归属链请见 [`docs/RBAC说明.md`](./RBAC说明.md)。
+如需临时回退到「仅审计、不拦截」灰度窗口，可在配置里设置 `tenant.enable_rbac=false`（或环境变量 `RELIQUARY_TENANT_ENABLE_RBAC=false`）。完整的角色矩阵请见 [`docs/RBAC说明.md`](./RBAC说明.md)。
 
 ## 12. 为什么登录后没有自动回到上次的工作区？
 
@@ -265,15 +263,6 @@ Wiki 模式允许 Agent 根据原始文档自动生成并维护一套结构化�
 
 0.6.2 为 **1024 维** embedding（如 bge-m3）在 PostgreSQL pgvector 上引入 HNSW 索引，该索引已纳入 `000000_init` 基线。服务启动会自动执行基线；若你使用其他维度，该索引可能不适用，需按自身 embedding 维度另行调优。首次大批量入库期间索引维护可能占用额外 I/O，属正常现象。
 
-## 21. 如何在网站嵌入 Reliquary 智能体（Embed Widget）？
-
-0.6.3 起支持**嵌入渠道**：在 **集成中心** 或 Agent 编辑器中创建 embed 渠道，绑定自定义 Agent，获取渠道 ID 与发布 Token（`em_…`），将 `reliquary-widget.js` 嵌入外部网页即可提供访客问答。
-
-- **域名白名单**：必须在渠道配置中填写允许加载 Widget 的 Origin，否则 exchange 会返回 403。
-- **安全模式（推荐）**：生产环境不要把 `em_…` 写在页面 HTML 里；由业务后端提供 `token-endpoint`，用发布 Token 调 `POST /api/v1/embed/:id/exchange` 换取短时令牌 `ems_…`（约 30 分钟有效）。详见 [`docs/embed-secure-mode.md`](./embed-secure-mode.md) 与 [`docs/embed-subdomain.md`](./embed-subdomain.md)。
-- **限流**：渠道可配置每分钟 / 每日请求上限；超限返回 429。
-- **子域部署**：若 embed 页面与 API 不同子域，参考 `docs/embed-subdomain.md` 配置 CORS 与 Nginx。
-
 ## 22. 文档如何设置多个标签？
 
 0.6.3 将文档标签从单选升级为**多标签**（相关结构已纳入数据库基线）。在知识库列表可为文档打多个标签，侧边栏支持按标签筛选；**标签管理**抽屉可批量维护标签。API 上传 / 更新知识时传 `tag_ids` 数组（取代旧的单 `tag_id`）。
@@ -305,11 +294,7 @@ Wiki 模式允许 Agent 根据原始文档自动生成并维护一套结构化�
 - 在 **设置 → API 集成**（Owner 可见）中创建 Key，可勾选能力（如 `manage_kbs` 覆盖 KB 全生命周期、`manage_storage_backends` 等），并可限制到指定知识库。
 - Key 的 `last_used_at` 按节流更新，避免高频写库。
 - 路由级守卫会拒绝越权访问；管理类接口对 API Key Principal 默认拒绝，请为集成使用具备对应能力的 Key，而非全权 Key。
-- MCP OAuth 与嵌入会话按 Principal 隔离，不同集成之间互不串号。
-
-### 如何用一个 API Key 自动化管理多个空间？
-
-SystemAdmin 可在 **系统管理 → 平台 API Key** 创建 `scope_type=platform` 的 Key。平台 Key 不绑定单一空间：调用普通空间 API 时必须携带 `X-Tenant-ID`，并继续受原有 capability 和知识库范围守卫约束；调用开放的系统控制面接口则需要对应的 `system_*` capability。平台 Key 不支持 `full_access`，也不能创建、轮换或吊销其他平台 Key。
+- MCP OAuth 与 IM 会话按 Principal 隔离，不同集成之间互不串号。
 
 ## 29. 一个空间如何绑定多个对象存储实例？
 
@@ -331,9 +316,9 @@ SystemAdmin 可在 **系统管理 → 平台 API Key** 创建 `scope_type=platfo
 
 0.7.0 支持**会话级临时附件**（相关结构已纳入数据库基线）。在对话输入区上传图片或文档，系统异步解析后仅用于当前会话的问答，不会写入知识库。图片与附件共享一个合并数量上限；附件内容会在多轮对话中保留。
 
-## 32. 如何接入 QQBot / Lark（飞书国际版）？
+## 32. 如何接入飞书？
 
-0.7.0 新增 **QQBot** 平台集成，并支持飞书国际版 **Lark**（区域感知路由）。在 **设置 → IM 集成** 添加对应渠道并填写凭据即可；飞书回复通过 reply-message 接口发送，回复会落在原消息线程内。
+在 **设置 → IM 集成** 添加飞书渠道并填写凭据。飞书通过 reply-message 接口回复，回复会落在原消息线程内。
 
 ## 33. 如何为 Redis 启用 TLS？
 
@@ -342,10 +327,6 @@ SystemAdmin 可在 **系统管理 → 平台 API Key** 创建 `scope_type=platfo
 ## 34. 升级到 0.7.0 后 `reliquary` CLI 命令找不到或行为变化？
 
 0.7.0 随附 **CLI v0.10**（Agent 优先，破坏性变更）：新增 `model` / `message` / `config` / `skills` 命令组，`doc reparse` / `doc update`，`kb config` / `kb config set`；`session continue` 更名为 `session resume`，新增 `session tool-approval`；提供 agent-first 的 chat 与 `session ask` 输出模式，并强化了 SSE 可靠性与类型化错误。详见 [`cli/CHANGELOG.md`](../cli/CHANGELOG.md)。
-
-## 35. 如何接入云之家（Yunzhijia）？
-
-0.7.1 新增 **云之家 IM 集成**。在 **设置 → IM 集成** 添加云之家渠道并填写应用凭据即可；集成基于 WebSocket 长连接接收消息，支持图片消息入库（带 SSRF 安全下载），默认以 **Markdown** 格式回复。若图片无法下载，请检查出站网络与凭据是否具备下载权限。
 
 ## 36. 如何使用火山引擎 Rerank / 智谱 AI 网络搜索？
 
@@ -371,7 +352,7 @@ docker run -d -p 8081:8081 reliquary-docs
 
 站点的版本号在构建时自动读取仓库根目录的 `VERSION` 文件，因此升级版本后无需手动改文档。若某处截图显示为虚线占位框，说明 `website-docs/public/screenshots/` 下缺少同名图片，补图即可生效，不需要改 Markdown。
 
-`website-docs/sample-data/` 下还提供了 4 份 Markdown 样例文档与 1 份 FAQ 导入 JSON，可以直接用来跑一遍「建库 → 上传 → 问答」；`examples/mcp-demo/` 是一个可直接运行的本地 MCP 服务示例。
+`website-docs/sample-data/` 下还提供了 4 份 Markdown 样例文档与 1 份 文档样例，可以直接用来跑一遍「建库 → 上传 → 问答」；`examples/mcp-demo/` 是一个可直接运行的本地 MCP 服务示例。
 
 ## 39. 文件夹上传后文档标题变成了一长串路径？
 
@@ -405,7 +386,7 @@ docker run -d -p 8081:8081 reliquary-docs
 
 - 直链依赖 `APP_EXTERNAL_URL`（或存储后端本身公网可达）才能生成；无法生成时该引用会保持 `resource://` 原样，客户端仍可回退到 `/files`。
 - `public` 会为每个被引用文件签发**限时匿名可读**链接（Reliquary 侧 2 小时，MinIO 24 小时），请评估是否符合你的安全要求。
-- 匿名的 embed 渠道与限定了知识库范围的 API Key **始终返回 handle**，不受该变量影响。
+- 限定了知识库范围的 API Key **始终返回 handle**，不受该变量影响。
 - 建议同时配置 `SYSTEM_AES_KEY`，以便复用 grant 行、稳定直链 URL 并降低读接口的写入压力。
 
 详见 [API 文档 · 文件与图片引用](./api/README.md)。
@@ -418,17 +399,15 @@ docker run -d -p 8081:8081 reliquary-docs
 
 本仓库的 Python 包名为 `reliquary-mcp`，尚未发布到 PyPI；请在仓库根目录执行 `pip install ./mcp-server`。
 
-0.7.2 随附 MCP Server 1.1.x，已迁移到 mcp 2.x 的高级 `MCPServer` API，修复了 `uvx` 拉到 SDK 2.x 时的启动崩溃（`AttributeError: 'Server' object has no attribute 'list_tools'`），并恢复了 HTTP（`stateless_http`）与 SSE（`/sse/messages/`）传输的路由兼容性。工具总数为 29 个，新增 `create_knowledge_from_text`（用 Markdown 文本直接建知识条目）与 `list_shared_knowledge_bases`（共享知识库也纳入按名称解析）。
+0.7.2 随附 MCP Server 1.1.x，已迁移到 mcp 2.x 的高级 `MCPServer` API，修复了 `uvx` 拉到 SDK 2.x 时的启动崩溃（`AttributeError: 'Server' object has no attribute 'list_tools'`），并恢复了 HTTP（`stateless_http`）与 SSE（`/sse/messages/`）传输的路由兼容性。工具包括 `create_knowledge_from_text`，可用 Markdown 文本直接建立知识条目。
 
 行为变化提醒：工具执行失败时，MCPServer 2.x 返回 `CallToolResult(isError=True)`，不再像旧版低层 API 那样以成功响应返回 `"Error executing …"` 文本前缀。只解析 `content[0].text` 的客户端通常无感，依赖 `isError` 标志的集成方行为会更符合 MCP 规范。
 
 ## 45. 升级到 0.8.0 后技能沙箱起不来 / 找不到 Local 后端？
 
-0.8.0 **移除了 Local 宿主机进程沙箱**。技能执行改为会话级常驻沙箱，三个后端共用同一套协议：
+0.8.0 **移除了 Local 宿主机进程沙箱**。技能执行使用 Docker 会话级常驻沙箱：
 
 - **Docker**（单机 / 私有化）：默认**关闭**。本机 `docker.sock` 等同宿主机 root，需系统管理员在 **设置 → 系统设置 → 网络安全** 打开，或设置 `RELIQUARY_SANDBOX_DOCKER_ENABLED=true`。打开后才会出现「添加 Docker 后端」入口；已有配置仍可查看/删除。
-- **E2B**：E2B Cloud，或任意 E2B 兼容控制面（含自托管）。
-- **CubeSandbox**：集群模板 + 网络策略。
 
 原 Local 配置需要按上面任一后端重建。每个空间可配多个沙箱实例，并可为每个配置设置**网络策略**（默认放行出站、关闭公网入站；可改成默认拒绝出站再写允许名单）。详见 [`docs/sandbox-docker-backend.md`](./sandbox-docker-backend.md) 与 [`docs/sandbox-protocol.md`](./sandbox-protocol.md)。
 
@@ -457,10 +436,6 @@ docker run -d -p 8081:8081 reliquary-docs
 ## 48. 文档解析能否不经过 docreader？anydoc 是什么？
 
 0.8.0 引入进程内 **anydoc** 引擎（`third_party/anydoc-go`）。当绑定已链接时，anydoc 能转换的格式（含 doc/docx/ppt/pptx）会优先走 Go 进程，不再先打到 docreader。PPT/PPTX 在没有引擎规则时仍默认 MarkItDown。官方 app 镜像默认链接 anydoc。解析失败或格式不在 anydoc 覆盖范围时，仍回退到 docreader / MarkItDown / MinerU 等既有引擎。
-
-## 49. OIDC 登录提示签名无效，或想跳过前端直接 302？
-
-0.8.0 会通过 JWKS **校验 ID Token 签名**（#2799），显式配置的 token endpoint 同样走这条路径。请确认 IdP 的 JWKS URL 可达、密钥已轮换到当前 kid。若要做门户级跳转，可调用 `GET /auth/oidc/start` 直接 302 到 IdP，不必先渲染 SPA 握手页。
 
 ## 50. 开启复杂密码后注册 / 改密失败？
 

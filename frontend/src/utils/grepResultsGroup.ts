@@ -5,21 +5,19 @@ export type GrepGroupedRow = {
   knowledge_id: string
   knowledge_base_id: string
   title: string
-  is_faq: boolean
   chunk_hit_count: number
   title_match: boolean
   match_snippet: string
   chunks: { content: string; chunk_id: string; knowledge_id: string }[]
 }
 
-/** Collapse per-chunk grep hits into one row per document; FAQ entries stay separate. */
+/** Collapse per-chunk grep hits into one row per document. */
 export function groupGrepChunkResults(chunkRows: GrepChunkResult[]): GrepGroupedRow[] {
   const map = new Map<string, GrepGroupedRow>()
   const order: string[] = []
 
   for (const result of chunkRows) {
-    const isFAQ = !!result.faq_id || result.chunk_type === 'faq'
-    const key = isFAQ ? (result.faq_id || result.chunk_id) : result.knowledge_id
+    const key = result.knowledge_id
     if (!key) continue
 
     const snippet = String(result.match_snippet ?? '').trim()
@@ -28,8 +26,7 @@ export function groupGrepChunkResults(chunkRows: GrepChunkResult[]): GrepGrouped
         key,
         knowledge_id: result.knowledge_id,
         knowledge_base_id: result.knowledge_base_id,
-        title: result.faq_question || result.knowledge_title || '',
-        is_faq: isFAQ,
+        title: result.knowledge_title || '',
         chunk_hit_count: 0,
         title_match: false,
         match_snippet: snippet,
@@ -45,7 +42,7 @@ export function groupGrepChunkResults(chunkRows: GrepChunkResult[]): GrepGrouped
     if (snippet) {
       group.chunks.push({
         content: snippet,
-        chunk_id: result.faq_id || result.chunk_id,
+        chunk_id: result.chunk_id,
         knowledge_id: result.knowledge_id,
       })
     }

@@ -1,7 +1,6 @@
 import { onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getChunkByIdOnly } from '@/api/knowledge-base'
-import { getEmbedChunkById } from '@/api/embed'
 import { resolveCitationChunkId, type CitationKnowledgeRef } from '@/utils/citationMarkdown'
 import {
   getCitationChunkCache,
@@ -27,8 +26,6 @@ export type CitationFloatState = FloatState
 
 export type ChatCitationPopoverOptions = {
   getKnowledgeReferences?: () => CitationKnowledgeRef[] | null | undefined
-  embedChannelId?: () => string | undefined
-  embedToken?: () => string | undefined
   sessionId?: () => string | undefined
 }
 
@@ -38,13 +35,8 @@ export function useChatCitationPopover(
 ) {
   const { t } = useI18n()
   const referencesDrawer = useChatReferencesDrawer()
+const getCacheScope = () => options?.sessionId?.() || 'default'
 
-  const getCacheScope = () => {
-    const channelId = options?.embedChannelId?.()
-    const token = options?.embedToken?.()
-    if (channelId && token) return `embed:${channelId}:${token}`
-    return options?.sessionId?.() || 'default'
-  }
 
   const float = ref<FloatState>({
     visible: false,
@@ -78,15 +70,8 @@ export function useChatCitationPopover(
     float.value.visible = true
     positionFor(el)
   }
+const fetchChunkContent = async (chunkId: string) => getChunkByIdOnly(chunkId)
 
-  const fetchChunkContent = async (chunkId: string) => {
-    const channelId = options?.embedChannelId?.()
-    const token = options?.embedToken?.()
-    if (channelId && token) {
-      return getEmbedChunkById(channelId, token, chunkId)
-    }
-    return getChunkByIdOnly(chunkId)
-  }
 
   const openKb = async (el: HTMLElement) => {
     const rawChunkId = el.getAttribute('data-chunk-id') || ''

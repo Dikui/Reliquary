@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	redis "github.com/redis/go-redis/v9"
 	"time"
 
 	"github.com/hibiken/asynq"
-	"github.com/redis/go-redis/v9"
 
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
@@ -54,7 +54,6 @@ type knowledgeIDProbe struct {
 type runtimeTaskPayloadProbe struct {
 	TenantID        uint64   `json:"tenant_id,omitempty"`
 	KnowledgeBaseID string   `json:"knowledge_base_id,omitempty"`
-	KBID            string   `json:"kb_id,omitempty"`
 	KnowledgeID     string   `json:"knowledge_id,omitempty"`
 	TaskID          string   `json:"task_id,omitempty"`
 	SourceID        string   `json:"source_id,omitempty"`
@@ -81,10 +80,6 @@ var queuesScanned = func() []string {
 	return queues
 }()
 
-// taskTypesForKnowledgeCancel lists every asynq task type that carries
-// a knowledge_id in its payload and should be cancelable. The set is
-// deliberately narrow: we don't touch FAQ import / KB-level tasks
-// because the cancel API is per-knowledge.
 var taskTypesForKnowledgeCancel = map[string]struct{}{
 	types.TypeDocumentProcess:      {},
 	types.TypeManualProcess:        {},
@@ -309,9 +304,7 @@ func projectRuntimeTask(task *asynq.TaskInfo, worker runtimeWorkerMetadata) (typ
 	probe := runtimeTaskPayloadProbe{}
 	_ = json.Unmarshal(task.Payload, &probe)
 	kbID := probe.KnowledgeBaseID
-	if kbID == "" {
-		kbID = probe.KBID
-	}
+
 	enqueuedAt := probe.EnqueuedAt
 	if enqueuedAt == 0 {
 		enqueuedAt = probe.CreatedAt
@@ -1019,7 +1012,7 @@ func matchesKnowledgeBase(
 ) bool {
 	// These cleanup tasks carry snapshots specifically so they can still run
 	// after the KB row has been soft-deleted. Removing them leaks resources.
-	if taskType == types.TypeKBDelete || taskType == types.TypeIndexDelete {
+	if taskType == types.TypeKBDelete {
 		return false
 	}
 	var probe runtimeTaskPayloadProbe
@@ -1028,7 +1021,7 @@ func matchesKnowledgeBase(
 	}
 
 	if knowledgeBaseID != "" {
-		if probe.KnowledgeBaseID == knowledgeBaseID || probe.KBID == knowledgeBaseID {
+		if probe.KnowledgeBaseID == knowledgeBaseID {
 			return true
 		}
 		switch taskType {

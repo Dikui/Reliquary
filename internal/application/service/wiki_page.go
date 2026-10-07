@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	redis "github.com/redis/go-redis/v9"
 	"regexp"
 	"slices"
 	"sort"
@@ -12,7 +13,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"

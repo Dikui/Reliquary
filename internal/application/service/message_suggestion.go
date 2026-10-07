@@ -95,7 +95,6 @@ func (s *messageSuggestionService) EnsureFollowUps(
 		SessionID:          sessionID,
 		AssistantMessageID: assistantMessageID,
 		AgentID:            message.AgentID,
-		AgentTenantID:      message.AgentTenantID,
 		Placement:          types.SuggestionPlacementAfterAnswer,
 		ConfigHash:         configHash,
 		Locale:             locale,
@@ -327,9 +326,7 @@ func (s *messageSuggestionService) generateWithModel(
 	}
 
 	modelCtx := ctx
-	if message.AgentTenantID != 0 {
-		modelCtx = context.WithValue(modelCtx, types.TenantIDContextKey, message.AgentTenantID)
-	}
+
 	chatModel, err := s.modelService.GetChatModel(modelCtx, modelID)
 	if err != nil {
 		return nil, types.TokenUsage{}, err
@@ -394,9 +391,7 @@ func (s *messageSuggestionService) generateFromKnowledge(
 		return types.SuggestionItems{}, nil
 	}
 	knowledgeCtx := ctx
-	if message.AgentTenantID != 0 {
-		knowledgeCtx = context.WithValue(knowledgeCtx, types.TenantIDContextKey, message.AgentTenantID)
-	}
+
 	poolSize := count * 5
 	if poolSize < 10 {
 		poolSize = 10

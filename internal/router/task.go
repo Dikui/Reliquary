@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -36,7 +37,6 @@ type AsynqTaskParams struct {
 	WikiServer           *asynq.Server `name:"wikiAsynqServer"`
 	KnowledgeService     interfaces.KnowledgeService
 	KnowledgeBaseService interfaces.KnowledgeBaseService
-	TagService           interfaces.KnowledgeTagService
 	DataSourceService    interfaces.DataSourceService
 	DataTableSummary     interfaces.TaskHandler `name:"dataTableSummary"`
 	ImageMultimodal      interfaces.TaskHandler `name:"imageMultimodal"`
@@ -152,6 +152,19 @@ func newAsynqServer(concurrency int, queues map[string]int) *asynq.Server {
 func backgroundTaskMiddleware() asynq.MiddlewareFunc {
 	return func(next asynq.Handler) asynq.Handler {
 		return asynq.HandlerFunc(func(ctx context.Context, t *asynq.Task) error {
+			var fields map[string]json.RawMessage
+			if json.Unmarshal(t.Payload(), &fields) == nil {
+				for name, raw := range fields {
+					if !strings.EqualFold(name, "tenant_id") {
+						continue
+					}
+					var tenantID uint64
+					if json.Unmarshal(raw, &tenantID) != nil || tenantID != types.SingleTenantID {
+						return fmt.Errorf("task must belong to the team: %w", asynq.SkipRetry)
+					}
+				}
+			}
+			ctx = context.WithValue(ctx, types.TenantIDContextKey, types.SingleTenantID)
 			return next.ProcessTask(types.WithBackgroundTask(ctx), t)
 		})
 	}
@@ -262,9 +275,6 @@ func RunAsynqServer(params AsynqTaskParams) *asynq.ServeMux {
 	// Register manual knowledge processing handler (cleanup + re-indexing)
 	mux.HandleFunc(types.TypeManualProcess, params.KnowledgeService.ProcessManualUpdate)
 
-	// Register FAQ import handler (includes dry run mode)
-	mux.HandleFunc(types.TypeFAQImport, params.KnowledgeService.ProcessFAQImport)
-
 	// Register question generation handler
 	mux.HandleFunc(types.TypeQuestionGeneration, params.KnowledgeService.ProcessQuestionGeneration)
 
@@ -284,7 +294,6 @@ func RunAsynqServer(params AsynqTaskParams) *asynq.ServeMux {
 	mux.HandleFunc(types.TypeKnowledgeListReparse, params.KnowledgeService.ProcessKnowledgeListReparse)
 
 	// Register index delete handler
-	mux.HandleFunc(types.TypeIndexDelete, params.TagService.ProcessIndexDelete)
 
 	// Register KB delete handler
 	mux.HandleFunc(types.TypeKBDelete, params.KnowledgeBaseService.ProcessKBDelete)

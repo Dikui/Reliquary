@@ -166,7 +166,6 @@ func (h *SystemHandler) CheckSandboxConfig(c *gin.Context) {
 
 	caps := client.Capabilities()
 	result.Capabilities = map[string]bool{
-		"supports_volumes":      caps.SupportsVolumes,
 		"supports_pause_resume": caps.SupportsPauseResume,
 		"supports_reconnect":    caps.SupportsReconnect,
 	}
@@ -195,26 +194,7 @@ func sandboxConnectionCheckConfig(cfg *types.TenantSandboxConfig) *types.TenantS
 		return nil
 	}
 	copy := *cfg
-	switch sandbox.SandboxType(copy.SandboxType) {
-	case sandbox.SandboxTypeCube:
-		cube := types.CubeSandboxConfig{}
-		if copy.Cube != nil {
-			cube = *copy.Cube
-		}
-		if strings.TrimSpace(cube.TemplateID) == "" {
-			cube.TemplateID = "__connection_check__"
-		}
-		copy.Cube = &cube
-	case sandbox.SandboxTypeE2B:
-		e2b := types.E2BSandboxConfig{}
-		if copy.E2B != nil {
-			e2b = *copy.E2B
-		}
-		if strings.TrimSpace(e2b.TemplateID) == "" {
-			e2b.TemplateID = "__connection_check__"
-		}
-		copy.E2B = &e2b
-	}
+
 	return &copy
 }
 
@@ -435,15 +415,6 @@ func reportEgressProbe(
 	})
 }
 
-// explainSandboxCreateFailure turns a failed sandbox creation into a cause the
-// operator can act on.
-//
-// A 404 from the provider is not proof that the template is gone: the E2B SDK
-// discards the response body of any 404 on the create endpoint and substitutes
-// a fixed "template not found" sentence, so the message alone cannot tell a
-// deleted template apart from one whose build cannot boot yet. The catalog is
-// the only place that distinction exists, so it is consulted before blaming the
-// template ID the admin just picked from a list.
 func explainSandboxCreateFailure(
 	ctx context.Context,
 	client sandbox.RemoteSandboxClient,
@@ -480,7 +451,7 @@ func explainSandboxCreateFailure(
 			return fmt.Sprintf(
 				"模板 %s 的构建已完成，但没有一个构建带上 %q 标签，创建沙箱时无法解析；"+
 					"请重新构建该模板（删除后由 Reliquary 重新创建即可）",
-				templateID, sandbox.DefaultE2BTemplateTag,
+				templateID, "default",
 			)
 		}
 		if tpl.Status == "ready" || tpl.Status == "" {

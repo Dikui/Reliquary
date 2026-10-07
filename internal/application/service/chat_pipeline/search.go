@@ -330,9 +330,7 @@ func targetReportsEmbedFailure(kb *types.KnowledgeBase) bool {
 	if kb == nil {
 		return false
 	}
-	if kb.Type == types.KnowledgeBaseTypeFAQ {
-		return true
-	}
+
 	if kb.IsKeywordEnabled() {
 		return false
 	}

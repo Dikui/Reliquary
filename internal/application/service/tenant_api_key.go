@@ -34,17 +34,10 @@ func NewTenantAPIKeyService(repo interfaces.TenantAPIKeyRepository) interfaces.T
 func (s *tenantAPIKeyService) CreateAPIKey(
 	ctx context.Context, req interfaces.TenantAPIKeyCreateRequest,
 ) (*interfaces.TenantAPIKeyCreateResult, error) {
-	scopeType := types.NormalizeAPIKeyScopeType(req.ScopeType)
-	if scopeType == types.APIKeyScopeTenant && req.TenantID == 0 {
-		return nil, errors.New("tenant_id is required")
-	}
-	if scopeType == types.APIKeyScopePlatform && req.FullAccess {
-		return nil, errors.New("platform API keys require explicit capabilities")
+	if req.TenantID != types.SingleTenantID {
+		return nil, errors.New("only the team workspace is available")
 	}
 	capabilities := types.NormalizeAPIKeyCapabilities(types.StringArray(req.Capabilities))
-	if scopeType == types.APIKeyScopePlatform && len(capabilities) == 0 {
-		return nil, errors.New("platform API keys require at least one capability")
-	}
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
 		return nil, errors.New("name is required")
@@ -58,13 +51,9 @@ func (s *tenantAPIKeyService) CreateAPIKey(
 		utc := expiresAt.UTC()
 		expiresAt = &utc
 	}
-	var tenantID *uint64
-	if scopeType == types.APIKeyScopeTenant {
-		tenantID = &req.TenantID
-	}
+	tenantID := &req.TenantID
 	key := &types.TenantAPIKey{
 		TenantID:         tenantID,
-		ScopeType:        scopeType,
 		Name:             name,
 		KeyHash:          hashTenantAPIKey(token),
 		APIKey:           token,
@@ -92,7 +81,7 @@ func (s *tenantAPIKeyService) AuthenticateAPIKey(ctx context.Context, token stri
 	if err != nil {
 		return nil, err
 	}
-	if key.RevokedAt != nil {
+	if key.TenantIDValue() != types.SingleTenantID || key.RevokedAt != nil {
 		return nil, apprepo.ErrTenantAPIKeyNotFound
 	}
 	if key.ExpiresAt != nil && time.Now().UTC().After(key.ExpiresAt.UTC()) {
@@ -124,10 +113,6 @@ func (s *tenantAPIKeyService) touchAPIKeyLastUsedAsync(keyID uint64) {
 
 func (s *tenantAPIKeyService) ListAPIKeys(ctx context.Context, tenantID uint64) ([]*types.TenantAPIKey, error) {
 	return s.repo.ListAPIKeys(ctx, tenantID)
-}
-
-func (s *tenantAPIKeyService) ListPlatformAPIKeys(ctx context.Context) ([]*types.TenantAPIKey, error) {
-	return s.repo.ListPlatformAPIKeys(ctx)
 }
 
 // UpdateAPIKey 按创建接口的相同语义更新租户 API Key 配置。
@@ -170,10 +155,6 @@ func (s *tenantAPIKeyService) UpdateAPIKey(
 
 func (s *tenantAPIKeyService) RevokeAPIKey(ctx context.Context, tenantID uint64, id uint64) error {
 	return s.repo.RevokeAPIKey(ctx, tenantID, id)
-}
-
-func (s *tenantAPIKeyService) RevokePlatformAPIKey(ctx context.Context, id uint64) error {
-	return s.repo.RevokePlatformAPIKey(ctx, id)
 }
 
 func (s *tenantAPIKeyService) BackfillMissingKeyHashes(ctx context.Context) (int, error) {

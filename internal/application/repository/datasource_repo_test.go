@@ -170,6 +170,36 @@ func TestDataSourceRepositoryDeleteSoftDeletes(t *testing.T) {
 	assert.Equal(t, other.ID, untouched.ID)
 }
 
+func TestDataSourceRepositoryOnlyLoadsTeamObjects(t *testing.T) {
+	db := setupDataSourceRepoTestDB(t)
+	repo := NewDataSourceRepository(db)
+	ctx := context.Background()
+	team := &types.DataSource{
+		ID: "ds-team", TenantID: types.SingleTenantID, KnowledgeBaseID: "kb-team",
+		Name: "Team source", Type: types.ConnectorTypeFeishu,
+		Status: types.DataSourceStatusActive, SyncSchedule: "0 * * * *",
+	}
+	outside := &types.DataSource{
+		ID: "ds-other", TenantID: 2, KnowledgeBaseID: "kb-other",
+		Name: "Other source", Type: types.ConnectorTypeFeishu,
+		Status: types.DataSourceStatusActive, SyncSchedule: "0 * * * *",
+	}
+	require.NoError(t, db.Create(team).Error)
+	require.NoError(t, db.Create(outside).Error)
+
+	loaded, err := repo.FindByID(ctx, team.ID)
+	require.NoError(t, err)
+	assert.Equal(t, types.SingleTenantID, loaded.TenantID)
+	loaded, err = repo.FindByID(ctx, outside.ID)
+	require.Error(t, err)
+	assert.Nil(t, loaded)
+
+	active, err := repo.FindActive(ctx)
+	require.NoError(t, err)
+	require.Len(t, active, 1)
+	assert.Equal(t, team.ID, active[0].ID)
+}
+
 func TestSyncLogRepositoryUpdateResultClearsErrorMessage(t *testing.T) {
 	db := setupDataSourceRepoTestDB(t)
 	repo := NewSyncLogRepository(db)

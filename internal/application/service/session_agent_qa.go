@@ -23,7 +23,7 @@ func (s *sessionService) AgentQA(
 	eventBus *event.EventBus,
 ) error {
 	sessionID := req.Session.ID
-	// Propagate the session ID so stateful sandbox backends (CubeSandbox) can
+	// Propagate the session ID so the Docker sandbox can
 	// bind script execution to a per-session MicroVM instance.
 	ctx = types.WithSessionID(ctx, sessionID)
 	sessionJSON, err := json.Marshal(req.Session)
@@ -32,7 +32,6 @@ func (s *sessionService) AgentQA(
 		return fmt.Errorf("failed to marshal session: %w", err)
 	}
 
-	// customAgent is required for AgentQA (handler has already done permission check for shared agent)
 	if req.CustomAgent == nil {
 		logger.Warnf(ctx, "Custom agent not provided for session: %s", sessionID)
 		return errors.New("custom agent configuration is required for agent QA")
@@ -47,7 +46,6 @@ func (s *sessionService) AgentQA(
 	if v := ctx.Value(types.TenantInfoContextKey); v != nil {
 		tenantInfo, _ = v.(*types.Tenant)
 	}
-	// When agent belongs to another tenant (shared agent), use agent's tenant for KB/model scope; load tenantInfo if needed
 	if tenantInfo == nil || tenantInfo.ID != agentTenantID {
 		if s.tenantService != nil {
 			if agentTenant, err := s.tenantService.GetTenantByID(ctx, agentTenantID); err == nil && agentTenant != nil {
@@ -305,7 +303,6 @@ func (s *sessionService) buildAgentConfig(
 		LLMCallTimeout:              customAgent.Config.LLMCallTimeout,
 		MaxCompletionTokens:         customAgent.Config.MaxCompletionTokens,
 		RetainRetrievalHistory:      customAgent.Config.RetainRetrievalHistory,
-		SharedAgentReadOnly:         req.SharedAgentReadOnly,
 	}
 
 	// Falls back to global configuration if no specific timeout is set for the agent.
@@ -352,9 +349,8 @@ func (s *sessionService) buildAgentConfig(
 	// Apply per-turn @Skill / @MCP scope. Each helper narrows the agent's
 	// whitelist to the mentioned items and records the pinned set used for the
 	// <must_use> hint, keeping all scope logic in one place per resource type.
-	isSharedAgent := req.SharedAgentReadOnly
 	applyPerRequestSkillScope(ctx, agentConfig, customAgent.Config.SkillsSelectionMode, req.SkillNames)
-	applyPerRequestMCPScope(ctx, agentConfig, customAgent.Config.MCPServices, isSharedAgent, req.MCPServiceIDs)
+	applyPerRequestMCPScope(ctx, agentConfig, customAgent.Config.MCPServices, req.MCPServiceIDs)
 
 	// Use custom agent's system prompt if specified
 	if customAgent.Config.SystemPrompt != "" {
@@ -394,7 +390,6 @@ func (s *sessionService) buildAgentConfig(
 		logger.Infof(ctx, "No knowledge bases specified for agent, running in pure agent mode")
 	}
 
-	// Build search targets using agent's tenant (handler has validated access for shared agent)
 	searchTargets, err := s.buildSearchTargets(ctx, agentTenantID, agentConfig.KnowledgeBases, agentConfig.KnowledgeIDs, req.TagScopes)
 	if err != nil {
 		return nil, fmt.Errorf("build search targets: %w", err)
@@ -484,7 +479,6 @@ func applyPerRequestMCPScope(
 	ctx context.Context,
 	agentConfig *types.AgentConfig,
 	agentPresetMCPs []string,
-	isSharedAgent bool,
 	requested []string,
 ) {
 	if len(requested) == 0 {
@@ -495,10 +489,10 @@ func applyPerRequestMCPScope(
 		return
 	}
 	mentioned := dedupPreservingOrder(requested)
-	effective, mode := resolvePerRequestMCPScope(mentioned, agentPresetMCPs, agentConfig.MCPSelectionMode, isSharedAgent)
+	effective, mode := resolvePerRequestMCPScope(mentioned, agentPresetMCPs, agentConfig.MCPSelectionMode)
 	if len(effective) == 0 {
-		logger.Warnf(ctx, "Ignoring @MCP scope outside agent preset: requested=%v agent=%v shared=%v",
-			requested, agentPresetMCPs, isSharedAgent)
+		logger.Warnf(ctx, "Ignoring @MCP scope outside agent preset: requested=%v agent=%v",
+			requested, agentPresetMCPs)
 		return
 	}
 	agentConfig.MCPSelectionMode = mode
@@ -508,23 +502,14 @@ func applyPerRequestMCPScope(
 		requested, agentConfig.MCPSelectionMode, agentConfig.MCPServices)
 }
 
-// resolvePerRequestMCPScope narrows MCP registration for a per-turn @mention.
-// selectionMode "none" rejects all mentions. Shared agents never register MCP
-// services outside the agent preset.
 func resolvePerRequestMCPScope(
 	mentioned, agentMCPs []string,
 	selectionMode string,
-	isSharedAgent bool,
 ) (effective []string, mode string) {
 	if len(mentioned) == 0 {
 		return nil, selectionMode
 	}
-	if isSharedAgent {
-		mentioned = intersectPreservingRequestOrder(mentioned, agentMCPs)
-		if len(mentioned) == 0 {
-			return nil, selectionMode
-		}
-	}
+
 	switch selectionMode {
 	case "none":
 		return nil, selectionMode

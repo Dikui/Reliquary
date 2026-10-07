@@ -3,11 +3,11 @@ package sandbox
 import (
 	"context"
 	"encoding/json"
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 	"testing"
 	"time"
 
-	"github.com/alicebob/miniredis/v2"
-	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 )
 
@@ -43,11 +43,6 @@ func newTwoRedisBindingTestStores(
 func TestRedisSessionSandboxBindingStoreContract(t *testing.T) {
 	store, _, _ := newRedisBindingTestStore(t)
 	testSessionSandboxBindingStore(t, store)
-}
-
-func TestRedisSessionSandboxBindingStoreReplacesTrafficToken(t *testing.T) {
-	store, _, _ := newRedisBindingTestStore(t)
-	testSessionSandboxBindingReplacesTrafficToken(t, store)
 }
 
 func TestRedisSessionSandboxBindingStoreTurnLease(t *testing.T) {
@@ -134,7 +129,7 @@ func TestRedisSessionSandboxBindingFailsClosedWhenRedisStops(t *testing.T) {
 	require.Error(t, err)
 	_, err = store.Create(context.Background(), key, binding)
 	require.Error(t, err)
-	_, err = store.DeleteIfMatch(context.Background(), key, SandboxTypeCube, "sandbox-a")
+	_, err = store.DeleteIfMatch(context.Background(), key, SandboxTypeDocker, "sandbox-a")
 	require.Error(t, err)
 
 	called := false

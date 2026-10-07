@@ -225,10 +225,6 @@ console.log(`Count: ${uncovered.length}`)
 console.log('\n=== Indirect i18n keys (computed / inline ternary) ===')
 const staticKeys = collectStaticI18nKeysFromSources()
 const indirectCandidates = [
-  'knowledgeList.sections.tenantOthers',
-  'knowledgeList.sections.tenantReadonly',
-  'agent.sections.tenantOthers',
-  'agent.sections.tenantReadonly',
   'modelSettings.builtinModels.descriptionAdmin',
   'modelSettings.builtinModels.description',
 ]

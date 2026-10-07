@@ -1,21 +1,3 @@
-// Package sandbox: what makes an existing sandbox operable.
-//
-// Two groups of configuration fields decide whether the sandboxes a config has
-// already created can still be acted on. This file names them in one place
-// because the answer depends on which SDK carries which value:
-//
-//   - Control plane (API URL, API key): every lifecycle call - list, delete,
-//     pause, resume, refresh timeout - is issued against it. Lose it and the
-//     sandboxes can no longer be reclaimed at all.
-//   - Data plane (sandbox domain, and for Cube the proxy endpoint): envd traffic
-//     is routed through it. Lose it and the sandboxes are still deletable but no
-//     longer usable, so every live session on the config fails at once.
-//
-// The split is a property of the clients in use, not a universal truth:
-// github.com/matiasinsaurralde/go-e2b resolves the API base URL and the sandbox
-// domain independently, whereas E2B's own JS/Python SDKs derive the API base from
-// the domain (https://api.${domain}). Swapping that dependency would move the
-// domain into the control-plane group.
 package sandbox
 
 import (
@@ -31,10 +13,6 @@ type SandboxIdentity struct {
 	// Control plane - whether an existing sandbox can still be reclaimed.
 	APIURL string
 	APIKey string
-
-	// Data plane - whether an existing sandbox can still be used.
-	SandboxDomain string
-	ProxyURL      string
 }
 
 // IdentityOf projects a stored config onto its identity. Only the active
@@ -59,18 +37,6 @@ func IdentityOf(tenantCfg *types.TenantSandboxConfig) SandboxIdentity {
 		AllowPrivateEndpoints: tenantCfg.AllowPrivateEndpoints,
 	}
 	switch SandboxType(tenantCfg.SandboxType) {
-	case SandboxTypeCube:
-		if cube := tenantCfg.Cube; cube != nil {
-			identity.APIURL, identity.APIKey = cube.APIURL, cube.APIKey
-			identity.SandboxDomain = cube.SandboxDomain
-			identity.ProxyURL = cube.ProxyURL
-		}
-	case SandboxTypeE2B:
-		if e2bCfg := tenantCfg.E2B; e2bCfg != nil {
-			identity.APIURL, identity.APIKey = e2bCfg.APIURL, e2bCfg.APIKey
-			identity.SandboxDomain = e2bCfg.SandboxDomain
-			identity.ProxyURL = e2bCfg.ProxyURL
-		}
 	case SandboxTypeDocker:
 		// The daemon endpoint is both planes at once: containers are created,
 		// exec'd and deleted over the same socket, so re-pointing it strands

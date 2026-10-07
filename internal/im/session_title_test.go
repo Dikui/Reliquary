@@ -50,8 +50,8 @@ func TestBuildUserSessionTitle(t *testing.T) {
 		{
 			name: "group without username falls back to user id",
 			msg: &IncomingMessage{
-				Platform: "wecom",
-				UserID:   "WeCom_ZhangSan",
+				Platform: "feishu",
+				UserID:   "Feishu_ZhangSan",
 				ChatType: ChatTypeGroup,
 				ChatID:   "wc_group_1234",
 			},
@@ -60,7 +60,7 @@ func TestBuildUserSessionTitle(t *testing.T) {
 		{
 			name: "no user identity at all",
 			msg: &IncomingMessage{
-				Platform: "slack",
+				Platform: "feishu",
 				ChatType: ChatTypeDirect,
 			},
 			want: "user · dm",
@@ -84,7 +84,7 @@ func TestBuildThreadSessionTitle(t *testing.T) {
 		{
 			name: "chat + thread",
 			msg: &IncomingMessage{
-				Platform: "slack",
+				Platform: "feishu",
 				ChatID:   "C0123456789",
 				ThreadID: "1700000000.111000",
 			},
@@ -137,8 +137,8 @@ func TestIMInitialSessionTitle(t *testing.T) {
 		{
 			name: "non-text message (no content) falls back to the identity title",
 			msg: &IncomingMessage{
-				Platform: "wecom",
-				UserID:   "WeCom_ZhangSan",
+				Platform: "feishu",
+				UserID:   "Feishu_ZhangSan",
 				ChatType: ChatTypeGroup,
 				ChatID:   "wc_group_1234",
 			},

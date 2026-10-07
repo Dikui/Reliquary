@@ -17,7 +17,7 @@ matching down migration. A fresh database reaches version `0` after applying
 this baseline. Future schema changes continue from version `000001`.
 
 The baseline includes `uuid-ossp`, `vector`, `pg_trgm`, and `pg_search`,
-78 application tables, and their final indexes, constraints, functions,
+70 application tables, and their final indexes, constraints, functions,
 and trigger. Running the old migration history on an empty database leaves
 every application table empty, so the baseline has no seed table rows.
 The old built-in agent inserts, RBAC membership inserts, and Skill catalog

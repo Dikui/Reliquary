@@ -29,7 +29,7 @@ const (
 	ToolExecuteSkillScript = "execute_skill_script"
 	ToolReadSkill          = "read_skill"
 	// Sandbox filesystem tools (only available when the sandbox backend
-	// supports per-session files — Cube, E2B, Docker). list/read inspect
+	// supports per-session files with Docker). list/read inspect
 	// the session workspace; write creates text files so generated
 	// scripts do not have to travel through a shell_exec heredoc; edit
 	// patches an existing file without regenerating it.
@@ -57,7 +57,7 @@ const (
 	// ToolShellExec lets the LLM execute ad-hoc shell commands inside the
 	// current session's sandbox (dependency installs, environment probing).
 	// Registered only when the resolved backend advertises the session shell
-	// capability (Cube, E2B, Docker). The command never runs on the Reliquary host.
+	// capability (Docker). The command never runs on the Reliquary host.
 	//
 	// Also absent from AvailableToolDefinitions: registerSandboxShellIfAllowed
 	// keys it on SkillsEnabled (or install mode), so the shell follows the

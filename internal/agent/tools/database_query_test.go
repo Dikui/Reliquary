@@ -14,7 +14,7 @@ func TestDatabaseQueryInjectsEnabledChunkFilter(t *testing.T) {
 	}})
 
 	securedSQL, err := tool.validateAndSecureSQL(
-		"SELECT c.id, c.content FROM chunks c WHERE c.chunk_type = 'faq'",
+		"SELECT c.id, c.content FROM chunks c WHERE c.chunk_type = 'text'",
 		1,
 	)
 	if err != nil {

@@ -206,7 +206,7 @@ func (s *tenantMemberService) AddMember(
 
 // EnsureOwner is idempotent: if the user already has an active membership
 // in the tenant it is returned unchanged; otherwise a new owner row is
-// created. Used by Register/OIDC paths so re-running Register on an
+// created. Used by team registration paths so re-running Register on an
 // existing user (e.g. after a partial failure) does not double-insert.
 func (s *tenantMemberService) EnsureOwner(
 	ctx context.Context,
@@ -389,14 +389,8 @@ func (s *tenantMemberService) emitRoleChangeAudit(
 // service method but the recorded action differs so an audit reader
 // can tell the two apart.
 //
-// After a successful soft-delete, best-effort cleanup clears any
-// dangling users.tenant_id / LastActiveTenantID that still points at
-// the removed workspace and revokes outstanding auth tokens. Without
-// this, a tenantless→invited→removed user keeps a stale home pointer
-// and the login path synthesises the removed workspace back into the
-// space switcher (see issue #2586). Cleanup failures are logged but
-// never fail the removal itself: the membership row is already gone
-// and the login-path membership checks act as a second line of defence.
+// After removal, revoke outstanding tokens. Login and request authentication
+// also require an active team membership.
 func (s *tenantMemberService) RemoveMember(ctx context.Context, userID string, tenantID uint64) error {
 	current, err := s.repo.Get(ctx, userID, tenantID)
 	if err != nil {
@@ -430,32 +424,6 @@ func (s *tenantMemberService) RemoveMember(ctx context.Context, userID string, t
 // JWT still scoped to that tenant cannot keep serving 403-only UI.
 // All steps are best-effort and nil-safe for partial DI graphs in tests.
 func (s *tenantMemberService) cleanupRemovedMemberState(ctx context.Context, userID string, tenantID uint64) {
-	if s.userRepo != nil {
-		user, err := s.userRepo.GetUserByID(ctx, userID)
-		if err != nil {
-			logger.Warnf(ctx,
-				"RemoveMember cleanup: failed to load user %s after removing tenant %d: %v",
-				userID, tenantID, err)
-		} else if user != nil {
-			changed := false
-			if user.TenantID == tenantID {
-				user.TenantID = 0
-				changed = true
-			}
-			if user.Preferences.LastActiveTenantID != nil && *user.Preferences.LastActiveTenantID == tenantID {
-				user.Preferences.LastActiveTenantID = nil
-				changed = true
-			}
-			if changed {
-				user.UpdatedAt = time.Now()
-				if err := s.userRepo.UpdateUser(ctx, user); err != nil {
-					logger.Warnf(ctx,
-						"RemoveMember cleanup: failed to clear stale tenant pointers for user %s tenant %d: %v",
-						userID, tenantID, err)
-				}
-			}
-		}
-	}
 
 	if s.tokenRepo == nil {
 		return

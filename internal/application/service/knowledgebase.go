@@ -13,6 +13,7 @@ import (
 	"github.com/hibiken/asynq"
 	"gorm.io/gorm"
 
+	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service/retriever"
 	"reliquary/internal/datasource"
 	apperrors "reliquary/internal/errors"
@@ -34,8 +35,6 @@ type knowledgeBaseService struct {
 	repo            interfaces.KnowledgeBaseRepository
 	kgRepo          interfaces.KnowledgeRepository
 	chunkRepo       interfaces.ChunkRepository
-	shareRepo       interfaces.KBShareRepository
-	kbShareService  interfaces.KBShareService
 	modelService    interfaces.ModelService
 	retrieveEngine  interfaces.RetrieveEngineRegistry
 	ownership       retriever.TenantStoreOwnership
@@ -56,8 +55,6 @@ type knowledgeBaseService struct {
 func NewKnowledgeBaseService(db *gorm.DB, repo interfaces.KnowledgeBaseRepository,
 	kgRepo interfaces.KnowledgeRepository,
 	chunkRepo interfaces.ChunkRepository,
-	shareRepo interfaces.KBShareRepository,
-	kbShareService interfaces.KBShareService,
 	modelService interfaces.ModelService,
 	retrieveEngine interfaces.RetrieveEngineRegistry,
 	ownership retriever.TenantStoreOwnership,
@@ -78,8 +75,6 @@ func NewKnowledgeBaseService(db *gorm.DB, repo interfaces.KnowledgeBaseRepositor
 		repo:            repo,
 		kgRepo:          kgRepo,
 		chunkRepo:       chunkRepo,
-		shareRepo:       shareRepo,
-		kbShareService:  kbShareService,
 		modelService:    modelService,
 		retrieveEngine:  retrieveEngine,
 		ownership:       ownership,
@@ -123,14 +118,6 @@ func (s *knowledgeBaseService) CreateKnowledgeBase(ctx context.Context,
 	kb.CreatedAt = time.Now()
 	kb.TenantID = types.MustTenantIDFromContext(ctx)
 	kb.UpdatedAt = time.Now()
-	// Record the creator so RBAC's RequireOwnershipOrRole can let
-	// Contributors edit their own KBs without granting them tenant-wide
-	// edit rights. The X-API-Key auth path attaches a synthetic
-	// `system-<tenantID>` user; we deliberately skip those so the KB
-	// stays tenant-owned (CreatorID == ""), which matches the original
-	// API-key semantics (any human Admin can manage it) and prevents a
-	// later "list KBs by creator" feature from surfacing rows nobody can
-	// re-attribute.
 	if uid, ok := types.UserIDFromContext(ctx); ok && !types.IsSyntheticUserID(uid) {
 		kb.CreatorID = uid
 	}
@@ -303,12 +290,13 @@ func (s *knowledgeBaseService) GetKnowledgeBaseByID(ctx context.Context, id stri
 		return nil, err
 	}
 
+	if kb == nil || kb.TenantID != types.SingleTenantID {
+		return nil, repository.ErrKnowledgeBaseNotFound
+	}
 	kb.EnsureDefaults()
 	return kb, nil
 }
 
-// GetKnowledgeBaseByIDOnly retrieves knowledge base by ID without tenant filter
-// Used for cross-tenant shared KB access where permission is checked elsewhere
 func (s *knowledgeBaseService) GetKnowledgeBaseByIDOnly(ctx context.Context, id string) (*types.KnowledgeBase, error) {
 	if id == "" {
 		logger.Error(ctx, "Knowledge base ID is empty")
@@ -323,11 +311,14 @@ func (s *knowledgeBaseService) GetKnowledgeBaseByIDOnly(ctx context.Context, id 
 		return nil, err
 	}
 
+	if kb == nil || kb.TenantID != types.SingleTenantID {
+		return nil, repository.ErrKnowledgeBaseNotFound
+	}
 	kb.EnsureDefaults()
 	return kb, nil
 }
 
-// GetKnowledgeBasesByIDsOnly retrieves knowledge bases by IDs without tenant filter (batch).
+// GetKnowledgeBasesByIDsOnly retrieves team knowledge bases by IDs (batch).
 func (s *knowledgeBaseService) GetKnowledgeBasesByIDsOnly(ctx context.Context, ids []string) ([]*types.KnowledgeBase, error) {
 	if len(ids) == 0 {
 		return nil, nil
@@ -336,12 +327,14 @@ func (s *knowledgeBaseService) GetKnowledgeBasesByIDsOnly(ctx context.Context, i
 	if err != nil {
 		return nil, err
 	}
+	teamKBs := make([]*types.KnowledgeBase, 0, len(kbs))
 	for _, kb := range kbs {
-		if kb != nil {
+		if kb != nil && kb.TenantID == types.SingleTenantID {
 			kb.EnsureDefaults()
+			teamKBs = append(teamKBs, kb)
 		}
 	}
-	return kbs, nil
+	return teamKBs, nil
 }
 
 // ListKnowledgeBases returns all knowledge bases for a tenant
@@ -373,14 +366,6 @@ func (s *knowledgeBaseService) ListKnowledgeBases(ctx context.Context) ([]*types
 			} else {
 				kb.KnowledgeCount = knowledgeCount
 			}
-		case types.KnowledgeBaseTypeFAQ:
-			// Get chunk count
-			chunkCount, err := s.chunkRepo.CountChunksByKnowledgeBaseID(ctx, tenantID, kb.ID)
-			if err != nil {
-				logger.Warnf(ctx, "Failed to get chunk count for knowledge base %s: %v", kb.ID, err)
-			} else {
-				kb.ChunkCount = chunkCount
-			}
 		}
 
 		// Check if there is a processing import task
@@ -408,7 +393,6 @@ func (s *knowledgeBaseService) ListKnowledgeBases(ctx context.Context) ([]*types
 	return kbs, nil
 }
 
-// ListKnowledgeBasesByTenantID returns all knowledge bases for the given tenant (e.g. for shared agent context).
 func (s *knowledgeBaseService) ListKnowledgeBasesByTenantID(ctx context.Context, tenantID uint64) ([]*types.KnowledgeBase, error) {
 	kbs, err := s.repo.ListKnowledgeBasesByTenantID(ctx, tenantID)
 	if err != nil {
@@ -424,10 +408,6 @@ func (s *knowledgeBaseService) ListKnowledgeBasesByTenantID(ctx context.Context,
 			if cnt, err := s.kgRepo.CountKnowledgeByKnowledgeBaseID(ctx, tenantID, kb.ID); err == nil {
 				kb.KnowledgeCount = cnt
 			}
-		case types.KnowledgeBaseTypeFAQ:
-			if cnt, err := s.chunkRepo.CountChunksByKnowledgeBaseID(ctx, tenantID, kb.ID); err == nil {
-				kb.ChunkCount = cnt
-			}
 		}
 		if processingCount, err := s.kgRepo.CountKnowledgeByStatus(ctx, tenantID, kb.ID, []string{"pending", "processing"}); err == nil {
 			kb.IsProcessing = processingCount > 0
@@ -435,11 +415,6 @@ func (s *knowledgeBaseService) ListKnowledgeBasesByTenantID(ctx context.Context,
 		}
 	}
 
-	// Stamp pin state from the caller's perspective. The tenantID
-	// argument may not match the caller's own tenant (this method is
-	// also used to list a shared-agent's source-tenant KBs); we still
-	// scope user_kb_pins by `tenantID` since a pin tied to one tenant
-	// shouldn't surface when browsing another tenant's KBs.
 	if userID, ok := types.UserIDFromContext(ctx); ok && userID != "" {
 		s.applyUserKBPins(ctx, tenantID, userID, kbs)
 	}
@@ -457,10 +432,6 @@ func (s *knowledgeBaseService) FillKnowledgeBaseCounts(ctx context.Context, kb *
 	case types.KnowledgeBaseTypeDocument:
 		if cnt, err := s.kgRepo.CountKnowledgeByKnowledgeBaseID(ctx, tenantID, kb.ID); err == nil {
 			kb.KnowledgeCount = cnt
-		}
-	case types.KnowledgeBaseTypeFAQ:
-		if cnt, err := s.chunkRepo.CountChunksByKnowledgeBaseID(ctx, tenantID, kb.ID); err == nil {
-			kb.ChunkCount = cnt
 		}
 	}
 	if processingCount, err := s.kgRepo.CountKnowledgeByStatus(ctx, tenantID, kb.ID, []string{"pending", "processing"}); err == nil {
@@ -526,9 +497,7 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 	if config != nil {
 		kb.ChunkingConfig = config.ChunkingConfig
 		kb.ImageProcessingConfig = config.ImageProcessingConfig
-		if config.FAQConfig != nil {
-			kb.FAQConfig = config.FAQConfig
-		}
+
 		if config.WikiConfig != nil {
 			kb.WikiConfig = config.WikiConfig
 		}
@@ -596,11 +565,6 @@ func (s *knowledgeBaseService) TogglePinKnowledgeBase(
 		return nil, errors.New("pin requires an authenticated user")
 	}
 
-	// Look the KB up without a tenant filter: the route's KBAccessRead
-	// guard already validated that this caller can see this KB (own,
-	// org-shared, or agent-shared). Filtering by the caller's tenant
-	// here would 404 every legitimate pin against a shared KB whose
-	// owning tenant differs from the caller's active tenant.
 	kb, err := s.repo.GetKnowledgeBaseByID(ctx, id)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
@@ -754,13 +718,6 @@ func (s *knowledgeBaseService) DeleteKnowledgeBase(ctx context.Context, id strin
 	)
 	s.cleanupTasksForKnowledgeBase(kbCleanupCtx, id, nil, nil)
 	cancelKBCleanup()
-
-	// Step 1b: Remove all organization shares for this KB so org settings no longer show them
-	if s.shareRepo != nil {
-		if delErr := s.shareRepo.DeleteByKnowledgeBaseID(ctx, id); delErr != nil {
-			logger.Warnf(ctx, "Failed to delete KB shares for knowledge base %s: %v", id, delErr)
-		}
-	}
 
 	// Step 1c: Stop and soft-delete all data sources bound to this KB so cron
 	// schedules and in-flight sync logs do not keep running against a deleted KB.
@@ -1089,23 +1046,6 @@ func (s *knowledgeBaseService) SetEmbeddingModel(ctx context.Context, id string,
 	return nil
 }
 
-// CopyKnowledgeBase copies a knowledge base to a new knowledge base (shallow copy).
-// Source and target must belong to the tenant in context; cross-tenant access is rejected.
-//
-// Defensive checks:
-//
-//   - When dstKB != "" (clone into an existing target), the source's
-//     EmbeddingModelID and VectorStoreID must match the target's. Mismatched
-//     embedding models would silently mix incompatible vector spaces;
-//     mismatched vector stores would require copying physical vector data
-//     between stores, which is not yet supported.
-//   - When dstKB == "" (create a new target), VectorStoreID is copied from
-//     the source so the new KB shares the same physical vector index. GORM
-//     `<-:create` allows INSERT, so the new row is well-formed.
-//
-// The handler's CopyKnowledgeBase endpoint runs the same checks synchronously
-// before enqueueing the async clone task, so the 400 errors here are
-// defense-in-depth for the worker entry point.
 func (s *knowledgeBaseService) CopyKnowledgeBase(ctx context.Context,
 	srcKB string, dstKB string,
 ) (*types.KnowledgeBase, *types.KnowledgeBase, error) {
@@ -1158,11 +1098,7 @@ func (s *knowledgeBaseService) CopyKnowledgeBase(ctx context.Context,
 			}
 		}
 	} else {
-		var faqConfig *types.FAQConfig
-		if sourceKB.FAQConfig != nil {
-			cfg := *sourceKB.FAQConfig
-			faqConfig = &cfg
-		}
+
 		// Preserve VectorStoreID so the cloned KB lands on the same
 		// physical index. GORM `<-:create` permits the value at INSERT.
 		targetKB = &types.KnowledgeBase{
@@ -1179,7 +1115,6 @@ func (s *knowledgeBaseService) CopyKnowledgeBase(ctx context.Context,
 			StorageProviderConfig: sourceKB.StorageProviderConfig,
 			StorageBackendID:      sourceKB.StorageBackendID,
 			StorageConfig:         sourceKB.StorageConfig,
-			FAQConfig:             faqConfig,
 			VectorStoreID:         sourceKB.VectorStoreID,
 		}
 		// The clone is owned by the caller, not the original creator —
@@ -1197,9 +1132,6 @@ func (s *knowledgeBaseService) CopyKnowledgeBase(ctx context.Context,
 	return sourceKB, targetKB, nil
 }
 
-// DuplicateKnowledgeBase creates a new KB from the source KB's settings only.
-// Runtime/content state is deliberately reset so this path never copies
-// knowledge entries, chunks, FAQ content, wiki pages, indexes, shares or pins.
 func (s *knowledgeBaseService) DuplicateKnowledgeBase(
 	ctx context.Context,
 	srcKB string,
@@ -1240,7 +1172,6 @@ func (s *knowledgeBaseService) DuplicateKnowledgeBase(
 	targetKB.ChunkCount = 0
 	targetKB.IsProcessing = false
 	targetKB.ProcessingCount = 0
-	targetKB.ShareCount = 0
 	targetKB.CreatorName = ""
 	targetKB.EnsureDefaults()
 	targetKB.Normalize()

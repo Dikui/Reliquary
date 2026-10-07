@@ -26,8 +26,6 @@ const TENANT_MEMBER_AUDIT_ACTION_LABELS_EN: Record<string, string> = {
 const SYSTEM_GLOBAL_AUDIT_ACTION_LABELS_EN: Record<string, string> = {
   'system.setting_changed': 'System setting changed',
   'system.admin_promoted': 'System admin granted',
-  'system.api_key_created': 'Platform API key created',
-  'system.api_key_revoked': 'Platform API key revoked',
   'system.admin_revoked': 'System admin revoked',
   'system.user_password_reset': 'User password reset',
   'system.queue_task_retried': 'Failed task run again',
@@ -65,13 +63,7 @@ const KB_ACTIVITY_ACTION_LABELS_EN: Record<string, string> = {
   'datasource.sync_failed': 'Data source sync failed',
   'datasource.paused': 'Data source paused',
   'datasource.resumed': 'Data source resumed',
-  'kb.share_added': 'Share added',
-  'kb.share_permission_changed': 'Share permission changed',
-  'kb.share_removed': 'Share removed',
   'wiki.content_changed': 'Wiki content changed',
-  'faq.import_started': 'FAQ import started',
-  'faq.import_completed': 'FAQ import completed',
-  'faq.import_failed': 'FAQ import failed',
 }
 
 const KB_ACTIVITY_OUTCOME_LABELS_EN: Record<string, string> = {

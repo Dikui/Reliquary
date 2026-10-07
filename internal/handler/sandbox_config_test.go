@@ -24,14 +24,13 @@ import (
 // produced them.
 func TestSandboxConfigResponseMasksSecrets(t *testing.T) {
 	cfg := &types.TenantSandboxConfig{
-		SandboxType: "e2b",
-		E2B:         &types.E2BSandboxConfig{APIKey: "super-secret"},
+		SandboxType: "docker",
 		EnvVars:     map[string]string{"TOKEN": "also-secret"},
 	}
 	entity := &types.TenantSandboxConfigEntity{
 		ID:          "cfg-a",
 		Name:        "primary",
-		SandboxType: "e2b",
+		SandboxType: "docker",
 		Config:      cfg,
 		CreatedAt:   time.Unix(1, 0),
 		UpdatedAt:   time.Unix(2, 0),

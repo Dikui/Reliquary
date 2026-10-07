@@ -2,17 +2,13 @@ package handler
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	stderrors "errors"
-	"net"
 	"net/http"
-	"net/url"
-	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 
+	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
 	"reliquary/internal/config"
 	"reliquary/internal/errors"
@@ -22,9 +18,6 @@ import (
 	"reliquary/internal/types/interfaces"
 	secutils "reliquary/internal/utils"
 )
-
-const oidcNonceCookieName = "reliquary_oidc_nonce"
-const oidcNonceCookieMaxAge = 600
 
 // AuthHandler implements HTTP request handlers for user authentication
 // Provides functionality for user registration, login, logout, and token management
@@ -41,33 +34,12 @@ type AuthHandler struct {
 	invitationSvc interfaces.TenantInvitationService
 }
 
-// NewAuthHandler creates a new auth handler instance with the provided services
-// Parameters:
-//   - userService: An implementation of the UserService interface for business logic
-//   - tenantService: An implementation of the TenantService interface for tenant management
-//   - systemSettingSvc: 3-tier resolver for runtime-tunable settings such as
-//     auth.registration_mode (P3). When DB has a row, it overrides cfg's
-//     startup value; otherwise we fall back to cfg.Auth.RegistrationMode
-//     (which already accounted for the legacy DISABLE_REGISTRATION env coerce
-//     during config load). Mismatch impossible by construction since the
-//     handler always passes cfg's value as the def parameter to GetString.
-//
-// Returns a pointer to the newly created AuthHandler
+// NewAuthHandler wires team authentication and password policy services.
 func NewAuthHandler(configInfo *config.Config,
 	userService interfaces.UserService, tenantService interfaces.TenantService,
 	systemSettingSvc interfaces.SystemSettingService,
 	invitationSvc interfaces.TenantInvitationService,
 ) *AuthHandler {
-	// Boot-time guard: a nil-or-empty Auth section silently disables the
-	// invite_only gate (see Register below). Emit a loud one-shot log
-	// pointing at the misconfiguration so operators notice on startup
-	// instead of discovering it the day someone hits /auth/register.
-	if configInfo == nil || configInfo.Auth == nil {
-		logger.Errorf(context.Background(),
-			"[auth] AuthHandler constructed with nil/incomplete config (cfg=%v); "+
-				"registration_mode enforcement is disabled. This is almost certainly a wiring bug.",
-			configInfo)
-	}
 	return &AuthHandler{
 		configInfo:       configInfo,
 		userService:      userService,
@@ -77,76 +49,16 @@ func NewAuthHandler(configInfo *config.Config,
 	}
 }
 
-// resolveRegistrationMode returns the currently active registration mode.
-// Priority: DB system_settings > cfg (which already absorbed the legacy
-// DISABLE_REGISTRATION env coerce at startup) > "self_serve" hard default.
-//
-// Centralised here so /auth/register and /auth/config stay in lock-step —
-// otherwise a SystemAdmin's UI edit could affect one path and not the other.
+// resolveRegistrationMode permits direct registration only for the first user.
 func (h *AuthHandler) resolveRegistrationMode(ctx context.Context) string {
-	// cfg-derived default: empty is impossible after applyAuthAndTenantDefaults,
-	// but be defensive in case AuthHandler was constructed before that ran
-	// (the NewAuthHandler guard already logged in that case).
-	def := config.AuthRegistrationModeSelfServe
-	if h.configInfo != nil && h.configInfo.Auth != nil {
-		if m := strings.TrimSpace(h.configInfo.Auth.RegistrationMode); m != "" {
-			def = m
-		}
+	if h.userService == nil {
+		return config.AuthRegistrationModeInviteOnly
 	}
-	if h.systemSettingSvc == nil {
-		return def
+	hasUsers, err := h.userService.HasTeamUsers(ctx)
+	if err != nil || hasUsers {
+		return config.AuthRegistrationModeInviteOnly
 	}
-	// envName = "" because DISABLE_REGISTRATION is a boolean and
-	// auth.registration_mode is a string — the legacy env was already
-	// coerced into `def` above. Mixing the two semantics at the resolver
-	// layer would mean a UI delete (DB row absent) silently flipped to
-	// the legacy boolean read again, which is surprising.
-	return h.systemSettingSvc.GetString(ctx, "auth.registration_mode", "", def)
-}
-
-// resolveDefaultTenantMode returns the provisioning policy for a new
-// local user account.
-// Priority: DB system_settings > cfg.Auth > hard default (create_personal).
-// Shared by public registration and the SystemAdmin create-user endpoint.
-//
-// Invitation registration never uses this value: the invitation itself
-// supplies the target tenant.
-func resolveDefaultTenantMode(
-	ctx context.Context,
-	configInfo *config.Config,
-	systemSettingSvc interfaces.SystemSettingService,
-) types.TenantProvisioningMode {
-	def := config.AuthDefaultTenantModeCreatePersonal
-	if configInfo != nil && configInfo.Auth != nil {
-		if mode := strings.TrimSpace(configInfo.Auth.DefaultTenantMode); mode != "" {
-			def = mode
-		}
-	}
-	mode := def
-	if systemSettingSvc != nil {
-		mode = systemSettingSvc.GetString(
-			ctx,
-			"auth.default_tenant_mode",
-			"RELIQUARY_AUTH_DEFAULT_TENANT_MODE",
-			def,
-		)
-	}
-	if mode == config.AuthDefaultTenantModeTenantless {
-		return types.TenantProvisioningTenantless
-	}
-	return types.TenantProvisioningCreatePersonal
-}
-
-// resolveDefaultTenantMode returns the provisioning policy for ordinary
-// public password registrations.
-func (h *AuthHandler) resolveDefaultTenantMode(ctx context.Context) types.TenantProvisioningMode {
-	return resolveDefaultTenantMode(ctx, h.configInfo, h.systemSettingSvc)
-}
-
-// resolveDefaultTenantMode resolves the same policy for users provisioned
-// by a SystemAdmin via POST /api/v1/system/admin/users/create.
-func (h *SystemHandler) resolveDefaultTenantMode(ctx context.Context) types.TenantProvisioningMode {
-	return resolveDefaultTenantMode(ctx, h.cfg, h.systemSettingSvc)
+	return config.AuthRegistrationModeSelfServe
 }
 
 func (h *AuthHandler) complexPasswordEnabled(ctx context.Context) bool {
@@ -173,12 +85,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	logger.Info(ctx, "Start user registration")
 
-	// 当 auth.registration_mode=invite_only 时，public 注册被关闭。
-	// 优先级：DB system_settings > cfg.Auth.RegistrationMode > "self_serve"。
-	// SystemAdmin 通过「全局设置」UI 实时切换 self_serve / invite_only，立即
-	// 生效，不需要重启服务。历史变量 DISABLE_REGISTRATION=true 仍在 config
-	// 启动阶段被等价提升为 invite_only（applyAuthAndTenantDefaults），
-	// 作为 cfg-default 进入 resolveRegistrationMode。
+	// After bootstrap, every new account requires an invitation.
 	if h.resolveRegistrationMode(ctx) == config.AuthRegistrationModeInviteOnly {
 		logger.Warn(ctx, "Registration rejected: auth.registration_mode=invite_only")
 		appErr := errors.NewForbiddenError("Registration is invite-only")
@@ -211,8 +118,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	}
 
 	// Validate password against the runtime policy (DB system_settings
-	// first). Register itself does not enforce this because OIDC
-	// auto-provision uses an untyped random secret the user never types.
+	// first). The service also enforces this policy.
 	if err := service.ValidatePasswordPolicy(req.Password, h.complexPasswordEnabled(ctx)); err != nil {
 		logger.Error(ctx, "Invalid password policy")
 		appErr := errors.NewValidationError(err.Error())
@@ -222,11 +128,14 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	req.Username = secutils.SanitizeForLog(req.Username)
 	req.Email = secutils.SanitizeForLog(req.Email)
-	req.TenantProvisioning = h.resolveDefaultTenantMode(ctx)
 	// Call service to register user
 	user, err := h.userService.Register(ctx, &req)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to register user: %v", err)
+		if stderrors.Is(err, repository.ErrTeamInvitationRequired) {
+			c.Error(errors.NewForbiddenError("Registration is invite-only"))
+			return
+		}
 		appErr := errors.NewBadRequestError(err.Error())
 		c.Error(appErr)
 		return
@@ -295,214 +204,6 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	logger.Infof(ctx, "User logged in successfully, email: %s", email)
 	c.JSON(http.StatusOK, dto.NewAuthLoginResponse(response))
-}
-
-// GetOIDCAuthorizationURL godoc
-// @Summary      获取OIDC授权地址
-// @Description  根据后端OIDC配置生成第三方登录跳转地址
-// @Tags         认证
-// @Accept       json
-// @Produce      json
-// @Param        redirect_uri  query     string  true  "OIDC回调地址"
-// @Success      200           {object}  types.OIDCAuthURLResponse
-// @Failure      400           {object}  errors.AppError  "请求参数错误"
-// @Failure      403           {object}  errors.AppError  "OIDC未启用"
-// @Router       /auth/oidc/url [get]
-func (h *AuthHandler) GetOIDCAuthorizationURL(c *gin.Context) {
-	ctx := c.Request.Context()
-	redirectURI := strings.TrimSpace(c.Query("redirect_uri"))
-	if redirectURI == "" {
-		appErr := errors.NewValidationError("redirect_uri is required")
-		c.Error(appErr)
-		return
-	}
-
-	resp, err := h.userService.GetOIDCAuthorizationURL(ctx, redirectURI)
-	if err != nil {
-		logger.Errorf(ctx, "Failed to generate OIDC authorization URL: %v", err)
-		appErr := errors.NewForbiddenError("OIDC authorization unavailable").WithDetails(err.Error())
-		c.Error(appErr)
-		return
-	}
-
-	// Bind the state nonce to this browser so an attacker cannot replay
-	// their own authorization code into a victim's callback.
-	setOIDCNonceCookie(c, resp.Nonce)
-
-	c.JSON(http.StatusOK, resp)
-}
-
-// setOIDCNonceCookie binds the OIDC state nonce to this browser so an
-// attacker cannot replay their own authorization code into a victim's
-// callback. Shared by /auth/oidc/url (JSON) and /auth/oidc/start (302).
-func setOIDCNonceCookie(c *gin.Context, nonce string) {
-	if nonce == "" {
-		return
-	}
-	secure := c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(oidcNonceCookieName, nonce, oidcNonceCookieMaxAge, "/", "", secure, true)
-}
-
-// oidcCallbackURL derives the absolute /auth/oidc/callback URL from the
-// request's own origin (scheme + host), so external platforms can deep-link
-// to /auth/oidc/start without supplying a redirect_uri.
-func oidcCallbackURL(c *gin.Context) string {
-	scheme := "http"
-	if c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https") {
-		scheme = "https"
-	}
-	return scheme + "://" + c.Request.Host + "/api/v1/auth/oidc/callback"
-}
-
-// OIDCStart godoc
-// @Summary      发起 OIDC 登录（直接 302）
-// @Description  与 /auth/oidc/url 不同，此端点直接 302 重定向到 OIDC Provider 的授权页，
-// @Description  无需前端 JS 介入。适用于外部平台（如企业门户）直接给出一个链接即可
-// @Description  触发 OIDC 授权码流程，借助 IdP 的 SSO session 实现免再次输密码。
-// @Tags         认证
-// @Success      302
-// @Router       /auth/oidc/start [get]
-func (h *AuthHandler) OIDCStart(c *gin.Context) {
-	ctx := c.Request.Context()
-	resp, err := h.userService.GetOIDCAuthorizationURL(ctx, oidcCallbackURL(c))
-	if err != nil {
-		logger.Errorf(ctx, "Failed to generate OIDC authorization URL: %v", err)
-		appErr := errors.NewForbiddenError("OIDC authorization unavailable").WithDetails(err.Error())
-		c.Error(appErr)
-		return
-	}
-	setOIDCNonceCookie(c, resp.Nonce)
-	c.Redirect(http.StatusFound, resp.AuthorizationURL)
-}
-
-// GetOIDCConfig godoc
-// @Summary      获取OIDC登录配置
-// @Description  返回OIDC是否启用以及provider展示名称，供前端决定是否展示OIDC登录入口
-// @Tags         认证
-// @Accept       json
-// @Produce      json
-// @Success      200  {object}  types.OIDCConfigResponse
-// @Router       /auth/oidc/config [get]
-func (h *AuthHandler) GetOIDCConfig(c *gin.Context) {
-	providerDisplayName := ""
-	enabled := false
-
-	if h.configInfo != nil && h.configInfo.OIDCAuth != nil {
-		enabled = h.configInfo.OIDCAuth.Enable
-		providerDisplayName = strings.TrimSpace(h.configInfo.OIDCAuth.ProviderDisplayName)
-	}
-
-	c.JSON(http.StatusOK, &types.OIDCConfigResponse{
-		Success:             true,
-		Enabled:             enabled,
-		ProviderDisplayName: providerDisplayName,
-	})
-}
-
-// OIDCRedirectCallback godoc
-// @Summary      OIDC登录重定向回调
-// @Description  接收OIDC provider回调并由后端完成code交换，随后重定向回前端登录页
-// @Tags         认证
-// @Accept       json
-// @Produce      json
-// @Param        code   query string false "OIDC授权码"
-// @Param        state  query string false "OIDC状态"
-// @Param        error  query string false "OIDC错误码"
-// @Success      302
-// @Router       /auth/oidc/callback [get]
-func (h *AuthHandler) OIDCRedirectCallback(c *gin.Context) {
-	ctx := c.Request.Context()
-	frontendRedirectURI := "/"
-
-	if providerError := strings.TrimSpace(c.Query("error")); providerError != "" {
-		redirectURL := frontendRedirectURI + "#oidc_error=" + urlQueryEscape(providerError)
-		if description := strings.TrimSpace(c.Query("error_description")); description != "" {
-			redirectURL += "&oidc_error_description=" + urlQueryEscape(description)
-		}
-		c.Redirect(http.StatusFound, redirectURL)
-		return
-	}
-
-	state := strings.TrimSpace(c.Query("state"))
-	decodedState, err := decodeOIDCState(state, c.Request)
-	if err != nil {
-		logger.Errorf(ctx, "Failed to decode OIDC state: %v", err)
-		c.Redirect(http.StatusFound, frontendRedirectURI+"#oidc_error="+urlQueryEscape("invalid_state"))
-		return
-	}
-	// One-time use: clear the binding cookie as soon as it is checked.
-	c.SetCookie(oidcNonceCookieName, "", -1, "/", "", false, true)
-
-	code := strings.TrimSpace(c.Query("code"))
-	if code == "" {
-		c.Redirect(http.StatusFound, frontendRedirectURI+"#oidc_error="+urlQueryEscape("missing_code"))
-		return
-	}
-
-	resp, err := h.userService.LoginWithOIDC(ctx, code, strings.TrimSpace(decodedState.RedirectURI), h.resolveDefaultTenantMode(ctx))
-	if err != nil {
-		logger.Errorf(ctx, "Failed to complete OIDC login via redirect callback: %v", err)
-		c.Redirect(http.StatusFound, frontendRedirectURI+"#oidc_error="+urlQueryEscape("login_failed")+"&oidc_error_description="+urlQueryEscape(err.Error()))
-		return
-	}
-	if !resp.Success {
-		c.Redirect(http.StatusFound, frontendRedirectURI+"#oidc_error="+urlQueryEscape("login_failed")+"&oidc_error_description="+urlQueryEscape(resp.Message))
-		return
-	}
-
-	payload, err := encodeOIDCCallbackPayload(resp)
-	if err != nil {
-		logger.Errorf(ctx, "Failed to encode OIDC callback payload: %v", err)
-		c.Redirect(http.StatusFound, frontendRedirectURI+"#oidc_error="+urlQueryEscape("payload_encode_failed"))
-		return
-	}
-
-	c.Redirect(http.StatusFound, frontendRedirectURI+"#oidc_result="+urlQueryEscape(payload))
-}
-
-func encodeOIDCCallbackPayload(resp *types.OIDCCallbackResponse) (string, error) {
-	payload, err := json.Marshal(dto.NewAuthOIDCCallbackResponse(resp))
-	if err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(payload), nil
-}
-
-type oidcStatePayload struct {
-	Nonce       string
-	RedirectURI string
-}
-
-func decodeOIDCState(raw string, req *http.Request) (*oidcStatePayload, error) {
-	payload, err := secutils.VerifyOIDCState(raw)
-	if err != nil {
-		return nil, err
-	}
-	cookieNonce, err := req.Cookie(oidcNonceCookieName)
-	if err != nil || cookieNonce == nil || strings.TrimSpace(cookieNonce.Value) == "" {
-		return nil, errors.NewValidationError("oidc nonce cookie missing")
-	}
-	if cookieNonce.Value != payload.Nonce {
-		return nil, errors.NewValidationError("oidc nonce mismatch")
-	}
-	return &oidcStatePayload{
-		Nonce:       payload.Nonce,
-		RedirectURI: strings.TrimSpace(payload.RedirectURI),
-	}, nil
-}
-
-func urlQueryEscape(value string) string {
-	replacer := strings.NewReplacer(
-		"%", "%25",
-		" ", "%20",
-		"#", "%23",
-		"&", "%26",
-		"+", "%2B",
-		"=", "%3D",
-		"?", "%3F",
-	)
-	return replacer.Replace(value)
 }
 
 // Logout godoc
@@ -623,15 +324,7 @@ func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
 		return
 	}
 
-	// Get tenant information for the *active* tenant (the one the
-	// auth middleware resolved against the X-Tenant-ID header), not
-	// the user's home tenant. user.TenantID is the row stored on the
-	// users table at signup time and never changes; reading it here
-	// would make /auth/me always return the home tenant even after
-	// the user switched into a peer tenant. The frontend then re-keys
-	// `authStore.tenant.id` to the home tenant, and every UI gate
-	// computed against it (currentTenantRole, isOwner, ...) leaks
-	// the wrong role. Pull the active tenant id from context instead.
+	// Return metadata for the team workspace.
 	var tenant *types.Tenant
 	activeTenantID, _ := types.TenantIDFromContext(ctx)
 	if activeTenantID == 0 {
@@ -644,89 +337,15 @@ func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
 			// Don't fail the request if tenant info is not available
 		}
 	}
-	userInfo := user.ToUserInfo()
-	userInfo.CanAccessAllTenants = user.CanAccessAllTenants && h.configInfo.Tenant.EnableCrossTenantAccess
-	// 同步返回当前用户的 memberships，让前端在页面刷新（仅命中 /auth/me）
-	// 后也能恢复 currentTenantRole，避免角色信息只在 login 那一刻可用。
 	memberships := h.userService.BuildLoginMemberships(ctx, user, tenant)
-	canCreateTenant := user.CanAccessAllTenants ||
-		resolveTenantSelfServiceCreationEnabled(ctx, h.configInfo, h.systemSettingSvc)
-	autoAcceptInvitation := h.systemSettingSvc != nil &&
-		h.systemSettingSvc.GetBool(ctx, "tenant.auto_accept_invitation", "RELIQUARY_TENANT_AUTO_ACCEPT_INVITATION", false)
+	userInfo := user.ToUserInfo()
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
-			"user":            userInfo,
-			"tenant":          dto.NewTenantResponse(ctx, tenant),
-			"memberships":     memberships,
-			"tenant_required": tenant == nil,
-			"capabilities": gin.H{
-				"can_create_tenant":      canCreateTenant,
-				"auto_accept_invitation": autoAcceptInvitation,
-			},
+			"user":        userInfo,
+			"tenant":      dto.NewTenantResponse(ctx, tenant),
+			"memberships": memberships,
 		},
-	})
-}
-
-// updateMyPreferencesRequest is the body for PUT /auth/me/preferences.
-// Fields are pointers so the handler can distinguish "key not present"
-// (preserve existing value) from "explicit false". See
-// types.UserPreferences for the persistence-layer counterpart.
-type updateMyPreferencesRequest struct {
-	// LastActiveTenantID lets clients persist "after a fresh login,
-	// drop me back into this workspace" across devices. The SPA sends
-	// this after every tenant switch; POST /auth/switch-tenant records
-	// the same preference server-side. Send a positive workspace id to
-	// set / replace, or 0 to clear. Membership is validated at next
-	// login, not here. Nil = field omitted from the PATCH and stays
-	// untouched.
-	LastActiveTenantID *uint64 `json:"last_active_tenant_id"`
-}
-
-// UpdateMyPreferences godoc
-// @Summary      更新当前用户的个性化设置
-// @Description  按 PATCH 语义合并用户偏好（仅覆盖请求体里出现的字段，其余字段保持不变），
-// @Description  数据存放在 users.preferences (JSON)，跨设备/浏览器自动同步。
-// @Tags         认证
-// @Accept       json
-// @Produce      json
-// @Param        request  body      updateMyPreferencesRequest  true  "Preferences patch"
-// @Success      200      {object}  map[string]interface{}      "更新后的偏好"
-// @Failure      400      {object}  errors.AppError             "请求参数错误"
-// @Failure      401      {object}  errors.AppError             "未授权"
-// @Security     Bearer
-// @Router       /auth/me/preferences [put]
-func (h *AuthHandler) UpdateMyPreferences(c *gin.Context) {
-	ctx := c.Request.Context()
-
-	user, err := h.userService.GetCurrentUser(ctx)
-	if err != nil {
-		appErr := errors.NewUnauthorizedError("Failed to get user information").WithDetails(err.Error())
-		c.Error(appErr)
-		return
-	}
-
-	var req updateMyPreferencesRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		appErr := errors.NewValidationError("Invalid preferences request").WithDetails(err.Error())
-		c.Error(appErr)
-		return
-	}
-
-	patch := types.UserPreferences{
-		LastActiveTenantID: req.LastActiveTenantID,
-	}
-	prefs, err := h.userService.UpdateUserPreferences(ctx, user.ID, patch)
-	if err != nil {
-		logger.Errorf(ctx, "Failed to update preferences for user %s: %v", user.Email, err)
-		appErr := errors.NewBadRequestError("Failed to update preferences").WithDetails(err.Error())
-		c.Error(appErr)
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    prefs,
 	})
 }
 
@@ -831,122 +450,6 @@ func (h *AuthHandler) GetAuthConfig(c *gin.Context) {
 		"registration_mode":        mode,
 		"complex_password_enabled": complexPasswordEnabled,
 	})
-}
-
-// SwitchTenant godoc
-// @Summary      切换激活空间
-// @Description  为当前用户在目标空间重新签发访问令牌；要求该用户在目标空间存在 active 成员关系（跨租户超级用户除外）。
-// @Description  成功换签会把目标空间写入「最近活跃租户」偏好，下次登录与 refresh 都落在该空间（refresh JWT 不含 tenant_id）。
-// @Description  该偏好是账号级的：一次换签会改变该用户所有设备的下次登录/refresh 落点。偏好写入失败则整次换签失败，不会发出新 token。
-// @Tags         认证
-// @Accept       json
-// @Produce      json
-// @Param        request  body      object{tenant_id=integer,refresh_token=string}  true  "切换请求"
-// @Success      200      {object}  types.LoginResponse
-// @Failure      400      {object}  errors.AppError  "参数错误"
-// @Failure      403      {object}  errors.AppError  "无该空间成员关系或偏好写入失败"
-// @Security     Bearer
-// @Router       /auth/switch-tenant [post]
-//
-// SwitchTenant is the v1 backend hook for the tenant-switcher UI added
-// in PR 3. The current PR ships the endpoint so multi-tenant tests can
-// exercise the membership flow end-to-end before the frontend lands.
-func (h *AuthHandler) SwitchTenant(c *gin.Context) {
-	ctx := c.Request.Context()
-
-	var req struct {
-		TenantID     uint64 `json:"tenant_id"     binding:"required"`
-		RefreshToken string `json:"refresh_token"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		appErr := errors.NewValidationError("Invalid workspace switch request").WithDetails(err.Error())
-		c.Error(appErr)
-		return
-	}
-
-	user, err := h.userService.GetCurrentUser(ctx)
-	if err != nil || user == nil {
-		appErr := errors.NewUnauthorizedError("not authenticated")
-		c.Error(appErr)
-		return
-	}
-
-	resp, err := h.userService.SwitchTenant(ctx, user, req.TenantID, req.RefreshToken)
-	if err != nil {
-		logger.Errorf(ctx, "SwitchTenant failed user=%s target=%d: %v", user.ID, req.TenantID, err)
-		appErr := errors.NewForbiddenError("workspace switch failed").WithDetails(err.Error())
-		c.Error(appErr)
-		return
-	}
-
-	c.JSON(http.StatusOK, dto.NewAuthLoginResponse(resp))
-}
-
-// @Summary      本地 QA 自动登录
-// @Description  显式启用的本地 QA 环境可为既有测试用户签发令牌
-// @Tags         认证
-// @Accept       json
-// @Produce      json
-// @Success      200  {object}  types.LoginResponse
-// @Failure      403  {object}  errors.AppError "未启用本地 QA 登录"
-// @Router       /auth/auto-setup [post]
-func (h *AuthHandler) AutoSetup(c *gin.Context) {
-	ctx := c.Request.Context()
-
-	email := strings.TrimSpace(os.Getenv("RELIQUARY_QA_AUTO_LOGIN_EMAIL"))
-	if !h.qaAutoLoginAllowed(c, email) {
-		c.Error(errors.NewForbiddenError("auto-setup is only available in local QA"))
-		return
-	}
-	user, err := h.userService.GetUserByEmail(ctx, email)
-	if err != nil || user == nil || !user.IsActive || user.DeletedAt.Valid {
-		c.Error(errors.NewForbiddenError("QA user is unavailable"))
-		return
-	}
-	tenant, err := h.tenantService.GetTenantByID(ctx, user.TenantID)
-	if err != nil || tenant == nil {
-		c.Error(errors.NewForbiddenError("QA workspace is unavailable"))
-		return
-	}
-	accessToken, refreshToken, err := h.userService.GenerateTokens(ctx, user)
-	if err != nil {
-		c.Error(errors.NewInternalServerError("QA auto-login failed"))
-		return
-	}
-	c.JSON(http.StatusOK, dto.NewAuthLoginResponse(&types.LoginResponse{
-		Success: true, Message: "QA auto-login successful", User: user,
-		ActiveTenant: tenant, Memberships: h.userService.BuildLoginMemberships(ctx, user, tenant),
-		Token: accessToken, RefreshToken: refreshToken,
-	}))
-	return
-}
-
-// QA auto-login only works for an explicitly named account on a local,
-// non-release server. Origin blocks a remote web page from reading its tokens.
-func (h *AuthHandler) qaAutoLoginAllowed(c *gin.Context, email string) bool {
-	if email == "" || gin.Mode() == gin.ReleaseMode || h.configInfo == nil || h.configInfo.Server == nil ||
-		!loopbackHost(h.configInfo.Server.Host) || !loopbackRemote(c.Request.RemoteAddr) ||
-		!loopbackOrigin(c.GetHeader("Origin")) {
-		return false
-	}
-	return true
-}
-
-func loopbackHost(host string) bool {
-	return strings.EqualFold(host, "localhost") || net.ParseIP(host).IsLoopback()
-}
-
-func loopbackRemote(remote string) bool {
-	host, _, err := net.SplitHostPort(remote)
-	return err == nil && net.ParseIP(host).IsLoopback()
-}
-
-func loopbackOrigin(origin string) bool {
-	if origin == "" {
-		return true
-	}
-	u, err := url.Parse(origin)
-	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && loopbackHost(u.Hostname())
 }
 
 // tenantNameOrEmpty returns the tenant name when available.

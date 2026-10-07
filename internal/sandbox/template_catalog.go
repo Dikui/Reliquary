@@ -7,10 +7,6 @@ import (
 
 const StandardTemplateName = "reliquary"
 
-// DefaultE2BTemplateTag is the tag E2B resolves when a sandbox is created from a
-// bare template name or ID. Builds must carry it to be spawnable at all.
-const DefaultE2BTemplateTag = "default"
-
 // TemplateStatusUntagged marks a template whose builds finished but which has no
 // build under the tag sandbox creation resolves. It looks identical to "still
 // building" in the provider's template list, yet waiting will never help: the
@@ -33,8 +29,6 @@ type RemoteTemplate struct {
 	// credential problem from an out-of-disk node.
 	Error string `json:"error,omitempty"`
 
-	// Cube reports these on GET /templates; other backends leave them empty
-	// and the settings list simply omits the corresponding rows.
 	InstanceType        string `json:"instance_type,omitempty"`
 	NetworkType         string `json:"network_type,omitempty"`
 	AllowInternetAccess *bool  `json:"allow_internet_access,omitempty"`
@@ -66,11 +60,6 @@ func isStandardTemplate(name string) bool {
 	return len(parts) > 1 && strings.EqualFold(parts[len(parts)-1], StandardTemplateName)
 }
 
-// isStandardTemplateImage recognises our template by the image it was built
-// from. Names are the primary key, but a provider that drops them — Cube omits
-// the field entirely when a template carries no alias — would otherwise make
-// every catalog refresh look at a cluster with no standard template and build
-// yet another one.
 func isStandardTemplateImage(image string) bool {
 	candidate := normalizeImageRepository(image)
 	return candidate != "" && candidate == normalizeImageRepository(DefaultDockerImage)

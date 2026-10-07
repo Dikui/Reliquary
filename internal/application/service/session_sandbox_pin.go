@@ -57,7 +57,7 @@ func (p *SessionSandboxPinner) read(ctx context.Context, sessionID string) (stri
 	var pinned sql.NullString
 	result := p.db.WithContext(ctx).
 		Model(&types.Session{}).
-		Where("id = ?", sessionID).
+		Where("id = ? AND tenant_id = ?", sessionID, types.SingleTenantID).
 		Select("sandbox_config_id").
 		Scan(&pinned)
 	if result.Error != nil {
@@ -97,8 +97,8 @@ func (p *SessionSandboxPinner) Pin(
 	for attempt := 0; attempt < 2; attempt++ {
 		result := p.db.WithContext(ctx).
 			Model(&types.Session{}).
-			Where("id = ? AND (sandbox_config_id IS NULL OR sandbox_config_id = ?)",
-				sessionID, "").
+			Where("id = ? AND tenant_id = ? AND (sandbox_config_id IS NULL OR sandbox_config_id = ?)",
+				sessionID, types.SingleTenantID, "").
 			Update("sandbox_config_id", configID)
 		if result.Error != nil {
 			return "", result.Error
@@ -135,7 +135,7 @@ func (p *SessionSandboxPinner) Pin(
 func (p *SessionSandboxPinner) Clear(ctx context.Context, sessionID string) error {
 	return p.db.WithContext(ctx).
 		Model(&types.Session{}).
-		Where("id = ?", sessionID).
+		Where("id = ? AND tenant_id = ?", sessionID, types.SingleTenantID).
 		Update("sandbox_config_id", nil).Error
 }
 
@@ -173,7 +173,7 @@ func resolveSandboxForExecution(
 	if err != nil || mgr == nil {
 		return mgr, configID, err
 	}
-	// Named backends (Cube, E2B, Docker) all keep a session-scoped sandbox.
+	// Named backends (Docker) all keep a session-scoped sandbox.
 	// Artifact collection and teardown resolve that sandbox from this pin, so
 	// skipping Docker here leaves /workspace/output files uncollected.
 	if !sandbox.IsNamedSandboxBackendType(string(mgr.GetType())) {

@@ -57,7 +57,7 @@
   <g transform="translate(336, 356)">
     <rect width="180" height="64" rx="12" fill="#FFFFFF" stroke="#6EE7B7" stroke-width="1.5"/>
     <rect x="14" y="14" width="28" height="10" rx="5" fill="#6EE7B7"/>
-    <text x="54" y="24" font-family="PingFang SC, sans-serif" font-size="13" font-weight="600" fill="#111827">FAQ</text>
+    <text x="54" y="24" font-family="PingFang SC, sans-serif" font-size="13" font-weight="600" fill="#111827">文档</text>
     <line x1="14" y1="40" x2="166" y2="40" stroke="#E5E7EB" stroke-width="1.5"/>
     <line x1="14" y1="52" x2="130" y2="52" stroke="#E5E7EB" stroke-width="1.5"/>
   </g>

@@ -54,12 +54,10 @@ func TestExecutionOutputDir(t *testing.T) {
 }
 
 func TestSessionBoundManagerExecuteEnsuresOutputDir(t *testing.T) {
-	client := newFakeRemoteClient(SandboxTypeCube)
+	client := newFakeRemoteClient(SandboxTypeDocker)
 	checker := &fakeSessionExistenceChecker{exists: true}
-	// DefaultConfig carries no Cube template on purpose; the deployment baseline
-	// or the named config supplies it.
 	cfg := DefaultConfig()
-	cfg.CubeTemplate = "tpl-test"
+	cfg.DockerImage = "tpl-test"
 	mgr, err := NewSessionBoundManager(SessionBoundManagerConfig{
 		Config:          cfg,
 		Client:          client,
@@ -69,7 +67,7 @@ func TestSessionBoundManagerExecuteEnsuresOutputDir(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(10000))
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
 	_, err = mgr.Execute(ctx, &ExecuteConfig{
 		SessionID:      "session-a",
 		SkipValidation: true,
@@ -121,9 +119,9 @@ func TestWorkspaceBootstrapCommandRepairsUnwritableDirs(t *testing.T) {
 // The agent can delete /workspace/output between turns. Preparing only once
 // per process would leave later writes failing until Reliquary restarted.
 func TestSessionBoundManagerPreparesWorkspaceOnEveryCall(t *testing.T) {
-	client := newFakeRemoteClient(SandboxTypeCube)
+	client := newFakeRemoteClient(SandboxTypeDocker)
 	cfg := DefaultConfig()
-	cfg.CubeTemplate = "tpl-test"
+	cfg.DockerImage = "tpl-test"
 	mgr, err := NewSessionBoundManager(SessionBoundManagerConfig{
 		Config:          cfg,
 		Client:          client,
@@ -133,7 +131,7 @@ func TestSessionBoundManagerPreparesWorkspaceOnEveryCall(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(10000))
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
 	for i := 0; i < 3; i++ {
 		_, err := mgr.ExecShellCommand(ctx, "session-a", "echo hi", "", time.Second, nil)
 		require.NoError(t, err)
@@ -158,9 +156,9 @@ func TestSessionBoundManagerPreparesWorkspaceOnEveryCall(t *testing.T) {
 // answers "as whom does model-authored input run" without having to trust that
 // all three adapters agree on what a blank user means.
 func TestSessionBoundManagerShellExecRunsAsSandboxUser(t *testing.T) {
-	client := newFakeRemoteClient(SandboxTypeCube)
+	client := newFakeRemoteClient(SandboxTypeDocker)
 	cfg := DefaultConfig()
-	cfg.CubeTemplate = "tpl-test"
+	cfg.DockerImage = "tpl-test"
 	mgr, err := NewSessionBoundManager(SessionBoundManagerConfig{
 		Config:          cfg,
 		Client:          client,
@@ -170,7 +168,7 @@ func TestSessionBoundManagerShellExecRunsAsSandboxUser(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(10000))
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
 	_, err = mgr.ExecShellCommand(
 		ctx, "session-shell", "id -un", SessionWorkspaceRoot, time.Minute, nil,
 	)
@@ -206,7 +204,7 @@ func TestCleanSessionWorkDirStillRejectsArbitraryPathsInInstallMode(t *testing.T
 }
 
 func TestExecShellCommandWithOptionsRunsAsRootOnlyWhenAsked(t *testing.T) {
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(10000))
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
 	mgr, client := newSessionManagerExecTestHarness(t)
 
 	_, err := mgr.ExecShellCommandWithOptions(ctx, "sess-1", "echo hi", ShellExecOptions{})
@@ -228,7 +226,7 @@ func TestExecShellCommandWithOptionsRunsAsRootOnlyWhenAsked(t *testing.T) {
 }
 
 func TestExecShellCommandKeepsOrdinaryRemoteRequest(t *testing.T) {
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(10000))
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
 	mgr, client := newSessionManagerExecTestHarness(t)
 	env := map[string]string{"A": "B"}
 
@@ -247,7 +245,7 @@ func TestExecShellCommandKeepsOrdinaryRemoteRequest(t *testing.T) {
 }
 
 func TestExecShellCommandEmptyWorkDirLeavesRemoteRequestUnset(t *testing.T) {
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(10000))
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
 	mgr, client := newSessionManagerExecTestHarness(t)
 
 	_, err := mgr.ExecShellCommand(ctx, "sess-1", "echo hi", "", time.Second, nil)
@@ -259,7 +257,7 @@ func TestExecShellCommandEmptyWorkDirLeavesRemoteRequestUnset(t *testing.T) {
 }
 
 func TestExecShellCommandRejectsInvalidWorkDir(t *testing.T) {
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(10000))
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
 	mgr, _ := newSessionManagerExecTestHarness(t)
 
 	_, err := mgr.ExecShellCommand(ctx, "sess-1", "echo hi", "/etc", time.Second, nil)
@@ -272,11 +270,11 @@ func TestExecShellCommandRejectsInvalidWorkDir(t *testing.T) {
 // image changed" to "this session runs on a new sandbox" has to work through
 // it, not only through the lifecycle it wraps.
 func TestSessionBoundManagerInvalidateConfigSandboxesRebuildsOnNextUse(t *testing.T) {
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(10000))
-	client := newFakeRemoteClient(SandboxTypeCube)
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
+	client := newFakeRemoteClient(SandboxTypeDocker)
 	store := NewMemorySessionSandboxBindingStore()
 	cfg := DefaultConfig()
-	cfg.CubeTemplate = "tpl-test"
+	cfg.DockerImage = "tpl-test"
 	mgr, err := NewSessionBoundManager(SessionBoundManagerConfig{
 		Config:          cfg,
 		Client:          client,
@@ -289,17 +287,17 @@ func TestSessionBoundManagerInvalidateConfigSandboxesRebuildsOnNextUse(t *testin
 
 	_, err = mgr.ExecShellCommand(ctx, "sess-1", "echo hi", "", time.Second, nil)
 	require.NoError(t, err)
-	before, err := store.Get(ctx, SessionSandboxKey{TenantID: 10000, SessionID: "sess-1"})
+	before, err := store.Get(ctx, SessionSandboxKey{TenantID: types.SingleTenantID, SessionID: "sess-1"})
 	require.NoError(t, err)
 	require.NotNil(t, before)
 
-	marked, err := mgr.InvalidateConfigSandboxes(ctx, 10000, "cfg-1")
+	marked, err := mgr.InvalidateConfigSandboxes(ctx, types.SingleTenantID, "cfg-1")
 	require.NoError(t, err)
 	require.Equal(t, 1, marked)
 
 	_, err = mgr.ExecShellCommand(ctx, "sess-1", "echo hi", "", time.Second, nil)
 	require.NoError(t, err)
-	after, err := store.Get(ctx, SessionSandboxKey{TenantID: 10000, SessionID: "sess-1"})
+	after, err := store.Get(ctx, SessionSandboxKey{TenantID: types.SingleTenantID, SessionID: "sess-1"})
 	require.NoError(t, err)
 	require.NotEqual(t, before.SandboxID, after.SandboxID)
 	require.False(t, client.hasSandbox(before.SandboxID),
@@ -307,13 +305,13 @@ func TestSessionBoundManagerInvalidateConfigSandboxesRebuildsOnNextUse(t *testin
 }
 
 func TestSessionBoundManagerEndSessionTurnIgnoresCancel(t *testing.T) {
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(10000))
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
 	store := NewMemorySessionSandboxBindingStore()
 	cfg := DefaultConfig()
-	cfg.CubeTemplate = "tpl-test"
+	cfg.DockerImage = "tpl-test"
 	mgr, err := NewSessionBoundManager(SessionBoundManagerConfig{
 		Config:          cfg,
-		Client:          newFakeRemoteClient(SandboxTypeCube),
+		Client:          newFakeRemoteClient(SandboxTypeDocker),
 		Store:           store,
 		Checker:         &fakeSessionExistenceChecker{exists: true},
 		SkipHealthProbe: true,
@@ -325,7 +323,7 @@ func TestSessionBoundManagerEndSessionTurnIgnoresCancel(t *testing.T) {
 	cancel()
 	require.NoError(t, mgr.EndSessionTurn(cancelled, "sess-1"))
 
-	active, _, err := store.TurnState(ctx, SessionSandboxKey{TenantID: 10000, SessionID: "sess-1"})
+	active, _, err := store.TurnState(ctx, SessionSandboxKey{TenantID: types.SingleTenantID, SessionID: "sess-1"})
 	require.NoError(t, err)
 	require.False(t, active)
 }
@@ -350,7 +348,7 @@ func TestCleanSessionWorkspaceWritePathAcceptsWorkspaceAndRefusesInput(t *testin
 }
 
 func TestWriteSessionWorkspaceFileWritesUnderOutput(t *testing.T) {
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(10000))
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
 	mgr, client := newSessionManagerExecTestHarness(t)
 
 	require.NoError(t, mgr.WriteSessionWorkspaceFile(
@@ -366,7 +364,7 @@ func TestWriteSessionWorkspaceFileWritesUnderOutput(t *testing.T) {
 }
 
 func TestWriteSessionWorkspaceFileRefusesSessionInput(t *testing.T) {
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(10000))
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
 	mgr, client := newSessionManagerExecTestHarness(t)
 
 	err := mgr.WriteSessionWorkspaceFile(
@@ -380,7 +378,7 @@ func TestWriteSessionWorkspaceFileRefusesSessionInput(t *testing.T) {
 }
 
 func TestWriteSessionFileSucceedsWhenInstallDirectoryAlreadyExists(t *testing.T) {
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(10000))
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
 	mgr, client := newSessionManagerExecTestHarness(t)
 	client.failMakeDirIfExists = true
 
@@ -400,40 +398,24 @@ func TestWriteSessionFileSucceedsWhenInstallDirectoryAlreadyExists(t *testing.T)
 	require.Equal(t, skillDir+"/SKILL.md", writes[0].path)
 }
 
-// The whole feature is inert without this: RemoteNetworkPolicy already existed
-// and both adapters already forwarded it, but nothing ever filled it in.
 func TestBuildSessionCreateRequestCarriesNetworkPolicy(t *testing.T) {
 	denied := false
 	cfg := DefaultConfig()
-	cfg.CubeTemplate = "tpl-1"
-	cfg.E2BTemplate = "tpl-1"
 	cfg.DockerImage = "img-1"
-	cfg.Network = RemoteNetworkPolicy{
-		AllowInternetAccess: &denied,
-		AllowOut:            []string{"api.example.com"},
-		DenyOut:             []string{"0.0.0.0/0"},
-	}
+	cfg.Network = RemoteNetworkPolicy{AllowInternetAccess: &denied}
 
-	for _, provider := range []RemoteProvider{
-		SandboxTypeCube, SandboxTypeE2B, SandboxTypeDocker,
-	} {
-		request, err := buildSessionCreateRequest(provider, cfg)
-		require.NoError(t, err, "provider %s", provider)
-		require.NotNil(t, request.Network.AllowInternetAccess, "provider %s", provider)
-		require.False(t, *request.Network.AllowInternetAccess, "provider %s", provider)
-		require.Equal(t, []string{"api.example.com"}, request.Network.AllowOut,
-			"provider %s", provider)
-		require.Equal(t, []string{"0.0.0.0/0"}, request.Network.DenyOut,
-			"provider %s", provider)
-	}
+	request, err := buildSessionCreateRequest(SandboxTypeDocker, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, request.Network.AllowInternetAccess)
+	require.False(t, *request.Network.AllowInternetAccess)
 }
 
 func newSessionManagerExecTestHarness(t *testing.T) (*SessionBoundManager, *fakeRemoteClient) {
 	t.Helper()
 
-	client := newFakeRemoteClient(SandboxTypeCube)
+	client := newFakeRemoteClient(SandboxTypeDocker)
 	cfg := DefaultConfig()
-	cfg.CubeTemplate = "tpl-test"
+	cfg.DockerImage = "tpl-test"
 	mgr, err := NewSessionBoundManager(SessionBoundManagerConfig{
 		Config:          cfg,
 		Client:          client,

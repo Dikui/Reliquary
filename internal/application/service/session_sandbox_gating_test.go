@@ -10,7 +10,7 @@ import (
 	"reliquary/internal/types"
 )
 
-// A workspace can point an agent at a named Cube/E2B config while the
+// A workspace can point an agent at a named Docker config while the
 // deployment default stays disabled. In that combination the agent still
 // registers shell/skill tools against the remote sandbox (initializeSkillsManager
 // resolves the same per-config manager), so gating attachment staging on the
@@ -24,7 +24,7 @@ func TestSessionSandboxInputStoreUsesNamedConfigNotDeploymentDefault(t *testing.
 		disableFiles: true,
 	}
 	// The workspace's named config does advertise one.
-	named := &stagingSandboxManager{sandboxType: sandbox.SandboxTypeCube}
+	named := &stagingSandboxManager{sandboxType: sandbox.SandboxTypeDocker}
 
 	svc := &agentService{
 		sandboxMgr:      deploymentDefault,

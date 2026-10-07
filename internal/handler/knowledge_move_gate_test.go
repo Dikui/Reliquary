@@ -54,6 +54,8 @@ func newMoveGateRouter(kb interfaces.KnowledgeBaseService, kg interfaces.Knowled
 	r.Use(func(c *gin.Context) {
 		c.Set(types.TenantIDContextKey.String(), uint64(1))
 		c.Set(types.UserIDContextKey.String(), "u-test")
+		ctx := context.WithValue(c.Request.Context(), types.TenantRoleContextKey, types.TenantRoleContributor)
+		c.Request = c.Request.WithContext(ctx)
 		c.Next()
 	})
 	// asynqClient stays nil: every case here either rejects at the gate or

@@ -140,7 +140,7 @@ func TestCreateAgentEngineOpensSandboxToolsOnlyForInstallMode(t *testing.T) {
 		svc := &agentService{
 			sandboxResolver: stubSandboxResolver{
 				mgr: &capableManager{
-					typ:   sandbox.SandboxTypeCube,
+					typ:   sandbox.SandboxTypeDocker,
 					shell: &stubShellExecutor{},
 					// The manager advertises a session file store, the way
 					// every real remote backend does. The installer still
@@ -178,7 +178,7 @@ func TestCreateAgentEngineOpensSandboxToolsOnlyForInstallMode(t *testing.T) {
 		svc := &agentService{
 			sandboxResolver: stubSandboxResolver{
 				mgr: &capableManager{
-					typ:          sandbox.SandboxTypeCube,
+					typ:          sandbox.SandboxTypeDocker,
 					shell:        &stubShellExecutor{},
 					files:        stubSessionFileStore{},
 					installShell: &stubInstallShellExecutor{},
@@ -209,7 +209,7 @@ func TestCreateAgentEngineOpensSandboxToolsOnlyForInstallMode(t *testing.T) {
 		svc := &agentService{
 			sandboxResolver: stubSandboxResolver{
 				mgr: &capableManager{
-					typ:   sandbox.SandboxTypeCube,
+					typ:   sandbox.SandboxTypeDocker,
 					shell: &stubShellExecutor{},
 					files: stubSessionFileStore{},
 				},
@@ -240,7 +240,7 @@ func TestCreateAgentEngineOpensSandboxToolsOnlyForInstallMode(t *testing.T) {
 		svc := &agentService{
 			sandboxResolver: stubSandboxResolver{
 				mgr: &capableManager{
-					typ:   sandbox.SandboxTypeCube,
+					typ:   sandbox.SandboxTypeDocker,
 					shell: &stubShellExecutor{},
 					files: stubSessionFileStore{},
 				},
@@ -271,7 +271,7 @@ func TestCreateAgentEngineOpensSandboxToolsOnlyForInstallMode(t *testing.T) {
 		svc := &agentService{
 			sandboxResolver: stubSandboxResolver{
 				mgr: &capableManager{
-					typ:   sandbox.SandboxTypeCube,
+					typ:   sandbox.SandboxTypeDocker,
 					shell: &stubShellExecutor{},
 					files: stubSessionFileStore{},
 				},
@@ -308,7 +308,7 @@ func TestSkillToolsFollowSkillsEnabled(t *testing.T) {
 		registry := tools.NewToolRegistry()
 		svc := &agentService{
 			sandboxResolver: stubSandboxResolver{
-				mgr: &capableManager{typ: sandbox.SandboxTypeCube, shell: &stubShellExecutor{}},
+				mgr: &capableManager{typ: sandbox.SandboxTypeDocker, shell: &stubShellExecutor{}},
 			},
 		}
 		ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
@@ -330,7 +330,7 @@ func TestSkillToolsFollowSkillsEnabled(t *testing.T) {
 		registry := tools.NewToolRegistry()
 		svc := &agentService{
 			sandboxResolver: stubSandboxResolver{
-				mgr: &capableManager{typ: sandbox.SandboxTypeCube, shell: &stubShellExecutor{}},
+				mgr: &capableManager{typ: sandbox.SandboxTypeDocker, shell: &stubShellExecutor{}},
 			},
 		}
 		ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
@@ -359,7 +359,7 @@ func TestCreateAgentEngineShellFollowsSkillsEnabledWithoutInstalledSkills(t *tes
 	svc := &agentService{
 		sandboxResolver: stubSandboxResolver{
 			mgr: &capableManager{
-				typ:          sandbox.SandboxTypeCube,
+				typ:          sandbox.SandboxTypeDocker,
 				shell:        &stubShellExecutor{},
 				files:        stubSessionFileStore{},
 				installShell: &stubInstallShellExecutor{},
@@ -397,7 +397,7 @@ func TestSkillsManagerOffersTheInjectedInstalledSkills(t *testing.T) {
 	newSvc := func() *agentService {
 		return &agentService{
 			sandboxResolver: stubSandboxResolver{
-				mgr: &capableManager{typ: sandbox.SandboxTypeCube, shell: &stubShellExecutor{}},
+				mgr: &capableManager{typ: sandbox.SandboxTypeDocker, shell: &stubShellExecutor{}},
 			},
 		}
 	}
@@ -489,46 +489,6 @@ func TestSkillInstallerIsHiddenFromThePicker(t *testing.T) {
 		"it must not clutter the tenant's agent picker")
 }
 
-func TestGetKnowledgeBaseInfos_SharedKnowledgeBaseUsesSourceTenant(t *testing.T) {
-	const (
-		receiverTenantID = uint64(7)
-		sourceTenantID   = uint64(42)
-	)
-	now := time.Now()
-	knowledgeService := &fakeAgentKnowledgeService{
-		knowledges: []*types.Knowledge{
-			{
-				ID:              "shared-doc",
-				KnowledgeBaseID: "shared-kb",
-				Title:           "shared document",
-				ParseStatus:     types.ParseStatusCompleted,
-				CreatedAt:       now,
-			},
-		},
-	}
-	service := &agentService{
-		knowledgeBaseService: &fakeAgentKnowledgeBaseService{
-			kb: &types.KnowledgeBase{
-				ID:       "shared-kb",
-				Name:     "Shared KB",
-				Type:     types.KnowledgeBaseTypeDocument,
-				TenantID: sourceTenantID,
-			},
-		},
-		knowledgeService: knowledgeService,
-	}
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, receiverTenantID)
-
-	infos, err := service.getKnowledgeBaseInfos(ctx, []string{"shared-kb"}, map[string]uint64{"shared-kb": sourceTenantID})
-
-	require.NoError(t, err)
-	require.Len(t, infos, 1)
-	assert.Equal(t, 1, infos[0].DocCount)
-	require.Len(t, infos[0].RecentDocs, 1)
-	assert.Equal(t, "shared-doc", infos[0].RecentDocs[0].KnowledgeID)
-	assert.Equal(t, sourceTenantID, knowledgeService.lastTenant)
-}
-
 func TestGetKnowledgeBaseInfos_ExcludesUnprocessedDocuments(t *testing.T) {
 	now := time.Now()
 	knowledgeService := &fakeAgentKnowledgeService{
@@ -565,7 +525,7 @@ func TestGetKnowledgeBaseInfos_ExcludesUnprocessedDocuments(t *testing.T) {
 		knowledgeService: knowledgeService,
 	}
 
-	infos, err := service.getKnowledgeBaseInfos(context.Background(), []string{"kb-1"}, nil)
+	infos, err := service.getKnowledgeBaseInfos(context.Background(), []string{"kb-1"})
 
 	require.NoError(t, err)
 	require.Len(t, infos, 1)

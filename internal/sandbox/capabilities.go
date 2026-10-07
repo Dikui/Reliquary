@@ -1,15 +1,3 @@
-// Package sandbox: session-scoped capability interfaces.
-//
-// The Sandbox / Manager pair intentionally hides provider identity (Cube,
-// E2B, Docker) from the application layer. Higher layers should never
-// branch on Manager.GetType() to decide whether a feature is supported —
-// that couples them to a specific backend.
-//
-// Instead, session-scoped features (shell execution, per-session file
-// inspection, attachment staging) are advertised via the capability
-// interfaces below. A manager may satisfy the underlying methods yet still
-// return nil from the accessors on SessionCapabilityProvider when the
-// current runtime configuration cannot honour that capability.
 package sandbox
 
 import (
@@ -17,9 +5,6 @@ import (
 	"time"
 )
 
-// SessionShellExecutor executes ad-hoc shell commands inside a session-
-// scoped remote sandbox. SessionBoundManager surfaces it while Cube, E2B,
-// or Docker is active.
 type SessionShellExecutor interface {
 	ExecShellCommand(
 		ctx context.Context,
@@ -31,11 +16,6 @@ type SessionShellExecutor interface {
 	) (*ExecuteResult, error)
 }
 
-// SessionFileStore is the effective per-session filesystem view a manager
-// offers callers that need to inspect, stage, or clean up files inside the
-// session's remote sandbox. It is intentionally provider-neutral: entries
-// use RemoteDirEntry / RemoteStatEntry, so E2B and Cube can implement it
-// without touching the caller.
 type SessionFileStore interface {
 	// EnsureSessionDir creates dir in the session's live sandbox. Silent
 	// no-op when no sandbox is bound yet; the next Execute call will

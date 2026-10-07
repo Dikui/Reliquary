@@ -17,7 +17,7 @@ The client includes the following main functional modules:
 9. **Evaluation Function**: Start evaluation tasks and get evaluation results
 10. **Sandbox skills**: Install a skill onto a sandbox config (zip upload, or ClawHub / SkillHub / GitHub source) and configure the environment variables it needs
 11. **Long-term memory**: The caller's cross-session memories (settings, items, confirm/reject, topics, document affinity, export, consolidate)
-12. **Auth**: Login, refresh tokens, and switch the active workspace (`SwitchTenant` records the last-active-tenant preference)
+12. **Auth**: Login and refresh tokens for the team workspace
 
 ## Usage
 
@@ -36,26 +36,6 @@ apiClient := client.NewClient(
     client.WithToken("your-auth-token"),
     client.WithTimeout(30*time.Second),
 )
-```
-
-### Workspace Configuration
-
-You can set a default workspace with `WithTenantID`; the client will automatically send the `X-Tenant-ID` header:
-
-```go
-tenantID := uint64(10000)
-apiClient := client.NewClient(
-    "http://api.example.com",
-    client.WithToken("your-auth-token"),
-    client.WithTenantID(tenantID),
-)
-```
-
-If a single request needs a different workspace, set `TenantID` in the request context. The value can be a `uint64`, `*uint64`, or a numeric string, and it will take precedence over the client default:
-
-```go
-ctx := context.WithValue(context.Background(), "TenantID", uint64(10000))
-// Pass ctx into any client method to switch to workspace 10000 for that request
 ```
 
 ### Example: Create Knowledge Base and Upload File

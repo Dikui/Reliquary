@@ -108,24 +108,6 @@ func TestRequireRole_DormantModeDoesNotFireAuditHook(t *testing.T) {
 	}
 }
 
-func TestRequireOwnershipOrRole_RejectFiresAuditHook(t *testing.T) {
-	// Mirror of TestRequireRole_RejectFiresAuditHook but for the
-	// ownership variant — the audit hook lives at a different reject
-	// site and must NOT skip the durable write.
-	audit := &stubDenyAudit{}
-	lookup := func(_ *gin.Context) (string, error) {
-		return "someone-else", nil // creator != caller, role too low
-	}
-	w := auditableHarness(t, types.TenantRoleContributor, "u1", 7, audit,
-		RequireOwnershipOrRole(types.TenantRoleAdmin, lookup, cfgRBAC(true)))
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("expected 403, got %d", w.Code)
-	}
-	if len(audit.calls) != 1 {
-		t.Fatalf("expected exactly one audit hook call, got %d", len(audit.calls))
-	}
-}
-
 func TestRequireRole_NilAuditServiceDoesNotPanic(t *testing.T) {
 	// AuditServiceProvider(nil) is a deliberate no-op; the rbac path
 	// must degrade to "log to stderr only" rather than crashing.

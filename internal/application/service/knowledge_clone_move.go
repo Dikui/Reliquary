@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	redis "github.com/redis/go-redis/v9"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -14,7 +15,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
-	"github.com/redis/go-redis/v9"
 	"golang.org/x/sync/errgroup"
 
 	"reliquary/internal/application/service/retriever"
@@ -320,10 +320,7 @@ func (s *knowledgeService) CloneChunk(ctx context.Context, src, dst *types.Knowl
 			nil,
 			"",
 			"",
-			"",
-			"",
-			nil,
-		)
+			nil)
 		chunkPage++
 		if err != nil {
 			return err
@@ -524,15 +521,6 @@ func (s *knowledgeService) ProcessKBClone(ctx context.Context, t *asynq.Task) er
 	}
 
 	// Use different sync strategies based on knowledge base type
-	if srcKB.Type == types.KnowledgeBaseTypeFAQ {
-		if err := s.cloneFAQKnowledgeBase(ctx, srcKB, dstKB, progress, handleError); err != nil {
-			return err
-		}
-		recordKBActivity(ctx, s.audit, payload.TenantID, payload.TargetID, types.AuditActionKBCloneCompleted,
-			"knowledge_base", payload.TargetID, types.AuditOutcomeSuccess,
-			map[string]any{"source_kb_id": payload.SourceID, "task_id": payload.TaskID, "total": progress.Total})
-		return nil
-	}
 
 	// Document type: use Knowledge-level diff based on file_hash
 	addKnowledge, err := s.repo.AminusB(ctx, srcKB.TenantID, srcKB.ID, dstKB.TenantID, dstKB.ID)
@@ -637,318 +625,6 @@ func (s *knowledgeService) ProcessKBClone(ctx context.Context, t *asynq.Task) er
 		"knowledge_base", payload.TargetID, types.AuditOutcomeSuccess,
 		map[string]any{"source_kb_id": payload.SourceID, "task_id": payload.TaskID, "total": totalOperations})
 	return nil
-}
-
-// cloneFAQKnowledgeBase handles FAQ knowledge base cloning with chunk-level incremental sync
-func (s *knowledgeService) cloneFAQKnowledgeBase(
-	ctx context.Context,
-	srcKB, dstKB *types.KnowledgeBase,
-	progress *types.KBCloneProgress,
-	handleError func(*types.KBCloneProgress, error, string),
-) (retErr error) {
-	// Deep-copy extracted FAQ images into objects owned by the destination KB.
-	// urlCache dedups identical source images across chunks; copiedURLs tracks
-	// new objects for best-effort cleanup if the clone fails partway through.
-	dstSvc := s.resolveFileService(ctx, dstKB)
-	imageURLCache := map[string]string{}
-	var copiedImageURLs []string
-	defer func() {
-		if retErr != nil {
-			cleanupCopiedObjects(ctx, dstSvc, copiedImageURLs)
-		}
-	}()
-
-	// Get source FAQ knowledge first (FAQ KB has exactly one Knowledge entry)
-	srcKnowledgeList, err := s.repo.ListKnowledgeByKnowledgeBaseID(ctx, srcKB.TenantID, srcKB.ID)
-	if err != nil {
-		logger.Errorf(ctx, "Failed to get source FAQ knowledge: %v", err)
-		handleError(progress, err, "Failed to get source FAQ knowledge")
-		return err
-	}
-	if len(srcKnowledgeList) == 0 {
-		// Source has no FAQ knowledge, nothing to clone
-		progress.Status = types.KBCloneStatusCompleted
-		progress.Progress = 100
-		progress.Message = "Source FAQ knowledge base is empty"
-		progress.UpdatedAt = time.Now().Unix()
-		_ = s.saveKBCloneProgress(ctx, progress)
-		return nil
-	}
-	srcKnowledge := srcKnowledgeList[0]
-
-	// Get chunk-level differences based on content_hash.
-	diff, err := s.chunkRepo.FAQChunkDiff(ctx, srcKB.TenantID, srcKB.ID, dstKB.TenantID, dstKB.ID)
-	if err != nil {
-		logger.Errorf(ctx, "Failed to calculate FAQ chunk difference: %v", err)
-		handleError(progress, err, "Failed to calculate FAQ chunk difference")
-		return err
-	}
-	chunksToAdd := diff.ChunksToAdd
-	chunksToDelete := diff.ChunksToDelete
-
-	tagIDMapping := map[string]string{}
-	resolveFAQTag := func(srcTagID string) string {
-		if srcTagID == "" {
-			return ""
-		}
-		if id, ok := tagIDMapping[srcTagID]; ok {
-			return id
-		}
-		return s.getOrCreateTagInTarget(ctx, srcKB.TenantID, dstKB.TenantID, dstKB.ID, srcTagID, tagIDMapping)
-	}
-
-	syncPlan, err := s.buildFAQStatusSyncPlan(ctx, srcKB.TenantID, dstKB.TenantID, diff.MatchedPairs, resolveFAQTag)
-	if err != nil {
-		logger.Errorf(ctx, "Failed to build FAQ status sync plan: %v", err)
-		handleError(progress, err, "Failed to build FAQ status sync plan")
-		return err
-	}
-	chunksToUpdate := syncPlan.Pairs
-
-	totalOperations := len(chunksToAdd) + len(chunksToDelete) + len(chunksToUpdate)
-	progress.Total = totalOperations
-	progress.Message = fmt.Sprintf(
-		"Found %d FAQ entries to add, %d to delete, %d to update status",
-		len(chunksToAdd), len(chunksToDelete), len(chunksToUpdate),
-	)
-	progress.UpdatedAt = time.Now().Unix()
-	_ = s.saveKBCloneProgress(ctx, progress)
-
-	logger.Infof(ctx, "FAQ chunks to add: %d, delete: %d, update status: %d",
-		len(chunksToAdd), len(chunksToDelete), len(chunksToUpdate))
-
-	if totalOperations == 0 {
-		progress.Status = types.KBCloneStatusCompleted
-		progress.Progress = 100
-		progress.Message = "FAQ knowledge base is already in sync"
-		progress.UpdatedAt = time.Now().Unix()
-		_ = s.saveKBCloneProgress(ctx, progress)
-		return nil
-	}
-
-	// Route the FAQ clone through the source KB's bound store. Same
-	// constraint as CloneChunk: callers must ensure source and target share
-	// the same VectorStore (cross-store FAQ clone is not handled here).
-	var sourceStoreID *string
-	if srcKB != nil {
-		sourceStoreID = srcKB.VectorStoreID
-	}
-	retrieveEngine, err := retriever.CreateRetrieveEngineForKB(
-		ctx, s.retrieveEngine, s.ownership, types.MustTenantIDFromContext(ctx), sourceStoreID)
-	if err != nil {
-		logger.Errorf(ctx, "Failed to init retrieve engine: %v", err)
-		handleError(progress, err, "Failed to initialize retrieve engine")
-		return err
-	}
-
-	// Get embedding model
-	embeddingModel, err := s.modelService.GetEmbeddingModel(ctx, dstKB.EmbeddingModelID)
-	if err != nil {
-		logger.Errorf(ctx, "Failed to get embedding model: %v", err)
-		handleError(progress, err, "Failed to get embedding model")
-		return err
-	}
-
-	processedCount := 0
-
-	// Delete FAQ chunks that don't exist in source
-	if len(chunksToDelete) > 0 {
-		// Delete from vector store
-		if err := retrieveEngine.DeleteByChunkIDList(ctx, chunksToDelete, embeddingModel.GetDimensions(), types.KnowledgeTypeFAQ); err != nil {
-			logger.Errorf(ctx, "Failed to delete FAQ chunks from vector store: %v", err)
-			handleError(progress, err, "Failed to delete FAQ entries from vector store")
-			return err
-		}
-		// Delete from database
-		if err := s.chunkRepo.DeleteChunks(ctx, dstKB.TenantID, chunksToDelete); err != nil {
-			logger.Errorf(ctx, "Failed to delete FAQ chunks from database: %v", err)
-			handleError(progress, err, "Failed to delete FAQ entries from database")
-			return err
-		}
-		processedCount += len(chunksToDelete)
-		if totalOperations > 0 {
-			progress.Progress = processedCount * 100 / totalOperations
-		}
-		progress.Processed = processedCount
-		progress.Message = fmt.Sprintf("Deleted %d FAQ entries, adding %d...", len(chunksToDelete), len(chunksToAdd))
-		progress.UpdatedAt = time.Now().Unix()
-		_ = s.saveKBCloneProgress(ctx, progress)
-	}
-
-	// Get or create the FAQ knowledge entry in destination
-	dstKnowledge, err := s.getOrCreateFAQKnowledge(ctx, dstKB, srcKnowledge)
-	if err != nil {
-		logger.Errorf(ctx, "Failed to get or create FAQ knowledge: %v", err)
-		handleError(progress, err, "Failed to prepare FAQ knowledge entry")
-		return err
-	}
-
-	// Clone FAQ chunks from source to destination
-	batch := 50
-	for i := 0; i < len(chunksToAdd); i += batch {
-		end := i + batch
-		if end > len(chunksToAdd) {
-			end = len(chunksToAdd)
-		}
-		batchIDs := chunksToAdd[i:end]
-
-		// Get source chunks
-		srcChunks, err := s.chunkRepo.ListChunksByID(ctx, srcKB.TenantID, batchIDs)
-		if err != nil {
-			logger.Errorf(ctx, "Failed to get source FAQ chunks: %v", err)
-			handleError(progress, err, "Failed to get source FAQ entries")
-			return err
-		}
-
-		// Create new chunks for destination
-		newChunks := make([]*types.Chunk, 0, len(srcChunks))
-		for _, srcChunk := range srcChunks {
-			// Map TagID to target knowledge base
-			targetTagID := ""
-			if srcChunk.TagID != "" {
-				targetTagID = resolveFAQTag(srcChunk.TagID)
-			}
-
-			// Deep-copy extracted images into objects owned by the destination
-			// FAQ knowledge so deleting the source never breaks this clone.
-			newImageInfo, copied, copyErr := cloneChunkImageInfo(
-				ctx, dstSvc, srcChunk.ImageInfo, dstKB.TenantID, dstKnowledge.ID, imageURLCache)
-			if copyErr != nil {
-				logger.Errorf(ctx, "Failed to copy FAQ chunk images: %v", copyErr)
-				handleError(progress, copyErr, "Failed to copy FAQ entry images")
-				retErr = copyErr
-				return retErr
-			}
-			copiedImageURLs = append(copiedImageURLs, copied...)
-
-			newChunk := &types.Chunk{
-				ID:              uuid.New().String(),
-				TenantID:        dstKB.TenantID,
-				KnowledgeID:     dstKnowledge.ID,
-				KnowledgeBaseID: dstKB.ID,
-				TagID:           targetTagID,
-				Content:         rewriteContentImageURLs(srcChunk.Content, imageURLCache),
-				ChunkIndex:      srcChunk.ChunkIndex,
-				IsEnabled:       srcChunk.IsEnabled,
-				Flags:           srcChunk.Flags,
-				ChunkType:       types.ChunkTypeFAQ,
-				Metadata:        srcChunk.Metadata,
-				ContentHash:     srcChunk.ContentHash,
-				ImageInfo:       newImageInfo,
-				Status:          int(types.ChunkStatusStored), // Initially stored, will be indexed
-				CreatedAt:       time.Now(),
-				UpdatedAt:       time.Now(),
-			}
-			newChunks = append(newChunks, newChunk)
-		}
-
-		// Save to database
-		if err := s.chunkRepo.CreateChunks(ctx, newChunks); err != nil {
-			logger.Errorf(ctx, "Failed to create FAQ chunks: %v", err)
-			handleError(progress, err, "Failed to create FAQ entries")
-			return err
-		}
-
-		// Index in vector store using existing method
-		// This will index standard question + similar questions based on FAQConfig
-		if err := s.indexFAQChunks(ctx, dstKB, dstKnowledge, newChunks, embeddingModel, false, false); err != nil {
-			logger.Errorf(ctx, "Failed to index FAQ chunks: %v", err)
-			handleError(progress, err, "Failed to index FAQ entries")
-			return err
-		}
-
-		// Update chunk status to indexed
-		for _, chunk := range newChunks {
-			chunk.Status = int(types.ChunkStatusIndexed)
-		}
-		if err := s.chunkService.UpdateChunks(ctx, newChunks); err != nil {
-			logger.Warnf(ctx, "Failed to update FAQ chunks status: %v", err)
-			// Don't fail the whole operation for status update failure
-		}
-
-		processedCount += len(batchIDs)
-		if totalOperations > 0 {
-			progress.Progress = processedCount * 100 / totalOperations
-		}
-		progress.Processed = processedCount
-		progress.Message = fmt.Sprintf("Added %d/%d FAQ entries", processedCount-len(chunksToDelete), len(chunksToAdd))
-		progress.UpdatedAt = time.Now().Unix()
-		_ = s.saveKBCloneProgress(ctx, progress)
-	}
-
-	for i := 0; i < len(chunksToUpdate); i += batch {
-		end := i + batch
-		if end > len(chunksToUpdate) {
-			end = len(chunksToUpdate)
-		}
-		if err := s.syncFAQChunkStatusBatch(
-			ctx, dstKB, chunksToUpdate[i:end], syncPlan.SrcByID, syncPlan.DstByID, resolveFAQTag); err != nil {
-			logger.Errorf(ctx, "Failed to sync FAQ status fields: %v", err)
-			handleError(progress, err, "Failed to sync FAQ status fields")
-			return err
-		}
-		processedCount += end - i
-		if totalOperations > 0 {
-			progress.Progress = processedCount * 100 / totalOperations
-		}
-		progress.Processed = processedCount
-		progress.Message = fmt.Sprintf("Updated %d/%d FAQ status fields", processedCount-len(chunksToDelete)-len(chunksToAdd), len(chunksToUpdate))
-		progress.UpdatedAt = time.Now().Unix()
-		_ = s.saveKBCloneProgress(ctx, progress)
-	}
-
-	// Mark as completed
-	progress.Status = types.KBCloneStatusCompleted
-	progress.Progress = 100
-	progress.Processed = totalOperations
-	progress.Message = "FAQ knowledge base clone completed successfully"
-	progress.UpdatedAt = time.Now().Unix()
-	if err := s.saveKBCloneProgress(ctx, progress); err != nil {
-		logger.Errorf(ctx, "Failed to update KB clone progress to completed: %v", err)
-	}
-
-	return nil
-}
-
-// getOrCreateFAQKnowledge gets or creates the FAQ knowledge entry for a knowledge base
-// If srcKnowledge is provided, it will copy relevant fields from source when creating new knowledge
-func (s *knowledgeService) getOrCreateFAQKnowledge(ctx context.Context, kb *types.KnowledgeBase, srcKnowledge *types.Knowledge) (*types.Knowledge, error) {
-	// FAQ knowledge base should have exactly one Knowledge entry
-	knowledgeList, err := s.repo.ListKnowledgeByKnowledgeBaseID(ctx, kb.TenantID, kb.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(knowledgeList) > 0 {
-		return knowledgeList[0], nil
-	}
-
-	// Create a new FAQ knowledge entry, copying from source if available
-	knowledge := &types.Knowledge{
-		ID:               uuid.New().String(),
-		TenantID:         kb.TenantID,
-		KnowledgeBaseID:  kb.ID,
-		Type:             types.KnowledgeTypeFAQ,
-		Channel:          types.ChannelWeb,
-		Title:            "FAQ",
-		ParseStatus:      "completed",
-		EnableStatus:     "enabled",
-		EmbeddingModelID: kb.EmbeddingModelID,
-	}
-
-	// Copy additional fields from source knowledge if available
-	if srcKnowledge != nil {
-		knowledge.Title = srcKnowledge.Title
-		knowledge.Description = srcKnowledge.Description
-		knowledge.Source = srcKnowledge.Source
-		knowledge.Channel = srcKnowledge.Channel
-		knowledge.Metadata = srcKnowledge.Metadata
-	}
-
-	if err := s.repo.CreateKnowledge(ctx, knowledge); err != nil {
-		return nil, err
-	}
-	return knowledge, nil
 }
 
 // saveKBCloneProgress saves the KB clone progress to Redis

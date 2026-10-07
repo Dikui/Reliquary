@@ -194,7 +194,6 @@ export const useEditorResourcesStore = defineStore('editorResources', () => {
     })
   }
 
-  /** 智能体编辑器打开时预取的依赖（不含 IM channels / 单 KB shares） */
   async function prefetchAgentEditorDeps(force = false): Promise<void> {
     await Promise.all([
       ensureMcpServices(force),

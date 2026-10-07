@@ -56,7 +56,7 @@ func TestMakeUserKey_ThreadMode(t *testing.T) {
 		want      string
 	}{
 		{
-			name:      "thread mode with Slack thread_ts",
+			name:      "thread mode with numeric thread ID",
 			channelID: "ch-1",
 			userID:    "user-1",
 			chatID:    "chat-1",
@@ -64,7 +64,7 @@ func TestMakeUserKey_ThreadMode(t *testing.T) {
 			want:      "ch-1:user-1:chat-1:1234567890.123456",
 		},
 		{
-			name:      "thread mode with Mattermost root_id",
+			name:      "thread mode with root message ID",
 			channelID: "ch-2",
 			userID:    "user-2",
 			chatID:    "chat-2",
@@ -72,7 +72,7 @@ func TestMakeUserKey_ThreadMode(t *testing.T) {
 			want:      "ch-2:user-2:chat-2:abc123def456",
 		},
 		{
-			name:      "thread mode with Telegram topic ID",
+			name:      "thread mode with short thread ID",
 			channelID: "ch-3",
 			userID:    "user-3",
 			chatID:    "chat-3",
@@ -122,7 +122,7 @@ func TestMakeUserKey_SameThreadDifferentUsers(t *testing.T) {
 func TestIncomingMessageThreadID(t *testing.T) {
 	// Verify ThreadID field works correctly on IncomingMessage
 	msg := &IncomingMessage{
-		Platform:  PlatformSlack,
+		Platform:  PlatformFeishu,
 		UserID:    "U123",
 		ChatID:    "C456",
 		MessageID: "1234567890.123456",
@@ -130,13 +130,12 @@ func TestIncomingMessageThreadID(t *testing.T) {
 	}
 
 	if msg.ThreadID != msg.MessageID {
-		t.Errorf("Slack ThreadID should equal MessageID for top-level, got ThreadID=%q MessageID=%q",
+		t.Errorf("ThreadID should equal MessageID for top-level, got ThreadID=%q MessageID=%q",
 			msg.ThreadID, msg.MessageID)
 	}
 
-	// Mattermost: ThreadID from Extra
 	msgMM := &IncomingMessage{
-		Platform:  PlatformMattermost,
+		Platform:  PlatformFeishu,
 		UserID:    "user-1",
 		ChatID:    "channel-1",
 		MessageID: "post-123",
@@ -147,7 +146,7 @@ func TestIncomingMessageThreadID(t *testing.T) {
 	}
 
 	if msgMM.ThreadID != msgMM.Extra["thread_root_id"] {
-		t.Error("Mattermost ThreadID should match Extra thread_root_id")
+		t.Error("ThreadID should match Extra thread_root_id")
 	}
 }
 

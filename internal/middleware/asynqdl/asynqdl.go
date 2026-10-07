@@ -157,7 +157,7 @@ func buildDeadLetter(t *asynq.Task, taskErr error, attempts int) *types.TaskDead
 	}
 
 	return &types.TaskDeadLetter{
-		TenantID:  probe.TenantID,
+		TenantID:  types.SingleTenantID,
 		TaskType:  t.Type(),
 		Scope:     scope,
 		ScopeID:   scopeID,
@@ -176,7 +176,6 @@ func buildDeadLetter(t *asynq.Task, taskErr error, attempts int) *types.TaskDead
 //
 //   - tenant_id          — uniformly the tenant uint64
 //   - knowledge_base_id  — wiki / chunk / image / post-process / ...
-//   - kb_id              — FAQImportPayload's alias for the same thing
 //   - knowledge_id       — per-document scope
 //   - source_kb_id       — KnowledgeMovePayload (semantic: source KB)
 //
@@ -191,7 +190,6 @@ func buildDeadLetter(t *asynq.Task, taskErr error, attempts int) *types.TaskDead
 type payloadProbe struct {
 	TenantID        uint64 `json:"tenant_id,omitempty"`
 	KnowledgeBaseID string `json:"knowledge_base_id,omitempty"`
-	KBID            string `json:"kb_id,omitempty"` // FAQImportPayload uses this name
 	KnowledgeID     string `json:"knowledge_id,omitempty"`
 	SourceKBID      string `json:"source_kb_id,omitempty"` // KnowledgeMovePayload
 }
@@ -208,8 +206,6 @@ func inferScope(p payloadProbe) (string, string) {
 	switch {
 	case p.KnowledgeBaseID != "":
 		return types.TaskScopeKnowledgeBase, p.KnowledgeBaseID
-	case p.KBID != "":
-		return types.TaskScopeKnowledgeBase, p.KBID
 	case p.SourceKBID != "":
 		// Knowledge move spans two KBs; the source is the better
 		// blast-radius indicator (it's where the work was being read

@@ -18,59 +18,59 @@ func TestRemoteBindingDecision(t *testing.T) {
 		{name: "nil", err: nil},
 		{
 			name:     "not found",
-			err:      NewRemoteError(SandboxTypeCube, "Get", RemoteErrorKindNotFound, "gone", nil),
+			err:      NewRemoteError(SandboxTypeDocker, "Get", RemoteErrorKindNotFound, "gone", nil),
 			replace:  true,
 			preserve: false,
 		},
 		{
 			name:     "terminal",
-			err:      NewRemoteError(SandboxTypeCube, "Get", RemoteErrorKindTerminal, "terminated", nil),
+			err:      NewRemoteError(SandboxTypeDocker, "Get", RemoteErrorKindTerminal, "terminated", nil),
 			replace:  true,
 			preserve: false,
 		},
 		{
 			name:     "authentication",
-			err:      NewRemoteError(SandboxTypeCube, "Connect", RemoteErrorKindAuthentication, "denied", nil),
+			err:      NewRemoteError(SandboxTypeDocker, "Connect", RemoteErrorKindAuthentication, "denied", nil),
 			preserve: true,
 		},
 		{
 			name:     "invalid request",
-			err:      NewRemoteError(SandboxTypeCube, "Create", RemoteErrorKindInvalidRequest, "bad template", nil),
+			err:      NewRemoteError(SandboxTypeDocker, "Create", RemoteErrorKindInvalidRequest, "bad template", nil),
 			preserve: true,
 		},
 		{
 			name:     "unsupported",
-			err:      NewRemoteError(SandboxTypeCube, "Connect", RemoteErrorKindUnsupported, "no reconnect", nil),
+			err:      NewRemoteError(SandboxTypeDocker, "Connect", RemoteErrorKindUnsupported, "no reconnect", nil),
 			preserve: true,
 		},
 		{
 			name:     "conflict",
-			err:      NewRemoteError(SandboxTypeCube, "Delete", RemoteErrorKindConflict, "busy", nil),
+			err:      NewRemoteError(SandboxTypeDocker, "Delete", RemoteErrorKindConflict, "busy", nil),
 			preserve: true,
 		},
 		{
 			name:     "capacity",
-			err:      NewRemoteError(SandboxTypeCube, "Create", RemoteErrorKindCapacity, "full", nil),
+			err:      NewRemoteError(SandboxTypeDocker, "Create", RemoteErrorKindCapacity, "full", nil),
 			preserve: true,
 		},
 		{
 			name:     "timeout",
-			err:      NewRemoteError(SandboxTypeCube, "Get", RemoteErrorKindTimeout, "deadline", nil),
+			err:      NewRemoteError(SandboxTypeDocker, "Get", RemoteErrorKindTimeout, "deadline", nil),
 			preserve: true,
 		},
 		{
 			name:     "unavailable",
-			err:      NewRemoteError(SandboxTypeCube, "Health", RemoteErrorKindUnavailable, "offline", nil),
+			err:      NewRemoteError(SandboxTypeDocker, "Health", RemoteErrorKindUnavailable, "offline", nil),
 			preserve: true,
 		},
 		{
 			name:     "internal",
-			err:      NewRemoteError(SandboxTypeCube, "List", RemoteErrorKindInternal, "unknown", nil),
+			err:      NewRemoteError(SandboxTypeDocker, "List", RemoteErrorKindInternal, "unknown", nil),
 			preserve: true,
 		},
 		{
 			name:     "wrapped terminal",
-			err:      fmt.Errorf("probe failed: %w", NewRemoteError(SandboxTypeCube, "Get", RemoteErrorKindTerminal, "dead", nil)),
+			err:      fmt.Errorf("probe failed: %w", NewRemoteError(SandboxTypeDocker, "Get", RemoteErrorKindTerminal, "dead", nil)),
 			replace:  true,
 			preserve: false,
 		},
@@ -97,7 +97,7 @@ func TestRemoteErrorRetainsCause(t *testing.T) {
 
 	cause := errors.New("connection reset")
 	err := NewRemoteError(
-		SandboxTypeCube,
+		SandboxTypeDocker,
 		"Connect",
 		RemoteErrorKindUnavailable,
 		"control plane unavailable",
@@ -107,7 +107,7 @@ func TestRemoteErrorRetainsCause(t *testing.T) {
 	if !errors.Is(err, cause) {
 		t.Fatal("RemoteError must retain its provider-native cause")
 	}
-	if got, want := err.Error(), "cube Connect: unavailable: control plane unavailable: connection reset"; got != want {
+	if got, want := err.Error(), "docker Connect: unavailable: control plane unavailable: connection reset"; got != want {
 		t.Fatalf("Error() = %q, want %q", got, want)
 	}
 }
@@ -116,7 +116,7 @@ func TestRemoteErrorDiagnostics(t *testing.T) {
 	t.Parallel()
 
 	remote := NewRemoteError(
-		SandboxTypeCube, "Exec", RemoteErrorKindAuthentication,
+		SandboxTypeDocker, "Exec", RemoteErrorKindAuthentication,
 		"HTTP 403", errors.New("forbidden"),
 	)
 	remote.StatusCode = 403
@@ -132,8 +132,8 @@ func TestRemoteErrorDiagnostics(t *testing.T) {
 func TestIsRemoteDirAlreadyExists(t *testing.T) {
 	t.Parallel()
 
-	cubeSeedErr := NewRemoteError(
-		SandboxTypeCube, "MakeDir", RemoteErrorKindInternal,
+	directoryErr := NewRemoteError(
+		SandboxTypeDocker, "MakeDir", RemoteErrorKindInternal,
 		"failed to make dir /opt/reliquary/tenant/skills/sk-1: directory already exists: /opt/reliquary/tenant/skills/sk-1",
 		nil,
 	)
@@ -143,27 +143,27 @@ func TestIsRemoteDirAlreadyExists(t *testing.T) {
 		want bool
 	}{
 		{name: "nil", err: nil, want: false},
-		{name: "cube envd already exists", err: cubeSeedErr, want: true},
+		{name: "directory already exists", err: directoryErr, want: true},
 		{
-			name: "wrapped cube error",
-			err:  fmt.Errorf("sandbox: create install directory: %w", cubeSeedErr),
+			name: "wrapped directory error",
+			err:  fmt.Errorf("sandbox: create install directory: %w", directoryErr),
 			want: true,
 		},
 		{
-			name: "e2b conflict already exists",
+			name: "directory conflict",
 			err: NewRemoteError(
-				SandboxTypeE2B, "MakeDir", RemoteErrorKindConflict, "already exists", nil,
+				SandboxTypeDocker, "MakeDir", RemoteErrorKindConflict, "already exists", nil,
 			),
 			want: true,
 		},
 		{
 			name: "unrelated internal",
-			err:  NewRemoteError(SandboxTypeCube, "MakeDir", RemoteErrorKindInternal, "disk full", nil),
+			err:  NewRemoteError(SandboxTypeDocker, "MakeDir", RemoteErrorKindInternal, "disk full", nil),
 			want: false,
 		},
 		{
 			name: "conflict without already exists",
-			err:  NewRemoteError(SandboxTypeCube, "Delete", RemoteErrorKindConflict, "busy", nil),
+			err:  NewRemoteError(SandboxTypeDocker, "Delete", RemoteErrorKindConflict, "busy", nil),
 			want: false,
 		},
 	}
@@ -184,81 +184,14 @@ func TestIsRemoteConflict(t *testing.T) {
 	if IsRemoteConflict(nil) {
 		t.Fatal("nil is not a conflict")
 	}
-	conflict := NewRemoteError(SandboxTypeE2B, "DeleteSnapshot", RemoteErrorKindConflict, "busy", nil)
+	conflict := NewRemoteError(SandboxTypeDocker, "DeleteSnapshot", RemoteErrorKindConflict, "busy", nil)
 	if !IsRemoteConflict(conflict) {
 		t.Fatal("Conflict kind must match")
 	}
 	invalid := NewRemoteError(
-		SandboxTypeE2B, "DeleteSnapshot", RemoteErrorKindInvalidRequest, "bad id", nil,
+		SandboxTypeDocker, "DeleteSnapshot", RemoteErrorKindInvalidRequest, "bad id", nil,
 	)
 	if IsRemoteConflict(invalid) {
 		t.Fatal("InvalidRequest must not match")
-	}
-}
-
-func TestSnapshotDeleteKindPromotesInUseToConflict(t *testing.T) {
-	t.Parallel()
-
-	inUse := "cannot delete template 'upfvuzpq0q6foo1mkpbkl' because there are paused sandboxes using it"
-	jsonBody := `e2b: status 400: {"code":400,"message":"` + inUse + `"}`
-
-	tests := []struct {
-		name string
-		op   string
-		kind RemoteErrorKind
-		msg  string
-		want RemoteErrorKind
-	}{
-		{
-			name: "e2b paused sandboxes 400",
-			op:   "DeleteSnapshot",
-			kind: RemoteErrorKindInvalidRequest,
-			msg:  inUse,
-			want: RemoteErrorKindConflict,
-		},
-		{
-			name: "json-wrapped e2b 400",
-			op:   "DeleteSnapshot",
-			kind: RemoteErrorKindInvalidRequest,
-			msg:  jsonBody,
-			want: RemoteErrorKindConflict,
-		},
-		{
-			name: "cube delete template",
-			op:   "DeleteTemplate",
-			kind: RemoteErrorKindInvalidRequest,
-			msg:  "cannot delete template x because there are sandboxes using it",
-			want: RemoteErrorKindConflict,
-		},
-		{
-			name: "already conflict stays conflict",
-			op:   "DeleteSnapshot",
-			kind: RemoteErrorKindConflict,
-			msg:  "image is in use",
-			want: RemoteErrorKindConflict,
-		},
-		{
-			name: "generic 400 stays invalid",
-			op:   "DeleteSnapshot",
-			kind: RemoteErrorKindInvalidRequest,
-			msg:  "invalid snapshot id",
-			want: RemoteErrorKindInvalidRequest,
-		},
-		{
-			name: "other ops are unchanged",
-			op:   "Create",
-			kind: RemoteErrorKindInvalidRequest,
-			msg:  inUse,
-			want: RemoteErrorKindInvalidRequest,
-		},
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			if got := snapshotDeleteKind(tt.op, tt.kind, tt.msg); got != tt.want {
-				t.Fatalf("snapshotDeleteKind() = %q, want %q", got, tt.want)
-			}
-		})
 	}
 }

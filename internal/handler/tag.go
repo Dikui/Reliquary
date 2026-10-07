@@ -14,22 +14,10 @@ import (
 	secutils "reliquary/internal/utils"
 )
 
-// TagHandler handles knowledge base tag operations.
-//
-// All KB-access checks (own / org-shared / via shared agent) are now
-// performed by the route-level g.KBAccessRead / g.KBAccessWrite
-// guards in router.go — the guard rewrites c.Request.Context() to
-// carry the effective tenant ID, so handlers below just use
-// c.Request.Context() the way they always did.
 type TagHandler struct {
 	tagService interfaces.KnowledgeTagService
 	tagRepo    interfaces.KnowledgeTagRepository
 	chunkRepo  interfaces.ChunkRepository
-}
-
-// DeleteTagRequest represents the request body for deleting a tag
-type DeleteTagRequest struct {
-	ExcludeIDs []int64 `json:"exclude_ids"` // Chunk seq_ids to exclude from deletion
 }
 
 // NewTagHandler creates a new TagHandler.
@@ -41,9 +29,6 @@ func NewTagHandler(
 	return &TagHandler{tagService: tagService, tagRepo: tagRepo, chunkRepo: chunkRepo}
 }
 
-// resolveTagID resolves tag_id parameter which can be either UUID or seq_id (integer).
-// Uses tenant from c's context — which the route-level KB-access guard
-// has already rewritten to the effective tenant for shared KBs.
 func (h *TagHandler) resolveTagID(c *gin.Context) (string, error) {
 	return h.resolveTagIDWithCtx(c, c.Request.Context())
 }
@@ -61,11 +46,6 @@ func (h *TagHandler) resolveTagIDWithCtx(c *gin.Context, ctx context.Context) (s
 		return tag.ID, nil
 	}
 	return tagIDParam, nil
-}
-
-// getChunksBySeqIDs retrieves chunks by their seq_ids.
-func (h *TagHandler) getChunksBySeqIDs(ctx context.Context, tenantID uint64, seqIDs []int64) ([]*types.Chunk, error) {
-	return h.chunkRepo.ListChunksBySeqID(ctx, tenantID, seqIDs)
 }
 
 // ListTags godoc
@@ -208,63 +188,17 @@ func (h *TagHandler) UpdateTag(c *gin.Context) {
 	})
 }
 
-// DeleteTag godoc
-// @Summary      删除标签
-// @Description  文档知识库仅创建者可删除标签及关联，消息与图片保留；FAQ 可使用 force 或 content_only 删除内容
-// @Tags         标签管理
-// @Accept       json
-// @Produce      json
-// @Param        id            path      string              true   "知识库ID"
-// @Param        tag_id        path      string              true   "标签ID (UUID或seq_id)"
-// @Param        force         query     bool                false  "强制删除"
-// @Param        content_only  query     bool                false  "仅删除内容，保留标签"
-// @Param        body          body      DeleteTagRequest    false  "删除选项"
-// @Success      200           {object}  map[string]interface{}  "删除成功"
-// @Failure      400           {object}  errors.AppError         "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge-bases/{id}/tags/{tag_id} [delete]
+// DeleteTag removes a team label and its associations while preserving documents.
 func (h *TagHandler) DeleteTag(c *gin.Context) {
 	ctx := c.Request.Context()
-
 	tagID, err := h.resolveTagID(c)
 	if err != nil {
 		c.Error(err)
 		return
 	}
-
-	force := c.Query("force") == "true"
-	contentOnly := c.Query("content_only") == "true"
-
-	var req DeleteTagRequest
-	_ = c.ShouldBindJSON(&req)
-
-	var excludeUUIDs []string
-	if len(req.ExcludeIDs) > 0 {
-		tenantID := types.MustTenantIDFromContext(ctx)
-		chunks, err := h.getChunksBySeqIDs(ctx, tenantID, req.ExcludeIDs)
-		if err != nil {
-			logger.Warnf(ctx, "Failed to resolve exclude_ids: %v", err)
-		} else {
-			excludeUUIDs = make([]string, len(chunks))
-			for i, chunk := range chunks {
-				excludeUUIDs[i] = chunk.ID
-			}
-		}
-	}
-
-	if err := h.tagService.DeleteTag(ctx, tagID, force, contentOnly, excludeUUIDs); err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"tag_id": tagID,
-		})
+	if err := h.tagService.DeleteTag(ctx, tagID); err != nil {
 		c.Error(err)
 		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-	})
+	c.JSON(http.StatusOK, gin.H{"success": true})
 }
-
-// NOTE: TagHandler currently exposes CRUD for tags and statistics.
-// Knowledge / Chunk tagging is handled via dedicated knowledge and FAQ APIs.

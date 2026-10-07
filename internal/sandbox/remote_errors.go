@@ -18,7 +18,6 @@ package sandbox
 import (
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 )
 
@@ -190,37 +189,6 @@ func IsRemoteConflict(err error) bool {
 	return remoteKind(err) == RemoteErrorKindConflict
 }
 
-// snapshotDeleteKind reclassifies a snapshot/template delete that failed
-// because sandboxes still reference it. E2B returns that as HTTP 400
-// invalid_request; it is Conflict: the caller did nothing wrong and should
-// retry after those sandboxes (typically paused) go away.
-func snapshotDeleteKind(op string, kind RemoteErrorKind, message string) RemoteErrorKind {
-	if op != "DeleteSnapshot" && op != "DeleteTemplate" {
-		return kind
-	}
-	if kind == RemoteErrorKindConflict || snapshotInUseBySandboxes(message) {
-		return RemoteErrorKindConflict
-	}
-	return kind
-}
-
-func snapshotInUseBySandboxes(message string) bool {
-	msg := strings.ToLower(message)
-	if strings.Contains(msg, "paused sandbox") {
-		return true
-	}
-	if strings.Contains(msg, "sandboxes using") {
-		return true
-	}
-	return strings.Contains(msg, "cannot delete template") && strings.Contains(msg, "using it")
-}
-
-// IsRemoteDirAlreadyExists reports whether MakeDir failed because the
-// directory is already present. Cube's envd MakeDir is not mkdir -p: a
-// directory created by a previous call (or by a shell `mkdir -p` in
-// resetSkillDir) comes back as an internal error instead of success, and
-// seeding SKILL.md would otherwise abort on a directory it is supposed to
-// write into.
 func IsRemoteDirAlreadyExists(err error) bool {
 	if err == nil {
 		return false
@@ -250,34 +218,5 @@ func CanReplaceRemoteBinding(err error) bool {
 		return true
 	default:
 		return false
-	}
-}
-
-// httpErrorKind maps an HTTP status code to a RemoteErrorKind. It is shared
-// by all remote sandbox adapter backends (Cube, E2B).
-func httpErrorKind(op string, status int) RemoteErrorKind {
-	switch status {
-	case http.StatusBadRequest, http.StatusUnprocessableEntity:
-		return RemoteErrorKindInvalidRequest
-	case http.StatusUnauthorized, http.StatusForbidden:
-		return RemoteErrorKindAuthentication
-	case http.StatusNotFound:
-		if op == "Create" {
-			return RemoteErrorKindInvalidRequest
-		}
-		return RemoteErrorKindNotFound
-	case http.StatusRequestTimeout, http.StatusGatewayTimeout:
-		return RemoteErrorKindTimeout
-	case http.StatusConflict:
-		return RemoteErrorKindConflict
-	case http.StatusGone:
-		return RemoteErrorKindTerminal
-	case http.StatusTooManyRequests, http.StatusInsufficientStorage:
-		return RemoteErrorKindCapacity
-	default:
-		if status >= 500 {
-			return RemoteErrorKindUnavailable
-		}
-		return RemoteErrorKindInternal
 	}
 }

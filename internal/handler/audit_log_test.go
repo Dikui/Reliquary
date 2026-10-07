@@ -196,15 +196,15 @@ func TestKnowledgeBaseActivityHandler_UsesKBScope(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/knowledge-bases/kb-1/activity?after_id=30&limit=10&outcome=partial", nil)
 	newKBActivityHandlerTestRouter(t, svc, 7,
 		&types.KnowledgeBase{ID: "kb-1", TenantID: 7, CreatorID: "creator"},
-		"creator", types.TenantRoleViewer).ServeHTTP(w, req)
+		"other-member", types.TenantRoleViewer).ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
 	}
 }
 
-func TestKnowledgeBaseActivityHandler_BlocksSharedWorkspace(t *testing.T) {
+func TestKnowledgeBaseActivityHandler_BlocksForeignTeam(t *testing.T) {
 	svc := &stubAuditService{list: func(_ context.Context, _ uint64, _ *interfaces.AuditLogQuery) ([]*types.AuditLog, error) {
-		t.Fatal("audit list must not be called for a shared workspace")
+		t.Fatal("audit list must not be called for a foreign team")
 		return nil, nil
 	}}
 	w := httptest.NewRecorder()
@@ -217,18 +217,20 @@ func TestKnowledgeBaseActivityHandler_BlocksSharedWorkspace(t *testing.T) {
 	}
 }
 
-func TestKnowledgeBaseActivityHandler_RequiresCreatorOrAdmin(t *testing.T) {
-	svc := &stubAuditService{list: func(_ context.Context, _ uint64, _ *interfaces.AuditLogQuery) ([]*types.AuditLog, error) {
-		t.Fatal("audit list must not be called for ordinary members")
+func TestKnowledgeBaseActivityHandler_ViewerCanReadTeamActivity(t *testing.T) {
+	called := false
+	svc := &stubAuditService{list: func(_ context.Context, tenantID uint64, _ *interfaces.AuditLogQuery) ([]*types.AuditLog, error) {
+		called = true
+		if tenantID != 7 {
+			t.Fatalf("tenant = %d, want 7", tenantID)
+		}
 		return nil, nil
 	}}
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/knowledge-bases/kb-1/activity", nil)
-	newKBActivityHandlerTestRouter(t, svc, 7,
-		&types.KnowledgeBase{ID: "kb-1", TenantID: 7, CreatorID: "creator"},
-		"other", types.TenantRoleContributor).ServeHTTP(w, req)
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("expected 403, got %d body=%s", w.Code, w.Body.String())
+	newKBActivityHandlerTestRouter(t, svc, 7, &types.KnowledgeBase{ID: "kb-1", TenantID: 7, CreatorID: "creator"}, "other-member", types.TenantRoleViewer).ServeHTTP(w, req)
+	if w.Code != http.StatusOK || !called {
+		t.Fatalf("status = %d, called = %v, body=%s", w.Code, called, w.Body.String())
 	}
 }
 

@@ -38,6 +38,9 @@ func (l *tenantSandboxConfigLoader) Load(
 	tenantID uint64,
 	configID string,
 ) (sandbox.ResolvedTenantSandboxConfig, error) {
+	if tenantID != types.SingleTenantID {
+		return sandbox.ResolvedTenantSandboxConfig{}, fmt.Errorf("sandbox: config must belong to the team")
+	}
 	if l.repo == nil {
 		return sandbox.ResolvedTenantSandboxConfig{}, nil
 	}
@@ -45,7 +48,7 @@ func (l *tenantSandboxConfigLoader) Load(
 	if err != nil {
 		return sandbox.ResolvedTenantSandboxConfig{}, err
 	}
-	if entity == nil {
+	if entity == nil || entity.TenantID != types.SingleTenantID {
 		return sandbox.ResolvedTenantSandboxConfig{Found: false}, nil
 	}
 	return sandbox.ResolvedTenantSandboxConfig{

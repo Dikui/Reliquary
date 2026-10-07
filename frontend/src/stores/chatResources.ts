@@ -5,7 +5,6 @@ import { listAgents, type CustomAgent } from '@/api/agent'
 import { listModels, type ModelConfig } from '@/api/model'
 import { listWebSearchProviders, type WebSearchProviderEntity } from '@/api/web-search-provider'
 import { isNamedSandboxBackend, listSandboxConfigs, type SandboxConfigRecord } from '@/api/system'
-import { useOrganizationStore } from '@/stores/organization'
 import { getCurrentLanguage } from '@/utils/request'
 import {
   isLocalizedCacheFresh,
@@ -18,8 +17,6 @@ const CACHE_TTL_MS = 60_000
 
 type ResourceKey = 'knowledgeBases' | 'agents' | 'models' | 'webSearchProviders' | 'sandboxConfigs'
 
-export type ListCreatorFilter = 'all' | 'mine' | 'others'
-
 function isKbModelReady(kb: any): boolean {
   if (!kb.summary_model_id || kb.summary_model_id === '') return false
   const strategy = kb.indexing_strategy
@@ -31,7 +28,6 @@ function isKbModelReady(kb: any): boolean {
 export const useChatResourcesStore = defineStore('chatResources', () => {
   const rawKnowledgeBases = ref<any[]>([])
   const agents = ref<CustomAgent[]>([])
-  const disabledOwnAgentIds = ref<string[]>([])
   const allModels = ref<ModelConfig[]>([])
   const webSearchProviders = ref<WebSearchProviderEntity[]>([])
   const sandboxConfigs = ref<SandboxConfigRecord[]>([])
@@ -41,7 +37,7 @@ export const useChatResourcesStore = defineStore('chatResources', () => {
   // creator==='all' 的列表请求单独去重：首屏 platform 预取与对话页 onMounted
   // 可能并发触发，缓存尚未写入时不去重会重复打 listKnowledgeBases / listAgents。
   let kbAllInflight: Promise<any[]> | null = null
-  let agentsAllInflight: Promise<{ data: CustomAgent[]; disabled_own_agent_ids: string[] }> | null = null
+  let agentsAllInflight: Promise<{ data: CustomAgent[] }> | null = null
   // 代际计数：force 与非 force 并发时句柄会被后来者覆盖，旧请求结束时凭此判断
   // 自己是否仍是最新的那次，避免误清正在飞行的句柄。
   let kbAllGen = 0
@@ -104,15 +100,9 @@ export const useChatResourcesStore = defineStore('chatResources', () => {
    * 知识库列表（支持 creator 筛选）。creator=all 时写入缓存供对话页复用。
    */
   async function fetchKnowledgeBasesForList(
-    params?: { creator?: ListCreatorFilter },
     force = false,
   ): Promise<any[]> {
-    const creator = params?.creator ?? 'all'
     // 带 creator 过滤的列表是列表页专用、不进缓存，直接透传请求。
-    if (creator !== 'all') {
-      const res: any = await listKnowledgeBases({ creator })
-      return res?.data && Array.isArray(res.data) ? res.data : []
-    }
 
     if (!force && isFresh('knowledgeBases')) {
       return rawKnowledgeBases.value
@@ -127,8 +117,6 @@ export const useChatResourcesStore = defineStore('chatResources', () => {
         if (kbAllGen !== gen) return []
         rawKnowledgeBases.value = data
         loadedAt.value.knowledgeBases = Date.now()
-        const orgStore = useOrganizationStore()
-        await orgStore.fetchSharedKnowledgeBases({ force })
         return data
       } finally {
         if (kbAllGen === gen) kbAllInflight = null
@@ -138,38 +126,26 @@ export const useChatResourcesStore = defineStore('chatResources', () => {
   }
 
   async function ensureKnowledgeBases(force = false): Promise<void> {
-    await fetchKnowledgeBasesForList({ creator: 'all' }, force)
+    await fetchKnowledgeBasesForList(force)
   }
 
   /**
    * 智能体列表（支持 creator 筛选）。creator=all 时写入缓存。
    */
   async function fetchAgentsForList(
-    params?: { creator?: ListCreatorFilter },
     force = false,
-  ): Promise<{ data: CustomAgent[]; disabled_own_agent_ids: string[] }> {
-    const creator = params?.creator ?? 'all'
-    const orgStore = useOrganizationStore()
+  ): Promise<{ data: CustomAgent[] }> {
 
-    // 带 creator 过滤的列表不进缓存，但仍需刷新共享智能体（与全量路径保持一致）。
-    if (creator !== 'all') {
-      const [agentsRes] = await Promise.all([
-        listAgents({ creator }),
-        orgStore.fetchSharedAgents({ force }),
-      ])
-      const res = agentsRes as { data?: CustomAgent[]; disabled_own_agent_ids?: string[] }
-      return { data: res.data || [], disabled_own_agent_ids: res.disabled_own_agent_ids || [] }
-    }
 
     const locale = getCurrentLanguage()
     if (!force && isFresh('agents')) {
-      return { data: agents.value, disabled_own_agent_ids: disabledOwnAgentIds.value }
+      return { data: agents.value }
     }
     if (
       !force &&
       shouldReuseLocalizedInflight(!!agentsAllInflight, agentsAllInflightLocale, locale)
     ) {
-      return agentsAllInflight as Promise<{ data: CustomAgent[]; disabled_own_agent_ids: string[] }>
+      return agentsAllInflight as Promise<{ data: CustomAgent[] }>
     }
 
     const gen = ++agentsAllGen
@@ -179,18 +155,15 @@ export const useChatResourcesStore = defineStore('chatResources', () => {
       try {
         const [agentsRes] = await Promise.all([
           listAgents(),
-          orgStore.fetchSharedAgents({ force }),
         ])
-        const res = agentsRes as { data?: CustomAgent[]; disabled_own_agent_ids?: string[] }
+        const res = agentsRes as { data?: CustomAgent[] }
         const data = res.data || []
-        const disabled = res.disabled_own_agent_ids || []
         if (shouldCommitLocalizedGeneration(gen, agentsAllGen)) {
           agents.value = data
-          disabledOwnAgentIds.value = disabled
           loadedAt.value.agents = Date.now()
           agentsLoadedLocale = requestLocale
         }
-        return { data, disabled_own_agent_ids: disabled }
+        return { data }
       } finally {
         if (shouldCommitLocalizedGeneration(gen, agentsAllGen)) {
           agentsAllInflight = null
@@ -202,7 +175,7 @@ export const useChatResourcesStore = defineStore('chatResources', () => {
   }
 
   async function ensureAgents(force = false): Promise<void> {
-    await fetchAgentsForList({ creator: 'all' }, force)
+    await fetchAgentsForList(force)
   }
 
   async function ensureModels(force = false): Promise<void> {
@@ -263,18 +236,16 @@ export const useChatResourcesStore = defineStore('chatResources', () => {
 
   /** 并行预取对话输入栏及列表页常用的空间级资源 */
   async function prefetchChatInput(force = false): Promise<void> {
-    const orgStore = useOrganizationStore()
     await Promise.all([
       ensureKnowledgeBases(force),
       ensureAgents(force),
       ensureModels(force),
       ensureWebSearchProviders(force),
-      orgStore.fetchOrganizations({ force }),
     ])
   }
 
-  async function ensureAgentKnowledgeBases(agentId: string, sourceTenantId?: string, force = false): Promise<any[]> {
-    const cacheKey = `${agentId}:${sourceTenantId || 'current'}`
+  async function ensureAgentKnowledgeBases(agentId: string, force = false): Promise<any[]> {
+    const cacheKey = agentId
     const cached = agentKbCache.get(cacheKey)
     if (!force && cached && Date.now() - cached.at < CACHE_TTL_MS) {
       return cached.data
@@ -286,7 +257,6 @@ export const useChatResourcesStore = defineStore('chatResources', () => {
       try {
         const res: any = await listKnowledgeBases({
           agent_id: agentId,
-          agent_source_tenant_id: sourceTenantId,
         })
         const list = res?.data && Array.isArray(res.data) ? res.data : []
         agentKbCache.set(cacheKey, { at: Date.now(), data: list })
@@ -342,7 +312,6 @@ export const useChatResourcesStore = defineStore('chatResources', () => {
       loadedAt.value = {}
       rawKnowledgeBases.value = []
       agents.value = []
-      disabledOwnAgentIds.value = []
       allModels.value = []
       webSearchProviders.value = []
       sandboxConfigs.value = []
@@ -382,7 +351,6 @@ export const useChatResourcesStore = defineStore('chatResources', () => {
     rawKnowledgeBases,
     validKnowledgeBases,
     agents,
-    disabledOwnAgentIds,
     allModels,
     chatModels,
     webSearchProviders,

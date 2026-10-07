@@ -67,7 +67,6 @@ func newTenantHandlerTestEngine(t *testing.T, role types.TenantRole, tenant *typ
 		c.Set(types.TenantIDContextKey.String(), tenant.ID)
 		c.Next()
 	})
-	r.GET("/tenants", h.ListTenants)
 	r.GET("/tenants/:id", h.GetTenant)
 	r.GET("/tenants/kv/:key", h.GetTenantKV)
 	r.PUT("/tenants/kv/:key", h.UpdateTenantKV)
@@ -97,20 +96,6 @@ func TestGetTenantViewerDoesNotLeakSecrets(t *testing.T) {
 	engine.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.NotContains(t, rec.Body.String(), "tenant-api-key-123")
-}
-
-func TestListTenantsViewerDoesNotLeakSecrets(t *testing.T) {
-	tenant := secretTenantFixture()
-	engine := newTenantHandlerTestEngine(t, types.TenantRoleViewer, tenant)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/tenants", nil)
-	engine.ServeHTTP(rec, req)
-	require.Equal(t, http.StatusOK, rec.Code)
-
-	body := rec.Body.String()
-	assert.NotContains(t, body, "tenant-api-key-123")
-	assert.NotContains(t, body, "parser-secret-123")
 }
 
 func TestGetTenantKVAdminReturnsRedactedSecrets(t *testing.T) {

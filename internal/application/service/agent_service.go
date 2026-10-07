@@ -178,23 +178,14 @@ func agentHasKnowledgeScope(config *types.AgentConfig) bool {
 	)
 }
 
-// knowledgeBaseScopesForPrompt returns the KB IDs to show in runtime_context
-// metadata, together with the tenant each KB should be queried under.
-//
-// The tenant map always comes from SearchTargets, which buildSearchTargets has
-// already resolved (and authorized) per KB: a directly shared KB carries its
-// source tenant there. KnowledgeBases alone cannot tell own from shared KBs —
-// both KBSelectionMode="all" and an @mention put shared KB IDs into it.
-// KBs missing from the map fall back to the caller's tenant.
-func knowledgeBaseScopesForPrompt(config *types.AgentConfig) ([]string, map[string]uint64) {
+func knowledgeBaseScopesForPrompt(config *types.AgentConfig) []string {
 	if config == nil {
-		return nil, nil
+		return nil
 	}
-	kbTenantMap := config.SearchTargets.GetKBTenantMap()
 	if len(config.KnowledgeBases) > 0 {
-		return config.KnowledgeBases, kbTenantMap
+		return config.KnowledgeBases
 	}
-	return config.SearchTargets.GetAllKnowledgeBaseIDs(), kbTenantMap
+	return config.SearchTargets.GetAllKnowledgeBaseIDs()
 }
 
 // agentService implements agent-related business logic
@@ -471,8 +462,8 @@ func (s *agentService) resolveKBAndDocInfos(
 	ctx context.Context,
 	config *types.AgentConfig,
 ) ([]*agent.KnowledgeBaseInfo, []*agent.SelectedDocumentInfo) {
-	kbIDs, kbTenantMap := knowledgeBaseScopesForPrompt(config)
-	kbInfos, err := s.getKnowledgeBaseInfos(ctx, kbIDs, kbTenantMap)
+	kbIDs := knowledgeBaseScopesForPrompt(config)
+	kbInfos, err := s.getKnowledgeBaseInfos(ctx, kbIDs)
 	if err != nil {
 		logger.Warnf(ctx, "Failed to get knowledge base details, using IDs only: %v", err)
 		kbInfos = make([]*agent.KnowledgeBaseInfo, 0, len(kbIDs))
@@ -952,9 +943,6 @@ func (s *agentService) registerTools(
 		allowedTools = tools.DefaultAllowedTools()
 		logger.Infof(ctx, "Using default allowed tools: %v", allowedTools)
 	}
-	if config.SharedAgentReadOnly {
-		allowedTools = filterSharedAgentWriteTools(allowedTools)
-	}
 
 	// ---- Capability detection from SearchTargets ----
 	var hasVectorKB bool
@@ -1233,8 +1221,8 @@ func (s *agentService) registerTools(
 				if err != nil {
 					return err
 				}
-				if kb == nil || kb.TenantID != tenantID || kb.CreatorID != userID {
-					return fmt.Errorf("only the knowledge base creator can import research")
+				if kb == nil || kb.TenantID != tenantID || !types.TenantRoleFromContext(ctx).HasPermission(types.TenantRoleContributor) {
+					return fmt.Errorf("a team editor is required to import research")
 				}
 				if blockedIntakeURL(input.URL) {
 					return fmt.Errorf("X/Twitter sources require Grok ingestion")
@@ -1298,30 +1286,6 @@ func (s *agentService) registerTools(
 	return nil
 }
 
-// filterSharedAgentWriteTools enforces the read-only contract of AgentShare.
-// These tools write source-workspace Wiki state and otherwise bypass the HTTP
-// KB permission middleware because they execute inside the agent engine.
-func filterSharedAgentWriteTools(allowed []string) []string {
-	sourceWorkspaceWrites := map[string]bool{
-		tools.ToolWikiFlagIssue:          true,
-		tools.ToolWikiUpdateIssue:        true,
-		tools.ToolWikiWritePage:          true,
-		tools.ToolWikiReplaceText:        true,
-		tools.ToolWikiRenamePage:         true,
-		tools.ToolWikiDeletePage:         true,
-		tools.ToolKnowledgeReportAnomaly: true,
-		tools.ToolKnowledgeImportURL:     true,
-		tools.ToolKnowledgeApplyAnomaly:  true,
-	}
-	filtered := make([]string, 0, len(allowed))
-	for _, name := range allowed {
-		if !sourceWorkspaceWrites[name] {
-			filtered = append(filtered, name)
-		}
-	}
-	return filtered
-}
-
 // ValidateConfig validates the agent configuration
 func (s *agentService) ValidateConfig(config *types.AgentConfig) error {
 	if config == nil {
@@ -1339,10 +1303,7 @@ func (s *agentService) ValidateConfig(config *types.AgentConfig) error {
 	return nil
 }
 
-// getKnowledgeBaseInfos retrieves detailed information for knowledge bases.
-// kbTenantMap carries the tenant each KB should be queried under (source tenant
-// for directly shared KBs); a missing entry falls back to the request tenant.
-func (s *agentService) getKnowledgeBaseInfos(ctx context.Context, kbIDs []string, kbTenantMap map[string]uint64) ([]*agent.KnowledgeBaseInfo, error) {
+func (s *agentService) getKnowledgeBaseInfos(ctx context.Context, kbIDs []string) ([]*agent.KnowledgeBaseInfo, error) {
 	if len(kbIDs) == 0 {
 		return []*agent.KnowledgeBaseInfo{}, nil
 	}
@@ -1371,52 +1332,13 @@ func (s *agentService) getKnowledgeBaseInfos(ctx context.Context, kbIDs []string
 			continue
 		}
 
-		// Document/FAQ listing below is tenant-scoped, so a directly shared KB
-		// must be queried under its source tenant — the request context belongs
-		// to the receiving tenant and would silently yield doc_count=0. The
-		// tenant comes from the SearchTarget that buildSearchTargets already
-		// authorized; this only widens the metadata query, never the KB set.
 		metaCtx := ctx
-		if scopeTenantID := kbTenantMap[kbID]; scopeTenantID != 0 {
-			metaCtx = context.WithValue(ctx, types.TenantIDContextKey, scopeTenantID)
-		}
 
 		// Get document count and recent documents
 		docCount := 0
 		recentDocs := []agent.RecentDocInfo{}
 
-		if kb.Type == types.KnowledgeBaseTypeFAQ {
-			pageResult, err := s.knowledgeService.ListFAQEntries(metaCtx, kbID, &types.Pagination{
-				Page:     1,
-				PageSize: 10,
-			}, nil, 0, "", "", "")
-			if err == nil && pageResult != nil {
-				docCount = int(pageResult.Total)
-				if entries, ok := pageResult.Data.([]*types.FAQEntry); ok {
-					for _, entry := range entries {
-						if len(recentDocs) >= 10 {
-							break
-						}
-						recentDocs = append(recentDocs, agent.RecentDocInfo{
-							ChunkID:             entry.ChunkID,
-							KnowledgeID:         entry.KnowledgeID,
-							KnowledgeBaseID:     entry.KnowledgeBaseID,
-							Title:               entry.StandardQuestion,
-							Type:                string(types.ChunkTypeFAQ),
-							CreatedAt:           entry.CreatedAt.Format("2006-01-02"),
-							FAQStandardQuestion: entry.StandardQuestion,
-							FAQSimilarQuestions: entry.SimilarQuestions,
-							FAQAnswers:          entry.Answers,
-						})
-					}
-				}
-			} else if err != nil {
-				logger.Warnf(ctx, "Failed to list FAQ entries for %s: %v", kbID, err)
-			}
-		}
-
-		// Fallback to generic knowledge listing when not FAQ or FAQ retrieval failed
-		if kb.Type != types.KnowledgeBaseTypeFAQ || len(recentDocs) == 0 {
+		{
 			pageResult, err := s.knowledgeService.ListPagedKnowledgeByKnowledgeBaseID(metaCtx, kbID, &types.Pagination{
 				Page:     1,
 				PageSize: 10,
@@ -1500,8 +1422,7 @@ func (s *agentService) getSelectedDocumentInfos(ctx context.Context, knowledgeID
 		tenantID = tid
 	}
 
-	// Fetch knowledge metadata (include docs from shared KBs the user has access to)
-	knowledges, err := s.knowledgeService.GetKnowledgeBatchWithSharedAccess(ctx, tenantID, knowledgeIDs)
+	knowledges, err := s.knowledgeService.GetKnowledgeBatch(ctx, tenantID, knowledgeIDs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get knowledge batch: %w", err)
 	}

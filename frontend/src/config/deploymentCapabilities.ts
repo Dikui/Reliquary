@@ -1,8 +1,6 @@
 export const DEPLOYMENT_CAPABILITY_KEYS = [
-  'organizations',
   'agents',
   'integrations.im',
-  'integrations.embed',
   'integrations.api',
   'settings.mcp',
   'settings.websearch',

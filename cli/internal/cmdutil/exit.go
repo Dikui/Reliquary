@@ -155,7 +155,7 @@ func defaultHint(code ErrorCode) string {
 		return "your session expired; run `reliquary auth login` to re-authenticate"
 	case CodeAuthForbidden:
 		return "active profile lacks permission for this resource"
-	case CodeAuthCrossTenantBlocked, CodeAuthTenantMismatch:
+	case CodeAuthTenantMismatch:
 		return "verify tenant profile with `reliquary auth status`"
 	case CodeNetworkError:
 		return "check base URL reachability with `reliquary doctor`"
@@ -240,7 +240,7 @@ func retryableForCode(code ErrorCode) *bool {
 	// (unknown), so the agent decides rather than reading an optimistic true.
 	// Deterministic - same command will fail the same way.
 	case CodeAuthUnauthenticated, CodeAuthTokenExpired, CodeAuthBadCredential,
-		CodeAuthForbidden, CodeAuthCrossTenantBlocked, CodeAuthTenantMismatch,
+		CodeAuthForbidden, CodeAuthTenantMismatch,
 		CodeInputInvalidArgument, CodeInputMissingFlag,
 		CodeInputConfirmationRequired, CodeInputUnknownSubcommand,
 		CodeResourceNotFound, CodeResourceAlreadyExists, CodeResourceLocked,

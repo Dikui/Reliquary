@@ -18,7 +18,6 @@ export interface LoginResponse {
     email: string
     avatar?: string
     tenant_id: number
-    can_access_all_tenants?: boolean
     is_system_admin?: boolean
     is_active: boolean
     created_at: string
@@ -35,9 +34,7 @@ export interface LoginResponse {
     created_at: string
     updated_at: string
   } | null
-  // active_tenant mirrors `tenant` for endpoints that distinguish home
-  // tenant from current tenant (e.g. /auth/register-by-invite). Only
-  // one of `tenant` / `active_tenant` is populated by any given endpoint.
+  // Current team returned by password login or invitation registration.
   active_tenant?: {
     id: number
     name: string
@@ -52,20 +49,6 @@ export interface LoginResponse {
   memberships?: MembershipInfo[]
   token?: string
   refresh_token?: string
-}
-
-export interface OIDCAuthURLResponse {
-  success: boolean
-  authorization_url?: string
-  state?: string
-  message?: string
-}
-
-export interface OIDCConfigResponse {
-  success: boolean
-  enabled: boolean
-  provider_display_name?: string
-  message?: string
 }
 
 // 用户注册接口
@@ -91,18 +74,6 @@ export interface RegisterResponse {
   }
 }
 
-// 用户偏好（与后端 types.UserPreferences 对齐，字段可选 = 没显式设置过）。
-// 新加 key 时记得：后端 service.UpdateUserPreferences 也要在 merge 分支里
-// 处理；前端调用方按需读 / 默认值降级。
-export interface UserPreferences {
-  // last_active_tenant_id 持久化「刷新 / 换设备 / 重新登录后回到上次的空间」
-  // 偏好；后端在 Login / RefreshToken 时校验 membership 有效后才会沿用，
-  // 否则回退到 home 并清掉这个字段。传 0 给 PATCH 表示「清除偏好」。
-  last_active_tenant_id?: number | null
-  // oidc_only_login 为 true 表示账号由 OIDC 自动开通且用户尚未设置已知密码。
-  oidc_only_login?: boolean
-}
-
 // 用户信息接口
 export interface UserInfo {
   id: string
@@ -110,30 +81,16 @@ export interface UserInfo {
   email: string
   avatar?: string
   tenant_id: string
-  can_access_all_tenants?: boolean
-  preferences?: UserPreferences
   is_system_admin?: boolean
   created_at: string
   updated_at: string
 }
 
 /**
- * 把后端返回的 user JSON 规范化成前端 UserInfo。
- *
- * 历史上有 4 处独立的 setUser 调用（Login、autoSetup、token rehydrate、
- * /auth/me 主动 refresh）各自手写字段白名单，每加一个 user 字段都要在
- * 4 处同步——否则该字段就被悄悄过滤掉。is_system_admin 上线时就因为
- * 漏拷一处而看不到「系统管理」入口；这个工厂存在的目的就是杜绝同类
- * 漏拷再发生。**新增 user 字段请只改这里**。
- *
- * fallbackTenantId 是 tenant_id 缺失时的兜底来源——
- *   - autoSetup 响应顶层有 tenant.id，但 user 对象上没有 tenant_id
- *   - /auth/me 偶发只返回 user 不带 tenant 时也走兜底
- * 调用方按需传入；不传则保持空字符串（与历史行为一致）。
- *
- * 字段读取统一走 `=== true` 而不是 `|| false`，对偶发非 boolean
- * 类型（后端某天传 1/0 或字符串）做严格收敛，避免把 truthy 字符串
- * 误判为权限通过。
+ * 将后端用户信息规范化为前端 UserInfo，统一登录与令牌恢复时的字段。
+ * 新增用户字段只需修改此处，避免遗漏系统管理员等权限属性。
+ * fallbackTenantId 用于响应中用户对象缺少 tenant_id 时补充团队 ID。
+ * 权限字段严格按 boolean true 读取。
  */
 export function userInfoFromApi(
   u: any,
@@ -150,9 +107,7 @@ export function userInfoFromApi(
     email: u?.email || '',
     avatar: u?.avatar,
     tenant_id: String(tid) || '',
-    can_access_all_tenants: u?.can_access_all_tenants === true,
     is_system_admin: u?.is_system_admin === true,
-    preferences: u?.preferences,
     created_at: u?.created_at || new Date().toISOString(),
     updated_at: u?.updated_at || new Date().toISOString(),
   }
@@ -180,7 +135,6 @@ export interface KnowledgeBaseInfo {
   description: string
   tenant_id: string
   // creator_id is the user id of whoever originally created the KB.
-  // Set by PR 5 of the multi-tenant RBAC series; nullable for legacy
   // KBs created before that migration backfilled the column.
   creator_id?: string
   // creator_name 由后端 list 接口批量回填（username 优先，退化到 email），
@@ -214,37 +168,6 @@ export async function login(data: LoginRequest): Promise<LoginResponse> {
   } catch (error: any) {
     return {
       success: false,
-      message: error.message || t('error.auth.loginFailed')
-    }
-  }
-}
-
-/**
- * 获取 OIDC 登录跳转地址
- */
-export async function getOIDCAuthorizationURL(redirectURI: string): Promise<OIDCAuthURLResponse> {
-  try {
-    const response = await get(`/api/v1/auth/oidc/url?redirect_uri=${encodeURIComponent(redirectURI)}`)
-    return response as unknown as OIDCAuthURLResponse
-  } catch (error: any) {
-    return {
-      success: false,
-      message: error.message || t('error.auth.loginFailed')
-    }
-  }
-}
-
-/**
- * 获取 OIDC 登录配置
- */
-export async function getOIDCConfig(): Promise<OIDCConfigResponse> {
-  try {
-    const response = await get('/api/v1/auth/oidc/config')
-    return response as unknown as OIDCConfigResponse
-  } catch (error: any) {
-    return {
-      success: false,
-      enabled: false,
       message: error.message || t('error.auth.loginFailed')
     }
   }
@@ -289,28 +212,7 @@ export async function register(data: RegisterRequest): Promise<RegisterResponse>
   }
 }
 
-/**
- * 本地 QA 自动初始化（创建默认用户/空间 + 签发令牌）
- */
-export async function autoSetup(): Promise<LoginResponse> {
-  try {
-    const response = await post('/api/v1/auth/auto-setup', {})
-    return response as unknown as LoginResponse
-  } catch (error: any) {
-    return {
-      success: false,
-      message: error.message || 'Auto-setup unavailable'
-    }
-  }
-}
-
-/**
- * Membership row returned alongside /auth/me. Mirrors the LoginResponse
- * shape so the frontend can refresh `currentTenantRole` on every page
- * load — without it, role changes after login (e.g. an Owner demoting
- * us in a peer tenant) stay invisible until the user logs out and back
- * in.
- */
+/** Team membership returned by /auth/me to refresh the current role. */
 export interface MembershipInfo {
   tenant_id: number
   tenant_name?: string
@@ -321,7 +223,6 @@ export interface MembershipInfo {
  * 获取当前用户信息
  */
 export interface AuthCapabilities {
-  can_create_tenant: boolean
   auto_accept_invitation: boolean
 }
 
@@ -333,24 +234,6 @@ export async function getCurrentUser(): Promise<{ success: boolean; data?: { use
     return {
       success: false,
       message: error.message || t('error.auth.getUserFailed')
-    }
-  }
-}
-
-/**
- * 更新当前用户的偏好设置（PATCH 语义：只发要改的字段，后端只覆盖发了的 key，
- * 其它 key 保持不变）。后端会返回更新后的完整 preferences 对象。
- */
-export async function updateMyPreferences(
-  patch: Partial<UserPreferences>,
-): Promise<{ success: boolean; data?: UserPreferences; message?: string }> {
-  try {
-    const response = await put('/api/v1/auth/me/preferences', patch)
-    return response as unknown as { success: boolean; data?: UserPreferences; message?: string }
-  } catch (error: any) {
-    return {
-      success: false,
-      message: error.message || t('error.auth.updatePreferencesFailed'),
     }
   }
 }

@@ -1,40 +1,3 @@
-// Docker backend as a session-persistent RemoteSandboxClient.
-//
-// One sandbox is one long-lived container: PID 1 sleeps, and every script,
-// shell command and file operation runs against that container until the
-// session ends or the idle sweep reclaims it. That is what makes the docker
-// backend behave like the E2B one — same session state, same shell_exec, same
-// attachment staging — instead of the previous one-shot `docker run --rm`,
-// which could not keep anything between two executions.
-//
-// The mapping onto the Engine API:
-//
-//	Create   → POST /containers/create + /start, metadata as labels
-//	Connect  → GET  /containers/{id}/json, restarting a stopped container
-//	Get/List → GET  /containers/json?filters=label=…
-//	Delete   → DELETE /containers/{id}?force=1
-//	Exec     → POST /containers/{id}/exec → /exec/{id}/start (hijack)
-//	Snapshot → POST /commit (skill images under reliquary-skill/)
-//
-// Every file operation — WriteFile, ReadFile, Stat, MakeDir, Remove, ListDir —
-// is an exec running as the sandbox account, NOT a call to /archive. The
-// archive endpoints run as root and resolve symlinks, so a session that plants
-// a link inside its own workspace could read or overwrite anything in the
-// container through them. Going through exec puts the kernel back in charge of
-// who may touch what. Do not "simplify" these back onto /archive.
-//
-// ListDir and Stat use `find -printf`, which needs GNU findutils in the image;
-// the standard Reliquary sandbox image provides it.
-//
-// Two Docker facts shape the rest of this file:
-//
-//   - Cancelling an exec client-side does NOT stop the process inside the
-//     container. Every exec is therefore wrapped in the container's own
-//     timeout(1), which is the only thing that actually kills a runaway script.
-//   - The daemon has no idle timeout. Each exec refreshes an activity marker
-//     file (for free, inside the same wrapper) that dockerIdleSweeper reads to
-//     decide what to reclaim.
-
 package sandbox
 
 import (
@@ -215,9 +178,6 @@ func (c *DockerRemoteClient) Provider() RemoteProvider { return SandboxTypeDocke
 //
 // SupportsTimeoutRefresh is false because the daemon has no timeout to
 // refresh: idle reclamation is Reliquary's own sweep, not a provider feature.
-// SupportsVolumes is false until the volume-mount surface is mapped onto
-// Docker named volumes; advertising it early would let a workspace configure
-// a mount that silently never appears.
 func (c *DockerRemoteClient) Capabilities() RemoteSandboxCapabilities {
 	return RemoteSandboxCapabilities{
 		SupportsReconnect:             true,
@@ -226,11 +186,7 @@ func (c *DockerRemoteClient) Capabilities() RemoteSandboxCapabilities {
 		SupportsPauseResume:           true,
 		SupportsTimeoutRefresh:        false,
 		SupportsFilesystemEnumeration: true,
-		// docker commit produces a local image whose tag is a template ID,
-		// which is what skill install uses on Cube/E2B. The snapshot is
-		// filesystem-only (no memory) and lives on this daemon.
-		SupportsSnapshots: true,
-		SupportsVolumes:   false,
+		SupportsSnapshots:             true,
 	}
 }
 
@@ -247,14 +203,6 @@ func (c *DockerRemoteClient) Create(
 	ctx context.Context,
 	req RemoteCreateRequest,
 ) (RemoteSandboxHandle, error) {
-	if len(req.VolumeMounts) > 0 {
-		return nil, &RemoteError{
-			Kind:     RemoteErrorKindUnsupported,
-			Provider: SandboxTypeDocker,
-			Op:       "Create",
-			Message:  "docker backend does not mount volumes yet",
-		}
-	}
 	image := strings.TrimSpace(req.TemplateID)
 	if image == "" {
 		image = c.settings.Image
@@ -271,13 +219,7 @@ func (c *DockerRemoteClient) Create(
 			// The standard image ends with USER user. The entrypoint has to
 			// create and chmod the activity marker under /var/lib, which only
 			// root can do; exec still names DefaultSandboxExecUser per call.
-			User: dockerSandboxPID1User,
-			// Entrypoint rather than Cmd, with Cmd explicitly emptied: the
-			// daemon prepends the image's own ENTRYPOINT to Cmd, so an image
-			// that declares one (the cube target of docker/Dockerfile.sandbox
-			// does, and so do most custom images) would take over PID 1. The
-			// activity marker would then never exist and every exec would run
-			// against whatever that entrypoint started instead.
+			User:       dockerSandboxPID1User,
 			Entrypoint: dockerSandboxEntrypoint,
 			Cmd:        []string{},
 			WorkingDir: SessionWorkspaceRoot,
@@ -354,14 +296,7 @@ func (c *DockerRemoteClient) hostConfig(policy RemoteNetworkPolicy) *container.H
 // means "follow the daemon default", which is not what this backend wants.
 var dockerInitProcess = true
 
-// networkMode resolves the effective Docker network for a sandbox.
-//
-// Docker filters at L3/L4 only, so the domain-level allow/deny lists in
-// RemoteNetworkPolicy cannot be honoured here; the one thing that maps
-// cleanly is "no egress at all", which AllowInternetAccess=false expresses.
-// Domain rules are silently not applied — the config surface refuses them
-// before they get this far (see types.ValidateSandboxNetworkPolicy, which
-// rejects any allow/deny list or L7 rule on a docker config at save time).
+// networkMode resolves the configured Docker network or disables networking.
 func (c *DockerRemoteClient) networkMode(policy RemoteNetworkPolicy) string {
 	if policy.AllowInternetAccess != nil && !*policy.AllowInternetAccess {
 		return "none"
@@ -372,16 +307,10 @@ func (c *DockerRemoteClient) networkMode(policy RemoteNetworkPolicy) string {
 	return "bridge"
 }
 
-// Connect re-attaches to an existing container, resuming it when the daemon
-// or the host stopped it. This is the docker equivalent of E2B's auto-resume:
-// a stopped container keeps its filesystem, so the session continues where it
-// left off instead of losing everything it installed.
 func (c *DockerRemoteClient) Connect(
 	ctx context.Context,
 	request RemoteConnectRequest,
 ) (RemoteSandboxHandle, error) {
-	// Docker containers are not fronted by a provider gateway, so there is no
-	// inbound credential to restore; TrafficAccessToken is ignored.
 	sandboxID := request.SandboxID
 	inspected, err := c.api.ContainerInspect(ctx, sandboxID, client.ContainerInspectOptions{})
 	if err != nil {
@@ -808,21 +737,6 @@ func dockerExecCommand(req RemoteExecRequest, timeout time.Duration) []string {
 	return append(argv, req.Args...)
 }
 
-// dockerExecUser resolves which account a command runs as.
-//
-// A blank user resolves to the sandbox account. It must never resolve to root:
-// this function is the single choke point for every exec the daemon runs, so a
-// caller that forgets to name an account has to lose privileges here, not
-// silently gain them. It also makes the backends agree — E2B authenticates its
-// data plane as DefaultSandboxExecUser and Cube hands a blank field to envd,
-// which defaults the same way.
-//
-// This used to fall back to root for the manager's artifact-directory
-// bootstrap. That was a container-escape primitive: chown follows symlinks, so
-// a session that replaced its own artifact directory with a link to /etc got
-// the root-run bootstrap to hand it ownership of /etc, and from there uid 0 by
-// rewriting passwd. The bootstrap now names the account like everyone else and
-// simply fails when it is aimed at something the account does not own.
 func dockerExecUser(user string) string {
 	if trimmed := strings.TrimSpace(user); trimmed != "" {
 		return trimmed

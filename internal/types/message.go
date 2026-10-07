@@ -28,7 +28,7 @@ type MentionedItem struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
 	Type      string `json:"type"`       // "kb", "file", "tag", "mcp", "skill"
-	KBType    string `json:"kb_type"`    // "document" or "faq" (only for kb type)
+	KBType    string `json:"kb_type"`    // "document" or "messages-history" (only for kb type)
 	KBID      string `json:"kb_id"`      // Parent knowledge base for file/tag mentions
 	KBName    string `json:"kb_name"`    // Display name for parent KB
 	ServiceID string `json:"service_id"` // Parent MCP service for MCP tool mentions
@@ -298,9 +298,6 @@ type Message struct {
 	// AgentID is the agent used for this individual assistant turn. Unlike the
 	// session's last_request_state it remains stable when users switch agents.
 	AgentID string `json:"agent_id,omitempty" gorm:"type:varchar(36);default:'';index"`
-	// AgentTenantID is the effective/source tenant used to resolve a shared
-	// agent's models and knowledge. It is intentionally not exposed in JSON.
-	AgentTenantID uint64 `json:"-" gorm:"column:agent_tenant_id;default:0"`
 	// ModelID is the requested/effective chat model binding captured for this
 	// turn. It is useful for reproducibility and suggestion generation.
 	ModelID string `json:"model_id,omitempty" gorm:"type:varchar(64);default:''"`

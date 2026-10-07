@@ -1148,10 +1148,6 @@ func (r *wikiPageRepository) ListAll(ctx context.Context, kbID string) ([]*types
 	return pages, nil
 }
 
-// ListRecentForSuggestions returns recent user-visible wiki pages across the given
-// knowledge bases, used as a fallback source for agent suggested questions when
-// the KB has no FAQ entries or AI-generated document questions (typical for
-// Wiki-only KBs). Excludes the index page and archived pages.
 func (r *wikiPageRepository) ListRecentForSuggestions(
 	ctx context.Context,
 	tenantID uint64,

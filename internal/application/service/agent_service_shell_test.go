@@ -60,14 +60,14 @@ func TestSessionSandboxShellExecutorReturnsNilWithoutCapability(t *testing.T) {
 func TestSessionSandboxShellExecutorReturnsNilWhenProviderRefuses(t *testing.T) {
 	// A provider that advertises capabilities but is currently unable to
 	// honour them returns nil from the accessor. The tool layer must respect that.
-	m := &capableManager{typ: sandbox.SandboxTypeCube}
+	m := &capableManager{typ: sandbox.SandboxTypeDocker}
 	assert.Nil(t, sessionSandboxShellExecutor(m))
 	assert.Nil(t, sessionSandboxFileStore(m))
 }
 
 func TestSessionSandboxShellExecutorReturnsCapability(t *testing.T) {
 	exec := &stubShellExecutor{}
-	m := &capableManager{typ: sandbox.SandboxTypeCube, shell: exec}
+	m := &capableManager{typ: sandbox.SandboxTypeDocker, shell: exec}
 	got := sessionSandboxShellExecutor(m)
 	assert.NotNil(t, got)
 	if _, err := got.ExecShellCommand(context.Background(), "sid", "echo", "", 0, nil); err != nil {

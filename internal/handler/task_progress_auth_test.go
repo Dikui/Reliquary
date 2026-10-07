@@ -10,7 +10,7 @@ import (
 )
 
 func TestRequireTaskProgressTenant_RejectsCrossTenant(t *testing.T) {
-	taskID := utils.GenerateTaskID("faq_import", 999, "kb-victim")
+	taskID := utils.GenerateTaskID("document_process", 999, "kb-victim")
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
 
 	err := requireTaskProgressTenant(ctx, taskID)

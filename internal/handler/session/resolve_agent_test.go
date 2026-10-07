@@ -11,61 +11,6 @@ import (
 	"reliquary/internal/types"
 )
 
-type resolveAgentShareStub struct {
-	agent *types.CustomAgent
-	err   error
-}
-
-func (s *resolveAgentShareStub) GetSharedAgentForTenant(
-	_ context.Context,
-	_ uint64,
-	_ types.TenantRole,
-	_ string,
-	_ ...uint64,
-) (*types.CustomAgent, error) {
-	return s.agent, s.err
-}
-
-func (s *resolveAgentShareStub) ShareAgent(context.Context, string, string, string, uint64, types.OrgMemberRole) (*types.AgentShare, error) {
-	panic("not implemented")
-}
-func (s *resolveAgentShareStub) RemoveShare(context.Context, string, string, uint64) error {
-	panic("not implemented")
-}
-func (s *resolveAgentShareStub) ListSharesByAgent(context.Context, string, uint64) ([]*types.AgentShare, error) {
-	panic("not implemented")
-}
-func (s *resolveAgentShareStub) ListSharesByOrganization(context.Context, string) ([]*types.AgentShare, error) {
-	panic("not implemented")
-}
-func (s *resolveAgentShareStub) ListSharedAgents(context.Context, uint64, types.TenantRole) ([]*types.SharedAgentInfo, error) {
-	panic("not implemented")
-}
-func (s *resolveAgentShareStub) ListSharedAgentsInOrganization(context.Context, string, uint64, types.TenantRole) ([]*types.OrganizationSharedAgentItem, error) {
-	panic("not implemented")
-}
-func (s *resolveAgentShareStub) ListSharedAgentsInOrganizations(context.Context, []string, uint64, types.TenantRole) (map[string][]*types.OrganizationSharedAgentItem, error) {
-	panic("not implemented")
-}
-func (s *resolveAgentShareStub) SetSharedAgentDisabledByMe(context.Context, uint64, string, uint64, bool) error {
-	panic("not implemented")
-}
-func (s *resolveAgentShareStub) TenantCanAccessKBViaSomeSharedAgent(context.Context, uint64, types.TenantRole, *types.KnowledgeBase) (bool, error) {
-	panic("not implemented")
-}
-func (s *resolveAgentShareStub) GetShare(context.Context, string) (*types.AgentShare, error) {
-	panic("not implemented")
-}
-func (s *resolveAgentShareStub) GetShareByAgentAndOrg(context.Context, string, string) (*types.AgentShare, error) {
-	panic("not implemented")
-}
-func (s *resolveAgentShareStub) GetShareByAgentIDForTenant(context.Context, uint64, string, uint64) (*types.AgentShare, error) {
-	panic("not implemented")
-}
-func (s *resolveAgentShareStub) CountByOrganizations(context.Context, []string) (map[string]int64, error) {
-	panic("not implemented")
-}
-
 type resolveOwnAgentStub struct {
 	agent *types.CustomAgent
 	err   error
@@ -112,47 +57,14 @@ func newResolveAgentTestContext(tenantID uint64) (*gin.Context, context.Context)
 	return c, ctx
 }
 
-func TestResolveAgent_RejectsInvalidSharedSelectorWithoutLocalFallback(t *testing.T) {
-	c, ctx := newResolveAgentTestContext(7)
-	localAgent := &types.CustomAgent{ID: "builtin-smart-reasoning", TenantID: 7, Name: "Local"}
-	h := &Handler{
-		agentShareService:  &resolveAgentShareStub{},
-		customAgentService: &resolveOwnAgentStub{agent: localAgent},
-	}
-
-	agent, effectiveTenantID, sharedReadOnly := h.resolveAgent(ctx, c, "builtin-smart-reasoning", 84)
-
-	require.Nil(t, agent)
-	require.Equal(t, uint64(0), effectiveTenantID)
-	require.False(t, sharedReadOnly)
-}
-
-func TestResolveAgent_UsesSharedAgentWhenSourceSelectorMatches(t *testing.T) {
-	c, ctx := newResolveAgentTestContext(7)
-	sharedAgent := &types.CustomAgent{ID: "builtin-smart-reasoning", TenantID: 84, Name: "Shared"}
-	h := &Handler{
-		agentShareService:  &resolveAgentShareStub{agent: sharedAgent},
-		customAgentService: &resolveOwnAgentStub{agent: &types.CustomAgent{ID: "builtin-smart-reasoning", TenantID: 7}},
-	}
-
-	agent, effectiveTenantID, sharedReadOnly := h.resolveAgent(ctx, c, "builtin-smart-reasoning", 84)
-
-	require.Equal(t, sharedAgent, agent)
-	require.Equal(t, uint64(84), effectiveTenantID)
-	require.True(t, sharedReadOnly)
-}
-
 func TestResolveAgent_FallsBackToLocalAgentWithoutSourceSelector(t *testing.T) {
 	c, ctx := newResolveAgentTestContext(7)
 	localAgent := &types.CustomAgent{ID: "builtin-smart-reasoning", TenantID: 7, Name: "Local"}
 	h := &Handler{
-		agentShareService:  &resolveAgentShareStub{},
 		customAgentService: &resolveOwnAgentStub{agent: localAgent},
 	}
 
-	agent, effectiveTenantID, sharedReadOnly := h.resolveAgent(ctx, c, "builtin-smart-reasoning", 0)
+	agent := h.resolveAgent(ctx, c, "builtin-smart-reasoning")
 
 	require.Equal(t, localAgent, agent)
-	require.Equal(t, uint64(0), effectiveTenantID)
-	require.False(t, sharedReadOnly)
 }

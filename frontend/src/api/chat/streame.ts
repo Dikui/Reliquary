@@ -36,7 +36,7 @@ export function useStream() {
   let renderTimer: number | null = null
 
   // 启动流式请求
-  const startStream = async (params: { session_id: any; query: any; knowledge_base_ids?: string[]; knowledge_ids?: string[]; tag_ids?: string[]; agent_enabled?: boolean; agent_id?: string; agent_source_tenant_id?: string | number; web_search_enabled?: boolean; summary_model_id?: string; mcp_service_ids?: string[]; skill_names?: string[]; mentioned_items?: Array<{id: string; name: string; type: string; kb_type?: string; kb_id?: string; kb_name?: string; service_id?: string; skill_name?: string}>; images?: Array<{data: string}>; attachment_uploads?: Array<{data: string; file_name: string; file_size: number}>; attachment_ids?: string[]; suggestion_attribution?: { suggestion_set_id: string; question_id: string }; method: string; url: string; embed_token?: string; embed_session_sig?: string; embed_visitor_id?: string }) => {
+  const startStream = async (params: { session_id: any; query: any; knowledge_base_ids?: string[]; knowledge_ids?: string[]; tag_ids?: string[]; agent_enabled?: boolean; agent_id?: string; web_search_enabled?: boolean; summary_model_id?: string; mcp_service_ids?: string[]; skill_names?: string[]; mentioned_items?: Array<{id: string; name: string; type: string; kb_type?: string; kb_id?: string; kb_name?: string; service_id?: string; skill_name?: string}>; images?: Array<{data: string}>; attachment_uploads?: Array<{data: string; file_name: string; file_size: number}>; attachment_ids?: string[]; suggestion_attribution?: { suggestion_set_id: string; question_id: string }; method: string; url: string }) => {
     const myGeneration = ++streamGeneration
     // 重置状态
     output.value = '';
@@ -47,23 +47,12 @@ export function useStream() {
     // 获取API配置
     const apiUrl = getApiBaseUrl();
     
-    const embedToken = params.embed_token;
-    const token = embedToken || localStorage.getItem('reliquary_token');
+    const token = localStorage.getItem('reliquary_token');
     if (!token) {
       error.value = i18n.global.t('error.tokenNotFound');
       stopStream();
       return;
     }
-
-    // 跨空间访问请求头：只要 setSelectedTenant 写过激活空间，就附
-    // X-Tenant-ID。早期版本会 short-circuit "selectedTenantId ===
-    // defaultTenantId 时不附" 来减少 header 体积，但任何把 reliquary_tenant
-    // 写成激活空间的代码（OIDC 同步 / UserMenu loadUserInfo / router
-    // hydrate）都会让两者相等，使得后续流式请求悄悄丢 header、落到
-    // home 空间上，导致 SSE 接口返回 404。直接附即可——后端
-    // IsTenantAccessible 也允许 header 指向自家空间。
-    const selectedTenantId = localStorage.getItem('reliquary_selected_tenant_id');
-    const tenantIdHeader: string | null = selectedTenantId || null;
 
     // TTFB instrumentation: record the moment we kick off the request so
     // we can compare it with the first answer chunk we receive from the
@@ -95,12 +84,8 @@ export function useStream() {
       if (params.knowledge_ids !== undefined && params.knowledge_ids.length > 0) {
         postBody.knowledge_ids = params.knowledge_ids;
       }
-      // Include agent_id if provided (backend resolves shared agent and tenant from share relation)
       if (params.agent_id) {
         postBody.agent_id = params.agent_id;
-      }
-      if (params.agent_source_tenant_id) {
-        postBody.agent_source_tenant_id = Number(params.agent_source_tenant_id);
       }
       // Include web_search_enabled if provided
       if (params.web_search_enabled !== undefined) {
@@ -138,7 +123,7 @@ export function useStream() {
       if (params.suggestion_attribution) {
         postBody.suggestion_attribution = params.suggestion_attribution;
       }
-      postBody.channel = embedToken ? "embed" : "web";
+      postBody.channel = "web";
 
       lastStreamRequest.value = {
         requestId: requestID,
@@ -152,12 +137,9 @@ export function useStream() {
         method: params.method,
         headers: {
           "Content-Type": "application/json",
-          "Authorization": embedToken ? `Embed ${embedToken}` : `Bearer ${token}`,
+          "Authorization": `Bearer ${token}`,
           "Accept-Language": i18n.global.locale?.value || localStorage.getItem('locale') || 'zh-CN',
           "X-Request-ID": requestID,
-          ...(!embedToken && tenantIdHeader ? { "X-Tenant-ID": tenantIdHeader } : {}),
-          ...(params.embed_session_sig ? { "X-Embed-Session": params.embed_session_sig } : {}),
-          ...(params.embed_visitor_id ? { "X-Embed-Visitor": params.embed_visitor_id } : {}),
         },
         body:
           params.method == "POST"

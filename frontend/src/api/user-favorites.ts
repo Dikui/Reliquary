@@ -1,10 +1,7 @@
-// API client for per-user starred resources (DB-backed; see migration
-// 000047 and internal/handler/user_resource_favorite.go).
+// API client for per-user starred resources stored in the database.
 //
 // The backend authoritatively scopes favorites to the active (user, tenant)
-// pair from the auth context — these helpers therefore never pass user_id
-// or tenant_id, and a tenant switch automatically points reads at the
-// right namespace.
+// pair from the auth context, so these helpers do not pass user_id or tenant_id.
 
 import { get, post, del } from '@/utils/request'
 

@@ -3,7 +3,6 @@ import test from 'node:test'
 import {
   agentHasConfiguredChatModel,
   agentRequiresRerankModel,
-  canLocallyConfigureAgent,
   getAgentNotReadyReasonKeys,
   resolveAgentNotReadySection,
   resolveAgentNotReadyHighlight,
@@ -82,7 +81,7 @@ test('getAgentNotReadyReasonKeys flags missing chat model', () => {
   assert.deepEqual(getAgentNotReadyReasonKeys(
     {},
     [{ id: 'chat-1', type: 'KnowledgeQA' }],
-    { isAgentMode: false, isSharedAgent: false },
+    { isAgentMode: false },
   ), ['summary_model'])
 })
 
@@ -90,16 +89,8 @@ test('getAgentNotReadyReasonKeys requires rerank only in agent mode with KB sear
   assert.deepEqual(getAgentNotReadyReasonKeys(
     { kb_selection_mode: 'all', allowed_tools: ['knowledge_search'] },
     [{ id: 'chat-1', type: 'KnowledgeQA' }, { id: 'rerank-1', type: 'Rerank' }],
-    { isAgentMode: true, isSharedAgent: false },
+    { isAgentMode: true },
   ), ['summary_model', 'rerank_model'])
-})
-
-test('getAgentNotReadyReasonKeys does not treat current shared context as shared without sourceTenantId', () => {
-  assert.deepEqual(getAgentNotReadyReasonKeys(
-    { model_id: 'deleted-chat' },
-    [{ id: 'chat-1', type: 'KnowledgeQA' }],
-    { isAgentMode: false, isSharedAgent: false },
-  ), ['summary_model'])
 })
 
 test('getAgentNotReadyReasonKeys treats empty allowed_tools as ready via backend defaults', () => {
@@ -111,12 +102,6 @@ test('getAgentNotReadyReasonKeys treats empty allowed_tools as ready via backend
       allowed_tools: [],
     },
     [{ id: 'chat-1', type: 'KnowledgeQA' }, { id: 'rerank-1', type: 'Rerank' }],
-    { isAgentMode: true, isSharedAgent: false },
+    { isAgentMode: true },
   ), [])
-})
-
-test('canLocallyConfigureAgent is false for shared agents', () => {
-  assert.equal(canLocallyConfigureAgent('42'), false)
-  assert.equal(canLocallyConfigureAgent(undefined), true)
-  assert.equal(canLocallyConfigureAgent(''), true)
 })

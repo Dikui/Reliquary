@@ -1,26 +1,3 @@
-// Package sandbox: per-config sandbox manager resolution.
-//
-// A manager is built for one (tenant, sandbox config) pair — a workspace holds
-// several named configs and each agent selects one. Managers are built per
-// request and deliberately NOT cached, mirroring modelService, which rebuilds
-// model clients on every call (see internal/application/service/model.go).
-//
-// Caching was considered and rejected after checking what SessionBoundManager
-// actually holds:
-//
-//   - remoteSessionLifecycle has no mutex; create/recover serialization lives
-//     entirely in the shared binding store (Redis SET NX, or the in-memory
-//     store's own lock), and that store is injected, so it stays a singleton
-//     either way.
-//   - SessionBoundManager.mu guards only the Cleanup idempotency flag.
-//   - No handles are held across requests: Execute re-Connects every time.
-//
-// That left the construction-time Health probe as the only real cost, which
-// SkipHealthProbe removes. Connection reuse is preserved by sharing one
-// http.Transport across tenants (Cube additionally routes its data plane
-// through SandboxGatewayTransportPool; see gateway_transport.go). The upshot: no cache, no
-// eviction, no invalidation plumbing, and a config change takes effect on the
-// next request.
 package sandbox
 
 import (
@@ -94,11 +71,6 @@ type tenantSandboxResolver struct {
 	deps             TenantSandboxResolverDeps
 	transport        *http.Transport
 	privateTransport *http.Transport
-
-	// gatewayTransports must outlive the per-request clients it serves, which is
-	// the whole point of holding it here rather than building it per Resolve.
-	gatewayTransports        *SandboxGatewayTransportPool
-	privateGatewayTransports *SandboxGatewayTransportPool
 }
 
 // NewTenantSandboxResolver validates the wiring and returns a resolver.
@@ -120,11 +92,9 @@ func NewTenantSandboxResolver(deps TenantSandboxResolverDeps) (TenantSandboxReso
 		transport = NewGuardedTransport()
 	}
 	return &tenantSandboxResolver{
-		deps:                     deps,
-		transport:                transport,
-		privateTransport:         NewGuardedTransportWithPolicy(OutboundURLPolicy{AllowPrivate: true}),
-		gatewayTransports:        NewSandboxGatewayTransportPool(transport),
-		privateGatewayTransports: NewSandboxGatewayTransportPoolWithPolicy(nil, OutboundURLPolicy{AllowPrivate: true}),
+		deps:             deps,
+		transport:        transport,
+		privateTransport: NewGuardedTransportWithPolicy(OutboundURLPolicy{AllowPrivate: true}),
 	}, nil
 }
 
@@ -154,6 +124,9 @@ func (r *tenantSandboxResolver) Resolve(
 	tenantID uint64,
 	configID string,
 ) (Manager, error) {
+	if tenantID != types.SingleTenantID {
+		return nil, errors.New("sandbox: config must belong to the team")
+	}
 	if strings.TrimSpace(configID) == "" ||
 		configID == types.SandboxConfigIDGlobalDefault {
 		return NewDisabledManager(), nil
@@ -182,7 +155,7 @@ func (r *tenantSandboxResolver) Resolve(
 	switch effective.Type {
 	case SandboxTypeDisabled:
 		return NewDisabledManager(), nil
-	case SandboxTypeCube, SandboxTypeE2B, SandboxTypeDocker:
+	case SandboxTypeDocker:
 		client, err := r.buildClient(effective)
 		if err != nil {
 			return nil, err
@@ -204,19 +177,6 @@ func (r *tenantSandboxResolver) Resolve(
 // shared transport so pooling survives per-request construction.
 func (r *tenantSandboxResolver) buildClient(cfg *Config) (RemoteSandboxClient, error) {
 	switch cfg.Type {
-	case SandboxTypeCube:
-		if cfg.AllowPrivateEndpoints {
-			return NewCubeRemoteClientWithPool(cfg, r.privateGatewayTransports)
-		}
-		return NewCubeRemoteClientWithPool(cfg, r.gatewayTransports)
-	case SandboxTypeE2B:
-		// The gateway pool is used even without a gateway URL: it then keeps
-		// every request on the shared control transport, which is exactly what
-		// a plain E2B Cloud config wants.
-		if cfg.AllowPrivateEndpoints {
-			return NewE2BRemoteClientWithPool(cfg, r.privateGatewayTransports)
-		}
-		return NewE2BRemoteClientWithPool(cfg, r.gatewayTransports)
 	case SandboxTypeDocker:
 		// The docker client keeps its own pooled connection per daemon
 		// endpoint rather than using the transports above: the Engine API is
@@ -241,15 +201,6 @@ func NewRemoteClientForCheck(cfg *Config) (RemoteSandboxClient, error) {
 		return nil, errors.New("sandbox: config is required")
 	}
 	switch cfg.Type {
-	case SandboxTypeCube:
-		return NewCubeRemoteClientWithPool(cfg, NewSandboxGatewayTransportPoolWithPolicy(nil,
-			OutboundURLPolicy{AllowPrivate: cfg.AllowPrivateEndpoints}))
-	case SandboxTypeE2B:
-		// Probing through the gateway pool is what makes the check meaningful
-		// for a self-hosted control plane: it exercises the same data-plane
-		// routing the resolved manager will use.
-		return NewE2BRemoteClientWithPool(cfg, NewSandboxGatewayTransportPoolWithPolicy(nil,
-			OutboundURLPolicy{AllowPrivate: cfg.AllowPrivateEndpoints}))
 	case SandboxTypeDocker:
 		if err := EnsureDockerBackendAllowed(SandboxTypeDocker); err != nil {
 			return nil, err

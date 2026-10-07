@@ -186,28 +186,9 @@ type ThinkBlockStyle struct {
 	Separator string // e.g. "\n---\n\n" or "\n"
 }
 
-// MarkdownThinkStyle renders think blocks as markdown blockquotes.
-// Used by DingTalk and Feishu/Lark.
-//
-// Known limitation: the headers below are Chinese for every platform, including
-// ones whose users are typically not Chinese speakers (Lark, Slack, Telegram,
-// Mattermost). Localizing them means threading a locale into
-// FormatIMDisplayContent, which is called from the shared streaming path with no
-// platform context — a cross-platform change rather than a per-platform patch.
 var MarkdownThinkStyle = ThinkBlockStyle{
 	ThinkingHeader: "> 💭 **思考中...**\n",
 	ThoughtHeader:  "> 💭 **思考过程**\n",
-	LinePrefix:     "> ",
-	LineSuffix:     "",
-	Separator:      "\n---\n\n",
-}
-
-// TelegramThinkStyle renders think blocks as blockquotes for Telegram.
-// Uses the same blockquote format as other platforms for reliable rendering
-// during streaming (where incomplete markdown can cause API failures).
-var TelegramThinkStyle = ThinkBlockStyle{
-	ThinkingHeader: "> 💭 *思考中...*\n",
-	ThoughtHeader:  "> 💭 *思考过程*\n",
 	LinePrefix:     "> ",
 	LineSuffix:     "",
 	Separator:      "\n---\n\n",

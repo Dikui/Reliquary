@@ -564,16 +564,6 @@ func TestDockerClientCreateRemovesContainerThatExitsImmediately(t *testing.T) {
 	require.Contains(t, err.Error(), "not running")
 }
 
-func TestDockerClientCreateRefusesVolumeMounts(t *testing.T) {
-	docker := newTestDockerClient(t, newFakeDockerEngine())
-	_, err := docker.Create(context.Background(), RemoteCreateRequest{
-		TemplateID:   "reliquary/sandbox:test",
-		VolumeMounts: []RemoteVolumeMount{{Name: "skills", Path: "/skills"}},
-	})
-	require.Error(t, err)
-	require.Equal(t, RemoteErrorKindUnsupported, remoteKind(err))
-}
-
 func TestDockerClientCreateNoEgressUsesNoneNetwork(t *testing.T) {
 	engine := newFakeDockerEngine()
 	engine.imagePresent["reliquary/sandbox:test"] = true
@@ -1062,7 +1052,6 @@ func TestDockerClientCapabilities(t *testing.T) {
 		"the daemon has no TTL to refresh; reclamation is Reliquary's own sweep")
 	require.True(t, caps.SupportsSnapshots,
 		"docker commit is the skill-image snapshot; without this flag install is refused")
-	require.False(t, caps.SupportsVolumes)
 }
 
 func TestDockerErrorKindClassification(t *testing.T) {

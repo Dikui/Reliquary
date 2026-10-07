@@ -1,18 +1,3 @@
-// Package sandbox: provider-neutral remote Sandbox implementation.
-//
-// RemoteSandbox is the concrete Sandbox that speaks any RemoteSandboxClient
-// backend. It contains no Cube- or E2B-specific logic; every operation is
-// expressed against the RemoteSandboxClient contract and a RemoteSandboxHandle.
-//
-// SessionBoundManager uses it in two shapes:
-//
-//   - Ephemeral: one call to Execute allocates a sandbox, uploads the script,
-//     runs it, then deletes the sandbox regardless of success. This gives
-//     stateless-per-call semantics for callers without a SessionID.
-//   - Persistent (session-bound): SessionBoundManager resolves the session's
-//     RemoteSandboxHandle through the lifecycle coordinator and hands it to
-//     RemoteSandbox.ExecuteOnHandle. The handle stays owned by the manager;
-//     RemoteSandbox never creates or deletes anything in this mode.
 package sandbox
 
 import (
@@ -26,9 +11,6 @@ import (
 	"time"
 )
 
-// remoteScriptDir is the absolute directory inside every remote sandbox where
-// Reliquary uploads scripts before execution. Kept identical to the historical
-// Cube path so existing tenant scripts continue to reference /workspace files.
 const remoteScriptDir = "/workspace"
 
 // RemoteSandbox implements Sandbox on top of a RemoteSandboxClient. It is

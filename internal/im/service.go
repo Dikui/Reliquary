@@ -414,15 +414,10 @@ func formatQuotedContext(quote *QuotedMessage) string {
 	return label + "\n<quoted_message>\n" + content + "\n</quoted_message>"
 }
 
-// withIMIdentity injects a synthetic caller identity into the context for IM
-// callbacks. IM platforms verify their own signatures and bypass the auth
-// middleware, so the downstream QA pipeline would otherwise see an empty
-// UserID/TenantRole. Mirroring the API-key path's "system-<tenantID>" synthetic
-// user (recognised by types.IsSyntheticUserID) lets Organization-shared
-// knowledge bases be merged and resolved correctly, since the shared-KB code
-// gates on a non-empty UserID. Viewer is the least privilege sufficient to
-// retrieve shared KBs.
-func withIMIdentity(ctx context.Context, tenantID uint64, channelID string, msg *IncomingMessage) context.Context {
+// withIMIdentity supplies the team and a viewer identity for signed IM callbacks.
+// The principal also scopes each IM user's MCP authorization independently.
+func withIMIdentity(ctx context.Context, channelID string, msg *IncomingMessage) context.Context {
+	const tenantID = types.SingleTenantID
 	ctx = context.WithValue(ctx, types.TenantIDContextKey, tenantID)
 	ctx = context.WithValue(ctx, types.UserIDContextKey, fmt.Sprintf("system-%d", tenantID))
 	if msg != nil {
@@ -987,7 +982,7 @@ func (s *Service) LoadAndStartChannels() error {
 
 	ctx := context.Background()
 	var channels []IMChannel
-	if err := s.db.Where("enabled = ? AND deleted_at IS NULL", true).Find(&channels).Error; err != nil {
+	if err := s.db.Where("tenant_id = ? AND enabled = ? AND deleted_at IS NULL", types.SingleTenantID, true).Find(&channels).Error; err != nil {
 		return fmt.Errorf("load im channels: %w", err)
 	}
 
@@ -1100,6 +1095,9 @@ func (s *Service) reloadChannelFromDB(channelID, reason string) {
 // the leader lock and opens the connection; other instances periodically
 // retry so they can take over if the leader dies.
 func (s *Service) StartChannel(channel *IMChannel) error {
+	if channel == nil || channel.TenantID != types.SingleTenantID {
+		return fmt.Errorf("IM channel must belong to the team")
+	}
 	if s.stopped.Load() {
 		return fmt.Errorf("im service is stopped")
 	}
@@ -1626,7 +1624,7 @@ func equalChannelCredentials(left, right types.JSON) bool {
 // GetChannelByID loads a channel from the database.
 func (s *Service) GetChannelByID(channelID string) (*IMChannel, error) {
 	var ch IMChannel
-	if err := s.db.Where("id = ? AND deleted_at IS NULL", channelID).First(&ch).Error; err != nil {
+	if err := s.db.Where("id = ? AND tenant_id = ? AND deleted_at IS NULL", channelID, types.SingleTenantID).First(&ch).Error; err != nil {
 		return nil, err
 	}
 	return &ch, nil
@@ -1725,7 +1723,7 @@ func (s *Service) HandleMessage(ctx context.Context, msg *IncomingMessage, chann
 		}
 	}
 
-	tenantID := channel.TenantID
+	tenantID := types.SingleTenantID
 	agentID := channel.AgentID
 
 	logger.Infof(ctx, "[IM] HandleMessage: channel=%s platform=%s user=%s chat=%s msgtype=%s content_len=%d",
@@ -1764,7 +1762,7 @@ func (s *Service) HandleMessage(ctx context.Context, msg *IncomingMessage, chann
 		return fmt.Errorf("get tenant: %w", err)
 	}
 	sessionCtx := context.WithValue(ctx, types.TenantInfoContextKey, tenant)
-	sessionCtx = withIMIdentity(sessionCtx, tenantID, channelID, msg)
+	sessionCtx = withIMIdentity(sessionCtx, channelID, msg)
 
 	// 2. Resolve or create a Reliquary session
 	channelSession, err := s.resolveSession(sessionCtx, msg, tenantID, agentID, channelID, channel.SessionMode)
@@ -3185,6 +3183,7 @@ func relocalizeBuiltinChannelAgentNames(ctx context.Context, rows []ChannelWithA
 // CreateChannel creates a new IM channel and optionally starts it.
 // Returns a duplicate_bot error if the bot identity is already used by another channel.
 func (s *Service) CreateChannel(channel *IMChannel) error {
+	channel.TenantID = types.SingleTenantID
 	if err := s.checkDuplicateBot(channel, ""); err != nil {
 		return err
 	}
@@ -3220,6 +3219,9 @@ func (s *Service) SetChannelAgentID(ctx context.Context, channel *IMChannel, age
 // UpdateChannel updates a channel and restarts it if needed.
 // Returns a duplicate_bot error if the bot identity is already used by another channel.
 func (s *Service) UpdateChannel(channel *IMChannel) error {
+	if channel == nil || channel.TenantID != types.SingleTenantID {
+		return fmt.Errorf("IM channel must belong to the team")
+	}
 	if err := s.checkDuplicateBot(channel, channel.ID); err != nil {
 		return err
 	}
@@ -3357,7 +3359,7 @@ func fileMessageQAContent(msg *IncomingMessage) string {
 // receives exactly its normal QA reply, while persistence remains background work.
 func (s *Service) processDownloadedFileToKnowledgeBase(ctx context.Context, channel *IMChannel, file *imDownloadedAttachment) {
 	kbID := channel.KnowledgeBaseID
-	tenantID := channel.TenantID
+	tenantID := types.SingleTenantID
 
 	// Build context with tenant info for the knowledge service
 	tenant, err := s.tenantService.GetTenantByID(ctx, tenantID)
@@ -3406,16 +3408,8 @@ func fileExtension(filename string) string {
 // imPlatformToChannel maps an IM platform identifier to a Knowledge.Channel constant.
 func imPlatformToChannel(platform string) string {
 	switch strings.ToLower(platform) {
-	case "wechat":
-		return types.ChannelWechat
-	case "wecom", "wxwork":
-		return types.ChannelWecom
 	case "feishu", "lark":
 		return types.ChannelFeishu
-	case "dingtalk":
-		return types.ChannelDingtalk
-	case "slack":
-		return types.ChannelSlack
 	default:
 		return types.ChannelIM
 	}

@@ -740,7 +740,7 @@ func (s *DataSourceService) ProcessSync(ctx context.Context, task *asynq.Task) e
 	}
 
 	// Set tenant context so KnowledgeService can resolve tenant info correctly
-	ctx = context.WithValue(ctx, types.TenantIDContextKey, ds.TenantID)
+	ctx = context.WithValue(ctx, types.TenantIDContextKey, types.SingleTenantID)
 
 	tenant, err := s.tenantRepo.GetTenantByID(ctx, ds.TenantID)
 	if err != nil {
@@ -1066,7 +1066,7 @@ func (s *DataSourceService) processSyncStreaming(
 ) error {
 	// Tenant + auto-tag setup must precede fetching because the stream ingests
 	// each item on the fly.
-	ctx = context.WithValue(ctx, types.TenantIDContextKey, ds.TenantID)
+	ctx = context.WithValue(ctx, types.TenantIDContextKey, types.SingleTenantID)
 	tenant, err := s.tenantRepo.GetTenantByID(ctx, ds.TenantID)
 	if err != nil {
 		logger.Errorf(ctx, "failed to get tenant info: %v", err)

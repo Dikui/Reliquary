@@ -41,12 +41,6 @@ import {
   resolveMCPOAuth,
   MCP_OAUTH_CALLBACK_PATH,
 } from '@/api/mcp-service'
-import {
-  cancelEmbedMCPOAuth,
-  getEmbedMCPOAuthAuthorizeURL,
-  getEmbedMCPOAuthStatus,
-  resolveEmbedMCPOAuth,
-} from '@/api/embed'
 
 const props = defineProps<{
   pendingId: string
@@ -61,20 +55,7 @@ const props = defineProps<{
   timedOut?: boolean
   canceled?: boolean
   embeddedMode?: boolean
-  embedChannelId?: string
-  embedToken?: string
-  embedSessionId?: string
-  embedSessionSig?: string
-  embedVisitorId?: string
 }>()
-
-const useEmbedOAuth = () =>
-  props.embeddedMode
-  && props.embedChannelId
-  && props.embedToken
-  && props.embedSessionId
-  && props.embedSessionSig
-  && props.embedVisitorId
 
 const { t } = useI18n()
 
@@ -147,18 +128,9 @@ const skip = async () => {
   if (props.resolved || canceling.value) return
   canceling.value = true
   try {
-    if (useEmbedOAuth()) {
-      await cancelEmbedMCPOAuth(
-        props.embedChannelId!,
-        props.embedToken!,
-        props.embedSessionId!,
-        props.embedSessionSig!,
-        props.embedVisitorId!,
-        props.pendingId,
-      )
-    } else {
+
       await cancelMCPOAuth(props.pendingId)
-    }
+
   } catch (e: any) {
     const msg = e?.response?.data?.error?.message || e?.message || t('agentStream.mcpOAuth.skipFailed')
     MessagePlugin.error(msg)
@@ -172,20 +144,8 @@ const authorize = async () => {
   authorizing.value = true
   try {
     const redirectUri = window.location.origin + MCP_OAUTH_CALLBACK_PATH
-    const frontendRedirect = useEmbedOAuth()
-      ? window.location.origin + window.location.pathname + window.location.search
-      : window.location.origin + '/'
-    const authorization = useEmbedOAuth()
-      ? await getEmbedMCPOAuthAuthorizeURL(
-        props.embedChannelId!,
-        props.embedToken!,
-        props.embedSessionId!,
-        props.embedSessionSig!,
-        props.embedVisitorId!,
-        props.serviceId,
-        { redirect_uri: redirectUri, frontend_redirect: frontendRedirect },
-      )
-      : await getMCPOAuthAuthorizeURL(props.serviceId, {
+    const frontendRedirect = window.location.origin + '/'
+    const authorization = await getMCPOAuthAuthorizeURL(props.serviceId, {
         redirect_uri: redirectUri,
         frontend_redirect: frontendRedirect,
       })
@@ -199,17 +159,7 @@ const authorize = async () => {
       const closed = !popup || popup.closed
       let ok = false
       try {
-        ok = useEmbedOAuth()
-          ? await getEmbedMCPOAuthStatus(
-            props.embedChannelId!,
-            props.embedToken!,
-            props.embedSessionId!,
-            props.embedSessionSig!,
-            props.embedVisitorId!,
-            props.serviceId,
-            authorization.authorizationAttempt,
-          )
-          : await getMCPOAuthStatus(props.serviceId, authorization.authorizationAttempt)
+        ok = await getMCPOAuthStatus(props.serviceId, authorization.authorizationAttempt)
       } catch {
         /* transient; keep polling */
       }
@@ -217,19 +167,9 @@ const authorize = async () => {
         stopPoll()
         try { popup?.close() } catch { /* cross-origin close may throw */ }
         try {
-          if (useEmbedOAuth()) {
-            await resolveEmbedMCPOAuth(
-              props.embedChannelId!,
-              props.embedToken!,
-              props.embedSessionId!,
-              props.embedSessionSig!,
-              props.embedVisitorId!,
-              props.pendingId,
-              { service_id: props.serviceId, decision: 'authorize' },
-            )
-          } else {
+
             await resolveMCPOAuth(props.pendingId, { service_id: props.serviceId, decision: 'authorize' })
-          }
+
           MessagePlugin.success(t('agentStream.mcpOAuth.authorizedToast'))
         } catch (e: any) {
           const msg = e?.response?.data?.error?.message || e?.message || t('agentStream.mcpOAuth.resumeFailed')

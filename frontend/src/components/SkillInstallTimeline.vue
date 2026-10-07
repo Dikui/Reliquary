@@ -106,7 +106,6 @@ function stop() {
 async function follow(run: number): Promise<boolean> {
   const url = `${getApiBaseUrl()}${configSkillTranscriptUrl(props.configId, props.skillId)}`
   const token = localStorage.getItem('reliquary_token')
-  const tenantId = localStorage.getItem('reliquary_selected_tenant_id')
   const ac = new AbortController()
   controller = ac
   if (run !== openRun) {
@@ -121,7 +120,6 @@ async function follow(run: number): Promise<boolean> {
       Authorization: token ? `Bearer ${token}` : '',
       'Accept-Language': i18n.global.locale?.value || localStorage.getItem('locale') || 'zh-CN',
       'X-Request-ID': generateRandomString(12),
-      ...(tenantId ? { 'X-Tenant-ID': tenantId } : {}),
     },
     signal: ac.signal,
     openWhenHidden: true,

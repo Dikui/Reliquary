@@ -319,3 +319,11 @@ func TestUserIDFromSignedTokenAcceptsExpiredToken(t *testing.T) {
 		t.Fatalf("userIDFromSignedToken(expired) = %q, want user-1", userID)
 	}
 }
+
+func (s *stubUserRepoForAuth) HasTeamUsers(context.Context) (bool, error) {
+	return len(s.users) > 0, nil
+}
+func (s *stubUserRepoForAuth) RegisterTeamUser(_ context.Context, user *types.User, token string) error {
+	s.users[user.ID] = user
+	return nil
+}

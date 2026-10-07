@@ -56,7 +56,6 @@ func appendKnowledgeRefs(state *types.AgentState, step types.AgentStep) []*types
 			}
 			id := row.ChunkID
 			if id == "" {
-				id = row.FAQID
 			}
 			if id == "" {
 				id = row.KnowledgeID
@@ -87,7 +86,6 @@ func appendKnowledgeRefs(state *types.AgentState, step types.AgentStep) []*types
 
 type knowledgeRefRow struct {
 	ChunkID         string `json:"chunk_id"`
-	FAQID           string `json:"faq_id"`
 	KnowledgeID     string `json:"knowledge_id"`
 	KnowledgeBaseID string `json:"knowledge_base_id"`
 	KnowledgeBase   string `json:"knowledge_base"`

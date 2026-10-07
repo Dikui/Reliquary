@@ -17,7 +17,7 @@ import (
 )
 
 // kbListFields enumerates the fields surfaced for `--format json` discovery on
-// `kb list`. Nested config structs (chunking / image / FAQ / VLM / storage
+// `kb list`. Nested config structs (chunking / image / VLM / storage
 // / extract) are intentionally omitted - users wanting those can use `--jq`
 // against the full object.
 var kbListFields = []string{

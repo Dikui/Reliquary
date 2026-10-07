@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	redis "github.com/redis/go-redis/v9"
 	"os"
 	"sort"
 	"strconv"
@@ -15,7 +16,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 
 	"reliquary/internal/config"
 	"reliquary/internal/logger"
@@ -135,24 +135,6 @@ var registry = map[string]settingSpec{
 		Description: "是否允许 Docker 沙箱后端。本机 docker.sock 等同宿主机 root，默认关闭。" +
 			"仅系统管理员可打开；打开后立即生效，无需重启。私有化单机且已挂载 daemon socket，或配置了带 TLS 的远程 tcp:// 时再启用。",
 	},
-	"auth.registration_mode": {
-		Type:     "string",
-		EnvName:  "", // No env fallback — handler passes cfg.Auth.RegistrationMode as default
-		Default:  "self_serve",
-		Enum:     []string{"self_serve", "invite_only"},
-		Category: "auth",
-		Description: "自助注册模式。self_serve = 任何人可注册账号；invite_only = 关闭公网注册，" +
-			"仅 Owner/Admin 可邀请。修改后立即生效，但谨慎对待 self_serve（公网会接受 spam）。",
-	},
-	"auth.default_tenant_mode": {
-		Type:     "string",
-		EnvName:  "RELIQUARY_AUTH_DEFAULT_TENANT_MODE",
-		Default:  "create_personal",
-		Enum:     []string{"create_personal", "tenantless"},
-		Category: "auth",
-		Description: "公开注册成功后的默认空间策略。create_personal = 自动创建个人空间并设为 Owner；" +
-			"tenantless = 仅创建用户，等待接受邀请或主动创建空间。修改后只影响新注册用户。",
-	},
 	"auth.complex_password_enabled": {
 		Type:     "bool",
 		EnvName:  "RELIQUARY_AUTH_COMPLEX_PASSWORD_ENABLED",
@@ -168,22 +150,6 @@ var registry = map[string]settingSpec{
 	// applyAuthAndTenantDefaults parses at boot, so a deployment that
 	// hasn't created a DB row keeps reading from env exactly as before.
 	// 0 = use the in-code default (10); negative = disable the cap entirely.
-	"tenant.max_owned_per_user": {
-		Type:     "int",
-		EnvName:  "RELIQUARY_TENANT_MAX_OWNED_PER_USER",
-		Default:  int64(10),
-		Category: "tenant",
-		Description: "每个非超管用户通过自助创建可拥有的最大空间数。每次创建空间时实时读取，" +
-			"修改后立即生效。0 表示使用内置默认值 10；负数表示完全关闭限制（不建议在公开部署使用）。",
-	},
-	"tenant.self_service_creation_enabled": {
-		Type:     "bool",
-		EnvName:  "RELIQUARY_TENANT_SELF_SERVICE_CREATION_ENABLED",
-		Default:  true,
-		Category: "tenant",
-		Description: "是否允许非超管用户主动创建空间。关闭后，普通用户只能通过邀请加入已有空间；" +
-			"跨空间超管仍可创建。修改后立即生效。",
-	},
 	// tenant.default_storage_quota_gb is the default storage quota (in GB)
 	// applied to a newly-created tenant when the caller doesn't specify
 	// one explicitly. Read at create time only — changing the value does
@@ -863,17 +829,7 @@ func (s *systemSettingService) fallbackJSONForSpec(key string, spec settingSpec)
 			}
 		}
 	}
-	if key == "auth.registration_mode" {
-		mode := config.AuthRegistrationModeSelfServe
-		if s.cfg != nil && s.cfg.Auth != nil {
-			if configured := strings.TrimSpace(s.cfg.Auth.RegistrationMode); configured != "" {
-				mode = configured
-			}
-		}
-		if encoded, err := encodeForType(spec.Type, mode); err == nil {
-			return encoded
-		}
-	}
+
 	encoded, err := encodeDefault(spec)
 	if err != nil {
 		return types.JSON(`null`)

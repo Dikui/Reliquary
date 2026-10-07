@@ -38,9 +38,7 @@ aliases: [Home, Index, wiki首页]
 
 | 页面 | 简介 |
 |------|------|
-| [OIDC认证调用流程](安全认证/OIDC认证调用流程.md) | OIDC 第三方登录的完整调用链路 |
 | [空间RBAC说明](安全认证/RBAC说明.md) | 空间内角色矩阵、资源归属与审计 |
-| [共享空间说明](安全认证/共享空间说明.md) | 跨空间协作与知识库/智能体共享 |
 
 ## 开发与部署
 
@@ -88,9 +86,7 @@ graph TB
     集成扩展 --> DS[数据源导入开发]
     集成扩展 --> WebSearch[添加网络搜索引擎]
 
-    安全认证 --> OIDC[OIDC认证调用流程]
     安全认证 --> RBAC[空间RBAC说明]
-    安全认证 --> SharedSpace[共享空间说明]
 
     开发部署 --> DevGuide[开发指南]
     开发部署 --> QuickDev[快速开发模式]
@@ -104,10 +100,6 @@ graph TB
     BuiltinMCP -.-> BuiltinModel
     Skills -.-> IM
     IM -.-> DS
-    DS -.-> SharedSpace
-    OIDC -.-> RBAC
-    RBAC -.-> SharedSpace
-    OIDC -.-> SharedSpace
     WebSearch -.-> VecDB
     DevGuide -.-> QuickDev
     FAQ -.-> DevGuide

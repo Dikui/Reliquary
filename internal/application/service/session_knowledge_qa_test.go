@@ -115,10 +115,6 @@ func (s *stubModelService) GetEmbeddingModel(context.Context, string) (embedding
 	return nil, nil
 }
 
-func (s *stubModelService) GetEmbeddingModelForTenant(context.Context, string, uint64) (embedding.Embedder, error) {
-	return nil, nil
-}
-
 func (s *stubModelService) GetRerankModel(context.Context, string) (rerank.Reranker, error) {
 	return nil, nil
 }

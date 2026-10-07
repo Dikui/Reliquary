@@ -61,27 +61,12 @@ func (s *suggestionKBService) GetKnowledgeBasesByIDsOnly(
 	return result, nil
 }
 
-type suggestionKBShareService struct {
-	interfaces.KBShareService
-	allowed map[string]bool
-}
-
-func (s *suggestionKBShareService) HasTenantKBPermission(
-	_ context.Context,
-	kbID string,
-	_ uint64,
-	_ types.TenantRole,
-	_ types.OrgMemberRole,
-) (bool, error) {
-	return s.allowed[kbID], nil
-}
-
-func TestResolveSuggestionTagScopes_UsesSourceTenantForSharedKB(t *testing.T) {
+func TestResolveSuggestionTagScopes_UsesTeamTenant(t *testing.T) {
 	const (
 		callerTenant = uint64(1)
-		sourceTenant = uint64(2)
-		kbID         = "shared-kb"
-		tagID        = "shared-tag"
+		sourceTenant = uint64(1)
+		kbID         = "team-kb"
+		tagID        = "team-tag"
 	)
 	svc := &customAgentService{
 		tagRepo: &suggestionTagRepo{tagsByTenant: map[uint64][]*types.KnowledgeTag{
@@ -93,7 +78,6 @@ func TestResolveSuggestionTagScopes_UsesSourceTenantForSharedKB(t *testing.T) {
 		kbService: &suggestionKBService{kbs: map[string]*types.KnowledgeBase{
 			kbID: {ID: kbID, TenantID: sourceTenant},
 		}},
-		kbShareService: &suggestionKBShareService{allowed: map[string]bool{kbID: true}},
 	}
 
 	resolved, err := svc.resolveSuggestionTagScopes(
@@ -105,7 +89,6 @@ func TestResolveSuggestionTagScopes_UsesSourceTenantForSharedKB(t *testing.T) {
 	assert.Equal(t, []string{kbID}, resolved.KnowledgeBaseIDs)
 	assert.Equal(t, []string{"doc-in-tag"}, resolved.KnowledgeIDs)
 	assert.Equal(t, []string{tagID}, resolved.TagIDsByTenant[sourceTenant])
-	assert.Empty(t, resolved.TagIDsByTenant[callerTenant])
 }
 
 func TestMergeHybridStarterSuggestions_ReservesKnowledgeSlots(t *testing.T) {
@@ -119,7 +102,7 @@ func TestMergeHybridStarterSuggestions_ReservesKnowledgeSlots(t *testing.T) {
 	}
 	knowledge := []types.SuggestedQuestion{
 		{Question: "knowledge 1", Source: "document"},
-		{Question: "knowledge 2", Source: "faq"},
+		{Question: "knowledge 2", Source: "document"},
 		{Question: "knowledge 3", Source: "document"},
 	}
 

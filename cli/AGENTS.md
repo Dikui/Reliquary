@@ -382,7 +382,6 @@ Agents parse the first colon to extract the typed code. The exit code class (see
 | `auth.token_expired` | 3 | yes (after refresh) | your session expired; run `reliquary auth login` to re-authenticate |
 | `auth.bad_credential` | 3 | no (re-login) | run `reliquary auth login` |
 | `auth.forbidden` | 3 | no | active profile lacks permission for this resource |
-| `auth.cross_tenant_blocked` | 3 | no | verify tenant context with `reliquary auth status` |
 | `auth.tenant_mismatch` | 3 | no | verify tenant context with `reliquary auth status` |
 | `input.invalid_argument` | 5 | no | see `reliquary <command> --help` for valid usage |
 | `input.missing_flag` | 5 | no | see `reliquary <command> --help` for valid usage |

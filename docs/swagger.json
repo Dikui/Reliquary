@@ -615,57 +615,6 @@
                 }
             }
         },
-        "/agents/{id}/shares/{share_id}": {
-            "delete": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "从智能体的共享列表中移除指定共享关系",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "组织"
-                ],
-                "summary": "取消智能体共享",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "智能体 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "共享记录 ID",
-                        "name": "share_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "success: true",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "无权限",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
         "/agents/{id}/suggested-questions": {
             "get": {
                 "security": [
@@ -777,35 +726,6 @@
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/auth/auto-setup": {
-            "post": {
-                "description": "显式启用的本地 QA 环境可为既有测试用户签发令牌",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "认证"
-                ],
-                "summary": "本地 QA 自动登录",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.LoginResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "非 Lite 版本",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -1039,179 +959,6 @@
                 }
             }
         },
-        "/auth/me/preferences": {
-            "put": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "按 PATCH 语义合并用户偏好（仅覆盖请求体里出现的字段，其余字段保持不变），\n数据存放在 users.preferences (JSON)，跨设备/浏览器自动同步。",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "认证"
-                ],
-                "summary": "更新当前用户的个性化设置",
-                "parameters": [
-                    {
-                        "description": "Preferences patch",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.updateMyPreferencesRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "更新后的偏好",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/auth/oidc/callback": {
-            "get": {
-                "description": "接收OIDC provider回调并由后端完成code交换，随后重定向回前端登录页",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "认证"
-                ],
-                "summary": "OIDC登录重定向回调",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "OIDC授权码",
-                        "name": "code",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "OIDC状态",
-                        "name": "state",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "OIDC错误码",
-                        "name": "error",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "302": {
-                        "description": "Found"
-                    }
-                }
-            }
-        },
-        "/auth/oidc/config": {
-            "get": {
-                "description": "返回OIDC是否启用以及provider展示名称，供前端决定是否展示OIDC登录入口",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "认证"
-                ],
-                "summary": "获取OIDC登录配置",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.OIDCConfigResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/auth/oidc/start": {
-            "get": {
-                "description": "与 /auth/oidc/url 不同，此端点直接 302 重定向到 OIDC Provider 的授权页，\n无需前端 JS 介入。适用于外部平台（如企业门户）直接给出一个链接即可\n触发 OIDC 授权码流程，借助 IdP 的 SSO session 实现免再次输密码。",
-                "tags": [
-                    "认证"
-                ],
-                "summary": "发起 OIDC 登录（直接 302）",
-                "responses": {
-                    "302": {
-                        "description": "Found"
-                    }
-                }
-            }
-        },
-        "/auth/oidc/url": {
-            "get": {
-                "description": "根据后端OIDC配置生成第三方登录跳转地址",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "认证"
-                ],
-                "summary": "获取OIDC授权地址",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "OIDC回调地址",
-                        "name": "redirect_uri",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.OIDCAuthURLResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    },
-                    "403": {
-                        "description": "OIDC未启用",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
         "/auth/refresh": {
             "post": {
                 "description": "使用刷新令牌获取新的访问令牌",
@@ -1356,65 +1103,6 @@
                 }
             }
         },
-        "/auth/switch-tenant": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "为当前用户在目标空间重新签发访问令牌；要求该用户在目标空间存在 active 成员关系（跨租户超级用户除外）。\n成功换签会把目标空间写入「最近活跃租户」偏好，下次登录与 refresh 都落在该空间（refresh JWT 不含 tenant_id）。\n该偏好是账号级的：一次换签会改变该用户所有设备的下次登录/refresh 落点。偏好写入失败则整次换签失败，不会发出新 token。",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "认证"
-                ],
-                "summary": "切换激活空间",
-                "parameters": [
-                    {
-                        "description": "切换请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "refresh_token": {
-                                    "type": "string"
-                                },
-                                "tenant_id": {
-                                    "type": "integer"
-                                }
-                            }
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.LoginResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    },
-                    "403": {
-                        "description": "无该空间成员关系或偏好写入失败",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
         "/auth/validate": {
             "get": {
                 "security": [
@@ -1523,7 +1211,7 @@
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "仅通过分块ID获取分块详情（不需要knowledge_id）；支持共享知识库下的分块访问",
+                "description": "仅通过分块 ID 获取团队分块详情。",
                 "consumes": [
                     "application/json"
                 ],
@@ -2570,53 +2258,6 @@
                 }
             }
         },
-        "/faq/import/progress/{task_id}": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "获取FAQ导入任务的进度",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "FAQ管理"
-                ],
-                "summary": "获取FAQ导入进度",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "任务ID",
-                        "name": "task_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "导入进度",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "任务不存在",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
         "/im-channels/{id}": {
             "put": {
                 "security": [
@@ -3025,55 +2666,6 @@
                     },
                     "404": {
                         "description": "知识库不存在",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/initialization/embedding/test": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "测试Embedding接口是否可用并返回向量维度",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "初始化"
-                ],
-                "summary": "测试Embedding模型",
-                "parameters": [
-                    {
-                        "description": "Embedding测试请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.ModelTestRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "测试结果",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
                         "schema": {
                             "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
                         }
@@ -3577,7 +3169,7 @@
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "获取当前空间的所有知识库；或当传入 agent_id（共享智能体）时，校验权限后返回该智能体配置的知识库范围（用于 @ 提及）",
+                "description": "获取团队的所有知识库。",
                 "consumes": [
                     "application/json"
                 ],
@@ -3588,14 +3180,7 @@
                     "知识库"
                 ],
                 "summary": "获取知识库列表",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "共享智能体 ID（传入时返回该智能体可用的知识库）",
-                        "name": "agent_id",
-                        "in": "query"
-                    }
-                ],
+                "parameters": [],
                 "responses": {
                     "200": {
                         "description": "知识库列表",
@@ -3766,7 +3351,7 @@
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "根据ID获取知识库详情。当使用共享智能体时，可传 agent_id 以校验该智能体是否有权访问该知识库。",
+                "description": "根据 ID 获取团队知识库详情。",
                 "consumes": [
                     "application/json"
                 ],
@@ -3784,12 +3369,6 @@
                         "name": "id",
                         "in": "path",
                         "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "共享智能体 ID（用于校验智能体是否有权访问该知识库）",
-                        "name": "agent_id",
-                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -3921,7 +3500,7 @@
                         "Bearer": []
                     }
                 ],
-                "description": "返回知识库的重要变更与后台任务入口。仅知识库创建者或所属空间管理员可读，共享空间不可读。",
+                "description": "返回知识库的重要变更与后台任务入口，团队成员可读。",
                 "produces": [
                     "application/json"
                 ],
@@ -3991,7 +3570,7 @@
                         "Bearer": []
                     }
                 ],
-                "description": "创建一个只包含设置的新知识库副本，不复制知识、FAQ 内容、分块、索引、Wiki 页面、分享或置顶状态",
+                "description": "创建一个只包含设置的新知识库副本，不复制知识、分块、索引、Wiki 页面或置顶状态",
                 "consumes": [
                     "application/json"
                 ],
@@ -4014,740 +3593,6 @@
                 "responses": {
                     "201": {
                         "description": "创建后的知识库副本",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/knowledge-bases/{id}/faq/entries": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "获取知识库下的FAQ条目列表，支持分页和筛选",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "FAQ管理"
-                ],
-                "summary": "获取FAQ条目列表",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "知识库ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "页码",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "每页数量",
-                        "name": "page_size",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "标签ID筛选(seq_id)，兼容旧版单标签",
-                        "name": "tag_id",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "标签UUID筛选，逗号分隔（OR语义）",
-                        "name": "tag_ids",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "关键词搜索",
-                        "name": "keyword",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "搜索字段: standard_question(标准问题), similar_questions(相似问法), answers(答案), 默认搜索全部",
-                        "name": "search_field",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "排序方式: asc(按更新时间正序), 默认按更新时间倒序",
-                        "name": "sort_order",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "FAQ列表",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "异步批量更新或插入FAQ条目。支持 dry_run 模式（设置 dry_run=true），异步验证不实际导入。\ndry_run 模式是异步操作，返回 task_id，通过 /faq/import/progress/{task_id} 查询进度和结果。\n验证内容包括：1) 条目基本格式 2) 重复问题（批次内和知识库已有） 3) 内容安全检查。",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "FAQ管理"
-                ],
-                "summary": "批量更新/插入FAQ条目",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "知识库ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "批量操作请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.FAQBatchUpsertPayload"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "任务ID",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "批量删除指定的FAQ条目",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "FAQ管理"
-                ],
-                "summary": "批量删除FAQ条目",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "知识库ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "要删除的FAQ ID列表(seq_id)",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "ids": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "integer"
-                                    }
-                                }
-                            }
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "删除成功",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/knowledge-bases/{id}/faq/entries/export": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "将所有FAQ条目导出为 CSV（默认）或 JSON。?format=json 返回与 FAQEntryPayload 结构兼容的数组。",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "text/csv",
-                    "application/json"
-                ],
-                "tags": [
-                    "FAQ管理"
-                ],
-                "summary": "导出FAQ条目",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "知识库ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "导出格式：csv（默认）或 json",
-                        "name": "format",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "导出文件",
-                        "schema": {
-                            "type": "file"
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/knowledge-bases/{id}/faq/entries/fields": {
-            "put": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "批量更新FAQ条目的多个字段（is_enabled, is_recommended, tag_id）",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "FAQ管理"
-                ],
-                "summary": "批量更新FAQ字段",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "知识库ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "字段更新请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.FAQEntryFieldsBatchUpdate"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "更新成功",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/knowledge-bases/{id}/faq/entries/tags": {
-            "put": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "批量更新FAQ条目的标签",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "FAQ管理"
-                ],
-                "summary": "批量更新FAQ标签",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "知识库ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "标签更新请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "更新成功",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/knowledge-bases/{id}/faq/entries/{entry_id}": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "根据ID获取单个FAQ条目的详情",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "FAQ管理"
-                ],
-                "summary": "获取FAQ条目详情",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "知识库ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "FAQ条目ID(seq_id)",
-                        "name": "entry_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "FAQ条目详情",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    },
-                    "404": {
-                        "description": "条目不存在",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            },
-            "put": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "更新指定的FAQ条目",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "FAQ管理"
-                ],
-                "summary": "更新FAQ条目",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "知识库ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "FAQ条目ID(seq_id)",
-                        "name": "entry_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "FAQ条目",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.FAQEntryPayload"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "更新成功",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/knowledge-bases/{id}/faq/entries/{entry_id}/similar-questions": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "向指定的FAQ条目添加相似问题",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "FAQ管理"
-                ],
-                "summary": "添加相似问",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "知识库ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "FAQ条目ID(seq_id)",
-                        "name": "entry_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "相似问列表",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.addSimilarQuestionsRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "更新后的FAQ条目",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    },
-                    "404": {
-                        "description": "条目不存在",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/knowledge-bases/{id}/faq/entry": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "同步创建单个FAQ条目",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "FAQ管理"
-                ],
-                "summary": "创建单个FAQ条目",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "知识库ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "FAQ条目",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.FAQEntryPayload"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "创建的FAQ条目",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/knowledge-bases/{id}/faq/import/last-result/display": {
-            "put": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "更新FAQ知识库导入结果统计卡片的显示或隐藏状态",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "FAQ管理"
-                ],
-                "summary": "更新FAQ最后一次导入结果显示状态",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "知识库ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "状态更新请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.updateLastFAQImportResultDisplayStatusRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "更新成功",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    },
-                    "404": {
-                        "description": "知识库不存在或无导入记录",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/knowledge-bases/{id}/faq/search": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "使用混合搜索在FAQ中搜索，支持两级优先级标签召回：first_priority_tag_ids优先级最高，second_priority_tag_ids次之",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "FAQ管理"
-                ],
-                "summary": "搜索FAQ",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "知识库ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "搜索请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.FAQSearchRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "搜索结果",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -4961,7 +3806,7 @@
                     },
                     {
                         "type": "string",
-                        "description": "来源/渠道筛选 (web/api/feishu/notion/yuque/wechat/...，或 manual/url 按 type 过滤)",
+                        "description": "来源/渠道筛选 (web/api/feishu/notion/yuque/...，或 manual/url 按 type 过滤)",
                         "name": "source",
                         "in": "query"
                     },
@@ -5495,194 +4340,6 @@
                 }
             }
         },
-        "/knowledge-bases/{id}/shares": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "获取知识库的所有共享记录",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "知识库共享"
-                ],
-                "summary": "获取知识库的共享列表",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "知识库ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ListSharesResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "将知识库共享到指定组织",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "知识库共享"
-                ],
-                "summary": "共享知识库到组织",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "知识库ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "共享信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ShareKnowledgeBaseRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/knowledge-bases/{id}/shares/{share_id}": {
-            "put": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "更新知识库共享的权限级别",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "知识库共享"
-                ],
-                "summary": "更新共享权限",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "知识库ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "共享记录ID",
-                        "name": "share_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "权限信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.UpdateSharePermissionRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "取消知识库的共享",
-                "tags": [
-                    "知识库共享"
-                ],
-                "summary": "取消共享",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "知识库ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "共享记录ID",
-                        "name": "share_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
         "/knowledge-bases/{id}/tags": {
             "get": {
                 "security": [
@@ -5884,10 +4541,7 @@
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "删除标签，可使用force=true强制删除被引用的标签，content_only=true仅删除标签下的内容而保留标签本身",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "删除团队标签及其关联，保留文档。",
                 "produces": [
                     "application/json"
                 ],
@@ -5909,26 +4563,6 @@
                         "name": "tag_id",
                         "in": "path",
                         "required": true
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "强制删除",
-                        "name": "force",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "仅删除内容，保留标签",
-                        "name": "content_only",
-                        "in": "query"
-                    },
-                    {
-                        "description": "删除选项",
-                        "name": "body",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.DeleteTagRequest"
-                        }
                     }
                 ],
                 "responses": {
@@ -6085,7 +4719,7 @@
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "根据ID列表批量获取知识条目。可选 kb_id：指定时按该知识库校验权限并用于共享知识库的空间解析；可选 agent_id：使用共享智能体时传此参数，后端按智能体所属空间查询（用于刷新后恢复共享知识库下的文件）",
+                "description": "根据 ID 列表批量获取团队知识条目，可选 kb_id 用于限定知识库范围。",
                 "consumes": [
                     "application/json"
                 ],
@@ -6110,14 +4744,8 @@
                     },
                     {
                         "type": "string",
-                        "description": "可选，知识库ID（用于共享知识库时指定范围）",
+                        "description": "可选，限定知识库范围。",
                         "name": "kb_id",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "可选，共享智能体ID（用于按智能体空间批量拉取文件详情）",
-                        "name": "agent_id",
                         "in": "query"
                     }
                 ],
@@ -6528,7 +5156,7 @@
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Search knowledge files by keyword. Pass recent=true without a keyword to browse recent files. When agent_id is set (shared agent), scope is the agent's configured knowledge bases.",
+                "description": "Search knowledge files by keyword. Pass recent=true without a keyword to browse recent files. When agent_id is set, scope is the agent's configured knowledge bases.",
                 "consumes": [
                     "application/json"
                 ],
@@ -6568,12 +5196,6 @@
                         "in": "query"
                     },
                     {
-                        "type": "string",
-                        "description": "Shared agent ID (search within agent's KB scope)",
-                        "name": "agent_id",
-                        "in": "query"
-                    },
-                    {
                         "type": "boolean",
                         "description": "Return recent files when keyword is empty",
                         "name": "recent",
@@ -6607,7 +5229,7 @@
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "批量更新知识条目的标签。可选 kb_id：指定时按该知识库校验编辑权限并用于共享知识库的空间解析",
+                "description": "批量更新团队知识条目的标签，可选 kb_id 用于限定知识库范围。",
                 "consumes": [
                     "application/json"
                 ],
@@ -7763,7 +6385,7 @@
                         "Bearer": []
                     }
                 ],
-                "description": "Partially update a wiki page by slug. Absent fields keep\ntheir stored value. When `version` is \u003e 0 it acts as an\noptimistic-lock guard: a mismatch with the stored version\nreturns 409 together with the current version so the client\ncan reload and re-apply.",
+                "description": "Partially update a wiki page by slug. Absent fields keep\ntheir stored value. When `version` is > 0 it acts as an\noptimistic-lock guard: a mismatch with the stored version\nreturns 409 together with the current version so the client\ncan reload and re-apply.",
                 "consumes": [
                     "application/json"
                 ],
@@ -10271,1061 +8893,6 @@
                 }
             }
         },
-        "/organizations": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "获取当前空间所属的所有组织，并附带各空间内知识库/智能体数量",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "组织管理"
-                ],
-                "summary": "获取我的组织列表",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ListOrganizationsResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "创建新的组织，创建者自动成为管理员",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "组织管理"
-                ],
-                "summary": "创建组织",
-                "parameters": [
-                    {
-                        "description": "组织信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.CreateOrganizationRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/organizations/join": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "使用邀请码加入组织",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "组织管理"
-                ],
-                "summary": "通过邀请码加入组织",
-                "parameters": [
-                    {
-                        "description": "邀请码",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.JoinOrganizationRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/organizations/join-by-id": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "加入已开放可被搜索的空间，无需邀请码",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "组织管理"
-                ],
-                "summary": "通过空间 ID 加入（可搜索空间）",
-                "parameters": [
-                    {
-                        "description": "空间 ID",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.JoinByOrganizationIDRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/organizations/join-request": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "对需要审核的组织提交加入申请",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "组织管理"
-                ],
-                "summary": "提交加入申请",
-                "parameters": [
-                    {
-                        "description": "申请信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.SubmitJoinRequestRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/organizations/preview/{code}": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "通过邀请码获取组织基本信息（不加入）",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "组织管理"
-                ],
-                "summary": "通过邀请码预览组织",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "邀请码",
-                        "name": "code",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/organizations/search": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "搜索已开放可被搜索的空间，用于发现并加入",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "组织管理"
-                ],
-                "summary": "搜索可加入的空间",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "搜索关键词（空间名称或描述）",
-                        "name": "q",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 20,
-                        "description": "返回数量限制",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/organizations/{id}": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "根据ID获取组织详情",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "组织管理"
-                ],
-                "summary": "获取组织详情",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "组织ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            },
-            "put": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "更新组织信息（需要管理员权限）",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "组织管理"
-                ],
-                "summary": "更新组织",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "组织ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "更新信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.UpdateOrganizationRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "删除组织（仅组织创建者可操作）",
-                "tags": [
-                    "组织管理"
-                ],
-                "summary": "删除组织",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "组织ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/organizations/{id}/agent-shares": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "返回所有被共享到指定组织的智能体（含我的有效权限）",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "组织"
-                ],
-                "summary": "获取共享到本组织的智能体",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "组织 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "智能体共享列表 + total",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "非组织成员",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/organizations/{id}/invite": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "管理员直接添加用户为组织成员",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "组织管理"
-                ],
-                "summary": "邀请成员",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "组织ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "邀请信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.InviteMemberRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/organizations/{id}/invite-code": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "生成新的组织邀请码（需要管理员权限）",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "组织管理"
-                ],
-                "summary": "生成邀请码",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "组织ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/organizations/{id}/join-requests": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "获取组织的待审核加入申请（仅管理员）",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "组织管理"
-                ],
-                "summary": "获取待审核加入申请列表",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "组织ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/organizations/{id}/join-requests/{request_id}/review": {
-            "put": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "通过或拒绝加入申请（仅管理员）",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "组织管理"
-                ],
-                "summary": "审核加入申请",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "组织ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "申请ID",
-                        "name": "request_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "审核结果",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ReviewJoinRequestRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/organizations/{id}/leave": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "退出指定组织",
-                "tags": [
-                    "组织管理"
-                ],
-                "summary": "退出组织",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "组织ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/organizations/{id}/members": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "获取组织的所有成员（按空间）",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "组织管理"
-                ],
-                "summary": "获取组织成员列表",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "组织ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ListMembersResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/organizations/{id}/members/{tenant_id}": {
-            "put": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "更新组织成员（空间）的角色（需要管理员权限）",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "组织管理"
-                ],
-                "summary": "更新成员角色",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "组织ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "成员空间ID",
-                        "name": "tenant_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "角色信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.UpdateMemberRoleRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "从组织中移除成员空间（需要管理员权限）",
-                "tags": [
-                    "组织管理"
-                ],
-                "summary": "移除成员",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "组织ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "成员空间ID",
-                        "name": "tenant_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/organizations/{id}/request-upgrade": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "现有成员申请更高权限",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "组织管理"
-                ],
-                "summary": "申请权限升级",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "组织ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "申请信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.RequestRoleUpgradeRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/organizations/{id}/search-tenants": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "按空间名搜索可邀请的空间（排除已加入的空间）用于邀请加入组织；按空间去重",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "组织管理"
-                ],
-                "summary": "搜索可邀请的空间",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "组织ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "搜索关键词（空间名）",
-                        "name": "q",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "default": 10,
-                        "description": "返回数量限制",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/organizations/{id}/search-users": {
-            "get": {
-                "deprecated": true,
-                "responses": {}
-            }
-        },
-        "/organizations/{id}/shared-agents": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "获取指定空间下所有共享智能体，包含他人共享的与我共享的，用于列表页空间视角",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "组织管理"
-                ],
-                "summary": "获取空间内全部智能体（含我共享的）",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "组织ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/organizations/{id}/shared-knowledge-bases": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "获取指定空间下所有共享知识库，包含直接共享的与通过共享智能体可见的，用于列表页空间视角",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "组织管理"
-                ],
-                "summary": "获取空间内全部知识库（含我共享的、含智能体携带的）",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "组织ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/organizations/{id}/shares": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "获取共享到指定组织的所有知识库",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "组织管理"
-                ],
-                "summary": "获取组织的共享知识库列表",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "组织ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ListSharesResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/sandbox-configs": {
             "get": {
                 "security": [
@@ -12380,7 +9947,7 @@
                     },
                     {
                         "type": "string",
-                        "description": "来源过滤：web / embed / api / feishu / wechat / slack / ...（api、embed、IM 渠道需 Admin+）",
+                        "description": "来源过滤：web / api / feishu（api、IM 渠道需 Admin+）",
                         "name": "source",
                         "in": "query"
                     },
@@ -13167,67 +10734,6 @@
                 }
             }
         },
-        "/shared-agents": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "返回所有共享给当前用户所在组织的智能体",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "组织"
-                ],
-                "summary": "获取我可访问的共享智能体",
-                "responses": {
-                    "200": {
-                        "description": "智能体列表 + total",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/shared-knowledge-bases": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "获取通过组织共享给当前用户的所有知识库",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "知识库共享"
-                ],
-                "summary": "获取共享给我的知识库列表",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/skills": {
             "get": {
                 "security": [
@@ -13908,105 +11414,6 @@
                 }
             }
         },
-        "/system/admin/api-keys": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "Lists non-workspace API keys. Full tokens are always masked. Human SystemAdmin only.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "System Admin"
-                ],
-                "summary": "List platform API keys",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "Creates a capability-scoped key that may target any workspace through X-Tenant-ID. The plaintext token is returned once. Human SystemAdmin only.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "System Admin"
-                ],
-                "summary": "Create a platform API key",
-                "parameters": [
-                    {
-                        "description": "Platform API key",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.platformAPIKeyCreateRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/system/admin/api-keys/{key_id}": {
-            "delete": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "Immediately revokes a platform API key. Human SystemAdmin only.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "System Admin"
-                ],
-                "summary": "Revoke a platform API key",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "API key ID",
-                        "name": "key_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/system/admin/audit-log": {
             "get": {
                 "security": [
@@ -14516,102 +11923,6 @@
                 }
             }
         },
-        "/system/admin/tenants/apply-default-storage-quota": {
-            "post": {
-                "description": "Reads the current value of `tenant.default_storage_quota_gb`\n(3-tier resolver: DB \u003e ENV \u003e default) and writes that many\nGiB into storage_quota for every row in tenants. Bypasses\nthe per-workspace PUT whitelist, which forbids storage_quota\nedits by Owners. SystemAdmin only.\nIdempotent — running twice with the same setting is a no-op.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "System Admin"
-                ],
-                "summary": "Apply the default storage quota to every existing workspace",
-                "responses": {
-                    "200": {
-                        "description": "{ affected: int64, quota_bytes: int64 }",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "DB write failed",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/system/admin/users/create": {
-            "post": {
-                "description": "Provision a new local user account (SystemAdmin only).\nWhen `password` is omitted or null, a cryptographically random\npassword is generated (OIDC-style crypto/rand + base64url)\nand returned once in the response body. Any provided value,\nincluding empty string, is policy-checked. Tenant provisioning\nfollows the shared auth.default_tenant_mode policy.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "System Admin"
-                ],
-                "summary": "Create a new user (SystemAdmin)",
-                "parameters": [
-                    {
-                        "description": "User creation request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.AdminCreateUserRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Identity already exists, returns the existing user",
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.CreateSystemUserResponse"
-                        }
-                    },
-                    "201": {
-                        "description": "User created successfully",
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.CreateSystemUserResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request or weak password",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden: not a system admin",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "409": {
-                        "description": "Email and username refer to conflicting identities",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/system/admin/users/reset-password": {
             "post": {
                 "description": "Replace another user's local password and revoke all of their existing sessions (SystemAdmin only).\nA system administrator cannot reset their own password through this endpoint; self-service password change still requires the old password.",
@@ -14880,120 +12191,6 @@
                 }
             }
         },
-        "/tenants": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "获取当前用户可访问的空间列表",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "空间管理"
-                ],
-                "summary": "获取空间列表",
-                "responses": {
-                    "200": {
-                        "description": "空间列表",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "创建新的空间。任意已登录用户均可调用以建立自己的新工作区，\n调用方会被自动设为该空间的 Owner。跨空间超管仍可像以前一样\n通过本接口创建任意空间。\n当 tenant.auto_create_api_key（或 RELIQUARY_TENANT_AUTO_CREATE_API_KEY）\n开启时，会自动创建一个 full_access API Key，并在响应体的 data.api_key 字段返回其明文 token。",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "空间管理"
-                ],
-                "summary": "创建空间",
-                "parameters": [
-                    {
-                        "description": "空间信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.createTenantRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "创建的空间（可选含 api_key）",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/tenants/all": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "获取系统中所有空间（需要跨空间访问权限）",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "空间管理"
-                ],
-                "summary": "获取所有空间列表",
-                "responses": {
-                    "200": {
-                        "description": "所有空间列表",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "权限不足",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
         "/tenants/kv/prompt-templates": {
             "get": {
                 "security": [
@@ -15171,72 +12368,6 @@
                 }
             }
         },
-        "/tenants/search": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "分页搜索空间（需要跨空间访问权限）",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "空间管理"
-                ],
-                "summary": "搜索空间",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "搜索关键词",
-                        "name": "keyword",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "空间ID筛选",
-                        "name": "tenant_id",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 1,
-                        "description": "页码",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 20,
-                        "description": "每页数量",
-                        "name": "page_size",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "搜索结果",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "权限不足",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
         "/tenants/{id}": {
             "get": {
                 "security": [
@@ -15327,48 +12458,6 @@
                 "responses": {
                     "200": {
                         "description": "更新后的空间",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "删除指定的空间",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "空间管理"
-                ],
-                "summary": "删除空间",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "空间ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "删除成功",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -16513,100 +13602,6 @@
                     }
                 }
             }
-        },
-        "/wechat/qrcode": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "申请一个用于扫码登录绑定的微信二维码（无请求体）",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "IM 渠道"
-                ],
-                "summary": "获取微信扫码登录二维码",
-                "responses": {
-                    "200": {
-                        "description": "二维码信息（qrcode_url + qrcode 标识）",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "二维码生成失败",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/wechat/qrcode/status": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "查询指定二维码是否已被扫描/确认/过期；confirmed 时返回凭证",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "IM 渠道"
-                ],
-                "summary": "轮询微信二维码状态",
-                "parameters": [
-                    {
-                        "description": "{qrcode: string}",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "扫码状态",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
         }
     },
     "definitions": {
@@ -17047,13 +14042,7 @@
                 "datasource.sync_failed",
                 "datasource.paused",
                 "datasource.resumed",
-                "kb.share_added",
-                "kb.share_permission_changed",
-                "kb.share_removed",
-                "wiki.content_changed",
-                "faq.import_started",
-                "faq.import_completed",
-                "faq.import_failed"
+                "wiki.content_changed"
             ],
             "x-enum-varnames": [
                 "AuditActionMemberAdded",
@@ -17111,13 +14100,7 @@
                 "AuditActionDataSourceSyncFailed",
                 "AuditActionDataSourcePaused",
                 "AuditActionDataSourceResumed",
-                "AuditActionKBShareAdded",
-                "AuditActionKBSharePermissionChanged",
-                "AuditActionKBShareRemoved",
-                "AuditActionWikiContentChanged",
-                "AuditActionFAQImportStarted",
-                "AuditActionFAQImportCompleted",
-                "AuditActionFAQImportFailed"
+                "AuditActionWikiContentChanged"
             ]
         },
         "github_com_Tencent_Reliquary_internal_types.AuditLog": {
@@ -17321,131 +14304,11 @@
                 }
             }
         },
-        "github_com_Tencent_Reliquary_internal_types.CreateOrganizationRequest": {
-            "type": "object",
-            "required": [
-                "name"
-            ],
-            "properties": {
-                "avatar": {
-                    "description": "optional avatar URL",
-                    "type": "string",
-                    "maxLength": 512
-                },
-                "description": {
-                    "type": "string",
-                    "maxLength": 1000
-                },
-                "invite_code_validity_days": {
-                    "description": "optional: 0=never, 1, 7, 30; default 7",
-                    "type": "integer"
-                },
-                "member_limit": {
-                    "description": "optional: max members; 0=unlimited; default 50",
-                    "type": "integer"
-                },
-                "name": {
-                    "type": "string",
-                    "maxLength": 255,
-                    "minLength": 1
-                }
-            }
-        },
         "github_com_Tencent_Reliquary_internal_types.CredentialsConfig": {
             "type": "object",
             "properties": {
                 "weknoracloud": {
                     "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.WeKnoraCloudCredentials"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.CubeEgressRule": {
-            "type": "object",
-            "properties": {
-                "audit": {
-                    "description": "Audit is none | metadata | full. Empty uses the server default.",
-                    "type": "string"
-                },
-                "deny": {
-                    "description": "Deny inverts the action, which defaults to allow. A deny rule still\nneeds Host or SNI: the target has to reach CubeEgress for it to answer\nwith a request-level 403 instead of the network layer dropping it.",
-                    "type": "boolean"
-                },
-                "host": {
-                    "type": "string"
-                },
-                "inject": {
-                    "description": "Inject adds credential headers on allowed HTTPS requests.",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.CubeHeaderInject"
-                    }
-                },
-                "methods": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "name": {
-                    "type": "string"
-                },
-                "path": {
-                    "type": "string"
-                },
-                "scheme": {
-                    "type": "string"
-                },
-                "sni": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.CubeHeaderInject": {
-            "type": "object",
-            "properties": {
-                "format": {
-                    "type": "string"
-                },
-                "header": {
-                    "type": "string"
-                },
-                "secret": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.CubeSandboxConfig": {
-            "type": "object",
-            "properties": {
-                "api_key": {
-                    "description": "加密",
-                    "type": "string"
-                },
-                "api_url": {
-                    "type": "string"
-                },
-                "cube_sandbox_ttl_seconds": {
-                    "type": "integer"
-                },
-                "dns_servers": {
-                    "description": "DNSServers are Cube template nameserver IPs. Empty uses Cubelet's default.",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "http_timeout_sec": {
-                    "description": "HTTPTimeoutSec bounds each HTTP call to the sandbox control plane.\n0 means use the built-in default (30s), never the deployment's value.",
-                    "type": "integer"
-                },
-                "proxy_url": {
-                    "type": "string"
-                },
-                "sandbox_domain": {
-                    "type": "string"
-                },
-                "template_id": {
-                    "type": "string"
                 }
             }
         },
@@ -17534,18 +14397,6 @@
                     "description": "Fallback strategy: \"fixed\" for fixed response, \"model\" for model generation",
                     "type": "string"
                 },
-                "faq_direct_answer_threshold": {
-                    "description": "FAQ direct answer threshold - if similarity \u003e this value, use FAQ answer directly",
-                    "type": "number"
-                },
-                "faq_priority_enabled": {
-                    "description": "===== FAQ Strategy Settings =====\nWhether FAQ priority strategy is enabled (FAQ answers prioritized over document chunks)",
-                    "type": "boolean"
-                },
-                "faq_score_boost": {
-                    "description": "FAQ score boost multiplier - FAQ results score multiplied by this factor",
-                    "type": "number"
-                },
                 "history_turns": {
                     "description": "Number of history turns to keep in context",
                     "type": "integer"
@@ -17593,7 +14444,7 @@
                     "type": "integer"
                 },
                 "mcp_auth_wait_timeout": {
-                    "description": "MCPAuthWaitTimeout is how many seconds to wait for in-conversation OAuth\nauthorization before skipping. \u003c=0 uses the gate's configured timeout.",
+                    "description": "MCPAuthWaitTimeout is how many seconds to wait for in-conversation OAuth\nauthorization before skipping. <=0 uses the gate's configured timeout.",
                     "type": "integer"
                 },
                 "mcp_selection_mode": {
@@ -17877,50 +14728,6 @@
                 }
             }
         },
-        "github_com_Tencent_Reliquary_internal_types.E2BHostRule": {
-            "type": "object",
-            "properties": {
-                "headers": {
-                    "description": "Headers values are credentials and are encrypted at rest; names stay\nreadable so operators can see which headers are injected.",
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
-                },
-                "host": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.E2BSandboxConfig": {
-            "type": "object",
-            "properties": {
-                "api_key": {
-                    "description": "加密",
-                    "type": "string"
-                },
-                "api_url": {
-                    "type": "string"
-                },
-                "e2b_sandbox_ttl_seconds": {
-                    "type": "integer"
-                },
-                "http_timeout_sec": {
-                    "description": "HTTPTimeoutSec bounds each HTTP call to the sandbox control plane.\n0 means use the built-in default (30s), never the deployment's value.",
-                    "type": "integer"
-                },
-                "proxy_url": {
-                    "description": "ProxyURL is the data-plane gateway that fronts envd. E2B Cloud resolves\n\"\u003cport\u003e-\u003csandboxID\u003e.\u003csandbox_domain\u003e\" through public DNS and TLS, so it\nneeds no value here. Self-hosted E2B-compatible control planes usually\nserve every sandbox from one gateway address and expect the sandbox\nauthority in the Host header; setting this makes Reliquary dial the\ngateway directly instead of requiring wildcard DNS and a certificate\nfor the sandbox domain. An \"http://\" gateway also downgrades the\ndata-plane scheme, which the E2B SDK otherwise pins to https.",
-                    "type": "string"
-                },
-                "sandbox_domain": {
-                    "type": "string"
-                },
-                "template_id": {
-                    "type": "string"
-                }
-            }
-        },
         "github_com_Tencent_Reliquary_internal_types.EmbeddingParameters": {
             "type": "object",
             "properties": {
@@ -17932,194 +14739,6 @@
                 },
                 "truncate_prompt_tokens": {
                     "type": "integer"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.FAQBatchUpsertPayload": {
-            "type": "object",
-            "required": [
-                "entries"
-            ],
-            "properties": {
-                "dry_run": {
-                    "description": "仅验证，不实际导入",
-                    "type": "boolean"
-                },
-                "entries": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.FAQEntryPayload"
-                    }
-                },
-                "knowledge_id": {
-                    "type": "string"
-                },
-                "mode": {
-                    "type": "string",
-                    "enum": [
-                        "append",
-                        "replace"
-                    ]
-                },
-                "task_id": {
-                    "description": "可选，如果不传则自动生成UUID",
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.FAQConfig": {
-            "type": "object",
-            "properties": {
-                "index_mode": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.FAQIndexMode"
-                },
-                "question_index_mode": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.FAQQuestionIndexMode"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.FAQEntryFieldsBatchUpdate": {
-            "type": "object",
-            "properties": {
-                "by_id": {
-                    "description": "ByID 按条目ID更新，key为条目ID (seq_id)",
-                    "type": "object",
-                    "additionalProperties": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.FAQEntryFieldsUpdate"
-                    }
-                },
-                "by_tag": {
-                    "description": "ByTag 按Tag批量更新，key为TagID (seq_id)",
-                    "type": "object",
-                    "additionalProperties": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.FAQEntryFieldsUpdate"
-                    }
-                },
-                "exclude_ids": {
-                    "description": "ExcludeIDs 在ByTag操作中需要排除的ID列表 (seq_id)",
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.FAQEntryFieldsUpdate": {
-            "type": "object",
-            "properties": {
-                "is_enabled": {
-                    "type": "boolean"
-                },
-                "is_recommended": {
-                    "type": "boolean"
-                },
-                "tag_id": {
-                    "type": "integer"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.FAQEntryPayload": {
-            "type": "object",
-            "required": [
-                "standard_question"
-            ],
-            "properties": {
-                "answer_strategy": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.AnswerStrategy"
-                },
-                "answers": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "id": {
-                    "description": "ID 可选，用于数据迁移时指定 seq_id（必须小于自增起始值 100000000）",
-                    "type": "integer"
-                },
-                "is_enabled": {
-                    "type": "boolean"
-                },
-                "is_recommended": {
-                    "type": "boolean"
-                },
-                "negative_questions": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "similar_questions": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "standard_question": {
-                    "type": "string"
-                },
-                "tag_id": {
-                    "type": "integer"
-                },
-                "tag_name": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.FAQIndexMode": {
-            "type": "string",
-            "enum": [
-                "question_only",
-                "question_answer"
-            ],
-            "x-enum-varnames": [
-                "FAQIndexModeQuestionOnly",
-                "FAQIndexModeQuestionAnswer"
-            ]
-        },
-        "github_com_Tencent_Reliquary_internal_types.FAQQuestionIndexMode": {
-            "type": "string",
-            "enum": [
-                "combined",
-                "separate"
-            ],
-            "x-enum-varnames": [
-                "FAQQuestionIndexModeCombined",
-                "FAQQuestionIndexModeSeparate"
-            ]
-        },
-        "github_com_Tencent_Reliquary_internal_types.FAQSearchRequest": {
-            "type": "object",
-            "required": [
-                "query_text"
-            ],
-            "properties": {
-                "first_priority_tag_ids": {
-                    "description": "第一优先级标签ID列表，限定命中范围，优先级最高",
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "match_count": {
-                    "type": "integer"
-                },
-                "only_recommended": {
-                    "description": "是否仅返回推荐的条目",
-                    "type": "boolean"
-                },
-                "query_text": {
-                    "type": "string"
-                },
-                "second_priority_tag_ids": {
-                    "description": "第二优先级标签ID列表，限定命中范围，优先级低于第一优先级",
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "vector_threshold": {
-                    "type": "number"
                 }
             }
         },
@@ -18187,71 +14806,6 @@
                 "wiki_enabled": {
                     "description": "WikiEnabled enables automatic wiki page generation from documents",
                     "type": "boolean"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.InviteMemberRequest": {
-            "type": "object",
-            "required": [
-                "role"
-            ],
-            "properties": {
-                "representative_user_id": {
-                    "description": "RepresentativeUserID identifies the user attached to the OTM row for\ndisplay/audit. Optional: when unset, the handler picks a stable default\n(the user from the legacy UserID field, or the workspace's owner).",
-                    "type": "string"
-                },
-                "role": {
-                    "description": "Role to assign: admin/editor/viewer",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.OrgMemberRole"
-                        }
-                    ]
-                },
-                "tenant_id": {
-                    "description": "TenantID is the workspace to enrol as an org member. Preferred field.",
-                    "type": "integer"
-                },
-                "user_id": {
-                    "description": "UserID is retained for backward compatibility. When set without\nTenantID, the handler resolves the user's TenantID and uses this\nuser as the representative.",
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.JoinByOrganizationIDRequest": {
-            "type": "object",
-            "required": [
-                "organization_id"
-            ],
-            "properties": {
-                "message": {
-                    "description": "Optional message for join request",
-                    "type": "string",
-                    "maxLength": 500
-                },
-                "organization_id": {
-                    "type": "string"
-                },
-                "role": {
-                    "description": "Optional: requested role (admin/editor/viewer); default viewer",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.OrgMemberRole"
-                        }
-                    ]
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.JoinOrganizationRequest": {
-            "type": "object",
-            "required": [
-                "invite_code"
-            ],
-            "properties": {
-                "invite_code": {
-                    "type": "string",
-                    "maxLength": 32,
-                    "minLength": 8
                 }
             }
         },
@@ -18329,14 +14883,6 @@
                     "description": "ID of the embedding model",
                     "type": "string"
                 },
-                "faq_config": {
-                    "description": "FAQConfig stores FAQ specific configuration such as indexing strategy",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.FAQConfig"
-                        }
-                    ]
-                },
                 "id": {
                     "description": "Unique identifier of the knowledge base",
                     "type": "string"
@@ -18362,7 +14908,7 @@
                     "type": "boolean"
                 },
                 "is_processing": {
-                    "description": "IsProcessing indicates if there is a processing import task (for FAQ type knowledge bases)",
+                    "description": "IsProcessing indicates whether a document processing task is active.",
                     "type": "boolean"
                 },
                 "is_temporary": {
@@ -18393,10 +14939,6 @@
                         }
                     ]
                 },
-                "share_count": {
-                    "description": "ShareCount indicates the number of organizations this knowledge base is shared with (not stored in database)",
-                    "type": "integer"
-                },
                 "storage_backend_id": {
                     "description": "StorageBackendID binds this KB to one concrete storage instance. The\nlegacy provider field remains readable during migration only.",
                     "type": "string"
@@ -18426,7 +14968,7 @@
                     "type": "integer"
                 },
                 "type": {
-                    "description": "Type of the knowledge base (document, faq, etc.)",
+                    "description": "Type of the knowledge base (document)",
                     "type": "string"
                 },
                 "updated_at": {
@@ -18434,7 +14976,7 @@
                     "type": "string"
                 },
                 "vector_store_id": {
-                    "description": "VectorStoreID references the VectorStore this knowledge base is bound to.\nWhen nil, the KB falls back to the workspace's effective engines derived from\nthe RETRIEVE_DRIVER environment variable (env store flow).\nThis field is set once at creation time and must not be modified afterwards;\nenforcement lives at the GORM layer (`\u003c-:create`) plus the service-layer\nKB update path, which omits this field from its update DTO.",
+                    "description": "VectorStoreID references the VectorStore this knowledge base is bound to.\nWhen nil, the KB falls back to the workspace's effective engines derived from\nthe RETRIEVE_DRIVER environment variable (env store flow).\nThis field is set once at creation time and must not be modified afterwards;\nenforcement lives at the GORM layer (`<-:create`) plus the service-layer\nKB update path, which omits this field from its update DTO.",
                     "type": "string"
                 },
                 "vlm_config": {
@@ -18474,14 +15016,6 @@
                         }
                     ]
                 },
-                "faq_config": {
-                    "description": "FAQ configuration (only for FAQ type knowledge bases)",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.FAQConfig"
-                        }
-                    ]
-                },
                 "image_processing_config": {
                     "description": "Image processing configuration",
                     "allOf": [
@@ -18505,62 +15039,6 @@
                             "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.WikiConfig"
                         }
                     ]
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.KnowledgeBaseShareResponse": {
-            "type": "object",
-            "properties": {
-                "chunk_count": {
-                    "type": "integer"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "knowledge_base_id": {
-                    "type": "string"
-                },
-                "knowledge_base_name": {
-                    "type": "string"
-                },
-                "knowledge_base_type": {
-                    "type": "string"
-                },
-                "knowledge_count": {
-                    "type": "integer"
-                },
-                "my_permission": {
-                    "description": "Effective permission for current user = min(Permission, MyRoleInOrg)",
-                    "type": "string"
-                },
-                "my_role_in_org": {
-                    "description": "Current user's role in this organization (admin/editor/viewer)",
-                    "type": "string"
-                },
-                "organization_id": {
-                    "type": "string"
-                },
-                "organization_name": {
-                    "type": "string"
-                },
-                "permission": {
-                    "description": "Share permission (what the space was granted: viewer/editor)",
-                    "type": "string"
-                },
-                "require_approval": {
-                    "type": "boolean"
-                },
-                "shared_by_user_id": {
-                    "type": "string"
-                },
-                "shared_by_username": {
-                    "type": "string"
-                },
-                "source_tenant_id": {
-                    "type": "integer"
                 }
             }
         },
@@ -18650,46 +15128,7 @@
             "type": "object",
             "properties": {
                 "members": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.OrganizationMemberResponse"
-                    }
-                },
-                "total": {
-                    "type": "integer"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.ListOrganizationsResponse": {
-            "type": "object",
-            "properties": {
-                "organizations": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.OrganizationResponse"
-                    }
-                },
-                "resource_counts": {
-                    "description": "各空间内知识库/智能体数量，供列表侧栏展示",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ResourceCountsByOrgResponse"
-                        }
-                    ]
-                },
-                "total": {
-                    "type": "integer"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.ListSharesResponse": {
-            "type": "object",
-            "properties": {
-                "shares": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.KnowledgeBaseShareResponse"
-                    }
+                    "type": "array"
                 },
                 "total": {
                     "type": "integer"
@@ -19093,7 +15532,7 @@
                     "type": "string"
                 },
                 "kb_type": {
-                    "description": "\"document\" or \"faq\" (only for kb type)",
+                    "description": "\"document\" (only for kb type)",
                     "type": "string"
                 },
                 "name": {
@@ -19535,159 +15974,6 @@
                 "ModelTypeASR"
             ]
         },
-        "github_com_Tencent_Reliquary_internal_types.OIDCAuthURLResponse": {
-            "type": "object",
-            "properties": {
-                "authorization_url": {
-                    "type": "string"
-                },
-                "provider_display_name": {
-                    "type": "string"
-                },
-                "state": {
-                    "type": "string"
-                },
-                "success": {
-                    "type": "boolean"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.OIDCConfigResponse": {
-            "type": "object",
-            "properties": {
-                "enabled": {
-                    "type": "boolean"
-                },
-                "provider_display_name": {
-                    "type": "string"
-                },
-                "success": {
-                    "type": "boolean"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.OrgMemberRole": {
-            "type": "string",
-            "enum": [
-                "admin",
-                "editor",
-                "viewer"
-            ],
-            "x-enum-varnames": [
-                "OrgRoleAdmin",
-                "OrgRoleEditor",
-                "OrgRoleViewer"
-            ]
-        },
-        "github_com_Tencent_Reliquary_internal_types.OrganizationMemberResponse": {
-            "type": "object",
-            "properties": {
-                "avatar": {
-                    "type": "string"
-                },
-                "email": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "joined_at": {
-                    "type": "string"
-                },
-                "representative_user_id": {
-                    "type": "string"
-                },
-                "role": {
-                    "type": "string"
-                },
-                "tenant_id": {
-                    "type": "integer"
-                },
-                "tenant_name": {
-                    "type": "string"
-                },
-                "user_id": {
-                    "type": "string"
-                },
-                "username": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.OrganizationResponse": {
-            "type": "object",
-            "properties": {
-                "agent_share_count": {
-                    "description": "共享到该组织的智能体数量",
-                    "type": "integer"
-                },
-                "avatar": {
-                    "type": "string"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "has_pending_upgrade": {
-                    "description": "当前用户是否有待处理的权限升级申请",
-                    "type": "boolean"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "invite_code": {
-                    "type": "string"
-                },
-                "invite_code_expires_at": {
-                    "type": "string"
-                },
-                "invite_code_validity_days": {
-                    "type": "integer"
-                },
-                "is_owner": {
-                    "type": "boolean"
-                },
-                "member_count": {
-                    "type": "integer"
-                },
-                "member_limit": {
-                    "description": "0 = unlimited",
-                    "type": "integer"
-                },
-                "my_role": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "owner_id": {
-                    "type": "string"
-                },
-                "owner_tenant_id": {
-                    "description": "OwnerTenantID is the persisted owner workspace of the organization\n(Plan 3, baseline schema). Frontend uses this to identify the\n\"owner row\" in the workspace-keyed members list — comparing\nmember.tenant_id against owner_tenant_id is the post-Plan-3\nequivalent of the old member.user_id == owner_id check.",
-                    "type": "integer"
-                },
-                "pending_join_request_count": {
-                    "description": "待审批加入申请数（仅管理员可见）",
-                    "type": "integer"
-                },
-                "require_approval": {
-                    "type": "boolean"
-                },
-                "searchable": {
-                    "type": "boolean"
-                },
-                "share_count": {
-                    "description": "共享到该组织的知识库数量",
-                    "type": "integer"
-                },
-                "updated_at": {
-                    "type": "string"
-                }
-            }
-        },
         "github_com_Tencent_Reliquary_internal_types.ParserEngineConfig": {
             "type": "object",
             "properties": {
@@ -19946,27 +16232,6 @@
                 }
             }
         },
-        "github_com_Tencent_Reliquary_internal_types.RequestRoleUpgradeRequest": {
-            "type": "object",
-            "required": [
-                "requested_role"
-            ],
-            "properties": {
-                "message": {
-                    "description": "Optional message explaining the reason",
-                    "type": "string",
-                    "maxLength": 500
-                },
-                "requested_role": {
-                    "description": "The role user wants to upgrade to",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.OrgMemberRole"
-                        }
-                    ]
-                }
-            }
-        },
         "github_com_Tencent_Reliquary_internal_types.Resource": {
             "type": "object",
             "properties": {
@@ -20006,33 +16271,6 @@
                 "url": {
                     "description": "URL to access in external system",
                     "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.ResourceCountsByOrgResponse": {
-            "type": "object",
-            "properties": {
-                "agents": {
-                    "type": "object",
-                    "properties": {
-                        "by_organization": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "integer"
-                            }
-                        }
-                    }
-                },
-                "knowledge_bases": {
-                    "type": "object",
-                    "properties": {
-                        "by_organization": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "integer"
-                            }
-                        }
-                    }
                 }
             }
         },
@@ -20150,26 +16388,6 @@
                 "VectorRetrieverType",
                 "WebSearchRetrieverType"
             ]
-        },
-        "github_com_Tencent_Reliquary_internal_types.ReviewJoinRequestRequest": {
-            "type": "object",
-            "properties": {
-                "approved": {
-                    "type": "boolean"
-                },
-                "message": {
-                    "type": "string",
-                    "maxLength": 500
-                },
-                "role": {
-                    "description": "Optional: role to assign when approving; overrides applicant's requested role",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.OrgMemberRole"
-                        }
-                    ]
-                }
-            }
         },
         "github_com_Tencent_Reliquary_internal_types.RuntimeTaskAction": {
             "type": "string",
@@ -20324,41 +16542,9 @@
         "github_com_Tencent_Reliquary_internal_types.SandboxNetworkPolicy": {
             "type": "object",
             "properties": {
-                "allow_out": {
-                    "description": "AllowOut accepts IPv4, IPv4 CIDR, a DNS name, or a single-label\nwildcard such as \"*.example.com\". Domain entries are only meaningful\ntogether with a deny-all; see ValidateSandboxNetworkPolicy.",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "allow_public_inbound": {
-                    "description": "AllowPublicInbound exposes the sandbox's public URL without a\ncredential. false requires every inbound request to carry the\nper-sandbox traffic access token.",
-                    "type": "boolean"
-                },
-                "cube_rules": {
-                    "description": "CubeRules are validated whenever present and consumed only by the Cube\nprovider adapter.",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.CubeEgressRule"
-                    }
-                },
                 "deny_egress_by_default": {
                     "description": "DenyEgressByDefault installs a 0.0.0.0/0 deny-all, after which only\nAllowOut (and L7 rule targets) can reach the network. false allows\npublic egress, which is what skill installs need.",
                     "type": "boolean"
-                },
-                "deny_out": {
-                    "description": "DenyOut accepts IPv4 and IPv4 CIDR only. Neither provider can deny a\ndomain: denial is a pure longest-prefix match on the destination IP.",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "e2b_host_rules": {
-                    "description": "E2BHostRules are validated whenever present and consumed only by the E2B\nprovider adapter.",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.E2BHostRule"
-                    }
                 }
             }
         },
@@ -20414,7 +16600,7 @@
                     "type": "boolean"
                 },
                 "tag_ids": {
-                    "description": "Tag IDs for filtering (used for FAQ priority filtering)",
+                    "description": "Tag IDs for filtering",
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -20464,7 +16650,7 @@
                     "type": "string"
                 },
                 "knowledge_channel": {
-                    "description": "KnowledgeChannel indicates through which channel the knowledge was ingested (web, api, wechat, etc.)",
+                    "description": "KnowledgeChannel indicates through which channel the knowledge was ingested (web, api, feishu, etc.)",
                     "type": "string"
                 },
                 "knowledge_custom_metadata": {
@@ -20500,7 +16686,7 @@
                     ]
                 },
                 "matched_content": {
-                    "description": "MatchedContent is the actual content that was matched in vector search\nFor FAQ: this is the matched question text (standard or similar question)",
+                    "description": "MatchedContent is the actual content that was matched in vector search\nMatched document text",
                     "type": "string"
                 },
                 "metadata": {
@@ -20553,7 +16739,7 @@
                     "type": "string"
                 },
                 "im_platform": {
-                    "description": "IMPlatform is the originating IM platform (e.g. \"feishu\", \"wecom\") when\nthis session is bound to an IM channel. It is not stored on the sessions\ntable (it lives in im_channel_sessions) and is populated on read so the\nWeb console can classify a session's origin folder without a list query.",
+                    "description": "IMPlatform is the originating IM platform (e.g. \"feishu\") when\nthis session is bound to an IM channel. It is not stored on the sessions\ntable (it lives in im_channel_sessions) and is populated on read so the\nWeb console can classify a session's origin folder without a list query.",
                     "type": "string"
                 },
                 "is_pinned": {
@@ -20643,21 +16829,6 @@
                 },
                 "web_search_enabled": {
                     "type": "boolean"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.ShareKnowledgeBaseRequest": {
-            "type": "object",
-            "required": [
-                "organization_id",
-                "permission"
-            ],
-            "properties": {
-                "organization_id": {
-                    "type": "string"
-                },
-                "permission": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.OrgMemberRole"
                 }
             }
         },
@@ -20806,31 +16977,6 @@
                 }
             }
         },
-        "github_com_Tencent_Reliquary_internal_types.SubmitJoinRequestRequest": {
-            "type": "object",
-            "required": [
-                "invite_code"
-            ],
-            "properties": {
-                "invite_code": {
-                    "type": "string",
-                    "maxLength": 32,
-                    "minLength": 8
-                },
-                "message": {
-                    "type": "string",
-                    "maxLength": 500
-                },
-                "role": {
-                    "description": "Optional: role the applicant requests (admin/editor/viewer); default viewer",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.OrgMemberRole"
-                        }
-                    ]
-                }
-            }
-        },
         "github_com_Tencent_Reliquary_internal_types.SuggestionAttribution": {
             "type": "object",
             "properties": {
@@ -20927,13 +17073,11 @@
                 "description": {
                     "type": "string"
                 },
-                "enum": {
-                    "description": "Enum is populated by the service layer (NOT persisted) from the\nin-code registry. Empty/nil means \"free-form input\"; non-empty\nmeans the UI should render a select with these options. Tagged\n`gorm:\"-\"` so GORM never tries to read/write the column.",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
+                "enum": [
+                    "description",
+                    "type",
+                    "items"
+                ],
                 "id": {
                     "type": "integer"
                 },
@@ -21117,18 +17261,12 @@
                     "description": "AllowPrivateEndpoints permits this workspace config to reach RFC1918 or\nloopback cluster endpoints. Link-local/cloud-metadata addresses remain\nblocked. It is explicit in the UI instead of hidden in process env.",
                     "type": "boolean"
                 },
-                "cube": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.CubeSandboxConfig"
-                },
                 "default_timeout_sec": {
                     "description": "DefaultTimeoutSec is the per-execution timeout in seconds. 0 uses the\nprogram's built-in default.",
                     "type": "integer"
                 },
                 "docker": {
                     "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.DockerSandboxConfig"
-                },
-                "e2b": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.E2BSandboxConfig"
                 },
                 "env_vars": {
                     "description": "EnvVars are additional environment variables injected into every\nsandbox created for this tenant. 🔒 Values are encrypted at rest.\nThese become visible to all scripts running in the tenant's\nsandboxes — do not place secrets here that scripts must not access.",
@@ -21146,7 +17284,7 @@
                     ]
                 },
                 "sandbox_type": {
-                    "description": "SandboxType is cube, e2b, or docker; disabled is the hidden policy row.",
+                    "description": "SandboxType is docker; disabled is the hidden policy row.",
                     "type": "string"
                 },
                 "skill_image": {
@@ -21160,14 +17298,6 @@
                 "skill_rollout": {
                     "description": "SkillRollout decides whether sessions that already hold a sandbox of\nthis config rebuild after a skill install or removal. Empty and\nSkillRolloutNextTurn rebuild on the next chat turn. SkillRolloutNewSession\nleaves those sandboxes on the previous image; only sessions that start\nafterwards boot the new snapshot.",
                     "type": "string"
-                },
-                "volume_mount": {
-                    "description": "VolumeMount configures an optional shared volume mounted into every\nsandbox created for this tenant. Currently used for tenant-installed\nskills, but the configuration itself is skill-agnostic and can serve\nany volume-mount use case (shared datasets, pre-installed toolchains,\netc.).",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.VolumeMountConfig"
-                        }
-                    ]
                 }
             }
         },
@@ -21289,56 +17419,7 @@
             "required": [
                 "role"
             ],
-            "properties": {
-                "role": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.OrgMemberRole"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.UpdateOrganizationRequest": {
-            "type": "object",
-            "properties": {
-                "avatar": {
-                    "description": "optional avatar URL",
-                    "type": "string",
-                    "maxLength": 512
-                },
-                "description": {
-                    "type": "string",
-                    "maxLength": 1000
-                },
-                "invite_code_validity_days": {
-                    "description": "0=never, 1, 7, 30",
-                    "type": "integer"
-                },
-                "member_limit": {
-                    "description": "max members; 0=unlimited",
-                    "type": "integer"
-                },
-                "name": {
-                    "type": "string",
-                    "maxLength": 255,
-                    "minLength": 1
-                },
-                "require_approval": {
-                    "type": "boolean"
-                },
-                "searchable": {
-                    "description": "open for search so others can discover and join",
-                    "type": "boolean"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.UpdateSharePermissionRequest": {
-            "type": "object",
-            "required": [
-                "permission"
-            ],
-            "properties": {
-                "permission": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.OrgMemberRole"
-                }
-            }
+            "properties": {}
         },
         "github_com_Tencent_Reliquary_internal_types.UsedMemory": {
             "type": "object",
@@ -21360,10 +17441,6 @@
                 "avatar": {
                     "description": "Avatar URL of the user",
                     "type": "string"
-                },
-                "can_access_all_tenants": {
-                    "description": "Whether the user can access all workspaces (cross-workspace access)",
-                    "type": "boolean"
                 },
                 "created_at": {
                     "description": "Creation time of the user",
@@ -21393,14 +17470,6 @@
                     "description": "Whether the user is a system administrator (independent of workspace roles)",
                     "type": "boolean"
                 },
-                "preferences": {
-                    "description": "Per-user UI/feature preferences.\nStored as JSON (jsonb on Postgres, TEXT on SQLite) via the\ndriver.Valuer / sql.Scanner methods on UserPreferences.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.UserPreferences"
-                        }
-                    ]
-                },
                 "tenant": {
                     "description": "Association relationship, not stored in the database",
                     "allOf": [
@@ -21429,9 +17498,6 @@
                 "avatar": {
                     "type": "string"
                 },
-                "can_access_all_tenants": {
-                    "type": "boolean"
-                },
                 "created_at": {
                     "type": "string"
                 },
@@ -21447,9 +17513,6 @@
                 "is_system_admin": {
                     "type": "boolean"
                 },
-                "preferences": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.UserPreferences"
-                },
                 "tenant_id": {
                     "type": "integer"
                 },
@@ -21458,19 +17521,6 @@
                 },
                 "username": {
                     "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.UserPreferences": {
-            "type": "object",
-            "properties": {
-                "last_active_tenant_id": {
-                    "description": "LastActiveTenantID remembers the last workspace the user actively\nswitched into, so a fresh login (new device, cleared browser, new\nrefresh token) lands them back in that workspace instead of always\nbouncing to their home workspace. Written by the SPA's preferences\nPUT and by service-level SwitchTenant (including when switching\nhome, which stores the home ID). Login / RefreshToken validate that\nthe workspace still exists and the user still has an active membership\n(or CanAccessAllTenants) before honouring this preference; an\ninvalid pointer is best-effort cleared and the user falls back to\nhome. Refresh JWT claims have no tenant_id, so RefreshToken\nre-resolves from this field.\n\nnil  = no preference (use user.TenantID, i.e. home)\n*0   = \"clear preference\" sentinel for the partial-update endpoint\n       (UpdateUserPreferences turns this into nil). Otherwise treat\n       a stored *0 the same as nil.\n*N   = preferred workspace id.",
-                    "type": "integer"
-                },
-                "oidc_only_login": {
-                    "description": "OidcOnlyLogin is set server-side when an account is auto-provisioned\nvia OIDC with a random password the user never received. The profile\nUI hides self-service password rotation until the user sets a known\npassword via ChangePassword (which clears this flag).",
-                    "type": "boolean"
                 }
             }
         },
@@ -21505,35 +17555,6 @@
                 },
                 "model_name": {
                     "description": "兼容老版本\nModel Name",
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.VolumeMountConfig": {
-            "type": "object",
-            "properties": {
-                "enabled": {
-                    "description": "Enabled toggles the volume mount for this tenant.",
-                    "type": "boolean"
-                },
-                "mount_path": {
-                    "description": "MountPath is the sandbox-internal path where the volume is mounted.\nDefault: /reliquary/tenant/skills (customizable per use case).",
-                    "type": "string"
-                },
-                "provider": {
-                    "description": "Provider identifies the volume backend. Currently \"e2b\" or \"cube\".",
-                    "type": "string"
-                },
-                "volume_id": {
-                    "description": "VolumeID is the provider-specific volume identifier, populated after\nEnsureVolume / CreateVolume succeeds.",
-                    "type": "string"
-                },
-                "volume_name": {
-                    "description": "VolumeName is the human-readable volume name, e.g.\n\"reliquary-tenant-\u003cid\u003e-skills\".",
-                    "type": "string"
-                },
-                "volume_owner_fingerprint": {
-                    "description": "VolumeOwnerFingerprint = sha256(provider + APIKey + APIURL).\nUsed to detect when the tenant switched to a different backend or\nAPI key, at which point the volume is no longer reachable and must\nbe recreated.",
                     "type": "string"
                 }
             }
@@ -21737,7 +17758,7 @@
                     "type": "integer"
                 },
                 "ingest_max_inflight": {
-                    "description": "IngestMaxInflight caps how many ingest batches for THIS KB may run\nconcurrently in the shared wiki worker pool (standard/Redis mode\nonly). 0 falls back to the hard-coded default (4). Since Phase 3\nremoved the exclusive per-KB lock, one KB's backlog could otherwise\nmonopolize the whole pool during a bulk import and starve other KBs;\nthis knob trades a single KB's peak throughput for cross-KB fairness.\nSet it \u003e= the wiki pool size to effectively disable the cap.",
+                    "description": "IngestMaxInflight caps how many ingest batches for THIS KB may run\nconcurrently in the shared wiki worker pool (standard/Redis mode\nonly). 0 falls back to the hard-coded default (4). Since Phase 3\nremoved the exclusive per-KB lock, one KB's backlog could otherwise\nmonopolize the whole pool during a bulk import and starve other KBs;\nthis knob trades a single KB's peak throughput for cross-KB fairness.\nSet it >= the wiki pool size to effectively disable the cap.",
                     "type": "integer"
                 },
                 "ingest_reduce_parallel": {
@@ -21948,7 +17969,7 @@
                     "type": "integer"
                 },
                 "truncated": {
-                    "description": "true when Returned \u003c Total (after filters)",
+                    "description": "true when Returned < Total (after filters)",
                     "type": "boolean"
                 }
             }
@@ -22146,7 +18167,7 @@
                     "type": "integer"
                 },
                 "source_refs": {
-                    "description": "References to source knowledge IDs that contributed to this page.\nFormat matches the legacy \"\u003cknowledge_id\u003e|\u003cdoc_title\u003e\" convention used\nacross the ingest pipeline, so retract / display code can split on `|`\nto recover the title. Document-level granularity.",
+                    "description": "References to source knowledge IDs that contributed to this page.\nFormat matches the legacy \"<knowledge_id>|<doc_title>\" convention used\nacross the ingest pipeline, so retract / display code can split on `|`\nto recover the title. Document-level granularity.",
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -22378,7 +18399,7 @@
                     "type": "string"
                 },
                 "version": {
-                    "description": "Version is the optimistic-lock guard: when \u003e 0 the update is rejected\nwith a conflict if the stored version differs (someone else edited the\npage since the client loaded it). 0 skips the check (legacy clients).",
+                    "description": "Version is the optimistic-lock guard: when > 0 the update is rejected\nwith a conflict if the stored version differs (someone else edited the\npage since the client loaded it). 0 skips the check (legacy clients).",
                     "type": "integer"
                 }
             }
@@ -22528,30 +18549,6 @@
                 },
                 "type": {
                     "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ModelType"
-                }
-            }
-        },
-        "internal_handler.CreateSystemUserResponse": {
-            "type": "object",
-            "properties": {
-                "generated_password": {
-                    "description": "GeneratedPassword is the plaintext password when the server\nauto-generated one. Absent when the caller supplied the password.",
-                    "type": "string"
-                },
-                "user": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.UserInfo"
-                }
-            }
-        },
-        "internal_handler.DeleteTagRequest": {
-            "type": "object",
-            "properties": {
-                "exclude_ids": {
-                    "description": "Chunk seq_ids to exclude from deletion",
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
                 }
             }
         },
@@ -23796,23 +19793,6 @@
                 }
             }
         },
-        "internal_handler.createTenantRequest": {
-            "type": "object",
-            "required": [
-                "name"
-            ],
-            "properties": {
-                "description": {
-                    "type": "string",
-                    "maxLength": 512
-                },
-                "name": {
-                    "type": "string",
-                    "maxLength": 128,
-                    "minLength": 1
-                }
-            }
-        },
         "internal_handler.invitationLookupRequest": {
             "type": "object",
             "required": [
@@ -23855,23 +19835,6 @@
                 },
                 "value": {
                     "description": "Value is unused by the delete endpoints. Clearing a value is a delete\nrather than a write of \"\", so a member always has one unambiguous way to\nrevoke.",
-                    "type": "string"
-                }
-            }
-        },
-        "internal_handler.platformAPIKeyCreateRequest": {
-            "type": "object",
-            "properties": {
-                "capabilities": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "expires_at_unix": {
-                    "type": "integer"
-                },
-                "name": {
                     "type": "string"
                 }
             }
@@ -23974,21 +19937,6 @@
                 }
             }
         },
-        "internal_handler.updateLastFAQImportResultDisplayStatusRequest": {
-            "type": "object",
-            "required": [
-                "display_status"
-            ],
-            "properties": {
-                "display_status": {
-                    "type": "string",
-                    "enum": [
-                        "open",
-                        "close"
-                    ]
-                }
-            }
-        },
         "internal_handler.updateMemberRoleRequest": {
             "type": "object",
             "required": [
@@ -23997,15 +19945,6 @@
             "properties": {
                 "role": {
                     "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.TenantRole"
-                }
-            }
-        },
-        "internal_handler.updateMyPreferencesRequest": {
-            "type": "object",
-            "properties": {
-                "last_active_tenant_id": {
-                    "description": "LastActiveTenantID lets clients persist \"after a fresh login,\ndrop me back into this workspace\" across devices. The SPA sends\nthis after every tenant switch; POST /auth/switch-tenant records\nthe same preference server-side. Send a positive workspace id to\nset / replace, or 0 to clear. Membership is validated at next\nlogin, not here. Nil = field omitted from the PATCH and stays\nuntouched.",
-                    "type": "integer"
                 }
             }
         },
@@ -24037,12 +19976,8 @@
                     "type": "boolean"
                 },
                 "agent_id": {
-                    "description": "Selected custom agent ID (backend resolves shared agent and its workspace from share relation)",
+                    "description": "Selected team agent ID",
                     "type": "string"
-                },
-                "agent_source_tenant_id": {
-                    "description": "Optional disambiguator; backend still verifies the share relation",
-                    "type": "integer"
                 },
                 "attachment_ids": {
                     "description": "Pre-uploaded session-scoped document IDs",
@@ -24192,7 +20127,7 @@
                     "type": "string"
                 },
                 "kb_type": {
-                    "description": "\"document\" or \"faq\" (only for kb type)",
+                    "description": "\"document\" (only for kb type)",
                     "type": "string"
                 },
                 "name": {
@@ -24284,7 +20219,7 @@
     },
     "securityDefinitions": {
         "ApiKeyAuth": {
-            "description": "API Key 认证：空间 Key 固定访问所属空间；平台 Key 调用空间接口时需同时传 X-Tenant-ID",
+            "description": "团队 API Key 认证，访问唯一团队空间",
             "type": "apiKey",
             "name": "X-API-Key",
             "in": "header"

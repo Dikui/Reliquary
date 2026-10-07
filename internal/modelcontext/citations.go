@@ -55,8 +55,7 @@ var (
 	publicKBAttrRE       = regexp.MustCompile(`(?i)\bkb_id\s*=\s*"([^"]*)"`)
 	urlAttrRE            = regexp.MustCompile(`(?i)\burl\s*=\s*"([^"]+)"`)
 	titleAttrRE          = regexp.MustCompile(`(?i)\btitle\s*=\s*"([^"]*)"`)
-	legacyChunkRE        = regexp.MustCompile(`(?is)<(?:chunk|faq)\b[^>]*>`)
-	faqAttrRE            = regexp.MustCompile(`(?i)\bfaq_id\s*=\s*"([^"]+)"`)
+	legacyChunkRE        = regexp.MustCompile(`(?is)<chunk\b[^>]*>`)
 	knowledgeTitleAttrRE = regexp.MustCompile(`(?i)\bknowledge_title\s*=\s*"([^"]*)"`)
 )
 
@@ -66,7 +65,7 @@ func (r *sourceRegistry) registerLegacyToolReferences(text string) {
 	}
 	r.registerLabeledReferences(text)
 	for _, tag := range legacyChunkRE.FindAllString(text, -1) {
-		chunkID := firstNonEmpty(publicAttr(chunkAttrRE, tag), publicAttr(faqAttrRE, tag))
+		chunkID := publicAttr(chunkAttrRE, tag)
 		if chunkID == "" {
 			continue
 		}

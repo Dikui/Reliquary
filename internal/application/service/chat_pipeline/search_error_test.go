@@ -157,8 +157,8 @@ func (s *vectorOnlySearchKnowledgeBaseService) GetKnowledgeBasesByIDsOnly(
 	context.Context, []string,
 ) ([]*types.KnowledgeBase, error) {
 	return []*types.KnowledgeBase{{
-		ID:               "faq-1",
-		Type:             types.KnowledgeBaseTypeFAQ,
+		ID:               "document-1",
+		Type:             types.KnowledgeBaseTypeDocument,
 		EmbeddingModelID: "embedding-1",
 		IndexingStrategy: types.IndexingStrategy{VectorEnabled: true},
 	}}, nil
@@ -167,7 +167,7 @@ func (s *vectorOnlySearchKnowledgeBaseService) GetKnowledgeBasesByIDsOnly(
 func (s *vectorOnlySearchKnowledgeBaseService) ResolveEmbeddingModelKeys(
 	context.Context, []*types.KnowledgeBase,
 ) map[string]string {
-	return map[string]string{"faq-1": "doubao|https://ark.cn-beijing.volces.com/api/v3"}
+	return map[string]string{"document-1": "doubao|https://ark.cn-beijing.volces.com/api/v3"}
 }
 
 func (s *vectorOnlySearchKnowledgeBaseService) GetQueryEmbedding(
@@ -191,7 +191,7 @@ func TestSearchEmbeddingFailureOnVectorOnlyTargetPreservesRootCause(t *testing.T
 		PipelineRequest: types.PipelineRequest{
 			SearchTargets: types.SearchTargets{{
 				Type:            types.SearchTargetTypeKnowledgeBase,
-				KnowledgeBaseID: "faq-1",
+				KnowledgeBaseID: "document-1",
 			}},
 			EmbeddingTopK: 10,
 		},

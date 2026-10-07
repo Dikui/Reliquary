@@ -81,7 +81,7 @@ var queueDefinitions = []QueueDefinition{
 	{Name: QueueMemory, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeMemoryExtract}},
 	{Name: QueueSync, Pool: WorkerPoolMaintenance, Weight: 2, TaskTypes: []string{TypeDataSourceSync}},
 	{Name: QueueMaintenance, Pool: WorkerPoolMaintenance, Weight: 1, TaskTypes: []string{
-		TypeKnowledgeWorkflowRun, TypeFAQImport, TypeKBClone, TypeIndexDelete, TypeKBDelete,
+		TypeKnowledgeWorkflowRun, TypeKBClone, TypeKBDelete,
 		TypeKnowledgeListDelete, TypeKnowledgeListReparse, TypeKnowledgeMove,
 	}},
 	{Name: QueueWiki, Pool: WorkerPoolWiki, Weight: 1, TaskTypes: []string{TypeWikiIngest, TypeWikiFinalize}},
@@ -233,11 +233,9 @@ type WorkerServerStat struct {
 
 const (
 	TypeDocumentProcess          = "document:process"       // 文档处理任务
-	TypeFAQImport                = "faq:import"             // FAQ导入任务（包含dry run模式）
 	TypeQuestionGeneration       = "question:generation"    // 问题生成任务
 	TypeSummaryGeneration        = "summary:generation"     // 摘要生成任务
 	TypeKBClone                  = "kb:clone"               // 知识库复制任务
-	TypeIndexDelete              = "index:delete"           // 索引删除任务
 	TypeKBDelete                 = "kb:delete"              // 知识库删除任务
 	TypeKnowledgeListDelete      = "knowledge:list_delete"  // 批量删除知识任务
 	TypeKnowledgeListReparse     = "knowledge:list_reparse" // 批量重解析知识任务
@@ -300,22 +298,6 @@ type DocumentProcessPayload struct {
 	// retried spans overwrite the previous attempt's row rather than
 	// fan out into a new attempt for every retry.
 	Attempt int `json:"attempt,omitempty"`
-}
-
-// FAQImportPayload represents the FAQ import task payload (including dry run mode)
-type FAQImportPayload struct {
-	TenantID    uint64            `json:"tenant_id"`
-	TaskID      string            `json:"task_id"`
-	KBID        string            `json:"kb_id"`
-	KnowledgeID string            `json:"knowledge_id,omitempty"` // 仅非 dry run 模式需要
-	Entries     []FAQEntryPayload `json:"entries,omitempty"`      // 小数据量时直接存储在 payload 中
-	EntriesURL  string            `json:"entries_url,omitempty"`  // 大数据量时存储到对象存储，这里存储 URL
-	EntryCount  int               `json:"entry_count,omitempty"`  // 条目总数（使用 EntriesURL 时需要）
-	Mode        string            `json:"mode"`
-	DryRun      bool              `json:"dry_run"`     // dry run 模式只验证不导入
-	EnqueuedAt  int64             `json:"enqueued_at"` // 任务入队时间戳，用于区分同一 TaskID 的不同次提交
-	InstanceID  string            `json:"instance_id,omitempty"`
-	Initiator   TaskInitiator     `json:"initiator,omitempty"`
 }
 
 // QuestionGenerationPayload represents the question generation task payload
@@ -384,20 +366,6 @@ type KBClonePayload struct {
 	SourceID  string        `json:"source_id"`
 	TargetID  string        `json:"target_id"`
 	Initiator TaskInitiator `json:"initiator,omitempty"`
-}
-
-// IndexDeletePayload represents the index delete task payload
-type IndexDeletePayload struct {
-	TenantID         uint64                  `json:"tenant_id"`
-	KnowledgeBaseID  string                  `json:"knowledge_base_id"`
-	EmbeddingModelID string                  `json:"embedding_model_id"`
-	KBType           string                  `json:"kb_type"`
-	ChunkIDs         []string                `json:"chunk_ids"`
-	EffectiveEngines []RetrieverEngineParams `json:"effective_engines"`
-	// VectorStoreID is the bound store snapshot taken at enqueue time so the
-	// async worker can resolve the same store the KB was bound to.
-	// nil means the KB had no binding — falls back to EffectiveEngines.
-	VectorStoreID *string `json:"vector_store_id,omitempty"`
 }
 
 // KBDeletePayload represents the knowledge base delete task payload

@@ -6,7 +6,7 @@
                 mentionTagClass(item)
             ]">
                 <span class="tag_icon">
-                    <t-icon v-if="item.type === 'kb'" :name="item.kb_type === 'faq' ? 'chat-bubble-help' : 'folder'" />
+                    <t-icon v-if="item.type === 'kb'" :name="false ? 'chat-bubble-help' : 'folder'" />
                     <t-icon v-else :name="mentionTagIcon(item)" />
                 </span>
                 <span class="tag_name">{{ item.name }}</span>
@@ -58,7 +58,7 @@ import { SKILL_ICON } from '@/types/mention';
 const { t } = useI18n();
 
 const mentionTagClass = (item) => {
-    if (item.type === 'kb') return item.kb_type === 'faq' ? 'faq-tag' : 'kb-tag';
+    if (item.type === 'kb') return 'kb-tag';
     return `${item.type || 'file'}-tag`;
 };
 

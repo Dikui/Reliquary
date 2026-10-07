@@ -41,20 +41,11 @@ var contextCloneAcrossDetach = map[ContextKey]bool{
 	// hand background work broader reach than the key it came from.
 	TenantAPIKeyScopeContextKey: true,
 
-	// Session scope. SessionTenantID re-scopes session/message lookups, while
-	// SandboxTenantID keys the session→sandbox binding to the session owner
-	// even when a shared agent borrowed another tenant. Dropping the latter
-	// would silently re-key every binding onto the borrowed tenant, because
-	// setupSSEStream builds its async context through CloneContext, and
-	// abandon a paused MicroVM that keeps billing.
 	SessionIDContextKey:       true,
-	SessionTenantIDContextKey: true,
 	SandboxTenantIDContextKey: true,
 
-	// Embed callers: the anonymous visitor id isolates embed OAuth, so losing
 	// it would merge visitors together.
-	EmbedQueryContextKey:   true,
-	EmbedVisitorContextKey: true,
+	EmbedQueryContextKey: true,
 
 	// Diagnostics and presentation that background work is expected to keep.
 	LoggerContextKey:    true,
@@ -103,10 +94,7 @@ var contextCloneAcrossDetach = map[ContextKey]bool{
 	// one attachment's file type. Read by the attachment processor on the same
 	// context that set it, and meaningless for anything else.
 	ChatParserEngineContextKey: false,
-	// The authenticated embed channel. Every reader takes it straight off the
-	// request context inside the embed handler that authenticated it; nothing
 	// downstream of a detach reads it.
-	EmbedChannelContextKey: false,
 }
 
 // ContextKeysClonedAcrossDetach returns the keys logger.CloneContext carries

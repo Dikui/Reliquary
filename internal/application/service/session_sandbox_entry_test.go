@@ -33,7 +33,7 @@ func (m *artifactFallbackManager) Execute(context.Context, *sandbox.ExecuteConfi
 func (m *artifactFallbackManager) Cleanup(context.Context) error { return nil }
 func (m *artifactFallbackManager) GetSandbox() sandbox.Sandbox   { return nil }
 func (m *artifactFallbackManager) GetType() sandbox.SandboxType {
-	return sandbox.SandboxTypeCube
+	return sandbox.SandboxTypeDocker
 }
 
 func (m *artifactFallbackManager) ListSessionFiles(ctx context.Context, sessionID, dir string) ([]sandbox.RemoteDirEntry, error) {
@@ -102,7 +102,7 @@ func TestArtifactSessionSourceSkipsUnpinnedSession(t *testing.T) {
 // session as having no sandbox.
 func TestArtifactSessionSourceResolvesNamedPin(t *testing.T) {
 	pinner := NewSessionSandboxPinner(newPinTestDB(t))
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
 	_, err := pinner.Pin(ctx, "s-1", "cfg-docker")
 	require.NoError(t, err)
 

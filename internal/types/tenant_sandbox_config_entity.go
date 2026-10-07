@@ -1,9 +1,3 @@
-// Package types: sandbox backend config entity.
-//
-// A workspace holds several named sandbox configs so different agents can run
-// on different backends (e.g. a big-memory E2B account for data analysis, a
-// self-hosted Cube for everything else). The credential-bearing payload lives
-// in Config, reusing TenantSandboxConfig's encrypted Value/Scan hooks.
 package types
 
 import (

@@ -325,29 +325,25 @@ func (r *cleanupTokenRepo) RevokeTokensByUserID(_ context.Context, userID string
 	return nil
 }
 
-func TestTenantMemberService_RemoveMember_ClearsStaleHomeAndRevokesTokens(t *testing.T) {
+func TestTenantMemberService_RemoveMemberKeepsTeamAndRevokesTokens(t *testing.T) {
 	memberRepo := newFakeRepo()
-	prefTenant := uint64(7)
 	userRepo := &cleanupUserRepo{users: map[string]*types.User{
 		"contrib": {
 			ID:       "contrib",
-			TenantID: 7,
-			Preferences: types.UserPreferences{
-				LastActiveTenantID: &prefTenant,
-			},
+			TenantID: 1,
 		},
 	}}
 	tokenRepo := &cleanupTokenRepo{}
 	svc := NewTenantMemberService(memberRepo, nil, userRepo, tokenRepo)
 	ctx := context.Background()
 
-	if _, err := svc.EnsureOwner(ctx, "owner", 7); err != nil {
+	if _, err := svc.EnsureOwner(ctx, "owner", 1); err != nil {
 		t.Fatalf("seed owner: %v", err)
 	}
-	if _, err := svc.AddMember(ctx, "contrib", 7, types.TenantRoleContributor, nil); err != nil {
+	if _, err := svc.AddMember(ctx, "contrib", 1, types.TenantRoleContributor, nil); err != nil {
 		t.Fatalf("seed contributor: %v", err)
 	}
-	if err := svc.RemoveMember(ctx, "contrib", 7); err != nil {
+	if err := svc.RemoveMember(ctx, "contrib", 1); err != nil {
 		t.Fatalf("RemoveMember: %v", err)
 	}
 
@@ -355,11 +351,8 @@ func TestTenantMemberService_RemoveMember_ClearsStaleHomeAndRevokesTokens(t *tes
 	if got == nil {
 		t.Fatal("user missing after cleanup")
 	}
-	if got.TenantID != 0 {
-		t.Fatalf("TenantID = %d, want 0 after home membership removal", got.TenantID)
-	}
-	if got.Preferences.LastActiveTenantID != nil {
-		t.Fatalf("LastActiveTenantID = %v, want nil", got.Preferences.LastActiveTenantID)
+	if got.TenantID != 1 {
+		t.Fatalf("TenantID = %d, want 1 after team membership removal", got.TenantID)
 	}
 	if len(tokenRepo.revoked) != 1 || tokenRepo.revoked[0] != "contrib" {
 		t.Fatalf("revoked users = %v, want [contrib]", tokenRepo.revoked)
@@ -643,3 +636,6 @@ func TestTenantRole_HasPermission(t *testing.T) {
 		}
 	}
 }
+
+func (r *cleanupUserRepo) HasTeamUsers(context.Context) (bool, error)                  { return len(r.users) > 0, nil }
+func (r *cleanupUserRepo) RegisterTeamUser(context.Context, *types.User, string) error { return nil }

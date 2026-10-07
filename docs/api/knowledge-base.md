@@ -4,10 +4,10 @@
 
 **字段说明（知识库对象）**
 
-- 知识库类型 `type` 为 `document`（文档）或 `faq`（FAQ），默认 `document`。
+- 知识库类型 `type` 为 `document`（文档）。
 - JSON 中对象存储相关字段：**`storage_config`** 为序列化字段名（对应数据库列 `cos_config`，兼容旧数据）。旧客户端若仍发送或接收 `cos_config`，服务端会兼容解析；新集成请使用 **`storage_config`**。
 - **`storage_provider_config`** 为新版存储提供者选择（如 `{"provider": "local"}`），与空间级存储引擎凭证配合使用；无配置时可为 `null`。
-- 嵌套配置对象：`chunking_config`、`image_processing_config`、`vlm_config`、`asr_config`、`faq_config`、`question_generation_config`、`auto_tag_config`。其中 `faq_config`、`question_generation_config`、`auto_tag_config` 允许为 `null`。
+- 嵌套配置对象：`chunking_config`、`image_processing_config`、`vlm_config`、`asr_config`、`question_generation_config`、`auto_tag_config`。其中 `question_generation_config`、`auto_tag_config` 允许为 `null`。
 - **`vector_store_id`** 为知识库绑定的向量存储 ID（参见 [vector-store.md](./vector-store.md)）。未指定（或 `null`/`""`）时使用空间级默认的环境变量存储；一旦创建即不可修改。详情接口返回时会附带 `vector_store_name` / `vector_store_source` / `vector_store_engine_type` / `vector_store_status` 四个只读元数据字段，用于前端展示。
 
 | 方法   | 路径                                      | 描述                     |
@@ -33,7 +33,7 @@
 | ----------------------------- | ------- | ---- | --------------------------------------------------------------- |
 | name                          | string  | 是   | 知识库名称                                                      |
 | description                   | string  | 否   | 知识库描述                                                      |
-| type                          | string  | 否   | 知识库类型：`document`（默认）或 `faq`                          |
+| type                          | string  | 否   | 知识库类型：`document`（默认）                          |
 | is_temporary                  | boolean | 否   | 是否为临时知识库（默认 `false`，临时库通常不在 UI 列表中显示）  |
 | chunking_config               | object  | 否   | 分块配置（见下方示例）                                          |
 | image_processing_config       | object  | 否   | 图片处理配置                                                    |
@@ -43,7 +43,6 @@
 | asr_config                    | object  | 否   | ASR（语音识别）配置                                             |
 | storage_provider_config       | object  | 否   | 存储提供者选择，如 `{"provider": "local"}`                      |
 | storage_config                | object  | 否   | 兼容字段，新集成留空即可                   |
-| faq_config                    | object  | 否   | FAQ 配置（仅 FAQ 类型知识库需要）                               |
 | question_generation_config    | object  | 否   | 问题生成配置                                                    |
 | auto_tag_config               | object  | 否   | 文档自动标签配置，默认关闭；仅适用于 `document` 类型知识库      |
 | vector_store_id               | string  | 否   | 绑定的向量存储 ID。不传或为空字符串等同于 `null`（使用环境变量默认存储）。指定时必须是调用者所在空间拥有的向量存储 UUID；创建后不可修改。无效 UUID / 跨空间 / 未注册到引擎的 ID 会返回 `400` |
@@ -101,7 +100,6 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases' \
         "app_id": "",
         "path_prefix": ""
     },
-    "faq_config": null,
     "question_generation_config": {
         "enabled": false,
         "question_count": 3
@@ -169,7 +167,6 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases' \
             "app_id": "",
             "path_prefix": ""
         },
-        "faq_config": null,
         "question_generation_config": {
             "enabled": false,
             "question_count": 3
@@ -218,9 +215,9 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases' \
 | 字段                       | 类型   | 说明                                                                                                       |
 | -------------------------- | ------ | ---------------------------------------------------------------------------------------------------------- |
 | `vector_store_id`          | string | 绑定的向量存储 ID（创建时未指定时为 `null`，从响应中省略）                                                  |
-| `vector_store_name`        | string | 绑定存储的展示名。未绑定时返回 `"System default"`；跨空间共享 KB 视图中被隐藏                              |
+| `vector_store_name`        | string | 绑定存储的展示名。未绑定时返回 `"System default"`                              |
 | `vector_store_source`      | string | `"user"`（DB 中创建的存储）/ `"env"`（环境变量虚拟存储）/ `"shared"`（跨空间共享 KB）/ `"unavailable"`（绑定的存储已不可解析） |
-| `vector_store_engine_type` | string | 引擎类型（固定为 `postgres`）。`shared` / `unavailable` 时为空                       |
+| `vector_store_engine_type` | string | 引擎类型（固定为 `postgres`）。`unavailable` 时为空                       |
 | `vector_store_status`      | string | `"available"` / `"unavailable"`。`unavailable` 表示绑定的存储已被删除或不在内存注册表中，UI 可据此提示用户重新绑定 |
 
 **错误码（Phase 2 新增）**:
@@ -232,13 +229,7 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases' \
 
 ## GET `/knowledge-bases` - 获取知识库列表
 
-返回当前空间拥有的全部知识库。当传入 `agent_id` 时，校验调用者对该共享智能体的访问权限后，返回该智能体配置可见的知识库范围（用于 `@` 提及）。
-
-**Query 参数**:
-
-| 字段     | 类型   | 必填 | 说明                                                       |
-| -------- | ------ | ---- | ---------------------------------------------------------- |
-| agent_id | string | 否   | 共享智能体 ID；传入时按智能体配置（`all` / `selected` / `none`）过滤可见知识库 |
+返回团队全部知识库。
 
 **请求**:
 
@@ -248,25 +239,19 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases' \
 --header 'X-API-Key: sk-xxxxx'
 ```
 
-**响应**: `data` 为数组，每个元素的字段结构同 `POST /knowledge-bases` 响应，并额外携带 `knowledge_count` / `chunk_count` / `processing_count` / `share_count` / `is_pinned` / `pinned_at` 这些聚合与状态字段。
+**响应**: `data` 为数组，每个元素的字段结构同 `POST /knowledge-bases` 响应，并额外携带 `knowledge_count` / `chunk_count` / `processing_count` / `is_pinned` / `pinned_at` 这些聚合与状态字段。
 
 > **注意（Phase 2）**：列表接口不包含 `vector_store_name` / `vector_store_source` / `vector_store_engine_type` / `vector_store_status` 这四个解析后的元数据字段（避免 N+1 查询）；仅 `vector_store_id` 来自数据库本身。需要展示存储名称时请单独调用详情接口或 `/vector-stores/:id`。
 
 ## GET `/knowledge-bases/:id` - 获取知识库详情
 
-根据 ID 获取知识库详情。当通过共享智能体访问时，可传 `agent_id` 进行权限校验；此时返回对象会附加 `my_permission` 字段以指示当前用户对该知识库的角色（如 `viewer`）。
+根据 ID 获取团队知识库详情。
 
 **路径参数**:
 
 | 字段 | 类型   | 说明      |
 | ---- | ------ | --------- |
 | id   | string | 知识库 ID |
-
-**Query 参数**:
-
-| 字段     | 类型   | 必填 | 说明                                       |
-| -------- | ------ | ---- | ------------------------------------------ |
-| agent_id | string | 否   | 共享智能体 ID（用于校验该智能体是否有权访问） |
 
 **请求**:
 
@@ -276,11 +261,11 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases/kb-00000001' \
 --header 'X-API-Key: sk-xxxxx'
 ```
 
-**响应**: 字段结构同 `POST /knowledge-bases` 响应（包含 Phase 2 的 `vector_store_*` 元数据字段），并附 `is_pinned` / `pinned_at` / `knowledge_count` / `chunk_count` / `processing_count` 状态字段。通过共享智能体访问时还会附加 `my_permission`；同时 `vector_store_name` / `vector_store_engine_type` 会被隐藏（`vector_store_source` 返回 `"shared"`），避免跨空间泄漏存储展示名。
+**响应**: 字段结构同 `POST /knowledge-bases` 响应（包含 Phase 2 的 `vector_store_*` 元数据字段），并附 `is_pinned` / `pinned_at` / `knowledge_count` / `chunk_count` / `processing_count` 状态字段。
 
 ## PUT `/knowledge-bases/:id` - 更新知识库
 
-仅知识库 owner（admin）或具备 `editor` 权限的用户可调用。注意：**`vector_store_id` 在创建后不可修改**，更新接口不接收该字段。
+owner / admin / contributor 可调用。注意：**`vector_store_id` 在创建后不可修改**，更新接口不接收该字段。
 
 **路径参数**:
 
@@ -294,7 +279,7 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases/kb-00000001' \
 | ----------- | ------ | ---- | ------------------------------------------------------------- |
 | name        | string | 是   | 知识库名称                                                    |
 | description | string | 否   | 知识库描述                                                    |
-| config      | object | 否   | 更新配置；包含 `chunking_config` / `image_processing_config` / `faq_config` / `wiki_config` / `indexing_strategy` |
+| config      | object | 否   | 更新配置；包含 `chunking_config` / `image_processing_config` / `wiki_config` / `indexing_strategy` |
 
 **请求**:
 
@@ -412,7 +397,7 @@ curl --location --request PUT 'http://localhost:8080/api/v1/knowledge-bases/kb-0
 | disable_keywords_match   | boolean  | 否   | 关闭关键词召回                                                   |
 | disable_vector_match     | boolean  | 否   | 关闭向量召回                                                     |
 | knowledge_ids            | string[] | 否   | 仅在指定的知识 ID 范围内召回                                     |
-| tag_ids                  | string[] | 否   | 标签过滤（FAQ 类型常用于优先级过滤）                             |
+| tag_ids                  | string[] | 否   | 标签过滤                             |
 | only_recommended         | boolean  | 否   | 仅返回标记为推荐的内容                                           |
 | knowledge_base_ids       | string[] | 否   | 跨知识库召回（需共享相同 embedding 模型），优先级高于路径中的 `:id` |
 | skip_context_enrichment  | boolean  | 否   | 跳过父子片段/相邻片段的上下文补全（chat 流程使用）               |
@@ -561,7 +546,6 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases/copy/progress/kb_c
 
 ## POST `/knowledge-bases/:id/duplicate` - 创建知识库副本
 
-同步创建一个**仅包含设置**的新知识库副本。会复制分块、模型、索引策略、Wiki/FAQ 配置等设置字段，但**不会**复制知识条目、分块内容、FAQ 条目、Wiki 页面、向量/关键词索引、数据源绑定、分享关系或置顶状态。
 
 与 `POST /knowledge-bases/copy` 的区别：
 
@@ -701,7 +685,6 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases/kb-00000001/move-t
                 "app_id": "",
                 "path_prefix": ""
             },
-            "faq_config": null,
             "question_generation_config": null,
             "is_pinned": false,
             "pinned_at": null,

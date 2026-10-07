@@ -25,7 +25,6 @@ const (
 	CapKeyword KBCapability = "keyword"
 	CapWiki    KBCapability = "wiki"
 	CapGraph   KBCapability = "graph"
-	CapFAQ     KBCapability = "faq"
 )
 
 // ToolRequirement declares what a tool needs from the KB scope.
@@ -93,8 +92,6 @@ func hasCap(caps types.KBCapabilities, c KBCapability) bool {
 		return caps.Wiki
 	case CapGraph:
 		return caps.Graph
-	case CapFAQ:
-		return caps.FAQ
 	}
 	return false
 }

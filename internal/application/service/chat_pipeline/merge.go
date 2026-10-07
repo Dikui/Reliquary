@@ -30,17 +30,6 @@ func (p *PluginMerge) ActivationEvents() []types.EventType {
 	return []types.EventType{types.CHUNK_MERGE}
 }
 
-// OnEvent processes the CHUNK_MERGE event to merge search result chunks.
-// The merge pipeline is:
-//  1. Select input (rerank or search fallback)
-//  2. Deduplicate by ID and content signature
-//  3. Inject relevant history references
-//  4. Resolve parent chunks (child → parent content)
-//  5. Group by knowledge source + chunk type, merge sequential current bodies
-//  6. Populate FAQ answers
-//  7. Expand short contexts with neighboring chunks
-//     7.5. Re-merge sequential or contained bodies introduced by expansion
-//  8. Final deduplication (ID + signature + partial content overlap)
 func (p *PluginMerge) OnEvent(ctx context.Context,
 	eventType types.EventType, chatManage *types.ChatManage, next func() *PluginError,
 ) *PluginError {
@@ -78,9 +67,6 @@ func (p *PluginMerge) OnEvent(ctx context.Context,
 
 	// Step 5: Group by knowledge/chunkType and merge overlapping ranges
 	mergedChunks := p.groupAndMergeCurrentContent(ctx, searchResult)
-
-	// Step 6: Populate FAQ answers
-	mergedChunks = p.populateFAQAnswers(ctx, chatManage, mergedChunks)
 
 	// Step 7: Expand short contexts
 	mergedChunks = p.expandShortContextWithNeighbors(ctx, chatManage, mergedChunks)

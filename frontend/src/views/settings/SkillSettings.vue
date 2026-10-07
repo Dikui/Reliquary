@@ -509,20 +509,8 @@ function recordFor(id: string): SandboxConfigRecord | undefined {
 function backendLabel(type: string): string {
   return t(`settings.sandbox.backends.${type}`)
 }
+function sandboxTargetLine(record: SandboxConfigRecord): string { return record.config?.docker?.image?.trim() || '' }
 
-function sandboxTargetLine(record: SandboxConfigRecord): string {
-  if (record.sandbox_type === 'docker') {
-    return record.config?.docker?.image?.trim() || ''
-  }
-  const remote = record.config?.e2b || record.config?.cube
-  const raw = remote?.api_url?.trim() || ''
-  if (!raw) return ''
-  try {
-    return new URL(raw).host
-  } catch {
-    return raw
-  }
-}
 
 function sandboxMetaLine(record: SandboxConfigRecord): string {
   const type = backendLabel(record.sandbox_type)

@@ -189,14 +189,13 @@ type SearchResult struct {
 	// Used to indicate the source of the knowledge, such as "url"
 	KnowledgeSource string `json:"knowledge_source"`
 
-	// KnowledgeChannel indicates through which channel the knowledge was ingested (web, api, wechat, etc.)
+	// KnowledgeChannel indicates through which channel the knowledge was ingested (web, api, feishu, etc.)
 	KnowledgeChannel string `json:"knowledge_channel"`
 
 	// ChunkMetadata stores chunk-level metadata (e.g., generated questions)
 	ChunkMetadata JSON `json:"chunk_metadata,omitempty"`
 
 	// MatchedContent is the actual content that was matched in vector search
-	// For FAQ: this is the matched question text (standard or similar question)
 	MatchedContent string `json:"matched_content,omitempty"`
 
 	// KnowledgeDescription is the description of the knowledge document
@@ -238,7 +237,7 @@ type SearchParams struct {
 	DisableKeywordsMatch bool      `json:"disable_keywords_match"`
 	DisableVectorMatch   bool      `json:"disable_vector_match"`
 	KnowledgeIDs         []string  `json:"knowledge_ids"`
-	TagIDs               []string  `json:"tag_ids"` // Tag IDs for filtering (used for FAQ priority filtering)
+	TagIDs               []string  `json:"tag_ids"`
 	ScopeTagIDs          []string  `json:"scope_tag_ids,omitempty"`
 	OnlyRecommended      bool      `json:"only_recommended"`
 	// KnowledgeBaseIDs overrides the single KB ID passed to HybridSearch,

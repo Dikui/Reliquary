@@ -566,7 +566,6 @@ const runtimeTaskTypeKeys: Record<string, string> = {
   'image:multimodal': 'multimodal',
   'chunk:extract': 'graph',
   'datasource:sync': 'sync',
-  'faq:import': 'faqImport',
   'knowledge:list_reparse': 'batchReparse',
   'knowledge:list_delete': 'batchDelete',
   'knowledge:move': 'move',

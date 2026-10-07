@@ -106,7 +106,7 @@ Agent 引擎执行经典 ReAct 循环：
 - 故障排查：\`docs/QA.md\`
 - 路线图：\`docs/ROADMAP.md\``
 
-const FAQ_SAMPLE = `# Reliquary 部署与使用 FAQ
+const SUPPORT_SAMPLE = `# Reliquary 部署与使用 使用指南
 
 本文档汇总社区与内部用户最常问到的问题，按"安装 / 配置 / 检索 / 模型 / 性能"分类。
 
@@ -215,7 +215,7 @@ const CHAPTER_SAMPLE = `第 1 章 引言
 
 2.2.1 用户与权限
 
-用户、组织、共享空间、角色与权限规则集中在 user-service 中。RBAC 模型支持继承与覆盖，外部 OIDC 接入通过适配层完成。
+用户、团队成员、角色与权限规则集中在 user-service 中。团队角色决定成员可执行的操作。
 
 2.2.2 内容与索引
 
@@ -279,7 +279,7 @@ const PLAIN_SAMPLE = `知识库的检索质量受多个因素影响，最直接�
 
 export const CHUNKING_SAMPLES: ChunkingSample[] = [
   { id: "markdown", labelKey: "samples.markdown", text: MARKDOWN_SAMPLE },
-  { id: "faq", labelKey: "samples.faq", text: FAQ_SAMPLE },
+  { id: "support", labelKey: "samples.support", text: SUPPORT_SAMPLE },
   { id: "chapter", labelKey: "samples.chapter", text: CHAPTER_SAMPLE },
   { id: "plain", labelKey: "samples.plain", text: PLAIN_SAMPLE },
 ];

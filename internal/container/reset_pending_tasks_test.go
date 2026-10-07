@@ -200,8 +200,9 @@ func TestRecoverPendingWikiTasks_RecreatesOneTriggerPerLaneAndKB(t *testing.T) {
 	db := setupResetPendingDB(t)
 	require.NoError(t, db.Exec(
 		`INSERT INTO knowledge_bases (id, tenant_id, deleted_at)
-		 VALUES (?, ?, NULL), (?, ?, NULL), (?, ?, ?)`,
-		"kb-a", 7, "kb-b", 8, "kb-deleted", 9, time.Now(),
+		 VALUES (?, ?, NULL), (?, ?, NULL), (?, ?, ?), (?, ?, NULL)`,
+		"kb-a", types.SingleTenantID, "kb-b", types.SingleTenantID,
+		"kb-deleted", types.SingleTenantID, time.Now(), "kb-other", 2,
 	).Error)
 	rows := []struct {
 		tenantID uint64
@@ -209,12 +210,13 @@ func TestRecoverPendingWikiTasks_RecreatesOneTriggerPerLaneAndKB(t *testing.T) {
 		kbID     string
 		dedup    string
 	}{
-		{7, types.TypeWikiIngest, "kb-a", "k-1"},
-		{7, types.TypeWikiIngest, "kb-a", "k-2"}, // same lane: one trigger
-		{7, types.TypeWikiFinalize, "kb-a", "slug-a"},
-		{8, types.TypeWikiIngest, "kb-b", "k-3"},
-		{9, types.TypeWikiIngest, "kb-deleted", "k-deleted"},
-		{10, types.TypeWikiFinalize, "kb-missing", "k-missing"},
+		{types.SingleTenantID, types.TypeWikiIngest, "kb-a", "k-1"},
+		{types.SingleTenantID, types.TypeWikiIngest, "kb-a", "k-2"}, // same lane: one trigger
+		{types.SingleTenantID, types.TypeWikiFinalize, "kb-a", "slug-a"},
+		{types.SingleTenantID, types.TypeWikiIngest, "kb-b", "k-3"},
+		{types.SingleTenantID, types.TypeWikiIngest, "kb-deleted", "k-deleted"},
+		{types.SingleTenantID, types.TypeWikiFinalize, "kb-missing", "k-missing"},
+		{2, types.TypeWikiIngest, "kb-other", "k-other"},
 	}
 	for _, row := range rows {
 		require.NoError(t, db.Exec(
@@ -235,9 +237,16 @@ func TestRecoverPendingWikiTasks_RecreatesOneTriggerPerLaneAndKB(t *testing.T) {
 		require.NoError(t, json.Unmarshal(task.Payload(), &payload))
 		seen[task.Type()+":"+payload.KnowledgeBaseID] = payload
 	}
-	assert.Equal(t, uint64(7), seen[types.TypeWikiIngest+":kb-a"].TenantID)
-	assert.Equal(t, uint64(7), seen[types.TypeWikiFinalize+":kb-a"].TenantID)
-	assert.Equal(t, uint64(8), seen[types.TypeWikiIngest+":kb-b"].TenantID)
+	assert.Equal(t, types.SingleTenantID, seen[types.TypeWikiIngest+":kb-a"].TenantID)
+	assert.Equal(t, types.SingleTenantID, seen[types.TypeWikiFinalize+":kb-a"].TenantID)
+	assert.Equal(t, types.SingleTenantID, seen[types.TypeWikiIngest+":kb-b"].TenantID)
+	assert.NotContains(t, seen, types.TypeWikiIngest+":kb-other")
+
+	var outsideTeam int64
+	require.NoError(t, db.Model(&types.TaskPendingOp{}).
+		Where("tenant_id = ? AND scope_id = ?", 2, "kb-other").
+		Count(&outsideTeam).Error)
+	assert.Equal(t, int64(1), outsideTeam)
 
 	var orphaned int64
 	require.NoError(t, db.Model(&types.TaskPendingOp{}).

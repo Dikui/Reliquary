@@ -106,24 +106,6 @@ func (h *AuditLogHandler) ListTenantAuditLog(c *gin.Context) {
 	})
 }
 
-// ListKnowledgeBaseActivity returns the durable activity projection for one
-// knowledge base. The route has already resolved KB access; this handler adds
-// an owner-tenant check so organization-shared consumers cannot inspect source
-// workspace actors or configuration history.
-// @Summary      获取知识库活动记录
-// @Description  返回知识库的重要变更与后台任务入口。仅知识库创建者或所属空间管理员可读，共享空间不可读。
-// @Tags         知识库
-// @Produce      json
-// @Param        id        path   string  true   "知识库ID"
-// @Param        after_id  query  int     false  "游标：返回 id 小于此值的记录"
-// @Param        limit     query  int     false  "页大小，1-100，默认 50"
-// @Param        action    query  string  false  "按 action 精确过滤"
-// @Param        outcome   query  string  false  "按 outcome 精确过滤"
-// @Param        actor     query  string  false  "按 actor_user_id 精确过滤"
-// @Success      200  {object}  auditLogListResponse
-// @Failure      403  {object}  errors.AppError
-// @Security     Bearer
-// @Router       /knowledge-bases/{id}/activity [get]
 func (h *AuditLogHandler) ListKnowledgeBaseActivity(c *gin.Context) {
 	ctx := c.Request.Context()
 	kbID := c.Param("id")
@@ -137,10 +119,9 @@ func (h *AuditLogHandler) ListKnowledgeBaseActivity(c *gin.Context) {
 		c.Error(errors.NewForbiddenError("knowledge base activity is only available in the owner workspace"))
 		return
 	}
-	actorID, _ := types.UserIDFromContext(ctx)
 	role := types.TenantRoleFromContext(ctx)
-	if access.KnowledgeBase.CreatorID != actorID && !role.HasPermission(types.TenantRoleAdmin) {
-		c.Error(errors.NewForbiddenError("knowledge base activity requires creator or admin access"))
+	if !role.HasPermission(types.TenantRoleViewer) {
+		c.Error(errors.NewForbiddenError("knowledge base activity requires team membership"))
 		return
 	}
 

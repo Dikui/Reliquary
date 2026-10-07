@@ -112,7 +112,7 @@ type searchResultWithMeta struct {
 	SourceQuery       string
 	QueryType         string // "vector" or "keyword"
 	KnowledgeBaseID   string // ID of the knowledge base this result came from
-	KnowledgeBaseType string // Type of the knowledge base (document, faq, etc.)
+	KnowledgeBaseType string // Type of the knowledge base (document or messages-history)
 }
 
 // KnowledgeSearchTool searches knowledge bases with flexible query modes.
@@ -613,17 +613,6 @@ func (t *KnowledgeSearchTool) concurrentSearchByTargets(
 	return allResults
 }
 
-// rerankResults applies reranking to all search results (including FAQ entries)
-// using the configured rerank model, then filters by threshold and applies
-// composite scoring so MMR/sorting uses a single score scale.
-//
-// A failed rerank call degrades to the raw retrieval order, mirroring the chat
-// pipeline's api_error_fallback. An empty result after threshold filtering is
-// kept empty: filterRerankRankResults already preserves the top candidate down
-// to agentRerankFallbackMinScore, so reaching zero means even the best match is
-// below that floor. There is deliberately no chat-model re-scoring path here —
-// it mixed the reranker's [0,1] scale with raw RRF scores and could resurrect
-// candidates the reranker had already rejected.
 func (t *KnowledgeSearchTool) rerankResults(
 	ctx context.Context,
 	query string,
@@ -650,38 +639,6 @@ func (t *KnowledgeSearchTool) rerankResults(
 	logger.Infof(ctx, "[Tool][KnowledgeSearch] Reranked %d/%d results above threshold %.2f",
 		len(reranked), len(results), threshold)
 	return reranked, nil
-}
-
-func (t *KnowledgeSearchTool) getFAQMetadata(
-	ctx context.Context,
-	chunkID string,
-	cache map[string]*types.FAQChunkMetadata,
-) (*types.FAQChunkMetadata, error) {
-	if chunkID == "" || t.chunkService == nil {
-		return nil, nil
-	}
-
-	if meta, ok := cache[chunkID]; ok {
-		return meta, nil
-	}
-
-	chunk, err := t.chunkService.GetChunkByID(ctx, chunkID)
-	if err != nil {
-		cache[chunkID] = nil
-		return nil, err
-	}
-	if chunk == nil {
-		cache[chunkID] = nil
-		return nil, nil
-	}
-
-	meta, err := chunk.FAQMetadata()
-	if err != nil {
-		cache[chunkID] = nil
-		return nil, err
-	}
-	cache[chunkID] = meta
-	return meta, nil
 }
 
 // rerankScores scores the candidates with the configured rerank model and
@@ -922,22 +879,11 @@ func (t *KnowledgeSearchTool) formatOutput(
 	formattedResults := make([]map[string]interface{}, 0, len(results))
 	enabled := true
 
-	faqMetadataCache := make(map[string]*types.FAQChunkMetadata)
-
 	knowledgeChunkMap := make(map[string]map[int]bool)
 	knowledgeTotalMap := make(map[string]int64)
 	knowledgeTitleMap := make(map[string]string)
 
 	for i, result := range results {
-		var faqMeta *types.FAQChunkMetadata
-		if result.KnowledgeBaseType == types.KnowledgeBaseTypeFAQ {
-			meta, err := t.getFAQMetadata(ctx, result.ID, faqMetadataCache)
-			if err != nil {
-				logger.Warnf(ctx, "[Tool][KnowledgeSearch] Failed to load FAQ metadata for chunk %s: %v", result.ID, err)
-			} else {
-				faqMeta = meta
-			}
-		}
 
 		if knowledgeChunkMap[result.KnowledgeID] == nil {
 			knowledgeChunkMap[result.KnowledgeID] = make(map[int]bool)
@@ -957,11 +903,14 @@ func (t *KnowledgeSearchTool) formatOutput(
 				// over. Mismatched filters previously let LLMs compute offsets
 				// against an inflated/deflated total and page past the end.
 				_, total, err := t.chunkService.GetRepository().ListPagedChunksByKnowledgeID(ctx,
-					effectiveTenantID, result.KnowledgeID,
+					effectiveTenantID,
+					result.KnowledgeID,
 					&types.Pagination{Page: 1, PageSize: 1},
-					[]types.ChunkType{types.ChunkTypeText, types.ChunkTypeFAQ}, nil, "", "", "", "",
-					&enabled,
-				)
+					[]types.ChunkType{types.ChunkTypeText},
+					nil,
+					"",
+					"",
+					&enabled)
 				if err != nil {
 					logger.Warnf(ctx, "[Tool][KnowledgeSearch] Failed to get total chunks for knowledge %s: %v", result.KnowledgeID, err)
 					knowledgeTotalMap[result.KnowledgeID] = 0
@@ -976,70 +925,43 @@ func (t *KnowledgeSearchTool) formatOutput(
 		t.seenChunks[result.ID] = true
 		t.seenMu.Unlock()
 
-		isFAQ := faqMeta != nil
 		if seen {
 			// Compact rendering for chunks we already returned in a previous
 			// knowledge_search call during this session. The model has the
 			// content in context already, so re-emitting it only burns tokens.
-			if isFAQ {
-				ob.WriteString(fmt.Sprintf(
-					"<faq rank=\"%d\" faq_id=\"%s\" index=\"%d\" knowledge_base_id=\"%s\" knowledge_title=\"%s\" score=\"%.3f\" source_query=\"%s\" already_seen=\"true\">\n",
-					i+1,
-					xmlEscape(result.ID),
-					result.ChunkIndex,
-					xmlEscape(result.KnowledgeBaseID),
-					xmlEscape(result.KnowledgeTitle),
-					result.Score,
-					xmlEscape(result.SourceQuery),
-				))
-			} else {
-				ob.WriteString(fmt.Sprintf(
-					"<chunk rank=\"%d\" chunk_id=\"%s\" chunk_index=\"%d\" knowledge_id=\"%s\" knowledge_base_id=\"%s\" knowledge_title=\"%s\" score=\"%.3f\" source_query=\"%s\" already_seen=\"true\">\n",
-					i+1,
-					xmlEscape(result.ID),
-					result.ChunkIndex,
-					xmlEscape(result.KnowledgeID),
-					xmlEscape(result.KnowledgeBaseID),
-					xmlEscape(result.KnowledgeTitle),
-					result.Score,
-					xmlEscape(result.SourceQuery),
-				))
-			}
+
+			ob.WriteString(fmt.Sprintf(
+				"<chunk rank=\"%d\" chunk_id=\"%s\" chunk_index=\"%d\" knowledge_id=\"%s\" knowledge_base_id=\"%s\" knowledge_title=\"%s\" score=\"%.3f\" source_query=\"%s\" already_seen=\"true\">\n",
+				i+1,
+				xmlEscape(result.ID),
+				result.ChunkIndex,
+				xmlEscape(result.KnowledgeID),
+				xmlEscape(result.KnowledgeBaseID),
+				xmlEscape(result.KnowledgeTitle),
+				result.Score,
+				xmlEscape(result.SourceQuery),
+			))
+
 			ob.WriteString("<note>(content omitted, already returned in a previous knowledge_search call this session)</note>\n")
-			if isFAQ {
-				ob.WriteString("</faq>\n")
-			} else {
-				ob.WriteString("</chunk>\n")
-			}
+
+			ob.WriteString("</chunk>\n")
+
 		} else {
-			if isFAQ {
-				ob.WriteString(fmt.Sprintf(
-					"<faq rank=\"%d\" faq_id=\"%s\" index=\"%d\" knowledge_base_id=\"%s\" knowledge_title=\"%s\" score=\"%.3f\" source_query=\"%s\">\n",
-					i+1,
-					xmlEscape(result.ID),
-					result.ChunkIndex,
-					xmlEscape(result.KnowledgeBaseID),
-					xmlEscape(result.KnowledgeTitle),
-					result.Score,
-					xmlEscape(result.SourceQuery),
-				))
-			} else {
-				ob.WriteString(fmt.Sprintf(
-					"<chunk rank=\"%d\" chunk_id=\"%s\" chunk_index=\"%d\" knowledge_id=\"%s\" knowledge_base_id=\"%s\" knowledge_title=\"%s\" score=\"%.3f\" source_query=\"%s\">\n",
-					i+1,
-					xmlEscape(result.ID),
-					result.ChunkIndex,
-					xmlEscape(result.KnowledgeID),
-					xmlEscape(result.KnowledgeBaseID),
-					xmlEscape(result.KnowledgeTitle),
-					result.Score,
-					xmlEscape(result.SourceQuery),
-				))
-			}
+
+			ob.WriteString(fmt.Sprintf(
+				"<chunk rank=\"%d\" chunk_id=\"%s\" chunk_index=\"%d\" knowledge_id=\"%s\" knowledge_base_id=\"%s\" knowledge_title=\"%s\" score=\"%.3f\" source_query=\"%s\">\n",
+				i+1,
+				xmlEscape(result.ID),
+				result.ChunkIndex,
+				xmlEscape(result.KnowledgeID),
+				xmlEscape(result.KnowledgeBaseID),
+				xmlEscape(result.KnowledgeTitle),
+				result.Score,
+				xmlEscape(result.SourceQuery),
+			))
+
 			snippet := ""
-			if faqMeta != nil {
-				snippet = faqMatchSnippetFromQueries(faqMeta, queries)
-			}
+
 			if snippet == "" {
 				snippet = extractSnippetForQueries(result.Content, queries)
 			}
@@ -1060,12 +982,8 @@ func (t *KnowledgeSearchTool) formatOutput(
 				}
 			}
 
-			if isFAQ {
-				writeFAQFieldsXML(&ob, faqMeta)
-				ob.WriteString("</faq>\n")
-			} else {
-				ob.WriteString("</chunk>\n")
-			}
+			ob.WriteString("</chunk>\n")
+
 		}
 
 		formattedResults = append(formattedResults, map[string]interface{}{
@@ -1108,17 +1026,7 @@ func (t *KnowledgeSearchTool) formatOutput(
 			}
 		}
 
-		if faqMeta != nil {
-			last["faq_id"] = result.ID
-			last["index"] = result.ChunkIndex
-			if faqMeta.StandardQuestion != "" {
-				last["faq_standard_question"] = faqMeta.StandardQuestion
-			}
-			appendSimilarQuestionsToChunkData(last, faqMeta.SimilarQuestions)
-			if len(faqMeta.Answers) > 0 {
-				last["faq_answers"] = faqMeta.Answers
-			}
-		} else {
+		{
 			last["chunk_id"] = result.ID
 			last["chunk_index"] = result.ChunkIndex
 		}

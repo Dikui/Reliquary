@@ -36,7 +36,7 @@ const (
 // cannot drift apart. Every key referenced by a toolHandlePolicies sourceIDKeys
 // set must appear here (enforced by a test).
 var sourceKeySpaces = map[string]sourceKeySpace{
-	"chunk_id": spaceChunk, "faq_id": spaceChunk, "chunk_ids": spaceChunk, "faq_ids": spaceChunk,
+	"chunk_id": spaceChunk, "chunk_ids": spaceChunk,
 	"knowledge_id": spaceDocument, "knowledge_ids": spaceDocument, "suspected_knowledge_ids": spaceDocument,
 	"source_refs":    spaceDocumentRef,
 	"knowledge_base": spaceKnowledgeBase, "knowledge_base_id": spaceKnowledgeBase,
@@ -66,11 +66,11 @@ var toolHandlePolicies = map[string]toolHandlePolicy{
 		sourceOutput: true,
 	},
 	"list_knowledge_chunks": {
-		sourceIDKeys: map[string]struct{}{"knowledge_id": {}, "faq_id": {}, "chunk_id": {}},
+		sourceIDKeys: map[string]struct{}{"knowledge_id": {}, "chunk_id": {}},
 		sourceOutput: true,
 	},
 	"get_document_info": {
-		sourceIDKeys: map[string]struct{}{"knowledge_ids": {}, "faq_ids": {}},
+		sourceIDKeys: map[string]struct{}{"knowledge_ids": {}},
 		sourceOutput: true,
 	},
 	// Past conversations carry no durable chunk or document IDs, so there is

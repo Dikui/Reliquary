@@ -76,13 +76,13 @@ func TestRegistryDecodesAliasesInNestedToolArguments(t *testing.T) {
 	calls := []types.LLMToolCall{{
 		Function: types.FunctionCall{
 			Name:      "list_knowledge_chunks",
-			Arguments: `{"knowledge_id":"d1","filters":{"chunk_id":"c1","faq_id":["c1"]}}`,
+			Arguments: `{"knowledge_id":"d1","filters":{"chunk_id":"c1"}}`,
 		},
 	}}
 	registry.DecodeToolCalls(calls)
 
 	require.JSONEq(t,
-		`{"knowledge_id":"knowledge-uuid-1","filters":{"chunk_id":"chunk-uuid-1","faq_id":["chunk-uuid-1"]}}`,
+		`{"knowledge_id":"knowledge-uuid-1","filters":{"chunk_id":"chunk-uuid-1"}}`,
 		calls[0].Function.Arguments,
 	)
 }
@@ -461,7 +461,7 @@ func TestModelOutputWebFetchLimitsRawContentAcrossPages(t *testing.T) {
 	require.Less(t, len([]rune(output)), modelWebFetchTotalMaxRunes+3000)
 }
 
-func TestModelOutputDocumentInfoUsesDocumentAndFAQAliases(t *testing.T) {
+func TestModelOutputDocumentInfoUsesDocumentAliases(t *testing.T) {
 	registry := newSourceRegistry()
 	result := &types.ToolResult{
 		Success: true,
@@ -476,24 +476,15 @@ func TestModelOutputDocumentInfoUsesDocumentAndFAQAliases(t *testing.T) {
 					"type":         "file",
 					"chunk_count":  12,
 				},
-				{
-					"faq_id":       "faq-chunk-real-id",
-					"knowledge_id": "faq-container-real-id",
-					"faq_question": "How does it work?",
-					"faq_answers":  []string{"With short aliases."},
-					"is_faq":       true,
-				},
 			},
 		},
 	}
 
 	output := registry.ModelOutput(result)
-	for _, raw := range []string{"doc-real-id", "faq-chunk-real-id", "faq-container-real-id"} {
+	for _, raw := range []string{"doc-real-id"} {
 		require.NotContains(t, output, raw)
 	}
 	require.Contains(t, output, `<document id="d1" title="Architecture"`)
-	require.Contains(t, output, `<chunk id="c1" type="faq">`)
-	require.Contains(t, registry.ExpandText(`Answer <ref id="c1"/>`), `chunk_id="faq-chunk-real-id"`)
 }
 
 func TestModelOutputCompactsLabeledWikiReferences(t *testing.T) {

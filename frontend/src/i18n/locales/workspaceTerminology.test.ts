@@ -25,7 +25,6 @@ function withoutTechnicalTenantTokens(value: string): string {
   return value
     .replace(/\{tenant(?:Id)?\}/g, '')
     .replace(/\btenant_id\b/gi, '')
-    .replace(/\btenantless\b/gi, '')
     .replace(/\bX-Tenant-ID\b/g, '')
 }
 

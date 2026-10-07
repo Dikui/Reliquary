@@ -2,7 +2,6 @@ import { get, post, put, del } from "../../utils/request";
 
 // 智能体配置
 // 智能推理下的智能体类型预设 ID
-// 'rag-qa'       : 经典文档/FAQ 分块 RAG
 // 'wiki-qa'      : Wiki 图谱导航问答
 // 'hybrid-rag-wiki': Wiki + 分块混合检索
 // 'custom'       : 完全自定义（不应用预设）
@@ -183,21 +182,10 @@ export const AGENT_MODE_SMART_REASONING = 'smart-reasoning';
 export const BUILTIN_AGENT_NORMAL_ID = BUILTIN_QUICK_ANSWER_ID;
 // Deprecated: Use BUILTIN_SMART_REASONING_ID instead
 export const BUILTIN_AGENT_AGENT_ID = BUILTIN_SMART_REASONING_ID;
-
-// 获取智能体列表（包括内置智能体）
-// disabled_own_agent_ids: 当前空间在对话下拉中停用的「我的」智能体 ID，仅影响本空间
-export function listAgents(params?: {
-  /**
-   * Optional creator filter; mirrors listKnowledgeBases. Built-in agents
-   * (is_builtin=true) are always returned regardless of this filter so
-   * the conversation dropdown never silently loses quick-answer /
-   * smart-reasoning when a user picks "Created by me".
-   */
-  creator?: 'all' | 'mine' | 'others';
-}) {
-  const qs = params?.creator && params.creator !== 'all' ? `?creator=${params.creator}` : '';
-  return get<{ data: CustomAgent[]; disabled_own_agent_ids?: string[] }>(`/api/v1/agents${qs}`);
+export function listAgents() {
+  return get<{ data: CustomAgent[] }>('/api/v1/agents');
 }
+
 
 // 获取智能体详情
 export function getAgentById(id: string) {
@@ -267,8 +255,7 @@ export interface KBCapabilities {
   keyword: boolean;
   wiki: boolean;
   graph: boolean;
-  faq: boolean;
-}
+  }
 
 // 预设的"自动填充"配置载荷：仅包含被预设覆盖的字段；其他字段不动
 export interface AgentTypePresetConfig {
@@ -277,7 +264,6 @@ export interface AgentTypePresetConfig {
   max_iterations?: number;
   allowed_tools?: string[];
   retain_retrieval_history?: boolean;
-  faq_priority_enabled?: boolean;
   web_search_enabled?: boolean;
   supported_file_types?: string[];
   kb_selection_mode?: 'all' | 'selected' | 'none';
@@ -307,10 +293,10 @@ export interface IMChannel {
   tenant_id?: number;
   agent_id: string;
   // 'lark' is Feishu's international edition; it shares Feishu's credentials and modes.
-  platform: 'wecom' | 'feishu' | 'lark' | 'slack' | 'telegram' | 'dingtalk' | 'mattermost' | 'wechat' | 'qqbot' | 'yunzhijia';
+  platform: 'feishu';
   name: string;
   enabled: boolean;
-  mode: 'webhook' | 'websocket' | 'longpoll';
+  mode: 'webhook' | 'websocket';
   output_mode: 'stream' | 'full';
   session_mode?: 'user' | 'thread';
   knowledge_base_id?: string;
@@ -366,7 +352,7 @@ export function toggleIMChannel(id: string) {
 // 推荐问题
 export interface SuggestedQuestion {
   question: string;
-  source: 'faq' | 'document' | 'agent_config' | 'wiki';
+  source: 'document' | 'agent_config' | 'wiki';
   knowledge_base_id?: string;
 }
 
@@ -388,28 +374,4 @@ export function getSuggestedQuestions(
   if (params?.limit) query.set('limit', String(params.limit));
   const qs = query.toString();
   return get<{ data: { questions: SuggestedQuestion[] } }>(`/api/v1/agents/${agentId}/suggested-questions${qs ? '?' + qs : ''}`);
-}
-// ===== WeChat QR Code Login =====
-
-export interface WeChatQRCodeResult {
-  qrcode_url: string;
-  qrcode: string;
-}
-
-export interface WeChatQRCodeStatus {
-  status: 'wait' | 'scaned' | 'confirmed' | 'expired';
-  credentials?: {
-    bot_token: string;
-    ilink_bot_id: string;
-    ilink_user_id: string;
-  };
-  baseurl?: string;
-}
-
-export function getWeChatQRCode() {
-  return post<{ data: WeChatQRCodeResult }>('/api/v1/wechat/qrcode');
-}
-
-export function pollWeChatQRCodeStatus(qrcode: string) {
-  return post<{ data: WeChatQRCodeStatus }>('/api/v1/wechat/qrcode/status', { qrcode });
 }

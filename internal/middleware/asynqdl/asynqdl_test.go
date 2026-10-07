@@ -100,8 +100,11 @@ func TestMiddleware_FailureWithoutAsynqCtx_RecordsRow(t *testing.T) {
 	if row.TaskType != "wiki:ingest" {
 		t.Errorf("task_type: got %q", row.TaskType)
 	}
-	if row.TenantID != 42 {
+	if row.TenantID != types.SingleTenantID {
 		t.Errorf("tenant_id: got %d", row.TenantID)
+	}
+	if string(row.Payload) != string(payload) {
+		t.Errorf("invalid tenant evidence changed: got %s", row.Payload)
 	}
 	if row.Scope != types.TaskScopeKnowledgeBase || row.ScopeID != "kb-abc" {
 		t.Errorf("scope tuple: got (%q, %q)", row.Scope, row.ScopeID)
@@ -192,12 +195,6 @@ func TestInferScope_Priority(t *testing.T) {
 			probe:     payloadProbe{KnowledgeBaseID: "kb1", KnowledgeID: "k1"},
 			wantScope: types.TaskScopeKnowledgeBase,
 			wantID:    "kb1",
-		},
-		{
-			name:      "kb_id alias resolves to knowledge_base scope",
-			probe:     payloadProbe{KBID: "kb-faq"},
-			wantScope: types.TaskScopeKnowledgeBase,
-			wantID:    "kb-faq",
 		},
 		{
 			name:      "source_kb_id from KnowledgeMovePayload",

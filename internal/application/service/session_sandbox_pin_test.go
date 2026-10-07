@@ -30,7 +30,7 @@ func newPinTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, db.AutoMigrate(&types.Session{}))
 	require.NoError(t, db.Model(&types.Session{}).Create(map[string]any{
 		"id":        "s-1",
-		"tenant_id": uint64(7),
+		"tenant_id": types.SingleTenantID,
 	}).Error)
 	return db
 }
@@ -165,22 +165,22 @@ func TestResolveSandboxForExecutionDoesNotPinStatelessBackend(t *testing.T) {
 
 func TestResolveSandboxForExecutionPinsRemoteBackend(t *testing.T) {
 	pinner := NewSessionSandboxPinner(newPinTestDB(t))
-	want := &pinTestManager{typ: sandbox.SandboxTypeCube}
+	want := &pinTestManager{typ: sandbox.SandboxTypeDocker}
 
 	got, configID, err := resolveSandboxForExecution(
 		context.Background(), stubSandboxResolver{mgr: want}, nil, pinner,
-		7, "s-1", "cfg-cube", nil,
+		7, "s-1", "cfg-docker", nil,
 	)
 
 	require.NoError(t, err)
 	require.Same(t, want, got)
-	require.Equal(t, "cfg-cube", configID)
+	require.Equal(t, "cfg-docker", configID)
 	pinned, err := pinner.Read(context.Background(), "s-1")
 	require.NoError(t, err)
-	require.Equal(t, "cfg-cube", pinned)
+	require.Equal(t, "cfg-docker", pinned)
 }
 
-// Docker is a session-persistent remote backend, same as Cube/E2B. Skipping
+// Docker preserves a sandbox across calls for each session. Skipping
 // the pin used to make ArtifactCollector treat the turn as "no live sandbox"
 // and leave generated HTML/files showing as unavailable in chat.
 func TestResolveSandboxForExecutionPinsDockerBackend(t *testing.T) {
@@ -204,7 +204,7 @@ func TestResolveSandboxForExecutionKeepsExistingRemotePin(t *testing.T) {
 	pinner := NewSessionSandboxPinner(newPinTestDB(t))
 	_, err := pinner.Pin(context.Background(), "s-1", "cfg-existing")
 	require.NoError(t, err)
-	want := &pinTestManager{typ: sandbox.SandboxTypeE2B}
+	want := &pinTestManager{typ: sandbox.SandboxTypeDocker}
 
 	got, configID, err := resolveSandboxForExecution(
 		context.Background(), stubSandboxResolver{mgr: want}, nil, pinner,
@@ -215,4 +215,22 @@ func TestResolveSandboxForExecutionKeepsExistingRemotePin(t *testing.T) {
 	require.Same(t, want, got)
 	require.Equal(t, "cfg-existing", configID,
 		"re-pointing an agent must not move an existing remote session")
+}
+
+func TestPinRejectsSessionOutsideTeam(t *testing.T) {
+	db := newPinTestDB(t)
+	require.NoError(t, db.Model(&types.Session{}).Create(map[string]any{
+		"id": "s-other-team", "tenant_id": uint64(2), "sandbox_config_id": "cfg-other",
+	}).Error)
+	pinner := NewSessionSandboxPinner(db)
+	ctx := context.Background()
+	pinned, err := pinner.Read(ctx, "s-other-team")
+	require.NoError(t, err)
+	require.Empty(t, pinned)
+	_, err = pinner.Pin(ctx, "s-other-team", "cfg-team")
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+	require.NoError(t, pinner.Clear(ctx, "s-other-team"))
+	var stored string
+	require.NoError(t, db.Model(&types.Session{}).Where("id = ?", "s-other-team").Select("sandbox_config_id").Scan(&stored).Error)
+	require.Equal(t, "cfg-other", stored)
 }

@@ -1,9 +1,5 @@
-// Bootstrap-time hooks that run after the DI container is built but
-// before the HTTP server starts listening. These are deliberately
-// best-effort: any failure here only warns and does NOT abort startup.
-// The reasoning is that an operator running with a misconfigured env
-// var should still be able to bring the server up (and fix the issue
-// from the running instance) rather than have a typo brick the deploy.
+// Startup hooks ensure the team exists before serving requests.
+// Optional administrator recovery and legacy key repair log failures.
 package main
 
 import (
@@ -12,6 +8,8 @@ import (
 	"strings"
 
 	"go.uber.org/dig"
+	"gorm.io/gorm"
+	"reliquary/internal/application/service"
 
 	"reliquary/internal/logger"
 	"reliquary/internal/types/interfaces"
@@ -32,12 +30,12 @@ import (
 //     silently undone on the next restart.
 const bootstrapEnvVar = "RELIQUARY_BOOTSTRAP_SYSTEM_ADMIN_EMAIL"
 
-// runStartupBootstrap consults the env and applies any one-shot
-// bootstrap actions. Currently it only handles system-admin promotion;
-// future bootstrap steps (default model seeding, etc.) can be added
-// here as additional dig.Invoke calls.
+// runStartupBootstrap ensures the team and applies optional recovery hooks.
 func runStartupBootstrap(c *dig.Container) {
 	ctx := context.Background()
+	if err := c.Invoke(func(db *gorm.DB) error { return service.EnsureSingleTeamSpace(ctx, db) }); err != nil {
+		panic("single team bootstrap failed: " + err.Error())
+	}
 
 	// Legacy hash repair for migration 000065 placeholder rows. Invoked each
 	// startup but short-circuits with a cheap EXISTS once every row is

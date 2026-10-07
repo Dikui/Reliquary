@@ -27,7 +27,6 @@ func TestMatchesKnowledgeBase(t *testing.T) {
 		want     bool
 	}{
 		{name: "knowledge base id", taskType: types.TypeDocumentProcess, payload: `{"knowledge_base_id":"kb-1"}`, want: true},
-		{name: "legacy kb id", taskType: types.TypeFAQImport, payload: `{"kb_id":"kb-1"}`, want: true},
 		{name: "clone source", taskType: types.TypeKBClone, payload: `{"source_id":"kb-1"}`, want: true},
 		{name: "clone target", taskType: types.TypeKBClone, payload: `{"target_id":"kb-1"}`, want: true},
 		{name: "source id is task specific", taskType: types.TypeDocumentProcess, payload: `{"source_id":"kb-1"}`},
@@ -49,11 +48,6 @@ func TestMatchesKnowledgeBase(t *testing.T) {
 		{name: "malformed payload", taskType: types.TypeDocumentProcess, payload: `{`},
 		{name: "preserve kb delete by kb", taskType: types.TypeKBDelete, payload: `{"knowledge_base_id":"kb-1"}`},
 		{name: "preserve kb delete by knowledge", taskType: types.TypeKBDelete, payload: `{"knowledge_id":"knowledge-1"}`},
-		{name: "preserve index delete by kb", taskType: types.TypeIndexDelete, payload: `{"knowledge_base_id":"kb-1"}`},
-		{
-			name: "preserve index delete by knowledge", taskType: types.TypeIndexDelete,
-			payload: `{"knowledge_id":"knowledge-1"}`,
-		},
 		{
 			name: "data source sync", taskType: types.TypeDataSourceSync,
 			payload: `{"data_source_id":"datasource-1"}`, want: true,
@@ -114,21 +108,18 @@ func TestCancelTasksForKnowledgeBaseRescansMutatedPages(t *testing.T) {
 	enqueueTask(t, asynqClient, types.TypeKBDelete,
 		`{"knowledge_base_id":"kb-delete"}`, "kb-delete-cleanup",
 	)
-	enqueueTask(t, asynqClient, types.TypeIndexDelete,
-		`{"knowledge_base_id":"kb-delete"}`, "index-delete-cleanup",
-	)
 	enqueueTask(t, asynqClient, types.TypeDataSourceSync,
 		`{"data_source_id":"datasource-delete"}`, "datasource-sync",
 	)
 
-	scheduleTask(t, asynqClient, types.TypeFAQImport,
-		`{"kb_id":"kb-delete"}`, "scheduled-kb-match",
+	scheduleTask(t, asynqClient, types.TypeKnowledgeListReparse,
+		`{"knowledge_base_id":"kb-delete"}`, "scheduled-kb-match",
 	)
 	scheduleTask(t, asynqClient, types.TypeKnowledgeListReparse,
 		`{"knowledge_ids":["knowledge-associated"]}`, "scheduled-knowledge-match",
 	)
-	scheduleTask(t, asynqClient, types.TypeFAQImport,
-		`{"kb_id":"kb-keep"}`, "scheduled-survivor",
+	scheduleTask(t, asynqClient, types.TypeKnowledgeListReparse,
+		`{"knowledge_base_id":"kb-keep"}`, "scheduled-survivor",
 	)
 
 	deleted, cancelled, err := inspector.CancelTasksForKnowledgeBase(
@@ -150,14 +141,11 @@ func TestCancelTasksForKnowledgeBaseRescansMutatedPages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list pending: %v", err)
 	}
-	if len(pending) != 7 {
-		t.Fatalf("pending survivors = %d, want 7", len(pending))
+	if len(pending) != 6 {
+		t.Fatalf("pending survivors = %d, want 6", len(pending))
 	}
 	if !hasTaskID(pending, "kb-delete-cleanup") {
 		t.Fatal("kb:delete cleanup task was removed")
-	}
-	if !hasTaskID(pending, "index-delete-cleanup") {
-		t.Fatal("index:delete cleanup task was removed")
 	}
 
 	scheduled, err := inspector.inspector.ListScheduledTasks(

@@ -31,9 +31,6 @@ builtin_agents:
       history_turns: 5
       kb_selection_mode: "all"
       retrieve_kb_only_when_mentioned: false
-      faq_priority_enabled: true
-      faq_direct_answer_threshold: 0.9
-      faq_score_boost: 1.2
       embedding_top_k: 10
       keyword_threshold: 0.3
       vector_threshold: 0.5
@@ -81,9 +78,6 @@ builtin_agents:
       reflection_enabled: false
       multi_turn_enabled: true
       history_turns: 5
-      faq_priority_enabled: true
-      faq_direct_answer_threshold: 0.9
-      faq_score_boost: 1.2
       embedding_top_k: 10
       keyword_threshold: 0.3
       vector_threshold: 0.5

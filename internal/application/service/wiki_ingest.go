@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	redis "github.com/redis/go-redis/v9"
 	"regexp"
 	"sort"
 	"strings"
@@ -15,7 +16,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
-	"github.com/redis/go-redis/v9"
 	"golang.org/x/sync/singleflight"
 
 	"reliquary/internal/agent"

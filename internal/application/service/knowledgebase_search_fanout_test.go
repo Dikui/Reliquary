@@ -725,37 +725,13 @@ func TestRetrieveFromStores_PerGroupTimeout(t *testing.T) {
 // authorizeKBAccess — per-KB authorization on multi-KB search scope
 // ---------------------------------------------------------------------------
 
-// fakeKBShareForAuth implements just enough of KBShareService for the
-// authorizeKBAccess test matrix. Only HasTenantKBPermission is exercised;
-// the embedded interface keeps the type assignable.
-type fakeKBShareForAuth struct {
-	// allowed maps kbID → tenantID → allowed. Mirrors the Plan 3 (#1303)
-	// per-tenant permission model.
-	allowed map[string]map[uint64]bool
-	err     error
-	interfaces.KBShareService
-}
-
-func (f *fakeKBShareForAuth) HasTenantKBPermission(
-	_ context.Context, kbID string, callerTenantID uint64,
-	_ types.TenantRole, _ types.OrgMemberRole,
-) (bool, error) {
-	if f.err != nil {
-		return false, f.err
-	}
-	if perTenant, ok := f.allowed[kbID]; ok {
-		return perTenant[callerTenantID], nil
-	}
-	return false, nil
-}
-
 func ctxWithTenantForAuth(tenantID uint64) context.Context {
 	return context.WithValue(context.Background(), types.TenantIDContextKey, tenantID)
 }
 
 func TestAuthorizeKBAccess_SameTenantAllPass(t *testing.T) {
 	t.Parallel()
-	s := &knowledgeBaseService{kbShareService: &fakeKBShareForAuth{}}
+	s := &knowledgeBaseService{}
 	kbs := []*types.KnowledgeBase{
 		{ID: "kb-1", TenantID: 7},
 		{ID: "kb-2", TenantID: 7},
@@ -764,30 +740,9 @@ func TestAuthorizeKBAccess_SameTenantAllPass(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestAuthorizeKBAccess_ForeignTenantWithShare_OK(t *testing.T) {
+func TestAuthorizeKBAccess_ForeignTenantForbidden(t *testing.T) {
 	t.Parallel()
-	share := &fakeKBShareForAuth{
-		allowed: map[string]map[uint64]bool{
-			"kb-foreign": {7: true},
-		},
-	}
-	s := &knowledgeBaseService{kbShareService: share}
-	kbs := []*types.KnowledgeBase{
-		{ID: "kb-own", TenantID: 7},
-		{ID: "kb-foreign", TenantID: 99},
-	}
-	err := s.authorizeKBAccess(ctxWithTenantForAuth(7), kbs, 7)
-	require.NoError(t, err)
-}
-
-func TestAuthorizeKBAccess_ForeignTenantNoShare_NotFound(t *testing.T) {
-	t.Parallel()
-	share := &fakeKBShareForAuth{
-		allowed: map[string]map[uint64]bool{
-			// kb-foreign explicitly NOT in allowed map
-		},
-	}
-	s := &knowledgeBaseService{kbShareService: share}
+	s := &knowledgeBaseService{}
 	kbs := []*types.KnowledgeBase{
 		{ID: "kb-foreign", TenantID: 99},
 	}
@@ -795,92 +750,15 @@ func TestAuthorizeKBAccess_ForeignTenantNoShare_NotFound(t *testing.T) {
 	require.Error(t, err)
 	app, ok := apperrors.IsAppError(err)
 	require.True(t, ok, "expected typed AppError, got %T", err)
-	assert.Equal(t, apperrors.ErrNotFound, app.Code,
-		"reject must surface as NotFound to avoid leaking foreign KB existence")
-}
-
-func TestAuthorizeKBAccess_PermissionLookupError_500(t *testing.T) {
-	t.Parallel()
-	share := &fakeKBShareForAuth{err: stderrors.New("share infra down")}
-	s := &knowledgeBaseService{kbShareService: share}
-	kbs := []*types.KnowledgeBase{{ID: "kb-foreign", TenantID: 99}}
-	err := s.authorizeKBAccess(ctxWithTenantForAuth(7), kbs, 7)
-	require.Error(t, err)
-	app, ok := apperrors.IsAppError(err)
-	require.True(t, ok)
-	assert.Equal(t, apperrors.ErrInternalServer, app.Code)
+	assert.Equal(t, apperrors.ErrForbidden, app.Code,
+		"foreign knowledge bases must be rejected")
 }
 
 func TestAuthorizeKBAccess_EmptyKBs_OK(t *testing.T) {
 	t.Parallel()
-	s := &knowledgeBaseService{kbShareService: &fakeKBShareForAuth{}}
+	s := &knowledgeBaseService{}
 	err := s.authorizeKBAccess(ctxWithTenantForAuth(7), nil, 7)
 	require.NoError(t, err)
-}
-
-// TestIterativeRetrieve_PropagatesTypedAppError pins the contract that
-// a typed AppError raised inside the iterative FAQ fan-out is
-// propagated upward to HybridSearch rather than being silently
-// converted into a truncated chunk list. Without this guarantee, a
-// per-group timeout or binding-invalid error during iteration N would
-// return whatever partial chunks landed in iterations 0..N-1 with no
-// error signal to the client.
-func TestIterativeRetrieve_PropagatesTypedAppError(t *testing.T) {
-	t.Parallel()
-	bad := &fakeRetrieveEngineService{
-		engineType: types.PostgresRetrieverEngineType,
-		support:    []types.RetrieverType{types.VectorRetrieverType},
-		cannedErr:  stderrors.New("simulated retrieve failure"),
-	}
-	groups := []*storeGroup{
-		{Engine: buildBoundComposite(t, bad), BaseParams: vectorParams("q"), TopK: 50, KBIDs: []string{"kb-bad"}},
-		{Engine: buildBoundComposite(t, bad), BaseParams: vectorParams("q"), TopK: 50, KBIDs: []string{"kb-bad-2"}},
-	}
-	s := &knowledgeBaseService{}
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
-	results, err := s.iterativeRetrieveWithDeduplication(ctx, groups, 10, "q")
-	require.Error(t, err)
-	assert.Nil(t, results, "results must be nil so HybridSearch returns a clean error response")
-	app, ok := apperrors.IsAppError(err)
-	require.True(t, ok, "expected typed AppError to propagate, got %T", err)
-	assert.Equal(t, apperrors.ErrVectorStoreUnavailable, app.Code)
-}
-
-// TestApplyFAQPostProcessing_PropagatesError is the matching test at the
-// applyFAQPostProcessing layer — the error path must surface upward.
-func TestApplyFAQPostProcessing_PropagatesError(t *testing.T) {
-	t.Parallel()
-	bad := &fakeRetrieveEngineService{
-		engineType: types.PostgresRetrieverEngineType,
-		support:    []types.RetrieverType{types.VectorRetrieverType},
-		cannedErr:  stderrors.New("simulated retrieve failure"),
-	}
-	groups := []*storeGroup{
-		{Engine: buildBoundComposite(t, bad), BaseParams: vectorParams("q"), TopK: 50, KBIDs: []string{"kb-bad"}},
-		{Engine: buildBoundComposite(t, bad), BaseParams: vectorParams("q"), TopK: 50, KBIDs: []string{"kb-bad-2"}},
-	}
-	s := &knowledgeBaseService{}
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
-
-	// FAQ KB + iterative-retrieval trigger (chunks < MatchCount AND
-	// vectorResults == matchCount): with 1 chunk in `chunks` and 5 in
-	// `vectorResults` matching matchCount=5, MatchCount=10, the iterative
-	// path is taken and the propagated error must surface.
-	kb := &types.KnowledgeBase{
-		ID: "kb-bad", Type: types.KnowledgeBaseTypeFAQ,
-		EmbeddingModelID: "m-1", TenantID: 1,
-	}
-	chunks := []*types.IndexWithScore{{ChunkID: "c1", Score: 0.5}}
-	vectorResults := make([]*types.IndexWithScore, 5)
-	for i := range vectorResults {
-		vectorResults[i] = &types.IndexWithScore{ChunkID: fmt.Sprintf("v%d", i)}
-	}
-	params := types.SearchParams{QueryText: "q", MatchCount: 10}
-	out, err := s.applyFAQPostProcessing(ctx, kb, chunks, vectorResults, groups, params, 5)
-	require.Error(t, err)
-	assert.Nil(t, out)
-	_, ok := apperrors.IsAppError(err)
-	require.True(t, ok)
 }
 
 // TestIsParentCancelled distinguishes a true client cancel
@@ -909,14 +787,6 @@ func TestIsParentCancelled(t *testing.T) {
 	}
 }
 
-// TestRetrieveFromStores_IterativePattern_NoInternalRace mirrors the
-// iterative-FAQ usage contract: ONE driver goroutine mutates group.TopK
-// between calls, retrieveFromStores spawns parallel internal goroutines
-// each call. The race detector confirms BaseParams is never observed
-// mid-mutation because paramsWithTopK builds a fresh slice per call.
-//
-// We use two groups to actually trigger the multi-group fan-out path
-// (the single-group fast path doesn't exercise the goroutine spawn).
 func TestRetrieveFromStores_IterativePattern_NoInternalRace(t *testing.T) {
 	t.Parallel()
 	fakeA := &fakeRetrieveEngineService{

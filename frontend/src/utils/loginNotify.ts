@@ -1,6 +1,5 @@
 // Rich "you're now in {workspace} as {role}" notification for the
 // post-login moment. Shared between the password (views/auth/Login.vue)
-// and OIDC (App.vue handleGlobalOIDCCallback) login paths so the two
 // flows feel identical to the user.
 //
 // Kept as a free function — not a composable — because the caller
@@ -21,7 +20,6 @@ type RoleFormatter = (role: string | null | undefined) => string
 type RoleIconResolver = (role: string | null | undefined) => string
 
 interface LoginResponseLike {
-  // Password-login response uses `active_tenant`; the OIDC callback
   // response uses `tenant` (legacy backward-compat name on the Go side).
   // Accept either so callers don't have to normalise.
   active_tenant?: { id?: number | string; name?: string } | null

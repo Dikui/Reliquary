@@ -167,7 +167,7 @@ curl --location 'http://localhost:8080/api/v1/sessions?page=1&page_size=10&keywo
 | `page`      | int    | 否   | 页码（默认 1）                                                    |
 | `page_size` | int    | 否   | 每页数量（默认 10）                                               |
 | `keyword`   | string | 否   | 按标题模糊匹配（ILIKE `%keyword%`）                               |
-| `source`    | string | 否   | 来源过滤：`web`（无 IM 映射）或 IM 平台名，如 `feishu`、`wechat`、`slack` |
+| `source`    | string | 否   | 来源过滤：`web`（无 IM 映射）或 `feishu`（飞书） |
 | `agent_id`  | string | 否   | 按 Agent 过滤（仅对 IM 会话生效）                                 |
 
 **响应**:

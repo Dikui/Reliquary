@@ -36,7 +36,7 @@ type tagTargetKnowledgeService struct {
 	tagIDs     map[string][]string
 }
 
-func (s *tagTargetKnowledgeService) GetKnowledgeBatchWithSharedAccess(
+func (s *tagTargetKnowledgeService) GetKnowledgeBatch(
 	_ context.Context,
 	_ uint64,
 	ids []string,
@@ -94,7 +94,6 @@ func newTagTargetSessionService() *sessionService {
 		knowledgeBaseService: &tagTargetKnowledgeBaseService{
 			kbs: map[string]*types.KnowledgeBase{
 				"doc-kb": {ID: "doc-kb", TenantID: 100, Type: types.KnowledgeBaseTypeDocument},
-				"faq-kb": {ID: "faq-kb", TenantID: 100, Type: types.KnowledgeBaseTypeFAQ},
 			},
 		},
 		knowledgeService: &tagTargetKnowledgeService{
@@ -209,26 +208,6 @@ func TestBuildSearchTargets_DocumentTagScopeIntersectsExplicitKnowledgeIDs(t *te
 	assert.True(t, targets[0].DisableRecallThresholds)
 }
 
-func TestBuildSearchTargets_FAQTagScopeKeepsIndexTagFilter(t *testing.T) {
-	svc := newTagTargetSessionService()
-
-	targets, err := svc.buildSearchTargets(
-		tagTargetContext(),
-		100,
-		[]string{"faq-kb"},
-		nil,
-		[]types.TagScope{{KnowledgeBaseID: "faq-kb", TagIDs: []string{"tag-a", "tag-b"}}},
-	)
-
-	require.NoError(t, err)
-	require.Len(t, targets, 1)
-	assert.Equal(t, types.SearchTargetTypeKnowledgeBase, targets[0].Type)
-	assert.Equal(t, "faq-kb", targets[0].KnowledgeBaseID)
-	assert.ElementsMatch(t, []string{"tag-a", "tag-b"}, targets[0].TagIDs)
-	assert.ElementsMatch(t, []string{"tag-a", "tag-b"}, targets[0].ScopeTagIDs)
-	assert.True(t, targets[0].DisableRecallThresholds)
-}
-
 func TestBuildSearchTargets_FullKBWithTagScopeSkipsFullKBTarget(t *testing.T) {
 	svc := newTagTargetSessionService()
 
@@ -282,11 +261,9 @@ func TestMergeResolvedTagKnowledgeIDs_OnlyIncludesTagScopedTargets(t *testing.T)
 		types.SearchTargets{
 			{Type: types.SearchTargetTypeKnowledge, KnowledgeBaseID: "tag-kb", KnowledgeIDs: []string{"tag-doc-1", "tag-doc-2"}},
 			{Type: types.SearchTargetTypeKnowledge, KnowledgeBaseID: "other-kb", KnowledgeIDs: []string{"other-doc"}},
-			{Type: types.SearchTargetTypeKnowledgeBase, KnowledgeBaseID: "faq-kb", TagIDs: []string{"faq-tag"}},
 		},
 		[]types.TagScope{
 			{KnowledgeBaseID: "tag-kb", TagIDs: []string{"tag-a"}},
-			{KnowledgeBaseID: "faq-kb", TagIDs: []string{"faq-tag"}},
 		},
 	)
 

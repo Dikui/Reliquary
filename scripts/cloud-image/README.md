@@ -86,7 +86,6 @@ Reliquary `docker-compose.yml` 大量服务是 **profile 限定**，本镜像只
 | profile | 用途 |
 |---|---|
 | `minio` | 对象存储替代本地文件 |
-| `dex` | OIDC 登录 |
 | `odl-hybrid` | OpenDataLoader Docling hybrid（体积大，无预发布镜像，需 `--build`） |
 
 启用方式：

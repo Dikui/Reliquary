@@ -1652,12 +1652,6 @@ func compactSnapshotToken(id string) string {
 	return s
 }
 
-// skillSnapshotBuildName is the name every generation of a config's image
-// chain is committed under. It is recorded on the ledger row before the
-// provider call so an abandoned build stays identifiable. Tenant and the
-// full config id are in the name because Cube, E2B and Docker all list
-// snapshots across a shared account or daemon; the row token stops two
-// builds of the same generation from sharing a tag.
 func skillSnapshotBuildName(tenantID uint64, configID string, generation int, rowID string) string {
 	prefix := skillSnapshotNamePrefix(tenantID, configID)
 	return fmt.Sprintf("%s-g%d-%s", prefix, generation, compactSnapshotToken(rowID))
@@ -1667,8 +1661,6 @@ func compactConfigID(id string) string {
 	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(id), "-", ""))
 }
 
-// reliquarySkillSnapshotName pulls the reliquary-sk-… token out of a provider
-// listing. Cube and E2B echo it in Names; Docker embeds it in the image tag.
 func reliquarySkillSnapshotName(raw string) string {
 	s := strings.TrimSpace(raw)
 	s = strings.TrimPrefix(s, "docker.io/")
@@ -1684,11 +1676,6 @@ func reliquarySkillSnapshotName(raw string) string {
 	return ""
 }
 
-// snapshotsNotFromOtherConfig drops provider listings that already name a
-// different Reliquary config. Cube, E2B and Docker all ListSnapshots across the
-// whole account/daemon, so without this a reconcile of one config would treat
-// every other config's image as an extra, and an abandoned-build match could
-// bind to the wrong snapshot.
 func snapshotsNotFromOtherConfig(
 	listed []sandbox.RemoteSnapshotRef, prefix string,
 ) []sandbox.RemoteSnapshotRef {
@@ -2220,14 +2207,6 @@ func currentBaseTemplate(cfg *types.TenantSandboxConfig) string {
 		return ""
 	}
 	switch sandbox.SandboxType(cfg.SandboxType) {
-	case sandbox.SandboxTypeCube:
-		if cfg.Cube != nil {
-			return cfg.Cube.TemplateID
-		}
-	case sandbox.SandboxTypeE2B:
-		if cfg.E2B != nil {
-			return cfg.E2B.TemplateID
-		}
 	case sandbox.SandboxTypeDocker:
 		if cfg.Docker != nil {
 			return cfg.Docker.Image

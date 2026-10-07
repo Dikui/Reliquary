@@ -18,7 +18,7 @@ type MentionedItem struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
 	Type   string `json:"type"`    // "kb", "file", "tag", "mcp", or "skill"
-	KBType string `json:"kb_type"` // "document" or "faq" (only for kb type)
+	KBType string `json:"kb_type"` // "document" (only for kb type)
 	KBID   string `json:"kb_id"`   // Parent knowledge base for file/tag mentions
 	KBName string `json:"kb_name"` // Display name for parent KB
 }

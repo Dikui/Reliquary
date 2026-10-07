@@ -94,35 +94,6 @@ func TestFilterRerankRankResults_thresholdAndFallback(t *testing.T) {
 	}
 }
 
-func TestApplyModelRerankScores_faqUsesCompositeScale(t *testing.T) {
-	t.Parallel()
-	tool := &KnowledgeSearchTool{
-		config: &config.Config{
-			Conversation: &config.ConversationConfig{RerankThreshold: 0.3},
-		},
-	}
-	originals := []*searchResultWithMeta{
-		{
-			SearchResult:      &types.SearchResult{ID: "faq-1", Content: "Q: Reliquary", Score: 0.011},
-			KnowledgeBaseType: types.KnowledgeBaseTypeFAQ,
-		},
-		{
-			SearchResult: &types.SearchResult{ID: "doc-1", Content: "swimming club", Score: 0.02},
-		},
-	}
-	rankResults := []rerank.RankResult{
-		{Index: 0, RelevanceScore: 0.05},
-		{Index: 1, RelevanceScore: 0.9},
-	}
-	out := tool.applyModelRerankScores(originals, rankResults, 0.3, false)
-	if len(out) != 1 || out[0].ID != "doc-1" {
-		t.Fatalf("weak FAQ should be filtered out, got %#v", out)
-	}
-	if out[0].Score <= 0.011 {
-		t.Fatalf("composite score should exceed raw retrieval score, got %.4f", out[0].Score)
-	}
-}
-
 // A rerank API failure must degrade to the raw retrieval order rather than
 // dropping the recall set or re-scoring it with a chat model.
 func TestRerankResults_modelErrorKeepsRawResults(t *testing.T) {

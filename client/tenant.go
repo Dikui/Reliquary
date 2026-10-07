@@ -1,7 +1,5 @@
-// Package client provides the implementation for interacting with the Reliquary API
-// The Tenant related interfaces are used to manage tenants in the system
-// Tenants can be created, retrieved, updated, deleted, and queried
-// They can also be used to manage retriever engines for different tasks
+// Package client provides the Reliquary API client.
+// Tenant endpoints read and update the single team's settings and API keys.
 package client
 
 import (
@@ -9,8 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
-	"strconv"
 	"time"
 )
 
@@ -42,11 +38,6 @@ type Tenant struct {
 	StorageQuota int64 `yaml:"storage_quota"     json:"storage_quota"     gorm:"default:10737418240"`
 	// Storage used (Bytes)
 	StorageUsed int64 `yaml:"storage_used"      json:"storage_used"      gorm:"default:0"`
-	// APIKey is only populated by CreateTenant when the server has
-	// tenant.auto_create_api_key (env RELIQUARY_TENANT_AUTO_CREATE_API_KEY)
-	// enabled: it carries the plaintext token of an auto-created full_access
-	// key. Empty otherwise. Save it on receipt — it is never returned again.
-	APIKey string `yaml:"api_key,omitempty" json:"api_key,omitempty"`
 	// Creation timestamp
 	CreatedAt time.Time `yaml:"created_at"        json:"created_at"`
 	// Last update timestamp
@@ -57,14 +48,6 @@ type Tenant struct {
 type TenantResponse struct {
 	Success bool   `json:"success"` // Whether the operation was successful
 	Data    Tenant `json:"data"`    // Tenant data
-}
-
-// TenantListResponse represents the API response structure for listing tenants
-type TenantListResponse struct {
-	Success bool `json:"success"` // Whether the operation was successful
-	Data    struct {
-		Items []Tenant `json:"items"` // List of tenant items
-	} `json:"data"`
 }
 
 // TenantAPIKeyRole is the tenant RBAC role bound to a revocable API key.
@@ -129,21 +112,6 @@ type tenantAPIKeyCreateResponse struct {
 	Data    CreatedTenantAPIKey `json:"data"`
 }
 
-// CreateTenant creates a new tenant
-func (c *Client) CreateTenant(ctx context.Context, tenant *Tenant) (*Tenant, error) {
-	resp, err := c.doRequest(ctx, http.MethodPost, "/api/v1/tenants", tenant, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	var response TenantResponse
-	if err := parseResponse(resp, &response); err != nil {
-		return nil, err
-	}
-
-	return &response.Data, nil
-}
-
 // GetTenant retrieves a tenant by ID
 func (c *Client) GetTenant(ctx context.Context, tenantID uint64) (*Tenant, error) {
 	path := fmt.Sprintf("/api/v1/tenants/%d", tenantID)
@@ -174,88 +142,6 @@ func (c *Client) UpdateTenant(ctx context.Context, tenant *Tenant) (*Tenant, err
 	}
 
 	return &response.Data, nil
-}
-
-// DeleteTenant removes a tenant by ID
-func (c *Client) DeleteTenant(ctx context.Context, tenantID uint64) error {
-	path := fmt.Sprintf("/api/v1/tenants/%d", tenantID)
-	resp, err := c.doRequest(ctx, http.MethodDelete, path, nil, nil)
-	if err != nil {
-		return err
-	}
-
-	var response struct {
-		Success bool   `json:"success"`
-		Message string `json:"message,omitempty"`
-	}
-
-	return parseResponse(resp, &response)
-}
-
-// ListTenants retrieves all tenants
-func (c *Client) ListTenants(ctx context.Context) ([]Tenant, error) {
-	resp, err := c.doRequest(ctx, http.MethodGet, "/api/v1/tenants", nil, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	var response TenantListResponse
-	if err := parseResponse(resp, &response); err != nil {
-		return nil, err
-	}
-
-	return response.Data.Items, nil
-}
-
-// ListAllTenants retrieves all tenants in the system (requires cross-tenant access)
-func (c *Client) ListAllTenants(ctx context.Context) ([]Tenant, error) {
-	resp, err := c.doRequest(ctx, http.MethodGet, "/api/v1/tenants/all", nil, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	var response TenantListResponse
-	if err := parseResponse(resp, &response); err != nil {
-		return nil, err
-	}
-
-	return response.Data.Items, nil
-}
-
-// TenantSearchResponse represents the API response for searching tenants
-type TenantSearchResponse struct {
-	Success bool `json:"success"`
-	Data    struct {
-		Items    []Tenant `json:"items"`
-		Total    int64    `json:"total"`
-		Page     int      `json:"page"`
-		PageSize int      `json:"page_size"`
-	} `json:"data"`
-}
-
-// SearchTenants searches tenants with pagination (requires cross-tenant access)
-func (c *Client) SearchTenants(ctx context.Context, keyword string, tenantID uint64, page, pageSize int) ([]Tenant, int64, error) {
-	queryParams := url.Values{}
-	if keyword != "" {
-		queryParams.Set("keyword", keyword)
-	}
-	if tenantID > 0 {
-		queryParams.Set("tenant_id", strconv.FormatUint(tenantID, 10))
-	}
-	queryParams.Set("page", strconv.Itoa(page))
-	queryParams.Set("page_size", strconv.Itoa(pageSize))
-
-	resp, err := c.doRequest(ctx, http.MethodGet, "/api/v1/tenants/search", nil, queryParams)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	var response TenantSearchResponse
-	if err := parseResponse(resp, &response); err != nil {
-		return nil, 0, err
-	}
-
-	return response.Data.Items, response.Data.Total, nil
 }
 
 // ListTenantAPIKeys lists API keys for a tenant.

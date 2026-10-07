@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/redis/go-redis/v9"
 	"strconv"
 	"strings"
 	"time"
 	"unicode"
-
-	"github.com/redis/go-redis/v9"
 
 	"reliquary/internal/common/redislock"
 )
@@ -39,34 +38,6 @@ if value['provider'] ~= ARGV[1] or value['sandbox_id'] ~= ARGV[2] then
 	return 0
 end
 redis.call('SET', KEYS[1], ARGV[3])
-return 1
-`)
-
-// Patches only traffic_access_token so a concurrent stale-mark cannot be
-// overwritten by a full-document replace. ARGV[3] is the new token.
-//
-// The field is rewritten in the stored JSON text rather than via
-// cjson.encode of the whole object: Redis's cjson turns integers into
-// x.0, and encoding/json then refuses those into uint64 (tenant_id).
-var replaceTrafficTokenIfMatchScript = redis.NewScript(`
-local raw = redis.call('GET', KEYS[1])
-if not raw then return 0 end
-local value = cjson.decode(raw)
-if value['provider'] ~= ARGV[1] or value['sandbox_id'] ~= ARGV[2] then
-	return 0
-end
-if value['traffic_access_token'] == ARGV[3] then
-	return 0
-end
-local encoded = string.gsub(cjson.encode(ARGV[3]), '%%', '%%%%')
-local updated, n = string.gsub(raw, '"traffic_access_token"%s*:%s*".-"', '"traffic_access_token":'..encoded, 1)
-if n == 0 then
-	updated, n = string.gsub(raw, '}(%s*)$', ',"traffic_access_token":'..encoded..'}%1', 1)
-	if n == 0 then
-		return 0
-	end
-end
-redis.call('SET', KEYS[1], updated)
 return 1
 `)
 
@@ -202,34 +173,6 @@ func (s *RedisSessionSandboxBindingStore) DeleteIfMatch(
 		return false, fmt.Errorf("delete sandbox binding: %w", err)
 	}
 	return deleted != 0, nil
-}
-
-// ReplaceTrafficTokenIfMatch patches the inbound credential only while the
-// stored binding still names expected's provider and sandbox.
-func (s *RedisSessionSandboxBindingStore) ReplaceTrafficTokenIfMatch(
-	ctx context.Context,
-	key SessionSandboxKey,
-	expected SessionSandboxBinding,
-	token string,
-) (bool, error) {
-	if err := validateBindingMatch(key, expected.Provider, expected.SandboxID); err != nil {
-		return false, err
-	}
-	if token == "" {
-		return false, nil
-	}
-	wrote, err := replaceTrafficTokenIfMatchScript.Run(
-		ctx,
-		s.client,
-		[]string{s.bindingKey(key)},
-		string(expected.Provider),
-		expected.SandboxID,
-		token,
-	).Int64()
-	if err != nil {
-		return false, fmt.Errorf("replace sandbox inbound token: %w", err)
-	}
-	return wrote != 0, nil
 }
 
 // WithLifecycleLock serializes create, recover, replace, and delete transitions
@@ -442,8 +385,6 @@ func (s *RedisSessionSandboxBindingStore) bindingKey(key SessionSandboxKey) stri
 }
 
 func (s *RedisSessionSandboxBindingStore) lockKey(key SessionSandboxKey) string {
-	// Keep the historical suffix used by the saved multi-node Cube
-	// implementation so rolling upgrades serialize on the same lock.
 	return "reliquary:sandbox:session:{" + s.hashTag(key) + "}:create-lock"
 }
 

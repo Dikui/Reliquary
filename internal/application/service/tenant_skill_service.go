@@ -3,12 +3,12 @@ package service
 import (
 	"context"
 	"fmt"
+	redis "github.com/redis/go-redis/v9"
+	"github.com/robfig/cron/v3"
 	"net/http"
 	"sync"
 	"time"
 
-	"github.com/redis/go-redis/v9"
-	"github.com/robfig/cron/v3"
 	"golang.org/x/sync/singleflight"
 
 	"reliquary/internal/application/repository"

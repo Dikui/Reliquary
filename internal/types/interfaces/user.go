@@ -8,16 +8,11 @@ import (
 
 // UserService defines the user service interface
 type UserService interface {
+	HasTeamUsers(ctx context.Context) (bool, error)
 	// Register creates a new user account
 	Register(ctx context.Context, req *types.RegisterRequest) (*types.User, error)
 	// Login authenticates a user and returns tokens
 	Login(ctx context.Context, req *types.LoginRequest) (*types.LoginResponse, error)
-	// GetOIDCAuthorizationURL builds the third-party OIDC authorization URL
-	GetOIDCAuthorizationURL(ctx context.Context, redirectURI string) (*types.OIDCAuthURLResponse, error)
-	// LoginWithOIDC exchanges the callback code, auto-provisions users if needed, and completes login.
-	// provisioning is the default tenant mode for a newly auto-created user
-	// (resolved by the caller from auth.default_tenant_mode).
-	LoginWithOIDC(ctx context.Context, code, redirectURI string, provisioning types.TenantProvisioningMode) (*types.OIDCCallbackResponse, error)
 	// GetUserByID gets a user by ID
 	GetUserByID(ctx context.Context, id string) (*types.User, error)
 	// GetUsersByIDs batch-fetches users by id, returning a map keyed by
@@ -51,20 +46,7 @@ type UserService interface {
 	// non-nil so callers can serialise it as an empty JSON array when the
 	// membership table is unavailable.
 	BuildLoginMemberships(ctx context.Context, user *types.User, activeTenant *types.Tenant) []types.Membership
-	// SwitchTenant issues a new token pair scoped to targetTenantID and
-	// returns the corresponding LoginResponse. The caller's previous
-	// refresh token (passed in for revocation) is invalidated. Membership
-	// is verified via the TenantMember service before tokens are issued.
-	// On success the target is recorded as the user's last-active-tenant
-	// preference (next login and refresh land there). A preference-write
-	// failure fails the switch so no token pair is issued.
-	SwitchTenant(ctx context.Context, user *types.User, targetTenantID uint64, currentRefreshToken string) (*types.LoginResponse, error)
-	// ValidateToken validates an access token. It returns the user
-	// referenced by the token plus the active tenant ID encoded in the
-	// JWT's `tenant_id` claim — the latter lets the auth middleware
-	// honour /auth/switch-tenant sessions that were minted with a
-	// non-home tenant. Falls back to user.TenantID when the claim is
-	// missing (old tokens issued before tenant-level RBAC).
+	// ValidateToken checks the access token and returns its team identity.
 	ValidateToken(ctx context.Context, token string) (*types.User, uint64, error)
 	// RefreshToken refreshes access token using refresh token
 	RefreshToken(ctx context.Context, refreshToken string) (accessToken, newRefreshToken string, err error)
@@ -82,26 +64,17 @@ type UserService interface {
 	// callers pass offset/limit to page through results. Used by the
 	// /api/v1/system/admin/list endpoint, gated to SystemAdmin callers.
 	ListSystemAdmins(ctx context.Context, offset, limit int) ([]*types.User, int64, error)
-	// AdminCreateUser provisions a new local user on behalf of a
-	// SystemAdmin. When req.Password is nil, a random password is generated
-	// and returned exactly once as the second result. provisioning is
-	// resolved by the caller from the shared auth.default_tenant_mode policy.
-	AdminCreateUser(
-		ctx context.Context, req *types.AdminCreateUserRequest, provisioning types.TenantProvisioningMode,
-	) (*types.User, string, error)
 	// RevokeSystemAdmin removes system-admin privileges with the
 	// last-admin/self-revoke checks performed atomically.
 	RevokeSystemAdmin(ctx context.Context, userID, actorID string) (*types.User, error)
-	// UpdateUserPreferences partially updates the calling user's
-	// preferences blob (PATCH semantics: only keys present in `patch`
-	// overwrite existing values). Returns the updated, persisted prefs.
-	UpdateUserPreferences(ctx context.Context, userID string, patch types.UserPreferences) (types.UserPreferences, error)
 }
 
 // UserRepository defines the user repository interface
 type UserRepository interface {
 	// CreateUser creates a user
 	CreateUser(ctx context.Context, user *types.User) error
+	RegisterTeamUser(ctx context.Context, user *types.User, invitationToken string) error
+	HasTeamUsers(ctx context.Context) (bool, error)
 	// GetUserByID gets a user by ID
 	GetUserByID(ctx context.Context, id string) (*types.User, error)
 	// GetUsersByIDs batch-fetches users by id, returning a map keyed by

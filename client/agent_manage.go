@@ -101,9 +101,6 @@ type AgentConfig struct {
 	ImageStorageProvider        string                    `json:"image_storage_provider"`
 	SupportedFileTypes          []string                  `json:"supported_file_types"`
 	DataAnalysisEnabled         bool                      `json:"data_analysis_enabled"`
-	FAQPriorityEnabled          bool                      `json:"faq_priority_enabled"`
-	FAQDirectAnswerThreshold    float64                   `json:"faq_direct_answer_threshold"`
-	FAQScoreBoost               float64                   `json:"faq_score_boost"`
 	WebSearchEnabled            bool                      `json:"web_search_enabled"`
 	WebSearchMaxResults         int                       `json:"web_search_max_results"`
 	WebSearchProviderID         string                    `json:"web_search_provider_id,omitempty"`
@@ -301,7 +298,7 @@ func (c *Client) GetAgentPlaceholders(ctx context.Context) (map[string]json.RawM
 // SuggestedQuestion represents a suggested question for an agent
 type SuggestedQuestion struct {
 	Question        string `json:"question"`                    // Question text
-	Source          string `json:"source"`                      // Source: "faq", "document", or "agent_config"
+	Source          string `json:"source"`                      // Source: "document" or "agent_config"
 	KnowledgeBaseID string `json:"knowledge_base_id,omitempty"` // Source knowledge base ID
 }
 

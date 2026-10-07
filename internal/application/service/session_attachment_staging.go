@@ -24,7 +24,7 @@ type stagedSessionAttachment struct {
 
 // sessionSandboxFileStore returns the manager's effective session filesystem
 // capability, or nil when the backend cannot support it. Centralised so
-// callers never resurrect a Cube-specific type check.
+// callers never resurrect a provider-specific type check.
 func sessionSandboxFileStore(mgr sandbox.Manager) sandbox.SessionFileStore {
 	provider, ok := mgr.(sandbox.SessionCapabilityProvider)
 	if !ok || provider == nil {

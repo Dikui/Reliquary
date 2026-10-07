@@ -3,7 +3,6 @@ import test from 'node:test'
 
 import {
   API_EXTERNAL_USER_SESSION_OWNER_PREFIX,
-  EMBED_SESSION_MARKER_PREFIX,
   classifyDateBucket,
   configuredPlatforms,
   groupSessions,
@@ -15,24 +14,15 @@ import {
 const sourceLabels = {
   web: 'Web',
   api: 'API',
-  embedFallback: 'Embed',
-  embedChannel: (id: string) => `Embed ${id}`,
   imPlatform: (p: string) => `IM ${p}`,
 }
 
-test('resolveSessionOrigin distinguishes web, IM, and embed sessions', () => {
+test('resolveSessionOrigin distinguishes web, IM, and API sessions', () => {
   assert.deepEqual(resolveSessionOrigin({ id: '1' }), { kind: 'web' })
   assert.deepEqual(resolveSessionOrigin({ id: '2', im_platform: 'feishu' }), {
     kind: 'im',
     platform: 'feishu',
   })
-  assert.deepEqual(
-    resolveSessionOrigin({
-      id: '3',
-      description: `${EMBED_SESSION_MARKER_PREFIX}ch-1`,
-    }),
-    { kind: 'embed', channelId: 'ch-1' },
-  )
   assert.deepEqual(
     resolveSessionOrigin({ id: '4', user_id: 'api_tenant_key:1:10' }),
     { kind: 'api' },
@@ -46,25 +36,23 @@ test('resolveSessionOrigin distinguishes web, IM, and embed sessions', () => {
 test('configuredPlatforms returns distinct platform keys in first-seen order', () => {
   const channels = [
     { platform: 'feishu' },
-    { platform: 'wecom' },
+    { platform: 'feishu' },
     { platform: 'feishu' },
     { platform: '' },
   ]
-  assert.deepEqual(configuredPlatforms(channels), ['feishu', 'wecom'])
+  assert.deepEqual(configuredPlatforms(channels), ['feishu'])
 })
 
-test('groupSessionsBySource orders web, configured IM, then embed channels', () => {
+test('groupSessionsBySource orders web and configured IM', () => {
   const sessions = [
     { id: 'w', title: 'web chat' },
     { id: 'f', title: 'feishu', im_platform: 'feishu' },
-    { id: 'e', title: 'embed', description: `${EMBED_SESSION_MARKER_PREFIX}ec-1` },
   ]
-  const groups = groupSessionsBySource(sessions, sourceLabels, { 'ec-1': 'Help widget' }, ['feishu'], 'Pinned')
+  const groups = groupSessionsBySource(sessions, sourceLabels, ['feishu'], 'Pinned')
   assert.deepEqual(
     groups.map((g) => g.key),
-    ['web', 'im:feishu', 'embed:ec-1'],
+    ['web', 'im:feishu'],
   )
-  assert.equal(groups[2]?.label, 'Help widget')
 })
 
 test('groupSessions date mode keeps pinned sessions in their own bucket', () => {
@@ -88,7 +76,6 @@ test('groupSessions date mode keeps pinned sessions in their own bucket', () => 
       },
       categorizeDate: () => 'today',
       sourceLabels,
-      embedChannelNames: {},
       configuredImPlatforms: [],
     },
   )

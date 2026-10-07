@@ -71,14 +71,14 @@ func TestRemoteClientContractExposesProviderAndReconnectCapability(t *testing.T)
 	t.Parallel()
 
 	client := &contractClient{
-		provider: SandboxTypeE2B,
+		provider: SandboxTypeDocker,
 		capabilities: RemoteSandboxCapabilities{
 			SupportsReconnect: true,
 		},
 	}
 
-	if got := client.Provider(); got != SandboxTypeE2B {
-		t.Fatalf("Provider() = %q, want %q", got, SandboxTypeE2B)
+	if got := client.Provider(); got != SandboxTypeDocker {
+		t.Fatalf("Provider() = %q, want %q", got, SandboxTypeDocker)
 	}
 	if !client.Capabilities().SupportsReconnect {
 		t.Fatal("reconnect capability must be explicit")

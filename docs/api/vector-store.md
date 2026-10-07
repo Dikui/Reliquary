@@ -14,4 +14,4 @@ curl 'http://localhost:8080/api/v1/vector-stores' -H 'X-API-Key: sk-xxxxx'
 
 返回数据包含 `id`、`name`、`engine_type`、`source`、`status` 和只读标记。`engine_type` 固定为 `postgres`；连接可用性根据服务端的 PostgreSQL 连接检测。
 
-知识库仍保留既有 `vector_store_id` 和显示投影字段，以免牵动共享访问与知识上下文模块；新建或更新知识库不会选择其他检索引擎。
+知识库仍保留既有 `vector_store_id` 和显示投影字段，供知识上下文模块使用；新建或更新知识库不会选择其他检索引擎。

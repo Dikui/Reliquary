@@ -52,7 +52,6 @@ export interface APIPrincipalTestToken {
 //  - 'retrieve': read/search knowledge-base data within scope
 //  - 'chat': run the conversation flow (sessions + agent listing + self identity)
 //  - 'read_agents': list/read agents without chat or authoring
-//  - 'ingest': write content into allowed knowledge bases (docs/chunks/FAQ/tags/wiki)
 //  - 'manage_kbs': manage the KB lifecycle (create/copy/duplicate/update/delete + config)
 //  - 'manage_agents': create/update/delete/copy agents
 //  - 'message_history': search/read tenant chat-history metadata
@@ -64,7 +63,6 @@ export interface APIPrincipalTestToken {
 //  - 'manage_web_search': manage web-search providers
 //  - 'run_evaluations': run/read evaluation jobs
 //  - 'manage_members': manage tenant members and invitations
-//  - 'manage_spaces': manage organization/space collaboration
 //  - 'manage_tenant_settings': read/update tenant integration settings (API principal mode, headers, tenant KV)
 export type TenantAPIKeyCapability =
   | 'retrieve'
@@ -83,19 +81,17 @@ export type TenantAPIKeyCapability =
   | 'manage_web_search'
   | 'run_evaluations'
   | 'manage_members'
-  | 'manage_spaces'
   | 'manage_tenant_settings'
-  | 'system_tenants_read'
-  | 'system_tenants_manage'
-  | 'system_settings_read'
-  | 'system_settings_manage'
-  | 'system_runtime_read'
-  | 'system_runtime_manage'
-  | 'system_audit_read'
+
+
+
+
+
+
 
 export interface TenantAPIKey {
   id: number
-  scope_type?: 'tenant' | 'platform'
+  scope_type?: 'tenant'
   name: string
   api_key: string
   full_access: boolean
@@ -124,42 +120,6 @@ export interface UpdateTenantAPIKeyPayload {
   knowledge_base_ids: string[]
   capabilities: TenantAPIKeyCapability[]
   expires_at_unix?: number
-}
-
-// 搜索空间参数
-export interface SearchTenantsParams {
-  keyword?: string
-  tenant_id?: number
-  page?: number
-  page_size?: number
-}
-
-// 搜索空间响应
-export interface SearchTenantsResponse {
-  success: boolean
-  data?: {
-    items: TenantInfo[]
-    total: number
-    page: number
-    page_size: number
-  }
-  message?: string
-}
-
-/**
- * 获取所有空间列表（需要跨空间访问权限）
- * @deprecated 建议使用 searchTenants 代替，支持分页和搜索
- */
-export async function listAllTenants(): Promise<{ success: boolean; data?: { items: TenantInfo[] }; message?: string }> {
-  try {
-    const response = await get('/api/v1/tenants/all')
-    return response as unknown as { success: boolean; data?: { items: TenantInfo[] }; message?: string }
-  } catch (error: any) {
-    return {
-      success: false,
-      message: error.message || t('error.tenant.listFailed')
-    }
-  }
 }
 
 export async function getAPIPrincipalConfig(
@@ -284,77 +244,6 @@ export async function updateTenant(
     return {
       success: false,
       message: error.message || t('error.tenant.updateFailed'),
-    }
-  }
-}
-
-/**
- * 删除当前工作区。权限：owner。
- */
-export async function deleteTenant(
-  tenantId: number,
-): Promise<{ success: boolean; message?: string }> {
-  try {
-    const response = await del(`/api/v1/tenants/${tenantId}`)
-    return response as unknown as { success: boolean; message?: string }
-  } catch (error: any) {
-    return {
-      success: false,
-      message: error.message || t('error.tenant.deleteFailed'),
-    }
-  }
-}
-
-/**
- * 创建新工作区（任意已登录用户均可调用）。
- * 后端会自动把调用者写成新空间的 Owner，并填充默认 storage_quota
- * 等服务端字段；API Key 由用户在集成页手动创建。
- * 路由：POST /api/v1/tenants（router 上不挂 g.CrossTenant()，自助场景使用）。
- */
-export async function createTenant(
-  payload: { name: string; description?: string },
-): Promise<{ success: boolean; data?: TenantInfo; message?: string }> {
-  try {
-    const response = await post('/api/v1/tenants', payload)
-    return response as unknown as { success: boolean; data?: TenantInfo; message?: string }
-  } catch (error: any) {
-    const code = error?.error?.code ?? error?.code
-    return {
-      success: false,
-      message: code === 2005
-        ? t('tenant.create.disabled')
-        : (error.message || t('error.tenant.createFailed')),
-    }
-  }
-}
-
-/**
- * 搜索空间（支持分页、关键词搜索和空间ID过滤）
- */
-export async function searchTenants(params: SearchTenantsParams = {}): Promise<SearchTenantsResponse> {
-  try {
-    const queryParams = new URLSearchParams()
-    if (params.keyword) {
-      queryParams.append('keyword', params.keyword)
-    }
-    if (params.tenant_id) {
-      queryParams.append('tenant_id', String(params.tenant_id))
-    }
-    if (params.page) {
-      queryParams.append('page', String(params.page))
-    }
-    if (params.page_size) {
-      queryParams.append('page_size', String(params.page_size))
-    }
-    
-    const queryString = queryParams.toString()
-    const url = `/api/v1/tenants/search${queryString ? '?' + queryString : ''}`
-    const response = await get(url)
-    return response as unknown as SearchTenantsResponse
-  } catch (error: any) {
-    return {
-      success: false,
-      message: error.message || t('error.tenant.searchFailed')
     }
   }
 }

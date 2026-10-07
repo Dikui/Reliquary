@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -14,14 +13,6 @@ import (
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
-
-// ListKnowledgeBases store-enrichment — every KB in the list response
-// carries the same resolved vector_store_* metadata as the single-KB
-// endpoint. The list path funnels the resolution through
-// BatchResolveStoreView so an N-KB list costs one service call rather
-// than N. Cross-tenant shared KBs still render via SharedStoreDisplay
-// so the owner-tenant's store inventory cannot be correlated across
-// rows in the same response.
 
 // stubListKBService returns a fixed slice from ListKnowledgeBases. Only
 // the methods exercised by ListKnowledgeBases are implemented; embedding
@@ -93,14 +84,12 @@ func newListKBRouter(
 	return r
 }
 
-func TestListKB_EnrichesEnvBoundAndSharedDistinctly(t *testing.T) {
+func TestListKB_EnrichesEnvAndBoundStores(t *testing.T) {
 	storeUserA := "aaaa-bbbb-cccc-dddd"
-	storeForeign := "ffff-eeee-dddd-cccc"
 
 	kbs := []*types.KnowledgeBase{
 		{ID: "kb-env", Name: "env", TenantID: 1},
 		{ID: "kb-bound", Name: "bound", TenantID: 1, VectorStoreID: &storeUserA},
-		{ID: "kb-shared", Name: "shared", TenantID: 99, VectorStoreID: &storeForeign},
 	}
 	vss := &stubVectorStoreService{
 		batch: map[string]types.StoreDisplay{
@@ -110,9 +99,6 @@ func TestListKB_EnrichesEnvBoundAndSharedDistinctly(t *testing.T) {
 				EngineType: "postgres",
 				Status:     "available",
 			},
-			// storeForeign is intentionally absent — shared KBs do not
-			// flow through BatchResolveStoreView so the stub must never
-			// see it. The assertion below confirms.
 		},
 	}
 
@@ -131,8 +117,8 @@ func TestListKB_EnrichesEnvBoundAndSharedDistinctly(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &envelope); err != nil {
 		t.Fatalf("decode: %v body=%s", err, w.Body.String())
 	}
-	if !envelope.Success || len(envelope.Data) != 3 {
-		t.Fatalf("expected 3 rows, got %d body=%s", len(envelope.Data), w.Body.String())
+	if !envelope.Success || len(envelope.Data) != 2 {
+		t.Fatalf("expected 2 rows, got %d body=%s", len(envelope.Data), w.Body.String())
 	}
 
 	byID := map[string]map[string]interface{}{}
@@ -161,23 +147,6 @@ func TestListKB_EnrichesEnvBoundAndSharedDistinctly(t *testing.T) {
 		t.Errorf("bound KB: expected engine=postgres, got %v", boundRow["vector_store_engine_type"])
 	}
 
-	// 3) cross-tenant shared KB — UUID stripped, source=shared, no name.
-	sharedRow := byID["kb-shared"]
-	if _, exists := sharedRow["vector_store_id"]; exists {
-		t.Errorf("shared KB must NOT expose vector_store_id, got %v", sharedRow["vector_store_id"])
-	}
-	if sharedRow["vector_store_source"] != string(types.StoreSourceShared) {
-		t.Errorf("shared KB: expected source=shared, got %v", sharedRow["vector_store_source"])
-	}
-	if name, ok := sharedRow["vector_store_name"]; ok && name != "" {
-		t.Errorf("shared KB must not surface a name, got %v", name)
-	}
-	// Defensive: the foreign store UUID must not appear anywhere in the
-	// shared row's serialized payload.
-	serialized, _ := json.Marshal(sharedRow)
-	if strings.Contains(string(serialized), storeForeign) {
-		t.Fatalf("shared row leaked foreign store UUID: %s", serialized)
-	}
 }
 
 func TestListKB_BatchesStoreLookupsToAvoidNPlus1(t *testing.T) {

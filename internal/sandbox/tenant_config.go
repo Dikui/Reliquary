@@ -65,39 +65,6 @@ func ResolveEffectiveConfig(
 	if tenantCfg.EnvVars != nil {
 		effective.EnvVars = cloneMetadata(tenantCfg.EnvVars)
 	}
-	if cube := tenantCfg.Cube; cube != nil {
-		if err := overrideURL(&effective.CubeAPIURL, cube.APIURL, effective.AllowPrivateEndpoints); err != nil {
-			return nil, err
-		}
-		if err := overrideURL(&effective.CubeProxyURL, cube.ProxyURL, effective.AllowPrivateEndpoints); err != nil {
-			return nil, err
-		}
-		overrideString(&effective.CubeSandboxDomain, cube.SandboxDomain)
-		overrideString(&effective.CubeAPIKey, cube.APIKey)
-		overrideString(&effective.CubeTemplate, cube.TemplateID)
-		overrideSeconds(&effective.CubeHTTPTimeout, cube.HTTPTimeoutSec)
-		overrideSeconds(&effective.CubeSandboxTTL, cube.CubeSandboxTTLSeconds)
-		dns, err := NormalizeCubeDNSServers(cube.DNSServers)
-		if err != nil {
-			return nil, err
-		}
-		effective.CubeDNSServers = dns
-	}
-
-	if e2bCfg := tenantCfg.E2B; e2bCfg != nil {
-		if err := overrideURL(&effective.E2BAPIURL, e2bCfg.APIURL, effective.AllowPrivateEndpoints); err != nil {
-			return nil, err
-		}
-		if err := overrideURL(&effective.E2BProxyURL, e2bCfg.ProxyURL, effective.AllowPrivateEndpoints); err != nil {
-			return nil, err
-		}
-		overrideString(&effective.E2BSandboxDomain, e2bCfg.SandboxDomain)
-		overrideString(&effective.E2BAPIKey, e2bCfg.APIKey)
-		overrideString(&effective.E2BTemplate, e2bCfg.TemplateID)
-		overrideSeconds(&effective.E2BHTTPTimeout, e2bCfg.HTTPTimeoutSec)
-		overrideSeconds(&effective.E2BSandboxTTL, e2bCfg.E2BSandboxTTLSeconds)
-	}
-
 	if docker := tenantCfg.Docker; docker != nil {
 		overrideString(&effective.DockerImage, docker.Image)
 		if err := ValidateDockerNetworkMode(docker.NetworkMode); err != nil {
@@ -121,30 +88,11 @@ func ResolveEffectiveConfig(
 	}
 
 	switch effective.Type {
-	case SandboxTypeCube:
-		applyCubeRuntimeDefaults(&effective)
-	case SandboxTypeE2B:
-		applyE2BRuntimeDefaults(&effective)
 	case SandboxTypeDocker:
 		applyDockerRuntimeDefaults(&effective)
 	}
-	// A skill snapshot is a template ID (Cube/E2B) or an image tag (Docker),
-	// so overriding that field here is the entire session-side change.
-	// Everything downstream keeps reading CubeTemplate / E2BTemplate /
-	// DockerImage and needs no knowledge of skills.
+	// Installed skills select the image used for new sessions.
 	switch effective.Type {
-	case SandboxTypeCube:
-		if snapshot := skillImageTemplateOverride(
-			tenantCfg.SkillImage, "cube", effective.CubeAPIKey, effective.CubeAPIURL,
-		); snapshot != "" {
-			effective.CubeTemplate = snapshot
-		}
-	case SandboxTypeE2B:
-		if snapshot := skillImageTemplateOverride(
-			tenantCfg.SkillImage, "e2b", effective.E2BAPIKey, effective.E2BAPIURL,
-		); snapshot != "" {
-			effective.E2BTemplate = snapshot
-		}
 	case SandboxTypeDocker:
 		// Deliberately computed from the STORED docker block, not from
 		// effective.DockerHost: a blank host is resolved from the environment
@@ -200,22 +148,6 @@ func clearProviderFields(cfg *Config) {
 	cfg.DockerPidsLimit = 0
 	cfg.DockerIdleTTL = 0
 	cfg.DockerHTTPTimeout = 0
-	cfg.CubeAPIURL = ""
-	cfg.CubeProxyURL = ""
-	cfg.CubeSandboxDomain = ""
-	cfg.CubeAPIKey = ""
-	cfg.CubeTemplate = ""
-	cfg.CubeSandboxTTL = 0
-	cfg.CubeHTTPTimeout = 0
-	cfg.CubeDNSServers = nil
-
-	cfg.E2BAPIURL = ""
-	cfg.E2BProxyURL = ""
-	cfg.E2BSandboxDomain = ""
-	cfg.E2BAPIKey = ""
-	cfg.E2BTemplate = ""
-	cfg.E2BSandboxTTL = 0
-	cfg.E2BHTTPTimeout = 0
 	cfg.Network = RemoteNetworkPolicy{}
 }
 
@@ -229,10 +161,6 @@ var ErrUnsupportedSandboxType = errors.New("sandbox: unsupported sandbox type")
 // silently disabling that tenant's sandbox at first use.
 func ParseSandboxType(raw string) (SandboxType, error) {
 	switch SandboxType(raw) {
-	case SandboxTypeCube:
-		return SandboxTypeCube, nil
-	case SandboxTypeE2B:
-		return SandboxTypeE2B, nil
 	case SandboxTypeDocker:
 		return SandboxTypeDocker, nil
 	case SandboxTypeDisabled:
@@ -248,10 +176,6 @@ func EffectiveTemplateID(cfg *Config) string {
 		return ""
 	}
 	switch cfg.Type {
-	case SandboxTypeCube:
-		return cfg.CubeTemplate
-	case SandboxTypeE2B:
-		return cfg.E2BTemplate
 	case SandboxTypeDocker:
 		// The image is what a template ID is for the MicroVM backends: the
 		// pre-baked filesystem a sandbox starts from.
@@ -286,89 +210,10 @@ func overrideSeconds(dst *time.Duration, seconds int) {
 	}
 }
 
-// resolveNetworkPolicy turns the stored, admin-facing policy into the
-// provider-facing one. This is the single place the inversions happen:
-//
-//   - DenyEgressByDefault -> AllowInternetAccess=false
-//   - CubeEgressRule.Deny -> RemoteCubeEgressRule.Allow
-//
-// Inbound is always closed (AllowPublicTraffic=false). Stored
-// AllowPublicInbound is dropped at the persistence boundary already
-// (mergeNetworkPolicyForUpdate); ignoring it again here means even a caller
-// that reaches this function without going through that merge cannot open
-// the sandbox URL.
-//
-// A nil stored policy is not "unset": it resolves to Reliquary's default of
-// egress allowed and inbound closed, so every downstream consumer sees one
-// fully specified policy and nobody re-derives the default.
+// resolveNetworkPolicy closes public inbound traffic and applies the egress switch.
 func resolveNetworkPolicy(stored *types.SandboxNetworkPolicy) RemoteNetworkPolicy {
-	allowEgress := true
-	inboundPublic := false
-	if stored != nil {
-		allowEgress = !stored.DenyEgressByDefault
-	}
-	policy := RemoteNetworkPolicy{
-		AllowInternetAccess: &allowEgress,
-		AllowPublicTraffic:  &inboundPublic,
-	}
-	if stored == nil {
-		return policy
-	}
-	policy.AllowOut = append([]string(nil), stored.AllowOut...)
-	// Canonicalise first: any IPv4 /0 (including 1.2.3.4/0) collapses onto
-	// 0.0.0.0/0, which is the spelling E2B string-matches as ALL_TRAFFIC.
-	// Leaving a non-canonical /0 on the wire would pass validation and then
-	// fail create, or accept a domain allow-list without actually denying the
-	// rest of the internet.
-	policy.DenyOut = types.CanonicalizeDenyOut(stored.DenyOut)
-	// DenyEgressByDefault means "install a 0.0.0.0/0 deny-all" — that is the
-	// stored field's documented definition — so materialise it as a real deny
-	// entry instead of leaving it implied by the top-level switch. E2B
-	// validates the two independently and rejects a create whose allowOut
-	// names a domain unless denyOut carries the entry:
-	//
-	//	400 When specifying allowed domains in allow out, you must include
-	//	'ALL_TRAFFIC' in deny out to block all other traffic.
-	//
-	// allow_internet_access=false does not satisfy it. Doing this here rather
-	// than in the E2B adapter keeps the neutral policy self-consistent, so
-	// every adapter and every reader of DenyOut sees the same deny-all the
-	// admin asked for.
-	if stored.DenyEgressByDefault && !types.DenyOutCoversAllIPv4(policy.DenyOut) {
-		policy.DenyOut = append(policy.DenyOut, types.DenyAllIPv4)
-	}
-
-	for _, rule := range stored.CubeRules {
-		converted := RemoteCubeEgressRule{
-			Name:    rule.Name,
-			Scheme:  rule.Scheme,
-			SNI:     rule.SNI,
-			Host:    rule.Host,
-			Methods: append([]string(nil), rule.Methods...),
-			Path:    rule.Path,
-			Allow:   !rule.Deny,
-			Audit:   rule.Audit,
-		}
-		for _, inject := range rule.Inject {
-			converted.Inject = append(converted.Inject, RemoteHeaderInject{
-				Header: inject.Header,
-				Secret: inject.Secret,
-				Format: inject.Format,
-			})
-		}
-		policy.CubeRules = append(policy.CubeRules, converted)
-	}
-	for _, rule := range stored.E2BHostRules {
-		converted := RemoteE2BHostRule{Host: rule.Host}
-		if len(rule.Headers) > 0 {
-			converted.Headers = make(map[string]string, len(rule.Headers))
-			for name, value := range rule.Headers {
-				converted.Headers[name] = value
-			}
-		}
-		policy.E2BHostRules = append(policy.E2BHostRules, converted)
-	}
-	return policy
+	allowEgress := stored == nil || !stored.DenyEgressByDefault
+	return RemoteNetworkPolicy{AllowInternetAccess: &allowEgress}
 }
 
 // applyDockerNetworkPolicy maps docker.network_mode=none onto the resolved

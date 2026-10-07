@@ -6,11 +6,6 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-// auditServiceContextKey is the gin context key used by
-// AuditServiceProvider to stash the running AuditLogService so that
-// middleware functions (rbac.go's RequireRole / RequireOwnershipOrRole)
-// can pull it out without needing the service threaded into their
-// signatures.
 const auditServiceContextKey = "reliquary.audit_service"
 
 // AuditServiceProvider returns a gin middleware that injects the audit

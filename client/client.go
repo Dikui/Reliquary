@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
 	"time"
 )
 
@@ -32,7 +31,6 @@ type Client struct {
 	streamTimeout time.Duration
 	apiKey        string
 	bearerToken   string
-	tenantID      *uint64
 }
 
 // ClientOption defines client configuration options
@@ -84,20 +82,6 @@ func WithBearerToken(token string) ClientOption {
 // Deprecated: use WithAPIKey for X-API-Key, WithBearerToken for JWT.
 func WithToken(token string) ClientOption {
 	return WithAPIKey(token)
-}
-
-// WithTenantID sets X-Tenant-ID on every request. Use only for explicit
-// cross-tenant access by callers with CanAccessAllTenants — the server's
-// auth middleware runs the cross-tenant gate whenever this header is
-// present on a bearer request, even when the value matches the credential's
-// own tenant, and 403s normal users. JWT bearer tokens and tenant-scoped
-// API keys carry tenant identity intrinsically, so the header is redundant
-// (and harmful) for default-tenant traffic. Per-request override via the
-// "TenantID" context value still applies.
-func WithTenantID(tenantID uint64) ClientOption {
-	return func(c *Client) {
-		c.tenantID = &tenantID
-	}
 }
 
 // NewClient creates a new client instance
@@ -177,7 +161,7 @@ func (c *Client) doRequestStream(ctx context.Context,
 	return sc.Do(req)
 }
 
-// applyAuthHeaders sets X-API-Key, Authorization, X-Request-ID, and X-Tenant-ID
+// applyAuthHeaders sets X-API-Key, Authorization, X-Request-ID,
 // on req based on client config and ctx values. Used by doRequest and any
 // caller that builds its own *http.Request (currently CreateKnowledgeFromFile,
 // which uses multipart and can't go through doRequest).
@@ -194,28 +178,10 @@ func (c *Client) applyAuthHeaders(ctx context.Context, req *http.Request) {
 		}
 	}
 
-	tenantID := c.tenantID
-	if ctxTenant := ctx.Value("TenantID"); ctxTenant != nil {
-		switch v := ctxTenant.(type) {
-		case *uint64:
-			if v != nil {
-				tenantID = v
-			}
-		case uint64:
-			tenantID = &v
-		case string:
-			if parsed, err := strconv.ParseUint(v, 10, 64); err == nil {
-				tenantID = &parsed
-			}
-		}
-	}
-	if tenantID != nil {
-		req.Header.Set("X-Tenant-ID", strconv.FormatUint(*tenantID, 10))
-	}
 }
 
 // Raw performs a raw HTTP request against the Reliquary API with the client's
-// auth headers, X-Request-ID, and X-Tenant-ID injection applied.
+// auth headers, X-Request-ID injection applied.
 //
 // Experimental: this method is intended for one-off integrations and the
 // `reliquary api` CLI passthrough. The signature, return type, and behavior may

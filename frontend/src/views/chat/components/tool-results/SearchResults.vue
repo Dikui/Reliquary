@@ -48,21 +48,18 @@ interface GroupedResult {
 }
 
 // Hybrid retrieval can return several chunks from the same document; collapse
-// them into one row so the same file is not listed repeatedly. FAQ entries are
 // the exception: they all share the owning document's title, so each entry is
 // kept as its own row labelled by its standard question to stay distinguishable.
 const groupedResults = computed<GroupedResult[]>(() => {
   const map = new Map<string, GroupedResult>();
   const order: string[] = [];
   for (const r of results.value) {
-    const faqQuestion = r.faq_standard_question?.trim();
-    const isFaq = !!faqQuestion;
-    const key = isFaq ? r.chunk_id : r.knowledge_id || r.chunk_id;
+    const key = r.knowledge_id || r.chunk_id;
     if (!map.has(key)) {
       map.set(key, {
         key,
         knowledge_id: r.knowledge_id,
-        title: (isFaq ? faqQuestion : r.knowledge_title) || r.knowledge_title,
+        title: (r.knowledge_title) || r.knowledge_title,
         chunks: [],
       });
       order.push(key);

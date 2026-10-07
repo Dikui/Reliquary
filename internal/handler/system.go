@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 
@@ -95,139 +94,8 @@ func NewSystemHandler(cfg *config.Config,
 	}
 }
 
-type platformAPIKeyCreateRequest struct {
-	Name         string   `json:"name"`
-	Capabilities []string `json:"capabilities"`
-	ExpiresAt    *int64   `json:"expires_at_unix"`
-}
-
-// ListPlatformAPIKeys godoc
-// @Summary      List platform API keys
-// @Description  Lists non-workspace API keys. Full tokens are always masked. Human SystemAdmin only.
-// @Tags         System Admin
-// @Produce      json
-// @Success      200 {object} map[string]interface{}
-// @Security     Bearer
-// @Router       /system/admin/api-keys [get]
-func (h *SystemHandler) ListPlatformAPIKeys(c *gin.Context) {
-	keys, err := h.apiKeySvc.ListPlatformAPIKeys(c.Request.Context())
-	if err != nil {
-		c.Error(apperrors.NewInternalServerError("Failed to list platform API keys").WithDetails(err.Error()))
-		return
-	}
-	response := make([]tenantAPIKeyResponse, 0, len(keys))
-	for _, key := range keys {
-		item := tenantAPIKeyForResponse(key)
-		item.APIKey = maskManagedAPIKey(key.APIKey)
-		response = append(response, item)
-	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": response})
-}
-
-// CreatePlatformAPIKey godoc
-// @Summary      Create a platform API key
-// @Description  Creates a capability-scoped key that may target any workspace through X-Tenant-ID. The plaintext token is returned once. Human SystemAdmin only.
-// @Tags         System Admin
-// @Accept       json
-// @Produce      json
-// @Param        request body platformAPIKeyCreateRequest true "Platform API key"
-// @Success      201 {object} map[string]interface{}
-// @Security     Bearer
-// @Router       /system/admin/api-keys [post]
-func (h *SystemHandler) CreatePlatformAPIKey(c *gin.Context) {
-	var req platformAPIKeyCreateRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.Error(apperrors.NewValidationError("Invalid request data").WithDetails(err.Error()))
-		return
-	}
-	if strings.TrimSpace(req.Name) == "" {
-		c.Error(apperrors.NewValidationError("name is required"))
-		return
-	}
-	capabilities := types.NormalizeAPIKeyCapabilities(types.StringArray(req.Capabilities))
-	if len(capabilities) == 0 || len(capabilities) != len(req.Capabilities) {
-		c.Error(apperrors.NewValidationError("valid capabilities are required"))
-		return
-	}
-	var expiresAt *time.Time
-	if req.ExpiresAt != nil {
-		value := time.Unix(*req.ExpiresAt, 0).UTC()
-		if !value.After(time.Now().UTC()) {
-			c.Error(apperrors.NewValidationError("expires_at_unix must be in the future"))
-			return
-		}
-		expiresAt = &value
-	}
-	result, err := h.apiKeySvc.CreateAPIKey(c.Request.Context(), interfaces.TenantAPIKeyCreateRequest{
-		ScopeType:    types.APIKeyScopePlatform,
-		Name:         req.Name,
-		Capabilities: []string(capabilities),
-		ExpiresAt:    expiresAt,
-	})
-	if err != nil {
-		c.Error(apperrors.NewInternalServerError("Failed to create platform API key").WithDetails(err.Error()))
-		return
-	}
-	item := tenantAPIKeyForResponse(result.APIKey)
-	item.APIKey = maskManagedAPIKey(result.Token)
-	h.emitAPIKeyAudit(c.Request.Context(), types.AuditActionSystemAPIKeyCreated, result.APIKey)
-	c.JSON(http.StatusCreated, gin.H{
-		"success": true,
-		"data":    tenantAPIKeyCreateResponse{tenantAPIKeyResponse: item, Token: result.Token},
-	})
-}
-
-// DeletePlatformAPIKey godoc
-// @Summary      Revoke a platform API key
-// @Description  Immediately revokes a platform API key. Human SystemAdmin only.
-// @Tags         System Admin
-// @Produce      json
-// @Param        key_id path int true "API key ID"
-// @Success      200 {object} map[string]interface{}
-// @Security     Bearer
-// @Router       /system/admin/api-keys/{key_id} [delete]
-func (h *SystemHandler) DeletePlatformAPIKey(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("key_id"), 10, 64)
-	if err != nil || id == 0 {
-		c.Error(apperrors.NewBadRequestError("Invalid API key ID"))
-		return
-	}
-	if err := h.apiKeySvc.RevokePlatformAPIKey(c.Request.Context(), id); err != nil {
-		c.Error(apperrors.NewNotFoundError("Platform API key not found"))
-		return
-	}
-	h.emitAPIKeyAudit(c.Request.Context(), types.AuditActionSystemAPIKeyRevoked, &types.TenantAPIKey{ID: id})
-	c.JSON(http.StatusOK, gin.H{"success": true})
-}
-
-func maskManagedAPIKey(token string) string {
-	token = strings.TrimSpace(token)
-	if len(token) <= 12 {
-		return "***"
-	}
-	return token[:7] + "..." + token[len(token)-4:]
-}
-
-func (h *SystemHandler) emitAPIKeyAudit(ctx context.Context, action types.AuditAction, key *types.TenantAPIKey) {
-	if h.auditSvc == nil || key == nil {
-		return
-	}
-	actorID, _ := types.UserIDFromContext(ctx)
-	details, _ := json.Marshal(map[string]any{
-		"scope_type":   types.APIKeyScopePlatform,
-		"capabilities": key.Capabilities,
-	})
-	_ = h.auditSvc.Log(ctx, &types.AuditLog{
-		TenantID: 0, ActorUserID: actorID, ActorRole: systemAuditActorRole(ctx),
-		Action: action, TargetType: "api_key", TargetID: strconv.FormatUint(key.ID, 10),
-		Outcome: types.AuditOutcomeSuccess, Details: types.JSON(details),
-	})
-}
-
 func systemAuditActorRole(ctx context.Context) string {
-	if scope, ok := types.TenantAPIKeyScopeFromContext(ctx); ok && scope.IsPlatform() {
-		return "platform_api_key"
-	}
+
 	return "system_admin"
 }
 
@@ -1101,87 +969,6 @@ func (h *SystemHandler) ResetUserPassword(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Password reset successfully"})
 }
 
-// CreateSystemUser godoc
-// @Summary      Create a new user (SystemAdmin)
-// @Description  Provision a new local user account (SystemAdmin only).
-// @Description  When `password` is omitted or null, a cryptographically random
-// @Description  password is generated (OIDC-style crypto/rand + base64url)
-// @Description  and returned once in the response body. Any provided value,
-// @Description  including empty string, is policy-checked. Tenant provisioning
-// @Description  follows the shared auth.default_tenant_mode policy.
-// @Tags         System Admin
-// @Accept       json
-// @Produce      json
-// @Param        request body types.AdminCreateUserRequest true "User creation request"
-// @Success      201  {object}  CreateSystemUserResponse  "User created successfully"
-// @Success      200  {object}  CreateSystemUserResponse  "Identity already exists, returns the existing user"
-// @Failure      400  {object}  map[string]interface{}  "Invalid request or weak password"
-// @Failure      403  {object}  map[string]interface{}  "Forbidden: not a system admin"
-// @Failure      409  {object}  map[string]interface{}  "Email and username refer to conflicting identities"
-// @Failure      500  {object}  map[string]interface{}  "Internal error"
-// @Router       /system/admin/users/create [post]
-func (h *SystemHandler) CreateSystemUser(c *gin.Context) {
-	ctx := logger.CloneContext(c.Request.Context())
-
-	var req types.AdminCreateUserRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user creation request"})
-		return
-	}
-	req.Username = secutils.SanitizeForLog(strings.TrimSpace(req.Username))
-	req.Email = secutils.SanitizeForLog(strings.TrimSpace(req.Email))
-	// Password is intentionally NOT trimmed or sanitized.
-	if req.Username == "" || req.Email == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Username and email are required"})
-		return
-	}
-	// Binding's min=2/max=50 ran on the raw JSON, re-check the trimmed value.
-	if n := utf8.RuneCountInString(req.Username); n < 2 || n > 50 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Username must be 2-50 characters"})
-		return
-	}
-
-	user, generatedPassword, err := h.userSvc.AdminCreateUser(ctx, &req, h.resolveDefaultTenantMode(ctx))
-	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrUserEmailExists) || errors.Is(err, service.ErrUserUsernameExists):
-			if user == nil {
-				logger.Errorf(ctx, "Duplicate identity error without a resolved user: %v", err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
-				return
-			}
-			logger.Infof(ctx, "Create user noop (identity already exists, ID: %s)", user.ID)
-			h.emitAdminAudit(ctx, types.AuditActionSystemUserCreated, user, map[string]any{
-				"target_email":       user.Email,
-				"target_username":    user.Username,
-				"password_generated": false,
-				"idempotent":         true,
-			})
-			c.JSON(http.StatusOK, CreateSystemUserResponse{User: user.ToUserInfo()})
-		case errors.Is(err, service.ErrPasswordPolicy):
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		case errors.Is(err, service.ErrUserIdentityConflict):
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-		default:
-			logger.Errorf(ctx, "Failed to create user: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
-		}
-		return
-	}
-
-	logger.Infof(ctx, "System admin created user %s (ID: %s)", user.Username, user.ID)
-	h.emitAdminAudit(ctx, types.AuditActionSystemUserCreated, user, map[string]any{
-		"target_email":       user.Email,
-		"target_username":    user.Username,
-		"password_generated": generatedPassword != "",
-		"idempotent":         false,
-	})
-	c.JSON(http.StatusCreated, CreateSystemUserResponse{
-		User:              user.ToUserInfo(),
-		GeneratedPassword: generatedPassword,
-	})
-}
-
 func aggregateRuntimeWorkerPools(pools []RuntimeWorkerPool, servers []types.WorkerServerStat) {
 	queueConfigs := map[string]map[string]int{
 		types.WorkerPoolCore:        types.QueueWeightsForPool(types.WorkerPoolCore),
@@ -1747,71 +1534,6 @@ func (h *SystemHandler) UpdateSystemSetting(c *gin.Context) {
 	c.JSON(http.StatusOK, row)
 }
 
-// ApplyDefaultStorageQuotaToAllTenants godoc
-// @Summary      Apply the default storage quota to every existing workspace
-// @Description  Reads the current value of `tenant.default_storage_quota_gb`
-// @Description  (3-tier resolver: DB > ENV > default) and writes that many
-// @Description  GiB into storage_quota for every row in tenants. Bypasses
-// @Description  the per-workspace PUT whitelist, which forbids storage_quota
-// @Description  edits by Owners. SystemAdmin only.
-// @Description  Idempotent — running twice with the same setting is a no-op.
-// @Tags         System Admin
-// @Produce      json
-// @Success      200 {object} map[string]interface{} "{ affected: int64, quota_bytes: int64 }"
-// @Failure      500 {object} map[string]interface{} "DB write failed"
-// @Router       /system/admin/tenants/apply-default-storage-quota [post]
-func (h *SystemHandler) ApplyDefaultStorageQuotaToAllTenants(c *gin.Context) {
-	ctx := logger.CloneContext(c.Request.Context())
-
-	// Resolve via the same 3-tier path the CreateTenant handler uses
-	// so the action's effect mirrors what new tenants would receive.
-	gb := h.systemSettingSvc.GetInt(
-		ctx,
-		"tenant.default_storage_quota_gb",
-		"RELIQUARY_TENANT_DEFAULT_STORAGE_QUOTA_GB",
-		10,
-	)
-	if gb <= 0 {
-		gb = 10
-	}
-	quotaBytes := gb * 1024 * 1024 * 1024
-
-	affected, err := h.tenantSvc.BulkSetStorageQuota(ctx, quotaBytes)
-	if err != nil {
-		logger.Errorf(ctx, "BulkSetStorageQuota failed: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to apply storage quota"})
-		return
-	}
-
-	// Audit. We capture quota_bytes (the actual value written) rather
-	// than the GB literal so the audit row is unambiguous if someone
-	// later changes the setting's units.
-	if h.auditSvc != nil {
-		actorID, _ := types.UserIDFromContext(ctx)
-		details, _ := json.Marshal(map[string]any{
-			"quota_bytes": quotaBytes,
-			"quota_gb":    gb,
-			"affected":    affected,
-		})
-		_ = h.auditSvc.Log(ctx, &types.AuditLog{
-			TenantID:    0,
-			ActorUserID: actorID,
-			ActorRole:   systemAuditActorRole(ctx),
-			Action:      types.AuditActionSystemSettingChanged,
-			TargetType:  "tenant_storage_quota",
-			TargetID:    "all",
-			Outcome:     types.AuditOutcomeSuccess,
-			Details:     types.JSON(details),
-		})
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"affected":    affected,
-		"quota_bytes": quotaBytes,
-		"quota_gb":    gb,
-	})
-}
-
 // ResetSystemSetting godoc
 // @Summary      Reset a system setting to ENV / built-in default
 // @Description  Removes the DB override for :key so the 3-tier resolver
@@ -1853,17 +1575,6 @@ type RuntimeTasksResponse struct {
 	PageSize   int                     `json:"page_size"`
 	HasMore    bool                    `json:"has_more"`
 	NextCursor string                  `json:"next_cursor,omitempty"`
-}
-
-// CreateSystemUserResponse is the payload returned by
-// POST /api/v1/system/admin/users/create. GeneratedPassword is populated
-// exactly once, only when the server minted a random password (`password`
-// omitted or null), and is never logged, audited, or retrievable again.
-type CreateSystemUserResponse struct {
-	User *types.UserInfo `json:"user"`
-	// GeneratedPassword is the plaintext password when the server
-	// auto-generated one. Absent when the caller supplied the password.
-	GeneratedPassword string `json:"generated_password,omitempty"`
 }
 
 type RuntimeQueuesResponse struct {

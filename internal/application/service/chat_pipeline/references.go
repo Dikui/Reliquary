@@ -108,21 +108,7 @@ func orderedPipelineReferences(chatManage *types.ChatManage) []*types.SearchResu
 	if chatManage == nil {
 		return nil
 	}
-	if !chatManage.FAQPriorityEnabled {
-		return chatManage.MergeResult
-	}
-	ordered := make([]*types.SearchResult, 0, len(chatManage.MergeResult))
-	for _, result := range chatManage.MergeResult {
-		if result != nil && result.ChunkType == string(types.ChunkTypeFAQ) {
-			ordered = append(ordered, result)
-		}
-	}
-	for _, result := range chatManage.MergeResult {
-		if result != nil && result.ChunkType != string(types.ChunkTypeFAQ) {
-			ordered = append(ordered, result)
-		}
-	}
-	return ordered
+	return chatManage.MergeResult
 }
 
 func firstPipelineTitle(result *types.SearchResult) string {

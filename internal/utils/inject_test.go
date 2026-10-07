@@ -483,7 +483,7 @@ func TestValidateAndSecureSQL_WithStructuredSearchScopes(t *testing.T) {
 
 func TestValidateAndSecureSQL_WithChunkEnabledFilter(t *testing.T) {
 	securedSQL, validation, err := ValidateAndSecureSQL(
-		"SELECT c.id, c.content FROM chunks c WHERE c.chunk_type = 'faq'",
+		"SELECT c.id, c.content FROM chunks c WHERE c.chunk_type = 'text'",
 		WithChunkEnabledFilter(),
 	)
 	if err != nil {

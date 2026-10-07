@@ -79,8 +79,6 @@
 - 详细的文档和安装指南
 
 ### 工具列表
-- `create_tenant` - 创建新空间
-- `list_tenants` - 列出所有空间
 - `create_knowledge_base` - 创建知识库
 - `list_knowledge_bases` - 列出知识库
 - `get_knowledge_base` - 获取知识库详情

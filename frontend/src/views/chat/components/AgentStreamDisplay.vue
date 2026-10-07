@@ -117,7 +117,7 @@
                   :mcp-tool-name="event.mcp_tool_name || ''" :description="event.description"
                   :args-json="event.args_json" :timeout-seconds="event.timeout_seconds"
                   :requested-at="event.requested_at" :resolved="event.resolved" :approved="event.approved"
-                  :resolve-reason="event.resolve_reason" v-bind="embedAuthProps" />
+                  :resolve-reason="event.resolve_reason"  />
               </div>
 
               <!-- MCP OAuth in-conversation authorization prompt -->
@@ -127,7 +127,7 @@
                   :timeout-seconds="event.timeout_seconds" :requested-at="event.requested_at"
                   :resolved="event.resolved" :authorized="event.authorized"
                   :resolve-reason="event.resolve_reason" :timed-out="event.timed_out" :canceled="event.canceled"
-                  v-bind="embedAuthProps" />
+                   />
               </div>
 
               <!-- Tool Call Event (non-thinking) -->
@@ -334,7 +334,7 @@
               <ToolApprovalCard :pending-id="event.pending_id" :service-name="event.service_name || ''"
                 :mcp-tool-name="event.mcp_tool_name || ''" :description="event.description" :args-json="event.args_json"
                 :timeout-seconds="event.timeout_seconds" :requested-at="event.requested_at" :resolved="event.resolved"
-                :approved="event.approved" :resolve-reason="event.resolve_reason" v-bind="embedAuthProps" />
+                :approved="event.approved" :resolve-reason="event.resolve_reason"  />
             </div>
 
             <!-- MCP OAuth in-conversation authorization prompt -->
@@ -343,7 +343,7 @@
                 :service-name="event.service_name || ''" :mcp-tool-name="event.mcp_tool_name || ''"
                 :timeout-seconds="event.timeout_seconds" :requested-at="event.requested_at" :resolved="event.resolved"
                 :authorized="event.authorized" :resolve-reason="event.resolve_reason" :timed-out="event.timed_out"
-                :canceled="event.canceled" v-bind="embedAuthProps" />
+                :canceled="event.canceled"  />
             </div>
 
             <!-- Thinking Tool Call -->
@@ -936,10 +936,6 @@ const props = defineProps<{
   sessionId?: string;
   userQuery?: string;
   embeddedMode?: boolean;
-  embedChannelId?: string;
-  embedToken?: string;
-  embedSessionSig?: string;
-  embedVisitorId?: string;
   ragMode?: boolean;
   followUpLoading?: boolean;
 }>();
@@ -947,15 +943,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: 'render-complete-change', ready: boolean): void;
 }>();
-
-const embedAuthProps = computed(() => ({
-  embeddedMode: props.embeddedMode,
-  embedChannelId: props.embedChannelId,
-  embedToken: props.embedToken,
-  embedSessionId: props.sessionId,
-  embedSessionSig: props.embedSessionSig,
-  embedVisitorId: props.embedVisitorId,
-}));
 
 const showRequestInfo = computed(
   () => !props.embeddedMode && !!(props.session?.request_id || props.session?.id),
@@ -974,13 +961,8 @@ const resolveAssistantMessageId = (session?: SessionData) =>
   String(session?.assistant_message_id || session?.id || '').trim();
 
 // Agent answers embed exported charts and knowledge-base images as
-// `resource://` handles. Embed visitors use the channel-scoped proxy. Logged-in
 // users use the persisted assistant message as the authorization anchor, which
-// also covers resources owned by a shared agent's source workspace.
 const protectedFileAccess = computed<ProtectedFileAccessContext | undefined>(() => {
-  if (props.embeddedMode && props.embedChannelId && props.embedToken) {
-    return { mode: 'embed', channelId: props.embedChannelId, token: props.embedToken };
-  }
   const messageId = resolveAssistantMessageId(props.session);
   if (props.sessionId && messageId) {
     return { mode: 'message', sessionId: props.sessionId, messageId };
@@ -1057,8 +1039,6 @@ const {
   scheduleClose: scheduleCitationClose,
 } = useChatCitationPopover(rootElement, {
   getKnowledgeReferences: () => props.session?.knowledge_references,
-  embedChannelId: () => (props.embeddedMode ? props.embedChannelId : undefined),
-  embedToken: () => (props.embeddedMode ? props.embedToken : undefined),
   sessionId: () => props.sessionId,
 });
 
@@ -1334,7 +1314,7 @@ function getToolReferenceItems(event: any): KnowledgeReferenceLike[] {
       .map((item: any, index: number) => ({
         id: item.chunk_id || `${item.knowledge_id}-${item.result_index ?? index + 1}`,
         knowledge_id: item.knowledge_id,
-        knowledge_title: item.faq_standard_question || item.knowledge_title,
+        knowledge_title: item.knowledge_title,
         knowledge_base_id: item.knowledge_base_id || fallbackKnowledgeBaseId,
         chunk_index: item.result_index ?? index + 1,
         chunk_type: item.chunk_type,
@@ -1354,7 +1334,7 @@ function getToolReferenceItems(event: any): KnowledgeReferenceLike[] {
           knowledge_title: group.title,
           knowledge_base_id: group.knowledge_base_id,
           chunk_index: index + 1,
-          chunk_type: group.is_faq ? 'faq' : undefined,
+          chunk_type: undefined,
           content: group.chunks.map((chunk) => chunk.content).filter(Boolean).slice(0, 3).join('\n\n') || group.match_snippet || '',
         }));
     }
@@ -1365,7 +1345,7 @@ function getToolReferenceItems(event: any): KnowledgeReferenceLike[] {
       .map((item: any, index: number) => ({
         id: item.knowledge_id,
         knowledge_id: item.knowledge_id,
-        knowledge_title: item.faq_question || item.knowledge_title,
+        knowledge_title: item.knowledge_title,
         knowledge_base_id: item.knowledge_base_id,
         chunk_index: index + 1,
         content: item.match_snippet || '',
@@ -1380,10 +1360,10 @@ function getToolReferenceItems(event: any): KnowledgeReferenceLike[] {
         .map((item: any, index: number) => ({
           id: item.chunk_id || item.id || `${toolData.knowledge_id || 'doc'}-${index + 1}`,
           knowledge_id: item.knowledge_id || toolData.knowledge_id,
-          knowledge_title: toolData.faq_question || toolData.knowledge_title || toolData.knowledge_id,
+          knowledge_title: toolData.knowledge_title || toolData.knowledge_id,
           knowledge_base_id: item.knowledge_base_id || toolData.knowledge_base_id,
           chunk_index: item.chunk_index ?? item.index ?? index + 1,
-          chunk_type: item.chunk_type || (toolData.faq_question ? 'faq' : undefined),
+          chunk_type: item.chunk_type,
           content: item.content || '',
         })));
     }
@@ -1391,11 +1371,10 @@ function getToolReferenceItems(event: any): KnowledgeReferenceLike[] {
     const output = cleanToolOutputContent(event.output);
     if (!output) return [];
     return [{
-      id: toolData.faq_id || toolData.knowledge_id || event.tool_call_id,
+      id: toolData.knowledge_id || event.tool_call_id,
       knowledge_id: toolData.knowledge_id,
-      knowledge_title: toolData.faq_question || toolData.knowledge_title || toolData.knowledge_id || getToolDescription(event),
+      knowledge_title: toolData.knowledge_title || toolData.knowledge_id || getToolDescription(event),
       knowledge_base_id: toolData.knowledge_base_id,
-      chunk_type: toolData.faq_question ? 'faq' : undefined,
       content: output,
     }];
   }
@@ -2592,9 +2571,6 @@ const getToolSummary = (event: any): string => {
       return t('agentStream.toolSummary.getDocument', { title: toolData.title });
     }
   } else if (toolName === 'list_knowledge_chunks') {
-    if (toolData?.faq_question) {
-      return t('agentStream.toolSummary.listFaqEntry', { question: toolData.faq_question });
-    }
     if (toolData?.fetched_chunks !== undefined) {
       const title = toolData?.knowledge_title || toolData?.knowledge_id || t('agentStream.toolSummary.document');
       return t('agentStream.toolSummary.listChunks', { title, fetched: toolData.fetched_chunks, total: toolData.total_chunks ?? '?' });

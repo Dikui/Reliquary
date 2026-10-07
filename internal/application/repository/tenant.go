@@ -73,46 +73,6 @@ func (r *tenantRepository) ListTenants(ctx context.Context) ([]*types.Tenant, er
 	return tenants, nil
 }
 
-// SearchTenants searches tenants with pagination and filters
-func (r *tenantRepository) SearchTenants(ctx context.Context, keyword string, tenantID uint64, page, pageSize int) ([]*types.Tenant, int64, error) {
-	var tenants []*types.Tenant
-	var total int64
-
-	query := r.db.WithContext(ctx).Model(&types.Tenant{})
-
-	// Build search conditions
-	if tenantID > 0 && keyword != "" {
-		escaped := escapeLikeKeyword(keyword)
-		query = query.Where("id = ? OR name LIKE ? OR description LIKE ?", tenantID, "%"+escaped+"%", "%"+escaped+"%")
-	} else if tenantID > 0 {
-		query = query.Where("id = ?", tenantID)
-	} else if keyword != "" {
-		escaped := escapeLikeKeyword(keyword)
-		query = query.Where("name LIKE ? OR description LIKE ?", "%"+escaped+"%", "%"+escaped+"%")
-	}
-
-	// Count total
-	if err := query.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-
-	// Apply pagination
-	if page > 0 && pageSize > 0 {
-		offset := (page - 1) * pageSize
-		query = query.Offset(offset).Limit(pageSize)
-	}
-
-	// Order by created_at DESC
-	query = query.Order("created_at DESC")
-
-	// Execute query
-	if err := query.Find(&tenants).Error; err != nil {
-		return nil, 0, err
-	}
-
-	return tenants, total, nil
-}
-
 // UpdateTenant updates tenant.
 func (r *tenantRepository) UpdateTenant(ctx context.Context, tenant *types.Tenant) error {
 	return r.db.WithContext(ctx).Model(&types.Tenant{}).Where("id = ?", tenant.ID).Updates(tenant).Error
@@ -148,25 +108,4 @@ func (r *tenantRepository) AdjustStorageUsed(ctx context.Context, tenantID uint6
 
 		return tx.Save(&tenant).Error
 	})
-}
-
-// BulkSetStorageQuota writes quotaBytes to storage_quota for every
-// tenant in one statement. We don't WHERE-filter (the action is
-// "apply globally"), so the affected count equals the row count of
-// the tenants table.
-//
-// No transaction here: the operation is a single statement and we
-// don't want to hold a long lock just to update a single column. If
-// a concurrent CreateTenant lands in the middle, the new row gets
-// the new default via the system-setting resolver in the handler —
-// no risk of the new tenant being skipped.
-func (r *tenantRepository) BulkSetStorageQuota(ctx context.Context, quotaBytes int64) (int64, error) {
-	res := r.db.WithContext(ctx).
-		Model(&types.Tenant{}).
-		Where("1 = 1"). // GORM refuses unconditional UPDATEs without an explicit WHERE
-		Update("storage_quota", quotaBytes)
-	if res.Error != nil {
-		return 0, res.Error
-	}
-	return res.RowsAffected, nil
 }

@@ -27,8 +27,6 @@ const (
 	ChunkTypeEntity ChunkType = "entity"
 	// ChunkTypeRelationship 表示关系类型的 Chunk
 	ChunkTypeRelationship ChunkType = "relationship"
-	// ChunkTypeFAQ 表示 FAQ 条目 Chunk
-	ChunkTypeFAQ ChunkType = "faq"
 	// ChunkTypeWebSearch 表示 Web 搜索结果的 Chunk
 	ChunkTypeWebSearch ChunkType = "web_search"
 	// ChunkTypeTableSummary 表示数据表摘要的 Chunk
@@ -112,17 +110,15 @@ type VideoInfo struct {
 // Chunks can be independently embedded as vectors and retrieved, supporting precise content localization
 type Chunk struct {
 	// Unique identifier of the chunk, using UUID format
-	ID string `json:"id"                       gorm:"type:varchar(36);primaryKey"`
-	// SeqID is an auto-increment integer ID for external API usage (FAQ entries)
-	SeqID int64 `json:"seq_id"                   gorm:"type:bigint;uniqueIndex;autoIncrement"`
+	ID    string `json:"id"                       gorm:"type:varchar(36);primaryKey"`
+	SeqID int64  `json:"seq_id"                   gorm:"type:bigint;uniqueIndex;autoIncrement"`
 	// Tenant ID, used for multi-tenant isolation
 	TenantID uint64 `json:"tenant_id"`
 	// ID of the parent knowledge, associated with the Knowledge model
 	KnowledgeID string `json:"knowledge_id"`
 	// ID of the knowledge base, for quick location
 	KnowledgeBaseID string `json:"knowledge_base_id"`
-	// Optional tag ID for categorization within a knowledge base (used for FAQ)
-	TagID string `json:"tag_id"                   gorm:"type:varchar(36);index"`
+	TagID           string `json:"tag_id"                   gorm:"type:varchar(36);index"`
 	// Actual text content of the chunk
 	Content string `json:"content"`
 	// SourceContent is the immutable parser output. Legacy rows are lazily
@@ -159,11 +155,9 @@ type Chunk struct {
 	// 关系 Chunk ID，用于关联关系 Chunk 和原始文本 Chunk
 	RelationChunks JSON `json:"relation_chunks"          gorm:"type:json"`
 	// 间接关系 Chunk ID，用于关联间接关系 Chunk 和原始文本 Chunk
-	IndirectRelationChunks JSON `json:"indirect_relation_chunks" gorm:"type:json"`
-	// Metadata 存储 chunk 级别的扩展信息，例如 FAQ 元数据
-	Metadata JSON `json:"metadata"                 gorm:"type:json"`
-	// ContentHash 存储内容的 hash 值，用于快速匹配（主要用于 FAQ）
-	ContentHash string `json:"content_hash"             gorm:"type:varchar(64);index"`
+	IndirectRelationChunks JSON   `json:"indirect_relation_chunks" gorm:"type:json"`
+	Metadata               JSON   `json:"metadata"                 gorm:"type:json"`
+	ContentHash            string `json:"content_hash"             gorm:"type:varchar(64);index"`
 	// 图片信息，存储为 JSON
 	ImageInfo string `json:"image_info"               gorm:"type:text"`
 	// Chunk creation time

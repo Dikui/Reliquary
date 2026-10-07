@@ -141,10 +141,6 @@ kb_selection_mode: ""     # "all" / "selected" / "none"; also settable via --kb-
 knowledge_bases: []       # KB ids; also settable via repeated --kb
 supported_file_types: []
 
-# FAQ
-faq_priority_enabled: false
-faq_direct_answer_threshold: 0.0
-faq_score_boost: 0.0
 
 # Web search
 web_search_enabled: false

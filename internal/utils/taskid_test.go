@@ -3,13 +3,13 @@ package utils
 import "testing"
 
 func TestParseTaskID_CompoundTaskType(t *testing.T) {
-	taskID := GenerateTaskID("faq_import", 42, "kb-abc-123")
+	taskID := GenerateTaskID("document_process", 42, "kb-abc-123")
 	taskType, tenantID, _, uuidPart, businessID, err := ParseTaskID(taskID)
 	if err != nil {
 		t.Fatalf("ParseTaskID failed: %v", err)
 	}
-	if taskType != "faq_import" {
-		t.Fatalf("taskType = %q, want faq_import", taskType)
+	if taskType != "document_process" {
+		t.Fatalf("taskType = %q, want document_process", taskType)
 	}
 	if tenantID != 42 {
 		t.Fatalf("tenantID = %d, want 42", tenantID)

@@ -38,26 +38,6 @@ func (s *stubMessageFileLookup) GetMessage(
 	return s.get(ctx, sessionID, messageID)
 }
 
-type stubSharedAgentFileLookup struct {
-	get func(
-		ctx context.Context,
-		tenantID uint64,
-		callerTenantRole types.TenantRole,
-		agentID string,
-		sourceTenantID ...uint64,
-	) (*types.CustomAgent, error)
-}
-
-func (s *stubSharedAgentFileLookup) GetSharedAgentForTenant(
-	ctx context.Context,
-	tenantID uint64,
-	callerTenantRole types.TenantRole,
-	agentID string,
-	sourceTenantID ...uint64,
-) (*types.CustomAgent, error) {
-	return s.get(ctx, tenantID, callerTenantRole, agentID, sourceTenantID...)
-}
-
 func (s *stubResourceCatalog) Register(
 	context.Context,
 	uint64,
@@ -378,10 +358,6 @@ func TestServeFilesAPIKeyScopeMatrix(t *testing.T) {
 	}
 }
 
-// newKBScopedFilesTestEngine wires newKBScopedFileServeHandler behind a
-// middleware that injects effectiveTenantID into the request context, mirroring
-// what RequireKBAccess does after resolving an org-shared KB to its source
-// tenant. This lets the handler be exercised without the full RBAC stack.
 func newKBScopedFilesTestEngine(
 	effectiveTenantID uint64,
 	tenantSvc interfaces.TenantService,
@@ -399,9 +375,6 @@ func newKBScopedFilesTestEngine(
 	return engine
 }
 
-// A tenant whose owner-tenant (10008) storage objects are requested by a
-// borrowing tenant via a shared KB: the effective tenant in context is the
-// owner, so the path validates and the file is served.
 func TestKBScopedFilesServesOwnerTenantPath(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("STORAGE_TYPE", "local")
@@ -515,7 +488,6 @@ func TestKBScopedFilesRequiresFilePath(t *testing.T) {
 func newMessageScopedFilesTestEngine(
 	callerTenantID uint64,
 	messageService messageFileLookup,
-	agentShareService sharedAgentFileLookup,
 	tenantService interfaces.TenantService,
 	global interfaces.FileService,
 	resourceCatalog interfaces.ResourceCatalog,
@@ -529,7 +501,6 @@ func newMessageScopedFilesTestEngine(
 		},
 		newMessageScopedFileServeHandler(
 			messageService,
-			agentShareService,
 			tenantService,
 			global,
 			nil,
@@ -537,64 +508,6 @@ func newMessageScopedFilesTestEngine(
 		),
 	)
 	return engine
-}
-
-func TestMessageScopedFilesServesSharedAgentResource(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	t.Setenv("STORAGE_TYPE", "local")
-
-	const (
-		callerTenantID = uint64(42)
-		ownerTenantID  = uint64(7)
-		ref            = "resource://AbCdEfGhIjKlMnOpQrStUv"
-		physical       = "local://7/exports/chart.png"
-	)
-	var requestedPath string
-	engine := newMessageScopedFilesTestEngine(
-		callerTenantID,
-		&stubMessageFileLookup{get: func(_ context.Context, sessionID, messageID string) (*types.Message, error) {
-			if sessionID != "session-1" || messageID != "message-1" {
-				t.Fatalf("unexpected message scope %s/%s", sessionID, messageID)
-			}
-			return &types.Message{AgentID: "agent-1", AgentTenantID: ownerTenantID}, nil
-		}},
-		&stubSharedAgentFileLookup{get: func(
-			_ context.Context,
-			tenantID uint64,
-			_ types.TenantRole,
-			agentID string,
-			sourceTenantID ...uint64,
-		) (*types.CustomAgent, error) {
-			if tenantID != callerTenantID || agentID != "agent-1" || len(sourceTenantID) != 1 || sourceTenantID[0] != ownerTenantID {
-				t.Fatalf("unexpected shared-agent lookup tenant=%d agent=%s source=%v", tenantID, agentID, sourceTenantID)
-			}
-			return &types.CustomAgent{ID: agentID, TenantID: ownerTenantID}, nil
-		}},
-		&stubTenantService{get: func(_ context.Context, id uint64) (*types.Tenant, error) {
-			return &types.Tenant{ID: id}, nil
-		}},
-		&stubFileService{getFile: func(_ context.Context, filePath string) (io.ReadCloser, error) {
-			requestedPath = filePath
-			return io.NopCloser(strings.NewReader("shared-agent-image")), nil
-		}},
-		&stubResourceCatalog{resource: &types.StoredResource{
-			TenantID:     ownerTenantID,
-			PhysicalPath: physical,
-			MimeType:     "image/png",
-		}},
-	)
-
-	req := httptest.NewRequest(http.MethodGet,
-		"/sessions/session-1/messages/message-1/files?file_path="+url.QueryEscape(ref), nil)
-	recorder := httptest.NewRecorder()
-	engine.ServeHTTP(recorder, req)
-
-	if recorder.Code != http.StatusOK || recorder.Body.String() != "shared-agent-image" {
-		t.Fatalf("status=%d body=%q", recorder.Code, recorder.Body.String())
-	}
-	if requestedPath != physical {
-		t.Fatalf("requested path = %q, want %q", requestedPath, physical)
-	}
 }
 
 func TestMessageScopedFilesServesSameTenantResource(t *testing.T) {
@@ -613,14 +526,9 @@ func TestMessageScopedFilesServesSameTenantResource(t *testing.T) {
 			if sessionID != "session-1" || messageID != "message-1" {
 				t.Fatalf("unexpected message scope %s/%s", sessionID, messageID)
 			}
-			return &types.Message{AgentTenantID: tenantID}, nil
+			return &types.Message{}, nil
 		}},
-		&stubSharedAgentFileLookup{get: func(
-			context.Context, uint64, types.TenantRole, string, ...uint64,
-		) (*types.CustomAgent, error) {
-			t.Fatal("shared-agent lookup should not run for same-tenant resources")
-			return nil, nil
-		}},
+
 		&stubTenantService{get: func(_ context.Context, id uint64) (*types.Tenant, error) {
 			return &types.Tenant{ID: id}, nil
 		}},
@@ -654,9 +562,8 @@ func TestMessageScopedFilesRequiresFilePath(t *testing.T) {
 	engine := newMessageScopedFilesTestEngine(
 		42,
 		&stubMessageFileLookup{get: func(context.Context, string, string) (*types.Message, error) {
-			return &types.Message{AgentTenantID: 42}, nil
+			return &types.Message{}, nil
 		}},
-		&stubSharedAgentFileLookup{},
 		&stubTenantService{},
 		&stubFileService{},
 		&stubResourceCatalog{},
@@ -671,41 +578,6 @@ func TestMessageScopedFilesRequiresFilePath(t *testing.T) {
 	}
 }
 
-func TestMessageScopedFilesRejectsRevokedSharedAgent(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	const ref = "resource://AbCdEfGhIjKlMnOpQrStUv"
-
-	engine := newMessageScopedFilesTestEngine(
-		42,
-		&stubMessageFileLookup{get: func(context.Context, string, string) (*types.Message, error) {
-			return &types.Message{AgentID: "agent-1", AgentTenantID: 7}, nil
-		}},
-		&stubSharedAgentFileLookup{get: func(
-			context.Context, uint64, types.TenantRole, string, ...uint64,
-		) (*types.CustomAgent, error) {
-			return nil, nil
-		}},
-		&stubTenantService{get: func(context.Context, uint64) (*types.Tenant, error) {
-			t.Fatal("tenant lookup should not run after share revocation")
-			return nil, nil
-		}},
-		&stubFileService{getFile: func(context.Context, string) (io.ReadCloser, error) {
-			t.Fatal("GetFile should not run after share revocation")
-			return nil, nil
-		}},
-		&stubResourceCatalog{resource: &types.StoredResource{TenantID: 7, PhysicalPath: "local://7/exports/chart.png"}},
-	)
-
-	req := httptest.NewRequest(http.MethodGet,
-		"/sessions/session-1/messages/message-1/files?file_path="+url.QueryEscape(ref), nil)
-	recorder := httptest.NewRecorder()
-	engine.ServeHTTP(recorder, req)
-
-	if recorder.Code != http.StatusForbidden {
-		t.Fatalf("status=%d, want %d", recorder.Code, http.StatusForbidden)
-	}
-}
-
 func TestMessageScopedFilesRejectsResourceOutsideMessageTenant(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	const ref = "resource://AbCdEfGhIjKlMnOpQrStUv"
@@ -713,14 +585,9 @@ func TestMessageScopedFilesRejectsResourceOutsideMessageTenant(t *testing.T) {
 	engine := newMessageScopedFilesTestEngine(
 		42,
 		&stubMessageFileLookup{get: func(context.Context, string, string) (*types.Message, error) {
-			return &types.Message{AgentID: "agent-1", AgentTenantID: 8}, nil
+			return &types.Message{AgentID: "agent-1"}, nil
 		}},
-		&stubSharedAgentFileLookup{get: func(
-			context.Context, uint64, types.TenantRole, string, ...uint64,
-		) (*types.CustomAgent, error) {
-			t.Fatal("shared-agent lookup should not run for a mismatched resource tenant")
-			return nil, nil
-		}},
+
 		&stubTenantService{},
 		&stubFileService{},
 		&stubResourceCatalog{resource: &types.StoredResource{TenantID: 7, PhysicalPath: "local://7/exports/chart.png"}},

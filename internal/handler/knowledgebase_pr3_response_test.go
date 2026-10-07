@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,20 +14,6 @@ import (
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
-
-// CreateKnowledgeBase typed-error preservation — the handler must surface
-// the typed AppError (ErrVectorStoreBindingInvalid / ErrVectorStoreUnavailable)
-// returned by validateVectorStoreBinding instead of stripping it into a
-// generic 500 via NewInternalServerError. Without the IsAppError unwrap in
-// the handler, the typed error codes would be silently nullified at the
-// HTTP boundary and clients would lose the ability to branch on the cause.
-//
-// Shared-KB UUID suppression — responses for cross-tenant shared KBs must
-// not leak the owner tenant's vector_store_id UUID. SharedStoreDisplay
-// suppresses store name + engine_type for cross-tenant callers, but the
-// underlying KnowledgeBase.MarshalJSON still emits the UUID; the
-// buildKBResponse strip closes the gap so the UUID cannot be correlated
-// across multiple shared KBs.
 
 // stubKBCreateService drives CreateKnowledgeBase end-to-end with a
 // service that returns a chosen error. Embedding the interface keeps
@@ -119,42 +104,6 @@ func TestCreateKB_GenericErrorStillFallsThroughTo500(t *testing.T) {
 type errSentinel string
 
 func (e errSentinel) Error() string { return string(e) }
-
-// ---------------------------------------------------------------------------
-// buildKBResponse must strip vector_store_id for shared KB responses
-// ---------------------------------------------------------------------------
-
-func TestBuildKBResponse_StripsVectorStoreIDForSharedKB(t *testing.T) {
-	storeID := "aaaa-bbbb-cccc-dddd"
-	kb := &types.KnowledgeBase{
-		ID:               "kb-1",
-		Name:             "shared-kb",
-		TenantID:         42, // different from caller
-		EmbeddingModelID: "e",
-		SummaryModelID:   "s",
-		VectorStoreID:    &storeID,
-	}
-	got := buildKBResponse(kb, types.SharedStoreDisplay(), nil)
-	m, ok := got.(map[string]interface{})
-	if !ok {
-		t.Fatalf("expected map result, got %T", got)
-	}
-	if _, exists := m["vector_store_id"]; exists {
-		t.Fatalf("shared KB response must not expose vector_store_id, got %v", m["vector_store_id"])
-	}
-	if _, exists := m["vector_store_name"]; exists {
-		t.Fatalf("shared KB response must not expose vector_store_name, got %v", m["vector_store_name"])
-	}
-	if m["vector_store_source"] != types.StoreSourceShared {
-		t.Fatalf("expected vector_store_source=shared, got %v", m["vector_store_source"])
-	}
-	// Defensive: ensure the source UUID does not appear *anywhere* in
-	// the serialized output (paranoid check against future map keys).
-	serialized, _ := json.Marshal(m)
-	if strings.Contains(string(serialized), storeID) {
-		t.Fatalf("shared KB response leaked vector store UUID via some path: %s", serialized)
-	}
-}
 
 func TestBuildKBResponse_KeepsVectorStoreIDForOwnerKB(t *testing.T) {
 	// Same setup but with the user-source display — owner caller should

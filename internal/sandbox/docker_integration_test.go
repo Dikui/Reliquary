@@ -1,20 +1,5 @@
 //go:build docker_integration
 
-// Conformance test for the Docker backend against a real daemon.
-//
-// It drives the same public surface as the E2B-protocol conformance suite
-// (session-scoped script execution, shell commands, attachment staging,
-// artifact listing, timeouts, teardown), because the point of the docker
-// backend is to be indistinguishable from a remote one at that level. Anything
-// asserted here that the E2B suite also asserts is deliberate duplication: a
-// backend that passes one and fails the other is not interchangeable.
-//
-// Run with a reachable daemon and the standard sandbox image:
-//
-//	docker build -f docker/Dockerfile.sandbox -t reliquary-sandbox:dev .
-//	DOCKER_INTEGRATION_IMAGE=reliquary-sandbox:dev \
-//	go test -tags=docker_integration ./internal/sandbox \
-//	  -run '^TestDocker.*Integration' -count=1 -v -timeout=15m
 package sandbox
 
 import (

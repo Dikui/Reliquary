@@ -92,7 +92,7 @@ func NewKnowledgeStrategyService(db *gorm.DB, kb interfaces.KnowledgeBaseService
 	return &KnowledgeStrategyService{db: db, kb: kb, knowledge: knowledge, models: models, tags: tags, audit: audit}
 }
 
-func (s *KnowledgeStrategyService) scopedKB(ctx context.Context, kbID string, ownerOnly bool) (*types.KnowledgeBase, string, error) {
+func (s *KnowledgeStrategyService) scopedKB(ctx context.Context, kbID string, requireEditor bool) (*types.KnowledgeBase, string, error) {
 	tenantID, ok := types.TenantIDFromContext(ctx)
 	if !ok || tenantID == 0 {
 		return nil, "", werrors.NewUnauthorizedError("workspace required")
@@ -105,8 +105,8 @@ func (s *KnowledgeStrategyService) scopedKB(ctx context.Context, kbID string, ow
 		return nil, "", werrors.NewNotFoundError("knowledge base not found")
 	}
 	userID, _ := types.UserIDFromContext(ctx)
-	if ownerOnly && (userID == "" || userID != kb.CreatorID || types.IsSyntheticUserID(userID)) {
-		return nil, "", werrors.NewForbiddenError("only the knowledge base creator can change strategy")
+	if requireEditor && (userID == "" || !types.TenantRoleFromContext(ctx).HasPermission(types.TenantRoleContributor) || types.IsSyntheticUserID(userID)) {
+		return nil, "", werrors.NewForbiddenError("a team editor is required to change strategy")
 	}
 	return kb, userID, nil
 }

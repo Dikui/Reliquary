@@ -502,9 +502,7 @@ export async function hydrateProtectedFileImages(
     }
     img.dataset.authHydrated = '1';
 
-    // A null request means this source cannot be fetched under the current
-    // access context (not a storage path, or the embed token has not arrived
-    // yet). Leave the placeholder so a later pass can retry.
+    // Leave unsupported storage paths as placeholders so a later pass can retry.
     const request = buildProtectedFileRequest(sourceURL, resolvedAccess);
     if (!request) {
       img.dataset.authHydrated = '0';

@@ -26,9 +26,8 @@ type sandboxConfigLookup interface {
 
 // CustomAgentHandler defines the HTTP handler for custom agent operations
 type CustomAgentHandler struct {
-	service      interfaces.CustomAgentService
-	imService    *im.Service
-	disabledRepo interfaces.TenantDisabledSharedAgentRepository
+	service   interfaces.CustomAgentService
+	imService *im.Service
 	// userService 仅用于 list 接口批量回填 creator_name，作用见
 	// KnowledgeBaseHandler.userService。
 	userService interfaces.UserService
@@ -41,14 +40,12 @@ type CustomAgentHandler struct {
 func NewCustomAgentHandler(
 	service interfaces.CustomAgentService,
 	imService *im.Service,
-	disabledRepo interfaces.TenantDisabledSharedAgentRepository,
 	userService interfaces.UserService,
 	sandboxConfigs *service.TenantSandboxConfigService,
 ) *CustomAgentHandler {
 	return &CustomAgentHandler{
 		service:        service,
 		imService:      imService,
-		disabledRepo:   disabledRepo,
 		userService:    userService,
 		sandboxConfigs: sandboxConfigs,
 	}
@@ -208,65 +205,14 @@ func (h *CustomAgentHandler) ListAgents(c *gin.Context) {
 		return
 	}
 
-	// Optional creator filter — see the matching block in
-	// KnowledgeBaseHandler.ListKnowledgeBases for rationale. Built-in
-	// agents (IsBuiltin=true, CreatedBy="") are tenant-level fixtures
-	// rather than user creations; we always keep them regardless of the
-	// filter so the conversation dropdown never silently loses
-	// quick-answer / smart-reasoning when a user picks "Created by me".
-	creatorFilter := strings.ToLower(strings.TrimSpace(c.Query("creator")))
-	if creatorFilter == "mine" || creatorFilter == "others" {
-		callerUserID, _ := c.Get(types.UserIDContextKey.String())
-		callerUserIDStr, _ := callerUserID.(string)
-		filtered := make([]*types.CustomAgent, 0, len(agents))
-		for _, ag := range agents {
-			if ag.IsBuiltin {
-				filtered = append(filtered, ag)
-				continue
-			}
-			if ag.CreatedBy == "" {
-				continue
-			}
-			if creatorFilter == "mine" && ag.CreatedBy == callerUserIDStr {
-				filtered = append(filtered, ag)
-			} else if creatorFilter == "others" && ag.CreatedBy != callerUserIDStr {
-				filtered = append(filtered, ag)
-			}
-		}
-		agents = filtered
-	}
-
-	// Per-tenant "disabled by me" for own agents (only affects this tenant's conversation dropdown)
-	tenantIDVal, exists := c.Get(types.TenantIDContextKey.String())
-	if !exists {
-		logger.Error(ctx, "Workspace ID not found in context")
-		c.Error(errors.NewUnauthorizedError("Missing workspace context"))
-		return
-	}
-	tenantID, ok := tenantIDVal.(uint64)
-	if !ok {
-		logger.Errorf(ctx, "Tenant ID has unexpected type %T in context", tenantIDVal)
-		c.Error(errors.NewInternalServerError("Invalid workspace context type"))
-		return
-	}
-	disabledOwnIDs, err := h.disabledRepo.ListDisabledOwnAgentIDs(ctx, tenantID)
-	if err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"tenant_id": tenantID,
-		})
-		c.Error(errors.NewInternalServerError("Failed to list disabled agent IDs: " + err.Error()))
-		return
-	}
-
 	// 批量回填 creator_name，作用同 KB 列表：让前端能区分「我创建」与「同空间其他成员」。
 	// 内建 agent（IsBuiltin=true, CreatedBy=""）不会有 creator_name，前端按 builtin
 	// 分支单独渲染。
 	enrichAgentCreatorNames(ctx, h.userService, agents)
 
 	c.JSON(http.StatusOK, gin.H{
-		"success":                true,
-		"data":                   agents,
-		"disabled_own_agent_ids": disabledOwnIDs,
+		"success": true,
+		"data":    agents,
 	})
 }
 

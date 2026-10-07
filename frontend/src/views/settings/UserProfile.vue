@@ -71,18 +71,12 @@
         <div class="setting-info">
           <label>{{ $t('userProfile.changePassword.label') }}</label>
           <p class="desc">
-            {{ oidcOnlyLogin
-              ? $t('userProfile.changePassword.oidcOnlyDescription')
-              : $t('userProfile.changePassword.description') }}
+            {{ $t('userProfile.changePassword.description') }}
           </p>
         </div>
         <div class="setting-control">
-          <template v-if="oidcOnlyLogin">
-            <span class="info-value info-value--muted">—</span>
-          </template>
-          <template v-else>
-            <span class="info-value password-mask" aria-hidden="true">••••••••</span>
-            <t-popup
+
+          <span class="info-value password-mask" aria-hidden="true">••••••••</span><t-popup
               v-model="passwordPopupVisible"
               trigger="click"
               placement="bottom-end"
@@ -162,7 +156,6 @@
                 </div>
               </template>
             </t-popup>
-          </template>
         </div>
       </div>
     </div>
@@ -211,10 +204,6 @@ const loadPasswordPolicy = async () => {
     complexPasswordEnabled.value = false
   }
 }
-
-const oidcOnlyLogin = computed(
-  () => userInfo.value?.preferences?.oidc_only_login === true,
-)
 
 watch(passwordPopupVisible, (open) => {
   if (!open) {

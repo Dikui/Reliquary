@@ -1,6 +1,6 @@
 <template>
   <div class="integrations-settings">
-    <div class="integrations-settings__body" :class="{ 'integrations-settings__body--landing': isLandingSection }">
+    <div class="integrations-settings__body" >
       <div v-if="tab === 'im'" class="section">
         <div class="section-header">
           <h2>{{ $t('agentEditor.im.title') }}</h2>
@@ -20,13 +20,7 @@
         <IMChannelPanel v-model:filter-agent-id="filterAgentId" />
       </div>
 
-      <div v-if="tab === 'embed'" class="section">
-        <div class="section-header">
-          <h2>{{ $t('agentEditor.embed.title') }}</h2>
-          <p class="section-description">{{ $t('agentEditor.embed.description') }}</p>
-        </div>
-        <AgentEmbedChannelPanel v-model:filter-agent-id="filterAgentId" />
-      </div>
+
 
       <div v-if="tab === 'api'" class="section">
         <div class="section-header">
@@ -36,8 +30,8 @@
         <ApiIntegrationSettings />
       </div>
 
-      <ChromeExtensionLanding v-if="tab === 'chrome'" />
-      <ClawSkillLanding v-if="tab === 'claw'" />
+
+
     </div>
   </div>
 </template>
@@ -46,10 +40,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import IMChannelPanel from '@/components/IMChannelPanel.vue'
-import AgentEmbedChannelPanel from '@/components/AgentEmbedChannelPanel.vue'
 import ApiIntegrationSettings from '@/views/integrations/ApiIntegrationSettings.vue'
-import ChromeExtensionLanding from '@/views/integrations/ChromeExtensionLanding.vue'
-import ClawSkillLanding from '@/views/integrations/ClawSkillLanding.vue'
 import type { IntegrationTab } from '@/config/integrations'
 
 const filterAgentId = ref('')
@@ -59,10 +50,6 @@ const props = defineProps<{
 }>()
 
 const route = useRoute()
-
-const isLandingSection = computed(
-  () => props.tab === 'chrome' || props.tab === 'claw',
-)
 
 function applyAgentFilterFromRoute() {
   filterAgentId.value = (route.query.agentId as string) || ''

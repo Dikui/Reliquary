@@ -16,7 +16,7 @@ func RegisterKnowledgeContextRoutes(r *gin.RouterGroup, h *handler.KnowledgeCont
 	read.GET("/events", g.Viewer(), g.KBAccessRead("id"), h.Events)
 	read.GET("/evidence", g.Viewer(), g.KBAccessRead("id"), h.Evidence)
 	read.GET("/evidence/:evidence_id", g.Viewer(), g.KBAccessRead("id"), h.GetEvidence)
-	group.POST("/facts/:fact_id/correction", g.OwnedKBOrAdmin(), g.KBAccessWrite("id"), h.CorrectFact)
-	group.POST("/entities/merge", g.OwnedKBOrAdmin(), g.KBAccessWrite("id"), h.MergeEntities)
-	group.POST("/rebuild", g.OwnedKBOrAdmin(), g.KBAccessWrite("id"), h.Rebuild)
+	group.POST("/facts/:fact_id/correction", g.Contributor(), g.KBAccessWrite("id"), h.CorrectFact)
+	group.POST("/entities/merge", g.Contributor(), g.KBAccessWrite("id"), h.MergeEntities)
+	group.POST("/rebuild", g.Contributor(), g.KBAccessWrite("id"), h.Rebuild)
 }

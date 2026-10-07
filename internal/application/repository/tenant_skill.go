@@ -263,6 +263,7 @@ func (r *tenantSkillRepository) ListStaleInstalling(
 ) ([]*types.TenantSkillEntity, error) {
 	var list []*types.TenantSkillEntity
 	err := r.db.WithContext(ctx).
+		Where("tenant_id = ?", types.SingleTenantID).
 		Where("status IN ? AND installing_since IS NOT NULL AND installing_since < ?",
 			[]string{types.SkillStatusInstalling, types.SkillStatusRemoving}, olderThan).
 		Find(&list).Error

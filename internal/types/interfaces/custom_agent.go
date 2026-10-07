@@ -28,7 +28,6 @@ type CustomAgentService interface {
 	//   - Possible errors such as not existing, insufficient permissions, etc.
 	GetAgentByID(ctx context.Context, id string) (*types.CustomAgent, error)
 
-	// GetAgentByIDAndTenant retrieves agent by ID and tenant (for shared agents; skips built-in resolution)
 	GetAgentByIDAndTenant(ctx context.Context, id string, tenantID uint64) (*types.CustomAgent, error)
 
 	// ListAgents lists all agents under the current tenant (including built-in agents)

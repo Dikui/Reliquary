@@ -24,18 +24,14 @@ type TenantService interface {
 	// DeleteTenant deletes a tenant
 	DeleteTenant(ctx context.Context, id uint64) error
 	// ListAllTenants lists all tenants (for users with cross-tenant access permission)
-	ListAllTenants(ctx context.Context) ([]*types.Tenant, error)
 	// BulkSetStorageQuota overwrites every tenant's storage_quota with
 	// quotaBytes. Returns how many rows were affected. Used by the
 	// SystemAdmin "apply default to all tenants" action; bypasses the
 	// per-tenant whitelist on PUT /tenants/:id (which intentionally
 	// forbids storage_quota edits for Owners). quotaBytes must be > 0;
 	// callers are responsible for resolving GB→bytes.
-	BulkSetStorageQuota(ctx context.Context, quotaBytes int64) (int64, error)
 	// SearchTenants searches tenants with pagination and filters
-	SearchTenants(ctx context.Context, keyword string, tenantID uint64, page, pageSize int) ([]*types.Tenant, int64, error)
 	// GetTenantByIDForUser gets a tenant by ID with permission check
-	GetTenantByIDForUser(ctx context.Context, tenantID uint64, userID string) (*types.Tenant, error)
 }
 
 // TenantRepository defines the tenant repository interface
@@ -49,7 +45,6 @@ type TenantRepository interface {
 	// ListTenants lists all tenants
 	ListTenants(ctx context.Context) ([]*types.Tenant, error)
 	// SearchTenants searches tenants with pagination and filters
-	SearchTenants(ctx context.Context, keyword string, tenantID uint64, page, pageSize int) ([]*types.Tenant, int64, error)
 	// UpdateTenant updates a tenant
 	UpdateTenant(ctx context.Context, tenant *types.Tenant) error
 	// DeleteTenant deletes a tenant
@@ -57,12 +52,10 @@ type TenantRepository interface {
 	// AdjustStorageUsed adjusts the storage used for a tenant
 	AdjustStorageUsed(ctx context.Context, tenantID uint64, delta int64) error
 	// BulkSetStorageQuota — see TenantService.BulkSetStorageQuota.
-	BulkSetStorageQuota(ctx context.Context, quotaBytes int64) (int64, error)
 }
 
 type TenantAPIKeyCreateRequest struct {
 	TenantID         uint64
-	ScopeType        types.APIKeyScopeType
 	Name             string
 	FullAccess       bool
 	KnowledgeBaseIDs []string
@@ -91,10 +84,8 @@ type TenantAPIKeyRepository interface {
 	CreateAPIKey(ctx context.Context, key *types.TenantAPIKey) error
 	GetAPIKeyByHash(ctx context.Context, hash string) (*types.TenantAPIKey, error)
 	ListAPIKeys(ctx context.Context, tenantID uint64) ([]*types.TenantAPIKey, error)
-	ListPlatformAPIKeys(ctx context.Context) ([]*types.TenantAPIKey, error)
 	UpdateAPIKey(ctx context.Context, tenantID uint64, id uint64, key *types.TenantAPIKey) (*types.TenantAPIKey, error)
 	RevokeAPIKey(ctx context.Context, tenantID uint64, id uint64) error
-	RevokePlatformAPIKey(ctx context.Context, id uint64) error
 	UpdateAPIKeyHash(ctx context.Context, id uint64, hash string) error
 	UpdateAPIKeyLastUsed(ctx context.Context, id uint64, at time.Time) error
 	// ListKeysWithPlaceholderHash returns keys whose key_hash is still the
@@ -110,10 +101,8 @@ type TenantAPIKeyService interface {
 	CreateAPIKey(ctx context.Context, req TenantAPIKeyCreateRequest) (*TenantAPIKeyCreateResult, error)
 	AuthenticateAPIKey(ctx context.Context, token string) (*types.TenantAPIKey, error)
 	ListAPIKeys(ctx context.Context, tenantID uint64) ([]*types.TenantAPIKey, error)
-	ListPlatformAPIKeys(ctx context.Context) ([]*types.TenantAPIKey, error)
 	UpdateAPIKey(ctx context.Context, req TenantAPIKeyUpdateRequest) (*types.TenantAPIKey, error)
 	RevokeAPIKey(ctx context.Context, tenantID uint64, id uint64) error
-	RevokePlatformAPIKey(ctx context.Context, id uint64) error
 	// BackfillMissingKeyHashes computes and persists the SHA-256 key_hash
 	// for legacy keys still carrying the migration placeholder.
 	// Returns the number of keys backfilled.

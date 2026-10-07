@@ -5,9 +5,6 @@ export type SessionGroupMode = 'none' | 'date'
 export const SESSION_GROUP_MODE_STORAGE_KEY = 'reliquary:session-group-mode'
 export const DEFAULT_SESSION_GROUP_MODE: SessionGroupMode = 'none'
 
-/** Mirrors backend types.EmbedSessionMarkerPrefix */
-export const EMBED_SESSION_MARKER_PREFIX = 'embed_channel:'
-
 /** Mirrors backend types.SessionOwnerAPITenantKeyPrefix (sessions.user_id owner). */
 export const API_SESSION_OWNER_PREFIX = 'api_tenant_key:'
 
@@ -35,7 +32,6 @@ export interface SessionGroup<T extends SessionForGrouping = SessionForGrouping>
 export type SessionOrigin =
   | { kind: 'web' }
   | { kind: 'im'; platform: string }
-  | { kind: 'embed'; channelId: string }
   | { kind: 'api' }
 
 export interface GroupModeOption {
@@ -46,8 +42,6 @@ export interface GroupModeOption {
 export interface SourceGroupLabels {
   web: string
   api: string
-  embedFallback: string
-  embedChannel: (channelId: string) => string
   imPlatform: (platform: string) => string
 }
 
@@ -90,11 +84,6 @@ export function storeGroupMode(mode: SessionGroupMode): void {
 export function resolveSessionOrigin(session: SessionForGrouping): SessionOrigin {
   const platform = (session.im_platform || '').trim().toLowerCase()
   if (platform) return { kind: 'im', platform }
-  const desc = (session.description || '').trim()
-  if (desc.startsWith(EMBED_SESSION_MARKER_PREFIX)) {
-    const channelId = desc.slice(EMBED_SESSION_MARKER_PREFIX.length).trim()
-    if (channelId) return { kind: 'embed', channelId }
-  }
   const ownerId = session.user_id || ''
   if (
     ownerId.startsWith(API_SESSION_OWNER_PREFIX) ||
@@ -111,8 +100,6 @@ export function originGroupKey(origin: SessionOrigin): string {
       return 'web'
     case 'im':
       return `im:${origin.platform}`
-    case 'embed':
-      return `embed:${origin.channelId}`
     case 'api':
       return 'api'
   }
@@ -121,7 +108,6 @@ export function originGroupKey(origin: SessionOrigin): string {
 function labelForOrigin(
   origin: SessionOrigin,
   labels: SourceGroupLabels,
-  embedChannelNames: Record<string, string>,
 ): string {
   switch (origin.kind) {
     case 'web':
@@ -130,10 +116,6 @@ function labelForOrigin(
       return labels.api
     case 'im':
       return labels.imPlatform(origin.platform)
-    case 'embed': {
-      const name = embedChannelNames[origin.channelId]?.trim()
-      return name || labels.embedChannel(origin.channelId)
-    }
   }
 }
 
@@ -194,7 +176,6 @@ export function groupSessionsByDate<T extends SessionForGrouping>(
 export function groupSessionsBySource<T extends SessionForGrouping>(
   sessions: T[],
   labels: SourceGroupLabels,
-  embedChannelNames: Record<string, string>,
   configuredImPlatforms: string[],
   pinnedLabel: string,
 ): SessionGroup<T>[] {
@@ -228,17 +209,6 @@ export function groupSessionsBySource<T extends SessionForGrouping>(
     .sort((a, b) => a.localeCompare(b))
   orderedKeys.push(...extraIm)
 
-  const embedKeys = Array.from(byKey.keys())
-    .filter((k) => k.startsWith('embed:'))
-    .sort((a, b) => {
-      const idA = a.slice(7)
-      const idB = b.slice(7)
-      const nameA = embedChannelNames[idA] || idA
-      const nameB = embedChannelNames[idB] || idB
-      return nameA.localeCompare(nameB)
-    })
-  orderedKeys.push(...embedKeys)
-
   const groups: SessionGroup<T>[] = []
   if (pinned.length > 0) {
     groups.push({ key: 'pinned', label: pinnedLabel, items: pinned })
@@ -250,7 +220,7 @@ export function groupSessionsBySource<T extends SessionForGrouping>(
     const origin = resolveSessionOrigin(sample)
     groups.push({
       key,
-      label: labelForOrigin(origin, labels, embedChannelNames),
+      label: labelForOrigin(origin, labels),
       items,
     })
   }
@@ -277,7 +247,6 @@ export function groupSessions<T extends SessionForGrouping>(
     bucketLabels: Record<DateBucketKey, string>
     categorizeDate: (session: T) => DateBucketKey
     sourceLabels: SourceGroupLabels
-    embedChannelNames: Record<string, string>
     configuredImPlatforms: string[]
   },
 ): SessionGroup<T>[] {

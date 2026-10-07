@@ -1,23 +1,3 @@
-// Idle reclamation for the docker backend.
-//
-// Every other backend gets this for free. Cube and E2B are told an idle
-// timeout at creation and the provider pauses or kills the sandbox when it
-// elapses, which is why SessionBoundManager never reaps anything itself. The
-// Docker daemon has no such concept: a container runs until something stops
-// it. Without a sweep, one abandoned session pins its memory and CPU share on
-// the host forever.
-//
-// The sweep needs to know when a sandbox was last used, and Docker exposes no
-// exec timestamps. Labels cannot help either — they are immutable after
-// create. So each exec touches an activity marker file inside the container
-// (folded into the exec wrapper, costing no extra round-trip), and the sweep
-// reads its mtime with a single HEAD /archive call per container.
-//
-// Deleting an idle container needs no coordination with the binding store: the
-// lifecycle already treats a sandbox the provider no longer has as replaceable
-// (see CanReplaceRemoteBinding), which is exactly how an E2B sandbox reaped by
-// its own TTL is handled.
-
 package sandbox
 
 import (

@@ -28,7 +28,6 @@ CREATE TABLE IF NOT EXISTS knowledge_bases (
     storage_provider_config JSONB DEFAULT NULL,
     vlm_config JSONB NOT NULL DEFAULT '{}',
     extract_config JSONB NULL DEFAULT NULL,
-    faq_config JSONB,
     question_generation_config JSONB NULL,
     auto_tag_config JSONB NULL,
     is_temporary BOOLEAN NOT NULL DEFAULT false,
@@ -79,6 +78,25 @@ func reloadKB(t *testing.T, db *gorm.DB, id string) types.KnowledgeBase {
 	var got types.KnowledgeBase
 	require.NoError(t, db.First(&got, "id = ?", id).Error)
 	return got
+}
+
+func TestKnowledgeBaseLookupOnlyReturnsSingleTeam(t *testing.T) {
+	db := setupKBTestDB(t)
+	repo := NewKnowledgeBaseRepository(db)
+	teamKB, foreignKB := makeKB(nil), makeKB(nil)
+	foreignKB.TenantID = 2
+	require.NoError(t, db.Create(teamKB).Error)
+	require.NoError(t, db.Create(foreignKB).Error)
+	ctx := db.Statement.Context
+	got, err := repo.GetKnowledgeBaseByID(ctx, teamKB.ID)
+	require.NoError(t, err)
+	require.Equal(t, teamKB.ID, got.ID)
+	_, err = repo.GetKnowledgeBaseByID(ctx, foreignKB.ID)
+	require.ErrorIs(t, err, ErrKnowledgeBaseNotFound)
+	rows, err := repo.GetKnowledgeBaseByIDs(ctx, []string{teamKB.ID, foreignKB.ID})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, teamKB.ID, rows[0].ID)
 }
 
 // TestKnowledgeBase_VectorStoreID_Save_Immutable verifies that db.Save(kb)

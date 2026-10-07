@@ -476,22 +476,6 @@ function targetDiff(entry: KnowledgeBaseActivity): string {
   if (entry.target_type === 'data_source' && value.type) {
     return String(value.type)
   }
-  // Share: surface the granted permission rather than the opaque share id.
-  if (entry.target_type === 'knowledge_base_share' && value.permission) {
-    const key = `knowledgeEditor.activity.detailValues.${String(value.permission)}`
-    return te(key) ? t(key) : String(value.permission)
-  }
-  if (entry.action.startsWith('faq.import_')) {
-    if (entry.action === 'faq.import_started' && value.total !== undefined && value.total !== null) {
-      return t('knowledgeEditor.activity.countItems', { count: Number(value.total) })
-    }
-    if (entry.action !== 'faq.import_started' && value.total !== undefined && value.total !== null) {
-      const success = Number(value.count ?? 0)
-      const failed = Number(value.failed ?? 0)
-      const skipped = Number(value.skipped ?? 0)
-      return t('knowledgeEditor.activity.importSummary', { success, failed, skipped })
-    }
-  }
   // Aggregate events: show volume only when the primary subject has no title.
   const count = value.count !== undefined && value.count !== null
     ? Number(value.count)

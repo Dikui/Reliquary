@@ -24,25 +24,9 @@ const (
 	// in the currently active tenant (loaded by the auth middleware from
 	// the tenant_members table). See TenantRoleFromContext.
 	TenantRoleContextKey ContextKey = "TenantRole"
-	// SessionTenantIDContextKey is the context key for session owner's tenant ID.
-	// When set (e.g. in pipeline with shared agent), session/message lookups use this instead of TenantIDContextKey.
-	SessionTenantIDContextKey ContextKey = "SessionTenantID"
-	// SessionIDContextKey carries the current session ID through the chat pipeline
-	// so that stateful sandbox backends (notably CubeSandbox) can route script
-	// execution to the persistent, per-session MicroVM instance.
+	// SessionIDContextKey carries the current session ID through the chat pipeline.
 	SessionIDContextKey ContextKey = "SessionID"
-	// SandboxTenantIDContextKey carries the tenant that owns the session whose
-	// sandbox is being addressed, which is NOT always the tenant in
-	// TenantIDContextKey: a shared agent runs under the agent owner's tenant so
-	// that models/KBs/named sandbox configs resolve in the sharing workspace.
-	//
-	// The session→sandbox binding must stay keyed by the session owner instead,
-	// because session deletion tears the sandbox down from a plain HTTP request
-	// that only ever knows the session's own tenant. Keying the binding on the
-	// borrowed tenant would leave that teardown looking up a key nobody wrote,
-	// abandoning a paused MicroVM that keeps billing. It is deliberately a
-	// distinct key from SessionTenantIDContextKey, which also re-scopes
-	// session/message repository lookups. See SandboxTenantIDFromContext.
+	// SandboxTenantIDContextKey carries the team ID for session sandbox bindings.
 	SandboxTenantIDContextKey ContextKey = "SandboxTenantID"
 	// EmbedQueryContextKey is the context key for embedding query text
 	EmbedQueryContextKey ContextKey = "EmbedQuery"
@@ -52,12 +36,8 @@ const (
 	WikiEditSourceContextKey ContextKey = "WikiEditSource"
 	// LanguageContextKey is the context key for user language preference (e.g. "zh-CN", "en-US")
 	LanguageContextKey ContextKey = "Language"
-	// EmbedVisitorContextKey is the anonymous visitor id for embed OAuth isolation.
-	EmbedVisitorContextKey ContextKey = "EmbedVisitorID"
-	// EmbedChannelContextKey stores the authenticated *EmbedChannel on the request
 	// context. It is declared here so context_clone.go can name every context key
 	// without importing the middleware that authenticates it.
-	EmbedChannelContextKey ContextKey = "EmbedChannel"
 	// SystemAdminContextKey is the context key indicating whether the user is a system administrator
 	SystemAdminContextKey ContextKey = "SystemAdmin"
 	// BackgroundTaskContextKey marks a context whose model calls originate from

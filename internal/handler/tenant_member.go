@@ -171,7 +171,6 @@ func (h *TenantMemberHandler) ListMembers(c *gin.Context) {
 //	这是【直加路径】，被加入的用户没有任何确认机会就出现在空间里——
 //	保留它是为了三类不需要走邀请确认的场景：
 //	  1. 自动化脚本 / 平台运维 / 数据迁移；
-//	  2. 跨空间超管 (CanAccessAllTenants) 的批量编排；
 //	  3. 对接外部 IdP 时由身份源单向同步成员。
 //
 //	所有由 UI 触发的「邀请伙伴加入」交互应改走

@@ -35,13 +35,12 @@ const (
 
 // customAgentService implements the CustomAgentService interface
 type customAgentService struct {
-	repo           interfaces.CustomAgentRepository
-	chunkRepo      interfaces.ChunkRepository
-	kbService      interfaces.KnowledgeBaseService
-	kbShareService interfaces.KBShareService
-	wikiPageRepo   interfaces.WikiPageRepository
-	tagRepo        interfaces.KnowledgeTagRepository
-	knowledgeRepo  interfaces.KnowledgeRepository
+	repo          interfaces.CustomAgentRepository
+	chunkRepo     interfaces.ChunkRepository
+	kbService     interfaces.KnowledgeBaseService
+	wikiPageRepo  interfaces.WikiPageRepository
+	tagRepo       interfaces.KnowledgeTagRepository
+	knowledgeRepo interfaces.KnowledgeRepository
 }
 
 // NewCustomAgentService creates a new custom agent service
@@ -49,19 +48,17 @@ func NewCustomAgentService(
 	repo interfaces.CustomAgentRepository,
 	chunkRepo interfaces.ChunkRepository,
 	kbService interfaces.KnowledgeBaseService,
-	kbShareService interfaces.KBShareService,
 	wikiPageRepo interfaces.WikiPageRepository,
 	tagRepo interfaces.KnowledgeTagRepository,
 	knowledgeRepo interfaces.KnowledgeRepository,
 ) interfaces.CustomAgentService {
 	return &customAgentService{
-		repo:           repo,
-		chunkRepo:      chunkRepo,
-		kbService:      kbService,
-		kbShareService: kbShareService,
-		wikiPageRepo:   wikiPageRepo,
-		tagRepo:        tagRepo,
-		knowledgeRepo:  knowledgeRepo,
+		repo:          repo,
+		chunkRepo:     chunkRepo,
+		kbService:     kbService,
+		wikiPageRepo:  wikiPageRepo,
+		tagRepo:       tagRepo,
+		knowledgeRepo: knowledgeRepo,
 	}
 }
 
@@ -84,11 +81,6 @@ func (s *customAgentService) CreateAgent(ctx context.Context, agent *types.Custo
 	}
 	agent.TenantID = tenantID
 
-	// Record the creator. Mirrors KnowledgeBase.CreatorID — needed by
-	// RBAC's RequireOwnershipOrRole so Contributors can edit their own
-	// agents. Synthetic system-{tenantID} users (X-API-Key path) leave
-	// the field empty via IsSyntheticUserID, which makes the agent
-	// tenant-owned (Admin+ only).
 	if uid, ok := types.UserIDFromContext(ctx); ok && !types.IsSyntheticUserID(uid) {
 		agent.CreatedBy = uid
 	}
@@ -171,7 +163,6 @@ func (s *customAgentService) GetAgentByID(ctx context.Context, id string) (*type
 	return agent, nil
 }
 
-// GetAgentByIDAndTenant retrieves an agent by ID and tenant (for shared agents; does not resolve built-in)
 func (s *customAgentService) GetAgentByIDAndTenant(ctx context.Context, id string, tenantID uint64) (*types.CustomAgent, error) {
 	if id == "" {
 		logger.Error(ctx, "Agent ID is empty")
@@ -652,9 +643,6 @@ func (s *customAgentService) getSuggestedQuestions(
 
 	remaining := limit
 
-	// 3. Collect candidate chunks from both FAQ and Document KBs,
-	//    grouped by knowledge_id for diversity.
-	//    knowledgeID -> list of questions
 	buckets := make(map[string][]types.SuggestedQuestion)
 
 	// Determine query scope
@@ -667,48 +655,12 @@ func (s *customAgentService) getSuggestedQuestions(
 		fetchLimit = 20
 	}
 
-	// Resolve each KB to the tenant whose chunks should be queried. Cross-tenant
-	// KBs reached via an organization share map to the source tenant ID; the chunk
-	// rows live under that tenant. Without this grouping a caller in tenant A
-	// querying a KB shared from tenant B would hit `tenant_id = A` and get zero
-	// rows back — the symptom is "suggested questions never appear for shared KBs".
 	scopeKBIDs := mergeUniqueStrings(queryKBIDs, resolvedTags.KnowledgeBaseIDs)
 	kbGroups := s.groupKBIDsByEffectiveTenant(ctx, tenantID, scopeKBIDs)
 	// Always keep the caller's tenant in the iteration so knowledge_ids-only
 	// requests (no kbIDs) still execute one query under the caller's tenant.
 	if len(scopeKBIDs) == 0 {
 		kbGroups[tenantID] = nil
-	}
-
-	// Collect FAQ recommended chunks
-	for groupTenantID, groupKBIDs := range kbGroups {
-		explicitGroupKBIDs := intersectSuggestionStrings(groupKBIDs, queryKBIDs)
-		groupTagIDs := resolvedTags.TagIDsByTenant[groupTenantID]
-		faqChunks, err := s.chunkRepo.ListRecommendedFAQChunks(
-			ctx, groupTenantID, explicitGroupKBIDs, queryKnowledgeIDs, groupTagIDs, fetchLimit,
-		)
-		if err != nil {
-			logger.ErrorWithFields(ctx, err, map[string]interface{}{
-				"agent_id":  agentID,
-				"tenant_id": groupTenantID,
-			})
-			continue
-		}
-		for _, chunk := range faqChunks {
-			meta, err := chunk.FAQMetadata()
-			if err != nil || meta == nil || meta.StandardQuestion == "" {
-				continue
-			}
-			if seen[meta.StandardQuestion] {
-				continue
-			}
-			seen[meta.StandardQuestion] = true
-			buckets[chunk.KnowledgeID] = append(buckets[chunk.KnowledgeID], types.SuggestedQuestion{
-				Question:        meta.StandardQuestion,
-				Source:          "faq",
-				KnowledgeBaseID: chunk.KnowledgeBaseID,
-			})
-		}
 	}
 
 	// Collect Document chunks with generated questions
@@ -828,10 +780,6 @@ type resolvedSuggestionTagScopes struct {
 	TagIDsByTenant   map[uint64][]string
 }
 
-// resolveSuggestionTagScopes keeps tag ownership separate from whole-KB
-// selection. Document tags become concrete knowledge IDs; FAQ tags remain
-// chunk tag filters. Scoped inputs also let shared-KB tags resolve against the
-// source tenant that owns the tag and chunk rows.
 func (s *customAgentService) resolveSuggestionTagScopes(
 	ctx context.Context,
 	callerTenantID uint64,
@@ -1068,19 +1016,6 @@ func wikiSuggestionFromPage(page *types.WikiPage, locale string) string {
 	}
 }
 
-// groupKBIDsByEffectiveTenant resolves each kbID to the tenant whose chunk
-// rows back that KB, so cross-tenant shares can be queried correctly:
-//   - In-tenant KBs map to the caller's tenant id.
-//   - KBs owned by another tenant are included only if the caller's tenant
-//     has at least Viewer access via an organization share, in which case
-//     the KB maps to its source tenant id (where the chunks actually live).
-//   - KBs the caller cannot reach (no membership, no share) are silently
-//     dropped — the suggestion endpoint never returns 403, it just shows
-//     nothing for that KB, mirroring how search results are scoped.
-//
-// The result is keyed by effective tenant id so the caller can issue one
-// chunk / wiki query per tenant group. Returns an empty (non-nil) map when
-// kbIDs is empty.
 func (s *customAgentService) groupKBIDsByEffectiveTenant(
 	ctx context.Context,
 	callerTenantID uint64,
@@ -1106,25 +1041,12 @@ func (s *customAgentService) groupKBIDsByEffectiveTenant(
 			kbByID[kb.ID] = kb
 		}
 	}
-	callerRole := types.TenantRoleFromContext(ctx)
 	for _, kbID := range kbIDs {
-		kb := kbByID[kbID]
-		if kb == nil {
-			continue
-		}
-		if kb.TenantID == callerTenantID {
+		if kb := kbByID[kbID]; kb != nil && kb.TenantID == callerTenantID {
 			out[callerTenantID] = append(out[callerTenantID], kbID)
-			continue
 		}
-		if s.kbShareService == nil {
-			continue
-		}
-		ok, err := s.kbShareService.HasTenantKBPermission(ctx, kbID, callerTenantID, callerRole, types.OrgRoleViewer)
-		if err != nil || !ok {
-			continue
-		}
-		out[kb.TenantID] = append(out[kb.TenantID], kbID)
 	}
+
 	return out
 }
 

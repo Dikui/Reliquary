@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"github.com/go-viper/mapstructure/v2"
+	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -9,9 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
-	"gopkg.in/yaml.v3"
 
 	"reliquary/internal/types"
 )
@@ -24,7 +24,6 @@ type Config struct {
 	Tenant          *TenantConfig          `yaml:"tenant"           json:"tenant"`
 	Auth            *AuthConfig            `yaml:"auth"             json:"auth"`
 	Audit           *AuditConfig           `yaml:"audit"            json:"audit"`
-	OIDCAuth        *OIDCAuthConfig        `yaml:"oidc_auth"        json:"oidc_auth"`
 	Models          []ModelConfig          `yaml:"models"           json:"models"`
 	DocReader       *DocReaderConfig       `yaml:"docreader"        json:"docreader"`
 	StreamManager   *StreamManagerConfig   `yaml:"stream_manager"   json:"stream_manager"`
@@ -191,8 +190,6 @@ type TenantConfig struct {
 	DefaultSessionName        string `yaml:"default_session_name"        json:"default_session_name"`
 	DefaultSessionTitle       string `yaml:"default_session_title"       json:"default_session_title"`
 	DefaultSessionDescription string `yaml:"default_session_description" json:"default_session_description"`
-	// EnableCrossTenantAccess enables cross-tenant access for users with permission
-	EnableCrossTenantAccess bool `yaml:"enable_cross_tenant_access" json:"enable_cross_tenant_access"`
 	// EnableRBAC turns on tenant-level role enforcement (issue #1303).
 	// Pointer so we can distinguish "unset" from "explicit false":
 	//   nil           — fall back to the built-in default (true) applied
@@ -203,24 +200,6 @@ type TenantConfig struct {
 	//   pointer true  — enforcement on (the new default).
 	// Read through IsRBACEnforced so callers stay nil-safe.
 	EnableRBAC *bool `yaml:"enable_rbac" json:"enable_rbac"`
-	// MaxOwnedPerUser caps how many tenants a single non-superuser can
-	// create (and Own) via self-service POST /tenants. Counts only Owner
-	// memberships so being invited as Admin/Editor/Viewer in another
-	// tenant doesn't burn quota. Cross-tenant superusers
-	// (CanAccessAllTenants) are exempt.
-	//   > 0 — enforce the cap (handler returns 429 when reached).
-	//   = 0 — fall back to defaultMaxOwnedTenantsPerUser in the handler.
-	//   < 0 — disable the cap entirely (not recommended in shared deployments).
-	//
-	// Env override: RELIQUARY_TENANT_MAX_OWNED_PER_USER (integer). When set
-	// and parseable it always wins over config.yaml so operators can
-	// loosen / tighten the quota without a redeploy. See
-	// applyAuthAndTenantDefaults for the semantics of <0 / 0 / >0.
-	MaxOwnedPerUser int `yaml:"max_owned_per_user" json:"max_owned_per_user" mapstructure:"max_owned_per_user"`
-	// SelfServiceCreationEnabled controls whether ordinary authenticated
-	// users may create a workspace for themselves. Nil preserves the
-	// historical default (enabled); cross-tenant superusers are exempt.
-	SelfServiceCreationEnabled *bool `yaml:"self_service_creation_enabled" json:"self_service_creation_enabled" mapstructure:"self_service_creation_enabled"`
 }
 
 // IsRBACEnforced reports whether tenant-level role enforcement is
@@ -234,12 +213,6 @@ func (t *TenantConfig) IsRBACEnforced() bool {
 		return true
 	}
 	return *t.EnableRBAC
-}
-
-// IsSelfServiceCreationEnabled reports whether ordinary users may create
-// tenants. Nil keeps the historical behaviour enabled.
-func (t *TenantConfig) IsSelfServiceCreationEnabled() bool {
-	return t == nil || t.SelfServiceCreationEnabled == nil || *t.SelfServiceCreationEnabled
 }
 
 // AuditConfig governs durable audit log behaviour. Writes happen on
@@ -258,60 +231,13 @@ type AuditConfig struct {
 
 // AuthConfig governs the user authentication entry points.
 type AuthConfig struct {
-	// RegistrationMode controls who may call POST /auth/register.
-	//   "self_serve" (default) — anyone may register; a new tenant is
-	//                            auto-created and the registrant becomes
-	//                            its Owner. Preserves existing behaviour.
-	//   "invite_only"          — public registration is rejected; new
-	//                            users only enter through the invitation
-	//                            flow added in PR 3.
-	RegistrationMode string `yaml:"registration_mode" json:"registration_mode"`
-	// DefaultTenantMode controls public password-registration provisioning.
-	// create_personal preserves the historical one-user-one-workspace default;
-	// tenantless creates only the identity and waits for an invitation or an
-	// explicit self-service tenant creation.
-	DefaultTenantMode      string `yaml:"default_tenant_mode" json:"default_tenant_mode"`
-	ComplexPasswordEnabled bool   `yaml:"complex_password_enabled" json:"complex_password_enabled"`
+	ComplexPasswordEnabled bool `yaml:"complex_password_enabled" json:"complex_password_enabled"`
 }
 
-// AuthRegistrationMode constants used by handlers and middleware.
 const (
-	AuthRegistrationModeSelfServe       = "self_serve"
-	AuthRegistrationModeInviteOnly      = "invite_only"
-	AuthDefaultTenantModeCreatePersonal = "create_personal"
-	AuthDefaultTenantModeTenantless     = "tenantless"
+	AuthRegistrationModeSelfServe  = "self_serve"
+	AuthRegistrationModeInviteOnly = "invite_only"
 )
-
-// IsInviteOnly returns true when registration is gated behind invitations.
-// Treats nil receiver and empty/unknown values as "not invite-only" so the
-// default keeps current behaviour even if the section is missing from the
-// config file.
-func (c *AuthConfig) IsInviteOnly() bool {
-	if c == nil {
-		return false
-	}
-	return c.RegistrationMode == AuthRegistrationModeInviteOnly
-}
-
-type OIDCUserInfoMapping struct {
-	Username string `yaml:"username" json:"username"`
-	Email    string `yaml:"email"    json:"email"`
-}
-
-type OIDCAuthConfig struct {
-	Enable                bool                 `yaml:"enable"                 json:"enable"`
-	IssuerURL             string               `yaml:"issuer_url"             json:"issuer_url"`
-	DiscoveryURL          string               `yaml:"discovery_url"          json:"discovery_url"`
-	ProviderDisplayName   string               `yaml:"provider_display_name"  json:"provider_display_name"`
-	ClientID              string               `yaml:"client_id"              json:"client_id"`
-	ClientSecret          string               `yaml:"client_secret"          json:"-"`
-	AuthorizationEndpoint string               `yaml:"authorization_endpoint" json:"authorization_endpoint"`
-	TokenEndpoint         string               `yaml:"token_endpoint"         json:"token_endpoint"`
-	UserInfoEndpoint      string               `yaml:"user_info_endpoint"     json:"user_info_endpoint"`
-	JwksURI               string               `yaml:"jwks_uri"               json:"jwks_uri"`
-	Scopes                []string             `yaml:"scopes"                 json:"scopes"`
-	UserInfoMapping       *OIDCUserInfoMapping `yaml:"user_info_mapping"      json:"user_info_mapping"`
-}
 
 // PromptTemplateI18n holds localized name and description for a prompt template.
 type PromptTemplateI18n struct {
@@ -557,7 +483,6 @@ func LoadConfig() (*Config, error) {
 	}
 
 	// Validate configuration values
-	applyOIDCEnvOverrides(&cfg)
 	applyAgentEnvOverrides(&cfg)
 	applyKnowledgeBaseEnvOverrides(&cfg)
 	applyAuthAndTenantDefaults(&cfg)
@@ -575,15 +500,7 @@ func LoadConfig() (*Config, error) {
 	// "I edited .env but the gates still aren't firing" trap obvious
 	// from the first console line. Printf rather than logger because
 	// LoadConfig runs before the logger sink is wired in the dig graph.
-	rbacOn := cfg.Tenant.IsRBACEnforced()
-	xtAccess := cfg.Tenant != nil && cfg.Tenant.EnableCrossTenantAccess
-	fmt.Printf(
-		"[config] tenant RBAC enforcement: enable_rbac=%v cross_tenant_access=%v "+
-			"(env: RELIQUARY_TENANT_ENABLE_RBAC=%q RELIQUARY_TENANT_ENABLE_CROSS_TENANT_ACCESS=%q)\n",
-		rbacOn, xtAccess,
-		os.Getenv("RELIQUARY_TENANT_ENABLE_RBAC"),
-		os.Getenv("RELIQUARY_TENANT_ENABLE_CROSS_TENANT_ACCESS"),
-	)
+	fmt.Printf("[config] team RBAC enforcement: enable_rbac=%v\n", cfg.Tenant.IsRBACEnforced())
 
 	return &cfg, nil
 }
@@ -592,33 +509,6 @@ func LoadConfig() (*Config, error) {
 // It checks for obviously invalid or missing values that would cause runtime failures.
 func ValidateConfig(cfg *Config) error {
 	var errs []string
-
-	if cfg.OIDCAuth != nil && cfg.OIDCAuth.Enable {
-		if strings.TrimSpace(cfg.OIDCAuth.ClientID) == "" {
-			errs = append(errs, "oidc_auth.client_id is required when OIDC is enabled")
-		}
-		if strings.TrimSpace(cfg.OIDCAuth.ClientSecret) == "" {
-			errs = append(errs, "oidc_auth.client_secret is required when OIDC is enabled")
-		}
-		if strings.TrimSpace(cfg.OIDCAuth.DiscoveryURL) == "" &&
-			(strings.TrimSpace(cfg.OIDCAuth.AuthorizationEndpoint) == "" || strings.TrimSpace(cfg.OIDCAuth.TokenEndpoint) == "") {
-			errs = append(errs, "oidc_auth.discovery_url or both oidc_auth.authorization_endpoint and oidc_auth.token_endpoint are required when OIDC is enabled")
-		}
-	}
-
-	if cfg.Auth != nil {
-		mode := strings.TrimSpace(cfg.Auth.RegistrationMode)
-		if mode != "" && mode != AuthRegistrationModeSelfServe && mode != AuthRegistrationModeInviteOnly {
-			errs = append(errs, fmt.Sprintf("auth.registration_mode must be %q or %q, got %q",
-				AuthRegistrationModeSelfServe, AuthRegistrationModeInviteOnly, mode))
-		}
-
-		tenantMode := strings.TrimSpace(cfg.Auth.DefaultTenantMode)
-		if tenantMode != "" && tenantMode != AuthDefaultTenantModeCreatePersonal && tenantMode != AuthDefaultTenantModeTenantless {
-			errs = append(errs, fmt.Sprintf("auth.default_tenant_mode must be %q or %q, got %q",
-				AuthDefaultTenantModeCreatePersonal, AuthDefaultTenantModeTenantless, tenantMode))
-		}
-	}
 
 	if cfg.Audit != nil && cfg.Audit.RetentionDays < 0 {
 		errs = append(errs, fmt.Sprintf("audit.retention_days must be >= 0 (got %d); use 0 to disable purge",
@@ -662,71 +552,6 @@ func ValidateConfig(cfg *Config) error {
 		return fmt.Errorf("config validation errors: %s", strings.Join(errs, "; "))
 	}
 	return nil
-}
-
-func applyOIDCEnvOverrides(cfg *Config) {
-	if cfg.OIDCAuth == nil {
-		cfg.OIDCAuth = &OIDCAuthConfig{}
-	}
-	if cfg.OIDCAuth.UserInfoMapping == nil {
-		cfg.OIDCAuth.UserInfoMapping = &OIDCUserInfoMapping{}
-	}
-
-	if value := strings.TrimSpace(os.Getenv("OIDC_AUTH_ENABLE")); value != "" {
-		cfg.OIDCAuth.Enable = strings.EqualFold(value, "true")
-	}
-	if value := strings.TrimSpace(os.Getenv("OIDC_AUTH_ISSUER_URL")); value != "" {
-		cfg.OIDCAuth.IssuerURL = value
-	}
-	if value := strings.TrimSpace(os.Getenv("OIDC_AUTH_DISCOVERY_URL")); value != "" {
-		cfg.OIDCAuth.DiscoveryURL = value
-	}
-	if value := strings.TrimSpace(os.Getenv("OIDC_AUTH_PROVIDER_DISPLAY_NAME")); value != "" {
-		cfg.OIDCAuth.ProviderDisplayName = value
-	}
-	if value := strings.TrimSpace(os.Getenv("OIDC_AUTH_CLIENT_ID")); value != "" {
-		cfg.OIDCAuth.ClientID = value
-	}
-	if value := strings.TrimSpace(os.Getenv("OIDC_AUTH_CLIENT_SECRET")); value != "" {
-		cfg.OIDCAuth.ClientSecret = value
-	}
-	if value := strings.TrimSpace(os.Getenv("OIDC_AUTH_AUTHORIZATION_ENDPOINT")); value != "" {
-		cfg.OIDCAuth.AuthorizationEndpoint = value
-	}
-	if value := strings.TrimSpace(os.Getenv("OIDC_AUTH_TOKEN_ENDPOINT")); value != "" {
-		cfg.OIDCAuth.TokenEndpoint = value
-	}
-	if value := strings.TrimSpace(os.Getenv("OIDC_AUTH_USER_INFO_ENDPOINT")); value != "" {
-		cfg.OIDCAuth.UserInfoEndpoint = value
-	}
-	if value := strings.TrimSpace(os.Getenv("OIDC_AUTH_JWKS_URI")); value != "" {
-		cfg.OIDCAuth.JwksURI = value
-	}
-	if value := strings.TrimSpace(os.Getenv("OIDC_AUTH_SCOPES")); value != "" {
-		cfg.OIDCAuth.Scopes = strings.Fields(strings.ReplaceAll(value, ",", " "))
-	}
-	if value := strings.TrimSpace(os.Getenv("OIDC_USER_INFO_MAPPING_USER_NAME")); value != "" {
-		cfg.OIDCAuth.UserInfoMapping.Username = value
-	}
-	if value := strings.TrimSpace(os.Getenv("OIDC_USER_INFO_MAPPING_EMAIL")); value != "" {
-		cfg.OIDCAuth.UserInfoMapping.Email = value
-	}
-
-	if cfg.OIDCAuth.ProviderDisplayName == "" {
-		cfg.OIDCAuth.ProviderDisplayName = "OIDC"
-	}
-	if len(cfg.OIDCAuth.Scopes) == 0 {
-		cfg.OIDCAuth.Scopes = []string{"openid", "profile", "email"}
-	}
-	if cfg.OIDCAuth.UserInfoMapping.Username == "" {
-		cfg.OIDCAuth.UserInfoMapping.Username = "name"
-	}
-	if cfg.OIDCAuth.UserInfoMapping.Email == "" {
-		cfg.OIDCAuth.UserInfoMapping.Email = "email"
-	}
-	if cfg.OIDCAuth.DiscoveryURL == "" && cfg.OIDCAuth.IssuerURL != "" {
-		cfg.OIDCAuth.DiscoveryURL = strings.TrimRight(cfg.OIDCAuth.IssuerURL, "/") + "/.well-known/openid-configuration"
-	}
 }
 
 func applyKnowledgeBaseEnvOverrides(cfg *Config) {
@@ -774,39 +599,8 @@ func applyAgentEnvOverrides(cfg *Config) {
 	}
 }
 
-// applyAuthAndTenantDefaults fills in defaults for the Auth and Tenant
-// config sections and applies env-var overrides that operators commonly use
-// to enable RBAC or switch registration mode without editing config.yaml.
-//
-// Defaults:
-//   - auth.registration_mode  -> "self_serve" (preserves pre-RBAC behaviour)
-//   - auth.default_tenant_mode -> "create_personal" (preserves the
-//     historical registration behaviour)
-//   - tenant.enable_rbac      -> true (enforce role checks unless an
-//     operator explicitly opts into the logging-only rollout window via
-//     config.yaml `enable_rbac: false` or `RELIQUARY_TENANT_ENABLE_RBAC=false`).
-//   - tenant.self_service_creation_enabled -> true (preserves ordinary
-//     authenticated users' ability to create workspaces).
-//
-// Env overrides (when set and non-empty):
-//   - RELIQUARY_AUTH_DEFAULT_TENANT_MODE ("create_personal"/"tenantless")
-//   - RELIQUARY_AUTH_COMPLEX_PASSWORD_ENABLED (boolean)
-//   - RELIQUARY_TENANT_SELF_SERVICE_CREATION_ENABLED (boolean)
-//   - RELIQUARY_TENANT_ENABLE_RBAC      ("true"/"false", case-insensitive)
-//   - RELIQUARY_TENANT_ENABLE_CROSS_TENANT_ACCESS ("true"/"false", case-insensitive).
-//     Read explicitly because viper.AutomaticEnv has no SetEnvPrefix, so the
-//     RELIQUARY_-prefixed var is not bound to the nested struct automatically.
-//   - RELIQUARY_TENANT_MAX_OWNED_PER_USER (integer; <0 disables the cap,
-//     0 falls back to the handler default, >0 enforces that exact cap).
-//     Unparseable / empty values are ignored so a stale shell variable
-//     can't silently disable the quota for a future deployment.
-//
-// Note: auth.registration_mode has no dedicated env override. The
-// long-standing DISABLE_REGISTRATION=true env var is the single env-layer
-// knob and, when set, coerces registration_mode to invite_only here. That
-// way both the API gate (handler) and the /auth/config-driven UI gate
-// (frontend hides the register entry) stay consistent — without needing
-// two parallel env vars.
+// applyAuthAndTenantDefaults loads password policy and role enforcement.
+// Registration mode is derived from whether the team already has a user.
 func applyAuthAndTenantDefaults(cfg *Config) {
 	if cfg.Auth == nil {
 		cfg.Auth = &AuthConfig{}
@@ -815,32 +609,10 @@ func applyAuthAndTenantDefaults(cfg *Config) {
 		cfg.Tenant = &TenantConfig{}
 	}
 
-	if legacy := strings.TrimSpace(os.Getenv("DISABLE_REGISTRATION")); strings.EqualFold(legacy, "true") {
-		prev := strings.TrimSpace(cfg.Auth.RegistrationMode)
-		cfg.Auth.RegistrationMode = AuthRegistrationModeInviteOnly
-		if prev != "" && prev != AuthRegistrationModeInviteOnly {
-			fmt.Printf(
-				"[config] DISABLE_REGISTRATION=true overrides auth.registration_mode=%q -> %q\n",
-				prev, AuthRegistrationModeInviteOnly,
-			)
-		}
-	}
-
-	if strings.TrimSpace(cfg.Auth.RegistrationMode) == "" {
-		cfg.Auth.RegistrationMode = AuthRegistrationModeSelfServe
-	}
-
 	if value := strings.TrimSpace(os.Getenv("RELIQUARY_AUTH_COMPLEX_PASSWORD_ENABLED")); value != "" {
 		if parsed, err := strconv.ParseBool(value); err == nil {
 			cfg.Auth.ComplexPasswordEnabled = parsed
 		}
-	}
-
-	if value := strings.TrimSpace(os.Getenv("RELIQUARY_AUTH_DEFAULT_TENANT_MODE")); value != "" {
-		cfg.Auth.DefaultTenantMode = value
-	}
-	if strings.TrimSpace(cfg.Auth.DefaultTenantMode) == "" {
-		cfg.Auth.DefaultTenantMode = AuthDefaultTenantModeCreatePersonal
 	}
 
 	if value := strings.TrimSpace(os.Getenv("RELIQUARY_TENANT_ENABLE_RBAC")); value != "" {
@@ -854,41 +626,6 @@ func applyAuthAndTenantDefaults(cfg *Config) {
 		cfg.Tenant.EnableRBAC = &on
 	}
 
-	// RELIQUARY_TENANT_ENABLE_CROSS_TENANT_ACCESS mirrors the RBAC switch above.
-	// It must be read explicitly: viper.AutomaticEnv has no SetEnvPrefix, so the
-	// RELIQUARY_-prefixed env var is never bound to the nested struct field —
-	// without this block, only config.yaml's enable_cross_tenant_access takes
-	// effect and the documented env override is silently ignored. The default
-	// stays whatever config.yaml provides (false unless set there).
-	if value := strings.TrimSpace(os.Getenv("RELIQUARY_TENANT_ENABLE_CROSS_TENANT_ACCESS")); value != "" {
-		cfg.Tenant.EnableCrossTenantAccess = strings.EqualFold(value, "true")
-	}
-
-	if value := strings.TrimSpace(os.Getenv("RELIQUARY_TENANT_SELF_SERVICE_CREATION_ENABLED")); value != "" {
-		if enabled, err := strconv.ParseBool(value); err == nil {
-			cfg.Tenant.SelfServiceCreationEnabled = &enabled
-		} else {
-			fmt.Printf(
-				"[config] RELIQUARY_TENANT_SELF_SERVICE_CREATION_ENABLED=%q is not a boolean, ignoring\n",
-				value,
-			)
-		}
-	}
-	if cfg.Tenant.SelfServiceCreationEnabled == nil {
-		on := true
-		cfg.Tenant.SelfServiceCreationEnabled = &on
-	}
-
-	if value := strings.TrimSpace(os.Getenv("RELIQUARY_TENANT_MAX_OWNED_PER_USER")); value != "" {
-		if n, err := strconv.Atoi(value); err == nil {
-			cfg.Tenant.MaxOwnedPerUser = n
-		} else {
-			fmt.Printf(
-				"[config] RELIQUARY_TENANT_MAX_OWNED_PER_USER=%q is not an integer, ignoring\n",
-				value,
-			)
-		}
-	}
 }
 
 // applyAuditDefaults fills in defaults for the Audit config section

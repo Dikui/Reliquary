@@ -40,7 +40,7 @@ const (
 // EvaluationTask contains information about an evaluation task
 type EvaluationTask struct {
 	ID        string `json:"id"`         // Unique task ID
-	TenantID  uint64 `json:"tenant_id"`  // Tenant/Organization ID
+	TenantID  uint64 `json:"tenant_id"`  // Team tenant ID
 	DatasetID string `json:"dataset_id"` // Dataset ID for evaluation
 
 	StartTime time.Time        `json:"start_time"`        // Task start time

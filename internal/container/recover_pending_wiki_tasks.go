@@ -32,7 +32,7 @@ func recoverPendingWikiTasks(db *gorm.DB, task interfaces.TaskEnqueuer) {
 	if db == nil || task == nil {
 		return
 	}
-	ctx := context.Background()
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
 	const activeKnowledgeBase = `EXISTS (
 		SELECT 1 FROM knowledge_bases kb
 		WHERE kb.id = task_pending_ops.scope_id
@@ -45,6 +45,7 @@ func recoverPendingWikiTasks(db *gorm.DB, task interfaces.TaskEnqueuer) {
 	// triggers at startup. Fail closed if this cleanup cannot be verified.
 	cleanup := db.WithContext(ctx).
 		Where("scope = ? AND task_type IN ?", types.TaskScopeKnowledgeBase, wikiTaskTypes).
+		Where("tenant_id = ?", types.SingleTenantID).
 		Where("NOT " + activeKnowledgeBase).
 		Delete(&types.TaskPendingOp{})
 	if cleanup.Error != nil {
@@ -60,6 +61,7 @@ func recoverPendingWikiTasks(db *gorm.DB, task interfaces.TaskEnqueuer) {
 		Model(&types.TaskPendingOp{}).
 		Distinct("tenant_id", "task_type", "scope_id").
 		Where("scope = ? AND task_type IN ?", types.TaskScopeKnowledgeBase, wikiTaskTypes).
+		Where("tenant_id = ?", types.SingleTenantID).
 		Where(activeKnowledgeBase).
 		Find(&scopes).Error; err != nil {
 		logger.Warnf(ctx, "[WikiRecovery] failed to list pending queues: %v", err)
@@ -72,7 +74,7 @@ func recoverPendingWikiTasks(db *gorm.DB, task interfaces.TaskEnqueuer) {
 			continue
 		}
 		payload, err := json.Marshal(service.WikiIngestPayload{
-			TenantID:        scope.TenantID,
+			TenantID:        types.SingleTenantID,
 			KnowledgeBaseID: scope.ScopeID,
 		})
 		if err != nil {

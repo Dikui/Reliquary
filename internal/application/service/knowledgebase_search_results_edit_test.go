@@ -25,11 +25,11 @@ func TestIsSearchableChunkSkipsUnsynchronizedEdits(t *testing.T) {
 func TestIsSearchableChunkSkipsDisabledChunk(t *testing.T) {
 	service := &knowledgeBaseService{}
 	chunk := &types.Chunk{
-		ChunkType:   types.ChunkTypeFAQ,
+		ChunkType:   types.ChunkTypeText,
 		IndexStatus: "ready",
 		IsEnabled:   false,
 	}
 	if service.isSearchableChunk(chunk) {
-		t.Fatal("disabled FAQ chunk should never be searchable")
+		t.Fatal("disabled document chunk should never be searchable")
 	}
 }

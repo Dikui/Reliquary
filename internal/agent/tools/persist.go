@@ -297,9 +297,7 @@ func compactToolSummary(success bool, errMsg string, data map[string]interface{}
 		}
 		fetched := intField(data, "fetched_chunks")
 		total := intField(data, "total_chunks")
-		if q := stringField(data, "faq_question"); q != "" {
-			return fmt.Sprintf("Loaded FAQ entry: %s (content omitted from history)", q)
-		}
+
 		if title != "" && total > 0 {
 			return fmt.Sprintf("Listed %d/%d chunks from %s (content omitted from history)", fetched, total, title)
 		}

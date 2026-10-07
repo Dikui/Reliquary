@@ -24,7 +24,7 @@ func TestTenantAPIKeyServiceCreateAPIKeyUsesSKPrefix(t *testing.T) {
 	svc := NewTenantAPIKeyService(repo)
 
 	result, err := svc.CreateAPIKey(ctx, interfaces.TenantAPIKeyCreateRequest{
-		TenantID: 42,
+		TenantID: 1,
 		Name:     "integration",
 	})
 	if err != nil {
@@ -74,17 +74,6 @@ func (r *fakeTenantAPIKeyRepo) ListAPIKeys(_ context.Context, tenantID uint64) (
 	return out, nil
 }
 
-func (r *fakeTenantAPIKeyRepo) ListPlatformAPIKeys(_ context.Context) ([]*types.TenantAPIKey, error) {
-	out := []*types.TenantAPIKey{}
-	for _, key := range r.byHash {
-		if key.IsPlatform() && key.RevokedAt == nil {
-			cp := *key
-			out = append(out, &cp)
-		}
-	}
-	return out, nil
-}
-
 func (r *fakeTenantAPIKeyRepo) RevokeAPIKey(_ context.Context, tenantID uint64, id uint64) error {
 	now := time.Now()
 	for _, key := range r.byHash {
@@ -122,7 +111,7 @@ func TestTenantAPIKeyServiceUpdateNormalizesConfiguration(t *testing.T) {
 	repo := newFakeTenantAPIKeyRepo()
 	svc := NewTenantAPIKeyService(repo)
 	created, err := svc.CreateAPIKey(ctx, interfaces.TenantAPIKeyCreateRequest{
-		TenantID: 42, Name: "scoped", Capabilities: []string{"retrieve"},
+		TenantID: 1, Name: "scoped", Capabilities: []string{"retrieve"},
 	})
 	if err != nil {
 		t.Fatalf("CreateAPIKey returned error: %v", err)
@@ -130,7 +119,7 @@ func TestTenantAPIKeyServiceUpdateNormalizesConfiguration(t *testing.T) {
 
 	expiresAt := time.Date(2026, 9, 1, 12, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60))
 	updated, err := svc.UpdateAPIKey(ctx, interfaces.TenantAPIKeyUpdateRequest{
-		TenantID: 42, APIKeyID: created.APIKey.ID,
+		TenantID: 1, APIKeyID: created.APIKey.ID,
 		Name: " updated ", Capabilities: []string{"retrieve", "chat", "retrieve"},
 		KnowledgeBaseIDs: []string{" kb-1 ", "", "kb-2", "kb-1"},
 		ExpiresAt:        &expiresAt,
@@ -152,7 +141,7 @@ func TestTenantAPIKeyServiceUpdateNormalizesConfiguration(t *testing.T) {
 	}
 
 	full, err := svc.UpdateAPIKey(ctx, interfaces.TenantAPIKeyUpdateRequest{
-		TenantID: 42, APIKeyID: created.APIKey.ID, Name: "full", FullAccess: true,
+		TenantID: 1, APIKeyID: created.APIKey.ID, Name: "full", FullAccess: true,
 		KnowledgeBaseIDs: []string{"kb-ignored"}, Capabilities: []string{"retrieve"},
 	})
 	if err != nil {
@@ -174,17 +163,6 @@ func apiKeyEqualStrings(a, b []string) bool {
 		}
 	}
 	return true
-}
-
-func (r *fakeTenantAPIKeyRepo) RevokePlatformAPIKey(_ context.Context, id uint64) error {
-	now := time.Now()
-	for _, key := range r.byHash {
-		if key.ID == id && key.IsPlatform() && key.RevokedAt == nil {
-			key.RevokedAt = &now
-			return nil
-		}
-	}
-	return apprepo.ErrTenantAPIKeyNotFound
 }
 
 func (r *fakeTenantAPIKeyRepo) UpdateAPIKeyHash(_ context.Context, id uint64, hash string) error {
@@ -236,9 +214,9 @@ func TestTenantAPIKeyServiceBackfillMissingKeyHashes(t *testing.T) {
 
 	token := "sk-legacy-token-value"
 	legacy := &types.TenantAPIKey{
-		TenantID:   uint64Pointer(7),
+		TenantID:   uint64Pointer(types.SingleTenantID),
 		Name:       "legacy",
-		KeyHash:    "migrated-tenant-7",
+		KeyHash:    "migrated-tenant-1",
 		APIKey:     token,
 		FullAccess: true,
 	}
@@ -263,49 +241,19 @@ func TestTenantAPIKeyServiceBackfillMissingKeyHashes(t *testing.T) {
 
 func uint64Pointer(value uint64) *uint64 { return &value }
 
-func TestTenantAPIKeyServiceCreatesPlatformKeyWithoutTenant(t *testing.T) {
-	repo := newFakeTenantAPIKeyRepo()
-	svc := NewTenantAPIKeyService(repo)
-	created, err := svc.CreateAPIKey(context.Background(), interfaces.TenantAPIKeyCreateRequest{
-		ScopeType:    types.APIKeyScopePlatform,
-		Name:         "automation",
-		Capabilities: []string{string(types.APIKeyCapabilityRetrieve)},
-	})
-	if err != nil {
-		t.Fatalf("CreateAPIKey returned error: %v", err)
-	}
-	if !created.APIKey.IsPlatform() || created.APIKey.TenantID != nil {
-		t.Fatalf("created key scope = %q tenant=%v, want platform with nil tenant", created.APIKey.ScopeType, created.APIKey.TenantID)
-	}
-	if created.APIKey.FullAccess {
-		t.Fatal("platform API key must not be full-access")
-	}
-}
-
-func TestTenantAPIKeyServiceRejectsFullAccessPlatformKey(t *testing.T) {
-	svc := NewTenantAPIKeyService(newFakeTenantAPIKeyRepo())
-	_, err := svc.CreateAPIKey(context.Background(), interfaces.TenantAPIKeyCreateRequest{
-		ScopeType: types.APIKeyScopePlatform,
-		Name:      "unsafe", FullAccess: true,
-	})
-	if err == nil {
-		t.Fatal("full-access platform key should be rejected")
-	}
-}
-
 func TestTenantAPIKeyServiceRevokeAPIKey(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeTenantAPIKeyRepo()
 	svc := NewTenantAPIKeyService(repo)
 
 	created, err := svc.CreateAPIKey(ctx, interfaces.TenantAPIKeyCreateRequest{
-		TenantID: 42,
+		TenantID: 1,
 		Name:     "integration",
 	})
 	if err != nil {
 		t.Fatalf("CreateAPIKey returned error: %v", err)
 	}
-	if err := svc.RevokeAPIKey(ctx, 42, created.APIKey.ID); err != nil {
+	if err := svc.RevokeAPIKey(ctx, 1, created.APIKey.ID); err != nil {
 		t.Fatalf("RevokeAPIKey returned error: %v", err)
 	}
 	if _, err := svc.AuthenticateAPIKey(ctx, created.Token); err == nil {
@@ -319,7 +267,7 @@ func TestTenantAPIKeyServiceAuthenticateThrottlesLastUsedUpdates(t *testing.T) {
 	svc := NewTenantAPIKeyService(repo)
 
 	created, err := svc.CreateAPIKey(ctx, interfaces.TenantAPIKeyCreateRequest{
-		TenantID: 42,
+		TenantID: 1,
 		Name:     "integration",
 	})
 	if err != nil {
@@ -348,7 +296,7 @@ func TestTenantAPIKeyServiceAuthenticateRejectsExpiredKey(t *testing.T) {
 
 	expired := time.Now().UTC().Add(-time.Minute)
 	created, err := svc.CreateAPIKey(ctx, interfaces.TenantAPIKeyCreateRequest{
-		TenantID:  42,
+		TenantID:  1,
 		Name:      "short-lived",
 		ExpiresAt: &expired,
 	})

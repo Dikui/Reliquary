@@ -5,7 +5,6 @@ import { ModuleKind, ScriptTarget, transpileModule } from 'typescript'
 
 test('an invalidated knowledge base request cannot restore the previous account cache', async () => {
   const pending: Array<(value: unknown) => void> = []
-  let sharedRequests = 0
   const dependencies = {
     defineStore: (_id: string, setup: () => unknown) => setup,
     ref: (value: unknown) => ({ value }),
@@ -13,9 +12,6 @@ test('an invalidated knowledge base request cannot restore the previous account 
     watch: () => {},
     getCurrentLanguage: () => 'en-US',
     listKnowledgeBases: () => new Promise(resolve => pending.push(resolve)),
-    useOrganizationStore: () => ({
-      fetchSharedKnowledgeBases: async () => { sharedRequests++ },
-    }),
   }
   // Execute the actual store setup with controlled API timing, without browser dependencies.
   const source = readFileSync(new URL('./chatResources.ts', import.meta.url), 'utf8')
@@ -31,12 +27,10 @@ test('an invalidated knowledge base request cannot restore the previous account 
   assert.deepEqual(await previous, [])
   assert.deepEqual(store.rawKnowledgeBases.value, [])
   assert.equal(store.isFresh('knowledgeBases'), false)
-  assert.equal(sharedRequests, 0)
 
   const current = store.fetchKnowledgeBasesForList()
   pending.shift()!({ data: [{ id: 'current-account-kb' }] })
   assert.deepEqual(await current, [{ id: 'current-account-kb' }])
   assert.deepEqual(await store.fetchKnowledgeBasesForList(), [{ id: 'current-account-kb' }])
   assert.equal(pending.length, 0)
-  assert.equal(sharedRequests, 1)
 })

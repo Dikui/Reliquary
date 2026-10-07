@@ -64,7 +64,6 @@ export function useConfigSkillInstallProgress(options?: {
     abortByKey.set(key, controller)
 
     const token = localStorage.getItem('reliquary_token')
-    const tenantId = localStorage.getItem('reliquary_selected_tenant_id')
     const url = `${getApiBaseUrl()}${configSkillInstallEventsUrl(configId, skillId)}`
 
     void fetchEventSource(url, {
@@ -73,7 +72,6 @@ export function useConfigSkillInstallProgress(options?: {
         Authorization: token ? `Bearer ${token}` : '',
         'Accept-Language': i18n.global.locale?.value || localStorage.getItem('locale') || 'zh-CN',
         'X-Request-ID': generateRandomString(12),
-        ...(tenantId ? { 'X-Tenant-ID': tenantId } : {}),
       },
       signal: controller.signal,
       openWhenHidden: true,

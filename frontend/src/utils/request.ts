@@ -29,36 +29,14 @@ export function getCurrentLanguage(): string {
 
 instance.interceptors.request.use(
   (config) => {
-    const existingAuth = config.headers?.Authorization ?? config.headers?.authorization;
-    const isEmbedAuth = typeof existingAuth === 'string' && existingAuth.startsWith('Embed ');
-    const isEmbedPath = typeof config.url === 'string' && config.url.includes('/api/v1/embed/');
-
-    // 嵌入渠道使用 Embed token；勿用本地 JWT 覆盖（否则调试页会 401）
-    if (!isEmbedAuth) {
-      const token = localStorage.getItem('reliquary_token');
-      if (token) {
-        config.headers["Authorization"] = `Bearer ${token}`;
-      }
+    const token = localStorage.getItem('reliquary_token');
+    if (token) {
+      config.headers["Authorization"] = `Bearer ${token}`;
     }
+
     
     // 添加用户语言偏好
     config.headers["Accept-Language"] = getCurrentLanguage();
-    
-    // 添加跨空间访问请求头：只要 setSelectedTenant 写过激活空间，
-    // 每个请求都要附 X-Tenant-ID。早期版本会 short-circuit
-    // "selectedTenantId === defaultTenantId 时不附"以减少 header 体积，
-    // 但这条优化会被任何把 reliquary_tenant 写成激活空间的代码（OIDC
-    // 回调、UserMenu loadUserInfo、router hydrate）触发，导致后续请求
-    // 静默丢失 header，前端"切换了"但实际仍跑在 home 空间里——把"切
-    // 换之后只有第一批请求带 X-Tenant-ID"调成永久状态。
-    // 后端 IsTenantAccessible 已经允许 header 指向 home 空间（自家），
-    // 所以无脑附不会引入新风险。
-    if (!isEmbedAuth && !isEmbedPath) {
-      const selectedTenantId = localStorage.getItem('reliquary_selected_tenant_id');
-      if (selectedTenantId) {
-        config.headers["X-Tenant-ID"] = selectedTenantId;
-      }
-    }
     
     config.headers["X-Request-ID"] = `${generateRandomString(12)}`;
     return config;
@@ -77,7 +55,7 @@ let failedQueue: Array<{ resolve: Function; reject: Function }> = [];
 // must surface to the page (e.g. expired token), not trigger the
 // refresh-then-redirect-to-login flow (issue #1617). '/auth/register' already
 // covers '/auth/register-by-invite' via substring match.
-const PUBLIC_AUTH_PATHS = ['/auth/auto-setup', '/auth/login', '/auth/register', '/auth/oidc/', '/auth/invitations/lookup', '/api/v1/embed/'];
+const PUBLIC_AUTH_PATHS = ['/auth/login', '/auth/register', '/auth/invitations/lookup', '/auth/register-by-invite'];
 
 function isPublicAuthRequest(url?: string): boolean {
   if (!url) return false;
@@ -97,16 +75,9 @@ const processQueue = (error: any, token: string | null = null) => {
   failedQueue = [];
 };
 
-function isEmbedPage(): boolean {
-  if (typeof window === 'undefined') return false;
-  return window.location.pathname.startsWith('/embed/');
-}
-
 function redirectToLogin() {
   if (typeof window === 'undefined') return;
   if (window.location.pathname === '/login') return;
-  // Embed 渠道用 Embed token 鉴权，匿名访问不应被踢到登录页
-  if (isEmbedPage()) return;
   window.location.href = '/login';
 }
 
@@ -127,7 +98,6 @@ instance.interceptors.response.use(
       return Promise.reject({ message: t('error.networkError') });
     }
     
-    // 公开接口（auto-setup / login / register / oidc）的 401 不走 refresh 逻辑，直接返回错误
     if ((error.response.status === 401 || error.response.status === 403) && isPublicAuthRequest(originalRequest?.url)) {
       const { status, data } = error.response;
       const msg = typeof data === 'object'
@@ -137,13 +107,6 @@ instance.interceptors.response.use(
     }
 
     // Embed 调试页/挂件：无 JWT 时直接拒绝，勿走 refresh → /login
-    if (error.response.status === 401 && isEmbedPage()) {
-      const { status, data } = error.response;
-      const msg = typeof data === 'object'
-        ? (typeof data?.error === 'string' ? data.error : (data?.error?.message || data?.message))
-        : data;
-      return Promise.reject({ status, message: msg || t('error.invalidCredentials') });
-    }
 
     // 如果是401错误且不是刷新token的请求，尝试刷新token
     if (error.response.status === 401 && !originalRequest._retry && !originalRequest.url?.includes('/auth/refresh')) {

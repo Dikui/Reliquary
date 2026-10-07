@@ -60,7 +60,6 @@ func (t *DataSchemaTool) Execute(ctx context.Context, args json.RawMessage) (*ty
 		}, err
 	}
 
-	// Get knowledge to get TenantID (use IDOnly to support cross-tenant shared KB)
 	var knowledge *types.Knowledge
 	var err error
 	if t.scopeEnforced {
@@ -87,19 +86,18 @@ func (t *DataSchemaTool) Execute(ctx context.Context, args json.RawMessage) (*ty
 	}
 	enabled := true
 
-	chunks, _, err := t.chunkRepo.ListPagedChunksByKnowledgeID(
-		ctx,
+	chunks, _, err := t.chunkRepo.ListPagedChunksByKnowledgeID(ctx,
 		knowledge.TenantID,
 		input.KnowledgeID,
 		page,
 		chunkTypes,
-		nil, // tagIDs
-		"",  // keyword
-		"",  // searchField
-		"",  // sortOrder
-		"",  // knowledgeType
-		&enabled,
-	)
+		nil,
+		// tagIDs
+		"",
+		// searchField
+		"",
+		// knowledgeType
+		&enabled)
 	if err != nil {
 		return &types.ToolResult{
 			Success: false,

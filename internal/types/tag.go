@@ -4,9 +4,6 @@ import (
 	"time"
 )
 
-// KnowledgeTag represents a tag (category) under a specific knowledge base.
-// Tags are scoped by knowledge base (and tenant) and are used to categorize
-// Knowledge (documents) and FAQ Chunks.
 type KnowledgeTag struct {
 	// Unique identifier of the tag (UUID)
 	ID string `json:"id"                gorm:"type:varchar(36);primaryKey"`
@@ -18,7 +15,6 @@ type KnowledgeTag struct {
 	KnowledgeBaseID string `json:"knowledge_base_id" gorm:"type:varchar(36);index"`
 	// Tag name, unique within the same knowledge base
 	Name string `json:"name"              gorm:"type:varchar(128);not null"`
-	// Kind is empty for legacy/FAQ tags; document labels use nature, topic, object or event.
 	Kind string `json:"kind" gorm:"type:varchar(16);not null;default:''"`
 	// Optional display color
 	Color string `json:"color"             gorm:"type:varchar(32)"`
@@ -78,3 +74,6 @@ type KnowledgeTagRelation struct {
 func (KnowledgeTagRelation) TableName() string {
 	return "knowledge_tag_relations"
 }
+
+// UntaggedTagName labels entries that have no assigned tag.
+const UntaggedTagName = "未分类"

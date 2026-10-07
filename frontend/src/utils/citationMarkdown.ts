@@ -80,7 +80,7 @@ function docTitlesMatch(a: string, b: string): boolean {
   return na === nb || na.includes(nb) || nb.includes(na)
 }
 
-/** Map model context index (1, FAQ-1, DOC-2) to the real chunk UUID from retrieval results. */
+/** Map model context index (1, DOC-2) to the real chunk UUID from retrieval results. */
 export function resolveCitationChunkId(
   rawChunkId: string,
   attrs: { doc?: string; kbId?: string },
@@ -103,17 +103,9 @@ export function resolveCitationChunkId(
     )
     if (byDoc?.id) return byDoc.id
   }
-
-  const faqMatch = raw.match(/^FAQ-(\d+)$/i)
-  if (faqMatch) {
-    const faqRefs = list.filter((r) => r.chunk_type === 'faq')
-    const hit = faqRefs[parseInt(faqMatch[1], 10) - 1]
-    if (hit?.id) return hit.id
-  }
-
   const docMatch = raw.match(/^DOC-(\d+)$/i)
   if (docMatch) {
-    const docRefs = list.filter((r) => r.chunk_type !== 'faq')
+    const docRefs = list
     const hit = docRefs[parseInt(docMatch[1], 10) - 1]
     if (hit?.id) return hit.id
   }

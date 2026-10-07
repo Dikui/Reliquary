@@ -128,7 +128,7 @@ type Session struct {
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `json:"deleted_at" gorm:"index"`
 
-	// IMPlatform is the originating IM platform (e.g. "feishu", "wecom") when
+	// IMPlatform is the originating IM platform (e.g. "feishu") when
 	// this session is bound to an IM channel. It is not stored on the sessions
 	// table (it lives in im_channel_sessions) and is populated on read so the
 	// Web console can classify a session's origin folder without a list query.
@@ -171,10 +171,7 @@ func SessionRequiresAdminConsoleRead(s *Session, imPlatform string) bool {
 	if IsAPISessionOwnerID(s.UserID) {
 		return true
 	}
-	if strings.HasPrefix(s.Description, EmbedSessionMarkerPrefix) ||
-		strings.HasPrefix(s.UserID, PrincipalEmbedSession+":") {
-		return true
-	}
+
 	// Defence in depth for skill maintenance transcripts: the listing hides
 	// them, and this keeps a leaked session id from being opened by a
 	// non-admin who happens to own the row.
@@ -209,7 +206,7 @@ func SanitizeClientSessionDescription(incoming, existing string) string {
 // Keyword matches title ILIKE '%keyword%'.
 // Source values: "web" (user chats, no IM/embed), "embed" / "embed:{channelID}",
 // "api" (all API-key sessions, Admin+ only), or an IM platform name
-// (e.g. "feishu", "wechat"). IM and embed sources are also Admin+ only.
+// (e.g. "feishu"). IM sources are also Admin+ only.
 // AgentID currently only filters sessions that have an IM channel mapping.
 type SessionListQuery struct {
 	TenantID uint64

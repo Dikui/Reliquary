@@ -33,7 +33,7 @@ func TestInstallerAgentGetsTheRootShellWithTheSkillsRoot(t *testing.T) {
 	privileged := &stubInstallShellExecutor{}
 	ordinary := &stubShellExecutor{}
 	mgr := &capableManager{
-		typ:          sandbox.SandboxTypeE2B,
+		typ:          sandbox.SandboxTypeDocker,
 		shell:        ordinary,
 		installShell: privileged,
 	}
@@ -61,7 +61,7 @@ func TestOrdinaryAgentKeepsTheUnprivilegedShell(t *testing.T) {
 	privileged := &stubInstallShellExecutor{}
 	ordinary := &stubShellExecutor{}
 	mgr := &capableManager{
-		typ:          sandbox.SandboxTypeE2B,
+		typ:          sandbox.SandboxTypeDocker,
 		shell:        ordinary,
 		installShell: privileged,
 	}

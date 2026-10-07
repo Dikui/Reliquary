@@ -285,7 +285,6 @@ const loadIntakeOriginal = async () => {
       headers: {
         Authorization: `Bearer ${localStorage.getItem('reliquary_token') || ''}`,
         Range: `bytes=${start}-${start + 65535}`,
-        ...(localStorage.getItem('reliquary_selected_tenant_id') ? { 'X-Tenant-ID': localStorage.getItem('reliquary_selected_tenant_id')! } : {}),
       },
       signal: controller.signal,
     });
@@ -1034,8 +1033,6 @@ const channelLabelMap: Record<string, string> = {
   web_research: 'knowledgeBase.channelWebResearch',
   api: 'knowledgeBase.channelApi',
   browser_extension: 'knowledgeBase.channelBrowserExtension',
-  wechat: 'knowledgeBase.channelWechat',
-  wecom: 'knowledgeBase.channelWecom',
   feishu: 'knowledgeBase.channelFeishu',
   gitlab: 'knowledgeBase.channelGitLab',
   // Drive (云盘) connectors get their own channel so Drive docs show
@@ -1044,8 +1041,6 @@ const channelLabelMap: Record<string, string> = {
   lark_drive: 'knowledgeBase.channelLarkDrive',
   rss: 'datasource.connector.rss',
   grok_x: 'datasource.connector.grok_x',
-  dingtalk: 'knowledgeBase.channelDingtalk',
-  slack: 'knowledgeBase.channelSlack',
   im: 'knowledgeBase.channelIm',
   ima: 'knowledgeBase.channelIma',
 };

@@ -17,14 +17,8 @@ export const TENANT_API_KEY_CAPABILITIES: TenantAPIKeyCapability[] = [
   'message_history', 'manage_agents', 'manage_mcp_services',
   'manage_datasources', 'manage_models', 'manage_vector_stores',
   'manage_storage_backends', 'manage_web_search', 'manage_channels',
-  'run_evaluations', 'manage_members', 'manage_spaces',
+  'run_evaluations', 'manage_members',
   'manage_tenant_settings',
-]
-
-export const SYSTEM_API_KEY_CAPABILITIES: TenantAPIKeyCapability[] = [
-  'system_tenants_read', 'system_tenants_manage',
-  'system_settings_read', 'system_settings_manage',
-  'system_runtime_read', 'system_runtime_manage', 'system_audit_read',
 ]
 
 export const DEFAULT_TENANT_API_KEY_CAPABILITIES = new Set<TenantAPIKeyCapability>([
@@ -62,7 +56,6 @@ export const TENANT_API_KEY_CAPABILITY_GROUPS: ApiKeyCapabilityGroup[] = [
     labelKey: 'integrations.api.apiKeyCapabilityGroupCollaboration',
     capabilities: [
       { value: 'manage_members', labelKey: 'integrations.api.capabilityManageMembers', hintKey: 'integrations.api.capabilityManageMembersHint' },
-      { value: 'manage_spaces', labelKey: 'integrations.api.capabilityManageSpaces', hintKey: 'integrations.api.capabilityManageSpacesHint' },
     ],
   },
   {
@@ -78,23 +71,4 @@ export const TENANT_API_KEY_CAPABILITY_GROUPS: ApiKeyCapabilityGroup[] = [
       { value: 'manage_tenant_settings', labelKey: 'integrations.api.capabilityManageTenantSettings', hintKey: 'integrations.api.capabilityManageTenantSettingsHint' },
     ],
   },
-]
-
-export const SYSTEM_API_KEY_CAPABILITY_GROUP: ApiKeyCapabilityGroup = {
-  key: 'system',
-  labelKey: 'platformApiKeys.systemCapabilityGroup',
-  capabilities: [
-    { value: 'system_tenants_read', labelKey: 'platformApiKeys.capabilities.tenantsRead', hintKey: 'platformApiKeys.capabilityHints.tenantsRead' },
-    { value: 'system_tenants_manage', labelKey: 'platformApiKeys.capabilities.tenantsManage', hintKey: 'platformApiKeys.capabilityHints.tenantsManage' },
-    { value: 'system_settings_read', labelKey: 'platformApiKeys.capabilities.settingsRead', hintKey: 'platformApiKeys.capabilityHints.settingsRead' },
-    { value: 'system_settings_manage', labelKey: 'platformApiKeys.capabilities.settingsManage', hintKey: 'platformApiKeys.capabilityHints.settingsManage' },
-    { value: 'system_runtime_read', labelKey: 'platformApiKeys.capabilities.runtimeRead', hintKey: 'platformApiKeys.capabilityHints.runtimeRead' },
-    { value: 'system_runtime_manage', labelKey: 'platformApiKeys.capabilities.runtimeManage', hintKey: 'platformApiKeys.capabilityHints.runtimeManage' },
-    { value: 'system_audit_read', labelKey: 'platformApiKeys.capabilities.auditRead', hintKey: 'platformApiKeys.capabilityHints.auditRead' },
-  ],
-}
-
-export const PLATFORM_API_KEY_CAPABILITY_GROUPS: ApiKeyCapabilityGroup[] = [
-  SYSTEM_API_KEY_CAPABILITY_GROUP,
-  ...TENANT_API_KEY_CAPABILITY_GROUPS,
 ]

@@ -79,7 +79,7 @@ Agent 模式支持更智能的问答，包括工具调用、网络搜索、多�
 | `knowledge_base_ids` | string[] | 否 | 知识库 ID 列表，可动态指定本次查询使用的知识库 |
 | `knowledge_ids` | string[] | 否 | 知识文件 ID 列表，可动态指定本次查询使用的具体文件 |
 | `agent_enabled` | bool | 否 | 是否启用 Agent 模式（默认 false，优先使用 Agent 配置） |
-| `agent_id` | string | 否 | 自定义 Agent ID，指定使用的智能体（支持共享 Agent） |
+| `agent_id` | string | 否 | 自定义 Agent ID，指定使用的智能体 |
 | `web_search_enabled` | bool | 否 | 是否启用网络搜索（默认 false） |
 | `summary_model_id` | string | 否 | 覆盖默认的摘要模型 ID |
 | `mentioned_items` | object[] | 否 | @提及的知识库和文件列表 |
@@ -112,7 +112,6 @@ Content-Type: application/json
 }
 ```
 
-网页嵌入提供同构接口：`/api/v1/embed/{channel_id}/sessions/{session_id}/...`，继续使用嵌入令牌和 `X-Embed-Session`。
 
 **mentioned_items 结构**：
 
@@ -121,7 +120,7 @@ Content-Type: application/json
 | `id` | string | 知识库或文件 ID |
 | `name` | string | 显示名称 |
 | `type` | string | 类型：`kb`（知识库）或 `file`（文件） |
-| `kb_type` | string | 知识库类型：`document` 或 `faq`（仅 `type=kb` 时） |
+| `kb_type` | string | 知识库类型：`document`（仅 `type=kb` 时） |
 
 **images 结构**：
 

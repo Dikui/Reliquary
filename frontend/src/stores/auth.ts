@@ -2,7 +2,6 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { UserInfo, TenantInfo, KnowledgeBaseInfo } from '@/api/auth'
 import { userInfoFromApi } from '@/api/auth'
-import type { TenantInfo as TenantInfoFromAPI } from '@/api/tenant'
 import i18n from '@/i18n'
 import { reloadFontFromStorage } from '@/composables/useFont'
 import { reloadThemeFromStorage } from '@/composables/useTheme'
@@ -10,13 +9,11 @@ import { resetMigrationLatch } from '@/composables/preferenceStorage'
 import { BUILTIN_QUICK_ANSWER_ID } from '@/api/agent'
 import { useChatResourcesStore } from '@/stores/chatResources'
 import { useEditorResourcesStore } from '@/stores/editorResources'
-import { useOrganizationStore } from '@/stores/organization'
 
 /** 登出时丢弃 Pinia 内的空间级资源缓存，避免 SPA 重登复用上一账号数据。 */
 function clearSessionResourceCaches() {
   useChatResourcesStore().invalidate()
   useEditorResourcesStore().invalidate()
-  useOrganizationStore().clearState()
 }
 
 // Per-user UI preferences are namespaced by user id in localStorage.
@@ -36,27 +33,15 @@ export const useAuthStore = defineStore('auth', () => {
   const refreshToken = ref<string>('')
   const knowledgeBases = ref<KnowledgeBaseInfo[]>([])
   const currentKnowledgeBase = ref<KnowledgeBaseInfo | null>(null)
-  const selectedTenantId = ref<number | null>(null)
-  const selectedTenantName = ref<string | null>(null)
-  const allTenants = ref<TenantInfoFromAPI[]>([])
-  // memberships lists every tenant the user can authenticate into,
-  // along with their role in each. Populated from /auth/login response.
-  // v1 deployments will typically have length 1; the field is wired now
-  // so PR 3 can render a tenant-switcher UI without a store migration.
+  // Memberships carry the team role returned by the authentication API.
   const memberships = ref<Array<{ tenant_id: number; tenant_name?: string; role: string }>>([])
   // pendingInvitationCount is the number of pending tenant invitations
   // addressed to the current user. Renders as a badge next to the
   // avatar; updated by fetchPendingInvitationCount, which runs after
-  // login, after tenant switch, and on a polling interval. Polling
+  // login and on a polling interval. Polling
   // (vs SSE) is fine — the count is checked rarely and a 1-2 minute
   // staleness window is acceptable for an inbox indicator.
   const pendingInvitationCount = ref<number>(0)
-  // Authoritative deployment capability returned by /auth/me. Defaults to
-  // false (fail-closed): we hide the "create workspace" affordance until
-  // /auth/me confirms the deployment allows it, so an invitation-only
-  // deployment never briefly flashes a create action the backend would
-  // then reject with 403/2005.
-  const canCreateTenant = ref(false)
 
   const autoAcceptInvitation = ref(false)
 
@@ -72,37 +57,11 @@ export const useAuthStore = defineStore('auth', () => {
   const currentTenantId = computed(() => {
     return tenant.value?.id || ''
   })
+const currentTenantName = computed(() => tenant.value?.name || '')
 
-  // currentTenantName resolves the active tenant's display name across the
-  // app (sidebar, breadcrumbs, headers). It MUST follow the same active-
-  // tenant rule as currentTenantRole / effectiveTenantId: the user's
-  // selected override takes precedence over their home tenant. Reading
-  // tenant.value.name alone would render the home tenant's name even after
-  // the user switched, which is the bug TenantSelector already worked
-  // around inline; this computed centralises that fallback ladder.
-  const currentTenantName = computed(() => {
-    const tid =
-      selectedTenantId.value !== null && selectedTenantId.value !== undefined
-        ? String(selectedTenantId.value)
-        : tenant.value?.id
-        ? String(tenant.value.id)
-        : ''
-    if (!tid) return ''
-    if (selectedTenantId.value && selectedTenantName.value) {
-      return selectedTenantName.value
-    }
-    const fromMembership = memberships.value.find((m) => String(m.tenant_id) === tid)
-    if (fromMembership?.tenant_name) return fromMembership.tenant_name
-    if (tenant.value && String(tenant.value.id) === tid) return tenant.value.name || ''
-    return ''
-  })
 
   const currentUserId = computed(() => {
     return user.value?.id || ''
-  })
-
-  const canAccessAllTenants = computed(() => {
-    return user.value?.can_access_all_tenants || false
   })
 
   // isSystemAdmin reflects the platform-wide system-administrator flag
@@ -120,45 +79,8 @@ export const useAuthStore = defineStore('auth', () => {
   const isSystemAdmin = computed(() => {
     return user.value?.is_system_admin === true
   })
+const currentTenantRole = computed(() => memberships.value.find(m => String(m.tenant_id) === String(tenant.value?.id))?.role || '')
 
-  // currentTenantRole returns the user's role in the active tenant
-  // (defaulting to '' when memberships have not been loaded). Used by
-  // role-aware UI gating; PR 2 wires backend enforcement, PR 3 uses
-  // this for menu/button visibility.
-  //
-  // It MUST read effectiveTenantId, not tenant.value.id. tenant.value is
-  // the user's home tenant (set once on login from /auth/me's tenant
-  // field); selectedTenantId is the active override applied by the
-  // tenant switcher. Reading the wrong field used to leak Owner-level
-  // UI to a Viewer who switched into a tenant where they were a Viewer
-  // — every gate above (`hasRole(...)`) returned the home-tenant role.
-  //
-  // SECURITY: This value is read from localStorage (`reliquary_memberships`)
-  // and therefore MUST be treated as UI-rendering-only — any user can
-  // tamper with localStorage and grant themselves "owner" here. All real
-  // authorisation decisions live on the server (auth middleware resolves
-  // the role from tenant_members on every request). Never branch
-  // security-sensitive logic on this value alone.
-  const currentTenantRole = computed(() => {
-    const tid =
-      selectedTenantId.value !== null && selectedTenantId.value !== undefined
-        ? String(selectedTenantId.value)
-        : tenant.value?.id
-        ? String(tenant.value.id)
-        : ''
-    if (!tid) return ''
-    const match = memberships.value.find((m) => String(m.tenant_id) === tid)
-    if (match?.role) return match.role
-    // Cross-tenant superuser visiting a tenant they're not a member of:
-    // backend auth.go resolveTenantRole step2 grants a temporary Admin
-    // role without writing tenant_members. Mirror that here so mutation
-    // UIs aren't hidden in tenants the superuser switched into. Never
-    // surface Owner — the backend caps the temporary grant at Admin too
-    // (Owner-only ops like tenant deletion stay reserved for a real
-    // Owner inside the target tenant).
-    if (canAccessAllTenants.value) return 'admin'
-    return ''
-  })
 
   // hasRole answers "is the current tenant role at least <min>?", used by
   // role-aware UI gating across KB / Agent / settings views. The numeric
@@ -178,11 +100,8 @@ export const useAuthStore = defineStore('auth', () => {
   const hasRole = (min: 'viewer' | 'contributor' | 'admin' | 'owner'): boolean => {
     return (ROLE_LEVEL[currentTenantRole.value] ?? 0) >= ROLE_LEVEL[min]
   }
+const effectiveTenantId = computed(() => tenant.value?.id ? Number(tenant.value.id) : null)
 
-  const effectiveTenantId = computed(() => {
-    // 如果选择了其他空间，使用选择的空间ID，否则使用用户默认空间ID
-    return selectedTenantId.value || (tenant.value?.id ? Number(tenant.value.id) : null)
-  })
 
   // 操作方法
   const setUser = (userData: UserInfo) => {
@@ -201,7 +120,6 @@ export const useAuthStore = defineStore('auth', () => {
       localStorage.setItem('reliquary_tenant', JSON.stringify(tenantData))
     } else {
       localStorage.removeItem('reliquary_tenant')
-      setSelectedTenant(null, null)
     }
   }
 
@@ -230,64 +148,6 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // Wipe chat / KB selections that were saved under the previous tenant.
-  // These keys are NOT tenant-scoped in storage; after a tenant switch they
-  // would otherwise be reloaded verbatim and the chat input would post under
-  // the new tenant with an Agent / model id that only existed in the old
-  // tenant — backend 403s or "model not found". Called from setSelectedTenant
-  // only on an actual tenant change, so logout / init paths are not touched.
-  const clearTenantScopedClientState = () => {
-    try {
-      localStorage.removeItem('reliquary_last_chat_model_id')
-      localStorage.removeItem('reliquary_current_kb')
-      const raw = localStorage.getItem('Reliquary_settings')
-      if (raw) {
-        const parsed = JSON.parse(raw)
-        if (parsed && typeof parsed === 'object') {
-          parsed.selectedAgentId = BUILTIN_QUICK_ANSWER_ID
-          parsed.selectedAgentSourceTenantId = null
-          parsed.isAgentEnabled = false
-          if (parsed.conversationModels && typeof parsed.conversationModels === 'object') {
-            parsed.conversationModels.summaryModelId = ''
-            parsed.conversationModels.rerankModelId = ''
-            parsed.conversationModels.selectedChatModelId = ''
-          }
-          parsed.selectedKnowledgeBases = []
-          parsed.selectedFiles = []
-          parsed.selectedFileKbMap = {}
-          parsed.knowledgeBaseId = ''
-          localStorage.setItem('Reliquary_settings', JSON.stringify(parsed))
-        }
-      }
-    } catch (e) {
-      // localStorage may be disabled or contain malformed JSON — best effort.
-      console.warn('[auth] failed to clear tenant-scoped client state', e)
-    }
-  }
-
-  const setSelectedTenant = (tenantId: number | null, tenantName: string | null = null) => {
-    const previousTenantId = selectedTenantId.value
-    const tenantChanged = previousTenantId !== tenantId
-    selectedTenantId.value = tenantId
-    selectedTenantName.value = tenantName
-    if (tenantId !== null) {
-      localStorage.setItem('reliquary_selected_tenant_id', String(tenantId))
-      if (tenantName) {
-        localStorage.setItem('reliquary_selected_tenant_name', tenantName)
-      }
-    } else {
-      localStorage.removeItem('reliquary_selected_tenant_id')
-      localStorage.removeItem('reliquary_selected_tenant_name')
-    }
-    if (tenantChanged) {
-      clearTenantScopedClientState()
-    }
-  }
-
-  const setAllTenants = (tenants: TenantInfoFromAPI[]) => {
-    allTenants.value = tenants
-  }
-
   const setMemberships = (
     list: Array<{ tenant_id: number; tenant_name?: string; role: string }>
   ) => {
@@ -301,10 +161,6 @@ export const useAuthStore = defineStore('auth', () => {
   // future devtools / strict-mode checks intercept the write.
   const setPendingInvitationCount = (n: number) => {
     pendingInvitationCount.value = Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0
-  }
-
-  const setCanCreateTenant = (allowed: boolean) => {
-    canCreateTenant.value = allowed
   }
 
   const setAutoAcceptInvitation = (enabled: boolean) => {
@@ -332,7 +188,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // Reconcile user / home tenant / memberships with GET /api/v1/auth/me.
+  // Refresh the current user, team, and role with GET /api/v1/auth/me.
   // Login only populated memberships once; SPA navigations skip
   // hydrateSessionFromToken when isLoggedIn is already true — so inviting
   // flows or revokes would leave the sidebar switcher stale until reload.
@@ -368,11 +224,6 @@ export const useAuthStore = defineStore('auth', () => {
         setMemberships(list)
       }
 
-      const createCapability = response.data?.capabilities?.can_create_tenant
-      if (typeof createCapability === 'boolean') {
-        setCanCreateTenant(createCapability)
-      }
-
       setAutoAcceptInvitation(response.data?.capabilities?.auto_accept_invitation === true)
 
       return true
@@ -396,15 +247,10 @@ export const useAuthStore = defineStore('auth', () => {
       const tenantName = resp.data.tenant_name
       // 刷新成员关系，并切到刚加入的空间。
       await refreshFromAuthMe()
-      setSelectedTenant(tenantId, tenantName ?? null)
       return { ok: true, tenantId, tenantName }
     } catch {
       return { ok: false }
     }
-  }
-
-  const getSelectedTenant = () => {
-    return selectedTenantId.value
   }
 
   const logout = () => {
@@ -415,12 +261,8 @@ export const useAuthStore = defineStore('auth', () => {
     refreshToken.value = ''
     knowledgeBases.value = []
     currentKnowledgeBase.value = null
-    selectedTenantId.value = null
-    selectedTenantName.value = null
-    allTenants.value = []
     memberships.value = []
     pendingInvitationCount.value = 0
-    canCreateTenant.value = false
     autoAcceptInvitation.value = false
     clearSessionResourceCaches()
 
@@ -431,8 +273,6 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('reliquary_refresh_token')
     localStorage.removeItem('reliquary_knowledge_bases')
     localStorage.removeItem('reliquary_current_kb')
-    localStorage.removeItem('reliquary_selected_tenant_id')
-    localStorage.removeItem('reliquary_selected_tenant_name')
     localStorage.removeItem('reliquary_memberships')
     reloadUserPreferences()
   }
@@ -445,8 +285,6 @@ export const useAuthStore = defineStore('auth', () => {
     const storedRefreshToken = localStorage.getItem('reliquary_refresh_token')
     const storedKnowledgeBases = localStorage.getItem('reliquary_knowledge_bases')
     const storedCurrentKb = localStorage.getItem('reliquary_current_kb')
-    const storedSelectedTenantId = localStorage.getItem('reliquary_selected_tenant_id')
-    const storedSelectedTenantName = localStorage.getItem('reliquary_selected_tenant_name')
 
     if (storedUser) {
       try {
@@ -494,19 +332,6 @@ export const useAuthStore = defineStore('auth', () => {
       }
     }
 
-    if (storedSelectedTenantId) {
-      try {
-        selectedTenantId.value = Number(storedSelectedTenantId)
-        if (storedSelectedTenantName) {
-          selectedTenantName.value = storedSelectedTenantName
-        }
-      } catch (e) {
-        console.error('Failed to parse selected tenant ID', e)
-        selectedTenantId.value = null
-        selectedTenantName.value = null
-      }
-    }
-
     const storedMemberships = localStorage.getItem('reliquary_memberships')
     if (storedMemberships) {
       try {
@@ -531,12 +356,8 @@ export const useAuthStore = defineStore('auth', () => {
     refreshToken,
     knowledgeBases,
     currentKnowledgeBase,
-    selectedTenantId,
-    selectedTenantName,
-    allTenants,
     memberships,
     pendingInvitationCount,
-    canCreateTenant,
     autoAcceptInvitation,
 
     // 计算属性
@@ -545,7 +366,6 @@ export const useAuthStore = defineStore('auth', () => {
     currentTenantId,
     currentTenantName,
     currentUserId,
-    canAccessAllTenants,
     isSystemAdmin,
     currentTenantRole,
     hasRole,
@@ -558,16 +378,12 @@ export const useAuthStore = defineStore('auth', () => {
     setRefreshToken,
     setKnowledgeBases,
     setCurrentKnowledgeBase,
-    setSelectedTenant,
-    setAllTenants,
     setMemberships,
     setPendingInvitationCount,
-    setCanCreateTenant,
     setAutoAcceptInvitation,
     fetchPendingInvitationCount,
     refreshFromAuthMe,
     acceptInvitationByTokenAndRefresh,
-    getSelectedTenant,
     logout,
     initFromStorage
   }

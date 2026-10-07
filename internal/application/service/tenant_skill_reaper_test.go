@@ -340,7 +340,7 @@ func TestPruneSupersededSnapshotsSkipsAConfigBuiltByAnotherAccount(t *testing.T)
 	old := fx.now.Add(-2 * time.Hour)
 	fx.live("snap-live")
 	fx.superseded("sk-1", "snap-old", "", old)
-	fx.configs.entity.Config.E2B.APIKey = "rotated-key"
+	fx.configs.entity.Config.Docker.Host = "unix:///rotated-daemon.sock"
 
 	n, err := fx.svc.PruneSupersededSnapshots(context.Background())
 
@@ -397,7 +397,7 @@ func TestPruneSupersededSnapshotsRetriesWhenSnapshotStillInUse(t *testing.T) {
 	fx.live("snap-live")
 	fx.superseded("sk-1", "snap-old", "", old)
 	fx.provider.deleteErr = sandbox.NewRemoteError(
-		sandbox.SandboxTypeE2B, "DeleteSnapshot", sandbox.RemoteErrorKindConflict,
+		sandbox.SandboxTypeDocker, "DeleteSnapshot", sandbox.RemoteErrorKindConflict,
 		"cannot delete template because there are paused sandboxes using it", nil,
 	)
 
@@ -435,7 +435,7 @@ func TestPruneSupersededSnapshotsTreatsMissingProviderSnapshotAsDeleted(t *testi
 func TestPruneSupersededSnapshotsHonoursALongerConfiguredSandboxTTL(t *testing.T) {
 	fx := newReaperFixture(t)
 	fx.svc.snapshotRetention = time.Hour
-	fx.configs.entity.Config.E2B.E2BSandboxTTLSeconds = int((48 * time.Hour).Seconds())
+	fx.configs.entity.Config.Docker.IdleTTLSeconds = int((48 * time.Hour).Seconds())
 	young := fx.now.Add(-25 * time.Hour)
 	old := fx.now.Add(-50 * time.Hour)
 	fx.live("snap-live")
@@ -584,7 +584,7 @@ func TestPruneLeavesALegacyBuildWithNoPlannedName(t *testing.T) {
 
 // The docker daemon has no TTL of its own, so a container created from the
 // previous image sits there until the idle sweep reclaims it. That window is
-// what the snapshot has to outlive, exactly as the Cube and E2B TTLs are.
+// what the snapshot has to outlive.
 func TestConfiguredSandboxTTLCoversTheDockerIdleWindow(t *testing.T) {
 	require.Equal(t, 48*time.Hour, configuredSandboxTTL(&types.TenantSandboxConfig{
 		SandboxType: "docker",
@@ -606,25 +606,25 @@ func TestSnapshotBelongsToOtherConfig(t *testing.T) {
 	dockerTheirs := sandbox.RemoteSnapshotRef{
 		ID: "reliquary-skill/reliquary-sk-t7-cfg2-g1", Names: []string{"reliquary-skill/reliquary-sk-t7-cfg2-g1"},
 	}
-	cubeOurs := sandbox.RemoteSnapshotRef{ID: "snap-ours", Names: []string{"reliquary-sk-t7-cfg1-g1"}}
-	cubeTheirs := sandbox.RemoteSnapshotRef{ID: "snap-theirs", Names: []string{"reliquary-sk-t8-cfg1-g1"}}
-	e2bTheirs := sandbox.RemoteSnapshotRef{ID: "tpl-other", Names: []string{"reliquary-sk-t7-aaaa-g3"}}
+	namedOurs := sandbox.RemoteSnapshotRef{ID: "snap-ours", Names: []string{"reliquary-sk-t7-cfg1-g1"}}
+	namedTheirs := sandbox.RemoteSnapshotRef{ID: "snap-theirs", Names: []string{"reliquary-sk-t8-cfg1-g1"}}
+	otherConfig := sandbox.RemoteSnapshotRef{ID: "tpl-other", Names: []string{"reliquary-sk-t7-aaaa-g3"}}
 	legacy := sandbox.RemoteSnapshotRef{ID: "snap-legacy", Names: []string{"reliquary-sk-cfg1-g2"}}
 	unnamed := sandbox.RemoteSnapshotRef{ID: "snap-plain"}
 
 	require.False(t, snapshotBelongsToOtherConfig(dockerOurs, prefix))
 	require.True(t, snapshotBelongsToOtherConfig(dockerTheirs, prefix))
-	require.False(t, snapshotBelongsToOtherConfig(cubeOurs, prefix))
-	require.True(t, snapshotBelongsToOtherConfig(cubeTheirs, prefix),
-		"a Cube snapshot named for another tenant must not be this config's extra")
-	require.True(t, snapshotBelongsToOtherConfig(e2bTheirs, prefix))
+	require.False(t, snapshotBelongsToOtherConfig(namedOurs, prefix))
+	require.True(t, snapshotBelongsToOtherConfig(namedTheirs, prefix),
+		"a snapshot named for another tenant must not be this config's extra")
+	require.True(t, snapshotBelongsToOtherConfig(otherConfig, prefix))
 	require.False(t, snapshotBelongsToOtherConfig(legacy, prefix),
 		"legacy names without a tenant prefix must still be matchable")
 	require.False(t, snapshotBelongsToOtherConfig(unnamed, prefix),
 		"a listing that does not echo our name is not classified as another config")
 
 	kept := snapshotsNotFromOtherConfig([]sandbox.RemoteSnapshotRef{
-		dockerOurs, dockerTheirs, cubeOurs, cubeTheirs, legacy, unnamed,
+		dockerOurs, dockerTheirs, namedOurs, namedTheirs, legacy, unnamed,
 	}, prefix)
 	ids := make([]string, 0, len(kept))
 	for _, snap := range kept {
@@ -659,16 +659,16 @@ type reaperFixture struct {
 func newReaperFixture(t *testing.T) *reaperFixture {
 	t.Helper()
 	now := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
-	fingerprint := sandbox.SkillImageFingerprint("e2b", "key-1", "https://e2b.example")
+	fingerprint := sandbox.SkillImageFingerprint("docker", "", "unix:///test-daemon.sock")
 	skills := &reaperSkillStore{rows: map[string]*types.TenantSkillEntity{}}
 	configs := &reaperConfigStore{
 		entity: &types.TenantSandboxConfigEntity{
 			ID: "cfg-1", TenantID: 7,
-			SandboxType: string(sandbox.SandboxTypeE2B),
+			SandboxType: string(sandbox.SandboxTypeDocker),
 			Config: &types.TenantSandboxConfig{
-				SandboxType: string(sandbox.SandboxTypeE2B),
-				E2B: &types.E2BSandboxConfig{
-					APIURL: "https://e2b.example", APIKey: "key-1", TemplateID: "base-template",
+				SandboxType: string(sandbox.SandboxTypeDocker),
+				Docker: &types.DockerSandboxConfig{
+					Host: "unix:///test-daemon.sock", Image: "base-template",
 				},
 				SkillImage: &types.SkillImageConfig{
 					SnapshotID: "snap-other", OwnerFingerprint: fingerprint,
@@ -1064,4 +1064,4 @@ func (p *reaperSnapshotProvider) Execute(context.Context, *sandbox.ExecuteConfig
 }
 func (p *reaperSnapshotProvider) Cleanup(context.Context) error { return nil }
 func (p *reaperSnapshotProvider) GetSandbox() sandbox.Sandbox   { return nil }
-func (p *reaperSnapshotProvider) GetType() sandbox.SandboxType  { return sandbox.SandboxTypeE2B }
+func (p *reaperSnapshotProvider) GetType() sandbox.SandboxType  { return sandbox.SandboxTypeDocker }

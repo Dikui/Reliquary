@@ -36,9 +36,9 @@ func TestParseGeneratedSuggestionsFiltersAndDeduplicates(t *testing.T) {
 func TestMergeSuggestionItemsPreservesPriorityAndLimit(t *testing.T) {
 	primary := types.SuggestionItems{{ID: "1", Text: "A?", Source: "model"}}
 	fallback := types.SuggestionItems{
-		{ID: "2", Text: "A？", Source: "faq"},
-		{ID: "3", Text: "B?", Source: "faq"},
-		{ID: "4", Text: "C?", Source: "faq"},
+		{ID: "2", Text: "A？", Source: "document"},
+		{ID: "3", Text: "B?", Source: "document"},
+		{ID: "4", Text: "C?", Source: "document"},
 	}
 	got := mergeSuggestionItems(primary, fallback, 2)
 	if len(got) != 2 || got[0].ID != "1" || got[1].ID != "3" {
@@ -167,7 +167,7 @@ func TestMergeHybridSuggestionItemsReservesKnowledgeSlots(t *testing.T) {
 	}
 	knowledge := types.SuggestionItems{
 		{Text: "knowledge one", Source: "document"},
-		{Text: "knowledge two", Source: "faq"},
+		{Text: "knowledge two", Source: "document"},
 	}
 
 	items := mergeHybridSuggestionItems(model, knowledge, 3)

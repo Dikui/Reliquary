@@ -32,13 +32,11 @@ func classifyRetrievalResults(ctx context.Context, retrieveResults []*types.Retr
 // retrievalCfg may be nil — defaults are then used for RRF parameters.
 func fuseOrDeduplicate(ctx context.Context, vectorResults, keywordResults []*types.IndexWithScore, retrievalCfg *types.RetrievalConfig) []*types.IndexWithScore {
 	if len(keywordResults) == 0 {
-		// Vector-only: keep original embedding scores (important for FAQ)
 		result := deduplicateByScore(vectorResults)
 		logger.Infof(ctx, "Result count after deduplication: %d", len(result))
 		return result
 	}
 	if len(vectorResults) == 0 {
-		// Keyword-only: keep original scores (important for FAQ)
 		result := deduplicateByScore(keywordResults)
 		logger.Infof(ctx, "Result count after deduplication: %d", len(result))
 		return result
@@ -59,9 +57,6 @@ func sortByScoreDesc(a, b *types.IndexWithScore) int {
 	return 0
 }
 
-// deduplicateByScore deduplicates retrieval results by chunk ID, keeping the highest score
-// for each chunk. Returns the results sorted by score descending.
-// Used when only a single retriever (e.g. vector-only for FAQ) is active.
 func deduplicateByScore(results []*types.IndexWithScore) []*types.IndexWithScore {
 	chunkInfoMap := make(map[string]*types.IndexWithScore, len(results))
 	for _, r := range results {

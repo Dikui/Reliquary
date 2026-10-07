@@ -195,8 +195,8 @@ func (s *knowledgeService) ReviewKnowledgeIntake(ctx context.Context, id, action
 		return nil, err
 	}
 	userID, _ := ctx.Value(types.UserIDContextKey).(string)
-	if userID == "" || userID != kb.CreatorID {
-		return nil, werrors.NewForbiddenError("only the knowledge base creator can review intake")
+	if userID == "" || !types.TenantRoleFromContext(ctx).HasPermission(types.TenantRoleContributor) {
+		return nil, werrors.NewForbiddenError("a team editor is required to review intake")
 	}
 	intake, err := knowledge.IntakeMetadata()
 	if err != nil || intake == nil || intake.Decision != "rejected" {

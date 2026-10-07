@@ -2,9 +2,7 @@ package sandbox
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -15,7 +13,7 @@ import (
 func validSessionSandboxBinding(key SessionSandboxKey, sandboxID string) SessionSandboxBinding {
 	return SessionSandboxBinding{
 		Version:    SessionSandboxBindingVersion,
-		Provider:   SandboxTypeCube,
+		Provider:   SandboxTypeDocker,
 		TenantID:   key.TenantID,
 		SessionID:  key.SessionID,
 		SandboxID:  sandboxID,
@@ -47,60 +45,15 @@ func testSessionSandboxBindingStore(t *testing.T, store SessionSandboxBindingSto
 	require.NoError(t, err)
 	require.False(t, created)
 
-	deleted, err := store.DeleteIfMatch(ctx, key, SandboxTypeE2B, "sandbox-a")
+	deleted, err := store.DeleteIfMatch(ctx, key, SandboxType("other"), "sandbox-a")
+	require.Error(t, err)
+	require.False(t, deleted)
+	deleted, err = store.DeleteIfMatch(ctx, key, SandboxTypeDocker, "sandbox-b")
 	require.NoError(t, err)
 	require.False(t, deleted)
-	deleted, err = store.DeleteIfMatch(ctx, key, SandboxTypeCube, "sandbox-b")
-	require.NoError(t, err)
-	require.False(t, deleted)
-	deleted, err = store.DeleteIfMatch(ctx, key, SandboxTypeCube, "sandbox-a")
+	deleted, err = store.DeleteIfMatch(ctx, key, SandboxTypeDocker, "sandbox-a")
 	require.NoError(t, err)
 	require.True(t, deleted)
-}
-
-func TestMemorySessionSandboxBindingStoreReplacesTrafficToken(t *testing.T) {
-	store := NewMemorySessionSandboxBindingStore()
-	testSessionSandboxBindingReplacesTrafficToken(t, store)
-}
-
-func testSessionSandboxBindingReplacesTrafficToken(t *testing.T, store SessionSandboxBindingStore) {
-	t.Helper()
-
-	ctx := context.Background()
-	key := SessionSandboxKey{TenantID: 42, SessionID: "session-token"}
-	binding := validSessionSandboxBinding(key, "sandbox-a")
-	binding.TrafficAccessToken = "old-token"
-	binding.ConfigID = "cfg-token"
-	created, err := store.Create(ctx, key, binding)
-	require.NoError(t, err)
-	require.True(t, created)
-
-	marked, err := store.InvalidateByConfig(ctx, key.TenantID, binding.ConfigID)
-	require.NoError(t, err)
-	require.Equal(t, 1, marked)
-
-	wrote, err := store.ReplaceTrafficTokenIfMatch(ctx, key, binding, "new-token")
-	require.NoError(t, err)
-	require.True(t, wrote)
-
-	got, err := store.Get(ctx, key)
-	require.NoError(t, err)
-	require.Equal(t, "new-token", got.TrafficAccessToken)
-	require.Equal(t, binding.SandboxID, got.SandboxID)
-	require.NotNil(t, got.StaleAt, "patching the token must not wipe a concurrent stale mark")
-
-	mismatch := binding
-	mismatch.SandboxID = "sandbox-other"
-	wrote, err = store.ReplaceTrafficTokenIfMatch(ctx, key, mismatch, "ignored")
-	require.NoError(t, err)
-	require.False(t, wrote)
-	got, err = store.Get(ctx, key)
-	require.NoError(t, err)
-	require.Equal(t, "new-token", got.TrafficAccessToken)
-
-	wrote, err = store.ReplaceTrafficTokenIfMatch(ctx, key, binding, "")
-	require.NoError(t, err)
-	require.False(t, wrote)
 }
 
 func testSessionSandboxBindingTenantIsolation(t *testing.T, store SessionSandboxBindingStore) {
@@ -355,62 +308,16 @@ func TestSessionSandboxBindingValidation(t *testing.T) {
 	require.NoError(t, valid.Validate(key))
 
 	tests := []SessionSandboxBinding{
-		{Version: SessionSandboxBindingVersion + 1, Provider: SandboxTypeCube, TenantID: 42, SessionID: "session-a", SandboxID: "sandbox-a"},
+		{Version: SessionSandboxBindingVersion + 1, Provider: SandboxTypeDocker, TenantID: 42, SessionID: "session-a", SandboxID: "sandbox-a"},
 		{Version: SessionSandboxBindingVersion, TenantID: 42, SessionID: "session-a", SandboxID: "sandbox-a"},
 		{Version: SessionSandboxBindingVersion, Provider: "unknown", TenantID: 42, SessionID: "session-a", SandboxID: "sandbox-a"},
-		{Version: SessionSandboxBindingVersion, Provider: SandboxTypeCube, TenantID: 43, SessionID: "session-a", SandboxID: "sandbox-a"},
-		{Version: SessionSandboxBindingVersion, Provider: SandboxTypeCube, TenantID: 42, SessionID: "other", SandboxID: "sandbox-a"},
-		{Version: SessionSandboxBindingVersion, Provider: SandboxTypeCube, TenantID: 42, SessionID: "session-a"},
+		{Version: SessionSandboxBindingVersion, Provider: SandboxTypeDocker, TenantID: 43, SessionID: "session-a", SandboxID: "sandbox-a"},
+		{Version: SessionSandboxBindingVersion, Provider: SandboxTypeDocker, TenantID: 42, SessionID: "other", SandboxID: "sandbox-a"},
+		{Version: SessionSandboxBindingVersion, Provider: SandboxTypeDocker, TenantID: 42, SessionID: "session-a"},
 	}
 	for _, binding := range tests {
 		require.Error(t, binding.Validate(key), "binding must be rejected: %+v", binding)
 	}
-}
-
-// Bindings written before this field existed must stay usable: their sandboxes
-// were created while inbound access was still open, so an empty token is the
-// correct value rather than a corrupt one.
-func TestSessionSandboxBindingWithoutTrafficTokenStaysValid(t *testing.T) {
-	key := SessionSandboxKey{TenantID: 1, SessionID: "session-1"}
-	raw := []byte(`{
-		"version": ` + strconv.Itoa(SessionSandboxBindingVersion) + `,
-		"provider": "cube",
-		"tenant_id": 1,
-		"session_id": "session-1",
-		"sandbox_id": "sandbox-1",
-		"template_id": "tpl-1",
-		"created_at": "2026-01-01T00:00:00Z"
-	}`)
-
-	var binding SessionSandboxBinding
-	require.NoError(t, json.Unmarshal(raw, &binding))
-	require.NoError(t, binding.Validate(key))
-	require.Empty(t, binding.TrafficAccessToken)
-}
-
-func TestSessionSandboxBindingOmitsEmptyTrafficToken(t *testing.T) {
-	encoded, err := json.Marshal(SessionSandboxBinding{
-		Version: SessionSandboxBindingVersion, Provider: SandboxTypeCube,
-		TenantID: 1, SessionID: "s", SandboxID: "sb", TemplateID: "tpl",
-		CreatedAt: time.Unix(0, 0).UTC(),
-	})
-	require.NoError(t, err)
-	require.NotContains(t, string(encoded), "traffic_access_token")
-}
-
-func TestSessionSandboxBindingRoundTripsTrafficToken(t *testing.T) {
-	const token = "traffic-token"
-	encoded, err := json.Marshal(SessionSandboxBinding{
-		Version: SessionSandboxBindingVersion, Provider: SandboxTypeCube,
-		TenantID: 1, SessionID: "s", SandboxID: "sb", TemplateID: "tpl",
-		TrafficAccessToken: token, CreatedAt: time.Unix(0, 0).UTC(),
-	})
-	require.NoError(t, err)
-	require.Contains(t, string(encoded), `"traffic_access_token"`)
-
-	var decoded SessionSandboxBinding
-	require.NoError(t, json.Unmarshal(encoded, &decoded))
-	require.Equal(t, token, decoded.TrafficAccessToken)
 }
 
 func TestMemoryLifecycleLockSerializesSameKey(t *testing.T) {

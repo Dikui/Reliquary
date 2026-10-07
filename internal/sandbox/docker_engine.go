@@ -373,7 +373,7 @@ func dockerError(op string, err error) error {
 		return err
 	}
 	return &RemoteError{
-		Kind:     snapshotDeleteKind(op, dockerErrorKind(op, err), err.Error()),
+		Kind:     dockerErrorKind(op, err),
 		Provider: SandboxTypeDocker,
 		Op:       op,
 		Message:  err.Error(),
@@ -403,9 +403,6 @@ func awaitImagePull(ctx context.Context, body client.ImagePullResponse) error {
 	return body.Wait(ctx)
 }
 
-// dockerStateOf normalizes a container state string. "exited" is deliberately
-// NOT terminal: a stopped container keeps its filesystem and Connect restarts
-// it, which is the closest Docker gets to E2B's pause + auto-resume.
 func dockerStateOf(status container.ContainerState) RemoteSandboxState {
 	switch strings.ToLower(strings.TrimSpace(string(status))) {
 	case "running":

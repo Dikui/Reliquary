@@ -24,9 +24,6 @@ func TestUpdateKBRequest_DoesNotAcceptVectorStoreID(t *testing.T) {
 		assertNoVectorStoreIDField(t, reflect.TypeOf(UpdateKnowledgeBaseRequest{}))
 	})
 	t.Run("KnowledgeBaseConfig", func(t *testing.T) {
-		// Config carries chunking / extract / faq / wiki sub-configs and must
-		// not be extended with a VectorStoreID either (Config is passed
-		// straight into the service Update path).
 		assertNoVectorStoreIDField(t, reflect.TypeOf(types.KnowledgeBaseConfig{}))
 	})
 }

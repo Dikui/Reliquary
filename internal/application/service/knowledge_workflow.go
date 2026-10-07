@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/robfig/cron/v3"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/robfig/cron/v3"
 	"gorm.io/gorm"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -528,7 +528,7 @@ func (s *KnowledgeWorkflowService) authorizeKB(ctx context.Context, kbID string)
 	if kb == nil || kb.TenantID != tenantID {
 		return nil, 0, "", ErrWorkflowForbidden
 	}
-	if !types.IsSystemAdminFromContext(ctx) && !role.HasPermission(types.TenantRoleAdmin) && kb.CreatorID != actor {
+	if !types.IsSystemAdminFromContext(ctx) && !role.HasPermission(types.TenantRoleContributor) {
 		return nil, 0, "", ErrWorkflowForbidden
 	}
 	return kb, tenantID, actor, nil

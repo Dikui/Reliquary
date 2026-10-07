@@ -4,7 +4,7 @@ export interface MessageSuggestionItem {
   id: string
   text: string
   category?: 'clarify' | 'deepen' | 'action'
-  source: 'model' | 'faq' | 'document' | 'wiki' | string
+  source: 'model' | 'document' | 'wiki' | string
   knowledge_base_ids?: string[]
 }
 

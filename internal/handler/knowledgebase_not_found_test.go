@@ -18,19 +18,6 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-// validateAndGetKnowledgeBase (knowledgebase.go) and the four sibling
-// helpers in faq.go / knowledge.go / tag.go / initialization.go used to
-// wrap every Get*ByID error — including the well-known
-// repository.ErrKnowledgeBaseNotFound sentinel — as a 500. That turned
-// every probe of a stale or cross-tenant KB id into a fake "internal
-// server error" envelope. These tests pin the corrected mapping (404)
-// at the HTTP boundary so a future refactor can't quietly regress it.
-//
-// The wrapped-sentinel cases are the actual security boundary: if a
-// caller drops the stderrors.Is comparison and reverts to `==`, the
-// fmt.Errorf("%w") path silently fails over to 500 and the tests below
-// fail before the change ships.
-
 // stubKBOnlyService implements just enough of KnowledgeBaseService to
 // drive validateAndGetKnowledgeBase. Embedding the interface keeps every
 // other method nil-panicky on purpose so a future test that reaches

@@ -30,11 +30,10 @@ func (s *acceptByTokenInvitationSvc) AcceptByToken(_ context.Context, _ string, 
 	if s.member != nil {
 		return s.member, nil
 	}
-	return &types.TenantMember{TenantID: 42, Role: types.TenantRoleViewer, Status: types.TenantMemberStatusActive}, nil
+	return &types.TenantMember{TenantID: types.SingleTenantID, Role: types.TenantRoleViewer, Status: types.TenantMemberStatusActive}, nil
 }
 
-// acceptByTokenUserSvc returns a user with the configured home tenant so
-// the handler's tenantless-adoption branch can be exercised.
+// acceptByTokenUserSvc tracks accidental changes to the team identity.
 type acceptByTokenUserSvc struct {
 	interfaces.UserService
 	homeTenant    uint64
@@ -75,7 +74,7 @@ func newAcceptByTokenTestRouter(h *TenantInvitationHandler) *gin.Engine {
 }
 
 func TestAcceptMyInvitationByTokenSuccess(t *testing.T) {
-	users := &acceptByTokenUserSvc{homeTenant: 0} // tenantless -> adopts invited tenant
+	users := &acceptByTokenUserSvc{homeTenant: types.SingleTenantID}
 	h := &TenantInvitationHandler{
 		invitationService: &acceptByTokenInvitationSvc{},
 		userService:       users,
@@ -92,9 +91,8 @@ func TestAcceptMyInvitationByTokenSuccess(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}
-	if !users.updateCalled || users.updatedTenant != 42 {
-		t.Fatalf("tenantless user should adopt tenant 42, updateCalled=%v updatedTenant=%d",
-			users.updateCalled, users.updatedTenant)
+	if users.updateCalled {
+		t.Fatal("accepting an invitation changed the team identity")
 	}
 	var resp struct {
 		Success bool `json:"success"`
@@ -109,13 +107,13 @@ func TestAcceptMyInvitationByTokenSuccess(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v body=%s", err, w.Body.String())
 	}
-	if !resp.Success || resp.Data.Membership.TenantID != 42 || resp.Data.TenantName != "Invited Workspace" {
+	if !resp.Success || resp.Data.Membership.TenantID != types.SingleTenantID || resp.Data.TenantName != "Invited Workspace" {
 		t.Fatalf("unexpected response: %+v", resp)
 	}
 }
 
 func TestAcceptMyInvitationByTokenDoesNotMutateUserWithHomeTenant(t *testing.T) {
-	users := &acceptByTokenUserSvc{homeTenant: 7} // already has a home tenant
+	users := &acceptByTokenUserSvc{homeTenant: types.SingleTenantID}
 	h := &TenantInvitationHandler{
 		invitationService: &acceptByTokenInvitationSvc{},
 		userService:       users,
@@ -183,7 +181,7 @@ func TestAcceptMyInvitationByTokenIdempotent(t *testing.T) {
 	users := &acceptByTokenUserSvc{homeTenant: 42}
 	h := &TenantInvitationHandler{
 		invitationService: &acceptByTokenInvitationSvc{
-			member: &types.TenantMember{TenantID: 42, Role: types.TenantRoleContributor, Status: types.TenantMemberStatusActive},
+			member: &types.TenantMember{TenantID: types.SingleTenantID, Role: types.TenantRoleContributor, Status: types.TenantMemberStatusActive},
 		},
 		userService:   users,
 		tenantService: &acceptByTokenTenantSvc{},

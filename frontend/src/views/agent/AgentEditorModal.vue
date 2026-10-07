@@ -87,10 +87,7 @@
                             <t-icon name="chevron-right" size="14px" />
                           </button>
                           <span class="integration-inline__sep" aria-hidden="true">|</span>
-                          <button type="button" class="integration-inline__stat integration-inline__link" @click="gotoIntegrations('embed')">
-                            <span>{{ $t('integrations.tabs.embed') }} · {{ agentEmbedChannelCount }}</span>
-                            <t-icon name="chevron-right" size="14px" />
-                          </button>
+
                         </div>
                       </div>
                     </div>
@@ -1488,8 +1485,8 @@
                             <t-option v-for="kb in filteredMyKbOptions" :key="kb.value" :value="kb.value"
                               :label="kb.label" :disabled="kb.disabled">
                               <div class="kb-option-item" :title="kb.disabled ? kb.disabledReason : ''">
-                                <span class="kb-option-icon" :class="kb.type === 'faq' ? 'faq-icon' : 'doc-icon'">
-                                  <t-icon :name="kb.type === 'faq' ? 'chat-bubble-help' : 'folder'" />
+                                <span class="kb-option-icon" :class="'doc-icon'">
+                                  <t-icon :name="'folder'" />
                                 </span>
                                 <span class="kb-option-label">{{ kb.label }}</span>
                                 <span v-if="kb.ragEnabled" class="kb-option-tag tag-rag">RAG</span>
@@ -1499,23 +1496,7 @@
                               </div>
                             </t-option>
                           </t-option-group>
-                          <t-option-group v-if="filteredSharedKbOptions.length"
-                            :label="$t('agent.editor.sharedKnowledgeBases')">
-                            <t-option v-for="kb in filteredSharedKbOptions" :key="kb.value" :value="kb.value"
-                              :label="kb.label" :disabled="kb.disabled">
-                              <div class="kb-option-item" :title="kb.disabled ? kb.disabledReason : ''">
-                                <span class="kb-option-icon" :class="kb.type === 'faq' ? 'faq-icon' : 'doc-icon'">
-                                  <t-icon :name="kb.type === 'faq' ? 'chat-bubble-help' : 'folder'" />
-                                </span>
-                                <span class="kb-option-label">{{ kb.label }}</span>
-                                <span v-if="kb.ragEnabled" class="kb-option-tag tag-rag">RAG</span>
-                                <span v-if="kb.wikiEnabled" class="kb-option-tag tag-wiki">Wiki</span>
-                                <span v-if="kb.orgName" class="kb-option-org">{{ kb.orgName }}</span>
-                                <span class="kb-option-count">{{ kb.count || 0 }}</span>
-                                <span v-if="kb.disabled" class="kb-option-disabled-hint">{{ kb.disabledReason }}</span>
-                              </div>
-                            </t-option>
-                          </t-option-group>
+
                         </t-select>
                       </div>
                     </div>
@@ -1712,44 +1693,11 @@
                       </div>
                     </div>
 
-                    <!-- FAQ 优先策略（关联 FAQ 类型知识库时显示） -->
-                    <div v-if="hasFaqKnowledgeBase" class="setting-row">
-                      <div class="setting-info">
-                        <label>{{ $t('agentEditor.faq.enableLabel') }}</label>
-                        <p class="desc">{{ $t('agentEditor.faq.enableDesc') }}</p>
-                      </div>
-                      <div class="setting-control">
-                        <t-switch v-model="formData.config.faq_priority_enabled" />
-                      </div>
-                    </div>
 
-                    <div v-if="hasFaqKnowledgeBase && formData.config.faq_priority_enabled" class="setting-row">
-                      <div class="setting-info">
-                        <label>{{ $t('agentEditor.faq.thresholdLabel') }}</label>
-                        <p class="desc">{{ $t('agentEditor.faq.thresholdDesc') }}</p>
-                      </div>
-                      <div class="setting-control">
-                        <div class="slider-wrapper">
-                          <t-slider v-model="formData.config.faq_direct_answer_threshold" :min="0.7" :max="1"
-                            :step="0.05" />
-                          <span class="slider-value">{{ formData.config.faq_direct_answer_threshold?.toFixed(2)
-                            }}</span>
-                        </div>
-                      </div>
-                    </div>
 
-                    <div v-if="hasFaqKnowledgeBase && formData.config.faq_priority_enabled" class="setting-row">
-                      <div class="setting-info">
-                        <label>{{ $t('agentEditor.faq.boostLabel') }}</label>
-                        <p class="desc">{{ $t('agentEditor.faq.boostDesc') }}</p>
-                      </div>
-                      <div class="setting-control">
-                        <div class="slider-wrapper">
-                          <t-slider v-model="formData.config.faq_score_boost" :min="1" :max="2" :step="0.1" />
-                          <span class="slider-value">{{ formData.config.faq_score_boost?.toFixed(1) }}x</span>
-                        </div>
-                      </div>
-                    </div>
+
+
+
 
                     <!-- 表格数据分析（仅普通模式，命中 CSV/Excel 时会多一次 LLM 调用生成 SQL） -->
                     <div v-if="!isAgentMode" class="setting-row">
@@ -1764,11 +1712,6 @@
                   </div>
                 </div>
 
-                <!-- 共享管理（仅编辑模式且非内置智能体） -->
-                <div v-if="editorMode === 'edit' && editorAgent?.id && !editorAgent?.is_builtin"
-                  v-show="currentSection === 'share'" class="section">
-                  <AgentShareSettings :agent-id="editorAgent.id" :agent="editorAgent" />
-                </div>
               </div>
 
               <!-- 底部操作栏 -->
@@ -1859,7 +1802,6 @@ import {
 } from '@/api/system';
 import { useUIStore } from '@/stores/ui';
 import { useAuthStore } from '@/stores/auth';
-import { useOrganizationStore } from '@/stores/organization';
 import { useChatResourcesStore } from '@/stores/chatResources';
 import { useEditorResourcesStore } from '@/stores/editorResources';
 import AgentAvatar from '@/components/AgentAvatar.vue';
@@ -1868,9 +1810,7 @@ import ModelSelector from '@/components/ModelSelector.vue';
 import SandboxSkillsPanel from '@/components/SandboxSkillsPanel.vue';
 import SettingDrawer from '@/components/settings/SettingDrawer.vue';
 import KBParserSettings, { type ParserEngineRule } from '@/views/knowledge/settings/KBParserSettings.vue';
-import AgentShareSettings from '@/components/AgentShareSettings.vue';
 import { SKILL_ICON } from '@/types/mention';
-import { listEmbedChannels } from '@/api/embed';
 import { getRootZoom, rectToCssPx } from '@/utils/zoom';
 import { integrationSectionKey } from '@/config/settingsRoute';
 import {
@@ -1890,7 +1830,6 @@ const CHAT_PARSER_EXTENSIONS = [
 const uiStore = useUIStore();
 const authStore = useAuthStore();
 const router = useRouter();
-const orgStore = useOrganizationStore();
 const chatResources = useChatResourcesStore();
 const editorResources = useEditorResourcesStore();
 
@@ -2025,7 +1964,7 @@ onBeforeUnmount(() => {
 const saving = ref(false);
 const editorInitializing = ref(false);
 const allModels = ref<ModelConfig[]>([]);
-const kbOptions = ref<{ label: string; value: string; type?: 'document' | 'faq'; count?: number; shared?: boolean; orgName?: string; ragEnabled?: boolean; wikiEnabled?: boolean; capabilities?: KBCapabilities }[]>([]);
+const kbOptions = ref<{ label: string; value: string; type?: 'document'; count?: number; ragEnabled?: boolean; wikiEnabled?: boolean; capabilities?: KBCapabilities }[]>([]);
 
 // 智能体类型预设（仅 smart-reasoning 模式下展示）
 const agentTypePresets = ref<AgentTypePreset[]>([]);
@@ -2284,20 +2223,8 @@ const sandboxConfigOptions = computed(() => {
 });
 const backendLabel = (type: string) =>
   type ? t(`settings.sandbox.backends.${type}`) : t('common.error');
+function sandboxTargetLine(cfg: SandboxConfigRecord): string { return cfg.config?.docker?.image?.trim() || '' }
 
-function sandboxTargetLine(cfg: SandboxConfigRecord): string {
-  if (cfg.sandbox_type === 'docker') {
-    return cfg.config?.docker?.image?.trim() || ''
-  }
-  const remote = cfg.config?.e2b || cfg.config?.cube
-  const raw = remote?.api_url?.trim() || ''
-  if (!raw) return ''
-  try {
-    return new URL(raw).host
-  } catch {
-    return raw
-  }
-}
 
 const selectedSandboxSummary = computed(() => {
   const id = formData.value.config.sandbox_config_id
@@ -2415,9 +2342,7 @@ const toolGroups = computed(() => [
   { key: 'data', label: t('agentEditor.tools.groupData') },
 ]);
 
-// 知识库分组：我的 vs 共享的
-const myKbOptions = computed(() => kbOptions.value.filter(kb => !kb.shared));
-const sharedKbOptions = computed(() => kbOptions.value.filter(kb => kb.shared));
+const myKbOptions = computed(() => kbOptions.value);
 
 // 根据知识库配置动态计算是否有知识库能力
 const hasKnowledgeBase = computed(() => {
@@ -2453,22 +2378,10 @@ const hasWikiKnowledgeBase = computed(() => {
 const ragKbCount = computed(() => kbsInScope.value.filter(kb => kb.ragEnabled).length);
 const wikiKbCount = computed(() => kbsInScope.value.filter(kb => kb.wikiEnabled).length);
 
-// 检测选择的知识库中是否包含 FAQ 类型
-const hasFaqKnowledgeBase = computed(() => {
-  if (kbSelectionMode.value === 'none') return false;
-  if (kbSelectionMode.value === 'all') {
-    // 全部知识库模式，检查是否有任何 FAQ 类型的知识库
-    return kbOptions.value.some(kb => kb.type === 'faq');
-  }
-  // 指定知识库模式，检查选中的知识库中是否有 FAQ 类型
-  const selectedKbIds = formData.value.config.knowledge_bases || [];
-  return kbOptions.value.some(kb => selectedKbIds.includes(kb.value) && kb.type === 'faq');
-});
-
 // 把"作用域内 KB 能力"聚合成一个 ScopeCapabilities 对象，交给
 // `evaluateToolRequirement` 统一判定；UI 上的所有可用性提示都应出自此处。
 const scopeCapabilities = computed<ScopeCapabilities>(() => {
-  const scope: ScopeCapabilities = { vector: false, keyword: false, wiki: false, graph: false, faq: false };
+  const scope: ScopeCapabilities = { vector: false, keyword: false, wiki: false, graph: false, };
   for (const kb of kbsInScope.value) {
     const caps = kb.capabilities;
     if (caps) {
@@ -2476,19 +2389,17 @@ const scopeCapabilities = computed<ScopeCapabilities>(() => {
       if (caps.keyword) scope.keyword = true;
       if (caps.wiki) scope.wiki = true;
       if (caps.graph) scope.graph = true;
-      if (caps.faq) scope.faq = true;
     } else {
       // 向后兼容：capabilities 尚未加载时，退回到 ragEnabled/wikiEnabled 推断
       if (kb.ragEnabled) { scope.vector = true; scope.keyword = true; }
       if (kb.wikiEnabled) scope.wiki = true;
-      if (kb.type === 'faq') scope.faq = true;
+
     }
   }
   return scope;
 });
 
 // 把 evaluateToolRequirement 返回的 missKind 映射到 i18n 文案。
-// 新增的 needsGraph / needsFaq 暂时复用 requiresRagKb 文案（"需要 RAG 知识库"），
 // 后续可按需增加独立的 i18n 键。
 const missKindToReason = (kind: RequirementMissKind): string | undefined => {
   switch (kind) {
@@ -2496,7 +2407,6 @@ const missKindToReason = (kind: RequirementMissKind): string | undefined => {
     case 'needsWiki': return t('agentEditor.tools.requiresWikiKb');
     case 'needsRag':
     case 'needsGraph':
-    case 'needsFaq': return t('agentEditor.tools.requiresRagKb');
     case 'none':
     default: return undefined;
   }
@@ -2676,10 +2586,6 @@ const navItems = computed(() => {
     items.push({ key: 'mcp', icon: 'server', label: t('agentEditor.mcp.label') });
     items.push({ key: 'skills', icon: SKILL_ICON, label: t('agent.editor.skillsConfig') });
   }
-  // 发布（仅编辑模式）
-  if (editorMode.value === 'edit' && editorAgent.value?.id && !editorAgent.value?.is_builtin) {
-    items.push({ key: 'share', icon: 'share', label: t('knowledgeEditor.sidebar.share') });
-  }
   return items;
 });
 
@@ -2707,7 +2613,7 @@ const navGroups = computed(() => {
     {
       key: 'integration',
       label: t('agentEditor.navGroups.integration'),
-      items: pickItems(['share']),
+      items: pickItems([]),
     },
   ].filter((group) => group.items.length > 0);
 });
@@ -2769,10 +2675,6 @@ const defaultFormData = {
     supported_file_types: [] as string[],
     // 数据分析阶段开关（默认关闭，避免在普通问答上多一次 LLM 调用生成 SQL）
     data_analysis_enabled: false,
-    // FAQ 策略设置
-    faq_priority_enabled: true, // 是否启用 FAQ 优先策略
-    faq_direct_answer_threshold: 0.9, // FAQ 直接回答阈值（相似度高于此值直接使用 FAQ 答案）
-    faq_score_boost: 1.2, // FAQ 分数加权系数
     // 网络搜索设置
     web_search_enabled: false,
     web_search_max_results: 5,
@@ -3000,23 +2902,10 @@ watch(currentSection, (section) => {
 });
 
 const agentIMChannelCount = ref(0);
-const agentEmbedChannelCount = ref(0);
+const loadAgentIntegrationCounts = async (agentId: string) => { try { const imResp = await listIMChannels(agentId); agentIMChannelCount.value = imResp?.data?.length ?? 0; } catch { agentIMChannelCount.value = 0; } };
 
-async function loadAgentIntegrationCounts(agentId: string) {
-  try {
-    const [imResp, embedResp] = await Promise.all([
-      listIMChannels(agentId),
-      listEmbedChannels(agentId),
-    ]);
-    agentIMChannelCount.value = imResp?.data?.length ?? 0;
-    agentEmbedChannelCount.value = embedResp?.data?.length ?? 0;
-  } catch {
-    agentIMChannelCount.value = 0;
-    agentEmbedChannelCount.value = 0;
-  }
-}
 
-function gotoIntegrations(tab: 'im' | 'embed') {
+function gotoIntegrations(tab: 'im') {
   const agentId = editorAgent.value?.id;
   if (!agentId) return;
   handleClose();
@@ -3184,7 +3073,6 @@ const presetKbMismatchReason = (preset: AgentTypePreset): string => {
 //   - 工具 → any_of（"KB 至少要能被其中一个工具用得上"）由
 //     `deriveKbFilterFromTools` 自动算出；
 //   - YAML 里的 `kb_filter` 只负责**工具推不出来**的业务规则（如
-//     data-analysis 的 `none_of: ["faq"]`），作为增量合并，而不是整体覆盖；
 //   - `all_of` / `none_of` 直接从 YAML 继承（工具不表达这类约束）。
 //
 // 这样 rag-qa / wiki-qa / hybrid 在 YAML 里彻底不写 `kb_filter`，
@@ -3212,15 +3100,13 @@ const kbSatisfiesPresetFilter = (kb: { capabilities?: KBCapabilities; ragEnabled
     keyword: !!kb.ragEnabled,
     wiki: !!kb.wikiEnabled,
     graph: false,
-    faq: kb.type === 'faq',
-  };
+    };
   const has = (name: string): boolean => {
     switch (name) {
       case 'vector': return !!caps.vector;
       case 'keyword': return !!caps.keyword;
       case 'wiki': return !!caps.wiki;
       case 'graph': return !!caps.graph;
-      case 'faq': return !!caps.faq;
       default: return false;
     }
   };
@@ -3267,8 +3153,7 @@ const filteredKbOptionsForPreset = computed(() => {
     return { ...kb, disabled: !ok, disabledReason: reason };
   });
 });
-const filteredMyKbOptions = computed(() => filteredKbOptionsForPreset.value.filter(kb => !kb.shared));
-const filteredSharedKbOptions = computed(() => filteredKbOptionsForPreset.value.filter(kb => kb.shared));
+const filteredMyKbOptions = computed(() => filteredKbOptionsForPreset.value);
 
 // 当前选中的 KB 中，有多少个在新预设 / 模式下会被禁用（用于保存前提示）。
 // quick-answer 模式下 preset 恒为 null，但 wiki-only KB 仍属"被禁用"，
@@ -3302,7 +3187,6 @@ const applyAgentTypePreset = (preset: AgentTypePreset | null) => {
   if (typeof c.max_iterations === 'number') target.max_iterations = c.max_iterations;
   if (Array.isArray(c.allowed_tools)) target.allowed_tools = [...c.allowed_tools];
   if (typeof c.retain_retrieval_history === 'boolean') target.retain_retrieval_history = c.retain_retrieval_history;
-  if (typeof c.faq_priority_enabled === 'boolean') target.faq_priority_enabled = c.faq_priority_enabled;
   if (typeof c.web_search_enabled === 'boolean') target.web_search_enabled = c.web_search_enabled;
   // supported_file_types 采用"强同步"语义：只有 data-analysis 需要限定 csv/xlsx，
   // 其余类型切过来时必须清空，否则会从上一个类型带过来残留。
@@ -3554,7 +3438,6 @@ watch(() => props.visible, async (val) => {
     editorInitializing.value = false;
     clearFieldHighlight();
     agentIMChannelCount.value = 0;
-    agentEmbedChannelCount.value = 0;
     showSkillProgress.value = false;
     skillProgressRecord.value = null;
     skillProgressId.value = '';
@@ -3837,18 +3720,16 @@ watch(() => chatResources.allModels, (list) => {
   }
 });
 
-const mapKbToOption = (kb: any, shared: boolean, orgName?: string) => {
+const mapKbToOption = (kb: any) => {
   const strategy = kb.indexing_strategy;
   const caps: KBCapabilities | undefined = kb.capabilities;
   return {
     label: kb.name,
     value: kb.id,
     type: kb.type || 'document',
-    count: kb.type === 'faq' ? (kb.chunk_count || 0) : (kb.knowledge_count || 0),
-    shared,
-    orgName,
+    count: (kb.knowledge_count || 0),
     ragEnabled: caps ? (caps.vector || caps.keyword) : (!strategy || strategy.vector_enabled || strategy.keyword_enabled),
-    wikiEnabled: caps ? caps.wiki : (strategy?.wiki_enabled || false),
+    wikiEnabled: caps ? caps.wiki : (strategy?.wiki_enabled),
     capabilities: caps,
   };
 };
@@ -3898,12 +3779,8 @@ const loadDependencies = async () => {
       allModels.value = chatResources.allModels;
     }
 
-    const myKbs = chatResources.rawKnowledgeBases.map((kb: any) => mapKbToOption(kb, false));
-    const myKbIds = new Set(myKbs.map(kb => kb.value));
-    const sharedKbs = (orgStore.sharedKnowledgeBases || [])
-      .filter((shared: any) => shared.knowledge_base && !myKbIds.has(shared.knowledge_base.id))
-      .map((shared: any) => mapKbToOption(shared.knowledge_base, true, shared.org_name));
-    kbOptions.value = [...myKbs, ...sharedKbs];
+    const myKbs = chatResources.rawKnowledgeBases.map((kb: any) => mapKbToOption(kb));
+    kbOptions.value = myKbs;
 
     agentTypePresets.value = editorResources.agentTypePresets as AgentTypePreset[];
     applyPromptTemplateDefaults(editorResources.promptTemplates);
@@ -6621,11 +6498,7 @@ const handleSave = async () => {
     color: var(--td-success-color);
   }
 
-  // FAQ KB
-  &.faq-icon {
-    background: rgba(0, 82, 217, 0.1);
-    color: var(--td-brand-color);
-  }
+
 }
 
 .kb-option-label {

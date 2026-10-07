@@ -1,23 +1,3 @@
-// Images as templates for the docker backend.
-//
-// The settings wizard asks every backend the same two questions — which
-// templates exist, and please make sure the standard one does. For Docker the
-// answer is images on the daemon: an image is a pre-baked filesystem a sandbox
-// starts from, which is exactly what a Cube or E2B template is.
-//
-// Three differences from the MicroVM backends shape this file:
-//
-//   - A daemon holds every image its host ever pulled, most of which have
-//     nothing to do with sandboxes. Listing all of them would bury the one the
-//     admin needs, so the catalog only reports images that are recognisably
-//     sandbox templates.
-//   - Skill snapshots live in the same image store (reliquary-skill/…), so they
-//     are subtracted the way Cube hides snap- IDs from GET /templates.
-//   - Making the standard template exist means pulling, which can take minutes
-//     on a cold host. The pull therefore runs in the background and the
-//     template reports "building" until it lands, mirroring how the other
-//     backends report an in-flight template build.
-
 package sandbox
 
 import (
@@ -63,9 +43,6 @@ func (c *DockerRemoteClient) ListTemplates(ctx context.Context) ([]RemoteTemplat
 			if tag == "" || tag == "<none>:<none>" {
 				continue
 			}
-			// Skill snapshots are images, so they would otherwise appear in
-			// the "pick a base template" list the way Cube's snap- IDs used
-			// to. Hide them unless this config's stored image is that tag.
 			if snapshot && tag != configured {
 				continue
 			}

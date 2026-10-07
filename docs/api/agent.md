@@ -6,7 +6,6 @@
 
 智能体 API 用于管理自定义智能体（Custom Agent）。系统提供了内置智能体，同时支持用户创建自定义智能体来满足不同的业务场景需求。
 
-> 智能体的共享与跨组织分发（`/agents/:id/shares` 等）属于组织协作能力，文档见 [组织管理 API](./organization.md)。本文件只覆盖智能体自身的 CRUD、复制、占位符、类型预设以及推荐问题接口。
 
 ### 内置智能体
 
@@ -456,14 +455,6 @@ curl --location 'http://localhost:8080/api/v1/agents/placeholders' \
 | `vlm_model_id` | string | - | 图片分析所用的 VLM 模型 ID |
 | `image_storage_provider` | string | - | 图片存储提供者：`local`/`minio`/`s3`，为空使用全局默认 |
 
-### FAQ 策略设置
-
-| 参数 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `faq_priority_enabled` | bool | true | FAQ 优先策略开关 |
-| `faq_direct_answer_threshold` | float | 0.9 | FAQ 直接回答阈值 |
-| `faq_score_boost` | float | 1.2 | FAQ 分数加成系数 |
-
 ### 网络搜索设置
 
 | 参数 | 类型 | 默认值 | 说明 |
@@ -548,6 +539,5 @@ curl --location 'http://localhost:8080/api/v1/agent-chat/session-123' \
 
 ## 相关文档
 
-- 智能体的组织共享、跨空间分发与禁用（`/agents/:id/shares`、`/shared-agents` 等）：见 [组织管理 API](./organization.md)
 - 智能体绑定 IM 渠道（`/agents/:id/im-channels`）：见组织/IM 渠道相关文档
 - 网络搜索提供者配置（被 `web_search_provider_id` 引用）：见 [Web Search API](./web-search.md)

@@ -76,7 +76,7 @@ func TestRunInstallSucceedsOnDockerConfig(t *testing.T) {
 	fx := newInstallFixture(t)
 	fx.configRepo.entity.SandboxType = "docker"
 	fx.configRepo.entity.Config.SandboxType = "docker"
-	fx.configRepo.entity.Config.E2B = nil
+	fx.configRepo.entity.Config.Docker = nil
 	fx.configRepo.entity.Config.Docker = &types.DockerSandboxConfig{
 		Image: "reliquary/sandbox:base",
 		Host:  "unix:///var/run/docker.sock",
@@ -414,7 +414,7 @@ func TestSwitchImagePointerAbandonsSnapshotWhenCredentialsRotate(t *testing.T) {
 	// snapshot to the new account. Stamping the new fingerprint onto that ID
 	// would make every session trust a snapshot the live key cannot resolve.
 	fx.configRepo.editAfterFirstRead = func(e *types.TenantSandboxConfigEntity) {
-		e.Config.E2B.APIKey = "key-2"
+		e.Config.Docker.Host = "unix:///rotated-daemon.sock"
 	}
 
 	err := fx.svc.runInstall(context.Background(), 7, "cfg-1", "sk-1", fx.bundle)
@@ -1409,7 +1409,7 @@ func TestSwitchImagePointerRefusesAnUnusableFingerprint(t *testing.T) {
 	// and a pointer with an empty fingerprint is discarded at session start.
 	fx.configRepo.entity.SandboxType = "docker"
 	fx.configRepo.entity.Config.SandboxType = "docker"
-	fx.configRepo.entity.Config.E2B = nil
+	fx.configRepo.entity.Config.Docker = nil
 	fx.configRepo.entity.Config.Docker = nil
 
 	err := fx.svc.runInstall(context.Background(), 7, "cfg-1", "sk-1", fx.bundle)
@@ -1709,7 +1709,7 @@ func TestRunInstallRefusesAnImageThatBelongsToAnotherProviderAccount(t *testing.
 		SnapshotID: "snap-old", Generation: 3,
 		BaseTemplateID: "base-template", OwnerFingerprint: fx.fingerprint,
 	}
-	fx.configRepo.entity.Config.E2B.APIKey = "key-2"
+	fx.configRepo.entity.Config.Docker.Host = "unix:///rotated-daemon.sock"
 
 	err := fx.svc.runInstall(context.Background(), 7, "cfg-1", "sk-1", fx.bundle)
 
@@ -2041,7 +2041,7 @@ func newInstallFixture(t *testing.T) *installFixture {
 	t.Helper()
 
 	fx := &installFixture{t: t}
-	fx.fingerprint = sandbox.SkillImageFingerprint("e2b", "key-1", "https://e2b.example")
+	fx.fingerprint = sandbox.SkillImageFingerprint("docker", "", "unix:///test-daemon.sock")
 	// The checker's own wording for a missing dependency, so a test reading the
 	// repair prompt sees what a real run would put in it.
 	fx.loadCheckStderr = "scripts/extract.py imports pandas, " +
@@ -2061,13 +2061,13 @@ func newInstallFixture(t *testing.T) *installFixture {
 		ID:          "cfg-1",
 		TenantID:    7,
 		Name:        "cfg",
-		SandboxType: string(sandbox.SandboxTypeE2B),
+		SandboxType: string(sandbox.SandboxTypeDocker),
 		Config: &types.TenantSandboxConfig{
-			SandboxType: string(sandbox.SandboxTypeE2B),
-			E2B: &types.E2BSandboxConfig{
-				APIURL:     "https://e2b.example",
-				APIKey:     "key-1",
-				TemplateID: "base-template",
+			SandboxType: string(sandbox.SandboxTypeDocker),
+			Docker: &types.DockerSandboxConfig{
+				Host: "unix:///test-daemon.sock",
+
+				Image: "base-template",
 			},
 		},
 	}}
@@ -2220,14 +2220,11 @@ func (r *installConfigRepo) GetByID(
 	cp := *r.entity
 	if r.entity.Config != nil {
 		cfg := *r.entity.Config
-		if r.entity.Config.E2B != nil {
-			e2b := *r.entity.Config.E2B
-			cfg.E2B = &e2b
+		if r.entity.Config.Docker != nil {
+			docker := *r.entity.Config.Docker
+			cfg.Docker = &docker
 		}
-		if r.entity.Config.Cube != nil {
-			cube := *r.entity.Config.Cube
-			cfg.Cube = &cube
-		}
+
 		if r.entity.Config.SkillImage != nil {
 			image := *r.entity.Config.SkillImage
 			cfg.SkillImage = &image
@@ -2811,7 +2808,7 @@ func (m *installSandboxManager) Execute(context.Context, *sandbox.ExecuteConfig)
 }
 func (m *installSandboxManager) Cleanup(context.Context) error                      { return nil }
 func (m *installSandboxManager) GetSandbox() sandbox.Sandbox                        { return nil }
-func (m *installSandboxManager) GetType() sandbox.SandboxType                       { return sandbox.SandboxTypeE2B }
+func (m *installSandboxManager) GetType() sandbox.SandboxType                       { return sandbox.SandboxTypeDocker }
 func (m *installSandboxManager) SessionShellExecutor() sandbox.SessionShellExecutor { return m }
 func (m *installSandboxManager) SessionFileStore() sandbox.SessionFileStore         { return m }
 func (m *installSandboxManager) SessionInstallShellExecutor() sandbox.SessionInstallShellExecutor {
@@ -3314,10 +3311,6 @@ func (s *installModelService) ClearModelCredential(context.Context, string, stri
 }
 
 func (s *installModelService) GetEmbeddingModel(context.Context, string) (embedding.Embedder, error) {
-	return nil, nil
-}
-
-func (s *installModelService) GetEmbeddingModelForTenant(context.Context, string, uint64) (embedding.Embedder, error) {
 	return nil, nil
 }
 

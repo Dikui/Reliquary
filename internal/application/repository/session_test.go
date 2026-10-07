@@ -200,10 +200,10 @@ func TestSessionRepositoryQueryPagedKeepsClearedIMSessionsOutOfWeb(t *testing.T)
 	cleared := createSessionForTest(t, db, 1, "alice") // IM mapping soft-deleted by /clear
 
 	require.NoError(t, db.Create(&testIMChannelSession{
-		ID: "m-active", SessionID: active.ID, Platform: "wecom", TenantID: 1,
+		ID: "m-active", SessionID: active.ID, Platform: "feishu", TenantID: 1,
 	}).Error)
 	clearedMapping := &testIMChannelSession{
-		ID: "m-cleared", SessionID: cleared.ID, Platform: "wecom", TenantID: 1,
+		ID: "m-cleared", SessionID: cleared.ID, Platform: "feishu", TenantID: 1,
 	}
 	require.NoError(t, db.Create(clearedMapping).Error)
 	require.NoError(t, db.Delete(clearedMapping).Error) // soft-delete, as /clear does
@@ -215,35 +215,12 @@ func TestSessionRepositoryQueryPagedKeepsClearedIMSessionsOutOfWeb(t *testing.T)
 	require.Equal(t, []string{web.ID}, listItemIDsForTest(webItems),
 		"web must exclude sessions that ever had an IM mapping, including cleared ones")
 
-	wecomItems, _, err := repo.QueryPaged(ctx, &types.SessionListQuery{
-		TenantID: 1, UserID: "alice", Source: "wecom", Page: 1, PageSize: 50,
+	feishuItems, _, err := repo.QueryPaged(ctx, &types.SessionListQuery{
+		TenantID: 1, UserID: "alice", Source: "feishu", Page: 1, PageSize: 50,
 	})
 	require.NoError(t, err)
-	require.ElementsMatch(t, []string{active.ID, cleared.ID}, listItemIDsForTest(wecomItems),
-		"wecom must include both the active and the cleared IM session")
-}
-
-func TestSessionRepositoryQueryPagedSplitsWebAndEmbedSessions(t *testing.T) {
-	repo, db := newSessionRepositoryForTest(t)
-	require.NoError(t, db.AutoMigrate(&testIMChannelSession{}))
-	ctx := context.Background()
-
-	web := createSessionForTest(t, db, 1, "alice")
-	embed := createSessionForTest(t, db, 1, "alice")
-	require.NoError(t, db.Model(&types.Session{}).Where("id = ?", embed.ID).
-		Update("description", types.EmbedSessionMarkerPrefix+"ch-1").Error)
-
-	webItems, _, err := repo.QueryPaged(ctx, &types.SessionListQuery{
-		TenantID: 1, UserID: "alice", Source: "web", Page: 1, PageSize: 50,
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{web.ID}, listItemIDsForTest(webItems))
-
-	embedItems, _, err := repo.QueryPaged(ctx, &types.SessionListQuery{
-		TenantID: 1, UserID: "alice", Source: "embed:ch-1", Page: 1, PageSize: 50,
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{embed.ID}, listItemIDsForTest(embedItems))
+	require.ElementsMatch(t, []string{active.ID, cleared.ID}, listItemIDsForTest(feishuItems),
+		"feishu must include both the active and the cleared IM session")
 }
 
 // The "web" source is user chats only; API-key sessions live in the

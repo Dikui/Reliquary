@@ -122,9 +122,7 @@ func TestKnowledgeBaseEnsureDefaultsWiki(t *testing.T) {
 	if kb.WikiConfig.SynthesisModelID != "m-1" {
 		t.Error("SynthesisModelID should be preserved")
 	}
-	if kb.FAQConfig != nil {
-		t.Error("Document KB should not have FAQConfig")
-	}
+
 }
 
 func TestKnowledgeBaseEnsureDefaultsDocumentWithoutWiki(t *testing.T) {

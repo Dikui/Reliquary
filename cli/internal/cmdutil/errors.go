@@ -21,12 +21,11 @@ type ErrorCode string
 
 const (
 	// auth.* - authentication / permission
-	CodeAuthUnauthenticated    ErrorCode = "auth.unauthenticated"
-	CodeAuthTokenExpired       ErrorCode = "auth.token_expired"
-	CodeAuthBadCredential      ErrorCode = "auth.bad_credential"
-	CodeAuthForbidden          ErrorCode = "auth.forbidden"
-	CodeAuthCrossTenantBlocked ErrorCode = "auth.cross_tenant_blocked"
-	CodeAuthTenantMismatch     ErrorCode = "auth.tenant_mismatch"
+	CodeAuthUnauthenticated ErrorCode = "auth.unauthenticated"
+	CodeAuthTokenExpired    ErrorCode = "auth.token_expired"
+	CodeAuthBadCredential   ErrorCode = "auth.bad_credential"
+	CodeAuthForbidden       ErrorCode = "auth.forbidden"
+	CodeAuthTenantMismatch  ErrorCode = "auth.tenant_mismatch"
 
 	// resource.*
 	CodeResourceNotFound      ErrorCode = "resource.not_found"
@@ -439,7 +438,7 @@ func AllCodes() []ErrorCode {
 	return []ErrorCode{
 		// auth
 		CodeAuthUnauthenticated, CodeAuthTokenExpired, CodeAuthBadCredential,
-		CodeAuthForbidden, CodeAuthCrossTenantBlocked, CodeAuthTenantMismatch,
+		CodeAuthForbidden, CodeAuthTenantMismatch,
 		// resource
 		CodeResourceNotFound, CodeResourceAlreadyExists, CodeResourceLocked,
 		// input

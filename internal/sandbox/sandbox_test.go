@@ -107,8 +107,8 @@ func TestIsNamedSandboxBackendType(t *testing.T) {
 		raw  string
 		want bool
 	}{
-		{"cube", true},
-		{"e2b", true},
+		{"cube", false},
+		{"e2b", false},
 		{"docker", true},
 		{"local", false},
 		{"disabled", false},

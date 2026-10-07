@@ -192,12 +192,7 @@ func buildClient(f *Factory) (*sdk.Client, error) {
 			NewAuthRetryTransport(http.DefaultTransport, accessToken, refreshFn),
 		))
 	}
-	// prof.TenantID is intentionally NOT injected as X-Tenant-ID. Servers derive
-	// tenant from the credential itself (JWT claim or API key prefix); the
-	// header is only meaningful for explicit cross-tenant switching by users
-	// with CanAccessAllTenants. Auto-mirroring the persisted tenant from config
-	// breaks that contract - explicit cross-tenant flags would be required
-	// before sending it. `tenant_id` stays in config for `auth status` display only.
+	// The server resolves the team from the credential. TenantID is display metadata.
 	return sdk.NewClient(prof.Host, opts...), nil
 }
 

@@ -38,7 +38,6 @@ async function bootstrap() {
   const pinia = createPinia();
   app.use(pinia);
 
-  // Capabilities (can_create_tenant, auto_accept_invitation) are not cached
   // in localStorage — reconcile once before first paint when a session exists.
   const authStore = useAuthStore();
   if (localStorage.getItem("reliquary_token")) {

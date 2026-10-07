@@ -587,12 +587,12 @@ func (s *knowledgeService) DeleteKnowledgeList(ctx context.Context, ids []string
 		if intake == nil || intake.Decision != "rejected" {
 			continue
 		}
-		kb, kbErr := s.kbService.GetKnowledgeBaseByID(ctx, knowledge.KnowledgeBaseID)
+		_, kbErr := s.kbService.GetKnowledgeBaseByID(ctx, knowledge.KnowledgeBaseID)
 		if kbErr != nil {
 			return kbErr
 		}
-		if userID == "" || userID != kb.CreatorID {
-			return errors.New("only the knowledge base creator can delete rejected intake")
+		if userID == "" || !types.TenantRoleFromContext(ctx).HasPermission(types.TenantRoleContributor) {
+			return errors.New("a team editor is required to delete rejected intake")
 		}
 	}
 
