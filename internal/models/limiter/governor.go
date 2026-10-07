@@ -64,6 +64,7 @@ func GateN(ctx context.Context, modelID string, modelLimit int) func() {
 }
 
 func GateNamedN(ctx context.Context, modelID, modelName string, modelLimit int) func() {
+	modelID = BudgetKey(ctx, modelID)
 	governorMu.RLock()
 	l, defaultLimit := governor, governorN
 	governorMu.RUnlock()

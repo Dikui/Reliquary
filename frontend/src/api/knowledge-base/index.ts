@@ -1,4 +1,5 @@
 import { get, post, put, del, postUpload, getDown } from "../../utils/request";
+import type { ModelTierConfig } from '@/types/modelTiers';
 import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess';
 import type { AuditLog, AuditOutcome, ListAuditLogResponse } from '@/api/tenant/audit-log';
 
@@ -64,6 +65,7 @@ export interface KnowledgeBaseStoreView {
 }
 
 export function createKnowledgeBase(data: {
+  model_tiers?: ModelTierConfig;
   domain_id: string;
   name: string;
   description?: string;
@@ -112,6 +114,7 @@ export function getKnowledgeBaseById(id: string, options?: { agent_id?: string }
 }
 
 export function updateKnowledgeBase(id: string, data: {
+  model_tiers?: ModelTierConfig;
   domain_id?: string;
   name: string;
   description?: string;

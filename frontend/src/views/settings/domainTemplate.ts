@@ -1,7 +1,8 @@
+import { copyModelTiers } from '../../utils/modelTiers'
 import type { DomainField, KnowledgeDomainInput } from '@/api/knowledge-domains'
 
 export const emptyDomainField = (key = ''): DomainField => ({ key, label: key, aliases: [], value_type: 'text', unit_family: '', entity_types: [] })
-export const emptyKnowledgeDomain = (): KnowledgeDomainInput => ({ name: '', description: '', entity_types: [], fields: [], relations: [], unit_families: [], extraction_hints: '' })
+export const emptyKnowledgeDomain = (): KnowledgeDomainInput => ({ name: '', description: '', entity_types: [], fields: [], relations: [], unit_families: [], extraction_hints: '', model_tiers: copyModelTiers() })
 
 export function copyDomainInput(domain: KnowledgeDomainInput): KnowledgeDomainInput {
   return JSON.parse(JSON.stringify({
@@ -10,6 +11,7 @@ export function copyDomainInput(domain: KnowledgeDomainInput): KnowledgeDomainIn
     relations: (domain.relations || []).map(relation => ({ ...relation, aliases: relation.aliases || [], subject_types: relation.subject_types || [], object_types: relation.object_types || [] })),
     unit_families: (domain.unit_families || []).map(family => ({ ...family, units: (family.units || []).map(unit => ({ ...unit, aliases: unit.aliases || [] })) })),
     extraction_hints: domain.extraction_hints || '',
+    model_tiers: copyModelTiers(domain.model_tiers),
   }))
 }
 export type DomainValidationKey = 'nameRequired' | 'keysRequired' | 'duplicateKeys' | 'invalidUnit' | 'unknownFamily' | 'invalidType' | 'duplicateAliases' | 'unknownEntityType'

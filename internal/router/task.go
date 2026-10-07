@@ -43,6 +43,7 @@ type AsynqTaskParams struct {
 	KnowledgePostProcess interfaces.TaskHandler `name:"knowledgePostProcess"`
 	KnowledgeAutoTag     interfaces.TaskHandler `name:"knowledgeAutoTag"`
 	KnowledgeContext     *service.KnowledgeContextWorker
+	ContextNameEmbedding *service.ContextNameEmbeddingRebuilder
 	KnowledgeWorkflow    *service.KnowledgeWorkflowService
 	WikiIngest           interfaces.TaskHandler `name:"wikiIngest"`
 	TemporaryDocument    interfaces.TemporaryDocumentService
@@ -305,6 +306,7 @@ func RunAsynqServer(params AsynqTaskParams) *asynq.ServeMux {
 	mux.HandleFunc(types.TypeKnowledgePostProcess, params.KnowledgePostProcess.Handle)
 	mux.HandleFunc(types.TypeKnowledgeAutoTag, params.KnowledgeAutoTag.Handle)
 	mux.HandleFunc(types.TypeKnowledgeContext, params.KnowledgeContext.Handle)
+	mux.HandleFunc(types.TypeContextNameEmbeddingRebuild, params.ContextNameEmbedding.Handle)
 	mux.HandleFunc(service.TypeKnowledgeWorkflowRun, params.KnowledgeWorkflow.Handle)
 
 	// Register data source sync handler

@@ -229,6 +229,7 @@ func (r *knowledgeBaseRepository) ListModelUsages(
 		Model(&types.KnowledgeBase{}).
 		Select(
 			"id", "name", "embedding_model_id", "summary_model_id",
+			"model_tiers", "auto_tag_config",
 			"image_processing_config", "vlm_config", "asr_config", "wiki_config",
 		).
 		Where("tenant_id = ?", tenantID)

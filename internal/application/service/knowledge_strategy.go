@@ -133,20 +133,11 @@ func (s *KnowledgeStrategyService) Propose(ctx context.Context, kbID, instructio
 	if instruction == "" || len([]rune(instruction)) > 2000 || len(sampleIDs) == 0 || len(sampleIDs) > 3 {
 		return nil, werrors.NewBadRequestError("instruction and one to three real message samples required")
 	}
-	if strings.TrimSpace(kb.SummaryModelID) == "" {
-		return nil, werrors.NewBadRequestError("summary model required for strategy trial")
-	}
-	model, err := s.models.GetChatModel(ctx, kb.SummaryModelID)
+	model, err := GetTierChatModel(ctx, s.db, s.models, kb, types.ModelTierLight)
 	if err != nil {
 		return nil, err
 	}
 	tagModel := model
-	if kb.AutoTagConfig != nil && strings.TrimSpace(kb.AutoTagConfig.ModelID) != "" && kb.AutoTagConfig.ModelID != kb.SummaryModelID {
-		tagModel, err = s.models.GetChatModel(ctx, kb.AutoTagConfig.ModelID)
-		if err != nil {
-			return nil, err
-		}
-	}
 	current, err := activeKnowledgeStrategyRules(ctx, s.db, kb.TenantID, kb.ID)
 	if err != nil {
 		return nil, err
@@ -308,9 +299,6 @@ func (s *KnowledgeStrategyService) Evaluate(ctx context.Context, kbID, versionID
 	if err := json.Unmarshal(version.Rules, &newRules); err != nil {
 		return nil, fmt.Errorf("invalid candidate strategy rules: %w", err)
 	}
-	if strings.TrimSpace(kb.SummaryModelID) == "" {
-		return nil, werrors.NewBadRequestError("summary model required for strategy evaluation")
-	}
 
 	seen := make(map[string]bool, len(samples))
 	messages := make([]types.Knowledge, 0, len(samples))
@@ -378,7 +366,7 @@ func (s *KnowledgeStrategyService) Evaluate(ctx context.Context, kbID, versionID
 		bodies = append(bodies, string(body))
 	}
 
-	model, err := s.models.GetChatModel(ctx, kb.SummaryModelID)
+	model, err := GetTierChatModel(ctx, s.db, s.models, kb, types.ModelTierLight)
 	if err != nil {
 		return nil, err
 	}

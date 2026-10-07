@@ -562,6 +562,7 @@ type UpdateKnowledgeBaseRequest struct {
 	Description string                     `json:"description"`
 	Config      *types.KnowledgeBaseConfig `json:"config"`
 	DomainID    *string                    `json:"domain_id"`
+	ModelTiers  *types.ModelTierConfig     `json:"model_tiers"`
 }
 
 // UpdateKnowledgeBase godoc
@@ -599,6 +600,12 @@ func (h *KnowledgeBaseHandler) UpdateKnowledgeBase(c *gin.Context) {
 		logger.Error(ctx, "Failed to parse request parameters", err)
 		c.Error(apperrors.NewBadRequestError("Invalid request parameters").WithDetails(err.Error()))
 		return
+	}
+	if req.ModelTiers != nil {
+		if req.Config == nil {
+			req.Config = &types.KnowledgeBaseConfig{}
+		}
+		req.Config.ModelTiers = req.ModelTiers
 	}
 	if req.Config != nil {
 		probe := &types.KnowledgeBase{

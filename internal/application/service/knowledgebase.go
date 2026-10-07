@@ -32,24 +32,25 @@ const kbTaskCleanupTimeout = 5 * time.Second
 
 // knowledgeBaseService implements the knowledge base service interface
 type knowledgeBaseService struct {
-	db              *gorm.DB
-	repo            interfaces.KnowledgeBaseRepository
-	kgRepo          interfaces.KnowledgeRepository
-	chunkRepo       interfaces.ChunkRepository
-	modelService    interfaces.ModelService
-	retrieveEngine  interfaces.RetrieveEngineRegistry
-	ownership       retriever.TenantStoreOwnership
-	tenantRepo      interfaces.TenantRepository
-	fileSvc         interfaces.FileService
-	storageResolver interfaces.StorageBackendResolver
-	asynqClient     interfaces.TaskEnqueuer
-	taskInspector   interfaces.TaskInspector
-	taskPendingRepo interfaces.TaskPendingOpsRepository
-	dsRepo          interfaces.DataSourceRepository
-	syncLogRepo     interfaces.SyncLogRepository
-	dsScheduler     *datasource.Scheduler
-	audit           interfaces.AuditLogService
-	resourceCatalog interfaces.ResourceCatalog
+	db                     *gorm.DB
+	repo                   interfaces.KnowledgeBaseRepository
+	kgRepo                 interfaces.KnowledgeRepository
+	chunkRepo              interfaces.ChunkRepository
+	modelService           interfaces.ModelService
+	retrieveEngine         interfaces.RetrieveEngineRegistry
+	ownership              retriever.TenantStoreOwnership
+	tenantRepo             interfaces.TenantRepository
+	fileSvc                interfaces.FileService
+	storageResolver        interfaces.StorageBackendResolver
+	asynqClient            interfaces.TaskEnqueuer
+	taskInspector          interfaces.TaskInspector
+	taskPendingRepo        interfaces.TaskPendingOpsRepository
+	dsRepo                 interfaces.DataSourceRepository
+	syncLogRepo            interfaces.SyncLogRepository
+	dsScheduler            *datasource.Scheduler
+	audit                  interfaces.AuditLogService
+	resourceCatalog        interfaces.ResourceCatalog
+	nameEmbeddingRebuilder ContextNameEmbeddingRebuildTrigger
 }
 
 // NewKnowledgeBaseService creates a new knowledge base service
@@ -121,6 +122,9 @@ func (s *knowledgeBaseService) CreateKnowledgeBase(ctx context.Context,
 	if err := s.validateKnowledgeBaseDomain(ctx, kb.TenantID, kb.DomainID); err != nil {
 		return nil, err
 	}
+	if err := ValidateModelTierConfig(ctx, s.db, kb.ModelTiers); err != nil {
+		return nil, err
+	}
 	kb.UpdatedAt = time.Now()
 	if uid, ok := types.UserIDFromContext(ctx); ok && !types.IsSyntheticUserID(uid) {
 		kb.CreatorID = uid
@@ -155,6 +159,11 @@ func (s *knowledgeBaseService) CreateKnowledgeBase(ctx context.Context,
 			"tenant_id":         kb.TenantID,
 		})
 		return nil, err
+	}
+	if s.nameEmbeddingRebuilder != nil && kb.ModelTiers.ModelID(types.ModelTierEmbedding) != "" {
+		if err := s.nameEmbeddingRebuilder.MarkAndEnqueue(ctx, kb.TenantID, "knowledge_base_embedding_override_changed"); err != nil {
+			return kb, fmt.Errorf("knowledge base saved but name embedding rebuild could not be queued: %w", err)
+		}
 	}
 	recordKBActivity(ctx, s.audit, kb.TenantID, kb.ID, types.AuditActionKBCreated,
 		"knowledge_base", kb.ID, types.AuditOutcomeSuccess, map[string]any{
@@ -535,6 +544,7 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 	}
 
 	changedFields := make([]string, 0, 3)
+	previousEmbeddingOverride := kb.ModelTiers.ModelID(types.ModelTierEmbedding)
 	if len(domainIDs) > 0 {
 		if err := s.validateKnowledgeBaseDomain(ctx, kb.TenantID, domainIDs[0]); err != nil {
 			return nil, err
@@ -582,6 +592,12 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 
 		}
 	}
+	if config != nil && config.ModelTiers != nil {
+		if err := ValidateModelTierConfig(ctx, s.db, *config.ModelTiers); err != nil {
+			return nil, err
+		}
+		kb.ModelTiers = *config.ModelTiers
+	}
 	kb.UpdatedAt = time.Now()
 	kb.EnsureDefaults()
 
@@ -591,6 +607,11 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 			"knowledge_base_id": id,
 		})
 		return nil, err
+	}
+	if s.nameEmbeddingRebuilder != nil && previousEmbeddingOverride != kb.ModelTiers.ModelID(types.ModelTierEmbedding) {
+		if err := s.nameEmbeddingRebuilder.MarkAndEnqueue(ctx, kb.TenantID, "knowledge_base_embedding_override_changed"); err != nil {
+			return kb, fmt.Errorf("knowledge base saved but name embedding rebuild could not be queued: %w", err)
+		}
 	}
 	recordKBActivity(ctx, s.audit, kb.TenantID, kb.ID, types.AuditActionKBUpdated,
 		"knowledge_base", kb.ID, types.AuditOutcomeSuccess, map[string]any{
@@ -1175,6 +1196,7 @@ func (s *knowledgeBaseService) CopyKnowledgeBase(ctx context.Context,
 			ImageProcessingConfig: sourceKB.ImageProcessingConfig,
 			EmbeddingModelID:      sourceKB.EmbeddingModelID,
 			SummaryModelID:        sourceKB.SummaryModelID,
+			ModelTiers:            sourceKB.ModelTiers,
 			VLMConfig:             sourceKB.VLMConfig,
 			StorageProviderConfig: sourceKB.StorageProviderConfig,
 			StorageBackendID:      sourceKB.StorageBackendID,
@@ -1373,3 +1395,5 @@ func (s *knowledgeBaseService) cleanupKnowledgeFusion(ctx context.Context, kbID 
 	}
 	return nil
 }
+
+func (s *knowledgeBaseService) ModelRoutingDB() *gorm.DB { return s.db }

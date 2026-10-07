@@ -16,6 +16,7 @@
             <label><span>{{ t('knowledgeDomains.domainDescription') }}</span><t-textarea v-model="draft.description" :disabled="!canEdit || saving" :autosize="{ minRows: 2, maxRows: 6 }" /></label>
             <t-alert v-if="selectedDomain?.is_builtin" theme="info" :message="t('knowledgeDomains.builtinHint')" />
             <DomainTemplateEditor v-model="draft" :disabled="!canEdit || saving" />
+            <ModelTierEditor :model-value="draft.model_tiers || {}" scope="domain" :before-navigate="confirmLeave" :disabled="!canEdit || saving" @update:model-value="draft.model_tiers = $event" />
             <p v-if="editorError" class="inline-error" role="alert">{{ editorError }}</p>
             <div class="domain-actions"><t-button variant="outline" :disabled="saving" @click="closeEditor">{{ t('common.cancel') }}</t-button><t-button v-if="canEdit" theme="primary" type="submit" :loading="saving">{{ t('common.save') }}</t-button></div>
           </form>
@@ -57,6 +58,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useConfirmDelete } from '@/components/settings/useConfirmDelete'
 import { createDomainField, createKnowledgeDomain, deleteKnowledgeDomain, getKnowledgeDomain, listDomainOpenFields, listKnowledgeDomains, mapDomainOpenField, updateKnowledgeDomain, type DomainEnvelope, type DomainOpenField, type KnowledgeDomain, type KnowledgeDomainInput } from '@/api/knowledge-domains'
+import ModelTierEditor from '@/components/ModelTierEditor.vue'
 import DomainFieldEditor from './DomainFieldEditor.vue'
 import DomainTemplateEditor from './DomainTemplateEditor.vue'
 import { copyDomainInput, emptyDomainField, emptyKnowledgeDomain, templateFieldFromOpenField, validateDomainInput } from './domainTemplate'
@@ -110,11 +112,17 @@ async function loadDomains() {
 }
 function startCreate() { if (!canEdit.value) return; selectedId.value = ''; draft.value = emptyKnowledgeDomain(); savedDraft.value = JSON.stringify(draft.value); editorTab.value = 'template'; editorError.value = '' }
 function openDomain(domain: KnowledgeDomain) { selectedId.value = domain.id; draft.value = copyDomainInput(domain); savedDraft.value = JSON.stringify(draft.value); editorTab.value = 'template'; editorError.value = ''; openFields.value = []; openPage.value = 1 }
-function closeEditor() {
-  const close = () => { fieldsRequest++; draft.value = null; selectedId.value = ''; editorError.value = '' }
-  if (canEdit.value && JSON.stringify(draft.value) !== savedDraft.value) confirmDelete({ title: t('knowledgeDomains.discardTitle'), body: t('knowledgeDomains.discardHint'), confirmText: t('knowledgeDomains.discard'), onConfirm: close })
-  else close()
+function discardEditor() { fieldsRequest++; draft.value = null; selectedId.value = ''; editorError.value = '' }
+function confirmLeave(): Promise<boolean> {
+  if (saving.value) return Promise.resolve(false)
+  if (!canEdit.value || !draft.value || JSON.stringify(draft.value) === savedDraft.value) return Promise.resolve(true)
+  return new Promise(resolve => {
+    const dialog = confirmDelete({ title: t('knowledgeDomains.discardTitle'), body: t('knowledgeDomains.discardHint'), confirmText: t('knowledgeDomains.discard'), onConfirm: () => { discardEditor(); resolve(true) } })
+    dialog.update({ onCancel: () => { dialog.hide(); resolve(false) }, onClose: () => resolve(false) })
+  })
 }
+async function closeEditor() { if (await confirmLeave()) discardEditor() }
+defineExpose({ confirmLeave })
 async function saveDomain() {
   if (!draft.value || !canEdit.value || saving.value) return
   const invalid = validateDomainInput(draft.value)

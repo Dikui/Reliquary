@@ -245,3 +245,15 @@ func agentRequiresRerankModel(agent *types.CustomAgent) bool {
 	}
 	return false
 }
+
+func (s *sessionService) resolveScopedRerankTier(ctx context.Context, kbIDs []string) (string, error) {
+	var kb *types.KnowledgeBase
+	if len(kbIDs) > 0 {
+		var err error
+		kb, err = s.knowledgeBaseService.GetKnowledgeBaseByID(ctx, kbIDs[0])
+		if err != nil {
+			return "", err
+		}
+	}
+	return ResolveModelTier(ctx, s.db, kb, types.ModelTierRerank)
+}

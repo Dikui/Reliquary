@@ -51,8 +51,9 @@ type Config struct {
 	Provider                  string            `json:"provider"`
 	// MaxConcurrency caps concurrent background calls to this model; 0 falls
 	// back to the process-wide default (see limiter.GateN).
-	MaxConcurrency int               `json:"max_concurrency"`
-	ExtraConfig    map[string]string `json:"extra_config"`
+	MaxConcurrency    int               `json:"max_concurrency"`
+	RequestsPerMinute int               `json:"requests_per_minute"`
+	ExtraConfig       map[string]string `json:"extra_config"`
 	// CustomHeaders 允许在调用远程 API 时附加自定义 HTTP 请求头（类似 OpenAI Python SDK 的 extra_headers）。
 	CustomHeaders map[string]string `json:"custom_headers"`
 }
@@ -74,6 +75,7 @@ func ConfigFromModel(m *types.Model) Config {
 		TruncatePromptTokens:      m.Parameters.EmbeddingParameters.TruncatePromptTokens,
 		Provider:                  m.Parameters.Provider,
 		MaxConcurrency:            m.Parameters.MaxConcurrency,
+		RequestsPerMinute:         m.Parameters.RequestsPerMinute,
 		ExtraConfig:               m.Parameters.ExtraConfig,
 		CustomHeaders:             m.Parameters.CustomHeaders,
 	}
@@ -91,6 +93,9 @@ func NewEmbedder(config Config, pooler EmbedderPooler, ollamaService *ollama.Oll
 	// Innermost: gate real provider calls, including per-sub-batch pool callbacks,
 	// before debug logging. See concurrencyEmbedder for the placement rationale.
 	e = wrapEmbeddingConcurrency(e, config.MaxConcurrency)
+	if w, ok := e.(*concurrencyEmbedder); ok {
+		w.requestsPerMinute = config.RequestsPerMinute
+	}
 	if logger.LLMDebugEnabled() {
 		e = &debugEmbedder{inner: e}
 	}

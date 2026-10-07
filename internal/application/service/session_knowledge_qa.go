@@ -24,6 +24,7 @@ func (s *sessionService) KnowledgeQA(
 	req *types.QARequest,
 	eventBus *event.EventBus,
 ) error {
+	ctx = types.WithModelTier(ctx, types.ModelTierGeneration)
 	logger.Infof(
 		ctx,
 		"Knowledge base question answering parameters, session ID: %s, query: %s, webSearchEnabled: %v",
@@ -140,6 +141,11 @@ func (s *sessionService) KnowledgeQA(
 		},
 	}
 
+	rerankTierID, tierErr := s.resolveScopedRerankTier(ctx, knowledgeBaseIDs)
+	if tierErr != nil {
+		return tierErr
+	}
+	chatManage.RerankModelID = rerankTierID
 	s.applyAgentOverridesToChatManage(ctx, req.CustomAgent, chatManage)
 
 	// An agent may opt out of long-term memory. The preference is per-request
@@ -262,11 +268,18 @@ func (s *sessionService) selectChatModelID(
 				logger.Warnf(ctx, "Failed to get knowledge base: %v", err)
 				continue
 			}
-			if kb != nil && kb.SummaryModelID != "" {
-				model, err := s.modelService.GetModelByID(ctx, kb.SummaryModelID)
+			if kb != nil {
+				modelID, resolveErr := ResolveModelTier(ctx, s.db, kb, types.ModelTierGeneration)
+				if resolveErr != nil {
+					return "", resolveErr
+				}
+				if modelID == "" {
+					continue
+				}
+				model, err := s.modelService.GetModelByID(ctx, modelID)
 				if err == nil && model != nil && model.Source == types.ModelSourceRemote {
 					logger.Info(ctx, "Using Remote summary model from knowledge base")
-					return kb.SummaryModelID, nil
+					return modelID, nil
 				}
 			}
 		}
@@ -277,17 +290,28 @@ func (s *sessionService) selectChatModelID(
 			logger.Errorf(ctx, "Failed to get knowledge base for model ID: %v", err)
 			return "", fmt.Errorf("failed to get knowledge base %s: %w", knowledgeBaseIDs[0], err)
 		}
-		if kb != nil && kb.SummaryModelID != "" {
-			logger.Infof(
-				ctx,
-				"Using summary model from first knowledge base %s: %s",
-				knowledgeBaseIDs[0],
-				kb.SummaryModelID,
-			)
-			return kb.SummaryModelID, nil
+		if kb != nil {
+			modelID, resolveErr := ResolveModelTier(ctx, s.db, kb, types.ModelTierGeneration)
+			if resolveErr != nil {
+				return "", resolveErr
+			}
+			if modelID != "" {
+				logger.Infof(
+					ctx,
+					"Using summary model from first knowledge base %s: %s",
+					knowledgeBaseIDs[0],
+					modelID,
+				)
+				return modelID, nil
+			}
 		}
 	}
 
+	if modelID, resolveErr := ResolveModelTier(ctx, s.db, nil, types.ModelTierGeneration); resolveErr != nil {
+		return "", resolveErr
+	} else if modelID != "" {
+		return modelID, nil
+	}
 	// No knowledge bases - try to find any available chat model
 	models, err := s.modelService.ListModels(ctx)
 	if err != nil {
@@ -736,9 +760,24 @@ func (s *sessionService) SearchKnowledge(ctx context.Context,
 		return nil, err
 	}
 
-	// Use rerank model from RetrievalConfig if set, otherwise auto-select the first available
+	// Apply a configured rerank tier before the legacy retrieval default.
+	var routingKB *types.KnowledgeBase
+	if len(knowledgeBaseIDs) > 0 {
+		var routingErr error
+		routingKB, routingErr = s.knowledgeBaseService.GetKnowledgeBaseByID(ctx, knowledgeBaseIDs[0])
+		if routingErr != nil {
+			return nil, routingErr
+		}
+	}
+	tierRerank, resolveErr := ResolveModelTier(ctx, s.db, routingKB, types.ModelTierRerank)
+	if resolveErr != nil {
+		return nil, resolveErr
+	}
+	// Keep the explicit retrieval selection first, then the scoped rerank tier.
 	if rc != nil && rc.RerankModelID != "" {
 		chatManage.RerankModelID = rc.RerankModelID
+	} else if tierRerank != "" {
+		chatManage.RerankModelID = tierRerank
 	} else {
 		for _, model := range models {
 			if model == nil {
@@ -824,7 +863,7 @@ func (s *sessionService) handleModelFallback(ctx context.Context, chatManage *ty
 	}
 
 	// Get chat model
-	chatModel, err := s.modelService.GetChatModel(ctx, chatManage.ChatModelID)
+	chatModel, err := getGenerationChatModel(ctx, s.modelService, chatManage.ChatModelID)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to get chat model for fallback: %v, falling back to fixed response", err)
 		s.handleFixedFallback(ctx, chatManage)

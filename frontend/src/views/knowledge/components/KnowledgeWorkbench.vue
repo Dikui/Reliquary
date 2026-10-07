@@ -194,6 +194,10 @@
       </t-loading>
     </section>
 
+    <section v-else-if="activeSection === 'merges'" class="workbench-panel">
+      <MergeSuggestions ref="mergeSuggestions" :kb-id="kbId" :scope="queryScope" :domain-id="queryDomainId" :can-manage="canManage" @open-evidence="openEvidence" @changed="refreshAll" />
+    </section>
+
     <section v-else-if="activeSection === 'events'" class="workbench-panel">
       <div class="panel-heading">
         <div>
@@ -574,6 +578,7 @@
         <div v-if="selectedSnapshot">
           <h3>{{ selectedSnapshot.title }}</h3>
           <p>v{{ selectedSnapshot.version }} · {{ t(`knowledgeWorkbench.evidence.status.${selectedSnapshot.status}`) }}</p>
+          <EvidenceExtractionDetails :evidence="selectedSnapshot" />
           <p class="snapshot-hash">{{ t('knowledgeWorkbench.evidence.hash') }}: {{ selectedSnapshot.body_hash }}</p>
           <blockquote v-if="selectedQuote">{{ selectedQuote }}</blockquote>
           <p v-if="selectedQuote && !snapshotSegments.some(segment => segment.match)" role="status">
@@ -621,6 +626,8 @@
 import { computed, defineComponent, h, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
+import MergeSuggestions from './MergeSuggestions.vue'
+import EvidenceExtractionDetails from './EvidenceExtractionDetails.vue'
 import { listKnowledgeDomains, type KnowledgeDomain } from '@/api/knowledge-domains'
 import { knowledgeContextScopeParams } from '@/api/knowledge-context-scope'
 import { safeMarkdownToHTML } from '@/utils/security'
@@ -687,10 +694,11 @@ async function loadDomains() {
   finally { domainsLoading.value = false }
 }
 
-type SectionId = 'query' | 'entities' | 'events' | 'evidence' | 'workflows' | 'reports'
+type SectionId = 'merges' | 'query' | 'entities' | 'events' | 'evidence' | 'workflows' | 'reports'
 const sections: Array<{ id: SectionId }> = [
-  { id: 'query' }, { id: 'entities' }, { id: 'events' }, { id: 'evidence' }, { id: 'workflows' }, { id: 'reports' },
+  { id: 'query' }, { id: 'entities' }, { id: 'merges' }, { id: 'events' }, { id: 'evidence' }, { id: 'workflows' }, { id: 'reports' },
 ]
+const mergeSuggestions = ref<InstanceType<typeof MergeSuggestions>>()
 const activeSection = ref<SectionId>('query')
 const loading = ref(false)
 const loadError = ref('')
@@ -853,6 +861,7 @@ async function refreshAll() {
     hasMoreEntities.value = entities.value.length === pageSize
     hasMoreEvents.value = events.value.length === pageSize
     hasMoreEvidence.value = evidence.value.length === pageSize
+    if (activeSection.value === 'merges') await mergeSuggestions.value?.refresh()
     if (selectedEntity.value) {
       const current = entities.value.find(item => item.id === selectedEntity.value?.id)
       selectedEntity.value = current || null
@@ -1828,6 +1837,7 @@ const EvidenceCard = defineComponent({
           `${t('knowledgeWorkbench.scope.sourceKb')}: ${cardProps.evidence.knowledge_base_name || cardProps.evidence.knowledge_base_id}`,
           [cardProps.evidence.publisher, cardProps.evidence.author, cardProps.evidence.published_at ? formatDate(cardProps.evidence.published_at) : ''].filter(Boolean).join(' · '),
         ]),
+        h(EvidenceExtractionDetails, { evidence: cardProps.snapshot || cardProps.evidence, compact: !cardProps.expanded }),
         cardProps.evidence.source_kind === 'roundup' ? h('p', { class: 'evidence-card__meta' }, t('knowledgeWorkbench.fusion.roundup')) : null,
         safeExternalUrl(cardProps.evidence.original_url) ? h('a', { href: safeExternalUrl(cardProps.evidence.original_url), target: '_blank', rel: 'noopener noreferrer' }, t('knowledgeWorkbench.evidence.openSource')) : null,
         cardProps.evidence.knowledge_id ? h('button', { type: 'button', class: 'text-link', onClick: () => cardEmit('openSource', cardProps.evidence.knowledge_id) }, t('knowledgeWorkbench.evidence.openKnowledge')) : null,
@@ -1840,7 +1850,6 @@ const EvidenceCard = defineComponent({
             `${t('knowledgeWorkbench.evidence.hash')}: ${(cardProps.snapshot?.body_hash || cardProps.evidence.body_hash).slice(0, 16)}`,
             `${t('knowledgeWorkbench.evidence.extraction')}: ${t(`knowledgeWorkbench.evidence.extractionStatus.${cardProps.snapshot?.extraction_status || cardProps.evidence.extraction_status}`)}`,
           ].map(text => h('span', text))),
-          cardProps.snapshot?.extraction_error ? h('p', { class: 'run-error' }, cardProps.snapshot.extraction_error) : null,
           h('pre', { class: 'evidence-snapshot__body' }, cardProps.snapshot?.body || cardProps.evidence.body || t('knowledgeWorkbench.evidence.noBody')),
         ]) : null,
     ])

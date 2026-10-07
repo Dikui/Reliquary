@@ -12,12 +12,61 @@ import (
 )
 
 type KnowledgeContextHandler struct {
-	service *service.KnowledgeContextService
-	worker  *service.KnowledgeContextWorker
+	service   *service.KnowledgeContextService
+	worker    *service.KnowledgeContextWorker
+	rebuilder *service.ContextNameEmbeddingRebuilder
 }
 
 func NewKnowledgeContextHandler(s *service.KnowledgeContextService, w *service.KnowledgeContextWorker) *KnowledgeContextHandler {
 	return &KnowledgeContextHandler{service: s, worker: w}
+}
+
+func (h *KnowledgeContextHandler) SetNameEmbeddingRebuilder(rebuilder *service.ContextNameEmbeddingRebuilder) {
+	h.rebuilder = rebuilder
+}
+
+// NameEmbeddingRebuildStatus exposes pending work and the most recent task failure.
+func (h *KnowledgeContextHandler) NameEmbeddingRebuildStatus(c *gin.Context) {
+	if h.rebuilder == nil {
+		c.Error(werrors.NewInternalServerError("name embedding rebuilder unavailable"))
+		return
+	}
+	status, err := h.rebuilder.Status(c.Request.Context(), types.MustTenantIDFromContext(c.Request.Context()))
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": status})
+}
+
+// RebuildNameEmbeddings schedules the pending global object names on the task queue.
+func (h *KnowledgeContextHandler) RebuildNameEmbeddings(c *gin.Context) {
+	if h.rebuilder == nil {
+		c.Error(werrors.NewInternalServerError("name embedding rebuilder unavailable"))
+		return
+	}
+	ctx := c.Request.Context()
+	if err := h.rebuilder.MarkAndEnqueue(ctx, types.MustTenantIDFromContext(ctx), "administrator"); err != nil {
+		c.Error(err)
+		return
+	}
+	h.NameEmbeddingRebuildStatus(c)
+}
+
+func (h *KnowledgeContextHandler) UpdateEntityDescription(c *gin.Context) {
+	var input struct {
+		Description *string `json:"description" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.Error(werrors.NewBadRequestError("description is required"))
+		return
+	}
+	entity, err := h.service.UpdateEntityDescription(c.Request.Context(), c.Param("entity_id"), *input.Description)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": entity})
 }
 
 // Query queries sourced facts in a knowledge base, domain or team.
@@ -274,4 +323,32 @@ func (h *KnowledgeContextHandler) EntityDetail(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": result})
+}
+
+func (h *KnowledgeContextHandler) MergeSuggestions(c *gin.Context) {
+	q, err := contextListQuery(c)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	items, err := h.service.ListMergeSuggestions(c.Request.Context(), c.Param("id"), q, c.Query("status"))
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": items})
+}
+func (h *KnowledgeContextHandler) AcceptMergeSuggestion(c *gin.Context) {
+	h.decideMergeSuggestion(c, true)
+}
+func (h *KnowledgeContextHandler) RejectMergeSuggestion(c *gin.Context) {
+	h.decideMergeSuggestion(c, false)
+}
+func (h *KnowledgeContextHandler) decideMergeSuggestion(c *gin.Context, accept bool) {
+	item, err := h.service.DecideMergeSuggestion(c.Request.Context(), c.Param("suggestion_id"), accept)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
 }

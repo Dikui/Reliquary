@@ -8,8 +8,9 @@ import (
 // KnowledgeContextService owns the structured, evidence-backed context kept
 // alongside the existing message and chunk search indexes.
 type KnowledgeContextService struct {
-	db     *gorm.DB
-	models interfaces.ModelService
+	db                     *gorm.DB
+	models                 interfaces.ModelService
+	nameEmbeddingRebuilder *ContextNameEmbeddingRebuilder
 }
 
 func NewKnowledgeContextService(db *gorm.DB, models interfaces.ModelService) *KnowledgeContextService {

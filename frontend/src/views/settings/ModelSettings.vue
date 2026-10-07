@@ -235,6 +235,11 @@
             </p>
           </section>
 
+          <section v-if="usageConflict.model_tiers?.length" class="model-usage-group">
+            <h3>{{ $t('modelTiers.title') }}</h3>
+            <ul><li v-for="resource in usageConflict.model_tiers" :key="`${resource.scope}:${resource.id}`"><div class="model-usage-resource"><strong>{{ resource.name }}</strong><div class="model-usage-bindings"><t-tag v-for="binding in resource.bindings" :key="binding" size="small" variant="light">{{ $t(modelUsageBindingI18nKey(binding)) }}</t-tag></div></div><t-button variant="text" @click="openTierUsageResource(resource.scope)">{{ $t(resource.scope === 'team' ? 'modelTiers.configureTeam' : 'modelTiers.configureDomains') }}</t-button></li></ul>
+          </section>
+
           <section v-if="usageConflict.long_term_memory.bindings.length" class="model-usage-group">
             <h3>{{ $t('modelSettings.usage.longTermMemory') }}</h3>
             <div class="model-usage-memory">
@@ -312,6 +317,7 @@ const showDebugDrawer = ref(false)
 const showUsageDialog = ref(false)
 const usageConflict = ref<ModelUsageDetails | null>(null)
 const usageConflictModelName = ref('')
+function openTierUsageResource(scope: 'team' | 'domain') { showUsageDialog.value = false; uiStore.openSettings(scope === 'team' ? 'tenant' : 'domains') }
 const currentModelType = ref<ModelType>('chat')
 const editingModel = ref<any>(null)
 const loading = ref(true)

@@ -8,6 +8,7 @@ import (
 
 // KnowledgeDomain defines the editable extraction vocabulary for a team domain.
 type KnowledgeDomain struct {
+	ModelTiers      ModelTierConfig    `json:"model_tiers" gorm:"type:jsonb;not null;default:'{}'"`
 	ID              string             `json:"id" gorm:"type:varchar(36);primaryKey"`
 	TenantID        uint64             `json:"tenant_id" gorm:"not null"`
 	Name            string             `json:"name" gorm:"type:varchar(255);not null"`

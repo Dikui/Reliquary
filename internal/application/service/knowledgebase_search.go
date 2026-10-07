@@ -25,7 +25,7 @@ func (s *knowledgeBaseService) GetQueryEmbedding(ctx context.Context, kbID strin
 
 	var embeddingModel embedding.Embedder
 
-	embeddingModel, err = s.modelService.GetEmbeddingModel(ctx, kb.EmbeddingModelID)
+	embeddingModel, err = GetTierEmbeddingModel(ctx, s.db, s.modelService, kb)
 
 	if err != nil {
 		logger.Errorf(ctx, "GetQueryEmbedding: failed to get embedding model %s: %v", kb.EmbeddingModelID, err)
@@ -48,7 +48,12 @@ func (s *knowledgeBaseService) ResolveEmbeddingModelKeys(ctx context.Context, kb
 	uniqueRefs := make(map[modelRef]struct{})
 	kbRefs := make(map[string]modelRef, len(kbs))
 	for _, kb := range kbs {
-		ref := modelRef{ModelID: kb.EmbeddingModelID, TenantID: kb.TenantID}
+		modelID, err := ResolveModelTier(ctx, s.db, kb, types.ModelTierEmbedding)
+		if err != nil {
+			logger.Warnf(ctx, "Cannot resolve embedding tier for %s: %v", kb.ID, err)
+			modelID = "unavailable:" + kb.ID
+		}
+		ref := modelRef{ModelID: modelID, TenantID: kb.TenantID}
 		uniqueRefs[ref] = struct{}{}
 		kbRefs[kb.ID] = ref
 	}
@@ -109,6 +114,18 @@ func (s *knowledgeBaseService) HybridSearch(ctx context.Context,
 
 	if err := s.authorizeKBAccess(ctx, kbs, requestTenantID); err != nil {
 		return nil, err
+	}
+	for i, kb := range kbs {
+		if !kb.IsVectorEnabled() {
+			continue
+		}
+		modelID, err := ResolveModelTier(ctx, s.db, kb, types.ModelTierEmbedding)
+		if err != nil {
+			return nil, err
+		}
+		copy := *kb
+		copy.EmbeddingModelID = modelID
+		kbs[i] = &copy
 	}
 
 	// Explicit embedding-model consistency check. Multi-KB searches that
@@ -336,7 +353,7 @@ func (s *knowledgeBaseService) resolveQueryEmbedding(
 	var embeddingModel embedding.Embedder
 	var err error
 
-	embeddingModel, err = s.modelService.GetEmbeddingModel(ctx, kb.EmbeddingModelID)
+	embeddingModel, err = GetTierEmbeddingModel(ctx, s.db, s.modelService, kb)
 
 	if err != nil {
 		logger.Errorf(ctx, "Failed to get embedding model, model ID: %s, error: %v", kb.EmbeddingModelID, err)

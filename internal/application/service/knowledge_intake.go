@@ -95,6 +95,40 @@ func intakeReviewPromptForMessage(rules *KnowledgeStrategyRules, channel string)
 	return prompt
 }
 
+func intakeReviewAndTagPrompt(rules *KnowledgeStrategyRules, channel string) string {
+	policy := ""
+	if rules != nil {
+		policy = rules.Tags
+	}
+	return intakeReviewPromptForMessage(rules, channel) + "\nIn the same response classify the message using the following rules. Use one JSON object with approved, reason, natures and referents. Rejected messages may omit labels. Approved messages must provide valid labels.\n" + messageTagPrompt(policy)
+}
+
+func reviewAndClassifyMessage(ctx context.Context, model chat.Chat, rules *KnowledgeStrategyRules, channel, body string, source types.SourceInfo) (approved bool, reason string, labels []messageReferent, err error) {
+	input, _ := json.Marshal(map[string]any{"source_info": source, "body": body})
+	response, err := model.Chat(types.WithLLMCallMetadata(ctx, "intake_review_and_tag", ""), []chat.Message{{Role: "system", Content: intakeReviewAndTagPrompt(rules, channel)}, {Role: "user", Content: string(input)}}, &chat.ChatOptions{Temperature: 0, MaxTokens: 2048})
+	if err != nil {
+		return false, "", nil, err
+	}
+	if response == nil {
+		return false, "", nil, fmt.Errorf("empty intake review response")
+	}
+	var decision struct {
+		Approved *bool  `json:"approved"`
+		Reason   string `json:"reason"`
+		messageTagResponse
+	}
+	if json.Unmarshal([]byte(response.Content), &decision) != nil || decision.Approved == nil || strings.TrimSpace(decision.Reason) == "" {
+		return false, "", nil, fmt.Errorf("invalid intake review response")
+	}
+	if *decision.Approved {
+		labels, err = validateMessageTagResponse(decision.messageTagResponse)
+		if err != nil {
+			return false, "", nil, err
+		}
+	}
+	return *decision.Approved, decision.Reason, labels, nil
+}
+
 // reviewIntake is deliberately strict: malformed model output is an execution
 // failure, never an implicit approval.
 func (s *knowledgeService) reviewIntake(ctx context.Context, kb *types.KnowledgeBase, knowledge *types.Knowledge, body string) (rejected bool, reviewErr error) {
@@ -105,8 +139,19 @@ func (s *knowledgeService) reviewIntake(ctx context.Context, kb *types.Knowledge
 	if intake.Decision == "approved" {
 		return false, nil
 	}
+	ctx, calls := types.WithModelCallCollector(ctx)
 	started := time.Now()
+	parent := s.tracker().LookupStage(ctx, knowledge.ID, s.tracker().LatestAttempt(ctx, knowledge.ID), types.StageDocReader)
+	span := s.tracker().BeginSubSpan(ctx, parent, "intake.review_and_tag", types.SpanKindGeneration, nil)
+	defer func() {
+		if reviewErr != nil {
+			s.tracker().FailSpan(ctx, span, "INTAKE_REVIEW_FAILED", reviewErr.Error(), reviewErr)
+		} else {
+			s.tracker().EndSpan(ctx, span, types.JSONMap{"model_calls": calls.Snapshot(), "model_tier": types.ModelTierLight})
+		}
+	}()
 	var usage types.TokenUsage
+	resolvedModelID := ""
 	defer func() {
 		var memory runtime.MemStats
 		runtime.ReadMemStats(&memory)
@@ -118,7 +163,7 @@ func (s *knowledgeService) reviewIntake(ctx context.Context, kb *types.Knowledge
 			s.tracker().FinalizeAttempt(ctx, knowledge.ID, s.tracker().LatestAttempt(ctx, knowledge.ID), "done", types.JSONMap{"intake_decision": "rejected"}, "", "")
 		}
 		recordKBActivity(ctx, s.audit, knowledge.TenantID, kb.ID, types.AuditAction("knowledge.intake_review"), "knowledge", knowledge.ID, outcome,
-			map[string]any{"title": knowledge.Title, "body_bytes": len(body), "file_bytes": knowledge.FileSize, "duration_ms": time.Since(started).Milliseconds(), "process_heap_bytes": memory.Alloc, "model_id": kb.SummaryModelID, "model_usage": usage, "fee_source": "unavailable"})
+			map[string]any{"title": knowledge.Title, "body_bytes": len(body), "file_bytes": knowledge.FileSize, "duration_ms": time.Since(started).Milliseconds(), "process_heap_bytes": memory.Alloc, "model_id": resolvedModelID, "model_tier": types.ModelTierLight, "model_calls": calls.Snapshot(), "model_usage": usage, "fee_source": "unavailable"})
 	}()
 	var source struct {
 		RejectReason string `json:"intake_reject_reason"`
@@ -137,13 +182,11 @@ func (s *knowledgeService) reviewIntake(ctx context.Context, kb *types.Knowledge
 		}
 		return true, s.repo.UpdateKnowledge(ctx, knowledge)
 	}
-	if strings.TrimSpace(kb.SummaryModelID) == "" {
-		return false, fmt.Errorf("intake review requires summary model")
-	}
-	model, err := s.modelService.GetChatModel(ctx, kb.SummaryModelID)
+	model, err := GetTierChatModel(ctx, s.db, s.modelService, kb, types.ModelTierLight)
 	if err != nil {
 		return false, err
 	}
+	resolvedModelID = model.GetModelID()
 	reviewInput, err := json.Marshal(struct {
 		SourceInfo types.SourceInfo `json:"source_info"`
 		Body       string           `json:"body"`
@@ -155,7 +198,10 @@ func (s *knowledgeService) reviewIntake(ctx context.Context, kb *types.Knowledge
 	if err != nil {
 		return false, err
 	}
-	response, err := model.Chat(types.WithLLMCallMetadata(ctx, "intake_review", ""), []chat.Message{{Role: "system", Content: intakeReviewPromptForMessage(policy, knowledge.Channel)}, {Role: "user", Content: string(reviewInput)}}, &chat.ChatOptions{Temperature: 0})
+	if policy == nil && kb.AutoTagConfig != nil {
+		policy = &KnowledgeStrategyRules{Tags: kb.AutoTagConfig.Policy}
+	}
+	response, err := model.Chat(types.WithLLMCallMetadata(ctx, "intake_review_and_tag", ""), []chat.Message{{Role: "system", Content: intakeReviewAndTagPrompt(policy, knowledge.Channel)}, {Role: "user", Content: string(reviewInput)}}, &chat.ChatOptions{Temperature: 0})
 	if err != nil || response == nil {
 		if err == nil {
 			err = fmt.Errorf("empty intake review response")
@@ -164,6 +210,7 @@ func (s *knowledgeService) reviewIntake(ctx context.Context, kb *types.Knowledge
 	}
 	usage = response.Usage
 	var decision struct {
+		messageTagResponse
 		Approved *bool  `json:"approved"`
 		Reason   string `json:"reason"`
 	}
@@ -175,7 +222,16 @@ func (s *knowledgeService) reviewIntake(ctx context.Context, kb *types.Knowledge
 		knowledge.ParseStatus, knowledge.EnableStatus = types.ParseStatusRejected, "disabled"
 	} else {
 		intake.Decision, intake.Reason = "approved", ""
+		labels, err := validateMessageTagResponse(decision.messageTagResponse)
+		if err != nil {
+			return false, err
+		}
+		intake.Classification = make([]types.KnowledgeIntakeTag, 0, len(labels))
+		for _, label := range labels {
+			intake.Classification = append(intake.Classification, types.KnowledgeIntakeTag{Kind: label.Kind, Name: label.Name})
+		}
 	}
+	intake.ModelCalls = calls.Snapshot()
 	if err := knowledge.SetIntakeMetadata(intake); err != nil {
 		return false, err
 	}

@@ -43,6 +43,7 @@ func (s strategyOriginal) GetKnowledgeFile(_ context.Context, id string) (io.Rea
 
 func TestKnowledgeStrategyEvaluationDevelopmentHoldoutAndScope(t *testing.T) {
 	db := pgtest.OpenFixture(t)
+	require.NoError(t, db.Create(&types.Tenant{ID: 1, Name: "Routing test team"}).Error)
 	require.NoError(t, db.Exec(`CREATE TABLE knowledge_bases (id TEXT PRIMARY KEY, tenant_id INTEGER, deleted_at TIMESTAMPTZ)`).Error)
 	require.NoError(t, db.Exec(`INSERT INTO knowledge_bases (id,tenant_id) VALUES ('kb',1)`).Error)
 	require.NoError(t, db.Exec(`CREATE TABLE knowledges (id TEXT PRIMARY KEY, tenant_id INTEGER, knowledge_base_id TEXT, title TEXT, channel TEXT, parse_status TEXT, metadata JSONB, deleted_at TIMESTAMPTZ)`).Error)
@@ -141,7 +142,12 @@ func (strategyChat) Chat(_ context.Context, messages []chat.Message, _ *chat.Cha
 		if strings.Contains(system, "Prefer detailed evidence") || strings.Contains(system, "Prefer primary reports") {
 			return &types.ChatResponse{Content: `{"approved":false,"reason":"Insufficient detail"}`}, nil
 		}
-		return &types.ChatResponse{Content: `{"approved":true,"reason":"Has source evidence"}`}, nil
+		name := "Broad topic"
+		if strings.Contains(system, "Prefer specific object names") {
+			name = "Specific object"
+		}
+		value, _ := json.Marshal(map[string]any{"approved": true, "reason": "Has source evidence", "natures": []string{"描述"}, "referents": []map[string]string{{"kind": "object", "name": name}}})
+		return &types.ChatResponse{Content: string(value)}, nil
 	case strings.HasPrefix(system, "Rewrite one web search"):
 		if strings.Contains(messages[1].Content, "Search primary reports") {
 			return &types.ChatResponse{Content: `{"query":"Report primary source"}`}, nil
@@ -166,6 +172,7 @@ func (strategyChat) GetModelID() string   { return "strategy" }
 
 func TestKnowledgeStrategyCandidateTrialAndRestore(t *testing.T) {
 	db := pgtest.OpenFixture(t)
+	require.NoError(t, db.Create(&types.Tenant{ID: 1, Name: "Routing test team"}).Error)
 	require.NoError(t, db.Exec(`CREATE TABLE knowledge_bases (id TEXT PRIMARY KEY, tenant_id INTEGER, deleted_at TIMESTAMPTZ)`).Error)
 	require.NoError(t, db.Exec(`INSERT INTO knowledge_bases (id,tenant_id) VALUES ('kb',1)`).Error)
 	require.NoError(t, db.Exec(`CREATE TABLE knowledges (id TEXT PRIMARY KEY, tenant_id INTEGER, knowledge_base_id TEXT, title TEXT, parse_status TEXT, metadata JSONB, deleted_at TIMESTAMPTZ)`).Error)

@@ -17,7 +17,10 @@ import (
 	"reliquary/internal/types"
 )
 
-type KnowledgeDomainService struct{ db *gorm.DB }
+type KnowledgeDomainService struct {
+	db                     *gorm.DB
+	nameEmbeddingRebuilder ContextNameEmbeddingRebuildTrigger
+}
 
 func NewKnowledgeDomainService(db *gorm.DB) *KnowledgeDomainService {
 	return &KnowledgeDomainService{db: db}
@@ -91,6 +94,9 @@ func (s *KnowledgeDomainService) Create(ctx context.Context, input types.Knowled
 	if err != nil {
 		return nil, err
 	}
+	if err := ValidateModelTierConfig(ctx, s.db, input.ModelTiers); err != nil {
+		return nil, err
+	}
 	if err := validateKnowledgeDomain(&input); err != nil {
 		return nil, err
 	}
@@ -105,11 +111,16 @@ func (s *KnowledgeDomainService) Create(ctx context.Context, input types.Knowled
 	if err := s.db.WithContext(ctx).Create(&input).Error; err != nil {
 		return nil, knowledgeDomainWriteError(err)
 	}
+	if s.nameEmbeddingRebuilder != nil && input.ModelTiers.Embedding != "" {
+		if err := s.nameEmbeddingRebuilder.MarkAndEnqueue(ctx, tenantID, "domain_embedding_override_changed"); err != nil {
+			return &input, fmt.Errorf("domain saved but name embedding rebuild could not be queued: %w", err)
+		}
+	}
 	return &input, nil
 }
 
 func domainUpdateColumns() []string {
-	return []string{"name", "description", "entity_types", "fields", "relations", "unit_families", "extraction_hints", "updated_at"}
+	return []string{"name", "description", "entity_types", "fields", "relations", "unit_families", "extraction_hints", "model_tiers", "updated_at"}
 }
 
 func (s *KnowledgeDomainService) Update(ctx context.Context, id string, input types.KnowledgeDomain) (*types.KnowledgeDomain, error) {
@@ -117,15 +128,20 @@ func (s *KnowledgeDomainService) Update(ctx context.Context, id string, input ty
 	if err != nil {
 		return nil, err
 	}
+	if err := ValidateModelTierConfig(ctx, s.db, input.ModelTiers); err != nil {
+		return nil, err
+	}
 	if err := validateKnowledgeDomain(&input); err != nil {
 		return nil, err
 	}
 	var output *types.KnowledgeDomain
+	embeddingChanged := false
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		existing, err := getKnowledgeDomain(ctx, tx, tenantID, id, true)
 		if err != nil {
 			return err
 		}
+		embeddingChanged = existing.ModelTiers.ModelID(types.ModelTierEmbedding) != input.ModelTiers.ModelID(types.ModelTierEmbedding)
 		input.ID, input.TenantID = existing.ID, existing.TenantID
 		input.IsBuiltin, input.CreatedBy, input.CreatedAt = existing.IsBuiltin, existing.CreatedBy, existing.CreatedAt
 		input.UpdatedAt, input.DeletedAt = time.Time{}, existing.DeletedAt
@@ -135,6 +151,11 @@ func (s *KnowledgeDomainService) Update(ctx context.Context, id string, input ty
 		output = &input
 		return nil
 	})
+	if err == nil && embeddingChanged && s.nameEmbeddingRebuilder != nil {
+		if enqueueErr := s.nameEmbeddingRebuilder.MarkAndEnqueue(ctx, tenantID, "domain_embedding_override_changed"); enqueueErr != nil {
+			return output, fmt.Errorf("domain saved but name embedding rebuild could not be queued: %w", enqueueErr)
+		}
+	}
 	return output, err
 }
 

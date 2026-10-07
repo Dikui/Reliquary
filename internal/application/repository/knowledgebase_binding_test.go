@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS knowledge_bases (
     image_processing_config JSONB NOT NULL DEFAULT '{}',
     embedding_model_id VARCHAR(64) NOT NULL,
     summary_model_id VARCHAR(64) NOT NULL,
+    model_tiers JSONB NOT NULL DEFAULT '{}',
     cos_config JSONB NOT NULL DEFAULT '{}',
     storage_provider_config JSONB DEFAULT NULL,
     vlm_config JSONB NOT NULL DEFAULT '{}',

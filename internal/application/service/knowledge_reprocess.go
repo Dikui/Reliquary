@@ -73,20 +73,11 @@ func (s *KnowledgeStrategyService) Reprocess(ctx context.Context, kbID string, m
 	if len(ids) == 0 {
 		return result, nil
 	}
-	if strings.TrimSpace(kb.SummaryModelID) == "" {
-		return nil, werrors.NewBadRequestError("summary model required")
-	}
-	reviewModel, err := s.models.GetChatModel(ctx, kb.SummaryModelID)
+	reviewModel, err := GetTierChatModel(ctx, s.db, s.models, kb, types.ModelTierLight)
 	if err != nil {
 		return nil, err
 	}
 	tagModel := reviewModel
-	if kb.AutoTagConfig != nil && strings.TrimSpace(kb.AutoTagConfig.ModelID) != "" && kb.AutoTagConfig.ModelID != kb.SummaryModelID {
-		tagModel, err = s.models.GetChatModel(ctx, kb.AutoTagConfig.ModelID)
-		if err != nil {
-			return nil, err
-		}
-	}
 	rules, err := activeKnowledgeStrategyRules(ctx, s.db, kb.TenantID, kb.ID)
 	if err != nil {
 		return nil, err
@@ -168,18 +159,14 @@ func (s *KnowledgeStrategyService) reprocessMessage(ctx context.Context, kb *typ
 			KnowledgeIDs: []string{id}, Kind: "suspected_error", Description: "Historical strategy recheck: missing original or required source evidence"})
 		return "flagged", err
 	}
-	decision, err := trialReview(ctx, reviewModel, intakeReviewPromptForMessage(rules, message.Channel), string(body), intake.SourceInfo)
+	approved, reason, labels, err := reviewAndClassifyMessage(ctx, reviewModel, rules, message.Channel, string(body), intake.SourceInfo)
 	if err != nil {
 		return "", err
 	}
-	if strings.HasPrefix(decision, "rejected:") {
+	if !approved {
 		_, err := NewKnowledgeAnomalyService(s.db, s.knowledge, nil, s.audit).Create(ctx, kb.ID, KnowledgeAnomalyInput{
-			KnowledgeIDs: []string{id}, Kind: "suspected_error", Description: "Historical strategy recheck: " + decision})
+			KnowledgeIDs: []string{id}, Kind: "suspected_error", Description: "Historical strategy recheck: rejected: " + reason})
 		return "flagged", err
-	}
-	labels, err := classifyMessageTags(ctx, tagModel, rules.Tags, message.Title+"\n\n"+string(body))
-	if err != nil {
-		return "", err
 	}
 	current, err := s.knowledge.GetKnowledgeTags(ctx, []string{id})
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 
 	"reliquary/internal/application/repository"
 	chatpipeline "reliquary/internal/application/service/chat_pipeline"
@@ -104,6 +105,7 @@ func generateEventID(suffix string) string {
 // (see service.LoadAgentHistory and chat_pipeline history loading) — there is no
 // separate cross-turn cache layer.
 type sessionService struct {
+	db                    *gorm.DB
 	cfg                   *config.Config                         // Application configuration
 	sessionRepo           interfaces.SessionRepository           // Repository for session data
 	messageRepo           interfaces.MessageRepository           // Repository for message data
@@ -150,9 +152,11 @@ func NewSessionService(cfg *config.Config,
 	memoryService interfaces.MemoryService,
 	sandboxConfigRepo repository.TenantSandboxConfigRepository,
 	tenantSkillRepo repository.TenantSkillRepository,
+	db *gorm.DB,
 ) interfaces.SessionService {
 	return &sessionService{
 		cfg:                   cfg,
+		db:                    db,
 		sessionRepo:           sessionRepo,
 		messageRepo:           messageRepo,
 		knowledgeBaseService:  knowledgeBaseService,
@@ -775,6 +779,13 @@ func (s *sessionService) GenerateTitle(ctx context.Context,
 		return "", stderrors.New("no user message found")
 	}
 
+	if modelID == "" {
+		var resolveErr error
+		modelID, resolveErr = ResolveModelTier(ctx, s.db, nil, types.ModelTierGeneration)
+		if resolveErr != nil {
+			return "", resolveErr
+		}
+	}
 	// Use provided modelID, or fallback to first available KnowledgeQA model
 	if modelID == "" {
 		models, err := s.modelService.ListModels(ctx)
@@ -800,7 +811,7 @@ func (s *sessionService) GenerateTitle(ctx context.Context,
 		logger.Infof(ctx, "Using specified model for title generation: %s", modelID)
 	}
 
-	chatModel, err := s.modelService.GetChatModel(ctx, modelID)
+	chatModel, err := getGenerationChatModel(ctx, s.modelService, modelID)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"model_id": modelID,

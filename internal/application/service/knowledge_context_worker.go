@@ -19,11 +19,12 @@ import (
 )
 
 type KnowledgeContextWorker struct {
-	db        *gorm.DB
-	context   *KnowledgeContextService
-	knowledge interfaces.KnowledgeService
-	chunks    interfaces.ChunkService
-	tasks     interfaces.TaskEnqueuer
+	db                     *gorm.DB
+	context                *KnowledgeContextService
+	knowledge              interfaces.KnowledgeService
+	chunks                 interfaces.ChunkService
+	tasks                  interfaces.TaskEnqueuer
+	nameEmbeddingRebuilder ContextNameEmbeddingRebuildTrigger
 }
 
 func NewKnowledgeContextWorker(db *gorm.DB, contextService *KnowledgeContextService, knowledge interfaces.KnowledgeService,
@@ -94,6 +95,11 @@ func (w *KnowledgeContextWorker) Rebuild(ctx context.Context, kbID string, ids [
 	items, err := w.knowledge.ListKnowledgeByKnowledgeBaseID(ctx, kbID)
 	if err != nil {
 		return 0, err
+	}
+	if w.nameEmbeddingRebuilder != nil {
+		if err := w.nameEmbeddingRebuilder.Enqueue(ctx, types.MustTenantIDFromContext(ctx), "workbench_rebuild"); err != nil {
+			return 0, fmt.Errorf("name embedding rebuild could not be queued: %w", err)
+		}
 	}
 	selected := make(map[string]bool, len(ids))
 	for _, id := range ids {

@@ -252,15 +252,21 @@ func (s *DataTableSummaryService) prepareResources(ctx context.Context, payload 
 		return nil, err
 	}
 
+	kb, err := s.knowledgeBaseService.GetKnowledgeBaseByID(ctx, knowledge.KnowledgeBaseID)
+	if err != nil {
+		logger.Errorf(ctx, "failed to get knowledge base for vector store lookup: %v", err)
+		return nil, err
+	}
+
 	// 获取聊天模型（用于生成摘要）
-	chatModel, err := s.modelService.GetChatModel(ctx, payload.SummaryModel)
+	chatModel, err := GetTierChatModel(ctx, modelRoutingDB(s.knowledgeBaseService), s.modelService, kb, types.ModelTierGeneration)
 	if err != nil {
 		logger.Errorf(ctx, "failed to get chat model: %v", err)
 		return nil, err
 	}
 
 	// 获取嵌入模型（用于向量化）
-	embeddingModel, err := s.modelService.GetEmbeddingModel(ctx, payload.EmbeddingModel)
+	embeddingModel, err := GetTierEmbeddingModel(ctx, modelRoutingDB(s.knowledgeBaseService), s.modelService, kb)
 	if err != nil {
 		logger.Errorf(ctx, "failed to get embedding model: %v", err)
 		return nil, err
@@ -268,11 +274,6 @@ func (s *DataTableSummaryService) prepareResources(ctx context.Context, payload 
 
 	// Load the KB to discover its VectorStoreID binding so the factory can
 	// route to the bound store (or fall back to tenant engines if unbound).
-	kb, err := s.knowledgeBaseService.GetKnowledgeBaseByID(ctx, knowledge.KnowledgeBaseID)
-	if err != nil {
-		logger.Errorf(ctx, "failed to get knowledge base for vector store lookup: %v", err)
-		return nil, err
-	}
 	var vectorStoreID *string
 	if kb != nil {
 		vectorStoreID = kb.VectorStoreID
@@ -630,4 +631,23 @@ func (s *DataTableSummaryService) buildSampleDataDescription(ctx context.Context
 	}
 
 	return builder.String()
+}
+
+func (s *knowledgeService) enqueueTierDataTableSummary(ctx context.Context, kb *types.KnowledgeBase, knowledgeID, fileName, fileType string) error {
+	ft := normalizeFileExtension(fileType)
+	if ft == "" {
+		ft = getFileType(fileName)
+	}
+	if !isDataTableFileType(ft) {
+		return nil
+	}
+	summaryID, err := ResolveModelTier(ctx, s.db, kb, types.ModelTierGeneration)
+	if err != nil {
+		return err
+	}
+	embeddingID, err := ResolveModelTier(ctx, s.db, kb, types.ModelTierEmbedding)
+	if err != nil {
+		return err
+	}
+	return NewDataTableSummaryTask(ctx, s.task, kb.TenantID, knowledgeID, summaryID, embeddingID)
 }

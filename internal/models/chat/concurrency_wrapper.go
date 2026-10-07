@@ -28,19 +28,26 @@ type concurrencyChat struct {
 	inner Chat
 	// limit is this model's configured per-model background cap; 0 falls back
 	// to the process-wide default (see limiter.GateN).
-	limit int
+	limit             int
+	requestsPerMinute int
 }
 
 func (w *concurrencyChat) GetModelName() string { return w.inner.GetModelName() }
 func (w *concurrencyChat) GetModelID() string   { return w.inner.GetModelID() }
 
 func (w *concurrencyChat) Chat(ctx context.Context, messages []Message, opts *ChatOptions) (*types.ChatResponse, error) {
+	if err := limiter.WaitRate(ctx, w.inner.GetModelID(), w.requestsPerMinute); err != nil {
+		return nil, err
+	}
 	release := limiter.GateNamedN(ctx, w.inner.GetModelID(), w.inner.GetModelName(), w.limit)
 	defer release()
 	return w.inner.Chat(ctx, messages, opts)
 }
 
 func (w *concurrencyChat) ChatStream(ctx context.Context, messages []Message, opts *ChatOptions) (<-chan types.StreamResponse, error) {
+	if err := limiter.WaitRate(ctx, w.inner.GetModelID(), w.requestsPerMinute); err != nil {
+		return nil, err
+	}
 	release := limiter.GateNamedN(ctx, w.inner.GetModelID(), w.inner.GetModelName(), w.limit)
 	ch, err := w.inner.ChatStream(ctx, messages, opts)
 	if err != nil || ch == nil {

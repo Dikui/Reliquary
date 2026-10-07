@@ -352,7 +352,11 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 	}
 	// Structured context is independently retryable; a model failure must not
 	// discard the approved source or prevent ordinary RAG from becoming available.
-	if kb.SummaryModelID != "" && len(textChunks) > 0 && !knowledge.IsSourceUpdateCandidate() {
+	extractionModelID, resolveErr := ResolveModelTier(ctx, modelRoutingDB(s.kbService), kb, types.ModelTierExtraction)
+	if resolveErr != nil {
+		return resolveErr
+	}
+	if extractionModelID != "" && len(textChunks) > 0 && !knowledge.IsSourceUpdateCandidate() {
 		if err := enqueueKnowledgeContext(ctx, s.taskEnqueuer, types.KnowledgeAutoTagPayload{
 			TenantID: payload.TenantID, KnowledgeBaseID: payload.KnowledgeBaseID, KnowledgeID: payload.KnowledgeID, Attempt: attempt,
 		}); err != nil {

@@ -6,7 +6,10 @@ import (
 )
 
 func knowledgeBaseModelUsageBindings(kb *types.KnowledgeBase, modelID string) []types.ModelUsageBinding {
-	bindings := make([]types.ModelUsageBinding, 0, 6)
+	bindings := kb.ModelTiers.UsageBindings(modelID)
+	if kb.AutoTagConfig != nil && kb.AutoTagConfig.ModelID == modelID {
+		bindings = append(bindings, types.ModelUsageBinding("light_model_tier"))
+	}
 	if kb.EmbeddingModelID == modelID {
 		bindings = append(bindings, types.ModelUsageBindingEmbeddingModel)
 	}
@@ -60,8 +63,9 @@ func scopeKnowledgeBasesByModelID(db *gorm.DB, modelID string) *gorm.DB {
 			"image_processing_config->>'model_id' = ? OR "+
 			"vlm_config->>'model_id' = ? OR "+
 			"asr_config->>'model_id' = ? OR "+
-			"wiki_config->>'synthesis_model_id' = ?",
-		modelID, modelID, modelID, modelID, modelID, modelID,
+			"wiki_config->>'synthesis_model_id' = ? OR auto_tag_config->>'model_id' = ? OR "+
+			"model_tiers->>'light' = ? OR model_tiers->>'extraction' = ? OR model_tiers->>'generation' = ? OR model_tiers->>'embedding' = ? OR model_tiers->>'rerank' = ?",
+		modelID, modelID, modelID, modelID, modelID, modelID, modelID, modelID, modelID, modelID, modelID, modelID,
 	)
 }
 

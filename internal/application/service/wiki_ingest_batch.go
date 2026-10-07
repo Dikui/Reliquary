@@ -296,13 +296,17 @@ func (s *wikiIngestService) ProcessWikiIngest(ctx context.Context, t *asynq.Task
 		synthesisModelID = kb.WikiConfig.SynthesisModelID
 	}
 	if synthesisModelID == "" {
-		synthesisModelID = kb.SummaryModelID
+		var resolveErr error
+		synthesisModelID, resolveErr = ResolveModelTier(ctx, s.db, kb, types.ModelTierGeneration)
+		if resolveErr != nil {
+			return resolveErr
+		}
 	}
 	if synthesisModelID == "" {
 		exitStatus = "missing_synthesis_model"
 		return fmt.Errorf("wiki ingest: no synthesis model configured for KB %s", kb.ID)
 	}
-	chatModel, err := s.modelService.GetChatModel(ctx, synthesisModelID)
+	chatModel, err := getGenerationChatModel(ctx, s.modelService, synthesisModelID)
 	if err != nil {
 		exitStatus = "get_chat_model_failed"
 		return fmt.Errorf("wiki ingest: get chat model: %w", err)
@@ -1049,7 +1053,11 @@ func (s *wikiIngestService) ProcessWikiFinalize(ctx context.Context, t *asynq.Ta
 		synthesisModelID = kb.WikiConfig.SynthesisModelID
 	}
 	if synthesisModelID == "" {
-		synthesisModelID = kb.SummaryModelID
+		var resolveErr error
+		synthesisModelID, resolveErr = ResolveModelTier(ctx, s.db, kb, types.ModelTierGeneration)
+		if resolveErr != nil {
+			return resolveErr
+		}
 	}
 	if synthesisModelID == "" {
 		// No model to rebuild the index with; still run the pure-text passes,
@@ -1062,7 +1070,7 @@ func (s *wikiIngestService) ProcessWikiFinalize(ctx context.Context, t *asynq.Ta
 
 	indexRebuilt := false
 	if changeDesc.Len() > 0 && synthesisModelID != "" {
-		chatModel, mErr := s.modelService.GetChatModel(ctx, synthesisModelID)
+		chatModel, mErr := getGenerationChatModel(ctx, s.modelService, synthesisModelID)
 		if mErr != nil {
 			logger.Warnf(ctx, "wiki finalize: get chat model failed: %v", mErr)
 		} else if err := s.rebuildIndexPage(ctx, chatModel, payload, changeDesc.String(), lang,

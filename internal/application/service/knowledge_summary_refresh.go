@@ -105,7 +105,12 @@ func enqueueSummaryRefresh(
 		markFailed()
 		return err
 	}
-	if kb.SummaryModelID == "" {
+	modelID, resolveErr := ResolveModelTier(ctx, modelRoutingDB(kbReader), kb, types.ModelTierGeneration)
+	if resolveErr != nil {
+		markFailed()
+		return resolveErr
+	}
+	if modelID == "" {
 		markFailed()
 		return fmt.Errorf("summary model is not configured")
 	}

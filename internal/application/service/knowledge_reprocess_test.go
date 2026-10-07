@@ -36,6 +36,7 @@ func (s reprocessKnowledge) SetKnowledgeTags(ctx context.Context, id string, ids
 
 func TestKnowledgeReprocessKeepsManualChoicesAndScope(t *testing.T) {
 	db := pgtest.OpenFixture(t)
+	require.NoError(t, db.Create(&types.Tenant{ID: 1, Name: "Routing test team"}).Error)
 	for _, ddl := range []string{
 		`CREATE TABLE knowledge_bases (id TEXT PRIMARY KEY, tenant_id INTEGER, creator_id TEXT, deleted_at TIMESTAMPTZ)`,
 		`CREATE TABLE knowledges (id TEXT PRIMARY KEY, tenant_id INTEGER, knowledge_base_id TEXT, title TEXT, channel TEXT, parse_status TEXT, metadata JSONB, deleted_at TIMESTAMPTZ)`,

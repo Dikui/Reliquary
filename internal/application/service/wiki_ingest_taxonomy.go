@@ -173,11 +173,19 @@ func (s *wikiIngestService) selectRelevantFolders(
 	// Gate purely on whether an embedding model is configured — NOT on
 	// NeedsEmbeddingModel(), which is false for wiki-only KBs that may still
 	// opt into an embedding model purely for directory/taxonomy similarity.
-	if strings.TrimSpace(kb.EmbeddingModelID) == "" || len(deeper) == 0 {
+	if len(deeper) == 0 {
+		return capFolders(pool, wikiTaxonomyPromptMaxPaths)
+	}
+	embeddingID, resolveErr := ResolveModelTier(ctx, s.db, kb, types.ModelTierEmbedding)
+	if resolveErr != nil {
+		logger.Warnf(ctx, "wiki ingest: embedding tier resolution failed: %v", resolveErr)
+		return capFolders(pool, wikiTaxonomyPromptMaxPaths)
+	}
+	if embeddingID == "" {
 		return capFolders(pool, wikiTaxonomyPromptMaxPaths)
 	}
 
-	embedder, err := s.modelService.GetEmbeddingModel(ctx, kb.EmbeddingModelID)
+	embedder, err := GetTierEmbeddingModel(ctx, s.db, s.modelService, kb)
 	if err != nil {
 		logger.Warnf(ctx, "wiki ingest: taxonomy plan embed model unavailable, feeding all folders: %v", err)
 		return capFolders(pool, wikiTaxonomyPromptMaxPaths)

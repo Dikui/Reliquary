@@ -1,4 +1,99 @@
 export default {
+  modelTiers: {
+  configureTeam: '设置团队档位',
+  configureDomains: '设置领域档位',
+  "title": "模型档位",
+  "scopeHint": {
+    "team": "设置团队默认模型，领域和知识库可以覆盖各档位。清空后使用已有默认配置。",
+    "domain": "覆盖团队默认模型，清空后继承团队配置。",
+    "knowledge_base": "覆盖领域与团队模型，清空后依次继承领域、团队和已有默认配置。"
+  },
+  "names": {
+    "light": "轻量",
+    "extraction": "抽取",
+    "generation": "生成",
+    "embedding": "向量",
+    "rerank": "重排"
+  },
+  "uses": {
+    "light": "筛选、标签、关注评分与对象及事件判断",
+    "extraction": "从原文抽取对象、事实和事件",
+    "generation": "问答、报告与 Wiki 内容生成",
+    "embedding": "内容检索与对象名称相似度",
+    "rerank": "重排检索结果"
+  },
+  "sources": {
+    "team": "团队默认",
+    "domain": "领域覆盖",
+    "knowledge_base": "知识库覆盖",
+    "legacy": "已有模型配置",
+    "default": "系统默认",
+    "unconfigured": "未配置"
+  },
+  "inherit": "继承上级配置",
+  "useDefault": "使用已有默认配置",
+  "effective": "当前使用：{model}（{source}）",
+  "unconfigured": "未配置模型",
+  "explicitChoice": "会话、报告和 Wiki 中已有的显式模型选择优先使用，未选择时使用生成档位。",
+  "loadFailed": "无法加载模型配置，请重试。",
+  "saveFailed": "模型配置保存失败，请重试。",
+  "saved": "模型档位已保存",
+  "readOnly": "你可以查看模型档位，修改需要管理员权限。",
+  "retry": "重新加载模型配置"
+},
+  mergeSuggestions: {
+  "title": "待合并建议",
+  "description": "无法确认的对象保持独立，核验原文后决定是否合并到候选对象。",
+  "statusFilter": "建议状态",
+  "status": {
+    "pending": "待处理",
+    "accepted": "已合并",
+    "rejected": "已拒绝"
+  },
+  "empty": {
+    "pending": "没有待处理的合并建议。",
+    "accepted": "还没有已合并的建议。",
+    "rejected": "还没有已拒绝的建议。"
+  },
+  "pair": "{source} → {target}",
+  "noReason": "未提供判断理由。",
+  "accept": "接受并合并",
+  "reject": "拒绝建议",
+  "readOnly": "你可以核验合并建议，处理需要编辑者或管理员权限。",
+  "confirmTitle": "接受并合并对象",
+  "confirmBody": "将“{source}”合并到“{target}”？全团队的事实、关系和别名将引用保留对象，操作会写入审计日志。",
+  "feedback": {
+    "accept": "建议已接受，对象已合并",
+    "reject": "建议已拒绝，对象保持独立"
+  },
+  "loaded": "已加载 {count} 条建议"
+},
+  extractionDetails: {
+  "partial": "部分抽取",
+  "complete": "完整抽取",
+  "segments": "已处理 {processed} / {total} 段",
+  "partialHint": "只有部分段落完成抽取，未处理或抽取失败的段落内容仍保留在原文中。",
+  "callsTitle": "模型调用",
+  "noCalls": "没有模型调用记录。",
+  "stage": "处理阶段",
+  "tier": "模型档位",
+  "calls": "调用次数",
+  "totalCalls": "合计",
+  "stages": {
+    "context_extraction": "事实与事件抽取",
+    "context_entity_judgment": "对象判断",
+    "context_event_judgment": "事件判断",
+    "context_entity_resolution": "对象判断",
+    "context_event_resolution": "事件判断",
+    "context_attention": "关注评分",
+    "context_entity_embedding": "名称向量",
+    "intake": "筛选与标签",
+    "classification": "筛选与标签",
+    "auto_tag": "标签分类",
+    "filter": "消息筛选",
+    "generation": "内容生成"
+  }
+},
   knowledgeDomains: {
     view: '查看',
     "title": "领域",
@@ -136,7 +231,7 @@ export default {
     scope: {"label": "查询范围", "knowledge_base": "当前知识库", "domain": "领域下全部知识库", "team": "全团队", "selectDomain": "选择查询领域", "sourceKb": "来源知识库", "detailHint": "对象身份在团队内统一，以下事实和事件汇总所有知识库的来源。", "workflowHint": "工作流和报告保留在当前知识库；事实查询步骤可以设置独立范围。"},
     fusion: {"minValue": "数值下限", "maxValue": "数值上限", "unit": "比较单位", "queryHint": "使用领域模板中的字段或别名查询。数值比较需要同一单位族；结果数量只代表当前返回的资料。", "originalField": "原始字段名", "snapshotTitle": "核验引用原文", "quoteMissing": "这段引用没有在该快照中精确匹配。请核对原文；系统不会猜测位置。", "sameStory": "关联的先前事件", "roundup": "汇总材料：保持独立，不累加到各子事件", "current_period": "本期材料", "background": "历史背景", "unknown_date": "日期未知"},
     tabLabel: '知识工作台', title: '知识工作台', subtitle: "管理和组织文档知识库", sections: '知识工作台功能', refresh: '刷新', rebuild: '重新构建知识上下文', requestFailed: '请求失败，请稍后重试。', emptyValue: '未填写', unknownDate: '时间未知', facts: '事实', correct: '纠正事实', correctionSaved: '事实纠正已保存，新事实保留了来源和历史。', correctionTitle: '纠正事实', correctionIntro: '为“{predicate}”提交新的事实版本。引用必须与来源原文一致。', correctionValue: '正确值', correctionValueType: '值类型', correctionUnit: '单位', correctionQuote: '来源原文引用', correctionNote: '纠正说明', correctionFrom: '生效开始时间', correctionTo: '生效结束时间', correctionValueInvalid: '请按类型输入有效值。', cancel: '取消', factPeriod: '有效时间', rebuildQueued: '已将 {count} 条来源加入重建队列；索引结果会在后台处理完成后更新。', loadMore: '加载更多',
-    nav: { query: '结构化检索', entities: '对象与事实', events: '事件热度', evidence: '来源证据', workflows: '跟踪工作流', reports: '研究报告' },
+    nav: { merges: '待合并建议', query: '结构化检索', entities: '对象与事实', events: '事件热度', evidence: '来源证据', workflows: '跟踪工作流', reports: '研究报告' },
     query: { title: '查询知识上下文', description: '按对象、属性、关系和时间范围筛选事实，并检查当前值与历史版本的来源。', entity: '对象名称', entityPlaceholder: '例如：Acme 公司', predicate: '事实属性', predicatePlaceholder: '例如：总部、状态、融资轮次', relation: '关系类型', relationPlaceholder: '例如：投资、收购、合作', since: '开始时间', until: '结束时间', history: '包含已替代的历史事实', submit: '查询', clear: '清空条件', resultCounts: '找到 {entities} 个对象、{facts} 条事实、{events} 个事件和 {evidence} 条证据。', historyIncluded: '结果包含历史版本', empty: '没有匹配的事实、事件或来源。' },
     entities: { title: '对象与事实', description: '浏览知识图谱中的对象，检查关系、属性、来源与事实历史。', filter: '筛选对象', empty: '没有对象', unknownType: '未分类', aliases: '个别名', choose: '选择一个对象查看事实', includeHistory: '包含历史事实', noFacts: '这个对象还没有可显示的事实。', unknownObject: '未知对象', merge: '合并重复对象', mergeTitle: '合并对象', mergeHint: '选择保留为规范对象的目标。事实、关系和别名将转移到目标对象。', mergeSource: '待合并对象', mergeTarget: '保留对象', mergeTargetPlaceholder: '选择保留的对象', mergeWarning: '合并会影响全团队所有知识库中的对象引用，操作写入审计日志，且不能在此界面撤销。', mergeSaved: '对象已合并' },
     events: { title: '事件热度', description: '按热度查看近期事件，展开理由、关联对象和支撑来源。', empty: '没有事件', event: '事件', heat: '热度', sourceCount: '{count} 个来源', hideDetails: '收起详情', showDetails: '查看热度依据', whyHot: '热度和关注度依据', noReason: '暂无热度说明。', scored: '系统关注度评分', attentionScore: '关注度 {score}', noSources: '尚无关联来源。', noDescription: '暂无事件摘要。' },
@@ -1586,6 +1681,12 @@ export default {
       openConfiguration: '打开配置',
       truncated: '仅显示前 {shown} 个，共 {total} 个',
       bindings: {
+          light_model_tier: '轻量档位',
+          extraction_model_tier: '抽取档位',
+          generation_model_tier: '生成档位',
+          embedding_model_tier: '向量档位',
+          rerank_model_tier: '重排档位',
+
         embedding_model: 'Embedding 模型',
         summary_model: '摘要模型',
         image_processing_model: '图片处理模型',

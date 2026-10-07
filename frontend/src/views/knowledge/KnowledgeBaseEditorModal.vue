@@ -204,6 +204,7 @@
                     :all-models="allModels"
                     @update:config="handleModelConfigUpdate"
                   />
+                  <ModelTierEditor v-if="formData" v-model="formData.modelTiers" scope="knowledge_base" :domain-id="formData.domainId" :all-models="allModels" :legacy-tiers="{ light: formData.autoTagConfig.modelId || formData.modelConfig.llmModelId, extraction: formData.modelConfig.llmModelId, generation: formData.modelConfig.llmModelId, embedding: formData.modelConfig.embeddingModelId }" :disabled="saving" :embedding-locked="hasFiles && kbCreateNeedsEmbedding" @resolved="resolvedModelTiers = $event" />
                 </div>
 
                 <!-- VectorStore 绑定 -->
@@ -434,6 +435,9 @@ import { copyWithToast } from '@/utils/clipboard'
 import { useEditorResourcesStore } from '@/stores/editorResources'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
+import ModelTierEditor from '@/components/ModelTierEditor.vue'
+import { copyModelTiers } from '@/utils/modelTiers'
+import type { ResolvedModelTiers } from '@/types/modelTiers'
 import KBModelConfig from './settings/KBModelConfig.vue'
 import KBParserSettings from './settings/KBParserSettings.vue'
 import KBStorageSettings from './settings/KBStorageSettings.vue'
@@ -466,6 +470,8 @@ const emit = defineEmits<{
 }>()
 
 /** 首次保存创建成功后留在弹窗内，继续调整设置。 */
+const resolvedModelTiers = ref<ResolvedModelTiers>({})
+const savedModelTiers = ref('')
 const savedKbId = ref<string | null>(null)
 const editorMode = computed(() => (savedKbId.value ? 'edit' : props.mode))
 const activeKbId = computed(() => savedKbId.value ?? props.kbId)
@@ -638,6 +644,7 @@ const initFormData = (type: 'document' = 'document') => {
     name: '',
     description: '',
     domainId: '',
+    modelTiers: copyModelTiers(),
     modelConfig: {
       llmModelId: '',
       embeddingModelId: '',
@@ -748,12 +755,14 @@ const loadKBData = async (
 
     const kb = kbInfo.data
     hasFiles.value = (filesResult as any)?.total > 0
+    savedModelTiers.value = JSON.stringify(copyModelTiers(kb.model_tiers))
 
     // 设置表单数据
     const kbType = (kb.type as 'document') || 'document'
     formData.value = {
       type: kbType,
       domainId: kb.domain_id || '',
+      modelTiers: copyModelTiers(kb.model_tiers),
       name: kb.name || '',
       description: kb.description || '',
       modelConfig: {
@@ -1026,13 +1035,13 @@ const validateForm = (): boolean => {
 
   // 验证模型配置 - embedding 模型仅在检索索引启用时必须
   const needsEmbedding = formData.value.indexingStrategy?.vectorEnabled || formData.value.indexingStrategy?.keywordEnabled
-  if (needsEmbedding && !formData.value.modelConfig.embeddingModelId) {
+  if (needsEmbedding && !formData.value.modelConfig.embeddingModelId && !resolvedModelTiers.value.embedding?.model_id) {
     MessagePlugin.warning(t('knowledgeEditor.indexing.embeddingRequired'))
     currentSection.value = 'models'
     return false
   }
 
-  if (!formData.value.modelConfig.llmModelId) {
+  if (!formData.value.modelConfig.llmModelId && !resolvedModelTiers.value.generation?.model_id) {
     MessagePlugin.warning(t('knowledgeEditor.messages.summaryRequired'))
     currentSection.value = 'models'
     return false
@@ -1056,6 +1065,7 @@ const buildSubmitData = () => {
 
   const data: any = {
     domain_id: formData.value.domainId,
+    model_tiers: copyModelTiers(formData.value.modelTiers),
     name: formData.value.name,
     description: formData.value.description,
     type: formData.value.type,
@@ -1077,8 +1087,8 @@ const buildSubmitData = () => {
         ? { parser_engine_rules: formData.value.chunkingConfig.parserEngineRules }
         : {})
     },
-    embedding_model_id: formData.value.modelConfig.embeddingModelId,
-    summary_model_id: formData.value.modelConfig.llmModelId
+    embedding_model_id: formData.value.modelConfig.embeddingModelId || resolvedModelTiers.value.embedding?.model_id || '',
+    summary_model_id: formData.value.modelConfig.llmModelId || resolvedModelTiers.value.generation?.model_id || ''
   }
 
   // 添加多模态配置
@@ -1223,6 +1233,7 @@ const doSubmit = async () => {
 
       await updateKnowledgeBase(kbId, {
         domain_id: data.domain_id,
+        model_tiers: data.model_tiers,
         name: data.name,
         description: data.description,
         config: updateConfig
@@ -1298,6 +1309,8 @@ const doSubmit = async () => {
         }
       }
 
+      savedModelTiers.value = JSON.stringify(copyModelTiers(formData.value.modelTiers))
+      saving.value = false
       emit('success', kbId)
       handleClose()
     }
@@ -1311,6 +1324,8 @@ const doSubmit = async () => {
 
 // 重置所有状态
 const resetState = () => {
+  savedModelTiers.value = JSON.stringify(copyModelTiers())
+  resolvedModelTiers.value = {}
   savedKbId.value = null
   currentSection.value = 'basic'
   formData.value = null
@@ -1324,6 +1339,11 @@ const resetState = () => {
 
 // 关闭弹窗
 const handleClose = () => {
+  if (saving.value) return
+  if (formData.value && JSON.stringify(copyModelTiers(formData.value.modelTiers)) !== savedModelTiers.value) {
+    const dialog = DialogPlugin.confirm({ header: t('knowledgeDomains.discardTitle'), body: t('knowledgeDomains.discardHint'), confirmBtn: t('knowledgeDomains.discard'), cancelBtn: t('common.cancel'), theme: 'warning', onConfirm: () => { savedModelTiers.value = JSON.stringify(copyModelTiers(formData.value?.modelTiers)); dialog.hide(); handleClose() } })
+    return
+  }
   emit('update:visible', false)
   setTimeout(() => {
     if (props.visible) return

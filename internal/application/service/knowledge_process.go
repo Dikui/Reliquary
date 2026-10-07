@@ -48,7 +48,7 @@ func (s *knowledgeService) cloneKnowledge(
 		Source:           src.Source,
 		ParseStatus:      "processing",
 		EnableStatus:     "disabled",
-		EmbeddingModelID: targetKB.EmbeddingModelID,
+		EmbeddingModelID: src.EmbeddingModelID,
 		FileName:         src.FileName,
 		FolderPath:       src.FolderPath,
 		FileType:         src.FileType,
@@ -250,6 +250,8 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 	kb *types.KnowledgeBase, knowledge *types.Knowledge, chunks []types.ParsedChunk,
 	opts ...ProcessChunksOptions,
 ) {
+	ctx, _ = types.WithModelCallCollector(ctx)
+	ctx = types.WithLLMCallMetadata(ctx, "document_embedding", "")
 	// Get options
 	var options ProcessChunksOptions
 	if len(opts) > 0 {
@@ -285,11 +287,12 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 	var embeddingModel embedding.Embedder
 	if kb.NeedsEmbeddingModel() {
 		var err error
-		embeddingModel, err = s.modelService.GetEmbeddingModel(ctx, kb.EmbeddingModelID)
+		embeddingModel, err = GetTierEmbeddingModel(ctx, s.db, s.modelService, kb)
 		if err != nil {
 			logger.GetLogger(ctx).WithField("error", err).Errorf("processChunks get embedding model failed")
 			return
 		}
+		knowledge.EmbeddingModelID = embeddingModel.GetModelID()
 	} else {
 		logger.Infof(ctx, "Vector/keyword indexing disabled for KB %s, skipping embedding model", kb.ID)
 	}
@@ -1006,6 +1009,7 @@ func sampleLongContent(content string, maxChars int) string {
 
 // ProcessSummaryGeneration handles async summary generation task
 func (s *knowledgeService) ProcessSummaryGeneration(ctx context.Context, t *asynq.Task) (retErr error) {
+	ctx, _ = types.WithModelCallCollector(ctx)
 	var payload types.SummaryGenerationPayload
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
 		logger.Errorf(ctx, "Failed to unmarshal summary generation payload: %v", err)
@@ -1091,9 +1095,15 @@ func (s *knowledgeService) ProcessSummaryGeneration(ctx context.Context, t *asyn
 	// know it — debugging "summary stage took 60s" benefits hugely from
 	// seeing WHICH chat model was actually used (kb config drift, fall-
 	// throughs to a slow upstream, etc.).
-	summaryOut["model_id"] = kb.SummaryModelID
+	summaryModelID, resolveErr := ResolveModelTier(ctx, s.db, kb, types.ModelTierGeneration)
+	if resolveErr != nil {
+		summaryErr = resolveErr
+		return resolveErr
+	}
+	summaryOut["model_id"] = summaryModelID
+	summaryOut["model_tier"] = types.ModelTierGeneration
 
-	if kb.SummaryModelID == "" {
+	if summaryModelID == "" {
 		logger.Warn(ctx, "Knowledge base summary model ID is empty, skipping summary generation")
 		_ = s.repo.UpdateKnowledgeColumn(ctx, payload.KnowledgeID, "summary_status", types.SummaryStatusFailed)
 		summaryOut["skipped"] = "no_summary_model"
@@ -1218,7 +1228,7 @@ func (s *knowledgeService) ProcessSummaryGeneration(ctx context.Context, t *asyn
 
 	// Initialize chat model for summary. Model resolution failures use the same
 	// retry budget and terminal first-chunk fallback as LLM request failures.
-	chatModel, err := s.modelService.GetChatModel(ctx, kb.SummaryModelID)
+	chatModel, err := GetTierChatModel(ctx, s.db, s.modelService, kb, types.ModelTierGeneration)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to get chat model: %v", err)
 		return handleRetryableSummaryFailure(fmt.Errorf("get chat model: %w", err))
@@ -1343,7 +1353,7 @@ func (s *knowledgeService) ProcessSummaryGeneration(ctx context.Context, t *asyn
 			return fmt.Errorf("failed to init retrieve engine: %w", err)
 		}
 
-		embeddingModel, err := s.modelService.GetEmbeddingModel(ctx, kb.EmbeddingModelID)
+		embeddingModel, err := GetTierEmbeddingModel(ctx, s.db, s.modelService, kb)
 		if err != nil {
 			logger.Errorf(ctx, "Failed to get embedding model: %v", err)
 			summaryErr = err
@@ -1397,6 +1407,7 @@ func (s *knowledgeService) ProcessQuestionGeneration(ctx context.Context, t *asy
 // in-flight tasks queued before per-chunk fan-out; new enqueues always set
 // payload.ChunkID and take the per-chunk path instead.
 func (s *knowledgeService) processQuestionGenerationForKnowledge(ctx context.Context, t *asynq.Task, payload types.QuestionGenerationPayload) (retErr error) {
+	ctx, _ = types.WithModelCallCollector(ctx)
 	taskStartedAt := time.Now()
 	retryCount, _ := asynq.GetRetryCount(ctx)
 	maxRetry, _ := asynq.GetMaxRetry(ctx)
@@ -1604,16 +1615,16 @@ func (s *knowledgeService) processQuestionGenerationForKnowledge(ctx context.Con
 	})
 
 	// Initialize chat model
-	chatModel, err := s.modelService.GetChatModel(ctx, kb.SummaryModelID)
+	chatModel, err := GetTierChatModel(ctx, s.db, s.modelService, kb, types.ModelTierGeneration)
 	if err != nil {
 		exitStatus = "get_chat_model_failed"
 		logger.Errorf(ctx, "Failed to get chat model: %v", err)
 		return fmt.Errorf("failed to get chat model: %w", err)
 	}
-	resolvedModelID = kb.SummaryModelID
+	resolvedModelID = chatModel.GetModelID()
 
 	// Initialize embedding model and retrieval engine
-	embeddingModel, err := s.modelService.GetEmbeddingModel(ctx, kb.EmbeddingModelID)
+	embeddingModel, err := GetTierEmbeddingModel(ctx, s.db, s.modelService, kb)
 	if err != nil {
 		exitStatus = "get_embedding_model_failed"
 		logger.Errorf(ctx, "Failed to get embedding model: %v", err)
@@ -1773,6 +1784,7 @@ func (s *knowledgeService) processQuestionGenerationForKnowledge(ctx context.Con
 // (never content); content is read fresh here, and all questions for the batch
 // are indexed in a single embedding BatchIndex call.
 func (s *knowledgeService) processQuestionGenerationForChunks(ctx context.Context, t *asynq.Task, payload types.QuestionGenerationPayload) (retErr error) {
+	ctx, _ = types.WithModelCallCollector(ctx)
 	taskStartedAt := time.Now()
 	retryCount, _ := asynq.GetRetryCount(ctx)
 	maxRetry, _ := asynq.GetMaxRetry(ctx)
@@ -1915,15 +1927,15 @@ func (s *knowledgeService) processQuestionGenerationForChunks(ctx context.Contex
 		}
 	}
 
-	chatModel, err := s.modelService.GetChatModel(ctx, kb.SummaryModelID)
+	chatModel, err := GetTierChatModel(ctx, s.db, s.modelService, kb, types.ModelTierGeneration)
 	if err != nil {
 		exitStatus = "get_chat_model_failed"
 		logger.Errorf(ctx, "Failed to get chat model: %v", err)
 		return fmt.Errorf("failed to get chat model: %w", err)
 	}
-	resolvedModelID = kb.SummaryModelID
+	resolvedModelID = chatModel.GetModelID()
 
-	embeddingModel, err := s.modelService.GetEmbeddingModel(ctx, kb.EmbeddingModelID)
+	embeddingModel, err := GetTierEmbeddingModel(ctx, s.db, s.modelService, kb)
 	if err != nil {
 		exitStatus = "get_embedding_model_failed"
 		logger.Errorf(ctx, "Failed to get embedding model: %v", err)
@@ -2189,10 +2201,14 @@ func (s *knowledgeService) RegenerateChunkQuestions(
 	if err != nil {
 		return nil, err
 	}
-	if kb.SummaryModelID == "" {
+	modelID, resolveErr := ResolveModelTier(ctx, s.db, kb, types.ModelTierGeneration)
+	if resolveErr != nil {
+		return nil, resolveErr
+	}
+	if modelID == "" {
 		return nil, fmt.Errorf("summary model is required for question generation")
 	}
-	chatModel, err := s.modelService.GetChatModel(ctx, kb.SummaryModelID)
+	chatModel, err := GetTierChatModel(ctx, s.db, s.modelService, kb, types.ModelTierGeneration)
 	if err != nil {
 		return nil, err
 	}
@@ -2267,7 +2283,11 @@ func (s *knowledgeService) RegenerateKnowledgeSummary(
 	if err != nil {
 		return nil, err
 	}
-	if kb.SummaryModelID == "" {
+	modelID, resolveErr := ResolveModelTier(ctx, s.db, kb, types.ModelTierGeneration)
+	if resolveErr != nil {
+		return nil, resolveErr
+	}
+	if modelID == "" {
 		return nil, fmt.Errorf("summary model is not configured")
 	}
 	allChunks, err := s.chunkRepo.ListChunksByKnowledgeID(ctx, tenantID, knowledgeID)
@@ -2334,7 +2354,7 @@ func (s *knowledgeService) RegenerateKnowledgeSummary(
 		return knowledge, generationErr
 	}
 
-	chatModel, err := s.modelService.GetChatModel(ctx, kb.SummaryModelID)
+	chatModel, err := GetTierChatModel(ctx, s.db, s.modelService, kb, types.ModelTierGeneration)
 	if err != nil {
 		return handleGenerationFailure(fmt.Errorf("get chat model: %w", err))
 	}
@@ -2596,7 +2616,9 @@ func (s *knowledgeService) ReparseKnowledge(
 		recordReparseStarted()
 
 		// For data tables (csv, xlsx, xls), also enqueue summary task
-		enqueueDataTableSummaryIfNeeded(ctx, s.task, tenantID, existing.ID, existing.FileName, existing.FileType, kb.SummaryModelID, kb.EmbeddingModelID)
+		if err := s.enqueueTierDataTableSummary(ctx, kb, existing.ID, existing.FileName, existing.FileType); err != nil {
+			return existing, err
+		}
 
 		return existing, nil
 	}
@@ -2648,7 +2670,9 @@ func (s *knowledgeService) ReparseKnowledge(
 		logger.Infof(ctx, "Enqueued file URL reparse task: id=%s queue=%s knowledge_id=%s", info.ID, info.Queue, existing.ID)
 		recordReparseStarted()
 
-		enqueueDataTableSummaryIfNeeded(ctx, s.task, tenantID, existing.ID, existing.FileName, existing.FileType, kb.SummaryModelID, kb.EmbeddingModelID)
+		if err := s.enqueueTierDataTableSummary(ctx, kb, existing.ID, existing.FileName, existing.FileType); err != nil {
+			return existing, err
+		}
 
 		return existing, nil
 	}
@@ -2849,7 +2873,7 @@ func (s *knowledgeService) updateChunkVector(ctx context.Context, kbID string, c
 	if !sourceKB.NeedsEmbeddingModel() {
 		return nil
 	}
-	embeddingModel, err := s.modelService.GetEmbeddingModel(ctx, sourceKB.EmbeddingModelID)
+	embeddingModel, err := GetTierEmbeddingModel(ctx, s.db, s.modelService, sourceKB)
 	if err != nil {
 		return err
 	}

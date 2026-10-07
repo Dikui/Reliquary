@@ -2,6 +2,8 @@
 import { ref, reactive, onMounted, onBeforeUnmount, watch, computed, nextTick } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
+import ModelCallSummary from './ModelCallSummary.vue'
+import { modelCallsFromSpan } from '@/utils/modelCalls'
 import { copyWithToast } from '@/utils/clipboard'
 import { getKnowledgeSpans, reparseKnowledge, cancelKnowledgeParse, getKnowledgeDetails } from '@/api/knowledge-base/index'
 import {
@@ -1660,6 +1662,7 @@ const processConfigLines = computed<string[]>(() => {
             <div class="kp-detail-body">
               <!-- Overview tab -->
               <template v-if="detailTab === 'overview'">
+                <ModelCallSummary v-if="modelCallsFromSpan(selectedRow.node).length" :calls="modelCallsFromSpan(selectedRow.node)" />
                 <!-- Timing -->
                 <div class="kp-section">
                   <div class="kp-section-title">{{ t('knowledgeStages.detail.timing') }}</div>

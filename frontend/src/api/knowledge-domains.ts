@@ -1,4 +1,5 @@
 import { del, get, post, put } from '@/utils/request'
+import type { ModelTierConfig } from '@/types/modelTiers'
 import type { KnowledgeFact } from './knowledge-context'
 
 export interface DomainField {
@@ -19,6 +20,7 @@ export interface DomainRelation {
 export interface DomainUnit { name: string; aliases: string[]; factor: number }
 export interface DomainUnitFamily { key: string; canonical_unit: string; units: DomainUnit[] }
 export interface KnowledgeDomainInput {
+  model_tiers?: ModelTierConfig
   name: string
   description: string
   entity_types: string[]

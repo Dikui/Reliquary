@@ -136,3 +136,10 @@ test('maps agent bindings to the configuration section that owns them', () => {
   assert.equal(modelUsageAgentSection(['chat_model', 'vlm_model']), 'model')
   assert.equal(modelUsageAgentSection(['vlm_model', 'follow_up_model']), 'multimodal')
 })
+
+test('tier-only model usage prevents deletion and preserves team and domain references', () => {
+  const details = parseModelUsageDetails({ knowledge_bases: [], agents: [], long_term_memory: { bindings: [] }, model_tiers: [{ scope: 'team', id: '1', name: 'Team', bindings: ['light_model_tier'] }, { scope: 'domain', id: 'domain-a', name: 'AI', bindings: ['extraction_model_tier'] }] })
+  assert.equal(details?.model_tiers?.length, 2)
+  assert.equal(details?.model_tiers?.[1]?.scope, 'domain')
+  assert.equal(modelUsageBindingI18nKey('light_model_tier'), 'modelSettings.usage.bindings.light_model_tier')
+})

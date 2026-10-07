@@ -614,6 +614,7 @@ CREATE TABLE public.knowledge_anomalies (
 --
 
 CREATE TABLE public.knowledge_domains (
+    model_tiers jsonb DEFAULT '{}'::jsonb NOT NULL,
     id character varying(36) NOT NULL PRIMARY KEY,
     tenant_id integer NOT NULL,
     name character varying(255) NOT NULL,
@@ -635,6 +636,7 @@ CREATE UNIQUE INDEX idx_knowledge_domains_builtin ON public.knowledge_domains (t
 CREATE INDEX idx_knowledge_domains_deleted_at ON public.knowledge_domains (deleted_at);
 
 CREATE TABLE public.knowledge_bases (
+    model_tiers jsonb DEFAULT '{}'::jsonb NOT NULL,
     id character varying(36) DEFAULT public.uuid_generate_v4() NOT NULL,
     name character varying(255) NOT NULL,
     description text,
@@ -743,6 +745,10 @@ CREATE TABLE public.knowledge_context_entities (
     normalized_name character varying(512) NOT NULL,
     entity_type character varying(128) DEFAULT ''::character varying NOT NULL,
     description text DEFAULT ''::text NOT NULL,
+    name_embedding public.vector,
+    embedding_model_id character varying(64) DEFAULT '' NOT NULL,
+    embedding_dimension integer DEFAULT 0 NOT NULL,
+    embedding_needs_rebuild boolean DEFAULT true NOT NULL,
     merged_into_id character varying(36) DEFAULT ''::character varying NOT NULL,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL
@@ -761,8 +767,52 @@ CREATE TABLE public.knowledge_context_entity_aliases (
     entity_id character varying(36) NOT NULL,
     alias character varying(512) NOT NULL,
     normalized_alias character varying(512) NOT NULL,
+    evidence_id character varying(36) DEFAULT '' NOT NULL,
+    quote text DEFAULT '' NOT NULL,
+    resolution_method character varying(16) DEFAULT 'exact' NOT NULL,
     created_at timestamp with time zone NOT NULL
 );
+
+CREATE TABLE public.knowledge_context_merge_suggestions (
+    id character varying(36) PRIMARY KEY,
+    tenant_id bigint NOT NULL,
+    knowledge_base_id character varying(36) NOT NULL,
+    new_entity_id character varying(36) NOT NULL,
+    candidate_entity_id character varying(36) NOT NULL,
+    evidence_id character varying(36) NOT NULL,
+    reason text NOT NULL,
+    quote text NOT NULL,
+    status character varying(16) DEFAULT 'pending' NOT NULL CHECK (status IN ('pending', 'accepted', 'rejected')),
+    created_at timestamp with time zone NOT NULL,
+    decided_at timestamp with time zone,
+    CONSTRAINT idx_kcems_pair UNIQUE (tenant_id, new_entity_id, candidate_entity_id, evidence_id)
+);
+CREATE INDEX idx_kcems_scope_status ON public.knowledge_context_merge_suggestions (tenant_id, knowledge_base_id, status);
+CREATE INDEX idx_kce_name_trgm ON public.knowledge_context_entities USING gin (normalized_name public.gin_trgm_ops);
+CREATE INDEX idx_kcea_alias_trgm ON public.knowledge_context_entity_aliases USING gin (normalized_alias public.gin_trgm_ops);
+CREATE INDEX idx_kce_embedding_profile ON public.knowledge_context_entities (tenant_id, embedding_model_id, embedding_dimension) WHERE name_embedding IS NOT NULL;
+CREATE INDEX idx_kce_embedding_pending ON public.knowledge_context_entities (tenant_id, id) WHERE embedding_needs_rebuild AND merged_into_id = '';
+
+CREATE TABLE public.knowledge_context_embedding_rebuild_runs (
+    id character varying(36) PRIMARY KEY,
+    tenant_id bigint NOT NULL,
+    status character varying(16) NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'failed')),
+    reason text NOT NULL,
+    error text DEFAULT '' NOT NULL,
+    model_id character varying(64) DEFAULT '' NOT NULL,
+    dimension integer DEFAULT 0 NOT NULL,
+    profile_hash character varying(64) DEFAULT '' NOT NULL,
+    processed_count bigint DEFAULT 0 NOT NULL,
+    total_count bigint DEFAULT 0 NOT NULL,
+    model_calls integer DEFAULT 0 NOT NULL,
+    attempts integer DEFAULT 0 NOT NULL,
+    attempt_id character varying(36) DEFAULT '' NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    started_at timestamp with time zone,
+    finished_at timestamp with time zone
+);
+CREATE INDEX idx_kc_embedding_run_latest ON public.knowledge_context_embedding_rebuild_runs (tenant_id, created_at DESC, id DESC);
 
 
 --
@@ -829,6 +879,10 @@ CREATE TABLE public.knowledge_context_evidence (
     image_refs jsonb DEFAULT '[]'::jsonb NOT NULL,
     status character varying(16) DEFAULT 'current'::character varying NOT NULL,
     extraction_status character varying(16) DEFAULT 'pending'::character varying NOT NULL,
+    extraction_coverage character varying(16) DEFAULT 'complete' NOT NULL CHECK (extraction_coverage IN ('complete', 'partial')),
+    processed_segments integer DEFAULT 0 NOT NULL,
+    total_segments integer DEFAULT 0 NOT NULL,
+    model_calls jsonb DEFAULT '[]'::jsonb NOT NULL,
     extraction_error text DEFAULT ''::text NOT NULL,
     created_at timestamp with time zone NOT NULL,
     source_kind character varying(32) DEFAULT ''::character varying NOT NULL
@@ -2147,6 +2201,7 @@ COMMENT ON COLUMN public.tenant_user_env_vars.value IS 'AES-GCM encrypted. Never
 --
 
 CREATE TABLE public.tenants (
+    model_tiers jsonb DEFAULT '{}'::jsonb NOT NULL,
     id integer NOT NULL CHECK (id = 1),
     name character varying(255) NOT NULL,
     description text,

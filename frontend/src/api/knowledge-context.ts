@@ -46,6 +46,10 @@ export interface KnowledgeEvidence {
   status: 'current' | 'superseded' | string
   extraction_status: 'pending' | 'complete' | 'failed' | string
   extraction_error?: string
+  extraction_coverage?: 'complete' | 'partial'
+  processed_segments?: number
+  total_segments?: number
+  model_calls?: KnowledgeModelCall[]
   source_kind?: 'roundup' | string
   created_at: string
 }
@@ -210,3 +214,15 @@ export const correctGlobalKnowledgeFact = (factId: string, correction: Knowledge
   post<KnowledgeContextEnvelope<KnowledgeFact>>(`/api/v1/knowledge-context/facts/${encodeURIComponent(factId)}/correction`, correction)
 export const mergeGlobalKnowledgeEntities = (input: { keep_entity_id: string; merge_entity_id: string }) =>
   post<KnowledgeContextActionEnvelope>('/api/v1/knowledge-context/entities/merge', input)
+
+export interface KnowledgeModelCall { stage: string; tier: string; model_id?: string; calls: number }
+export interface KnowledgeMergeSuggestion {
+  id: string; new_entity_id: string; candidate_entity_id: string; new_entity_name?: string; candidate_entity_name?: string;
+  reason: string; evidence_id: string; quote?: string; knowledge_base_id: string; status: 'pending' | 'accepted' | 'rejected'; created_at: string; decided_at?: string
+}
+export const listKnowledgeMergeSuggestions = (params: KnowledgeContextListParams & { status?: string }) =>
+  get<KnowledgeContextEnvelope<KnowledgeMergeSuggestion[]>>(`/api/v1/knowledge-context/merge-suggestions${queryString(params)}`)
+export const acceptKnowledgeMergeSuggestion = (id: string) =>
+  post<KnowledgeContextActionEnvelope>(`/api/v1/knowledge-context/merge-suggestions/${encodeURIComponent(id)}/accept`, {})
+export const rejectKnowledgeMergeSuggestion = (id: string) =>
+  post<KnowledgeContextActionEnvelope>(`/api/v1/knowledge-context/merge-suggestions/${encodeURIComponent(id)}/reject`, {})

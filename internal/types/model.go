@@ -75,18 +75,29 @@ const ModelUsageListLimit = 50
 // ModelUsageListLimit entries; KnowledgeBaseTotal and AgentTotal are the
 // untruncated counts used by the deletion guard and UI headings.
 type ModelUsageDetails struct {
-	KnowledgeBases     []ModelUsageResource `json:"knowledge_bases"`
-	Agents             []ModelUsageResource `json:"agents"`
-	LongTermMemory     ModelUsageMemory     `json:"long_term_memory"`
-	KnowledgeBaseTotal int64                `json:"knowledge_base_total"`
-	AgentTotal         int64                `json:"agent_total"`
+	ModelTiers         []ModelTierUsageResource `json:"model_tiers"`
+	KnowledgeBases     []ModelUsageResource     `json:"knowledge_bases"`
+	Agents             []ModelUsageResource     `json:"agents"`
+	LongTermMemory     ModelUsageMemory         `json:"long_term_memory"`
+	KnowledgeBaseTotal int64                    `json:"knowledge_base_total"`
+	AgentTotal         int64                    `json:"agent_total"`
 }
 
 // InUse reports whether at least one active object references the model.
 func (d ModelUsageDetails) InUse() bool {
+	if len(d.ModelTiers) > 0 {
+		return true
+	}
 	return d.KnowledgeBaseTotal > 0 || d.AgentTotal > 0 ||
 		len(d.KnowledgeBases) > 0 || len(d.Agents) > 0 ||
 		len(d.LongTermMemory.Bindings) > 0
+}
+
+type ModelTierUsageResource struct {
+	Scope    string              `json:"scope"`
+	ID       string              `json:"id"`
+	Name     string              `json:"name"`
+	Bindings []ModelUsageBinding `json:"bindings"`
 }
 
 // ModelSource represents the source of the model
@@ -149,8 +160,9 @@ type ModelParameters struct {
 	// across all replicas. 0 (the default) means "fall back to the
 	// process-wide model.max_concurrency". Interactive user-facing calls are
 	// never gated. Only chat / vlm / embedding honour this (see limiter.Gate).
-	MaxConcurrency int    `yaml:"max_concurrency,omitempty" json:"max_concurrency,omitempty"`
-	AppSecret      string `yaml:"app_secret,omitempty" json:"app_secret,omitempty"` // AES-256 加密存储，实际承载上游 API Key
+	MaxConcurrency    int    `yaml:"max_concurrency,omitempty" json:"max_concurrency,omitempty"`
+	RequestsPerMinute int    `yaml:"requests_per_minute,omitempty" json:"requests_per_minute,omitempty"`
+	AppSecret         string `yaml:"app_secret,omitempty" json:"app_secret,omitempty"` // AES-256 加密存储，实际承载上游 API Key
 }
 
 // Per-response redaction for Model now lives in dto.NewModelResponse. The

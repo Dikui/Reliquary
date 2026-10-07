@@ -22,6 +22,7 @@ func (s *sessionService) AgentQA(
 	req *types.QARequest,
 	eventBus *event.EventBus,
 ) error {
+	ctx = types.WithModelTier(ctx, types.ModelTierGeneration)
 	sessionID := req.Session.ID
 	// Propagate the session ID so the Docker sandbox can
 	// bind script execution to a per-session MicroVM instance.
@@ -83,7 +84,7 @@ func (s *sessionService) AgentQA(
 		return errors.New("summary model (model_id) is not configured in custom agent settings")
 	}
 
-	summaryModel, err := s.modelService.GetChatModel(ctx, effectiveModelID)
+	summaryModel, err := getGenerationChatModel(ctx, s.modelService, effectiveModelID)
 	if err != nil {
 		logger.Warnf(ctx, "Failed to get chat model: %v", err)
 		return fmt.Errorf("failed to get chat model: %w", err)
@@ -122,6 +123,13 @@ func (s *sessionService) AgentQA(
 		// the agent. If a Wiki-only agent doesn't need reranking,
 		// agentRequiresRerankModel() below already lets it pass.
 		rerankModelID := req.CustomAgent.Config.RerankModelID
+		if rerankModelID == "" {
+			var tierErr error
+			rerankModelID, tierErr = s.resolveScopedRerankTier(ctx, agentConfig.KnowledgeBases)
+			if tierErr != nil {
+				return tierErr
+			}
+		}
 		if rerankModelID == "" {
 			logger.Warnf(ctx, "No rerank model configured for custom agent %s, but knowledge_search tool is enabled", req.CustomAgent.ID)
 			return errors.New("rerank model is not configured: please set rerank_model_id on the agent")

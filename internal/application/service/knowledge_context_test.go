@@ -20,9 +20,11 @@ import (
 func knowledgeContextTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db := pgtest.OpenFixture(t)
-	require.NoError(t, db.Exec(`CREATE TABLE knowledge_bases (id TEXT PRIMARY KEY, tenant_id INTEGER NOT NULL, name TEXT NOT NULL DEFAULT 'Test knowledge base', domain_id TEXT NOT NULL DEFAULT 'ai', deleted_at TIMESTAMPTZ)`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE tenants (id BIGINT PRIMARY KEY, model_tiers JSONB NOT NULL DEFAULT '{}', deleted_at TIMESTAMPTZ)`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO tenants(id) VALUES (9)`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE knowledge_bases (id TEXT PRIMARY KEY, tenant_id INTEGER NOT NULL, name TEXT NOT NULL DEFAULT 'Test knowledge base', domain_id TEXT NOT NULL DEFAULT 'ai', model_tiers JSONB NOT NULL DEFAULT '{}', embedding_model_id TEXT DEFAULT '', auto_tag_config JSONB, deleted_at TIMESTAMPTZ)`).Error)
 	require.NoError(t, db.AutoMigrate(&types.Knowledge{}, &types.KnowledgeEntity{}, &types.KnowledgeEntityAlias{}, &types.KnowledgeEvidence{},
-		&types.KnowledgeFact{}, &types.KnowledgeEvent{}, &types.KnowledgeEventEvidence{}, &types.KnowledgeAttention{}, &types.KnowledgeDomain{}, &types.AuditLog{}))
+		&types.KnowledgeEntityMergeSuggestion{}, &types.KnowledgeFact{}, &types.KnowledgeEvent{}, &types.KnowledgeEventEvidence{}, &types.KnowledgeAttention{}, &types.KnowledgeDomain{}, &types.AuditLog{}))
 	domain := BuiltinAIKnowledgeDomain()
 	domain.ID = "ai"
 	domain.TenantID = 9
@@ -53,6 +55,12 @@ func (c *knowledgeContextTestChat) Chat(_ context.Context, messages []chat.Messa
 	c.calls++
 	if c.reply != nil {
 		return &types.ChatResponse{Content: c.reply(messages)}, nil
+	}
+	if len(messages) > 0 && strings.Contains(messages[0].Content, "same real-world object") {
+		return &types.ChatResponse{Content: `{"decision":"new","confidence":0}`}, nil
+	}
+	if len(messages) > 0 && strings.Contains(messages[0].Content, "same specific real-world change") {
+		return &types.ChatResponse{Content: `{"relation":"UNRELATED","confidence":0}`}, nil
 	}
 	return &types.ChatResponse{Content: c.response}, nil
 }
@@ -145,7 +153,7 @@ func TestKnowledgeContextProcessSnapshotCorrectionAndTenantScope(t *testing.T) {
 	ctx = context.WithValue(ctx, types.UserIDContextKey, "reviewer")
 	require.NoError(t, svc.ProcessMessage(ctx, &k, body))
 	require.NoError(t, svc.ProcessMessage(ctx, &k, body))
-	require.Equal(t, 1, model.calls, "a completed evidence snapshot must make retries idempotent")
+	require.Equal(t, 5, model.calls, "a completed evidence snapshot must make retries idempotent")
 
 	result, err := svc.Query(ctx, "kb", types.KnowledgeContextQuery{KnowledgeIDs: []string{k.ID}})
 	require.NoError(t, err)

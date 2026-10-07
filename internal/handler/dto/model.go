@@ -48,6 +48,7 @@ type ModelParametersDTO struct {
 	ContextWindow       int                       `json:"context_window,omitempty"`
 	MaxOutputTokens     int                       `json:"max_output_tokens,omitempty"`
 	MaxConcurrency      int                       `json:"max_concurrency,omitempty"`
+	RequestsPerMinute   int                       `json:"requests_per_minute,omitempty"`
 }
 
 // NewModelResponse converts a stored Model into its response shape.
@@ -70,6 +71,7 @@ func NewModelResponse(ctx context.Context, m *types.Model) *ModelResponse {
 		ContextWindow:       m.Parameters.ContextWindow,
 		MaxOutputTokens:     m.Parameters.MaxOutputTokens,
 		MaxConcurrency:      m.Parameters.MaxConcurrency,
+		RequestsPerMinute:   m.Parameters.RequestsPerMinute,
 	}
 	canManageBuiltin := m.IsBuiltin && types.IsSystemAdminFromContext(ctx)
 	if !CanViewIntegrationSecrets(ctx) && !canManageBuiltin {

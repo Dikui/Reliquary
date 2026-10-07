@@ -447,6 +447,12 @@ func (t *spanTracker) EndSpan(ctx context.Context, span *Span, output types.JSON
 	if span == nil {
 		return
 	}
+	if calls := types.ModelCallCountsFromContext(ctx); calls != nil {
+		if output == nil {
+			output = types.JSONMap{}
+		}
+		output["model_calls"] = calls
+	}
 	now := time.Now()
 	dur := durationSince(t, span, now)
 	row := &types.KnowledgeProcessingSpan{
@@ -498,6 +504,9 @@ func (t *spanTracker) FailSpan(ctx context.Context, span *Span, errorCode, error
 		StartedAt:    &span.StartedAt,
 		FinishedAt:   &now,
 		DurationMs:   dur,
+	}
+	if calls := types.ModelCallCountsFromContext(ctx); calls != nil {
+		row.Output = types.JSONMap{"model_calls": calls}
 	}
 	if err := t.repo.Upsert(ctx, row); err != nil {
 		logger.Warnf(ctx, "[SpanTracker] FailSpan failed span=%s: %v", span.SpanID, err)

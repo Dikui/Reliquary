@@ -190,19 +190,21 @@
 
 
     </div>
-
-
+    <TeamModelTierSettings ref="modelTierSettings" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
+import TeamModelTierSettings from './TeamModelTierSettings.vue'
 import { getCurrentUser, type TenantInfo } from '@/api/auth'
 import { updateTenant as updateTenantApi } from '@/api/tenant'
 import { useAuthStore } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
 
+const modelTierSettings = ref<InstanceType<typeof TeamModelTierSettings>>()
+defineExpose({ confirmLeave: () => modelTierSettings.value?.confirmLeave() ?? Promise.resolve(true) })
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
 

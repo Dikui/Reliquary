@@ -32,6 +32,10 @@ func logUsage(ctx context.Context, model string, u *types.TokenUsage) {
 // empty suffix, keeping their lines byte-identical to before.
 func usageAttribution(ctx context.Context) string {
 	var b strings.Builder
+	if tier := types.ModelTierFromContext(ctx); tier != "" {
+		b.WriteString(", tier=")
+		b.WriteString(string(tier))
+	}
 	if sessionID, ok := types.SessionIDFromContext(ctx); ok && sessionID != "" {
 		b.WriteString(", session_id=")
 		b.WriteString(sessionID)

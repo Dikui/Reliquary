@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"reliquary/internal/models/limiter"
+	"reliquary/internal/types"
 )
 
 // Embedding is the highest-volume background model call: document ingestion
@@ -26,16 +27,25 @@ type concurrencyEmbedder struct {
 	inner Embedder
 	// limit is this model's configured per-model background cap; 0 falls back
 	// to the process-wide default (see limiter.GateN).
-	limit int
+	limit             int
+	requestsPerMinute int
 }
 
 func (w *concurrencyEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
+	ctx = types.WithModelTier(ctx, types.ModelTierEmbedding)
+	if err := limiter.WaitRate(ctx, w.inner.GetModelID(), w.requestsPerMinute); err != nil {
+		return nil, err
+	}
 	release := limiter.GateNamedN(ctx, w.inner.GetModelID(), w.inner.GetModelName(), w.limit)
 	defer release()
 	return w.inner.Embed(ctx, text)
 }
 
 func (w *concurrencyEmbedder) BatchEmbed(ctx context.Context, texts []string) ([][]float32, error) {
+	ctx = types.WithModelTier(ctx, types.ModelTierEmbedding)
+	if err := limiter.WaitRate(ctx, w.inner.GetModelID(), w.requestsPerMinute); err != nil {
+		return nil, err
+	}
 	release := limiter.GateNamedN(ctx, w.inner.GetModelID(), w.inner.GetModelName(), w.limit)
 	defer release()
 	return w.inner.BatchEmbed(ctx, texts)

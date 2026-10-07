@@ -112,7 +112,7 @@ func TestResolveContextEventsRelationClasses(t *testing.T) {
 	}
 }
 
-func TestMatchContextEventRejectsAmbiguousCandidateBatches(t *testing.T) {
+func TestMatchContextEventUsesOneBoundedCandidateCall(t *testing.T) {
 	candidates := make([]types.KnowledgeEvent, 51)
 	for i := range candidates {
 		candidates[i] = types.KnowledgeEvent{ID: fmt.Sprintf("event-%02d", i), EntityIDs: types.StringArray{"acme"}}
@@ -123,17 +123,16 @@ func TestMatchContextEventRejectsAmbiguousCandidateBatches(t *testing.T) {
 				ID string `json:"id"`
 			} `json:"candidates"`
 		}
-		_ = json.Unmarshal([]byte(messages[1].Content), &input)
-		if len(input.Candidates) == 50 {
-			return `{"relation":"SAME_OCCURRENCE","event_id":"event-00","confidence":0.99}`
-		}
-		return `{"relation":"SAME_STORY","event_id":"event-50","confidence":0.98}`
+		require.NoError(t, json.Unmarshal([]byte(messages[1].Content), &input))
+		require.Len(t, input.Candidates, 10)
+		return `{"relation":"SAME_STORY","event_id":"event-09","confidence":0.98}`
 	}}
 	service := NewKnowledgeContextService(nil, nil)
 	resolved, err := service.matchContextEvent(context.Background(), model, contextExtractedEvent{Title: "Change"}, types.StringArray{"acme"}, candidates)
 	require.NoError(t, err)
-	require.Equal(t, types.KnowledgeEventRelationUnrelated, resolved.Relation)
-	require.Empty(t, resolved.Event.ID, "close high-confidence results from different candidate batches are ambiguous")
+	require.Equal(t, types.KnowledgeEventRelationSameStory, resolved.Relation)
+	require.Equal(t, "event-09", resolved.Event.ID)
+	require.Equal(t, 1, model.calls)
 }
 
 func TestProcessRoundupKeepsFactsAndSkipsEventLinks(t *testing.T) {

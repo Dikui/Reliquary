@@ -129,8 +129,9 @@ type ChatConfig struct {
 	Provider  string
 	// MaxConcurrency caps concurrent background calls to this model; 0 falls
 	// back to the process-wide default (see limiter.GateN).
-	MaxConcurrency int
-	ExtraConfig    map[string]string
+	MaxConcurrency    int
+	RequestsPerMinute int
+	ExtraConfig       map[string]string
 	// CustomHeaders 允许在调用远程 OpenAI 兼容 API 时附加自定义 HTTP 请求头（类似 OpenAI Python SDK 的 extra_headers）。
 	CustomHeaders map[string]string
 }
@@ -143,15 +144,16 @@ func ConfigFromModel(m *types.Model) *ChatConfig {
 		return nil
 	}
 	return &ChatConfig{
-		ModelID:        m.ID,
-		APIKey:         m.Parameters.APIKey,
-		BaseURL:        m.Parameters.BaseURL,
-		ModelName:      m.Name,
-		Source:         m.Source,
-		Provider:       m.Parameters.Provider,
-		MaxConcurrency: m.Parameters.MaxConcurrency,
-		ExtraConfig:    m.Parameters.ExtraConfig,
-		CustomHeaders:  m.Parameters.CustomHeaders,
+		ModelID:           m.ID,
+		APIKey:            m.Parameters.APIKey,
+		BaseURL:           m.Parameters.BaseURL,
+		ModelName:         m.Name,
+		Source:            m.Source,
+		Provider:          m.Parameters.Provider,
+		MaxConcurrency:    m.Parameters.MaxConcurrency,
+		RequestsPerMinute: m.Parameters.RequestsPerMinute,
+		ExtraConfig:       m.Parameters.ExtraConfig,
+		CustomHeaders:     m.Parameters.CustomHeaders,
 	}
 }
 
@@ -170,7 +172,11 @@ func NewChat(config *ChatConfig, ollamaService *ollama.OllamaService) (Chat, err
 	// Outermost: hold the per-model concurrency slot around the provider call,
 	// so semaphore wait time is excluded from debug timing.
 	c, err = wrapChatDebug(c, err)
-	return wrapChatConcurrency(c, config.MaxConcurrency, err)
+	wrapped, err := wrapChatConcurrency(c, config.MaxConcurrency, err)
+	if w, ok := wrapped.(*concurrencyChat); ok {
+		w.requestsPerMinute = config.RequestsPerMinute
+	}
+	return wrapped, err
 }
 
 // NewRemoteChat 根据 provider 创建远程聊天实例。

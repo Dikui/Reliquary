@@ -76,7 +76,7 @@ var queueDefinitions = []QueueDefinition{
 		TypeSummaryGeneration, TypeDataTableSummary, TypeKnowledgeAutoTag,
 	}},
 	{Name: QueueMultimodal, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeImageMultimodal}},
-	{Name: QueueGraph, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeKnowledgeContext}},
+	{Name: QueueGraph, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeKnowledgeContext, TypeContextNameEmbeddingRebuild}},
 	{Name: QueueQuestion, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeQuestionGeneration}},
 	{Name: QueueMemory, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeMemoryExtract}},
 	{Name: QueueSync, Pool: WorkerPoolMaintenance, Weight: 2, TaskTypes: []string{TypeDataSourceSync}},
@@ -232,25 +232,26 @@ type WorkerServerStat struct {
 }
 
 const (
-	TypeDocumentProcess          = "document:process"       // 文档处理任务
-	TypeQuestionGeneration       = "question:generation"    // 问题生成任务
-	TypeSummaryGeneration        = "summary:generation"     // 摘要生成任务
-	TypeKBClone                  = "kb:clone"               // 知识库复制任务
-	TypeKBDelete                 = "kb:delete"              // 知识库删除任务
-	TypeKnowledgeListDelete      = "knowledge:list_delete"  // 批量删除知识任务
-	TypeKnowledgeListReparse     = "knowledge:list_reparse" // 批量重解析知识任务
-	TypeKnowledgeMove            = "knowledge:move"         // 知识移动任务
-	TypeDataTableSummary         = "datatable:summary"      // 表格摘要任务
-	TypeImageMultimodal          = "image:multimodal"       // 图片多模态处理任务（OCR + VLM Caption）
-	TypeKnowledgePostProcess     = "knowledge:post_process" // 知识后处理任务（统一调度）
-	TypeKnowledgeAutoTag         = "knowledge:auto_tag"     // 文档自动关联知识库已有标签
-	TypeKnowledgeContext         = "knowledge:context"
-	TypeKnowledgeWorkflowRun     = "knowledge_workflow:run"
-	TypeManualProcess            = "manual:process"             // 手工知识更新任务（cleanup + 重新索引）
-	TypeDataSourceSync           = "datasource:sync"            // 数据源同步任务
-	TypeWikiIngest               = "wiki:ingest"                // Wiki 页面同步任务
-	TypeWikiFinalize             = "wiki:finalize"              // Wiki KB 级收尾任务（防抖：索引重建/死链清理/交叉链接）
-	TypeTemporaryDocumentProcess = "temporary_document:process" // 会话临时文档解析任务
+	TypeDocumentProcess             = "document:process"       // 文档处理任务
+	TypeQuestionGeneration          = "question:generation"    // 问题生成任务
+	TypeSummaryGeneration           = "summary:generation"     // 摘要生成任务
+	TypeKBClone                     = "kb:clone"               // 知识库复制任务
+	TypeKBDelete                    = "kb:delete"              // 知识库删除任务
+	TypeKnowledgeListDelete         = "knowledge:list_delete"  // 批量删除知识任务
+	TypeKnowledgeListReparse        = "knowledge:list_reparse" // 批量重解析知识任务
+	TypeKnowledgeMove               = "knowledge:move"         // 知识移动任务
+	TypeDataTableSummary            = "datatable:summary"      // 表格摘要任务
+	TypeImageMultimodal             = "image:multimodal"       // 图片多模态处理任务（OCR + VLM Caption）
+	TypeKnowledgePostProcess        = "knowledge:post_process" // 知识后处理任务（统一调度）
+	TypeKnowledgeAutoTag            = "knowledge:auto_tag"     // 文档自动关联知识库已有标签
+	TypeKnowledgeContext            = "knowledge:context"
+	TypeContextNameEmbeddingRebuild = "knowledge_context:name_embedding_rebuild"
+	TypeKnowledgeWorkflowRun        = "knowledge_workflow:run"
+	TypeManualProcess               = "manual:process"             // 手工知识更新任务（cleanup + 重新索引）
+	TypeDataSourceSync              = "datasource:sync"            // 数据源同步任务
+	TypeWikiIngest                  = "wiki:ingest"                // Wiki 页面同步任务
+	TypeWikiFinalize                = "wiki:finalize"              // Wiki KB 级收尾任务（防抖：索引重建/死链清理/交叉链接）
+	TypeTemporaryDocumentProcess    = "temporary_document:process" // 会话临时文档解析任务
 	// TypeMemoryExtract 长期记忆抽取任务（会话轮次防抖后异步执行）
 	TypeMemoryExtract = "memory:extract"
 )

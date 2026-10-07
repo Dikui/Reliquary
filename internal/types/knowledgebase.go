@@ -36,6 +36,7 @@ const (
 
 // KnowledgeBase represents a knowledge base entity
 type KnowledgeBase struct {
+	ModelTiers ModelTierConfig `json:"model_tiers" gorm:"type:jsonb;not null;default:'{}'"`
 	// Unique identifier of the knowledge base
 	ID string `yaml:"id"                      json:"id"                      gorm:"type:varchar(36);primaryKey"`
 	// Name of the knowledge base
@@ -120,6 +121,7 @@ type KnowledgeBase struct {
 
 // KnowledgeBaseConfig represents the knowledge base configuration
 type KnowledgeBaseConfig struct {
+	ModelTiers *ModelTierConfig `json:"model_tiers,omitempty"`
 	// Chunking configuration
 	ChunkingConfig ChunkingConfig `yaml:"chunking_config"         json:"chunking_config"`
 	// Image processing configuration

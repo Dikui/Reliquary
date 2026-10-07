@@ -274,7 +274,9 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 		knowledge.ID,
 	)
 
-	enqueueDataTableSummaryIfNeeded(ctx, s.task, tenantID, knowledge.ID, safeFilename, getFileType(safeFilename), kb.SummaryModelID, kb.EmbeddingModelID)
+	if err := s.enqueueTierDataTableSummary(ctx, kb, knowledge.ID, safeFilename, getFileType(safeFilename)); err != nil {
+		return knowledge, err
+	}
 
 	logger.Infof(ctx, "Knowledge from file created successfully, ID: %s", knowledge.ID)
 	return knowledge, nil
@@ -754,7 +756,9 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 		})
 	logger.Infof(ctx, "Enqueued file URL process task: id=%s queue=%s knowledge_id=%s", info.ID, info.Queue, knowledge.ID)
 
-	enqueueDataTableSummaryIfNeeded(ctx, s.task, tenantID, knowledge.ID, fileName, fileType, kb.SummaryModelID, kb.EmbeddingModelID)
+	if err := s.enqueueTierDataTableSummary(ctx, kb, knowledge.ID, fileName, fileType); err != nil {
+		return knowledge, err
+	}
 
 	logger.Infof(ctx, "Knowledge from file URL created successfully, ID: %s", knowledge.ID)
 	return knowledge, nil

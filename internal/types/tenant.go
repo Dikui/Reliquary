@@ -36,6 +36,7 @@ func GetDefaultRetrieverEngines() []RetrieverEngineParams {
 
 // Tenant represents the tenant
 type Tenant struct {
+	ModelTiers ModelTierConfig `json:"model_tiers" gorm:"type:jsonb;not null;default:'{}'"`
 	// ID
 	ID uint64 `yaml:"id"                  json:"id"                  gorm:"primaryKey"`
 	// Name

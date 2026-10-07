@@ -269,13 +269,20 @@ type SourceInfo struct {
 
 // KnowledgeIntakeMetadata records the single-message intake decision. Original
 // bodies stay in object storage; this only contains the audit/display fields.
+type KnowledgeIntakeTag struct {
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+}
+
 type KnowledgeIntakeMetadata struct {
-	Source       string     `json:"source"`
-	OriginalPath string     `json:"original_path,omitempty"`
-	Images       []string   `json:"images,omitempty"`
-	Reason       string     `json:"reason,omitempty"`
-	Decision     string     `json:"decision"`
-	SourceInfo   SourceInfo `json:"source_info,omitempty"`
+	Classification []KnowledgeIntakeTag `json:"classification,omitempty"`
+	ModelCalls     []ModelCallCount     `json:"model_calls,omitempty"`
+	Source         string               `json:"source"`
+	OriginalPath   string               `json:"original_path,omitempty"`
+	Images         []string             `json:"images,omitempty"`
+	Reason         string               `json:"reason,omitempty"`
+	Decision       string               `json:"decision"`
+	SourceInfo     SourceInfo           `json:"source_info,omitempty"`
 }
 
 func (k *Knowledge) IntakeMetadata() (*KnowledgeIntakeMetadata, error) {

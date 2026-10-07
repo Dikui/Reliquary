@@ -180,7 +180,7 @@
 
                   <!-- 空间信息 -->
                   <div v-if="currentSection === 'tenant'" class="section">
-                    <TenantInfo />
+                    <TenantInfo ref="tenantInfoView" />
                   </div>
 
                   <!-- 成员管理 (#1303 PR 3) -->
@@ -188,7 +188,7 @@
                     <TenantMembers />
                   </div>
 
-                  <div v-if="currentSection === 'domains'" class="section"><DomainSettings /></div>
+                  <div v-if="currentSection === 'domains'" class="section"><DomainSettings ref="domainSettingsView" /></div>
 
                   <!-- 发布集成 -->
                   <div v-if="isIntegrationSection(currentSection)" class="section">
@@ -268,6 +268,11 @@ const authStore = useAuthStore()
 const deploymentCapabilities = useDeploymentCapabilitiesStore()
 const { t } = useI18n()
 
+const tenantInfoView = ref<InstanceType<typeof TenantInfo>>()
+const domainSettingsView = ref<InstanceType<typeof DomainSettings>>()
+const canLeaveCurrentSection = () => currentSection.value === 'tenant'
+  ? tenantInfoView.value?.confirmLeave() ?? Promise.resolve(true)
+  : currentSection.value === 'domains' ? domainSettingsView.value?.confirmLeave() ?? Promise.resolve(true) : Promise.resolve(true)
 const currentSection = ref<string>('general')
 const currentSubSection = ref<string>('')
 const expandedMenus = ref<string[]>([])
@@ -442,7 +447,8 @@ const navGroups = computed<NavGroup[]>(() => {
 })
 
 // 导航项点击处理
-const handleNavClick = (item: any) => {
+const handleNavClick = async (item: any) => {
+  if (item.key !== currentSection.value && !await canLeaveCurrentSection()) return
   if (item.children && item.children.length > 0) {
     // 有子菜单，切换展开状态
     const index = expandedMenus.value.indexOf(item.key)
@@ -481,8 +487,16 @@ const visible = computed(() => {
   return route.path === '/platform/settings' || uiStore.showSettingsModal
 })
 
+const removeDraftNavigationGuard = router.beforeEach(async (to, from) => {
+  if (!visible.value) return true
+  const nextSection = typeof to.query.section === 'string' ? normalizeSettingsSection(to.query.section) : ''
+  if (to.path !== from.path || (to.path === '/platform/settings' && nextSection && nextSection !== currentSection.value)) return canLeaveCurrentSection()
+  return true
+})
+
 // 关闭弹窗
-const handleClose = () => {
+const handleClose = async () => {
+  if (!await canLeaveCurrentSection()) return
   // Blur before unmount so TDesign textarea autosize won't run on a detached node.
   if (document.activeElement instanceof HTMLElement) {
     document.activeElement.blur()
@@ -624,6 +638,7 @@ watch(currentSection, () => {
 })
 
 onUnmounted(() => {
+  removeDraftNavigationGuard()
   window.removeEventListener('keydown', handleEscape)
   window.removeEventListener('settings-nav', handleSettingsNav as EventListener)
 })

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"gorm.io/gorm"
+	"strconv"
 	"strings"
 
 	apperrors "reliquary/internal/errors"
@@ -24,12 +26,20 @@ var ErrModelNotFound = errors.New("model not found")
 
 // modelService implements the model service interface
 type modelService struct {
-	repo          interfaces.ModelRepository
-	kbRepo        interfaces.KnowledgeBaseRepository
-	agentRepo     interfaces.CustomAgentRepository
-	ollamaService *ollama.OllamaService
-	pooler        embedding.EmbedderPooler
-	tenantService interfaces.TenantService
+	db                     *gorm.DB
+	repo                   interfaces.ModelRepository
+	kbRepo                 interfaces.KnowledgeBaseRepository
+	agentRepo              interfaces.CustomAgentRepository
+	ollamaService          *ollama.OllamaService
+	pooler                 embedding.EmbedderPooler
+	tenantService          interfaces.TenantService
+	nameEmbeddingRebuilder ContextNameEmbeddingRebuildTrigger
+}
+
+func NewModelServiceWithRoutingDB(repo interfaces.ModelRepository, kbRepo interfaces.KnowledgeBaseRepository, agentRepo interfaces.CustomAgentRepository, ollamaService *ollama.OllamaService, pooler embedding.EmbedderPooler, tenantService interfaces.TenantService, db *gorm.DB) interfaces.ModelService {
+	s := NewModelService(repo, kbRepo, agentRepo, ollamaService, pooler, tenantService).(*modelService)
+	s.db = db
+	return s
 }
 
 // NewModelService creates a new model service instance
@@ -231,6 +241,19 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 	}
 
 	logger.Infof(ctx, "Model updated successfully: %s", model.ID)
+	if s.nameEmbeddingRebuilder != nil && existingModel != nil &&
+		(existingModel.Type == types.ModelTypeEmbedding || model.Type == types.ModelTypeEmbedding) &&
+		contextEmbeddingProfileHash(existingModel.ID, existingModel.Parameters.EmbeddingParameters.Dimension, existingModel) != contextEmbeddingProfileHash(model.ID, model.Parameters.EmbeddingParameters.Dimension, model) {
+		profileModel, resolveErr := ResolveModelTier(ctx, s.db, nil, types.ModelTierEmbedding)
+		if resolveErr != nil {
+			return fmt.Errorf("model saved but name embedding profile could not be resolved: %w", resolveErr)
+		}
+		if profileModel == model.ID {
+			if err := s.nameEmbeddingRebuilder.MarkAndEnqueue(ctx, types.SingleTenantID, "embedding_model_updated"); err != nil {
+				return fmt.Errorf("model saved but name embedding rebuild could not be queued: %w", err)
+			}
+		}
+	}
 	return nil
 }
 
@@ -387,9 +410,19 @@ func (s *modelService) getModelUsageDetails(
 	ctx context.Context, tenantID uint64, modelID string,
 ) (types.ModelUsageDetails, error) {
 	details := types.ModelUsageDetails{
+		ModelTiers:     []types.ModelTierUsageResource{},
 		KnowledgeBases: make([]types.ModelUsageResource, 0),
 		Agents:         make([]types.ModelUsageResource, 0),
 		LongTermMemory: types.ModelUsageMemory{Bindings: make([]types.ModelUsageBinding, 0)},
+	}
+	if s.db != nil {
+		var domains []types.KnowledgeDomain
+		if err := s.db.WithContext(ctx).Select("id", "name", "model_tiers").Where("tenant_id = ? AND (model_tiers->>'light' = ? OR model_tiers->>'extraction' = ? OR model_tiers->>'generation' = ? OR model_tiers->>'embedding' = ? OR model_tiers->>'rerank' = ?)", tenantID, modelID, modelID, modelID, modelID, modelID).Find(&domains).Error; err != nil {
+			return details, err
+		}
+		for _, domain := range domains {
+			details.ModelTiers = append(details.ModelTiers, types.ModelTierUsageResource{Scope: "domain", ID: domain.ID, Name: domain.Name, Bindings: domain.ModelTiers.UsageBindings(modelID)})
+		}
 	}
 
 	kbCount, err := s.kbRepo.CountByModelID(ctx, tenantID, modelID)
@@ -429,7 +462,13 @@ func (s *modelService) getModelUsageDetails(
 	if err != nil {
 		return details, err
 	}
-	if tenant == nil || tenant.MemoryConfig == nil {
+	if tenant == nil {
+		return details, nil
+	}
+	if bindings := tenant.ModelTiers.UsageBindings(modelID); len(bindings) > 0 {
+		details.ModelTiers = append(details.ModelTiers, types.ModelTierUsageResource{Scope: "team", ID: strconv.FormatUint(tenantID, 10), Name: tenant.Name, Bindings: bindings})
+	}
+	if tenant.MemoryConfig == nil {
 		return details, nil
 	}
 

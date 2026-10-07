@@ -824,13 +824,15 @@ func workflowCitationFromEvidence(k *types.Knowledge, evidence types.KnowledgeEv
 	}
 }
 
+const maxWorkflowSourceBytes = 32 << 20
+
 func (s *KnowledgeWorkflowService) workflowSourceBody(ctx context.Context, k *types.Knowledge) (string, error) {
 	if s.knowledge != nil {
 		reader, _, err := s.knowledge.GetKnowledgeFile(ctx, k.ID)
 		if reader != nil {
-			body, readErr := io.ReadAll(io.LimitReader(reader, int64(maxContextBodyBytes+1)))
+			body, readErr := io.ReadAll(io.LimitReader(reader, int64(maxWorkflowSourceBytes+1)))
 			_ = reader.Close()
-			if err == nil && readErr == nil && len(body) <= maxContextBodyBytes && utf8.Valid(body) && strings.TrimSpace(string(body)) != "" {
+			if err == nil && readErr == nil && len(body) <= maxWorkflowSourceBytes && utf8.Valid(body) && strings.TrimSpace(string(body)) != "" {
 				return string(body), nil
 			}
 		}
@@ -859,7 +861,7 @@ func (s *KnowledgeWorkflowService) workflowSourceBody(ctx context.Context, k *ty
 			}
 			body.WriteString(text)
 		}
-		if strings.TrimSpace(body.String()) != "" && body.Len() <= maxContextBodyBytes {
+		if strings.TrimSpace(body.String()) != "" && body.Len() <= maxWorkflowSourceBytes {
 			return body.String(), nil
 		}
 	}
@@ -1130,10 +1132,7 @@ func (s *KnowledgeWorkflowService) executeReport(ctx context.Context, wf *types.
 	if err != nil {
 		return workflowStepOutput{}, err
 	}
-	if kb.SummaryModelID == "" {
-		return workflowStepOutput{}, errors.New("knowledge base summary model is required for report generation")
-	}
-	model, err := s.models.GetChatModel(ctx, kb.SummaryModelID)
+	model, err := GetTierChatModel(ctx, s.db, s.models, kb, types.ModelTierGeneration)
 	if err != nil {
 		return workflowStepOutput{}, err
 	}

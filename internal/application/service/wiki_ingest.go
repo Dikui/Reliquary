@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"golang.org/x/sync/singleflight"
+	"gorm.io/gorm"
 
 	"reliquary/internal/agent"
 	"reliquary/internal/logger"
@@ -359,6 +360,7 @@ type WikiPendingOp struct {
 // both of which are correctness-critical short-lived flags rather
 // than data the system should survive without.
 type wikiIngestService struct {
+	db             *gorm.DB
 	wikiService    interfaces.WikiPageService
 	kbService      interfaces.KnowledgeBaseService
 	knowledgeSvc   interfaces.KnowledgeService
@@ -411,8 +413,10 @@ func NewWikiIngestService(
 	deadLetterRepo interfaces.TaskDeadLetterRepository,
 	redisClient *redis.Client,
 	spanTracker SpanTracker,
+	db *gorm.DB,
 ) interfaces.TaskHandler {
 	svc := &wikiIngestService{
+		db:             db,
 		wikiService:    wikiService,
 		kbService:      kbService,
 		knowledgeSvc:   knowledgeSvc,

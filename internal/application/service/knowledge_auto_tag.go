@@ -115,6 +115,7 @@ type autoTagModelResponse struct {
 
 // Handle processes one automatic-tagging task.
 func (s *KnowledgeAutoTagService) Handle(ctx context.Context, task *asynq.Task) error {
+	ctx, calls := types.WithModelCallCollector(ctx)
 	var payload types.KnowledgeAutoTagPayload
 	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
 		return fmt.Errorf("unmarshal knowledge auto tag payload: %w", err)
@@ -133,6 +134,8 @@ func (s *KnowledgeAutoTagService) Handle(ctx context.Context, task *asynq.Task) 
 			extra = types.JSONMap{}
 		}
 		extra["skipped"] = reason
+		extra["model_calls"] = calls.Snapshot()
+		extra["model_tier"] = types.ModelTierLight
 		s.tracker().EndSpan(ctx, span, extra)
 		return nil
 	}
@@ -168,7 +171,7 @@ func (s *KnowledgeAutoTagService) Handle(ctx context.Context, task *asynq.Task) 
 			s.tracker().FailSpan(ctx, span, "MESSAGE_TAGGING_FAILED", err.Error(), err)
 			return err
 		}
-		s.tracker().EndSpan(ctx, span, types.JSONMap{"message_dual_tags": true})
+		s.tracker().EndSpan(ctx, span, types.JSONMap{"message_dual_tags": true, "model_calls": calls.Snapshot(), "model_tier": types.ModelTierLight})
 		return nil
 	}
 	config := kb.AutoTagConfig
@@ -222,9 +225,9 @@ func (s *KnowledgeAutoTagService) Handle(ctx context.Context, task *asynq.Task) 
 		existingIDs[tag.ID] = struct{}{}
 	}
 
-	modelID := strings.TrimSpace(config.ModelID)
-	if modelID == "" {
-		modelID = strings.TrimSpace(kb.SummaryModelID)
+	modelID, err := ResolveModelTier(ctx, s.db, kb, types.ModelTierLight)
+	if err != nil {
+		return err
 	}
 	if modelID == "" {
 		return skip("model_not_configured", nil)
@@ -240,7 +243,7 @@ func (s *KnowledgeAutoTagService) Handle(ctx context.Context, task *asynq.Task) 
 		return skip("no_text_chunks", nil)
 	}
 
-	chatModel, err := s.modelService.GetChatModel(ctx, modelID)
+	chatModel, err := GetTierChatModel(ctx, s.db, s.modelService, kb, types.ModelTierLight)
 	if err != nil {
 		s.tracker().FailSpan(ctx, span, "AUTO_TAG_MODEL_LOAD_FAILED", err.Error(), err)
 		return fmt.Errorf("get auto tag model: %w", err)
@@ -287,6 +290,8 @@ func (s *KnowledgeAutoTagService) Handle(ctx context.Context, task *asynq.Task) 
 		"matched_tag_count":     len(validIDs),
 		"added_tag_count":       len(added),
 		"added_tag_ids":         added,
+		"model_calls":           calls.Snapshot(),
+		"model_tier":            types.ModelTierLight,
 		"model_id":              modelID,
 	})
 	return nil
@@ -312,38 +317,50 @@ func messageTagPrompt(policy string) string {
 }
 
 func (s *KnowledgeAutoTagService) tagMessage(ctx context.Context, kb *types.KnowledgeBase, knowledge *types.Knowledge) error {
-	modelID := strings.TrimSpace(kb.SummaryModelID)
-	if kb.AutoTagConfig != nil && strings.TrimSpace(kb.AutoTagConfig.ModelID) != "" {
-		modelID = strings.TrimSpace(kb.AutoTagConfig.ModelID)
-	}
-	if modelID == "" {
-		return fmt.Errorf("message tag model is not configured")
-	}
-	chunks, err := s.chunkService.ListChunksByKnowledgeID(ctx, knowledge.ID)
+	intake, err := knowledge.IntakeMetadata()
 	if err != nil {
 		return err
 	}
-	content := buildAutoTagDocumentContent(knowledge, chunks)
-	if strings.TrimSpace(content) == "" {
-		return fmt.Errorf("message tag content is empty")
-	}
-	model, err := s.modelService.GetChatModel(ctx, modelID)
-	if err != nil {
-		return err
-	}
-	active, err := activeKnowledgeStrategyRules(ctx, s.db, kb.TenantID, kb.ID)
-	if err != nil {
-		return err
-	}
-	policy := ""
-	if active != nil {
-		policy = active.Tags
-	} else if kb.AutoTagConfig != nil {
-		policy = kb.AutoTagConfig.Policy
-	}
-	labels, err := classifyMessageTags(ctx, model, policy, content)
-	if err != nil {
-		return err
+	labels := []messageReferent{}
+	if intake != nil && len(intake.Classification) > 0 {
+		for _, label := range intake.Classification {
+			labels = append(labels, messageReferent{Kind: label.Kind, Name: label.Name})
+		}
+	} else {
+		modelID, err := ResolveModelTier(ctx, s.db, kb, types.ModelTierLight)
+		if err != nil {
+			return err
+		}
+		if modelID == "" {
+			return fmt.Errorf("message tag model is not configured")
+		}
+		chunks, err := s.chunkService.ListChunksByKnowledgeID(ctx, knowledge.ID)
+		if err != nil {
+			return err
+		}
+		content := buildAutoTagDocumentContent(knowledge, chunks)
+		if strings.TrimSpace(content) == "" {
+			return fmt.Errorf("message tag content is empty")
+		}
+		model, err := GetTierChatModel(ctx, s.db, s.modelService, kb, types.ModelTierLight)
+		if err != nil {
+			return err
+		}
+		active, err := activeKnowledgeStrategyRules(ctx, s.db, kb.TenantID, kb.ID)
+		if err != nil {
+			return err
+		}
+		policy := ""
+		if active != nil {
+			policy = active.Tags
+		} else if kb.AutoTagConfig != nil {
+			policy = kb.AutoTagConfig.Policy
+		}
+		labels, err = classifyMessageTags(ctx, model, policy, content)
+		if err != nil {
+			return err
+		}
+
 	}
 	ids := make([]string, 0, len(labels))
 	for _, label := range labels {
@@ -384,6 +401,10 @@ func classifyMessageTags(ctx context.Context, model chat.Chat, policy, content s
 	if err := common.ParseLLMJsonResponse(result.Content, &parsed); err != nil {
 		return nil, err
 	}
+	return validateMessageTagResponse(parsed)
+}
+
+func validateMessageTagResponse(parsed messageTagResponse) ([]messageReferent, error) {
 	labels := make([]messageReferent, 0, len(parsed.Natures)+len(parsed.Referents))
 	natureCount, referentCount := 0, 0
 	for _, name := range parsed.Natures[:min(len(parsed.Natures), len(types.ContentNatures))] {

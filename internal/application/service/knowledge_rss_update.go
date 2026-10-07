@@ -367,8 +367,8 @@ func (s *knowledgeService) promoteSourceUpdateCandidate(ctx context.Context, id 
 		if err != nil {
 			return fmt.Errorf("read source update candidate original: %w", err)
 		}
-		if strings.TrimSpace(body) == "" || len(body) > maxContextBodyBytes {
-			return fmt.Errorf("source update candidate original is empty or too large for evidence")
+		if strings.TrimSpace(body) == "" {
+			return fmt.Errorf("source update candidate original is empty")
 		}
 		// Snapshot while the candidate is still hidden. Context queries and
 		// workers reject candidate rows, so evidence cannot leak before commit.

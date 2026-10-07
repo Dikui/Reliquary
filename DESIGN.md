@@ -14,3 +14,5 @@
 运行时样式以 frontend/src/assets/theme/theme.css 为唯一色彩与圆角来源，经 frontend/src/main.ts 加载后供 TDesign 组件及 var(--td-*) 使用。字体由 frontend/src/composables/useFont.ts 管理，保留既有中文与英文选择。领域页不新增色彩、字体或阴影值。滚动条使用全局主题变量，所有新增溢出区域自动继承。
 
 领域页列表与模板表单共用设置区原有内容滚动区域。长模板自然增长，不把列表的高度限制传给表单。窄屏将字段和单位编辑网格改为单列，保持标签和操作可达。行为与组件归属见 UX-CONTRACT.md。
+
+模型档位在空间、领域和知识库中共用 ModelTierEditor 与原有 ModelSelector。每一行直接显示用途、选择和当前生效来源，清空表示继承，配色与字体继续由原有主题所有。知识工作台用原有证据侧栏核验待合并建议，合并前明确保留对象与全团队影响。部分抽取使用文字及 warning 标签同时标记，调用预算使用共享 ModelCallSummary 表格。

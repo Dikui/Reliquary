@@ -1,4 +1,99 @@
 export default {
+  modelTiers: {
+  configureTeam: 'Configure team tiers',
+  configureDomains: 'Configure domain tiers',
+  "title": "Model tiers",
+  "scopeHint": {
+    "team": "Set team defaults. Domains and knowledge bases can override each tier. Clear a selection to use existing defaults.",
+    "domain": "Override team defaults. Clear a tier to inherit the team configuration.",
+    "knowledge_base": "Override domain and team defaults. Clear a tier to inherit the domain, then the team and existing defaults."
+  },
+  "names": {
+    "light": "Light",
+    "extraction": "Extraction",
+    "generation": "Generation",
+    "embedding": "Embedding",
+    "rerank": "Rerank"
+  },
+  "uses": {
+    "light": "Filtering, tags, attention scores, and entity and event decisions",
+    "extraction": "Extract entities, facts and events from source text",
+    "generation": "Answers, reports and Wiki content",
+    "embedding": "Content retrieval and entity name similarity",
+    "rerank": "Rank retrieved results"
+  },
+  "sources": {
+    "team": "Team default",
+    "domain": "Domain override",
+    "knowledge_base": "Knowledge base override",
+    "legacy": "Existing model configuration",
+    "default": "System default",
+    "unconfigured": "Unconfigured"
+  },
+  "inherit": "Inherit parent configuration",
+  "useDefault": "Use existing defaults",
+  "effective": "Current model: {model} ({source})",
+  "unconfigured": "No model configured",
+  "explicitChoice": "Explicit conversation, report and Wiki model selections take priority. Otherwise, they use the generation tier.",
+  "loadFailed": "Could not load model configuration. Try again.",
+  "saveFailed": "Could not save model configuration. Try again.",
+  "saved": "Model tiers saved",
+  "readOnly": "You can view model tiers. Administrator access is required to edit them.",
+  "retry": "Reload model configuration"
+},
+  mergeSuggestions: {
+  "title": "Merge suggestions",
+  "description": "Entities remain separate when a match is uncertain. Check the source before deciding whether to merge into the candidate.",
+  "statusFilter": "Suggestion status",
+  "status": {
+    "pending": "Pending",
+    "accepted": "Merged",
+    "rejected": "Rejected"
+  },
+  "empty": {
+    "pending": "No pending merge suggestions.",
+    "accepted": "No accepted merge suggestions yet.",
+    "rejected": "No rejected merge suggestions yet."
+  },
+  "pair": "{source} → {target}",
+  "noReason": "No decision reason was provided.",
+  "accept": "Accept and merge",
+  "reject": "Reject suggestion",
+  "readOnly": "You can check merge suggestions. Contributor or administrator access is required to decide.",
+  "confirmTitle": "Accept and merge entities",
+  "confirmBody": "Merge “{source}” into “{target}”? Facts, relations and aliases across the team will refer to the retained entity. The action is recorded in the audit log.",
+  "feedback": {
+    "accept": "Suggestion accepted and entities merged",
+    "reject": "Suggestion rejected; entities remain separate"
+  },
+  "loaded": "Loaded {count} suggestions"
+},
+  extractionDetails: {
+  "partial": "Partial extraction",
+  "complete": "Complete extraction",
+  "segments": "Processed {processed} / {total} segments",
+  "partialHint": "Only some segments completed extraction. Content from unprocessed or failed segments remains in the source.",
+  "callsTitle": "Model calls",
+  "noCalls": "No model calls recorded.",
+  "stage": "Processing stage",
+  "tier": "Model tier",
+  "calls": "Calls",
+  "totalCalls": "Total",
+  "stages": {
+    "context_extraction": "Fact and event extraction",
+    "context_entity_judgment": "Entity decision",
+    "context_event_judgment": "Event decision",
+    "context_entity_resolution": "Entity decision",
+    "context_event_resolution": "Event decision",
+    "context_attention": "Attention scoring",
+    "context_entity_embedding": "Name embeddings",
+    "intake": "Filtering and tags",
+    "classification": "Filtering and tags",
+    "auto_tag": "Tag classification",
+    "filter": "Message filtering",
+    "generation": "Content generation"
+  }
+},
   knowledgeDomains: {
     view: 'View',
     "title": "Domains",
@@ -136,7 +231,7 @@ export default {
     scope: {"label": "Query scope", "knowledge_base": "Current knowledge base", "domain": "All knowledge bases in a domain", "team": "Entire team", "selectDomain": "Select a query domain", "sourceKb": "Source knowledge base", "detailHint": "Entity identities are shared across the team. The facts and events below include sources from every knowledge base.", "workflowHint": "Workflows and reports belong to the current knowledge base. Fact query steps can use a separate scope."},
     fusion: {"minValue": "Minimum value", "maxValue": "Maximum value", "unit": "Comparison unit", "queryHint": "Query using fields or aliases from domain templates. Numeric comparisons require compatible units from the same family; counts describe only the returned records.", "originalField": "Original field label", "snapshotTitle": "Verify the source quote", "quoteMissing": "This quote does not exactly match the snapshot. Check the original text; no position is guessed.", "sameStory": "Related earlier event", "roundup": "Roundup: kept separate from the individual events", "current_period": "This period", "background": "Historical background", "unknown_date": "Unknown date"},
     tabLabel: 'Knowledge Workbench', title: 'Knowledge Workbench', subtitle: "Manage and organize document knowledge bases", sections: 'Knowledge workbench sections', refresh: 'Refresh', rebuild: 'Rebuild knowledge context', requestFailed: 'The request failed. Please try again.', emptyValue: 'Not set', unknownDate: 'Unknown time', facts: 'Facts', correct: 'Correct fact', correctionSaved: 'Fact correction saved with its source and history.', correctionTitle: 'Correct fact', correctionIntro: 'Create a new version of “{predicate}”. The quote must match the source text.', correctionValue: 'Correct value', correctionValueType: 'Value type', correctionUnit: 'Unit', correctionQuote: 'Verbatim source quote', correctionNote: 'Correction note', correctionFrom: 'Effective from', correctionTo: 'Effective until', correctionValueInvalid: 'Enter a valid value for the selected type.', cancel: 'Cancel', factPeriod: 'Effective period', rebuildQueued: '{count} sources were queued for rebuilding. Results will update after background processing finishes.', loadMore: 'Load more',
-    nav: { query: 'Structured query', entities: 'Entities & facts', events: 'Event attention', evidence: 'Source evidence', workflows: 'Tracking workflows', reports: 'Research reports' },
+    nav: { merges: 'Merge suggestions', query: 'Structured query', entities: 'Entities & facts', events: 'Event attention', evidence: 'Source evidence', workflows: 'Tracking workflows', reports: 'Research reports' },
     query: { title: 'Query knowledge context', description: 'Filter facts by entity, attribute, relation, and time, then inspect current values, history, and evidence.', entity: 'Entity name', entityPlaceholder: 'For example: Acme Inc.', predicate: 'Fact attribute', predicatePlaceholder: 'For example: headquarters, status, funding round', relation: 'Relation type', relationPlaceholder: 'For example: invested in, acquired, partnered with', since: 'From', until: 'Until', history: 'Include superseded facts', submit: 'Query', clear: 'Clear filters', resultCounts: 'Found {entities} entities, {facts} facts, {events} events, and {evidence} evidence items.', historyIncluded: 'Results include historical versions', empty: 'No matching facts, events, or sources.' },
     entities: { title: 'Entities & facts', description: 'Browse graph entities and inspect their relations, attributes, sources, and history.', filter: 'Filter entities', empty: 'No entities found', unknownType: 'Uncategorized', aliases: 'aliases', choose: 'Select an entity to inspect its facts', includeHistory: 'Include historical facts', noFacts: 'This entity has no facts to show.', unknownObject: 'Unknown entity', merge: 'Merge duplicate', mergeTitle: 'Merge entities', mergeHint: 'Choose the canonical entity to keep. Facts, relations, and aliases will move to it.', mergeSource: 'Entity to merge', mergeTarget: 'Keep this entity', mergeTargetPlaceholder: 'Select the entity to keep', mergeWarning: 'Merging changes entity references across every knowledge base in the team and is recorded in the audit log. It cannot be undone in this view.', mergeSaved: 'Entities merged' },
     events: { title: 'Event attention', description: 'Review recent events by heat and expand their reasons, related entities, and evidence.', empty: 'No events found', event: 'Event', heat: 'Heat', sourceCount: '{count} sources', hideDetails: 'Hide details', showDetails: 'Why it is trending', whyHot: 'Heat and attention reasons', noReason: 'No attention reason is available.', scored: 'Attention score', attentionScore: 'Attention {score}', noSources: 'No linked sources yet.', noDescription: 'No event summary available.' },
@@ -4254,6 +4349,12 @@ export default {
       openConfiguration: 'Open settings',
       truncated: 'Showing the first {shown} of {total}',
       bindings: {
+          light_model_tier: 'Light tier',
+          extraction_model_tier: 'Extraction tier',
+          generation_model_tier: 'Generation tier',
+          embedding_model_tier: 'Embedding tier',
+          rerank_model_tier: 'Rerank tier',
+
         embedding_model: 'Embedding model',
         summary_model: 'Summary model',
         image_processing_model: 'Image processing model',

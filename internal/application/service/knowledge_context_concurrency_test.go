@@ -95,7 +95,7 @@ func TestP2ExtractionRechecksGlobalMergeAfterModelResolution(t *testing.T) {
 	require.NoError(t, db.Create(&types.KnowledgeEvidence{ID: "old", TenantID: 9, KnowledgeBaseID: "kb", KnowledgeID: "old", Version: 1, BodyHash: strings.Repeat("a", 64), Body: "OldCo has 10 staff.", Status: types.KnowledgeEvidenceCurrent}).Error)
 	require.NoError(t, db.Create(&types.KnowledgeFact{ID: "old", TenantID: 9, KnowledgeBaseID: "kb", SubjectEntityID: "merge", Kind: "attribute", Predicate: "staff", Value: types.JSON(`10`), ValueType: "number", EvidenceID: "old", Quote: "OldCo has 10 staff.", Status: types.KnowledgeFactCurrent}).Error)
 	incoming := p2ContextMessage(t, db, "incoming", "energy-one", "OldCo has 10 staff.")
-	svc.models = knowledgeContextTestModelService{model: &knowledgeContextTestChat{response: `{"entities":[{"mention":"OldCo","canonical_name":"OldCo","entity_type":"company","quote":"OldCo has 10 staff."}],"facts":[{"kind":"attribute","subject":"OldCo","predicate":"staff","value":10,"value_type":"number","quote":"OldCo has 10 staff."}],"events":[],"attention":{"score":1,"reason":"Staff count."}}`}}
+	svc.models = knowledgeContextTestModelService{model: &knowledgeContextTestChat{response: `{"entities":[{"mention":"OldCo","canonical_name":"OldCo","entity_type":"company","quote":"OldCo has 10 staff."}],"facts":[{"kind":"attribute","subject":"OldCo","predicate":"staff","value":10,"value_type":"number","quote":"OldCo has 10 staff."}],"events":[{"title":"OldCo staff count changed","event_type":"change","entity_mentions":["OldCo"],"quote":"OldCo has 10 staff."}],"attention":{"score":1,"reason":"Staff count."}}`}}
 	paused := make(chan struct{})
 	release := make(chan struct{})
 	var pauseOnce, releaseOnce sync.Once

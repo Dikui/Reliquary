@@ -2,6 +2,7 @@
   <div class="model-selector">
     <t-select
       :value="selectedModelId"
+      :aria-label="ariaLabel"
       @change="handleModelChange"
       :placeholder="placeholderText"
       :disabled="disabled"
@@ -73,6 +74,7 @@ import {
 } from '@/utils/contextWindow'
 
 interface Props {
+  ariaLabel?: string
   modelType: 'KnowledgeQA' | 'Embedding' | 'Rerank' | 'VLLM' | 'ASR'
   selectedModelId?: string
   disabled?: boolean

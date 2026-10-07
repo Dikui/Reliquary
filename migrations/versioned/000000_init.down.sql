@@ -402,6 +402,8 @@ DROP TABLE IF EXISTS public.knowledge_context_evidence;
 DROP TABLE IF EXISTS public.knowledge_context_events;
 DROP TABLE IF EXISTS public.knowledge_context_event_evidence;
 DROP TABLE IF EXISTS public.knowledge_context_entity_aliases;
+DROP TABLE IF EXISTS public.knowledge_context_merge_suggestions;
+DROP TABLE IF EXISTS public.knowledge_context_embedding_rebuild_runs;
 DROP TABLE IF EXISTS public.knowledge_context_entities;
 DROP TABLE IF EXISTS public.knowledge_context_attention;
 DROP TABLE IF EXISTS public.knowledge_bases;

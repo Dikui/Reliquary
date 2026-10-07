@@ -79,13 +79,15 @@ func (d *DocumentInfo) UnmarshalJSON(data []byte) error {
 }
 
 type RerankerConfig struct {
-	APIKey      string
-	BaseURL     string
-	ModelName   string
-	Source      types.ModelSource
-	ModelID     string
-	Provider    string // Provider identifier: openai, aliyun, zhipu, siliconflow, jina, generic
-	ExtraConfig map[string]string
+	MaxConcurrency    int
+	RequestsPerMinute int
+	APIKey            string
+	BaseURL           string
+	ModelName         string
+	Source            types.ModelSource
+	ModelID           string
+	Provider          string // Provider identifier: openai, aliyun, zhipu, siliconflow, jina, generic
+	ExtraConfig       map[string]string
 	// CustomHeaders 允许在调用远程 API 时附加自定义 HTTP 请求头（类似 OpenAI Python SDK 的 extra_headers）。
 	CustomHeaders map[string]string
 	AppSecret     string // 加密值，工厂函数调用方传入，使用前已解密
@@ -99,15 +101,17 @@ func ConfigFromModel(m *types.Model, appSecret string) *RerankerConfig {
 		return nil
 	}
 	return &RerankerConfig{
-		ModelID:       m.ID,
-		APIKey:        m.Parameters.APIKey,
-		BaseURL:       m.Parameters.BaseURL,
-		ModelName:     m.Name,
-		Source:        m.Source,
-		Provider:      m.Parameters.Provider,
-		ExtraConfig:   m.Parameters.ExtraConfig,
-		CustomHeaders: m.Parameters.CustomHeaders,
-		AppSecret:     appSecret,
+		MaxConcurrency:    m.Parameters.MaxConcurrency,
+		RequestsPerMinute: m.Parameters.RequestsPerMinute,
+		ModelID:           m.ID,
+		APIKey:            m.Parameters.APIKey,
+		BaseURL:           m.Parameters.BaseURL,
+		ModelName:         m.Name,
+		Source:            m.Source,
+		Provider:          m.Parameters.Provider,
+		ExtraConfig:       m.Parameters.ExtraConfig,
+		CustomHeaders:     m.Parameters.CustomHeaders,
+		AppSecret:         appSecret,
 	}
 }
 
@@ -120,7 +124,7 @@ func NewReranker(config *RerankerConfig) (Reranker, error) {
 	if logger.LLMDebugEnabled() {
 		r = &debugReranker{inner: r}
 	}
-	return r, nil
+	return &governedReranker{inner: r, limit: config.MaxConcurrency, requestsPerMinute: config.RequestsPerMinute}, nil
 }
 
 // customHeaderSetter 表示支持注入自定义 HTTP header 的 reranker 实现。

@@ -170,11 +170,12 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewKnowledgeContextService))
 	must(container.Provide(service.NewKnowledgeDomainService))
 	must(container.Provide(service.NewKnowledgeContextWorker))
+	must(container.Provide(service.NewContextNameEmbeddingRebuilder))
 	must(container.Provide(service.NewWorkflowSkillExecutor))
 	must(container.Provide(service.NewKnowledgeWorkflowService))
 	must(container.Provide(func(s *service.KnowledgeContextService) interfaces.KnowledgeContextReader { return s }))
 	must(container.Provide(embedding.NewBatchEmbedder))
-	must(container.Provide(service.NewModelService))
+	must(container.Provide(service.NewModelServiceWithRoutingDB))
 	must(container.Provide(service.NewDatasetService))
 	must(container.Provide(service.NewEvaluationService))
 	must(container.Provide(service.NewUserService))
@@ -336,6 +337,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewKnowledgeStrategyHandler))
 	must(container.Provide(handler.NewKnowledgeContextHandler))
 	must(container.Provide(handler.NewKnowledgeDomainHandler))
+	must(container.Provide(handler.NewModelRoutingHandler))
 	must(container.Provide(handler.NewKnowledgeWorkflowHandler))
 	must(container.Provide(handler.NewChunkHandler))
 	must(container.Provide(handler.NewTagHandler))
@@ -387,6 +389,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	// local:// images that live under a tenant's configured storage PathPrefix
 	// (which is not encoded in the local:// URL).
 	must(container.Invoke(registerChatLocalImageResolver))
+	must(container.Invoke(registerNameEmbeddingRebuildIntegration))
 
 	// Router configuration
 	logger.Debugf(ctx, "[Container] Registering router and starting task server...")
@@ -397,10 +400,52 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	// trigger enqueue failed. Re-arm
 	// them only after the matching handlers are ready.
 	must(container.Invoke(recoverPendingWikiTasks))
+	must(container.Invoke(recoverContextNameEmbeddings))
 	must(container.Invoke(startKnowledgeWorkflowScheduler))
 
 	logger.Infof(ctx, "[Container] Container initialization completed successfully")
 	return container
+}
+
+func registerNameEmbeddingRebuildIntegration(
+	rebuilder *service.ContextNameEmbeddingRebuilder,
+	contextService *service.KnowledgeContextService,
+	domains *service.KnowledgeDomainService,
+	worker *service.KnowledgeContextWorker,
+	knowledgeBases interfaces.KnowledgeBaseService,
+	models interfaces.ModelService,
+	contextHandler *handler.KnowledgeContextHandler,
+	modelRoutingHandler *handler.ModelRoutingHandler,
+) error {
+	setter := func(target any) error {
+		integration, ok := target.(interface {
+			SetNameEmbeddingRebuilder(service.ContextNameEmbeddingRebuildTrigger)
+		})
+		if !ok {
+			return fmt.Errorf("name embedding rebuild integration unavailable for %T", target)
+		}
+		integration.SetNameEmbeddingRebuilder(rebuilder)
+		return nil
+	}
+	if err := setter(knowledgeBases); err != nil {
+		return err
+	}
+	if err := setter(models); err != nil {
+		return err
+	}
+	domains.SetNameEmbeddingRebuilder(rebuilder)
+	worker.SetNameEmbeddingRebuilder(rebuilder)
+	contextService.SetNameEmbeddingRebuilder(rebuilder)
+	contextHandler.SetNameEmbeddingRebuilder(rebuilder)
+	modelRoutingHandler.SetNameEmbeddingRebuilder(rebuilder)
+	return nil
+}
+
+func recoverContextNameEmbeddings(rebuilder *service.ContextNameEmbeddingRebuilder) error {
+	if err := rebuilder.Startup(context.Background()); err != nil {
+		logger.Warnf(context.Background(), "[Container] Name embedding rebuild startup recovery failed: %v", err)
+	}
+	return nil
 }
 
 // registerChatLocalImageResolver wires the chat package's LocalImageResolver

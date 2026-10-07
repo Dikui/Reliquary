@@ -44,11 +44,15 @@ func (s *KnowledgeContextService) purgeKnowledgeTx(tx *gorm.DB, tenantID uint64,
 	for _, item := range evidence {
 		evidenceIDs = append(evidenceIDs, item.ID)
 	}
+	if err := tx.Model(&types.KnowledgeEntityAlias{}).Where("tenant_id = ? AND evidence_id IN ?", tenantID, evidenceIDs).
+		Updates(map[string]any{"evidence_id": "", "quote": ""}).Error; err != nil {
+		return err
+	}
 	var eventIDs []string
 	if err := tx.Model(&types.KnowledgeEventEvidence{}).Where("tenant_id = ? AND knowledge_base_id = ? AND evidence_id IN ?", tenantID, kbID, evidenceIDs).Distinct().Pluck("event_id", &eventIDs).Error; err != nil {
 		return err
 	}
-	for _, model := range []any{&types.KnowledgeAttention{}, &types.KnowledgeEventEvidence{}, &types.KnowledgeFact{}, &types.KnowledgeEvidence{}} {
+	for _, model := range []any{&types.KnowledgeEntityMergeSuggestion{}, &types.KnowledgeAttention{}, &types.KnowledgeEventEvidence{}, &types.KnowledgeFact{}, &types.KnowledgeEvidence{}} {
 		column := "evidence_id"
 		if _, ok := model.(*types.KnowledgeEvidence); ok {
 			column = "id"
@@ -106,7 +110,12 @@ func (s *KnowledgeContextService) DeleteKnowledgeBase(ctx context.Context, kbID 
 			return err
 		}
 		eventIDs = uniqueContextIDs(append(eventIDs, sourceEventIDs...))
-		for _, model := range []any{&types.KnowledgeAttention{}, &types.KnowledgeEventEvidence{}, &types.KnowledgeFact{}, &types.KnowledgeEvidence{}} {
+		sourceEvidenceIDs := tx.Model(&types.KnowledgeEvidence{}).Select("id").Where("tenant_id = ? AND knowledge_base_id = ?", tenantID, kbID)
+		if err := tx.Model(&types.KnowledgeEntityAlias{}).Where("tenant_id = ? AND evidence_id IN (?)", tenantID, sourceEvidenceIDs).
+			Updates(map[string]any{"evidence_id": "", "quote": ""}).Error; err != nil {
+			return err
+		}
+		for _, model := range []any{&types.KnowledgeEntityMergeSuggestion{}, &types.KnowledgeAttention{}, &types.KnowledgeEventEvidence{}, &types.KnowledgeFact{}, &types.KnowledgeEvidence{}} {
 			if err := tx.Where("tenant_id = ? AND knowledge_base_id = ?", tenantID, kbID).Delete(model).Error; err != nil {
 				return err
 			}
@@ -182,6 +191,9 @@ func (s *KnowledgeContextService) pruneContextEntities(tx *gorm.DB, tenantID uin
 	for _, entity := range entities {
 		if used[entity.ID] {
 			continue
+		}
+		if err := tx.Where("tenant_id = ? AND (new_entity_id = ? OR candidate_entity_id = ?)", tenantID, entity.ID, entity.ID).Delete(&types.KnowledgeEntityMergeSuggestion{}).Error; err != nil {
+			return err
 		}
 		if err := tx.Where("tenant_id = ? AND entity_id = ?", tenantID, entity.ID).Delete(&types.KnowledgeEntityAlias{}).Error; err != nil {
 			return err

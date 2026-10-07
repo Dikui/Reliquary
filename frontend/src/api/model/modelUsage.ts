@@ -12,6 +12,11 @@ export const KNOWN_MODEL_USAGE_BINDINGS = [
   'query_understand_model',
   'follow_up_model',
   'extract_model',
+  'light_model_tier',
+  'extraction_model_tier',
+  'generation_model_tier',
+  'embedding_model_tier',
+  'rerank_model_tier',
 ] as const
 
 export type KnownModelUsageBinding = typeof KNOWN_MODEL_USAGE_BINDINGS[number]
@@ -23,6 +28,7 @@ export interface ModelUsageResource {
 }
 
 export interface ModelUsageDetails {
+  model_tiers?: Array<ModelUsageResource & { scope: 'team' | 'domain' }>
   knowledge_bases: ModelUsageResource[]
   agents: ModelUsageResource[]
   long_term_memory: {
@@ -85,6 +91,17 @@ export function parseModelUsageDetails(value: unknown): ModelUsageDetails | null
   const memoryBindings = parseBindings(value.long_term_memory.bindings)
   if (!knowledgeBases || !agents || !memoryBindings) return null
 
+  let tiers: ModelUsageDetails['model_tiers']
+  if (value.model_tiers !== undefined) {
+    const resources = parseResources(value.model_tiers)
+    if (!resources || !Array.isArray(value.model_tiers)) return null
+    tiers = []
+    for (let index = 0; index < resources.length; index++) {
+      const original = value.model_tiers[index]
+      if (!isRecord(original) || (original.scope !== 'team' && original.scope !== 'domain')) return null
+      tiers.push({ ...resources[index]!, scope: original.scope })
+    }
+  }
   const details: ModelUsageDetails = {
     knowledge_bases: knowledgeBases,
     agents,
@@ -92,7 +109,8 @@ export function parseModelUsageDetails(value: unknown): ModelUsageDetails | null
     knowledge_base_total: parseTotal(value.knowledge_base_total, knowledgeBases.length),
     agent_total: parseTotal(value.agent_total, agents.length),
   }
-  if (knowledgeBases.length === 0 && agents.length === 0 && memoryBindings.length === 0) {
+  if (tiers) details.model_tiers = tiers
+  if (knowledgeBases.length === 0 && agents.length === 0 && memoryBindings.length === 0 && !tiers?.length) {
     return null
   }
   return details
