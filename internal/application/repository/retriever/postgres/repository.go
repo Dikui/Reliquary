@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/pgvector/pgvector-go"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -37,25 +36,27 @@ func (r *pgRepository) Support() []types.RetrieverType {
 	return []types.RetrieverType{types.KeywordsRetrieverType, types.VectorRetrieverType}
 }
 
-// calculateIndexStorageSize calculates storage size for a single index entry
+// calculateIndexStorageSize estimates embedding and HNSW storage only.
+// Chunk text and BM25 are stored independently and are not repeated per vector source.
 func (g *pgRepository) calculateIndexStorageSize(embeddingDB *pgVector) int64 {
-	// 1. Text content size
-	contentSizeBytes := int64(len(embeddingDB.Content))
+	if embeddingDB.Dimension == 0 {
+		return 0
+	}
 
-	// 2. Vector storage size (2 bytes per dimension for half-precision float)
+	// Vector storage size (2 bytes per dimension for half-precision float).
 	var vectorSizeBytes int64 = 0
 	if embeddingDB.Dimension > 0 {
 		vectorSizeBytes = int64(embeddingDB.Dimension * 2)
 	}
 
-	// 3. Metadata size (fixed overhead for IDs, timestamps etc.)
+	// Fixed overhead for IDs and timestamps.
 	metadataSizeBytes := int64(200)
 
-	// 4. Index overhead (HNSW index is ~2x vector size)
+	// HNSW index overhead is approximately twice the vector size.
 	indexOverheadBytes := vectorSizeBytes * 2
 
 	// Total size in bytes
-	totalSizeBytes := contentSizeBytes + vectorSizeBytes + metadataSizeBytes + indexOverheadBytes
+	totalSizeBytes := vectorSizeBytes + metadataSizeBytes + indexOverheadBytes
 
 	return totalSizeBytes
 }
@@ -67,6 +68,12 @@ func (g *pgRepository) EstimateStorageSize(
 	var totalStorageSize int64 = 0
 	for _, indexInfo := range indexInfoList {
 		embeddingDB := toDBVectorEmbedding(indexInfo, additionalParams)
+		// The indexer keys estimate-only placeholders by chunk ID, including questions.
+		if embeddingDB.Dimension == 0 && additionalParams != nil {
+			if embeddings, ok := additionalParams["embedding"].(map[string][]float32); ok {
+				embeddingDB.Dimension = len(embeddings[indexInfo.ChunkID])
+			}
+		}
 		totalStorageSize += g.calculateIndexStorageSize(embeddingDB)
 	}
 	logger.GetLogger(ctx).Infof(
@@ -80,6 +87,9 @@ func (g *pgRepository) EstimateStorageSize(
 func (g *pgRepository) Save(ctx context.Context, indexInfo *types.IndexInfo, additionalParams map[string]any) error {
 	logger.GetLogger(ctx).Debugf("[Postgres] Saving index for source ID: %s", indexInfo.SourceID)
 	embeddingDB := toDBVectorEmbedding(indexInfo, additionalParams)
+	if embeddingDB.Dimension == 0 {
+		return nil
+	}
 	err := g.db.WithContext(ctx).Create(embeddingDB).Error
 	if err != nil {
 		logger.GetLogger(ctx).Errorf("[Postgres] Failed to save index: %v", err)
@@ -94,9 +104,15 @@ func (g *pgRepository) BatchSave(
 	ctx context.Context, indexInfoList []*types.IndexInfo, additionalParams map[string]any,
 ) error {
 	logger.GetLogger(ctx).Infof("[Postgres] Batch saving %d indices", len(indexInfoList))
-	indexInfoDBList := make([]*pgVector, len(indexInfoList))
+	indexInfoDBList := make([]*pgVector, 0, len(indexInfoList))
 	for i := range indexInfoList {
-		indexInfoDBList[i] = toDBVectorEmbedding(indexInfoList[i], additionalParams)
+		embeddingDB := toDBVectorEmbedding(indexInfoList[i], additionalParams)
+		if embeddingDB.Dimension > 0 {
+			indexInfoDBList = append(indexInfoDBList, embeddingDB)
+		}
+	}
+	if len(indexInfoDBList) == 0 {
+		return nil
 	}
 	err := g.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(indexInfoDBList).Error
 	if err != nil {
@@ -174,14 +190,14 @@ func (g *pgRepository) KeywordsRetrieve(ctx context.Context,
 	if len(params.KnowledgeBaseIDs) > 0 {
 		logger.GetLogger(ctx).Debugf("[Postgres] Filtering by knowledge base IDs: %v", params.KnowledgeBaseIDs)
 		conds = append(conds, clause.IN{
-			Column: "knowledge_base_id",
+			Column: "c.knowledge_base_id",
 			Values: common.ToInterfaceSlice(params.KnowledgeBaseIDs),
 		})
 	}
 	if len(params.KnowledgeIDs) > 0 {
 		logger.GetLogger(ctx).Debugf("[Postgres] Filtering by knowledge IDs: %v", params.KnowledgeIDs)
 		conds = append(conds, clause.IN{
-			Column: "knowledge_id",
+			Column: "c.knowledge_id",
 			Values: common.ToInterfaceSlice(params.KnowledgeIDs),
 		})
 	}
@@ -189,38 +205,50 @@ func (g *pgRepository) KeywordsRetrieve(ctx context.Context,
 	if len(params.TagIDs) > 0 {
 		logger.GetLogger(ctx).Debugf("[Postgres] Filtering by tag IDs: %v", params.TagIDs)
 		conds = append(conds, clause.IN{
-			Column: "tag_id",
+			Column: "c.tag_id",
 			Values: common.ToInterfaceSlice(params.TagIDs),
 		})
 	}
 
-	// Use ParadeDB's ||| operator for matching any token
+	// Match only searchable text, including the generated questions in metadata.
 	conds = append(conds, clause.Expr{
-		SQL:  "content ||| ?",
-		Vars: []interface{}{params.Query},
+		SQL: `c.seq_id @@@ paradedb.boolean(should => ARRAY[
+			paradedb.match_disjunction('content', ?),
+			paradedb.match_disjunction('context_header', ?),
+			paradedb.match_disjunction('search_title', ?),
+			paradedb.match_disjunction('metadata.generated_questions.question', ?)
+		])`,
+		Vars: []interface{}{params.Query, params.Query, params.Query, params.Query},
 	})
 
-	// Filter by is_enabled = true or NULL (NULL means enabled for historical data)
+	// A chunk is the source of keyword availability, even without a vector row.
 	conds = append(conds, clause.Expr{
-		SQL:  "(is_enabled IS NULL OR is_enabled = ?)",
-		Vars: []interface{}{true},
+		SQL: `c.deleted_at IS NULL
+			AND (c.is_enabled IS NULL OR c.is_enabled = true)
+			AND c.index_status NOT IN ('processing', 'failed')
+			AND c.chunk_type IN ('text', 'summary', 'image_ocr', 'image_caption', 'table_summary', 'table_column')
+			AND k.deleted_at IS NULL AND kb.deleted_at IS NULL
+			AND (kb.indexing_strategy IS NULL OR kb.indexing_strategy->>'keyword_enabled' = 'true')`,
 	})
 	conds = append(conds, clause.OrderBy{Columns: []clause.OrderByColumn{
 		{Column: clause.Column{Name: "score"}, Desc: true},
 	}})
 
 	var embeddingDBList []pgVectorWithScore
-	err := g.db.WithContext(ctx).Clauses(conds...).Debug().
+	err := g.db.WithContext(ctx).Table("chunks AS c").
+		Joins("JOIN knowledges AS k ON k.id = c.knowledge_id").
+		Joins("JOIN knowledge_bases AS kb ON kb.id = c.knowledge_base_id").
+		Clauses(conds...).
 		Select([]string{
-			"paradedb.score(id) as score",
-			"id",
-			"content",
-			"source_id",
-			"source_type",
-			"chunk_id",
-			"knowledge_id",
-			"knowledge_base_id",
-			"tag_id",
+			"paradedb.score(c.seq_id) AS score",
+			"c.seq_id AS id",
+			"c.content", "c.context_header", "k.title", "c.metadata",
+			"c.id AS source_id",
+			"0 AS source_type",
+			"c.id AS chunk_id",
+			"c.knowledge_id",
+			"c.knowledge_base_id",
+			"c.tag_id",
 		}).
 		Limit(int(params.TopK)).
 		Find(&embeddingDBList).Error
@@ -235,13 +263,14 @@ func (g *pgRepository) KeywordsRetrieve(ctx context.Context,
 	}
 
 	logger.GetLogger(ctx).Infof("[Postgres] Keywords retrieval found %d results", len(embeddingDBList))
-	results := make([]*types.IndexWithScore, len(embeddingDBList))
+	results := make([]*types.IndexWithScore, 0, len(embeddingDBList))
 	const maxKeywordResultLog = 8
 	for i := range embeddingDBList {
-		results[i] = fromDBVectorEmbeddingWithScore(&embeddingDBList[i], types.MatchTypeKeywords)
+		result := fromDBVectorEmbeddingWithScore(&embeddingDBList[i], types.MatchTypeKeywords)
+		results = append(results, result)
 		if i < maxKeywordResultLog {
 			logger.GetLogger(ctx).Debugf("[Postgres] Keywords result %d: chunk=%s, score=%f",
-				i, results[i].ChunkID, results[i].Score)
+				i, result.ChunkID, result.Score)
 		}
 	}
 	if len(results) > maxKeywordResultLog {
@@ -376,19 +405,28 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 
 	querySQL := fmt.Sprintf(`
 		SELECT 
-			id, content, source_id, source_type, chunk_id, knowledge_id, knowledge_base_id, tag_id,
-			(1 - distance) as score
+			e.id, c.content, c.context_header, k.title, c.metadata,
+			e.source_id, e.source_type, e.chunk_id, e.knowledge_id, e.knowledge_base_id, c.tag_id,
+			(1 - candidates.distance) as score
 		FROM (
 			SELECT 
-				id, content, source_id, source_type, chunk_id, knowledge_id, knowledge_base_id, tag_id,
+				id,
 				embedding::halfvec(%[1]d) <=> $1::halfvec(%[1]d) as distance
 			FROM embeddings
 			%[2]s
 			ORDER BY embedding::halfvec(%[1]d) <=> $1::halfvec(%[1]d)
 			LIMIT $%[3]d
 		) AS candidates
-		WHERE distance <= $%[4]d
-		ORDER BY distance ASC
+		JOIN embeddings AS e ON e.id = candidates.id
+		JOIN chunks AS c ON c.id = e.chunk_id
+		JOIN knowledges AS k ON k.id = c.knowledge_id
+		WHERE candidates.distance <= $%[4]d
+			AND c.deleted_at IS NULL
+			AND (c.is_enabled IS NULL OR c.is_enabled = true)
+			AND c.index_status NOT IN ('processing', 'failed')
+			AND c.chunk_type IN ('text', 'summary', 'image_ocr', 'image_caption', 'table_summary', 'table_column')
+			AND k.deleted_at IS NULL
+		ORDER BY candidates.distance ASC
 		LIMIT $%[5]d
 	`, dimension, whereClause, subqueryLimitParam, thresholdParam, finalLimitParam)
 
@@ -457,13 +495,17 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 	}
 
 	logger.GetLogger(ctx).Infof("[Postgres] Vector retrieval found %d results", len(embeddingDBList))
-	results := make([]*types.IndexWithScore, len(embeddingDBList))
+	results := make([]*types.IndexWithScore, 0, len(embeddingDBList))
 	const maxVectorResultLog = 8
 	for i := range embeddingDBList {
-		results[i] = fromDBVectorEmbeddingWithScore(&embeddingDBList[i], types.MatchTypeEmbedding)
+		result := fromDBVectorEmbeddingWithScore(&embeddingDBList[i], types.MatchTypeEmbedding)
+		if result == nil {
+			continue
+		}
+		results = append(results, result)
 		if i < maxVectorResultLog {
 			logger.GetLogger(ctx).Debugf("[Postgres] Vector search result %d: chunk_id %s, score %.4f",
-				i, results[i].ChunkID, results[i].Score)
+				i, result.ChunkID, result.Score)
 		}
 	}
 	if len(results) > maxVectorResultLog {
@@ -501,6 +543,30 @@ func (g *pgRepository) CopyIndices(ctx context.Context,
 		return nil
 	}
 
+	// Moving a message keeps its chunk and source IDs, which are unique in embeddings.
+	// Update these rows in place rather than attempting a duplicate INSERT.
+	isIdentityMove := sourceKnowledgeBaseID != targetKnowledgeBaseID
+	for sourceID, targetID := range sourceToTargetChunkIDMap {
+		isIdentityMove = isIdentityMove && sourceID == targetID
+	}
+	for sourceID, targetID := range sourceToTargetKBIDMap {
+		isIdentityMove = isIdentityMove && sourceID == targetID
+	}
+	if isIdentityMove {
+		chunkIDs := make([]string, 0, len(sourceToTargetChunkIDMap))
+		for chunkID := range sourceToTargetChunkIDMap {
+			chunkIDs = append(chunkIDs, chunkID)
+		}
+		knowledgeIDs := make([]string, 0, len(sourceToTargetKBIDMap))
+		for knowledgeID := range sourceToTargetKBIDMap {
+			knowledgeIDs = append(knowledgeIDs, knowledgeID)
+		}
+		return g.db.WithContext(ctx).Model(&pgVector{}).
+			Where("knowledge_base_id = ? AND chunk_id IN ? AND knowledge_id IN ?",
+				sourceKnowledgeBaseID, chunkIDs, knowledgeIDs).
+			Update("knowledge_base_id", targetKnowledgeBaseID).Error
+	}
+
 	// Batch processing parameters
 	batchSize := 500 // Number of records to process per batch
 	offset := 0      // Offset for pagination
@@ -511,6 +577,7 @@ func (g *pgRepository) CopyIndices(ctx context.Context,
 		var sourceVectors []*pgVector
 		if err := g.db.WithContext(ctx).
 			Where("knowledge_base_id = ?", sourceKnowledgeBaseID).
+			Order("id").
 			Limit(batchSize).
 			Offset(offset).
 			Find(&sourceVectors).Error; err != nil {
@@ -532,9 +599,29 @@ func (g *pgRepository) CopyIndices(ctx context.Context,
 			batchCount, offset,
 		)
 
+		chunkIDs := make([]string, 0, batchCount*2)
+		for _, vector := range sourceVectors {
+			chunkIDs = append(chunkIDs, vector.ChunkID)
+			if targetChunkID, ok := sourceToTargetChunkIDMap[vector.ChunkID]; ok {
+				chunkIDs = append(chunkIDs, targetChunkID)
+			}
+		}
+		var chunks []*types.Chunk
+		if err := g.db.WithContext(ctx).Select("id", "metadata", "tag_id").
+			Where("id IN ?", chunkIDs).Find(&chunks).Error; err != nil {
+			return err
+		}
+		chunksByID := make(map[string]*types.Chunk, len(chunks))
+		for _, chunk := range chunks {
+			chunksByID[chunk.ID] = chunk
+		}
+
 		// Create target vector index
 		targetVectors := make([]*pgVector, 0, batchCount)
 		for _, sourceVector := range sourceVectors {
+			if sourceVector.Dimension == 0 {
+				continue
+			}
 			// Get the mapped target chunk ID
 			targetChunkID, ok := sourceToTargetChunkIDMap[sourceVector.ChunkID]
 			if !ok {
@@ -555,30 +642,43 @@ func (g *pgRepository) CopyIndices(ctx context.Context,
 				continue
 			}
 
-			// Handle SourceID transformation for generated questions
-			// Generated questions have SourceID format: {chunkID}-{questionID}
-			// Regular chunks have SourceID == ChunkID
-			var targetSourceID string
+			// Recover the original question ID before rebuilding its stable source ID.
+			targetSourceID := ""
 			if sourceVector.SourceID == sourceVector.ChunkID {
-				// Regular chunk, use targetChunkID as SourceID
 				targetSourceID = targetChunkID
-			} else if strings.HasPrefix(sourceVector.SourceID, sourceVector.ChunkID+"-") {
-				// This is a generated question, preserve the questionID part
-				questionID := strings.TrimPrefix(sourceVector.SourceID, sourceVector.ChunkID+"-")
-				targetSourceID = fmt.Sprintf("%s-%s", targetChunkID, questionID)
-			} else {
-				// For other complex scenarios, generate new unique SourceID
-				targetSourceID = uuid.New().String()
+			} else if chunk := chunksByID[sourceVector.ChunkID]; chunk != nil {
+				metadata, err := chunk.DocumentMetadata()
+				if err != nil {
+					return err
+				}
+				if metadata != nil {
+					for _, question := range metadata.GeneratedQuestions {
+						if types.GeneratedQuestionSourceID(sourceVector.ChunkID, question.ID) == sourceVector.SourceID {
+							targetSourceID = types.GeneratedQuestionSourceID(targetChunkID, question.ID)
+							break
+						}
+					}
+				}
+			}
+			if targetSourceID == "" {
+				logger.GetLogger(ctx).Warnf("[Postgres] Skipping vector for missing question source: %s", sourceVector.SourceID)
+				continue
 			}
 
-			// Create new vector index, copy the content and vector of the source index
+			targetTagID := sourceVector.TagID
+			if chunk := chunksByID[targetChunkID]; chunk != nil {
+				targetTagID = chunk.TagID
+			}
+
+			// Copy vectors and source identifiers; keyword indexing follows chunks.
 			targetVector := &pgVector{
-				Content:         sourceVector.Content,
 				SourceID:        targetSourceID, // Handle SourceID transformation properly
 				SourceType:      sourceVector.SourceType,
 				ChunkID:         targetChunkID,         // Update to target chunk ID
 				KnowledgeID:     targetKnowledgeID,     // Update to target knowledge ID
 				KnowledgeBaseID: targetKnowledgeBaseID, // Update to target knowledge base ID
+				TagID:           targetTagID,
+				IsEnabled:       sourceVector.IsEnabled,
 				Dimension:       sourceVector.Dimension,
 				Embedding:       sourceVector.Embedding, // Copy the vector embedding directly, avoid recalculation
 			}

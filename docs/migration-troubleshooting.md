@@ -35,10 +35,11 @@ the new baseline; changing the recorded version does not create the schema.
 The Compose PostgreSQL service uses `paradedb/paradedb:v0.22.2-pg17`.
 Both `docker-compose.yml` and `docker-compose.dev.yml` mount only their
 PostgreSQL data volume and do not mount `migrations/paradedb/` into
-`/docker-entrypoint-initdb.d`. Those files are legacy manual initialization
-and demonstration scripts, including a separate Chinese search demo table.
-They are not part of startup migrations and must not initialize the new
-baseline database. Startup and `scripts/migrate.sh` use only
+`/docker-entrypoint-initdb.d`. The remaining file is a legacy Chinese search
+demonstration script. The unused `00-init-db.sql` initialization script was
+removed so it cannot recreate the obsolete embeddings text column and index.
+The demonstration is not part of startup migrations and must not initialize
+the baseline database. Startup and `scripts/migrate.sh` use only
 `migrations/versioned/`.
 
 ---

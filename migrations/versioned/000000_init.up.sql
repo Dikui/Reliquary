@@ -304,7 +304,8 @@ CREATE TABLE public.chunks (
     content_revision integer DEFAULT 0 NOT NULL,
     index_status character varying(16) DEFAULT 'ready'::character varying NOT NULL,
     last_editor_id character varying(64) DEFAULT ''::character varying NOT NULL,
-    context_header text DEFAULT ''::text NOT NULL
+    context_header text DEFAULT ''::text NOT NULL,
+    search_title text DEFAULT ''::text NOT NULL
 );
 
 
@@ -375,7 +376,6 @@ CREATE TABLE public.embeddings (
     chunk_id character varying(64),
     knowledge_id character varying(64),
     knowledge_base_id character varying(64),
-    content text,
     dimension integer NOT NULL,
     embedding public.halfvec,
     is_enabled boolean DEFAULT true,
@@ -3331,17 +3331,6 @@ CREATE INDEX embeddings_embedding_idx_798 ON public.embeddings USING hnsw (((emb
 
 
 --
--- Name: embeddings_search_idx; Type: INDEX; Schema: public
---
-
-CREATE INDEX embeddings_search_idx ON public.embeddings USING bm25 (id, knowledge_base_id, content, knowledge_id, chunk_id) WITH (key_field=id, text_fields='{
-                "content": {
-                  "tokenizer": {"type": "chinese_lindera"}
-                }
-            }');
-
-
---
 -- Name: embeddings_unique_source; Type: INDEX; Schema: public
 --
 
@@ -3479,6 +3468,18 @@ CREATE INDEX idx_chunks_parent_id ON public.chunks USING btree (parent_chunk_id)
 --
 
 CREATE UNIQUE INDEX idx_chunks_seq_id ON public.chunks USING btree (seq_id);
+
+-- Search the editable body and its short retrieval aliases without a body copy.
+CREATE INDEX chunks_search_idx ON public.chunks USING bm25
+    (seq_id, knowledge_base_id, knowledge_id, tag_id, is_enabled, chunk_type,
+     index_status, deleted_at, content, context_header, search_title, metadata)
+    WITH (key_field=seq_id, text_fields='{
+        "content": {"tokenizer": {"type": "chinese_lindera"}},
+        "context_header": {"tokenizer": {"type": "chinese_lindera"}},
+        "search_title": {"tokenizer": {"type": "chinese_lindera"}}
+    }', json_fields='{
+        "metadata": {"tokenizer": {"type": "chinese_lindera"}}
+    }');
 
 
 --
@@ -4829,6 +4830,35 @@ CREATE UNIQUE INDEX uq_user_env_var ON public.tenant_user_env_vars USING btree (
 --
 
 CREATE TRIGGER trigger_mcp_services_updated_at BEFORE UPDATE ON public.mcp_services FOR EACH ROW EXECUTE FUNCTION public.update_mcp_services_updated_at();
+
+CREATE FUNCTION public.set_chunk_search_title() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+BEGIN
+    NEW.search_title := COALESCE((
+        SELECT btrim(title) FROM public.knowledges
+        WHERE id = NEW.knowledge_id AND tenant_id = NEW.tenant_id
+    ), '');
+    RETURN NEW;
+END;
+$$;
+
+CREATE FUNCTION public.sync_knowledge_search_title() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+BEGIN
+    UPDATE public.chunks SET search_title = COALESCE(btrim(NEW.title), '')
+    WHERE knowledge_id = NEW.id AND tenant_id = NEW.tenant_id
+      AND search_title IS DISTINCT FROM COALESCE(btrim(NEW.title), '');
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER set_chunk_search_title
+    BEFORE INSERT OR UPDATE OF knowledge_id, tenant_id ON public.chunks
+    FOR EACH ROW EXECUTE FUNCTION public.set_chunk_search_title();
+
+CREATE TRIGGER sync_knowledge_search_title
+    AFTER INSERT OR UPDATE OF title ON public.knowledges
+    FOR EACH ROW EXECUTE FUNCTION public.sync_knowledge_search_title();
 
 
 --

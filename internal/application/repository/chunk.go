@@ -39,7 +39,13 @@ func NewChunkRepository(db *gorm.DB) interfaces.ChunkRepository {
 // A deadlock retry wrapper is kept as defense-in-depth for any remaining
 // edge cases on secondary unique indexes.
 func (r *chunkRepository) CreateChunks(ctx context.Context, chunks []*types.Chunk) error {
+	disabledIDs := make([]string, 0)
+	disabledChunks := make([]*types.Chunk, 0)
 	for _, chunk := range chunks {
+		if !chunk.IsEnabled {
+			disabledIDs = append(disabledIDs, chunk.ID)
+			disabledChunks = append(disabledChunks, chunk)
+		}
 		chunk.Content = common.CleanInvalidUTF8(chunk.Content)
 		chunk.ContextHeader = common.CleanInvalidUTF8(chunk.ContextHeader)
 		if chunk.SourceContent == "" {
@@ -52,10 +58,23 @@ func (r *chunkRepository) CreateChunks(ctx context.Context, chunks []*types.Chun
 
 	db := r.db.WithContext(ctx)
 
-	// Select("*") ensures zero-value fields (IsEnabled=false, Flags=0) are
-	// explicitly inserted, bypassing GORM's default value behavior.
 	// SeqID=0 is skipped by GORM automatically (autoIncrement tag).
-	return db.Select("*").CreateInBatches(chunks, 100).Error
+	if len(disabledIDs) == 0 {
+		return db.Select("*").CreateInBatches(chunks, 100).Error
+	}
+	// GORM replaces false with the model's true default during INSERT, even
+	// with Select("*"). Restore explicitly disabled chunks in the same transaction.
+	defer func() {
+		for _, chunk := range disabledChunks {
+			chunk.IsEnabled = false
+		}
+	}()
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Select("*").CreateInBatches(chunks, 100).Error; err != nil {
+			return err
+		}
+		return tx.Model(&types.Chunk{}).Where("id IN ?", disabledIDs).Update("is_enabled", false).Error
+	})
 }
 
 // GetChunkByID retrieves a chunk by its ID and tenant ID

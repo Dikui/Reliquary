@@ -289,6 +289,7 @@ func (s *knowledgeService) CloneChunk(ctx context.Context, src, dst *types.Knowl
 	chunkType := []types.ChunkType{
 		types.ChunkTypeText, types.ChunkTypeParentText, types.ChunkTypeSummary,
 		types.ChunkTypeImageCaption, types.ChunkTypeImageOCR,
+		types.ChunkTypeTableSummary, types.ChunkTypeTableColumn,
 	}
 
 	// Resolve the destination FileService so extracted images can be copied
@@ -362,6 +363,8 @@ func (s *knowledgeService) CloneChunk(ctx context.Context, src, dst *types.Knowl
 				KnowledgeBaseID: dst.KnowledgeBaseID,
 				TagID:           targetTagID,
 				Content:         sourceChunk.Content,
+				ContextHeader:   sourceChunk.ContextHeader,
+				IndexStatus:     sourceChunk.IndexStatus,
 				ChunkIndex:      sourceChunk.ChunkIndex,
 				IsEnabled:       sourceChunk.IsEnabled,
 				Flags:           sourceChunk.Flags,
@@ -904,7 +907,7 @@ func (s *knowledgeService) moveOneKnowledge(
 	}
 }
 
-// moveKnowledgeReuseVectors moves knowledge by copying vector indices and updating DB references.
+// moveKnowledgeReuseVectors moves vector ownership and chunk references together.
 func (s *knowledgeService) moveKnowledgeReuseVectors(
 	ctx context.Context,
 	knowledge *types.Knowledge,
@@ -926,9 +929,15 @@ func (s *knowledgeService) moveKnowledgeReuseVectors(
 	}
 
 	// 1. Get old chunk IDs for vector index copy mapping
-	oldChunks, err := s.chunkRepo.ListChunksByKnowledgeID(ctx, tenantID, knowledge.ID)
-	if err != nil {
-		return fmt.Errorf("failed to list chunks: %w", err)
+	var oldChunks []*types.Chunk
+	if knowledge.EmbeddingModelID != "" {
+		var err error
+		oldChunks, err = s.chunkRepo.ListChunksByKnowledgeIDAndTypes(ctx, tenantID, knowledge.ID,
+			[]types.ChunkType{types.ChunkTypeText, types.ChunkTypeParentText, types.ChunkTypeSummary,
+				types.ChunkTypeImageOCR, types.ChunkTypeImageCaption, types.ChunkTypeTableSummary, types.ChunkTypeTableColumn})
+		if err != nil {
+			return fmt.Errorf("failed to list chunks: %w", err)
+		}
 	}
 
 	// Build identity mapping (same chunk IDs, just moving between KBs)
@@ -956,21 +965,13 @@ func (s *knowledgeService) moveKnowledgeReuseVectors(
 			return fmt.Errorf("failed to get embedding model: %w", err)
 		}
 
-		// Copy indices from source KB to target KB
+		// Identity mappings move the existing vectors to the destination KB.
 		knowledgeIDMapping := map[string]string{knowledge.ID: knowledge.ID}
 		if err := retrieveEngine.CopyIndices(ctx, sourceKB.ID, targetKB.ID,
 			knowledgeIDMapping, chunkIDMapping,
 			embeddingModel.GetDimensions(), sourceKB.Type,
 		); err != nil {
 			return fmt.Errorf("failed to copy indices: %w", err)
-		}
-
-		// Delete indices from source KB
-		if err := retrieveEngine.DeleteByKnowledgeIDList(ctx, []string{knowledge.ID},
-			embeddingModel.GetDimensions(), sourceKB.Type,
-		); err != nil {
-			logger.Warnf(ctx, "moveKnowledgeReuseVectors: failed to delete old indices for knowledge %s: %v", knowledge.ID, err)
-			// Non-fatal: indices will be orphaned but won't affect correctness
 		}
 	}
 
