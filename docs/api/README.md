@@ -133,4 +133,4 @@ Reliquary API 按功能分为以下几类：
 | 向量存储 | 向量数据库连接管理 | [vector-store.md](./vector-store.md) |
 | 存储后端 | 对象/文件存储实例（多实例）管理 | [storage-backend.md](./storage-backend.md) |
 | IM 渠道 | 飞书 IM 对接，含渠道 CRUD 与回调 | [../IM集成开发文档.md](../IM集成开发文档.md) |
-| 数据源导入 | 飞书 / 企微 / Notion / Confluence 等外部数据源接入与同步 | [../数据源导入开发文档.md](../数据源导入开发文档.md) |
+| 数据源导入 | RSS 订阅与站点适配器的数据源接入和同步 | [../数据源导入开发文档.md](../数据源导入开发文档.md) |

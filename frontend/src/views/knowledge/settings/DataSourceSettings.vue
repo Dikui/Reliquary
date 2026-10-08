@@ -21,10 +21,8 @@ const emit = defineEmits<{ (e: 'count', value: number): void }>()
 const { t } = useI18n()
 const authStore = useAuthStore()
 
-// 后端 /datasource 的 list/logs 是 Viewer+，但所有写操作（POST/PUT/DELETE
-// 以及 sync/pause/resume/validate）都是 Admin+。低权限用户保留只读视图，
 // 增删改和触发同步全部隐藏，而不是按下去再撞 403。
-const canManageDataSource = computed(() => authStore.hasRole('admin'))
+const canManageDataSource = computed(() => authStore.isLoggedIn)
 
 const dataSources = ref<DataSource[]>([])
 const loading = ref(false)
@@ -461,14 +459,7 @@ onBeforeUnmount(stopPolling)
     overflow: hidden;
   }
 
-  &--feishu .ds-card__badge,
-  &--notion .ds-card__badge,
-  &--yuque .ds-card__badge,
-  &--ima .ds-card__badge,
-  &--rss .ds-card__badge {
-    background: var(--td-bg-color-container, #fff);
-    box-shadow: inset 0 0 0 1px var(--td-component-stroke);
-  }
+
 
   &__body {
     flex: 1;

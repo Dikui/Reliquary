@@ -14,10 +14,10 @@ import (
 	"reliquary/internal/types"
 )
 
-func domainTestContext(role types.TenantRole) context.Context {
+func domainTestContext() context.Context {
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
 	ctx = context.WithValue(ctx, types.UserIDContextKey, "domain-administrator")
-	return context.WithValue(ctx, types.TenantRoleContextKey, role)
+	return ctx
 }
 
 func requireDomainError(t *testing.T, err error, status int) {
@@ -30,34 +30,19 @@ func requireDomainError(t *testing.T, err error, status int) {
 func TestKnowledgeDomainCRUDAndPermissions(t *testing.T) {
 	db := pgtest.Open(t)
 	s := NewKnowledgeDomainService(db)
-	admin := domainTestContext(types.TenantRoleAdmin)
+	admin := domainTestContext()
 	domain, err := s.Create(admin, types.KnowledgeDomain{Name: "材料科学", EntityTypes: []string{"材料"}, Fields: []types.DomainField{{Key: "strength", Label: "强度", ValueType: "number"}}})
 	require.NoError(t, err)
 	require.Equal(t, "domain-administrator", domain.CreatedBy)
 	require.False(t, domain.IsBuiltin)
 	_, err = s.Create(admin, types.KnowledgeDomain{Name: "材料科学"})
 	requireDomainError(t, err, http.StatusConflict)
-	for _, role := range []types.TenantRole{types.TenantRoleOwner, types.TenantRoleAdmin, types.TenantRoleContributor, types.TenantRoleViewer} {
-		ctx := domainTestContext(role)
-		items, err := s.List(ctx)
-		require.NoError(t, err)
-		require.Len(t, items, 1)
-		_, err = s.Get(ctx, domain.ID)
-		require.NoError(t, err)
-		if role.HasPermission(types.TenantRoleAdmin) {
-			continue
-		}
-		_, err = s.Create(ctx, types.KnowledgeDomain{Name: "Denied"})
-		requireDomainError(t, err, http.StatusForbidden)
-		_, err = s.Update(ctx, domain.ID, *domain)
-		requireDomainError(t, err, http.StatusForbidden)
-		err = s.Delete(ctx, domain.ID)
-		requireDomainError(t, err, http.StatusForbidden)
-		_, err = s.MapField(ctx, domain.ID, types.DomainFieldMapping{OpenField: "压力", FieldKey: "strength"})
-		requireDomainError(t, err, http.StatusForbidden)
-		_, err = s.AddField(ctx, domain.ID, types.DomainField{Key: "pressure", ValueType: "number"})
-		requireDomainError(t, err, http.StatusForbidden)
-	}
+	items, err := s.List(admin)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	_, err = s.Get(admin, domain.ID)
+	require.NoError(t, err)
+
 	domain.Description = "材料属性与研发动态"
 	domain.Name = "先进材料"
 	domain.IsBuiltin = true
@@ -79,7 +64,7 @@ func TestKnowledgeDomainCRUDAndPermissions(t *testing.T) {
 
 func TestBuiltinKnowledgeDomainBootstrapPreservesEdits(t *testing.T) {
 	db := pgtest.Open(t)
-	ctx := domainTestContext(types.TenantRoleOwner)
+	ctx := domainTestContext()
 	require.NoError(t, EnsureSingleTeamSpace(ctx, db))
 	for i := 0; i < 3; i++ {
 		require.NoError(t, EnsureBuiltinKnowledgeDomains(ctx, db))
@@ -110,7 +95,7 @@ func TestBuiltinKnowledgeDomainBootstrapPreservesEdits(t *testing.T) {
 
 func TestKnowledgeBaseRequiresActiveDomainAndBlocksDomainDeletion(t *testing.T) {
 	db := pgtest.Open(t)
-	ctx := domainTestContext(types.TenantRoleOwner)
+	ctx := domainTestContext()
 	domains := NewKnowledgeDomainService(db)
 	domain, err := domains.Create(ctx, types.KnowledgeDomain{Name: "物流"})
 	require.NoError(t, err)
@@ -139,7 +124,7 @@ func TestKnowledgeBaseRequiresActiveDomainAndBlocksDomainDeletion(t *testing.T) 
 
 func TestDomainOpenFieldConsolidationRetainsSourceFacts(t *testing.T) {
 	db := pgtest.Open(t)
-	ctx := domainTestContext(types.TenantRoleAdmin)
+	ctx := domainTestContext()
 	s := NewKnowledgeDomainService(db)
 	domain, err := s.Create(ctx, types.KnowledgeDomain{Name: "医学", Fields: []types.DomainField{{Key: "dose", Label: "剂量", ValueType: "number"}}})
 	require.NoError(t, err)
@@ -159,7 +144,7 @@ func TestDomainOpenFieldConsolidationRetainsSourceFacts(t *testing.T) {
 			require.NoError(t, db.Create(&known).Error)
 		}
 	}
-	fields, err := s.OpenFields(domainTestContext(types.TenantRoleViewer), domain.ID)
+	fields, err := s.OpenFields(domainTestContext(), domain.ID)
 	require.NoError(t, err)
 	require.Len(t, fields, 1)
 	require.Equal(t, "给药量", fields[0].Name)
@@ -186,7 +171,7 @@ func TestDomainOpenFieldConsolidationRetainsSourceFacts(t *testing.T) {
 
 func TestKnowledgeBaseDomainUpdateCannotRestoreDeletedBase(t *testing.T) {
 	db := pgtest.Open(t)
-	ctx := domainTestContext(types.TenantRoleAdmin)
+	ctx := domainTestContext()
 	domains := NewKnowledgeDomainService(db)
 	first, err := domains.Create(ctx, types.KnowledgeDomain{Name: "新闻"})
 	require.NoError(t, err)

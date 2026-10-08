@@ -174,8 +174,8 @@
                       </div>
                       <div class="form-item" data-guide="kb-create-name">
                         <label class="form-label required">{{ $t('knowledgeEditor.basic.nameLabel') }}</label>
-                        <t-input 
-                          v-model="formData.name" 
+                        <t-input
+                          v-model="formData.name"
                           :placeholder="$t('knowledgeEditor.basic.namePlaceholder')"
                           :maxlength="50"
                         />
@@ -386,12 +386,6 @@
                 <div v-if="editorMode === 'edit' && activeKbId && currentSection === 'datasource'" class="section">
                   <DataSourceSettings :kb-id="activeKbId" @count="dsCount = $event" />
                 </div>
-
-
-                <!-- 活动记录（仅编辑模式，KB 所属租户内 Owner/Admin） -->
-                <div v-if="editorMode === 'edit' && activeKbId && canViewActivity && currentSection === 'activity'" class="section">
-                  <KnowledgeBaseActivitySettings :kb-id="activeKbId" :active="currentSection === 'activity'" />
-                </div>
               </div>
 
               <!-- 保存按钮 -->
@@ -449,7 +443,6 @@ import KBVectorStoreSettings from './settings/KBVectorStoreSettings.vue'
 import KBAdvancedSettings from './settings/KBAdvancedSettings.vue'
 import ModelSelector from '@/components/ModelSelector.vue'
 import DataSourceSettings from './settings/DataSourceSettings.vue'
-import KnowledgeBaseActivitySettings from './settings/KnowledgeBaseActivitySettings.vue'
 import { useI18n } from 'vue-i18n'
 
 const uiStore = useUIStore()
@@ -529,8 +522,7 @@ const hasFiles = ref(false)
 const tenantDefaultStorageProvider = ref('local')
 const initialIndexingStrategy = ref<any>(null)
 const dsCount = ref(0)
-const canEditKB = computed(() => authStore.hasRole('contributor'))
-const canViewActivity = computed(() => editorMode.value === 'edit' && !!activeKbId.value && authStore.hasRole('viewer'))
+const canEditKB = computed(() => authStore.isLoggedIn)
 
 // 用户是否在分块设置中手动改过任何值。一旦为 true，就不再根据索引策略自动调整默认分块参数。
 const chunkingDirty = ref(false)
@@ -554,7 +546,7 @@ const DEFAULT_CHUNKING_PRESET = {
 } as const
 
 const navItems = computed(() => {
-  if (!canEditKB.value) return canViewActivity.value ? [{ key: 'activity', icon: 'history', label: t('knowledgeEditor.sidebar.activity') }] : []
+  if (!canEditKB.value) return []
   const items: { key: string; icon: string; label: string; badge?: number }[] = [
     { key: 'basic', icon: 'info-circle', label: t('knowledgeEditor.sidebar.basic') },
     { key: 'models', icon: 'control-platform', label: t('knowledgeEditor.sidebar.models') },
@@ -572,9 +564,7 @@ const navItems = computed(() => {
     if (editorMode.value === 'edit' && activeKbId.value) {
       items.push({ key: 'datasource', icon: 'cloud-download', label: t('knowledgeEditor.sidebar.datasource'), badge: dsCount.value || undefined })
     }
-  if (canViewActivity.value) {
-    items.push({ key: 'activity', icon: 'history', label: t('knowledgeEditor.sidebar.activity') })
-  }
+
   return items
 })
 
@@ -602,7 +592,7 @@ const navGroups = computed(() => {
     {
       key: 'management',
       label: t('knowledgeEditor.navGroups.management'),
-      items: pickItems(['activity']),
+      items: [],
     },
   ].filter((group) => group.items.length > 0)
 })
@@ -1177,7 +1167,7 @@ const buildSubmitData = () => {
 
 // 提交表单
 const handleSubmit = async () => {
-  if (!canEditKB.value) return
+  if (!canEditKB.value) return []
   if (!validateForm()) {
     return
   }

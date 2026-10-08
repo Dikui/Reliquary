@@ -47,8 +47,6 @@ func (r *tenantAPIKeyRepository) ListAPIKeys(ctx context.Context, tenantID uint6
 	return keys, err
 }
 
-// UpdateAPIKey 更新租户 API Key 的可配置属性。
-// tenant_id 和 scope_type 同时参与条件，避免跨租户或误改平台级 Key。
 func (r *tenantAPIKeyRepository) UpdateAPIKey(
 	ctx context.Context, tenantID uint64, id uint64, update *types.TenantAPIKey,
 ) (*types.TenantAPIKey, error) {
@@ -57,11 +55,8 @@ func (r *tenantAPIKeyRepository) UpdateAPIKey(
 		Where("id = ? AND tenant_id = ? AND revoked_at IS NULL",
 			id, tenantID).
 		Updates(map[string]any{
-			"name":               update.Name,
-			"full_access":        update.FullAccess,
-			"knowledge_base_ids": update.KnowledgeBaseIDs,
-			"capabilities":       update.Capabilities,
-			"expires_at":         update.ExpiresAt,
+			"name":       update.Name,
+			"expires_at": update.ExpiresAt,
 		})
 	if res.Error != nil {
 		return nil, res.Error

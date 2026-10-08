@@ -52,44 +52,29 @@ func NewKnowledgeHandler(
 	}
 }
 
-func (h *KnowledgeHandler) requireKBOwnershipOrAdmin(c *gin.Context, kbID string) error {
-	if _, apiKey := types.TenantAPIKeyScopeFromContext(c.Request.Context()); apiKey {
-		return nil
-	}
-	if h.cfg != nil && h.cfg.Tenant != nil && !h.cfg.Tenant.IsRBACEnforced() {
-		return nil
-	}
-	if !types.TenantRoleFromContext(c.Request.Context()).HasPermission(types.TenantRoleContributor) {
-		return errors.NewForbiddenError("编辑者以上角色可编辑知识库")
-	}
-	return nil
-}
-
 // validateKnowledgeBaseAccess validates access permissions to a knowledge base
 // using the ":id" URL path parameter. It delegates to validateKnowledgeBaseAccessWithKBID.
-func (h *KnowledgeHandler) validateKnowledgeBaseAccess(c *gin.Context) (*types.KnowledgeBase, string, uint64, types.TenantRole, error) {
+func (h *KnowledgeHandler) validateKnowledgeBaseAccess(c *gin.Context) (*types.KnowledgeBase, string, uint64, error) {
 	kbID := secutils.SanitizeForLog(c.Param("id"))
 	return h.validateKnowledgeBaseAccessWithKBID(c, kbID)
 }
 
 // validateKnowledgeBaseAccessWithKBID validates access to the given knowledge base ID (e.g. from query or body).
-// Enforces per-API-key KB scope before tenant/share/agent resolution.
-// Returns the knowledge base, kbID, effective tenant ID, permission, and error.
-func (h *KnowledgeHandler) validateKnowledgeBaseAccessWithKBID(c *gin.Context, kbID string) (*types.KnowledgeBase, string, uint64, types.TenantRole, error) {
+// Checks that the knowledge base belongs to the current workspace.
+// Returns the knowledge base, its ID, the tenant ID, and any error.
+func (h *KnowledgeHandler) validateKnowledgeBaseAccessWithKBID(c *gin.Context, kbID string) (*types.KnowledgeBase, string, uint64, error) {
 	ctx := c.Request.Context()
 	tenantID := c.GetUint64(types.TenantIDContextKey.String())
 	if tenantID == 0 {
 		logger.Error(ctx, "Failed to get tenant ID")
-		return nil, "", 0, "", errors.NewUnauthorizedError("Unauthorized")
+		return nil, "", 0, errors.NewUnauthorizedError("Unauthorized")
 	}
 	userID, userExists := c.Get(types.UserIDContextKey.String())
 	kbID = secutils.SanitizeForLog(kbID)
 	if kbID == "" {
-		return nil, "", 0, "", errors.NewBadRequestError("Knowledge base ID cannot be empty")
+		return nil, "", 0, errors.NewBadRequestError("Knowledge base ID cannot be empty")
 	}
-	if err := requireTenantAPIKeyKnowledgeBase(ctx, kbID); err != nil {
-		return nil, kbID, 0, "", err
-	}
+
 	kb, err := h.kbService.GetKnowledgeBaseByID(ctx, kbID)
 	if err != nil {
 		// Same not-found-vs-real-error split as knowledgebase.go's
@@ -97,24 +82,24 @@ func (h *KnowledgeHandler) validateKnowledgeBaseAccessWithKBID(c *gin.Context, k
 		// expected outcome for a probed/stale kb id and must surface as
 		// 404, not the generic 500 the original code produced.
 		if goerrors.Is(err, repository.ErrKnowledgeBaseNotFound) {
-			return nil, kbID, 0, "", errors.NewNotFoundError("knowledge base not found")
+			return nil, kbID, 0, errors.NewNotFoundError("knowledge base not found")
 		}
 		logger.ErrorWithFields(ctx, err, nil)
-		return nil, kbID, 0, "", errors.NewInternalServerError(err.Error())
+		return nil, kbID, 0, errors.NewInternalServerError(err.Error())
 	}
 	if kb.TenantID == tenantID {
-		return kb, kbID, tenantID, teamKBPermission(ctx), nil
+		return kb, kbID, tenantID, nil
 	}
 
 	_ = userID
 	_ = userExists
 	logger.Warnf(ctx, "Permission denied to access KB %s, tenant ID: %d, KB tenant: %d", kbID, tenantID, kb.TenantID)
-	return nil, kbID, 0, "", errors.NewForbiddenError("Permission denied to access this knowledge base")
+	return nil, kbID, 0, errors.NewForbiddenError("Permission denied to access this knowledge base")
 }
 
-// resolveKnowledgeAndValidateKBAccess resolves knowledge by ID and validates KB access (owner or shared with required permission).
+// resolveKnowledgeAndValidateKBAccess resolves knowledge within the current workspace.
 // Returns the knowledge, context with effectiveTenantID set for downstream service calls, and error.
-func (h *KnowledgeHandler) resolveKnowledgeAndValidateKBAccess(c *gin.Context, knowledgeID string, requiredPermission types.TenantRole) (*types.Knowledge, context.Context, error) {
+func (h *KnowledgeHandler) resolveKnowledgeAndValidateKBAccess(c *gin.Context, knowledgeID string) (*types.Knowledge, context.Context, error) {
 	ctx := c.Request.Context()
 	tenantID := c.GetUint64(types.TenantIDContextKey.String())
 	if tenantID == 0 {
@@ -126,11 +111,8 @@ func (h *KnowledgeHandler) resolveKnowledgeAndValidateKBAccess(c *gin.Context, k
 	if err != nil {
 		return nil, ctx, errors.NewNotFoundError("Knowledge not found")
 	}
-	if err := requireTenantAPIKeyKnowledgeBase(ctx, knowledge.KnowledgeBaseID); err != nil {
-		return nil, ctx, err
-	}
 
-	// Owner: knowledge belongs to caller's tenant
+	// Knowledge must belong to the current workspace.
 	if knowledge.TenantID == tenantID {
 		return knowledge, context.WithValue(ctx, types.TenantIDContextKey, tenantID), nil
 	}
@@ -188,8 +170,8 @@ func (h *KnowledgeHandler) enqueueKnowledgeListDelete(
 			return "", err
 		}
 		userID, _ := ctx.Value(types.UserIDContextKey).(string)
-		if userID == "" || !types.TenantRoleFromContext(ctx).HasPermission(types.TenantRoleContributor) {
-			return "", errors.NewForbiddenError("a team editor is required to discard intake")
+		if userID == "" || !types.IsAuthenticatedFromContext(ctx) {
+			return "", errors.NewForbiddenError("an authenticated user is required to discard intake")
 		}
 	}
 	payload := types.KnowledgeListDeletePayload{
@@ -260,8 +242,8 @@ func (h *KnowledgeHandler) CreateKnowledgeFromFile(c *gin.Context) {
 	ctx := c.Request.Context()
 	logger.Info(ctx, "Start creating knowledge from file")
 
-	// Validate access to the knowledge base (only owner or admin/editor can create)
-	_, kbID, effectiveTenantID, permission, err := h.validateKnowledgeBaseAccess(c)
+	// Validate that the knowledge base belongs to the current workspace.
+	_, kbID, effectiveTenantID, err := h.validateKnowledgeBaseAccess(c)
 	if err != nil {
 		c.Error(err)
 		return
@@ -269,10 +251,6 @@ func (h *KnowledgeHandler) CreateKnowledgeFromFile(c *gin.Context) {
 	ctx = context.WithValue(ctx, types.TenantIDContextKey, effectiveTenantID)
 
 	// Check write permission
-	if !permission.HasPermission(types.TenantRoleContributor) {
-		c.Error(errors.NewForbiddenError("No permission to create knowledge"))
-		return
-	}
 
 	// Validate file size — read MAX_FILE_SIZE_MB env (50MB default).
 	// Deliberately not a runtime system_setting; see filesize.go for the
@@ -416,8 +394,8 @@ func (h *KnowledgeHandler) CreateKnowledgeFromURL(c *gin.Context) {
 	ctx := c.Request.Context()
 	logger.Info(ctx, "Start creating knowledge from URL")
 
-	// Validate access to the knowledge base (only owner or admin/editor can create)
-	_, kbID, effectiveTenantID, permission, err := h.validateKnowledgeBaseAccess(c)
+	// Validate that the knowledge base belongs to the current workspace.
+	_, kbID, effectiveTenantID, err := h.validateKnowledgeBaseAccess(c)
 	if err != nil {
 		c.Error(err)
 		return
@@ -425,10 +403,6 @@ func (h *KnowledgeHandler) CreateKnowledgeFromURL(c *gin.Context) {
 	ctx = context.WithValue(ctx, types.TenantIDContextKey, effectiveTenantID)
 
 	// Check write permission
-	if !permission.HasPermission(types.TenantRoleContributor) {
-		c.Error(errors.NewForbiddenError("No permission to create knowledge"))
-		return
-	}
 
 	// Parse URL from request body
 	var req struct {
@@ -514,8 +488,8 @@ func (h *KnowledgeHandler) CreateManualKnowledge(c *gin.Context) {
 	ctx := c.Request.Context()
 	logger.Info(ctx, "Start creating manual knowledge")
 
-	// Validate access to the knowledge base (only owner or admin/editor can create)
-	_, kbID, effectiveTenantID, permission, err := h.validateKnowledgeBaseAccess(c)
+	// Validate that the knowledge base belongs to the current workspace.
+	_, kbID, effectiveTenantID, err := h.validateKnowledgeBaseAccess(c)
 	if err != nil {
 		c.Error(err)
 		return
@@ -523,10 +497,6 @@ func (h *KnowledgeHandler) CreateManualKnowledge(c *gin.Context) {
 	ctx = context.WithValue(ctx, types.TenantIDContextKey, effectiveTenantID)
 
 	// Check write permission
-	if !permission.HasPermission(types.TenantRoleContributor) {
-		c.Error(errors.NewForbiddenError("No permission to create knowledge"))
-		return
-	}
 
 	var req types.ManualKnowledgePayload
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -584,8 +554,8 @@ func (h *KnowledgeHandler) GetKnowledge(c *gin.Context) {
 		return
 	}
 
-	// Resolve knowledge and validate KB access (at least viewer)
-	knowledge, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, id, types.TenantRoleViewer)
+	// Resolve knowledge and validate its workspace.
+	knowledge, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, id)
 	if err != nil {
 		c.Error(err)
 		return
@@ -630,7 +600,7 @@ func (h *KnowledgeHandler) GetKnowledgeSpans(c *gin.Context) {
 		return
 	}
 
-	knowledge, _, err := h.resolveKnowledgeAndValidateKBAccess(c, id, types.TenantRoleViewer)
+	knowledge, _, err := h.resolveKnowledgeAndValidateKBAccess(c, id)
 	if err != nil {
 		c.Error(err)
 		return
@@ -886,7 +856,7 @@ func buildSpanTree(knowledgeID string, attempt int, rows []types.KnowledgeProces
 // @Param        keyword       query     string  false  "关键词搜索"
 // @Param        file_type     query     string  false  "文件类型筛选"
 // @Param        parse_status  query     string  false  "解析状态筛选 (pending/processing/completed/failed)"
-// @Param        source        query     string  false  "来源/渠道筛选 (web/api/feishu/notion/yuque/...，或 manual/url 按 type 过滤)"
+// @Param        source        query     string  false  "来源/渠道筛选 (web/api/rss，或 manual/url 按 type 过滤)"
 // @Param        start_time    query     string  false  "更新时间起点，RFC3339 格式"
 // @Param        end_time      query     string  false  "更新时间终点，RFC3339 格式"
 // @Param        folder_path      query     string  false  "文件夹路径筛选，空字符串表示知识库根目录；不传该参数则不按文件夹过滤"
@@ -902,7 +872,7 @@ func (h *KnowledgeHandler) ListKnowledge(c *gin.Context) {
 	logger.Info(ctx, "Start retrieving knowledge list")
 
 	// Validate access to the knowledge base (read access - any permission level)
-	_, kbID, effectiveTenantID, _, err := h.validateKnowledgeBaseAccess(c)
+	_, kbID, effectiveTenantID, err := h.validateKnowledgeBaseAccess(c)
 	if err != nil {
 		c.Error(err)
 		return
@@ -1008,7 +978,7 @@ func (h *KnowledgeHandler) ListKnowledge(c *gin.Context) {
 func (h *KnowledgeHandler) ListKnowledgeFolders(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	_, kbID, effectiveTenantID, _, err := h.validateKnowledgeBaseAccess(c)
+	_, kbID, effectiveTenantID, err := h.validateKnowledgeBaseAccess(c)
 	if err != nil {
 		c.Error(err)
 		return
@@ -1137,19 +1107,12 @@ func (h *KnowledgeHandler) RenameKnowledgeFolder(c *gin.Context) {
 		return
 	}
 
-	_, kbID, effectiveTenantID, permission, err := h.validateKnowledgeBaseAccess(c)
+	_, kbID, effectiveTenantID, err := h.validateKnowledgeBaseAccess(c)
 	if err != nil {
 		c.Error(err)
 		return
 	}
-	if !permission.HasPermission(types.TenantRoleContributor) {
-		c.Error(errors.NewForbiddenError("No permission to modify knowledge"))
-		return
-	}
-	if err := h.requireKBOwnershipOrAdmin(c, kbID); err != nil {
-		c.Error(err)
-		return
-	}
+
 	ctx = context.WithValue(ctx, types.TenantIDContextKey, effectiveTenantID)
 
 	affected, err := h.kgService.RenameKnowledgeFolder(ctx, kbID, req.From, req.To)
@@ -1192,21 +1155,16 @@ func dedupeKnowledgeIDs(raw []string) []string {
 }
 
 // requireKnowledgeWriteAccess resolves a knowledge base from a request body and
-// enforces the editor-or-admin plus ownership gate shared by the batch routes.
+// validates its workspace for the batch routes.
 func (h *KnowledgeHandler) requireKnowledgeWriteAccess(
 	c *gin.Context,
 	requestedKBID string,
 ) (string, uint64, error) {
-	_, kbID, effectiveTenantID, permission, err := h.validateKnowledgeBaseAccessWithKBID(c, requestedKBID)
+	_, kbID, effectiveTenantID, err := h.validateKnowledgeBaseAccessWithKBID(c, requestedKBID)
 	if err != nil {
 		return "", 0, err
 	}
-	if !permission.HasPermission(types.TenantRoleContributor) {
-		return "", 0, errors.NewForbiddenError("No permission to modify knowledge")
-	}
-	if err := h.requireKBOwnershipOrAdmin(c, kbID); err != nil {
-		return "", 0, err
-	}
+
 	return kbID, effectiveTenantID, nil
 }
 
@@ -1261,7 +1219,7 @@ func (h *KnowledgeHandler) DeleteKnowledge(c *gin.Context) {
 		return
 	}
 
-	_, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, id, types.TenantRoleContributor)
+	_, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, id)
 	if err != nil {
 		c.Error(err)
 		return
@@ -1334,20 +1292,13 @@ func (h *KnowledgeHandler) BatchDeleteKnowledge(c *gin.Context) {
 		return
 	}
 
-	// Validate KB access (editor or admin) using the kb_id from body.
-	_, kbID, effectiveTenantID, permission, err := h.validateKnowledgeBaseAccessWithKBID(c, req.KBID)
+	// Validate the workspace using the kb_id from the request body.
+	_, kbID, effectiveTenantID, err := h.validateKnowledgeBaseAccessWithKBID(c, req.KBID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
-	if !permission.HasPermission(types.TenantRoleContributor) {
-		c.Error(errors.NewForbiddenError("No permission to delete knowledge"))
-		return
-	}
-	if err := h.requireKBOwnershipOrAdmin(c, kbID); err != nil {
-		c.Error(err)
-		return
-	}
+
 	ctx = context.WithValue(ctx, types.TenantIDContextKey, effectiveTenantID)
 
 	// Single batch fetch to validate that every id exists and belongs to the
@@ -1409,16 +1360,16 @@ func (h *KnowledgeHandler) ClearKnowledgeBaseContents(c *gin.Context) {
 	ctx := c.Request.Context()
 	logger.Info(ctx, "Start clearing knowledge base contents")
 
-	kb, kbID, effectiveTenantID, permission, err := h.validateKnowledgeBaseAccess(c)
+	kb, kbID, effectiveTenantID, err := h.validateKnowledgeBaseAccess(c)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	// Team administrators may clear contents in their own tenant.
+	// Knowledge base contents can be cleared within the current workspace.
 	tenantID := c.GetUint64(types.TenantIDContextKey.String())
-	if kb.TenantID != tenantID || !permission.HasPermission(types.TenantRoleAdmin) {
-		c.Error(errors.NewForbiddenError("Only knowledge base owner can clear contents"))
+	if kb.TenantID != tenantID {
+		c.Error(errors.NewForbiddenError("Knowledge base must belong to the current workspace"))
 		return
 	}
 
@@ -1487,7 +1438,7 @@ func (h *KnowledgeHandler) DownloadKnowledgeFile(c *gin.Context) {
 		return
 	}
 
-	_, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, id, types.TenantRoleContributor)
+	_, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, id)
 	if err != nil {
 		c.Error(err)
 		return
@@ -1557,7 +1508,7 @@ func (h *KnowledgeHandler) PreviewKnowledgeFile(c *gin.Context) {
 		return
 	}
 
-	_, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, id, types.TenantRoleViewer)
+	_, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, id)
 	if err != nil {
 		c.Error(err)
 		return
@@ -1603,14 +1554,14 @@ func (h *KnowledgeHandler) PreviewKnowledgeFile(c *gin.Context) {
 }
 
 // ReviewKnowledgeIntake retries a rejected intake after correcting source
-// evidence, or removes it when the owner discards it.
+// evidence, or removes it when the user discards it.
 func (h *KnowledgeHandler) ReviewKnowledgeIntake(c *gin.Context) {
 	id := secutils.SanitizeForLog(c.Param("id"))
 	if id == "" {
 		c.Error(errors.NewBadRequestError("Knowledge ID cannot be empty"))
 		return
 	}
-	_, ctx, err := h.resolveKnowledgeAndValidateKBAccess(c, id, types.TenantRoleContributor)
+	_, ctx, err := h.resolveKnowledgeAndValidateKBAccess(c, id)
 	if err != nil {
 		c.Error(err)
 		return
@@ -1662,7 +1613,7 @@ func (h *KnowledgeHandler) GetKnowledgeBatch(c *gin.Context) {
 	var scopeKBID string
 
 	if kbID := secutils.SanitizeForLog(req.KBID); kbID != "" {
-		_, _, effID, _, err := h.validateKnowledgeBaseAccessWithKBID(c, kbID)
+		_, _, effID, err := h.validateKnowledgeBaseAccessWithKBID(c, kbID)
 		if err != nil {
 			c.Error(err)
 			return
@@ -1687,9 +1638,7 @@ func (h *KnowledgeHandler) GetKnowledgeBatch(c *gin.Context) {
 	if scopeKBID != "" {
 		allowedKBSet = map[string]bool{scopeKBID: true}
 	}
-	if apiKeySet := tenantAPIKeyAllowedKBSet(ctx); apiKeySet != nil {
-		allowedKBSet = intersectKBAllowSet(allowedKBSet, apiKeySet)
-	}
+
 	if allowedKBSet != nil {
 		knowledges = filterKnowledgesByKBAllowSet(knowledges, allowedKBSet)
 	}
@@ -1740,7 +1689,7 @@ func (h *KnowledgeHandler) UpdateKnowledge(c *gin.Context) {
 		return
 	}
 
-	_, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, id, types.TenantRoleContributor)
+	_, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, id)
 	if err != nil {
 		c.Error(err)
 		return
@@ -1787,7 +1736,7 @@ func (h *KnowledgeHandler) RegenerateKnowledgeSummary(c *gin.Context) {
 		c.Error(errors.NewBadRequestError("Knowledge ID cannot be empty"))
 		return
 	}
-	_, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, id, types.TenantRoleContributor)
+	_, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, id)
 	if err != nil {
 		c.Error(err)
 		return
@@ -1838,7 +1787,7 @@ func (h *KnowledgeHandler) UpdateManualKnowledge(c *gin.Context) {
 		return
 	}
 
-	_, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, id, types.TenantRoleContributor)
+	_, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, id)
 	if err != nil {
 		c.Error(err)
 		return
@@ -1896,8 +1845,8 @@ func (h *KnowledgeHandler) ReparseKnowledge(c *gin.Context) {
 		return
 	}
 
-	// Validate KB access with editor permission (reparse requires write access)
-	_, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, id, types.TenantRoleContributor)
+	// Validate the knowledge base workspace before reparsing.
+	_, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, id)
 	if err != nil {
 		c.Error(err)
 		return
@@ -1965,8 +1914,8 @@ func (h *KnowledgeHandler) CancelKnowledgeParse(c *gin.Context) {
 		return
 	}
 
-	// Editor permission — same gate as ReparseKnowledge / DeleteKnowledge.
-	_, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, id, types.TenantRoleContributor)
+	// Validate the workspace as for reparsing and deleting knowledge.
+	_, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, id)
 	if err != nil {
 		c.Error(err)
 		return
@@ -1995,7 +1944,7 @@ func (h *KnowledgeHandler) CancelKnowledgeParse(c *gin.Context) {
 
 type knowledgeTagBatchRequest struct {
 	Updates map[string][]string `json:"updates" binding:"required,min=1"`
-	KBID    string              `json:"kb_id"` // Optional: scope to this KB (validates team editor access)
+	KBID    string              `json:"kb_id"` // Optional: scope to a knowledge base in the current workspace.
 	Reason  string              `json:"reason"`
 }
 
@@ -2031,15 +1980,12 @@ func (h *KnowledgeHandler) UpdateKnowledgeTagBatch(c *gin.Context) {
 	// Resolve effective tenant and the authorized KB scope.
 	var authorizedKBID string
 	if kbID := secutils.SanitizeForLog(req.KBID); kbID != "" {
-		_, _, effID, permission, err := h.validateKnowledgeBaseAccessWithKBID(c, kbID)
+		_, _, effID, err := h.validateKnowledgeBaseAccessWithKBID(c, kbID)
 		if err != nil {
 			c.Error(err)
 			return
 		}
-		if !permission.HasPermission(types.TenantRoleContributor) {
-			c.Error(errors.NewForbiddenError("No permission to update knowledge tags"))
-			return
-		}
+
 		authorizedKBID = kbID
 		ctx = context.WithValue(ctx, types.TenantIDContextKey, effID)
 	} else if len(req.Updates) > 0 {
@@ -2049,7 +1995,7 @@ func (h *KnowledgeHandler) UpdateKnowledgeTagBatch(c *gin.Context) {
 			break
 		}
 		if firstKnowledgeID != "" {
-			knowledge, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, firstKnowledgeID, types.TenantRoleContributor)
+			knowledge, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, firstKnowledgeID)
 			if err != nil {
 				c.Error(err)
 				return
@@ -2099,7 +2045,7 @@ func (h *KnowledgeHandler) UpdateImageInfo(c *gin.Context) {
 		return
 	}
 
-	_, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, id, types.TenantRoleContributor)
+	_, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, id)
 	if err != nil {
 		c.Error(err)
 		return
@@ -2162,31 +2108,6 @@ func (h *KnowledgeHandler) SearchKnowledge(c *gin.Context) {
 				fileTypes = append(fileTypes, ft)
 			}
 		}
-	}
-
-	if scopes, restricted := tenantAPIKeySearchScopes(ctx); restricted {
-		if len(scopes) == 0 {
-			c.JSON(http.StatusOK, gin.H{
-				"success":  true,
-				"data":     []interface{}{},
-				"has_more": false,
-				"total":    0,
-			})
-			return
-		}
-		knowledges, hasMore, total, err := h.kgService.SearchKnowledgeForScopes(ctx, scopes, keyword, offset, limit, fileTypes)
-		if err != nil {
-			logger.ErrorWithFields(ctx, err, nil)
-			c.Error(errors.NewInternalServerError("Failed to search knowledge").WithDetails(err.Error()))
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{
-			"success":  true,
-			"data":     knowledges,
-			"has_more": hasMore,
-			"total":    total,
-		})
-		return
 	}
 
 	knowledges, hasMore, total, err := h.kgService.SearchKnowledge(ctx, keyword, offset, limit, fileTypes)
@@ -2256,10 +2177,6 @@ func (h *KnowledgeHandler) MoveKnowledge(c *gin.Context) {
 		c.Error(errors.NewUnauthorizedError("Unauthorized"))
 		return
 	}
-	if err := requireTenantAPIKeyKnowledgeBases(ctx, req.SourceKBID, req.TargetKBID); err != nil {
-		c.Error(err)
-		return
-	}
 
 	// Validate source KB
 	sourceKB, err := h.kbService.GetKnowledgeBaseByID(ctx, req.SourceKBID)
@@ -2275,10 +2192,6 @@ func (h *KnowledgeHandler) MoveKnowledge(c *gin.Context) {
 		c.Error(errors.NewForbiddenError("No permission to access source knowledge base"))
 		return
 	}
-	if err := h.requireKBOwnershipOrAdmin(c, req.SourceKBID); err != nil {
-		c.Error(err)
-		return
-	}
 
 	// Validate target KB
 	targetKB, err := h.kbService.GetKnowledgeBaseByID(ctx, req.TargetKBID)
@@ -2292,10 +2205,6 @@ func (h *KnowledgeHandler) MoveKnowledge(c *gin.Context) {
 	}
 	if targetKB.TenantID != tenantID.(uint64) {
 		c.Error(errors.NewForbiddenError("No permission to access target knowledge base"))
-		return
-	}
-	if err := h.requireKBOwnershipOrAdmin(c, req.TargetKBID); err != nil {
-		c.Error(err)
 		return
 	}
 
@@ -2533,15 +2442,12 @@ func (h *KnowledgeHandler) BatchReparseKnowledge(c *gin.Context) {
 		return
 	}
 
-	_, kbID, effectiveTenantID, permission, err := h.validateKnowledgeBaseAccessWithKBID(c, req.KBID)
+	_, kbID, effectiveTenantID, err := h.validateKnowledgeBaseAccessWithKBID(c, req.KBID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
-	if !permission.HasPermission(types.TenantRoleContributor) {
-		c.Error(errors.NewForbiddenError("no permission to reparse knowledge in this kb"))
-		return
-	}
+
 	ctx = context.WithValue(ctx, types.TenantIDContextKey, effectiveTenantID)
 
 	knowledgeList, err := h.kgService.GetKnowledgeBatch(ctx, effectiveTenantID, ids)
@@ -2583,42 +2489,6 @@ func (h *KnowledgeHandler) BatchReparseKnowledge(c *gin.Context) {
 	})
 }
 
-func requireTenantAPIKeyKnowledgeBase(ctx context.Context, kbID string) error {
-	return requireTenantAPIKeyKnowledgeBases(ctx, kbID)
-}
-
-func requireTenantAPIKeyKnowledgeBases(ctx context.Context, kbIDs ...string) error {
-	return types.AuthorizeTenantAPIKeyKnowledgeBases(ctx, kbIDs...)
-}
-
-func tenantAPIKeyAllowedKBSet(ctx context.Context) map[string]bool {
-	scope, ok := types.TenantAPIKeyScopeFromContext(ctx)
-	if !ok || !scope.IsKnowledgeBaseRestricted() {
-		return nil
-	}
-	allowed := make(map[string]bool, len(scope.KnowledgeBaseIDs))
-	for _, id := range scope.KnowledgeBaseIDs {
-		allowed[id] = true
-	}
-	return allowed
-}
-
-func intersectKBAllowSet(base, restrict map[string]bool) map[string]bool {
-	if restrict == nil {
-		return base
-	}
-	if base == nil {
-		return restrict
-	}
-	out := make(map[string]bool)
-	for id := range base {
-		if restrict[id] {
-			out[id] = true
-		}
-	}
-	return out
-}
-
 func filterKnowledgesByKBAllowSet(knowledges []*types.Knowledge, allowed map[string]bool) []*types.Knowledge {
 	if allowed == nil {
 		return knowledges
@@ -2630,34 +2500,4 @@ func filterKnowledgesByKBAllowSet(knowledges []*types.Knowledge, allowed map[str
 		}
 	}
 	return filtered
-}
-
-func filterKnowledgeSearchScopesForAPIKey(ctx context.Context, scopes []types.KnowledgeSearchScope) []types.KnowledgeSearchScope {
-	allowed := tenantAPIKeyAllowedKBSet(ctx)
-	if allowed == nil {
-		return scopes
-	}
-	filtered := make([]types.KnowledgeSearchScope, 0, len(scopes))
-	for _, scope := range scopes {
-		if allowed[scope.KBID] {
-			filtered = append(filtered, scope)
-		}
-	}
-	return filtered
-}
-
-func tenantAPIKeySearchScopes(ctx context.Context) ([]types.KnowledgeSearchScope, bool) {
-	scope, ok := types.TenantAPIKeyScopeFromContext(ctx)
-	if !ok || !scope.IsKnowledgeBaseRestricted() {
-		return nil, false
-	}
-	tenantID, ok := types.TenantIDFromContext(ctx)
-	if !ok || tenantID == 0 {
-		return nil, true
-	}
-	scopes := make([]types.KnowledgeSearchScope, 0, len(scope.KnowledgeBaseIDs))
-	for _, kbID := range scope.KnowledgeBaseIDs {
-		scopes = append(scopes, types.KnowledgeSearchScope{TenantID: tenantID, KBID: kbID})
-	}
-	return scopes, true
 }

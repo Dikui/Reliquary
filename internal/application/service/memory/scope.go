@@ -17,14 +17,6 @@ import (
 // bug rather than an empty state.
 var ErrNoMemoryScope = errors.New("memory: no principal in context")
 
-// ResolveScope derives the memory space from the request context alone.
-//
-// Deriving rather than accepting a scope is the whole isolation model: there
-// is no code path where a client-supplied id can select a memory space, so no
-// endpoint has to be audited for that. The subject is Principal.StorageID(),
-// which covers web users, IM users, API external users and embed visitors
-// alike, and it is paired with the workspace so the same person's memories do
-// not leak between workspaces.
 func ResolveScope(ctx context.Context) (interfaces.MemoryScope, error) {
 	tenantID, ok := types.TenantIDFromContext(ctx)
 	if !ok || tenantID == 0 {

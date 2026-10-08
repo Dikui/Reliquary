@@ -16,7 +16,7 @@
 
 返回当前部署版本，以及各功能模块是否已在后端注册对应路由。`supported: false` 表示 SPA 应隐藏相关入口；字段缺失或接口不可用时不应据此清空整个菜单（fail-open）。
 
-**权限**：Viewer+（租户成员）；任意有效 API Key 可读（`apiKeyAny`）。
+**权限**：登录用户或有效 API Key。
 
 **请求**:
 
@@ -36,7 +36,6 @@ curl --location 'http://localhost:8080/api/v1/system/capabilities' \
     "edition": "standard",
     "capabilities": {
       "agents": { "supported": true },
-      "integrations.im": { "supported": true },
       "integrations.api": { "supported": true },
       "settings.mcp": { "supported": true },
       "settings.websearch": { "supported": true },

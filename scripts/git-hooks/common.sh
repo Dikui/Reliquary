@@ -135,7 +135,7 @@ collect_go_packages_from_files() {
   local -a files=("$@")
   local f dir pkg module root_module
   local -a pkgs=()
-  # Nested modules (docs/poc, cli, client) are not testable from the root
+  # Nested dependency modules are not testable from the root
   # module, so only keep packages that belong to it.
   root_module="$(cd "$ROOT" && go list -m 2>/dev/null || true)"
   for f in "${files[@]}"; do
@@ -201,20 +201,6 @@ run_go_test_packages() {
 run_app_vet_test() {
   run_full_app_vet
   run_go_test_packages "$@"
-}
-
-run_cli_checks() {
-  log_step "cli: go vet && go test"
-  (
-    cd "$ROOT/cli"
-    go vet ./...
-    if [[ "${HOOK_SKIP_TEST:-}" == "1" ]]; then
-      log_step "HOOK_SKIP_TEST=1; skip cli go test"
-    else
-      go test -count=1 ./...
-    fi
-  )
-  log_ok "cli checks"
 }
 
 run_frontend_checks() {

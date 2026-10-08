@@ -19,7 +19,7 @@
 // @securityDefinitions.apikey ApiKeyAuth
 // @in header
 // @name X-API-Key
-// @description API Key 认证：团队 Key 访问唯一团队空间
+// @description API Key 认证：以唯一用户身份访问个人空间
 package main
 
 import (
@@ -40,6 +40,13 @@ import (
 )
 
 func main() {
+	if handled, err := runServerCommand(os.Args[1:], os.Stdin, os.Stdout); handled {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	// Set Gin mode
 	if os.Getenv("GIN_MODE") == "release" {
 		gin.SetMode(gin.ReleaseMode)
@@ -56,10 +63,6 @@ func main() {
 
 	// Build dependency injection container
 	c := container.BuildContainer(runtime.GetContainer())
-
-	// One-shot bootstrap hooks (e.g. promote env-named user to system
-	// admin). Best-effort: never aborts startup — see bootstrap.go.
-	runStartupBootstrap(c)
 
 	// Run application
 	err := c.Invoke(func(

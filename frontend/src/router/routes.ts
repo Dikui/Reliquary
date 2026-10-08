@@ -19,12 +19,6 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
       meta: { requiresAuth: false, requiresInit: false }
     },
     {
-      path: "/register",
-      name: "registerByInvite",
-      component: () => import("../views/auth/Login.vue"),
-      meta: { requiresAuth: false, requiresInit: false }
-    },
-    {
       path: "/knowledgeBase",
       name: "home",
       component: () => import("../views/knowledge/KnowledgeBase.vue"),
@@ -119,25 +113,19 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
         {
           path: "system",
           redirect: { path: "/platform/settings", query: { section: "system-global" } },
-          meta: { requiresInit: true, requiresAuth: true, requiresSystemAdmin: true },
+          meta: { requiresInit: true, requiresAuth: true },
         },
         {
           path: "system/settings",
           name: "systemSettings",
           redirect: { path: "/platform/settings", query: { section: "system-global" } },
-          meta: { requiresInit: true, requiresAuth: true, requiresSystemAdmin: true },
-        },
-        {
-          path: "system/admins",
-          name: "systemAdmins",
-          redirect: { path: "/platform/settings", query: { section: "system-global" } },
-          meta: { requiresInit: true, requiresAuth: true, requiresSystemAdmin: true },
+          meta: { requiresInit: true, requiresAuth: true },
         },
         {
           path: "system/queues",
           name: "systemQueues",
           redirect: { path: "/platform/settings", query: { section: "runtime-queues" } },
-          meta: { requiresInit: true, requiresAuth: true, requiresSystemAdmin: true },
+          meta: { requiresInit: true, requiresAuth: true },
         },
         {
           path: ':pathMatch(.*)*',

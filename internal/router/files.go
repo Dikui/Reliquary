@@ -14,7 +14,6 @@ import (
 	filesvc "reliquary/internal/application/service/file"
 	"reliquary/internal/config"
 	"reliquary/internal/logger"
-	"reliquary/internal/middleware"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	secutils "reliquary/internal/utils"
@@ -90,8 +89,7 @@ func resolveCatalogResource(
 	c *gin.Context,
 	catalog interfaces.ResourceCatalog,
 	filePath string,
-	ownerTenantID uint64,
-) (resolved string, isResource, ok bool) {
+	ownerTenantID uint64) (resolved string, isResource, ok bool) {
 	if catalog == nil {
 		return filePath, false, true
 	}
@@ -118,8 +116,7 @@ func resolveFileService(
 	ctx context.Context,
 	tenant *types.Tenant,
 	backendID, provider, absDir string,
-	storageResolver interfaces.StorageBackendResolver,
-) (interfaces.FileService, string, error) {
+	storageResolver interfaces.StorageBackendResolver) (interfaces.FileService, string, error) {
 	if storageResolver != nil {
 		return storageResolver.ResolveFileService(ctx, tenant, backendID, provider, absDir)
 	}
@@ -138,8 +135,7 @@ func resolveTenantFileServiceWithFallback(
 	tenant *types.Tenant,
 	backendID, provider, absDir string,
 	storageResolver interfaces.StorageBackendResolver,
-	globalFileService interfaces.FileService,
-) (fileSvc interfaces.FileService, resolvedProvider string, ok bool) {
+	globalFileService interfaces.FileService) (fileSvc interfaces.FileService, resolvedProvider string, ok bool) {
 	var err error
 	if storageResolver != nil {
 		fileSvc, resolvedProvider, err = storageResolver.ResolveFileService(ctx, tenant, backendID, provider, absDir)
@@ -190,8 +186,7 @@ func streamStoredFile(c *gin.Context, reader io.ReadCloser, contentType string, 
 func newFileServeHandler(
 	globalFileService interfaces.FileService,
 	storageResolver interfaces.StorageBackendResolver,
-	resourceCatalogs ...interfaces.ResourceCatalog,
-) gin.HandlerFunc {
+	resourceCatalogs ...interfaces.ResourceCatalog) gin.HandlerFunc {
 	resourceCatalog := firstResourceCatalog(resourceCatalogs)
 	absDir := localStorageAbsDir()
 	if info, err := os.Stat(absDir); err != nil || !info.IsDir() {
@@ -268,31 +263,20 @@ func serveFilesWithResources(
 	r getRouteRegistrar,
 	globalFileService interfaces.FileService,
 	storageResolver interfaces.StorageBackendResolver,
-	resourceCatalog interfaces.ResourceCatalog,
-) {
+	resourceCatalog interfaces.ResourceCatalog) {
 	logger.Infof(context.Background(), "[Router] Serving files from /files")
-	// /files sits outside the /api/v1 APIKeyGate, so it carries its own
-	// API-key guard. A KB-restricted key is denied (a raw storage path cannot
-	// be bounded to its allow-list); full-access keys and tenant-wide retrieve
-	// keys pass, since the handler still enforces same-tenant paths
-	// (ValidateStoragePathTenant). Embed routes use their own
-	// /embed/.../files handler.
 	r.GET(
 		"/files",
-		middleware.AllowFileServeAPIKey(),
-		newFileServeHandler(globalFileService, storageResolver, resourceCatalog),
-	)
+
+		newFileServeHandler(globalFileService, storageResolver, resourceCatalog))
 }
 
-// serveResourceGrants exposes short, revocable capability URLs for clients
-// such as IM platforms that cannot attach a Reliquary bearer/embed token.
 func serveResourceGrants(
 	r *gin.Engine,
 	resourceCatalog interfaces.ResourceCatalog,
 	tenantService interfaces.TenantService,
 	globalFileService interfaces.FileService,
-	storageResolver interfaces.StorageBackendResolver,
-) {
+	storageResolver interfaces.StorageBackendResolver) {
 	if resourceCatalog == nil || tenantService == nil {
 		return
 	}
@@ -347,32 +331,23 @@ func serveResourceGrants(
 
 func serveKBScopedFiles(
 	r *gin.RouterGroup,
-	g *rbacGuards,
+	g *accessGuards,
 	tenantService interfaces.TenantService,
 	globalFileService interfaces.FileService,
 	storageResolver interfaces.StorageBackendResolver,
-	resourceCatalogs ...interfaces.ResourceCatalog,
-) {
+	resourceCatalogs ...interfaces.ResourceCatalog) {
 	logger.Infof(context.Background(), "[Router] Serving KB-scoped files from /knowledge-bases/:id/files")
-	g.apiKeyRoute(r, http.MethodGet, "/knowledge-bases/:id/files",
-		apiKeyRetrieve(apiKeyFullAccess()),
-		middleware.AllowFileServeAPIKey(),
-		g.Viewer(),
-		g.KBAccessRead("id"),
-		newKBScopedFileServeHandlerWithResources(
-			tenantService,
-			globalFileService,
-			storageResolver,
-			firstResourceCatalog(resourceCatalogs),
-		),
-	)
+	r.Handle(http.MethodGet, "/knowledge-bases/:id/files", g.KBAccessRead("id"), newKBScopedFileServeHandlerWithResources(
+		tenantService,
+		globalFileService,
+		storageResolver,
+		firstResourceCatalog(resourceCatalogs)))
 }
 
 func newKBScopedFileServeHandler(
 	tenantService interfaces.TenantService,
 	globalFileService interfaces.FileService,
-	resolvers ...interfaces.StorageBackendResolver,
-) gin.HandlerFunc {
+	resolvers ...interfaces.StorageBackendResolver) gin.HandlerFunc {
 	var storageResolver interfaces.StorageBackendResolver
 	if len(resolvers) > 0 {
 		storageResolver = resolvers[0]
@@ -391,8 +366,7 @@ func newKBScopedFileServeHandlerWithResources(
 	tenantService interfaces.TenantService,
 	globalFileService interfaces.FileService,
 	storageResolver interfaces.StorageBackendResolver,
-	resourceCatalog interfaces.ResourceCatalog,
-) gin.HandlerFunc {
+	resourceCatalog interfaces.ResourceCatalog) gin.HandlerFunc {
 	absDir := localStorageAbsDir()
 
 	return func(c *gin.Context) {
@@ -457,8 +431,7 @@ func newMessageScopedFileServeHandler(
 	tenantService interfaces.TenantService,
 	globalFileService interfaces.FileService,
 	storageResolver interfaces.StorageBackendResolver,
-	resourceCatalog interfaces.ResourceCatalog,
-) gin.HandlerFunc {
+	resourceCatalog interfaces.ResourceCatalog) gin.HandlerFunc {
 	absDir := localStorageAbsDir()
 
 	return func(c *gin.Context) {
@@ -533,8 +506,7 @@ func newMessageScopedFileServeHandler(
 			provider,
 			absDir,
 			storageResolver,
-			globalFileService,
-		)
+			globalFileService)
 		if !ok {
 			c.Status(http.StatusBadRequest)
 			return
@@ -562,53 +534,26 @@ func newMessageScopedFileServeHandler(
 // sufficient because GetMessage enforces ownership of the API key's session.
 func serveMessageScopedFiles(
 	r *gin.RouterGroup,
-	g *rbacGuards,
+	g *accessGuards,
 	messageService interfaces.MessageService,
 	tenantService interfaces.TenantService,
 	globalFileService interfaces.FileService,
 	storageResolver interfaces.StorageBackendResolver,
-	resourceCatalog interfaces.ResourceCatalog,
-) {
-	g.apiKeyRoute(
-		r,
-		http.MethodGet,
-		"/sessions/:id/messages/:message_id/files",
-		apiKeyChat(apiKeyFullAccess()),
-		g.Viewer(),
-		newMessageScopedFileServeHandler(
-			messageService,
-			tenantService,
-			globalFileService,
-			storageResolver,
-			resourceCatalog,
-		),
-	)
+	resourceCatalog interfaces.ResourceCatalog) {
+	r.Handle(http.MethodGet, "/sessions/:id/messages/:message_id/files", newMessageScopedFileServeHandler(
+		messageService,
+		tenantService,
+		globalFileService,
+		storageResolver,
+		resourceCatalog))
 }
 
-// servePresignedFiles serves files via HMAC-signed URLs without requiring authentication.
-// This is used by IM channels to serve images that are embedded in bot replies.
-//
-// Routes:
-//   - GET  /api/v1/files/presigned?file_path=<provider://...>&tenant_id=<id>&expires=<unix>&sig=<hmac>
-//   - HEAD /api/v1/files/presigned?...  (IM platforms issue HEAD first to validate
-//     Content-Type / Content-Length before rendering image previews; HEAD must
-//     succeed or the inline image renders as broken)
-//
-// Failure paths log client IP + User-Agent + (truncated) file_path so operators
-// can correlate an IM platform's fetch against the upstream signing log line.
-// Without this it is otherwise impossible to tell whether a "broken image" is
-// caused by an expired signature, a stale URL cached by the platform, the
-// platform's IP being blocked, or the URL simply never reaching us.
 func servePresignedFiles(r *gin.Engine, tenantService interfaces.TenantService, storageResolver interfaces.StorageBackendResolver) {
 	handler := presignedFileHandler(tenantService, localStorageAbsDir(), storageResolver)
 	r.GET("/api/v1/files/presigned", handler)
 	r.HEAD("/api/v1/files/presigned", handler)
 }
 
-// presignedFileHandler returns the shared Gin handler used by both GET and HEAD.
-// For HEAD requests it returns the same status + headers but does not stream
-// the body — this is enough for IM platforms to validate the URL while saving
-// us a full read of the backing object.
 func presignedFileHandler(tenantService interfaces.TenantService, absDir string, resolvers ...interfaces.StorageBackendResolver) gin.HandlerFunc {
 	var storageResolver interfaces.StorageBackendResolver
 	if len(resolvers) > 0 {
@@ -643,10 +588,6 @@ func presignedFileHandler(tenantService interfaces.TenantService, absDir string,
 			return
 		}
 
-		// Verify HMAC signature and expiry. Logged at Warn because every 403
-		// here is a signal worth investigating: either the URL was tampered
-		// with, the IM platform cached an expired URL, or SYSTEM_AES_KEY was
-		// rotated without invalidating in-flight links.
 		if !secutils.VerifyFileURLSig(filePath, tenantID, expiresStr, sig) {
 			logger.Warnf(ctx, "[Router] /files/presigned sig invalid or expired: client_ip=%s ua=%q tenant_id=%d file_path=%q expires=%s",
 				clientIP, userAgent, tenantID, filePath, expiresStr)
@@ -688,25 +629,11 @@ func presignedFileHandler(tenantService interfaces.TenantService, absDir string,
 	}
 }
 
-// servePresignedPreview registers an Admin-only diagnostic endpoint that
-// returns the presigned HTTP URL that *would be* generated for a given
-// storage path by the calling tenant's current storage config — exactly the
-// URL an IM channel would embed in a reply. Operators can paste the result
-// into a 4G/mobile browser to verify public reachability without having to
-// send a real message through an IM bot.
-//
-// Route:
-//   - GET /api/v1/files/presigned-preview?file_path=<provider://...>
 func servePresignedPreview(r *gin.Engine, cfg *config.Config, storageResolver interfaces.StorageBackendResolver, resourceCatalog interfaces.ResourceCatalog) {
 	absDir := localStorageAbsDir()
 
-	// This route is registered on the engine root, NOT the /api/v1 group,
-	// so the APIKeyGate never runs for it. RequireRole short-circuits
-	// API-key principals (deferring to that absent gate), which would let
-	// any valid key past the Admin check. Deny API keys explicitly first.
 	r.GET("/api/v1/files/presigned-preview",
-		middleware.DenyAPIKeyPrincipal(),
-		middleware.RequireRole(types.TenantRoleAdmin, cfg),
+
 		func(c *gin.Context) {
 			ctx := c.Request.Context()
 			filePath, ok := requireFilePathQuery(c)

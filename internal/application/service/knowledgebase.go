@@ -32,23 +32,23 @@ const kbTaskCleanupTimeout = 5 * time.Second
 
 // knowledgeBaseService implements the knowledge base service interface
 type knowledgeBaseService struct {
-	db                     *gorm.DB
-	repo                   interfaces.KnowledgeBaseRepository
-	kgRepo                 interfaces.KnowledgeRepository
-	chunkRepo              interfaces.ChunkRepository
-	modelService           interfaces.ModelService
-	retrieveEngine         interfaces.RetrieveEngineRegistry
-	ownership              retriever.TenantStoreOwnership
-	tenantRepo             interfaces.TenantRepository
-	fileSvc                interfaces.FileService
-	storageResolver        interfaces.StorageBackendResolver
-	asynqClient            interfaces.TaskEnqueuer
-	taskInspector          interfaces.TaskInspector
-	taskPendingRepo        interfaces.TaskPendingOpsRepository
-	dsRepo                 interfaces.DataSourceRepository
-	syncLogRepo            interfaces.SyncLogRepository
-	dsScheduler            *datasource.Scheduler
-	audit                  interfaces.AuditLogService
+	db              *gorm.DB
+	repo            interfaces.KnowledgeBaseRepository
+	kgRepo          interfaces.KnowledgeRepository
+	chunkRepo       interfaces.ChunkRepository
+	modelService    interfaces.ModelService
+	retrieveEngine  interfaces.RetrieveEngineRegistry
+	ownership       retriever.TenantStoreOwnership
+	tenantRepo      interfaces.TenantRepository
+	fileSvc         interfaces.FileService
+	storageResolver interfaces.StorageBackendResolver
+	asynqClient     interfaces.TaskEnqueuer
+	taskInspector   interfaces.TaskInspector
+	taskPendingRepo interfaces.TaskPendingOpsRepository
+	dsRepo          interfaces.DataSourceRepository
+	syncLogRepo     interfaces.SyncLogRepository
+	dsScheduler     *datasource.Scheduler
+
 	resourceCatalog        interfaces.ResourceCatalog
 	nameEmbeddingRebuilder ContextNameEmbeddingRebuildTrigger
 }
@@ -69,7 +69,7 @@ func NewKnowledgeBaseService(db *gorm.DB, repo interfaces.KnowledgeBaseRepositor
 	dsRepo interfaces.DataSourceRepository,
 	syncLogRepo interfaces.SyncLogRepository,
 	dsScheduler *datasource.Scheduler,
-	audit interfaces.AuditLogService,
+
 	resourceCatalog interfaces.ResourceCatalog,
 ) interfaces.KnowledgeBaseService {
 	return &knowledgeBaseService{
@@ -89,7 +89,7 @@ func NewKnowledgeBaseService(db *gorm.DB, repo interfaces.KnowledgeBaseRepositor
 		dsRepo:          dsRepo,
 		syncLogRepo:     syncLogRepo,
 		dsScheduler:     dsScheduler,
-		audit:           audit,
+
 		resourceCatalog: resourceCatalog,
 	}
 }
@@ -126,7 +126,7 @@ func (s *knowledgeBaseService) CreateKnowledgeBase(ctx context.Context,
 		return nil, err
 	}
 	kb.UpdatedAt = time.Now()
-	if uid, ok := types.UserIDFromContext(ctx); ok && !types.IsSyntheticUserID(uid) {
+	if uid, ok := types.UserIDFromContext(ctx); ok {
 		kb.CreatorID = uid
 	}
 	kb.EnsureDefaults()
@@ -165,10 +165,6 @@ func (s *knowledgeBaseService) CreateKnowledgeBase(ctx context.Context,
 			return kb, fmt.Errorf("knowledge base saved but name embedding rebuild could not be queued: %w", err)
 		}
 	}
-	recordKBActivity(ctx, s.audit, kb.TenantID, kb.ID, types.AuditActionKBCreated,
-		"knowledge_base", kb.ID, types.AuditOutcomeSuccess, map[string]any{
-			"name": kb.Name, "type": kb.Type,
-		})
 
 	logger.Infof(ctx, "Knowledge base created successfully, ID: %s, name: %s", kb.ID, kb.Name)
 	return kb, nil
@@ -445,10 +441,6 @@ func (s *knowledgeBaseService) ListKnowledgeBases(ctx context.Context) ([]*types
 		}
 	}
 
-	// Per-user pin stamping + ordering. The "main" list view is the
-	// only path that needs to honour the caller's personal pin set;
-	// agent/share/IM callers go through ListKnowledgeBasesByTenantID
-	// which also enriches but keys off the user in their own context.
 	if userID, ok := types.UserIDFromContext(ctx); ok && userID != "" {
 		s.applyUserKBPins(ctx, tenantID, userID, kbs)
 	}
@@ -613,10 +605,6 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 			return kb, fmt.Errorf("knowledge base saved but name embedding rebuild could not be queued: %w", err)
 		}
 	}
-	recordKBActivity(ctx, s.audit, kb.TenantID, kb.ID, types.AuditActionKBUpdated,
-		"knowledge_base", kb.ID, types.AuditOutcomeSuccess, map[string]any{
-			"name": kb.Name, "changed_fields": changedFields,
-		})
 
 	logger.Infof(ctx, "Knowledge base updated successfully, ID: %s, name: %s", kb.ID, kb.Name)
 	return kb, nil
@@ -782,12 +770,6 @@ func (s *knowledgeBaseService) DeleteKnowledgeBase(ctx context.Context, id strin
 			logger.Warnf(ctx, "Stop deleted KB workflows: %v", err)
 		}
 	}
-	deletedName := ""
-	if kb != nil {
-		deletedName = kb.Name
-	}
-	recordKBActivity(ctx, s.audit, tenantID, id, types.AuditActionKBDeleted,
-		"knowledge_base", id, types.AuditOutcomeSuccess, map[string]any{"name": deletedName})
 
 	// Stop both ephemeral queue work and durable wiki operations that target
 	// the now-deleted KB. ProcessKBDelete repeats this with document IDs and
@@ -1203,11 +1185,8 @@ func (s *knowledgeBaseService) CopyKnowledgeBase(ctx context.Context,
 			StorageConfig:         sourceKB.StorageConfig,
 			VectorStoreID:         sourceKB.VectorStoreID,
 		}
-		// The clone is owned by the caller, not the original creator —
-		// otherwise a Contributor copying someone else's KB would still
-		// not be able to edit the result. Skip synthetic API-key users
-		// (see CreateKnowledgeBase for the same reasoning).
-		if uid, ok := types.UserIDFromContext(ctx); ok && !types.IsSyntheticUserID(uid) {
+		// Record the authenticated user as the clone's creator.
+		if uid, ok := types.UserIDFromContext(ctx); ok {
 			targetKB.CreatorID = uid
 		}
 		targetKB.EnsureDefaults()
@@ -1243,7 +1222,7 @@ func (s *knowledgeBaseService) DuplicateKnowledgeBase(
 	targetKB.TenantID = tenantID
 	targetKB.Name = s.buildDuplicateKnowledgeBaseName(ctx, tenantID, sourceKB.Name)
 	targetKB.CreatorID = ""
-	if uid, ok := types.UserIDFromContext(ctx); ok && !types.IsSyntheticUserID(uid) {
+	if uid, ok := types.UserIDFromContext(ctx); ok {
 		targetKB.CreatorID = uid
 	}
 	now := time.Now()
@@ -1271,10 +1250,6 @@ func (s *knowledgeBaseService) DuplicateKnowledgeBase(
 	if err := s.persistKnowledgeBase(ctx, targetKB, true); err != nil {
 		return nil, err
 	}
-	recordKBActivity(ctx, s.audit, tenantID, targetKB.ID, types.AuditActionKBDuplicated,
-		"knowledge_base", targetKB.ID, types.AuditOutcomeSuccess, map[string]any{
-			"source_kb_id": sourceKB.ID, "name": targetKB.Name,
-		})
 	return targetKB, nil
 }
 

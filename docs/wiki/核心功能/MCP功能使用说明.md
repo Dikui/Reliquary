@@ -53,7 +53,6 @@ source: MCP功能使用说明.md
 
 - [内置MCP服务管理](../核心功能/内置MCP服务管理.md) — 系统管理员视角的内置 MCP 服务配置
 - [Agent技能系统](Agent技能系统.md) — 另一种 Agent 扩展机制
-- [IM集成开发](../集成扩展/IM集成开发.md) — IM 渠道中 Agent 使用 MCP 工具
 - [添加网络搜索引擎](../集成扩展/添加网络搜索引擎.md) — 扩展搜索能力的另一种方式
 
 ---
@@ -63,4 +62,3 @@ source: MCP功能使用说明.md
 - [Home](../Home.md) — Wiki 首页导航
 - [内置MCP服务管理](内置MCP服务管理.md) — MCP 的系统级管理（管理员视角）
 - [Agent技能系统](Agent技能系统.md) — 与 MCP 并列的 Agent 扩展机制
-- [IM集成开发](../集成扩展/IM集成开发.md) — Agent 在 IM 渠道中可调用 MCP 工具

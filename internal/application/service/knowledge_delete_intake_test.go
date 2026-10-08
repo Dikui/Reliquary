@@ -49,7 +49,7 @@ func (s intakeDeleteKB) GetKnowledgeBaseByID(context.Context, string) (*types.Kn
 	return &types.KnowledgeBase{ID: "kb", CreatorID: s.creator}, nil
 }
 
-func TestDeleteKnowledgeListIntakeRoleAndResources(t *testing.T) {
+func TestDeleteKnowledgeListIntakeAndResources(t *testing.T) {
 	makeKnowledge := func() *types.Knowledge {
 		k := &types.Knowledge{ID: "k", TenantID: 1, KnowledgeBaseID: "kb", FilePath: "upload", ParseStatus: types.ParseStatusRejected}
 		require.NoError(t, k.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "rejected", OriginalPath: "original", Images: []string{"image"}}))
@@ -57,9 +57,8 @@ func TestDeleteKnowledgeListIntakeRoleAndResources(t *testing.T) {
 	}
 	for _, tt := range []struct {
 		name, user string
-		role       types.TenantRole
 		wantErr    bool
-	}{{"team editor cleans", "other-editor", types.TenantRoleContributor, false}, {"viewer rejected", "creator", types.TenantRoleViewer, true}} {
+	}{{"personal user cleans", "creator", false}} {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &intakeDeleteRepo{knowledge: makeKnowledge()}
 			files := &intakeFileService{saved: map[string][]byte{"upload": {}, "original": {}, "image": {}}}
@@ -67,7 +66,6 @@ func TestDeleteKnowledgeListIntakeRoleAndResources(t *testing.T) {
 			ctx := context.WithValue(context.Background(), types.TenantInfoContextKey, &types.Tenant{ID: 1})
 			ctx = context.WithValue(ctx, types.TenantIDContextKey, uint64(1))
 			ctx = context.WithValue(ctx, types.UserIDContextKey, tt.user)
-			ctx = context.WithValue(ctx, types.TenantRoleContextKey, tt.role)
 			err := svc.DeleteKnowledgeList(ctx, []string{"k"})
 			if tt.wantErr {
 				require.Error(t, err)

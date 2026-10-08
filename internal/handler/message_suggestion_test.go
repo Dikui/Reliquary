@@ -11,7 +11,7 @@ import (
 )
 
 // When the suggestion pipeline bubbles up a session-not-found (e.g. an embed
-// Viewer whose session read was rejected), the response must be a 404, not a
+// User whose session read was rejected), the response must be a 404, not a
 // misleading 500. apperrors.ErrSessionNotFound is a bare errors.New and so is
 // not caught by the gorm.ErrRecordNotFound branch on its own.
 func TestMessageSuggestionWriteErrorMapsSessionNotFoundTo404(t *testing.T) {

@@ -14,7 +14,7 @@ import (
 
 func TestKnowledgeDomainDeletionReportsOnlyActiveTeamReferences(t *testing.T) {
 	db := pgtest.Open(t)
-	ctx := domainTestContext(types.TenantRoleAdmin)
+	ctx := domainTestContext()
 	svc := NewKnowledgeDomainService(db)
 	domain, err := svc.Create(ctx, types.KnowledgeDomain{Name: "Referenced domain", Description: "Preserved on conflict"})
 	require.NoError(t, err)

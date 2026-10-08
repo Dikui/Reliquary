@@ -26,7 +26,7 @@ func TestFindByDataSourceExternalID(t *testing.T) {
 		require.NoError(t, db.Exec(`
 			INSERT INTO knowledges
 			  (id, tenant_id, knowledge_base_id, type, title, source, parse_status, metadata)
-			VALUES (?, ?, ?, 'document', ?, 'feishu', 'completed', ?)
+			VALUES (?, ?, ?, 'document', ?, 'rss', 'completed', ?)
 		`, id, tenantID, kbID, extID, metadata).Error)
 		return id
 	}
@@ -54,7 +54,7 @@ func TestFindByDataSourceExternalID_DeletedRowsExcluded(t *testing.T) {
 	require.NoError(t, db.Exec(`
 		INSERT INTO knowledges
 		  (id, tenant_id, knowledge_base_id, type, title, source, parse_status, metadata, deleted_at)
-		VALUES (?, ?, ?, 'document', 'gone', 'feishu', 'completed', ?, '2026-01-01 00:00:00')
+		VALUES (?, ?, ?, 'document', 'gone', 'rss', 'completed', ?, '2026-01-01 00:00:00')
 	`, id, tenantID, kbID, metadata).Error)
 
 	found, err := repo.FindByDataSourceExternalID(ctx, tenantID, kbID, dsID, "file:gone")
@@ -74,7 +74,7 @@ func TestHardDeleteKnowledge(t *testing.T) {
 	require.NoError(t, db.Exec(`
 		INSERT INTO knowledges
 		  (id, tenant_id, knowledge_base_id, type, title, source, parse_status, metadata, deleted_at)
-		VALUES (?, ?, ?, 'document', 'file:1', 'feishu', 'completed', ?, '2026-01-01 00:00:00')
+		VALUES (?, ?, ?, 'document', 'file:1', 'rss', 'completed', ?, '2026-01-01 00:00:00')
 	`, id, tenantID, kbID, metadata).Error)
 
 	require.NoError(t, repo.HardDeleteKnowledge(ctx, tenantID, id))

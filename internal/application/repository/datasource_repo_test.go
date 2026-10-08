@@ -33,8 +33,8 @@ func TestDataSourceRepositoryUpdateSyncStateClearsErrorMessage(t *testing.T) {
 		ID:              "ds-1",
 		TenantID:        1,
 		KnowledgeBaseID: "kb-1",
-		Name:            "Feishu",
-		Type:            types.ConnectorTypeFeishu,
+		Name:            "RSS",
+		Type:            types.ConnectorTypeRSS,
 		Status:          types.DataSourceStatusError,
 		ErrorMessage:    "previous failure",
 	}
@@ -63,8 +63,8 @@ func TestDataSourceRepositoryUpdatePersistsDisabledSyncDeletions(t *testing.T) {
 		ID:              "ds-sync-deletions",
 		TenantID:        1,
 		KnowledgeBaseID: "kb-1",
-		Name:            "Feishu",
-		Type:            types.ConnectorTypeFeishu,
+		Name:            "RSS",
+		Type:            types.ConnectorTypeRSS,
 		SyncDeletions:   true,
 	}
 	require.NoError(t, repo.Create(ctx, ds))
@@ -93,8 +93,8 @@ func TestDataSourceRepositoryCreatePersistsDisabledSyncDeletions(t *testing.T) {
 		ID:              "ds-create-sync-deletions",
 		TenantID:        1,
 		KnowledgeBaseID: "kb-1",
-		Name:            "Feishu",
-		Type:            types.ConnectorTypeFeishu,
+		Name:            "RSS",
+		Type:            types.ConnectorTypeRSS,
 		SyncDeletions:   false,
 	}
 	require.NoError(t, repo.Create(ctx, ds))
@@ -121,8 +121,8 @@ func TestDataSourceRepositoryCreatePersistsEnabledSyncDeletions(t *testing.T) {
 		ID:              "ds-create-sync-deletions-enabled",
 		TenantID:        1,
 		KnowledgeBaseID: "kb-1",
-		Name:            "Feishu",
-		Type:            types.ConnectorTypeFeishu,
+		Name:            "RSS",
+		Type:            types.ConnectorTypeRSS,
 		SyncDeletions:   true,
 	}
 	require.NoError(t, repo.Create(ctx, ds))
@@ -143,14 +143,14 @@ func TestDataSourceRepositoryDeleteSoftDeletes(t *testing.T) {
 		TenantID:        1,
 		KnowledgeBaseID: "kb-1",
 		Name:            "Delete target",
-		Type:            types.ConnectorTypeFeishu,
+		Type:            types.ConnectorTypeRSS,
 	}
 	other := &types.DataSource{
 		ID:              "ds-delete-other",
 		TenantID:        1,
 		KnowledgeBaseID: "kb-1",
 		Name:            "Other data source",
-		Type:            types.ConnectorTypeFeishu,
+		Type:            types.ConnectorTypeRSS,
 	}
 	require.NoError(t, repo.Create(ctx, target))
 	require.NoError(t, repo.Create(ctx, other))
@@ -176,12 +176,12 @@ func TestDataSourceRepositoryOnlyLoadsTeamObjects(t *testing.T) {
 	ctx := context.Background()
 	team := &types.DataSource{
 		ID: "ds-team", TenantID: types.SingleTenantID, KnowledgeBaseID: "kb-team",
-		Name: "Team source", Type: types.ConnectorTypeFeishu,
+		Name: "Team source", Type: types.ConnectorTypeRSS,
 		Status: types.DataSourceStatusActive, SyncSchedule: "0 * * * *",
 	}
 	outside := &types.DataSource{
 		ID: "ds-other", TenantID: 2, KnowledgeBaseID: "kb-other",
-		Name: "Other source", Type: types.ConnectorTypeFeishu,
+		Name: "Other source", Type: types.ConnectorTypeRSS,
 		Status: types.DataSourceStatusActive, SyncSchedule: "0 * * * *",
 	}
 	require.NoError(t, db.Create(team).Error)

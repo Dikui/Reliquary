@@ -6,14 +6,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { compile, type CompileError } from '@intlify/core-base'
 
-import {
-  FLAT_KEY_BAG_PATHS,
-  KB_ACTIVITY_DETAIL_VALUES,
-  KB_ACTIVITY_I18N_ROOTS,
-  KB_ACTIVITY_OUTCOMES,
-  REGISTERED_AUDIT_ACTION_ENTRIES,
-} from './auditActionRegistry.ts'
-import { AUDIT_ACTION_LOCALE_DEFAULTS, getAuditActionLocaleDefault } from './auditActionLocaleDefaults.ts'
 import { writeLocaleModule } from './localeSerialize.ts'
 
 import enUS from './locales/en-US.ts'
@@ -61,18 +53,10 @@ const TM_KEY_PATTERNS = [
 
 const EXTRA_PREFIXES = [
   'system.globalSettings.listConfirm.',
-  'system.globalSettings.admins.confirm.',
   'system.globalSettings.keyLabels.',
   'system.globalSettings.keyDescriptions.',
   'system.globalSettings.enumLabels.',
-  'system.globalSettings.audit.action.',
   'system.globalSettings.audit.actorRole.',
-  'knowledgeEditor.activity.detailFields.',
-  'knowledgeEditor.activity.detailValues.',
-  'knowledgeEditor.activity.outcomes.',
-  'knowledgeEditor.activity.actions.',
-  'knowledgeEditor.activity.targets.',
-  'tenantMember.audit.action.',
   'newUserGuide.steps.',
   'contextualGuide.kbList.steps.',
   'contextualGuide.kbCreate.steps.',
@@ -93,7 +77,6 @@ const EXTRA_PREFIXES = [
   'system.globalSettings.runtime.queueNames.',
   'system.globalSettings.runtime.queueDescriptions.',
   'system.globalSettings.runtime.tasks.taskTypes.',
-  'inviteRegister.',
   'modelSettings.builtinModels.',
 ] as const
 
@@ -101,13 +84,9 @@ const EXTRA_PREFIXES = [
 export const CRITICAL_LOCALE_KEYS = [
   'newUserGuide.steps.welcome.title',
   'contextualGuide.kbList.steps.create.title',
-  'tenantMember.audit.action.rbac.member_added',
-  'system.globalSettings.audit.action.system.setting_changed',
-  'knowledgeEditor.activity.targets.knowledge_base',
   'modelSettings.builtinModels.descriptionAdmin',
   'model.editor.description.chat',
   'model.editor.description.asr',
-  'inviteRegister.emailPlaceholder',
 ] as const
 
 function addPrefix(usage: I18nUsage, prefix: string): void {
@@ -562,33 +541,7 @@ export function getLocaleValueAtPath(root: unknown, path: string): unknown {
 
 export function setLocaleValueAtPath(root: LocaleTree, path: string, value: string): void {
   if (!path) return
-  if (setLocaleFlatBagValueIfApplicable(root, path, value)) return
   setLocaleValueAtPathParts(root, path.split('.'), value)
-}
-
-/** Write flat keys (e.g. `kb.created`) under audit action bags without nesting. */
-function setLocaleFlatBagValueIfApplicable(root: LocaleTree, path: string, value: string): boolean {
-  for (const bagPath of FLAT_KEY_BAG_PATHS) {
-    const prefix = `${bagPath}.`
-    if (!path.startsWith(prefix)) continue
-
-    const actionKey = path.slice(prefix.length)
-    if (!actionKey) return false
-
-    const bagParts = bagPath.split('.')
-    let node: Record<string, unknown> = root
-    for (const part of bagParts) {
-      let child = node[part]
-      if (child == null || typeof child !== 'object' || Array.isArray(child)) {
-        child = {}
-        node[part] = child
-      }
-      node = child as Record<string, unknown>
-    }
-    node[actionKey] = value
-    return true
-  }
-  return false
 }
 
 export function mergeLocaleKeysFromSource(
@@ -598,10 +551,7 @@ export function mergeLocaleKeysFromSource(
 ): void {
   for (const key of keys) {
     if (collectLocaleKeys(target).has(key)) continue
-    const value =
-      getLocaleValueAtPath(source, key) ??
-      getAuditActionLocaleDefault(key) ??
-      AUDIT_ACTION_LOCALE_DEFAULTS[key]
+    const value = getLocaleValueAtPath(source, key)
     if (typeof value === 'string') setLocaleValueAtPath(target, key, value)
   }
 }
@@ -612,16 +562,6 @@ export function collectRequiredLocaleKeys(usage: I18nUsage, referenceBundle: unk
     ...usage.staticKeys,
     ...CRITICAL_LOCALE_KEYS,
   ])
-
-  for (const { root, actions } of REGISTERED_AUDIT_ACTION_ENTRIES) {
-    for (const action of actions) required.add(`${root}.${action}`)
-  }
-  for (const outcome of KB_ACTIVITY_OUTCOMES) {
-    required.add(`${KB_ACTIVITY_I18N_ROOTS.outcomes}.${outcome}`)
-  }
-  for (const value of KB_ACTIVITY_DETAIL_VALUES) {
-    required.add(`${KB_ACTIVITY_I18N_ROOTS.detailValues}.${value}`)
-  }
 
   return required
 }

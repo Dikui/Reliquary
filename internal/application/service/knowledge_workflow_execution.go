@@ -134,7 +134,7 @@ func (s *KnowledgeWorkflowService) Run(ctx context.Context, kbID, workflowID, tr
 	if err != nil {
 		return nil, err
 	}
-	role, err := s.currentRole(ctx, tenantID, actor)
+	err = s.validateActor(ctx, tenantID, actor)
 	if err != nil {
 		return nil, err
 	}
@@ -145,9 +145,8 @@ func (s *KnowledgeWorkflowService) Run(ctx context.Context, kbID, workflowID, tr
 		WorkflowSnapshot: append([]types.KnowledgeWorkflowStep(nil), wf.Steps...),
 	}
 	payload := types.KnowledgeWorkflowTaskPayload{
-		RunID:       run.ID,
-		Initiator:   types.TaskInitiator{UserID: actor, Role: role},
-		SystemAdmin: types.IsSystemAdminFromContext(ctx),
+		RunID:     run.ID,
+		Initiator: types.TaskInitiator{UserID: actor},
 	}
 	return s.createAndEnqueue(ctx, run, payload)
 }
@@ -194,9 +193,7 @@ func (s *KnowledgeWorkflowService) Handle(ctx context.Context, task *asynq.Task)
 		return err
 	}
 	ctx = context.WithValue(ctx, types.TenantIDContextKey, run.TenantID)
-	if payload.SystemAdmin {
-		ctx = context.WithValue(ctx, types.SystemAdminContextKey, true)
-	}
+
 	ctx = payload.Initiator.Apply(ctx)
 	if _, ok := types.UserIDFromContext(ctx); !ok {
 		// Scheduled jobs run as the workflow's current owner. Membership and
@@ -215,7 +212,7 @@ func (s *KnowledgeWorkflowService) Handle(ctx context.Context, task *asynq.Task)
 	if err != nil {
 		return err
 	}
-	role, roleErr := s.currentRole(ctx, run.TenantID, workflowActor(ctx))
+	roleErr := s.validateActor(ctx, run.TenantID, workflowActor(ctx))
 	if roleErr != nil {
 		if errors.Is(roleErr, ErrWorkflowForbidden) {
 			_ = s.failUnclaimedRun(ctx, &run, "initiator no longer authorized: "+roleErr.Error())
@@ -223,7 +220,6 @@ func (s *KnowledgeWorkflowService) Handle(ctx context.Context, task *asynq.Task)
 		}
 		return roleErr
 	}
-	ctx = context.WithValue(ctx, types.TenantRoleContextKey, role)
 	if err := s.authorizeWorkflow(ctx, &wf); err != nil {
 		if errors.Is(err, ErrWorkflowForbidden) {
 			_ = s.failUnclaimedRun(ctx, &run, "initiator no longer authorized: "+err.Error())
@@ -612,13 +608,12 @@ func (s *KnowledgeWorkflowService) waitForIngestion(ctx context.Context, run *ty
 		return s.failWaitingIngestion(ctx, run, stepRun, output, err)
 	}
 	ownerCtx := context.WithValue(ctx, types.UserIDContextKey, run.OwnerID)
-	role, err := s.currentRole(ownerCtx, run.TenantID, run.OwnerID)
+	err = s.validateActor(ownerCtx, run.TenantID, run.OwnerID)
 	if err != nil {
 		return s.failWaitingIngestion(ctx, run, stepRun, output, fmt.Errorf("workflow owner is no longer authorized: %w", err))
 	}
 	payload, err := json.Marshal(types.KnowledgeWorkflowTaskPayload{
-		RunID: run.ID, Initiator: types.TaskInitiator{UserID: run.OwnerID, Role: role},
-		SystemAdmin: types.IsSystemAdminFromContext(ctx),
+		RunID: run.ID, Initiator: types.TaskInitiator{UserID: run.OwnerID},
 	})
 	if err != nil {
 		return s.failWaitingIngestion(ctx, run, stepRun, output, err)

@@ -28,7 +28,7 @@ func (s *knowledgeService) ReviewRSSUpdate(ctx context.Context, oldID string, pa
 	if err != nil {
 		return false, err
 	}
-	if old.Channel != types.ChannelRSS && old.Channel != types.ConnectorTypeGrokX {
+	if old.Channel != types.ChannelRSS {
 		return false, fmt.Errorf("message is not a daily-source article")
 	}
 	if old.IsArchivedSource() || old.IsSourceUpdateCandidate() {
@@ -123,8 +123,6 @@ func (s *knowledgeService) ReviewRSSUpdate(ctx context.Context, oldID string, pa
 		if err := removeCandidate(); err != nil {
 			return false, err
 		}
-		recordKBActivity(ctx, s.audit, tenantID, kb.ID, types.AuditAction("knowledge.source_update"), "knowledge", old.ID, types.AuditOutcomeDenied,
-			map[string]any{"reason": reason, "result": "original_preserved"})
 		if err := s.recordSourceUpdateIssue(ctx, old, reason); err != nil {
 			return false, err
 		}
@@ -231,8 +229,6 @@ func (s *knowledgeService) ReviewRSSUpdate(ctx context.Context, oldID string, pa
 	if err := s.promoteSourceUpdateCandidate(ctx, candidate.ID); err != nil {
 		return false, fmt.Errorf("promote RSS source update candidate %s; approved original preserved for retry: %w", candidate.ID, err)
 	}
-	recordKBActivity(ctx, s.audit, tenantID, kb.ID, types.AuditAction("knowledge.source_update"), "knowledge", candidate.ID, types.AuditOutcomeSuccess,
-		map[string]any{"replaced_knowledge_id": old.ID})
 	return false, nil
 }
 

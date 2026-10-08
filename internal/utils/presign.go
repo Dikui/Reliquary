@@ -14,11 +14,7 @@ import (
 
 const (
 	// presignPath is the URL path for presigned file access.
-	presignPath = "/api/v1/files/presigned"
-	// presignDefaultTTL is the default validity period for presigned URLs.
-	// Kept short because the HMAC key alone authorizes cross-tenant access —
-	// a leaked URL should expire before it can be widely abused. IM clients
-	// typically fetch and cache images within seconds of receipt.
+	presignPath       = "/api/v1/files/presigned"
 	presignDefaultTTL = 2 * time.Hour
 )
 

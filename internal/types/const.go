@@ -18,13 +18,6 @@ const (
 	UserIDContextKey ContextKey = "UserID"
 	// PrincipalContextKey is the context key for the terminal caller principal.
 	PrincipalContextKey ContextKey = "Principal"
-	// TenantAPIKeyScopeContextKey carries per-API-key operation and KB scopes.
-	TenantAPIKeyScopeContextKey ContextKey = "TenantAPIKeyScope"
-	// TenantRoleContextKey is the context key for the caller's TenantRole
-	// in the currently active tenant (loaded by the auth middleware from
-	// the tenant_members table). See TenantRoleFromContext.
-	TenantRoleContextKey ContextKey = "TenantRole"
-	// SessionIDContextKey carries the current session ID through the chat pipeline.
 	SessionIDContextKey ContextKey = "SessionID"
 	// SandboxTenantIDContextKey carries the team ID for session sandbox bindings.
 	SandboxTenantIDContextKey ContextKey = "SandboxTenantID"
@@ -38,8 +31,6 @@ const (
 	LanguageContextKey ContextKey = "Language"
 	// context. It is declared here so context_clone.go can name every context key
 	// without importing the middleware that authenticates it.
-	// SystemAdminContextKey is the context key indicating whether the user is a system administrator
-	SystemAdminContextKey ContextKey = "SystemAdmin"
 	// BackgroundTaskContextKey marks a context whose model calls originate from
 	// an asynq background worker (document parse / summary / question / graph /
 	// multimodal enrichment) rather than a user-facing HTTP request. The chat
@@ -52,12 +43,7 @@ const (
 	// LLMPromptPrefixFingerprintContextKey carries a non-sensitive hash of the
 	// intended reusable prompt prefix for cache diagnostics.
 	LLMPromptPrefixFingerprintContextKey ContextKey = "LLMPromptPrefixFingerprint"
-	// MCPOAuthNonInteractiveContextKey marks a request whose channel cannot
-	// resolve an in-conversation MCP OAuth prompt (e.g. an IM bot: there is no
-	// live client to click "Authorize" and call the resolve endpoint). When set,
-	// the agent emits a one-shot authorization notice and continues instead of
-	// blocking until the OAuth wait times out. See IsMCPOAuthNonInteractive.
-	MCPOAuthNonInteractiveContextKey ContextKey = "MCPOAuthNonInteractive"
+	MCPOAuthNonInteractiveContextKey     ContextKey = "MCPOAuthNonInteractive"
 	// ChatParserEngineContextKey carries the resolved parser engine
 	// from the agent's ChatParserEngineRules for chat attachment processing.
 	ChatParserEngineContextKey ContextKey = "ChatParserEngine"

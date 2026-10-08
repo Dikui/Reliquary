@@ -155,7 +155,7 @@ curl --location 'http://localhost:8080/api/v1/sessions/ceb9babb-1e30-41d7-817d-f
 **请求**:
 
 ```curl
-curl --location 'http://localhost:8080/api/v1/sessions?page=1&page_size=10&keyword=AI&source=web' \
+curl --location 'http://localhost:8080/api/v1/sessions?page=1&page_size=10&keyword=AI' \
 --header 'X-API-Key: sk-xxxxx' \
 --header 'Content-Type: application/json'
 ```
@@ -167,8 +167,6 @@ curl --location 'http://localhost:8080/api/v1/sessions?page=1&page_size=10&keywo
 | `page`      | int    | 否   | 页码（默认 1）                                                    |
 | `page_size` | int    | 否   | 每页数量（默认 10）                                               |
 | `keyword`   | string | 否   | 按标题模糊匹配（ILIKE `%keyword%`）                               |
-| `source`    | string | 否   | 来源过滤：`web`（无 IM 映射）或 `feishu`（飞书） |
-| `agent_id`  | string | 否   | 按 Agent 过滤（仅对 IM 会话生效）                                 |
 
 **响应**:
 
@@ -186,10 +184,7 @@ curl --location 'http://localhost:8080/api/v1/sessions?page=1&page_size=10&keywo
             "pinned_at": "2026-04-01T09:12:33.123456+08:00",
             "created_at": "2026-03-27T12:26:19.611616+08:00",
             "updated_at": "2026-03-27T12:26:19.611616+08:00",
-            "deleted_at": null,
-            "im_platform": "feishu",
-            "im_chat_id": "oc_xxx",
-            "im_agent_id": "agent-001"
+            "deleted_at": null
         }
     ],
     "total": 1,
@@ -198,7 +193,6 @@ curl --location 'http://localhost:8080/api/v1/sessions?page=1&page_size=10&keywo
 }
 ```
 
-> 列表项始终包含置顶状态字段，IM 来源相关字段（`im_platform`、`im_chat_id`、`im_thread_id`、`im_user_id`、`im_agent_id`、`im_channel_id`）仅对 IM 创建的会话填充，Web 会话省略。
 
 ## PUT `/sessions/:id` - 更新会话
 

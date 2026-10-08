@@ -49,19 +49,19 @@ func TestApplyFetchedItem_ProducesLocalisableStructuredError(t *testing.T) {
 		Title:      "季度报告",
 		Metadata: map[string]string{
 			// raw, for logs only
-			"error": `export 季度报告 (docx): feishu api error: status=500 body={"code":1663,"error":{"log_id":"20260"}}`,
+			"error": `export 季度报告 (docx): feed fetch error: status=500 body={"code":1663,"error":{"log_id":"20260"}}`,
 			// classification, for a localisable UI sample
-			"error_reason_code":       "feishu_api_error",
+			"error_reason_code":       "fetch_failed",
 			"error_reason_code_value": "1663",
-			"error_reason":            "Feishu API error (code=1663); will retry automatically",
+			"error_reason":            "Feed fetch error (code=1663); will retry automatically",
 		},
 	}, nil, result)
 
 	assert.Equal(t, 1, len(result.Errors))
 	got := result.Errors[0]
 	assert.Equal(t, "季度报告", got.Title, "title is a separate field, not embedded in the message")
-	assert.Equal(t, "feishu_api_error", got.Code, "stable i18n code drives frontend localisation")
-	assert.Equal(t, "1663", got.Params["code"], "feishu error code is passed as an interpolation param")
+	assert.Equal(t, "fetch_failed", got.Code, "stable i18n code drives frontend localisation")
+	assert.Equal(t, "1663", got.Params["code"], "source error code is passed as an interpolation param")
 	assert.NotContains(t, got.Message, "body=", "raw API body must not reach the UI sample")
 	assert.NotContains(t, got.Message, "log_id", "raw log_id must not reach the UI sample")
 }

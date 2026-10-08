@@ -47,7 +47,7 @@ func TestSystemSettingsRetireTenantCreationOptions(t *testing.T) {
 				repo.rows = []*types.SystemSetting{
 					{Key: retiredKeys[0], Value: types.JSON(`true`), ValueType: "bool", Category: "tenant"},
 					{Key: retiredKeys[1], Value: types.JSON(`100`), ValueType: "int", Category: "tenant"},
-					{Key: "auth.complex_password_enabled", Value: types.JSON(`true`), ValueType: "bool", Category: "auth"},
+					{Key: "asynq.core_concurrency", Value: types.JSON(`4`), ValueType: "int", Category: "worker"},
 				}
 			}
 			svc := &systemSettingService{repo: repo}
@@ -55,17 +55,17 @@ func TestSystemSettingsRetireTenantCreationOptions(t *testing.T) {
 			if err != nil {
 				t.Fatalf("list settings: %v", err)
 			}
-			passwordSettingPresent := false
+			activeSettingPresent := false
 			for _, row := range rows {
 				for _, key := range retiredKeys {
 					if row.Key == key {
 						t.Fatalf("retired key %q remains visible in settings", key)
 					}
 				}
-				passwordSettingPresent = passwordSettingPresent || row.Key == "auth.complex_password_enabled"
+				activeSettingPresent = activeSettingPresent || row.Key == "asynq.core_concurrency"
 			}
-			if !passwordSettingPresent {
-				t.Fatal("active password configuration missing")
+			if !activeSettingPresent {
+				t.Fatal("active worker configuration missing")
 			}
 			for _, key := range retiredKeys {
 				if _, err := svc.Get(context.Background(), key); err == nil {

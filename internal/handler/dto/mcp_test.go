@@ -25,7 +25,7 @@ func TestMCPServiceResponse_OmitsSecrets(t *testing.T) {
 			CustomHeaders: map[string]string{"X-Trace": "abc"},
 		},
 	}
-	body, err := json.Marshal(NewMCPServiceResponse(adminContext(), svc))
+	body, err := json.Marshal(NewMCPServiceResponse(userContext(), svc))
 	assert.NoError(t, err)
 	s := string(body)
 	assert.NotContains(t, s, "sk-real-api-key-do-not-leak",
@@ -63,7 +63,7 @@ func TestMCPServiceResponse_BuiltinStripsTenantConfig(t *testing.T) {
 			APIKey: "should-not-leak-via-builtin",
 		},
 	}
-	resp := NewMCPServiceResponse(adminContext(), svc)
+	resp := NewMCPServiceResponse(userContext(), svc)
 	assert.Nil(t, resp.URL, "builtin must not leak per-tenant URL")
 	assert.Nil(t, resp.Headers, "builtin must not leak per-tenant headers")
 	assert.Nil(t, resp.AuthConfig, "builtin must not leak auth config")
@@ -73,7 +73,7 @@ func TestMCPServiceResponse_BuiltinStripsTenantConfig(t *testing.T) {
 	assert.False(t, strings.Contains(string(body), "X-Tenant-Secret"))
 }
 
-func TestMCPServiceResponse_ViewerStripsIntegrationDetail(t *testing.T) {
+func TestMCPServiceResponse_UserCanReadIntegrationDetail(t *testing.T) {
 	url := "https://tenant-private.example.com"
 	svc := &types.MCPService{
 		ID:      "svc-2",
@@ -82,24 +82,24 @@ func TestMCPServiceResponse_ViewerStripsIntegrationDetail(t *testing.T) {
 		EnvVars: types.MCPEnvVars{"TOKEN": "secret"},
 		StdioConfig: &types.MCPStdioConfig{
 			Command: "npx",
-			Args:    []string{"-y", "mcp-server"},
+			Args:    []string{"-y", "example-mcp-tool"},
 		},
 		AdvancedConfig: &types.MCPAdvancedConfig{},
 		AuthConfig: &types.MCPAuthConfig{
 			CustomHeaders: map[string]string{"X-Auth": "secret"},
 		},
 	}
-	resp := NewMCPServiceResponse(viewerContext(), svc)
-	assert.Nil(t, resp.URL)
-	assert.Nil(t, resp.Headers)
-	assert.Nil(t, resp.EnvVars)
-	assert.Nil(t, resp.StdioConfig)
-	assert.Nil(t, resp.AdvancedConfig)
+	resp := NewMCPServiceResponse(userContext(), svc)
+	assert.Equal(t, svc.URL, resp.URL)
+	assert.Equal(t, svc.Headers, resp.Headers)
+	assert.Equal(t, svc.EnvVars, resp.EnvVars)
+	assert.Equal(t, svc.StdioConfig, resp.StdioConfig)
+	assert.Equal(t, svc.AdvancedConfig, resp.AdvancedConfig)
 	assert.NotNil(t, resp.AuthConfig)
-	assert.Nil(t, resp.AuthConfig.CustomHeaders)
+	assert.Equal(t, svc.AuthConfig.CustomHeaders, resp.AuthConfig.CustomHeaders)
 }
 
 func TestMCPServiceResponse_NilSafe(t *testing.T) {
-	assert.Nil(t, NewMCPServiceResponse(adminContext(), nil))
-	assert.Equal(t, []*MCPServiceResponse{}, NewMCPServiceResponses(adminContext(), nil))
+	assert.Nil(t, NewMCPServiceResponse(userContext(), nil))
+	assert.Equal(t, []*MCPServiceResponse{}, NewMCPServiceResponses(userContext(), nil))
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -47,9 +46,7 @@ func (s *KnowledgeContextService) CorrectFact(ctx context.Context, kbID, factID 
 			}
 			return err
 		}
-		if err := types.AuthorizeTenantAPIKeyKnowledgeBases(ctx, old.KnowledgeBaseID); err != nil {
-			return err
-		}
+
 		if kbID != "" && old.KnowledgeBaseID != kbID {
 			return werrors.NewNotFoundError("knowledge fact not found")
 		}
@@ -91,11 +88,7 @@ func (s *KnowledgeContextService) CorrectFact(ctx context.Context, kbID, factID 
 		if err := tx.Create(&newFact).Error; err != nil {
 			return err
 		}
-		previous := old
 		if err := tx.Model(&old).Updates(map[string]any{"status": types.KnowledgeFactCorrected, "corrected_by": newFact.ID}).Error; err != nil {
-			return err
-		}
-		if err := writeContextAudit(tx, ctx, tenantID, "knowledge_context.fact_corrected", "fact", newFact.ID, map[string]any{"knowledge_base_id": kbID, "previous_fact": previous, "corrected_fact": newFact}); err != nil {
 			return err
 		}
 		corrected = &newFact
@@ -108,9 +101,6 @@ func (s *KnowledgeContextService) MergeEntities(ctx context.Context, kbID, keepE
 	tenantID, err := s.requireTenant(ctx)
 	if err != nil {
 		return err
-	}
-	if key, ok := types.TenantAPIKeyScopeFromContext(ctx); ok && key.IsKnowledgeBaseRestricted() {
-		return werrors.NewForbiddenError("global object merges require an unrestricted team API key")
 	}
 	if kbID != "" {
 		if _, err := s.scopedKnowledgeBase(ctx, kbID); err != nil {
@@ -146,28 +136,6 @@ func (s *KnowledgeContextService) MergeEntities(ctx context.Context, kbID, keepE
 		}
 		if keep.MergedIntoID != "" || merged.MergedIntoID != "" {
 			return werrors.NewBadRequestError("entity was already merged into a different object")
-		}
-		var previousFacts []types.KnowledgeFact
-		var previousLinks []types.KnowledgeEventEvidence
-		var previousEvents []types.KnowledgeEvent
-		if err := tx.Where("tenant_id = ? AND (subject_entity_id = ? OR object_entity_id = ?)", tenantID, merged.ID, merged.ID).Find(&previousFacts).Error; err != nil {
-			return err
-		}
-		if err := tx.Where(`tenant_id = ? AND (event_id, evidence_id) IN (
-			SELECT event_id, evidence_id FROM knowledge_context_event_evidence_entities WHERE tenant_id = ? AND entity_id = ?
-		)`, tenantID, tenantID, merged.ID).Find(&previousLinks).Error; err != nil {
-			return err
-		}
-		if err := loadContextEventEvidenceEntityIDs(tx, tenantID, previousLinks); err != nil {
-			return err
-		}
-		if err := tx.Where(`tenant_id = ? AND id IN (
-			SELECT event_id FROM knowledge_context_event_entities WHERE tenant_id = ? AND entity_id = ?
-		)`, tenantID, tenantID, merged.ID).Find(&previousEvents).Error; err != nil {
-			return err
-		}
-		if err := loadContextEventEntityIDs(tx, tenantID, previousEvents); err != nil {
-			return err
 		}
 		var aliases []types.KnowledgeEntityAlias
 		if err := tx.Where("tenant_id = ? AND entity_id = ?", tenantID, merged.ID).Find(&aliases).Error; err != nil {
@@ -223,7 +191,7 @@ func (s *KnowledgeContextService) MergeEntities(ctx context.Context, kbID, keepE
 		if err := tx.Model(&keep).Updates(map[string]any{"embedding_needs_rebuild": true, "updated_at": time.Now()}).Error; err != nil {
 			return err
 		}
-		return writeContextAudit(tx, ctx, tenantID, "knowledge_context.entities_merged", "entity", keep.ID, map[string]any{"scope": "team", "kept_entity": keep, "merged_entity": merged, "aliases_before": aliases, "facts_before": previousFacts, "event_links_before": previousLinks, "events_before": previousEvents})
+		return nil
 	})
 	if err != nil {
 		return err
@@ -232,19 +200,6 @@ func (s *KnowledgeContextService) MergeEntities(ctx context.Context, kbID, keepE
 		return s.nameEmbeddingRebuilder.Enqueue(ctx, tenantID, "entity_merge")
 	}
 	return nil
-}
-
-// The audit row is committed in the same transaction as the global change.
-func writeContextAudit(tx *gorm.DB, ctx context.Context, tenantID uint64, action types.AuditAction, targetType, targetID string, details any) error {
-	actor, ok := types.PrincipalFromContext(ctx)
-	if !ok {
-		return werrors.NewUnauthorizedError("authenticated context editor required")
-	}
-	encoded, err := json.Marshal(details)
-	if err != nil {
-		return err
-	}
-	return tx.Create(&types.AuditLog{TenantID: tenantID, ActorUserID: actor.ID, ActorRole: string(types.TenantRoleFromContext(ctx)), Action: action, ScopeType: "team", ScopeID: fmt.Sprint(tenantID), TargetType: targetType, TargetID: targetID, Outcome: types.AuditOutcomeSuccess, Details: types.JSON(encoded), CreatedAt: time.Now()}).Error
 }
 
 func contextDatabaseInTransaction(db *gorm.DB) bool {
@@ -263,9 +218,6 @@ func (s *KnowledgeContextService) UpdateEntityDescription(ctx context.Context, e
 	if _, ok := types.PrincipalFromContext(ctx); !ok {
 		return nil, werrors.NewUnauthorizedError("authenticated object editor required")
 	}
-	if key, ok := types.TenantAPIKeyScopeFromContext(ctx); ok && key.IsKnowledgeBaseRestricted() {
-		return nil, werrors.NewForbiddenError("global object edits require an unrestricted team API key")
-	}
 	description = strings.TrimSpace(description)
 	if len([]rune(description)) > 20000 {
 		return nil, werrors.NewBadRequestError("object description exceeds 20000 characters")
@@ -280,13 +232,12 @@ func (s *KnowledgeContextService) UpdateEntityDescription(ctx context.Context, e
 		} else if err != nil {
 			return err
 		}
-		previous := entity.Description
 		if err := tx.Model(&entity).Updates(map[string]any{"description": description, "embedding_needs_rebuild": true, "updated_at": time.Now()}).Error; err != nil {
 			return err
 		}
 		entity.Description = description
 		entity.EmbeddingNeedsRebuild = true
-		return writeContextAudit(tx, ctx, tenantID, "knowledge_context.entity_description_updated", "entity", entity.ID, map[string]any{"previous_description": previous, "description": description})
+		return nil
 	})
 	if err != nil {
 		return nil, err

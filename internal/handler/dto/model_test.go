@@ -24,7 +24,7 @@ func TestModelResponse_OmitsSecrets(t *testing.T) {
 			Provider:  "openai",
 		},
 	}
-	body, err := json.Marshal(NewModelResponse(adminContext(), m))
+	body, err := json.Marshal(NewModelResponse(userContext(), m))
 	assert.NoError(t, err)
 	s := string(body)
 	assert.NotContains(t, s, "sk-real-api-key-do-not-leak")
@@ -55,7 +55,7 @@ func TestModelResponse_BuiltinStripsTenantConfig(t *testing.T) {
 			ExtraConfig:    map[string]string{"region": "cn-hangzhou"},
 		},
 	}
-	resp := NewModelResponse(adminContext(), m)
+	resp := NewModelResponse(context.Background(), m)
 	assert.Empty(t, resp.Parameters.BaseURL,
 		"builtin must not leak per-tenant base URL")
 	assert.Nil(t, resp.Parameters.ExtraConfig,
@@ -68,8 +68,8 @@ func TestModelResponse_BuiltinStripsTenantConfig(t *testing.T) {
 	assert.False(t, strings.Contains(string(body), "tenant-private.example.com"))
 }
 
-func TestModelResponse_SystemAdminCanManageBuiltinConfig(t *testing.T) {
-	ctx := context.WithValue(viewerContext(), types.SystemAdminContextKey, true)
+func TestModelResponse_UserCanManageBuiltinConfig(t *testing.T) {
+	ctx := context.WithValue(userContext(), types.UserIDContextKey, "personal-user")
 	m := &types.Model{
 		ID:        "builtin-1",
 		IsBuiltin: true,
@@ -95,7 +95,7 @@ func TestModelResponse_SystemAdminCanManageBuiltinConfig(t *testing.T) {
 	assert.NotContains(t, string(body), "also-never-returned")
 }
 
-func TestModelResponse_ViewerStripsIntegrationDetail(t *testing.T) {
+func TestModelResponse_UserCanReadIntegrationDetail(t *testing.T) {
 	m := &types.Model{
 		ID: "m-2",
 		Parameters: types.ModelParameters{
@@ -104,13 +104,13 @@ func TestModelResponse_ViewerStripsIntegrationDetail(t *testing.T) {
 			ExtraConfig:   map[string]string{"region": "cn-hangzhou"},
 		},
 	}
-	resp := NewModelResponse(viewerContext(), m)
-	assert.Empty(t, resp.Parameters.BaseURL)
-	assert.Nil(t, resp.Parameters.CustomHeaders)
-	assert.Nil(t, resp.Parameters.ExtraConfig)
+	resp := NewModelResponse(userContext(), m)
+	assert.Equal(t, m.Parameters.BaseURL, resp.Parameters.BaseURL)
+	assert.Equal(t, m.Parameters.CustomHeaders, resp.Parameters.CustomHeaders)
+	assert.Equal(t, m.Parameters.ExtraConfig, resp.Parameters.ExtraConfig)
 }
 
 func TestModelResponse_NilSafe(t *testing.T) {
-	assert.Nil(t, NewModelResponse(adminContext(), nil))
-	assert.Equal(t, []*ModelResponse{}, NewModelResponses(adminContext(), nil))
+	assert.Nil(t, NewModelResponse(userContext(), nil))
+	assert.Equal(t, []*ModelResponse{}, NewModelResponses(userContext(), nil))
 }

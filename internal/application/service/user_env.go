@@ -35,10 +35,8 @@ type EnvVarView struct {
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 }
 
-// SkillEnvGroup is one skill's declared credentials. It carries the skill's
-// identity (name and the SKILL.md one-liner) and nothing else about it — not
-// the instructions, not the bundle, not the install state, all of which are
-// Admin+ disclosure.
+// SkillEnvGroup describes one skill's declared credentials and identity.
+// Instructions, bundle contents, and install state use their dedicated endpoints.
 type SkillEnvGroup struct {
 	SkillID     string       `json:"skill_id"`
 	SkillName   string       `json:"skill_name"`
@@ -59,10 +57,8 @@ type ConfigEnvGroup struct {
 // UserEnvService serves the values one identity keeps for itself, in both
 // scopes: config-wide variables and the credentials a skill declared.
 //
-// It is separate from TenantSkillService because its authority is different in
-// kind. Every method derives the workspace and the identity from the context
-// alone and touches only rows keyed by that identity, which is what makes the
-// endpoints safe for any logged-in member while install and listing stay Admin+.
+// Every method derives the workspace and user identity from the context
+// and accesses rows belonging to that user.
 type UserEnvService struct {
 	skills  repository.TenantSkillRepository
 	configs repository.TenantSandboxConfigRepository

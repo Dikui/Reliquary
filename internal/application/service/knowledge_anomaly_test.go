@@ -41,16 +41,12 @@ func anomalyTestDB(t *testing.T) *gorm.DB {
 func anomalyContext(user string) context.Context {
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
 	ctx = context.WithValue(ctx, types.UserIDContextKey, user)
-	role := types.TenantRoleContributor
-	if user == "reviewer" {
-		role = types.TenantRoleViewer
-	}
-	return context.WithValue(ctx, types.TenantRoleContextKey, role)
+	return ctx
 }
 
 func TestKnowledgeAnomalyForMessagesReturnsRelevantDecisions(t *testing.T) {
 	db := anomalyTestDB(t)
-	svc := NewKnowledgeAnomalyService(db, nil, nil, nil)
+	svc := NewKnowledgeAnomalyService(db, nil, nil)
 	ctx := anomalyContext("owner")
 	item, err := svc.Create(ctx, "kb", KnowledgeAnomalyInput{KnowledgeIDs: []string{"message", "second"}, Kind: "source_conflict", Description: "conflicting evidence"})
 	require.NoError(t, err)
@@ -72,18 +68,21 @@ func TestKnowledgeAnomalyForMessagesReturnsRelevantDecisions(t *testing.T) {
 	require.Empty(t, got)
 }
 
-func TestKnowledgeAnomalyViewerCannotApplyTeamEditorCan(t *testing.T) {
+func TestKnowledgeAnomalyRequiresAuthenticatedUserToApply(t *testing.T) {
 	db := anomalyTestDB(t)
 	tagRepo := repository.NewKnowledgeTagRepository(db)
 	knowledge := &knowledgeService{repo: repository.NewKnowledgeRepository(db), tagRepo: tagRepo}
-	svc := NewKnowledgeAnomalyService(db, knowledge, nil, nil)
+	svc := NewKnowledgeAnomalyService(db, knowledge, nil)
 	reviewer := anomalyContext("reviewer")
 	item, err := svc.Create(reviewer, "kb", KnowledgeAnomalyInput{
 		KnowledgeIDs: []string{"message", "second"}, Kind: "suspected_error", Description: "wrong topic",
 		ProposalType: "change_tags", ProposedTagIDs: []string{"new"}, ProposedRemoveTagIDs: []string{"old"},
 	})
 	require.NoError(t, err)
-	require.Error(t, func() error { _, err := svc.Resolve(reviewer, "kb", item.ID, "apply", ""); return err }())
+	require.Error(t, func() error {
+		_, err := svc.Resolve(context.WithValue(reviewer, types.UserIDContextKey, ""), "kb", item.ID, "apply", "")
+		return err
+	}())
 	var ids []string
 	require.NoError(t, db.Model(&types.KnowledgeTagRelation{}).Where("knowledge_id = ?", "message").Pluck("tag_id", &ids).Error)
 	sort.Strings(ids)
@@ -112,7 +111,7 @@ func TestKnowledgeAnomalyViewerCannotApplyTeamEditorCan(t *testing.T) {
 func TestKnowledgeAnomalyTagDeletionKeepsMessage(t *testing.T) {
 	db := anomalyTestDB(t)
 	tagService := &knowledgeTagService{repo: repository.NewKnowledgeTagRepository(db), kbService: &safeDeleteKBService{}}
-	svc := NewKnowledgeAnomalyService(db, nil, tagService, nil)
+	svc := NewKnowledgeAnomalyService(db, nil, tagService)
 	item, err := svc.Create(anomalyContext("system-1"), "kb", KnowledgeAnomalyInput{
 		KnowledgeIDs: []string{"message"}, Kind: "tag_deletion", Description: "duplicate tag",
 		ProposalType: "delete_tag", ProposedDeleteTagID: "old",
@@ -133,7 +132,7 @@ func TestKnowledgeAnomalyApplyingCanRecoverAfterOutcomeWriteFailure(t *testing.T
 	db := anomalyTestDB(t)
 	tagRepo := repository.NewKnowledgeTagRepository(db)
 	knowledge := &knowledgeService{repo: repository.NewKnowledgeRepository(db), tagRepo: tagRepo}
-	svc := NewKnowledgeAnomalyService(db, knowledge, nil, nil)
+	svc := NewKnowledgeAnomalyService(db, knowledge, nil)
 	item, err := svc.Create(anomalyContext("reviewer"), "kb", KnowledgeAnomalyInput{
 		KnowledgeIDs: []string{"message"}, Kind: "suspected_error", Description: "wrong topic",
 		ProposalType: "change_tags", ProposedTagIDs: []string{"new"}, ProposedRemoveTagIDs: []string{"old"},

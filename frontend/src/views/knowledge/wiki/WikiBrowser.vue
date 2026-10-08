@@ -2708,7 +2708,6 @@ function appendIndexDirectoryLines(items: WikiIndexEntryDTO[]): string {
 // round trip that appends a markdown block to indexMarkdown.
 //
 // Rendering is append-only markdown rather than a structured list so
-// the viewer feels like a regular wiki page — [[wiki-link]] clicks flow
 // through handleContentClick just like every other page body. Entries
 // are rendered as plain lines (not list items) so the reader doesn't
 // carry list bullets next to every link.
@@ -4320,7 +4319,7 @@ function renderGraph(opts: RenderGraphOpts = {}) {
         const n2 = sortedNodes[j]
         const dx = n2.x - n1.x
 
-        // Because nodes are sorted by X, if dx > MAX_REPULSION_DIST, 
+        // Because nodes are sorted by X, if dx > MAX_REPULSION_DIST,
         // all subsequent n2 nodes will also be too far on the X axis, so we can break early
         if (dx > MAX_REPULSION_DIST) break
 

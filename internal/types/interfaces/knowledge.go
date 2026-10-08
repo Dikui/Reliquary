@@ -12,7 +12,7 @@ import (
 // KnowledgeService defines the interface for knowledge services.
 type KnowledgeService interface {
 	// CreateKnowledgeFromFile creates knowledge from a file.
-	// channel identifies the ingestion channel (e.g. "web", "api", "feishu"); empty defaults to "web".
+	// channel identifies the ingestion channel (e.g. "web", "api", "rss"); empty defaults to "web".
 	CreateKnowledgeFromFile(
 		ctx context.Context,
 		kbID string,

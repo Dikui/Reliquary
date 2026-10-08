@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -43,15 +42,7 @@ type SystemHandler struct {
 	userSvc          interfaces.UserService
 	systemSettingSvc interfaces.SystemSettingService
 	apiKeySvc        interfaces.TenantAPIKeyService
-	// auditSvc is optional — when nil, emitAdminAudit no-ops so unit
-	// tests that wire a partial container still compile. In production
-	// the dig graph always provides one.
-	auditSvc interfaces.AuditLogService
-	// taskInspector backs the SystemAdmin runtime queue dashboard. Always
-	// provided by the container (asynq-backed in Redis mode, a no-op in
-	// in-memory fixtures), so GetRuntimeQueues can distinguish "no queues in this
-	// deployment" from "queues are empty".
-	taskInspector interfaces.TaskInspector
+	taskInspector    interfaces.TaskInspector
 	// knowledgeSvc supplies the domain-level cancellation path used by the
 	// runtime task console. It updates business state and tracing before queue
 	// records are removed, unlike a raw Redis deletion.
@@ -73,7 +64,6 @@ func NewSystemHandler(cfg *config.Config,
 	userSvc interfaces.UserService,
 	systemSettingSvc interfaces.SystemSettingService,
 	apiKeySvc interfaces.TenantAPIKeyService,
-	auditSvc interfaces.AuditLogService,
 	taskInspector interfaces.TaskInspector,
 	knowledgeSvc interfaces.KnowledgeService,
 	storageBackendRepo interfaces.StorageBackendRepository,
@@ -86,59 +76,11 @@ func NewSystemHandler(cfg *config.Config,
 		userSvc:            userSvc,
 		systemSettingSvc:   systemSettingSvc,
 		apiKeySvc:          apiKeySvc,
-		auditSvc:           auditSvc,
 		taskInspector:      taskInspector,
 		knowledgeSvc:       knowledgeSvc,
 		storageBackendRepo: storageBackendRepo,
 		sandboxConfigSvc:   sandboxConfigSvc,
 	}
-}
-
-func systemAuditActorRole(ctx context.Context) string {
-
-	return "system_admin"
-}
-
-// emitAdminAudit writes one audit row for a system-admin lifecycle event
-// (promote / revoke). Best-effort — a nil audit service or a write
-// failure does not bubble up to the caller. Mirrors the failure
-// semantics of tenantMemberService.emitAudit and the system settings
-// audit hook.
-//
-// `details` may be nil; the JSON `{}` default applies.
-func (h *SystemHandler) emitAdminAudit(
-	ctx context.Context,
-	action types.AuditAction,
-	target *types.User,
-	details map[string]any,
-) {
-	if h.auditSvc == nil {
-		return
-	}
-	actorID, _ := types.UserIDFromContext(ctx)
-	var detailsJSON types.JSON
-	if details != nil {
-		if b, err := json.Marshal(details); err == nil {
-			detailsJSON = types.JSON(b)
-		}
-	}
-	entry := &types.AuditLog{
-		// tenant_id=0 marks the row as system-scope. The audit_logs
-		// table is tenant-scoped; 0 is the convention for platform-wide
-		// events (matches AuditActionSystemSettingChanged).
-		TenantID:    0,
-		ActorUserID: actorID,
-		ActorRole:   systemAuditActorRole(ctx),
-		Action:      action,
-		TargetType:  "user",
-		Outcome:     types.AuditOutcomeSuccess,
-		Details:     detailsJSON,
-	}
-	if target != nil {
-		entry.TargetID = target.ID
-		entry.TargetUserID = target.ID
-	}
-	_ = h.auditSvc.Log(ctx, entry)
 }
 
 // GetSystemInfoResponse defines the response structure for system info
@@ -695,280 +637,6 @@ func (h *SystemHandler) ResolveDocumentReader(ctx context.Context, addr string) 
 	return reader
 }
 
-// PromoteUserToSystemAdmin godoc
-// @Summary      Promote a user to system administrator
-// @Description  Grant system administrator privileges to a user (SystemAdmin only).
-// @Description  Idempotent: re-promoting an existing system admin returns 200 with no DB write.
-// @Description  Identify the user by email (preferred for human operators) or user_id (UUID, for API clients).
-// @Tags         System Admin
-// @Accept       json
-// @Produce      json
-// @Param        request body PromoteUserToSystemAdminRequest true "User promotion request"
-// @Success      200  {object}  types.UserInfo  "User promoted successfully"
-// @Failure      400  {object}  map[string]interface{}  "Bad request"
-// @Failure      403  {object}  map[string]interface{}  "Forbidden: not a system admin"
-// @Failure      404  {object}  map[string]interface{}  "User not found"
-// @Router       /system/admin/promote [post]
-func (h *SystemHandler) PromoteUserToSystemAdmin(c *gin.Context) {
-	ctx := logger.CloneContext(c.Request.Context())
-
-	var req PromoteUserToSystemAdminRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: " + err.Error()})
-		return
-	}
-
-	userID := strings.TrimSpace(req.UserID)
-	email := strings.TrimSpace(req.Email)
-	if userID == "" && email == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Either user_id or email is required"})
-		return
-	}
-
-	// Resolve user. user_id takes priority when both are sent (see request
-	// struct doc); otherwise we look up by email. Both branches funnel
-	// into the same {nil-user / error} 404 so we don't leak whether a
-	// given email exists in the system to non-admins — though SystemAdmin
-	// is already a high-trust role, the parity keeps the surface clean.
-	var (
-		user *types.User
-		err  error
-	)
-	switch {
-	case userID != "":
-		user, err = h.userSvc.GetUserByID(ctx, userID)
-	default:
-		user, err = h.userSvc.GetUserByEmail(ctx, email)
-	}
-	if err != nil {
-		logger.Errorf(ctx, "Error fetching user (id=%q email=%q): %v", userID, email, err)
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-		return
-	}
-	if user == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-		return
-	}
-
-	if user.IsSystemAdmin {
-		// Idempotent: re-promoting an existing system admin is a no-op
-		// success. We still emit an audit row so probing the endpoint
-		// leaves a forensic trail (idempotent=true marks it as noop).
-		h.emitAdminAudit(ctx, types.AuditActionSystemAdminPromoted, user, map[string]any{
-			"target_email":    user.Email,
-			"target_username": user.Username,
-			"idempotent":      true,
-		})
-		c.JSON(http.StatusOK, user.ToUserInfo())
-		return
-	}
-	user.IsSystemAdmin = true
-	if err := h.userSvc.UpdateUser(ctx, user); err != nil {
-		logger.Errorf(ctx, "Error promoting user %s to system admin: %v", req.UserID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to promote user"})
-		return
-	}
-
-	logger.Infof(ctx, "User %s (ID: %s) promoted to system admin", user.Username, user.ID)
-	h.emitAdminAudit(ctx, types.AuditActionSystemAdminPromoted, user, map[string]any{
-		"target_email":    user.Email,
-		"target_username": user.Username,
-		"idempotent":      false,
-	})
-	c.JSON(http.StatusOK, user.ToUserInfo())
-}
-
-// RevokeSystemAdmin godoc
-// @Summary      Revoke system administrator privileges from a user
-// @Description  Remove system administrator privileges from a user (SystemAdmin only).
-// @Description  Two safety guards: the caller cannot revoke their own privileges,
-// @Description  and revoking the last remaining system admin is rejected — both
-// @Description  prevent a SystemAdmin from accidentally locking the platform out
-// @Description  of system-level administration. Idempotent on already-non-admin users.
-// @Tags         System Admin
-// @Accept       json
-// @Produce      json
-// @Param        request body RevokeSystemAdminRequest true "User revocation request"
-// @Success      200  {object}  types.UserInfo  "Privileges revoked successfully"
-// @Failure      400  {object}  map[string]interface{}  "Bad request / would remove last admin / self-revoke"
-// @Failure      403  {object}  map[string]interface{}  "Forbidden: not a system admin"
-// @Failure      404  {object}  map[string]interface{}  "User not found"
-// @Router       /system/admin/revoke [post]
-func (h *SystemHandler) RevokeSystemAdmin(c *gin.Context) {
-	ctx := logger.CloneContext(c.Request.Context())
-
-	var req RevokeSystemAdminRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: " + err.Error()})
-		return
-	}
-
-	callerID, _ := types.UserIDFromContext(ctx)
-	user, err := h.userSvc.RevokeSystemAdmin(ctx, req.UserID, callerID)
-	switch {
-	case err == nil:
-		// Real revoke — privileges were actually removed.
-		logger.Infof(ctx, "System admin privileges revoked from user %s (ID: %s)", user.Username, user.ID)
-		h.emitAdminAudit(ctx, types.AuditActionSystemAdminRevoked, user, map[string]any{
-			"target_email":    user.Email,
-			"target_username": user.Username,
-			"changed":         true,
-		})
-		c.JSON(http.StatusOK, user.ToUserInfo())
-		return
-	case errors.Is(err, repository.ErrUserNotSystemAdmin):
-		// Idempotent: target was already not an admin. Return 200 so
-		// callers that re-issue the request after a partial failure
-		// don't get a confusing 4xx, but mark `changed=false` in the
-		// audit row so a forensic reader can tell a real revoke from a
-		// noop probe.
-		if user == nil {
-			logger.Errorf(ctx, "RevokeSystemAdmin returned nil user with ErrUserNotSystemAdmin for %s", req.UserID)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to revoke system admin privileges"})
-			return
-		}
-		logger.Infof(ctx, "Revoke noop (user %s was not a system admin)", user.ID)
-		h.emitAdminAudit(ctx, types.AuditActionSystemAdminRevoked, user, map[string]any{
-			"target_email":    user.Email,
-			"target_username": user.Username,
-			"changed":         false,
-		})
-		c.JSON(http.StatusOK, user.ToUserInfo())
-		return
-	case errors.Is(err, repository.ErrCannotRevokeSelf):
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Cannot revoke your own system admin privileges",
-		})
-		return
-	case errors.Is(err, repository.ErrLastSystemAdmin):
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Cannot revoke the last remaining system administrator",
-		})
-		return
-	case errors.Is(err, repository.ErrUserNotFound):
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-		return
-	default:
-		logger.Errorf(ctx, "Error revoking system admin from user %s: %v", req.UserID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to revoke system admin privileges"})
-		return
-	}
-}
-
-// ListSystemAdmins godoc
-// @Summary      List all system administrators
-// @Description  Retrieve a paginated list of users with system administrator
-// @Description  privileges (SystemAdmin only). Supports `offset` (default 0)
-// @Description  and `limit` (default 50, max 200) query parameters. Walks the
-// @Description  partial-friendly idx_users_is_system_admin index.
-// @Tags         System Admin
-// @Produce      json
-// @Param        offset query int false "Page offset" default(0)
-// @Param        limit  query int false "Page size (max 200)" default(50)
-// @Success      200  {object}  ListSystemAdminsResponse  "System admins retrieved successfully"
-// @Failure      403  {object}  map[string]interface{}  "Forbidden: not a system admin"
-// @Router       /system/admin/list [get]
-func (h *SystemHandler) ListSystemAdmins(c *gin.Context) {
-	ctx := logger.CloneContext(c.Request.Context())
-
-	// Best-effort pagination parsing — a malformed `limit=foo` falls back
-	// to defaults rather than 400-ing, since the call is still safe and a
-	// failed-page is more user-hostile than a soft default.
-	offset := 0
-	limit := 50
-	if v := c.Query("offset"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
-			offset = n
-		}
-	}
-	if v := c.Query("limit"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			limit = n
-		}
-	}
-	// Cap so a client can't ask for the entire table.
-	if limit > 200 {
-		limit = 200
-	}
-
-	users, total, err := h.userSvc.ListSystemAdmins(ctx, offset, limit)
-	if err != nil {
-		logger.Errorf(ctx, "Error listing system admins: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list system admins"})
-		return
-	}
-
-	// Always emit a non-nil slice so the JSON serialises to `[]` rather
-	// than `null` for an empty page — front-end iteration is safer.
-	infos := make([]*types.UserInfo, 0, len(users))
-	for _, u := range users {
-		infos = append(infos, u.ToUserInfo())
-	}
-
-	c.JSON(http.StatusOK, ListSystemAdminsResponse{
-		Total:  total,
-		Admins: infos,
-	})
-}
-
-// ResetUserPassword godoc
-// @Summary      Reset another user's password
-// @Description  Replace another user's local password and revoke all of their existing sessions (SystemAdmin only).
-// @Description  A system administrator cannot reset their own password through this endpoint; self-service password change still requires the old password.
-// @Tags         System Admin
-// @Accept       json
-// @Produce      json
-// @Param        request body ResetUserPasswordRequest true "Password reset request"
-// @Success      200  {object}  map[string]interface{}  "Password reset successfully"
-// @Failure      400  {object}  map[string]interface{}  "Invalid request, weak password, or self reset"
-// @Failure      403  {object}  map[string]interface{}  "Forbidden: not a system admin"
-// @Failure      404  {object}  map[string]interface{}  "User not found"
-// @Router       /system/admin/users/reset-password [post]
-func (h *SystemHandler) ResetUserPassword(c *gin.Context) {
-	ctx := logger.CloneContext(c.Request.Context())
-
-	var req ResetUserPasswordRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid password reset request"})
-		return
-	}
-	req.Email = strings.TrimSpace(req.Email)
-
-	if err := service.ValidatePasswordPolicy(req.NewPassword, h.complexPasswordEnabled(ctx)); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	user, err := h.userSvc.GetUserByEmail(ctx, req.Email)
-	if err != nil || user == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-		return
-	}
-	callerID, _ := types.UserIDFromContext(ctx)
-	if callerID == user.ID {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot reset your own password here"})
-		return
-	}
-
-	if err := h.userSvc.AdminResetPassword(ctx, user.ID, req.NewPassword); err != nil {
-		if service.IsPasswordPolicyError(err) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-		logger.Errorf(ctx, "Failed to reset password for user %s: %v", user.ID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reset user password"})
-		return
-	}
-
-	logger.Infof(ctx, "Password reset by system administrator for user ID: %s", user.ID)
-	h.emitAdminAudit(ctx, types.AuditActionSystemUserPasswordReset, user, map[string]any{
-		"target_email":     user.Email,
-		"target_username":  user.Username,
-		"sessions_revoked": true,
-	})
-	c.JSON(http.StatusOK, gin.H{"message": "Password reset successfully"})
-}
-
 func aggregateRuntimeWorkerPools(pools []RuntimeWorkerPool, servers []types.WorkerServerStat) {
 	queueConfigs := map[string]map[string]int{
 		types.WorkerPoolCore:        types.QueueWeightsForPool(types.WorkerPoolCore),
@@ -1021,7 +689,7 @@ func sameQueueWeights(left, right map[string]int) bool {
 
 // GetRuntimeQueues godoc
 // @Summary      获取解析任务队列运行时状态
-// @Description  返回各 asynq 队列的实时深度（pending/active/scheduled/retry 等）与 worker 并发配置，仅系统管理员可见
+// @Description  返回各 asynq 队列的实时深度（pending/active/scheduled/retry 等）与 worker 并发配置，供登录用户查看
 // @Tags         系统管理
 // @Produce      json
 // @Success      200  {object}  RuntimeQueuesResponse
@@ -1175,39 +843,6 @@ func (h *SystemHandler) ListRuntimeTasks(c *gin.Context) {
 	h.listRuntimeTasks(c, types.RuntimeTaskState(c.Query("state")))
 }
 
-func (h *SystemHandler) emitQueueTaskAudit(
-	ctx context.Context,
-	action types.AuditAction,
-	queue, taskID string,
-	extra map[string]string,
-) {
-	if h.auditSvc == nil {
-		return
-	}
-	actorID, _ := types.UserIDFromContext(ctx)
-	detailMap := map[string]string{"queue": queue, "task_id": taskID}
-	for key, value := range extra {
-		detailMap[key] = value
-	}
-	details, _ := json.Marshal(detailMap)
-	targetType := "queue_task"
-	targetID := taskID
-	if targetID == "" {
-		targetType = "task_queue"
-		targetID = queue
-	}
-	_ = h.auditSvc.Log(ctx, &types.AuditLog{
-		TenantID:    0,
-		ActorUserID: actorID,
-		ActorRole:   systemAuditActorRole(ctx),
-		Action:      action,
-		TargetType:  targetType,
-		TargetID:    targetID,
-		Outcome:     types.AuditOutcomeSuccess,
-		Details:     types.JSON(details),
-	})
-}
-
 func runtimeTaskParams(c *gin.Context) (string, string, bool) {
 	queue := c.Param("queue")
 	taskID := c.Param("task_id")
@@ -1246,12 +881,6 @@ func (h *SystemHandler) mutateRuntimeTask(c *gin.Context, action types.RuntimeTa
 		return
 	}
 
-	var auditAction types.AuditAction
-	auditDetails := map[string]string{
-		"task_type":  task.Type,
-		"from_state": string(task.State),
-		"action":     string(action),
-	}
 	switch action {
 	case types.RuntimeTaskActionCancel:
 		if h.knowledgeSvc == nil || task.KnowledgeID == "" {
@@ -1265,8 +894,6 @@ func (h *SystemHandler) mutateRuntimeTask(c *gin.Context, action types.RuntimeTa
 					logger.Warnf(c.Request.Context(),
 						"cancel runtime queue task queue=%s task=%s: knowledge gone, purged queue record",
 						queue, taskID)
-					auditDetails["orphan_purge"] = "true"
-					auditAction = types.AuditActionSystemQueueTaskCancelled
 					break
 				}
 			}
@@ -1274,7 +901,6 @@ func (h *SystemHandler) mutateRuntimeTask(c *gin.Context, action types.RuntimeTa
 			c.JSON(http.StatusConflict, gin.H{"error": "Task can no longer be cancelled"})
 			return
 		}
-		auditAction = types.AuditActionSystemQueueTaskCancelled
 	case types.RuntimeTaskActionRunNow:
 		available, err = inspector.RunRuntimeTask(c.Request.Context(), queue, taskID)
 		if !available {
@@ -1286,7 +912,6 @@ func (h *SystemHandler) mutateRuntimeTask(c *gin.Context, action types.RuntimeTa
 			c.JSON(http.StatusConflict, gin.H{"error": "Task is no longer available to run"})
 			return
 		}
-		auditAction = types.AuditActionSystemQueueTaskRunNow
 	case types.RuntimeTaskActionDelete:
 		available, err = inspector.DeleteRuntimeTask(c.Request.Context(), queue, taskID)
 		if !available {
@@ -1298,12 +923,10 @@ func (h *SystemHandler) mutateRuntimeTask(c *gin.Context, action types.RuntimeTa
 			c.JSON(http.StatusConflict, gin.H{"error": "Task is no longer available for deletion"})
 			return
 		}
-		auditAction = types.AuditActionSystemQueueTaskDeleted
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Unknown task action"})
 		return
 	}
-	h.emitQueueTaskAudit(c.Request.Context(), auditAction, queue, taskID, auditDetails)
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
@@ -1389,20 +1012,9 @@ func (h *SystemHandler) PurgeArchivedRuntimeTasks(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": "Archived tasks could not be purged"})
 		return
 	}
-	h.emitQueueTaskAudit(c.Request.Context(), types.AuditActionSystemQueueArchivedPurged, queue, "",
-		map[string]string{"deleted": strconv.Itoa(deleted)})
 	c.JSON(http.StatusOK, gin.H{"success": true, "deleted": deleted})
 }
 
-// ListSystemSettings godoc
-// @Summary      List all system settings
-// @Description  Return every row in the system_settings table (system-scope,
-// @Description  not workspace-scoped). SystemAdmin only.
-// @Tags         System Admin
-// @Produce      json
-// @Success      200 {array} types.SystemSetting "list of settings"
-// @Failure      403 {object} map[string]interface{} "Forbidden: not a system admin"
-// @Router       /system/admin/settings [get]
 func (h *SystemHandler) ListSystemSettings(c *gin.Context) {
 	ctx := logger.CloneContext(c.Request.Context())
 	rows, err := h.systemSettingSvc.List(ctx)
@@ -1456,8 +1068,8 @@ func (h *SystemHandler) enrichSettingsModifiedBy(ctx context.Context, rows []*ty
 			continue
 		}
 		// Username is the canonical display label; fall back to email
-		// for older rows where username may be empty (legacy seeded
-		// admins). Both empty → leave LastModifiedByName empty so the
+		// for older rows where username may be empty. If both are empty,
+		// leave LastModifiedByName empty so the
 		// UI's UUID-prefix fallback kicks in.
 		switch {
 		case strings.TrimSpace(u.Username) != "":
@@ -1497,21 +1109,6 @@ func (h *SystemHandler) GetSystemSetting(c *gin.Context) {
 	c.JSON(http.StatusOK, row)
 }
 
-// UpdateSystemSetting godoc
-// @Summary      Update a system setting value
-// @Description  Persist a new value for :key. Service validates the
-// @Description  rawValue against the registry's declared value_type and
-// @Description  rejects mismatches with 400. SystemAdmin only. Emits an
-// @Description  audit row (action=system.setting_changed) on success.
-// @Tags         System Admin
-// @Accept       json
-// @Produce      json
-// @Param        key     path string                       true "Setting key"
-// @Param        request body UpdateSystemSettingRequest   true "New value"
-// @Success      200 {object} types.SystemSetting "the updated row"
-// @Failure      400 {object} map[string]interface{} "Bad request / unknown key / type mismatch"
-// @Failure      403 {object} map[string]interface{} "Forbidden: not a system admin"
-// @Router       /system/admin/settings/{key} [put]
 func (h *SystemHandler) UpdateSystemSetting(c *gin.Context) {
 	ctx := logger.CloneContext(c.Request.Context())
 	key := c.Param("key")
@@ -1564,15 +1161,6 @@ func (h *SystemHandler) ResetSystemSetting(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
-// ResetUserPasswordRequest defines the system-administrator password-reset
-// payload. Email is intentionally the only user-facing identifier: the UI is
-// an operator tool and emails are easier to verify than UUIDs. The password is
-// never written to logs or audit details.
-type ResetUserPasswordRequest struct {
-	Email       string `json:"email" binding:"required,email"`
-	NewPassword string `json:"new_password" binding:"required"`
-}
-
 type RuntimeTasksResponse struct {
 	Available  bool                    `json:"available"`
 	Tasks      []types.RuntimeTaskInfo `json:"tasks"`
@@ -1593,9 +1181,6 @@ type RuntimeQueuesResponse struct {
 	Timestamp             int64                      `json:"timestamp"`
 }
 
-// RuntimeQueuesResponse is the payload for the SystemAdmin runtime queue
-// dashboard. Each pool reports configured per-process concurrency plus live
-// cluster capacity/active workers aggregated from asynq server heartbeats.
 type RuntimeWorkerPool struct {
 	Name            string  `json:"name"`
 	Concurrency     int     `json:"concurrency"` // configured per instance
@@ -1614,14 +1199,6 @@ type StorageEngineStatusItem struct {
 	Description string `json:"description"` // short description for UI
 }
 
-// ListSystemAdminsResponse defines the response structure for listing system admins.
-// Total reflects the underlying COUNT(*), not just the page size, so the front
-// end can render pagination metadata without a follow-up call.
-type ListSystemAdminsResponse struct {
-	Total  int64             `json:"total"`
-	Admins []*types.UserInfo `json:"admins"`
-}
-
 // UpdateSystemSettingRequest is the body for PUT /system/admin/settings/:key.
 // `value` carries the new value as raw JSON — int / string / bool depending
 // on the registry-declared value_type. The service validates the type
@@ -1638,26 +1215,6 @@ type StorageCheckResponse struct {
 	OK            bool   `json:"ok"`
 	Message       string `json:"message"`
 	BucketCreated bool   `json:"bucket_created,omitempty"`
-}
-
-// RevokeSystemAdminRequest defines the request for revoking system admin privileges
-type RevokeSystemAdminRequest struct {
-	UserID string `json:"user_id" binding:"required"`
-}
-
-// PromoteUserToSystemAdminRequest defines the request for promoting a user to system admin.
-//
-// Either user_id (UUID) or email must be supplied. When both are present
-// user_id wins — explicit IDs are unambiguous, an email collision (extremely
-// rare in practice but possible during a tenant merge) would otherwise
-// silently target the wrong row.
-//
-// We don't expose a `binding:"required"` tag on either field because gin's
-// validator can't express the OR constraint; the handler does the check
-// manually and returns 400 with a specific message for each branch.
-type PromoteUserToSystemAdminRequest struct {
-	UserID string `json:"user_id"`
-	Email  string `json:"email"`
 }
 
 // GetStorageEngineStatusResponse is the response for GET /system/storage-engine-status.

@@ -215,7 +215,7 @@ const error = ref('')
 
 // 仅 owner 可改空间名（与后端 router.go 中 g.Owner() 守卫一致；
 // 服务端始终是权限的最终裁判，这里只决定 UI 是否露出入口）。
-const canEditTenant = computed(() => authStore.hasRole('owner'))
+const canEditTenant = computed(() => authStore.isLoggedIn)
 
 
 // 原地编辑空间名称：editing 控制行内只读 / 编辑两种形态切换。
@@ -336,14 +336,7 @@ const saveTenantName = async () => {
         authStore.setTenant({ ...authStore.tenant, name: newName })
       }
       // 同步成员记录中的团队名称。
-      if (authStore.memberships?.length) {
-        const next = authStore.memberships.map((m) =>
-          String(m.tenant_id) === String(tenantInfo.value?.id)
-            ? { ...m, tenant_name: newName }
-            : m,
-        )
-        authStore.setMemberships(next)
-      }
+
       MessagePlugin.success(t('tenant.details.editNameSuccess'))
       editing.value = false
     } else {

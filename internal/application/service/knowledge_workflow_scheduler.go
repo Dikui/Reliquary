@@ -43,7 +43,7 @@ func (s *KnowledgeWorkflowService) Approve(ctx context.Context, kbID, runID, dec
 	}
 	now := time.Now()
 	ownerCtx := context.WithValue(ctx, types.UserIDContextKey, run.OwnerID)
-	role, err := s.currentRole(ownerCtx, run.TenantID, run.OwnerID)
+	err = s.validateActor(ownerCtx, run.TenantID, run.OwnerID)
 	if err != nil && decision == "approve" {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func (s *KnowledgeWorkflowService) Approve(ctx context.Context, kbID, runID, dec
 		return nil, err
 	}
 	payload := types.KnowledgeWorkflowTaskPayload{
-		RunID: run.ID, Initiator: types.TaskInitiator{UserID: run.OwnerID, Role: role},
+		RunID: run.ID, Initiator: types.TaskInitiator{UserID: run.OwnerID},
 	}
 	if _, err := s.enqueueExisting(ctx, run, payload); err != nil {
 		return nil, err
@@ -137,7 +137,7 @@ func (s *KnowledgeWorkflowService) Resume(ctx context.Context, kbID, runID strin
 		return nil, fmt.Errorf("run cannot be resumed from status %q", run.Status)
 	}
 	ownerCtx := context.WithValue(ctx, types.UserIDContextKey, run.OwnerID)
-	role, err := s.currentRole(ownerCtx, run.TenantID, run.OwnerID)
+	err = s.validateActor(ownerCtx, run.TenantID, run.OwnerID)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +151,7 @@ func (s *KnowledgeWorkflowService) Resume(ctx context.Context, kbID, runID strin
 	if result.RowsAffected == 0 {
 		return nil, fmt.Errorf("run cannot be resumed from status %q", run.Status)
 	}
-	payload := types.KnowledgeWorkflowTaskPayload{RunID: runID, Initiator: types.TaskInitiator{UserID: run.OwnerID, Role: role}}
+	payload := types.KnowledgeWorkflowTaskPayload{RunID: runID, Initiator: types.TaskInitiator{UserID: run.OwnerID}}
 	if _, err := s.enqueueExisting(ctx, run, payload); err != nil {
 		return nil, err
 	}
@@ -179,7 +179,7 @@ func (s *KnowledgeWorkflowService) Retry(ctx context.Context, kbID, runID string
 		return nil, errors.New("enable the workflow before retrying")
 	}
 	roleCtx := context.WithValue(ctx, types.UserIDContextKey, run.OwnerID)
-	role, err := s.currentRole(roleCtx, run.TenantID, run.OwnerID)
+	err = s.validateActor(roleCtx, run.TenantID, run.OwnerID)
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +192,7 @@ func (s *KnowledgeWorkflowService) Retry(ctx context.Context, kbID, runID string
 	if result.RowsAffected == 0 {
 		return nil, errors.New("workflow run is no longer failed")
 	}
-	payload := types.KnowledgeWorkflowTaskPayload{RunID: runID, Initiator: types.TaskInitiator{UserID: run.OwnerID, Role: role}}
+	payload := types.KnowledgeWorkflowTaskPayload{RunID: runID, Initiator: types.TaskInitiator{UserID: run.OwnerID}}
 	if _, err := s.enqueueExisting(ctx, run, payload); err != nil {
 		return nil, err
 	}
@@ -300,9 +300,8 @@ func (s *KnowledgeWorkflowService) Tick(ctx context.Context) error {
 		}
 		tenantCtx := context.WithValue(ctx, types.TenantIDContextKey, wf.TenantID)
 		tenantCtx = context.WithValue(tenantCtx, types.UserIDContextKey, wf.OwnerID)
-		role, roleErr := s.currentRole(tenantCtx, wf.TenantID, wf.OwnerID)
+		roleErr := s.validateActor(tenantCtx, wf.TenantID, wf.OwnerID)
 		if roleErr != nil {
-			role = ""
 			firstErr = errors.Join(firstErr, fmt.Errorf("workflow %s owner authorization: %w", wf.ID, roleErr))
 		}
 		run := &types.KnowledgeWorkflowRun{
@@ -310,7 +309,7 @@ func (s *KnowledgeWorkflowService) Tick(ctx context.Context) error {
 			WorkflowID: wf.ID, OwnerID: wf.OwnerID, Trigger: "scheduled", IdempotencyKey: key, Status: types.WorkflowStatusQueued,
 			WorkflowSnapshot: append([]types.KnowledgeWorkflowStep(nil), wf.Steps...),
 		}
-		payload := types.KnowledgeWorkflowTaskPayload{RunID: run.ID, Initiator: types.TaskInitiator{UserID: wf.OwnerID, Role: role}}
+		payload := types.KnowledgeWorkflowTaskPayload{RunID: run.ID, Initiator: types.TaskInitiator{UserID: wf.OwnerID}}
 		if _, createErr := s.createScheduledRun(ctx, run, payload); createErr != nil {
 			firstErr = errors.Join(firstErr, createErr)
 		}
@@ -333,7 +332,7 @@ func (s *KnowledgeWorkflowService) recoverWorkflowRuns(ctx context.Context, now 
 		run := &runs[i]
 		actorCtx := context.WithValue(ctx, types.TenantIDContextKey, run.TenantID)
 		actorCtx = context.WithValue(actorCtx, types.UserIDContextKey, run.OwnerID)
-		role, err := s.currentRole(actorCtx, run.TenantID, run.OwnerID)
+		err := s.validateActor(actorCtx, run.TenantID, run.OwnerID)
 		if err != nil {
 			firstErr = errors.Join(firstErr, fmt.Errorf("workflow run %s owner authorization: %w", run.ID, err))
 			_ = s.db.WithContext(ctx).Model(&types.KnowledgeWorkflowRun{}).Where("id = ? AND updated_at = ? AND status = ?", run.ID, run.UpdatedAt, run.Status).
@@ -371,7 +370,7 @@ func (s *KnowledgeWorkflowService) recoverWorkflowRuns(ctx context.Context, now 
 			continue
 		}
 		payload, err := json.Marshal(types.KnowledgeWorkflowTaskPayload{
-			RunID: run.ID, Initiator: types.TaskInitiator{UserID: run.OwnerID, Role: role},
+			RunID: run.ID, Initiator: types.TaskInitiator{UserID: run.OwnerID},
 		})
 		if err != nil {
 			firstErr = errors.Join(firstErr, err)

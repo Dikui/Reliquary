@@ -18,7 +18,6 @@ export interface LoginResponse {
     email: string
     avatar?: string
     tenant_id: number
-    is_system_admin?: boolean
     is_active: boolean
     created_at: string
     updated_at: string
@@ -34,7 +33,7 @@ export interface LoginResponse {
     created_at: string
     updated_at: string
   } | null
-  // Current team returned by password login or invitation registration.
+  // Current team returned by password login.
   active_tenant?: {
     id: number
     name: string
@@ -46,7 +45,6 @@ export interface LoginResponse {
     created_at?: string
     updated_at?: string
   } | null
-  memberships?: MembershipInfo[]
   token?: string
   refresh_token?: string
 }
@@ -81,7 +79,6 @@ export interface UserInfo {
   email: string
   avatar?: string
   tenant_id: string
-  is_system_admin?: boolean
   created_at: string
   updated_at: string
 }
@@ -107,7 +104,6 @@ export function userInfoFromApi(
     email: u?.email || '',
     avatar: u?.avatar,
     tenant_id: String(tid) || '',
-    is_system_admin: u?.is_system_admin === true,
     created_at: u?.created_at || new Date().toISOString(),
     updated_at: u?.updated_at || new Date().toISOString(),
   }
@@ -173,19 +169,11 @@ export async function login(data: LoginRequest): Promise<LoginResponse> {
   }
 }
 
-/**
- * 获取认证配置（仅返回前端渲染需要的公开字段，例如注册模式）。
- *
- * 后端通过 `auth.registration_mode` 控制是否允许自助注册：
- *   - "self_serve"  保留现有自助注册入口（默认）
- *   - "invite_only" 关闭注册，要求管理员邀请
- *
- * 失败时回落到 self_serve，避免接口异常导致注册入口直接消失。
- */
+/** Registration remains open until the first user is created. */
 export interface AuthConfigResponse {
   success: boolean
-  registration_mode: 'self_serve' | 'invite_only' | string
-  complex_password_enabled: boolean
+  registration_enabled: boolean
+  minimum_password_length: number
 }
 
 export async function getAuthConfig(): Promise<AuthConfigResponse> {
@@ -193,7 +181,7 @@ export async function getAuthConfig(): Promise<AuthConfigResponse> {
     const response = await get('/api/v1/auth/config')
     return response as unknown as AuthConfigResponse
   } catch {
-    return { success: false, registration_mode: 'self_serve', complex_password_enabled: false }
+    return { success: false, registration_enabled: false, minimum_password_length: 8 }
   }
 }
 
@@ -212,24 +200,10 @@ export async function register(data: RegisterRequest): Promise<RegisterResponse>
   }
 }
 
-/** Team membership returned by /auth/me to refresh the current role. */
-export interface MembershipInfo {
-  tenant_id: number
-  tenant_name?: string
-  role: string
-}
-
-/**
- * 获取当前用户信息
- */
-export interface AuthCapabilities {
-  auto_accept_invitation: boolean
-}
-
-export async function getCurrentUser(): Promise<{ success: boolean; data?: { user: UserInfo; tenant?: TenantInfo | null; memberships?: MembershipInfo[]; tenant_required?: boolean; capabilities?: AuthCapabilities }; message?: string }> {
+export async function getCurrentUser(): Promise<{ success: boolean; data?: { user: UserInfo; tenant?: TenantInfo | null; tenant_required?: boolean }; message?: string }> {
   try {
     const response = await get('/api/v1/auth/me')
-    return response as unknown as { success: boolean; data?: { user: UserInfo; tenant?: TenantInfo | null; memberships?: MembershipInfo[]; tenant_required?: boolean; capabilities?: AuthCapabilities }; message?: string }
+    return response as unknown as { success: boolean; data?: { user: UserInfo; tenant?: TenantInfo | null; tenant_required?: boolean }; message?: string }
   } catch (error: any) {
     return {
       success: false,
@@ -317,7 +291,7 @@ export function resolveChangePasswordError(error: any): string {
   switch (details) {
     case 'invalid_old_password':
       return t('userProfile.changePassword.failed')
-    case 'password_policy':
+    case 'invalid_password':
       return t('userProfile.changePassword.policyFailed')
     case 'same_password':
       return t('userProfile.changePassword.sameAsCurrent')
@@ -358,61 +332,5 @@ export async function validateToken(): Promise<{ success: boolean; valid?: boole
       valid: false,
       message: error.message || t('error.auth.validateTokenFailed')
     }
-  }
-}
-
-// ---- share-link registration --------------------------------------------
-
-// InviteLookup is the public projection of a share-link row used by
-// /register?token=xxx — enough to render the registration page header
-// ("X invited you to Y") without leaking sensitive inviter fields.
-export interface InviteLookup {
-  tenant_id: number
-  tenant_name?: string
-  role: string
-  expires_at: string
-}
-
-export interface InviteLookupResponse {
-  success: boolean
-  data?: InviteLookup
-  message?: string
-}
-
-export interface RegisterByInviteRequest {
-  token: string
-  email: string
-  username: string
-  password: string
-}
-
-/**
- * Resolve a share-link token (no auth) into the context the
- * registration page needs (tenant name, role, expiry). Returns 410
- * when the link is invalid / revoked / expired.
- *
- * Uses POST + body (rather than GET + path) so the plaintext token
- * never appears in access logs, browser history, or tracing spans.
- */
-export async function getInvitationByToken(token: string): Promise<InviteLookupResponse> {
-  try {
-    const response = await post(`/api/v1/auth/invitations/lookup`, { token })
-    return response as unknown as InviteLookupResponse
-  } catch (error: any) {
-    return { success: false, message: error.message || '' }
-  }
-}
-
-/**
- * Complete registration via a share-link token. The invitee supplies
- * their own email — the token is the authorisation, not an identity
- * lock.
- */
-export async function registerByInvite(data: RegisterByInviteRequest): Promise<LoginResponse> {
-  try {
-    const response = await post('/api/v1/auth/register-by-invite', data)
-    return response as unknown as LoginResponse
-  } catch (error: any) {
-    return { success: false, message: error.message || t('error.auth.registerFailed') }
   }
 }

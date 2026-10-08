@@ -16,87 +16,10 @@ export interface TenantInfo {
   updated_at: string
 }
 
-export type APIPrincipalMode = 'tenant' | 'direct_header' | 'signed_token'
-
-export interface APIPrincipalConfig {
-  mode: APIPrincipalMode
-  direct_header_name: string
-  signed_token_header_name: string
-  require_direct_header: boolean
-  // The server never returns the plaintext secret; only its presence.
-  has_hmac_secret: boolean
-}
-
-export interface UpdateAPIPrincipalConfigPayload {
-  mode: APIPrincipalMode
-  direct_header_name?: string
-  signed_token_header_name?: string
-  require_direct_header?: boolean
-  hmac_secret?: string
-}
-
-export interface CreateAPIPrincipalTestTokenPayload {
-  external_user_id: string
-  expires_in_seconds?: number
-}
-
-export interface APIPrincipalTestToken {
-  token: string
-  header_name: string
-  expires_in_seconds: number
-  expires_at_unix: number
-  external_user_id: string
-}
-
-// Bounded per-key grants for non-full-access API keys.
-//  - 'retrieve': read/search knowledge-base data within scope
-//  - 'chat': run the conversation flow (sessions + agent listing + self identity)
-//  - 'read_agents': list/read agents without chat or authoring
-//  - 'manage_kbs': manage the KB lifecycle (create/copy/duplicate/update/delete + config)
-//  - 'manage_agents': create/update/delete/copy agents
-//  - 'message_history': search/read tenant chat-history metadata
-//  - 'manage_models': manage tenant model definitions, checks, and credentials
-//  - 'manage_mcp_services': manage MCP services, credentials, tool policies, and OAuth state
-//  - 'manage_datasources': manage data-source connectors and sync jobs
-//  - 'manage_channels': manage embed and IM channels
-//  - 'manage_vector_stores': manage vector stores and parser/storage checks
-//  - 'manage_web_search': manage web-search providers
-//  - 'run_evaluations': run/read evaluation jobs
-//  - 'manage_members': manage tenant members and invitations
-//  - 'manage_tenant_settings': read/update tenant integration settings (API principal mode, headers, tenant KV)
-export type TenantAPIKeyCapability =
-  | 'retrieve'
-  | 'chat'
-  | 'read_agents'
-  | 'ingest'
-  | 'manage_kbs'
-  | 'manage_agents'
-  | 'message_history'
-  | 'manage_models'
-  | 'manage_mcp_services'
-  | 'manage_datasources'
-  | 'manage_channels'
-  | 'manage_vector_stores'
-  | 'manage_storage_backends'
-  | 'manage_web_search'
-  | 'run_evaluations'
-  | 'manage_members'
-  | 'manage_tenant_settings'
-
-
-
-
-
-
-
 export interface TenantAPIKey {
   id: number
-  scope_type?: 'tenant'
   name: string
   api_key: string
-  full_access: boolean
-  knowledge_base_ids: string[] | null
-  capabilities?: TenantAPIKeyCapability[]
   last_used_at?: string
   expires_at?: string
   created_at: string
@@ -108,62 +31,12 @@ export interface CreatedTenantAPIKey extends TenantAPIKey {
 
 export interface CreateTenantAPIKeyPayload {
   name: string
-  full_access?: boolean
-  knowledge_base_ids?: string[]
-  capabilities?: TenantAPIKeyCapability[]
   expires_at_unix?: number
 }
 
 export interface UpdateTenantAPIKeyPayload {
   name: string
-  full_access: boolean
-  knowledge_base_ids: string[]
-  capabilities: TenantAPIKeyCapability[]
   expires_at_unix?: number
-}
-
-export async function getAPIPrincipalConfig(
-  tenantId: number,
-): Promise<{ success: boolean; data?: APIPrincipalConfig; message?: string }> {
-  try {
-    const response = await get(`/api/v1/tenants/${tenantId}/api-principal-config`)
-    return response as unknown as { success: boolean; data?: APIPrincipalConfig; message?: string }
-  } catch (error: any) {
-    return {
-      success: false,
-      message: error.message || t('error.tenant.getApiPrincipalConfigFailed'),
-    }
-  }
-}
-
-export async function updateAPIPrincipalConfig(
-  tenantId: number,
-  payload: UpdateAPIPrincipalConfigPayload,
-): Promise<{ success: boolean; data?: APIPrincipalConfig; message?: string }> {
-  try {
-    const response = await put(`/api/v1/tenants/${tenantId}/api-principal-config`, payload)
-    return response as unknown as { success: boolean; data?: APIPrincipalConfig; message?: string }
-  } catch (error: any) {
-    return {
-      success: false,
-      message: error.message || t('error.tenant.updateApiPrincipalConfigFailed'),
-    }
-  }
-}
-
-export async function createAPIPrincipalTestToken(
-  tenantId: number,
-  payload: CreateAPIPrincipalTestTokenPayload,
-): Promise<{ success: boolean; data?: APIPrincipalTestToken; message?: string }> {
-  try {
-    const response = await post(`/api/v1/tenants/${tenantId}/api-principal-test-token`, payload)
-    return response as unknown as { success: boolean; data?: APIPrincipalTestToken; message?: string }
-  } catch (error: any) {
-    return {
-      success: false,
-      message: error.message || t('error.tenant.createApiPrincipalTestTokenFailed'),
-    }
-  }
 }
 
 export async function listTenantAPIKeys(
@@ -195,7 +68,7 @@ export async function createTenantAPIKey(
   }
 }
 
-/** 更新已创建租户 API Key 的授权范围和其他可配置属性。 */
+/** 更新 API Key 的名称和有效期。 */
 export async function updateTenantAPIKey(
   tenantId: number,
   keyId: number,
@@ -207,7 +80,7 @@ export async function updateTenantAPIKey(
   } catch (error: any) {
     return {
       success: false,
-      message: error.message || t('integrations.api.updateApiKeyScopeFailed'),
+      message: error.message || t('integrations.api.updateApiKeyFailed'),
     }
   }
 }

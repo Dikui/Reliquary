@@ -59,7 +59,7 @@ func TestDataSourceConfig_ToJSON_PassthroughWhenNoKey(t *testing.T) {
 func TestDataSource_ParseConfig_Roundtrip(t *testing.T) {
 	withAESKey(t, testAESKey32)
 	original := &DataSourceConfig{
-		Type: "notion",
+		Type: "rss",
 		Credentials: map[string]interface{}{
 			"token":   "ntn-roundtrip",
 			"team_id": "team-public-id",

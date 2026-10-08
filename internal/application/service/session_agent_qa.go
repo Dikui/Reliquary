@@ -245,9 +245,6 @@ func (s *sessionService) AgentQA(
 		agentQuery = req.Query + "\n\n[用户上传图片内容]\n" + req.ImageDescription
 		logger.Infof(ctx, "Agent model does not support vision, appending image description (%d chars)", len(req.ImageDescription))
 	}
-	if req.QuotedContext != "" {
-		agentQuery += "\n\n" + req.QuotedContext
-	}
 	// Inject attachment content (documents, audio transcripts, etc.) so the agent
 	// can see uploaded files. Mirrors the behavior of the KnowledgeQA pipeline
 	// (see chat_pipeline/into_chat_message.go).

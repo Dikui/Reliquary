@@ -1,9 +1,7 @@
 import { get, post, put, del, postUpload, getDown } from "../../utils/request";
 import type { ModelTierConfig } from '@/types/modelTiers';
 import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess';
-import type { AuditLog, AuditOutcome, ListAuditLogResponse } from '@/api/tenant/audit-log';
 
-export type KnowledgeBaseActivity = AuditLog;
 export interface IntakeSourceInfo { author?: string; publisher?: string; original_url?: string; published_at?: string }
 
 export type KnowledgeDuplicateCode = 'duplicate_manual' | 'duplicate_file' | 'duplicate_url';
@@ -16,28 +14,6 @@ export interface KnowledgeDuplicateResponse {
   match_method?: KnowledgeDuplicateMatchMethod;
   message?: string;
   data?: { id: string; knowledge_base_id?: string; title?: string; file_name?: string };
-}
-
-export interface ListKnowledgeBaseActivityParams {
-  after_id?: number;
-  limit?: number;
-  action?: string;
-  outcome?: AuditOutcome;
-  actor?: string;
-}
-
-export async function listKnowledgeBaseActivity(
-  id: string,
-  params: ListKnowledgeBaseActivityParams = {},
-): Promise<ListAuditLogResponse> {
-  const query = new URLSearchParams();
-  if (params.after_id) query.set('after_id', String(params.after_id));
-  if (params.limit) query.set('limit', String(params.limit));
-  if (params.action) query.set('action', params.action);
-  if (params.outcome) query.set('outcome', params.outcome);
-  if (params.actor) query.set('actor', params.actor);
-  const qs = query.toString();
-  return (await get(`/api/v1/knowledge-bases/${id}/activity${qs ? `?${qs}` : ''}`)) as unknown as ListAuditLogResponse;
 }
 
 // 知识库管理 API（列表、创建、获取、更新、删除、复制）

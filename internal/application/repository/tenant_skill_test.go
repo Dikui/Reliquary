@@ -291,22 +291,20 @@ func TestUserEnvsAreIsolatedBetweenPrincipals(t *testing.T) {
 	repo := newSkillTestRepo(t)
 	ctx := context.Background()
 	alice := types.Principal{Type: types.PrincipalWebUser, ID: "u-alice"}
-	// Same ID, different type: the IM path's synthetic account is why the key
-	// is the whole principal rather than a user id.
-	imUser := types.Principal{Type: types.PrincipalIMUser, ID: "u-alice"}
+	bob := types.Principal{Type: types.PrincipalWebUser, ID: "u-bob"}
 
 	require.NoError(t, repo.UpsertUserEnvVar(ctx, userEnvRow(alice, "sk-a", "TAVILY_API_KEY", "alice-key")))
-	require.NoError(t, repo.UpsertUserEnvVar(ctx, userEnvRow(imUser, "sk-a", "TAVILY_API_KEY", "im-key")))
+	require.NoError(t, repo.UpsertUserEnvVar(ctx, userEnvRow(bob, "sk-a", "TAVILY_API_KEY", "bob-key")))
 
 	aliceEnvs, err := repo.ListUserEnvVars(ctx, 7, alice, "cfg-1", "sk-a")
 	require.NoError(t, err)
 	require.Len(t, aliceEnvs, 1)
 	require.Equal(t, "alice-key", aliceEnvs[0].Value)
 
-	imEnvs, err := repo.ListUserEnvVars(ctx, 7, imUser, "cfg-1", "sk-a")
+	bobEnvs, err := repo.ListUserEnvVars(ctx, 7, bob, "cfg-1", "sk-a")
 	require.NoError(t, err)
-	require.Len(t, imEnvs, 1)
-	require.Equal(t, "im-key", imEnvs[0].Value)
+	require.Len(t, bobEnvs, 1)
+	require.Equal(t, "bob-key", bobEnvs[0].Value)
 }
 
 func TestDeleteSkillRemovesOnlyThatSkillsUserEnvs(t *testing.T) {
@@ -361,7 +359,7 @@ func TestDeleteUserEnvReportsAnAlreadyDeletedRow(t *testing.T) {
 	t.Setenv("SYSTEM_AES_KEY", skillEnvTestAESKey)
 	repo := newSkillTestRepo(t)
 	ctx := context.Background()
-	alice := types.Principal{Type: types.PrincipalWebUser, ID: "u-alice"}
+	alice := types.Principal{Type: types.PrincipalWebUser, ID: "u-bob"}
 
 	require.NoError(t, repo.UpsertUserEnvVar(ctx, userEnvRow(alice, "sk-a", "TAVILY_API_KEY", "a")))
 	require.NoError(t, repo.DeleteUserEnvVar(ctx, 7, alice, "cfg-1", "sk-a", "TAVILY_API_KEY"))
@@ -396,7 +394,7 @@ func TestUserEnvVarsKeepScopesApart(t *testing.T) {
 	t.Setenv("SYSTEM_AES_KEY", skillEnvTestAESKey)
 	repo := newSkillTestRepo(t)
 	ctx := context.Background()
-	alice := types.Principal{Type: types.PrincipalWebUser, ID: "u-alice"}
+	alice := types.Principal{Type: types.PrincipalWebUser, ID: "u-bob"}
 
 	require.NoError(t, repo.UpsertUserEnvVar(ctx, userEnvRow(alice, "", "TOKEN", "config-wide")))
 	require.NoError(t, repo.UpsertUserEnvVar(ctx, userEnvRow(alice, "sk-a", "TOKEN", "skill-scoped")))

@@ -27,7 +27,7 @@ export interface DataSource {
 
 /**
  * One user-facing failure sample. The backend sends a stable i18n `code`
- * (+ interpolation `params`) so the UI localises it to the viewer's language;
+ * (+ interpolation `params`) so the UI localises it to the user's language;
  * `message` is a fallback when no i18n key exists (old logs decode into it).
  */
 export interface SyncItemError {
@@ -120,9 +120,7 @@ export function validateCredentials(type: string, credentials: Record<string, an
   return post('/api/v1/datasource/validate-credentials', { type, credentials })
 }
 
-// listResources lists selectable resources for a data source. Pass parentId to
-// lazily load the direct children of a resource (e.g. expanding a Feishu wiki
-// space/node), which avoids traversing the whole tree up front.
+// List selectable RSS feed resources.
 export function listResources(id: string, parentId?: string) {
   const query = parentId ? `?parent_id=${encodeURIComponent(parentId)}` : ''
   return get(`/api/v1/datasource/${id}/resources${query}`, { timeout: 120000 })

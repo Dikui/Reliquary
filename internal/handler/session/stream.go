@@ -265,9 +265,7 @@ func (h *Handler) StopSession(c *gin.Context) {
 		return
 	}
 
-	// Verify message belongs to the current tenant. Stopping generation mutates
-	// an in-flight run, so use the strict owner scope: a tenant admin may read an
-	// API-key session but must not be able to interrupt its (external) API calls.
+	// Validate the authenticated user's session before stopping generation.
 	session, err := h.sessionService.GetOwnedSession(ctx, sessionID)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{

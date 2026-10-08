@@ -121,16 +121,6 @@ func (v *SkillEnvVars) Scan(value interface{}) error {
 	return nil
 }
 
-// TenantUserEnvVar is one principal's own environment variable.
-//
-// An empty SkillID means the variable belongs to the whole sandbox config and
-// is injected into every execution on it. A non-empty SkillID scopes it to that
-// skill's declaration, injected only when a tool names the skill. The storage is
-// the same either way; only the load timing differs.
-//
-// It is keyed by principal rather than user id because the IM path puts a
-// synthetic "system-<tenantID>" account in the user id, which would make every
-// IM user of a workspace share a single credential.
 type TenantUserEnvVar struct {
 	ID       string `gorm:"type:varchar(36);primaryKey"`
 	TenantID uint64 `gorm:"uniqueIndex:uq_user_env_var,priority:1;index:idx_user_env_var_skill,priority:1;index:idx_user_env_var_config,priority:1"`

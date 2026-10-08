@@ -207,14 +207,14 @@ type agentService struct {
 	wikiPageService       interfaces.WikiPageService
 	tenantService         interfaces.TenantService
 	messageService        interfaces.MessageService
-	audit                 interfaces.AuditLogService
-	memoryService         interfaces.MemoryService
-	storageResolver       interfaces.StorageBackendResolver
-	toolApprovalGate      approval.MCPApproval
-	sandboxMgr            sandbox.Manager
-	sandboxResolver       sandbox.TenantSandboxResolver
-	sandboxPinner         *SessionSandboxPinner
-	sandboxPolicy         WorkspaceSandboxPolicy
+
+	memoryService    interfaces.MemoryService
+	storageResolver  interfaces.StorageBackendResolver
+	toolApprovalGate approval.MCPApproval
+	sandboxMgr       sandbox.Manager
+	sandboxResolver  sandbox.TenantSandboxResolver
+	sandboxPinner    *SessionSandboxPinner
+	sandboxPolicy    WorkspaceSandboxPolicy
 }
 
 // NewAgentService creates a new agent service
@@ -236,7 +236,7 @@ func NewAgentService(
 	wikiPageService interfaces.WikiPageService,
 	tenantService interfaces.TenantService,
 	messageService interfaces.MessageService,
-	audit interfaces.AuditLogService,
+
 	memoryService interfaces.MemoryService,
 	storageResolver interfaces.StorageBackendResolver,
 	toolApprovalGate approval.MCPApproval,
@@ -263,14 +263,14 @@ func NewAgentService(
 		wikiPageService:       wikiPageService,
 		tenantService:         tenantService,
 		messageService:        messageService,
-		audit:                 audit,
-		memoryService:         memoryService,
-		storageResolver:       storageResolver,
-		toolApprovalGate:      toolApprovalGate,
-		sandboxMgr:            sandboxMgr,
-		sandboxResolver:       sandboxResolver,
-		sandboxPinner:         sandboxPinner,
-		sandboxPolicy:         sandboxPolicy,
+
+		memoryService:    memoryService,
+		storageResolver:  storageResolver,
+		toolApprovalGate: toolApprovalGate,
+		sandboxMgr:       sandboxMgr,
+		sandboxResolver:  sandboxResolver,
+		sandboxPinner:    sandboxPinner,
+		sandboxPolicy:    sandboxPolicy,
 	}
 }
 
@@ -1123,10 +1123,10 @@ func (s *agentService) registerTools(
 				config.SearchTargets,
 				rerankModel,
 				s.cfg,
-			).WithSourceDisputes(NewKnowledgeAnomalyService(s.db, s.knowledgeService, s.knowledgeTagService, s.audit).ForMessages)
+			).WithSourceDisputes(NewKnowledgeAnomalyService(s.db, s.knowledgeService, s.knowledgeTagService).ForMessages)
 		case tools.ToolGrepChunks:
 			toolToRegister = tools.NewGrepChunksTool(s.db, config.SearchTargets).
-				WithSourceDisputes(NewKnowledgeAnomalyService(s.db, s.knowledgeService, s.knowledgeTagService, s.audit).ForMessages)
+				WithSourceDisputes(NewKnowledgeAnomalyService(s.db, s.knowledgeService, s.knowledgeTagService).ForMessages)
 			logger.Infof(ctx, "Registered grep_chunks tool with searchTargets: %d targets", len(config.SearchTargets))
 		case tools.ToolListKnowledgeChunks:
 			toolToRegister = tools.NewListKnowledgeChunksTool(s.knowledgeService, s.chunkService, config.SearchTargets)
@@ -1195,7 +1195,7 @@ func (s *agentService) registerTools(
 		case tools.ToolWikiUpdateIssue:
 			toolToRegister = tools.NewWikiUpdateIssueTool(s.wikiPageService, wikiKBIDs)
 		case tools.ToolKnowledgeReportAnomaly:
-			anomalies := NewKnowledgeAnomalyService(s.db, s.knowledgeService, nil, s.audit)
+			anomalies := NewKnowledgeAnomalyService(s.db, s.knowledgeService, nil)
 			toolToRegister = tools.NewKnowledgeReportAnomalyTool(config.SearchTargets, func(ctx context.Context, input tools.KnowledgeAnomalyReport) (string, error) {
 				item, err := anomalies.Create(ctx, input.KnowledgeBaseID, KnowledgeAnomalyInput{
 					KnowledgeIDs: input.KnowledgeIDs, Kind: input.Kind, Description: input.Description,
@@ -1214,15 +1214,15 @@ func (s *agentService) registerTools(
 					return fmt.Errorf("workspace required")
 				}
 				userID, ok := types.UserIDFromContext(ctx)
-				if !ok || userID == "" || types.IsSyntheticUserID(userID) {
+				if !ok || userID == "" {
 					return fmt.Errorf("user required for knowledge intake")
 				}
 				kb, err := s.knowledgeBaseService.GetKnowledgeBaseByIDOnly(ctx, input.KnowledgeBaseID)
 				if err != nil {
 					return err
 				}
-				if kb == nil || kb.TenantID != tenantID || !types.TenantRoleFromContext(ctx).HasPermission(types.TenantRoleContributor) {
-					return fmt.Errorf("a team editor is required to import research")
+				if kb == nil || kb.TenantID != tenantID || !types.IsAuthenticatedFromContext(ctx) {
+					return fmt.Errorf("an authenticated user is required to import research")
 				}
 				if blockedIntakeURL(input.URL) {
 					return fmt.Errorf("X/Twitter sources require Grok ingestion")
@@ -1246,7 +1246,7 @@ func (s *agentService) registerTools(
 				return err
 			})
 		case tools.ToolKnowledgeApplyAnomaly:
-			anomalies := NewKnowledgeAnomalyService(s.db, s.knowledgeService, s.knowledgeTagService, s.audit)
+			anomalies := NewKnowledgeAnomalyService(s.db, s.knowledgeService, s.knowledgeTagService)
 			approvalGate, _ := s.toolApprovalGate.(approval.RequiredApproval)
 			toolToRegister = tools.NewKnowledgeApplyAnomalyTool(config.SearchTargets, approvalGate, func(ctx context.Context, kbID, anomalyID string) (string, error) {
 				item, err := anomalies.Resolve(ctx, kbID, anomalyID, "apply", "")

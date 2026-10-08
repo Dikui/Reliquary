@@ -88,7 +88,6 @@ func (s *KnowledgeStrategyService) Reprocess(ctx context.Context, kbID string, m
 			rules.Tags = kb.AutoTagConfig.Policy
 		}
 	}
-	start := time.Now()
 	for _, id := range ids {
 		if err := ctx.Err(); err != nil {
 			return result, err
@@ -115,14 +114,6 @@ func (s *KnowledgeStrategyService) Reprocess(ctx context.Context, kbID string, m
 			result.Conflicts++
 		}
 	}
-	status := types.AuditOutcomeSuccess
-	if result.Failed > 0 {
-		status = types.AuditOutcomePartial
-	}
-	recordKBActivity(ctx, s.audit, kb.TenantID, kb.ID, types.AuditActionKnowledgeReprocessed, "knowledge_base", kb.ID,
-		status, map[string]any{"scope_tag_id": tagID, "scope_count": len(ids), "processed": result.Processed, "updated": result.Updated,
-			"flagged": result.Flagged, "conflicts": result.Conflicts, "failed": result.Failed, "errors": result.Errors,
-			"duration_ms": time.Since(start).Milliseconds(), "model_id": kb.SummaryModelID})
 	return result, nil
 }
 
@@ -155,7 +146,7 @@ func (s *KnowledgeStrategyService) reprocessMessage(ctx context.Context, kb *typ
 		return "", fmt.Errorf("original is empty or too large")
 	}
 	if invalidIntakeEvidence(string(body), intake.SourceInfo, &message) {
-		_, err := NewKnowledgeAnomalyService(s.db, s.knowledge, nil, s.audit).Create(ctx, kb.ID, KnowledgeAnomalyInput{
+		_, err := NewKnowledgeAnomalyService(s.db, s.knowledge, nil).Create(ctx, kb.ID, KnowledgeAnomalyInput{
 			KnowledgeIDs: []string{id}, Kind: "suspected_error", Description: "Historical strategy recheck: missing original or required source evidence"})
 		return "flagged", err
 	}
@@ -164,7 +155,7 @@ func (s *KnowledgeStrategyService) reprocessMessage(ctx context.Context, kb *typ
 		return "", err
 	}
 	if !approved {
-		_, err := NewKnowledgeAnomalyService(s.db, s.knowledge, nil, s.audit).Create(ctx, kb.ID, KnowledgeAnomalyInput{
+		_, err := NewKnowledgeAnomalyService(s.db, s.knowledge, nil).Create(ctx, kb.ID, KnowledgeAnomalyInput{
 			KnowledgeIDs: []string{id}, Kind: "suspected_error", Description: "Historical strategy recheck: rejected: " + reason})
 		return "flagged", err
 	}
@@ -232,7 +223,7 @@ func (s *KnowledgeStrategyService) reprocessMessage(ctx context.Context, kb *typ
 		}
 	}
 	if len(toAdd)+len(toRemove) > 0 {
-		_, err := NewKnowledgeAnomalyService(s.db, s.knowledge, nil, s.audit).Create(ctx, kb.ID, KnowledgeAnomalyInput{
+		_, err := NewKnowledgeAnomalyService(s.db, s.knowledge, nil).Create(ctx, kb.ID, KnowledgeAnomalyInput{
 			KnowledgeIDs: []string{id}, Kind: "manual_conflict", Description: "Historical strategy disagrees with manual tag corrections",
 			ProposalType: "change_tags", ProposedTagIDs: toAdd, ProposedRemoveTagIDs: toRemove})
 		if err != nil {

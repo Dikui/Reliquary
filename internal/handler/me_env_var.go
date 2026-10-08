@@ -12,7 +12,7 @@ import (
 	"reliquary/internal/types"
 )
 
-// meEnvVarService is the member-facing slice of the env var surface. Not one
+// meEnvVarService is the personal environment variable interface. No
 // method takes an identity: the service derives it from the context, which is
 // what makes it impossible for a request to select whose values are touched.
 type meEnvVarService interface {
@@ -25,11 +25,8 @@ type meEnvVarService interface {
 
 // MeEnvVarHandler serves the /me/env-vars endpoints.
 //
-// These exist instead of relaxing /sandbox-configs/:id/skills*, which is Admin+
-// even for reads on purpose: an upload there drives a root shell whose output is
-// baked into the image every session of that config boots, and the listing names
-// what that image carries. This handler returns declarations and set/unset
-// status only — never a value.
+// This handler returns environment variable declarations and set/unset status.
+// Stored credential values are excluded from its response.
 type MeEnvVarHandler struct {
 	service meEnvVarService
 }
@@ -39,22 +36,19 @@ func NewMeEnvVarHandler(s *service.UserEnvService) *MeEnvVarHandler {
 }
 
 // meEnvVarRequest is the body of every write endpoint. It has no principal
-// field, deliberately: not an ignored one, an absent one. A field that could
-// name an identity is one refactor away from being honoured, and honouring it
-// would let any logged-in member write another member's values.
+// field: the authenticated user identity comes from the request context.
 type meEnvVarRequest struct {
 	SkillID         string `json:"skill_id"`
 	SandboxConfigID string `json:"sandbox_config_id"`
 	Name            string `json:"name"`
 	// Value is unused by the delete endpoints. Clearing a value is a delete
-	// rather than a write of "", so a member always has one unambiguous way to
-	// revoke.
+	// rather than a write of "", so revocation has one unambiguous meaning.
 	Value string `json:"value"`
 }
 
 // respondEnvVarError renders a refusal. Nothing to delete is a 404; a rejected
 // input is a 400; anything else is the service failing and stays a 500 so an
-// internal message never reaches a member.
+// internal message never reaches the user.
 func respondEnvVarError(c *gin.Context, err error) {
 	switch {
 	case stderrors.Is(err, types.ErrEnvVarNotFound):

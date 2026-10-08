@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -18,25 +17,18 @@ import (
 
 // Config 应用程序总配置
 type Config struct {
-	Conversation    *ConversationConfig    `yaml:"conversation"     json:"conversation"`
-	Server          *ServerConfig          `yaml:"server"           json:"server"`
-	KnowledgeBase   *KnowledgeBaseConfig   `yaml:"knowledge_base"   json:"knowledge_base"`
-	Tenant          *TenantConfig          `yaml:"tenant"           json:"tenant"`
-	Auth            *AuthConfig            `yaml:"auth"             json:"auth"`
-	Audit           *AuditConfig           `yaml:"audit"            json:"audit"`
+	Conversation  *ConversationConfig  `yaml:"conversation"     json:"conversation"`
+	Server        *ServerConfig        `yaml:"server"           json:"server"`
+	KnowledgeBase *KnowledgeBaseConfig `yaml:"knowledge_base"   json:"knowledge_base"`
+	Tenant        *TenantConfig        `yaml:"tenant"           json:"tenant"`
+
 	Models          []ModelConfig          `yaml:"models"           json:"models"`
 	DocReader       *DocReaderConfig       `yaml:"docreader"        json:"docreader"`
 	StreamManager   *StreamManagerConfig   `yaml:"stream_manager"   json:"stream_manager"`
 	WebSearch       *WebSearchConfig       `yaml:"web_search"       json:"web_search"`
 	PromptTemplates *PromptTemplatesConfig `yaml:"prompt_templates" json:"prompt_templates"`
-	IM              *IMConfig              `yaml:"im"               json:"im"`
-	Agent           *AgentConfig           `yaml:"agent"            json:"agent"`
-	// FrontendBaseURL is the externally-visible origin of the SPA, used
-	// to compose absolute share-link URLs. Empty falls back to a host-
-	// relative URL ("/register?token=…") which the SPA then resolves
-	// against window.location.origin — fine for typical single-origin
-	// deployments. Sourced from FRONTEND_BASE_URL env at startup.
-	FrontendBaseURL string `yaml:"frontend_base_url" json:"frontend_base_url"`
+
+	Agent *AgentConfig `yaml:"agent"            json:"agent"`
 }
 
 // AgentConfig represents the global agent settings.
@@ -47,33 +39,6 @@ type AgentConfig struct {
 	// ToolApprovalTimeoutSeconds is how long the agent waits for human approval on a flagged MCP tool.
 	// 0 means default 600 (10 minutes).
 	ToolApprovalTimeoutSeconds int `yaml:"tool_approval_timeout_seconds" json:"tool_approval_timeout_seconds"`
-}
-
-// IMConfig configures the IM integration service.
-// All fields are optional — zero values fall back to built-in defaults so
-// existing deployments need no config changes.
-type IMConfig struct {
-	// Workers is the number of concurrent QA worker goroutines per instance.
-	// Default: 5.
-	Workers int `yaml:"workers" json:"workers"`
-	// GlobalMaxWorkers is the maximum number of QA requests that can execute
-	// concurrently across ALL instances. Enforced via a Redis counter; when the
-	// global limit is reached, local workers wait until a slot opens.
-	// Requires Redis — ignored in single-instance mode.
-	// 0 (default) means no global limit.
-	GlobalMaxWorkers int `yaml:"global_max_workers" json:"global_max_workers"`
-	// MaxQueueSize is the maximum number of pending QA requests per instance.
-	// Default: 50.
-	MaxQueueSize int `yaml:"max_queue_size" json:"max_queue_size"`
-	// MaxPerUser limits how many requests a single user can have queued globally.
-	// Default: 3.
-	MaxPerUser int `yaml:"max_per_user" json:"max_per_user"`
-	// RateLimitWindow is the sliding window duration for per-user rate limiting.
-	// Default: 60s.
-	RateLimitWindow time.Duration `yaml:"rate_limit_window" json:"rate_limit_window"`
-	// RateLimitMax is the maximum number of requests allowed per window per user.
-	// Default: 10.
-	RateLimitMax int `yaml:"rate_limit_max" json:"rate_limit_max"`
 }
 
 // DocReaderConfig configures the document parser client (gRPC or HTTP).
@@ -190,54 +155,7 @@ type TenantConfig struct {
 	DefaultSessionName        string `yaml:"default_session_name"        json:"default_session_name"`
 	DefaultSessionTitle       string `yaml:"default_session_title"       json:"default_session_title"`
 	DefaultSessionDescription string `yaml:"default_session_description" json:"default_session_description"`
-	// EnableRBAC turns on tenant-level role enforcement (issue #1303).
-	// Pointer so we can distinguish "unset" from "explicit false":
-	//   nil           — fall back to the built-in default (true) applied
-	//                   by applyAuthAndTenantDefaults.
-	//   pointer false — operators opted into the logging-only rollout
-	//                   window (set via config.yaml `enable_rbac: false`
-	//                   or env `RELIQUARY_TENANT_ENABLE_RBAC=false`).
-	//   pointer true  — enforcement on (the new default).
-	// Read through IsRBACEnforced so callers stay nil-safe.
-	EnableRBAC *bool `yaml:"enable_rbac" json:"enable_rbac"`
 }
-
-// IsRBACEnforced reports whether tenant-level role enforcement is
-// active. Nil receiver or nil EnableRBAC pointer means "operator did
-// not opt out", which after applyAuthAndTenantDefaults is the new
-// default (true). Callers that need to treat a nil *Config as
-// fail-open (legacy behaviour) should keep their own `cfg != nil`
-// short-circuit before invoking this helper.
-func (t *TenantConfig) IsRBACEnforced() bool {
-	if t == nil || t.EnableRBAC == nil {
-		return true
-	}
-	return *t.EnableRBAC
-}
-
-// AuditConfig governs durable audit log behaviour. Writes happen on
-// every member-management mutation and on RBAC denials (when
-// EnableRBAC is true); the table grows monotonically unless this
-// section turns on retention.
-type AuditConfig struct {
-	// RetentionDays is how many days of audit history to keep. Older
-	// rows are deleted by a daily background sweep.
-	//   > 0 — purge rows whose created_at < NOW() - retention_days.
-	//   = 0 — disable purge entirely (the pre-rollout default).
-	//   < 0 — invalid; ValidateConfig rejects it.
-	// Default: 90 (set by applyAuditDefaults when the section is omitted).
-	RetentionDays int `yaml:"retention_days" json:"retention_days"`
-}
-
-// AuthConfig governs the user authentication entry points.
-type AuthConfig struct {
-	ComplexPasswordEnabled bool `yaml:"complex_password_enabled" json:"complex_password_enabled"`
-}
-
-const (
-	AuthRegistrationModeSelfServe  = "self_serve"
-	AuthRegistrationModeInviteOnly = "invite_only"
-)
 
 // PromptTemplateI18n holds localized name and description for a prompt template.
 type PromptTemplateI18n struct {
@@ -485,22 +403,10 @@ func LoadConfig() (*Config, error) {
 	// Validate configuration values
 	applyAgentEnvOverrides(&cfg)
 	applyKnowledgeBaseEnvOverrides(&cfg)
-	applyAuthAndTenantDefaults(&cfg)
-	applyAuditDefaults(&cfg)
 
 	if err := ValidateConfig(&cfg); err != nil {
 		return nil, err
 	}
-
-	// Surface RBAC enforcement state at startup. air's hot-reload only
-	// rebuilds the binary on Go-source changes; it does NOT re-source
-	// .env, so a `RELIQUARY_TENANT_ENABLE_RBAC=true` flip while the dev
-	// loop is already running silently has no effect until the dev
-	// script restarts. Logging this once at startup makes the
-	// "I edited .env but the gates still aren't firing" trap obvious
-	// from the first console line. Printf rather than logger because
-	// LoadConfig runs before the logger sink is wired in the dig graph.
-	fmt.Printf("[config] team RBAC enforcement: enable_rbac=%v\n", cfg.Tenant.IsRBACEnforced())
 
 	return &cfg, nil
 }
@@ -509,11 +415,6 @@ func LoadConfig() (*Config, error) {
 // It checks for obviously invalid or missing values that would cause runtime failures.
 func ValidateConfig(cfg *Config) error {
 	var errs []string
-
-	if cfg.Audit != nil && cfg.Audit.RetentionDays < 0 {
-		errs = append(errs, fmt.Sprintf("audit.retention_days must be >= 0 (got %d); use 0 to disable purge",
-			cfg.Audit.RetentionDays))
-	}
 
 	if cfg.Conversation != nil {
 		if cfg.Conversation.EmbeddingTopK < 0 {
@@ -595,67 +496,6 @@ func applyAgentEnvOverrides(cfg *Config) {
 			cfg.Agent.ToolApprovalTimeoutSeconds = int(d.Seconds())
 		} else if d, err := time.ParseDuration(value + "s"); err == nil {
 			cfg.Agent.ToolApprovalTimeoutSeconds = int(d.Seconds())
-		}
-	}
-}
-
-// applyAuthAndTenantDefaults loads password policy and role enforcement.
-// Registration mode is derived from whether the team already has a user.
-func applyAuthAndTenantDefaults(cfg *Config) {
-	if cfg.Auth == nil {
-		cfg.Auth = &AuthConfig{}
-	}
-	if cfg.Tenant == nil {
-		cfg.Tenant = &TenantConfig{}
-	}
-
-	if value := strings.TrimSpace(os.Getenv("RELIQUARY_AUTH_COMPLEX_PASSWORD_ENABLED")); value != "" {
-		if parsed, err := strconv.ParseBool(value); err == nil {
-			cfg.Auth.ComplexPasswordEnabled = parsed
-		}
-	}
-
-	if value := strings.TrimSpace(os.Getenv("RELIQUARY_TENANT_ENABLE_RBAC")); value != "" {
-		v := strings.EqualFold(value, "true")
-		cfg.Tenant.EnableRBAC = &v
-	}
-	if cfg.Tenant.EnableRBAC == nil {
-		// Default: enforce. Operators opt out of enforcement explicitly
-		// via config.yaml `enable_rbac: false` or the env override.
-		on := true
-		cfg.Tenant.EnableRBAC = &on
-	}
-
-}
-
-// applyAuditDefaults fills in defaults for the Audit config section
-// and applies the env override commonly used to extend or disable
-// retention without editing config.yaml.
-//
-// Defaults:
-//   - When the `audit:` section is omitted entirely from YAML,
-//     RetentionDays = 90 (purge rows older than 90 days).
-//
-// Operator intent is otherwise preserved: an explicit
-// `audit.retention_days: 0` in YAML means "disable the purge", which
-// is a supported posture for compliance use cases that handle archival
-// off-database.
-//
-// Env overrides (when set and parseable; out-of-range is ignored):
-//   - RELIQUARY_AUDIT_RETENTION_DAYS (non-negative integer)
-func applyAuditDefaults(cfg *Config) {
-	// Section omitted entirely -> apply the default and no env wiring
-	// is needed for the most common path.
-	if cfg.Audit == nil {
-		cfg.Audit = &AuditConfig{RetentionDays: 90}
-	}
-
-	// Env override always wins, but only when explicitly set so a
-	// stale shell variable doesn't suddenly disable the purge for a
-	// future deployment that committed a real value.
-	if value := strings.TrimSpace(os.Getenv("RELIQUARY_AUDIT_RETENTION_DAYS")); value != "" {
-		if n, err := strconv.Atoi(value); err == nil && n >= 0 {
-			cfg.Audit.RetentionDays = n
 		}
 	}
 }

@@ -131,48 +131,6 @@ $$;
 
 
 --
--- Name: audit_logs; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.audit_logs (
-    id bigint NOT NULL,
-    tenant_id bigint NOT NULL,
-    actor_user_id character varying(36) DEFAULT ''::character varying NOT NULL,
-    actor_role character varying(32) DEFAULT ''::character varying NOT NULL,
-    action character varying(64) NOT NULL,
-    target_type character varying(32) DEFAULT ''::character varying NOT NULL,
-    target_id character varying(64) DEFAULT ''::character varying NOT NULL,
-    target_user_id character varying(36) DEFAULT ''::character varying NOT NULL,
-    request_path character varying(512) DEFAULT ''::character varying NOT NULL,
-    request_method character varying(16) DEFAULT ''::character varying NOT NULL,
-    outcome character varying(16) DEFAULT 'success'::character varying NOT NULL,
-    details jsonb DEFAULT '{}'::jsonb NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    scope_type character varying(32) DEFAULT ''::character varying NOT NULL,
-    scope_id character varying(64) DEFAULT ''::character varying NOT NULL
-);
-
-
---
--- Name: audit_logs_id_seq; Type: SEQUENCE; Schema: public
---
-
-CREATE SEQUENCE public.audit_logs_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: audit_logs_id_seq; Type: SEQUENCE OWNED BY; Schema: public
---
-
-ALTER SEQUENCE public.audit_logs_id_seq OWNED BY public.audit_logs.id;
-
-
---
 -- Name: auth_tokens; Type: TABLE; Schema: public
 --
 
@@ -331,8 +289,7 @@ CREATE TABLE public.custom_agents (
     config jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    deleted_at timestamp with time zone,
-    runnable_by_viewer boolean DEFAULT true NOT NULL
+    deleted_at timestamp with time zone
 );
 
 
@@ -401,185 +358,6 @@ CREATE SEQUENCE public.embeddings_id_seq
 --
 
 ALTER SEQUENCE public.embeddings_id_seq OWNED BY public.embeddings.id;
-
-
---
--- Name: im_channel_sessions; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.im_channel_sessions (
-    id character varying(36) DEFAULT public.uuid_generate_v4() NOT NULL,
-    platform character varying(20) NOT NULL,
-    user_id character varying(128) NOT NULL,
-    chat_id character varying(128) DEFAULT ''::character varying NOT NULL,
-    session_id character varying(36) NOT NULL,
-    tenant_id bigint NOT NULL,
-    agent_id character varying(36) DEFAULT ''::character varying,
-    status character varying(20) DEFAULT 'active'::character varying NOT NULL,
-    metadata jsonb DEFAULT '{}'::jsonb,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    deleted_at timestamp with time zone,
-    im_channel_id character varying(36) DEFAULT ''::character varying,
-    thread_id character varying(128) DEFAULT ''::character varying NOT NULL
-);
-
-
---
--- Name: TABLE im_channel_sessions; Type: COMMENT; Schema: public
---
-
-COMMENT ON TABLE public.im_channel_sessions IS 'Maps IM platform channels to Reliquary conversation sessions';
-
-
---
--- Name: COLUMN im_channel_sessions.platform; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.im_channel_sessions.platform IS 'IM platform identifier: feishu';
-
-
---
--- Name: COLUMN im_channel_sessions.user_id; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.im_channel_sessions.user_id IS 'Platform-specific user identifier';
-
-
---
--- Name: COLUMN im_channel_sessions.chat_id; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.im_channel_sessions.chat_id IS 'Platform-specific chat/group identifier, empty for direct messages';
-
-
---
--- Name: COLUMN im_channel_sessions.session_id; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.im_channel_sessions.session_id IS 'Associated Reliquary session ID';
-
-
---
--- Name: COLUMN im_channel_sessions.tenant_id; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.im_channel_sessions.tenant_id IS 'Tenant that owns this channel mapping';
-
-
---
--- Name: COLUMN im_channel_sessions.agent_id; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.im_channel_sessions.agent_id IS 'Custom agent ID used for this channel, empty for default';
-
-
---
--- Name: COLUMN im_channel_sessions.status; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.im_channel_sessions.status IS 'Channel status: active, paused, expired';
-
-
---
--- Name: COLUMN im_channel_sessions.metadata; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.im_channel_sessions.metadata IS 'Platform-specific extra data (JSON)';
-
-
---
--- Name: COLUMN im_channel_sessions.thread_id; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.im_channel_sessions.thread_id IS 'Platform thread identifier for thread-based sessions. Empty for user-mode sessions.';
-
-
---
--- Name: im_channels; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.im_channels (
-    id character varying(36) DEFAULT public.uuid_generate_v4() NOT NULL,
-    tenant_id bigint NOT NULL,
-    agent_id character varying(36) NOT NULL,
-    platform character varying(20) NOT NULL,
-    name character varying(255) DEFAULT ''::character varying NOT NULL,
-    enabled boolean DEFAULT true NOT NULL,
-    mode character varying(20) DEFAULT 'websocket'::character varying NOT NULL,
-    output_mode character varying(20) DEFAULT 'stream'::character varying NOT NULL,
-    credentials jsonb DEFAULT '{}'::jsonb NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    deleted_at timestamp with time zone,
-    knowledge_base_id character varying(36) DEFAULT ''::character varying,
-    bot_identity character varying(255) DEFAULT ''::character varying NOT NULL,
-    session_mode character varying(20) DEFAULT 'user'::character varying NOT NULL,
-    CONSTRAINT chk_im_channels_session_mode CHECK (session_mode IN ('user', 'thread'))
-);
-
-
---
--- Name: TABLE im_channels; Type: COMMENT; Schema: public
---
-
-COMMENT ON TABLE public.im_channels IS 'IM platform channel configurations bound to agents';
-
-
---
--- Name: COLUMN im_channels.agent_id; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.im_channels.agent_id IS 'Agent ID this channel is bound to';
-
-
---
--- Name: COLUMN im_channels.platform; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.im_channels.platform IS 'IM platform: feishu';
-
-
---
--- Name: COLUMN im_channels.name; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.im_channels.name IS 'User-defined channel name for identification';
-
-
---
--- Name: COLUMN im_channels.mode; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.im_channels.mode IS 'Connection mode: webhook or websocket';
-
-
---
--- Name: COLUMN im_channels.output_mode; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.im_channels.output_mode IS 'Output mode: stream (real-time) or full (wait for complete answer)';
-
-
---
--- Name: COLUMN im_channels.credentials; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.im_channels.credentials IS 'Feishu credentials (JSONB): app_id, app_secret, verification_token, encrypt_key';
-
-
---
--- Name: COLUMN im_channels.bot_identity; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.im_channels.bot_identity IS 'Unique bot identity derived from credentials (feishu:{app_id}). Used to prevent duplicate bot bindings.';
-
-
---
--- Name: COLUMN im_channels.session_mode; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.im_channels.session_mode IS 'Session resolution mode: user (per user+chat, default) or thread (per thread)';
 
 
 --
@@ -1175,7 +953,7 @@ CREATE TABLE public.knowledges (
 -- Name: COLUMN knowledges.channel; Type: COMMENT; Schema: public
 --
 
-COMMENT ON COLUMN public.knowledges.channel IS 'Source channel of the knowledge: web, api, feishu';
+COMMENT ON COLUMN public.knowledges.channel IS 'Source channel of the knowledge: web, api, rss';
 
 
 CREATE TABLE public.knowledge_repost_sources (
@@ -1932,9 +1710,6 @@ CREATE TABLE public.tenant_api_keys (
     name character varying(128) NOT NULL,
     key_hash character varying(64) NOT NULL,
     api_key text DEFAULT ''::text NOT NULL,
-    full_access boolean DEFAULT false NOT NULL,
-    knowledge_base_ids jsonb DEFAULT '[]'::jsonb NOT NULL,
-    capabilities jsonb DEFAULT '[]'::jsonb NOT NULL,
     last_used_at timestamp with time zone,
     expires_at timestamp with time zone,
     revoked_at timestamp with time zone,
@@ -1960,84 +1735,6 @@ CREATE SEQUENCE public.tenant_api_keys_id_seq
 --
 
 ALTER SEQUENCE public.tenant_api_keys_id_seq OWNED BY public.tenant_api_keys.id;
-
-
---
--- Name: tenant_invitations; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.tenant_invitations (
-    id bigint NOT NULL,
-    tenant_id integer NOT NULL,
-    invitee_user_id character varying(36) DEFAULT ''::character varying NOT NULL,
-    invited_by character varying(36),
-    role character varying(20) NOT NULL,
-    status character varying(20) DEFAULT 'pending'::character varying NOT NULL,
-    message character varying(500),
-    expires_at timestamp with time zone NOT NULL,
-    responded_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    deleted_at timestamp with time zone,
-    token character varying(64) DEFAULT ''::character varying NOT NULL,
-    accepted_count integer DEFAULT 0 NOT NULL
-);
-
-
---
--- Name: tenant_invitations_id_seq; Type: SEQUENCE; Schema: public
---
-
-CREATE SEQUENCE public.tenant_invitations_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: tenant_invitations_id_seq; Type: SEQUENCE OWNED BY; Schema: public
---
-
-ALTER SEQUENCE public.tenant_invitations_id_seq OWNED BY public.tenant_invitations.id;
-
-
---
--- Name: tenant_members; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.tenant_members (
-    id bigint NOT NULL,
-    user_id character varying(36) NOT NULL,
-    tenant_id integer NOT NULL,
-    role character varying(20) DEFAULT 'contributor'::character varying NOT NULL,
-    status character varying(20) DEFAULT 'active'::character varying NOT NULL,
-    invited_by character varying(36),
-    joined_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    deleted_at timestamp with time zone
-);
-
-
---
--- Name: tenant_members_id_seq; Type: SEQUENCE; Schema: public
---
-
-CREATE SEQUENCE public.tenant_members_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: tenant_members_id_seq; Type: SEQUENCE OWNED BY; Schema: public
---
-
-ALTER SEQUENCE public.tenant_members_id_seq OWNED BY public.tenant_members.id;
 
 
 --
@@ -2219,7 +1916,7 @@ CREATE TABLE public.tenant_user_env_vars (
 -- Name: TABLE tenant_user_env_vars; Type: COMMENT; Schema: public
 --
 
-COMMENT ON TABLE public.tenant_user_env_vars IS 'One principal''s own environment variable. An empty skill_id applies to every execution on the sandbox config; a skill_id scopes it to that skill''s declaration. Keyed by principal, not user_id: the IM path stores a synthetic tenant account in the user ID, which would make every IM user of a workspace share one value.';
+COMMENT ON TABLE public.tenant_user_env_vars IS 'The user''s environment variable. An empty skill_id applies to every execution on the sandbox config; a skill_id scopes it to that skill''s declaration.';
 
 
 --
@@ -2255,7 +1952,6 @@ CREATE TABLE public.tenants (
     chat_history_config jsonb,
     retrieval_config jsonb,
     credentials jsonb,
-    api_principal_config jsonb,
     default_storage_backend_id character varying(36),
     memory_config jsonb
 );
@@ -2369,8 +2065,7 @@ CREATE TABLE public.users (
     is_active boolean DEFAULT true NOT NULL,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    deleted_at timestamp with time zone,
-    is_system_admin boolean DEFAULT false NOT NULL
+    deleted_at timestamp with time zone
 );
 
 
@@ -2429,13 +2124,6 @@ COMMENT ON COLUMN public.users.tenant_id IS 'Tenant ID that the user belongs to'
 
 COMMENT ON COLUMN public.users.is_active IS 'Whether the user is active';
 
-
-
---
--- Name: COLUMN users.is_system_admin; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.users.is_system_admin IS 'Whether the user is a system administrator (independent of tenant roles)';
 
 
 --
@@ -2587,13 +2275,6 @@ COMMENT ON COLUMN public.wiki_pages.last_editor_id IS 'User id of the caller tha
 
 
 --
--- Name: audit_logs id; Type: DEFAULT; Schema: public
---
-
-ALTER TABLE ONLY public.audit_logs ALTER COLUMN id SET DEFAULT nextval('public.audit_logs_id_seq'::regclass);
-
-
---
 -- Name: embeddings id; Type: DEFAULT; Schema: public
 --
 
@@ -2643,32 +2324,10 @@ ALTER TABLE ONLY public.tenant_api_keys ALTER COLUMN id SET DEFAULT nextval('pub
 
 
 --
--- Name: tenant_invitations id; Type: DEFAULT; Schema: public
---
-
-ALTER TABLE ONLY public.tenant_invitations ALTER COLUMN id SET DEFAULT nextval('public.tenant_invitations_id_seq'::regclass);
-
-
---
--- Name: tenant_members id; Type: DEFAULT; Schema: public
---
-
-ALTER TABLE ONLY public.tenant_members ALTER COLUMN id SET DEFAULT nextval('public.tenant_members_id_seq'::regclass);
-
-
---
 -- Name: tenants id; Type: DEFAULT; Schema: public
 --
 
 ALTER TABLE ONLY public.tenants ALTER COLUMN id SET DEFAULT nextval('public.tenants_id_seq'::regclass);
-
-
---
--- Name: audit_logs audit_logs_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.audit_logs
-    ADD CONSTRAINT audit_logs_pkey PRIMARY KEY (id);
 
 
 --
@@ -2717,22 +2376,6 @@ ALTER TABLE ONLY public.data_sources
 
 ALTER TABLE ONLY public.embeddings
     ADD CONSTRAINT embeddings_pkey PRIMARY KEY (id);
-
-
---
--- Name: im_channel_sessions im_channel_sessions_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.im_channel_sessions
-    ADD CONSTRAINT im_channel_sessions_pkey PRIMARY KEY (id);
-
-
---
--- Name: im_channels im_channels_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.im_channels
-    ADD CONSTRAINT im_channels_pkey PRIMARY KEY (id);
 
 
 --
@@ -3152,22 +2795,6 @@ ALTER TABLE ONLY public.tenant_api_keys
 
 
 --
--- Name: tenant_invitations tenant_invitations_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.tenant_invitations
-    ADD CONSTRAINT tenant_invitations_pkey PRIMARY KEY (id);
-
-
---
--- Name: tenant_members tenant_members_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.tenant_members
-    ADD CONSTRAINT tenant_members_pkey PRIMARY KEY (id);
-
-
---
 -- Name: tenant_sandbox_configs tenant_sandbox_configs_pkey; Type: CONSTRAINT; Schema: public
 --
 
@@ -3340,41 +2967,6 @@ CREATE UNIQUE INDEX embeddings_unique_source ON public.embeddings USING btree (s
 
 
 --
--- Name: idx_audit_logs_actor; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_audit_logs_actor ON public.audit_logs USING btree (actor_user_id);
-
-
---
--- Name: idx_audit_logs_created_at; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_audit_logs_created_at ON public.audit_logs USING btree (created_at);
-
-
---
--- Name: idx_audit_logs_tenant_action; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_audit_logs_tenant_action ON public.audit_logs USING btree (tenant_id, action);
-
-
---
--- Name: idx_audit_logs_tenant_id_desc; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_audit_logs_tenant_id_desc ON public.audit_logs USING btree (tenant_id, id DESC);
-
-
---
--- Name: idx_audit_logs_tenant_scope_desc; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_audit_logs_tenant_scope_desc ON public.audit_logs USING btree (tenant_id, scope_type, scope_id, id DESC);
-
-
---
 -- Name: idx_auth_tokens_expires_at; Type: INDEX; Schema: public
 --
 
@@ -3400,20 +2992,6 @@ CREATE INDEX idx_auth_tokens_token_type ON public.auth_tokens USING btree (token
 --
 
 CREATE INDEX idx_auth_tokens_user_id ON public.auth_tokens USING btree (user_id);
-
-
---
--- Name: idx_channel_lookup; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_channel_lookup ON public.im_channel_sessions USING btree (platform, user_id, chat_id, tenant_id, agent_id) WHERE (deleted_at IS NULL);
-
-
---
--- Name: idx_channel_thread_lookup; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_channel_thread_lookup ON public.im_channel_sessions USING btree (platform, chat_id, thread_id, tenant_id, agent_id) WHERE ((deleted_at IS NULL) AND ((thread_id)::text <> ''::text));
 
 
 --
@@ -3573,62 +3151,6 @@ CREATE INDEX idx_embeddings_knowledge_base_id ON public.embeddings USING btree (
 --
 
 CREATE INDEX idx_embeddings_tag_id ON public.embeddings USING btree (tag_id);
-
-
---
--- Name: idx_im_channel_deleted; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_im_channel_deleted ON public.im_channel_sessions USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
-
-
---
--- Name: idx_im_channel_session; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_im_channel_session ON public.im_channel_sessions USING btree (session_id);
-
-
---
--- Name: idx_im_channel_sessions_channel; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_im_channel_sessions_channel ON public.im_channel_sessions USING btree (im_channel_id) WHERE ((im_channel_id)::text <> ''::text);
-
-
---
--- Name: idx_im_channel_tenant; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_im_channel_tenant ON public.im_channel_sessions USING btree (tenant_id);
-
-
---
--- Name: idx_im_channels_agent; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_im_channels_agent ON public.im_channels USING btree (agent_id);
-
-
---
--- Name: idx_im_channels_bot_identity; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_im_channels_bot_identity ON public.im_channels USING btree (bot_identity) WHERE ((deleted_at IS NULL) AND ((bot_identity)::text <> ''::text));
-
-
---
--- Name: idx_im_channels_deleted; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_im_channels_deleted ON public.im_channels USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
-
-
---
--- Name: idx_im_channels_tenant; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_im_channels_tenant ON public.im_channels USING btree (tenant_id);
 
 
 --
@@ -4464,55 +3986,6 @@ CREATE INDEX idx_tenant_api_keys_tenant ON public.tenant_api_keys USING btree (t
 
 
 --
--- Name: idx_tenant_invitations_invitee; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_tenant_invitations_invitee ON public.tenant_invitations USING btree (invitee_user_id) WHERE (deleted_at IS NULL);
-
-
---
--- Name: idx_tenant_invitations_tenant; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_tenant_invitations_tenant ON public.tenant_invitations USING btree (tenant_id) WHERE (deleted_at IS NULL);
-
-
---
--- Name: idx_tenant_invitations_token; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_tenant_invitations_token ON public.tenant_invitations USING btree (token) WHERE (((token)::text <> ''::text) AND (deleted_at IS NULL));
-
-
---
--- Name: idx_tenant_invitations_unique_pending; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_tenant_invitations_unique_pending ON public.tenant_invitations USING btree (tenant_id, invitee_user_id) WHERE (((status)::text = 'pending'::text) AND (deleted_at IS NULL) AND ((invitee_user_id)::text <> ''::text));
-
-
---
--- Name: idx_tenant_members_tenant_role; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_tenant_members_tenant_role ON public.tenant_members USING btree (tenant_id, role) WHERE (deleted_at IS NULL);
-
-
---
--- Name: idx_tenant_members_user; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_tenant_members_user ON public.tenant_members USING btree (user_id) WHERE (deleted_at IS NULL);
-
-
---
--- Name: idx_tenant_members_user_tenant_unique; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_tenant_members_user_tenant_unique ON public.tenant_members USING btree (user_id, tenant_id) WHERE (deleted_at IS NULL);
-
-
---
 -- Name: idx_tenant_sandbox_configs_tenant; Type: INDEX; Schema: public
 --
 
@@ -4601,13 +4074,6 @@ CREATE INDEX idx_users_deleted_at ON public.users USING btree (deleted_at);
 --
 
 CREATE INDEX idx_users_email ON public.users USING btree (email);
-
-
---
--- Name: idx_users_is_system_admin; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_users_is_system_admin ON public.users USING btree (is_system_admin);
 
 
 --
@@ -4910,14 +4376,6 @@ ALTER TABLE ONLY public.users
 
 
 --
--- Name: im_channel_sessions im_channel_sessions_session_id_fkey; Type: FK CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.im_channel_sessions
-    ADD CONSTRAINT im_channel_sessions_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.sessions(id) ON DELETE CASCADE;
-
-
---
 -- Name: mcp_oauth_clients mcp_oauth_clients_service_id_fkey; Type: FK CONSTRAINT; Schema: public
 --
 
@@ -4998,7 +4456,6 @@ ALTER TABLE ONLY public.tenant_api_keys
 
 -- No seed rows: every application table is empty after the original up migrations.
 -- Preserve sequence positions, including the first tenant ID of 10000.
-SELECT pg_catalog.setval('public.audit_logs_id_seq', 1, false);
 SELECT pg_catalog.setval('public.chunks_seq_id_seq', 100000000, false);
 SELECT pg_catalog.setval('public.embeddings_id_seq', 1, false);
 SELECT pg_catalog.setval('public.knowledge_processing_spans_id_seq', 1, false);
@@ -5008,8 +4465,6 @@ SELECT pg_catalog.setval('public.system_settings_id_seq', 1, false);
 SELECT pg_catalog.setval('public.task_dead_letters_id_seq', 1, false);
 SELECT pg_catalog.setval('public.task_pending_ops_id_seq', 1, false);
 SELECT pg_catalog.setval('public.tenant_api_keys_id_seq', 1, false);
-SELECT pg_catalog.setval('public.tenant_invitations_id_seq', 1, false);
-SELECT pg_catalog.setval('public.tenant_members_id_seq', 1, false);
 SELECT pg_catalog.setval('public.tenants_id_seq', 10000, false);
 
 COMMIT;

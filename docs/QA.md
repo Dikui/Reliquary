@@ -191,14 +191,9 @@ Wiki 模式允许 Agent 根据原始文档自动生成并维护一套结构化�
 3. 当你向该知识库上传文档时，系统会自动触发异步任务，通过大模型提取文档中的实体与核心概念，并自动生成结构化的 Wiki 页面及页面间的知识图谱链接。
 4. 你可以在该知识库的“Wiki”标签页中，使用专用的 Wiki 浏览器查阅、管理页面，并通过可视化的知识图谱查看不同内容之间的关联关系。
 
-## 11. 升级到 0.6.0 后，原本能做的操作变成了「权限不足」？
+## 11. 登录后如何获得完整权限？
 
-团队使用 owner / admin / contributor / viewer 角色。写入接口按角色鉴权，`creator_id` 只记录创建者。常见现象：
-
-- **看得到但点不动**：你大概率是该资源的 `Viewer` ，UI 已经把写操作隐藏/置灰。检查 **用户菜单 → 当前工作区** 角色徽章。
-- **API Key 调用**：`X-API-Key` 合成虚拟用户按检索、入库或完整范围鉴权。
-
-如需临时回退到「仅审计、不拦截」灰度窗口，可在配置里设置 `tenant.enable_rbac=false`（或环境变量 `RELIQUARY_TENANT_ENABLE_RBAC=false`）。完整的角色矩阵请见 [`docs/RBAC说明.md`](./RBAC说明.md)。
+唯一用户登录后拥有全部权限，有效 API Key 的权限相同。出现 401 时检查登录令牌或 API Key 是否过期、撤销或填写错误。
 
 ## 12. 为什么登录后没有自动回到上次的工作区？
 
@@ -207,17 +202,6 @@ Wiki 模式允许 Agent 根据原始文档自动生成并维护一套结构化�
 1. 浏览器清理了 LocalStorage / 切换了浏览器；
 2. 你最后访问的那个工作区已经把你移除（`/leave` 或被管理员剔除）— 系统会回退到默认空间；
 3. JWT 中携带了 `tenant_id` 但已无效 — 退出重登录即可。
-
-## 13. 如何让多人协作时正确分配权限？
-
-按照 [`docs/RBAC说明.md`](./RBAC说明.md) 的角色矩阵：
-
-- 只读用户 → `Viewer`
-- 普通成员（上传文档、维护「自己」的 KB / Agent）→ `Contributor`
-- 运维人员（管理共享模型、向量库、解析器等基础设施）→ `Admin`
-- 空间所有者（拥有删除空间权限；每空间至少一位，可以有多位，最后一位不能被降级或移除）→ `Owner`
-
-如果你希望开启「invite-only」（不允许自助注册到本空间），可在空间设置里打开邀请制，并通过「邀请」入口签发邀请码或链接。
 
 ## 14. 文档解析卡在「处理中」/ 解析追踪时间线打不开怎么办？
 
@@ -235,9 +219,9 @@ Wiki 模式允许 Agent 根据原始文档自动生成并维护一套结构化�
 - **Docker 下环境变量未注入**：`builtin_models` 依赖 `env_file` 数组形式注入变量，确认 compose 中按数组形式挂载了 `.env`。
 - 参考样例：`config/builtin_models.yaml.example`。
 
-## 17. 系统管理员（System Admin）与平台设置怎么用？
+## 17. 系统设置与运行队列怎么使用？
 
-0.6.1 引入了系统管理员与统一平台设置面板（含平台审计日志），与空间内 RBAC 区分：系统管理员管理的是「平台级」配置，而非单个空间内的资源。首次启用需通过系统管理员 bootstrap 流程晋升首个管理员；撤销管理员权限有安全防护（避免误撤导致无人可管）。相关结构已纳入 `000000_init` 基线。
+唯一用户登录后可直接访问设置中的系统设置和运行队列，无需额外提升账号权限。
 
 ## 18. 上传时如何自定义解析配置（process_config）？
 
@@ -247,17 +231,6 @@ Wiki 模式允许 Agent 根据原始文档自动生成并维护一套结构化�
 - **重新解析**：`POST /knowledge/:id/reparse` 可在 body 中传 `process_config` 以新配置重跑解析，覆盖项会写入 `knowledge.metadata.process_overrides`。
 - **图片 / 音频校验**：批次含图片时需 KB 已配置 VLM；含音频时需已配置 ASR，否则上传会被拒绝。
 - 详见 [`docs/api/knowledge.md`](./api/knowledge.md)。
-
-## 19. 升级到 0.6.2 后 `reliquary` CLI 登录或 MCP 工具报错？
-
-0.6.2 随附 **CLI v0.9**（破坏性变更），常见迁移：
-
-- **`auth login` 不再创建 profile**：先 `reliquary profile add <name> --host <url> --use`，再 `reliquary auth login`；切换 profile 用全局 `--profile <name>`。
-- **`auth logout` / `auth refresh` 去掉 `--name`**：作用于当前 active profile。
-- **MCP 工具 `agent_invoke` 已更名为 `session_ask`**：外部 MCP 客户端需刷新工具 schema。
-- **`agent create --kb` 改为 `--attach-kb`**；`doc delete --all` 与 `search chunks` / `search docs` 的 `--kb` 必填且支持名称或 ID。
-- 新增 `reliquary session stop <session-id>` 可中止进行中的 Agent 运行；仓库内附带 `reliquary-rag-search` / `reliquary-shared` 内置 Skills。
-- 详见 [`cli/CHANGELOG.md`](../cli/CHANGELOG.md)。
 
 ## 20. pgvector 检索变慢或刚升级后需要做什么？
 
@@ -287,15 +260,6 @@ Wiki 模式允许 Agent 根据原始文档自动生成并维护一套结构化�
 
 0.6.3 在 Agent 选择器引入**模型就绪校验**：绑定的 LLM / Embedding / Rerank / VLM 缺失或配置无效时会阻断对话并给出修复指引。可在模型卡片打开 **调试抽屉** 先测试连通性；确认 KB 与 Agent 引用的模型均存在且可用。
 
-## 28. 如何创建并限制权限范围 API Key？
-
-0.7.0 引入**权限范围 API Key 与 Principal 模型**（相关结构已纳入数据库基线）。API Key 不再等同于某个人类用户，而是独立的 Principal，携带显式角色与能力（capability）授权：
-
-- 在 **设置 → API 集成**（Owner 可见）中创建 Key，可勾选能力（如 `manage_kbs` 覆盖 KB 全生命周期、`manage_storage_backends` 等），并可限制到指定知识库。
-- Key 的 `last_used_at` 按节流更新，避免高频写库。
-- 路由级守卫会拒绝越权访问；管理类接口对 API Key Principal 默认拒绝，请为集成使用具备对应能力的 Key，而非全权 Key。
-- MCP OAuth 与 IM 会话按 Principal 隔离，不同集成之间互不串号。
-
 ## 29. 一个空间如何绑定多个对象存储实例？
 
 0.7.0 支持**多实例存储后端**（相关结构已纳入数据库基线）。一个空间可注册多个存储实例（`local` / `minio` / `s3`），不同知识库绑定到不同实例，空间维度还有一个默认实例：
@@ -316,17 +280,9 @@ Wiki 模式允许 Agent 根据原始文档自动生成并维护一套结构化�
 
 0.7.0 支持**会话级临时附件**（相关结构已纳入数据库基线）。在对话输入区上传图片或文档，系统异步解析后仅用于当前会话的问答，不会写入知识库。图片与附件共享一个合并数量上限；附件内容会在多轮对话中保留。
 
-## 32. 如何接入飞书？
-
-在 **设置 → IM 集成** 添加飞书渠道并填写凭据。飞书通过 reply-message 接口回复，回复会落在原消息线程内。
-
 ## 33. 如何为 Redis 启用 TLS？
 
 0.7.0 支持 Redis 的 **TLS 连接**（#1930）。按环境变量启用 TLS 后，启动日志会打印 TLS 配置状态便于确认。若连接失败，请核对证书/CA 配置与 Redis 服务端是否要求 TLS。
-
-## 34. 升级到 0.7.0 后 `reliquary` CLI 命令找不到或行为变化？
-
-0.7.0 随附 **CLI v0.10**（Agent 优先，破坏性变更）：新增 `model` / `message` / `config` / `skills` 命令组，`doc reparse` / `doc update`，`kb config` / `kb config set`；`session continue` 更名为 `session resume`，新增 `session tool-approval`；提供 agent-first 的 chat 与 `session ask` 输出模式，并强化了 SSE 可靠性与类型化错误。详见 [`cli/CHANGELOG.md`](../cli/CHANGELOG.md)。
 
 ## 36. 如何使用火山引擎 Rerank / 智谱 AI 网络搜索？
 
@@ -394,14 +350,6 @@ docker run -d -p 8081:8081 reliquary-docs
 ## 43. 使用 AWS S3 但不想在配置里写 AK/SK？
 
 0.7.2 支持 **AWS SDK 默认凭据链**（#2008）：把 `S3_ACCESS_KEY` 与 `S3_SECRET_KEY` **同时留空**即可，SDK 会依次尝试 EC2/ECS/EKS 实例角色、IRSA / Web Identity、环境变量与共享配置文件。注意两者必须同时填写或同时留空，只填一个会报配置错误。`S3_ENDPOINT` 也可留空，此时使用 `S3_REGION` 对应的 AWS 标准端点。
-
-## 44. MCP Server 用 `uvx` 启动失败，或者应该装哪个包？
-
-本仓库的 Python 包名为 `reliquary-mcp`，尚未发布到 PyPI；请在仓库根目录执行 `pip install ./mcp-server`。
-
-0.7.2 随附 MCP Server 1.1.x，已迁移到 mcp 2.x 的高级 `MCPServer` API，修复了 `uvx` 拉到 SDK 2.x 时的启动崩溃（`AttributeError: 'Server' object has no attribute 'list_tools'`），并恢复了 HTTP（`stateless_http`）与 SSE（`/sse/messages/`）传输的路由兼容性。工具包括 `create_knowledge_from_text`，可用 Markdown 文本直接建立知识条目。
-
-行为变化提醒：工具执行失败时，MCPServer 2.x 返回 `CallToolResult(isError=True)`，不再像旧版低层 API 那样以成功响应返回 `"Error executing …"` 文本前缀。只解析 `content[0].text` 的客户端通常无感，依赖 `isError` 标志的集成方行为会更符合 MCP 规范。
 
 ## 45. 升级到 0.8.0 后技能沙箱起不来 / 找不到 Local 后端？
 

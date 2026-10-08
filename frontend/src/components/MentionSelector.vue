@@ -487,17 +487,17 @@ watch(() => props.visible, (newVisible) => {
 const scrollToItem = (index: number) => {
   nextTick(() => {
     if (!listRef.value) return;
-    
+
     const items = listRef.value.querySelectorAll('.mention-item');
     if (!items || items.length <= index) return;
-    
+
     const activeItem = items[index] as HTMLElement;
     const menu = listRef.value;
-    
+
     if (activeItem) {
       const menuRect = menu.getBoundingClientRect();
       const itemRect = activeItem.getBoundingClientRect();
-      
+
       // 检查是否在上方被遮挡
       if (itemRect.top < menuRect.top) {
         menu.scrollTop -= (menuRect.top - itemRect.top);

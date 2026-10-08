@@ -1,6 +1,6 @@
 <template>
-  <div 
-    class="agent-avatar" 
+  <div
+    class="agent-avatar"
     :style="avatarStyle"
     :class="{ 'agent-avatar-small': size === 'small', 'agent-avatar-large': size === 'large' }"
   >
@@ -60,15 +60,15 @@ const hashCode = (str: string): number => {
 const letter = computed(() => {
   const name = props.name?.trim() || '';
   if (!name) return '?';
-  
+
   // 获取第一个字符
   const firstChar = name.charAt(0);
-  
+
   // 如果是英文字母，转大写
   if (/[a-zA-Z]/.test(firstChar)) {
     return firstChar.toUpperCase();
   }
-  
+
   // 中文或其他字符直接返回
   return firstChar;
 });
@@ -108,31 +108,31 @@ const letterStyle = computed(() => {
   flex-shrink: 0;
   box-shadow: var(--td-shadow-2);
   overflow: hidden;
-  
+
   &.agent-avatar-small {
     width: 22px;
     height: 22px;
     border-radius: 5px;
     box-shadow: none;
-    
+
     .agent-avatar-letter {
       font-size: 11px;
     }
-    
+
     .agent-sparkles {
       display: none;
     }
   }
-  
+
   &.agent-avatar-large {
     width: 48px;
     height: 48px;
     border-radius: 12px;
-    
+
     .agent-avatar-letter {
       font-size: 20px;
     }
-    
+
     .agent-sparkles {
       opacity: 0.9;
     }

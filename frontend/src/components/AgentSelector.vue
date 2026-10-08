@@ -239,7 +239,7 @@ const activeDetailNotReadyLabels = computed(() => {
 const canShowDetailHeaderAction = computed(() => {
   const detail = activeDetail.value;
   if (!detail) return false;
-  if (authStore.hasRole('contributor')) return true;
+  if (authStore.isLoggedIn) return true;
   return activeDetailNotReadyLabels.value.length === 0;
 });
 
@@ -438,7 +438,7 @@ const selectAgent = (agent: CustomAgent) => {
 };
 
 const goToSettings = (agent: CustomAgent) => {
-  if (!authStore.hasRole('contributor') && getAgentNotReadyLabels(agent).length > 0) {
+  if (!authStore.isLoggedIn && getAgentNotReadyLabels(agent).length > 0) {
     return;
   }
   const reasonKeys = getAgentNotReadyReasonKeysFor(agent);

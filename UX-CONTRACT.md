@@ -2,13 +2,13 @@
 
 ## Product context
 
-Reliquary serves a small team that collects source material and checks entities, facts, events and evidence. The supported locales are zh-CN and en-US; existing locale files own product copy. Light and dark themes retain the same hierarchy. The accessibility target for new controls is WCAG 2.2 AA.
+Reliquary serves a single user that collects source material and checks entities, facts, events and evidence. The supported locales are zh-CN and en-US; existing locale files own product copy. Light and dark themes retain the same hierarchy. The accessibility target for new controls is WCAG 2.2 AA.
 
 ## Business-context sources
 
 | Scope | Source |
 | --- | --- |
-| Team visibility and roles | CONTEXT.md and docs/adr/0003-single-team-space.md |
+| Single-user access | CONTEXT.md and docs/adr/0007-personal-single-user.md |
 | Global entity identity and source attribution | docs/adr/0002-global-entity-registry.md |
 | Domain templates and field consolidation | docs/adr/0004-domain-templates-open-fields.md |
 | Model routing, segmented extraction and uncertain identity | .scratch/architecture-reshape/spec.md, phase P3, sections 6.4 to 6.6 |
@@ -40,10 +40,10 @@ Reliquary serves a small team that collects source material and checks entities,
 | Delete domain | Shared useConfirmDelete dialog and busy action | Refresh and clamp the current list page | Keep list visible and show error; server prevents referenced domain deletion |
 | Map or create a template field | Dialog controls disabled | Refresh selected domain and open-field statistics, remain in consolidation | Keep dialog values and show inline error |
 | Query context | Existing loading controls | Keep query and show source-labelled results | Preserve query, show error and allow retry |
-| View entity | Clear previous detail and show loading indicator | Show facts and events from all team knowledge bases | Preserve selection and show error |
+| View entity | Clear previous detail and show loading indicator | Show facts and events from all knowledge bases | Preserve selection and show error |
 | Collect a duplicate | Existing intake busy controls | Keep a localized notice with an explicit view-existing-message action | Preserve the manual draft; URL and file batches count duplicates separately from failed inputs |
 
-Built in domain deletion stays disabled with an explanation. Viewers can browse domains; only owner and admin roles see mutations. The server remains authoritative for permissions.
+Built in domain deletion stays disabled with an explanation. The signed-in user can browse and edit domains. The server remains authoritative for permissions.
 
 ## Dataset and draft state
 
@@ -59,9 +59,9 @@ Browser checks cover the changed flows, both locales and themes, keyboard input,
 
 ## P3 configuration and review
 
-Team model tier saves stay in space settings. Domain and knowledge base overrides remain part of their existing edit drafts and save with those drafts. Every tier displays its effective model and source, and clearing an override restores inheritance. The server validates model compatibility. Team and domain edits require administrator access; knowledge base edits follow the existing editor permission. Pending requests disable the relevant controls, and failures preserve the draft with an inline error and retry. Leaving changed team or domain model tiers through settings navigation, adding a model or closing settings uses the shared application confirmation dialog.
+Team model tier saves stay in space settings. Domain and knowledge base overrides remain part of their existing edit drafts and save with those drafts. Every tier displays its effective model and source, and clearing an override restores inheritance. The server validates model compatibility. The signed-in user can edit workspace, domain and knowledge base configuration. Pending requests disable the relevant controls, and failures preserve the draft with an inline error and retry. Leaving changed team or domain model tiers through settings navigation, adding a model or closing settings uses the shared application confirmation dialog.
 
-Merge suggestions use explicit load more with twenty rows per request and transient local status filters, consistent with other context lists. Scope and status changes invalidate old requests. Accepting names both objects and the team-wide consequences in the shared confirmation dialog. Rejecting keeps the objects separate. Both actions refresh the list, retain the filter and announce success through MessagePlugin. Viewers see source evidence and status; contributor and administrator mutations remain subject to server authorization.
+Merge suggestions use explicit load more with twenty rows per request and transient local status filters, consistent with other context lists. Scope and status changes invalidate old requests. Accepting names both objects and the team-wide consequences in the shared confirmation dialog. Rejecting keeps the objects separate. Both actions refresh the list, retain the filter and announce success through MessagePlugin. The signed-in user can inspect evidence and edit suggestions; the server validates authentication.
 
 Evidence cards and the source snapshot drawer display complete or partial extraction with processed and total segment counts. The same model-call table shows stage, tier and count in evidence and processing details. Existing native date fields remain platform owned as documented above. No new date picker, scrollbar owner or runtime token system is introduced.
 

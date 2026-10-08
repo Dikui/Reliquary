@@ -18,18 +18,15 @@ func TestApplyAuthSessionSetsBothSurfaces(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/knowledge-bases", nil)
 
-	user := &types.User{ID: "u1", IsSystemAdmin: true}
+	user := &types.User{ID: "u1"}
 	tenant := &types.Tenant{ID: 1}
 	principal := types.Principal{Type: types.PrincipalWebUser, ID: "u1"}
-	scope := &types.TenantAPIKeyScope{KeyID: 3}
+
 	applyAuthSession(c, authSession{
-		User:        user,
-		Principal:   principal,
-		TenantID:    1,
-		Tenant:      tenant,
-		Role:        types.TenantRoleAdmin,
-		SystemAdmin: true,
-		APIKeyScope: scope,
+		User:      user,
+		Principal: principal,
+		TenantID:  1,
+		Tenant:    tenant,
 	})
 
 	ctx := c.Request.Context()
@@ -50,18 +47,6 @@ func TestApplyAuthSessionSetsBothSurfaces(t *testing.T) {
 	}
 	if got, ok := types.PrincipalFromContext(ctx); !ok || got != principal {
 		t.Fatalf("ctx principal = %#v, ok=%v", got, ok)
-	}
-	if got := types.TenantRoleFromContext(ctx); got != types.TenantRoleAdmin {
-		t.Fatalf("ctx role = %q", got)
-	}
-	if got, ok := c.Get(types.TenantRoleContextKey.String()); !ok || got.(types.TenantRole) != types.TenantRoleAdmin {
-		t.Fatalf("keys role = %v, ok=%v", got, ok)
-	}
-	if !types.IsSystemAdminFromContext(ctx) {
-		t.Fatal("ctx system admin flag lost")
-	}
-	if got, ok := types.TenantAPIKeyScopeFromContext(ctx); !ok || got.KeyID != 3 {
-		t.Fatalf("ctx api key scope = %#v, ok=%v", got, ok)
 	}
 
 }

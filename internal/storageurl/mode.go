@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"reliquary/internal/logger"
-	"reliquary/internal/types"
 )
 
 // Mode selects how stored files are referenced in an API response.
@@ -96,27 +95,8 @@ func DefaultMode(ctx context.Context) Mode {
 	return mode
 }
 
-// ResolveMode combines the per-request query value with the deployment default,
-// then enforces the API key scope.
-//
-// An explicit query value wins over the deployment default; an invalid one is
-// returned as an error so integrators find their typo instead of silently
-// receiving handles.
-//
-// A knowledge-base-restricted API key cannot request public file URLs.
-// Such a key only grants access to indexed content, so ResolveMode returns
-// ErrPublicModeForbidden rather than widening access to file bytes.
 func ResolveMode(ctx context.Context, queryValue string) (Mode, error) {
-	mode, err := requestedMode(ctx, queryValue)
-	if err != nil {
-		return ModeHandle, err
-	}
-	if mode == ModePublic {
-		if scope, ok := types.TenantAPIKeyScopeFromContext(ctx); ok && scope.IsKnowledgeBaseRestricted() {
-			return ModeHandle, ErrPublicModeForbidden
-		}
-	}
-	return mode, nil
+	return requestedMode(ctx, queryValue)
 }
 
 func requestedMode(ctx context.Context, queryValue string) (Mode, error) {

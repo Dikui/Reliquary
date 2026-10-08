@@ -10,29 +10,6 @@ import {
   type BucketDefinition,
 } from './sessionSidebarBuckets.ts'
 
-const imDef: BucketDefinition = {
-  key: 'im:feishu',
-  apiSource: 'feishu',
-  label: 'Feishu',
-  kind: 'im',
-  platform: 'feishu',
-}
-
-test('bucketVisible hides channel buckets until count is known', () => {
-  const bucket = createEmptyBucket(imDef)
-  assert.equal(bucketVisible(bucket), false)
-})
-
-test('bucketVisible hides channel buckets with zero sessions after probe', () => {
-  const bucket = applyBucketCountProbe(createEmptyBucket(imDef), 0)
-  assert.equal(bucketVisible(bucket), false)
-})
-
-test('bucketVisible shows channel buckets with sessions after probe', () => {
-  const bucket = applyBucketCountProbe(createEmptyBucket(imDef), 3)
-  assert.equal(bucketVisible(bucket), true)
-})
-
 test('prependSessionToWebBucket inserts new session at front and bumps total', () => {
   const webDef: BucketDefinition = {
     key: 'web',
@@ -58,28 +35,6 @@ test('prependSessionToWebBucket is idempotent for existing session', () => {
   assert.equal(next, bucket)
 })
 
-test('buildBucketDefinitions hides channel buckets unless admin', () => {
-  const defs = buildBucketDefinitions(
-    ['feishu'],
-    {
-      web: 'Chats',
-      imPlatform: (platform) => platform,
-      api: 'API',
-    },
-  )
-  assert.deepEqual(defs.map((def) => def.key), ['web'])
-
-  const adminDefs = buildBucketDefinitions(
-    ['feishu'],
-    {
-      web: 'Chats',
-      imPlatform: (platform) => platform,
-      api: 'API',
-    },
-    { includeAdminChannelBuckets: true },
-  )
-  assert.deepEqual(
-    adminDefs.map((def) => def.key),
-    ['im:feishu', 'api', 'web'],
-  )
+test('buildBucketDefinitions contains the single user session list', () => {
+  assert.deepEqual(buildBucketDefinitions({ web: 'Chats' }).map(def => def.key), ['web'])
 })

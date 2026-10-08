@@ -77,12 +77,12 @@ const groupedResults = computed<GroupedResult[]>(() => {
 const parsedArguments = computed(() => {
   const args = props.arguments;
   if (!args) return null;
-  
+
   // If it's already an object, return it
   if (typeof args === 'object' && !Array.isArray(args)) {
     return args;
   }
-  
+
   // If it's a string, try to parse it
   if (typeof args === 'string') {
     try {
@@ -92,7 +92,7 @@ const parsedArguments = computed(() => {
       return null;
     }
   }
-  
+
   return null;
 });
 
@@ -115,7 +115,7 @@ const highlightQuery = computed(() => {
 const hasSearchParams = computed(() => {
   const args = parsedArguments.value;
   if (!args || typeof args !== 'object') return false;
-  
+
   return !!(
     (Array.isArray(args.knowledge_base_ids) && args.knowledge_base_ids.length > 0) ||
     args.top_k || args.vector_threshold || args.keyword_threshold || args.min_score);

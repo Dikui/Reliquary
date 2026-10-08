@@ -54,9 +54,6 @@ func (h *DataSourceHandler) getOwnedKnowledgeBase(
 	if kb.TenantID != tenantID {
 		return nil, http.StatusForbidden, "access denied"
 	}
-	if err := types.AuthorizeTenantAPIKeyKnowledgeBases(ctx, kbID); err != nil {
-		return nil, http.StatusForbidden, err.Error()
-	}
 
 	return kb, http.StatusOK, ""
 }
@@ -332,7 +329,7 @@ func (h *DataSourceHandler) ValidateCredentials(c *gin.Context) {
 }
 
 // @Summary List available resources in data source
-// @Description List resources available for sync in the external system. Pass parent_id to lazily load the direct children of a resource (used for large hierarchical sources such as Feishu wiki).
+// @Description List resources available for sync in the external system. Pass parent_id to lazily load the direct children of a resource .
 // @Tags DataSource
 // @Produce json
 // @Param id path string true "Data source ID"

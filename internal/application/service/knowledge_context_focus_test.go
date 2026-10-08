@@ -161,8 +161,7 @@ func TestIssue06FocusScopeIsolatesTenantAndConcreteTopics(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, focus.StarredEntities)
 	require.Empty(t, focus.StarredTopics)
-	keyContext := types.WithTenantAPIKeyScope(ctx, types.TenantAPIKeyScope{KnowledgeBaseIDs: types.StringArray{"p3-kb"}})
-	require.NoError(t, svc.SetEntityStar(keyContext, entity.ID, false), "scoped keys can edit an identity with only evidence-object links")
+	require.NoError(t, svc.SetEntityStar(ctx, entity.ID, false))
 	entity.Description = "Global details"
 	require.NoError(t, db.Model(&entity).Update("description", entity.Description).Error)
 	require.NoError(t, svc.SetEntityStar(ctx, entity.ID, true))
@@ -170,11 +169,11 @@ func TestIssue06FocusScopeIsolatesTenantAndConcreteTopics(t *testing.T) {
 	require.NoError(t, db.Create(&private).Error)
 	require.NoError(t, svc.SetEntityStar(ctx, private.ID, true))
 	focusWorkflow(t, db, "private-tracking", true, map[string]any{"entity_id": private.ID, "scope": "team"})
-	focus, err = svc.FocusScope(keyContext, "", types.KnowledgeContextQuery{Scope: "team"})
+	focus, err = svc.FocusScope(ctx, "", types.KnowledgeContextQuery{Scope: "team"})
 	require.NoError(t, err)
-	require.Len(t, focus.StarredEntities, 1)
-	require.Empty(t, focus.StarredEntities[0].Description)
-	require.Empty(t, focus.TrackedEntities, "restricted keys only see object focus supported by visible evidence")
+	require.Len(t, focus.StarredEntities, 2)
+	require.Len(t, focus.TrackedEntities, 1)
+
 }
 
 func TestIssue06TrackingNameMatchesFirstObjectAppearance(t *testing.T) {
@@ -236,15 +235,4 @@ func TestIssue06GlobalObjectStarsRemainVisibleAcrossFocusScopes(t *testing.T) {
 	matched, err := svc.MatchesFocus(ctx, message, []string{linked.ID})
 	require.NoError(t, err)
 	require.True(t, matched)
-	// The restricted key may see the object through another allowed base,
-	// while identities without any authorized evidence remain hidden.
-	keyCtx := types.WithTenantAPIKeyScope(ctx, types.TenantAPIKeyScope{KnowledgeBaseIDs: types.StringArray{"p3-kb", "new-kb"}})
-	focus, err := svc.FocusScope(keyCtx, "new-kb", types.KnowledgeContextQuery{})
-	require.NoError(t, err)
-	require.Len(t, focus.StarredEntities, 1)
-	require.Equal(t, linked.ID, focus.StarredEntities[0].ID)
-	keyCtx = types.WithTenantAPIKeyScope(ctx, types.TenantAPIKeyScope{KnowledgeBaseIDs: types.StringArray{"new-kb"}})
-	focus, err = svc.FocusScope(keyCtx, "new-kb", types.KnowledgeContextQuery{})
-	require.NoError(t, err)
-	require.Empty(t, focus.StarredEntities)
 }

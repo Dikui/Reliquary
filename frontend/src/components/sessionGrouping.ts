@@ -5,19 +5,12 @@ export type SessionGroupMode = 'none' | 'date'
 export const SESSION_GROUP_MODE_STORAGE_KEY = 'reliquary:session-group-mode'
 export const DEFAULT_SESSION_GROUP_MODE: SessionGroupMode = 'none'
 
-/** Mirrors backend types.SessionOwnerAPITenantKeyPrefix (sessions.user_id owner). */
-export const API_SESSION_OWNER_PREFIX = 'api_tenant_key:'
-
-/** Mirrors backend types.SessionOwnerAPIExternalUserPrefix. */
-export const API_EXTERNAL_USER_SESSION_OWNER_PREFIX = 'api_external_user:'
-
 export interface SessionForGrouping {
   id: string
   title?: string
   is_pinned?: boolean
   created_at?: string
   updated_at?: string
-  im_platform?: string
   description?: string
   user_id?: string
   originalIndex?: number
@@ -29,10 +22,7 @@ export interface SessionGroup<T extends SessionForGrouping = SessionForGrouping>
   items: T[]
 }
 
-export type SessionOrigin =
-  | { kind: 'web' }
-  | { kind: 'im'; platform: string }
-  | { kind: 'api' }
+export type SessionOrigin = { kind: 'web' }
 
 export interface GroupModeOption {
   value: SessionGroupMode
@@ -42,19 +32,6 @@ export interface GroupModeOption {
 export interface SourceGroupLabels {
   web: string
   api: string
-  imPlatform: (platform: string) => string
-}
-
-// Distinct platform keys from the tenant's IM channel overview, in first-seen order.
-export function configuredPlatforms(channels: Array<{ platform: string }>): string[] {
-  const seen = new Set<string>()
-  const out: string[] = []
-  for (const c of channels) {
-    if (!c.platform || seen.has(c.platform)) continue
-    seen.add(c.platform)
-    out.push(c.platform)
-  }
-  return out
 }
 
 export function buildGroupModeOptions(labels: {
@@ -81,43 +58,9 @@ export function storeGroupMode(mode: SessionGroupMode): void {
   localStorage.setItem(SESSION_GROUP_MODE_STORAGE_KEY, mode)
 }
 
-export function resolveSessionOrigin(session: SessionForGrouping): SessionOrigin {
-  const platform = (session.im_platform || '').trim().toLowerCase()
-  if (platform) return { kind: 'im', platform }
-  const ownerId = session.user_id || ''
-  if (
-    ownerId.startsWith(API_SESSION_OWNER_PREFIX) ||
-    ownerId.startsWith(API_EXTERNAL_USER_SESSION_OWNER_PREFIX)
-  ) {
-    return { kind: 'api' }
-  }
-  return { kind: 'web' }
-}
+export function resolveSessionOrigin(_session: SessionForGrouping): SessionOrigin { return { kind: 'web' } }
 
-export function originGroupKey(origin: SessionOrigin): string {
-  switch (origin.kind) {
-    case 'web':
-      return 'web'
-    case 'im':
-      return `im:${origin.platform}`
-    case 'api':
-      return 'api'
-  }
-}
-
-function labelForOrigin(
-  origin: SessionOrigin,
-  labels: SourceGroupLabels,
-): string {
-  switch (origin.kind) {
-    case 'web':
-      return labels.web
-    case 'api':
-      return labels.api
-    case 'im':
-      return labels.imPlatform(origin.platform)
-  }
-}
+export function originGroupKey(_origin: SessionOrigin): string { return 'web' }
 
 export function classifyDateBucket(dateStr: string | undefined): DateBucketKey {
   if (!dateStr) return 'earlier'
@@ -173,60 +116,6 @@ export function groupSessionsByDate<T extends SessionForGrouping>(
     }))
 }
 
-export function groupSessionsBySource<T extends SessionForGrouping>(
-  sessions: T[],
-  labels: SourceGroupLabels,
-  configuredImPlatforms: string[],
-  pinnedLabel: string,
-): SessionGroup<T>[] {
-  const pinned: T[] = []
-  const byKey = new Map<string, T[]>()
-
-  for (const session of sessions) {
-    if (session.is_pinned) {
-      pinned.push(session)
-      continue
-    }
-    const origin = resolveSessionOrigin(session)
-    const key = originGroupKey(origin)
-    if (!byKey.has(key)) byKey.set(key, [])
-    byKey.get(key)!.push(session)
-  }
-
-  const orderedKeys: string[] = []
-  if (byKey.has('web')) orderedKeys.push('web')
-
-  const seenIm = new Set<string>()
-  for (const platform of configuredImPlatforms) {
-    const key = `im:${platform}`
-    if (byKey.has(key)) {
-      orderedKeys.push(key)
-      seenIm.add(platform)
-    }
-  }
-  const extraIm = Array.from(byKey.keys())
-    .filter((k) => k.startsWith('im:') && !seenIm.has(k.slice(3)))
-    .sort((a, b) => a.localeCompare(b))
-  orderedKeys.push(...extraIm)
-
-  const groups: SessionGroup<T>[] = []
-  if (pinned.length > 0) {
-    groups.push({ key: 'pinned', label: pinnedLabel, items: pinned })
-  }
-  for (const key of orderedKeys) {
-    const items = byKey.get(key)
-    if (!items?.length) continue
-    const sample = items[0]
-    const origin = resolveSessionOrigin(sample)
-    groups.push({
-      key,
-      label: labelForOrigin(origin, labels),
-      items,
-    })
-  }
-  return groups
-}
-
 export function groupSessionsFlat<T extends SessionForGrouping>(
   sessions: T[],
   pinnedLabel: string,
@@ -247,7 +136,6 @@ export function groupSessions<T extends SessionForGrouping>(
     bucketLabels: Record<DateBucketKey, string>
     categorizeDate: (session: T) => DateBucketKey
     sourceLabels: SourceGroupLabels
-    configuredImPlatforms: string[]
   },
 ): SessionGroup<T>[] {
   if (!sessions.length) return []

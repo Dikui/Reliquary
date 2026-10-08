@@ -32,19 +32,6 @@ var (
 	// ErrUserUsernameExists is returned by Register when the target entity's
 	// username already exists.
 	ErrUserUsernameExists = errors.New("user with this username already exists")
-
-	// ErrPasswordPolicy is returned when a newly chosen password does not
-	// meet the product's public 8-32 character, letter-and-number contract.
-	// It is exported so HTTP handlers can translate the failure to a 400
-	// without exposing bcrypt or persistence errors.
-	ErrPasswordPolicy = errors.New(
-		"password must be 8-32 characters and contain at least one letter and one number")
-	// ErrComplexPasswordPolicy is returned when the runtime complex-password
-	// switch is on and the new password is missing a required character class.
-	ErrComplexPasswordPolicy = errors.New(
-		"password must be 8-32 characters and must contain uppercase and lowercase " +
-			"letters, numbers, and special characters")
-
 	// ErrInvalidOldPassword is returned by ChangePassword when the supplied
 	// current password does not match the stored hash. Handlers map this to
 	// a 400 so callers can prompt the user without treating it as a 500.
@@ -59,7 +46,7 @@ var (
 // Machine-readable change-password failure reasons for HTTP details fields.
 const (
 	DetailInvalidOldPassword = "invalid_old_password"
-	DetailPasswordPolicy     = "password_policy"
+	DetailInvalidPassword    = "invalid_password"
 	DetailSamePassword       = "same_password"
 )
 
@@ -83,12 +70,10 @@ func getJwtSecret() string {
 
 // userService implements the UserService interface
 type userService struct {
-	userRepo         interfaces.UserRepository
-	tokenRepo        interfaces.AuthTokenRepository
-	tenantService    interfaces.TenantService
-	memberService    interfaces.TenantMemberService
-	config           *config.Config
-	systemSettingSvc interfaces.SystemSettingService
+	userRepo      interfaces.UserRepository
+	tokenRepo     interfaces.AuthTokenRepository
+	tenantService interfaces.TenantService
+	config        *config.Config
 }
 
 // NewUserService creates a new user service instance
@@ -97,21 +82,13 @@ func NewUserService(
 	userRepo interfaces.UserRepository,
 	tokenRepo interfaces.AuthTokenRepository,
 	tenantService interfaces.TenantService,
-	memberService interfaces.TenantMemberService,
-	systemSettingSvc interfaces.SystemSettingService,
 ) interfaces.UserService {
 	return &userService{
-		userRepo:         userRepo,
-		tokenRepo:        tokenRepo,
-		tenantService:    tenantService,
-		memberService:    memberService,
-		config:           configInfo,
-		systemSettingSvc: systemSettingSvc,
+		userRepo:      userRepo,
+		tokenRepo:     tokenRepo,
+		tenantService: tenantService,
+		config:        configInfo,
 	}
-}
-
-func (s *userService) complexPasswordEnabled(ctx context.Context) bool {
-	return ResolveComplexPasswordEnabled(ctx, s.config, s.systemSettingSvc)
 }
 
 // Register creates a new user account
@@ -134,7 +111,7 @@ func (s *userService) Register(ctx context.Context, req *types.RegisterRequest) 
 		return nil, ErrUserUsernameExists
 	}
 
-	if err := ValidatePasswordPolicy(req.Password, s.complexPasswordEnabled(ctx)); err != nil {
+	if err := ValidatePassword(req.Password); err != nil {
 		return nil, err
 	}
 
@@ -150,7 +127,7 @@ func (s *userService) Register(ctx context.Context, req *types.RegisterRequest) 
 		PasswordHash: string(hashedPassword), TenantID: types.SingleTenantID,
 		IsActive: true, CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
-	if err := s.userRepo.RegisterTeamUser(ctx, user, req.InvitationToken); err != nil {
+	if err := s.userRepo.RegisterSingleUser(ctx, user); err != nil {
 		return nil, err
 	}
 
@@ -196,12 +173,12 @@ func (s *userService) Login(ctx context.Context, req *types.LoginRequest) (*type
 			Message: "Invalid email or password",
 		}, nil
 	}
-	if user.TenantID != types.SingleTenantID || len(s.buildMembershipsForUser(ctx, user, nil)) == 0 {
-		return &types.LoginResponse{Success: false, Message: "Not an active team member"}, nil
+	if user.TenantID != types.SingleTenantID {
+		return &types.LoginResponse{Success: false, Message: "Invalid personal workspace"}, nil
 	}
 	logger.Info(ctx, "Password verification successful")
 
-	// Issue tokens for the team workspace.
+	// Issue tokens for the personal workspace.
 	logger.Info(ctx, "Generating tokens")
 	resolvedTenantID := types.SingleTenantID
 	accessToken, refreshToken, err := s.generateTokensForTenant(ctx, user, resolvedTenantID)
@@ -225,43 +202,15 @@ func (s *userService) Login(ctx context.Context, req *types.LoginRequest) (*type
 		}
 	}
 
-	memberships := s.buildMembershipsForUser(ctx, user, tenant)
-
 	logger.Info(ctx, "User logged in successfully")
 	return &types.LoginResponse{
 		Success:      true,
 		Message:      "Login successful",
 		User:         user,
 		ActiveTenant: tenant,
-		Memberships:  memberships,
 		Token:        accessToken,
 		RefreshToken: refreshToken,
 	}, nil
-}
-
-// BuildLoginMemberships projects the caller's active team role for the response.
-func (s *userService) BuildLoginMemberships(
-	ctx context.Context,
-	user *types.User,
-	activeTenant *types.Tenant,
-) []types.Membership {
-	return s.buildMembershipsForUser(ctx, user, activeTenant)
-}
-
-func (s *userService) buildMembershipsForUser(ctx context.Context, user *types.User, tenant *types.Tenant) []types.Membership {
-	memberships := []types.Membership{}
-	if s.memberService == nil || user == nil || user.TenantID != types.SingleTenantID {
-		return memberships
-	}
-	member, err := s.memberService.GetMembership(ctx, user.ID, types.SingleTenantID)
-	if err != nil || member == nil || member.Status != types.TenantMemberStatusActive || !member.Role.IsValid() {
-		return memberships
-	}
-	name := ""
-	if tenant != nil {
-		name = tenant.Name
-	}
-	return append(memberships, types.Membership{TenantID: types.SingleTenantID, TenantName: name, Role: member.Role})
 }
 
 // GetUserByID gets a user by ID
@@ -285,7 +234,7 @@ func (s *userService) GetUserByUsername(ctx context.Context, username string) (*
 	return s.userRepo.GetUserByUsername(ctx, username)
 }
 
-// GetUserByTenantID gets the first user (owner) of a tenant
+// GetUserByTenantID gets the sole user of the personal workspace
 func (s *userService) GetUserByTenantID(ctx context.Context, tenantID uint64) (*types.User, error) {
 	return s.userRepo.GetUserByTenantID(ctx, tenantID)
 }
@@ -296,40 +245,18 @@ func (s *userService) UpdateUser(ctx context.Context, user *types.User) error {
 	return s.userRepo.UpdateUser(ctx, user)
 }
 
-// ListSystemAdmins lists users with IsSystemAdmin=true. Thin pass-through
-// to the repository; the handler enforces SystemAdmin gating, so the
-// service does not duplicate the role check here.
-func (s *userService) ListSystemAdmins(
-	ctx context.Context, offset, limit int,
-) ([]*types.User, int64, error) {
-	return s.userRepo.ListSystemAdmins(ctx, offset, limit)
-}
-
-// RevokeSystemAdmin removes system-admin privileges through the
-// repository's transactional guard so concurrent revokes cannot remove
-// the final administrator.
-func (s *userService) RevokeSystemAdmin(ctx context.Context, userID, actorID string) (*types.User, error) {
-	return s.userRepo.RevokeSystemAdmin(ctx, userID, actorID)
-}
-
 // DeleteUser deletes a user
 func (s *userService) DeleteUser(ctx context.Context, id string) error {
 	return s.userRepo.DeleteUser(ctx, id)
 }
 
-// ChangePassword changes user password after verifying the current
-// credential. The new password must satisfy ValidatePasswordPolicy so
-// self-service rotation cannot introduce weaker passwords than
-// registration / admin reset allow. On success every outstanding session
-// is revoked so a stolen token cannot survive the rotation.
 func (s *userService) ChangePassword(ctx context.Context, userID, oldPassword, newPassword string) error {
 	user, err := s.userRepo.GetUserByID(ctx, userID)
 	if err != nil {
 		return err
 	}
 
-	// Verify old password before policy checks so callers with a wrong
-	// current credential get a clear failure instead of a policy error.
+	// Verify the current credential before checking the new password.
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(oldPassword)); err != nil {
 		return ErrInvalidOldPassword
 	}
@@ -338,7 +265,7 @@ func (s *userService) ChangePassword(ctx context.Context, userID, oldPassword, n
 		return ErrSamePassword
 	}
 
-	if err := ValidatePasswordPolicy(newPassword, s.complexPasswordEnabled(ctx)); err != nil {
+	if err := ValidatePassword(newPassword); err != nil {
 		return err
 	}
 
@@ -360,33 +287,6 @@ func (s *userService) ChangePassword(ctx context.Context, userID, oldPassword, n
 	return s.tokenRepo.RevokeTokensByUserID(ctx, userID)
 }
 
-// AdminResetPassword replaces a user's password without checking the previous
-// credential. Authorization and the cannot-reset-self rule live at the system
-// admin HTTP boundary; this service owns the security-critical persistence and
-// session invalidation so no caller can accidentally update only one of them.
-func (s *userService) AdminResetPassword(ctx context.Context, userID, newPassword string) error {
-	if err := ValidatePasswordPolicy(newPassword, s.complexPasswordEnabled(ctx)); err != nil {
-		return err
-	}
-
-	user, err := s.userRepo.GetUserByID(ctx, userID)
-	if err != nil {
-		return err
-	}
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
-
-	user.PasswordHash = string(hashedPassword)
-	user.UpdatedAt = time.Now()
-	if err := s.userRepo.UpdateUser(ctx, user); err != nil {
-		return err
-	}
-
-	return s.tokenRepo.RevokeTokensByUserID(ctx, userID)
-}
-
 // ValidatePassword validates user password
 func (s *userService) ValidatePassword(ctx context.Context, userID string, password string) error {
 	user, err := s.userRepo.GetUserByID(ctx, userID)
@@ -397,7 +297,7 @@ func (s *userService) ValidatePassword(ctx context.Context, userID string, passw
 	return bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))
 }
 
-// GenerateTokens issues access and refresh tokens for the team workspace.
+// GenerateTokens issues access and refresh tokens for the personal workspace.
 func (s *userService) GenerateTokens(
 	ctx context.Context,
 	user *types.User,
@@ -413,6 +313,7 @@ func (s *userService) generateTokensForTenant(
 ) (accessToken, refreshToken string, err error) {
 	// Generate access token (expires in 24 hours)
 	accessClaims := jwt.MapClaims{
+		"jti":       uuid.NewString(),
 		"user_id":   user.ID,
 		"email":     user.Email,
 		"tenant_id": activeTenantID,
@@ -429,6 +330,7 @@ func (s *userService) generateTokensForTenant(
 
 	// Generate refresh token (expires in 7 days)
 	refreshClaims := jwt.MapClaims{
+		"jti":     uuid.NewString(),
 		"user_id": user.ID,
 		"exp":     time.Now().Add(7 * 24 * time.Hour).Unix(),
 		"iat":     time.Now().Unix(),
@@ -462,13 +364,17 @@ func (s *userService) generateTokensForTenant(
 		UpdatedAt: time.Now(),
 	}
 
-	_ = s.tokenRepo.CreateToken(ctx, accessTokenRecord)
-	_ = s.tokenRepo.CreateToken(ctx, refreshTokenRecord)
+	if err := s.tokenRepo.CreateToken(ctx, accessTokenRecord); err != nil {
+		return "", "", err
+	}
+	if err := s.tokenRepo.CreateToken(ctx, refreshTokenRecord); err != nil {
+		return "", "", err
+	}
 
 	return accessToken, refreshToken, nil
 }
 
-// ValidateToken requires an active account and a token for the team workspace.
+// ValidateToken requires an active account and a token for the personal workspace.
 func (s *userService) ValidateToken(ctx context.Context, tokenString string) (*types.User, uint64, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -514,7 +420,7 @@ func (s *userService) ValidateToken(ctx context.Context, tokenString string) (*t
 	// by code paths that don't yet set the claim) keep working.
 	activeTenantID := tenantIDFromClaims(claims, user.TenantID)
 	if activeTenantID != types.SingleTenantID || user.TenantID != types.SingleTenantID {
-		return nil, 0, errors.New("invalid team workspace")
+		return nil, 0, errors.New("invalid personal workspace")
 	}
 
 	return user, activeTenantID, nil
@@ -684,6 +590,6 @@ func decodeJWKBase64(value string) ([]byte, error) {
 	return base64.URLEncoding.DecodeString(value)
 }
 
-func (s *userService) HasTeamUsers(ctx context.Context) (bool, error) {
-	return s.userRepo.HasTeamUsers(ctx)
+func (s *userService) HasUsers(ctx context.Context) (bool, error) {
+	return s.userRepo.HasUsers(ctx)
 }

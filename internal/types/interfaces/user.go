@@ -8,7 +8,7 @@ import (
 
 // UserService defines the user service interface
 type UserService interface {
-	HasTeamUsers(ctx context.Context) (bool, error)
+	HasUsers(ctx context.Context) (bool, error)
 	// Register creates a new user account
 	Register(ctx context.Context, req *types.RegisterRequest) (*types.User, error)
 	// Login authenticates a user and returns tokens
@@ -17,14 +17,13 @@ type UserService interface {
 	GetUserByID(ctx context.Context, id string) (*types.User, error)
 	// GetUsersByIDs batch-fetches users by id, returning a map keyed by
 	// user id. Missing ids are simply absent from the result; the call
-	// is not an error when some ids resolve to no row. Used on hot list
-	// endpoints (tenant members, audit logs) to avoid N+1 queries.
+	// is not an error when some ids resolve to no row.
 	GetUsersByIDs(ctx context.Context, ids []string) (map[string]*types.User, error)
 	// GetUserByEmail gets a user by email
 	GetUserByEmail(ctx context.Context, email string) (*types.User, error)
 	// GetUserByUsername gets a user by username
 	GetUserByUsername(ctx context.Context, username string) (*types.User, error)
-	// GetUserByTenantID gets the first user (owner) of a tenant
+	// GetUserByTenantID gets the sole user of the personal workspace
 	GetUserByTenantID(ctx context.Context, tenantID uint64) (*types.User, error)
 	// UpdateUser updates user information
 	UpdateUser(ctx context.Context, user *types.User) error
@@ -32,21 +31,9 @@ type UserService interface {
 	DeleteUser(ctx context.Context, id string) error
 	// ChangePassword changes user password
 	ChangePassword(ctx context.Context, userID string, oldPassword, newPassword string) error
-	// AdminResetPassword replaces a user's password without requiring the old
-	// password and revokes all of that user's existing sessions. Callers must
-	// enforce the system-admin and cannot-reset-self guards before invoking it.
-	AdminResetPassword(ctx context.Context, userID string, newPassword string) error
-	// ValidatePassword validates user password
 	ValidatePassword(ctx context.Context, userID string, password string) error
 	// GenerateTokens generates access and refresh tokens for user
 	GenerateTokens(ctx context.Context, user *types.User) (accessToken, refreshToken string, err error)
-	// BuildLoginMemberships projects the user's tenant memberships into
-	// the login-response shape. activeTenant is reused (without an extra
-	// lookup) for the matching row's TenantName. The slice is guaranteed
-	// non-nil so callers can serialise it as an empty JSON array when the
-	// membership table is unavailable.
-	BuildLoginMemberships(ctx context.Context, user *types.User, activeTenant *types.Tenant) []types.Membership
-	// ValidateToken checks the access token and returns its team identity.
 	ValidateToken(ctx context.Context, token string) (*types.User, uint64, error)
 	// RefreshToken refreshes access token using refresh token
 	RefreshToken(ctx context.Context, refreshToken string) (accessToken, newRefreshToken string, err error)
@@ -59,22 +46,14 @@ type UserService interface {
 	GetCurrentUser(ctx context.Context) (*types.User, error)
 	// SearchUsers searches users by username or email
 	SearchUsers(ctx context.Context, query string, limit int) ([]*types.User, error)
-	// ListSystemAdmins lists users with IsSystemAdmin=true.
-	// Returns the page of admins plus the total count (for pagination UI);
-	// callers pass offset/limit to page through results. Used by the
-	// /api/v1/system/admin/list endpoint, gated to SystemAdmin callers.
-	ListSystemAdmins(ctx context.Context, offset, limit int) ([]*types.User, int64, error)
-	// RevokeSystemAdmin removes system-admin privileges with the
-	// last-admin/self-revoke checks performed atomically.
-	RevokeSystemAdmin(ctx context.Context, userID, actorID string) (*types.User, error)
 }
 
 // UserRepository defines the user repository interface
 type UserRepository interface {
 	// CreateUser creates a user
 	CreateUser(ctx context.Context, user *types.User) error
-	RegisterTeamUser(ctx context.Context, user *types.User, invitationToken string) error
-	HasTeamUsers(ctx context.Context) (bool, error)
+	RegisterSingleUser(ctx context.Context, user *types.User) error
+	HasUsers(ctx context.Context) (bool, error)
 	// GetUserByID gets a user by ID
 	GetUserByID(ctx context.Context, id string) (*types.User, error)
 	// GetUsersByIDs batch-fetches users by id, returning a map keyed by
@@ -84,7 +63,7 @@ type UserRepository interface {
 	GetUserByEmail(ctx context.Context, email string) (*types.User, error)
 	// GetUserByUsername gets a user by username
 	GetUserByUsername(ctx context.Context, username string) (*types.User, error)
-	// GetUserByTenantID gets the first user (owner) of a tenant
+	// GetUserByTenantID gets the sole user of the personal workspace
 	GetUserByTenantID(ctx context.Context, tenantID uint64) (*types.User, error)
 	// UpdateUser updates a user
 	UpdateUser(ctx context.Context, user *types.User) error
@@ -92,15 +71,6 @@ type UserRepository interface {
 	DeleteUser(ctx context.Context, id string) error
 	// ListUsers lists users with pagination
 	ListUsers(ctx context.Context, offset, limit int) ([]*types.User, error)
-	// ListSystemAdmins lists users where is_system_admin = true.
-	// Walks the partial-friendly idx_users_is_system_admin index. Returns
-	// the slice plus the total count for pagination metadata. Used by
-	// the system-admin management endpoint.
-	ListSystemAdmins(ctx context.Context, offset, limit int) ([]*types.User, int64, error)
-	// RevokeSystemAdmin removes system-admin privileges with the
-	// last-admin/self-revoke checks performed atomically.
-	RevokeSystemAdmin(ctx context.Context, userID, actorID string) (*types.User, error)
-	// SearchUsers searches users by username or email
 	SearchUsers(ctx context.Context, query string, limit int) ([]*types.User, error)
 }
 

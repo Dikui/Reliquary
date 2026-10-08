@@ -56,9 +56,6 @@ func NewUserEnvResolver(
 func (r *userEnvResolver) ResolveEnv(
 	ctx context.Context, skillName string,
 ) (map[string]string, []string, error) {
-	// The identity is the Principal from the context and nothing else. A user
-	// id would give every IM caller in a workspace the same synthetic account
-	// and therefore the same values.
 	principal, hasPrincipal := types.PrincipalFromContext(ctx)
 	canReadMine := hasPrincipal && r.userEnvs != nil
 

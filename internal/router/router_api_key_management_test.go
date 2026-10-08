@@ -1,97 +1,32 @@
 package router
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"github.com/gin-gonic/gin"
-	"reliquary/internal/middleware"
-	"reliquary/internal/types"
+	"github.com/stretchr/testify/require"
 )
 
-// TestAPIKeyGateDeniesTenantKeyManagementPaths guards the default-deny
-// contract: tenant lifecycle, key management and API-principal config routes
-// are registered without apiKeyRoute/apiKeyGroup, so even a full-access API
-// key must receive 403 from the gate before JWT-only handlers run.
-func TestAPIKeyGateDeniesTenantKeyManagementPaths(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	gate := middleware.NewAPIKeyRouteAuthorizer()
-	engine := gin.New()
-	engine.Use(func(c *gin.Context) {
-		scope := types.TenantAPIKeyScope{FullAccess: true}
-		c.Request = c.Request.WithContext(types.WithTenantAPIKeyScope(c.Request.Context(), scope))
-		c.Next()
-	})
-	engine.Use(gate.Middleware())
-
-	v1 := engine.Group("/api/v1")
-	tenantByID := v1.Group("/tenants/:id")
-	{
-		tenantByID.GET("/api-keys", reachedOK)
-		tenantByID.POST("/api-keys", reachedOK)
-		tenantByID.PUT("/api-keys/:key_id", reachedOK)
-		tenantByID.DELETE("/api-keys/:key_id", reachedOK)
-		tenantByID.GET("/api-principal-config", reachedOK)
-		tenantByID.PUT("/api-principal-config", reachedOK)
-		tenantByID.POST("/api-principal-test-token", reachedOK)
+func TestPersonalAPIKeyCanManageAPIKeys(t *testing.T) {
+	f := newPersonalAuthFixture(t)
+	create := personalRequest(t, f.router, http.MethodPost, "/api/v1/tenants/1/api-keys", `{"name":"managed through key"}`, f.key, true)
+	require.Equal(t, http.StatusCreated, create.Code, create.Body.String())
+	var response struct {
+		Data struct {
+			ID    uint64 `json:"id"`
+			Token string `json:"token"`
+		} `json:"data"`
 	}
-	tenantRoutes := v1.Group("/tenants")
-	{
-		tenantRoutes.POST("", reachedOK)
-	}
-
-	cases := []struct {
-		method string
-		path   string
-	}{
-		{http.MethodGet, "/api/v1/tenants/42/api-keys"},
-		{http.MethodPost, "/api/v1/tenants/42/api-keys"},
-		{http.MethodPut, "/api/v1/tenants/42/api-keys/7"},
-		{http.MethodDelete, "/api/v1/tenants/42/api-keys/7"},
-		{http.MethodGet, "/api/v1/tenants/42/api-principal-config"},
-		{http.MethodPut, "/api/v1/tenants/42/api-principal-config"},
-		{http.MethodPost, "/api/v1/tenants/42/api-principal-test-token"},
-		{http.MethodPost, "/api/v1/tenants"},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
-			w := httptest.NewRecorder()
-			engine.ServeHTTP(w, httptest.NewRequest(tc.method, tc.path, nil))
-			if w.Code != http.StatusForbidden {
-				t.Fatalf("status = %d, want 403 body=%s", w.Code, w.Body.String())
-			}
-		})
-	}
-}
-
-// TestAPIKeyGateAllowsDeclaredTenantKVRead confirms the gate still permits
-// routes that are explicitly declared for full-access API keys (sanity check).
-func TestAPIKeyGateAllowsDeclaredTenantKVRead(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	g := &rbacGuards{}
-	v1 := gin.New().Group("/api/v1")
-	g.apiKeyRoute(v1.Group("/tenants"), http.MethodGet, "/kv/:key", apiKeyFullAccess(), reachedOK)
-
-	engine := gin.New()
-	engine.Use(func(c *gin.Context) {
-		scope := types.TenantAPIKeyScope{FullAccess: true}
-		c.Request = c.Request.WithContext(types.WithTenantAPIKeyScope(c.Request.Context(), scope))
-		c.Next()
-	})
-	engine.Use(g.apiKeyAuthorizer.Middleware())
-	engine.GET("/api/v1/tenants/kv/:key", reachedOK)
-
-	w := httptest.NewRecorder()
-	engine.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/tenants/kv/my-key", nil))
-	if w.Code != http.StatusOK {
-		t.Fatalf("declared owner route status = %d, want 200 body=%s", w.Code, w.Body.String())
-	}
-}
-
-func reachedOK(c *gin.Context) {
-	c.Status(http.StatusOK)
+	require.NoError(t, json.Unmarshal(create.Body.Bytes(), &response))
+	require.NotEmpty(t, response.Data.Token)
+	path := fmt.Sprintf("/api/v1/tenants/1/api-keys/%d", response.Data.ID)
+	updated := personalRequest(t, f.router, http.MethodPut, path, `{"name":"renamed"}`, f.key, true)
+	require.Equal(t, http.StatusOK, updated.Code, updated.Body.String())
+	require.Contains(t, updated.Body.String(), "renamed")
+	removed := personalRequest(t, f.router, http.MethodDelete, path, "", f.key, true)
+	require.Equal(t, http.StatusOK, removed.Code, removed.Body.String())
+	revoked := personalRequest(t, f.router, http.MethodGet, "/api/v1/knowledge-domains", "", response.Data.Token, true)
+	require.Equal(t, http.StatusUnauthorized, revoked.Code, revoked.Body.String())
 }

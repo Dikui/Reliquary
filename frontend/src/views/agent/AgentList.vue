@@ -7,7 +7,7 @@
         <div class="header-title">
           <div class="title-row">
             <h2>{{ $t('agent.title') }}</h2>
-            <t-tooltip v-if="authStore.hasRole('contributor')" :content="$t('agent.createAgent')" placement="bottom">
+            <t-tooltip v-if="authStore.isLoggedIn" :content="$t('agent.createAgent')" placement="bottom">
               <t-button variant="text" theme="default" size="small" class="header-action-btn"
                 data-guide="agent-list-create" @click="handleCreateAgent">
                 <template #icon>
@@ -107,7 +107,7 @@
                   <span class="card-title" :title="agent.name">{{ agent.name }}</span>
                 </div>
                 <t-popup
-                  v-if="(canManageAgent(agent) || authStore.hasRole('contributor') || authStore.hasRole('admin'))"
+                  v-if="(canManageAgent(agent) || authStore.isLoggedIn || authStore.isLoggedIn)"
                   :visible="openMoreAgentId === agent.id" trigger="hover" overlayClassName="card-more-popup"
                   destroy-on-close placement="bottom-right" @visible-change="onVisibleChange"
                   @update:visible="(v: boolean) => { if (!v) openMoreAgentId = null }">
@@ -119,7 +119,7 @@
                     <div class="popup-menu">
                       <div v-if="canEditAgent(agent)" class="popup-menu-item" @click="handleEdit(agent)"><t-icon
                           class="menu-icon" name="edit" /><span>{{ $t('common.edit') }}</span></div>
-                      <div v-if="authStore.hasRole('contributor')" class="popup-menu-item" @click="handleCopy(agent)">
+                      <div v-if="authStore.isLoggedIn" class="popup-menu-item" @click="handleCopy(agent)">
                         <t-icon class="menu-icon" name="file-copy" /><span>{{ $t('common.copy') }}</span>
                       </div>
 
@@ -201,7 +201,7 @@
           <img class="empty-img" src="@/assets/img/upload.svg" alt="">
           <span class="empty-txt">{{ $t('agent.empty.title') }}</span>
           <span class="empty-desc">{{ $t('agent.empty.description') }}</span>
-          <t-button v-if="authStore.hasRole('contributor')" class="agent-create-btn empty-state-btn"
+          <t-button v-if="authStore.isLoggedIn" class="agent-create-btn empty-state-btn"
             data-guide="agent-list-create" @click="handleCreateAgent">
             <template #icon>
               <span class="btn-icon-wrapper">
@@ -350,7 +350,7 @@ const openMoreAgentId = ref<string | null>(null)
 
 const showAgentListEmpty = computed(() => {
   if (loading.value) return false
-  if (!authStore.hasRole('contributor')) return false
+  if (!authStore.isLoggedIn) return false
   if (spaceSelection.value === 'all' && filteredAgents.value.length === 0) return true
   return false
 })
@@ -381,14 +381,7 @@ const checkAndOpenEditModal = async () => {
   const generation = ++editOpenGeneration
   const editId = route.query.edit as string
   const section = route.query.section as string
-  if (editId && (section === 'im' || section === 'integrations' || section === 'integration-im')) {
-    const tab = 'im'
-    router.replace({
-      path: '/platform/settings',
-      query: { section: integrationSectionKey(tab), agentId: editId },
-    })
-    return
-  }
+
   if (editId) {
     const agent = resolveAgentForEdit(editId)
     // A route change can remove a creator filter before the corresponding
@@ -491,8 +484,8 @@ const handleEdit = (agent: AgentWithUI) => {
   editorInitialHighlightField.value = ''
   editorVisible.value = true
 }
-function canEditAgent(_agent: AgentWithUI): boolean { return authStore.hasRole('contributor') }
-function canManageAgent(agent: AgentWithUI): boolean { return !agent.is_builtin && authStore.hasRole('contributor') }
+function canEditAgent(_agent: AgentWithUI): boolean { return authStore.isLoggedIn }
+function canManageAgent(agent: AgentWithUI): boolean { return !agent.is_builtin && authStore.isLoggedIn }
 
 
 // isMyAgent 仅用于卡片来源徽章在「我创建」与「同空间其他成员创建」之间切换。

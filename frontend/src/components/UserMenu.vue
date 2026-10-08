@@ -47,11 +47,7 @@
             <span class="dropdown-tenant-panel-name" :title="activeTenantName || userName">
               {{ activeTenantName || userName }}
             </span>
-            <div v-if="currentRoleLabel" class="dropdown-tenant-panel-role">
-              <t-icon v-if="currentRoleIcon" :name="currentRoleIcon" size="12px"
-                class="dropdown-tenant-panel-role-icon" />
-              <span>{{ currentRoleLabel }}</span>
-            </div>
+
           </div>
 
         </div>
@@ -64,12 +60,6 @@
         <div class="menu-item" @click="handleQuickNav('tenant')">
           <t-icon name="user-circle" class="menu-icon" />
           <span>{{ $t('settings.workspaceSettings') }}</span>
-        </div>
-        <!-- “管理”类快捷入口只对真正具备写权限的人展示。只读名册和模型列表
-             仍可从「全部设置」进入，避免 viewer 看到名不副实的管理入口。 -->
-        <div v-if="canManageMembers" class="menu-item" @click="handleQuickNav('members')">
-          <t-icon name="usergroup" class="menu-icon" />
-          <span>{{ $t('tenantMember.title') }}</span>
         </div>
         <div v-if="canManageModels" class="menu-item" @click="handleQuickNav('models')">
           <t-icon name="control-platform" class="menu-icon" />
@@ -84,13 +74,8 @@
           <t-icon name="setting" class="menu-icon" />
           <span>{{ $t('general.allSettings') }}</span>
         </div>
-        <!--
-          System administration entry — visible only to users with the
-          platform-wide is_system_admin flag. Hidden for everyone else,
-          including tenant Owners. Real authorisation lives server-side
-          (RequireSystemAdmin middleware); this is UI gating only.
-        -->
-        <div v-if="authStore.isSystemAdmin" class="menu-item" @click="handleSystemAdmin">
+
+        <div v-if="authStore.isLoggedIn" class="menu-item" @click="handleSystemAdmin">
           <t-icon name="server" class="menu-icon" />
           <span>{{ $t('settings.navGroups.systemAdministration') }}</span>
         </div>
@@ -134,10 +119,8 @@ import { useAuthStore } from '@/stores/auth'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { getCurrentUser, logout as logoutApi, userInfoFromApi } from '@/api/auth'
 import { useI18n } from 'vue-i18n'
-import { useRoleLabel } from '@/composables/useRoleLabel'
 import { getRootZoom, rectToCssPx, cssViewportSize } from '@/utils/zoom'
 import { openNewUserGuide } from '@/config/contextualGuides'
-import { SETTINGS_MANAGEMENT_SHORTCUT_MIN_ROLE } from '@/config/settingsAccess'
 import { SKILL_ICON } from '@/types/mention'
 
 const { t } = useI18n()
@@ -147,32 +130,15 @@ const uiStore = useUIStore()
 const props = defineProps<{ collapsed?: boolean }>()
 const sidebarCollapsed = computed(() => props.collapsed ?? uiStore.sidebarCollapsed)
 const authStore = useAuthStore()
-const { formatRole, roleIcon } = useRoleLabel()
 
-// 当前团队名称与成员角色。
 const activeTenantName = computed(() => {
   return (
     authStore.tenant?.name ||
     ''
   )
 })
-const currentRoleLabel = computed(() => formatRole(authStore.currentTenantRole))
-const currentRoleIcon = computed(() => roleIcon(authStore.currentTenantRole))
-
-
-// 快捷入口使用“管理能力”而不是页面最低可见角色：成员名册和模型列表允许
-// viewer 浏览，但头像菜单里的“管理”入口只服务实际能执行管理操作的角色。
-const canManageMembers = computed(() =>
-  authStore.hasRole(SETTINGS_MANAGEMENT_SHORTCUT_MIN_ROLE.members),
-)
-const canManageModels = computed(() =>
-  authStore.isSystemAdmin ||
-  authStore.hasRole(SETTINGS_MANAGEMENT_SHORTCUT_MIN_ROLE.models),
-)
-const canManageSkills = computed(() =>
-  authStore.isSystemAdmin ||
-  authStore.hasRole(SETTINGS_MANAGEMENT_SHORTCUT_MIN_ROLE.skills),
-)
+const canManageModels = computed(() => authStore.isLoggedIn)
+const canManageSkills = computed(() => authStore.isLoggedIn)
 
 const menuRef = ref<HTMLElement>()
 const menuVisible = ref(false)
@@ -214,7 +180,6 @@ const handleSettings = () => {
 
 // Open the platform administration group inside the standard Settings
 // modal. Global settings is the group's landing page; task queues, platform
-// API keys and the audit log remain available beside it in the settings nav.
 const handleSystemAdmin = () => {
   menuVisible.value = false
   uiStore.openSettings('system-global')
@@ -275,12 +240,7 @@ const loadUserInfo = async () => {
         email: user.email || 'user@example.com',
         avatar: user.avatar || ''
       }
-      // is_system_admin 等所有字段。MUST 走 userInfoFromApi 工厂——历史
-      // 上这里手写字段白名单，每加一个 user 字段都要在 5 个 setUser 调用
-      // 点同步，is_system_admin 就因为漏了这一处导致进入 platform 后
-      // user.value 的字段被 mount 时的 loadUserInfo 静默覆盖回 undefined
-      // （同时污染 localStorage），系统管理入口在 hover 工作空间触发
-      // refreshFromAuthMe 后才出现。新增字段请只改 userInfoFromApi。
+      // Keep stored user fields consistent with the authentication response.
       authStore.setUser(userInfoFromApi(user))
       if (response.data.tenant) {
         authStore.setTenant({
@@ -293,10 +253,7 @@ const loadUserInfo = async () => {
       } else {
         authStore.setTenant(null)
       }
-      const membershipsSync = response.data.memberships
-      if (Array.isArray(membershipsSync)) {
-        authStore.setMemberships(membershipsSync)
-      }
+
     }
   } catch (error) {
     console.error('Failed to load user info:', error)

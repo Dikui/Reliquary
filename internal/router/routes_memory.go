@@ -6,19 +6,11 @@ import (
 	"reliquary/internal/handler"
 )
 
-// RegisterMemoryRoutes registers the personal long-term memory endpoints.
-//
-// There is no admin surface here and no subject parameter anywhere in the
-// paths: the memory space is derived from the caller's principal, so these
-// routes can only ever read or write the caller's own memories. That is why
-// Viewer is the only role gate they need. An API key must be full-access,
-// since a memory space belongs to a person and a scoped integration key has
-// no business inheriting one.
-func RegisterMemoryRoutes(r *gin.RouterGroup, memoryHandler *handler.MemoryHandler, g *rbacGuards) {
+func RegisterMemoryRoutes(r *gin.RouterGroup, memoryHandler *handler.MemoryHandler, g *accessGuards) {
 	if memoryHandler == nil {
 		return
 	}
-	memoryGroup := g.apiKeyGroup(r.Group("/memory", g.Viewer()), apiKeyFullAccess())
+	memoryGroup := r.Group("/memory")
 	{
 		memoryGroup.GET("/settings", memoryHandler.GetSettings)
 		memoryGroup.PUT("/settings", memoryHandler.UpdateSettings)

@@ -286,67 +286,6 @@ export function getAgentTypePresets() {
   return get<{ data: AgentTypePreset[] }>('/api/v1/agents/type-presets');
 }
 
-// ===== IM渠道 =====
-
-export interface IMChannel {
-  id: string;
-  tenant_id?: number;
-  agent_id: string;
-  // 'lark' is Feishu's international edition; it shares Feishu's credentials and modes.
-  platform: 'feishu';
-  name: string;
-  enabled: boolean;
-  mode: 'webhook' | 'websocket';
-  output_mode: 'stream' | 'full';
-  session_mode?: 'user' | 'thread';
-  knowledge_base_id?: string;
-  credentials: Record<string, any>;
-  created_at?: string;
-  updated_at?: string;
-}
-
-export function listIMChannels(agentId: string) {
-  return get<{ data: IMChannel[] }>(`/api/v1/agents/${agentId}/im-channels`);
-}
-
-// Tenant-wide overview row. Credentials are intentionally omitted — use
-// listIMChannels(agentId) when you need to edit a specific channel.
-export interface IMChannelOverview {
-  id: string;
-  tenant_id: number;
-  agent_id: string;
-  agent_name: string; // localized built-in name when the agent is built-in
-  platform: IMChannel['platform'];
-  name: string;
-  enabled: boolean;
-  mode: IMChannel['mode'];
-  output_mode: IMChannel['output_mode'];
-  session_mode?: IMChannel['session_mode'];
-  bot_identity: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export function listAllIMChannels() {
-  return get<{ data: IMChannelOverview[] }>('/api/v1/im-channels');
-}
-
-export function createIMChannel(agentId: string, data: Partial<IMChannel>) {
-  return post<{ data: IMChannel }>(`/api/v1/agents/${agentId}/im-channels`, data);
-}
-
-export function updateIMChannel(id: string, data: Partial<IMChannel>) {
-  return put<{ data: IMChannel }>(`/api/v1/im-channels/${id}`, data);
-}
-
-export function deleteIMChannel(id: string) {
-  return del<{ success: boolean }>(`/api/v1/im-channels/${id}`);
-}
-
-export function toggleIMChannel(id: string) {
-  return post<{ data: IMChannel }>(`/api/v1/im-channels/${id}/toggle`);
-}
-
 // ===== 推荐问题 =====
 
 // 推荐问题

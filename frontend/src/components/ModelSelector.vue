@@ -43,7 +43,7 @@
           >{{ formatContextWindow(model.parameters?.context_window) }}</span>
         </div>
       </t-option>
-      
+
       <!-- 添加模型选项（在底部） -->
       <t-option
         v-if="!disabled"
@@ -186,17 +186,17 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  
+
   .model-icon {
     font-size: 14px;
     color: var(--td-brand-color);
   }
-  
+
   .add-icon {
     font-size: 14px;
     color: var(--td-brand-color);
   }
-  
+
   .model-name {
     flex: 0 1 auto;
     min-width: 0;
@@ -219,7 +219,7 @@ onMounted(() => {
   .model-ctx {
     margin-left: auto;
   }
-  
+
   &.add {
     .model-name {
       color: var(--td-brand-color);

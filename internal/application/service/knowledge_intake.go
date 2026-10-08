@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/logger"
-	"runtime"
 	"strings"
 	"time"
 
@@ -35,23 +34,6 @@ func missingSourceValue(value string) bool {
 	return false
 }
 
-func validGrokPostURL(raw, author string) bool {
-	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "https" || u.User != nil || u.Port() != "" || strings.TrimRight(strings.ToLower(u.Hostname()), ".") != "x.com" {
-		return false
-	}
-	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-	if len(parts) != 3 || !strings.EqualFold("@"+parts[0], strings.TrimSpace(author)) || parts[1] != "status" || parts[2] == "" {
-		return false
-	}
-	for _, digit := range parts[2] {
-		if digit < '0' || digit > '9' {
-			return false
-		}
-	}
-	return true
-}
-
 func invalidIntakeEvidence(body string, source types.SourceInfo, knowledge *types.Knowledge) bool {
 	if strings.TrimSpace(body) == "" ||
 		(missingSourceValue(source.Author) && missingSourceValue(source.Publisher)) ||
@@ -60,16 +42,7 @@ func invalidIntakeEvidence(body string, source types.SourceInfo, knowledge *type
 		missingSourceValue(source.PublishedAt) {
 		return true
 	}
-	if knowledge.Channel != types.ConnectorTypeGrokX {
-		return blockedIntakeURL(source.OriginalURL)
-	}
-	// Manual requests can set channel; only the data-source path adds datasource_id.
-	var origin struct {
-		DataSourceID string `json:"datasource_id"`
-	}
-	return knowledge.Type != types.KnowledgeTypeManual ||
-		json.Unmarshal(knowledge.Metadata, &origin) != nil || origin.DataSourceID == "" ||
-		!validGrokPostURL(source.OriginalURL, source.Author)
+	return blockedIntakeURL(source.OriginalURL)
 }
 
 func intakeReviewPrompt(policy string) string {
@@ -86,10 +59,7 @@ func intakeReviewPromptForMessage(rules *KnowledgeStrategyRules, channel string)
 		filter = rules.Filter
 	}
 	prompt := intakeReviewPrompt(filter)
-	if channel == types.ConnectorTypeGrokX {
-		prompt += "\nFor Grok X Search, treat the returned post text, author, timestamp, URL and media list as the collected original; do not require an independent comparison with X or reject solely because the URL is on x.com."
-	}
-	if rules != nil && (channel == types.ChannelRSS || channel == types.ConnectorTypeGrokX) && rules.Collection != "" {
+	if rules != nil && (channel == types.ChannelRSS) && rules.Collection != "" {
 		prompt += "\nDaily source collection policy (refine selection only; all source and completeness checks remain mandatory):\n" + rules.Collection
 	}
 	return prompt
@@ -140,7 +110,6 @@ func (s *knowledgeService) reviewIntake(ctx context.Context, kb *types.Knowledge
 		return false, nil
 	}
 	ctx, calls := types.WithModelCallCollector(ctx)
-	started := time.Now()
 	parent := s.tracker().LookupStage(ctx, knowledge.ID, s.tracker().LatestAttempt(ctx, knowledge.ID), types.StageDocReader)
 	span := s.tracker().BeginSubSpan(ctx, parent, "intake.review_and_tag", types.SpanKindGeneration, nil)
 	defer func() {
@@ -150,21 +119,12 @@ func (s *knowledgeService) reviewIntake(ctx context.Context, kb *types.Knowledge
 			s.tracker().EndSpan(ctx, span, types.JSONMap{"model_calls": calls.Snapshot(), "model_tier": types.ModelTierLight})
 		}
 	}()
-	var usage types.TokenUsage
-	resolvedModelID := ""
 	defer func() {
-		var memory runtime.MemStats
-		runtime.ReadMemStats(&memory)
-		outcome := types.AuditOutcomeSuccess
-		if reviewErr != nil {
-			outcome = types.AuditOutcomeFailed
-		} else if rejected {
-			outcome = types.AuditOutcomeDenied
+		if rejected && reviewErr == nil {
 			s.tracker().FinalizeAttempt(ctx, knowledge.ID, s.tracker().LatestAttempt(ctx, knowledge.ID), "done", types.JSONMap{"intake_decision": "rejected"}, "", "")
 		}
-		recordKBActivity(ctx, s.audit, knowledge.TenantID, kb.ID, types.AuditAction("knowledge.intake_review"), "knowledge", knowledge.ID, outcome,
-			map[string]any{"title": knowledge.Title, "body_bytes": len(body), "file_bytes": knowledge.FileSize, "duration_ms": time.Since(started).Milliseconds(), "process_heap_bytes": memory.Alloc, "model_id": resolvedModelID, "model_tier": types.ModelTierLight, "model_calls": calls.Snapshot(), "model_usage": usage, "fee_source": "unavailable"})
 	}()
+
 	var source struct {
 		RejectReason string `json:"intake_reject_reason"`
 	}
@@ -186,7 +146,6 @@ func (s *knowledgeService) reviewIntake(ctx context.Context, kb *types.Knowledge
 	if err != nil {
 		return false, err
 	}
-	resolvedModelID = model.GetModelID()
 	reviewInput, err := json.Marshal(struct {
 		SourceInfo types.SourceInfo `json:"source_info"`
 		Body       string           `json:"body"`
@@ -208,7 +167,6 @@ func (s *knowledgeService) reviewIntake(ctx context.Context, kb *types.Knowledge
 		}
 		return false, err
 	}
-	usage = response.Usage
 	var decision struct {
 		messageTagResponse
 		Approved *bool  `json:"approved"`
@@ -251,8 +209,8 @@ func (s *knowledgeService) ReviewKnowledgeIntake(ctx context.Context, id, action
 		return nil, err
 	}
 	userID, _ := ctx.Value(types.UserIDContextKey).(string)
-	if userID == "" || !types.TenantRoleFromContext(ctx).HasPermission(types.TenantRoleContributor) {
-		return nil, werrors.NewForbiddenError("a team editor is required to review intake")
+	if userID == "" || !types.IsAuthenticatedFromContext(ctx) {
+		return nil, werrors.NewForbiddenError("an authenticated user is required to review intake")
 	}
 	intake, err := knowledge.IntakeMetadata()
 	if err != nil || intake == nil || intake.Decision != "rejected" {
@@ -273,7 +231,6 @@ func (s *knowledgeService) ReviewKnowledgeIntake(ctx context.Context, id, action
 		if err := s.repo.HardDeleteKnowledge(ctx, tenantID, id); err != nil {
 			return nil, err
 		}
-		recordKBActivity(ctx, s.audit, tenantID, kb.ID, types.AuditActionKnowledgeDeleted, "knowledge", id, types.AuditOutcomeSuccess, map[string]any{"title": knowledge.Title, "reason": "intake discarded"})
 		return knowledge, nil
 	}
 	if action != "retry" {
@@ -447,5 +404,4 @@ func (s *knowledgeService) failIntake(ctx context.Context, k *types.Knowledge) {
 	_ = k.SetIntakeMetadata(intake)
 	_ = s.repo.UpdateKnowledge(ctx, k)
 	s.tracker().FinalizeAttempt(ctx, k.ID, s.tracker().LatestAttempt(ctx, k.ID), "failed", nil, "intake_processing_failed", k.ErrorMessage)
-	recordKBActivity(ctx, s.audit, k.TenantID, k.KnowledgeBaseID, types.AuditAction("knowledge.intake_review"), "knowledge", k.ID, types.AuditOutcomeFailed, map[string]any{"title": k.Title, "reason": k.ErrorMessage})
 }

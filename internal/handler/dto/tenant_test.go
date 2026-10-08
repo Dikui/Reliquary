@@ -9,25 +9,9 @@ import (
 	"reliquary/internal/types"
 )
 
-func TestTenantResponse_ViewerOmitsSecrets(t *testing.T) {
+func TestTenantResponse_UserOmitsLegacyTenantAPIKey(t *testing.T) {
 	tenant := sampleSecretTenant()
-	body, err := json.Marshal(NewTenantResponse(viewerContext(), tenant))
-	require.NoError(t, err)
-	s := string(body)
-	assert.NotContains(t, s, "tenant-api-key-123")
-	assert.NotContains(t, s, "legacy-search-secret-999")
-	assert.NotContains(t, s, "wk-app-secret-def")
-	assert.NotContains(t, s, "parser-secret-123")
-	assert.NotContains(t, s, "minio-secret-789")
-	assert.NotContains(t, s, "web_search_config")
-	assert.NotContains(t, s, "parser_engine_config")
-	assert.NotContains(t, s, "storage_engine_config")
-	assert.NotContains(t, s, "credentials")
-}
-
-func TestTenantResponse_OwnerOmitsLegacyTenantAPIKey(t *testing.T) {
-	tenant := sampleSecretTenant()
-	body, err := json.Marshal(NewTenantResponse(ownerContext(), tenant))
+	body, err := json.Marshal(NewTenantResponse(userContext(), tenant))
 	require.NoError(t, err)
 	s := string(body)
 	assert.NotContains(t, s, `"api_key"`)
@@ -36,9 +20,9 @@ func TestTenantResponse_OwnerOmitsLegacyTenantAPIKey(t *testing.T) {
 	assert.Contains(t, s, "web_search_config")
 }
 
-func TestTenantResponse_AdminGetsRedactedIntegrationConfigs(t *testing.T) {
+func TestTenantResponse_UserGetsRedactedIntegrationConfigs(t *testing.T) {
 	tenant := sampleSecretTenant()
-	resp := NewTenantResponse(adminContext(), tenant)
+	resp := NewTenantResponse(userContext(), tenant)
 	require.NotNil(t, resp.WebSearchConfig)
 	assert.Equal(t, types.RedactedSecretPlaceholder, resp.WebSearchConfig.ProxyURL)
 	assert.Empty(t, resp.WebSearchConfig.APIKey)
@@ -50,15 +34,6 @@ func TestTenantResponse_AdminGetsRedactedIntegrationConfigs(t *testing.T) {
 	require.NotNil(t, resp.Credentials.WeKnoraCloud)
 	assert.Equal(t, types.RedactedSecretPlaceholder, resp.Credentials.WeKnoraCloud.AppSecret)
 	assert.Equal(t, "wk-app-secret-def", tenant.Credentials.WeKnoraCloud.AppSecret)
-}
-
-func TestTenantResponsesCrossTenant_RedactsEvenForOwnerContext(t *testing.T) {
-	tenant := sampleSecretTenant()
-	body, err := json.Marshal(NewTenantResponsesCrossTenant([]*types.Tenant{tenant}))
-	require.NoError(t, err)
-	s := string(body)
-	assert.NotContains(t, s, "tenant-api-key-123")
-	assert.NotContains(t, s, "parser-secret-123")
 }
 
 func sampleSecretTenant() *types.Tenant {

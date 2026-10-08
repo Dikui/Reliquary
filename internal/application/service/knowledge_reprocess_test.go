@@ -64,8 +64,8 @@ func TestKnowledgeReprocessKeepsManualChoicesAndScope(t *testing.T) {
 		Rules: types.JSON(`{"tags":"Prefer specific object names"}`), PreviousRules: types.JSON(`{}`), SampleResults: types.JSON(`[]`), Reason: "reviewed", CreatedBy: "owner"}).Error)
 	repo := repository.NewKnowledgeRepository(db)
 	kb := &types.KnowledgeBase{ID: "kb", TenantID: 1, CreatorID: "owner", SummaryModelID: "model"}
-	svc := NewKnowledgeStrategyService(db, strategyKB{kb: kb}, reprocessKnowledge{repo: repo}, intakeModelService{chat: strategyChat{}}, repository.NewKnowledgeTagRepository(db), nil)
-	_, err := svc.Reprocess(anomalyContext("reviewer"), "kb", []string{"selected"}, "")
+	svc := NewKnowledgeStrategyService(db, strategyKB{kb: kb}, reprocessKnowledge{repo: repo}, intakeModelService{chat: strategyChat{}}, repository.NewKnowledgeTagRepository(db))
+	_, err := svc.Reprocess(anomalyContext(""), "kb", []string{"selected"}, "")
 	require.Error(t, err)
 	_, err = svc.Reprocess(anomalyContext("owner"), "kb", []string{"selected", "missing"}, "")
 	require.Error(t, err)
@@ -100,7 +100,7 @@ func TestKnowledgeReprocessKeepsManualChoicesAndScope(t *testing.T) {
 	require.Equal(t, 1, result.Processed)
 
 	failedService := NewKnowledgeStrategyService(db, strategyKB{kb: kb}, reprocessKnowledge{repo: repo, badID: "outside"},
-		intakeModelService{chat: strategyChat{}}, repository.NewKnowledgeTagRepository(db), nil)
+		intakeModelService{chat: strategyChat{}}, repository.NewKnowledgeTagRepository(db))
 	failed, err := failedService.Reprocess(anomalyContext("owner"), "kb", []string{"outside"}, "")
 	require.NoError(t, err)
 	require.Equal(t, 1, failed.Failed)

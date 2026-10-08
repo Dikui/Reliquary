@@ -139,14 +139,14 @@ func TestChangePassword_MapsSamePasswordDetail(t *testing.T) {
 	}
 }
 
-func TestChangePassword_MapsPasswordPolicyDetail(t *testing.T) {
+func TestChangePassword_MapsInvalidPasswordDetail(t *testing.T) {
 	h := &AuthHandler{
 		userService: &stubChangePasswordUserService{
 			getCurrentUser: func(_ context.Context) (*types.User, error) {
 				return &types.User{ID: "user-1", Email: "alice@example.com"}, nil
 			},
 			changePassword: func(_ context.Context, _, _, _ string) error {
-				return service.ErrComplexPasswordPolicy
+				return service.ErrInvalidPassword
 			},
 		},
 	}
@@ -167,7 +167,7 @@ func TestChangePassword_MapsPasswordPolicyDetail(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if resp.Error.Details != service.DetailPasswordPolicy {
-		t.Fatalf("details = %q, want %q", resp.Error.Details, service.DetailPasswordPolicy)
+	if resp.Error.Details != service.DetailInvalidPassword {
+		t.Fatalf("details = %q, want %q", resp.Error.Details, service.DetailInvalidPassword)
 	}
 }

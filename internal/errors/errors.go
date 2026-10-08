@@ -206,7 +206,7 @@ func NewTenantInactiveError() *AppError {
 func NewTenantCreationDisabledError() *AppError {
 	return &AppError{
 		Code:     ErrTenantCreationDisabled,
-		Message:  "self-service workspace creation is disabled; join a workspace by invitation",
+		Message:  "only the personal workspace is available",
 		HTTPCode: http.StatusForbidden,
 	}
 }

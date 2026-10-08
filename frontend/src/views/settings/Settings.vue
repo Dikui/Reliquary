@@ -78,20 +78,10 @@
             <!-- 右侧内容区域 -->
             <div class="settings-content">
               <div class="content-wrapper" :class="{
-                'content-wrapper--wide': currentSection === 'members' || currentSection === 'domains',
+                'content-wrapper--wide': currentSection === 'domains',
                 'content-wrapper--full': SYSTEM_ADMIN_SECTIONS.has(currentSection) || isIntegrationSection(currentSection),
               }">
-                <!-- 角色不允许访问当前 section（deep-link 进来或角色降级）时，优先于具体 section 渲染。
-                     正常导航走 navItems filter 不会到这里，但 watch(navItems) 的 fallback 会在角色降级
-                     的瞬间触发；这一段做兜底兼容旧 URL。 -->
-                <div v-if="!canSeeSection(currentSection)" class="section role-denied">
-                  <div class="role-denied-icon">
-                    <t-icon name="lock-on" size="48px" />
-                  </div>
-                  <div class="role-denied-title">{{ $t('settings.roleDenied.title') }}</div>
-                  <div class="role-denied-desc">{{ $t('settings.roleDenied.desc') }}</div>
-                </div>
-                <template v-else>
+                <template v-if="authStore.isLoggedIn">
                   <!-- 常规设置 -->
                   <div v-if="currentSection === 'general'" class="section">
                     <GeneralSettings />
@@ -174,9 +164,7 @@
 
 
 
-                  <div v-if="currentSection === 'system-audit-log'" class="section">
-                    <SystemAuditLog />
-                  </div>
+
 
                   <!-- 用户信息（账户基础信息：ID / 用户名 / 邮箱 / 注册时间）。
                      用户的基本信息不该跟 owner 权限绑定。 -->
@@ -187,11 +175,6 @@
                   <!-- 空间信息 -->
                   <div v-if="currentSection === 'tenant'" class="section">
                     <TenantInfo ref="tenantInfoView" />
-                  </div>
-
-                  <!-- 成员管理 (#1303 PR 3) -->
-                  <div v-if="currentSection === 'members'" class="section">
-                    <TenantMembers />
                   </div>
 
                   <div v-if="currentSection === 'domains'" class="section"><DomainSettings ref="domainSettingsView" /></div>
@@ -241,20 +224,16 @@ import ParserEngineSettings from './ParserEngineSettings.vue'
 import StorageEngineSettings from './StorageBackendSettings.vue'
 import SandboxSettings from './SandboxSettings.vue'
 import SkillSettings from './SkillSettings.vue'
-import TenantMembers from './TenantMembers.vue'
 import DomainSettings from './DomainSettings.vue'
 import SystemSettings from '@/views/system/SystemSettings.vue'
 import RuntimeQueues from '@/views/system/RuntimeQueues.vue'
-import SystemAuditLog from '@/views/system/SystemAuditLog.vue'
 import IntegrationSettingsSection from '@/views/integrations/IntegrationSettingsSection.vue'
 import {
   INTEGRATION_PREVIEW_ITEMS,
   INTEGRATION_TAB_CAPABILITY,
-  INTEGRATION_TAB_MIN_ROLE,
 } from '@/config/integrations'
 import {
-  SETTINGS_SECTION_MIN_ROLE,
-  SYSTEM_ADMIN_SETTINGS_SECTIONS,
+  SYSTEM_SETTINGS_SECTIONS,
 } from '@/config/settingsAccess'
 import { SETTINGS_SECTION_CAPABILITY } from '@/config/deploymentCapabilities'
 import { SKILL_ICON } from '@/types/mention'
@@ -297,22 +276,7 @@ type NavGroup = {
   items: NavItem[]
 }
 
-// 设置二级导航的最低可见角色来自 settingsAccess.ts，和
-// internal/router/router.go 的守卫矩阵对齐。
-// 以「页面里至少有 1 个有意义的写操作所要求的最低角色」为基准，把基础设
-// 施配置（models 写、ollama 下载、websearch 写、parser/storage/vector/mcp
-// CRUD、sandbox 连接、skills 安装、chat-history 配置）统一收到 admin；只读类（general / system info /
-// tenant-info / members 名册）保留 viewer 可见；最高敏感的 reset api
-// key 是 owner-only。改这张表前请在 router.go 里复核对应路由组。
-//
-// 特别说明：
-// - chathistory 页面唯一的「启用消息索引」开关 PUT /tenants/kv/chat-history-config
-//   后端走 g.Admin()。给 viewer/contributor 看到入口、点开开关、保存时
-//   403，体验很差，所以入口本身归 admin。
-// - models 列表 viewer 可读，页面内的「+ 添加模型 / 编辑 / 删除」按钮在
-//   ModelSettings.vue 里另用 hasRole('admin') 自己 gate，所以入口保留
-//   viewer 是合理的（contributor 也能浏览模型列表）。
-const SYSTEM_ADMIN_SECTIONS = SYSTEM_ADMIN_SETTINGS_SECTIONS
+const SYSTEM_ADMIN_SECTIONS = SYSTEM_SETTINGS_SECTIONS
 
 const normalizeSettingsSection = (section: string) => {
   return normalizeSettingsSectionFromQuery(section, route.query.tab as string | undefined)
@@ -337,24 +301,9 @@ const isSectionSupported = (key: string): boolean => {
   return deploymentCapabilities.isSupported(SETTINGS_SECTION_CAPABILITY[key])
 }
 
-const canSeeSection = (key: string): boolean => {
-  if (isIntegrationSection(key)) {
-    const min = INTEGRATION_TAB_MIN_ROLE[integrationTabFromSection(key)]
-    if (!min) return true
-    return authStore.hasRole(min)
-  }
-  if (SYSTEM_ADMIN_SECTIONS.has(key)) {
-    return authStore.isSystemAdmin
-  }
-  const min = SETTINGS_SECTION_MIN_ROLE[key] ?? 'viewer'
-  // 管理员看不到自己有权操作的入口（参考 TenantMembers.vue 的 canManage）。
-  return authStore.hasRole(min)
-}
+const canSeeSection = (_key: string): boolean => authStore.isLoggedIn
 
 const navItems = computed(() => {
-  // 一律走 SETTINGS_SECTION_MIN_ROLE 表，避免 ad-hoc isAdmin/isOwner 散落在多处。
-  // 服务端在每条路由上仍以 g.Viewer/Admin/Owner 为准，这里只决定 UI 是
-  // 否露入口；改动入口规则请同步更新 settingsAccess.ts 和对应后端路由。
   const integrationItems: NavItem[] = INTEGRATION_PREVIEW_ITEMS.map((item) => ({
     key: integrationSectionKey(item.key),
     icon: item.icon.type === 'icon' ? item.icon.name : 'integration',
@@ -377,21 +326,15 @@ const navItems = computed(() => {
     { key: 'system', icon: 'info-circle', label: t('settings.versionInfo') },
     { key: 'system-global', icon: 'server', label: t('settings.system') },
     { key: 'runtime-queues', icon: 'queue', label: t('settings.taskQueue') },
-    { key: 'system-audit-log', icon: 'history', label: t('system.globalSettings.audit.tabLabel') },
     { key: 'userprofile', icon: 'user', label: t('userProfile.title') },
     { key: 'mymemory', icon: 'bookmark', label: t('memorySettings.title') },
     { key: 'envvars', icon: 'key', label: t('envVarSettings.title') },
     { key: 'tenant', icon: 'user-circle', label: t('settings.tenantInfo') },
-    { key: 'members', icon: 'usergroup', label: t('tenantMember.title') },
     { key: 'domains', icon: 'layers', label: t('knowledgeDomains.title') },
     ...integrationItems,
   ]
-  // currentTenantRole 为空表示「membership 还没加载」—— 比起渲染整套
-  // viewer 入口然后角色一返回又消失，先卡住不渲染更稳，跟原先 members
   // 入口的策略一致。
-  if (!authStore.currentTenantRole) {
-    return [] as NavItem[]
-  }
+
   return all.filter((it) => canSeeSection(it.key) && isSectionSupported(it.key))
 })
 
@@ -411,7 +354,7 @@ const navGroups = computed<NavGroup[]>(() => {
     {
       key: 'workspace',
       label: t('settings.navGroups.workspace'),
-      items: pickItems(['tenant', 'members', 'domains', 'chathistory', 'memory']),
+      items: pickItems(['tenant', 'domains', 'chathistory', 'memory']),
     },
     {
       key: 'models_runtime',
@@ -422,7 +365,6 @@ const navGroups = computed<NavGroup[]>(() => {
       key: 'integrations',
       label: t('integrations.title'),
       items: pickItems([
-        integrationSectionKey('im'),
         integrationSectionKey('api'),
       ]),
     },
@@ -442,7 +384,7 @@ const navGroups = computed<NavGroup[]>(() => {
     {
       key: 'system_administration',
       label: t('settings.navGroups.systemAdministration'),
-      items: pickItems(['system-global', 'runtime-queues', 'system-audit-log']),
+      items: pickItems(['system-global', 'runtime-queues']),
     },
     {
       key: 'platform',
@@ -516,7 +458,7 @@ const handleClose = async () => {
   // 如果当前路由是设置页，返回上一页
   if (route.path === '/platform/settings') {
     const sec = route.query.section
-    if (!router.options.history.state.back || sec === 'system-global' || sec === 'runtime-queues' || sec === 'system-audit-log') {
+    if (!router.options.history.state.back || sec === 'system-global' || sec === 'runtime-queues') {
       router.push('/platform/knowledge-bases')
     } else {
       router.back()
@@ -972,34 +914,6 @@ onUnmounted(() => {
 
 .settings-content::-webkit-scrollbar-thumb:hover {
   background: var(--td-gray-color-6);
-}
-
-.role-denied {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 64px 24px;
-  gap: 12px;
-  min-height: 240px;
-
-  .role-denied-icon {
-    color: var(--td-text-color-placeholder);
-  }
-
-  .role-denied-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--td-text-color-primary);
-  }
-
-  .role-denied-desc {
-    font-size: 13px;
-    color: var(--td-text-color-secondary);
-    max-width: 360px;
-    line-height: 1.6;
-  }
 }
 
 @media (max-width: 640px) {

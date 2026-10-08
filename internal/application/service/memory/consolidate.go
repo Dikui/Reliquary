@@ -106,7 +106,7 @@ func (s *Service) reviewStore(
 	// reasons and must not silence each other. The daily pass is maintenance
 	// nobody asked for, so it waits a day. A review someone pressed a button
 	// for waits only long enough that the button cannot be held down: the
-	// endpoint is Viewer-level and each press is worth up to forcedMaxClusters
+	// each press can run up to forcedMaxClusters
 	// model calls, which a store the model keeps declining would repeat
 	// indefinitely.
 	last, interval := subject.ConsolidatedAt, consolidateInterval

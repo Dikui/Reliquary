@@ -53,16 +53,6 @@ async function hydrateSessionFromToken(authStore: ReturnType<typeof useAuthStore
       authStore.setTenant(null)
     }
 
-    // Refresh the team role on every page load.
-    const memberships = response.data?.memberships
-    if (Array.isArray(memberships)) {
-      authStore.setMemberships(memberships)
-    }
-
-    authStore.setAutoAcceptInvitation(
-      response.data?.capabilities?.auto_accept_invitation === true,
-    )
-
     return true
   } catch {
     return false
@@ -109,17 +99,6 @@ router.beforeEach(async (to, from, next) => {
     MessagePlugin.warning(i18n.global.t('settings.capabilityUnavailable'))
     next('/platform/knowledge-bases')
     return
-  }
-
-  // SystemAdmin gate — checked AFTER auth so a non-admin who's logged
-  // out gets redirected to /login first (consistent with how the rest
-  // of the auth flow works), and only an authenticated non-admin sees
-  // the bounce. This is UI-only; the server enforces the real check.
-  if (to.meta.requiresSystemAdmin === true) {
-    if (!authStore.isSystemAdmin) {
-      next('/platform/knowledge-bases')
-      return
-    }
   }
 
   next()

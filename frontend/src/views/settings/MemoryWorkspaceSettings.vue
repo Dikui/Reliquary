@@ -226,7 +226,7 @@ const config = reactive<MemoryConfig>({
 })
 const isInitializing = ref(true)
 
-const canEdit = computed(() => authStore.hasRole('admin'))
+const canEdit = computed(() => authStore.isLoggedIn)
 
 const loadConfig = async () => {
   try {

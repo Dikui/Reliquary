@@ -102,8 +102,7 @@ const (
 // the given knowledge_id and signals active workers running such tasks
 // to stop.
 func (a *asynqTaskInspector) CancelTasksForKnowledge(
-	ctx context.Context, knowledgeID string,
-) (int, int, error) {
+	ctx context.Context, knowledgeID string) (int, int, error) {
 	if a == nil || a.inspector == nil || knowledgeID == "" {
 		return 0, 0, nil
 	}
@@ -113,8 +112,7 @@ func (a *asynqTaskInspector) CancelTasksForKnowledge(
 
 	logger.Infof(ctx,
 		"[TaskInspector] knowledge=%s cancel summary: deleted_from_queue=%d active_cancel_signaled=%d",
-		knowledgeID, deleted, cancelled,
-	)
+		knowledgeID, deleted, cancelled)
 	return deleted, cancelled, nil
 }
 
@@ -123,8 +121,7 @@ func (a *asynqTaskInspector) CancelTasksForKnowledge(
 // The kb:delete task is deliberately excluded because it performs the durable
 // storage cleanup and must remain queued.
 func (a *asynqTaskInspector) CancelTasksForKnowledgeBase(
-	ctx context.Context, knowledgeBaseID string, knowledgeIDs []string, dataSourceIDs []string,
-) (int, int, error) {
+	ctx context.Context, knowledgeBaseID string, knowledgeIDs []string, dataSourceIDs []string) (int, int, error) {
 	if a == nil || a.inspector == nil {
 		return 0, 0, nil
 	}
@@ -149,8 +146,7 @@ func (a *asynqTaskInspector) CancelTasksForKnowledgeBase(
 	})
 	logger.Infof(ctx,
 		"[TaskInspector] knowledge_base=%s cancel summary: deleted_from_queue=%d active_cancel_signaled=%d",
-		knowledgeBaseID, deleted, cancelled,
-	)
+		knowledgeBaseID, deleted, cancelled)
 	return deleted, cancelled, nil
 }
 
@@ -160,8 +156,7 @@ func (a *asynqTaskInspector) CancelTasksForKnowledgeBase(
 // sweep uses it to avoid flagging a backlogged-but-not-orphaned row as
 // failed. Short-circuits on the first match and never deletes anything.
 func (a *asynqTaskInspector) HasQueuedTasksForKnowledge(
-	ctx context.Context, knowledgeID string,
-) (bool, error) {
+	ctx context.Context, knowledgeID string) (bool, error) {
 	if a == nil || a.inspector == nil || knowledgeID == "" {
 		return false, nil
 	}
@@ -186,8 +181,7 @@ func (a *asynqTaskInspector) HasQueuedTasksForKnowledge(
 // surface it as a zeroed row so the dashboard shows the complete lane set even
 // before a queue receives its first task.
 func (a *asynqTaskInspector) QueueStats(
-	ctx context.Context,
-) ([]types.QueueStat, bool, error) {
+	ctx context.Context) ([]types.QueueStat, bool, error) {
 	if a == nil || a.inspector == nil {
 		return nil, false, nil
 	}
@@ -471,8 +465,7 @@ func (a *asynqTaskInspector) runtimeTaskAnchorOffset(
 	ctx context.Context,
 	key string,
 	order runtimeTaskStorageOrder,
-	anchors []string,
-) (int64, error) {
+	anchors []string) (int64, error) {
 	if len(anchors) == 0 {
 		return 0, nil
 	}
@@ -508,8 +501,7 @@ func (a *asynqTaskInspector) listRuntimeTaskIDs(
 	queue string,
 	state types.RuntimeTaskState,
 	anchors []string,
-	limit int,
-) ([]string, error) {
+	limit int) ([]string, error) {
 	key, order := runtimeTaskStateKey(queue, state)
 	start, err := a.runtimeTaskAnchorOffset(ctx, key, order, anchors)
 	if err != nil {
@@ -537,8 +529,7 @@ func (a *asynqTaskInspector) ListRuntimeTasks(
 	queue string,
 	state types.RuntimeTaskState,
 	cursor string,
-	pageSize int,
-) (types.RuntimeTaskPage, bool, error) {
+	pageSize int) (types.RuntimeTaskPage, bool, error) {
 	if a == nil || a.inspector == nil || a.redis == nil {
 		return types.RuntimeTaskPage{}, false, nil
 	}
@@ -624,8 +615,7 @@ func (a *asynqTaskInspector) ListRuntimeTasks(
 }
 
 func (a *asynqTaskInspector) GetRuntimeTask(
-	ctx context.Context, queue, taskID string,
-) (*types.RuntimeTaskInfo, bool, error) {
+	ctx context.Context, queue, taskID string) (*types.RuntimeTaskInfo, bool, error) {
 	if a == nil || a.inspector == nil {
 		return nil, false, nil
 	}
@@ -699,8 +689,7 @@ return redis.call("DEL", KEYS[2])
 `)
 
 func (a *asynqTaskInspector) deleteArchivedRuntimeTask(
-	ctx context.Context, queue, taskID, message string,
-) (int, error) {
+	ctx context.Context, queue, taskID, message string) (int, error) {
 	archivedKey, _ := runtimeTaskStateKey(queue, types.RuntimeTaskArchived)
 	taskKey := "asynq:{" + queue + "}:t:" + taskID
 	deleted, err := deleteArchivedRuntimeTaskScript.Run(ctx, a.redis,
@@ -755,8 +744,7 @@ func (a *asynqTaskInspector) PurgeArchivedRuntimeTasks(ctx context.Context, queu
 }
 
 func (a *asynqTaskInspector) WorkerServerStats(
-	ctx context.Context,
-) ([]types.WorkerServerStat, bool, error) {
+	ctx context.Context) ([]types.WorkerServerStat, bool, error) {
 	if a == nil || a.inspector == nil {
 		return nil, false, nil
 	}
@@ -816,8 +804,7 @@ func (a *asynqTaskInspector) cancelMatchingTasks(ctx context.Context, matcher ta
 			}
 			deleted += a.processQueueStateMatches(
 				ctx, queue, state, true, matcher, "delete",
-				func(task *asynq.TaskInfo) error { return a.inspector.DeleteTask(queue, task.ID) },
-			)
+				func(task *asynq.TaskInfo) error { return a.inspector.DeleteTask(queue, task.ID) })
 		}
 	}
 
@@ -852,8 +839,7 @@ func (a *asynqTaskInspector) cancelMatchingTasks(ctx context.Context, matcher ta
 			}
 			deleted += a.processQueueStateMatches(
 				ctx, queue, state, true, matcher, "delete",
-				func(task *asynq.TaskInfo) error { return a.inspector.DeleteTask(queue, task.ID) },
-			)
+				func(task *asynq.TaskInfo) error { return a.inspector.DeleteTask(queue, task.ID) })
 		}
 	}
 	return deleted, cancelled
@@ -870,8 +856,7 @@ func (a *asynqTaskInspector) snapshotQueueStateMatches(
 	ctx context.Context,
 	queue string,
 	state cancellableTaskState,
-	matcher taskMatcher,
-) []*asynq.TaskInfo {
+	matcher taskMatcher) []*asynq.TaskInfo {
 	var matches []*asynq.TaskInfo
 	for page := 1; ; page++ {
 		if ctx.Err() != nil {
@@ -969,8 +954,7 @@ func (a *asynqTaskInspector) processQueueStateMatches(
 	rescanAfterSuccess bool,
 	matcher taskMatcher,
 	actionName string,
-	action func(*asynq.TaskInfo) error,
-) int {
+	action func(*asynq.TaskInfo) error) int {
 	processed := 0
 	page := 1
 	passes := 0
@@ -1012,8 +996,7 @@ func (a *asynqTaskInspector) processQueueStateMatches(
 	}
 	logger.Warnf(ctx,
 		"[TaskInspector] stopped %s queue=%s after %d mutation passes",
-		state.name, queue, maxQueueMutationPasses,
-	)
+		state.name, queue, maxQueueMutationPasses)
 	return processed
 }
 
@@ -1025,8 +1008,7 @@ func (a *asynqTaskInspector) queueStateHasMatch(
 	queue string,
 	state string,
 	list func(string, ...asynq.ListOption) ([]*asynq.TaskInfo, error),
-	matcher taskMatcher,
-) bool {
+	matcher taskMatcher) bool {
 	page := 1
 	for {
 		tasks, err := list(queue, asynq.PageSize(listPageSize), asynq.Page(page))
@@ -1073,8 +1055,7 @@ func matchesKnowledgeBase(
 	payload []byte,
 	knowledgeBaseID string,
 	knowledgeIDs map[string]struct{},
-	dataSourceIDs map[string]struct{},
-) bool {
+	dataSourceIDs map[string]struct{}) bool {
 	// These cleanup tasks carry snapshots specifically so they can still run
 	// after the KB row has been soft-deleted. Removing them leaks resources.
 	if taskType == types.TypeKBDelete {

@@ -128,12 +128,6 @@ type Session struct {
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `json:"deleted_at" gorm:"index"`
 
-	// IMPlatform is the originating IM platform (e.g. "feishu") when
-	// this session is bound to an IM channel. It is not stored on the sessions
-	// table (it lives in im_channel_sessions) and is populated on read so the
-	// Web console can classify a session's origin folder without a list query.
-	IMPlatform string `json:"im_platform,omitempty" gorm:"-"`
-
 	// Association relationship, not stored in the database
 	Messages []Message `json:"-" gorm:"foreignKey:SessionID"`
 }
@@ -141,44 +135,6 @@ type Session struct {
 func (s *Session) BeforeCreate(tx *gorm.DB) (err error) {
 	s.ID = uuid.New().String()
 	return nil
-}
-
-// SessionSourceAPI is the source filter that lists every session created via a
-// tenant API key across the whole tenant. It is an admin-only view: the service
-// layer requires Admin+ and drops the per-user owner scope so a tenant
-// Owner/admin can observe API-key traffic that is otherwise isolated per key.
-const SessionSourceAPI = "api"
-
-// SessionSourceWeb is the source filter for a user's own Web-console chats.
-const SessionSourceWeb = "web"
-
-// SessionListSourceRequiresAdmin reports whether a session-list source filter
-// exposes tenant-wide channel traffic (API / IM / embed) in the Web console.
-func SessionListSourceRequiresAdmin(source string) bool {
-	src := strings.TrimSpace(source)
-	if src == "" || strings.EqualFold(src, SessionSourceWeb) {
-		return false
-	}
-	return true
-}
-
-// SessionRequiresAdminConsoleRead reports whether a session row is channel-
-// managed traffic that non-admin web users must not open from the console.
-func SessionRequiresAdminConsoleRead(s *Session, imPlatform string) bool {
-	if s == nil {
-		return false
-	}
-	if IsAPISessionOwnerID(s.UserID) {
-		return true
-	}
-
-	// Defence in depth for skill maintenance transcripts: the listing hides
-	// them, and this keeps a leaked session id from being opened by a
-	// non-admin who happens to own the row.
-	if IsSkillMaintenanceDescription(s.Description) {
-		return true
-	}
-	return strings.TrimSpace(imPlatform) != ""
 }
 
 // IsSkillMaintenanceDescription reports whether description is the reserved
@@ -201,34 +157,19 @@ func SanitizeClientSessionDescription(incoming, existing string) string {
 	return incoming
 }
 
-// SessionListQuery bundles the parameters for listing sessions.
-// UserID empty means "tenant-wide" (used by API-key callers / legacy rows).
-// Keyword matches title ILIKE '%keyword%'.
-// Source values: "web" (user chats, no IM/embed), "embed" / "embed:{channelID}",
-// "api" (all API-key sessions, Admin+ only), or an IM platform name
-// (e.g. "feishu"). IM sources are also Admin+ only.
-// AgentID currently only filters sessions that have an IM channel mapping.
+// SessionListQuery contains pagination, keyword, and agent filters.
 type SessionListQuery struct {
 	TenantID uint64
 	UserID   string
 	Keyword  string
-	Source   string
 	AgentID  string
 	Page     int
 	PageSize int
 }
 
-// SessionListItem is a session row enriched with its IM origin (when any).
-// IM-related fields are populated from the im_channel_sessions table via LEFT JOIN
-// and are empty for Web-created sessions.
+// SessionListItem is a session returned by the paginated list.
 type SessionListItem struct {
 	Session
-	IMPlatform  string `json:"im_platform,omitempty"   gorm:"column:im_platform"`
-	IMChatID    string `json:"im_chat_id,omitempty"    gorm:"column:im_chat_id"`
-	IMThreadID  string `json:"im_thread_id,omitempty"  gorm:"column:im_thread_id"`
-	IMUserID    string `json:"im_user_id,omitempty"    gorm:"column:im_user_id"`
-	IMAgentID   string `json:"im_agent_id,omitempty"   gorm:"column:im_agent_id"`
-	IMChannelID string `json:"im_channel_id,omitempty" gorm:"column:im_channel_id"`
 }
 
 // StringArray represents a list of strings

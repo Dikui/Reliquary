@@ -28,11 +28,10 @@ type KnowledgeAnomalyService struct {
 	db        *gorm.DB
 	knowledge interfaces.KnowledgeService
 	tags      interfaces.KnowledgeTagService
-	audit     interfaces.AuditLogService
 }
 
-func NewKnowledgeAnomalyService(db *gorm.DB, knowledge interfaces.KnowledgeService, tags interfaces.KnowledgeTagService, audit interfaces.AuditLogService) *KnowledgeAnomalyService {
-	return &KnowledgeAnomalyService{db: db, knowledge: knowledge, tags: tags, audit: audit}
+func NewKnowledgeAnomalyService(db *gorm.DB, knowledge interfaces.KnowledgeService, tags interfaces.KnowledgeTagService) *KnowledgeAnomalyService {
+	return &KnowledgeAnomalyService{db: db, knowledge: knowledge, tags: tags}
 }
 
 func (s *KnowledgeAnomalyService) scopedKB(ctx context.Context, kbID string) (*types.KnowledgeBase, error) {
@@ -70,7 +69,7 @@ func (s *KnowledgeAnomalyService) List(ctx context.Context, kbID string, offset 
 }
 
 // ForMessages returns source conflicts relevant to retrieved messages, so a
-// later answer can respect the owner's decision without rereading all reports.
+// later answer can respect the user's decision without rereading all reports.
 func (s *KnowledgeAnomalyService) ForMessages(ctx context.Context, kbIDs, messageIDs []string) ([]types.KnowledgeAnomaly, error) {
 	tenantID, ok := types.TenantIDFromContext(ctx)
 	if !ok || tenantID == 0 {
@@ -196,8 +195,6 @@ func (s *KnowledgeAnomalyService) Create(ctx context.Context, kbID string, input
 	if err := s.db.WithContext(ctx).Create(item).Error; err != nil {
 		return nil, err
 	}
-	recordKBActivity(ctx, s.audit, kb.TenantID, kb.ID, types.AuditActionKnowledgeAnomalyReported, "knowledge_anomaly", item.ID,
-		types.AuditOutcomeSuccess, map[string]any{"kind": item.Kind, "knowledge_ids": item.KnowledgeIDs})
 	return item, nil
 }
 
@@ -214,16 +211,15 @@ func normalizeAnomalyTagIDs(ids []string) []string {
 	return out
 }
 
-// Resolve accepts or rejects a suggestion. A team editor can decide;
-// a reviewer with read access cannot use this path to mutate knowledge.
+// Resolve accepts or rejects a suggestion from the authenticated user.
 func (s *KnowledgeAnomalyService) Resolve(ctx context.Context, kbID, anomalyID, action, note string) (*types.KnowledgeAnomaly, error) {
 	kb, err := s.scopedKB(ctx, kbID)
 	if err != nil {
 		return nil, err
 	}
 	actorID, ok := types.UserIDFromContext(ctx)
-	if !ok || !types.TenantRoleFromContext(ctx).HasPermission(types.TenantRoleContributor) || types.IsSyntheticUserID(actorID) {
-		return nil, werrors.NewForbiddenError("a team editor is required to decide anomalies")
+	if !ok || !types.IsAuthenticatedFromContext(ctx) {
+		return nil, werrors.NewForbiddenError("an authenticated user is required to decide anomalies")
 	}
 	if action != "apply" && action != "resolved" && action != "dismiss" {
 		return nil, werrors.NewBadRequestError("invalid decision")
@@ -244,7 +240,7 @@ func (s *KnowledgeAnomalyService) Resolve(ctx context.Context, kbID, anomalyID, 
 		return nil, werrors.NewBadRequestError("anomaly already decided")
 	}
 	if item.Kind == "source_conflict" && action == "resolved" && note == "" {
-		return nil, werrors.NewBadRequestError("source conflict resolution requires an owner decision")
+		return nil, werrors.NewBadRequestError("source conflict resolution requires a user decision")
 	}
 	if retrying && time.Since(item.UpdatedAt) < 2*time.Minute {
 		return nil, werrors.NewBadRequestError("anomaly is still applying; retry after two minutes")
@@ -351,7 +347,5 @@ func (s *KnowledgeAnomalyService) Resolve(ctx context.Context, kbID, anomalyID, 
 		return nil, werrors.NewBadRequestError("anomaly already decided")
 	}
 	item.Status, item.DecidedBy, item.DecisionNote, item.Result, item.DecidedAt, item.UpdatedAt = status, actorID, note, result, &now, now
-	recordKBActivity(ctx, s.audit, kb.TenantID, kb.ID, types.AuditActionKnowledgeAnomalyDecided, "knowledge_anomaly", item.ID,
-		types.AuditOutcomeSuccess, map[string]any{"action": action, "knowledge_ids": item.KnowledgeIDs, "result": result, "note": note, "changes": item.AppliedChanges, "deleted_tag_id": item.ProposedDeleteTagID})
 	return &item, nil
 }

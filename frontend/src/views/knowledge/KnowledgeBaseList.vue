@@ -7,7 +7,7 @@
         <div class="header-title">
           <div class="title-row">
             <h2>{{ $t('knowledgeBase.title') }}</h2>
-            <t-tooltip v-if="authStore.hasRole('contributor')" :content="$t('knowledgeList.create')" placement="bottom">
+            <t-tooltip v-if="authStore.isLoggedIn" :content="$t('knowledgeList.create')" placement="bottom">
               <t-button variant="text" theme="default" size="small" class="header-action-btn"
                 data-guide="kb-list-create" @click="handleCreateKnowledgeBase">
                 <template #icon><t-icon name="folder-add" size="16px" /></template>
@@ -133,7 +133,7 @@
                         <t-icon class="menu-icon" name="file-copy" />
                         <span>{{ $t('knowledgeList.menu.duplicate') }}</span>
                       </div>
-                      <template v-if="authStore.hasRole('viewer')">
+                      <template v-if="authStore.isLoggedIn">
                         <div class="popup-menu-item" @click.stop="handleSettingsById(kb.id)">
                           <t-icon class="menu-icon" name="setting" />
                           <span>{{ $t('knowledgeBase.settings') }}</span>
@@ -193,7 +193,7 @@
           <img class="empty-img" src="@/assets/img/upload.svg" alt="">
           <span class="empty-txt">{{ $t('knowledgeList.empty.title') }}</span>
           <span class="empty-desc">{{ $t('knowledgeList.empty.description') }}</span>
-          <t-button v-if="authStore.hasRole('contributor')" class="kb-create-btn empty-state-btn"
+          <t-button v-if="authStore.isLoggedIn" class="kb-create-btn empty-state-btn"
             data-guide="kb-list-create" @click="handleCreateKnowledgeBase">
             <template #icon><t-icon name="folder-add" /></template>
             {{ $t('knowledgeList.create') }}
@@ -348,7 +348,7 @@ const filteredKnowledgeBases = computed(() => {
 
 const showKbListEmpty = computed(() => {
   if (loading.value) return false
-  if (!authStore.hasRole('contributor')) return false
+  if (!authStore.isLoggedIn) return false
   if (spaceSelection.value === 'all' && filteredKnowledgeBases.value.length === 0) return true
   return false
 })
@@ -448,9 +448,9 @@ const handleSettings = (kb: KB) => {
   kb.showMore = false
   goSettings(kb.id)
 }
-function canManageKBCard(_kb: KB): boolean { return authStore.hasRole('contributor') }
+function canManageKBCard(_kb: KB): boolean { return authStore.isLoggedIn }
 
-function canDuplicateKBCard(_kb: any): boolean { return authStore.hasRole('contributor') }
+function canDuplicateKBCard(_kb: any): boolean { return authStore.isLoggedIn }
 
 
 // isMyKb 仅用于卡片右下角徽章在「我创建」与「同空间其他成员创建」之间切换。
@@ -465,7 +465,6 @@ function isMyKb(kb: { creator_id?: string }): boolean {
 // kbOriginVariant 决定卡片右下角徽章的展示形态：
 //   - 我自己创建的：mine（绿色 "我创建"）
 //   - 同空间他人创建的：creator 变体——只显示创建者名字。用户始终在
-//     角再贴一遍空间名属于重复信息；contributor / admin / owner / viewer
 //     看到的徽章一致。创建者无法解析时，creator 变体自动回退到
 //     resourceOrigin.tenant 文案（"本空间"），不会出现空标签。
 function kbOriginVariant(kb: { creator_id?: string }): 'mine' | 'creator' {
@@ -1468,14 +1467,6 @@ const handleUploadFinishedEvent = (event: Event) => {
     }
   }
 
-  &.role-viewer {
-    background: var(--td-bg-color-container-hover);
-    color: var(--td-text-color-secondary);
-
-    &:hover {
-      background: rgba(0, 0, 0, 0.08);
-    }
-  }
 }
 
 @keyframes spin {

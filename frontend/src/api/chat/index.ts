@@ -6,11 +6,8 @@ export async function createSessions(data = {}) {
   return post("/api/v1/sessions", data);
 }
 
-export async function getSessionsList(page: number, page_size: number, source?: string) {
+export async function getSessionsList(page: number, page_size: number) {
   const params = new URLSearchParams({ page: String(page), page_size: String(page_size) });
-  if (source) {
-    params.set("source", source);
-  }
   return get(`/api/v1/sessions?${params.toString()}`);
 }
 
@@ -35,13 +32,13 @@ export async function knowledgeChat(data: { session_id: string; query: string; }
 }
 
 // Agent chat with streaming support
-export async function agentChat(data: { 
-  session_id: string; 
+export async function agentChat(data: {
+  session_id: string;
   query: string;
   knowledge_base_ids?: string[];
   agent_enabled: boolean;
 }) {
-  return postChat(`/api/v1/agent-chat/${data.session_id}`, { 
+  return postChat(`/api/v1/agent-chat/${data.session_id}`, {
     query: data.query,
     knowledge_base_ids: data.knowledge_base_ids,
     agent_enabled: data.agent_enabled,

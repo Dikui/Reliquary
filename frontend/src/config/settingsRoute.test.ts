@@ -13,7 +13,7 @@ test('every settings nav item writes only section', () => {
   assert.deepEqual(
     buildSettingsRouteQuery('models', {
       section: 'system-global',
-      tab: 'im',
+      tab: 'api',
       agentId: 'agt_1',
     }),
     { section: 'models' },
@@ -27,16 +27,16 @@ test('every settings nav item writes only section', () => {
     { section: 'runtime-queues' },
   )
   assert.deepEqual(
-    buildSettingsRouteQuery(integrationSectionKey('im'), {
+    buildSettingsRouteQuery(integrationSectionKey('api'), {
       section: 'integrations',
-      tab: 'im',
+      tab: 'api',
     }),
-    { section: 'integration-im' },
+    { section: 'integration-api' },
   )
   assert.deepEqual(
     buildSettingsRouteQuery(integrationSectionKey('api'), {
       section: 'integrations',
-      tab: 'im',
+      tab: 'api',
       agentId: 'agt_1',
     }),
     { section: 'integration-api', agentId: 'agt_1' },
@@ -45,9 +45,9 @@ test('every settings nav item writes only section', () => {
 
 test('legacy api / integrations / bare-tab query strings normalize to nav keys', () => {
   assert.equal(normalizeSettingsSection('api'), 'integration-api')
-  assert.equal(normalizeSettingsSection('im'), 'integration-im')
-  assert.equal(normalizeSettingsSection('integrations', 'im'), 'integration-im')
-  assert.equal(normalizeSettingsSection('integrations'), 'integration-im')
+  assert.equal(normalizeSettingsSection('api'), 'integration-api')
+  assert.equal(normalizeSettingsSection('integrations', 'api'), 'integration-api')
+  assert.equal(normalizeSettingsSection('integrations'), 'integration-api')
   assert.equal(normalizeSettingsSection('integration-api'), 'integration-api')
   assert.equal(normalizeSettingsSection('system-global'), 'system-global')
   assert.equal(isIntegrationSection('integration-api'), true)
@@ -58,15 +58,15 @@ test('legacy api / integrations / bare-tab query strings normalize to nav keys',
 test('canonical settings query skips a redundant replace', () => {
   assert.equal(
     settingsQueryUnchanged(
-      { section: 'integration-im' },
-      { section: 'integration-im' },
+      { section: 'integration-api' },
+      { section: 'integration-api' },
     ),
     true,
   )
   assert.equal(
     settingsQueryUnchanged(
-      { section: 'integrations', tab: 'im' },
-      { section: 'integration-im' },
+      { section: 'integrations', tab: 'api' },
+      { section: 'integration-api' },
     ),
     false,
   )
@@ -81,8 +81,8 @@ test('deleted and unknown settings sections fall back to the default section', (
       agentId: 'removed-agent',
     }), { section: 'general' })
   }
-  for (const section of ['general', 'domains', 'tenant', 'members', 'system-global', 'runtime-queues', 'system-audit-log']) {
+  for (const section of ['general', 'domains', 'tenant', 'system-global', 'runtime-queues']) {
     assert.equal(normalizeSettingsSection(section), section)
   }
-  assert.equal(normalizeSettingsSection('integrations', 'embed'), 'integration-im')
+  assert.equal(normalizeSettingsSection('integrations', 'embed'), 'integration-api')
 })

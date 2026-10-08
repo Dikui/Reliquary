@@ -103,7 +103,7 @@
       v-model:visible="drawerVisible"
       :title="drawerTitle"
       :class="currentEngine ? `storage-engine-drawer storage-engine-drawer--${currentEngine}` : 'storage-engine-drawer'"
-      :hide-footer="!authStore.hasRole('admin') && !needsTestButton"
+      :hide-footer="!authStore.isLoggedIn && !needsTestButton"
       :confirm-loading="saving"
       @confirm="onSave"
       @cancel="drawerVisible = false"

@@ -157,9 +157,8 @@ type KnowledgeWorkflowReport struct {
 func (KnowledgeWorkflowReport) TableName() string { return "knowledge_workflow_reports" }
 
 type KnowledgeWorkflowTaskPayload struct {
-	RunID       string        `json:"run_id"`
-	Initiator   TaskInitiator `json:"initiator"`
-	SystemAdmin bool          `json:"system_admin,omitempty"`
+	RunID     string        `json:"run_id"`
+	Initiator TaskInitiator `json:"initiator"`
 }
 
 type KnowledgeWorkflowDecision struct {

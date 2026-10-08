@@ -43,9 +43,9 @@ const event = {
 
 type Scenario = (state: any, beforeUnmount: () => void) => Promise<void>
 async function renderWorkbench({
-  role = 'contributor', result = {}, scenario = async () => {}, status = { pending_count: 1, latest_run: null }, workflows = {},
+  result = {}, scenario = async () => {}, status = { pending_count: 1, latest_run: null }, workflows = {},
   focus = {}, focusApi = {},
-}: { role?: string; result?: object; scenario?: Scenario; status?: object; workflows?: object; focus?: Partial<KnowledgeFocusScope>; focusApi?: object } = {}) {
+}: { result?: object; scenario?: Scenario; status?: object; workflows?: object; focus?: Partial<KnowledgeFocusScope>; focusApi?: object } = {}) {
   const requests = { status: 0, rebuild: 0, query: [] as any[], snapshots: [] as string[], focus: [] as object[], stars: [] as Array<{ kind: string; id: string; starred: boolean }> }
   const cleanupCallbacks: Array<() => void> = []
   const envelope = (data: unknown) => Promise.resolve({ success: true, data })
@@ -86,7 +86,7 @@ async function renderWorkbench({
     './RepostSources.vue': { __esModule: true, default: emptyComponent },
     './ReportMarkdown.vue': { __esModule: true, default: reportComponent },
     './knowledgeContextDisplay': display,
-    '@/stores/auth': { useAuthStore: () => ({ hasRole: () => ['admin', 'owner'].includes(role) }) },
+    '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true }) },
     '@/api/knowledge-domains': { listKnowledgeDomains: () => envelope([]) },
     '@/api/knowledge-context-scope': scope,
     '@/api/knowledge-context': api,
@@ -112,14 +112,14 @@ async function renderWorkbench({
     onServerPrefetch(async () => {
       try {
         await state.refreshAll()
-        if (['admin', 'owner'].includes(role)) await state.loadNameEmbeddingStatus()
+        await state.loadNameEmbeddingStatus()
         await scenario(state, () => { cleanupCallbacks.forEach(callback => callback()) })
         await nextTick()
       } finally { state.clearNameEmbeddingPolling() }
     })
     return state
   }
-  const app = createSSRApp(component, { kbId: 'kb-a', domainId: 'domain-a', canManage: role !== 'viewer' })
+  const app = createSSRApp(component, { kbId: 'kb-a', domainId: 'domain-a', canManage: true })
   const stub = defineComponent({
     props: ['message', 'description', 'disabled', 'visible'],
     setup(props, { attrs, slots }) {
@@ -191,28 +191,17 @@ test('an event with null evidence_ids does not inherit unrelated query evidence'
   assert.doesNotMatch(card, /Source a|Source b|Source unrelated/)
 })
 
-for (const role of ['owner', 'admin']) {
-  test(`${role} can view name embedding status and request a rebuild`, async () => {
-    const { html, requests } = await renderWorkbench({ role, scenario: state => state.rebuildNameEmbeddings() })
-    assert.ok(requests.status > 0)
-    assert.equal(requests.rebuild, 1)
-    assert.match(html, /name-embedding-rebuild/)
-    assert.match(html, /knowledgeWorkbench.nameEmbeddings.status.pending/)
-  })
-}
-
-for (const role of ['contributor', 'viewer']) {
-  test(`${role} does not request or display the administrator rebuild control`, async () => {
-    const { html, requests } = await renderWorkbench({ role, scenario: state => state.rebuildNameEmbeddings() })
-    assert.equal(requests.status, 0)
-    assert.equal(requests.rebuild, 0)
-    assert.doesNotMatch(html, /name-embedding-rebuild/)
-  })
-}
+test('signed-in user can view name embedding status and request a rebuild', async () => {
+  const { html, requests } = await renderWorkbench({ scenario: state => state.rebuildNameEmbeddings() })
+  assert.ok(requests.status > 0)
+  assert.equal(requests.rebuild, 1)
+  assert.match(html, /name-embedding-rebuild/)
+  assert.match(html, /knowledgeWorkbench.nameEmbeddings.status.pending/)
+})
 
 test('latest rebuild failures remain visible and evidence metadata has a separator', async () => {
   const { html } = await renderWorkbench({
-    role: 'admin', status: { pending_count: 1, latest_run: { status: 'failed', error: 'Embedding provider unavailable', processed_count: 0, total_count: 1 } },
+    status: { pending_count: 1, latest_run: { status: 'failed', error: 'Embedding provider unavailable', processed_count: 0, total_count: 1 } },
     scenario: state => state.selectSection('evidence'),
   })
   assert.match(html, /knowledgeWorkbench.nameEmbeddings.status.failed/)
@@ -323,14 +312,14 @@ test('duplicate star requests remain blocked while a mutation is pending', async
   })
 })
 
-test('viewers can inspect focus but cannot change stars', async () => {
+test('signed-in user can inspect focus and change stars', async () => {
   const { html, requests } = await renderWorkbench({
-    role: 'viewer', focus: { starred_entities: [entity] },
+    focus: { starred_entities: [] },
     scenario: async state => { await state.selectSection('focus'); await state.toggleFocusStar('entity', entity) },
   })
   assert.match(html, /Aurora/)
-  assert.doesNotMatch(html, /class="focus-star/)
-  assert.equal(requests.stars.length, 0)
+  assert.match(html, /class="focus-star/)
+  assert.equal(requests.stars.length, 1)
 })
 
 test('older focus responses cannot replace a more recent refresh', async () => {
@@ -356,7 +345,7 @@ test('older focus responses cannot replace a more recent refresh', async () => {
 
 test('unmount cancels name embedding polling and invalidates outstanding status requests', async () => {
   await renderWorkbench({
-    role: 'admin',
+
     scenario: async (state, beforeUnmount) => {
       await state.rebuildNameEmbeddings()
       assert.ok(state.nameEmbeddingPollTimer)

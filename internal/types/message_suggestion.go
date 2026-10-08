@@ -104,8 +104,8 @@ func (s *MessageSuggestionSet) BeforeCreate(_ *gorm.DB) error {
 	return nil
 }
 
-// MessageSuggestionEvent stores product analytics separately from the
-// security audit log. It references question IDs rather than copying text.
+// MessageSuggestionEvent stores product analytics by referencing question
+// IDs rather than copying text.
 type MessageSuggestionEvent struct {
 	ID              uint64    `json:"id" gorm:"primaryKey;autoIncrement"`
 	TenantID        uint64    `json:"tenant_id" gorm:"not null;index"`

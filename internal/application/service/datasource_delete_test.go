@@ -36,7 +36,7 @@ func newDataSourceDeleteFixture(t *testing.T) *dataSourceDeleteFixture {
 		TenantID:        1,
 		KnowledgeBaseID: "kb-delete",
 		Name:            "Delete fixture",
-		Type:            types.ConnectorTypeFeishu,
+		Type:            types.ConnectorTypeRSS,
 		Status:          types.DataSourceStatusActive,
 		SyncSchedule:    "0 0 * * * *",
 	}

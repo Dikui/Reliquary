@@ -1310,7 +1310,7 @@ func (h *InitializationHandler) buildConfigResponse(ctx context.Context, models 
 		if model == nil {
 			continue
 		}
-		// Hide sensitive information for builtin models and viewers.
+		// Hide sensitive information for built-in models and restricted projections.
 		baseURL := model.Parameters.BaseURL
 		if model.IsBuiltin || !includeIntegrationDetail {
 			baseURL = ""

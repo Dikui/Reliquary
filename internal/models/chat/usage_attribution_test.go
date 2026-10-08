@@ -17,10 +17,10 @@ func TestUsageAttributionEmptyOutsideSessions(t *testing.T) {
 
 func TestUsageAttributionCarriesSessionAndPrincipal(t *testing.T) {
 	ctx := types.WithSessionID(context.Background(), "sess-123")
-	ctx = types.WithPrincipal(ctx, types.Principal{Type: types.PrincipalAPIExternalUser, ID: "10000:42"})
+	ctx = types.WithPrincipal(ctx, types.Principal{Type: types.PrincipalWebUser, ID: "10000:42"})
 
 	got := usageAttribution(ctx)
-	want := ", session_id=sess-123, principal=api_external_user:10000:42"
+	want := ", session_id=sess-123, principal=web_user:10000:42"
 	if got != want {
 		t.Fatalf("got %q want %q", got, want)
 	}

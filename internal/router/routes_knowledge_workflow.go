@@ -5,14 +5,12 @@ import (
 	"reliquary/internal/handler"
 )
 
-func RegisterKnowledgeWorkflowRoutes(r *gin.RouterGroup, h *handler.KnowledgeWorkflowHandler, g *rbacGuards) {
+func RegisterKnowledgeWorkflowRoutes(r *gin.RouterGroup, h *handler.KnowledgeWorkflowHandler, g *accessGuards) {
 	if h == nil {
 		return
 	}
-	// Workflows can research and write knowledge. Access is limited to the KB
-	// owner/admin; the service rechecks current membership for queued jobs too.
-	w := g.apiKeyGroup(r.Group("/knowledge-bases/:id/workflows"), apiKeyFullAccess())
-	w.grp.Use(g.Contributor(), g.KBAccessWrite("id"))
+	w := r.Group("/knowledge-bases/:id/workflows")
+	w.Use(g.KBAccessWrite("id"))
 	w.GET("", h.List)
 	w.POST("", h.Create)
 	w.GET("/runs/:run_id", h.GetRun)
@@ -24,8 +22,8 @@ func RegisterKnowledgeWorkflowRoutes(r *gin.RouterGroup, h *handler.KnowledgeWor
 	w.DELETE("/:workflow_id", h.Delete)
 	w.POST("/:workflow_id/run", h.Run)
 	w.GET("/:workflow_id/runs", h.ListRuns)
-	rp := g.apiKeyGroup(r.Group("/knowledge-bases/:id/reports"), apiKeyFullAccess())
-	rp.grp.Use(g.Contributor(), g.KBAccessRead("id"))
+	rp := r.Group("/knowledge-bases/:id/reports")
+	rp.Use(g.KBAccessRead("id"))
 	rp.GET("", h.ListReports)
 	rp.GET("/:report_id", h.GetReport)
 	rp.GET("/:report_id/download", h.DownloadReport)

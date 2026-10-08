@@ -64,10 +64,6 @@ func TestTemplateOnlyCoverageAcrossQueryScopes(t *testing.T) {
 	require.Empty(t, result.Facts)
 	require.Empty(t, result.Events)
 	require.NoError(t, db.Create(&types.KnowledgeEntityAlias{ID: "private-alias", TenantID: 1, EntityID: "acme", EntityType: "company", Alias: "Private identity", NormalizedAlias: "private identity"}).Error)
-	keyCtx := types.WithTenantAPIKeyScope(ctx, types.TenantAPIKeyScope{KnowledgeBaseIDs: types.StringArray{"p3-kb"}})
-	privateResult, err := svc.Query(keyCtx, "", types.KnowledgeContextQuery{Scope: "team", Entity: "Private identity"})
-	require.NoError(t, err)
-	require.Zero(t, privateResult.TemplateOnlyMessageCount, "a scoped source must support the queried alias")
 	// Disabled messages and failed extraction are not described as extracted.
 	require.NoError(t, db.Model(&types.Knowledge{}).Where("id = ?", "coverage-source-1").Update("enable_status", "disabled").Error)
 	require.NoError(t, db.Model(&types.KnowledgeEvidence{}).Where("id = ?", "coverage-source-2").Update("extraction_status", types.KnowledgeExtractionFailed).Error)
@@ -78,10 +74,6 @@ func TestTemplateOnlyCoverageAcrossQueryScopes(t *testing.T) {
 	result, err = svc.Query(ctx, "", types.KnowledgeContextQuery{Scope: "team", EntityID: "acme", Until: &until})
 	require.NoError(t, err)
 	require.Zero(t, result.TemplateOnlyMessageCount)
-	// A restricted key cannot count the same object's sources in other bases.
-	result, err = svc.Query(keyCtx, "", types.KnowledgeContextQuery{Scope: "team", EntityID: "acme", IncludeHistory: true})
-	require.NoError(t, err)
-	require.Equal(t, 1, result.TemplateOnlyMessageCount)
 }
 
 func TestTemplateOnlyEventCoverageUsesVisibleSourceObjects(t *testing.T) {

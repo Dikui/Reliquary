@@ -81,7 +81,7 @@ func (s *customAgentService) CreateAgent(ctx context.Context, agent *types.Custo
 	}
 	agent.TenantID = tenantID
 
-	if uid, ok := types.UserIDFromContext(ctx); ok && !types.IsSyntheticUserID(uid) {
+	if uid, ok := types.UserIDFromContext(ctx); ok {
 		agent.CreatedBy = uid
 	}
 
@@ -446,10 +446,8 @@ func (s *customAgentService) CopyAgent(ctx context.Context, id string) (*types.C
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	}
-	// The clone is owned by whoever ran the copy, not the original
-	// creator — same reasoning as CopyKnowledgeBase. Skip synthetic
-	// API-key users.
-	if uid, ok := types.UserIDFromContext(ctx); ok && !types.IsSyntheticUserID(uid) {
+	// Record the authenticated user as the clone's creator.
+	if uid, ok := types.UserIDFromContext(ctx); ok {
 		newAgent.CreatedBy = uid
 	}
 
@@ -514,13 +512,7 @@ func (s *customAgentService) getSuggestedQuestions(
 		limit = suggestionMaxLimit
 	}
 
-	if err := types.AuthorizeTenantAPIKeyKnowledgeTargets(ctx, kbIDs, knowledgeIDs); err != nil {
-		return nil, err
-	}
 	scopeTagIDs := flattenTagScopeIDs(tagScopes)
-	if err := types.AuthorizeTenantAPIKeyOptionalTagIDs(ctx, scopeTagIDs); err != nil {
-		return nil, err
-	}
 
 	// Get tenant ID from context
 	tenantID, ok := types.TenantIDFromContext(ctx)
@@ -624,12 +616,6 @@ func (s *customAgentService) getSuggestedQuestions(
 	// KB even when that KB is present in the agent's preselected KB list. Other
 	// explicitly selected KBs remain additive.
 	effectiveKBIDs = excludeSuggestionStrings(effectiveKBIDs, resolvedTags.KnowledgeBaseIDs)
-
-	filteredKBIDs, err := types.FilterKnowledgeBasesForTenantAPIKeyScope(ctx, kbIDs, effectiveKBIDs)
-	if err != nil {
-		return nil, err
-	}
-	effectiveKBIDs = filteredKBIDs
 
 	if len(effectiveKBIDs) == 0 && len(knowledgeIDs) == 0 && len(resolvedTags.TagIDsByTenant) == 0 {
 		return finalizeStarterSuggestions(curated, nil, starterMode, limit), nil

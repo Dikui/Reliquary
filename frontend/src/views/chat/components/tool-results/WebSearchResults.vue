@@ -2,8 +2,8 @@
   <div class="web-search-results">
     <!-- Grouped Results List -->
     <div v-if="groupedResults && groupedResults.length > 0" class="results-groups">
-      <div 
-        v-for="group in groupedResults" 
+      <div
+        v-for="group in groupedResults"
         :key="group.key"
         class="results-group"
       >
@@ -12,18 +12,18 @@
           <span class="group-source">{{ group.label }}</span>
         </div> -->
         <div class="results-list">
-          <div 
-            v-for="result in group.items" 
+          <div
+            v-for="result in group.items"
             :key="result.result_index"
             class="result-item"
           >
             <div class="result-header">
               <div class="result-index">#{{ result.result_index }}</div>
-              <a 
+              <a
                 v-if="result.url"
-                :href="result.url" 
+                :href="result.url"
                 :title="result.url"
-                target="_blank" 
+                target="_blank"
                 rel="noopener noreferrer"
                 class="result-title-link one-line"
               >
@@ -33,7 +33,7 @@
                 <span class="result-title">{{ result.title }}</span>
               </div>
             </div>
-            
+
             <div v-if="result.published_at" class="result-meta">
               <span class="meta-item">
                 <t-icon name="time" class="meta-icon" />
@@ -44,7 +44,7 @@
         </div>
       </div>
     </div>
-    
+
     <!-- Empty State -->
     <div v-else class="empty-state">
       {{ $t('chat.webSearchNoResults') }}
@@ -215,7 +215,7 @@ const formatDate = (dateStr: string): string => {
   gap: 6px;
   margin-bottom: 0;
   padding: 2px 0;
-  
+
   :deep(a) {
     pointer-events: auto;
   }
@@ -241,7 +241,7 @@ const formatDate = (dateStr: string): string => {
 
   &:hover {
     color: var(--td-brand-color);
-    
+
     .result-title {
       text-decoration: underline;
     }
@@ -270,7 +270,7 @@ const formatDate = (dateStr: string): string => {
   display: flex;
   align-items: baseline;
   flex: 1;
-  
+
   .result-title {
     font-size: 12px;
     font-weight: 500;
@@ -288,13 +288,13 @@ const formatDate = (dateStr: string): string => {
   border-top: 1px solid var(--td-bg-color-secondarycontainer);
   font-size: 10px;
   color: var(--td-text-color-placeholder);
-  
+
   .meta-item {
     display: flex;
     align-items: center;
     gap: 3px;
   }
-  
+
   .meta-icon {
     font-size: 10px;
   }

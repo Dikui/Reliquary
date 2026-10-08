@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	stderrors "errors"
 	"net/http"
 	"strings"
@@ -10,7 +9,6 @@ import (
 
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
-	"reliquary/internal/config"
 	"reliquary/internal/errors"
 	"reliquary/internal/handler/dto"
 	"reliquary/internal/logger"
@@ -23,50 +21,16 @@ import (
 // Provides functionality for user registration, login, logout, and token management
 // through the REST API endpoints
 type AuthHandler struct {
-	userService      interfaces.UserService
-	tenantService    interfaces.TenantService
-	configInfo       *config.Config
-	systemSettingSvc interfaces.SystemSettingService
-	// invitationSvc is required for the share-link registration path
-	// (POST /auth/register-by-invite). When nil — e.g. legacy test
-	// fixtures — the share-link endpoints respond 503 rather than
-	// blocking the rest of the auth surface.
-	invitationSvc interfaces.TenantInvitationService
+	userService   interfaces.UserService
+	tenantService interfaces.TenantService
 }
 
-// NewAuthHandler wires team authentication and password policy services.
-func NewAuthHandler(configInfo *config.Config,
-	userService interfaces.UserService, tenantService interfaces.TenantService,
-	systemSettingSvc interfaces.SystemSettingService,
-	invitationSvc interfaces.TenantInvitationService,
+func NewAuthHandler(userService interfaces.UserService, tenantService interfaces.TenantService,
 ) *AuthHandler {
 	return &AuthHandler{
-		configInfo:       configInfo,
-		userService:      userService,
-		tenantService:    tenantService,
-		systemSettingSvc: systemSettingSvc,
-		invitationSvc:    invitationSvc,
+		userService:   userService,
+		tenantService: tenantService,
 	}
-}
-
-// resolveRegistrationMode permits direct registration only for the first user.
-func (h *AuthHandler) resolveRegistrationMode(ctx context.Context) string {
-	if h.userService == nil {
-		return config.AuthRegistrationModeInviteOnly
-	}
-	hasUsers, err := h.userService.HasTeamUsers(ctx)
-	if err != nil || hasUsers {
-		return config.AuthRegistrationModeInviteOnly
-	}
-	return config.AuthRegistrationModeSelfServe
-}
-
-func (h *AuthHandler) complexPasswordEnabled(ctx context.Context) bool {
-	return service.ResolveComplexPasswordEnabled(ctx, h.configInfo, h.systemSettingSvc)
-}
-
-func (h *SystemHandler) complexPasswordEnabled(ctx context.Context) bool {
-	return service.ResolveComplexPasswordEnabled(ctx, h.cfg, h.systemSettingSvc)
 }
 
 // Register godoc
@@ -85,10 +49,9 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	logger.Info(ctx, "Start user registration")
 
-	// After bootstrap, every new account requires an invitation.
-	if h.resolveRegistrationMode(ctx) == config.AuthRegistrationModeInviteOnly {
-		logger.Warn(ctx, "Registration rejected: auth.registration_mode=invite_only")
-		appErr := errors.NewForbiddenError("Registration is invite-only")
+	if enabled, err := h.userService.HasUsers(ctx); err != nil || enabled {
+		logger.Warn(ctx, "Registration rejected: a user already exists")
+		appErr := errors.NewForbiddenError("Registration is closed")
 		c.Error(appErr)
 		return
 	}
@@ -117,10 +80,9 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	// Validate password against the runtime policy (DB system_settings
-	// first). The service also enforces this policy.
-	if err := service.ValidatePasswordPolicy(req.Password, h.complexPasswordEnabled(ctx)); err != nil {
-		logger.Error(ctx, "Invalid password policy")
+	// Validate basic password requirements, also enforced by the service.
+	if err := service.ValidatePassword(req.Password); err != nil {
+		logger.Error(ctx, "Invalid password")
 		appErr := errors.NewValidationError(err.Error())
 		_ = c.Error(appErr)
 		return
@@ -132,8 +94,8 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	user, err := h.userService.Register(ctx, &req)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to register user: %v", err)
-		if stderrors.Is(err, repository.ErrTeamInvitationRequired) {
-			c.Error(errors.NewForbiddenError("Registration is invite-only"))
+		if stderrors.Is(err, repository.ErrRegistrationClosed) {
+			c.Error(errors.NewForbiddenError("Registration is closed"))
 			return
 		}
 		appErr := errors.NewBadRequestError(err.Error())
@@ -324,7 +286,7 @@ func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
 		return
 	}
 
-	// Return metadata for the team workspace.
+	// Return metadata for the personal workspace.
 	var tenant *types.Tenant
 	activeTenantID, _ := types.TenantIDFromContext(ctx)
 	if activeTenantID == 0 {
@@ -337,14 +299,12 @@ func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
 			// Don't fail the request if tenant info is not available
 		}
 	}
-	memberships := h.userService.BuildLoginMemberships(ctx, user, tenant)
 	userInfo := user.ToUserInfo()
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
-			"user":        userInfo,
-			"tenant":      dto.NewTenantResponse(ctx, tenant),
-			"memberships": memberships,
+			"user":   userInfo,
+			"tenant": dto.NewTenantResponse(ctx, tenant),
 		},
 	})
 }
@@ -392,9 +352,9 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	err = h.userService.ChangePassword(ctx, user.ID, req.OldPassword, req.NewPassword)
 	if err != nil {
 		switch {
-		case service.IsPasswordPolicyError(err):
-			appErr := errors.NewValidationError("Password policy violation").
-				WithDetails(service.DetailPasswordPolicy)
+		case stderrors.Is(err, service.ErrInvalidPassword):
+			appErr := errors.NewValidationError("Invalid password").
+				WithDetails(service.DetailInvalidPassword)
 			_ = c.Error(appErr)
 			return
 		case stderrors.Is(err, service.ErrInvalidOldPassword):
@@ -436,20 +396,8 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 // password complexity rules to apply. We expose only what the UI
 // strictly needs; other config stays internal.
 func (h *AuthHandler) GetAuthConfig(c *gin.Context) {
-	// Same source-of-truth as Register's gate, so the UI hide-the-button
-	// signal can never disagree with the API enforcement signal.
-	mode := h.resolveRegistrationMode(c.Request.Context())
-
-	complexPasswordEnabled := service.ResolveComplexPasswordEnabled(
-		c.Request.Context(),
-		h.configInfo,
-		h.systemSettingSvc,
-	)
-	c.JSON(http.StatusOK, gin.H{
-		"success":                  true,
-		"registration_mode":        mode,
-		"complex_password_enabled": complexPasswordEnabled,
-	})
+	hasUsers, err := h.userService.HasUsers(c.Request.Context())
+	c.JSON(http.StatusOK, gin.H{"success": true, "registration_enabled": err == nil && !hasUsers, "minimum_password_length": service.MinimumPasswordLength})
 }
 
 // tenantNameOrEmpty returns the tenant name when available.

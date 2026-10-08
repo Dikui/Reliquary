@@ -190,9 +190,6 @@ func TestP3MergeSuggestionsCreateAcceptAndReject(t *testing.T) {
 	var merged types.KnowledgeEntity
 	require.NoError(t, db.First(&merged, "id=?", items[0].NewEntityID).Error)
 	require.Equal(t, "acme", merged.MergedIntoID)
-	var auditCount int64
-	require.NoError(t, db.Model(&types.AuditLog{}).Where("action=?", "knowledge_context.entities_merged").Count(&auditCount).Error)
-	require.EqualValues(t, 1, auditCount)
 	other := p3Entity("other-acme", "Acme Regional", "company")
 	require.NoError(t, db.Create(&other).Error)
 	rejected := types.KnowledgeEntityMergeSuggestion{ID: "reject-suggestion", TenantID: 1, KnowledgeBaseID: "p3-kb", NewEntityID: other.ID, CandidateEntityID: "acme", EvidenceID: evidence.ID, Reason: "Unclear", Quote: evidence.Body, Status: "pending", CreatedAt: time.Now()}

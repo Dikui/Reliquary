@@ -18,7 +18,7 @@
         </tbody>
       </table>
     </div>
-    
+
     <!-- No Results -->
     <div v-else class="no-results">
       {{ $t('chat.noDatabaseRecords') }}
@@ -61,7 +61,7 @@ const formatValue = (value: any): string => {
   border-radius: 4px;
   margin-bottom: 16px;
   font-size: 13px;
-  
+
   strong {
     color: var(--td-brand-color);
     font-weight: 600;
@@ -79,11 +79,11 @@ const formatValue = (value: any): string => {
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
-  
+
   thead {
     background: var(--td-bg-color-secondarycontainer);
     border-bottom: 2px solid var(--td-component-stroke);
-    
+
     th {
       padding: 10px 12px;
       text-align: left;
@@ -92,20 +92,20 @@ const formatValue = (value: any): string => {
       white-space: nowrap;
     }
   }
-  
+
   tbody {
     tr {
       border-bottom: 1px solid var(--td-component-stroke);
-      
+
       &:hover {
         background: var(--td-bg-color-secondarycontainer);
       }
-      
+
       &:last-child {
         border-bottom: none;
       }
     }
-    
+
     td {
       padding: 10px 12px;
       color: var(--td-text-color-primary);

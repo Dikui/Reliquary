@@ -60,9 +60,7 @@ type SystemSettingService interface {
 	// non-nil so callers can iterate without a nil check.
 	GetStringList(ctx context.Context, key string, envName string, def []string) []string
 
-	// List, Get, Update are the management-CRUD surface called by the
-	// SystemAdmin handlers (gated to user.is_system_admin = true at the
-	// router layer). Update emits an audit log on success.
+	// List, Get, Update expose system settings to the authenticated user.
 	List(ctx context.Context) ([]*types.SystemSetting, error)
 	Get(ctx context.Context, key string) (*types.SystemSetting, error)
 	// Update writes a new value for `key`, validating that:
@@ -72,13 +70,13 @@ type SystemSettingService interface {
 	//      (e.g. int64 / float64 for "int", string for "string", bool
 	//      for "bool"),
 	//   3. the actor is captured from ctx (UserIDFromContext) and
-	//      written to last_modified_by + the audit log.
+	//      written to last_modified_by.
 	// Returns the persisted row on success.
 	Update(ctx context.Context, key string, rawValue any) (*types.SystemSetting, error)
 	// Reset removes the DB override for `key` so the resolver falls
 	// back to ENV / built-in default. Idempotent: deleting a key that
-	// was never persisted returns nil. Emits an audit row on actual
-	// deletions, invalidates the local cache, and publishes to peers.
+	// was never persisted returns nil. Invalidates the local cache and
+	// publishes to peers.
 	// Returns an error only when the DB write itself fails; callers
 	// must NOT translate "no row" into a 404 — that's the success
 	// path for an idempotent reset.

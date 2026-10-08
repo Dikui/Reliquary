@@ -6,8 +6,8 @@ import (
 	"reliquary/internal/handler"
 )
 
-func RegisterModelRoutingRoutes(r *gin.RouterGroup, h *handler.ModelRoutingHandler, g *rbacGuards) {
+func RegisterModelRoutingRoutes(r *gin.RouterGroup, h *handler.ModelRoutingHandler, g *accessGuards) {
 	team := r.Group("/tenants")
-	g.apiKeyRoute(team, http.MethodGet, "/model-tiers", apiKeyManageTenantSettings(apiKeyFullAccess()), g.Viewer(), h.Get)
-	g.apiKeyRoute(team, http.MethodPut, "/model-tiers", apiKeyManageTenantSettings(apiKeyFullAccess()), g.Admin(), h.Update)
+	team.Handle(http.MethodGet, "/model-tiers", h.Get)
+	team.Handle(http.MethodPut, "/model-tiers", h.Update)
 }

@@ -98,7 +98,7 @@
       v-model:visible="drawerVisible"
       :title="drawerTitle"
       :class="currentEngine ? `parser-engine-drawer parser-engine-drawer--${currentEngine.Name}` : 'parser-engine-drawer'"
-      :hide-footer="!authStore.hasRole('admin') && !needsTestButton"
+      :hide-footer="!authStore.isLoggedIn && !needsTestButton"
       :confirm-loading="saving"
       @confirm="onSave"
       @cancel="drawerVisible = false"

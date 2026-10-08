@@ -19,7 +19,7 @@ func TestWebSearchProviderResponse_OmitsSecrets(t *testing.T) {
 			BaseURL:  "https://example.com",
 		},
 	}
-	body, err := json.Marshal(NewWebSearchProviderResponse(adminContext(), e))
+	body, err := json.Marshal(NewWebSearchProviderResponse(userContext(), e))
 	assert.NoError(t, err)
 	s := string(body)
 	assert.NotContains(t, s, "bing-secret-do-not-leak")
@@ -35,7 +35,7 @@ func TestWebSearchProviderResponse_OmitsSecrets(t *testing.T) {
 	assert.Contains(t, s, "example.com")
 }
 
-func TestWebSearchProviderResponse_ViewerStripsIntegrationDetail(t *testing.T) {
+func TestWebSearchProviderResponse_UserCanReadIntegrationDetail(t *testing.T) {
 	e := &types.WebSearchProviderEntity{
 		ID: "wsp-2",
 		Parameters: types.WebSearchProviderParameters{
@@ -43,12 +43,12 @@ func TestWebSearchProviderResponse_ViewerStripsIntegrationDetail(t *testing.T) {
 			ExtraConfig: map[string]string{"token": "secret"},
 		},
 	}
-	resp := NewWebSearchProviderResponse(viewerContext(), e)
-	assert.Empty(t, resp.Parameters.ProxyURL)
-	assert.Nil(t, resp.Parameters.ExtraConfig)
+	resp := NewWebSearchProviderResponse(userContext(), e)
+	assert.Equal(t, e.Parameters.ProxyURL, resp.Parameters.ProxyURL)
+	assert.Equal(t, e.Parameters.ExtraConfig, resp.Parameters.ExtraConfig)
 }
 
 func TestWebSearchProviderResponse_NilSafe(t *testing.T) {
-	assert.Nil(t, NewWebSearchProviderResponse(adminContext(), nil))
-	assert.Equal(t, []*WebSearchProviderResponse{}, NewWebSearchProviderResponses(adminContext(), nil))
+	assert.Nil(t, NewWebSearchProviderResponse(userContext(), nil))
+	assert.Equal(t, []*WebSearchProviderResponse{}, NewWebSearchProviderResponses(userContext(), nil))
 }

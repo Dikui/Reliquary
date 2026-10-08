@@ -2,37 +2,11 @@ package types
 
 import (
 	"context"
-	"fmt"
 	"strings"
 )
 
-const (
-	PrincipalWebUser         = "web_user"
-	PrincipalAPITenant       = "api_tenant"
-	PrincipalAPIExternalUser = "api_external_user"
-	PrincipalIMUser          = "im_user"
-)
+const PrincipalWebUser = "web_user"
 
-// SessionOwnerAPITenantKeyPrefix prefixes sessions.user_id for rows created by a
-// tenant API key. The full owner id is "api_tenant_key:<tenantID>:<keyID>", so a
-// LIKE '<prefix>%' selects every API-key session in the tenant.
-const SessionOwnerAPITenantKeyPrefix = "api_tenant_key:"
-
-// SessionOwnerAPIExternalUserPrefix prefixes sessions.user_id for rows created
-// by a tenant API key whose request resolved an external-user identity. The
-// remainder is "<tenantID>:<externalUserID>".
-const SessionOwnerAPIExternalUserPrefix = PrincipalAPIExternalUser + ":"
-
-// IsAPISessionOwnerID reports whether a stored session owner was produced by
-// a tenant API-key request, with or without an external-user identity.
-func IsAPISessionOwnerID(ownerID string) bool {
-	ownerID = strings.TrimSpace(ownerID)
-	return strings.HasPrefix(ownerID, SessionOwnerAPITenantKeyPrefix) ||
-		strings.HasPrefix(ownerID, SessionOwnerAPIExternalUserPrefix)
-}
-
-// Principal represents the terminal caller for per-subject isolation features.
-// Principal storage isolates machine and IM identities from web accounts.
 type Principal struct {
 	Type string
 	ID   string
@@ -88,20 +62,8 @@ func MCPOAuthPrincipalFromContext(ctx context.Context) Principal {
 	return p.Normalize()
 }
 
-// SessionOwnerIDFromContext scopes sessions to a user or API key principal.
+// SessionOwnerIDFromContext resolves the authenticated user for session ownership.
 func SessionOwnerIDFromContext(ctx context.Context) string {
-	if p, ok := PrincipalFromContext(ctx); ok {
-		switch p.Type {
-		case PrincipalAPIExternalUser:
-			return p.StorageID()
-		case PrincipalAPITenant:
-			if scope, ok := TenantAPIKeyScopeFromContext(ctx); ok && scope.KeyID > 0 {
-				if tenantID, ok := TenantIDFromContext(ctx); ok && tenantID > 0 {
-					return fmt.Sprintf("%s%d:%d", SessionOwnerAPITenantKeyPrefix, tenantID, scope.KeyID)
-				}
-			}
-		}
-	}
 	userID, _ := UserIDFromContext(ctx)
 	return userID
 }

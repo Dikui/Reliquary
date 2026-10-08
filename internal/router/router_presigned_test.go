@@ -49,12 +49,11 @@ func TestPresignedPreviewScopesResourcesBeforeIssuingGrants(t *testing.T) {
 	require.NoError(t, err)
 	otherReference, err := catalog.Register(t.Context(), 2, "local://2/other.txt", interfaces.ResourceRegistration{})
 	require.NoError(t, err)
-	enabled := true
-	cfg := &config.Config{Tenant: &config.TenantConfig{EnableRBAC: &enabled}}
+	cfg := &config.Config{}
 	preview := gin.New()
 	preview.Use(func(c *gin.Context) {
 		ctx := context.WithValue(c.Request.Context(), types.TenantInfoContextKey, tenant)
-		ctx = context.WithValue(ctx, types.TenantRoleContextKey, types.TenantRoleAdmin)
+		ctx = context.WithValue(ctx, types.UserIDContextKey, "personal-user")
 		c.Request = c.Request.WithContext(ctx)
 		c.Next()
 	})
@@ -165,8 +164,6 @@ func TestPresignedFile_HEAD_Returns200WithoutBody(t *testing.T) {
 	if got := w.Header().Get("Content-Type"); got != "image/png" {
 		t.Fatalf("Content-Type = %q, want image/png", got)
 	}
-	// HEAD must not stream the body — protects backing storage from a
-	// full read on every IM preview probe.
 	if w.Body.Len() != 0 {
 		t.Fatalf("HEAD response body should be empty, got %d bytes", w.Body.Len())
 	}

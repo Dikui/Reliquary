@@ -12,10 +12,10 @@ test('capability filtering is fail-open unless backend explicitly disables a fea
 
   const capabilities: DeploymentCapabilityMap = {
     agents: { supported: false, reason: 'feature_disabled' },
-    'integrations.im': { supported: true },
+    'integrations.api': { supported: true },
   }
   assert.equal(isDeploymentCapabilitySupported(capabilities, 'agents'), false)
-  assert.equal(isDeploymentCapabilitySupported(capabilities, 'integrations.im'), true)
+  assert.equal(isDeploymentCapabilitySupported(capabilities, 'integrations.api'), true)
 })
 
 test('only route-backed settings sections require deployment capabilities', () => {

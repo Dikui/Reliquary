@@ -145,7 +145,6 @@ export interface CredentialFieldDef<K extends string = string> {
   key: K
   label: string
   // Optional connector-specific placeholder shown only when the input is
-  // visible (e.g. "ntn_xxxx" for Notion). Defaults to a generic "Enter value".
   placeholder?: string
 }
 

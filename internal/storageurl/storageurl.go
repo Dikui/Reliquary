@@ -1,16 +1,3 @@
-// Package storageurl converts internal storage references into HTTP(S) URLs an
-// external client can load directly.
-//
-// Reliquary persists files behind two internal reference forms: the stable
-// `resource://<handle>` application identity and legacy/canonical provider
-// paths (`local://…`, `minio://…`, `storage://<backend-id>/s3://…`). Neither is
-// fetchable by a browser or a third-party app, which must otherwise call the
-// authenticated `/files` proxy for every image.
-//
-// This package is the single implementation of the "give me a loadable link"
-// translation. It is used by the IM channels (which have no way to attach
-// Reliquary credentials to an image fetch) and, opt-in, by the HTTP API so
-// integrators receive ready-to-render URLs.
 package storageurl
 
 import (
@@ -50,24 +37,6 @@ type Resolver interface {
 	ResolveFileService(ref string) interfaces.FileService
 }
 
-// Rewriter replaces storage references with loadable HTTP URLs.
-//
-// Resolutions are memoised for the Rewriter's lifetime. Create one per request
-// or per outbound message: a `resource://` handle costs one access-grant row per
-// resolution, and a streamed answer repeats the same image across many chunks.
-//
-// Safe for concurrent use: mu covers both the memo and the resolver, which is
-// itself single-threaded. Resolution therefore serialises across goroutines,
-// which is what we want — two chunks naming the same image must not each pay for
-// a signature.
-//
-// Logging policy:
-//   - A successful rewrite logs the source reference at INFO. The signed URL
-//     is DEBUG-only so log aggregation cannot hand out anonymously readable
-//     links; operators can raise the log level when verifying reachability.
-//   - Failure or no-op logs at WARN. The no-op case usually means
-//     APP_EXTERNAL_URL is unset, the most common cause of "image broken in the
-//     IM channel / in my app" reports.
 type Rewriter struct {
 	resolver  Resolver
 	logPrefix string
@@ -76,9 +45,6 @@ type Rewriter struct {
 	memo map[string]string
 }
 
-// NewRewriter returns a Rewriter that resolves references through r. logPrefix
-// tags log lines with the calling surface (for example "IM" or "API"). A nil
-// resolver yields a Rewriter that leaves content unchanged.
 func NewRewriter(r Resolver, logPrefix string) *Rewriter {
 	return &Rewriter{resolver: r, logPrefix: logPrefix, memo: make(map[string]string)}
 }

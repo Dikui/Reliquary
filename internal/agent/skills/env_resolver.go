@@ -34,12 +34,6 @@ type MissingSkillEnvError struct {
 }
 
 func (e *MissingSkillEnvError) Error() string {
-	// English, like every other error in this codebase: the agent relays this
-	// to the user and translates it into whatever language they are speaking.
-	// execute_skill_script has no env parameter, so it cannot take a value the
-	// user just typed. shell_exec can: naming the skill and passing the value
-	// in env runs the command and stores the value for the next run. Pointing
-	// at the settings page alone would strand IM users, who have no such page.
 	return fmt.Sprintf(
 		"skill %q needs the environment variable(s) %s, which nobody has set yet. "+
 			"Ask the user for them, then run the skill through shell_exec with "+

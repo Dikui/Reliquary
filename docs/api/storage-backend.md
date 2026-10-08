@@ -4,19 +4,19 @@
 
 存储后端（StorageBackend）API 用于管理空间的对象/文件存储实例。一个空间可以注册多个存储实例（`local`、`minio`、`s3`），并将不同知识库绑定到不同实例；空间维度还有一个默认实例（`default_storage_backend_id`），未显式绑定的新知识库使用该默认实例。
 
-接口同时管理用户创建的实例（`source: "user"`）以及从环境变量快照生成的只读实例（`source: "env"`）。存储后端 CRUD 需要 **Admin+** 角色；对 API Key 需具备 `manage_storage_backends` capability（或 full-access）。
+接口同时管理用户创建的实例（`source: "user"`）以及从环境变量快照生成的只读实例（`source: "env"`）。登录用户和有效 API Key 均可管理存储后端。
 
 | 方法   | 路径                              | 描述                                   | 最低权限 |
 | ------ | --------------------------------- | -------------------------------------- | -------- |
-| GET    | `/storage-backends/types`         | 获取 `STORAGE_ALLOW_LIST` 允许的存储类型 | Viewer+  |
-| POST   | `/storage-backends/test`          | 使用原始配置测试连通性（不落库）         | Admin+   |
-| POST   | `/storage-backends`               | 创建存储实例                           | Admin+   |
-| GET    | `/storage-backends`               | 获取存储实例列表                       | Viewer+  |
-| GET    | `/storage-backends/:id`           | 获取存储实例详情                       | Viewer+  |
-| PUT    | `/storage-backends/:id`           | 更新存储实例（名称/凭据/状态）          | Admin+   |
-| DELETE | `/storage-backends/:id`           | 删除存储实例（软删除）                  | Admin+   |
-| POST   | `/storage-backends/:id/test`      | 测试已保存实例的连通性                  | Admin+   |
-| PUT    | `/storage-backends/:id/default`   | 设为空间默认存储实例                    | Admin+   |
+| GET    | `/storage-backends/types`         | 获取 `STORAGE_ALLOW_LIST` 允许的存储类型 | 已认证  |
+| POST   | `/storage-backends/test`          | 使用原始配置测试连通性（不落库）         | 已认证   |
+| POST   | `/storage-backends`               | 创建存储实例                           | 已认证   |
+| GET    | `/storage-backends`               | 获取存储实例列表                       | 已认证  |
+| GET    | `/storage-backends/:id`           | 获取存储实例详情                       | 已认证  |
+| PUT    | `/storage-backends/:id`           | 更新存储实例（名称/凭据/状态）          | 已认证   |
+| DELETE | `/storage-backends/:id`           | 删除存储实例（软删除）                  | 已认证   |
+| POST   | `/storage-backends/:id/test`      | 测试已保存实例的连通性                  | 已认证   |
+| PUT    | `/storage-backends/:id/default`   | 设为空间默认存储实例                    | 已认证   |
 
 > 所有响应中的敏感字段（`access_key_id`、`secret_access_key`）都会被掩码。更新时若提交掩码占位符，则保留库中原有的真实凭据，不会被占位符覆盖。
 
@@ -332,6 +332,6 @@ curl --location --request PUT 'http://localhost:8080/api/v1/storage-backends/550
 | ----------- | ---------------------------------------------------------------- |
 | 400         | 请求参数错误、校验失败、SSRF 校验失败、连通性测试失败、尝试更改不可变字段、修改只读实例、删除受保护实例、禁用被引用实例、设为默认时实例非 active |
 | 401         | 未认证（缺少空间上下文或 API Key）                               |
-| 403         | 权限不足（需 Admin+ 或 API Key `manage_storage_backends` capability） |
+| 403         | 权限不足（需 已认证 或 API Key `manage_storage_backends` capability） |
 | 404         | 存储实例不存在                                                   |
 | 409         | 同名存储实例已存在                                               |

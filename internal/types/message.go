@@ -293,7 +293,7 @@ type Message struct {
 	// sent to the LLM. Used to preserve retrieval context across conversation turns.
 	// Empty for non-retrieval intents or assistant messages.
 	RenderedContent string `json:"-" gorm:"type:text;column:rendered_content;default:''"`
-	// Channel indicates the source channel of this message (e.g., "web", "api", "im")
+	// Channel indicates the source channel of this message (e.g., "web", "api")
 	Channel string `json:"channel,omitempty" gorm:"type:varchar(50);default:''"`
 	// AgentID is the agent used for this individual assistant turn. Unlike the
 	// session's last_request_state it remains stable when users switch agents.

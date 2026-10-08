@@ -170,7 +170,7 @@ const loadKnowledgeBases = async () => {
 // 计算下拉位置：水平居中对齐到按钮中点，处理视口边界
 const updateDropdownPosition = () => {
   const anchor = resolveAnchorEl()
-  
+
   // Cache root zoom for this update. Both fallback and rect-anchored paths
   // need to convert visual measurements to CSS pixels (see utils/zoom.ts).
   const zoom = getRootZoom()
@@ -189,7 +189,7 @@ const updateDropdownPosition = () => {
       padding: '0',
     };
   };
-  
+
   if (!anchor) {
     applyFallback()
     return
@@ -220,11 +220,11 @@ const updateDropdownPosition = () => {
   console.log('[KB Selector] Button rect (css px):', rect)
   const vw = vwFallback
   const vh = vhFallback
-  
+
   // 左对齐到触发元素的左边缘
   // 使用 Math.floor 而不是 Math.round，避免像素对齐问题
   let left = Math.floor(rect.left)
-  
+
   // 边界处理：不超出视口左右（留 16px margin）
   const minLeft = 16
   const maxLeft = Math.max(16, vw - dropdownWidth - 16)
@@ -237,16 +237,16 @@ const updateDropdownPosition = () => {
   const topMargin = 20 // 顶部留白
   const spaceBelow = vh - rect.bottom // 下方剩余空间
   const spaceAbove = rect.top // 上方剩余空间
-  
+
   console.log('[KB Selector] Space check:', {
     spaceBelow,
     spaceAbove,
     windowHeight: vh
   })
-  
+
   let actualHeight: number
   let shouldOpenBelow: boolean
-  
+
   // 优先考虑下方空间
   if (spaceBelow >= minDropdownHeight + offsetY) {
     // 下方有足够空间，向下弹出
@@ -266,7 +266,7 @@ const updateDropdownPosition = () => {
     shouldOpenBelow = false
     console.log('[KB Selector] Position: above button', { actualHeight })
   }
-  
+
   // 根据弹出方向使用不同的定位方式
   if (shouldOpenBelow) {
     // 向下弹出：使用 top 定位
@@ -456,7 +456,7 @@ watch(() => props.visible, async (v) => {
   justify-content: center;
   flex-shrink: 0;
   color: var(--td-brand-color-active);
-  
+
 
 }
 .kb-name-wrap { display:flex; flex-direction: row; align-items: center; gap: 4px; min-width: 0; }

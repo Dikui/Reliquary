@@ -93,9 +93,6 @@ func (r *fakeTenantAPIKeyRepo) UpdateAPIKey(
 	for _, key := range r.byHash {
 		if key.ID == id && key.TenantIDValue() == tenantID && key.RevokedAt == nil {
 			key.Name = update.Name
-			key.FullAccess = update.FullAccess
-			key.KnowledgeBaseIDs = append(types.StringArray(nil), update.KnowledgeBaseIDs...)
-			key.Capabilities = append(types.StringArray(nil), update.Capabilities...)
 			key.ExpiresAt = update.ExpiresAt
 			cp := *key
 			return &cp, nil
@@ -111,7 +108,7 @@ func TestTenantAPIKeyServiceUpdateNormalizesConfiguration(t *testing.T) {
 	repo := newFakeTenantAPIKeyRepo()
 	svc := NewTenantAPIKeyService(repo)
 	created, err := svc.CreateAPIKey(ctx, interfaces.TenantAPIKeyCreateRequest{
-		TenantID: 1, Name: "scoped", Capabilities: []string{"retrieve"},
+		TenantID: 1, Name: "scoped",
 	})
 	if err != nil {
 		t.Fatalf("CreateAPIKey returned error: %v", err)
@@ -120,9 +117,9 @@ func TestTenantAPIKeyServiceUpdateNormalizesConfiguration(t *testing.T) {
 	expiresAt := time.Date(2026, 9, 1, 12, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60))
 	updated, err := svc.UpdateAPIKey(ctx, interfaces.TenantAPIKeyUpdateRequest{
 		TenantID: 1, APIKeyID: created.APIKey.ID,
-		Name: " updated ", Capabilities: []string{"retrieve", "chat", "retrieve"},
-		KnowledgeBaseIDs: []string{" kb-1 ", "", "kb-2", "kb-1"},
-		ExpiresAt:        &expiresAt,
+		Name: " updated ",
+
+		ExpiresAt: &expiresAt,
 	})
 	if err != nil {
 		t.Fatalf("UpdateAPIKey returned error: %v", err)
@@ -130,27 +127,10 @@ func TestTenantAPIKeyServiceUpdateNormalizesConfiguration(t *testing.T) {
 	if updated.Name != "updated" {
 		t.Fatalf("name = %q, want updated", updated.Name)
 	}
-	if got, want := []string(updated.KnowledgeBaseIDs), []string{"kb-1", "kb-2"}; !apiKeyEqualStrings(got, want) {
-		t.Fatalf("knowledge_base_ids = %#v, want %#v", got, want)
-	}
-	if got, want := []string(updated.Capabilities), []string{"retrieve", "chat"}; !apiKeyEqualStrings(got, want) {
-		t.Fatalf("capabilities = %#v, want %#v", got, want)
-	}
 	if updated.ExpiresAt == nil || updated.ExpiresAt.Location() != time.UTC {
 		t.Fatalf("expires_at = %v, want UTC", updated.ExpiresAt)
 	}
 
-	full, err := svc.UpdateAPIKey(ctx, interfaces.TenantAPIKeyUpdateRequest{
-		TenantID: 1, APIKeyID: created.APIKey.ID, Name: "full", FullAccess: true,
-		KnowledgeBaseIDs: []string{"kb-ignored"}, Capabilities: []string{"retrieve"},
-	})
-	if err != nil {
-		t.Fatalf("updating to full access returned error: %v", err)
-	}
-	if !full.FullAccess || len(full.KnowledgeBaseIDs) != 0 || len(full.Capabilities) != 0 {
-		t.Fatalf("full access scope = full:%v kbs:%v caps:%v, want true/empty/empty",
-			full.FullAccess, full.KnowledgeBaseIDs, full.Capabilities)
-	}
 }
 
 func apiKeyEqualStrings(a, b []string) bool {
@@ -214,11 +194,10 @@ func TestTenantAPIKeyServiceBackfillMissingKeyHashes(t *testing.T) {
 
 	token := "sk-legacy-token-value"
 	legacy := &types.TenantAPIKey{
-		TenantID:   uint64Pointer(types.SingleTenantID),
-		Name:       "legacy",
-		KeyHash:    "migrated-tenant-1",
-		APIKey:     token,
-		FullAccess: true,
+		TenantID: uint64Pointer(types.SingleTenantID),
+		Name:     "legacy",
+		KeyHash:  "migrated-tenant-1",
+		APIKey:   token,
 	}
 	if err := repo.CreateAPIKey(ctx, legacy); err != nil {
 		t.Fatalf("CreateAPIKey returned error: %v", err)

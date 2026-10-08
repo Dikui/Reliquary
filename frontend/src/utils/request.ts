@@ -1,5 +1,6 @@
 // src/utils/request.js
 import axios from "axios";
+import { translatePersonalServerMessage } from './personalServerError';
 import { generateRandomString, MAX_FILE_SIZE_MB, MAX_SKILL_BUNDLE_SIZE_MB } from "./index";
 import i18n from '@/i18n'
 import { getApiBaseUrl } from './api-base';
@@ -34,10 +35,10 @@ instance.interceptors.request.use(
       config.headers["Authorization"] = `Bearer ${token}`;
     }
 
-    
+
     // 添加用户语言偏好
     config.headers["Accept-Language"] = getCurrentLanguage();
-    
+
     config.headers["X-Request-ID"] = `${generateRandomString(12)}`;
     return config;
   },
@@ -50,12 +51,7 @@ instance.interceptors.request.use(
 let isRefreshing = false;
 let failedQueue: Array<{ resolve: Function; reject: Function }> = [];
 
-// Share-link endpoints (/auth/invitations/lookup, /auth/register-by-invite)
-// are reachable by anonymous users opening an invite link. A 401 from these
-// must surface to the page (e.g. expired token), not trigger the
-// refresh-then-redirect-to-login flow (issue #1617). '/auth/register' already
-// covers '/auth/register-by-invite' via substring match.
-const PUBLIC_AUTH_PATHS = ['/auth/login', '/auth/register', '/auth/invitations/lookup', '/auth/register-by-invite'];
+const PUBLIC_AUTH_PATHS = ['/auth/login', '/auth/register'];
 
 function isPublicAuthRequest(url?: string): boolean {
   if (!url) return false;
@@ -71,7 +67,7 @@ const processQueue = (error: any, token: string | null = null) => {
       resolve(token);
     }
   });
-  
+
   failedQueue = [];
 };
 
@@ -93,17 +89,17 @@ instance.interceptors.response.use(
   },
   async (error: any) => {
     const originalRequest = error.config;
-    
+
     if (!error.response) {
       return Promise.reject({ message: t('error.networkError') });
     }
-    
+
     if ((error.response.status === 401 || error.response.status === 403) && isPublicAuthRequest(originalRequest?.url)) {
       const { status, data } = error.response;
       const msg = typeof data === 'object'
         ? (typeof data?.error === 'string' ? data.error : (data?.error?.message || data?.message))
         : data;
-      return Promise.reject({ status, message: msg || t('error.invalidCredentials') });
+      return Promise.reject({ status, message: translatePersonalServerMessage(msg, t) || t('error.invalidCredentials') });
     }
 
     // Embed 调试页/挂件：无 JWT 时直接拒绝，勿走 refresh → /login
@@ -121,31 +117,31 @@ instance.interceptors.response.use(
           return Promise.reject(err);
         });
       }
-      
+
       originalRequest._retry = true;
       isRefreshing = true;
-      
+
       const refreshToken = localStorage.getItem('reliquary_refresh_token');
-      
+
       if (refreshToken) {
         try {
           // 动态导入refresh token API
           const { refreshToken: refreshTokenAPI } = await import('../api/auth/index');
           const response = await refreshTokenAPI(refreshToken);
-          
+
           if (response.success && response.data) {
             const { token, refreshToken: newRefreshToken } = response.data;
-            
+
             // 更新localStorage中的token
             localStorage.setItem('reliquary_token', token);
             localStorage.setItem('reliquary_refresh_token', newRefreshToken);
-            
+
             // 更新请求头
             originalRequest.headers['Authorization'] = 'Bearer ' + token;
-            
+
             // 处理队列中的请求
             processQueue(null, token);
-            
+
             return instance(originalRequest);
           } else {
             throw new Error(response.message || t('error.tokenRefreshFailed'));
@@ -156,11 +152,11 @@ instance.interceptors.response.use(
           localStorage.removeItem('reliquary_refresh_token');
           localStorage.removeItem('reliquary_user');
           localStorage.removeItem('reliquary_tenant');
-          
+
           processQueue(refreshError, null);
-          
+
           redirectToLogin();
-          
+
           return Promise.reject(refreshError);
         } finally {
           isRefreshing = false;
@@ -170,18 +166,18 @@ instance.interceptors.response.use(
         localStorage.removeItem('reliquary_token');
         localStorage.removeItem('reliquary_user');
         localStorage.removeItem('reliquary_tenant');
-        
+
         redirectToLogin();
-        
+
         return Promise.reject({ message: t('error.pleaseRelogin') });
       }
     }
-    
+
     // 处理 Nginx 413 Request Entity Too Large
     if (error.response.status === 413) {
       const skillUpload = isSkillBundleUploadUrl(error.config?.url)
-      return Promise.reject({ 
-        status: 413, 
+      return Promise.reject({
+        status: 413,
         message: skillUpload
           ? i18n.global.t('settings.sandbox.skillBundleTooLarge', { size: MAX_SKILL_BUNDLE_SIZE_MB })
           : i18n.global.t('error.fileSizeExceeded', { size: MAX_FILE_SIZE_MB }),
@@ -205,10 +201,10 @@ instance.interceptors.response.use(
     } else if (typeof data === 'string') {
       errorMessage = data;
     }
-    return Promise.reject({ 
-      status, 
-      message: errorMessage,
-      ...(typeof data === 'object' ? data : {}) 
+    return Promise.reject({
+      status,
+      ...(typeof data === 'object' ? data : {}),
+      message: translatePersonalServerMessage(errorMessage, t)
     });
   }
 );

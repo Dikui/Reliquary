@@ -2497,9 +2497,6 @@ func (s *knowledgeService) ReparseKnowledge(
 		s.prepareWikiForReparse(ctx, existing)
 	}
 	recordReparseStarted := func() {
-		recordKBActivity(ctx, s.audit, tenantID, existing.KnowledgeBaseID, types.AuditActionKnowledgeReparseStarted,
-			"knowledge", existing.ID, types.AuditOutcomeAccepted,
-			map[string]any{"title": existing.Title, "type": existing.Type, "attempt": reparseAttempt})
 	}
 
 	// For manual knowledge, use async manual processing (cleanup + re-indexing in worker)
@@ -2846,9 +2843,6 @@ func (s *knowledgeService) CancelKnowledgeParse(
 	// at isWikiKnowledgeAborted anyway, but scrubbing avoids waking the
 	// batch in the first place.
 	s.scrubWikiPendingIngest(ctx, existing.KnowledgeBaseID, knowledgeID, "cancel")
-	recordKBActivity(ctx, s.audit, tenantID, existing.KnowledgeBaseID, types.AuditActionKnowledgeParseCanceled,
-		"knowledge", existing.ID, types.AuditOutcomeCanceled,
-		map[string]any{"title": existing.Title, "type": existing.Type})
 	return existing, nil
 }
 
@@ -4032,8 +4026,6 @@ func (s *knowledgeService) ProcessKnowledgeListReparse(ctx context.Context, t *a
 		return err
 	}
 	ctx = payload.Initiator.Apply(ctx)
-	taskID, _ := asynq.GetTaskID(ctx)
-	ctx = withKBActivityTask(ctx, taskID, kbActivityTrigger(ctx))
 
 	logger.Infof(ctx, "Processing knowledge list reparse task for %d knowledge items", len(payload.KnowledgeIDs))
 

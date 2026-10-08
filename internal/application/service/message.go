@@ -496,10 +496,8 @@ func (s *messageService) SearchMessages(ctx context.Context, params *types.Messa
 
 	tenantID := types.MustTenantIDFromContext(ctx)
 
-	// Conversation search is scoped to the person asking, exactly as the
-	// session list is. Sessions are per-user state, and a workspace-wide
-	// keyword search over them let any viewer read a colleague's private
-	// conversations, which is not something a search box should be able to do.
+	// Conversation search uses the authenticated user's session scope,
+	// matching the session list.
 	if params.OwnerID == "" {
 		params.OwnerID = types.SessionOwnerIDFromContext(ctx)
 	}

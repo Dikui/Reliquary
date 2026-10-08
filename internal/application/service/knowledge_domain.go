@@ -29,20 +29,7 @@ func NewKnowledgeDomainService(db *gorm.DB) *KnowledgeDomainService {
 func knowledgeDomainAccess(ctx context.Context, write bool) (uint64, error) {
 	tenantID, ok := types.TenantIDFromContext(ctx)
 	if !ok || tenantID != types.SingleTenantID {
-		return 0, apperrors.NewUnauthorizedError("team workspace context required")
-	}
-	if scope, ok := types.TenantAPIKeyScopeFromContext(ctx); ok {
-		if write && !scope.FullAccess {
-			return 0, apperrors.NewForbiddenError("domain administration requires full access")
-		}
-		return tenantID, nil
-	}
-	minimum := types.TenantRoleViewer
-	if write {
-		minimum = types.TenantRoleAdmin
-	}
-	if !types.TenantRoleFromContext(ctx).HasPermission(minimum) {
-		return 0, apperrors.NewForbiddenError("insufficient team role")
+		return 0, apperrors.NewUnauthorizedError("personal workspace context required")
 	}
 	return tenantID, nil
 }
@@ -103,7 +90,7 @@ func (s *KnowledgeDomainService) Create(ctx context.Context, input types.Knowled
 	input.ID, input.TenantID = uuid.NewString(), tenantID
 	input.IsBuiltin = false
 	input.CreatedBy = ""
-	if userID, ok := types.UserIDFromContext(ctx); ok && !types.IsSyntheticUserID(userID) {
+	if userID, ok := types.UserIDFromContext(ctx); ok {
 		input.CreatedBy = userID
 	}
 	input.CreatedAt, input.UpdatedAt = time.Time{}, time.Time{}
@@ -352,9 +339,7 @@ func (s *KnowledgeDomainService) OpenFields(ctx context.Context, id string) ([]t
 			Joins("JOIN knowledge_bases AS kb ON kb.id = f.knowledge_base_id AND kb.tenant_id = f.tenant_id AND kb.deleted_at IS NULL").
 			Joins("JOIN knowledge_context_evidence AS ev ON ev.id = f.evidence_id AND ev.tenant_id = f.tenant_id").
 			Where("f.tenant_id = ? AND kb.domain_id = ? AND f.kind = ? AND f.status = ? AND ev.status = ?", domain.TenantID, id, types.KnowledgeFactAttribute, types.KnowledgeFactCurrent, types.KnowledgeEvidenceCurrent)
-		if scope, ok := types.TenantAPIKeyScopeFromContext(ctx); ok && len(scope.KnowledgeBaseIDs) > 0 {
-			query = query.Where("kb.id IN ?", []string(scope.KnowledgeBaseIDs))
-		}
+
 		return query
 	}
 	const nameSQL = "COALESCE(NULLIF(f.original_predicate, ''), f.predicate)"

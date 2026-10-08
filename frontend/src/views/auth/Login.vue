@@ -95,6 +95,7 @@
       </svg>
     </div>
 
+    <header class="login-header">
     <!-- Logo - Top Left -->
     <a href="http://192.168.1.146:3000/dikui/reliquary" target="_blank" class="header-logo" :title="$t('common.github')">
       <img src="@/assets/img/reliquary.svg" alt="Reliquary" class="logo-image" />
@@ -142,6 +143,8 @@
       </div>
     </div>
 
+    </header>
+
     <!-- Left Showcase Section -->
     <div class="showcase-section">
       <div class="showcase-content">
@@ -177,21 +180,6 @@
       <div class="form-panel">
         <!-- Login Card -->
         <div class="form-card" v-if="!isRegisterMode">
-          <!-- invite_only 模式下共享链接停在登录卡，同样需要邀请上下文。 -->
-          <div v-if="inviteLookup" class="invite-banner">
-            <t-icon name="link" class="invite-banner__icon" />
-            <div class="invite-banner__text">
-              <div class="invite-banner__title">
-                {{ $t('inviteRegister.bannerTitle', { tenant: inviteLookup.tenant_name || '' }) }}
-              </div>
-              <div class="invite-banner__hint">
-                {{ $t('inviteRegister.bannerHintLogin') }}
-              </div>
-            </div>
-          </div>
-          <div v-else-if="inviteLookupError" class="invite-banner invite-banner--error">
-            {{ inviteLookupError }}
-          </div>
           <div class="form-header">
             <h2 class="form-title">{{ $t('auth.login') }}</h2>
             <p class="form-welcome">{{ $t('auth.subtitle') }}</p>
@@ -248,29 +236,7 @@
           </div>
         </div>
 
-        <!-- Register Card. Renders when the user is in register mode
-             AND either self-service registration is enabled OR they
-             arrived with a valid share-link token (which bypasses the
-             invite_only gate). -->
-        <div class="form-card" v-if="isRegisterMode && (registrationEnabled || inviteLookup)">
-          <!-- Share-link banner: shown only when ?token= resolved to a
-               real invitation row. Sits above the form header so the
-               invitee instantly sees who invited them and into which
-               workspace, without bumping the existing register UX. -->
-          <div v-if="inviteLookup" class="invite-banner">
-            <t-icon name="link" class="invite-banner__icon" />
-            <div class="invite-banner__text">
-              <div class="invite-banner__title">
-                {{ $t('inviteRegister.bannerTitle', { tenant: inviteLookup.tenant_name || '' }) }}
-              </div>
-              <div class="invite-banner__hint">
-                {{ $t('inviteRegister.bannerHint') }}
-              </div>
-            </div>
-          </div>
-          <div v-else-if="inviteLookupError" class="invite-banner invite-banner--error">
-            {{ inviteLookupError }}
-          </div>
+        <div class="form-card" v-if="isRegisterMode && registrationEnabled">
           <div class="form-header">
             <h2 class="form-title">{{ $t('auth.createAccount') }}</h2>
             <p class="form-subtitle">{{ $t('auth.registerSubtitle') }}</p>
@@ -335,11 +301,11 @@
 
 <script setup lang="ts">
 import { ref, reactive, nextTick, onMounted, onBeforeUnmount, computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { useRoleLabel } from '@/composables/useRoleLabel'
+import { translatePersonalServerMessage } from '@/utils/personalServerError'
 import { notifyLoginSuccess } from '@/utils/loginNotify'
-import { newPasswordRules } from '@/utils/passwordPolicy'
+import { newPasswordRules } from '@/utils/passwordValidation'
 import { Swiper, SwiperSlide } from 'swiper/vue'
 import { Autoplay, EffectFade, Pagination } from 'swiper/modules'
 import 'swiper/css'
@@ -350,9 +316,6 @@ import {
   register,
   getAuthConfig,
   userInfoFromApi,
-  getInvitationByToken,
-  registerByInvite,
-  type InviteLookup,
 } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
@@ -364,10 +327,8 @@ import screenshot3 from '@/assets/img/screenshot-3.svg'
 import screenshot4 from '@/assets/img/screenshot-4.svg'
 
 const router = useRouter()
-const route = useRoute()
 const authStore = useAuthStore()
 const { t, tm, locale } = useI18n()
-const { formatRole, roleIcon } = useRoleLabel()
 
 // Swiper modules
 const modules = [Autoplay, EffectFade, Pagination]
@@ -406,19 +367,6 @@ const isRegisterMode = ref(false)
 const showLanguageMenu = ref(false)
 // Registration follows the server bootstrap state.
 const registrationEnabled = ref(false)
-const complexPasswordEnabled = ref(false)
-
-// invite-link state. When the URL carries ?token=xxx we resolve it to
-// the originating tenant + role and switch the form into a "register
-// via invitation" mode. The token bypasses the normal invite_only
-// gate — possessing it IS the authorisation. Submitting the register
-// form with this set hits /auth/register-by-invite (auto-login on
-// success) instead of /auth/register.
-const inviteToken = ref('')
-const inviteLookup = ref<InviteLookup | null>(null)
-const inviteLookupError = ref('')
-const inviteLookupLoading = ref(false)
-
 // Language options
 const languageOptions = [
   { value: 'zh-CN', label: '简体中文', shortLabel: '中文', flag: '🇨🇳' },
@@ -451,7 +399,7 @@ const formRules = computed(() => ({
   password: [
     { required: true, message: t('auth.passwordRequired'), type: 'error' },
     { min: 8, message: t('auth.passwordMinLength'), type: 'error' },
-    { max: 32, message: t('auth.passwordMaxLength'), type: 'error' }
+    { max: 72, message: t('auth.passwordMaxLength'), type: 'error' }
   ],
 }))
 
@@ -471,7 +419,7 @@ const registerRules = computed(() => ({
     { required: true, message: t('auth.emailRequired'), type: 'error' },
     { email: true, message: t('auth.emailInvalid'), type: 'error' }
   ],
-  password: newPasswordRules(t, complexPasswordEnabled.value),
+  password: newPasswordRules(t),
   confirmPassword: [
     { required: true, message: t('auth.confirmPasswordRequired'), type: 'error' },
     {
@@ -541,12 +489,10 @@ const persistLoginResponse = async (response: any, skipRedirect = false) => {
     } else {
       authStore.setTenant(null)
     }
-    if (Array.isArray(response.memberships)) {
-      authStore.setMemberships(response.memberships)
-    }
+
   }
 
-  // Load the current team role before entering the main UI.
+  // Refresh the user and workspace before entering the main UI.
   await authStore.refreshFromAuthMe()
   await nextTick()
   if (skipRedirect) return
@@ -558,30 +504,9 @@ const persistLoginResponse = async (response: any, skipRedirect = false) => {
 const loadAuthConfig = async () => {
   try {
     const response = await getAuthConfig()
-    registrationEnabled.value = response.registration_mode !== 'invite_only'
-    complexPasswordEnabled.value = response.complex_password_enabled
+    registrationEnabled.value = response.registration_enabled === true
   } catch {
     registrationEnabled.value = false
-    complexPasswordEnabled.value = false
-  }
-}
-
-// 用 token 加入空间并进入应用。会话此时已有效，故即便 token 失效也照常进入（避免困在登录页）。
-const acceptAndEnter = async (token: string) => {
-  loading.value = true
-  try {
-    const result = await authStore.acceptInvitationByTokenAndRefresh(token)
-    if (result.ok) {
-      MessagePlugin.success(t('inviteRegister.joined'))
-    } else {
-      MessagePlugin.warning(t('inviteRegister.invalidBody'))
-    }
-  } catch {
-    MessagePlugin.warning(t('inviteRegister.invalidBody'))
-  } finally {
-    loading.value = false
-    await nextTick()
-    router.replace('/platform/knowledge-bases')
   }
 }
 
@@ -599,14 +524,8 @@ const handleLogin = async () => {
     })
 
     if (response.success) {
-      if (inviteToken.value) {
-        // 从邀请链接登录：持久化会话后兑换 token 并进入对应空间。
-        await persistLoginResponse(response, true)
-        await acceptAndEnter(inviteToken.value)
-        return
-      }
       await persistLoginResponse(response)
-      notifyLoginSuccess(response, t, tm, formatRole, roleIcon)
+      notifyLoginSuccess(response, t, tm)
     } else {
       MessagePlugin.error(response.message || t('auth.loginError'))
     }
@@ -618,35 +537,13 @@ const handleLogin = async () => {
   }
 }
 
-// Handle registration. Dispatches based on whether the user arrived
-// with a share-link token: with token -> register-by-invite (auto-
-// login on success); without -> the normal self-service register
-// (drops back to the login form for the user to sign in).
+// Handle registration.
 const handleRegister = async () => {
   try {
     const valid = await registerFormRef.value?.validate()
     if (valid !== true) return
 
     loading.value = true
-
-    if (inviteToken.value) {
-      const response = await registerByInvite({
-        token: inviteToken.value,
-        username: registerData.username,
-        email: registerData.email,
-        password: registerData.password,
-      })
-      if (!response.success) {
-        MessagePlugin.error(response.message || t('auth.registerFailed'))
-        return
-      }
-      MessagePlugin.success(t('auth.registerSuccess'))
-      // register-by-invite returns the same shape as login (token +
-      // active_tenant + memberships), so reuse the login persistence
-      // path — same store writes, same redirect target.
-      await persistLoginResponse(response)
-      return
-    }
 
     const response = await register({
       username: registerData.username,
@@ -659,6 +556,7 @@ const handleRegister = async () => {
 
       // Switch to login mode and fill in email
       isRegisterMode.value = false
+      registrationEnabled.value = false
       formData.email = registerData.email
 
       // Clear register form
@@ -666,61 +564,17 @@ const handleRegister = async () => {
         (registerData as any)[key] = ''
       })
     } else {
-      MessagePlugin.error(response.message || t('auth.registerFailed'))
+      MessagePlugin.error(translatePersonalServerMessage(response.message, t) || t('auth.registerFailed'))
     }
   } catch (error: any) {
     console.error('注册错误:', error)
-    MessagePlugin.error(error.message || t('auth.registerError'))
+    MessagePlugin.error(translatePersonalServerMessage(error.message, t) || t('auth.registerError'))
   } finally {
     loading.value = false
   }
 }
 
-// Resolve invitations before redirecting an existing login session.
 onMounted(async () => {
-  // Share-link landing: ?token=xxx switches the form into invite-
-  // register mode before a logged-in session redirects. Resolution failure
-  // surfaces inline; the user can still log in normally if they
-  // already have an account. We check this BEFORE the isLoggedIn
-  // redirect so an existing session doesn't bounce the user to
-  // /platform (and possibly back to /login if the session is stale),
-  // dropping the invite token along the way.
-  const tokenFromQuery = String(route.query.token || '').trim()
-  if (tokenFromQuery) {
-    inviteToken.value = tokenFromQuery
-    inviteLookupLoading.value = true
-    // 1. 先校验 token：无效/过期则停在登录页报错，不进注册模式。
-    try {
-      const resp = await getInvitationByToken(tokenFromQuery)
-      if (resp.success && resp.data) {
-        inviteLookup.value = resp.data
-      } else {
-        inviteLookupError.value = resp.message || t('inviteRegister.invalidBody')
-        loadAuthConfig()
-        return
-      }
-    } catch {
-      inviteLookupError.value = t('inviteRegister.invalidBody')
-      loadAuthConfig()
-      return
-    } finally {
-      inviteLookupLoading.value = false
-    }
-
-    // 2. 已登录则直接兑换 token 进入空间（两种模式通用）。
-    if (authStore.isLoggedIn && (await authStore.refreshFromAuthMe())) {
-      await acceptAndEnter(tokenFromQuery)
-      return
-    }
-
-    // 3. 未登录：有效邀请链接显示邀请注册表单。
-    const cfg = await getAuthConfig()
-    const inviteOnly = cfg.registration_mode === 'invite_only'
-    registrationEnabled.value = !inviteOnly
-    isRegisterMode.value = true
-    return
-  }
-
   if (authStore.isLoggedIn) {
     router.replace('/platform/knowledge-bases')
     return
@@ -1232,56 +1086,12 @@ onMounted(async () => {
   width: 100%;
 }
 
-/* Share-link invitation banner. Sits above the register form when the
- * user arrived via /register?token=xxx; gives them confirmation of who
- * invited them before they fill anything in. Subtle, neutral card —
- * the page background is heavily brand-coloured already, so a loud
- * tinted banner clashes; we lean on the form's own surface tokens. */
-.invite-banner {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 12px 14px;
-  margin-bottom: 20px;
-  border-radius: 10px;
-  background: var(--td-bg-color-container-hover, rgba(0, 0, 0, 0.03));
-  border: 1px solid var(--td-component-stroke);
-  color: var(--td-text-color-primary);
-}
 
-.invite-banner__icon {
-  margin-top: 2px;
-  font-size: 18px;
-  flex-shrink: 0;
-  color: var(--td-text-color-secondary);
-}
 
-.invite-banner__text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
 
-.invite-banner__title {
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.4;
-  color: var(--td-text-color-primary);
-}
 
-.invite-banner__hint {
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-  line-height: 1.5;
-}
 
-.invite-banner--error {
-  background: var(--td-error-color-1, rgba(220, 38, 38, 0.06));
-  border-color: var(--td-error-color-3, rgba(220, 38, 38, 0.2));
-  color: var(--td-error-color, #b91c1c);
-  font-size: 13px;
-}
+
 
 .form-header {
   text-align: center;
@@ -1761,6 +1571,30 @@ html[theme-mode="dark"] {
 
   .login-features .feature-icon {
     background: rgba(6, 176, 77, 0.15);
+  }
+}
+</style>
+
+<style scoped lang="less">
+@media (max-width: 768px) {
+  .login-header {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 18px 20px;
+    box-sizing: border-box;
+    width: 100%;
+    z-index: 10;
+  }
+  .header-logo, .header-links {
+    position: static;
+  }
+  .header-links {
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 }
 </style>

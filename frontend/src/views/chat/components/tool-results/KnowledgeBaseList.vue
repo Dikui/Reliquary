@@ -6,8 +6,8 @@
       </div>
 
       <div class="card-grid">
-        <div 
-          v-for="kb in data.knowledge_bases" 
+        <div
+          v-for="kb in data.knowledge_bases"
           :key="kb.id"
           class="kb-card"
         >

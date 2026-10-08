@@ -8,14 +8,6 @@ import (
 	"unicode/utf8"
 )
 
-// ── Incomplete-reference detection ──
-//
-// Content is delivered to clients in chunks (SSE answer deltas, or the IM
-// channel's 300ms flush batches). A storage reference may be split across two
-// chunks, so a rewrite that only sees one chunk would leave a broken fragment.
-// These helpers locate an incomplete pattern at the tail of a chunk so the
-// caller can hold it back until the next chunk completes it.
-
 // incompleteRefSuffixRe matches a storage reference that reaches the end of the
 // string — it may continue in the next chunk.
 var incompleteRefSuffixRe = regexp.MustCompile(

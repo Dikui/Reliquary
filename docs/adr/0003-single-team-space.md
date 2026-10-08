@@ -1,6 +1,7 @@
 # 0003 单团队空间，删除多租户与共享
 
 Status: accepted
+部分被 [0007](0007-personal-single-user.md) 取代
 日期：2026-10-07
 
 ## 背景

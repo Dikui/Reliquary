@@ -39,8 +39,7 @@ func (s *KnowledgeContextService) contextQueryCandidates(ctx context.Context, sc
 		if err := s.db.WithContext(ctx).Select("entity_id", "alias").Where("tenant_id = ?", tenantID).Find(&aliases).Error; err != nil {
 			return nil, nil, true, err
 		}
-		key, _ := types.TenantAPIKeyScopeFromContext(ctx)
-		limitedAliases := key.IsKnowledgeBaseRestricted() || len(q.KnowledgeIDs) > 0
+		limitedAliases := len(q.KnowledgeIDs) > 0
 		var aliasEvidence []types.KnowledgeEvidence
 		if limitedAliases {
 			var err error
@@ -137,9 +136,7 @@ func (s *KnowledgeContextService) scopedKnowledgeBase(ctx context.Context, kbID 
 	if err != nil {
 		return 0, err
 	}
-	if err := types.AuthorizeTenantAPIKeyKnowledgeBases(ctx, kbID); err != nil {
-		return 0, err
-	}
+
 	if strings.TrimSpace(kbID) == "" {
 		return 0, werrors.NewBadRequestError("knowledge base ID is required")
 	}
@@ -159,13 +156,11 @@ func (s *KnowledgeContextService) Query(ctx context.Context, kbID string, q type
 
 // EntityDetail includes team history by default, without list pagination.
 func (s *KnowledgeContextService) EntityDetail(ctx context.Context, entityID string, history ...bool) (*types.KnowledgeContextResult, error) {
-	tenantID, err := s.requireTenant(ctx)
+	_, err := s.requireTenant(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authorizeContextEntity(ctx, tenantID, entityID); err != nil {
-		return nil, err
-	}
+
 	includeHistory := true
 	if len(history) > 0 {
 		includeHistory = history[0]
@@ -191,16 +186,11 @@ func (s *KnowledgeContextService) EntityDetail(ctx context.Context, entityID str
 		if err := s.db.WithContext(ctx).Where("tenant_id = ? AND entity_id = ?", tenantID, entityID).Order("normalized_alias ASC").Find(&aliases).Error; err != nil {
 			return nil, err
 		}
-		if key, ok := types.TenantAPIKeyScopeFromContext(ctx); ok && key.IsKnowledgeBaseRestricted() {
-			entity.Description = ""
-			if !key.AllowsKnowledgeBase(entity.KnowledgeBaseID) {
-				entity.KnowledgeBaseID = ""
-			}
-		} else {
-			for _, alias := range aliases {
-				entity.Aliases = append(entity.Aliases, alias.Alias)
-			}
+
+		for _, alias := range aliases {
+			entity.Aliases = append(entity.Aliases, alias.Alias)
 		}
+
 		result.Entities = []types.KnowledgeEntity{entity}
 	}
 	return result, nil
@@ -212,9 +202,8 @@ func (s *KnowledgeContextService) queryContext(ctx context.Context, kbID string,
 		return nil, err
 	}
 	tenantID, kbIDs := scope.tenantID, scope.kbIDs
-	key, _ := types.TenantAPIKeyScopeFromContext(ctx)
-	limitedEntities := len(q.KnowledgeIDs) > 0 || key.IsKnowledgeBaseRestricted()
-	projectEventSources := len(q.KnowledgeIDs) > 0 || scope.kind != "team" || key.IsKnowledgeBaseRestricted()
+	limitedEntities := len(q.KnowledgeIDs) > 0
+	projectEventSources := len(q.KnowledgeIDs) > 0 || scope.kind != "team"
 	result := &types.KnowledgeContextResult{
 		Entities: []types.KnowledgeEntity{}, Facts: []types.KnowledgeFact{},
 		Events: []types.KnowledgeEvent{}, Evidence: []types.KnowledgeEvidence{}, Attention: []types.KnowledgeAttention{},
@@ -415,9 +404,7 @@ func (s *KnowledgeContextService) queryContext(ctx context.Context, kbID string,
 		}
 		event.EvidenceIDs = visibleIDs
 		event.EntityIDs = visibleEntityIDs
-		if key.IsKnowledgeBaseRestricted() && !key.AllowsKnowledgeBase(event.KnowledgeBaseID) {
-			event.KnowledgeBaseID = visibleEvidence[0].KnowledgeBaseID
-		}
+
 		if projectEventSources {
 			if visibleSummary == nil {
 				continue
@@ -538,9 +525,7 @@ func (s *KnowledgeContextService) queryContext(ctx context.Context, kbID string,
 		for i := range result.Entities {
 			if limitedEntities {
 				result.Entities[i].Description = ""
-				if key.IsKnowledgeBaseRestricted() && !key.AllowsKnowledgeBase(result.Entities[i].KnowledgeBaseID) {
-					result.Entities[i].KnowledgeBaseID = ""
-				}
+
 			}
 			byID[result.Entities[i].ID] = &result.Entities[i]
 		}
@@ -702,9 +687,7 @@ func (s *KnowledgeContextService) GetEvidence(ctx context.Context, kbID, evidenc
 		}
 		return nil, err
 	}
-	if err := types.AuthorizeTenantAPIKeyKnowledgeBases(ctx, evidence.KnowledgeBaseID); err != nil {
-		return nil, err
-	}
+
 	if kbID != "" && evidence.KnowledgeBaseID != kbID {
 		return nil, werrors.NewNotFoundError("knowledge evidence not found")
 	}

@@ -6,7 +6,6 @@ package container
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -34,20 +33,10 @@ import (
 	"reliquary/internal/config"
 	"reliquary/internal/database"
 	"reliquary/internal/datasource"
-	"reliquary/internal/datasource/connector/feishu/core"
-	"reliquary/internal/datasource/connector/feishu/drive"
-	"reliquary/internal/datasource/connector/feishu/wiki"
-	gitlabConnector "reliquary/internal/datasource/connector/gitlab"
-	grokXConnector "reliquary/internal/datasource/connector/grokx"
-	imaConnector "reliquary/internal/datasource/connector/ima"
-	notionConnector "reliquary/internal/datasource/connector/notion"
 	rssConnector "reliquary/internal/datasource/connector/rss"
-	yuqueConnector "reliquary/internal/datasource/connector/yuque"
 	"reliquary/internal/event"
 	"reliquary/internal/handler"
 	"reliquary/internal/handler/session"
-	imPkg "reliquary/internal/im"
-	"reliquary/internal/im/feishu"
 	"reliquary/internal/infrastructure/docparser"
 	infra_web_search "reliquary/internal/infrastructure/web_search"
 	"reliquary/internal/logger"
@@ -107,9 +96,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	logger.Debugf(ctx, "[Container] Registering repositories...")
 	must(container.Provide(repository.NewTenantRepository))
 	must(container.Provide(repository.NewTenantAPIKeyRepository))
-	must(container.Provide(repository.NewTenantMemberRepository))
-	must(container.Provide(repository.NewTenantInvitationRepository))
-	must(container.Provide(repository.NewAuditLogRepository))
 	must(container.Provide(repository.NewKnowledgeBaseRepository))
 	must(container.Provide(repository.NewKnowledgeRepository))
 	must(container.Provide(repository.NewKnowledgeSpanRepository))
@@ -156,10 +142,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	logger.Debugf(ctx, "[Container] Registering business services...")
 	must(container.Provide(service.NewTenantService))
 	must(container.Provide(service.NewTenantAPIKeyService))
-	must(container.Provide(service.NewTenantMemberService))
-	must(container.Provide(service.NewTenantInvitationService))
-	must(container.Provide(service.NewAuditLogService))
-	must(container.Provide(service.NewAuditLogRetentionRunner))
 	must(container.Provide(service.NewKnowledgeBaseService))
 	must(container.Provide(service.NewKnowledgeService))
 	must(container.Provide(service.NewSpanTracker))
@@ -295,8 +277,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewDataSourceService))
 	must(container.Invoke(startDataSourceScheduler))
 	logger.Debugf(ctx, "[Container] Data source sync framework registered")
-	must(container.Invoke(startAuditLogRetention))
-	logger.Debugf(ctx, "[Container] Audit log retention runner registered")
 	must(container.Provide(service.NewHousekeepingService))
 	must(container.Invoke(startHousekeepingService))
 	logger.Debugf(ctx, "[Container] Knowledge housekeeping runner registered")
@@ -328,9 +308,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	// HTTP handlers layer
 	logger.Debugf(ctx, "[Container] Registering HTTP handlers...")
 	must(container.Provide(handler.NewTenantHandler))
-	must(container.Provide(handler.NewTenantMemberHandler))
-	must(container.Provide(handler.NewTenantInvitationHandler))
-	must(container.Provide(handler.NewAuditLogHandler))
 	must(container.Provide(handler.NewKnowledgeBaseHandler))
 	must(container.Provide(handler.NewKnowledgeHandler))
 	must(container.Provide(handler.NewKnowledgeAnomalyHandler))
@@ -378,11 +355,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewDataSourceHandler))
 	// Wiki page handler
 	must(container.Provide(handler.NewWikiPageHandler))
-	// IM integration
-	logger.Debugf(ctx, "[Container] Registering IM integration...")
-	must(container.Provide(imPkg.NewService))
-	must(container.Invoke(registerIMService))
-	must(container.Provide(handler.NewIMHandler))
 	logger.Debugf(ctx, "[Container] HTTP handlers registered")
 
 	// Wire the chat package's local image resolver so multimodal chat can read
@@ -826,73 +798,11 @@ func registerWebSearchProviders(registry *infra_web_search.Registry) {
 	registry.Register("metaso", infra_web_search.NewMetasoProvider)
 }
 
-// registerIMService registers adapter factories, loads enabled channels, and
-// wires the process-lifetime shutdown hook. Each platform's factory lives in
-// its own subpackage to keep this file focused on wiring.
-func registerIMService(imService *imPkg.Service, cleaner interfaces.ResourceCleaner) {
-	imService.RegisterAdapterFactory("feishu", feishu.NewFactory(feishu.RegionFeishu))
-	// Lark is Feishu's international cloud: same adapter, different host/tenant.
-	imService.RegisterAdapterFactory("lark", feishu.NewFactory(feishu.RegionLark))
-
-	// Load and start all enabled channels from database
-	if err := imService.LoadAndStartChannels(); err != nil {
-		logger.Warnf(context.Background(), "[IM] Failed to load channels from database: %v", err)
-	}
-
-	cleaner.RegisterWithName("IMService", func() error {
-		imService.Stop()
-		return nil
-	})
-}
-
-// initConnectorRegistry creates and populates the connector registry with all available connectors.
-// Aggregates registration errors via errors.Join so a misconfigured or duplicated connector fails
-// container initialization loudly instead of silently disabling the feature at runtime.
+// initConnectorRegistry registers RSS and its site adapters.
 func initConnectorRegistry() (*datasource.ConnectorRegistry, error) {
 	registry := datasource.NewConnectorRegistry()
-
-	var errs error
-	if err := registry.Register(wiki.NewConnector(core.RegionFeishu)); err != nil {
-		errs = errors.Join(errs, fmt.Errorf("register feishu connector: %w", err))
-	}
-	// Lark is Feishu's international cloud: same connector, different host/tenant.
-	if err := registry.Register(wiki.NewConnector(core.RegionLark)); err != nil {
-		errs = errors.Join(errs, fmt.Errorf("register lark connector: %w", err))
-	}
-	// Feishu/Lark Drive (云盘) mode: different connector type so the registry
-	// dispatches to the Drive connector. Shares core.Client/Region/export logic
-	// with the wiki connector. See 飞书云盘数据源设计.md / ADR-0001.
-	if err := registry.Register(drive.NewDriveConnector(core.RegionFeishuDrive)); err != nil {
-		errs = errors.Join(errs, fmt.Errorf("register feishu_drive connector: %w", err))
-	}
-	if err := registry.Register(drive.NewDriveConnector(core.RegionLarkDrive)); err != nil {
-		errs = errors.Join(errs, fmt.Errorf("register lark_drive connector: %w", err))
-	}
-	if err := registry.Register(notionConnector.NewConnector()); err != nil {
-		errs = errors.Join(errs, fmt.Errorf("register notion connector: %w", err))
-	}
-	if err := registry.Register(yuqueConnector.NewConnector()); err != nil {
-		errs = errors.Join(errs, fmt.Errorf("register yuque connector: %w", err))
-	}
-	if err := registry.Register(imaConnector.NewConnector()); err != nil {
-		errs = errors.Join(errs, fmt.Errorf("register ima connector: %w", err))
-	}
 	if err := registry.Register(rssConnector.NewConnector()); err != nil {
-		errs = errors.Join(errs, fmt.Errorf("register rss connector: %w", err))
-	}
-	if err := registry.Register(grokXConnector.NewConnector()); err != nil {
-		errs = errors.Join(errs, fmt.Errorf("register grok_x connector: %w", err))
-	}
-	if err := registry.Register(gitlabConnector.NewConnector()); err != nil {
-		errs = errors.Join(errs, fmt.Errorf("register gitlab connector: %w", err))
-	}
-
-	// Future connectors will be registered here:
-	// if err := registry.Register(confluenceConnector.NewConnector()); err != nil { ... }
-	// if err := registry.Register(githubConnector.NewConnector()); err != nil { ... }
-
-	if errs != nil {
-		return nil, errs
+		return nil, fmt.Errorf("register rss connector: %w", err)
 	}
 	return registry, nil
 }
@@ -964,25 +874,6 @@ func startTemporaryDocumentCleanup(svc interfaces.TemporaryDocumentService, clea
 	}()
 	cleaner.RegisterWithName("TemporaryDocumentCleanup", func() error {
 		close(stop)
-		return nil
-	})
-}
-
-// startAuditLogRetention spins up the daily audit_logs purge sweep
-// and registers shutdown cleanup. Mirrors the data-source-scheduler
-// pattern: container init kicks the goroutine, ResourceCleaner stops
-// it during graceful shutdown so a SIGTERM during a sweep doesn't
-// orphan the goroutine.
-//
-// retention_days <= 0 is the configured way to disable retention;
-// the runner short-circuits Start() on that path so we don't need
-// to gate the wiring here.
-func startAuditLogRetention(
-	runner *service.AuditLogRetentionRunner, cleaner interfaces.ResourceCleaner,
-) {
-	runner.Start(context.Background())
-	cleaner.RegisterWithName("AuditLogRetentionRunner", func() error {
-		runner.Stop()
 		return nil
 	})
 }

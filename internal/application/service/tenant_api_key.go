@@ -37,7 +37,6 @@ func (s *tenantAPIKeyService) CreateAPIKey(
 	if req.TenantID != types.SingleTenantID {
 		return nil, errors.New("only the team workspace is available")
 	}
-	capabilities := types.NormalizeAPIKeyCapabilities(types.StringArray(req.Capabilities))
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
 		return nil, errors.New("name is required")
@@ -53,18 +52,11 @@ func (s *tenantAPIKeyService) CreateAPIKey(
 	}
 	tenantID := &req.TenantID
 	key := &types.TenantAPIKey{
-		TenantID:         tenantID,
-		Name:             name,
-		KeyHash:          hashTenantAPIKey(token),
-		APIKey:           token,
-		FullAccess:       req.FullAccess,
-		KnowledgeBaseIDs: normalizeAPIKeyIDs(req.KnowledgeBaseIDs),
-		Capabilities:     capabilities,
-		ExpiresAt:        expiresAt,
-	}
-	if key.FullAccess {
-		key.KnowledgeBaseIDs = nil
-		key.Capabilities = nil
+		TenantID:  tenantID,
+		Name:      name,
+		KeyHash:   hashTenantAPIKey(token),
+		APIKey:    token,
+		ExpiresAt: expiresAt,
 	}
 	if err := s.repo.CreateAPIKey(ctx, key); err != nil {
 		return nil, err
@@ -116,7 +108,7 @@ func (s *tenantAPIKeyService) ListAPIKeys(ctx context.Context, tenantID uint64) 
 }
 
 // UpdateAPIKey 按创建接口的相同语义更新租户 API Key 配置。
-// scoped Key 需要至少一个能力；full-access Key 会清空细粒度能力和知识库范围。
+// API Key 与登录用户使用相同权限，只更新名称和有效期。
 func (s *tenantAPIKeyService) UpdateAPIKey(
 	ctx context.Context, req interfaces.TenantAPIKeyUpdateRequest,
 ) (*types.TenantAPIKey, error) {
@@ -130,25 +122,14 @@ func (s *tenantAPIKeyService) UpdateAPIKey(
 	if name == "" {
 		return nil, errors.New("name is required")
 	}
-	capabilities := types.NormalizeAPIKeyCapabilities(types.StringArray(req.Capabilities))
-	if !req.FullAccess && len(capabilities) == 0 {
-		return nil, errors.New("capabilities are required for scoped API keys")
-	}
 	expiresAt := req.ExpiresAt
 	if expiresAt != nil {
 		utc := expiresAt.UTC()
 		expiresAt = &utc
 	}
 	key := &types.TenantAPIKey{
-		Name:             name,
-		FullAccess:       req.FullAccess,
-		KnowledgeBaseIDs: normalizeAPIKeyIDs(req.KnowledgeBaseIDs),
-		Capabilities:     capabilities,
-		ExpiresAt:        expiresAt,
-	}
-	if key.FullAccess {
-		key.KnowledgeBaseIDs = nil
-		key.Capabilities = nil
+		Name:      name,
+		ExpiresAt: expiresAt,
 	}
 	return s.repo.UpdateAPIKey(ctx, req.TenantID, req.APIKeyID, key)
 }
@@ -197,21 +178,4 @@ func generateTenantAPIKeyToken() (string, error) {
 func hashTenantAPIKey(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
-}
-
-func normalizeAPIKeyIDs(in []string) types.StringArray {
-	out := types.StringArray{}
-	seen := map[string]struct{}{}
-	for _, id := range in {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		out = append(out, id)
-	}
-	return out
 }

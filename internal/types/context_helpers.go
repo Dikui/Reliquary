@@ -69,23 +69,18 @@ func WikiEditSourceFromContext(ctx context.Context) string {
 }
 
 // TaskInitiator is the authenticated caller that submitted an asynchronous
-// task. Workers restore it into their context so audit entries describe who
-// initiated the operation, while tasks created by schedulers remain
-// attributable to the system.
+// task. Workers restore this identity into their execution context.
 type TaskInitiator struct {
-	UserID string     `json:"user_id,omitempty"`
-	Role   TenantRole `json:"role,omitempty"`
+	UserID string `json:"user_id,omitempty"`
 }
 
-// TaskInitiatorFromContext snapshots the real caller identity for a task
-// payload. Synthetic API-key users are service identities, not people, and are
-// intentionally left empty so the activity feed presents them as system work.
+// TaskInitiatorFromContext snapshots the authenticated user for a task payload.
 func TaskInitiatorFromContext(ctx context.Context) TaskInitiator {
 	userID, ok := UserIDFromContext(ctx)
-	if !ok || IsSyntheticUserID(userID) {
+	if !ok {
 		return TaskInitiator{}
 	}
-	return TaskInitiator{UserID: userID, Role: TenantRoleFromContext(ctx)}
+	return TaskInitiator{UserID: userID}
 }
 
 // Apply restores a captured task initiator onto a worker context. Empty or
@@ -95,59 +90,8 @@ func (i TaskInitiator) Apply(ctx context.Context) context.Context {
 		return ctx
 	}
 	ctx = context.WithValue(ctx, UserIDContextKey, i.UserID)
-	if i.Role.IsValid() {
-		ctx = context.WithValue(ctx, TenantRoleContextKey, i.Role)
-	}
+
 	return ctx
-}
-
-// IsSyntheticUserID reports whether id refers to the synthetic system
-// user that the X-API-Key auth path attaches to each tenant
-// (User.ID = "system-<tenantID>"). These users have no real human
-// behind them and no tenant_members row, so RBAC ownership matching
-// against them is never meaningful — service-layer code that records
-// "the creator" should skip storing this ID and treat the resource as
-// tenant-owned instead.
-//
-// Kept minimal on purpose: the prefix and "all digits afterwards"
-// invariant comes from middleware/auth.go's User construction for the
-// API-key branch. If that prefix changes, update both sides.
-func IsSyntheticUserID(id string) bool {
-	const prefix = "system-"
-	if len(id) <= len(prefix) {
-		return false
-	}
-	if id[:len(prefix)] != prefix {
-		return false
-	}
-	for _, r := range id[len(prefix):] {
-		if r < '0' || r > '9' {
-			return false
-		}
-	}
-	return true
-}
-
-// TenantRoleFromContext extracts the caller's TenantRole in the currently
-// active tenant. Returns TenantRoleViewer when the key is absent so that
-// callers fail closed (least privilege) if the auth middleware did not
-// populate the role for some reason.
-func TenantRoleFromContext(ctx context.Context) TenantRole {
-	v, ok := ctx.Value(TenantRoleContextKey).(TenantRole)
-	if !ok || !v.IsValid() {
-		return TenantRoleViewer
-	}
-	return v
-}
-
-// IsSystemAdminFromContext extracts the system admin flag from ctx.
-// Returns false (fail-closed) when the key is absent.
-func IsSystemAdminFromContext(ctx context.Context) bool {
-	v, ok := ctx.Value(SystemAdminContextKey).(bool)
-	if !ok {
-		return false
-	}
-	return v
 }
 
 func SessionTenantIDFromContext(ctx context.Context) (uint64, bool) { return TenantIDFromContext(ctx) }
@@ -189,10 +133,6 @@ func SandboxTenantIDFromContext(ctx context.Context) (uint64, bool) {
 	return TenantIDFromContext(ctx)
 }
 
-// WithMCPOAuthNonInteractive marks ctx as originating from a channel that cannot
-// complete an in-conversation MCP OAuth prompt (e.g. an IM bot). The agent uses
-// this to emit a one-shot authorization notice instead of blocking on the OAuth
-// wait until it times out. See MCPOAuthNonInteractiveContextKey.
 func WithMCPOAuthNonInteractive(ctx context.Context) context.Context {
 	return context.WithValue(ctx, MCPOAuthNonInteractiveContextKey, true)
 }
@@ -353,4 +293,10 @@ func LanguageLocaleName(locale string) string {
 		// For unknown locales, return the locale itself
 		return locale
 	}
+}
+
+// IsAuthenticatedFromContext reports whether a user identity was verified.
+func IsAuthenticatedFromContext(ctx context.Context) bool {
+	id, ok := UserIDFromContext(ctx)
+	return ok && strings.TrimSpace(id) != ""
 }

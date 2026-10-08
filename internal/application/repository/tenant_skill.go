@@ -41,10 +41,6 @@ type TenantSkillRepository interface {
 		enabled bool,
 		envs types.SkillEnvVars,
 	) error
-	// DeleteSkill soft-deletes the metadata row and, in the same transaction,
-	// hard-deletes the per-principal env values hanging off it. Image cleanup is
-	// represented by snapshots. When the scoped key matches no skill, nothing is
-	// deleted and the call succeeds.
 	DeleteSkill(ctx context.Context, tenantID uint64, configID, skillID string) error
 	// ListStaleInstalling finds abandoned install/remove runs for the reaper.
 	ListStaleInstalling(ctx context.Context, olderThan time.Time) ([]*types.TenantSkillEntity, error)

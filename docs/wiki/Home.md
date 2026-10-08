@@ -30,7 +30,6 @@ aliases: [Home, Index, wiki首页]
 
 | 页面 | 简介 |
 |------|------|
-| [IM集成开发](集成扩展/IM集成开发.md) | 企业即时通讯平台接入开发 |
 | [数据源导入开发](集成扩展/数据源导入开发.md) | 外部平台数据自动同步与导入 |
 | [添加网络搜索引擎](集成扩展/添加网络搜索引擎.md) | 扩展新的网络搜索 Provider |
 
@@ -38,7 +37,7 @@ aliases: [Home, Index, wiki首页]
 
 | 页面 | 简介 |
 |------|------|
-| [空间RBAC说明](安全认证/RBAC说明.md) | 空间内角色矩阵、资源归属与审计 |
+| [个人使用说明](../personal-use.md) | 单用户登录、API Key 与本地密码恢复 |
 
 ## 开发与部署
 
@@ -82,11 +81,10 @@ graph TB
     核心功能 --> BuiltinModel[内置模型管理]
     核心功能 --> Skills[Agent技能系统]
 
-    集成扩展 --> IM[IM集成开发]
     集成扩展 --> DS[数据源导入开发]
     集成扩展 --> WebSearch[添加网络搜索引擎]
 
-    安全认证 --> RBAC[空间RBAC说明]
+    安全认证 --> Personal[个人使用说明]
 
     开发部署 --> DevGuide[开发指南]
     开发部署 --> QuickDev[快速开发模式]
@@ -98,8 +96,6 @@ graph TB
     KG -.-> KGSetup
     MCP -.-> BuiltinMCP
     BuiltinMCP -.-> BuiltinModel
-    Skills -.-> IM
-    IM -.-> DS
     WebSearch -.-> VecDB
     DevGuide -.-> QuickDev
     FAQ -.-> DevGuide

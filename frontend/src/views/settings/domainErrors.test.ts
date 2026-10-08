@@ -5,6 +5,7 @@ import { createI18n } from 'vue-i18n'
 import ts from 'typescript'
 import enUS from '../../i18n/locales/en-US'
 import zhCN from '../../i18n/locales/zh-CN'
+import * as personalServerError from '../../utils/personalServerError'
 import { domainErrorMessage, KNOWLEDGE_DOMAIN_REFERENCED_CODE } from './domainErrors'
 
 test('referenced domain deletion shows the reason returned with HTTP 409', () => {
@@ -21,7 +22,7 @@ test('referenced domain deletion shows the reason returned with HTTP 409', () =>
 
 type RejectResponse = (cause: { response: { status: number; data: unknown }; config: { url: string } }) => Promise<never>
 
-function requestRejectionHandler(): RejectResponse {
+function requestRejectionHandler(translate: (key: string) => string = key => key): RejectResponse {
   let rejected: RejectResponse | undefined
   const axios = {
     create: () => ({
@@ -34,7 +35,8 @@ function requestRejectionHandler(): RejectResponse {
   const modules: Record<string, unknown> = {
     axios,
     './index': { generateRandomString: () => 'domain-error-test', MAX_FILE_SIZE_MB: 50, MAX_SKILL_BUNDLE_SIZE_MB: 256 },
-    '@/i18n': { global: { t: (key: string) => key } },
+    '@/i18n': { global: { t: translate } },
+    './personalServerError': personalServerError,
     './api-base': { getApiBaseUrl: () => '/api/v1' },
     './uploadLimit': { isSkillBundleUploadUrl: () => false },
   }
@@ -100,3 +102,21 @@ test('missing domain error details retain the localized fallback', () => {
     assert.equal(domainErrorMessage(cause, '操作失败，请重试'), '操作失败，请重试')
   }
 })
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: request rejection localizes registration closure and API key validation`, async () => {
+    const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zhCN, 'en-US': enUS } })
+    for (const [url, status, reason, key] of [
+      ['/api/v1/auth/register', 403, 'Registration is closed', 'auth.registrationClosed'],
+      ['/api/v1/tenants/1/api-keys', 400, 'expires_at_unix must be in the future', 'integrations.api.apiKeyExpiresAtInvalid'],
+    ] as const) {
+      await assert.rejects(requestRejectionHandler(i18n.global.t)({
+        config: { url }, response: { status, data: { message: reason, error: { message: reason } } },
+      }), error => {
+        assert.equal((error as { message: string }).message, i18n.global.t(key))
+        assert.notEqual((error as { message: string }).message, reason)
+        return true
+      })
+    }
+  })
+}

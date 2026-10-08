@@ -125,9 +125,7 @@ func (h *Handler) CreateSession(c *gin.Context) {
 		Title:       request.Title,
 		Description: types.SanitizeClientSessionDescription(request.Description, ""),
 	}
-	// Attach the calling user as the session owner when available.
-	// API-key callers scope sessions per external user when configured;
-	// otherwise they fall back to the synthetic tenant user.
+	// Attach the authenticated user as the session owner when available.
 	if ownerID := types.SessionOwnerIDFromContext(ctx); ownerID != "" {
 		createdSession.UserID = ownerID
 	}
@@ -196,22 +194,6 @@ func (h *Handler) GetSession(c *gin.Context) {
 	})
 }
 
-// GetSessionsByTenant godoc
-// @Summary      获取会话列表
-// @Description  获取当前空间的会话列表，支持分页、关键字搜索、按来源/Agent 筛选
-// @Tags         会话
-// @Accept       json
-// @Produce      json
-// @Param        page       query     int     false  "页码"
-// @Param        page_size  query     int     false  "每页数量"
-// @Param        keyword    query     string  false  "标题模糊搜索"
-// @Param        source     query     string  false  "来源过滤：web / api / feishu（api、IM 渠道需 Admin+）"
-// @Param        agent_id   query     string  false  "按 Agent 过滤（仅对 IM 会话生效）"
-// @Success      200        {object}  map[string]interface{}  "会话列表"
-// @Failure      400        {object}  errors.AppError         "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /sessions [get]
 func (h *Handler) GetSessionsByTenant(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -223,12 +205,8 @@ func (h *Handler) GetSessionsByTenant(c *gin.Context) {
 		return
 	}
 
-	// Response items always include pin state and (when available) IM origin
-	// fields so the frontend can render pin icons / source badges without a
-	// second roundtrip. Unset filter params behave like "no filter".
 	result, err := h.sessionService.ListSessions(ctx, &types.SessionListQuery{
 		Keyword:  c.Query("keyword"),
-		Source:   c.Query("source"),
 		AgentID:  c.Query("agent_id"),
 		Page:     pagination.Page,
 		PageSize: pagination.PageSize,

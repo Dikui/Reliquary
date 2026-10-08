@@ -1,4 +1,3 @@
-// Line-level diff for the wiki revision viewer. Deliberately small: the
 // consumer renders "removed / added / unchanged" rows, nothing fancier, so a
 // trimmed-LCS diff is enough — no need to pull in a diff dependency.
 

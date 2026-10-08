@@ -84,34 +84,34 @@ const triggerFileSelect = () => {
 const handleFileSelect = async (event: Event) => {
   const input = event.target as HTMLInputElement;
   if (!input.files) return;
-  
+
   await addFiles(Array.from(input.files));
   input.value = ''; // Reset input
 };
 
 const addFiles = async (files: File[]) => {
   if (props.disabled) return;
-  
+
   for (const file of files) {
     // Check max files limit
     if (attachments.value.length >= maxFiles.value) {
       MessagePlugin.warning(t('chat.attachmentTooMany', { max: maxFiles.value }));
       break;
     }
-    
+
     // Check file size
     if (file.size > maxSize.value) {
       MessagePlugin.warning(t('chat.attachmentTooLarge', { name: file.name, max: maxSizeMB.value }));
       continue;
     }
-    
+
     // Check file type
     const ext = '.' + file.name.split('.').pop()?.toLowerCase();
     if (!supportedTypes.value.includes(ext)) {
       MessagePlugin.warning(t('chat.attachmentTypeNotSupported', { name: file.name }));
       continue;
     }
-    
+
     const attachment: AttachmentFile = {
       file,
       id: `${Date.now()}-${Math.random()}`,
@@ -267,7 +267,7 @@ defineExpose({
       style="display: none"
       @change="handleFileSelect"
     />
-    
+
     <!-- Attachment list -->
     <div v-if="attachments.length > 0" class="attachment-preview-bar">
       <div
@@ -296,7 +296,7 @@ defineExpose({
         <span class="attachment-preview-remove" @click="removeAttachment(attachment.id)" :aria-label="$t('common.remove')">×</span>
       </div>
     </div>
-    
+
     <!-- Upload button (shown in control bar) -->
     <slot name="trigger" :trigger="triggerFileSelect" :count="attachments.length" />
   </div>

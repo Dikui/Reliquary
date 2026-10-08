@@ -105,7 +105,7 @@ async function renderDetails(sources: KnowledgeRepostSource[] | null | undefined
     '@/api/knowledge-base/index': { KNOWLEDGE_CHUNK_PAGE_SIZE: 20, getKnowledgeDetails: unexpectedAPI },
     '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) },
     '@/utils/markdownTableNormalize': {}, '@/utils/mermaidViewer': {}, '@/utils/wikiLineDiff': {},
-    '@/stores/auth': { useAuthStore: () => ({ hasRole: () => false }) },
+    '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true }) },
     '@/components/document-preview.vue': emptyModule,
     '@/components/knowledge-processing-timeline.vue': emptyModule,
     '@/views/knowledge/components/RepostSources.vue': sharedRepostModule,
@@ -132,7 +132,7 @@ async function renderWorkbench(sources: KnowledgeRepostSource[], locale: keyof t
     './MergeSuggestions.vue': emptyModule, './EvidenceExtractionDetails.vue': emptyModule,
     './ReportMarkdown.vue': emptyModule, './RepostSources.vue': sharedRepostModule,
     './knowledgeContextDisplay': display,
-    '@/stores/auth': { useAuthStore: () => ({ hasRole: () => false }) },
+    '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true }) },
     '@/api/knowledge-domains': { listKnowledgeDomains: () => envelope([]) },
     '@/api/knowledge-context-scope': scope,
     '@/api/knowledge-context': {

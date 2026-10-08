@@ -208,8 +208,7 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 	logger.Info(ctx, "Start updating model")
 	logger.Infof(ctx, "Updating model ID: %s, name: %s", model.ID, model.Name)
 
-	// Built-in models are platform-wide. Tenant administrators may view them,
-	// but only a system administrator may change their shared configuration.
+	// Built-in model configuration can be changed by the authenticated user.
 	tenantID := types.MustTenantIDFromContext(ctx)
 	existingModel, err := s.repo.GetByID(ctx, tenantID, model.ID)
 	if err != nil {
@@ -219,9 +218,9 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 		return err
 	}
 	if existingModel != nil && existingModel.IsBuiltin {
-		if !types.IsSystemAdminFromContext(ctx) {
-			logger.Warnf(ctx, "Non-system-admin attempted to update builtin model: %s", model.ID)
-			return apperrors.NewForbiddenError("only system administrators can update builtin models")
+		if !types.IsAuthenticatedFromContext(ctx) {
+			logger.Warnf(ctx, "Unauthenticated caller attempted to update builtin model: %s", model.ID)
+			return apperrors.NewForbiddenError("an authenticated user is required to update builtin models")
 		}
 		// A UI edit is an explicit runtime override. Clear YAML ownership so
 		// the startup reconciler does not silently replace the saved values.
@@ -273,9 +272,9 @@ func (s *modelService) UpdateModelCredentials(
 	if existing == nil {
 		return nil, ErrModelNotFound
 	}
-	if existing.IsBuiltin && !types.IsSystemAdminFromContext(ctx) {
+	if existing.IsBuiltin && !types.IsAuthenticatedFromContext(ctx) {
 		return nil, apperrors.NewForbiddenError(
-			"only system administrators can modify builtin model credentials")
+			"an authenticated user is required to modify builtin model credentials")
 	}
 
 	changed := false
@@ -311,9 +310,9 @@ func (s *modelService) ClearModelCredential(ctx context.Context, id, field strin
 	if existing == nil {
 		return ErrModelNotFound
 	}
-	if existing.IsBuiltin && !types.IsSystemAdminFromContext(ctx) {
+	if existing.IsBuiltin && !types.IsAuthenticatedFromContext(ctx) {
 		return apperrors.NewForbiddenError(
-			"only system administrators can modify builtin model credentials")
+			"an authenticated user is required to modify builtin model credentials")
 	}
 
 	changed := false

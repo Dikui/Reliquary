@@ -22,8 +22,6 @@ type User struct {
 	TenantID uint64 `json:"tenant_id"  gorm:"index"`
 	// Whether the user is active
 	IsActive bool `json:"is_active"  gorm:"default:true"`
-	// Whether the user is a system administrator (independent of workspace roles)
-	IsSystemAdmin bool `json:"is_system_admin" gorm:"default:false;index"`
 	// Creation time of the user
 	CreatedAt time.Time `json:"created_at"`
 	// Last updated time of the user
@@ -66,25 +64,12 @@ type LoginRequest struct {
 
 // RegisterRequest represents a registration request
 type RegisterRequest struct {
-	InvitationToken string `json:"-"`
-	Username        string `json:"username" binding:"required,min=2,max=50"`
-	Email           string `json:"email"    binding:"required,email"`
-	Password        string `json:"password" binding:"required,min=6"`
+	Username string `json:"username" binding:"required,min=2,max=50"`
+	Email    string `json:"email"    binding:"required,email"`
+	Password string `json:"password" binding:"required,min=6"`
 
 	// deliberately excluded from JSON so a public caller cannot choose its
 	// own tenancy semantics. Empty preserves the historical behaviour and is
-}
-
-// AdminCreateUserRequest is the payload for a SystemAdmin provisioning a
-// new local user via POST /api/v1/system/admin/users/create.
-//
-// Password is optional: when absent (or null), the service generates a
-// random one and returns it exactly once. Any provided value, the
-// empty string included, is subject to the password policy.
-type AdminCreateUserRequest struct {
-	Username string  `json:"username" binding:"required,min=2,max=50"`
-	Email    string  `json:"email"    binding:"required,email"`
-	Password *string `json:"password"`
 }
 
 // LoginResponse represents a login response
@@ -92,12 +77,10 @@ type LoginResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message,omitempty"`
 	User    *User  `json:"user,omitempty"`
-	// ActiveTenant identifies the team workspace encoded in the issued JWT.
+	// ActiveTenant identifies the personal workspace encoded in the issued JWT.
 	ActiveTenant *Tenant `json:"active_tenant,omitempty"`
-	// Memberships contains the caller's active team role.
-	Memberships  []Membership `json:"memberships"`
-	Token        string       `json:"token,omitempty"`
-	RefreshToken string       `json:"refresh_token,omitempty"`
+	Token        string  `json:"token,omitempty"`
+	RefreshToken string  `json:"refresh_token,omitempty"`
 }
 
 // RegisterResponse represents a registration response
@@ -110,29 +93,26 @@ type RegisterResponse struct {
 
 // UserInfo represents user information for API responses
 type UserInfo struct {
-	ID            string    `json:"id"`
-	Username      string    `json:"username"`
-	Email         string    `json:"email"`
-	Avatar        string    `json:"avatar"`
-	TenantID      uint64    `json:"tenant_id"`
-	IsActive      bool      `json:"is_active"`
-	IsSystemAdmin bool      `json:"is_system_admin"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID        string    `json:"id"`
+	Username  string    `json:"username"`
+	Email     string    `json:"email"`
+	Avatar    string    `json:"avatar"`
+	TenantID  uint64    `json:"tenant_id"`
+	IsActive  bool      `json:"is_active"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // ToUserInfo converts User to UserInfo (without sensitive data)
 func (u *User) ToUserInfo() *UserInfo {
 	return &UserInfo{
-		ID:       u.ID,
-		Username: u.Username,
-		Email:    u.Email,
-		Avatar:   u.Avatar,
-		TenantID: u.TenantID,
-		IsActive: u.IsActive,
-
-		IsSystemAdmin: u.IsSystemAdmin,
-		CreatedAt:     u.CreatedAt,
-		UpdatedAt:     u.UpdatedAt,
+		ID:        u.ID,
+		Username:  u.Username,
+		Email:     u.Email,
+		Avatar:    u.Avatar,
+		TenantID:  u.TenantID,
+		IsActive:  u.IsActive,
+		CreatedAt: u.CreatedAt,
+		UpdatedAt: u.UpdatedAt,
 	}
 }

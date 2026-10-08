@@ -203,140 +203,6 @@ export function checkStorageEngine(req: StorageCheckRequest): Promise<{ data: St
   return post('/api/v1/system/storage-engine-check', req)
 }
 
-// ---- System Admin Management ----
-
-export interface SystemAdminUser {
-  id: string
-  username: string
-  email: string
-  avatar?: string
-  is_active: boolean
-  is_system_admin: boolean
-  created_at: string
-  updated_at: string
-}
-
-export interface PromoteUserRequest {
-  user_id: string
-}
-
-export interface RevokeSystemAdminRequest {
-  user_id: string
-}
-
-export interface ListSystemAdminsResponse {
-  total: number
-  admins: SystemAdminUser[]
-}
-
-/**
- * Promote a user to system administrator.
- *
- * Identify the target either by user_id (UUID, for API clients) or
- * email (the human-friendly path used by the SystemAdmin UI). Backend
- * accepts whichever is provided; user_id wins when both are set.
- *
- * Backend handler (system.go) returns the updated UserInfo directly as
- * the response body — no {data: ...} wrapping. The shared axios
- * interceptor in utils/request.ts unwraps response.data at the
- * interceptor layer, so the resolved value here IS the UserInfo.
- *
- * The `as unknown as T` cast is the project-wide pattern for telling
- * TS "trust me, the interceptor unwraps this" — see api/auth/index.ts
- * for the same convention. A naked `Promise<T>` annotation would
- * compile (sometimes — vue-tsc is inconsistent on AxiosResponse vs
- * inline interface assignability) but is fragile.
- */
-export interface PromoteUserToSystemAdminRequest {
-  /** UUID of the user to promote. Optional; supply this OR `email`. */
-  user_id?: string
-  /** Email address of the user to promote. Optional; supply this OR `user_id`. */
-  email?: string
-}
-
-export async function promoteUserToSystemAdmin(
-  req: PromoteUserToSystemAdminRequest,
-): Promise<SystemAdminUser> {
-  const response = await post('/api/v1/system/admin/promote', req)
-  return response as unknown as SystemAdminUser
-}
-
-/**
- * Revoke system administrator privileges from a user.
- * Same wrapping convention as promoteUserToSystemAdmin.
- */
-export async function revokeSystemAdmin(userId: string): Promise<SystemAdminUser> {
-  const response = await post('/api/v1/system/admin/revoke', { user_id: userId })
-  return response as unknown as SystemAdminUser
-}
-
-/**
- * List all system administrators (paginated).
- * Returns {total, admins[]} directly — no {data: ...} wrapping.
- */
-export async function listSystemAdmins(
-  params?: { offset?: number; limit?: number },
-): Promise<ListSystemAdminsResponse> {
-  // The shared `get` helper doesn't accept a config object, so we
-  // assemble the query string manually. Both params are optional;
-  // the server applies sane defaults (offset=0, limit=50, max=200).
-  const qs = new URLSearchParams()
-  if (params?.offset != null) qs.set('offset', String(params.offset))
-  if (params?.limit != null) qs.set('limit', String(params.limit))
-  const suffix = qs.toString() ? `?${qs.toString()}` : ''
-  const response = await get(`/api/v1/system/admin/list${suffix}`)
-  return response as unknown as ListSystemAdminsResponse
-}
-
-export interface ResetUserPasswordRequest {
-  email: string
-  new_password: string
-}
-
-/**
- * Replace another user's password and revoke all of their active sessions.
- * The backend route is restricted to SystemAdmin callers and rejects attempts
- * to reset the caller's own password.
- */
-export async function resetUserPassword(req: ResetUserPasswordRequest): Promise<{ message: string }> {
-  const response = await post('/api/v1/system/admin/users/reset-password', req)
-  return response as unknown as { message: string }
-}
-
-export interface CreateSystemUserRequest {
-  /** 2-50 characters. */
-  username: string
-  /** Must be a valid email address. */
-  email: string
-  /**
-   * Optional. Omit the key (or send null) to have the server generate a
-   * random password, returned exactly once in `generated_password`.
-   * Any provided value (including empty string) is subject to the
-   * password policy and can be rejected.
-   */
-  password?: string
-}
-
-export interface CreateSystemUserResponse {
-  user: SystemAdminUser
-  /**
-   * Present only when the request omitted `password` (or sent null): the
-   * server-minted plaintext password, returned exactly once and could not
-   * be fetched again.
-   */
-  generated_password?: string
-}
-
-/**
- * Provision a new local user account (SystemAdmin only).
- * Backend returns the unwrapped CreateSystemUserResponse body.
- * Responses 201 on success.
- */
-export async function createSystemUser(req: CreateSystemUserRequest): Promise<CreateSystemUserResponse> {
-  const response = await post('/api/v1/system/admin/users/create', req)
-  return response as unknown as CreateSystemUserResponse
-}
-
 // ---- System Settings (P1) ----
 
 /**
@@ -425,48 +291,6 @@ export async function updateSystemSetting(
  */
 export async function resetSystemSetting(key: string): Promise<void> {
   await del(`/api/v1/system/admin/settings/${encodeURIComponent(key)}`)
-}
-
-// ---- Platform Audit Log (system-scope) ----
-
-// We reuse the AuditLog / ListAuditLogParams types from the tenant
-// audit-log module — the row shape is identical, only the route
-// differs (tenant_id=0 rows aren't visible via the per-tenant endpoint).
-// Re-exported here so SystemSettings.vue doesn't need to cross-import
-// from a tenant-specific module to consume system-scope feeds.
-export type {
-  AuditLog,
-  AuditAction,
-  AuditOutcome,
-  ListAuditLogParams,
-  ListAuditLogResponse,
-} from '@/api/tenant/audit-log'
-
-import type { ListAuditLogParams, ListAuditLogResponse } from '@/api/tenant/audit-log'
-
-/**
- * List the platform-wide audit log (system-scope, tenant_id=0).
- *
- * Backend: GET /api/v1/system/admin/audit-log (SystemAdmin only).
- * Covers system.setting_changed / system.admin_promoted /
- * system.admin_revoked etc. — events emitted by SystemAdmin actions.
- *
- * Cursor-paginated by descending id: the first call should pass no
- * cursor, each subsequent page should pass `after_id =
- * previousResponse.next_cursor` until next_cursor comes back as 0.
- */
-export async function listSystemAuditLog(
-  params: ListAuditLogParams = {},
-): Promise<ListAuditLogResponse> {
-  const qs = new URLSearchParams()
-  if (params.after_id) qs.append('after_id', String(params.after_id))
-  if (params.limit) qs.append('limit', String(params.limit))
-  if (params.action) qs.append('action', params.action)
-  if (params.outcome) qs.append('outcome', params.outcome)
-  if (params.actor) qs.append('actor', params.actor)
-  const tail = qs.toString()
-  const url = `/api/v1/system/admin/audit-log${tail ? '?' + tail : ''}`
-  return (await get(url)) as unknown as ListAuditLogResponse
 }
 
 // ---- Runtime queue observability (system-scope) ----
@@ -575,7 +399,6 @@ export interface RuntimeTasksResponse {
 
 /**
  * Fetch the live asynq queue depths + worker-pool concurrency.
- * Backend: GET /api/v1/system/admin/runtime/queues (SystemAdmin only).
  * Returns the object directly — no {data: ...} wrapping (see
  * utils/request.ts interceptor).
  */

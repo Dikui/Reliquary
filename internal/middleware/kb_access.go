@@ -6,28 +6,27 @@ import (
 
 	"github.com/gin-gonic/gin"
 	apprepo "reliquary/internal/application/repository"
-	"reliquary/internal/config"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
 )
 
-// Knowledge-base access stays within the authenticated team.
+// Knowledge-base access stays within the authenticated workspace.
+var ErrResourceNotFound = stderrors.New("resource not found")
 
 // KBAccess captures the result of a successful KB access resolution.
 // Stashed on gin.Context under KBAccessContextKey so handlers that
 // need the resolved KB / permission (e.g. to render
-// my_permission in the response) can pull it without re-running the
+// resource projection in the response) can pull it without re-running the
 // resolution.
 type KBAccess struct {
 	KnowledgeBase     *types.KnowledgeBase
 	EffectiveTenantID uint64
-	Permission        types.TenantRole
 }
 
 // KBAccessContextKey is the gin.Context key under which a successful
 // KB access resolution is stored.
-const KBAccessContextKey = "rbac.kb_access"
+const KBAccessContextKey = "access.kb_access"
 
 // KBAccessFromContext returns the KBAccess stashed by the guard, if
 // any. Handlers that don't care can just rely on the rewritten
@@ -161,78 +160,36 @@ func isResourceNotFound(err error) bool {
 		stderrors.Is(err, ErrResourceNotFound)
 }
 
-func RequireKBAccess(
-	resolveKBID KBIDResolver,
-	requiredPermission types.TenantRole,
-	kbService KBLookup,
-	cfg *config.Config,
-) gin.HandlerFunc {
-	warnOnNilConfig(cfg)
+func RequireKBAccess(resolveKBID KBIDResolver, kbService KBLookup) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		kbID, err := resolveKBID(c)
+		id, err := resolveKBID(c)
 		if err != nil {
 			_ = c.Error(err)
 			c.Abort()
 			return
 		}
-
-		ctx := c.Request.Context()
-		if err := types.AuthorizeTenantAPIKeyKnowledgeBases(ctx, kbID); err != nil {
+		access, err := resolveKBAccessOnce(c.Request.Context(), c, id, kbService)
+		switch {
+		case stderrors.Is(err, errKBAccessUnauthorized):
+			err = apperrors.NewUnauthorizedError("Unauthorized")
+		case stderrors.Is(err, errKBAccessNotFound):
+			err = apperrors.NewNotFoundError("knowledge base not found")
+		case stderrors.Is(err, errKBAccessForbidden):
+			err = apperrors.NewForbiddenError("knowledge base belongs to another workspace")
+		case err != nil:
+			err = apperrors.NewServiceUnavailableError("cannot verify knowledge base access")
+		}
+		if err != nil {
 			_ = c.Error(err)
 			c.Abort()
 			return
 		}
-
-		// Rollout window: enforcement off -> log the would-be check and
-		// pass through. We still resolve the KB (best-effort) so the
-		// effective-tenant context rewrite still happens for shared
-		// KBs; that way embedding queries hit the right tenant
-		// regardless of whether RBAC enforcement is active.
-		enforcing := rbacEnforcementEnabled(cfg)
-
-		access, err := resolveKBAccessOnce(ctx, c, kbID, requiredPermission, kbService)
-		switch {
-		case stderrors.Is(err, errKBAccessUnauthorized):
-			if !enforcing {
-				logger.Warnf(ctx, "[rbac] kb-access would 401 (enforcement off): kb=%s", kbID)
-				c.Next()
-				return
-			}
-			_ = c.Error(apperrors.NewUnauthorizedError("Unauthorized"))
-			c.Abort()
-			return
-		case stderrors.Is(err, errKBAccessNotFound):
-			// 404 still fires when enforcement is off — a missing KB is
-			// not an authorisation event, the client genuinely asked
-			// for nothing.
-			_ = c.Error(apperrors.NewNotFoundError("knowledge base not found"))
-			c.Abort()
-			return
-		case stderrors.Is(err, errKBAccessForbidden):
-			if !enforcing {
-				logger.Warnf(ctx, "[rbac] kb-access would 403 (enforcement off): kb=%s required=%s",
-					kbID, requiredPermission)
-				c.Next()
-				return
-			}
-			_ = c.Error(apperrors.NewForbiddenError("Permission denied to access this knowledge base"))
-			c.Abort()
-			return
-		case err != nil:
-			logger.ErrorWithFields(ctx, err, nil)
-			// Transient/internal -> 503 so monitoring catches the
-			// underlying failure rather than a misleading 500.
-			_ = c.Error(apperrors.NewServiceUnavailableError("cannot verify KB access right now"))
-			c.Abort()
-			return
-		}
-
 		c.Set(KBAccessContextKey, access)
 		c.Next()
 	}
 }
 
-func resolveKBAccessOnce(ctx context.Context, c *gin.Context, kbID string, requiredPermission types.TenantRole, kbService KBLookup) (*KBAccess, error) {
+func resolveKBAccessOnce(ctx context.Context, c *gin.Context, kbID string, kbService KBLookup) (*KBAccess, error) {
 	tenantID, ok := types.TenantIDFromContext(ctx)
 	if !ok || tenantID == 0 {
 		return nil, errKBAccessUnauthorized
@@ -250,11 +207,7 @@ func resolveKBAccessOnce(ctx context.Context, c *gin.Context, kbID string, requi
 	if kb.TenantID != tenantID {
 		return nil, errKBAccessForbidden
 	}
-	role := types.TenantRoleFromContext(ctx)
-	if _, apiKey := types.TenantAPIKeyScopeFromContext(ctx); !apiKey && !role.HasPermission(requiredPermission) {
-		return nil, errKBAccessForbidden
-	}
-	return &KBAccess{KnowledgeBase: kb, EffectiveTenantID: tenantID, Permission: role}, nil
+	return &KBAccess{KnowledgeBase: kb, EffectiveTenantID: tenantID}, nil
 }
 
 var (

@@ -17,7 +17,7 @@
         <p>{{ $t('mcpSettings.manageAndTest') }}</p>
       </div>
 
-      <div v-if="services.length === 0 && !authStore.hasRole('admin')" class="empty-state">
+      <div v-if="services.length === 0 && !authStore.isLoggedIn" class="empty-state">
         <t-empty :description="$t('mcpSettings.empty')" />
       </div>
 
@@ -93,7 +93,7 @@
           </div>
         </div>
         <button
-          v-if="authStore.hasRole('admin')"
+          v-if="authStore.isLoggedIn"
           type="button"
           class="service-card service-card--add"
           @click="handleAdd"
@@ -162,7 +162,7 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const isServiceCardClickable = () => authStore.hasRole('admin')
+const isServiceCardClickable = () => authStore.isLoggedIn
 
 const onServiceCardClick = (event: Event, service: MCPService) => {
   if (!isServiceCardClickable()) return
@@ -240,7 +240,7 @@ const handleDelete = (service: MCPService) => {
 // 测试连接已挪到编辑抽屉的 footer，不再放在外层菜单里 — 单一入口减少
 // 用户疑惑（"为什么有两个测试入口，结果一样吗？"）。
 const getServiceOptions = (service: MCPService) => {
-  if (!authStore.hasRole('admin')) {
+  if (!authStore.isLoggedIn) {
     return []
   }
   return [
@@ -256,7 +256,7 @@ const getServiceOptions = (service: MCPService) => {
 // Builtin: 仅编辑（同样 Admin+ only）。内置服务测试也通过抽屉的 footer 触发，
 // 不再在外层菜单露出"测试连接"项。
 const getBuiltinServiceOptions = () => {
-  if (!authStore.hasRole('admin')) {
+  if (!authStore.isLoggedIn) {
     return []
   }
   return [

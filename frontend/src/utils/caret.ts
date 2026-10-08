@@ -7,7 +7,7 @@ export interface CaretCoordinates {
 export function getCaretCoordinates(element: HTMLTextAreaElement, position: number): CaretCoordinates {
   const div = document.createElement('div');
   const style = window.getComputedStyle(element);
-  
+
   // Copy styles
   const properties = [
     'direction', 'boxSizing', 'width', 'height', 'overflowX', 'overflowY',
@@ -33,26 +33,26 @@ export function getCaretCoordinates(element: HTMLTextAreaElement, position: numb
   // We append a special character to the end of the text to handle the case where the caret is at the end
   const textContent = element.value.substring(0, position);
   div.textContent = textContent;
-  
+
   const span = document.createElement('span');
-  // Use a zero-width space to simulate the caret position without adding visible width, 
-  // but if it's at the end of a line, we might need something else. 
+  // Use a zero-width space to simulate the caret position without adding visible width,
+  // but if it's at the end of a line, we might need something else.
   // Standard trick is using a pipe or similar and measuring it.
-  span.textContent = '|'; 
+  span.textContent = '|';
   div.appendChild(span);
-  
+
   document.body.appendChild(div);
-  
+
   const spanRect = span.getBoundingClientRect();
   const divRect = div.getBoundingClientRect();
-  
+
   const coordinates = {
     top: span.offsetTop + parseInt(style.borderTopWidth),
     left: span.offsetLeft + parseInt(style.borderLeftWidth),
     height: parseInt(style.lineHeight) || spanRect.height
   };
-  
+
   document.body.removeChild(div);
-  
+
   return coordinates;
 }

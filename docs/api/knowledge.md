@@ -276,7 +276,7 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases/kb-00000001/knowle
 | `keyword`      | string  | -    | 按标题/内容关键词过滤                                                                               |
 | `file_type`    | string  | -    | 按单个文件扩展名过滤（如 `pdf`）；特殊值 `manual` / `url` 命中 `type` 列                              |
 | `parse_status` | string  | -    | 按解析状态过滤：`pending` / `processing` / `completed` / `failed`                                    |
-| `source`       | string  | -    | 按来源/渠道过滤：`web` / `api` / `feishu` / `notion` / `yuque` 等； 特殊值 `manual` / `url` 命中 `type` 列 |
+| `source`       | string  | -    | 按来源/渠道过滤：`web` / `api` / `rss`； 特殊值 `manual` / `url` 命中 `type` 列 |
 | `start_time`   | string  | -    | 更新时间起点，接受 RFC3339 (`2024-05-01T00:00:00+08:00`) 或 `YYYY-MM-DD HH:MM:SS` / `YYYY-MM-DD`     |
 | `end_time`     | string  | -    | 更新时间终点，格式同 `start_time`                                                                   |
 | `folder_path`  | string  | -    | 按文件夹路径筛选；**仅当传入该参数时启用文件夹维度**。空字符串表示知识库根目录（不含子文件夹中的文档）；不传则列出全部文件夹下的文档（扁平视图） |
@@ -334,7 +334,7 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases/kb-00000001/knowle
 
 ## GET `/knowledge-bases/:id/knowledge/folders` - 获取文件夹目录树
 
-返回由 `folder_path` 聚合而成的目录树，包含每个文件夹的直接文档数与含子目录的总数。只读，权限与列出知识相同（Viewer+ 且对 KB 有 read 权限）。
+返回由 `folder_path` 聚合而成的目录树，包含每个文件夹的直接文档数与含子目录的总数。登录用户和有效 API Key 均可读取。
 
 **响应**:
 
@@ -392,7 +392,7 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases/kb-00000001/knowle
 
 ## POST `/knowledge/folder` - 批量移动知识到文件夹
 
-批量修改知识条目的 `folder_path`，仅调整归类，**不会**重新解析、分块或向量化。目标路径不存在时会自动创建；空路径表示移回知识库根目录。需要 owner / admin / contributor 角色。
+批量修改知识条目的 `folder_path`，仅调整归类，**不会**重新解析、分块或向量化。目标路径不存在时会自动创建；空路径表示移回知识库根目录。登录用户和有效 API Key 均可修改。
 
 **请求体**:
 

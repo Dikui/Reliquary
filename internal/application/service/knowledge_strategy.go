@@ -85,11 +85,10 @@ type KnowledgeStrategyService struct {
 	knowledge interfaces.KnowledgeService
 	models    interfaces.ModelService
 	tags      interfaces.KnowledgeTagRepository
-	audit     interfaces.AuditLogService
 }
 
-func NewKnowledgeStrategyService(db *gorm.DB, kb interfaces.KnowledgeBaseService, knowledge interfaces.KnowledgeService, models interfaces.ModelService, tags interfaces.KnowledgeTagRepository, audit interfaces.AuditLogService) *KnowledgeStrategyService {
-	return &KnowledgeStrategyService{db: db, kb: kb, knowledge: knowledge, models: models, tags: tags, audit: audit}
+func NewKnowledgeStrategyService(db *gorm.DB, kb interfaces.KnowledgeBaseService, knowledge interfaces.KnowledgeService, models interfaces.ModelService, tags interfaces.KnowledgeTagRepository) *KnowledgeStrategyService {
+	return &KnowledgeStrategyService{db: db, kb: kb, knowledge: knowledge, models: models, tags: tags}
 }
 
 func (s *KnowledgeStrategyService) scopedKB(ctx context.Context, kbID string, requireEditor bool) (*types.KnowledgeBase, string, error) {
@@ -105,8 +104,8 @@ func (s *KnowledgeStrategyService) scopedKB(ctx context.Context, kbID string, re
 		return nil, "", werrors.NewNotFoundError("knowledge base not found")
 	}
 	userID, _ := types.UserIDFromContext(ctx)
-	if requireEditor && (userID == "" || !types.TenantRoleFromContext(ctx).HasPermission(types.TenantRoleContributor) || types.IsSyntheticUserID(userID)) {
-		return nil, "", werrors.NewForbiddenError("a team editor is required to change strategy")
+	if requireEditor && (userID == "" || !types.IsAuthenticatedFromContext(ctx)) {
+		return nil, "", werrors.NewForbiddenError("an authenticated user is required to change strategy")
 	}
 	return kb, userID, nil
 }
@@ -265,8 +264,6 @@ func (s *KnowledgeStrategyService) Propose(ctx context.Context, kbID, instructio
 	if err := s.db.WithContext(ctx).Create(version).Error; err != nil {
 		return nil, err
 	}
-	recordKBActivity(ctx, s.audit, kb.TenantID, kb.ID, types.AuditActionKnowledgeStrategyProposed, "knowledge_strategy", version.ID,
-		types.AuditOutcomeSuccess, map[string]any{"reason": version.Reason, "sample_count": len(samples)})
 	return version, nil
 }
 
@@ -549,8 +546,6 @@ func (s *KnowledgeStrategyService) Activate(ctx context.Context, kbID, versionID
 		return nil
 	})
 	if err == nil {
-		recordKBActivity(ctx, s.audit, kb.TenantID, kb.ID, types.AuditActionKnowledgeStrategyActivated, "knowledge_strategy", selected.ID,
-			types.AuditOutcomeSuccess, map[string]any{"reason": selected.Reason})
 	}
 	return &selected, err
 }

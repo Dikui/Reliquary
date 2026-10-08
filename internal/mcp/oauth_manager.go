@@ -150,10 +150,6 @@ func (m *OAuthManager) StartAuthorization(
 	return authURL, state, nil
 }
 
-// StartAuthorizationForService loads the MCP service by ID and starts the
-// authorization-code flow, returning the URL the user must open. It is a
-// convenience for callers (e.g. IM channels) that only hold a service ID and
-// cannot reach the MCP service lookup directly.
 func (m *OAuthManager) StartAuthorizationForService(
 	ctx context.Context,
 	tenantID uint64,

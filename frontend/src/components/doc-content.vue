@@ -32,13 +32,10 @@ const { t } = useI18n();
 const authStore = useAuthStore();
 
 // canDeleteGeneratedQuestion 对应后端 DELETE /chunks/by-id/:id/questions
-// 的 OwnedChunkKBOrAdminFromChunkID 守卫——KB 创建者或空间 Admin+
 // 才允许删除。父组件 KnowledgeBase.vue 通过 :canEditKB 把 KB 级权限
-// 传下来（包含 KB creator / Admin / 组织分享 editor 三种来源），未
-// 传时按更严格的 Admin 兜底，避免 Viewer 看到一个会 403 的入口。
 const canDeleteGeneratedQuestion = computed(() => {
   if (props.canEditKB === true) return true;
-  return authStore.hasRole('admin');
+  return authStore.isLoggedIn;
 });
 const canEditContent = canDeleteGeneratedQuestion;
 
@@ -1043,16 +1040,8 @@ const channelLabelMap: Record<string, string> = {
   web_research: 'knowledgeBase.channelWebResearch',
   api: 'knowledgeBase.channelApi',
   browser_extension: 'knowledgeBase.channelBrowserExtension',
-  feishu: 'knowledgeBase.channelFeishu',
-  gitlab: 'knowledgeBase.channelGitLab',
   // Drive (云盘) connectors get their own channel so Drive docs show
-  // "飞书云盘" / "Lark 云盘", distinct from the wiki connector's "飞书".
-  feishu_drive: 'knowledgeBase.channelFeishuDrive',
-  lark_drive: 'knowledgeBase.channelLarkDrive',
   rss: 'datasource.connector.rss',
-  grok_x: 'datasource.connector.grok_x',
-  im: 'knowledgeBase.channelIm',
-  ima: 'knowledgeBase.channelIma',
 };
 
 const getChannelLabel = (channel: string) => {
@@ -1063,7 +1052,6 @@ const getChannelLabel = (channel: string) => {
 // 获取类型标签
 const getTypeLabel = () => {
   if (props.details.channel === 'rss') return t('datasource.connector.rss');
-  if (props.details.channel === 'grok_x') return t('datasource.connector.grok_x');
   if (props.details.channel === 'web_research') return t('knowledgeBase.typeURL');
   switch (props.details.type) {
     case 'url':

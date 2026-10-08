@@ -6,7 +6,7 @@ import { isSettingValueDirty, resolveCurrentSetting } from './systemSettingsEdit
 test('treats scalar edits as dirty', () => {
   assert.equal(isSettingValueDirty(true, false), true)
   assert.equal(isSettingValueDirty(false, false), false)
-  assert.equal(isSettingValueDirty('invite', 'open'), true)
+  assert.equal(isSettingValueDirty('changed', 'original'), true)
 })
 
 test('treats list edits as dirty by value, not by reference', () => {
@@ -31,11 +31,11 @@ test('resolves the latest setting so a reused row does not keep the pre-save val
 })
 
 test('high-risk cancel restores the latest saved value, not the first-loaded object', () => {
-  const stale = { key: 'auth.registration_mode', value: 'open' }
-  const current = { key: 'auth.registration_mode', value: 'invite' }
+  const stale = { key: 'sandbox.docker_enabled', value: false }
+  const current = { key: 'sandbox.docker_enabled', value: true }
   const settingsByKey = new Map([[current.key, current]])
 
   const resolved = resolveCurrentSetting(settingsByKey, stale.key)
-  assert.equal(resolved?.value, 'invite')
+  assert.equal(resolved?.value, true)
   assert.notEqual(stale.value, resolved?.value)
 })

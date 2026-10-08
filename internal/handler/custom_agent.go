@@ -10,7 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"reliquary/internal/application/service"
 	"reliquary/internal/errors"
-	"reliquary/internal/im"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -26,8 +25,8 @@ type sandboxConfigLookup interface {
 
 // CustomAgentHandler defines the HTTP handler for custom agent operations
 type CustomAgentHandler struct {
-	service   interfaces.CustomAgentService
-	imService *im.Service
+	service interfaces.CustomAgentService
+
 	// userService 仅用于 list 接口批量回填 creator_name，作用见
 	// KnowledgeBaseHandler.userService。
 	userService interfaces.UserService
@@ -39,13 +38,13 @@ type CustomAgentHandler struct {
 // NewCustomAgentHandler creates a new custom agent handler instance
 func NewCustomAgentHandler(
 	service interfaces.CustomAgentService,
-	imService *im.Service,
+
 	userService interfaces.UserService,
 	sandboxConfigs *service.TenantSandboxConfigService,
 ) *CustomAgentHandler {
 	return &CustomAgentHandler{
-		service:        service,
-		imService:      imService,
+		service: service,
+
 		userService:    userService,
 		sandboxConfigs: sandboxConfigs,
 	}
@@ -91,10 +90,7 @@ func (h *CustomAgentHandler) CreateAgent(c *gin.Context) {
 		c.Error(errors.NewBadRequestError("Invalid request parameters").WithDetails(err.Error()))
 		return
 	}
-	if err := authorizeAgentKnowledgeScope(ctx, req.Config); err != nil {
-		c.Error(err)
-		return
-	}
+
 	if err := h.validateAgentSandboxConfig(ctx, req.Config); err != nil {
 		c.Error(err)
 		return
@@ -205,7 +201,7 @@ func (h *CustomAgentHandler) ListAgents(c *gin.Context) {
 		return
 	}
 
-	// 批量回填 creator_name，作用同 KB 列表：让前端能区分「我创建」与「同空间其他成员」。
+	// 批量回填 creator_name，作用同 KB 列表：供前端显示创建者名称。
 	// 内建 agent（IsBuiltin=true, CreatedBy=""）不会有 creator_name，前端按 builtin
 	// 分支单独渲染。
 	enrichAgentCreatorNames(ctx, h.userService, agents)
@@ -287,10 +283,7 @@ func (h *CustomAgentHandler) UpdateAgent(c *gin.Context) {
 		c.Error(errors.NewBadRequestError("Invalid request parameters").WithDetails(err.Error()))
 		return
 	}
-	if err := authorizeAgentKnowledgeScope(ctx, req.Config); err != nil {
-		c.Error(err)
-		return
-	}
+
 	if err := h.validateAgentSandboxConfig(ctx, req.Config); err != nil {
 		c.Error(err)
 		return
@@ -368,20 +361,6 @@ func (h *CustomAgentHandler) DeleteAgent(c *gin.Context) {
 
 	logger.Infof(ctx, "Deleting custom agent, ID: %s", secutils.SanitizeForLog(id))
 
-	tenantID, ok := types.TenantIDFromContext(ctx)
-	if !ok {
-		c.Error(errors.NewUnauthorizedError("Unauthorized"))
-		return
-	}
-
-	if err := h.imService.DeleteChannelsByAgent(id, tenantID); err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"agent_id": id,
-		})
-		c.Error(errors.NewInternalServerError("Failed to delete agent IM channels"))
-		return
-	}
-
 	// Delete the agent
 	err := h.service.DeleteAgent(ctx, id)
 	if err != nil {
@@ -433,7 +412,7 @@ func (h *CustomAgentHandler) CopyAgent(c *gin.Context) {
 	}
 
 	logger.Infof(ctx, "Copying custom agent, ID: %s", secutils.SanitizeForLog(id))
-	sourceAgent, err := h.service.GetAgentByID(ctx, id)
+	_, err := h.service.GetAgentByID(ctx, id)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"agent_id": id,
@@ -444,10 +423,6 @@ func (h *CustomAgentHandler) CopyAgent(c *gin.Context) {
 		default:
 			c.Error(errors.NewInternalServerError(err.Error()))
 		}
-		return
-	}
-	if err := authorizeAgentKnowledgeScope(ctx, sourceAgent.Config); err != nil {
-		c.Error(err)
 		return
 	}
 
@@ -638,24 +613,4 @@ func (h *CustomAgentHandler) validateAgentSandboxConfig(
 		return errors.NewBadRequestError("所选沙箱后端配置不存在，请重新选择")
 	}
 	return nil
-}
-
-func authorizeAgentKnowledgeScope(ctx context.Context, cfg types.CustomAgentConfig) error {
-	scope, ok := types.TenantAPIKeyScopeFromContext(ctx)
-	if !ok || !scope.IsKnowledgeBaseRestricted() {
-		return nil
-	}
-	switch strings.ToLower(strings.TrimSpace(cfg.KBSelectionMode)) {
-	case "none":
-		return nil
-	case "all":
-		return errors.NewForbiddenError("API key scope does not allow agents that use all knowledge bases")
-	case "selected":
-		return types.AuthorizeTenantAPIKeyKnowledgeBases(ctx, cfg.KnowledgeBases...)
-	default:
-		if len(cfg.KnowledgeBases) == 0 {
-			return nil
-		}
-		return types.AuthorizeTenantAPIKeyKnowledgeBases(ctx, cfg.KnowledgeBases...)
-	}
 }

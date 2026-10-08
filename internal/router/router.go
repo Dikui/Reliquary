@@ -47,11 +47,6 @@ type RouterParams struct {
 	TenantHandler                *handler.TenantHandler
 	TenantService                interfaces.TenantService
 	TenantAPIKeyService          interfaces.TenantAPIKeyService
-	TenantMemberService          interfaces.TenantMemberService
-	TenantMemberHandler          *handler.TenantMemberHandler
-	TenantInvitationHandler      *handler.TenantInvitationHandler
-	AuditLogHandler              *handler.AuditLogHandler
-	AuditLogService              interfaces.AuditLogService
 	ChunkHandler                 *handler.ChunkHandler
 	SessionHandler               *session.Handler
 	MessageHandler               *handler.MessageHandler
@@ -79,7 +74,6 @@ type RouterParams struct {
 	CustomAgentHandler           *handler.CustomAgentHandler
 	UserFavoriteHandler          *handler.UserResourceFavoriteHandler
 	SkillHandler                 *handler.SkillHandler
-	IMHandler                    *handler.IMHandler
 	RedisClient                  *redis.Client
 	DataSourceHandler            *handler.DataSourceHandler
 	DataSourceCredentialsHandler *handler.DataSourceCredentialsHandler
@@ -140,15 +134,10 @@ func NewRouter(params RouterParams) *gin.Engine {
 		))
 	}
 
-	// IM 回调路由（在认证中间件之前注册，使用各平台自身的签名验证）
-	RegisterIMRoutes(r, params.IMHandler)
-
-	// Short-lived capability URLs for IM and other clients that cannot attach
-	// Reliquary authentication headers.
 	serveResourceGrants(r, params.ResourceCatalog, params.TenantService, params.FileService, params.StorageBackendResolver)
 
 	// 认证中间件
-	r.Use(middleware.Auth(params.TenantService, params.UserService, params.TenantMemberService, params.TenantAPIKeyService, params.Config))
+	r.Use(middleware.Auth(params.TenantService, params.UserService, params.TenantAPIKeyService))
 
 	// 文件服务：统一代理本地和S3兼容存储后端（需要认证）
 	serveFilesWithResources(r, params.FileService, params.StorageBackendResolver, params.ResourceCatalog)
@@ -156,106 +145,71 @@ func NewRouter(params RouterParams) *gin.Engine {
 	// Presigned file access: no auth required, signature-verified.
 	servePresignedFiles(r, params.TenantService, params.StorageBackendResolver)
 
-	// Diagnostic preview of presigned URLs (Admin only, behind auth middleware).
+	// Diagnostic preview of presigned URLs behind authentication middleware.
 	servePresignedPreview(r, params.Config, params.StorageBackendResolver, params.ResourceCatalog)
-
-	// Audit log injection — middleware/rbac.go's reject paths and the
-	// admin-only /tenants/:id/audit-log endpoint pull the service out
-	// of the gin context. Provider is a no-op when AuditLogService is
-	// nil (e.g. in-memory fixtures without DB), so the rbac path degrades to
-	// "log to stderr only" instead of crashing.
-	r.Use(middleware.AuditServiceProvider(params.AuditLogService))
 
 	// 需要认证的API路由
 	v1 := r.Group("/api/v1")
 	{
-		// rbacGuards bundles the role-gating middleware factories so each
-		// Register* function below can attach the right guard without
-		// taking a *config.Config dependency directly. The guards honour
-		// cfg.Tenant.EnableRBAC: when false, they log but pass through,
-		// preserving today's behaviour during the rollout window.
-		rbacGuards := newRBACGuards(
-			params.Config,
-			params.KBHandler,
-			params.CustomAgentHandler,
-			params.KnowledgeHandler,
-			params.ChunkHandler,
-			params.WikiPageHandler,
-			params.KBService,
-			params.KnowledgeService,
-			params.ChunkService,
-		)
+		accessGuards := newAccessGuards(params.KBService, params.KnowledgeService, params.ChunkService)
 
-		// API-key gate: single authority for X-API-Key principals. Runs
-		// first on every /api/v1 route (JWT sessions pass straight
-		// through) and denies any route not explicitly declared via the
-		// apiKeyGroup helpers. Must be attached BEFORE the Register* calls
-		// so that sub-groups inherit it.
-		v1.Use(rbacGuards.apiKeyAuthorizer.Middleware())
-
-		RegisterAuthRoutes(v1, params.AuthHandler, rbacGuards)
-		RegisterTenantRoutes(v1, params.TenantHandler, params.TenantMemberHandler, params.TenantInvitationHandler, params.AuditLogHandler, rbacGuards)
-		RegisterMyInvitationRoutes(v1, params.TenantInvitationHandler)
-		RegisterKnowledgeBaseRoutes(v1, params.KBHandler, rbacGuards)
-		RegisterKnowledgeBaseActivityRoutes(v1, params.AuditLogHandler, rbacGuards)
+		RegisterAuthRoutes(v1, params.AuthHandler, accessGuards)
+		RegisterTenantRoutes(v1, params.TenantHandler, accessGuards)
+		RegisterKnowledgeBaseRoutes(v1, params.KBHandler, accessGuards)
 		serveKBScopedFiles(
 			v1,
-			rbacGuards,
+			accessGuards,
 			params.TenantService,
 			params.FileService,
 			params.StorageBackendResolver,
-			params.ResourceCatalog,
-		)
+			params.ResourceCatalog)
 		serveMessageScopedFiles(
 			v1,
-			rbacGuards,
+			accessGuards,
 			params.MessageService,
 			params.TenantService,
 			params.FileService,
 			params.StorageBackendResolver,
-			params.ResourceCatalog,
-		)
-		RegisterKnowledgeTagRoutes(v1, params.TagHandler, rbacGuards)
-		RegisterKnowledgeRoutes(v1, params.KnowledgeHandler, rbacGuards)
-		RegisterKnowledgeAnomalyRoutes(v1, params.KnowledgeAnomalyHandler, rbacGuards)
-		RegisterKnowledgeStrategyRoutes(v1, params.KnowledgeStrategyHandler, rbacGuards)
-		RegisterKnowledgeContextRoutes(v1, params.KnowledgeContextHandler, rbacGuards)
-		RegisterKnowledgeDomainRoutes(v1, params.KnowledgeDomainHandler, rbacGuards)
+			params.ResourceCatalog)
+		RegisterKnowledgeTagRoutes(v1, params.TagHandler, accessGuards)
+		RegisterKnowledgeRoutes(v1, params.KnowledgeHandler, accessGuards)
+		RegisterKnowledgeAnomalyRoutes(v1, params.KnowledgeAnomalyHandler, accessGuards)
+		RegisterKnowledgeStrategyRoutes(v1, params.KnowledgeStrategyHandler, accessGuards)
+		RegisterKnowledgeContextRoutes(v1, params.KnowledgeContextHandler, accessGuards)
+		RegisterKnowledgeDomainRoutes(v1, params.KnowledgeDomainHandler, accessGuards)
 		if params.ModelRoutingHandler != nil {
-			RegisterModelRoutingRoutes(v1, params.ModelRoutingHandler, rbacGuards)
+			RegisterModelRoutingRoutes(v1, params.ModelRoutingHandler, accessGuards)
 		}
-		RegisterKnowledgeWorkflowRoutes(v1, params.KnowledgeWorkflowHandler, rbacGuards)
-		RegisterChunkRoutes(v1, params.ChunkHandler, rbacGuards)
-		RegisterSessionRoutes(v1, params.SessionHandler, params.MessageSuggestionHandler, rbacGuards)
-		RegisterChatRoutes(v1, params.SessionHandler, rbacGuards)
-		RegisterMessageRoutes(v1, params.MessageHandler, rbacGuards)
-		RegisterModelRoutes(v1, params.ModelHandler, params.ModelCredentialsHandler, rbacGuards)
-		RegisterSandboxConfigRoutes(v1, params.SandboxConfigHandler, params.SandboxSkillHandler, rbacGuards)
+		RegisterKnowledgeWorkflowRoutes(v1, params.KnowledgeWorkflowHandler, accessGuards)
+		RegisterChunkRoutes(v1, params.ChunkHandler, accessGuards)
+		RegisterSessionRoutes(v1, params.SessionHandler, params.MessageSuggestionHandler, accessGuards)
+		RegisterChatRoutes(v1, params.SessionHandler, accessGuards)
+		RegisterMessageRoutes(v1, params.MessageHandler, accessGuards)
+		RegisterModelRoutes(v1, params.ModelHandler, params.ModelCredentialsHandler, accessGuards)
+		RegisterSandboxConfigRoutes(v1, params.SandboxConfigHandler, params.SandboxSkillHandler, accessGuards)
 		RegisterMyEnvVarRoutes(v1, params.MeEnvVarHandler)
-		RegisterEvaluationRoutes(v1, params.EvaluationHandler, rbacGuards)
-		RegisterInitializationRoutes(v1, params.InitializationHandler, rbacGuards)
+		RegisterEvaluationRoutes(v1, params.EvaluationHandler, accessGuards)
+		RegisterInitializationRoutes(v1, params.InitializationHandler, accessGuards)
 		params.SystemHandler.BindDeploymentCapabilities(deploymentCapabilitiesFromRouter(params))
-		RegisterSystemRoutes(v1, params.SystemHandler, rbacGuards)
-		RegisterSystemAdminRoutes(v1, params.SystemHandler, params.AuditLogHandler, rbacGuards)
-		RegisterMCPServiceRoutes(v1, params.MCPServiceHandler, params.MCPCredentialsHandler, params.MCPOAuthHandler, rbacGuards)
-		RegisterWebSearchRoutes(v1, params.WebSearchHandler, rbacGuards)
-		RegisterWebSearchProviderRoutes(v1, params.WebSearchProviderHandler, params.WebSearchCredentialsHandler, rbacGuards)
-		RegisterVectorStoreRoutes(v1, params.VectorStoreHandler, rbacGuards)
-		RegisterStorageBackendRoutes(v1, params.StorageBackendHandler, rbacGuards)
-		RegisterCustomAgentRoutes(v1, params.CustomAgentHandler, rbacGuards)
-		RegisterUserFavoriteRoutes(v1, params.UserFavoriteHandler, rbacGuards)
-		RegisterSkillRoutes(v1, params.SkillHandler, rbacGuards)
-		RegisterIMChannelRoutes(v1, params.IMHandler, rbacGuards)
-		RegisterDataSourceRoutes(v1, params.DataSourceHandler, params.DataSourceCredentialsHandler, rbacGuards)
-		RegisterWikiPageRoutes(v1, params.WikiPageHandler, rbacGuards)
-		RegisterMemoryRoutes(v1, params.MemoryHandler, rbacGuards)
-		RegisterChunkerDebugRoutes(v1, rbacGuards)
+		RegisterSystemRoutes(v1, params.SystemHandler, accessGuards)
+		RegisterSystemAdminRoutes(v1, params.SystemHandler, accessGuards)
+		RegisterMCPServiceRoutes(v1, params.MCPServiceHandler, params.MCPCredentialsHandler, params.MCPOAuthHandler, accessGuards)
+		RegisterWebSearchRoutes(v1, params.WebSearchHandler, accessGuards)
+		RegisterWebSearchProviderRoutes(v1, params.WebSearchProviderHandler, params.WebSearchCredentialsHandler, accessGuards)
+		RegisterVectorStoreRoutes(v1, params.VectorStoreHandler, accessGuards)
+		RegisterStorageBackendRoutes(v1, params.StorageBackendHandler, accessGuards)
+		RegisterCustomAgentRoutes(v1, params.CustomAgentHandler, accessGuards)
+		RegisterUserFavoriteRoutes(v1, params.UserFavoriteHandler, accessGuards)
+		RegisterSkillRoutes(v1, params.SkillHandler, accessGuards)
+		RegisterDataSourceRoutes(v1, params.DataSourceHandler, params.DataSourceCredentialsHandler, accessGuards)
+		RegisterWikiPageRoutes(v1, params.WikiPageHandler, accessGuards)
+		RegisterMemoryRoutes(v1, params.MemoryHandler, accessGuards)
+		RegisterChunkerDebugRoutes(v1, accessGuards)
 
 		// Fail fast if any declared API-key policy points at a route
 		// template that does not actually exist (typo / path drift). A
 		// stale template would silently 403 every API key on that route,
 		// so we panic at startup instead of shipping a dead policy.
-		rbacGuards.assertAPIKeyPoliciesMatchRoutes(r)
 	}
 
 	return r

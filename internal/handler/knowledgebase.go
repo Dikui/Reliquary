@@ -229,7 +229,7 @@ func (h *KnowledgeBaseHandler) HybridSearch(c *gin.Context) {
 	logger.Info(ctx, "Start hybrid search")
 
 	// Validate and check permission for knowledge base access
-	_, id, effectiveTenantID, _, err := h.validateAndGetKnowledgeBase(c)
+	_, id, effectiveTenantID, err := h.validateAndGetKnowledgeBase(c)
 	if err != nil {
 		c.Error(err)
 		return
@@ -351,14 +351,14 @@ func (h *KnowledgeBaseHandler) CreateKnowledgeBase(c *gin.Context) {
 	})
 }
 
-func (h *KnowledgeBaseHandler) validateAndGetKnowledgeBase(c *gin.Context) (*types.KnowledgeBase, string, uint64, types.TenantRole, error) {
+func (h *KnowledgeBaseHandler) validateAndGetKnowledgeBase(c *gin.Context) (*types.KnowledgeBase, string, uint64, error) {
 	ctx := c.Request.Context()
 
 	// Get tenant ID from context
 	tenantID, exists := c.Get(types.TenantIDContextKey.String())
 	if !exists {
 		logger.Error(ctx, "Failed to get tenant ID")
-		return nil, "", 0, "", apperrors.NewUnauthorizedError("Unauthorized")
+		return nil, "", 0, apperrors.NewUnauthorizedError("Unauthorized")
 	}
 
 	userID, userExists := c.Get(types.UserIDContextKey.String())
@@ -367,10 +367,7 @@ func (h *KnowledgeBaseHandler) validateAndGetKnowledgeBase(c *gin.Context) (*typ
 	id := secutils.SanitizeForLog(c.Param("id"))
 	if id == "" {
 		logger.Error(ctx, "Knowledge base ID is empty")
-		return nil, "", 0, "", apperrors.NewBadRequestError("Knowledge base ID cannot be empty")
-	}
-	if err := requireTenantAPIKeyKnowledgeBase(ctx, id); err != nil {
-		return nil, id, 0, "", err
+		return nil, "", 0, apperrors.NewBadRequestError("Knowledge base ID cannot be empty")
 	}
 
 	// Verify tenant has permission to access this knowledge base
@@ -382,15 +379,15 @@ func (h *KnowledgeBaseHandler) validateAndGetKnowledgeBase(c *gin.Context) (*typ
 		// path) don't have to wrap NewInternalServerError into a 500 for
 		// every probe of a non-existent id.
 		if stderrors.Is(err, repository.ErrKnowledgeBaseNotFound) {
-			return nil, id, 0, "", apperrors.NewNotFoundError("knowledge base not found")
+			return nil, id, 0, apperrors.NewNotFoundError("knowledge base not found")
 		}
 		logger.ErrorWithFields(ctx, err, nil)
-		return nil, id, 0, "", apperrors.NewInternalServerError(err.Error())
+		return nil, id, 0, apperrors.NewInternalServerError(err.Error())
 	}
 
 	// Check 1: Verify tenant ownership (owner has full access)
 	if kb.TenantID == tenantID.(uint64) {
-		return kb, id, tenantID.(uint64), teamKBPermission(ctx), nil
+		return kb, id, tenantID.(uint64), nil
 	}
 
 	_ = userID
@@ -403,12 +400,12 @@ func (h *KnowledgeBaseHandler) validateAndGetKnowledgeBase(c *gin.Context) (*typ
 			"request tenant ID: %d, knowledge base tenant ID: %d",
 		id, tenantID.(uint64), kb.TenantID,
 	)
-	return nil, id, 0, "", apperrors.NewForbiddenError("No permission to operate")
+	return nil, id, 0, apperrors.NewForbiddenError("No permission to operate")
 }
 
 func (h *KnowledgeBaseHandler) GetKnowledgeBase(c *gin.Context) {
 	// Validate and get the knowledge base
-	kb, _, _, permission, err := h.validateAndGetKnowledgeBase(c)
+	kb, _, _, err := h.validateAndGetKnowledgeBase(c)
 	if err != nil {
 		c.Error(err)
 		return
@@ -420,10 +417,7 @@ func (h *KnowledgeBaseHandler) GetKnowledgeBase(c *gin.Context) {
 	tenantID := c.GetUint64(types.TenantIDContextKey.String())
 	storeView := h.resolveKBStoreView(c.Request.Context(), kb, tenantID)
 	var extras map[string]interface{}
-	if kb.TenantID != tenantID && permission != "" {
-		// Include my_permission in data so frontend can show role (e.g. "只读") instead of "--" for agent-visible KBs
-		extras = map[string]interface{}{"my_permission": permission}
-	}
+
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": buildKBResponse(kb, storeView, extras)})
 }
 
@@ -438,11 +432,9 @@ func (h *KnowledgeBaseHandler) ListKnowledgeBases(c *gin.Context) {
 		return
 	}
 
-	kbs = filterKnowledgeBasesForAPIKeyScope(ctx, kbs)
-
 	// Get share counts for all knowledge bases
 
-	// 批量回填 creator_name，让前端列表能区分「我创建」与「同空间其他成员创建」。
+	// 批量回填 creator_name，保留知识库的创建者展示。
 	// 仅在 list 接口里回填，详情 / 编辑场景不依赖这个字段；解析失败（用户已删除、
 	// CreatorID 为空的老数据）就让字段为空，前端按 fallback 渲染。
 	enrichKBCreatorNames(ctx, h.userService, kbs)
@@ -452,20 +444,6 @@ func (h *KnowledgeBaseHandler) ListKnowledgeBases(c *gin.Context) {
 		"success": true,
 		"data":    h.buildKBListResponse(ctx, kbs, callerTenantID),
 	})
-}
-
-func filterKnowledgeBasesForAPIKeyScope(ctx context.Context, kbs []*types.KnowledgeBase) []*types.KnowledgeBase {
-	scope, ok := types.TenantAPIKeyScopeFromContext(ctx)
-	if !ok || len(scope.KnowledgeBaseIDs) == 0 {
-		return kbs
-	}
-	filtered := make([]*types.KnowledgeBase, 0, len(kbs))
-	for _, kb := range kbs {
-		if kb != nil && scope.AllowsKnowledgeBase(kb.ID) {
-			filtered = append(filtered, kb)
-		}
-	}
-	return filtered
 }
 
 // enrichKBCreatorNames 把 KB 列表里的 CreatorID 批量解析成展示名（username
@@ -583,14 +561,9 @@ func (h *KnowledgeBaseHandler) UpdateKnowledgeBase(c *gin.Context) {
 	logger.Info(ctx, "Start updating knowledge base")
 
 	// Validate and get the knowledge base
-	_, id, _, permission, err := h.validateAndGetKnowledgeBase(c)
+	_, id, _, err := h.validateAndGetKnowledgeBase(c)
 	if err != nil {
 		c.Error(err)
-		return
-	}
-
-	if !permission.HasPermission(types.TenantRoleContributor) {
-		c.Error(apperrors.NewForbiddenError("No permission to update knowledge base"))
 		return
 	}
 
@@ -664,14 +637,14 @@ func (h *KnowledgeBaseHandler) DeleteKnowledgeBase(c *gin.Context) {
 	logger.Info(ctx, "Start deleting knowledge base")
 
 	// Validate and get the knowledge base
-	kb, id, _, permission, err := h.validateAndGetKnowledgeBase(c)
+	kb, id, _, err := h.validateAndGetKnowledgeBase(c)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
 	tenantID, _ := c.Get(types.TenantIDContextKey.String())
-	if kb.TenantID != tenantID.(uint64) || !permission.HasPermission(types.TenantRoleAdmin) {
+	if kb.TenantID != tenantID.(uint64) {
 		c.Error(apperrors.NewForbiddenError("Only knowledge base owner can delete"))
 		return
 	}
@@ -746,10 +719,6 @@ func (h *KnowledgeBaseHandler) CopyKnowledgeBase(c *gin.Context) {
 	kbIDs := []string{req.SourceID}
 	if req.TargetID != "" {
 		kbIDs = append(kbIDs, req.TargetID)
-	}
-	if err := requireTenantAPIKeyKnowledgeBases(ctx, kbIDs...); err != nil {
-		c.Error(err)
-		return
 	}
 
 	// Validate source knowledge base exists and belongs to caller's tenant (prevent cross-tenant clone)
@@ -1067,11 +1036,4 @@ func (h *KnowledgeBaseHandler) ListMoveTargets(c *gin.Context) {
 		"success": true,
 		"data":    targets,
 	})
-}
-
-func teamKBPermission(ctx context.Context) types.TenantRole {
-	if _, ok := types.TenantAPIKeyScopeFromContext(ctx); ok {
-		return types.TenantRoleAdmin
-	}
-	return types.TenantRoleFromContext(ctx)
 }

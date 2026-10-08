@@ -78,7 +78,7 @@ function createEnvironment(locale = 'zh-CN') {
     '@/stores/knowledge': { knowledgeStore: () => store },
     '@/stores/ui': { useUIStore: () => uiStore },
     '@/stores/menu': { useMenuStore: () => ({}) },
-    '@/stores/auth': { useAuthStore: () => ({ hasRole: () => true, effectiveTenantId: '' }) },
+    '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true, effectiveTenantId: '' }) },
     '@/stores/commandPalette': { useCommandPaletteStore: () => ({}) },
     '@/stores/chatResources': { useChatResourcesStore: () => ({ knowledgeBases: [] }) },
     '@/stores/editorResources': { useEditorResourcesStore: () => ({ parserEngines: [] }) },

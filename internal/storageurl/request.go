@@ -8,18 +8,6 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-// NewRequestRewriter builds the Rewriter for one API request or response stream.
-//
-// ModeHandle yields a disabled Rewriter, so the default path resolves nothing
-// and costs no access-grant rows. The tenant is taken from ctx because a
-// reference may live on a tenant-configured storage backend rather than the
-// process-wide default.
-//
-// No extra authorization gate applies here, unlike the `/files` proxy which
-// rejects KB-restricted API keys. That gate exists because `/files` takes an
-// arbitrary caller-supplied path it cannot bind to a KB allow-list. Here the
-// references come from a response the caller is already authorized to receive,
-// so the server — not the client — chooses which resources get a URL.
 func NewRequestRewriter(
 	ctx context.Context,
 	mode Mode,

@@ -68,7 +68,6 @@ type KnowledgeWorkflowService struct {
 	webSearch interfaces.WebSearchService
 	wiki      interfaces.WikiPageService
 	models    interfaces.ModelService
-	members   interfaces.TenantMemberRepository
 	tasks     interfaces.TaskEnqueuer
 	skillExec WorkflowSkillExecutor
 	cron      *cron.Cron
@@ -83,13 +82,12 @@ func NewKnowledgeWorkflowService(
 	webSearch interfaces.WebSearchService,
 	wiki interfaces.WikiPageService,
 	models interfaces.ModelService,
-	members interfaces.TenantMemberRepository,
 	tasks interfaces.TaskEnqueuer,
 	skillExecutor WorkflowSkillExecutor,
 ) *KnowledgeWorkflowService {
 	return &KnowledgeWorkflowService{
 		db: db, kbs: kbs, knowledge: knowledge, context: contextService,
-		webSearch: webSearch, wiki: wiki, models: models, members: members,
+		webSearch: webSearch, wiki: wiki, models: models,
 		tasks: tasks, skillExec: skillExecutor,
 	}
 }
@@ -359,18 +357,12 @@ func (s *KnowledgeWorkflowService) Delete(ctx context.Context, kbID, id string) 
 }
 
 func (s *KnowledgeWorkflowService) List(ctx context.Context, kbID string) ([]types.KnowledgeWorkflow, error) {
-	_, tenantID, actor, err := s.authorizeKB(ctx, kbID)
-	if err != nil {
-		return nil, err
-	}
-	role, err := s.currentRole(ctx, tenantID, actor)
+	_, tenantID, _, err := s.authorizeKB(ctx, kbID)
 	if err != nil {
 		return nil, err
 	}
 	query := s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id = ?", tenantID, kbID)
-	if !role.HasPermission(types.TenantRoleAdmin) && !types.IsSystemAdminFromContext(ctx) {
-		query = query.Where("owner_id = ?", actor)
-	}
+
 	var workflows []types.KnowledgeWorkflow
 	err = query.Order("updated_at DESC").Find(&workflows).Error
 	return workflows, err
@@ -388,15 +380,11 @@ func (s *KnowledgeWorkflowService) Get(ctx context.Context, kbID, id string) (*t
 }
 
 func (s *KnowledgeWorkflowService) ListRuns(ctx context.Context, kbID, workflowID string) ([]types.KnowledgeWorkflowRun, error) {
-	_, tenantID, actor, err := s.authorizeKB(ctx, kbID)
+	_, tenantID, _, err := s.authorizeKB(ctx, kbID)
 	if err != nil {
 		return nil, err
 	}
 	query := s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id = ?", tenantID, kbID)
-	role, err := s.currentRole(ctx, tenantID, actor)
-	if err != nil {
-		return nil, err
-	}
 	if workflowID != "" {
 		wf, err := s.getWorkflow(ctx, kbID, workflowID)
 		if err != nil {
@@ -406,8 +394,6 @@ func (s *KnowledgeWorkflowService) ListRuns(ctx context.Context, kbID, workflowI
 			return nil, err
 		}
 		query = query.Where("workflow_id = ?", workflowID)
-	} else if !role.HasPermission(types.TenantRoleAdmin) && !types.IsSystemAdminFromContext(ctx) {
-		query = query.Where("owner_id = ?", actor)
 	}
 	var runs []types.KnowledgeWorkflowRun
 	err = query.Order("created_at DESC").Limit(200).Find(&runs).Error
@@ -434,20 +420,13 @@ func (s *KnowledgeWorkflowService) GetRun(ctx context.Context, kbID, runID strin
 }
 
 func (s *KnowledgeWorkflowService) ListReports(ctx context.Context, kbID string) ([]types.KnowledgeWorkflowReport, error) {
-	_, tenantID, actor, err := s.authorizeKB(ctx, kbID)
-	if err != nil {
-		return nil, err
-	}
-	role, err := s.currentRole(ctx, tenantID, actor)
+	_, tenantID, _, err := s.authorizeKB(ctx, kbID)
 	if err != nil {
 		return nil, err
 	}
 	var reports []types.KnowledgeWorkflowReport
 	query := s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_base_id = ?", tenantID, kbID)
-	if !role.HasPermission(types.TenantRoleAdmin) && !types.IsSystemAdminFromContext(ctx) {
-		query = query.Where("run_id IN (?)", s.db.Model(&types.KnowledgeWorkflowRun{}).
-			Select("id").Where("tenant_id = ? AND knowledge_base_id = ? AND owner_id = ?", tenantID, kbID, actor))
-	}
+
 	err = query.Order("created_at DESC").Limit(200).Find(&reports).Error
 	return reports, err
 }
@@ -525,8 +504,7 @@ func (s *KnowledgeWorkflowService) authorizeKB(ctx context.Context, kbID string)
 	if !ok {
 		return nil, 0, "", ErrWorkflowForbidden
 	}
-	role, err := s.currentRole(ctx, tenantID, actor)
-	if err != nil {
+	if err := s.validateActor(ctx, tenantID, actor); err != nil {
 		return nil, 0, "", err
 	}
 	kb, err := s.kbs.GetKnowledgeBaseByID(ctx, kbID)
@@ -537,82 +515,34 @@ func (s *KnowledgeWorkflowService) authorizeKB(ctx context.Context, kbID string)
 	if kb == nil || kb.TenantID != tenantID {
 		return nil, 0, "", ErrWorkflowForbidden
 	}
-	if !types.IsSystemAdminFromContext(ctx) && !role.HasPermission(types.TenantRoleContributor) {
-		return nil, 0, "", ErrWorkflowForbidden
-	}
+
 	return kb, tenantID, actor, nil
 }
 
-func (s *KnowledgeWorkflowService) currentRole(ctx context.Context, tenantID uint64, actor string) (types.TenantRole, error) {
-	if types.IsSystemAdminFromContext(ctx) {
-		// Queued jobs may outlive an administrator grant. Do not trust the
-		// original task payload after the account is disabled or demoted.
-		var user types.User
-		if err := s.db.WithContext(ctx).Select("id", "is_active", "is_system_admin").Where("id = ?", actor).First(&user).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return "", ErrWorkflowForbidden
-			}
-			return "", err
+func (s *KnowledgeWorkflowService) validateActor(ctx context.Context, tenantID uint64, actor string) error {
+	var user types.User
+	if err := s.db.WithContext(ctx).Where("id = ? AND tenant_id = ? AND is_active = TRUE", actor, tenantID).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrWorkflowForbidden
 		}
-		if !user.IsActive || !user.IsSystemAdmin {
-			return "", ErrWorkflowForbidden
-		}
-		return types.TenantRoleOwner, nil
+		return err
 	}
-	if types.IsSyntheticUserID(actor) {
-		if actor == fmt.Sprintf("system-%d", tenantID) {
-			return types.TenantRoleOwner, nil
-		}
-		return "", ErrWorkflowForbidden
-	}
-	if s.members == nil {
-		return "", fmt.Errorf("workflow tenant member repository is unavailable")
-	}
-	member, err := s.members.Get(ctx, actor, tenantID)
-	if err != nil {
-		return "", err
-	}
-	if member == nil || member.Status != types.TenantMemberStatusActive || !member.Role.IsValid() {
-		return "", ErrWorkflowForbidden
-	}
-	return member.Role, nil
+	return nil
 }
 
 func (s *KnowledgeWorkflowService) authorizeWorkflow(ctx context.Context, wf *types.KnowledgeWorkflow) error {
-	_, tenantID, actor, err := s.authorizeKB(ctx, wf.KnowledgeBaseID)
+	_, tenantID, _, err := s.authorizeKB(ctx, wf.KnowledgeBaseID)
 	if err != nil {
 		return err
 	}
 	if tenantID != wf.TenantID {
 		return ErrWorkflowForbidden
 	}
-	role, err := s.currentRole(ctx, tenantID, actor)
-	if err != nil {
-		return err
-	}
-	if actor == wf.OwnerID || role.HasPermission(types.TenantRoleAdmin) || types.IsSystemAdminFromContext(ctx) {
-		return nil
-	}
-	return ErrWorkflowForbidden
+	return nil
 }
 
 func (s *KnowledgeWorkflowService) refreshWorkflowAuthorization(ctx context.Context, wf *types.KnowledgeWorkflow) (context.Context, error) {
-	_, tenantID, actor, err := s.authorizeKB(ctx, wf.KnowledgeBaseID)
-	if err != nil {
-		return ctx, err
-	}
-	if tenantID != wf.TenantID {
-		return ctx, ErrWorkflowForbidden
-	}
-	role, err := s.currentRole(ctx, tenantID, actor)
-	if err != nil {
-		return ctx, err
-	}
-	ctx = context.WithValue(ctx, types.TenantRoleContextKey, role)
-	if err := s.authorizeWorkflow(ctx, wf); err != nil {
-		return ctx, err
-	}
-	return ctx, nil
+	return ctx, s.authorizeWorkflow(ctx, wf)
 }
 
 func (s *KnowledgeWorkflowService) authorizeActor(ctx context.Context, tenantID uint64, ownerID string) error {
@@ -620,12 +550,5 @@ func (s *KnowledgeWorkflowService) authorizeActor(ctx context.Context, tenantID 
 	if !ok {
 		return ErrWorkflowForbidden
 	}
-	role, err := s.currentRole(ctx, tenantID, actor)
-	if err != nil {
-		return err
-	}
-	if actor == ownerID || role.HasPermission(types.TenantRoleAdmin) || types.IsSystemAdminFromContext(ctx) {
-		return nil
-	}
-	return ErrWorkflowForbidden
+	return s.validateActor(ctx, tenantID, actor)
 }

@@ -66,7 +66,7 @@ func TestKnowledgeStrategyEvaluationDevelopmentHoldoutAndScope(t *testing.T) {
 		PreviousRules: types.JSON(`{"filter":""}`), Rules: types.JSON(`{"filter":"Prefer detailed evidence"}`), Reason: "evaluation fixture", SampleResults: types.JSON(`[]`), CreatedBy: "owner"}
 	require.NoError(t, db.Create(version).Error)
 	kb := &types.KnowledgeBase{ID: "kb", TenantID: 1, CreatorID: "owner", SummaryModelID: "model"}
-	svc := NewKnowledgeStrategyService(db, strategyKB{kb: kb}, strategyOriginal{}, intakeModelService{chat: strategyChat{}}, nil, nil)
+	svc := NewKnowledgeStrategyService(db, strategyKB{kb: kb}, strategyOriginal{}, intakeModelService{chat: strategyChat{}}, nil)
 
 	result, err := svc.Evaluate(anomalyContext("owner"), "kb", version.ID, []KnowledgeStrategyEvaluationSample{
 		{KnowledgeID: "dev-select", Label: "select", Split: "development"},
@@ -92,12 +92,12 @@ func TestKnowledgeStrategyEvaluationDevelopmentHoldoutAndScope(t *testing.T) {
 	require.JSONEq(t, string(version.Rules), string(unchanged.Rules))
 	require.JSONEq(t, `[]`, string(unchanged.SampleResults), "gold labels and evaluation results are not persisted")
 
-	_, err = svc.Evaluate(anomalyContext("reviewer"), "kb", version.ID, []KnowledgeStrategyEvaluationSample{{KnowledgeID: "dev-select", Label: "select", Split: "development"}})
-	require.Error(t, err, "only the KB owner can evaluate strategy samples")
+	_, err = svc.Evaluate(anomalyContext(""), "kb", version.ID, []KnowledgeStrategyEvaluationSample{{KnowledgeID: "dev-select", Label: "select", Split: "development"}})
+	require.Error(t, err, "strategy evaluation requires an authenticated user")
 	_, err = svc.Evaluate(anomalyContext("owner"), "kb", version.ID, []KnowledgeStrategyEvaluationSample{{KnowledgeID: "foreign", Label: "select", Split: "development"}})
 	require.Error(t, err, "sample IDs are scoped to the requested tenant and KB")
 
-	missingOriginalSvc := NewKnowledgeStrategyService(db, strategyKB{kb: kb}, strategyOriginal{missing: map[string]bool{"test-reject": true}}, intakeModelService{chat: strategyChat{}}, nil, nil)
+	missingOriginalSvc := NewKnowledgeStrategyService(db, strategyKB{kb: kb}, strategyOriginal{missing: map[string]bool{"test-reject": true}}, intakeModelService{chat: strategyChat{}}, nil)
 	_, err = missingOriginalSvc.Evaluate(anomalyContext("owner"), "kb", version.ID, []KnowledgeStrategyEvaluationSample{{KnowledgeID: "test-reject", Label: "reject", Split: "holdout"}})
 	require.Error(t, err, "rejected samples without a retrievable original cannot be evaluated")
 }
@@ -127,10 +127,6 @@ func TestKnowledgeStrategyEvaluationUsesFilterOnlyChannelRules(t *testing.T) {
 	require.NotContains(t, model.prompts[0], "tag rule")
 	require.NotContains(t, model.prompts[0], "collection rule")
 
-	_, _, err = strategyFilterDecision(context.Background(), model, rules, types.ConnectorTypeGrokX, "post", types.SourceInfo{})
-	require.NoError(t, err)
-	require.Contains(t, model.prompts[1], "For Grok X Search")
-	require.NotContains(t, model.prompts[1], "collection rule")
 }
 
 func (strategyChat) Chat(_ context.Context, messages []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
@@ -181,7 +177,7 @@ func TestKnowledgeStrategyCandidateTrialAndRestore(t *testing.T) {
 	require.NoError(t, message.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "approved", SourceInfo: types.SourceInfo{Publisher: "Publisher", OriginalURL: "https://example.org/report", PublishedAt: "2026-09-01"}}))
 	require.NoError(t, db.Exec(`INSERT INTO knowledges (id,tenant_id,knowledge_base_id,title,parse_status,metadata) VALUES (?,?,?,?,?,?)`, message.ID, message.TenantID, message.KnowledgeBaseID, message.Title, message.ParseStatus, string(message.Metadata)).Error)
 	kb := &types.KnowledgeBase{ID: "kb", TenantID: 1, CreatorID: "owner", SummaryModelID: "model"}
-	svc := NewKnowledgeStrategyService(db, strategyKB{kb: kb}, strategyOriginal{}, intakeModelService{chat: strategyChat{}}, nil, nil)
+	svc := NewKnowledgeStrategyService(db, strategyKB{kb: kb}, strategyOriginal{}, intakeModelService{chat: strategyChat{}}, nil)
 	owner := anomalyContext("owner")
 	version, err := svc.Propose(owner, "kb", "Tighten evidence screening and use specific names", []string{"sample"})
 	require.NoError(t, err)
@@ -193,7 +189,7 @@ func TestKnowledgeStrategyCandidateTrialAndRestore(t *testing.T) {
 	active, err := activeKnowledgeStrategyRules(owner, db, 1, "kb")
 	require.NoError(t, err)
 	require.Nil(t, active)
-	_, err = svc.Activate(anomalyContext("reviewer"), "kb", version.ID)
+	_, err = svc.Activate(anomalyContext(""), "kb", version.ID)
 	require.Error(t, err)
 	_, err = svc.Activate(owner, "kb", version.ID)
 	require.NoError(t, err)

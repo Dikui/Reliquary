@@ -13,30 +13,12 @@ import (
 	"reliquary/internal/types"
 )
 
-// access_test.go covers the four exported helpers in access.go:
-// IsCrossTenantSuperuser, IsTenantAccessible, RequireCrossTenantAccess,
-// RequirePathTenantMatch. The shapes are similar — feature-flag +
-// per-user attribute combinations — so the tests are organised around
-// the truth-table for each helper rather than per-handler scenarios.
-
-func cfgCrossTenant(enabled bool) *config.Config {
-	return &config.Config{Tenant: &config.TenantConfig{EnableRBAC: &enabled}}
-}
-
-// ---------- IsCrossTenantSuperuser ----------
-
-// ---------- IsTenantAccessible ----------
-
-// ---------- RequireCrossTenantAccess ----------
-
-// ---------- RequirePathTenantMatch ----------
-
 func runPathTenantHandler(
 	cfg *config.Config, ctxTenantID uint64, user *types.User, urlPath string,
 ) *httptest.ResponseRecorder {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.Use(ErrorHandler()) // see runCrossTenantHandler for rationale
+	r.Use(ErrorHandler()) // see the response envelope checks
 	r.Use(func(c *gin.Context) {
 		ctx := c.Request.Context()
 		if ctxTenantID != 0 {
@@ -59,14 +41,14 @@ func runPathTenantHandler(
 }
 
 func TestRequirePathTenantMatch_MatchAllows(t *testing.T) {
-	w := runPathTenantHandler(cfgCrossTenant(false), 7, nil, "/tenants/7")
+	w := runPathTenantHandler(nil, 7, nil, "/tenants/7")
 	if w.Code != http.StatusOK {
 		t.Fatalf("matching :id must allow, got %d", w.Code)
 	}
 }
 
 func TestRequirePathTenantMatch_MismatchRejects(t *testing.T) {
-	w := runPathTenantHandler(cfgCrossTenant(false), 7, nil, "/tenants/9")
+	w := runPathTenantHandler(nil, 7, nil, "/tenants/9")
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("mismatch must 403, got %d", w.Code)
 	}
@@ -76,28 +58,28 @@ func TestRequirePathTenantMatch_MissingCtxTenantRejects(t *testing.T) {
 	// If the auth middleware never set TenantIDContextKey we fail
 	// closed — silently treating "no ctx" as a match would be a footgun
 	// the next time someone refactors the auth chain.
-	w := runPathTenantHandler(cfgCrossTenant(true), 0, nil, "/tenants/7")
+	w := runPathTenantHandler(nil, 0, nil, "/tenants/7")
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("missing tenant ctx must 401, got %d", w.Code)
 	}
 }
 
 func TestRequirePathTenantMatch_NonNumericIDRejects(t *testing.T) {
-	w := runPathTenantHandler(cfgCrossTenant(true), 7, nil, "/tenants/abc")
+	w := runPathTenantHandler(nil, 7, nil, "/tenants/abc")
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("non-numeric :id must 400, got %d", w.Code)
 	}
 }
 
 func TestRequirePathTenantMatch_ZeroIDRejects(t *testing.T) {
-	w := runPathTenantHandler(cfgCrossTenant(true), 7, nil, "/tenants/0")
+	w := runPathTenantHandler(nil, 7, nil, "/tenants/0")
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf(":id=0 must 400, got %d", w.Code)
 	}
 }
 
 // TestAccessMiddleware_ResponseEnvelope pins the wire format produced
-// by RequireCrossTenantAccess and RequirePathTenantMatch when they
+// by RequirePathTenantMatch when they
 // reject. Both used to live in handlers that called
 // c.Error(apperrors.NewForbiddenError(...)) and rendered through
 // ErrorHandler — clients (frontend axios interceptor, Go SDK) key off
@@ -105,17 +87,17 @@ func TestRequirePathTenantMatch_ZeroIDRejects(t *testing.T) {
 // favour of a raw c.JSON, this test catches the regression.
 func TestAccessMiddleware_ResponseEnvelope(t *testing.T) {
 	t.Run("RequirePathTenantMatch_Mismatch", func(t *testing.T) {
-		w := runPathTenantHandler(cfgCrossTenant(false), 7, nil, "/tenants/9")
+		w := runPathTenantHandler(nil, 7, nil, "/tenants/9")
 		assertEnvelope(t, w, http.StatusForbidden, apperrors.ErrForbidden)
 	})
 	t.Run("RequirePathTenantMatch_NonNumeric", func(t *testing.T) {
-		w := runPathTenantHandler(cfgCrossTenant(true), 7, nil, "/tenants/abc")
+		w := runPathTenantHandler(nil, 7, nil, "/tenants/abc")
 		// NewValidationError uses ErrValidation, not ErrBadRequest — both
 		// surface as HTTP 400 but the code in the body is ErrValidation.
 		assertEnvelope(t, w, http.StatusBadRequest, apperrors.ErrValidation)
 	})
 	t.Run("RequirePathTenantMatch_NoCtxTenant", func(t *testing.T) {
-		w := runPathTenantHandler(cfgCrossTenant(true), 0, nil, "/tenants/7")
+		w := runPathTenantHandler(nil, 0, nil, "/tenants/7")
 		assertEnvelope(t, w, http.StatusUnauthorized, apperrors.ErrUnauthorized)
 	})
 }

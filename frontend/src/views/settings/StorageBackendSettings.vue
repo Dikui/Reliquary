@@ -11,7 +11,7 @@
 
     <t-loading :loading="loading" size="small" class="backend-list-loading">
       <t-empty
-        v-if="!loading && backends.length === 0 && !authStore.hasRole('admin')"
+        v-if="!loading && backends.length === 0 && !authStore.isLoggedIn"
         :description="t('settings.storageBackend.empty')"
       />
       <div v-else-if="!loading" class="backend-grid">
@@ -71,7 +71,7 @@
         </div>
 
         <button
-          v-if="authStore.hasRole('admin')"
+          v-if="authStore.isLoggedIn"
           type="button"
           class="backend-card backend-card--add"
           @click="openCreate"
@@ -278,9 +278,9 @@ function backendMeta(backend: StorageBackend): string {
   return backend.config.endpoint || backend.config.bucket_name || backend.config.path_prefix || t('settings.storageBackend.localStorage')
 }
 
-const canEdit = (backend: StorageBackend) => authStore.hasRole('admin') && backend.source !== 'env'
-const canDelete = (backend: StorageBackend) => authStore.hasRole('admin') && backend.source !== 'env' && !backend.legacy_alias
-const canSetDefault = (backend: StorageBackend) => backend.id !== defaultID.value && authStore.hasRole('admin')
+const canEdit = (backend: StorageBackend) => authStore.isLoggedIn && backend.source !== 'env'
+const canDelete = (backend: StorageBackend) => authStore.isLoggedIn && backend.source !== 'env' && !backend.legacy_alias
+const canSetDefault = (backend: StorageBackend) => backend.id !== defaultID.value && authStore.isLoggedIn
 // 测试连接对所有可见用户开放，因此每张卡至少有一个动作。
 const hasActions = (_backend: StorageBackend) => true
 

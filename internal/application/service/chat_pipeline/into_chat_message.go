@@ -64,9 +64,6 @@ func (p *PluginIntoChatMessage) OnEvent(ctx context.Context,
 		if chatManage.ImageDescription != "" && !chatManage.ChatModelSupportsVision {
 			userContent += "\n\n[用户上传图片内容]\n" + chatManage.ImageDescription
 		}
-		if chatManage.QuotedContext != "" {
-			userContent += "\n\n" + chatManage.QuotedContext
-		}
 		// Inject attachment content (documents, audio transcripts, etc.)
 		if len(chatManage.Attachments) > 0 {
 			userContent += chatManage.Attachments.BuildPrompt()
@@ -127,9 +124,6 @@ func (p *PluginIntoChatMessage) OnEvent(ctx context.Context,
 	// process images directly. Vision-capable models see images via MultiContent.
 	if chatManage.ImageDescription != "" && !chatManage.ChatModelSupportsVision {
 		userContent += "\n\n[用户上传图片内容]\n" + chatManage.ImageDescription
-	}
-	if chatManage.QuotedContext != "" {
-		userContent += "\n\n" + chatManage.QuotedContext
 	}
 	// Inject attachment content (documents, audio transcripts, etc.)
 	if len(chatManage.Attachments) > 0 {

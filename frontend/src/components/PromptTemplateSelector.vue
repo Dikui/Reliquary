@@ -126,7 +126,7 @@ const loadTemplates = async () => {
 // 根据类型获取对应的模板列表
 const templates = computed<PromptTemplate[]>(() => {
   if (!templatesConfig.value) return [];
-  
+
   let list: PromptTemplate[] = [];
   switch (props.type) {
     case 'systemPrompt':
@@ -211,7 +211,7 @@ onMounted(() => {
 <style scoped lang="less">
 .prompt-template-selector {
   display: inline-flex;
-  
+
   &.position-corner {
     position: absolute;
     right: 8px;
@@ -238,13 +238,13 @@ onMounted(() => {
   &:hover {
     color: var(--td-brand-color);
   }
-  
+
   :deep(.t-button__text) {
     display: inline-flex;
     align-items: center;
     gap: 3px;
   }
-  
+
   :deep(.t-icon) {
     font-size: 14px;
     vertical-align: middle;
@@ -268,13 +268,13 @@ onMounted(() => {
     border-color: var(--td-brand-color);
     background: var(--td-bg-color-secondarycontainer);
   }
-  
+
   :deep(.t-button__text) {
     display: inline-flex;
     align-items: center;
     gap: 4px;
   }
-  
+
   :deep(.t-icon) {
     vertical-align: middle;
     line-height: 1;
@@ -321,11 +321,11 @@ onMounted(() => {
   cursor: pointer;
   transition: all 0.2s ease;
   margin-bottom: 4px;
-  
+
   &:last-child {
     margin-bottom: 0;
   }
-  
+
   &:hover {
     background: var(--td-bg-color-secondarycontainer);
   }
@@ -352,12 +352,12 @@ onMounted(() => {
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 11px;
-  
+
   &.kb-tag {
     background: var(--td-brand-color-light);
     color: var(--td-brand-color);
   }
-  
+
   &.web-tag {
     background: var(--td-success-color-light);
     color: var(--td-brand-color);

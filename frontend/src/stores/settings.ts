@@ -297,7 +297,7 @@ export const useSettingsStore = defineStore("settings", {
 
     // 移除单个知识库
     removeKnowledgeBase(kbId: string) {
-      this.settings.selectedKnowledgeBases = 
+      this.settings.selectedKnowledgeBases =
         this.settings.selectedKnowledgeBases.filter((id: string) => id !== kbId);
       localStorage.setItem("Reliquary_settings", JSON.stringify(this.settings));
     },

@@ -73,7 +73,7 @@ func newStreamHandler(svc *DataSourceService, ds *types.DataSource, result *type
 func TestStreamHandler_EmitClassifiesDeletedAndFailed(t *testing.T) {
 	ds := &types.DataSource{
 		ID: "ds-1", TenantID: 1, KnowledgeBaseID: "kb-1",
-		Type: types.ConnectorTypeFeishu, SyncDeletions: true,
+		Type: types.ConnectorTypeRSS, SyncDeletions: true,
 	}
 	result := &types.SyncResult{}
 	knowledgeRepo := &deletionLookupKnowledgeRepo{knowledge: &types.Knowledge{ID: "knowledge-gone"}}

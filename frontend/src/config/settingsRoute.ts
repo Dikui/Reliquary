@@ -1,5 +1,5 @@
 import { INTEGRATION_TABS, type IntegrationTab } from './integrations'
-import { SETTINGS_SECTION_MIN_ROLE, SYSTEM_ADMIN_SETTINGS_SECTIONS } from './settingsAccess'
+import { SETTINGS_SECTIONS, SYSTEM_SETTINGS_SECTIONS } from './settingsAccess'
 
 export const INTEGRATION_SECTION_PREFIX = 'integration-'
 
@@ -17,7 +17,7 @@ export function integrationTabFromSection(section: string): IntegrationTab {
   if (INTEGRATION_TABS.includes(raw as IntegrationTab)) {
     return raw as IntegrationTab
   }
-  return 'im'
+  return 'api'
 }
 
 export function isIntegrationSection(section: string): boolean {
@@ -37,13 +37,13 @@ function isBareIntegrationTab(section: string): section is IntegrationTab {
  */
 export function normalizeSettingsSection(section: string, tab?: string | null): string {
   if (section === 'integrations') {
-    return integrationSectionKey(integrationTabFromSection(tab || 'im'))
+    return integrationSectionKey(integrationTabFromSection(tab || 'api'))
   }
   if (isBareIntegrationTab(section)) {
     return integrationSectionKey(section)
   }
-  if (isIntegrationSection(section) || SYSTEM_ADMIN_SETTINGS_SECTIONS.has(section)
-    || Object.hasOwn(SETTINGS_SECTION_MIN_ROLE, section)) return section
+  if (isIntegrationSection(section) || SYSTEM_SETTINGS_SECTIONS.has(section)
+    || SETTINGS_SECTIONS.has(section)) return section
   return 'general'
 }
 

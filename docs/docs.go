@@ -814,46 +814,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/auth/invitations/lookup": {
-            "post": {
-                "description": "根据邀请链接中的 token 返回邀请上下文（空间名 / 角色 / 过期时间），\n供注册页展示。无认证；token 无效或被撤销返回 410。\n使用 POST + body 而非 GET + path，避免 token 落入访问日志 / 浏览器历史 / tracing。",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "认证"
-                ],
-                "summary": "解析共享邀请链接 token",
-                "parameters": [
-                    {
-                        "description": "邀请 token",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.invitationLookupRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.invitationLookupResponse"
-                        }
-                    },
-                    "410": {
-                        "description": "链接无效或已撤销",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
         "/auth/login": {
             "post": {
                 "description": "用户登录并获取访问令牌",
@@ -1049,58 +1009,6 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "注册功能已禁用",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/auth/register-by-invite": {
-            "post": {
-                "description": "通过 Owner 生成的共享邀请链接 token 完成注册，绕过 invite_only 模式拦截。\n注册者自填邮箱（与 token 不绑定）；注册成功后自动加入对应空间。",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "认证"
-                ],
-                "summary": "使用共享链接注册",
-                "parameters": [
-                    {
-                        "description": "邀请注册请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.registerByInviteRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.LoginResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    },
-                    "409": {
-                        "description": "邮箱已注册",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    },
-                    "410": {
-                        "description": "链接无效或已撤销",
                         "schema": {
                             "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
                         }
@@ -2013,7 +1921,7 @@ const docTemplate = `{
         },
         "/datasource/{id}/resources": {
             "get": {
-                "description": "List resources available for sync in the external system. Pass parent_id to lazily load the direct children of a resource (used for large hierarchical sources such as Feishu wiki).",
+                "description": "List RSS feeds available for sync.",
                 "produces": [
                     "application/json"
                 ],
@@ -2258,265 +2166,6 @@ const docTemplate = `{
                         "description": "请求参数错误",
                         "schema": {
                             "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/im-channels/{id}": {
-            "put": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "更新指定 IM 渠道的名称、模式、知识库、凭证或启用状态",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "IM 渠道"
-                ],
-                "summary": "更新 IM 渠道",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "渠道 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "更新字段（name/mode/output_mode/knowledge_base_id/credentials/enabled）",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "更新后的渠道",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "渠道不存在",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "删除指定 IM 渠道",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "IM 渠道"
-                ],
-                "summary": "删除 IM 渠道",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "渠道 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "success: true",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "渠道不存在",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/im-channels/{id}/toggle": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "切换指定 IM 渠道的启用状态",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "IM 渠道"
-                ],
-                "summary": "启用/停用 IM 渠道",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "渠道 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "更新后的渠道",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "渠道不存在",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/im/callback/{channel_id}": {
-            "get": {
-                "description": "接收各 IM 平台的事件回调；走平台自身签名校验，不使用 API Key",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "IM 回调"
-                ],
-                "summary": "IM 平台回调",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "渠道 ID",
-                        "name": "channel_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "处理结果",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "签名校验失败",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "post": {
-                "description": "接收各 IM 平台的事件回调；走平台自身签名校验，不使用 API Key",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "IM 回调"
-                ],
-                "summary": "IM 平台回调",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "渠道 ID",
-                        "name": "channel_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "处理结果",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "签名校验失败",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
                         }
                     }
                 }
@@ -3498,76 +3147,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/knowledge-bases/{id}/activity": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "返回知识库的重要变更与后台任务入口，团队成员可读。",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "知识库"
-                ],
-                "summary": "获取知识库活动记录",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "知识库ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "游标：返回 id 小于此值的记录",
-                        "name": "after_id",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "页大小，1-100，默认 50",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "按 action 精确过滤",
-                        "name": "action",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "按 outcome 精确过滤",
-                        "name": "outcome",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "按 actor_user_id 精确过滤",
-                        "name": "actor",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.auditLogListResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
         "/knowledge-bases/{id}/duplicate": {
             "post": {
                 "security": [
@@ -3811,7 +3390,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "来源/渠道筛选 (web/api/feishu/notion/yuque/...，或 manual/url 按 type 过滤)",
+                        "description": "来源/渠道筛选 (web/api/rss，或 manual/url 按 type 过滤)",
                         "name": "source",
                         "in": "query"
                     },
@@ -8229,182 +7808,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/me/invitations": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "返回当前登录用户的待接受邀请（默认仅 pending），用于头像入口和 /invitations 收件箱页。",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "我的邀请"
-                ],
-                "summary": "列出我的待接受邀请",
-                "parameters": [
-                    {
-                        "type": "boolean",
-                        "description": "是否包含已处理 / 已过期等终止态行（默认 false）",
-                        "name": "include_terminal",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/me/invitations/accept-by-token": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "已登录用户用共享邀请链接 token 加入空间，不创建新账号；对已是成员的用户幂等。",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "我的邀请"
-                ],
-                "summary": "通过共享链接加入空间",
-                "parameters": [
-                    {
-                        "description": "邀请 token",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.acceptInvitationByTokenRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "410": {
-                        "description": "链接无效或已撤销",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/me/invitations/pending-count": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "轻量级 endpoint，返回当前登录用户的 pending 邀请数，用于头像旁的角标轮询。",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "我的邀请"
-                ],
-                "summary": "获取我的待处理邀请数",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/me/invitations/{inv_id}/accept": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "当前登录用户接受一条 pending 邀请；服务端会同时写入 tenant_members 行。",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "我的邀请"
-                ],
-                "summary": "接受邀请",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "邀请 ID",
-                        "name": "inv_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/me/invitations/{inv_id}/decline": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "当前登录用户拒绝一条 pending 邀请；不创建 tenant_members 行。",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "我的邀请"
-                ],
-                "summary": "拒绝邀请",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "邀请 ID",
-                        "name": "inv_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/memory/consolidate": {
             "post": {
                 "security": [
@@ -10510,7 +9913,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "来源过滤：web / api / feishu（api、IM 渠道需 Admin+）",
+                        "description": "会话列表",
                         "name": "source",
                         "in": "query"
                     },
@@ -11977,225 +11380,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/system/admin/audit-log": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "返回 system-scope（tenant_id=0）的审计事件，覆盖 system.setting_changed / system.admin_promoted / system.admin_revoked 等 SystemAdmin 操作。按 id 倒序的游标分页。",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "审计日志"
-                ],
-                "summary": "获取平台审计日志",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "游标：返回 id 小于此值的记录（默认从最新开始）",
-                        "name": "after_id",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "页大小，1-100，默认 50",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "按 action 精确过滤（如 system.setting_changed）",
-                        "name": "action",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "按 outcome 精确过滤（success / denied）",
-                        "name": "outcome",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "按 actor_user_id 精确过滤",
-                        "name": "actor",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.auditLogListResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/system/admin/list": {
-            "get": {
-                "description": "Retrieve a paginated list of users with system administrator\nprivileges (SystemAdmin only). Supports \u0060offset\u0060 (default 0)\nand \u0060limit\u0060 (default 50, max 200) query parameters. Walks the\npartial-friendly idx_users_is_system_admin index.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "System Admin"
-                ],
-                "summary": "List all system administrators",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "default": 0,
-                        "description": "Page offset",
-                        "name": "offset",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 50,
-                        "description": "Page size (max 200)",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "System admins retrieved successfully",
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.ListSystemAdminsResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden: not a system admin",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/system/admin/promote": {
-            "post": {
-                "description": "Grant system administrator privileges to a user (SystemAdmin only).\nIdempotent: re-promoting an existing system admin returns 200 with no DB write.\nIdentify the user by email (preferred for human operators) or user_id (UUID, for API clients).",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "System Admin"
-                ],
-                "summary": "Promote a user to system administrator",
-                "parameters": [
-                    {
-                        "description": "User promotion request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.PromoteUserToSystemAdminRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "User promoted successfully",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.UserInfo"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden: not a system admin",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "User not found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/system/admin/revoke": {
-            "post": {
-                "description": "Remove system administrator privileges from a user (SystemAdmin only).\nTwo safety guards: the caller cannot revoke their own privileges,\nand revoking the last remaining system admin is rejected — both\nprevent a SystemAdmin from accidentally locking the platform out\nof system-level administration. Idempotent on already-non-admin users.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "System Admin"
-                ],
-                "summary": "Revoke system administrator privileges from a user",
-                "parameters": [
-                    {
-                        "description": "User revocation request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.RevokeSystemAdminRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Privileges revoked successfully",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.UserInfo"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request / would remove last admin / self-revoke",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden: not a system admin",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "User not found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/system/admin/runtime/queues": {
             "get": {
                 "description": "返回各 asynq 队列的实时深度（pending/active/scheduled/retry 等）与 worker 并发配置，仅系统管理员可见",
@@ -12394,7 +11578,7 @@ const docTemplate = `{
                 }
             },
             "put": {
-                "description": "Persist a new value for :key. Service validates the\nrawValue against the registry's declared value_type and\nrejects mismatches with 400. SystemAdmin only. Emits an\naudit row (action=system.setting_changed) on success.",
+                "description": "Persist a new value for :key. Service validates the\nrawValue against the registry's declared value_type and\nrejects mismatches with 400. Authenticated users and API keys have full access.",
                 "consumes": [
                     "application/json"
                 ],
@@ -12478,62 +11662,6 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "DB write failed",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/system/admin/users/reset-password": {
-            "post": {
-                "description": "Replace another user's local password and revoke all of their existing sessions (SystemAdmin only).\nA system administrator cannot reset their own password through this endpoint; self-service password change still requires the old password.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "System Admin"
-                ],
-                "summary": "Reset another user's password",
-                "parameters": [
-                    {
-                        "description": "Password reset request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.ResetUserPasswordRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Password reset successfully",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request, weak password, or self reset",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden: not a system admin",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "User not found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -13030,662 +12158,6 @@ const docTemplate = `{
                         "description": "请求参数错误",
                         "schema": {
                             "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/tenants/{id}/api-principal-config": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "返回 X-API-Key 请求如何映射为终端 Principal 的配置（Owner）",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "空间管理"
-                ],
-                "summary": "获取空间 API Key 用户身份配置",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "空间ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "API principal 配置",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    },
-                    "403": {
-                        "description": "权限不足",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            },
-            "put": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "配置 X-API-Key 请求如何映射为终端 Principal（Owner）",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "空间管理"
-                ],
-                "summary": "更新空间 API Key 用户身份配置",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "空间ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "API principal 配置",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.apiPrincipalConfigRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "更新后的配置",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    },
-                    "403": {
-                        "description": "权限不足",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/tenants/{id}/api-principal-test-token": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "使用空间已保存的 HMAC 密钥签发短期外部用户 JWT（Owner）",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "空间管理"
-                ],
-                "summary": "生成 API Playground 测试 JWT",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "空间ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "测试 Token 参数",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.apiPrincipalTestTokenRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "短期 JWT",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    },
-                    "403": {
-                        "description": "权限不足",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/tenants/{id}/audit-log": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "返回该空间最近的审计事件，按 id 倒序。游标分页：将上次响应的 next_cursor 作为下一次请求的 after_id。",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "审计日志"
-                ],
-                "summary": "获取空间审计日志",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "空间ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "游标：返回 id 小于此值的记录（默认从最新开始）",
-                        "name": "after_id",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "页大小，1-100，默认 50",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "按 action 精确过滤（如 rbac.member_added / rbac.access_denied）",
-                        "name": "action",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "按 outcome 精确过滤（success / denied）",
-                        "name": "outcome",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "按 actor_user_id 精确过滤",
-                        "name": "actor",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.auditLogListResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/tenants/{id}/invitations": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "按空间列出待接受 / 历史邀请。query include_terminal=true 时附带 accepted/declined/revoked/expired。",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "空间邀请"
-                ],
-                "summary": "列出空间邀请",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "空间 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "是否包含终止态行（默认 false）",
-                        "name": "include_terminal",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 1,
-                        "description": "页码（从 1 起）",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 20,
-                        "description": "每页数量",
-                        "name": "page_size",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "Owner 通过邮箱邀请已注册用户加入空间。开启 tenant.auto_accept_invitation 后被邀请人立即自动加入（响应为成员结构），否则需在 /me/invitations 接受后成为成员。",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "空间邀请"
-                ],
-                "summary": "发出空间邀请",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "空间 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "邀请请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.createInvitationRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/tenants/{id}/invitations/{inv_id}": {
-            "delete": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "Owner 取消一条还在 pending 的邀请；已 accepted/declined/revoked/expired 的行不可再撤销。",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "空间邀请"
-                ],
-                "summary": "撤销待接受邀请",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "空间 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "邀请 ID",
-                        "name": "inv_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/tenants/{id}/invite-links": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "生成一条多次使用的共享邀请链接：谁拿到链接谁就能注册并加入当前空间。\n链接持续有效，直到过期或被撤销。",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "空间邀请"
-                ],
-                "summary": "生成共享邀请链接",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "空间 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "共享链接配置",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.createInviteLinkRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/tenants/{id}/leave": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "调用方主动退出当前空间。等价于以自己的 user_id 调 RemoveMember，",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "空间成员"
-                ],
-                "summary": "退出当前空间",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "空间 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/tenants/{id}/members": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "分页返回当前空间内 active 成员（含每位成员的角色、邮箱、头像）；支持 q 按邮箱/用户名筛选",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "空间成员"
-                ],
-                "summary": "列出空间成员",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "空间 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "按邮箱/用户名模糊筛选",
-                        "name": "q",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 1,
-                        "description": "页码（从 1 起）",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 20,
-                        "description": "每页数量（最大 100）",
-                        "name": "page_size",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "空间成员"
-                ],
-                "summary": "直接添加空间成员（直加路径）",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "空间 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "邀请请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.addMemberRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/tenants/{id}/members/{user_id}": {
-            "put": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "Owner 修改某位成员在当前空间内的角色；不能将最后一位 Owner 降级",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "空间成员"
-                ],
-                "summary": "修改空间成员角色",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "空间 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "用户 ID",
-                        "name": "user_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "目标角色",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.updateMemberRoleRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "Owner 将某位成员从当前空间中移除（软删除 tenant_members 行）；不能移除最后一位 Owner",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "空间成员"
-                ],
-                "summary": "移除空间成员",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "空间 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "用户 ID",
-                        "name": "user_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
                         }
                     }
                 }
@@ -14685,19 +13157,6 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_Tencent_Reliquary_internal_types.APIPrincipalMode": {
-            "type": "string",
-            "enum": [
-                "tenant",
-                "direct_header",
-                "signed_token"
-            ],
-            "x-enum-varnames": [
-                "APIPrincipalModeTenant",
-                "APIPrincipalModeDirect",
-                "APIPrincipalModeSignedToken"
-            ]
-        },
         "github_com_Tencent_Reliquary_internal_types.ASRConfig": {
             "type": "object",
             "properties": {
@@ -14770,194 +13229,6 @@ const docTemplate = `{
             "x-enum-varnames": [
                 "AnswerStrategyAll",
                 "AnswerStrategyRandom"
-            ]
-        },
-        "github_com_Tencent_Reliquary_internal_types.AuditAction": {
-            "type": "string",
-            "enum": [
-                "rbac.member_added",
-                "rbac.member_removed",
-                "rbac.member_role_changed",
-                "rbac.member_left",
-                "rbac.access_denied",
-                "rbac.invitation_sent",
-                "rbac.invitation_accepted",
-                "rbac.invitation_declined",
-                "rbac.invitation_revoked",
-                "rbac.invitation_expired",
-                "vector_store.created",
-                "vector_store.updated",
-                "vector_store.deleted",
-                "system.setting_changed",
-                "system.admin_promoted",
-                "system.admin_revoked",
-                "system.user_password_reset",
-                "system.user_created",
-                "system.api_key_created",
-                "system.api_key_revoked",
-                "system.queue_task_retried",
-                "system.queue_task_deleted",
-                "system.queue_task_run_now",
-                "system.queue_task_cancelled",
-                "system.queue_archived_purged",
-                "kb.created",
-                "kb.updated",
-                "kb.deleted",
-                "kb.duplicated",
-                "kb.clone_started",
-                "kb.clone_completed",
-                "kb.clone_failed",
-                "knowledge.created",
-                "knowledge.updated",
-                "knowledge.deleted",
-                "knowledge.batch_deleted",
-                "knowledge.reparse_started",
-                "knowledge.parse_canceled",
-                "knowledge.move_started",
-                "knowledge.move_completed",
-                "knowledge.move_failed",
-                "tag.created",
-                "tag.updated",
-                "tag.deleted",
-                "datasource.created",
-                "datasource.updated",
-                "datasource.deleted",
-                "datasource.sync_started",
-                "datasource.sync_completed",
-                "datasource.sync_failed",
-                "datasource.paused",
-                "datasource.resumed",
-                "wiki.content_changed"
-            ],
-            "x-enum-varnames": [
-                "AuditActionMemberAdded",
-                "AuditActionMemberRemoved",
-                "AuditActionMemberRoleChanged",
-                "AuditActionMemberLeft",
-                "AuditActionAccessDenied",
-                "AuditActionInvitationSent",
-                "AuditActionInvitationAccepted",
-                "AuditActionInvitationDeclined",
-                "AuditActionInvitationRevoked",
-                "AuditActionInvitationExpired",
-                "AuditActionVectorStoreCreated",
-                "AuditActionVectorStoreUpdated",
-                "AuditActionVectorStoreDeleted",
-                "AuditActionOpenSearchIndexCreated",
-                "AuditActionOpenSearchIndexDeleted",
-                "AuditActionOpenSearchReindexExecuted",
-                "AuditActionSystemSettingChanged",
-                "AuditActionSystemAdminPromoted",
-                "AuditActionSystemAdminRevoked",
-                "AuditActionSystemUserPasswordReset",
-                "AuditActionSystemUserCreated",
-                "AuditActionSystemAPIKeyCreated",
-                "AuditActionSystemAPIKeyRevoked",
-                "AuditActionSystemQueueTaskRetried",
-                "AuditActionSystemQueueTaskDeleted",
-                "AuditActionSystemQueueTaskRunNow",
-                "AuditActionSystemQueueTaskCancelled",
-                "AuditActionSystemQueueArchivedPurged",
-                "AuditActionKBCreated",
-                "AuditActionKBUpdated",
-                "AuditActionKBDeleted",
-                "AuditActionKBDuplicated",
-                "AuditActionKBCloneStarted",
-                "AuditActionKBCloneCompleted",
-                "AuditActionKBCloneFailed",
-                "AuditActionKnowledgeCreated",
-                "AuditActionKnowledgeUpdated",
-                "AuditActionKnowledgeDeleted",
-                "AuditActionKnowledgeBatchDeleted",
-                "AuditActionKnowledgeReparseStarted",
-                "AuditActionKnowledgeParseCanceled",
-                "AuditActionKnowledgeMoveStarted",
-                "AuditActionKnowledgeMoveCompleted",
-                "AuditActionKnowledgeMoveFailed",
-                "AuditActionTagCreated",
-                "AuditActionTagUpdated",
-                "AuditActionTagDeleted",
-                "AuditActionDataSourceCreated",
-                "AuditActionDataSourceUpdated",
-                "AuditActionDataSourceDeleted",
-                "AuditActionDataSourceSyncStarted",
-                "AuditActionDataSourceSyncCompleted",
-                "AuditActionDataSourceSyncFailed",
-                "AuditActionDataSourcePaused",
-                "AuditActionDataSourceResumed",
-                "AuditActionWikiContentChanged"
-            ]
-        },
-        "github_com_Tencent_Reliquary_internal_types.AuditLog": {
-            "type": "object",
-            "properties": {
-                "action": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.AuditAction"
-                },
-                "actor_role": {
-                    "type": "string"
-                },
-                "actor_user_id": {
-                    "type": "string"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "details": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "outcome": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.AuditOutcome"
-                },
-                "request_method": {
-                    "type": "string"
-                },
-                "request_path": {
-                    "type": "string"
-                },
-                "scope_id": {
-                    "type": "string"
-                },
-                "scope_type": {
-                    "type": "string"
-                },
-                "target_id": {
-                    "type": "string"
-                },
-                "target_type": {
-                    "type": "string"
-                },
-                "target_user_id": {
-                    "type": "string"
-                },
-                "tenant_id": {
-                    "type": "integer"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.AuditOutcome": {
-            "type": "string",
-            "enum": [
-                "success",
-                "accepted",
-                "denied",
-                "failed",
-                "partial",
-                "canceled"
-            ],
-            "x-enum-varnames": [
-                "AuditOutcomeSuccess",
-                "AuditOutcomeAccepted",
-                "AuditOutcomeDenied",
-                "AuditOutcomeFailed",
-                "AuditOutcomePartial",
-                "AuditOutcomeCanceled"
             ]
         },
         "github_com_Tencent_Reliquary_internal_types.AutoTagConfig": {
@@ -15460,7 +13731,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "type": {
-                    "description": "Connector type (feishu, notion, confluence, etc.)",
+                    "description": "Connector type (rss).",
                     "type": "string"
                 },
                 "updated_at": {
@@ -15645,7 +13916,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "creator_id": {
-                    "description": "CreatorID records the user ID of whoever originally created the KB.\nUsed by the workspace-level RBAC middleware to let Contributors edit\ntheir own KBs without granting them access to everyone else's.\nNullable for backward compatibility with rows created before the\nRBAC migration backfilled the column to the workspace Owner.",
+                    "description": "CreatorID records who created the knowledge base. It does not restrict access.",
                     "type": "string"
                 },
                 "creator_name": {
@@ -15912,17 +14183,6 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_Tencent_Reliquary_internal_types.ListMembersResponse": {
-            "type": "object",
-            "properties": {
-                "members": {
-                    "type": "array"
-                },
-                "total": {
-                    "type": "integer"
-                }
-            }
-        },
         "github_com_Tencent_Reliquary_internal_types.LocalEngineConfig": {
             "type": "object",
             "properties": {
@@ -15957,13 +14217,6 @@ const docTemplate = `{
                             "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.Tenant"
                         }
                     ]
-                },
-                "memberships": {
-                    "description": "Memberships lists every workspace the user can authenticate into,\nalong with their role in each. Always populated (length 1 for users\nwho only belong to their home workspace) so frontends can render a\nworkspace switcher without a follow-up request. Serialised without\nomitempty so the field is always present as a JSON array (possibly\nempty) — the \"always populated\" contract relies on the server side\nguaranteeing a non-nil slice.",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.Membership"
-                    }
                 },
                 "message": {
                     "type": "string"
@@ -16241,20 +14494,6 @@ const docTemplate = `{
                 "MatchTypeDirectLoad",
                 "MatchTypeDataAnalysis"
             ]
-        },
-        "github_com_Tencent_Reliquary_internal_types.Membership": {
-            "type": "object",
-            "properties": {
-                "role": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.TenantRole"
-                },
-                "tenant_id": {
-                    "type": "integer"
-                },
-                "tenant_name": {
-                    "type": "string"
-                }
-            }
         },
         "github_com_Tencent_Reliquary_internal_types.MemoryConfig": {
             "type": "object",
@@ -17438,7 +15677,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "knowledge_channel": {
-                    "description": "KnowledgeChannel indicates through which channel the knowledge was ingested (web, api, feishu, etc.)",
+                    "description": "KnowledgeChannel indicates the source channel (web, api, rss).",
                     "type": "string"
                 },
                 "knowledge_custom_metadata": {
@@ -17526,10 +15765,6 @@ const docTemplate = `{
                     "description": "ID",
                     "type": "string"
                 },
-                "im_platform": {
-                    "description": "IMPlatform is the originating IM platform (e.g. \"feishu\") when\nthis session is bound to an IM channel. It is not stored on the sessions\ntable (it lives in im_channel_sessions) and is populated on read so the\nWeb console can classify a session's origin folder without a list query.",
-                    "type": "string"
-                },
                 "is_pinned": {
                     "description": "IsPinned indicates whether the session is pinned in the list.",
                     "type": "boolean"
@@ -17562,7 +15797,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "user_id": {
-                    "description": "UserID is the owner scope for this session. Reliquary user UUIDs, API\nexternal-user principals, and embed visitor principals all use this column.",
+                    "description": "UserID identifies the personal user who owns the session.",
                     "type": "string"
                 }
             }
@@ -18027,21 +16262,6 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_Tencent_Reliquary_internal_types.TenantRole": {
-            "type": "string",
-            "enum": [
-                "owner",
-                "admin",
-                "contributor",
-                "viewer"
-            ],
-            "x-enum-varnames": [
-                "TenantRoleOwner",
-                "TenantRoleAdmin",
-                "TenantRoleContributor",
-                "TenantRoleViewer"
-            ]
-        },
         "github_com_Tencent_Reliquary_internal_types.TenantSandboxConfig": {
             "type": "object",
             "properties": {
@@ -18202,13 +16422,6 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_Tencent_Reliquary_internal_types.UpdateMemberRoleRequest": {
-            "type": "object",
-            "required": [
-                "role"
-            ],
-            "properties": {}
-        },
         "github_com_Tencent_Reliquary_internal_types.UsedMemory": {
             "type": "object",
             "properties": {
@@ -18254,10 +16467,6 @@ const docTemplate = `{
                     "description": "Whether the user is active",
                     "type": "boolean"
                 },
-                "is_system_admin": {
-                    "description": "Whether the user is a system administrator (independent of workspace roles)",
-                    "type": "boolean"
-                },
                 "tenant": {
                     "description": "Association relationship, not stored in the database",
                     "allOf": [
@@ -18296,9 +16505,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "is_active": {
-                    "type": "boolean"
-                },
-                "is_system_admin": {
                     "type": "boolean"
                 },
                 "tenant_id": {
@@ -19683,20 +17889,6 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handler.ListSystemAdminsResponse": {
-            "type": "object",
-            "properties": {
-                "admins": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.UserInfo"
-                    }
-                },
-                "total": {
-                    "type": "integer"
-                }
-            }
-        },
         "internal_handler.ModelTestRequest": {
             "type": "object",
             "required": [
@@ -19954,17 +18146,6 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handler.PromoteUserToSystemAdminRequest": {
-            "type": "object",
-            "properties": {
-                "email": {
-                    "type": "string"
-                },
-                "user_id": {
-                    "type": "string"
-                }
-            }
-        },
         "internal_handler.RemoteModelCheckRequest": {
             "type": "object",
             "required": [
@@ -20029,32 +18210,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "to": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_handler.ResetUserPasswordRequest": {
-            "type": "object",
-            "required": [
-                "email",
-                "new_password"
-            ],
-            "properties": {
-                "email": {
-                    "type": "string"
-                },
-                "new_password": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_handler.RevokeSystemAdminRequest": {
-            "type": "object",
-            "required": [
-                "user_id"
-            ],
-            "properties": {
-                "user_id": {
                     "type": "string"
                 }
             }
@@ -20126,7 +18281,7 @@ const docTemplate = `{
             }
         },
         "internal_handler.RuntimeWorkerPool": {
-            "description": "Return every row in the system_settings table (system-scope, not workspace-scoped). SystemAdmin only.",
+            "description": "Return every row in the system_settings table (system-scope, not workspace-scoped). Authenticated user or API Key.",
             "type": "object",
             "properties": {
                 "active": {
@@ -20442,32 +18597,6 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handler.acceptInvitationByTokenRequest": {
-            "type": "object",
-            "required": [
-                "token"
-            ],
-            "properties": {
-                "token": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_handler.addMemberRequest": {
-            "type": "object",
-            "required": [
-                "email",
-                "role"
-            ],
-            "properties": {
-                "email": {
-                    "type": "string"
-                },
-                "role": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.TenantRole"
-                }
-            }
-        },
         "internal_handler.addSimilarQuestionsRequest": {
             "type": "object",
             "required": [
@@ -20480,54 +18609,6 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
-                }
-            }
-        },
-        "internal_handler.apiPrincipalConfigRequest": {
-            "type": "object",
-            "properties": {
-                "direct_header_name": {
-                    "type": "string"
-                },
-                "hmac_secret": {
-                    "type": "string"
-                },
-                "mode": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.APIPrincipalMode"
-                },
-                "require_direct_header": {
-                    "type": "boolean"
-                },
-                "signed_token_header_name": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_handler.apiPrincipalTestTokenRequest": {
-            "type": "object",
-            "properties": {
-                "expires_in_seconds": {
-                    "type": "integer"
-                },
-                "external_user_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_handler.auditLogListResponse": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.AuditLog"
-                    }
-                },
-                "next_cursor": {
-                    "type": "integer"
-                },
-                "success": {
-                    "type": "boolean"
                 }
             }
         },
@@ -20552,66 +18633,6 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handler.createInvitationRequest": {
-            "type": "object",
-            "required": [
-                "email",
-                "role"
-            ],
-            "properties": {
-                "email": {
-                    "type": "string"
-                },
-                "message": {
-                    "type": "string"
-                },
-                "role": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.TenantRole"
-                }
-            }
-        },
-        "internal_handler.createInviteLinkRequest": {
-            "type": "object",
-            "required": [
-                "role"
-            ],
-            "properties": {
-                "message": {
-                    "type": "string"
-                },
-                "role": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.TenantRole"
-                }
-            }
-        },
-        "internal_handler.invitationLookupRequest": {
-            "type": "object",
-            "required": [
-                "token"
-            ],
-            "properties": {
-                "token": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_handler.invitationLookupResponse": {
-            "type": "object",
-            "properties": {
-                "expires_at": {
-                    "type": "string"
-                },
-                "role": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.TenantRole"
-                },
-                "tenant_id": {
-                    "type": "integer"
-                },
-                "tenant_name": {
-                    "type": "string"
-                }
-            }
-        },
         "internal_handler.meEnvVarRequest": {
             "type": "object",
             "properties": {
@@ -20626,30 +18647,6 @@ const docTemplate = `{
                 },
                 "value": {
                     "description": "Value is unused by the delete endpoints. Clearing a value is a delete\nrather than a write of \"\", so a member always has one unambiguous way to\nrevoke.",
-                    "type": "string"
-                }
-            }
-        },
-        "internal_handler.registerByInviteRequest": {
-            "type": "object",
-            "required": [
-                "email",
-                "password",
-                "token",
-                "username"
-            ],
-            "properties": {
-                "email": {
-                    "type": "string"
-                },
-                "password": {
-                    "type": "string",
-                    "minLength": 6
-                },
-                "token": {
-                    "type": "string"
-                },
-                "username": {
                     "type": "string"
                 }
             }
@@ -20725,17 +18722,6 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
-                }
-            }
-        },
-        "internal_handler.updateMemberRoleRequest": {
-            "type": "object",
-            "required": [
-                "role"
-            ],
-            "properties": {
-                "role": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.TenantRole"
                 }
             }
         },
@@ -21263,7 +19249,7 @@ const docTemplate = `{
     },
     "securityDefinitions": {
         "ApiKeyAuth": {
-            "description": "团队 API Key 认证，访问唯一团队空间",
+            "description": "API Key 认证，以唯一用户身份访问个人空间",
             "type": "apiKey",
             "name": "X-API-Key",
             "in": "header"

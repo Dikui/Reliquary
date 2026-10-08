@@ -12,7 +12,6 @@ import (
 // frontend/src/config/deploymentCapabilities.ts — keep both in sync.
 var DeploymentCapabilityKeys = []string{
 	"agents",
-	"integrations.im",
 	"integrations.api",
 	"settings.mcp",
 	"settings.websearch",
@@ -37,7 +36,6 @@ type DeploymentCapabilitiesData struct {
 // DeploymentFeatureAvailability mirrors injected backend handlers/services.
 type DeploymentFeatureAvailability struct {
 	Agents        bool
-	IM            bool
 	API           bool
 	MCP           bool
 	WebSearch     bool
@@ -73,7 +71,6 @@ func BuildDeploymentCapabilities(
 		Edition: edition,
 		Capabilities: map[string]DeploymentCapability{
 			"agents":                  supportedDeploymentCapability(available.Agents),
-			"integrations.im":         supportedDeploymentCapability(available.IM),
 			"integrations.api":        supportedDeploymentCapability(available.API),
 			"settings.mcp":            supportedDeploymentCapability(available.MCP),
 			"settings.websearch":      supportedDeploymentCapability(available.WebSearch),

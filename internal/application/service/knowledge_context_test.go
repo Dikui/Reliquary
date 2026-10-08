@@ -28,7 +28,7 @@ func knowledgeContextTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, db.AutoMigrate(&types.Knowledge{}, &types.KnowledgeEntity{}, &types.KnowledgeEntityAlias{}, &types.KnowledgeEvidence{},
 		&types.KnowledgeEvidenceEntity{}, &types.KnowledgeEntityStar{}, &types.KnowledgeTopicStar{}, &types.KnowledgeTag{}, &types.KnowledgeTagRelation{}, &types.KnowledgeTagManualDecision{}, &types.KnowledgeWorkflow{},
 		&types.KnowledgeEntityMergeSuggestion{}, &types.KnowledgeFact{}, &types.KnowledgeEvent{}, &types.KnowledgeEventEvidence{},
-		&types.KnowledgeEventEntity{}, &types.KnowledgeEventEvidenceEntity{}, &types.KnowledgeAttention{}, &types.KnowledgeDomain{}, &types.AuditLog{}))
+		&types.KnowledgeEventEntity{}, &types.KnowledgeEventEvidenceEntity{}, &types.KnowledgeAttention{}, &types.KnowledgeDomain{}))
 	require.NoError(t, db.Exec(`ALTER TABLE knowledge_tags ADD COLUMN deleted_at TIMESTAMPTZ`).Error)
 	domain := BuiltinAIKnowledgeDomain()
 	domain.ID = "ai"

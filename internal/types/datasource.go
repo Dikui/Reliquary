@@ -14,32 +14,7 @@ import (
 
 // Data source types and constants
 const (
-	// Connector types
-	ConnectorTypeFeishu = "feishu"
-	// ConnectorTypeLark is Feishu's international edition (open.larksuite.com).
-	// It shares the Feishu connector; only the API host and tenant differ.
-	ConnectorTypeLark = "lark"
-	// ConnectorTypeFeishuDrive is the Feishu Drive (云盘) mode: syncs documents
-	// under a user-supplied Drive folder_token, as opposed to a Wiki space.
-	// Shares the feishu connector package; only resource enumeration + fetch differ.
-	ConnectorTypeFeishuDrive = "feishu_drive"
-	// ConnectorTypeLarkDrive is the Lark (international) Drive mode, the
-	// international counterpart of ConnectorTypeFeishuDrive.
-	ConnectorTypeLarkDrive   = "lark_drive"
-	ConnectorTypeNotion      = "notion"
-	ConnectorTypeConfluence  = "confluence"
-	ConnectorTypeYuque       = "yuque"
-	ConnectorTypeGitHub      = "github"
-	ConnectorTypeGoogleDrive = "google_drive"
-	ConnectorTypeOneDrive    = "onedrive"
-	ConnectorTypeDingTalk    = "dingtalk"
-	ConnectorTypeWebCrawler  = "web_crawler"
-	ConnectorTypeSlack       = "slack"
-	ConnectorTypeIMAP        = "imap"
-	ConnectorTypeRSS         = "rss"
-	ConnectorTypeGrokX       = "grok_x"
-	ConnectorTypeGitLab      = "gitlab"
-	ConnectorTypeIMA         = "ima"
+	ConnectorTypeRSS = "rss"
 
 	// Sync modes
 	SyncModeIncremental = "incremental"
@@ -77,7 +52,7 @@ type DataSource struct {
 	// User-friendly name
 	Name string `json:"name"`
 
-	// Connector type (feishu, notion, confluence, etc.)
+	// Connector type (rss).
 	Type string `json:"type" gorm:"type:varchar(50);index"`
 
 	// Encrypted configuration (API credentials, tokens, etc.)
@@ -221,7 +196,7 @@ type DataSourceConfig struct {
 	// Common fields applicable to most connectors
 	Type string `json:"type"`
 
-	// OAuth/API credentials (varies by connector)
+	// Optional authentication headers for feeds.
 	Credentials map[string]interface{} `json:"credentials"`
 
 	// Selected resource IDs to sync (e.g., folder IDs, space IDs)
@@ -233,14 +208,6 @@ type DataSourceConfig struct {
 	IngestSince time.Time `json:"-"`
 	// FetchMetrics is populated by connectors for the current run only.
 	FetchMetrics map[string]interface{} `json:"-"`
-
-	// MultimodalEnabled mirrors the target knowledge base's VLM/multimodal
-	// setting for the current sync run. The service populates it before each fetch
-	// and it is never persisted (json:"-") — the KB owns the setting. Connectors
-	// use it to decide whether extracting embedded images for OCR is worthwhile:
-	// ingesting an image into a KB without VLM is rejected, so image extraction is
-	// skipped when this is false.
-	MultimodalEnabled bool `json:"-"`
 }
 
 // HasCredentials reports whether the credentials map carries any value at
@@ -355,7 +322,7 @@ type FetchedItem struct {
 	// whose external_id starts with SubtreeChildPrefix(ExternalID) that is NOT
 	// listed in SubtreeKeep is deleted as stale. Used by connectors that fan one
 	// source node out into a parent document plus attachment/image sub-items
-	// (e.g. Feishu docx).
+	// containing attachments.
 	//
 	// PRECONDITIONS the sweep relies on — a connector setting this MUST honour:
 	//   1. Child external_ids are built with SubtreeChildID, so they share the
@@ -402,7 +369,7 @@ type SourceAdapterFailure struct {
 // producers MUST build child IDs with this helper so the producer and the sweep
 // consumer share one source of truth. kind is a short discriminator ("file",
 // "image"); token is the source system's id for the child and is assumed to be
-// '#'-free (Feishu/Notion/etc. tokens are).
+// '#'-free.
 func SubtreeChildID(parentExternalID, kind, token string) string {
 	return parentExternalID + "#" + kind + "#" + token
 }
@@ -468,7 +435,7 @@ type SyncItemError struct {
 	// Title is the document title (user content, not translated).
 	Title string `json:"title,omitempty"`
 	// Code is a stable key the frontend maps to a localized string, e.g.
-	// "feishu_rate_limited" → datasource.syncError.feishu_rate_limited.
+	// "fetch_failed" maps to datasource.syncError.fetch_failed.
 	Code string `json:"code,omitempty"`
 	// Params are interpolation values for the localized string, e.g. {"code":"1663"}.
 	Params map[string]string `json:"params,omitempty"`

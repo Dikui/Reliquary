@@ -20,7 +20,6 @@ import (
 	"reliquary/internal/agent/tools"
 	apprepo "reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
-	"reliquary/internal/config"
 	"reliquary/internal/handler"
 	"reliquary/internal/middleware"
 	chatmodel "reliquary/internal/models/chat"
@@ -81,19 +80,14 @@ func TestMain(m *testing.M) {
 func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 	db := fusionFixtureDB(t)
 
-	ctx := fusionContext(fusionTenantID, fusionOwnerID, types.TenantRoleContributor)
+	ctx := fusionContext(fusionTenantID, fusionOwnerID)
 	now := time.Now().UTC()
 	require.NoError(t, db.Create(&types.Tenant{ID: fusionTenantID, Name: "Fusion tenant", Business: "test"}).Error)
 	require.NoError(t, db.Create(&types.User{ID: fusionOwnerID, Username: fusionOwnerID, Email: "fusion@example.test", PasswordHash: "test-only", TenantID: fusionTenantID, IsActive: true}).Error)
-	memberRepo := apprepo.NewTenantMemberRepository(db)
-	require.NoError(t, memberRepo.Create(ctx, &types.TenantMember{
-		UserID: fusionOwnerID, TenantID: fusionTenantID, Role: types.TenantRoleContributor,
-		Status: types.TenantMemberStatusActive, JoinedAt: now,
-	}))
 	kbRepo := apprepo.NewKnowledgeBaseRepository(db)
 	knowledgeRepo := apprepo.NewKnowledgeRepository(db)
 	kbService := service.NewKnowledgeBaseService(db, kbRepo, knowledgeRepo, nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil, nil, nil, nil, nil)
+		nil, nil, nil, nil, nil, nil, nil, nil)
 	kb := &types.KnowledgeBase{
 		DomainID: service.BuiltinAIKnowledgeDomainID,
 		ID:       fusionKBID, Name: "Fusion KB", TenantID: fusionTenantID, CreatorID: fusionOwnerID,
@@ -103,7 +97,7 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 	require.NoError(t, kbRepo.CreateKnowledgeBase(ctx, kb))
 
 	knowledge, err := service.NewKnowledgeService(db, nil, knowledgeRepo, nil, kbService, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, fusionModelService{model: fusionChat{}}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+		nil, nil, nil, nil, fusionModelService{model: fusionChat{}}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	source := &types.Knowledge{
 		ID: fusionSourceID, TenantID: fusionTenantID, KnowledgeBaseID: fusionKBID,
@@ -153,12 +147,10 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 
 	taskQueue := &fusionTaskQueue{}
 	workflowService := service.NewKnowledgeWorkflowService(db, kbService, knowledge, contextService, nil, nil,
-		modelService, memberRepo, taskQueue, nil)
-	kbHandler := handler.NewKnowledgeBaseHandler(kbService, knowledge, nil, nil, nil, nil, nil)
+		modelService, taskQueue, nil)
 	contextHandler := handler.NewKnowledgeContextHandler(contextService, contextWorker)
 	workflowHandler := handler.NewKnowledgeWorkflowHandler(workflowService)
-	enabled := true
-	guards := newRBACGuards(&config.Config{Tenant: &config.TenantConfig{EnableRBAC: &enabled}}, kbHandler, nil, nil, nil, nil, kbService, knowledge, nil)
+	guards := newAccessGuards(kbService, knowledge, nil)
 	engine := gin.New()
 	engine.Use(middleware.ErrorHandler(), fusionIdentityMiddleware())
 	v1 := engine.Group("/api/v1")
@@ -166,7 +158,7 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 	RegisterKnowledgeWorkflowRoutes(v1, workflowHandler, guards)
 
 	queryRec := fusionRequest(t, engine, http.MethodPost, "/api/v1/knowledge-bases/"+fusionKBID+"/context/query",
-		`{"entity":"Acme Holdings","include_history":true,"limit":20}`, fusionTenantID, fusionOwnerID, types.TenantRoleContributor)
+		`{"entity":"Acme Holdings","include_history":true,"limit":20}`, fusionTenantID, fusionOwnerID)
 	require.Equal(t, http.StatusOK, queryRec.Code, queryRec.Body.String())
 	var queryResponse fusionEnvelope
 	require.NoError(t, json.Unmarshal(queryRec.Body.Bytes(), &queryResponse))
@@ -180,7 +172,7 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 
 	snapshotRec := fusionRequest(t, engine, http.MethodGet,
 		"/api/v1/knowledge-bases/"+fusionKBID+"/context/evidence/"+evidenceID, "",
-		fusionTenantID, fusionOwnerID, types.TenantRoleContributor)
+		fusionTenantID, fusionOwnerID)
 	require.Equal(t, http.StatusOK, snapshotRec.Code, snapshotRec.Body.String())
 	var snapshotResponse fusionEnvelope
 	require.NoError(t, json.Unmarshal(snapshotRec.Body.Bytes(), &snapshotResponse))
@@ -192,7 +184,7 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 	workflowBody := `{"name":"Acquisition report","enabled":true,"schedule":{"timezone":"UTC"},"steps":[{"id":"facts","type":"fact_query","config":{"entity":"Acme Holdings","limit":20}},{"id":"report","type":"report","depends_on":["facts"],"config":{"title":"Acquisition report","prompt":"Summarize the sourced acquisition fact."}},{"id":"review","type":"human_review","depends_on":["report"],"config":{"message":"Review the cited report."}}]}`
 	createRec := fusionRequest(t, engine, http.MethodPost,
 		"/api/v1/knowledge-bases/"+fusionKBID+"/workflows", workflowBody,
-		fusionTenantID, fusionOwnerID, types.TenantRoleContributor)
+		fusionTenantID, fusionOwnerID)
 	require.Equal(t, http.StatusOK, createRec.Code, createRec.Body.String())
 	var workflowResponse fusionEnvelope
 	require.NoError(t, json.Unmarshal(createRec.Body.Bytes(), &workflowResponse))
@@ -202,7 +194,7 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 
 	runRec := fusionRequest(t, engine, http.MethodPost,
 		fmt.Sprintf("/api/v1/knowledge-bases/%s/workflows/%s/run", fusionKBID, workflow.ID), "{}",
-		fusionTenantID, fusionOwnerID, types.TenantRoleContributor)
+		fusionTenantID, fusionOwnerID)
 	require.Equal(t, http.StatusOK, runRec.Code, runRec.Body.String())
 	var runResponse fusionEnvelope
 	require.NoError(t, json.Unmarshal(runRec.Body.Bytes(), &runResponse))
@@ -226,7 +218,7 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 
 	decisionRec := fusionRequest(t, engine, http.MethodPost,
 		fmt.Sprintf("/api/v1/knowledge-bases/%s/workflows/runs/%s/decision", fusionKBID, run.ID),
-		`{"decision":"approve"}`, fusionTenantID, fusionOwnerID, types.TenantRoleContributor)
+		`{"decision":"approve"}`, fusionTenantID, fusionOwnerID)
 	require.Equal(t, http.StatusOK, decisionRec.Code, decisionRec.Body.String())
 	require.Len(t, taskQueue.tasks, 2)
 	require.NoError(t, workflowService.Handle(ctx, taskQueue.tasks[1]))
@@ -239,14 +231,14 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 
 	markdownRec := fusionRequest(t, engine, http.MethodGet,
 		fmt.Sprintf("/api/v1/knowledge-bases/%s/reports/%s/download", fusionKBID, storedReport.ID), "",
-		fusionTenantID, fusionOwnerID, types.TenantRoleContributor)
+		fusionTenantID, fusionOwnerID)
 	require.Equal(t, http.StatusOK, markdownRec.Code, markdownRec.Body.String())
 	require.Contains(t, markdownRec.Header().Get("Content-Type"), "text/markdown")
 	require.Contains(t, markdownRec.Body.String(), "Acme Holdings 已完成对 WidgetCo 的收购。[C1]")
 
 	jsonRec := fusionRequest(t, engine, http.MethodGet,
 		fmt.Sprintf("/api/v1/knowledge-bases/%s/reports/%s/download?format=json", fusionKBID, storedReport.ID), "",
-		fusionTenantID, fusionOwnerID, types.TenantRoleContributor)
+		fusionTenantID, fusionOwnerID)
 	require.Equal(t, http.StatusOK, jsonRec.Code, jsonRec.Body.String())
 	require.Contains(t, jsonRec.Header().Get("Content-Type"), "application/json")
 	var downloaded types.KnowledgeWorkflowReport
@@ -256,7 +248,7 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 
 	crossTenantRec := fusionRequest(t, engine, http.MethodGet,
 		"/api/v1/knowledge-bases/"+fusionKBID+"/context/evidence/"+evidenceID, "",
-		2, "outsider", types.TenantRoleViewer)
+		2, "outsider")
 	require.Equal(t, http.StatusForbidden, crossTenantRec.Code, "another tenant must not read the evidence snapshot")
 }
 
@@ -267,10 +259,10 @@ func fusionFixtureDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-func fusionContext(tenantID uint64, userID string, role types.TenantRole) context.Context {
+func fusionContext(tenantID uint64, userID string) context.Context {
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, tenantID)
 	ctx = context.WithValue(ctx, types.UserIDContextKey, userID)
-	return context.WithValue(ctx, types.TenantRoleContextKey, role)
+	return ctx
 }
 
 func fusionIdentityMiddleware() gin.HandlerFunc {
@@ -283,19 +275,15 @@ func fusionIdentityMiddleware() gin.HandlerFunc {
 		if userID == "" {
 			userID = fusionOwnerID
 		}
-		role := types.TenantRole(c.GetHeader("X-Test-Role"))
-		if role == "" {
-			role = types.TenantRoleContributor
-		}
-		ctx := fusionContext(tenantID, userID, role)
+		ctx := fusionContext(tenantID, userID)
 		c.Set(types.TenantIDContextKey.String(), tenantID)
-		c.Set(types.TenantRoleContextKey.String(), role)
+
 		c.Request = c.Request.WithContext(ctx)
 		c.Next()
 	}
 }
 
-func fusionRequest(t *testing.T, engine *gin.Engine, method, target, body string, tenantID uint64, userID string, role types.TenantRole) *httptest.ResponseRecorder {
+func fusionRequest(t *testing.T, engine *gin.Engine, method, target, body string, tenantID uint64, userID string) *httptest.ResponseRecorder {
 	t.Helper()
 	var reader *bytes.Reader
 	if body == "" {
@@ -307,7 +295,6 @@ func fusionRequest(t *testing.T, engine *gin.Engine, method, target, body string
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Test-Tenant", fmt.Sprint(tenantID))
 	req.Header.Set("X-Test-User", userID)
-	req.Header.Set("X-Test-Role", string(role))
 	rec := httptest.NewRecorder()
 	engine.ServeHTTP(rec, req)
 	return rec
@@ -317,7 +304,7 @@ func fusionGetRun(t *testing.T, engine *gin.Engine, runID string, tenantID uint6
 	t.Helper()
 	rec := fusionRequest(t, engine, http.MethodGet,
 		fmt.Sprintf("/api/v1/knowledge-bases/%s/workflows/runs/%s", fusionKBID, runID), "",
-		tenantID, userID, types.TenantRoleContributor)
+		tenantID, userID)
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	var envelope fusionEnvelope
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &envelope))

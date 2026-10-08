@@ -10,10 +10,8 @@ import (
 	"reliquary/internal/types"
 )
 
-// Sessions are per-user state and the session list has always been scoped that
-// way. Conversation search was not, which meant a workspace viewer could type a
-// colleague's project name into the search box and read their chats. These
-// tests pin the scoping so that cannot come back.
+// These tests preserve the repository boundary between session owners when
+// searching stored conversations.
 
 // Session.BeforeCreate assigns a fresh UUID, so the ids are read back rather
 // than assumed.

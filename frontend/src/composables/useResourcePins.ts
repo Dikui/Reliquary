@@ -8,7 +8,6 @@
 // shareable resource; round-tripping every card click through the
 // network would add latency for marginal value. If the product later
 // needs cross-device recents we can promote them to a server-side
-// audit-log derivation, which is a much smaller migration than starting
 // from scratch.
 
 import { ref, computed, watch, type ComputedRef, type Ref } from 'vue'

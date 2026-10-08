@@ -43,9 +43,7 @@ func (h *Handler) GenerateTitle(c *gin.Context) {
 		return
 	}
 
-	// Get session from database. Title generation writes the session row, so use
-	// the strict owner scope: a tenant admin may read an API-key session but must
-	// not be able to (re)generate its title.
+	// Get the authenticated user's session before updating its title.
 	session, err := h.sessionService.GetOwnedSession(ctx, sessionID)
 	if err != nil {
 		if stderrors.Is(err, errors.ErrSessionNotFound) {

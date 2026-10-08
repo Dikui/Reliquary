@@ -57,9 +57,7 @@ func (s *KnowledgeContextService) resolveContextQueryScope(ctx context.Context, 
 	default:
 		return nil, werrors.NewBadRequestError("scope must be knowledge_base, domain or team")
 	}
-	if key, ok := types.TenantAPIKeyScopeFromContext(ctx); ok && key.IsKnowledgeBaseRestricted() {
-		query = query.Where("id IN ?", []string(key.KnowledgeBaseIDs))
-	}
+
 	var bases []types.KnowledgeBase
 	if err := query.Find(&bases).Error; err != nil {
 		return nil, err
@@ -106,35 +104,4 @@ func (scope *contextQueryScope) factFields(query *gorm.DB, q types.KnowledgeCont
 		return query.Where("false")
 	}
 	return query.Where("("+strings.Join(clauses, " OR ")+")", args...)
-}
-
-// A restricted key can view an identity only through evidence in an allowed base.
-func (s *KnowledgeContextService) authorizeContextEntity(ctx context.Context, tenantID uint64, entityID string) error {
-	key, ok := types.TenantAPIKeyScopeFromContext(ctx)
-	if !ok || !key.IsKnowledgeBaseRestricted() {
-		return nil
-	}
-	evidenceIDs := s.db.WithContext(ctx).Model(&types.KnowledgeEvidence{}).Select("id").Where("tenant_id = ? AND knowledge_base_id IN ?", tenantID, []string(key.KnowledgeBaseIDs))
-	var count int64
-	if err := s.db.WithContext(ctx).Model(&types.KnowledgeEvidenceEntity{}).Where("tenant_id = ? AND evidence_id IN (?) AND entity_id = ?", tenantID, evidenceIDs, entityID).Count(&count).Error; err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil
-	}
-	if err := s.db.WithContext(ctx).Model(&types.KnowledgeFact{}).Where("tenant_id = ? AND knowledge_base_id IN ? AND evidence_id IN (?) AND (subject_entity_id = ? OR object_entity_id = ?)", tenantID, []string(key.KnowledgeBaseIDs), evidenceIDs, entityID, entityID).Count(&count).Error; err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil
-	}
-	if err := s.db.WithContext(ctx).Model(&types.KnowledgeEventEvidenceEntity{}).
-		Joins("JOIN knowledge_context_event_evidence links ON links.tenant_id = knowledge_context_event_evidence_entities.tenant_id AND links.event_id = knowledge_context_event_evidence_entities.event_id AND links.evidence_id = knowledge_context_event_evidence_entities.evidence_id").
-		Where("knowledge_context_event_evidence_entities.tenant_id = ? AND links.knowledge_base_id IN ? AND knowledge_context_event_evidence_entities.evidence_id IN (?) AND knowledge_context_event_evidence_entities.entity_id = ?", tenantID, []string(key.KnowledgeBaseIDs), evidenceIDs, entityID).Count(&count).Error; err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil
-	}
-	return werrors.NewForbiddenError("API key scope does not allow this knowledge object")
 }

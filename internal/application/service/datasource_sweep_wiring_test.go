@@ -111,7 +111,7 @@ func TestIngestItem_ReplacesSubtreeSweepsStaleChildrenAfterCreate(t *testing.T) 
 
 	ds := &types.DataSource{
 		ID:              "ds-1",
-		Type:            "feishu",
+		Type:            "test-subtree",
 		TenantID:        7,
 		KnowledgeBaseID: "kb-1",
 	}
@@ -167,7 +167,7 @@ func TestIngestItem_ReplacesSubtreeSweepsOnDuplicateParent(t *testing.T) {
 	}
 	s := &DataSourceService{knowledgeService: ks}
 
-	ds := &types.DataSource{ID: "ds-1", Type: "feishu", TenantID: 7, KnowledgeBaseID: "kb-1"}
+	ds := &types.DataSource{ID: "ds-1", Type: "test-subtree", TenantID: 7, KnowledgeBaseID: "kb-1"}
 	item := &types.FetchedItem{
 		ExternalID:      "nt-parent",
 		Content:         []byte("# hello\n"),
@@ -203,7 +203,7 @@ func TestIngestItem_NoSweepWhenDuplicateIsDifferentNode(t *testing.T) {
 	}
 	s := &DataSourceService{knowledgeService: ks}
 
-	ds := &types.DataSource{ID: "ds-1", Type: "feishu", TenantID: 7, KnowledgeBaseID: "kb-1"}
+	ds := &types.DataSource{ID: "ds-1", Type: "test-subtree", TenantID: 7, KnowledgeBaseID: "kb-1"}
 	item := &types.FetchedItem{
 		ExternalID:      "nt-parent",
 		Content:         []byte("# hello\n"),
@@ -245,7 +245,7 @@ func TestIngestItem_SubtreeKeepPreservesPresentChild(t *testing.T) {
 	ks := &sweepFakeKS{repo: repo}
 	s := &DataSourceService{knowledgeService: ks}
 
-	ds := &types.DataSource{ID: "ds-1", Type: "feishu", TenantID: 7, KnowledgeBaseID: "kb-1"}
+	ds := &types.DataSource{ID: "ds-1", Type: "test-subtree", TenantID: 7, KnowledgeBaseID: "kb-1"}
 	item := &types.FetchedItem{
 		ExternalID:      "nt-parent",
 		Content:         []byte("# hello\n"),
@@ -272,7 +272,7 @@ func TestIngestItem_SubtreeSweepSkipsOtherDataSourceChildren(t *testing.T) {
 	ks := &sweepFakeKS{repo: repo}
 	s := &DataSourceService{knowledgeService: ks}
 
-	ds := &types.DataSource{ID: "ds-1", Type: "feishu", TenantID: 7, KnowledgeBaseID: "kb-1"}
+	ds := &types.DataSource{ID: "ds-1", Type: "test-subtree", TenantID: 7, KnowledgeBaseID: "kb-1"}
 	item := &types.FetchedItem{
 		ExternalID:      "nt-parent",
 		Content:         []byte("# hello\n"),
@@ -295,7 +295,7 @@ func TestIngestItem_NoSweepWhenFlagUnset(t *testing.T) {
 	ks := &sweepFakeKS{repo: repo}
 	s := &DataSourceService{knowledgeService: ks}
 
-	ds := &types.DataSource{ID: "ds-1", Type: "feishu", TenantID: 7, KnowledgeBaseID: "kb-1"}
+	ds := &types.DataSource{ID: "ds-1", Type: "test-subtree", TenantID: 7, KnowledgeBaseID: "kb-1"}
 	item := &types.FetchedItem{
 		ExternalID: "nt-plain",
 		Content:    []byte("data"),
@@ -321,7 +321,7 @@ func TestIngestItem_NoSweepWhenFlagUnset(t *testing.T) {
 // non-image item with the same error must still count as Failed.
 func TestApplyFetchedItem_EmbeddedImageIngestFailureCountsAsSkip(t *testing.T) {
 	ingestErr := errors.New("上传图片文件需要设置VLM模型")
-	ds := &types.DataSource{ID: "ds-1", Type: "feishu", TenantID: 7, KnowledgeBaseID: "kb-1"}
+	ds := &types.DataSource{ID: "ds-1", Type: "test-subtree", TenantID: 7, KnowledgeBaseID: "kb-1"}
 	newItem := func(extID string, meta map[string]string) *types.FetchedItem {
 		return &types.FetchedItem{
 			ExternalID:  extID,

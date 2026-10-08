@@ -23,12 +23,12 @@ func TestTenantAPIKeyRepositoryPersistsUTCExpiry(t *testing.T) {
 	expiresAt := time.Unix(time.Now().UTC().Add(5*time.Second).Unix(), 0).UTC()
 	tenantID := uint64(42)
 	key := &types.TenantAPIKey{
-		TenantID:   &tenantID,
-		Name:       "integration",
-		KeyHash:    "hash-expiry",
-		APIKey:     "sk-test",
-		FullAccess: true,
-		ExpiresAt:  &expiresAt,
+		TenantID: &tenantID,
+		Name:     "integration",
+		KeyHash:  "hash-expiry",
+		APIKey:   "sk-test",
+
+		ExpiresAt: &expiresAt,
 	}
 	require.NoError(t, repo.CreateAPIKey(ctx, key))
 
@@ -50,7 +50,7 @@ func TestTenantAPIKeyRepositoryUpdateIsTenantScoped(t *testing.T) {
 	keys := []*types.TenantAPIKey{
 		{TenantID: &tenant42, Name: "scoped", KeyHash: "hash-scoped", APIKey: "sk-scoped"},
 		{TenantID: &tenant43, Name: "other", KeyHash: "hash-other", APIKey: "sk-other"},
-		{TenantID: &tenant42, Name: "full", KeyHash: "hash-full", APIKey: "sk-full", FullAccess: true},
+		{TenantID: &tenant42, Name: "full", KeyHash: "hash-full", APIKey: "sk-full"},
 	}
 	for _, key := range keys {
 		require.NoError(t, repo.CreateAPIKey(ctx, key))
@@ -58,15 +58,12 @@ func TestTenantAPIKeyRepositoryUpdateIsTenantScoped(t *testing.T) {
 
 	expiresAt := time.Now().UTC().Add(time.Hour).Truncate(time.Second)
 	updated, err := repo.UpdateAPIKey(ctx, tenant42, keys[0].ID, &types.TenantAPIKey{
-		Name: "updated", FullAccess: false,
-		KnowledgeBaseIDs: types.StringArray{"kb-1", "kb-2"},
-		Capabilities:     types.StringArray{"retrieve", "chat"},
-		ExpiresAt:        &expiresAt,
+		Name: "updated",
+
+		ExpiresAt: &expiresAt,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "updated", updated.Name)
-	require.Equal(t, types.StringArray{"kb-1", "kb-2"}, updated.KnowledgeBaseIDs)
-	require.Equal(t, types.StringArray{"retrieve", "chat"}, updated.Capabilities)
 	require.NotNil(t, updated.ExpiresAt)
 	require.True(t, updated.ExpiresAt.Equal(expiresAt))
 
@@ -74,8 +71,8 @@ func TestTenantAPIKeyRepositoryUpdateIsTenantScoped(t *testing.T) {
 	require.ErrorIs(t, err, ErrTenantAPIKeyNotFound)
 
 	full, err := repo.UpdateAPIKey(ctx, tenant42, keys[2].ID, &types.TenantAPIKey{
-		Name: "full updated", FullAccess: false, Capabilities: types.StringArray{"retrieve"},
+		Name: "full updated",
 	})
 	require.NoError(t, err)
-	require.False(t, full.FullAccess)
+	require.Equal(t, "full updated", full.Name)
 }

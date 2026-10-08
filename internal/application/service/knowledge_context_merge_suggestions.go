@@ -55,11 +55,6 @@ func (s *KnowledgeContextService) DecideMergeSuggestion(ctx context.Context, sug
 	if _, ok := types.PrincipalFromContext(ctx); !ok {
 		return nil, werrors.NewUnauthorizedError("authenticated merge suggestion editor required")
 	}
-	if accept {
-		if key, ok := types.TenantAPIKeyScopeFromContext(ctx); ok && key.IsKnowledgeBaseRestricted() {
-			return nil, werrors.NewForbiddenError("global object merges require an unrestricted team API key")
-		}
-	}
 	var item types.KnowledgeEntityMergeSuggestion
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := lockContextTeam(tx, tenantID); err != nil {
@@ -70,9 +65,7 @@ func (s *KnowledgeContextService) DecideMergeSuggestion(ctx context.Context, sug
 		} else if err != nil {
 			return err
 		}
-		if err := types.AuthorizeTenantAPIKeyKnowledgeBases(ctx, item.KnowledgeBaseID); err != nil {
-			return err
-		}
+
 		target := "rejected"
 		if accept {
 			target = "accepted"
@@ -87,10 +80,6 @@ func (s *KnowledgeContextService) DecideMergeSuggestion(ctx context.Context, sug
 			nested := *s
 			nested.db = tx
 			if err := nested.MergeEntities(ctx, "", item.CandidateEntityID, item.NewEntityID); err != nil {
-				return err
-			}
-		} else {
-			if err := writeContextAudit(tx, ctx, tenantID, "knowledge_context.merge_suggestion_rejected", "merge_suggestion", item.ID, map[string]any{"suggestion": item}); err != nil {
 				return err
 			}
 		}

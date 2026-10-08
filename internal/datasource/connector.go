@@ -7,9 +7,9 @@ import (
 )
 
 // Connector is the interface that all external data source connectors must implement.
-// Each connector (Feishu, Notion, Confluence, etc.) provides an implementation of this interface.
+// RSS and supported site adapters implement this interface.
 type Connector interface {
-	// Type returns the connector type identifier (e.g., "feishu", "notion")
+	// Type returns the connector type identifier.
 	Type() string
 
 	// Validate verifies that the provided configuration is valid by testing connectivity
@@ -20,7 +20,7 @@ type Connector interface {
 	// Returns a list of Resource objects that the user can select for syncing.
 	//
 	// parentID controls lazy (on-demand) loading of hierarchical resources:
-	//   - parentID == "" → return the top-level resources (e.g. Feishu wiki spaces).
+	//   - parentID == "" → return the top-level resources (e.g. configured feeds).
 	//   - parentID != "" → return only the direct children of that resource.
 	// Connectors whose listing is already flat or returns the full tree in a single
 	// call may ignore parentID for the root call and return an empty slice for any
@@ -32,11 +32,6 @@ type Connector interface {
 	// lazily-loaded picker can reveal a pre-existing (possibly deeply nested)
 	// selection. The returned set is deduplicated and unordered.
 	//
-	// It exists so connectors that load their tree one level at a time (e.g. the
-	// Feishu wiki) can expose, in O(depth) per selection, the path back to the
-	// root without re-traversing the whole tree. Connectors that already return
-	// the full tree (Notion) or a flat list (Yuque) have nothing to reveal and
-	// return an empty slice.
 	ResolveResourceAncestors(
 		ctx context.Context, config *types.DataSourceConfig, resourceIDs []string,
 	) ([]string, error)
@@ -149,149 +144,13 @@ type ConnectorMetadata struct {
 // GetConnectorMetadata returns metadata for all available connectors
 // This is used by the frontend to display connector options
 var ConnectorMetadataRegistry = map[string]ConnectorMetadata{
-	types.ConnectorTypeFeishu: {
-		Type:         types.ConnectorTypeFeishu,
-		Name:         "Feishu (飞书)",
-		Description:  "Sync documents, wikis, and content from Feishu",
-		Priority:     0,
-		AuthType:     "oauth2",
-		Capabilities: []string{"incremental", "deletion_sync"},
-	},
-	types.ConnectorTypeLark: {
-		Type:         types.ConnectorTypeLark,
-		Name:         "Lark",
-		Description:  "Sync documents, wikis, and content from Lark (Feishu international)",
-		Priority:     0,
-		AuthType:     "oauth2",
-		Capabilities: []string{"incremental", "deletion_sync"},
-	},
-	types.ConnectorTypeFeishuDrive: {
-		Type:         types.ConnectorTypeFeishuDrive,
-		Name:         "Feishu Drive (飞书云盘)",
-		Description:  "Sync documents and files from a Feishu Drive folder",
-		Priority:     0,
-		AuthType:     "oauth2",
-		Capabilities: []string{"incremental", "deletion_sync"},
-	},
-	types.ConnectorTypeLarkDrive: {
-		Type:         types.ConnectorTypeLarkDrive,
-		Name:         "Lark Drive",
-		Description:  "Sync documents and files from a Lark Drive folder",
-		Priority:     0,
-		AuthType:     "oauth2",
-		Capabilities: []string{"incremental", "deletion_sync"},
-	},
-	types.ConnectorTypeNotion: {
-		Type:         types.ConnectorTypeNotion,
-		Name:         "Notion",
-		Description:  "Sync pages and databases from Notion",
-		Priority:     1,
-		AuthType:     "api_key",
-		Capabilities: []string{"incremental"},
-	},
-	types.ConnectorTypeConfluence: {
-		Type:         types.ConnectorTypeConfluence,
-		Name:         "Confluence",
-		Description:  "Sync spaces and pages from Atlassian Confluence",
-		Priority:     2,
-		AuthType:     "api_key",
-		Capabilities: []string{"incremental"},
-	},
-	types.ConnectorTypeYuque: {
-		Type:         types.ConnectorTypeYuque,
-		Name:         "Yuque (语雀)",
-		Description:  "Sync knowledge bases and documents from Yuque",
-		Priority:     3,
-		AuthType:     "api_key",
-		Capabilities: []string{"incremental"},
-	},
-	types.ConnectorTypeIMA: {
-		Type:         types.ConnectorTypeIMA,
-		Name:         "Tencent IMA (ima.qq.com)",
-		Description:  "Sync knowledge bases and documents from Tencent IMA",
-		Priority:     3,
-		AuthType:     "api_key",
-		Capabilities: []string{"incremental", "deletion_sync"},
-	},
-	types.ConnectorTypeGitHub: {
-		Type:         types.ConnectorTypeGitHub,
-		Name:         "GitHub",
-		Description:  "Sync repositories, wikis, and issues from GitHub",
-		Priority:     4,
-		AuthType:     "oauth2",
-		Capabilities: []string{"incremental"},
-	},
-	types.ConnectorTypeGoogleDrive: {
-		Type:         types.ConnectorTypeGoogleDrive,
-		Name:         "Google Drive",
-		Description:  "Sync documents and files from Google Drive",
-		Priority:     5,
-		AuthType:     "oauth2",
-		Capabilities: []string{"incremental"},
-	},
-	types.ConnectorTypeOneDrive: {
-		Type:         types.ConnectorTypeOneDrive,
-		Name:         "OneDrive / SharePoint",
-		Description:  "Sync documents and files from Microsoft OneDrive",
-		Priority:     6,
-		AuthType:     "oauth2",
-		Capabilities: []string{"incremental"},
-	},
-	types.ConnectorTypeDingTalk: {
-		Type:         types.ConnectorTypeDingTalk,
-		Name:         "DingTalk (钉钉)",
-		Description:  "Sync documents and content from DingTalk",
-		Priority:     7,
-		AuthType:     "api_key",
-		Capabilities: []string{"incremental"},
-	},
-	types.ConnectorTypeWebCrawler: {
-		Type:         types.ConnectorTypeWebCrawler,
-		Name:         "Web Crawler (Sitemap)",
-		Description:  "Crawl websites via Sitemap.xml",
-		Priority:     9,
-		AuthType:     "none",
-		Capabilities: []string{},
-	},
-	types.ConnectorTypeSlack: {
-		Type:         types.ConnectorTypeSlack,
-		Name:         "Slack",
-		Description:  "Sync channel messages and files from Slack",
-		Priority:     10,
-		AuthType:     "oauth2",
-		Capabilities: []string{"incremental"},
-	},
-	types.ConnectorTypeIMAP: {
-		Type:         types.ConnectorTypeIMAP,
-		Name:         "Email (IMAP)",
-		Description:  "Sync email content from IMAP servers",
-		Priority:     11,
-		AuthType:     "password",
-		Capabilities: []string{},
-	},
 	types.ConnectorTypeRSS: {
 		Type:         types.ConnectorTypeRSS,
 		Name:         "RSS / Atom Feed",
-		Description:  "Sync articles from RSS/Atom feeds",
-		Priority:     12,
+		Description:  "Sync articles from RSS/Atom feeds and supported sites",
+		Priority:     0,
 		AuthType:     "custom",
 		Capabilities: []string{"incremental"},
-	},
-	types.ConnectorTypeGrokX: {
-		Type:         types.ConnectorTypeGrokX,
-		Name:         "X discovery via Grok",
-		Description:  "Collect X posts through Grok X Search for source and quality review",
-		Priority:     13,
-		AuthType:     "api_key",
-		Capabilities: []string{"incremental"},
-	},
-	types.ConnectorTypeGitLab: {
-		Type:         types.ConnectorTypeGitLab,
-		Name:         "GitLab",
-		Description:  "Sync files from GitLab projects",
-		Priority:     8,
-		AuthType:     "token",
-		Capabilities: []string{"incremental", "hierarchical"},
 	},
 }
 

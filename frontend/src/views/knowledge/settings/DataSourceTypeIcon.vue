@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { getDatasourceIconUrl, datasourceIconMap } from './datasourceIcons'
+import { getDatasourceIconUrl } from './datasourceIcons'
 
 const props = withDefaults(defineProps<{
   type: string
@@ -11,20 +11,10 @@ const props = withDefaults(defineProps<{
   variant: 'inline',
 })
 
-const iconMap = datasourceIconMap
+const iconMap = { rss: getDatasourceIconUrl('rss') } as Record<string, string | undefined>
 
 function fallbackText(type: string) {
   switch (type) {
-    case 'feishu':
-      return 'F'
-    case 'lark':
-      return 'L'
-    case 'notion':
-      return 'N'
-    case 'yuque':
-      return 'Y'
-    case 'ima':
-      return 'I'
     default:
       return type.slice(0, 1).toUpperCase() || '?'
   }

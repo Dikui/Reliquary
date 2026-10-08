@@ -73,25 +73,6 @@
                         </div>
                       </div>
                     </div>
-
-                    <!-- 集成渠道状态（编辑模式，配置在集成中心） -->
-                    <div v-if="editorMode === 'edit' && editorAgent?.id" class="setting-row">
-                      <div class="setting-info">
-                        <label>{{ $t('integrations.agentEditor.label') }}</label>
-                        <p class="desc">{{ isPostCreateSession ? $t('agent.editor.postCreateHint.integrationDesc') : $t('integrations.agentEditor.desc') }}</p>
-                      </div>
-                      <div class="setting-control">
-                        <div class="integration-inline">
-                          <button type="button" class="integration-inline__stat integration-inline__link" @click="gotoIntegrations('im')">
-                            <span>{{ $t('integrations.tabs.im') }} · {{ agentIMChannelCount }}</span>
-                            <t-icon name="chevron-right" size="14px" />
-                          </button>
-                          <span class="integration-inline__sep" aria-hidden="true">|</span>
-
-                        </div>
-                      </div>
-                    </div>
-
                     <!-- 运行模式（首先选择） -->
                     <div class="setting-row">
                       <div class="setting-info">
@@ -1781,7 +1762,6 @@ import { MessagePlugin } from 'tdesign-vue-next';
 import {
   createAgent,
   updateAgent,
-  listIMChannels,
   type CustomAgent,
   type PlaceholderDefinition,
   type AgentTypePreset,
@@ -1841,7 +1821,6 @@ const props = defineProps<{
   agent?: CustomAgent | null;
   initialSection?: string;
   initialHighlightField?: string;
-  // readOnly hides the save button so a Viewer who clicks an agent
   // card to inspect its config doesn't see a "确定" that 403s on the
   // backend update endpoint. Field-level disable is intentionally NOT
   // wired here yet (the modal has 3000+ lines of form inputs); instead
@@ -2017,7 +1996,7 @@ const hasSandboxSelected = computed(() => !!formData.value.config.sandbox_config
 const canEnableSkills = computed(() =>
   hasSandboxSelected.value || namedSandboxConfigs().length === 1,
 );
-const canInstallSkills = computed(() => authStore.hasRole('admin'));
+const canInstallSkills = computed(() => authStore.isLoggedIn);
 
 type CatalogSkillRow = SkillCatalogItem & {
   installed: boolean
@@ -2901,16 +2880,8 @@ watch(currentSection, (section) => {
   }
 });
 
-const agentIMChannelCount = ref(0);
-const loadAgentIntegrationCounts = async (agentId: string) => { try { const imResp = await listIMChannels(agentId); agentIMChannelCount.value = imResp?.data?.length ?? 0; } catch { agentIMChannelCount.value = 0; } };
 
 
-function gotoIntegrations(tab: 'im') {
-  const agentId = editorAgent.value?.id;
-  if (!agentId) return;
-  handleClose();
-  router.push({ path: '/platform/settings', query: { section: integrationSectionKey(tab), agentId } });
-}
 
 const filteredIntentPlaceholders = computed(() => {
   if (!intentPromptPopup.value.prefix) {
@@ -3353,7 +3324,6 @@ watch(() => props.visible, async (val) => {
       if (agentData.is_builtin) {
         fillBuiltinAgentDefaults();
       }
-      void loadAgentIntegrationCounts(agentData.id);
     } else {
       // 创建新智能体，使用系统默认值
       const newFormData = JSON.parse(JSON.stringify(defaultFormData));
@@ -3437,7 +3407,6 @@ watch(() => props.visible, async (val) => {
   } else {
     editorInitializing.value = false;
     clearFieldHighlight();
-    agentIMChannelCount.value = 0;
     showSkillProgress.value = false;
     skillProgressRecord.value = null;
     skillProgressId.value = '';
@@ -4704,7 +4673,6 @@ const handleSave = async () => {
       formData.value.id = created.id;
       markContextualGuideDone('agentCreate')
       currentSection.value = 'basic';
-      void loadAgentIntegrationCounts(created.id);
       MessagePlugin.success(t('agent.messages.created'));
       emit('success', created);
     } else {

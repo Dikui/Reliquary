@@ -26,40 +26,29 @@ func TestWithPrincipalRejectsBlankValues(t *testing.T) {
 }
 
 func TestPrincipalStorageID(t *testing.T) {
-	p := Principal{Type: PrincipalIMUser, ID: "feishu:ch1:u1"}
+	p := Principal{Type: PrincipalWebUser, ID: "u1"}
 
-	if got := p.StorageID(); got != "im_user:feishu:ch1:u1" {
+	if got := p.StorageID(); got != "web_user:u1" {
 		t.Fatalf("StorageID() = %q", got)
 	}
 }
 
-func TestSessionOwnerIDFromContextUsesAPIExternalPrincipal(t *testing.T) {
+func TestSessionOwnerIDFromContextUsesAuthenticatedUser(t *testing.T) {
 	ctx := WithPrincipal(context.Background(), Principal{
-		Type: PrincipalAPIExternalUser,
-		ID:   "7:alice",
+		Type: PrincipalWebUser,
+		ID:   "user-7",
 	})
-	ctx = context.WithValue(ctx, UserIDContextKey, "system-7")
+	ctx = context.WithValue(ctx, UserIDContextKey, "user-7")
 
-	if got := SessionOwnerIDFromContext(ctx); got != "api_external_user:7:alice" {
+	if got := SessionOwnerIDFromContext(ctx); got != "user-7" {
 		t.Fatalf("SessionOwnerIDFromContext() = %q", got)
 	}
 }
 
 func TestSessionOwnerIDFromContextFallsBackToUserID(t *testing.T) {
-	ctx := context.WithValue(context.Background(), UserIDContextKey, "system-7")
+	ctx := context.WithValue(context.Background(), UserIDContextKey, "user-7")
 
-	if got := SessionOwnerIDFromContext(ctx); got != "system-7" {
+	if got := SessionOwnerIDFromContext(ctx); got != "user-7" {
 		t.Fatalf("SessionOwnerIDFromContext() = %q", got)
-	}
-}
-
-func TestSessionOwnerIDFromContextIsolatesTenantAPIKeys(t *testing.T) {
-	ctx := WithPrincipal(context.Background(), Principal{Type: PrincipalAPITenant, ID: "7"})
-	ctx = context.WithValue(ctx, TenantIDContextKey, uint64(7))
-	ctx = context.WithValue(ctx, UserIDContextKey, "system-7")
-	ctx = WithTenantAPIKeyScope(ctx, TenantAPIKeyScope{KeyID: 99})
-
-	if got := SessionOwnerIDFromContext(ctx); got != "api_tenant_key:7:99" {
-		t.Fatalf("SessionOwnerIDFromContext() = %q, want per-key isolation", got)
 	}
 }

@@ -133,26 +133,9 @@ var registry = map[string]settingSpec{
 		Default:  false,
 		Category: "security",
 		Description: "是否允许 Docker 沙箱后端。本机 docker.sock 等同宿主机 root，默认关闭。" +
-			"仅系统管理员可打开；打开后立即生效，无需重启。私有化单机且已挂载 daemon socket，或配置了带 TLS 的远程 tcp:// 时再启用。",
+			"可在系统设置中打开；打开后立即生效，无需重启。私有化单机且已挂载 daemon socket，或配置了带 TLS 的远程 tcp:// 时再启用。",
 	},
-	"auth.complex_password_enabled": {
-		Type:     "bool",
-		EnvName:  "RELIQUARY_AUTH_COMPLEX_PASSWORD_ENABLED",
-		Default:  false,
-		Category: "auth",
-		Description: "是否启用复杂密码。开启后密码必须包含大小写字母、数字和特殊字符。" +
-			"修改后立即生效，只影响新注册用户或新密码修改/重置操作。特殊字符包含：!@#$%^&*()_+-=[]{}|;:,.<>?",
-	},
-	// tenant.auto_accept_invitation: invite = auto-join switch (default false).
-	"tenant.auto_accept_invitation": {
-		Type:     "bool",
-		EnvName:  "RELIQUARY_TENANT_AUTO_ACCEPT_INVITATION",
-		Default:  false,
-		Category: "tenant",
-		Description: "全局开关：开启后，空间管理员通过邮箱邀请已注册用户加入空间时，" +
-			"被邀请人将被立即自动加入（直接写入成员关系），无需在收件箱手动接受，也不再生成待接受的邀请记录。" +
-			"关闭时保持原有「发出邀请 → 被邀请人收件箱确认」流程。每次邀请时实时读取，修改后立即生效。默认 false。",
-	},
+
 	"asynq.core_concurrency": {
 		Type:            "int",
 		EnvName:         "RELIQUARY_ASYNQ_CORE_CONCURRENCY",
@@ -226,7 +209,7 @@ var registry = map[string]settingSpec{
 	},
 }
 
-// systemSettingService wires the repository, audit log, and (P2)
+// systemSettingService wires the repository and
 // the Redis client + an in-memory cache. Cache strategy is "preload
 // at boot, invalidate via pubsub":
 //
@@ -247,10 +230,10 @@ var registry = map[string]settingSpec{
 // edits still take effect (since Update does write the local cache
 // inline). This is the right behaviour for single-replica deployments.
 type systemSettingService struct {
-	repo  interfaces.SystemSettingRepository
-	audit interfaces.AuditLogService
-	rdb   *redis.Client // may be nil in test fixtures
-	cfg   *config.Config
+	repo interfaces.SystemSettingRepository
+
+	rdb *redis.Client // may be nil in test fixtures
+	cfg *config.Config
 
 	// instanceID disambiguates this replica from its peers in the
 	// pubsub stream. Generated once at construction; never changes.
@@ -274,20 +257,19 @@ type systemSettingService struct {
 	subOnce sync.Once
 }
 
-// NewSystemSettingService is the dig provider. audit may be nil
-// (matches the tenantMemberService convention — tests that don't care
-// about audit can pass nil and emitAudit no-ops). rdb may also be nil
+// NewSystemSettingService constructs the settings service.
+// The Redis client may be nil.
 // when REDIS_ADDR is unset — the service still uses its local cache,
 // but skips cross-replica pubsub invalidation.
 func NewSystemSettingService(
 	repo interfaces.SystemSettingRepository,
-	audit interfaces.AuditLogService,
+
 	rdb *redis.Client,
 	cfg *config.Config,
 ) interfaces.SystemSettingService {
 	s := &systemSettingService{
-		repo:       repo,
-		audit:      audit,
+		repo: repo,
+
 		rdb:        rdb,
 		cfg:        cfg,
 		instanceID: uuid.NewString(),
@@ -495,16 +477,6 @@ func (s *systemSettingService) publishChange(ctx context.Context, key string) {
 		logger.Warnf(ctx, "[system_settings] publish %q: %v", key, err)
 	}
 }
-
-// NewSystemSettingService is the dig provider. audit may be nil
-// (matches the tenantMemberService convention — tests that don't care
-// about audit can pass nil and emitAudit no-ops).
-//
-// Compatibility shim: the real ctor lives above (with rdb). Keeping this
-// alternate signature would break dig (two providers for one type), so
-// it is intentionally NOT exported separately. Tests that don't have a
-// Redis client should pass nil — the service detects nil and degrades
-// to the P1 "no cache, no pubsub" path.
 
 // resolveRaw runs the 3-tier fallback ladder for an arbitrary key and
 // returns either the raw DB value bytes (when present), or nil with
@@ -833,7 +805,6 @@ func jsonEqual(a, b types.JSON) bool {
 //     and float64 for "int" and round-trip through strconv to surface
 //     rejection of e.g. floats like 3.14 cleanly.
 //  3. Build the SystemSetting row, write via repo.Upsert.
-//  4. Emit an audit log carrying old + new values for forensics.
 //
 // Returns the persisted row (re-read from DB so updated_at /
 // last_modified_by are fresh).
@@ -881,15 +852,10 @@ func (s *systemSettingService) Update(ctx context.Context, key string, rawValue 
 		return nil, fmt.Errorf("invalid value for %q: %w", key, err)
 	}
 
-	// Capture pre-image for the audit log — pulled fresh, not from
-	// any cache, so concurrent admin edits race-fairly (last writer
-	// wins, audit reflects what was actually replaced).
 	prev, _ := s.repo.Get(ctx, key)
-	var oldValue types.JSON
 	var category, description string
 	var isSecret, requiresRestart bool
 	if prev != nil {
-		oldValue = prev.Value
 		category = prev.Category
 		description = prev.Description
 		isSecret = prev.IsSecret
@@ -914,7 +880,7 @@ func (s *systemSettingService) Update(ctx context.Context, key string, rawValue 
 		Description:     description,
 		IsSecret:        isSecret,
 		RequiresRestart: requiresRestart,
-		LastModifiedBy:  auditActor(ctx),
+		LastModifiedBy:  systemSettingActor(ctx),
 	}
 	if err := s.repo.Upsert(ctx, row); err != nil {
 		return nil, fmt.Errorf("upsert system setting %q: %w", key, err)
@@ -948,29 +914,17 @@ func (s *systemSettingService) Update(ctx context.Context, key string, rawValue 
 	s.dispatchSideEffects(ctx, key)
 
 	s.publishChange(ctx, key)
-	s.emitChangeAudit(ctx, key, spec.Type, oldValue, encoded)
 	return persisted, nil
 }
 
-// Reset deletes the DB override for `key` so the resolver falls back
-// to ENV / built-in default. Idempotent — deleting a key that was
-// never persisted is treated as success (no audit row written, since
-// nothing actually changed) so retries from the UI can't pile up
-// noise. Mirrors Update's cache+pubsub+audit+side-effect plumbing on
-// the success path so other replicas drop the entry too.
-//
-// Unknown keys still 400 — we don't want a typo on the URL to silently
-// pretend it cleared something.
+// Reset deletes the database override and refreshes the configuration cache.
 func (s *systemSettingService) Reset(ctx context.Context, key string) error {
-	spec, ok := registry[key]
+	_, ok := registry[key]
 	if !ok {
 		return fmt.Errorf("unknown setting key %q", key)
 	}
 
-	// Capture pre-image for the audit log before the row vanishes.
-	prev, _ := s.repo.Get(ctx, key)
-
-	deleted, err := s.repo.Delete(ctx, key)
+	_, err := s.repo.Delete(ctx, key)
 	if err != nil {
 		return fmt.Errorf("delete system setting %q: %w", key, err)
 	}
@@ -989,12 +943,6 @@ func (s *systemSettingService) Reset(ctx context.Context, key string) error {
 	s.dispatchSideEffects(ctx, key)
 	s.publishChange(ctx, key)
 
-	// Only emit an audit row on real deletions. The new_value field
-	// is intentionally null to flag this as a reset (vs an Update
-	// which always writes a concrete new_value).
-	if deleted && prev != nil {
-		s.emitChangeAudit(ctx, key, spec.Type, prev.Value, nil)
-	}
 	return nil
 }
 
@@ -1087,37 +1035,6 @@ func (s *systemSettingService) consumeMessages(ctx context.Context, ch <-chan *r
 			s.reload(ctx, m.Key)
 		}
 	}
-}
-
-// emitChangeAudit writes one audit row per successful Update. Best-
-// effort — a nil audit service or a write failure does not bubble up.
-// This mirrors tenantMemberService.emitAudit's failure semantics: the
-// business op (config update) succeeds even if audit is broken.
-func (s *systemSettingService) emitChangeAudit(
-	ctx context.Context, key, valueType string, oldValue, newValue types.JSON,
-) {
-	if s.audit == nil {
-		return
-	}
-	details, _ := json.Marshal(map[string]any{
-		"key":        key,
-		"value_type": valueType,
-		"old_value":  json.RawMessage(oldValue),
-		"new_value":  json.RawMessage(newValue),
-	})
-	_ = s.audit.Log(ctx, &types.AuditLog{
-		// tenant_id=0 marks the row as system-scope (the audit_logs
-		// table itself is tenant-scoped; 0 is the convention for
-		// platform-wide events).
-		TenantID:    0,
-		ActorUserID: auditActor(ctx),
-		ActorRole:   "system_admin",
-		Action:      types.AuditActionSystemSettingChanged,
-		TargetType:  "system_setting",
-		TargetID:    key,
-		Outcome:     types.AuditOutcomeSuccess,
-		Details:     types.JSON(details),
-	})
 }
 
 // encodeForType validates rawValue against the declared type and
@@ -1313,4 +1230,14 @@ func coerceToStringSlice(rawValue any) ([]string, error) {
 	default:
 		return nil, fmt.Errorf("expected string array, got %T", rawValue)
 	}
+}
+
+func systemSettingActor(ctx context.Context) string {
+	if userID, ok := types.UserIDFromContext(ctx); ok {
+		return userID
+	}
+	if principal, ok := types.PrincipalFromContext(ctx); ok && principal.Type == types.PrincipalWebUser {
+		return principal.ID
+	}
+	return ""
 }

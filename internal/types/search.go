@@ -189,7 +189,7 @@ type SearchResult struct {
 	// Used to indicate the source of the knowledge, such as "url"
 	KnowledgeSource string `json:"knowledge_source"`
 
-	// KnowledgeChannel indicates through which channel the knowledge was ingested (web, api, feishu, etc.)
+	// KnowledgeChannel indicates through which channel the knowledge was ingested (web, api, rss)
 	KnowledgeChannel string `json:"knowledge_channel"`
 
 	// ChunkMetadata stores chunk-level metadata (e.g., generated questions)

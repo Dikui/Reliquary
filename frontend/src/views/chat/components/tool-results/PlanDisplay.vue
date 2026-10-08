@@ -17,7 +17,7 @@
         </span>
       </div>
     </div>
-    
+
     <div v-else class="no-steps">
       {{ $t('chat.noPlanSteps') }}
     </div>
@@ -58,11 +58,11 @@ const props = defineProps<Props>();
   gap: 7px;
   padding: 1px 0;
   transition: all 0.15s;
-  
+
   &:last-child {
     margin-bottom: 0;
   }
-  
+
   &.status-in_progress {
     .step-description {
       color: var(--td-text-color-primary);
@@ -99,12 +99,12 @@ const props = defineProps<Props>();
   color: var(--td-text-color-secondary);
   line-height: 1.5;
   font-size: 12px;
-  
+
   &.completed {
     text-decoration: line-through;
     color: var(--td-text-color-placeholder);
   }
-  
+
   .sparkle {
     margin-left: 3px;
     font-size: 11px;

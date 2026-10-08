@@ -9,8 +9,6 @@ import (
 	"reliquary/internal/types"
 )
 
-// TenantResponse is the viewer-safe tenant profile shape. Secret-bearing
-// columns are omitted or redacted unless the caller has Admin+.
 type TenantResponse struct {
 	ID                  uint64                     `json:"id"`
 	Name                string                     `json:"name"`
@@ -35,16 +33,16 @@ type TenantResponse struct {
 
 // NewTenantResponse converts a stored tenant into its HTTP response shape.
 func NewTenantResponse(ctx context.Context, tenant *types.Tenant) *TenantResponse {
-	return NewTenantResponseWithRole(tenant, RoleFromContext(ctx))
+	return NewTenantResponseWithSecrets(tenant)
 }
 
 // NewTenantResponseWithRole converts a stored tenant using an explicit role
 // (for auth flows where tenant role is not yet in request context).
-func NewTenantResponseWithRole(tenant *types.Tenant, role types.TenantRole) *TenantResponse {
+func NewTenantResponseWithSecrets(tenant *types.Tenant) *TenantResponse {
 	if tenant == nil {
 		return nil
 	}
-	includeSecrets := role.HasPermission(types.TenantRoleAdmin)
+	includeSecrets := true
 	resp := &TenantResponse{
 		ID:                tenant.ID,
 		Name:              tenant.Name,
@@ -76,17 +74,6 @@ func NewTenantResponses(ctx context.Context, tenants []*types.Tenant) []*TenantR
 	out := make([]*TenantResponse, 0, len(tenants))
 	for _, t := range tenants {
 		out = append(out, NewTenantResponse(ctx, t))
-	}
-	return out
-}
-
-// NewTenantResponsesCrossTenant redacts every tenant as Viewer regardless of
-// the caller's active-tenant role. Used by cross-tenant list/search endpoints
-// where the caller's home-tenant role must not unlock other tenants' secrets.
-func NewTenantResponsesCrossTenant(tenants []*types.Tenant) []*TenantResponse {
-	out := make([]*TenantResponse, 0, len(tenants))
-	for _, t := range tenants {
-		out = append(out, NewTenantResponseWithRole(t, types.TenantRoleViewer))
 	}
 	return out
 }

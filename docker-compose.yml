@@ -98,22 +98,12 @@ services:
       # - RELIQUARY_TRUSTED_PROXIES=${RELIQUARY_TRUSTED_PROXIES:-}
       # 启动时自动执行数据库迁移；设为 false 禁用，默认启用
       - AUTO_MIGRATE=${AUTO_MIGRATE:-true}
-      # IM 渠道图片/文件外链的外部可达 URL。IM 显示知识库图片需二选一：
-      # 存储后端公网可达（如 MINIO_ENDPOINT 设为公网），或设本变量走 <APP_EXTERNAL_URL>/r/<token>（需 nginx 代理 /r/）。
-      # 默认 MinIO 内网部署 / local 后端需设本变量。
+      # 文件与图片直链使用的外部地址，供 /r/ 路由生成可访问 URL。
       # - APP_EXTERNAL_URL=${APP_EXTERNAL_URL:-}
-      # 前端外部 origin，用于邀请链接等绝对 URL（留空走 host-relative）
-      - FRONTEND_BASE_URL=${FRONTEND_BASE_URL:-}
 
-      # 团队认证 / RBAC / 审计
-      # 开启后密码必须包含大小写字母、数字和特殊字符，特殊字符包含：!@#$%^&*()_+-=[]{}|;:,.<>?
-      - RELIQUARY_AUTH_COMPLEX_PASSWORD_ENABLED=${RELIQUARY_AUTH_COMPLEX_PASSWORD_ENABLED:-false}
+      # 个人账号认证
       # 新建空间默认存储配额（GB，默认 10）
       - RELIQUARY_TENANT_DEFAULT_STORAGE_QUOTA_GB=${RELIQUARY_TENANT_DEFAULT_STORAGE_QUOTA_GB:-10}
-      # 空间邀请链接 TTL（Go duration，默认 168h=7 天）
-      - RELIQUARY_INVITATION_TTL=${RELIQUARY_INVITATION_TTL:-168h}
-      # 审计日志保留天数（0 禁用清理，默认 90）
-      - RELIQUARY_AUDIT_RETENTION_DAYS=${RELIQUARY_AUDIT_RETENTION_DAYS:-90}
       # 数据库设置
       - DB_DRIVER=${DB_DRIVER:-postgres}
       - DB_HOST=${DB_HOST:-postgres}
@@ -220,11 +210,7 @@ services:
       - RELIQUARY_AGENT_TOOL_APPROVAL_TIMEOUT=${RELIQUARY_AGENT_TOOL_APPROVAL_TIMEOUT:-}
       # MCP 工具人工审批失败时是否放行（true 放行 / 默认 fail-close 拒绝）
       - RELIQUARY_AGENT_TOOL_APPROVAL_FAIL_OPEN=${RELIQUARY_AGENT_TOOL_APPROVAL_FAIL_OPEN:-}
-      # Tenant / RBAC（详见 docs/RBAC说明.md 与 .env.example 注释）
-      # - RELIQUARY_TENANT_ENABLE_RBAC: 是否启用空间角色强制鉴权（true / false），默认 true
-      #   >0 强制限额；=0 走 handler 默认；<0 关闭限额（不建议共享部署使用）
-      #   （兼容旧版默认下发 API Key 行为，破坏性变更回退开关；true / false，默认 false）
-      - RELIQUARY_TENANT_ENABLE_RBAC=${RELIQUARY_TENANT_ENABLE_RBAC:-}
+      # 个人空间存储配额
       - RELIQUARY_ASYNQ_CORE_CONCURRENCY=${RELIQUARY_ASYNQ_CORE_CONCURRENCY:-8}
       - RELIQUARY_ASYNQ_POSTPROCESS_CONCURRENCY=${RELIQUARY_ASYNQ_POSTPROCESS_CONCURRENCY:-2}
       - RELIQUARY_ASYNQ_ENRICHMENT_CONCURRENCY=${RELIQUARY_ASYNQ_ENRICHMENT_CONCURRENCY:-12}
@@ -233,9 +219,6 @@ services:
       - RELIQUARY_WIKI_ASYNQ_CONCURRENCY=${RELIQUARY_WIKI_ASYNQ_CONCURRENCY:-8}
       - RELIQUARY_MODEL_MAX_CONCURRENCY=${RELIQUARY_MODEL_MAX_CONCURRENCY:-32}
       - APK_MIRROR_ARG=${APK_MIRROR_ARG:-}
-      - RELIQUARY_BOOTSTRAP_SYSTEM_ADMIN_EMAIL=${RELIQUARY_BOOTSTRAP_SYSTEM_ADMIN_EMAIL:-}
-      # 飞书云文档解析模式 export：导出为docx，blocks：根据飞书云文档块解析为markdown。默认为:export
-      - FEISHU_DOCX_PARSE_MODE=${FEISHU_DOCX_PARSE_MODE:-export}
     depends_on:
       redis:
         condition: service_started
@@ -490,32 +473,6 @@ services:
       - Reliquary-network
     profiles:
       - minio
-      - full
-
-  mcp:
-    build:
-      context: ./mcp-server
-    container_name: Reliquary-mcp
-    ports:
-      - "${MCP_PORT:-8082}:8000"
-    environment:
-      - RELIQUARY_BASE_URL=http://app:8080/api/v1
-      - RELIQUARY_API_KEY=${RELIQUARY_API_KEY:-}
-      # HTTP/SSE 传输必填：mcp-server 启动时若缺少此项会拒绝启动（客户端以 Authorization: Bearer 携带）
-      - MCP_SERVER_AUTH_TOKEN=${MCP_SERVER_AUTH_TOKEN:-}
-      # 调用 Reliquary REST 的读超时（秒，默认 300）
-      - RELIQUARY_CHAT_TIMEOUT=${RELIQUARY_CHAT_TIMEOUT:-300}
-      # 是否校验 Reliquary 后端 TLS 证书（默认 true；自签证书可设 false）
-      - RELIQUARY_VERIFY_SSL=${RELIQUARY_VERIFY_SSL:-true}
-      # 允许上传的目录白名单（逗号分隔；留空禁用文件上传工具）
-      - MCP_ALLOWED_UPLOAD_DIRS=${MCP_ALLOWED_UPLOAD_DIRS:-}
-    depends_on:
-      app:
-        condition: service_healthy
-    networks:
-      - Reliquary-network
-    restart: unless-stopped
-    profiles:
       - full
 
 networks:

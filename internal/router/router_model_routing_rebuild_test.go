@@ -45,10 +45,10 @@ func TestTeamEmbeddingConfigurationTriggersCommittedRebuildAndShowsQueueFailure(
 		require.NoError(t, db.First(&team, "id = ?", 1).Error)
 		require.Equal(t, "configured-vector", team.ModelTiers.Embedding)
 	}
-	response := fusionRequest(t, engine, http.MethodPut, "/api/v1/tenants/model-tiers", `{"embedding":"configured-vector"}`, 1, fusionOwnerID, types.TenantRoleAdmin)
+	response := fusionRequest(t, engine, http.MethodPut, "/api/v1/tenants/model-tiers", `{"embedding":"configured-vector"}`, 1, fusionOwnerID)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	require.Equal(t, 1, trigger.calls)
-	response = fusionRequest(t, engine, http.MethodPut, "/api/v1/tenants/model-tiers", `{"embedding":"configured-vector"}`, 1, fusionOwnerID, types.TenantRoleAdmin)
+	response = fusionRequest(t, engine, http.MethodPut, "/api/v1/tenants/model-tiers", `{"embedding":"configured-vector"}`, 1, fusionOwnerID)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	require.Equal(t, 1, trigger.calls, "unchanged overrides do not schedule another rebuild")
 	trigger.err = errors.New("redis queue unavailable")
@@ -57,7 +57,7 @@ func TestTeamEmbeddingConfigurationTriggersCommittedRebuildAndShowsQueueFailure(
 		require.NoError(t, db.First(&team, "id = ?", 1).Error)
 		require.Empty(t, team.ModelTiers.Embedding)
 	}
-	response = fusionRequest(t, engine, http.MethodPut, "/api/v1/tenants/model-tiers", `{}`, 1, fusionOwnerID, types.TenantRoleAdmin)
+	response = fusionRequest(t, engine, http.MethodPut, "/api/v1/tenants/model-tiers", `{}`, 1, fusionOwnerID)
 	require.Equal(t, http.StatusInternalServerError, response.Code, response.Body.String())
 	require.Contains(t, response.Body.String(), "team settings saved")
 	require.Equal(t, 2, trigger.calls)

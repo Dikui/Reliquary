@@ -24,9 +24,7 @@ func (s *KnowledgeContextService) SetEntityStar(ctx context.Context, entityID st
 	if err != nil {
 		return err
 	}
-	if err := s.authorizeContextEntity(ctx, tenantID, entityID); err != nil {
-		return err
-	}
+
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := lockContextTeam(tx, tenantID); err != nil {
 			return err
@@ -87,12 +85,7 @@ func (s *KnowledgeContextService) FocusScope(ctx context.Context, kbID string, q
 	query := s.db.WithContext(ctx).Model(&types.KnowledgeEntity{}).
 		Joins("JOIN knowledge_context_entity_stars stars ON stars.tenant_id = knowledge_context_entities.tenant_id AND stars.entity_id = knowledge_context_entities.id").
 		Where("knowledge_context_entities.tenant_id = ? AND knowledge_context_entities.merged_into_id = ''", scope.tenantID)
-	key, _ := types.TenantAPIKeyScopeFromContext(ctx)
-	if key.IsKnowledgeBaseRestricted() {
-		query = query.Where(`EXISTS (SELECT 1 FROM knowledge_context_evidence_entities mentions
-			JOIN knowledge_context_evidence evidence ON evidence.tenant_id = mentions.tenant_id AND evidence.id = mentions.evidence_id
-			WHERE mentions.tenant_id = knowledge_context_entities.tenant_id AND mentions.entity_id = knowledge_context_entities.id AND evidence.knowledge_base_id IN ?)`, []string(key.KnowledgeBaseIDs))
-	}
+
 	if err := query.Select("knowledge_context_entities.*").Order("canonical_name, knowledge_context_entities.id").Find(&result.StarredEntities).Error; err != nil {
 		return nil, err
 	}
@@ -118,30 +111,7 @@ func (s *KnowledgeContextService) FocusScope(ctx context.Context, kbID string, q
 	if err != nil {
 		return nil, err
 	}
-	if key.IsKnowledgeBaseRestricted() {
-		for i := range result.StarredEntities {
-			result.StarredEntities[i].Description = ""
-			if !key.AllowsKnowledgeBase(result.StarredEntities[i].KnowledgeBaseID) {
-				result.StarredEntities[i].KnowledgeBaseID = ""
-			}
-		}
-		visible := []types.KnowledgeFocusEntity{}
-		for _, item := range result.TrackedEntities {
-			if err := s.authorizeContextEntity(ctx, scope.tenantID, item.ID); err != nil {
-				var appErr *werrors.AppError
-				if errors.As(err, &appErr) && appErr.Code == werrors.ErrForbidden {
-					continue
-				}
-				return nil, err
-			}
-			item.Description = ""
-			if !key.AllowsKnowledgeBase(item.KnowledgeBaseID) {
-				item.KnowledgeBaseID = ""
-			}
-			visible = append(visible, item)
-		}
-		result.TrackedEntities = visible
-	}
+
 	// Current workflows have no typed topic/tag condition. Search strings are
 	// not treated as tags; tracked_topics is reserved for an explicit condition.
 	return result, nil
@@ -153,9 +123,7 @@ func (s *KnowledgeContextService) contextTrackedEntities(ctx context.Context, sc
 	workflowQuery := s.db.WithContext(ctx).Model(&types.KnowledgeWorkflow{}).
 		Joins("JOIN knowledge_bases bases ON bases.id = knowledge_workflows.knowledge_base_id AND bases.tenant_id = knowledge_workflows.tenant_id AND bases.deleted_at IS NULL").
 		Where("knowledge_workflows.tenant_id = ? AND knowledge_workflows.enabled", scope.tenantID)
-	if key, ok := types.TenantAPIKeyScopeFromContext(ctx); ok && key.IsKnowledgeBaseRestricted() {
-		workflowQuery = workflowQuery.Where("knowledge_workflows.knowledge_base_id IN ?", []string(key.KnowledgeBaseIDs))
-	}
+
 	if err := workflowQuery.Select("knowledge_workflows.*").Order("knowledge_workflows.id").Find(&workflows).Error; err != nil {
 		return nil, err
 	}

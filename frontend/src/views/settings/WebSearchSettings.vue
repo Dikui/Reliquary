@@ -10,7 +10,7 @@
     <!-- Provider List —— 与 ModelSettings 的卡片同形：左侧标识徽章 + 标题 / 副标题 / proxy URL 三段式。
          不复用 SettingCard 的原因和 Models 一样：每页有微妙不同的右上侧栏需求（这里没有控件，
          Mcp 有开关），SettingCard 仍服务于其它消费者。 -->
-    <div v-if="providerEntities.length === 0 && !authStore.hasRole('admin')" class="empty-state">
+    <div v-if="providerEntities.length === 0 && !authStore.isLoggedIn" class="empty-state">
       <t-empty :description="t('webSearchSettings.noProvidersDesc')" />
     </div>
     <div v-else class="provider-grid">
@@ -74,7 +74,7 @@
         </div>
       </div>
       <button
-        v-if="authStore.hasRole('admin')"
+        v-if="authStore.isLoggedIn"
         type="button"
         class="provider-card provider-card--add"
         @click="openAddDialog"
@@ -669,7 +669,7 @@ const testConnection = async () => {
   }
 }
 
-const isProviderCardClickable = () => authStore.hasRole('admin')
+const isProviderCardClickable = () => authStore.isLoggedIn
 
 const onProviderCardClick = (event: Event, entity: WebSearchProviderEntity) => {
   if (!isProviderCardClickable()) return
@@ -689,7 +689,7 @@ const getProviderOptions = (_entity: WebSearchProviderEntity) => {
   // Hide the action menu entirely for non-Admins so they don't trip 403s.
   // 测试连接已挪到编辑抽屉的 footer，不再放在外层菜单里 — 单一入口减少
   // 用户疑惑（"为什么有两个测试入口，结果一样吗？"）。
-  if (!authStore.hasRole('admin')) {
+  if (!authStore.isLoggedIn) {
     return []
   }
   return [

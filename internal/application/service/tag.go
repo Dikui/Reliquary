@@ -19,19 +19,17 @@ import (
 type knowledgeTagService struct {
 	kbService interfaces.KnowledgeBaseService
 	repo      interfaces.KnowledgeTagRepository
-	audit     interfaces.AuditLogService
 }
 
 // NewKnowledgeTagService creates a new tag service.
 func NewKnowledgeTagService(
 	kbService interfaces.KnowledgeBaseService,
 	repo interfaces.KnowledgeTagRepository,
-	audit interfaces.AuditLogService,
+
 ) (interfaces.KnowledgeTagService, error) {
 	return &knowledgeTagService{
 		kbService: kbService,
 		repo:      repo,
-		audit:     audit,
 	}, nil
 }
 
@@ -162,8 +160,6 @@ func (s *knowledgeTagService) CreateTag(
 	if err := s.repo.Create(ctx, tag); err != nil {
 		return nil, err
 	}
-	recordKBActivity(ctx, s.audit, tag.TenantID, tag.KnowledgeBaseID, types.AuditActionTagCreated,
-		"knowledge_tag", tag.ID, types.AuditOutcomeSuccess, map[string]any{"name": tag.Name, "kind": tag.Kind})
 	return tag, nil
 }
 
@@ -184,7 +180,6 @@ func (s *knowledgeTagService) UpdateTag(
 	if err != nil {
 		return nil, err
 	}
-	oldName, oldKind := tag.Name, tag.Kind
 	kb, err := s.kbService.GetKnowledgeBaseByID(ctx, tag.KnowledgeBaseID)
 	if err != nil {
 		return nil, err
@@ -215,9 +210,6 @@ func (s *knowledgeTagService) UpdateTag(
 	if err := s.repo.Update(ctx, tag); err != nil {
 		return nil, err
 	}
-	recordKBActivity(ctx, s.audit, tag.TenantID, tag.KnowledgeBaseID, types.AuditActionTagUpdated,
-		"knowledge_tag", tag.ID, types.AuditOutcomeSuccess,
-		map[string]any{"old_name": oldName, "name": tag.Name, "old_kind": oldKind, "kind": tag.Kind})
 	return tag, nil
 }
 
@@ -245,20 +237,15 @@ func (s *knowledgeTagService) DeleteTag(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	canEdit := types.TenantRoleFromContext(ctx).HasPermission(types.TenantRoleContributor)
-	if scope, ok := types.TenantAPIKeyScopeFromContext(ctx); ok {
-		canEdit = scope.AllowsKnowledgeBase(kb.ID) && (scope.FullAccess || scope.HasCapability(types.APIKeyCapabilityIngest))
-	}
+	canEdit := types.IsAuthenticatedFromContext(ctx)
+
 	if kb.TenantID != tenantID || !canEdit {
-		return werrors.NewForbiddenError("编辑者以上角色可删除标签")
+		return werrors.NewForbiddenError("登录用户可删除当前空间的标签")
 	}
 
 	if err := s.repo.Delete(ctx, tenantID, id); err != nil {
 		return err
 	}
-	recordKBActivity(ctx, s.audit, tenantID, kb.ID, types.AuditActionTagDeleted,
-		"knowledge_tag", tag.ID, types.AuditOutcomeSuccess,
-		map[string]any{"name": tag.Name, "kind": tag.Kind, "relations_removed": true})
 	return nil
 }
 

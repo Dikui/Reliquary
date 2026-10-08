@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"fmt"
-	jwt "github.com/golang-jwt/jwt/v5"
 	"net/http"
 	"strconv"
 	"strings"
@@ -24,39 +23,19 @@ import (
 // Provides functionality for creating, retrieving, updating, and deleting tenants
 // through the REST API endpoints
 type TenantHandler struct {
-	service       interfaces.TenantService
-	apiKeyService interfaces.TenantAPIKeyService
-	userService   interfaces.UserService
-	memberService interfaces.TenantMemberService
-	kbService     interfaces.KnowledgeBaseService
-	config        *config.Config
-	// systemSettingSvc resolves runtime tenant policies and limits.
-	// Reading goes DB > ENV >
-	// in-code default, so a SystemAdmin's UI override applies on the
-	// very next CreateTenant call.
+	service          interfaces.TenantService
+	apiKeyService    interfaces.TenantAPIKeyService
+	userService      interfaces.UserService
+	kbService        interfaces.KnowledgeBaseService
+	config           *config.Config
 	systemSettingSvc interfaces.SystemSettingService
 }
 
-// NewTenantHandler creates a new tenant handler instance with the provided service
-// Parameters:
-//   - service: An implementation of the TenantService interface for business logic
-//   - userService: An implementation of the UserService interface for user operations
-//   - memberService: An implementation of TenantMemberService used to bootstrap
-//     the creator as Owner of the tenant they just created (self-service create).
-//   - config: Application configuration
-//
-// # Returns a pointer to the newly created TenantHandler
-//
-// active tenant) used to live in `authorizeTenantAccess` and the if
-// blocks at the top of ListAllTenants / SearchTenants. Both moved to
-// `middleware/access.go` (RequireCrossTenantAccess /
-// RequirePathTenantMatch) and are wired in `router.go` so the handler
-// stays focused on business logic.
+// NewTenantHandler creates handlers for personal workspace settings and API keys.
 func NewTenantHandler(
 	service interfaces.TenantService,
 	apiKeyService interfaces.TenantAPIKeyService,
 	userService interfaces.UserService,
-	memberService interfaces.TenantMemberService,
 	kbService interfaces.KnowledgeBaseService,
 	config *config.Config,
 	systemSettingSvc interfaces.SystemSettingService,
@@ -65,19 +44,15 @@ func NewTenantHandler(
 		service:          service,
 		apiKeyService:    apiKeyService,
 		userService:      userService,
-		memberService:    memberService,
 		kbService:        kbService,
 		config:           config,
 		systemSettingSvc: systemSettingSvc,
 	}
 }
 
-// updateTenantRequest is the JSON body for PUT /tenants/:id. Only the
-// fields an Owner is permitted to mutate via the public API are bound;
-// everything else (storage_quota, status, business, api_key, agent /
-// retrieval / storage configs, ...) is intentionally NOT writable here
-// — those go through dedicated endpoints (PUT /tenants/kv/:key, ...)
-// that have their own validation.
+// updateTenantRequest is the JSON body for PUT /tenants/:id.
+// It binds the name and description. Configuration fields use dedicated
+// endpoints with their own validation.
 //
 // Pointers so we can distinguish "not sent" from "explicit empty
 // string"; when nil we leave the existing column untouched.
@@ -86,83 +61,30 @@ type updateTenantRequest struct {
 	Description *string `json:"description" binding:"omitempty,max=512"`
 }
 
-type apiPrincipalConfigRequest struct {
-	Mode                  types.APIPrincipalMode `json:"mode"`
-	DirectHeaderName      string                 `json:"direct_header_name"`
-	SignedTokenHeaderName string                 `json:"signed_token_header_name"`
-	RequireDirectHeader   bool                   `json:"require_direct_header"`
-	HMACSecret            *string                `json:"hmac_secret"`
-}
-
-type apiPrincipalConfigResponse struct {
-	Mode                  types.APIPrincipalMode `json:"mode"`
-	DirectHeaderName      string                 `json:"direct_header_name"`
-	SignedTokenHeaderName string                 `json:"signed_token_header_name"`
-	RequireDirectHeader   bool                   `json:"require_direct_header"`
-	// HasHMACSecret reports whether a signing secret is configured. The
-	// plaintext secret is NEVER returned — clients only learn presence.
-	HasHMACSecret bool `json:"has_hmac_secret"`
-}
-
-type apiPrincipalTestTokenRequest struct {
-	ExternalUserID   string `json:"external_user_id"`
-	ExpiresInSeconds int    `json:"expires_in_seconds"`
-}
-
-type apiPrincipalTestTokenResponse struct {
-	Token            string `json:"token"`
-	HeaderName       string `json:"header_name"`
-	ExpiresInSeconds int    `json:"expires_in_seconds"`
-	ExpiresAtUnix    int64  `json:"expires_at_unix"`
-	ExternalUserID   string `json:"external_user_id"`
-}
-
 type tenantAPIKeyCreateRequest struct {
-	Name             string   `json:"name"`
-	FullAccess       bool     `json:"full_access"`
-	KnowledgeBaseIDs []string `json:"knowledge_base_ids"`
-	Capabilities     []string `json:"capabilities"`
-	ExpiresAt        *int64   `json:"expires_at_unix"`
+	Name      string `json:"name"`
+	ExpiresAt *int64 `json:"expires_at_unix"`
 }
 
 // tenantAPIKeyUpdateRequest 修改已创建 API Key 的配置，字段语义与创建接口一致。
 type tenantAPIKeyUpdateRequest struct {
-	Name             string   `json:"name"`
-	FullAccess       bool     `json:"full_access"`
-	KnowledgeBaseIDs []string `json:"knowledge_base_ids"`
-	Capabilities     []string `json:"capabilities"`
-	ExpiresAt        *int64   `json:"expires_at_unix"`
+	Name      string `json:"name"`
+	ExpiresAt *int64 `json:"expires_at_unix"`
 }
 
 type tenantAPIKeyResponse struct {
-	ID               uint64            `json:"id"`
-	Name             string            `json:"name"`
-	APIKey           string            `json:"api_key"`
-	FullAccess       bool              `json:"full_access"`
-	KnowledgeBaseIDs types.StringArray `json:"knowledge_base_ids"`
-	Capabilities     types.StringArray `json:"capabilities"`
-	LastUsedAt       *time.Time        `json:"last_used_at,omitempty"`
-	ExpiresAt        *time.Time        `json:"expires_at,omitempty"`
-	CreatedAt        time.Time         `json:"created_at"`
+	ID         uint64     `json:"id"`
+	Name       string     `json:"name"`
+	APIKey     string     `json:"api_key"`
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
 }
 
 type tenantAPIKeyCreateResponse struct {
 	tenantAPIKeyResponse
 	Token string `json:"token"`
 }
-
-const (
-	defaultAPIPrincipalDirectHeader  = "X-External-User-ID"
-	defaultAPIPrincipalTokenHeader   = "X-External-User-Token"
-	defaultAPIPrincipalTestTokenTTL  = 15 * time.Minute
-	maxAPIPrincipalTestTokenTTL      = time.Hour
-	maxAPIPrincipalExternalUserIDLen = 128
-	// apiPrincipalSecretRedacted is the placeholder an update request may
-	// send in place of the HMAC secret to signal "leave the stored secret
-	// unchanged". The plaintext secret is never returned by GET, so the
-	// client cannot echo the real value back.
-	apiPrincipalSecretRedacted = "***"
-)
 
 // defaultMaxOwnedTenantsPerUser is the cap applied when
 // cover legitimate "personal + a couple of side-projects" use while
@@ -233,14 +155,8 @@ func (h *TenantHandler) UpdateTenant(c *gin.Context) {
 		return
 	}
 
-	// Strict whitelist: only Name / Description are mutable through the
-	// public PUT. Storage quota, status, business, configs, api_key and
-	// every other privileged column live behind dedicated endpoints
-	// (PUT /tenants/kv/:key, ...). Without this, an
-	// Owner — including any user who just self-served a tenant — could
-	// flip status / bump storage_quota by simply crafting an extended
-	// JSON body. Pointers distinguish "field omitted" from "explicit
-	// empty string" so we can leave untouched columns alone.
+	// Bind the name and description; configuration fields use dedicated
+	// endpoints. Pointers distinguish omitted fields from explicit empty strings.
 	var req updateTenantRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		logger.Error(ctx, "Failed to parse request parameters", err)
@@ -336,7 +252,7 @@ func (h *TenantHandler) CreateAPIKey(c *gin.Context) {
 		return
 	}
 	var expiresAt *time.Time
-	if req.ExpiresAt != nil {
+	if req.ExpiresAt != nil && *req.ExpiresAt != 0 {
 		t := time.Unix(*req.ExpiresAt, 0).UTC()
 		if !t.After(time.Now().UTC()) {
 			c.Error(errors.NewValidationError("expires_at_unix must be in the future"))
@@ -345,12 +261,9 @@ func (h *TenantHandler) CreateAPIKey(c *gin.Context) {
 		expiresAt = &t
 	}
 	result, err := h.apiKeyService.CreateAPIKey(ctx, interfaces.TenantAPIKeyCreateRequest{
-		TenantID:         id,
-		Name:             req.Name,
-		FullAccess:       req.FullAccess,
-		KnowledgeBaseIDs: req.KnowledgeBaseIDs,
-		Capabilities:     req.Capabilities,
-		ExpiresAt:        expiresAt,
+		TenantID:  id,
+		Name:      req.Name,
+		ExpiresAt: expiresAt,
 	})
 	if err != nil {
 		c.Error(errors.NewInternalServerError("Failed to create API key").WithDetails(err.Error()))
@@ -365,8 +278,8 @@ func (h *TenantHandler) CreateAPIKey(c *gin.Context) {
 	})
 }
 
-// UpdateAPIKey 修改已创建租户 API Key 的授权范围和其他可配置属性。
-// 路由层要求当前租户 Owner；字段校验与创建接口保持一致。
+// UpdateAPIKey 修改个人空间 API Key 的名称和到期时间。
+// 字段校验与创建接口保持一致。
 func (h *TenantHandler) UpdateAPIKey(c *gin.Context) {
 	ctx := c.Request.Context()
 	tenantID, err := strconv.ParseUint(c.Param("id"), 10, 64)
@@ -389,14 +302,13 @@ func (h *TenantHandler) UpdateAPIKey(c *gin.Context) {
 		return
 	}
 	var expiresAt *time.Time
-	if req.ExpiresAt != nil {
+	if req.ExpiresAt != nil && *req.ExpiresAt != 0 {
 		t := time.Unix(*req.ExpiresAt, 0).UTC()
 		expiresAt = &t
 	}
 
 	updated, err := h.apiKeyService.UpdateAPIKey(ctx, interfaces.TenantAPIKeyUpdateRequest{
-		TenantID: tenantID, APIKeyID: keyID, Name: req.Name, FullAccess: req.FullAccess,
-		KnowledgeBaseIDs: req.KnowledgeBaseIDs, Capabilities: req.Capabilities, ExpiresAt: expiresAt,
+		TenantID: tenantID, APIKeyID: keyID, Name: req.Name, ExpiresAt: expiresAt,
 	})
 	if err != nil {
 		c.Error(errors.NewNotFoundError("API key not found"))
@@ -429,327 +341,27 @@ func tenantAPIKeyForResponse(key *types.TenantAPIKey) tenantAPIKeyResponse {
 		return tenantAPIKeyResponse{}
 	}
 	return tenantAPIKeyResponse{
-		ID:               key.ID,
-		Name:             key.Name,
-		APIKey:           key.APIKey,
-		FullAccess:       key.FullAccess,
-		KnowledgeBaseIDs: key.KnowledgeBaseIDs,
-		Capabilities:     types.NormalizeAPIKeyCapabilities(key.Capabilities),
-		LastUsedAt:       key.LastUsedAt,
-		ExpiresAt:        key.ExpiresAt,
-		CreatedAt:        key.CreatedAt,
+		ID:         key.ID,
+		Name:       key.Name,
+		APIKey:     key.APIKey,
+		LastUsedAt: key.LastUsedAt,
+		ExpiresAt:  key.ExpiresAt,
+		CreatedAt:  key.CreatedAt,
 	}
 }
 
-func validateTenantAPIKeyRequest(
-	ctx context.Context,
-	kbService interfaces.KnowledgeBaseService,
-	tenantID uint64,
-	req tenantAPIKeyCreateRequest,
-) *errors.AppError {
+func validateTenantAPIKeyRequest(ctx context.Context, kbService interfaces.KnowledgeBaseService, tenantID uint64, req tenantAPIKeyCreateRequest) *errors.AppError {
 	if strings.TrimSpace(req.Name) == "" {
 		return errors.NewValidationError("name is required")
 	}
-	if req.FullAccess {
-		return nil
-	}
-	caps := types.NormalizeAPIKeyCapabilities(types.StringArray(req.Capabilities))
-	if len(caps) == 0 {
-		return errors.NewValidationError("capabilities are required for scoped API keys")
-	}
-	for _, cap := range req.Capabilities {
-		if strings.TrimSpace(cap) == "" {
-			continue
-		}
-		if types.NormalizeAPIKeyCapability(types.APIKeyCapability(cap)) == "" {
-			return errors.NewValidationError("capabilities contains an unknown capability")
-		}
-	}
-	return validateTenantAPIKeyKnowledgeBaseIDs(ctx, kbService, tenantID, req.KnowledgeBaseIDs)
+	return nil
 }
 
 // validateTenantAPIKeyKnowledgeBaseIDs 校验白名单中的知识库真实存在且属于目标租户。
 // 入参是请求上下文、知识库服务、租户 ID 和待授权 ID；成功无返回值，失败返回可直接响应的应用错误。
-func validateTenantAPIKeyKnowledgeBaseIDs(
-	ctx context.Context,
-	kbService interfaces.KnowledgeBaseService,
-	tenantID uint64,
-	knowledgeBaseIDs []string,
-) *errors.AppError {
-	if len(knowledgeBaseIDs) == 0 {
-		return nil
-	}
-	return validateTenantAPIKeyKnowledgeBaseIDsWithLookup(
-		ctx, tenantID, knowledgeBaseIDs, kbService.GetKnowledgeBaseByID,
-	)
-}
 
 // validateTenantAPIKeyKnowledgeBaseIDsWithLookup 将归属校验与大型知识库服务接口解耦，便于覆盖边界测试。
 // lookup 输入知识库 ID 并返回真实知识库；函数输出 nil 或可直接响应的校验错误。
-func validateTenantAPIKeyKnowledgeBaseIDsWithLookup(
-	ctx context.Context,
-	tenantID uint64,
-	knowledgeBaseIDs []string,
-	lookup func(context.Context, string) (*types.KnowledgeBase, error),
-) *errors.AppError {
-	for _, kbID := range knowledgeBaseIDs {
-		kbID = strings.TrimSpace(kbID)
-		if kbID == "" {
-			continue
-		}
-		kb, err := lookup(ctx, kbID)
-		if err != nil || kb == nil {
-			return errors.NewValidationError("knowledge_base_ids contains an unknown knowledge base")
-		}
-		if kb.TenantID != tenantID {
-			return errors.NewForbiddenError("knowledge_base_ids contains a knowledge base outside this workspace")
-		}
-	}
-	return nil
-}
-
-func apiPrincipalConfigForResponse(cfg *types.APIPrincipalConfig) apiPrincipalConfigResponse {
-	if cfg == nil {
-		cfg = &types.APIPrincipalConfig{}
-	}
-	mode := cfg.Mode
-	if mode == "" {
-		mode = types.APIPrincipalModeTenant
-	}
-	return apiPrincipalConfigResponse{
-		Mode:                  mode,
-		DirectHeaderName:      defaultAPIPrincipalDirectHeader,
-		SignedTokenHeaderName: defaultAPIPrincipalTokenHeader,
-		RequireDirectHeader:   cfg.RequireDirectHeader,
-		HasHMACSecret:         strings.TrimSpace(cfg.HMACSecret) != "",
-	}
-}
-
-// GetAPIPrincipalConfig godoc
-// @Summary      获取空间 API Key 用户身份配置
-// @Description  返回 X-API-Key 请求如何映射为终端 Principal 的配置（Owner）
-// @Tags         空间管理
-// @Accept       json
-// @Produce      json
-// @Param        id   path      int  true  "空间ID"
-// @Success      200  {object}  map[string]interface{}  "API principal 配置"
-// @Failure      400  {object}  errors.AppError         "请求参数错误"
-// @Failure      403  {object}  errors.AppError         "权限不足"
-// @Security     Bearer
-// @Router       /tenants/{id}/api-principal-config [get]
-func (h *TenantHandler) GetAPIPrincipalConfig(c *gin.Context) {
-	ctx := c.Request.Context()
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		c.Error(errors.NewBadRequestError("Invalid workspace ID"))
-		return
-	}
-	tenant, err := h.service.GetTenantByID(ctx, id)
-	if err != nil {
-		if appErr, ok := errors.IsAppError(err); ok {
-			c.Error(appErr)
-		} else {
-			c.Error(errors.NewInternalServerError("Failed to load workspace").WithDetails(err.Error()))
-		}
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    apiPrincipalConfigForResponse(tenant.APIPrincipalConfig),
-	})
-}
-
-// UpdateAPIPrincipalConfig godoc
-// @Summary      更新空间 API Key 用户身份配置
-// @Description  配置 X-API-Key 请求如何映射为终端 Principal（Owner）
-// @Tags         空间管理
-// @Accept       json
-// @Produce      json
-// @Param        id       path      int                           true  "空间ID"
-// @Param        request  body      handler.apiPrincipalConfigRequest  true  "API principal 配置"
-// @Success      200      {object}  map[string]interface{}        "更新后的配置"
-// @Failure      400      {object}  errors.AppError               "请求参数错误"
-// @Failure      403      {object}  errors.AppError               "权限不足"
-// @Security     Bearer
-// @Router       /tenants/{id}/api-principal-config [put]
-func (h *TenantHandler) UpdateAPIPrincipalConfig(c *gin.Context) {
-	ctx := c.Request.Context()
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		c.Error(errors.NewBadRequestError("Invalid workspace ID"))
-		return
-	}
-	var req apiPrincipalConfigRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.Error(errors.NewValidationError("Invalid request data").WithDetails(err.Error()))
-		return
-	}
-	if req.Mode == "" {
-		req.Mode = types.APIPrincipalModeTenant
-	}
-	switch req.Mode {
-	case types.APIPrincipalModeTenant, types.APIPrincipalModeDirect, types.APIPrincipalModeSignedToken:
-	default:
-		c.Error(errors.NewValidationError("mode must be tenant, direct_header, or signed_token"))
-		return
-	}
-
-	tenant, err := h.service.GetTenantByID(ctx, id)
-	if err != nil {
-		if appErr, ok := errors.IsAppError(err); ok {
-			c.Error(appErr)
-		} else {
-			c.Error(errors.NewInternalServerError("Failed to load workspace").WithDetails(err.Error()))
-		}
-		return
-	}
-
-	existingSecret := ""
-	if tenant.APIPrincipalConfig != nil {
-		existingSecret = tenant.APIPrincipalConfig.HMACSecret
-	}
-	hmacSecret := existingSecret
-	if req.HMACSecret != nil {
-		provided := strings.TrimSpace(*req.HMACSecret)
-		// GET no longer discloses the plaintext secret, so a client that
-		// edits the config re-submits the redaction placeholder to mean
-		// "keep the existing secret". Treat it as a no-op instead of
-		// overwriting the real secret with "***".
-		if provided != apiPrincipalSecretRedacted {
-			hmacSecret = provided
-		}
-	}
-	cfg := &types.APIPrincipalConfig{
-		Mode:                  req.Mode,
-		DirectHeaderName:      defaultAPIPrincipalDirectHeader,
-		SignedTokenHeaderName: defaultAPIPrincipalTokenHeader,
-		RequireDirectHeader:   req.RequireDirectHeader,
-		HMACSecret:            hmacSecret,
-	}
-	if cfg.Mode == types.APIPrincipalModeSignedToken && strings.TrimSpace(cfg.HMACSecret) == "" {
-		c.Error(errors.NewValidationError("hmac_secret is required for signed_token mode"))
-		return
-	}
-	tenant.APIPrincipalConfig = cfg
-
-	updatedTenant, err := h.service.UpdateTenant(ctx, tenant)
-	if err != nil {
-		if appErr, ok := errors.IsAppError(err); ok {
-			c.Error(appErr)
-		} else {
-			c.Error(errors.NewInternalServerError("Failed to update API principal config").WithDetails(err.Error()))
-		}
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    apiPrincipalConfigForResponse(updatedTenant.APIPrincipalConfig),
-	})
-}
-
-// CreateAPIPrincipalTestToken godoc
-// @Summary      生成 API Playground 测试 JWT
-// @Description  使用空间已保存的 HMAC 密钥签发短期外部用户 JWT（Owner）
-// @Tags         空间管理
-// @Accept       json
-// @Produce      json
-// @Param        id       path      int                                  true  "空间ID"
-// @Param        request  body      handler.apiPrincipalTestTokenRequest true  "测试 Token 参数"
-// @Success      200      {object}  map[string]interface{}               "短期 JWT"
-// @Failure      400      {object}  errors.AppError                      "请求参数错误"
-// @Failure      403      {object}  errors.AppError                      "权限不足"
-// @Security     Bearer
-// @Router       /tenants/{id}/api-principal-test-token [post]
-func (h *TenantHandler) CreateAPIPrincipalTestToken(c *gin.Context) {
-	ctx := c.Request.Context()
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		c.Error(errors.NewBadRequestError("Invalid workspace ID"))
-		return
-	}
-
-	var req apiPrincipalTestTokenRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.Error(errors.NewValidationError("Invalid request data").WithDetails(err.Error()))
-		return
-	}
-
-	externalUserID := strings.TrimSpace(req.ExternalUserID)
-	if err := validateAPIPrincipalExternalUserID(externalUserID); err != nil {
-		c.Error(errors.NewValidationError("external_user_id is invalid").WithDetails(err.Error()))
-		return
-	}
-
-	tenant, err := h.service.GetTenantByID(ctx, id)
-	if err != nil {
-		if appErr, ok := errors.IsAppError(err); ok {
-			c.Error(appErr)
-		} else {
-			c.Error(errors.NewInternalServerError("Failed to load workspace").WithDetails(err.Error()))
-		}
-		return
-	}
-
-	cfg := tenant.APIPrincipalConfig
-	if cfg == nil || cfg.Mode != types.APIPrincipalModeSignedToken {
-		c.Error(errors.NewValidationError("signed_token mode is required"))
-		return
-	}
-	secret := strings.TrimSpace(cfg.HMACSecret)
-	if secret == "" {
-		c.Error(errors.NewValidationError("hmac_secret is required for signed_token mode"))
-		return
-	}
-
-	ttl := defaultAPIPrincipalTestTokenTTL
-	if req.ExpiresInSeconds > 0 {
-		ttl = time.Duration(req.ExpiresInSeconds) * time.Second
-	}
-	if ttl <= 0 || ttl > maxAPIPrincipalTestTokenTTL {
-		c.Error(errors.NewValidationError("expires_in_seconds must be between 1 and 3600"))
-		return
-	}
-
-	now := time.Now()
-	expiresAt := now.Add(ttl)
-	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub":       externalUserID,
-		"tenant_id": strconv.FormatUint(id, 10),
-		"aud":       "reliquary",
-		"iat":       now.Unix(),
-		"exp":       expiresAt.Unix(),
-	}).SignedString([]byte(secret))
-	if err != nil {
-		c.Error(errors.NewInternalServerError("Failed to create API principal test token").WithDetails(err.Error()))
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data": apiPrincipalTestTokenResponse{
-			Token:            token,
-			HeaderName:       defaultAPIPrincipalTokenHeader,
-			ExpiresInSeconds: int(ttl.Seconds()),
-			ExpiresAtUnix:    expiresAt.Unix(),
-			ExternalUserID:   externalUserID,
-		},
-	})
-}
-
-func validateAPIPrincipalExternalUserID(id string) error {
-	if id == "" {
-		return errors.NewValidationError("external_user_id is required")
-	}
-	if len(id) > maxAPIPrincipalExternalUserIDLen {
-		return errors.NewValidationError("external_user_id is too long")
-	}
-	for _, r := range id {
-		if r < 0x20 || r == 0x7f {
-			return errors.NewValidationError("external_user_id contains invalid characters")
-		}
-	}
-	return nil
-}
 
 // GetTenantKV godoc
 // @Summary      获取空间KV配置
@@ -770,12 +382,12 @@ func (h *TenantHandler) GetTenantKV(c *gin.Context) {
 	switch key {
 	case "web-search-config", "parser-engine-config":
 		if !dto.CanViewIntegrationSecrets(ctx) {
-			c.Error(errors.NewForbiddenError("integration configuration requires admin access"))
+			c.Error(errors.NewForbiddenError("integration configuration requires an authenticated user"))
 			return
 		}
 	case "storage-engine-config":
-		if !dto.CanViewIntegrationSecrets(ctx) && !dto.RoleFromContext(ctx).HasPermission(types.TenantRoleContributor) {
-			c.Error(errors.NewForbiddenError("storage configuration requires contributor access"))
+		if !dto.CanViewIntegrationSecrets(ctx) {
+			c.Error(errors.NewForbiddenError("storage configuration requires authentication"))
 			return
 		}
 	}
@@ -829,7 +441,7 @@ func (h *TenantHandler) UpdateTenantKV(c *gin.Context) {
 	switch key {
 	case "web-search-config", "parser-engine-config", "storage-engine-config":
 		if !dto.CanViewIntegrationSecrets(ctx) {
-			c.Error(errors.NewForbiddenError("integration configuration requires admin access"))
+			c.Error(errors.NewForbiddenError("integration configuration requires an authenticated user"))
 			return
 		}
 	}
@@ -1002,8 +614,7 @@ func (h *TenantHandler) GetTenantStorageEngineConfig(c *gin.Context) {
 		return
 	}
 	if !dto.CanViewIntegrationSecrets(ctx) {
-		// Content editors only need the team's default provider to create a KB.
-		// Connection details and credential fields remain admin-only.
+		// Project only the default provider when integration details are hidden.
 		provider := ""
 		if tenant.StorageEngineConfig != nil {
 			provider = tenant.StorageEngineConfig.DefaultProvider
@@ -1293,7 +904,7 @@ func (h *TenantHandler) GetTenantMemoryConfig(c *gin.Context) {
 	}
 	data := tenant.MemoryConfig
 	if data == nil {
-		// Memory is off until an admin turns it on: the feature retains what
+		// Memory is off until the user turns it on: the feature retains what
 		// users say across sessions, so it must not arrive enabled by default.
 		data = &types.MemoryConfig{}
 	}

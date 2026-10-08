@@ -26,9 +26,9 @@ func TestSyncItemError_UnmarshalAcceptsLegacyStringAndObject(t *testing.T) {
 	// New format: structured object round-trips.
 	in := SyncItemError{
 		Title:   "季度报告",
-		Code:    "feishu_api_error",
+		Code:    "fetch_failed",
 		Params:  map[string]string{"code": "1663"},
-		Message: "Feishu API error (code=1663); will retry",
+		Message: "RSS fetch error (code=1663); will retry",
 	}
 	b, err := json.Marshal([]SyncItemError{in})
 	if err != nil {
@@ -38,7 +38,7 @@ func TestSyncItemError_UnmarshalAcceptsLegacyStringAndObject(t *testing.T) {
 	if err := json.Unmarshal(b, &out); err != nil {
 		t.Fatalf("unmarshal structured: %v", err)
 	}
-	if len(out) != 1 || out[0].Code != "feishu_api_error" || out[0].Params["code"] != "1663" || out[0].Title != "季度报告" {
+	if len(out) != 1 || out[0].Code != "fetch_failed" || out[0].Params["code"] != "1663" || out[0].Title != "季度报告" {
 		t.Fatalf("structured form did not round-trip: %+v", out)
 	}
 }

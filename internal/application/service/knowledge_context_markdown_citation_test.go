@@ -143,33 +143,6 @@ func TestMarkdownCitationWorkflowExcerptKeepsNormalizedQuote(t *testing.T) {
 	require.Equal(t, quote, citation.Quote)
 }
 
-func TestKnowledgeContextMarkdownCitationRestrictedAliasVisibility(t *testing.T) {
-	db, ctx, svc := p2ContextFixture(t)
-	require.NoError(t, db.Create(&types.KnowledgeEntity{ID: "markdown-shared", TenantID: 9, EntityType: "company", CanonicalName: "Aurora", NormalizedName: "aurora"}).Error)
-	for _, source := range []struct{ kbID, id, body, alias string }{
-		{"energy-one", "markdown-visible", "ACME **Model** has 10 staff.", "Acme Model"},
-		{"energy-two", "markdown-hidden", "Secret *Model* has 20 staff.", "Secret Model"},
-	} {
-		p2ContextMessage(t, db, source.id, source.kbID, source.body)
-		require.NoError(t, db.Create(&types.KnowledgeEvidence{ID: source.id, TenantID: 9, KnowledgeBaseID: source.kbID, KnowledgeID: source.id, Version: 1, BodyHash: strings.Repeat("a", 64), Body: source.body, Status: types.KnowledgeEvidenceCurrent}).Error)
-		require.NoError(t, db.Create(&types.KnowledgeEntityAlias{ID: source.id, TenantID: 9, KnowledgeBaseID: source.kbID, EntityID: "markdown-shared", EntityType: "company", Alias: source.alias, NormalizedAlias: normalizeContextName(source.alias), EvidenceID: source.id, Quote: source.body}).Error)
-		require.NoError(t, db.Create(&types.KnowledgeFact{ID: source.id, TenantID: 9, KnowledgeBaseID: source.kbID, SubjectEntityID: "markdown-shared", Kind: types.KnowledgeFactAttribute, Predicate: "staff", Value: types.JSON(`10`), ValueType: "number", EvidenceID: source.id, Quote: source.body, Status: types.KnowledgeFactCurrent}).Error)
-	}
-	keyCtx := types.WithTenantAPIKeyScope(ctx, types.TenantAPIKeyScope{KeyID: 1, KnowledgeBaseIDs: types.StringArray{"energy-one"}, Capabilities: types.StringArray{"retrieve"}})
-	visible, err := svc.Query(keyCtx, "", types.KnowledgeContextQuery{Scope: "team", Entity: "Acme Model"})
-	require.NoError(t, err)
-	require.Len(t, visible.Entities, 1)
-	require.Equal(t, []string{"Acme Model"}, []string(visible.Entities[0].Aliases))
-	require.Len(t, visible.Facts, 1)
-	require.Equal(t, "energy-one", visible.Facts[0].KnowledgeBaseID)
-	require.Len(t, visible.Evidence, 1)
-	hidden, err := svc.Query(keyCtx, "", types.KnowledgeContextQuery{Scope: "team", Entity: "Secret Model"})
-	require.NoError(t, err)
-	require.Empty(t, hidden.Entities)
-	require.Empty(t, hidden.Facts)
-	require.False(t, contextAliasVisible("ACME staff", visible.Evidence), "Non-contiguous aliases must remain invisible")
-}
-
 func TestMarkdownCitationLongUnmatchedMarkerRuns(t *testing.T) {
 	for _, marker := range []string{"*", "_", "~", "`"} {
 		t.Run(marker, func(t *testing.T) {

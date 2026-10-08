@@ -1,27 +1,6 @@
 <template>
   <div class="integrations-settings">
     <div class="integrations-settings__body" >
-      <div v-if="tab === 'im'" class="section">
-        <div class="section-header">
-          <h2>{{ $t('agentEditor.im.title') }}</h2>
-          <p class="section-description">
-            {{ $t('agentEditor.im.description') }}
-            <a
-              href="http://192.168.1.146:3000/dikui/reliquary/src/branch/main/docs/IM%E9%9B%86%E6%88%90%E5%BC%80%E5%8F%91%E6%96%87%E6%A1%A3.md"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="doc-link"
-            >
-              {{ $t('agentEditor.im.docLink') }}
-              <t-icon name="link" class="link-icon" />
-            </a>
-          </p>
-        </div>
-        <IMChannelPanel v-model:filter-agent-id="filterAgentId" />
-      </div>
-
-
-
       <div v-if="tab === 'api'" class="section">
         <div class="section-header">
           <h2>{{ $t('integrations.api.title') }}</h2>
@@ -37,29 +16,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
-import IMChannelPanel from '@/components/IMChannelPanel.vue'
 import ApiIntegrationSettings from '@/views/integrations/ApiIntegrationSettings.vue'
 import type { IntegrationTab } from '@/config/integrations'
-
-const filterAgentId = ref('')
 
 const props = defineProps<{
   tab: IntegrationTab
 }>()
 
-const route = useRoute()
-
-function applyAgentFilterFromRoute() {
-  filterAgentId.value = (route.query.agentId as string) || ''
-}
-
-watch(
-  () => route.query.agentId,
-  applyAgentFilterFromRoute,
-  { immediate: true },
-)
 </script>
 
 <style scoped lang="less">

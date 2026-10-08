@@ -91,7 +91,7 @@ export default function (knowledgeBaseId?: string) {
         file_type: fileTypeSource ? String(fileTypeSource).toLocaleUpperCase() : '',
       }
     });
-        
+
         if (query.page === 1) {
           cardList.value = cardList_;
         } else {
@@ -146,11 +146,11 @@ export default function (knowledgeBaseId?: string) {
       MessagePlugin.error(t('error.invalidFileType'));
       return;
     }
-    
+
     if (kbFileTypeVerification(file)) {
       return;
     }
-    
+
     // 获取当前知识库ID
     let currentKbId: string | undefined = (route.params as any)?.kbId as string;
     if (!currentKbId && typeof window !== 'undefined') {
@@ -164,7 +164,7 @@ export default function (knowledgeBaseId?: string) {
       MessagePlugin.error(t('error.missingKbId'));
       return;
     }
-    
+
     // 获取当前选中的标签 ID
     const uiStore = useUIStore();
     const tagIdsToUpload = uiStore.selectedTagIds.length > 0 ? [...uiStore.selectedTagIds] : undefined;
@@ -238,7 +238,7 @@ export default function (knowledgeBaseId?: string) {
       .catch(() => {});
     getfDetails(item.id, 1);
   };
-  
+
   const getfDetails = (id: string, page: number) => {
     const requestGeneration = ++chunkRequestGeneration;
     details.chunkLoading = true;

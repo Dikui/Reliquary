@@ -2481,9 +2481,6 @@ func (r *installSkillRepo) DeleteSkill(
 	}
 	key := skillKey(tenantID, configID, skillID)
 	if _, matched := r.skills[key]; !matched {
-		// Mirrors the real repository: when the scoped key matches no skill,
-		// nothing is deleted at all. Deleting the user values here anyway would
-		// hide the exact data-loss bug the real DeleteSkill was fixed to avoid.
 		return nil
 	}
 	delete(r.skills, key)

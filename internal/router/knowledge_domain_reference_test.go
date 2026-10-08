@@ -19,7 +19,7 @@ import (
 func TestKnowledgeDomainDeleteReturnsStructuredReferenceConflict(t *testing.T) {
 	db := fusionFixtureDB(t)
 	domains := service.NewKnowledgeDomainService(db)
-	ctx := fusionContext(types.SingleTenantID, "administrator", types.TenantRoleAdmin)
+	ctx := fusionContext(types.SingleTenantID, "administrator")
 	domain, err := domains.Create(ctx, types.KnowledgeDomain{Name: "Used domain"})
 	require.NoError(t, err)
 	otherDomain, err := domains.Create(ctx, types.KnowledgeDomain{Name: "Other domain"})
@@ -46,11 +46,11 @@ func TestKnowledgeDomainDeleteReturnsStructuredReferenceConflict(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 	engine.Use(middleware.ErrorHandler(), fusionIdentityMiddleware())
-	guards := newRBACGuards(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	guards := newAccessGuards(nil, nil, nil)
 	RegisterKnowledgeDomainRoutes(engine.Group("/api/v1"), handler.NewKnowledgeDomainHandler(domains), guards)
 
 	response := fusionRequest(t, engine, http.MethodDelete, "/api/v1/knowledge-domains/"+domain.ID, "",
-		types.SingleTenantID, "administrator", types.TenantRoleAdmin)
+		types.SingleTenantID, "administrator")
 	require.Equal(t, http.StatusConflict, response.Code, response.Body.String())
 	var body struct {
 		Success bool `json:"success"`

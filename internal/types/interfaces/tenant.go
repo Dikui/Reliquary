@@ -23,15 +23,6 @@ type TenantService interface {
 	UpdateTenant(ctx context.Context, tenant *types.Tenant) (*types.Tenant, error)
 	// DeleteTenant deletes a tenant
 	DeleteTenant(ctx context.Context, id uint64) error
-	// ListAllTenants lists all tenants (for users with cross-tenant access permission)
-	// BulkSetStorageQuota overwrites every tenant's storage_quota with
-	// quotaBytes. Returns how many rows were affected. Used by the
-	// SystemAdmin "apply default to all tenants" action; bypasses the
-	// per-tenant whitelist on PUT /tenants/:id (which intentionally
-	// forbids storage_quota edits for Owners). quotaBytes must be > 0;
-	// callers are responsible for resolving GB→bytes.
-	// SearchTenants searches tenants with pagination and filters
-	// GetTenantByIDForUser gets a tenant by ID with permission check
 }
 
 // TenantRepository defines the tenant repository interface
@@ -55,12 +46,9 @@ type TenantRepository interface {
 }
 
 type TenantAPIKeyCreateRequest struct {
-	TenantID         uint64
-	Name             string
-	FullAccess       bool
-	KnowledgeBaseIDs []string
-	Capabilities     []string
-	ExpiresAt        *time.Time
+	TenantID  uint64
+	Name      string
+	ExpiresAt *time.Time
 }
 
 type TenantAPIKeyCreateResult struct {
@@ -71,13 +59,10 @@ type TenantAPIKeyCreateResult struct {
 // TenantAPIKeyUpdateRequest 修改已创建租户 API Key 的可配置属性。
 // 配置语义与创建接口一致：FullAccess 为 true 时忽略细粒度能力和知识库范围。
 type TenantAPIKeyUpdateRequest struct {
-	TenantID         uint64
-	APIKeyID         uint64
-	Name             string
-	FullAccess       bool
-	KnowledgeBaseIDs []string
-	Capabilities     []string
-	ExpiresAt        *time.Time
+	TenantID  uint64
+	APIKeyID  uint64
+	Name      string
+	ExpiresAt *time.Time
 }
 
 type TenantAPIKeyRepository interface {

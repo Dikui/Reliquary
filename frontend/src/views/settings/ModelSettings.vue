@@ -7,7 +7,7 @@
           <p class="section-description">{{ $t('modelSettings.description') }}</p>
         </div>
         <t-button
-          v-if="authStore.hasRole('admin')"
+          v-if="authStore.isLoggedIn"
           type="button"
           theme="primary"
           variant="text"
@@ -23,7 +23,7 @@
       <div class="builtin-models-hint" role="note">
         <p class="builtin-hint-label">{{ $t('modelSettings.builtinModels.title') }}</p>
         <p class="builtin-hint-text">
-          {{ $t(authStore.isSystemAdmin
+          {{ $t(authStore.isLoggedIn
             ? 'modelSettings.builtinModels.descriptionAdmin'
             : 'modelSettings.builtinModels.description') }}
         </p>
@@ -46,7 +46,7 @@
     </t-tabs>
 
     <t-loading :loading="loading" size="small" class="model-list-loading">
-      <div v-if="!loading && filteredModels.length === 0 && !authStore.hasRole('admin')" class="empty-state">
+      <div v-if="!loading && filteredModels.length === 0 && !authStore.isLoggedIn" class="empty-state">
         <t-empty :description="emptyHint" />
       </div>
       <div v-else-if="!loading" class="model-grid">
@@ -68,7 +68,7 @@
               <h3 class="model-card__title">{{ modelDisplayName(model) }}</h3>
               <span v-if="model.isBuiltin" class="model-card__lock" :title="$t('modelSettings.builtinTag')"
                 :aria-label="$t('modelSettings.builtinTag')">
-                <t-icon :name="authStore.isSystemAdmin ? 'edit-1' : 'lock-on'" />
+                <t-icon :name="authStore.isLoggedIn ? 'edit-1' : 'lock-on'" />
               </span>
               <div v-if="canManageModel(model)" class="model-card__actions" @click.stop>
                 <t-dropdown :options="getModelOptions(model._modelType, model)" placement="bottom-right" attach="body"
@@ -126,7 +126,7 @@
           </div>
         </div>
         <button
-          v-if="authStore.hasRole('admin')"
+          v-if="authStore.isLoggedIn"
           type="button"
           class="model-card model-card--add"
           data-guide="settings-add-model"
@@ -506,19 +506,17 @@ const openAddDialog = () => {
   showDialog.value = true
 }
 
-// Tenant Admin+ manages tenant models; only SystemAdmin manages shared
 // built-in models. The backend repeats this distinction authoritatively.
 const canEditModel = (model: any) =>
-  model.isBuiltin ? authStore.isSystemAdmin : authStore.hasRole('admin')
+  model.isBuiltin ? authStore.isLoggedIn : authStore.isLoggedIn
 
 const isModelCardClickable = (model: any) => canEditModel(model)
 
 const canManageModel = (model: any) => canEditModel(model)
 
 // Built-in lifecycle remains deployment-managed (YAML / SQL). The UI only
-// exposes configuration and credential editing to SystemAdmin.
 const canDeleteModel = (model: any) =>
-  authStore.hasRole('admin') && !model.isBuiltin
+  authStore.isLoggedIn && !model.isBuiltin
 
 const onModelCardClick = (event: Event, type: ModelType, model: any) => {
   if (!isModelCardClickable(model)) return
@@ -534,11 +532,11 @@ const onModelCardClick = (event: Event, type: ModelType, model: any) => {
 
 // 编辑模型
 const editModel = (type: ModelType, model: any) => {
-  if (model.isBuiltin && !authStore.isSystemAdmin) {
+  if (model.isBuiltin && !authStore.isLoggedIn) {
     MessagePlugin.warning(t('modelSettings.toasts.builtinCannotEdit'))
     return
   }
-  if (!model.isBuiltin && !authStore.hasRole('admin')) {
+  if (!model.isBuiltin && !authStore.isLoggedIn) {
     return
   }
   currentModelType.value = type
@@ -745,7 +743,7 @@ const getModelOptions = (type: ModelType, model: any) => {
   const options: any[] = []
 
   if (model.isBuiltin) {
-    if (authStore.isSystemAdmin) {
+    if (authStore.isLoggedIn) {
       options.push({
         content: t('common.edit'),
         value: `edit-${type}-${model.id}`
@@ -755,10 +753,8 @@ const getModelOptions = (type: ModelType, model: any) => {
   }
 
   // Models are tenant-wide infrastructure (LLM credentials); the
-  // backend gates every mutation behind Admin+ (see RegisterModelRoutes).
-  // Non-Admins get an empty action menu — viewing is fine, but editing,
   // copying (also goes through createModel), and deleting are not.
-  if (!authStore.hasRole('admin')) {
+  if (!authStore.isLoggedIn) {
     return options
   }
 

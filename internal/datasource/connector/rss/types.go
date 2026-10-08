@@ -228,7 +228,7 @@ func firstNonEmpty(values ...string) string {
 }
 
 // sanitizeFileName removes characters invalid in filenames and truncates to a
-// safe length at a UTF-8 rune boundary (mirrors the Yuque connector).
+// safe length at a UTF-8 rune boundary .
 func sanitizeFileName(name string) string {
 	name = strings.TrimSpace(name)
 	if name == "" {

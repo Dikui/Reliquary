@@ -120,7 +120,6 @@ type PipelineState struct {
 	RenderedContexts     string                  `json:"-"`
 	ChatResponse         *ChatResponse           `json:"-"`
 	ImageDescription     string                  `json:"-"`
-	QuotedContext        string                  `json:"-"` // Quoted message text, injected at LLM prompt stage
 	SystemPromptOverride string                  `json:"-"`
 	// MemoryPrompt is the long-term memory envelope appended to the system
 	// prompt for this turn, empty when memory is off or nothing matched.
@@ -237,7 +236,6 @@ func (c *ChatManage) Clone() *ChatManage {
 			RewriteQuery:         c.RewriteQuery,
 			Intent:               c.Intent,
 			ImageDescription:     c.ImageDescription,
-			QuotedContext:        c.QuotedContext,
 			SystemPromptOverride: c.SystemPromptOverride,
 			MemoryPrompt:         c.MemoryPrompt,
 			UsedMemories:         append(UsedMemories(nil), c.UsedMemories...),

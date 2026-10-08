@@ -8,14 +8,13 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"reliquary/internal/application/service"
-	"reliquary/internal/config"
 	"reliquary/internal/handler"
 	"reliquary/internal/middleware"
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 )
 
-func TestIssue06FocusRoutesUseExistingRoleAndTenantRules(t *testing.T) {
+func TestIssue06FocusRoutesUseTenantRules(t *testing.T) {
 	db := pgtest.Open(t)
 	require.NoError(t, db.Create(&types.Tenant{ID: 1, Name: "Focus team"}).Error)
 	domain := service.BuiltinAIKnowledgeDomain()
@@ -27,18 +26,15 @@ func TestIssue06FocusRoutesUseExistingRoleAndTenantRules(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 	engine.Use(middleware.ErrorHandler(), fusionIdentityMiddleware())
-	enabled := true
-	guards := newRBACGuards(&config.Config{Tenant: &config.TenantConfig{EnableRBAC: &enabled}}, nil, nil, nil, nil, nil, nil, nil, nil)
+	guards := newAccessGuards(nil, nil, nil)
 	RegisterKnowledgeContextRoutes(engine.Group("/api/v1"), handler.NewKnowledgeContextHandler(service.NewKnowledgeContextService(db, nil), nil), guards)
 	for _, target := range []string{"/api/v1/knowledge-context/entities/object/star", "/api/v1/knowledge-context/topics/topic/star"} {
-		viewer := fusionRequest(t, engine, http.MethodPut, target, "", 1, "viewer", types.TenantRoleViewer)
-		require.Equal(t, http.StatusForbidden, viewer.Code, viewer.Body.String())
-		foreign := fusionRequest(t, engine, http.MethodPut, target, "", 2, "editor", types.TenantRoleContributor)
+		foreign := fusionRequest(t, engine, http.MethodPut, target, "", 2, "editor")
 		require.Equal(t, http.StatusNotFound, foreign.Code, foreign.Body.String())
-		added := fusionRequest(t, engine, http.MethodPut, target, "", 1, "editor", types.TenantRoleContributor)
+		added := fusionRequest(t, engine, http.MethodPut, target, "", 1, "editor")
 		require.Equal(t, http.StatusOK, added.Code, added.Body.String())
 	}
-	focus := fusionRequest(t, engine, http.MethodGet, "/api/v1/knowledge-context/focus?scope=team", "", 1, "viewer", types.TenantRoleViewer)
+	focus := fusionRequest(t, engine, http.MethodGet, "/api/v1/knowledge-context/focus?scope=team", "", 1, "personal-user")
 	require.Equal(t, http.StatusOK, focus.Code, focus.Body.String())
 	var response struct {
 		Data types.KnowledgeFocusScope `json:"data"`
@@ -49,7 +45,7 @@ func TestIssue06FocusRoutesUseExistingRoleAndTenantRules(t *testing.T) {
 	require.Len(t, response.Data.AvailableTopics, 1)
 	require.Equal(t, "Sources", response.Data.StarredTopics[0].KnowledgeBaseName)
 	for _, target := range []string{"/api/v1/knowledge-context/entities/object/star", "/api/v1/knowledge-context/topics/topic/star"} {
-		removed := fusionRequest(t, engine, http.MethodDelete, target, "", 1, "editor", types.TenantRoleContributor)
+		removed := fusionRequest(t, engine, http.MethodDelete, target, "", 1, "editor")
 		require.Equal(t, http.StatusOK, removed.Code, removed.Body.String())
 	}
 }

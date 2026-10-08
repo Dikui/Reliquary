@@ -49,47 +49,26 @@ func TestIsResourceNotFound_RecognisesKnowledgeSentinel(t *testing.T) {
 		"a genuine transient error must NOT be classified as not-found")
 }
 
-// ---------- Agent-share fallback ----------
-
-// ---------- EnableRBAC=false rollout window ----------
-
-func TestRequireKBAccessTeamRoleMatrix(t *testing.T) {
-	required := []types.TenantRole{types.TenantRoleViewer, types.TenantRoleContributor, types.TenantRoleAdmin, types.TenantRoleOwner}
-	cases := []struct {
-		role    types.TenantRole
-		allowed [4]bool
-	}{
-		{types.TenantRoleViewer, [4]bool{true, false, false, false}},
-		{types.TenantRoleContributor, [4]bool{true, true, false, false}},
-		{types.TenantRoleAdmin, [4]bool{true, true, true, false}},
-		{types.TenantRoleOwner, [4]bool{true, true, true, true}},
-	}
-	for _, tc := range cases {
-		for i, floor := range required {
-			t.Run(string(tc.role)+"/"+string(floor), func(t *testing.T) {
-				c, _ := gin.CreateTestContext(httptest.NewRecorder())
-				c.Params = gin.Params{{Key: "id", Value: "kb"}}
-				ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
-				ctx = context.WithValue(ctx, types.TenantRoleContextKey, tc.role)
-				c.Request = httptest.NewRequest("GET", "/", nil).WithContext(ctx)
-				RequireKBAccess(KBIDFromParam("id"), floor, &stubKBLookup{kbs: map[string]*types.KnowledgeBase{"kb": {ID: "kb", TenantID: 1, CreatorID: "another-member"}}}, cfgRBAC(true))(c)
-				require.Equal(t, !tc.allowed[i], c.IsAborted())
-				if !c.IsAborted() {
-					a, ok := KBAccessFromContext(c)
-					require.True(t, ok)
-					require.Equal(t, tc.role, a.Permission)
-				}
-			})
-		}
-	}
+func TestRequireKBAccessWithinWorkspace(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Params = gin.Params{{Key: "id", Value: "kb"}}
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
+	c.Request = httptest.NewRequest("GET", "/", nil).WithContext(ctx)
+	RequireKBAccess(KBIDFromParam("id"), &stubKBLookup{kbs: map[string]*types.KnowledgeBase{"kb": {ID: "kb", TenantID: 1}}})(c)
+	require.False(t, c.IsAborted())
+	access, ok := KBAccessFromContext(c)
+	require.True(t, ok)
+	require.Equal(t, uint64(1), access.EffectiveTenantID)
+	require.Equal(t, "kb", access.KnowledgeBase.ID)
 }
+
 func TestRequireKBAccessRejectsOutsideTeam(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Params = gin.Params{{Key: "id", Value: "kb"}}
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
-	ctx = context.WithValue(ctx, types.TenantRoleContextKey, types.TenantRoleOwner)
+
 	c.Request = httptest.NewRequest("GET", "/", nil).WithContext(ctx)
-	RequireKBAccess(KBIDFromParam("id"), types.TenantRoleViewer, &stubKBLookup{kbs: map[string]*types.KnowledgeBase{"kb": {ID: "kb", TenantID: 2}}}, cfgRBAC(true))(c)
+	RequireKBAccess(KBIDFromParam("id"), &stubKBLookup{kbs: map[string]*types.KnowledgeBase{"kb": {ID: "kb", TenantID: 2}}})(c)
 	require.True(t, c.IsAborted())
 }
 func TestRequireKBAccessNotFoundAndLookupFailure(t *testing.T) {
@@ -97,9 +76,9 @@ func TestRequireKBAccessNotFoundAndLookupFailure(t *testing.T) {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
 		c.Params = gin.Params{{Key: "id", Value: "kb"}}
 		ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
-		ctx = context.WithValue(ctx, types.TenantRoleContextKey, types.TenantRoleViewer)
+
 		c.Request = httptest.NewRequest("GET", "/", nil).WithContext(ctx)
-		RequireKBAccess(KBIDFromParam("id"), types.TenantRoleViewer, &stubKBLookup{getErr: err}, cfgRBAC(true))(c)
+		RequireKBAccess(KBIDFromParam("id"), &stubKBLookup{getErr: err})(c)
 		require.True(t, c.IsAborted())
 		require.NotEmpty(t, c.Errors)
 	}

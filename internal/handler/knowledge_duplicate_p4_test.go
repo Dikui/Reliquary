@@ -27,7 +27,7 @@ func TestP4DuplicateManualKnowledgeHTTPReturnsExistingMessage(t *testing.T) {
 	router := gin.New()
 	router.Use(middleware.ErrorHandler(), func(c *gin.Context) {
 		c.Set(types.TenantIDContextKey.String(), uint64(1))
-		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), types.TenantRoleContextKey, types.TenantRoleContributor))
+		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), types.UserIDContextKey, "personal-user"))
 		c.Next()
 	})
 	handler := &KnowledgeHandler{kbService: &stubFolderKBService{}, kgService: duplicateManualKnowledgeService{}}

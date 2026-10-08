@@ -717,22 +717,6 @@ func (s *wikiIngestService) ProcessWikiIngest(ctx context.Context, t *asynq.Task
 
 	totalPagesAffected = len(allPagesAffected)
 
-	// Project one bounded summary into the knowledge-base activity feed.
-	// Detailed per-document Wiki log rows duplicated that feed and were never
-	// consumed by retrieval, so the activity record is now written directly.
-	wikiActivityActions := make(map[string]int, 2)
-	for _, op := range pendingOps {
-		if op.Op == WikiOpRetract {
-			wikiActivityActions["retract"]++
-		}
-	}
-	for _, r := range docResults {
-		if r != nil {
-			wikiActivityActions["ingest"]++
-		}
-	}
-	RecordWikiContentActivity(tailCtx, s.audit, payload.TenantID, payload.KnowledgeBaseID, wikiActivityActions)
-
 	// Publish freshly-generated pages immediately (NOT deferred to finalize):
 	// users should see a document's wiki pages as soon as their content is
 	// written, not after the debounce window. This is a cheap status flip.

@@ -46,7 +46,7 @@ export function useStream() {
 
     // 获取API配置
     const apiUrl = getApiBaseUrl();
-    
+
     const token = localStorage.getItem('reliquary_token');
     if (!token) {
       error.value = i18n.global.t('error.tokenNotFound');
@@ -69,10 +69,10 @@ export function useStream() {
           ? `${apiUrl}${params.url}/${params.session_id}`
           : `${apiUrl}${params.url}/${params.session_id}?message_id=${params.query}`;
       console.log(`[TTFB] request:start request_id=${requestID} url=${url} sent_at=${Date.now()}`);
-      
+
       // Prepare POST body with required fields for agent-chat
       // knowledge_base_ids array and agent_enabled can update Session's SessionAgentConfig
-      const postBody: any = { 
+      const postBody: any = {
         query: params.query,
         agent_enabled: params.agent_enabled !== undefined ? params.agent_enabled : true
       };
@@ -132,7 +132,7 @@ export function useStream() {
         body: params.method === 'POST' ? sanitizeStreamRequestBody(postBody) : null,
         sentAt: Date.now(),
       };
-      
+
       await fetchEventSource(url, {
         method: params.method,
         headers: {

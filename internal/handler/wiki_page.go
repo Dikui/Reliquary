@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	stderrors "errors"
 	"fmt"
 	"net/http"
@@ -20,10 +19,10 @@ import (
 
 // WikiPageHandler handles HTTP requests for wiki page operations
 type WikiPageHandler struct {
-	wikiService   interfaces.WikiPageService
-	kbService     interfaces.KnowledgeBaseService
-	lintService   *service.WikiLintService
-	auditService  interfaces.AuditLogService
+	wikiService interfaces.WikiPageService
+	kbService   interfaces.KnowledgeBaseService
+	lintService *service.WikiLintService
+
 	memoryService interfaces.MemoryService
 	taskEnqueuer  interfaces.TaskEnqueuer
 }
@@ -33,15 +32,15 @@ func NewWikiPageHandler(
 	wikiService interfaces.WikiPageService,
 	kbService interfaces.KnowledgeBaseService,
 	lintService *service.WikiLintService,
-	auditService interfaces.AuditLogService,
+
 	memoryService interfaces.MemoryService,
 	taskEnqueuer interfaces.TaskEnqueuer,
 ) *WikiPageHandler {
 	return &WikiPageHandler{
-		wikiService:   wikiService,
-		kbService:     kbService,
-		lintService:   lintService,
-		auditService:  auditService,
+		wikiService: wikiService,
+		kbService:   kbService,
+		lintService: lintService,
+
 		memoryService: memoryService,
 		taskEnqueuer:  taskEnqueuer,
 	}
@@ -426,21 +425,7 @@ func (h *WikiPageHandler) CreatePage(c *gin.Context) {
 		return
 	}
 
-	h.recordManualWikiActivity(ctx, created, "manual_create")
 	c.JSON(http.StatusCreated, created)
-}
-
-// recordManualWikiActivity projects a manual page mutation directly into the
-// knowledge-base activity feed. Activity recording is best-effort and must not
-// fail the edit itself.
-func (h *WikiPageHandler) recordManualWikiActivity(
-	ctx context.Context, page *types.WikiPage, action string,
-) {
-	if page == nil {
-		return
-	}
-	service.RecordWikiContentActivity(ctx, h.auditService, page.TenantID,
-		page.KnowledgeBaseID, map[string]int{action: 1})
 }
 
 // GetPage godoc
@@ -582,7 +567,7 @@ func (h *WikiPageHandler) UpdatePage(c *gin.Context) {
 	}
 
 	if updated.Version != existing.Version {
-		h.recordManualWikiActivity(ctx, updated, "manual_edit")
+
 	}
 	c.JSON(http.StatusOK, updated)
 }
@@ -716,7 +701,6 @@ func (h *WikiPageHandler) RevertPage(c *gin.Context) {
 		return
 	}
 
-	h.recordManualWikiActivity(ctx, updated, "revert")
 	c.JSON(http.StatusOK, updated)
 }
 
@@ -744,8 +728,6 @@ func (h *WikiPageHandler) DeletePage(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	// Load first so the log entry can carry the page title after deletion.
-	page, _ := h.wikiService.GetPageBySlug(ctx, kbID, slug)
 
 	if err := h.wikiService.DeletePage(ctx, kbID, slug); err != nil {
 		if stderrors.Is(err, repository.ErrWikiPageNotFound) {
@@ -756,7 +738,6 @@ func (h *WikiPageHandler) DeletePage(c *gin.Context) {
 		return
 	}
 
-	h.recordManualWikiActivity(ctx, page, "manual_delete")
 	c.Status(http.StatusNoContent)
 }
 

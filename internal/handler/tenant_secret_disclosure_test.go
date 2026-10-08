@@ -51,7 +51,7 @@ func (s *stubTenantService) GetTenantByIDForUser(context.Context, uint64, string
 	return s.tenant, nil
 }
 
-func newTenantHandlerTestEngine(t *testing.T, role types.TenantRole, tenant *types.Tenant) *gin.Engine {
+func newTenantHandlerTestEngine(t *testing.T, tenant *types.Tenant) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	h := &TenantHandler{service: &stubTenantService{tenant: tenant}}
@@ -61,7 +61,6 @@ func newTenantHandlerTestEngine(t *testing.T, role types.TenantRole, tenant *typ
 	r.Use(func(c *gin.Context) {
 		ctx := c.Request.Context()
 		ctx = context.WithValue(ctx, types.TenantIDContextKey, tenant.ID)
-		ctx = context.WithValue(ctx, types.TenantRoleContextKey, role)
 		ctx = context.WithValue(ctx, types.TenantInfoContextKey, tenant)
 		c.Request = c.Request.WithContext(ctx)
 		c.Set(types.TenantIDContextKey.String(), tenant.ID)
@@ -73,34 +72,9 @@ func newTenantHandlerTestEngine(t *testing.T, role types.TenantRole, tenant *typ
 	return r
 }
 
-func TestGetTenantKVViewerForbiddenForSecretKeys(t *testing.T) {
+func TestGetTenantKVReturnsRedactedSecrets(t *testing.T) {
 	tenant := secretTenantFixture()
-	engine := newTenantHandlerTestEngine(t, types.TenantRoleViewer, tenant)
-
-	for _, key := range []string{"web-search-config", "parser-engine-config", "storage-engine-config"} {
-		t.Run(key, func(t *testing.T) {
-			rec := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, "/tenants/kv/"+key, nil)
-			engine.ServeHTTP(rec, req)
-			require.Equal(t, http.StatusForbidden, rec.Code)
-		})
-	}
-}
-
-func TestGetTenantViewerDoesNotLeakSecrets(t *testing.T) {
-	tenant := secretTenantFixture()
-	engine := newTenantHandlerTestEngine(t, types.TenantRoleViewer, tenant)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/tenants/42", nil)
-	engine.ServeHTTP(rec, req)
-	require.Equal(t, http.StatusOK, rec.Code)
-	assert.NotContains(t, rec.Body.String(), "tenant-api-key-123")
-}
-
-func TestGetTenantKVAdminReturnsRedactedSecrets(t *testing.T) {
-	tenant := secretTenantFixture()
-	engine := newTenantHandlerTestEngine(t, types.TenantRoleAdmin, tenant)
+	engine := newTenantHandlerTestEngine(t, tenant)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/tenants/kv/parser-engine-config", nil)
@@ -134,10 +108,10 @@ func secretTenantFixture() *types.Tenant {
 	}
 }
 
-func TestGetTenantKVViewerAllowedForNonSecretKey(t *testing.T) {
+func TestGetTenantKVAllowedForNonSecretKey(t *testing.T) {
 	tenant := secretTenantFixture()
 	tenant.RetrievalConfig = &types.RetrievalConfig{}
-	engine := newTenantHandlerTestEngine(t, types.TenantRoleViewer, tenant)
+	engine := newTenantHandlerTestEngine(t, tenant)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/tenants/kv/retrieval-config", nil)
@@ -145,34 +119,10 @@ func TestGetTenantKVViewerAllowedForNonSecretKey(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 }
 
-func TestGetTenantKVContributorStorageConfigContainsOnlyDefaultProvider(t *testing.T) {
-	tenant := secretTenantFixture()
-	tenant.StorageEngineConfig.DefaultProvider = "minio"
-	tenant.StorageEngineConfig.Local = &types.LocalEngineConfig{PathPrefix: "/private/storage"}
-	tenant.StorageEngineConfig.MinIO.Endpoint = "https://storage.example.test"
-	tenant.StorageEngineConfig.MinIO.AccessKeyID = "minio-access-key"
-	tenant.StorageEngineConfig.S3 = &types.S3EngineConfig{AccessKey: "s3-access-key", SecretKey: "s3-secret-key"}
-	engine := newTenantHandlerTestEngine(t, types.TenantRoleContributor, tenant)
-
-	rec := httptest.NewRecorder()
-	engine.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/tenants/kv/storage-engine-config", nil))
-	require.Equal(t, http.StatusOK, rec.Code)
-	require.JSONEq(t, `{"success":true,"data":{"default_provider":"minio"}}`, rec.Body.String())
-	assert.Equal(t, "minio-secret-789", tenant.StorageEngineConfig.MinIO.SecretAccessKey)
-	assert.Equal(t, "s3-secret-key", tenant.StorageEngineConfig.S3.SecretKey)
-
-	write := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPut, "/tenants/kv/storage-engine-config", strings.NewReader(`{"default_provider":"local"}`))
-	request.Header.Set("Content-Type", "application/json")
-	engine.ServeHTTP(write, request)
-	require.Equal(t, http.StatusForbidden, write.Code)
-	assert.Equal(t, "minio", tenant.StorageEngineConfig.DefaultProvider)
-}
-
-func TestGetTenantKVContributorStorageConfigWithoutStoredConfig(t *testing.T) {
+func TestGetTenantKVUserStorageConfigWithoutStoredConfig(t *testing.T) {
 	tenant := secretTenantFixture()
 	tenant.StorageEngineConfig = nil
-	engine := newTenantHandlerTestEngine(t, types.TenantRoleContributor, tenant)
+	engine := newTenantHandlerTestEngine(t, tenant)
 	rec := httptest.NewRecorder()
 	engine.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/tenants/kv/storage-engine-config", nil))
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -181,7 +131,7 @@ func TestGetTenantKVContributorStorageConfigWithoutStoredConfig(t *testing.T) {
 
 func TestPutTenantParserConfigAdminPreservesRedactedSecrets(t *testing.T) {
 	tenant := secretTenantFixture()
-	engine := newTenantHandlerTestEngine(t, types.TenantRoleAdmin, tenant)
+	engine := newTenantHandlerTestEngine(t, tenant)
 
 	body := `{"mineru_api_key":"***","mineru_endpoint":"https://example.com/mineru"}`
 	rec := httptest.NewRecorder()

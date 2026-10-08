@@ -101,10 +101,6 @@
                      (instead of embedding it in the first date group, which
                      appears/disappears while a bucket loads) prevents the
                      top-right control from jumping when switching session type. -->
-                <div v-if="showSessionSourceFilter && !batchMode" class="session-list-scope-header">
-                    <SessionSourceFilter inline :emphasized="sessionScopeFilterPinned" :sources="sessionSourceOptions"
-                        :current="activeSessionBucketKey" @select="switchSessionBucket" />
-                </div>
                 <template v-if="sessionListBooting && !hasAnySession">
                     <div v-for="n in 4" :key="'skel-' + n" class="submenu_item_p session-chat-row">
                         <div class="session-list-row session-list-row--flat">
@@ -197,7 +193,6 @@ import { onMounted, onUnmounted, watch, computed, ref, h, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getSessionsList, batchDelSessions, deleteAllSessions, getSession } from "@/api/chat/index";
 import { useChatResourcesStore } from '@/stores/chatResources';
-import { listAllIMChannels } from '@/api/agent/index';
 import SessionSidebarRow from './SessionSidebarRow.vue';
 import {
     clearSession,
@@ -207,7 +202,6 @@ import {
     setSessionPinned,
     type SessionMutationDetail,
 } from './sessionMutations';
-import SessionSourceFilter from './SessionSourceFilter.vue';
 import {
     SIDEBAR_BUCKET_PAGE_SIZE,
     applyBucketCountProbe,
@@ -226,7 +220,6 @@ import {
 import type { SessionForGrouping } from './sessionGrouping';
 import {
     classifyDateBucket,
-    configuredPlatforms,
     groupSessionsByDate,
     originGroupKey,
     resolveSessionOrigin,
@@ -234,9 +227,7 @@ import {
 } from './sessionGrouping';
 import {
     DEFAULT_SESSION_BUCKET_KEY,
-    buildSessionSourceOptions,
     findSessionBucketKey,
-    shouldShowSessionSourceFilter,
 } from './sessionSidebarSourceFilter';
 import { logout as logoutApi } from '@/api/auth';
 import { useMenuStore } from '@/stores/menu';
@@ -249,16 +240,6 @@ import UserMenu from '@/components/UserMenu.vue';
 import { useI18n } from 'vue-i18n';
 
 const chatResources = useChatResourcesStore();
-// Platform logos reused from IMChannelsOverviewPanel — keeps the session list
-// visually consistent with the channels admin view.
-import feishuLogo from '@/assets/img/im/feishu.svg';
-
-const PLATFORM_LOGO: Record<string, string> = {
-    feishu: feishuLogo,
-};
-
-const platformLogo = (p: string): string => (p ? PLATFORM_LOGO[p] || '' : '');
-
 const { t } = useI18n();
 const usemenuStore = useMenuStore();
 const authStore = useAuthStore();
@@ -288,31 +269,8 @@ let bucketRequestToken = 0;
 const sessionListBooting = ref(false);
 const currentSecondpath = ref('');
 const scrollContainer = ref<HTMLElement | null>(null);
-const imPlatforms = ref<string[]>([]);
 const activeSessionBucketKey = ref(DEFAULT_SESSION_BUCKET_KEY);
 const sessionListCanScroll = ref(false);
-const visibleChannelBuckets = computed(() =>
-    bucketOrder.value
-        .map((key) => sessionBuckets.value[key])
-        .filter((bucket): bucket is SidebarSessionBucket => !!bucket && isChannelBucket(bucket) && bucketVisible(bucket)),
-);
-const showSessionSourceFilter = computed(() =>
-    shouldShowSessionSourceFilter(visibleChannelBuckets.value.length),
-);
-const sessionScopeFilterPinned = computed(() =>
-    activeSessionBucketKey.value !== DEFAULT_SESSION_BUCKET_KEY,
-);
-const sessionSourceOptions = computed(() =>
-    buildSessionSourceOptions(
-        t('menu.myChats'),
-        visibleChannelBuckets.value.map((bucket) => ({
-            key: bucket.key,
-            label: bucket.label,
-            platform: bucket.platform,
-        })),
-        (platform) => platformLogo(platform),
-    ),
-);
 const activeBucket = computed(() => sessionBuckets.value[activeSessionBucketKey.value]);
 const hasAnySession = computed(() =>
     Object.values(sessionBuckets.value).some((bucket) => bucket.items.length > 0),
@@ -661,7 +619,6 @@ const mapSessionRow = (item: any) => ({
     updated_at: item.updated_at,
     is_pinned: !!item.is_pinned,
     pinned_at: item.pinned_at || null,
-    im_platform: item.im_platform || '',
     description: item.description || '',
     user_id: item.user_id || '',
 });
@@ -682,7 +639,6 @@ const menuChildToSessionRow = (item: Record<string, unknown>): SessionForGroupin
         is_pinned: !!item.is_pinned,
         created_at: typeof item.created_at === 'string' ? item.created_at : undefined,
         updated_at: typeof item.updated_at === 'string' ? item.updated_at : undefined,
-        im_platform: typeof item.im_platform === 'string' ? item.im_platform : '',
         description: typeof item.description === 'string' ? item.description : '',
         user_id: typeof item.user_id === 'string' ? item.user_id : '',
     };
@@ -710,15 +666,7 @@ const ensureSessionInSidebar = (sessionId: string) => {
     total.value = flattenBucketItems(sessionBuckets.value, bucketOrder.value).length;
 };
 
-const rebuildBucketDefinitions = () => buildBucketDefinitions(
-    imPlatforms.value,
-    {
-        web: t('menu.myChats'),
-        imPlatform: (platform) => t(`agentEditor.im.${platform}`),
-        api: t('menu.apiChats'),
-    },
-    { includeAdminChannelBuckets: authStore.hasRole('admin') },
-);
+const rebuildBucketDefinitions = () => buildBucketDefinitions({ web: t('menu.myChats') });
 
 /** 首屏轻量探测各渠道是否有会话（page_size=1 只取 total），避免展示空文件夹 */
 const probeChannelBucketCounts = async (keys: string[], token: number) => {
@@ -728,7 +676,7 @@ const probeChannelBucketCounts = async (keys: string[], token: number) => {
             const bucket = sessionBuckets.value[key];
             if (!bucket) return;
             try {
-                const res: any = await getSessionsList(1, 1, bucket.apiSource);
+                const res: any = await getSessionsList(1, 1);
                 if (token !== bucketRequestToken) return;
                 sessionBuckets.value = {
                     ...sessionBuckets.value,
@@ -757,7 +705,7 @@ const loadBucketPage = async (key: string, page?: number, token?: number) => {
     };
 
     try {
-        const res: any = await getSessionsList(nextPage, SIDEBAR_BUCKET_PAGE_SIZE, bucket.apiSource);
+        const res: any = await getSessionsList(nextPage, SIDEBAR_BUCKET_PAGE_SIZE);
         if (activeToken !== bucketRequestToken) return;
         const rows = (res?.data || []).map((item: any) => mapSessionRow(item));
         const current = sessionBuckets.value[key];
@@ -810,7 +758,6 @@ const syncActiveBucketFromChat = async (sessionId: string | undefined) => {
             const res: any = await getSession(sessionId);
             const candidate = originGroupKey(resolveSessionOrigin({
                 id: sessionId,
-                im_platform: res?.data?.im_platform || '',
                 description: res?.data?.description || '',
                 user_id: res?.data?.user_id || '',
             }));
@@ -897,7 +844,6 @@ async function loadCurrentKbInfo(kbId: string) {
         currentKbInfo.value = null
     }
 }
-const loadSessionOriginMeta = async () => { try { const res: any = await listAllIMChannels(); imPlatforms.value = configuredPlatforms(res?.data || []); } catch { imPlatforms.value = []; } };
 
 
 const handleSessionMutation = (event: Event) => {
@@ -929,7 +875,6 @@ onMounted(async () => {
 
     await loadCurrentKbInfo((route.params as any)?.kbId as string)
 
-    await loadSessionOriginMeta();
     await getMessageList();
     const initialChatId = route.params.chatid as string | undefined;
     if (initialChatId) {

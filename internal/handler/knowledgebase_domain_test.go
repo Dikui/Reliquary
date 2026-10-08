@@ -47,14 +47,13 @@ func (s *domainUpdateErrorService) DeleteKnowledgeBase(context.Context, string) 
 	return nil
 }
 
-func newDomainKnowledgeBaseTestRouter(svc interfaces.KnowledgeBaseService, role types.TenantRole) *gin.Engine {
+func newDomainKnowledgeBaseTestRouter(svc interfaces.KnowledgeBaseService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(middleware.ErrorHandler())
 	r.Use(func(c *gin.Context) {
 		c.Set(types.TenantIDContextKey.String(), types.SingleTenantID)
 		ctx := context.WithValue(c.Request.Context(), types.TenantIDContextKey, types.SingleTenantID)
-		ctx = context.WithValue(ctx, types.TenantRoleContextKey, role)
 		c.Request = c.Request.WithContext(ctx)
 		c.Next()
 	})
@@ -69,7 +68,7 @@ func TestUpdateKnowledgeBaseInvalidDomainReturnsBadRequest(t *testing.T) {
 	for _, domainID := range []string{"", "missing-domain", "deleted-domain"} {
 		t.Run(domainID, func(t *testing.T) {
 			svc := &domainUpdateErrorService{updateErr: apperrors.NewBadRequestError("domain_id must reference an existing team domain")}
-			r := newDomainKnowledgeBaseTestRouter(svc, types.TenantRoleContributor)
+			r := newDomainKnowledgeBaseTestRouter(svc)
 			body, err := json.Marshal(map[string]string{"name": "News", "domain_id": domainID})
 			require.NoError(t, err)
 			request := httptest.NewRequest(http.MethodPut, "/api/v1/knowledge-bases/kb", strings.NewReader(string(body)))
@@ -83,37 +82,19 @@ func TestUpdateKnowledgeBaseInvalidDomainReturnsBadRequest(t *testing.T) {
 	}
 }
 
-func TestKnowledgeBaseDomainUpdateAndDeletionRolePermissions(t *testing.T) {
-	for _, role := range []types.TenantRole{types.TenantRoleOwner, types.TenantRoleAdmin, types.TenantRoleContributor, types.TenantRoleViewer} {
-		t.Run(string(role)+"/update_domain", func(t *testing.T) {
-			svc := &domainUpdateErrorService{}
-			r := newDomainKnowledgeBaseTestRouter(svc, role)
-			request := httptest.NewRequest(http.MethodPut, "/api/v1/knowledge-bases/kb", strings.NewReader(`{"name":"News","domain_id":"new-domain"}`))
-			request.Header.Set("Content-Type", "application/json")
-			response := httptest.NewRecorder()
-			r.ServeHTTP(response, request)
-			if role.HasPermission(types.TenantRoleContributor) {
-				require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-				require.True(t, svc.updated)
-				require.Equal(t, []string{"new-domain"}, svc.domainIDs)
-				require.Contains(t, response.Body.String(), `"domain_id":"new-domain"`)
-			} else {
-				require.Equal(t, http.StatusForbidden, response.Code, response.Body.String())
-				require.False(t, svc.updated)
-			}
-		})
-		t.Run(string(role)+"/delete", func(t *testing.T) {
-			svc := &domainUpdateErrorService{}
-			r := newDomainKnowledgeBaseTestRouter(svc, role)
-			response := httptest.NewRecorder()
-			r.ServeHTTP(response, httptest.NewRequest(http.MethodDelete, "/api/v1/knowledge-bases/kb", nil))
-			if role.HasPermission(types.TenantRoleAdmin) {
-				require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-				require.True(t, svc.deleted)
-			} else {
-				require.Equal(t, http.StatusForbidden, response.Code, response.Body.String())
-				require.False(t, svc.deleted)
-			}
-		})
-	}
+func TestKnowledgeBaseDomainUpdateAndDeletion(t *testing.T) {
+	svc := &domainUpdateErrorService{}
+	r := newDomainKnowledgeBaseTestRouter(svc)
+	request := httptest.NewRequest(http.MethodPut, "/api/v1/knowledge-bases/kb", strings.NewReader(`{"name":"News","domain_id":"new-domain"}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	r.ServeHTTP(response, request)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.True(t, svc.updated)
+	require.Equal(t, []string{"new-domain"}, svc.domainIDs)
+	require.Contains(t, response.Body.String(), `"domain_id":"new-domain"`)
+	response = httptest.NewRecorder()
+	r.ServeHTTP(response, httptest.NewRequest(http.MethodDelete, "/api/v1/knowledge-bases/kb", nil))
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.True(t, svc.deleted)
 }

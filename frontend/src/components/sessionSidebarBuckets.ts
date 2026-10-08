@@ -5,14 +5,13 @@ import type { SessionForGrouping } from './sessionGrouping'
 
 export const SIDEBAR_BUCKET_PAGE_SIZE = 30
 
-export type SidebarBucketKind = 'web' | 'im' | 'api'
+export type SidebarBucketKind = 'web' | 'api'
 
 export interface SidebarSessionBucket {
   key: string
   apiSource: string
   label: string
   kind: SidebarBucketKind
-  platform?: string
   page: number
   total: number
   items: SessionForGrouping[]
@@ -27,7 +26,6 @@ export interface BucketDefinition {
   apiSource: string
   label: string
   kind: SidebarBucketKind
-  platform?: string
 }
 
 export function createEmptyBucket(def: BucketDefinition): SidebarSessionBucket {
@@ -60,11 +58,11 @@ export function applyBucketCountProbe(
 }
 
 export function isChannelBucket(bucket: SidebarSessionBucket): boolean {
-  return bucket.kind === 'im' || bucket.kind === 'api'
+  return bucket.kind === 'api'
 }
 
 export function isChannelBucketKey(key: string): boolean {
-  return key.startsWith('im:') || key === API_SESSION_BUCKET_KEY
+  return key === API_SESSION_BUCKET_KEY
 }
 
 // API_SESSION_BUCKET_KEY is the admin-only bucket that lists every API-key
@@ -72,45 +70,8 @@ export function isChannelBucketKey(key: string): boolean {
 // probed for a count first and only surfaced when they have sessions.
 export const API_SESSION_BUCKET_KEY = 'api'
 
-export function buildBucketDefinitions(
-  imPlatforms: string[],
-  labels: {
-    web: string
-    imPlatform: (platform: string) => string
-    api: string
-  },
-  options: { includeAdminChannelBuckets?: boolean } = {},
-): BucketDefinition[] {
-  const includeChannels = options.includeAdminChannelBuckets ?? false
-  const imDefs = includeChannels
-    ? imPlatforms.map((platform) => ({
-        key: `im:${platform}`,
-        apiSource: platform,
-        label: labels.imPlatform(platform),
-        kind: 'im' as const,
-        platform,
-      }))
-    : []
-  const apiDefs: BucketDefinition[] = includeChannels
-    ? [
-        {
-          key: API_SESSION_BUCKET_KEY,
-          apiSource: API_SESSION_BUCKET_KEY,
-          label: labels.api,
-          kind: 'api' as const,
-        },
-      ]
-    : []
-  return [
-    ...imDefs,
-    ...apiDefs,
-    {
-      key: 'web',
-      apiSource: 'web',
-      label: labels.web,
-      kind: 'web',
-    },
-  ]
+export function buildBucketDefinitions(labels: { web: string }): BucketDefinition[] {
+  return [{ key: 'web', apiSource: 'web', label: labels.web, kind: 'web' }]
 }
 
 export function mergeBucketPage(

@@ -147,10 +147,7 @@ func (h *Handler) parseQARequest(c *gin.Context, logPrefix string) (*qaRequestCo
 			logPrefix, sessionID, secutils.SanitizeForLog(secutils.CompactImageDataURLForLog(string(requestJSON))))
 	}
 
-	// Get session. QA writes new messages into the session, so use the strict
-	// owner scope: a tenant admin may read an API-key session but must not be
-	// able to post messages to it (which would otherwise fail later at message
-	// creation with a 500 instead of a clean not-found).
+	// Get the authenticated user's session before writing QA messages.
 	session, err := h.sessionService.GetOwnedSession(ctx, sessionID)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to get session, session ID: %s, error: %v", sessionID, err)
@@ -161,9 +158,6 @@ func (h *Handler) parseQARequest(c *gin.Context, logPrefix string) (*qaRequestCo
 
 	// Merge @mentioned items into knowledge_base_ids and knowledge_ids
 	kbIDs, knowledgeIDs := mergeKnowledgeTargets(request.KnowledgeBaseIDs, request.KnowledgeIds, request.MentionedItems)
-	if err := types.AuthorizeTenantAPIKeyKnowledgeTargets(ctx, kbIDs, knowledgeIDs); err != nil {
-		return nil, nil, err
-	}
 
 	// Log merge results for debugging
 	logger.Infof(ctx, "[%s] @mention merge: request.KnowledgeBaseIDs=%v, request.MentionedItems=%d, merged kbIDs=%v, merged knowledgeIDs=%v",
@@ -677,10 +671,6 @@ func (h *Handler) SearchKnowledge(c *gin.Context) {
 	if len(knowledgeBaseIDs) == 0 && len(request.KnowledgeIDs) == 0 && len(tagScopes) == 0 {
 		logger.Error(ctx, "No knowledge base IDs, knowledge IDs, or tag scopes provided")
 		c.Error(errors.NewBadRequestError("At least one knowledge_base_id, knowledge_base_ids, knowledge_ids, or scoped tag must be provided"))
-		return
-	}
-	if err := types.AuthorizeTenantAPIKeyKnowledgeTargets(ctx, knowledgeBaseIDs, request.KnowledgeIDs); err != nil {
-		c.Error(err)
 		return
 	}
 

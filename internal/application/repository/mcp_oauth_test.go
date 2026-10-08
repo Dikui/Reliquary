@@ -26,7 +26,7 @@ func TestMCPOAuthRepositoryTokenForPrincipalIsolated(t *testing.T) {
 	expiresAt := time.Now().Add(time.Hour).UTC()
 
 	webPrincipal := types.Principal{Type: types.PrincipalWebUser, ID: "u1"}
-	apiPrincipal := types.Principal{Type: types.PrincipalAPIExternalUser, ID: "7:external-u1"}
+	apiPrincipal := types.Principal{Type: types.PrincipalWebUser, ID: "7:external-u1"}
 
 	require.NoError(t, repo.SaveTokenForPrincipal(ctx, &types.MCPOAuthToken{
 		TenantID:      7,

@@ -14,7 +14,7 @@
         </div>
         <div class="setting-control">
           <div class="status-display">
-            <t-tag 
+            <t-tag
               v-if="testing"
               theme="default"
               variant="light"
@@ -22,7 +22,7 @@
               <t-icon name="loading" class="status-icon spinning" />
               {{ $t('ollamaSettings.status.testing') }}
             </t-tag>
-            <t-tag 
+            <t-tag
               v-else-if="connectionStatus === true"
               theme="success"
               variant="light"
@@ -30,7 +30,7 @@
               <t-icon name="check-circle-filled" />
               {{ $t('ollamaSettings.status.available') }}
             </t-tag>
-            <t-tag 
+            <t-tag
               v-else-if="connectionStatus === false"
               theme="danger"
               variant="light"
@@ -38,7 +38,7 @@
               <t-icon name="close-circle-filled" />
               {{ $t('ollamaSettings.status.unavailable') }}
             </t-tag>
-            <t-tag 
+            <t-tag
               v-else
               theme="default"
               variant="light"
@@ -46,8 +46,8 @@
               <t-icon name="help-circle" />
               {{ $t('ollamaSettings.status.untested') }}
             </t-tag>
-            <t-button 
-              size="small" 
+            <t-button
+              size="small"
               variant="text"
               :loading="testing"
               @click="testConnection"
@@ -69,14 +69,14 @@
         </div>
         <div class="setting-control">
           <div class="url-control-group">
-            <t-input 
-              v-model="localBaseUrl" 
+            <t-input
+              v-model="localBaseUrl"
               :placeholder="$t('ollamaSettings.address.placeholder')"
               disabled
               style="flex: 1;"
             />
           </div>
-          <t-alert 
+          <t-alert
             v-if="connectionStatus === false"
             theme="warning"
             :message="$t('ollamaSettings.address.failed')"
@@ -101,11 +101,11 @@
           </p>
         </div>
       </div>
-      
+
       <div class="download-content">
         <div class="input-group">
-          <t-input 
-            v-model="downloadModelName" 
+          <t-input
+            v-model="downloadModelName"
             :placeholder="$t('ollamaSettings.download.placeholder')"
             style="flex: 1;"
           />
@@ -122,7 +122,7 @@
             {{ $t('ollamaSettings.download.download') }}
           </t-button>
         </div>
-        
+
         <div v-if="downloadProgress > 0" class="download-progress">
           <div class="progress-info">
             <span>{{ $t('ollamaSettings.download.downloading', { name: downloadModelName }) }}</span>
@@ -140,8 +140,8 @@
           <h3>{{ $t('ollamaSettings.installed.title') }}</h3>
           <p>{{ $t('ollamaSettings.installed.desc') }}</p>
         </div>
-        <t-button 
-          size="small" 
+        <t-button
+          size="small"
           variant="text"
           :loading="loadingModels"
           @click="refreshModels"
@@ -152,7 +152,7 @@
           {{ $t('common.refresh') }}
         </t-button>
       </div>
-      
+
       <div v-if="loadingModels" class="loading-state">
         <t-loading size="small" />
         <span>{{ $t('common.loading') }}</span>
@@ -199,22 +199,22 @@ const downloadProgress = ref(0)
 const testConnection = async () => {
   testing.value = true
   connectionStatus.value = null
-  
+
   try {
     // 保存配置
     settingsStore.updateOllamaConfig({ baseUrl: localBaseUrl.value })
-    
+
     // 调用真实 Ollama API 测试连接
     const result = await checkOllamaStatus()
-    
+
     // 如果接口返回了 baseUrl 且与当前输入框的值不同，更新为接口返回的值
     if (result.baseUrl && result.baseUrl !== localBaseUrl.value) {
       localBaseUrl.value = result.baseUrl
       settingsStore.updateOllamaConfig({ baseUrl: result.baseUrl })
     }
-    
+
     connectionStatus.value = result.available
-    
+
     if (connectionStatus.value) {
       MessagePlugin.success(t('ollamaSettings.toasts.connected'))
       refreshModels()
@@ -232,7 +232,7 @@ const testConnection = async () => {
 // 刷新模型列表
 const refreshModels = async () => {
   loadingModels.value = true
-  
+
   try {
     // 调用真实 Ollama API 获取模型列表（现在返回完整的模型信息）
     const models = await listOllamaModels()
@@ -274,30 +274,30 @@ const formatDate = (dateStr: string): string => {
 // 下载模型
 const downloadModel = async () => {
   if (!downloadModelName.value.trim()) return
-  
+
   downloading.value = true
   downloadProgress.value = 0
-  
+
   try {
     // 调用真实 Ollama API 下载模型
     const result = await downloadOllamaModel(downloadModelName.value)
-    
+
     if (result.status === 'failed') {
       MessagePlugin.error(t('ollamaSettings.toasts.downloadFailed'))
       downloading.value = false
       downloadProgress.value = 0
       return
     }
-    
+
     MessagePlugin.success(t('ollamaSettings.toasts.downloadStarted', { name: downloadModelName.value }))
-    
+
     // 查询下载进度
     const taskId = result.taskId
     const progressInterval = setInterval(async () => {
       try {
         const task = await getDownloadProgress(taskId)
         downloadProgress.value = task.progress
-        
+
         if (task.status === 'completed') {
           clearInterval(progressInterval)
           MessagePlugin.success(t('ollamaSettings.toasts.downloadCompleted', { name: downloadModelName.value }))
@@ -341,13 +341,13 @@ const initOllamaBaseUrl = async () => {
       // 如果接口没返回且 store 中也没有，使用默认值
       localBaseUrl.value = 'http://localhost:11434'
     }
-    
+
     // 直接使用初始化时获取的状态，避免重复调用
       connectionStatus.value = result.available
       if (result.available) {
         refreshModels()
     }
-    
+
     return result
   } catch (error) {
     console.error('初始化 Ollama 地址失败:', error)

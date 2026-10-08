@@ -14,7 +14,6 @@ import (
 func allDeploymentFeaturesAvailable() handler.DeploymentFeatureAvailability {
 	return handler.DeploymentFeatureAvailability{
 		Agents:      true,
-		IM:          true,
 		API:         true,
 		MCP:         true,
 		WebSearch:   true,

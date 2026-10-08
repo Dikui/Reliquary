@@ -44,23 +44,7 @@
               </span>
             </div>
           </section>
-          <section class="setting-drawer__section">
-            <h4 class="setting-drawer__section-title">
-              {{ t('knowledgeBase.infoCard.access') }}
-            </h4>
-            <div class="kb-info-card-row">
-              <span class="kb-info-card-label">{{ t('knowledgeBase.accessInfo.myRole') }}</span>
-              <span class="kb-info-card-value">
-                <t-tag size="small" :theme="roleTagTheme">
-                  {{ accessRoleLabel }}
-                </t-tag>
-                <span class="kb-info-card-hint">{{ accessPermissionSummary }}</span>
-              </span>
-            </div>
 
-
-
-          </section>
           <section v-if="capabilities.length" class="setting-drawer__section">
             <h4 class="setting-drawer__section-title">
               {{ t('knowledgeBase.infoCard.capabilities') }}
@@ -152,7 +136,6 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VectorStoreBadge from '@/components/VectorStoreBadge.vue'
-import { useAuthStore } from '@/stores/auth'
 import { formatStringDate } from '@/utils'
 
 const props = defineProps<{
@@ -167,14 +150,6 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
-const authStore = useAuthStore()
-
-const effectiveKBPermission = computed(() => authStore.currentTenantRole)
-const accessRoleLabel = computed(() => t(`tenantMember.role.${effectiveKBPermission.value}`))
-const accessPermissionSummary = computed(() => { const role = effectiveKBPermission.value; if (role === 'owner') return t('knowledgeBase.accessInfo.permissionOwner'); if (role === 'admin') return t('knowledgeBase.accessInfo.permissionAdmin'); if (role === 'contributor') return t('knowledgeBase.accessInfo.permissionEditor'); return t('knowledgeBase.accessInfo.permissionViewer') })
-type RoleTheme = 'success' | 'primary' | 'warning' | 'default'
-const roleTagTheme = computed<RoleTheme>(() => { const role = effectiveKBPermission.value; return role === 'owner' ? 'success' : role === 'admin' ? 'primary' : role === 'contributor' ? 'warning' : 'default' })
-
 // KB.UpdatedAt is auto-bumped by GORM only when the KB row itself is
 // touched (rename, config edit, …). For a freshly created KB whose
 // only mutations were document uploads, updated_at == created_at and

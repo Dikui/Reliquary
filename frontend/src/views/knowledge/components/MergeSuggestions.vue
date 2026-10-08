@@ -2,7 +2,6 @@
   <section class="merge-suggestions">
     <div class="merge-suggestions-heading"><div><h3>{{ t('mergeSuggestions.title') }}</h3><p>{{ t('mergeSuggestions.description') }}</p></div><t-select v-model="status" :options="statusOptions" :disabled="!!decidingId" :aria-label="t('mergeSuggestions.statusFilter')" /></div>
     <t-alert v-if="error" theme="error" :message="error" role="alert"><template #operation><t-button variant="text" :loading="loading" @click="load(false)">{{ t('common.refresh') }}</t-button></template></t-alert>
-    <t-alert v-if="!canManage" theme="info" :message="t('mergeSuggestions.readOnly')" />
     <t-loading :loading="loading" show-overlay>
       <div class="merge-suggestions-list">
         <t-empty v-if="!items.length && !error" :description="t(`mergeSuggestions.empty.${status}`)" />

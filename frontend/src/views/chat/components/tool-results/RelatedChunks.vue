@@ -1,12 +1,12 @@
 <template>
   <div class="related-chunks">
     <div v-if="data.chunks && data.chunks.length > 0" class="chunks-list">
-      <div 
-        v-for="chunk in data.chunks" 
+      <div
+        v-for="chunk in data.chunks"
         :key="chunk.chunk_id"
         class="result-item"
       >
-        <t-popup 
+        <t-popup
           :overlayClassName="`chunk-popup-${chunk.chunk_id}`"
           placement="bottom-left"
           width="400"
@@ -15,7 +15,7 @@
           destroy-on-close
         >
           <template #content>
-            <ContentPopup 
+            <ContentPopup
               :content="chunk.content"
               :chunk-id="chunk.chunk_id"
             />
@@ -55,21 +55,21 @@ const props = defineProps<{
   flex-direction: column;
   gap: 8px;
   padding: 0 0 0 12px;
-  
+
   .info-section {
     margin-bottom: 8px;
     padding: 0;
-    
+
     .info-field {
       font-size: 11px;
       margin-bottom: 4px;
-      
+
       .field-label {
         font-size: 11px;
         color: var(--td-text-color-placeholder);
         min-width: 70px;
       }
-      
+
       .field-value {
         font-size: 11px;
         color: var(--td-text-color-secondary);
@@ -100,7 +100,7 @@ const props = defineProps<{
   justify-content: space-between;
   gap: 8px;
   transition: color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  
+
   &:hover {
     color: var(--td-brand-color);
   }

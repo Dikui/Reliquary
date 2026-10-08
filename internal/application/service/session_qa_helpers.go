@@ -25,7 +25,6 @@ func (s *sessionService) resolveKnowledgeBases(
 ) (kbIDs []string, knowledgeIDs []string, err error) {
 	kbIDs = req.KnowledgeBaseIDs
 	knowledgeIDs = req.KnowledgeIDs
-	requestedKBIDs := append([]string(nil), req.KnowledgeBaseIDs...)
 	customAgent := req.CustomAgent
 
 	hasExplicitMention := len(kbIDs) > 0 || len(knowledgeIDs) > 0 || len(req.TagScopes) > 0
@@ -45,13 +44,6 @@ func (s *sessionService) resolveKnowledgeBases(
 		kbIDs = s.resolveKnowledgeBasesFromAgent(ctx, customAgent, req.Session.TenantID)
 	}
 
-	if err := types.AuthorizeTenantAPIKeyKnowledgeTargets(ctx, requestedKBIDs, req.KnowledgeIDs); err != nil {
-		return nil, nil, err
-	}
-	kbIDs, err = types.FilterKnowledgeBasesForTenantAPIKeyScope(ctx, requestedKBIDs, kbIDs)
-	if err != nil {
-		return nil, nil, err
-	}
 	return kbIDs, knowledgeIDs, nil
 }
 

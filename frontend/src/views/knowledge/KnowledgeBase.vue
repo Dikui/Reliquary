@@ -243,10 +243,10 @@ const goToParserSettings = () => {
   }
 }
 
-const canEdit = computed(() => authStore.hasRole('contributor'));
-const canManage = computed(() => authStore.hasRole('contributor'));
-const canMutateKnowledge = computed(() => authStore.hasRole('contributor'));
-const canDownloadKnowledge = computed(() => authStore.hasRole('contributor'));
+const canEdit = computed(() => authStore.isLoggedIn);
+const canManage = computed(() => authStore.isLoggedIn);
+const canMutateKnowledge = computed(() => authStore.isLoggedIn);
+const canDownloadKnowledge = computed(() => authStore.isLoggedIn);
 
 const knowledgeList = ref<Array<{ id: string; name: string; type?: string }>>([]);
 let { cardList, total, moreIndex, details, getKnowled, delKnowledge, openMore, onVisibleChange: _onVisibleChange, getCardDetails, getfDetails,
@@ -534,16 +534,8 @@ const sourceOptions = computed(() => [
   { label: t('knowledgeBase.sourceManual'), value: 'manual' },
   { label: t('knowledgeBase.channelWebResearch'), value: 'web_research' },
   { label: t('datasource.connector.rss'), value: 'rss' },
-  { label: t('datasource.connector.grok_x'), value: 'grok_x' },
   { label: t('knowledgeBase.sourceApi'), value: 'api' },
   { label: t('knowledgeBase.sourceBrowserExtension'), value: 'browser_extension' },
-  { label: t('knowledgeBase.channelFeishu'), value: 'feishu' },
-  { label: t('knowledgeBase.channelFeishuDrive'), value: 'feishu_drive' },
-  { label: t('knowledgeBase.channelNotion'), value: 'notion' },
-  { label: t('knowledgeBase.channelYuque'), value: 'yuque' },
-  { label: t('knowledgeBase.channelGitLab'), value: 'gitlab' },
-  { label: t('knowledgeBase.channelIma'), value: 'ima' },
-  { label: t('knowledgeBase.channelIm'), value: 'im' },
 ]);
 // Date range as [start, end] in "YYYY-MM-DD" form (t-date-range-picker default).
 const updatedTimeRange = ref<string[]>([]);
@@ -2349,7 +2341,7 @@ async function createNewSession(value: string): Promise<void> {
               </t-tooltip>
               <KBInfoPopover v-if="kbInfo" :kb-info="kbInfo"
                 :supported-file-types="[...supportedFileTypes]" />
-              <t-tooltip v-if="authStore.hasRole('viewer')" :content="$t('knowledgeBase.settings')" placement="top">
+              <t-tooltip v-if="authStore.isLoggedIn" :content="$t('knowledgeBase.settings')" placement="top">
                 <button type="button" class="kb-settings-button" :disabled="!kbId" @click="handleOpenKBSettings">
                   <t-icon name="setting" size="16px" />
                 </button>

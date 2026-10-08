@@ -265,7 +265,7 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases/kb-00000001' \
 
 ## PUT `/knowledge-bases/:id` - 更新知识库
 
-owner / admin / contributor 可调用。注意：**`vector_store_id` 在创建后不可修改**，更新接口不接收该字段。
+登录用户和有效 API Key 均可调用。注意：**`vector_store_id` 在创建后不可修改**，更新接口不接收该字段。
 
 **路径参数**:
 
@@ -555,7 +555,7 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases/copy/progress/kb_c
 | 复制内容 | 仅设置 | 设置 + 全部知识内容 |
 | 新 KB ID | 服务端自动生成 UUID | 可指定已有目标库或新建 |
 
-**权限**：需要 `Contributor+`，且对源知识库至少有 `Viewer` 读权限（路由层 `KBAccessRead`）。源知识库必须属于调用者所在空间，否则返回 `403 Forbidden`。
+**权限**：需要登录令牌或有效 API Key。源知识库必须属于调用者所在空间，否则返回 `403 Forbidden`。
 
 **命名规则**：新 KB 名称在源名称后追加本地化后缀（依据 `Accept-Language` 或 `RELIQUARY_LANGUAGE`），例如中文 `原名 副本`、英文 `Original Name Copy`；若同名已存在则递增为 `原名 副本 2`、`Original Name Copy 2` 等。
 

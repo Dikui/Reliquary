@@ -25,21 +25,11 @@ var contextCloneAcrossDetach = map[ContextKey]bool{
 	// principal in the same workspace, so all of this has to survive; a
 	// detached goroutine that loses its tenant reads another tenant's rows or
 	// none at all.
-	TenantIDContextKey:    true,
-	TenantInfoContextKey:  true,
-	UserContextKey:        true,
-	UserIDContextKey:      true,
-	PrincipalContextKey:   true,
-	SystemAdminContextKey: true,
-	// TenantRoleContextKey: the caller's resolved role in the active tenant
-	// (PR 2 #1303). Must survive for the same reason as TenantIDContextKey —
-	// any handler that does `ctx := logger.CloneContext(c.Request.Context())`
-	// and then reads the role via TenantRoleFromContext would otherwise see
-	// the type-zero TenantRole and fall back to Viewer, blocking even Owners.
-	TenantRoleContextKey: true,
-	// Per-API-key operation and KB scopes: a restriction, so dropping it would
-	// hand background work broader reach than the key it came from.
-	TenantAPIKeyScopeContextKey: true,
+	TenantIDContextKey:   true,
+	TenantInfoContextKey: true,
+	UserContextKey:       true,
+	UserIDContextKey:     true,
+	PrincipalContextKey:  true,
 
 	SessionIDContextKey:       true,
 	SandboxTenantIDContextKey: true,
@@ -66,12 +56,7 @@ var contextCloneAcrossDetach = map[ContextKey]bool{
 	// what vectorises every chunk. Dropping the mark there would let exactly
 	// the ingestion storm the governor exists to contain run past it. Keeping
 	// it can only over-throttle a context that is background by definition.
-	BackgroundTaskContextKey: true,
-	// Marks a channel that cannot resolve an in-conversation MCP OAuth prompt
-	// (an IM bot has no live client to click "Authorize"). Dropping it makes
-	// the agent block on the OAuth wait for every unauthorized service instead
-	// of emitting its one-shot notice, so the failure is a stalled reply.
-	// A detached context has no live client either, which is what this says.
+	BackgroundTaskContextKey:         true,
 	MCPOAuthNonInteractiveContextKey: true,
 
 	// ---- Deliberately does not survive a detach ----

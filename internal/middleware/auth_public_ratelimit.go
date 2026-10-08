@@ -9,23 +9,6 @@ import (
 	apperrors "reliquary/internal/errors"
 )
 
-// auth_public_ratelimit.go — sliding-window IP rate limiter for the
-// unauthenticated share-link endpoints (/auth/invitations/lookup and
-// /auth/register-by-invite). Both surfaces accept a plaintext token
-// from the request and either reveal tenant context (lookup) or
-// create an account (register-by-invite); without a limiter an
-// attacker can brute-force token guesses and hammer registration.
-//
-// The token is 256-bit so guessing the space is infeasible regardless,
-// but the limiter still narrows the abuse window for partial-token
-// leaks (e.g. via referrer / clipboard managers / accidental commits)
-// and bounds the noise this endpoint can add to the user-create path.
-//
-// Local in-memory only — fine for typical deployments since both
-// endpoints handle low absolute volumes; if/when Reliquary horizontally
-// scales the auth surface, swap to the Redis-backed limiter in
-// internal/ratelimit (shared with IM + embed surfaces).
-
 // publicAuthRateLimitWindow is the rolling window length per IP.
 const publicAuthRateLimitWindow = 60 * time.Second
 

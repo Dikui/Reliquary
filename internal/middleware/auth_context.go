@@ -12,15 +12,9 @@ type authSession struct {
 	// User is the authenticated (possibly synthetic) user. Required.
 	User      *types.User
 	Principal types.Principal
-	// TenantID and Tenant identify the single team workspace.
+	// TenantID and Tenant identify the personal workspace.
 	TenantID uint64
 	Tenant   *types.Tenant
-	// Role is the caller's active team membership role.
-	Role        types.TenantRole
-	SystemAdmin bool
-	// APIKeyScope marks machine principals; the APIKeyGate authorizes them
-	// per-route from this scope.
-	APIKeyScope *types.TenantAPIKeyScope
 }
 
 // applyAuthSession writes the session onto BOTH context surfaces of the
@@ -52,13 +46,6 @@ func applyAuthSession(c *gin.Context, s authSession) {
 	}
 	c.Set(types.PrincipalContextKey.String(), s.Principal)
 	ctx = types.WithPrincipal(ctx, s.Principal)
-	if s.Role != "" {
-		set(types.TenantRoleContextKey, s.Role)
-	}
-	set(types.SystemAdminContextKey, s.SystemAdmin)
-	if s.APIKeyScope != nil {
-		ctx = types.WithTenantAPIKeyScope(ctx, *s.APIKeyScope)
-	}
 
 	c.Request = c.Request.WithContext(ctx)
 }

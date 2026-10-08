@@ -22,7 +22,6 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/hibiken/asynq v0.26.0
 	github.com/jackc/pgx/v5 v5.9.2
-	github.com/larksuite/oapi-sdk-go/v3 v3.9.7
 	github.com/mark3labs/mcp-go v0.52.0
 	github.com/mmcdole/gofeed v1.3.0
 	github.com/ollama/ollama v0.23.2
@@ -63,7 +62,6 @@ require (
 
 require (
 	github.com/docker/docker v28.5.2+incompatible // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
 	go.opentelemetry.io/otel v1.43.0 // indirect
 	golang.org/x/mod v0.36.0 // indirect
@@ -144,7 +142,6 @@ require (
 	github.com/gobwas/ws v1.4.0 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
-	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/gogs/chardet v0.0.0-20211120154057-b7413eaefb8f // indirect
 	github.com/google/flatbuffers v25.12.19+incompatible // indirect
 	github.com/google/s2a-go v0.1.9 // indirect

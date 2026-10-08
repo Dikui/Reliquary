@@ -4,13 +4,11 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	apprepo "reliquary/internal/application/repository"
-	"reliquary/internal/config"
 	"reliquary/internal/handler"
 	"reliquary/internal/middleware"
 	"reliquary/internal/types"
@@ -28,13 +26,13 @@ func (s *stubWikiKBLookup) GetKnowledgeBaseByID(_ context.Context, id string) (*
 }
 
 func newWikiRouteTestEngine(t *testing.T, callerTenantID uint64, kbLookup *stubWikiKBLookup) *gin.Engine {
-	return newKBRouteTestEngine(t, callerTenantID, kbLookup, nil, func(r *gin.RouterGroup, guards *rbacGuards) {
+	return newKBRouteTestEngine(t, callerTenantID, kbLookup, func(r *gin.RouterGroup, guards *accessGuards) {
 		RegisterWikiPageRoutes(r, &handler.WikiPageHandler{}, guards)
 	})
 }
 
 func newInitializationRouteTestEngine(t *testing.T, callerTenantID uint64, kbLookup *stubWikiKBLookup) *gin.Engine {
-	return newKBRouteTestEngine(t, callerTenantID, kbLookup, nil, func(r *gin.RouterGroup, guards *rbacGuards) {
+	return newKBRouteTestEngine(t, callerTenantID, kbLookup, func(r *gin.RouterGroup, guards *accessGuards) {
 		RegisterInitializationRoutes(r, &handler.InitializationHandler{}, guards)
 	})
 }
@@ -43,18 +41,12 @@ func newKBRouteTestEngine(
 	t *testing.T,
 	callerTenantID uint64,
 	kbLookup *stubWikiKBLookup,
-	apiKeyScope *types.TenantAPIKeyScope,
-	register func(r *gin.RouterGroup, guards *rbacGuards),
+	register func(r *gin.RouterGroup, guards *accessGuards),
 ) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
-	enabled := true
-	cfg := &config.Config{
-		Tenant: &config.TenantConfig{EnableRBAC: &enabled},
-	}
-	guards := &rbacGuards{
-		cfg:       cfg,
+	guards := &accessGuards{
 		kbService: kbLookup,
 	}
 
@@ -63,14 +55,6 @@ func newKBRouteTestEngine(
 	r.Use(func(c *gin.Context) {
 		ctx := c.Request.Context()
 		ctx = context.WithValue(ctx, types.TenantIDContextKey, callerTenantID)
-		role := types.TenantRoleViewer
-		if apiKeyScope != nil {
-			ctx = types.WithTenantAPIKeyScope(ctx, *apiKeyScope)
-			if apiKeyScope.FullAccess {
-				role = types.TenantRoleOwner
-			}
-		}
-		ctx = context.WithValue(ctx, types.TenantRoleContextKey, role)
 		c.Request = c.Request.WithContext(ctx)
 		c.Set(types.TenantIDContextKey.String(), callerTenantID)
 		c.Next()
@@ -132,79 +116,6 @@ func TestWikiReadRoutesDenyCrossTenantKB(t *testing.T) {
 		t.Run(path, func(t *testing.T) {
 			rec := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodGet, path, nil)
-			engine.ServeHTTP(rec, req)
-			require.Equal(t, http.StatusForbidden, rec.Code, "body=%s", rec.Body.String())
-		})
-	}
-}
-
-func TestWikiOperationLogRouteIsRemoved(t *testing.T) {
-	engine := newWikiRouteTestEngine(t, 1, tenantKBLookupFixture())
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/knowledgebase/kb-allowed/wiki/log", nil)
-	engine.ServeHTTP(rec, req)
-	require.Equal(t, http.StatusNotFound, rec.Code, "body=%s", rec.Body.String())
-}
-
-func TestInitializationWriteRoutesDenyOutOfScopeAPIKeyKB(t *testing.T) {
-	kbLookup := tenantKBLookupFixture()
-	scope := &types.TenantAPIKeyScope{
-		KnowledgeBaseIDs: types.StringArray{"kb-allowed"},
-		Capabilities:     types.StringArray{string(types.APIKeyCapabilityManageKnowledgeBases)},
-	}
-	engine := newKBRouteTestEngine(t, 1, kbLookup, scope, func(r *gin.RouterGroup, guards *rbacGuards) {
-		RegisterInitializationRoutes(r, &handler.InitializationHandler{}, guards)
-	})
-
-	cases := []struct {
-		method string
-		path   string
-		body   string
-	}{
-		{http.MethodPut, "/api/v1/initialization/config/kb-other", `{}`},
-		{http.MethodPost, "/api/v1/initialization/initialize/kb-other", `{}`},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
-			rec := httptest.NewRecorder()
-			req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
-			req.Header.Set("Content-Type", "application/json")
-			engine.ServeHTTP(rec, req)
-			require.Equal(t, http.StatusForbidden, rec.Code, "body=%s", rec.Body.String())
-		})
-	}
-}
-
-func TestWikiWriteRoutesDenyOutOfScopeAPIKeyKB(t *testing.T) {
-	kbLookup := tenantKBLookupFixture()
-	scope := &types.TenantAPIKeyScope{
-		KnowledgeBaseIDs: types.StringArray{"kb-allowed"},
-		Capabilities:     types.StringArray{string(types.APIKeyCapabilityIngest)},
-	}
-	engine := newKBRouteTestEngine(t, 1, kbLookup, scope, func(r *gin.RouterGroup, guards *rbacGuards) {
-		RegisterWikiPageRoutes(r, &handler.WikiPageHandler{}, guards)
-	})
-
-	cases := []struct {
-		method string
-		path   string
-	}{
-		{http.MethodPost, "/api/v1/knowledgebase/kb-other/wiki/pages"},
-		{http.MethodPut, "/api/v1/knowledgebase/kb-other/wiki/pages/some-page"},
-		{http.MethodDelete, "/api/v1/knowledgebase/kb-other/wiki/pages/some-page"},
-		{http.MethodPost, "/api/v1/knowledgebase/kb-other/wiki/folders"},
-		{http.MethodPost, "/api/v1/knowledgebase/kb-other/wiki/rebuild-links"},
-		{http.MethodPost, "/api/v1/knowledgebase/kb-other/wiki/auto-fix"},
-		{http.MethodPut, "/api/v1/knowledgebase/kb-other/wiki/issues/1/status"},
-		{http.MethodPost, "/api/v1/knowledgebase/kb-other/wiki/revert"},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
-			rec := httptest.NewRecorder()
-			req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(`{}`))
-			req.Header.Set("Content-Type", "application/json")
 			engine.ServeHTTP(rec, req)
 			require.Equal(t, http.StatusForbidden, rec.Code, "body=%s", rec.Body.String())
 		})

@@ -142,8 +142,7 @@ func newAsynqServer(concurrency int, queues map[string]int) *asynq.Server {
 			Concurrency:    concurrency,
 			Queues:         queues,
 			RetryDelayFunc: asynqRetryDelayFunc,
-		},
-	)
+		})
 }
 
 // backgroundTaskMiddleware tags every task's context as a background worker
@@ -440,8 +439,7 @@ func markKnowledgeListDeleteFailed(
 	ctx context.Context,
 	repo interfaces.KnowledgeRepository,
 	t *asynq.Task,
-	taskErr error,
-) {
+	taskErr error) {
 	var payload deadLetterKnowledgeListDeletePayload
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil || len(payload.KnowledgeIDs) == 0 {
 		return

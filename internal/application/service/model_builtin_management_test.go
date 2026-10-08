@@ -12,7 +12,10 @@ import (
 
 func builtinModelContext(systemAdmin bool) context.Context {
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
-	return context.WithValue(ctx, types.SystemAdminContextKey, systemAdmin)
+	if systemAdmin {
+		return context.WithValue(ctx, types.UserIDContextKey, "personal-user")
+	}
+	return ctx
 }
 
 func TestUpdateBuiltinModel_RequiresSystemAdmin(t *testing.T) {

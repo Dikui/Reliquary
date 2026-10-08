@@ -6,18 +6,18 @@ import (
 	"reliquary/internal/handler"
 )
 
-func RegisterKnowledgeDomainRoutes(r *gin.RouterGroup, h *handler.KnowledgeDomainHandler, g *rbacGuards) {
+func RegisterKnowledgeDomainRoutes(r *gin.RouterGroup, h *handler.KnowledgeDomainHandler, g *accessGuards) {
 	if h == nil {
 		return
 	}
-	domains := g.apiKeyGroup(r.Group("/knowledge-domains"), apiKeyFullAccess())
-	read := domains.With(apiKeyRetrieve(apiKeyFullAccess()))
-	read.GET("", g.Viewer(), h.List)
-	read.GET("/:id", g.Viewer(), h.Get)
-	read.GET("/:id/open-fields", g.Viewer(), h.OpenFields)
-	domains.POST("", g.Admin(), h.Create)
-	domains.PUT("/:id", g.Admin(), h.Update)
-	domains.DELETE("/:id", g.Admin(), h.Delete)
-	domains.POST("/:id/field-mappings", g.Admin(), h.MapField)
-	domains.POST("/:id/fields", g.Admin(), h.AddField)
+	domains := r.Group("/knowledge-domains")
+	read := domains
+	read.GET("", h.List)
+	read.GET("/:id", h.Get)
+	read.GET("/:id/open-fields", h.OpenFields)
+	domains.POST("", h.Create)
+	domains.PUT("/:id", h.Update)
+	domains.DELETE("/:id", h.Delete)
+	domains.POST("/:id/field-mappings", h.MapField)
+	domains.POST("/:id/fields", h.AddField)
 }

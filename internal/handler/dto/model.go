@@ -29,8 +29,8 @@ type ModelResponse struct {
 	Status      types.ModelStatus  `json:"status"`
 	CreatedAt   time.Time          `json:"created_at"`
 	UpdatedAt   time.Time          `json:"updated_at"`
-	// Per-field "configured?" map. Omitted for builtin models unless the
-	// caller is a system administrator. See MCPServiceResponse.Credentials.
+	// Per-field "configured?" map. Built-in model metadata requires an
+	// authenticated caller. See MCPServiceResponse.Credentials.
 	Credentials map[string]CredentialFieldMetadata `json:"credentials,omitempty"`
 }
 
@@ -73,7 +73,7 @@ func NewModelResponse(ctx context.Context, m *types.Model) *ModelResponse {
 		MaxConcurrency:      m.Parameters.MaxConcurrency,
 		RequestsPerMinute:   m.Parameters.RequestsPerMinute,
 	}
-	canManageBuiltin := m.IsBuiltin && types.IsSystemAdminFromContext(ctx)
+	canManageBuiltin := m.IsBuiltin && types.IsAuthenticatedFromContext(ctx)
 	if !CanViewIntegrationSecrets(ctx) && !canManageBuiltin {
 		params.ExtraConfig = nil
 		params.CustomHeaders = nil

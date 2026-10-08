@@ -130,18 +130,6 @@ func (s *workflowTestWikiService) UpdatePage(_ context.Context, page *types.Wiki
 	return &updated, nil
 }
 
-type workflowTestMembers struct {
-	interfaces.TenantMemberRepository
-	member *types.TenantMember
-}
-
-func (s workflowTestMembers) Get(_ context.Context, userID string, tenantID uint64) (*types.TenantMember, error) {
-	if s.member == nil || s.member.UserID != userID || s.member.TenantID != tenantID {
-		return nil, nil
-	}
-	return s.member, nil
-}
-
 type workflowRecordedTask struct {
 	task    *asynq.Task
 	payload types.KnowledgeWorkflowTaskPayload
@@ -166,6 +154,7 @@ func workflowTestDB(t *testing.T) *gorm.DB {
 	db := pgtest.OpenFixture(t)
 	require.NoError(t, db.AutoMigrate(&types.Tenant{}, &types.User{}, &types.KnowledgeDomain{}, &types.KnowledgeBase{}, &types.Knowledge{}, &types.Chunk{}, &types.KnowledgeEvidence{}, &types.KnowledgeWorkflow{}, &types.KnowledgeWorkflowRun{}, &types.KnowledgeWorkflowStepRun{}, &types.KnowledgeWorkflowReport{}))
 	require.NoError(t, db.Create(&types.Tenant{ID: 1, Name: "tenant"}).Error)
+	require.NoError(t, db.Create(&types.User{ID: "owner", Username: "owner", Email: "owner@example.com", TenantID: 1, IsActive: true}).Error)
 	domain := BuiltinAIKnowledgeDomain()
 	domain.ID = "ai"
 	domain.TenantID = 1
@@ -186,7 +175,7 @@ func TestKnowledgeWorkflowPausesForReviewAndResumesWithoutRepeatingSuccess(t *te
 	require.NoError(t, db.Create(&types.KnowledgeEvidence{ID: "source-evidence", TenantID: 1, KnowledgeBaseID: "kb", KnowledgeID: "source-1", Version: 1, BodyHash: strings.Repeat("a", 64), Title: "Source", Body: "An approved evidence excerpt from the source.", OriginalURL: "https://example.com/source", Status: types.KnowledgeEvidenceCurrent, ExtractionStatus: types.KnowledgeExtractionPending, CreatedAt: time.Now()}).Error)
 	queue := &workflowTestTaskQueue{}
 	svc := NewKnowledgeWorkflowService(db, kb, workflowTestKnowledgeService{}, NewKnowledgeContextService(db, nil), nil, nil, nil,
-		workflowTestMembers{member: &types.TenantMember{UserID: "owner", TenantID: 1, Role: types.TenantRoleContributor, Status: types.TenantMemberStatusActive}}, queue, nil)
+		queue, nil)
 	ctx := workflowTestContext("owner", 1)
 	wf, err := svc.Create(ctx, "kb", types.KnowledgeWorkflowInput{
 		Name: "Weekly report", Enabled: true,
@@ -253,7 +242,6 @@ func TestKnowledgeWorkflowWaitsForWebIntakeDecisionWithoutDuplicateIngest(t *tes
 	}}}
 	reportModel := &workflowTestReportChat{}
 	wiki := &workflowTestWikiService{}
-	member := &types.TenantMember{UserID: "owner", TenantID: 1, Role: types.TenantRoleContributor, Status: types.TenantMemberStatusActive}
 	var run *types.KnowledgeWorkflowRun
 	skillCalls := 0
 	skill := func(_ context.Context, tenantID uint64, ownerID, kbID string, cfg WorkflowSkillConfig) (*WorkflowSkillResult, error) {
@@ -271,7 +259,7 @@ func TestKnowledgeWorkflowWaitsForWebIntakeDecisionWithoutDuplicateIngest(t *tes
 		return &WorkflowSkillResult{Output: "skill complete", ExitCode: 0}, nil
 	}
 	svc := NewKnowledgeWorkflowService(db, kb, knowledge, NewKnowledgeContextService(db, nil), webSearch, wiki,
-		workflowTestReportModelService{model: reportModel}, workflowTestMembers{member: member}, queue, skill)
+		workflowTestReportModelService{model: reportModel}, queue, skill)
 	ctx := workflowTestContext("owner", 1)
 	wf, err := svc.Create(ctx, "kb", types.KnowledgeWorkflowInput{
 		Name: "Research", Enabled: true,
@@ -334,11 +322,11 @@ func TestKnowledgeWorkflowWaitsForWebIntakeDecisionWithoutDuplicateIngest(t *tes
 	require.Contains(t, wiki.page.Content, "[C1]")
 
 	queuedBeforeRetry := len(queue.tasks)
-	member.Status = types.TenantMemberStatusSuspended
+	require.NoError(t, db.Model(&types.User{}).Where("id = ?", "owner").Update("is_active", false).Error)
 	_, err = svc.Retry(ctx, "kb", run.ID)
 	require.ErrorIs(t, err, ErrWorkflowForbidden)
 	require.Len(t, queue.tasks, queuedBeforeRetry)
-	member.Status = types.TenantMemberStatusActive
+	require.NoError(t, db.Model(&types.User{}).Where("id = ?", "owner").Update("is_active", true).Error)
 	_, err = svc.Retry(ctx, "kb", run.ID)
 	require.NoError(t, err)
 	require.Len(t, queue.tasks, queuedBeforeRetry+1)
@@ -352,20 +340,20 @@ func TestKnowledgeWorkflowWaitsForWebIntakeDecisionWithoutDuplicateIngest(t *tes
 	require.NoError(t, db.Model(&types.KnowledgeWorkflowReport{}).Where("run_id = ?", run.ID).Count(&reportCount).Error)
 	require.EqualValues(t, 1, reportCount)
 
-	admin := &types.User{ID: "admin", Username: "workflow-admin", Email: "workflow-admin@example.com", PasswordHash: "test", TenantID: 1, IsActive: true, IsSystemAdmin: true}
+	admin := &types.User{ID: "admin", Username: "workflow-admin", Email: "workflow-admin@example.com", PasswordHash: "test", TenantID: 1, IsActive: true}
 	require.NoError(t, db.Create(admin).Error)
-	adminCtx := context.WithValue(workflowTestContext("admin", 1), types.SystemAdminContextKey, true)
-	role, err := svc.currentRole(adminCtx, 1, "admin")
+	adminCtx := workflowTestContext("admin", 1)
+	err = svc.validateActor(adminCtx, 1, "admin")
 	require.NoError(t, err)
-	require.Equal(t, types.TenantRoleOwner, role)
-	require.NoError(t, db.Model(&types.User{}).Where("id = ?", admin.ID).Update("is_system_admin", false).Error)
-	_, err = svc.currentRole(adminCtx, 1, "admin")
+
+	require.NoError(t, db.Model(&types.User{}).Where("id = ?", admin.ID).Update("is_active", false).Error)
+	err = svc.validateActor(adminCtx, 1, "admin")
 	require.ErrorIs(t, err, ErrWorkflowForbidden)
 }
 
 func TestKnowledgeWorkflowLeaseFencesDuplicateAndStaleWorker(t *testing.T) {
 	db := workflowTestDB(t)
-	svc := NewKnowledgeWorkflowService(db, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	svc := NewKnowledgeWorkflowService(db, nil, nil, nil, nil, nil, nil, nil, nil)
 	run := &types.KnowledgeWorkflowRun{
 		ID: "run-lease", TenantID: 1, KnowledgeBaseID: "kb", WorkflowID: "wf", OwnerID: "owner",
 		Trigger: "manual", IdempotencyKey: "lease:test", Status: types.WorkflowStatusQueued,
@@ -410,7 +398,7 @@ func TestKnowledgeWorkflowRejectsOtherTenantAndUnsupportedStep(t *testing.T) {
 	db := workflowTestDB(t)
 	kb := &workflowTestKBService{kb: &types.KnowledgeBase{ID: "kb", TenantID: 1, DomainID: "ai", CreatorID: "owner"}}
 	svc := NewKnowledgeWorkflowService(db, kb, workflowTestKnowledgeService{}, nil, nil, nil, nil,
-		workflowTestMembers{member: &types.TenantMember{UserID: "owner", TenantID: 1, Role: types.TenantRoleContributor, Status: types.TenantMemberStatusActive}}, &workflowTestTaskQueue{}, nil)
+		&workflowTestTaskQueue{}, nil)
 	_, err := svc.Create(workflowTestContext("owner", 2), "kb", types.KnowledgeWorkflowInput{
 		Name: "Cross tenant", Steps: []types.KnowledgeWorkflowStep{{ID: "step", Type: types.WorkflowStepSearch, Config: map[string]any{"query": "x"}}},
 	})

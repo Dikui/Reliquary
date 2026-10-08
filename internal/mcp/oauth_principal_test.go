@@ -113,7 +113,7 @@ func (r *fakeOAuthRepo) ReleaseTokenRefreshLease(
 
 func TestDBTokenStoreUsesPrincipal(t *testing.T) {
 	repo := newFakeOAuthRepo()
-	principal := types.Principal{Type: types.PrincipalAPIExternalUser, ID: "7:external-42"}
+	principal := types.Principal{Type: types.PrincipalWebUser, ID: "7:external-42"}
 	store := newDBTokenStore(repo, 7, principal, "svc-1")
 
 	expiresAt := time.Now().Add(time.Hour).UTC()
@@ -127,7 +127,7 @@ func TestDBTokenStoreUsesPrincipal(t *testing.T) {
 	row, err := repo.GetTokenForPrincipal(context.Background(), 7, principal, "svc-1")
 	require.NoError(t, err)
 	require.NotNil(t, row)
-	require.Equal(t, types.PrincipalAPIExternalUser, row.PrincipalType)
+	require.Equal(t, types.PrincipalWebUser, row.PrincipalType)
 	require.Equal(t, "7:external-42", row.PrincipalID)
 	require.Equal(t, principal.StorageID(), row.UserID)
 
@@ -161,8 +161,8 @@ func TestOAuthCacheKeyUsesPrincipalForOAuthServices(t *testing.T) {
 		ID:         "svc-1",
 		AuthConfig: &types.MCPAuthConfig{AuthType: types.MCPAuthOAuth},
 	}
-	alice := types.Principal{Type: types.PrincipalAPIExternalUser, ID: "7:alice"}
-	bob := types.Principal{Type: types.PrincipalAPIExternalUser, ID: "7:bob"}
+	alice := types.Principal{Type: types.PrincipalWebUser, ID: "7:alice"}
+	bob := types.Principal{Type: types.PrincipalWebUser, ID: "7:bob"}
 
 	require.NotEqual(t, cacheKey(service, alice), cacheKey(service, bob))
 	require.Contains(t, cacheKey(service, alice), alice.StorageID())

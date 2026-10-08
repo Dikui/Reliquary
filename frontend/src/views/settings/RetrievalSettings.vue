@@ -125,7 +125,7 @@ const authStore = useAuthStore()
 // PUT /tenants/kv/retrieval-config requires Admin+ on the server. Hide the
 // banner + lock all controls for non-Admins so they can read the
 // configuration without tripping a 403 mid-edit.
-const canEdit = computed(() => authStore.hasRole('admin'))
+const canEdit = computed(() => authStore.isLoggedIn)
 
 const defaultConfig: RetrievalConfig = {
   embedding_top_k: 50,

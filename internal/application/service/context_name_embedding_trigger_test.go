@@ -44,7 +44,7 @@ func (s *nameEmbeddingTriggerSpy) Enqueue(_ context.Context, tenantID uint64, re
 func nameEmbeddingTriggerDB(t *testing.T) (*gorm.DB, context.Context) {
 	t.Helper()
 	db := pgtest.Open(t)
-	ctx := domainTestContext(types.TenantRoleAdmin)
+	ctx := domainTestContext()
 	team := types.Tenant{ID: 1, Name: "Rebuild triggers", ModelTiers: types.ModelTierConfig{Embedding: "team-vector"}}
 	require.NoError(t, db.Create(&team).Error)
 	for _, id := range []string{"team-vector", "override-vector"} {
@@ -116,7 +116,7 @@ func (*nameEmbeddingEmptyKnowledge) ListKnowledgeByKnowledgeBaseID(context.Conte
 }
 
 func TestWorkbenchNameEmbeddingRebuildRunsWithoutMessagesAndPropagatesQueueError(t *testing.T) {
-	ctx := domainTestContext(types.TenantRoleAdmin)
+	ctx := domainTestContext()
 	worker := NewKnowledgeContextWorker(nil, nil, &nameEmbeddingEmptyKnowledge{}, nil, nil)
 	spy := &nameEmbeddingTriggerSpy{}
 	worker.SetNameEmbeddingRebuilder(spy)

@@ -7,48 +7,24 @@ import (
 	"reliquary/internal/handler/session"
 )
 
-// RegisterMessageRoutes 注册消息相关的路由。
-//
-// Per-session ownership is already enforced inside each handler (the
-// user must own the session). We add Viewer+ here so non-members
-// (e.g. revoked accounts retained in the tenant for audit) cannot
-// reach the endpoints at all once RBAC is on.
-func RegisterMessageRoutes(r *gin.RouterGroup, handler *handler.MessageHandler, g *rbacGuards) {
-	// Message history is tenant-wide and not attributable to a KB, so it is
-	// a full-access surface for API keys by default. The narrow
-	// exceptions are explicit capabilities:
-	//   - chat: load/delete messages inside the caller's own session, where
-	//     ownership is enforced by the message service.
-	//   - message_history: search/read tenant chat-history metadata without
-	//     granting every other full-access API.
-	messages := g.apiKeyGroup(r.Group("/messages"), apiKeyFullAccess())
-	chatMessages := messages.With(apiKeyChat(apiKeyFullAccess()))
-	historyMessages := messages.With(apiKeyMessageHistory(apiKeyFullAccess()))
+func RegisterMessageRoutes(r *gin.RouterGroup, handler *handler.MessageHandler, g *accessGuards) {
+	messages := r.Group("/messages")
+	chatMessages := messages
+	historyMessages := messages
 	{
-		historyMessages.POST("/search", g.Viewer(), handler.SearchMessages)
-		historyMessages.GET("/chat-history-stats", g.Viewer(), handler.GetChatHistoryKBStats)
-		chatMessages.GET("/:session_id/load", g.Viewer(), handler.LoadMessages)
-		chatMessages.DELETE("/:session_id/:id", g.Viewer(), handler.DeleteMessage)
+		historyMessages.POST("/search", handler.SearchMessages)
+		historyMessages.GET("/chat-history-stats", handler.GetChatHistoryKBStats)
+		chatMessages.GET("/:session_id/load", handler.LoadMessages)
+		chatMessages.DELETE("/:session_id/:id", handler.DeleteMessage)
 	}
 }
 
-// RegisterSessionRoutes 注册路由。
-//
-// Sessions are per-user resources; the handler enforces user ownership.
-// We gate at Viewer+ to keep non-members out once RBAC is on, matching
-// the message routes above. A future refactor can introduce
-// per-session ownership in the middleware layer the same way KB/agent
-// routes do today.
 func RegisterSessionRoutes(
 	r *gin.RouterGroup,
 	handler *session.Handler,
 	suggestionHandler *handler.MessageSuggestionHandler,
-	g *rbacGuards,
-) {
-	// Sessions are per-user chat state, not knowledge-base content. The
-	// chat capability lets a scoped key run the full conversation flow
-	// (create/manage its own sessions) without full tenant access.
-	sessions := g.apiKeyGroup(r.Group("/sessions", g.Viewer()), apiKeyChat(apiKeyFullAccess()))
+	g *accessGuards) {
+	sessions := r.Group("/sessions")
 	{
 		sessions.POST("", handler.CreateSession)
 		sessions.DELETE("/batch", handler.BatchDeleteSessions)
@@ -97,25 +73,20 @@ func RegisterSessionRoutes(
 	}
 }
 
-// RegisterChatRoutes 注册路由。Chat endpoints are tenant-member usage
-// surfaces; Viewer+ is sufficient because per-session/per-agent
-// authorisation is enforced inside the handlers.
-func RegisterChatRoutes(r *gin.RouterGroup, handler *session.Handler, g *rbacGuards) {
-	// These POST routes append messages and run generation, so a scoped key
-	// needs the explicit chat capability unless it has full tenant access.
-	knowledgeChat := g.apiKeyGroup(r.Group("/knowledge-chat", g.Viewer()), apiKeyChat(apiKeyFullAccess()))
+func RegisterChatRoutes(r *gin.RouterGroup, handler *session.Handler, g *accessGuards) {
+	knowledgeChat := r.Group("/knowledge-chat")
 	{
 		knowledgeChat.POST("/:session_id", handler.KnowledgeQA)
 	}
 
 	// Agent-based chat
-	agentChat := g.apiKeyGroup(r.Group("/agent-chat", g.Viewer()), apiKeyChat(apiKeyFullAccess()))
+	agentChat := r.Group("/agent-chat")
 	{
 		agentChat.POST("/:session_id", handler.AgentQA)
 	}
 
 	// 新增知识检索接口，不需要session_id
-	knowledgeSearch := g.apiKeyGroup(r.Group("/knowledge-search", g.Viewer()), apiKeyRetrieve(apiKeyFullAccess()))
+	knowledgeSearch := r.Group("/knowledge-search")
 	{
 		knowledgeSearch.POST("", handler.SearchKnowledge)
 	}

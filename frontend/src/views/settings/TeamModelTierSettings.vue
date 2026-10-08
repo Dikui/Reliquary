@@ -1,7 +1,6 @@
 <template>
   <section class="team-model-tier-settings">
     <t-alert v-if="error" theme="error" :message="error" role="alert"><template #operation><t-button variant="text" :loading="loading" @click="load">{{ t('modelTiers.retry') }}</t-button></template></t-alert>
-    <t-alert v-if="!canEdit" theme="info" :message="t('modelTiers.readOnly')" />
     <t-loading :loading="loading" show-overlay><form novalidate @submit.prevent="save"><ModelTierEditor v-model="draft" scope="team" :before-navigate="confirmLeave" :disabled="!canEdit || loading || saving" @refresh="load" /><div v-if="canEdit" class="tier-actions"><t-button variant="outline" :disabled="!dirty || saving || loading" @click="reset">{{ t('common.cancel') }}</t-button><t-button theme="primary" type="submit" :loading="saving" :disabled="!dirty || loading">{{ t('common.save') }}</t-button></div></form></t-loading>
   </section>
 </template>
@@ -16,7 +15,7 @@ import { useConfirmDelete } from '@/components/settings/useConfirmDelete'
 import ModelTierEditor from '@/components/ModelTierEditor.vue'
 const { t } = useI18n()
 const auth = useAuthStore(), confirmDelete = useConfirmDelete()
-const canEdit = computed(() => auth.hasRole('admin'))
+const canEdit = computed(() => auth.isLoggedIn)
 const draft = ref<ModelTierConfig>(copyModelTiers()), saved = ref<ModelTierConfig>(copyModelTiers())
 const loading = ref(false), saving = ref(false), error = ref('')
 const dirty = computed(() => JSON.stringify(copyModelTiers(draft.value)) !== JSON.stringify(saved.value))

@@ -401,11 +401,7 @@ func (s *messageSuggestionService) generateFromKnowledge(
 	}
 	knowledgeIDs := message.ExecutionContext.KnowledgeIDs
 	preferActualEvidence := len(generationContext.ActualKnowledgeIDs) > 0
-	if scope, ok := types.TenantAPIKeyScopeFromContext(knowledgeCtx); ok && scope.IsKnowledgeBaseRestricted() {
-		// Restricted API keys cannot safely pass document IDs through the generic
-		// suggestion API because that surface cannot verify each ID's KB binding.
-		preferActualEvidence = false
-	}
+
 	if preferActualEvidence {
 		knowledgeIDs = generationContext.ActualKnowledgeIDs
 	}

@@ -74,12 +74,6 @@ func (s *stubUserRepoForAuth) DeleteUser(context.Context, string) error { return
 func (s *stubUserRepoForAuth) ListUsers(context.Context, int, int) ([]*types.User, error) {
 	return nil, nil
 }
-func (s *stubUserRepoForAuth) ListSystemAdmins(context.Context, int, int) ([]*types.User, int64, error) {
-	return nil, 0, nil
-}
-func (s *stubUserRepoForAuth) RevokeSystemAdmin(context.Context, string, string) (*types.User, error) {
-	return nil, nil
-}
 func (s *stubUserRepoForAuth) SearchUsers(context.Context, string, int) ([]*types.User, error) {
 	return nil, nil
 }
@@ -182,46 +176,7 @@ func TestLogoutRevokesAllUserTokens(t *testing.T) {
 	}
 }
 
-func TestAdminResetPasswordHashesPasswordAndRevokesSessions(t *testing.T) {
-	ctx := context.Background()
-	tokenRepo := &stubAuthTokenRepo{tokens: map[string]*types.AuthToken{}}
-	svc := newAuthTestUserService(tokenRepo)
-	repo := svc.userRepo.(*stubUserRepoForAuth)
-
-	if err := svc.AdminResetPassword(ctx, "user-1", "NewSecure9"); err != nil {
-		t.Fatalf("AdminResetPassword() err = %v", err)
-	}
-	if repo.updateCalls != 1 {
-		t.Fatalf("UpdateUser calls = %d, want 1", repo.updateCalls)
-	}
-	user := repo.users["user-1"]
-	if user.PasswordHash == "NewSecure9" || user.PasswordHash == "" {
-		t.Fatalf("password was not stored as a hash")
-	}
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte("NewSecure9")); err != nil {
-		t.Fatalf("stored hash does not match new password: %v", err)
-	}
-	if len(tokenRepo.revokedUserIDs) != 1 || tokenRepo.revokedUserIDs[0] != "user-1" {
-		t.Fatalf("RevokeTokensByUserID calls = %v, want [user-1]", tokenRepo.revokedUserIDs)
-	}
-}
-
-func TestAdminResetPasswordRejectsWeakPasswordBeforeWrite(t *testing.T) {
-	tokenRepo := &stubAuthTokenRepo{tokens: map[string]*types.AuthToken{}}
-	svc := newAuthTestUserService(tokenRepo)
-	repo := svc.userRepo.(*stubUserRepoForAuth)
-
-	err := svc.AdminResetPassword(context.Background(), "user-1", "password")
-	if !errors.Is(err, ErrPasswordPolicy) {
-		t.Fatalf("AdminResetPassword() err = %v, want ErrPasswordPolicy", err)
-	}
-	if repo.updateCalls != 0 || len(tokenRepo.revokedUserIDs) != 0 {
-		t.Fatalf("weak password caused side effects: updates=%d revocations=%v",
-			repo.updateCalls, tokenRepo.revokedUserIDs)
-	}
-}
-
-func TestChangePasswordRequiresPolicyAndRevokesSessions(t *testing.T) {
+func TestChangePasswordRequiresMinimumLengthAndRevokesSessions(t *testing.T) {
 	ctx := context.Background()
 	tokenRepo := &stubAuthTokenRepo{tokens: map[string]*types.AuthToken{}}
 	svc := newAuthTestUserService(tokenRepo)
@@ -233,8 +188,8 @@ func TestChangePasswordRequiresPolicyAndRevokesSessions(t *testing.T) {
 	}
 	repo.users["user-1"].PasswordHash = string(hashed)
 
-	if err := svc.ChangePassword(ctx, "user-1", "OldSecure9", "weak"); !errors.Is(err, ErrPasswordPolicy) {
-		t.Fatalf("ChangePassword(weak) err = %v, want ErrPasswordPolicy", err)
+	if err := svc.ChangePassword(ctx, "user-1", "OldSecure9", "weak"); !errors.Is(err, ErrInvalidPassword) {
+		t.Fatalf("ChangePassword(weak) err = %v, want ErrInvalidPassword", err)
 	}
 	if repo.updateCalls != 0 || len(tokenRepo.revokedUserIDs) != 0 {
 		t.Fatalf("weak password caused side effects: updates=%d revocations=%v",
@@ -276,34 +231,6 @@ func TestChangePasswordRejectsSamePassword(t *testing.T) {
 	}
 }
 
-func TestChangePasswordHonoursRuntimeComplexPolicy(t *testing.T) {
-	ctx := context.Background()
-	tokenRepo := &stubAuthTokenRepo{tokens: map[string]*types.AuthToken{}}
-	svc := newAuthTestUserService(tokenRepo)
-	svc.systemSettingSvc = &stubComplexPasswordSettings{enabled: true}
-	repo := svc.userRepo.(*stubUserRepoForAuth)
-
-	hashed, err := bcrypt.GenerateFromPassword([]byte("OldSecure9"), bcrypt.DefaultCost)
-	if err != nil {
-		t.Fatalf("hash old password: %v", err)
-	}
-	repo.users["user-1"].PasswordHash = string(hashed)
-
-	if err := svc.ChangePassword(ctx, "user-1", "wrong-pass", "weak"); !errors.Is(err, ErrInvalidOldPassword) {
-		t.Fatalf("ChangePassword(wrong old, weak new) err = %v, want ErrInvalidOldPassword", err)
-	}
-	if err := svc.ChangePassword(ctx, "user-1", "OldSecure9", "NewSecure9"); !errors.Is(err, ErrComplexPasswordPolicy) {
-		t.Fatalf("ChangePassword(simple new) err = %v, want ErrComplexPasswordPolicy", err)
-	}
-	if repo.updateCalls != 0 || len(tokenRepo.revokedUserIDs) != 0 {
-		t.Fatalf("complex-policy reject caused side effects: updates=%d revocations=%v",
-			repo.updateCalls, tokenRepo.revokedUserIDs)
-	}
-	if err := svc.ChangePassword(ctx, "user-1", "OldSecure9", "NewSecure9!"); err != nil {
-		t.Fatalf("ChangePassword(complex new) err = %v", err)
-	}
-}
-
 func TestUserIDFromSignedTokenAcceptsExpiredToken(t *testing.T) {
 	expired := signTestJWT(jwt.MapClaims{
 		"user_id": "user-1",
@@ -320,10 +247,10 @@ func TestUserIDFromSignedTokenAcceptsExpiredToken(t *testing.T) {
 	}
 }
 
-func (s *stubUserRepoForAuth) HasTeamUsers(context.Context) (bool, error) {
+func (s *stubUserRepoForAuth) HasUsers(context.Context) (bool, error) {
 	return len(s.users) > 0, nil
 }
-func (s *stubUserRepoForAuth) RegisterTeamUser(_ context.Context, user *types.User, token string) error {
+func (s *stubUserRepoForAuth) RegisterSingleUser(_ context.Context, user *types.User) error {
 	s.users[user.ID] = user
 	return nil
 }

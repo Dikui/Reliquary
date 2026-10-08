@@ -27,9 +27,9 @@ func TestKnowledgeContextEntityDetailReturnsEmptyEventArray(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 	engine.Use(middleware.ErrorHandler(), fusionIdentityMiddleware())
-	guards := newRBACGuards(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	guards := newAccessGuards(nil, nil, nil)
 	RegisterKnowledgeContextRoutes(engine.Group("/api/v1"), handler.NewKnowledgeContextHandler(service.NewKnowledgeContextService(db, nil), nil), guards)
-	rec := fusionRequest(t, engine, http.MethodGet, "/api/v1/knowledge-context/entities/object", "", 1, "editor", types.TenantRoleContributor)
+	rec := fusionRequest(t, engine, http.MethodGet, "/api/v1/knowledge-context/entities/object", "", 1, "editor")
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	var response struct {
 		Success bool                       `json:"success"`

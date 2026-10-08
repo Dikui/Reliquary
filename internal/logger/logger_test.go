@@ -187,30 +187,11 @@ func TestLevelColorFor(t *testing.T) {
 func TestCloneContextPreservesPrincipal(t *testing.T) {
 	t.Parallel()
 
-	ctx := types.WithPrincipal(context.Background(), types.Principal{Type: types.PrincipalAPIExternalUser, ID: "1:external-alice"})
+	ctx := types.WithPrincipal(context.Background(), types.Principal{Type: types.PrincipalWebUser, ID: "personal-user"})
 	cloned := CloneContext(ctx)
 
-	if got := types.SessionOwnerIDFromContext(cloned); got != "api_external_user:1:external-alice" {
+	if got, ok := types.PrincipalFromContext(cloned); !ok || got.StorageID() != "web_user:personal-user" {
 		t.Fatalf("SessionOwnerIDFromContext(cloned) = %q", got)
-	}
-}
-
-func TestCloneContextPreservesTenantAPIKeyScope(t *testing.T) {
-	t.Parallel()
-
-	want := types.TenantAPIKeyScope{
-		KeyID:            7,
-		KnowledgeBaseIDs: types.StringArray{"kb-1"},
-	}
-	ctx := types.WithTenantAPIKeyScope(context.Background(), want)
-	cloned := CloneContext(ctx)
-
-	got, ok := types.TenantAPIKeyScopeFromContext(cloned)
-	if !ok {
-		t.Fatal("TenantAPIKeyScopeFromContext(cloned) = false, want true")
-	}
-	if got.KeyID != want.KeyID || !got.AllowsKnowledgeBase("kb-1") || got.AllowsKnowledgeBase("kb-2") {
-		t.Fatalf("cloned scope = %#v, want key_id=7 scoped to kb-1", got)
 	}
 }
 

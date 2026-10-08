@@ -9,15 +9,11 @@ import (
 	"reliquary/internal/types"
 )
 
-func TestAuthLoginResponse_ViewerOmitsActiveTenantSecrets(t *testing.T) {
+func TestAuthLoginResponse_OmitsActiveTenantSecrets(t *testing.T) {
 	tenant := sampleSecretTenant()
 	resp := NewAuthLoginResponse(&types.LoginResponse{
 		Success:      true,
 		ActiveTenant: tenant,
-		Memberships: []types.Membership{{
-			TenantID: tenant.ID,
-			Role:     types.TenantRoleViewer,
-		}},
 	})
 	body, err := json.Marshal(resp)
 	require.NoError(t, err)
@@ -26,15 +22,11 @@ func TestAuthLoginResponse_ViewerOmitsActiveTenantSecrets(t *testing.T) {
 	assert.NotContains(t, s, "parser-secret-123")
 }
 
-func TestAuthLoginResponse_OwnerOmitsLegacyTenantAPIKey(t *testing.T) {
+func TestAuthLoginResponse_OmitsLegacyTenantAPIKey(t *testing.T) {
 	tenant := sampleSecretTenant()
 	resp := NewAuthLoginResponse(&types.LoginResponse{
 		Success:      true,
 		ActiveTenant: tenant,
-		Memberships: []types.Membership{{
-			TenantID: tenant.ID,
-			Role:     types.TenantRoleOwner,
-		}},
 	})
 	body, err := json.Marshal(resp)
 	require.NoError(t, err)

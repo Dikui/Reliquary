@@ -112,7 +112,7 @@ func (r *memoryRepository) EnqueuePendingSession(
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var subject types.MemorySubject
 		if err := tx.Where("tenant_id = ? AND subject_id = ?", scope.TenantID, scope.SubjectID).
-			Clauses(forUpdateClause()).
+			Clauses(clause.Locking{Strength: "UPDATE"}).
 			First(&subject).Error; err != nil {
 			return err
 		}
@@ -155,7 +155,7 @@ func (r *memoryRepository) ClaimPendingSessions(
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var subject types.MemorySubject
 		if err := tx.Where("tenant_id = ? AND subject_id = ?", scope.TenantID, scope.SubjectID).
-			Clauses(forUpdateClause()).
+			Clauses(clause.Locking{Strength: "UPDATE"}).
 			First(&subject).Error; err != nil {
 			return err
 		}

@@ -222,16 +222,6 @@ definitions:
       waiting:
         type: integer
     type: object
-  github_com_Tencent_Reliquary_internal_types.APIPrincipalMode:
-    enum:
-      - tenant
-      - direct_header
-      - signed_token
-    type: string
-    x-enum-varnames:
-      - APIPrincipalModeTenant
-      - APIPrincipalModeDirect
-      - APIPrincipalModeSignedToken
   github_com_Tencent_Reliquary_internal_types.ASRConfig:
     properties:
       enabled:
@@ -288,170 +278,6 @@ definitions:
     x-enum-varnames:
       - AnswerStrategyAll
       - AnswerStrategyRandom
-  github_com_Tencent_Reliquary_internal_types.AuditAction:
-    enum:
-      - rbac.member_added
-      - rbac.member_removed
-      - rbac.member_role_changed
-      - rbac.member_left
-      - rbac.access_denied
-      - rbac.invitation_sent
-      - rbac.invitation_accepted
-      - rbac.invitation_declined
-      - rbac.invitation_revoked
-      - rbac.invitation_expired
-      - vector_store.created
-      - vector_store.updated
-      - vector_store.deleted
-      - system.setting_changed
-      - system.admin_promoted
-      - system.admin_revoked
-      - system.user_password_reset
-      - system.user_created
-      - system.api_key_created
-      - system.api_key_revoked
-      - system.queue_task_retried
-      - system.queue_task_deleted
-      - system.queue_task_run_now
-      - system.queue_task_cancelled
-      - system.queue_archived_purged
-      - kb.created
-      - kb.updated
-      - kb.deleted
-      - kb.duplicated
-      - kb.clone_started
-      - kb.clone_completed
-      - kb.clone_failed
-      - knowledge.created
-      - knowledge.updated
-      - knowledge.deleted
-      - knowledge.batch_deleted
-      - knowledge.reparse_started
-      - knowledge.parse_canceled
-      - knowledge.move_started
-      - knowledge.move_completed
-      - knowledge.move_failed
-      - tag.created
-      - tag.updated
-      - tag.deleted
-      - datasource.created
-      - datasource.updated
-      - datasource.deleted
-      - datasource.sync_started
-      - datasource.sync_completed
-      - datasource.sync_failed
-      - datasource.paused
-      - datasource.resumed
-      - wiki.content_changed
-    type: string
-    x-enum-varnames:
-      - AuditActionMemberAdded
-      - AuditActionMemberRemoved
-      - AuditActionMemberRoleChanged
-      - AuditActionMemberLeft
-      - AuditActionAccessDenied
-      - AuditActionInvitationSent
-      - AuditActionInvitationAccepted
-      - AuditActionInvitationDeclined
-      - AuditActionInvitationRevoked
-      - AuditActionInvitationExpired
-      - AuditActionVectorStoreCreated
-      - AuditActionVectorStoreUpdated
-      - AuditActionVectorStoreDeleted
-      - AuditActionOpenSearchIndexCreated
-      - AuditActionOpenSearchIndexDeleted
-      - AuditActionOpenSearchReindexExecuted
-      - AuditActionSystemSettingChanged
-      - AuditActionSystemAdminPromoted
-      - AuditActionSystemAdminRevoked
-      - AuditActionSystemUserPasswordReset
-      - AuditActionSystemUserCreated
-      - AuditActionSystemAPIKeyCreated
-      - AuditActionSystemAPIKeyRevoked
-      - AuditActionSystemQueueTaskRetried
-      - AuditActionSystemQueueTaskDeleted
-      - AuditActionSystemQueueTaskRunNow
-      - AuditActionSystemQueueTaskCancelled
-      - AuditActionSystemQueueArchivedPurged
-      - AuditActionKBCreated
-      - AuditActionKBUpdated
-      - AuditActionKBDeleted
-      - AuditActionKBDuplicated
-      - AuditActionKBCloneStarted
-      - AuditActionKBCloneCompleted
-      - AuditActionKBCloneFailed
-      - AuditActionKnowledgeCreated
-      - AuditActionKnowledgeUpdated
-      - AuditActionKnowledgeDeleted
-      - AuditActionKnowledgeBatchDeleted
-      - AuditActionKnowledgeReparseStarted
-      - AuditActionKnowledgeParseCanceled
-      - AuditActionKnowledgeMoveStarted
-      - AuditActionKnowledgeMoveCompleted
-      - AuditActionKnowledgeMoveFailed
-      - AuditActionTagCreated
-      - AuditActionTagUpdated
-      - AuditActionTagDeleted
-      - AuditActionDataSourceCreated
-      - AuditActionDataSourceUpdated
-      - AuditActionDataSourceDeleted
-      - AuditActionDataSourceSyncStarted
-      - AuditActionDataSourceSyncCompleted
-      - AuditActionDataSourceSyncFailed
-      - AuditActionDataSourcePaused
-      - AuditActionDataSourceResumed
-      - AuditActionWikiContentChanged
-  github_com_Tencent_Reliquary_internal_types.AuditLog:
-    properties:
-      action:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.AuditAction'
-      actor_role:
-        type: string
-      actor_user_id:
-        type: string
-      created_at:
-        type: string
-      details:
-        items:
-          type: integer
-        type: array
-      id:
-        type: integer
-      outcome:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.AuditOutcome'
-      request_method:
-        type: string
-      request_path:
-        type: string
-      scope_id:
-        type: string
-      scope_type:
-        type: string
-      target_id:
-        type: string
-      target_type:
-        type: string
-      target_user_id:
-        type: string
-      tenant_id:
-        type: integer
-    type: object
-  github_com_Tencent_Reliquary_internal_types.AuditOutcome:
-    enum:
-      - success
-      - accepted
-      - denied
-      - failed
-      - partial
-      - canceled
-    type: string
-    x-enum-varnames:
-      - AuditOutcomeSuccess
-      - AuditOutcomeAccepted
-      - AuditOutcomeDenied
-      - AuditOutcomeFailed
-      - AuditOutcomePartial
-      - AuditOutcomeCanceled
   github_com_Tencent_Reliquary_internal_types.AutoTagConfig:
     properties:
       enabled:
@@ -935,7 +761,7 @@ definitions:
         description: Total items synced (not stored in DB, calculated on query)
         type: integer
       type:
-        description: Connector type (feishu, notion, confluence, etc.)
+        description: Connector type (rss).
         type: string
       updated_at:
         description: Last update timestamp
@@ -1080,12 +906,7 @@ definitions:
         description: Creation time of the knowledge base
         type: string
       creator_id:
-        description: |-
-          CreatorID records the user ID of whoever originally created the KB.
-          Used by the workspace-level RBAC middleware to let Contributors edit
-          their own KBs without granting them access to everyone else's.
-          Nullable for backward compatibility with rows created before the
-          RBAC migration backfilled the column to the workspace Owner.
+        description: CreatorID records who created the knowledge base. It does not restrict access.
         type: string
       creator_name:
         description: |-
@@ -1279,13 +1100,6 @@ definitions:
       vlm_config:
         $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.VLMConfig'
     type: object
-  github_com_Tencent_Reliquary_internal_types.ListMembersResponse:
-    properties:
-      members:
-        type: array
-      total:
-        type: integer
-    type: object
   github_com_Tencent_Reliquary_internal_types.LocalEngineConfig:
     properties:
       path_prefix:
@@ -1311,18 +1125,6 @@ definitions:
           ActiveTenant is the workspace whose ID is encoded in the issued JWT;
           future requests are scoped to it until the client calls /auth/switch-tenant.
           Defaults to the user's home workspace on a fresh login.
-      memberships:
-        description: |-
-          Memberships lists every workspace the user can authenticate into,
-          along with their role in each. Always populated (length 1 for users
-          who only belong to their home workspace) so frontends can render a
-          workspace switcher without a follow-up request. Serialised without
-          omitempty so the field is always present as a JSON array (possibly
-          empty) — the "always populated" contract relies on the server side
-          guaranteeing a non-nil slice.
-        items:
-          $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.Membership'
-        type: array
       message:
         type: string
       refresh_token:
@@ -1531,15 +1333,6 @@ definitions:
       - MatchTypeWebSearch
       - MatchTypeDirectLoad
       - MatchTypeDataAnalysis
-  github_com_Tencent_Reliquary_internal_types.Membership:
-    properties:
-      role:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.TenantRole'
-      tenant_id:
-        type: integer
-      tenant_name:
-        type: string
-    type: object
   github_com_Tencent_Reliquary_internal_types.MemoryConfig:
     properties:
       embedding_model_id:
@@ -2497,7 +2290,7 @@ definitions:
         description: KnowledgeBaseID is the ID of the knowledge base this result belongs to
         type: string
       knowledge_channel:
-        description: KnowledgeChannel indicates through which channel the knowledge was ingested (web, api, feishu, etc.)
+        description: KnowledgeChannel indicates the source channel (web, api, rss).
         type: string
       knowledge_custom_metadata:
         description: KnowledgeCustomMetadata is user-authored context safe to expose to models.
@@ -2565,13 +2358,6 @@ definitions:
       id:
         description: ID
         type: string
-      im_platform:
-        description: |-
-          IMPlatform is the originating IM platform (e.g. "feishu") when
-          this session is bound to an IM channel. It is not stored on the sessions
-          table (it lives in im_channel_sessions) and is populated on read so the
-          Web console can classify a session's origin folder without a list query.
-        type: string
       is_pinned:
         description: IsPinned indicates whether the session is pinned in the list.
         type: boolean
@@ -2607,9 +2393,7 @@ definitions:
       updated_at:
         type: string
       user_id:
-        description: |-
-          UserID is the owner scope for this session. Reliquary user UUIDs, API
-          external-user principals, and embed visitor principals all use this column.
+        description: UserID identifies the personal user who owns the session.
         type: string
     type: object
   github_com_Tencent_Reliquary_internal_types.SessionLastRequestState:
@@ -2942,18 +2726,6 @@ definitions:
           - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WebSearchConfig'
         description: Global WebSearch configuration for this workspace
     type: object
-  github_com_Tencent_Reliquary_internal_types.TenantRole:
-    enum:
-      - owner
-      - admin
-      - contributor
-      - viewer
-    type: string
-    x-enum-varnames:
-      - TenantRoleOwner
-      - TenantRoleAdmin
-      - TenantRoleContributor
-      - TenantRoleViewer
   github_com_Tencent_Reliquary_internal_types.TenantSandboxConfig:
     properties:
       allow_private_endpoints:
@@ -3080,11 +2852,6 @@ definitions:
         description: Whether the tool executed successfully
         type: boolean
     type: object
-  github_com_Tencent_Reliquary_internal_types.UpdateMemberRoleRequest:
-    properties: {}
-    required:
-      - role
-    type: object
   github_com_Tencent_Reliquary_internal_types.UsedMemory:
     properties:
       content:
@@ -3115,9 +2882,6 @@ definitions:
       is_active:
         description: Whether the user is active
         type: boolean
-      is_system_admin:
-        description: Whether the user is a system administrator (independent of workspace roles)
-        type: boolean
       tenant:
         allOf:
           - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.Tenant'
@@ -3143,8 +2907,6 @@ definitions:
       id:
         type: string
       is_active:
-        type: boolean
-      is_system_admin:
         type: boolean
       tenant_id:
         type: integer
@@ -4181,15 +3943,6 @@ definitions:
     required:
       - llmModelId
     type: object
-  internal_handler.ListSystemAdminsResponse:
-    properties:
-      admins:
-        items:
-          $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.UserInfo'
-        type: array
-      total:
-        type: integer
-    type: object
   internal_handler.ModelTestRequest:
     properties:
       apiKey:
@@ -4375,13 +4128,6 @@ definitions:
           response was truncated to previewMaxChunks for transport.
         type: integer
     type: object
-  internal_handler.PromoteUserToSystemAdminRequest:
-    properties:
-      email:
-        type: string
-      user_id:
-        type: string
-    type: object
   internal_handler.RemoteModelCheckRequest:
     properties:
       apiKey:
@@ -4436,23 +4182,6 @@ definitions:
       - from
       - to
     type: object
-  internal_handler.ResetUserPasswordRequest:
-    properties:
-      email:
-        type: string
-      new_password:
-        type: string
-    required:
-      - email
-      - new_password
-    type: object
-  internal_handler.RevokeSystemAdminRequest:
-    properties:
-      user_id:
-        type: string
-    required:
-      - user_id
-    type: object
   internal_handler.RuntimeQueuesResponse:
     properties:
       available:
@@ -4498,7 +4227,7 @@ definitions:
         type: array
     type: object
   internal_handler.RuntimeWorkerPool:
-    description: Return every row in the system_settings table (system-scope, not workspace-scoped). SystemAdmin only.
+    description: Return every row in the system_settings table (system-scope, not workspace-scoped). Authenticated user or API Key.
     properties:
       active:
         description: live workers assigned to this pool
@@ -4721,23 +4450,6 @@ definitions:
           etc. by the JSON unmarshaller). Service.encodeForType normalises
           these against the registry's declared type and rejects mismatches.
     type: object
-  internal_handler.acceptInvitationByTokenRequest:
-    properties:
-      token:
-        type: string
-    required:
-      - token
-    type: object
-  internal_handler.addMemberRequest:
-    properties:
-      email:
-        type: string
-      role:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.TenantRole'
-    required:
-      - email
-      - role
-    type: object
   internal_handler.addSimilarQuestionsRequest:
     properties:
       similar_questions:
@@ -4747,37 +4459,6 @@ definitions:
         type: array
     required:
       - similar_questions
-    type: object
-  internal_handler.apiPrincipalConfigRequest:
-    properties:
-      direct_header_name:
-        type: string
-      hmac_secret:
-        type: string
-      mode:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.APIPrincipalMode'
-      require_direct_header:
-        type: boolean
-      signed_token_header_name:
-        type: string
-    type: object
-  internal_handler.apiPrincipalTestTokenRequest:
-    properties:
-      expires_in_seconds:
-        type: integer
-      external_user_id:
-        type: string
-    type: object
-  internal_handler.auditLogListResponse:
-    properties:
-      data:
-        items:
-          $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.AuditLog'
-        type: array
-      next_cursor:
-        type: integer
-      success:
-        type: boolean
     type: object
   internal_handler.batchReparseKnowledgeRequest:
     properties:
@@ -4793,45 +4474,6 @@ definitions:
       - ids
       - kb_id
     type: object
-  internal_handler.createInvitationRequest:
-    properties:
-      email:
-        type: string
-      message:
-        type: string
-      role:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.TenantRole'
-    required:
-      - email
-      - role
-    type: object
-  internal_handler.createInviteLinkRequest:
-    properties:
-      message:
-        type: string
-      role:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.TenantRole'
-    required:
-      - role
-    type: object
-  internal_handler.invitationLookupRequest:
-    properties:
-      token:
-        type: string
-    required:
-      - token
-    type: object
-  internal_handler.invitationLookupResponse:
-    properties:
-      expires_at:
-        type: string
-      role:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.TenantRole'
-      tenant_id:
-        type: integer
-      tenant_name:
-        type: string
-    type: object
   internal_handler.meEnvVarRequest:
     properties:
       name:
@@ -4846,23 +4488,6 @@ definitions:
           rather than a write of "", so a member always has one unambiguous way to
           revoke.
         type: string
-    type: object
-  internal_handler.registerByInviteRequest:
-    properties:
-      email:
-        type: string
-      password:
-        minLength: 6
-        type: string
-      token:
-        type: string
-      username:
-        type: string
-    required:
-      - email
-      - password
-      - token
-      - username
     type: object
   internal_handler.resolveAncestorsRequest:
     properties:
@@ -4922,13 +4547,6 @@ definitions:
     required:
       - name
       - provider
-    type: object
-  internal_handler.updateMemberRoleRequest:
-    properties:
-      role:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.TenantRole'
-    required:
-      - role
     type: object
   internal_handler_session.AttachmentUpload:
     properties:
@@ -5796,35 +5414,6 @@ paths:
       summary: 获取认证配置
       tags:
         - 认证
-  /auth/invitations/lookup:
-    post:
-      consumes:
-        - application/json
-      description: |-
-        根据邀请链接中的 token 返回邀请上下文（空间名 / 角色 / 过期时间），
-        供注册页展示。无认证；token 无效或被撤销返回 410。
-        使用 POST + body 而非 GET + path，避免 token 落入访问日志 / 浏览器历史 / tracing。
-      parameters:
-        - description: 邀请 token
-          in: body
-          name: request
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.invitationLookupRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_handler.invitationLookupResponse'
-        "410":
-          description: 链接无效或已撤销
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      summary: 解析共享邀请链接 token
-      tags:
-        - 认证
   /auth/login:
     post:
       consumes:
@@ -5953,42 +5542,6 @@ paths:
           schema:
             $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
       summary: 用户注册
-      tags:
-        - 认证
-  /auth/register-by-invite:
-    post:
-      consumes:
-        - application/json
-      description: |-
-        通过 Owner 生成的共享邀请链接 token 完成注册，绕过 invite_only 模式拦截。
-        注册者自填邮箱（与 token 不绑定）；注册成功后自动加入对应空间。
-      parameters:
-        - description: 邀请注册请求
-          in: body
-          name: request
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.registerByInviteRequest'
-      produces:
-        - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.LoginResponse'
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "409":
-          description: 邮箱已注册
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "410":
-          description: 链接无效或已撤销
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      summary: 使用共享链接注册
       tags:
         - 认证
   /auth/validate:
@@ -6506,7 +6059,7 @@ paths:
         - DataSource
   /datasource/{id}/resources:
     get:
-      description: List resources available for sync in the external system. Pass parent_id to lazily load the direct children of a resource (used for large hierarchical sources such as Feishu wiki).
+      description: List RSS feeds available for sync.
       parameters:
         - description: Data source ID
           in: path
@@ -6736,176 +6289,6 @@ paths:
       summary: 执行评估
       tags:
         - 评估
-  /im-channels/{id}:
-    delete:
-      description: 删除指定 IM 渠道
-      parameters:
-        - description: 渠道 ID
-          in: path
-          name: id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 'success: true'
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 请求参数错误
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: 渠道不存在
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: 删除 IM 渠道
-      tags:
-        - IM 渠道
-    put:
-      consumes:
-        - application/json
-      description: 更新指定 IM 渠道的名称、模式、知识库、凭证或启用状态
-      parameters:
-        - description: 渠道 ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: 更新字段（name/mode/output_mode/knowledge_base_id/credentials/enabled）
-          in: body
-          name: request
-          required: true
-          schema:
-            additionalProperties: true
-            type: object
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 更新后的渠道
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 请求参数错误
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: 渠道不存在
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: 更新 IM 渠道
-      tags:
-        - IM 渠道
-  /im-channels/{id}/toggle:
-    post:
-      description: 切换指定 IM 渠道的启用状态
-      parameters:
-        - description: 渠道 ID
-          in: path
-          name: id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 更新后的渠道
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 请求参数错误
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: 渠道不存在
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: 启用/停用 IM 渠道
-      tags:
-        - IM 渠道
-  /im/callback/{channel_id}:
-    get:
-      consumes:
-        - application/json
-      description: 接收各 IM 平台的事件回调；走平台自身签名校验，不使用 API Key
-      parameters:
-        - description: 渠道 ID
-          in: path
-          name: channel_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 处理结果
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 请求参数错误
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: 签名校验失败
-          schema:
-            additionalProperties: true
-            type: object
-      summary: IM 平台回调
-      tags:
-        - IM 回调
-    post:
-      consumes:
-        - application/json
-      description: 接收各 IM 平台的事件回调；走平台自身签名校验，不使用 API Key
-      parameters:
-        - description: 渠道 ID
-          in: path
-          name: channel_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 处理结果
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 请求参数错误
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: 签名校验失败
-          schema:
-            additionalProperties: true
-            type: object
-      summary: IM 平台回调
-      tags:
-        - IM 回调
   /initialization/asr/check:
     post:
       consumes:
@@ -7453,51 +6836,6 @@ paths:
       summary: 更新知识库
       tags:
         - 知识库
-  /knowledge-bases/{id}/activity:
-    get:
-      description: 返回知识库的重要变更与后台任务入口，团队成员可读。
-      parameters:
-        - description: 知识库ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: 游标：返回 id 小于此值的记录
-          in: query
-          name: after_id
-          type: integer
-        - description: 页大小，1-100，默认 50
-          in: query
-          name: limit
-          type: integer
-        - description: 按 action 精确过滤
-          in: query
-          name: action
-          type: string
-        - description: 按 outcome 精确过滤
-          in: query
-          name: outcome
-          type: string
-        - description: 按 actor_user_id 精确过滤
-          in: query
-          name: actor
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_handler.auditLogListResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-      summary: 获取知识库活动记录
-      tags:
-        - 知识库
   /knowledge-bases/{id}/duplicate:
     post:
       consumes:
@@ -7678,7 +7016,7 @@ paths:
           in: query
           name: parse_status
           type: string
-        - description: 来源/渠道筛选 (web/api/feishu/notion/yuque/...，或 manual/url 按 type 过滤)
+        - description: 来源/渠道筛选 (web/api/rss，或 manual/url 按 type 过滤)
           in: query
           name: source
           type: string
@@ -10173,116 +9511,6 @@ paths:
       summary: Set one of my skill credentials
       tags:
         - Me
-  /me/invitations:
-    get:
-      description: 返回当前登录用户的待接受邀请（默认仅 pending），用于头像入口和 /invitations 收件箱页。
-      parameters:
-        - description: 是否包含已处理 / 已过期等终止态行（默认 false）
-          in: query
-          name: include_terminal
-          type: boolean
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 列出我的待接受邀请
-      tags:
-        - 我的邀请
-  /me/invitations/{inv_id}/accept:
-    post:
-      description: 当前登录用户接受一条 pending 邀请；服务端会同时写入 tenant_members 行。
-      parameters:
-        - description: 邀请 ID
-          in: path
-          name: inv_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 接受邀请
-      tags:
-        - 我的邀请
-  /me/invitations/{inv_id}/decline:
-    post:
-      description: 当前登录用户拒绝一条 pending 邀请；不创建 tenant_members 行。
-      parameters:
-        - description: 邀请 ID
-          in: path
-          name: inv_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 拒绝邀请
-      tags:
-        - 我的邀请
-  /me/invitations/accept-by-token:
-    post:
-      consumes:
-        - application/json
-      description: 已登录用户用共享邀请链接 token 加入空间，不创建新账号；对已是成员的用户幂等。
-      parameters:
-        - description: 邀请 token
-          in: body
-          name: request
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.acceptInvitationByTokenRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "410":
-          description: 链接无效或已撤销
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-      summary: 通过共享链接加入空间
-      tags:
-        - 我的邀请
-  /me/invitations/pending-count:
-    get:
-      description: 轻量级 endpoint，返回当前登录用户的 pending 邀请数，用于头像旁的角标轮询。
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 获取我的待处理邀请数
-      tags:
-        - 我的邀请
   /memory/consolidate:
     post:
       description: 合并意思接近的条目、归档到期事项，不等待每日后台整理
@@ -11631,7 +10859,7 @@ paths:
           in: query
           name: keyword
           type: string
-        - description: 来源过滤：web / api / feishu（api、IM 渠道需 Admin+）
+        - description: 会话列表
           in: query
           name: source
           type: string
@@ -12561,162 +11789,6 @@ paths:
       summary: List allowed storage provider types
       tags:
         - StorageBackend
-  /system/admin/audit-log:
-    get:
-      description: 返回 system-scope（tenant_id=0）的审计事件，覆盖 system.setting_changed / system.admin_promoted / system.admin_revoked 等 SystemAdmin 操作。按 id 倒序的游标分页。
-      parameters:
-        - description: 游标：返回 id 小于此值的记录（默认从最新开始）
-          in: query
-          name: after_id
-          type: integer
-        - description: 页大小，1-100，默认 50
-          in: query
-          name: limit
-          type: integer
-        - description: 按 action 精确过滤（如 system.setting_changed）
-          in: query
-          name: action
-          type: string
-        - description: 按 outcome 精确过滤（success / denied）
-          in: query
-          name: outcome
-          type: string
-        - description: 按 actor_user_id 精确过滤
-          in: query
-          name: actor
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_handler.auditLogListResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: 获取平台审计日志
-      tags:
-        - 审计日志
-  /system/admin/list:
-    get:
-      description: |-
-        Retrieve a paginated list of users with system administrator
-        privileges (SystemAdmin only). Supports `offset` (default 0)
-        and `limit` (default 50, max 200) query parameters. Walks the
-        partial-friendly idx_users_is_system_admin index.
-      parameters:
-        - default: 0
-          description: Page offset
-          in: query
-          name: offset
-          type: integer
-        - default: 50
-          description: Page size (max 200)
-          in: query
-          name: limit
-          type: integer
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: System admins retrieved successfully
-          schema:
-            $ref: '#/definitions/internal_handler.ListSystemAdminsResponse'
-        "403":
-          description: 'Forbidden: not a system admin'
-          schema:
-            additionalProperties: true
-            type: object
-      summary: List all system administrators
-      tags:
-        - System Admin
-  /system/admin/promote:
-    post:
-      consumes:
-        - application/json
-      description: |-
-        Grant system administrator privileges to a user (SystemAdmin only).
-        Idempotent: re-promoting an existing system admin returns 200 with no DB write.
-        Identify the user by email (preferred for human operators) or user_id (UUID, for API clients).
-      parameters:
-        - description: User promotion request
-          in: body
-          name: request
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.PromoteUserToSystemAdminRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: User promoted successfully
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.UserInfo'
-        "400":
-          description: Bad request
-          schema:
-            additionalProperties: true
-            type: object
-        "403":
-          description: 'Forbidden: not a system admin'
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: User not found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Promote a user to system administrator
-      tags:
-        - System Admin
-  /system/admin/revoke:
-    post:
-      consumes:
-        - application/json
-      description: |-
-        Remove system administrator privileges from a user (SystemAdmin only).
-        Two safety guards: the caller cannot revoke their own privileges,
-        and revoking the last remaining system admin is rejected — both
-        prevent a SystemAdmin from accidentally locking the platform out
-        of system-level administration. Idempotent on already-non-admin users.
-      parameters:
-        - description: User revocation request
-          in: body
-          name: request
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.RevokeSystemAdminRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Privileges revoked successfully
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.UserInfo'
-        "400":
-          description: Bad request / would remove last admin / self-revoke
-          schema:
-            additionalProperties: true
-            type: object
-        "403":
-          description: 'Forbidden: not a system admin'
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: User not found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Revoke system administrator privileges from a user
-      tags:
-        - System Admin
   /system/admin/runtime/queues:
     get:
       description: 返回各 asynq 队列的实时深度（pending/active/scheduled/retry 等）与 worker 并发配置，仅系统管理员可见
@@ -12890,8 +11962,7 @@ paths:
       description: |-
         Persist a new value for :key. Service validates the
         rawValue against the registry's declared value_type and
-        rejects mismatches with 400. SystemAdmin only. Emits an
-        audit row (action=system.setting_changed) on success.
+        rejects mismatches with 400. Authenticated users and API keys have full access.
       parameters:
         - description: Setting key
           in: path
@@ -12922,46 +11993,6 @@ paths:
             additionalProperties: true
             type: object
       summary: Update a system setting value
-      tags:
-        - System Admin
-  /system/admin/users/reset-password:
-    post:
-      consumes:
-        - application/json
-      description: |-
-        Replace another user's local password and revoke all of their existing sessions (SystemAdmin only).
-        A system administrator cannot reset their own password through this endpoint; self-service password change still requires the old password.
-      parameters:
-        - description: Password reset request
-          in: body
-          name: request
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.ResetUserPasswordRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Password reset successfully
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Invalid request, weak password, or self reset
-          schema:
-            additionalProperties: true
-            type: object
-        "403":
-          description: 'Forbidden: not a system admin'
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: User not found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Reset another user's password
       tags:
         - System Admin
   /system/capabilities:
@@ -13167,430 +12198,6 @@ paths:
       summary: 更新空间
       tags:
         - 空间管理
-  /tenants/{id}/api-principal-config:
-    get:
-      consumes:
-        - application/json
-      description: 返回 X-API-Key 请求如何映射为终端 Principal 的配置（Owner）
-      parameters:
-        - description: 空间ID
-          in: path
-          name: id
-          required: true
-          type: integer
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: API principal 配置
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "403":
-          description: 权限不足
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-      summary: 获取空间 API Key 用户身份配置
-      tags:
-        - 空间管理
-    put:
-      consumes:
-        - application/json
-      description: 配置 X-API-Key 请求如何映射为终端 Principal（Owner）
-      parameters:
-        - description: 空间ID
-          in: path
-          name: id
-          required: true
-          type: integer
-        - description: API principal 配置
-          in: body
-          name: request
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.apiPrincipalConfigRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 更新后的配置
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "403":
-          description: 权限不足
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-      summary: 更新空间 API Key 用户身份配置
-      tags:
-        - 空间管理
-  /tenants/{id}/api-principal-test-token:
-    post:
-      consumes:
-        - application/json
-      description: 使用空间已保存的 HMAC 密钥签发短期外部用户 JWT（Owner）
-      parameters:
-        - description: 空间ID
-          in: path
-          name: id
-          required: true
-          type: integer
-        - description: 测试 Token 参数
-          in: body
-          name: request
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.apiPrincipalTestTokenRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 短期 JWT
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "403":
-          description: 权限不足
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-      summary: 生成 API Playground 测试 JWT
-      tags:
-        - 空间管理
-  /tenants/{id}/audit-log:
-    get:
-      description: 返回该空间最近的审计事件，按 id 倒序。游标分页：将上次响应的 next_cursor 作为下一次请求的 after_id。
-      parameters:
-        - description: 空间ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: 游标：返回 id 小于此值的记录（默认从最新开始）
-          in: query
-          name: after_id
-          type: integer
-        - description: 页大小，1-100，默认 50
-          in: query
-          name: limit
-          type: integer
-        - description: 按 action 精确过滤（如 rbac.member_added / rbac.access_denied）
-          in: query
-          name: action
-          type: string
-        - description: 按 outcome 精确过滤（success / denied）
-          in: query
-          name: outcome
-          type: string
-        - description: 按 actor_user_id 精确过滤
-          in: query
-          name: actor
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_handler.auditLogListResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: 获取空间审计日志
-      tags:
-        - 审计日志
-  /tenants/{id}/invitations:
-    get:
-      description: 按空间列出待接受 / 历史邀请。query include_terminal=true 时附带 accepted/declined/revoked/expired。
-      parameters:
-        - description: 空间 ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: 是否包含终止态行（默认 false）
-          in: query
-          name: include_terminal
-          type: boolean
-        - default: 1
-          description: 页码（从 1 起）
-          in: query
-          name: page
-          type: integer
-        - default: 20
-          description: 每页数量
-          in: query
-          name: page_size
-          type: integer
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 列出空间邀请
-      tags:
-        - 空间邀请
-    post:
-      consumes:
-        - application/json
-      description: Owner 通过邮箱邀请已注册用户加入空间。开启 tenant.auto_accept_invitation 后被邀请人立即自动加入（响应为成员结构），否则需在 /me/invitations 接受后成为成员。
-      parameters:
-        - description: 空间 ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: 邀请请求
-          in: body
-          name: request
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.createInvitationRequest'
-      produces:
-        - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 发出空间邀请
-      tags:
-        - 空间邀请
-  /tenants/{id}/invitations/{inv_id}:
-    delete:
-      description: Owner 取消一条还在 pending 的邀请；已 accepted/declined/revoked/expired 的行不可再撤销。
-      parameters:
-        - description: 空间 ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: 邀请 ID
-          in: path
-          name: inv_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 撤销待接受邀请
-      tags:
-        - 空间邀请
-  /tenants/{id}/invite-links:
-    post:
-      consumes:
-        - application/json
-      description: |-
-        生成一条多次使用的共享邀请链接：谁拿到链接谁就能注册并加入当前空间。
-        链接持续有效，直到过期或被撤销。
-      parameters:
-        - description: 空间 ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: 共享链接配置
-          in: body
-          name: request
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.createInviteLinkRequest'
-      produces:
-        - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 生成共享邀请链接
-      tags:
-        - 空间邀请
-  /tenants/{id}/leave:
-    post:
-      description: 调用方主动退出当前空间。等价于以自己的 user_id 调 RemoveMember，
-      parameters:
-        - description: 空间 ID
-          in: path
-          name: id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 退出当前空间
-      tags:
-        - 空间成员
-  /tenants/{id}/members:
-    get:
-      description: 分页返回当前空间内 active 成员（含每位成员的角色、邮箱、头像）；支持 q 按邮箱/用户名筛选
-      parameters:
-        - description: 空间 ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: 按邮箱/用户名模糊筛选
-          in: query
-          name: q
-          type: string
-        - default: 1
-          description: 页码（从 1 起）
-          in: query
-          name: page
-          type: integer
-        - default: 20
-          description: 每页数量（最大 100）
-          in: query
-          name: page_size
-          type: integer
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 列出空间成员
-      tags:
-        - 空间成员
-    post:
-      consumes:
-        - application/json
-      parameters:
-        - description: 空间 ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: 邀请请求
-          in: body
-          name: request
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.addMemberRequest'
-      produces:
-        - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 直接添加空间成员（直加路径）
-      tags:
-        - 空间成员
-  /tenants/{id}/members/{user_id}:
-    delete:
-      description: Owner 将某位成员从当前空间中移除（软删除 tenant_members 行）；不能移除最后一位 Owner
-      parameters:
-        - description: 空间 ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: 用户 ID
-          in: path
-          name: user_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 移除空间成员
-      tags:
-        - 空间成员
-    put:
-      consumes:
-        - application/json
-      description: Owner 修改某位成员在当前空间内的角色；不能将最后一位 Owner 降级
-      parameters:
-        - description: 空间 ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: 用户 ID
-          in: path
-          name: user_id
-          required: true
-          type: string
-        - description: 目标角色
-          in: body
-          name: request
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.updateMemberRoleRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 修改空间成员角色
-      tags:
-        - 空间成员
   /tenants/kv/{key}:
     get:
       consumes:
@@ -14488,7 +13095,7 @@ paths:
       - Knowledge Context
 securityDefinitions:
   ApiKeyAuth:
-    description: 团队 API Key 认证，访问唯一团队空间
+    description: API Key 认证，以唯一用户身份访问个人空间
     in: header
     name: X-API-Key
     type: apiKey

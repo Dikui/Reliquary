@@ -78,7 +78,6 @@ type knowledgeService struct {
 	// handled because the public surface is the SpanTracker interface,
 	// which has a no-op fallback. See knowledge_span_tracker.go.
 	spanTracker SpanTracker
-	audit       interfaces.AuditLogService
 }
 
 const (
@@ -113,7 +112,7 @@ func NewKnowledgeService(
 	wikiService interfaces.WikiPageService,
 	taskPendingRepo interfaces.TaskPendingOpsRepository,
 	spanTracker SpanTracker,
-	audit interfaces.AuditLogService,
+
 ) (interfaces.KnowledgeService, error) {
 	return &knowledgeService{
 		db:              db,
@@ -141,7 +140,6 @@ func NewKnowledgeService(
 		wikiService:     wikiService,
 		taskPendingRepo: taskPendingRepo,
 		spanTracker:     spanTracker,
-		audit:           audit,
 	}, nil
 }
 
@@ -866,8 +864,6 @@ func (s *knowledgeService) UpdateKnowledgeTag(ctx context.Context, knowledgeID s
 	actorID, _ := types.UserIDFromContext(ctx)
 	added, removed, err := s.repo.SetKnowledgeTagsManually(ctx, knowledgeID, tagIDs, actorID, "")
 	if err == nil && (len(added) > 0 || len(removed) > 0) {
-		recordKBActivity(ctx, s.audit, tenantID, knowledge.KnowledgeBaseID, types.AuditActionTagUpdated,
-			"knowledge", knowledgeID, types.AuditOutcomeSuccess, map[string]any{"added_tag_ids": added, "removed_tag_ids": removed})
 	}
 	return err
 }
@@ -974,9 +970,6 @@ func (s *knowledgeService) UpdateKnowledgeTagBatch(ctx context.Context, authoriz
 		if len(added) > 0 || len(removed) > 0 {
 			knowledge := findKnowledgeByID(knowledgeList, knowledgeID)
 			if knowledge != nil {
-				recordKBActivity(ctx, s.audit, tenantID, knowledge.KnowledgeBaseID, types.AuditActionTagUpdated,
-					"knowledge", knowledgeID, types.AuditOutcomeSuccess,
-					map[string]any{"added_tag_ids": added, "removed_tag_ids": removed, "reason": reason})
 			}
 		}
 	}

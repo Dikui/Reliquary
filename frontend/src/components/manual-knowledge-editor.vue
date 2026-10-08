@@ -1097,7 +1097,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  
+
   .t-icon {
     color: var(--td-text-color-secondary);
     font-size: 16px;
@@ -1109,7 +1109,7 @@ onBeforeUnmount(() => {
 .toolbar-btn:hover {
   background: rgba(7, 192, 95, 0.08);
   color: var(--td-brand-color);
-  
+
   .t-icon {
     color: var(--td-brand-color);
   }
@@ -1118,7 +1118,7 @@ onBeforeUnmount(() => {
 .toolbar-btn.active {
   background: rgba(7, 192, 95, 0.12);
   color: var(--td-brand-color);
-  
+
   .t-icon {
     color: var(--td-brand-color);
   }

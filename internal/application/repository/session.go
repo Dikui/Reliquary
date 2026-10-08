@@ -73,25 +73,6 @@ func (r *sessionRepository) GetByID(ctx context.Context, tenantID uint64, id str
 	return &session, nil
 }
 
-// GetIMPlatform returns the IM platform bound to a session, or "" when none.
-// It intentionally ignores soft-deleted mappings' visibility rules used by
-// QueryPaged: any mapping (active or cleared) marks the session as IM-origin.
-func (r *sessionRepository) GetIMPlatform(
-	ctx context.Context, tenantID uint64, sessionID string,
-) (string, error) {
-	var platform string
-	err := r.db.WithContext(ctx).
-		Table("im_channel_sessions AS ics").
-		Joins("JOIN sessions AS s ON s.id = ics.session_id").
-		Where("ics.session_id = ? AND s.tenant_id = ?", sessionID, tenantID).
-		Limit(1).
-		Pluck("ics.platform", &platform).Error
-	if err != nil {
-		return "", err
-	}
-	return platform, nil
-}
-
 // GetByTenantID retrieves all sessions for a tenant
 func (r *sessionRepository) GetByTenantID(ctx context.Context, tenantID uint64, userID string) ([]*types.Session, error) {
 	var sessions []*types.Session
@@ -138,8 +119,7 @@ func (r *sessionRepository) GetPagedByTenantID(
 	return sessions, total, nil
 }
 
-// QueryPaged lists sessions for tenant/user with keyword/source/agent filters,
-// pin-aware ordering, and IM origin fields from a LEFT JOIN.
+// QueryPaged lists personal sessions with keyword filtering and pin-aware ordering.
 func (r *sessionRepository) QueryPaged(
 	ctx context.Context, q *types.SessionListQuery,
 ) ([]*types.SessionListItem, int64, error) {
@@ -167,55 +147,10 @@ func (r *sessionRepository) QueryPaged(
 		return db
 	}
 
-	// LEFT JOIN IM mappings to surface origin fields and support source/agent filters.
-	// Soft-deleted mappings are intentionally included: a session that was ever bound
-	// to an IM channel belongs to that platform, not "web". /clear and session
-	// recycling soft-delete the mapping (and start a fresh session), so filtering
-	// deleted mappings out here would mis-bucket those past IM conversations into the
-	// user's own web chats ("web" = ics.id IS NULL).
-	// Safe from row fan-out because the IM flow only ever creates a *fresh* session
-	// for a new mapping (never re-maps an existing one), so a session has at most one
-	// mapping row. If that ever changes, this JOIN would need a one-row-per-session
-	// guard (the unique index only constrains active mappings).
-	joinClause := "LEFT JOIN im_channel_sessions ics ON ics.session_id = s.id"
-
-	applySource := func(db *gorm.DB) *gorm.DB {
-		src := strings.TrimSpace(q.Source)
-		lower := strings.ToLower(src)
-		switch lower {
-		case "":
-			return db
-		case types.SessionSourceAPI:
-			// Tenant-wide view of API-key sessions. Requests without an
-			// external identity use an api_tenant_key owner; requests with a
-			// direct-header or signed-token identity use api_external_user.
-			// The service layer already enforced Admin+ and cleared the
-			// per-user scope for this source.
-			return db.Where(
-				"(s.user_id LIKE ? OR s.user_id LIKE ?)",
-				types.SessionOwnerAPITenantKeyPrefix+"%",
-				types.SessionOwnerAPIExternalUserPrefix+"%",
-			)
-		case "web":
-			return db.Where("ics.id IS NULL AND (s.user_id IS NULL OR (s.user_id NOT LIKE ? AND s.user_id NOT LIKE ?))", types.SessionOwnerAPITenantKeyPrefix+"%", types.SessionOwnerAPIExternalUserPrefix+"%")
-
-		default:
-
-			return db.Where("ics.platform = ?", lower)
-		}
-	}
-	applyAgent := func(db *gorm.DB) *gorm.DB {
-		if q.AgentID != "" {
-			return db.Where("ics.agent_id = ?", q.AgentID)
-		}
-		return db
-	}
-
-	// Count distinct sessions to guard against fan-out from the join.
 	var total int64
-	countQ := applyAgent(applySource(applyBase(
-		r.db.WithContext(ctx).Table("sessions AS s").Joins(joinClause),
-	)))
+	countQ := applyBase(
+		r.db.WithContext(ctx).Table("sessions AS s"),
+	)
 	if err := countQ.Distinct("s.id").Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
@@ -230,16 +165,10 @@ func (r *sessionRepository) QueryPaged(
 	}
 
 	items := make([]*types.SessionListItem, 0)
-	rowsQ := applyAgent(applySource(applyBase(
-		r.db.WithContext(ctx).Table("sessions AS s").Joins(joinClause),
-	))).
-		Select(`s.*,
-			ics.platform       AS im_platform,
-			ics.chat_id        AS im_chat_id,
-			ics.thread_id      AS im_thread_id,
-			ics.user_id        AS im_user_id,
-			ics.agent_id       AS im_agent_id,
-			ics.im_channel_id  AS im_channel_id`).
+	rowsQ := applyBase(
+		r.db.WithContext(ctx).Table("sessions AS s"),
+	).
+		Select("s.*").
 		Order(orderClause).
 		Offset((page - 1) * size).
 		Limit(size)

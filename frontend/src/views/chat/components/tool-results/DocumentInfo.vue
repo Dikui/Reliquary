@@ -95,12 +95,7 @@ const channelLabelMap: Record<string, string> = {
   web_research: 'knowledgeBase.channelWebResearch',
   api: 'knowledgeBase.channelApi',
   browser_extension: 'knowledgeBase.channelBrowserExtension',
-  feishu: 'knowledgeBase.channelFeishu',
-  gitlab: 'knowledgeBase.channelGitLab',
-  im: 'knowledgeBase.channelIm',
-  ima: 'knowledgeBase.channelIma',
   rss: 'datasource.connector.rss',
-  grok_x: 'datasource.connector.grok_x',
 };
 
 const getChannelLabel = (channel: string) => {
@@ -173,7 +168,7 @@ const formatMetadataValue = (value: unknown) => {
 
 .document-card {
   margin: 0 8px 8px 8px;
-  
+
   .document-header {
     align-items: center;
   }

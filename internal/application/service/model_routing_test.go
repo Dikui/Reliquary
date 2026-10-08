@@ -15,7 +15,7 @@ import (
 
 func TestModelTierFallbackAndExplicitGeneration(t *testing.T) {
 	db := pgtest.Open(t)
-	ctx := domainTestContext(types.TenantRoleAdmin)
+	ctx := domainTestContext()
 	team := types.Tenant{ID: 1, Name: "Team", ModelTiers: types.ModelTierConfig{Light: "team-light", Extraction: "team-extract", Generation: "team-generate", Embedding: "team-embedding", Rerank: "team-rerank"}}
 	require.NoError(t, db.Create(&team).Error)
 	domain, err := NewKnowledgeDomainService(db).Create(ctx, types.KnowledgeDomain{Name: "Research"})
@@ -118,7 +118,7 @@ func TestIntakeReviewClassifiesLabelsInOneCall(t *testing.T) {
 
 func TestModelTierReferencesProtectModelDeletion(t *testing.T) {
 	db := pgtest.Open(t)
-	ctx := domainTestContext(types.TenantRoleAdmin)
+	ctx := domainTestContext()
 	team := &types.Tenant{ID: 1, Name: "Team", ModelTiers: types.ModelTierConfig{Light: "bound-model"}}
 	require.NoError(t, db.Create(team).Error)
 	domain, err := NewKnowledgeDomainService(db).Create(ctx, types.KnowledgeDomain{Name: "Research"})

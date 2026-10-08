@@ -363,15 +363,15 @@ type WikiPendingOp struct {
 // both of which are correctness-critical short-lived flags rather
 // than data the system should survive without.
 type wikiIngestService struct {
-	db             *gorm.DB
-	wikiService    interfaces.WikiPageService
-	kbService      interfaces.KnowledgeBaseService
-	knowledgeSvc   interfaces.KnowledgeService
-	knowledgeRepo  interfaces.KnowledgeRepository
-	chunkRepo      interfaces.ChunkRepository
-	modelService   interfaces.ModelService
-	task           interfaces.TaskEnqueuer
-	audit          interfaces.AuditLogService
+	db            *gorm.DB
+	wikiService   interfaces.WikiPageService
+	kbService     interfaces.KnowledgeBaseService
+	knowledgeSvc  interfaces.KnowledgeService
+	knowledgeRepo interfaces.KnowledgeRepository
+	chunkRepo     interfaces.ChunkRepository
+	modelService  interfaces.ModelService
+	task          interfaces.TaskEnqueuer
+
 	pendingRepo    interfaces.TaskPendingOpsRepository
 	deadLetterRepo interfaces.TaskDeadLetterRepository
 	redisClient    *redis.Client // nil only in test fixtures
@@ -411,7 +411,7 @@ func NewWikiIngestService(
 	chunkRepo interfaces.ChunkRepository,
 	modelService interfaces.ModelService,
 	task interfaces.TaskEnqueuer,
-	audit interfaces.AuditLogService,
+
 	pendingRepo interfaces.TaskPendingOpsRepository,
 	deadLetterRepo interfaces.TaskDeadLetterRepository,
 	redisClient *redis.Client,
@@ -419,15 +419,15 @@ func NewWikiIngestService(
 	db *gorm.DB,
 ) interfaces.TaskHandler {
 	svc := &wikiIngestService{
-		db:             db,
-		wikiService:    wikiService,
-		kbService:      kbService,
-		knowledgeSvc:   knowledgeSvc,
-		knowledgeRepo:  knowledgeRepo,
-		chunkRepo:      chunkRepo,
-		modelService:   modelService,
-		task:           task,
-		audit:          audit,
+		db:            db,
+		wikiService:   wikiService,
+		kbService:     kbService,
+		knowledgeSvc:  knowledgeSvc,
+		knowledgeRepo: knowledgeRepo,
+		chunkRepo:     chunkRepo,
+		modelService:  modelService,
+		task:          task,
+
 		pendingRepo:    pendingRepo,
 		deadLetterRepo: deadLetterRepo,
 		redisClient:    redisClient,

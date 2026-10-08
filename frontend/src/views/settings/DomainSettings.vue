@@ -5,7 +5,6 @@
       <t-button v-if="canEdit && !draft" theme="primary" @click="startCreate">{{ t('knowledgeDomains.create') }}</t-button>
     </header>
     <t-alert v-if="error" theme="error" :message="error" role="alert" />
-    <t-alert v-if="!canEdit" theme="info" :message="t('knowledgeDomains.readOnly')" />
 
     <template v-if="draft">
       <div class="editor-heading"><h3>{{ selectedId ? t('knowledgeDomains.edit') : t('knowledgeDomains.create') }}</h3><t-button variant="text" :disabled="saving" @click="closeEditor">{{ t('common.back') }}</t-button></div>
@@ -67,7 +66,7 @@ import { domainErrorMessage } from './domainErrors'
 const { t } = useI18n()
 const auth = useAuthStore()
 const confirmDelete = useConfirmDelete()
-const canEdit = computed(() => auth.hasRole('admin'))
+const canEdit = computed(() => auth.isLoggedIn)
 const domains = ref<KnowledgeDomain[]>([])
 const loading = ref(false)
 const error = ref('')

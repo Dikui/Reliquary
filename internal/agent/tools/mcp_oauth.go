@@ -177,11 +177,6 @@ func waitForMCPOAuthAuthorization(
 		requestID, _ = types.RequestIDFromContext(ctx)
 	}
 
-	// Non-interactive channels (e.g. IM bots) have no live client that can click
-	// "Authorize" and call the resolve endpoint, so blocking on the OAuth wait
-	// would just hang the agent until it times out (once per unauthorized
-	// service). Instead, emit a one-shot notice the channel can surface to the
-	// user and continue without the tool. See types.WithMCPOAuthNonInteractive.
 	if types.IsMCPOAuthNonInteractive(ctx) || types.IsMCPOAuthNonInteractive(waitCtx) {
 		emitMCPOAuthRequiredNotice(waitCtx, sess, service, mcpToolName, toolCallID, tenantID, requestID)
 		return ctx, noop, false
@@ -211,12 +206,6 @@ func waitForMCPOAuthAuthorization(
 	return ctx, noop, true
 }
 
-// emitMCPOAuthRequiredNotice publishes a one-shot "MCP OAuth required" event
-// WITHOUT registering a pending waiter. It is used for non-interactive channels
-// that cannot complete an in-conversation authorization: subscribers (e.g. the
-// IM reply builder) surface the notice to the user, who then authorizes the
-// service from the web console out-of-band. TimeoutSeconds is 0 to distinguish
-// this notice from a resolvable prompt.
 func emitMCPOAuthRequiredNotice(
 	ctx context.Context,
 	sess *MCPOAuthSession,

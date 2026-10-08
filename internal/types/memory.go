@@ -191,9 +191,7 @@ type MemorySubject struct {
 	// The scope is declared as a unique index on the model, not only in the
 	// migration, so EnsureSubject's upsert has a constraint to target on every
 	// database the model is auto-migrated onto.
-	TenantID uint64 `json:"tenant_id" gorm:"column:tenant_id;not null;uniqueIndex:idx_memory_subjects_scope,priority:1"`
-	// SubjectID is Principal.StorageID(), so IM users, embed visitors and API
-	// external users each get their own space without needing an account.
+	TenantID  uint64 `json:"tenant_id" gorm:"column:tenant_id;not null;uniqueIndex:idx_memory_subjects_scope,priority:1"`
 	SubjectID string `json:"subject_id" gorm:"type:varchar(512);not null;uniqueIndex:idx_memory_subjects_scope,priority:2"`
 	// Enabled is the per-user opt out. The workspace switch lives on
 	// Tenant.MemoryConfig and takes precedence over it.

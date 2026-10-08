@@ -799,7 +799,7 @@ const props = defineProps<{ kbId: string; domainId?: string; canManage: boolean 
 const emit = defineEmits<{ 'open-source': [knowledgeId: string] }>()
 const { t } = useI18n()
 const authStore = useAuthStore()
-const canRebuildNameEmbeddings = computed(() => authStore.hasRole('admin'))
+const canRebuildNameEmbeddings = computed(() => authStore.isLoggedIn)
 const pageSize = 50
 const queryScope = ref<KnowledgeContextScope>('knowledge_base')
 const queryDomainId = ref(props.domainId || '')

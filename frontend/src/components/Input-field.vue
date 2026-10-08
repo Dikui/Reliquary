@@ -724,7 +724,6 @@ const loadAgents = async (force = false) => {
 // LAST_CHAT_MODEL_KEY scopes the per-user "last selected chat model"
 // to localStorage. The previous implementation wrote this back to the
 // tenant-level KV /tenants/kv/conversation-config — which (a) required
-// Admin+ to mutate, so a Viewer/Contributor switching models in the
 // chat input got a 403, and (b) silently overwrote the tenant default
 // for everyone else. localStorage is per-user-per-browser, which is
 // what "remember my last pick" actually wants.
@@ -851,11 +850,7 @@ const handleModelChange = (value: string | number | Array<string | number> | und
     return;
   }
 
-  // The chat-level model picker now persists per-user-per-browser via
-  // localStorage instead of writing to the tenant-shared KV. This is what
-  // "remember my last pick" should always have meant — the previous PUT
-  // /tenants/kv/conversation-config required Admin+, so a Viewer or
-  // Contributor switching models from the chat input got a 403.
+  // Keep the last chat model selection in this browser.
   writeLastChatModelID(val);
   selectedModelId.value = val;
   showModelSelector.value = false;
@@ -2120,7 +2115,7 @@ const showAgentNotReadyMessage = (
   reasonKeys?: AgentNotReadyReasonKey[],
 ) => {
   const reasonsText = formatLocalizedList(reasons, locale.value)
-  const canEditAgent = authStore.hasRole('contributor')
+  const canEditAgent = authStore.isLoggedIn
 
   const messageContent = h('div', { style: 'display: flex; flex-direction: column; gap: 8px; max-width: 320px;' }, [
     h(

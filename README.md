@@ -22,8 +22,10 @@ docker compose up -d --build
 本首版未发布预编译程序、Homebrew 安装包或公共镜像。下方及其他文档中的上游发布链接仅用于参考，
 使用本项目请采用上述源码构建方式。
 
-Go 主模块为 `reliquary`，CLI 为 `reliquary/cli`，SDK 为 `reliquary/client`；
+Go 主模块为 `reliquary`；
 环境变量前缀为 `RELIQUARY_`。此版本面向全新安装，不自动迁移旧 WeKnora 数据目录、数据库或浏览器设置。2026-10-07 已将 PostgreSQL `000000` 至 `000098` 迁移压缩为新的 `000000_init` 基线，旧 Reliquary 数据库也必须重建，不能原地升级；操作说明见 [数据库迁移排障](docs/migration-troubleshooting.md#single-baseline-and-database-rebuild)。
+
+本版本供个人单用户使用，首次注册后关闭注册。登录用户和有效 API Key 拥有全部权限，密码恢复使用本地命令，详见[个人使用说明](docs/personal-use.md)。
 
 知识库新增对象与事实、证据历史、多源事件，以及定时研究和报告工作流。架构、配置、数据升级和使用方法见 [知识库融合说明](docs/知识库融合说明.md)。
 
@@ -33,9 +35,9 @@ Go 主模块为 `reliquary`，CLI 为 `reliquary/cli`，SDK 为 `reliquary/clien
 
 [**Reliquary**](https://weknora.weixin.qq.com) is an open-source, LLM-powered knowledge framework built for enterprise-grade document understanding, semantic retrieval, and autonomous reasoning.
 
-It is organized around three core capabilities: **RAG-based Quick Q&A** for everyday lookups, a **ReAct Agent** that autonomously orchestrates retrieval, MCP tools, a **tenant skill catalog**, session-persistent **Docker sandboxes** and web search to handle complex multi-step tasks, and a brand-new **Wiki Mode** in which agents distill raw documents into a self-maintaining, interlinked markdown knowledge base with an interactive knowledge graph, complete with manual editing, revision history and one-click rollback. **Cross-session long-term memory** remembers who you are and what you keep asking about. Knowledge curation is equally hands-on: a **tree-structured folder view** preserves the directory layout of uploads, and **chunk editing with revision history** lets retrieval chunks be edited, diffed and reverted like documents. Combined with multi-source ingestion (Feishu wiki / Feishu Drive / GitLab / Tencent IMA / Notion / Yuque / RSS, and growing), **website embed widgets** for publishing agents to external sites, **scoped API keys with a principal model** for programmatic integrations, **multi-instance storage backends** per workspace for flexible data placement, 20+ LLM provider integrations (including LiteLLM), **runtime task-queue dashboard with worker-pool governance**, **enterprise-ready multi-workspace RBAC** (4-tier role matrix + per-resource ownership + per-workspace audit log), and a fully self-hostable modular architecture, Reliquary turns scattered documents into a queryable, reasoning-capable, continuously evolving knowledge asset.
+It is organized around three core capabilities: **RAG-based Quick Q&A** for everyday lookups, a **ReAct Agent** that autonomously orchestrates retrieval, MCP tools, a **tenant skill catalog**, session-persistent **Docker sandboxes** and web search to handle complex multi-step tasks, and a brand-new **Wiki Mode** in which agents distill raw documents into a self-maintaining, interlinked markdown knowledge base with an interactive knowledge graph, complete with manual editing, revision history and one-click rollback. **Cross-session long-term memory** remembers who you are and what you keep asking about. Knowledge curation is equally hands-on: a **tree-structured folder view** preserves the directory layout of uploads, and **chunk editing with revision history** lets retrieval chunks be edited, diffed and reverted like documents. Combined with RSS feeds and site adapters, **website embed widgets** for publishing agents to external sites, **full-access API keys** for programmatic integrations, **multi-instance storage backends** per workspace for flexible data placement, 20+ LLM provider integrations (including LiteLLM), **runtime task-queue dashboard with worker-pool governance**, **personal single-user access**, and a fully self-hostable modular architecture, Reliquary turns scattered documents into a queryable, reasoning-capable, continuously evolving knowledge asset.
 
-The framework supports auto-syncing knowledge from Feishu, GitLab, Tencent IMA, Notion, and Yuque (more data sources coming soon), handles 10+ document formats including PDF, Word, images, Excel and XMind, and can serve Q&A directly through Feishu IM channels. It is compatible with major LLM providers including OpenAI, DeepSeek, Qwen (Alibaba Cloud), Zhipu, Hunyuan, Gemini, MiniMax, NVIDIA, LiteLLM, and Ollama. Office files can be parsed in-process with **anydoc**. Its fully modular design supports configurable LLMs, PostgreSQL retrieval, and local or S3-compatible storage, with support for local and private cloud deployment ensuring complete data sovereignty. Model usage is recorded in the `model_usage` table.
+The framework supports auto-syncing RSS feeds and site adapters, handles 10+ document formats including PDF, Word, images, Excel and XMind. It is compatible with major LLM providers including OpenAI, DeepSeek, Qwen (Alibaba Cloud), Zhipu, Hunyuan, Gemini, MiniMax, NVIDIA, LiteLLM, and Ollama. Office files can be parsed in-process with **anydoc**. Its fully modular design supports configurable LLMs, PostgreSQL retrieval, and local or S3-compatible storage, with support for local and private cloud deployment ensuring complete data sovereignty. Model usage is recorded in the `model_usage` table.
 
 
 ## 📱 Interface Showcase
@@ -86,7 +88,7 @@ Fully modular pipeline from document parsing, vectorization, and retrieval to LL
 | Suggested Questions | Auto-generated question suggestions and after-answer follow-ups based on knowledge base content |
 | Temporary Attachments | Session-scoped image / document uploads with async parsing for one-off Q&A, with a combined image + attachment limit |
 | Citations & RAG Progress | Inline citation popovers and a references drawer (web / KB source distinction), shared markdown rendering, and stage-by-stage RAG pipeline progress in chat |
-| Session Management | Filter and group sidebar sessions by source (Web / IM / Embed), with inline session-title rename |
+| Session Management | Browse sidebar sessions with inline session-title rename |
 
 **Knowledge Management**
 
@@ -97,7 +99,7 @@ Fully modular pipeline from document parsing, vectorization, and retrieval to LL
 | Chunk Editing & Revisions | Edit retrieval chunks directly in the UI with per-version snapshots, diff and one-click rollback, and automatic reindexing after an edit; generated questions can be added, edited, deleted and regenerated; custom document metadata supported |
 | Per-Upload Process Config | Override parser, chunking, multimodal (VLM / ASR), and question generation per upload batch via upload-confirm dialog or `process_config` API; reparse with new settings |
 | Batch Reparse | Re-queue parsing for multiple documents at once with optional per-batch `process_config` |
-| Data Source Import | Auto-sync from Feishu wiki / Feishu Drive / Lark / GitLab / Tencent IMA / Notion / Yuque / RSS feeds (more data sources coming soon); incremental and full sync |
+| Data Source Import | RSS, Atom, JSON Feed and site adapters with incremental and full sync |
 | Document Formats | PDF / Word / Txt / Markdown / HTML / EPUB / MHTML / Images / CSV / Excel / PPT / JSON / XMind |
 | Auto-Tagging | After parse, pick matching tags from the knowledge base's existing set without creating tags or overwriting manual ones |
 | Retrieval Strategies | BM25 sparse / Dense retrieval / parent-child chunking / HNSW-accelerated pgvector (1024-dim) / multi-dimensional indexing |
@@ -112,20 +114,18 @@ Fully modular pipeline from document parsing, vectorization, and retrieval to LL
 | Embeddings | Ollama / BGE / GTE / Zhipu / OpenAI-compatible APIs |
 | Vector DB | PostgreSQL (ParadeDB: pgvector + pg_search) |
 | Object Storage | Local disk / S3-compatible storage (MinIO or cloud S3, IAM Role supported) |
-| IM Channels | Feishu |
 | Website Embed | Publish agents via embed widget with domain allowlists, rate limits, and secure-mode token exchange |
 | Web Search | DuckDuckGo / Bing / Google / Tavily / Baidu / Ollama / SearXNG / Keenable / Zhipu AI / Exa / Metaso |
-| API Integration | Scoped API keys (capability-level grants + per-KB restriction + throttled last-used tracking) with an API integration playground; MCP OAuth and embed sessions isolated per principal; `resource_urls=public` returns directly loadable file/image URLs, removing the second authenticated proxy call |
-| MCP Server | Official PyPI package `reliquary-mcp` with 29 tools over stdio / SSE / HTTP transports |
+| API Integration | Full-access API keys with an API integration playground; `resource_urls=public` returns directly loadable file/image URLs |
 
 **Platform**
 
 | Capability | Details |
 |------------|---------|
 | Deployment | Docker Compose with private and offline support |
-| UI | Web UI / RESTful API / CLI (`reliquary`) |
-| Access Control | One team workspace with Owner / Admin / Contributor / Viewer roles, team-wide knowledge access, audit logs, invitation registration, admin password reset (session revocation), and scoped team API keys |
-| Security | AES-256-GCM at-rest encryption for API keys and MCP / data-source credentials with graceful key rotation; gRPC TLS + Token between app and docreader; Redis TLS; SSRF-safe HTTP client (data sources, URL import, redirect chains); secret redaction in responses; skill sandbox isolation (Docker opt-in) with per-config network policy; optional complex-password policy |
+| UI | Web UI / RESTful API |
+| Access Control | One personal user with complete access, automatic registration closure, full-access API keys and local password recovery |
+| Security | AES-256-GCM at-rest encryption for API keys and MCP / data-source credentials with graceful key rotation; gRPC TLS + Token between app and docreader; Redis TLS; SSRF-safe HTTP client (data sources, URL import, redirect chains); secret redaction in responses; skill sandbox isolation (Docker opt-in) with per-config network policy |
 | Observability | Model usage in `model_usage`, document processing timelines, runtime task queues and worker governance |
 | Task Management | MQ async tasks with per-stage worker-pool governance (core / post-process / enrichment / maintenance + elastic shared pool, plus an independent Wiki pool) and per-model background concurrency governors; automatic database migration on version upgrade |
 | Model Management | Centralized config, declarative built-in models via YAML, per-knowledge-base model selection, per-model thinking-mode and embedding-dimension overrides, interactive model test debugger, multi-workspace built-in model sharing, WeKnora Cloud hosted models and parsing |
@@ -142,29 +142,6 @@ Fully modular pipeline from document parsing, vectorization, and retrieval to LL
 - **Document Import** — Upload files, import web pages, or write Markdown knowledge via the agent
 - **Hybrid Search** — Search within or across knowledge bases with vector + keyword retrieval
 - **Knowledge Management** — List, browse, edit, and delete knowledge entries programmatically
-
-## ⌨️ Command-Line Interface
-
-`reliquary` is the official CLI for driving the API from a terminal or an AI
-agent. It is **agent-first**: every command emits a stable JSON envelope by
-default (with typed error codes mapped to exit codes), and `--format text`
-renders for humans. It also serves a curated MCP tool surface
-(`reliquary mcp serve`) and ships bundled Agent Skills.
-
-```bash
-reliquary profile add prod --host https://kb.example.com --use
-reliquary auth login
-reliquary kb list
-reliquary link --kb my-knowledge-base    # bind the current directory
-reliquary doc upload notes.md
-reliquary chat "summarise the design doc"
-```
-
-For headless / CI use, set `RELIQUARY_API_KEY` + `RELIQUARY_HOST` and skip
-`auth login` entirely — no credentials written to disk.
-
-See [`cli/README.md`](./cli/README.md) for install + 5-minute quickstart and
-[`cli/AGENTS.md`](./cli/AGENTS.md) for the operational contract AI agents rely on.
 
 ## 🚀 Getting Started
 
@@ -223,7 +200,6 @@ Stop services: `docker compose down`
 
 ## MCP Server
 
-Please refer to the [MCP Configuration Guide](./mcp-server/MCP_CONFIG.md) for the necessary setup.
 
 
 ## 📘 API Reference

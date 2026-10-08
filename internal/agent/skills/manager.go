@@ -386,19 +386,6 @@ func (m *Manager) ExecuteScript(ctx context.Context, skillName, scriptPath strin
 		}
 	}
 
-	// Per-caller values are resolved here rather than baked into the sandbox
-	// at creation: an IM thread can have several people sharing one sandbox,
-	// so each turn's values must belong to that turn's speaker and must not
-	// linger where the next person could read them with `env`.
-	//
-	// The resolver runs after the artifact keys above are seeded, so
-	// ApplyResolvedEnv's skip-existing rule protects RELIQUARY_SKILL_OUTPUT_DIR
-	// and RELIQUARY_SKILL_HISTORY_ROOT (always) plus RELIQUARY_SESSION_INPUT_DIR
-	// (when a session file store exists). skillDirEnvVar is set later inside
-	// buildSkillExecuteConfig by an unconditional write. The write-time
-	// blacklist of skills.InjectedSandboxEnvVars (service.validateUserEnvName)
-	// is what covers a name that was not seeded on this path. Other RELIQUARY_*
-	// names (API keys, base URLs) are ordinary credentials a skill may declare.
 	if m.envResolver != nil {
 		resolved, missing, err := m.envResolver.ResolveEnv(ctx, skillName)
 		if err != nil {
