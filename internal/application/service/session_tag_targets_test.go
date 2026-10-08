@@ -119,7 +119,6 @@ func TestBuildAgentConfig_TagOnlyScopePreservesRetrievalTarget(t *testing.T) {
 		Config: types.CustomAgentConfig{
 			AgentMode:           types.AgentModeSmartReasoning,
 			KBSelectionMode:     "all",
-			WebSearchProviderID: "provider-1",
 		},
 	}
 	req := &types.QARequest{

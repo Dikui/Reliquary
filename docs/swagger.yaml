@@ -643,7 +643,7 @@ definitions:
           type: string
         type: array
       system_prompt:
-        description: System prompt for the agent (unified prompt, uses web_search_status placeholder for dynamic behavior)
+        description: System prompt for the agent
         type: string
       system_prompt_id:
         description: |-
@@ -661,25 +661,6 @@ definitions:
         type: number
       vlm_model_id:
         description: VLM model ID for image analysis (optional, falls back to workspace-level VLM)
-        type: string
-      web_fetch_enabled:
-        description: Whether to auto-fetch full page content for reranked web search results
-        type: boolean
-      web_fetch_top_n:
-        description: 'Max number of pages to fetch after rerank (default: 3)'
-        type: integer
-      web_search_enabled:
-        description: |-
-          ===== Web Search Settings =====
-          Whether web search is enabled
-        type: boolean
-      web_search_max_results:
-        description: Maximum web search results
-        type: integer
-      web_search_provider_id:
-        description: |-
-          WebSearchProviderID references a specific WebSearchProviderEntity.
-          If empty, the workspace's default provider (is_default=true) is used.
         type: string
     type: object
   github_com_Tencent_Reliquary_internal_types.DataSource:
@@ -1262,7 +1243,6 @@ definitions:
       - 4
       - 5
       - 6
-      - 7
       - 8
       - 9
     type: integer
@@ -1271,7 +1251,6 @@ definitions:
       MatchTypeDirectLoad: 'Deprecated: reserved to preserve serialized enum values'
       MatchTypeParentChunk: 父Chunk匹配类型
       MatchTypeRelationChunk: 关系Chunk匹配类型
-      MatchTypeWebSearch: 网络搜索匹配类型
     x-enum-descriptions:
       - ""
       - ""
@@ -1280,7 +1259,6 @@ definitions:
       - 父Chunk匹配类型
       - 关系Chunk匹配类型
       - ""
-      - 网络搜索匹配类型
       - 'Deprecated: reserved to preserve serialized enum values'
       - 数据分析匹配类型
     x-enum-varnames:
@@ -1291,7 +1269,6 @@ definitions:
       - MatchTypeParentChunk
       - MatchTypeRelationChunk
       - MatchTypeGraph
-      - MatchTypeWebSearch
       - MatchTypeDirectLoad
       - MatchTypeDataAnalysis
   github_com_Tencent_Reliquary_internal_types.MemoryConfig:
@@ -1973,20 +1950,16 @@ definitions:
     enum:
       - keywords
       - vector
-      - websearch
     type: string
     x-enum-comments:
       KeywordsRetrieverType: Keywords retriever
       VectorRetrieverType: Vector retriever
-      WebSearchRetrieverType: Web search retriever
     x-enum-descriptions:
       - Keywords retriever
       - Vector retriever
-      - Web search retriever
     x-enum-varnames:
       - KeywordsRetrieverType
       - VectorRetrieverType
-      - WebSearchRetrieverType
   github_com_Tencent_Reliquary_internal_types.RuntimeTaskAction:
     enum:
       - cancel
@@ -2237,7 +2210,7 @@ definitions:
           - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.SessionLastRequestState'
         description: |-
           LastRequestState records the input-bar state used the last time this
-          session sent a question (agent, model, KB scope, web search, MCPs).
+          session sent a question (agent, model, KB scope, MCPs).
           Persisted on every successful POST to /knowledge-chat or /agent-chat so
           that reopening the session can restore the original request context to
           the chat UI. Stored in the legacy sessions.agent_config JSONB column to
@@ -2299,8 +2272,6 @@ definitions:
         items:
           type: string
         type: array
-      web_search_enabled:
-        type: boolean
     type: object
   github_com_Tencent_Reliquary_internal_types.SkillImageConfig:
     properties:
@@ -2512,10 +2483,6 @@ definitions:
       updated_at:
         description: Last updated time
         type: string
-      web_search_config:
-        allOf:
-          - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WebSearchConfig'
-        description: Global WebSearch configuration for this workspace
     type: object
   github_com_Tencent_Reliquary_internal_types.TenantSandboxConfig:
     properties:
@@ -2744,127 +2711,6 @@ definitions:
       app_secret:
         type: string
     type: object
-  github_com_Tencent_Reliquary_internal_types.WebSearchConfig:
-    properties:
-      api_key:
-        description: 'Deprecated: Use WebSearchProviderEntity.Parameters.APIKey instead.'
-        type: string
-      blacklist:
-        description: 黑名单规则列表
-        items:
-          type: string
-        type: array
-      compression_method:
-        description: 压缩方法：none, summary, extract, rag
-        type: string
-      document_fragments:
-        description: 文档片段数量（用于RAG压缩）
-        type: integer
-      embedding_dimension:
-        description: 嵌入维度（用于RAG压缩）
-        type: integer
-      embedding_model_id:
-        description: RAG压缩相关配置
-        type: string
-      include_date:
-        description: 是否包含日期
-        type: boolean
-      max_results:
-        description: 最大搜索结果数
-        type: integer
-      provider:
-        description: 'Deprecated: Use WebSearchProviderEntity.Parameters.APIKey instead.'
-        type: string
-      proxy_url:
-        description: Optional per-request proxy override; normally empty — use WebSearchProviderEntity.Parameters.proxy_url. Merged at call time when set.
-        type: string
-      rerank_model_id:
-        description: 重排模型ID（用于RAG压缩）
-        type: string
-    type: object
-  github_com_Tencent_Reliquary_internal_types.WebSearchProviderEntity:
-    properties:
-      created_at:
-        description: Timestamps
-        type: string
-      deleted_at:
-        $ref: '#/definitions/gorm.DeletedAt'
-      description:
-        description: Description
-        type: string
-      id:
-        description: Unique identifier (UUID, auto-generated)
-        type: string
-      is_default:
-        description: Whether this is the default provider for the workspace
-        type: boolean
-      name:
-        description: User-friendly name, e.g., "Production Bing Search"
-        type: string
-      parameters:
-        allOf:
-          - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WebSearchProviderParameters'
-        description: Provider-specific parameters (API key, engine ID, etc.) stored as encrypted JSON
-      provider:
-        allOf:
-          - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WebSearchProviderType'
-        description: 'Provider type: bing, google, duckduckgo, tavily'
-      tenant_id:
-        description: Workspace ID for scoping
-        type: integer
-      updated_at:
-        type: string
-    type: object
-  github_com_Tencent_Reliquary_internal_types.WebSearchProviderParameters:
-    properties:
-      api_key:
-        description: API key for the search provider (encrypted in DB)
-        type: string
-      base_url:
-        description: |-
-          Base URL for self-hosted search engines (e.g. SearXNG instance URL).
-          Validated with utils.ValidateURLForSSRF; private hosts must be added to SSRF_WHITELIST.
-        type: string
-      engine_id:
-        description: Google Custom Search Engine ID (only for Google provider)
-        type: string
-      extra_config:
-        additionalProperties:
-          type: string
-        description: Provider-specific extra configuration for future extensibility
-        type: object
-      proxy_url:
-        description: |-
-          Optional HTTP/HTTPS proxy URL for outbound search requests (e.g. http://host:port); validated with utils.ValidateURLForSSRF.
-          Does not replace the search API endpoint; only tunnels traffic to the official APIs.
-        type: string
-    type: object
-  github_com_Tencent_Reliquary_internal_types.WebSearchProviderType:
-    enum:
-      - bing
-      - google
-      - duckduckgo
-      - tavily
-      - ollama
-      - baidu
-      - searxng
-      - keenable
-      - zhipu
-      - exa
-      - metaso
-    type: string
-    x-enum-varnames:
-      - WebSearchProviderTypeBing
-      - WebSearchProviderTypeGoogle
-      - WebSearchProviderTypeDuckDuckGo
-      - WebSearchProviderTypeTavily
-      - WebSearchProviderTypeOllama
-      - WebSearchProviderTypeBaidu
-      - WebSearchProviderTypeSearxng
-      - WebSearchProviderTypeKeenable
-      - WebSearchProviderTypeZhipu
-      - WebSearchProviderTypeExa
-      - WebSearchProviderTypeMetaso
   github_com_Tencent_Reliquary_internal_types.WikiConfig:
     properties:
       content_instructions:
@@ -4090,15 +3936,6 @@ definitions:
       - event_type
       - suggestion_set_id
     type: object
-  internal_handler.TestProviderRequest:
-    properties:
-      parameters:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WebSearchProviderParameters'
-      provider:
-        type: string
-    required:
-      - provider
-    type: object
   internal_handler.UpdateAgentRequest:
     properties:
       avatar:
@@ -4157,17 +3994,6 @@ definitions:
         $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.ModelSource'
       type:
         $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.ModelType'
-    type: object
-  internal_handler.UpdateProviderRequest:
-    properties:
-      description:
-        type: string
-      is_default:
-        type: boolean
-      name:
-        type: string
-      parameters:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WebSearchProviderParameters'
     type: object
   internal_handler.UpdateSystemSettingRequest:
     properties:
@@ -4340,9 +4166,6 @@ definitions:
         items:
           type: string
         type: array
-      web_search_enabled:
-        description: Whether web search is enabled for this request
-        type: boolean
     required:
       - query
     type: object
@@ -11566,7 +11389,7 @@ paths:
     get:
       consumes:
         - application/json
-      description: 获取空间级别的KV配置（支持web-search-config、prompt-templates、parser-engine-config、storage-engine-config、chat-history-config、retrieval-config）
+      description: 获取空间级别的KV配置（支持prompt-templates、parser-engine-config、storage-engine-config、chat-history-config、retrieval-config）
       parameters:
         - description: 配置键名
           in: path
@@ -11594,7 +11417,7 @@ paths:
     put:
       consumes:
         - application/json
-      description: 更新空间级别的KV配置（支持web-search-config、parser-engine-config、storage-engine-config、chat-history-config、retrieval-config）
+      description: 更新空间级别的KV配置（支持parser-engine-config、storage-engine-config、chat-history-config、retrieval-config）
       parameters:
         - description: 配置键名
           in: path
@@ -11646,29 +11469,6 @@ paths:
         - Bearer: []
         - ApiKeyAuth: []
       summary: 获取提示词模板
-      tags:
-        - 空间管理
-  /tenants/kv/web-search-config:
-    get:
-      consumes:
-        - application/json
-      description: 获取空间的网络搜索配置
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 网络搜索配置
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: 获取空间网络搜索配置
       tags:
         - 空间管理
   /user/favorites:
@@ -11728,192 +11528,6 @@ paths:
       summary: Unstar a resource
       tags:
         - User
-  /web-search-providers/{id}:
-    delete:
-      description: 删除指定 provider 配置
-      parameters:
-        - description: Provider ID
-          in: path
-          name: id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 'success: true'
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Provider 不存在
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: 删除网络搜索 Provider
-      tags:
-        - 网络搜索
-    get:
-      description: 根据 ID 获取指定 provider 配置
-      parameters:
-        - description: Provider ID
-          in: path
-          name: id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Provider 详情
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WebSearchProviderEntity'
-        "404":
-          description: Provider 不存在
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: 获取网络搜索 Provider 详情
-      tags:
-        - 网络搜索
-    put:
-      consumes:
-        - application/json
-      description: 更新指定 provider 的名称/描述/参数/是否默认
-      parameters:
-        - description: Provider ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: 更新字段
-          in: body
-          name: request
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.UpdateProviderRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 更新后的 Provider
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WebSearchProviderEntity'
-        "400":
-          description: 请求参数错误
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Provider 不存在
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: 更新网络搜索 Provider
-      tags:
-        - 网络搜索
-  /web-search-providers/{id}/test:
-    post:
-      description: 使用数据库中已保存的凭证测试连通性
-      parameters:
-        - description: Provider ID
-          in: path
-          name: id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 测试结果
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Provider 不存在
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: 测试已保存的 Provider
-      tags:
-        - 网络搜索
-  /web-search-providers/test:
-    post:
-      consumes:
-        - application/json
-      description: 使用前端表单中尚未保存的凭证测试连通性，用于"测试连接"按钮
-      parameters:
-        - description: '{provider, parameters}'
-          in: body
-          name: request
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.TestProviderRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 测试结果
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 请求参数错误
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: 使用原始凭证测试 Provider（不落库）
-      tags:
-        - 网络搜索
-  /web-search-providers/types:
-    get:
-      description: 返回 UI 表单需要的 provider 类型及参数定义
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: provider 类型列表
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: 获取网络搜索 Provider 类型元数据
-      tags:
-        - 网络搜索
-  /web-search/providers:
-    get:
-      description: 返回所有已注册的网络搜索 provider（含元数据）
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: provider 列表
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: 获取可用网络搜索 Provider 列表
-      tags:
-        - 网络搜索
   /knowledge-context/entities:
     get:
       parameters:

@@ -22,7 +22,7 @@
       </div>
 
       <div v-else class="services-grid">
-        <!-- 与 ModelSettings / WebSearchSettings 同形的卡片：左侧 transport 徽章 +
+        <!-- 与 ModelSettings / ModelSettings 同形的卡片：左侧 transport 徽章 +
              标题 / 副标题 / url 三段式。开关挂在标题行右侧，三点菜单 hover 才出现。
              SettingCard 当前没有其它消费者了，但保留组件供未来需要时复用。 -->
         <div
@@ -385,7 +385,7 @@ onMounted(() => {
   }
 }
 
-// Transport-distinguished card. 与 ModelSettings / WebSearchSettings 同形。
+// Transport-distinguished card. 与 ModelSettings / ModelSettings 同形。
 .service-card {
   display: flex;
   align-items: flex-start;

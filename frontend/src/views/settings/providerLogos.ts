@@ -21,7 +21,7 @@ const monoModules = import.meta.glob('@/assets/img/providers/mono/*/*.svg', {
   import: 'default',
 }) as Record<string, string>;
 
-export type ProviderCategory = 'storage' | 'websearch' | 'parser' | 'sandbox';
+export type ProviderCategory = 'storage' | 'parser' | 'sandbox';
 
 export type LogoMatch = {
   mode: 'color' | 'mono';

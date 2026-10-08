@@ -50,7 +50,7 @@
       <g font-family="Arial, sans-serif" font-size="12.5" fill="#78350F" text-anchor="middle">
         <rect x="20" y="44" width="176" height="28" rx="8" fill="#FFFFFF" stroke="#FDE68A"/><text x="108" y="63">Vector Search</text>
         <rect x="20" y="78" width="176" height="28" rx="8" fill="#FFFFFF" stroke="#FDE68A"/><text x="108" y="97">Knowledge Graph</text>
-        <rect x="20" y="112" width="176" height="28" rx="8" fill="#FFFFFF" stroke="#FDE68A"/><text x="108" y="131">Web Search</text>
+        <rect x="20" y="112" width="176" height="28" rx="8" fill="#FFFFFF" stroke="#FDE68A"/><text x="108" y="131">URL Fetch</text>
       </g>
     </g>
 

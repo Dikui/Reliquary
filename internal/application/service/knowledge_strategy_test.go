@@ -201,10 +201,7 @@ func TestKnowledgeStrategyCandidateTrialAndRestore(t *testing.T) {
 	require.NoError(t, db.Create(stale).Error)
 	_, err = svc.Activate(owner, "kb", stale.ID)
 	require.Error(t, err, "a candidate trialed against an obsolete active strategy must not overwrite it")
-	targets := types.SearchTargets{&types.SearchTarget{Type: types.SearchTargetTypeKnowledgeBase, KnowledgeBaseID: "kb", TenantID: 1}}
-	researchPolicy, err := activeResearchPolicyForTargets(owner, db, targets)
-	require.NoError(t, err)
-	require.Contains(t, researchPolicy, "Search primary reports")
+	require.Contains(t, active.Research, "Search primary reports")
 	pending := &types.Knowledge{ID: "next", TenantID: 1, KnowledgeBaseID: "kb", Title: "New report"}
 	require.NoError(t, pending.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "pending", SourceInfo: types.SourceInfo{Publisher: "Publisher", OriginalURL: "https://example.org/next", PublishedAt: "2026-09-02"}}))
 	repo := &intakeRepo{knowledge: pending}
@@ -245,9 +242,7 @@ func TestKnowledgeStrategyCandidateTrialAndRestore(t *testing.T) {
 	active, err = activeKnowledgeStrategyRules(owner, db, 1, "kb")
 	require.NoError(t, err)
 	require.Equal(t, "Original policy", active.Filter)
-	researchPolicy, err = activeResearchPolicyForTargets(owner, db, targets)
-	require.NoError(t, err)
-	require.Empty(t, researchPolicy)
+	require.Empty(t, active.Research)
 	_, err = svc.Activate(owner, "kb", version.ID)
 	require.NoError(t, err)
 	active, err = activeKnowledgeStrategyRules(owner, db, 1, "kb")

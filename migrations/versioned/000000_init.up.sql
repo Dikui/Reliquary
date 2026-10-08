@@ -843,7 +843,6 @@ CREATE TABLE public.knowledge_workflow_runs (
     error text DEFAULT ''::text NOT NULL,
     started_at timestamp with time zone,
     finished_at timestamp with time zone,
-    next_run_at timestamp with time zone,
     lease_token character varying(36) DEFAULT ''::character varying NOT NULL,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL
@@ -1907,7 +1906,6 @@ CREATE TABLE public.tenants (
     deleted_at timestamp with time zone,
     context_config jsonb,
     conversation_config jsonb,
-    web_search_config jsonb,
     parser_engine_config jsonb,
     chat_history_config jsonb,
     retrieval_config jsonb,
@@ -1935,13 +1933,6 @@ COMMENT ON COLUMN public.tenants.context_config IS 'Global Context configuration
 --
 
 COMMENT ON COLUMN public.tenants.conversation_config IS 'Global Conversation configuration for this tenant (default for normal mode sessions)';
-
-
---
--- Name: COLUMN tenants.web_search_config; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.tenants.web_search_config IS 'Web search configuration for the tenant';
 
 
 --
@@ -2076,24 +2067,6 @@ COMMENT ON COLUMN public.users.tenant_id IS 'Tenant ID that the user belongs to'
 
 COMMENT ON COLUMN public.users.is_active IS 'Whether the user is active';
 
-
-
---
--- Name: web_search_providers; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.web_search_providers (
-    id character varying(36) NOT NULL,
-    tenant_id bigint NOT NULL,
-    name character varying(255) NOT NULL,
-    provider character varying(50) NOT NULL,
-    description text,
-    parameters jsonb,
-    is_default boolean DEFAULT false,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    deleted_at timestamp without time zone
-);
 
 
 --
@@ -2815,14 +2788,6 @@ ALTER TABLE ONLY public.users
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_username_key UNIQUE (username);
-
-
---
--- Name: web_search_providers web_search_providers_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.web_search_providers
-    ADD CONSTRAINT web_search_providers_pkey PRIMARY KEY (id);
 
 
 --
@@ -3965,27 +3930,6 @@ CREATE INDEX idx_users_tenant_id ON public.users USING btree (tenant_id);
 --
 
 CREATE INDEX idx_users_username ON public.users USING btree (username);
-
-
---
--- Name: idx_web_search_providers_deleted_at; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_web_search_providers_deleted_at ON public.web_search_providers USING btree (deleted_at);
-
-
---
--- Name: idx_web_search_providers_provider; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_web_search_providers_provider ON public.web_search_providers USING btree (provider);
-
-
---
--- Name: idx_web_search_providers_tenant_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_web_search_providers_tenant_id ON public.web_search_providers USING btree (tenant_id);
 
 
 --

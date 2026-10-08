@@ -35,7 +35,7 @@ export interface CustomAgentConfig {
   // 智能推理模式下的类型预设，用于一键应用"系统提示词 + 工具 + KB 兼容性"组合
   // 仅在 agent_mode === 'smart-reasoning' 时生效；quick-answer 模式忽略
   agent_type?: AgentType;
-  system_prompt?: string;           // 统一系统提示词（使用 {{web_search_status}} 占位符动态控制行为）
+  system_prompt?: string;           // 统一系统提示词
   system_prompt_id?: string;        // 引用的 prompt template ID（预设会填入此字段）
   context_template?: string;        // 上下文模板（普通模式）
 
@@ -98,11 +98,6 @@ export interface CustomAgentConfig {
   // 支持的文件类型（如 ["csv", "xlsx", "xls"]）
   // 为空表示支持所有文件类型
   supported_file_types?: string[];
-
-  // ===== 网络搜索设置 =====
-  web_search_enabled?: boolean;
-  web_search_provider_id?: string;
-  web_search_max_results?: number;
 
   // ===== 多轮对话设置 =====
   multi_turn_enabled?: boolean;     // 是否启用多轮对话
@@ -185,7 +180,6 @@ export function listAgents() {
   return get<{ data: CustomAgent[] }>('/api/v1/agents');
 }
 
-
 // 获取智能体详情
 export function getAgentById(id: string) {
   return get<{ data: CustomAgent }>(`/api/v1/agents/${id}`);
@@ -263,7 +257,6 @@ export interface AgentTypePresetConfig {
   max_iterations?: number;
   allowed_tools?: string[];
   retain_retrieval_history?: boolean;
-  web_search_enabled?: boolean;
   supported_file_types?: string[];
   kb_selection_mode?: 'all' | 'selected' | 'none';
 }

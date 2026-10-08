@@ -23,7 +23,6 @@ type Config struct {
 	Tenant        *TenantConfig        `yaml:"tenant"           json:"tenant"`
 
 	Models          []ModelConfig          `yaml:"models"           json:"models"`
-	WebSearch       *WebSearchConfig       `yaml:"web_search"       json:"web_search"`
 	PromptTemplates *PromptTemplatesConfig `yaml:"prompt_templates" json:"prompt_templates"`
 
 	Agent *AgentConfig `yaml:"agent"            json:"agent"`
@@ -166,7 +165,6 @@ type PromptTemplate struct {
 	Content          string                        `yaml:"content"            json:"content"`
 	User             string                        `yaml:"user"               json:"user,omitempty"`
 	HasKnowledgeBase bool                          `yaml:"has_knowledge_base" json:"has_knowledge_base,omitempty"`
-	HasWebSearch     bool                          `yaml:"has_web_search"     json:"has_web_search,omitempty"`
 	Default          bool                          `yaml:"default"            json:"default,omitempty"`
 	Mode             string                        `yaml:"mode"               json:"mode,omitempty"`
 	I18n             map[string]PromptTemplateI18n `yaml:"i18n"               json:"-"`
@@ -636,9 +634,4 @@ func loadPromptTemplates(configDir string) (*PromptTemplatesConfig, error) {
 	}
 
 	return config, nil
-}
-
-// WebSearchConfig represents the web search configuration
-type WebSearchConfig struct {
-	Timeout int `yaml:"timeout" json:"timeout"` // 超时时间（秒）
 }

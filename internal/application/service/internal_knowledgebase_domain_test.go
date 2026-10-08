@@ -42,22 +42,13 @@ func TestInternalKnowledgeBaseCreationAssignsDomain(t *testing.T) {
 		evaluation bool
 		sourceID   string
 	}{
-		{name: "web_search_compression", domainID: BuiltinAIKnowledgeDomainID, temporary: true},
 		{name: "evaluation_without_source", domainID: BuiltinAIKnowledgeDomainID, evaluation: true},
 		{name: "evaluation_with_source", domainID: "custom-source-domain", evaluation: true, sourceID: "source"},
 	} {
 		t.Run(testcase.name, func(t *testing.T) {
 			kbService := &internalDomainKBService{}
-			var err error
-			if testcase.evaluation {
-				s := NewEvaluationService(nil, nil, kbService, nil, nil, internalDomainModelService{})
-				_, err = s.Evaluation(ctx, "dataset", testcase.sourceID, "chat", "rerank")
-			} else {
-				s := &WebSearchService{}
-				_, _, _, _, err = s.CompressWithRAG(ctx, "session", "", []string{"news"},
-					[]*types.WebSearchResult{{URL: "https://example.test/news", Content: "News"}},
-					&types.WebSearchConfig{EmbeddingModelID: "embedding"}, kbService, nil, nil, nil)
-			}
+			s := NewEvaluationService(nil, nil, kbService, nil, nil, internalDomainModelService{})
+			_, err := s.Evaluation(ctx, "dataset", testcase.sourceID, "chat", "rerank")
 			require.ErrorIs(t, err, errCapturedInternalKnowledgeBase)
 			require.NotNil(t, kbService.input)
 			require.NotEmpty(t, kbService.input.DomainID)

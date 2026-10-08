@@ -64,13 +64,8 @@ show_help() {
     echo "  frontend   启动前端开发服务器（本地运行）"
     echo "  help       显示此帮助信息"
     echo ""
-    echo "可选 Profile（用于 start 命令）:"
-    echo "  --searxng     启动联网搜索"
-    echo "  --full        启动所有保留的可选服务（含 searxng）"
-    echo ""
     echo "示例："
     echo "  $0 start                    # 启动基础服务"
-    echo "  $0 start --full             # 启动所有服务"
     echo "  $0 app                      # 在另一个终端启动后端"
     echo "  $0 frontend                 # 在另一个终端启动前端"
 }
@@ -155,21 +150,10 @@ start_services() {
         return 0
     fi
     
-    # 解析 profile 参数
-    PROFILES=""
-    ENABLED_SERVICES=""
+    # 解析额外参数
     shift  # 移除 "start" 命令本身
     while [ $# -gt 0 ]; do
         case "$1" in
-            --searxng)
-                PROFILES="$PROFILES --profile searxng"
-                ENABLED_SERVICES="$ENABLED_SERVICES searxng"
-                ;;
-            --full)
-                PROFILES="--profile searxng"
-                ENABLED_SERVICES="searxng"
-                break
-                ;;
             *)
                 log_warning "未知参数: $1"
                 ;;
@@ -177,7 +161,7 @@ start_services() {
         shift
     done
 
-    "$DOCKER_COMPOSE_BIN" $DOCKER_COMPOSE_SUBCMD -f docker-compose.dev.yml $PROFILES up -d
+    "$DOCKER_COMPOSE_BIN" $DOCKER_COMPOSE_SUBCMD -f docker-compose.dev.yml up -d
     local compose_rc=$?
 
     if [ "$compose_rc" -eq 0 ]; then
@@ -187,7 +171,6 @@ start_services() {
         echo "  - PostgreSQL:    localhost:5432"
         echo "  - Redis:         localhost:6379"
         
-        # 根据启用的 profile 显示额外服务
         echo ""
         log_info "接下来的步骤:"
         printf "%b\n" "${YELLOW}1. 在新终端运行后端:${NC} make dev-app"

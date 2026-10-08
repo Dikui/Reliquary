@@ -21,7 +21,6 @@ interface Settings {
   selectedTools?: string[];
   modelConfig: ModelConfig;  // 模型配置
   ollamaConfig: OllamaConfig;  // Ollama配置
-  webSearchEnabled: boolean;  // 网络搜索是否启用
   conversationModels: ConversationModels;
   selectedAgentId: string;  // 当前选中的智能体ID
 }
@@ -31,7 +30,7 @@ interface AgentConfig {
   maxIterations: number;
   temperature: number;
   allowedTools: string[];
-  system_prompt?: string;  // Unified system prompt (uses {{web_search_status}} placeholder)
+  system_prompt?: string;  // Unified system prompt
 }
 
 interface ConversationModels {
@@ -95,7 +94,6 @@ const defaultSettings: Settings = {
     baseUrl: "http://localhost:11434",
     enabled: true
   },
-  webSearchEnabled: false,  // 默认关闭网络搜索
   conversationModels: {
     summaryModelId: "",
     rerankModelId: "",
@@ -160,8 +158,6 @@ export const useSettingsStore = defineStore("settings", {
     // 获取模型配置
     modelConfig: (state) => state.settings.modelConfig || defaultSettings.modelConfig,
 
-    // 网络搜索是否启用
-    isWebSearchEnabled: (state) => state.settings.webSearchEnabled || false,
 
     // 当前选中的智能体ID
     selectedAgentId: (state) => state.settings.selectedAgentId || BUILTIN_QUICK_ANSWER_ID,
@@ -313,12 +309,6 @@ export const useSettingsStore = defineStore("settings", {
       return this.settings.selectedKnowledgeBases || [];
     },
 
-    // 启用/禁用网络搜索
-    toggleWebSearch(enabled: boolean) {
-      this.settings.webSearchEnabled = enabled;
-      localStorage.setItem("Reliquary_settings", JSON.stringify(this.settings));
-    },
-
     // File selection actions
     addFile(fileId: string) {
       if (!this.settings.selectedFiles) this.settings.selectedFiles = [];
@@ -433,9 +423,6 @@ export const useSettingsStore = defineStore("settings", {
 
     selectAgent(agentId: string) {
       this.settings.selectedAgentId = agentId;
-      // 智能体配置只决定是否具备网络搜索能力，不替用户决定是否在本轮使用。
-      // 每次选择智能体都默认关闭，之后只能由用户从输入框主动开启。
-      this.settings.webSearchEnabled = false;
       // 根据智能体类型自动切换 Agent 模式
       if (agentId === BUILTIN_QUICK_ANSWER_ID) {
         this.settings.isAgentEnabled = false;
@@ -462,7 +449,7 @@ export const useSettingsStore = defineStore("settings", {
 
     // —— 会话级输入态恢复 —— //
     //
-    // 输入栏的 agent / 模型 / KB / 联网 / MCP 等选择由本 store 持有，跨会话共享。
+    // 输入栏的 agent / 模型 / KB / MCP 等选择由本 store 持有，跨会话共享。
     // 但用户的诉求是：点开旧会话时，能看到当时发起请求的那一套状态。
     // 实现策略：进入会话时把"当前的全局默认"暂存到一个非持久化的 `_defaultsSnapshot`
     // 字段里，然后用 session.last_request_state 覆盖 store；离开会话时从快照还原。
@@ -543,9 +530,6 @@ export const useSettingsStore = defineStore("settings", {
             .filter(item => item.type === "skill" && item.id)
             .map(item => item.skill_name || item.id);
         }
-        if (typeof state.web_search_enabled === "boolean") {
-          this.settings.webSearchEnabled = state.web_search_enabled;
-        }
       } finally {
         // 复位必须延后到下一次 flush 之后：监听 selectedAgentId 的 watcher 默认
         // flush:'pre'，是异步执行的；若在此处同步复位，watcher 真正运行时标志早已
@@ -581,5 +565,4 @@ export interface SessionLastRequestStatePayload {
     kb_name?: string;
     skill_name?: string;
   }>;
-  web_search_enabled?: boolean;
 }

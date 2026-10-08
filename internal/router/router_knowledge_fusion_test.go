@@ -146,7 +146,7 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 	require.Empty(t, graphContext.Evidence[0].Body, "graph queries include evidence metadata, not the full source snapshot")
 
 	taskQueue := &fusionTaskQueue{}
-	workflowService := service.NewKnowledgeWorkflowService(db, kbService, knowledge, contextService, nil, nil,
+	workflowService := service.NewKnowledgeWorkflowService(db, kbService, knowledge, contextService, nil,
 		modelService, taskQueue, nil)
 	contextHandler := handler.NewKnowledgeContextHandler(contextService, contextWorker)
 	workflowHandler := handler.NewKnowledgeWorkflowHandler(workflowService)
@@ -180,6 +180,14 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 	require.NoError(t, json.Unmarshal(snapshotResponse.Data, &evidence))
 	require.Equal(t, sourceBody, evidence.Body)
 	require.Equal(t, "https://news.example/acme-widgetco", evidence.OriginalURL)
+
+	invalidWorkflowRec := fusionRequest(t, engine, http.MethodPost,
+		"/api/v1/knowledge-bases/"+fusionKBID+"/workflows",
+		`{"name":"Removed research","steps":[{"id":"research","type":"web_research","config":{"query":"source"}}]}`,
+		fusionTenantID, fusionOwnerID)
+	require.Equal(t, http.StatusBadRequest, invalidWorkflowRec.Code, invalidWorkflowRec.Body.String())
+	require.Contains(t, invalidWorkflowRec.Body.String(), "unsupported step type")
+	require.Contains(t, invalidWorkflowRec.Body.String(), "web_research")
 
 	workflowBody := `{"name":"Acquisition report","enabled":true,"schedule":{"timezone":"UTC"},"steps":[{"id":"facts","type":"fact_query","config":{"entity":"Acme Holdings","limit":20}},{"id":"report","type":"report","depends_on":["facts"],"config":{"title":"Acquisition report","prompt":"Summarize the sourced acquisition fact."}},{"id":"review","type":"human_review","depends_on":["report"],"config":{"message":"Review the cited report."}}]}`
 	createRec := fusionRequest(t, engine, http.MethodPost,

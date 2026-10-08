@@ -1098,7 +1098,7 @@ func (s *knowledgeBaseService) disableKnowledgeWorkflows(ctx context.Context, kb
 		if err := scope(tx.Model(&types.KnowledgeWorkflow{})).Update("enabled", false).Error; err != nil {
 			return err
 		}
-		return scope(tx.Model(&types.KnowledgeWorkflowRun{})).Where("status IN ?", []string{types.WorkflowStatusQueued, types.WorkflowStatusRunning, types.WorkflowStatusPaused, types.WorkflowStatusWaitingIngestion}).Updates(map[string]any{"status": types.WorkflowStatusCancelled, "error": "knowledge base deleted", "updated_at": time.Now(), "next_run_at": nil}).Error
+		return scope(tx.Model(&types.KnowledgeWorkflowRun{})).Where("status IN ?", []string{types.WorkflowStatusQueued, types.WorkflowStatusRunning, types.WorkflowStatusPaused}).Updates(map[string]any{"status": types.WorkflowStatusCancelled, "error": "knowledge base deleted", "updated_at": time.Now()}).Error
 	})
 }
 func (s *knowledgeBaseService) cleanupKnowledgeFusion(ctx context.Context, kbID string) error {

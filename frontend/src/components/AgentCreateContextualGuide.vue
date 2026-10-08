@@ -67,13 +67,6 @@ const guideSteps = computed<SpotlightGuideStep[]>(() => {
       before: () => focusAgentEditorSection('knowledge'),
     },
     {
-      key: 'navWebsearch',
-      target: '[data-guide="agent-editor-nav-websearch"]',
-      placement: 'right',
-      before: () => focusAgentEditorSection('websearch'),
-      optional: true,
-    },
-    {
       key: 'navMultimodal',
       target: '[data-guide="agent-editor-nav-multimodal"]',
       placement: 'right',

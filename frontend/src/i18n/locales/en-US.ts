@@ -269,17 +269,16 @@ export default {
     factDifference: { conflict: 'Overlapping effective periods have different recorded values', potential: 'Possible discrepancy: effective dates are incomplete' },
     workflows: {
       invalidConditionValue: 'Enter a valid number for condition step “{step}”.',
-      title: 'Tracking workflows', description: 'Schedule knowledge queries, continuous research, and cited reports with conditions, human review, and Skills.', create: 'New workflow', edit: 'Edit workflow', new: 'Configure workflow', cancel: 'Cancel editing', name: 'Name', namePlaceholder: 'For example: Weekly competitor tracking', descriptionField: 'Description', cron: 'Cron schedule', manualOnly: 'Leave blank for manual runs only', timezone: 'Time zone', enabled: 'Enabled', disabled: 'Disabled', steps: 'Workflow steps', stepsHint: 'Steps run in order. Dependencies, branches, and reviews are kept in the run record.', addStep: 'Add step', stepId: 'Step ID', remove: 'Remove step', dependsOn: 'Depends on', onlyWhen: 'Run only when the condition matches', save: 'Save workflow', validation: 'Enter a name and ensure every step has a unique ID.', saved: 'Workflow saved', run: 'Run now', disable: 'Disable', enable: 'Enable', noDescription: 'No description', runs: 'Runs', selectWorkflow: 'Select a workflow to view its runs', noRuns: 'No runs yet.', runDetail: 'Run details', retry: 'Retry failed run', resume: 'Resume paused run', attempt: 'Attempt {count}', reviewPending: 'This run is waiting for human review.', approve: 'Approve and continue', reject: 'Reject run', runStarted: 'Workflow started', invalidArgs: 'Arguments for Skill step “{step}” must be a JSON array of strings.', empty: 'No workflows yet. Create a daily, weekly, or continuous research workflow.',
+      title: 'Tracking workflows', description: 'Schedule knowledge queries and cited reports with conditions, human review, and Skills.', create: 'New workflow', edit: 'Edit workflow', new: 'Configure workflow', cancel: 'Cancel editing', name: 'Name', namePlaceholder: 'For example: Weekly competitor tracking', descriptionField: 'Description', cron: 'Cron schedule', manualOnly: 'Leave blank for manual runs only', timezone: 'Time zone', enabled: 'Enabled', disabled: 'Disabled', steps: 'Workflow steps', stepsHint: 'Steps run in order. Dependencies, branches, and reviews are kept in the run record.', addStep: 'Add step', stepId: 'Step ID', remove: 'Remove step', dependsOn: 'Depends on', onlyWhen: 'Run only when the condition matches', save: 'Save workflow', validation: 'Enter a name and ensure every step has a unique ID.', saved: 'Workflow saved', run: 'Run now', disable: 'Disable', enable: 'Enable', noDescription: 'No description', runs: 'Runs', selectWorkflow: 'Select a workflow to view its runs', noRuns: 'No runs yet.', runDetail: 'Run details', retry: 'Retry failed run', resume: 'Resume paused run', attempt: 'Attempt {count}', reviewPending: 'This run is waiting for human review.', approve: 'Approve and continue', reject: 'Reject run', runStarted: 'Workflow started', invalidArgs: 'Arguments for Skill step “{step}” must be a JSON array of strings.', empty: 'No workflows yet. Create a daily or weekly knowledge query workflow.',
       decision: { approve: 'Review approved', reject: 'Run rejected' },
-      config: { query: 'Query', limit: 'Maximum results', entity: 'Entity name (required)', predicate: 'Fact attribute', relation: 'Relation type', objectEntityId: 'Related entity ID', since: 'From', until: 'Until', includeHistory: 'Include historical facts', maxResults: 'Maximum web results (up to 30)', provider: 'Search provider ID (optional)', ingest: 'Ingest research results into the knowledge base', reportTitle: 'Report title', timeFrom: 'Report start date', timeTo: 'Report end date', timeWindow: 'Report time window', days: 'Rolling days (1–365)', timezone: 'Time zone', previousDay: 'Previous day', previousWeek: 'Previous week', rollingDays: 'Last N days', prompt: 'Report instructions', slug: 'Wiki page slug', pageTitle: 'Page title', pageType: 'Page type', sourceStep: 'Content source step', summary: 'Additional summary', agentId: 'Agent ID', skillName: 'Skill name', scriptPath: 'Script path', inputStep: 'Input step', input: 'Text input', args: 'Arguments JSON array', conditionStep: 'Condition data step', path: 'Output field path', operator: 'Operator (exists / equals / not_equals / contains / gt / gte)', value: 'Comparison value', reviewMessage: 'Review prompt' },
-      stepTypes: { search: 'Knowledge search', fact_query: 'Fact query', web_research: 'Web research', report: 'Generate report', wiki_update: 'Update Wiki', skill: 'Run Skill', condition: 'Condition', human_review: 'Human review' },
-      runStatus: { queued: 'Queued', running: 'Running', waiting_ingestion: 'Waiting for source intake', paused: 'Waiting for review', completed: 'Completed', failed: 'Failed', rejected: 'Rejected', cancelled: 'Cancelled' },
-      stepStatus: { pending: 'Pending', running: 'Running', waiting_ingestion: 'Waiting for source intake', waiting_review: 'Waiting for review', succeeded: 'Completed', failed: 'Failed', skipped: 'Skipped', rejected: 'Rejected' },
+      config: { query: 'Query', limit: 'Maximum results', entity: 'Entity name (required)', predicate: 'Fact attribute', relation: 'Relation type', objectEntityId: 'Related entity ID', since: 'From', until: 'Until', includeHistory: 'Include historical facts', reportTitle: 'Report title', timeFrom: 'Report start date', timeTo: 'Report end date', timeWindow: 'Report time window', days: 'Rolling days (1–365)', timezone: 'Time zone', previousDay: 'Previous day', previousWeek: 'Previous week', rollingDays: 'Last N days', prompt: 'Report instructions', slug: 'Wiki page slug', pageTitle: 'Page title', pageType: 'Page type', sourceStep: 'Content source step', summary: 'Additional summary', agentId: 'Agent ID', skillName: 'Skill name', scriptPath: 'Script path', inputStep: 'Input step', input: 'Text input', args: 'Arguments JSON array', conditionStep: 'Condition data step', path: 'Output field path', operator: 'Operator (exists / equals / not_equals / contains / gt / gte)', value: 'Comparison value', reviewMessage: 'Review prompt' },
+      stepTypes: { search: 'Knowledge search', fact_query: 'Fact query', report: 'Generate report', wiki_update: 'Update Wiki', skill: 'Run Skill', condition: 'Condition', human_review: 'Human review' },
+      runStatus: { queued: 'Queued', running: 'Running', paused: 'Waiting for review', completed: 'Completed', failed: 'Failed', rejected: 'Rejected', cancelled: 'Cancelled' },
+      stepStatus: { pending: 'Pending', running: 'Running', waiting_review: 'Waiting for review', succeeded: 'Completed', failed: 'Failed', skipped: 'Skipped', rejected: 'Rejected' },
       templates: {
         daily: { title: 'Daily briefing', description: 'Search recent knowledge every day and produce a cited summary.', searchQuery: 'Find important changes in the knowledge base and recent updates', reportTitle: 'Daily knowledge updates', reportPrompt: 'Summarize key changes, their impact, and sources. Separate confirmed facts from items that need verification.' },
         weekly: { title: 'Weekly fact review', description: 'Summarize facts and changes for a selected entity each week.', reportTitle: 'Weekly fact changes', reportPrompt: 'Review this week’s fact changes for the selected entity, preserving dates, evidence, and historical differences.' },
-        research: { title: 'Continuous research', description: 'Research the web on a schedule, update context, and report on trends.', reportTitle: 'Continuous research report', reportPrompt: 'Combine web research with existing facts to explain trends, evidence, conflicts, and open questions.' },
-        custom: { title: 'Custom workflow', description: 'Combine queries, research, conditions, Skills, and human review from scratch.' }
+        custom: { title: 'Custom workflow', description: 'Combine queries, conditions, Skills, and human review from scratch.' }
       }
     },
     reports: { title: 'Research reports', description: 'Read workflow reports with source citations and download them as Markdown or JSON.', empty: 'No research reports yet.', download: 'Download Markdown', downloadJson: 'Download JSON', citations: 'Citations and sources', noCitations: 'This report has no attached citations.' }
@@ -510,11 +509,7 @@ export default {
         },
         knowledge: {
           title: 'Knowledge scope',
-          desc: '"All" for general assistants; "Selected" for a domain; "None" relies on the model alone or web search.'
-        },
-        navWebsearch: {
-          title: 'Web search (optional)',
-          desc: 'Allow the agent to call external search for up-to-date information.'
+          desc: '"All" for general assistants; "Selected" for a domain; "None" relies on the model alone.'
         },
         navMultimodal: {
           title: 'Attachment upload (optional)',
@@ -751,7 +746,6 @@ export default {
     typeFile: 'File',
     channelLabel: 'Source Channel',
     channelWeb: 'Web',
-    channelWebResearch: 'Web research',
     channelApi: 'API',
     channelBrowserExtension: 'Browser Extension',
     channelUpload: 'Upload',
@@ -1111,7 +1105,6 @@ export default {
       inlineMissing: 'File unavailable',
     },
     updatePlan: 'Update Plan',
-    webSearchFound: 'Found <strong>{count}</strong> web search result(s)',
     toolFallback: 'Tool',
     stepsCompleted: 'Completed <strong>{steps}</strong> step(s)',
     reasoningRounds: '<strong>{rounds}</strong> reasoning round(s)',
@@ -1149,7 +1142,6 @@ export default {
       agent: 'Smart Reasoning'
     },
     features: {
-      webSearch: 'Web Search Enabled',
       knowledgeBase: 'Knowledge Base Linked',
       mcp: 'MCP Services Enabled',
       multiTurn: 'Multi-turn Conversation'
@@ -1205,8 +1197,6 @@ export default {
       toolsConfigDesc: 'Configure tools available to the Agent',
       knowledgeConfig: 'Knowledge Base',
       knowledgeConfigDesc: "Configure the knowledge base scope for the agent",
-      webSearchConfig: 'Web Search',
-      webSearchConfigDesc: 'Configure web search capabilities for the agent',
       agentId: 'Agent ID',
       agentIdDesc: 'Use this ID to target the agent in API integrations',
       name: 'Name',
@@ -1223,19 +1213,13 @@ export default {
       model: 'Model',
       modelPlaceholder: 'Select Model',
       systemPrompt: 'System Prompt',
-      systemPromptPlaceholder: 'Custom system prompt to define agent behavior and role (use {\'{{\'}web_search_status{\'}}\'} placeholder for dynamic web search behavior)',
+      systemPromptPlaceholder: 'Custom system prompt to define agent behavior and role',
       contextTemplateRequired: 'Context template is required',
       temperature: 'Temperature',
       thinking: 'Thinking Mode',
       citationEnabled: 'Show Source Citations',
       citationEnabledDesc: 'Show knowledge-base and web sources in final answers; retrieval and grounding still work when disabled',
       mode: 'Running Mode',
-      webSearch: 'Web Search',
-      webSearchProvider: 'Search Engine',
-      webSearchProviderPlaceholder: 'Use default search engine',
-      webSearchMaxResults: 'Max Search Results',
-      webFetchEnabled: 'Auto-Fetch Page Content',
-      webFetchTopN: 'Pages to Fetch',
       knowledgeBases: 'Knowledge Bases',
       allKnowledgeBases: 'All Knowledge Bases',
       selectedKnowledgeBases: 'Selected Knowledge Bases',
@@ -1320,7 +1304,6 @@ export default {
       notReadyStatus: 'Setup needed',
       configureAction: 'Configure',
       capabilitiesSection: 'Capabilities',
-      webSearchCapability: 'Web search',
       imageUploadCapability: 'Image upload',
       capabilityEnabled: 'On',
       capabilityDisabled: 'Off',
@@ -1331,7 +1314,6 @@ export default {
   },
   settings: {
     modelManagement: 'Model Management',
-    webSearchConfig: 'Web Search',
     parserEngine: 'Parser Engine',
     sandbox: {
       allowPrivateEndpointsHint: "Allow connections to a Docker daemon on a private network.",
@@ -1749,44 +1731,6 @@ export default {
       vlmServerUrlPlaceholder: 'e.g. http://your-vllm-server:8000',
       vlmServerUrlHint: 'Required when Backend is vlm-http-client or hybrid-http-client',
     },
-  },
-  webSearchSettings: {
-    title: 'Web Search Configuration',
-    description: 'Configure web search so answers can include up-to-date information from the internet.',
-    basicSection: 'Basic',
-    credentialsSection: 'Connection',
-    optionsSection: 'Options',
-    providersTitle: 'Search Engine Providers',
-    addProvider: 'Add Provider',
-    editProvider: 'Edit Provider',
-    deleteConfirm: 'Are you sure you want to delete this provider?',
-    providerNameLabel: 'Name',
-    providerNamePlaceholder: 'e.g., Production Bing Search',
-    providerTypeLabel: 'Provider Type',
-    providerDescLabel: 'Notes',
-    providerDescPlaceholder: 'Optional, e.g., for testing',
-    engineIdLabel: 'Engine ID',
-    setAsDefault: 'Set as default',
-    testConnection: 'Test Connection',
-    testing: 'Testing...',
-    viewDocs: 'View docs for API key',
-    noProvidersDesc: 'Add a web search provider to enable your agents to retrieve real-time information from the internet.',
-    setAsDefaultDesc: 'This provider will be used by default when an agent doesn\'t specify one',
-    proxyUrlLabel: 'HTTP proxy',
-    proxyUrlPlaceholder: 'e.g. http://proxy.example.com:3128 (optional; http/https only)',
-    proxyUrlHelp: 'Use when outbound access to the search API requires a proxy; leave empty to rely on HTTP_PROXY/HTTPS_PROXY environment variables.',
-    apiKeyLabel: 'API Key',
-    apiKeyOptionalLabel: 'API Key (optional)',
-    baseUrlLabel: 'Instance URL',
-    baseUrlPlaceholder: 'https://searxng.example.com',
-    apiKeyPlaceholder: 'Enter API key',
-    toasts: {
-      providerCreated: 'Search provider created',
-      providerUpdated: 'Search provider updated',
-      providerDeleted: 'Search provider deleted',
-      testSuccess: 'Connection test succeeded',
-      testFailed: 'Connection test failed'
-    }
   },
   memorySettings: {
     title: 'My memory',
@@ -2270,8 +2214,6 @@ export default {
     addModel: 'Add Model',
     placeholder: 'Ask questions directly to the model',
     placeholderWithContext: 'Enter your question, will answer based on selected knowledge bases/files above',
-    placeholderWebOnly: 'Enter your question, will answer with web search',
-    placeholderKbAndWeb: 'Enter your question, will answer based on knowledge base and web search',
     placeholderAgent: 'Ask {name}',
     agentMode: 'Smart Reasoning',
     normalMode: 'Quick Answer',
@@ -2284,11 +2226,6 @@ export default {
     customAgentMissingRerankModel: 'Rerank model',
     goToAgentEditor: 'Go to configure →',
     agentNotReadyDetail: 'Agent "{agentName}" is not ready. Please configure: {reasons}',
-    webSearch: {
-      toggleOn: 'Enable Web Search',
-      toggleOff: 'Disable Web Search',
-      notConfigured: 'Web search engine not configured'
-    },
     knowledgeBase: 'Knowledge Base',
     knowledgeBaseWithCount: 'Knowledge Base ({count})',
     notConfigured: 'Not configured',
@@ -2301,15 +2238,11 @@ export default {
       agentSwitchedOn: 'Switched to Intelligent Reasoning',
       agentSwitchedOff: 'Switched to Quick Q&A',
       agentSelected: 'Selected agent "{name}"',
-      webSearchNotConfigured: 'Web search engine is not configured. Please configure a provider and credentials in settings.',
-      webSearchEnabled: 'Web search enabled',
-      webSearchDisabled: 'Web search disabled',
       sessionMissing: 'Session ID does not exist',
       messageMissing: 'Unable to get message ID. Please refresh the page and try again.',
       stopSuccess: 'Generation stopped',
       stopFailed: 'Failed to stop. Please try again.'
     },
-    webSearchDisabledByAgent: 'Web search is disabled by the current agent',
     kbLockedByAgent: 'Knowledge base configuration is locked by the current agent',
     kbDisabledByAgent: 'Knowledge base is disabled by the current agent',
     modelLockedByAgent: 'Model selection is locked by the current agent',
@@ -2889,7 +2822,6 @@ export default {
     relevanceMedium: 'Medium relevance',
     relevanceLow: 'Low relevance',
     relevanceWeak: 'Weak relevance',
-    webSearchNoResults: 'No web search results found',
     otherSource: 'Other sources',
     webGroupIntro: 'The following {count} items are from',
     graphConfigTitle: 'Graph Configuration',
@@ -3892,6 +3824,7 @@ export default {
     addService: 'Add Service',
     empty: 'No MCP services',
     actions: {
+      testing: 'Testing...',
       test: 'Test Connection'
     },
     toasts: {
@@ -4176,7 +4109,6 @@ export default {
     resetDefault: 'Reset Default',
     default: 'Default',
     withKnowledgeBase: 'KB',
-    withWebSearch: 'Web Search'
   },
   preview: {
     tab: 'Preview',
@@ -4326,7 +4258,6 @@ export default {
     tools: {
       searchKnowledge: 'Knowledge Search',
       grepChunks: 'Text Pattern Search',
-      webSearch: 'Web Search',
       webFetch: 'Web Fetch',
       getDocumentInfo: 'Get Document Info',
       listKnowledgeChunks: 'List Knowledge Chunks',
@@ -4395,8 +4326,6 @@ export default {
       candidatesBelowThreshold: 'Matched {count} candidate(s), none relevant enough to use',
       foundResultsFromFiles: 'Found {count} result(s) from {files} file(s)',
       foundResults: 'Found {count} result(s)',
-      foundMixedResults: 'Found {count} result(s) ({docCount} documents, {webCount} web results)',
-      webResults: 'Found {count} web result(s)',
       grepSummary: 'Found {chunks} matching chunk(s) across {docs} document(s)'
     },
     grepResults: {
@@ -4416,20 +4345,12 @@ export default {
     ragPipeline: {
       searching: 'Searching knowledge base...',
       searchingWithQuery: 'Searching knowledge base: "{query}"',
-      searchingWeb: 'Searching the web...',
-      searchingWebWithQuery: 'Searching the web: "{query}"',
-      searchingMixed: 'Searching knowledge base and web...',
-      searchingMixedWithQuery: 'Searching knowledge base and web: "{query}"',
       searchDone: 'Search complete'
     },
     toolStatus: {
       calling: 'Calling {name}...',
       searchKb: 'Searching knowledge base',
       searchKbFailed: 'Knowledge base search failed',
-      searchMixed: 'Searched knowledge base and web',
-      searchMixedFailed: 'Search failed',
-      webSearch: 'Web search',
-      webSearchFailed: 'Web search failed',
       grepSearch: 'Keyword search',
       grepSearchFailed: 'Keyword search failed',
       getDocInfo: 'Getting document info',
@@ -4555,11 +4476,6 @@ export default {
       selectTools: 'Select tools available to the Agent',
       maxIterations: 'Caps how many reasoning steps one task may take. Unlimited keeps going until the model stops on its own or you stop it.',
       kbScope: 'Select the scope of knowledge bases accessible to the agent',
-      webSearch: 'When enabled, the agent can search the internet for information',
-      webSearchProvider: 'Specify a search engine for this agent. Leave empty to use the default.',
-      webSearchMaxResults: 'Maximum number of results returned per search',
-      webFetchEnabled: 'After reranking, auto-fetch full page content from top web results for better answers',
-      webFetchTopN: 'Maximum number of web pages to fetch after reranking',
       retrievalSection: "Configure knowledge retrieval and ranking",
       queryExpansion: 'Automatically expand query terms to improve recall',
       embeddingTopK: 'Maximum number of results from vector retrieval',
@@ -4605,7 +4521,7 @@ export default {
       wikiFlagIssueDesc: 'Flag factual errors or merge conflicts on a Wiki page',
       knowledgeReportAnomaly: 'Report message issue',
       knowledgeReportAnomalyDesc: 'Suggest a correction or tag change for the knowledge base owner',
-      knowledgeImportURL: 'Import research page',
+      knowledgeImportURL: 'Import page by URL',
       knowledgeImportURLDesc: 'Fetch the original page for completeness, source, and quality review',
       knowledgeApplyAnomaly: 'Apply message correction',
       knowledgeApplyAnomalyDesc: 'Apply a specific correction only after the owner explicitly asks',
@@ -4621,8 +4537,8 @@ export default {
       wikiReadIssueDesc: 'View details of a Wiki page issue',
       wikiUpdateIssue: 'Update Wiki Issue',
       wikiUpdateIssueDesc: 'Update the status of a Wiki page issue',
-      webSearch: 'Web Search',
       webFetch: 'Web Fetch',
+      webFetchDesc: 'Fetch content from a specified URL',
       groupBase: 'Basic',
       groupRag: 'Knowledge Retrieval (RAG)',
       groupWikiRead: 'Wiki Read',

@@ -45,7 +45,6 @@ export interface PromptTemplate {
   content: string
   user?: string
   has_knowledge_base?: boolean
-  has_web_search?: boolean
   default?: boolean
   mode?: string
 }

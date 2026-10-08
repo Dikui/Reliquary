@@ -24,7 +24,7 @@ type knowledgeImportURLTool struct {
 func NewKnowledgeImportURLTool(targets types.SearchTargets, importURL func(context.Context, KnowledgeImportURLInput) error) types.Tool {
 	return &knowledgeImportURLTool{
 		BaseTool: NewBaseTool(ToolKnowledgeImportURL,
-			"Fetch a discovered original article URL into the knowledge base's normal completeness, source and quality review. The result is queued, not approved. Use only for a user-requested research task; never submit search snippets or X/Twitter posts. Source metadata must be extracted from the page, not guessed.",
+			"Fetch a specified original article URL into the knowledge base's normal completeness, source and quality review. The result is queued, not approved. Use only for a user-requested URL intake; never submit summaries or X/Twitter posts. Source metadata must be extracted from the page, not guessed.",
 			json.RawMessage(`{"type":"object","properties":{"knowledge_base_id":{"type":"string"},"url":{"type":"string"}},"required":["knowledge_base_id","url"]}`)),
 		allowed: targets.GetKBTenantMap(), importURL: importURL,
 	}

@@ -89,7 +89,7 @@ export function resolveCitationChunkId(
   const raw = String(rawChunkId || '').trim()
   if (!raw || UUID_RE.test(raw)) return raw
 
-  const list = (refs || []).filter((r) => r && r.chunk_type !== 'web_search')
+  const list = (refs || []).filter((r) => r && r.chunk_type !== 'web_fetch')
   if (!list.length) return raw
 
   const doc = (attrs.doc || '').trim()

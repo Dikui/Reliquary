@@ -27,8 +27,6 @@ const (
 	ChunkTypeEntity ChunkType = "entity"
 	// ChunkTypeRelationship 表示关系类型的 Chunk
 	ChunkTypeRelationship ChunkType = "relationship"
-	// ChunkTypeWebSearch 表示 Web 搜索结果的 Chunk
-	ChunkTypeWebSearch ChunkType = "web_search"
 	// ChunkTypeTableSummary 表示数据表摘要的 Chunk
 	ChunkTypeTableSummary ChunkType = "table_summary"
 	// ChunkTypeTableColumn 表示数据表列描述的 Chunk

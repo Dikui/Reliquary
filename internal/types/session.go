@@ -224,7 +224,6 @@ type SessionLastRequestState struct {
 	MCPServiceIDs    []string       `json:"mcp_service_ids,omitempty"`
 	SkillNames       []string       `json:"skill_names,omitempty"`
 	MentionedItems   MentionedItems `json:"mentioned_items,omitempty"`
-	WebSearchEnabled bool           `json:"web_search_enabled"`
 }
 
 // Value implements driver.Valuer for SessionLastRequestState (JSONB).

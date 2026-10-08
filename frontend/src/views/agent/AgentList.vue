@@ -148,17 +148,6 @@
                           size="14px" />
                       </div>
                     </t-tooltip>
-                    <t-tooltip v-if="agent.config?.web_search_enabled" :content="$t('agent.features.webSearch')"
-                      placement="top">
-                      <div class="feature-badge web-search">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.2" fill="none" />
-                          <ellipse cx="8" cy="8" rx="2.5" ry="6" stroke="currentColor" stroke-width="1.2" fill="none" />
-                          <line x1="2" y1="6" x2="14" y2="6" stroke="currentColor" stroke-width="1.2" />
-                          <line x1="2" y1="10" x2="14" y2="10" stroke="currentColor" stroke-width="1.2" />
-                        </svg>
-                      </div>
-                    </t-tooltip>
                     <t-tooltip v-if="agent.config?.knowledge_bases?.length || agent.config?.kb_selection_mode === 'all'"
                       :content="$t('agent.features.knowledgeBase')" placement="top">
                       <div class="feature-badge knowledge">
@@ -1216,15 +1205,6 @@ defineExpose({
 
     &:hover {
       background: rgba(124, 77, 255, 0.12);
-    }
-  }
-
-  &.web-search {
-    background: rgba(255, 152, 0, 0.08);
-    color: var(--td-warning-color);
-
-    &:hover {
-      background: rgba(255, 152, 0, 0.12);
     }
   }
 

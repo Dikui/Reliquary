@@ -10,10 +10,9 @@ import (
 )
 
 const (
-	modelWebSearchEvidenceMaxRunes = 500
-	modelWebFetchSummaryMaxRunes   = 4000
-	modelWebFetchContentMaxRunes   = 8000
-	modelWebFetchTotalMaxRunes     = 16000
+	modelWebFetchSummaryMaxRunes = 4000
+	modelWebFetchContentMaxRunes = 8000
+	modelWebFetchTotalMaxRunes   = 16000
 )
 
 // ModelOutput returns a compact, source-centric representation for the LLM.
@@ -40,8 +39,6 @@ func (r *sourceRegistry) ModelOutput(result *types.ToolResult) string {
 		return r.modelDocumentInfoOutput(mapsValue(result.Data["documents"]), result.Output)
 	case "graph_query_results":
 		return r.modelKnowledgeOutput("graph", mapsValue(result.Data["results"]), result.Output)
-	case "web_search_results":
-		return r.modelWebSearchOutput(mapsValue(result.Data["results"]), result.Output)
 	case "database_query":
 		return r.modelDatabaseQueryOutput(mapsValue(result.Data["rows"]), result.Output)
 	default:
@@ -319,40 +316,6 @@ func renderKnowledgeChunks(mode string, chunks []modelChunk) string {
 	return b.String()
 }
 
-func (r *sourceRegistry) modelWebSearchOutput(rows []map[string]interface{}, fallback string) string {
-	if len(rows) == 0 {
-		return r.CompactKnownText(fallback)
-	}
-	var b strings.Builder
-	b.WriteString("<retrieval type=\"web\" mode=\"search\">\n")
-	count := 0
-	for _, row := range rows {
-		rawURL := stringValue(row, "url")
-		if rawURL == "" {
-			continue
-		}
-		handle := r.RegisterWeb(rawURL, stringValue(row, "title"))
-		fmt.Fprintf(&b, "  <page id=\"%s\" title=\"%s\">\n", handle, escapeAttr(stringValue(row, "title")))
-		b.WriteString("    <evidence type=\"search_summary\" verified=\"false\" />\n")
-		if snippet := stringValue(row, "snippet"); snippet != "" {
-			writeLimitedWebEvidence(&b, "match", snippet, modelWebSearchEvidenceMaxRunes, nil)
-		}
-		if content := stringValue(row, "content"); content != "" && content != stringValue(row, "snippet") {
-			writeLimitedWebEvidence(&b, "content", content, modelWebSearchEvidenceMaxRunes, nil)
-		}
-		if published := stringValue(row, "published_at"); published != "" {
-			fmt.Fprintf(&b, "    <published>%s</published>\n", escapeText(published))
-		}
-		b.WriteString("  </page>\n")
-		count++
-	}
-	b.WriteString("</retrieval>")
-	if count == 0 {
-		return r.CompactKnownText(fallback)
-	}
-	return b.String()
-}
-
 func (r *sourceRegistry) modelWebFetchOutput(rows []map[string]interface{}, fallback string) string {
 	if len(rows) == 0 {
 		return r.CompactKnownText(fallback)
@@ -412,10 +375,10 @@ func (r *sourceRegistry) modelWebFetchOutput(rows []map[string]interface{}, fall
 	if failedCount > 0 {
 		b.WriteString("\n\n=== Next Steps ===\n")
 		if successCount == 0 {
-			b.WriteString("- All page fetches failed. Stop expanding web searches and answer from existing web_search titles, URLs, and snippets.\n")
+			b.WriteString("- All page fetches failed. Answer only from other available evidence.\n")
 			b.WriteString("- Explicitly state that page content was not verified and treat dynamic facts as uncertain.")
 		} else {
-			b.WriteString("- Use successful page content together with existing search snippets; failed URLs do not invalidate successful evidence.\n")
+			b.WriteString("- Use successful page content; failed URLs do not invalidate successful evidence.\n")
 			b.WriteString("- Do not retry non-retryable failures. If evidence is sufficient, answer now.")
 		}
 	}

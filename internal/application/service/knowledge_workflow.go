@@ -65,7 +65,6 @@ type KnowledgeWorkflowService struct {
 	kbs       interfaces.KnowledgeBaseService
 	knowledge interfaces.KnowledgeService
 	context   *KnowledgeContextService
-	webSearch interfaces.WebSearchService
 	wiki      interfaces.WikiPageService
 	models    interfaces.ModelService
 	tasks     interfaces.TaskEnqueuer
@@ -79,7 +78,6 @@ func NewKnowledgeWorkflowService(
 	kbs interfaces.KnowledgeBaseService,
 	knowledge interfaces.KnowledgeService,
 	contextService *KnowledgeContextService,
-	webSearch interfaces.WebSearchService,
 	wiki interfaces.WikiPageService,
 	models interfaces.ModelService,
 	tasks interfaces.TaskEnqueuer,
@@ -87,7 +85,7 @@ func NewKnowledgeWorkflowService(
 ) *KnowledgeWorkflowService {
 	return &KnowledgeWorkflowService{
 		db: db, kbs: kbs, knowledge: knowledge, context: contextService,
-		webSearch: webSearch, wiki: wiki, models: models,
+		wiki: wiki, models: models,
 		tasks: tasks, skillExec: skillExecutor,
 	}
 }
@@ -169,7 +167,7 @@ func validateWorkflowInput(in types.KnowledgeWorkflowInput) error {
 
 func validWorkflowStepType(stepType string) bool {
 	switch stepType {
-	case types.WorkflowStepSearch, types.WorkflowStepFactQuery, types.WorkflowStepWebResearch,
+	case types.WorkflowStepSearch, types.WorkflowStepFactQuery,
 		types.WorkflowStepReport, types.WorkflowStepWikiUpdate, types.WorkflowStepSkill,
 		types.WorkflowStepCondition, types.WorkflowStepHumanReview:
 		return true
@@ -207,20 +205,6 @@ func validateWorkflowStepConfig(step types.KnowledgeWorkflowStep) error {
 		}
 		if cfg.MinValue != nil && cfg.MaxValue != nil && *cfg.MinValue > *cfg.MaxValue {
 			return errors.New("invalid numeric range")
-		}
-	case types.WorkflowStepWebResearch:
-		if str("query") == "" {
-			return errors.New("query is required")
-		}
-		cfg, err := decodeWorkflowConfig[workflowResearchConfig](step.Config)
-		if err != nil {
-			return err
-		}
-		if cfg.Ingest != nil && !*cfg.Ingest {
-			return errors.New("web research must ingest sources through the existing intake review")
-		}
-		if max := workflowInt(step.Config["max_results"]); max > 30 {
-			return errors.New("max_results cannot exceed 30")
 		}
 	case types.WorkflowStepReport:
 		if str("title") == "" {

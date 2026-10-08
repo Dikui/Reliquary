@@ -5,30 +5,27 @@ import "time"
 const (
 	WorkflowStepSearch      = "search"
 	WorkflowStepFactQuery   = "fact_query"
-	WorkflowStepWebResearch = "web_research"
 	WorkflowStepReport      = "report"
 	WorkflowStepWikiUpdate  = "wiki_update"
 	WorkflowStepSkill       = "skill"
 	WorkflowStepCondition   = "condition"
 	WorkflowStepHumanReview = "human_review"
 
-	WorkflowStatusQueued           = "queued"
-	WorkflowStatusRunning          = "running"
-	WorkflowStatusPaused           = "paused"
-	WorkflowStatusWaitingIngestion = "waiting_ingestion"
-	WorkflowStatusCompleted        = "completed"
-	WorkflowStatusFailed           = "failed"
-	WorkflowStatusRejected         = "rejected"
-	WorkflowStatusCancelled        = "cancelled"
+	WorkflowStatusQueued    = "queued"
+	WorkflowStatusRunning   = "running"
+	WorkflowStatusPaused    = "paused"
+	WorkflowStatusCompleted = "completed"
+	WorkflowStatusFailed    = "failed"
+	WorkflowStatusRejected  = "rejected"
+	WorkflowStatusCancelled = "cancelled"
 
-	WorkflowStepPending          = "pending"
-	WorkflowStepRunning          = "running"
-	WorkflowStepWaitingReview    = "waiting_review"
-	WorkflowStepWaitingIngestion = "waiting_ingestion"
-	WorkflowStepSucceeded        = "succeeded"
-	WorkflowStepFailed           = "failed"
-	WorkflowStepSkipped          = "skipped"
-	WorkflowStepRejected         = "rejected"
+	WorkflowStepPending       = "pending"
+	WorkflowStepRunning       = "running"
+	WorkflowStepWaitingReview = "waiting_review"
+	WorkflowStepSucceeded     = "succeeded"
+	WorkflowStepFailed        = "failed"
+	WorkflowStepSkipped       = "skipped"
+	WorkflowStepRejected      = "rejected"
 )
 
 // KnowledgeWorkflowSchedule is evaluated in the configured IANA time zone.
@@ -95,7 +92,6 @@ type KnowledgeWorkflowRun struct {
 	Error            string                     `json:"error,omitempty" gorm:"type:text;not null;default:''"`
 	StartedAt        *time.Time                 `json:"started_at,omitempty"`
 	FinishedAt       *time.Time                 `json:"finished_at,omitempty"`
-	NextRunAt        *time.Time                 `json:"next_run_at,omitempty"`
 	LeaseToken       string                     `json:"-" gorm:"type:varchar(36);not null;default:''"`
 	CreatedAt        time.Time                  `json:"created_at"`
 	UpdatedAt        time.Time                  `json:"updated_at"`

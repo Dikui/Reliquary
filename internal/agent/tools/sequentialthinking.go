@@ -50,7 +50,7 @@ Each thought can build on, question, or revise previous insights as understandin
   * Hypothesis generation
   * Hypothesis verification
   
-  **CRITICAL - User-Friendly Thinking**: Write your thoughts in natural, user-friendly language. NEVER mention tool names (like "grep_chunks", "knowledge_search", "web_search", etc.) in your thinking process. Instead, describe your actions in plain language:
+  **CRITICAL - User-Friendly Thinking**: Write your thoughts in natural, user-friendly language. NEVER mention tool names (like "grep_chunks", "knowledge_search", "web_fetch", etc.) in your thinking process. Instead, describe your actions in plain language:
   - ❌ BAD: "I'll use grep_chunks to search for keywords, then knowledge_search for semantic understanding"
   - ✅ GOOD: "I'll start by searching for key terms in the knowledge base, then explore related concepts"
   - ❌ BAD: "After grep_chunks returns results, I'll use knowledge_search"
@@ -85,7 +85,7 @@ Each thought can build on, question, or revise previous insights as understandin
   "properties": {
     "thought": {
       "type": "string",
-      "description": "Your current thinking step. Write in natural, user-friendly language. NEVER mention tool names (like \"grep_chunks\", \"knowledge_search\", \"web_search\", etc.). Instead, describe actions in plain language (e.g., \"I'll search for key terms\" instead of \"I'll use grep_chunks\"). Focus on WHAT you're trying to find and WHY, not HOW (which tools you'll use)."
+      "description": "Your current thinking step. Write in natural, user-friendly language. NEVER mention tool names (like \"grep_chunks\", \"knowledge_search\", \"web_fetch\", etc.). Instead, describe actions in plain language (e.g., \"I'll search for key terms\" instead of \"I'll use grep_chunks\"). Focus on WHAT you're trying to find and WHY, not HOW (which tools you'll use)."
     },
     "next_thought_needed": {
       "type": "boolean",

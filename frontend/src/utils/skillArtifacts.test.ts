@@ -6,7 +6,7 @@ import { agentTurnUsedSkillScript, isCollectingSkillArtifacts } from './skillArt
 test('agentTurnUsedSkillScript detects execute_skill_script in the stream', () => {
   assert.equal(agentTurnUsedSkillScript(undefined), false)
   assert.equal(agentTurnUsedSkillScript([]), false)
-  assert.equal(agentTurnUsedSkillScript([{ tool_name: 'web_search' }]), false)
+  assert.equal(agentTurnUsedSkillScript([{ tool_name: 'web_fetch' }]), false)
   assert.equal(agentTurnUsedSkillScript([{ tool_name: 'execute_skill_script' }]), true)
 })
 

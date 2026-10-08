@@ -241,7 +241,7 @@ func TestChunkKeywordSearchFiltersAndTypes(t *testing.T) {
 	}
 	for _, chunkType := range []string{
 		types.ChunkTypeParentText, types.ChunkTypeEntity, types.ChunkTypeRelationship,
-		types.ChunkTypeWebSearch, types.ChunkTypeWikiPage,
+		types.ChunkTypeWikiPage,
 	} {
 		f.createChunk(t, knowledge, "Filterbodymarker excluded content", "", chunkType)
 	}

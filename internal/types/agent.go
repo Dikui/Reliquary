@@ -110,18 +110,12 @@ type AgentConfig struct {
 	Temperature    float64  `json:"temperature"`             // LLM temperature for agent
 	KnowledgeBases []string `json:"knowledge_bases"`         // Accessible knowledge base IDs
 	KnowledgeIDs   []string `json:"knowledge_ids"`           // Accessible knowledge IDs (individual documents)
-	SystemPrompt   string   `json:"system_prompt,omitempty"` // Unified system prompt (uses web_search_status placeholder for dynamic behavior)
-	// Deprecated: Use SystemPrompt instead. Kept for backward compatibility during migration.
-	SystemPromptWebEnabled  string        `json:"system_prompt_web_enabled,omitempty"`  // Deprecated: Custom prompt when web search is enabled
-	SystemPromptWebDisabled string        `json:"system_prompt_web_disabled,omitempty"` // Deprecated: Custom prompt when web search is disabled
-	UseCustomSystemPrompt   bool          `json:"use_custom_system_prompt"`             // Whether to use custom system prompt instead of default
-	WebSearchEnabled        bool          `json:"web_search_enabled"`                   // Whether web search tool is enabled
-	WebSearchMaxResults     int           `json:"web_search_max_results"`               // Maximum number of web search results (default: 5)
-	WebSearchProviderID     string        `json:"web_search_provider_id,omitempty"`     // WebSearchProviderEntity ID (resolved from agent config)
-	MultiTurnEnabled        bool          `json:"multi_turn_enabled"`                   // Whether multi-turn conversation is enabled
-	HistoryTurns            int           `json:"history_turns"`                        // Number of history turns to keep in context
-	MemoryEnabled           *bool         `json:"memory_enabled,omitempty"`             // nil inherits workspace
-	SearchTargets           SearchTargets `json:"-"`                                    // Pre-computed unified search targets (runtime only)
+	SystemPrompt   string   `json:"system_prompt,omitempty"` // System prompt
+	UseCustomSystemPrompt bool          `json:"use_custom_system_prompt"` // Whether to use custom system prompt instead of default
+	MultiTurnEnabled      bool          `json:"multi_turn_enabled"`       // Whether multi-turn conversation is enabled
+	HistoryTurns          int           `json:"history_turns"`            // Number of history turns to keep in context
+	MemoryEnabled         *bool         `json:"memory_enabled,omitempty"` // nil inherits workspace
+	SearchTargets         SearchTargets `json:"-"`                        // Pre-computed unified search targets (runtime only)
 	// MCP service selection
 	MCPSelectionMode string   `json:"mcp_selection_mode"` // MCP selection mode: "all", "selected", "none"
 	MCPServices      []string `json:"mcp_services"`       // Selected MCP service IDs (when mode is "selected")
@@ -246,7 +240,6 @@ func (c *AgentConfig) CitationsEnabled() bool {
 // Sessions only store Enabled and KnowledgeBases; other configs are read from Tenant at runtime
 type SessionAgentConfig struct {
 	AgentModeEnabled bool     `json:"agent_mode_enabled"` // Whether agent mode is enabled for this session
-	WebSearchEnabled bool     `json:"web_search_enabled"` // Whether web search is enabled for this session
 	KnowledgeBases   []string `json:"knowledge_bases"`    // Accessible knowledge base IDs for this session
 	KnowledgeIDs     []string `json:"knowledge_ids"`      // Accessible knowledge IDs (individual documents) for this session
 }
@@ -295,30 +288,12 @@ func (c *SessionAgentConfig) Scan(value interface{}) error {
 	return json.Unmarshal(b, c)
 }
 
-// ResolveSystemPrompt returns the prompt template for the given web search state.
-// It uses the unified SystemPrompt field, falling back to deprecated fields for backward compatibility.
-func (c *AgentConfig) ResolveSystemPrompt(webSearchEnabled bool) string {
+// ResolveSystemPrompt returns the configured system prompt.
+func (c *AgentConfig) ResolveSystemPrompt() string {
 	if c == nil {
 		return ""
 	}
-
-	// First, try the new unified SystemPrompt field
-	if c.SystemPrompt != "" {
-		return c.SystemPrompt
-	}
-
-	// Fallback to deprecated fields for backward compatibility
-	if webSearchEnabled {
-		if c.SystemPromptWebEnabled != "" {
-			return c.SystemPromptWebEnabled
-		}
-	} else {
-		if c.SystemPromptWebDisabled != "" {
-			return c.SystemPromptWebDisabled
-		}
-	}
-
-	return ""
+	return c.SystemPrompt
 }
 
 // Tool defines the interface that all agent tools must implement

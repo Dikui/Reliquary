@@ -7,7 +7,7 @@
       Footer-left slot: connection-test button lives here so it sits next to
       Save/Cancel — primary actions all aligned along the bottom of the
       drawer. Avoids the "test, then scroll back down to save" dance.
-      Mirrors the pattern used in WebSearchSettings' provider drawer.
+      Mirrors the pattern used in ModelSettings' provider drawer.
     -->
     <template v-if="formData.source === 'remote'" #footer-left>
       <t-button variant="outline" @click="checkRemoteAPI" :loading="checking"

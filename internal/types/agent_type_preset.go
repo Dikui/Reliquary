@@ -58,7 +58,6 @@ type AgentTypePresetConfig struct {
 	MaxIterations          int      `yaml:"max_iterations"         json:"max_iterations,omitempty"`
 	AllowedTools           []string `yaml:"allowed_tools"          json:"allowed_tools,omitempty"`
 	RetainRetrievalHistory bool     `yaml:"retain_retrieval_history" json:"retain_retrieval_history,omitempty"`
-	WebSearchEnabled       bool     `yaml:"web_search_enabled"     json:"web_search_enabled,omitempty"`
 	SupportedFileTypes     []string `yaml:"supported_file_types"   json:"supported_file_types,omitempty"`
 	// KBSelectionMode presets the KB picker mode: "all" | "selected" | "none".
 	// When empty, the user's current value stays untouched.

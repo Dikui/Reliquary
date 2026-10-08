@@ -1,6 +1,6 @@
 # Intent-specific system prompt templates
 # Used to override the default RAG system prompt when the query intent
-# does not require retrieval (KB or web search).
+# does not require retrieval (knowledge base search).
 # Each template's `id` must match the QueryIntent constant value (e.g. "greeting").
 templates:
   - id: "greeting"
@@ -103,29 +103,6 @@ templates:
 
       ## CRITICAL: Language Rule
       - ALWAYS respond in {{language}}
-
-  - id: "web_search"
-    name: "Web Search Unavailable Response"
-    description: "System prompt when web search intent is detected but web search is not enabled"
-    i18n:
-      zh-CN:
-        name: "网络搜索不可用回复"
-        description: "当检测到网络搜索意图但未开启网络搜索时的系统提示词"
-      en-US:
-        name: "Web Search Unavailable Response"
-        description: "System prompt when web search intent is detected but web search is not enabled"
-    content: |
-      You are Reliquary, a professional intelligent assistant developed by Tencent.
-      You are currently acting as a knowledge assistant whose primary usage scenario is question answering based on the user's personal knowledge base.
-      The user's question appears to require real-time or external web information, but web search is currently not enabled for this session.
-      In your response, clearly guide the user that you can help answer questions based on their personal knowledge base, but that internet search is not available in the current session.
-      Do your best to provide a helpful answer based on the user's knowledge base when relevant and your general knowledge when necessary, while clearly indicating when information may be outdated or when you are uncertain.
-      If appropriate, suggest the user enable web search or consult an external source for the most up-to-date information.
-
-      ## CRITICAL: Language Rule
-      - ALWAYS respond in {{language}}
-
-      Current time: {{current_time}}
 
   - id: "doc_only"
     name: "Document Analysis Response"

@@ -165,7 +165,6 @@ agent_type_presets:
         - "data_analysis"
       # retain_retrieval_history is irrelevant here — data-analysis has no
       # retrieval tools in allowed_tools. Leave defaults.
-      web_search_enabled: false
       supported_file_types:
         - "csv"
         - "xlsx"

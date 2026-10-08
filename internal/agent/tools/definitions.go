@@ -18,7 +18,6 @@ const (
 	ToolDatabaseQuery       = "database_query"
 	ToolDataAnalysis        = "data_analysis"
 	ToolDataSchema          = "data_schema"
-	ToolWebSearch           = "web_search"
 	ToolWebFetch            = "web_fetch"
 	// Skills-related tools (only available when skills are enabled).
 	//
@@ -35,7 +34,7 @@ const (
 	// patches an existing file without regenerating it.
 	//
 	// Deliberately absent from AvailableToolDefinitions and
-	// DefaultAllowedTools, like search_memory and web_search: the sandbox
+	// DefaultAllowedTools, like search_memory: the sandbox
 	// switch already decides whether a run has a workspace at all, and
 	// registerSandboxFileTools registers these from that capability rather
 	// than from the allowlist. A checkbox would have been a lie — clearing
@@ -104,6 +103,7 @@ func AvailableToolDefinitions() []AvailableTool {
 		},
 		{Name: ToolDatabaseQuery, Label: "查询数据库", Description: "查询数据库中的信息"},
 		{Name: ToolDataAnalysis, Label: "数据分析", Description: "理解数据文件并进行数据分析"},
+		{Name: ToolWebFetch, Label: "抓取网页", Description: "抓取指定网址的正文并分析内容"},
 		{Name: ToolDataSchema, Label: "查看数据元信息", Description: "获取表格文件的元信息"},
 		{Name: ToolWikiReadPage, Label: "读取Wiki页面", Description: "读取指定的Wiki页面内容"},
 		{Name: ToolWikiSearch, Label: "搜索Wiki", Description: "在Wiki中搜索页面"},
@@ -116,7 +116,7 @@ func AvailableToolDefinitions() []AvailableTool {
 		{Name: ToolWikiReadIssue, Label: "查看Wiki问题", Description: "查看特定的Wiki页面问题详情"},
 		{Name: ToolWikiUpdateIssue, Label: "更新Wiki问题状态", Description: "更新特定的Wiki页面问题状态"},
 		{Name: ToolKnowledgeReportAnomaly, Label: "报告消息异常", Description: "提交消息纠错或标签建议，等待知识库本人处理"},
-		{Name: ToolKnowledgeImportURL, Label: "调研网页入库", Description: "抓取原文并进入统一质量审核，审核前不作为正式消息"},
+		{Name: ToolKnowledgeImportURL, Label: "按网址收录", Description: "抓取原文并进入统一质量审核，审核前不作为正式消息"},
 		{Name: ToolKnowledgeApplyAnomaly, Label: "执行消息纠错", Description: "仅在知识库本人明确指示后执行指定纠错建议"},
 	}
 }
@@ -138,7 +138,7 @@ func DefaultAllowedTools() []string {
 		// without stuffing every past conversation into the context window.
 		ToolSearchConversations,
 		// ToolSearchMemory is deliberately absent here and from
-		// AvailableToolDefinitions. Like web_search it is not chosen from this
+		// AvailableToolDefinitions. It is not chosen from this
 		// list at all: registerTools injects it whenever the workspace, the
 		// user and the agent all allow memory, and strips it whenever they do
 		// not. Adding it here would let a stale allowlist decide something the
@@ -146,5 +146,6 @@ func DefaultAllowedTools() []string {
 		ToolDatabaseQuery,
 		ToolDataAnalysis,
 		ToolDataSchema,
+		ToolWebFetch,
 	}
 }

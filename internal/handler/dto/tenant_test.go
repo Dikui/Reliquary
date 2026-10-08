@@ -15,17 +15,12 @@ func TestTenantResponse_UserOmitsLegacyTenantAPIKey(t *testing.T) {
 	require.NoError(t, err)
 	s := string(body)
 	assert.NotContains(t, s, `"api_key"`)
-	assert.NotContains(t, s, "legacy-search-secret-999")
 	assert.NotContains(t, s, "parser-secret-123")
-	assert.Contains(t, s, "web_search_config")
 }
 
 func TestTenantResponse_UserGetsRedactedIntegrationConfigs(t *testing.T) {
 	tenant := sampleSecretTenant()
 	resp := NewTenantResponse(userContext(), tenant)
-	require.NotNil(t, resp.WebSearchConfig)
-	assert.Equal(t, types.RedactedSecretPlaceholder, resp.WebSearchConfig.ProxyURL)
-	assert.Empty(t, resp.WebSearchConfig.APIKey)
 	require.NotNil(t, resp.ParserEngineConfig)
 	assert.Equal(t, types.RedactedSecretPlaceholder, resp.ParserEngineConfig.MinerUAPIKey)
 	require.NotNil(t, resp.Credentials)
@@ -38,10 +33,6 @@ func sampleSecretTenant() *types.Tenant {
 	return &types.Tenant{
 		ID:   42,
 		Name: "tenant",
-		WebSearchConfig: &types.WebSearchConfig{
-			APIKey:   "legacy-search-secret-999",
-			ProxyURL: "http://proxy.internal:8080",
-		},
 		Credentials: &types.CredentialsConfig{
 			WeKnoraCloud: &types.WeKnoraCloudCredentials{
 				AppID:     "wk-app-id-abc",

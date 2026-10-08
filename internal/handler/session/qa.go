@@ -48,7 +48,6 @@ type qaRequestContext struct {
 	mcpServiceIDs         []string
 	skillNames            []string
 	summaryModelID        string
-	webSearchEnabled      bool
 	mentionedItems        types.MentionedItems
 	images                []ImageAttachment        // Uploaded images with analysis text
 	userMessageID         string                   // Created user message ID (populated after createUserMessage)
@@ -87,7 +86,6 @@ func (rc *qaRequestContext) buildQARequest() *types.QARequest {
 		ImageURLs:          imageURLs,
 		ImageDescription:   imageDescription,
 		UserMessageID:      rc.userMessageID,
-		WebSearchEnabled:   rc.webSearchEnabled,
 		Attachments:        rc.attachments,
 	}
 }
@@ -309,7 +307,6 @@ func (h *Handler) parseQARequest(c *gin.Context, logPrefix string) (*qaRequestCo
 		tagScopes,
 		secutils.SanitizeForLogArray(mcpServiceIDs),
 		secutils.SanitizeForLogArray(skillNames),
-		request.WebSearchEnabled,
 	)
 
 	// Build request context
@@ -339,7 +336,6 @@ func (h *Handler) parseQARequest(c *gin.Context, logPrefix string) (*qaRequestCo
 		mcpServiceIDs:         secutils.SanitizeForLogArray(mcpServiceIDs),
 		skillNames:            secutils.SanitizeForLogArray(skillNames),
 		summaryModelID:        secutils.SanitizeForLog(request.SummaryModelID),
-		webSearchEnabled:      request.WebSearchEnabled,
 		mentionedItems:        convertMentionedItems(request.MentionedItems),
 		images:                request.Images,
 		channel:               request.Channel,
@@ -393,7 +389,6 @@ func buildMessageExecutionContext(
 	tagScopes []types.TagScope,
 	mcpServiceIDs []string,
 	skillNames []string,
-	webSearchEnabled bool,
 ) (types.MessageExecutionContext, string, string) {
 	locale := types.LanguageFromContextOrDefault(ctx)
 
@@ -404,7 +399,6 @@ func buildMessageExecutionContext(
 		TagScopes:        cloneTagScopes(tagScopes),
 		MCPServiceIDs:    mcpServiceIDs,
 		SkillNames:       skillNames,
-		WebSearchEnabled: webSearchEnabled,
 		Locale:           locale,
 	}
 	if agent == nil {
@@ -982,7 +976,7 @@ func (h *Handler) executeQA(reqCtx *qaRequestContext, mode qaMode, generateTitle
 
 // runVLMAnalysisIfNeeded runs VLM image analysis within the async goroutine,
 // emitting tool_call/tool_result events so the user can see progress.
-// For normal mode, VLM only runs on the pure-chat path (no KB, no web search);
+// For normal mode, VLM only runs on the pure-chat path (no knowledge base);
 // RAG paths defer VLM to the pipeline rewrite step.
 // For agent mode, VLM always runs when images and a VLM model are present.
 func (h *Handler) runVLMAnalysisIfNeeded(streamCtx *sseStreamContext, reqCtx *qaRequestContext, mode qaMode) {
@@ -1008,7 +1002,7 @@ func (h *Handler) runVLMAnalysisIfNeeded(streamCtx *sseStreamContext, reqCtx *qa
 				agentWillResolveKBs = len(reqCtx.customAgent.Config.KnowledgeBases) > 0
 			}
 		}
-		if hasRequestKBs || agentWillResolveKBs || reqCtx.webSearchEnabled {
+		if hasRequestKBs || agentWillResolveKBs {
 			return // VLM will be handled by the pipeline rewrite step
 		}
 	}
@@ -1313,7 +1307,6 @@ func (h *Handler) persistLastRequestState(parentCtx context.Context, reqCtx *qaR
 		MCPServiceIDs:    reqCtx.mcpServiceIDs,
 		SkillNames:       reqCtx.skillNames,
 		MentionedItems:   reqCtx.mentionedItems,
-		WebSearchEnabled: reqCtx.webSearchEnabled,
 	}
 
 	if err := h.sessionService.UpdateSessionLastRequestState(ctx, reqCtx.sessionID, state); err != nil {

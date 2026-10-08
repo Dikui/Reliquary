@@ -99,9 +99,6 @@ var toolHandlePolicies = map[string]toolHandlePolicy{
 		sourceIDKeys: map[string]struct{}{"url": {}, "urls": {}},
 		sourceOutput: true,
 	},
-	"web_search": {
-		sourceOutput: true,
-	},
 	"wiki_read_page": {
 		sourceOutput: true,
 	},

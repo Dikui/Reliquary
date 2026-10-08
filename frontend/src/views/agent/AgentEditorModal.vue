@@ -209,7 +209,7 @@
                         </div>
                       </div>
                       <div class="setting-control setting-control-full" style="position: relative;">
-                        <!-- Agent模式：统一提示词（使用 {{web_search_status}} 占位符动态控制行为） -->
+                        <!-- Agent模式：统一提示词 -->
                         <div v-if="isAgentMode" class="textarea-with-template">
                           <t-textarea ref="promptTextareaRef" v-model="formData.config.system_prompt"
                             :placeholder="systemPromptPlaceholder" :autosize="{ minRows: 10, maxRows: 25 }"
@@ -1485,86 +1485,6 @@
                   </div>
                 </div>
 
-                <!-- 网络搜索配置 -->
-                <div v-show="currentSection === 'websearch'" class="section">
-                  <div class="section-header">
-                    <h2>{{ $t('agent.editor.webSearchConfig') }}</h2>
-                    <p class="section-description">{{ $t('agent.editor.webSearchConfigDesc') }}</p>
-                  </div>
-
-                  <div class="settings-group">
-                    <!-- 网络搜索 -->
-                    <div class="setting-row">
-                      <div class="setting-info">
-                        <label>{{ $t('agent.editor.webSearch') }}</label>
-                        <p class="desc">{{ $t('agentEditor.desc.webSearch') }}</p>
-                      </div>
-                      <div class="setting-control">
-                        <t-switch v-model="formData.config.web_search_enabled" />
-                      </div>
-                    </div>
-
-                    <!-- 网络搜索最大结果数 -->
-                    <div v-if="formData.config.web_search_enabled" class="setting-row">
-                      <div class="setting-info">
-                        <label>{{ $t('agent.editor.webSearchProvider') }}</label>
-                        <p class="desc">{{ $t('agentEditor.desc.webSearchProvider') }}</p>
-                      </div>
-                      <div class="setting-control">
-                        <t-select v-model="formData.config.web_search_provider_id" clearable
-                          :placeholder="$t('agent.editor.webSearchProviderPlaceholder')" style="width: 240px;">
-                          <t-option v-for="p in webSearchProviderList" :key="p.id" :value="p.id" :label="p.name">
-                            <span>{{ p.name }}</span>
-                            <t-tag v-if="p.is_default" theme="primary" size="small" style="margin-left: 6px;">{{
-                              $t('common.default')
-                              }}</t-tag>
-                          </t-option>
-                        </t-select>
-                      </div>
-                    </div>
-
-                    <!-- 网络搜索最大结果数 -->
-                    <div v-if="formData.config.web_search_enabled" class="setting-row">
-                      <div class="setting-info">
-                        <label>{{ $t('agent.editor.webSearchMaxResults') }}</label>
-                        <p class="desc">{{ $t('agentEditor.desc.webSearchMaxResults') }}</p>
-                      </div>
-                      <div class="setting-control">
-                        <div class="slider-wrapper">
-                          <t-slider v-model="formData.config.web_search_max_results" :min="1" :max="10" />
-                          <span class="slider-value">{{ formData.config.web_search_max_results }}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- 自动抓取页面内容 -->
-                    <div v-if="formData.config.web_search_enabled" class="setting-row">
-                      <div class="setting-info">
-                        <label>{{ $t('agent.editor.webFetchEnabled') }}</label>
-                        <p class="desc">{{ $t('agentEditor.desc.webFetchEnabled') }}</p>
-                      </div>
-                      <div class="setting-control">
-                        <t-switch v-model="formData.config.web_fetch_enabled" />
-                      </div>
-                    </div>
-
-                    <!-- 抓取页面数 -->
-                    <div v-if="formData.config.web_search_enabled && formData.config.web_fetch_enabled"
-                      class="setting-row">
-                      <div class="setting-info">
-                        <label>{{ $t('agent.editor.webFetchTopN') }}</label>
-                        <p class="desc">{{ $t('agentEditor.desc.webFetchTopN') }}</p>
-                      </div>
-                      <div class="setting-control">
-                        <div class="slider-wrapper">
-                          <t-slider v-model="formData.config.web_fetch_top_n" :min="1" :max="10" />
-                          <span class="slider-value">{{ formData.config.web_fetch_top_n }}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
                 <!-- 检索策略（仅在有知识库能力时显示） -->
                 <div v-show="currentSection === 'retrieval' && hasKnowledgeBase" class="section">
                   <div class="section-header">
@@ -1647,8 +1567,6 @@
                         </div>
                       </div>
                     </div>
-
-
 
 
 
@@ -1746,7 +1664,6 @@ import {
 import { type ModelConfig } from '@/api/model';
 import { type AgentNotReadyReasonKey, agentRequiresRerankModel } from '@/utils/agent-readiness';
 import { installSkillCatalog, type SkillCatalogItem } from '@/api/skill';
-import { type WebSearchProviderEntity } from '@/api/web-search-provider';
 import {
   isNamedSandboxBackend,
   type SandboxConfigRecord,
@@ -1960,7 +1877,6 @@ const mcpOptions = computed<McpSelectOption[]>(() => {
 const showMcpServiceSelect = computed(() =>
   mcpOptions.value.length > 0 || (formData.value.config.mcp_services?.length ?? 0) > 0,
 );
-const webSearchProviderList = ref<WebSearchProviderEntity[]>([]);
 const skillCatalog = ref<SkillCatalogItem[]>([]);
 const catalogReady = ref(false);
 const installingCatalogId = ref('');
@@ -2177,7 +2093,6 @@ const backendLabel = (type: string) =>
   type ? t(`settings.sandbox.backends.${type}`) : t('common.error');
 function sandboxTargetLine(cfg: SandboxConfigRecord): string { return cfg.config?.docker?.image?.trim() || '' }
 
-
 const selectedSandboxSummary = computed(() => {
   const id = formData.value.config.sandbox_config_id
   const cfg = sandboxConfigOptions.value.find((item) => item.id === id)
@@ -2242,6 +2157,7 @@ const allTools = computed(() => [
   // 基础思考类
   { value: 'thinking', label: t('agentEditor.tools.thinking'), description: t('agentEditor.tools.thinkingDesc'), group: 'base' },
   { value: 'todo_write', label: t('agentEditor.tools.todoWrite'), description: t('agentEditor.tools.todoWriteDesc'), group: 'base' },
+  { value: 'web_fetch', label: t('agentEditor.tools.webFetch'), description: t('agentEditor.tools.webFetchDesc'), group: 'base' },
   // 知识库语义/关键词检索
   { value: 'grep_chunks', label: t('agentEditor.tools.grepChunks'), description: t('agentEditor.tools.grepChunksDesc'), group: 'rag' },
   { value: 'knowledge_search', label: t('agentEditor.tools.knowledgeSearch'), description: t('agentEditor.tools.knowledgeSearchDesc'), group: 'rag' },
@@ -2383,8 +2299,7 @@ const groupedAvailableTools = computed(() => {
 // 最终运行时智能体实际能使用的工具集合（仅做预览展示）
 // 规则：基于 allowed_tools 过滤
 //   1) 勾选但缺失对应能力（无 KB / 无 Wiki 能力 KB）的工具会被灰显/隐藏
-//   2) 无论是否勾选，web_search / web_fetch 随 web_search_enabled 出现
-//   3) 当 kb_selection_mode === 'none' 时，RAG/Wiki 工具都视为不可用
+//   2) 当 kb_selection_mode === 'none' 时，RAG/Wiki 工具都视为不可用
 const effectiveTools = computed(() => {
   const chosen = new Set(formData.value.config.allowed_tools || []);
   const items: Array<{ value: string; label: string; reason?: string; active: boolean }> = [];
@@ -2396,10 +2311,6 @@ const effectiveTools = computed(() => {
     } else {
       items.push({ value: tool.value, label: tool.label, active: true });
     }
-  }
-  if (formData.value.config.web_search_enabled) {
-    items.push({ value: 'web_search', label: t('agentEditor.tools.webSearch'), active: true });
-    items.push({ value: 'web_fetch', label: t('agentEditor.tools.webFetch'), active: true });
   }
   return items;
 });
@@ -2516,7 +2427,6 @@ const navItems = computed(() => {
   if (hasKnowledgeBase.value) {
     items.push({ key: 'retrieval', icon: 'search', label: t('agent.editor.retrievalStrategy') });
   }
-  items.push({ key: 'websearch', icon: 'internet', label: t('agent.editor.webSearchConfig') });
   items.push({ key: 'multimodal', icon: 'attach', label: t('agentEditor.imageUpload.navLabel') });
   // Agent 模式能力
   if (isAgentMode.value) {
@@ -2541,7 +2451,7 @@ const navGroups = computed(() => {
     {
       key: 'knowledge',
       label: t('agentEditor.navGroups.knowledge'),
-      items: pickItems(['knowledge', 'retrieval', 'websearch']),
+      items: pickItems(['knowledge', 'retrieval']),
     },
     {
       key: 'capability',
@@ -2612,9 +2522,6 @@ const defaultFormData = {
     supported_file_types: [] as string[],
     // 数据分析阶段开关（默认关闭，避免在普通问答上多一次 LLM 调用生成 SQL）
     data_analysis_enabled: false,
-    // 网络搜索设置
-    web_search_enabled: false,
-    web_search_max_results: 5,
     // 多轮对话设置
     multi_turn_enabled: false,
     history_turns: 5,
@@ -2837,7 +2744,6 @@ watch(currentSection, (section) => {
     syncActivePromptAnchor();
   }
 });
-
 
 
 
@@ -3116,7 +3022,6 @@ const applyAgentTypePreset = (preset: AgentTypePreset | null) => {
   if (typeof c.max_iterations === 'number') target.max_iterations = c.max_iterations;
   if (Array.isArray(c.allowed_tools)) target.allowed_tools = [...c.allowed_tools];
   if (typeof c.retain_retrieval_history === 'boolean') target.retain_retrieval_history = c.retain_retrieval_history;
-  if (typeof c.web_search_enabled === 'boolean') target.web_search_enabled = c.web_search_enabled;
   // supported_file_types 采用"强同步"语义：只有 data-analysis 需要限定 csv/xlsx，
   // 其余类型切过来时必须清空，否则会从上一个类型带过来残留。
   if (Array.isArray(c.supported_file_types)) {
@@ -3693,7 +3598,6 @@ const loadDependencies = async () => {
     await Promise.all([
       chatResources.ensureModels(),
       chatResources.ensureKnowledgeBases(),
-      chatResources.ensureWebSearchProviders(),
       chatResources.ensureSandboxConfigs(),
       editorResources.prefetchAgentEditorDeps(),
     ]);
@@ -3707,8 +3611,6 @@ const loadDependencies = async () => {
 
     agentTypePresets.value = editorResources.agentTypePresets as AgentTypePreset[];
     applyPromptTemplateDefaults(editorResources.promptTemplates);
-
-    webSearchProviderList.value = chatResources.webSearchProviders as WebSearchProviderEntity[];
 
     if (editorResources.placeholders) {
       placeholderData.value = editorResources.placeholders;
@@ -6417,7 +6319,6 @@ const handleSave = async () => {
     background: rgba(16, 185, 129, 0.1);
     color: var(--td-success-color);
   }
-
 
 }
 

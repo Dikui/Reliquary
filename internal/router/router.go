@@ -63,9 +63,6 @@ type RouterParams struct {
 	MCPServiceHandler            *handler.MCPServiceHandler
 	MCPCredentialsHandler        *handler.MCPCredentialsHandler
 	MCPOAuthHandler              *handler.MCPOAuthHandler
-	WebSearchHandler             *handler.WebSearchHandler
-	WebSearchProviderHandler     *handler.WebSearchProviderHandler
-	WebSearchCredentialsHandler  *handler.WebSearchProviderCredentialsHandler
 	ResourceCatalog              interfaces.ResourceCatalog
 	TagHandler                   *handler.TagHandler
 	CustomAgentHandler           *handler.CustomAgentHandler
@@ -189,8 +186,6 @@ func NewRouter(params RouterParams) *gin.Engine {
 		RegisterSystemRoutes(v1, params.SystemHandler, accessGuards)
 		RegisterSystemAdminRoutes(v1, params.SystemHandler, accessGuards)
 		RegisterMCPServiceRoutes(v1, params.MCPServiceHandler, params.MCPCredentialsHandler, params.MCPOAuthHandler, accessGuards)
-		RegisterWebSearchRoutes(v1, params.WebSearchHandler, accessGuards)
-		RegisterWebSearchProviderRoutes(v1, params.WebSearchProviderHandler, params.WebSearchCredentialsHandler, accessGuards)
 		RegisterCustomAgentRoutes(v1, params.CustomAgentHandler, accessGuards)
 		RegisterUserFavoriteRoutes(v1, params.UserFavoriteHandler, accessGuards)
 		RegisterSkillRoutes(v1, params.SkillHandler, accessGuards)

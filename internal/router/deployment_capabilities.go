@@ -12,9 +12,6 @@ func deploymentCapabilitiesFromRouter(params RouterParams) handler.DeploymentCap
 		MCP: params.MCPServiceHandler != nil &&
 			params.MCPCredentialsHandler != nil &&
 			params.MCPOAuthHandler != nil,
-		WebSearch: params.WebSearchHandler != nil &&
-			params.WebSearchProviderHandler != nil &&
-			params.WebSearchCredentialsHandler != nil,
 		Sandbox:       params.SandboxConfigHandler != nil,
 		SandboxDocker: sandbox.DockerBackendEnabled(),
 	})

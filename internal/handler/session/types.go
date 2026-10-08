@@ -47,7 +47,6 @@ type CreateKnowledgeQARequest struct {
 	KnowledgeIds          []string                     `json:"knowledge_ids"`                         // Selected knowledge ID for this request
 	AgentEnabled          bool                         `json:"agent_enabled"`                         // Whether agent mode is enabled for this request
 	AgentID               string                       `json:"agent_id"`                              // Selected custom agent ID
-	WebSearchEnabled      bool                         `json:"web_search_enabled"`                    // Whether web search is enabled for this request
 	SummaryModelID        string                       `json:"summary_model_id"`                      // Optional summary model ID for this request (overrides session default)
 	MCPServiceIDs         []string                     `json:"mcp_service_ids"`                       // Per-request MCP services selected via @mention
 	SkillNames            []string                     `json:"skill_names"`                           // Per-request Skills selected via @mention

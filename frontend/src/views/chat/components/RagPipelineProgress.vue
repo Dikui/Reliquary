@@ -256,7 +256,6 @@ import { getAgentToolIconName } from '@/utils/agent-tool-icons'
 import {
   getKnowledgeSearchSummaryHtml,
   getRagPipelineStepTitle,
-  getRetrievalSearchSource,
 } from '@/utils/agent-tool-display'
 import { getAttachmentParsingSummaryHtml } from '@/utils/attachmentParsingDisplay'
 import { RAG_RETRIEVAL_TOOL_NAMES, RAG_TIMELINE_TOOL_NAMES } from '@/utils/rag-pipeline-history'
@@ -363,9 +362,6 @@ const steps = computed(() => {
 
       const isSearchTool = RAG_RETRIEVAL_TOOL_NAMES.has(toolName)
       const isAttachmentTool = toolName === 'attachment_parsing' || toolName === 'image_analysis'
-      const searchSource = isSearchTool
-        ? getRetrievalSearchSource(event.arguments, toolData)
-        : undefined
       let summaryHtml = ''
       if (!pending && isSearchTool && toolData) {
         summaryHtml = getKnowledgeSearchSummaryHtml(t, toolData)
@@ -378,7 +374,7 @@ const steps = computed(() => {
         id: String(event.tool_call_id || `${toolName}-${event.timestamp || 0}`),
         toolName,
         pending,
-        iconName: getAgentToolIconName(toolName, searchSource),
+        iconName: getAgentToolIconName(toolName),
         title: getRagPipelineStepTitle(t, {
           tool_name: toolName,
           pending,

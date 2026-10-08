@@ -20,7 +20,6 @@ export type DisplayType =
     | 'thinking'
     | 'plan'
     | 'database_query'
-    | 'web_search_results'
     | 'web_fetch_results'
     | 'grep_results'
     | 'knowledge_chunks_list'
@@ -183,25 +182,6 @@ export interface DatabaseQueryData {
     columns: string[];
     rows: Array<Record<string, any>>;
     row_count: number;
-}
-
-// Web search result item
-export interface WebSearchResultItem {
-    result_index: number;
-    title: string;
-    url: string;
-    snippet?: string;
-    content?: string;
-    source?: string;
-    published_at?: string;
-}
-
-// Web search results data
-export interface WebSearchResultsData {
-    display_type: 'web_search_results';
-    query: string;
-    results: WebSearchResultItem[];
-    count: number;
 }
 
 // Web fetch result item
@@ -396,7 +376,6 @@ export type ToolResultData =
     | ThinkingData
     | PlanData
     | DatabaseQueryData
-    | WebSearchResultsData
     | WebFetchResultsData
     | GrepResultsData
     | KnowledgeChunksListData

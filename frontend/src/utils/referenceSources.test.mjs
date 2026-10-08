@@ -12,7 +12,7 @@ test('buildReferenceList separates web and document references', () => {
   const items = buildReferenceList([
     {
       id: 'https://example.com/a',
-      chunk_type: 'web_search',
+      chunk_type: 'web_fetch',
       knowledge_title: 'Example A',
       metadata: { url: 'https://example.com/a', snippet: 'snippet a' },
       content: 'Example A\n\nsnippet a',
@@ -75,7 +75,7 @@ test('resolveReferenceHighlightKey matches web url', () => {
   const refs = [
     {
       id: 'https://news.example.com/post',
-      chunk_type: 'web_search',
+      chunk_type: 'web_fetch',
       metadata: { url: 'https://news.example.com/post/' },
     },
   ]
@@ -132,7 +132,7 @@ test('buildReferenceList uses domain instead of raw url title', () => {
   const items = buildReferenceList([
     {
       id: 'http://bj.bendibao.com/xiuxian/202671/384250.shtm',
-      chunk_type: 'web_search',
+      chunk_type: 'web_fetch',
       knowledge_title: 'http://bj.bendibao.com/xiuxian/202671/384250.shtm',
       metadata: {
         url: 'http://bj.bendibao.com/xiuxian/202671/384250.shtm',
@@ -150,7 +150,7 @@ test('buildReferenceList prefers metadata title for web references', () => {
   const items = buildReferenceList([
     {
       id: 'https://example.com/post',
-      chunk_type: 'web_search',
+      chunk_type: 'web_fetch',
       knowledge_title: 'https://example.com/post',
       metadata: {
         url: 'https://example.com/post',

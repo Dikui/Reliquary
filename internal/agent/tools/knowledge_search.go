@@ -848,8 +848,7 @@ func (t *KnowledgeSearchTool) formatOutput(
 		output := fmt.Sprintf("No relevant content found in %d knowledge base(s).\n\n", len(kbsToSearch))
 		output += "=== ⚠️ CRITICAL - Next Steps ===\n"
 		output += "- ❌ DO NOT use training data or general knowledge to answer\n"
-		output += "- ✅ If web_search is enabled: You MUST use web_search to find information\n"
-		output += "- ✅ If web_search is disabled: State 'I couldn't find relevant information in the knowledge base'\n"
+		output += "- ✅ State 'I couldn't find relevant information in the knowledge base'\n"
 		output += "- NEVER fabricate or infer answers - ONLY use retrieved content\n"
 
 		return &types.ToolResult{
@@ -1152,11 +1151,7 @@ func (t *KnowledgeSearchTool) compositeScore(
 	result *searchResultWithMeta,
 	modelScore, baseScore float64,
 ) float64 {
-	// Source weight: web_search results get slightly lower weight
 	sourceWeight := 1.0
-	if strings.ToLower(result.KnowledgeSource) == "web_search" {
-		sourceWeight = 0.95
-	}
 
 	// Position prior: slightly favor chunks earlier in the document
 	positionPrior := 1.0

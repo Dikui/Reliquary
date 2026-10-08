@@ -11397,45 +11397,6 @@ const docTemplate = `{
                 "parameters": []
             }
         },
-        "/tenants/kv/web-search-config": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "获取空间的网络搜索配置",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "空间管理"
-                ],
-                "summary": "获取空间网络搜索配置",
-                "responses": {
-                    "200": {
-                        "description": "网络搜索配置",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                },
-                "parameters": []
-            }
-        },
         "/tenants/kv/{key}": {
             "get": {
                 "security": [
@@ -11446,7 +11407,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "获取空间级别的KV配置（支持web-search-config、prompt-templates、parser-engine-config、storage-engine-config、chat-history-config、retrieval-config）",
+                "description": "获取空间级别的KV配置（支持prompt-templates、parser-engine-config、storage-engine-config、chat-history-config、retrieval-config）",
                 "consumes": [
                     "application/json"
                 ],
@@ -11491,7 +11452,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "更新空间级别的KV配置（支持web-search-config、parser-engine-config、storage-engine-config、chat-history-config、retrieval-config）",
+                "description": "更新空间级别的KV配置（支持parser-engine-config、storage-engine-config、chat-history-config、retrieval-config）",
                 "consumes": [
                     "application/json"
                 ],
@@ -11725,309 +11686,6 @@ const docTemplate = `{
                         }
                     }
                 }
-            }
-        },
-        "/web-search-providers/test": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "使用前端表单中尚未保存的凭证测试连通性，用于\"测试连接\"按钮",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "网络搜索"
-                ],
-                "summary": "使用原始凭证测试 Provider（不落库）",
-                "parameters": [
-                    {
-                        "description": "{provider, parameters}",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.TestProviderRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "测试结果",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/web-search-providers/types": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "返回 UI 表单需要的 provider 类型及参数定义",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "网络搜索"
-                ],
-                "summary": "获取网络搜索 Provider 类型元数据",
-                "responses": {
-                    "200": {
-                        "description": "provider 类型列表",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                },
-                "parameters": []
-            }
-        },
-        "/web-search-providers/{id}": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "根据 ID 获取指定 provider 配置",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "网络搜索"
-                ],
-                "summary": "获取网络搜索 Provider 详情",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Provider ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Provider 详情",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.WebSearchProviderEntity"
-                        }
-                    },
-                    "404": {
-                        "description": "Provider 不存在",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "put": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "更新指定 provider 的名称/描述/参数/是否默认",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "网络搜索"
-                ],
-                "summary": "更新网络搜索 Provider",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Provider ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "更新字段",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.UpdateProviderRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "更新后的 Provider",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.WebSearchProviderEntity"
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Provider 不存在",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "删除指定 provider 配置",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "网络搜索"
-                ],
-                "summary": "删除网络搜索 Provider",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Provider ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "success: true",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Provider 不存在",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/web-search-providers/{id}/test": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "使用数据库中已保存的凭证测试连通性",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "网络搜索"
-                ],
-                "summary": "测试已保存的 Provider",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Provider ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "测试结果",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Provider 不存在",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/web-search/providers": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "返回所有已注册的网络搜索 provider（含元数据）",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "网络搜索"
-                ],
-                "summary": "获取可用网络搜索 Provider 列表",
-                "responses": {
-                    "200": {
-                        "description": "provider 列表",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                },
-                "parameters": []
             }
         },
         "/knowledge-context/entities/merge": {
@@ -12973,7 +12631,7 @@ const docTemplate = `{
                     }
                 },
                 "system_prompt": {
-                    "description": "System prompt for the agent (unified prompt, uses web_search_status placeholder for dynamic behavior)",
+                    "description": "System prompt for the agent",
                     "type": "string"
                 },
                 "system_prompt_id": {
@@ -12994,26 +12652,6 @@ const docTemplate = `{
                 },
                 "vlm_model_id": {
                     "description": "VLM model ID for image analysis (optional, falls back to workspace-level VLM)",
-                    "type": "string"
-                },
-                "web_fetch_enabled": {
-                    "description": "Whether to auto-fetch full page content for reranked web search results",
-                    "type": "boolean"
-                },
-                "web_fetch_top_n": {
-                    "description": "Max number of pages to fetch after rerank (default: 3)",
-                    "type": "integer"
-                },
-                "web_search_enabled": {
-                    "description": "===== Web Search Settings =====\nWhether web search is enabled",
-                    "type": "boolean"
-                },
-                "web_search_max_results": {
-                    "description": "Maximum web search results",
-                    "type": "integer"
-                },
-                "web_search_provider_id": {
-                    "description": "WebSearchProviderID references a specific WebSearchProviderEntity.\nIf empty, the workspace's default provider (is_default=true) is used.",
                     "type": "string"
                 }
             }
@@ -13811,7 +13449,6 @@ const docTemplate = `{
                 4,
                 5,
                 6,
-                7,
                 8,
                 9
             ],
@@ -13819,8 +13456,7 @@ const docTemplate = `{
                 "MatchTypeDataAnalysis": "数据分析匹配类型",
                 "MatchTypeDirectLoad": "Deprecated: reserved to preserve serialized enum values",
                 "MatchTypeParentChunk": "父Chunk匹配类型",
-                "MatchTypeRelationChunk": "关系Chunk匹配类型",
-                "MatchTypeWebSearch": "网络搜索匹配类型"
+                "MatchTypeRelationChunk": "关系Chunk匹配类型"
             },
             "x-enum-descriptions": [
                 "",
@@ -13830,7 +13466,6 @@ const docTemplate = `{
                 "父Chunk匹配类型",
                 "关系Chunk匹配类型",
                 "",
-                "网络搜索匹配类型",
                 "Deprecated: reserved to preserve serialized enum values",
                 "数据分析匹配类型"
             ],
@@ -13842,7 +13477,6 @@ const docTemplate = `{
                 "MatchTypeParentChunk",
                 "MatchTypeRelationChunk",
                 "MatchTypeGraph",
-                "MatchTypeWebSearch",
                 "MatchTypeDirectLoad",
                 "MatchTypeDataAnalysis"
             ]
@@ -14644,23 +14278,19 @@ const docTemplate = `{
             "type": "string",
             "enum": [
                 "keywords",
-                "vector",
-                "websearch"
+                "vector"
             ],
             "x-enum-comments": {
                 "KeywordsRetrieverType": "Keywords retriever",
-                "VectorRetrieverType": "Vector retriever",
-                "WebSearchRetrieverType": "Web search retriever"
+                "VectorRetrieverType": "Vector retriever"
             },
             "x-enum-descriptions": [
                 "Keywords retriever",
-                "Vector retriever",
-                "Web search retriever"
+                "Vector retriever"
             ],
             "x-enum-varnames": [
                 "KeywordsRetrieverType",
-                "VectorRetrieverType",
-                "WebSearchRetrieverType"
+                "VectorRetrieverType"
             ]
         },
         "github_com_Tencent_Reliquary_internal_types.RuntimeTaskAction": {
@@ -14988,7 +14618,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "last_request_state": {
-                    "description": "LastRequestState records the input-bar state used the last time this\nsession sent a question (agent, model, KB scope, web search, MCPs).\nPersisted on every successful POST to /knowledge-chat or /agent-chat so\nthat reopening the session can restore the original request context to\nthe chat UI. Stored in the legacy sessions.agent_config JSONB column to\navoid a new migration; the shape used today is \u0060SessionLastRequestState\u0060.",
+                    "description": "LastRequestState records the input-bar state used the last time this\nsession sent a question (agent, model, KB scope, MCPs).\nPersisted on every successful POST to /knowledge-chat or /agent-chat so\nthat reopening the session can restore the original request context to\nthe chat UI. Stored in the legacy sessions.agent_config JSONB column to\navoid a new migration; the shape used today is \u0060SessionLastRequestState\u0060.",
                     "allOf": [
                         {
                             "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.SessionLastRequestState"
@@ -15067,9 +14697,6 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
-                },
-                "web_search_enabled": {
-                    "type": "boolean"
                 }
             }
         },
@@ -15349,14 +14976,6 @@ const docTemplate = `{
                 "updated_at": {
                     "description": "Last updated time",
                     "type": "string"
-                },
-                "web_search_config": {
-                    "description": "Global WebSearch configuration for this workspace",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.WebSearchConfig"
-                        }
-                    ]
                 }
             }
         },
@@ -15661,166 +15280,6 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
-        },
-        "github_com_Tencent_Reliquary_internal_types.WebSearchConfig": {
-            "type": "object",
-            "properties": {
-                "api_key": {
-                    "description": "Deprecated: Use WebSearchProviderEntity.Parameters.APIKey instead.",
-                    "type": "string"
-                },
-                "blacklist": {
-                    "description": "黑名单规则列表",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "compression_method": {
-                    "description": "压缩方法：none, summary, extract, rag",
-                    "type": "string"
-                },
-                "document_fragments": {
-                    "description": "文档片段数量（用于RAG压缩）",
-                    "type": "integer"
-                },
-                "embedding_dimension": {
-                    "description": "嵌入维度（用于RAG压缩）",
-                    "type": "integer"
-                },
-                "embedding_model_id": {
-                    "description": "RAG压缩相关配置",
-                    "type": "string"
-                },
-                "include_date": {
-                    "description": "是否包含日期",
-                    "type": "boolean"
-                },
-                "max_results": {
-                    "description": "最大搜索结果数",
-                    "type": "integer"
-                },
-                "provider": {
-                    "description": "Deprecated: Use WebSearchProviderEntity.Parameters.APIKey instead.",
-                    "type": "string"
-                },
-                "proxy_url": {
-                    "description": "Optional per-request proxy override; normally empty — use WebSearchProviderEntity.Parameters.proxy_url. Merged at call time when set.",
-                    "type": "string"
-                },
-                "rerank_model_id": {
-                    "description": "重排模型ID（用于RAG压缩）",
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.WebSearchProviderEntity": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "description": "Timestamps",
-                    "type": "string"
-                },
-                "deleted_at": {
-                    "$ref": "#/definitions/gorm.DeletedAt"
-                },
-                "description": {
-                    "description": "Description",
-                    "type": "string"
-                },
-                "id": {
-                    "description": "Unique identifier (UUID, auto-generated)",
-                    "type": "string"
-                },
-                "is_default": {
-                    "description": "Whether this is the default provider for the workspace",
-                    "type": "boolean"
-                },
-                "name": {
-                    "description": "User-friendly name, e.g., \"Production Bing Search\"",
-                    "type": "string"
-                },
-                "parameters": {
-                    "description": "Provider-specific parameters (API key, engine ID, etc.) stored as encrypted JSON",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.WebSearchProviderParameters"
-                        }
-                    ]
-                },
-                "provider": {
-                    "description": "Provider type: bing, google, duckduckgo, tavily",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.WebSearchProviderType"
-                        }
-                    ]
-                },
-                "tenant_id": {
-                    "description": "Workspace ID for scoping",
-                    "type": "integer"
-                },
-                "updated_at": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.WebSearchProviderParameters": {
-            "type": "object",
-            "properties": {
-                "api_key": {
-                    "description": "API key for the search provider (encrypted in DB)",
-                    "type": "string"
-                },
-                "base_url": {
-                    "description": "Base URL for self-hosted search engines (e.g. SearXNG instance URL).\nValidated with utils.ValidateURLForSSRF; private hosts must be added to SSRF_WHITELIST.",
-                    "type": "string"
-                },
-                "engine_id": {
-                    "description": "Google Custom Search Engine ID (only for Google provider)",
-                    "type": "string"
-                },
-                "extra_config": {
-                    "description": "Provider-specific extra configuration for future extensibility",
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
-                },
-                "proxy_url": {
-                    "description": "Optional HTTP/HTTPS proxy URL for outbound search requests (e.g. http://host:port); validated with utils.ValidateURLForSSRF.\nDoes not replace the search API endpoint; only tunnels traffic to the official APIs.",
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.WebSearchProviderType": {
-            "type": "string",
-            "enum": [
-                "bing",
-                "google",
-                "duckduckgo",
-                "tavily",
-                "ollama",
-                "baidu",
-                "searxng",
-                "keenable",
-                "zhipu",
-                "exa",
-                "metaso"
-            ],
-            "x-enum-varnames": [
-                "WebSearchProviderTypeBing",
-                "WebSearchProviderTypeGoogle",
-                "WebSearchProviderTypeDuckDuckGo",
-                "WebSearchProviderTypeTavily",
-                "WebSearchProviderTypeOllama",
-                "WebSearchProviderTypeBaidu",
-                "WebSearchProviderTypeSearxng",
-                "WebSearchProviderTypeKeenable",
-                "WebSearchProviderTypeZhipu",
-                "WebSearchProviderTypeExa",
-                "WebSearchProviderTypeMetaso"
-            ]
         },
         "github_com_Tencent_Reliquary_internal_types.WikiConfig": {
             "type": "object",
@@ -17469,20 +16928,6 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handler.TestProviderRequest": {
-            "type": "object",
-            "required": [
-                "provider"
-            ],
-            "properties": {
-                "parameters": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.WebSearchProviderParameters"
-                },
-                "provider": {
-                    "type": "string"
-                }
-            }
-        },
         "internal_handler.UpdateAgentRequest": {
             "type": "object",
             "properties": {
@@ -17571,23 +17016,6 @@ const docTemplate = `{
                 },
                 "type": {
                     "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ModelType"
-                }
-            }
-        },
-        "internal_handler.UpdateProviderRequest": {
-            "type": "object",
-            "properties": {
-                "description": {
-                    "type": "string"
-                },
-                "is_default": {
-                    "type": "boolean"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "parameters": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.WebSearchProviderParameters"
                 }
             }
         },
@@ -17818,10 +17246,6 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
-                },
-                "web_search_enabled": {
-                    "description": "Whether web search is enabled for this request",
-                    "type": "boolean"
                 }
             }
         },

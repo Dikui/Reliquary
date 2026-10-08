@@ -14,7 +14,6 @@ var DeploymentCapabilityKeys = []string{
 	"agents",
 	"integrations.api",
 	"settings.mcp",
-	"settings.websearch",
 	"settings.sandbox",
 	"settings.sandbox.docker",
 }
@@ -36,7 +35,6 @@ type DeploymentFeatureAvailability struct {
 	Agents        bool
 	API           bool
 	MCP           bool
-	WebSearch     bool
 	Sandbox       bool
 	SandboxDocker bool
 }
@@ -69,7 +67,6 @@ func BuildDeploymentCapabilities(
 			"agents":                  supportedDeploymentCapability(available.Agents),
 			"integrations.api":        supportedDeploymentCapability(available.API),
 			"settings.mcp":            supportedDeploymentCapability(available.MCP),
-			"settings.websearch":      supportedDeploymentCapability(available.WebSearch),
 			"settings.sandbox":        supportedDeploymentCapability(available.Sandbox),
 			"settings.sandbox.docker": sandboxDocker,
 		},

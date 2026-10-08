@@ -86,7 +86,7 @@ func (s *KnowledgeWorkflowService) Approve(ctx context.Context, kbID, runID, dec
 			return errors.New("workflow run is no longer waiting for review")
 		}
 		result = tx.Model(&types.KnowledgeWorkflowRun{}).Where("id = ? AND status = ?", runID, types.WorkflowStatusPaused).Updates(map[string]any{
-			"status": types.WorkflowStatusQueued, "error": "", "finished_at": nil, "next_run_at": nil, "updated_at": now,
+			"status": types.WorkflowStatusQueued, "error": "", "finished_at": nil, "updated_at": now,
 		})
 		if result.Error != nil {
 			return result.Error
@@ -143,7 +143,7 @@ func (s *KnowledgeWorkflowService) Resume(ctx context.Context, kbID, runID strin
 	}
 	now := time.Now()
 	result := s.db.WithContext(ctx).Model(&types.KnowledgeWorkflowRun{}).Where("id = ? AND status = ?", runID, types.WorkflowStatusPaused).Updates(map[string]any{
-		"status": types.WorkflowStatusQueued, "error": "", "finished_at": nil, "next_run_at": nil, "updated_at": now,
+		"status": types.WorkflowStatusQueued, "error": "", "finished_at": nil, "updated_at": now,
 	})
 	if result.Error != nil {
 		return nil, result.Error
@@ -184,7 +184,7 @@ func (s *KnowledgeWorkflowService) Retry(ctx context.Context, kbID, runID string
 		return nil, err
 	}
 	result := s.db.WithContext(ctx).Model(&types.KnowledgeWorkflowRun{}).Where("id = ? AND status = ?", runID, types.WorkflowStatusFailed).Updates(map[string]any{
-		"status": types.WorkflowStatusQueued, "error": "", "finished_at": nil, "next_run_at": nil, "updated_at": time.Now(),
+		"status": types.WorkflowStatusQueued, "error": "", "finished_at": nil, "updated_at": time.Now(),
 	})
 	if result.Error != nil {
 		return nil, result.Error
@@ -321,9 +321,8 @@ func (s *KnowledgeWorkflowService) recoverWorkflowRuns(ctx context.Context, now 
 	staleBefore := now.Add(-2 * time.Minute)
 	var runs []types.KnowledgeWorkflowRun
 	if err := s.db.WithContext(ctx).Where(
-		"(status = ? AND updated_at < ?) OR (status = ? AND updated_at < ?) OR (status = ? AND next_run_at <= ?)",
+		"(status = ? AND updated_at < ?) OR (status = ? AND updated_at < ?)",
 		types.WorkflowStatusQueued, staleBefore, types.WorkflowStatusRunning, staleBefore,
-		types.WorkflowStatusWaitingIngestion, now,
 	).Order("updated_at ASC").Limit(100).Find(&runs).Error; err != nil {
 		return err
 	}
@@ -336,10 +335,9 @@ func (s *KnowledgeWorkflowService) recoverWorkflowRuns(ctx context.Context, now 
 		if err != nil {
 			firstErr = errors.Join(firstErr, fmt.Errorf("workflow run %s owner authorization: %w", run.ID, err))
 			_ = s.db.WithContext(ctx).Model(&types.KnowledgeWorkflowRun{}).Where("id = ? AND updated_at = ? AND status = ?", run.ID, run.UpdatedAt, run.Status).
-				Updates(map[string]any{"status": types.WorkflowStatusFailed, "error": "workflow owner is no longer authorized", "finished_at": now, "next_run_at": nil, "updated_at": now}).Error
+				Updates(map[string]any{"status": types.WorkflowStatusFailed, "error": "workflow owner is no longer authorized", "finished_at": now, "updated_at": now}).Error
 			continue
 		}
-		delay := time.Duration(0)
 		updates := map[string]any{"updated_at": now}
 		query := s.db.WithContext(ctx).Model(&types.KnowledgeWorkflowRun{}).Where("id = ? AND updated_at = ? AND status = ?", run.ID, run.UpdatedAt, run.Status)
 		switch run.Status {
@@ -348,10 +346,6 @@ func (s *KnowledgeWorkflowService) recoverWorkflowRuns(ctx context.Context, now 
 			updates["status"] = types.WorkflowStatusQueued
 			updates["lease_token"] = ""
 			updates["error"] = "recovered stale worker lease"
-		case types.WorkflowStatusWaitingIngestion:
-			delay = 30 * time.Second
-			nextRunAt := now.Add(delay)
-			updates["next_run_at"] = nextRunAt
 		default:
 			continue
 		}
@@ -377,11 +371,11 @@ func (s *KnowledgeWorkflowService) recoverWorkflowRuns(ctx context.Context, now 
 			continue
 		}
 		_, err = s.tasks.Enqueue(asynq.NewTask(TypeKnowledgeWorkflowRun, payload), asynq.Queue(types.QueueMaintenance),
-			asynq.ProcessIn(delay), asynq.TaskID("workflow-recovery:"+run.ID+":"+uuid.NewString()))
+			asynq.TaskID("workflow-recovery:"+run.ID+":"+uuid.NewString()))
 		if err != nil {
 			failure := "recovery enqueue: " + err.Error()
 			_ = s.db.WithContext(ctx).Model(&types.KnowledgeWorkflowRun{}).Where("id = ? AND status = ? AND updated_at = ?", run.ID, types.WorkflowStatusQueued, now).
-				Updates(map[string]any{"status": types.WorkflowStatusFailed, "error": failure, "finished_at": now, "next_run_at": nil, "updated_at": time.Now()}).Error
+				Updates(map[string]any{"status": types.WorkflowStatusFailed, "error": failure, "finished_at": now, "updated_at": time.Now()}).Error
 			firstErr = errors.Join(firstErr, fmt.Errorf("enqueue recovered workflow %s: %w", run.ID, err))
 		}
 	}

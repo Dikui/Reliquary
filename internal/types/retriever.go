@@ -13,9 +13,8 @@ type RetrieverType string
 
 // RetrieverType constants
 const (
-	KeywordsRetrieverType  RetrieverType = "keywords"  // Keywords retriever
-	VectorRetrieverType    RetrieverType = "vector"    // Vector retriever
-	WebSearchRetrieverType RetrieverType = "websearch" // Web search retriever
+	KeywordsRetrieverType RetrieverType = "keywords" // Keywords retriever
+	VectorRetrieverType   RetrieverType = "vector"   // Vector retriever
 )
 
 // RetrieveParams represents the parameters for retrieval

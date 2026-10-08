@@ -32,18 +32,8 @@ func prepareMessagesWithModelContext(
 	ordered := orderedPipelineReferences(chatManage)
 	knowledgeResults := make([]*types.SearchResult, 0, len(ordered))
 	knowledgeRows := make([]map[string]interface{}, 0, len(ordered))
-	webRows := make([]map[string]interface{}, 0)
 	for _, result := range ordered {
 		if result == nil {
-			continue
-		}
-		if isPipelineWebReference(result) {
-			webRows = append(webRows, map[string]interface{}{
-				"url":          result.ID,
-				"title":        firstPipelineTitle(result),
-				"snippet":      result.Content,
-				"published_at": result.Metadata["published_at"],
-			})
 			continue
 		}
 		knowledgeResults = append(knowledgeResults, result)
@@ -68,15 +58,6 @@ func prepareMessagesWithModelContext(
 			},
 		}))
 	}
-	if len(webRows) > 0 {
-		contextParts = append(contextParts, registry.ModelToolResult(&types.ToolResult{
-			Success: true,
-			Data: map[string]interface{}{
-				"display_type": "web_search_results",
-				"results":      webRows,
-			},
-		}))
-	}
 	modelContexts := strings.Join(contextParts, "\n")
 	if strings.TrimSpace(modelContexts) == "" {
 		return messages, registry
@@ -94,14 +75,6 @@ func prepareMessagesWithModelContext(
 		messages[last].Content = modelContexts + "\n\n" + messages[last].Content
 	}
 	return messages, registry
-}
-
-func isPipelineWebReference(result *types.SearchResult) bool {
-	if result == nil {
-		return false
-	}
-	return strings.EqualFold(result.ChunkType, string(types.ChunkTypeWebSearch)) ||
-		strings.EqualFold(result.KnowledgeSource, "web_search")
 }
 
 func orderedPipelineReferences(chatManage *types.ChatManage) []*types.SearchResult {

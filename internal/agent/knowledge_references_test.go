@@ -36,7 +36,7 @@ func TestAppendKnowledgeRefsFromToolResults(t *testing.T) {
 			}},
 		},
 		{
-			Name: "web_search",
+			Name: "web_fetch",
 			Result: &types.ToolResult{Success: true, Data: map[string]interface{}{
 				"results": []map[string]interface{}{{"knowledge_id": "not-a-message"}},
 			}},

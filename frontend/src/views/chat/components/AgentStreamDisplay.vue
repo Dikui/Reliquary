@@ -186,13 +186,6 @@
                     <div class="results-summary-text" v-html="getSearchResultsSummary(event)"></div>
                   </div>
 
-                  <div v-if="!event.pending && event.tool_name === 'web_search' && event.tool_data"
-                    class="search-results-summary-fixed">
-                    <div class="results-summary-text"
-                      v-html="t('agent.webSearchFound', { count: getResultsCount(event.tool_data) })">
-                    </div>
-                  </div>
-
                   <div v-if="!event.pending && event.tool_name === 'grep_chunks' && event.tool_data"
                     class="search-results-summary-fixed grep-summary">
                     <div class="results-summary-text" v-html="getGrepResultsSummary(event.tool_data)"></div>
@@ -480,13 +473,6 @@
                   <div class="results-summary-text" v-html="getSearchResultsSummary(event)"></div>
                 </div>
 
-                <div v-if="!event.pending && event.tool_name === 'web_search' && event.tool_data"
-                  class="search-results-summary-fixed">
-                  <div class="results-summary-text"
-                    v-html="t('agent.webSearchFound', { count: getResultsCount(event.tool_data) })">
-                  </div>
-                </div>
-
                 <div v-if="!event.pending && event.tool_name === 'grep_chunks' && event.tool_data"
                   class="search-results-summary-fixed grep-summary">
                   <div class="results-summary-text" v-html="getGrepResultsSummary(event.tool_data)"></div>
@@ -688,7 +674,6 @@ const TOOL_NAME_KEYS: Record<string, string> = {
   search_knowledge: 'agentStream.tools.searchKnowledge',
   knowledge_search: 'agentStream.tools.searchKnowledge',
   grep_chunks: 'agentStream.tools.grepChunks',
-  web_search: 'agentStream.tools.webSearch',
   web_fetch: 'agentStream.tools.webFetch',
   get_document_info: 'agentStream.tools.getDocumentInfo',
   list_knowledge_chunks: 'agentStream.tools.listKnowledgeChunks',
@@ -1079,7 +1064,7 @@ const mergeDocumentReferences = (refs: KnowledgeReferenceLike[]): KnowledgeRefer
   const merged = new Map<string, KnowledgeReferenceLike & { contentParts?: string[] }>();
 
   for (const ref of refs) {
-    if (ref.chunk_type === 'web_search') continue;
+    if (ref.chunk_type === 'web_fetch') continue;
     const key = ref.knowledge_id || ref.knowledge_title || ref.id;
     if (!key) continue;
 
@@ -1273,31 +1258,13 @@ function getToolReferenceItems(event: any): KnowledgeReferenceLike[] {
     );
   }
 
-  if (toolName === 'web_search') {
-    const results = Array.isArray(toolData.results) ? toolData.results : [];
-    return results
-      .filter((item: any) => item?.url)
-      .map((item: any, index: number) => ({
-        id: item.url,
-        chunk_type: 'web_search',
-        knowledge_title: item.title || item.source || item.url,
-        content: item.snippet || item.content || '',
-        metadata: {
-          url: item.url,
-          title: item.title || '',
-          snippet: item.snippet || item.content || '',
-        },
-        chunk_index: item.result_index ?? index + 1,
-      }));
-  }
-
   if (toolName === 'web_fetch') {
     const results = Array.isArray(toolData.results) ? toolData.results : [];
     return results
       .filter((item: any) => item?.url)
       .map((item: any, index: number) => ({
         id: item.url,
-        chunk_type: 'web_search',
+        chunk_type: 'web_fetch',
         knowledge_title: item.url,
         content: item.summary || item.raw_content || '',
         metadata: {
@@ -2157,7 +2124,6 @@ const isReferenceDrawerTool = (toolName?: string | null): boolean =>
   WIKI_ISSUE_TOOL_NAMES.has(String(toolName || '')) ||
   toolName === 'search_knowledge' ||
   toolName === 'knowledge_search' ||
-  toolName === 'web_search' ||
   toolName === 'web_fetch' ||
   toolName === 'grep_chunks' ||
   toolName === 'list_knowledge_chunks' ||
@@ -2180,12 +2146,6 @@ const hasResults = (event: any): boolean => {
 
   // For knowledge search tools
   if (toolName === 'search_knowledge' || toolName === 'knowledge_search') {
-    const count = event.tool_data.results?.length || event.tool_data.count || 0;
-    return count > 0;
-  }
-
-  // For web search tools
-  if (toolName === 'web_search') {
     const count = event.tool_data.results?.length || event.tool_data.count || 0;
     return count > 0;
   }
@@ -2716,22 +2676,6 @@ const getSearchResultsSummary = (event: any): string => {
   return summary;
 };
 
-// Get web search results summary text
-const getWebSearchResultsSummary = (toolData: any): string => {
-  if (!toolData) return '';
-
-  const count = Number(toolData.results?.length ?? toolData.count ?? 0) || 0;
-  if (count === 0) return '';
-
-  return t('agentStream.search.webResults', { count });
-};
-
-// Get results count (number only) for web search summary
-const getResultsCount = (toolData: any): number => {
-  if (!toolData) return 0;
-  return Number(toolData.results?.length ?? toolData.count ?? 0) || 0;
-};
-
 // Get grep results summary text (returns HTML with colored numbers)
 const getGrepResultsSummary = (toolData: any): string => {
   if (!toolData) return '';
@@ -2790,7 +2734,6 @@ const getToolTitle = (event: any): string => {
 
   const toolName = event.tool_name;
   const isSearchTool = toolName === 'search_knowledge' || toolName === 'knowledge_search' || toolName === 'wiki_search';
-  const isWebSearchTool = toolName === 'web_search';
   const isGrepTool = toolName === 'grep_chunks';
 
   // For search tools, use description with query text
@@ -2799,34 +2742,6 @@ const getToolTitle = (event: any): string => {
     const queryText =
       getQueryText(event.arguments) ||
       getQueryText(event.tool_data);
-    if (queryText) {
-      return `${baseTitle}：「${queryText}」`;
-    }
-    return baseTitle;
-  }
-
-  // For web search tools, use description with query text
-  if (isWebSearchTool) {
-    const baseTitle = getToolDescription(event);
-    // Try to get query from arguments or tool_data
-    let queryText = '';
-    if (event.arguments && typeof event.arguments === 'object' && event.arguments.query) {
-      const query = event.arguments.query;
-      // Handle both string and array formats
-      if (Array.isArray(query)) {
-        queryText = query.filter((q: any) => q && typeof q === 'string').join('，');
-      } else if (typeof query === 'string') {
-        queryText = query;
-      }
-    } else if (event.tool_data && event.tool_data.query) {
-      const query = event.tool_data.query;
-      // Handle both string and array formats
-      if (Array.isArray(query)) {
-        queryText = query.filter((q: any) => q && typeof q === 'string').join('，');
-      } else if (typeof query === 'string') {
-        queryText = query;
-      }
-    }
     if (queryText) {
       return `${baseTitle}：「${queryText}」`;
     }
@@ -2957,8 +2872,7 @@ const getToolDescription = (event: any): string => {
   } else if (toolName === 'wiki_search' || toolName === 'wiki_read_page') {
     const localizedName = getLocalizedToolName(toolName);
     return success ? localizedName : t('agentStream.toolStatus.calledFailed', { name: localizedName });
-  } else if (toolName === 'web_search') {
-    return success ? t('agentStream.toolStatus.webSearch') : t('agentStream.toolStatus.webSearchFailed');
+
   } else if (toolName === 'grep_chunks') {
     return success ? t('agentStream.toolStatus.grepSearch') : t('agentStream.toolStatus.grepSearchFailed');
   } else if (toolName === 'get_document_info') {

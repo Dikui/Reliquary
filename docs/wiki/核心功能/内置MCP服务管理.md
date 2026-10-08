@@ -60,7 +60,7 @@ INSERT INTO mcp_services (
     id, tenant_id, name, description, enabled,
     transport_type, url, auth_config, advanced_config, is_builtin
 ) VALUES (
-    'builtin-mcp-001', 10000, 'Web Search', '内置 Web 搜索 MCP 服务',
+    'builtin-mcp-001', 10000, 'Weather', '内置天气查询 MCP 服务',
     true, 'sse', 'https://mcp.example.com/sse',
     '{"api_key": "your-api-key"}'::jsonb,
     '{"timeout": 30, "retry_count": 3, "retry_delay": 1}'::jsonb,

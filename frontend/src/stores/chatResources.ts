@@ -3,7 +3,6 @@ import { ref, computed, watch } from 'vue'
 import { listKnowledgeBases, getKnowledgeBaseById } from '@/api/knowledge-base'
 import { listAgents, type CustomAgent } from '@/api/agent'
 import { listModels, type ModelConfig } from '@/api/model'
-import { listWebSearchProviders, type WebSearchProviderEntity } from '@/api/web-search-provider'
 import { isNamedSandboxBackend, listSandboxConfigs, type SandboxConfigRecord } from '@/api/system'
 import { getCurrentLanguage } from '@/utils/request'
 import {
@@ -15,7 +14,7 @@ import {
 /** 空间级资源缓存 TTL */
 const CACHE_TTL_MS = 60_000
 
-type ResourceKey = 'knowledgeBases' | 'agents' | 'models' | 'webSearchProviders' | 'sandboxConfigs'
+type ResourceKey = 'knowledgeBases' | 'agents' | 'models' | 'sandboxConfigs'
 
 function isKbModelReady(kb: any): boolean {
   if (!kb.summary_model_id || kb.summary_model_id === '') return false
@@ -29,7 +28,6 @@ export const useChatResourcesStore = defineStore('chatResources', () => {
   const rawKnowledgeBases = ref<any[]>([])
   const agents = ref<CustomAgent[]>([])
   const allModels = ref<ModelConfig[]>([])
-  const webSearchProviders = ref<WebSearchProviderEntity[]>([])
   const sandboxConfigs = ref<SandboxConfigRecord[]>([])
 
   const loadedAt = ref<Partial<Record<ResourceKey, number>>>({})
@@ -136,7 +134,6 @@ export const useChatResourcesStore = defineStore('chatResources', () => {
     force = false,
   ): Promise<{ data: CustomAgent[] }> {
 
-
     const locale = getCurrentLanguage()
     if (!force && isFresh('agents')) {
       return { data: agents.value }
@@ -201,15 +198,6 @@ export const useChatResourcesStore = defineStore('chatResources', () => {
     return ensureModels(force)
   }
 
-  async function ensureWebSearchProviders(force = false): Promise<void> {
-    return runOnce('webSearchProviders', force, async () => {
-      const response = await listWebSearchProviders()
-      const providers = (response as any)?.data
-      webSearchProviders.value = Array.isArray(providers) ? providers : []
-      loadedAt.value.webSearchProviders = Date.now()
-    })
-  }
-
   /**
    * 沙箱后端配置，供智能体编辑器的后端选择器使用。
    *
@@ -240,7 +228,6 @@ export const useChatResourcesStore = defineStore('chatResources', () => {
       ensureKnowledgeBases(force),
       ensureAgents(force),
       ensureModels(force),
-      ensureWebSearchProviders(force),
     ])
   }
 
@@ -313,7 +300,6 @@ export const useChatResourcesStore = defineStore('chatResources', () => {
       rawKnowledgeBases.value = []
       agents.value = []
       allModels.value = []
-      webSearchProviders.value = []
       sandboxConfigs.value = []
       agentKbCache.clear()
       // 同时丢弃所有 inflight 句柄，否则失效后仍在飞行的请求会把旧数据写回缓存。
@@ -353,7 +339,6 @@ export const useChatResourcesStore = defineStore('chatResources', () => {
     agents,
     allModels,
     chatModels,
-    webSearchProviders,
     sandboxConfigs,
     isFresh,
     fetchKnowledgeBasesForList,
@@ -363,7 +348,6 @@ export const useChatResourcesStore = defineStore('chatResources', () => {
     ensureModels,
     replaceModels,
     ensureChatModels,
-    ensureWebSearchProviders,
     ensureSandboxConfigs,
     ensureAgentKnowledgeBases,
     prefetchChatInput,

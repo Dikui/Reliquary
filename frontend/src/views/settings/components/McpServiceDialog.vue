@@ -31,7 +31,7 @@
 
     <!--
       测试连接按钮挪到 footer-left，与 ModelEditorDialog/Storage/Parser/
-      WebSearch 抽屉同款。仅 edit 模式有效（需要服务 id 才能调 /test 端点）。
+      模型抽屉同款。仅 edit 模式有效（需要服务 id 才能调 /test 端点）。
       create 模式下按钮 disabled 并提示"保存后可测试"。
     -->
     <template #footer-left>
@@ -54,7 +54,7 @@
             class="status-icon unavailable"
           />
         </template>
-        {{ testing ? t('webSearchSettings.testing', '测试中…') : t('mcpSettings.actions.test', '测试连接') }}
+        {{ testing ? t('mcpSettings.actions.testing') : t('mcpSettings.actions.test', '测试连接') }}
       </t-button>
     </template>
 

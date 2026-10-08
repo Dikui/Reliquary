@@ -121,15 +121,6 @@
             <div class="detail-tag-group-title">{{ $t('agent.selector.capabilitiesSection') }}</div>
             <div class="detail-tags detail-tags--capabilities">
               <span class="detail-tag detail-capability-tag"
-                :class="getWebSearchCapabilityClass(activeDetail.agent)">
-                <span class="detail-capability-icon-wrap">
-                  <TIcon :name="getWebSearchCapabilityIcon(activeDetail.agent)" size="10px"
-                    class="detail-capability-icon" />
-                </span>
-                <span class="detail-capability-name">{{ $t('agent.selector.webSearchCapability') }}</span>
-                <span class="detail-capability-state">{{ getWebSearchCapabilityState(activeDetail.agent) }}</span>
-              </span>
-              <span class="detail-tag detail-capability-tag"
                 :class="isImageUploadEnabledForAgent(activeDetail.agent) ? 'detail-capability-tag--on' : 'detail-capability-tag--off'">
                 <span class="detail-capability-icon-wrap">
                   <TIcon :name="isImageUploadEnabledForAgent(activeDetail.agent) ? 'check' : 'close'" size="10px"
@@ -167,16 +158,10 @@ import {
   type AgentNotReadyReasonKey,
 } from '@/utils/agent-readiness';
 import { formatLocalizedList } from '@/utils/format-list';
-import { useChatResourcesStore } from '@/stores/chatResources';
-import {
-  isAgentWebSearchEnabled,
-  isAgentWebSearchReady,
-} from '@/utils/agentWebSearch';
 
 const { t, locale } = useI18n();
 const router = useRouter();
 const settingsStore = useSettingsStore();
-const chatResources = useChatResourcesStore();
 
 const authStore = useAuthStore();
 const props = defineProps<{
@@ -209,7 +194,6 @@ const DETAIL_PANEL_GAP = 8;
 const DETAIL_HIDE_DELAY_MS = 400;
 
 const agentsList = computed(() => props.agents ?? []);
-const webSearchProviders = computed(() => chatResources.webSearchProviders);
 
 const builtinAgents = computed(() => {
   const apiBuiltins = agentsList.value.filter(a => a.is_builtin);
@@ -253,38 +237,9 @@ const getKbCapability = (agent: CustomAgent): string => {
   return '';
 };
 
-const isWebSearchEnabledForAgent = (agent: CustomAgent): boolean => {
-  return isAgentWebSearchEnabled(agent.config);
-};
-
-const isWebSearchReadyForAgent = (agent: CustomAgent): boolean => {
-  return isAgentWebSearchReady(
-    agent.config,
-    webSearchProviders.value,
-  );
-};
-
 const isImageUploadEnabledForAgent = (agent: CustomAgent): boolean => {
   const config = agent.config || {};
   return config.image_upload_enabled === true;
-};
-
-const getWebSearchCapabilityClass = (agent: CustomAgent): string => {
-  if (isWebSearchReadyForAgent(agent)) return 'detail-capability-tag--on';
-  if (isWebSearchEnabledForAgent(agent)) return 'detail-capability-tag--warning';
-  return 'detail-capability-tag--off';
-};
-
-const getWebSearchCapabilityIcon = (agent: CustomAgent): string => {
-  if (isWebSearchReadyForAgent(agent)) return 'check';
-  if (isWebSearchEnabledForAgent(agent)) return 'error-circle';
-  return 'close';
-};
-
-const getWebSearchCapabilityState = (agent: CustomAgent): string => {
-  if (isWebSearchReadyForAgent(agent)) return t('agent.selector.capabilityEnabled');
-  if (isWebSearchEnabledForAgent(agent)) return t('agent.selector.capabilityUnconfigured');
-  return t('agent.selector.capabilityDisabled');
 };
 
 const getImageUploadCapabilityState = (agent: CustomAgent): string => {
@@ -509,7 +464,6 @@ const updateDropdownPosition = () => {
 watch(() => props.visible, (newVal) => {
   if (newVal) {
     nextTick(() => updateDropdownPosition());
-    chatResources.ensureWebSearchProviders();
   } else {
     hideDetailPanel();
   }

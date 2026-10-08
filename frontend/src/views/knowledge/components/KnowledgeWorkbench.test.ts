@@ -481,3 +481,35 @@ test('a pending report download blocks a second request and errors restore the a
     },
   })
 })
+
+
+test('workflow editor saves selectable knowledge and retained workflow steps', async () => {
+  const saved: Array<{ kbId: string; input: any }> = []
+  const retainedTypes = ['search', 'fact_query', 'report', 'wiki_update', 'skill', 'condition', 'human_review']
+  const { state } = await renderWorkbench({
+    workflows: {
+      listKnowledgeWorkflows: () => Promise.resolve({ success: true, data: [] }),
+      createKnowledgeWorkflow: (kbId: string, input: object) => {
+        saved.push({ kbId, input })
+        return Promise.resolve({ success: true, data: { id: 'workflow-a' } })
+      },
+    },
+    scenario: async state => {
+      state.startNewWorkflow()
+      state.workflowDraft.value.name = 'Knowledge workflow'
+      const selectable = state.stepTypeOptions.value.map((option: { value: string }) => option.value)
+      for (const type of retainedTypes) {
+        assert.ok(selectable.includes(type), `${type} remains available in the step picker`)
+        state.stepTypeToAdd.value = type
+        state.addWorkflowStep()
+      }
+      await state.saveWorkflow()
+    },
+  })
+  assert.equal(saved.length, 1)
+  assert.equal(saved[0].kbId, 'kb-a')
+  assert.deepEqual(saved[0].input.steps.map((step: { type: string }) => step.type), ['search', 'report', ...retainedTypes])
+  assert.deepEqual(saved[0].input.steps.find((step: { type: string }) => step.type === 'skill').config.args, [])
+  assert.equal(state.workflowEditorError.value, '')
+  assert.equal(state.workflowDraft.value, null)
+})

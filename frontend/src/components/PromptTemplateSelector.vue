@@ -47,10 +47,6 @@
                     <t-icon name="folder" size="12px" />
                     {{ $t('promptTemplate.withKnowledgeBase') }}
                   </span>
-                  <span v-if="template.has_web_search" class="template-tag web-tag">
-                    <t-icon name="internet" size="12px" />
-                    {{ $t('promptTemplate.withWebSearch') }}
-                  </span>
                 </div>
                 <p class="template-desc">{{ template.description }}</p>
               </div>
@@ -355,11 +351,6 @@ onMounted(() => {
 
   &.kb-tag {
     background: var(--td-brand-color-light);
-    color: var(--td-brand-color);
-  }
-
-  &.web-tag {
-    background: var(--td-success-color-light);
     color: var(--td-brand-color);
   }
 

@@ -16,21 +16,6 @@ type RagHistoryReference = {
   knowledge_title?: string
 }
 
-function inferRetrievalSearchSource(refs: RagHistoryReference[]): 'knowledge' | 'web' | 'mixed' {
-  let docCount = 0
-  let webCount = 0
-  for (const ref of refs) {
-    if (ref.chunk_type === 'web_search') {
-      webCount++
-    } else {
-      docCount++
-    }
-  }
-  if (docCount > 0 && webCount > 0) return 'mixed'
-  if (webCount > 0) return 'web'
-  return 'knowledge'
-}
-
 type RagHistoryMessage = {
   knowledge_references?: RagHistoryReference[]
   agentEventStream?: Array<Record<string, unknown>>
@@ -60,19 +45,12 @@ export function synthesizeRagPipelineToolEvents(
 
   const kbCounts: Record<string, number> = {}
   let docCount = 0
-  let webCount = 0
 
   for (const ref of refs) {
-    if (ref.chunk_type === 'web_search') {
-      webCount++
-      continue
-    }
     docCount++
     const key = ref.knowledge_id || ref.knowledge_title || 'document'
     kbCounts[key] = (kbCounts[key] || 0) + 1
   }
-
-  const searchSource = inferRetrievalSearchSource(refs)
 
   const events: Array<Record<string, unknown>> = [
     {
@@ -88,12 +66,9 @@ export function synthesizeRagPipelineToolEvents(
       tool_name: 'knowledge_search',
       pending: false,
       success: true,
-      arguments: { search_source: searchSource },
       tool_data: {
         count: refs.length,
         doc_count: docCount,
-        web_count: webCount,
-        search_source: searchSource,
         kb_counts: kbCounts,
         results: refs,
       },

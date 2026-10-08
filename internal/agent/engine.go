@@ -128,7 +128,6 @@ func (e *AgentEngine) systemPromptOptions(ctx context.Context) *BuildSystemPromp
 func (e *AgentEngine) buildSystemPrompt(ctx context.Context) string {
 	prompt := BuildSystemPromptWithOptions(
 		e.knowledgeBasesInfo,
-		e.config.WebSearchEnabled,
 		e.systemPromptOptions(ctx),
 		e.systemPromptTemplate,
 	)

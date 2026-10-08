@@ -32,6 +32,4 @@ func TestAuthLoginResponse_OmitsLegacyTenantAPIKey(t *testing.T) {
 	require.NoError(t, err)
 	s := string(body)
 	assert.NotContains(t, s, `"api_key"`)
-	assert.NotContains(t, s, "legacy-search-secret-999")
-	assert.Contains(t, s, "web_search_config")
 }

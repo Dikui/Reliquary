@@ -298,33 +298,25 @@ func sandboxArtifactReferenceGuidance() string {
 	return builder.String()
 }
 
-// renderPromptPlaceholdersWithStatus renders placeholders including web search status
+// renderRuntimePromptPlaceholders renders runtime prompt values
 // Supported placeholders:
 //   - {{knowledge_bases}}
-//   - {{web_search_status}} -> "Enabled" or "Disabled"
 //   - {{current_time}} -> current time string
 //   - {{language}} -> user language name (e.g. "Chinese (Simplified)", "English")
 //   - {{skills}} -> formatted skills metadata (if any)
-func renderPromptPlaceholdersWithStatus(
+func renderRuntimePromptPlaceholders(
 	template string,
 	knowledgeBases []*KnowledgeBaseInfo,
-	webSearchEnabled bool,
 	currentTime string,
 	language string,
 ) string {
 	// Knowledge bases need special formatting, so handle it first
 	result := renderPromptPlaceholders(template, knowledgeBases)
 
-	status := "Disabled"
-	if webSearchEnabled {
-		status = "Enabled"
-	}
-
 	result = types.RenderPromptPlaceholders(result, types.PlaceholderValues{
-		"web_search_status": status,
-		"current_time":      currentTime,
-		"language":          language,
-		"skills":            "", // Remove {{skills}} placeholder; skills are appended separately if present
+		"current_time": currentTime,
+		"language":     language,
+		"skills":       "", // Remove {{skills}} placeholder; skills are appended separately if present
 	})
 	return result
 }
@@ -338,19 +330,17 @@ type BuildSystemPromptOptions struct {
 }
 
 // BuildSystemPrompt builds the progressive RAG system prompt
-// This is the main function to use - it uses a unified template with dynamic web search status
+// The prompt combines the template with current knowledge base context.
 func BuildSystemPrompt(
 	knowledgeBases []*KnowledgeBaseInfo,
-	webSearchEnabled bool,
 	systemPromptTemplate ...string,
 ) string {
-	return BuildSystemPromptWithOptions(knowledgeBases, webSearchEnabled, nil, systemPromptTemplate...)
+	return BuildSystemPromptWithOptions(knowledgeBases, nil, systemPromptTemplate...)
 }
 
 // BuildSystemPromptWithOptions builds the system prompt with additional options like skills
 func BuildSystemPromptWithOptions(
 	knowledgeBases []*KnowledgeBaseInfo,
-	webSearchEnabled bool,
 	options *BuildSystemPromptOptions,
 	systemPromptTemplate ...string,
 ) string {
@@ -379,7 +369,7 @@ func BuildSystemPromptWithOptions(
 	if options != nil {
 		language = options.Language
 	}
-	basePrompt = renderPromptPlaceholdersWithStatus(template, knowledgeBases, webSearchEnabled, currentTime, language)
+	basePrompt = renderRuntimePromptPlaceholders(template, knowledgeBases, currentTime, language)
 
 	// Append skills metadata if available (Level 1 - Progressive Disclosure)
 	if options != nil && len(options.SkillsMetadata) > 0 {

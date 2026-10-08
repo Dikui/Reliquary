@@ -331,7 +331,6 @@ type MessageExecutionContext struct {
 	TagScopes             []TagScope                `json:"tag_scopes,omitempty"`
 	MCPServiceIDs         []string                  `json:"mcp_service_ids,omitempty"`
 	SkillNames            []string                  `json:"skill_names,omitempty"`
-	WebSearchEnabled      bool                      `json:"web_search_enabled"`
 	Locale                string                    `json:"locale,omitempty"`
 	SuggestionAttribution *SuggestionAttribution    `json:"suggestion_attribution,omitempty"`
 }

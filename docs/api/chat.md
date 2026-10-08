@@ -69,7 +69,7 @@ data: {"id":"3475c004-0ada-4306-9d30-d7f5efce50d2","response_type":"answer","con
 
 ## POST `/agent-chat/:session_id` - 基于 Agent 的智能问答
 
-Agent 模式支持更智能的问答，包括工具调用、网络搜索、多知识库检索等能力。
+Agent 模式支持更智能的问答，包括工具调用、指定网址抓取、多知识库检索等能力。
 
 **请求参数**：
 
@@ -80,7 +80,6 @@ Agent 模式支持更智能的问答，包括工具调用、网络搜索、多�
 | `knowledge_ids` | string[] | 否 | 知识文件 ID 列表，可动态指定本次查询使用的具体文件 |
 | `agent_enabled` | bool | 否 | 是否启用 Agent 模式（默认 false，优先使用 Agent 配置） |
 | `agent_id` | string | 否 | 自定义 Agent ID，指定使用的智能体 |
-| `web_search_enabled` | bool | 否 | 是否启用网络搜索（默认 false） |
 | `summary_model_id` | string | 否 | 覆盖默认的摘要模型 ID |
 | `mentioned_items` | object[] | 否 | @提及的知识库和文件列表 |
 | `disable_title` | bool | 否 | 是否禁用自动标题生成（默认 false） |
@@ -135,9 +134,8 @@ curl --location 'http://localhost:8080/api/v1/agent-chat/ceb9babb-1e30-41d7-817d
 --header 'X-API-Key: sk-xxxxx' \
 --header 'Content-Type: application/json' \
 --data '{
-    "query": "帮我查询今天的天气",
+    "query": "帮我查询知识库中的天气记录",
     "agent_enabled": true,
-    "web_search_enabled": true,
     "knowledge_base_ids": ["kb-00000001"],
     "agent_id": "builtin-smart-reasoning",
     "mentioned_items": [
@@ -173,13 +171,13 @@ curl --location 'http://localhost:8080/api/v1/agent-chat/ceb9babb-1e30-41d7-817d
 
 ```
 event: message
-data: {"id":"req-001","response_type":"thinking","content":"用户想查询天气，我需要使用网络搜索工具...","done":false}
+data: {"id":"req-001","response_type":"thinking","content":"用户想查询天气记录，我需要检索知识库...","done":false}
 
 event: message
-data: {"id":"req-001","response_type":"tool_call","content":"","done":false,"data":{"tool_name":"web_search","arguments":{"query":"今天天气"}}}
+data: {"id":"req-001","response_type":"tool_call","content":"","done":false,"data":{"tool_name":"knowledge_search","arguments":{"query":"天气记录"}}}
 
 event: message
-data: {"id":"req-001","response_type":"tool_result","content":"搜索结果：今天晴，气温25°C...","done":false}
+data: {"id":"req-001","response_type":"tool_result","content":"知识库记录：今天晴，气温25°C...","done":false}
 
 event: message
 data: {"id":"req-001","response_type":"answer","content":"根据查询结果，今天天气晴朗，气温约25°C。","done":false}

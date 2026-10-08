@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -59,13 +58,6 @@ type workflowFactConfig struct {
 	Limit           int      `json:"limit"`
 }
 
-type workflowResearchConfig struct {
-	Query      string `json:"query"`
-	MaxResults int    `json:"max_results"`
-	ProviderID string `json:"provider_id"`
-	Ingest     *bool  `json:"ingest"`
-}
-
 type workflowReportConfig struct {
 	Title    string `json:"title"`
 	Prompt   string `json:"prompt"`
@@ -90,28 +82,6 @@ type workflowConditionConfig struct {
 	Operator string `json:"operator"`
 	Value    any    `json:"value"`
 }
-
-type workflowResearchSource struct {
-	KnowledgeID string `json:"knowledge_id"`
-	Title       string `json:"title"`
-	URL         string `json:"url"`
-	PublishedAt string `json:"published_at,omitempty"`
-	Snippet     string `json:"snippet,omitempty"`
-}
-
-type workflowResearchData struct {
-	Query    string                   `json:"query"`
-	Sources  []workflowResearchSource `json:"sources"`
-	Warnings []string                 `json:"warnings,omitempty"`
-}
-
-type workflowPendingError struct{ delay time.Duration }
-
-func (e *workflowPendingError) Error() string {
-	return "web research sources are awaiting intake review or processing"
-}
-
-const workflowIngestionMaxWait = 24 * time.Hour
 
 func (s *KnowledgeWorkflowService) Run(ctx context.Context, kbID, workflowID, trigger string) (*types.KnowledgeWorkflowRun, error) {
 	wf, err := s.getWorkflow(ctx, kbID, workflowID)
@@ -246,9 +216,9 @@ func (s *KnowledgeWorkflowService) claimRun(ctx context.Context, run *types.Know
 	staleBefore := now.Add(-2 * time.Minute)
 	token := uuid.NewString()
 	result := s.db.WithContext(ctx).Model(&types.KnowledgeWorkflowRun{}).
-		Where("id = ? AND (status IN ? OR (status = ? AND updated_at < ?) OR (status = ? AND next_run_at <= ?))", run.ID,
-			[]string{types.WorkflowStatusQueued, types.WorkflowStatusFailed}, types.WorkflowStatusRunning, staleBefore, types.WorkflowStatusWaitingIngestion, now).
-		Updates(map[string]any{"status": types.WorkflowStatusRunning, "lease_token": token, "error": "", "finished_at": nil, "next_run_at": nil, "updated_at": now})
+		Where("id = ? AND (status IN ? OR (status = ? AND updated_at < ?))", run.ID,
+			[]string{types.WorkflowStatusQueued, types.WorkflowStatusFailed}, types.WorkflowStatusRunning, staleBefore).
+		Updates(map[string]any{"status": types.WorkflowStatusRunning, "lease_token": token, "error": "", "finished_at": nil, "updated_at": now})
 	if result.Error != nil {
 		return false, result.Error
 	}
@@ -262,9 +232,9 @@ func (s *KnowledgeWorkflowService) claimRun(ctx context.Context, run *types.Know
 func (s *KnowledgeWorkflowService) failUnclaimedRun(ctx context.Context, run *types.KnowledgeWorkflowRun, message string) error {
 	staleBefore := time.Now().Add(-2 * time.Minute)
 	return s.db.WithContext(ctx).Model(&types.KnowledgeWorkflowRun{}).
-		Where("id = ? AND tenant_id = ? AND knowledge_base_id = ? AND (status = ? OR (status = ? AND next_run_at <= ?) OR (status = ? AND updated_at < ?))",
-			run.ID, run.TenantID, run.KnowledgeBaseID, types.WorkflowStatusQueued, types.WorkflowStatusWaitingIngestion, time.Now(), types.WorkflowStatusRunning, staleBefore).
-		Updates(map[string]any{"status": types.WorkflowStatusFailed, "error": message, "finished_at": time.Now(), "next_run_at": nil, "updated_at": time.Now()}).Error
+		Where("id = ? AND tenant_id = ? AND knowledge_base_id = ? AND (status = ? OR (status = ? AND updated_at < ?))",
+			run.ID, run.TenantID, run.KnowledgeBaseID, types.WorkflowStatusQueued, types.WorkflowStatusRunning, staleBefore).
+		Updates(map[string]any{"status": types.WorkflowStatusFailed, "error": message, "finished_at": time.Now(), "updated_at": time.Now()}).Error
 }
 
 func (s *KnowledgeWorkflowService) executeRunWithLease(ctx context.Context, wf *types.KnowledgeWorkflow, run *types.KnowledgeWorkflowRun) error {
@@ -303,7 +273,6 @@ func (s *KnowledgeWorkflowService) executeRun(ctx context.Context, wf *types.Kno
 	}
 	if err := s.updateRunLease(ctx, run, map[string]any{
 		"status": types.WorkflowStatusRunning, "started_at": run.StartedAt, "error": "", "finished_at": nil, "updated_at": now,
-		"next_run_at": nil,
 	}); err != nil {
 		return err
 	}
@@ -376,10 +345,6 @@ func (s *KnowledgeWorkflowService) executeRun(ctx context.Context, wf *types.Kno
 		}
 		output, err := s.executeStep(ctx, wf, run, step, outputs)
 		if err != nil {
-			var pending *workflowPendingError
-			if errors.As(err, &pending) {
-				return s.waitForIngestion(ctx, run, stepRun, output, pending.delay)
-			}
 			_ = s.completeStep(ctx, run, stepRun, types.WorkflowStepFailed, output, err)
 			return s.failRun(ctx, run, fmt.Errorf("step %s: %w", step.ID, err))
 		}
@@ -519,7 +484,7 @@ func (s *KnowledgeWorkflowService) readStepOutputs(ctx context.Context, run *typ
 	}
 	outputs := make(map[string]workflowStepOutput, len(rows))
 	for _, row := range rows {
-		if (row.Status == types.WorkflowStepSucceeded || row.Status == types.WorkflowStepSkipped || row.Status == types.WorkflowStepWaitingIngestion || row.Status == types.WorkflowStepPending && row.StepType == types.WorkflowStepWebResearch) && len(row.Output) > 0 {
+		if (row.Status == types.WorkflowStepSucceeded || row.Status == types.WorkflowStepSkipped) && len(row.Output) > 0 {
 			var out workflowStepOutput
 			if err := json.Unmarshal(row.Output, &out); err != nil {
 				return nil, fmt.Errorf("decode step %s output: %w", row.StepID, err)
@@ -568,98 +533,14 @@ func (s *KnowledgeWorkflowService) failRun(ctx context.Context, run *types.Knowl
 	return err
 }
 
-func (s *KnowledgeWorkflowService) waitForIngestion(ctx context.Context, run *types.KnowledgeWorkflowRun, stepRun *types.KnowledgeWorkflowStepRun, output workflowStepOutput, delay time.Duration) error {
-	if stepRun.StartedAt != nil && time.Since(*stepRun.StartedAt) >= workflowIngestionMaxWait {
-		err := errors.New("web research intake did not reach a decision within 24 hours")
-		_ = s.completeStep(ctx, run, stepRun, types.WorkflowStepFailed, output, err)
-		return s.failRun(ctx, run, err)
-	}
-	if delay <= 0 {
-		delay = 30 * time.Second
-	}
-	nextRunAt := time.Now().Add(delay)
-	encoded, err := json.Marshal(output)
-	if err != nil {
-		return s.failRun(ctx, run, err)
-	}
-	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := updateRunLeaseTx(tx, run, map[string]any{
-			"status": types.WorkflowStatusWaitingIngestion, "error": "waiting for web source intake review or processing",
-			"finished_at": nil, "next_run_at": nextRunAt, "updated_at": time.Now(),
-		}); err != nil {
-			return err
-		}
-		result := tx.Model(stepRun).Updates(map[string]any{
-			"status": types.WorkflowStepWaitingIngestion, "output": types.JSON(encoded), "error": "",
-			"finished_at": nil, "updated_at": time.Now(),
-		})
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected == 0 {
-			return gorm.ErrRecordNotFound
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-	if s.tasks == nil {
-		err := errors.New("workflow task enqueuer is unavailable")
-		return s.failWaitingIngestion(ctx, run, stepRun, output, err)
-	}
-	ownerCtx := context.WithValue(ctx, types.UserIDContextKey, run.OwnerID)
-	err = s.validateActor(ownerCtx, run.TenantID, run.OwnerID)
-	if err != nil {
-		return s.failWaitingIngestion(ctx, run, stepRun, output, fmt.Errorf("workflow owner is no longer authorized: %w", err))
-	}
-	payload, err := json.Marshal(types.KnowledgeWorkflowTaskPayload{
-		RunID: run.ID, Initiator: types.TaskInitiator{UserID: run.OwnerID},
-	})
-	if err != nil {
-		return s.failWaitingIngestion(ctx, run, stepRun, output, err)
-	}
-	_, err = s.tasks.Enqueue(asynq.NewTask(TypeKnowledgeWorkflowRun, payload), asynq.Queue(types.QueueMaintenance),
-		asynq.ProcessIn(delay), asynq.TaskID("workflow-ingestion:"+run.ID+":"+uuid.NewString()))
-	if err != nil {
-		failure := fmt.Errorf("enqueue intake retry: %w", err)
-		return s.failWaitingIngestion(ctx, run, stepRun, output, failure)
-	}
-	return nil
-}
-
-func (s *KnowledgeWorkflowService) failWaitingIngestion(ctx context.Context, run *types.KnowledgeWorkflowRun, stepRun *types.KnowledgeWorkflowStepRun, output workflowStepOutput, cause error) error {
-	encoded, err := json.Marshal(output)
-	if err != nil {
-		return err
-	}
-	now := time.Now()
-	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		result := tx.Model(&types.KnowledgeWorkflowRun{}).Where("id = ? AND status = ? AND lease_token = ?", run.ID, types.WorkflowStatusWaitingIngestion, run.LeaseToken).Updates(map[string]any{
-			"status": types.WorkflowStatusFailed, "error": cause.Error(), "finished_at": now, "next_run_at": nil, "updated_at": now,
-		})
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected != 1 {
-			return ErrWorkflowLeaseLost
-		}
-		return tx.Model(stepRun).Updates(map[string]any{
-			"status": types.WorkflowStepFailed, "output": types.JSON(encoded), "error": cause.Error(), "finished_at": now, "updated_at": now,
-		}).Error
-	}); err != nil {
-		return err
-	}
-	return cause
-}
-
 func (s *KnowledgeWorkflowService) finishRun(ctx context.Context, run *types.KnowledgeWorkflowRun, status, message string) error {
 	now := time.Now()
 	var finished any
-	if status != types.WorkflowStatusPaused && status != types.WorkflowStatusQueued && status != types.WorkflowStatusWaitingIngestion {
+	if status != types.WorkflowStatusPaused && status != types.WorkflowStatusQueued {
 		finished = now
 	}
 	result := s.db.WithContext(ctx).Model(&types.KnowledgeWorkflowRun{}).Where("id = ? AND tenant_id = ? AND knowledge_base_id = ? AND status = ? AND lease_token = ?", run.ID, run.TenantID, run.KnowledgeBaseID, types.WorkflowStatusRunning, run.LeaseToken).Updates(map[string]any{
-		"status": status, "error": message, "finished_at": finished, "next_run_at": nil, "updated_at": now,
+		"status": status, "error": message, "finished_at": finished, "updated_at": now,
 	})
 	if result.Error != nil {
 		return result.Error
@@ -676,8 +557,6 @@ func (s *KnowledgeWorkflowService) executeStep(ctx context.Context, wf *types.Kn
 		return s.executeSearch(ctx, wf, step)
 	case types.WorkflowStepFactQuery:
 		return s.executeFactQuery(ctx, wf, step)
-	case types.WorkflowStepWebResearch:
-		return s.executeWebResearch(ctx, wf, step, outputs[step.ID])
 	case types.WorkflowStepReport:
 		return s.executeReport(ctx, wf, run, step, outputs)
 	case types.WorkflowStepWikiUpdate:
@@ -930,163 +809,6 @@ func (s *KnowledgeWorkflowService) executeFactQuery(ctx context.Context, wf *typ
 		}
 	}
 	return workflowStepOutput{Data: result, Sources: citations}, nil
-}
-
-func (s *KnowledgeWorkflowService) executeWebResearch(ctx context.Context, wf *types.KnowledgeWorkflow, step types.KnowledgeWorkflowStep, previous workflowStepOutput) (workflowStepOutput, error) {
-	cfg, err := decodeWorkflowConfig[workflowResearchConfig](step.Config)
-	if err != nil {
-		return workflowStepOutput{}, err
-	}
-	ingest := cfg.Ingest == nil || *cfg.Ingest
-	if !ingest {
-		return workflowStepOutput{}, errors.New("web research must ingest sources through the existing intake review")
-	}
-	var data workflowResearchData
-	if previous.Data != nil {
-		encoded, marshalErr := json.Marshal(previous.Data)
-		if marshalErr != nil {
-			return workflowStepOutput{}, marshalErr
-		}
-		if unmarshalErr := json.Unmarshal(encoded, &data); unmarshalErr != nil {
-			return workflowStepOutput{}, unmarshalErr
-		}
-	}
-	if len(data.Sources) == 0 {
-		maxResults := cfg.MaxResults
-		if maxResults <= 0 {
-			maxResults = 10
-		}
-		if maxResults > 30 {
-			maxResults = 30
-		}
-		webConfig := types.EffectiveWebSearchConfig(nil)
-		webConfig.MaxResults = maxResults
-		webConfig.IncludeDate = true
-		results, searchErr := s.webSearch.Search(ctx, cfg.ProviderID, webConfig, cfg.Query)
-		if searchErr != nil {
-			return workflowStepOutput{}, searchErr
-		}
-		for _, result := range results {
-			if result == nil || !eligibleWorkflowResearchURL(result) {
-				continue
-			}
-			sourceURL := strings.TrimSpace(result.URL)
-			publishedAt := ""
-			if result.PublishedAt != nil && !result.PublishedAt.IsZero() {
-				publishedAt = result.PublishedAt.Format(time.RFC3339)
-			}
-			ctx, err = s.refreshWorkflowAuthorization(ctx, wf)
-			if err != nil {
-				return workflowStepOutput{}, fmt.Errorf("workflow authorization changed during web research: %w", err)
-			}
-			item, createErr := s.knowledge.CreateKnowledgeFromURL(ctx, wf.KnowledgeBaseID, sourceURL, "", "", nil, result.Title, nil, types.ChannelWeb, nil, types.SourceInfo{
-				Publisher: workflowPublisher(sourceURL), OriginalURL: sourceURL, PublishedAt: publishedAt,
-			})
-			if createErr != nil {
-				var duplicate *types.DuplicateKnowledgeError
-				if errors.As(createErr, &duplicate) {
-					item = duplicate.Knowledge
-				} else {
-					data.Warnings = append(data.Warnings, sourceURL+": "+createErr.Error())
-					continue
-				}
-			}
-			if item == nil {
-				continue
-			}
-			data.Sources = append(data.Sources, workflowResearchSource{
-				KnowledgeID: item.ID, Title: result.Title, URL: sourceURL, PublishedAt: publishedAt,
-				Snippet: truncateWorkflowText(result.Content+" "+result.Snippet, 2400),
-			})
-		}
-		data.Query = cfg.Query
-	}
-	if len(data.Sources) == 0 {
-		message := "web research found no eligible HTTP(S) URLs"
-		if len(data.Warnings) > 0 {
-			message += ": " + strings.Join(data.Warnings, "; ")
-		}
-		return workflowStepOutput{Data: data}, errors.New(message)
-	}
-	ctx, err = s.refreshWorkflowAuthorization(ctx, wf)
-	if err != nil {
-		return workflowStepOutput{}, fmt.Errorf("workflow authorization changed during web research: %w", err)
-	}
-	ids := make([]string, 0, len(data.Sources))
-	for _, source := range data.Sources {
-		ids = append(ids, source.KnowledgeID)
-	}
-	ids = uniqueWorkflowStrings(ids)
-	items, err := s.knowledge.GetKnowledgeBatch(ctx, wf.TenantID, ids)
-	if err != nil {
-		return workflowStepOutput{}, err
-	}
-	byID := make(map[string]*types.Knowledge, len(items))
-	for _, item := range items {
-		if item != nil && item.TenantID == wf.TenantID && item.KnowledgeBaseID == wf.KnowledgeBaseID {
-			byID[item.ID] = item
-		}
-	}
-	var approved []types.KnowledgeWorkflowCitation
-	pending := false
-	for _, source := range data.Sources {
-		item := byID[source.KnowledgeID]
-		if item == nil {
-			data.Warnings = append(data.Warnings, source.URL+": ingested knowledge could not be loaded")
-			continue
-		}
-		meta, metaErr := item.IntakeMetadata()
-		if metaErr != nil {
-			data.Warnings = append(data.Warnings, source.URL+": invalid intake metadata")
-			continue
-		}
-		if item.ParseStatus == types.ParseStatusRejected || meta != nil && meta.Decision == "rejected" {
-			data.Warnings = append(data.Warnings, source.URL+": rejected during intake review")
-			continue
-		}
-		if item.ParseStatus == types.ParseStatusFailed {
-			data.Warnings = append(data.Warnings, source.URL+": source processing failed")
-			continue
-		}
-		if item.ParseStatus != types.ParseStatusCompleted || meta != nil && meta.Decision != "approved" {
-			pending = true
-			continue
-		}
-		citation, citationErr := s.citationForKnowledge(ctx, wf, item, source.Snippet)
-		if citationErr != nil {
-			return workflowStepOutput{}, fmt.Errorf("anchor researched source %s to source evidence: %w", item.ID, citationErr)
-		}
-		// Search results may omit the publication date. Preserve absence; never
-		// substitute crawl or import time as a source publication date.
-		if citation.PublishedAt == "" {
-			citation.PublishedAt = source.PublishedAt
-		}
-		approved = appendUniqueCitation(approved, citation)
-	}
-	out := workflowStepOutput{
-		Data:         workflowResearchData{Query: data.Query, Sources: data.Sources, Warnings: data.Warnings},
-		KnowledgeIDs: ids, Sources: approved,
-	}
-	if pending {
-		return out, &workflowPendingError{delay: 30 * time.Second}
-	}
-	return out, nil
-}
-
-func eligibleWorkflowResearchURL(result *types.WebSearchResult) bool {
-	if strings.TrimSpace(result.URL) == "" || blockedIntakeURL(result.URL) {
-		return false
-	}
-	u, err := url.Parse(result.URL)
-	return err == nil && u.Hostname() != "" && (u.Scheme == "https" || u.Scheme == "http")
-}
-
-func workflowPublisher(rawURL string) string {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
 }
 
 func (s *KnowledgeWorkflowService) executeReport(ctx context.Context, wf *types.KnowledgeWorkflow, run *types.KnowledgeWorkflowRun, step types.KnowledgeWorkflowStep, outputs map[string]workflowStepOutput) (workflowStepOutput, error) {

@@ -538,7 +538,7 @@ func TestBuildSystemPromptUsesInternalCitationSetting(t *testing.T) {
 
 func TestKnowledgeAgentCustomPromptRetainsEvidenceRules(t *testing.T) {
 	prompt := BuildSystemPromptWithOptions(
-		[]*KnowledgeBaseInfo{{ID: "kb-1", Name: "Docs"}}, false, nil, "Custom agent prompt",
+		[]*KnowledgeBaseInfo{{ID: "kb-1", Name: "Docs"}}, nil, "Custom agent prompt",
 	)
 	require.Contains(t, prompt, "Custom agent prompt")
 	require.Contains(t, prompt, "deliver supported findings even if evidence remains incomplete")

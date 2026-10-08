@@ -94,9 +94,6 @@ func secretTenantFixture() *types.Tenant {
 	return &types.Tenant{
 		ID:   42,
 		Name: "tenant",
-		WebSearchConfig: &types.WebSearchConfig{
-			APIKey: "legacy-search-secret-999",
-		},
 		ParserEngineConfig: &types.ParserEngineConfig{
 			MinerUAPIKey: "parser-secret-123",
 		},

@@ -15,7 +15,7 @@ import (
 // DataSourceCredentialsHandler handles credentials for data source
 // connectors via the dedicated /credentials subresource.
 //
-// Unlike the other three resources (MCP / Model / WebSearch), DataSource
+// Unlike the other resources (MCP / Model), DataSource
 // credentials are a per-connector atomic map — there's no individual-field
 // PUT or DELETE because half-configured connector auth doesn't work. So we
 // expose a single logical field "credentials": GET returns whether anything

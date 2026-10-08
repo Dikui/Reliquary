@@ -53,7 +53,7 @@ func TestMCPAuthConfig_Value_PassthroughWhenNoKey(t *testing.T) {
 	assert.NoError(t, err)
 	raw := v.([]byte)
 	// Without SYSTEM_AES_KEY we fall back to plaintext storage (matches
-	// the existing Model/WebSearch convention so deployments without a
+	// the existing Model convention so deployments without a
 	// key don't break).
 	assert.Contains(t, string(raw), "plain-key")
 	assert.Contains(t, string(raw), "plain-tok")

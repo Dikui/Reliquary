@@ -269,17 +269,16 @@ export default {
     factDifference: { conflict: '有效期重叠：存在不同记载', potential: '待核实差异：有效时间信息不完整' },
     workflows: {
       invalidConditionValue: '条件步骤“{step}”的比较值必须是有效数字。',
-      title: '跟踪工作流', description: '定期查询知识、持续研究并生成带引用的报告；步骤可配置条件、人工审核和 Skill。', create: '新建工作流', edit: '编辑工作流', new: '配置工作流', cancel: '取消编辑', name: '名称', namePlaceholder: '例如：每周竞品动态追踪', descriptionField: '说明', cron: 'Cron 计划', manualOnly: '留空表示仅手动运行', timezone: '时区', enabled: '已启用', disabled: '已停用', steps: '执行步骤', stepsHint: '步骤按列表顺序执行；依赖、条件分支和人工审核会保留在运行记录中。', addStep: '添加步骤', stepId: '步骤 ID', remove: '删除步骤', dependsOn: '依赖步骤', onlyWhen: '仅在条件结果匹配时执行', save: '保存工作流', validation: '请填写名称，并确保每个步骤都有唯一 ID。', saved: '工作流已保存', run: '立即运行', disable: '停用', enable: '启用', noDescription: '无说明', runs: '运行记录', selectWorkflow: '选择工作流查看运行记录', noRuns: '还没有运行记录。', runDetail: '运行详情', retry: '重试失败步骤', resume: '恢复暂停的运行', attempt: '第 {count} 次尝试', reviewPending: '运行正等待人工审核。', approve: '批准并继续', reject: '拒绝运行', runStarted: '工作流已启动', invalidArgs: 'Skill 步骤“{step}”的参数必须是字符串数组 JSON。', empty: '还没有工作流。创建每日、每周或持续研究流程。',
+      title: '跟踪工作流', description: '定期查询知识并生成带引用的报告；步骤可配置条件、人工审核和 Skill。', create: '新建工作流', edit: '编辑工作流', new: '配置工作流', cancel: '取消编辑', name: '名称', namePlaceholder: '例如：每周竞品动态追踪', descriptionField: '说明', cron: 'Cron 计划', manualOnly: '留空表示仅手动运行', timezone: '时区', enabled: '已启用', disabled: '已停用', steps: '执行步骤', stepsHint: '步骤按列表顺序执行；依赖、条件分支和人工审核会保留在运行记录中。', addStep: '添加步骤', stepId: '步骤 ID', remove: '删除步骤', dependsOn: '依赖步骤', onlyWhen: '仅在条件结果匹配时执行', save: '保存工作流', validation: '请填写名称，并确保每个步骤都有唯一 ID。', saved: '工作流已保存', run: '立即运行', disable: '停用', enable: '启用', noDescription: '无说明', runs: '运行记录', selectWorkflow: '选择工作流查看运行记录', noRuns: '还没有运行记录。', runDetail: '运行详情', retry: '重试失败步骤', resume: '恢复暂停的运行', attempt: '第 {count} 次尝试', reviewPending: '运行正等待人工审核。', approve: '批准并继续', reject: '拒绝运行', runStarted: '工作流已启动', invalidArgs: 'Skill 步骤“{step}”的参数必须是字符串数组 JSON。', empty: '还没有工作流。创建每日或每周知识查询流程。',
       decision: { approve: '已批准审核', reject: '已拒绝运行' },
-      config: { query: '查询内容', limit: '结果数量上限', entity: '对象名称（必填）', predicate: '事实属性', relation: '关系类型', objectEntityId: '关联对象 ID', since: '开始时间', until: '结束时间', includeHistory: '包含历史事实', maxResults: '网页结果上限（最多 30）', provider: '搜索服务 ID（可选）', ingest: '将研究结果导入知识库', reportTitle: '报告标题', timeFrom: '报告开始时间', timeTo: '报告结束时间', timeWindow: '报告时间窗口', days: '滚动天数（1–365）', timezone: '时区', previousDay: '前一天', previousWeek: '前一周', rollingDays: '最近 N 天', prompt: '报告要求', slug: 'Wiki 页面路径', pageTitle: '页面标题', pageType: '页面类型', sourceStep: '内容来源步骤', summary: '补充摘要', agentId: '智能体 ID', skillName: 'Skill 名称', scriptPath: '脚本路径', inputStep: '输入步骤', input: '文本输入', args: '参数 JSON 数组', conditionStep: '条件数据步骤', path: '输出字段路径', operator: '判断方式（exists / equals / not_equals / contains / gt / gte）', value: '比较值', reviewMessage: '审核提示' },
-      stepTypes: { search: '知识搜索', fact_query: '事实查询', web_research: '网页研究', report: '生成报告', wiki_update: '更新 Wiki', skill: '运行 Skill', condition: '条件判断', human_review: '人工审核' },
-      runStatus: { queued: '排队中', running: '运行中', waiting_ingestion: '等待来源入库', paused: '等待审核', completed: '已完成', failed: '失败', rejected: '已拒绝', cancelled: '已取消' },
-      stepStatus: { pending: '等待中', running: '运行中', waiting_ingestion: '等待来源入库', waiting_review: '等待审核', succeeded: '已完成', failed: '失败', skipped: '已跳过', rejected: '已拒绝' },
+      config: { query: '查询内容', limit: '结果数量上限', entity: '对象名称（必填）', predicate: '事实属性', relation: '关系类型', objectEntityId: '关联对象 ID', since: '开始时间', until: '结束时间', includeHistory: '包含历史事实', reportTitle: '报告标题', timeFrom: '报告开始时间', timeTo: '报告结束时间', timeWindow: '报告时间窗口', days: '滚动天数（1–365）', timezone: '时区', previousDay: '前一天', previousWeek: '前一周', rollingDays: '最近 N 天', prompt: '报告要求', slug: 'Wiki 页面路径', pageTitle: '页面标题', pageType: '页面类型', sourceStep: '内容来源步骤', summary: '补充摘要', agentId: '智能体 ID', skillName: 'Skill 名称', scriptPath: '脚本路径', inputStep: '输入步骤', input: '文本输入', args: '参数 JSON 数组', conditionStep: '条件数据步骤', path: '输出字段路径', operator: '判断方式（exists / equals / not_equals / contains / gt / gte）', value: '比较值', reviewMessage: '审核提示' },
+      stepTypes: { search: '知识搜索', fact_query: '事实查询', report: '生成报告', wiki_update: '更新 Wiki', skill: '运行 Skill', condition: '条件判断', human_review: '人工审核' },
+      runStatus: { queued: '排队中', running: '运行中', paused: '等待审核', completed: '已完成', failed: '失败', rejected: '已拒绝', cancelled: '已取消' },
+      stepStatus: { pending: '等待中', running: '运行中', waiting_review: '等待审核', succeeded: '已完成', failed: '失败', skipped: '已跳过', rejected: '已拒绝' },
       templates: {
         daily: { title: '每日动态简报', description: '每天搜索最新知识并生成带引用的摘要。', searchQuery: '搜索知识库和近期动态中的重要变化', reportTitle: '每日知识动态', reportPrompt: '总结本次搜索中的关键变化、影响和来源，并区分已确认事实与待核实内容。' },
         weekly: { title: '每周事实回顾', description: '每周汇总指定对象的事实及变化记录。', reportTitle: '每周事实变化', reportPrompt: '回顾所选对象在本周发生的事实变化，保留时间、证据和历史差异。' },
-        research: { title: '持续研究追踪', description: '定期进行网页研究、更新知识上下文并生成趋势报告。', reportTitle: '持续研究报告', reportPrompt: '综合网页研究结果和已有事实，给出趋势、证据、冲突与待验证问题。' },
-        custom: { title: '自定义流程', description: '从空白步骤开始组合查询、研究、条件、Skill 和人工审核。' }
+        custom: { title: '自定义流程', description: '从空白步骤开始组合查询、条件、Skill 和人工审核。' }
       }
     },
     reports: { title: '研究报告', description: '阅读工作流生成的报告、来源引用，可下载 Markdown 或 JSON。', empty: '还没有研究报告。', download: '下载 Markdown', downloadJson: '下载 JSON', citations: '引用与来源', noCitations: '此报告没有附加引用。' }
@@ -676,7 +675,7 @@ export default {
       wikiFlagIssueDesc: '标记页面中存在的事实错误或合并冲突问题',
       knowledgeReportAnomaly: '报告消息异常',
       knowledgeReportAnomalyDesc: '提交消息纠错或标签建议，等待知识库本人处理',
-      knowledgeImportURL: '调研网页入库',
+      knowledgeImportURL: '按网址收录',
       knowledgeImportURLDesc: '抓取原文并经过完整性、来源与质量审核后收录',
       knowledgeApplyAnomaly: '执行消息纠错',
       knowledgeApplyAnomalyDesc: '仅在知识库本人明确指示后执行指定纠错建议',
@@ -692,8 +691,8 @@ export default {
       wikiReadIssueDesc: '查看特定 Wiki 页面的巡检问题详情',
       wikiUpdateIssue: '更新 Wiki 问题',
       wikiUpdateIssueDesc: '更新 Wiki 页面问题的处理状态',
-      webSearch: '网络搜索',
       webFetch: '网页抓取',
+      webFetchDesc: '抓取指定网址的内容',
       groupBase: '基础',
       groupRag: '知识库检索（RAG）',
       groupWikiRead: 'Wiki 读取',
@@ -734,11 +733,6 @@ export default {
       selectTools: '选择 Agent 可以使用的工具',
       maxIterations: '限制 Agent 单次任务的推理步数。选「不限制」时会一直跑到模型自然结束或你手动停止。',
       kbScope: '选择智能体可访问的知识库范围',
-      webSearch: '启用后智能体可以搜索互联网获取信息',
-      webSearchProvider: '为此智能体指定搜索引擎，留空则使用默认搜索引擎',
-      webSearchMaxResults: '每次搜索返回的最大结果数量',
-      webFetchEnabled: 'Rerank 后自动抓取排名靠前的网页完整内容，提升回答质量',
-      webFetchTopN: 'Rerank 后最多抓取几个网页的完整内容',
       retrievalSection: "配置知识库检索召回与排序",
       queryExpansion: '自动扩展查询词以提高召回率',
       embeddingTopK: '向量检索返回的最大结果数量',
@@ -833,10 +827,6 @@ export default {
       calling: '正在调用 {name}...',
       searchKb: '检索知识库',
       searchKbFailed: '检索知识库失败',
-      searchMixed: '检索知识库和网络',
-      searchMixedFailed: '检索失败',
-      webSearch: '网络搜索',
-      webSearchFailed: '网络搜索失败',
       grepSearch: '搜索关键词',
       grepSearchFailed: '搜索关键词失败',
       getDocInfo: '获取文档信息',
@@ -861,10 +851,6 @@ export default {
     ragPipeline: {
       searching: '正在检索知识库...',
       searchingWithQuery: '正在检索知识库：「{query}」',
-      searchingWeb: '正在检索网络...',
-      searchingWebWithQuery: '正在检索网络：「{query}」',
-      searchingMixed: '正在检索知识库和网络...',
-      searchingMixedWithQuery: '正在检索知识库和网络：「{query}」',
       searchDone: '检索完成'
     },
     attachmentParsing: {
@@ -886,8 +872,6 @@ export default {
       candidatesBelowThreshold: '命中 {count} 条候选，相关性不足，未用于回答',
       foundResultsFromFiles: '找到 {count} 个结果，来自 {files} 个文件',
       foundResults: '找到 {count} 个结果',
-      foundMixedResults: '找到 {count} 个结果（{docCount} 篇文档，{webCount} 条网页）',
-      webResults: '找到 {count} 条网页',
       grepSummary: '找到 {chunks} 个匹配片段，来自 {docs} 个文档'
     },
     plan: {
@@ -909,7 +893,6 @@ export default {
     tools: {
       searchKnowledge: '知识库检索',
       grepChunks: '搜索关键词',
-      webSearch: '网络搜索',
       webFetch: '网页抓取',
       getDocumentInfo: '获取文档信息',
       listKnowledgeChunks: '查看知识分块',
@@ -1109,7 +1092,6 @@ export default {
     resetDefault: '恢复默认',
     default: '默认',
     withKnowledgeBase: '知识库',
-    withWebSearch: '网络搜索'
   },
   mcpServiceDialog: {
     addTitle: '添加 MCP 服务',
@@ -1395,6 +1377,7 @@ export default {
       deleteFailed: '删除 MCP 服务失败'
     },
     actions: {
+      testing: '测试中...',
       test: '测试连接'
     }
   },
@@ -2373,7 +2356,6 @@ export default {
     relevanceMedium: '中相关',
     relevanceLow: '低相关',
     relevanceWeak: '弱相关',
-    webSearchNoResults: '未找到搜索结果',
     otherSource: '其他来源',
     webGroupIntro: '以下 {count} 条内容来自',
     graphConfigTitle: '图谱配置',
@@ -2968,8 +2950,6 @@ export default {
     addModel: '添加模型',
     placeholder: '直接向模型提问',
     placeholderWithContext: '输入问题，将基于上方选中的知识库/文件回答',
-    placeholderWebOnly: '输入问题，将结合网络搜索回答',
-    placeholderKbAndWeb: '输入问题，将基于知识库和网络搜索回答',
     placeholderAgent: '向 {name} 提问',
     agentMode: '智能推理',
     normalMode: '快速问答',
@@ -2988,7 +2968,6 @@ export default {
     noModel: '暂无可用模型',
     stopGeneration: '停止生成',
     send: '发送',
-    webSearchDisabledByAgent: '当前智能体已禁用网络搜索',
     kbLockedByAgent: '当前智能体已锁定知识库配置',
     kbDisabledByAgent: '当前智能体已禁用知识库功能',
     modelLockedByAgent: '当前智能体已锁定模型配置',
@@ -3000,19 +2979,11 @@ export default {
       agentSwitchedOn: '已切换到智能推理',
       agentSwitchedOff: '已切换到快速问答',
       agentSelected: '已选择智能体「{name}」',
-      webSearchNotConfigured: '未配置网络搜索引擎，请先在设置中完成搜索引擎选择与接口配置。',
-      webSearchEnabled: '网络搜索已开启',
-      webSearchDisabled: '网络搜索已关闭',
       sessionMissing: '会话 ID 不存在',
       messageMissing: '无法获取消息 ID，请刷新页面后重试',
       stopSuccess: '已停止生成',
       stopFailed: '停止失败，请重试'
     },
-    webSearch: {
-      toggleOn: '开启网络搜索',
-      toggleOff: '关闭网络搜索',
-      notConfigured: '未配置网络搜索引擎'
-    }
   },
   manualEditor: {
     description: '使用 Markdown 编写知识内容，支持实时预览',
@@ -3492,47 +3463,8 @@ export default {
       saveFailed: '保存配置失败: {message}'
     }
   },
-  webSearchSettings: {
-    title: '网络搜索配置',
-    description: '配置网络搜索功能，在回答问题时可以从互联网获取实时信息补充知识库内容',
-    basicSection: '基本信息',
-    credentialsSection: '连接配置',
-    optionsSection: '选项',
-    providersTitle: '搜索引擎配置',
-    addProvider: '添加搜索引擎',
-    editProvider: '编辑搜索引擎',
-    deleteConfirm: '确定要删除此搜索引擎配置吗？',
-    providerNameLabel: '名称',
-    providerNamePlaceholder: '例如：生产环境 Bing 搜索',
-    providerTypeLabel: '引擎类型',
-    providerDescLabel: '备注',
-    providerDescPlaceholder: '可选，如：测试环境用',
-    engineIdLabel: '搜索引擎 ID',
-    setAsDefault: '设为默认',
-    testConnection: '测试连接',
-    testing: '测试中...',
-    viewDocs: '查看文档获取密钥',
-    noProvidersDesc: '添加一个网络搜索引擎，为您的智能体提供实时的互联网信息检索能力。',
-    setAsDefaultDesc: '当智能体没有指定特定的搜索引擎时，将默认使用此配置',
-    proxyUrlLabel: 'HTTP 代理',
-    proxyUrlPlaceholder: '例如 http://proxy.example.com:3128（可选，仅支持 http/https）',
-    proxyUrlHelp: '若环境访问搜索 API 需代理，在此填写；留空则使用系统环境变量 HTTP(S)_PROXY。',
-    apiKeyLabel: 'API 密钥',
-    apiKeyOptionalLabel: 'API 密钥（可选）',
-    baseUrlLabel: '实例地址',
-    baseUrlPlaceholder: 'https://searxng.example.com',
-    apiKeyPlaceholder: '请输入 API 密钥',
-    toasts: {
-      providerCreated: '搜索引擎配置已创建',
-      providerUpdated: '搜索引擎配置已更新',
-      providerDeleted: '搜索引擎配置已删除',
-      testSuccess: '连接测试成功',
-      testFailed: '连接测试失败'
-    }
-  },
   settings: {
     modelManagement: '模型管理',
-    webSearchConfig: '网络搜索',
     parserEngine: '解析引擎',
     sandbox: {
       allowPrivateEndpointsHint: "启用后允许连接私网地址上的 Docker 守护进程。",
@@ -3969,7 +3901,6 @@ export default {
       inlineMissing: '文件不可用',
     },
     updatePlan: '更新计划',
-    webSearchFound: '找到 <strong>{count}</strong> 个网络搜索结果',
     toolFallback: '工具',
     stepsCompleted: '已完成 <strong>{steps}</strong> 个步骤',
     reasoningRounds: '思考 <strong>{rounds}</strong> 轮',
@@ -4000,7 +3931,6 @@ export default {
       notReadyStatus: '待配置',
       configureAction: '去配置',
       capabilitiesSection: '能力',
-      webSearchCapability: '网络搜索',
       imageUploadCapability: '图片上传',
       capabilityEnabled: '开启',
       capabilityDisabled: '关闭',
@@ -4029,8 +3959,6 @@ export default {
       toolsConfigDesc: '配置 Agent 可以使用的工具',
       knowledgeConfig: '知识库',
       knowledgeConfigDesc: "配置智能体可访问的知识库范围",
-      webSearchConfig: '网络搜索',
-      webSearchConfigDesc: '配置智能体的网络搜索能力',
       agentId: '智能体 ID',
       agentIdDesc: 'API 集成时可使用此 ID 指定智能体',
       name: '名称',
@@ -4047,19 +3975,13 @@ export default {
       model: '模型',
       modelPlaceholder: '请选择模型',
       systemPrompt: '系统提示词',
-      systemPromptPlaceholder: '自定义系统提示词，定义智能体的行为和角色（使用 {\'{{\'}web_search_status{\'}}\'} 占位符动态控制网络搜索行为）',
+      systemPromptPlaceholder: '自定义系统提示词，定义智能体的行为和角色',
       contextTemplateRequired: '请输入上下文模板',
       temperature: '温度',
       thinking: '思考模式',
       citationEnabled: '输出来源引用',
       citationEnabledDesc: '在最终回答中展示知识库和网页来源；关闭后仍会正常检索和使用证据',
       mode: '运行模式',
-      webSearch: '网络搜索',
-      webSearchProvider: '搜索引擎',
-      webSearchProviderPlaceholder: '使用默认搜索引擎',
-      webSearchMaxResults: '最大搜索结果数',
-      webFetchEnabled: '自动抓取页面内容',
-      webFetchTopN: '抓取页面数',
       knowledgeBases: '关联知识库',
       allKnowledgeBases: '全部知识库',
       selectedKnowledgeBases: '指定知识库',
@@ -4167,7 +4089,6 @@ export default {
     tabs: {
     },
     features: {
-      webSearch: '支持网络搜索',
       knowledgeBase: '关联知识库',
       mcp: '支持MCP服务',
       multiTurn: '多轮对话'
@@ -4465,7 +4386,6 @@ export default {
     typeFile: '文件',
     channelLabel: '来源渠道',
     channelWeb: '网页端',
-    channelWebResearch: '主动调研',
     channelApi: 'API',
     channelBrowserExtension: '浏览器插件',
     channelUpload: '上传',
@@ -4770,13 +4690,9 @@ export default {
           title: '附件上传（可选）',
           desc: '开启后，对话中可上传图片、文档、音频等附件；图片理解需先在系统设置中配置 VLLM 模型。'
         },
-        navWebsearch: {
-          title: '联网搜索（可选）',
-          desc: '配置是否允许智能体调用外部搜索引擎补充实时信息。'
-        },
         knowledge: {
           title: '知识库范围',
-          desc: '「全部」适合通用助手；「指定」可限定专业领域；「不关联」则仅依赖模型自身能力或联网搜索。'
+          desc: '「全部」适合通用助手；「指定」可限定专业领域；「不关联」则仅依赖模型自身能力。'
         },
         navKnowledge: {
           title: '关联知识库',

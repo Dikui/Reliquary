@@ -30,7 +30,6 @@ var toolDisplayNames = map[string]string{
 	agenttools.ToolDatabaseQuery:       "查询数据",
 	agenttools.ToolDataAnalysis:        "数据分析",
 	agenttools.ToolDataSchema:          "查看数据结构",
-	agenttools.ToolWebSearch:           "搜索网页",
 	agenttools.ToolWebFetch:            "获取网页",
 	agenttools.ToolExecuteSkillScript:  "执行技能脚本",
 	agenttools.ToolReadSkill:           "读取技能",

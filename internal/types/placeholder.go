@@ -86,12 +86,6 @@ var (
 		Description: "自动格式化的知识库列表，包含名称、描述、文档数量等信息",
 	}
 
-	PlaceholderWebSearchStatus = PromptPlaceholder{
-		Name:        "web_search_status",
-		Label:       "网络搜索状态",
-		Description: "网络搜索工具是否启用的状态（Enabled 或 Disabled）",
-	}
-
 	PlaceholderLanguage = PromptPlaceholder{
 		Name:        "language",
 		Label:       "用户语言",
@@ -115,7 +109,6 @@ func PlaceholdersByField(fieldType PromptFieldType) []PromptPlaceholder {
 		// Agent mode system prompt
 		return []PromptPlaceholder{
 			PlaceholderKnowledgeBases,
-			PlaceholderWebSearchStatus,
 			PlaceholderCurrentTime,
 			PlaceholderLanguage,
 		}
@@ -165,7 +158,6 @@ func AllPlaceholders() []PromptPlaceholder {
 		PlaceholderYesterday,
 		PlaceholderAnswer,
 		PlaceholderKnowledgeBases,
-		PlaceholderWebSearchStatus,
 		PlaceholderLanguage,
 	}
 }

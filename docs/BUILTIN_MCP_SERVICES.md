@@ -63,8 +63,8 @@ INSERT INTO mcp_services (
 ) VALUES (
     'builtin-mcp-001',                                -- 使用固定ID，建议使用 builtin-mcp- 前缀
     10000,                                             -- 空间ID（使用第一个空间）
-    'Web Search',                                      -- 服务名称
-    '内置 Web 搜索 MCP 服务',                            -- 描述
+    'Weather',                                      -- 服务名称
+    '内置天气查询 MCP 服务',                            -- 描述
     true,                                              -- 启用状态
     'sse',                                             -- 传输方式
     'https://mcp.example.com/sse',                     -- 服务地址

@@ -12,7 +12,7 @@ import (
 // connector Credentials map stripped from the Config jsonb. Credential
 // presence is exposed via the dedicated /credentials subresource.
 //
-// Unlike MCP / Model / WebSearch (which have a flat set of named credential
+// Unlike MCP / Model (which have a flat set of named credential
 // fields), DataSource credentials are a per-connector atomic map — an OAuth
 // token pair, a Confluence email+token bundle, etc. Splitting them at the
 // field level would leave half-configured states that can't actually

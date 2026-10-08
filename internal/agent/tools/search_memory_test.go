@@ -98,19 +98,12 @@ func TestSearchMemoryRejectsABlankQuery(t *testing.T) {
 // the agent's own preference. Letting the tool list say it a fourth time would
 // produce configurations where memory is on but the agent cannot reach past
 // what each turn injects — so the tool appears in neither list and is injected
-// by registerTools instead, the same way web_search is.
+// by registerTools instead.
 func TestSearchMemoryIsNotChosenFromTheToolList(t *testing.T) {
 	require.NotContains(t, DefaultAllowedTools(), ToolSearchMemory)
 
 	for _, definition := range AvailableToolDefinitions() {
 		require.NotEqual(t, ToolSearchMemory, definition.Name,
 			"a checkbox for this would compete with the memory switches")
-	}
-
-	// web_search is the tool this follows; keeping the two consistent is the
-	// point, so a change to one should be a deliberate change to both.
-	require.NotContains(t, DefaultAllowedTools(), ToolWebSearch)
-	for _, definition := range AvailableToolDefinitions() {
-		require.NotEqual(t, ToolWebSearch, definition.Name)
 	}
 }

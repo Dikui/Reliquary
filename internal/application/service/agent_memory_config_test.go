@@ -1,7 +1,6 @@
 package service
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -25,8 +24,7 @@ func TestAgentConfigCarriesTheMemoryPreference(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			svc := &sessionService{
-				cfg:                   &config.Config{},
-				webSearchProviderRepo: &agentWebSearchRepo{},
+				cfg: &config.Config{},
 			}
 			req := &types.QARequest{
 				Session: &types.Session{ID: "session-1", TenantID: 1},
@@ -48,8 +46,7 @@ func TestAgentConfigCarriesTheMemoryPreference(t *testing.T) {
 
 func TestAgentConfigCarriesMaxCompletionTokens(t *testing.T) {
 	svc := &sessionService{
-		cfg:                   &config.Config{},
-		webSearchProviderRepo: &agentWebSearchRepo{},
+		cfg: &config.Config{},
 	}
 	req := &types.QARequest{
 		Session: &types.Session{ID: "session-1", TenantID: 1},
@@ -68,32 +65,3 @@ func TestAgentConfigCarriesMaxCompletionTokens(t *testing.T) {
 }
 
 func boolPtr(v bool) *bool { return &v }
-
-type agentWebSearchRepo struct {
-	byIDTenant      uint64
-	byID            string
-	defaultTenant   uint64
-	explicit        *types.WebSearchProviderEntity
-	defaultProvider *types.WebSearchProviderEntity
-}
-
-func (r *agentWebSearchRepo) Create(context.Context, *types.WebSearchProviderEntity) error {
-	return nil
-}
-func (r *agentWebSearchRepo) GetByID(_ context.Context, tenantID uint64, id string) (*types.WebSearchProviderEntity, error) {
-	r.byIDTenant = tenantID
-	r.byID = id
-	return r.explicit, nil
-}
-func (r *agentWebSearchRepo) GetDefault(_ context.Context, tenantID uint64) (*types.WebSearchProviderEntity, error) {
-	r.defaultTenant = tenantID
-	return r.defaultProvider, nil
-}
-func (r *agentWebSearchRepo) List(context.Context, uint64) ([]*types.WebSearchProviderEntity, error) {
-	return nil, nil
-}
-func (r *agentWebSearchRepo) Update(context.Context, *types.WebSearchProviderEntity) error {
-	return nil
-}
-func (r *agentWebSearchRepo) Delete(context.Context, uint64, string) error       { return nil }
-func (r *agentWebSearchRepo) ClearDefault(context.Context, uint64, string) error { return nil }

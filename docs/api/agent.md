@@ -67,7 +67,6 @@ curl --location 'http://localhost:8080/api/v1/agents' \
         "temperature": 0.7,
         "max_iterations": 10,
         "kb_selection_mode": "all",
-        "web_search_enabled": true,
         "multi_turn_enabled": true,
         "history_turns": 5
     }
@@ -138,7 +137,6 @@ curl --location 'http://localhost:8080/api/v1/agents' \
                 "temperature": 0.3,
                 "max_completion_tokens": 2048,
                 "kb_selection_mode": "all",
-                "web_search_enabled": false,
                 "multi_turn_enabled": true,
                 "history_turns": 5
             },
@@ -203,7 +201,6 @@ curl --location 'http://localhost:8080/api/v1/agents/builtin-quick-answer' \
             "temperature": 0.7,
             "max_completion_tokens": 2048,
             "kb_selection_mode": "all",
-            "web_search_enabled": true,
             "multi_turn_enabled": true,
             "history_turns": 5
         },
@@ -454,16 +451,6 @@ curl --location 'http://localhost:8080/api/v1/agents/placeholders' \
 | `image_upload_enabled` | bool | false | 是否允许上传图片 |
 | `vlm_model_id` | string | - | 图片分析所用的 VLM 模型 ID |
 
-### 网络搜索设置
-
-| 参数 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `web_search_enabled` | bool | true | 是否启用网络搜索 |
-| `web_search_max_results` | int | 5 | 网络搜索最大结果数 |
-| `web_search_provider_id` | string | - | 网络搜索提供者 ID，为空使用空间默认提供者 |
-| `web_fetch_enabled` | bool | false | 是否自动获取重排后的搜索结果页面全文 |
-| `web_fetch_top_n` | int | 3 | 重排后获取全文的最大页面数 |
-
 ### 多轮对话设置
 
 | 参数 | 类型 | 默认值 | 说明 |
@@ -539,4 +526,3 @@ curl --location 'http://localhost:8080/api/v1/agent-chat/session-123' \
 ## 相关文档
 
 - 智能体绑定 IM 渠道（`/agents/:id/im-channels`）：见组织/IM 渠道相关文档
-- 网络搜索提供者配置（被 `web_search_provider_id` 引用）：见 [Web Search API](./web-search.md)

@@ -34,11 +34,6 @@ import {
   type ScopeCapabilities,
 } from '@/utils/tool-capabilities';
 import {
-  isAgentWebSearchEnabled,
-  isAgentWebSearchReady,
-  isTenantWebSearchReady,
-} from '@/utils/agentWebSearch';
-import {
   getAgentNotReadyReasonKeys,
   resolveAgentNotReadySection,
   resolveAgentNotReadyHighlight,
@@ -60,7 +55,6 @@ const {
   agents,
   allModels,
   chatModels: availableModels,
-  webSearchProviders,
 } = storeToRefs(chatResources);
 const { t, locale } = useI18n();
 
@@ -199,7 +193,7 @@ const agentKBSelectionMode = computed(() => {
   return currentAgentConfig.value?.kb_selection_mode || 'all';
 });
 
-// 当智能体改变时，模型、可@知识库列表均跟随新智能体配置；网络搜索由用户主动开启
+// 当智能体改变时，模型、可@知识库列表均跟随新智能体配置
 watch([selectedAgentId, agentKnowledgeBases, agentKBSelectionMode], ([newAgentId, newAgentKbs, newKbMode], [oldAgentId]) => {
   if (settingsStore._isApplyingSessionState) return;
   if (newAgentId !== oldAgentId && oldAgentId !== undefined) {
@@ -219,17 +213,6 @@ watch([selectedAgentId, agentKnowledgeBases, agentKBSelectionMode], ([newAgentId
     }
   }
 }, { immediate: true });
-
-// 智能体是否启用了网络搜索（仅显式开启才算支持）
-const isWebSearchEnabledByAgent = computed(() => {
-  if (!hasAgentConfig.value) return null;
-  return isAgentWebSearchEnabled(currentAgentConfig.value);
-});
-
-// 网络搜索是否被智能体禁用
-const isWebSearchDisabledByAgent = computed(() => {
-  return hasAgentConfig.value && isWebSearchEnabledByAgent.value !== true;
-});
 
 // 知识库选择是否被智能体锁定
 // 1. 如果智能体配置了 kb_selection_mode = 'none' → 完全禁用知识库
@@ -388,17 +371,6 @@ const isImageUploadEnabledByAgent = computed(() => {
   return currentAgentConfig.value?.image_upload_enabled === true;
 });
 
-// Input 工具栏：仅当智能体已启用且搜索引擎可用时才显示
-const showWebSearchButton = computed(() => {
-
-  if (!hasAgentConfig.value) {
-    return isTenantWebSearchReady(webSearchProviders.value);
-  }
-  return isAgentWebSearchReady(
-    currentAgentConfig.value,
-    webSearchProviders.value,
-  );
-});
 const showImageUploadButton = computed(() => isImageUploadEnabledByAgent.value);
 
 // 模型选择是否被智能体锁定 - 已移除锁定逻辑，允许用户自由切换模型
@@ -449,7 +421,6 @@ const props = defineProps({
 });
 
 const isAgentEnabled = computed(() => settingsStore.isAgentEnabled);
-const isWebSearchEnabled = computed(() => settingsStore.isWebSearchEnabled);
 const selectedKbIds = computed(() => settingsStore.settings.selectedKnowledgeBases || []);
 const selectedFileIds = computed(() => settingsStore.settings.selectedFiles || []);
 const selectedTags = computed(() => settingsStore.settings.selectedTags || []);
@@ -587,22 +558,9 @@ const inputPlaceholder = computed(() => {
     return t('input.placeholderAgent', { name: selectedAgent.value.name });
   }
 
-  const hasKnowledge = allSelectedItems.value.length > 0;
-  const hasWebSearch = isWebSearchEnabled.value && isWebSearchConfigured.value;
-
-  if (hasKnowledge && hasWebSearch) {
-    // 有知识库 + 有网络搜索
-    return t('input.placeholderKbAndWeb');
-  } else if (hasKnowledge) {
-    // 有知识库 + 无网络搜索
-    return t('input.placeholderWithContext');
-  } else if (hasWebSearch) {
-    // 无知识库 + 有网络搜索
-    return t('input.placeholderWebOnly');
-  } else {
-    // 无知识库 + 无网络搜索（纯模型对话）
-    return t('input.placeholder');
-  }
+  return allSelectedItems.value.length > 0
+    ? t('input.placeholderWithContext')
+    : t('input.placeholder');
 });
 
 // 加载知识库列表（自己的 + 共享的，用于 @ 提及等）
@@ -682,35 +640,6 @@ const loadMCPServices = async () => {
 watch(selectedFileIds, () => {
   loadFiles();
 }, { immediate: true });
-
-const isWebSearchConfigured = computed(() => {
-  if (hasAgentConfig.value) {
-    return isAgentWebSearchReady(
-      currentAgentConfig.value,
-      webSearchProviders.value,
-    );
-  }
-  return isTenantWebSearchReady(webSearchProviders.value);
-});
-const isWebSearchReadinessKnown = computed(
-  () => true
-);
-
-const loadWebSearchConfig = async (force = false) => {
-  try {
-    await chatResources.ensureWebSearchProviders(force);
-
-    if (isWebSearchReadinessKnown.value && !isWebSearchConfigured.value && settingsStore.isWebSearchEnabled) {
-      settingsStore.toggleWebSearch(false);
-    }
-  } catch (error) {
-    console.error('Failed to load web search config:', error);
-    chatResources.invalidate('webSearchProviders');
-    if (settingsStore.isWebSearchEnabled) {
-      settingsStore.toggleWebSearch(false);
-    }
-  }
-};
 
 // 加载智能体列表（我的 + 共享，供选中态与就绪检查用）
 const loadAgents = async (force = false) => {
@@ -1531,7 +1460,6 @@ onMounted(() => {
   initChatModelSelection();
   void Promise.all([
     loadKnowledgeBases(),
-    loadWebSearchConfig(),
     loadChatModels(),
     loadAgents(),
     loadMCPServices(),
@@ -1612,14 +1540,12 @@ watch(() => route.params.kbId, (newKbId) => {
 
 watch(() => uiStore.showSettingsModal, (visible, prevVisible) => {
   if (prevVisible && !visible) {
-    loadWebSearchConfig(true);
     loadChatModels(true);
   }
 });
 
 watch(() => route.path, (path, prev) => {
   if (prev === '/platform/settings' && path !== '/platform/settings') {
-    loadWebSearchConfig(true);
     loadChatModels(true);
   }
 });
@@ -1912,7 +1838,6 @@ const handleSelectAgent = async (agent: CustomAgent) => {
   settingsStore.selectAgent(agent.id);
   settingsStore.toggleAgent(!!isAgentType);
 
-  // 网络搜索已由 selectAgent 重置为关闭，智能体配置只控制该开关是否可用。
   const agentModel = agent.config?.model_id;
   if (agentModel && agentModel.trim() !== '') {
     selectedModelId.value = agentModel;
@@ -2033,21 +1958,6 @@ const onDragOver = (e: DragEvent) => {
   e.preventDefault();
 };
 
-const handleGoToWebSearchSettings = () => {
-  uiStore.openSettings('websearch');
-  if (route.path !== '/platform/settings') {
-    router.push('/platform/settings');
-  }
-};
-
-const handleGoToWebSearchConfig = () => {
-  if (hasAgentConfig.value && selectedAgent.value) {
-    handleGoToAgentSettings('websearch');
-    return;
-  }
-  handleGoToWebSearchSettings();
-};
-
 const handleGoToAgentSettings = (section?: string) => {
   const agent = selectedAgent.value;
   if (!agent) {
@@ -2148,49 +2058,6 @@ const showAgentNotReadyMessage = (
     duration: 5000
   });
 }
-
-const toggleWebSearch = () => {
-  // 互斥：虽然不是弹出层，但操作时关闭其他弹出层体验更好
-  showMention.value = false;
-  showModelSelector.value = false;
-  showAgentModeSelector.value = false;
-
-  // 如果智能体禁用了网络搜索，不允许开启
-  if (isWebSearchDisabledByAgent.value) {
-    MessagePlugin.warning(t('input.webSearchDisabledByAgent'));
-    return;
-  }
-
-  if (!isWebSearchConfigured.value) {
-    const messageContent = h('div', { style: 'display: flex; flex-direction: column; gap: 6px; max-width: 280px;' }, [
-      h('span', { style: 'color: var(--td-text-color-primary); line-height: 1.5;' }, t('input.messages.webSearchNotConfigured')),
-      h('a', {
-        href: '#',
-        onClick: (e: Event) => {
-          e.preventDefault();
-          handleGoToWebSearchConfig();
-        },
-        style: 'color: var(--td-brand-color); text-decoration: none; font-weight: 500; cursor: pointer; align-self: flex-start;',
-        onMouseenter: (e: Event) => {
-          (e.target as HTMLElement).style.textDecoration = 'underline';
-        },
-        onMouseleave: (e: Event) => {
-          (e.target as HTMLElement).style.textDecoration = 'none';
-        }
-      }, t('input.goToAgentSettings'))
-    ]);
-    MessagePlugin.warning({
-      content: () => messageContent,
-      duration: 5000
-    });
-    return;
-  }
-
-  const currentValue = settingsStore.isWebSearchEnabled;
-  const newValue = !currentValue;
-  settingsStore.toggleWebSearch(newValue);
-  MessagePlugin.success(newValue ? t('input.messages.webSearchEnabled') : t('input.messages.webSearchDisabled'));
-};
 
 const toggleKbSelector = () => {
   showKbSelector.value = !showKbSelector.value;
@@ -2308,34 +2175,6 @@ defineExpose({
           <AgentSelector :visible="showAgentModeSelector" :anchorEl="agentModeButtonRef"
             :currentAgentId="selectedAgentId" :agents="agents" :all-models="allModels"
             @close="closeAgentModeSelector" @select="handleSelectAgent" @not-ready="handleAgentNotReady" />
-
-          <!-- WebSearch 开关按钮（智能体未启用时不显示） -->
-          <t-tooltip v-if="showWebSearchButton" placement="top" theme="light"
-            :popupProps="{ overlayClassName: 'input-field-tooltip' }">
-            <template #content>
-              <span v-if="isWebSearchConfigured">{{ isWebSearchEnabled ? $t('input.webSearch.toggleOff') :
-                $t('input.webSearch.toggleOn') }}</span>
-              <div v-else class="tooltip-with-link">
-                <span>{{ $t('input.webSearch.notConfigured') }}</span>
-                <a href="#" @click.prevent="handleGoToWebSearchConfig">{{ $t('input.goToAgentSettings') }}</a>
-              </div>
-            </template>
-            <div class="control-btn websearch-btn" :class="{
-              'active': isWebSearchEnabled && isWebSearchConfigured,
-              'disabled': !isWebSearchConfigured
-            }" @click.stop="toggleWebSearch">
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"
-                class="control-icon websearch-icon" :class="{ 'active': isWebSearchEnabled && isWebSearchConfigured }">
-                <circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.2" fill="none" />
-                <path d="M 9 2 A 3.5 7 0 0 0 9 16" stroke="currentColor" stroke-width="1.2" fill="none" />
-                <path d="M 9 2 A 3.5 7 0 0 1 9 16" stroke="currentColor" stroke-width="1.2" fill="none" />
-                <line x1="2.94" y1="5.5" x2="15.06" y2="5.5" stroke="currentColor" stroke-width="1.2"
-                  stroke-linecap="round" />
-                <line x1="2.94" y1="12.5" x2="15.06" y2="12.5" stroke="currentColor" stroke-width="1.2"
-                  stroke-linecap="round" />
-              </svg>
-            </div>
-          </t-tooltip>
 
           <!-- 图片上传按钮（智能体未启用时不显示） -->
           <t-tooltip v-if="showImageUploadButton" placement="top" theme="light"
@@ -2997,56 +2836,6 @@ const getImgSrc = (url: string) => {
   }
 }
 
-.websearch-btn {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  min-width: auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-
-  &.active {
-    background: rgba(16, 185, 129, 0.1);
-
-    .websearch-icon {
-      color: var(--td-brand-color);
-    }
-
-    &:hover {
-      background: rgba(16, 185, 129, 0.15);
-    }
-  }
-
-  &:not(.active) {
-    .websearch-icon {
-      color: var(--td-text-color-secondary, #666);
-    }
-
-    &:hover {
-      background: var(--td-bg-color-secondarycontainer-hover, #f0f0f0);
-
-      .websearch-icon {
-        color: var(--td-text-color-primary, #333);
-      }
-    }
-  }
-
-  &.agent-controlled {
-    cursor: not-allowed;
-    opacity: 0.85;
-
-    &:hover {
-      background: var(--td-bg-color-secondarycontainer, #f5f5f5);
-    }
-
-    &.active:hover {
-      background: rgba(16, 185, 129, 0.1);
-    }
-  }
-}
-
 :global(.input-field-tooltip) {
   .t-popup__content {
     box-shadow: var(--td-shadow-2);
@@ -3071,11 +2860,6 @@ const getImgSrc = (url: string) => {
 
 :global(.tooltip-with-link a:hover) {
   text-decoration: underline;
-}
-
-.websearch-icon {
-  width: 18px;
-  height: 18px;
 }
 
 .dropdown-arrow {

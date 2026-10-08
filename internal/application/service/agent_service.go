@@ -190,23 +190,21 @@ func knowledgeBaseScopesForPrompt(config *types.AgentConfig) []string {
 
 // agentService implements agent-related business logic
 type agentService struct {
-	cfg                   *config.Config
-	modelService          interfaces.ModelService
-	mcpServiceService     interfaces.MCPServiceService
-	mcpManager            *mcp.MCPManager
-	eventBus              *event.EventBus
-	db                    *gorm.DB
-	webSearchService      interfaces.WebSearchService
-	knowledgeBaseService  interfaces.KnowledgeBaseService
-	knowledgeService      interfaces.KnowledgeService
-	knowledgeTagService   interfaces.KnowledgeTagService
-	fileService           interfaces.FileService
-	chunkService          interfaces.ChunkService
-	duckdb                *sql.DB
-	webSearchStateService interfaces.WebSearchStateService
-	wikiPageService       interfaces.WikiPageService
-	tenantService         interfaces.TenantService
-	messageService        interfaces.MessageService
+	cfg                  *config.Config
+	modelService         interfaces.ModelService
+	mcpServiceService    interfaces.MCPServiceService
+	mcpManager           *mcp.MCPManager
+	eventBus             *event.EventBus
+	db                   *gorm.DB
+	knowledgeBaseService interfaces.KnowledgeBaseService
+	knowledgeService     interfaces.KnowledgeService
+	knowledgeTagService  interfaces.KnowledgeTagService
+	fileService          interfaces.FileService
+	chunkService         interfaces.ChunkService
+	duckdb               *sql.DB
+	wikiPageService      interfaces.WikiPageService
+	tenantService        interfaces.TenantService
+	messageService       interfaces.MessageService
 
 	memoryService    interfaces.MemoryService
 	toolApprovalGate approval.MCPApproval
@@ -229,9 +227,7 @@ func NewAgentService(
 	mcpManager *mcp.MCPManager,
 	eventBus *event.EventBus,
 	db *gorm.DB,
-	webSearchService interfaces.WebSearchService,
 	duckdb *sql.DB,
-	webSearchStateService interfaces.WebSearchStateService,
 	wikiPageService interfaces.WikiPageService,
 	tenantService interfaces.TenantService,
 	messageService interfaces.MessageService,
@@ -244,23 +240,21 @@ func NewAgentService(
 	sandboxPolicy WorkspaceSandboxPolicy,
 ) interfaces.AgentService {
 	return &agentService{
-		cfg:                   cfg,
-		modelService:          modelService,
-		knowledgeBaseService:  knowledgeBaseService,
-		knowledgeService:      knowledgeService,
-		knowledgeTagService:   knowledgeTagService,
-		fileService:           fileService,
-		chunkService:          chunkService,
-		mcpServiceService:     mcpServiceService,
-		mcpManager:            mcpManager,
-		eventBus:              eventBus,
-		db:                    db,
-		webSearchService:      webSearchService,
-		duckdb:                duckdb,
-		webSearchStateService: webSearchStateService,
-		wikiPageService:       wikiPageService,
-		tenantService:         tenantService,
-		messageService:        messageService,
+		cfg:                  cfg,
+		modelService:         modelService,
+		knowledgeBaseService: knowledgeBaseService,
+		knowledgeService:     knowledgeService,
+		knowledgeTagService:  knowledgeTagService,
+		fileService:          fileService,
+		chunkService:         chunkService,
+		mcpServiceService:    mcpServiceService,
+		mcpManager:           mcpManager,
+		eventBus:             eventBus,
+		db:                   db,
+		duckdb:               duckdb,
+		wikiPageService:      wikiPageService,
+		tenantService:        tenantService,
+		messageService:       messageService,
 
 		memoryService:    memoryService,
 		toolApprovalGate: toolApprovalGate,
@@ -317,7 +311,7 @@ func (s *agentService) CreateAgentEngine(
 	// 4. Resolve system prompt template
 	systemPromptTemplate := ""
 	if config.UseCustomSystemPrompt || config.SystemPrompt != "" {
-		systemPromptTemplate = config.ResolveSystemPrompt(config.WebSearchEnabled)
+		systemPromptTemplate = config.ResolveSystemPrompt()
 	}
 
 	// 5. Create engine
@@ -993,10 +987,7 @@ func (s *agentService) registerTools(
 			tools.ToolWikiUpdateIssue:   true,
 		}
 
-		// If no knowledge and no web search, also disable todo_write (not useful for simple chat)
-		if !config.WebSearchEnabled {
-			kbTools[tools.ToolTodoWrite] = true
-		}
+		kbTools[tools.ToolTodoWrite] = true
 
 		for _, toolName := range allowedTools {
 			if !kbTools[toolName] {
@@ -1005,12 +996,6 @@ func (s *agentService) registerTools(
 		}
 		allowedTools = filteredTools
 		logger.Infof(ctx, "Pure Agent Mode: Knowledge base tools filtered out, remaining: %v", allowedTools)
-	}
-
-	// If web search is enabled, add web_search to allowedTools
-	if config.WebSearchEnabled {
-		allowedTools = append(allowedTools, tools.ToolWebSearch)
-		allowedTools = append(allowedTools, tools.ToolWebFetch)
 	}
 
 	// Long-term memory search follows the memory switches, not the tool list.
@@ -1094,7 +1079,6 @@ func (s *agentService) registerTools(
 	// Deduplicate while preserving original order.
 	allowedTools = dedupStrings(allowedTools)
 
-	// logger.Infof(ctx, "Registering tools: %v, webSearchEnabled: %v", allowedTools, config.WebSearchEnabled)
 	// Register each allowed tool
 	for _, toolName := range allowedTools {
 		var toolToRegister types.Tool
@@ -1139,22 +1123,6 @@ func (s *agentService) registerTools(
 			toolToRegister = tools.NewSearchMemoryTool(s.memoryService)
 		case tools.ToolDatabaseQuery:
 			toolToRegister = tools.NewDatabaseQueryTool(s.db, config.SearchTargets)
-		case tools.ToolWebSearch:
-			researchPolicy, err := activeResearchPolicyForTargets(ctx, s.db, config.SearchTargets)
-			if err != nil {
-				return err
-			}
-			toolToRegister = tools.NewWebSearchTool(
-				s.webSearchService,
-				s.knowledgeBaseService,
-				s.knowledgeService,
-				s.webSearchStateService,
-				sessionID,
-				config.WebSearchMaxResults,
-				config.WebSearchProviderID,
-			).WithResearchPolicy(chatModel, researchPolicy)
-			logger.Infof(ctx, "Registered web_search tool for session: %s, maxResults: %d, providerID: %s", sessionID, config.WebSearchMaxResults, config.WebSearchProviderID)
-
 		case tools.ToolWebFetch:
 			toolToRegister = tools.NewWebFetchTool(chatModel)
 			logger.Infof(ctx, "Registered web_fetch tool for session: %s", sessionID)
@@ -1211,7 +1179,7 @@ func (s *agentService) registerTools(
 					return err
 				}
 				if kb == nil || kb.TenantID != tenantID || !types.IsAuthenticatedFromContext(ctx) {
-					return fmt.Errorf("an authenticated user is required to import research")
+					return fmt.Errorf("an authenticated user is required to import a URL")
 				}
 				if blockedIntakeURL(input.URL) {
 					return fmt.Errorf("X/Twitter sources require Grok ingestion")
@@ -1231,7 +1199,7 @@ func (s *agentService) registerTools(
 						Author: article.Metadata["author"], Publisher: article.Metadata["publisher"],
 						OriginalURL: input.URL, PublishedAt: article.Metadata["published_at"],
 					},
-				}, "web_research")
+				}, "url_import")
 				return err
 			})
 		case tools.ToolKnowledgeApplyAnomaly:

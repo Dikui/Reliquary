@@ -35,7 +35,7 @@ Go 主模块为 `reliquary`；
 
 [**Reliquary**](https://weknora.weixin.qq.com) is an open-source, LLM-powered knowledge framework built for enterprise-grade document understanding, semantic retrieval, and autonomous reasoning.
 
-It is organized around three core capabilities: **RAG-based Quick Q&A** for everyday lookups, a **ReAct Agent** that autonomously orchestrates retrieval, MCP tools, a **tenant skill catalog**, session-persistent **Docker sandboxes** and web search to handle complex multi-step tasks, and a brand-new **Wiki Mode** in which agents distill raw documents into a self-maintaining, interlinked markdown knowledge base with an interactive knowledge graph, complete with manual editing, revision history and one-click rollback. **Cross-session long-term memory** remembers who you are and what you keep asking about. Knowledge curation is equally hands-on: a **tree-structured folder view** preserves the directory layout of uploads, and **chunk editing with revision history** lets retrieval chunks be edited, diffed and reverted like documents. Combined with RSS feeds and site adapters, **website embed widgets** for publishing agents to external sites, **full-access API keys** for programmatic integrations, 20+ LLM provider integrations (including LiteLLM), **runtime task-queue dashboard with worker-pool governance**, **personal single-user access**, and a fully self-hostable modular architecture, Reliquary turns scattered documents into a queryable, reasoning-capable, continuously evolving knowledge asset.
+It is organized around three core capabilities: **RAG-based Quick Q&A** for everyday lookups, a **ReAct Agent** that autonomously orchestrates retrieval, MCP tools, a **tenant skill catalog**, session-persistent **Docker sandboxes** to handle complex multi-step tasks, and a brand-new **Wiki Mode** in which agents distill raw documents into a self-maintaining, interlinked markdown knowledge base with an interactive knowledge graph, complete with manual editing, revision history and one-click rollback. **Cross-session long-term memory** remembers who you are and what you keep asking about. Knowledge curation is equally hands-on: a **tree-structured folder view** preserves the directory layout of uploads, and **chunk editing with revision history** lets retrieval chunks be edited, diffed and reverted like documents. Combined with RSS feeds and site adapters, **website embed widgets** for publishing agents to external sites, **full-access API keys** for programmatic integrations, 20+ LLM provider integrations (including LiteLLM), **runtime task-queue dashboard with worker-pool governance**, **personal single-user access**, and a fully self-hostable modular architecture, Reliquary turns scattered documents into a queryable, reasoning-capable, continuously evolving knowledge asset.
 
 The framework supports auto-syncing RSS feeds and site adapters, handles 10+ document formats including PDF, Word, images, Excel and EPUB. It is compatible with major LLM providers including OpenAI, DeepSeek, Qwen (Alibaba Cloud), Zhipu, Hunyuan, Gemini, MiniMax, NVIDIA, LiteLLM, and Ollama. Office files can be parsed in-process with **anydoc**. Its fully modular design supports configurable LLMs, PostgreSQL retrieval, and local file storage, with support for local and private cloud deployment ensuring complete data sovereignty. Model usage is recorded in the `model_usage` table.
 
@@ -78,16 +78,16 @@ Fully modular pipeline from document parsing, vectorization, and retrieval to LL
 
 | Capability | Details |
 |------------|---------|
-| Intelligent Reasoning | ReACT progressive multi-step reasoning, autonomously orchestrating knowledge retrieval, MCP tools, skill sandboxes, and web search |
+| Intelligent Reasoning | ReACT progressive multi-step reasoning, autonomously orchestrating knowledge retrieval, MCP tools and skill sandboxes |
 | Quick Q&A | RAG-based Q&A over knowledge bases for fast and accurate answers |
 | Wiki Mode | Agent-driven auto-generation of structured, interlinked markdown Wiki pages from raw documents; in-browser manual editing, page revision history, line-level diff and one-click rollback |
 | Skill Catalog & Sandbox | Workspace skill catalog (ClawHub / SkillHub / git / zip) installed onto session-persistent Docker sandboxes; `shell_exec`, file tools, artifacts, per-config network policy; Local host-process backend removed |
 | Long-term Memory | Cross-session memory (profile / preference / fact / task / interest) with auto-extract, user confirm, and on-demand `search_memory` |
-| Tool Calling | Built-in tools, MCP tools (incl. OAuth2 remote services, mid-conversation OAuth), web search; `@Skill / @MCP` mentions to scope the agent runtime per turn |
+| Tool Calling | Built-in tools, MCP tools (incl. OAuth2 remote services, mid-conversation OAuth); `@Skill / @MCP` mentions to scope the agent runtime per turn |
 | Conversation Strategy | Online Prompt editing, retrieval threshold tuning, multi-turn context awareness, per-agent citation output toggle |
 | Suggested Questions | Auto-generated question suggestions and after-answer follow-ups based on knowledge base content |
 | Temporary Attachments | Session-scoped image / document uploads with async parsing for one-off Q&A, with a combined image + attachment limit |
-| Citations & RAG Progress | Inline citation popovers and a references drawer (web / KB source distinction), shared markdown rendering, and stage-by-stage RAG pipeline progress in chat |
+| Citations & RAG Progress | Inline citation popovers and a references drawer, shared markdown rendering, and stage-by-stage RAG pipeline progress in chat |
 | Session Management | Browse sidebar sessions with inline session-title rename |
 
 **Knowledge Management**
@@ -115,7 +115,6 @@ Fully modular pipeline from document parsing, vectorization, and retrieval to LL
 | Vector DB | PostgreSQL (ParadeDB: pgvector + pg_search) |
 | Object Storage | Local filesystem |
 | Website Embed | Publish agents via embed widget with domain allowlists, rate limits, and secure-mode token exchange |
-| Web Search | DuckDuckGo / Bing / Google / Tavily / Baidu / Ollama / SearXNG / Keenable / Zhipu AI / Exa / Metaso |
 | API Integration | Full-access API keys with an API integration playground; `resource_urls=public` returns directly loadable file/image URLs |
 
 **Platform**
@@ -184,7 +183,6 @@ Add `--profile` flags to enable additional components. Multiple profiles can be 
 |---------|-------------|---------|
 | _(default)_ | Core services | `docker compose pull && docker compose up -d` |
 | `full` | Retained optional services | `docker compose --profile full pull && docker compose --profile full up -d` |
-| `searxng` | Web search / 联网搜索 | `docker compose --profile searxng up -d` |
 
 
 Stop services: `docker compose down`

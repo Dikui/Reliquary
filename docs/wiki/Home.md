@@ -31,7 +31,6 @@ aliases: [Home, Index, wiki首页]
 | 页面 | 简介 |
 |------|------|
 | [数据源导入开发](集成扩展/数据源导入开发.md) | 外部平台数据自动同步与导入 |
-| [添加网络搜索引擎](集成扩展/添加网络搜索引擎.md) | 扩展新的网络搜索 Provider |
 
 ## 安全与认证
 
@@ -82,7 +81,6 @@ graph TB
     核心功能 --> Skills[Agent技能系统]
 
     集成扩展 --> DS[数据源导入开发]
-    集成扩展 --> WebSearch[添加网络搜索引擎]
 
     安全认证 --> Personal[个人使用说明]
 
@@ -96,7 +94,6 @@ graph TB
     KG -.-> KGSetup
     MCP -.-> BuiltinMCP
     BuiltinMCP -.-> BuiltinModel
-    WebSearch -.-> VecDB
     DevGuide -.-> QuickDev
     FAQ -.-> DevGuide
 ```

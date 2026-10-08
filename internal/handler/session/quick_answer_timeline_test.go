@@ -43,7 +43,7 @@ func TestQuickAnswerTimelineRecorderPersistsSearchWithoutResults(t *testing.T) {
 			Output:   "未检索到相关内容",
 			Success:  true,
 			Duration: 12,
-			Data:     map[string]interface{}{"count": 0, "doc_count": 0, "web_count": 0},
+			Data:     map[string]interface{}{"count": 0, "doc_count": 0},
 		})
 
 	require.Len(t, msg.AgentSteps, 1)
@@ -66,7 +66,7 @@ func TestQuickAnswerTimelineRecorderKeepsStageOrderAndIgnoresOtherTools(t *testi
 
 	emitTimelineStage(t, bus, "call-1", "query_understand", nil,
 		event.AgentToolResultData{Output: "已完成问题理解", Success: true})
-	emitTimelineStage(t, bus, "call-2", "web_search", nil,
+	emitTimelineStage(t, bus, "call-2", "web_fetch", nil,
 		event.AgentToolResultData{Output: "ignored", Success: true})
 	emitTimelineStage(t, bus, "call-3", "knowledge_search", nil,
 		event.AgentToolResultData{Output: "检索到 3 条相关内容", Success: true})

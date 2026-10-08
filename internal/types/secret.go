@@ -1,14 +1,13 @@
 // Package types — shared secret redaction helpers.
 //
-// Tenant KV configs (web search, parser
-// engine, storage engine) use the redacted-placeholder round-trip pattern:
+// Parser engine configuration uses the redacted-placeholder round-trip pattern:
 //
 //   - GET responses replace set secrets with RedactedSecretPlaceholder (or
 //     empty string when unset).
 //   - PUT requests treat "", or RedactedSecretPlaceholder as "preserve
 //     existing"; any other value replaces the stored secret.
 //
-// MCP / Model / WebSearch provider / DataSource credentials use a dedicated
+// MCP / Model / DataSource credentials use a dedicated
 // /credentials subresource instead; see internal/handler/dto/mcp.go.
 package types
 

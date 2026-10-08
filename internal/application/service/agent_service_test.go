@@ -553,3 +553,28 @@ func TestValidateConfigMaxIterationsUnlimited(t *testing.T) {
 	tooHigh := &types.AgentConfig{MaxIterations: MAX_ITERATIONS + 1}
 	require.Error(t, s.ValidateConfig(tooHigh))
 }
+
+func TestAgentRegistersURLFetchOnlyWhenAllowed(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		allowed []string
+		want    bool
+	}{
+		{name: "specified URL fetch", allowed: []string{tools.ToolWebFetch}, want: true},
+		{name: "explicit tool selection", allowed: []string{tools.ToolThinking}, want: false},
+		{name: "default tools", want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			registry := tools.NewToolRegistry()
+			err := (&agentService{}).registerTools(context.Background(), registry,
+				&types.AgentConfig{AllowedTools: tc.allowed}, nil, &fakeAgentChatModel{}, "session")
+			require.NoError(t, err)
+			_, err = registry.GetTool(tools.ToolWebFetch)
+			if tc.want {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+			}
+		})
+	}
+}

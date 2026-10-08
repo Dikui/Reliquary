@@ -113,7 +113,6 @@ func TestInstallerAgentConfigTurnsOnInstallMode(t *testing.T) {
 	require.NotNil(t, config.MemoryEnabled)
 	require.False(t, *config.MemoryEnabled,
 		"nil MemoryEnabled inherits the workspace and would register search_memory")
-	require.False(t, config.WebSearchEnabled)
 }
 
 func TestInstallerAgentConfigKeepsMCPOffWhenThePlatformYAMLEnablesIt(t *testing.T) {
@@ -123,13 +122,11 @@ func TestInstallerAgentConfigKeepsMCPOffWhenThePlatformYAMLEnablesIt(t *testing.
 		Config: types.CustomAgentConfig{
 			AllowedTools:     []string{tools.ToolShellExec},
 			MCPSelectionMode: "all",
-			WebSearchEnabled: true,
 			MemoryEnabled:    &memoryOn,
 		},
 	}, "cfg-1", sandbox.SkillsImageRoot+"/pptx")
 
 	require.Equal(t, "none", config.MCPSelectionMode)
-	require.False(t, config.WebSearchEnabled)
 	require.NotNil(t, config.MemoryEnabled)
 	require.False(t, *config.MemoryEnabled)
 }

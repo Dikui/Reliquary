@@ -1947,7 +1947,6 @@ func installerAgentConfig(
 		MaxIterations:    30,
 		AllowedTools:     append([]string(nil), installTools...),
 		Temperature:      0.2,
-		WebSearchEnabled: false,
 		MCPSelectionMode: "none",
 		MemoryEnabled:    &memoryOff,
 		SandboxConfigID:  configID,
@@ -1978,8 +1977,6 @@ func installerAgentConfig(
 	cfg.Temperature = custom.Temperature
 	cfg.SystemPrompt = custom.SystemPrompt
 	cfg.UseCustomSystemPrompt = custom.SystemPrompt != ""
-	cfg.WebSearchEnabled = false
-	cfg.WebSearchMaxResults = 0
 	cfg.MCPSelectionMode = "none"
 	cfg.MemoryEnabled = &memoryOff
 	cfg.MultiTurnEnabled = custom.MultiTurnEnabled

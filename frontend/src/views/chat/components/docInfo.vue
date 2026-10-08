@@ -11,12 +11,12 @@
             </div>
         </div>
         <div class="refer_box" v-show="contentOnly || showReferBox">
-            <!-- Web search references (ungrouped) -->
-            <div v-for="(item, index) in webSearchRefs" :key="'web-' + index">
-                <a :href="getWebSearchUrl(item)" target="_blank" rel="noopener noreferrer" class="doc doc-web"
+            <!-- Fetched URL references (ungrouped) -->
+            <div v-for="(item, index) in webReferenceRefs" :key="'web-' + index">
+                <a :href="getWebReferenceUrl(item)" target="_blank" rel="noopener noreferrer" class="doc doc-web"
                     @click.stop>
-                    {{ webSearchRefs.length < 2 ? getWebSearchDisplayText(item) : `${index + 1}.
-                        ${getWebSearchDisplayText(item)}` }} </a>
+                    {{ webReferenceRefs.length < 2 ? getWebReferenceDisplayText(item) : `${index + 1}.
+                        ${getWebReferenceDisplayText(item)}` }} </a>
             </div>
 
             <!-- Knowledge references grouped by document -->
@@ -110,14 +110,14 @@ const toggleGroup = (key) => {
     expandedGroups[key] = !expandedGroups[key];
 };
 
-const webSearchRefs = computed(() => {
+const webReferenceRefs = computed(() => {
     if (!props.session?.knowledge_references) return [];
-    return props.session.knowledge_references.filter(item => item.chunk_type === 'web_search');
+    return props.session.knowledge_references.filter(item => item.chunk_type === 'web_fetch');
 });
 
 const knowledgeRefs = computed(() => {
     if (!props.session?.knowledge_references) return [];
-    return props.session.knowledge_references.filter(item => item.chunk_type !== 'web_search');
+    return props.session.knowledge_references.filter(item => item.chunk_type !== 'web_fetch');
 });
 
 const groupedKnowledgeRefs = computed(() => {
@@ -144,7 +144,7 @@ const groupedKnowledgeRefs = computed(() => {
 const headerText = computed(() => {
     const total = props.session?.knowledge_references?.length ?? 0;
     const docCount = groupedKnowledgeRefs.value.length;
-    const webCount = webSearchRefs.value.length;
+    const webCount = webReferenceRefs.value.length;
     if (docCount > 0 && webCount > 0) {
         return t('chat.referencesDocAndWebCount', { docCount, webCount });
     }
@@ -182,7 +182,7 @@ const getDocumentHref = (group) => {
     }).href;
 };
 
-const getWebSearchUrl = (item) => {
+const getWebReferenceUrl = (item) => {
     if (item.metadata?.url) {
         return item.metadata.url;
     }
@@ -192,14 +192,14 @@ const getWebSearchUrl = (item) => {
     return '#';
 };
 
-const getWebSearchDisplayText = (item) => {
+const getWebReferenceDisplayText = (item) => {
     if (item.knowledge_title) {
         return item.knowledge_title;
     }
     if (item.metadata?.title) {
         return item.metadata.title;
     }
-    const url = getWebSearchUrl(item);
+    const url = getWebReferenceUrl(item);
     if (url && url !== '#') {
         try {
             const urlObj = new URL(url);
@@ -208,7 +208,7 @@ const getWebSearchDisplayText = (item) => {
             return url;
         }
     }
-    return 'Web Search Result';
+    return 'Web page';
 };
 </script>
 <style lang="less" scoped>

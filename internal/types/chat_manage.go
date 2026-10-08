@@ -29,7 +29,7 @@ type PipelineRequest struct {
 	FallbackStrategy FallbackStrategy `json:"fallback_strategy"`
 	FallbackResponse string           `json:"fallback_response"`
 	FallbackPrompt   string           `json:"fallback_prompt"`
-	// CitationEnabled controls only final knowledge/web source citations. Nil
+	// CitationEnabled controls final source citations. Nil
 	// defaults to true for requests and agents created before this option existed.
 	CitationEnabled *bool `json:"citation_enabled,omitempty"`
 
@@ -61,13 +61,8 @@ type PipelineRequest struct {
 	IntentPromptOverrides map[string]string `json:"-"`
 
 	// Misc request-scoped config
-	TenantID            uint64 `json:"-"`
-	WebSearchEnabled    bool   `json:"-"`
-	WebSearchProviderID string `json:"-"` // Resolved from agent config or tenant default
-	WebSearchMaxResults int    `json:"-"` // Resolved from agent config or tenant default
-	WebFetchEnabled     bool   `json:"-"` // Auto-fetch full page content for web search results after rerank
-	WebFetchTopN        int    `json:"-"` // Max pages to fetch (default 3)
-	Language            string `json:"-"`
+	TenantID uint64 `json:"-"`
+	Language string `json:"-"`
 }
 
 // CitationsEnabled returns the effective citation setting for this request.
@@ -80,7 +75,6 @@ type QueryIntent string
 
 const (
 	IntentKBSearch      QueryIntent = "kb_search"
-	IntentWebSearch     QueryIntent = "web_search"
 	IntentGreeting      QueryIntent = "greeting"
 	IntentChitchat      QueryIntent = "chitchat"
 	IntentFollowUp      QueryIntent = "follow_up"
@@ -92,8 +86,6 @@ const (
 
 // NeedsKBRetrieval returns true when the intent requires knowledge base search.
 // The zero value (empty string) is treated as needing retrieval for safety.
-// Note: IntentWebSearch is NOT included — use ChatManage.NeedsRetrieval()
-// which also considers the WebSearchEnabled flag.
 func (i QueryIntent) NeedsKBRetrieval() bool {
 	switch i {
 	case IntentKBSearch, IntentClarification, IntentSummarize, "":
@@ -147,12 +139,7 @@ type ChatManage struct {
 
 // NeedsRetrieval returns true when the current pipeline execution should
 // run the retrieval stages (search, rerank, merge, etc.).
-// For IntentWebSearch, retrieval is only needed if web search is enabled;
-// for all other intents it delegates to QueryIntent.NeedsKBRetrieval().
 func (c *ChatManage) NeedsRetrieval() bool {
-	if c.Intent == IntentWebSearch {
-		return c.WebSearchEnabled
-	}
 	return c.Intent.NeedsKBRetrieval()
 }
 
@@ -224,11 +211,6 @@ func (c *ChatManage) Clone() *ChatManage {
 			ChatModelSupportsVision: c.ChatModelSupportsVision,
 			Attachments:             append(MessageAttachments(nil), c.Attachments...),
 			TenantID:                c.TenantID,
-			WebSearchEnabled:        c.WebSearchEnabled,
-			WebSearchProviderID:     c.WebSearchProviderID,
-			WebSearchMaxResults:     c.WebSearchMaxResults,
-			WebFetchEnabled:         c.WebFetchEnabled,
-			WebFetchTopN:            c.WebFetchTopN,
 			Language:                c.Language,
 			IntentPromptOverrides:   maps.Clone(c.IntentPromptOverrides),
 		},
@@ -257,7 +239,6 @@ const (
 	CHUNK_SEARCH           EventType = "chunk_search"
 	CHUNK_SEARCH_PARALLEL  EventType = "chunk_search_parallel"
 	CHUNK_RERANK           EventType = "chunk_rerank"
-	WEB_FETCH              EventType = "web_fetch"
 	CHUNK_MERGE            EventType = "chunk_merge"
 	DATA_ANALYSIS          EventType = "data_analysis"
 	INTO_CHAT_MESSAGE      EventType = "into_chat_message"

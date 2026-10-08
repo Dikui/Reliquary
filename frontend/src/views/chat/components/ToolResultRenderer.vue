@@ -28,9 +28,6 @@
     <!-- Database Query Display -->
     <DatabaseQuery v-else-if="displayType === 'database_query'" :data="toolData as DatabaseQueryData" />
 
-    <!-- Web Search Results Display -->
-    <WebSearchResults v-else-if="displayType === 'web_search_results'" :data="toolData as WebSearchResultsData" />
-
     <!-- Web Fetch Results Display -->
     <WebFetchResults v-else-if="displayType === 'web_fetch_results'" :data="toolData as WebFetchResultsData" />
 
@@ -93,7 +90,6 @@ import type {
   ThinkingData,
   PlanData,
   DatabaseQueryData,
-  WebSearchResultsData,
   WebFetchResultsData,
   GrepResultsData,
   KnowledgeChunksListData,
@@ -113,7 +109,6 @@ import GraphQueryResults from './tool-results/GraphQueryResults.vue';
 import ThinkingDisplay from './tool-results/ThinkingDisplay.vue';
 import PlanDisplay from './tool-results/PlanDisplay.vue';
 import DatabaseQuery from './tool-results/DatabaseQuery.vue';
-import WebSearchResults from './tool-results/WebSearchResults.vue';
 import WebFetchResults from './tool-results/WebFetchResults.vue';
 import GrepResults from './tool-results/GrepResults.vue';
 import KnowledgeChunksList from './tool-results/KnowledgeChunksList.vue';

@@ -218,7 +218,7 @@ const props = defineProps({
 });
 
 const formalReferences = computed(() => (props.session?.knowledge_references || [])
-    .filter(item => item?.knowledge_id && item.chunk_type !== 'web_search' && item.chunk_type !== 'tool_result'));
+    .filter(item => item?.knowledge_id && item.chunk_type !== 'web_fetch' && item.chunk_type !== 'tool_result'));
 const otherReferences = computed(() => (props.session?.knowledge_references || [])
     .filter(item => !formalReferences.value.includes(item)));
 const formalMessageCount = computed(() => new Set(formalReferences.value.map(item => item.knowledge_id)).size);

@@ -469,12 +469,6 @@
                 <label><span>{{ t('knowledgeWorkbench.workflows.config.limit') }}</span><t-input-number v-model="step.config.limit" :min="1" :max="100" /></label>
                 <label class="enable-toggle"><t-checkbox v-model="step.config.include_history">{{ t('knowledgeWorkbench.workflows.config.includeHistory') }}</t-checkbox></label>
               </template>
-              <template v-else-if="step.type === 'web_research'">
-                <label class="span-two"><span>{{ t('knowledgeWorkbench.workflows.config.query') }}</span><t-input v-model="step.config.query" /></label>
-                <label><span>{{ t('knowledgeWorkbench.workflows.config.maxResults') }}</span><t-input-number v-model="step.config.max_results" :min="1" :max="50" /></label>
-                <label><span>{{ t('knowledgeWorkbench.workflows.config.provider') }}</span><t-input v-model="step.config.provider_id" /></label>
-                <label class="enable-toggle"><t-checkbox :checked="true" disabled>{{ t('knowledgeWorkbench.workflows.config.ingest') }}</t-checkbox></label>
-              </template>
               <template v-else-if="step.type === 'report'">
                 <label><span>{{ t('knowledgeWorkbench.workflows.config.reportTitle') }}</span><t-input v-model="step.config.title" /></label>
                 <label><span>{{ t('knowledgeWorkbench.workflows.config.timeWindow') }}</span><t-select :value="step.config.window" clearable :options="reportWindowOptions" @change="setReportWindow(step, $event)" /></label>
@@ -921,10 +915,10 @@ const stepTypeToAdd = ref<KnowledgeWorkflowStepType>('search')
 let runPollTimer: ReturnType<typeof setInterval> | null = null
 
 const workflowTemplates = [
-  { id: 'daily' }, { id: 'weekly' }, { id: 'research' }, { id: 'custom' },
+  { id: 'daily' }, { id: 'weekly' }, { id: 'custom' },
 ]
 const stepTypes: KnowledgeWorkflowStepType[] = [
-  'search', 'fact_query', 'web_research', 'report', 'wiki_update', 'skill', 'condition', 'human_review',
+  'search', 'fact_query', 'report', 'wiki_update', 'skill', 'condition', 'human_review',
 ]
 const stepTypeOptions = computed(() => stepTypes.map(value => ({
   value,
@@ -1536,7 +1530,7 @@ function clearRunPolling() {
 
 function updateRunPolling() {
   clearRunPolling()
-  if (selectedRun.value && ['queued', 'running', 'waiting_ingestion'].includes(selectedRun.value.status)) {
+  if (selectedRun.value && ['queued', 'running'].includes(selectedRun.value.status)) {
     runPollTimer = setInterval(() => {
       if (selectedRun.value) void selectRun(selectedRun.value)
     }, 3000)
@@ -1646,7 +1640,6 @@ function makeStep(type: KnowledgeWorkflowStepType, index: number): KnowledgeWork
   const config: Record<string, unknown> = {
     search: { query: '', limit: 20 },
     fact_query: { scope: 'knowledge_base', entity: '', predicate: '', relation: '', object_entity_id: '', since: '', until: '', include_history: true, limit: 50 },
-    web_research: { query: '', max_results: 10, provider_id: '', ingest: true },
     report: { title: '', prompt: '', time_from: '', time_to: '', window: '', days: 7, timezone: 'Asia/Shanghai' },
     wiki_update: { slug: '', title: '', page_type: 'topic', summary: '', source_step: '' },
     skill: { agent_id: '', skill_name: '', script_path: '', args: [], args_text: '[]', input: '', input_step: '' },
@@ -1699,21 +1692,6 @@ function applyTemplate(templateId: string) {
     draft.steps[1].config.prompt = t('knowledgeWorkbench.workflows.templates.weekly.reportPrompt')
     draft.steps[1].config.window = 'previous_week'
     draft.steps[1].config.timezone = 'Asia/Shanghai'
-  } else if (templateId === 'research') {
-    draft.name = t('knowledgeWorkbench.workflows.templates.research.title')
-    draft.description = t('knowledgeWorkbench.workflows.templates.research.description')
-    draft.enabled = true
-    draft.schedule = { cron: '0 9 * * *', timezone: 'Asia/Shanghai' }
-    draft.steps = [makeStep('web_research', 0), makeStep('fact_query', 1), makeStep('report', 2)]
-    draft.steps[0].config.ingest = true
-    draft.steps[1].depends_on = [draft.steps[0].id]
-    draft.steps[1].config.include_history = true
-    draft.steps[2].depends_on = [draft.steps[1].id]
-    draft.steps[2].config.title = t('knowledgeWorkbench.workflows.templates.research.reportTitle')
-    draft.steps[2].config.prompt = t('knowledgeWorkbench.workflows.templates.research.reportPrompt')
-    draft.steps[2].config.window = 'rolling_days'
-    draft.steps[2].config.days = 7
-    draft.steps[2].config.timezone = 'Asia/Shanghai'
   } else {
     draft.name = ''
     draft.description = ''
@@ -1824,7 +1802,6 @@ function normalizeWorkflowInput(draft: KnowledgeWorkflowInput): KnowledgeWorkflo
     schedule: { cron: draft.schedule.cron?.trim() || '', timezone: draft.schedule.timezone?.trim() || 'Asia/Shanghai' },
     steps: draft.steps.map(step => {
       const config = { ...step.config }
-      if (step.type === 'web_research') config.ingest = true
       if (step.type === 'fact_query' && config.scope === 'domain' && !config.domain_id) throw new Error(t('knowledgeDomains.domainRequired'))
       if (step.type === 'condition' && (config.operator === 'gt' || config.operator === 'gte')) {
         const value = typeof config.value === 'string' && config.value.trim() !== '' ? Number(config.value) : config.value
@@ -2299,7 +2276,7 @@ label { display: flex; flex-direction: column; gap: 6px; color: var(--td-text-co
 .status-dot { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--td-text-color-placeholder); }
 .status-dot.status-completed { background: var(--td-success-color); }
 .status-dot.status-failed, .status-dot.status-rejected { background: var(--td-error-color); }
-.status-dot.status-running, .status-dot.status-queued, .status-dot.status-paused, .status-dot.status-waiting_ingestion { background: var(--td-warning-color); }
+.status-dot.status-running, .status-dot.status-queued, .status-dot.status-paused { background: var(--td-warning-color); }
 .run-list__copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .run-detail { margin-top: 14px; border-top: 1px solid var(--td-border-level-1-color); padding-top: 12px; }
 .run-detail__heading h5 { margin: 0; }

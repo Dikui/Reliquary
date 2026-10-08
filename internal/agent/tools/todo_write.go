@@ -44,7 +44,7 @@ NOTE that you should not use this tool if there is only one trivial task to do. 
 <example>
 User: Compare Reliquary with other RAG frameworks like LangChain and LlamaIndex.
 Assistant: I'll help you compare Reliquary with other RAG frameworks. Let me create a retrieval plan to gather information about each framework.
-*Creates a todo list with retrieval tasks: 1) Search knowledge base for Reliquary features and architecture, 2) Use web_search to find LangChain documentation and features, 3) Use web_search to find LlamaIndex documentation and features, 4) Retrieve detailed comparison points for each framework*
+*Creates a todo list with retrieval tasks: 1) Search knowledge base for Reliquary features and architecture, 2) Fetch the supplied LangChain documentation URL, 3) Fetch the supplied LlamaIndex documentation URL, 4) Retrieve detailed comparison points for each framework*
 *Note: Summary and synthesis will be handled by thinking tool after all retrieval tasks are completed*
 Assistant: Let me start by searching the knowledge base for detailed Reliquary information.
 
@@ -61,7 +61,7 @@ The assistant used todo_write tool correctly because:
 <example>
 User: I need to research the latest developments in vector databases for RAG applications.
 Assistant: I'll help you research vector databases for RAG. Let me create a retrieval plan to gather comprehensive information.
-*Creates todo list with retrieval tasks: 1) Search knowledge base for vector database information, 2) Use web_search to find latest vector database technologies, 3) Retrieve information about performance comparisons, 4) Gather information about integration approaches*
+*Creates todo list with retrieval tasks: 1) Search knowledge base for vector database information, 2) Retrieve supplied documentation for vector database technologies, 3) Retrieve information about performance comparisons, 4) Gather information about integration approaches*
 *Note: After completing all retrieval tasks, thinking tool will synthesize the findings into a comprehensive answer*
 Assistant: Let me start by searching the knowledge base for vector database information.
 
@@ -236,7 +236,7 @@ func generatePlanOutput(task string, steps []PlanStep) string {
 		output += "1. Use grep_chunks to search keywords and locate relevant documents\n"
 		output += "2. Use knowledge_search for semantic search to retrieve relevant content\n"
 		output += "3. Use list_knowledge_chunks to get the full content of key documents\n"
-		output += "4. Use web_search to get supplementary information (if needed)\n"
+		output += "4. Use web_fetch for supplied URLs (if needed)\n"
 		output += "\nNote: Summarization and synthesis are handled by the thinking tool. Do not add summarization tasks here.\n"
 		return output
 	}

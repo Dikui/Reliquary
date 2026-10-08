@@ -292,12 +292,12 @@ func TestFilterNonTerminalToolCalls(t *testing.T) {
 	in := []types.ToolCall{
 		{Name: agenttools.ToolKnowledgeSearch},
 		{Name: "final_answer"},
-		{Name: agenttools.ToolWebSearch},
+		{Name: agenttools.ToolWebFetch},
 	}
 	out := filterNonTerminalToolCalls(in)
 	if assert.Len(t, out, 2) {
 		assert.Equal(t, agenttools.ToolKnowledgeSearch, out[0].Name)
-		assert.Equal(t, agenttools.ToolWebSearch, out[1].Name)
+		assert.Equal(t, agenttools.ToolWebFetch, out[1].Name)
 	}
 }
 

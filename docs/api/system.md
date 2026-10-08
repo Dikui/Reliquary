@@ -35,7 +35,6 @@ curl --location 'http://localhost:8080/api/v1/system/capabilities' \
       "agents": { "supported": true },
       "integrations.api": { "supported": true },
       "settings.mcp": { "supported": true },
-      "settings.websearch": { "supported": true },
       "settings.sandbox": { "supported": true }
     }
   }

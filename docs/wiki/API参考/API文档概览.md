@@ -60,7 +60,6 @@ API Key 在 Web 页面完成账户注册后，前往账户信息页面获取。
 | 系统管理 | 系统信息、解析引擎、存储引擎 | [system.md](../../api/system.md) |
 | MCP 服务 | MCP 工具服务管理 | [mcp-service.md](../../api/mcp-service.md) |
 | Skills | 预装智能体技能 | [skill.md](../../api/skill.md) |
-| 网络搜索 | 网络搜索服务商 | [web-search.md](../../api/web-search.md) |
 
 > 各 API 的详细说明参见 `docs/api/` 目录下的对应文档
 

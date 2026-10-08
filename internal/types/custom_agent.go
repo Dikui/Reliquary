@@ -105,7 +105,7 @@ type CustomAgentConfig struct {
 	// Empty / unknown values are treated as "custom" (no preset applied).
 	// Ignored for quick-answer mode.
 	AgentType string `yaml:"agent_type" json:"agent_type,omitempty"`
-	// System prompt for the agent (unified prompt, uses web_search_status placeholder for dynamic behavior)
+	// System prompt for the agent
 	SystemPrompt string `yaml:"system_prompt" json:"system_prompt"`
 	// SystemPromptID references a template ID in prompt_templates/ YAML files.
 	// If set and SystemPrompt is empty, the template content will be resolved at startup.
@@ -222,19 +222,6 @@ type CustomAgentConfig struct {
 	// call to generate a SQL query and is disabled by default because most
 	// quick-answer / RAG-style agents do not want the added latency.
 	DataAnalysisEnabled bool `yaml:"data_analysis_enabled" json:"data_analysis_enabled"`
-
-	// ===== Web Search Settings =====
-	// Whether web search is enabled
-	WebSearchEnabled bool `yaml:"web_search_enabled" json:"web_search_enabled"`
-	// Maximum web search results
-	WebSearchMaxResults int `yaml:"web_search_max_results" json:"web_search_max_results"`
-	// WebSearchProviderID references a specific WebSearchProviderEntity.
-	// If empty, the workspace's default provider (is_default=true) is used.
-	WebSearchProviderID string `yaml:"web_search_provider_id" json:"web_search_provider_id,omitempty"`
-	// Whether to auto-fetch full page content for reranked web search results
-	WebFetchEnabled bool `yaml:"web_fetch_enabled" json:"web_fetch_enabled"`
-	// Max number of pages to fetch after rerank (default: 3)
-	WebFetchTopN int `yaml:"web_fetch_top_n" json:"web_fetch_top_n,omitempty"`
 
 	// ===== Multi-turn Conversation Settings =====
 	// Whether multi-turn conversation is enabled
@@ -494,9 +481,6 @@ func (a *CustomAgent) EnsureDefaults() {
 	}
 	if a.Config.MaxIterations < 0 {
 		a.Config.MaxIterations = UnlimitedMaxIterations
-	}
-	if a.Config.WebSearchMaxResults == 0 {
-		a.Config.WebSearchMaxResults = 5
 	}
 	if a.Config.HistoryTurns == 0 {
 		a.Config.HistoryTurns = 5

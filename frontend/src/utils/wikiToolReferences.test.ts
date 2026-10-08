@@ -71,6 +71,6 @@ test('uses the wiki summary only when a page has no body', () => {
 })
 
 test('ignores non-wiki tools and empty result sets', () => {
-  assert.deepEqual(parseWikiToolReferences('web_search', '<page>ignored</page>'), [])
+  assert.deepEqual(parseWikiToolReferences('web_fetch', '<page>ignored</page>'), [])
   assert.deepEqual(parseWikiToolReferences('wiki_search', '<search_results count="0" />'), [])
 })

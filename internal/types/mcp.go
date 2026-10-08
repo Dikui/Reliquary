@@ -198,7 +198,7 @@ func (h *MCPHeaders) Scan(value interface{}) error {
 //
 // When SYSTEM_AES_KEY is configured, APIKey and Token are AES-256-GCM
 // encrypted before serialization — mirroring the ModelParameters /
-// WebSearchProviderParameters pattern so MCP secrets are not the odd
+// other integration credential pattern so MCP secrets are not the odd
 // resource stored in plaintext. Encryption operates on a local copy to
 // avoid mutating the caller's in-memory struct (subsequent reads of the
 // same *MCPAuthConfig would otherwise see ciphertext).

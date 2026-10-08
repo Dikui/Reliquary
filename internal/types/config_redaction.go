@@ -2,24 +2,6 @@ package types
 
 import "strings"
 
-// WebSearchConfigForResponse returns a copy safe for HTTP responses.
-// When maskSecrets is true, api_key is omitted and a configured proxy_url
-// is replaced with RedactedSecretPlaceholder.
-func WebSearchConfigForResponse(cfg *WebSearchConfig, maskSecrets bool) *WebSearchConfig {
-	if cfg == nil {
-		return nil
-	}
-	out := *EffectiveWebSearchConfig(cfg)
-	if !maskSecrets {
-		return &out
-	}
-	out.APIKey = ""
-	if strings.TrimSpace(out.ProxyURL) != "" {
-		out.ProxyURL = RedactedSecretPlaceholder
-	}
-	return &out
-}
-
 // ParserEngineConfigForResponse returns a copy with secret fields redacted
 // when maskSecrets is true.
 func ParserEngineConfigForResponse(cfg *ParserEngineConfig, maskSecrets bool) *ParserEngineConfig {
@@ -53,19 +35,6 @@ func CredentialsConfigForResponse(cfg *CredentialsConfig, maskSecrets bool) *Cre
 		}
 		out.WeKnoraCloud = &cloud
 	}
-	return &out
-}
-
-// MergeWebSearchConfigForUpdate applies preserve semantics to secret fields on
-// tenant KV PUT.
-func MergeWebSearchConfigForUpdate(incoming, existing *WebSearchConfig) *WebSearchConfig {
-	out := *EffectiveWebSearchConfig(incoming)
-	var prev WebSearchConfig
-	if existing != nil {
-		prev = *EffectiveWebSearchConfig(existing)
-	}
-	out.APIKey = PreserveIfRedacted(out.APIKey, prev.APIKey)
-	out.ProxyURL = PreserveIfRedacted(out.ProxyURL, prev.ProxyURL)
 	return &out
 }
 

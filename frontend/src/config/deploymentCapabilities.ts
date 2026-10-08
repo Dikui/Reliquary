@@ -2,7 +2,6 @@ export const DEPLOYMENT_CAPABILITY_KEYS = [
   'agents',
   'integrations.api',
   'settings.mcp',
-  'settings.websearch',
   'settings.sandbox',
   'settings.sandbox.docker',
 ] as const
@@ -34,7 +33,6 @@ export function isDeploymentCapabilitySupported(
 }
 
 export const SETTINGS_SECTION_CAPABILITY: Partial<Record<string, DeploymentCapabilityKey>> = {
-  websearch: 'settings.websearch',
   sandbox: 'settings.sandbox',
   // Skills are baked into a sandbox image. Hide the catalog when the
   // deployment has no sandbox support, same as personal skill credentials.

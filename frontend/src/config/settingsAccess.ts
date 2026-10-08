@@ -1,5 +1,5 @@
 export const SETTINGS_SECTIONS = new Set([
-  'general', 'ollama', 'models', 'websearch', 'chathistory',
+  'general', 'ollama', 'models', 'chathistory',
   'parser', 'storage', 'sandbox', 'skills', 'mcp', 'system', 'userprofile',
   'tenant', 'domains', 'mymemory', 'memory', 'envvars',
 ])

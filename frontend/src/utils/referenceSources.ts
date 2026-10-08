@@ -51,7 +51,7 @@ export function normalizeReferenceUrl(url: string): string {
   }
 }
 
-export function getWebSearchUrl(item: KnowledgeReferenceLike): string {
+export function getWebReferenceUrl(item: KnowledgeReferenceLike): string {
   if (item.metadata?.url) return item.metadata.url
   if (item.id && (item.id.startsWith('http://') || item.id.startsWith('https://'))) {
     return item.id
@@ -97,7 +97,7 @@ export function formatReferenceSnippet(text: string | undefined): string {
 }
 
 function isWebReference(item: KnowledgeReferenceLike): boolean {
-  return item.chunk_type === 'web_search'
+  return item.chunk_type === 'web_fetch'
 }
 
 function isToolReference(item: KnowledgeReferenceLike): boolean {
@@ -136,7 +136,7 @@ function resolveWebTitle(item: KnowledgeReferenceLike, url: string, domain: stri
 }
 
 function buildWebItem(item: KnowledgeReferenceLike, index: number): ReferenceListItem | null {
-  const url = getWebSearchUrl(item)
+  const url = getWebReferenceUrl(item)
   if (!url) return null
   const domain = getDomainFromUrl(url)
   const title = resolveWebTitle(item, url, domain)
@@ -249,7 +249,7 @@ function mergeWebReferences(refs: KnowledgeReferenceLike[]): KnowledgeReferenceL
   const groups = new Map<string, KnowledgeReferenceLike>()
 
   refs.forEach((item, index) => {
-    const url = getWebSearchUrl(item)
+    const url = getWebReferenceUrl(item)
     const key = url ? normalizeReferenceUrl(url) : item.id || `web-${index}`
     if (!groups.has(key)) {
       groups.set(key, item)

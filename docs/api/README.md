@@ -129,6 +129,5 @@ Reliquary API 按功能分为以下几类：
 | MCP 服务 | MCP 工具服务管理 | [mcp-service.md](./mcp-service.md) |
 | Skills | 预装与已安装的智能体技能、技能环境变量 | [skill.md](./skill.md) |
 | 长期记忆 | 当前用户的跨会话记忆（设置、条目、主题、文档亲和度、导出、整理） | [memory.md](./memory.md) |
-| 网络搜索 | 网络搜索服务商 | [web-search.md](./web-search.md) |
 | IM 渠道 | 飞书 IM 对接，含渠道 CRUD 与回调 | [../IM集成开发文档.md](../IM集成开发文档.md) |
 | 数据源导入 | RSS 订阅与站点适配器的数据源接入和同步 | [../数据源导入开发文档.md](../数据源导入开发文档.md) |

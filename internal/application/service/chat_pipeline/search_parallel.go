@@ -15,9 +15,6 @@ type PluginSearchParallel struct {
 	knowledgeBaseService interfaces.KnowledgeBaseService
 	knowledgeService     interfaces.KnowledgeService
 	config               *config.Config
-	webSearchService     interfaces.WebSearchService
-	tenantService        interfaces.TenantService
-	sessionService       interfaces.SessionService
 
 	contextReader interfaces.KnowledgeContextReader
 	searchPlugin  *PluginSearch
@@ -30,33 +27,20 @@ func NewPluginSearchParallel(
 	knowledgeService interfaces.KnowledgeService,
 	chunkService interfaces.ChunkService,
 	config *config.Config,
-	webSearchService interfaces.WebSearchService,
-	tenantService interfaces.TenantService,
-	sessionService interfaces.SessionService,
-	webSearchStateService interfaces.WebSearchStateService,
-	webSearchProviderRepo interfaces.WebSearchProviderRepository,
 	contextReader interfaces.KnowledgeContextReader,
 ) *PluginSearchParallel {
 	// Create internal plugins without registering them
 	searchPlugin := &PluginSearch{
-		knowledgeBaseService:  knowledgeBaseService,
-		knowledgeService:      knowledgeService,
-		chunkService:          chunkService,
-		config:                config,
-		webSearchService:      webSearchService,
-		tenantService:         tenantService,
-		sessionService:        sessionService,
-		webSearchStateService: webSearchStateService,
-		webSearchProviderRepo: webSearchProviderRepo,
+		knowledgeBaseService: knowledgeBaseService,
+		knowledgeService:     knowledgeService,
+		chunkService:         chunkService,
+		config:               config,
 	}
 
 	res := &PluginSearchParallel{
 		knowledgeBaseService: knowledgeBaseService,
 		knowledgeService:     knowledgeService,
 		config:               config,
-		webSearchService:     webSearchService,
-		tenantService:        tenantService,
-		sessionService:       sessionService,
 		contextReader:        contextReader,
 		searchPlugin:         searchPlugin,
 	}

@@ -35,8 +35,8 @@ curl --location 'http://localhost:8080/api/v1/skills' \
 {
     "data": [
         {
-            "name": "web_search",
-            "description": "搜索互联网获取最新信息"
+            "name": "pdf-tools",
+            "description": "处理 PDF 文档"
         },
         {
             "name": "code_interpreter",
@@ -232,7 +232,7 @@ curl --location --request PATCH \
 'http://localhost:8080/api/v1/sandbox-configs/{id}/skills/{skillId}' \
 --header 'X-API-Key: sk-xxxxx' \
 --header 'Content-Type: application/json' \
---data '{"enabled":true,"envs":{"TAVILY_API_KEY":"tvly-xxxxx"}}'
+--data '{"enabled":true,"envs":{"DOCUMENT_API_KEY":"document-key-xxxxx"}}'
 ```
 
 ### GET `/me/env-vars` - 列出自己的环境变量
@@ -260,10 +260,10 @@ curl --location 'http://localhost:8080/api/v1/me/env-vars' \
             "skills": [
                 {
                     "skill_id": "sk-1",
-                    "skill_name": "web-search",
-                    "description": "通过 Tavily 检索网页",
+                    "skill_name": "document-tools",
+                    "description": "调用文档处理服务",
                     "vars": [
-                        { "name": "TAVILY_API_KEY", "description": "Tavily 搜索密钥", "required": true, "source": "workspace" },
+                        { "name": "DOCUMENT_API_KEY", "description": "文档处理服务密钥", "required": true, "source": "workspace" },
                         { "name": "REGION", "source": "unset" }
                     ]
                 }
@@ -281,14 +281,14 @@ curl --location 'http://localhost:8080/api/v1/me/env-vars' \
 curl --location --request PUT 'http://localhost:8080/api/v1/me/env-vars/skill' \
 --header 'Authorization: Bearer <token>' \
 --header 'Content-Type: application/json' \
---data '{"skill_id":"sk-1","name":"TAVILY_API_KEY","value":"tvly-xxxxx"}'
+--data '{"skill_id":"sk-1","name":"DOCUMENT_API_KEY","value":"document-key-xxxxx"}'
 ```
 
 ```curl
 curl --location --request DELETE 'http://localhost:8080/api/v1/me/env-vars/skill' \
 --header 'Authorization: Bearer <token>' \
 --header 'Content-Type: application/json' \
---data '{"skill_id":"sk-1","name":"TAVILY_API_KEY"}'
+--data '{"skill_id":"sk-1","name":"DOCUMENT_API_KEY"}'
 ```
 
 删除一个本就没设过的值返回 404。

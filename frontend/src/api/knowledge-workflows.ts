@@ -4,7 +4,6 @@ import type { KnowledgeContextEnvelope } from './knowledge-context'
 export type KnowledgeWorkflowStepType =
   | 'search'
   | 'fact_query'
-  | 'web_research'
   | 'report'
   | 'wiki_update'
   | 'skill'

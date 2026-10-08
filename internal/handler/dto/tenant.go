@@ -18,7 +18,6 @@ type TenantResponse struct {
 	StorageQuota       int64                     `json:"storage_quota"`
 	StorageUsed        int64                     `json:"storage_used"`
 	ContextConfig      *types.ContextConfig      `json:"context_config,omitempty"`
-	WebSearchConfig    *types.WebSearchConfig    `json:"web_search_config,omitempty"`
 	ParserEngineConfig *types.ParserEngineConfig `json:"parser_engine_config,omitempty"`
 	Credentials        *types.CredentialsConfig  `json:"credentials,omitempty"`
 	ChatHistoryConfig  *types.ChatHistoryConfig  `json:"chat_history_config,omitempty"`
@@ -58,7 +57,6 @@ func NewTenantResponseWithSecrets(tenant *types.Tenant) *TenantResponse {
 		DeletedAt:         tenant.DeletedAt,
 	}
 	if includeSecrets {
-		resp.WebSearchConfig = types.WebSearchConfigForResponse(tenant.WebSearchConfig, true)
 		resp.ParserEngineConfig = types.ParserEngineConfigForResponse(tenant.ParserEngineConfig, true)
 		resp.Credentials = types.CredentialsConfigForResponse(tenant.Credentials, true)
 	}

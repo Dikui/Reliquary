@@ -142,38 +142,6 @@ func RegisterMCPServiceRoutes(
 	}
 }
 
-// RegisterWebSearchRoutes registers web search routes
-func RegisterWebSearchRoutes(r *gin.RouterGroup, webSearchHandler *handler.WebSearchHandler, g *accessGuards) {
-	webSearch := r.Group("/web-search")
-	{
-		webSearch.GET("/providers", webSearchHandler.GetProviders)
-	}
-}
-
-func RegisterWebSearchProviderRoutes(
-	r *gin.RouterGroup,
-	h *handler.WebSearchProviderHandler,
-	credHandler *handler.WebSearchProviderCredentialsHandler,
-	g *accessGuards) {
-	providers := r.Group("/web-search-providers")
-	{
-		providers.GET("/types", h.ListProviderTypes)
-		// Test with raw credentials (no persistence)
-		providers.POST("/test", h.TestProviderRaw)
-		// CRUD
-		providers.POST("", h.CreateProvider)
-		providers.GET("", h.ListProviders)
-		providers.GET("/:id", h.GetProvider)
-		providers.PUT("/:id", h.UpdateProvider)
-		providers.DELETE("/:id", h.DeleteProvider)
-		// Per-field credential subresource
-		providers.PUT("/:id/credentials", credHandler.Put)
-		providers.DELETE("/:id/credentials/:field", credHandler.DeleteField)
-		// Test existing saved provider
-		providers.POST("/:id/test", h.TestProviderByID)
-	}
-}
-
 func RegisterDataSourceRoutes(
 	r *gin.RouterGroup,
 	handler *handler.DataSourceHandler,

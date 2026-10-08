@@ -17,29 +17,28 @@ import (
 
 var webFetchTool = BaseTool{
 	name: ToolWebFetch,
-	description: `Fetch detailed content from web pages returned by web_search and analyze it with an LLM.
+	description: `Fetch detailed content from specified web page URLs and analyze it with an LLM.
 
 ## Usage
-- Receive one or more {url: "wN", prompt} combinations; the field name stays url, but its value is the short page ID
+- Receive one or more {url, prompt} combinations using a full HTTP or HTTPS URL or a known short page ID
 - Fetch each page independently and return a structured status for every URL
 - Successful pages remain usable when other pages fail
 
 ## When to Use
-- Use when a search snippet is insufficient or a claim needs full-page verification
-- web_search titles, URLs, and snippets remain usable evidence if fetching fails
-- Do not repeatedly fetch a non-retryable URL or expand searches after all fetches fail
-- When page verification is unavailable, answer from search summaries, disclose that limitation, and lower confidence for dynamic facts`,
+- Use when the user supplies a URL or a claim needs full-page verification
+- Do not repeatedly fetch a non-retryable URL
+- When page verification is unavailable, disclose that limitation and lower confidence for dynamic facts`,
 	schema: utils.GenerateSchema[WebFetchInput](),
 }
 
 // WebFetchInput defines the input parameters for web fetch tool.
 type WebFetchInput struct {
-	Items []WebFetchItem `json:"items" jsonschema:"Batch fetch tasks, each containing a short wN web page ID and prompt"`
+	Items []WebFetchItem `json:"items" jsonschema:"Batch fetch tasks, each containing a URL or known short web page ID and prompt"`
 }
 
 // WebFetchItem represents a single web fetch task.
 type WebFetchItem struct {
-	URL    string `json:"url" jsonschema:"Short wN web page ID from web_search results"`
+	URL    string `json:"url" jsonschema:"HTTP or HTTPS URL, or a known short web page ID"`
 	Prompt string `json:"prompt" jsonschema:"Prompt for analyzing the fetched web page content"`
 }
 
@@ -203,10 +202,10 @@ func buildWebFetchToolResult(ctx context.Context, results []*webFetchItemResult)
 	builder.WriteString("=== Next Steps ===\n")
 	switch {
 	case allFailed:
-		builder.WriteString("- All page fetches failed. Stop expanding web searches and answer from existing web_search titles, URLs, and snippets.\n")
+		builder.WriteString("- All page fetches failed. Answer only from other available evidence.\n")
 		builder.WriteString("- Explicitly state that page content was not verified. Treat prices, inventory, and other dynamic facts as uncertain.\n")
 	case failedCount > 0:
-		builder.WriteString("- Use successful page content together with existing search snippets; failed URLs do not invalidate successful evidence.\n")
+		builder.WriteString("- Use successful page content; failed URLs do not invalidate successful evidence.\n")
 		builder.WriteString("- Do not retry non-retryable failures. If evidence is sufficient, answer now.\n")
 	default:
 		builder.WriteString("- Synthesize the fetched evidence and answer when it is sufficient.\n")

@@ -20,20 +20,8 @@ test('synthesizeRagPipelineToolEvents builds completed retrieval steps', () => {
   assert.equal(events[0].tool_name, 'query_understand')
   assert.equal(events[1].tool_name, 'knowledge_search')
   assert.equal(events[1].tool_data.count, 3)
-  assert.equal(events[1].tool_data.search_source, 'knowledge')
-})
-
-test('synthesizeRagPipelineToolEvents marks web-only references as web search', () => {
-  const events = synthesizeRagPipelineToolEvents({
-    knowledge_references: [
-      { chunk_type: 'web_search', knowledge_title: 'page-1' },
-      { chunk_type: 'web_search', knowledge_title: 'page-2' },
-    ],
-  })
-
-  assert.equal(events[1].tool_data.search_source, 'web')
-  assert.equal(events[1].tool_data.web_count, 2)
-  assert.equal(events[1].tool_data.doc_count, 0)
+  assert.deepEqual(events[1].tool_data.kb_counts, { a: 2, b: 1 })
+  assert.equal(events[1].tool_data.doc_count, 3)
 })
 
 test('synthesizeRagPipelineToolEvents skips retrieval when there are no references', () => {
