@@ -28,24 +28,21 @@ const (
 // AttachmentProcessor saves uploaded file attachments and extracts their text content
 // for injection into the LLM prompt.
 type AttachmentProcessor struct {
-	fileService    interfaces.FileService
-	documentReader interfaces.DocumentReader
-	imageResolver  *docparser.ImageResolver
-	modelService   interfaces.ModelService // used to obtain the ASR model
+	fileService   interfaces.FileService
+	imageResolver *docparser.ImageResolver
+	modelService  interfaces.ModelService // used to obtain the ASR model
 }
 
 // NewAttachmentProcessor creates an AttachmentProcessor with the given dependencies.
 func NewAttachmentProcessor(
 	fileService interfaces.FileService,
-	documentReader interfaces.DocumentReader,
 	imageResolver *docparser.ImageResolver,
 	modelService interfaces.ModelService,
 ) *AttachmentProcessor {
 	return &AttachmentProcessor{
-		fileService:    fileService,
-		documentReader: documentReader,
-		imageResolver:  imageResolver,
-		modelService:   modelService,
+		fileService:   fileService,
+		imageResolver: imageResolver,
+		modelService:  modelService,
 	}
 }
 
@@ -112,8 +109,8 @@ func (p *AttachmentProcessor) ProcessAttachment(
 			attachment.Content = fmt.Sprintf("<error><message>Failed to parse document</message><details>%v</details></error>", err)
 		}
 	} else {
-		if err := p.processWithDocumentReader(ctx, data, baseName, ext, attachment, tenantID); err != nil {
-			logger.Warnf(ctx, "DocumentReader failed: %v, keeping metadata only", err)
+		if err := p.processWithParser(ctx, data, baseName, ext, attachment, tenantID); err != nil {
+			logger.Warnf(ctx, "Document parser failed: %v, keeping metadata only", err)
 			attachment.Content = fmt.Sprintf("<error><message>Failed to read document</message><details>%v</details></error>", err)
 		}
 	}
@@ -223,8 +220,8 @@ func (p *AttachmentProcessor) processAudioFile(
 	return nil
 }
 
-// processWithDocumentReader extracts content from complex formats (pdf, docx, xlsx, etc.).
-func (p *AttachmentProcessor) processWithDocumentReader(
+// processWithParser extracts content from complex formats (pdf, docx, xlsx, etc.).
+func (p *AttachmentProcessor) processWithParser(
 	ctx context.Context,
 	data []byte,
 	fileName string,
@@ -232,10 +229,6 @@ func (p *AttachmentProcessor) processWithDocumentReader(
 	attachment *types.MessageAttachment,
 	tenantID uint64,
 ) error {
-	if p.documentReader == nil {
-		return fmt.Errorf("DocumentReader not configured")
-	}
-
 	normalizedType := strings.TrimPrefix(fileType, ".")
 
 	parserEngine := ""
@@ -246,18 +239,9 @@ func (p *AttachmentProcessor) processWithDocumentReader(
 	}
 	overrides := getParserEngineOverridesFromContext(ctx)
 
-	// Engines that parse in this process (anydoc, MinerU, ...) are resolved
-	// through the registry so a chat attachment honours the same engine rules
-	// as an ingested document. Anything the registry cannot build here — a
-	// cloud engine whose credentials this path cannot resolve — falls back to
-	// the docreader, which is where every engine name went before.
-	reader, err := docparser.NewReader(ctx, parserEngine, normalizedType, false, docparser.ReaderDeps{
-		Overrides: overrides,
-		Remote:    p.documentReader,
-	})
+	reader, err := docparser.NewReader(ctx, parserEngine, normalizedType, false, docparser.ReaderDeps{Overrides: overrides})
 	if err != nil {
-		logger.Warnf(ctx, "parser engine %q unusable for this attachment, using docreader: %v", parserEngine, err)
-		reader = p.documentReader
+		return fmt.Errorf("document parser unavailable: %w", err)
 	}
 
 	result, err := reader.Read(ctx, &types.ReadRequest{
@@ -311,11 +295,11 @@ func isValidFileType(fileName string) bool {
 
 	supportedTypes := []string{
 		// documents
-		"docx", "doc", "pdf", "ppt", "pptx", "epub", "mhtml",
+		"docx", "doc", "pdf", "ppt", "pptx", "epub",
 		// spreadsheets
 		"xlsx", "xls",
 		// text / markup
-		"md", "markdown", "txt", "csv", "json", "xml", "yaml", "yml", "log", "html",
+		"md", "markdown", "txt", "csv", "json", "xml", "yaml", "yml", "log",
 		// images
 		"jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp",
 		// audio

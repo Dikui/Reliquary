@@ -10,7 +10,7 @@ import (
 // FileService provides methods to save, retrieve, and delete files.
 type FileService interface {
 	// CheckConnectivity verifies that the storage backend is reachable and
-	// properly configured (e.g. bucket exists, credentials valid).
+	// accessible to the server process.
 	CheckConnectivity(ctx context.Context) error
 	// SaveFile saves a file.
 	SaveFile(ctx context.Context, file *multipart.FileHeader, tenantID uint64, knowledgeID string) (string, error)
@@ -24,8 +24,8 @@ type FileService interface {
 	// DeleteFile deletes a file.
 	DeleteFile(ctx context.Context, filePath string) error
 	// CopyFile copies an existing stored object to a NEW object owned by
-	// (tenantID, knowledgeID), returning the new provider:// path. The copy is
+	// (tenantID, knowledgeID), returning the new local path. The copy is
 	// independent: deleting the source never affects it. Returns ErrCrossBackendCopy
-	// when srcPath belongs to a different storage provider than this service.
+	// when srcPath uses a scheme other than local.
 	CopyFile(ctx context.Context, srcPath string, tenantID uint64, knowledgeID string) (string, error)
 }

@@ -18,7 +18,7 @@ import (
 
 func TestResolveToolApprovalRejectsNullWithoutResolvingPendingCall(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	gate := approval.NewGate(nil, nil, nil)
+	gate := approval.NewGate(nil, nil)
 	bus := event.NewEventBus()
 	pending := make(chan string, 1)
 	bus.On(event.EventToolApprovalRequired, func(_ context.Context, evt event.Event) error {

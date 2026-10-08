@@ -4,11 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
-	"net/url"
-	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -17,7 +13,6 @@ import (
 
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
-	"reliquary/internal/application/service/file"
 	"reliquary/internal/config"
 	"reliquary/internal/database"
 	apperrors "reliquary/internal/errors"
@@ -27,7 +22,6 @@ import (
 	"reliquary/internal/runtime"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
-	secutils "reliquary/internal/utils"
 )
 
 type runtimeKnowledgeCanceller interface {
@@ -37,7 +31,6 @@ type runtimeKnowledgeCanceller interface {
 // SystemHandler handles system-related requests
 type SystemHandler struct {
 	cfg              *config.Config
-	documentReader   interfaces.DocumentReader
 	tenantSvc        interfaces.TenantService
 	userSvc          interfaces.UserService
 	systemSettingSvc interfaces.SystemSettingService
@@ -46,40 +39,31 @@ type SystemHandler struct {
 	// knowledgeSvc supplies the domain-level cancellation path used by the
 	// runtime task console. It updates business state and tracing before queue
 	// records are removed, unlike a raw Redis deletion.
-	knowledgeSvc runtimeKnowledgeCanceller
-	// storageBackendRepo lets GetStorageEngineStatus report multi-instance
-	// storage backends (Settings → Storage) as "available", not just the legacy
-	// singleton tenant.StorageEngineConfig. Optional — nil in partially-wired
-	// unit tests, in which case only the legacy config is consulted.
-	storageBackendRepo interfaces.StorageBackendRepository
-	sandboxConfigSvc   sandboxConfigService
+	knowledgeSvc     runtimeKnowledgeCanceller
+	sandboxConfigSvc sandboxConfigService
 	// startup snapshot for GET /system/capabilities; bound in router.NewRouter.
 	deploymentCapabilities DeploymentCapabilitiesData
 }
 
 // NewSystemHandler creates a new system handler
 func NewSystemHandler(cfg *config.Config,
-	documentReader interfaces.DocumentReader,
 	tenantSvc interfaces.TenantService,
 	userSvc interfaces.UserService,
 	systemSettingSvc interfaces.SystemSettingService,
 	apiKeySvc interfaces.TenantAPIKeyService,
 	taskInspector interfaces.TaskInspector,
 	knowledgeSvc interfaces.KnowledgeService,
-	storageBackendRepo interfaces.StorageBackendRepository,
 	sandboxConfigSvc *service.TenantSandboxConfigService,
 ) *SystemHandler {
 	return &SystemHandler{
-		cfg:                cfg,
-		documentReader:     documentReader,
-		tenantSvc:          tenantSvc,
-		userSvc:            userSvc,
-		systemSettingSvc:   systemSettingSvc,
-		apiKeySvc:          apiKeySvc,
-		taskInspector:      taskInspector,
-		knowledgeSvc:       knowledgeSvc,
-		storageBackendRepo: storageBackendRepo,
-		sandboxConfigSvc:   sandboxConfigSvc,
+		cfg:              cfg,
+		tenantSvc:        tenantSvc,
+		userSvc:          userSvc,
+		systemSettingSvc: systemSettingSvc,
+		apiKeySvc:        apiKeySvc,
+		taskInspector:    taskInspector,
+		knowledgeSvc:     knowledgeSvc,
+		sandboxConfigSvc: sandboxConfigSvc,
 	}
 }
 
@@ -91,8 +75,6 @@ type GetSystemInfoResponse struct {
 	BuildTime          string `json:"build_time,omitempty"`
 	GoVersion          string `json:"go_version,omitempty"`
 	KeywordIndexEngine string `json:"keyword_index_engine,omitempty"`
-	VectorStoreEngine  string `json:"vector_store_engine,omitempty"`
-	MinioEnabled       bool   `json:"minio_enabled,omitempty"`
 	DBVersion          string `json:"db_version,omitempty"`
 	// DBMigrationError carries the human-readable error message recorded when
 	// the most recent startup migration attempt failed. Empty when migrations
@@ -128,11 +110,6 @@ func (h *SystemHandler) GetSystemInfo(c *gin.Context) {
 	// PostgreSQL provides both keyword and vector retrieval.
 	keywordIndexEngine := h.getKeywordIndexEngine()
 
-	vectorStoreEngine := h.getVectorStoreEngine()
-
-	// Get MinIO enabled status
-	minioEnabled := h.isMinioConfigured(c)
-
 	dbMigrationErr := database.CachedMigrationError()
 	var dbVersion string
 	if ver, dirty, ok := database.CachedMigrationVersion(); ok {
@@ -164,8 +141,6 @@ func (h *SystemHandler) GetSystemInfo(c *gin.Context) {
 		BuildTime:          BuildTime,
 		GoVersion:          GoVersion,
 		KeywordIndexEngine: keywordIndexEngine,
-		VectorStoreEngine:  vectorStoreEngine,
-		MinioEnabled:       minioEnabled,
 		DBVersion:          dbVersion,
 		DBMigrationError:   dbMigrationErr,
 		StartedAt:          startedAt,
@@ -180,19 +155,8 @@ func (h *SystemHandler) GetSystemInfo(c *gin.Context) {
 	})
 }
 
-func (h *SystemHandler) getDocReaderConnInfo() (addr, transport string) {
-	addr = strings.TrimSpace(os.Getenv("DOCREADER_ADDR"))
-	transport = strings.TrimSpace(os.Getenv("DOCREADER_TRANSPORT"))
-	if transport == "" {
-		transport = "grpc"
-	}
-	transport = strings.ToLower(transport)
-	return addr, transport
-}
-
 // ListParserEngines returns available document parser engines.
-// Merges Go-native static engines with engines discovered from the remote
-// docreader service, so newly added Python engines are auto-discovered.
+// Lists the four retained parser engines with their availability.
 // @Summary      列出可用的文档解析引擎
 // @Tags         系统
 // @Produce      json
@@ -208,66 +172,8 @@ func (h *SystemHandler) ListParserEngines(c *gin.Context) {
 		}
 	}
 
-	reader, docreaderAddr, docreaderTransport := h.resolveDocReader(c.Request.Context(), overrides)
-	connected := reader != nil && reader.IsConnected()
-	remoteEngines := h.fetchRemoteEngines(c.Request.Context(), reader, overrides)
-	engines := docparser.ListAllEngines(connected, overrides, remoteEngines)
-	c.JSON(200, gin.H{"code": 0, "msg": "success", "data": engines, "docreader_addr": docreaderAddr, "docreader_transport": docreaderTransport, "connected": connected})
-}
-
-// ReconnectDocReader reconnects the document converter to a new (or same) DocReader address.
-// @Summary      重连文档解析服务
-// @Tags         系统
-// @Accept       json
-// @Produce      json
-// @Param        request  body  object{addr string} true "DocReader 地址"
-// @Success      200
-// @Router       /system/docreader/reconnect [post]
-func (h *SystemHandler) ReconnectDocReader(c *gin.Context) {
-	var req struct {
-		Addr string `json:"addr" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"code": 1, "msg": "请提供 addr 参数"})
-		return
-	}
-	addr := strings.TrimSpace(req.Addr)
-	if addr == "" {
-		c.JSON(400, gin.H{"code": 1, "msg": "addr 不能为空"})
-		return
-	}
-
-	// SSRF validation for docreader address
-	if err := secutils.ValidateURLForSSRF(addr); err != nil {
-		logger.Warnf(c.Request.Context(), "SSRF validation failed for docreader addr: %v", err)
-		c.JSON(400, gin.H{"code": 1, "msg": secutils.FormatSSRFError("DocReader 地址", addr, err)})
-		return
-	}
-
-	if h.documentReader == nil {
-		c.JSON(500, gin.H{"code": 1, "msg": "document converter not initialized"})
-		return
-	}
-
-	if err := h.documentReader.Reconnect(addr); err != nil {
-		logger.Errorf(c.Request.Context(), "Failed to reconnect docreader to %s: %v", addr, err)
-		c.JSON(200, gin.H{"code": 1, "msg": fmt.Sprintf("连接失败: %v", err)})
-		return
-	}
-
-	var overrides map[string]string
-	if v, exists := c.Get(types.TenantInfoContextKey.String()); exists {
-		if tenant, ok := v.(*types.Tenant); ok && tenant != nil {
-			if tenant.ParserEngineConfig != nil {
-				overrides = tenant.ParserEngineConfig.ToOverridesMap()
-			}
-		}
-	}
-	remoteEngines := h.fetchRemoteEngines(c.Request.Context(), h.documentReader, overrides)
-	engines := docparser.ListAllEngines(true, overrides, remoteEngines)
-
-	_, docreaderTransport := h.getDocReaderConnInfo()
-	c.JSON(200, gin.H{"code": 0, "msg": "连接成功", "data": engines, "docreader_addr": addr, "docreader_transport": docreaderTransport, "connected": true})
+	engines := docparser.ListAllEngines(overrides)
+	c.JSON(200, gin.H{"code": 0, "msg": "success", "data": engines})
 }
 
 // CheckParserEngines runs availability check with the given config overrides (e.g. current form values).
@@ -286,355 +192,20 @@ func (h *SystemHandler) CheckParserEngines(c *gin.Context) {
 		return
 	}
 	var existing *types.ParserEngineConfig
-	var tenant *types.Tenant
 	if v, exists := c.Get(types.TenantInfoContextKey.String()); exists {
 		if t, ok := v.(*types.Tenant); ok && t != nil {
-			tenant = t
 			existing = t.ParserEngineConfig
 		}
 	}
 	merged := types.MergeParserEngineConfigForUpdate(&body, existing)
 	overrides := merged.ToOverridesMap()
-	if tenant != nil {
-	}
-	reader, docreaderAddr, docreaderTransport := h.resolveDocReader(c.Request.Context(), overrides)
-	connected := reader != nil && reader.IsConnected()
-	remoteEngines := h.fetchRemoteEngines(c.Request.Context(), reader, overrides)
-	engines := docparser.ListAllEngines(connected, overrides, remoteEngines)
-	c.JSON(200, gin.H{"code": 0, "msg": "success", "data": engines, "docreader_addr": docreaderAddr, "docreader_transport": docreaderTransport, "connected": connected})
-}
-
-func (h *SystemHandler) resolveDocReader(ctx context.Context, overrides map[string]string) (interfaces.DocumentReader, string, string) {
-	if len(overrides) > 0 {
-	}
-
-	addr, transport := h.getDocReaderConnInfo()
-	return h.documentReader, addr, transport
-}
-
-func transportFromDocReaderAddr(addr string) string {
-	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(addr)), "https://") {
-		return "https"
-	}
-	return "http"
-}
-
-// fetchRemoteEngines queries the remote docreader for its engine list.
-// Returns nil on any error (e.g. not connected), letting the caller
-// fall back to Go's static registry only.
-func (h *SystemHandler) fetchRemoteEngines(ctx context.Context, reader interfaces.DocumentReader, overrides map[string]string) []types.ParserEngineInfo {
-	if reader == nil || !reader.IsConnected() {
-		return nil
-	}
-	engines, err := reader.ListEngines(ctx, overrides)
-	if err != nil {
-		logger.Warnf(ctx, "Failed to fetch remote engines from docreader: %v", err)
-		return nil
-	}
-	return engines
+	engines := docparser.ListAllEngines(overrides)
+	c.JSON(200, gin.H{"code": 0, "msg": "success", "data": engines})
 }
 
 // getKeywordIndexEngine returns the application's PostgreSQL keyword engine.
 func (h *SystemHandler) getKeywordIndexEngine() string {
 	return string(types.PostgresRetrieverEngineType)
-}
-
-// getVectorStoreEngine returns the application's PostgreSQL vector engine.
-func (h *SystemHandler) getVectorStoreEngine() string {
-	return string(types.PostgresRetrieverEngineType)
-}
-
-// getMinioConfig resolves MinIO connection parameters from tenant config (if mode=remote) or env vars (mode=docker/default).
-func (h *SystemHandler) getMinioConfig(c *gin.Context) (endpoint, accessKeyID, secretAccessKey string) {
-	if v, exists := c.Get(types.TenantInfoContextKey.String()); exists {
-		if tenant, ok := v.(*types.Tenant); ok && tenant != nil && tenant.StorageEngineConfig != nil && tenant.StorageEngineConfig.MinIO != nil {
-			m := tenant.StorageEngineConfig.MinIO
-			if m.Mode == "remote" {
-				return m.Endpoint, m.AccessKeyID, m.SecretAccessKey
-			}
-		}
-	}
-	endpoint = os.Getenv("MINIO_ENDPOINT")
-	accessKeyID = os.Getenv("MINIO_ACCESS_KEY_ID")
-	secretAccessKey = os.Getenv("MINIO_SECRET_ACCESS_KEY")
-	return
-}
-
-// activeBackendProviders returns the set of storage providers that have at
-// least one active multi-instance backend registered for the caller's
-// workspace. Used to keep GetStorageEngineStatus in sync with the new Storage
-// settings UI, which writes to storage_backends rather than the legacy
-// tenant.StorageEngineConfig singleton. Best-effort and nil-safe: a missing
-// repo, missing tenant, or query error yields an empty set so callers fall
-// back to the legacy config checks.
-func (h *SystemHandler) activeBackendProviders(c *gin.Context) map[string]bool {
-	result := map[string]bool{}
-	if h.storageBackendRepo == nil {
-		return result
-	}
-	v, exists := c.Get(types.TenantInfoContextKey.String())
-	if !exists {
-		return result
-	}
-	tenant, ok := v.(*types.Tenant)
-	if !ok || tenant == nil {
-		return result
-	}
-	backends, err := h.storageBackendRepo.List(c.Request.Context(), tenant.ID)
-	if err != nil {
-		logger.Warnf(c.Request.Context(), "[storage] list backends for status failed: tenant=%d err=%v", tenant.ID, err)
-		return result
-	}
-	for _, backend := range backends {
-		if backend == nil || backend.Status != types.StorageBackendStatusActive {
-			continue
-		}
-		result[strings.ToLower(strings.TrimSpace(backend.Provider))] = true
-	}
-	return result
-}
-
-// isMinioConfigured checks whether MinIO connection info is available (from tenant config or env).
-func (h *SystemHandler) isMinioConfigured(c *gin.Context) bool {
-	endpoint, accessKeyID, secretAccessKey := h.getMinioConfig(c)
-	return endpoint != "" && accessKeyID != "" && secretAccessKey != ""
-}
-
-// isMinioEnvAvailable checks whether MinIO env vars (MINIO_ENDPOINT etc.) are set.
-func (h *SystemHandler) isMinioEnvAvailable() bool {
-	return os.Getenv("MINIO_ENDPOINT") != "" &&
-		os.Getenv("MINIO_ACCESS_KEY_ID") != "" &&
-		os.Getenv("MINIO_SECRET_ACCESS_KEY") != ""
-}
-
-// GetStorageEngineStatus godoc
-// @Summary      获取存储引擎状态
-// @Description  返回 Local 和 S3 兼容 各存储引擎的可用状态及说明，供全局设置与知识库选择使用
-// @Tags         系统
-// @Produce      json
-// @Success      200  {object}  GetStorageEngineStatusResponse
-// @Router       /system/storage-engine-status [get]
-func (h *SystemHandler) GetStorageEngineStatus(c *gin.Context) {
-	// Providers that already have an active multi-instance backend registered
-	// (Settings → Storage). These are authoritative and independent of the
-	// legacy singleton tenant.StorageEngineConfig, so a workspace that only
-	// configured storage through the new UI is still reported as available.
-	activeBackend := h.activeBackendProviders(c)
-	minioConfigured := h.isMinioConfigured(c) || activeBackend["minio"]
-	minioEnvAvailable := h.isMinioEnvAvailable()
-	s3Configured := h.isS3Configured(c) || activeBackend["s3"]
-	allowed := getAllowedStorageProviders()
-	allowedProviders := make([]string, 0, len(getSupportedStorageProviders()))
-	for _, provider := range getSupportedStorageProviders() {
-		if allowed[provider] {
-			allowedProviders = append(allowedProviders, provider)
-		}
-	}
-	engines := []StorageEngineStatusItem{
-		{Name: "local", Allowed: allowed["local"], Available: true, Description: "本地文件系统存储，仅适合单机部署"},
-		{Name: "minio", Allowed: allowed["minio"], Available: minioConfigured || minioEnvAvailable, Description: "S3 兼容的自托管对象存储，适合内网和私有云部署"},
-		{Name: "s3", Allowed: allowed["s3"], Available: s3Configured, Description: "AWS S3 与兼容对象存储服务，适合公有云与混合云部署"},
-	}
-	c.JSON(200, gin.H{
-		"code": 0,
-		"msg":  "success",
-		"data": GetStorageEngineStatusResponse{Engines: engines, AllowedProviders: allowedProviders, MinioEnvAvailable: minioEnvAvailable},
-	})
-}
-
-var storageFieldPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$`)
-
-// sanitizeStorageCheckError converts a raw storage connectivity error into a safe
-// user-facing message that does not leak internal network details (hostnames, IPs, ports).
-// The concrete mapping lives in internal/utils so the service layer can share it.
-func sanitizeStorageCheckError(err error) string {
-	return secutils.SanitizeStorageConnectivityError(err)
-}
-
-// storageEndpointHost extracts the hostname from a storage endpoint string.
-// Endpoints may be bare host:port, hostnames, or full URLs with a scheme
-// (e.g. "http://127.0.0.1:9000" for S3-compatible stores).
-func storageEndpointHost(endpoint string) string {
-	endpoint = strings.TrimSpace(endpoint)
-	if endpoint == "" {
-		return ""
-	}
-	if strings.Contains(endpoint, "://") {
-		if u, err := url.Parse(endpoint); err == nil {
-			if h := u.Hostname(); h != "" {
-				return h
-			}
-		}
-	}
-	if host, _, err := net.SplitHostPort(endpoint); err == nil {
-		return host
-	}
-	return endpoint
-}
-
-// isBlockedStorageEndpoint keeps the legacy handler contract while delegating
-// to the same fail-closed SSRF policy used by the storage clients themselves.
-// Private storage endpoints must be explicitly whitelisted by an operator.
-func isBlockedStorageEndpoint(endpoint string) (bool, string) {
-	endpoint = strings.TrimSpace(endpoint)
-	if endpoint == "" {
-		return true, "无效的地址"
-	}
-	if err := secutils.ValidateURLForSSRF(endpoint); err != nil {
-		return true, secutils.FormatSSRFError("存储 Endpoint", endpoint, err)
-	}
-	return false, ""
-}
-
-// CheckStorageEngine tests connectivity for a single storage engine using the provided config.
-// @Summary      测试存储引擎连通性
-// @Description  使用当前填写的参数测试 S3-compatible 连通性，不保存配置
-// @Tags         系统
-// @Accept       json
-// @Produce      json
-// @Param        body  body  StorageCheckRequest  true  "存储引擎配置"
-// @Success      200   {object}  StorageCheckResponse
-// @Router       /system/storage-engine-check [post]
-func (h *SystemHandler) CheckStorageEngine(c *gin.Context) {
-	ctx := logger.CloneContext(c.Request.Context())
-
-	var req StorageCheckRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"code": 1, "msg": "请求体格式错误"})
-		return
-	}
-	if !isStorageProviderAllowed(req.Provider) {
-		c.JSON(403, gin.H{"code": 1, "msg": "该存储引擎已被禁用"})
-		return
-	}
-
-	switch req.Provider {
-	case "minio":
-		h.checkMinio(c, ctx, req.MinIO)
-	case "s3":
-		h.checkS3(c, ctx, req.S3)
-	default:
-		c.JSON(200, gin.H{"code": 0, "data": StorageCheckResponse{OK: true, Message: "本地存储无需检测"}})
-	}
-}
-
-func (h *SystemHandler) isS3Configured(c *gin.Context) bool {
-	if v, exists := c.Get(types.TenantInfoContextKey.String()); exists {
-		if tenant, ok := v.(*types.Tenant); ok && tenant != nil && tenant.StorageEngineConfig != nil && tenant.StorageEngineConfig.S3 != nil {
-			s3Conf := tenant.StorageEngineConfig.S3
-			return s3Conf.Region != "" && s3Conf.BucketName != "" && (s3Conf.AccessKey == "") == (s3Conf.SecretKey == "")
-		}
-	}
-	return false
-}
-
-func (h *SystemHandler) checkMinio(c *gin.Context, ctx context.Context, cfg *types.MinIOEngineConfig) {
-	if cfg == nil {
-		c.JSON(200, gin.H{"code": 0, "data": StorageCheckResponse{OK: false, Message: "未提供 MinIO 配置"}})
-		return
-	}
-
-	if cfg.BucketName != "" && !storageFieldPattern.MatchString(cfg.BucketName) {
-		c.JSON(200, gin.H{"code": 0, "data": StorageCheckResponse{OK: false, Message: "Bucket 名称格式不正确，仅允许字母、数字、点、连字符"}})
-		return
-	}
-
-	endpoint, accessKeyID, secretAccessKey := cfg.Endpoint, cfg.AccessKeyID, cfg.SecretAccessKey
-	if cfg.Mode != "remote" {
-		endpoint = os.Getenv("MINIO_ENDPOINT")
-		accessKeyID = os.Getenv("MINIO_ACCESS_KEY_ID")
-		secretAccessKey = os.Getenv("MINIO_SECRET_ACCESS_KEY")
-	}
-	if endpoint == "" || accessKeyID == "" || secretAccessKey == "" {
-		c.JSON(200, gin.H{"code": 0, "data": StorageCheckResponse{OK: false, Message: "Endpoint、Access Key、Secret Key 不能为空"}})
-		return
-	}
-
-	if cfg.Mode == "remote" {
-		if blocked, reason := isBlockedStorageEndpoint(endpoint); blocked {
-			logger.Warnf(ctx, "Storage check: MinIO endpoint blocked by SSRF protection, endpoint: %s", endpoint)
-			c.JSON(200, gin.H{"code": 0, "data": StorageCheckResponse{OK: false, Message: reason}})
-			return
-		}
-	}
-
-	err := file.CheckMinioConnectivity(ctx, endpoint, accessKeyID, secretAccessKey, cfg.BucketName, cfg.UseSSL)
-	if err != nil {
-		errMsg := err.Error()
-		// If bucket does not exist, auto-create it
-		if strings.Contains(errMsg, "does not exist") && cfg.BucketName != "" {
-			logger.Info(ctx, "Storage check: bucket does not exist, attempting auto-creation", "bucket", cfg.BucketName)
-			if _, mkErr := file.NewMinioFileService(endpoint, accessKeyID, secretAccessKey, cfg.BucketName, cfg.UseSSL); mkErr != nil {
-				logger.Error(ctx, "Storage check: failed to create bucket", "bucket", cfg.BucketName, "error", mkErr)
-				c.JSON(200, gin.H{"code": 0, "data": StorageCheckResponse{OK: false, Message: fmt.Sprintf("Failed to auto-create Bucket '%s': %s", cfg.BucketName, sanitizeStorageCheckError(mkErr))}})
-				return
-			}
-			logger.Info(ctx, "Storage check: bucket created", "bucket", cfg.BucketName)
-			c.JSON(200, gin.H{"code": 0, "data": StorageCheckResponse{OK: true, BucketCreated: true, Message: fmt.Sprintf("Bucket '%s' does not exist, and has been automatically created", cfg.BucketName)}})
-			return
-		}
-		logger.Error(ctx, "Storage check: MinIO connectivity failed", "error", err)
-		c.JSON(200, gin.H{"code": 0, "data": StorageCheckResponse{OK: false, Message: sanitizeStorageCheckError(err)}})
-		return
-	}
-
-	msg := "连接成功"
-	if cfg.BucketName != "" {
-		msg = fmt.Sprintf("连接成功，Bucket「%s」已确认存在", cfg.BucketName)
-	}
-	c.JSON(200, gin.H{"code": 0, "data": StorageCheckResponse{OK: true, Message: msg}})
-}
-
-func (h *SystemHandler) checkS3(c *gin.Context, ctx context.Context, cfg *types.S3EngineConfig) {
-	if cfg == nil {
-		c.JSON(200, gin.H{"code": 0, "data": StorageCheckResponse{OK: false, Message: "未提供 S3 配置"}})
-		return
-	}
-	if cfg.Region == "" || cfg.BucketName == "" {
-		c.JSON(200, gin.H{"code": 0, "data": StorageCheckResponse{OK: false, Message: "Region、Bucket 名称不能为空"}})
-		return
-	}
-	if (cfg.AccessKey == "") != (cfg.SecretKey == "") {
-		c.JSON(200, gin.H{"code": 0, "data": StorageCheckResponse{OK: false, Message: "Access Key 与 Secret Key 必须同时填写或同时留空（使用 AWS 默认凭证链）"}})
-		return
-	}
-
-	if cfg.Endpoint != "" {
-		if blocked, reason := isBlockedStorageEndpoint(cfg.Endpoint); blocked {
-			logger.Warnf(ctx, "Storage check: S3 endpoint blocked by SSRF protection, endpoint: %s", cfg.Endpoint)
-			c.JSON(200, gin.H{"code": 0, "data": StorageCheckResponse{OK: false, Message: reason}})
-			return
-		}
-	}
-
-	err := file.CheckS3Connectivity(ctx, cfg.Endpoint, cfg.AccessKey, cfg.SecretKey, cfg.BucketName, cfg.Region)
-	if err != nil {
-		logger.Errorf(ctx, "Storage check: S3 connectivity failed, bucket: %s, error: %v", cfg.BucketName, err)
-		errMsg := err.Error()
-		if strings.Contains(errMsg, "403") {
-			c.JSON(200, gin.H{"code": 0, "data": StorageCheckResponse{OK: false, Message: "认证失败，请检查静态密钥或 AWS IAM Role / 默认凭证链权限"}})
-			return
-		}
-		if strings.Contains(errMsg, "404") || strings.Contains(errMsg, "NotFound") {
-			c.JSON(200, gin.H{"code": 0, "data": StorageCheckResponse{OK: false, Message: fmt.Sprintf("Bucket「%s」不存在，请检查名称和 Region", cfg.BucketName)}})
-			return
-		}
-		c.JSON(200, gin.H{"code": 0, "data": StorageCheckResponse{OK: false, Message: sanitizeStorageCheckError(err)}})
-		return
-	}
-	c.JSON(200, gin.H{"code": 0, "data": StorageCheckResponse{OK: true, Message: fmt.Sprintf("连接成功，Bucket「%s」已确认存在", cfg.BucketName)}})
-}
-
-func (h *SystemHandler) ResolveDocumentReader(ctx context.Context, addr string) interfaces.DocumentReader {
-	if addr == "" {
-		return h.documentReader
-	}
-
-	reader, err := docparser.NewHTTPDocumentReader(addr)
-	if err != nil || reader == nil {
-		return reader
-	}
-	return reader
 }
 
 func aggregateRuntimeWorkerPools(pools []RuntimeWorkerPool, servers []types.WorkerServerStat) {
@@ -1191,14 +762,6 @@ type RuntimeWorkerPool struct {
 	Utilization     float64 `json:"utilization"`      // Active / ClusterCapacity
 }
 
-// StorageEngineStatusItem describes one storage engine's availability and description.
-type StorageEngineStatusItem struct {
-	Name        string `json:"name"` // "local", "minio", "s3"
-	Allowed     bool   `json:"allowed"`
-	Available   bool   `json:"available"`   // whether the engine can be used
-	Description string `json:"description"` // short description for UI
-}
-
 // UpdateSystemSettingRequest is the body for PUT /system/admin/settings/:key.
 // `value` carries the new value as raw JSON — int / string / bool depending
 // on the registry-declared value_type. The service validates the type
@@ -1208,25 +771,4 @@ type UpdateSystemSettingRequest struct {
 	// etc. by the JSON unmarshaller). Service.encodeForType normalises
 	// these against the registry's declared type and rejects mismatches.
 	Value any `json:"value"`
-}
-
-// StorageCheckResponse is the response for a single-engine connectivity check.
-type StorageCheckResponse struct {
-	OK            bool   `json:"ok"`
-	Message       string `json:"message"`
-	BucketCreated bool   `json:"bucket_created,omitempty"`
-}
-
-// GetStorageEngineStatusResponse is the response for GET /system/storage-engine-status.
-type GetStorageEngineStatusResponse struct {
-	Engines           []StorageEngineStatusItem `json:"engines"`
-	AllowedProviders  []string                  `json:"allowed_providers"`
-	MinioEnvAvailable bool                      `json:"minio_env_available"`
-}
-
-// StorageCheckRequest is the body for POST /system/storage-engine-check.
-type StorageCheckRequest struct {
-	Provider string                   `json:"provider"` // "minio", "s3"
-	MinIO    *types.MinIOEngineConfig `json:"minio,omitempty"`
-	S3       *types.S3EngineConfig    `json:"s3,omitempty"`
 }

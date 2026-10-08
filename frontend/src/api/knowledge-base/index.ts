@@ -26,32 +26,6 @@ export function listKnowledgeBases(params?: {
   return get(qs ? `/api/v1/knowledge-bases?${qs}` : '/api/v1/knowledge-bases');
 }
 
-// Read-only vector-store binding metadata enriched onto every KB
-// response (list, create, get, update, pin). Source carries where the
-// binding points; status reports whether that target is currently
-// reachable by the server.
-//
-//   - source 'env'    → KB uses the tenant's env-configured store
-//                       (RETRIEVE_DRIVER). vector_store_id is null and
-//                       vector_store_name is the localized "System
-//                       default" label; vector_store_engine_type still
-//                       reports the underlying engine (e.g. "postgres").
-//   - source 'user'   → KB is bound to a tenant-owned VectorStore.
-//                       vector_store_id / name / engine_type are real.
-//   - status 'unavailable' → the binding cannot be reached right now
-//                       (deleted row, registry miss, transient infra
-//                       failure). Operators recover via the global
-//                       Vector Stores settings page.
-export type VectorStoreSource = 'env' | 'user' | 'unavailable';
-export type VectorStoreStatus = 'available' | 'unavailable';
-
-export interface KnowledgeBaseStoreView {
-  vector_store_name?: string;
-  vector_store_engine_type?: string;
-  vector_store_source?: VectorStoreSource;
-  vector_store_status?: VectorStoreStatus;
-}
-
 export function createKnowledgeBase(data: {
   model_tiers?: ModelTierConfig;
   domain_id: string;
@@ -64,15 +38,12 @@ export function createKnowledgeBase(data: {
   auto_tag_config?: { enabled: boolean; model_id?: string; max_tags?: number; skip_if_tagged?: boolean; policy?: string };
   // Concrete tenant-owned storage instance. When omitted, the tenant default
   // backend is bound by the server at creation time.
-  storage_backend_id?: string;
   vlm_config?: {
     enabled: boolean;
     model_id?: string;
     description_language?: string;
     custom_instructions?: string;
   };
-  storage_provider_config?: { provider: string };
-  storage_config?: any; // legacy, kept for backward compat (dual-write)
   asr_config?: {
     enabled: boolean;
     model_id?: string;

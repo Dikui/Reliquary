@@ -428,7 +428,6 @@ CREATE TABLE public.knowledge_bases (
     image_processing_config jsonb DEFAULT '{"model_id": "", "enable_multimodal": false}'::jsonb NOT NULL,
     embedding_model_id character varying(64) NOT NULL,
     summary_model_id character varying(64) NOT NULL,
-    cos_config jsonb DEFAULT '{}'::jsonb NOT NULL,
     vlm_config jsonb DEFAULT '{}'::jsonb NOT NULL,
     extract_config jsonb,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
@@ -437,15 +436,12 @@ CREATE TABLE public.knowledge_bases (
     is_temporary boolean DEFAULT false NOT NULL,
     type character varying(32) DEFAULT 'document'::character varying NOT NULL,
     question_generation_config jsonb,
-    storage_provider_config jsonb,
     is_pinned boolean DEFAULT false NOT NULL,
     pinned_at timestamp with time zone,
     asr_config jsonb,
-    vector_store_id character varying(36),
     wiki_config jsonb,
     indexing_strategy jsonb,
     creator_id character varying(36),
-    storage_backend_id character varying(36),
     auto_tag_config jsonb
 );
 
@@ -460,24 +456,10 @@ COMMENT ON COLUMN public.knowledge_bases.is_temporary IS 'Whether this knowledge
 
 
 --
--- Name: COLUMN knowledge_bases.storage_provider_config; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.knowledge_bases.storage_provider_config IS 'Storage provider config for this KB. Only stores provider name; credentials come from tenant StorageEngineConfig.';
-
-
---
 -- Name: COLUMN knowledge_bases.asr_config; Type: COMMENT; Schema: public
 --
 
 COMMENT ON COLUMN public.knowledge_bases.asr_config IS 'ASR (Automatic Speech Recognition) configuration: {"enabled": bool, "model_id": string, "language": string}';
-
-
---
--- Name: COLUMN knowledge_bases.vector_store_id; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.knowledge_bases.vector_store_id IS 'References vector_stores.id. NULL means tenant default (env store derived from RETRIEVE_DRIVER). Immutable after creation (enforced at ORM and service layer). No FK by design.';
 
 
 --
@@ -1369,7 +1351,6 @@ CREATE TABLE public.resources (
     id character varying(36) NOT NULL,
     handle character varying(22) NOT NULL,
     tenant_id bigint NOT NULL,
-    storage_backend_id character varying(36),
     provider character varying(32) NOT NULL,
     physical_path text NOT NULL,
     location_hash character varying(64) NOT NULL,
@@ -1441,25 +1422,6 @@ COMMENT ON COLUMN public.sessions.context_config IS 'LLM context management conf
 --
 
 COMMENT ON COLUMN public.sessions.sandbox_config_id IS 'Sandbox config the session current live sandbox was created on; NULL = no live sandbox, ''-'' = deployment default';
-
-
---
--- Name: storage_backends; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.storage_backends (
-    id character varying(36) NOT NULL,
-    tenant_id bigint NOT NULL,
-    name character varying(255) NOT NULL,
-    provider character varying(32) NOT NULL,
-    config jsonb DEFAULT '{}'::jsonb NOT NULL,
-    source character varying(16) DEFAULT 'user'::character varying NOT NULL,
-    status character varying(16) DEFAULT 'active'::character varying NOT NULL,
-    legacy_alias boolean DEFAULT false NOT NULL,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    deleted_at timestamp without time zone
-);
 
 
 --
@@ -1935,7 +1897,6 @@ CREATE TABLE public.tenants (
     id integer NOT NULL CHECK (id = 1),
     name character varying(255) NOT NULL,
     description text,
-    retriever_engines jsonb DEFAULT '[]'::jsonb NOT NULL,
     status character varying(50) DEFAULT 'active'::character varying,
     business character varying(255) NOT NULL,
     storage_quota bigint DEFAULT '10737418240'::bigint NOT NULL,
@@ -1948,11 +1909,9 @@ CREATE TABLE public.tenants (
     conversation_config jsonb,
     web_search_config jsonb,
     parser_engine_config jsonb,
-    storage_engine_config jsonb,
     chat_history_config jsonb,
     retrieval_config jsonb,
     credentials jsonb,
-    default_storage_backend_id character varying(36),
     memory_config jsonb
 );
 
@@ -1990,13 +1949,6 @@ COMMENT ON COLUMN public.tenants.web_search_config IS 'Web search configuration 
 --
 
 COMMENT ON COLUMN public.tenants.parser_engine_config IS 'Parser engine overrides (mineru_endpoint, mineru_api_key, etc.); takes precedence over env when parsing';
-
-
---
--- Name: COLUMN tenants.storage_engine_config; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.tenants.storage_engine_config IS 'Storage engine parameters for Local, MinIO, COS; used for document/file storage and docreader';
 
 
 --
@@ -2124,23 +2076,6 @@ COMMENT ON COLUMN public.users.tenant_id IS 'Tenant ID that the user belongs to'
 
 COMMENT ON COLUMN public.users.is_active IS 'Whether the user is active';
 
-
-
---
--- Name: vector_stores; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.vector_stores (
-    id character varying(36) NOT NULL,
-    name character varying(255) NOT NULL,
-    engine_type character varying(50) NOT NULL,
-    connection_config jsonb DEFAULT '{}'::jsonb NOT NULL,
-    index_config jsonb DEFAULT '{}'::jsonb NOT NULL,
-    tenant_id bigint NOT NULL,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    deleted_at timestamp without time zone
-);
 
 
 --
@@ -2723,14 +2658,6 @@ ALTER TABLE ONLY public.sessions
 
 
 --
--- Name: storage_backends storage_backends_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.storage_backends
-    ADD CONSTRAINT storage_backends_pkey PRIMARY KEY (id);
-
-
---
 -- Name: sync_logs sync_logs_pkey; Type: CONSTRAINT; Schema: public
 --
 
@@ -2888,14 +2815,6 @@ ALTER TABLE ONLY public.users
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_username_key UNIQUE (username);
-
-
---
--- Name: vector_stores vector_stores_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.vector_stores
-    ADD CONSTRAINT vector_stores_pkey PRIMARY KEY (id);
 
 
 --
@@ -3335,13 +3254,6 @@ CREATE INDEX idx_knowledge_anomalies_scope ON public.knowledge_anomalies USING b
 
 
 --
--- Name: idx_knowledge_bases_storage_backend; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_knowledge_bases_storage_backend ON public.knowledge_bases USING btree (tenant_id, storage_backend_id);
-
-
---
 -- Name: idx_knowledge_bases_tenant_creator; Type: INDEX; Schema: public
 --
 
@@ -3353,13 +3265,6 @@ CREATE INDEX idx_knowledge_bases_tenant_creator ON public.knowledge_bases USING 
 --
 
 CREATE INDEX idx_knowledge_bases_tenant_id ON public.knowledge_bases USING btree (tenant_id);
-
-
---
--- Name: idx_knowledge_bases_tenant_vector_store; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_knowledge_bases_tenant_vector_store ON public.knowledge_bases USING btree (tenant_id, vector_store_id);
 
 
 --
@@ -3797,13 +3702,6 @@ CREATE UNIQUE INDEX idx_resource_bindings_unique ON public.resource_bindings USI
 
 
 --
--- Name: idx_resources_backend; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_resources_backend ON public.resources USING btree (storage_backend_id);
-
-
---
 -- Name: idx_resources_tenant; Type: INDEX; Schema: public
 --
 
@@ -3850,27 +3748,6 @@ CREATE INDEX idx_sessions_tenant_id ON public.sessions USING btree (tenant_id);
 --
 
 CREATE INDEX idx_sessions_tenant_user_pin ON public.sessions USING btree (tenant_id, user_id, is_pinned DESC, pinned_at DESC, updated_at DESC) WHERE (deleted_at IS NULL);
-
-
---
--- Name: idx_storage_backends_legacy_alias; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_storage_backends_legacy_alias ON public.storage_backends USING btree (tenant_id, provider) WHERE ((deleted_at IS NULL) AND (legacy_alias = true));
-
-
---
--- Name: idx_storage_backends_name_tenant; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_storage_backends_name_tenant ON public.storage_backends USING btree (tenant_id, name) WHERE (deleted_at IS NULL);
-
-
---
--- Name: idx_storage_backends_tenant; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_storage_backends_tenant ON public.storage_backends USING btree (tenant_id);
 
 
 --
@@ -4088,34 +3965,6 @@ CREATE INDEX idx_users_tenant_id ON public.users USING btree (tenant_id);
 --
 
 CREATE INDEX idx_users_username ON public.users USING btree (username);
-
-
---
--- Name: idx_vector_stores_deleted_at; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_vector_stores_deleted_at ON public.vector_stores USING btree (deleted_at);
-
-
---
--- Name: idx_vector_stores_engine_type; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_vector_stores_engine_type ON public.vector_stores USING btree (engine_type);
-
-
---
--- Name: idx_vector_stores_name_tenant; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_vector_stores_name_tenant ON public.vector_stores USING btree (name, tenant_id) WHERE (deleted_at IS NULL);
-
-
---
--- Name: idx_vector_stores_tenant_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_vector_stores_tenant_id ON public.vector_stores USING btree (tenant_id);
 
 
 --

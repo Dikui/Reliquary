@@ -775,32 +775,6 @@
                       </div>
                     </div>
 
-                    <!-- 图片存储 Provider（图片上传启用时） -->
-                    <div v-if="formData.config.image_upload_enabled" class="setting-row">
-                      <div class="setting-info">
-                        <label>{{ $t('agentEditor.imageUpload.storageProvider') }}</label>
-                        <p class="desc">{{ $t('agentEditor.imageUpload.storageProviderDesc') }}</p>
-                      </div>
-                      <div class="setting-control" style="flex-direction: column; align-items: flex-end;">
-                        <t-select v-model="formData.config.image_storage_provider" style="width: 280px;"
-                          :placeholder="$t('agentEditor.imageUpload.storageProviderPlaceholder')" clearable>
-                          <t-option value="" :label="$t('agentEditor.imageUpload.storageDefault')" />
-                          <t-option v-for="opt in imageStorageOptions" :key="opt.value" :value="opt.value"
-                            :label="opt.label" :disabled="opt.disabled">
-                            <span class="select-option-with-tag">
-                              <span>{{ opt.label }}</span>
-                              <t-tag v-if="opt.disabled" theme="warning" variant="light" size="small">{{
-                                $t('agentEditor.imageUpload.notConfigured') }}</t-tag>
-                            </span>
-                          </t-option>
-                        </t-select>
-                        <a href="javascript:void(0)" class="go-settings-link"
-                          @click.prevent="uiStore.openSettings('storage')">
-                          {{ $t('agentEditor.imageUpload.goStorageSettings') }}
-                        </a>
-                      </div>
-                    </div>
-
                     <!-- 音频上传开关 -->
                     <div class="setting-row">
                       <div class="setting-info">
@@ -1776,7 +1750,6 @@ import { type WebSearchProviderEntity } from '@/api/web-search-provider';
 import {
   isNamedSandboxBackend,
   type SandboxConfigRecord,
-  type StorageEngineStatusItem,
   type PromptTemplate,
   type PromptTemplatesConfig,
 } from '@/api/system';
@@ -2214,20 +2187,6 @@ const selectedSandboxSummary = computed(() => {
   if (desc) parts.push(desc)
   return parts.filter(Boolean).join(' · ')
 })
-// 存储引擎可用状态（用于图片存储 provider 选择）
-const storageEngineStatus = ref<StorageEngineStatusItem[]>([]);
-const imageStorageOptions = computed(() => {
-  const statusMap: Record<string, boolean> = {};
-  for (const e of storageEngineStatus.value) {
-    statusMap[e.name] = e.available;
-  }
-  return [
-    { value: 'local', label: t('settings.storage.engineLocal'), disabled: false },
-    { value: 'minio', label: 'MinIO', disabled: statusMap.minio === false },
-    { value: 's3', label: 'Amazon S3', disabled: statusMap.s3 === false },
-  ];
-});
-
 // 系统默认配置（用于内置智能体显示默认提示词）
 // Agent (smart-reasoning) 模式的默认系统提示词。直接从 prompt-templates
 // 的 agent_system_prompt 数组里挑 mode==='rag' && default 的那条得到，
@@ -2641,7 +2600,6 @@ const defaultFormData = {
     // 附件上传设置
     image_upload_enabled: false,
     vlm_model_id: '',
-    image_storage_provider: '',
     // 附件图片理解 / 扫描件 OCR 开关（默认关闭，避免解析耗时增加）
     attachment_image_understanding: false,
     // 扫描件 OCR 最大页数（0 = 使用全局默认）
@@ -3667,14 +3625,10 @@ watch(() => uiStore.showSettingsModal, async (visible, prevVisible) => {
     try {
       await Promise.all([
         chatResources.ensureModels(true),
-        editorResources.ensureStorageEngine(true),
         chatResources.ensureSandboxConfigs(true),
       ]);
       if (chatResources.allModels.length > 0) {
         allModels.value = chatResources.allModels;
-      }
-      if (editorResources.storageStatus.length > 0) {
-        storageEngineStatus.value = editorResources.storageStatus;
       }
       await syncInstalledSkills(true);
     } catch (e) {
@@ -3753,8 +3707,6 @@ const loadDependencies = async () => {
 
     agentTypePresets.value = editorResources.agentTypePresets as AgentTypePreset[];
     applyPromptTemplateDefaults(editorResources.promptTemplates);
-
-    storageEngineStatus.value = editorResources.storageStatus;
 
     webSearchProviderList.value = chatResources.webSearchProviders as WebSearchProviderEntity[];
 

@@ -2,7 +2,7 @@
 
 Reliquary uses guaranteed per-stage worker pools plus an elastic pool for the
 document ingestion pipeline. Worker concurrency is a scheduling budget, not a
-replacement for model quotas, DocReader capacity, vector-store limits, or
+replacement for model quotas, parser capacity or
 database connection limits.
 
 ## Topology
@@ -20,7 +20,7 @@ The upstream total remains 32 workers per service instance by default. Wiki is
 separate and is not included in that total.
 
 Post-process has its own physical queue so lightweight fan-out work cannot sit
-behind long DocReader calls. Maintenance is intentionally excluded from the
+behind long parser calls. Maintenance is intentionally excluded from the
 shared pool because its long-running tasks could pin elastic capacity needed by
 the user-facing pipeline.
 
@@ -49,9 +49,9 @@ Tune these layers independently:
 
 1. Worker concurrency controls the number of task handlers admitted per
    service instance.
-2. Model quota governance controls provider concurrency, RPM, and TPM across
-   replicas and quota groups.
-3. DocReader, vector stores, object storage, Postgres, and local CPU/RAM retain
+2. Model quota governance controls provider concurrency and RPM within
+   the backend process and its quota groups.
+3. Parsers, Postgres, and local CPU/RAM retain
    their own resource limits.
 
 If model limiter waiting grows while worker queues are busy, adding workers
@@ -81,5 +81,5 @@ The runtime dashboard reports:
 
 Increase a pool only when backlog age grows while its downstream dependency has
 headroom. Reallocate to enrichment when core stays underutilized and fan-out
-queues grow. Reduce core admission when DocReader CPU, memory, or latency is the
+queues grow. Reduce core admission when parser CPU, memory, or latency is the
 bottleneck.

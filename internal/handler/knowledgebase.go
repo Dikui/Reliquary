@@ -24,18 +24,16 @@ import (
 
 // KnowledgeBaseHandler defines the HTTP handler for knowledge base operations
 type KnowledgeBaseHandler struct {
-	service            interfaces.KnowledgeBaseService
-	knowledgeService   interfaces.KnowledgeService
-	asynqClient        interfaces.TaskEnqueuer
-	vectorStoreService interfaces.VectorStoreService // enriches KB responses with bound store display
+	service          interfaces.KnowledgeBaseService
+	knowledgeService interfaces.KnowledgeService
+	asynqClient      interfaces.TaskEnqueuer
 	// userService 仅在 list 类接口里用于批量回填 creator_name；
 	// 真正的鉴权由 RBAC 中间件 + Lookup 完成，这里不参与决策。
 	userService interfaces.UserService
-	// fileService and storageResolver back the optional `resource_urls=public`
+	// fileService back the optional `resource_urls=public`
 	// mode on hybrid-search. Both may be nil in tests, in which case only the
 	// default handle mode is available.
-	fileService     interfaces.FileService
-	storageResolver interfaces.StorageBackendResolver
+	fileService interfaces.FileService
 }
 
 // NewKnowledgeBaseHandler creates a new knowledge base handler instance
@@ -43,19 +41,15 @@ func NewKnowledgeBaseHandler(
 	service interfaces.KnowledgeBaseService,
 	knowledgeService interfaces.KnowledgeService,
 	asynqClient interfaces.TaskEnqueuer,
-	vectorStoreService interfaces.VectorStoreService,
 	userService interfaces.UserService,
 	fileService interfaces.FileService,
-	storageResolver interfaces.StorageBackendResolver,
 ) *KnowledgeBaseHandler {
 	return &KnowledgeBaseHandler{
-		service:            service,
-		knowledgeService:   knowledgeService,
-		asynqClient:        asynqClient,
-		vectorStoreService: vectorStoreService,
-		userService:        userService,
-		fileService:        fileService,
-		storageResolver:    storageResolver,
+		service:          service,
+		knowledgeService: knowledgeService,
+		asynqClient:      asynqClient,
+		userService:      userService,
+		fileService:      fileService,
 	}
 }
 
@@ -72,12 +66,11 @@ func (h *KnowledgeBaseHandler) resolveResourceRewriter(c *gin.Context) (*storage
 		}
 		return nil, apperrors.NewBadRequestError(err.Error())
 	}
-	return storageurl.NewRequestRewriter(ctx, mode, h.fileService, h.storageResolver), nil
+	return storageurl.NewRequestRewriter(ctx, mode, h.fileService), nil
 }
 
 func buildKBResponse(
 	kb *types.KnowledgeBase,
-	storeView types.StoreDisplay,
 	extras map[string]interface{},
 ) interface{} {
 	b, err := json.Marshal(kb)
@@ -89,123 +82,18 @@ func buildKBResponse(
 		return kb
 	}
 
-	if storeView.Name != "" {
-		m["vector_store_name"] = storeView.Name
-	}
-	if storeView.Source != "" {
-		m["vector_store_source"] = storeView.Source
-	}
-	if storeView.EngineType != "" {
-		m["vector_store_engine_type"] = storeView.EngineType
-	}
-	if storeView.Status != "" {
-		m["vector_store_status"] = storeView.Status
-	}
 	for k, v := range extras {
 		m[k] = v
 	}
 	return m
 }
 
-func (h *KnowledgeBaseHandler) buildKBListResponse(
-	ctx context.Context, kbs []*types.KnowledgeBase, callerTenantID uint64,
-) []interface{} {
-	defaultView := h.envDefaultStoreView(ctx)
-	storeViews := h.batchResolveKBStoreViews(ctx, kbs, callerTenantID)
+func (h *KnowledgeBaseHandler) buildKBListResponse(kbs []*types.KnowledgeBase) []interface{} {
 	out := make([]interface{}, 0, len(kbs))
 	for _, kb := range kbs {
-		var view types.StoreDisplay
-		switch {
-		case !kb.HasVectorStore():
-			view = defaultView
-		default:
-			v, ok := storeViews[*kb.VectorStoreID]
-			if !ok || v.Source == "" {
-				view = types.UnavailableStoreDisplay()
-			} else {
-				view = v
-			}
-		}
-		out = append(out, buildKBResponse(kb, view, nil))
+		out = append(out, buildKBResponse(kb, nil))
 	}
 	return out
-}
-
-// envDefaultStoreView returns the env-fallback store display enriched with
-// the configured env-store engine type when the service is available. The
-// service path populates EngineType so the caller can show "postgres" or
-// "postgres" on the env-default badge instead of leaving it blank. A nil
-// service (e.g. in narrow unit-test setups) falls back to the bare default
-// display rather than failing the list response.
-func (h *KnowledgeBaseHandler) envDefaultStoreView(ctx context.Context) types.StoreDisplay {
-	if h.vectorStoreService == nil {
-		return types.DefaultStoreDisplay()
-	}
-	return h.vectorStoreService.EnvDefaultStoreView(ctx)
-}
-
-func (h *KnowledgeBaseHandler) batchResolveKBStoreViews(
-	ctx context.Context, kbs []*types.KnowledgeBase, callerTenantID uint64,
-) map[string]types.StoreDisplay {
-	if h.vectorStoreService == nil {
-		return nil
-	}
-	storeIDs := make([]string, 0, len(kbs))
-	seen := make(map[string]bool, len(kbs))
-	for _, kb := range kbs {
-		if !kb.HasVectorStore() || kb.TenantID != callerTenantID {
-			continue
-		}
-		sid := *kb.VectorStoreID
-		if !seen[sid] {
-			seen[sid] = true
-			storeIDs = append(storeIDs, sid)
-		}
-	}
-	if len(storeIDs) == 0 {
-		return nil
-	}
-	views, err := h.vectorStoreService.BatchResolveStoreView(ctx, callerTenantID, storeIDs)
-	if err != nil {
-		logger.WarnWithFields(ctx, logger.Fields{
-			"tenant_id":   callerTenantID,
-			"store_count": len(storeIDs),
-		}, "[kb.list] batch store view resolve failed; rendering bound KBs as unavailable")
-		return nil
-	}
-	return views
-}
-
-// resolveKBStoreView returns the store display payload to embed in the KB
-// response. It applies two policies on top of the service-level resolver:
-//
-//   - When the KB does not have a DB-managed vector store binding,
-//     the env-fallback display is returned without touching the service.
-//   - When the caller is not the KB owner (shared access), the underlying
-//     store's name and engine are suppressed so operator-chosen names do
-//     not leak across tenants. The Source value is set to "shared".
-//
-// On resolution error, an unavailable display is returned and the failure
-// is logged for ops; the request itself still succeeds.
-func (h *KnowledgeBaseHandler) resolveKBStoreView(
-	ctx context.Context, kb *types.KnowledgeBase, callerTenantID uint64,
-) types.StoreDisplay {
-	if !kb.HasVectorStore() {
-		return h.envDefaultStoreView(ctx)
-	}
-
-	if h.vectorStoreService == nil {
-		return types.UnavailableStoreDisplay()
-	}
-	view, err := h.vectorStoreService.ResolveStoreView(ctx, kb.TenantID, *kb.VectorStoreID)
-	if err != nil {
-		logger.WarnWithFields(ctx, logger.Fields{
-			"kb_id":     secutils.SanitizeForLog(kb.ID),
-			"tenant_id": kb.TenantID,
-		}, "[kb.view] vector store resolve failed; returning unavailable")
-		return types.UnavailableStoreDisplay()
-	}
-	return view
 }
 
 // HybridSearch godoc
@@ -261,8 +149,7 @@ func (h *KnowledgeBaseHandler) HybridSearch(c *gin.Context) {
 
 	results, err := h.service.HybridSearch(ctx, id, req)
 	if err != nil {
-		// Service-layer typed AppErrors (e.g. ErrVectorStoreBindingInvalid,
-		// ErrVectorStoreUnavailable, BadRequest from multi-store fan-out)
+		// Service-layer typed AppErrors
 		// must reach the client with their original code rather than be
 		// downgraded to InternalServerError. Mirrors the pattern used in
 		// CreateKnowledgeBase.
@@ -307,29 +194,16 @@ func (h *KnowledgeBaseHandler) CreateKnowledgeBase(c *gin.Context) {
 		c.Error(apperrors.NewBadRequestError("Invalid request parameters").WithDetails(err.Error()))
 		return
 	}
-	if req.VectorStoreID != nil && strings.TrimSpace(*req.VectorStoreID) != "" && *req.VectorStoreID != "__env_postgres__" {
-		c.Error(apperrors.NewBadRequestError("Retrieval uses the application PostgreSQL database"))
-		return
-	}
-	req.VectorStoreID = nil
 	types.NormalizeKnowledgeBasePromptInstructions(&req)
 	if err := validateKnowledgeBasePromptInstructions(&req); err != nil {
 		c.Error(err)
 		return
 	}
-	provider := strings.ToLower(strings.TrimSpace(req.GetStorageProvider()))
-	if provider != "" && !isStorageProviderAllowed(provider) {
-		c.Error(apperrors.NewBadRequestError("Storage provider is not allowed by STORAGE_ALLOW_LIST"))
-		return
-	}
-
 	logger.Infof(ctx, "Creating knowledge base, name: %s", secutils.SanitizeForLog(req.Name))
 	// Create knowledge base using the service
 	kb, err := h.service.CreateKnowledgeBase(ctx, &req)
 	if err != nil {
-		// Surface typed AppErrors (notably the 400-class codes
-		// ErrVectorStoreBindingInvalid and ErrVectorStoreUnavailable
-		// returned by validateVectorStoreBinding) instead of wrapping them
+		// Surface typed AppErrors instead of wrapping them
 		// into a generic 500. The middleware renders the original code and
 		// HTTP status verbatim. Falls through to 500 only for raw infra
 		// errors that the service did not classify.
@@ -344,10 +218,9 @@ func (h *KnowledgeBaseHandler) CreateKnowledgeBase(c *gin.Context) {
 
 	logger.Infof(ctx, "Knowledge base created successfully, ID: %s, name: %s",
 		secutils.SanitizeForLog(kb.ID), secutils.SanitizeForLog(kb.Name))
-	callerTenantID := c.GetUint64(types.TenantIDContextKey.String())
 	c.JSON(http.StatusCreated, gin.H{
 		"success": true,
-		"data":    buildKBResponse(kb, h.resolveKBStoreView(ctx, kb, callerTenantID), nil),
+		"data":    buildKBResponse(kb, nil),
 	})
 }
 
@@ -414,11 +287,9 @@ func (h *KnowledgeBaseHandler) GetKnowledgeBase(c *gin.Context) {
 	if fillErr := h.service.FillKnowledgeBaseCounts(c.Request.Context(), kb); fillErr != nil {
 		logger.Warnf(c.Request.Context(), "Failed to fill KB counts for %s: %v", kb.ID, fillErr)
 	}
-	tenantID := c.GetUint64(types.TenantIDContextKey.String())
-	storeView := h.resolveKBStoreView(c.Request.Context(), kb, tenantID)
 	var extras map[string]interface{}
 
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": buildKBResponse(kb, storeView, extras)})
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": buildKBResponse(kb, extras)})
 }
 
 func (h *KnowledgeBaseHandler) ListKnowledgeBases(c *gin.Context) {
@@ -438,11 +309,9 @@ func (h *KnowledgeBaseHandler) ListKnowledgeBases(c *gin.Context) {
 	// 仅在 list 接口里回填，详情 / 编辑场景不依赖这个字段；解析失败（用户已删除、
 	// CreatorID 为空的老数据）就让字段为空，前端按 fallback 渲染。
 	enrichKBCreatorNames(ctx, h.userService, kbs)
-
-	callerTenantID := c.GetUint64(types.TenantIDContextKey.String())
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"data":    h.buildKBListResponse(ctx, kbs, callerTenantID),
+		"data":    h.buildKBListResponse(kbs),
 	})
 }
 
@@ -526,11 +395,9 @@ func (h *KnowledgeBaseHandler) TogglePinKnowledgeBase(c *gin.Context) {
 		c.Error(apperrors.NewInternalServerError(err.Error()))
 		return
 	}
-
-	callerTenantID := c.GetUint64(types.TenantIDContextKey.String())
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"data":    buildKBResponse(kb, h.resolveKBStoreView(ctx, kb, callerTenantID), nil),
+		"data":    buildKBResponse(kb, nil),
 	})
 }
 
@@ -613,10 +480,9 @@ func (h *KnowledgeBaseHandler) UpdateKnowledgeBase(c *gin.Context) {
 
 	logger.Infof(ctx, "Knowledge base updated successfully, ID: %s",
 		secutils.SanitizeForLog(id))
-	callerTenantID := c.GetUint64(types.TenantIDContextKey.String())
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"data":    buildKBResponse(kb, h.resolveKBStoreView(ctx, kb, callerTenantID), nil),
+		"data":    buildKBResponse(kb, nil),
 	})
 }
 
@@ -771,31 +637,8 @@ func (h *KnowledgeBaseHandler) CopyKnowledgeBase(c *gin.Context) {
 					"clone into a target with the same embedding model"))
 			return
 		}
-		// Pre-flight defense 2: vector store binding must match.
-		// Cross-store cloning would require copying physical vector data
 		// between stores, which is not yet supported.
-		if !sourceKB.SharesStoreWith(targetKB) {
-			c.Error(apperrors.NewBadRequestError(
-				"source and target knowledge bases are bound to different vector stores; " +
-					"cross-store cloning is not yet supported"))
-			return
-		}
-		// Pre-flight defense 3: compare concrete instance IDs, not just the
-		// provider type (S3-A and S3-B are different physical stores).
-		if tenant, _ := ctx.Value(types.TenantInfoContextKey).(*types.Tenant); tenant != nil {
-			defaultID, defaultProvider := "", ""
-			if tenant.DefaultStorageBackendID != nil {
-				defaultID = *tenant.DefaultStorageBackendID
-			}
-			if tenant.StorageEngineConfig != nil {
-				defaultProvider = tenant.StorageEngineConfig.DefaultProvider
-			}
-			if !sourceKB.SharesStorageBackendWith(targetKB, defaultID, defaultProvider) {
-				c.Error(apperrors.NewBadRequestError(
-					"source and target knowledge bases use different storage instances; cross-storage-backend cloning is not supported"))
-				return
-			}
-		}
+
 	}
 
 	// Generate task ID if not provided
@@ -911,7 +754,7 @@ func (h *KnowledgeBaseHandler) DuplicateKnowledgeBase(c *gin.Context) {
 			SourceID:      sourceID,
 			TargetID:      targetKB.ID,
 			Message:       "Knowledge base duplicate created",
-			KnowledgeBase: buildKBResponse(targetKB, h.resolveKBStoreView(ctx, targetKB, callerTenantID), nil),
+			KnowledgeBase: buildKBResponse(targetKB, nil),
 		},
 	})
 }

@@ -169,33 +169,6 @@ func (r *knowledgeBaseRepository) DeleteKnowledgeBase(ctx context.Context, id st
 	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&types.KnowledgeBase{}).Error
 }
 
-// CountByVectorStoreID counts active knowledge bases that are bound to the
-// given vector store within a tenant scope.
-//
-// Soft-delete filter is applied automatically by GORM because KnowledgeBase
-// has a gorm.DeletedAt column — we deliberately do not add an explicit
-// `deleted_at IS NULL` predicate to keep the single source of truth on the
-// auto-scope.
-//
-// Pass db == nil to use the repository's default db handle; pass a *gorm.DB
-// bound to a transaction (e.g., from db.Transaction) to share the same
-// write-lock context as the caller. Query column order matches the
-// composite index idx_knowledge_bases_tenant_vector_store(tenant_id,
-// vector_store_id).
-func (r *knowledgeBaseRepository) CountByVectorStoreID(
-	ctx context.Context, db *gorm.DB, tenantID uint64, storeID string,
-) (int64, error) {
-	if db == nil {
-		db = r.db
-	}
-	var count int64
-	err := db.WithContext(ctx).
-		Model(&types.KnowledgeBase{}).
-		Where("tenant_id = ? AND vector_store_id = ?", tenantID, storeID).
-		Count(&count).Error
-	return count, err
-}
-
 // CountByModelID counts active knowledge bases that reference modelID in any
 // model-binding column (scalar fields or JSON config blobs).
 func (r *knowledgeBaseRepository) CountByModelID(

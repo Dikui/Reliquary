@@ -11,6 +11,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/require"
 
+	"reliquary/internal/application/service/retriever"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
@@ -52,7 +53,7 @@ func (s intakeKBService) GetKnowledgeBaseByID(context.Context, string) (*types.K
 		ID: "kb", TenantID: 1, CreatorID: s.creatorID, SummaryModelID: "summary", EmbeddingModelID: "embedding",
 		IndexingStrategy: types.IndexingStrategy{VectorEnabled: true},
 		ChunkingConfig: types.ChunkingConfig{ParserEngineRules: []types.ParserEngineRule{{
-			FileTypes: []string{"txt"}, Engine: "builtin",
+			FileTypes: []string{"txt"}, Engine: "simple",
 		}}},
 	}, nil
 }
@@ -60,9 +61,7 @@ func (s intakeKBService) GetKnowledgeBaseByID(context.Context, string) (*types.K
 type intakeTenantRepo struct{ interfaces.TenantRepository }
 
 func (intakeTenantRepo) GetTenantByID(context.Context, uint64) (*types.Tenant, error) {
-	return &types.Tenant{ID: 1, RetrieverEngines: types.RetrieverEngines{Engines: []types.RetrieverEngineParams{{
-		RetrieverType: types.VectorRetrieverType, RetrieverEngineType: types.PostgresRetrieverEngineType,
-	}}}}, nil
+	return &types.Tenant{ID: 1}, nil
 }
 
 func (intakeTenantRepo) AdjustStorageUsed(context.Context, uint64, int64) error { return nil }
@@ -132,8 +131,6 @@ func TestReviewKnowledgeIntakeSourceReadFailureCleansPendingMessage(t *testing.T
 	}
 }
 
-func (intakeReader) IsConnected() bool { return true }
-
 func (s intakeModelService) GetChatModel(context.Context, string) (chat.Chat, error) {
 	return s.chat, nil
 }
@@ -173,11 +170,10 @@ func TestProcessDocumentIntakeQualityGate(t *testing.T) {
 			engine := &parentChildRetrieveEngine{}
 			svc := &knowledgeService{
 				repo: repo, kbService: intakeKBService{}, tenantRepo: intakeTenantRepo{}, tenantService: intakeTenantService{}, fileSvc: files,
-				documentReader: intakeReader{result: &types.ReadResult{MarkdownContent: "Full source body with analysis."}},
-				modelService:   intakeModelService{chat: tt.chat}, chunkService: chunks,
-				retrieveEngine: parentChildRetrieveRegistry{engine: engine}, task: parentChildTaskEnqueuer{},
+				modelService: intakeModelService{chat: tt.chat}, chunkService: chunks,
+				retrieveEngine: &retriever.PostgresRetrievalService{RetrieveEngineService: engine}, task: parentChildTaskEnqueuer{},
 			}
-			files.saved = map[string][]byte{"input": []byte("source")}
+			files.saved = map[string][]byte{"input": []byte("Full source body with analysis.")}
 			payload, err := json.Marshal(types.DocumentProcessPayload{TenantID: 1, KnowledgeID: knowledge.ID, KnowledgeBaseID: "kb", FilePath: "input", FileName: "message.txt", FileType: "txt"})
 			require.NoError(t, err)
 			err = svc.ProcessDocument(context.Background(), asynq.NewTask(types.TypeDocumentProcess, payload, asynq.MaxRetry(0)))
@@ -267,10 +263,6 @@ func TestReviewKnowledgeIntakeCorrectionClearsQwenRejection(t *testing.T) {
 	require.Equal(t, "2026-09-20", intake.SourceInfo.PublishedAt)
 }
 
-func (r intakeReader) Read(context.Context, *types.ReadRequest) (*types.ReadResult, error) {
-	return r.result, nil
-}
-
 func (s *intakeFileService) DeleteFile(_ context.Context, path string) error {
 	s.deleted = append(s.deleted, path)
 	delete(s.saved, path)
@@ -281,11 +273,6 @@ func (s *intakeFileService) DeleteFile(_ context.Context, path string) error {
 type intakeModelService struct {
 	interfaces.ModelService
 	chat chat.Chat
-}
-
-type intakeReader struct {
-	interfaces.DocumentReader
-	result *types.ReadResult
 }
 
 type intakeFileService struct {

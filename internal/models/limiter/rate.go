@@ -5,9 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"golang.org/x/time/rate"
-	"reliquary/internal/logger"
 	"reliquary/internal/types"
 )
 
@@ -30,26 +28,6 @@ func WaitRate(ctx context.Context, modelID string, requestsPerMinute int) error 
 		return nil
 	}
 	key := BudgetKey(ctx, modelID)
-	governorMu.RLock()
-	backend, _ := governor.(*redisLimiter)
-	governorMu.RUnlock()
-	if backend != nil && backend.rdb != nil {
-		wait, err := reserveRateSlot.Run(ctx, backend.rdb, []string{"reliquary:modelrate:" + key}, (60000+requestsPerMinute-1)/requestsPerMinute).Int64()
-		if err == nil {
-			if wait <= 0 {
-				return nil
-			}
-			timer := time.NewTimer(time.Duration(wait) * time.Millisecond)
-			defer timer.Stop()
-			select {
-			case <-timer.C:
-				return nil
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		}
-		logger.Warnf(ctx, "[ModelLimiter] request rate backend failed for %s: %v", key, err)
-	}
 	rates.Lock()
 	entry := rates.entries[key]
 	limit := rate.Limit(float64(requestsPerMinute) / 60)
@@ -62,13 +40,3 @@ func WaitRate(ctx context.Context, modelID string, requestsPerMinute int) error 
 	rates.Unlock()
 	return entry.Wait(ctx)
 }
-
-// Each replica reserves a start time from the same model and tier schedule.
-var reserveRateSlot = redis.NewScript(`
-local now_parts = redis.call('TIME')
-local now = tonumber(now_parts[1]) * 1000 + math.floor(tonumber(now_parts[2]) / 1000)
-local interval = math.max(1, tonumber(ARGV[1]))
-local next_slot = math.max(now, tonumber(redis.call('GET', KEYS[1]) or '0'))
-redis.call('SET', KEYS[1], next_slot + interval, 'PX', next_slot - now + interval * 2)
-return next_slot - now
-`)

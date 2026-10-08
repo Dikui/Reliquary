@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
-	"gorm.io/gorm"
 	"reliquary/internal/types"
 )
 
@@ -199,16 +198,6 @@ type KnowledgeBaseRepository interface {
 	// Returns:
 	//   - Possible errors such as record not existing, database errors, etc.
 	DeleteKnowledgeBase(ctx context.Context, id string) error
-
-	// CountByVectorStoreID counts active KBs bound to the given vector store
-	// within a tenant scope. Accepts a *gorm.DB handle so callers can share a
-	// transaction (e.g., the VectorStore delete guard's row-lock context) or
-	// run standalone (pass nil → uses the repository's default db).
-	//
-	// The soft-delete filter is applied automatically by the gorm.DeletedAt
-	// scope on KnowledgeBase; implementations MUST NOT add an explicit
-	// `deleted_at IS NULL` predicate (avoids divergence with the auto-scope).
-	CountByVectorStoreID(ctx context.Context, db *gorm.DB, tenantID uint64, storeID string) (int64, error)
 
 	// CountByModelID counts active KBs in the tenant that reference the given
 	// model ID in any model-binding field (embedding, summary, VLM, ASR, etc.).

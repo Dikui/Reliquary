@@ -13,7 +13,6 @@ import (
 
 	"github.com/google/uuid"
 	"reliquary/internal/application/repository"
-	"reliquary/internal/application/service/retriever"
 	"reliquary/internal/logger"
 	"reliquary/internal/searchutil"
 	"reliquary/internal/types"
@@ -30,8 +29,7 @@ type chunkService struct {
 	knowledgeRepo   interfaces.KnowledgeRepository
 	kbRepository    interfaces.KnowledgeBaseRepository
 	modelService    interfaces.ModelService
-	retrieveEngine  interfaces.RetrieveEngineRegistry
-	ownership       retriever.TenantStoreOwnership
+	retrieveEngine  interfaces.RetrievalService
 	task            interfaces.TaskEnqueuer
 	spanTracker     SpanTracker
 }
@@ -48,8 +46,7 @@ func NewChunkService(
 	knowledgeRepo interfaces.KnowledgeRepository,
 	kbRepository interfaces.KnowledgeBaseRepository,
 	modelService interfaces.ModelService,
-	retrieveEngine interfaces.RetrieveEngineRegistry,
-	ownership retriever.TenantStoreOwnership,
+	retrieveEngine interfaces.RetrievalService,
 	task interfaces.TaskEnqueuer,
 	spanTracker SpanTracker,
 ) interfaces.ChunkService {
@@ -59,7 +56,6 @@ func NewChunkService(
 		kbRepository:    kbRepository,
 		modelService:    modelService,
 		retrieveEngine:  retrieveEngine,
-		ownership:       ownership,
 		task:            task,
 		spanTracker:     spanTracker,
 	}
@@ -642,17 +638,14 @@ func (s *chunkService) syncChunkIndex(ctx context.Context, chunk *types.Chunk) e
 	if err != nil {
 		return err
 	}
-	if !kb.NeedsEmbeddingModel() {
+	if !kb.IsVectorEnabled() {
 		return nil
 	}
 	embedder, err := s.modelService.GetEmbeddingModel(ctx, kb.EmbeddingModelID)
 	if err != nil {
 		return err
 	}
-	engine, err := retriever.CreateRetrieveEngineForKB(ctx, s.retrieveEngine, s.ownership, chunk.TenantID, kb.VectorStoreID)
-	if err != nil {
-		return err
-	}
+	engine := s.retrieveEngine
 	if err := engine.DeleteByChunkIDList(ctx, []string{chunk.ID}, embedder.GetDimensions(), kb.Type); err != nil {
 		return err
 	}
@@ -800,14 +793,7 @@ func (s *chunkService) DeleteGeneratedQuestion(ctx context.Context, chunkID stri
 	// The source_id format is: {chunk_id}-{question_id}
 	sourceID := types.GeneratedQuestionSourceID(chunkID, questionID)
 
-	retrieveEngine, err := retriever.CreateRetrieveEngineForKB(
-		ctx, s.retrieveEngine, s.ownership, tenantID, kb.VectorStoreID)
-	if err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"chunk_id": chunkID,
-		})
-		return fmt.Errorf("failed to create retrieve engine: %w", err)
-	}
+	retrieveEngine := s.retrieveEngine
 
 	embeddingModel, err := s.modelService.GetEmbeddingModel(ctx, kb.EmbeddingModelID)
 	if err != nil {

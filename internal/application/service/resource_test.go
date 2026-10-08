@@ -24,7 +24,7 @@ func newResourceCatalogForTest(t *testing.T) (interfaces.ResourceCatalog, *gorm.
 func TestResourceCatalogRegisterResolveAndDeduplicate(t *testing.T) {
 	catalog, _ := newResourceCatalogForTest(t)
 	ctx := context.Background()
-	physical := "storage://backend-a/local://7/exports/a.png"
+	physical := "local://7/exports/a.png"
 
 	ref, err := catalog.Register(ctx, 7, physical, interfaces.ResourceRegistration{Kind: "image", OriginalName: "a.png"})
 	require.NoError(t, err)
@@ -38,7 +38,6 @@ func TestResourceCatalogRegisterResolveAndDeduplicate(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, physical, resolvedPath)
 	require.Equal(t, uint64(7), resource.TenantID)
-	require.Equal(t, "backend-a", resource.StorageBackendID)
 	require.Equal(t, "local", resource.Provider)
 }
 

@@ -1,57 +1,32 @@
 package docparser
 
 import (
-	"testing"
-
-	"reliquary/internal/infrastructure/docparser/anydoc"
 	"reliquary/internal/types"
+	"testing"
 )
 
-func TestListAllEnginesBuiltinIncludesDocumentFormats(t *testing.T) {
-	engines := ListAllEngines(true, nil, nil)
-	for _, engine := range engines {
-		if engine.Name != "builtin" {
-			continue
-		}
-		if !engine.Available {
-			t.Fatalf("builtin engine is unavailable: %s", engine.UnavailableReason)
-		}
-
-		fileTypes := make(map[string]bool, len(engine.FileTypes))
-		for _, fileType := range engine.FileTypes {
-			fileTypes[fileType] = true
-		}
-		for _, want := range []string{"html", "htm", "xmind", "ppt", "pptx"} {
-			if !fileTypes[want] {
-				t.Errorf("builtin engine file types do not include %q: %v", want, engine.FileTypes)
-			}
-		}
-		return
+func TestListAllEnginesRetainsOnlyPersonalParsers(t *testing.T) {
+	names := map[string]bool{}
+	for _, engine := range ListAllEngines(nil) {
+		names[engine.Name] = true
 	}
-
-	t.Fatal("builtin engine not found")
+	if len(names) != 4 {
+		t.Fatalf("engines = %v, want four retained parsers", names)
+	}
+	for _, name := range []string{"simple", "anydoc", "mineru", "mineru_cloud"} {
+		if !names[name] {
+			t.Errorf("missing parser %q", name)
+		}
+	}
 }
 
-func TestDefaultParserEnginePrefersAnydocWhenLinked(t *testing.T) {
-	cases := []string{"pptx", "ppt", "pdf", "docx"}
-	if anydoc.Available() {
-		for _, ft := range cases {
-			if got := types.DefaultParserEngine(ft); got != AnydocEngineName {
-				t.Errorf("DefaultParserEngine(%s) = %q, want anydoc when the binding is linked", ft, got)
-			}
+func TestDefaultParserEngineUsesAnydocRegardlessOfBuild(t *testing.T) {
+	for _, ft := range []string{"pptx", "ppt", "pdf", "docx"} {
+		if got := types.DefaultParserEngine(ft); got != AnydocEngineName {
+			t.Errorf("DefaultParserEngine(%s) = %q, want anydoc", ft, got)
 		}
-		if got := types.DefaultParserEngine("csv"); got != "" {
-			t.Errorf("DefaultParserEngine(csv) = %q, want empty so the Go simple reader stays default", got)
-		}
-		return
 	}
-	if got := types.DefaultParserEngine("pptx"); got != "markitdown" {
-		t.Fatalf("DefaultParserEngine(pptx) = %q, want markitdown when anydoc is unavailable", got)
-	}
-	if got := types.DefaultParserEngine("pdf"); got != "" {
-		t.Fatalf("DefaultParserEngine(pdf) = %q, want empty when anydoc is unavailable", got)
-	}
-	if got := types.DefaultParserEngine("docx"); got != "" {
-		t.Fatalf("DefaultParserEngine(docx) = %q, want empty when anydoc is unavailable", got)
+	if got := types.DefaultParserEngine("csv"); got != SimpleEngineName {
+		t.Errorf("csv default = %q, want simple", got)
 	}
 }

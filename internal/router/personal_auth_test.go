@@ -54,18 +54,18 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 	require.NoError(t, service.EnsureSingleTeamSpace(context.Background(), db))
 	cfg := &config.Config{Conversation: &config.ConversationConfig{}, Tenant: &config.TenantConfig{}}
 	tenantRepo := apprepo.NewTenantRepository(db)
-	tenantSvc := service.NewTenantService(tenantRepo, apprepo.NewStorageBackendRepository(db))
+	tenantSvc := service.NewTenantService(tenantRepo)
 	users := service.NewUserService(cfg, apprepo.NewUserRepository(db), apprepo.NewAuthTokenRepository(db), tenantSvc)
 	keys := service.NewTenantAPIKeyService(apprepo.NewTenantAPIKeyRepository(db))
 	knowledgeRepo := apprepo.NewKnowledgeRepository(db)
 	kbRepo := apprepo.NewKnowledgeBaseRepository(db)
-	kb := service.NewKnowledgeBaseService(db, kbRepo, knowledgeRepo, nil, nil, nil, nil, tenantRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	kb := service.NewKnowledgeBaseService(db, kbRepo, knowledgeRepo, nil, nil, nil, tenantRepo, nil, nil, nil, nil, nil, nil, nil, nil)
 	models := service.NewModelService(apprepo.NewModelRepository(db), kbRepo, nil, nil, nil, tenantSvc)
-	knowledge, err := service.NewKnowledgeService(db, cfg, knowledgeRepo, nil, kb, tenantRepo, tenantSvc,
-		nil, nil, nil, nil, nil, nil, nil, models, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	knowledge, err := service.NewKnowledgeService(db, cfg, knowledgeRepo, kb, tenantRepo, tenantSvc,
+		nil, nil, nil, nil, nil, nil, models, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	settings := service.NewSystemSettingService(apprepo.NewSystemSettingRepository(db), nil, cfg)
-	system := handler.NewSystemHandler(cfg, nil, tenantSvc, users, settings, keys, nil, nil, nil, nil)
+	system := handler.NewSystemHandler(cfg, tenantSvc, users, settings, keys, nil, nil, nil)
 	guards := newAccessGuards(kb, knowledge, nil)
 	r := gin.New()
 	r.Use(middleware.ErrorHandler(), middleware.Auth(tenantSvc, users, keys))

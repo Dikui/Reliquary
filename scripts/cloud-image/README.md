@@ -71,7 +71,6 @@ Reliquary `docker-compose.yml` 大量服务是 **profile 限定**，本镜像只
 |---|---|
 | `frontend` | Vue UI / NGINX 反代 |
 | `app` | Reliquary Go 后端 |
-| `docreader` | Python 文档解析 (gRPC) |
 | `postgres` (ParadeDB) | 主库 + pgvector 向量检索 + BM25 |
 | `redis` | 流式输出 / 缓存 / 异步队列 |
 
@@ -85,14 +84,11 @@ Reliquary `docker-compose.yml` 大量服务是 **profile 限定**，本镜像只
 
 | profile | 用途 |
 |---|---|
-| `minio` | 对象存储替代本地文件 |
-| `odl-hybrid` | OpenDataLoader Docling hybrid（体积大，无预发布镜像，需 `--build`） |
 
 启用方式：
 
 ```bash
 cd /opt/Reliquary
-docker compose --profile odl-hybrid up -d --build odl-hybrid  # Docling hybrid（按需）
 ```
 
 ---
@@ -255,7 +251,7 @@ sudo bash    /opt/reliquary-tools/scripts/cloud-image/cleanup.sh   # 制作新�
 
 ## 安全注意事项
 
-- 数据库 / Redis / MinIO 端口默认仅对 docker 网络可见，不要在云防火墙里对外开放
+- 数据库 / Redis 端口默认仅对 docker 网络可见，不要在云防火墙里对外开放
 - `/root/reliquary-credentials.txt` 用 `umask 077` 创建，仅 root 可读
 - 每次重制镜像前必须执行 `cleanup.sh`，避免泄漏上一份测试数据 / SSH key / machine-id
 

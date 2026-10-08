@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 
-	"reliquary/internal/application/service/retriever"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
 	"reliquary/internal/models/embedding"
@@ -149,10 +148,7 @@ func (s *knowledgeBaseService) HybridSearch(ctx context.Context,
 		matchCount = maxRetrievalPoolSize
 	}
 
-	// Compute the query embedding once before fan-out and propagate via
-	// params.QueryEmbedding. Without this, each storeGroup's
-	// buildRetrievalParams would re-embed the same query text — for N
-	// stores that means N API calls of identical input.
+	// Compute the query embedding once for all selected knowledge bases.
 	//
 	// Skip when params already carries an embedding (e.g. the agent
 	// pre-computed it) or when the primary KB has no vector indexing
@@ -167,23 +163,15 @@ func (s *knowledgeBaseService) HybridSearch(ctx context.Context,
 		params.QueryEmbedding = emb
 	}
 
-	// Group KBs by (storeID, owner tenant), resolve the bound engine for
-	// each group, and build the per-group base RetrieveParams once.
-	groups, err := s.resolveStoreGroups(ctx, kb, kbs, params, matchCount)
+	baseParams, err := s.buildRetrievalParams(ctx, kb, kbs, params, matchCount)
 	if err != nil {
 		return nil, err
 	}
-	if len(groups) == 0 || allBaseParamsEmpty(groups) {
-		// Wiki-only / graph-only fan-out: every KB is non-retrievable.
-		// Preserve the existing "return empty rather than error" contract
-		// so agent tools that combine multiple KB scopes degrade gracefully.
+	if len(baseParams) == 0 {
 		logger.Infof(ctx, "No retrievable indexing pipelines across %d KBs", len(kbs))
 		return nil, nil
 	}
-
-	logger.Infof(ctx, "Starting multi-store retrieval, group count: %d", len(groups))
-	retrieveCtx := ctx
-	retrieveResults, err := s.retrieveFromStores(retrieveCtx, groups, retriever.EngineAwareNormalizer{})
+	retrieveResults, err := s.retrieveEngine.Retrieve(ctx, baseParams)
 
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
@@ -236,20 +224,6 @@ func pickPrimary(kbs []*types.KnowledgeBase, id string) *types.KnowledgeBase {
 	return nil
 }
 
-// allBaseParamsEmpty reports whether every store group has an empty
-// BaseParams slice. True only when every KB in scope is wiki-only or
-// graph-only with neither vector nor keyword indexing — HybridSearch then
-// returns nil so callers that combine searchable + non-searchable KBs
-// (agent tools, chat pipeline) degrade gracefully.
-func allBaseParamsEmpty(groups []*storeGroup) bool {
-	for _, g := range groups {
-		if len(g.BaseParams) > 0 {
-			return false
-		}
-	}
-	return true
-}
-
 // totalHits counts the IndexWithScore entries across a slice of retrieve
 // results.
 func totalHits(rrs []*types.RetrieveResult) int {
@@ -262,7 +236,6 @@ func totalHits(rrs []*types.RetrieveResult) int {
 
 func (s *knowledgeBaseService) buildRetrievalParams(
 	ctx context.Context,
-	retrieveEngine *retriever.CompositeRetrieveEngine,
 	primary *types.KnowledgeBase,
 	groupKBs []*types.KnowledgeBase,
 	params types.SearchParams,
@@ -288,7 +261,7 @@ func (s *knowledgeBaseService) buildRetrievalParams(
 	}
 
 	// Add vector retrieval params if supported
-	if retrieveEngine.SupportRetriever(types.VectorRetrieverType) && !params.DisableVectorMatch &&
+	if s.retrieveEngine.SupportRetriever(types.VectorRetrieverType) && !params.DisableVectorMatch &&
 		len(docVectorKBIDs) > 0 {
 		logger.Info(ctx, "Vector retrieval supported, preparing vector retrieval parameters")
 
@@ -319,7 +292,7 @@ func (s *knowledgeBaseService) buildRetrievalParams(
 
 	// Add keyword retrieval params if supported and any document KB has
 	// keyword indexing enabled.
-	if retrieveEngine.SupportRetriever(types.KeywordsRetrieverType) && !params.DisableKeywordsMatch &&
+	if s.retrieveEngine.SupportRetriever(types.KeywordsRetrieverType) && !params.DisableKeywordsMatch &&
 		len(docKeywordKBIDs) > 0 {
 		logger.Info(ctx, "Keyword retrieval supported, preparing keyword retrieval parameters")
 		retrieveParams = append(retrieveParams, types.RetrieveParams{
@@ -369,4 +342,57 @@ func (s *knowledgeBaseService) resolveQueryEmbedding(
 	}
 	logger.Infof(ctx, "Query embedding generated successfully, embedding vector length: %d", len(queryEmbedding))
 	return queryEmbedding, nil
+}
+
+func (s *knowledgeBaseService) authorizeKBAccess(ctx context.Context, kbs []*types.KnowledgeBase, tenantID uint64) error {
+	for _, kb := range kbs {
+		if kb == nil || kb.TenantID != tenantID {
+			return apperrors.NewForbiddenError("knowledge base is outside the team")
+		}
+	}
+	return nil
+}
+
+// validateSameEmbeddingModel rejects multi-KB searches that span more than
+// one resolved embedding-model identity key. Single-KB calls no-op.
+//
+// Wiki-only / graph-only KBs (empty resolved key) are tolerated: if every
+// KB lacks an embedding model, validation passes and HybridSearch returns
+// an empty result set when the retrieval parameter list is empty.
+//
+// Log fields are sanitized via secutils.SanitizeForLog because resolved
+// keys are derived from model.Parameters.BaseURL, which is tenant-
+// configured and can contain CR/LF or other control characters.
+func (s *knowledgeBaseService) validateSameEmbeddingModel(
+	ctx context.Context,
+	kbs []*types.KnowledgeBase,
+) error {
+	if len(kbs) <= 1 {
+		return nil
+	}
+	keys := s.ResolveEmbeddingModelKeys(ctx, kbs)
+	var seen string
+	for _, kb := range kbs {
+		k, ok := keys[kb.ID]
+		if !ok || k == "" {
+			// Wiki-only / graph-only carve-out: KB has no embedding model.
+			continue
+		}
+		if seen == "" {
+			seen = k
+			continue
+		}
+		if k != seen {
+			logger.WarnWithFields(ctx, logger.Fields{
+				"primary_key": secutils.SanitizeForLog(seen),
+				"diverging":   secutils.SanitizeForLog(k),
+				"kb_id":       kb.ID,
+				"kb_count":    len(kbs),
+			}, "multi-KB search rejected: embedding models differ")
+			return apperrors.NewBadRequestError(
+				"selected knowledge bases use different embedding models; " +
+					"multi-KB search requires every knowledge base to share a single embedding model")
+		}
+	}
+	return nil
 }

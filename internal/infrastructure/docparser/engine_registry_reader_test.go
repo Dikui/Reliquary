@@ -5,59 +5,36 @@ import (
 	"testing"
 
 	"reliquary/internal/infrastructure/docparser/anydoc"
-	"reliquary/internal/types/interfaces"
 )
 
-// stubRemote stands in for the docreader client. NewReader only ever hands it
-// back, so the embedded interface is never called — and would panic if routing
-// ever sent a parse here by mistake.
-type stubRemote struct{ interfaces.DocReader }
-
-func TestNewReaderRoutesByEngine(t *testing.T) {
-	ctx := context.Background()
-	remote := &stubRemote{}
-	deps := ReaderDeps{Remote: remote}
-
-	cases := []struct {
-		name     string
-		engine   string
+func TestNewReaderRoutesSimpleFormatsAndURLsInProcess(t *testing.T) {
+	for _, tc := range []struct {
 		fileType string
 		isURL    bool
-		want     any
-	}{
-		{name: "simple engine", engine: SimpleEngineName, fileType: "md", want: &SimpleFormatReader{}},
-		{name: "builtin engine goes remote", engine: BuiltinEngineName, fileType: "md", want: remote},
-		{name: "unset engine handles simple formats in Go", fileType: "csv", want: &SimpleFormatReader{}},
-		{name: "unset engine sends complex formats to docreader", fileType: "docx", want: remote},
-		{name: "default pptx engine is remote markitdown", engine: "markitdown", fileType: "pptx", want: remote},
-		{name: "URLs always go to docreader", fileType: "md", isURL: true, want: remote},
-		{name: "docreader-only engines fall through", engine: "markitdown", fileType: "docx", want: remote},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			reader, err := NewReader(ctx, tc.engine, tc.fileType, tc.isURL, deps)
-			if err != nil {
-				t.Fatalf("NewReader: %v", err)
-			}
-			if _, isSimple := tc.want.(*SimpleFormatReader); isSimple {
-				if _, ok := reader.(*SimpleFormatReader); !ok {
-					t.Fatalf("reader = %T, want *SimpleFormatReader", reader)
-				}
-				return
-			}
-			if reader != tc.want {
-				t.Fatalf("reader = %T, want the docreader client", reader)
-			}
-		})
+	}{{"md", false}, {"csv", false}, {"html", true}} {
+		reader, err := NewReader(context.Background(), "", tc.fileType, tc.isURL, ReaderDeps{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := reader.(*SimpleFormatReader); !ok {
+			t.Fatalf("reader = %T, want simple", reader)
+		}
 	}
 }
 
-// A disconnected docreader has to surface as an error, not as a nil reader the
-// caller would dereference.
-func TestNewReaderReportsDisconnectedDocReader(t *testing.T) {
-	if _, err := NewReader(context.Background(), BuiltinEngineName, "docx", false, ReaderDeps{}); err == nil {
-		t.Fatal("NewReader succeeded without a docreader connection, want an error")
+func TestNewReaderRejectsUnsupportedTypesAndRemovedEngines(t *testing.T) {
+	for _, ft := range []string{"html", "htm", "mhtml", "xmind"} {
+		if SupportsFileType(ft) {
+			t.Fatalf("upload %q must be unsupported", ft)
+		}
+		if _, err := NewReader(context.Background(), "", ft, false, ReaderDeps{}); err == nil {
+			t.Fatalf("unsupported upload %q succeeded", ft)
+		}
+	}
+	for _, name := range []string{"builtin", "markitdown", "paddleocr_vl", "paddleocr_vl_cloud"} {
+		if _, err := NewReader(context.Background(), name, "pdf", false, ReaderDeps{}); err == nil {
+			t.Fatalf("removed engine %q succeeded", name)
+		}
 	}
 }
 
@@ -83,7 +60,7 @@ func TestAnydocEngineFollowsBuildAvailability(t *testing.T) {
 }
 
 func TestListAllEnginesIncludesAnydoc(t *testing.T) {
-	for _, engine := range ListAllEngines(true, nil, nil) {
+	for _, engine := range ListAllEngines(nil) {
 		if engine.Name != AnydocEngineName {
 			continue
 		}

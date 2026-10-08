@@ -88,7 +88,7 @@ func TestImageMultimodalHandleDropsMissingKnowledge(t *testing.T) {
 		TenantID:        1,
 		KnowledgeID:     "missing",
 		KnowledgeBaseID: "kb-1",
-		ImageURL:        "minio://bucket/img.png",
+		ImageURL:        "local://1/img.png",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -134,7 +134,7 @@ func TestImageMultimodalHandleDropFinalizesPendingCounter(t *testing.T) {
 		TenantID:        1,
 		KnowledgeID:     knowledgeID,
 		KnowledgeBaseID: "kb-1",
-		ImageURL:        "minio://bucket/img.png",
+		ImageURL:        "local://1/img.png",
 	})
 	if err != nil {
 		t.Fatal(err)

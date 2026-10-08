@@ -22,12 +22,12 @@ type StreamEvent struct {
 // All stream state is managed through events: metadata, references, completion, etc.
 type StreamManager interface {
 	// AppendEvent appends a single event to the stream
-	// Uses Redis RPush for O(1) append performance
+	// Appends to the process-local event buffer.
 	// All event types (thinking, tool_call, references, complete) use this method
 	AppendEvent(ctx context.Context, sessionID, messageID string, event StreamEvent) error
 
 	// GetEvents gets events starting from offset
-	// Uses Redis LRange for incremental reads
+	// Reads events from the process-local buffer starting at an offset.
 	// Returns: events slice, next offset for subsequent reads, error
 	GetEvents(ctx context.Context, sessionID, messageID string, fromOffset int) ([]StreamEvent, int, error)
 }

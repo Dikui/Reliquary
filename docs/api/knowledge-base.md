@@ -5,10 +5,7 @@
 **字段说明（知识库对象）**
 
 - 知识库类型 `type` 为 `document`（文档）。
-- JSON 中对象存储相关字段：**`storage_config`** 为序列化字段名（对应数据库列 `cos_config`，兼容旧数据）。旧客户端若仍发送或接收 `cos_config`，服务端会兼容解析；新集成请使用 **`storage_config`**。
-- **`storage_provider_config`** 为新版存储提供者选择（如 `{"provider": "local"}`），与空间级存储引擎凭证配合使用；无配置时可为 `null`。
 - 嵌套配置对象：`chunking_config`、`image_processing_config`、`vlm_config`、`asr_config`、`question_generation_config`、`auto_tag_config`。其中 `question_generation_config`、`auto_tag_config` 允许为 `null`。
-- **`vector_store_id`** 为知识库绑定的向量存储 ID（参见 [vector-store.md](./vector-store.md)）。未指定（或 `null`/`""`）时使用空间级默认的环境变量存储；一旦创建即不可修改。详情接口返回时会附带 `vector_store_name` / `vector_store_source` / `vector_store_engine_type` / `vector_store_status` 四个只读元数据字段，用于前端展示。
 
 | 方法   | 路径                                      | 描述                     |
 | ------ | ----------------------------------------- | ------------------------ |
@@ -41,11 +38,8 @@
 | summary_model_id              | string  | 否   | 摘要模型 ID                                                     |
 | vlm_config                    | object  | 否   | VLM（视觉模型）配置                                             |
 | asr_config                    | object  | 否   | ASR（语音识别）配置                                             |
-| storage_provider_config       | object  | 否   | 存储提供者选择，如 `{"provider": "local"}`                      |
-| storage_config                | object  | 否   | 兼容字段，新集成留空即可                   |
 | question_generation_config    | object  | 否   | 问题生成配置                                                    |
 | auto_tag_config               | object  | 否   | 文档自动标签配置，默认关闭；仅适用于 `document` 类型知识库      |
-| vector_store_id               | string  | 否   | 绑定的向量存储 ID。不传或为空字符串等同于 `null`（使用环境变量默认存储）。指定时必须是调用者所在空间拥有的向量存储 UUID；创建后不可修改。无效 UUID / 跨空间 / 未注册到引擎的 ID 会返回 `400` |
 
 **请求**:
 
@@ -89,17 +83,6 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases' \
         "model_id": "",
         "language": ""
     },
-    "storage_provider_config": {
-        "provider": "local"
-    },
-    "storage_config": {
-        "secret_id": "",
-        "secret_key": "",
-        "region": "",
-        "bucket_name": "",
-        "app_id": "",
-        "path_prefix": ""
-    },
     "question_generation_config": {
         "enabled": false,
         "question_count": 3
@@ -109,8 +92,7 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases' \
         "model_id": "8aea788c-bb30-4898-809e-e40c14ffb48c",
         "max_tags": 3,
         "skip_if_tagged": true
-    },
-    "vector_store_id": "550e8400-e29b-41d4-a716-446655440000"
+    }
 }'
 ```
 
@@ -156,17 +138,6 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases' \
             "model_id": "",
             "language": ""
         },
-        "storage_provider_config": {
-            "provider": "local"
-        },
-        "storage_config": {
-            "secret_id": "",
-            "secret_key": "",
-            "region": "",
-            "bucket_name": "",
-            "app_id": "",
-            "path_prefix": ""
-        },
         "question_generation_config": {
             "enabled": false,
             "question_count": 3
@@ -182,11 +153,6 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases' \
         "knowledge_count": 0,
         "chunk_count": 0,
         "processing_count": 0,
-        "vector_store_id": "550e8400-e29b-41d4-a716-446655440000",
-        "vector_store_name": "postgres",
-        "vector_store_source": "user",
-        "vector_store_engine_type": "postgres",
-        "vector_store_status": "available",
         "created_at": "2025-08-12T11:30:09.206238645+08:00",
         "updated_at": "2025-08-12T11:30:09.206238854+08:00",
         "deleted_at": null
@@ -210,23 +176,6 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases' \
 
 候选标签按知识库排序取前 500 个参与分类；标签数超出时会记录告警并使用该前缀，不会跳过任务。模型按候选序号返回结果，服务端会校验序号范围并映射回标签 ID，越界或重复的序号将被丢弃。
 
-**`vector_store_*` 响应字段说明**:
-
-| 字段                       | 类型   | 说明                                                                                                       |
-| -------------------------- | ------ | ---------------------------------------------------------------------------------------------------------- |
-| `vector_store_id`          | string | 绑定的向量存储 ID（创建时未指定时为 `null`，从响应中省略）                                                  |
-| `vector_store_name`        | string | 绑定存储的展示名。未绑定时返回 `"System default"`                              |
-| `vector_store_source`      | string | `"user"`（DB 中创建的存储）/ `"env"`（环境变量虚拟存储）/ `"shared"`（跨空间共享 KB）/ `"unavailable"`（绑定的存储已不可解析） |
-| `vector_store_engine_type` | string | 引擎类型（固定为 `postgres`）。`unavailable` 时为空                       |
-| `vector_store_status`      | string | `"available"` / `"unavailable"`。`unavailable` 表示绑定的存储已被删除或不在内存注册表中，UI 可据此提示用户重新绑定 |
-
-**错误码（Phase 2 新增）**:
-
-| HTTP | code | 说明                                                              |
-| ---- | ---- | ----------------------------------------------------------------- |
-| 400  | 2200 | `vector_store_id` 无效：格式错误、不存在或属于其他空间（统一返回，避免枚举泄漏） |
-| 400  | 2201 | 指定的向量存储当前不可用：存在于数据库但未注册到引擎注册表，请检查 connection_config |
-
 ## GET `/knowledge-bases` - 获取知识库列表
 
 返回团队全部知识库。
@@ -241,7 +190,6 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases' \
 
 **响应**: `data` 为数组，每个元素的字段结构同 `POST /knowledge-bases` 响应，并额外携带 `knowledge_count` / `chunk_count` / `processing_count` / `is_pinned` / `pinned_at` 这些聚合与状态字段。
 
-> **注意（Phase 2）**：列表接口不包含 `vector_store_name` / `vector_store_source` / `vector_store_engine_type` / `vector_store_status` 这四个解析后的元数据字段（避免 N+1 查询）；仅 `vector_store_id` 来自数据库本身。需要展示存储名称时请单独调用详情接口或 `/vector-stores/:id`。
 
 ## GET `/knowledge-bases/:id` - 获取知识库详情
 
@@ -261,11 +209,11 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases/kb-00000001' \
 --header 'X-API-Key: sk-xxxxx'
 ```
 
-**响应**: 字段结构同 `POST /knowledge-bases` 响应（包含 Phase 2 的 `vector_store_*` 元数据字段），并附 `is_pinned` / `pinned_at` / `knowledge_count` / `chunk_count` / `processing_count` 状态字段。
+**响应**: 字段结构同 `POST /knowledge-bases` 响应，并附 `is_pinned` / `pinned_at` / `knowledge_count` / `chunk_count` / `processing_count` 状态字段。
 
 ## PUT `/knowledge-bases/:id` - 更新知识库
 
-登录用户和有效 API Key 均可调用。注意：**`vector_store_id` 在创建后不可修改**，更新接口不接收该字段。
+登录用户和有效 API Key 均可调用。
 
 **路径参数**:
 
@@ -321,7 +269,7 @@ curl --location --request PUT 'http://localhost:8080/api/v1/knowledge-bases/b582
 }'
 ```
 
-**响应**: 字段结构同 `POST /knowledge-bases` 响应（返回更新后的完整知识库对象，包含 Phase 2 的 `vector_store_*` 元数据字段。`vector_store_id` 与创建时保持一致，无法通过该接口更改）。
+**响应**: 字段结构同 `POST /knowledge-bases` 响应（返回更新后的完整知识库对象）。
 
 ## DELETE `/knowledge-bases/:id` - 删除知识库
 
@@ -368,7 +316,7 @@ curl --location --request PUT 'http://localhost:8080/api/v1/knowledge-bases/kb-0
 --header 'Content-Type: application/json'
 ```
 
-**响应**: 字段结构同 `POST /knowledge-bases` 响应（包含 Phase 2 的 `vector_store_*` 元数据字段），本接口操作后 `is_pinned` 翻转、`pinned_at` 同步更新。
+**响应**: 字段结构同 `POST /knowledge-bases` 响应，本接口操作后 `is_pinned` 翻转、`pinned_at` 同步更新。
 
 ## POST `/knowledge-bases/:id/hybrid-search` - 混合搜索
 
@@ -452,9 +400,8 @@ curl --location --request POST 'http://localhost:8080/api/v1/knowledge-bases/kb-
 | 检查           | 失败时响应                                                                    |
 | -------------- | ----------------------------------------------------------------------------- |
 | 嵌入模型一致性 | `400` `source and target knowledge bases use different embedding models; clone into a target with the same embedding model` |
-| 向量存储一致性 | `400` `source and target knowledge bases are bound to different vector stores; cross-store cloning is not yet supported`     |
 
-预检失败时任务不会入队、不会生成 `task_id`，调用方直接收到 `400`；这两个检查在异步 worker 中会再次执行（defense in depth），但在握手时即时拒绝是为了避免用户需要轮询 `progress` 才能看到错误。当 `target_id` 为空（新建目标库）时，目标库会自动复制源库的 `vector_store_id` 与 `embedding_model_id`，因此预检不会触发。
+嵌入模型预检失败时任务不会入队、不会生成 `task_id`，调用方直接收到 `400`。异步 worker 会再次检查嵌入模型。当 `target_id` 为空时，新知识库继承源知识库的嵌入模型。
 
 **参数说明（请求体）**:
 
@@ -612,7 +559,6 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases/kb-00000001/duplic
 | -------------------- | ---- | ---- |
 | 源知识库不存在       | 404  | `Source knowledge base not found` |
 | 源库属于其他空间     | 403  | `No permission to duplicate this knowledge base` |
-| 向量存储绑定无效     | 400  | 源库绑定的 vector store 不可用 |
 
 ## GET `/knowledge-bases/:id/move-targets` - 获取可迁移目标知识库列表
 
@@ -673,17 +619,6 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases/kb-00000001/move-t
                 "enabled": false,
                 "model_id": "",
                 "language": ""
-            },
-            "storage_provider_config": {
-                "provider": "local"
-            },
-            "storage_config": {
-                "secret_id": "",
-                "secret_key": "",
-                "region": "",
-                "bucket_name": "",
-                "app_id": "",
-                "path_prefix": ""
             },
             "question_generation_config": null,
             "is_pinned": false,

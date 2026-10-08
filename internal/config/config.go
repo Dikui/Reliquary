@@ -23,8 +23,6 @@ type Config struct {
 	Tenant        *TenantConfig        `yaml:"tenant"           json:"tenant"`
 
 	Models          []ModelConfig          `yaml:"models"           json:"models"`
-	DocReader       *DocReaderConfig       `yaml:"docreader"        json:"docreader"`
-	StreamManager   *StreamManagerConfig   `yaml:"stream_manager"   json:"stream_manager"`
 	WebSearch       *WebSearchConfig       `yaml:"web_search"       json:"web_search"`
 	PromptTemplates *PromptTemplatesConfig `yaml:"prompt_templates" json:"prompt_templates"`
 
@@ -39,14 +37,6 @@ type AgentConfig struct {
 	// ToolApprovalTimeoutSeconds is how long the agent waits for human approval on a flagged MCP tool.
 	// 0 means default 600 (10 minutes).
 	ToolApprovalTimeoutSeconds int `yaml:"tool_approval_timeout_seconds" json:"tool_approval_timeout_seconds"`
-}
-
-// DocReaderConfig configures the document parser client (gRPC or HTTP).
-type DocReaderConfig struct {
-	// Addr: for gRPC it is the server address (e.g. "localhost:50051"); for HTTP it is the base URL (e.g. "http://localhost:8080").
-	Addr string `yaml:"addr" json:"addr"`
-	// Transport: "grpc" (default) or "http"
-	Transport string `yaml:"transport" json:"transport"`
 }
 
 // ConversationConfig 对话服务配置
@@ -124,12 +114,12 @@ type KnowledgeBaseConfig struct {
 	KeepSeparator          bool                   `yaml:"keep_separator"   json:"keep_separator"`
 	ImageProcessing        *ImageProcessingConfig `yaml:"image_processing" json:"image_processing"`
 	DocumentProcessTimeout time.Duration          `yaml:"document_process_timeout"  json:"document_process_timeout"`
-	// DocReaderCallTimeout caps a single DocReader RPC. Without this the
+	// ParserCallTimeout caps a single parser call. Without this the
 	// gRPC call inherits the asynq task context (whole DocumentProcessTimeout,
-	// default 2h+), so a hung docreader would block a worker for hours and
+	// default 2h+), so a hung parser would block a worker for hours and
 	// leave knowledge in "processing". Default 30 minutes is generous enough
 	// for OCR-heavy large PDFs while ensuring forward progress.
-	DocReaderCallTimeout time.Duration `yaml:"docreader_call_timeout"   json:"docreader_call_timeout"`
+	ParserCallTimeout time.Duration `yaml:"parser_call_timeout"   json:"parser_call_timeout"`
 }
 
 // DefaultDocumentProcessTimeout is the ceiling for a single document:process
@@ -274,23 +264,6 @@ type ModelConfig struct {
 	Source     string                 `yaml:"source"     json:"source"`
 	ModelName  string                 `yaml:"model_name" json:"model_name"`
 	Parameters map[string]interface{} `yaml:"parameters" json:"parameters"`
-}
-
-// StreamManagerConfig 流管理器配置
-type StreamManagerConfig struct {
-	Type           string        `yaml:"type"            json:"type"`            // 类型: "memory" 或 "redis"
-	Redis          RedisConfig   `yaml:"redis"           json:"redis"`           // Redis配置
-	CleanupTimeout time.Duration `yaml:"cleanup_timeout" json:"cleanup_timeout"` // 清理超时，单位秒
-}
-
-// RedisConfig Redis配置
-type RedisConfig struct {
-	Address  string        `yaml:"address"  json:"address"`  // Redis地址
-	Username string        `yaml:"username" json:"username"` // Redis用户名
-	Password string        `yaml:"password" json:"password"` // Redis密码
-	DB       int           `yaml:"db"       json:"db"`       // Redis数据库
-	Prefix   string        `yaml:"prefix"   json:"prefix"`   // 键前缀
-	TTL      time.Duration `yaml:"ttl"      json:"ttl"`      // 过期时间(小时)
 }
 
 // resolvedConfigDir holds the directory of the loaded config file. Populated by
@@ -467,12 +440,12 @@ func applyKnowledgeBaseEnvOverrides(cfg *Config) {
 			cfg.KnowledgeBase.DocumentProcessTimeout = d
 		}
 	}
-	if cfg.KnowledgeBase.DocReaderCallTimeout <= 0 {
-		cfg.KnowledgeBase.DocReaderCallTimeout = 30 * time.Minute
+	if cfg.KnowledgeBase.ParserCallTimeout <= 0 {
+		cfg.KnowledgeBase.ParserCallTimeout = 30 * time.Minute
 	}
-	if value := strings.TrimSpace(os.Getenv("RELIQUARY_DOCREADER_CALL_TIMEOUT")); value != "" {
+	if value := strings.TrimSpace(os.Getenv("PARSER_CALL_TIMEOUT")); value != "" {
 		if d, err := time.ParseDuration(value); err == nil && d > 0 {
-			cfg.KnowledgeBase.DocReaderCallTimeout = d
+			cfg.KnowledgeBase.ParserCallTimeout = d
 		}
 	}
 }
@@ -526,6 +499,13 @@ func backfillConversationDefaults(cfg *Config) {
 			conv.GenerateSessionTitlePrompt = t.Content
 		} else {
 			fmt.Printf("Warning: generate_session_title_prompt_id %q not found\n", conv.GenerateSessionTitlePromptID)
+		}
+	}
+	if conv.GenerateQuestionsPromptID != "" {
+		if t := FindTemplateByID(pt, conv.GenerateQuestionsPromptID); t != nil {
+			conv.GenerateQuestionsPrompt = t.Content
+		} else {
+			fmt.Printf("Warning: generate_questions_prompt_id %q not found\n", conv.GenerateQuestionsPromptID)
 		}
 	}
 	if conv.GenerateSummaryPromptID != "" {

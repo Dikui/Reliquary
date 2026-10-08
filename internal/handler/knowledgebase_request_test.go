@@ -8,18 +8,9 @@ import (
 	"reliquary/internal/types"
 )
 
-// TestUpdateKBRequest_DoesNotAcceptVectorStoreID is the structural enforcement
-// behind the vector_store_id immutability contract. The GORM `<-:create`
-// tag on KnowledgeBase.VectorStoreID already blocks every ORM UPDATE path
-// (verified by the repository-level sqlite immutability tests), but the
-// service DTO must independently refuse to even *accept* the field —
-// otherwise a future maintainer who adds it to UpdateKnowledgeBaseRequest
-// or KnowledgeBaseConfig opens a path where the field is silently ignored
-// by the ORM, which is worse than an explicit rejection.
-//
-// This test walks the request and config struct shapes and fails if either
-// gains a VectorStoreID member, by name or by JSON tag.
-func TestUpdateKBRequest_DoesNotAcceptVectorStoreID(t *testing.T) {
+// Knowledge base request and response types contain no vector binding fields.
+func TestKnowledgeBaseRequestsContainNoVectorBinding(t *testing.T) {
+	t.Run("KnowledgeBase", func(t *testing.T) { assertNoVectorStoreIDField(t, reflect.TypeOf(types.KnowledgeBase{})) })
 	t.Run("UpdateKnowledgeBaseRequest", func(t *testing.T) {
 		assertNoVectorStoreIDField(t, reflect.TypeOf(UpdateKnowledgeBaseRequest{}))
 	})
@@ -45,12 +36,12 @@ func assertNoVectorStoreIDField(t *testing.T, typ reflect.Type) {
 			f := rt.Field(i)
 			full := path + "." + f.Name
 			if f.Name == "VectorStoreID" {
-				t.Fatalf("%s declares VectorStoreID — vector_store_id is immutable post-create "+
-					"and must not be accepted by update DTOs", full)
+				t.Fatalf("%s declares VectorStoreID; "+
+					"knowledge base DTOs must contain no vector binding", full)
 			}
 			if tag := strings.Split(f.Tag.Get("json"), ",")[0]; tag == "vector_store_id" {
-				t.Fatalf("%s carries json tag \"vector_store_id\" — the field is immutable "+
-					"post-create and must not be accepted by update DTOs", full)
+				t.Fatalf("%s carries json tag \"vector_store_id\"; "+
+					"post-create knowledge base DTOs must contain no vector binding", full)
 			}
 			if f.Anonymous {
 				visit(f.Type, full)

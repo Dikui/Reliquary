@@ -64,40 +64,6 @@ type RetrieveEngineRepository interface {
 	RetrieveEngine
 }
 
-// RetrieveEngineRegistry defines the retrieve engine registry interface
-type RetrieveEngineRegistry interface {
-	// Register registers the retrieve engine service
-	Register(indexService RetrieveEngineService) error
-	// GetRetrieveEngineService gets the retrieve engine service
-	GetRetrieveEngineService(engineType types.RetrieverEngineType) (RetrieveEngineService, error)
-	// GetAllRetrieveEngineServices gets all retrieve engine services
-	GetAllRetrieveEngineServices() []RetrieveEngineService
-
-	// GetByStoreID returns the engine service registered for a specific DB store ID.
-	//
-	// IMPORTANT: This method does NOT verify tenant ownership of the returned
-	// store. Callers MUST use the CreateRetrieveEngineForKB /
-	// CreateRetrieveEngineFromPayload factory functions in the retriever package
-	// rather than calling this directly. The factories wrap GetByStoreID with
-	// tenant ownership verification (defense-in-depth against cross-tenant IDOR).
-	GetByStoreID(storeID string) (RetrieveEngineService, error)
-
-	// GetOrLoadByStoreID returns the engine for storeID, rebuilding it from the
-	// database when this process has no entry for it. The registry is per-process:
-	// an engine registered on one instance is missing on every other until that
-	// instance restarts, and an engine whose creation failed during startup stays
-	// missing even across restarts. Rebuilding on demand lets both cases recover
-	// without an operator-driven rollout.
-	//
-	// Unlike GetByStoreID, this method scopes its database lookup to tenantID, so
-	// it cannot hydrate a store belonging to another tenant. Callers should still
-	// verify ownership first: the tenant scope is defense-in-depth, not a
-	// replacement for the ownership check.
-	GetOrLoadByStoreID(
-		ctx context.Context, tenantID uint64, storeID string,
-	) (RetrieveEngineService, error)
-}
-
 // RetrieveEngineService defines the retrieve engine service interface
 type RetrieveEngineService interface {
 	// Index indexes the index info
@@ -153,4 +119,19 @@ type RetrieveEngineService interface {
 
 	// RetrieveEngine retrieves the engine
 	RetrieveEngine
+}
+
+// RetrievalService accesses the application's PostgreSQL retrieval indexes.
+type RetrievalService interface {
+	Retrieve(context.Context, []types.RetrieveParams) ([]*types.RetrieveResult, error)
+	SupportRetriever(types.RetrieverType) bool
+	Index(context.Context, embedding.Embedder, *types.IndexInfo) error
+	BatchIndex(context.Context, embedding.Embedder, []*types.IndexInfo) error
+	EstimateStorageSize(context.Context, embedding.Embedder, []*types.IndexInfo) int64
+	DeleteByChunkIDList(context.Context, []string, int, string) error
+	DeleteBySourceIDList(context.Context, []string, int, string) error
+	DeleteByKnowledgeIDList(context.Context, []string, int, string) error
+	BatchUpdateChunkEnabledStatus(context.Context, map[string]bool) error
+	BatchUpdateChunkTagID(context.Context, map[string]string) error
+	CopyIndices(context.Context, string, string, map[string]string, map[string]string, int, string) error
 }

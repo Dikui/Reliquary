@@ -157,7 +157,7 @@ type ModelParameters struct {
 	MaxOutputTokens int `yaml:"max_output_tokens,omitempty" json:"max_output_tokens,omitempty"`
 	// MaxConcurrency caps concurrent in-flight BACKGROUND (ingestion /
 	// enrichment) calls to THIS specific model, keyed by model ID and shared
-	// across all replicas. 0 (the default) means "fall back to the
+	// within this process. 0 (the default) means "fall back to the
 	// process-wide model.max_concurrency". Interactive user-facing calls are
 	// never gated. Only chat / vlm / embedding honour this (see limiter.Gate).
 	MaxConcurrency    int    `yaml:"max_concurrency,omitempty" json:"max_concurrency,omitempty"`

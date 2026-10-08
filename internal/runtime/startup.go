@@ -90,13 +90,6 @@ var startupEnvVars = []envVarSpec{
 	{name: "REDIS_PASSWORD", sensitive: true},
 	{name: "REDIS_USE_TLS"},
 	{name: "REDIS_TLS_SERVER_NAME"},
-	// Object storage
-	{name: "STORAGE_TYPE"},
-	{name: "MINIO_ENDPOINT"},
-	{name: "MINIO_BUCKET_NAME"},
-	{name: "MINIO_SECRET_ACCESS_KEY", sensitive: true},
-	// External services
-	{name: "DOCREADER_ADDR"},
 }
 
 // LogStartupEnv prints a single banner block summarising the curated set

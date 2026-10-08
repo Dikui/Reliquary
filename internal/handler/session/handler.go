@@ -26,9 +26,8 @@ type Handler struct {
 	customAgentService   interfaces.CustomAgentService   // Service for managing custom agents
 	tenantService        interfaces.TenantService        // Service for loading team settings
 	fileService          interfaces.FileService          // Service for file storage (image uploads)
-	storageResolver      interfaces.StorageBackendResolver
-	modelService         interfaces.ModelService // Service for model management (VLM access)
-	attachmentProcessor  *AttachmentProcessor    // Processor for file attachments
+	modelService         interfaces.ModelService         // Service for model management (VLM access)
+	attachmentProcessor  *AttachmentProcessor            // Processor for file attachments
 	temporaryDocuments   interfaces.TemporaryDocumentService
 	// artifactCollector drains skill-generated files from the session sandbox
 	// after an agent turn completes. May be nil when the sandbox backend does
@@ -48,9 +47,7 @@ func NewHandler(
 	customAgentService interfaces.CustomAgentService,
 	tenantService interfaces.TenantService,
 	fileService interfaces.FileService,
-	storageResolver interfaces.StorageBackendResolver,
 	modelService interfaces.ModelService,
-	documentReader interfaces.DocumentReader,
 	imageResolver *docparser.ImageResolver,
 	temporaryDocuments interfaces.TemporaryDocumentService,
 	artifactCollector *service.ArtifactCollector,
@@ -66,14 +63,12 @@ func NewHandler(
 		customAgentService:   customAgentService,
 		tenantService:        tenantService,
 		fileService:          fileService,
-		storageResolver:      storageResolver,
 		modelService:         modelService,
 		temporaryDocuments:   temporaryDocuments,
 		artifactCollector:    artifactCollector,
 		memoryService:        memoryService,
 		attachmentProcessor: NewAttachmentProcessor(
 			fileService,
-			documentReader,
 			imageResolver,
 			modelService,
 		),

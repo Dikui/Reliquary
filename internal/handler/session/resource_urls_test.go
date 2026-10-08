@@ -41,7 +41,7 @@ func (s *stubResourceFileService) GetFile(context.Context, string) (io.ReadClose
 
 func publicStreamRewriter() *storageurl.StreamRewriter {
 	return storageurl.NewStreamRewriter(storageurl.NewRequestRewriter(
-		context.Background(), storageurl.ModePublic, &stubResourceFileService{}, nil))
+		context.Background(), storageurl.ModePublic, &stubResourceFileService{}))
 }
 
 func newTestGinContext(t *testing.T, query string) (*gin.Context, *httptest.ResponseRecorder) {

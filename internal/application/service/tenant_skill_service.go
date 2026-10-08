@@ -59,7 +59,7 @@ const (
 type TenantSkillService struct {
 	skills        repository.TenantSkillRepository
 	configs       repository.TenantSandboxConfigRepository
-	resolver      interfaces.StorageBackendResolver
+	resolver      interfaces.FileService
 	sandboxes     sandbox.TenantSandboxResolver
 	sandboxPolicy WorkspaceSandboxPolicy
 	agents        interfaces.AgentService
@@ -121,7 +121,7 @@ type TenantSkillService struct {
 func NewTenantSkillService(
 	skillsRepo repository.TenantSkillRepository,
 	configsRepo repository.TenantSandboxConfigRepository,
-	resolver interfaces.StorageBackendResolver,
+	resolver interfaces.FileService,
 	sandboxes sandbox.TenantSandboxResolver,
 	sandboxPolicy WorkspaceSandboxPolicy,
 	agents interfaces.AgentService,

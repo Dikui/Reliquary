@@ -22,7 +22,7 @@ func (s *stubChecker) IsRequired(ctx context.Context, tenantID uint64, serviceID
 
 func TestGate_RequestAndWait_Approve(t *testing.T) {
 	bus := event.NewEventBus()
-	g := NewGate(&config.Config{Agent: &config.AgentConfig{ToolApprovalTimeoutSeconds: 2}}, &stubChecker{required: true}, nil)
+	g := NewGate(&config.Config{Agent: &config.AgentConfig{ToolApprovalTimeoutSeconds: 2}}, &stubChecker{required: true})
 
 	ctx := context.Background()
 	req := PendingRequest{
@@ -56,7 +56,7 @@ func TestGate_RequestAndWait_Approve(t *testing.T) {
 }
 
 func TestGate_RequestAndWait_Timeout(t *testing.T) {
-	g := NewGate(&config.Config{Agent: &config.AgentConfig{ToolApprovalTimeoutSeconds: 1}}, &stubChecker{required: true}, nil)
+	g := NewGate(&config.Config{Agent: &config.AgentConfig{ToolApprovalTimeoutSeconds: 1}}, &stubChecker{required: true})
 	ctx := context.Background()
 	req := PendingRequest{
 		TenantID:           1,
@@ -76,19 +76,19 @@ func TestGate_RequestAndWait_Timeout(t *testing.T) {
 }
 
 func TestGate_NeedsApproval_NoChecker(t *testing.T) {
-	g := NewGate(nil, nil, nil)
+	g := NewGate(nil, nil)
 	require.False(t, g.NeedsApproval(context.Background(), 1, "x", "y"))
 }
 
 func TestGate_Resolve_NotFound(t *testing.T) {
-	g := NewGate(&config.Config{Agent: &config.AgentConfig{ToolApprovalTimeoutSeconds: 1}}, &stubChecker{required: true}, nil)
+	g := NewGate(&config.Config{Agent: &config.AgentConfig{ToolApprovalTimeoutSeconds: 1}}, &stubChecker{required: true})
 	err := g.Resolve(1, "", "no-such-id", Decision{Approved: true})
 	require.ErrorIs(t, err, ErrPendingNotFound)
 }
 
 func TestGate_Resolve_TenantMismatch(t *testing.T) {
 	bus := event.NewEventBus()
-	g := NewGate(&config.Config{Agent: &config.AgentConfig{ToolApprovalTimeoutSeconds: 2}}, &stubChecker{required: true}, nil)
+	g := NewGate(&config.Config{Agent: &config.AgentConfig{ToolApprovalTimeoutSeconds: 2}}, &stubChecker{required: true})
 	req := PendingRequest{
 		TenantID: 1, EventBus: bus, SessionID: "s1", AssistantMessageID: "m1",
 		ServiceID: "svc", MCPToolName: "t", Args: json.RawMessage(`{}`),
@@ -108,7 +108,7 @@ func TestGate_Resolve_TenantMismatch(t *testing.T) {
 
 func TestGate_Resolve_UserMismatch(t *testing.T) {
 	bus := event.NewEventBus()
-	g := NewGate(&config.Config{Agent: &config.AgentConfig{ToolApprovalTimeoutSeconds: 2}}, &stubChecker{required: true}, nil)
+	g := NewGate(&config.Config{Agent: &config.AgentConfig{ToolApprovalTimeoutSeconds: 2}}, &stubChecker{required: true})
 	req := PendingRequest{
 		TenantID: 1, UserID: "alice", EventBus: bus,
 		SessionID: "s1", AssistantMessageID: "m1",
@@ -132,7 +132,7 @@ func TestGate_Resolve_UserMismatch(t *testing.T) {
 // per-user check entirely (allowing same-tenant cross-user approval).
 func TestGate_Resolve_EmptyUserIDRejectedWhenWaiterHasUser(t *testing.T) {
 	bus := event.NewEventBus()
-	g := NewGate(&config.Config{Agent: &config.AgentConfig{ToolApprovalTimeoutSeconds: 2}}, &stubChecker{required: true}, nil)
+	g := NewGate(&config.Config{Agent: &config.AgentConfig{ToolApprovalTimeoutSeconds: 2}}, &stubChecker{required: true})
 	req := PendingRequest{
 		TenantID: 1, UserID: "alice", EventBus: bus,
 		SessionID: "s1", AssistantMessageID: "m1",
@@ -152,7 +152,7 @@ func TestGate_Resolve_EmptyUserIDRejectedWhenWaiterHasUser(t *testing.T) {
 }
 
 func TestGate_Resolve_AlreadyResolvedAfterTimeout(t *testing.T) {
-	g := NewGate(&config.Config{Agent: &config.AgentConfig{ToolApprovalTimeoutSeconds: 1}}, &stubChecker{required: true}, nil)
+	g := NewGate(&config.Config{Agent: &config.AgentConfig{ToolApprovalTimeoutSeconds: 1}}, &stubChecker{required: true})
 	bus := event.NewEventBus()
 
 	var pendingID string
@@ -184,7 +184,7 @@ func TestGate_Resolve_AlreadyResolvedAfterTimeout(t *testing.T) {
 }
 
 func TestGate_Resolve_RaceWinsAlreadyResolved(t *testing.T) {
-	g := NewGate(&config.Config{Agent: &config.AgentConfig{ToolApprovalTimeoutSeconds: 30}}, &stubChecker{required: true}, nil)
+	g := NewGate(&config.Config{Agent: &config.AgentConfig{ToolApprovalTimeoutSeconds: 30}}, &stubChecker{required: true})
 	bus := event.NewEventBus()
 
 	type result struct {

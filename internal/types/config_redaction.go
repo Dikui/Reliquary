@@ -33,42 +33,6 @@ func ParserEngineConfigForResponse(cfg *ParserEngineConfig, maskSecrets bool) *P
 	if out.MinerUAPIKey != "" {
 		out.MinerUAPIKey = RedactedSecretPlaceholder
 	}
-	if out.PaddleOCRVLCloudToken != "" {
-		out.PaddleOCRVLCloudToken = RedactedSecretPlaceholder
-	}
-	return &out
-}
-
-// StorageEngineConfigForResponse returns a copy with provider secret fields
-// redacted when maskSecrets is true.
-func StorageEngineConfigForResponse(cfg *StorageEngineConfig, maskSecrets bool) *StorageEngineConfig {
-	if cfg == nil {
-		return nil
-	}
-	out := *cfg
-	if !maskSecrets {
-		return &out
-	}
-	if out.MinIO != nil {
-		minio := *out.MinIO
-		if minio.AccessKeyID != "" {
-			minio.AccessKeyID = RedactedSecretPlaceholder
-		}
-		if minio.SecretAccessKey != "" {
-			minio.SecretAccessKey = RedactedSecretPlaceholder
-		}
-		out.MinIO = &minio
-	}
-	if out.S3 != nil {
-		s3 := *out.S3
-		if s3.AccessKey != "" {
-			s3.AccessKey = RedactedSecretPlaceholder
-		}
-		if s3.SecretKey != "" {
-			s3.SecretKey = RedactedSecretPlaceholder
-		}
-		out.S3 = &s3
-	}
 	return &out
 }
 
@@ -117,49 +81,10 @@ func MergeParserEngineConfigForUpdate(incoming, existing *ParserEngineConfig) *P
 		prev = *existing
 	}
 	out.MinerUAPIKey = PreserveIfRedacted(out.MinerUAPIKey, prev.MinerUAPIKey)
-	out.PaddleOCRVLCloudToken = PreserveIfRedacted(out.PaddleOCRVLCloudToken, prev.PaddleOCRVLCloudToken)
 	// Chat attachment parser rules are configured per agent; preserve any legacy
 	// tenant-level rules when the settings UI omits this field on engine updates.
 	if incoming.ChatParserEngineRules == nil && existing != nil {
 		out.ChatParserEngineRules = existing.ChatParserEngineRules
-	}
-	return &out
-}
-
-// MergeStorageEngineConfigForUpdate applies preserve semantics to provider
-// secret fields on tenant KV PUT.
-func MergeStorageEngineConfigForUpdate(incoming, existing *StorageEngineConfig) *StorageEngineConfig {
-	if incoming == nil {
-		return nil
-	}
-	out := *incoming
-	if out.MinIO != nil {
-		minio := *out.MinIO
-		var prev MinIOEngineConfig
-		if existing != nil && existing.MinIO != nil {
-			prev = *existing.MinIO
-		}
-		minio.AccessKeyID = PreserveIfRedacted(minio.AccessKeyID, prev.AccessKeyID)
-		minio.SecretAccessKey = PreserveIfRedacted(minio.SecretAccessKey, prev.SecretAccessKey)
-		out.MinIO = &minio
-	}
-	if out.S3 != nil {
-		s3 := *out.S3
-		var prev S3EngineConfig
-		if existing != nil && existing.S3 != nil {
-			prev = *existing.S3
-		}
-		// Empty S3 credentials intentionally switch authentication to the AWS
-		// default credential chain. Only the response placeholder means "keep
-		// the stored value"; treating empty as preserve makes it impossible to
-		// migrate an existing static AK/SK configuration to IAM roles.
-		if s3.AccessKey == RedactedSecretPlaceholder {
-			s3.AccessKey = prev.AccessKey
-		}
-		if s3.SecretKey == RedactedSecretPlaceholder {
-			s3.SecretKey = prev.SecretKey
-		}
-		out.S3 = &s3
 	}
 	return &out
 }

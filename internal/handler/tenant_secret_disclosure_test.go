@@ -100,11 +100,6 @@ func secretTenantFixture() *types.Tenant {
 		ParserEngineConfig: &types.ParserEngineConfig{
 			MinerUAPIKey: "parser-secret-123",
 		},
-		StorageEngineConfig: &types.StorageEngineConfig{
-			MinIO: &types.MinIOEngineConfig{
-				SecretAccessKey: "minio-secret-789",
-			},
-		},
 	}
 }
 
@@ -117,16 +112,6 @@ func TestGetTenantKVAllowedForNonSecretKey(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/tenants/kv/retrieval-config", nil)
 	engine.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
-}
-
-func TestGetTenantKVUserStorageConfigWithoutStoredConfig(t *testing.T) {
-	tenant := secretTenantFixture()
-	tenant.StorageEngineConfig = nil
-	engine := newTenantHandlerTestEngine(t, tenant)
-	rec := httptest.NewRecorder()
-	engine.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/tenants/kv/storage-engine-config", nil))
-	require.Equal(t, http.StatusOK, rec.Code)
-	require.JSONEq(t, `{"success":true,"data":{"default_provider":""}}`, rec.Body.String())
 }
 
 func TestPutTenantParserConfigAdminPreservesRedactedSecrets(t *testing.T) {

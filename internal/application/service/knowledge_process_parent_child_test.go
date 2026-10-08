@@ -7,6 +7,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/require"
 
+	"reliquary/internal/application/service/retriever"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -107,17 +108,6 @@ func (e *parentChildRetrieveEngine) BatchIndex(
 	return nil
 }
 
-type parentChildRetrieveRegistry struct {
-	interfaces.RetrieveEngineRegistry
-	engine interfaces.RetrieveEngineService
-}
-
-func (r parentChildRetrieveRegistry) GetRetrieveEngineService(
-	types.RetrieverEngineType,
-) (interfaces.RetrieveEngineService, error) {
-	return r.engine, nil
-}
-
 type parentChildTenantRepo struct {
 	interfaces.TenantRepository
 }
@@ -141,21 +131,13 @@ func TestProcessChunksIndexesEveryTextChild(t *testing.T) {
 	}
 	chunkService := &parentChildChunkService{}
 	retrieveEngine := &parentChildRetrieveEngine{}
-	tenant := &types.Tenant{
-		ID: 1,
-		RetrieverEngines: types.RetrieverEngines{Engines: []types.RetrieverEngineParams{
-			{
-				RetrieverType:       types.VectorRetrieverType,
-				RetrieverEngineType: types.PostgresRetrieverEngineType,
-			},
-		}},
-	}
+	tenant := &types.Tenant{ID: 1}
 	ctx := context.WithValue(context.Background(), types.TenantInfoContextKey, tenant)
 	svc := &knowledgeService{
 		repo:           &parentChildKnowledgeRepo{knowledge: knowledge},
 		chunkService:   chunkService,
 		modelService:   parentChildModelService{embedder: parentChildEmbedder{}},
-		retrieveEngine: parentChildRetrieveRegistry{engine: retrieveEngine},
+		retrieveEngine: &retriever.PostgresRetrievalService{RetrieveEngineService: retrieveEngine},
 		tenantRepo:     parentChildTenantRepo{},
 		task:           parentChildTaskEnqueuer{},
 	}

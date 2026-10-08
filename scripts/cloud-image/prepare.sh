@@ -175,7 +175,7 @@ else
 fi
 echo "[prepare]   -> RELIQUARY_VERSION=${RELIQUARY_VERSION_VAL}"
 
-echo "[prepare] 4/6 拉取并启动默认 5 个常驻容器 (frontend/app/docreader/postgres/redis)"
+echo "[prepare] 4/6 拉取并启动默认 4 个常驻容器 (frontend/app/postgres/redis)"
 docker compose pull
 docker compose up -d
 

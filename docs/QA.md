@@ -4,7 +4,7 @@
 
 ## 1. 如何查看日志？
 ```bash
-docker compose logs -f app docreader postgres
+docker compose logs -f app postgres redis
 ```
 
 ## 2. 如何启动和停止服务？
@@ -67,62 +67,13 @@ INIT_RERANK_MODEL_API_KEY=your_rerank_model_api_key
 
 在知识库设置中开启**高级设置 - 多模态功能**，并在界面中配置相应的多模态模型。
 
-### 2. 确认 MinIO 服务已启动
+### 2. 确认本地文件目录可读写
 
-如果多模态功能配置使用的是 MinIO 存储，需要确保 MinIO 镜像已正确启动：
+检查 `LOCAL_STORAGE_BASE_DIR` 指向的目录和容器文件卷。图片通过带鉴权的文件接口加载；需要匿名直链时配置 `APP_EXTERNAL_URL` 并代理 `/r/`。
 
-```bash
-# 启动 MinIO 服务
-docker-compose --profile minio up -d
+## 5. 扫描件与复杂排版如何解析？
 
-# 或者启动完整服务（包括 MinIO、联网搜索与可选 PDF 解析服务）
-docker-compose --profile full up -d
-```
-
-### 3. 检查 MinIO Bucket 权限
-
-确保 MinIO 对应的 bucket 具有正确的读写权限：
-
-1. 访问 MinIO 控制台：`http://localhost:9001`（默认端口）
-2. 使用 `.env` 中配置的 `MINIO_ACCESS_KEY_ID` 和 `MINIO_SECRET_ACCESS_KEY` 登录
-3. 进入对应的 bucket，检查并设置访问策略为**公开读取**或**公开读写**
-
-**重要提示**：
-- Bucket 名称不要包含特殊字符（包括中文），建议使用小写字母、数字和连字符
-- 如果无法修改现有 bucket 的权限，可以在配置中填入一个不存在的 bucket 名称，本项目会自动创建对应的 bucket 并设置好正确的权限
-
-### 4. 配置 MINIO_PUBLIC_ENDPOINT
-
-在 `docker-compose.yml` 文件中，`MINIO_PUBLIC_ENDPOINT` 变量默认配置为 `http://localhost:9000`。
-
-**重要提示**：如果你需要从其他设备或容器访问图片，`localhost` 可能无法正常工作，需要将其替换为本机的实际 IP 地址：
-
-
-## 5. 平台兼容性说明
-
-**重要提示**：`OCR_BACKEND=paddle` 模式在部分平台上可能无法正常运行。如果遇到 PaddleOCR 启动失败的问题，请选择以下解决方案
-
-### 方案一：关闭 OCR 识别
-
-在 `docker-compose.yml` 文件的 `docreader` 服务中删除 `OCR_BACKEND` 配置，然后重启 docreader 服务
-
-**注意**：设置为 `no_ocr` 后，文档解析将不会使用 OCR 功能，这可能会影响图片和扫描文档的文字识别效果。
-
-### 方案二：使用外部 OCR 模型（推荐）
-
-如果需要 OCR 功能，可以使用外部的视觉语言模型（VLM）来替代 PaddleOCR。在 `docker-compose.yml` 文件的 `docreader` 服务中配置：
-
-```yaml
-environment:
-  - OCR_BACKEND=vlm
-  - OCR_API_BASE_URL=${OCR_API_BASE_URL:-}
-  - OCR_API_KEY=${OCR_API_KEY:-}
-  - OCR_MODEL=${OCR_MODEL:-}
-```
-
-然后重启 docreader 服务
-
-**优势**：使用外部 OCR 模型可以获得更好的识别效果，且不受平台限制。
+在设置中配置 `mineru` 或 `mineru_cloud`，为对应文件类型选择该引擎。普通 PDF 和 Office 文档使用进程内 anydoc，本地开发需执行 `make anydoc-lib` 后使用 `go run -tags anydoc ./cmd/server`。未链接 anydoc 时会明确提示构建标签和静态库要求。
 
 ## 6. 如何使用数据分析功能？
 
@@ -254,19 +205,15 @@ Wiki 模式允许 Agent 根据原始文档自动生成并维护一套结构化�
 
 ## 26. Embedding 维度如何覆盖？
 
-在 **设置 → 模型** 编辑 Embedding 模型时可填写 **dimensions** 覆盖值（如 1024、1536）。0.6.3 修复了部分提供商请求未携带 `dimensions` 的问题（#1654）。若向量库索引维度与模型不一致，检索可能异常，请保持 KB 绑定向量库与模型维度一致。
+在 **设置 → 模型** 编辑 Embedding 模型时可填写 **dimensions** 覆盖值（如 1024、1536）。0.6.3 修复了部分提供商请求未携带 `dimensions` 的问题（#1654）。若向量库索引维度与模型不一致，检索可能异常，请保持嵌入模型的实际输出维度与模型配置一致。
 
 ## 27. Agent 提示「模型未就绪」无法对话？
 
 0.6.3 在 Agent 选择器引入**模型就绪校验**：绑定的 LLM / Embedding / Rerank / VLM 缺失或配置无效时会阻断对话并给出修复指引。可在模型卡片打开 **调试抽屉** 先测试连通性；确认 KB 与 Agent 引用的模型均存在且可用。
 
-## 29. 一个空间如何绑定多个对象存储实例？
+## 29. 文件存储在哪里？
 
-0.7.0 支持**多实例存储后端**（相关结构已纳入数据库基线）。一个空间可注册多个存储实例（`local` / `minio` / `s3`），不同知识库绑定到不同实例，空间维度还有一个默认实例：
-
-- 在 **设置 → 存储后端** 创建/测试/设为默认（需 Admin+；API Key 需 `manage_storage_backends` 能力）。
-- 未显式绑定的新知识库使用空间默认实例；响应中的 `access_key_id` / `secret_access_key` 会被掩码，更新时提交掩码占位符不会覆盖库中真实凭据。
-- 若创建知识库时提示存储引擎不可用，请确认目标 provider 在 `STORAGE_ALLOW_LIST` 允许范围内。详见 [`docs/api/storage-backend.md`](./api/storage-backend.md)。
+文件统一保存到 `LOCAL_STORAGE_BASE_DIR` 指定的本地目录。知识库仍可选择嵌入模型。备份时保存 PostgreSQL 数据与本地文件目录。
 
 ## 30. 后台解析/入库任务积压或需要排查失败任务怎么办？
 
@@ -274,7 +221,7 @@ Wiki 模式允许 Agent 根据原始文档自动生成并维护一套结构化�
 
 - 在 **系统设置 → 运行时队列** 查看队列深度、按模型并发统计、失败任务详情，并可手动重试。
 - 可通过 `RELIQUARY_ASYNQ_*_CONCURRENCY` 与 `asynq.*_concurrency` 系统设置调整各池并发（需重启服务）；`model.max_concurrency` 用于约束单模型后台并发。
-- 详见 [`docs/worker-pool-governance.md`](./worker-pool-governance.md)。注意：Worker 并发只是调度预算，仍受模型配额、DocReader 容量、向量库与数据库连接数限制。
+- 详见 [`docs/worker-pool-governance.md`](./worker-pool-governance.md)。注意：Worker 并发只是调度预算，仍受模型配额、解析引擎容量和数据库连接数限制。
 
 ## 31. 对话中如何临时上传图片/文档做一次性问答？
 
@@ -341,15 +288,11 @@ docker run -d -p 8081:8081 reliquary-docs
 注意事项：
 
 - 直链依赖 `APP_EXTERNAL_URL`（或存储后端本身公网可达）才能生成；无法生成时该引用会保持 `resource://` 原样，客户端仍可回退到 `/files`。
-- `public` 会为每个被引用文件签发**限时匿名可读**链接（Reliquary 侧 2 小时，MinIO 24 小时），请评估是否符合你的安全要求。
+- `public` 会为每个被引用文件签发**限时匿名可读**链接（2 小时），请评估是否符合你的安全要求。
 - 限定了知识库范围的 API Key **始终返回 handle**，不受该变量影响。
 - 建议同时配置 `SYSTEM_AES_KEY`，以便复用 grant 行、稳定直链 URL 并降低读接口的写入压力。
 
 详见 [API 文档 · 文件与图片引用](./api/README.md)。
-
-## 43. 使用 AWS S3 但不想在配置里写 AK/SK？
-
-0.7.2 支持 **AWS SDK 默认凭据链**（#2008）：把 `S3_ACCESS_KEY` 与 `S3_SECRET_KEY` **同时留空**即可，SDK 会依次尝试 EC2/ECS/EKS 实例角色、IRSA / Web Identity、环境变量与共享配置文件。注意两者必须同时填写或同时留空，只填一个会报配置错误。`S3_ENDPOINT` 也可留空，此时使用 `S3_REGION` 对应的 AWS 标准端点。
 
 ## 45. 升级到 0.8.0 后技能沙箱起不来 / 找不到 Local 后端？
 
@@ -381,9 +324,9 @@ docker run -d -p 8081:8081 reliquary-docs
 
 接口在 `/api/v1/memory/*`，只操作当前调用者自己的记忆，需要 full-access API Key 或登录会话。
 
-## 48. 文档解析能否不经过 docreader？anydoc 是什么？
+## 48. anydoc 如何启用？
 
-0.8.0 引入进程内 **anydoc** 引擎（`third_party/anydoc-go`）。当绑定已链接时，anydoc 能转换的格式（含 doc/docx/ppt/pptx）会优先走 Go 进程，不再先打到 docreader。PPT/PPTX 在没有引擎规则时仍默认 MarkItDown。官方 app 镜像默认链接 anydoc。解析失败或格式不在 anydoc 覆盖范围时，仍回退到 docreader / MarkItDown / MinerU 等既有引擎。
+anydoc 是进程内文档转换引擎，PDF、Office、EPUB 和 CSV 默认使用它。本地需安装 Rust，执行 `make anydoc-lib` 后使用 `go run -tags anydoc ./cmd/server`。应用镜像默认链接 anydoc。未链接时明确提示构建要求；扫描件和复杂排版可在设置中选择 MinerU。
 
 ## 50. 开启复杂密码后注册 / 改密失败？
 

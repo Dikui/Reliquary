@@ -9,24 +9,6 @@ import (
 	"gorm.io/gorm"
 )
 
-const storageBackendScheme = "storage://"
-
-func BuildStorageBackendPath(backendID, providerPath string) string {
-	return storageBackendScheme + strings.TrimSpace(backendID) + "/" + providerPath
-}
-
-func ParseStorageBackendPath(path string) (backendID, providerPath string, ok bool) {
-	if !strings.HasPrefix(path, storageBackendScheme) {
-		return "", "", false
-	}
-	rest := strings.TrimPrefix(path, storageBackendScheme)
-	parts := strings.SplitN(rest, "/", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", false
-	}
-	return parts[0], parts[1], true
-}
-
 // KnowledgeBaseType represents the type of the knowledge base
 const (
 	// KnowledgeBaseTypeDocument represents the document knowledge base type
@@ -64,20 +46,6 @@ type KnowledgeBase struct {
 	VLMConfig VLMConfig `yaml:"vlm_config"              json:"vlm_config"              gorm:"type:json"`
 	// ASR config (Automatic Speech Recognition)
 	ASRConfig ASRConfig `yaml:"asr_config"              json:"asr_config"              gorm:"type:json"`
-	// Storage provider config (new): only stores provider selection; credentials from workspace StorageEngineConfig
-	StorageProviderConfig *StorageProviderConfig `yaml:"storage_provider_config" json:"storage_provider_config"  gorm:"column:storage_provider_config;type:jsonb"`
-	// StorageBackendID binds this KB to one concrete storage instance. The
-	// legacy provider field remains readable during migration only.
-	StorageBackendID *string `yaml:"storage_backend_id" json:"storage_backend_id,omitempty" gorm:"column:storage_backend_id;type:varchar(36);default:null"`
-	// Deprecated: legacy storage config column. Kept for backward compatibility with old data.
-	StorageConfig StorageConfig `yaml:"-" json:"storage_config" gorm:"column:cos_config;type:json"`
-	// VectorStoreID references the VectorStore this knowledge base is bound to.
-	// When nil, the KB falls back to the workspace's effective engines derived from
-	// the RETRIEVE_DRIVER environment variable (env store flow).
-	// This field is set once at creation time and must not be modified afterwards;
-	// enforcement lives at the GORM layer (`<-:create`) plus the service-layer
-	// KB update path, which omits this field from its update DTO.
-	VectorStoreID *string `yaml:"vector_store_id"         json:"vector_store_id,omitempty" gorm:"column:vector_store_id;type:varchar(36);<-:create"`
 	// Extract config
 	// QuestionGenerationConfig stores question generation configuration for document knowledge bases
 	QuestionGenerationConfig *QuestionGenerationConfig `yaml:"question_generation_config" json:"question_generation_config" gorm:"column:question_generation_config;type:json"`
@@ -207,9 +175,6 @@ func (c *AutoTagConfig) Normalize() {
 type ParserEngineRule struct {
 	FileTypes []string `yaml:"file_types" json:"file_types"`
 	Engine    string   `yaml:"engine"     json:"engine"`
-	// XLSXFirstRowAsHeader restores row-1 column context for flat XLSX tables.
-	// nil preserves the parser default; an explicit false disables the mode.
-	XLSXFirstRowAsHeader *bool `yaml:"xlsx_first_row_as_header,omitempty" json:"xlsx_first_row_as_header,omitempty"`
 }
 
 // ChunkingConfig represents the document splitting configuration
@@ -255,39 +220,15 @@ type ChunkingConfig struct {
 	TableMetadataInstructions string `yaml:"table_metadata_instructions,omitempty" json:"table_metadata_instructions,omitempty"`
 }
 
-// defaultParserEngineByType maps file types the builtin/simple engines cannot
-// parse to a docreader engine that can. Types omitted here keep empty-string
-// routing (Go simple formats, otherwise docreader builtin) unless
-// SetPreferParserEngine selects a linked in-process engine such as anydoc.
-var defaultParserEngineByType = map[string]string{
-	"ppt":  "markitdown",
-	"pptx": "markitdown",
-}
-
-// preferParserEngine, if set, may override DefaultParserEngine. The
-// docparser package registers anydoc here so types does not import the
-// engine catalog.
-var preferParserEngine func(fileType string) string
-
-// SetPreferParserEngine registers a build-time preference used by
-// DefaultParserEngine. Pass nil to clear. Intended to be called from init().
-func SetPreferParserEngine(fn func(fileType string) string) {
-	preferParserEngine = fn
-}
-
-// DefaultParserEngine returns the engine used when no parser_engine_rules
-// match. Empty string means builtin (docreader) or Go simple-format routing.
-// When the anydoc binding is linked it is preferred for every type it
-// converts (except Go simple formats). ppt/pptx otherwise fall back to
-// markitdown.
+// DefaultParserEngine selects a retained parser independent of build tags.
+// Office documents and PDFs use anydoc so a missing binding reports an error.
 func DefaultParserEngine(fileType string) string {
-	ft := normalizeParserFileType(fileType)
-	if preferParserEngine != nil {
-		if engine := preferParserEngine(ft); engine != "" {
-			return engine
-		}
+	switch normalizeParserFileType(fileType) {
+	case "doc", "docx", "docm", "odt", "rtf", "ppt", "pptx", "pptm", "odp", "xls", "xlsx", "xlsm", "ods", "epub", "pdf":
+		return "anydoc"
+	default:
+		return "simple"
 	}
-	return defaultParserEngineByType[ft]
 }
 
 // ResolveParserEngine returns the engine name for the given file type
@@ -320,167 +261,10 @@ func normalizeParserFileType(fileType string) string {
 	return strings.TrimPrefix(strings.ToLower(strings.TrimSpace(fileType)), ".")
 }
 
-// StorageProviderConfig stores the KB-level storage provider selection.
-// Credentials are managed at the tenant level (StorageEngineConfig).
-type StorageProviderConfig struct {
-	Provider string `yaml:"provider" json:"provider"` // "local", "minio", "s3"
-}
-
-func (c StorageProviderConfig) Value() (driver.Value, error) {
-	return json.Marshal(c)
-}
-
-func (c *StorageProviderConfig) Scan(value interface{}) error {
-	if value == nil {
-		return nil
-	}
-	b, ok := value.([]byte)
-	if !ok {
-		return nil
-	}
-	return json.Unmarshal(b, c)
-}
-
-// Deprecated: StorageConfig is the legacy storage configuration stored in the cos_config column.
-// New code should use StorageProviderConfig. Kept for backward compatibility with old data.
-type StorageConfig struct {
-	// Access Key ID (S3, MinIO)
-	SecretID string `yaml:"secret_id"   json:"secret_id"`
-	// Secret Access Key (S3, MinIO)
-	SecretKey string `yaml:"secret_key"  json:"secret_key"`
-	// Region
-	Region string `yaml:"region"      json:"region"`
-	// Bucket Name
-	BucketName string `yaml:"bucket_name" json:"bucket_name"`
-	// Path Prefix
-	PathPrefix string `yaml:"path_prefix" json:"path_prefix"`
-	// Provider: "minio", "s3"
-	Provider string `yaml:"provider"    json:"provider"`
-	// Endpoint (S3 specific) - e.g., s3.amazonaws.com
-	Endpoint string `yaml:"endpoint"    json:"endpoint,omitempty"`
-	// UseSSL (S3 specific) - whether to use HTTPS
-	UseSSL bool `yaml:"use_ssl"     json:"use_ssl,omitempty"`
-	// ForcePathStyle (S3 specific) - whether to use path-style URLs
-	ForcePathStyle bool `yaml:"force_path_style" json:"force_path_style,omitempty"`
-}
-
-func (c StorageConfig) Value() (driver.Value, error) {
-	return json.Marshal(c)
-}
-
-func (c *StorageConfig) Scan(value interface{}) error {
-	if value == nil {
-		return nil
-	}
-	b, ok := value.([]byte)
-	if !ok {
-		return nil
-	}
-	return json.Unmarshal(b, c)
-}
-
-// UnmarshalJSON keeps backward compatibility for legacy clients that still send
-// `cos_config` or `storage_config`, while migrating to `storage_provider_config`.
-func (kb *KnowledgeBase) UnmarshalJSON(data []byte) error {
-	type alias KnowledgeBase
-	aux := struct {
-		*alias
-		LegacyStorageConfig *StorageConfig `json:"cos_config"`
-	}{
-		alias: (*alias)(kb),
-	}
-	if err := json.Unmarshal(data, &aux); err != nil {
-		return err
-	}
-	// Backward compat: populate legacy StorageConfig from cos_config
-	if aux.LegacyStorageConfig != nil && kb.StorageConfig == (StorageConfig{}) {
-		kb.StorageConfig = *aux.LegacyStorageConfig
-	}
-	// Auto-populate StorageProviderConfig from legacy StorageConfig if not set
-	if kb.StorageProviderConfig == nil && kb.StorageConfig.Provider != "" {
-		kb.StorageProviderConfig = &StorageProviderConfig{Provider: kb.StorageConfig.Provider}
-	}
-	return nil
-}
-
-// GetStorageProvider returns the effective storage provider for this KB.
-// Priority: StorageProviderConfig (new) > StorageConfig.Provider (legacy cos_config).
-func (kb *KnowledgeBase) GetStorageProvider() string {
-	if kb == nil {
-		return ""
-	}
-	if kb.StorageProviderConfig != nil {
-		p := strings.ToLower(strings.TrimSpace(kb.StorageProviderConfig.Provider))
-		if p != "" && p != "__pending_env__" {
-			return p
-		}
-	}
-	return strings.ToLower(strings.TrimSpace(kb.StorageConfig.Provider))
-}
-
-// EffectiveStorageProvider returns the KB's storage provider, falling back to
-// the supplied tenant default when the KB does not pin one. This mirrors the
-// selection logic in resolveFileService and is used by clone preflight checks
-// to detect cross-storage-backend clones (which are not supported).
-func (kb *KnowledgeBase) EffectiveStorageProvider(tenantDefault string) string {
-	if p := kb.GetStorageProvider(); p != "" {
-		return p
-	}
-	return strings.ToLower(strings.TrimSpace(tenantDefault))
-}
-
-// SetStorageProvider writes the provider to the new StorageProviderConfig field.
-func (kb *KnowledgeBase) SetStorageProvider(provider string) {
-	if kb == nil {
-		return
-	}
-	kb.StorageProviderConfig = &StorageProviderConfig{Provider: provider}
-}
-
-// SharesStorageBackendWith compares concrete instance bindings first. Provider
-// comparison is only a compatibility fallback for rows not yet backfilled.
-func (kb *KnowledgeBase) SharesStorageBackendWith(other *KnowledgeBase, defaultBackendID, defaultProvider string) bool {
-	if kb == nil || other == nil {
-		return false
-	}
-	effectiveID := func(candidate *KnowledgeBase) string {
-		if candidate.StorageBackendID != nil {
-			if id := strings.TrimSpace(*candidate.StorageBackendID); id != "" {
-				return id
-			}
-		}
-		return strings.TrimSpace(defaultBackendID)
-	}
-	leftID, rightID := effectiveID(kb), effectiveID(other)
-	if leftID != "" || rightID != "" {
-		return leftID != "" && leftID == rightID
-	}
-	return kb.EffectiveStorageProvider(defaultProvider) == other.EffectiveStorageProvider(defaultProvider)
-}
-
-// InferStorageFromFilePath deduces the storage provider from a file path format.
-// Used as a safety fallback when the KB's configured provider doesn't match the data.
-// Supports provider:// scheme (local://, minio://, s3://),
-// unified /files/{provider}/... format, and legacy formats.
-func InferStorageFromFilePath(filePath string) string {
-	// Provider scheme format: provider://...
-	if p := ParseProviderScheme(filePath); p != "" {
-		return p
-	}
-	return ""
-}
-
-// ParseProviderScheme extracts the provider from a provider:// scheme path.
-// e.g. "minio://bucket/key" → "minio", "local://tenant/file.pdf" → "local"
-// Returns "" if the path does not use a known provider scheme.
+// ParseProviderScheme extracts the local file scheme used by stored paths.
 func ParseProviderScheme(filePath string) string {
-	if _, inner, ok := ParseStorageBackendPath(filePath); ok {
-		filePath = inner
-	}
-	for _, provider := range []string{"local", "minio", "s3", "dummy"} {
-		if strings.HasPrefix(filePath, provider+"://") {
-			return provider
-		}
+	if strings.HasPrefix(filePath, "local://") {
+		return "local"
 	}
 	return ""
 }
@@ -770,65 +554,4 @@ func (kb *KnowledgeBase) IsMultimodalEnabled() bool {
 		return false
 	}
 	return kb.VLMConfig.IsEnabled()
-}
-
-// HasVectorStore reports whether the KB is bound to a DB-managed VectorStore
-// (as opposed to the tenant's env-store fallback).
-//
-// Safe to call on a nil receiver (returns false). Mirrors the convention of
-// other Is*Enabled / Capabilities accessors in this file.
-func (kb *KnowledgeBase) HasVectorStore() bool {
-	return kb != nil && kb.VectorStoreID != nil && *kb.VectorStoreID != ""
-}
-
-// Normalize folds the empty-string vector store id into nil so a single
-// representation reaches both the DB and the retrieve-engine factory, which
-// treats nil and `&""` as the same "no binding" signal. Idempotent and safe
-// to call repeatedly.
-//
-// Callers that accept unvalidated user input (CreateKnowledgeBase, async
-// payload decoders) should invoke this before persistence or validation.
-// Safe to call on a nil receiver (no-op).
-func (kb *KnowledgeBase) Normalize() {
-	if kb == nil {
-		return
-	}
-	if kb.VectorStoreID != nil && *kb.VectorStoreID == "" {
-		kb.VectorStoreID = nil
-	}
-}
-
-// SharesStoreWith reports whether two knowledge bases are bound to the same
-// vector store. Both env-fallback (nil) → true; both same UUID → true;
-// otherwise false. Safe to call when either receiver or argument is nil
-// (returns true iff both are nil).
-//
-// Empty-string VectorStoreID is treated as equivalent to nil so that rows
-// persisted by callers that did not run Normalize first (raw-SQL writes,
-// external migrations, ops scripts) still compare correctly. The alternative
-// — treating `&""` as a distinct binding — would reject otherwise valid
-// CopyKnowledgeBase clones with a confusing "different vector stores" 400.
-// This normalization is read-only; it does not mutate the receivers.
-//
-// Lives on *KnowledgeBase next to HasVectorStore() so the binding semantics
-// stay co-located with the type they describe.
-func (kb *KnowledgeBase) SharesStoreWith(other *KnowledgeBase) bool {
-	if kb == nil || other == nil {
-		return kb == other
-	}
-	a, b := kb.VectorStoreID, other.VectorStoreID
-	if a != nil && *a == "" {
-		a = nil
-	}
-	if b != nil && *b == "" {
-		b = nil
-	}
-	switch {
-	case a == nil && b == nil:
-		return true
-	case a == nil || b == nil:
-		return false
-	default:
-		return *a == *b
-	}
 }

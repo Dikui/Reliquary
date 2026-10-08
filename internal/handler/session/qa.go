@@ -172,8 +172,7 @@ func (h *Handler) parseQARequest(c *gin.Context, logPrefix string) (*qaRequestCo
 			return nil, nil, errors.NewBadRequestError("Image upload is not enabled for this agent")
 		}
 		tenantID := c.GetUint64(types.TenantIDContextKey.String())
-		agentStorageProvider := customAgent.Config.ImageStorageProvider
-		if err := h.saveImageAttachments(ctx, request.Images, tenantID, agentStorageProvider); err != nil {
+		if err := h.saveImageAttachments(ctx, request.Images, tenantID); err != nil {
 			logger.Errorf(ctx, "[%s] Failed to save images: %v", logPrefix, err)
 			return nil, nil, errors.NewBadRequestError(fmt.Sprintf("Image save failed: %v", err))
 		}

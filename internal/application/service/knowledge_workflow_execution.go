@@ -823,7 +823,7 @@ const maxWorkflowSourceBytes = 32 << 20
 
 func (s *KnowledgeWorkflowService) workflowSourceBody(ctx context.Context, k *types.Knowledge) (string, error) {
 	if s.knowledge != nil {
-		reader, _, err := s.knowledge.GetKnowledgeFile(ctx, k.ID)
+		reader, _, err := s.knowledge.GetKnowledgeBody(ctx, k.ID)
 		if reader != nil {
 			body, readErr := io.ReadAll(io.LimitReader(reader, int64(maxWorkflowSourceBytes+1)))
 			_ = reader.Close()

@@ -254,7 +254,7 @@ func (h *KnowledgeHandler) CreateKnowledgeFromFile(c *gin.Context) {
 
 	// Validate file size — read MAX_FILE_SIZE_MB env (50MB default).
 	// Deliberately not a runtime system_setting; see filesize.go for the
-	// rationale (nginx / docreader / browser bundle all cache this at
+	// rationale (nginx / browser bundle all cache this at
 	// container startup, so a UI knob would silently mismatch).
 	maxSizeMB := utils.GetMaxFileSizeMB()
 	maxSize := maxSizeMB * 1024 * 1024
@@ -1465,7 +1465,8 @@ func (h *KnowledgeHandler) DownloadKnowledgeFile(c *gin.Context) {
 	c.Header("Content-Transfer-Encoding", "binary")
 	cd := mime.FormatMediaType("attachment", map[string]string{"filename": filename})
 	c.Header("Content-Disposition", cd)
-	c.Header("Content-Type", "application/octet-stream")
+	c.Header("Content-Type", mimeTypeByExt(filename))
+	c.Header("X-Content-Type-Options", "nosniff")
 	c.Header("Expires", "0")
 	c.Header("Cache-Control", "must-revalidate")
 	c.Header("Pragma", "public")
@@ -2217,18 +2218,6 @@ func (h *KnowledgeHandler) MoveKnowledge(c *gin.Context) {
 	// Validate embedding model match
 	if sourceKB.EmbeddingModelID != targetKB.EmbeddingModelID {
 		c.Error(errors.NewBadRequestError("Source and target must use the same embedding model"))
-		return
-	}
-
-	// reuse_vectors copies index entries directly between KBs, which only works
-	// inside the same VectorStore backend. A cross-store reuse_vectors move would
-	// route CopyIndices through the SOURCE store and then delete the source
-	// indices, corrupting the vector data. Reject it and point the caller at
-	// reparse mode, which re-indexes into the target store safely.
-	if req.Mode == "reuse_vectors" && !sourceKB.SharesStoreWith(targetKB) {
-		c.Error(errors.NewBadRequestError(
-			"reuse_vectors move across different vector stores is not supported; " +
-				"use reparse mode to move into a different store"))
 		return
 	}
 

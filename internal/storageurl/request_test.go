@@ -14,12 +14,12 @@ func publicRewriter(url string) *Rewriter {
 }
 
 func TestNewRequestRewriter_HandleModeIsDisabled(t *testing.T) {
-	w := NewRequestRewriter(context.Background(), ModeHandle, &stubFileService{}, nil)
+	w := NewRequestRewriter(context.Background(), ModeHandle, &stubFileService{})
 	assert.False(t, w.Enabled(), "the default mode must not resolve anything")
 }
 
 func TestNewRequestRewriter_PublicModeIsEnabled(t *testing.T) {
-	w := NewRequestRewriter(context.Background(), ModePublic, &stubFileService{}, nil)
+	w := NewRequestRewriter(context.Background(), ModePublic, &stubFileService{})
 	require.True(t, w.Enabled())
 	assert.Equal(t, "https://cdn.example.com/resource://xifDo7NTSL300Lp1goVutw",
 		w.Ref(context.Background(), "resource://xifDo7NTSL300Lp1goVutw"))
@@ -35,7 +35,7 @@ func TestRewriteMessages(t *testing.T) {
 			Content: "answer ![fig](resource://xifDo7NTSL300Lp1goVutw)",
 			Images: types.MessageImages{{
 				URL:     "resource://aaaabbbbccccddddeeeeff",
-				Caption: "shows ![inline](minio://bucket/10000/exports/a.png)",
+				Caption: "shows ![inline](local://1/10000/exports/a.png)",
 			}},
 			KnowledgeReferences: types.References{{
 				Content:   "chunk ![c](resource://xifDo7NTSL300Lp1goVutw)",

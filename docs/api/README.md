@@ -98,7 +98,7 @@ X-Request-ID: unique_request_id
 - **需要外链能力。** 直链由存储后端预签名，或由 `APP_EXTERNAL_URL` + `/r/<token>` 提供。二者都不
   可用时（例如 local 存储且未设 `APP_EXTERNAL_URL`），该引用**保持 `resource://` 原样**，客户端
   仍可回退到 `/files` 代理。详见 `.env.example` 中的 `APP_EXTERNAL_URL` 说明。
-- **直链是限时匿名可读的**（Reliquary 签发的 grant 2 小时，MinIO 预签名 24 小时）。任何拿到链接的
+- **直链是限时匿名可读的**（Reliquary 签发的 grant 2 小时）。任何拿到链接的
   人在过期前都能读取该文件，请勿写入日志或转发给不应看到该文件的一方。
   `handle`（即使传了 `?resource_urls=public`、或部署默认是 `public`），图片仍走渠道维度的鉴权代理。
 - **限定知识库的 API Key 不能使用 `public`**，返回 `403`。这类 Key 本身也被拒绝访问 `/files`
@@ -130,7 +130,5 @@ Reliquary API 按功能分为以下几类：
 | Skills | 预装与已安装的智能体技能、技能环境变量 | [skill.md](./skill.md) |
 | 长期记忆 | 当前用户的跨会话记忆（设置、条目、主题、文档亲和度、导出、整理） | [memory.md](./memory.md) |
 | 网络搜索 | 网络搜索服务商 | [web-search.md](./web-search.md) |
-| 向量存储 | 向量数据库连接管理 | [vector-store.md](./vector-store.md) |
-| 存储后端 | 对象/文件存储实例（多实例）管理 | [storage-backend.md](./storage-backend.md) |
 | IM 渠道 | 飞书 IM 对接，含渠道 CRUD 与回调 | [../IM集成开发文档.md](../IM集成开发文档.md) |
 | 数据源导入 | RSS 订阅与站点适配器的数据源接入和同步 | [../数据源导入开发文档.md](../数据源导入开发文档.md) |

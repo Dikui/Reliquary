@@ -16,8 +16,8 @@ const require = createRequire(import.meta.url)
 const filename = 'KnowledgeBase.vue'
 const source = readFileSync(new URL('./KnowledgeBase.vue', import.meta.url), 'utf8')
 const { descriptor } = parse(source, { filename })
-const hints = descriptor.template.content.match(/<p v-if="(?:unsupportedFileTypes.length|missingStorageEngine)"[\s\S]*?<\/p>/g)
-assert.equal(hints?.length, 2, 'both knowledge header warnings must be covered')
+const hints = descriptor.template.content.match(/<p v-if="unsupportedFileTypes.length"[\s\S]*?<\/p>/g)
+assert.equal(hints?.length, 1, 'the parser warning must remain covered')
 const template = compileTemplate({ id: 'header-hints-test', filename, source: `<div>${hints.join('\n')}</div>` })
 assert.deepEqual(template.errors, [])
 const compiled = ts.transpileModule(template.code, {
@@ -36,13 +36,11 @@ function findNodes(node, predicate) {
 for (const locale of ['zh-CN', 'en-US']) {
   test(`${locale} header warnings keep full descriptions and working configuration buttons`, async () => {
     const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zhCN, 'en-US': enUS } })
-    const clicks = { parser: 0, storage: 0 }
+    const clicks = { parser: 0 }
     const context = {
       unsupportedFileTypes: ['doc', 'docx', 'pdf', 'ppt', 'pptx', 'xls', 'xlsx', 'epub', 'html', 'htm', 'md', 'txt', 'csv', 'json', 'xml', 'png', 'jpg', 'jpeg', 'webp'],
-      missingStorageEngine: true,
       $t: (...args) => i18n.global.t(...args),
       goToParserSettings: () => { clicks.parser++ },
-      handleOpenKBSettings: () => { clicks.storage++ },
     }
     let tree
     const component = defineComponent({ setup: () => () => { tree = exports.render(context, []); return tree } })
@@ -50,10 +48,9 @@ for (const locale of ['zh-CN', 'en-US']) {
     app.component('t-icon', defineComponent({ setup: () => () => h('svg') }))
     const html = await renderToString(app)
     assert.ok(html.includes('.webp'), 'the long parser type list is retained')
-    assert.ok(html.includes(i18n.global.t('knowledgeBase.missingStorageEngine')))
 
     const paragraphs = findNodes(tree, node => node.type === 'p')
-    assert.equal(paragraphs.length, 2)
+    assert.equal(paragraphs.length, 1)
     for (const paragraph of paragraphs) {
       assert.ok(paragraph.props.class.split(' ').includes('knowledge-header-hint'))
       assert.equal(findNodes(paragraph, node => node.props?.class === 'knowledge-header-hint__text').length, 1)
@@ -65,14 +62,14 @@ for (const locale of ['zh-CN', 'en-US']) {
       button.props.onClick({ stopPropagation() { stopped = true } })
       assert.ok(stopped, 'the action runs once without bubbling into the hint')
     }
-    assert.deepEqual(clicks, { parser: 1, storage: 1 })
-    for (const key of ['knowledgeBase.goToParserSettings', 'knowledgeBase.goToStorageSettings']) {
+    assert.deepEqual(clicks, { parser: 1 })
+    for (const key of ['knowledgeBase.goToParserSettings']) {
       assert.ok(html.includes(i18n.global.t(key)))
     }
   })
 }
 
-test('at 390px both hints wrap text and keep actions inside a shrinkable grid column', async () => {
+test('at 390px the parser hint wrap text and keep actions inside a shrinkable grid column', async () => {
   const { css } = await less.render(descriptor.styles.map(style => style.content).join('\n'))
   const stylesheet = postcss.parse(css)
   // Resolve the applicable class rules in cascade order, including specificity.
@@ -106,7 +103,7 @@ test('at 390px both hints wrap text and keep actions inside a shrinkable grid co
     return resolved
   }
 
-  for (const [hint, action] of [['parser-hint', 'parser-hint-link'], ['storage-engine-warning', 'warning-link']]) {
+  for (const [hint, action] of [['parser-hint', 'parser-hint-link']]) {
     const hintClasses = [hint, 'knowledge-header-hint']
     const parentClasses = ['document-header', ...hintClasses]
     const narrowHint = stylesAt(390, hintClasses, ['document-header'])

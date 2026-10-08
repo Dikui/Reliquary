@@ -105,7 +105,7 @@ body:
 
         - Docker Compose:
           ```bash
-          docker compose logs -f --tail=1000 app docreader postgres
+          docker compose logs -f --tail=1000 app postgres
           ```
         - Build from source: include the console output or log files (e.g., `logs/*.log`).
 

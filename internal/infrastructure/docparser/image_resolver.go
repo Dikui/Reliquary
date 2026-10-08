@@ -57,11 +57,11 @@ func isIconImage(data []byte) bool {
 // StoredImage describes an image that has been saved to storage.
 type StoredImage struct {
 	OriginalRef string // reference in the original markdown
-	ServingURL  string // provider:// URL (e.g. local://images/xxx.png, minio://bucket/key)
+	ServingURL  string // stored image URL (for example local://1/exports/image.png)
 	MimeType    string
 }
 
-// ImageResolver reads images from a DocReader ReadResult (inline bytes only)
+// ImageResolver reads images from a parser ReadResult (inline bytes only)
 // and saves them via FileService, replacing markdown references with unified URLs.
 type ImageResolver struct {
 	// TenantID for storage path namespacing

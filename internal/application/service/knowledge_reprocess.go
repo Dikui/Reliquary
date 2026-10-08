@@ -130,7 +130,7 @@ func (s *KnowledgeStrategyService) reprocessMessage(ctx context.Context, kb *typ
 	if intake == nil || intake.Decision != "approved" {
 		return "", fmt.Errorf("message lacks an approved original")
 	}
-	file, _, err := s.knowledge.GetKnowledgeFile(ctx, id)
+	file, _, err := s.knowledge.GetKnowledgeBody(ctx, id)
 	if err != nil {
 		return "", err
 	}

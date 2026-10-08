@@ -149,21 +149,17 @@ const handleActionSelect = (data: { value: string }) => {
   }
 }
 
-const notifyFilterResult = (result: ReturnType<typeof filterUploadFiles>, emptyAllSkippedKey: string) => {
-  const { validFiles, skippedCount, videoFilteredCount } = result
-  if (validFiles.length === 0) {
-    if (skippedCount > 0) {
-      MessagePlugin.warning(t(emptyAllSkippedKey))
-    }
-    return false
+const notifyFilterResult = (result: ReturnType<typeof filterUploadFiles>) => {
+  if (result.unsupportedTypeCount > 0) {
+    MessagePlugin.warning(t('error.unsupportedFileType'))
   }
-  if (videoFilteredCount > 0) {
-    MessagePlugin.warning(t('knowledgeBase.videosFilteredNoVLM', { count: videoFilteredCount }))
+  if (result.unavailableEngineCount > 0) {
+    MessagePlugin.warning({ content: t('knowledgeBase.parserRecoveryHint'), duration: 12000 })
   }
-  if (skippedCount > 0) {
-    MessagePlugin.warning(t('knowledgeBase.filesSkippedNoEngine', { count: skippedCount }))
+  if (result.videoFilteredCount > 0) {
+    MessagePlugin.warning(t('knowledgeBase.videosFilteredNoVLM', { count: result.videoFilteredCount }))
   }
-  return true
+  return result.validFiles.length > 0
 }
 
 const handleFilesChange = (event: Event, fromFolder: boolean) => {
@@ -177,7 +173,7 @@ const handleFilesChange = (event: Event, fromFolder: boolean) => {
     multiFile: files.length > 1,
   })
 
-  if (!notifyFilterResult(result, 'knowledgeBase.allFilesSkippedNoEngine')) {
+  if (!notifyFilterResult(result)) {
     input.value = ''
     return
   }

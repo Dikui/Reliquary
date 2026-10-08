@@ -70,10 +70,10 @@
                     {{ t('uploadConfirm.manualCharCount', { count: manualCharCount }) }}
                   </p>
                   <div class="intake-source-fields">
-                    <t-input v-model="sourceInfo('manual').author" :placeholder="t('knowledgeBase.intakeAuthor')" />
-                    <t-input v-model="sourceInfo('manual').publisher" :placeholder="t('knowledgeBase.intakePublisher')" />
-                    <t-input v-model="sourceInfo('manual').original_url" :placeholder="t('knowledgeBase.intakeOriginalUrl')" />
-                    <t-input v-model="sourceInfo('manual').published_at" :placeholder="t('knowledgeBase.intakePublishedAt')" />
+                    <label class="intake-source-field"><span>{{ t('knowledgeBase.intakeAuthor') }}</span><t-input v-model="sourceInfo('manual').author" :placeholder="t('knowledgeBase.intakeAuthor')" /></label>
+                    <label class="intake-source-field"><span>{{ t('knowledgeBase.intakePublisher') }}</span><t-input v-model="sourceInfo('manual').publisher" :placeholder="t('knowledgeBase.intakePublisher')" /></label>
+                    <label class="intake-source-field"><span>{{ t('knowledgeBase.intakeOriginalUrl') }}</span><t-textarea v-model="sourceInfo('manual').original_url" :placeholder="t('knowledgeBase.intakeOriginalUrl')" :autosize="{ minRows: 2, maxRows: 4 }" /></label>
+                    <label class="intake-source-field"><span>{{ t('knowledgeBase.intakePublishedAt') }}</span><t-input v-model="sourceInfo('manual').published_at" :placeholder="t('knowledgeBase.intakePublishedAt')" /></label>
                   </div>
                 </div>
                 <div v-else-if="mode === 'reparse' && reparsePreview" class="manual-source-panel">
@@ -100,10 +100,10 @@
                       <t-icon name="close" />
                     </button>
                     <div class="intake-source-fields">
-                      <t-input v-model="sourceInfo(urlSourceKey(url)).author" :placeholder="t('knowledgeBase.intakeAuthor')" />
-                      <t-input v-model="sourceInfo(urlSourceKey(url)).publisher" :placeholder="t('knowledgeBase.intakePublisher')" />
-                      <t-input v-model="sourceInfo(urlSourceKey(url)).original_url" :placeholder="t('knowledgeBase.intakeOriginalUrl')" />
-                      <t-input v-model="sourceInfo(urlSourceKey(url)).published_at" :placeholder="t('knowledgeBase.intakePublishedAt')" />
+                      <label class="intake-source-field"><span>{{ t('knowledgeBase.intakeAuthor') }}</span><t-input v-model="sourceInfo(urlSourceKey(url)).author" :placeholder="t('knowledgeBase.intakeAuthor')" /></label>
+                      <label class="intake-source-field"><span>{{ t('knowledgeBase.intakePublisher') }}</span><t-input v-model="sourceInfo(urlSourceKey(url)).publisher" :placeholder="t('knowledgeBase.intakePublisher')" /></label>
+                      <label class="intake-source-field"><span>{{ t('knowledgeBase.intakeOriginalUrl') }}</span><t-textarea v-model="sourceInfo(urlSourceKey(url)).original_url" :placeholder="t('knowledgeBase.intakeOriginalUrl')" :autosize="{ minRows: 2, maxRows: 4 }" /></label>
+                      <label class="intake-source-field"><span>{{ t('knowledgeBase.intakePublishedAt') }}</span><t-input v-model="sourceInfo(urlSourceKey(url)).published_at" :placeholder="t('knowledgeBase.intakePublishedAt')" /></label>
                     </div>
                   </li>
                   <li v-for="(file, index) in localFiles" :key="`${file.name}-${index}`" class="file-item">
@@ -129,10 +129,10 @@
                       <t-icon name="close" />
                     </button>
                     <div class="intake-source-fields">
-                      <t-input v-model="sourceInfo(fileSourceKey(file)).author" :placeholder="t('knowledgeBase.intakeAuthor')" />
-                      <t-input v-model="sourceInfo(fileSourceKey(file)).publisher" :placeholder="t('knowledgeBase.intakePublisher')" />
-                      <t-input v-model="sourceInfo(fileSourceKey(file)).original_url" :placeholder="t('knowledgeBase.intakeOriginalUrl')" />
-                      <t-input v-model="sourceInfo(fileSourceKey(file)).published_at" :placeholder="t('knowledgeBase.intakePublishedAt')" />
+                      <label class="intake-source-field"><span>{{ t('knowledgeBase.intakeAuthor') }}</span><t-input v-model="sourceInfo(fileSourceKey(file)).author" :placeholder="t('knowledgeBase.intakeAuthor')" /></label>
+                      <label class="intake-source-field"><span>{{ t('knowledgeBase.intakePublisher') }}</span><t-input v-model="sourceInfo(fileSourceKey(file)).publisher" :placeholder="t('knowledgeBase.intakePublisher')" /></label>
+                      <label class="intake-source-field"><span>{{ t('knowledgeBase.intakeOriginalUrl') }}</span><t-textarea v-model="sourceInfo(fileSourceKey(file)).original_url" :placeholder="t('knowledgeBase.intakeOriginalUrl')" :autosize="{ minRows: 2, maxRows: 4 }" /></label>
+                      <label class="intake-source-field"><span>{{ t('knowledgeBase.intakePublishedAt') }}</span><t-input v-model="sourceInfo(fileSourceKey(file)).published_at" :placeholder="t('knowledgeBase.intakePublishedAt')" /></label>
                     </div>
                   </li>
                 </ul>
@@ -596,7 +596,6 @@ interface ChunkingUIConfig {
   parserEngineRules?: Array<{
     file_types: string[]
     engine: string
-    xlsx_first_row_as_header?: boolean
   }>
   enableParentChild: boolean
   parentChunkSize: number
@@ -743,8 +742,7 @@ function truncateNavText(text: string, max = 18): string {
 function hasParserCustomization(): boolean {
   const rules = uiState.value.chunkingConfig.parserEngineRules
   if (!rules?.length) return false
-  return rules.some(rule => rule.engine && rule.engine !== 'builtin')
-    || rules.some(rule => rule.xlsx_first_row_as_header)
+  return rules.some(rule => rule.engine)
 }
 
 function getFileExt(file: File): string {
@@ -862,7 +860,7 @@ const hasAudio = computed(() => {
 })
 
 const showMultimodalModelError = computed(() => {
-  return uiState.value.multimodalConfig.enabled && !uiState.value.multimodalConfig.vllmModelId
+  return !hasImages.value && uiState.value.multimodalConfig.enabled && !uiState.value.multimodalConfig.vllmModelId
 })
 
 const showAsrModelError = computed(() => {
@@ -1005,11 +1003,6 @@ function getSectionNavStatus(
 const canConfirm = computed(() => {
   if (props.mode === 'file' && batchItemCount.value === 0) return false
   if (props.mode === 'manual' && !props.manualPreview?.content?.trim()) return false
-  if (hasImages.value) {
-    if (!uiState.value.multimodalConfig.enabled || !uiState.value.multimodalConfig.vllmModelId) {
-      return false
-    }
-  }
   if (hasAudio.value) {
     if (!uiState.value.asrConfig.enabled || !uiState.value.asrConfig.modelId) {
       return false
@@ -1115,9 +1108,9 @@ function buildProcessOverrides(): KnowledgeProcessOverrides {
       languages: chunking.languages,
       table_metadata_instructions: chunking.tableMetadataInstructions,
     },
-    enable_multimodel: state.multimodalConfig.enabled,
+    enable_multimodel: state.multimodalConfig.enabled && !!state.multimodalConfig.vllmModelId,
     vlm_config: {
-      enabled: state.multimodalConfig.enabled,
+      enabled: state.multimodalConfig.enabled && !!state.multimodalConfig.vllmModelId,
       model_id: state.multimodalConfig.vllmModelId,
       description_language: state.multimodalConfig.descriptionLanguage,
       custom_instructions: state.multimodalConfig.customInstructions,
@@ -1284,7 +1277,6 @@ const removeFile = (index: number) => {
 const handleParserEngineRulesUpdate = (rules: Array<{
   file_types: string[]
   engine: string
-  xlsx_first_row_as_header?: boolean
 }>) => {
   uiState.value.chunkingConfig.parserEngineRules = rules
 }
@@ -1302,14 +1294,7 @@ const handleAddASRModel = () => {
 }
 
 const validateBeforeConfirm = (): boolean => {
-  if (hasImages.value) {
-    if (!uiState.value.multimodalConfig.enabled || !uiState.value.multimodalConfig.vllmModelId) {
-      MessagePlugin.warning(t('uploadConfirm.vlmModelRequired'))
-      uiState.value.multimodalConfig.enabled = true
-      goToSection('multimodal')
-      return false
-    }
-  } else if (showMultimodalModelError.value) {
+  if (showMultimodalModelError.value) {
     MessagePlugin.warning(t('uploadConfirm.vlmModelSelectRequired'))
     goToSection('multimodal')
     return false
@@ -1425,7 +1410,7 @@ const handleConfirm = () => {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  width: 220px;
+  width: clamp(280px, 28vw, 360px);
   background: var(--td-bg-color-settings-modal, var(--td-bg-color-secondarycontainer));
   border-right: 1px solid var(--td-component-stroke);
 }
@@ -1582,10 +1567,19 @@ const handleConfirm = () => {
 
 .intake-source-fields {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
+  box-sizing: border-box;
   width: 100%;
   gap: 6px;
   padding-left: 32px;
+}
+
+.intake-source-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  span { white-space: normal; overflow-wrap: anywhere; }
 }
 
 .file-icon-wrap {

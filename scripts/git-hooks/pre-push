@@ -73,7 +73,6 @@ while read -r _local_ref local_sha remote_ref remote_sha; do
 
     filtered=()
     for pkg in "${pkgs[@]}"; do
-      [[ "$pkg" == *"/docreader/"* ]] && continue
       filtered+=("$pkg")
     done
 

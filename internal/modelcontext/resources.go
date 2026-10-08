@@ -12,10 +12,8 @@ import (
 	"reliquary/internal/types"
 )
 
-// storedRefRE also recognizes legacy physical references. New writes persist
-// resource:// handles, but old chunks and message history can still contain a
-// provider URL. Giving both forms the same request-local handle makes rollout
-// safe without a blocking full-table content rewrite.
+// storedRefRE recognizes resource handles and local file paths, assigning
+// either form a compact reference in model input.
 //
 // The final alternative handles wiki summary-page slugs (summary/<uuid>). They
 // are not storage handles, but they share the exact failure mode this registry
@@ -29,8 +27,7 @@ import (
 // and semantically meaningful, so they are deliberately left untouched.
 var storedRefRE = regexp.MustCompile(
 	`resource://[0-9A-Za-z_-]{22}|` +
-		`(?:storage://[0-9A-Za-z_-]+/)?` +
-		`(?:local|minio|s3)://[^\s)\]>"']+|` +
+		`local://[^\s)\]>"']+|` +
 		`summary/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`,
 )
 

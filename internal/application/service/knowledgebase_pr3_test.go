@@ -8,67 +8,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
-	"reliquary/internal/application/service/retriever"
-	apperrors "reliquary/internal/errors"
-	"reliquary/internal/storageallowlist"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
-
-// ---------------------------------------------------------------------------
-// Vector-store binding service-level tests
-//
-// Coverage:
-//   - CreateKnowledgeBase: vector_store_id validation matrix (Normalize,
-//     malformed UUID, sentinel wrap, error code distinction).
-//   - CopyKnowledgeBase: embedding-model + store defenses, new-KB
-//     VectorStoreID copy.
-//
-// These are pure logic tests that drive `validateVectorStoreBinding` and
-// `CopyKnowledgeBase` through stubbed dependencies — no DB I/O.
-// ---------------------------------------------------------------------------
-
-// validKBStoreUUID is a well-formed UUID used to drive the validation
-// branches that survive the uuid.Parse() pre-flight.
-const validKBStoreUUID = "0193b8a0-1111-7000-8000-000000000001"
-
-type fakeOwnership struct {
-	owned map[string]uint64 // storeID -> tenantID owner
-	err   error
-}
-
-func (f *fakeOwnership) StoreOwnedBy(_ context.Context, storeID string, tenantID uint64) (bool, error) {
-	if f.err != nil {
-		return false, f.err
-	}
-	owner, ok := f.owned[storeID]
-	return ok && owner == tenantID, nil
-}
-
-type fakeRegistry struct {
-	registered map[string]struct{}
-}
-
-func (f *fakeRegistry) Register(_ interfaces.RetrieveEngineService) error { return nil }
-func (f *fakeRegistry) GetRetrieveEngineService(_ types.RetrieverEngineType) (interfaces.RetrieveEngineService, error) {
-	return nil, nil
-}
-func (f *fakeRegistry) GetAllRetrieveEngineServices() []interfaces.RetrieveEngineService { return nil }
-func (f *fakeRegistry) GetByStoreID(storeID string) (interfaces.RetrieveEngineService, error) {
-	if _, ok := f.registered[storeID]; ok {
-		return nil, nil
-	}
-	return nil, stderrors.New("not registered")
-}
-
-// This fake never rebuilds a missing engine, so a miss stays a miss.
-func (f *fakeRegistry) GetOrLoadByStoreID(
-	_ context.Context, _ uint64, storeID string,
-) (interfaces.RetrieveEngineService, error) {
-	return f.GetByStoreID(storeID)
-}
 
 // fakeKBRepo is the smallest KnowledgeBaseRepository needed by
 // CreateKnowledgeBase + CopyKnowledgeBase tests. It stores rows in a map
@@ -120,9 +63,7 @@ func (r *fakeKBRepo) DeleteKnowledgeBase(_ context.Context, _ string) error { re
 func (r *fakeKBRepo) TogglePinKnowledgeBase(_ context.Context, _ string, _ uint64) (*types.KnowledgeBase, error) {
 	return nil, nil
 }
-func (r *fakeKBRepo) CountByVectorStoreID(_ context.Context, _ *gorm.DB, _ uint64, _ string) (int64, error) {
-	return 0, nil
-}
+
 func (r *fakeKBRepo) CountByModelID(_ context.Context, _ uint64, _ string) (int64, error) {
 	return 0, nil
 }
@@ -143,262 +84,41 @@ func (r *fakeKBRepo) ListUserKBPinIDs(_ context.Context, _ uint64, _ string) (ma
 // surfaces as a build error here rather than at usage site.
 var _ interfaces.KnowledgeBaseRepository = (*fakeKBRepo)(nil)
 
-func newPR3KBService(repo *fakeKBRepo, registry *fakeRegistry, ownership *fakeOwnership) *knowledgeBaseService {
-	return &knowledgeBaseService{
-		repo:           repo,
-		retrieveEngine: registry,
-		ownership:      ownership,
-	}
+func newPR3KBService(repo *fakeKBRepo) *knowledgeBaseService {
+	return &knowledgeBaseService{repo: repo}
 }
 
 func ctxWithTenant(tenantID uint64) context.Context {
 	return context.WithValue(context.Background(), types.TenantIDContextKey, tenantID)
 }
 
-func ctxWithTenantStorage(tenantID uint64, defaultProvider string) context.Context {
-	ctx := ctxWithTenant(tenantID)
-	tenant := &types.Tenant{
-		ID: tenantID,
-		StorageEngineConfig: &types.StorageEngineConfig{
-			DefaultProvider: defaultProvider,
-		},
-	}
-	return context.WithValue(ctx, types.TenantInfoContextKey, tenant)
-}
-
-func TestCreateKnowledgeBase_DefaultStorageProviderFromTenant(t *testing.T) {
-	repo := newFakeKBRepo()
-	svc := newPR3KBService(repo, &fakeRegistry{registered: map[string]struct{}{}}, &fakeOwnership{})
-
-	kb, err := svc.CreateKnowledgeBase(ctxWithTenantStorage(1, "minio"), &types.KnowledgeBase{DomainID: "test-domain", Name: "kb"})
-	require.NoError(t, err)
-	assert.Equal(t, "minio", kb.GetStorageProvider())
-
-	kbExplicit, err := svc.CreateKnowledgeBase(ctxWithTenantStorage(1, "minio"), &types.KnowledgeBase{DomainID: "test-domain",
-		Name:                  "kb2",
-		StorageProviderConfig: &types.StorageProviderConfig{Provider: "s3"},
-	})
-	require.NoError(t, err)
-	assert.Equal(t, "s3", kbExplicit.GetStorageProvider())
-}
-
-func TestCreateKnowledgeBase_DefaultStorageProviderRespectsAllowList(t *testing.T) {
-	t.Setenv(storageallowlist.AllowListEnv, "minio")
-	repo := newFakeKBRepo()
-	svc := newPR3KBService(repo, &fakeRegistry{registered: map[string]struct{}{}}, &fakeOwnership{})
-
-	kb, err := svc.CreateKnowledgeBase(ctxWithTenantStorage(1, ""), &types.KnowledgeBase{DomainID: "test-domain", Name: "kb"})
-	require.NoError(t, err)
-	assert.Equal(t, "minio", kb.GetStorageProvider())
-
-	kbDisallowedDefault, err := svc.CreateKnowledgeBase(ctxWithTenantStorage(1, "local"), &types.KnowledgeBase{DomainID: "test-domain", Name: "kb2"})
-	require.NoError(t, err)
-	assert.Equal(t, "minio", kbDisallowedDefault.GetStorageProvider())
-}
-
-// ---------------------------------------------------------------------------
-// CreateKnowledgeBase — vector_store_id binding validation matrix
-// ---------------------------------------------------------------------------
-
-func TestCreateKnowledgeBase_VectorStoreBinding(t *testing.T) {
-	registered := map[string]struct{}{validKBStoreUUID: {}}
-
-	t.Run("nil vector_store_id persists unchanged", func(t *testing.T) {
-		repo := newFakeKBRepo()
-		svc := newPR3KBService(repo,
-			&fakeRegistry{registered: registered},
-			&fakeOwnership{owned: map[string]uint64{validKBStoreUUID: 1}},
-		)
-		kb, err := svc.CreateKnowledgeBase(ctxWithTenant(1), &types.KnowledgeBase{DomainID: "test-domain", Name: "kb"})
-		require.NoError(t, err)
-		assert.Nil(t, kb.VectorStoreID)
-		assert.Len(t, repo.rows, 1)
-	})
-
-	t.Run("empty string vector_store_id normalizes to nil", func(t *testing.T) {
-		repo := newFakeKBRepo()
-		svc := newPR3KBService(repo,
-			&fakeRegistry{registered: registered},
-			&fakeOwnership{},
-		)
-		empty := ""
-		kb, err := svc.CreateKnowledgeBase(ctxWithTenant(1), &types.KnowledgeBase{DomainID: "test-domain", Name: "kb", VectorStoreID: &empty})
-		require.NoError(t, err)
-		assert.Nil(t, kb.VectorStoreID)
-	})
-
-	t.Run("malformed UUID rejected with BindingInvalid code", func(t *testing.T) {
-		repo := newFakeKBRepo()
-		svc := newPR3KBService(repo,
-			&fakeRegistry{registered: registered},
-			&fakeOwnership{},
-		)
-		bad := "not-a-uuid"
-		_, err := svc.CreateKnowledgeBase(ctxWithTenant(1), &types.KnowledgeBase{DomainID: "test-domain", Name: "kb", VectorStoreID: &bad})
-		require.Error(t, err)
-		appErr, ok := apperrors.IsAppError(err)
-		require.True(t, ok)
-		assert.Equal(t, apperrors.ErrVectorStoreBindingInvalid, appErr.Code)
-		assert.NotContains(t, appErr.Message, bad, "UUID must not echo back")
-		assert.Empty(t, repo.rows, "must not persist on validation failure")
-	})
-
-	t.Run("valid UUID + owned + registered → persist OK", func(t *testing.T) {
-		repo := newFakeKBRepo()
-		svc := newPR3KBService(repo,
-			&fakeRegistry{registered: registered},
-			&fakeOwnership{owned: map[string]uint64{validKBStoreUUID: 1}},
-		)
-		id := validKBStoreUUID
-		kb, err := svc.CreateKnowledgeBase(ctxWithTenant(1), &types.KnowledgeBase{DomainID: "test-domain", Name: "kb", VectorStoreID: &id})
-		require.NoError(t, err)
-		require.NotNil(t, kb.VectorStoreID)
-		assert.Equal(t, validKBStoreUUID, *kb.VectorStoreID)
-	})
-
-	t.Run("valid UUID + cross-tenant → BindingInvalid", func(t *testing.T) {
-		repo := newFakeKBRepo()
-		svc := newPR3KBService(repo,
-			&fakeRegistry{registered: registered},
-			&fakeOwnership{owned: map[string]uint64{validKBStoreUUID: 2}}, // owned by tenant 2
-		)
-		id := validKBStoreUUID
-		_, err := svc.CreateKnowledgeBase(ctxWithTenant(1), &types.KnowledgeBase{DomainID: "test-domain", Name: "kb", VectorStoreID: &id})
-		require.Error(t, err)
-		appErr, ok := apperrors.IsAppError(err)
-		require.True(t, ok)
-		assert.Equal(t, apperrors.ErrVectorStoreBindingInvalid, appErr.Code)
-	})
-
-	t.Run("valid UUID + owned but unregistered → Unavailable", func(t *testing.T) {
-		repo := newFakeKBRepo()
-		svc := newPR3KBService(repo,
-			&fakeRegistry{registered: map[string]struct{}{}}, // not registered
-			&fakeOwnership{owned: map[string]uint64{validKBStoreUUID: 1}},
-		)
-		id := validKBStoreUUID
-		_, err := svc.CreateKnowledgeBase(ctxWithTenant(1), &types.KnowledgeBase{DomainID: "test-domain", Name: "kb", VectorStoreID: &id})
-		require.Error(t, err)
-		appErr, ok := apperrors.IsAppError(err)
-		require.True(t, ok)
-		assert.Equal(t, apperrors.ErrVectorStoreUnavailable, appErr.Code)
-	})
-
-	t.Run("ownership infra error → 500", func(t *testing.T) {
-		repo := newFakeKBRepo()
-		svc := newPR3KBService(repo,
-			&fakeRegistry{registered: registered},
-			&fakeOwnership{err: stderrors.New("db down")},
-		)
-		id := validKBStoreUUID
-		_, err := svc.CreateKnowledgeBase(ctxWithTenant(1), &types.KnowledgeBase{DomainID: "test-domain", Name: "kb", VectorStoreID: &id})
-		require.Error(t, err)
-		appErr, ok := apperrors.IsAppError(err)
-		require.True(t, ok)
-		assert.Equal(t, 500, appErr.HTTPCode)
-	})
-
-	// Compile-time check: the retriever sentinels still match what we expect
-	// in the wrapper logic. If they are ever renamed or removed, this fails
-	// at build time rather than silently degrading the wrap.
-	_ = retriever.ErrVectorStoreForbidden
-	_ = retriever.ErrVectorStoreNotFound
-}
-
-// ---------------------------------------------------------------------------
-// CopyKnowledgeBase — embedding model + vector store defenses
-// ---------------------------------------------------------------------------
-
 func TestCopyKnowledgeBase_Defenses(t *testing.T) {
-	mkKB := func(id string, tenant uint64, embed string, vsid *string) *types.KnowledgeBase {
-		return &types.KnowledgeBase{DomainID: "test-domain",
-			ID: id, Name: id, TenantID: tenant, EmbeddingModelID: embed, VectorStoreID: vsid,
-		}
+	mkKB := func(id, model string) *types.KnowledgeBase {
+		return &types.KnowledgeBase{ID: id, Name: id, DomainID: "test-domain", TenantID: 1, EmbeddingModelID: model}
 	}
-	storeA := "store-A"
-	storeB := "store-B"
-
-	t.Run("dstKB empty -> new KB inherits VectorStoreID", func(t *testing.T) {
+	t.Run("new knowledge base preserves domain and embedding model", func(t *testing.T) {
 		repo := newFakeKBRepo()
-		repo.rows["src"] = mkKB("src", 1, "embed-1", &storeA)
-		svc := newPR3KBService(repo, &fakeRegistry{}, &fakeOwnership{})
-
-		src, tgt, err := svc.CopyKnowledgeBase(ctxWithTenant(1), "src", "")
+		repo.rows["src"] = mkKB("src", "embed-1")
+		source, target, err := newPR3KBService(repo).CopyKnowledgeBase(ctxWithTenant(1), "src", "")
 		require.NoError(t, err)
-		require.NotNil(t, src.VectorStoreID)
-		require.NotNil(t, tgt.VectorStoreID)
-		assert.Equal(t, *src.VectorStoreID, *tgt.VectorStoreID, "M17: VectorStoreID preserved")
-		assert.Equal(t, src.DomainID, tgt.DomainID)
-
-		// Reload from fake repo and re-verify
-		stored := repo.rows[tgt.ID]
-		require.NotNil(t, stored)
-		require.NotNil(t, stored.VectorStoreID)
-		assert.Equal(t, storeA, *stored.VectorStoreID)
+		require.NotNil(t, repo.rows[target.ID])
+		assert.Equal(t, source.DomainID, target.DomainID)
+		assert.Equal(t, source.EmbeddingModelID, target.EmbeddingModelID)
 	})
-
-	t.Run("dstKB empty + source nil VectorStoreID -> new target nil too", func(t *testing.T) {
+	t.Run("same embedding model succeeds", func(t *testing.T) {
 		repo := newFakeKBRepo()
-		repo.rows["src"] = mkKB("src", 1, "embed-1", nil)
-		svc := newPR3KBService(repo, &fakeRegistry{}, &fakeOwnership{})
-
-		_, tgt, err := svc.CopyKnowledgeBase(ctxWithTenant(1), "src", "")
-		require.NoError(t, err)
-		assert.Nil(t, tgt.VectorStoreID)
-	})
-
-	t.Run("dstKB set + same embedding model + both nil stores -> OK", func(t *testing.T) {
-		repo := newFakeKBRepo()
-		repo.rows["src"] = mkKB("src", 1, "embed-1", nil)
-		repo.rows["dst"] = mkKB("dst", 1, "embed-1", nil)
-		svc := newPR3KBService(repo, &fakeRegistry{}, &fakeOwnership{})
-
-		_, _, err := svc.CopyKnowledgeBase(ctxWithTenant(1), "src", "dst")
+		repo.rows["src"] = mkKB("src", "embed-1")
+		repo.rows["dst"] = mkKB("dst", "embed-1")
+		_, _, err := newPR3KBService(repo).CopyKnowledgeBase(ctxWithTenant(1), "src", "dst")
 		require.NoError(t, err)
 	})
-
-	t.Run("dstKB set + same store UUID -> OK", func(t *testing.T) {
+	t.Run("different embedding models reject cloning", func(t *testing.T) {
 		repo := newFakeKBRepo()
-		repo.rows["src"] = mkKB("src", 1, "embed-1", &storeA)
-		repo.rows["dst"] = mkKB("dst", 1, "embed-1", &storeA)
-		svc := newPR3KBService(repo, &fakeRegistry{}, &fakeOwnership{})
-
-		_, _, err := svc.CopyKnowledgeBase(ctxWithTenant(1), "src", "dst")
-		require.NoError(t, err)
-	})
-
-	t.Run("dstKB set + different embedding models -> 400", func(t *testing.T) {
-		repo := newFakeKBRepo()
-		repo.rows["src"] = mkKB("src", 1, "embed-1", &storeA)
-		repo.rows["dst"] = mkKB("dst", 1, "embed-2", &storeA)
-		svc := newPR3KBService(repo, &fakeRegistry{}, &fakeOwnership{})
-
-		_, _, err := svc.CopyKnowledgeBase(ctxWithTenant(1), "src", "dst")
+		repo.rows["src"] = mkKB("src", "embed-1")
+		repo.rows["dst"] = mkKB("dst", "embed-2")
+		_, _, err := newPR3KBService(repo).CopyKnowledgeBase(ctxWithTenant(1), "src", "dst")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "different embedding models")
-	})
-
-	t.Run("dstKB set + different stores -> 400 (no Phase number)", func(t *testing.T) {
-		repo := newFakeKBRepo()
-		repo.rows["src"] = mkKB("src", 1, "embed-1", &storeA)
-		repo.rows["dst"] = mkKB("dst", 1, "embed-1", &storeB)
-		svc := newPR3KBService(repo, &fakeRegistry{}, &fakeOwnership{})
-
-		_, _, err := svc.CopyKnowledgeBase(ctxWithTenant(1), "src", "dst")
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "different vector stores")
-		assert.NotContains(t, err.Error(), "Phase 4", "internal roadmap labels must not leak to end-user error messages")
-	})
-
-	t.Run("dstKB set + one nil + one set -> 400", func(t *testing.T) {
-		repo := newFakeKBRepo()
-		repo.rows["src"] = mkKB("src", 1, "embed-1", nil)
-		repo.rows["dst"] = mkKB("dst", 1, "embed-1", &storeA)
-		svc := newPR3KBService(repo, &fakeRegistry{}, &fakeOwnership{})
-
-		_, _, err := svc.CopyKnowledgeBase(ctxWithTenant(1), "src", "dst")
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "different vector stores")
 	})
 }
 
@@ -419,7 +139,7 @@ func TestDuplicateKnowledgeBase_CreatesSettingsOnlyDuplicate(t *testing.T) {
 			Separators:      []string{"\n\n", "."},
 			ParserEngineRules: []types.ParserEngineRule{{
 				FileTypes: []string{"pdf"},
-				Engine:    "docreader",
+				Engine:    "anydoc",
 			}},
 		},
 		ImageProcessingConfig: types.ImageProcessingConfig{ModelID: "vlm-image"},
@@ -427,7 +147,6 @@ func TestDuplicateKnowledgeBase_CreatesSettingsOnlyDuplicate(t *testing.T) {
 		SummaryModelID:        "summary-1",
 		VLMConfig:             types.VLMConfig{Enabled: true, ModelID: "vlm-1"},
 		ASRConfig:             types.ASRConfig{Enabled: true, ModelID: "asr-1", Language: "zh"},
-		StorageProviderConfig: &types.StorageProviderConfig{Provider: "local"},
 
 		QuestionGenerationConfig: &types.QuestionGenerationConfig{Enabled: true, QuestionCount: 5},
 		WikiConfig:               &types.WikiConfig{SynthesisModelID: "wiki-llm", MaxPagesPerIngest: 12},
@@ -444,7 +163,7 @@ func TestDuplicateKnowledgeBase_CreatesSettingsOnlyDuplicate(t *testing.T) {
 		CreatorName:     "Source Owner",
 	}
 	repo.rows["src"] = source
-	svc := newPR3KBService(repo, &fakeRegistry{}, &fakeOwnership{})
+	svc := newPR3KBService(repo)
 	ctx := context.WithValue(ctxWithTenant(1), types.UserIDContextKey, "copy-user")
 
 	target, err := svc.DuplicateKnowledgeBase(ctx, "src")
@@ -462,8 +181,6 @@ func TestDuplicateKnowledgeBase_CreatesSettingsOnlyDuplicate(t *testing.T) {
 	assert.Equal(t, source.SummaryModelID, target.SummaryModelID)
 	assert.Equal(t, source.VLMConfig, target.VLMConfig)
 	assert.Equal(t, source.ASRConfig, target.ASRConfig)
-	require.NotNil(t, target.StorageProviderConfig)
-	assert.Equal(t, "local", target.StorageProviderConfig.Provider)
 	require.NotNil(t, target.QuestionGenerationConfig)
 	assert.Equal(t, 5, target.QuestionGenerationConfig.QuestionCount)
 	require.NotNil(t, target.WikiConfig)
@@ -495,7 +212,7 @@ func TestDuplicateKnowledgeBase_UsesDistinctNameWhenDuplicateExists(t *testing.T
 		Type:     types.KnowledgeBaseTypeDocument,
 		TenantID: 1,
 	}
-	svc := newPR3KBService(repo, &fakeRegistry{}, &fakeOwnership{})
+	svc := newPR3KBService(repo)
 
 	target, err := svc.DuplicateKnowledgeBase(ctxWithTenant(1), "src")
 	require.NoError(t, err)
@@ -511,11 +228,15 @@ func TestDuplicateKnowledgeBase_UsesLocalizedEnglishSuffix(t *testing.T) {
 		Type:     types.KnowledgeBaseTypeDocument,
 		TenantID: 1,
 	}
-	svc := newPR3KBService(repo, &fakeRegistry{}, &fakeOwnership{})
+	svc := newPR3KBService(repo)
 	ctx := context.WithValue(ctxWithTenant(1), types.LanguageContextKey, "en-US")
 
 	target, err := svc.DuplicateKnowledgeBase(ctx, "src")
 	require.NoError(t, err)
 
 	assert.Equal(t, "Source KB Copy", target.Name)
+}
+
+func ctxWithTenantInfo(tenantID uint64) context.Context {
+	return context.WithValue(ctxWithTenant(tenantID), types.TenantInfoContextKey, &types.Tenant{ID: tenantID})
 }

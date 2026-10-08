@@ -177,15 +177,8 @@ onUnmounted(() => {
   stopWikiStatusPolling()
   clearWikiStatusProbes()
 })
-const missingStorageEngine = computed(() => {
-  if (!kbInfo.value) return false
-  // storage_backend_id is authoritative; storage_provider_config.provider is a
-  // compatibility projection for older clients. Either being present means the
-  // KB has a bound storage instance and uploads should not be blocked.
-  if (kbInfo.value.storage_backend_id) return false
-  const spc = kbInfo.value.storage_provider_config
-  return !spc || !spc.provider
-})
+
+
 const parserEngines = computed<ParserEngineInfo[]>(() => editorResources.parserEngines);
 
 const supportedFileTypes = computed<Set<string>>(() => {
@@ -501,7 +494,6 @@ const fileTypeOptions = computed(() => [
   { label: 'PPTX', value: 'pptx' },
   { label: 'PPT', value: 'ppt' },
   { label: 'EPUB', value: 'epub' },
-  { label: 'MHTML', value: 'mhtml' },
   { label: 'TXT', value: 'txt' },
   { label: 'MD', value: 'md' },
   { label: 'URL', value: 'url' },
@@ -1543,10 +1535,6 @@ const ensureDocumentKbReady = () => {
     MessagePlugin.warning(t('knowledgeBase.notInitialized'));
     return false;
   }
-  if (missingStorageEngine.value) {
-    MessagePlugin.warning(t('knowledgeBase.missingStorageEngineUpload'));
-    return false;
-  }
   return true;
 };
 
@@ -2359,13 +2347,6 @@ async function createNewSession(value: string): Promise<void> {
               {{ $t('knowledgeBase.goToParserSettings') }} →
             </button>
           </p>
-          <p v-if="missingStorageEngine" class="storage-engine-warning knowledge-header-hint" @click="handleOpenKBSettings">
-            <t-icon name="info-circle" class="warning-icon" />
-            <span class="knowledge-header-hint__text">{{ $t('knowledgeBase.missingStorageEngine') }}</span>
-            <button type="button" class="warning-link knowledge-header-hint__action" @click.stop="handleOpenKBSettings">
-              {{ $t('knowledgeBase.goToStorageSettings') }} →
-            </button>
-          </p>
         </div>
       </div>
 
@@ -2678,7 +2659,7 @@ async function createNewSession(value: string): Promise<void> {
                         ? $t('knowledgeBase.folderTree.emptySearch')
                         : $t('knowledgeBase.folderTree.emptyFolder') }}
                     </p>
-                    <EmptyKnowledge v-else />
+                    <EmptyKnowledge v-else :supported-file-types="[...supportedFileTypes]" />
                   </div>
                 </template>
               </div>

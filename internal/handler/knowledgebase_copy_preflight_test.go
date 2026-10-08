@@ -145,7 +145,7 @@ func TestDuplicateHandler_PropagatesServiceAppError(t *testing.T) {
 			return &types.KnowledgeBase{ID: "src", TenantID: 1, Name: "Source"}, nil
 		},
 		duplicate: func(_ context.Context, _ string) (*types.KnowledgeBase, error) {
-			return nil, apperrors.NewBadRequestError("invalid vector store binding")
+			return nil, apperrors.NewBadRequestError("invalid embedding model configuration")
 		},
 	}
 	r := newDuplicateRouter(svc)
@@ -157,7 +157,7 @@ func TestDuplicateHandler_PropagatesServiceAppError(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for service app error, got %d body=%s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), "invalid vector store binding") {
+	if !strings.Contains(w.Body.String(), "invalid embedding model configuration") {
 		t.Fatalf("expected service error message in body: %s", w.Body.String())
 	}
 }

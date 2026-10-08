@@ -1,11 +1,10 @@
-// Package anydoc converts office documents to Markdown inside the Go process,
-// without the Python docreader service.
+// Package anydoc converts office documents to Markdown inside the Go process.
 //
 // The conversion itself is the anydoc Rust library, linked as a static archive
 // through cgo (see third_party/anydoc-go). That archive needs a Rust toolchain
 // to produce, so it is opt-in: only builds tagged `anydoc` link it. Every other
 // build compiles the stub in backend_stub.go, where Available reports false and
-// the engine registry hides the engine with a reason the UI can show.
+// the engine registry reports the engine unavailable with a reason the UI can show.
 //
 // The exported surface is deliberately narrow — bytes in, Markdown and embedded
 // images out — so the backend can be replaced (a WASI runtime, a future

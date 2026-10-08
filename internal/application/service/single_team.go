@@ -27,7 +27,7 @@ func EnsureSingleTeamSpace(ctx context.Context, db *gorm.DB) error {
 		if len(tenants) != 0 {
 			return fmt.Errorf("expected only personal workspace %d, found %d workspaces", types.SingleTenantID, len(tenants))
 		}
-		svc := NewTenantService(repo, repository.NewStorageBackendRepository(tx))
+		svc := NewTenantService(repo)
 		_, err = svc.CreateTenant(ctx, &types.Tenant{
 			ID: types.SingleTenantID, Name: "Personal workspace", Description: "Personal knowledge", Status: "active",
 		})

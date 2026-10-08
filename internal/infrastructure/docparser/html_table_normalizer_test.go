@@ -6,7 +6,7 @@ import (
 )
 
 func TestNormalizeHTMLTables_ConvertsStyledTableToMarkdown(t *testing.T) {
-	// Mirrors PaddleOCR-VL output: a data table where every cell carries a
+	// Mirrors OCR/layout parsers output: a data table where every cell carries a
 	// text-align style that wastes tokens.
 	input := `# 报告
 

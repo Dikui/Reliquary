@@ -26,25 +26,25 @@ func TestCollectImageURLs(t *testing.T) {
 		{
 			name: "single image",
 			imageInfos: []string{
-				`[{"url":"s3://bucket/prefix/123/exports/abc.png","original_url":"https://example.com/img.png"}]`,
+				`[{"url":"local://1/prefix/123/exports/abc.png","original_url":"https://example.com/img.png"}]`,
 			},
-			wantURLs: []string{"s3://bucket/prefix/123/exports/abc.png"},
+			wantURLs: []string{"local://1/prefix/123/exports/abc.png"},
 		},
 		{
 			name: "multiple images in one chunk",
 			imageInfos: []string{
-				`[{"url":"s3://bucket/a.png"},{"url":"s3://bucket/b.png"}]`,
+				`[{"url":"local://1/a.png"},{"url":"local://1/b.png"}]`,
 			},
-			wantURLs: []string{"s3://bucket/a.png", "s3://bucket/b.png"},
+			wantURLs: []string{"local://1/a.png", "local://1/b.png"},
 		},
 		{
 			name: "dedup across chunks — parent and child share same URL",
 			imageInfos: []string{
-				`[{"url":"s3://bucket/same.png"}]`,
-				`[{"url":"s3://bucket/same.png"}]`,
-				`[{"url":"s3://bucket/other.png"}]`,
+				`[{"url":"local://1/same.png"}]`,
+				`[{"url":"local://1/same.png"}]`,
+				`[{"url":"local://1/other.png"}]`,
 			},
-			wantURLs: []string{"s3://bucket/same.png", "s3://bucket/other.png"},
+			wantURLs: []string{"local://1/same.png", "local://1/other.png"},
 		},
 		{
 			name: "skip empty URL field",
@@ -57,20 +57,20 @@ func TestCollectImageURLs(t *testing.T) {
 			name: "invalid JSON — skipped with no panic",
 			imageInfos: []string{
 				`not valid json`,
-				`[{"url":"s3://bucket/valid.png"}]`,
+				`[{"url":"local://1/valid.png"}]`,
 			},
-			wantURLs: []string{"s3://bucket/valid.png"},
+			wantURLs: []string{"local://1/valid.png"},
 		},
 		{
 			name: "mixed providers",
 			imageInfos: []string{
-				`[{"url":"s3://bucket/img1.png"}]`,
-				`[{"url":"minio://bucket/img2.jpg"}]`,
+				`[{"url":"local://1/img1.png"}]`,
+				`[{"url":"local://1/img2.jpg"}]`,
 				`[{"url":"local://data/img3.webp"}]`,
 			},
 			wantURLs: []string{
-				"s3://bucket/img1.png",
-				"minio://bucket/img2.jpg",
+				"local://1/img1.png",
+				"local://1/img2.jpg",
 				"local://data/img3.webp",
 			},
 		},

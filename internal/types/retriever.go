@@ -44,14 +44,6 @@ type RetrieveParams struct {
 	RetrieverType RetrieverType // Retriever type
 }
 
-// RetrieverEngineParams represents the parameters for retriever engine
-type RetrieverEngineParams struct {
-	// Retriever engine type
-	RetrieverEngineType RetrieverEngineType `yaml:"retriever_engine_type" json:"retriever_engine_type"`
-	// Retriever type
-	RetrieverType RetrieverType `yaml:"retriever_type"        json:"retriever_type"`
-}
-
 // IndexWithScore represents the index with score
 type IndexWithScore struct {
 	// ID

@@ -11,9 +11,9 @@ test('markdownDomPurifyConfig FORBID_TAGS includes script', () => {
   assert.ok(markdownDomPurifyConfig.FORBID_TAGS.includes('script'));
 });
 
-test('ALLOWED_URI_REGEXP allows s3:// and rejects javascript:', () => {
+test('ALLOWED_URI_REGEXP allows local:// and rejects javascript:', () => {
   const re = markdownDomPurifyConfig.ALLOWED_URI_REGEXP ?? domPurifyAllowedUriRegexp;
-  assert.match('s3://bucket/key', re);
+  assert.match('local://1/exports/image.png', re);
   assert.doesNotMatch('javascript:alert(1)', re);
 });
 

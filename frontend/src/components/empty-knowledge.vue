@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
+import { MAX_FILE_SIZE_MB } from '@/utils'
 const { t } = useI18n()
+defineProps<{ supportedFileTypes?: string[] }>()
 </script>
 <template>
     <div class="empty">
         <img class="empty-img" src="@/assets/img/upload.svg" alt="">
         <span class="empty-txt">{{ $t('knowledgeBase.emptyKnowledgeDragDrop') }}</span>
-        <span class="empty-type-txt">{{ $t('knowledgeBase.pdfDocFormat') }}</span>
-        <span class="empty-type-txt">{{ $t('knowledgeBase.textMarkdownFormat') }}</span>
+        <span class="empty-type-txt">{{ t('knowledgeBase.availableUploadTypes', { types: supportedFileTypes?.map(type => '.' + type).join(', ') || '' }) }}</span>
+        <span class="empty-type-txt">{{ t('knowledgeBase.uploadSizeLimit', { size: MAX_FILE_SIZE_MB }) }}</span>
     </div>
 </template>
 <style scoped lang="less">
@@ -34,7 +36,9 @@ const { t } = useI18n()
     font-family: var(--app-font-family);
     font-size: 12px;
     font-weight: 400;
-    width: 217px;
+    max-width: 560px;
+    padding: 0 20px;
+    overflow-wrap: anywhere;
 }
 
 .empty-img {

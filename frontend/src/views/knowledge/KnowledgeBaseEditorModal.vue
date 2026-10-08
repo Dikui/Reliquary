@@ -210,14 +210,6 @@
                   <ModelTierEditor v-if="formData" v-model="formData.modelTiers" scope="knowledge_base" :domain-id="formData.domainId" :all-models="allModels" :legacy-tiers="{ light: formData.autoTagConfig.modelId || formData.modelConfig.llmModelId, extraction: formData.modelConfig.llmModelId, generation: formData.modelConfig.llmModelId, embedding: formData.modelConfig.embeddingModelId }" :disabled="saving" :embedding-locked="hasFiles && kbCreateNeedsEmbedding" @resolved="resolvedModelTiers = $event" />
                 </div>
 
-                <!-- VectorStore 绑定 -->
-                <div v-show="currentSection === 'vectorStore'" class="section">
-                  <KBVectorStoreSettings
-                    v-if="formData"
-                    :bound-status="formData.vectorStoreInfo?.status"
-                  />
-                </div>
-
 
 
                 <!-- 解析引擎 -->
@@ -229,15 +221,6 @@
                 </div>
 
                 <!-- 存储引擎 -->
-                <div v-if="formData && currentSection === 'storage'" class="section">
-                  <KBStorageSettings
-                    :storage-backend-id="formData.storageBackendId"
-                    :storage-provider="formData.storageProvider"
-                    :has-files="editorMode === 'edit' && hasFiles"
-                    @update:storage-backend-id="handleStorageBackendUpdate"
-                    @update:storage-provider="handleStorageProviderUpdate"
-                  />
-                </div>
 
                 <!-- 分块设置 -->
                 <div  v-show="currentSection === 'chunking'" class="section">
@@ -437,9 +420,7 @@ import { copyModelTiers } from '@/utils/modelTiers'
 import type { ResolvedModelTiers } from '@/types/modelTiers'
 import KBModelConfig from './settings/KBModelConfig.vue'
 import KBParserSettings from './settings/KBParserSettings.vue'
-import KBStorageSettings from './settings/KBStorageSettings.vue'
 import KBChunkingSettings from './settings/KBChunkingSettings.vue'
-import KBVectorStoreSettings from './settings/KBVectorStoreSettings.vue'
 import KBAdvancedSettings from './settings/KBAdvancedSettings.vue'
 import ModelSelector from '@/components/ModelSelector.vue'
 import DataSourceSettings from './settings/DataSourceSettings.vue'
@@ -518,8 +499,6 @@ async function loadDomains() {
 }
 const allModels = ref<any[]>([])
 const hasFiles = ref(false)
-/** Tenant-wide default from Settings → Storage engine (used when creating a KB). */
-const tenantDefaultStorageProvider = ref('local')
 const initialIndexingStrategy = ref<any>(null)
 const dsCount = ref(0)
 const canEditKB = computed(() => authStore.isLoggedIn)
@@ -550,14 +529,12 @@ const navItems = computed(() => {
   const items: { key: string; icon: string; label: string; badge?: number }[] = [
     { key: 'basic', icon: 'info-circle', label: t('knowledgeEditor.sidebar.basic') },
     { key: 'models', icon: 'control-platform', label: t('knowledgeEditor.sidebar.models') },
-    { key: 'vectorStore', icon: 'data-base', label: t('knowledgeEditor.sidebar.vectorStore') }
   ]
 
     items.push(
       { key: 'parser', icon: 'file-search', label: t('settings.parserEngine') },
       { key: 'multimodal', icon: 'image', label: t('knowledgeEditor.sidebar.multimodal') },
       { key: 'asr', icon: 'sound', label: t('knowledgeEditor.sidebar.asr') },
-      { key: 'storage', icon: 'cloud', label: t('knowledgeEditor.sidebar.storage') },
       { key: 'chunking', icon: 'file-copy', label: t('knowledgeEditor.sidebar.chunking') },
       { key: 'advanced', icon: 'setting', label: t('knowledgeEditor.sidebar.advanced') }
     )
@@ -577,7 +554,7 @@ const navGroups = computed(() => {
     {
       key: 'basic',
       label: t('knowledgeEditor.navGroups.basic'),
-      items: pickItems(['basic', 'models', 'vectorStore']),
+      items: pickItems(['basic', 'models']),
     },
     {
       key: 'processing',
@@ -587,7 +564,7 @@ const navGroups = computed(() => {
     {
       key: 'data',
       label: t('knowledgeEditor.navGroups.data'),
-      items: pickItems(['storage', 'datasource']),
+      items: pickItems(['datasource']),
     },
     {
       key: 'management',
@@ -659,8 +636,6 @@ const initFormData = (type: 'document' = 'document') => {
       languages: [] as string[],
       tableMetadataInstructions: ''
     },
-    storageBackendId: '' as string,
-    storageProvider: '' as string,
     multimodalConfig: {
       enabled: false,
       vllmModelId: '',
@@ -695,12 +670,6 @@ const initFormData = (type: 'document' = 'document') => {
       vectorEnabled: true,
       keywordEnabled: true,
       wikiEnabled: false,
-    },
-    vectorStoreInfo: {
-      source: undefined as string | undefined,
-      name: undefined as string | undefined,
-      engineType: undefined as string | undefined,
-      status: undefined as string | undefined,
     },
   }
 }
@@ -780,8 +749,6 @@ const loadKBData = async (
         languages: kb.chunking_config?.languages || [],
         tableMetadataInstructions: kb.chunking_config?.table_metadata_instructions || ''
       },
-      storageBackendId: (kb.storage_backend_id || '') as string,
-      storageProvider: (kb.storage_provider_config?.provider || kb.storage_config?.provider || 'local') as string,
       multimodalConfig: {
         enabled: !!kb.vlm_config?.enabled,
         vllmModelId: kb.vlm_config?.model_id || '',
@@ -823,12 +790,6 @@ const loadKBData = async (
         vectorEnabled: kb.indexing_strategy?.vector_enabled ?? true,
         keywordEnabled: kb.indexing_strategy?.keyword_enabled ?? true,
         wikiEnabled: kb.indexing_strategy?.wiki_enabled ?? false,
-      },
-      vectorStoreInfo: {
-        source: kb.vector_store_source,
-        name: kb.vector_store_name,
-        engineType: kb.vector_store_engine_type,
-        status: kb.vector_store_status,
       },
     }
     initialIndexingStrategy.value = { ...formData.value.indexingStrategy }
@@ -958,40 +919,6 @@ const handleAddWikiModel = () => {
   uiStore.openSettings('models', 'knowledgeqa')
 }
 
-const handleStorageProviderUpdate = (value: string) => {
-  if (formData.value) {
-    formData.value.storageProvider = editorMode.value === 'create'
-      ? editorResources.resolveUsableStorageProvider(value || tenantDefaultStorageProvider.value)
-      : (value || tenantDefaultStorageProvider.value || 'local')
-  }
-}
-
-const handleStorageBackendUpdate = (value: string) => {
-  if (formData.value) {
-    formData.value.storageBackendId = value
-  }
-}
-
-async function loadTenantDefaultStorageProvider(force = false) {
-  try {
-    await editorResources.ensureStorageEngine(force)
-    tenantDefaultStorageProvider.value = editorResources.resolveUsableStorageProvider(
-      editorResources.storageConfig?.default_provider,
-    )
-  } catch {
-    tenantDefaultStorageProvider.value = editorResources.resolveUsableStorageProvider()
-  }
-}
-
-/** Resolved storage provider for create payload (never silently default to local before tenant config loads). */
-function resolvedStorageProvider(): string {
-  const explicit = formData.value?.storageProvider?.trim()
-  if (editorMode.value === 'create') {
-    return editorResources.resolveUsableStorageProvider(explicit || tenantDefaultStorageProvider.value)
-  }
-  if (explicit) return explicit
-  return tenantDefaultStorageProvider.value || 'local'
-}
 
 const handleQuestionGenerationUpdate = (config: any) => {
   if (formData.value) {
@@ -1103,18 +1030,7 @@ const buildSubmitData = () => {
     language: formData.value.asrConfig?.language || ''
   }
 
-  // storage_backend_id is authoritative. Keep provider projection for old clients
-  // and for rolling upgrades where a node has not picked up the new schema yet.
-  if (formData.value.storageBackendId) {
-    data.storage_backend_id = formData.value.storageBackendId
-  }
-  const storageProvider = resolvedStorageProvider()
-  data.storage_provider_config = {
-    provider: storageProvider
-  }
-  data.storage_config = {
-    provider: storageProvider
-  }
+
 
   // 添加问题生成配置
   if (formData.value.questionGenerationConfig?.enabled) {
@@ -1257,8 +1173,6 @@ const doSubmit = async () => {
         multimodal: {
           enabled: !!data.vlm_config?.enabled
         },
-        storageBackendId: formData.value?.storageBackendId || '',
-        storageProvider: data.storage_provider_config?.provider || data.storage_config?.provider || 'local',
         questionGeneration: {
           enabled: data.question_generation_config?.enabled,
           questionCount: data.question_generation_config?.question_count || 3,
@@ -1323,7 +1237,6 @@ const resetState = () => {
   currentSection.value = 'basic'
   formData.value = null
   hasFiles.value = false
-  tenantDefaultStorageProvider.value = 'local'
   initialIndexingStrategy.value = null
   saving.value = false
   loading.value = false
@@ -1359,7 +1272,7 @@ watch(() => props.visible, async (newVal) => {
     }
 
     // 加载模型列表与空间默认存储引擎（创建 KB 时即使用，不依赖是否打开「存储引擎」Tab）
-    await Promise.all([loadAllModels(), loadTenantDefaultStorageProvider(), loadDomains()])
+    await Promise.all([loadAllModels(), loadDomains()])
 
     if (generation !== kbEditorLoadGeneration || !props.visible) return
 
@@ -1370,7 +1283,6 @@ watch(() => props.visible, async (newVal) => {
     } else {
       // 创建模式：初始化空表单，并预填空间默认存储引擎
       formData.value = initFormData(props.initialType || 'document')
-      formData.value.storageProvider = tenantDefaultStorageProvider.value
       hasFiles.value = false
       applyDefaultModelsIfEmpty()
       loading.value = false
@@ -1842,7 +1754,7 @@ watch(() => chatResources.allModels, (list) => {
   }
 }
 
-// 多模态配置内联样式（与子组件 KBStorageSettings/KBAdvancedSettings 一致）
+// 多模态配置内联样式（与子组件 KBAdvancedSettings 一致）
 .kb-multimodal-settings {
   width: 100%;
 

@@ -1,6 +1,6 @@
 // Package types — shared secret redaction helpers.
 //
-// VectorStore connection configs and tenant KV configs (web search, parser
+// Tenant KV configs (web search, parser
 // engine, storage engine) use the redacted-placeholder round-trip pattern:
 //
 //   - GET responses replace set secrets with RedactedSecretPlaceholder (or

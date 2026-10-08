@@ -5,14 +5,11 @@ import (
 	"strings"
 
 	"reliquary/internal/infrastructure/docparser/anydoc"
-	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
 
 // Engine names, as stored in knowledge base parser rules and shown in the UI.
 const (
-	// BuiltinEngineName is the DocReader (Python) parser suite.
-	BuiltinEngineName = "builtin"
 	// SimpleEngineName is Go-native handling of text formats and images.
 	SimpleEngineName = "simple"
 	// AnydocEngineName is the in-process anydoc office-document converter.
@@ -20,75 +17,16 @@ const (
 	MinerUEngineName = "mineru"
 	// MinerUCloudEngineName is the MinerU Cloud API.
 	MinerUCloudEngineName = "mineru_cloud"
-	// PaddleOCRVLEngineName is a self-hosted PaddleOCR-VL pipeline.
-	PaddleOCRVLEngineName = "paddleocr_vl"
-	// PaddleOCRVLCloudEngineName is the PaddleOCR-VL AI Studio cloud API.
-	PaddleOCRVLCloudEngineName = "paddleocr_vl_cloud"
 )
 
 func init() {
-	types.SetPreferParserEngine(preferAnydocWhenAvailable)
-	RegisterEngine(&builtinEngine{})
 	RegisterEngine(&simpleEngine{})
 	RegisterEngine(&anydocEngine{})
 	RegisterEngine(&mineruEngine{})
 	RegisterEngine(&mineruCloudEngine{})
-	RegisterEngine(&paddleOCRVLEngine{})
-	RegisterEngine(&paddleOCRVLCloudEngine{})
 }
 
-// preferAnydocWhenAvailable is the type-level default override: when the
-// anydoc binding is linked and converts this file type, use it instead of
-// builtin or the markitdown fallback. Simple formats stay on the Go reader.
-func preferAnydocWhenAvailable(fileType string) string {
-	if IsSimpleFormat(fileType) {
-		return ""
-	}
-	if anydoc.Available() && anydoc.Supports(fileType, "") {
-		return AnydocEngineName
-	}
-	return ""
-}
-
-// ---------------------------------------------------------------------------
-// builtin — DocReader-backed parser for complex document formats.
-// ---------------------------------------------------------------------------
-
-type builtinEngine struct{}
-
-func (e *builtinEngine) Name() string { return BuiltinEngineName }
-
-func (e *builtinEngine) Description() string { return "DocReader built-in parser engine" }
-
-func (e *builtinEngine) FileTypes(_ bool) []string {
-	return []string{
-		"docx", "doc", "pdf", "md", "markdown", "xlsx", "xls",
-		"pptx", "ppt", "epub",
-		"html", "htm", "mhtml", "xmind",
-		"jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp",
-		"mp3", "wav", "m4a", "flac", "ogg",
-	}
-}
-
-func (e *builtinEngine) CheckAvailable(docreaderConnected bool, _ map[string]string) (bool, string) {
-	if docreaderConnected {
-		return true, ""
-	}
-	return false, "DocReader service not connected"
-}
-
-// NewReader returns the docreader client. Selecting "builtin" explicitly means
-// the docreader is wanted even for formats the simple reader could handle.
-func (e *builtinEngine) NewReader(_ context.Context, deps ReaderDeps) (interfaces.DocReader, error) {
-	return remoteReader(deps)
-}
-
-// ---------------------------------------------------------------------------
-// simple — Go handles md/txt/csv/json natively, no external service needed.
-// Distinct from docreader's "builtin", which uses Python libraries for complex
-// formats (docx, pdf, ...).
-// ---------------------------------------------------------------------------
-
+// simple parses text, images and audio in this process.
 type simpleEngine struct{}
 
 func (e *simpleEngine) Name() string { return SimpleEngineName }
@@ -97,15 +35,15 @@ func (e *simpleEngine) Description() string {
 	return "Simple format & image parsing (no external service required)"
 }
 
-func (e *simpleEngine) FileTypes(_ bool) []string {
+func (e *simpleEngine) FileTypes() []string {
 	return []string{
-		"md", "markdown", "txt", "csv", "json",
+		"md", "markdown", "txt", "text", "csv", "json",
 		"jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp",
 		"mp3", "wav", "m4a", "flac", "ogg",
 	}
 }
 
-func (e *simpleEngine) CheckAvailable(_ bool, _ map[string]string) (bool, string) {
+func (e *simpleEngine) CheckAvailable(_ map[string]string) (bool, string) {
 	return true, ""
 }
 
@@ -126,9 +64,9 @@ func (e *anydocEngine) Description() string {
 	return "anydoc in-process office document converter (no external service required)"
 }
 
-func (e *anydocEngine) FileTypes(_ bool) []string { return anydoc.SupportedFileTypes() }
+func (e *anydocEngine) FileTypes() []string { return anydoc.SupportedFileTypes() }
 
-func (e *anydocEngine) CheckAvailable(_ bool, _ map[string]string) (bool, string) {
+func (e *anydocEngine) CheckAvailable(_ map[string]string) (bool, string) {
 	if anydoc.Available() {
 		return true, ""
 	}
@@ -139,7 +77,13 @@ func (e *anydocEngine) NewReader(_ context.Context, deps ReaderDeps) (interfaces
 	if !anydoc.Available() {
 		return nil, errEngineUnavailable(AnydocEngineName, anydoc.UnavailableReason())
 	}
-	return NewAnydocReader(deps.Overrides, deps.Remote), nil
+	var fallback interfaces.DocReader
+	if strings.TrimSpace(deps.Overrides["mineru_endpoint"]) != "" {
+		fallback = NewMinerUReader(deps.Overrides)
+	} else if strings.TrimSpace(deps.Overrides["mineru_api_key"]) != "" {
+		fallback = NewMinerUCloudReader(deps.Overrides)
+	}
+	return NewAnydocReader(deps.Overrides, fallback), nil
 }
 
 // ---------------------------------------------------------------------------
@@ -155,11 +99,11 @@ func (e *mineruEngine) Name() string { return MinerUEngineName }
 
 func (e *mineruEngine) Description() string { return "MinerU self-hosted service" }
 
-func (e *mineruEngine) FileTypes(_ bool) []string {
+func (e *mineruEngine) FileTypes() []string {
 	return []string{"pdf", "jpg", "jpeg", "png", "bmp", "tiff", "doc", "docx", "ppt", "pptx"}
 }
 
-func (e *mineruEngine) CheckAvailable(_ bool, overrides map[string]string) (bool, string) {
+func (e *mineruEngine) CheckAvailable(overrides map[string]string) (bool, string) {
 	endpoint := strings.TrimSpace(overrides["mineru_endpoint"])
 	if endpoint == "" {
 		return false, "MinerU service not configured"
@@ -181,11 +125,11 @@ func (e *mineruCloudEngine) Name() string { return MinerUCloudEngineName }
 
 func (e *mineruCloudEngine) Description() string { return "MinerU Cloud API" }
 
-func (e *mineruCloudEngine) FileTypes(_ bool) []string {
+func (e *mineruCloudEngine) FileTypes() []string {
 	return []string{"pdf", "jpg", "jpeg", "png", "bmp", "tiff", "doc", "docx", "ppt", "pptx"}
 }
 
-func (e *mineruCloudEngine) CheckAvailable(_ bool, overrides map[string]string) (bool, string) {
+func (e *mineruCloudEngine) CheckAvailable(overrides map[string]string) (bool, string) {
 	apiKey := strings.TrimSpace(overrides["mineru_api_key"])
 	if apiKey == "" {
 		return false, "MinerU API Key not configured"
@@ -195,58 +139,4 @@ func (e *mineruCloudEngine) CheckAvailable(_ bool, overrides map[string]string) 
 
 func (e *mineruCloudEngine) NewReader(_ context.Context, deps ReaderDeps) (interfaces.DocReader, error) {
 	return NewMinerUCloudReader(deps.Overrides), nil
-}
-
-// ---------------------------------------------------------------------------
-// paddleocr_vl — Go-native, calls a self-hosted PaddleOCR-VL pipeline service
-// ---------------------------------------------------------------------------
-
-type paddleOCRVLEngine struct{}
-
-func (e *paddleOCRVLEngine) Name() string { return PaddleOCRVLEngineName }
-
-func (e *paddleOCRVLEngine) Description() string { return "PaddleOCR-VL self-hosted service" }
-
-func (e *paddleOCRVLEngine) FileTypes(_ bool) []string {
-	return []string{"pdf", "jpg", "jpeg", "png", "bmp", "tiff"}
-}
-
-func (e *paddleOCRVLEngine) CheckAvailable(_ bool, overrides map[string]string) (bool, string) {
-	endpoint := strings.TrimSpace(overrides["paddleocr_vl_endpoint"])
-	if endpoint == "" {
-		return false, "PaddleOCR-VL service not configured"
-	}
-	return PingPaddleOCRVL(endpoint)
-}
-
-func (e *paddleOCRVLEngine) NewReader(_ context.Context, deps ReaderDeps) (interfaces.DocReader, error) {
-	return NewPaddleOCRVLReader(deps.Overrides), nil
-}
-
-// ---------------------------------------------------------------------------
-// paddleocr_vl_cloud — Go-native, calls the PaddleOCR-VL AI Studio cloud API
-// ---------------------------------------------------------------------------
-
-type paddleOCRVLCloudEngine struct{}
-
-func (e *paddleOCRVLCloudEngine) Name() string { return PaddleOCRVLCloudEngineName }
-
-func (e *paddleOCRVLCloudEngine) Description() string { return "PaddleOCR-VL Cloud API" }
-
-func (e *paddleOCRVLCloudEngine) FileTypes(_ bool) []string {
-	return []string{"pdf", "jpg", "jpeg", "png", "bmp", "tiff"}
-}
-
-func (e *paddleOCRVLCloudEngine) CheckAvailable(_ bool, overrides map[string]string) (bool, string) {
-	token := strings.TrimSpace(overrides["paddleocr_vl_cloud_token"])
-	if token == "" {
-		return false, "PaddleOCR-VL Cloud Token not configured"
-	}
-	return PingPaddleOCRVLCloud(token)
-}
-
-func (e *paddleOCRVLCloudEngine) NewReader(
-	_ context.Context, deps ReaderDeps,
-) (interfaces.DocReader, error) {
-	return NewPaddleOCRVLCloudReader(deps.Overrides), nil
 }

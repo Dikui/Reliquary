@@ -64,12 +64,7 @@ func (s *resourceCatalog) Register(
 		return types.BuildResourcePath(existing.Handle), nil
 	}
 
-	backendID, inner, scoped := types.ParseStorageBackendPath(physicalPath)
-	providerPath := physicalPath
-	if scoped {
-		providerPath = inner
-	}
-	provider := types.ParseProviderScheme(providerPath)
+	provider := types.ParseProviderScheme(physicalPath)
 	if provider == "" {
 		return "", fmt.Errorf("resource physical path has unsupported provider scheme")
 	}
@@ -83,18 +78,17 @@ func (s *resourceCatalog) Register(
 			return "", tokenErr
 		}
 		resource := &types.StoredResource{
-			Handle:           handle,
-			TenantID:         tenantID,
-			StorageBackendID: backendID,
-			Provider:         provider,
-			PhysicalPath:     physicalPath,
-			LocationHash:     locationHash,
-			Kind:             meta.Kind,
-			MimeType:         meta.MimeType,
-			OriginalName:     meta.OriginalName,
-			Size:             meta.Size,
-			ContentHash:      meta.ContentHash,
-			Lifecycle:        lifecycle,
+			Handle:       handle,
+			TenantID:     tenantID,
+			Provider:     provider,
+			PhysicalPath: physicalPath,
+			LocationHash: locationHash,
+			Kind:         meta.Kind,
+			MimeType:     meta.MimeType,
+			OriginalName: meta.OriginalName,
+			Size:         meta.Size,
+			ContentHash:  meta.ContentHash,
+			Lifecycle:    lifecycle,
 		}
 		if err := s.repo.Create(ctx, resource); err == nil {
 			return types.BuildResourcePath(handle), nil

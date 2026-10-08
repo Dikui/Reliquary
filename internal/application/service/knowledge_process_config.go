@@ -2,35 +2,12 @@ package service
 
 import (
 	"context"
-	"strconv"
 	"strings"
 
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
 )
-
-const xlsxFirstRowAsHeaderOverride = "xlsx_first_row_as_header"
-
-func applyParserRuleOverrides(
-	overrides map[string]string,
-	config types.ChunkingConfig,
-	fileType string,
-) {
-	fileType = normalizeParserFileType(fileType)
-	if fileType != "xlsx" && fileType != "xls" {
-		return
-	}
-	rule := config.ResolveParserEngineRule(fileType)
-	if rule == nil || rule.XLSXFirstRowAsHeader == nil {
-		return
-	}
-	engine := strings.TrimSpace(rule.Engine)
-	if engine != "" && engine != "builtin" {
-		return
-	}
-	overrides[xlsxFirstRowAsHeaderOverride] = strconv.FormatBool(*rule.XLSXFirstRowAsHeader)
-}
 
 func normalizeParserFileType(fileType string) string {
 	return strings.TrimPrefix(strings.ToLower(strings.TrimSpace(fileType)), ".")
@@ -81,7 +58,7 @@ func ResolveProcessConfig(kb *types.KnowledgeBase, overrides *types.KnowledgePro
 	return eff
 }
 
-// validateDefaultFileImportRequirements enforces the VLM/ASR prerequisites that
+// validateDefaultFileImportRequirements enforces the ASR prerequisites that
 // ValidateProcessOverrides would otherwise cover, for imports that ship no
 // per-import overrides and therefore fall back to the KB defaults.
 func validateDefaultFileImportRequirements(
@@ -91,10 +68,6 @@ func validateDefaultFileImportRequirements(
 	fileType string,
 ) error {
 	fileType = normalizeFileExtension(fileType)
-	if IsImageType(fileType) && !eff.VLMConfig.IsEnabled() {
-		logger.Error(ctx, "VLM model is not configured")
-		return werrors.NewBadRequestError("上传图片文件需要设置VLM模型")
-	}
 	if IsAudioType(fileType) && !kb.ASRConfig.IsASREnabled() {
 		logger.Error(ctx, "ASR model is not configured")
 		return werrors.NewBadRequestError("上传音频文件需要设置ASR语音识别模型")
@@ -103,7 +76,7 @@ func validateDefaultFileImportRequirements(
 }
 
 // resolveFileImportProcessConfig is the single gate every file import passes
-// through: it rejects unsupported extensions, enforces the VLM/ASR
+// through: it rejects unsupported extensions, enforces the ASR
 // prerequisites for the resolved type, and returns the effective processing
 // config for task enqueue. Persisting overrides onto the knowledge record stays
 // with the caller, which owns the record's lifecycle.
@@ -131,6 +104,9 @@ func resolveFileImportProcessConfig(
 		return eff, err
 	}
 
+	if IsImageType(fileType) && !eff.VLMConfig.IsEnabled() {
+		eff.EnableMultimodel = false
+	}
 	return eff, nil
 }
 
@@ -145,24 +121,14 @@ func ValidateProcessOverrides(
 		return nil
 	}
 
-	hasImage := false
 	hasAudio := false
 	for _, ft := range fileTypes {
-		if IsImageType(ft) {
-			hasImage = true
-		}
 		if IsAudioType(ft) {
 			hasAudio = true
 		}
 	}
 
 	eff := ResolveProcessConfig(kb, overrides)
-
-	if hasImage {
-		if !eff.VLMConfig.IsEnabled() {
-			return werrors.NewBadRequestError("上传图片文件需要设置VLM模型")
-		}
-	}
 
 	if hasAudio && !eff.ASRConfig.IsASREnabled() {
 		return werrors.NewBadRequestError("上传音频文件需要设置ASR语音识别模型")

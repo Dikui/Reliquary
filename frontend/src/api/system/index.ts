@@ -7,8 +7,6 @@ export interface SystemInfo {
   build_time?: string
   go_version?: string
   keyword_index_engine?: string
-  vector_store_engine?: string
-  minio_enabled?: boolean
   db_version?: string
   /** Human-readable error message when the startup migration failed.
    *  When non-empty, the system info view should surface a troubleshooting
@@ -88,8 +86,6 @@ export interface ParserEngineInfo {
 export type MinerUParseMethod = 'auto' | 'ocr' | 'txt'
 
 export interface ParserEngineConfig {
-  docreader_addr?: string
-  docreader_transport?: string
   mineru_endpoint?: string
   mineru_api_key?: string
   // MinerU 自建参数
@@ -106,23 +102,10 @@ export interface ParserEngineConfig {
   mineru_cloud_enable_table?: boolean | null
   mineru_cloud_enable_ocr?: boolean | null
   mineru_cloud_language?: string
-  // PaddleOCR-VL 自建参数
-  paddleocr_vl_endpoint?: string
-  paddleocr_vl_use_seal_recognition?: boolean | null
-  paddleocr_vl_use_chart_recognition?: boolean | null
-  // PaddleOCR-VL 云 API 参数
-  paddleocr_vl_cloud_token?: string
-  paddleocr_vl_cloud_model?: string
-  paddleocr_vl_cloud_use_seal_recognition?: boolean | null
-  paddleocr_vl_cloud_use_chart_recognition?: boolean | null
 }
 
 export interface ParserEnginesResponse {
   data: ParserEngineInfo[]
-  docreader_addr?: string
-  /** 连接方式：grpc | http，由服务端环境/配置决定 */
-  docreader_transport?: string
-  connected?: boolean
 }
 
 export function getParserEngines(): Promise<ParserEnginesResponse> {
@@ -141,81 +124,6 @@ export function getParserEngineConfig(): Promise<{ data: ParserEngineConfig }> {
 export function updateParserEngineConfig(config: ParserEngineConfig): Promise<{ data: ParserEngineConfig }> {
   return put('/api/v1/tenants/kv/parser-engine-config', config)
 }
-
-export function reconnectDocReader(addr: string): Promise<ParserEnginesResponse & { msg?: string }> {
-  return post('/api/v1/system/docreader/reconnect', { addr })
-}
-
-// ---- 存储引擎配置（空间级，供文档/图片存储与 docreader 使用） ----
-
-export interface StorageEngineConfig {
-  default_provider: string // "local" | "minio" | "s3"
-  local: { path_prefix: string }
-  minio: { mode: string; endpoint: string; access_key_id: string; secret_access_key: string; bucket_name: string; use_ssl: boolean; path_prefix: string }
-  s3: {
-    endpoint: string // optional for standard AWS S3
-    region: string
-    access_key: string // both keys empty => AWS default credential chain
-    secret_key: string
-    bucket_name: string
-    path_prefix: string
-  }
-}
-
-export interface StorageEngineStatusItem {
-  name: string
-  allowed?: boolean
-  available: boolean
-  description: string
-}
-
-export interface GetStorageEngineStatusResponse {
-  engines: StorageEngineStatusItem[]
-  allowed_providers?: string[]
-  minio_env_available: boolean
-}
-
-export function getStorageEngineConfig(): Promise<{ data: StorageEngineConfig }> {
-  return get('/api/v1/tenants/kv/storage-engine-config')
-}
-
-export function updateStorageEngineConfig(config: StorageEngineConfig): Promise<{ data: StorageEngineConfig }> {
-  return put('/api/v1/tenants/kv/storage-engine-config', config)
-}
-
-export function getStorageEngineStatus(): Promise<{ data: GetStorageEngineStatusResponse }> {
-  return get('/api/v1/system/storage-engine-status')
-}
-
-export interface StorageCheckRequest {
-  provider: string // "minio" | "s3"
-  minio?: StorageEngineConfig['minio']
-  s3?: StorageEngineConfig['s3']
-}
-
-export interface StorageCheckResponse {
-  ok: boolean
-  message: string
-  bucket_created?: boolean
-}
-
-export function checkStorageEngine(req: StorageCheckRequest): Promise<{ data: StorageCheckResponse }> {
-  return post('/api/v1/system/storage-engine-check', req)
-}
-
-// ---- System Settings (P1) ----
-
-/**
- * SystemSettingItem mirrors types.SystemSetting on the backend, exactly
- * as the JSON API serialises it (no `data: ...` wrapping; see
- * utils/request.ts:97 — the axios interceptor unwraps response.data
- * project-wide). New fields here MUST also be added to backend
- * types/system_setting.go.
- *
- * `value` is typed as `unknown` because the underlying JSONB column can
- * hold an int / string / bool depending on `value_type`. Callers narrow
- * via the value_type field (`'int' | 'string' | 'bool'`).
- */
 export interface SystemSettingItem {
   id: number
   key: string

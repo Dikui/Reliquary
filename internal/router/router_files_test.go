@@ -111,7 +111,6 @@ func (s *stubFileService) CopyFile(ctx context.Context, srcPath string, tenantID
 
 func TestServeFilesFallsBackToGlobalFileService(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	t.Setenv("STORAGE_TYPE", "local")
 
 	engine := gin.New()
 	var requestedPath string
@@ -142,7 +141,6 @@ func TestServeFilesFallsBackToGlobalFileService(t *testing.T) {
 
 func TestServeFilesResolvesShortResourceReference(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	t.Setenv("STORAGE_TYPE", "local")
 	const ref = "resource://AbCdEfGhIjKlMnOpQrStUv"
 	const physical = "local://42/exports/a.png"
 
@@ -151,7 +149,7 @@ func TestServeFilesResolvesShortResourceReference(t *testing.T) {
 	serveFilesWithResources(engine, &stubFileService{getFile: func(_ context.Context, path string) (io.ReadCloser, error) {
 		requestedPath = path
 		return io.NopCloser(strings.NewReader("image")), nil
-	}}, nil, &stubResourceCatalog{resource: &types.StoredResource{TenantID: 42, PhysicalPath: physical}})
+	}}, &stubResourceCatalog{resource: &types.StoredResource{TenantID: 42, PhysicalPath: physical}})
 
 	req := httptest.NewRequest(http.MethodGet, "/files?file_path="+url.QueryEscape(ref), nil)
 	req = req.WithContext(context.WithValue(req.Context(), types.TenantInfoContextKey, &types.Tenant{ID: 42}))
@@ -173,7 +171,7 @@ func TestServeFilesRejectsCrossTenantResourceReference(t *testing.T) {
 	serveFilesWithResources(engine, &stubFileService{getFile: func(context.Context, string) (io.ReadCloser, error) {
 		t.Fatal("GetFile should not be called")
 		return nil, nil
-	}}, nil, &stubResourceCatalog{resource: &types.StoredResource{TenantID: 7, PhysicalPath: "local://7/exports/a.png"}})
+	}}, &stubResourceCatalog{resource: &types.StoredResource{TenantID: 7, PhysicalPath: "local://7/exports/a.png"}})
 
 	req := httptest.NewRequest(http.MethodGet, "/files?file_path="+url.QueryEscape(ref), nil)
 	req = req.WithContext(context.WithValue(req.Context(), types.TenantInfoContextKey, &types.Tenant{ID: 42}))
@@ -207,7 +205,6 @@ func TestResourceGrantServesShortPublicURL(t *testing.T) {
 			}
 			return io.NopCloser(strings.NewReader("image")), nil
 		}},
-		nil,
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/r/GrantTokenAbCdEfGhIjKlM", nil)
@@ -221,32 +218,8 @@ func TestResourceGrantServesShortPublicURL(t *testing.T) {
 	}
 }
 
-func TestServeFilesDoesNotFallbackWhenProviderDoesNotMatchGlobalStorage(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	t.Setenv("STORAGE_TYPE", "minio")
-
-	engine := gin.New()
-	serveFiles(engine, &stubFileService{
-		getFile: func(ctx context.Context, filePath string) (io.ReadCloser, error) {
-			t.Fatalf("GetFile should not be called for mismatched provider, got %q", filePath)
-			return nil, nil
-		},
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/files?file_path="+url.QueryEscape("local://42/docs/example.txt"), nil)
-	req = req.WithContext(context.WithValue(req.Context(), types.TenantInfoContextKey, &types.Tenant{ID: 42}))
-
-	recorder := httptest.NewRecorder()
-	engine.ServeHTTP(recorder, req)
-
-	if got, want := recorder.Code, http.StatusBadRequest; got != want {
-		t.Fatalf("status = %d, want %d", got, want)
-	}
-}
-
 func TestServeFilesRejectsCrossTenantPath(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	t.Setenv("STORAGE_TYPE", "local")
 
 	engine := gin.New()
 	serveFiles(engine, &stubFileService{
@@ -269,7 +242,6 @@ func TestServeFilesRejectsCrossTenantPath(t *testing.T) {
 
 func TestServeFilesRejectsPathWithoutTenantSegment(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	t.Setenv("STORAGE_TYPE", "local")
 
 	engine := gin.New()
 	serveFiles(engine, &stubFileService{
@@ -309,7 +281,6 @@ func newKBScopedFilesTestEngine(
 
 func TestKBScopedFilesServesOwnerTenantPath(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	t.Setenv("STORAGE_TYPE", "local")
 
 	const ownerTenantID = uint64(10008)
 	var requestedPath string
@@ -345,7 +316,6 @@ func TestKBScopedFilesServesOwnerTenantPath(t *testing.T) {
 // cannot be used to reach arbitrary tenants' files.
 func TestKBScopedFilesRejectsPathNotOwnedByKBTenant(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	t.Setenv("STORAGE_TYPE", "local")
 
 	const ownerTenantID = uint64(10008)
 	engine := newKBScopedFilesTestEngine(
@@ -374,7 +344,6 @@ func TestKBScopedFilesRejectsPathNotOwnedByKBTenant(t *testing.T) {
 // must use /knowledge/:id/download even when the tenant matches.
 func TestKBScopedFilesRejectsNonExportsPath(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	t.Setenv("STORAGE_TYPE", "local")
 
 	const ownerTenantID = uint64(10008)
 	engine := newKBScopedFilesTestEngine(
@@ -435,7 +404,6 @@ func newMessageScopedFilesTestEngine(
 			messageService,
 			tenantService,
 			global,
-			nil,
 			resourceCatalog,
 		),
 	)
@@ -444,7 +412,6 @@ func newMessageScopedFilesTestEngine(
 
 func TestMessageScopedFilesServesSameTenantResource(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	t.Setenv("STORAGE_TYPE", "local")
 
 	const (
 		tenantID = uint64(42)
@@ -537,7 +504,6 @@ func TestMessageScopedFilesRejectsResourceOutsideMessageTenant(t *testing.T) {
 
 func TestServeFilesForcesActiveContentDownload(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	t.Setenv("STORAGE_TYPE", "local")
 
 	engine := gin.New()
 	serveFiles(engine, &stubFileService{

@@ -55,14 +55,10 @@ test('referenced i18n keys used in app code exist in every locale', () => {
 })
 
 const PARSER_ENGINE_NAMES = [
-  'builtin',
   'simple',
   'mineru',
   'mineru_cloud',
-  'paddleocr_vl',
-  'paddleocr_vl_cloud',
-  'markitdown',
-  'opendataloader',
+  'anydoc',
 ] as const
 
 /** Worker pools / queues use dynamic te() paths in RuntimeQueues.vue; keep in sync with internal/types/task.go. */

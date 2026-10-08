@@ -1,4 +1,4 @@
-.PHONY: help build run reset-password test clean docker-build-app docker-build-docreader docker-build-frontend docker-build-all docker-run migrate-up migrate-down docker-restart docker-stop start-all stop-all start-ollama stop-ollama build-images build-images-app build-images-docreader build-images-frontend clean-images check-env list-containers pull-images show-platform dev-start dev-stop dev-restart dev-logs dev-status dev-app dev-frontend docs install-swagger anydoc-lib build-anydoc
+.PHONY: help build run reset-password test clean docker-build-app docker-build-frontend docker-build-all docker-run migrate-up migrate-down docker-restart docker-stop start-all stop-all start-ollama stop-ollama build-images build-images-app build-images-frontend clean-images check-env list-containers pull-images show-platform dev-start dev-stop dev-restart dev-logs dev-status dev-app dev-frontend docs install-swagger anydoc-lib build-anydoc
 
 # Show help
 help:
@@ -16,7 +16,6 @@ help:
 	@echo ""
 	@echo "Docker 命令:"
 	@echo "  docker-build-app       构建应用 Docker 镜像 (reliquary-app)"
-	@echo "  docker-build-docreader 构建文档读取器镜像 (reliquary-docreader)"
 	@echo "  docker-build-frontend  构建前端镜像 (reliquary-ui)"
 	@echo "  docker-build-all       构建所有 Docker 镜像"
 	@echo "  docker-run            运行 Docker 容器"
@@ -31,7 +30,7 @@ help:
 	@echo "镜像构建:"
 	@echo "  build-images      从源码构建所有镜像"
 	@echo "  build-images-app  从源码构建应用镜像"
-	@echo "  build-images-docreader 从源码构建文档读取器镜像"
+	@echo "  从源码构建文档读取器镜像"
 	@echo "  build-images-frontend  从源码构建前端镜像"
 	@echo "  clean-images      清理本地镜像"
 	@echo ""
@@ -54,7 +53,6 @@ help:
 	@echo ""
 	@echo "开发模式（推荐）:"
 	@echo "  dev-start         启动开发环境基础设施（仅启动依赖服务）"
-	@echo "                    可选: make dev-start DEV_ARGS=--odl-hybrid"
 	@echo "  dev-stop          停止开发环境"
 	@echo "  dev-restart       重启开发环境"
 	@echo "  dev-logs          查看开发环境日志"
@@ -133,17 +131,13 @@ docker-build-app:
 		--build-arg WITH_ANYDOC=$${WITH_ANYDOC:-1} \
 		-f docker/Dockerfile.app -t $(DOCKER_IMAGE):$(DOCKER_TAG) .
 
-# Build docreader Docker image
-docker-build-docreader:
-	docker build --platform $(PLATFORM) -f docker/Dockerfile.docreader -t reliquary-docreader:latest .
-
 # Build frontend Docker image
 docker-build-frontend:
 	./scripts/build_frontend_dist.sh
 	docker build --platform $(PLATFORM) -f frontend/Dockerfile -t reliquary-ui:latest frontend/
 
 # Build all Docker images
-docker-build-all: docker-build-app docker-build-docreader docker-build-frontend
+docker-build-all: docker-build-app docker-build-frontend
 
 # Run Docker container (传统方式)
 # Touch .env if missing — docker-compose.yml's `env_file: [.env]` is required
@@ -180,9 +174,6 @@ build-images:
 
 build-images-app:
 	./scripts/build_images.sh --app
-
-build-images-docreader:
-	./scripts/build_images.sh --docreader
 
 build-images-frontend:
 	./scripts/build_images.sh --frontend
@@ -274,9 +265,6 @@ clean-db:
 	@echo "Cleaning database..."
 	@if [ $$(docker volume ls -q -f name=reliquary_postgres-data) ]; then \
 		docker volume rm reliquary_postgres-data; \
-	fi
-	@if [ $$(docker volume ls -q -f name=reliquary_minio_data) ]; then \
-		docker volume rm reliquary_minio_data; \
 	fi
 	@if [ $$(docker volume ls -q -f name=reliquary_redis_data) ]; then \
 		docker volume rm reliquary_redis_data; \

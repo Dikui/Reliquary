@@ -10,18 +10,12 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-// Pattern matches every internal storage reference form: `resource://` handles,
-// legacy `provider://` paths, and canonical `storage://<backend-id>/provider://`
-// paths. The trailing character class stops at Markdown/HTML delimiters so a
-// reference inside `![alt](…)` or `src="…"` is matched without them.
-var Pattern = regexp.MustCompile(
-	`\b(?:resource://[0-9A-Za-z_-]+|` +
-		`(?:storage://[0-9A-Za-z_-]+/)?` +
-		`(?:local|minio|s3)://[^\s)\]>"]+)`,
-)
+// Pattern matches resource handles and local file paths, excluding Markdown
+// and HTML delimiters from the reference.
+var Pattern = regexp.MustCompile(`\b(?:resource://[0-9A-Za-z_-]+|local://[^\s)\]>"]+)`)
 
 // IsHTTPURL reports whether s is an http(s) URL — the only form an external
-// client can fetch; any provider scheme (s3://, local://, …) is not. Scheme
+// client can fetch; any provider scheme (local:// or resource://) is not. Scheme
 // match is case-insensitive per RFC 3986 §3.1: a backend may emit an
 // operator-configured host (e.g. OBS_PROXY_DOMAIN) with an uppercase scheme.
 func IsHTTPURL(s string) bool {
@@ -29,9 +23,7 @@ func IsHTTPURL(s string) bool {
 		len(s) >= 8 && strings.EqualFold(s[:8], "https://")
 }
 
-// Resolver maps one storage reference to the FileService that owns it. A
-// reference carries its own provider scheme and optional storage backend id, so
-// a single answer may span several backends.
+// Resolver maps a resource or local file reference to its file service.
 type Resolver interface {
 	// ResolveFileService returns nil when no backend can serve ref.
 	ResolveFileService(ref string) interfaces.FileService
@@ -79,10 +71,8 @@ func (w *Rewriter) Ref(ctx context.Context, ref string) string {
 	return w.String(ctx, ref)
 }
 
-// ref resolves one reference. The lock is held across resolve because Resolver
-// implementations (FileServiceResolver in particular) keep an unsynchronised
-// per-provider cache, and because it collapses a concurrent duplicate into one
-// signature instead of two.
+// ref resolves one reference while ensuring concurrent duplicates share the
+// same generated URL.
 func (w *Rewriter) ref(ctx context.Context, ref string) string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -106,7 +96,7 @@ func (w *Rewriter) resolve(ctx context.Context, ref string) string {
 		return ref
 	}
 	// A non-http(s) result cannot be fetched by the client — this covers both an
-	// unchanged no-op and a resource:// alias left as an internal storage://
+	// unchanged no-op and a resource:// alias left as an internal local://
 	// path (APP_EXTERNAL_URL unset / nginx not proxying /r/).
 	if !IsHTTPURL(httpURL) {
 		logger.Warnf(ctx,

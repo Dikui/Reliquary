@@ -15,14 +15,11 @@ import (
 	"gorm.io/gorm/clause"
 
 	"reliquary/internal/application/repository"
-	"reliquary/internal/application/service/retriever"
 	"reliquary/internal/datasource"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
-	"reliquary/internal/storageallowlist"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
-	secutils "reliquary/internal/utils"
 )
 
 // ErrInvalidTenantID represents an error for invalid tenant ID
@@ -37,11 +34,9 @@ type knowledgeBaseService struct {
 	kgRepo          interfaces.KnowledgeRepository
 	chunkRepo       interfaces.ChunkRepository
 	modelService    interfaces.ModelService
-	retrieveEngine  interfaces.RetrieveEngineRegistry
-	ownership       retriever.TenantStoreOwnership
+	retrieveEngine  interfaces.RetrievalService
 	tenantRepo      interfaces.TenantRepository
 	fileSvc         interfaces.FileService
-	storageResolver interfaces.StorageBackendResolver
 	asynqClient     interfaces.TaskEnqueuer
 	taskInspector   interfaces.TaskInspector
 	taskPendingRepo interfaces.TaskPendingOpsRepository
@@ -58,11 +53,9 @@ func NewKnowledgeBaseService(db *gorm.DB, repo interfaces.KnowledgeBaseRepositor
 	kgRepo interfaces.KnowledgeRepository,
 	chunkRepo interfaces.ChunkRepository,
 	modelService interfaces.ModelService,
-	retrieveEngine interfaces.RetrieveEngineRegistry,
-	ownership retriever.TenantStoreOwnership,
+	retrieveEngine interfaces.RetrievalService,
 	tenantRepo interfaces.TenantRepository,
 	fileSvc interfaces.FileService,
-	storageResolver interfaces.StorageBackendResolver,
 	asynqClient interfaces.TaskEnqueuer,
 	taskInspector interfaces.TaskInspector,
 	taskPendingRepo interfaces.TaskPendingOpsRepository,
@@ -79,10 +72,8 @@ func NewKnowledgeBaseService(db *gorm.DB, repo interfaces.KnowledgeBaseRepositor
 		chunkRepo:       chunkRepo,
 		modelService:    modelService,
 		retrieveEngine:  retrieveEngine,
-		ownership:       ownership,
 		tenantRepo:      tenantRepo,
 		fileSvc:         fileSvc,
-		storageResolver: storageResolver,
 		asynqClient:     asynqClient,
 		taskInspector:   taskInspector,
 		taskPendingRepo: taskPendingRepo,
@@ -105,11 +96,6 @@ func (s *knowledgeBaseService) GetRepository() interfaces.KnowledgeBaseRepositor
 }
 
 // CreateKnowledgeBase creates a new knowledge base.
-//
-// When VectorStoreID is set, the binding is validated against the caller's
-// tenant scope and the engine registry before persisting. A nil or
-// empty-string VectorStoreID is normalized to nil ("use the tenant's
-// effective engines") to match the retrieve-engine factory's pre-condition.
 func (s *knowledgeBaseService) CreateKnowledgeBase(ctx context.Context,
 	kb *types.KnowledgeBase,
 ) (*types.KnowledgeBase, error) {
@@ -130,26 +116,6 @@ func (s *knowledgeBaseService) CreateKnowledgeBase(ctx context.Context,
 		kb.CreatorID = uid
 	}
 	kb.EnsureDefaults()
-	applyTenantDefaultStorageProvider(ctx, kb)
-	if err := s.applyAndValidateStorageBackend(ctx, kb); err != nil {
-		return nil, err
-	}
-
-	// Fold empty-string vector_store_id into nil so this path and the
-	// retrieve-engine factory's pre-condition share a single representation.
-	wasEmpty := kb.VectorStoreID != nil && *kb.VectorStoreID == ""
-	kb.Normalize()
-	if wasEmpty {
-		logger.Debugf(ctx,
-			"[kb.create] empty vector_store_id normalized to nil for tenant=%d",
-			kb.TenantID)
-	}
-
-	if kb.HasVectorStore() {
-		if err := s.validateVectorStoreBinding(ctx, kb.TenantID, *kb.VectorStoreID); err != nil {
-			return nil, err
-		}
-	}
 
 	logger.Infof(ctx, "Creating knowledge base, ID: %s, tenant ID: %d, name: %s", kb.ID, kb.TenantID, kb.Name)
 
@@ -168,37 +134,6 @@ func (s *knowledgeBaseService) CreateKnowledgeBase(ctx context.Context,
 
 	logger.Infof(ctx, "Knowledge base created successfully, ID: %s, name: %s", kb.ID, kb.Name)
 	return kb, nil
-}
-
-func (s *knowledgeBaseService) applyAndValidateStorageBackend(ctx context.Context, kb *types.KnowledgeBase) error {
-	if s.storageResolver == nil || kb == nil {
-		return nil
-	}
-	tenant, _ := types.TenantInfoFromContext(ctx)
-	if tenant == nil {
-		return apperrors.NewBadRequestError("workspace context missing")
-	}
-	id := ""
-	if kb.StorageBackendID != nil {
-		id = strings.TrimSpace(*kb.StorageBackendID)
-	}
-	provider := kb.GetStorageProvider()
-	// A newly created KB without an explicit instance follows the concrete
-	// tenant default. The legacy provider is only a fallback for workspaces
-	// that have not been migrated yet.
-	if id == "" && tenant.DefaultStorageBackendID != nil && strings.TrimSpace(*tenant.DefaultStorageBackendID) != "" {
-		provider = ""
-	}
-	backend, err := s.storageResolver.ResolveBackend(ctx, tenant, id, provider)
-	if err != nil {
-		return apperrors.NewBadRequestError("storage backend is unavailable").WithDetails(err.Error())
-	}
-	if backend == nil {
-		return nil
-	}
-	kb.StorageBackendID = &backend.ID
-	kb.SetStorageProvider(backend.Provider)
-	return nil
 }
 
 func (s *knowledgeBaseService) validateKnowledgeBaseDomain(ctx context.Context, tenantID uint64, domainID string) error {
@@ -248,89 +183,6 @@ func (s *knowledgeBaseService) persistKnowledgeBase(ctx context.Context, kb *typ
 		}
 		return persist(repository.NewKnowledgeBaseRepository(tx))
 	})
-}
-
-// applyTenantDefaultStorageProvider fills an empty KB storage provider from the
-// tenant's global default (Settings → Storage engine). Frontend should send the
-// same value; this keeps API clients and legacy UIs consistent.
-func applyTenantDefaultStorageProvider(ctx context.Context, kb *types.KnowledgeBase) {
-	if kb == nil || strings.TrimSpace(kb.GetStorageProvider()) != "" {
-		return
-	}
-	tenant, _ := ctx.Value(types.TenantInfoContextKey).(*types.Tenant)
-	provider := ""
-	if tenant != nil && tenant.StorageEngineConfig != nil {
-		provider = strings.ToLower(strings.TrimSpace(tenant.StorageEngineConfig.DefaultProvider))
-	}
-	if provider == "" || !storageallowlist.IsAllowed(provider) {
-		provider = storageallowlist.FirstAllowed()
-	}
-	if provider == "" {
-		return
-	}
-	kb.SetStorageProvider(provider)
-}
-
-// validateVectorStoreBinding routes through retriever.VerifyBinding so the
-// ownership + registry sentinel hierarchy stays the single source of truth.
-// The service layer's responsibility is to:
-//
-//  1. fast-reject malformed UUIDs (cheap pre-flight that also avoids a DB
-//     round trip for type-confusion inputs like "' OR 1=1 --"),
-//  2. translate retriever sentinels into user-facing AppErrors with
-//     generic messages and the typed error codes.
-//
-// UUID parse failures map to the same "vector store not found" message as
-// cross-tenant attempts to avoid an enumeration oracle that distinguishes
-// "malformed input" from "non-existent UUID".
-func (s *knowledgeBaseService) validateVectorStoreBinding(
-	ctx context.Context, tenantID uint64, storeID string,
-) error {
-	sanitized := secutils.SanitizeForLog(storeID)
-
-	if _, err := uuid.Parse(storeID); err != nil {
-		logger.WarnWithFields(ctx, logger.Fields{
-			"tenant_id": tenantID,
-			"store_id":  sanitized,
-			"reason":    "malformed vector_store_id",
-		}, "[kb.create] vector store id is not a valid UUID")
-		return apperrors.NewVectorStoreBindingInvalidError("vector store not found")
-	}
-
-	switch err := retriever.VerifyBinding(
-		ctx, s.retrieveEngine, s.ownership, tenantID, storeID,
-	); {
-	case err == nil:
-		return nil
-	case errors.Is(err, retriever.ErrVectorStoreForbidden):
-		logger.WarnWithFields(ctx, logger.Fields{
-			"tenant_id": tenantID,
-			"store_id":  sanitized,
-			"reason":    "cross-tenant or unknown store",
-		}, "[kb.create] vector store not owned by tenant")
-		return apperrors.NewVectorStoreBindingInvalidError("vector store not found")
-	case errors.Is(err, retriever.ErrVectorStoreNotFound),
-		errors.Is(err, retriever.ErrVectorStoreUnavailable):
-		logger.WarnWithFields(ctx, logger.Fields{
-			"tenant_id": tenantID,
-			"store_id":  sanitized,
-			"reason":    "store recorded in DB but no engine could be resolved",
-		}, "[kb.create] vector store currently unavailable")
-		return apperrors.NewVectorStoreUnavailableError(
-			"vector store is currently unavailable; check its connection configuration")
-	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
-		// The caller went away or ran out of time while the binding was being
-		// verified, which can now include rebuilding the store's engine. That
-		// is not a server fault, so it must not be logged and answered as one.
-		return err
-	default:
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"tenant_id": tenantID,
-			"store_id":  sanitized,
-			"reason":    "binding verification failed",
-		})
-		return apperrors.NewInternalServerError("failed to verify vector store binding")
-	}
 }
 
 // GetKnowledgeBaseByID retrieves a knowledge base by its ID
@@ -496,22 +348,6 @@ func (s *knowledgeBaseService) FillKnowledgeBaseCounts(ctx context.Context, kb *
 }
 
 // UpdateKnowledgeBase updates a knowledge base's mutable properties.
-//
-// IMPORTANT — vector_store_id immutability contract:
-// The vector_store_id binding is deliberately not accepted by this method.
-// Two layers enforce immutability:
-//
-//  1. ORM layer: the GORM tag `<-:create` on KnowledgeBase.VectorStoreID
-//     makes every UPDATE path (Save / Updates / Select-Updates) a no-op for
-//     that column. Verified by repository/knowledgebase_binding_test.go.
-//  2. Service layer: this method intentionally omits VectorStoreID from its
-//     parameter list, and the matching handler DTO UpdateKnowledgeBaseRequest
-//     omits the field as well. A reflection-based regression test
-//     (handler/knowledgebase_request_test.go) fails if either DTO field
-//     is added back, alerting future maintainers.
-//
-// Any future cross-store rebind workflow must use raw SQL through a
-// dedicated repository method — the only sanctioned write path post-creation.
 func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 	id string,
 	name string,
@@ -739,26 +575,14 @@ func (s *knowledgeBaseService) DeleteKnowledgeBase(ctx context.Context, id strin
 
 	// Get tenant ID from context
 	tenantID := types.MustTenantIDFromContext(ctx)
-	tenantInfo, _ := types.TenantInfoFromContext(ctx)
-
-	// Load the KB before soft-delete so we can snapshot its VectorStoreID
-	// into the async cleanup payload. GORM's soft-delete filter hides the
-	// row from subsequent reads, so this read must happen first.
-	kb, err := s.repo.GetKnowledgeBaseByID(ctx, id)
-	if err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"knowledge_base_id": id,
-		})
+	if _, err := s.repo.GetKnowledgeBaseByID(ctx, id); err != nil {
+		logger.ErrorWithFields(ctx, err, map[string]interface{}{"knowledge_base_id": id})
 		return err
-	}
-	var vectorStoreIDSnapshot *string
-	if kb != nil {
-		vectorStoreIDSnapshot = kb.VectorStoreID
 	}
 
 	// Step 1: Delete the knowledge base record first (mark as deleted)
 	logger.Infof(ctx, "Deleting knowledge base from database")
-	err = s.repo.DeleteKnowledgeBase(ctx, id)
+	err := s.repo.DeleteKnowledgeBase(ctx, id)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"knowledge_base_id": id,
@@ -798,11 +622,9 @@ func (s *knowledgeBaseService) DeleteKnowledgeBase(ctx context.Context, id strin
 
 	// Step 2: Enqueue async task for heavy cleanup operations
 	payload := types.KBDeletePayload{
-		TenantID:         tenantID,
-		KnowledgeBaseID:  id,
-		DataSourceIDs:    dataSourceIDs,
-		EffectiveEngines: tenantInfo.GetEffectiveEngines(),
-		VectorStoreID:    vectorStoreIDSnapshot, // snapshot taken before soft-delete
+		TenantID:        tenantID,
+		KnowledgeBaseID: id,
+		DataSourceIDs:   dataSourceIDs,
 	}
 
 	payloadBytes, err := json.Marshal(payload)
@@ -876,54 +698,26 @@ func (s *knowledgeBaseService) ProcessKBDelete(ctx context.Context, t *asynq.Tas
 	if len(knowledgeList) > 0 {
 		logger.Infof(ctx, "Deleting all knowledge entries and their resources")
 
-		// Delete embeddings from vector store.
-		// Resolve the engine via the factory, using the VectorStoreID captured
-		// at enqueue time (may be nil → falls back to payload.EffectiveEngines).
-		// If the payload references a store no longer owned/registered
-		// (e.g. tampered queue entry or a store that was deleted while the
-		// task sat in the queue), the factory returns a sentinel and we
-		// SkipRetry to avoid burning retries on an unrecoverable situation.
-		logger.Infof(ctx, "Deleting embeddings from vector store")
-		retrieveEngine, err := retriever.CreateRetrieveEngineFromPayload(
-			ctx,
-			s.retrieveEngine,
-			s.ownership,
-			payload.TenantID,
-			payload.EffectiveEngines,
-			payload.VectorStoreID,
-		)
-		if errors.Is(err, retriever.ErrVectorStoreForbidden) ||
-			errors.Is(err, retriever.ErrVectorStoreNotFound) {
-			logger.Errorf(ctx, "KB delete task aborted: %v (tenant=%d, kb=%s)", err, payload.TenantID, payload.KnowledgeBaseID)
-			return asynq.SkipRetry
+		retrieveEngine := s.retrieveEngine
+		// Group knowledge by embedding model and type
+		type groupKey struct {
+			EmbeddingModelID string
+			Type             string
 		}
-		if err != nil {
-			// Transient failures — store temporarily unavailable, request
-			// cancellation during resolution, or other retryable errors —
-			// must not fall through and report success while embeddings remain.
-			logger.Errorf(ctx, "KB delete task deferred: %v (tenant=%d, kb=%s)", err, payload.TenantID, payload.KnowledgeBaseID)
-			return err
-		} else {
-			// Group knowledge by embedding model and type
-			type groupKey struct {
-				EmbeddingModelID string
-				Type             string
-			}
-			embeddingGroups := make(map[groupKey][]string)
-			for _, knowledge := range knowledgeList {
-				key := groupKey{EmbeddingModelID: knowledge.EmbeddingModelID, Type: knowledge.Type}
-				embeddingGroups[key] = append(embeddingGroups[key], knowledge.ID)
-			}
+		embeddingGroups := make(map[groupKey][]string)
+		for _, knowledge := range knowledgeList {
+			key := groupKey{EmbeddingModelID: knowledge.EmbeddingModelID, Type: knowledge.Type}
+			embeddingGroups[key] = append(embeddingGroups[key], knowledge.ID)
+		}
 
-			for key, knowledgeGroup := range embeddingGroups {
-				embeddingModel, err := s.modelService.GetEmbeddingModel(ctx, key.EmbeddingModelID)
-				if err != nil {
-					logger.Warnf(ctx, "Failed to get embedding model %s: %v", key.EmbeddingModelID, err)
-					continue
-				}
-				if err := retrieveEngine.DeleteByKnowledgeIDList(ctx, knowledgeGroup, embeddingModel.GetDimensions(), key.Type); err != nil {
-					logger.Warnf(ctx, "Failed to delete embeddings for model %s: %v", key.EmbeddingModelID, err)
-				}
+		for key, knowledgeGroup := range embeddingGroups {
+			embeddingModel, err := s.modelService.GetEmbeddingModel(ctx, key.EmbeddingModelID)
+			if err != nil {
+				logger.Warnf(ctx, "Failed to get embedding model %s: %v", key.EmbeddingModelID, err)
+				continue
+			}
+			if err := retrieveEngine.DeleteByKnowledgeIDList(ctx, knowledgeGroup, embeddingModel.GetDimensions(), key.Type); err != nil {
+				logger.Warnf(ctx, "Failed to delete embeddings for model %s: %v", key.EmbeddingModelID, err)
 			}
 		}
 
@@ -1138,35 +932,7 @@ func (s *knowledgeBaseService) CopyKnowledgeBase(ctx context.Context,
 				"source and target knowledge bases use different embedding models; " +
 					"clone into a target with the same embedding model")
 		}
-
-		// Defense 2: vector store binding must match. Cross-store cloning
-		// would require copying physical vector data between stores.
-		// (both nil → equal; both same UUID → equal; otherwise → rejected)
-		if !sourceKB.SharesStoreWith(targetKB) {
-			return nil, nil, apperrors.NewBadRequestError(
-				"source and target knowledge bases are bound to different vector stores; " +
-					"cross-store cloning is not yet supported")
-		}
-
-		// Defense 3: the concrete storage instance must match. Comparing only
-		// provider names would incorrectly allow S3-A -> S3-B clones.
-		if tenant, _ := ctx.Value(types.TenantInfoContextKey).(*types.Tenant); tenant != nil {
-			defaultID, defaultProvider := "", ""
-			if tenant.DefaultStorageBackendID != nil {
-				defaultID = *tenant.DefaultStorageBackendID
-			}
-			if tenant.StorageEngineConfig != nil {
-				defaultProvider = tenant.StorageEngineConfig.DefaultProvider
-			}
-			if !sourceKB.SharesStorageBackendWith(targetKB, defaultID, defaultProvider) {
-				return nil, nil, apperrors.NewBadRequestError(
-					"source and target knowledge bases use different storage instances; cross-storage-backend cloning is not supported")
-			}
-		}
 	} else {
-
-		// Preserve VectorStoreID so the cloned KB lands on the same
-		// physical index. GORM `<-:create` permits the value at INSERT.
 		targetKB = &types.KnowledgeBase{
 			ID:                    uuid.New().String(),
 			Name:                  sourceKB.Name,
@@ -1180,10 +946,6 @@ func (s *knowledgeBaseService) CopyKnowledgeBase(ctx context.Context,
 			SummaryModelID:        sourceKB.SummaryModelID,
 			ModelTiers:            sourceKB.ModelTiers,
 			VLMConfig:             sourceKB.VLMConfig,
-			StorageProviderConfig: sourceKB.StorageProviderConfig,
-			StorageBackendID:      sourceKB.StorageBackendID,
-			StorageConfig:         sourceKB.StorageConfig,
-			VectorStoreID:         sourceKB.VectorStoreID,
 		}
 		// Record the authenticated user as the clone's creator.
 		if uid, ok := types.UserIDFromContext(ctx); ok {
@@ -1239,13 +1001,6 @@ func (s *knowledgeBaseService) DuplicateKnowledgeBase(
 	targetKB.ProcessingCount = 0
 	targetKB.CreatorName = ""
 	targetKB.EnsureDefaults()
-	targetKB.Normalize()
-
-	if targetKB.HasVectorStore() {
-		if err := s.validateVectorStoreBinding(ctx, tenantID, *targetKB.VectorStoreID); err != nil {
-			return nil, err
-		}
-	}
 
 	if err := s.persistKnowledgeBase(ctx, targetKB, true); err != nil {
 		return nil, err

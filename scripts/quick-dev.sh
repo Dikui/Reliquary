@@ -98,7 +98,6 @@ echo ""
 log_info "访问地址:"
 echo "  - 前端: http://localhost:5173"
 echo "  - 后端 API: http://localhost:8080"
-echo "  - MinIO Console: http://localhost:9001"
 echo ""
 
 log_info "管理命令:"

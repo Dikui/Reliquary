@@ -122,20 +122,12 @@
                     <EnvVarSettings />
                   </div>
 
-                  <!-- 向量数据库引擎 -->
-                  <div v-if="currentSection === 'vectorstore'" class="section">
-                    <VectorStoreSettings />
-                  </div>
-
                   <!-- 解析引擎 -->
                   <div v-if="currentSection === 'parser'" class="section">
                     <ParserEngineSettings />
                   </div>
 
                   <!-- 存储引擎 -->
-                  <div v-if="currentSection === 'storage'" class="section">
-                    <StorageEngineSettings />
-                  </div>
 
                   <!-- 沙箱 -->
                   <div v-if="currentSection === 'sandbox'" class="section">
@@ -219,9 +211,7 @@ import ChatHistorySettings from './ChatHistorySettings.vue'
 import MemorySettings from './MemorySettings.vue'
 import EnvVarSettings from './EnvVarSettings.vue'
 import MemoryWorkspaceSettings from './MemoryWorkspaceSettings.vue'
-import VectorStoreSettings from './VectorStoreSettings.vue'
 import ParserEngineSettings from './ParserEngineSettings.vue'
-import StorageEngineSettings from './StorageBackendSettings.vue'
 import SandboxSettings from './SandboxSettings.vue'
 import SkillSettings from './SkillSettings.vue'
 import DomainSettings from './DomainSettings.vue'
@@ -317,9 +307,7 @@ const navItems = computed(() => {
     { key: 'websearch', icon: 'search', label: t('settings.webSearchConfig') },
     { key: 'chathistory', icon: 'chat', label: t('chatHistorySettings.title') },
     { key: 'memory', icon: 'bulletpoint', label: t('memoryWorkspaceSettings.title') },
-    { key: 'vectorstore', icon: 'data-base', label: t('settings.vectorStoreEngine') },
     { key: 'parser', icon: 'file-search', label: t('settings.parserEngine') },
-    { key: 'storage', icon: 'cloud', label: t('settings.storageEngine') },
     { key: 'sandbox', icon: 'code', label: t('settings.sandbox.title') },
     { key: 'skills', icon: SKILL_ICON, label: t('settings.skills.title') },
     { key: 'mcp', icon: 'tools', label: t('settings.mcpService') },
@@ -372,9 +360,7 @@ const navGroups = computed<NavGroup[]>(() => {
       key: 'data_extensions',
       label: t('settings.navGroups.dataExtensions'),
       items: pickItems([
-        'vectorstore',
         'parser',
-        'storage',
         'sandbox',
         'skills',
         'websearch',

@@ -31,7 +31,7 @@ type strategyOriginal struct {
 	missing map[string]bool
 }
 
-func (s strategyOriginal) GetKnowledgeFile(_ context.Context, id string) (io.ReadCloser, string, error) {
+func (s strategyOriginal) GetKnowledgeBody(_ context.Context, id string) (io.ReadCloser, string, error) {
 	if s.missing[id] {
 		return nil, "", errors.New("original unavailable")
 	}

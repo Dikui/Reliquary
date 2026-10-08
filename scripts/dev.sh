@@ -55,7 +55,7 @@ show_help() {
     echo "用法: $0 [命令] [选项]"
     echo ""
     echo "命令:"
-    echo "  start      启动基础设施服务（postgres, redis, docreader）"
+    echo "  start      启动基础设施服务（postgres, redis）"
     echo "  stop       停止所有服务"
     echo "  restart    重启所有服务"
     echo "  logs       查看服务日志"
@@ -66,15 +66,11 @@ show_help() {
     echo ""
     echo "可选 Profile（用于 start 命令）:"
     echo "  --searxng     启动联网搜索"
-    echo "  --minio       启动 MinIO 对象存储"
-    echo "  --odl-hybrid  启动 OpenDataLoader hybrid（Docling，镜像较大，按需启用）"
-    echo "  --full        启动所有保留的可选服务（含 odl-hybrid）"
+    echo "  --full        启动所有保留的可选服务（含 searxng）"
     echo ""
     echo "示例："
     echo "  $0 start                    # 启动基础服务"
-    echo "  $0 start --odl-hybrid       # 启动基础服务 + OpenDataLoader hybrid"
     echo "  $0 start --full             # 启动所有服务"
-    echo "  make dev-start DEV_ARGS=--odl-hybrid   # 同上（Makefile 传参）"
     echo "  $0 app                      # 在另一个终端启动后端"
     echo "  $0 frontend                 # 在另一个终端启动前端"
 }
@@ -130,46 +126,6 @@ check_docker() {
     return 0
 }
 
-# 检查 .env 是否启用了 hybrid 模式（用于 --odl-hybrid 启动后重建 docreader）
-_should_enable_odl_hybrid_from_env() {
-    local hybrid="${DOCREADER_ODL_HYBRID:-off}"
-    hybrid=$(printf '%s' "$hybrid" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
-    case "$hybrid" in
-        off|"") return 1 ;;
-        *) return 0 ;;
-    esac
-}
-
-_enable_odl_hybrid_profile() {
-    PROFILES="$PROFILES --profile odl-hybrid"
-    ENABLED_SERVICES="$ENABLED_SERVICES odl-hybrid"
-}
-
-# 等待 odl-hybrid HTTP 健康检查通过（compose 启动后服务可能仍在拉依赖）
-_wait_odl_hybrid_ready() {
-    local port="${ODL_HYBRID_PORT:-5002}"
-    local max_wait="${ODL_HYBRID_STARTUP_WAIT_SEC:-180}"
-    local waited=0
-    local interval=5
-
-    if ! command -v curl &> /dev/null; then
-        log_warning "未安装 curl，跳过 odl-hybrid 就绪等待；请手动检查 http://localhost:${port}/health"
-        return 0
-    fi
-
-    log_info "等待 odl-hybrid 就绪（最多 ${max_wait}s，首次需构建镜像: docker compose ... build odl-hybrid）..."
-    while [ "$waited" -lt "$max_wait" ]; do
-        if curl -sf "http://127.0.0.1:${port}/health" >/dev/null 2>&1; then
-            log_success "odl-hybrid 已就绪 (http://localhost:${port}/health)"
-            return 0
-        fi
-        sleep "$interval"
-        waited=$((waited + interval))
-    done
-    log_warning "odl-hybrid 在 ${max_wait}s 内未就绪，请查看: docker logs Reliquary-odl-hybrid"
-    return 1
-}
-
 # 启动基础设施服务
 start_services() {
     log_info "启动开发环境基础设施服务..."
@@ -209,18 +165,9 @@ start_services() {
                 PROFILES="$PROFILES --profile searxng"
                 ENABLED_SERVICES="$ENABLED_SERVICES searxng"
                 ;;
-            --minio)
-                PROFILES="$PROFILES --profile minio"
-                ENABLED_SERVICES="$ENABLED_SERVICES minio"
-                ;;
-            --odl-hybrid)
-                if [[ "$ENABLED_SERVICES" != *"odl-hybrid"* ]]; then
-                    _enable_odl_hybrid_profile
-                fi
-                ;;
             --full)
-                PROFILES="--profile minio --profile searxng --profile odl-hybrid"
-                ENABLED_SERVICES="minio searxng odl-hybrid"
+                PROFILES="--profile searxng"
+                ENABLED_SERVICES="searxng"
                 break
                 ;;
             *)
@@ -230,19 +177,8 @@ start_services() {
         shift
     done
 
-    # 启动服务（odl-hybrid 单独 --build，避免每次重建 docreader）
     "$DOCKER_COMPOSE_BIN" $DOCKER_COMPOSE_SUBCMD -f docker-compose.dev.yml $PROFILES up -d
     local compose_rc=$?
-    if [ "$compose_rc" -eq 0 ] && [[ "$ENABLED_SERVICES" == *"odl-hybrid"* ]]; then
-        log_info "构建/更新 odl-hybrid 镜像..."
-        "$DOCKER_COMPOSE_BIN" $DOCKER_COMPOSE_SUBCMD -f docker-compose.dev.yml $PROFILES up -d --build odl-hybrid
-        _wait_odl_hybrid_ready || true
-        # docreader 需读取 DOCREADER_ODL_HYBRID；若刚改 .env，强制重建以注入环境变量
-        if _should_enable_odl_hybrid_from_env; then
-            log_info "重建 docreader 以应用 DOCREADER_ODL_HYBRID=${DOCREADER_ODL_HYBRID} ..."
-            "$DOCKER_COMPOSE_BIN" $DOCKER_COMPOSE_SUBCMD -f docker-compose.dev.yml up -d --force-recreate docreader
-        fi
-    fi
 
     if [ "$compose_rc" -eq 0 ]; then
         log_success "基础设施服务已启动"
@@ -250,17 +186,8 @@ start_services() {
         log_info "服务访问地址:"
         echo "  - PostgreSQL:    localhost:5432"
         echo "  - Redis:         localhost:6379"
-        echo "  - DocReader:     localhost:50051"
         
         # 根据启用的 profile 显示额外服务
-        if [[ "$ENABLED_SERVICES" == *"minio"* ]]; then
-            echo "  - MinIO:         localhost:9000 (Console: localhost:9001)"
-        fi
-        if [[ "$ENABLED_SERVICES" == *"odl-hybrid"* ]]; then
-            echo "  - ODL Hybrid:    http://localhost:${ODL_HYBRID_PORT:-5002} (health: /health)"
-            echo "                   docreader 需 DOCREADER_ODL_HYBRID=docling-fast"
-        fi
-        
         echo ""
         log_info "接下来的步骤:"
         printf "%b\n" "${YELLOW}1. 在新终端运行后端:${NC} make dev-app"
@@ -335,11 +262,10 @@ check_remote_dev_connectivity() {
     if [ "$redis_port" = "$REDIS_ADDR" ]; then
         redis_port=6379
     fi
-    local docreader_port="${DOCREADER_PORT:-50051}"
 
     log_info "检查远程基础设施连通性 (${host})..."
     local failed=0
-    for spec in "PostgreSQL:${host}:${db_port}" "Redis:${host}:${redis_port}" "DocReader:${host}:${docreader_port}"; do
+    for spec in "PostgreSQL:${host}:${db_port}" "Redis:${host}:${redis_port}"; do
         local name="${spec%%:*}"
         local rest="${spec#*:}"
         local h="${rest%%:*}"
@@ -360,10 +286,10 @@ check_remote_dev_connectivity() {
         echo ""
         log_error "无法连接远程开发环境 ${host}"
         log_info "排查建议:"
-        echo "  1. 确认远程机器 Docker 容器在运行 (postgres/redis/docreader)"
+        echo "  1. 确认远程机器 Docker 容器在运行 (postgres/redis)"
         echo "  2. 确认本机与 ${host} 在同一局域网 (本机: $(ipconfig getifaddr en0 2>/dev/null || echo '未知'))"
         echo "  3. 在远程检查端口映射: docker ps --format 'table {{.Names}}\t{{.Ports}}'"
-        echo "  4. 检查远程防火墙是否放行 5432/6379/50051"
+        echo "  4. 检查远程防火墙是否放行 5432/6379"
         return 1
     fi
     return 0
@@ -433,15 +359,10 @@ start_app() {
         log_info "远程开发模式: 基础设施 → ${DEV_REMOTE_HOST}"
         export DB_HOST="${DB_HOST:-$DEV_REMOTE_HOST}"
         export REDIS_ADDR="${REDIS_ADDR:-$DEV_REMOTE_HOST:6379}"
-        export DOCREADER_ADDR="${DOCREADER_ADDR:-$DEV_REMOTE_HOST:50051}"
-        export MINIO_ENDPOINT="${MINIO_ENDPOINT:-$DEV_REMOTE_HOST:9000}"
     else
         export DB_HOST=127.0.0.1
-        export DOCREADER_ADDR=127.0.0.1:50051
-        export MINIO_ENDPOINT=127.0.0.1:9000
         export REDIS_ADDR=127.0.0.1:6379
     fi
-    export DOCREADER_TRANSPORT="${DOCREADER_TRANSPORT:-grpc}"
 
     if ! check_remote_dev_connectivity; then
         return 1

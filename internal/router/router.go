@@ -66,9 +66,6 @@ type RouterParams struct {
 	WebSearchHandler             *handler.WebSearchHandler
 	WebSearchProviderHandler     *handler.WebSearchProviderHandler
 	WebSearchCredentialsHandler  *handler.WebSearchProviderCredentialsHandler
-	VectorStoreHandler           *handler.VectorStoreHandler
-	StorageBackendHandler        *handler.StorageBackendHandler
-	StorageBackendResolver       interfaces.StorageBackendResolver
 	ResourceCatalog              interfaces.ResourceCatalog
 	TagHandler                   *handler.TagHandler
 	CustomAgentHandler           *handler.CustomAgentHandler
@@ -134,19 +131,19 @@ func NewRouter(params RouterParams) *gin.Engine {
 		))
 	}
 
-	serveResourceGrants(r, params.ResourceCatalog, params.TenantService, params.FileService, params.StorageBackendResolver)
+	serveResourceGrants(r, params.ResourceCatalog, params.TenantService, params.FileService)
 
 	// 认证中间件
 	r.Use(middleware.Auth(params.TenantService, params.UserService, params.TenantAPIKeyService))
 
-	// 文件服务：统一代理本地和S3兼容存储后端（需要认证）
-	serveFilesWithResources(r, params.FileService, params.StorageBackendResolver, params.ResourceCatalog)
+	// 本地文件访问代理（需要认证）
+	serveFilesWithResources(r, params.FileService, params.ResourceCatalog)
 
 	// Presigned file access: no auth required, signature-verified.
-	servePresignedFiles(r, params.TenantService, params.StorageBackendResolver)
+	servePresignedFiles(r, params.TenantService)
 
 	// Diagnostic preview of presigned URLs behind authentication middleware.
-	servePresignedPreview(r, params.Config, params.StorageBackendResolver, params.ResourceCatalog)
+	servePresignedPreview(r, params.Config, params.ResourceCatalog)
 
 	// 需要认证的API路由
 	v1 := r.Group("/api/v1")
@@ -161,7 +158,6 @@ func NewRouter(params RouterParams) *gin.Engine {
 			accessGuards,
 			params.TenantService,
 			params.FileService,
-			params.StorageBackendResolver,
 			params.ResourceCatalog)
 		serveMessageScopedFiles(
 			v1,
@@ -169,7 +165,6 @@ func NewRouter(params RouterParams) *gin.Engine {
 			params.MessageService,
 			params.TenantService,
 			params.FileService,
-			params.StorageBackendResolver,
 			params.ResourceCatalog)
 		RegisterKnowledgeTagRoutes(v1, params.TagHandler, accessGuards)
 		RegisterKnowledgeRoutes(v1, params.KnowledgeHandler, accessGuards)
@@ -196,8 +191,6 @@ func NewRouter(params RouterParams) *gin.Engine {
 		RegisterMCPServiceRoutes(v1, params.MCPServiceHandler, params.MCPCredentialsHandler, params.MCPOAuthHandler, accessGuards)
 		RegisterWebSearchRoutes(v1, params.WebSearchHandler, accessGuards)
 		RegisterWebSearchProviderRoutes(v1, params.WebSearchProviderHandler, params.WebSearchCredentialsHandler, accessGuards)
-		RegisterVectorStoreRoutes(v1, params.VectorStoreHandler, accessGuards)
-		RegisterStorageBackendRoutes(v1, params.StorageBackendHandler, accessGuards)
 		RegisterCustomAgentRoutes(v1, params.CustomAgentHandler, accessGuards)
 		RegisterUserFavoriteRoutes(v1, params.UserFavoriteHandler, accessGuards)
 		RegisterSkillRoutes(v1, params.SkillHandler, accessGuards)

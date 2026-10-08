@@ -23,7 +23,7 @@ func TestResetPasswordCommandChangesLoginAndRevokesSessions(t *testing.T) {
 	if err := service.EnsureSingleTeamSpace(ctx, db); err != nil {
 		t.Fatal(err)
 	}
-	tenantService := service.NewTenantService(repository.NewTenantRepository(db), repository.NewStorageBackendRepository(db))
+	tenantService := service.NewTenantService(repository.NewTenantRepository(db))
 	userService := service.NewUserService(&config.Config{}, repository.NewUserRepository(db), repository.NewAuthTokenRepository(db), tenantService)
 	user, err := userService.Register(ctx, &types.RegisterRequest{Username: "personal", Email: "personal@example.com", Password: "old-password"})
 	if err != nil {

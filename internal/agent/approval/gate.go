@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	redis "github.com/redis/go-redis/v9"
 	"os"
 	"strings"
 	"sync"
@@ -18,54 +17,6 @@ import (
 	"reliquary/internal/event"
 	"reliquary/internal/logger"
 )
-
-// pubsubChannelBase is the Redis channel prefix used to fan-out Resolve calls
-// across backend replicas (issue #1173 cross-instance support). The actual
-// channel is suffixed with RELIQUARY_REDIS_NAMESPACE (when set) so multiple
-// deployments sharing the same Redis don't cross-talk.
-const pubsubChannelBase = "reliquary:mcp_approval:resolve"
-
-// instanceID is a process-unique id used to ignore self-published pubsub
-// messages (avoids "pending not found" log noise on the publisher side).
-var instanceID = uuid.New().String()
-
-// resolveMessage is the JSON payload published when one instance receives a
-// Resolve API call but the pending wait may live on another instance.
-type resolveMessage struct {
-	TenantID     uint64          `json:"tenant_id"`
-	UserID       string          `json:"user_id,omitempty"`
-	PendingID    string          `json:"pending_id"`
-	Approved     bool            `json:"approved"`
-	ModifiedArgs json.RawMessage `json:"modified_args,omitempty"`
-	Reason       string          `json:"reason,omitempty"`
-	TimedOut     bool            `json:"timed_out,omitempty"`
-	Canceled     bool            `json:"canceled,omitempty"`
-	// ReplyChannel, when non-empty, asks the owning instance to publish a
-	// resolveAck so the caller can know if delivery actually happened.
-	ReplyChannel string `json:"reply_channel,omitempty"`
-	OriginID     string `json:"origin_id,omitempty"`
-	// RequestNonce uniquely identifies this Resolve call. The owning
-	// instance echoes it back in resolveAck so concurrent Resolve callers
-	// for the same pendingID don't consume each other's acks.
-	RequestNonce string `json:"request_nonce,omitempty"`
-}
-
-// resolveAck is published by the owning instance back to the caller's
-// per-pending reply channel so HTTP semantics stay accurate cross-instance.
-type resolveAck struct {
-	PendingID    string `json:"pending_id"`
-	Status       string `json:"status"` // ok | not_found | tenant_mismatch | user_mismatch | already_resolved
-	OriginID     string `json:"origin_id,omitempty"`
-	RequestNonce string `json:"request_nonce,omitempty"`
-}
-
-// pubsubChannel returns the namespaced pubsub channel name.
-func pubsubChannel() string {
-	if ns := strings.TrimSpace(os.Getenv("RELIQUARY_REDIS_NAMESPACE")); ns != "" {
-		return pubsubChannelBase + ":" + ns
-	}
-	return pubsubChannelBase
-}
 
 // Checker answers whether a concrete MCP tool requires human approval before execution.
 type Checker interface {
@@ -130,20 +81,13 @@ type OAuthPendingRequest struct {
 
 var _ MCPApproval = (*Gate)(nil)
 
-// Gate coordinates wait/resolve for MCP tool approvals.
-//
-// Pending waiters live in-memory on the instance that started RequestAndWait.
-// When a redis client is supplied, Resolve calls hitting any replica are
-// published over Redis Pub/Sub so the owning instance can deliver the decision
-// (issue #1173 cross-instance support). Without redis, the gate degrades to
-// single-process behavior (deployments must use sticky sessions).
+// Gate coordinates process-local waiters for MCP tool approvals.
 type Gate struct {
 	mu        sync.Mutex
 	pending   map[string]*waiter
 	checker   Checker
 	timeout   time.Duration
-	rdb       *redis.Client // optional; nil disables cross-instance fan-out
-	failClose bool          // when true, NeedsApproval errors block (require approval) instead of skip
+	failClose bool // when true, NeedsApproval errors block (require approval) instead of skip
 }
 
 type waiter struct {
@@ -190,8 +134,8 @@ var (
 )
 
 // NewGate builds a gate. checker may be nil (disables gating). cfg may be nil
-// (defaults apply). rdb may be nil (single-instance mode).
-func NewGate(cfg *config.Config, checker Checker, rdb *redis.Client) *Gate {
+// (defaults apply).
+func NewGate(cfg *config.Config, checker Checker) *Gate {
 	timeout := 10 * time.Minute
 	if cfg != nil && cfg.Agent != nil && cfg.Agent.ToolApprovalTimeoutSeconds > 0 {
 		timeout = time.Duration(cfg.Agent.ToolApprovalTimeoutSeconds) * time.Second
@@ -203,91 +147,9 @@ func NewGate(cfg *config.Config, checker Checker, rdb *redis.Client) *Gate {
 		pending:   make(map[string]*waiter),
 		checker:   checker,
 		timeout:   timeout,
-		rdb:       rdb,
 		failClose: failClose,
 	}
-	if rdb != nil {
-		go g.runSubscriber()
-	}
 	return g
-}
-
-// runSubscriber listens for cross-instance Resolve fan-outs and delivers
-// decisions to local waiters. Runs for the lifetime of the process.
-func (g *Gate) runSubscriber() {
-	ctx := context.Background()
-	channel := pubsubChannel()
-	backoff := time.Second
-	const maxBackoff = 30 * time.Second
-	for {
-		sub := g.rdb.Subscribe(ctx, channel)
-		ch := sub.Channel()
-		// Reset backoff once we have an active subscription.
-		backoff = time.Second
-		for msg := range ch {
-			var m resolveMessage
-			if err := json.Unmarshal([]byte(msg.Payload), &m); err != nil {
-				logger.GetLogger(ctx).Warnf("mcp approval pubsub: bad payload: %v", err)
-				continue
-			}
-			// Skip messages we published ourselves; they would always miss
-			// locally and produce noisy ErrPendingNotFound.
-			if m.OriginID == instanceID {
-				continue
-			}
-			err := g.deliverLocal(m.TenantID, m.UserID, m.PendingID, Decision{
-				Approved:        m.Approved,
-				ModifiedArgs:    m.ModifiedArgs,
-				Reason:          m.Reason,
-				TimedOut:        m.TimedOut,
-				ContextCanceled: m.Canceled,
-			})
-			// Reply to the originating instance so it can return accurate HTTP
-			// status codes. Only the owning instance (or one that detects a
-			// real conflict) replies; other replicas stay silent on NotFound.
-			if m.ReplyChannel != "" {
-				status := ""
-				switch {
-				case err == nil:
-					status = "ok"
-				case errors.Is(err, ErrTenantMismatch):
-					status = "tenant_mismatch"
-				case errors.Is(err, ErrUserMismatch):
-					status = "user_mismatch"
-				case errors.Is(err, ErrAlreadyResolved):
-					status = "already_resolved"
-				}
-				if status != "" {
-					ackPayload, _ := json.Marshal(resolveAck{
-						PendingID:    m.PendingID,
-						Status:       status,
-						OriginID:     instanceID,
-						RequestNonce: m.RequestNonce,
-					})
-					pubCtx, pubCancel := context.WithTimeout(ctx, 2*time.Second)
-					if pErr := g.rdb.Publish(pubCtx, m.ReplyChannel, ackPayload).Err(); pErr != nil {
-						logger.GetLogger(ctx).Warnf("mcp approval pubsub reply: %v", pErr)
-					}
-					pubCancel()
-				}
-			}
-			switch {
-			case err == nil, errors.Is(err, ErrPendingNotFound):
-				// Either delivered or this isn't the owning replica — quiet.
-			default:
-				logger.GetLogger(ctx).Warnf("mcp approval pubsub deliver: %v", err)
-			}
-		}
-		_ = sub.Close()
-		// Reconnect with capped exponential backoff if Redis hiccups.
-		time.Sleep(backoff)
-		if backoff < maxBackoff {
-			backoff *= 2
-			if backoff > maxBackoff {
-				backoff = maxBackoff
-			}
-		}
-	}
 }
 
 // NeedsApproval returns whether execution should pause for human confirmation.
@@ -541,109 +403,12 @@ func (g *Gate) RequestOAuthAndWait(ctx context.Context, req OAuthPendingRequest)
 	}
 }
 
-// Resolve completes a pending approval. tenantID must match the tenant that
-// started the wait; userID, when non-zero, must match the session owner.
-//
-// If the waiter is not on this instance and Redis Pub/Sub is configured, the
-// decision is fanned out to all replicas and ack'd via a reply key in Redis
-// so the caller can distinguish "delivered elsewhere" from "no instance had
-// the pending" (issue #1173 follow-up).
+// Resolve completes a pending approval after checking its tenant and user.
 func (g *Gate) Resolve(tenantID uint64, userID, pendingID string, d Decision) error {
 	if g == nil {
 		return fmt.Errorf("gate is nil")
 	}
-	switch err := g.deliverLocal(tenantID, userID, pendingID, d); {
-	case err == nil:
-		return nil
-	case errors.Is(err, ErrTenantMismatch),
-		errors.Is(err, ErrUserMismatch),
-		errors.Is(err, ErrAlreadyResolved):
-		return err
-	case errors.Is(err, ErrPendingNotFound):
-		if g.rdb == nil {
-			return err
-		}
-		return g.resolveCrossInstance(tenantID, userID, pendingID, d)
-	default:
-		return err
-	}
-}
-
-// resolveCrossInstance publishes a resolve request and waits briefly for an
-// ack from the instance that owns the pending. The ack is sent over a
-// per-pending Redis pub/sub reply channel and contains the same error codes
-// the local path would return, so HTTP responses stay accurate even when the
-// session lives on a different replica.
-func (g *Gate) resolveCrossInstance(tenantID uint64, userID, pendingID string, d Decision) error {
-	// Per-call nonce so concurrent Resolve callers for the same pendingID
-	// don't consume each other's acks on the shared reply channel.
-	nonce := uuid.New().String()
-	replyChannel := pubsubChannel() + ":reply:" + pendingID
-	sub := g.rdb.Subscribe(context.Background(), replyChannel)
-	defer func() { _ = sub.Close() }()
-	// Wait for the subscription to be active before publishing so we don't
-	// miss the ack.
-	subCtx, subCancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer subCancel()
-	if _, err := sub.Receive(subCtx); err != nil {
-		return fmt.Errorf("subscribe approval reply: %w", err)
-	}
-
-	payload, mErr := json.Marshal(resolveMessage{
-		TenantID:     tenantID,
-		UserID:       userID,
-		PendingID:    pendingID,
-		Approved:     d.Approved,
-		ModifiedArgs: d.ModifiedArgs,
-		Reason:       d.Reason,
-		TimedOut:     d.TimedOut,
-		Canceled:     d.ContextCanceled,
-		ReplyChannel: replyChannel,
-		OriginID:     instanceID,
-		RequestNonce: nonce,
-	})
-	if mErr != nil {
-		return fmt.Errorf("encode pubsub payload: %w", mErr)
-	}
-	pubCtx, pubCancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer pubCancel()
-	if pErr := g.rdb.Publish(pubCtx, pubsubChannel(), payload).Err(); pErr != nil {
-		return fmt.Errorf("publish approval resolve: %w", pErr)
-	}
-
-	// Wait for the owning instance to ack. Window is short (3s) — UX wins
-	// from getting an accurate 404/409 over slowly returning 200.
-	ackCtx, ackCancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer ackCancel()
-	for {
-		msg, err := sub.ReceiveMessage(ackCtx)
-		if err != nil {
-			// Timeout or subscription error: nobody confirmed, treat as not found.
-			return ErrPendingNotFound
-		}
-		var ack resolveAck
-		if jErr := json.Unmarshal([]byte(msg.Payload), &ack); jErr != nil {
-			continue
-		}
-		// Ignore acks intended for a different concurrent Resolve call.
-		if ack.RequestNonce != "" && ack.RequestNonce != nonce {
-			continue
-		}
-		switch ack.Status {
-		case "ok":
-			return nil
-		case "tenant_mismatch":
-			return ErrTenantMismatch
-		case "user_mismatch":
-			return ErrUserMismatch
-		case "already_resolved":
-			return ErrAlreadyResolved
-		case "not_found":
-			return ErrPendingNotFound
-		default:
-			return fmt.Errorf("approval reply: unexpected status %q", ack.Status)
-		}
-	}
+	return g.deliverLocal(tenantID, userID, pendingID, d)
 }
 
 // deliverLocal attempts to satisfy a waiter on this instance only.

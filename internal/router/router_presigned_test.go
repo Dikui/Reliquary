@@ -15,12 +15,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
+	filesvc "reliquary/internal/application/service/file"
 	"reliquary/internal/config"
-	"reliquary/internal/testutil/sqlfixture"
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	secutils "reliquary/internal/utils"
@@ -32,20 +32,13 @@ func TestPresignedPreviewScopesResourcesBeforeIssuingGrants(t *testing.T) {
 	t.Setenv("LOCAL_STORAGE_BASE_DIR", baseDir)
 	t.Setenv("APP_EXTERNAL_URL", "https://example.test")
 	t.Setenv("SYSTEM_AES_KEY", "reliquary-test-aes-key-32bytes!!!")
-	db, err := sqlfixture.Open(":memory:", &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&types.StorageBackend{}, &types.StoredResource{}, &types.ResourceAccessGrant{}))
-	storageRepo := repository.NewStorageBackendRepository(db)
-	defaultBackend := &types.StorageBackend{TenantID: 1, Name: "default", Provider: "local"}
-	resourceBackend := &types.StorageBackend{TenantID: 1, Name: "resource", Provider: "local"}
-	require.NoError(t, storageRepo.Create(t.Context(), defaultBackend))
-	require.NoError(t, storageRepo.Create(t.Context(), resourceBackend))
-	tenant := &types.Tenant{ID: 1, DefaultStorageBackendID: &defaultBackend.ID}
+	db := pgtest.OpenFixture(t)
+	require.NoError(t, db.AutoMigrate(&types.StoredResource{}, &types.ResourceAccessGrant{}))
+	tenant := &types.Tenant{ID: 1}
 	catalog := service.NewResourceCatalog(repository.NewResourceRepository(db))
-	resolver := service.NewStorageBackendServiceWithResources(storageRepo, db, catalog)
 	// Registered resources use catalog ownership, even when the physical path has no tenant segment.
 	physical := writeTestFile(t, baseDir, "archive/synthetic.txt", "synthetic-resource")
-	reference, err := catalog.Register(t.Context(), 1, types.BuildStorageBackendPath(resourceBackend.ID, physical), interfaces.ResourceRegistration{OriginalName: "synthetic.txt"})
+	reference, err := catalog.Register(t.Context(), 1, physical, interfaces.ResourceRegistration{OriginalName: "synthetic.txt"})
 	require.NoError(t, err)
 	otherReference, err := catalog.Register(t.Context(), 2, "local://2/other.txt", interfaces.ResourceRegistration{})
 	require.NoError(t, err)
@@ -57,7 +50,7 @@ func TestPresignedPreviewScopesResourcesBeforeIssuingGrants(t *testing.T) {
 		c.Request = c.Request.WithContext(ctx)
 		c.Next()
 	})
-	servePresignedPreview(preview, cfg, resolver, catalog)
+	servePresignedPreview(preview, cfg, catalog)
 	allowed := httptest.NewRecorder()
 	preview.ServeHTTP(allowed, httptest.NewRequest(http.MethodGet, "/api/v1/files/presigned-preview?file_path="+url.QueryEscape(reference), nil))
 	require.Equal(t, http.StatusOK, allowed.Code, allowed.Body.String())
@@ -72,7 +65,7 @@ func TestPresignedPreviewScopesResourcesBeforeIssuingGrants(t *testing.T) {
 	serveResourceGrants(public, catalog, &stubTenantService{get: func(_ context.Context, id uint64) (*types.Tenant, error) {
 		require.Equal(t, tenant.ID, id)
 		return tenant, nil
-	}}, nil, resolver)
+	}}, filesvc.NewLocalFileService(baseDir, "https://example.test"))
 	download := httptest.NewRecorder()
 	public.ServeHTTP(download, httptest.NewRequest(http.MethodGet, grantURL.RequestURI(), nil))
 	require.Equal(t, http.StatusOK, download.Code, download.Body.String())
@@ -209,10 +202,6 @@ func setupPresignedTestServer(t *testing.T) (engine *gin.Engine, baseDir string,
 
 	tenant := &types.Tenant{
 		ID: 1,
-		StorageEngineConfig: &types.StorageEngineConfig{
-			DefaultProvider: "local",
-			Local:           &types.LocalEngineConfig{},
-		},
 	}
 	stubTS := &stubTenantService{
 		get: func(_ context.Context, id uint64) (*types.Tenant, error) {

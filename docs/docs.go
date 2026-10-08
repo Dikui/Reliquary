@@ -283,7 +283,8 @@ const docTemplate = `{
                             "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
                         }
                     }
-                }
+                },
+                "parameters": []
             },
             "post": {
                 "security": [
@@ -362,7 +363,8 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
+                },
+                "parameters": []
             }
         },
         "/agents/type-presets": {
@@ -394,7 +396,8 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
+                },
+                "parameters": []
             }
         },
         "/agents/{id}": {
@@ -811,7 +814,8 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
+                },
+                "parameters": []
             }
         },
         "/auth/login": {
@@ -886,7 +890,8 @@ const docTemplate = `{
                             "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
                         }
                     }
-                }
+                },
+                "parameters": []
             }
         },
         "/auth/me": {
@@ -921,7 +926,8 @@ const docTemplate = `{
                             "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
                         }
                     }
-                }
+                },
+                "parameters": []
             }
         },
         "/auth/refresh": {
@@ -1048,7 +1054,8 @@ const docTemplate = `{
                             "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
                         }
                     }
-                }
+                },
+                "parameters": []
             }
         },
         "/chunker/preview": {
@@ -1607,7 +1614,8 @@ const docTemplate = `{
                             }
                         }
                     }
-                }
+                },
+                "parameters": []
             }
         },
         "/datasource/validate-credentials": {
@@ -2437,13 +2445,6 @@ const docTemplate = `{
                         "description": "VLM接口类型",
                         "name": "vlm_interface_type",
                         "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "存储类型(cos/minio)",
-                        "name": "storage_type",
-                        "in": "formData",
-                        "required": true
                     }
                 ],
                 "responses": {
@@ -2539,7 +2540,8 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
+                },
+                "parameters": []
             }
         },
         "/initialization/ollama/models": {
@@ -2577,7 +2579,8 @@ const docTemplate = `{
                             "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
                         }
                     }
-                }
+                },
+                "parameters": []
             }
         },
         "/initialization/ollama/models/check": {
@@ -2712,7 +2715,8 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
+                },
+                "parameters": []
             }
         },
         "/initialization/remote/check": {
@@ -4494,7 +4498,8 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
+                },
+                "parameters": []
             },
             "post": {
                 "security": [
@@ -6912,7 +6917,8 @@ const docTemplate = `{
                             "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
                         }
                     }
-                }
+                },
+                "parameters": []
             },
             "post": {
                 "security": [
@@ -7625,7 +7631,8 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
+                },
+                "parameters": []
             }
         },
         "/me/env-vars/sandbox": {
@@ -7831,7 +7838,8 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
+                },
+                "parameters": []
             }
         },
         "/memory/documents": {
@@ -7933,7 +7941,8 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
+                },
+                "parameters": []
             }
         },
         "/memory/items": {
@@ -8048,7 +8057,8 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
+                },
+                "parameters": []
             }
         },
         "/memory/items/{id}": {
@@ -8224,7 +8234,8 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
+                },
+                "parameters": []
             },
             "put": {
                 "security": [
@@ -8405,7 +8416,8 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
+                },
+                "parameters": []
             }
         },
         "/messages/search": {
@@ -8617,7 +8629,8 @@ const docTemplate = `{
                             "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
                         }
                     }
-                }
+                },
+                "parameters": []
             },
             "post": {
                 "security": [
@@ -8892,7 +8905,8 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
+                },
+                "parameters": []
             },
             "post": {
                 "security": [
@@ -10388,12 +10402,14 @@ const docTemplate = `{
         },
         "/sessions/{session_id}/messages/{message_id}/artifacts": {
             "get": {
-                "responses": {}
+                "responses": {},
+                "parameters": []
             }
         },
         "/sessions/{session_id}/messages/{message_id}/artifacts/{index}/download": {
             "get": {
-                "responses": {}
+                "responses": {},
+                "parameters": []
             }
         },
         "/sessions/{session_id}/messages/{message_id}/suggestions": {
@@ -10766,7 +10782,8 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
+                },
+                "parameters": []
             },
             "post": {
                 "description": "Records a skill without installing it. Send a zip as multipart field \"file\", or JSON {\"source\":\"...\"}.",
@@ -10789,7 +10806,8 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
+                },
+                "parameters": []
             }
         },
         "/skills/catalog/{id}": {
@@ -10918,468 +10936,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/storage-backends": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "List all storage backend instances for the current workspace, with credentials masked. The workspace default backend id is returned alongside the list.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "StorageBackend"
-                ],
-                "summary": "List storage backends",
-                "responses": {
-                    "200": {
-                        "description": "List of storage backends and default_storage_backend_id",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Register a new object/file storage instance for the current workspace. The configuration is validated and a connectivity test is run before the backend is persisted.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "StorageBackend"
-                ],
-                "summary": "Create storage backend",
-                "parameters": [
-                    {
-                        "description": "Storage backend configuration",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.storageBackendRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created storage backend",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request, validation, or connectivity test failure",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "409": {
-                        "description": "A storage backend with this name already exists",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/storage-backends/test": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Test connectivity for the provided storage configuration without persisting it. Returns success=false with a sanitized error message on failure (the HTTP status stays 200).",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "StorageBackend"
-                ],
-                "summary": "Test storage backend with raw config",
-                "parameters": [
-                    {
-                        "description": "Storage backend configuration to test",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.storageBackendRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Connectivity test result (success, error)",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request or validation error",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/storage-backends/types": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Return the storage provider types allowed by STORAGE_ALLOW_LIST for UI form generation (e.g. local, minio, cos, tos, s3, oss, ks3, obs).",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "StorageBackend"
-                ],
-                "summary": "List allowed storage provider types",
-                "responses": {
-                    "200": {
-                        "description": "List of allowed storage provider types",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/storage-backends/{id}": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Retrieve a single storage backend by ID for the current workspace. Credentials are masked.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "StorageBackend"
-                ],
-                "summary": "Get storage backend",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Storage backend ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Storage backend details",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Storage backend not found",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            },
-            "put": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Update a storage backend's mutable fields (name, credentials, status). Provider and physical location (endpoint, region, bucket, path prefix) are immutable; use storage migration to move data. Environment-sourced backends are read-only. Redacted secret placeholders preserve the stored credentials.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "StorageBackend"
-                ],
-                "summary": "Update storage backend",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Storage backend ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Updated storage backend fields",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.storageBackendRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Updated storage backend",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Immutable field change, read-only backend, validation, or connectivity failure",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Storage backend not found",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Soft-delete a storage backend. A backend that is the workspace default, still bound to knowledge bases, environment-sourced, or a legacy alias cannot be deleted.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "StorageBackend"
-                ],
-                "summary": "Delete storage backend",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Storage backend ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Deletion success",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Backend is default, bound, read-only, or legacy alias",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Storage backend not found",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/storage-backends/{id}/default": {
-            "put": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Mark a storage backend as the workspace default. Only an active backend can become the default. New knowledge bases without an explicit binding use the default.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "StorageBackend"
-                ],
-                "summary": "Set default storage backend",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Storage backend ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Default set successfully",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Backend is not active",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Storage backend not found",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/storage-backends/{id}/test": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Test connectivity of an existing saved storage backend using its stored credentials. Returns success=false with a sanitized error message on failure (the HTTP status stays 200).",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "StorageBackend"
-                ],
-                "summary": "Test storage backend by ID",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Storage backend ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Connectivity test result (success, error)",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Storage backend not found",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
         "/system/admin/runtime/queues": {
             "get": {
                 "description": "返回各 asynq 队列的实时深度（pending/active/scheduled/retry 等）与 worker 并发配置，仅系统管理员可见",
@@ -11397,7 +10953,8 @@ const docTemplate = `{
                             "$ref": "#/definitions/internal_handler.RuntimeQueuesResponse"
                         }
                     }
-                }
+                },
+                "parameters": []
             }
         },
         "/system/admin/runtime/queues/{queue}/archived": {
@@ -11688,37 +11245,8 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/system/docreader/reconnect": {
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "系统"
-                ],
-                "summary": "重连文档解析服务",
-                "parameters": [
-                    {
-                        "description": "DocReader 地址",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK"
-                    }
-                }
+                },
+                "parameters": []
             }
         },
         "/system/info": {
@@ -11741,7 +11269,8 @@ const docTemplate = `{
                             "$ref": "#/definitions/internal_handler.GetSystemInfoResponse"
                         }
                     }
-                }
+                },
+                "parameters": []
             }
         },
         "/system/parser-engines": {
@@ -11761,7 +11290,8 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
+                },
+                "parameters": []
             }
         },
         "/system/parser-engines/check": {
@@ -11828,60 +11358,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/system/storage-engine-check": {
-            "post": {
-                "description": "使用当前填写的参数测试 MinIO/COS 连通性，不保存配置",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "系统"
-                ],
-                "summary": "测试存储引擎连通性",
-                "parameters": [
-                    {
-                        "description": "存储引擎配置",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.StorageCheckRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.StorageCheckResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/system/storage-engine-status": {
-            "get": {
-                "description": "返回 Local、MinIO、COS 各存储引擎的可用状态及说明，供全局设置与知识库选择使用",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "系统"
-                ],
-                "summary": "获取存储引擎状态",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.GetStorageEngineStatusResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/tenants/kv/prompt-templates": {
             "get": {
                 "security": [
@@ -11917,7 +11393,8 @@ const docTemplate = `{
                             "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
                         }
                     }
-                }
+                },
+                "parameters": []
             }
         },
         "/tenants/kv/web-search-config": {
@@ -11955,7 +11432,8 @@ const docTemplate = `{
                             "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
                         }
                     }
-                }
+                },
+                "parameters": []
             }
         },
         "/tenants/kv/{key}": {
@@ -12249,94 +11727,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/vector-stores": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Report the read-only application PostgreSQL store without exposing credentials",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "VectorStore"
-                ],
-                "summary": "Get PostgreSQL store status",
-                "responses": {
-                    "200": {
-                        "description": "List of vector stores (env + DB)",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/vector-stores/{id}": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Report the read-only application PostgreSQL store by its virtual ID",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "VectorStore"
-                ],
-                "summary": "Get PostgreSQL store status",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Vector store ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Vector store details",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Vector store not found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/web-search-providers/test": {
             "post": {
                 "security": [
@@ -12413,7 +11803,8 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
+                },
+                "parameters": []
             }
         },
         "/web-search-providers/{id}": {
@@ -12635,7 +12026,8 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
+                },
+                "parameters": []
             }
         },
         "/knowledge-context/entities/merge": {
@@ -13010,8 +12402,6 @@ const docTemplate = `{
                 2101,
                 2102,
                 2103,
-                2200,
-                2201,
                 2300
             ],
             "x-enum-varnames": [
@@ -13036,8 +12426,6 @@ const docTemplate = `{
                 "ErrAgentMissingAllowedTools",
                 "ErrAgentInvalidMaxIterations",
                 "ErrAgentInvalidTemperature",
-                "ErrVectorStoreBindingInvalid",
-                "ErrVectorStoreUnavailable",
                 "ErrModelInUse"
             ]
         },
@@ -13456,10 +12844,6 @@ const docTemplate = `{
                 "history_turns": {
                     "description": "Number of history turns to keep in context",
                     "type": "integer"
-                },
-                "image_storage_provider": {
-                    "description": "Storage provider for image uploads: \"local\", \"minio\", \"cos\", \"tos\", \"s3\", \"oss\", \"ks3\".\nEmpty means use the global/workspace default provider.",
-                    "type": "string"
                 },
                 "image_upload_enabled": {
                     "description": "===== Image Upload / Multimodal Settings =====\nWhether image upload is enabled for this agent (default: false)",
@@ -13995,26 +13379,6 @@ const docTemplate = `{
                         }
                     ]
                 },
-                "storage_backend_id": {
-                    "description": "StorageBackendID binds this KB to one concrete storage instance. The\nlegacy provider field remains readable during migration only.",
-                    "type": "string"
-                },
-                "storage_config": {
-                    "description": "Deprecated: legacy COS config column. Kept for backward compatibility with old data.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.StorageConfig"
-                        }
-                    ]
-                },
-                "storage_provider_config": {
-                    "description": "Storage provider config (new): only stores provider selection; credentials from workspace StorageEngineConfig",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.StorageProviderConfig"
-                        }
-                    ]
-                },
                 "summary_model_id": {
                     "description": "Summary model ID",
                     "type": "string"
@@ -14029,10 +13393,6 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "description": "Last updated time of the knowledge base",
-                    "type": "string"
-                },
-                "vector_store_id": {
-                    "description": "VectorStoreID references the VectorStore this knowledge base is bound to.\nWhen nil, the KB falls back to the workspace's effective engines derived from\nthe RETRIEVE_DRIVER environment variable (env store flow).\nThis field is set once at creation time and must not be modified afterwards;\nenforcement lives at the GORM layer (\u0060<-:create\u0060) plus the service-layer\nKB update path, which omits this field from its update DTO.",
                     "type": "string"
                 },
                 "vlm_config": {
@@ -14163,7 +13523,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "parser_engine_overrides": {
-                    "description": "ParserEngineOverrides passes key-value configuration to docreader parsers\n(e.g. pdf_force_scanned=true). Merged with workspace-level overrides in the\nparse pipeline; per-upload values take priority on conflict.",
+                    "description": "ParserEngineOverrides passes per-upload configuration to retained parsers; these values override workspace settings.",
                     "type": "object",
                     "additionalProperties": {
                         "type": "string"
@@ -14180,14 +13540,6 @@ const docTemplate = `{
                 },
                 "vlm_config": {
                     "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.VLMConfig"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.LocalEngineConfig": {
-            "type": "object",
-            "properties": {
-                "path_prefix": {
-                    "type": "string"
                 }
             }
         },
@@ -14798,33 +14150,6 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_Tencent_Reliquary_internal_types.MinIOEngineConfig": {
-            "type": "object",
-            "properties": {
-                "access_key_id": {
-                    "type": "string"
-                },
-                "bucket_name": {
-                    "type": "string"
-                },
-                "endpoint": {
-                    "type": "string"
-                },
-                "mode": {
-                    "description": "\"docker\" or \"remote\"",
-                    "type": "string"
-                },
-                "path_prefix": {
-                    "type": "string"
-                },
-                "secret_access_key": {
-                    "type": "string"
-                },
-                "use_ssl": {
-                    "type": "boolean"
-                }
-            }
-        },
         "github_com_Tencent_Reliquary_internal_types.ModelParameters": {
             "type": "object",
             "properties": {
@@ -15058,48 +14383,6 @@ const docTemplate = `{
                 "mineru_vlm_server_url": {
                     "description": "vLLM 服务器地址 (vlm-http-client / hybrid-http-client)",
                     "type": "string"
-                },
-                "odl_hybrid": {
-                    "description": "OpenDataLoader PDF (docreader engine); hybrid requires opendataloader-pdf-hybrid service.",
-                    "type": "string"
-                },
-                "odl_hybrid_fallback": {
-                    "type": "boolean"
-                },
-                "odl_hybrid_mode": {
-                    "description": "auto, full",
-                    "type": "string"
-                },
-                "odl_hybrid_url": {
-                    "description": "e.g. http://odl-hybrid:5002",
-                    "type": "string"
-                },
-                "odl_markdown_with_html": {
-                    "type": "boolean"
-                },
-                "paddleocr_vl_cloud_model": {
-                    "description": "e.g. PaddleOCR-VL-1.6",
-                    "type": "string"
-                },
-                "paddleocr_vl_cloud_token": {
-                    "description": "PaddleOCR-VL AI Studio cloud API.",
-                    "type": "string"
-                },
-                "paddleocr_vl_cloud_use_chart_recognition": {
-                    "type": "boolean"
-                },
-                "paddleocr_vl_cloud_use_seal_recognition": {
-                    "type": "boolean"
-                },
-                "paddleocr_vl_endpoint": {
-                    "description": "PaddleOCR-VL self-hosted pipeline service (full /layout-parsing API).",
-                    "type": "string"
-                },
-                "paddleocr_vl_use_chart_recognition": {
-                    "type": "boolean"
-                },
-                "paddleocr_vl_use_seal_recognition": {
-                    "type": "boolean"
                 }
             }
         },
@@ -15114,10 +14397,6 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
-                },
-                "xlsx_first_row_as_header": {
-                    "description": "XLSXFirstRowAsHeader restores row-1 column context for flat XLSX tables.\nnil preserves the parser default; an explicit false disables the mode.",
-                    "type": "boolean"
                 }
             }
         },
@@ -15342,27 +14621,6 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_Tencent_Reliquary_internal_types.RetrieverEngineParams": {
-            "type": "object",
-            "properties": {
-                "retriever_engine_type": {
-                    "description": "Retriever engine type",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.RetrieverEngineType"
-                        }
-                    ]
-                },
-                "retriever_type": {
-                    "description": "Retriever type",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.RetrieverType"
-                        }
-                    ]
-                }
-            }
-        },
         "github_com_Tencent_Reliquary_internal_types.RetrieverEngineType": {
             "type": "string",
             "enum": [
@@ -15381,17 +14639,6 @@ const docTemplate = `{
                 "TencentVectorDBRetrieverEngineType",
                 "OpenSearchRetrieverEngineType"
             ]
-        },
-        "github_com_Tencent_Reliquary_internal_types.RetrieverEngines": {
-            "type": "object",
-            "properties": {
-                "engines": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.RetrieverEngineParams"
-                    }
-                }
-            }
         },
         "github_com_Tencent_Reliquary_internal_types.RetrieverType": {
             "type": "string",
@@ -15536,35 +14783,6 @@ const docTemplate = `{
                 "RuntimeTaskArchived",
                 "RuntimeTaskCompleted"
             ]
-        },
-        "github_com_Tencent_Reliquary_internal_types.S3EngineConfig": {
-            "type": "object",
-            "properties": {
-                "access_key": {
-                    "type": "string"
-                },
-                "bucket_name": {
-                    "type": "string"
-                },
-                "endpoint": {
-                    "type": "string"
-                },
-                "force_path_style": {
-                    "type": "boolean"
-                },
-                "path_prefix": {
-                    "type": "string"
-                },
-                "region": {
-                    "type": "string"
-                },
-                "secret_key": {
-                    "type": "string"
-                },
-                "use_ssl": {
-                    "type": "boolean"
-                }
-            }
         },
         "github_com_Tencent_Reliquary_internal_types.SandboxNetworkPolicy": {
             "type": "object",
@@ -15900,106 +15118,6 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_Tencent_Reliquary_internal_types.StorageBackendConfig": {
-            "type": "object",
-            "properties": {
-                "access_key_id": {
-                    "type": "string"
-                },
-                "bucket_name": {
-                    "type": "string"
-                },
-                "endpoint": {
-                    "type": "string"
-                },
-                "force_path_style": {
-                    "type": "boolean"
-                },
-                "mode": {
-                    "type": "string"
-                },
-                "path_prefix": {
-                    "type": "string"
-                },
-                "region": {
-                    "type": "string"
-                },
-                "secret_access_key": {
-                    "type": "string"
-                },
-                "use_ssl": {
-                    "type": "boolean"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.StorageConfig": {
-            "type": "object",
-            "properties": {
-                "bucket_name": {
-                    "description": "Bucket Name",
-                    "type": "string"
-                },
-                "endpoint": {
-                    "description": "Endpoint (S3 specific) - e.g., s3.amazonaws.com, oss-cn-hangzhou.aliyuncs.com",
-                    "type": "string"
-                },
-                "force_path_style": {
-                    "description": "ForcePathStyle (S3 specific) - whether to use path-style URLs",
-                    "type": "boolean"
-                },
-                "path_prefix": {
-                    "description": "Path Prefix",
-                    "type": "string"
-                },
-                "provider": {
-                    "description": "Provider: \"cos\", \"minio\", \"s3\"",
-                    "type": "string"
-                },
-                "region": {
-                    "description": "Region",
-                    "type": "string"
-                },
-                "secret_id": {
-                    "description": "Secret ID (COS) / Access Key ID (S3, MinIO)",
-                    "type": "string"
-                },
-                "secret_key": {
-                    "description": "Secret Key (COS) / Secret Access Key (S3, MinIO)",
-                    "type": "string"
-                },
-                "use_ssl": {
-                    "description": "UseSSL (S3 specific) - whether to use HTTPS",
-                    "type": "boolean"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.StorageEngineConfig": {
-            "type": "object",
-            "properties": {
-                "default_provider": {
-                    "description": "\"local\", \"minio\", \"cos\", \"tos\", \"s3\", \"oss\", \"ks3\", \"obs\"",
-                    "type": "string"
-                },
-                "local": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.LocalEngineConfig"
-                },
-                "minio": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.MinIOEngineConfig"
-                },
-                "s3": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.S3EngineConfig"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.StorageProviderConfig": {
-            "type": "object",
-            "properties": {
-                "provider": {
-                    "description": "\"local\", \"minio\", \"cos\", \"tos\", \"s3\", \"oss\", \"ks3\", \"obs\"",
-                    "type": "string"
-                }
-            }
-        },
         "github_com_Tencent_Reliquary_internal_types.SuggestionAttribution": {
             "type": "object",
             "properties": {
@@ -16172,10 +15290,6 @@ const docTemplate = `{
                         }
                     ]
                 },
-                "default_storage_backend_id": {
-                    "description": "DefaultStorageBackendID is the workspace default concrete storage instance.",
-                    "type": "string"
-                },
                 "deleted_at": {
                     "description": "Deletion time",
                     "allOf": [
@@ -16220,25 +15334,9 @@ const docTemplate = `{
                         }
                     ]
                 },
-                "retriever_engines": {
-                    "description": "Retriever engines",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.RetrieverEngines"
-                        }
-                    ]
-                },
                 "status": {
                     "description": "Status",
                     "type": "string"
-                },
-                "storage_engine_config": {
-                    "description": "Storage engine config: parameters for Local, MinIO, COS. Used for document/file storage and docreader.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.StorageEngineConfig"
-                        }
-                    ]
                 },
                 "storage_quota": {
                     "description": "Storage quota (Bytes), default is 10GB, including vector, original file, text, index, etc.",
@@ -17575,26 +16673,6 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handler.GetStorageEngineStatusResponse": {
-            "type": "object",
-            "properties": {
-                "allowed_providers": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "engines": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_handler.StorageEngineStatusItem"
-                    }
-                },
-                "minio_env_available": {
-                    "type": "boolean"
-                }
-            }
-        },
         "internal_handler.GetSystemInfoResponse": {
             "type": "object",
             "properties": {
@@ -17620,9 +16698,6 @@ const docTemplate = `{
                 "keyword_index_engine": {
                     "type": "string"
                 },
-                "minio_enabled": {
-                    "type": "boolean"
-                },
                 "started_at": {
                     "description": "StartedAt is the server process boot time (RFC3339, UTC).",
                     "type": "string"
@@ -17630,9 +16705,6 @@ const docTemplate = `{
                 "uptime_seconds": {
                     "description": "UptimeSeconds is seconds elapsed since process start.",
                     "type": "integer"
-                },
-                "vector_store_engine": {
-                    "type": "string"
                 },
                 "version": {
                     "type": "string"
@@ -17723,20 +16795,6 @@ const docTemplate = `{
                     "properties": {
                         "enabled": {
                             "type": "boolean"
-                        },
-                        "minio": {
-                            "type": "object",
-                            "properties": {
-                                "bucketName": {
-                                    "type": "string"
-                                },
-                                "pathPrefix": {
-                                    "type": "string"
-                                }
-                            }
-                        },
-                        "storageType": {
-                            "type": "string"
                         },
                         "vlm": {
                             "type": "object",
@@ -17876,13 +16934,6 @@ const docTemplate = `{
                             "type": "integer"
                         }
                     }
-                },
-                "storageBackendId": {
-                    "type": "string"
-                },
-                "storageProvider": {
-                    "description": "存储引擎选择（\"local\" | \"minio\" | \"cos\"），影响文档上传与文档内图片存储，参数从全局设置读取",
-                    "type": "string"
                 },
                 "vlm_config": {
                     "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.VLMConfig"
@@ -18400,55 +17451,6 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handler.StorageCheckRequest": {
-            "type": "object",
-            "properties": {
-                "minio": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.MinIOEngineConfig"
-                },
-                "provider": {
-                    "description": "\"minio\", \"cos\", \"tos\", \"s3\", \"oss\", \"ks3\", \"obs\"",
-                    "type": "string"
-                },
-                "s3": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.S3EngineConfig"
-                }
-            }
-        },
-        "internal_handler.StorageCheckResponse": {
-            "type": "object",
-            "properties": {
-                "bucket_created": {
-                    "type": "boolean"
-                },
-                "message": {
-                    "type": "string"
-                },
-                "ok": {
-                    "type": "boolean"
-                }
-            }
-        },
-        "internal_handler.StorageEngineStatusItem": {
-            "type": "object",
-            "properties": {
-                "allowed": {
-                    "type": "boolean"
-                },
-                "available": {
-                    "description": "whether the engine can be used",
-                    "type": "boolean"
-                },
-                "description": {
-                    "description": "short description for UI",
-                    "type": "string"
-                },
-                "name": {
-                    "description": "\"local\", \"minio\", \"cos\", \"tos\", \"s3\", \"oss\", \"ks3\", \"obs\"",
-                    "type": "string"
-                }
-            }
-        },
         "internal_handler.SuggestionEventRequest": {
             "type": "object",
             "required": [
@@ -18700,27 +17702,6 @@ const docTemplate = `{
             "properties": {
                 "source": {
                     "description": "Source is exactly one of: \"@owner/slug\" or a slash-free slug (ClawHub),\na github.com / gitlab.com / skills.sh / clawhub / skillhub page URL, a\nClawHub skills-sh catalog page or \"skills-sh:owner/repo/slug\" locator, or\na direct zip/SKILL.md URL. Bare \"owner/slug\" is rejected: it is both a\nClawHub id and a GitHub repo. The fetch carries no credential.",
-                    "type": "string"
-                }
-            }
-        },
-        "internal_handler.storageBackendRequest": {
-            "type": "object",
-            "required": [
-                "name",
-                "provider"
-            ],
-            "properties": {
-                "config": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.StorageBackendConfig"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "provider": {
-                    "type": "string"
-                },
-                "status": {
                     "type": "string"
                 }
             }

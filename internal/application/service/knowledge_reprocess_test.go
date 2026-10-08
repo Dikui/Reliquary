@@ -21,7 +21,7 @@ type reprocessKnowledge struct {
 	badID string
 }
 
-func (s reprocessKnowledge) GetKnowledgeFile(_ context.Context, id string) (io.ReadCloser, string, error) {
+func (s reprocessKnowledge) GetKnowledgeBody(_ context.Context, id string) (io.ReadCloser, string, error) {
 	if id == s.badID {
 		return nil, "", errors.New("source read failed")
 	}

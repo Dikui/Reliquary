@@ -21,37 +21,13 @@
     </div>
 
     <template v-else>
-      <div v-if="engines.length === 0 && !hasBuiltinEngine" class="empty-state">
+      <div v-if="engines.length === 0" class="empty-state">
         <p class="empty-text">{{ $t('settings.parser.noEngineDetected') }}</p>
       </div>
 
       <!-- 与其它 settings 列表同形：左侧 monogram 徽章 + 标题 + 状态徽 + 两行描述。
            整张卡片可点击，打开抽屉配置；当前抽屉对应的卡片获得品牌色描边。 -->
       <div v-else class="engine-cards">
-        <!-- 当后端未返回 builtin 引擎项时，仍展示 DocReader 状态卡片 -->
-        <button
-          v-if="!hasBuiltinEngine"
-          type="button"
-          class="engine-card engine-card--builtin"
-          :class="{ 'engine-card--active': drawerVisible && currentEngine?.Name === 'builtin' }"
-          @click="openDrawer({ Name: 'builtin' } as any)"
-        >
-          <div class="engine-card__badge">{{ engineInitial('builtin') }}</div>
-          <div class="engine-card__body">
-            <div class="engine-card__header">
-              <h3 class="engine-card__title">{{ getEngineDisplayName('builtin') }}</h3>
-              <span
-                class="engine-card__status"
-                :class="connected ? 'engine-card__status--on' : 'engine-card__status--err'"
-              >
-                <span class="engine-card__status-dot" />
-                {{ connected ? $t('settings.parser.connected') : $t('settings.parser.disconnected') }}
-              </span>
-            </div>
-            <p class="engine-card__desc">{{ $t('settings.parser.builtinDesc') }}</p>
-          </div>
-        </button>
-
         <button
           v-for="engine in sortedEngines"
           :key="engine.Name"
@@ -166,37 +142,6 @@
           </div>
         </section>
 
-        <!--
-          Section 2 — 状态信息（DocReader 连接）
-          只有有内容时才渲染，避免空 section 空底部分隔线。
-        -->
-        <section
-          v-if="currentEngine.Name === 'builtin'"
-          class="setting-drawer__section"
-        >
-          <h4 class="setting-drawer__section-title">{{ $t('settings.parser.statusSection', '状态信息') }}</h4>
-
-          <!-- builtin: DocReader 连接信息 -->
-          <div v-if="currentEngine.Name === 'builtin'" class="docreader-block">
-            <div class="status-line">
-              <t-tag v-if="connected" theme="success" variant="light" size="small">
-                {{ $t('settings.parser.connected') }}
-              </t-tag>
-              <t-tag v-else theme="danger" variant="light" size="small">
-                {{ $t('settings.parser.disconnected') }}
-              </t-tag>
-              <t-tag theme="default" variant="light" size="small">
-                {{ docreaderTransport === 'http' ? 'HTTP' : 'gRPC' }}
-              </t-tag>
-              <span v-if="docreaderAddrEnv" class="env-hint">
-                {{ $t('settings.parser.currentAddr') }}: {{ docreaderAddrEnv }}
-              </span>
-            </div>
-            <p class="form-desc">{{ $t('settings.parser.envVarHint') }}</p>
-          </div>
-
-        </section>
-
         <!-- Section 3 — mineru 自建配置 -->
         <section v-if="currentEngine.Name === 'mineru'" class="setting-drawer__section">
           <h4 class="setting-drawer__section-title">{{ $t('settings.parser.configSection', '配置') }}</h4>
@@ -295,59 +240,6 @@
           </div>
         </section>
 
-        <!-- Section 3 — paddleocr_vl 自建配置 -->
-        <section v-if="currentEngine.Name === 'paddleocr_vl'" class="setting-drawer__section">
-          <h4 class="setting-drawer__section-title">{{ $t('settings.parser.configSection', '配置') }}</h4>
-
-          <div class="form-item">
-            <label class="form-label required">{{ t('settings.parser.selfHostedEndpoint') }}</label>
-            <t-input
-              v-model="config.paddleocr_vl_endpoint"
-              :placeholder="$t('settings.parser.paddleocrVlEndpointPlaceholder')"
-              clearable
-            />
-            <p class="form-desc">{{ $t('settings.parser.paddleocrVlEndpointHint') }}</p>
-          </div>
-          <div class="form-item">
-            <label class="form-label">{{ $t('settings.parser.featuresLabel', '识别选项') }}</label>
-            <div class="form-toggles">
-              <t-checkbox v-model="config.paddleocr_vl_use_seal_recognition">{{ $t('settings.parser.sealRecognition') }}</t-checkbox>
-              <t-checkbox v-model="config.paddleocr_vl_use_chart_recognition">{{ $t('settings.parser.chartRecognition') }}</t-checkbox>
-            </div>
-          </div>
-        </section>
-
-        <!-- Section 3 — paddleocr_vl_cloud 云 API 配置 -->
-        <section v-if="currentEngine.Name === 'paddleocr_vl_cloud'" class="setting-drawer__section">
-          <h4 class="setting-drawer__section-title">{{ $t('settings.parser.configSection', '配置') }}</h4>
-
-          <div class="form-item">
-            <label class="form-label required">Token</label>
-            <t-input
-              v-model="config.paddleocr_vl_cloud_token"
-              type="password"
-              :placeholder="$t('settings.parser.paddleocrVlCloudTokenPlaceholder')"
-              clearable
-            >
-              <template #prefix-icon><t-icon name="lock-on" /></template>
-            </t-input>
-          </div>
-          <div class="form-item">
-            <label class="form-label">Model</label>
-            <t-input
-              v-model="config.paddleocr_vl_cloud_model"
-              placeholder="PaddleOCR-VL-1.6"
-              clearable
-            />
-          </div>
-          <div class="form-item">
-            <label class="form-label">{{ $t('settings.parser.featuresLabel', '识别选项') }}</label>
-            <div class="form-toggles">
-              <t-checkbox v-model="config.paddleocr_vl_cloud_use_seal_recognition">{{ $t('settings.parser.sealRecognition') }}</t-checkbox>
-              <t-checkbox v-model="config.paddleocr_vl_cloud_use_chart_recognition">{{ $t('settings.parser.chartRecognition') }}</t-checkbox>
-            </div>
-          </div>
-        </section>
       </div>
     </SettingDrawer>
   </div>
@@ -371,21 +263,16 @@ import {
 const { t } = useI18n()
 const authStore = useAuthStore()
 
-const CONFIGURABLE_ENGINES = new Set(['mineru', 'mineru_cloud', 'paddleocr_vl', 'paddleocr_vl_cloud'])
+const CONFIGURABLE_ENGINES = new Set(['mineru', 'mineru_cloud'])
 
 /** 各解析引擎的项目/官方文档地址 */
 const ENGINE_DOC_LINKS: Record<string, string> = {
-  markitdown: 'https://github.com/microsoft/markitdown',
   mineru: 'https://github.com/opendatalab/MinerU',
   mineru_cloud: 'https://mineru.net/apiManage/docs',
-  paddleocr_vl: 'https://github.com/PaddlePaddle/PaddleOCR',
-  paddleocr_vl_cloud: 'https://aistudio.baidu.com/paddleocr',
 }
 
-/** 解析引擎配置默认值（与 DocReader/Python 侧一致） */
+/** 保留解析引擎的配置默认值 */
 const DEFAULT_PARSER_CONFIG: ParserEngineConfig = {
-  docreader_addr: '',
-  docreader_transport: 'grpc',
   mineru_endpoint: '',
   mineru_api_key: '',
   mineru_model: 'pipeline',
@@ -400,19 +287,9 @@ const DEFAULT_PARSER_CONFIG: ParserEngineConfig = {
   mineru_cloud_enable_table: true,
   mineru_cloud_enable_ocr: true,
   mineru_cloud_language: 'ch',
-  paddleocr_vl_endpoint: '',
-  paddleocr_vl_use_seal_recognition: true,
-  paddleocr_vl_use_chart_recognition: false,
-  paddleocr_vl_cloud_token: '',
-  paddleocr_vl_cloud_model: 'PaddleOCR-VL-1.6',
-  paddleocr_vl_cloud_use_seal_recognition: true,
-  paddleocr_vl_cloud_use_chart_recognition: false,
 }
 
 const engines = ref<ParserEngineInfo[]>([])
-const docreaderAddrEnv = ref('')
-const docreaderTransport = ref<'grpc' | 'http'>('grpc')
-const connected = ref(false)
 const loading = ref(true)
 const error = ref('')
 
@@ -423,7 +300,6 @@ const saveSuccess = ref(false)
 const checking = ref(false)
 const checkMessage = ref('')
 
-const hasBuiltinEngine = computed(() => engines.value.some(e => e.Name === 'builtin'))
 
 const drawerVisible = ref(false)
 const currentEngine = ref<ParserEngineInfo | null>(null)
@@ -434,25 +310,15 @@ const drawerTitle = computed(() => {
 // SettingDrawer 头部图标走 #headerIcon 槽（首字母 monogram + per-engine
 // 配色，与列表卡片完全一致），不再需要 t-icon name 兜底。
 
-// Whether the footer test-connection button should appear. Engines without
-// configurable fields and that aren't the builtin DocReader (whose connection
-// status is the whole point of the drawer) skip the test affordance — for
-// e.g. simple/markitdown there's nothing to validate beyond presence.
-const needsTestButton = computed(() => {
-  if (!currentEngine.value) return false
-  return hasConfigFields(currentEngine.value.Name) || currentEngine.value.Name === 'builtin'
-})
+// Only engines with connection settings need a test action.
+const needsTestButton = computed(() => currentEngine.value !== null && hasConfigFields(currentEngine.value.Name))
 
 /** 固定展示顺序，未列出的引擎排在末尾按名称排序 */
 const ENGINE_ORDER: Record<string, number> = {
-  builtin: 0,
   simple: 2,
   anydoc: 3,
-  markitdown: 4,
   mineru: 5,
   mineru_cloud: 6,
-  paddleocr_vl: 7,
-  paddleocr_vl_cloud: 8,
 }
 
 const sortedEngines = computed(() => {
@@ -506,14 +372,9 @@ async function loadEngines() {
   try {
     const res = await getParserEngines()
     engines.value = res?.data ?? []
-    docreaderAddrEnv.value = res?.docreader_addr ?? ''
-    const transport = (res?.docreader_transport ?? 'grpc').toLowerCase()
-    docreaderTransport.value = transport === 'http' ? 'http' : 'grpc'
-    connected.value = res?.connected ?? (engines.value.length > 0)
   } catch (e: any) {
     error.value = e?.message || t('settings.parser.loadFailed')
     engines.value = []
-    connected.value = false
   }
 }
 
@@ -522,8 +383,6 @@ async function loadConfig() {
     const res = await getParserEngineConfig()
     const data = res?.data
     config.value = {
-      docreader_addr: data?.docreader_addr ?? DEFAULT_PARSER_CONFIG.docreader_addr ?? '',
-      docreader_transport: data?.docreader_transport ?? DEFAULT_PARSER_CONFIG.docreader_transport ?? 'grpc',
       mineru_endpoint: data?.mineru_endpoint ?? DEFAULT_PARSER_CONFIG.mineru_endpoint ?? '',
       mineru_api_key: data?.mineru_api_key ?? DEFAULT_PARSER_CONFIG.mineru_api_key ?? '',
       mineru_model: data?.mineru_model ?? DEFAULT_PARSER_CONFIG.mineru_model ?? '',
@@ -538,13 +397,6 @@ async function loadConfig() {
       mineru_cloud_enable_table: data?.mineru_cloud_enable_table ?? DEFAULT_PARSER_CONFIG.mineru_cloud_enable_table ?? true,
       mineru_cloud_enable_ocr: data?.mineru_cloud_enable_ocr ?? DEFAULT_PARSER_CONFIG.mineru_cloud_enable_ocr ?? true,
       mineru_cloud_language: data?.mineru_cloud_language ?? DEFAULT_PARSER_CONFIG.mineru_cloud_language ?? 'ch',
-      paddleocr_vl_endpoint: data?.paddleocr_vl_endpoint ?? DEFAULT_PARSER_CONFIG.paddleocr_vl_endpoint ?? '',
-      paddleocr_vl_use_seal_recognition: data?.paddleocr_vl_use_seal_recognition ?? DEFAULT_PARSER_CONFIG.paddleocr_vl_use_seal_recognition ?? true,
-      paddleocr_vl_use_chart_recognition: data?.paddleocr_vl_use_chart_recognition ?? DEFAULT_PARSER_CONFIG.paddleocr_vl_use_chart_recognition ?? false,
-      paddleocr_vl_cloud_token: data?.paddleocr_vl_cloud_token ?? DEFAULT_PARSER_CONFIG.paddleocr_vl_cloud_token ?? '',
-      paddleocr_vl_cloud_model: data?.paddleocr_vl_cloud_model ?? DEFAULT_PARSER_CONFIG.paddleocr_vl_cloud_model ?? 'PaddleOCR-VL-1.6',
-      paddleocr_vl_cloud_use_seal_recognition: data?.paddleocr_vl_cloud_use_seal_recognition ?? DEFAULT_PARSER_CONFIG.paddleocr_vl_cloud_use_seal_recognition ?? true,
-      paddleocr_vl_cloud_use_chart_recognition: data?.paddleocr_vl_cloud_use_chart_recognition ?? DEFAULT_PARSER_CONFIG.paddleocr_vl_cloud_use_chart_recognition ?? false,
     }
   } catch {
     config.value = { ...DEFAULT_PARSER_CONFIG }
@@ -560,8 +412,6 @@ async function loadAll() {
 
 function buildConfigPayload(): ParserEngineConfig {
   return {
-    docreader_addr: config.value.docreader_addr?.trim() ?? '',
-    docreader_transport: (config.value.docreader_transport ?? 'grpc').trim() || 'grpc',
     mineru_endpoint: config.value.mineru_endpoint?.trim() ?? '',
     mineru_api_key: config.value.mineru_api_key?.trim() ?? '',
     mineru_model: config.value.mineru_model?.trim() ?? '',
@@ -577,41 +427,17 @@ function buildConfigPayload(): ParserEngineConfig {
     mineru_cloud_enable_table: config.value.mineru_cloud_enable_table,
     mineru_cloud_enable_ocr: config.value.mineru_cloud_enable_ocr,
     mineru_cloud_language: config.value.mineru_cloud_language?.trim() ?? '',
-    paddleocr_vl_endpoint: config.value.paddleocr_vl_endpoint?.trim() ?? '',
-    paddleocr_vl_use_seal_recognition: config.value.paddleocr_vl_use_seal_recognition,
-    paddleocr_vl_use_chart_recognition: config.value.paddleocr_vl_use_chart_recognition,
-    paddleocr_vl_cloud_token: config.value.paddleocr_vl_cloud_token?.trim() ?? '',
-    paddleocr_vl_cloud_model: config.value.paddleocr_vl_cloud_model?.trim() ?? '',
-    paddleocr_vl_cloud_use_seal_recognition: config.value.paddleocr_vl_cloud_use_seal_recognition,
-    paddleocr_vl_cloud_use_chart_recognition: config.value.paddleocr_vl_cloud_use_chart_recognition,
   }
 }
 
 async function onCheck() {
-  if (!connected) {
-    checkMessage.value = t('settings.parser.ensureDocreaderConnected')
-    return
-  }
   checking.value = true
   checkMessage.value = ''
   saveMessage.value = ''
   try {
     const res = await checkParserEngines(buildConfigPayload())
     engines.value = res?.data ?? []
-    if (res?.connected !== undefined) {
-      connected.value = res.connected
-    }
-
     if (currentEngine.value) {
-      if (currentEngine.value.Name === 'builtin') {
-        if (connected.value) {
-          checkMessage.value = t('settings.parser.checkSuccess', '测试连接成功')
-          saveSuccess.value = true
-        } else {
-          checkMessage.value = t('settings.parser.checkFailed', '测试连接失败')
-          saveSuccess.value = false
-        }
-      } else {
         const updatedEngine = engines.value.find(e => e.Name === currentEngine.value!.Name)
         if (updatedEngine) {
           if (updatedEngine.Available) {
@@ -625,7 +451,6 @@ async function onCheck() {
           checkMessage.value = t('settings.parser.checkFailed', '引擎状态未知')
           saveSuccess.value = false
         }
-      }
     } else {
       checkMessage.value = t('settings.parser.checkDoneStatusUpdated', '检测已完成，状态已更新')
       saveSuccess.value = true
@@ -761,25 +586,12 @@ onMounted(loadAll)
 }
 
 // 解析引擎徽章配色 —— 内置/官方系绿，外部工具按性质各取一色。
-.engine-card--builtin .engine-card__badge {
-  background: rgba(7, 192, 95, 0.12);
-  color: #07C05F;
-}
 .engine-card--simple .engine-card__badge {
   background: rgba(70, 70, 70, 0.1);
   color: #464646;
 }
-.engine-card--markitdown .engine-card__badge {
-  background: rgba(0, 137, 255, 0.12);
-  color: #0089FF;
-}
 .engine-card--mineru .engine-card__badge,
 .engine-card--mineru_cloud .engine-card__badge,
-.engine-card--paddleocr_vl .engine-card__badge,
-.engine-card--paddleocr_vl_cloud .engine-card__badge {
-  background: rgba(98, 53, 187, 0.12);
-  color: #6235BB;
-}
 
 .engine-card__body {
   flex: 1;
@@ -906,20 +718,7 @@ onMounted(loadAll)
   }
 }
 
-// ---- DocReader 连接信息（builtin 引擎） ----
-.docreader-block {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 14px;
-  background: var(--td-bg-color-container-hover);
-  border: 1px solid var(--td-component-stroke);
-  border-radius: 8px;
 
-  .form-desc {
-    margin-top: 0;
-  }
-}
 
 .status-line {
   display: flex;
@@ -1102,29 +901,19 @@ onMounted(loadAll)
 </style>
 
 <!--
-  Non-scoped block: per-engine header-icon coloring. Same approach as
-  StorageEngineSettings — keep these rules global so they always apply
+  Non-scoped block: per-engine header-icon coloring. Keep these rules
+  global so they always apply
   regardless of whether the drawer panel inherits the parent's scoped
   data attributes. Each rule mirrors the matching .engine-card--{name}
   .engine-card__badge from the scoped block above.
 -->
 <style lang="less">
-.parser-engine-drawer--builtin .setting-drawer__header-icon {
-  background: rgba(7, 192, 95, 0.12);
-  color: #07C05F;
-}
 .parser-engine-drawer--simple .setting-drawer__header-icon {
   background: rgba(70, 70, 70, 0.1);
   color: #464646;
 }
-.parser-engine-drawer--markitdown .setting-drawer__header-icon {
-  background: rgba(0, 137, 255, 0.12);
-  color: #0089FF;
-}
 .parser-engine-drawer--mineru .setting-drawer__header-icon,
-.parser-engine-drawer--mineru_cloud .setting-drawer__header-icon,
-.parser-engine-drawer--paddleocr_vl .setting-drawer__header-icon,
-.parser-engine-drawer--paddleocr_vl_cloud .setting-drawer__header-icon {
+.parser-engine-drawer--mineru_cloud .setting-drawer__header-icon {
   background: rgba(98, 53, 187, 0.12);
   color: #6235BB;
 }

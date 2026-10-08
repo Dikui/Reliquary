@@ -13,7 +13,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 
-	"reliquary/internal/application/service/retriever"
 	"reliquary/internal/common"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/chunker"
@@ -308,9 +307,9 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 
 	// 删除旧的索引数据 — only when vector/keyword indexing is enabled
 	tenantInfo := ctx.Value(types.TenantInfoContextKey).(*types.Tenant)
-	retrieveEngine, err := retriever.CreateRetrieveEngineForKB(
-		ctx, s.retrieveEngine, s.ownership, tenantInfo.ID, kb.VectorStoreID)
-	if err == nil && embeddingModel != nil {
+	var err error
+	retrieveEngine := s.retrieveEngine
+	if embeddingModel != nil {
 		if err := retrieveEngine.DeleteByKnowledgeIDList(ctx, []string{knowledge.ID}, embeddingModel.GetDimensions(), knowledge.Type); err != nil {
 			logger.Warnf(ctx, "Failed to delete existing index data (may not exist): %v", err)
 			// 不返回错误，继续处理（可能没有旧数据）
@@ -599,9 +598,9 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 			); err != nil {
 				logger.Errorf(ctx, "Delete index failed: %v", err)
 			}
-			// Map vector store / embedding rate-limit errors to a
+			// Map PostgreSQL index / embedding rate-limit errors to a
 			// stable code so the UI can offer "retry later" hints.
-			code := werrors.ErrCodeVectorStoreWriteFailed
+			code := werrors.ErrCodeIndexWriteFailed
 			if isLikelyRateLimitError(err) {
 				code = werrors.ErrCodeEmbeddingRateLimit
 			}
@@ -1345,13 +1344,7 @@ func (s *knowledgeService) ProcessSummaryGeneration(ctx context.Context, t *asyn
 		}
 		ctx = context.WithValue(ctx, types.TenantInfoContextKey, tenantInfo)
 
-		retrieveEngine, err := retriever.CreateRetrieveEngineForKB(
-			ctx, s.retrieveEngine, s.ownership, tenantInfo.ID, kb.VectorStoreID)
-		if err != nil {
-			logger.Errorf(ctx, "Failed to init retrieve engine: %v", err)
-			summaryErr = err
-			return fmt.Errorf("failed to init retrieve engine: %w", err)
-		}
+		retrieveEngine := s.retrieveEngine
 
 		embeddingModel, err := GetTierEmbeddingModel(ctx, s.db, s.modelService, kb)
 		if err != nil {
@@ -1639,13 +1632,7 @@ func (s *knowledgeService) processQuestionGenerationForKnowledge(ctx context.Con
 	}
 	ctx = context.WithValue(ctx, types.TenantInfoContextKey, tenantInfo)
 
-	retrieveEngine, err := retriever.CreateRetrieveEngineForKB(
-		ctx, s.retrieveEngine, s.ownership, tenantInfo.ID, kb.VectorStoreID)
-	if err != nil {
-		exitStatus = "init_retrieve_engine_failed"
-		logger.Errorf(ctx, "Failed to init retrieve engine: %v", err)
-		return fmt.Errorf("failed to init retrieve engine: %w", err)
-	}
+	retrieveEngine := s.retrieveEngine
 
 	questionCount := payload.QuestionCount
 	if questionCount <= 0 {
@@ -1950,13 +1937,7 @@ func (s *knowledgeService) processQuestionGenerationForChunks(ctx context.Contex
 	}
 	ctx = context.WithValue(ctx, types.TenantInfoContextKey, tenantInfo)
 
-	retrieveEngine, err := retriever.CreateRetrieveEngineForKB(
-		ctx, s.retrieveEngine, s.ownership, tenantInfo.ID, kb.VectorStoreID)
-	if err != nil {
-		exitStatus = "init_retrieve_engine_failed"
-		logger.Errorf(ctx, "Failed to init retrieve engine: %v", err)
-		return fmt.Errorf("failed to init retrieve engine: %w", err)
-	}
+	retrieveEngine := s.retrieveEngine
 
 	questionCount := payload.QuestionCount
 	if questionCount <= 0 {
@@ -2508,7 +2489,7 @@ func (s *knowledgeService) ReparseKnowledge(
 		}
 
 		if intake, _ := existing.IntakeMetadata(); intake != nil {
-			file, _, err := s.GetKnowledgeFile(ctx, existing.ID)
+			file, _, err := s.GetKnowledgeBody(ctx, existing.ID)
 			if err != nil {
 				return nil, err
 			}
@@ -2872,7 +2853,7 @@ func (s *knowledgeService) updateChunkVector(ctx context.Context, kbID string, c
 		return err
 	}
 
-	// Initialize composite retrieve engine from tenant configuration
+	// Build index entries for the PostgreSQL retrieval service.
 	indexInfo := make([]*types.IndexInfo, 0, len(chunks))
 	ids := make([]string, 0, len(chunks))
 	knowledgeCache := make(map[string]*types.Knowledge)
@@ -2921,11 +2902,7 @@ func (s *knowledgeService) updateChunkVector(ctx context.Context, kbID string, c
 		}
 	}
 
-	retrieveEngine, err := retriever.CreateRetrieveEngineForKB(
-		ctx, s.retrieveEngine, s.ownership, types.MustTenantIDFromContext(ctx), sourceKB.VectorStoreID)
-	if err != nil {
-		return err
-	}
+	retrieveEngine := s.retrieveEngine
 
 	// Delete old vector representation of the chunk
 	err = retrieveEngine.DeleteByChunkIDList(ctx, ids, embeddingModel.GetDimensions(), sourceKB.Type)
@@ -3319,6 +3296,9 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) (
 
 	processOverrides, _ := knowledge.ProcessOverrides()
 	eff := ResolveProcessConfig(kb, processOverrides)
+	if IsImageType(payload.FileType) && !eff.VLMConfig.IsEnabled() {
+		payload.EnableMultimodel = false
+	}
 
 	// Re-check abort status right before flipping to "processing" — closes
 	// the race where the user cancels between the entry guard above and
@@ -3347,17 +3327,6 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) (
 		}
 	}
 	ctx = withAttempt(ctx, attempt)
-
-	// 检查多模态配置（仅对文件导入）
-	if payload.FilePath != "" && !payload.EnableMultimodel && IsImageType(payload.FileType) {
-		logger.GetLogger(ctx).WithField("knowledge_id", knowledge.ID).
-			WithField("error", ErrImageNotParse).Errorf("processDocument image without enable multimodel")
-		knowledge.ParseStatus = "failed"
-		knowledge.ErrorMessage = ErrImageNotParse.Error()
-		knowledge.UpdatedAt = time.Now()
-		s.repo.UpdateKnowledge(ctx, knowledge)
-		return nil
-	}
 
 	// 检查音频ASR配置（仅对文件导入）
 	if payload.FilePath != "" && IsAudioType(payload.FileType) && !eff.ASRConfig.IsASREnabled() {
@@ -3752,7 +3721,6 @@ func (s *knowledgeService) convert(
 		uploadOverrides = processOverrides.ParserEngineOverrides
 	}
 	mergedOverrides := MergeParserEngineOverrides(tenantOverrides, uploadOverrides)
-	applyParserRuleOverrides(mergedOverrides, eff.ChunkingConfig, fileType)
 	if err := validateParserEngineOverrideURLs(mergedOverrides); err != nil {
 		logger.Errorf(ctx, "Parser endpoint rejected for SSRF protection: %v", err)
 		knowledge.ParseStatus = "failed"
@@ -3785,12 +3753,12 @@ func (s *knowledgeService) convert(
 	logger.Infof(ctx, "[convert] kb=%s fileType=%s isURL=%v engine=%q rules=%+v",
 		kb.ID, fileType, isURL, parserEngine, eff.ChunkingConfig.ParserEngineRules)
 
-	var reader interfaces.DocReader = s.resolveDocReader(ctx, parserEngine, fileType, isURL, mergedOverrides)
-	if reader == nil {
+	reader, readerErr := docparser.NewReader(ctx, parserEngine, fileType, isURL, docparser.ReaderDeps{Overrides: mergedOverrides})
+	if readerErr != nil {
 		logger.Errorf(ctx, "[convert] no doc reader for kb=%s knowledge=%s fileType=%s engine=%q isURL=%v",
 			kb.ID, knowledge.ID, fileType, parserEngine, isURL)
 		knowledge.ParseStatus = "failed"
-		knowledge.ErrorMessage = "Document parsing service is not configured. Please use text/paragraph import or set DOCREADER_ADDR."
+		knowledge.ErrorMessage = readerErr.Error()
 		knowledge.UpdatedAt = time.Now()
 		s.repo.UpdateKnowledge(ctx, knowledge)
 		s.failStage(ctx, knowledge.ID, types.StageDocReader,
@@ -3831,7 +3799,7 @@ func (s *knowledgeService) convert(
 		// failure) from generic read errors so the UI can suggest
 		// "split this large file" specifically when relevant.
 		code := werrors.ErrCodeDocReaderParseFailed
-		if errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "docreader call timeout") {
+		if errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "parser call timeout") {
 			code = werrors.ErrCodeDocReaderTimeout
 		}
 		s.failStage(ctx, knowledge.ID, types.StageDocReader,
@@ -3862,20 +3830,20 @@ func (s *knowledgeService) convert(
 	return result, nil
 }
 
-// callDocReaderWithTimeout wraps the DocReader RPC in a child context whose
-// deadline is min(parent_deadline, DocReaderCallTimeout). Without this cap,
-// a hung docreader (network partition, GC pause, OCR runaway) silently
+// callDocReaderWithTimeout wraps the parser call in a child context whose
+// deadline is min(parent_deadline, ParserCallTimeout). Without this cap,
+// a hung parser (network partition, GC pause, OCR runaway) silently
 // burns the whole DocumentProcessTimeout budget and pins a worker for hours
 // — the #1 cause of "knowledge stuck in processing" reports.
 //
 // On timeout we annotate the error so retries / dead-letter consumers can
-// distinguish "docreader was slow" from "docreader returned an error".
+// distinguish "parser was slow" from "parser returned an error".
 func (s *knowledgeService) callDocReaderWithTimeout(
 	ctx context.Context, reader interfaces.DocReader, req *types.ReadRequest,
 ) (*types.ReadResult, error) {
 	timeout := 30 * time.Minute
-	if s.config != nil && s.config.KnowledgeBase != nil && s.config.KnowledgeBase.DocReaderCallTimeout > 0 {
-		timeout = s.config.KnowledgeBase.DocReaderCallTimeout
+	if s.config != nil && s.config.KnowledgeBase != nil && s.config.KnowledgeBase.ParserCallTimeout > 0 {
+		timeout = s.config.KnowledgeBase.ParserCallTimeout
 	}
 	callCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -3888,13 +3856,13 @@ func (s *knowledgeService) callDocReaderWithTimeout(
 		// error via %w so errors.Is(callCtx.Err(), context.DeadlineExceeded)
 		// still works for upstream classification.
 		if errors.Is(callCtx.Err(), context.DeadlineExceeded) && !errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			logger.Errorf(ctx, "[convert] docreader call timed out after %s (limit %s) for %q",
+			logger.Errorf(ctx, "[convert] parser call timed out after %s (limit %s) for %q",
 				elapsed, timeout, req.FileName)
-			return nil, fmt.Errorf("docreader call timeout after %s: %w", timeout, err)
+			return nil, fmt.Errorf("parser call timeout after %s: %w", timeout, err)
 		}
 		return nil, err
 	}
-	logger.Infof(ctx, "[convert] docreader call ok in %s for %q", elapsed, req.FileName)
+	logger.Infof(ctx, "[convert] parser call ok in %s for %q", elapsed, req.FileName)
 	return result, nil
 }
 
@@ -3914,24 +3882,6 @@ func isLikelyRateLimitError(err error) bool {
 		}
 	}
 	return false
-}
-
-// resolveDocReader picks the reader for one parse request. The engine catalog
-// itself lives in the docparser registry; this only supplies the dependencies
-// the service owns. Returns nil when the chosen engine cannot run — an
-// unconfigured cloud engine, a disconnected docreader — after logging why.
-func (s *knowledgeService) resolveDocReader(
-	ctx context.Context, engine, fileType string, isURL bool, overrides map[string]string,
-) interfaces.DocReader {
-	reader, err := docparser.NewReader(ctx, engine, fileType, isURL, docparser.ReaderDeps{
-		Overrides: overrides,
-		Remote:    s.documentReader,
-	})
-	if err != nil {
-		logger.Warnf(ctx, "[resolveDocReader] engine=%q fileType=%q unusable: %v", engine, fileType, err)
-		return nil
-	}
-	return reader
 }
 
 // failKnowledge marks knowledge as failed (only on last retry) and returns an error.

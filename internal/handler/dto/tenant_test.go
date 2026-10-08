@@ -28,8 +28,6 @@ func TestTenantResponse_UserGetsRedactedIntegrationConfigs(t *testing.T) {
 	assert.Empty(t, resp.WebSearchConfig.APIKey)
 	require.NotNil(t, resp.ParserEngineConfig)
 	assert.Equal(t, types.RedactedSecretPlaceholder, resp.ParserEngineConfig.MinerUAPIKey)
-	require.NotNil(t, resp.StorageEngineConfig.MinIO)
-	assert.Equal(t, types.RedactedSecretPlaceholder, resp.StorageEngineConfig.MinIO.SecretAccessKey)
 	require.NotNil(t, resp.Credentials)
 	require.NotNil(t, resp.Credentials.WeKnoraCloud)
 	assert.Equal(t, types.RedactedSecretPlaceholder, resp.Credentials.WeKnoraCloud.AppSecret)
@@ -51,15 +49,7 @@ func sampleSecretTenant() *types.Tenant {
 			},
 		},
 		ParserEngineConfig: &types.ParserEngineConfig{
-			MinerUAPIKey:          "parser-secret-123",
-			PaddleOCRVLCloudToken: "paddle-secret-456",
-		},
-		StorageEngineConfig: &types.StorageEngineConfig{
-			DefaultProvider: "minio",
-			MinIO: &types.MinIOEngineConfig{
-				AccessKeyID:     "minio-access-id",
-				SecretAccessKey: "minio-secret-789",
-			},
+			MinerUAPIKey: "parser-secret-123",
 		},
 	}
 }

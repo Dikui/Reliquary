@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -13,7 +12,6 @@ import (
 	"github.com/hibiken/asynq"
 
 	"reliquary/internal/agent/tools"
-	"reliquary/internal/application/service/retriever"
 	"reliquary/internal/logger"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
@@ -147,10 +145,8 @@ type DataTableSummaryService struct {
 	fileService          interfaces.FileService
 	chunkService         interfaces.ChunkService
 	tenantService        interfaces.TenantService
-	retrieveEngine       interfaces.RetrieveEngineRegistry
-	ownership            retriever.TenantStoreOwnership
+	retrieveEngine       interfaces.RetrievalService
 	sqlDB                *sql.DB
-	storageResolver      interfaces.StorageBackendResolver
 }
 
 // NewDataTableSummaryService creates a new DataTableSummaryService
@@ -161,10 +157,8 @@ func NewDataTableSummaryService(
 	fileService interfaces.FileService,
 	chunkService interfaces.ChunkService,
 	tenantService interfaces.TenantService,
-	retrieveEngine interfaces.RetrieveEngineRegistry,
-	ownership retriever.TenantStoreOwnership,
+	retrieveEngine interfaces.RetrievalService,
 	sqlDB *sql.DB,
-	storageResolver interfaces.StorageBackendResolver,
 ) interfaces.TaskHandler {
 	return &DataTableSummaryService{
 		modelService:         modelService,
@@ -174,9 +168,7 @@ func NewDataTableSummaryService(
 		chunkService:         chunkService,
 		tenantService:        tenantService,
 		retrieveEngine:       retrieveEngine,
-		ownership:            ownership,
 		sqlDB:                sqlDB,
-		storageResolver:      storageResolver,
 	}
 }
 
@@ -225,7 +217,7 @@ type extractionResources struct {
 	tenant         *types.Tenant
 	chatModel      chat.Chat
 	embeddingModel embedding.Embedder
-	retrieveEngine *retriever.CompositeRetrieveEngine
+	retrieveEngine interfaces.RetrievalService
 }
 
 // prepareResources 准备提取所需的所有资源
@@ -254,7 +246,7 @@ func (s *DataTableSummaryService) prepareResources(ctx context.Context, payload 
 
 	kb, err := s.knowledgeBaseService.GetKnowledgeBaseByID(ctx, knowledge.KnowledgeBaseID)
 	if err != nil {
-		logger.Errorf(ctx, "failed to get knowledge base for vector store lookup: %v", err)
+		logger.Errorf(ctx, "failed to get knowledge base for PostgreSQL index lookup: %v", err)
 		return nil, err
 	}
 
@@ -272,24 +264,7 @@ func (s *DataTableSummaryService) prepareResources(ctx context.Context, payload 
 		return nil, err
 	}
 
-	// Load the KB to discover its VectorStoreID binding so the factory can
-	// route to the bound store (or fall back to tenant engines if unbound).
-	var vectorStoreID *string
-	if kb != nil {
-		vectorStoreID = kb.VectorStoreID
-	}
-
-	// The factory's unbound path reads TenantInfo from ctx.
-	ctx = context.WithValue(ctx, types.TenantInfoContextKey, tenantInfo)
-
-	// Resolve the engine via the factory using the KB's VectorStore binding
-	// (nil -> tenant effective engines fallback; verified tenant ownership otherwise).
-	retrieveEngine, err := retriever.CreateRetrieveEngineForKB(
-		ctx, s.retrieveEngine, s.ownership, payload.TenantID, vectorStoreID)
-	if err != nil {
-		logger.Errorf(ctx, "failed to get retrieve engine: %v", err)
-		return nil, err
-	}
+	retrieveEngine := s.retrieveEngine
 
 	return &extractionResources{
 		knowledge:      knowledge,
@@ -301,41 +276,8 @@ func (s *DataTableSummaryService) prepareResources(ctx context.Context, payload 
 	}, nil
 }
 
-// resolveFileServiceForKnowledge resolves a provider-specific file service for the current knowledge file.
-// It falls back to the global service when tenant storage config is unavailable.
 func (s *DataTableSummaryService) resolveFileServiceForKnowledge(ctx context.Context, resources *extractionResources) interfaces.FileService {
-	if resources == nil || resources.knowledge == nil {
-		return s.fileService
-	}
-	if resources.tenant == nil {
-		return s.fileService
-	}
-
-	provider := types.InferStorageFromFilePath(resources.knowledge.FilePath)
-	if provider == "" && resources.tenant.StorageEngineConfig != nil {
-		provider = strings.ToLower(strings.TrimSpace(resources.tenant.StorageEngineConfig.DefaultProvider))
-	}
-
-	baseDir := strings.TrimSpace(os.Getenv("LOCAL_STORAGE_BASE_DIR"))
-	backendID, _, _ := types.ParseStorageBackendPath(resources.knowledge.FilePath)
-	if backendID == "" && resources.knowledgeBase != nil && resources.knowledgeBase.StorageBackendID != nil {
-		backendID = strings.TrimSpace(*resources.knowledgeBase.StorageBackendID)
-	}
-
-	// New-model workspaces resolve via DefaultStorageBackendID even when no
-	// legacy StorageEngineConfig / provider is present, so gate on the resolver
-	// and a usable backendID/provider rather than requiring a non-empty provider.
-	if s.storageResolver == nil || (backendID == "" && provider == "") {
-		return s.fileService
-	}
-
-	resolvedSvc, resolvedProvider, err := s.storageResolver.ResolveFileService(ctx, resources.tenant, backendID, provider, baseDir)
-	if err != nil {
-		logger.Warnf(ctx, "[TableSummary] Failed to resolve file service for provider=%s, fallback to default: %v", provider, err)
-		return s.fileService
-	}
-	logger.Infof(ctx, "[TableSummary] Resolved file service for knowledge=%s provider=%s", resources.knowledge.ID, resolvedProvider)
-	return resolvedSvc
+	return s.fileService
 }
 
 // processTableData 处理表格数据：加载 -> 分析 -> 生成摘要 -> 创建chunks
@@ -344,7 +286,7 @@ func (s *DataTableSummaryService) processTableData(ctx context.Context, resource
 	// 创建DuckDB会话并加载数据
 	sessionID := fmt.Sprintf("table_summary_%s", resources.knowledge.ID)
 	fileSvc := s.resolveFileServiceForKnowledge(ctx, resources)
-	duckdbTool := tools.NewDataAnalysisTool(s.knowledgeBaseService, s.knowledgeService, s.tenantService, fileSvc, s.sqlDB, sessionID, s.storageResolver)
+	duckdbTool := tools.NewDataAnalysisTool(s.knowledgeBaseService, s.knowledgeService, s.tenantService, fileSvc, s.sqlDB, sessionID)
 	defer duckdbTool.Cleanup(ctx)
 
 	// 使用knowledge.ID作为表名，根据文件类型自动加载数据
@@ -451,7 +393,7 @@ func (s *DataTableSummaryService) buildChunks(resources *extractionResources, ta
 func (s *DataTableSummaryService) indexToVectorDB(
 	ctx context.Context,
 	chunks []*types.Chunk,
-	engine *retriever.CompositeRetrieveEngine,
+	engine interfaces.RetrievalService,
 	embedder embedding.Embedder,
 ) error {
 	// 构建索引信息列表

@@ -1148,10 +1148,7 @@ func (s *TenantSkillService) fileServiceForTenant(
 	if s.resolver == nil {
 		return nil, errors.New("storage resolver is not configured")
 	}
-	fs, _, err := s.resolver.ResolveFileService(ctx, s.tenantForStorage(ctx, tenantID), "", "", "")
-	if err != nil {
-		return nil, err
-	}
+	fs := s.resolver
 	if fs == nil {
 		return nil, errors.New("file service is not configured")
 	}

@@ -99,7 +99,8 @@ invisible (`Tr 3`) OCR text layers instead of reporting `needs_ocr`, which
 sounds like it would spare WeKnora an OCR round trip, except that it landed in
 `extract_text_in_regions`; anydoc uses the positioned-text path, which already
 retried with invisible text included. Scanned PDFs still come back as "OCR is
-required" and still fall back to the docreader.
+required" and use the configured MinerU reader for OCR. Without a configured
+MinerU reader, the conversion reports the OCR requirement explicitly.
 
 ## Local modifications
 
@@ -175,7 +176,8 @@ serializer: `scripts/build-anydoc-lib.sh` re-exports the one function, then
 `anydoc_to_markdown_with_asset_links` rewrites `Asset` images to
 `ImageSource::External("images/image-N.ext")` so the official GFM output
 places them in reading order. PDF has no document model; scanned pages fall
-back to the builtin docreader so they can be rasterized for OCR.
+back to a configured MinerU reader for OCR. Without one, parsing reports that
+the scanned PDF requires OCR.
 
 ## Building the archive
 

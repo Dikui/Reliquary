@@ -37,7 +37,6 @@ export interface InitializationConfig {
     };
     multimodal: {
         enabled: boolean;
-        storageType: 'local' | 'minio' | 's3';
         vlm?: {
             modelName: string;
             baseUrl: string;
@@ -45,10 +44,6 @@ export interface InitializationConfig {
             apiKey?: string;
             interfaceType?: string; // "ollama" or "openai"
             credentials?: ModelCredentialStatus;
-        };
-        minio?: {
-            bucketName: string;
-            pathPrefix?: string;
         };
     };
     documentSplitting: {
@@ -65,7 +60,6 @@ export interface InitializationConfig {
         languages?: string[];
     };
     // Frontend-only hint for storage selection UI
-    storageType?: 'local' | 'minio' | 's3';
 }
 
 // 下载任务状态类型
@@ -101,7 +95,6 @@ export interface KBModelConfigRequest {
         parserEngineRules?: {
             file_types: string[]
             engine: string
-            xlsx_first_row_as_header?: boolean
         }[]
         enableParentChild?: boolean
         parentChunkSize?: number
@@ -122,9 +115,6 @@ export interface KBModelConfigRequest {
     multimodal: {
         enabled: boolean
     }
-    /** 存储引擎选择："local" | "minio" | "s3"，影响文档上传与文档内图片存储 */
-    storageBackendId?: string
-    storageProvider?: string
     questionGeneration?: {
         enabled: boolean
         questionCount: number
@@ -378,10 +368,6 @@ export function testMultimodalFunction(testData: {
     vlm_base_url: string;
     vlm_api_key?: string;
     vlm_interface_type?: string;
-    storage_type?: 'local' | 'minio' | 's3';
-    // MinIO optional fields
-    minio_bucket_name?: string;
-    minio_path_prefix?: string;
     chunk_size: number;
     chunk_overlap: number;
     separators: string[];
@@ -403,12 +389,6 @@ export function testMultimodalFunction(testData: {
         if (testData.vlm_interface_type) {
             formData.append('vlm_interface_type', testData.vlm_interface_type);
         }
-        if (testData.storage_type) {
-            formData.append('storage_type', testData.storage_type);
-        }
-        // MinIO fields
-        if (testData.minio_bucket_name) formData.append('minio_bucket_name', testData.minio_bucket_name);
-        if (testData.minio_path_prefix) formData.append('minio_path_prefix', testData.minio_path_prefix);
         formData.append('chunk_size', testData.chunk_size.toString());
         formData.append('chunk_overlap', testData.chunk_overlap.toString());
         formData.append('separators', JSON.stringify(testData.separators));

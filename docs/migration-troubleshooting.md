@@ -90,7 +90,7 @@ ERROR: function ... does not exist
 -- Connect as a superuser (typically `postgres`):
 \c your_reliquary_database
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
-CREATE EXTENSION IF NOT EXISTS vector;       -- if RETRIEVE_DRIVER includes pgvector
+CREATE EXTENSION IF NOT EXISTS vector;       -- PostgreSQL vector retrieval
 CREATE EXTENSION IF NOT EXISTS pg_search;    -- only on ParadeDB
 
 -- Verify they are actually loaded:
@@ -222,7 +222,7 @@ Include:
   ```sql
   SELECT extname, extversion FROM pg_extension;
   ```
-- Any non-default values of `RETRIEVE_DRIVER`, `AUTO_MIGRATE`, and
+- Any non-default values of `AUTO_MIGRATE` and
   `AUTO_RECOVER_DIRTY`.
 
 The "Report issue" link on the system info page pre-fills a body with the

@@ -10,7 +10,6 @@ import (
 	"regexp"
 	"strings"
 
-	filesvc "reliquary/internal/application/service/file"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -116,16 +115,8 @@ type DataAnalysisTool struct {
 	db                   *sql.DB
 	sessionID            string
 	createdTables        []string // Track tables created in this session
-	// localBaseDir is the LOCAL_STORAGE_BASE_DIR value captured at construction
-	// time so resolveFileServiceForKnowledge uses the same base path that was
-	// used when the local FileService was initialised by DI.  Re-reading the
-	// env var at request time can produce a different (or empty) value if the
-	// variable was not exported to the sub-process or was set programmatically
-	// after startup, causing GetFile to look in the wrong directory (#1040).
-	localBaseDir    string
-	storageResolver interfaces.StorageBackendResolver
-	searchTargets   types.SearchTargets
-	scopeEnforced   bool
+	searchTargets        types.SearchTargets
+	scopeEnforced        bool
 }
 
 // WithSearchTargets enables the Agent-only authorization boundary. Other
@@ -146,7 +137,6 @@ func NewDataAnalysisTool(
 	fileService interfaces.FileService,
 	db *sql.DB,
 	sessionID string,
-	storageResolvers ...interfaces.StorageBackendResolver,
 ) *DataAnalysisTool {
 	tool := &DataAnalysisTool{
 		BaseTool:             dataAnalysisTool,
@@ -156,14 +146,6 @@ func NewDataAnalysisTool(
 		tenantService:        tenantService,
 		db:                   db,
 		sessionID:            sessionID,
-		// Capture LOCAL_STORAGE_BASE_DIR once at construction time so that every
-		// call to resolveFileServiceForKnowledge uses the same base path.  The
-		// env var is guaranteed to be set (or empty == "/data/files" fallback)
-		// when the application starts and the DI container is assembled.
-		localBaseDir: strings.TrimSpace(os.Getenv("LOCAL_STORAGE_BASE_DIR")),
-	}
-	if len(storageResolvers) > 0 {
-		tool.storageResolver = storageResolvers[0]
 	}
 	return tool
 }
@@ -617,9 +599,7 @@ func (t *DataAnalysisTool) LoadFromKnowledge(ctx context.Context, knowledge *typ
 // semantics. It returns the temp path and a cleanup closure that removes the
 // temp file; the closure is always safe to call and is a no-op on failure.
 //
-// This hides storage-backend-specific URL schemes (local://, s3://, s3://,
-// minio://, s3://, …) behind the FileService.GetFile abstraction, so the
-// Data Analysis tool works identically across all deployments.
+// Local paths and resource handles are read through FileService.GetFile.
 func (t *DataAnalysisTool) materializeKnowledgeFile(ctx context.Context, knowledge *types.Knowledge) (string, func(), error) {
 	noop := func() {}
 
@@ -782,101 +762,6 @@ func (t *TableSchema) Description() string {
 	return builder.String()
 }
 
-// resolveFileServiceForKnowledge resolves a provider-specific FileService based on the knowledge file path.
-// It falls back to the injected default service when provider/config cannot be resolved.
 func (t *DataAnalysisTool) resolveFileServiceForKnowledge(ctx context.Context, knowledge *types.Knowledge) interfaces.FileService {
-	if knowledge == nil {
-		logger.Warnf(ctx, "[Tool][DataAnalysis][storage] fallback default: session_id=%s reason=knowledge_nil", t.sessionID)
-		return t.fileService
-	}
-
-	kbID := strings.TrimSpace(knowledge.KnowledgeBaseID)
-	var kb *types.KnowledgeBase
-	if t.knowledgeBaseService != nil && kbID != "" {
-		var err error
-		kb, err = t.knowledgeBaseService.GetKnowledgeBaseByID(ctx, kbID)
-		if err != nil {
-			logger.Warnf(ctx, "[Tool][DataAnalysis][storage] get kb failed, fallback default: session_id=%s knowledge_id=%s kb_id=%s err=%v",
-				t.sessionID, knowledge.ID, kbID, err)
-			return t.fileService
-		}
-	}
-	if kb == nil && kbID != "" {
-		logger.Infof(ctx, "[Tool][DataAnalysis][storage] kb not found, fallback default: session_id=%s knowledge_id=%s kb_id=%s",
-			t.sessionID, knowledge.ID, kbID)
-		return t.fileService
-	}
-
-	provider := ""
-	backendID, _, _ := types.ParseStorageBackendPath(knowledge.FilePath)
-	if kb != nil {
-		provider = kb.GetStorageProvider()
-		if backendID == "" && kb.StorageBackendID != nil {
-			backendID = strings.TrimSpace(*kb.StorageBackendID)
-		}
-	}
-	tenant, _ := ctx.Value(types.TenantInfoContextKey).(*types.Tenant)
-	if tenant == nil {
-		tenantID := uint64(0)
-		if tid, ok := ctx.Value(types.TenantIDContextKey).(uint64); ok {
-			tenantID = tid
-		}
-		if tenantID == 0 && kb != nil {
-			tenantID = knowledge.TenantID
-		}
-		if tenantID > 0 && t.tenantService != nil {
-			resolvedTenant, err := t.tenantService.GetTenantByID(ctx, tenantID)
-			if err != nil {
-				logger.Warnf(ctx, "[Tool][DataAnalysis][storage] get tenant failed: session_id=%s knowledge_id=%s kb_id=%s tenant_id=%d err=%v",
-					t.sessionID, knowledge.ID, kbID, tenantID, err)
-			} else if resolvedTenant != nil {
-				tenant = resolvedTenant
-				logger.Infof(ctx, "[Tool][DataAnalysis][storage] resolved tenant from service: session_id=%s knowledge_id=%s kb_id=%s tenant_id=%d",
-					t.sessionID, knowledge.ID, kbID, tenantID)
-			}
-		}
-	}
-	if provider == "" && tenant != nil && tenant.StorageEngineConfig != nil {
-		provider = strings.ToLower(strings.TrimSpace(tenant.StorageEngineConfig.DefaultProvider))
-	}
-	if t.storageResolver != nil && tenant != nil && (backendID != "" || provider != "") {
-		resolvedSvc, resolvedProvider, err := t.storageResolver.ResolveFileService(
-			ctx, tenant, backendID, provider, t.localBaseDir,
-		)
-		if err == nil {
-			logger.Infof(ctx, "[Tool][DataAnalysis][storage] resolved storage backend: session_id=%s knowledge_id=%s kb_id=%s backend_id=%s provider=%s",
-				t.sessionID, knowledge.ID, kbID, backendID, resolvedProvider)
-			return resolvedSvc
-		}
-		logger.Warnf(ctx, "[Tool][DataAnalysis][storage] resolve storage backend failed, trying legacy config: session_id=%s knowledge_id=%s kb_id=%s backend_id=%s provider=%s err=%v",
-			t.sessionID, knowledge.ID, kbID, backendID, provider, err)
-	}
-
-	if provider == "" || tenant == nil || tenant.StorageEngineConfig == nil {
-		hasTenantStorageConfig := tenant != nil && tenant.StorageEngineConfig != nil
-		logger.Infof(ctx, "[Tool][DataAnalysis][storage] fallback default: session_id=%s knowledge_id=%s kb_id=%s provider=%q tenant_cfg=%t",
-			t.sessionID, knowledge.ID, kbID, provider, hasTenantStorageConfig)
-		return t.fileService
-	}
-
-	storageConfig := tenant.StorageEngineConfig
-	// Use the localBaseDir captured at construction time rather than re-reading
-	// LOCAL_STORAGE_BASE_DIR from os.Getenv here.  Reading the env var at
-	// request-handling time can produce an empty string (or the wrong value)
-	// when the variable was set programmatically before startup or is absent
-	// from the process environment of the DI-constructed sub-component, causing
-	// the newly created local FileService to use the /data/files fallback
-	// instead of the configured path and therefore fail to locate files (#1040).
-	baseDir := t.localBaseDir
-
-	resolvedSvc, resolvedProvider, err := filesvc.NewFileServiceFromStorageConfig(provider, storageConfig, baseDir)
-	if err != nil {
-		logger.Warnf(ctx, "[Tool][DataAnalysis][storage] create file service failed, fallback default: session_id=%s knowledge_id=%s kb_id=%s provider=%s err=%v",
-			t.sessionID, knowledge.ID, kbID, provider, err)
-		return t.fileService
-	}
-
-	logger.Infof(ctx, "[Tool][DataAnalysis][storage] resolved file service: session_id=%s knowledge_id=%s kb_id=%s provider=%s",
-		t.sessionID, knowledge.ID, kbID, resolvedProvider)
-	return resolvedSvc
+	return t.fileService
 }

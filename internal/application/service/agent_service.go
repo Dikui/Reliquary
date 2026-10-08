@@ -209,7 +209,6 @@ type agentService struct {
 	messageService        interfaces.MessageService
 
 	memoryService    interfaces.MemoryService
-	storageResolver  interfaces.StorageBackendResolver
 	toolApprovalGate approval.MCPApproval
 	sandboxMgr       sandbox.Manager
 	sandboxResolver  sandbox.TenantSandboxResolver
@@ -238,7 +237,6 @@ func NewAgentService(
 	messageService interfaces.MessageService,
 
 	memoryService interfaces.MemoryService,
-	storageResolver interfaces.StorageBackendResolver,
 	toolApprovalGate approval.MCPApproval,
 	sandboxMgr sandbox.Manager,
 	sandboxResolver sandbox.TenantSandboxResolver,
@@ -265,7 +263,6 @@ func NewAgentService(
 		messageService:        messageService,
 
 		memoryService:    memoryService,
-		storageResolver:  storageResolver,
 		toolApprovalGate: toolApprovalGate,
 		sandboxMgr:       sandboxMgr,
 		sandboxResolver:  sandboxResolver,
@@ -845,15 +842,7 @@ func (s *agentService) skillEnvCapture(config *types.AgentConfig) tools.SkillEnv
 func (s *agentService) readSkillBundle(
 	ctx context.Context, tenantID uint64, ref string,
 ) ([]byte, error) {
-	if s.storageResolver == nil {
-		return nil, errors.New("storage resolver is not configured")
-	}
-	fs, _, err := s.storageResolver.ResolveFileService(
-		ctx, &types.Tenant{ID: tenantID}, "", "", "",
-	)
-	if err != nil {
-		return nil, err
-	}
+	fs := s.fileService
 	if fs == nil {
 		return nil, errors.New("file service is not configured")
 	}
@@ -1171,7 +1160,7 @@ func (s *agentService) registerTools(
 			logger.Infof(ctx, "Registered web_fetch tool for session: %s", sessionID)
 
 		case tools.ToolDataAnalysis:
-			toolToRegister = tools.NewDataAnalysisTool(s.knowledgeBaseService, s.knowledgeService, s.tenantService, s.fileService, s.duckdb, sessionID, s.storageResolver).
+			toolToRegister = tools.NewDataAnalysisTool(s.knowledgeBaseService, s.knowledgeService, s.tenantService, s.fileService, s.duckdb, sessionID).
 				WithSearchTargets(config.SearchTargets)
 			logger.Infof(ctx, "Registered data_analysis tool for session: %s", sessionID)
 

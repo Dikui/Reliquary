@@ -45,16 +45,9 @@
                 :key="opt.value"
                 :value="opt.value"
                 :label="opt.selectLabel"
+                :disabled="opt.disabled"
               />
             </t-select>
-            <t-checkbox
-              v-if="group.extensions.includes('xlsx') && getEngineForGroup(group.extensions) === 'builtin'"
-              class="xlsx-header-option"
-              :checked="getXLSXFirstRowAsHeader(group.extensions)"
-              @change="(checked: boolean) => handleXLSXFirstRowAsHeaderChange(group.extensions, checked)"
-            >
-              {{ $t('kbSettings.parser.xlsxFirstRowAsHeader') }}
-            </t-checkbox>
             <div v-if="!hasAvailableEngine(group.extensions)" class="no-engine-warning">
               <a class="go-settings" @click.prevent="goToParserSettings">{{ $t('kbSettings.parser.goConfig') }}</a>
             </div>
@@ -85,13 +78,13 @@ function getEngineDisplayName(engineName: string): string {
 export interface ParserEngineRule {
   file_types: string[]
   engine: string
-  xlsx_first_row_as_header?: boolean
 }
 
 interface EngineOption {
   value: string
   selectLabel: string
   isDefault: boolean
+  disabled: boolean
 }
 
 function buildOptionLabel(name: string, isDefault: boolean): string {
@@ -141,7 +134,6 @@ const fileTypeGroups = computed(() => {
   const pptExts = ['pptx', 'ppt'].filter(e => ft.has(e))
   const excelExts = ['xlsx', 'xls'].filter(e => ft.has(e))
   const ebookExts = ['epub'].filter(e => ft.has(e))
-  const webArchiveExts = ['mhtml'].filter(e => ft.has(e))
   const csvExts = ['csv'].filter(e => ft.has(e))
   const mdExts = ['md', 'markdown'].filter(e => ft.has(e))
   const txtExts = ['txt'].filter(e => ft.has(e))
@@ -155,7 +147,6 @@ const fileTypeGroups = computed(() => {
   if (pptExts.length) groups.push({ key: 'ppt', label: t('kbSettings.parser.fileTypePpt'), icon: 'file-powerpoint', extensions: pptExts })
   if (excelExts.length) groups.push({ key: 'excel', label: t('kbSettings.parser.fileTypeExcel'), icon: 'file-excel', extensions: excelExts })
   if (ebookExts.length) groups.push({ key: 'ebook', label: t('kbSettings.parser.fileTypeEbook'), icon: 'file', extensions: ebookExts })
-  if (webArchiveExts.length) groups.push({ key: 'webarchive', label: t('kbSettings.parser.fileTypeWebArchive'), icon: 'file', extensions: webArchiveExts })
   if (csvExts.length) groups.push({ key: 'csv', label: t('kbSettings.parser.fileTypeCsv'), icon: 'file-excel', extensions: csvExts })
   if (mdExts.length) groups.push({ key: 'markdown', label: 'Markdown', icon: 'file-code', extensions: mdExts })
   if (txtExts.length) groups.push({ key: 'text', label: t('kbSettings.parser.fileTypeText'), icon: 'file', extensions: txtExts })
@@ -201,10 +192,10 @@ function getEngineOptions(extensions: string[]): EngineOption[] {
   }
   const defaultName = pickDefaultEngineName(raw, extensions)
   return raw
-    .filter(e => e.available)
     .map(e => ({
       value: e.name,
-      selectLabel: buildOptionLabel(e.name, defaultName !== '' && e.name === defaultName),
+      selectLabel: `${buildOptionLabel(e.name, defaultName !== '' && e.name === defaultName)}${e.available ? '' : ` (${t('settings.parser.unavailable')})`}`,
+      disabled: !e.available,
       isDefault: defaultName !== '' && e.name === defaultName,
     }))
 }
@@ -213,18 +204,15 @@ function pickDefaultEngineName(
   engines: { name: string; available: boolean }[],
   extensions: string[],
 ): string {
-  const available = engines.filter(e => e.available)
-  const simpleExts = new Set(['md', 'markdown', 'txt', 'csv', 'json'])
+  const simpleExts = new Set(['md', 'markdown', 'txt', 'text', 'csv', 'json', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'webp', 'mp3', 'wav', 'm4a', 'flac', 'ogg'])
   const allSimple = extensions.length > 0 && extensions.every(ext => simpleExts.has(ext))
-  if (!allSimple) {
-    const anydoc = available.find(e => e.name === 'anydoc')
-    if (anydoc) return anydoc.name
-  }
-  return available[0]?.name ?? ''
+  const defaultName = allSimple ? 'simple' : 'anydoc'
+  return engines.find(engine => engine.name === defaultName)?.name ?? engines[0]?.name ?? ''
+
 }
 
 function hasAvailableEngine(extensions: string[]): boolean {
-  return getEngineOptions(extensions).length > 0
+  return getEngineOptions(extensions).some(option => !option.disabled)
 }
 
 function getDefaultEngine(extensions: string[]): string {
@@ -242,7 +230,6 @@ function getEngineForGroup(extensions: string[]): string {
 }
 
 function handleEngineChange(extensions: string[], engine: string) {
-  const currentRule = getRuleForGroup(extensions)
   const otherRules = localEngineRules.value.filter(
     r => !r.file_types.some(ft => extensions.includes(ft))
   )
@@ -250,9 +237,6 @@ function handleEngineChange(extensions: string[], engine: string) {
     otherRules.push({
       file_types: [...extensions],
       engine,
-      ...(currentRule?.xlsx_first_row_as_header !== undefined
-        ? { xlsx_first_row_as_header: currentRule.xlsx_first_row_as_header }
-        : {}),
     })
   }
   localEngineRules.value = otherRules
@@ -265,32 +249,14 @@ function getRuleForGroup(extensions: string[]): ParserEngineRule | undefined {
   )
 }
 
-function getXLSXFirstRowAsHeader(extensions: string[]): boolean {
-  return getRuleForGroup(extensions)?.xlsx_first_row_as_header === true
-}
-
-function handleXLSXFirstRowAsHeaderChange(extensions: string[], checked: boolean) {
-  const rules = buildCompleteRules()
-  const rule = rules.find(item => item.file_types.some(fileType => extensions.includes(fileType)))
-  if (!rule) return
-
-  rule.xlsx_first_row_as_header = checked
-  localEngineRules.value = rules
-  emit('update:parserEngineRules', rules)
-}
-
 function buildCompleteRules(): ParserEngineRule[] {
   const rules: ParserEngineRule[] = []
   for (const group of fileTypeGroups.value) {
     const engine = getEngineForGroup(group.extensions)
     if (engine) {
-      const currentRule = getRuleForGroup(group.extensions)
       rules.push({
         file_types: [...group.extensions],
         engine,
-        ...(currentRule?.xlsx_first_row_as_header !== undefined
-          ? { xlsx_first_row_as_header: currentRule.xlsx_first_row_as_header }
-          : {}),
       })
     }
   }

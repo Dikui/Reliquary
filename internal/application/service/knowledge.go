@@ -14,7 +14,6 @@ import (
 	"gorm.io/gorm"
 
 	"reliquary/internal/application/repository"
-	"reliquary/internal/application/service/retriever"
 	"reliquary/internal/config"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/docparser"
@@ -39,8 +38,6 @@ var (
 	ErrDuplicateFile = errors.New("file already exists")
 	// ErrDuplicateURL is returned when trying to add a URL that already exists
 	ErrDuplicateURL = errors.New("URL already exists")
-	// ErrImageNotParse is returned when trying to update image information without enabling multimodel
-	ErrImageNotParse = errors.New("image not parse without enable multimodel")
 )
 
 // knowledgeService implements the knowledge service interface
@@ -48,19 +45,16 @@ var (
 type knowledgeService struct {
 	db              *gorm.DB
 	config          *config.Config
-	retrieveEngine  interfaces.RetrieveEngineRegistry
-	ownership       retriever.TenantStoreOwnership
+	retrieveEngine  interfaces.RetrievalService
 	repo            interfaces.KnowledgeRepository
 	kbService       interfaces.KnowledgeBaseService
 	tenantRepo      interfaces.TenantRepository
 	tenantService   interfaces.TenantService
-	documentReader  interfaces.DocumentReader
 	chunkService    interfaces.ChunkService
 	chunkRepo       interfaces.ChunkRepository
 	tagRepo         interfaces.KnowledgeTagRepository
 	tagService      interfaces.KnowledgeTagService
 	fileSvc         interfaces.FileService
-	storageResolver interfaces.StorageBackendResolver
 	resourceCatalog interfaces.ResourceCatalog
 	modelService    interfaces.ModelService
 	task            interfaces.TaskEnqueuer
@@ -90,7 +84,6 @@ func NewKnowledgeService(
 	db *gorm.DB,
 	config *config.Config,
 	repo interfaces.KnowledgeRepository,
-	documentReader interfaces.DocumentReader,
 	kbService interfaces.KnowledgeBaseService,
 	tenantRepo interfaces.TenantRepository,
 	tenantService interfaces.TenantService,
@@ -99,13 +92,11 @@ func NewKnowledgeService(
 	tagRepo interfaces.KnowledgeTagRepository,
 	tagService interfaces.KnowledgeTagService,
 	fileSvc interfaces.FileService,
-	storageResolver interfaces.StorageBackendResolver,
 	resourceCatalog interfaces.ResourceCatalog,
 	modelService interfaces.ModelService,
 	task interfaces.TaskEnqueuer,
 	taskInspector interfaces.TaskInspector,
-	retrieveEngine interfaces.RetrieveEngineRegistry,
-	ownership retriever.TenantStoreOwnership,
+	retrieveEngine interfaces.RetrievalService,
 	redisClient *redis.Client,
 	imageResolver *docparser.ImageResolver,
 	wikiRepo interfaces.WikiPageRepository,
@@ -121,19 +112,16 @@ func NewKnowledgeService(
 		kbService:       kbService,
 		tenantRepo:      tenantRepo,
 		tenantService:   tenantService,
-		documentReader:  documentReader,
 		chunkService:    chunkService,
 		chunkRepo:       chunkRepo,
 		tagRepo:         tagRepo,
 		tagService:      tagService,
 		fileSvc:         fileSvc,
-		storageResolver: storageResolver,
 		resourceCatalog: resourceCatalog,
 		modelService:    modelService,
 		task:            task,
 		taskInspector:   taskInspector,
 		retrieveEngine:  retrieveEngine,
-		ownership:       ownership,
 		redisClient:     redisClient,
 		imageResolver:   imageResolver,
 		wikiRepo:        wikiRepo,
@@ -425,34 +413,6 @@ func (s *knowledgeService) isKnowledgeAborted(
 	return false, knowledge.ParseStatus
 }
 
-// checkStorageEngineConfigured verifies that the knowledge base has a storage engine configured
-// (either at the KB level or via the tenant default).
-//
-// 内部版兜底语义：当 KB 与空间都未配置 storage provider 时，如果服务实例持有
-// 全局 FileService（由容器按 STORAGE_TYPE 注入，默认 local），允许直接落到该
-// 全局 fileSvc 上，不再硬性阻断。这与 resolveFileService / resolveFileServiceForPath
-// 在 provider 为空时回退到 s.fileSvc 的行为保持一致，避免上层闸门和下游解析口径不一。
-// 仅当 KB/空间/全局三处都拿不到任何可用 FileService 时才报错。
-func (s *knowledgeService) checkStorageEngineConfigured(ctx context.Context, kb *types.KnowledgeBase) error {
-	provider := kb.GetStorageProvider()
-	if provider == "" {
-		tenant, _ := ctx.Value(types.TenantInfoContextKey).(*types.Tenant)
-		if tenant != nil && tenant.StorageEngineConfig != nil {
-			provider = strings.ToLower(strings.TrimSpace(tenant.StorageEngineConfig.DefaultProvider))
-		}
-	}
-	if provider != "" {
-		return nil
-	}
-	if s != nil && s.fileSvc != nil {
-		logger.Warnf(ctx,
-			"[storage] checkStorageEngineConfigured: no KB/tenant provider, fallback to global fileSvc (kb=%s)",
-			kbIDOrEmpty(kb))
-		return nil
-	}
-	return werrors.NewBadRequestError("请先为知识库选择存储引擎，再上传内容。请前往知识库设置页面进行配置。")
-}
-
 func kbIDOrEmpty(kb *types.KnowledgeBase) string {
 	if kb == nil {
 		return ""
@@ -639,6 +599,27 @@ func (s *knowledgeService) GetKnowledgeFile(ctx context.Context, id string) (io.
 	if err != nil {
 		return nil, "", err
 	}
+
+	// Uploaded source bytes take precedence over the immutable parsed body.
+	if knowledge.FilePath != "" {
+		kb, _ := s.kbService.GetKnowledgeBaseByID(ctx, knowledge.KnowledgeBaseID)
+		file, err := s.resolveFileServiceForPath(ctx, kb, knowledge.FilePath).GetFile(ctx, knowledge.FilePath)
+		return file, knowledge.FileName, err
+	}
+	return s.getKnowledgeBody(ctx, knowledge)
+}
+
+// GetKnowledgeBody reads the immutable parsed text rather than uploaded bytes.
+func (s *knowledgeService) GetKnowledgeBody(ctx context.Context, id string) (io.ReadCloser, string, error) {
+	tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
+	knowledge, err := s.repo.GetKnowledgeByID(ctx, tenantID, id)
+	if err != nil {
+		return nil, "", err
+	}
+	return s.getKnowledgeBody(ctx, knowledge)
+}
+
+func (s *knowledgeService) getKnowledgeBody(ctx context.Context, knowledge *types.Knowledge) (io.ReadCloser, string, error) {
 
 	// Intake originals are stored independently of the uploaded binary and DB row.
 	if intake, intakeErr := knowledge.IntakeMetadata(); intakeErr != nil {

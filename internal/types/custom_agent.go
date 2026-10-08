@@ -187,9 +187,6 @@ type CustomAgentConfig struct {
 	AudioUploadEnabled bool `yaml:"audio_upload_enabled" json:"audio_upload_enabled"`
 	// ASR model ID for audio transcription (optional)
 	ASRModelID string `yaml:"asr_model_id" json:"asr_model_id"`
-	// Storage provider for image uploads: "local", "minio", "s3".
-	// Empty means use the global/workspace default provider.
-	ImageStorageProvider string `yaml:"image_storage_provider" json:"image_storage_provider"`
 
 	// ===== File Type Restriction Settings =====
 	// Supported file types for this agent (e.g., ["csv", "xlsx", "xls"])

@@ -86,8 +86,8 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 	require.NoError(t, db.Create(&types.User{ID: fusionOwnerID, Username: fusionOwnerID, Email: "fusion@example.test", PasswordHash: "test-only", TenantID: fusionTenantID, IsActive: true}).Error)
 	kbRepo := apprepo.NewKnowledgeBaseRepository(db)
 	knowledgeRepo := apprepo.NewKnowledgeRepository(db)
-	kbService := service.NewKnowledgeBaseService(db, kbRepo, knowledgeRepo, nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil, nil, nil, nil)
+	kbService := service.NewKnowledgeBaseService(db, kbRepo, knowledgeRepo, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil)
 	kb := &types.KnowledgeBase{
 		DomainID: service.BuiltinAIKnowledgeDomainID,
 		ID:       fusionKBID, Name: "Fusion KB", TenantID: fusionTenantID, CreatorID: fusionOwnerID,
@@ -96,8 +96,8 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 	kb.EnsureDefaults()
 	require.NoError(t, kbRepo.CreateKnowledgeBase(ctx, kb))
 
-	knowledge, err := service.NewKnowledgeService(db, nil, knowledgeRepo, nil, kbService, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, fusionModelService{model: fusionChat{}}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	knowledge, err := service.NewKnowledgeService(db, nil, knowledgeRepo, kbService, nil, nil, nil, nil, nil, nil,
+		nil, nil, fusionModelService{model: fusionChat{}}, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	source := &types.Knowledge{
 		ID: fusionSourceID, TenantID: fusionTenantID, KnowledgeBaseID: fusionKBID,

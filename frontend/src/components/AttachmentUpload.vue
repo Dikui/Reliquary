@@ -47,9 +47,9 @@ let disposed = false;
 // Supported file types (matching backend)
 const supportedTypes = ref([
   // Documents
-  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.epub', '.mhtml',
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.epub',
   // Text
-  '.txt', '.md', '.csv', '.json', '.xml', '.html',
+  '.txt', '.md', '.csv', '.json', '.xml',
 	'.markdown', '.yaml', '.yml', '.log',
 	// Images are parsed as documents here; the dedicated image button remains
 	// available for direct multimodal chat.
@@ -223,7 +223,7 @@ const getFileIcon = (fileName: string): string => {
   if (['doc', 'docx'].includes(ext || '')) return 'file-word';
   if (['xls', 'xlsx'].includes(ext || '')) return 'file-excel';
   if (['ppt', 'pptx'].includes(ext || '')) return 'file-powerpoint';
-  if (['epub', 'mhtml'].includes(ext || '')) return 'file';
+  if (['epub'].includes(ext || '')) return 'file';
   if (['txt', 'md'].includes(ext || '')) return 'file';
   if (['mp3', 'wav', 'm4a', 'flac', 'ogg', 'aac'].includes(ext || '')) return 'sound';
   return 'file';

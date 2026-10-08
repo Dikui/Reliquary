@@ -168,7 +168,7 @@ func TestDeleteKnowledgeBaseCleansUpDataSources(t *testing.T) {
 		dsScheduler: scheduler,
 	}
 
-	ctx := ctxWithTenantStorage(1, "local")
+	ctx := ctxWithTenantInfo(1)
 	err := svc.DeleteKnowledgeBase(ctx, kbID)
 	require.NoError(t, err)
 
@@ -211,7 +211,7 @@ func TestDeleteKnowledgeBaseContinuesWhenDataSourceCleanupFails(t *testing.T) {
 		syncLogRepo: &kbDeleteSyncLogRepo{},
 	}
 
-	err := svc.DeleteKnowledgeBase(ctxWithTenantStorage(1, "local"), kbID)
+	err := svc.DeleteKnowledgeBase(ctxWithTenantInfo(1), kbID)
 	require.NoError(t, err)
 	assert.Equal(t, kbID, kbRepo.deletedID)
 }

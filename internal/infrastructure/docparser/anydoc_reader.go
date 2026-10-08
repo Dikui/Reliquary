@@ -12,13 +12,8 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-// AnydocReader converts office documents to markdown in this process, using
-// the anydoc converter instead of the Python docreader service.
-//
-// Embedded images are rendered in place from the document model. PDFs with no
-// text layer (scanned exam papers) cannot be converted by anydoc; when a
-// fallback reader is configured (typically the builtin docreader) those files
-// are handed off so pages can be rasterized for OCR.
+// AnydocReader converts office documents in this process. Scanned PDFs require
+// a separately selected MinerU parser when no OCR fallback is supplied.
 type AnydocReader struct {
 	// extractImages controls whether embedded images are parsed and placed
 	// in the markdown. Off halves parse time for text-only indexing.
@@ -86,16 +81,20 @@ func pdfMarkdownIsEmpty(converted *anydoc.Result, err error) bool {
 }
 
 func (r *AnydocReader) readScannedPDF(ctx context.Context, req *types.ReadRequest, convertErr error) (*types.ReadResult, error) {
-	if !r.canFallback() {
+	if r.fallback == nil {
+		hint := "Configure MinerU or select a MinerU parser for scanned PDFs"
 		if convertErr != nil {
-			return nil, fmt.Errorf("anydoc conversion failed for %q: %w", req.FileName, convertErr)
+			return nil, fmt.Errorf("anydoc conversion failed for %q: %w. %s", req.FileName, convertErr, hint)
 		}
-		return nil, fmt.Errorf("anydoc conversion failed for %q: PDF has no extractable text; OCR is required", req.FileName)
+		return nil, fmt.Errorf("anydoc conversion failed for %q: PDF has no extractable text; OCR is required. %s", req.FileName, hint)
 	}
 
-	logger.Infof(ctx, "[anydoc] %q has no text layer, falling back to builtin for scanned-PDF OCR", req.FileName)
+	logger.Infof(ctx, "[anydoc] %q has no text layer, falling back to the configured OCR reader", req.FileName)
 	fallbackReq := *req
-	fallbackReq.ParserEngine = BuiltinEngineName
+	fallbackReq.ParserEngine = MinerUEngineName
+	if _, cloud := r.fallback.(*MinerUCloudReader); cloud {
+		fallbackReq.ParserEngine = MinerUCloudEngineName
+	}
 	result, err := r.fallback.Read(ctx, &fallbackReq)
 	if err != nil {
 		return nil, fmt.Errorf("anydoc scanned-PDF fallback failed for %q: %w", req.FileName, err)
@@ -107,23 +106,13 @@ func (r *AnydocReader) readScannedPDF(ctx context.Context, req *types.ReadReques
 		result.Metadata = map[string]string{}
 	}
 	if result.Metadata["parser"] == "" {
-		result.Metadata["parser"] = BuiltinEngineName
+		result.Metadata["parser"] = fallbackReq.ParserEngine
 	}
 	result.Metadata["anydoc_fallback"] = "scanned_pdf"
 	if result.Metadata["image_source_type"] == "" {
 		result.Metadata["image_source_type"] = "scanned_pdf"
 	}
 	return result, nil
-}
-
-func (r *AnydocReader) canFallback() bool {
-	if r.fallback == nil {
-		return false
-	}
-	if connected, ok := r.fallback.(interface{ IsConnected() bool }); ok {
-		return connected.IsConnected()
-	}
-	return true
 }
 
 // imageRefsFromAssets turns extracted assets into ImageRefs that match the

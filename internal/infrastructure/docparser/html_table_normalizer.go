@@ -12,7 +12,7 @@ import (
 
 var (
 	// htmlTableBlockPattern matches a single (non-nested) <table>...</table>
-	// block, the form OCR/layout engines such as PaddleOCR-VL emit tables in.
+	// block, the form OCR/layout engines such as OCR/layout parsers emit tables in.
 	htmlTableBlockPattern = regexp.MustCompile(`(?is)<table\b[^>]*>.*?</table>`)
 
 	// htmlLayoutAttrPattern matches presentational HTML attributes that carry
@@ -32,7 +32,7 @@ var (
 )
 
 // normalizeHTMLTables rewrites inline HTML <table> blocks embedded in OCR
-// markdown output. PaddleOCR-VL emits tables as HTML with per-cell text-align
+// markdown output. OCR/layout parsers emits tables as HTML with per-cell text-align
 // styles, which (1) waste tokens on layout markup and (2) are not recognized
 // by the chunker's table-protection logic, so large tables get split mid-row.
 //

@@ -19,11 +19,7 @@ func TestEnsureSingleTeamSpaceIsIdempotent(t *testing.T) {
 	if err := db.Find(&tenants).Error; err != nil {
 		t.Fatal(err)
 	}
-	if len(tenants) != 1 || tenants[0].ID != types.SingleTenantID || tenants[0].DefaultStorageBackendID == nil {
+	if len(tenants) != 1 || tenants[0].ID != types.SingleTenantID {
 		t.Fatalf("team bootstrap=%+v", tenants)
-	}
-	var count int64
-	if err := db.Model(&types.StorageBackend{}).Count(&count).Error; err != nil || count != 1 {
-		t.Fatalf("default storage count=%d err=%v", count, err)
 	}
 }

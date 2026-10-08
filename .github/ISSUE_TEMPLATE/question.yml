@@ -70,7 +70,7 @@ body:
         If the issue involves errors or requires debugging, please collect logs:
 
         ```bash
-        docker compose logs -f --tail=1000 app docreader postgres
+        docker compose logs -f --tail=1000 app postgres
         ```
 
   - type: textarea

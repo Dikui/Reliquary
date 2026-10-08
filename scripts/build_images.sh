@@ -27,7 +27,6 @@ show_help() {
     echo "  -h, --help     显示帮助信息"
     echo "  -a, --all      构建所有镜像（默认）"
     echo "  -p, --app      仅构建应用镜像"
-    echo "  -d, --docreader 仅构建文档读取器镜像"
     echo "  -f, --frontend 仅构建前端镜像"
     echo "  -s, --sandbox  仅构建沙箱镜像"
     echo "  -c, --clean    清理所有本地镜像"
@@ -159,30 +158,6 @@ build_app_image() {
     fi
 }
 
-# 构建文档读取器镜像
-build_docreader_image() {
-    log_info "构建文档读取器镜像 (reliquary-docreader)..."
-    
-    cd "$PROJECT_ROOT"
-    
-    docker build \
-        --platform $PLATFORM \
-        --build-arg PLATFORM=$PLATFORM \
-        --build-arg TARGETARCH=$TARGETARCH \
-        --build-arg APT_MIRROR=${APT_MIRROR:-} \
-        -f docker/Dockerfile.docreader \
-        -t reliquary-docreader:latest \
-        .
-    
-    if [ $? -eq 0 ]; then
-        log_success "文档读取器镜像构建成功"
-        return 0
-    else
-        log_error "文档读取器镜像构建失败"
-        return 1
-    fi
-}
-
 # 构建前端镜像
 build_frontend_image() {
     log_info "构建前端镜像 (reliquary-ui)..."
@@ -240,7 +215,6 @@ build_all_images() {
     log_info "开始构建所有镜像..."
 
     local app_result=0
-    local docreader_result=0
     local frontend_result=0
     local sandbox_result=0
 
@@ -248,9 +222,6 @@ build_all_images() {
     build_app_image
     app_result=$?
 
-    # 构建文档读取器镜像
-    build_docreader_image
-    docreader_result=$?
 
     # 构建前端镜像
     build_frontend_image
@@ -269,12 +240,6 @@ build_all_images() {
         log_error "✗ 应用镜像构建失败"
     fi
 
-    if [ $docreader_result -eq 0 ]; then
-        log_success "✓ 文档读取器镜像构建成功"
-    else
-        log_error "✗ 文档读取器镜像构建失败"
-    fi
-
     if [ $frontend_result -eq 0 ]; then
         log_success "✓ 前端镜像构建成功"
     else
@@ -287,7 +252,7 @@ build_all_images() {
         log_error "✗ 沙箱镜像构建失败"
     fi
 
-    if [ $app_result -eq 0 ] && [ $docreader_result -eq 0 ] && [ $frontend_result -eq 0 ] && [ $sandbox_result -eq 0 ]; then
+    if [ $app_result -eq 0 ] && [ $frontend_result -eq 0 ] && [ $sandbox_result -eq 0 ]; then
         log_success "所有镜像构建完成！"
         return 0
     else
@@ -303,19 +268,16 @@ clean_images() {
     # 停止相关容器
     log_info "停止相关容器..."
     docker stop $(docker ps -q --filter "ancestor=reliquary-app:latest" 2>/dev/null) 2>/dev/null || true
-    docker stop $(docker ps -q --filter "ancestor=reliquary-docreader:latest" 2>/dev/null) 2>/dev/null || true
     docker stop $(docker ps -q --filter "ancestor=reliquary-ui:latest" 2>/dev/null) 2>/dev/null || true
     
     # 删除相关容器
     log_info "删除相关容器..."
     docker rm $(docker ps -aq --filter "ancestor=reliquary-app:latest" 2>/dev/null) 2>/dev/null || true
-    docker rm $(docker ps -aq --filter "ancestor=reliquary-docreader:latest" 2>/dev/null) 2>/dev/null || true
     docker rm $(docker ps -aq --filter "ancestor=reliquary-ui:latest" 2>/dev/null) 2>/dev/null || true
     
     # 删除镜像
     log_info "删除本地镜像..."
     docker rmi reliquary-app:latest 2>/dev/null || true
-    docker rmi reliquary-docreader:latest 2>/dev/null || true
     docker rmi reliquary-ui:latest 2>/dev/null || true
     docker rmi reliquary-sandbox:latest 2>/dev/null || true
     docker rmi reliquary-sandbox:main 2>/dev/null || true
@@ -329,7 +291,6 @@ clean_images() {
 # 解析命令行参数
 BUILD_ALL=false
 BUILD_APP=false
-BUILD_DOCREADER=false
 BUILD_FRONTEND=false
 BUILD_SANDBOX=false
 CLEAN_IMAGES=false
@@ -346,8 +307,6 @@ while [ "$1" != "" ]; do
         -a | --all )        BUILD_ALL=true
                             ;;
         -p | --app )        BUILD_APP=true
-                            ;;
-        -d | --docreader )  BUILD_DOCREADER=true
                             ;;
         -f | --frontend )   BUILD_FRONTEND=true
                             ;;
@@ -387,11 +346,6 @@ fi
 
 if [ "$BUILD_APP" = true ]; then
     build_app_image
-    exit $?
-fi
-
-if [ "$BUILD_DOCREADER" = true ]; then
-    build_docreader_image
     exit $?
 fi
 

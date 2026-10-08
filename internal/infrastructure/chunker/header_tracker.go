@@ -1,5 +1,5 @@
 // Package chunker - header_tracker.go implements context-preserving header
-// tracking for document chunking, ported from docreader/splitter/header_hook.py.
+// tracking for document chunking, ported from the original Python heading tracker.
 //
 // When a large Markdown table is split across multiple chunks, each chunk after
 // the first would lose the table header context. The headerTracker detects table
@@ -22,7 +22,7 @@ type headerTrackerHook struct {
 }
 
 // defaultHeaderHooks returns header tracking hooks matching the Python defaults
-// in docreader/splitter/header_hook.py.
+// in the original Python heading tracker.
 var defaultHeaderHooks = []headerTrackerHook{
 	{
 		// Markdown table: header row + separator row (e.g. "| A | B |\n| --- | --- |\n")

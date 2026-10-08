@@ -101,6 +101,8 @@ type KnowledgeService interface {
 	DeleteKnowledgeList(ctx context.Context, ids []string) error
 	// GetKnowledgeFile retrieves the file associated with the knowledge.
 	GetKnowledgeFile(ctx context.Context, id string) (io.ReadCloser, string, error)
+	// GetKnowledgeBody retrieves the immutable parsed text.
+	GetKnowledgeBody(ctx context.Context, id string) (io.ReadCloser, string, error)
 	ReviewKnowledgeIntake(ctx context.Context, id, action string, sourceInfo types.SourceInfo) (*types.Knowledge, error)
 	// UpdateKnowledge updates knowledge information.
 	UpdateKnowledge(ctx context.Context, knowledge *types.Knowledge) error

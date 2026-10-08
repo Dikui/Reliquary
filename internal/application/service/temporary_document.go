@@ -83,9 +83,9 @@ func envPositiveInt(key string, def int) int {
 var markdownImagePattern = regexp.MustCompile(`!\[[^\]]*\]\([^)]*\)`)
 
 var temporaryDocumentExtensions = map[string]struct{}{
-	".docx": {}, ".doc": {}, ".pdf": {}, ".ppt": {}, ".pptx": {}, ".epub": {}, ".mhtml": {},
+	".docx": {}, ".doc": {}, ".pdf": {}, ".ppt": {}, ".pptx": {}, ".epub": {},
 	".xlsx": {}, ".xls": {},
-	".md": {}, ".markdown": {}, ".txt": {}, ".csv": {}, ".json": {}, ".xml": {}, ".yaml": {}, ".yml": {}, ".log": {}, ".html": {},
+	".md": {}, ".markdown": {}, ".txt": {}, ".csv": {}, ".json": {}, ".xml": {}, ".yaml": {}, ".yml": {}, ".log": {},
 	".jpg": {}, ".jpeg": {}, ".png": {}, ".gif": {}, ".bmp": {}, ".tiff": {}, ".webp": {},
 	".mp3": {}, ".wav": {}, ".m4a": {}, ".flac": {}, ".ogg": {}, ".aac": {},
 }
@@ -98,7 +98,6 @@ type temporaryDocumentService struct {
 	repo            interfaces.TemporaryDocumentRepository
 	fileService     interfaces.FileService
 	resourceCatalog interfaces.ResourceCatalog
-	documentReader  interfaces.DocumentReader
 	imageResolver   *docparser.ImageResolver
 	modelService    interfaces.ModelService
 	tenantService   interfaces.TenantService
@@ -109,7 +108,6 @@ func NewTemporaryDocumentService(
 	repo interfaces.TemporaryDocumentRepository,
 	fileService interfaces.FileService,
 	resourceCatalog interfaces.ResourceCatalog,
-	documentReader interfaces.DocumentReader,
 	imageResolver *docparser.ImageResolver,
 	modelService interfaces.ModelService,
 	tenantService interfaces.TenantService,
@@ -117,8 +115,8 @@ func NewTemporaryDocumentService(
 ) interfaces.TemporaryDocumentService {
 	return &temporaryDocumentService{
 		repo: repo, fileService: fileService, resourceCatalog: resourceCatalog,
-		documentReader: documentReader, imageResolver: imageResolver,
-		modelService: modelService, tenantService: tenantService, taskEnqueuer: taskEnqueuer,
+		imageResolver: imageResolver,
+		modelService:  modelService, tenantService: tenantService, taskEnqueuer: taskEnqueuer,
 	}
 }
 
@@ -211,32 +209,7 @@ func (s *temporaryDocumentService) supportsExtension(ctx context.Context, tenant
 	if _, ok := temporaryDocumentExtensions[ext]; ok {
 		return true
 	}
-	if s.documentReader == nil {
-		return false
-	}
-	var overrides map[string]string
-	if tenant, err := s.tenantService.GetTenantByID(ctx, tenantID); err == nil && tenant != nil {
-		overrides = tenant.ParserEngineConfig.ToOverridesMap()
-	}
-	engines, err := s.documentReader.ListEngines(ctx, overrides)
-	if err != nil {
-		return false
-	}
-	wanted := strings.TrimPrefix(strings.ToLower(ext), ".")
-	if wanted == "" || wanted == "url" {
-		return false
-	}
-	for _, engine := range engines {
-		if !engine.Available {
-			continue
-		}
-		for _, fileType := range engine.FileTypes {
-			if strings.TrimPrefix(strings.ToLower(strings.TrimSpace(fileType)), ".") == wanted {
-				return true
-			}
-		}
-	}
-	return false
+	return docparser.SupportsFileType(ext)
 }
 
 func (s *temporaryDocumentService) Get(ctx context.Context, tenantID uint64, sessionID, documentID string) (*types.TemporaryDocument, error) {
@@ -386,7 +359,7 @@ func (s *temporaryDocumentService) parse(ctx context.Context, document *types.Te
 	if tenant, ok := ctx.Value(types.TenantInfoContextKey).(*types.Tenant); ok && tenant != nil && tenant.ParserEngineConfig != nil {
 		request.ParserEngineOverrides = tenant.ParserEngineConfig.ToOverridesMap()
 	}
-	deps := docparser.ReaderDeps{Overrides: request.ParserEngineOverrides, Remote: s.documentReader}
+	deps := docparser.ReaderDeps{Overrides: request.ParserEngineOverrides}
 	if s.tenantService != nil {
 	}
 	reader, err := docparser.NewReader(ctx, parserEngine, strings.TrimPrefix(ext, "."), false, deps)

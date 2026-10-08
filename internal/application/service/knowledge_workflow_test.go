@@ -73,7 +73,7 @@ func (s *workflowTestIntakeKnowledge) GetKnowledgeBatch(context.Context, uint64,
 	return []*types.Knowledge{s.item}, nil
 }
 
-func (s *workflowTestIntakeKnowledge) GetKnowledgeFile(context.Context, string) (io.ReadCloser, string, error) {
+func (s *workflowTestIntakeKnowledge) GetKnowledgeBody(context.Context, string) (io.ReadCloser, string, error) {
 	return io.NopCloser(strings.NewReader(s.sourceBody)), s.item.FileName, nil
 }
 

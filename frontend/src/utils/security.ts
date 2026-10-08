@@ -24,10 +24,7 @@ const PROVIDER_IMG_SRC_RE = new RegExp(
   `<img\\b([^>]*?)\\ssrc=(["'])(${PROVIDER_SCHEME_PATTERN}):(?:\\/\\/|&#x2f;&#x2f;|&#47;&#47;)([^"']+)\\2([^>]*)>`,
   'gi',
 );
-const STORAGE_BACKEND_IMG_SRC_RE = new RegExp(
-  `<img\\b([^>]*?)\\ssrc=(["'])storage:\\/\\/([0-9A-Za-z_-]+)\\/(${PROVIDER_SCHEME_PATTERN}):(?:\\/\\/|&#x2f;&#x2f;|&#47;&#47;)([^"']+)\\2([^>]*)>`,
-  'gi',
-);
+
 
 type SecurityHooks = {
   beforeSanitizeElements: NodeHook;
@@ -170,18 +167,7 @@ export function protectProviderImageSrcInHTML(html: string): string {
       return buildProtectedImageTag(before, quote, `${provider}://${restPath}`, after);
     },
   );
-  return withProviderImages.replace(
-    STORAGE_BACKEND_IMG_SRC_RE,
-    (_m, before, quote, backendID, provider, restPathRaw, after) => {
-      const restPath = decodeProviderURL(restPathRaw);
-      return buildProtectedImageTag(
-        before,
-        quote,
-        `storage://${backendID}/${provider}://${restPath}`,
-        after,
-      );
-    },
-  );
+  return withProviderImages;
 }
 
 function decodeProviderURL(raw: string): string {
@@ -477,7 +463,7 @@ export async function hydrateProtectedFileImages(
   }
 
   const images = root.querySelectorAll<HTMLImageElement>(
-    'img[data-protected-src], img[src^="resource://"], img[src^="storage://"], img[src^="local://"], img[src^="minio://"], img[src^="s3://"]',
+    'img[data-protected-src], img[src^="resource://"], img[src^="local://"]',
   );
   if (!images.length) {
     return;

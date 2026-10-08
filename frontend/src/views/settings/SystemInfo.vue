@@ -168,17 +168,6 @@
         </div>
       </div>
 
-      <!-- Vector Store Engine -->
-      <div class="setting-row">
-        <div class="setting-info">
-          <label>{{ $t('system.vectorStoreEngineLabel') }}</label>
-          <p class="desc">{{ $t('system.vectorStoreEngineDescription') }}</p>
-        </div>
-        <div class="setting-control">
-          <span class="info-value">{{ systemInfo?.vector_store_engine || $t('system.unknown') }}</span>
-        </div>
-      </div>
-
       <!-- Graph Database Engine -->
 
     </div>

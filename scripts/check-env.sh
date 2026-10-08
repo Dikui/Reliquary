@@ -83,17 +83,7 @@ check_var "DB_NAME"
 
 echo ""
 log_info "存储配置:"
-check_var "STORAGE_TYPE"
-
-if [ "$STORAGE_TYPE" = "minio" ]; then
-    check_var "MINIO_BUCKET_NAME"
-fi
-
-
-if [ "$STORAGE_TYPE" = "s3" ]; then
-    check_var "S3_REGION"
-    check_var "S3_BUCKET_NAME"
-fi
+check_var "LOCAL_STORAGE_BASE_DIR"
 
 echo ""
 log_info "Redis 配置:"

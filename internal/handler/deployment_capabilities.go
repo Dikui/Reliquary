@@ -15,8 +15,6 @@ var DeploymentCapabilityKeys = []string{
 	"integrations.api",
 	"settings.mcp",
 	"settings.websearch",
-	"settings.vectorstore",
-	"settings.storage",
 	"settings.sandbox",
 	"settings.sandbox.docker",
 }
@@ -39,8 +37,6 @@ type DeploymentFeatureAvailability struct {
 	API           bool
 	MCP           bool
 	WebSearch     bool
-	VectorStore   bool
-	Storage       bool
 	Sandbox       bool
 	SandboxDocker bool
 }
@@ -74,8 +70,6 @@ func BuildDeploymentCapabilities(
 			"integrations.api":        supportedDeploymentCapability(available.API),
 			"settings.mcp":            supportedDeploymentCapability(available.MCP),
 			"settings.websearch":      supportedDeploymentCapability(available.WebSearch),
-			"settings.vectorstore":    supportedDeploymentCapability(available.VectorStore),
-			"settings.storage":        supportedDeploymentCapability(available.Storage),
 			"settings.sandbox":        supportedDeploymentCapability(available.Sandbox),
 			"settings.sandbox.docker": sandboxDocker,
 		},

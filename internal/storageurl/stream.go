@@ -11,7 +11,7 @@ import (
 // incompleteRefSuffixRe matches a storage reference that reaches the end of the
 // string — it may continue in the next chunk.
 var incompleteRefSuffixRe = regexp.MustCompile(
-	`\b(?:resource|storage|local|minio|s3)://[^\s)\]>"]*$`,
+	`\b(?:resource|local)://[^\s)\]>"]*$`,
 )
 
 // FindIncompleteRef returns the byte offset of a potentially truncated storage
@@ -25,8 +25,8 @@ func FindIncompleteRef(s string) int {
 }
 
 // incompleteMarkdownLinkSuffixRe matches a Markdown link or image whose destination URL
-// (the parenthesized part) is not yet closed — e.g. "![alt](minio://part" or
-// "![alt](". Holding back only from "minio://" would flush "![alt](" to the
+// (the parenthesized part) is not yet closed, for example "![alt](local://part" or
+// "![alt](". Holding back only from "local://" would flush "![alt](" to the
 // client and break the image once the URL arrives in the next chunk.
 //
 // The destination must be whitespace-free, and FindIncompleteMarkdownLink caps
@@ -45,7 +45,7 @@ const maxIncompleteLinkBytes = 2048
 // `[label](url` or `![alt](url` suffix at the end of s, or -1 if none.
 func FindIncompleteMarkdownLink(s string) int {
 	// Prefer pairing a trailing reference fragment with the nearest preceding
-	// `![…](` so alt text may itself contain ']' (e.g. `![a[b]](minio://part`).
+	// `![…](` so alt text may itself contain ']' (e.g. `![a[b]](local://part`).
 	if urlIdx := FindIncompleteRef(s); urlIdx >= 0 {
 		if imgIdx := strings.LastIndex(s[:urlIdx], "!["); imgIdx >= 0 {
 			if strings.Contains(s[imgIdx:urlIdx], "](") {

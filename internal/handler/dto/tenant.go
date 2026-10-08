@@ -10,25 +10,23 @@ import (
 )
 
 type TenantResponse struct {
-	ID                  uint64                     `json:"id"`
-	Name                string                     `json:"name"`
-	Description         string                     `json:"description"`
-	Status              string                     `json:"status"`
-	RetrieverEngines    types.RetrieverEngines     `json:"retriever_engines"`
-	Business            string                     `json:"business"`
-	StorageQuota        int64                      `json:"storage_quota"`
-	StorageUsed         int64                      `json:"storage_used"`
-	ContextConfig       *types.ContextConfig       `json:"context_config,omitempty"`
-	WebSearchConfig     *types.WebSearchConfig     `json:"web_search_config,omitempty"`
-	ParserEngineConfig  *types.ParserEngineConfig  `json:"parser_engine_config,omitempty"`
-	Credentials         *types.CredentialsConfig   `json:"credentials,omitempty"`
-	StorageEngineConfig *types.StorageEngineConfig `json:"storage_engine_config,omitempty"`
-	ChatHistoryConfig   *types.ChatHistoryConfig   `json:"chat_history_config,omitempty"`
-	RetrievalConfig     *types.RetrievalConfig     `json:"retrieval_config,omitempty"`
-	MemoryConfig        *types.MemoryConfig        `json:"memory_config,omitempty"`
-	CreatedAt           time.Time                  `json:"created_at"`
-	UpdatedAt           time.Time                  `json:"updated_at"`
-	DeletedAt           gorm.DeletedAt             `json:"deleted_at"`
+	ID                 uint64                    `json:"id"`
+	Name               string                    `json:"name"`
+	Description        string                    `json:"description"`
+	Status             string                    `json:"status"`
+	Business           string                    `json:"business"`
+	StorageQuota       int64                     `json:"storage_quota"`
+	StorageUsed        int64                     `json:"storage_used"`
+	ContextConfig      *types.ContextConfig      `json:"context_config,omitempty"`
+	WebSearchConfig    *types.WebSearchConfig    `json:"web_search_config,omitempty"`
+	ParserEngineConfig *types.ParserEngineConfig `json:"parser_engine_config,omitempty"`
+	Credentials        *types.CredentialsConfig  `json:"credentials,omitempty"`
+	ChatHistoryConfig  *types.ChatHistoryConfig  `json:"chat_history_config,omitempty"`
+	RetrievalConfig    *types.RetrievalConfig    `json:"retrieval_config,omitempty"`
+	MemoryConfig       *types.MemoryConfig       `json:"memory_config,omitempty"`
+	CreatedAt          time.Time                 `json:"created_at"`
+	UpdatedAt          time.Time                 `json:"updated_at"`
+	DeletedAt          gorm.DeletedAt            `json:"deleted_at"`
 }
 
 // NewTenantResponse converts a stored tenant into its HTTP response shape.
@@ -48,7 +46,6 @@ func NewTenantResponseWithSecrets(tenant *types.Tenant) *TenantResponse {
 		Name:              tenant.Name,
 		Description:       tenant.Description,
 		Status:            tenant.Status,
-		RetrieverEngines:  tenant.RetrieverEngines,
 		Business:          tenant.Business,
 		StorageQuota:      tenant.StorageQuota,
 		StorageUsed:       tenant.StorageUsed,
@@ -64,7 +61,6 @@ func NewTenantResponseWithSecrets(tenant *types.Tenant) *TenantResponse {
 		resp.WebSearchConfig = types.WebSearchConfigForResponse(tenant.WebSearchConfig, true)
 		resp.ParserEngineConfig = types.ParserEngineConfigForResponse(tenant.ParserEngineConfig, true)
 		resp.Credentials = types.CredentialsConfigForResponse(tenant.Credentials, true)
-		resp.StorageEngineConfig = types.StorageEngineConfigForResponse(tenant.StorageEngineConfig, true)
 	}
 	return resp
 }

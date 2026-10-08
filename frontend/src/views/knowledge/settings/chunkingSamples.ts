@@ -85,7 +85,7 @@ Reliquary 后端采用清晰的分层架构：
 
 ### 检索流水线
 
-文档上传 → docreader 服务解析 → 分块（含父子分块） → 嵌入 → 写入 PostgreSQL → 用户查询时多路召回 → RRF 融合 → 重排 → 返回。
+文档上传 → 进程内解析器或 MinerU 解析 → 分块（含父子分块） → 嵌入 → 写入 PostgreSQL → 用户查询时多路召回 → RRF 融合 → 重排 → 返回。
 
 ### Agent 编排
 
@@ -116,7 +116,7 @@ const SUPPORT_SAMPLE = `# Reliquary 部署与使用 使用指南
 
 \`\`\`
 docker pull docker.m.daocloud.io/reliquary-app:v0.5.0
-docker pull docker.m.daocloud.io/reliquary-docreader:v0.5.0
+make anydoc-lib
 docker pull docker.m.daocloud.io/reliquary-ui:v0.5.0
 \`\`\`
 
@@ -130,7 +130,7 @@ docker pull docker.m.daocloud.io/reliquary-ui:v0.5.0
 数据库迁移未完成。运行 \`make migrate-up\`，确认所有迁移成功后重启 app 容器。
 
 ### Q5: 文档上传后状态一直是 processing
-检查 docreader 容器是否运行（\`docker compose ps\`），并查看其日志中是否有解析报错。常见原因：依赖的 Python 包缺失、PDF 加密、扫描件 OCR 超时。
+检查应用日志中的解析错误。PDF 默认使用 anydoc，需要链接静态库；扫描件请在知识库规则中选择已配置的 MinerU。
 
 ## 配置
 
@@ -179,7 +179,7 @@ docker pull docker.m.daocloud.io/reliquary-ui:v0.5.0
 ## 性能
 
 ### Q16: 大文档上传慢怎么办？
-docreader 是 CPU 密集型，建议横向扩容：在 docker-compose 中调高 docreader 服务的 \`deploy.replicas\`，或独立部署到更强的机器。
+文档解析可能占用较多 CPU，按本机资源调整任务队列并发。扫描件和复杂排版可选择已配置的 MinerU。
 
 ### Q17: 嵌入吞吐瓶颈
 切换到本地 Ollama + GPU 加速，或用商用 API 的批量端点（如 OpenAI 的 batch API）。设置 \`EMBED_BATCH_SIZE=64\` 显著提升吞吐。
@@ -260,7 +260,7 @@ docker compose up -d
 
 4.2 备份与恢复
 
-PG 全量每日备份 + WAL 增量；MinIO/对象存储依赖云端版本管理。本地磁盘卷单独定期备份。
+PG 全量每日备份 + WAL 增量；本地磁盘卷单独定期备份。
 
 4.3 故障排查
 

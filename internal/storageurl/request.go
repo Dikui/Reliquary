@@ -12,17 +12,12 @@ func NewRequestRewriter(
 	ctx context.Context,
 	mode Mode,
 	defaultSvc interfaces.FileService,
-	storageResolver interfaces.StorageBackendResolver,
 ) *Rewriter {
 	if mode != ModePublic {
 		return NewRewriter(nil, "API")
 	}
 	tenant, _ := types.TenantInfoFromContext(ctx)
-	var resolvers []interfaces.StorageBackendResolver
-	if storageResolver != nil {
-		resolvers = append(resolvers, storageResolver)
-	}
-	resolver := NewFileServiceResolver(tenant, defaultSvc, resolvers...).WithContext(ctx)
+	resolver := NewFileServiceResolver(tenant, defaultSvc).WithContext(ctx)
 	return NewRewriter(resolver, "API")
 }
 

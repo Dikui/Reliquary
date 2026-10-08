@@ -2,14 +2,10 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"reliquary/internal/types"
 )
 
@@ -35,12 +31,8 @@ type OAuthState struct {
 	FrontendRedirect string `json:"frontend_redirect"`
 }
 
-// oauthStateStore persists in-flight OAuth states. Backed by Redis when
-// available (so the callback can land on any backend replica); falls back to
-// a TTL in-memory map for in-memory test fixtures.
+// oauthStateStore keeps expiring, single-use authorization states in this process.
 type oauthStateStore struct {
-	rdb *redis.Client
-
 	mu       sync.Mutex
 	mem      map[string]memStateEntry
 	attempts map[string]memAttemptEntry
@@ -67,28 +59,8 @@ type memAttemptEntry struct {
 	expiresAt time.Time
 }
 
-func newOAuthStateStore(rdb *redis.Client) *oauthStateStore {
-	s := &oauthStateStore{
-		rdb:      rdb,
-		mem:      make(map[string]memStateEntry),
-		attempts: make(map[string]memAttemptEntry),
-	}
-	if rdb == nil {
-		go s.gcLoop()
-	}
-	return s
-}
-
-func (s *oauthStateStore) key(state string) string {
-	ns := strings.TrimSpace(os.Getenv("RELIQUARY_REDIS_NAMESPACE"))
-	if ns != "" {
-		return "reliquary:mcp_oauth_state:" + ns + ":" + state
-	}
-	return "reliquary:mcp_oauth_state:" + state
-}
-
-func (s *oauthStateStore) attemptKey(state string) string {
-	return s.key(state) + ":attempt"
+func newOAuthStateStore() *oauthStateStore {
+	return &oauthStateStore{mem: make(map[string]memStateEntry), attempts: make(map[string]memAttemptEntry)}
 }
 
 // Put stores a state with a fixed TTL.
@@ -98,23 +70,9 @@ func (s *oauthStateStore) Put(ctx context.Context, state string, value OAuthStat
 		Principal: value.Principal.Normalize(),
 		ServiceID: value.ServiceID,
 	}
-	if s.rdb != nil {
-		data, err := json.Marshal(value)
-		if err != nil {
-			return err
-		}
-		attemptData, err := json.Marshal(attempt)
-		if err != nil {
-			return err
-		}
-		pipe := s.rdb.TxPipeline()
-		pipe.Set(ctx, s.key(state), data, oauthStateTTL)
-		pipe.Set(ctx, s.attemptKey(state), attemptData, oauthStateTTL)
-		_, err = pipe.Exec(ctx)
-		return err
-	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.gcExpiredLocked(time.Now())
 	expiresAt := time.Now().Add(oauthStateTTL)
 	s.mem[state] = memStateEntry{value: value, expiresAt: expiresAt}
 	s.attempts[state] = memAttemptEntry{value: attempt, expiresAt: expiresAt}
@@ -124,27 +82,9 @@ func (s *oauthStateStore) Put(ctx context.Context, state string, value OAuthStat
 // CompleteAttempt marks an authorization attempt complete only after the code
 // exchange has successfully persisted a token.
 func (s *oauthStateStore) CompleteAttempt(ctx context.Context, state string) error {
-	if s.rdb != nil {
-		data, err := s.rdb.Get(ctx, s.attemptKey(state)).Bytes()
-		if err != nil {
-			if err == redis.Nil {
-				return fmt.Errorf("oauth attempt not found or expired")
-			}
-			return err
-		}
-		var attempt OAuthAttempt
-		if err := json.Unmarshal(data, &attempt); err != nil {
-			return err
-		}
-		attempt.Completed = true
-		data, err = json.Marshal(attempt)
-		if err != nil {
-			return err
-		}
-		return s.rdb.Set(ctx, s.attemptKey(state), data, oauthStateTTL).Err()
-	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.gcExpiredLocked(time.Now())
 	entry, ok := s.attempts[state]
 	if !ok || time.Now().After(entry.expiresAt) {
 		delete(s.attempts, state)
@@ -158,22 +98,9 @@ func (s *oauthStateStore) CompleteAttempt(ctx context.Context, state string) err
 
 // Attempt returns the status record for one authorization flow.
 func (s *oauthStateStore) Attempt(ctx context.Context, state string) (OAuthAttempt, error) {
-	if s.rdb != nil {
-		data, err := s.rdb.Get(ctx, s.attemptKey(state)).Bytes()
-		if err != nil {
-			if err == redis.Nil {
-				return OAuthAttempt{}, fmt.Errorf("oauth attempt not found or expired")
-			}
-			return OAuthAttempt{}, err
-		}
-		var attempt OAuthAttempt
-		if err := json.Unmarshal(data, &attempt); err != nil {
-			return OAuthAttempt{}, err
-		}
-		return attempt, nil
-	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.gcExpiredLocked(time.Now())
 	entry, ok := s.attempts[state]
 	if !ok || time.Now().After(entry.expiresAt) {
 		delete(s.attempts, state)
@@ -185,22 +112,9 @@ func (s *oauthStateStore) Attempt(ctx context.Context, state string) (OAuthAttem
 // Take retrieves and deletes a state (single-use). Returns an error if the
 // state is unknown or expired.
 func (s *oauthStateStore) Take(ctx context.Context, state string) (OAuthState, error) {
-	if s.rdb != nil {
-		data, err := s.rdb.GetDel(ctx, s.key(state)).Bytes()
-		if err != nil {
-			if err == redis.Nil {
-				return OAuthState{}, fmt.Errorf("oauth state not found or expired")
-			}
-			return OAuthState{}, err
-		}
-		var v OAuthState
-		if err := json.Unmarshal(data, &v); err != nil {
-			return OAuthState{}, err
-		}
-		return v, nil
-	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.gcExpiredLocked(time.Now())
 	entry, ok := s.mem[state]
 	if !ok {
 		return OAuthState{}, fmt.Errorf("oauth state not found or expired")
@@ -212,22 +126,16 @@ func (s *oauthStateStore) Take(ctx context.Context, state string) (OAuthState, e
 	return entry.value, nil
 }
 
-func (s *oauthStateStore) gcLoop() {
-	ticker := time.NewTicker(time.Minute)
-	defer ticker.Stop()
-	for range ticker.C {
-		now := time.Now()
-		s.mu.Lock()
-		for k, v := range s.mem {
-			if now.After(v.expiresAt) {
-				delete(s.mem, k)
-			}
+// gcExpiredLocked removes expired entries during store access.
+func (s *oauthStateStore) gcExpiredLocked(now time.Time) {
+	for key, entry := range s.mem {
+		if !now.Before(entry.expiresAt) {
+			delete(s.mem, key)
 		}
-		for k, v := range s.attempts {
-			if now.After(v.expiresAt) {
-				delete(s.attempts, k)
-			}
+	}
+	for key, entry := range s.attempts {
+		if !now.Before(entry.expiresAt) {
+			delete(s.attempts, key)
 		}
-		s.mu.Unlock()
 	}
 }

@@ -123,7 +123,7 @@
 
         <div class="form-item">
           <label class="form-label required">{{ t('mcpServiceDialog.transportType') }}</label>
-          <!-- 紧凑 pill segmented，与 ModelEditorDialog 来源切换 / Storage MinIO 部署模式同款 -->
+          <!-- 紧凑 pill segmented，与 ModelEditorDialog 来源切换同款 -->
           <div class="source-options" role="radiogroup">
             <button
               type="button"

@@ -22,6 +22,7 @@ import (
 	"reliquary/internal/config"
 	"reliquary/internal/errors"
 	"reliquary/internal/handler/dto"
+	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/logger"
 	"reliquary/internal/models/asr"
 	"reliquary/internal/models/chat"
@@ -59,9 +60,7 @@ type InitializationHandler struct {
 	kbRepository     interfaces.KnowledgeBaseRepository
 	knowledgeService interfaces.KnowledgeService
 	ollamaService    *ollama.OllamaService
-	documentReader   interfaces.DocumentReader
 	pooler           embedding.EmbedderPooler
-	storageResolver  interfaces.StorageBackendResolver
 }
 
 // NewInitializationHandler 创建初始化处理器
@@ -73,9 +72,7 @@ func NewInitializationHandler(
 	kbRepository interfaces.KnowledgeBaseRepository,
 	knowledgeService interfaces.KnowledgeService,
 	ollamaService *ollama.OllamaService,
-	documentReader interfaces.DocumentReader,
 	pooler embedding.EmbedderPooler,
-	storageResolver interfaces.StorageBackendResolver,
 ) *InitializationHandler {
 	return &InitializationHandler{
 		config:           config,
@@ -85,9 +82,7 @@ func NewInitializationHandler(
 		kbRepository:     kbRepository,
 		knowledgeService: knowledgeService,
 		ollamaService:    ollamaService,
-		documentReader:   documentReader,
 		pooler:           pooler,
-		storageResolver:  storageResolver,
 	}
 }
 
@@ -118,14 +113,11 @@ type KBModelConfigRequest struct {
 		TableMetadataInstructions *string   `json:"tableMetadataInstructions,omitempty"`
 	} `json:"documentSplitting"`
 
-	// 多模态配置（仅模型相关；存储引擎在 storageProvider 中配置）
+	// 多模态模型配置
 	Multimodal struct {
 		Enabled bool `json:"enabled"`
 	} `json:"multimodal"`
 
-	// 存储引擎选择（"local" | "minio" | "s3"），影响文档上传与文档内图片存储，参数从全局设置读取
-	StorageProvider  string `json:"storageProvider"`
-	StorageBackendID string `json:"storageBackendId"`
 
 	// 问题生成配置
 	QuestionGeneration struct {
@@ -167,11 +159,6 @@ type InitializationRequest struct {
 			APIKey        string `json:"apiKey"`
 			InterfaceType string `json:"interfaceType"` // "ollama" or "openai"
 		} `json:"vlm,omitempty"`
-		StorageType string `json:"storageType"`
-		Minio       *struct {
-			BucketName string `json:"bucketName"`
-			PathPrefix string `json:"pathPrefix"`
-		} `json:"minio,omitempty"`
 	} `json:"multimodal"`
 
 	DocumentSplitting struct {
@@ -331,51 +318,6 @@ func (h *InitializationHandler) UpdateKBConfig(c *gin.Context) {
 		kb.VLMConfig.DescriptionLanguage = strings.TrimSpace(req.VLMConfig.DescriptionLanguage)
 		kb.VLMConfig.CustomInstructions = strings.TrimSpace(req.VLMConfig.CustomInstructions)
 	}
-
-	// Bind the concrete storage instance. Provider remains a compatibility
-	// projection for older clients and historical rows.
-	if strings.TrimSpace(req.StorageBackendID) != "" {
-		tenant, _ := types.TenantInfoFromContext(ctx)
-		backend, resolveErr := h.storageResolver.ResolveBackend(ctx, tenant, req.StorageBackendID, "")
-		if resolveErr != nil || backend == nil {
-			c.Error(errors.NewBadRequestError("Storage backend is unavailable"))
-			return
-		}
-		oldID := ""
-		if kb.StorageBackendID != nil {
-			oldID = *kb.StorageBackendID
-		}
-		if oldID != "" && oldID != backend.ID {
-			knowledgeList, listErr := h.knowledgeService.ListPagedKnowledgeByKnowledgeBaseID(ctx, kbIdStr, &types.Pagination{Page: 1, PageSize: 1}, types.KnowledgeListFilter{})
-			if listErr == nil && knowledgeList != nil && knowledgeList.Total > 0 {
-				c.Error(errors.NewBadRequestError("Storage backend cannot be changed while the knowledge base contains files"))
-				return
-			}
-		}
-		kb.StorageBackendID = &backend.ID
-		req.StorageProvider = backend.Provider
-	}
-	// Legacy provider projection.
-	provider := strings.ToLower(strings.TrimSpace(req.StorageProvider))
-	if provider == "" {
-		provider = "local"
-	}
-	if !isStorageProviderAllowed(provider) {
-		c.Error(errors.NewBadRequestError("Storage provider is not allowed by STORAGE_ALLOW_LIST"))
-		return
-	}
-	oldProvider := kb.GetStorageProvider()
-	if oldProvider == "" {
-		oldProvider = "local"
-	}
-	if oldProvider != provider {
-		knowledgeList, err := h.knowledgeService.ListPagedKnowledgeByKnowledgeBaseID(ctx,
-			kbIdStr, &types.Pagination{Page: 1, PageSize: 1}, types.KnowledgeListFilter{})
-		if err == nil && knowledgeList != nil && knowledgeList.Total > 0 {
-			logger.Warn(ctx, "Storage engine changed with existing files, old files may become inaccessible")
-		}
-	}
-	kb.SetStorageProvider(provider)
 
 	// 更新问题生成配置
 	if req.QuestionGeneration.Enabled {
@@ -549,7 +491,6 @@ func (h *InitializationHandler) validateMultimodalConfig(ctx context.Context, re
 		return nil
 	}
 
-	storageType := strings.ToLower(req.Multimodal.StorageType)
 	if req.Multimodal.VLM == nil {
 		logger.Error(ctx, "Multimodal enabled but missing VLM configuration")
 		return errors.NewBadRequestError("启用多模态时需要配置VLM信息")
@@ -562,14 +503,6 @@ func (h *InitializationHandler) validateMultimodalConfig(ctx context.Context, re
 		return errors.NewBadRequestError("VLM配置不完整")
 	}
 
-	switch storageType {
-	case "minio":
-		if req.Multimodal.Minio == nil || req.Multimodal.Minio.BucketName == "" ||
-			os.Getenv("MINIO_ACCESS_KEY_ID") == "" || os.Getenv("MINIO_SECRET_ACCESS_KEY") == "" {
-			logger.Error(ctx, "MinIO configuration incomplete")
-			return errors.NewBadRequestError("MinIO配置不完整")
-		}
-	}
 	return nil
 }
 
@@ -757,24 +690,8 @@ func (h *InitializationHandler) applyKnowledgeBaseInitialization(
 			Enabled: req.Multimodal.Enabled,
 			ModelID: vlmModelID,
 		}
-		switch req.Multimodal.StorageType {
-		case "minio":
-			if req.Multimodal.Minio != nil {
-				kb.SetStorageProvider("minio")
-				// Legacy: also write to cos_config for backward compat with old code paths
-				kb.StorageConfig = types.StorageConfig{
-					Provider:   req.Multimodal.StorageType,
-					BucketName: req.Multimodal.Minio.BucketName,
-					PathPrefix: req.Multimodal.Minio.PathPrefix,
-					SecretID:   os.Getenv("MINIO_ACCESS_KEY_ID"),
-					SecretKey:  os.Getenv("MINIO_SECRET_ACCESS_KEY"),
-				}
-			}
-		}
 	} else {
 		kb.VLMConfig = types.VLMConfig{}
-		kb.SetStorageProvider("")
-		kb.StorageConfig = types.StorageConfig{}
 	}
 
 }
@@ -1364,11 +1281,8 @@ func (h *InitializationHandler) buildConfigResponse(ctx context.Context, models 
 		}
 	}
 
-	// 判断多模态是否启用：有VLM模型ID或有存储配置（兼容新旧字段）
-	storageProvider := kb.GetStorageProvider()
-	hasMultimodal := (kb.VLMConfig.IsEnabled() ||
-		kb.StorageConfig.SecretID != "" || kb.StorageConfig.BucketName != "" ||
-		(storageProvider != "" && storageProvider != "local"))
+	hasMultimodal := kb.VLMConfig.IsEnabled()
+
 	if config["multimodal"] == nil {
 		config["multimodal"] = map[string]interface{}{
 			"enabled": hasMultimodal,
@@ -1426,24 +1340,6 @@ func (h *InitializationHandler) buildConfigResponse(ctx context.Context, models 
 		}
 		config["documentSplitting"] = ds
 
-		// 添加多模态的存储配置信息（优先读新字段，兼容旧 cos_config）
-		effectiveProvider := kb.GetStorageProvider()
-		if kb.StorageConfig.SecretID != "" || (effectiveProvider != "" && effectiveProvider != "local") {
-			if config["multimodal"] == nil {
-				config["multimodal"] = map[string]interface{}{
-					"enabled": true,
-				}
-			}
-			multimodal := config["multimodal"].(map[string]interface{})
-			multimodal["storageType"] = effectiveProvider
-			switch effectiveProvider {
-			case "minio":
-				multimodal["minio"] = map[string]interface{}{
-					"bucketName": kb.StorageConfig.BucketName,
-					"pathPrefix": kb.StorageConfig.PathPrefix,
-				}
-			}
-		}
 	}
 
 	if kb.QuestionGenerationConfig != nil {
@@ -1943,7 +1839,6 @@ func (h *InitializationHandler) CheckASRModel(c *gin.Context) {
 // @Param        vlm_base_url      formData  string  true   "VLM Base URL"
 // @Param        vlm_api_key       formData  string  false  "VLM API Key"
 // @Param        vlm_interface_type formData string  false  "VLM接口类型"
-// @Param        storage_type      formData  string  true   "存储类型(local/minio/s3)"
 // @Success      200               {object}  map[string]interface{}  "测试结果"
 // @Failure      400               {object}  errors.AppError         "请求参数错误"
 // @Security     Bearer
@@ -1965,8 +1860,6 @@ func (h *InitializationHandler) TestMultimodalFunction(c *gin.Context) {
 		req.VLMBaseURL = os.Getenv("OLLAMA_BASE_URL") + "/v1"
 	}
 
-	req.StorageType = strings.ToLower(req.StorageType)
-
 	if req.VLMModel == "" || req.VLMBaseURL == "" {
 		logger.Error(ctx, "VLM model name and base URL are required")
 		c.Error(errors.NewBadRequestError("VLM模型名称和Base URL不能为空"))
@@ -1977,19 +1870,6 @@ func (h *InitializationHandler) TestMultimodalFunction(c *gin.Context) {
 	if err := utils.ValidateURLForSSRF(req.VLMBaseURL); err != nil {
 		logger.Warnf(ctx, "SSRF validation failed for VLM BaseURL: %v", err)
 		c.Error(errors.NewBadRequestError(utils.FormatSSRFError("VLM Base URL", req.VLMBaseURL, err)))
-		return
-	}
-
-	switch req.StorageType {
-	case "minio":
-		if req.MinioBucketName == "" {
-			logger.Error(ctx, "MinIO configuration is required")
-			c.Error(errors.NewBadRequestError("MinIO配置信息不能为空"))
-			return
-		}
-	default:
-		logger.Error(ctx, "Invalid storage type")
-		c.Error(errors.NewBadRequestError("无效的存储类型"))
 		return
 	}
 
@@ -2072,7 +1952,7 @@ func (h *InitializationHandler) TestMultimodalFunction(c *gin.Context) {
 
 	// 调用多模态测试
 	startTime := time.Now()
-	result, err := h.testMultimodalWithDocReader(
+	result, err := h.testMultimodalWithParser(
 		ctx,
 		imageContent, header.Filename,
 		chunkSize, chunkOverlap, separators, &req,
@@ -2105,9 +1985,9 @@ func (h *InitializationHandler) TestMultimodalFunction(c *gin.Context) {
 	})
 }
 
-// testMultimodalWithDocReader uses DocumentReader.Read for document reading,
+// testMultimodalWithParser uses the process-local image reader,
 // then returns basic information about the result.
-func (h *InitializationHandler) testMultimodalWithDocReader(
+func (h *InitializationHandler) testMultimodalWithParser(
 	ctx context.Context,
 	imageContent []byte, filename string,
 	chunkSize, chunkOverlap int32, separators []string,
@@ -2118,23 +1998,19 @@ func (h *InitializationHandler) testMultimodalWithDocReader(
 		fileExt = strings.ToLower(filename[idx+1:])
 	}
 
-	if h.documentReader == nil {
-		return nil, fmt.Errorf("DocReader service not configured")
-	}
-
 	requestID, _ := types.RequestIDFromContext(ctx)
 
-	readResult, err := h.documentReader.Read(ctx, &types.ReadRequest{
+	readResult, err := (&docparser.SimpleFormatReader{}).Read(ctx, &types.ReadRequest{
 		FileContent: imageContent,
 		FileName:    filename,
 		FileType:    fileExt,
 		RequestID:   requestID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("调用DocReader服务失败: %v", err)
+		return nil, fmt.Errorf("图片解析失败: %v", err)
 	}
 	if readResult.Error != "" {
-		return nil, fmt.Errorf("DocReader服务返回错误: %s", readResult.Error)
+		return nil, fmt.Errorf("图片解析返回错误: %s", readResult.Error)
 	}
 
 	result := map[string]string{
@@ -2152,8 +2028,6 @@ type testMultimodalForm struct {
 	VLMAPIKey        string `form:"vlm_api_key"`
 	VLMInterfaceType string `form:"vlm_interface_type"`
 
-	StorageType string `form:"storage_type"`
-
 	COSSecretID   string `form:"cos_secret_id"`
 	COSSecretKey  string `form:"cos_secret_key"`
 	COSRegion     string `form:"cos_region"`
@@ -2161,9 +2035,6 @@ type testMultimodalForm struct {
 	COSAppID      string `form:"cos_app_id"`
 	COSPathPrefix string `form:"cos_path_prefix"`
 
-	// MinIO 配置（当存储为 minio 时）
-	MinioBucketName string `form:"minio_bucket_name"`
-	MinioPathPrefix string `form:"minio_path_prefix"`
 
 	// 文档切分配置（字符串后续自行解析，以避免类型绑定失败）
 	ChunkSize     string `form:"chunk_size"`

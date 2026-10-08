@@ -609,12 +609,7 @@ export default {
       ocrMaxPagesLabel: '扫描件 OCR 最大页数',
       ocrMaxPagesDesc: '扫描件送入 VLM 做 OCR 的最大页数，越多覆盖越全但越慢、越贵。0 表示使用全局默认。',
       useGlobalDefault: '0 = 全局默认',
-      storageProvider: '图片存储',
-      storageProviderDesc: '选择图片文件的存储引擎，留空则使用系统默认',
-      storageProviderPlaceholder: '选择存储引擎',
-      storageDefault: '系统默认',
       notConfigured: '未配置',
-      goStorageSettings: '去存储设置中配置'
     },
     llmCallTimeout: {
       label: 'LLM 调用超时',
@@ -1001,7 +996,7 @@ export default {
   kbSettings: {
     parser: {
       title: '解析引擎',
-      description: '为不同文件类型选择文档解析引擎。未配置的文件类型将使用内置解析引擎。',
+      description: '为不同文件类型选择文档解析引擎。PDF 和 Office 文档默认使用 anydoc。',
       loading: '加载中...',
       noEngineAvailable: '暂无可用解析引擎，或文档解析服务未配置。',
       default: '默认',
@@ -1011,31 +1006,13 @@ export default {
       fileTypeWord: 'Word 文档',
       fileTypePpt: '演示文稿',
       fileTypeExcel: 'Excel 表格',
-      xlsxFirstRowAsHeader: '将首行作为列标题，并保留在每行上下文中',
       fileTypeEbook: '电子书',
-      fileTypeWebArchive: '网页归档',
       fileTypeCsv: 'CSV 文件',
       fileTypeText: '纯文本',
       fileTypeJson: 'JSON 文件',
       fileTypeImage: '图片',
       fileTypeAudiovisual: '音频',
       engines: {
-        opendataloader: {
-          name: 'OpenDataLoader',
-          desc: 'OpenDataLoader PDF 解析引擎（版面分析，需 Java 11+ 与 opendataloader-pdf）'
-        },
-        markitdown: {
-          name: 'MarkItDown',
-          desc: 'Microsoft MarkItDown 文档转换工具（支持 PDF/Office/HTML 等）'
-        },
-        paddleocr_vl_cloud: {
-          name: 'PaddleOCR-VL Cloud',
-          desc: 'PaddleOCR-VL 云 API'
-        },
-        paddleocr_vl: {
-          name: 'PaddleOCR-VL',
-          desc: 'PaddleOCR-VL 自部署服务'
-        },
         mineru_cloud: {
           name: 'MinerU Cloud',
           desc: 'MinerU Cloud API'
@@ -1052,35 +1029,8 @@ export default {
           name: 'anydoc',
           desc: '进程内 Office 文档解析（无需外部服务）'
         },
-        builtin: {
-          name: '内置',
-          desc: 'DocReader 内置解析引擎（docx/pdf/xlsx 等复杂格式）'
-        }
       }
     },
-    storage: {
-      title: '存储引擎',
-      selectDescription: '选择此知识库绑定的具体存储实例。',
-      defaultTag: '默认',
-      instanceLabel: '存储实例',
-      instanceDesc: '同一种存储类型可以配置多个不同 Endpoint、Bucket 或凭据的实例。',
-      bindingLocked: '知识库已有文件，不能更改绑定的存储实例。',
-      manageInstances: '管理存储实例',
-      localStorage: '本地存储',
-      loading: '加载中...'
-    },
-    vectorStore: {
-      title: '检索数据库',
-      description: '本知识库使用 PostgreSQL 进行向量和全文检索。',
-      engineLabel: '检索数据库',
-      engineDesc: 'PostgreSQL 由服务器统一配置。',
-      unavailableHint: 'PostgreSQL 当前不可用，请在设置中检查连接状态。'
-    }
-  },
-  vectorStoreBadge: {
-    systemDefault: '系统默认',
-    unknownStore: '未知存储',
-    unavailable: '不可用'
   },
   tools: {
     multiKbSearch: '跨库搜索',
@@ -1684,7 +1634,7 @@ export default {
       contextWindowTokens: '{count} tokens',
       maxConcurrencyLabel: '后台并发上限',
       maxConcurrencyPlaceholder: '0 表示使用全局默认',
-      maxConcurrencyDesc: '限制文档入库/富化等后台任务对该模型的并发调用数（按模型全副本共享）。0 或留空表示沿用全局默认；不影响交互式对话。',
+      maxConcurrencyDesc: '限制文档入库/富化等后台任务对该模型的并发调用数（按模型在本进程内共享）。0 或留空表示沿用全局默认；不影响交互式对话。',
       thinkingControlLabel: '思考模式参数格式',
       thinkingControlDesc: '决定智能体「思考模式」开/关时如何写入 API。已尝试按厂商/模型预选，若与实际情况不符请按 API 文档手动修改；选「不写入」时，智能体「思考模式」开关不生效。',
       dimensionHint: '模型已选择，点击"检测维度"按钮自动获取向量维度',
@@ -1955,8 +1905,6 @@ export default {
     dbMigrationReportIssue: '无法修复？提交 Issue',
     keywordIndexEngineLabel: '关键词索引引擎',
     keywordIndexEngineDescription: '当前使用的关键词索引引擎',
-    vectorStoreEngineLabel: '向量存储引擎',
-    vectorStoreEngineDescription: '当前使用的向量存储引擎',
     unknown: '未知',
     globalSettings: {
       title: '系统设置',
@@ -2015,7 +1963,7 @@ export default {
       },
       keyDescriptions: {
         model: {
-          max_concurrency: '后台任务（文档入库/富化）对单个模型的默认并发上限，按模型 ID 全副本共享。每次调用实时读取，修改后立即生效、无需重启。0 或负数表示关闭默认限制（各模型仍会尊重自身在模型管理里配置的上限）。仅影响后台任务，不影响交互式对话。'
+          max_concurrency: '后台任务（文档入库/富化）对单个模型的默认并发上限，按模型 ID 在本进程内共享。每次调用实时读取，修改后立即生效、无需重启。0 或负数表示关闭默认限制（各模型仍会尊重自身在模型管理里配置的上限）。仅影响后台任务，不影响交互式对话。'
         },
         asynq: {
           core_concurrency: '文档解析与手工重解析的每实例保底并发，可额外借用共享弹性池；修改后需重启。',
@@ -2944,9 +2892,7 @@ export default {
     sidebar: {
       basic: '基本信息',
       models: '模型配置',
-      vectorStore: '向量存储',
       chunking: '分块设置',
-      storage: '存储引擎',
       advanced: '高级设置',
       multimodal: '图像处理',
       asr: '音频处理',
@@ -3546,13 +3492,6 @@ export default {
       saveFailed: '保存配置失败: {message}'
     }
   },
-  vectorStoreSettings: {
-    title: 'PostgreSQL 状态',
-    description: '所有知识库统一使用 PostgreSQL 进行向量和全文检索。',
-    available: '可用',
-    unavailable: '不可用',
-    loadFailed: '无法加载 PostgreSQL 状态'
-  },
   webSearchSettings: {
     title: '网络搜索配置',
     description: '配置网络搜索功能，在回答问题时可以从互联网获取实时信息补充知识库内容',
@@ -3594,9 +3533,7 @@ export default {
   settings: {
     modelManagement: '模型管理',
     webSearchConfig: '网络搜索',
-    vectorStoreEngine: '向量数据库引擎',
     parserEngine: '解析引擎',
-    storageEngine: '存储引擎',
     sandbox: {
       allowPrivateEndpointsHint: "启用后允许连接私网地址上的 Docker 守护进程。",
       title: '沙箱配置',
@@ -3960,87 +3897,6 @@ export default {
     tenantInfo: '空间信息',
     workspaceSettings: '空间设置',
     system: '系统设置',
-    storage: {
-      title: '存储引擎',
-      description: '配置文档与图片的存储方式。此处设置各引擎参数，知识库中仅选择使用哪个引擎。',
-      basicSection: '基本配置',
-      modeSection: '部署模式',
-      credentialsSection: '凭证',
-      bucketSection: 'Bucket',
-      useSslDesc: '通过 HTTPS 访问 MinIO',
-      loading: '加载中...',
-      retry: '重试',
-      defaultEngine: '默认引擎',
-      defaultEngineDesc: '新建知识库时默认选用的存储引擎',
-      engineLocal: 'Local（本地）',
-      localTitle: 'Local（本地存储）',
-      localDesc: '使用服务器本地文件系统存储文件，仅适合单机部署。',
-      available: '可用',
-      needsConfig: '需要配置',
-      configurable: '可配置',
-      pathPrefix: '路径前缀（可选）',
-      pathPrefixPlaceholder: '如 reliquary/images',
-      prefixPlaceholder: '如 reliquary',
-      bucketName: 'Bucket 名称',
-      bucketPlaceholder: '存储桶名称',
-      minioDesc: 'S3 兼容的自托管对象存储，适合内网和私有云部署。',
-      minioDocker: 'Docker 部署',
-      minioRemote: '远程 MinIO',
-      minioDockerDetected: '已检测到 Docker 部署的 MinIO 环境变量，连接信息由环境变量提供，无需手动填写。',
-      minioDockerNotDetected: '未检测到 MinIO 环境变量（MINIO_ENDPOINT 等），请确认 Docker Compose 配置正确。',
-      minioRemoteHint: '连接到远程 MinIO 服务，需要手动填写连接信息。',
-      s3Title: 'S3 兼容存储',
-      s3Desc: 'AWS S3 及兼容的对象存储服务，适合公有云部署。',
-      s3AccessKeyPlaceholder: 'AWS Access Key',
-      s3SecretKeyPlaceholder: 'AWS Secret Key',
-      s3DefaultCredentialsHint: 'Access Key 与 Secret Key 同时留空时，将使用 AWS 默认凭证链（IAM Role、IRSA / Web Identity、环境变量或共享配置）。',
-      s3EndpointPlaceholder: '可选，留空使用 AWS 区域默认端点',
-      console: '控制台',
-      docs: '文档',
-      testConnection: '测试连接',
-      loadFailed: '加载失败',
-      saveSuccess: '保存成功',
-      saveFailed: '保存失败',
-      unknownError: '未知错误',
-      requestFailed: '请求失败'
-    },
-    storageBackend: {
-      description: '管理文件与图片使用的存储实例；同一种类型可以配置多个实例。',
-      empty: '尚未配置存储实例',
-      defaultTag: '默认',
-      add: '添加存储实例',
-      editTitle: '编辑存储实例',
-      createTitle: '添加存储实例',
-      editSubtitle: '修改此存储实例的连接配置。',
-      createSubtitle: '为文件与图片新增一个存储实例。',
-      basicSection: '基本信息',
-      nameLabel: '名称',
-      namePlaceholder: '例如：生产 S3、归档 MinIO',
-      providerLabel: '存储类型',
-      modeLabel: '部署模式',
-      modeRemote: '远程实例',
-      modeEnv: '环境变量',
-      connectionSection: '连接配置',
-      advancedSection: '高级选项',
-      pathPrefixLabel: '路径前缀',
-      useSslDesc: '使用 HTTPS 访问 MinIO',
-      forcePathStyleDesc: '使用 Path Style',
-      testConnection: '测试连接',
-      localStorage: '本地存储',
-      setDefault: '设为默认',
-      edit: '编辑',
-      delete: '删除',
-      testSuccess: '连接成功',
-      testFailed: '连接失败',
-      nameRequired: '请输入名称',
-      saveSuccess: '保存成功',
-      saveFailed: '保存失败',
-      defaultUpdated: '默认存储已更新',
-      deleteTitle: '删除存储实例',
-      deleteConfirm: '确定删除“{name}”吗？',
-      deleted: '已删除',
-      deleteFailed: '删除失败'
-    },
     parser: {
       title: '解析引擎',
       description: '文档解析引擎状态及配置。此处设置优先于服务端环境变量，留空则使用环境变量默认值。',
@@ -4050,14 +3906,12 @@ export default {
       featuresLabel: '识别选项',
       loading: '加载中...',
       retry: '重试',
-      noEngineDetected: '未检测到解析引擎，请确认 DocReader 服务正常运行。',
+      noEngineDetected: '未检测到解析引擎，请重试或检查应用日志。',
       disconnected: '未连接',
       connected: '已连接',
       available: '可用',
       unavailable: '不可用',
-      builtinDesc: 'DocReader 内置解析引擎（docx/pdf/xlsx 等复杂格式）',
       currentAddr: '当前',
-      envVarHint: '修改请设置环境变量 DOCREADER_ADDR、DOCREADER_TRANSPORT（grpc/http），重启服务生效。',
       selfHostedEndpoint: '自建端点',
       formulaRecognition: '公式识别',
       tableRecognition: '表格识别',
@@ -4072,7 +3926,6 @@ export default {
       testConnection: '测试连接',
       docs: '文档',
       loadFailed: '加载解析引擎列表失败',
-      ensureDocreaderConnected: '请先确保 DocReader 服务已通过环境变量配置并已连接',
       checkDoneStatusUpdated: '已使用当前填写参数检测，上方状态已更新',
       checkSuccess: '测试连接成功',
       checkFailed: '检测失败',
@@ -4087,9 +3940,6 @@ export default {
       serverUrl: '服务器地址',
       vlmServerUrlPlaceholder: '如 http://your-vllm-server:8000',
       vlmServerUrlHint: '当 Backend 选择 vlm-http-client 或 hybrid-http-client 时需要填写',
-      paddleocrVlEndpointPlaceholder: '如 http://your-paddleocr-vl:8080',
-      paddleocrVlEndpointHint: '填写 PaddleOCR-VL 完整服务（pipeline）地址，无需 /layout-parsing 后缀',
-      paddleocrVlCloudTokenPlaceholder: 'PaddleOCR-VL 飞桨星河社区 Token'
     },
     capabilityUnavailable: '当前部署不支持此功能，已返回可用页面。',
     navGroups: {
@@ -4454,7 +4304,7 @@ export default {
     urlAdded: '已添加 URL',
     urlDuplicate: '该 URL 已在列表中',
     statusNeedsSetup: '待配置',
-    multimodalSetupHint: '含图片内容，请启用多模态并选择模型',
+    multimodalSetupHint: '未配置视觉模型时不会从图片提取文字，仍可上传和保存图片。',
     asrSetupHint: '含音频内容，请启用语音识别并选择模型',
     vlmModelRequired: '请配置多模态模型',
     asrModelRequired: '请配置语音识别模型',
@@ -4685,9 +4535,6 @@ export default {
     staleGeneratedQuestions: '问题基于编辑前内容生成，可按需重新生成',
     noGeneratedQuestions: '暂无辅助召回问题',
     notInitialized: '该知识库尚未完成初始化配置，请先前往设置页面配置模型信息后再上传文件',
-    missingStorageEngine: '该知识库尚未选择存储引擎，请先前往设置页面配置存储引擎后再上传内容。',
-    missingStorageEngineUpload: '请先配置存储引擎后再上传内容',
-    goToStorageSettings: '前往配置',
     getInfoFailed: '获取知识库信息失败，无法上传文件',
     missingId: '缺少知识库ID',
     deleteFailed: '删除失败，请稍后再试！',
@@ -4776,6 +4623,9 @@ export default {
     statusDraft: '草稿',
     noDescription: '无描述',
     emptyKnowledgeDragDrop: '知识为空，拖放上传',
+    parserRecoveryHint: '所选文件类型暂无可用解析引擎。请使用默认包含 anydoc 的 Docker 镜像，或本地执行 make anydoc-lib 后以 -tags anydoc 启动，或在解析引擎设置中配置 MinerU。',
+    availableUploadTypes: '当前可上传：{types}',
+    uploadSizeLimit: '单个文件不超过 {size} MB',
     pdfDocFormat: 'pdf、doc 格式文件，不超过10M',
     textMarkdownFormat: 'text、markdown格式文件，不超过200K',
     dragFileNotText: '请拖拽文件而不是文本或链接',
@@ -4825,7 +4675,6 @@ export default {
       createdAt: '创建时间',
       source: '来源',
       enabled: '已启用',
-      vectorStore: '向量存储',
       fileStorage: '文件存储',
       documentCount: '文档数',
       supportedFileTypes: '可上传格式',
@@ -4980,10 +4829,6 @@ export default {
         navMultimodal: {
           title: '多模态 / 图片理解（可选）',
           desc: '若文档含大量图表、扫描件或需理解图片内容，可在此开启多模态并选择 VLM 模型。'
-        },
-        storage: {
-          title: '存储引擎（可选）',
-          desc: '原始文件存放位置（本地或对象存储）。默认跟随空间设置即可。'
         },
         chunking: {
           title: '分块策略（可选）',

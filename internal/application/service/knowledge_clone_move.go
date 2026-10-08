@@ -17,7 +17,6 @@ import (
 	"github.com/hibiken/asynq"
 	"golang.org/x/sync/errgroup"
 
-	"reliquary/internal/application/service/retriever"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
@@ -414,21 +413,7 @@ func (s *knowledgeService) CloneChunk(ctx context.Context, src, dst *types.Knowl
 		}
 	}
 
-	tenantID := types.MustTenantIDFromContext(ctx)
-	// Route CopyIndices via the source KB's bound store. This function does
-	// not handle cross-store copies — embeddings written by different
-	// VectorStore backends are not bit-compatible, so callers that allow
-	// source/target KBs to bind to different stores must perform their own
-	// cross-store migration before invoking this.
-	var sourceStoreID *string
-	if srcKB, loadErr := s.kbService.GetKnowledgeBaseByID(ctx, src.KnowledgeBaseID); loadErr == nil && srcKB != nil {
-		sourceStoreID = srcKB.VectorStoreID
-	}
-	retrieveEngine, err := retriever.CreateRetrieveEngineForKB(
-		ctx, s.retrieveEngine, s.ownership, tenantID, sourceStoreID)
-	if err != nil {
-		return err
-	}
+	retrieveEngine := s.retrieveEngine
 	embeddingModel, err := s.modelService.GetEmbeddingModel(ctx, dst.EmbeddingModelID)
 	if err != nil {
 		return err
@@ -823,18 +808,6 @@ func (s *knowledgeService) moveOneKnowledge(
 		return fmt.Errorf("knowledge %s is not in completed status (current: %s)", knowledgeID, knowledge.ParseStatus)
 	}
 
-	// Reject a cross-store reuse_vectors move BEFORE mutating status, so a
-	// rejected move leaves the knowledge untouched (Completed) rather than
-	// stranded in Processing. reuse_vectors copies indices through the source
-	// store only; a cross-store copy would corrupt vector data. The handler
-	// rejects this synchronously — this is defense-in-depth for directly
-	// enqueued tasks. Cross-store moves must use reparse mode.
-	if mode == "reuse_vectors" && !sourceKB.SharesStoreWith(targetKB) {
-		return fmt.Errorf(
-			"reuse_vectors move across different vector stores is not supported "+
-				"(source KB %s, target KB %s); use reparse mode", sourceKB.ID, targetKB.ID)
-	}
-
 	// Mark as processing during move
 	knowledge.ParseStatus = types.ParseStatusProcessing
 	if err := s.repo.UpdateKnowledge(ctx, knowledge); err != nil {
@@ -878,19 +851,6 @@ func (s *knowledgeService) moveKnowledgeReuseVectors(
 ) error {
 	tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
 
-	// reuse_vectors copies index entries directly between KBs, which only works
-	// inside the same VectorStore backend (CopyIndices is routed through the
-	// source store). A cross-store reuse_vectors move would write target-KB rows
-	// into the source store and then delete the source indices, corrupting data.
-	// The MoveKnowledge handler rejects this up front; this is defense-in-depth
-	// for any path that enqueues a move task directly. Cross-store moves must use
-	// reparse mode (moveKnowledgeReparse), which re-indexes into the target store.
-	if !sourceKB.SharesStoreWith(targetKB) {
-		return fmt.Errorf(
-			"reuse_vectors move across different vector stores is not supported "+
-				"(source KB %s, target KB %s); use reparse mode", sourceKB.ID, targetKB.ID)
-	}
-
 	// 1. Get old chunk IDs for vector index copy mapping
 	var oldChunks []*types.Chunk
 	if knowledge.EmbeddingModelID != "" {
@@ -911,18 +871,7 @@ func (s *knowledgeService) moveKnowledgeReuseVectors(
 
 	// 2. Copy vector indices from source KB to target KB
 	if len(chunkIDMapping) > 0 && knowledge.EmbeddingModelID != "" {
-		// Same VectorStore backend is guaranteed by the SharesStoreWith guard at
-		// the top of this function, so routing CopyIndices through the source
-		// KB's binding also resolves the target's store.
-		var sourceStoreID *string
-		if sourceKB != nil {
-			sourceStoreID = sourceKB.VectorStoreID
-		}
-		retrieveEngine, err := retriever.CreateRetrieveEngineForKB(
-			ctx, s.retrieveEngine, s.ownership, tenantID, sourceStoreID)
-		if err != nil {
-			return fmt.Errorf("failed to init retrieve engine: %w", err)
-		}
+		retrieveEngine := s.retrieveEngine
 		embeddingModel, err := s.modelService.GetEmbeddingModel(ctx, knowledge.EmbeddingModelID)
 		if err != nil {
 			return fmt.Errorf("failed to get embedding model: %w", err)

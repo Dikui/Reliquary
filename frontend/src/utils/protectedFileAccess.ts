@@ -5,13 +5,9 @@
  * 渲染组件声明作用域，由此处统一构造代理请求。
  */
 
-export const PROVIDER_SCHEME_PATTERN = 'resource|local|minio|s3';
+export const PROVIDER_SCHEME_PATTERN = 'resource|local';
 
 const PROVIDER_FILE_SCHEME_RE = new RegExp(`^(${PROVIDER_SCHEME_PATTERN}):\\/\\/\\S+$`, 'i');
-const STORAGE_BACKEND_FILE_SCHEME_RE = new RegExp(
-  `^storage:\\/\\/[0-9A-Za-z_-]+\\/(${PROVIDER_SCHEME_PATTERN}):\\/\\/\\S+$`,
-  'i',
-);
 
 const KB_FILE_PROXY_PATH_RE = /^\/api\/v1\/knowledge-bases\/[^/]+\/files$/;
 const MESSAGE_FILE_PROXY_PATH_RE = /^\/api\/v1\/sessions\/[^/]+\/messages\/[^/]+\/files$/;
@@ -76,10 +72,10 @@ export function resolveProtectedFileAccess(
   return override;
 }
 
-/** 是否为需要经代理拉取的存储路径（provider:// 或 storage://<backend>/provider://）。 */
+/** 是否为需要经代理拉取的 resource:// 或 local:// 路径。 */
 export function isProviderFileURL(url: string): boolean {
   const trimmed = url.trim();
-  return PROVIDER_FILE_SCHEME_RE.test(trimmed) || STORAGE_BACKEND_FILE_SCHEME_RE.test(trimmed);
+  return PROVIDER_FILE_SCHEME_RE.test(trimmed);
 }
 
 /** 是否为受保护文件代理之一的路径。 */

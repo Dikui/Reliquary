@@ -90,41 +90,13 @@
               <span class="kb-info-card-value kb-info-card-value-number">{{ stat.value }}</span>
             </div>
           </section>
-          <section
-            v-if="kbInfo.vector_store_source || kbInfo.storage_provider_config?.provider"
-            class="setting-drawer__section"
-          >
-            <h4 class="setting-drawer__section-title">
-              {{ t('knowledgeBase.infoCard.binding') }}
-            </h4>
-            <div v-if="kbInfo.vector_store_source" class="kb-info-card-row">
-              <span class="kb-info-card-label">{{ t('knowledgeBase.infoCard.vectorStore') }}</span>
-              <span class="kb-info-card-value">
-                <VectorStoreBadge
-                  :source="kbInfo.vector_store_source"
-                  :name="kbInfo.vector_store_name"
-                  :engine-type="kbInfo.vector_store_engine_type"
-                  :status="kbInfo.vector_store_status"
-                />
-              </span>
-            </div>
-            <div
-              v-if="kbInfo.storage_provider_config?.provider"
-              class="kb-info-card-row"
-            >
-              <span class="kb-info-card-label">{{ t('knowledgeBase.infoCard.fileStorage') }}</span>
-              <span class="kb-info-card-value kb-info-card-value-mono">
-                {{ kbInfo.storage_provider_config.provider }}
-              </span>
-            </div>
-          </section>
+
         </div>
       </div>
     </template>
     <button
       type="button"
       class="kb-info-button"
-      :class="{ 'has-warning': kbInfo?.vector_store_status === 'unavailable' }"
     >
       <t-icon name="info-circle" size="16px" />
     </button>
@@ -135,7 +107,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import VectorStoreBadge from '@/components/VectorStoreBadge.vue'
 import { formatStringDate } from '@/utils'
 
 const props = defineProps<{

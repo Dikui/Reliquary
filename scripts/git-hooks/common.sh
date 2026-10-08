@@ -167,14 +167,14 @@ run_golangci_if_available() {
 }
 
 run_full_app_vet() {
-  # Mirrors .github/workflows/app.yml: vet every app package (excl. docreader).
+  # Mirrors .github/workflows/app.yml: vet every app package .
   log_step "go vet (all app packages, like CI)"
   (
     cd "$ROOT"
     local -a pkgs=()
     while IFS= read -r line; do
       [[ -n "$line" ]] && pkgs+=("$line")
-    done < <(go list ./... | grep -v '/docreader/' || true)
+    done < <(go list ./... || true)
     go vet "${pkgs[@]}"
   )
   log_ok "go vet"

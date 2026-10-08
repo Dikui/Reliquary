@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/mark3labs/mcp-go/client/transport"
-	"github.com/redis/go-redis/v9"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -32,17 +31,15 @@ type OAuthManager struct {
 	states      *oauthStateStore
 }
 
-// NewOAuthManager constructs the OAuth manager. rdb may be nil (in-memory fixtures),
-// in which case in-flight authorization states are kept in memory.
+// NewOAuthManager constructs the manager with process-local authorization states.
 func NewOAuthManager(
 	repo interfaces.MCPOAuthRepository,
 	serviceRepo interfaces.MCPServiceRepository,
-	rdb *redis.Client,
 ) *OAuthManager {
 	return &OAuthManager{
 		repo:        repo,
 		serviceRepo: serviceRepo,
-		states:      newOAuthStateStore(rdb),
+		states:      newOAuthStateStore(),
 	}
 }
 

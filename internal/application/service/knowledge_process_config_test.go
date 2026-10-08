@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -143,11 +142,10 @@ func TestBuildSplitterConfigFromChunking_UsesEffectiveChunkingConfig(t *testing.
 func TestEffectiveChunkingConfig_ResolveParserEngineFromOverrides(t *testing.T) {
 	t.Parallel()
 
-	xlsxFirstRowAsHeader := true
 	kb := &types.KnowledgeBase{
 		ChunkingConfig: types.ChunkingConfig{
 			ParserEngineRules: []types.ParserEngineRule{
-				{FileTypes: []string{"pdf"}, Engine: "builtin"},
+				{FileTypes: []string{"pdf"}, Engine: "anydoc"},
 			},
 		},
 	}
@@ -155,9 +153,8 @@ func TestEffectiveChunkingConfig_ResolveParserEngineFromOverrides(t *testing.T) 
 		ParserEngineRules: []types.ParserEngineRule{
 			{FileTypes: []string{"pdf"}, Engine: "mineru"},
 			{
-				FileTypes:            []string{"xlsx", "xls"},
-				Engine:               "builtin",
-				XLSXFirstRowAsHeader: &xlsxFirstRowAsHeader,
+				FileTypes: []string{"xlsx", "xls"},
+				Engine:    "anydoc",
 			},
 		},
 	}
@@ -165,85 +162,7 @@ func TestEffectiveChunkingConfig_ResolveParserEngineFromOverrides(t *testing.T) 
 	require.Equal(t, "mineru", eff.ChunkingConfig.ResolveParserEngine("pdf"))
 	xlsxRule := eff.ChunkingConfig.ResolveParserEngineRule("xlsx")
 	require.NotNil(t, xlsxRule)
-	require.Equal(t, "builtin", xlsxRule.Engine)
-	require.Equal(t, &xlsxFirstRowAsHeader, xlsxRule.XLSXFirstRowAsHeader)
-}
-
-func TestApplyParserRuleOverrides_XLSXFirstRowAsHeader(t *testing.T) {
-	t.Parallel()
-
-	for _, enabled := range []bool{true, false} {
-		enabled := enabled
-		t.Run(strconv.FormatBool(enabled), func(t *testing.T) {
-			config := types.ChunkingConfig{
-				ParserEngineRules: []types.ParserEngineRule{{
-					FileTypes:            []string{"xlsx", "xls"},
-					Engine:               "builtin",
-					XLSXFirstRowAsHeader: &enabled,
-				}},
-			}
-			overrides := map[string]string{"tenant_option": "preserved"}
-
-			applyParserRuleOverrides(overrides, config, "xlsx")
-
-			require.Equal(t, strconv.FormatBool(enabled), overrides[xlsxFirstRowAsHeaderOverride])
-			require.Equal(t, "preserved", overrides["tenant_option"])
-		})
-	}
-}
-
-func TestApplyParserRuleOverrides_XLSFileType(t *testing.T) {
-	t.Parallel()
-
-	enabled := true
-	config := types.ChunkingConfig{
-		ParserEngineRules: []types.ParserEngineRule{{
-			FileTypes:            []string{"xlsx", "xls"},
-			Engine:               "builtin",
-			XLSXFirstRowAsHeader: &enabled,
-		}},
-	}
-	overrides := map[string]string{}
-
-	applyParserRuleOverrides(overrides, config, "xls")
-
-	require.Equal(t, "true", overrides[xlsxFirstRowAsHeaderOverride])
-}
-
-func TestApplyParserRuleOverrides_NormalizesFileTypeCase(t *testing.T) {
-	t.Parallel()
-
-	enabled := true
-	config := types.ChunkingConfig{
-		ParserEngineRules: []types.ParserEngineRule{{
-			FileTypes:            []string{"xlsx"},
-			Engine:               "builtin",
-			XLSXFirstRowAsHeader: &enabled,
-		}},
-	}
-	overrides := map[string]string{}
-
-	applyParserRuleOverrides(overrides, config, ".XLSX")
-
-	require.Equal(t, "true", overrides[xlsxFirstRowAsHeaderOverride])
-}
-
-func TestApplyParserRuleOverrides_SkipsNonBuiltinEngine(t *testing.T) {
-	t.Parallel()
-
-	enabled := true
-	config := types.ChunkingConfig{
-		ParserEngineRules: []types.ParserEngineRule{{
-			FileTypes:            []string{"xlsx"},
-			Engine:               "markitdown",
-			XLSXFirstRowAsHeader: &enabled,
-		}},
-	}
-	overrides := map[string]string{}
-
-	applyParserRuleOverrides(overrides, config, "xlsx")
-
-	require.NotContains(t, overrides, xlsxFirstRowAsHeaderOverride)
+	require.Equal(t, "anydoc", xlsxRule.Engine)
 }
 
 func TestResolveProcessConfig_ParserEngineRulesReplaced(t *testing.T) {
@@ -252,7 +171,7 @@ func TestResolveProcessConfig_ParserEngineRulesReplaced(t *testing.T) {
 	kb := &types.KnowledgeBase{
 		ChunkingConfig: types.ChunkingConfig{
 			ParserEngineRules: []types.ParserEngineRule{
-				{FileTypes: []string{"pdf"}, Engine: "builtin"},
+				{FileTypes: []string{"pdf"}, Engine: "anydoc"},
 			},
 		},
 	}
@@ -327,16 +246,14 @@ func TestValidateProcessOverrides_NilOverrides(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestValidateProcessOverrides_ImageRequiresVLM(t *testing.T) {
+func TestValidateProcessOverrides_ImageWithoutVLMAllowed(t *testing.T) {
 	t.Parallel()
 
 	kb := &types.KnowledgeBase{
 		VLMConfig: types.VLMConfig{Enabled: false},
 	}
 	err := ValidateProcessOverrides(context.Background(), kb, &types.KnowledgeProcessOverrides{}, []string{"png"})
-	require.Error(t, err)
-	var badReq *werrors.AppError
-	require.ErrorAs(t, err, &badReq)
+	require.NoError(t, err)
 }
 
 func TestValidateProcessOverrides_ImageWithEffectiveVLM(t *testing.T) {
@@ -386,30 +303,22 @@ func TestValidateProcessOverrides_NonMediaFileTypes(t *testing.T) {
 func TestValidateProcessOverrides_ImageAllowsStorageFallback(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.WithValue(context.Background(), types.TenantInfoContextKey, &types.Tenant{
-		StorageEngineConfig: &types.StorageEngineConfig{
-			S3: &types.S3EngineConfig{AccessKey: "incomplete"},
-		},
-	})
 	kb := &types.KnowledgeBase{
 		VLMConfig: types.VLMConfig{Enabled: true, ModelID: "vlm-1"},
 	}
-	kb.SetStorageProvider("s3")
 
-	err := ValidateProcessOverrides(ctx, kb, &types.KnowledgeProcessOverrides{}, []string{"png"})
+	err := ValidateProcessOverrides(context.Background(), kb, &types.KnowledgeProcessOverrides{}, []string{"png"})
 	require.NoError(t, err)
 }
 
-func TestResolveFileImportProcessConfig_ImageRequiresVLM(t *testing.T) {
+func TestResolveFileImportProcessConfig_ImageWithoutVLMAllowed(t *testing.T) {
 	t.Parallel()
 
 	kb := &types.KnowledgeBase{
 		VLMConfig: types.VLMConfig{Enabled: false},
 	}
 	_, err := resolveFileImportProcessConfig(context.Background(), kb, "png", nil, nil)
-	require.Error(t, err)
-	var badReq *werrors.AppError
-	require.ErrorAs(t, err, &badReq)
+	require.NoError(t, err)
 }
 
 func TestResolveFileImportProcessConfig_AudioRequiresASR(t *testing.T) {
@@ -512,4 +421,13 @@ func TestBuildParentChildConfigs_PropagatesStrategy(t *testing.T) {
 	require.Equal(t, 512/5, child.ChunkOverlap)
 	require.Equal(t, base.Separators, parent.Separators)
 	require.Equal(t, base.Separators, child.Separators)
+}
+
+func TestImageWithoutVisionIgnoresMultimodalRequest(t *testing.T) {
+	enabled := true
+	for _, overrides := range []*types.KnowledgeProcessOverrides{nil, {EnableMultimodel: &enabled}} {
+		eff, err := resolveFileImportProcessConfig(context.Background(), &types.KnowledgeBase{}, "png", overrides, &enabled)
+		require.NoError(t, err)
+		require.False(t, eff.EnableMultimodel)
+	}
 }

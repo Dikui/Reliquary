@@ -13,13 +13,11 @@ import (
 
 func allDeploymentFeaturesAvailable() handler.DeploymentFeatureAvailability {
 	return handler.DeploymentFeatureAvailability{
-		Agents:      true,
-		API:         true,
-		MCP:         true,
-		WebSearch:   true,
-		VectorStore: true,
-		Storage:     true,
-		Sandbox:     true,
+		Agents:    true,
+		API:       true,
+		MCP:       true,
+		WebSearch: true,
+		Sandbox:   true,
 	}
 }
 
@@ -56,7 +54,7 @@ func TestBuildDeploymentCapabilitiesReflectsMissingRoutes(t *testing.T) {
 			t.Fatalf("%s reason = %q, want route_not_registered", key, capability.Reason)
 		}
 	}
-	if !result.Capabilities["settings.storage"].Supported {
+	if !result.Capabilities["settings.websearch"].Supported {
 		t.Fatal("an available route should remain supported")
 	}
 }

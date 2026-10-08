@@ -58,9 +58,6 @@ func RegisterSystemRoutes(
 		systemRoutes.GET("/info", handler.GetSystemInfo)
 		systemRoutes.GET("/parser-engines", handler.ListParserEngines)
 		systemRoutes.POST("/parser-engines/check", handler.CheckParserEngines)
-		systemRoutes.POST("/docreader/reconnect", handler.ReconnectDocReader)
-		systemRoutes.GET("/storage-engine-status", handler.GetStorageEngineStatus)
-		systemRoutes.POST("/storage-engine-check", handler.CheckStorageEngine)
 		systemRoutes.POST("/sandbox-check", handler.CheckSandboxConfig)
 	}
 }

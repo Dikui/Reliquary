@@ -47,7 +47,7 @@ test('message access routes through the session-message-scoped proxy', () => {
 test('non-storage sources are not proxied', () => {
   assert.equal(buildProtectedFileRequest('https://example.com/a.png', { mode: 'tenant' }), null)
   assert.equal(isProviderFileURL('https://example.com/a.png'), false)
-  assert.equal(isProviderFileURL('storage://backend-1/local://42/a.png'), true)
+  assert.equal(isProviderFileURL('local://42/a.png'), true)
 })
 
 test('a component scope refines the default tenant plane', () => {

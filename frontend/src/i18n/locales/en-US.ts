@@ -456,10 +456,6 @@ export default {
           title: 'Chunking (optional)',
           desc: 'How documents are split for retrieval. Default chunk sizes are tuned for RAG and rarely need changes.'
         },
-        storage: {
-          title: 'Storage (optional)',
-          desc: 'Where raw files are stored (local or object storage). The workspace default is usually fine.'
-        },
         navMultimodal: {
           title: 'Multimodal / images (optional)',
           desc: 'Enable this if documents contain charts, scans, or image-heavy content that needs vision understanding.'
@@ -616,7 +612,6 @@ export default {
       createdAt: 'Created at',
       source: 'Source',
       enabled: 'Enabled',
-      vectorStore: 'Vector store',
       fileStorage: 'File storage',
       documentCount: 'Documents',
       supportedFileTypes: 'Accepted formats',
@@ -826,9 +821,6 @@ export default {
     staleGeneratedQuestions: 'Generated from an earlier version; regenerate if needed',
     noGeneratedQuestions: 'No retrieval questions',
     notInitialized: 'Knowledge base is not initialized. Please configure models in settings before uploading files',
-    missingStorageEngine: 'This knowledge base has no storage engine selected. Please configure a storage engine in settings before uploading content.',
-    missingStorageEngineUpload: 'Please configure a storage engine before uploading content',
-    goToStorageSettings: 'Go to Settings',
     getInfoFailed: 'Failed to get knowledge base information, file upload is not possible',
     missingId: 'Knowledge base ID is missing',
     deleteFailed: 'Delete failed. Please try again later!',
@@ -917,6 +909,9 @@ export default {
     statusDraft: 'Draft',
     noDescription: 'No description',
     emptyKnowledgeDragDrop: 'Knowledge is empty, drag and drop to upload',
+    parserRecoveryHint: 'No parser engine is available for the selected file types. Use the Docker image, which includes anydoc by default, or run make anydoc-lib locally and start with -tags anydoc, or configure MinerU in parser engine settings.',
+    availableUploadTypes: 'Available file types: {types}',
+    uploadSizeLimit: 'Maximum file size: {size} MB',
     pdfDocFormat: 'pdf, doc format files, max 10M',
     textMarkdownFormat: 'text, markdown format files, max 200K',
     dragFileNotText: 'Please drag files instead of text or links',
@@ -983,7 +978,7 @@ export default {
     urlAdded: 'URL added',
     urlDuplicate: 'This URL is already in the list',
     statusNeedsSetup: 'Needs setup',
-    multimodalSetupHint: 'Images detected. Enable multimodal and select a model.',
+    multimodalSetupHint: 'Without a vision model, text will not be extracted from images. You can still upload and save them.',
     asrSetupHint: 'Audio detected. Enable speech recognition and select a model.',
     vlmModelRequired: 'Configure a multimodal model',
     asrModelRequired: 'Configure a speech recognition model',
@@ -1337,9 +1332,7 @@ export default {
   settings: {
     modelManagement: 'Model Management',
     webSearchConfig: 'Web Search',
-    vectorStoreEngine: 'Vector DB Engine',
     parserEngine: 'Parser Engine',
-    storageEngine: 'Storage Engine',
     sandbox: {
       allowPrivateEndpointsHint: "Allow connections to a Docker daemon on a private network.",
       title: 'Sandbox Config',
@@ -1721,14 +1714,12 @@ export default {
       featuresLabel: 'Features',
       loading: 'Loading...',
       retry: 'Retry',
-      noEngineDetected: 'No parser engine detected. Please ensure the DocReader service is running properly.',
+      noEngineDetected: 'No parser engines were detected. Retry or check the application logs.',
       disconnected: 'Disconnected',
       connected: 'Connected',
       available: 'Available',
       unavailable: 'Unavailable',
-      builtinDesc: 'DocReader built-in parser engine (docx/pdf/xlsx and other complex formats)',
       currentAddr: 'Current',
-      envVarHint: 'To modify, set environment variables DOCREADER_ADDR and DOCREADER_TRANSPORT (grpc/http), then restart the service.',
       selfHostedEndpoint: 'Self-hosted Endpoint',
       formulaRecognition: 'Formula Recognition',
       tableRecognition: 'Table Recognition',
@@ -1743,7 +1734,6 @@ export default {
       testConnection: 'Test Connection',
       docs: 'Docs',
       loadFailed: 'Failed to load parser engine list',
-      ensureDocreaderConnected: 'Please ensure the DocReader service is configured via environment variables and connected',
       checkDoneStatusUpdated: 'Checked with current parameters. Status above has been updated.',
       checkSuccess: 'Test Connection Successful',
       checkFailed: 'Check failed',
@@ -1758,91 +1748,7 @@ export default {
       serverUrl: 'Server URL',
       vlmServerUrlPlaceholder: 'e.g. http://your-vllm-server:8000',
       vlmServerUrlHint: 'Required when Backend is vlm-http-client or hybrid-http-client',
-      paddleocrVlEndpointPlaceholder: 'e.g. http://your-paddleocr-vl:8080',
-      paddleocrVlEndpointHint: 'Base URL of the full PaddleOCR-VL pipeline service; no /layout-parsing suffix needed',
-      paddleocrVlCloudTokenPlaceholder: 'PaddleOCR-VL AI Studio Token'
     },
-    storageBackend: {
-      description: 'Manage the storage instances used for files and images; multiple instances of the same type can be configured.',
-      empty: 'No storage instances configured yet',
-      defaultTag: 'Default',
-      add: 'Add storage instance',
-      editTitle: 'Edit storage instance',
-      createTitle: 'Add storage instance',
-      editSubtitle: 'Update the connection configuration of this storage instance.',
-      createSubtitle: 'Add a new storage instance for files and images.',
-      basicSection: 'Basic information',
-      nameLabel: 'Name',
-      namePlaceholder: 'e.g. Production S3, Archive MinIO',
-      providerLabel: 'Storage type',
-      modeLabel: 'Deployment mode',
-      modeRemote: 'Remote instance',
-      modeEnv: 'Environment variables',
-      connectionSection: 'Connection settings',
-      advancedSection: 'Advanced options',
-      pathPrefixLabel: 'Path prefix',
-      useSslDesc: 'Access MinIO over HTTPS',
-      forcePathStyleDesc: 'Use path style',
-      testConnection: 'Test connection',
-      localStorage: 'Local storage',
-      setDefault: 'Set as default',
-      edit: 'Edit',
-      delete: 'Delete',
-      testSuccess: 'Connection succeeded',
-      testFailed: 'Connection failed',
-      nameRequired: 'Please enter a name',
-      saveSuccess: 'Saved successfully',
-      saveFailed: 'Failed to save',
-      defaultUpdated: 'Default storage updated',
-      deleteTitle: 'Delete storage instance',
-      deleteConfirm: 'Are you sure you want to delete "{name}"?',
-      deleted: 'Deleted',
-      deleteFailed: 'Failed to delete'
-    },
-    storage: {
-      title: 'Storage Engine',
-      description: 'Configure document and image storage. Set engine parameters here; knowledge bases only select which engine to use.',
-      basicSection: 'Basic',
-      modeSection: 'Deployment Mode',
-      credentialsSection: 'Credentials',
-      bucketSection: 'Bucket',
-      useSslDesc: 'Connect to MinIO over HTTPS',
-      loading: 'Loading...',
-      retry: 'Retry',
-      defaultEngine: 'Default Engine',
-      defaultEngineDesc: 'The default storage engine when creating new knowledge bases',
-      engineLocal: 'Local',
-      localTitle: 'Local Storage',
-      localDesc: 'Store files on the server local filesystem, suitable for single-node deployment only.',
-      available: 'Available',
-      needsConfig: 'Needs Configuration',
-      configurable: 'Configurable',
-      pathPrefix: 'Path Prefix (optional)',
-      pathPrefixPlaceholder: 'e.g. reliquary/images',
-      prefixPlaceholder: 'e.g. reliquary',
-      bucketName: 'Bucket Name',
-      bucketPlaceholder: 'Bucket name',
-      minioDesc: 'S3-compatible self-hosted object storage, suitable for private networks and private cloud deployment.',
-      minioDocker: 'Docker Deployment',
-      minioRemote: 'Remote MinIO',
-      minioDockerDetected: 'Docker-deployed MinIO environment variables detected. Connection info is provided by env vars, no manual input needed.',
-      minioDockerNotDetected: 'MinIO environment variables (MINIO_ENDPOINT, etc.) not detected. Please verify your Docker Compose configuration.',
-      minioRemoteHint: 'Connect to a remote MinIO service. Manual connection info required.',
-      s3Title: 'S3-compatible storage',
-      s3Desc: 'AWS S3 and S3-compatible object storage services, suitable for public cloud deployment.',
-      s3AccessKeyPlaceholder: 'AWS Access Key',
-      s3SecretKeyPlaceholder: 'AWS Secret Key',
-      s3DefaultCredentialsHint: 'Leave both keys empty to use the AWS default credential chain (IAM role, IRSA / web identity, environment, or shared config).',
-      s3EndpointPlaceholder: 'Optional; leave empty to use the AWS regional endpoint',
-      console: 'Console',
-      docs: 'Docs',
-      testConnection: 'Test Connection',
-      loadFailed: 'Failed to load',
-      saveSuccess: 'Saved successfully',
-      saveFailed: 'Save failed',
-      unknownError: 'Unknown error',
-      requestFailed: 'Request failed'
-    }
   },
   webSearchSettings: {
     title: 'Web Search Configuration',
@@ -1881,13 +1787,6 @@ export default {
       testSuccess: 'Connection test succeeded',
       testFailed: 'Connection test failed'
     }
-  },
-  vectorStoreSettings: {
-    title: 'PostgreSQL status',
-    description: 'All knowledge bases use PostgreSQL for vector and full-text search.',
-    available: 'Available',
-    unavailable: 'Unavailable',
-    loadFailed: 'Failed to load PostgreSQL status'
   },
   memorySettings: {
     title: 'My memory',
@@ -2488,9 +2387,7 @@ export default {
     sidebar: {
       basic: 'Basic Information',
       models: 'Model Configuration',
-      vectorStore: 'Vector Store',
       chunking: 'Chunking Settings',
-      storage: 'Storage Engine',
       advanced: 'Advanced Settings',
       multimodal: 'Image Processing',
       asr: 'Audio',
@@ -3172,8 +3069,6 @@ export default {
     dbMigrationReportIssue: 'Can\'t fix it? Report an issue',
     keywordIndexEngineLabel: 'Keyword Index Engine',
     keywordIndexEngineDescription: 'Currently used keyword index engine',
-    vectorStoreEngineLabel: 'Vector Store Engine',
-    vectorStoreEngineDescription: 'Currently used vector store engine',
     unknown: 'Unknown',
     messages: {
       fetchFailed: 'Failed to fetch system information',
@@ -3466,7 +3361,7 @@ export default {
           wiki_concurrency: 'Per-process concurrency for the dedicated Wiki worker pool, isolated from upstream tasks. Minimum 1; requires a service restart.'
         },
         model: {
-          max_concurrency: 'Default cap on concurrent background (ingestion/enrichment) calls to a single model, keyed by model ID and shared across replicas. Read on every call and applied immediately with no restart. 0 or a negative value disables the default cap (each model still honours its own limit configured in model management). Affects background tasks only, not interactive chat.'
+          max_concurrency: 'Default cap on concurrent background (ingestion/enrichment) calls to a single model, keyed by model ID and shared within this process. Read on every call and applied immediately with no restart. 0 or a negative value disables the default cap (each model still honours its own limit configured in model management). Affects background tasks only, not interactive chat.'
         }
       },
       enumLabels: {
@@ -3649,7 +3544,7 @@ export default {
       contextWindowTokens: '{count} tokens',
       maxConcurrencyLabel: 'Background concurrency limit',
       maxConcurrencyPlaceholder: '0 = use global default',
-      maxConcurrencyDesc: 'Caps concurrent background (ingestion/enrichment) calls to this model, shared per model across all replicas. 0 or empty falls back to the global default; interactive chat is never affected.',
+      maxConcurrencyDesc: 'Caps concurrent background (ingestion/enrichment) calls to this model, shared per model within this process. 0 or empty falls back to the global default; interactive chat is never affected.',
       thinkingControlLabel: 'Thinking mode request format',
       thinkingControlDesc: 'Controls how the agent’s “Thinking mode” on/off switch is written to the API. We pre-select based on vendor/model when possible; change it to match your API docs. With “Do not send”, the agent Thinking mode switch has no effect.',
       thinkingControl: {
@@ -4353,33 +4248,10 @@ export default {
     think: 'Deep Thinking',
     todoWrite: 'Make Plan'
   },
-  vectorStoreBadge: {
-    systemDefault: 'System default',
-    unknownStore: 'Unknown store',
-    unavailable: 'Unavailable'
-  },
   kbSettings: {
-    vectorStore: {
-      title: 'Search database',
-      description: 'This knowledge base uses PostgreSQL for vector and full-text search.',
-      engineLabel: 'Search database',
-      engineDesc: 'PostgreSQL is configured by the server.',
-      unavailableHint: 'PostgreSQL is unavailable. Check its status in Settings.'
-    },
-    storage: {
-      title: 'Storage Engine',
-      selectDescription: 'Select the specific storage instance to bind this knowledge base to.',
-      defaultTag: 'Default',
-      instanceLabel: 'Storage instance',
-      instanceDesc: 'The same storage type can have multiple instances with different endpoints, buckets, or credentials.',
-      bindingLocked: 'The storage instance is fixed once this knowledge base contains files.',
-      manageInstances: 'Manage storage instances',
-      localStorage: 'Local storage',
-      loading: 'Loading...'
-    },
     parser: {
       title: 'Parser Engine',
-      description: 'Select document parser engines for different file types. Unconfigured file types will use the built-in parser.',
+      description: 'Select document parser engines for different file types. PDF and Office documents use anydoc by default.',
       loading: 'Loading...',
       noEngineAvailable: 'No parser engine available, or the document parsing service is not configured.',
       default: 'Default',
@@ -4389,19 +4261,13 @@ export default {
       fileTypeWord: 'Word Documents',
       fileTypePpt: 'Presentations',
       fileTypeExcel: 'Excel Spreadsheets',
-      xlsxFirstRowAsHeader: 'Use the first row as column context for every row',
       fileTypeEbook: 'E-books',
-      fileTypeWebArchive: 'Web Archives',
       fileTypeCsv: 'CSV Files',
       fileTypeText: 'Plain Text',
       fileTypeJson: 'JSON Files',
       fileTypeImage: 'Images',
       fileTypeAudiovisual: 'Audio',
       engines: {
-        builtin: {
-          name: 'Built-in',
-          desc: 'DocReader built-in parser engine (docx/pdf/xlsx and other complex formats)'
-        },
         simple: {
           name: 'Simple',
           desc: 'Simple format & image parsing (no external service required)'
@@ -4418,22 +4284,6 @@ export default {
           name: 'MinerU Cloud',
           desc: 'MinerU Cloud API'
         },
-        paddleocr_vl: {
-          name: 'PaddleOCR-VL',
-          desc: 'PaddleOCR-VL self-hosted service'
-        },
-        paddleocr_vl_cloud: {
-          name: 'PaddleOCR-VL Cloud',
-          desc: 'PaddleOCR-VL Cloud API'
-        },
-        markitdown: {
-          name: 'MarkItDown',
-          desc: 'Microsoft MarkItDown converter (PDF/Office/HTML and more)'
-        },
-        opendataloader: {
-          name: 'OpenDataLoader',
-          desc: 'OpenDataLoader PDF parser (layout analysis; requires Java 11+ and opendataloader-pdf)'
-        }
       }
     }
   },
@@ -4835,12 +4685,7 @@ export default {
       ocrMaxPagesLabel: 'Scanned OCR Max Pages',
       ocrMaxPagesDesc: 'Max pages of a scanned document sent to the VLM for OCR. More pages means better coverage but slower and costlier parsing. 0 uses the global default.',
       useGlobalDefault: '0 = global default',
-      storageProvider: 'Image Storage',
-      storageProviderDesc: 'Storage engine for uploaded images. Leave empty to use system default',
-      storageProviderPlaceholder: 'Select storage engine',
-      storageDefault: 'System Default',
       notConfigured: 'Not Configured',
-      goStorageSettings: 'Go to Storage Settings'
     },
     audioUpload: {
       label: 'Audio Upload',

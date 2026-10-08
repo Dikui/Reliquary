@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"reliquary/internal/types"
@@ -10,7 +11,7 @@ import (
 
 func TestOAuthAttemptCompletesOnlyAfterCallbackExchange(t *testing.T) {
 	ctx := context.Background()
-	store := newOAuthStateStore(nil)
+	store := newOAuthStateStore()
 	principal := types.Principal{Type: types.PrincipalWebUser, ID: "user-1"}
 	state := OAuthState{
 		TenantID:  7,
@@ -41,9 +42,39 @@ func TestOAuthAttemptCompletesOnlyAfterCallbackExchange(t *testing.T) {
 	require.Equal(t, "service-1", attempt.ServiceID)
 }
 
+func TestOAuthStateSingleUseAndExpiration(t *testing.T) {
+	ctx := context.Background()
+	store := newOAuthStateStore()
+	value := OAuthState{TenantID: 1, ServiceID: "service", CodeVerifier: "secret"}
+	require.NoError(t, store.Put(ctx, "single-use", value))
+	got, err := store.Take(ctx, "single-use")
+	require.NoError(t, err)
+	require.Equal(t, value, got)
+	_, err = store.Take(ctx, "single-use")
+	require.ErrorContains(t, err, "not found or expired")
+	require.NoError(t, store.Put(ctx, "expired", value))
+	store.mu.Lock()
+	entry := store.mem["expired"]
+	entry.expiresAt = time.Now().Add(-time.Second)
+	store.mem["expired"] = entry
+	attempt := store.attempts["expired"]
+	attempt.expiresAt = entry.expiresAt
+	store.attempts["expired"] = attempt
+	store.mu.Unlock()
+	_, err = store.Take(ctx, "expired")
+	require.ErrorContains(t, err, "not found or expired")
+	_, err = store.Attempt(ctx, "expired")
+	require.ErrorContains(t, err, "not found or expired")
+	require.ErrorContains(t, store.CompleteAttempt(ctx, "expired"), "not found or expired")
+	store.mu.Lock()
+	require.NotContains(t, store.mem, "expired")
+	require.NotContains(t, store.attempts, "expired")
+	store.mu.Unlock()
+}
+
 func TestAuthorizationAttemptStatusIsScopedToPrincipalAndService(t *testing.T) {
 	ctx := context.Background()
-	manager := &OAuthManager{states: newOAuthStateStore(nil)}
+	manager := &OAuthManager{states: newOAuthStateStore()}
 	principal := types.Principal{Type: types.PrincipalWebUser, ID: "user-1"}
 
 	require.NoError(t, manager.states.Put(ctx, "attempt-1", OAuthState{

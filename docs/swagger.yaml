@@ -114,8 +114,6 @@ definitions:
       - 2101
       - 2102
       - 2103
-      - 2200
-      - 2201
       - 2300
     type: integer
     x-enum-varnames:
@@ -140,8 +138,6 @@ definitions:
       - ErrAgentMissingAllowedTools
       - ErrAgentInvalidMaxIterations
       - ErrAgentInvalidTemperature
-      - ErrVectorStoreBindingInvalid
-      - ErrVectorStoreUnavailable
       - ErrModelInUse
   github_com_Tencent_Reliquary_internal_infrastructure_chunker.DocProfile:
     properties:
@@ -509,11 +505,6 @@ definitions:
       history_turns:
         description: Number of history turns to keep in context
         type: integer
-      image_storage_provider:
-        description: |-
-          Storage provider for image uploads: "local", "minio", "cos", "tos", "s3", "oss", "ks3".
-          Empty means use the global/workspace default provider.
-        type: string
       image_upload_enabled:
         description: |-
           ===== Image Upload / Multimodal Settings =====
@@ -972,19 +963,6 @@ definitions:
         allOf:
           - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.QuestionGenerationConfig'
         description: QuestionGenerationConfig stores question generation configuration for document knowledge bases
-      storage_backend_id:
-        description: |-
-          StorageBackendID binds this KB to one concrete storage instance. The
-          legacy provider field remains readable during migration only.
-        type: string
-      storage_config:
-        allOf:
-          - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.StorageConfig'
-        description: 'Deprecated: legacy COS config column. Kept for backward compatibility with old data.'
-      storage_provider_config:
-        allOf:
-          - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.StorageProviderConfig'
-        description: 'Storage provider config (new): only stores provider selection; credentials from workspace StorageEngineConfig'
       summary_model_id:
         description: Summary model ID
         type: string
@@ -996,15 +974,6 @@ definitions:
         type: string
       updated_at:
         description: Last updated time of the knowledge base
-        type: string
-      vector_store_id:
-        description: |-
-          VectorStoreID references the VectorStore this knowledge base is bound to.
-          When nil, the KB falls back to the workspace's effective engines derived from
-          the RETRIEVE_DRIVER environment variable (env store flow).
-          This field is set once at creation time and must not be modified afterwards;
-          enforcement lives at the GORM layer (`<-:create`) plus the service-layer
-          KB update path, which omits this field from its update DTO.
         type: string
       vlm_config:
         allOf:
@@ -1086,10 +1055,7 @@ definitions:
       parser_engine_overrides:
         additionalProperties:
           type: string
-        description: |-
-          ParserEngineOverrides passes key-value configuration to docreader parsers
-          (e.g. pdf_force_scanned=true). Merged with workspace-level overrides in the
-          parse pipeline; per-upload values take priority on conflict.
+        description: ParserEngineOverrides passes per-upload configuration to retained parsers; these values override workspace settings.
         type: object
       parser_engine_rules:
         items:
@@ -1099,11 +1065,6 @@ definitions:
         $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.QuestionGenerationConfig'
       vlm_config:
         $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.VLMConfig'
-    type: object
-  github_com_Tencent_Reliquary_internal_types.LocalEngineConfig:
-    properties:
-      path_prefix:
-        type: string
     type: object
   github_com_Tencent_Reliquary_internal_types.LoginRequest:
     properties:
@@ -1604,24 +1565,6 @@ definitions:
       url:
         type: string
     type: object
-  github_com_Tencent_Reliquary_internal_types.MinIOEngineConfig:
-    properties:
-      access_key_id:
-        type: string
-      bucket_name:
-        type: string
-      endpoint:
-        type: string
-      mode:
-        description: '"docker" or "remote"'
-        type: string
-      path_prefix:
-        type: string
-      secret_access_key:
-        type: string
-      use_ssl:
-        type: boolean
-    type: object
   github_com_Tencent_Reliquary_internal_types.ModelParameters:
     properties:
       api_key:
@@ -1832,36 +1775,6 @@ definitions:
       mineru_vlm_server_url:
         description: vLLM 服务器地址 (vlm-http-client / hybrid-http-client)
         type: string
-      odl_hybrid:
-        description: OpenDataLoader PDF (docreader engine); hybrid requires opendataloader-pdf-hybrid service.
-        type: string
-      odl_hybrid_fallback:
-        type: boolean
-      odl_hybrid_mode:
-        description: auto, full
-        type: string
-      odl_hybrid_url:
-        description: e.g. http://odl-hybrid:5002
-        type: string
-      odl_markdown_with_html:
-        type: boolean
-      paddleocr_vl_cloud_model:
-        description: e.g. PaddleOCR-VL-1.6
-        type: string
-      paddleocr_vl_cloud_token:
-        description: PaddleOCR-VL AI Studio cloud API.
-        type: string
-      paddleocr_vl_cloud_use_chart_recognition:
-        type: boolean
-      paddleocr_vl_cloud_use_seal_recognition:
-        type: boolean
-      paddleocr_vl_endpoint:
-        description: PaddleOCR-VL self-hosted pipeline service (full /layout-parsing API).
-        type: string
-      paddleocr_vl_use_chart_recognition:
-        type: boolean
-      paddleocr_vl_use_seal_recognition:
-        type: boolean
     type: object
   github_com_Tencent_Reliquary_internal_types.ParserEngineRule:
     properties:
@@ -1871,11 +1784,6 @@ definitions:
         items:
           type: string
         type: array
-      xlsx_first_row_as_header:
-        description: |-
-          XLSXFirstRowAsHeader restores row-1 column context for flat XLSX tables.
-          nil preserves the parser default; an explicit false disables the mode.
-        type: boolean
     type: object
   github_com_Tencent_Reliquary_internal_types.PromptCacheStatus:
     enum:
@@ -2045,17 +1953,6 @@ definitions:
         description: 'VectorThreshold is the minimum vector similarity score (0-1, default: 0.15)'
         type: number
     type: object
-  github_com_Tencent_Reliquary_internal_types.RetrieverEngineParams:
-    properties:
-      retriever_engine_type:
-        allOf:
-          - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.RetrieverEngineType'
-        description: Retriever engine type
-      retriever_type:
-        allOf:
-          - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.RetrieverType'
-        description: Retriever type
-    type: object
   github_com_Tencent_Reliquary_internal_types.RetrieverEngineType:
     enum:
       - postgres
@@ -2072,13 +1969,6 @@ definitions:
       - SQLiteRetrieverEngineType
       - TencentVectorDBRetrieverEngineType
       - OpenSearchRetrieverEngineType
-  github_com_Tencent_Reliquary_internal_types.RetrieverEngines:
-    properties:
-      engines:
-        items:
-          $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.RetrieverEngineParams'
-        type: array
-    type: object
   github_com_Tencent_Reliquary_internal_types.RetrieverType:
     enum:
       - keywords
@@ -2182,25 +2072,6 @@ definitions:
       - RuntimeTaskRetry
       - RuntimeTaskArchived
       - RuntimeTaskCompleted
-  github_com_Tencent_Reliquary_internal_types.S3EngineConfig:
-    properties:
-      access_key:
-        type: string
-      bucket_name:
-        type: string
-      endpoint:
-        type: string
-      force_path_style:
-        type: boolean
-      path_prefix:
-        type: string
-      region:
-        type: string
-      secret_key:
-        type: string
-      use_ssl:
-        type: boolean
-    type: object
   github_com_Tencent_Reliquary_internal_types.SandboxNetworkPolicy:
     properties:
       deny_egress_by_default:
@@ -2469,75 +2340,6 @@ definitions:
       mode:
         type: string
     type: object
-  github_com_Tencent_Reliquary_internal_types.StorageBackendConfig:
-    properties:
-      access_key_id:
-        type: string
-      bucket_name:
-        type: string
-      endpoint:
-        type: string
-      force_path_style:
-        type: boolean
-      mode:
-        type: string
-      path_prefix:
-        type: string
-      region:
-        type: string
-      secret_access_key:
-        type: string
-      use_ssl:
-        type: boolean
-    type: object
-  github_com_Tencent_Reliquary_internal_types.StorageConfig:
-    properties:
-      bucket_name:
-        description: Bucket Name
-        type: string
-      endpoint:
-        description: Endpoint (S3 specific) - e.g., s3.amazonaws.com, oss-cn-hangzhou.aliyuncs.com
-        type: string
-      force_path_style:
-        description: ForcePathStyle (S3 specific) - whether to use path-style URLs
-        type: boolean
-      path_prefix:
-        description: Path Prefix
-        type: string
-      provider:
-        description: 'Provider: "cos", "minio", "s3"'
-        type: string
-      region:
-        description: Region
-        type: string
-      secret_id:
-        description: Secret ID (COS) / Access Key ID (S3, MinIO)
-        type: string
-      secret_key:
-        description: Secret Key (COS) / Secret Access Key (S3, MinIO)
-        type: string
-      use_ssl:
-        description: UseSSL (S3 specific) - whether to use HTTPS
-        type: boolean
-    type: object
-  github_com_Tencent_Reliquary_internal_types.StorageEngineConfig:
-    properties:
-      default_provider:
-        description: '"local", "minio", "cos", "tos", "s3", "oss", "ks3", "obs"'
-        type: string
-      local:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.LocalEngineConfig'
-      minio:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.MinIOEngineConfig'
-      s3:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.S3EngineConfig'
-    type: object
-  github_com_Tencent_Reliquary_internal_types.StorageProviderConfig:
-    properties:
-      provider:
-        description: '"local", "minio", "cos", "tos", "s3", "oss", "ks3", "obs"'
-        type: string
-    type: object
   github_com_Tencent_Reliquary_internal_types.SuggestionAttribution:
     properties:
       question_id:
@@ -2673,9 +2475,6 @@ definitions:
         allOf:
           - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.CredentialsConfig'
         description: 'Credentials config: third-party provider credentials (e.g. WeKnoraCloud AppID/AppSecret)'
-      default_storage_backend_id:
-        description: DefaultStorageBackendID is the workspace default concrete storage instance.
-        type: string
       deleted_at:
         allOf:
           - $ref: '#/definitions/gorm.DeletedAt'
@@ -2701,17 +2500,9 @@ definitions:
         allOf:
           - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.RetrievalConfig'
         description: 'Retrieval config: global search/retrieval parameters shared by knowledge search and message search'
-      retriever_engines:
-        allOf:
-          - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.RetrieverEngines'
-        description: Retriever engines
       status:
         description: Status
         type: string
-      storage_engine_config:
-        allOf:
-          - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.StorageEngineConfig'
-        description: 'Storage engine config: parameters for Local, MinIO, COS. Used for document/file storage and docreader.'
       storage_quota:
         description: Storage quota (Bytes), default is 10GB, including vector, original file, text, index, etc.
         type: integer
@@ -3723,19 +3514,6 @@ definitions:
         description: ID of rerank model to use
         type: string
     type: object
-  internal_handler.GetStorageEngineStatusResponse:
-    properties:
-      allowed_providers:
-        items:
-          type: string
-        type: array
-      engines:
-        items:
-          $ref: '#/definitions/internal_handler.StorageEngineStatusItem'
-        type: array
-      minio_env_available:
-        type: boolean
-    type: object
   internal_handler.GetSystemInfoResponse:
     properties:
       build_time:
@@ -3757,16 +3535,12 @@ definitions:
         type: string
       keyword_index_engine:
         type: string
-      minio_enabled:
-        type: boolean
       started_at:
         description: StartedAt is the server process boot time (RFC3339, UTC).
         type: string
       uptime_seconds:
         description: UptimeSeconds is seconds elapsed since process start.
         type: integer
-      vector_store_engine:
-        type: string
       version:
         type: string
     type: object
@@ -3825,15 +3599,6 @@ definitions:
         properties:
           enabled:
             type: boolean
-          minio:
-            properties:
-              bucketName:
-                type: string
-              pathPrefix:
-                type: string
-            type: object
-          storageType:
-            type: string
           vlm:
             properties:
               apiKey:
@@ -3933,11 +3698,6 @@ definitions:
           questionCount:
             type: integer
         type: object
-      storageBackendId:
-        type: string
-      storageProvider:
-        description: 存储引擎选择（"local" | "minio" | "cos"），影响文档上传与文档内图片存储，参数从全局设置读取
-        type: string
       vlm_config:
         $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.VLMConfig'
     required:
@@ -4318,39 +4078,6 @@ definitions:
     required:
       - query
     type: object
-  internal_handler.StorageCheckRequest:
-    properties:
-      minio:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.MinIOEngineConfig'
-      provider:
-        description: '"minio", "cos", "tos", "s3", "oss", "ks3", "obs"'
-        type: string
-      s3:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.S3EngineConfig'
-    type: object
-  internal_handler.StorageCheckResponse:
-    properties:
-      bucket_created:
-        type: boolean
-      message:
-        type: string
-      ok:
-        type: boolean
-    type: object
-  internal_handler.StorageEngineStatusItem:
-    properties:
-      allowed:
-        type: boolean
-      available:
-        description: whether the engine can be used
-        type: boolean
-      description:
-        description: short description for UI
-        type: string
-      name:
-        description: '"local", "minio", "cos", "tos", "s3", "oss", "ks3", "obs"'
-        type: string
-    type: object
   internal_handler.SuggestionEventRequest:
     properties:
       event_type:
@@ -4533,20 +4260,6 @@ definitions:
           a direct zip/SKILL.md URL. Bare "owner/slug" is rejected: it is both a
           ClawHub id and a GitHub repo. The fetch carries no credential.
         type: string
-    type: object
-  internal_handler.storageBackendRequest:
-    properties:
-      config:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.StorageBackendConfig'
-      name:
-        type: string
-      provider:
-        type: string
-      status:
-        type: string
-    required:
-      - name
-      - provider
     type: object
   internal_handler_session.AttachmentUpload:
     properties:
@@ -6449,11 +6162,6 @@ paths:
         - description: VLM接口类型
           in: formData
           name: vlm_interface_type
-          type: string
-        - description: 存储类型(cos/minio)
-          in: formData
-          name: storage_type
-          required: true
           type: string
       produces:
         - application/json
@@ -11499,296 +11207,6 @@ paths:
       summary: Install a catalog skill onto sandboxes
       tags:
         - Skills
-  /storage-backends:
-    get:
-      description: List all storage backend instances for the current workspace, with credentials masked. The workspace default backend id is returned alongside the list.
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: List of storage backends and default_storage_backend_id
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: List storage backends
-      tags:
-        - StorageBackend
-    post:
-      consumes:
-        - application/json
-      description: Register a new object/file storage instance for the current workspace. The configuration is validated and a connectivity test is run before the backend is persisted.
-      parameters:
-        - description: Storage backend configuration
-          in: body
-          name: request
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.storageBackendRequest'
-      produces:
-        - application/json
-      responses:
-        "201":
-          description: Created storage backend
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Invalid request, validation, or connectivity test failure
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "409":
-          description: A storage backend with this name already exists
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: Create storage backend
-      tags:
-        - StorageBackend
-  /storage-backends/{id}:
-    delete:
-      description: Soft-delete a storage backend. A backend that is the workspace default, still bound to knowledge bases, environment-sourced, or a legacy alias cannot be deleted.
-      parameters:
-        - description: Storage backend ID
-          in: path
-          name: id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Deletion success
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Backend is default, bound, read-only, or legacy alias
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Storage backend not found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: Delete storage backend
-      tags:
-        - StorageBackend
-    get:
-      description: Retrieve a single storage backend by ID for the current workspace. Credentials are masked.
-      parameters:
-        - description: Storage backend ID
-          in: path
-          name: id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Storage backend details
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Storage backend not found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: Get storage backend
-      tags:
-        - StorageBackend
-    put:
-      consumes:
-        - application/json
-      description: Update a storage backend's mutable fields (name, credentials, status). Provider and physical location (endpoint, region, bucket, path prefix) are immutable; use storage migration to move data. Environment-sourced backends are read-only. Redacted secret placeholders preserve the stored credentials.
-      parameters:
-        - description: Storage backend ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: Updated storage backend fields
-          in: body
-          name: request
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.storageBackendRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Updated storage backend
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Immutable field change, read-only backend, validation, or connectivity failure
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Storage backend not found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: Update storage backend
-      tags:
-        - StorageBackend
-  /storage-backends/{id}/default:
-    put:
-      description: Mark a storage backend as the workspace default. Only an active backend can become the default. New knowledge bases without an explicit binding use the default.
-      parameters:
-        - description: Storage backend ID
-          in: path
-          name: id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Default set successfully
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Backend is not active
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Storage backend not found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: Set default storage backend
-      tags:
-        - StorageBackend
-  /storage-backends/{id}/test:
-    post:
-      description: Test connectivity of an existing saved storage backend using its stored credentials. Returns success=false with a sanitized error message on failure (the HTTP status stays 200).
-      parameters:
-        - description: Storage backend ID
-          in: path
-          name: id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Connectivity test result (success, error)
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Storage backend not found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: Test storage backend by ID
-      tags:
-        - StorageBackend
-  /storage-backends/test:
-    post:
-      consumes:
-        - application/json
-      description: Test connectivity for the provided storage configuration without persisting it. Returns success=false with a sanitized error message on failure (the HTTP status stays 200).
-      parameters:
-        - description: Storage backend configuration to test
-          in: body
-          name: request
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.storageBackendRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Connectivity test result (success, error)
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Invalid request or validation error
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: Test storage backend with raw config
-      tags:
-        - StorageBackend
-  /storage-backends/types:
-    get:
-      description: Return the storage provider types allowed by STORAGE_ALLOW_LIST for UI form generation (e.g. local, minio, cos, tos, s3, oss, ks3, obs).
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: List of allowed storage provider types
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: List allowed storage provider types
-      tags:
-        - StorageBackend
   /system/admin/runtime/queues:
     get:
       description: 返回各 asynq 队列的实时深度（pending/active/scheduled/retry 等）与 worker 并发配置，仅系统管理员可见
@@ -12009,25 +11427,6 @@ paths:
       summary: 获取部署能力清单
       tags:
         - 系统
-  /system/docreader/reconnect:
-    post:
-      consumes:
-        - application/json
-      parameters:
-        - description: DocReader 地址
-          in: body
-          name: request
-          required: true
-          schema:
-            type: object
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-      summary: 重连文档解析服务
-      tags:
-        - 系统
   /system/info:
     get:
       consumes:
@@ -12095,41 +11494,6 @@ paths:
           schema:
             $ref: '#/definitions/internal_handler.SandboxCheckResponse'
       summary: 测试沙箱连通性
-      tags:
-        - 系统
-  /system/storage-engine-check:
-    post:
-      consumes:
-        - application/json
-      description: 使用当前填写的参数测试 MinIO/COS 连通性，不保存配置
-      parameters:
-        - description: 存储引擎配置
-          in: body
-          name: body
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.StorageCheckRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_handler.StorageCheckResponse'
-      summary: 测试存储引擎连通性
-      tags:
-        - 系统
-  /system/storage-engine-status:
-    get:
-      description: 返回 Local、MinIO、COS 各存储引擎的可用状态及说明，供全局设置与知识库选择使用
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_handler.GetStorageEngineStatusResponse'
-      summary: 获取存储引擎状态
       tags:
         - 系统
   /tenants/{id}:
@@ -12364,61 +11728,6 @@ paths:
       summary: Unstar a resource
       tags:
         - User
-  /vector-stores:
-    get:
-      description: Report the read-only application PostgreSQL store without exposing credentials
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: List of vector stores (env + DB)
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: Get PostgreSQL store status
-      tags:
-        - VectorStore
-  /vector-stores/{id}:
-    get:
-      description: Report the read-only application PostgreSQL store by its virtual ID
-      parameters:
-        - description: Vector store ID
-          in: path
-          name: id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Vector store details
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Vector store not found
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: Get PostgreSQL store status
-      tags:
-        - VectorStore
   /web-search-providers/{id}:
     delete:
       description: 删除指定 provider 配置

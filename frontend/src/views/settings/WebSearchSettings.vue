@@ -466,7 +466,7 @@ const providerInitial = (providerId: string) => {
   return (label.trim().charAt(0) || '?').toUpperCase()
 }
 
-// 见 VectorStoreSettings 的同名注释：返回 --logo-url 给 ::before 用 mask 渲染。
+// 返回 --logo-url 给 ::before 用 mask 渲染。
 const resolveLogo = (providerId: string) => providerLogo('websearch', providerId)
 
 const badgeClass = (providerId: string) => {

@@ -1,6 +1,6 @@
 // Package chunker implements text splitting for document chunking.
 //
-// Ported from the Python docreader/splitter/splitter.py recursive text splitter.
+// Ported from the Python the original Python recursive splitter recursive text splitter.
 package chunker
 
 import (
@@ -94,7 +94,7 @@ type SplitterConfig struct {
 //
 // MIGRATION NOTE: Prior versions had three different overlap defaults
 // (Go DefaultConfig: 64, knowledge.go buildSplitterConfig: 50, Python
-// docreader: 100). All consolidated to 80 here.
+// original Python reader: 100). All consolidated to 80 here.
 //
 // Omitted overlap uses 80. Explicitly stored zero disables overlap on the
 // next re-index; existing embeddings are unchanged until re-indexing.
@@ -207,7 +207,7 @@ type splitUnit struct {
 // splitBySeparators splits text by separators in priority order, recursively
 // applying the next separator to any piece that is still larger than
 // chunkSize. Mirrors the recursive priority semantics of the Python
-// reference splitter (docreader/splitter/splitter.py:_split): if `\n\n`
+// reference splitter (the original Python recursive splitter:_split): if `\n\n`
 // produces a piece that's still too big, `\n` (and subsequent separators)
 // are applied within that piece — not to the whole text.
 //

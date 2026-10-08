@@ -58,17 +58,10 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 		return nil, err
 	}
 
-	if err := s.checkStorageEngineConfigured(ctx, kb); err != nil {
-		return nil, err
-	}
-
 	// Early reject before the whole-file hash below. resolveFileImportProcessConfig
-	// gates the same extension set, but this path must keep returning
-	// ErrInvalidFileType rather than the shared gate's localized message.
-	logger.Infof(ctx, "Checking file type: %s", fileName)
-	if !isValidFileType(fileName) {
-		logger.Error(ctx, "Invalid file type")
-		return nil, ErrInvalidFileType
+	// gates the same extension set and provides a clear unsupported-type error.
+	if err := validateImportFileType(getFileType(fileName)); err != nil {
+		return nil, err
 	}
 
 	// Calculate file hash for deduplication
@@ -326,10 +319,6 @@ func (s *knowledgeService) createKnowledgeFromURL(ctx context.Context,
 		return nil, err
 	}
 
-	if err := s.checkStorageEngineConfigured(ctx, kb); err != nil {
-		return nil, err
-	}
-
 	// Validate URL format and security
 	logger.Info(ctx, "Validating URL")
 	if !isValidURL(url) || !secutils.IsValidURL(url) {
@@ -562,10 +551,6 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 	kb, err := s.kbService.GetKnowledgeBaseByID(ctx, kbID)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to get knowledge base: %v", err)
-		return nil, err
-	}
-
-	if err := s.checkStorageEngineConfigured(ctx, kb); err != nil {
 		return nil, err
 	}
 
@@ -836,10 +821,6 @@ func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 	kb, err := s.kbService.GetKnowledgeBaseByID(ctx, kbID)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to get knowledge base: %v", err)
-		return nil, err
-	}
-
-	if err := s.checkStorageEngineConfigured(ctx, kb); err != nil {
 		return nil, err
 	}
 

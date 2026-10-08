@@ -64,10 +64,10 @@ func (personalSystemRouteInspector) PurgeArchivedRuntimeTasks(context.Context, s
 func TestPersonalUserAndAPIKeyCanAccessAllSystemRoutes(t *testing.T) {
 	f := newPersonalAuthFixture(t)
 	cfg := &config.Config{Tenant: &config.TenantConfig{}}
-	tenantSvc := service.NewTenantService(apprepo.NewTenantRepository(f.db), apprepo.NewStorageBackendRepository(f.db))
+	tenantSvc := service.NewTenantService(apprepo.NewTenantRepository(f.db))
 	users := service.NewUserService(cfg, apprepo.NewUserRepository(f.db), apprepo.NewAuthTokenRepository(f.db), tenantSvc)
 	keys := service.NewTenantAPIKeyService(apprepo.NewTenantAPIKeyRepository(f.db))
-	h := handler.NewSystemHandler(cfg, nil, tenantSvc, users, personalSystemRouteSettings{}, keys, personalSystemRouteInspector{}, nil, nil, nil)
+	h := handler.NewSystemHandler(cfg, tenantSvc, users, personalSystemRouteSettings{}, keys, personalSystemRouteInspector{}, nil, nil)
 	r := gin.New()
 	r.Use(middleware.ErrorHandler(), middleware.Auth(tenantSvc, users, keys))
 	RegisterSystemAdminRoutes(r.Group("/api/v1"), h, newAccessGuards(nil, nil, nil))

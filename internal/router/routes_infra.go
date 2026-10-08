@@ -174,28 +174,6 @@ func RegisterWebSearchProviderRoutes(
 	}
 }
 
-func RegisterVectorStoreRoutes(r *gin.RouterGroup, h *handler.VectorStoreHandler, g *accessGuards) {
-	stores := r.Group("/vector-stores")
-	stores.GET("", h.ListStores)
-	stores.GET("/:id", h.GetStore)
-}
-
-// RegisterStorageBackendRoutes manages concrete object/file storage instances.
-func RegisterStorageBackendRoutes(r *gin.RouterGroup, h *handler.StorageBackendHandler, g *accessGuards) {
-	backends := r.Group("/storage-backends")
-	{
-		backends.GET("/types", h.Types)
-		backends.POST("/test", h.TestRaw)
-		backends.POST("", h.Create)
-		backends.GET("", h.List)
-		backends.GET("/:id", h.Get)
-		backends.PUT("/:id", h.Update)
-		backends.DELETE("/:id", h.Delete)
-		backends.POST("/:id/test", h.TestByID)
-		backends.PUT("/:id/default", h.SetDefault)
-	}
-}
-
 func RegisterDataSourceRoutes(
 	r *gin.RouterGroup,
 	handler *handler.DataSourceHandler,

@@ -15,8 +15,6 @@ func deploymentCapabilitiesFromRouter(params RouterParams) handler.DeploymentCap
 		WebSearch: params.WebSearchHandler != nil &&
 			params.WebSearchProviderHandler != nil &&
 			params.WebSearchCredentialsHandler != nil,
-		VectorStore:   params.VectorStoreHandler != nil,
-		Storage:       params.StorageBackendHandler != nil,
 		Sandbox:       params.SandboxConfigHandler != nil,
 		SandboxDocker: sandbox.DockerBackendEnabled(),
 	})

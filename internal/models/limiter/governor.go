@@ -57,8 +57,7 @@ func Gate(ctx context.Context, modelID string) func() {
 // model's own configured cap; a value <= 0 means "fall back to the process-wide
 // default" (governorN). It returns a release func that is ALWAYS safe to call:
 // on the passthrough / fail-open paths it is a cheap no-op. The gate never
-// blocks a call permanently — a limiter/Redis outage or a cancelled context
-// fails open.
+// blocks a call permanently: a cancelled context fails open.
 func GateN(ctx context.Context, modelID string, modelLimit int) func() {
 	return GateNamedN(ctx, modelID, "", modelLimit)
 }
@@ -92,9 +91,7 @@ func GateNamedN(ctx context.Context, modelID, modelName string, modelLimit int) 
 	return release
 }
 
-// RuntimeStats returns the semaphores observed by this process. Redis-backed
-// limiters report cluster-wide active holders; waiting callers remain local to
-// this instance by design.
+// RuntimeStats returns the semaphores observed by this process.
 func RuntimeStats(ctx context.Context) ([]RuntimeStat, bool, error) {
 	governorMu.RLock()
 	l := governor
@@ -111,7 +108,7 @@ func RuntimeStats(ctx context.Context) ([]RuntimeStat, bool, error) {
 }
 
 // localLimiter is an in-process (single-node) counting semaphore keyed by
-// model ID. It supports isolated tests without a distributed Redis semaphore.
+// model ID shared by background model calls in this process.
 type localLimiter struct {
 	mu      sync.Mutex
 	sems    map[string]*localSemaphore

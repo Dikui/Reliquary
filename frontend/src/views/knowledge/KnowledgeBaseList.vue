@@ -314,8 +314,6 @@ interface KB {
   type?: 'document';
   showMore?: boolean;
   vlm_config?: { enabled?: boolean; model_id?: string };
-  storage_provider_config?: { provider?: string };
-  storage_config?: { provider?: string; bucket_name?: string }; // legacy
   question_generation_config?: { enabled?: boolean; question_count?: number };
   knowledge_count?: number;
   chunk_count?: number;

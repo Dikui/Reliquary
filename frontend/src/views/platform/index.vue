@@ -16,7 +16,7 @@
             <RouterView />
         </div>
         <div class="upload-mask" v-show="ismask">
-            <UploadMask></UploadMask>
+            <UploadMask :supported-file-types="dragUploadTypes"></UploadMask>
         </div>
         <!-- 全局设置模态框，供所有 platform 子路由使用 -->
         <Settings />
@@ -30,8 +30,9 @@
 </template>
 <script setup lang="ts">
 import Menu from '@/components/menu.vue'
-import { ref, onMounted, onUnmounted, nextTick, provide, watch } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, provide, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router'
+import { useEditorResourcesStore } from '@/stores/editorResources'
 import UploadMask from '@/components/upload-mask.vue'
 import Settings from '@/views/settings/Settings.vue'
 import GlobalCommandPalette from '@/components/GlobalCommandPalette.vue'
@@ -46,6 +47,10 @@ import { collectDroppedFiles } from './collectDroppedFiles'
 const route = useRoute();
 const router = useRouter();
 const commandPaletteStore = useCommandPaletteStore();
+const editorResources = useEditorResourcesStore()
+const dragUploadTypes = computed(() => [...new Set(
+    editorResources.parserEngines.filter(engine => engine.Available !== false).flatMap(engine => engine.FileTypes || [])
+)])
 let ismask = ref(false)
 const { t } = useI18n();
 const navigationMedia = window.matchMedia('(max-width: 640px)');

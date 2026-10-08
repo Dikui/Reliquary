@@ -460,7 +460,7 @@ func TestArtifactCollector_UploadFailureIsPerFile(t *testing.T) {
 	}
 	// FileService fails on every call — both files should be skipped without
 	// propagating an error.
-	fs := &fakeFileService{saveErr: stderrors.New("s3 dead")}
+	fs := &fakeFileService{saveErr: stderrors.New("local storage unavailable")}
 	c := newTestCollector(src, &fakeStore{}, fs, 1<<20)
 
 	got, err := c.Collect(ctx, "sess-1", "msg-1", 42, "/workspace/output")

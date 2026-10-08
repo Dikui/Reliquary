@@ -15,7 +15,6 @@ import (
 	"reliquary/internal/application/repository"
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
-	"reliquary/internal/types/interfaces"
 )
 
 type skillBundleFileMap struct {
@@ -42,19 +41,6 @@ func (s skillBundleFileMap) CopyFile(context.Context, string, uint64, string) (s
 	return "", errors.New("not implemented")
 }
 
-type skillBundleResolver struct{ fs interfaces.FileService }
-
-func (r skillBundleResolver) ResolveFileService(
-	context.Context, *types.Tenant, string, string, string,
-) (interfaces.FileService, string, error) {
-	return r.fs, "", nil
-}
-func (skillBundleResolver) ResolveBackend(
-	context.Context, *types.Tenant, string, string,
-) (*types.StorageBackend, error) {
-	return nil, nil
-}
-
 func newAgentSkillBundleService(t *testing.T, files map[string][]byte) (*agentService, *gorm.DB) {
 	t.Helper()
 	db := pgtest.OpenFixture(t)
@@ -63,8 +49,8 @@ func newAgentSkillBundleService(t *testing.T, files map[string][]byte) (*agentSe
 		&types.TenantSkillSnapshotEntity{}, &types.TenantUserEnvVar{},
 	))
 	return &agentService{
-		db:              db,
-		storageResolver: skillBundleResolver{fs: skillBundleFileMap{files: files}},
+		db:          db,
+		fileService: skillBundleFileMap{files: files},
 	}, db
 }
 

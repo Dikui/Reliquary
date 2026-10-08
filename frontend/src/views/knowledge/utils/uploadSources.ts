@@ -1,4 +1,5 @@
-import { kbFileTypeVerification } from '@/utils'
+import { fileSizeVerification } from '@/utils'
+import { shouldRejectKnowledgeFileType } from '@/utils/fileTypeVerification'
 
 export const UPLOAD_VIDEO_EXTENSIONS = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'wmv', 'flv']
 
@@ -24,6 +25,9 @@ export interface FilterUploadFilesResult {
   skippedCount: number
   videoFilteredCount: number
   hiddenFileCount: number
+  unsupportedTypeCount: number
+  unavailableEngineCount: number
+  oversizedCount: number
 }
 
 export function filterUploadFiles(
@@ -45,6 +49,9 @@ export function filterUploadFiles(
   let skippedCount = 0
   let videoFilteredCount = 0
   let hiddenFileCount = 0
+  let unsupportedTypeCount = 0
+  let unavailableEngineCount = 0
+  let oversizedCount = 0
   const multiFile = options.multiFile ?? list.length > 1
 
   for (const file of list) {
@@ -62,7 +69,18 @@ export function filterUploadFiles(
       continue
     }
 
-    if (kbFileTypeVerification(file, multiFile, dynamicTypes)) {
+    if (shouldRejectKnowledgeFileType(file.name)) {
+      unsupportedTypeCount++
+      skippedCount++
+      continue
+    }
+    if (dynamicTypes && shouldRejectKnowledgeFileType(file.name, dynamicTypes)) {
+      unavailableEngineCount++
+      skippedCount++
+      continue
+    }
+    if (fileSizeVerification(file, multiFile)) {
+      oversizedCount++
       skippedCount++
       continue
     }
@@ -70,5 +88,5 @@ export function filterUploadFiles(
     validFiles.push(file)
   }
 
-  return { validFiles, skippedCount, videoFilteredCount, hiddenFileCount }
+  return { validFiles, skippedCount, videoFilteredCount, hiddenFileCount, unsupportedTypeCount, unavailableEngineCount, oversizedCount }
 }

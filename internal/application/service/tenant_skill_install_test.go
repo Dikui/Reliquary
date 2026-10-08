@@ -1187,8 +1187,7 @@ func TestRunInstallAbortsWhenTheSameArchiveIsAlreadyServing(t *testing.T) {
 
 func TestTenantForStoragePrefersMatchingContextTenant(t *testing.T) {
 	svc := &TenantSkillService{}
-	backendID := "backend-1"
-	ctxTenant := &types.Tenant{ID: 7, DefaultStorageBackendID: &backendID}
+	ctxTenant := &types.Tenant{ID: 7, Name: "personal"}
 	ctx := context.WithValue(context.Background(), types.TenantInfoContextKey, ctxTenant)
 
 	got := svc.tenantForStorage(ctx, 7)
@@ -1203,7 +1202,7 @@ func TestTenantForStorageIgnoresMismatchedContextTenant(t *testing.T) {
 	got := svc.tenantForStorage(ctx, 7)
 
 	require.Equal(t, uint64(7), got.ID)
-	require.Nil(t, got.DefaultStorageBackendID)
+	require.Empty(t, got.Name)
 }
 
 func TestRunInstallAbortsWhenANewerBundleOwnsTheRow(t *testing.T) {
@@ -2091,7 +2090,7 @@ func newInstallFixture(t *testing.T) *installFixture {
 	fx.svc = NewTenantSkillService(
 		fx.skillRepo,
 		fx.configRepo,
-		&installStorageResolver{fx: fx},
+		installFileService{fx: fx},
 		&installSandboxResolver{mgr: fx.sandboxMgr},
 		nil,
 		fx.agentSvc,
@@ -3335,20 +3334,6 @@ func (installChat) ChatStream(context.Context, []chat.Message, *chat.ChatOptions
 }
 func (installChat) GetModelName() string { return "install-chat" }
 func (c installChat) GetModelID() string { return c.id }
-
-type installStorageResolver struct{ fx *installFixture }
-
-func (r *installStorageResolver) ResolveFileService(
-	context.Context, *types.Tenant, string, string, string,
-) (interfaces.FileService, string, error) {
-	return installFileService{fx: r.fx}, "", nil
-}
-
-func (r *installStorageResolver) ResolveBackend(
-	context.Context, *types.Tenant, string, string,
-) (*types.StorageBackend, error) {
-	return nil, nil
-}
 
 type installFileService struct{ fx *installFixture }
 

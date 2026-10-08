@@ -109,14 +109,14 @@ var registry = map[string]settingSpec{
 	//      from the MAX_FILE_SIZE_MB env var; envsubst writes the
 	//      computed value into nginx.conf; nginx is never reloaded
 	//      during the container's lifetime).
-	//   2. docreader gRPC max_send/recv_message_length (read from the
+	//   2. browser upload validation (read from the
 	//      MAX_FILE_SIZE_MB env at python startup).
 	//   3. The frontend client-side check (utils/index.ts) reads
 	//      window.__RUNTIME_CONFIG__.MAX_FILE_SIZE_MB which is
 	//      written into /usr/share/nginx/html/config.js by the
 	//      docker-entrypoint at container start.
 	// Surfacing a UI knob whose effect is silently capped by nginx /
-	// docreader / the in-page bundle is worse than not having it.
+	// the in-page bundle is worse than not having it.
 	// Keep MAX_FILE_SIZE_MB as a deploy-time env var until all four
 	// layers can be reconfigured in lockstep without restarts.
 	"ssrf.whitelist": {
@@ -192,7 +192,7 @@ var registry = map[string]settingSpec{
 	},
 	// model.max_concurrency is the DEFAULT per-model cap on concurrent
 	// background (ingestion/enrichment) LLM/embedding/VLM calls, keyed by
-	// model ID and shared across replicas. Read at every gated call via the
+	// model ID within this process. Read at every gated call via the
 	// limiter governor; a runtime bridge (applyModelMaxConcurrency) pushes UI
 	// edits into limiter.SetGlobalLimit so no restart is needed. Individual
 	// models may override this via their own max_concurrency parameter.
@@ -203,7 +203,7 @@ var registry = map[string]settingSpec{
 		EnvName:  "RELIQUARY_MODEL_MAX_CONCURRENCY",
 		Default:  int64(32),
 		Category: "worker",
-		Description: "后台任务（文档入库/富化）对单个模型的默认并发上限，按模型 ID 全副本共享。" +
+		Description: "后台任务（文档入库/富化）对单个模型的默认并发上限，按模型 ID 在本进程内共享。" +
 			"每次调用实时读取，修改后立即生效、无需重启。0 或负数表示关闭默认限制" +
 			"（各模型仍会尊重自身在模型管理里配置的上限）。仅影响后台任务，不影响交互式对话。",
 	},
@@ -439,7 +439,7 @@ func (s *systemSettingService) applySSRFWhitelist(ctx context.Context) {
 // applyModelMaxConcurrency resolves model.max_concurrency via the 3-tier
 // resolver and pushes it into the model concurrency governor so UI edits take
 // effect without a restart. Only the process-wide default limit is retuned;
-// the installed limiter backend (redis/local) stays intact. The default (8)
+// the installed local limiter stays intact. The default (32)
 // deliberately mirrors container.defaultModelMaxConcurrency so the value here
 // matches what the container installs at boot.
 //

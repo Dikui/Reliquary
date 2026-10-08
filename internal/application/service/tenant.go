@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	werrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -13,13 +12,12 @@ import (
 
 // tenantService implements the TenantService interface
 type tenantService struct {
-	repo        interfaces.TenantRepository // Repository for tenant data operations
-	storageRepo interfaces.StorageBackendRepository
+	repo interfaces.TenantRepository // Repository for tenant data operations
 }
 
 // NewTenantService creates a new tenant service instance
-func NewTenantService(repo interfaces.TenantRepository, storageRepo interfaces.StorageBackendRepository) interfaces.TenantService {
-	return &tenantService{repo: repo, storageRepo: storageRepo}
+func NewTenantService(repo interfaces.TenantRepository) interfaces.TenantService {
+	return &tenantService{repo: repo}
 }
 
 // CreateTenant creates a new tenant
@@ -39,13 +37,6 @@ func (s *tenantService) CreateTenant(ctx context.Context, tenant *types.Tenant) 
 	tenant.CreatedAt = time.Now()
 	tenant.UpdatedAt = time.Now()
 
-	if err := s.validateStorageBucketUniqueness(ctx, tenant); err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"tenant_name": tenant.Name,
-		})
-		return nil, err
-	}
-
 	logger.Info(ctx, "Saving tenant information to database")
 	if err := s.repo.CreateTenant(ctx, tenant); err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
@@ -53,42 +44,9 @@ func (s *tenantService) CreateTenant(ctx context.Context, tenant *types.Tenant) 
 		})
 		return nil, err
 	}
-	if err := s.createDefaultStorageBackend(ctx, tenant); err != nil {
-		// No related rows exist yet, so rolling the tenant back is safe and
-		// avoids leaving a workspace that cannot bind new knowledge bases.
-		_ = s.repo.DeleteTenant(ctx, tenant.ID)
-		return nil, err
-	}
 
 	logger.Infof(ctx, "Tenant created successfully, ID: %d, name: %s", tenant.ID, tenant.Name)
 	return tenant, nil
-}
-
-func (s *tenantService) createDefaultStorageBackend(ctx context.Context, tenant *types.Tenant) error {
-	if s.storageRepo == nil || tenant == nil {
-		return nil
-	}
-	provider := ""
-	if tenant.StorageEngineConfig != nil {
-		provider = tenant.StorageEngineConfig.DefaultProvider
-	}
-	backend := types.StorageBackendFromLegacy(tenant.ID, provider, tenant.StorageEngineConfig)
-	if backend == nil {
-		backend = types.StorageBackendFromEnvironment(tenant.ID)
-	}
-	if backend == nil {
-		return errors.New("no supported default storage backend is configured")
-	}
-	backend.LegacyAlias = true
-	if err := s.storageRepo.Create(ctx, backend); err != nil {
-		return err
-	}
-	tenant.DefaultStorageBackendID = &backend.ID
-	if err := s.repo.UpdateTenant(ctx, tenant); err != nil {
-		_ = s.storageRepo.Delete(ctx, tenant.ID, backend.ID)
-		return err
-	}
-	return nil
 }
 
 // GetTenantByID retrieves a tenant by their ID
@@ -134,13 +92,6 @@ func (s *tenantService) UpdateTenant(ctx context.Context, tenant *types.Tenant) 
 	}
 
 	logger.Infof(ctx, "Updating tenant, ID: %d, name: %s", tenant.ID, tenant.Name)
-
-	if err := s.validateStorageBucketUniqueness(ctx, tenant); err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"tenant_id": tenant.ID,
-		})
-		return nil, err
-	}
 
 	tenant.UpdatedAt = time.Now()
 	logger.Info(ctx, "Saving tenant information to database")
@@ -191,75 +142,5 @@ func (s *tenantService) DeleteTenant(ctx context.Context, id uint64) error {
 	}
 
 	logger.Infof(ctx, "Workspace deleted successfully, ID: %d", id)
-	return nil
-}
-
-func (s *tenantService) validateStorageBucketUniqueness(ctx context.Context, tenant *types.Tenant) error {
-	if tenant.StorageEngineConfig == nil {
-		return nil
-	}
-
-	// Fetch existing tenant from DB to compare
-	var oldTenant *types.Tenant
-	if tenant.ID != 0 {
-		var err error
-		oldTenant, err = s.repo.GetTenantByID(ctx, tenant.ID)
-		if err != nil && err.Error() != "tenant not found" && err.Error() != "record not found" {
-			return err
-		}
-	}
-
-	// Fetch ALL tenants to check for collision.
-	allTenants, err := s.repo.ListTenants(ctx)
-	if err != nil {
-		return err
-	}
-
-	// Helper to get bucket names from a StorageEngineConfig
-	getBuckets := func(cfg *types.StorageEngineConfig) map[string]string {
-		if cfg == nil {
-			return nil
-		}
-		res := make(map[string]string)
-		if cfg.MinIO != nil && cfg.MinIO.BucketName != "" {
-			res["minio"] = cfg.MinIO.BucketName
-		}
-		if cfg.S3 != nil && cfg.S3.BucketName != "" {
-			res["s3"] = cfg.S3.BucketName
-		}
-		return res
-	}
-
-	var oldBuckets map[string]string
-	if oldTenant != nil {
-		oldBuckets = getBuckets(oldTenant.StorageEngineConfig)
-	}
-	newBuckets := getBuckets(tenant.StorageEngineConfig)
-
-	// Collect buckets used by other tenants
-	usedByOthers := make(map[string]map[string]bool) // provider -> set of bucket names
-	for _, t := range allTenants {
-		if t.ID == tenant.ID {
-			continue
-		}
-		tb := getBuckets(t.StorageEngineConfig)
-		for p, b := range tb {
-			if usedByOthers[p] == nil {
-				usedByOthers[p] = make(map[string]bool)
-			}
-			usedByOthers[p][b] = true
-		}
-	}
-
-	// Check if any NEW bucket is already used by someone else, AND it's different from the OLD bucket
-	for p, b := range newBuckets {
-		oldB := oldBuckets[p]
-		if b != oldB { // User is trying to change their bucket name or set a new one
-			if usedByOthers[p] != nil && usedByOthers[p][b] {
-				return werrors.NewBadRequestError("存储桶名称「" + b + "」已被其他空间使用，为保证数据隔离，请使用其他名称")
-			}
-		}
-	}
-
 	return nil
 }

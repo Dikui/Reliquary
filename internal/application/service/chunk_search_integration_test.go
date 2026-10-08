@@ -67,7 +67,7 @@ type chunkSearchFixture struct {
 	knowledge interfaces.KnowledgeRepository
 	kbs       interfaces.KnowledgeBaseRepository
 	indices   interfaces.RetrieveEngineRepository
-	registry  interfaces.RetrieveEngineRegistry
+	retrieval interfaces.RetrievalService
 	service   *chunkService
 }
 
@@ -75,12 +75,6 @@ func newChunkSearchFixture(t *testing.T, vectorEnabled bool) *chunkSearchFixture
 	t.Helper()
 	db := pgtest.Open(t)
 	tenant := &types.Tenant{ID: types.SingleTenantID}
-	if !vectorEnabled {
-		tenant.RetrieverEngines.Engines = []types.RetrieverEngineParams{{
-			RetrieverEngineType: types.PostgresRetrieverEngineType,
-			RetrieverType:       types.KeywordsRetrieverType,
-		}}
-	}
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
 	ctx = context.WithValue(ctx, types.TenantInfoContextKey, tenant)
 	f := &chunkSearchFixture{
@@ -88,14 +82,14 @@ func newChunkSearchFixture(t *testing.T, vectorEnabled bool) *chunkSearchFixture
 		chunks: repository.NewChunkRepository(db), knowledge: repository.NewKnowledgeRepository(db),
 		kbs:      repository.NewKnowledgeBaseRepository(db),
 		indices:  pgretriever.NewPostgresRetrieveEngineRepository(db),
-		registry: retriever.NewRetrieveEngineRegistry(nil, nil),
+
 	}
 	require.NoError(t, db.Exec("INSERT INTO knowledge_domains (id, tenant_id, name) VALUES (?, ?, ?)",
 		f.domainID, types.SingleTenantID, "Chunk search domain").Error)
-	require.NoError(t, f.registry.Register(retriever.NewKVHybridRetrieveEngine(f.indices, types.PostgresRetrieverEngineType)))
+	f.retrieval = retriever.NewPostgresRetrievalService(f.indices)
 	f.service = &chunkService{
 		chunkRepository: f.chunks, knowledgeRepo: f.knowledge, kbRepository: f.kbs,
-		modelService: chunkSearchModels{}, retrieveEngine: f.registry,
+		modelService: chunkSearchModels{}, retrieveEngine: f.retrieval,
 	}
 	return f
 }
@@ -373,7 +367,7 @@ func TestChunkKeywordSearchCloneAndMoveKnowledge(t *testing.T) {
 	}))
 	service := &knowledgeService{
 		db: f.db, repo: f.knowledge, chunkRepo: f.chunks,
-		kbService: chunkSearchKBReader{repo: f.kbs}, modelService: chunkSearchModels{}, retrieveEngine: f.registry,
+		kbService: chunkSearchKBReader{repo: f.kbs}, modelService: chunkSearchModels{}, retrieveEngine: f.retrieval,
 	}
 	require.NoError(t, service.CloneChunk(f.ctx, source, target))
 	targetChunks, err := f.chunks.ListChunksByKnowledgeIDAndTypes(f.ctx, types.SingleTenantID, target.ID,

@@ -11,8 +11,8 @@ package errors
 
 const (
 	// ErrCodeDocReaderTimeout — DocReader RPC exceeded
-	// RELIQUARY_DOCREADER_CALL_TIMEOUT (default 30m). Suggest splitting
-	// large files or checking docreader load.
+	// PARSER_CALL_TIMEOUT (default 30m). Suggest splitting
+	// large files or checking parser load.
 	ErrCodeDocReaderTimeout = "DOCREADER_TIMEOUT"
 
 	// ErrCodeDocReaderUnavailable — no DocReader configured for the
@@ -36,9 +36,9 @@ const (
 	// config changes.
 	ErrCodeEmbeddingProviderFail = "EMBEDDING_PROVIDER_FAIL"
 
-	// ErrCodeVectorStoreWriteFailed — chunks embedded fine but the
-	// vector DB write failed (quota, connectivity, schema mismatch).
-	ErrCodeVectorStoreWriteFailed = "VECTORSTORE_WRITE_FAILED"
+	// ErrCodeIndexWriteFailed reports a PostgreSQL index write failure.
+	// Keep the serialized code used by ingestion events and existing clients.
+	ErrCodeIndexWriteFailed = "VECTORSTORE_WRITE_FAILED"
 
 	// ErrCodeMultimodalVLMFailed — a single image's OCR or caption call
 	// failed. Note: per-image failures don't fail the whole parent;
@@ -53,7 +53,7 @@ const (
 	// ErrCodeTaskTimeout — asynq retry budget exhausted. Used by the
 	// dead-letter callback when promoting a task failure into a stage
 	// failure. Distinct from DocReaderTimeout: this is the asynq-level
-	// timeout (whole task), not the docreader-call-level timeout.
+	// timeout (whole task), not the parser-call-level timeout.
 	ErrCodeTaskTimeout = "TASK_TIMEOUT"
 
 	// ErrCodeUnknown — fallback when a wrapped error doesn't classify.

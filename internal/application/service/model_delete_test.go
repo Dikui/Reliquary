@@ -8,7 +8,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/types"
@@ -42,9 +41,6 @@ func (s *stubKBRepoForModelDelete) UpdateKnowledgeBase(context.Context, *types.K
 	return nil
 }
 func (s *stubKBRepoForModelDelete) DeleteKnowledgeBase(context.Context, string) error { return nil }
-func (s *stubKBRepoForModelDelete) CountByVectorStoreID(context.Context, *gorm.DB, uint64, string) (int64, error) {
-	return 0, nil
-}
 func (s *stubKBRepoForModelDelete) CountByModelID(context.Context, uint64, string) (int64, error) {
 	if s.count != nil {
 		return *s.count, s.usageErr

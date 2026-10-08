@@ -7,7 +7,7 @@
 // finalize-on-last-attempt) miss — for example:
 //
 //   - Worker process killed mid-handler before any defer could run.
-//   - DocReader call genuinely exceeding DocReaderCallTimeout AND the
+//   - Parser call genuinely exceeding ParserCallTimeout AND the
 //     worker subsequently being lost before retry kicks in.
 //   - Multimodal Redis counter set to N but ALL N image tasks failing in
 //     ways that bypass finalize (extremely rare; defence-in-depth here).

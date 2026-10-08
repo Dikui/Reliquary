@@ -192,7 +192,7 @@ func (s *KnowledgeStrategyService) Propose(ctx context.Context, kbID, instructio
 		if err != nil || intake == nil || intake.Decision != "approved" {
 			return nil, werrors.NewBadRequestError("sample needs an approved original")
 		}
-		file, _, err := s.knowledge.GetKnowledgeFile(ctx, id)
+		file, _, err := s.knowledge.GetKnowledgeBody(ctx, id)
 		if err != nil {
 			return nil, err
 		}
@@ -341,7 +341,7 @@ func (s *KnowledgeStrategyService) Evaluate(ctx context.Context, kbID, versionID
 				return nil, werrors.NewBadRequestError("formal sample must have an approved original")
 			}
 		}
-		file, _, err := s.knowledge.GetKnowledgeFile(ctx, message.ID)
+		file, _, err := s.knowledge.GetKnowledgeBody(ctx, message.ID)
 		if err != nil || file == nil {
 			if file != nil {
 				_ = file.Close()

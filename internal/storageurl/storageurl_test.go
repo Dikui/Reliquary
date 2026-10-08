@@ -65,13 +65,12 @@ func TestRewriter_RewritesEveryReferenceForm(t *testing.T) {
 	w := NewRewriter(fixedResolver{svc: svc}, "TEST")
 
 	in := "handle ![a](resource://xifDo7NTSL300Lp1goVutw) " +
-		"legacy ![b](minio://bucket/10000/exports/b.png) " +
-		"scoped ![c](storage://backend-a/s3://bucket/ap/10000/exports/c.png)"
+		"legacy ![b](local://1/10000/exports/b.png) " +
+		"scoped ![c](local://1/ap/10000/exports/c.png)"
 	out := w.String(context.Background(), in)
 
 	assert.NotContains(t, out, "resource://")
-	assert.NotContains(t, out, "minio://")
-	assert.NotContains(t, out, "storage://")
+	assert.NotContains(t, out, "local://")
 	assert.Equal(t, 3, svc.calls)
 }
 
@@ -85,7 +84,7 @@ func TestRewriter_LeavesHTTPURLsAlone(t *testing.T) {
 // Emitting an unfetchable URL is worse than leaving the handle: the client can
 // still fall back to the authenticated /files proxy for a handle.
 func TestRewriter_NonHTTPResultIsNoOp(t *testing.T) {
-	w := NewRewriter(stubResolver("storage://7cb970a6/s3://bucket/10000/exports/a.png"), "TEST")
+	w := NewRewriter(stubResolver("local://1/10000/exports/a.png"), "TEST")
 	in := "![img](resource://xifDo7NTSL300Lp1goVutw)"
 	assert.Equal(t, in, w.String(context.Background(), in))
 }

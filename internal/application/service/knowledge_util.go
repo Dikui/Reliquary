@@ -12,9 +12,7 @@ import (
 	"strings"
 	"time"
 
-	filesvc "reliquary/internal/application/service/file"
 	werrors "reliquary/internal/errors"
-	"reliquary/internal/logger"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	secutils "reliquary/internal/utils"
@@ -29,9 +27,10 @@ const unknownFileType = "unknown"
 // that let direct upload accept xlsx while URL import rejected it (#2447).
 var supportedImportFileExtensions = map[string]struct{}{
 	"pdf": {}, "txt": {}, "docx": {}, "doc": {}, "epub": {},
-	"html": {}, "htm": {}, "mhtml": {}, "md": {}, "markdown": {},
-	"png": {}, "jpg": {}, "jpeg": {}, "gif": {},
+	"md": {}, "markdown": {},
+	"png": {}, "jpg": {}, "jpeg": {}, "gif": {}, "bmp": {}, "tiff": {}, "webp": {},
 	"csv": {}, "xlsx": {}, "xls": {}, "pptx": {}, "ppt": {}, "json": {},
+	"docm": {}, "odt": {}, "rtf": {}, "pptm": {}, "odp": {}, "xlsm": {}, "ods": {},
 	"mp3": {}, "wav": {}, "m4a": {}, "flac": {}, "ogg": {},
 }
 
@@ -167,208 +166,12 @@ func (s *knowledgeService) getVLMConfig(ctx context.Context, kb *types.Knowledge
 	}, nil
 }
 
-func (s *knowledgeService) buildStorageConfig(ctx context.Context, kb *types.KnowledgeBase) *types.DocParserStorageConfig {
-	provider := kb.GetStorageProvider()
-	tenant, _ := ctx.Value(types.TenantInfoContextKey).(*types.Tenant)
-	backendID := ""
-	if kb.StorageBackendID != nil {
-		backendID = *kb.StorageBackendID
-	}
-	if s.storageResolver != nil && tenant != nil {
-		if backend, err := s.storageResolver.ResolveBackend(ctx, tenant, backendID, provider); err == nil && backend != nil {
-			provider = backend.Provider
-			tenantCopy := *tenant
-			tenantCopy.StorageEngineConfig = backend.ToStorageEngineConfig()
-			tenant = &tenantCopy
-		}
-	}
-	if provider == "" {
-		provider = "local"
-	}
-
-	// Backward compatibility: if legacy cos_config has full params for the chosen provider, use them.
-	sc := &kb.StorageConfig
-	hasKBFull := false
-	switch provider {
-	case "minio":
-		hasKBFull = sc.BucketName != ""
-	case "local", "s3":
-		hasKBFull = false
-	}
-
-	if hasKBFull {
-		logger.Infof(ctx, "[storage] buildStorageConfig use legacy kb config: kb=%s provider=%s bucket=%s path_prefix=%s",
-			kb.ID, provider, sc.BucketName, sc.PathPrefix)
-		return &types.DocParserStorageConfig{
-			Provider:        strings.ToUpper(provider),
-			Region:          sc.Region,
-			BucketName:      sc.BucketName,
-			AccessKeyID:     sc.SecretID,
-			SecretAccessKey: sc.SecretKey,
-			PathPrefix:      sc.PathPrefix,
-		}
-	}
-
-	// Merge from tenant's StorageEngineConfig.
-	var out types.DocParserStorageConfig
-	out.Provider = strings.ToUpper(provider)
-
-	if tenant != nil && tenant.StorageEngineConfig != nil {
-		sec := tenant.StorageEngineConfig
-		if sec.DefaultProvider != "" && provider == "" {
-			provider = strings.ToLower(strings.TrimSpace(sec.DefaultProvider))
-			out.Provider = strings.ToUpper(provider)
-		}
-		// Provider list must match types.StorageEngineConfig + ParseProviderScheme.
-		// Missing a case here causes DocParserStorageConfig to be returned with only
-		// Provider set — bucket/endpoint/credentials are silently dropped, and the
-		// docreader then fails or fetches from the wrong location. See issue #1117.
-		switch provider {
-		case "local":
-			if sec.Local != nil {
-				out.PathPrefix = sec.Local.PathPrefix
-			}
-		case "minio":
-			if sec.MinIO != nil {
-				out.BucketName = sec.MinIO.BucketName
-				out.PathPrefix = sec.MinIO.PathPrefix
-				if sec.MinIO.Mode == "remote" {
-					out.Endpoint = sec.MinIO.Endpoint
-					out.AccessKeyID = sec.MinIO.AccessKeyID
-					out.SecretAccessKey = sec.MinIO.SecretAccessKey
-				} else {
-					out.Endpoint = os.Getenv("MINIO_ENDPOINT")
-					out.AccessKeyID = os.Getenv("MINIO_ACCESS_KEY_ID")
-					out.SecretAccessKey = os.Getenv("MINIO_SECRET_ACCESS_KEY")
-				}
-			}
-		case "s3":
-			if sec.S3 != nil {
-				out.Endpoint = sec.S3.Endpoint
-				out.Region = sec.S3.Region
-				out.AccessKeyID = sec.S3.AccessKey
-				out.SecretAccessKey = sec.S3.SecretKey
-				out.BucketName = sec.S3.BucketName
-				out.PathPrefix = sec.S3.PathPrefix
-			}
-		}
-	}
-
-	logger.Infof(ctx, "[storage] buildStorageConfig use merged tenant/global config: kb=%s provider=%s bucket=%s path_prefix=%s endpoint=%s",
-		kb.ID, strings.ToLower(out.Provider), out.BucketName, out.PathPrefix, out.Endpoint)
-	return &out
-}
-
-// resolveFileService returns the FileService for the given knowledge base,
-// based on the KB's StorageProviderConfig (or legacy StorageConfig.Provider) and the tenant's StorageEngineConfig.
-// Falls back to the global fileSvc when no tenant-level storage config is found.
 func (s *knowledgeService) resolveFileService(ctx context.Context, kb *types.KnowledgeBase) interfaces.FileService {
-	if kb == nil {
-		logger.Infof(ctx, "[storage] resolveFileService fallback default: kb=nil")
-		return s.fileSvc
-	}
-
-	provider := kb.GetStorageProvider()
-
-	tenant, _ := ctx.Value(types.TenantInfoContextKey).(*types.Tenant)
-	backendID := ""
-	if kb.StorageBackendID != nil {
-		backendID = strings.TrimSpace(*kb.StorageBackendID)
-	}
-	if s.storageResolver != nil && tenant != nil {
-		baseDir := strings.TrimSpace(os.Getenv("LOCAL_STORAGE_BASE_DIR"))
-		svc, resolvedProvider, err := s.storageResolver.ResolveFileService(ctx, tenant, backendID, provider, baseDir)
-		if err == nil && svc != nil {
-			logger.Infof(ctx, "[storage] resolveFileService selected instance: kb=%s backend=%s provider=%s", kb.ID, backendID, resolvedProvider)
-			return svc
-		}
-		if err != nil {
-			logger.Errorf(ctx, "Failed to resolve storage backend for kb=%s: %v", kb.ID, err)
-		}
-	}
-	if provider == "" && tenant != nil && tenant.StorageEngineConfig != nil {
-		provider = strings.ToLower(strings.TrimSpace(tenant.StorageEngineConfig.DefaultProvider))
-	}
-
-	if provider == "" || tenant == nil || tenant.StorageEngineConfig == nil {
-		logger.Infof(ctx, "[storage] resolveFileService fallback default: kb=%s provider=%q tenant_cfg=%v",
-			kb.ID, provider, tenant != nil && tenant.StorageEngineConfig != nil)
-		return s.fileSvc
-	}
-
-	sec := tenant.StorageEngineConfig
-	baseDir := strings.TrimSpace(os.Getenv("LOCAL_STORAGE_BASE_DIR"))
-	svc, resolvedProvider, err := filesvc.NewFileServiceFromStorageConfig(provider, sec, baseDir)
-	if err != nil {
-		logger.Errorf(ctx, "Failed to create %s file service from tenant config: %v, falling back to default", provider, err)
-		return s.fileSvc
-	}
-	logger.Infof(ctx, "[storage] resolveFileService selected: kb=%s provider=%s", kb.ID, resolvedProvider)
-	return svc
+	return s.fileSvc
 }
 
-// resolveFileServiceForPath is like resolveFileService but adds a safety check:
-// if the resolved provider doesn't match what the filePath implies, fall back to
-// the provider inferred from the file path. This protects historical data when
-// tenant/KB config changes but files were stored under the old provider.
 func (s *knowledgeService) resolveFileServiceForPath(ctx context.Context, kb *types.KnowledgeBase, filePath string) interfaces.FileService {
-	// A resource:// reference belongs to the tenant that registered it. Shared
-	// KB requests use the viewer's effective tenant in ctx, which can otherwise
-	// select the wrong storage backend and pass the resource URL to local disk.
-	if _, ok := types.ParseResourcePath(filePath); ok && s.resourceCatalog != nil && s.storageResolver != nil && s.tenantRepo != nil {
-		resource, err := s.resourceCatalog.Resolve(ctx, filePath)
-		if err == nil && resource != nil {
-			ownerTenant, tenantErr := s.tenantRepo.GetTenantByID(ctx, resource.TenantID)
-			if tenantErr == nil && ownerTenant != nil {
-				baseDir := strings.TrimSpace(os.Getenv("LOCAL_STORAGE_BASE_DIR"))
-				if resolved, _, resolveErr := s.storageResolver.ResolveFileService(ctx, ownerTenant, resource.StorageBackendID, resource.Provider, baseDir); resolveErr == nil && resolved != nil {
-					return resolved
-				} else if resolveErr != nil {
-					logger.Warnf(ctx, "[storage] failed to resolve resource owner backend: resource=%s tenant=%d err=%v", resource.Handle, resource.TenantID, resolveErr)
-				}
-			}
-		}
-	}
-
-	if backendID, inner, ok := types.ParseStorageBackendPath(filePath); ok && s.storageResolver != nil {
-		tenant, _ := ctx.Value(types.TenantInfoContextKey).(*types.Tenant)
-		if tenant != nil {
-			provider := types.ParseProviderScheme(inner)
-			baseDir := strings.TrimSpace(os.Getenv("LOCAL_STORAGE_BASE_DIR"))
-			if resolved, _, err := s.storageResolver.ResolveFileService(ctx, tenant, backendID, provider, baseDir); err == nil {
-				return resolved
-			} else {
-				logger.Warnf(ctx, "[storage] failed to resolve backend from file path: backend=%s err=%v", backendID, err)
-			}
-		}
-	}
-	svc := s.resolveFileService(ctx, kb)
-	if filePath == "" {
-		return svc
-	}
-
-	inferred := types.InferStorageFromFilePath(filePath)
-	if inferred == "" {
-		return svc
-	}
-
-	configured := kb.GetStorageProvider()
-	if configured == "" {
-		tenant, _ := ctx.Value(types.TenantInfoContextKey).(*types.Tenant)
-		if tenant != nil && tenant.StorageEngineConfig != nil {
-			configured = strings.ToLower(strings.TrimSpace(tenant.StorageEngineConfig.DefaultProvider))
-		}
-	}
-	if configured == "" {
-		configured = strings.ToLower(strings.TrimSpace(os.Getenv("STORAGE_TYPE")))
-	}
-
-	if configured != "" && configured != inferred {
-		logger.Warnf(ctx, "[storage] FilePath format mismatch: configured=%s inferred=%s filePath=%s, using global fallback",
-			configured, inferred, filePath)
-		return s.fileSvc
-	}
-	return svc
+	return s.fileSvc
 }
 
 func IsImageType(fileType string) bool {

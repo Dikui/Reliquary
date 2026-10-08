@@ -94,33 +94,40 @@ func TestAnydocReaderFallsBackForScannedPDF(t *testing.T) {
 	if result.Metadata["image_source_type"] != "scanned_pdf" {
 		t.Errorf("image_source_type = %q, want scanned_pdf", result.Metadata["image_source_type"])
 	}
-	if fallback.got == nil || fallback.got.ParserEngine != BuiltinEngineName {
-		t.Errorf("fallback request engine = %v, want builtin", fallback.got)
+	if fallback.got == nil || fallback.got.ParserEngine != MinerUEngineName {
+		t.Errorf("fallback request engine = %v, want mineru", fallback.got)
 	}
 }
 
 func TestAnydocReaderScannedPDFWithoutFallbackKeepsError(t *testing.T) {
+	conversionErr := errors.New("PDF has no extractable text: OCR is required")
 	_, err := NewAnydocReader(nil, nil).readScannedPDF(context.Background(), &types.ReadRequest{
 		FileName: "exam.pdf",
-	}, errors.New("PDF has no extractable text: OCR is required"))
+	}, conversionErr)
 	if err == nil {
 		t.Fatal("readScannedPDF succeeded without a fallback, want an error")
 	}
 	if !strings.Contains(err.Error(), "OCR is required") {
 		t.Errorf("error does not mention OCR: %v", err)
 	}
+	if !strings.Contains(err.Error(), "Configure MinerU") {
+		t.Errorf("error does not explain how to configure OCR: %v", err)
+	}
+	if !errors.Is(err, conversionErr) {
+		t.Errorf("original conversion error was not preserved: %v", err)
+	}
 }
 
-func TestAnydocReaderDisconnectedFallbackKeepsError(t *testing.T) {
-	fallback := &disconnectedDocReader{}
+func TestAnydocReaderFailedFallbackKeepsError(t *testing.T) {
+	fallback := &stubDocReader{err: errors.New("OCR service unavailable")}
 	_, err := NewAnydocReader(nil, fallback).readScannedPDF(context.Background(), &types.ReadRequest{
 		FileName: "exam.pdf",
 	}, errors.New("PDF has no extractable text: OCR is required"))
 	if err == nil {
-		t.Fatal("readScannedPDF succeeded with a disconnected fallback, want an error")
+		t.Fatal("readScannedPDF succeeded with a failed fallback, want an error")
 	}
-	if !strings.Contains(err.Error(), "OCR is required") {
-		t.Errorf("error does not mention OCR: %v", err)
+	if !strings.Contains(err.Error(), "OCR service unavailable") {
+		t.Errorf("error does not preserve the OCR failure: %v", err)
 	}
 }
 
@@ -134,11 +141,3 @@ func (s *stubDocReader) Read(_ context.Context, req *types.ReadRequest) (*types.
 	s.got = req
 	return s.result, s.err
 }
-
-type disconnectedDocReader struct{}
-
-func (disconnectedDocReader) Read(context.Context, *types.ReadRequest) (*types.ReadResult, error) {
-	return nil, errors.New("should not be called")
-}
-
-func (disconnectedDocReader) IsConnected() bool { return false }

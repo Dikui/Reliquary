@@ -371,14 +371,9 @@ type KBClonePayload struct {
 
 // KBDeletePayload represents the knowledge base delete task payload
 type KBDeletePayload struct {
-	TenantID         uint64                  `json:"tenant_id"`
-	KnowledgeBaseID  string                  `json:"knowledge_base_id"`
-	DataSourceIDs    []string                `json:"data_source_ids,omitempty"`
-	EffectiveEngines []RetrieverEngineParams `json:"effective_engines"`
-	// VectorStoreID is the bound store snapshot taken at enqueue time (before
-	// soft-delete) so the async worker can resolve the right store. nil means
-	// the KB had no binding — falls back to EffectiveEngines.
-	VectorStoreID *string `json:"vector_store_id,omitempty"`
+	TenantID        uint64   `json:"tenant_id"`
+	KnowledgeBaseID string   `json:"knowledge_base_id"`
+	DataSourceIDs   []string `json:"data_source_ids,omitempty"`
 }
 
 // KnowledgeListDeletePayload represents the batch knowledge delete task payload
@@ -440,7 +435,7 @@ type ImageMultimodalPayload struct {
 	KnowledgeID     string `json:"knowledge_id"`
 	KnowledgeBaseID string `json:"knowledge_base_id"`
 	ChunkID         string `json:"chunk_id"`         // parent text chunk
-	ImageURL        string `json:"image_url"`        // provider:// URL (e.g. local://..., minio://...)
+	ImageURL        string `json:"image_url"`        // stored image reference (resource:// or local://)
 	ImageLocalPath  string `json:"image_local_path"` // deprecated: kept for backward compat with in-flight tasks
 	EnableOCR       bool   `json:"enable_ocr"`
 	EnableCaption   bool   `json:"enable_caption"`

@@ -21,7 +21,7 @@ const (
 // three other layers that all read this env at startup and cache the
 // value:
 //   - frontend nginx client_max_body_size (envsubst into nginx.conf)
-//   - docreader gRPC max_send/recv_message_length
+//   - browser upload validation
 //   - frontend client-side check via window.__RUNTIME_CONFIG__
 //
 // Surfacing a SystemAdmin UI knob whose effect is silently capped by
@@ -42,7 +42,7 @@ func GetMaxFileSizeMB() int64 {
 // GetMaxSkillBundleSize is the compressed zip / source-download cap for
 // skills. Knowledge uploads stay on GetMaxFileSize: packages such as
 // ppt-master exceed 50MB, but raising the document limit would also
-// inflate docreader gRPC messages. A GitHub zipball is the whole
+// inflate file-processing memory use. A GitHub zipball is the whole
 // repository archive, not the SKILL.md subtree, so a huge monorepo can
 // still be refused here even when the skill itself is small.
 func GetMaxSkillBundleSize() int64 {

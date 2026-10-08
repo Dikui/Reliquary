@@ -2,15 +2,15 @@ package service
 
 import "testing"
 
-func TestIsValidFileTypeHTML(t *testing.T) {
+func TestIsValidFileTypeRejectsRemovedHTMLUploads(t *testing.T) {
 	tests := []struct {
 		name     string
 		filename string
 		want     bool
 	}{
-		{name: "html", filename: "index.html", want: true},
-		{name: "uppercase html", filename: "INDEX.HTML", want: true},
-		{name: "htm", filename: "legacy.htm", want: true},
+		{name: "html", filename: "index.html", want: false},
+		{name: "uppercase html", filename: "INDEX.HTML", want: false},
+		{name: "htm", filename: "legacy.htm", want: false},
 		{name: "unsupported", filename: "payload.exe", want: false},
 	}
 

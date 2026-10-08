@@ -13,27 +13,6 @@ import (
 	"reliquary/internal/utils"
 )
 
-// retrieverEngineMapping maps RETRIEVE_DRIVER values to retriever engine configurations
-var retrieverEngineMapping = map[string][]RetrieverEngineParams{
-	"postgres": {
-		{RetrieverType: KeywordsRetrieverType, RetrieverEngineType: PostgresRetrieverEngineType},
-		{RetrieverType: VectorRetrieverType, RetrieverEngineType: PostgresRetrieverEngineType},
-	},
-}
-
-// GetRetrieverEngineMapping returns the retriever engine mapping
-// This allows other packages to access the driver capabilities
-func GetRetrieverEngineMapping() map[string][]RetrieverEngineParams {
-	return retrieverEngineMapping
-}
-
-// GetDefaultRetrieverEngines returns the PostgreSQL retriever capabilities.
-
-// GetDefaultRetrieverEngines returns the default retriever engines based on RETRIEVE_DRIVER env
-func GetDefaultRetrieverEngines() []RetrieverEngineParams {
-	return append([]RetrieverEngineParams(nil), retrieverEngineMapping["postgres"]...)
-}
-
 // Tenant represents the tenant
 type Tenant struct {
 	ModelTiers ModelTierConfig `json:"model_tiers" gorm:"type:jsonb;not null;default:'{}'"`
@@ -45,8 +24,6 @@ type Tenant struct {
 	Description string `yaml:"description"         json:"description"`
 	// Status
 	Status string `yaml:"status"              json:"status"              gorm:"default:'active'"`
-	// Retriever engines
-	RetrieverEngines RetrieverEngines `yaml:"retriever_engines"   json:"retriever_engines"   gorm:"type:json"`
 	// Business
 	Business string `yaml:"business"            json:"business"`
 	// Storage quota (Bytes), default is 10GB, including vector, original file, text, index, etc.
@@ -60,10 +37,7 @@ type Tenant struct {
 	// Parser engine config overrides (MinerU endpoint, API key, etc.). Used when parsing documents; overrides env.
 	ParserEngineConfig *ParserEngineConfig `yaml:"parser_engine_config" json:"parser_engine_config" gorm:"type:jsonb"`
 	// Credentials retains encrypted metadata from existing deployments.
-	Credentials         *CredentialsConfig   `yaml:"credentials" json:"credentials" gorm:"type:jsonb"`
-	StorageEngineConfig *StorageEngineConfig `yaml:"storage_engine_config" json:"storage_engine_config" gorm:"type:jsonb"`
-	// DefaultStorageBackendID is the workspace default concrete storage instance.
-	DefaultStorageBackendID *string `yaml:"default_storage_backend_id" json:"default_storage_backend_id,omitempty" gorm:"column:default_storage_backend_id;type:varchar(36)"`
+	Credentials *CredentialsConfig `yaml:"credentials" json:"credentials" gorm:"type:jsonb"`
 	// Chat history config: knowledge base configuration for indexing and searching chat messages via vector search
 	ChatHistoryConfig *ChatHistoryConfig `yaml:"chat_history_config" json:"chat_history_config" gorm:"type:jsonb"`
 	// Retrieval config: global search/retrieval parameters shared by knowledge search and message search
@@ -76,58 +50,6 @@ type Tenant struct {
 	UpdatedAt time.Time `yaml:"updated_at"          json:"updated_at"`
 	// Deletion time
 	DeletedAt gorm.DeletedAt `yaml:"deleted_at"          json:"deleted_at"          gorm:"index"`
-}
-
-// RetrieverEngines represents the retriever engines for a tenant
-type RetrieverEngines struct {
-	Engines []RetrieverEngineParams `yaml:"engines" json:"engines" gorm:"type:json"`
-}
-
-// GetEffectiveEngines returns the tenant's engines if configured, otherwise returns system defaults
-func (t *Tenant) GetEffectiveEngines() []RetrieverEngineParams {
-	if len(t.RetrieverEngines.Engines) > 0 {
-		return t.RetrieverEngines.Engines
-	}
-	return GetDefaultRetrieverEngines()
-}
-
-// BeforeCreate is a hook function that is called before creating a tenant
-func (t *Tenant) BeforeCreate(tx *gorm.DB) error {
-	if t.RetrieverEngines.Engines == nil {
-		t.RetrieverEngines.Engines = []RetrieverEngineParams{}
-	}
-	return nil
-}
-
-// Value implements the driver.Valuer interface, used to convert RetrieverEngines to database value
-func (c RetrieverEngines) Value() (driver.Value, error) {
-	return json.Marshal(c)
-}
-
-// Scan implements the sql.Scanner interface, used to convert database value to RetrieverEngines.
-// It supports both the legacy bare-array format (e.g. [{...}, {...}]) and the current
-// object-wrapped format (e.g. {"engines": [{...}, {...}]}).
-func (c *RetrieverEngines) Scan(value interface{}) error {
-	if value == nil {
-		return nil
-	}
-	b, ok := value.([]byte)
-	if !ok {
-		return nil
-	}
-
-	// Try the current object format first: {"engines": [...]}
-	if err := json.Unmarshal(b, c); err == nil {
-		return nil
-	}
-
-	// Fallback: legacy bare-array format: [{...}, {...}]
-	var engines []RetrieverEngineParams
-	if err := json.Unmarshal(b, &engines); err != nil {
-		return fmt.Errorf("retriever_engines: cannot unmarshal as object or array: %w", err)
-	}
-	c.Engines = engines
-	return nil
 }
 
 // CredentialsConfig holds third-party provider credentials at the tenant level.
@@ -209,24 +131,6 @@ type ParserEngineConfig struct {
 	MinerUCloudEnableTable   *bool  `json:"mineru_cloud_enable_table,omitempty"`
 	MinerUCloudEnableOCR     *bool  `json:"mineru_cloud_enable_ocr,omitempty"`
 	MinerUCloudLanguage      string `json:"mineru_cloud_language,omitempty"`
-
-	// OpenDataLoader PDF (docreader engine); hybrid requires opendataloader-pdf-hybrid service.
-	ODLHybrid           string `json:"odl_hybrid,omitempty"`      // off (default), docling-fast, hancom-ai
-	ODLHybridURL        string `json:"odl_hybrid_url,omitempty"`  // e.g. http://odl-hybrid:5002
-	ODLHybridMode       string `json:"odl_hybrid_mode,omitempty"` // auto, full
-	ODLHybridFallback   *bool  `json:"odl_hybrid_fallback,omitempty"`
-	ODLMarkdownWithHTML *bool  `json:"odl_markdown_with_html,omitempty"`
-
-	// PaddleOCR-VL self-hosted pipeline service (full /layout-parsing API).
-	PaddleOCRVLEndpoint            string `json:"paddleocr_vl_endpoint,omitempty"` // e.g. http://paddleocr-vl:8080
-	PaddleOCRVLUseSealRecognition  *bool  `json:"paddleocr_vl_use_seal_recognition,omitempty"`
-	PaddleOCRVLUseChartRecognition *bool  `json:"paddleocr_vl_use_chart_recognition,omitempty"`
-
-	// PaddleOCR-VL AI Studio cloud API.
-	PaddleOCRVLCloudToken               string `json:"paddleocr_vl_cloud_token,omitempty"`
-	PaddleOCRVLCloudModel               string `json:"paddleocr_vl_cloud_model,omitempty"` // e.g. PaddleOCR-VL-1.6
-	PaddleOCRVLCloudUseSealRecognition  *bool  `json:"paddleocr_vl_cloud_use_seal_recognition,omitempty"`
-	PaddleOCRVLCloudUseChartRecognition *bool  `json:"paddleocr_vl_cloud_use_chart_recognition,omitempty"`
 }
 
 const (
@@ -318,42 +222,6 @@ func (c *ParserEngineConfig) ToOverridesMap() map[string]string {
 	if c.MinerUCloudLanguage != "" {
 		m["mineru_cloud_language"] = c.MinerUCloudLanguage
 	}
-	if c.ODLHybrid != "" {
-		m["odl_hybrid"] = c.ODLHybrid
-	}
-	if c.ODLHybridURL != "" {
-		m["odl_hybrid_url"] = c.ODLHybridURL
-	}
-	if c.ODLHybridMode != "" {
-		m["odl_hybrid_mode"] = c.ODLHybridMode
-	}
-	if c.ODLHybridFallback != nil {
-		m["odl_hybrid_fallback"] = fmt.Sprintf("%v", *c.ODLHybridFallback)
-	}
-	if c.ODLMarkdownWithHTML != nil {
-		m["odl_markdown_with_html"] = fmt.Sprintf("%v", *c.ODLMarkdownWithHTML)
-	}
-	if c.PaddleOCRVLEndpoint != "" {
-		m["paddleocr_vl_endpoint"] = c.PaddleOCRVLEndpoint
-	}
-	if c.PaddleOCRVLUseSealRecognition != nil {
-		m["paddleocr_vl_use_seal_recognition"] = fmt.Sprintf("%v", *c.PaddleOCRVLUseSealRecognition)
-	}
-	if c.PaddleOCRVLUseChartRecognition != nil {
-		m["paddleocr_vl_use_chart_recognition"] = fmt.Sprintf("%v", *c.PaddleOCRVLUseChartRecognition)
-	}
-	if c.PaddleOCRVLCloudToken != "" {
-		m["paddleocr_vl_cloud_token"] = c.PaddleOCRVLCloudToken
-	}
-	if c.PaddleOCRVLCloudModel != "" {
-		m["paddleocr_vl_cloud_model"] = c.PaddleOCRVLCloudModel
-	}
-	if c.PaddleOCRVLCloudUseSealRecognition != nil {
-		m["paddleocr_vl_cloud_use_seal_recognition"] = fmt.Sprintf("%v", *c.PaddleOCRVLCloudUseSealRecognition)
-	}
-	if c.PaddleOCRVLCloudUseChartRecognition != nil {
-		m["paddleocr_vl_cloud_use_chart_recognition"] = fmt.Sprintf("%v", *c.PaddleOCRVLCloudUseChartRecognition)
-	}
 	if len(m) == 0 {
 		return nil
 	}
@@ -370,64 +238,6 @@ func (c *ParserEngineConfig) Value() (driver.Value, error) {
 
 // Scan implements the sql.Scanner interface for ParserEngineConfig
 func (c *ParserEngineConfig) Scan(value interface{}) error {
-	if value == nil {
-		return nil
-	}
-	b, ok := value.([]byte)
-	if !ok {
-		return nil
-	}
-	return json.Unmarshal(b, c)
-}
-
-// StorageEngineConfig holds tenant-level local and S3-compatible storage parameters.
-// Knowledge bases select which provider to use; parameters are read from here.
-type StorageEngineConfig struct {
-	DefaultProvider string             `json:"default_provider"` // "local", "minio", "s3"
-	Local           *LocalEngineConfig `json:"local,omitempty"`
-	MinIO           *MinIOEngineConfig `json:"minio,omitempty"`
-	S3              *S3EngineConfig    `json:"s3,omitempty"`
-}
-
-// LocalEngineConfig is for local file system storage (single-machine deployment only).
-type LocalEngineConfig struct {
-	PathPrefix string `json:"path_prefix"`
-}
-
-// MinIOEngineConfig is for MinIO/S3-compatible object storage.
-// Mode "docker" uses env vars for endpoint/credentials; "remote" uses the fields below.
-type MinIOEngineConfig struct {
-	Mode            string `json:"mode"` // "docker" or "remote"
-	Endpoint        string `json:"endpoint"`
-	AccessKeyID     string `json:"access_key_id"`
-	SecretAccessKey string `json:"secret_access_key"`
-	BucketName      string `json:"bucket_name"`
-	UseSSL          bool   `json:"use_ssl"`
-	PathPrefix      string `json:"path_prefix"`
-}
-
-// S3EngineConfig is for AWS S3 and S3-compatible object storage.
-type S3EngineConfig struct {
-	Endpoint       string `json:"endpoint"`
-	Region         string `json:"region"`
-	AccessKey      string `json:"access_key"`
-	SecretKey      string `json:"secret_key"`
-	BucketName     string `json:"bucket_name"`
-	PathPrefix     string `json:"path_prefix"`
-	UseSSL         bool   `json:"use_ssl"`
-	ForcePathStyle bool   `json:"force_path_style"`
-}
-
-// Value implements the driver.Valuer interface for StorageEngineConfig
-func (c *StorageEngineConfig) Value() (driver.Value, error) {
-	if c == nil {
-		return nil, nil
-	}
-	return json.Marshal(c)
-}
-
-// Scan implements the sql.Scanner interface for StorageEngineConfig
-func (c *StorageEngineConfig) Scan(value interface{}) error {
 	if value == nil {
 		return nil
 	}

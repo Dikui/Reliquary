@@ -54,17 +54,6 @@ func localStorageAbsDir() string {
 	return absDir
 }
 
-// parseStorageTarget splits a stored file path into its optional storage
-// backend ID and provider scheme (e.g. "backend://3/local://7/x.png" ->
-// ("3", "local"); "s3://7/x.png" -> ("", "s3")).
-func parseStorageTarget(filePath string) (backendID, provider string) {
-	backendID, providerPath, scoped := types.ParseStorageBackendPath(filePath)
-	if !scoped {
-		providerPath = filePath
-	}
-	return backendID, types.ParseProviderScheme(providerPath)
-}
-
 // requireFilePathQuery validates the file_path query parameter every proxy
 // route accepts. On failure the 400 response has been written and ok=false.
 func requireFilePathQuery(c *gin.Context) (string, bool) {
@@ -108,58 +97,15 @@ func resolveCatalogResource(
 	return resolvedPath, true, true
 }
 
-// resolveFileService picks the file service for (tenant, backendID, provider)
-// — via the storage resolver when wired, else directly from the tenant's
-// storage config. No fallback; used by the presigned surfaces where a
-// missing tenant config must surface as an error.
-func resolveFileService(
-	ctx context.Context,
-	tenant *types.Tenant,
-	backendID, provider, absDir string,
-	storageResolver interfaces.StorageBackendResolver) (interfaces.FileService, string, error) {
-	if storageResolver != nil {
-		return storageResolver.ResolveFileService(ctx, tenant, backendID, provider, absDir)
+// localFileService verifies that the reference belongs to the local filesystem.
+func localFileService(filePath, absDir string, fileService interfaces.FileService) (interfaces.FileService, bool) {
+	if strings.Contains(filePath, "://") && !strings.HasPrefix(filePath, "local://") {
+		return nil, false
 	}
-	return filesvc.NewFileServiceFromStorageConfig(provider, tenant.StorageEngineConfig, absDir)
-}
-
-// resolveTenantFileServiceWithFallback is resolveFileService plus the
-// fallback rule shared by /files and the KB-scoped proxy: when tenant-level
-// resolution fails and the requested provider matches the process-global
-// STORAGE_TYPE, serve through the global file service instead of failing.
-// Returns ok=false (already logged) when no service can be resolved; the
-// caller decides the HTTP status.
-func resolveTenantFileServiceWithFallback(
-	ctx context.Context,
-	logTag string,
-	tenant *types.Tenant,
-	backendID, provider, absDir string,
-	storageResolver interfaces.StorageBackendResolver,
-	globalFileService interfaces.FileService) (fileSvc interfaces.FileService, resolvedProvider string, ok bool) {
-	var err error
-	if storageResolver != nil {
-		fileSvc, resolvedProvider, err = storageResolver.ResolveFileService(ctx, tenant, backendID, provider, absDir)
-	} else if tenant.StorageEngineConfig != nil {
-		fileSvc, resolvedProvider, err = filesvc.NewFileServiceFromStorageConfig(provider, tenant.StorageEngineConfig, absDir)
-	} else {
-		err = http.ErrMissingFile
+	if fileService != nil {
+		return fileService, true
 	}
-	if err == nil {
-		return fileSvc, resolvedProvider, true
-	}
-
-	globalStorageType := strings.ToLower(strings.TrimSpace(os.Getenv("STORAGE_TYPE")))
-	if globalStorageType == "" {
-		globalStorageType = "local"
-	}
-	if provider == globalStorageType && globalFileService != nil {
-		logger.Warnf(ctx, "[Router] %s tenant storage config missing or invalid, fallback to global file service: tenant_id=%d provider=%s err=%v",
-			logTag, tenant.ID, provider, err)
-		return globalFileService, globalStorageType, true
-	}
-	logger.Warnf(ctx, "[Router] %s resolve file service failed without fallback: tenant_id=%d provider=%s global_storage_type=%s err=%v",
-		logTag, tenant.ID, provider, globalStorageType, err)
-	return nil, "", false
+	return filesvc.NewLocalFileService(absDir, os.Getenv("APP_EXTERNAL_URL")), true
 }
 
 // streamStoredFile writes the shared success response of every file proxy:
@@ -185,7 +131,6 @@ func streamStoredFile(c *gin.Context, reader io.ReadCloser, contentType string, 
 // newFileServeHandler builds a file proxy that verifies the active team owns the path.
 func newFileServeHandler(
 	globalFileService interfaces.FileService,
-	storageResolver interfaces.StorageBackendResolver,
 	resourceCatalogs ...interfaces.ResourceCatalog) gin.HandlerFunc {
 	resourceCatalog := firstResourceCatalog(resourceCatalogs)
 	absDir := localStorageAbsDir()
@@ -224,9 +169,7 @@ func newFileServeHandler(
 			}
 		}
 
-		backendID, provider := parseStorageTarget(filePath)
-		fileSvc, resolvedProvider, ok := resolveTenantFileServiceWithFallback(
-			c.Request.Context(), "/files", tenant, backendID, provider, absDir, storageResolver, globalFileService)
+		fileSvc, ok := localFileService(filePath, absDir, globalFileService)
 		if !ok {
 			c.Status(http.StatusBadRequest)
 			return
@@ -235,7 +178,7 @@ func newFileServeHandler(
 		reader, err := fileSvc.GetFile(c.Request.Context(), filePath)
 		if err != nil {
 			logger.Warnf(c.Request.Context(), "[Router] /files get file failed: tenant_id=%d provider=%s path=%q err=%v",
-				tenant.ID, resolvedProvider, filePath, err)
+				tenant.ID, "local", filePath, err)
 			c.Status(http.StatusNotFound)
 			return
 		}
@@ -245,12 +188,8 @@ func newFileServeHandler(
 	}
 }
 
-func serveFiles(r getRouteRegistrar, globalFileService interfaces.FileService, resolvers ...interfaces.StorageBackendResolver) {
-	var storageResolver interfaces.StorageBackendResolver
-	if len(resolvers) > 0 {
-		storageResolver = resolvers[0]
-	}
-	serveFilesWithResources(r, globalFileService, storageResolver, nil)
+func serveFiles(r getRouteRegistrar, globalFileService interfaces.FileService) {
+	serveFilesWithResources(r, globalFileService, nil)
 }
 
 // serveFilesWithResources registers the tenant-scoped storage proxy.
@@ -262,13 +201,12 @@ func serveFiles(r getRouteRegistrar, globalFileService interfaces.FileService, r
 func serveFilesWithResources(
 	r getRouteRegistrar,
 	globalFileService interfaces.FileService,
-	storageResolver interfaces.StorageBackendResolver,
 	resourceCatalog interfaces.ResourceCatalog) {
 	logger.Infof(context.Background(), "[Router] Serving files from /files")
 	r.GET(
 		"/files",
 
-		newFileServeHandler(globalFileService, storageResolver, resourceCatalog))
+		newFileServeHandler(globalFileService, resourceCatalog))
 }
 
 func serveResourceGrants(
@@ -276,7 +214,7 @@ func serveResourceGrants(
 	resourceCatalog interfaces.ResourceCatalog,
 	tenantService interfaces.TenantService,
 	globalFileService interfaces.FileService,
-	storageResolver interfaces.StorageBackendResolver) {
+) {
 	if resourceCatalog == nil || tenantService == nil {
 		return
 	}
@@ -293,17 +231,8 @@ func serveResourceGrants(
 			return
 		}
 
-		// The grant row carries its own backend ID; only the provider scheme
-		// comes from the physical path.
-		_, provider := parseStorageTarget(resource.PhysicalPath)
-		var fileSvc interfaces.FileService
-		if storageResolver != nil {
-			fileSvc, _, err = storageResolver.ResolveFileService(
-				ctx, tenant, resource.StorageBackendID, provider, localStorageBaseDir())
-		} else {
-			fileSvc = globalFileService
-		}
-		if err != nil || fileSvc == nil {
+		fileSvc, ok := localFileService(resource.PhysicalPath, localStorageAbsDir(), globalFileService)
+		if !ok || fileSvc == nil {
 			logger.Warnf(ctx, "[Router] resource grant storage resolution failed: resource_id=%s err=%v", resource.ID, err)
 			c.Status(http.StatusNotFound)
 			return
@@ -334,25 +263,19 @@ func serveKBScopedFiles(
 	g *accessGuards,
 	tenantService interfaces.TenantService,
 	globalFileService interfaces.FileService,
-	storageResolver interfaces.StorageBackendResolver,
 	resourceCatalogs ...interfaces.ResourceCatalog) {
 	logger.Infof(context.Background(), "[Router] Serving KB-scoped files from /knowledge-bases/:id/files")
 	r.Handle(http.MethodGet, "/knowledge-bases/:id/files", g.KBAccessRead("id"), newKBScopedFileServeHandlerWithResources(
 		tenantService,
 		globalFileService,
-		storageResolver,
 		firstResourceCatalog(resourceCatalogs)))
 }
 
 func newKBScopedFileServeHandler(
 	tenantService interfaces.TenantService,
 	globalFileService interfaces.FileService,
-	resolvers ...interfaces.StorageBackendResolver) gin.HandlerFunc {
-	var storageResolver interfaces.StorageBackendResolver
-	if len(resolvers) > 0 {
-		storageResolver = resolvers[0]
-	}
-	return newKBScopedFileServeHandlerWithResources(tenantService, globalFileService, storageResolver, nil)
+) gin.HandlerFunc {
+	return newKBScopedFileServeHandlerWithResources(tenantService, globalFileService, nil)
 }
 
 func firstResourceCatalog(catalogs []interfaces.ResourceCatalog) interfaces.ResourceCatalog {
@@ -365,7 +288,6 @@ func firstResourceCatalog(catalogs []interfaces.ResourceCatalog) interfaces.Reso
 func newKBScopedFileServeHandlerWithResources(
 	tenantService interfaces.TenantService,
 	globalFileService interfaces.FileService,
-	storageResolver interfaces.StorageBackendResolver,
 	resourceCatalog interfaces.ResourceCatalog) gin.HandlerFunc {
 	absDir := localStorageAbsDir()
 
@@ -402,9 +324,7 @@ func newKBScopedFileServeHandlerWithResources(
 			return
 		}
 
-		backendID, provider := parseStorageTarget(filePath)
-		fileSvc, resolvedProvider, ok := resolveTenantFileServiceWithFallback(
-			ctx, "/knowledge-bases/:id/files", tenant, backendID, provider, absDir, storageResolver, globalFileService)
+		fileSvc, ok := localFileService(filePath, absDir, globalFileService)
 		if !ok {
 			c.Status(http.StatusBadRequest)
 			return
@@ -413,7 +333,7 @@ func newKBScopedFileServeHandlerWithResources(
 		reader, err := fileSvc.GetFile(ctx, filePath)
 		if err != nil {
 			logger.Warnf(ctx, "[Router] /knowledge-bases/:id/files get file failed: owner_tenant_id=%d provider=%s path=%q err=%v",
-				ownerTenantID, resolvedProvider, filePath, err)
+				ownerTenantID, "local", filePath, err)
 			c.Status(http.StatusNotFound)
 			return
 		}
@@ -430,7 +350,6 @@ func newMessageScopedFileServeHandler(
 	messageService messageFileLookup,
 	tenantService interfaces.TenantService,
 	globalFileService interfaces.FileService,
-	storageResolver interfaces.StorageBackendResolver,
 	resourceCatalog interfaces.ResourceCatalog) gin.HandlerFunc {
 	absDir := localStorageAbsDir()
 
@@ -497,16 +416,7 @@ func newMessageScopedFileServeHandler(
 			return
 		}
 
-		backendID, provider := parseStorageTarget(resolvedPath)
-		fileSvc, resolvedProvider, ok := resolveTenantFileServiceWithFallback(
-			ctx,
-			"/sessions/:id/messages/:message_id/files",
-			ownerTenant,
-			backendID,
-			provider,
-			absDir,
-			storageResolver,
-			globalFileService)
+		fileSvc, ok := localFileService(resolvedPath, absDir, globalFileService)
 		if !ok {
 			c.Status(http.StatusBadRequest)
 			return
@@ -516,7 +426,7 @@ func newMessageScopedFileServeHandler(
 		if err != nil {
 			logger.Warnf(ctx,
 				"[Router] message files get file failed: owner_tenant_id=%d provider=%s path=%q err=%v",
-				ownerTenantID, resolvedProvider, resolvedPath, err)
+				ownerTenantID, "local", resolvedPath, err)
 			c.Status(http.StatusNotFound)
 			return
 		}
@@ -538,27 +448,21 @@ func serveMessageScopedFiles(
 	messageService interfaces.MessageService,
 	tenantService interfaces.TenantService,
 	globalFileService interfaces.FileService,
-	storageResolver interfaces.StorageBackendResolver,
 	resourceCatalog interfaces.ResourceCatalog) {
 	r.Handle(http.MethodGet, "/sessions/:id/messages/:message_id/files", newMessageScopedFileServeHandler(
 		messageService,
 		tenantService,
 		globalFileService,
-		storageResolver,
 		resourceCatalog))
 }
 
-func servePresignedFiles(r *gin.Engine, tenantService interfaces.TenantService, storageResolver interfaces.StorageBackendResolver) {
-	handler := presignedFileHandler(tenantService, localStorageAbsDir(), storageResolver)
+func servePresignedFiles(r *gin.Engine, tenantService interfaces.TenantService) {
+	handler := presignedFileHandler(tenantService, localStorageAbsDir())
 	r.GET("/api/v1/files/presigned", handler)
 	r.HEAD("/api/v1/files/presigned", handler)
 }
 
-func presignedFileHandler(tenantService interfaces.TenantService, absDir string, resolvers ...interfaces.StorageBackendResolver) gin.HandlerFunc {
-	var storageResolver interfaces.StorageBackendResolver
-	if len(resolvers) > 0 {
-		storageResolver = resolvers[0]
-	}
+func presignedFileHandler(tenantService interfaces.TenantService, absDir string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 		clientIP := c.ClientIP()
@@ -595,19 +499,16 @@ func presignedFileHandler(tenantService interfaces.TenantService, absDir string,
 			return
 		}
 
-		tenant, err := tenantService.GetTenantByID(ctx, tenantID)
+		_, err = tenantService.GetTenantByID(ctx, tenantID)
 		if err != nil {
 			logger.Warnf(ctx, "[Router] /files/presigned tenant lookup failed: client_ip=%s tenant_id=%d err=%v", clientIP, tenantID, err)
 			c.Status(http.StatusNotFound)
 			return
 		}
 
-		backendID, provider := parseStorageTarget(filePath)
-		fileSvc, resolvedProvider, err := resolveFileService(ctx, tenant, backendID, provider, absDir, storageResolver)
-		if err != nil {
-			logger.Warnf(ctx, "[Router] /files/presigned resolve file service failed: client_ip=%s tenant_id=%d provider=%s err=%v",
-				clientIP, tenantID, provider, err)
-			c.Status(http.StatusBadRequest)
+		fileSvc, ok := localFileService(filePath, absDir, nil)
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported file storage reference"})
 			return
 		}
 
@@ -619,7 +520,7 @@ func presignedFileHandler(tenantService interfaces.TenantService, absDir string,
 		reader, err := fileSvc.GetFile(ctx, filePath)
 		if err != nil {
 			logger.Warnf(ctx, "[Router] /files/presigned get file failed: client_ip=%s tenant_id=%d provider=%s path=%q err=%v",
-				clientIP, tenantID, resolvedProvider, filePath, err)
+				clientIP, tenantID, "local", filePath, err)
 			c.Status(http.StatusNotFound)
 			return
 		}
@@ -629,7 +530,7 @@ func presignedFileHandler(tenantService interfaces.TenantService, absDir string,
 	}
 }
 
-func servePresignedPreview(r *gin.Engine, cfg *config.Config, storageResolver interfaces.StorageBackendResolver, resourceCatalog interfaces.ResourceCatalog) {
+func servePresignedPreview(r *gin.Engine, cfg *config.Config, resourceCatalog interfaces.ResourceCatalog) {
 	absDir := localStorageAbsDir()
 
 	r.GET("/api/v1/files/presigned-preview",
@@ -662,22 +563,18 @@ func servePresignedPreview(r *gin.Engine, cfg *config.Config, storageResolver in
 				}
 			}
 
-			backendID, provider := parseStorageTarget(resolvedPath)
-			fileSvc, resolvedProvider, err := resolveFileService(ctx, tenant, backendID, provider, absDir, storageResolver)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{
-					"error":    err.Error(),
-					"provider": provider,
-					"hint":     "workspace storage config is missing or incomplete for this provider",
-				})
+			fileSvc, ok := localFileService(resolvedPath, absDir, nil)
+			if !ok {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported file storage reference"})
 				return
 			}
+			fileSvc = filesvc.NewResourceCatalogFileService(fileSvc, resourceCatalog)
 
 			httpURL, err := fileSvc.GetFileURL(ctx, filePath)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{
 					"error":    err.Error(),
-					"provider": resolvedProvider,
+					"provider": "local",
 					"hint":     "GetFileURL failed; for local storage this usually means APP_EXTERNAL_URL is unset",
 				})
 				return
@@ -694,7 +591,7 @@ func servePresignedPreview(r *gin.Engine, cfg *config.Config, storageResolver in
 
 			c.JSON(http.StatusOK, gin.H{
 				"file_path": filePath,
-				"provider":  resolvedProvider,
+				"provider":  "local",
 				"url":       httpURL,
 				"rewritten": rewritten,
 				"hint":      hint,

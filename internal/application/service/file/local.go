@@ -162,7 +162,7 @@ func (s *localFileService) CopyFile(ctx context.Context,
 	srcPath string, tenantID uint64, knowledgeID string,
 ) (string, error) {
 	// Only local paths are accepted. A provider scheme other than local://
-	// (e.g. s3://, minio://) means a cross-backend copy, which this service
+	// means an unsupported source location, which this service
 	// does not support. Legacy bare/absolute paths have no scheme and pass.
 	if i := strings.Index(srcPath, "://"); i >= 0 && srcPath[:i+3] != localScheme {
 		return "", fmt.Errorf("local file service cannot copy %q: %w", srcPath, ErrCrossBackendCopy)
@@ -265,11 +265,8 @@ func (s *localFileService) GetFileURL(ctx context.Context, filePath string) (str
 
 	// If external URL is configured, generate a presigned HTTP URL.
 	if s.externalURL != "" {
-		// Tenant ID is parsed from the storage path, which encodes the
-		// resource owner's tenant (not the caller's). The verifier on
-		// /api/v1/files/presigned uses this ID to look up the owning
-		// tenant's StorageEngineConfig — using the caller's tenant would
-		// break cross-tenant shared resources (e.g. shared KB images).
+		// The signed URL includes the local path's owning tenant so the
+		// verifier can check its workspace before serving the bytes.
 		tenantID := secutils.ParseTenantIDFromStoragePath(normalized)
 		presignedURL, err := secutils.SignFileURL(s.externalURL, normalized, tenantID, 0)
 		if err != nil {

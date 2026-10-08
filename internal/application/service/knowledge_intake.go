@@ -393,12 +393,16 @@ func (s *knowledgeService) failIntake(ctx context.Context, k *types.Knowledge) {
 	if err != nil || intake == nil || intake.Decision != "pending" {
 		return
 	}
+	reason := strings.TrimSpace(k.ErrorMessage)
+	if reason == "" {
+		reason = "message processing failed"
+	}
 	cleanupErr := s.clearIntakeSource(ctx, k)
 	intake, _ = k.IntakeMetadata()
-	intake.Decision, intake.Reason = "error", "message processing failed"
+	intake.Decision, intake.Reason = "error", reason
 	k.ParseStatus, k.EnableStatus, k.ErrorMessage = types.ParseStatusFailed, "disabled", intake.Reason
 	if cleanupErr != nil {
-		k.ErrorMessage = "message processing failed; source cleanup failed"
+		k.ErrorMessage += "; source cleanup failed"
 		logger.Warnf(ctx, "Intake %s source cleanup failed", k.ID)
 	}
 	_ = k.SetIntakeMetadata(intake)

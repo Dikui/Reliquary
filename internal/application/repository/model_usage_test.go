@@ -42,7 +42,7 @@ func TestCountByModelID_KnowledgeBase(t *testing.T) {
 	repo := NewKnowledgeBaseRepository(db)
 	modelID := "embed-model-1"
 
-	kb := makeKB(nil)
+	kb := makeKB()
 	kb.EmbeddingModelID = modelID
 	require.NoError(t, db.Create(kb).Error)
 
@@ -54,7 +54,7 @@ func TestCountByModelID_KnowledgeBase(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), count)
 
-	kb2 := makeKB(nil)
+	kb2 := makeKB()
 	kb2.ID = uuid.New().String()
 	kb2.VLMConfig = types.VLMConfig{Enabled: true, ModelID: modelID}
 	require.NoError(t, db.Create(kb2).Error)
@@ -75,7 +75,7 @@ func TestListModelUsages_KnowledgeBase(t *testing.T) {
 	repo := NewKnowledgeBaseRepository(db)
 	modelID := "all-kb-bindings"
 
-	allBindings := makeKB(nil)
+	allBindings := makeKB()
 	allBindings.Name = "Zulu KB"
 	allBindings.EmbeddingModelID = modelID
 	allBindings.SummaryModelID = modelID
@@ -85,18 +85,18 @@ func TestListModelUsages_KnowledgeBase(t *testing.T) {
 	allBindings.WikiConfig = &types.WikiConfig{SynthesisModelID: modelID}
 	require.NoError(t, db.Create(allBindings).Error)
 
-	vlmOnly := makeKB(nil)
+	vlmOnly := makeKB()
 	vlmOnly.Name = "Alpha KB"
 	vlmOnly.VLMConfig = types.VLMConfig{Enabled: true, ModelID: modelID}
 	require.NoError(t, db.Create(vlmOnly).Error)
 
-	otherTenant := makeKB(nil)
+	otherTenant := makeKB()
 	otherTenant.Name = "Other tenant"
 	otherTenant.TenantID = 2
 	otherTenant.EmbeddingModelID = modelID
 	require.NoError(t, db.Create(otherTenant).Error)
 
-	deleted := makeKB(nil)
+	deleted := makeKB()
 	deleted.Name = "Deleted KB"
 	deleted.EmbeddingModelID = modelID
 	require.NoError(t, db.Create(deleted).Error)
@@ -125,7 +125,7 @@ func TestListModelUsages_KnowledgeBaseRespectsLimit(t *testing.T) {
 	modelID := "shared-embed"
 
 	for i := 0; i < types.ModelUsageListLimit+3; i++ {
-		kb := makeKB(nil)
+		kb := makeKB()
 		kb.Name = fmt.Sprintf("KB %03d", i)
 		kb.EmbeddingModelID = modelID
 		require.NoError(t, db.Create(kb).Error)

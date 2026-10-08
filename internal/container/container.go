@@ -23,12 +23,10 @@ import (
 
 	"reliquary/internal/agent/approval"
 	"reliquary/internal/application/repository"
-	postgresRepo "reliquary/internal/application/repository/retriever/postgres"
 	"reliquary/internal/application/service"
 	chatpipeline "reliquary/internal/application/service/chat_pipeline"
 	"reliquary/internal/application/service/file"
 	"reliquary/internal/application/service/memory"
-	"reliquary/internal/application/service/retriever"
 	"reliquary/internal/common"
 	"reliquary/internal/config"
 	"reliquary/internal/database"
@@ -49,7 +47,6 @@ import (
 	"reliquary/internal/stream"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
-	secutils "reliquary/internal/utils"
 )
 
 // BuildContainer constructs the dependency injection container
@@ -78,16 +75,15 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	// Register goroutine pool cleanup handler
 	must(container.Invoke(registerPoolCleanup))
 
-	// Initialize retrieval engine registry for search capabilities
-	logger.Debugf(ctx, "[Container] Registering retrieval engine registry...")
-	must(container.Provide(initRetrieveEngineRegistry))
+	// Query PostgreSQL for retrieval and indexing.
+	must(container.Provide(NewPostgresRetrievalService))
 
 	// External service clients
 	logger.Debugf(ctx, "[Container] Registering external service clients...")
-	must(container.Provide(initDocReaderClient))
 	must(container.Provide(docparser.NewImageResolver))
 	must(container.Provide(initOllamaService))
 	must(container.Provide(stream.NewStreamManager))
+	must(container.Invoke(registerStreamCleanup))
 	logger.Debugf(ctx, "[Container] Initializing DuckDB...")
 	must(container.Provide(NewDuckDB))
 	logger.Debugf(ctx, "[Container] DuckDB registered")
@@ -166,9 +162,9 @@ func BuildContainer(container *dig.Container) *dig.Container {
 		repo repository.TenantSandboxConfigRepository,
 		agents interfaces.CustomAgentRepository,
 		skills repository.TenantSkillRepository,
-		files interfaces.StorageBackendResolver,
+		files interfaces.FileService,
 	) *service.TenantSandboxConfigService {
-		return service.NewTenantSandboxConfigService(repo, agents, buildGlobalSandboxConfig(), skills, files)
+		return service.NewTenantSandboxConfigService(repo, agents, buildGlobalSandboxConfig(), skills, localSandboxBundleResolver{files})
 	}))
 	must(container.Provide(func(s *service.TenantSandboxConfigService) service.WorkspaceSandboxPolicy {
 		return s
@@ -195,38 +191,18 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(infra_web_search.NewRegistry))
 	must(container.Invoke(registerWebSearchProviders))
 	must(container.Provide(repository.NewWebSearchProviderRepository))
-	must(container.Provide(repository.NewVectorStoreRepository))
-	must(container.Provide(repository.NewStorageBackendRepository))
 	must(container.Provide(repository.NewResourceRepository))
 	must(container.Provide(repository.NewTemporaryDocumentRepository))
 	must(container.Provide(service.NewResourceCatalog))
-	// TenantStoreOwnership adapter used by the retriever factory functions
-	// to verify that a resolved VectorStore belongs to the caller's tenant.
-	must(container.Provide(retriever.NewVectorStoreRepoOwnership))
 	must(container.Provide(service.NewWebSearchService))
 	must(container.Provide(service.NewWebSearchProviderService))
-	must(container.Provide(NewEngineFactory))
-	// StoreRegistry: same instance as RetrieveEngineRegistry, exposed as StoreRegistry interface.
-	// NewRetrieveEngineRegistry always returns *retriever.RetrieveEngineRegistry which implements both.
-	must(container.Provide(func(r interfaces.RetrieveEngineRegistry) (interfaces.StoreRegistry, error) {
-		sr, ok := r.(*retriever.RetrieveEngineRegistry)
-		if !ok {
-			return nil, fmt.Errorf("registry does not implement StoreRegistry")
-		}
-		return sr, nil
-	}))
-	must(container.Provide(service.NewVectorStoreService))
-	must(container.Provide(service.NewStorageBackendServiceWithResources))
-	must(container.Provide(func(s *service.StorageBackendService) interfaces.StorageBackendService { return s }))
-	must(container.Provide(func(s *service.StorageBackendService) interfaces.StorageBackendResolver { return s }))
-
 	// Agent service layer (requires event bus, web search service)
 	// SessionService is passed as parameter to CreateAgentEngine method when creating AgentService
 	logger.Debugf(ctx, "[Container] Registering event bus and agent service...")
 	must(container.Provide(event.NewEventBus))
 	must(container.Provide(service.NewSessionSandboxPinner))
-	must(container.Provide(func(cfg *config.Config, s interfaces.MCPToolApprovalService, rdb *redis.Client) *approval.Gate {
-		return approval.NewGate(cfg, &approval.Adapter{Svc: s}, rdb)
+	must(container.Provide(func(cfg *config.Config, s interfaces.MCPToolApprovalService) *approval.Gate {
+		return approval.NewGate(cfg, &approval.Adapter{Svc: s})
 	}))
 	// Expose Gate as MCPApproval interface so AgentService and others can depend on the abstraction.
 	must(container.Provide(func(g *approval.Gate) approval.MCPApproval { return g }))
@@ -341,8 +317,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewDataSourceCredentialsHandler))
 	must(container.Provide(handler.NewWebSearchHandler))
 	must(container.Provide(handler.NewWebSearchProviderHandler))
-	must(container.Provide(handler.NewVectorStoreHandler))
-	must(container.Provide(handler.NewStorageBackendHandler))
 	must(container.Provide(handler.NewCustomAgentHandler))
 	must(container.Provide(handler.NewUserResourceFavoriteHandler))
 	must(container.Provide(service.NewSkillService))
@@ -377,6 +351,17 @@ func BuildContainer(container *dig.Container) *dig.Container {
 
 	logger.Infof(ctx, "[Container] Container initialization completed successfully")
 	return container
+}
+
+// localSandboxBundleResolver supplies local files to the retained sandbox bundle cleanup.
+type localSandboxBundleResolver struct {
+	files interfaces.FileService
+}
+
+func (r localSandboxBundleResolver) ResolveFileService(
+	_ context.Context, _ *types.Tenant, _, _, _ string,
+) (interfaces.FileService, string, error) {
+	return r.files, "local", nil
 }
 
 func registerNameEmbeddingRebuildIntegration(
@@ -420,61 +405,16 @@ func recoverContextNameEmbeddings(rebuilder *service.ContextNameEmbeddingRebuild
 	return nil
 }
 
-// registerChatLocalImageResolver wires the chat package's LocalImageResolver
-// hook. Stored local:// URLs are relative to the resolved storage base dir and
-// do NOT encode the owning tenant's configured PathPrefix, so resolving them to
-// disk bytes requires rebuilding the FileService from that tenant's storage
-// config. The owning tenant is parsed from the URL's first path segment, which
-// correctly handles cross-tenant shared resources (e.g. shared KB images).
-func registerChatLocalImageResolver(
-	tenantRepo interfaces.TenantRepository,
-	storageResolver interfaces.StorageBackendResolver,
-	resourceCatalog interfaces.ResourceCatalog,
-) {
+// registerChatLocalImageResolver loads catalog-backed local images for model calls.
+func registerChatLocalImageResolver(files interfaces.FileService) {
 	chat.LocalImageResolver = func(storageURL string) ([]byte, bool) {
-		ctx := context.Background()
-		physicalPath, resource, err := resourceCatalog.ResolvePath(ctx, storageURL)
-		if err != nil {
-			return nil, false
-		}
-		tenantID := secutils.ParseTenantIDFromStoragePath(physicalPath)
-		if resource != nil {
-			tenantID = resource.TenantID
-		}
-		if tenantID == 0 {
-			return nil, false
-		}
-		tenant, err := tenantRepo.GetTenantByID(ctx, tenantID)
-		if err != nil || tenant == nil {
-			return nil, false
-		}
-		baseDir := strings.TrimSpace(os.Getenv("LOCAL_STORAGE_BASE_DIR"))
-		backendID, inner, scoped := types.ParseStorageBackendPath(physicalPath)
-		if resource != nil && resource.StorageBackendID != "" {
-			backendID = resource.StorageBackendID
-		}
-		providerPath := physicalPath
-		if scoped {
-			providerPath = inner
-		}
-		provider := types.ParseProviderScheme(providerPath)
-		if provider == "" {
-			provider = "local"
-		}
-		fileSvc, _, err := storageResolver.ResolveFileService(ctx, tenant, backendID, provider, baseDir)
-		if err != nil {
-			return nil, false
-		}
-		rc, err := fileSvc.GetFile(ctx, physicalPath)
+		rc, err := files.GetFile(context.Background(), storageURL)
 		if err != nil {
 			return nil, false
 		}
 		defer rc.Close()
 		data, err := io.ReadAll(rc)
-		if err != nil {
-			return nil, false
-		}
-		return data, true
+		return data, err == nil
 	}
 }
 
@@ -503,18 +443,18 @@ func resolveModelMaxConcurrency(ss interfaces.SystemSettingService) int {
 		"RELIQUARY_MODEL_MAX_CONCURRENCY", int64(defaultModelMaxConcurrency)))
 }
 
-// registerModelConcurrencyLimiter builds the Redis-backed per-model background
+// registerModelConcurrencyLimiter builds the process-local per-model background
 // concurrency governor (chat + vlm) and installs it.
-func registerModelConcurrencyLimiter(rdb *redis.Client, ss interfaces.SystemSettingService) {
+func registerModelConcurrencyLimiter(ss interfaces.SystemSettingService) {
 	limit := resolveModelMaxConcurrency(ss)
-	limiter.SetGovernor(limiter.NewRedisLimiter(rdb), limit)
+	limiter.SetGovernor(limiter.NewLocalLimiter(), limit)
 	if limit <= 0 {
 		logger.Infof(context.Background(),
 			"[ModelLimiter] background concurrency governor DISABLED (model.max_concurrency<=0)")
 		return
 	}
 	logger.Infof(context.Background(),
-		"[ModelLimiter] background model concurrency governed per-model, limit=%d (distributed via redis)", limit)
+		"[ModelLimiter] background model concurrency governed per-model, limit=%d (in process)", limit)
 }
 
 func initRedisClient() (*redis.Client, error) {
@@ -627,15 +567,7 @@ func syncSequences(db *gorm.DB) {
 	}
 }
 
-// initFileService initializes file storage service
-// Creates the appropriate file storage service based on configuration
-// Supports local filesystem and S3-compatible storage
-// Parameters:
-//   - cfg: Application configuration
-//
-// Returns:
-//   - Configured file service implementation
-//   - Error if initialization fails
+// initFileService registers uploaded files in the resource catalog.
 func initFileService(cfg *config.Config, catalog interfaces.ResourceCatalog) (interfaces.FileService, error) {
 	inner, err := initRawFileService(cfg)
 	if err != nil {
@@ -645,38 +577,11 @@ func initFileService(cfg *config.Config, catalog interfaces.ResourceCatalog) (in
 }
 
 func initRawFileService(_ *config.Config) (interfaces.FileService, error) {
-	backend := types.StorageBackendFromEnvironment(0)
-	cfg := backend.ToStorageEngineConfig()
-	svc, _, err := file.NewFileServiceFromStorageConfig(backend.Provider, cfg, os.Getenv("LOCAL_STORAGE_BASE_DIR"))
-	return svc, err
-}
-
-// initRetrieveEngineRegistry registers the PostgreSQL hybrid search engine.
-func initRetrieveEngineRegistry(
-	db *gorm.DB, cfg *config.Config,
-	storeRepo interfaces.VectorStoreRepository, engineFactory interfaces.EngineFactory,
-) (interfaces.RetrieveEngineRegistry, error) {
-	registry := retriever.NewRetrieveEngineRegistry(storeRepo, engineFactory).(*retriever.RetrieveEngineRegistry)
-	engine := retriever.NewKVHybridRetrieveEngine(
-		postgresRepo.NewPostgresRetrieveEngineRepository(db), types.PostgresRetrieverEngineType,
-	)
-	if err := registry.Register(engine); err != nil {
-		return nil, err
+	baseDir := strings.TrimSpace(os.Getenv("LOCAL_STORAGE_BASE_DIR"))
+	if baseDir == "" {
+		baseDir = "/data/files"
 	}
-	var stores []types.VectorStore
-	if err := db.Find(&stores).Error; err != nil {
-		logger.Warnf(context.Background(), "Failed to load PostgreSQL vector stores: %v", err)
-		return registry, nil
-	}
-	for _, store := range stores {
-		svc, err := engineFactory(context.Background(), store)
-		if err != nil {
-			logger.Warnf(context.Background(), "Failed to load vector store %s: %v", store.ID, err)
-			continue
-		}
-		registry.RegisterWithStoreID(store.ID, svc)
-	}
-	return registry, nil
+	return file.NewLocalFileService(baseDir, os.Getenv("APP_EXTERNAL_URL")), nil
 }
 
 // initAntsPool initializes the goroutine pool
@@ -711,28 +616,6 @@ func registerPoolCleanup(pool *ants.Pool, cleaner interfaces.ResourceCleaner) {
 		pool.Release()
 		return nil
 	})
-}
-
-// initDocReaderClient initializes the DocumentReader client (lightweight API).
-func initDocReaderClient(cfg *config.Config) (interfaces.DocumentReader, error) {
-	addr := strings.TrimSpace(os.Getenv("DOCREADER_ADDR"))
-	transport := strings.TrimSpace(os.Getenv("DOCREADER_TRANSPORT"))
-	if transport == "" {
-		transport = "grpc"
-	}
-	if addr == "" {
-		logger.Infof(context.Background(), "[DocConverter] No DOCREADER_ADDR configured, starting disconnected")
-	}
-	transport = strings.ToLower(transport)
-	switch transport {
-	case "http", "https":
-		if addr != "" && !strings.HasPrefix(addr, "http://") && !strings.HasPrefix(addr, "https://") {
-			addr = "http://" + addr
-		}
-		return docparser.NewHTTPDocumentReader(addr)
-	default:
-		return docparser.NewGRPCDocumentReader(addr)
-	}
 }
 
 // initOllamaService initializes the Ollama service client
@@ -883,4 +766,12 @@ func startKnowledgeWorkflowScheduler(svc *service.KnowledgeWorkflowService, clea
 		logger.Warnf(context.Background(), "[Container] knowledge workflow scheduler: %v", err)
 	}
 	cleaner.RegisterWithName("KnowledgeWorkflowScheduler", func() error { svc.Stop(); return nil })
+}
+
+func registerStreamCleanup(manager interfaces.StreamManager, cleaner interfaces.ResourceCleaner) {
+	local := manager.(*stream.MemoryStreamManager)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); local.RunCleanup(ctx) }()
+	cleaner.RegisterWithName("MemoryStream", func() error { cancel(); <-done; return nil })
 }
