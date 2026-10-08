@@ -25,9 +25,6 @@ func knowledgeBaseModelUsageBindings(kb *types.KnowledgeBase, modelID string) []
 	if kb.ASRConfig.ModelID == modelID {
 		bindings = append(bindings, types.ModelUsageBindingASRModel)
 	}
-	if kb.WikiConfig != nil && kb.WikiConfig.SynthesisModelID == modelID {
-		bindings = append(bindings, types.ModelUsageBindingWikiSynthesisModel)
-	}
 	return bindings
 }
 
@@ -63,9 +60,9 @@ func scopeKnowledgeBasesByModelID(db *gorm.DB, modelID string) *gorm.DB {
 			"image_processing_config->>'model_id' = ? OR "+
 			"vlm_config->>'model_id' = ? OR "+
 			"asr_config->>'model_id' = ? OR "+
-			"wiki_config->>'synthesis_model_id' = ? OR auto_tag_config->>'model_id' = ? OR "+
+			"auto_tag_config->>'model_id' = ? OR "+
 			"model_tiers->>'light' = ? OR model_tiers->>'extraction' = ? OR model_tiers->>'generation' = ? OR model_tiers->>'embedding' = ? OR model_tiers->>'rerank' = ?",
-		modelID, modelID, modelID, modelID, modelID, modelID, modelID, modelID, modelID, modelID, modelID, modelID,
+		modelID, modelID, modelID, modelID, modelID, modelID, modelID, modelID, modelID, modelID, modelID,
 	)
 }
 
@@ -79,8 +76,4 @@ func scopeCustomAgentsByModelID(db *gorm.DB, modelID string) *gorm.DB {
 			"config->'question_suggestions'->'follow_ups'->>'model_id' = ?",
 		modelID, modelID, modelID, modelID, modelID, modelID,
 	)
-}
-
-func scopeCustomAgentsBySandboxConfigID(db *gorm.DB, configID string) *gorm.DB {
-	return db.Where("config->>'sandbox_config_id' = ?", configID)
 }

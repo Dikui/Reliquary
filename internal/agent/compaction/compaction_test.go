@@ -82,14 +82,14 @@ func reactTurn(rounds int) []chat.Message {
 					ID:   "call-" + string(rune('a'+i%26)),
 					Type: "function",
 					Function: chat.FunctionCall{
-						Name:      "write_sandbox_file",
-						Arguments: `{"path":"/workspace/out.html","content":"` + filler(40) + `"}`,
+						Name:      "data_analysis",
+						Arguments: `{"sql":"` + filler(40) + `"}`,
 					},
 				}},
 			},
 			chat.Message{
 				Role:       "tool",
-				Name:       "write_sandbox_file",
+				Name:       "data_analysis",
 				ToolCallID: "call-" + string(rune('a'+i%26)),
 				Content:    filler(30),
 			},
@@ -290,19 +290,6 @@ func TestSummarizerFailureFallsBackToArchive(t *testing.T) {
 	assert.True(t, result.Degraded)
 	assert.Greater(t, result.Freed(), 0, "a degraded summary still has to free room")
 	assert.Contains(t, result.Summary, "Raw conversation archive")
-}
-
-// Sandbox paths are the detail a prose summarizer drops first, and losing them
-// makes the agent rebuild files it already wrote.
-func TestFilePathsSurviveCompaction(t *testing.T) {
-	est := newEstimator(t)
-	c := New(&stubChat{response: "prose that mentions no paths"}, est, testSettings())
-
-	result, err := c.Compact(context.Background(), reactTurn(12), ReasonThreshold)
-	require.NoError(t, err)
-
-	assert.Contains(t, result.Summary, "<modified-files>")
-	assert.Contains(t, result.Summary, "/workspace/out.html")
 }
 
 // A conversation that already fits has nothing outside the keep-recent budget.

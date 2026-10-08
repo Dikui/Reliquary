@@ -25,19 +25,10 @@ var toolDisplayNames = map[string]string{
 	agenttools.ToolListKnowledgeChunks: "查看文档分块",
 	agenttools.ToolQueryKnowledgeGraph: "查询知识图谱",
 	agenttools.ToolGetDocumentInfo:     "获取文档信息",
-	agenttools.ToolSearchConversations: "回顾历史对话",
-	agenttools.ToolSearchMemory:        "查询长期记忆",
 	agenttools.ToolDatabaseQuery:       "查询数据",
 	agenttools.ToolDataAnalysis:        "数据分析",
 	agenttools.ToolDataSchema:          "查看数据结构",
 	agenttools.ToolWebFetch:            "获取网页",
-	agenttools.ToolExecuteSkillScript:  "执行技能脚本",
-	agenttools.ToolReadSkill:           "读取技能",
-	agenttools.ToolListSandboxFiles:    "列出沙箱文件",
-	agenttools.ToolReadSandboxFile:     "读取沙箱文件",
-	agenttools.ToolWriteSandboxFile:    "写入沙箱文件",
-	agenttools.ToolEditSandboxFile:     "编辑沙箱文件",
-	agenttools.ToolShellExec:           "执行沙箱命令",
 }
 
 // toolHintSensitiveArgs lists tools whose arguments should NOT be shown in hints
@@ -83,9 +74,8 @@ func (e *AgentEngine) executeToolCalls(
 	n := len(response.ToolCalls)
 
 	// A completion-token cap cuts the response mid-serialization, so every call
-	// in it may carry incomplete arguments. Running them is worse than failing
-	// them: a truncated write_sandbox_file lands a half-written file and still
-	// reports success, which the model only discovers by reading the file back.
+	// in it may carry incomplete arguments. Execution must wait for complete
+	// arguments so queries and other tool inputs retain their intended meaning.
 	if isLengthFinishReason(response.FinishReason) {
 		logger.Warnf(ctx, "[Agent][Round-%d] Response hit the completion-token cap (finish=%s); "+
 			"refusing %d tool call(s) with possibly truncated arguments",
@@ -311,7 +301,7 @@ func (e *AgentEngine) runToolCall(
 		Data: event.AgentToolCallData{
 			ToolCallID: tc.ID,
 			ToolName:   tc.Function.Name,
-			Arguments:  agenttools.SanitizeSandboxFileCallArgs(tc.Function.Name, args),
+			Arguments:  args,
 			Iteration:  iteration,
 			Hint:       toolHint,
 		},
@@ -328,7 +318,7 @@ func (e *AgentEngine) runToolCall(
 	toolCtx := ctx
 
 	principal, _ := types.PrincipalFromContext(ctx)
-	execTimeout := toolExecutionTimeout(tc.Function.Name)
+	execTimeout := defaultToolExecTimeout
 	toolExecCtx := agenttools.WithToolExecContext(toolCtx, &agenttools.ToolExecContext{
 		SessionID:          sessionID,
 		AssistantMessageID: assistantMessageID,

@@ -41,7 +41,7 @@ import {
   type AgentNotReadyReasonKey,
 } from '@/utils/agent-readiness';
 import { formatLocalizedList } from '@/utils/format-list';
-import { SKILL_ICON, type MentionItem, type MentionItemType, type MentionRequestItem } from '@/types/mention';
+import { type MentionItem, type MentionItemType, type MentionRequestItem } from '@/types/mention';
 
 const authStore = useAuthStore();
 const route = useRoute();
@@ -230,7 +230,7 @@ const isKnowledgeBaseDisabledByAgent = computed(() => {
 });
 const isMentionDisabled = computed(() => {
   if (settingsStore.isAgentStreamMode && isKnowledgeBaseDisabledByAgent.value) {
-    return agentMCPSelectionMode.value === 'none' && agentSkillsSelectionMode.value === 'none';
+    return agentMCPSelectionMode.value === 'none';
   }
   return isKnowledgeBaseLockedByAgent.value && !settingsStore.isAgentStreamMode;
 });
@@ -276,26 +276,7 @@ const isMCPAllowedByAgent = (service: MCPService) => {
   return true;
 };
 
-const agentSkillsSelectionMode = computed<SelectionMode>(() => {
-  if (!settingsStore.isAgentStreamMode || !hasAgentConfig.value) return 'none';
-  return normalizeSelectionMode(currentAgentConfig.value?.skills_selection_mode);
-});
-
-const agentSelectedSkills = computed<string[]>(() => {
-  if (agentSkillsSelectionMode.value !== 'selected') return [];
-  return currentAgentConfig.value?.selected_skills || [];
-});
-
-const isSkillAllowedByAgent = (skillName: string) => {
-  if (!settingsStore.isAgentStreamMode || !editorResources.skillsAvailable) return false;
-  const mode = agentSkillsSelectionMode.value;
-  if (mode === 'none') return false;
-  if (mode === 'selected') return agentSelectedSkills.value.includes(skillName);
-  return true;
-};
-
-// 切换智能体时清理不允许的 MCP / Skill @mention
-watch([selectedAgentId, agentMCPSelectionMode, agentSkillsSelectionMode], ([newAgentId], [oldAgentId]) => {
+watch([selectedAgentId, agentMCPSelectionMode], ([newAgentId], [oldAgentId]) => {
   if (settingsStore._isApplyingSessionState) return;
   if (newAgentId === oldAgentId || oldAgentId === undefined) return;
 
@@ -308,14 +289,6 @@ watch([selectedAgentId, agentMCPSelectionMode, agentSkillsSelectionMode], ([newA
       .filter(id => allowed.has(id));
   }
 
-  const skillsMode = agentSkillsSelectionMode.value;
-  if (skillsMode === 'none') {
-    settingsStore.settings.selectedSkills = [];
-  } else if (skillsMode === 'selected') {
-    const allowed = new Set(agentSelectedSkills.value);
-    settingsStore.settings.selectedSkills = (settingsStore.settings.selectedSkills || [])
-      .filter(name => allowed.has(name));
-  }
 });
 
 // 从 KB 对象里抽能力位，优先用 backend 显式的 capabilities 字段；否则回退到 indexing_strategy，
@@ -325,7 +298,6 @@ const kbToScopeCaps = (kb: any): Partial<ScopeCapabilities> => {
     return {
       vector: !!kb.capabilities.vector,
       keyword: !!kb.capabilities.keyword,
-      wiki: !!kb.capabilities.wiki,
       graph: !!kb.capabilities.graph,
     };
   }
@@ -333,13 +305,11 @@ const kbToScopeCaps = (kb: any): Partial<ScopeCapabilities> => {
   return {
     vector: s ? !!s.vector_enabled : false,
     keyword: s ? !!s.keyword_enabled : false,
-    wiki: s ? !!s.wiki_enabled : false,
     graph: true,
     };
 };
 
 // 当前智能体的 agent_mode（quick-answer / smart-reasoning），用于把
-// "RAG-only 模式不能 @ wiki-only 知识库"这种隐式约束带进 KB 过滤。
 const agentMode = computed(() => {
   if (!hasAgentConfig.value) return '';
   return currentAgentConfig.value?.agent_mode || '';
@@ -425,7 +395,6 @@ const selectedKbIds = computed(() => settingsStore.settings.selectedKnowledgeBas
 const selectedFileIds = computed(() => settingsStore.settings.selectedFiles || []);
 const selectedTags = computed(() => settingsStore.settings.selectedTags || []);
 const selectedMCPServiceIds = computed(() => settingsStore.settings.selectedMCPServices || []);
-const selectedSkillNames = computed(() => settingsStore.settings.selectedSkills || []);
 
 // 已就绪的知识库（来自空间级缓存）
 const knowledgeBases = computed(() => chatResources.validKnowledgeBases);
@@ -439,21 +408,6 @@ const selectedFiles = computed(() => {
   return selectedFileIds.value.map((id: string) => {
     const found = fileList.value.find(f => f.id === id);
     return found || { id, name: 'Loading...' };
-  });
-});
-
-const skillMentionItems = computed<MentionItem[]>(() => {
-  return selectedSkillNames.value
-    .filter((name: string) => isSkillAllowedByAgent(name))
-    .map((name: string) => {
-    const skill = editorResources.skills.find(s => s.name === name);
-    return {
-      id: name,
-      name: skill?.name || name,
-      type: 'skill' as const,
-      skillName: name,
-      description: skill?.description || '',
-    };
   });
 });
 
@@ -500,7 +454,7 @@ const allSelectedItems = computed(() => {
     isAgentConfigured: false,
   }));
 
-  return [...agentConfiguredKbs, ...userSelectedKbs, ...files, ...tags, ...selectedMCPItems.value, ...skillMentionItems.value];
+  return [...agentConfiguredKbs, ...userSelectedKbs, ...files, ...tags, ...selectedMCPItems.value];
 });
 
 // 移除选中项（智能体配置的项也可以移除）
@@ -513,9 +467,7 @@ const removeSelectedItem = (item: MentionItem) => {
     settingsStore.removeTag(item.id, item.kbId);
   } else if (item.type === 'mcp') {
     settingsStore.removeMCPService(item.id);
-  } else if (item.type === 'skill') {
-    settingsStore.removeSkill(item.skillName || item.id);
-  }
+  } else {}
 };
 
 const getMentionIcon = (item: MentionItem) => {
@@ -523,7 +475,6 @@ const getMentionIcon = (item: MentionItem) => {
     case 'file': return 'file';
     case 'tag': return 'tag';
     case 'mcp': return 'tools';
-    case 'skill': return SKILL_ICON;
     default: return 'folder';
   }
 };
@@ -950,7 +901,6 @@ const loadMentionItems = async (q: string, resetIndex = true, append = false) =>
   let kbItems: any[] = [];
   let tagItems: MentionItem[] = [];
   let mcpItems: MentionItem[] = [];
-  let skillItems: MentionItem[] = [];
   if (!append) {
     let availableKbs: any[] = [...knowledgeBases.value];
     const agentId = selectedAgentId.value;
@@ -966,7 +916,6 @@ const loadMentionItems = async (q: string, resetIndex = true, append = false) =>
           availableKbs = availableKbs.filter((kb: any) => configuredKbIds.includes(kb.id));
         } else if (kbMode === 'all') {
           // 'all' 的语义是"全部兼容的 KB"——按工具派生的能力集合过滤，
-          // 避免 wiki-qa 选"全部"后 @ 出来一堆 wiki 工具跑不动的 KB。
           availableKbs = availableKbs.filter((kb: any) => isKbCompatibleWithAgent(kb));
         }
 
@@ -1034,32 +983,12 @@ const loadMentionItems = async (q: string, resetIndex = true, append = false) =>
         }));
     }
 
-    const skillsMode = agentSkillsSelectionMode.value;
-    if (skillsMode !== 'none') {
-      await editorResources.ensureSkills(currentAgentConfig.value?.sandbox_config_id);
-      skillItems = editorResources.skills
-        .filter(skill => isSkillAllowedByAgent(skill.name))
-        .map(skill => ({
-          id: skill.name,
-          name: skill.name,
-          type: 'skill' as const,
-          skillName: skill.name,
-          description: skill.description || '',
-        }))
-        .filter(skill => {
-          if (!q) return true;
-          const keyword = q.toLowerCase();
-          return skill.name.toLowerCase().includes(keyword)
-            || (skill.description || '').toLowerCase().includes(keyword);
-        });
-    }
   }
 
   // Fetch Files from API
   // 仅当满足以下两点才加载文件：
   //   1. 智能体确实会用到知识库（kb_selection_mode !== 'none'）；
   //   2. 智能体启用的工具里至少有一个能消费 @ 的文件 ID
-  //      （比如 wiki-qa 全是 wiki_* 工具，用户 @ 的文件根本进不到任何工具里，就没必要展示）。
   let fileItems: any[] = [];
   const kbModeAllowsFiles = !hasAgentConfig.value || agentKBSelectionMode.value !== 'none';
   const toolsAllowFiles = !hasAgentConfig.value || toolsConsumeFiles(agentAllowedTools.value);
@@ -1135,9 +1064,9 @@ const loadMentionItems = async (q: string, resetIndex = true, append = false) =>
     // Append file items to existing list
     mentionItems.value = [...mentionItems.value, ...fileItems];
   } else {
-    mentionItems.value = [...kbItems, ...tagItems, ...mcpItems, ...skillItems, ...fileItems];
+    mentionItems.value = [...kbItems, ...tagItems, ...mcpItems, ...fileItems];
   }
-  console.log('[Mention] Total items:', mentionItems.value.length, { kbItems: kbItems.length, fileItems: fileItems.length, tagItems: tagItems.length, mcpItems: mcpItems.length, skillItems: skillItems.length });
+  console.log('[Mention] Total items:', mentionItems.value.length, { kbItems: kbItems.length, fileItems: fileItems.length, tagItems: tagItems.length, mcpItems: mcpItems.length });
 
   // Only reset index if query changed or explicitly requested
   if (resetIndex || q !== lastMentionQuery) {
@@ -1358,9 +1287,7 @@ const onMentionSelect = (item: any) => {
     }
   } else if (item.type === 'mcp') {
     settingsStore.addMCPService(item.id);
-  } else if (item.type === 'skill') {
-    settingsStore.addSkill(item.skillName || item.id);
-  }
+  } else {}
 
   const textarea = getTextareaEl();
   if (textarea) {
@@ -1643,7 +1570,6 @@ const createSession = async (val: string) => {
     kb_id: item.kbId,
     kb_name: item.kbName,
     service_id: item.serviceId,
-    skill_name: item.skillName,
   }));
   const imageFiles = uploadedImages.value.map(img => img.file);
   const attachmentFiles = uploadedAttachments.value;
@@ -1852,9 +1778,8 @@ const handleSelectAgent = async (agent: CustomAgent) => {
 
   // Only the two "mode-entry" built-ins are re-branded as "Normal / Agent Mode"
   // in the dropdown — the switched-on/off toasts only make sense for them.
-  // Other built-ins (wiki researcher, data analyst, etc.) share `is_builtin`
   // but should fall back to the generic agentSelected toast like custom agents,
-  // otherwise selecting e.g. the Wiki Questioner incorrectly says
+  // otherwise selecting an agent incorrectly says
   // "Switched to Intelligent Reasoning".
   const isModeBuiltin =
     agent.id === BUILTIN_QUICK_ANSWER_ID || agent.id === BUILTIN_SMART_REASONING_ID;
@@ -2435,9 +2360,6 @@ const getImgSrc = (url: string) => {
 }
 
 
-
-
-
 .mention-chip__name {
   max-width: 100px;
   overflow: hidden;
@@ -2482,9 +2404,6 @@ const getImgSrc = (url: string) => {
 .mention-chip--kb .mention-chip__icon-wrap {
   color: var(--td-brand-color, #07c05f);
 }
-
-
-
 
 
 .mention-chip--file {

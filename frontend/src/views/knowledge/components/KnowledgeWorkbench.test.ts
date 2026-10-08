@@ -485,7 +485,7 @@ test('a pending report download blocks a second request and errors restore the a
 
 test('workflow editor saves selectable knowledge and retained workflow steps', async () => {
   const saved: Array<{ kbId: string; input: any }> = []
-  const retainedTypes = ['search', 'fact_query', 'report', 'wiki_update', 'skill', 'condition', 'human_review']
+  const retainedTypes = ['search', 'fact_query', 'report']
   const { state } = await renderWorkbench({
     workflows: {
       listKnowledgeWorkflows: () => Promise.resolve({ success: true, data: [] }),
@@ -498,6 +498,7 @@ test('workflow editor saves selectable knowledge and retained workflow steps', a
       state.startNewWorkflow()
       state.workflowDraft.value.name = 'Knowledge workflow'
       const selectable = state.stepTypeOptions.value.map((option: { value: string }) => option.value)
+      assert.deepEqual(selectable, retainedTypes)
       for (const type of retainedTypes) {
         assert.ok(selectable.includes(type), `${type} remains available in the step picker`)
         state.stepTypeToAdd.value = type
@@ -509,7 +510,69 @@ test('workflow editor saves selectable knowledge and retained workflow steps', a
   assert.equal(saved.length, 1)
   assert.equal(saved[0].kbId, 'kb-a')
   assert.deepEqual(saved[0].input.steps.map((step: { type: string }) => step.type), ['search', 'report', ...retainedTypes])
-  assert.deepEqual(saved[0].input.steps.find((step: { type: string }) => step.type === 'skill').config.args, [])
   assert.equal(state.workflowEditorError.value, '')
   assert.equal(state.workflowDraft.value, null)
+})
+
+for (const templateId of ['daily', 'weekly']) {
+  test(`${templateId} template saves retained steps and displays a completed run`, async () => {
+    let saved: any
+    let started = 0
+    let current: any
+    const completed = { id: 'run-template', status: 'completed', steps: [] }
+    const { html, state } = await renderWorkbench({
+      workflows: {
+        listKnowledgeWorkflows: () => Promise.resolve({ success: true, data: current ? [current] : [] }),
+        createKnowledgeWorkflow: (_kbId: string, input: any) => {
+          saved = structuredClone(input)
+          current = { ...input, id: 'workflow-template' }
+          return Promise.resolve({ success: true, data: current })
+        },
+        listKnowledgeWorkflowRuns: () => Promise.resolve({ success: true, data: started ? [completed] : [] }),
+        runKnowledgeWorkflow: () => { started++; return Promise.resolve({ success: true, data: completed }) },
+        getKnowledgeWorkflowRun: () => Promise.resolve({ success: true, data: completed }),
+      },
+      scenario: async state => {
+        await state.selectSection('workflows')
+        state.startNewWorkflow()
+        state.applyTemplate(templateId)
+        if (templateId === 'weekly') state.workflowDraft.value.steps[0].config.entity = 'Aurora'
+        await state.saveWorkflow()
+        assert.equal(state.workflowEditorError.value, '')
+        await state.runWorkflow(current)
+      },
+    })
+    assert.deepEqual(saved.steps.map((step: any) => step.type), [templateId === 'daily' ? 'search' : 'fact_query', 'report'])
+    assert.deepEqual(saved.steps[1].depends_on, [saved.steps[0].id])
+    assert.equal(saved.steps[1].config.window, templateId === 'daily' ? 'previous_day' : 'previous_week')
+    assert.equal(saved.enabled, true)
+    assert.equal(started, 1)
+    assert.equal(state.selectedRun.value.status, 'completed')
+    assert.match(html, /knowledgeWorkbench.workflows.runStatus.completed/)
+  })
+}
+
+test('enabled workflows still allow resuming a paused run', async () => {
+  const workflow = { id: 'workflow-paused', name: 'Paused workflow', enabled: true, steps: [], schedule: {} }
+  let resumed = 0
+  const { state } = await renderWorkbench({
+    workflows: {
+      resumeKnowledgeWorkflowRun: () => { resumed++; return Promise.resolve({ success: true, data: { id: 'run-paused', status: 'running', steps: [] } }) },
+      listKnowledgeWorkflowRuns: () => Promise.resolve({ success: true, data: [{ id: 'run-paused', status: 'running', steps: [] }] }),
+      getKnowledgeWorkflowRun: () => Promise.resolve({ success: true, data: { id: 'run-paused', status: 'running', steps: [] } }),
+    },
+    scenario: async state => {
+      state.selectedWorkflow.value = workflow
+      state.selectedRun.value = { id: 'run-paused', status: 'paused', steps: [] }
+      assert.equal(state.canResumeRun.value, true)
+      state.selectedWorkflow.value.enabled = false
+      assert.equal(state.canResumeRun.value, false)
+      state.selectedWorkflow.value.enabled = true
+      await state.resumeRun()
+      state.clearRunPolling()
+    },
+  })
+  assert.equal(resumed, 1)
+  assert.equal(state.selectedRun.value.status, 'running')
+  assert.equal(state.canResumeRun.value, false)
 })

@@ -17,12 +17,10 @@ matching down migration. A fresh database reaches version `0` after applying
 this baseline. Future schema changes continue from version `000001`.
 
 The baseline includes `uuid-ossp`, `vector`, `pg_trgm`, and `pg_search`,
-70 application tables, and their final indexes, constraints, functions,
+54 application tables, and their final indexes, constraints, functions,
 and trigger. Running the old migration history on an empty database leaves
 every application table empty, so the baseline has no seed table rows.
-The old built-in agent inserts, RBAC membership inserts, and Skill catalog
-inserts all depended on existing tenants, users, or installed skills. The
-initial tenant sequence state is preserved so the first tenant ID is `10000`.
+The baseline is for a fresh installation with the personal tenant ID fixed at `1`.
 
 Databases created with the old migration history **cannot be upgraded in
 place**, including old databases whose recorded version is already `0`.
@@ -53,8 +51,8 @@ remains reachable to help you diagnose the problem), but:
 - The failing migration is rolled back, leaving the database at the previous
   version. Any tables / indexes introduced by that migration **are not
   created**.
-- Downstream features depending on those tables (Wiki ingest, knowledge graph,
-  task queues, …) may silently produce nothing.
+- Downstream features depending on those tables (knowledge context and
+  task queues) may silently produce nothing.
 - The system info page shows the partial DB version + a red "Migration failed"
   tag and the captured error.
 
@@ -200,8 +198,7 @@ database rebuild procedure above.
    - Run `make migrate-up` from a checkout to apply migrations outside the
      server process.
 5. **Verify**: the system info page should now show the DB version without
-   the "Migration failed" tag, and the previously broken feature (Wiki, KG,
-   …) should start producing output.
+   the "Migration failed" tag, and the previously broken feature (knowledge context or task queues) should start producing output.
 
 ---
 

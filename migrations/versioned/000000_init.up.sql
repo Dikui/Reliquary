@@ -439,7 +439,6 @@ CREATE TABLE public.knowledge_bases (
     is_pinned boolean DEFAULT false NOT NULL,
     pinned_at timestamp with time zone,
     asr_config jsonb,
-    wiki_config jsonb,
     indexing_strategy jsonb,
     creator_id character varying(36),
     auto_tag_config jsonb
@@ -463,17 +462,10 @@ COMMENT ON COLUMN public.knowledge_bases.asr_config IS 'ASR (Automatic Speech Re
 
 
 --
--- Name: COLUMN knowledge_bases.wiki_config; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.knowledge_bases.wiki_config IS 'Wiki configuration: {"auto_ingest": bool, "synthesis_model_id": string, "wiki_language": string, "max_pages_per_ingest": int}';
-
-
---
 -- Name: COLUMN knowledge_bases.indexing_strategy; Type: COMMENT; Schema: public
 --
 
-COMMENT ON COLUMN public.knowledge_bases.indexing_strategy IS 'Indexing pipelines strategy: {"vector_enabled": bool, "keyword_enabled": bool, "wiki_enabled": bool, "graph_enabled": bool}';
+COMMENT ON COLUMN public.knowledge_bases.indexing_strategy IS 'Indexing pipelines strategy: {"vector_enabled": bool, "keyword_enabled": bool, "graph_enabled": bool}';
 
 
 --
@@ -1046,125 +1038,6 @@ CREATE TABLE public.mcp_tool_approvals (
 
 
 --
--- Name: memory_doc_affinity; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.memory_doc_affinity (
-    id character varying(36) DEFAULT public.uuid_generate_v4() NOT NULL,
-    tenant_id integer NOT NULL,
-    subject_id character varying(512) NOT NULL,
-    knowledge_id character varying(36) NOT NULL,
-    knowledge_base_id character varying(36) DEFAULT ''::character varying NOT NULL,
-    title character varying(512) DEFAULT ''::character varying NOT NULL,
-    hits integer DEFAULT 0 NOT NULL,
-    last_used_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
-);
-
-
---
--- Name: memory_item_embeddings; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.memory_item_embeddings (
-    item_id character varying(36) NOT NULL,
-    tenant_id integer NOT NULL,
-    subject_id character varying(512) NOT NULL,
-    model_id character varying(64) DEFAULT ''::character varying NOT NULL,
-    dims integer DEFAULT 0 NOT NULL,
-    vector bytea,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
-);
-
-
---
--- Name: memory_items; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.memory_items (
-    id character varying(36) DEFAULT public.uuid_generate_v4() NOT NULL,
-    tenant_id integer NOT NULL,
-    subject_id character varying(512) NOT NULL,
-    kind character varying(32) NOT NULL,
-    content text NOT NULL,
-    topic character varying(255) DEFAULT ''::character varying NOT NULL,
-    normalized_key character varying(255) DEFAULT ''::character varying NOT NULL,
-    importance smallint DEFAULT 3 NOT NULL,
-    origin character varying(16) DEFAULT 'extracted'::character varying NOT NULL,
-    status character varying(16) DEFAULT 'active'::character varying NOT NULL,
-    source_session_id character varying(36),
-    source_message_id character varying(36),
-    valid_from timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    invalid_at timestamp with time zone,
-    expires_at timestamp with time zone,
-    superseded_by character varying(36),
-    last_used_at timestamp with time zone,
-    use_count integer DEFAULT 0 NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
-);
-
-
---
--- Name: memory_subjects; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.memory_subjects (
-    id character varying(36) DEFAULT public.uuid_generate_v4() NOT NULL,
-    tenant_id integer NOT NULL,
-    subject_id character varying(512) NOT NULL,
-    enabled boolean DEFAULT true NOT NULL,
-    block_text text DEFAULT ''::text NOT NULL,
-    block_updated_at timestamp with time zone,
-    item_count integer DEFAULT 0 NOT NULL,
-    last_extracted_at timestamp with time zone,
-    extract_cursor timestamp with time zone,
-    pending_sessions jsonb,
-    extract_scheduled_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    consolidated_at timestamp with time zone,
-    forced_consolidated_at timestamp with time zone
-);
-
-
---
--- Name: memory_tombstones; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.memory_tombstones (
-    id character varying(36) DEFAULT public.uuid_generate_v4() NOT NULL,
-    tenant_id integer NOT NULL,
-    subject_id character varying(512) NOT NULL,
-    topic character varying(255) DEFAULT ''::character varying NOT NULL,
-    fingerprint character varying(64) NOT NULL,
-    source_message_id character varying(36),
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
-);
-
-
---
--- Name: memory_topic_stats; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.memory_topic_stats (
-    id character varying(36) DEFAULT public.uuid_generate_v4() NOT NULL,
-    tenant_id integer NOT NULL,
-    subject_id character varying(512) NOT NULL,
-    normalized_key character varying(255) NOT NULL,
-    topic character varying(255) DEFAULT ''::character varying NOT NULL,
-    hits integer DEFAULT 0 NOT NULL,
-    last_seen_at timestamp with time zone,
-    promoted_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    aliases jsonb DEFAULT '[]'::jsonb NOT NULL
-);
-
-
---
 -- Name: message_suggestion_events; Type: TABLE; Schema: public
 --
 
@@ -1397,8 +1270,7 @@ CREATE TABLE public.sessions (
     agent_id character varying(36),
     user_id character varying(512),
     is_pinned boolean DEFAULT false NOT NULL,
-    pinned_at timestamp with time zone,
-    sandbox_config_id character varying(36) DEFAULT NULL::character varying
+    pinned_at timestamp with time zone
 );
 
 
@@ -1414,13 +1286,6 @@ COMMENT ON COLUMN public.sessions.agent_config IS 'Session-level agent configura
 --
 
 COMMENT ON COLUMN public.sessions.context_config IS 'LLM context management configuration (separate from message storage)';
-
-
---
--- Name: COLUMN sessions.sandbox_config_id; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.sessions.sandbox_config_id IS 'Sandbox config the session current live sandbox was created on; NULL = no live sandbox, ''-'' = deployment default';
 
 
 --
@@ -1507,14 +1372,14 @@ CREATE TABLE public.task_dead_letters (
 -- Name: TABLE task_dead_letters; Type: COMMENT; Schema: public
 --
 
-COMMENT ON TABLE public.task_dead_letters IS 'Permanent archive of tasks that exhausted retries. Written by the asynq dead-letter middleware and by service-level retry handlers (e.g. wiki ingest per-doc retries).';
+COMMENT ON TABLE public.task_dead_letters IS 'Permanent archive of tasks that exhausted retries. Written by the asynq dead-letter middleware and service-level retry handlers.';
 
 
 --
 -- Name: COLUMN task_dead_letters.related_id; Type: COMMENT; Schema: public
 --
 
-COMMENT ON COLUMN public.task_dead_letters.related_id IS 'Optional secondary identifier. Wiki ingest puts knowledge_id here so retract/ingest dead letters cluster around the source document.';
+COMMENT ON COLUMN public.task_dead_letters.related_id IS 'Optional secondary identifier for a related source or resource.';
 
 
 --
@@ -1551,67 +1416,6 @@ ALTER SEQUENCE public.task_dead_letters_id_seq OWNED BY public.task_dead_letters
 
 
 --
--- Name: task_pending_ops; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.task_pending_ops (
-    id bigint NOT NULL,
-    tenant_id bigint NOT NULL,
-    task_type character varying(64) NOT NULL,
-    scope character varying(32) NOT NULL,
-    scope_id character varying(64) NOT NULL,
-    op character varying(32) NOT NULL,
-    dedup_key character varying(128) DEFAULT ''::character varying NOT NULL,
-    payload jsonb DEFAULT '{}'::jsonb NOT NULL,
-    fail_count integer DEFAULT 0 NOT NULL,
-    enqueued_at timestamp with time zone DEFAULT now() NOT NULL,
-    claimed_at timestamp with time zone
-);
-
-
---
--- Name: TABLE task_pending_ops; Type: COMMENT; Schema: public
---
-
-COMMENT ON TABLE public.task_pending_ops IS 'Generic durable pending-op queue keyed by (task_type, scope, scope_id). Replaces ad-hoc Redis-list queues that were vulnerable to TTL eviction.';
-
-
---
--- Name: COLUMN task_pending_ops.task_type; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.task_pending_ops.task_type IS 'Free-form task identifier, e.g. "wiki:ingest" — should match an asynq task type when applicable.';
-
-
---
--- Name: COLUMN task_pending_ops.scope; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.task_pending_ops.scope IS 'Logical scope, e.g. "knowledge_base" / "knowledge" / "tenant". Read together with scope_id.';
-
-
---
--- Name: COLUMN task_pending_ops.dedup_key; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.task_pending_ops.dedup_key IS 'Optional service-defined key used by the consumer to de-duplicate equivalent ops within a single batch peek. Empty means no de-dup.';
-
-
---
--- Name: COLUMN task_pending_ops.fail_count; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.task_pending_ops.fail_count IS 'In-batch retry counter: the consumer increments it via IncrFailCount and dead-letters once it exceeds a service-defined cap.';
-
-
---
--- Name: COLUMN task_pending_ops.claimed_at; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.task_pending_ops.claimed_at IS 'Concurrent-claim marker: set to NOW() when a consumer claims the row (SELECT ... FOR UPDATE SKIP LOCKED). NULL = unclaimed; a value older than the consumer stale threshold is a crashed/abandoned claim and is recoverable. A fresh claim blocks its whole dedup_key so same-document ops never split across concurrent batches.';
-
-
---
 -- Name: task_pending_ops_id_seq; Type: SEQUENCE; Schema: public
 --
 
@@ -1621,13 +1425,6 @@ CREATE SEQUENCE public.task_pending_ops_id_seq
     NO MINVALUE
     NO MAXVALUE
     CACHE 1;
-
-
---
--- Name: task_pending_ops_id_seq; Type: SEQUENCE OWNED BY; Schema: public
---
-
-ALTER SEQUENCE public.task_pending_ops_id_seq OWNED BY public.task_pending_ops.id;
 
 
 --
@@ -1699,195 +1496,6 @@ ALTER SEQUENCE public.tenant_api_keys_id_seq OWNED BY public.tenant_api_keys.id;
 
 
 --
--- Name: tenant_sandbox_configs; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.tenant_sandbox_configs (
-    id character varying(36) NOT NULL,
-    tenant_id bigint NOT NULL,
-    name character varying(255) NOT NULL,
-    description text,
-    sandbox_type character varying(32) NOT NULL,
-    config jsonb NOT NULL,
-    cordoned_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    deleted_at timestamp with time zone
-);
-
-
---
--- Name: COLUMN tenant_sandbox_configs.config; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.tenant_sandbox_configs.config IS 'Sandbox backend config (endpoints, encrypted API keys, env vars, volume mount); shape matches types.TenantSandboxConfig';
-
-
---
--- Name: COLUMN tenant_sandbox_configs.cordoned_at; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.tenant_sandbox_configs.cordoned_at IS 'Short lease taken while identity fields (provider/URL/API key) are being changed; sandbox resolution is refused while it is fresh';
-
-
---
--- Name: tenant_skill_catalog; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.tenant_skill_catalog (
-    id character varying(36) NOT NULL,
-    tenant_id bigint NOT NULL,
-    name character varying(255) NOT NULL,
-    version character varying(64),
-    description text,
-    instructions text,
-    bundle_ref character varying(1024),
-    bundle_sha256 character varying(64),
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    deleted_at timestamp with time zone
-);
-
-
---
--- Name: TABLE tenant_skill_catalog; Type: COMMENT; Schema: public
---
-
-COMMENT ON TABLE public.tenant_skill_catalog IS 'Workspace skill definition. Installations onto sandbox configs live in tenant_skills.';
-
-
---
--- Name: tenant_skill_snapshots; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.tenant_skill_snapshots (
-    id character varying(36) NOT NULL,
-    tenant_id bigint NOT NULL,
-    sandbox_config_id character varying(36) NOT NULL,
-    skill_id character varying(36),
-    snapshot_id character varying(255),
-    parent_snapshot_id character varying(255),
-    generation integer DEFAULT 0 NOT NULL,
-    trigger character varying(16) NOT NULL,
-    state character varying(16) NOT NULL,
-    superseded_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    planned_name character varying(255)
-);
-
-
---
--- Name: TABLE tenant_skill_snapshots; Type: COMMENT; Schema: public
---
-
-COMMENT ON TABLE public.tenant_skill_snapshots IS 'Image chain ledger. Old snapshots are kept (state=superseded), never deleted on switch, so the recorded IDs stay resolvable.';
-
-
---
--- Name: COLUMN tenant_skill_snapshots.planned_name; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.tenant_skill_snapshots.planned_name IS 'Name passed to CreateSnapshot, written before the provider call so an abandoned build stays identifiable';
-
-
---
--- Name: tenant_skills; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.tenant_skills (
-    id character varying(36) NOT NULL,
-    tenant_id bigint NOT NULL,
-    sandbox_config_id character varying(36) NOT NULL,
-    name character varying(255) NOT NULL,
-    version character varying(64),
-    description text,
-    instructions text,
-    bundle_ref character varying(1024),
-    bundle_sha256 character varying(64),
-    enabled boolean DEFAULT true NOT NULL,
-    installed_snapshot_id character varying(255),
-    status character varying(32) NOT NULL,
-    error text,
-    installing_since timestamp with time zone,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    deleted_at timestamp with time zone,
-    install_session_id character varying(36),
-    install_message_id character varying(36),
-    envs jsonb,
-    catalog_id character varying(36)
-);
-
-
---
--- Name: COLUMN tenant_skills.name; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.tenant_skills.name IS 'Also the directory name inside the image: /opt/reliquary/tenant/skills/<name>';
-
-
---
--- Name: COLUMN tenant_skills.enabled; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.tenant_skills.enabled IS 'Visibility to the agent only; files stay in the image until the skill is removed';
-
-
---
--- Name: COLUMN tenant_skills.install_session_id; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.tenant_skills.install_session_id IS 'Maintenance session of the most recent install; overwritten on re-install';
-
-
---
--- Name: COLUMN tenant_skills.install_message_id; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.tenant_skills.install_message_id IS 'Assistant message the installer transcript was streamed into';
-
-
---
--- Name: COLUMN tenant_skills.envs; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.tenant_skills.envs IS 'Installer-agent declaration [{name,description,required,value}]. value is the workspace-wide admin value and is AES-GCM encrypted; the rest is plaintext so the UI can render it without a key.';
-
-
---
--- Name: tenant_user_env_vars; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.tenant_user_env_vars (
-    id character varying(36) NOT NULL,
-    tenant_id bigint NOT NULL,
-    principal_type character varying(32) NOT NULL,
-    principal_id character varying(512) NOT NULL,
-    sandbox_config_id character varying(36) NOT NULL,
-    skill_id character varying(36) DEFAULT ''::character varying NOT NULL,
-    name character varying(255) NOT NULL,
-    value text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
---
--- Name: TABLE tenant_user_env_vars; Type: COMMENT; Schema: public
---
-
-COMMENT ON TABLE public.tenant_user_env_vars IS 'The user''s environment variable. An empty skill_id applies to every execution on the sandbox config; a skill_id scopes it to that skill''s declaration.';
-
-
---
--- Name: COLUMN tenant_user_env_vars.value; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.tenant_user_env_vars.value IS 'AES-GCM encrypted. Never returned by any endpoint.';
-
-
---
 -- Name: tenants; Type: TABLE; Schema: public
 --
 
@@ -1909,8 +1517,7 @@ CREATE TABLE public.tenants (
     parser_engine_config jsonb,
     chat_history_config jsonb,
     retrieval_config jsonb,
-    credentials jsonb,
-    memory_config jsonb
+    credentials jsonb
 );
 
 
@@ -2070,119 +1677,6 @@ COMMENT ON COLUMN public.users.is_active IS 'Whether the user is active';
 
 
 --
--- Name: wiki_folders; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.wiki_folders (
-    id character varying(36) NOT NULL,
-    tenant_id bigint DEFAULT 0 NOT NULL,
-    knowledge_base_id character varying(36) NOT NULL,
-    parent_id character varying(36) DEFAULT ''::character varying NOT NULL,
-    name character varying(255) NOT NULL,
-    path character varying(1024) DEFAULT ''::character varying NOT NULL,
-    depth integer DEFAULT 0 NOT NULL,
-    sort_order integer DEFAULT 0 NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    deleted_at timestamp with time zone
-);
-
-
---
--- Name: wiki_page_issues; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.wiki_page_issues (
-    id character varying(36) NOT NULL,
-    tenant_id bigint NOT NULL,
-    knowledge_base_id character varying(36) NOT NULL,
-    slug character varying(255) NOT NULL,
-    issue_type character varying(50) NOT NULL,
-    description text NOT NULL,
-    suspected_knowledge_ids jsonb,
-    status character varying(20) DEFAULT 'pending'::character varying NOT NULL,
-    reported_by character varying(100) NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    deleted_at timestamp with time zone
-);
-
-
---
--- Name: wiki_page_revisions; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.wiki_page_revisions (
-    id character varying(36) NOT NULL,
-    tenant_id bigint NOT NULL,
-    knowledge_base_id character varying(36) NOT NULL,
-    page_id character varying(36) NOT NULL,
-    slug character varying(255) NOT NULL,
-    version integer NOT NULL,
-    title character varying(512) DEFAULT ''::character varying NOT NULL,
-    page_type character varying(32) DEFAULT 'summary'::character varying NOT NULL,
-    status character varying(32) DEFAULT 'published'::character varying NOT NULL,
-    content text DEFAULT ''::text NOT NULL,
-    summary text DEFAULT ''::text NOT NULL,
-    aliases jsonb DEFAULT '[]'::jsonb,
-    edit_source character varying(16) DEFAULT ''::character varying NOT NULL,
-    editor_id character varying(64) DEFAULT ''::character varying NOT NULL,
-    edited_at timestamp with time zone DEFAULT now() NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
---
--- Name: wiki_pages; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.wiki_pages (
-    id character varying(36) NOT NULL,
-    tenant_id bigint NOT NULL,
-    knowledge_base_id character varying(36) NOT NULL,
-    slug character varying(255) NOT NULL,
-    title character varying(512) DEFAULT ''::character varying NOT NULL,
-    page_type character varying(32) DEFAULT 'summary'::character varying NOT NULL,
-    status character varying(32) DEFAULT 'published'::character varying NOT NULL,
-    content text DEFAULT ''::text NOT NULL,
-    summary text DEFAULT ''::text NOT NULL,
-    parent_slug character varying(255) DEFAULT ''::character varying NOT NULL,
-    folder_id character varying(36) DEFAULT ''::character varying NOT NULL,
-    category_path jsonb DEFAULT '[]'::jsonb,
-    wiki_path character varying(1024) DEFAULT ''::character varying NOT NULL,
-    depth integer DEFAULT 0 NOT NULL,
-    sort_order integer DEFAULT 0 NOT NULL,
-    source_refs jsonb DEFAULT '[]'::jsonb,
-    chunk_refs jsonb DEFAULT '[]'::jsonb,
-    source_changes jsonb DEFAULT '{}'::jsonb NOT NULL,
-    in_links jsonb DEFAULT '[]'::jsonb,
-    out_links jsonb DEFAULT '[]'::jsonb,
-    page_metadata jsonb DEFAULT '{}'::jsonb,
-    aliases jsonb DEFAULT '[]'::jsonb,
-    version integer DEFAULT 1 NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    deleted_at timestamp with time zone,
-    last_edit_source character varying(16) DEFAULT ''::character varying NOT NULL,
-    last_editor_id character varying(64) DEFAULT ''::character varying NOT NULL
-);
-
-
---
--- Name: COLUMN wiki_pages.last_edit_source; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.wiki_pages.last_edit_source IS 'Author kind of the current version: pipeline | agent | user | revert ('''' = legacy, treated as pipeline)';
-
-
---
--- Name: COLUMN wiki_pages.last_editor_id; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.wiki_pages.last_editor_id IS 'User id of the caller that produced the current version (empty for background pipeline writes)';
-
-
---
 -- Name: embeddings id; Type: DEFAULT; Schema: public
 --
 
@@ -2215,13 +1709,6 @@ ALTER TABLE ONLY public.system_settings ALTER COLUMN id SET DEFAULT nextval('pub
 --
 
 ALTER TABLE ONLY public.task_dead_letters ALTER COLUMN id SET DEFAULT nextval('public.task_dead_letters_id_seq'::regclass);
-
-
---
--- Name: task_pending_ops id; Type: DEFAULT; Schema: public
---
-
-ALTER TABLE ONLY public.task_pending_ops ALTER COLUMN id SET DEFAULT nextval('public.task_pending_ops_id_seq'::regclass);
 
 
 --
@@ -2503,54 +1990,6 @@ ALTER TABLE ONLY public.mcp_tool_approvals
 
 
 --
--- Name: memory_doc_affinity memory_doc_affinity_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.memory_doc_affinity
-    ADD CONSTRAINT memory_doc_affinity_pkey PRIMARY KEY (id);
-
-
---
--- Name: memory_item_embeddings memory_item_embeddings_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.memory_item_embeddings
-    ADD CONSTRAINT memory_item_embeddings_pkey PRIMARY KEY (item_id);
-
-
---
--- Name: memory_items memory_items_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.memory_items
-    ADD CONSTRAINT memory_items_pkey PRIMARY KEY (id);
-
-
---
--- Name: memory_subjects memory_subjects_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.memory_subjects
-    ADD CONSTRAINT memory_subjects_pkey PRIMARY KEY (id);
-
-
---
--- Name: memory_tombstones memory_tombstones_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.memory_tombstones
-    ADD CONSTRAINT memory_tombstones_pkey PRIMARY KEY (id);
-
-
---
--- Name: memory_topic_stats memory_topic_stats_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.memory_topic_stats
-    ADD CONSTRAINT memory_topic_stats_pkey PRIMARY KEY (id);
-
-
---
 -- Name: message_suggestion_events message_suggestion_events_pkey; Type: CONSTRAINT; Schema: public
 --
 
@@ -2663,14 +2102,6 @@ ALTER TABLE ONLY public.task_dead_letters
 
 
 --
--- Name: task_pending_ops task_pending_ops_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.task_pending_ops
-    ADD CONSTRAINT task_pending_ops_pkey PRIMARY KEY (id);
-
-
---
 -- Name: temporary_documents temporary_documents_pkey; Type: CONSTRAINT; Schema: public
 --
 
@@ -2692,46 +2123,6 @@ ALTER TABLE ONLY public.tenant_api_keys
 
 ALTER TABLE ONLY public.tenant_api_keys
     ADD CONSTRAINT tenant_api_keys_pkey PRIMARY KEY (id);
-
-
---
--- Name: tenant_sandbox_configs tenant_sandbox_configs_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.tenant_sandbox_configs
-    ADD CONSTRAINT tenant_sandbox_configs_pkey PRIMARY KEY (id);
-
-
---
--- Name: tenant_skill_catalog tenant_skill_catalog_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.tenant_skill_catalog
-    ADD CONSTRAINT tenant_skill_catalog_pkey PRIMARY KEY (id);
-
-
---
--- Name: tenant_skill_snapshots tenant_skill_snapshots_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.tenant_skill_snapshots
-    ADD CONSTRAINT tenant_skill_snapshots_pkey PRIMARY KEY (id);
-
-
---
--- Name: tenant_skills tenant_skills_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.tenant_skills
-    ADD CONSTRAINT tenant_skills_pkey PRIMARY KEY (id);
-
-
---
--- Name: tenant_user_env_vars tenant_user_env_vars_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.tenant_user_env_vars
-    ADD CONSTRAINT tenant_user_env_vars_pkey PRIMARY KEY (id);
 
 
 --
@@ -2788,38 +2179,6 @@ ALTER TABLE ONLY public.users
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_username_key UNIQUE (username);
-
-
---
--- Name: wiki_folders wiki_folders_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.wiki_folders
-    ADD CONSTRAINT wiki_folders_pkey PRIMARY KEY (id);
-
-
---
--- Name: wiki_page_issues wiki_page_issues_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.wiki_page_issues
-    ADD CONSTRAINT wiki_page_issues_pkey PRIMARY KEY (id);
-
-
---
--- Name: wiki_page_revisions wiki_page_revisions_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.wiki_page_revisions
-    ADD CONSTRAINT wiki_page_revisions_pkey PRIMARY KEY (id);
-
-
---
--- Name: wiki_pages wiki_pages_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.wiki_pages
-    ADD CONSTRAINT wiki_pages_pkey PRIMARY KEY (id);
 
 
 --
@@ -3485,62 +2844,6 @@ CREATE UNIQUE INDEX idx_mcp_tool_approvals_tenant_svc_tool ON public.mcp_tool_ap
 
 
 --
--- Name: idx_mem_affinity_scope; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_mem_affinity_scope ON public.memory_doc_affinity USING btree (tenant_id, subject_id, knowledge_id);
-
-
---
--- Name: idx_mem_emb_scope; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_mem_emb_scope ON public.memory_item_embeddings USING btree (tenant_id, subject_id);
-
-
---
--- Name: idx_mem_tomb_fp; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_mem_tomb_fp ON public.memory_tombstones USING btree (tenant_id, subject_id, fingerprint);
-
-
---
--- Name: idx_mem_topic_scope; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_mem_topic_scope ON public.memory_topic_stats USING btree (tenant_id, subject_id, normalized_key);
-
-
---
--- Name: idx_memory_items_key; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_memory_items_key ON public.memory_items USING btree (tenant_id, subject_id, normalized_key);
-
-
---
--- Name: idx_memory_items_scope; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_memory_items_scope ON public.memory_items USING btree (tenant_id, subject_id, status);
-
-
---
--- Name: idx_memory_subjects_scope; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_memory_subjects_scope ON public.memory_subjects USING btree (tenant_id, subject_id);
-
-
---
--- Name: idx_memory_tombstones_scope; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_memory_tombstones_scope ON public.memory_tombstones USING btree (tenant_id, subject_id);
-
-
---
 -- Name: idx_message_suggestion_events_session; Type: INDEX; Schema: public
 --
 
@@ -3779,20 +3082,6 @@ CREATE INDEX idx_task_dead_letters_tenant ON public.task_dead_letters USING btre
 
 
 --
--- Name: idx_task_pending_ops_scope; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_task_pending_ops_scope ON public.task_pending_ops USING btree (task_type, scope, scope_id, id);
-
-
---
--- Name: idx_task_pending_ops_tenant; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_task_pending_ops_tenant ON public.task_pending_ops USING btree (tenant_id);
-
-
---
 -- Name: idx_temporary_documents_expires; Type: INDEX; Schema: public
 --
 
@@ -3828,34 +3117,6 @@ CREATE INDEX idx_tenant_api_keys_tenant ON public.tenant_api_keys USING btree (t
 
 
 --
--- Name: idx_tenant_sandbox_configs_tenant; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_tenant_sandbox_configs_tenant ON public.tenant_sandbox_configs USING btree (tenant_id) WHERE (deleted_at IS NULL);
-
-
---
--- Name: idx_tenant_skill_snapshots_config; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_tenant_skill_snapshots_config ON public.tenant_skill_snapshots USING btree (sandbox_config_id);
-
-
---
--- Name: idx_tenant_skill_snapshots_state; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_tenant_skill_snapshots_state ON public.tenant_skill_snapshots USING btree (state);
-
-
---
--- Name: idx_tenant_skills_catalog; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_tenant_skills_catalog ON public.tenant_skills USING btree (catalog_id);
-
-
---
 -- Name: idx_tenants_agent_config; Type: INDEX; Schema: public
 --
 
@@ -3867,20 +3128,6 @@ CREATE INDEX idx_tenants_agent_config ON public.tenants USING gin (agent_config)
 --
 
 CREATE INDEX idx_tenants_status ON public.tenants USING btree (status);
-
-
---
--- Name: idx_user_env_var_config; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_user_env_var_config ON public.tenant_user_env_vars USING btree (tenant_id, sandbox_config_id);
-
-
---
--- Name: idx_user_env_var_skill; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_user_env_var_skill ON public.tenant_user_env_vars USING btree (tenant_id, skill_id);
 
 
 --
@@ -3930,190 +3177,6 @@ CREATE INDEX idx_users_tenant_id ON public.users USING btree (tenant_id);
 --
 
 CREATE INDEX idx_users_username ON public.users USING btree (username);
-
-
---
--- Name: idx_wiki_folders_deleted_at; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_wiki_folders_deleted_at ON public.wiki_folders USING btree (deleted_at);
-
-
---
--- Name: idx_wiki_folders_parent; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_wiki_folders_parent ON public.wiki_folders USING btree (knowledge_base_id, parent_id);
-
-
---
--- Name: idx_wiki_folders_parent_name; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_wiki_folders_parent_name ON public.wiki_folders USING btree (knowledge_base_id, parent_id, name) WHERE (deleted_at IS NULL);
-
-
---
--- Name: idx_wiki_page_issues_knowledge_base_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_wiki_page_issues_knowledge_base_id ON public.wiki_page_issues USING btree (knowledge_base_id);
-
-
---
--- Name: idx_wiki_page_issues_slug; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_wiki_page_issues_slug ON public.wiki_page_issues USING btree (slug);
-
-
---
--- Name: idx_wiki_page_issues_status; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_wiki_page_issues_status ON public.wiki_page_issues USING btree (status);
-
-
---
--- Name: idx_wiki_page_issues_tenant_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_wiki_page_issues_tenant_id ON public.wiki_page_issues USING btree (tenant_id);
-
-
---
--- Name: idx_wiki_page_revisions_kb_slug; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_wiki_page_revisions_kb_slug ON public.wiki_page_revisions USING btree (knowledge_base_id, slug);
-
-
---
--- Name: idx_wiki_page_revisions_page_version; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_wiki_page_revisions_page_version ON public.wiki_page_revisions USING btree (page_id, version);
-
-
---
--- Name: idx_wiki_pages_deleted_at; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_wiki_pages_deleted_at ON public.wiki_pages USING btree (deleted_at);
-
-
---
--- Name: idx_wiki_pages_folder; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_wiki_pages_folder ON public.wiki_pages USING btree (knowledge_base_id, folder_id);
-
-
---
--- Name: idx_wiki_pages_folder_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_wiki_pages_folder_id ON public.wiki_pages USING btree (folder_id);
-
-
---
--- Name: idx_wiki_pages_fulltext; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_wiki_pages_fulltext ON public.wiki_pages USING gin (to_tsvector('simple'::regconfig, (((COALESCE(title, ''::character varying))::text || ' '::text) || COALESCE(content, ''::text))));
-
-
---
--- Name: idx_wiki_pages_kb_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_wiki_pages_kb_id ON public.wiki_pages USING btree (knowledge_base_id);
-
-
---
--- Name: idx_wiki_pages_kb_slug; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_wiki_pages_kb_slug ON public.wiki_pages USING btree (knowledge_base_id, slug) WHERE (deleted_at IS NULL);
-
-
---
--- Name: idx_wiki_pages_page_type; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_wiki_pages_page_type ON public.wiki_pages USING btree (knowledge_base_id, page_type);
-
-
---
--- Name: idx_wiki_pages_parent_slug; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_wiki_pages_parent_slug ON public.wiki_pages USING btree (knowledge_base_id, parent_slug);
-
-
---
--- Name: idx_wiki_pages_source_refs; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_wiki_pages_source_refs ON public.wiki_pages USING gin (source_refs jsonb_path_ops);
-
-CREATE INDEX idx_wiki_pages_chunk_refs ON public.wiki_pages USING gin (chunk_refs jsonb_path_ops);
-
-
---
--- Name: idx_wiki_pages_source_refs_text; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_wiki_pages_source_refs_text ON public.wiki_pages USING gin (to_tsvector('simple'::regconfig, (source_refs)::text));
-
-
---
--- Name: idx_wiki_pages_tenant_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_wiki_pages_tenant_id ON public.wiki_pages USING btree (tenant_id);
-
-
---
--- Name: idx_wiki_pages_title_trgm; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_wiki_pages_title_trgm ON public.wiki_pages USING gin (lower((title)::text) public.gin_trgm_ops);
-
-
---
--- Name: idx_wiki_pages_tree; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_wiki_pages_tree ON public.wiki_pages USING btree (knowledge_base_id, page_type, wiki_path, sort_order, title);
-
-
---
--- Name: uq_tenant_sandbox_configs_tenant_name; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX uq_tenant_sandbox_configs_tenant_name ON public.tenant_sandbox_configs USING btree (tenant_id, name) WHERE (deleted_at IS NULL);
-
-
---
--- Name: uq_tenant_skill_catalog_name; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX uq_tenant_skill_catalog_name ON public.tenant_skill_catalog USING btree (tenant_id, name) WHERE (deleted_at IS NULL);
-
-
---
--- Name: uq_tenant_skills_config_name; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX uq_tenant_skills_config_name ON public.tenant_skills USING btree (sandbox_config_id, name) WHERE (deleted_at IS NULL);
-
-
---
--- Name: uq_user_env_var; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX uq_user_env_var ON public.tenant_user_env_vars USING btree (tenant_id, principal_type, principal_id, sandbox_config_id, skill_id, name);
 
 
 --

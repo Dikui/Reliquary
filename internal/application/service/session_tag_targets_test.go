@@ -117,8 +117,8 @@ func TestBuildAgentConfig_TagOnlyScopePreservesRetrievalTarget(t *testing.T) {
 		ID:       "agent-1",
 		TenantID: 100,
 		Config: types.CustomAgentConfig{
-			AgentMode:           types.AgentModeSmartReasoning,
-			KBSelectionMode:     "all",
+			AgentMode:       types.AgentModeSmartReasoning,
+			KBSelectionMode: "all",
 		},
 	}
 	req := &types.QARequest{

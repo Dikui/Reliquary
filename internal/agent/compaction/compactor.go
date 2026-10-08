@@ -105,7 +105,6 @@ func (c *Compactor) Compact(
 	}
 
 	summary, degraded := c.buildSummary(ctx, prep)
-	summary += prep.fileOps.format()
 	compacted := Apply(messages, prep, summary)
 
 	return &Result{

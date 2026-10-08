@@ -42,10 +42,8 @@ import (
 // maxSpanNameLen matches knowledge_processing_spans.name (varchar(255)).
 const maxSpanNameLen = 255
 
-// fitSpanName ensures a span name fits the DB column. Wiki ingest builds
-// names like postprocess.wiki.page[<slug>] which can exceed 64 chars when
-// the slug is a long romanized entity name; when truncated an 8-hex hash
-// suffix keeps concurrent subspans distinct. Truncation is rune-aware to
+// fitSpanName ensures a span name fits the DB column. Long source names
+// receive an 8-hex hash suffix to keep concurrent subspans distinct. Truncation is rune-aware to
 // match PostgreSQL VARCHAR(255) character semantics and avoid splitting
 // multi-byte UTF-8 sequences.
 func fitSpanName(name string) string {
@@ -528,7 +526,7 @@ func (t *spanTracker) FailSpan(ctx context.Context, span *Span, errorCode, error
 		// Any failure in a MAIN pipeline stage means the attempt is
 		// done — the parse cannot succeed past this point. Close the
 		// root span as failed so the UI doesn't show "进行中" forever.
-		// Optional downstream stages (summary/question/wiki/graph) do
+		// Optional downstream stages (summary/question/graph) do
 		// not poison the attempt: they can fail without invalidating
 		// the parsed document.
 		if isMainPipelineStage(span.Name) {
@@ -714,7 +712,7 @@ func contains(haystack []string, needle string) bool {
 // pipeline stages (docreader / chunking / embedding / multimodal /
 // postprocess). A failure in any of these terminally invalidates the
 // attempt and must close the root as failed. Optional downstream stages
-// added later (summary, question, wiki, graph) do NOT match — those
+// added later (summary, question, graph) do NOT match — those
 // can fail individually without poisoning the parse result.
 func isMainPipelineStage(name string) bool {
 	for _, s := range types.AllStages {

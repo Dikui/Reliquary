@@ -65,10 +65,7 @@
           <t-icon name="control-platform" class="menu-icon" />
           <span>{{ $t('settings.modelManagement') }}</span>
         </div>
-        <div v-if="canManageSkills" class="menu-item" @click="handleQuickNav('skills')">
-          <t-icon :name="SKILL_ICON" class="menu-icon" />
-          <span>{{ $t('settings.skills.title') }}</span>
-        </div>
+
         <div class="menu-divider"></div>
         <div class="menu-item" @click="handleSettings">
           <t-icon name="setting" class="menu-icon" />
@@ -121,7 +118,6 @@ import { getCurrentUser, logout as logoutApi, userInfoFromApi } from '@/api/auth
 import { useI18n } from 'vue-i18n'
 import { getRootZoom, rectToCssPx, cssViewportSize } from '@/utils/zoom'
 import { openNewUserGuide } from '@/config/contextualGuides'
-import { SKILL_ICON } from '@/types/mention'
 
 const { t } = useI18n()
 
@@ -138,7 +134,6 @@ const activeTenantName = computed(() => {
   )
 })
 const canManageModels = computed(() => authStore.isLoggedIn)
-const canManageSkills = computed(() => authStore.isLoggedIn)
 
 const menuRef = ref<HTMLElement>()
 const menuVisible = ref(false)

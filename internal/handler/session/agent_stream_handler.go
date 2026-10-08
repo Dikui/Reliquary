@@ -8,9 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"reliquary/internal/agent/skills"
 	agenttools "reliquary/internal/agent/tools"
-	"reliquary/internal/application/service"
 	"reliquary/internal/event"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
@@ -23,7 +21,7 @@ import (
 type AgentStreamHandler struct {
 	ctx                context.Context
 	sessionID          string
-	tenantID           uint64 // Tenant that owns this session; used when persisting skill artifacts.
+	tenantID           uint64 // Tenant that owns this session.
 	assistantMessageID string
 	requestID          string
 	receivedAt         time.Time // Handler entry timestamp, used for TTFB logging
@@ -32,11 +30,6 @@ type AgentStreamHandler struct {
 	streamManager      interfaces.StreamManager
 
 	eventBus *event.EventBus
-
-	// artifactCollector drains skill-generated files from the session
-	// sandbox after the agent completes. Nil when the sandbox backend
-	// doesn't support artifact collection or Reliquary was built without it.
-	artifactCollector *service.ArtifactCollector
 
 	// State tracking
 	knowledgeRefs   []*types.SearchResult
@@ -89,7 +82,6 @@ func NewAgentStreamHandler(
 	assistantMessage *types.Message,
 	streamManager interfaces.StreamManager,
 	eventBus *event.EventBus,
-	artifactCollector *service.ArtifactCollector,
 ) *AgentStreamHandler {
 	return &AgentStreamHandler{
 		ctx:                ctx,
@@ -101,7 +93,6 @@ func NewAgentStreamHandler(
 		assistantMessage:   assistantMessage,
 		streamManager:      streamManager,
 		eventBus:           eventBus,
-		artifactCollector:  artifactCollector,
 		knowledgeRefs:      make([]*types.SearchResult, 0),
 		eventStartTimes:    make(map[string]time.Time),
 	}
@@ -115,7 +106,6 @@ func (h *AgentStreamHandler) Subscribe() {
 	h.eventBus.On(event.EventAgentToolCall, h.handleToolCall)
 	h.eventBus.On(event.EventAgentToolResult, h.handleToolResult)
 	h.eventBus.On(event.EventAgentReferences, h.handleReferences)
-	h.eventBus.On(event.EventMemoryRecalled, h.handleMemoryRecalled)
 	h.eventBus.On(event.EventContextCompacted, h.handleContextCompacted)
 	h.eventBus.On(event.EventAgentFinalAnswer, h.handleFinalAnswer)
 	h.eventBus.On(event.EventAgentReflection, h.handleReflection)
@@ -206,7 +196,7 @@ func (h *AgentStreamHandler) handleToolCall(ctx context.Context, evt event.Event
 
 	metadata := map[string]interface{}{
 		"tool_name":    data.ToolName,
-		"arguments":    agenttools.SanitizeSandboxFileCallArgs(data.ToolName, data.Arguments),
+		"arguments":    data.Arguments,
 		"tool_call_id": data.ToolCallID,
 	}
 
@@ -429,35 +419,6 @@ func (h *AgentStreamHandler) handleReferences(ctx context.Context, evt event.Eve
 		logger.GetLogger(h.ctx).Error("Append references event to stream failed", "error", err)
 	}
 
-	return nil
-}
-
-// handleMemoryRecalled records the long-term memories injected into this turn.
-// The list is both persisted on the assistant message and streamed, so the
-// panel is present live and after a reload.
-func (h *AgentStreamHandler) handleMemoryRecalled(ctx context.Context, evt event.Event) error {
-	data, ok := evt.Data.(event.MemoryRecalledData)
-	if !ok {
-		return nil
-	}
-	used, ok := data.Memories.(types.UsedMemories)
-	if !ok || len(used) == 0 {
-		return nil
-	}
-
-	h.mu.Lock()
-	h.assistantMessage.UsedMemories = used
-	h.mu.Unlock()
-
-	if err := h.streamManager.AppendEvent(h.ctx, h.sessionID, h.assistantMessageID, interfaces.StreamEvent{
-		ID:        evt.ID,
-		Type:      types.ResponseTypeMemoryRecalled,
-		Done:      false,
-		Timestamp: time.Now(),
-		Data:      map[string]interface{}{"memories": used},
-	}); err != nil {
-		logger.GetLogger(h.ctx).Error("Append memory recalled event to stream failed", "error", err)
-	}
 	return nil
 }
 
@@ -689,41 +650,6 @@ func (h *AgentStreamHandler) handleComplete(ctx context.Context, evt event.Event
 			h.assistantMessage.Usage = usage
 		}
 
-		// Drain skill-generated files from the sandbox into persistent
-		// storage. Best-effort: any failure is logged and the turn is
-		// persisted without artifacts. Collect is a no-op when either the
-		// collector wasn't wired in, no sandbox is bound, or no files were
-		// produced — those cases must not disturb the completion path.
-		if h.artifactCollector != nil {
-			collectCtx := context.WithoutCancel(h.ctx)
-			artifacts, err := h.artifactCollector.CollectWithNotify(
-				collectCtx,
-				h.sessionID,
-				h.assistantMessageID,
-				h.tenantID,
-				skills.ArtifactOutputDir(),
-				h.emitArtifactsPending,
-			)
-			if err != nil {
-				logger.GetLogger(h.ctx).Warnf(
-					"artifact collect failed session=%s message=%s: %v",
-					h.sessionID, h.assistantMessageID, err,
-				)
-			} else if len(artifacts) > 0 {
-				h.assistantMessage.Artifacts = artifacts
-				// The answer text names generated files the way the model saw
-				// them in the sandbox. Bind those names to artifact indices now
-				// that the index space is final, so a reloaded conversation
-				// renders them instead of showing a broken link.
-				h.assistantMessage.Content = rewriteArtifactReferences(
-					h.assistantMessage.Content, artifacts,
-				)
-				logger.GetLogger(h.ctx).Infof(
-					"artifact collect attached %d file(s) to message=%s session=%s",
-					len(artifacts), h.assistantMessageID, h.sessionID,
-				)
-			}
-		}
 	}
 
 	// Fallback: if no answer events were streamed but we have a final answer,
@@ -799,28 +725,6 @@ func (h *AgentStreamHandler) handleComplete(ctx context.Context, evt event.Event
 	}
 
 	return nil
-}
-
-// emitArtifactsPending tells the live UI that sandbox files exist and are
-// being uploaded. It must not take h.mu — Collect calls it while
-// handleComplete already holds the lock.
-func (h *AgentStreamHandler) emitArtifactsPending(count int) {
-	if h == nil || h.streamManager == nil || count <= 0 {
-		return
-	}
-	if err := h.streamManager.AppendEvent(h.ctx, h.sessionID, h.assistantMessageID, interfaces.StreamEvent{
-		ID:        fmt.Sprintf("artifacts-pending-%d", time.Now().UnixMilli()),
-		Type:      types.ResponseTypeArtifactsPending,
-		Timestamp: time.Now(),
-		Data: map[string]interface{}{
-			"count": count,
-		},
-	}); err != nil {
-		logger.GetLogger(h.ctx).Warnf(
-			"append artifacts_pending failed session=%s message=%s: %v",
-			h.sessionID, h.assistantMessageID, err,
-		)
-	}
 }
 
 // publicArtifactViews returns a redacted view of the artifact list suitable

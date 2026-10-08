@@ -99,7 +99,7 @@ func VerifyFileURLSig(filePath string, tenantID uint64, expiresStr, sig string) 
 }
 
 // kbScopedExportsSegment is the only storage prefix served by the KB-scoped
-// file proxy. Embedded wiki/chunk images land under exports/; raw knowledge
+// file proxy. Embedded chunk images land under exports/; raw knowledge
 // uploads use {tenant}/{knowledgeID}/... and are served via
 // /knowledge/{id}/download instead.
 const kbScopedExportsSegment = "exports"

@@ -62,7 +62,7 @@ type GrepChunksInput struct {
 // The tool tracks previously-returned chunk IDs per-instance (one instance per
 // agent session) so that a subsequent search hitting the same chunk can be
 // rendered compactly with an `already_seen="true"` marker instead of replaying
-// the snippet, mirroring the UX of wiki_search.
+// the snippet.
 type GrepChunksTool struct {
 	BaseTool
 	db             *gorm.DB
@@ -470,7 +470,7 @@ func (t *GrepChunksTool) searchChunks(
 }
 
 // formatOutput emits per-chunk XML with <match_snippet> and <query_hit>
-// elements, mirroring the wiki_search output shape. Chunks that were already
+// elements. Chunks that were already
 // surfaced by a previous call to this tool in the same session are rendered
 // compactly with `already_seen="true"` so the LLM doesn't waste context
 // re-reading the same snippet.

@@ -14,10 +14,8 @@ database connection limits.
 | Enrichment | 12 | `summary`, `multimodal`, `graph`, `question` | Model-heavy enrichment guarantee |
 | Maintenance | 4 | `sync`, `low` | Source sync, batch work, move/delete/cleanup |
 | Shared | 6 | Core and enrichment queues | Elastic capacity borrowed by the side with backlog |
-| Wiki | 8 | `wiki` | Independently governed Wiki generation |
 
-The upstream total remains 32 workers per service instance by default. Wiki is
-separate and is not included in that total.
+The total remains 32 workers per service instance by default.
 
 Post-process has its own physical queue so lightweight fan-out work cannot sit
 behind long parser calls. Maintenance is intentionally excluded from the
@@ -36,7 +34,6 @@ All settings are available under System settings and require a service restart:
 - `asynq.enrichment_concurrency` / `RELIQUARY_ASYNQ_ENRICHMENT_CONCURRENCY`
 - `asynq.maintenance_concurrency` / `RELIQUARY_ASYNQ_MAINTENANCE_CONCURRENCY`
 - `asynq.shared_concurrency` / `RELIQUARY_ASYNQ_SHARED_CONCURRENCY`
-- `asynq.wiki_concurrency` / `RELIQUARY_WIKI_ASYNQ_CONCURRENCY`
 
 The old aggregate `asynq.concurrency` / `RELIQUARY_ASYNQ_CONCURRENCY` setting is
 retired. Deployments that set it must migrate to the explicit pool settings.

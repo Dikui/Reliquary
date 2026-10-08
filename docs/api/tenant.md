@@ -15,4 +15,4 @@
 
 API Key 使用 `X-API-Key`，拥有与登录用户相同的完整权限。创建和更新参数为 `name` 与可选的 `expires_at_unix`（Unix 秒）。
 
-空间 KV 配置继续使用 `/tenants/kv/:key`，租户由认证上下文提供。模型、RSS 数据源、工作流、Wiki、Skills、MCP 客户端等接口保持业务行为，详细配置请参考 Swagger。
+空间 KV 配置继续使用 `/tenants/kv/:key`，租户由认证上下文提供。模型、RSS 数据源、工作流、MCP 客户端等接口保持业务行为，详细配置请参考 Swagger。

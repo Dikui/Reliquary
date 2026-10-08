@@ -12,7 +12,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"reliquary/internal/application/repository"
-	"reliquary/internal/application/service"
 	"reliquary/internal/config"
 	"reliquary/internal/database"
 	apperrors "reliquary/internal/errors"
@@ -39,8 +38,7 @@ type SystemHandler struct {
 	// knowledgeSvc supplies the domain-level cancellation path used by the
 	// runtime task console. It updates business state and tracing before queue
 	// records are removed, unlike a raw Redis deletion.
-	knowledgeSvc     runtimeKnowledgeCanceller
-	sandboxConfigSvc sandboxConfigService
+	knowledgeSvc runtimeKnowledgeCanceller
 	// startup snapshot for GET /system/capabilities; bound in router.NewRouter.
 	deploymentCapabilities DeploymentCapabilitiesData
 }
@@ -53,7 +51,6 @@ func NewSystemHandler(cfg *config.Config,
 	apiKeySvc interfaces.TenantAPIKeyService,
 	taskInspector interfaces.TaskInspector,
 	knowledgeSvc interfaces.KnowledgeService,
-	sandboxConfigSvc *service.TenantSandboxConfigService,
 ) *SystemHandler {
 	return &SystemHandler{
 		cfg:              cfg,
@@ -63,7 +60,6 @@ func NewSystemHandler(cfg *config.Config,
 		apiKeySvc:        apiKeySvc,
 		taskInspector:    taskInspector,
 		knowledgeSvc:     knowledgeSvc,
-		sandboxConfigSvc: sandboxConfigSvc,
 	}
 }
 
@@ -215,7 +211,6 @@ func aggregateRuntimeWorkerPools(pools []RuntimeWorkerPool, servers []types.Work
 		types.WorkerPoolEnrichment:  types.QueueWeightsForPool(types.WorkerPoolEnrichment),
 		types.WorkerPoolMaintenance: types.QueueWeightsForPool(types.WorkerPoolMaintenance),
 		types.WorkerPoolShared:      types.QueueWeightsForSharedPool(),
-		types.WorkerPoolWiki:        types.QueueWeightsForPool(types.WorkerPoolWiki),
 	}
 	indexes := make(map[string]int, len(pools))
 	for i := range pools {
@@ -283,14 +278,12 @@ func (h *SystemHandler) GetRuntimeQueues(c *gin.Context) {
 	resp := RuntimeQueuesResponse{
 		UpstreamConcurrency: allocation.UpstreamTotal(),
 		ParseConcurrency:    allocation.UpstreamTotal(),
-		WikiConcurrency:     allocation.Wiki,
 		Pools: []RuntimeWorkerPool{
 			{Name: types.WorkerPoolCore, Concurrency: allocation.Core, QueueCount: queueCounts[types.WorkerPoolCore]},
 			{Name: types.WorkerPoolPostProcess, Concurrency: allocation.PostProcess, QueueCount: queueCounts[types.WorkerPoolPostProcess]},
 			{Name: types.WorkerPoolEnrichment, Concurrency: allocation.Enrichment, QueueCount: queueCounts[types.WorkerPoolEnrichment]},
 			{Name: types.WorkerPoolMaintenance, Concurrency: allocation.Maintenance, QueueCount: queueCounts[types.WorkerPoolMaintenance]},
 			{Name: types.WorkerPoolShared, Concurrency: allocation.Shared, QueueCount: len(types.QueueWeightsForSharedPool())},
-			{Name: types.WorkerPoolWiki, Concurrency: allocation.Wiki, QueueCount: queueCounts[types.WorkerPoolWiki]},
 		},
 		Timestamp: time.Now().Unix(),
 	}
@@ -744,7 +737,6 @@ type RuntimeQueuesResponse struct {
 	Available             bool                       `json:"available"`
 	UpstreamConcurrency   int                        `json:"upstream_concurrency"`
 	ParseConcurrency      int                        `json:"parse_concurrency"` // compatibility alias for upstream_concurrency
-	WikiConcurrency       int                        `json:"wiki_concurrency"`  // compatibility field
 	Pools                 []RuntimeWorkerPool        `json:"pools"`
 	Queues                []types.QueueStat          `json:"queues"`
 	ModelLimiterAvailable bool                       `json:"model_limiter_available"`

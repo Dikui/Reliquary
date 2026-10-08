@@ -17,10 +17,7 @@ export function isStoredSettingsRecord(
 type ReconcilableSettings = {
   selectedTags?: unknown;
   selectedMCPServices?: unknown;
-  selectedSkills?: unknown;
-  selectedTools?: unknown;
   selectedFileKbMap?: unknown;
-  enableMemory?: unknown;
   isAgentEnabled: boolean;
   selectedAgentId?: string;
 };
@@ -28,14 +25,9 @@ type ReconcilableSettings = {
 function reconcileLoadedSettings<T extends ReconcilableSettings>(loaded: T): T {
   loaded.selectedTags ||= [];
   loaded.selectedMCPServices ||= [];
-  loaded.selectedSkills ||= (loaded.selectedTools as string[] | undefined) || [];
   loaded.selectedFileKbMap ||= {};
-  const removedLegacyMemorySetting = Object.prototype.hasOwnProperty.call(loaded, "enableMemory");
-  if (removedLegacyMemorySetting) {
-    delete loaded.enableMemory;
-  }
   const reconciledAgentMode = reconcileBuiltinAgentMode(loaded);
-  if (removedLegacyMemorySetting || reconciledAgentMode) {
+  if (reconciledAgentMode) {
     safeSetItem(SETTINGS_STORAGE_KEY, JSON.stringify(loaded));
   }
   return loaded;

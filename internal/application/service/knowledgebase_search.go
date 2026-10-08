@@ -129,7 +129,7 @@ func (s *knowledgeBaseService) HybridSearch(ctx context.Context,
 
 	// Explicit embedding-model consistency check. Multi-KB searches that
 	// span different embedding spaces would otherwise silently produce
-	// meaningless cross-model scores. Same-model wiki/graph KBs are
+	// meaningless cross-model scores. Same-model KBs with disabled indexing are
 	// tolerated — see validateSameEmbeddingModel for the carve-out.
 	if err := s.validateSameEmbeddingModel(ctx, kbs); err != nil {
 		return nil, err
@@ -244,12 +244,12 @@ func (s *knowledgeBaseService) buildRetrievalParams(
 	var retrieveParams []types.RetrieveParams
 
 	// Partition the group's KBs by index routing. A KB that does not have
-	// vector indexing enabled (e.g. wiki-only or graph-only KBs) has no
+	// vector indexing enabled (e.g. KBs with disabled indexing) has no
 	// embeddings to retrieve from, and typically has no EmbeddingModelID
 	// configured either; such KBs are skipped for vector retrieval to avoid
 	// spurious "model ID cannot be empty" errors when an agent's retrieval
 	// scope happens to include them (e.g. KBSelectionMode=all picking up a
-	// wiki-only KB).
+	// unindexed KB).
 	var docVectorKBIDs, docKeywordKBIDs []string
 	for _, kb := range groupKBs {
 		if kb.IsVectorEnabled() && kb.EmbeddingModelID != "" {
@@ -356,7 +356,7 @@ func (s *knowledgeBaseService) authorizeKBAccess(ctx context.Context, kbs []*typ
 // validateSameEmbeddingModel rejects multi-KB searches that span more than
 // one resolved embedding-model identity key. Single-KB calls no-op.
 //
-// Wiki-only / graph-only KBs (empty resolved key) are tolerated: if every
+// KBs with disabled indexing (empty resolved key) are tolerated: if every
 // KB lacks an embedding model, validation passes and HybridSearch returns
 // an empty result set when the retrieval parameter list is empty.
 //
@@ -375,7 +375,7 @@ func (s *knowledgeBaseService) validateSameEmbeddingModel(
 	for _, kb := range kbs {
 		k, ok := keys[kb.ID]
 		if !ok || k == "" {
-			// Wiki-only / graph-only carve-out: KB has no embedding model.
+			// Disabled indexing: KB has no embedding model.
 			continue
 		}
 		if seen == "" {

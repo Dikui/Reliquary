@@ -13,7 +13,6 @@ func TestQueueDefinitionsAreUniqueAndConsumable(t *testing.T) {
 		WorkerPoolPostProcess: true,
 		WorkerPoolEnrichment:  true,
 		WorkerPoolMaintenance: true,
-		WorkerPoolWiki:        true,
 	}
 	seen := make(map[string]bool, len(definitions))
 	seenTaskTypes := make(map[string]string)
@@ -84,7 +83,7 @@ func TestEveryAsynqTaskTypeHasADeclaredQueue(t *testing.T) {
 		TypeKBDelete, TypeKnowledgeListDelete,
 		TypeKnowledgeListReparse, TypeKnowledgeMove, TypeDataTableSummary,
 		TypeImageMultimodal, TypeKnowledgePostProcess, TypeKnowledgeAutoTag, TypeManualProcess,
-		TypeDataSourceSync, TypeWikiIngest, TypeWikiFinalize, TypeTemporaryDocumentProcess,
+		TypeDataSourceSync, TypeTemporaryDocumentProcess,
 	}
 	for _, taskType := range taskTypes {
 		if _, ok := QueueForTaskType(taskType); !ok {
@@ -112,7 +111,7 @@ func TestDefaultWorkerPoolConcurrencyIsExplicitBudget(t *testing.T) {
 		t.Fatalf("upstream total = %d, want %d", allocation.UpstreamTotal(), DefaultUpstreamWorkerConcurrency)
 	}
 	if allocation.Core < 1 || allocation.PostProcess < 1 || allocation.Enrichment < 1 ||
-		allocation.Maintenance < 1 || allocation.Shared < 1 || allocation.Wiki < 1 {
+		allocation.Maintenance < 1 || allocation.Shared < 1 {
 		t.Fatalf("every pool must have positive explicit capacity: %+v", allocation)
 	}
 }

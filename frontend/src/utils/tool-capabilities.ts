@@ -12,7 +12,6 @@
  * Capability names mirror the backend's KB capability set:
  *   - vector:  vector chunk index (embedding-based retrieval)
  *   - keyword: keyword/BM25 chunk index
- *   - wiki:    Wiki page indexing
  *   - graph:   knowledge graph index
  *
  * Requirement semantics:
@@ -25,7 +24,7 @@
  * "always available" so new tools don't silently start disabled.
  */
 
-export type KBCapability = 'vector' | 'keyword' | 'wiki' | 'graph';
+export type KBCapability = 'vector' | 'keyword' | 'graph';
 
 export interface ToolRequirement {
   anyOf?: KBCapability[];
@@ -52,22 +51,9 @@ export const TOOL_CAPABILITY_REQUIREMENTS: Record<string, ToolRequirement> = {
   knowledge_search:      { anyOf: ['vector', 'keyword'], consumesFiles: true },
   grep_chunks:           { anyOf: ['vector', 'keyword'], consumesFiles: true },
   list_knowledge_chunks: { anyOf: ['vector', 'keyword'], consumesFiles: true },
-  query_knowledge_graph: { anyOf: ['vector', 'keyword', 'wiki'], consumesFiles: true },
+  query_knowledge_graph: { anyOf: ['vector', 'keyword'], consumesFiles: true },
   get_document_info:     { anyOf: ['vector', 'keyword'], consumesFiles: true },
   database_query:        { anyOf: ['vector', 'keyword'], consumesFiles: true },
-
-  // ---- Wiki (operates on wiki pages referenced by the wiki machinery;
-  //      arbitrary user-picked file IDs aren't meaningful here) ----
-  wiki_search:          { allOf: ['wiki'] },
-  wiki_read_page:       { allOf: ['wiki'] },
-  wiki_read_source_doc: { allOf: ['wiki'] },
-  wiki_flag_issue:      { allOf: ['wiki'] },
-  wiki_write_page:      { allOf: ['wiki'] },
-  wiki_replace_text:    { allOf: ['wiki'] },
-  wiki_rename_page:     { allOf: ['wiki'] },
-  wiki_delete_page:     { allOf: ['wiki'] },
-  wiki_read_issue:      { allOf: ['wiki'] },
-  wiki_update_issue:    { allOf: ['wiki'] },
 
   // ---- Data analysis (reads table summary/column chunks produced by RAG ingest) ----
   data_analysis: { anyOf: ['vector', 'keyword'], consumesFiles: true },
@@ -81,7 +67,6 @@ export const TOOL_CAPABILITY_REQUIREMENTS: Record<string, ToolRequirement> = {
 export interface ScopeCapabilities {
   vector: boolean;
   keyword: boolean;
-  wiki: boolean;
   graph: boolean;
   }
 
@@ -89,7 +74,7 @@ export interface ScopeCapabilities {
  * Machine-readable reason a tool is unsatisfiable. Map to a user-facing
  * string via i18n on the caller side (see `AgentEditorModal.vue`).
  */
-export type RequirementMissKind = 'none' | 'needsKb' | 'needsRag' | 'needsWiki' | 'needsGraph';
+export type RequirementMissKind = 'none' | 'needsKb' | 'needsRag' | 'needsGraph';
 
 /**
  * Evaluate whether a tool's requirements are satisfied by the scope.
@@ -130,7 +115,6 @@ export function evaluateToolRequirement(
 
 function primaryMissKind(c: KBCapability): RequirementMissKind {
   switch (c) {
-    case 'wiki':    return 'needsWiki';
     case 'graph':   return 'needsGraph';
     case 'vector':
     case 'keyword': return 'needsRag';
@@ -166,7 +150,7 @@ export function deriveKbFilterFromTools(
  * Implicit KB capability requirement for the "quick-answer" (RAG) agent
  * mode. Quick-answer drives retrieval purely through vector/keyword chunk
  * search and ships with NO `allowed_tools`, so the tool-derived filter
- * alone would let wiki-only KBs through even though they can't contribute
+ * alone would let KBs without chunk indexes through even though they can't contribute
  * anything to a RAG answer. Treat this as a property of the agent MODE.
  */
 const QUICK_ANSWER_KB_FILTER: { any_of: KBCapability[] } = {
@@ -237,8 +221,8 @@ export function kbSatisfiesToolRequirements(
 /**
  * True iff any of the agent's allowed tools can consume user-provided file
  * references (`knowledge_ids`). Used by the chat `@` menu to decide whether
- * showing the "文件" list makes sense at all — e.g. a pure Wiki agent has no
- * tool that would read an arbitrary file the user picks, so we don't offer
+ * showing the "文件" list makes sense at all — when no tool can
+ * read an arbitrary file the user picks, we do not offer
  * it. `undefined`/`null`/empty → true (permissive fallback: if we don't
  * know, show files).
  */

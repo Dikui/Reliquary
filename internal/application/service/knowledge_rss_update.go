@@ -513,16 +513,7 @@ func (s *knowledgeService) promoteSourceUpdateCandidate(ctx context.Context, id 
 			logger.Warnf(ctx, "load promoted source update %s for downstream refresh: %v", id, err)
 		} else if current.EnableStatus == "enabled" {
 			s.queueContextSource(ctx, &current)
-			if s.kbService != nil {
-				kb, err := s.kbService.GetKnowledgeBaseByID(ctx, current.KnowledgeBaseID)
-				if err != nil {
-					logger.Warnf(ctx, "load knowledge base for promoted source update %s: %v", id, err)
-				} else if kb != nil && kb.IndexingStrategy.WikiEnabled {
-					if _, err := EnqueueWikiIngest(ctx, s.task, s.taskPendingRepo, tenantID, current.KnowledgeBaseID, current.ID); err != nil {
-						logger.Warnf(ctx, "enqueue wiki refresh for promoted source update %s: %v", id, err)
-					}
-				}
-			}
+
 		}
 	}
 	return nil

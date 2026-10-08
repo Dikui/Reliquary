@@ -107,23 +107,6 @@ func (r *messageRepository) GetMessagesBySessionBeforeTime(
 	return messages, nil
 }
 
-// ListMessagesBySessionAfterTime returns the oldest messages created after
-// afterTime, so a caller holding a watermark can walk a session forward
-// without skipping anything when it has more new messages than one page.
-func (r *messageRepository) ListMessagesBySessionAfterTime(
-	ctx context.Context, sessionID string, afterTime time.Time, limit int,
-) ([]*types.Message, error) {
-	var messages []*types.Message
-	query := r.db.WithContext(ctx).Where("session_id = ?", sessionID)
-	if !afterTime.IsZero() {
-		query = query.Where("created_at > ?", afterTime)
-	}
-	if err := query.Order("created_at ASC").Limit(limit).Find(&messages).Error; err != nil {
-		return nil, err
-	}
-	return messages, nil
-}
-
 // UpdateMessage updates an existing message
 func (r *messageRepository) UpdateMessage(ctx context.Context, message *types.Message) error {
 	return r.db.WithContext(ctx).Model(&types.Message{}).Where(
@@ -322,7 +305,7 @@ func (r *messageRepository) UpdateMessageKnowledgeID(
 		Update("knowledge_id", knowledgeID).Error
 }
 
-// GetSessionArtifacts returns every skill-produced MessageArtifact recorded
+// GetSessionArtifacts returns every persisted MessageArtifact recorded
 // against any assistant message of the session, in creation order.
 //
 // Projection is scoped to the artifacts JSONB column plus created_at (used

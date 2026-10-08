@@ -3,7 +3,6 @@ package router
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -26,15 +25,13 @@ type AsynqTaskParams struct {
 	dig.In
 
 	// Dedicated servers provide minimum capacity for parse, post-process,
-	// enrichment, maintenance, and Wiki work. SharedServer is the elastic tier:
-	// it also subscribes to core/enrichment queues so either stage can borrow
+	// enrichment and maintenance. The shared server subscribes to queues so stages can borrow
 	// otherwise-idle capacity without consuming the other stage's guarantee.
 	CoreServer           *asynq.Server `name:"coreAsynqServer"`
 	PostProcessServer    *asynq.Server `name:"postProcessAsynqServer"`
 	EnrichmentServer     *asynq.Server `name:"enrichmentAsynqServer"`
 	MaintenanceServer    *asynq.Server `name:"maintenanceAsynqServer"`
 	SharedServer         *asynq.Server `name:"sharedAsynqServer"`
-	WikiServer           *asynq.Server `name:"wikiAsynqServer"`
 	KnowledgeService     interfaces.KnowledgeService
 	KnowledgeBaseService interfaces.KnowledgeBaseService
 	DataSourceService    interfaces.DataSourceService
@@ -45,9 +42,7 @@ type AsynqTaskParams struct {
 	KnowledgeContext     *service.KnowledgeContextWorker
 	ContextNameEmbedding *service.ContextNameEmbeddingRebuilder
 	KnowledgeWorkflow    *service.KnowledgeWorkflowService
-	WikiIngest           interfaces.TaskHandler `name:"wikiIngest"`
 	TemporaryDocument    interfaces.TemporaryDocumentService
-	MemoryService        interfaces.MemoryService
 	DeadLetterRepo       interfaces.TaskDeadLetterRepository
 	SpanTracker          service.SpanTracker
 }
@@ -103,34 +98,6 @@ func NewAsyncqClient() (*asynq.Client, error) {
 	return client, nil
 }
 
-// wikiIngestRetryDelay is a fixed, short backoff for wiki ingest lock
-// conflicts. Must be slightly longer than the active-lock TTL's worst-case
-// "just got set" window so the retry is highly likely to succeed without
-// burning through retries; but short enough that users don't feel the stall.
-const wikiIngestRetryDelay = 15 * time.Second
-
-// asynqRetryDelayFunc customizes per-task retry backoff.
-//
-// Default asynq backoff is exponential (≈10s, 40s, 90s, 2.5m, ...), which
-// is appropriate for transient errors like remote HTTP failures. But for
-// wiki ingest lock conflicts (ErrWikiIngestConcurrent), exponential
-// backoff is harmful: a freshly orphaned lock expires in ≤60s, so a 15s
-// fixed retry virtually guarantees the next attempt succeeds. Without
-// this override, a crash-restart cycle can leave a KB unable to make
-// progress for 7–10 minutes while the orphan lock expires AND the retry
-// schedule catches up.
-func asynqRetryDelayFunc(n int, e error, t *asynq.Task) time.Duration {
-	if errors.Is(e, service.ErrWikiIngestConcurrent) {
-		return wikiIngestRetryDelay
-	}
-	return asynq.DefaultRetryDelayFunc(n, e, t)
-}
-
-// Worker defaults live in types so server construction and runtime reporting
-// cannot drift. The upstream budget is divided without increasing historical
-// total capacity; Wiki remains separate because its model-heavy workload has a
-// different provider-capacity profile.
-
 // newAsynqServer builds an asynq server bound to a specific queue set and
 // concurrency. Every worker pool uses it so Redis options and retry-delay
 // policy stay consistent across the topology.
@@ -141,7 +108,7 @@ func newAsynqServer(concurrency int, queues map[string]int) *asynq.Server {
 		asynq.Config{
 			Concurrency:    concurrency,
 			Queues:         queues,
-			RetryDelayFunc: asynqRetryDelayFunc,
+			RetryDelayFunc: asynq.DefaultRetryDelayFunc,
 		})
 }
 
@@ -228,17 +195,6 @@ func NewSharedAsynqServer(svc interfaces.SystemSettingService) *asynq.Server {
 	return newAsynqServer(allocation.Shared, types.QueueWeightsForSharedPool())
 }
 
-// NewWikiAsynqServer builds the dedicated wiki pool: QueueWiki only. It runs
-// the shared handler mux but only ever pulls wiki tasks, so its concurrency
-// budget (RELIQUARY_WIKI_ASYNQ_CONCURRENCY, default 8) is spent exclusively on
-// wiki generation. This is the hard capacity isolation that prevents the parse
-// pipeline from starving wiki (and vice-versa) during concurrent uploads.
-func NewWikiAsynqServer(svc interfaces.SystemSettingService) *asynq.Server {
-	concurrency := resolveWorkerPoolConcurrency(svc).Wiki
-	log.Printf("asynq wiki-pool server starting with concurrency=%d", concurrency)
-	return newAsynqServer(concurrency, types.QueueWeightsForPool(types.WorkerPoolWiki))
-}
-
 func RunAsynqServer(params AsynqTaskParams) *asynq.ServeMux {
 	// Create a new mux and register all handlers
 	mux := asynq.NewServeMux()
@@ -311,15 +267,6 @@ func RunAsynqServer(params AsynqTaskParams) *asynq.ServeMux {
 	// Register data source sync handler
 	mux.HandleFunc(types.TypeDataSourceSync, params.DataSourceService.ProcessSync)
 
-	// Register wiki ingest handler + the debounced KB-global finalize handler.
-	// Both route to the same dispatch (WikiIngest.Handle switches on task type)
-	// and both land on QueueWiki, so the dedicated wiki pool serves them.
-	mux.HandleFunc(types.TypeWikiIngest, params.WikiIngest.Handle)
-	mux.HandleFunc(types.TypeWikiFinalize, params.WikiIngest.Handle)
-
-	// Register long-term memory distillation handler
-	mux.HandleFunc(types.TypeMemoryExtract, params.MemoryService.Handle)
-
 	// Run the same mux on every pool. Shared and dedicated servers intentionally
 	// overlap, but Redis dequeue is atomic, so each task still executes once.
 	runPool := func(name string, srv *asynq.Server) {
@@ -334,7 +281,6 @@ func RunAsynqServer(params AsynqTaskParams) *asynq.ServeMux {
 	runPool("enrichment-pool", params.EnrichmentServer)
 	runPool("maintenance-pool", params.MaintenanceServer)
 	runPool("shared-pool", params.SharedServer)
-	runPool("wiki-pool", params.WikiServer)
 	return mux
 }
 

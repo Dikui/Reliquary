@@ -104,7 +104,7 @@ async function renderDetails(sources: KnowledgeRepostSource[] | null | undefined
     'tdesign-vue-next': { MessagePlugin: { error: unexpectedAPI, warning: unexpectedAPI } },
     '@/api/knowledge-base/index': { KNOWLEDGE_CHUNK_PAGE_SIZE: 20, getKnowledgeDetails: unexpectedAPI },
     '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) },
-    '@/utils/markdownTableNormalize': {}, '@/utils/mermaidViewer': {}, '@/utils/wikiLineDiff': {},
+    '@/utils/markdownTableNormalize': {}, '@/utils/mermaidViewer': {}, '@/utils/textLineDiff': {},
     '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true }) },
     '@/components/document-preview.vue': emptyModule,
     '@/components/knowledge-processing-timeline.vue': emptyModule,

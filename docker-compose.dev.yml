@@ -35,17 +35,6 @@ services:
     networks:
       - Reliquary-network-dev
 
-  sandbox:
-    image: reliquary-sandbox:${RELIQUARY_VERSION:-latest}
-    pull_policy: build
-    container_name: Reliquary-sandbox-dev
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.sandbox
-    profiles:
-      - full
-    command: ["true"]
-    restart: "no"
 
 networks:
   Reliquary-network-dev:

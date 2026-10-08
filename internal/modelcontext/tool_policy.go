@@ -2,7 +2,6 @@ package modelcontext
 
 import (
 	"encoding/json"
-	"regexp"
 	"strings"
 
 	"reliquary/internal/models/chat"
@@ -10,13 +9,9 @@ import (
 )
 
 const (
-	toolDatabaseQuery   = "database_query"
-	toolDataAnalysis    = "data_analysis"
-	toolWikiReadIssue   = "wiki_read_issue"
-	toolWikiUpdateIssue = "wiki_update_issue"
+	toolDatabaseQuery = "database_query"
+	toolDataAnalysis  = "data_analysis"
 )
-
-var issueHandleShapeRE = regexp.MustCompile(`^i[1-9][0-9]*$`)
 
 // sourceKeySpace identifies which source-handle space an ID-bearing JSON key
 // belongs to.
@@ -45,12 +40,9 @@ var sourceKeySpaces = map[string]sourceKeySpace{
 }
 
 type toolHandlePolicy struct {
-	sourceIDKeys        map[string]struct{}
-	sourceTextKeys      map[string]struct{}
-	sourceOutput        bool
-	decodedIssueIDKeys  map[string]struct{}
-	encodedIssueIDKeys  map[string]struct{}
-	encodeKnownIssueIDs bool
+	sourceIDKeys   map[string]struct{}
+	sourceTextKeys map[string]struct{}
+	sourceOutput   bool
 }
 
 // toolHandlePolicies is the complete allowlist for built-in tool fields whose
@@ -58,116 +50,20 @@ type toolHandlePolicy struct {
 // alone are deliberately insufficient: a dynamic MCP tool may use the same
 // name with unrelated semantics and must remain opaque.
 var toolHandlePolicies = map[string]toolHandlePolicy{
-	"knowledge_search": {
-		sourceIDKeys: map[string]struct{}{"knowledge_base_ids": {}},
-		sourceOutput: true,
-	},
-	"grep_chunks": {
-		sourceOutput: true,
-	},
-	"list_knowledge_chunks": {
-		sourceIDKeys: map[string]struct{}{"knowledge_id": {}, "chunk_id": {}},
-		sourceOutput: true,
-	},
-	"get_document_info": {
-		sourceIDKeys: map[string]struct{}{"knowledge_ids": {}},
-		sourceOutput: true,
-	},
-	// Past conversations carry no durable chunk or document IDs, so there is
-	// nothing to compact; the output is prose the model may quote.
-	"search_conversations": {},
-	// Memories are single sentences about the person. They carry no chunk or
-	// document IDs of their own, and the memory item IDs never leave the
-	// service, so there is nothing here for the model to hold a handle on.
-	"search_memory": {},
-	"query_knowledge_graph": {
-		sourceIDKeys: map[string]struct{}{"knowledge_base_ids": {}},
-		sourceOutput: true,
-	},
-	toolDatabaseQuery: {
-		sourceTextKeys: map[string]struct{}{"sql": {}},
-		sourceOutput:   true,
-	},
-	toolDataAnalysis: {
-		sourceIDKeys:   map[string]struct{}{"knowledge_id": {}},
-		sourceTextKeys: map[string]struct{}{"sql": {}},
-	},
-	"data_schema": {
-		sourceIDKeys: map[string]struct{}{"knowledge_id": {}},
-	},
-	"web_fetch": {
-		sourceIDKeys: map[string]struct{}{"url": {}, "urls": {}},
-		sourceOutput: true,
-	},
-	"wiki_read_page": {
-		sourceOutput: true,
-	},
-	"wiki_read_source_doc": {
-		sourceIDKeys: map[string]struct{}{"knowledge_id": {}},
-		sourceOutput: true,
-	},
-	"wiki_write_page": {
-		sourceIDKeys: map[string]struct{}{"source_refs": {}},
-	},
-	"wiki_replace_text": {
-		sourceIDKeys: map[string]struct{}{"source_refs": {}},
-	},
-	"wiki_flag_issue": {
-		sourceIDKeys: map[string]struct{}{"suspected_knowledge_ids": {}},
-	},
-	"knowledge_report_anomaly": {
-		sourceIDKeys: map[string]struct{}{"knowledge_base_id": {}, "knowledge_ids": {}},
-	},
-	"knowledge_import_url": {
-		sourceIDKeys: map[string]struct{}{"knowledge_base_id": {}, "url": {}},
-	},
-	"knowledge_apply_anomaly": {
-		sourceIDKeys: map[string]struct{}{"knowledge_base_id": {}},
-	},
-	"wiki_search": {
-		sourceIDKeys: map[string]struct{}{"knowledge_base_id": {}},
-		sourceOutput: true,
-	},
-	toolWikiReadIssue: {
-		decodedIssueIDKeys:  map[string]struct{}{"issue_id": {}},
-		encodedIssueIDKeys:  map[string]struct{}{"id": {}},
-		encodeKnownIssueIDs: true,
-		sourceOutput:        true,
-	},
-	toolWikiUpdateIssue: {
-		decodedIssueIDKeys:  map[string]struct{}{"issue_id": {}},
-		encodeKnownIssueIDs: true,
-	},
-	// Mutation tools echo the slug they acted on and surface validation errors
-	// that can quote a durable KB or document ID. They own no source arguments,
-	// but their output must still be compacted before the model sees it.
-	"wiki_rename_page": {
-		sourceOutput: true,
-	},
-	"wiki_delete_page": {
-		sourceOutput: true,
-	},
-	// Agent-private bookkeeping tools echo model-authored text. They need
-	// compaction so a durable ID quoted back by the model is re-compacted, but
-	// never structured source rendering.
-	"thinking":   {},
-	"todo_write": {},
-	// Skill output is user-authored content of unknown shape. Compact known
-	// durable IDs, but do not mine it for source keys: a skill's JSON may use
-	// "url"/"knowledge_id" with unrelated semantics.
-	"read_skill":           {},
-	"execute_skill_script": {},
-	// Sandbox shell/file tools return whatever a skill script produced, so they
-	// carry the same unknown-shape caveat as skill output above.
-	"shell_exec":         {},
-	"list_sandbox_files": {},
-	"read_sandbox_file":  {},
-	"write_sandbox_file": {},
-	"edit_sandbox_file":  {},
-	// Installer-only writers for the skill image tree. Same unknown-shape
-	// caveat: they echo paths and byte counts, never knowledge identifiers.
-	"write_skill_file": {},
-	"edit_skill_file":  {},
+	"knowledge_search":         {sourceIDKeys: map[string]struct{}{"knowledge_base_ids": {}}, sourceOutput: true},
+	"grep_chunks":              {sourceOutput: true},
+	"list_knowledge_chunks":    {sourceIDKeys: map[string]struct{}{"knowledge_id": {}, "chunk_id": {}}, sourceOutput: true},
+	"get_document_info":        {sourceIDKeys: map[string]struct{}{"knowledge_ids": {}}, sourceOutput: true},
+	"query_knowledge_graph":    {sourceIDKeys: map[string]struct{}{"knowledge_base_ids": {}}, sourceOutput: true},
+	toolDatabaseQuery:          {sourceTextKeys: map[string]struct{}{"sql": {}}, sourceOutput: true},
+	toolDataAnalysis:           {sourceIDKeys: map[string]struct{}{"knowledge_id": {}}, sourceTextKeys: map[string]struct{}{"sql": {}}},
+	"data_schema":              {sourceIDKeys: map[string]struct{}{"knowledge_id": {}}},
+	"web_fetch":                {sourceIDKeys: map[string]struct{}{"url": {}, "urls": {}}, sourceOutput: true},
+	"knowledge_report_anomaly": {sourceIDKeys: map[string]struct{}{"knowledge_base_id": {}, "knowledge_ids": {}}},
+	"knowledge_import_url":     {sourceIDKeys: map[string]struct{}{"knowledge_base_id": {}, "url": {}}},
+	"knowledge_apply_anomaly":  {sourceIDKeys: map[string]struct{}{"knowledge_base_id": {}}},
+	"thinking":                 {},
+	"todo_write":               {},
 }
 
 // HasToolPolicy reports whether a tool has an explicit model-handle policy.
@@ -223,11 +119,6 @@ func (r *Registry) decodeToolPolicies(call *types.LLMToolCall) {
 			if _, ok := policy.sourceTextKeys[key]; ok {
 				return r.sources.DecodeKnownQuotedText(value)
 			}
-			if _, ok := policy.decodedIssueIDKeys[key]; ok && issueHandleShapeRE.MatchString(strings.TrimSpace(value)) {
-				if durable, ok := r.issues.Resolve(value); ok {
-					return durable
-				}
-			}
 			return value
 		},
 	)
@@ -250,9 +141,6 @@ func (r *Registry) encodeReplayedToolPolicies(call *chat.ToolCall) {
 			if _, ok := policy.sourceTextKeys[key]; ok {
 				return r.sources.CompactKnownText(value)
 			}
-			if _, ok := policy.decodedIssueIDKeys[key]; ok {
-				return r.issues.EncodeKnownText(value)
-			}
 			return value
 		},
 	)
@@ -263,7 +151,7 @@ func (r *Registry) unresolvedPrivateToolHandles(toolName, raw string) []string {
 		return nil
 	}
 	policy, ok := toolHandlePolicies[toolName]
-	if !ok || (len(policy.decodedIssueIDKeys) == 0 && len(policy.sourceTextKeys) == 0) {
+	if !ok || len(policy.sourceTextKeys) == 0 {
 		return nil
 	}
 	var unresolved []string
@@ -272,45 +160,9 @@ func (r *Registry) unresolvedPrivateToolHandles(toolName, raw string) []string {
 		if _, ok := policy.sourceTextKeys[key]; ok {
 			unresolved = append(unresolved, r.sources.UnresolvedQuotedTextHandles(value)...)
 		}
-		if _, ok := policy.decodedIssueIDKeys[key]; ok && issueHandleShapeRE.MatchString(value) {
-			if _, ok := r.issues.Resolve(value); !ok {
-				unresolved = append(unresolved, value)
-			}
-		}
 		return value
 	})
 	return unresolved
-}
-
-// encodeToolPrivateResult registers and compacts identifiers that are local to
-// one built-in tool family. Wiki issue IDs are the only such identity today;
-// MCP tools remain opaque unless they add an explicit policy here.
-func (r *Registry) encodeToolPrivateResult(toolName, output string) string {
-	if r == nil || output == "" {
-		return output
-	}
-	policy, ok := toolHandlePolicies[toolName]
-	if !ok {
-		return output
-	}
-	if len(policy.encodedIssueIDKeys) > 0 {
-		output = rewriteJSONStringValues(output, func(key, value string) string {
-			if _, ok := policy.encodedIssueIDKeys[key]; ok && strings.TrimSpace(value) != "" {
-				if issueHandleShapeRE.MatchString(strings.TrimSpace(value)) {
-					// Model-facing tool messages can be replayed across several
-					// rounds. Never treat an existing temporary handle as a new
-					// durable issue identity and allocate i2/i3 drift.
-					return value
-				}
-				return r.issues.Register(value)
-			}
-			return value
-		})
-	}
-	if policy.encodeKnownIssueIDs {
-		output = r.issues.EncodeKnownText(output)
-	}
-	return output
 }
 
 func rewriteJSONStringValues(raw string, rewrite func(key, value string) string) string {

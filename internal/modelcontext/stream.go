@@ -76,69 +76,6 @@ func (d *resourceStreamDecoder) Flush() string {
 	return d.hold.Flush()
 }
 
-// HandleStreamDecoder restores HandleTable values without leaking a handle
-// split across provider chunks.
-type HandleStreamDecoder struct {
-	table *HandleTable
-	hold  streamHold
-}
-
-func NewHandleStreamDecoder(table *HandleTable) *HandleStreamDecoder {
-	return &HandleStreamDecoder{table: table, hold: streamHold{
-		holdLen: func(combined string) int {
-			start := len(combined)
-			for start > 0 && isHandleTokenByte(combined[start-1]) {
-				start--
-			}
-			tail := combined[start:]
-			// The prefix is immutable after construction, so no lock is needed.
-			if couldBeNumericHandle(tail, table.table.prefix) {
-				return len(tail)
-			}
-			return 0
-		},
-		emit:  table.DecodeKnownText,
-		flush: table.DecodeKnownText,
-	}}
-}
-
-func (d *HandleStreamDecoder) Feed(chunk string) string {
-	if d == nil || d.table == nil {
-		return chunk
-	}
-	return d.hold.Feed(chunk)
-}
-
-func (d *HandleStreamDecoder) Flush() string {
-	if d == nil || d.table == nil {
-		return ""
-	}
-	return d.hold.Flush()
-}
-
-func isHandleTokenByte(value byte) bool {
-	return value >= 'a' && value <= 'z' || value >= 'A' && value <= 'Z' ||
-		value >= '0' && value <= '9' || value == '-' || value == '_'
-}
-
-func couldBeNumericHandle(value, prefix string) bool {
-	if value == "" || prefix == "" {
-		return false
-	}
-	if strings.HasPrefix(prefix, value) {
-		return true
-	}
-	if !strings.HasPrefix(value, prefix) || len(value) == len(prefix) {
-		return false
-	}
-	for _, char := range value[len(prefix):] {
-		if char < '0' || char > '9' {
-			return false
-		}
-	}
-	return true
-}
-
 // orphanResourceStreamFilter removes unresolved resource handles only after
 // the registered resource decoder has had a chance to restore known ones. It
 // buffers a possible handle suffix so provider chunk boundaries cannot leak a
@@ -223,12 +160,11 @@ func allDigits(value string) bool {
 }
 
 // StreamDecoder composes resource restoration, source-citation expansion,
-// issue-handle decoding and orphan filtering so callers cannot split handle
+// and orphan filtering so callers cannot split handle
 // processing or apply stages in the wrong order.
 type StreamDecoder struct {
 	resources *resourceStreamDecoder
 	sources   *citationStreamExpander
-	issues    *HandleStreamDecoder
 	orphans   *orphanResourceStreamFilter
 }
 
@@ -241,9 +177,6 @@ func (d *StreamDecoder) Feed(chunk string) string {
 	}
 	if d.sources != nil {
 		chunk = d.sources.Feed(chunk)
-	}
-	if d.issues != nil {
-		chunk = d.issues.Feed(chunk)
 	}
 	if d.orphans != nil {
 		chunk = d.orphans.Feed(chunk)
@@ -264,9 +197,6 @@ func (d *StreamDecoder) Flush() string {
 	}
 	if d.sources != nil {
 		tail = d.sources.Feed(tail) + d.sources.Flush()
-	}
-	if d.issues != nil {
-		tail = d.issues.Feed(tail) + d.issues.Flush()
 	}
 	if d.orphans != nil {
 		tail = d.orphans.Feed(tail) + d.orphans.Flush()

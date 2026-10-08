@@ -38,13 +38,8 @@ test('智能体中允许继承或关闭的可选模型可以恢复为空', () =>
   assertClearable(modelSelectorTag(agentEditor, 'formData.config.question_suggestions.follow_ups.model_id'))
 })
 
-test('知识库仅在模型确实可选时允许恢复为空', () => {
-  const embedding = modelSelectorTag(kbModelConfig, 'config.embeddingModelId')
-  assert.match(embedding, /:clearable="ragEnabled === false && wikiEnabled"/)
-  assertClearable(modelSelectorTag(kbModelConfig, 'config.wikiSynthesisModelId'))
-})
-
 test('必填模型继续保持不可清空', () => {
+  assert.match(modelSelectorTag(kbModelConfig, 'config.embeddingModelId'), /:clearable="false"/)
   assertNotClearable(modelSelectorTag(agentEditor, 'formData.config.model_id'))
   assertNotClearable(modelSelectorTag(agentEditor, 'formData.config.vlm_model_id'))
   assertNotClearable(modelSelectorTag(kbModelConfig, 'config.llmModelId'))

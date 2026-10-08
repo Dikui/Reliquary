@@ -4,9 +4,8 @@ import { createSSRApp } from 'vue'
 import { renderToString } from '@vue/server-renderer'
 import { marked } from 'marked'
 import { compiledSFCStyleRules, LONG_SOURCE_URL, styleDeclarationsAtWidth } from '../../../utils/sfcStyleTestHelpers'
-import { extractCitationHtmlPlaceholders } from '../../../utils/citationMarkdown'
 import { configureMarkedForChatMarkdown } from '../../../utils/chatMarkdownRenderer'
-import { registerDocumentMarkdownForReportTest, reportCitationClick, reportMarkdownTestComponent, wikiMarkdownForReportTest } from './reportMarkdownTestHarness'
+import { registerDocumentMarkdownForReportTest, reportCitationClick, reportMarkdownTestComponent } from './reportMarkdownTestHarness'
 
 const citations = [{ id: 'C1', kind: 'evidence', evidence_id: 'evidence-1', quote: 'Acme 发布了 新模型。' }]
 
@@ -44,14 +43,9 @@ test('compiled report CSS bounds content and wraps prose links at desktop and na
   }
 })
 
-test('reports preserve nested Markdown link labels after document and Wiki rendering', async () => {
+test('reports preserve nested Markdown link labels after document rendering', async () => {
   registerDocumentMarkdownForReportTest()
   configureMarkedForChatMarkdown()
-  const renderWiki = wikiMarkdownForReportTest()
-  assert.match(renderWiki('[[entity/acme]] [[entity/other|其他页]]'), /data-slug="entity\/acme">Acme<\/a>/)
-  assert.match(renderWiki('[[entity/other|其他页]]'), /data-slug="entity\/other">其他页<\/a>/)
-  // Chat citation preprocessing continues to convert Wiki links by default.
-  assert.match(extractCitationHtmlPlaceholders('[[entity/acme]]').htmlSnippets[0]!, /wiki-content-link/)
 
   const opened: unknown[][] = []
   const component = reportMarkdownTestComponent()
@@ -67,23 +61,22 @@ test('reports preserve nested Markdown link labels after document and Wiki rende
   assert.match(html, /<pre><code[^>]*>\[\[plain\]\]\(https:\/\/example.com\/fence\)\n<\/code><\/pre>/)
   assert.match(html, /class="katex"/)
   assert.equal((html.match(/data-report-citation=/g) || []).length, 1)
-  assert.doesNotMatch(html, /wiki-content-link|citation-wiki|href="#"/)
+  assert.doesNotMatch(html, /href="#"/)
   component.testState.openCitation(reportCitationClick('C1'))
   assert.deepEqual(opened, [['evidence-1', citations[0].quote]])
-  assert.match(renderWiki('[[entity/acme]]'), /data-slug="entity\/acme">Acme<\/a>/)
 })
 
 test('report parsing stays isolated when another view registers a global extension', async () => {
   const previous = { ...marked.defaults }
   try {
-    marked.use({ hooks: { preprocess: markdown => markdown.replace('[[C1]]', 'GLOBAL_WIKI_EXTENSION') } })
-    assert.match(marked.parse('[[C1]](https://example.com/a)', { async: false }), /GLOBAL_WIKI_EXTENSION/)
+    marked.use({ hooks: { preprocess: markdown => markdown.replace('[[C1]]', 'GLOBAL_EXTENSION') } })
+    assert.match(marked.parse('[[C1]](https://example.com/a)', { async: false }), /GLOBAL_EXTENSION/)
     const html = await renderToString(createSSRApp(reportMarkdownTestComponent(), {
       markdown: '[[C1]](https://example.com/a) [C1]', citations,
     }))
     assert.match(html, /<a href="https:\/\/example.com\/a">\[C1\]<\/a>/)
     assert.equal((html.match(/data-report-citation=/g) || []).length, 1)
-    assert.doesNotMatch(html, /GLOBAL_WIKI_EXTENSION/)
+    assert.doesNotMatch(html, /GLOBAL_EXTENSION/)
   } finally {
     marked.setOptions(previous)
   }

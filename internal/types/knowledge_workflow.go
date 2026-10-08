@@ -3,29 +3,21 @@ package types
 import "time"
 
 const (
-	WorkflowStepSearch      = "search"
-	WorkflowStepFactQuery   = "fact_query"
-	WorkflowStepReport      = "report"
-	WorkflowStepWikiUpdate  = "wiki_update"
-	WorkflowStepSkill       = "skill"
-	WorkflowStepCondition   = "condition"
-	WorkflowStepHumanReview = "human_review"
+	WorkflowStepSearch    = "search"
+	WorkflowStepFactQuery = "fact_query"
+	WorkflowStepReport    = "report"
 
 	WorkflowStatusQueued    = "queued"
 	WorkflowStatusRunning   = "running"
 	WorkflowStatusPaused    = "paused"
 	WorkflowStatusCompleted = "completed"
 	WorkflowStatusFailed    = "failed"
-	WorkflowStatusRejected  = "rejected"
 	WorkflowStatusCancelled = "cancelled"
 
-	WorkflowStepPending       = "pending"
-	WorkflowStepRunning       = "running"
-	WorkflowStepWaitingReview = "waiting_review"
-	WorkflowStepSucceeded     = "succeeded"
-	WorkflowStepFailed        = "failed"
-	WorkflowStepSkipped       = "skipped"
-	WorkflowStepRejected      = "rejected"
+	WorkflowStepPending   = "pending"
+	WorkflowStepRunning   = "running"
+	WorkflowStepSucceeded = "succeeded"
+	WorkflowStepFailed    = "failed"
 )
 
 // KnowledgeWorkflowSchedule is evaluated in the configured IANA time zone.
@@ -42,14 +34,7 @@ type KnowledgeWorkflowStep struct {
 	ID        string         `json:"id"`
 	Type      string         `json:"type"`
 	DependsOn []string       `json:"depends_on,omitempty"`
-	When      *WorkflowWhen  `json:"when,omitempty"`
 	Config    map[string]any `json:"config"`
-}
-
-// WorkflowWhen gates a step on the boolean result of a condition step.
-type WorkflowWhen struct {
-	StepID string `json:"step_id"`
-	Equals bool   `json:"equals"`
 }
 
 // KnowledgeWorkflowInput is used for create/update. Schedule and steps are
@@ -155,8 +140,4 @@ func (KnowledgeWorkflowReport) TableName() string { return "knowledge_workflow_r
 type KnowledgeWorkflowTaskPayload struct {
 	RunID     string        `json:"run_id"`
 	Initiator TaskInitiator `json:"initiator"`
-}
-
-type KnowledgeWorkflowDecision struct {
-	Decision string `json:"decision"` // approve or reject
 }

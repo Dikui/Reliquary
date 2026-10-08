@@ -242,7 +242,7 @@ import { useI18n } from 'vue-i18n';
 import { getKnowledgeBaseById } from '@/api/knowledge-base';
 import { getKnowledgeDetails } from '@/api/knowledge-base';
 import { useSettingsStore } from '@/stores/settings';
-import { SKILL_ICON, type MentionItem, type MentionItemType } from '@/types/mention';
+import { type MentionItem, type MentionItemType } from '@/types/mention';
 
 type DetailState = { loading: boolean; error?: string; data?: any };
 
@@ -285,7 +285,6 @@ const mentionGroupDefs = computed<Array<{ type: MentionItemType; label: string; 
   { type: 'kb', label: t('common.knowledgeBase'), icon: 'folder' },
   { type: 'tag', label: '标签', icon: 'tag' },
   { type: 'mcp', label: 'MCP', icon: 'tools' },
-  { type: 'skill', label: t('common.skill'), icon: SKILL_ICON },
   { type: 'file', label: t('common.file'), icon: 'file' },
 ]);
 
@@ -676,8 +675,6 @@ const scrollToItem = (index: number) => {
 /* 右下角组织角标：柔和小圆 + 绿色/灰色 icon，不刺眼 */
 
 
-
-
 /* 知识库 / 文件 - 无背景，与整体一致 */
 .kb-icon,
 .file-icon {
@@ -688,7 +685,6 @@ const scrollToItem = (index: number) => {
 .mention-item.active .icon {
   color: var(--td-brand-color);
 }
-
 
 
 .item-main {
@@ -719,7 +715,6 @@ const scrollToItem = (index: number) => {
   font-variant-numeric: tabular-nums;
   color: var(--td-text-color-placeholder, #999);
 }
-
 
 
 .kb-name {

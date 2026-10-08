@@ -35,7 +35,6 @@ type RouterParams struct {
 	SessionService               interfaces.SessionService
 	MessageService               interfaces.MessageService
 	ModelService                 interfaces.ModelService
-	EvaluationService            interfaces.EvaluationService
 	KBHandler                    *handler.KnowledgeBaseHandler
 	KnowledgeHandler             *handler.KnowledgeHandler
 	KnowledgeAnomalyHandler      *handler.KnowledgeAnomalyHandler
@@ -53,10 +52,6 @@ type RouterParams struct {
 	MessageSuggestionHandler     *handler.MessageSuggestionHandler
 	ModelHandler                 *handler.ModelHandler
 	ModelCredentialsHandler      *handler.ModelCredentialsHandler
-	SandboxConfigHandler         *handler.SandboxConfigHandler
-	SandboxSkillHandler          *handler.SandboxSkillHandler
-	MeEnvVarHandler              *handler.MeEnvVarHandler
-	EvaluationHandler            *handler.EvaluationHandler
 	AuthHandler                  *handler.AuthHandler
 	InitializationHandler        *handler.InitializationHandler
 	SystemHandler                *handler.SystemHandler
@@ -67,12 +62,9 @@ type RouterParams struct {
 	TagHandler                   *handler.TagHandler
 	CustomAgentHandler           *handler.CustomAgentHandler
 	UserFavoriteHandler          *handler.UserResourceFavoriteHandler
-	SkillHandler                 *handler.SkillHandler
 	RedisClient                  *redis.Client
 	DataSourceHandler            *handler.DataSourceHandler
 	DataSourceCredentialsHandler *handler.DataSourceCredentialsHandler
-	WikiPageHandler              *handler.WikiPageHandler
-	MemoryHandler                *handler.MemoryHandler
 }
 
 // NewRouter 创建新的路由
@@ -178,9 +170,6 @@ func NewRouter(params RouterParams) *gin.Engine {
 		RegisterChatRoutes(v1, params.SessionHandler, accessGuards)
 		RegisterMessageRoutes(v1, params.MessageHandler, accessGuards)
 		RegisterModelRoutes(v1, params.ModelHandler, params.ModelCredentialsHandler, accessGuards)
-		RegisterSandboxConfigRoutes(v1, params.SandboxConfigHandler, params.SandboxSkillHandler, accessGuards)
-		RegisterMyEnvVarRoutes(v1, params.MeEnvVarHandler)
-		RegisterEvaluationRoutes(v1, params.EvaluationHandler, accessGuards)
 		RegisterInitializationRoutes(v1, params.InitializationHandler, accessGuards)
 		params.SystemHandler.BindDeploymentCapabilities(deploymentCapabilitiesFromRouter(params))
 		RegisterSystemRoutes(v1, params.SystemHandler, accessGuards)
@@ -188,10 +177,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 		RegisterMCPServiceRoutes(v1, params.MCPServiceHandler, params.MCPCredentialsHandler, params.MCPOAuthHandler, accessGuards)
 		RegisterCustomAgentRoutes(v1, params.CustomAgentHandler, accessGuards)
 		RegisterUserFavoriteRoutes(v1, params.UserFavoriteHandler, accessGuards)
-		RegisterSkillRoutes(v1, params.SkillHandler, accessGuards)
 		RegisterDataSourceRoutes(v1, params.DataSourceHandler, params.DataSourceCredentialsHandler, accessGuards)
-		RegisterWikiPageRoutes(v1, params.WikiPageHandler, accessGuards)
-		RegisterMemoryRoutes(v1, params.MemoryHandler, accessGuards)
 		RegisterChunkerDebugRoutes(v1, accessGuards)
 
 		// Fail fast if any declared API-key policy points at a route

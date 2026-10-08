@@ -50,10 +50,8 @@ func (s *sessionService) resolveKnowledgeBases(
 // resolveChatModelID resolves the effective chat model ID for a QA request.
 //
 // When a user-configured agent is selected, its model configuration must be
-// complete and valid. The internal wiki fixer is the one exception: it is not
-// exposed in the agent UI, so an empty model_id falls back to KB/system model
-// selection. A request-level override may choose another valid model for this
-// request, but it must not make an unconfigured or stale agent appear usable.
+// complete and valid. A request-level override may choose another valid model,
+// while the stored agent configuration must remain valid.
 //
 // Without an agent, the legacy KB / session / system fallback remains
 // available for non-agent callers.
@@ -70,7 +68,7 @@ func (s *sessionService) resolveChatModelID(
 
 	if customAgent != nil {
 		configuredAgentModelID = strings.TrimSpace(customAgent.Config.ModelID)
-		if configuredAgentModelID == "" && customAgent.ID != types.BuiltinWikiFixerID {
+		if configuredAgentModelID == "" {
 			return "", fmt.Errorf("chat model is not configured: please set model_id on agent %s", customAgent.ID)
 		}
 		if configuredAgentModelID != "" {
@@ -78,13 +76,8 @@ func (s *sessionService) resolveChatModelID(
 			if err != nil || model == nil || model.Type != types.ModelTypeKnowledgeQA {
 				return "", fmt.Errorf("configured chat model %s is unavailable for agent %s", configuredAgentModelID, customAgent.ID)
 			}
-		} else {
-			// The wiki fixer is an internal agent and is intentionally omitted
-			// from the agent-management list. It therefore cannot receive a
-			// user-configured model_id; resolve it from the current Wiki KB or
-			// the normal system KnowledgeQA fallback below instead.
-			logger.Infof(ctx, "No model_id configured for internal wiki fixer %s, using KB/system fallback", customAgent.ID)
 		}
+
 	}
 
 	summaryModelID = strings.TrimSpace(summaryModelID)
@@ -191,7 +184,6 @@ func (s *sessionService) applyAgentOverridesToChatManage(
 	if customAgent.Config.FallbackPrompt != "" {
 		cm.FallbackPrompt = customAgent.Config.FallbackPrompt
 	}
-
 
 	// Override history turns
 	if customAgent.Config.HistoryTurns > 0 {

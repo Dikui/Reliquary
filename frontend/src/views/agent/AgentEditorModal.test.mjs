@@ -103,56 +103,8 @@ test('history turns can be raised beyond the old 20 cap', () => {
 
 test('retrieval retention is offered to agents that actually have a knowledge base', () => {
   // retain_retrieval_history is read only by the agent path
-  // (internal/agent/observe.go) and only rewrites KB/Wiki tool results, so it
+  // (internal/agent/observe.go) and only rewrites KB tool results, so it
   // is meaningless without a knowledge base.
   const guard = settingRowGuard('agent.editor.retainRetrievalHistory')
   assert.match(guard, /isAgentMode && hasKnowledgeBase/)
-})
-
-test('skills and sandbox share one editor section', () => {
-  const navItems = source.match(/const navItems = computed\(\(\) => \{([\s\S]*?)^\}\);/m)?.[1]
-  assert.ok(navItems, 'expected to find the nav items computed')
-  assert.match(navItems, /key: 'skills'/)
-  assert.match(navItems, /icon: SKILL_ICON/)
-  assert.doesNotMatch(navItems, /key: 'sandbox'/)
-
-  const capabilityGroup = source.match(/pickItems\(\['multimodal', 'tools', 'mcp', 'skills'\]\)/)
-  assert.ok(capabilityGroup, 'expected the capability group to list skills without a separate sandbox tab')
-
-  assert.match(source, /v-show="currentSection === 'skills' && isAgentMode"/)
-  assert.doesNotMatch(source, /currentSection === 'sandbox' && isAgentMode/)
-  assert.match(source, /sandbox: 'skills'/)
-  assert.match(source, /formData\.config\.sandbox_config_id/)
-  assert.match(source, /:disabled="!canEnableSkills"/)
-  assert.match(source, /sandbox-option/)
-  assert.doesNotMatch(source, /skill-info-box/)
-})
-
-test('agent skill picker uses the catalog and only enables ready installs', () => {
-  assert.match(source, /function autoBindSoleSandbox\(/)
-  assert.match(source, /canEnableSkills/)
-  assert.match(source, /catalogSkillRows/)
-  assert.match(source, /showCatalogSkillList/)
-  assert.match(source, /skillsSelectionMode\.value !== 'none'/)
-  assert.match(source, /:disabled="!skill\.selectable"/)
-  assert.match(source, /catalogSkillGroups/)
-  assert.match(source, /installPartial/)
-  assert.match(source, /installCatalogToCurrent/)
-  assert.match(source, /agent\.editor\.installToThisSandbox/)
-  assert.match(source, /skill-pick-list/)
-  assert.match(source, /skill-pick-group/)
-  assert.match(source, /skill-pick__badge/)
-  assert.match(source, /skillStatusIcon/)
-  assert.match(source, /isSkillBusy/)
-  assert.match(source, /viewInstallProgress/)
-  assert.match(source, /openSkillInstallProgress/)
-  assert.doesNotMatch(source, /await openSkillInstallProgress\(skill\)/)
-  assert.match(source, /SandboxSkillsPanel/)
-  assert.match(source, /focus-skill-id/)
-  assert.match(source, /skillsGroupUnavailable/)
-  assert.match(source, /selectedSandboxSummary/)
-  assert.match(source, /line-clamp: 2/)
-  assert.doesNotMatch(source, /skillsSelectionMode === 'selected' && catalogSkillRows/)
-  assert.doesNotMatch(source, /skill-list-summary/)
-  assert.doesNotMatch(source, /skill-ready-stat/)
 })

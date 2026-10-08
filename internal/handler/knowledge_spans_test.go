@@ -141,12 +141,12 @@ func TestKnowledgeSpansLastError_PrefersSpanFailure(t *testing.T) {
 
 func TestKnowledgeSpansLastError_RecoveryFallbackUsesKnowledgeMessage(t *testing.T) {
 	now := time.Now()
-	got := knowledgeSpansLastError(2, 2, types.ParseStatusFailed, "wiki ingest timed out", now, nil)
+	got := knowledgeSpansLastError(2, 2, types.ParseStatusFailed, "summary generation timed out", now, nil)
 	a := assert.New(t)
 	a.NotNil(got)
 	a.Equal("knowledge_processing", got["name"])
 	a.Equal("UNKNOWN", got["error_code"])
-	a.Equal("wiki ingest timed out", got["error_message"])
+	a.Equal("summary generation timed out", got["error_message"])
 	a.Equal(now, got["finished_at"])
 }
 
@@ -162,7 +162,7 @@ func TestKnowledgeSpansLastError_ClassifiesServerRestart(t *testing.T) {
 
 func TestKnowledgeSpansLastError_SkipsRecoveryFallbackForHistoricalAttempt(t *testing.T) {
 	now := time.Now()
-	got := knowledgeSpansLastError(1, 2, types.ParseStatusFailed, "wiki ingest timed out", now, nil)
+	got := knowledgeSpansLastError(1, 2, types.ParseStatusFailed, "summary generation timed out", now, nil)
 	assert.Nil(t, got)
 }
 

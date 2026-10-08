@@ -30,12 +30,12 @@ test('resolves the latest setting so a reused row does not keep the pre-save val
   assert.equal(isSettingValueDirty(editValue, resolved?.value), true)
 })
 
-test('high-risk cancel restores the latest saved value, not the first-loaded object', () => {
-  const stale = { key: 'sandbox.docker_enabled', value: false }
-  const current = { key: 'sandbox.docker_enabled', value: true }
+test('list edit cancel restores the latest saved value, not the first-loaded object', () => {
+  const stale = { key: 'ssrf.whitelist', value: [] }
+  const current = { key: 'ssrf.whitelist', value: ['docs.example.com'] }
   const settingsByKey = new Map([[current.key, current]])
 
   const resolved = resolveCurrentSetting(settingsByKey, stale.key)
-  assert.equal(resolved?.value, true)
+  assert.deepEqual(resolved?.value, ['docs.example.com'])
   assert.notEqual(stale.value, resolved?.value)
 })

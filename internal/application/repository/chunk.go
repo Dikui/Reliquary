@@ -5,10 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 
 	"reliquary/internal/common"
 	"reliquary/internal/types"
@@ -286,50 +284,7 @@ func (r *chunkRepository) ListChunksByParentIDs(
 // except SeqID (auto-increment, must not be overwritten).
 // Make sure the chunk object is complete (e.g., fetched from DB) before calling this method.
 func (r *chunkRepository) UpdateChunk(ctx context.Context, chunk *types.Chunk) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		changed, err := changedWikiSourceChunks(tx, []*types.Chunk{chunk})
-		if err != nil {
-			return err
-		}
-		if err := tx.Omit("SeqID").Save(chunk).Error; err != nil {
-			return err
-		}
-		return markChangedWikiSourceChunks(ctx, tx, changed, time.Now())
-	})
-}
-
-// Lock existing rows before comparing the fields consumed by Wiki generation.
-// New chunks and changes to indexing or other metadata do not mark pages.
-func changedWikiSourceChunks(tx *gorm.DB, chunks []*types.Chunk) (map[uint64][]string, error) {
-	ids := make([]string, 0, len(chunks))
-	targets := make(map[string]*types.Chunk, len(chunks))
-	for _, chunk := range chunks {
-		ids = append(ids, chunk.ID)
-		targets[chunk.ID] = chunk
-	}
-	var existing []*types.Chunk
-	if err := tx.Select("id", "tenant_id", "content", "is_enabled").
-		Where("id IN ?", ids).Order("id").Clauses(clause.Locking{Strength: "UPDATE"}).
-		Find(&existing).Error; err != nil {
-		return nil, err
-	}
-	changed := make(map[uint64][]string)
-	for _, old := range existing {
-		target := targets[old.ID]
-		if old.Content != common.CleanInvalidUTF8(target.Content) || old.IsEnabled != target.IsEnabled {
-			changed[old.TenantID] = append(changed[old.TenantID], old.ID)
-		}
-	}
-	return changed, nil
-}
-
-func markChangedWikiSourceChunks(ctx context.Context, tx *gorm.DB, changed map[uint64][]string, at time.Time) error {
-	for tenantID, ids := range changed {
-		if err := NewWikiPageRepository(tx).MarkSourceChanged(ctx, tenantID, ids, at); err != nil {
-			return err
-		}
-	}
-	return nil
+	return r.db.WithContext(ctx).Omit("SeqID").Save(chunk).Error
 }
 
 func (r *chunkRepository) CreateChunkRevision(ctx context.Context, revision *types.ChunkRevision) error {
@@ -361,9 +316,6 @@ func (r *chunkRepository) SaveChunkRevision(
 		if err := tx.Create(revision).Error; err != nil {
 			return err
 		}
-		if common.CleanInvalidUTF8(chunk.Content) != revision.Content || chunk.IsEnabled != revision.IsEnabled {
-			return NewWikiPageRepository(tx).MarkSourceChanged(ctx, chunk.TenantID, []string{chunk.ID}, chunk.UpdatedAt)
-		}
 		return nil
 	})
 }
@@ -394,16 +346,12 @@ func (r *chunkRepository) SaveChunks(ctx context.Context, chunks []*types.Chunk)
 		return nil
 	}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		changed, err := changedWikiSourceChunks(tx, chunks)
-		if err != nil {
-			return err
-		}
 		for _, chunk := range chunks {
 			if err := tx.Omit("SeqID").Save(chunk).Error; err != nil {
 				return err
 			}
 		}
-		return markChangedWikiSourceChunks(ctx, tx, changed, time.Now())
+		return nil
 	})
 }
 
@@ -504,14 +452,10 @@ func (r *chunkRepository) UpdateChunks(ctx context.Context, chunks []*types.Chun
 		strings.Join(inPlaceholders, ","),
 	)
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		changed, err := changedWikiSourceChunks(tx, chunks)
-		if err != nil {
-			return err
-		}
 		if err := tx.Exec(sql, args...).Error; err != nil {
 			return err
 		}
-		return markChangedWikiSourceChunks(ctx, tx, changed, time.Now())
+		return nil
 	})
 }
 

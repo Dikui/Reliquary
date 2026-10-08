@@ -116,7 +116,7 @@ const checkKnowledgeBaseInitialization = async (): Promise<boolean> => {
 }
 
 // isFileDrag distinguishes an OS file drag (the only thing the global upload
-// drop zone cares about) from an in-app element drag such as the wiki
+// drop zone cares about) from an in-app element drag such as the document
 // folder/page drag-and-drop. Element drags carry only "text/*" types, never
 // "Files", so we bail out and let the originating component handle the drop.
 const isFileDrag = (event: DragEvent): boolean => {

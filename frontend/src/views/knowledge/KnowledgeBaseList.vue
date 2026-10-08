@@ -110,7 +110,7 @@
               <!-- 卡片头部 -->
               <div class="card-header">
                 <span class="card-title" :title="kb.name">
-                  <KbWikiBadge v-if="isWikiKb(kb)" />
+
                   <span class="card-title-text">{{ kb.name }}</span>
                 </span>
                 <!-- The card menu always exists when the card is visible: pin
@@ -187,7 +187,6 @@
         </div>
 
 
-
         <!-- 全部空状态：保留「新建知识库」CTA，因为是空间没有任何 KB 的真空场景 -->
         <div v-if="spaceSelection === 'all' && filteredKnowledgeBases.length === 0 && !loading" class="empty-state">
           <img class="empty-img" src="@/assets/img/upload.svg" alt="">
@@ -249,7 +248,6 @@
       @update:visible="(val) => val ? null : uiStore.closeKBEditor()" @success="handleKBEditorSuccess" />
 
 
-
     <Teleport to="body">
 
     </Teleport>
@@ -268,7 +266,6 @@ import { formatStringDate } from '@/utils/index'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
 import KnowledgeBaseEditorModal from './KnowledgeBaseEditorModal.vue'
-import KbWikiBadge from './components/KbWikiBadge.vue'
 import ListSpaceSidebar from '@/components/ListSpaceSidebar.vue'
 import ResourceOriginBadge from '@/components/ResourceOriginBadge.vue'
 import ContextualGuide from '@/components/ContextualGuide.vue'
@@ -383,7 +380,6 @@ const applyKbListData = (data: any[]) => {
   }))
 }
 const fetchList = (force = false) => chatResources.fetchKnowledgeBasesForList(force).then(applyKbListData)
-
 
 
 onMounted(() => {
@@ -575,8 +571,6 @@ const isInitialized = (kb: KB) => {
   return true
 }
 
-const isWikiKb = (kb: unknown) =>
-  !!(kb as { indexing_strategy?: { wiki_enabled?: boolean } } | null | undefined)?.indexing_strategy?.wiki_enabled
 
 // 计算是否有未初始化的知识库
 const hasUninitializedKbs = computed(() => {
@@ -883,7 +877,6 @@ const handleUploadFinishedEvent = (event: Event) => {
 }
 
 
-
 .header-subtitle {
   margin: 0;
   color: var(--td-text-color-placeholder);
@@ -961,13 +954,6 @@ const handleUploadFinishedEvent = (event: Event) => {
     }
   }
 }
-
-
-
-
-
-
-
 
 
 .warning-banner {
@@ -1076,7 +1062,6 @@ const handleUploadFinishedEvent = (event: Event) => {
   grid-template-columns: 1fr;
   animation: contentFadeIn 0.32s ease-out;
 }
-
 
 
 .kb-card {
@@ -1418,7 +1403,6 @@ const handleUploadFinishedEvent = (event: Event) => {
   }
 
 
-
   &.kg {
     background: rgba(124, 77, 255, 0.08);
     color: var(--td-brand-color);
@@ -1667,32 +1651,7 @@ const handleUploadFinishedEvent = (event: Event) => {
 /* 下拉菜单样式已统一至 @/assets/dropdown-menu.less */
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // 右侧滑入动画
-
-
 
 
 // 创建对话框样式优化

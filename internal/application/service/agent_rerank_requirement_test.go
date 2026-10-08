@@ -46,10 +46,10 @@ func TestAgentRequiresRerankModel(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "wiki tools do not use reranker",
+			name: "knowledge graph query does not use reranker",
 			agent: &types.CustomAgent{Config: types.CustomAgentConfig{
 				KBSelectionMode: "all",
-				AllowedTools:    []string{"wiki_search", "wiki_read_page"},
+				AllowedTools:    []string{tools.ToolQueryKnowledgeGraph},
 			}},
 			want: false,
 		},

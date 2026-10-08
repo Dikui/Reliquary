@@ -12,7 +12,7 @@ import enUS from '../i18n/locales/en-US';
 import * as duplicate from '../utils/knowledgeDuplicate';
 import * as folderTree from '../views/knowledge/folderTree';
 import * as tagLabel from '../views/knowledge/tagLabel';
-import * as wikiStatus from '../views/knowledge/wikiStatusRefresh';
+import * as knowledgeStatus from '../views/knowledge/knowledgeStatusPolling';
 
 const require = createRequire(import.meta.url);
 const installedAlert = require('tdesign-vue-next').Alert;
@@ -89,11 +89,11 @@ function createEnvironment(locale = 'zh-CN') {
     '../utils/index': { formatStringDate: (value: Date) => value.toISOString(), kbFileTypeVerification: () => false },
     './folderTree': folderTree,
     './tagLabel': tagLabel,
-    './wikiStatusRefresh': wikiStatus,
+    './knowledgeStatusPolling': knowledgeStatus,
     './knowledgeDownloadFileName': {},
     '@/utils/knowledgeTrace': {},
     './utils/uploadSources': { getUploadFileKey: (file: File) => `${file.name}\0${file.size}` },
-    '@/api/chat/index': {}, '@/api/user-favorites': {}, '@/api/wiki': {}, '@/api/knowledge-anomalies': {},
+    '@/api/chat/index': {}, '@/api/user-favorites': {}, '@/api/knowledge-anomalies': {},
     '@/hooks/useMarqueeSelect': { useMarqueeSelect: () => ({ marqueeVisible: vue.ref(false), marqueeMode: vue.ref('select'), boxStyle: vue.ref({}), shouldSuppressClick: () => false }) },
   };
   function evaluate(code: string) {

@@ -2,7 +2,6 @@ package router
 
 import (
 	"reliquary/internal/handler"
-	"reliquary/internal/sandbox"
 )
 
 func deploymentCapabilitiesFromRouter(params RouterParams) handler.DeploymentCapabilitiesData {
@@ -12,7 +11,5 @@ func deploymentCapabilitiesFromRouter(params RouterParams) handler.DeploymentCap
 		MCP: params.MCPServiceHandler != nil &&
 			params.MCPCredentialsHandler != nil &&
 			params.MCPOAuthHandler != nil,
-		Sandbox:       params.SandboxConfigHandler != nil,
-		SandboxDocker: sandbox.DockerBackendEnabled(),
 	})
 }

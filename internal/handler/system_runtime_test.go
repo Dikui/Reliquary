@@ -28,8 +28,6 @@ func (runtimeTestSettings) GetInt(_ context.Context, key, _ string, def int64) i
 		return 4
 	case "asynq.shared_concurrency":
 		return 6
-	case "asynq.wiki_concurrency":
-		return 8
 	default:
 		return def
 	}
@@ -73,7 +71,6 @@ func (runtimeTestInspector) WorkerServerStats(context.Context) ([]types.WorkerSe
 		{Concurrency: 12, Active: 6, Status: "active", Queues: types.QueueWeightsForPool(types.WorkerPoolEnrichment)},
 		{Concurrency: 4, Active: 1, Status: "active", Queues: types.QueueWeightsForPool(types.WorkerPoolMaintenance)},
 		{Concurrency: 6, Active: 3, Status: "active", Queues: types.QueueWeightsForSharedPool()},
-		{Concurrency: 8, Active: 2, Status: "active", Queues: types.QueueWeightsForPool(types.WorkerPoolWiki)},
 		{Concurrency: 99, Active: 0, Status: "stopped", Queues: types.QueueWeightsForPool(types.WorkerPoolCore)},
 	}, true, nil
 }
@@ -238,10 +235,9 @@ func TestGetRuntimeQueuesReportsIsolatedPoolCapacity(t *testing.T) {
 	}{
 		types.WorkerPoolCore:        {8, 2},
 		types.WorkerPoolPostProcess: {2, 1},
-		types.WorkerPoolEnrichment:  {12, 5},
+		types.WorkerPoolEnrichment:  {12, 4},
 		types.WorkerPoolMaintenance: {4, 2},
-		types.WorkerPoolShared:      {6, 7},
-		types.WorkerPoolWiki:        {8, 1},
+		types.WorkerPoolShared:      {6, 6},
 	}
 	if len(response.Pools) != len(want) {
 		t.Fatalf("pool count = %d, want %d", len(response.Pools), len(want))
@@ -277,8 +273,7 @@ func TestGetRuntimeQueuesFallsBackFromInvalidHistoricalConcurrency(t *testing.T)
 	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.UpstreamConcurrency != types.DefaultUpstreamWorkerConcurrency ||
-		response.WikiConcurrency != types.DefaultWikiWorkerConcurrency {
+	if response.UpstreamConcurrency != types.DefaultUpstreamWorkerConcurrency {
 		t.Fatalf("invalid stored values should use worker defaults: %+v", response)
 	}
 	for _, pool := range response.Pools {

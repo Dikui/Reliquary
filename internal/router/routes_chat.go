@@ -56,7 +56,7 @@ func RegisterSessionRoutes(
 			sessions.POST("/:session_id/suggestion-events", suggestionHandler.RecordEvent)
 		}
 
-		// Skill-generated file artifacts. The list endpoints only expose
+		// Persisted message file artifacts. The list endpoints only expose
 		// metadata; the actual bytes are streamed via /artifacts/:index/download
 		// so the storage URL never appears on the wire.
 		//

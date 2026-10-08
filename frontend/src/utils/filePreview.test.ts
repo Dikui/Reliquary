@@ -65,7 +65,7 @@ test('pretty-print helpers only rewrite canonical JSON documents', () => {
   assert.equal(prettyPrintJson('not json'), 'not json')
 })
 
-test('mime and highlight maps cover skill-generated html/csv', () => {
+test('mime and highlight maps cover message html/csv files', () => {
   assert.equal(getPreviewMimeType('html'), 'text/html')
   assert.equal(getPreviewMimeType('csv'), 'text/csv')
   assert.equal(getHighlightLang('html'), 'xml')

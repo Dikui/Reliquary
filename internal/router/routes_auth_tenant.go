@@ -21,20 +21,6 @@ func RegisterTenantRoutes(r *gin.RouterGroup, h *handler.TenantHandler, g *acces
 	team.DELETE("/api-keys/:key_id", h.DeleteAPIKey)
 }
 
-func RegisterMyEnvVarRoutes(r *gin.RouterGroup, h *handler.MeEnvVarHandler) {
-	if h == nil {
-		return
-	}
-	me := r.Group("/me/env-vars")
-	{
-		me.GET("", h.List)
-		me.PUT("/skill", h.SetSkill)
-		me.DELETE("/skill", h.DeleteSkill)
-		me.PUT("/sandbox", h.SetSandbox)
-		me.DELETE("/sandbox", h.DeleteSandbox)
-	}
-}
-
 // RegisterAuthRoutes registers authentication routes
 func RegisterAuthRoutes(r *gin.RouterGroup, h *handler.AuthHandler, g *accessGuards) {
 	public := r.Group("/auth", middleware.PublicAuthRateLimit())
@@ -58,7 +44,6 @@ func RegisterSystemRoutes(
 		systemRoutes.GET("/info", handler.GetSystemInfo)
 		systemRoutes.GET("/parser-engines", handler.ListParserEngines)
 		systemRoutes.POST("/parser-engines/check", handler.CheckParserEngines)
-		systemRoutes.POST("/sandbox-check", handler.CheckSandboxConfig)
 	}
 }
 

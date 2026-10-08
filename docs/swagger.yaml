@@ -1,66 +1,5 @@
 basePath: /api/v1
 definitions:
-  github_com_Tencent_Reliquary_internal_application_service.WikiLintIssue:
-    properties:
-      auto_fixable:
-        type: boolean
-      description:
-        type: string
-      page_slug:
-        type: string
-      severity:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_application_service.WikiLintIssueSeverity'
-      target_slug:
-        description: |-
-          TargetSlug identifies the other page involved in the issue (e.g. the
-          broken link target, or the entity slug for a missing cross-ref). It is
-          the structured field used by AutoFix instead of parsing Description.
-        type: string
-      type:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_application_service.WikiLintIssueType'
-    type: object
-  github_com_Tencent_Reliquary_internal_application_service.WikiLintIssueSeverity:
-    enum:
-      - info
-      - warning
-      - error
-    type: string
-    x-enum-varnames:
-      - SeverityInfo
-      - SeverityWarning
-      - SeverityError
-  github_com_Tencent_Reliquary_internal_application_service.WikiLintIssueType:
-    enum:
-      - orphan_page
-      - broken_link
-      - stale_ref
-      - missing_cross_ref
-      - empty_content
-      - duplicate_slug
-    type: string
-    x-enum-varnames:
-      - LintIssueOrphanPage
-      - LintIssueBrokenLink
-      - LintIssueStaleRef
-      - LintIssueMissingCrossRef
-      - LintIssueEmptyContent
-      - LintIssueDuplicateSlug
-  github_com_Tencent_Reliquary_internal_application_service.WikiLintReport:
-    properties:
-      health_score:
-        description: 0-100
-        type: integer
-      issues:
-        items:
-          $ref: '#/definitions/github_com_Tencent_Reliquary_internal_application_service.WikiLintIssue'
-        type: array
-      knowledge_base_id:
-        type: string
-      stats:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiStats'
-      summary:
-        type: string
-    type: object
   github_com_Tencent_Reliquary_internal_datasource.ConnectorMetadata:
     properties:
       auth_type:
@@ -413,7 +352,7 @@ definitions:
         description: |-
           AgentType is a preset category under smart-reasoning mode that pre-fills
           system prompt, allowed tools and recommended KB compatibility.
-          Valid values: "rag-qa", "wiki-qa", "hybrid-rag-wiki", "custom".
+          Valid values: "rag-qa", "data-analysis", "custom".
           Empty / unknown values are treated as "custom" (no preset applied).
           Ignored for quick-answer mode.
         type: string
@@ -538,7 +477,7 @@ definitions:
         description: |-
           Maximum completion tokens. Quick-answer uses this for the RAG answer.
           Smart-reasoning ReAct rounds send this value as-is (zero becomes
-          DefaultMaxCompletionTokens at call time: 4096, or 24576 with a sandbox).
+          DefaultMaxCompletionTokens at call time: 4096).
         type: integer
       max_iterations:
         description: |-
@@ -560,12 +499,6 @@ definitions:
         items:
           type: string
         type: array
-      memory_enabled:
-        description: |-
-          Whether this agent may read the user's long-term memory. Nil inherits
-          the workspace setting; false opts a single agent out of memory even when
-          the workspace has it on. There is no "on" that overrides the workspace.
-        type: boolean
       model_id:
         description: |-
           ===== Model Settings =====
@@ -612,26 +545,6 @@ definitions:
         type: string
       rewrite_prompt_user:
         description: Rewrite prompt user message template
-        type: string
-      sandbox_config_id:
-        description: |-
-          ===== Sandbox Settings =====
-          SandboxConfigID selects which workspace sandbox config this agent's
-          skill scripts run on. Empty means sandbox execution is disabled.
-
-          This references the LOGICAL config, never a specific revision: keeping
-          the indirection here is what would let credential rotation happen
-          without re-pointing every agent (see the spec's §4.8).
-        type: string
-      selected_skills:
-        description: Selected skill names (only used when SkillsSelectionMode is "selected")
-        items:
-          type: string
-        type: array
-      skills_selection_mode:
-        description: |-
-          ===== Skills Settings (only for smart-reasoning mode) =====
-          Skills selection mode: "all" = all preloaded skills, "selected" = specific skills, "none" = no skills
         type: string
       supported_file_types:
         description: |-
@@ -739,56 +652,6 @@ definitions:
         description: Last update timestamp
         type: string
     type: object
-  github_com_Tencent_Reliquary_internal_types.DockerSandboxConfig:
-    properties:
-      cpu_limit:
-        description: |-
-          CPULimit is the number of CPU cores one sandbox may use. 0 uses the
-          built-in default.
-        type: number
-      host:
-        description: |-
-          Host is the daemon endpoint in DOCKER_HOST form. Empty means the local
-          unix socket.
-        type: string
-      http_timeout_sec:
-        description: HTTPTimeoutSec bounds each Engine API call. 0 uses the built-in default.
-        type: integer
-      idle_ttl_seconds:
-        description: |-
-          IdleTTLSeconds is how long a session container may go unused before it
-          is reclaimed. The daemon has no idle timeout of its own, so this is what
-          stops an abandoned session from pinning host memory indefinitely.
-        type: integer
-      image:
-        type: string
-      memory_limit_mb:
-        description: MemoryLimitMB caps one sandbox's memory. 0 uses the built-in default.
-        type: integer
-      network_mode:
-        description: |-
-          NetworkMode is the Docker network sandboxes join: "bridge" (default) or
-          "none" for no egress. Nothing else is accepted — host and container:
-          modes share another namespace outright, and a named network is usually
-          the deployment's own compose network, which would put the sandbox next
-          to Postgres and Redis.
-        type: string
-      pids_limit:
-        description: |-
-          PidsLimit caps how many processes one sandbox may run. 0 uses the
-          built-in default.
-        type: integer
-      runtime:
-        description: |-
-          Runtime selects an alternative OCI runtime such as "runsc" (gVisor).
-          Empty uses the daemon default.
-        type: string
-      tls_cert_path:
-        description: |-
-          TLSCertPath is a directory on the Reliquary host containing ca.pem,
-          cert.pem and key.pem. Required when Host is a TCP endpoint.
-        type: string
-    type: object
   github_com_Tencent_Reliquary_internal_types.EmbeddingParameters:
     properties:
       dimension:
@@ -838,9 +701,6 @@ definitions:
         type: boolean
       vector_enabled:
         description: VectorEnabled enables semantic vector embedding and search
-        type: boolean
-      wiki_enabled:
-        description: WikiEnabled enables automatic wiki page generation from documents
         type: boolean
     type: object
   github_com_Tencent_Reliquary_internal_types.KBCloneTaskStatus:
@@ -908,7 +768,7 @@ definitions:
           - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.IndexingStrategy'
         description: |-
           IndexingStrategy controls which indexing pipelines are active for this knowledge base.
-          Pipelines: vector search, keyword search, wiki generation, knowledge graph extraction.
+          Pipelines: vector search, keyword search, knowledge graph extraction.
       is_pinned:
         description: |-
           IsPinned and PinnedAt are computed per-caller from user_kb_pins
@@ -960,10 +820,6 @@ definitions:
         allOf:
           - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.VLMConfig'
         description: VLM config
-      wiki_config:
-        allOf:
-          - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiConfig'
-        description: WikiConfig stores wiki-specific configuration (only for wiki type knowledge bases)
     type: object
   github_com_Tencent_Reliquary_internal_types.KnowledgeBaseConfig:
     properties:
@@ -985,10 +841,6 @@ definitions:
         description: |-
           IndexingStrategy controls which indexing pipelines are active.
           nil means "no change" when updating (preserves existing strategy).
-      wiki_config:
-        allOf:
-          - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiConfig'
-        description: Wiki configuration (only for wiki-enabled knowledge bases)
     type: object
   github_com_Tencent_Reliquary_internal_types.KnowledgeMoveProgress:
     properties:
@@ -1271,76 +1123,6 @@ definitions:
       - MatchTypeGraph
       - MatchTypeDirectLoad
       - MatchTypeDataAnalysis
-  github_com_Tencent_Reliquary_internal_types.MemoryConfig:
-    properties:
-      embedding_model_id:
-        description: |-
-          EmbeddingModelID is the single model used to score memory against a
-          question. It is pinned per workspace: knowledge bases each have their
-          own embedding model, and grabbing whichever one happens to be listed
-          first would mix incomparable vector spaces. Blank means semantic recall
-          is off and matching stays lexical.
-        type: string
-      enabled:
-        description: |-
-          Enabled defaults to false. Memory retains user statements across
-          sessions, so a workspace admin has to turn it on deliberately.
-        type: boolean
-      extract_delay_seconds:
-        description: |-
-          ExtractDelaySeconds is how long a finished turn waits before
-          distillation runs. Waiting lets one model call cover the several
-          messages a user usually sends in a row. 0 means the default.
-        type: integer
-      extract_instructions:
-        description: |-
-          ExtractInstructions are workspace-specific rules appended to the
-          distillation prompt, for policies the product cannot guess ("never record
-          customer names", "always note the environment a question is about").
-        type: string
-      extract_min_interval_seconds:
-        description: |-
-          ExtractMinIntervalSeconds is the floor between two distillation runs for
-          the same person, and exists purely to bound cost. It never drops a turn:
-          a turn arriving inside the interval is queued and picked up by the next
-          run. 0 means the default.
-        type: integer
-      extract_model_id:
-        description: |-
-          ExtractModelID is the model used by the background extraction task.
-          Empty means "use the model the conversation itself used", which is what
-          the settings UI promises, so the extraction task must never fail merely
-          because this is blank.
-        type: string
-      interest_threshold:
-        description: |-
-          InterestThreshold is how many separate conversations must touch a topic
-          before it becomes a stored interest. 0 means the default. Setting it to 1
-          records every topic on first sight, which is usually too noisy.
-        type: integer
-      max_items:
-        description: MaxItems caps active items per subject. 0 means DefaultMemoryMaxItems.
-        type: integer
-      retrieval_conditioning:
-        description: |-
-          RetrievalConditioning lets memory shape retrieval — query rewriting and
-          per-document ranking — rather than only being appended to the answer
-          prompt. This is where memory earns its keep in a knowledge-base product.
-        type: boolean
-      vector_recall:
-        description: |-
-          VectorRecall adds semantic similarity to memory recall. Nil means on
-          when an embedding model is reachable.
-
-          Lexical matching alone cannot find a memory the user has re-worded, which
-          is most of them: "回答直接给结论" and "别铺垫那么多" share no tokens. The
-          cost is one embedding call per turn, bounded and degraded to lexical on
-          failure, so the feature never becomes a reason a chat is slow.
-        type: boolean
-      write_mode:
-        description: WriteMode is MemoryWriteExplicitOnly or MemoryWriteAuto.
-        type: string
-    type: object
   github_com_Tencent_Reliquary_internal_types.MentionedItem:
     properties:
       id:
@@ -1359,11 +1141,8 @@ definitions:
       service_id:
         description: Parent MCP service for MCP tool mentions
         type: string
-      skill_name:
-        description: Preloaded agent skill name
-        type: string
       type:
-        description: '"kb", "file", "tag", "mcp", "skill"'
+        description: '"kb", "file", "tag", "mcp"'
         type: string
     type: object
   github_com_Tencent_Reliquary_internal_types.Message:
@@ -1385,10 +1164,7 @@ definitions:
           $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.AgentStep'
         type: array
       artifacts:
-        description: |-
-          Skill-generated files produced during this assistant turn (assistant messages only).
-          Populated by ArtifactCollector after the sandbox finishes, referenced by the
-          artifact download endpoint. Empty for user messages and turns without skills.
+        description: Stored files associated with an assistant message, referenced by the artifact download endpoint.
         items:
           $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.MessageArtifact'
         type: array
@@ -1465,15 +1241,6 @@ definitions:
           LLM token usage aggregated across every round of the turn that produced this
           assistant message. Persisted so history reads can attribute cost after the
           live stream is gone; NULL (nil) for user messages and pre-feature rows.
-      used_memories:
-        description: |-
-          UsedMemories records which long-term memories were injected into this
-          answer, so the chat UI can show them and let the user delete one on the
-          spot. Persisted rather than only streamed so reopening a conversation
-          still explains what the answer saw.
-        items:
-          $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.UsedMemory'
-        type: array
     type: object
   github_com_Tencent_Reliquary_internal_types.MessageArtifact:
     properties:
@@ -1481,7 +1248,7 @@ definitions:
         description: When Reliquary persisted the blob
         type: string
       file_name:
-        description: Original filename inside the sandbox
+        description: Original filename
         type: string
       file_size:
         description: File size in bytes
@@ -1490,10 +1257,10 @@ definitions:
         description: File extension (e.g., ".pptx", ".pdf")
         type: string
       mod_time:
-        description: Sandbox-side modification time (used for diff)
+        description: File modification time
         type: string
       source_path:
-        description: Absolute path inside the sandbox (used for diff)
+        description: Original file path
         type: string
       url:
         description: Storage URL (provider://path); persisted, not sent to client
@@ -2045,15 +1812,6 @@ definitions:
       - RuntimeTaskRetry
       - RuntimeTaskArchived
       - RuntimeTaskCompleted
-  github_com_Tencent_Reliquary_internal_types.SandboxNetworkPolicy:
-    properties:
-      deny_egress_by_default:
-        description: |-
-          DenyEgressByDefault installs a 0.0.0.0/0 deny-all, after which only
-          AllowOut (and L7 rule targets) can reach the network. false allows
-          public egress, which is what skill installs need.
-        type: boolean
-    type: object
   github_com_Tencent_Reliquary_internal_types.SearchParams:
     properties:
       disable_keywords_match:
@@ -2218,16 +1976,6 @@ definitions:
       pinned_at:
         description: PinnedAt records when the session was pinned; nil when not pinned.
         type: string
-      sandbox_config_id:
-        description: |-
-          SandboxConfigID pins which sandbox config this session's CURRENT live
-          sandbox was created on. Empty means no live sandbox;
-          SandboxConfigIDGlobalDefault means the deployment-wide default config.
-
-          This is an ephemeral pin that dies with the sandbox, not a permanent
-          owner: sessions outlive sandboxes by months, so treating it as
-          permanent would make "no session references this config" never true.
-        type: string
       tenant_id:
         description: Workspace ID
         type: integer
@@ -2264,39 +2012,10 @@ definitions:
         type: array
       model_id:
         type: string
-      skill_names:
-        items:
-          type: string
-        type: array
       tag_ids:
         items:
           type: string
         type: array
-    type: object
-  github_com_Tencent_Reliquary_internal_types.SkillImageConfig:
-    properties:
-      base_template_id:
-        description: |-
-          BaseTemplateID is the template this chain was originally built from;
-          the rebuild path starts over from it.
-        type: string
-      built_at:
-        description: BuiltAt records when this generation was produced.
-        type: string
-      generation:
-        description: |-
-          Generation increments on every successful install/remove, for naming
-          and troubleshooting.
-        type: integer
-      owner_fingerprint:
-        description: |-
-          OwnerFingerprint identifies the provider account that owns the snapshot.
-          Snapshots are invisible across accounts, so a mismatch means "fall back
-          to the base template" rather than "fail".
-        type: string
-      snapshot_id:
-        description: SnapshotID is the currently effective snapshot; empty = base template.
-        type: string
     type: object
   github_com_Tencent_Reliquary_internal_types.StarterSuggestionConfig:
     properties:
@@ -2456,10 +2175,6 @@ definitions:
       id:
         description: ID
         type: integer
-      memory_config:
-        allOf:
-          - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.MemoryConfig'
-        description: 'Memory config: workspace switch for cross-session long-term memory'
       name:
         description: Name
         type: string
@@ -2482,54 +2197,6 @@ definitions:
         type: integer
       updated_at:
         description: Last updated time
-        type: string
-    type: object
-  github_com_Tencent_Reliquary_internal_types.TenantSandboxConfig:
-    properties:
-      allow_private_endpoints:
-        description: |-
-          AllowPrivateEndpoints permits this workspace config to reach RFC1918 or
-          loopback cluster endpoints. Link-local/cloud-metadata addresses remain
-          blocked. It is explicit in the UI instead of hidden in process env.
-        type: boolean
-      default_timeout_sec:
-        description: |-
-          DefaultTimeoutSec is the per-execution timeout in seconds. 0 uses the
-          program's built-in default.
-        type: integer
-      docker:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.DockerSandboxConfig'
-      env_vars:
-        additionalProperties:
-          type: string
-        description: "EnvVars are additional environment variables injected into every\nsandbox created for this tenant. \U0001F512 Values are encrypted at rest.\nThese become visible to all scripts running in the tenant's\nsandboxes — do not place secrets here that scripts must not access."
-        type: object
-      network:
-        allOf:
-          - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.SandboxNetworkPolicy'
-        description: |-
-          Network is the outbound/inbound network policy applied to every sandbox
-          created from this config — chat sessions, skill installs and deep
-          connectivity probes alike. nil and the zero value mean the same thing:
-          outbound egress allowed, inbound public access closed.
-      sandbox_type:
-        description: SandboxType is docker; disabled is the hidden policy row.
-        type: string
-      skill_image:
-        allOf:
-          - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.SkillImageConfig'
-        description: |-
-          SkillImage points at the snapshot that carries this config's installed
-          skills. Empty means "use the base template". Written only by the skill
-          install/remove path: MergeSandboxConfigForUpdate ignores client values
-          so a settings-form save cannot wipe or plant the pointer.
-      skill_rollout:
-        description: |-
-          SkillRollout decides whether sessions that already hold a sandbox of
-          this config rebuild after a skill install or removal. Empty and
-          SkillRolloutNextTurn rebuild on the next chat turn. SkillRolloutNewSession
-          leaves those sandboxes on the previous image; only sessions that start
-          afterwards boot the new snapshot.
         type: string
     type: object
   github_com_Tencent_Reliquary_internal_types.TokenUsage:
@@ -2609,15 +2276,6 @@ definitions:
       success:
         description: Whether the tool executed successfully
         type: boolean
-    type: object
-  github_com_Tencent_Reliquary_internal_types.UsedMemory:
-    properties:
-      content:
-        type: string
-      id:
-        type: string
-      kind:
-        type: string
     type: object
   github_com_Tencent_Reliquary_internal_types.User:
     properties:
@@ -2711,564 +2369,6 @@ definitions:
       app_secret:
         type: string
     type: object
-  github_com_Tencent_Reliquary_internal_types.WikiConfig:
-    properties:
-      content_instructions:
-        description: |-
-          ContentInstructions controls tone, structure and emphasis for generated
-          summary/entity/index prose. Citation and merge rules remain system-owned.
-        type: string
-      extraction_granularity:
-        allOf:
-          - $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiExtractionGranularity'
-        description: |-
-          ExtractionGranularity controls how many candidate slugs Pass 0 extracts
-          per document. Empty / unknown value is treated as WikiExtractionStandard.
-      extraction_instructions:
-        description: |-
-          ExtractionInstructions tells candidate extraction which domain concepts
-          to emphasize without replacing the stable JSON/citation protocol.
-        type: string
-      ingest_batch_size:
-        description: |-
-          IngestBatchSize controls how many pending ops a single batch claims and
-          processes before scheduling a follow-up. 0 falls back to the hard-coded
-          default (5). Larger batches amortize per-batch setup and let more docs
-          share the batch-internal Map/Reduce fan-out; smaller batches spread a
-          KB's backlog across more concurrent batches (finer scheduling grain).
-        type: integer
-      ingest_map_parallel:
-        description: |-
-          IngestMapParallel sets the errgroup limit for the Map phase
-          (per-document extraction + summary + chunk citation) WITHIN one batch.
-          0 falls back to 10. Bound by the LLM provider's concurrency limit and
-          the worker's outbound HTTP pool. Remember it multiplies with the number
-          of concurrent batches (IngestMaxInflight).
-        type: integer
-      ingest_max_inflight:
-        description: |-
-          IngestMaxInflight caps how many ingest batches for THIS KB may run
-          concurrently in the shared wiki worker pool (standard/Redis mode
-          only). 0 falls back to the hard-coded default (4). Since Phase 3
-          removed the exclusive per-KB lock, one KB's backlog could otherwise
-          monopolize the whole pool during a bulk import and starve other KBs;
-          this knob trades a single KB's peak throughput for cross-KB fairness.
-          Set it >= the wiki pool size to effectively disable the cap.
-        type: integer
-      ingest_reduce_parallel:
-        description: |-
-          IngestReduceParallel sets the errgroup limit for the Reduce phase
-          (per-slug page write) WITHIN one batch. 0 falls back to 10. Bound by the
-          same LLM concurrency / HTTP pool considerations as the Map phase, plus
-          DB connection pool size. Same multiplier caveat as IngestMapParallel.
-        type: integer
-      max_pages_per_ingest:
-        description: MaxPagesPerIngest limits pages created/updated per ingest operation (0 = no limit)
-        type: integer
-      synthesis_model_id:
-        description: SynthesisModelID is the LLM model ID used for wiki page generation and updates
-        type: string
-    type: object
-  github_com_Tencent_Reliquary_internal_types.WikiExtractionGranularity:
-    enum:
-      - focused
-      - standard
-      - exhaustive
-    type: string
-    x-enum-varnames:
-      - WikiExtractionFocused
-      - WikiExtractionStandard
-      - WikiExtractionExhaustive
-  github_com_Tencent_Reliquary_internal_types.WikiFolder:
-    properties:
-      created_at:
-        type: string
-      deleted_at:
-        $ref: '#/definitions/gorm.DeletedAt'
-      depth:
-        type: integer
-      id:
-        type: string
-      knowledge_base_id:
-        type: string
-      name:
-        type: string
-      parent_id:
-        type: string
-      path:
-        type: string
-      sort_order:
-        type: integer
-      tenant_id:
-        type: integer
-      updated_at:
-        type: string
-    type: object
-  github_com_Tencent_Reliquary_internal_types.WikiFolderCreateRequest:
-    properties:
-      name:
-        type: string
-      parent_id:
-        type: string
-    type: object
-  github_com_Tencent_Reliquary_internal_types.WikiFolderListResponse:
-    properties:
-      folders:
-        items:
-          $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiFolderNode'
-        type: array
-      parent_id:
-        type: string
-    type: object
-  github_com_Tencent_Reliquary_internal_types.WikiFolderNode:
-    properties:
-      created_at:
-        type: string
-      deleted_at:
-        $ref: '#/definitions/gorm.DeletedAt'
-      depth:
-        type: integer
-      has_children:
-        type: boolean
-      id:
-        type: string
-      knowledge_base_id:
-        type: string
-      name:
-        type: string
-      page_count:
-        type: integer
-      parent_id:
-        type: string
-      path:
-        type: string
-      sort_order:
-        type: integer
-      tenant_id:
-        type: integer
-      updated_at:
-        type: string
-    type: object
-  github_com_Tencent_Reliquary_internal_types.WikiFolderUpdateRequest:
-    properties:
-      move_parent:
-        type: boolean
-      name:
-        type: string
-      parent_id:
-        type: string
-    type: object
-  github_com_Tencent_Reliquary_internal_types.WikiGraphData:
-    properties:
-      edges:
-        items:
-          $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiGraphEdge'
-        type: array
-      meta:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiGraphMeta'
-      nodes:
-        items:
-          $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiGraphNode'
-        type: array
-    type: object
-  github_com_Tencent_Reliquary_internal_types.WikiGraphEdge:
-    properties:
-      source:
-        description: source slug
-        type: string
-      target:
-        description: target slug
-        type: string
-    type: object
-  github_com_Tencent_Reliquary_internal_types.WikiGraphMeta:
-    properties:
-      center:
-        description: populated in ego mode
-        type: string
-      depth:
-        description: populated in ego mode
-        type: integer
-      familiar_count:
-        description: FamiliarCount is how many returned nodes are lit up for this person.
-        type: integer
-      mode:
-        type: string
-      returned:
-        description: number of nodes actually returned
-        type: integer
-      total:
-        description: total node count in the KB before filtering/limit
-        type: integer
-      truncated:
-        description: true when Returned < Total (after filters)
-        type: boolean
-    type: object
-  github_com_Tencent_Reliquary_internal_types.WikiGraphNode:
-    properties:
-      familiar:
-        description: |-
-          Familiar is true when this page was built from a document this person
-          keeps citing in answers. It is a personal overlay, not a property of
-          the page: two people looking at the same wiki see different highlights.
-        type: boolean
-      link_count:
-        description: Number of inbound + outbound links
-        type: integer
-      page_type:
-        type: string
-      slug:
-        type: string
-      title:
-        type: string
-    type: object
-  github_com_Tencent_Reliquary_internal_types.WikiIndexEntry:
-    properties:
-      category_path:
-        items:
-          type: string
-        type: array
-      depth:
-        type: integer
-      parent_slug:
-        type: string
-      slug:
-        type: string
-      sort_order:
-        type: integer
-      summary:
-        type: string
-      title:
-        type: string
-      wiki_path:
-        type: string
-    type: object
-  github_com_Tencent_Reliquary_internal_types.WikiIndexGroup:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiIndexEntry'
-        type: array
-      next_cursor:
-        type: string
-      total:
-        type: integer
-      type:
-        type: string
-    type: object
-  github_com_Tencent_Reliquary_internal_types.WikiIndexResponse:
-    properties:
-      groups:
-        items:
-          $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiIndexGroup'
-        type: array
-      intro:
-        type: string
-      version:
-        type: integer
-    type: object
-  github_com_Tencent_Reliquary_internal_types.WikiPage:
-    properties:
-      aliases:
-        description: Alternate names, abbreviations, acronyms or translated names
-        items:
-          type: string
-        type: array
-      category_path:
-        description: |-
-          CategoryPath is the directory breadcrumb that groups this page in the
-          wiki browser, e.g. ["AI", "LLM 应用", "RAG"]. Derived cache of the
-          folder chain identified by FolderID.
-        items:
-          type: string
-        type: array
-      chunk_refs:
-        description: |-
-          ChunkRefs records the specific source-document chunks this page was
-          built from — one UUID per cited chunk. Populated during ingest from
-          the chunk-citation pass; refreshed wholesale whenever the page is
-          re-materialized. Empty for summary pages (they are document-level
-          synopses and don't carry chunk-level citations). Use this when you
-          need to surface the underlying evidence for a wiki page, or to
-          retract citations when a source document is deleted.
-        items:
-          type: string
-        type: array
-      content:
-        description: Full markdown content
-        type: string
-      created_at:
-        description: Creation time
-        type: string
-      deleted_at:
-        allOf:
-          - $ref: '#/definitions/gorm.DeletedAt'
-        description: Soft delete
-      depth:
-        description: Depth is len(CategoryPath), cached for filtering / display.
-        type: integer
-      folder_id:
-        description: |-
-          FolderID is the single source of truth for where this page sits in the
-          directory tree — a reference to wiki_folders.id ("" = wiki root). The
-          CategoryPath / WikiPath / Depth fields below are denormalized caches
-          recomputed from this folder's chain on every write so list/index/search
-          queries don't have to join wiki_folders.
-        type: string
-      id:
-        description: Unique identifier (UUID)
-        type: string
-      in_links:
-        description: Slugs of pages that link TO this page (backlinks)
-        items:
-          type: string
-        type: array
-      knowledge_base_id:
-        description: Knowledge base this page belongs to
-        type: string
-      last_edit_source:
-        description: |-
-          LastEditSource records who authored the CURRENT version: pipeline |
-          agent | user | revert. Empty for legacy rows (treated as pipeline).
-          When the version is superseded this value travels into the revision
-          snapshot, so each historical version keeps its own author kind.
-        type: string
-      last_editor_id:
-        description: |-
-          LastEditorID is the user id of the caller that produced the current
-          version (empty for background pipeline writes).
-        type: string
-      out_links:
-        description: Slugs of pages this page links to (outbound links)
-        items:
-          type: string
-        type: array
-      page_metadata:
-        description: Arbitrary metadata (tags, categories, dates, etc.)
-        items:
-          type: integer
-        type: array
-      page_type:
-        description: 'Page type: summary, entity, concept, index, synthesis, comparison'
-        type: string
-      parent_slug:
-        description: |-
-          ParentSlug optionally points at the wiki page that should act as this
-          page's semantic parent in the directory tree. The parent may be empty
-          when the page is grouped only by FolderID.
-        type: string
-      slug:
-        description: |-
-          URL-friendly slug for addressing, e.g. "entity/acme-corp", "concept/rag"
-          Unique within a knowledge base
-        type: string
-      sort_order:
-        description: |-
-          SortOrder allows generated or manually edited pages to control sibling
-          ordering before falling back to title.
-        type: integer
-      source_refs:
-        description: |-
-          References to source knowledge IDs that contributed to this page.
-          Format matches the legacy "<knowledge_id>|<doc_title>" convention used
-          across the ingest pipeline, so retract / display code can split on `|`
-          to recover the title. Document-level granularity.
-        items:
-          type: string
-        type: array
-      status:
-        description: 'Page status: draft, published, archived'
-        type: string
-      summary:
-        description: One-line summary for index listing
-        type: string
-      tenant_id:
-        description: Workspace ID for multi-workspace isolation
-        type: integer
-      title:
-        description: Human-readable title
-        type: string
-      updated_at:
-        description: Last update time
-        type: string
-      version:
-        description: |-
-          Version number. Incremented only when a user-visible content field
-          (title, content, summary, page_type, status) actually changes; pure
-          bookkeeping writes (link maintenance, same-content re-ingest, status
-          sync from background jobs) leave it untouched so it can be used as a
-          real "the page was edited" signal.
-        type: integer
-      wiki_path:
-        description: |-
-          WikiPath is a normalized, sortable path derived from page_type,
-          category_path, and title. It keeps large directory listings cheap to sort.
-        type: string
-    type: object
-  github_com_Tencent_Reliquary_internal_types.WikiPageIssue:
-    properties:
-      created_at:
-        type: string
-      deleted_at:
-        $ref: '#/definitions/gorm.DeletedAt'
-      description:
-        type: string
-      id:
-        type: string
-      issue_type:
-        type: string
-      knowledge_base_id:
-        type: string
-      reported_by:
-        type: string
-      slug:
-        type: string
-      status:
-        type: string
-      suspected_knowledge_ids:
-        items:
-          type: string
-        type: array
-      tenant_id:
-        type: integer
-      updated_at:
-        type: string
-    type: object
-  github_com_Tencent_Reliquary_internal_types.WikiPageListResponse:
-    properties:
-      page:
-        type: integer
-      page_size:
-        type: integer
-      pages:
-        items:
-          $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiPage'
-        type: array
-      total:
-        type: integer
-      total_pages:
-        type: integer
-    type: object
-  github_com_Tencent_Reliquary_internal_types.WikiPageMoveRequest:
-    properties:
-      folder_id:
-        type: string
-      slug:
-        type: string
-    required:
-      - slug
-    type: object
-  github_com_Tencent_Reliquary_internal_types.WikiPageRevertRequest:
-    properties:
-      slug:
-        type: string
-      version:
-        type: integer
-    required:
-      - slug
-      - version
-    type: object
-  github_com_Tencent_Reliquary_internal_types.WikiPageRevision:
-    properties:
-      aliases:
-        items:
-          type: string
-        type: array
-      content:
-        type: string
-      created_at:
-        type: string
-      edit_source:
-        description: Author of THIS version (same semantics as WikiPage.LastEditSource).
-        type: string
-      edited_at:
-        description: When this version was authored (the page's updated_at while current).
-        type: string
-      editor_id:
-        type: string
-      id:
-        type: string
-      knowledge_base_id:
-        type: string
-      page_id:
-        type: string
-      page_type:
-        type: string
-      slug:
-        type: string
-      status:
-        type: string
-      summary:
-        type: string
-      tenant_id:
-        type: integer
-      title:
-        type: string
-      version:
-        type: integer
-    type: object
-  github_com_Tencent_Reliquary_internal_types.WikiPageRevisionListResponse:
-    properties:
-      current_version:
-        type: integer
-      revisions:
-        items:
-          $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiPageRevision'
-        type: array
-      total:
-        type: integer
-    type: object
-  github_com_Tencent_Reliquary_internal_types.WikiPageUpdateRequest:
-    properties:
-      aliases:
-        items:
-          type: string
-        type: array
-      content:
-        type: string
-      page_type:
-        type: string
-      status:
-        type: string
-      summary:
-        type: string
-      title:
-        type: string
-      version:
-        description: |-
-          Version is the optimistic-lock guard: when > 0 the update is rejected
-          with a conflict if the stored version differs (someone else edited the
-          page since the client loaded it). 0 skips the check (legacy clients).
-        type: integer
-    type: object
-  github_com_Tencent_Reliquary_internal_types.WikiStats:
-    properties:
-      is_active:
-        description: whether wiki ingestion is currently running
-        type: boolean
-      orphan_count:
-        description: pages with no inbound links
-        type: integer
-      pages_by_type:
-        additionalProperties:
-          format: int64
-          type: integer
-        type: object
-      pending_issues:
-        description: number of pending wiki issues
-        type: integer
-      pending_tasks:
-        description: number of documents waiting to be ingested
-        type: integer
-      recent_updates:
-        description: last N updated pages
-        items:
-          $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiPage'
-        type: array
-      total_links:
-        type: integer
-      total_pages:
-        type: integer
-    type: object
   gorm.DeletedAt:
     properties:
       time:
@@ -3344,21 +2444,6 @@ definitions:
     properties:
       regenerate:
         type: boolean
-    type: object
-  internal_handler.EvaluationRequest:
-    properties:
-      chat_id:
-        description: ID of chat model to use
-        type: string
-      dataset_id:
-        description: ID of dataset to evaluate
-        type: string
-      knowledge_base_id:
-        description: ID of knowledge base to use
-        type: string
-      rerank_id:
-        description: ID of rerank model to use
-        type: string
     type: object
   internal_handler.GetSystemInfoResponse:
     properties:
@@ -3813,9 +2898,6 @@ definitions:
         type: integer
       upstream_concurrency:
         type: integer
-      wiki_concurrency:
-        description: compatibility field
-        type: integer
     type: object
   internal_handler.RuntimeTasksResponse:
     properties:
@@ -3854,56 +2936,6 @@ definitions:
       utilization:
         description: Active / ClusterCapacity
         type: number
-    type: object
-  internal_handler.SandboxCheckItem:
-    properties:
-      latency_ms:
-        type: integer
-      message:
-        description: Message carries free-form provider detail for an executed probe.
-        type: string
-      name:
-        type: string
-      ok:
-        type: boolean
-      reason:
-        description: |-
-          Reason is a stable code explaining why a probe was skipped. It exists so
-          the UI can phrase the skip in the operator's language instead of echoing
-          a server-side sentence.
-        type: string
-    type: object
-  internal_handler.SandboxCheckRequest:
-    properties:
-      config:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.TenantSandboxConfig'
-      config_id:
-        description: |-
-          ConfigID lets an edit form test stored credentials while overriding only
-          the fields the admin changed in the drawer.
-        type: string
-      deep:
-        description: |-
-          Deep additionally runs a throwaway script. For remote backends this also
-          creates and destroys one sandbox, which is the only way to validate the
-          template ID, data plane, in-sandbox execution, and outbound egress. It may
-          consume real sandbox time, so it is opt-in.
-        type: boolean
-    type: object
-  internal_handler.SandboxCheckResponse:
-    properties:
-      capabilities:
-        additionalProperties:
-          type: boolean
-        type: object
-      checks:
-        items:
-          $ref: '#/definitions/internal_handler.SandboxCheckItem'
-        type: array
-      ok:
-        type: boolean
-      provider:
-        type: string
     type: object
   internal_handler.SearchMessagesRequest:
     properties:
@@ -4027,65 +3059,12 @@ definitions:
       - ids
       - kb_id
     type: object
-  internal_handler.meEnvVarRequest:
-    properties:
-      name:
-        type: string
-      sandbox_config_id:
-        type: string
-      skill_id:
-        type: string
-      value:
-        description: |-
-          Value is unused by the delete endpoints. Clearing a value is a delete
-          rather than a write of "", so a member always has one unambiguous way to
-          revoke.
-        type: string
-    type: object
   internal_handler.resolveAncestorsRequest:
     properties:
       resource_ids:
         items:
           type: string
         type: array
-    type: object
-  internal_handler.sandboxConfigRequest:
-    properties:
-      config:
-        $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.TenantSandboxConfig'
-      description:
-        type: string
-      name:
-        type: string
-    required:
-      - name
-    type: object
-  internal_handler.skillPatchRequest:
-    properties:
-      enabled:
-        description: |-
-          Enabled is a pointer because its absence is not a request to disable the
-          skill; a body may carry envs instead.
-        type: boolean
-      envs:
-        additionalProperties:
-          type: string
-        description: |-
-          Envs is a pointer to a map because "sent an empty object" and "did not
-          mention envs" are different requests: the first clears what it names,
-          the second must leave every stored value alone.
-        type: object
-    type: object
-  internal_handler.skillSourceRequest:
-    properties:
-      source:
-        description: |-
-          Source is exactly one of: "@owner/slug" or a slash-free slug (ClawHub),
-          a github.com / gitlab.com / skills.sh / clawhub / skillhub page URL, a
-          ClawHub skills-sh catalog page or "skills-sh:owner/repo/slug" locator, or
-          a direct zip/SKILL.md URL. Bare "owner/slug" is rejected: it is both a
-          ClawHub id and a GitHub repo. The fetch carries no credential.
-        type: string
     type: object
   internal_handler_session.AttachmentUpload:
     properties:
@@ -4151,11 +3130,6 @@ definitions:
       query:
         description: Query text for knowledge base search
         type: string
-      skill_names:
-        description: Per-request Skills selected via @mention
-        items:
-          type: string
-        type: array
       suggestion_attribution:
         $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.SuggestionAttribution'
       summary_model_id:
@@ -4218,11 +3192,8 @@ definitions:
       service_id:
         description: Parent MCP service for MCP tool mentions
         type: string
-      skill_name:
-        description: Preloaded agent skill name
-        type: string
       type:
-        description: '"kb", "file", "tag", "mcp", "skill"'
+        description: '"kb", "file", "tag", "mcp"'
         type: string
     type: object
   internal_handler_session.SearchKnowledgeRequest:
@@ -4618,6 +3589,7 @@ paths:
       summary: 获取智能体列表
       tags:
         - 智能体
+      parameters: []
     post:
       consumes:
         - application/json
@@ -4855,11 +3827,12 @@ paths:
       summary: 获取占位符定义
       tags:
         - 智能体
+      parameters: []
   /agents/type-presets:
     get:
       consumes:
         - application/json
-      description: 返回所有 smart-reasoning 下可用的智能体类型预设（RAG/Wiki/Hybrid/Custom），用于编辑器自动填充系统提示词、工具和 KB 兼容性
+      description: 返回所有 smart-reasoning 下可用的智能体类型预设（RAG/Data Analysis/Custom），用于编辑器自动填充系统提示词、工具和 KB 兼容性
       produces:
         - application/json
       responses:
@@ -4874,6 +3847,7 @@ paths:
       summary: 获取智能体类型预设列表
       tags:
         - 智能体
+      parameters: []
   /api/v1/knowledge/{id}/spans:
     get:
       consumes:
@@ -4950,6 +3924,7 @@ paths:
       summary: 获取认证配置
       tags:
         - 认证
+      parameters: []
   /auth/login:
     post:
       consumes:
@@ -4998,6 +3973,7 @@ paths:
       summary: 用户登出
       tags:
         - 认证
+      parameters: []
   /auth/me:
     get:
       consumes:
@@ -5020,6 +3996,7 @@ paths:
       summary: 获取当前用户信息
       tags:
         - 认证
+      parameters: []
   /auth/refresh:
     post:
       consumes:
@@ -5102,6 +4079,7 @@ paths:
       summary: 验证令牌
       tags:
         - 认证
+      parameters: []
   /chunker/preview:
     post:
       consumes:
@@ -5737,6 +4715,7 @@ paths:
       summary: Get available connectors
       tags:
         - DataSource
+      parameters: []
   /datasource/validate-credentials:
     post:
       consumes:
@@ -5767,64 +4746,6 @@ paths:
       summary: Test connection with raw credentials (no persistence)
       tags:
         - DataSource
-  /evaluation/:
-    get:
-      consumes:
-        - application/json
-      description: 根据任务ID获取评估结果
-      parameters:
-        - description: 评估任务ID
-          in: query
-          name: task_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 评估结果
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: 获取评估结果
-      tags:
-        - 评估
-    post:
-      consumes:
-        - application/json
-      description: 对知识库进行评估测试
-      parameters:
-        - description: 评估请求参数
-          in: body
-          name: request
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.EvaluationRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 评估任务
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: 执行评估
-      tags:
-        - 评估
   /initialization/asr/check:
     post:
       consumes:
@@ -6052,6 +4973,7 @@ paths:
       summary: 列出下载任务
       tags:
         - 初始化
+      parameters: []
   /initialization/ollama/models:
     get:
       consumes:
@@ -6075,6 +4997,7 @@ paths:
       summary: 列出Ollama模型
       tags:
         - 初始化
+      parameters: []
   /initialization/ollama/models/check:
     post:
       consumes:
@@ -6159,6 +5082,7 @@ paths:
       summary: 检查Ollama服务状态
       tags:
         - 初始化
+      parameters: []
   /initialization/remote/check:
     post:
       consumes:
@@ -6371,7 +5295,7 @@ paths:
     post:
       consumes:
         - application/json
-      description: 创建一个只包含设置的新知识库副本，不复制知识、分块、索引、Wiki 页面或置顶状态
+      description: 创建一个只包含设置的新知识库副本，不复制知识、分块、索引或置顶状态
       parameters:
         - description: 源知识库 ID
           in: path
@@ -7733,730 +6657,6 @@ paths:
       summary: 批量更新知识标签
       tags:
         - 知识管理
-  /knowledgebase/{kb_id}/wiki/auto-fix:
-    post:
-      description: Automatically fix fixable wiki issues (broken links, etc.)
-      parameters:
-        - description: Knowledge base ID
-          in: path
-          name: kb_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: Auto-fix wiki issues
-      tags:
-        - Wiki
-  /knowledgebase/{kb_id}/wiki/folders:
-    get:
-      description: Retrieve the direct child folders of a parent folder (parent_id empty = root level), each with its page count and a has-children flag for the directory tree.
-      parameters:
-        - description: Knowledge base ID
-          in: path
-          name: kb_id
-          required: true
-          type: string
-        - description: Parent folder id (empty = root)
-          in: query
-          name: parent_id
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiFolderListResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-      summary: List wiki folders
-      tags:
-        - Wiki
-    post:
-      consumes:
-        - application/json
-      description: Create a new (initially empty) directory node under parent_id
-      parameters:
-        - description: Knowledge base ID
-          in: path
-          name: kb_id
-          required: true
-          type: string
-        - description: Folder data
-          in: body
-          name: folder
-          required: true
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiFolderCreateRequest'
-      produces:
-        - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiFolder'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-      summary: Create a wiki folder
-      tags:
-        - Wiki
-  /knowledgebase/{kb_id}/wiki/folders/{folder_id}:
-    delete:
-      description: Delete a folder that has no pages and no child folders
-      parameters:
-        - description: Knowledge base ID
-          in: path
-          name: kb_id
-          required: true
-          type: string
-        - description: Folder ID
-          in: path
-          name: folder_id
-          required: true
-          type: string
-      responses:
-        "204":
-          description: No Content
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-      summary: Delete an empty wiki folder
-      tags:
-        - Wiki
-    put:
-      consumes:
-        - application/json
-      description: Rename and/or reparent a folder; the whole subtree's paths and the affected pages' cached paths are recomputed
-      parameters:
-        - description: Knowledge base ID
-          in: path
-          name: kb_id
-          required: true
-          type: string
-        - description: Folder ID
-          in: path
-          name: folder_id
-          required: true
-          type: string
-        - description: Folder update
-          in: body
-          name: folder
-          required: true
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiFolderUpdateRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiFolder'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-      summary: Rename or move a wiki folder
-      tags:
-        - Wiki
-  /knowledgebase/{kb_id}/wiki/graph:
-    get:
-      description: |-
-        Returns a slice of the wiki link graph for visualization. Supports
-        `mode=overview` (top-N most-connected pages, default) and
-        `mode=ego` (BFS neighborhood of a center slug) to keep response
-        size tractable for knowledge bases with tens of thousands of pages.
-      parameters:
-        - description: Knowledge base ID
-          in: path
-          name: kb_id
-          required: true
-          type: string
-        - description: overview (default) | ego
-          in: query
-          name: mode
-          type: string
-        - description: Center slug for ego mode
-          in: query
-          name: center
-          type: string
-        - description: Ego BFS depth (1-3, default 1)
-          in: query
-          name: depth
-          type: integer
-        - description: Comma-separated page_type allow-list
-          in: query
-          name: types
-          type: string
-        - description: Max nodes to return (default 500, max 2000)
-          in: query
-          name: limit
-          type: integer
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiGraphData'
-      security:
-        - Bearer: []
-      summary: Get wiki link graph
-      tags:
-        - Wiki
-  /knowledgebase/{kb_id}/wiki/index:
-    get:
-      description: |-
-        Returns the wiki index as intro text plus per-type paginated
-        directory groups. The heavy directory markdown that used to
-        live in wiki_pages.content was replaced with this structured
-        response so a KB with tens of thousands of pages no longer
-        materializes megabytes of TEXT on every index open.
-      parameters:
-        - description: Knowledge base ID
-          in: path
-          name: kb_id
-          required: true
-          type: string
-        - description: 'Comma-separated page types (default: all content types)'
-          in: query
-          name: types
-          type: string
-        - description: Per-group window size, 1-200 (default 50)
-          in: query
-          name: limit
-          type: integer
-        - description: Opaque offset cursor from previous response
-          in: query
-          name: cursor
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiIndexResponse'
-      security:
-        - Bearer: []
-      summary: Get wiki index view
-      tags:
-        - Wiki
-  /knowledgebase/{kb_id}/wiki/issues:
-    get:
-      description: List issues flagged on wiki pages with optional filtering
-      parameters:
-        - description: Knowledge base ID
-          in: path
-          name: kb_id
-          required: true
-          type: string
-        - description: Filter by page slug
-          in: query
-          name: slug
-          type: string
-        - description: Filter by status (pending, ignored, resolved)
-          in: query
-          name: status
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiPageIssue'
-            type: array
-      security:
-        - Bearer: []
-      summary: List wiki page issues
-      tags:
-        - Wiki
-  /knowledgebase/{kb_id}/wiki/issues/{issue_id}/status:
-    put:
-      consumes:
-        - application/json
-      description: Update the status of a flagged wiki page issue
-      parameters:
-        - description: Knowledge base ID
-          in: path
-          name: kb_id
-          required: true
-          type: string
-        - description: Issue ID
-          in: path
-          name: issue_id
-          required: true
-          type: string
-        - description: 'New status {''status'': ''ignored''}'
-          in: body
-          name: status
-          required: true
-          schema:
-            type: object
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-      summary: Update wiki page issue status
-      tags:
-        - Wiki
-  /knowledgebase/{kb_id}/wiki/lint:
-    get:
-      description: Perform a comprehensive health check on the wiki
-      parameters:
-        - description: Knowledge base ID
-          in: path
-          name: kb_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_application_service.WikiLintReport'
-      security:
-        - Bearer: []
-      summary: Run wiki lint
-      tags:
-        - Wiki
-  /knowledgebase/{kb_id}/wiki/move-page:
-    put:
-      consumes:
-        - application/json
-      description: Relocate a page (identified by slug in the body) into a folder (folder_id empty = root); the page's cached category path is recomputed
-      parameters:
-        - description: Knowledge base ID
-          in: path
-          name: kb_id
-          required: true
-          type: string
-        - description: Move target
-          in: body
-          name: move
-          required: true
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiPageMoveRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiPage'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-      summary: Move a wiki page into a folder
-      tags:
-        - Wiki
-  /knowledgebase/{kb_id}/wiki/pages:
-    get:
-      description: List wiki pages with optional filtering and pagination
-      parameters:
-        - description: Knowledge base ID
-          in: path
-          name: kb_id
-          required: true
-          type: string
-        - description: Filter by page type; comma-separated for multiple (e.g. entity,concept)
-          in: query
-          name: page_type
-          type: string
-        - description: Filter by status
-          in: query
-          name: status
-          type: string
-        - description: Full-text search
-          in: query
-          name: query
-          type: string
-        - description: Page number
-          in: query
-          name: page
-          type: integer
-        - description: Page size
-          in: query
-          name: page_size
-          type: integer
-        - description: Sort field
-          in: query
-          name: sort_by
-          type: string
-        - description: Sort order (asc/desc)
-          in: query
-          name: sort_order
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiPageListResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-      summary: List wiki pages
-      tags:
-        - Wiki
-    post:
-      consumes:
-        - application/json
-      description: Create a new wiki page in the knowledge base
-      parameters:
-        - description: Knowledge base ID
-          in: path
-          name: kb_id
-          required: true
-          type: string
-        - description: Wiki page data
-          in: body
-          name: page
-          required: true
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiPage'
-      produces:
-        - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiPage'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-      summary: Create a wiki page
-      tags:
-        - Wiki
-  /knowledgebase/{kb_id}/wiki/pages/{slug}:
-    delete:
-      description: Soft-delete a wiki page by slug
-      parameters:
-        - description: Knowledge base ID
-          in: path
-          name: kb_id
-          required: true
-          type: string
-        - description: Page slug
-          in: path
-          name: slug
-          required: true
-          type: string
-      responses:
-        "204":
-          description: No Content
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-      summary: Delete a wiki page
-      tags:
-        - Wiki
-    get:
-      description: Retrieve a wiki page by its slug
-      parameters:
-        - description: Knowledge base ID
-          in: path
-          name: kb_id
-          required: true
-          type: string
-        - description: Page slug
-          in: path
-          name: slug
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiPage'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-      summary: Get a wiki page by slug
-      tags:
-        - Wiki
-    put:
-      consumes:
-        - application/json
-      description: |-
-        Partially update a wiki page by slug. Absent fields keep
-        their stored value. When `version` is > 0 it acts as an
-        optimistic-lock guard: a mismatch with the stored version
-        returns 409 together with the current version so the client
-        can reload and re-apply.
-      parameters:
-        - description: Knowledge base ID
-          in: path
-          name: kb_id
-          required: true
-          type: string
-        - description: Page slug
-          in: path
-          name: slug
-          required: true
-          type: string
-        - description: Fields to update
-          in: body
-          name: page
-          required: true
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiPageUpdateRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiPage'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-      summary: Update a wiki page
-      tags:
-        - Wiki
-  /knowledgebase/{kb_id}/wiki/rebuild-links:
-    post:
-      description: Re-parse all pages and rebuild bidirectional link references
-      parameters:
-        - description: Knowledge base ID
-          in: path
-          name: kb_id
-          required: true
-          type: string
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      security:
-        - Bearer: []
-      summary: Rebuild wiki links
-      tags:
-        - Wiki
-  /knowledgebase/{kb_id}/wiki/revert:
-    post:
-      consumes:
-        - application/json
-      description: |-
-        Rolls the page (slug in the body, like move-page) back to
-        the content of the given stored revision. Applied as a
-        regular edit: the pre-revert state is snapshotted and the
-        version advances.
-      parameters:
-        - description: Knowledge base ID
-          in: path
-          name: kb_id
-          required: true
-          type: string
-        - description: Revert target
-          in: body
-          name: revert
-          required: true
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiPageRevertRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiPage'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-      summary: Revert a wiki page to an earlier revision
-      tags:
-        - Wiki
-  /knowledgebase/{kb_id}/wiki/revisions/{slug}:
-    get:
-      description: |-
-        Returns the stored historical snapshots for a page, newest
-        first (content omitted), plus the current version. Passing
-        `version` returns that single snapshot with full content.
-      parameters:
-        - description: Knowledge base ID
-          in: path
-          name: kb_id
-          required: true
-          type: string
-        - description: Page slug
-          in: path
-          name: slug
-          required: true
-          type: string
-        - description: Return this single revision with content
-          in: query
-          name: version
-          type: integer
-        - description: Page size (default 50, max 200)
-          in: query
-          name: limit
-          type: integer
-        - description: Offset into the newest-first list
-          in: query
-          name: offset
-          type: integer
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiPageRevisionListResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-      summary: List wiki page revisions
-      tags:
-        - Wiki
-  /knowledgebase/{kb_id}/wiki/search:
-    get:
-      description: Full-text search over wiki pages
-      parameters:
-        - description: Knowledge base ID
-          in: path
-          name: kb_id
-          required: true
-          type: string
-        - description: Search query
-          in: query
-          name: q
-          required: true
-          type: string
-        - description: Max results (default 10)
-          in: query
-          name: limit
-          type: integer
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiPage'
-            type: array
-      security:
-        - Bearer: []
-      summary: Search wiki pages
-      tags:
-        - Wiki
-  /knowledgebase/{kb_id}/wiki/stats:
-    get:
-      description: Returns aggregate statistics about the wiki
-      parameters:
-        - description: Knowledge base ID
-          in: path
-          name: kb_id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_types.WikiStats'
-      security:
-        - Bearer: []
-      summary: Get wiki statistics
-      tags:
-        - Wiki
   /mcp-services:
     get:
       consumes:
@@ -8480,6 +6680,7 @@ paths:
       summary: 获取MCP服务列表
       tags:
         - MCP服务
+      parameters: []
     post:
       consumes:
         - application/json
@@ -8907,500 +7108,6 @@ paths:
       summary: MCP OAuth 回调
       tags:
         - MCP服务
-  /me/env-vars:
-    get:
-      description: List every sandbox config of this workspace with the caller's own config-wide variables and the credentials its skills declared, each reporting whether it is unset, filled in workspace-wide, or filled in by the caller. Values are never returned.
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: One group per sandbox config
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: List my environment variables
-      tags:
-        - Me
-  /me/env-vars/sandbox:
-    delete:
-      consumes:
-        - application/json
-      description: Remove the caller's own value for one variable on a sandbox config.
-      parameters:
-        - description: Sandbox config and variable name
-          in: body
-          name: request
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.meEnvVarRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Deleted
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not set
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-      summary: Delete one of my sandbox environment variables
-      tags:
-        - Me
-    put:
-      consumes:
-        - application/json
-      description: Store the caller's own value for one variable on a sandbox config. It is injected into every skill script and shell command this caller's turns run on that config.
-      parameters:
-        - description: Sandbox config, variable name and value
-          in: body
-          name: request
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.meEnvVarRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Stored
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Invalid request
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-      summary: Set one of my sandbox environment variables
-      tags:
-        - Me
-  /me/env-vars/skill:
-    delete:
-      consumes:
-        - application/json
-      description: Remove the caller's own value. The workspace-wide value, if there is one, applies again afterwards.
-      parameters:
-        - description: Skill and variable name
-          in: body
-          name: request
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.meEnvVarRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Deleted
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not set
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-      summary: Delete one of my skill credentials
-      tags:
-        - Me
-    put:
-      consumes:
-        - application/json
-      description: Store the caller's own value for one variable the skill declared. It overrides the workspace-wide value for this caller only, and is injected only into executions that name this skill.
-      parameters:
-        - description: Skill, variable name and value
-          in: body
-          name: request
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.meEnvVarRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Stored
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Invalid request
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-      summary: Set one of my skill credentials
-      tags:
-        - Me
-  /memory/consolidate:
-    post:
-      description: 合并意思接近的条目、归档到期事项，不等待每日后台整理
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 整理结果
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 立刻整理我的记忆
-      tags:
-        - 长期记忆
-  /memory/documents:
-    get:
-      description: 返回当前用户回答里反复引用的文档，次数未达习惯门槛的不展示
-      parameters:
-        - default: 50
-          description: 每页条数
-          in: query
-          name: limit
-          type: integer
-        - description: 偏移量
-          in: query
-          name: offset
-          type: integer
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 文档列表
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 列出常用资料
-      tags:
-        - 长期记忆
-  /memory/documents/{id}:
-    delete:
-      description: 删除一条文档亲和度计数，之后检索不再因为这份文档而加权
-      parameters:
-        - description: 亲和度 ID
-          in: path
-          name: id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 删除成功
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 停止用某份文档做个性化检索
-      tags:
-        - 长期记忆
-  /memory/export:
-    get:
-      description: 以 JSON 导出当前用户的全部记忆
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 记忆导出
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 导出我的记忆
-      tags:
-        - 长期记忆
-  /memory/items:
-    delete:
-      description: 永久删除当前用户的全部记忆
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 清空成功
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 清空我的记忆
-      tags:
-        - 长期记忆
-    get:
-      description: 分页返回当前用户的记忆条目，可按状态过滤
-      parameters:
-        - description: 状态过滤
-          enum:
-            - active
-            - superseded
-            - archived
-            - pending
-          in: query
-          name: status
-          type: string
-        - default: 50
-          description: 每页条数
-          in: query
-          name: limit
-          type: integer
-        - description: 偏移量
-          in: query
-          name: offset
-          type: integer
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 记忆列表
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 列出我的记忆
-      tags:
-        - 长期记忆
-    post:
-      consumes:
-        - application/json
-      description: 手动添加一条长期记忆
-      parameters:
-        - description: 记忆内容
-          in: body
-          name: request
-          required: true
-          schema:
-            type: object
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 新增的记忆
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 新增一条记忆
-      tags:
-        - 长期记忆
-  /memory/items/{id}:
-    delete:
-      description: 永久删除一条记忆
-      parameters:
-        - description: 记忆ID
-          in: path
-          name: id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 删除成功
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 删除一条记忆
-      tags:
-        - 长期记忆
-    put:
-      consumes:
-        - application/json
-      description: 修改记忆内容与重要度，修改后该条记忆不会被后台抽取覆盖
-      parameters:
-        - description: 记忆ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: 记忆内容
-          in: body
-          name: request
-          required: true
-          schema:
-            type: object
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 更新后的记忆
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 修改一条记忆
-      tags:
-        - 长期记忆
-  /memory/items/{id}/confirm:
-    post:
-      description: 接受系统推断的记忆，使其开始生效
-      parameters:
-        - description: 记忆 ID
-          in: path
-          name: id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 确认成功
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 确认一条推断出的记忆
-      tags:
-        - 长期记忆
-  /memory/items/{id}/reject:
-    post:
-      description: 拒绝系统推断的记忆，并记住这次拒绝
-      parameters:
-        - description: 记忆 ID
-          in: path
-          name: id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 否决成功
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 否决一条推断出的记忆
-      tags:
-        - 长期记忆
-  /memory/settings:
-    get:
-      description: 返回合并后的记忆开关状态（空间级 + 个人级）与记忆条数
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 记忆设置
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 获取我的记忆设置
-      tags:
-        - 长期记忆
-    put:
-      consumes:
-        - application/json
-      description: 开启或关闭当前用户自己的长期记忆
-      parameters:
-        - description: 设置
-          in: body
-          name: request
-          required: true
-          schema:
-            type: object
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 更新后的设置
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 更新我的记忆设置
-      tags:
-        - 长期记忆
-  /memory/topics:
-    get:
-      description: 返回已计数、尚未提升为长期关注的主题，以及距离阈值还差几次
-      parameters:
-        - default: 50
-          description: 每页条数
-          in: query
-          name: limit
-          type: integer
-        - description: 偏移量
-          in: query
-          name: offset
-          type: integer
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 主题列表
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 列出正在观察的主题
-      tags:
-        - 长期记忆
-  /memory/topics/{id}:
-    delete:
-      description: 删除尚未提升的主题计数，并记住这次拒绝，之后不会再自动记为长期关注
-      parameters:
-        - description: 主题 ID
-          in: path
-          name: id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 删除成功
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 停止跟踪一个主题
-      tags:
-        - 长期记忆
-  /memory/topics/{id}/promote:
-    post:
-      description: 不等待剩余次数，把正在观察的主题提升为一条长期关注记忆
-      parameters:
-        - description: 主题 ID
-          in: path
-          name: id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: 新增的记忆
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-      summary: 立即记为长期关注
-      tags:
-        - 长期记忆
   /messages/{session_id}/{id}:
     delete:
       consumes:
@@ -9500,6 +7207,7 @@ paths:
       summary: 获取聊天历史知识库统计
       tags:
         - 消息
+      parameters: []
   /messages/search:
     post:
       consumes:
@@ -9553,6 +7261,7 @@ paths:
       summary: 获取模型列表
       tags:
         - 模型管理
+      parameters: []
     post:
       consumes:
         - application/json
@@ -9701,677 +7410,6 @@ paths:
       summary: 获取模型厂商列表
       tags:
         - 模型管理
-  /sandbox-configs:
-    get:
-      description: List workspace sandbox backend configs with credentials masked.
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Sandbox configs and defaults
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: List sandbox configs
-      tags:
-        - SandboxConfig
-    post:
-      consumes:
-        - application/json
-      description: Create a named workspace sandbox backend config. Credentials are masked in the response.
-      parameters:
-        - description: Sandbox backend config
-          in: body
-          name: request
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.sandboxConfigRequest'
-      produces:
-        - application/json
-      responses:
-        "201":
-          description: Created sandbox config
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Invalid request or validation failure
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: Create sandbox config
-      tags:
-        - SandboxConfig
-  /sandbox-configs/{id}:
-    delete:
-      description: Soft-delete a sandbox backend config. force=true only overrides unverifiable provider inventory, never confirmed live sandboxes.
-      parameters:
-        - description: Sandbox config ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: Force delete when inventory is unverifiable
-          in: query
-          name: force
-          type: boolean
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Deletion success
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "409":
-          description: Live sandboxes or unverifiable inventory
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: Delete sandbox config
-      tags:
-        - SandboxConfig
-    get:
-      description: Retrieve a workspace sandbox backend config with credentials masked.
-      parameters:
-        - description: Sandbox config ID
-          in: path
-          name: id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Sandbox config
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Sandbox config not found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: Get sandbox config
-      tags:
-        - SandboxConfig
-    put:
-      consumes:
-        - application/json
-      description: Update a sandbox backend config. Identity-field changes are refused while the config owns live or paused sandboxes.
-      parameters:
-        - description: Sandbox config ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: Updated sandbox config
-          in: body
-          name: request
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.sandboxConfigRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Updated sandbox config
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Invalid request or validation failure
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Sandbox config not found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "409":
-          description: Live sandboxes or unverifiable inventory
-          schema:
-            additionalProperties: true
-            type: object
-        "423":
-          description: Sandbox config is being modified by another request
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: Update sandbox config
-      tags:
-        - SandboxConfig
-  /sandbox-configs/{id}/sandboxes:
-    get:
-      description: Return live/paused sandbox inventory and affected agent names for one config.
-      parameters:
-        - description: Sandbox config ID
-          in: path
-          name: id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Sandbox inventory
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: Inspect sandbox config inventory
-      tags:
-        - SandboxConfig
-  /sandbox-configs/{id}/skills:
-    get:
-      description: List the agent skills installed onto one sandbox config's image.
-      parameters:
-        - description: Sandbox config ID
-          in: path
-          name: id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Installed skills
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Sandbox config not found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: List installed skills
-      tags:
-        - SandboxConfig
-    post:
-      consumes:
-        - application/json
-        - multipart/form-data
-      description: |-
-        Install a skill onto this sandbox config's image. Send a zip
-        as multipart form field "file", or JSON {"source":"..."} to
-        pull a public skill. source is one of: "@owner/slug" or a
-        slash-free slug (ClawHub), a github.com / gitlab.com /
-        skills.sh / clawhub / skillhub URL, a ClawHub skills-sh
-        catalog page (https://clawhub.ai/skills-sh/owner/repo/slug),
-        a skills-sh:owner/repo/slug locator, or a direct zip/SKILL.md
-        URL. Bare "owner/slug" is rejected as ambiguous. The source
-        must be readable anonymously. The install boots a sandbox and
-        runs for minutes, so the request is only accepted; follow it
-        via the install-events stream.
-      parameters:
-        - description: Sandbox config ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: Skill bundle (zip)
-          in: formData
-          name: file
-          type: file
-        - description: Install from a registry, git host, or archive URL
-          in: body
-          name: request
-          schema:
-            $ref: '#/definitions/internal_handler.skillSourceRequest'
-      produces:
-        - application/json
-      responses:
-        "202":
-          description: Install accepted
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Missing, oversized or invalid bundle or source
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Sandbox config not found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: Install a skill
-      tags:
-        - SandboxConfig
-  /sandbox-configs/{id}/skills/{skillId}:
-    delete:
-      description: |-
-        Remove a skill from the config's image. The removal rebuilds
-        the image and runs for minutes, so it is only accepted; follow
-        it via the install-events stream.
-      parameters:
-        - description: Sandbox config ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: Skill ID
-          in: path
-          name: skillId
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "202":
-          description: Removal accepted
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Skill not found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: Remove an installed skill
-      tags:
-        - SandboxConfig
-    get:
-      description: Retrieve one installed skill of a sandbox config.
-      parameters:
-        - description: Sandbox config ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: Skill ID
-          in: path
-          name: skillId
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Installed skill
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Skill not found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: Get an installed skill
-      tags:
-        - SandboxConfig
-    patch:
-      consumes:
-        - application/json
-      description: Show or hide an installed skill and set the workspace-wide values of the environment variables it declared. Either field may be sent, or both. The files stay in the image either way; removal is a separate flow.
-      parameters:
-        - description: Sandbox config ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: Skill ID
-          in: path
-          name: skillId
-          required: true
-          type: string
-        - description: Fields to update
-          in: body
-          name: request
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.skillPatchRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Updated skill
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Invalid request
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Skill not found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: Update an installed skill
-      tags:
-        - SandboxConfig
-  /sandbox-configs/{id}/skills/{skillId}/files:
-    get:
-      description: List files in the stored skill bundle without starting a sandbox.
-      parameters:
-        - description: Sandbox config ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: Skill ID
-          in: path
-          name: skillId
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Skill files
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Skill or files not found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: List files of an installed skill
-      tags:
-        - SandboxConfig
-  /sandbox-configs/{id}/skills/{skillId}/files/content:
-    get:
-      description: Read one skill file as UTF-8, a small base64 image, or binary.
-      parameters:
-        - description: Sandbox config ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: Skill ID
-          in: path
-          name: skillId
-          required: true
-          type: string
-        - description: Skill-root-relative file path
-          in: query
-          name: path
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Skill file
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Invalid path
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Skill or file not found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: Read one file of an installed skill
-      tags:
-        - SandboxConfig
-  /sandbox-configs/{id}/skills/{skillId}/install-events:
-    get:
-      description: |-
-        Server-sent progress for one install or removal. The stream
-        always terminates: with the run's own terminal event, with one
-        derived from the durable status, or with a "detached" frame
-        when it stops following a run that is still going.
-      parameters:
-        - description: Sandbox config ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: Skill ID
-          in: path
-          name: skillId
-          required: true
-          type: string
-      produces:
-        - text/event-stream
-      responses:
-        "200":
-          description: SSE stream of progress events
-          schema:
-            type: string
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Skill not found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: Follow an install or removal
-      tags:
-        - SandboxConfig
-  /sandbox-configs/{id}/skills/{skillId}/reinstall:
-    post:
-      description: Retry a failed install from the stored archive; does not re-upload.
-      parameters:
-        - description: Sandbox config ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: Skill ID
-          in: path
-          name: skillId
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "202":
-          description: Reinstall accepted
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: The stored archive is gone
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Skill not found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: Retry a skill install
-      tags:
-        - SandboxConfig
-  /sandbox-configs/{id}/skills/{skillId}/stop:
-    post:
-      description: Abort an in-flight install so the operator can retry or uninstall. After a process restart the row may still say installing with no live process; this rewrites it immediately instead of waiting for the stuck-run reaper. Removal is not stopped.
-      parameters:
-        - description: Sandbox config ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: Skill ID
-          in: path
-          name: skillId
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Stopped skill
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Skill is not installing
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Skill not found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: Stop a skill install
-      tags:
-        - SandboxConfig
-  /sandbox-configs/{id}/skills/{skillId}/transcript:
-    get:
-      description: |-
-        Server-sent replay of everything the installer agent did — the
-        prompt it was given, its thinking, the commands it ran and
-        their output — followed live while the install is still
-        running. Frames are the same shape the chat stream uses, so a
-        console renders an install with the components it renders a
-        chat turn with. 404 once the event log has expired; the
-        durable message history is the fallback.
-      parameters:
-        - description: Sandbox config ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: Skill ID
-          in: path
-          name: skillId
-          required: true
-          type: string
-      produces:
-        - text/event-stream
-      responses:
-        "200":
-          description: SSE stream of transcript events
-          schema:
-            type: string
-        "204":
-          description: Install is still preparing; retry once locators exist
-          schema:
-            type: string
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Skill or transcript not found
-          schema:
-            $ref: '#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError'
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: Follow an install's agent transcript
-      tags:
-        - SandboxConfig
   /sessions:
     get:
       consumes:
@@ -10625,9 +7663,11 @@ paths:
   /sessions/{session_id}/messages/{message_id}/artifacts:
     get:
       responses: {}
+      parameters: []
   /sessions/{session_id}/messages/{message_id}/artifacts/{index}/download:
     get:
       responses: {}
+      parameters: []
   /sessions/{session_id}/messages/{message_id}/suggestions:
     get:
       parameters:
@@ -10889,147 +7929,6 @@ paths:
       summary: 继续流式响应
       tags:
         - 问答
-  /skills:
-    get:
-      consumes:
-        - application/json
-      description: 返回指定沙箱配置镜像内、智能体实际能调用的已安装技能（ready 且启用）。不传 sandbox_config_id 时列表为空。
-      parameters:
-        - description: Sandbox config ID
-          in: query
-          name: sandbox_config_id
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: Skills列表
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: 获取当前沙箱配置上可执行的 Skills
-      tags:
-        - Skills
-  /skills/catalog:
-    get:
-      description: Returns every skill definition in this workspace and which sandbox configs it is installed on.
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-        - Bearer: []
-        - ApiKeyAuth: []
-      summary: List workspace skills
-      tags:
-        - Skills
-    post:
-      consumes:
-        - application/json
-        - multipart/form-data
-      description: Records a skill without installing it. Send a zip as multipart field "file", or JSON {"source":"..."}.
-      produces:
-        - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Add a skill to the workspace catalog
-      tags:
-        - Skills
-  /skills/catalog/{id}:
-    delete:
-      description: Refused while any sandbox still has an installation of this skill.
-      parameters:
-        - description: Catalog skill ID
-          in: path
-          name: id
-          required: true
-          type: string
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Delete a catalog skill
-      tags:
-        - Skills
-  /skills/catalog/{id}/files:
-    get:
-      description: Lists the stored catalog bundle. Files belong to the skill definition, not a sandbox install.
-      parameters:
-        - description: Catalog skill ID
-          in: path
-          name: id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: List files of a catalog skill
-      tags:
-        - Skills
-  /skills/catalog/{id}/files/content:
-    get:
-      parameters:
-        - description: Catalog skill ID
-          in: path
-          name: id
-          required: true
-          type: string
-        - description: Skill-root-relative file path
-          in: query
-          name: path
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Read one file of a catalog skill
-      tags:
-        - Skills
-  /skills/catalog/{id}/install:
-    post:
-      consumes:
-        - application/json
-      description: Runs the existing snapshot install onto each named sandbox config.
-      parameters:
-        - description: Catalog skill ID
-          in: path
-          name: id
-          required: true
-          type: string
-      produces:
-        - application/json
-      responses:
-        "202":
-          description: Accepted
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Install a catalog skill onto sandboxes
-      tags:
-        - Skills
   /system/admin/runtime/queues:
     get:
       description: 返回各 asynq 队列的实时深度（pending/active/scheduled/retry 等）与 worker 并发配置，仅系统管理员可见
@@ -11043,6 +7942,7 @@ paths:
       summary: 获取解析任务队列运行时状态
       tags:
         - 系统管理
+      parameters: []
   /system/admin/runtime/queues/{queue}/archived:
     delete:
       parameters:
@@ -11250,6 +8150,7 @@ paths:
       summary: 获取部署能力清单
       tags:
         - 系统
+      parameters: []
   /system/info:
     get:
       consumes:
@@ -11265,6 +8166,7 @@ paths:
       summary: 获取系统信息
       tags:
         - 系统
+      parameters: []
   /system/parser-engines:
     get:
       produces:
@@ -11278,6 +8180,7 @@ paths:
       summary: 列出可用的文档解析引擎
       tags:
         - 系统
+      parameters: []
   /system/parser-engines/check:
     post:
       consumes:
@@ -11295,28 +8198,6 @@ paths:
         "200":
           description: OK
       summary: 使用当前参数检测解析引擎可用性
-      tags:
-        - 系统
-  /system/sandbox-check:
-    post:
-      consumes:
-        - application/json
-      description: 使用当前填写的参数测试沙箱后端，不保存配置；deep=true 会执行临时脚本，远端后端还会创建并销毁一个沙箱
-      parameters:
-        - description: 沙箱配置
-          in: body
-          name: body
-          required: true
-          schema:
-            $ref: '#/definitions/internal_handler.SandboxCheckRequest'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_handler.SandboxCheckResponse'
-      summary: 测试沙箱连通性
       tags:
         - 系统
   /tenants/{id}:
@@ -11471,6 +8352,7 @@ paths:
       summary: 获取提示词模板
       tags:
         - 空间管理
+      parameters: []
   /user/favorites:
     get:
       description: Lists this user's starred resources in the current workspace for a given type
@@ -11531,36 +8413,36 @@ paths:
   /knowledge-context/entities:
     get:
       parameters:
-      - description: Query scope
-        enum:
-        - knowledge_base
-        - domain
-        - team
-        in: query
-        name: scope
-        type: string
-      - description: Knowledge base for knowledge_base scope
-        in: query
-        name: knowledge_base_id
-        type: string
-      - description: Domain for domain scope
-        in: query
-        name: domain_id
-        type: string
-      - description: Object name or alias
-        in: query
-        name: entity
-        type: string
-      - description: Page size (1-100)
-        in: query
-        name: limit
-        type: integer
-      - description: Page offset
-        in: query
-        name: offset
-        type: integer
+        - description: Query scope
+          enum:
+            - knowledge_base
+            - domain
+            - team
+          in: query
+          name: scope
+          type: string
+        - description: Knowledge base for knowledge_base scope
+          in: query
+          name: knowledge_base_id
+          type: string
+        - description: Domain for domain scope
+          in: query
+          name: domain_id
+          type: string
+        - description: Object name or alias
+          in: query
+          name: entity
+          type: string
+        - description: Page size (1-100)
+          in: query
+          name: limit
+          type: integer
+        - description: Page offset
+          in: query
+          name: offset
+          type: integer
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
@@ -11568,24 +8450,24 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - Bearer: []
+        - Bearer: []
       summary: List global objects
       tags:
-      - Knowledge Context
+        - Knowledge Context
   /knowledge-context/entities/{entity_id}:
     get:
       parameters:
-      - description: Global object ID
-        in: path
-        name: entity_id
-        required: true
-        type: string
-      - description: Include historical facts and evidence (default true)
-        in: query
-        name: include_history
-        type: boolean
+        - description: Global object ID
+          in: path
+          name: entity_id
+          required: true
+          type: string
+        - description: Include historical facts and evidence (default true)
+          in: query
+          name: include_history
+          type: boolean
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
@@ -11603,43 +8485,43 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - Bearer: []
+        - Bearer: []
       summary: View a global object with source knowledge bases
       tags:
-      - Knowledge Context
+        - Knowledge Context
   /knowledge-context/events:
     get:
       parameters:
-      - description: Query scope
-        enum:
-        - knowledge_base
-        - domain
-        - team
-        in: query
-        name: scope
-        type: string
-      - description: Knowledge base for knowledge_base scope
-        in: query
-        name: knowledge_base_id
-        type: string
-      - description: Domain for domain scope
-        in: query
-        name: domain_id
-        type: string
-      - description: Related global object
-        in: query
-        name: entity_id
-        type: string
-      - description: Page size (1-100)
-        in: query
-        name: limit
-        type: integer
-      - description: Page offset
-        in: query
-        name: offset
-        type: integer
+        - description: Query scope
+          enum:
+            - knowledge_base
+            - domain
+            - team
+          in: query
+          name: scope
+          type: string
+        - description: Knowledge base for knowledge_base scope
+          in: query
+          name: knowledge_base_id
+          type: string
+        - description: Domain for domain scope
+          in: query
+          name: domain_id
+          type: string
+        - description: Related global object
+          in: query
+          name: entity_id
+          type: string
+        - description: Page size (1-100)
+          in: query
+          name: limit
+          type: integer
+        - description: Page offset
+          in: query
+          name: offset
+          type: integer
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
@@ -11647,23 +8529,23 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - Bearer: []
+        - Bearer: []
       summary: List events by scope
       tags:
-      - Knowledge Context
+        - Knowledge Context
   /knowledge-context/query:
     post:
       consumes:
-      - application/json
+        - application/json
       parameters:
-      - description: Scope and structured conditions
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/reliquary_internal_types.KnowledgeContextQuery'
+        - description: Scope and structured conditions
+          in: body
+          name: request
+          required: true
+          schema:
+            $ref: '#/definitions/reliquary_internal_types.KnowledgeContextQuery'
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: Sourced entities, facts and events
@@ -11676,14 +8558,14 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - Bearer: []
+        - Bearer: []
       summary: Query structured knowledge
       tags:
-      - Knowledge Context
+        - Knowledge Context
   /knowledge-domains:
     get:
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
@@ -11691,23 +8573,24 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - Bearer: []
-      - ApiKeyAuth: []
+        - Bearer: []
+        - ApiKeyAuth: []
       summary: List knowledge domains
       tags:
-      - Knowledge domains
+        - Knowledge domains
+      parameters: []
     post:
       consumes:
-      - application/json
+        - application/json
       parameters:
-      - description: Domain template
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/reliquary_internal_types.KnowledgeDomain'
+        - description: Domain template
+          in: body
+          name: request
+          required: true
+          schema:
+            $ref: '#/definitions/reliquary_internal_types.KnowledgeDomain'
       produces:
-      - application/json
+        - application/json
       responses:
         "201":
           description: Created
@@ -11715,21 +8598,21 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - Bearer: []
-      - ApiKeyAuth: []
+        - Bearer: []
+        - ApiKeyAuth: []
       summary: Create a knowledge domain
       tags:
-      - Knowledge domains
+        - Knowledge domains
   /knowledge-domains/{id}:
     delete:
       parameters:
-      - description: Domain ID
-        in: path
-        name: id
-        required: true
-        type: string
+        - description: Domain ID
+          in: path
+          name: id
+          required: true
+          type: string
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
@@ -11737,20 +8620,20 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - Bearer: []
-      - ApiKeyAuth: []
+        - Bearer: []
+        - ApiKeyAuth: []
       summary: Delete an unused custom knowledge domain
       tags:
-      - Knowledge domains
+        - Knowledge domains
     get:
       parameters:
-      - description: Domain ID
-        in: path
-        name: id
-        required: true
-        type: string
+        - description: Domain ID
+          in: path
+          name: id
+          required: true
+          type: string
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
@@ -11758,28 +8641,28 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - Bearer: []
-      - ApiKeyAuth: []
+        - Bearer: []
+        - ApiKeyAuth: []
       summary: Get a knowledge domain
       tags:
-      - Knowledge domains
+        - Knowledge domains
     put:
       consumes:
-      - application/json
+        - application/json
       parameters:
-      - description: Domain ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Domain template
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/reliquary_internal_types.KnowledgeDomain'
+        - description: Domain ID
+          in: path
+          name: id
+          required: true
+          type: string
+        - description: Domain template
+          in: body
+          name: request
+          required: true
+          schema:
+            $ref: '#/definitions/reliquary_internal_types.KnowledgeDomain'
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
@@ -11787,29 +8670,29 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - Bearer: []
-      - ApiKeyAuth: []
+        - Bearer: []
+        - ApiKeyAuth: []
       summary: Update a knowledge domain
       tags:
-      - Knowledge domains
+        - Knowledge domains
   /knowledge-domains/{id}/field-mappings:
     post:
       consumes:
-      - application/json
+        - application/json
       parameters:
-      - description: Domain ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Field mapping
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/reliquary_internal_types.DomainFieldMapping'
+        - description: Domain ID
+          in: path
+          name: id
+          required: true
+          type: string
+        - description: Field mapping
+          in: body
+          name: request
+          required: true
+          schema:
+            $ref: '#/definitions/reliquary_internal_types.DomainFieldMapping'
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
@@ -11817,29 +8700,29 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - Bearer: []
-      - ApiKeyAuth: []
+        - Bearer: []
+        - ApiKeyAuth: []
       summary: Map an open field to a template field alias
       tags:
-      - Knowledge domains
+        - Knowledge domains
   /knowledge-domains/{id}/fields:
     post:
       consumes:
-      - application/json
+        - application/json
       parameters:
-      - description: Domain ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: New template field
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/reliquary_internal_types.DomainField'
+        - description: Domain ID
+          in: path
+          name: id
+          required: true
+          type: string
+        - description: New template field
+          in: body
+          name: request
+          required: true
+          schema:
+            $ref: '#/definitions/reliquary_internal_types.DomainField'
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
@@ -11847,21 +8730,21 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - Bearer: []
-      - ApiKeyAuth: []
+        - Bearer: []
+        - ApiKeyAuth: []
       summary: Add an open field as a template field
       tags:
-      - Knowledge domains
+        - Knowledge domains
   /knowledge-domains/{id}/open-fields:
     get:
       parameters:
-      - description: Domain ID
-        in: path
-        name: id
-        required: true
-        type: string
+        - description: Domain ID
+          in: path
+          name: id
+          required: true
+          type: string
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
@@ -11869,29 +8752,29 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - Bearer: []
-      - ApiKeyAuth: []
+        - Bearer: []
+        - ApiKeyAuth: []
       summary: List unmapped open fields with counts and sample facts
       tags:
-      - Knowledge domains
+        - Knowledge domains
   /knowledge-context/entities/merge:
     post:
       consumes:
-      - application/json
+        - application/json
       parameters:
-      - description: Global object IDs
-        in: body
-        name: request
-        required: true
-        schema:
-          properties:
-            keep_entity_id:
-              type: string
-            merge_entity_id:
-              type: string
-          type: object
+        - description: Global object IDs
+          in: body
+          name: request
+          required: true
+          schema:
+            properties:
+              keep_entity_id:
+                type: string
+              merge_entity_id:
+                type: string
+            type: object
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
@@ -11904,47 +8787,47 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - Bearer: []
+        - Bearer: []
       summary: Merge global objects
       tags:
-      - Knowledge Context
+        - Knowledge Context
   /knowledge-context/evidence:
     get:
       parameters:
-      - description: Query scope
-        enum:
-        - knowledge_base
-        - domain
-        - team
-        in: query
-        name: scope
-        type: string
-      - description: Knowledge base for knowledge_base scope
-        in: query
-        name: knowledge_base_id
-        type: string
-      - description: Domain for domain scope
-        in: query
-        name: domain_id
-        type: string
-      - description: Related global object
-        in: query
-        name: entity_id
-        type: string
-      - description: Related event
-        in: query
-        name: event_id
-        type: string
-      - description: Page size (1-100)
-        in: query
-        name: limit
-        type: integer
-      - description: Page offset
-        in: query
-        name: offset
-        type: integer
+        - description: Query scope
+          enum:
+            - knowledge_base
+            - domain
+            - team
+          in: query
+          name: scope
+          type: string
+        - description: Knowledge base for knowledge_base scope
+          in: query
+          name: knowledge_base_id
+          type: string
+        - description: Domain for domain scope
+          in: query
+          name: domain_id
+          type: string
+        - description: Related global object
+          in: query
+          name: entity_id
+          type: string
+        - description: Related event
+          in: query
+          name: event_id
+          type: string
+        - description: Page size (1-100)
+          in: query
+          name: limit
+          type: integer
+        - description: Page offset
+          in: query
+          name: offset
+          type: integer
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
@@ -11952,20 +8835,20 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - Bearer: []
+        - Bearer: []
       summary: List evidence by scope
       tags:
-      - Knowledge Context
+        - Knowledge Context
   /knowledge-context/evidence/{evidence_id}:
     get:
       parameters:
-      - description: Evidence ID
-        in: path
-        name: evidence_id
-        required: true
-        type: string
+        - description: Evidence ID
+          in: path
+          name: evidence_id
+          required: true
+          type: string
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
@@ -11978,28 +8861,28 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - Bearer: []
+        - Bearer: []
       summary: View source evidence
       tags:
-      - Knowledge Context
+        - Knowledge Context
   /knowledge-context/facts/{fact_id}/correction:
     post:
       consumes:
-      - application/json
+        - application/json
       parameters:
-      - description: Fact ID
-        in: path
-        name: fact_id
-        required: true
-        type: string
-      - description: Fact correction
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/reliquary_internal_types.KnowledgeFactCorrection'
+        - description: Fact ID
+          in: path
+          name: fact_id
+          required: true
+          type: string
+        - description: Fact correction
+          in: body
+          name: request
+          required: true
+          schema:
+            $ref: '#/definitions/reliquary_internal_types.KnowledgeFactCorrection'
       produces:
-      - application/json
+        - application/json
       responses:
         "200":
           description: OK
@@ -12012,10 +8895,10 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - Bearer: []
+        - Bearer: []
       summary: Correct a sourced fact
       tags:
-      - Knowledge Context
+        - Knowledge Context
 securityDefinitions:
   ApiKeyAuth:
     description: API Key 认证，以唯一用户身份访问个人空间

@@ -32,48 +32,6 @@ func RegisterModelRoutes(
 	}
 }
 
-// Sandbox configs are workspace infrastructure that hold provider credentials.
-func RegisterSandboxConfigRoutes(
-	r *gin.RouterGroup,
-	h *handler.SandboxConfigHandler,
-	skills *handler.SandboxSkillHandler,
-	g *accessGuards) {
-	configs := r.Group("/sandbox-configs")
-	{
-		configs.GET("", h.List)
-		configs.PUT("/workspace-policy", h.SetWorkspacePolicy)
-		configs.POST("/templates/query", h.QueryTemplates)
-		configs.POST("", h.Create)
-		configs.GET("/:id", h.Get)
-		configs.PUT("/:id", h.Update)
-		configs.DELETE("/:id", h.Delete)
-		configs.GET("/:id/sandboxes", h.Inventory)
-		// Skill uploads update the image used by sessions of this config.
-		// The listing describes the skills available in that image.
-		configs.GET("/:id/skills", skills.List)
-		configs.POST("/:id/skills", skills.Upload)
-		configs.GET("/:id/skills/:skillId", skills.Get)
-		configs.GET("/:id/skills/:skillId/files", skills.ListFiles)
-		configs.GET("/:id/skills/:skillId/files/content", skills.GetFile)
-		configs.POST("/:id/skills/:skillId/reinstall", skills.Reinstall)
-		configs.POST("/:id/skills/:skillId/stop", skills.Stop)
-		configs.PATCH("/:id/skills/:skillId", skills.Patch)
-		configs.DELETE("/:id/skills/:skillId", skills.Delete)
-		configs.GET("/:id/skills/:skillId/install-events", skills.InstallEvents)
-		configs.GET("/:id/skills/:skillId/transcript", skills.InstallTranscript)
-	}
-}
-
-// RegisterEvaluationRoutes registers evaluation endpoints. Running an
-// evaluation calls the LLM and reads knowledge bases in the personal workspace.
-func RegisterEvaluationRoutes(r *gin.RouterGroup, handler *handler.EvaluationHandler, g *accessGuards) {
-	evaluationRoutes := r.Group("/evaluation")
-	{
-		evaluationRoutes.POST("", handler.Evaluation)
-		evaluationRoutes.GET("", handler.GetEvaluationResult)
-	}
-}
-
 func RegisterInitializationRoutes(r *gin.RouterGroup, handler *handler.InitializationHandler, g *accessGuards) {
 	r.Handle(http.MethodGet, "/initialization/config/:kbId", g.KBAccessRead("kbId"), handler.GetCurrentConfigByKB)
 	r.Handle(http.MethodPost, "/initialization/initialize/:kbId", g.KBAccessWrite("kbId"), handler.InitializeByKB)

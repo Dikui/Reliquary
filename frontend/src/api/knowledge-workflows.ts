@@ -5,26 +5,16 @@ export type KnowledgeWorkflowStepType =
   | 'search'
   | 'fact_query'
   | 'report'
-  | 'wiki_update'
-  | 'skill'
-  | 'condition'
-  | 'human_review'
 
 export interface KnowledgeWorkflowSchedule {
   cron?: string
   timezone?: string
 }
 
-export interface KnowledgeWorkflowWhen {
-  step_id: string
-  equals: boolean
-}
-
 export interface KnowledgeWorkflowStep {
   id: string
   type: KnowledgeWorkflowStepType
   depends_on?: string[]
-  when?: KnowledgeWorkflowWhen
   config: Record<string, unknown>
 }
 
@@ -51,18 +41,14 @@ export type KnowledgeWorkflowRunStatus =
   | 'paused'
   | 'completed'
   | 'failed'
-  | 'rejected'
   | 'cancelled'
   | string
 
 export type KnowledgeWorkflowStepRunStatus =
   | 'pending'
   | 'running'
-  | 'waiting_review'
   | 'succeeded'
   | 'failed'
-  | 'skipped'
-  | 'rejected'
   | string
 
 export interface KnowledgeWorkflowStepRun {
@@ -159,16 +145,6 @@ export const runKnowledgeWorkflow = (kbId: string, workflowId: string) =>
 export const getKnowledgeWorkflowRun = (kbId: string, runId: string) =>
   get<KnowledgeContextEnvelope<KnowledgeWorkflowRun>>(
     `${workflowBase(kbId)}/runs/${encodeURIComponent(runId)}`,
-  )
-
-export const decideKnowledgeWorkflowRun = (
-  kbId: string,
-  runId: string,
-  decision: 'approve' | 'reject',
-) =>
-  post<KnowledgeContextEnvelope<KnowledgeWorkflowRun>>(
-    `${workflowBase(kbId)}/runs/${encodeURIComponent(runId)}/decision`,
-    { decision },
   )
 
 export const resumeKnowledgeWorkflowRun = (kbId: string, runId: string) =>

@@ -26,15 +26,8 @@
                       'expanded': expandedMenus.includes(item.key)
                     }]" @click="handleNavClick(item)">
                       <!-- 沙箱：隔离运行窗口，避免和 Ollama / 系统设置共用 server -->
-                      <svg v-if="item.key === 'sandbox'" width="17" height="17" viewBox="0 0 18 18" fill="none"
-                        xmlns="http://www.w3.org/2000/svg" class="nav-icon">
-                        <rect x="2.5" y="3" width="13" height="12" rx="2" stroke="currentColor" stroke-width="1.2"
-                          fill="none" />
-                        <path d="M2.5 6.5h13" stroke="currentColor" stroke-width="1.2" />
-                        <path d="M5.5 10h4M5.5 12.5h2.5" stroke="currentColor" stroke-width="1.2"
-                          stroke-linecap="round" />
-                      </svg>
-                      <span v-else-if="item.emoji" class="nav-icon nav-icon-emoji">{{ item.emoji }}</span>
+
+                      <span v-if="item.emoji" class="nav-icon nav-icon-emoji">{{ item.emoji }}</span>
                       <t-icon v-else :name="item.icon" class="nav-icon" />
                       <span class="nav-label">{{ item.label }}</span>
                       <t-icon v-if="item.children && item.children.length > 0"
@@ -90,20 +83,12 @@
                     <ChatHistorySettings />
                   </div>
 
-                  <!-- 长期记忆（空间级开关） -->
-                  <div v-if="currentSection === 'memory'" class="section">
-                    <MemoryWorkspaceSettings />
-                  </div>
 
                   <!-- 我的记忆（个人记忆管理） -->
-                  <div v-if="currentSection === 'mymemory'" class="section">
-                    <MemorySettings />
-                  </div>
+
 
                   <!-- 沙箱密钥（成员自己的技能 / 沙箱密钥） -->
-                  <div v-if="currentSection === 'envvars'" class="section">
-                    <EnvVarSettings />
-                  </div>
+
 
                   <!-- 解析引擎 -->
                   <div v-if="currentSection === 'parser'" class="section">
@@ -113,14 +98,10 @@
                   <!-- 存储引擎 -->
 
                   <!-- 沙箱 -->
-                  <div v-if="currentSection === 'sandbox'" class="section">
-                    <SandboxSettings />
-                  </div>
+
 
                   <!-- 技能目录：登记后可装到多份沙箱，智能体只从当前沙箱的就绪集合选用 -->
-                  <div v-if="currentSection === 'skills'" class="section">
-                    <SkillSettings :initial-sandbox-id="currentSubSection" />
-                  </div>
+
 
                   <!-- 系统信息 -->
                   <div v-if="currentSection === 'system'" class="section">
@@ -136,9 +117,6 @@
                   <div v-if="currentSection === 'runtime-queues'" class="section">
                     <RuntimeQueues />
                   </div>
-
-
-
 
 
                   <!-- 用户信息（账户基础信息：ID / 用户名 / 邮箱 / 注册时间）。
@@ -190,12 +168,7 @@ import ModelSettings from './ModelSettings.vue'
 import OllamaSettings from './OllamaSettings.vue'
 import McpSettings from './McpSettings.vue'
 import ChatHistorySettings from './ChatHistorySettings.vue'
-import MemorySettings from './MemorySettings.vue'
-import EnvVarSettings from './EnvVarSettings.vue'
-import MemoryWorkspaceSettings from './MemoryWorkspaceSettings.vue'
 import ParserEngineSettings from './ParserEngineSettings.vue'
-import SandboxSettings from './SandboxSettings.vue'
-import SkillSettings from './SkillSettings.vue'
 import DomainSettings from './DomainSettings.vue'
 import SystemSettings from '@/views/system/SystemSettings.vue'
 import RuntimeQueues from '@/views/system/RuntimeQueues.vue'
@@ -208,7 +181,6 @@ import {
   SYSTEM_SETTINGS_SECTIONS,
 } from '@/config/settingsAccess'
 import { SETTINGS_SECTION_CAPABILITY } from '@/config/deploymentCapabilities'
-import { SKILL_ICON } from '@/types/mention'
 import {
   buildSettingsRouteQuery,
   integrationSectionKey,
@@ -287,17 +259,12 @@ const navItems = computed(() => {
     { key: 'ollama', icon: 'server', label: 'Ollama' },
     { key: 'models', icon: 'control-platform', label: t('settings.modelManagement') },
     { key: 'chathistory', icon: 'chat', label: t('chatHistorySettings.title') },
-    { key: 'memory', icon: 'bulletpoint', label: t('memoryWorkspaceSettings.title') },
     { key: 'parser', icon: 'file-search', label: t('settings.parserEngine') },
-    { key: 'sandbox', icon: 'code', label: t('settings.sandbox.title') },
-    { key: 'skills', icon: SKILL_ICON, label: t('settings.skills.title') },
     { key: 'mcp', icon: 'tools', label: t('settings.mcpService') },
     { key: 'system', icon: 'info-circle', label: t('settings.versionInfo') },
     { key: 'system-global', icon: 'server', label: t('settings.system') },
     { key: 'runtime-queues', icon: 'queue', label: t('settings.taskQueue') },
     { key: 'userprofile', icon: 'user', label: t('userProfile.title') },
-    { key: 'mymemory', icon: 'bookmark', label: t('memorySettings.title') },
-    { key: 'envvars', icon: 'key', label: t('envVarSettings.title') },
     { key: 'tenant', icon: 'user-circle', label: t('settings.tenantInfo') },
     { key: 'domains', icon: 'layers', label: t('knowledgeDomains.title') },
     ...integrationItems,
@@ -318,12 +285,12 @@ const navGroups = computed<NavGroup[]>(() => {
     {
       key: 'account',
       label: t('settings.navGroups.account'),
-      items: pickItems(['general', 'userprofile', 'mymemory', 'envvars']),
+      items: pickItems(['general', 'userprofile', ]),
     },
     {
       key: 'workspace',
       label: t('settings.navGroups.workspace'),
-      items: pickItems(['tenant', 'domains', 'chathistory', 'memory']),
+      items: pickItems(['tenant', 'domains', 'chathistory', ]),
     },
     {
       key: 'models_runtime',
@@ -342,8 +309,6 @@ const navGroups = computed<NavGroup[]>(() => {
       label: t('settings.navGroups.dataExtensions'),
       items: pickItems([
         'parser',
-        'sandbox',
-        'skills',
         'mcp',
       ]),
     },
@@ -458,21 +423,12 @@ watch(() => uiStore.settingsInitialSection, (section) => {
           }
         }, 300)
       }
-    } else if (normalizedSection === 'skills') {
-      // Sandbox config id from the agent editor / sandbox cards. Skills has
-      // no nav children, so this is the only way to preselect the target image.
-      currentSubSection.value = uiStore.settingsInitialSubSection || ''
     } else {
       currentSubSection.value = ''
     }
   }
 }, { immediate: true })
 
-watch(() => uiStore.settingsInitialSubSection, (sub) => {
-  if (uiStore.settingsInitialSection === 'skills' && visible.value) {
-    currentSubSection.value = sub || ''
-  }
-})
 
 watch(
   () => [visible.value, route.path, route.query.section, deploymentCapabilities.loaded] as const,
@@ -495,9 +451,7 @@ watch(
       return
     }
     currentSection.value = normalizedSection
-    currentSubSection.value = normalizedSection === 'skills'
-      ? (uiStore.settingsInitialSubSection || '')
-      : ''
+    currentSubSection.value = ''
     syncSettingsRoute(normalizedSection)
   },
   { immediate: true },

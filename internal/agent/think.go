@@ -38,7 +38,7 @@ func (e *AgentEngine) streamLLMToEventBus(
 	logger.Debugf(ctx, "[Agent][Stream] Starting LLM stream with %d messages", len(messages))
 
 	// No wall-clock deadline here: a round that streams a large tool-call
-	// payload (a whole file body inside write_sandbox_file) legitimately runs
+	// payload (such as a large data_analysis query) legitimately runs
 	// for minutes while producing output the entire time. Cutting it off by
 	// total elapsed time discards the half-assembled call. What must be caught
 	// is a stream that stops producing, which the watchdog below handles.
@@ -187,7 +187,7 @@ func (e *AgentEngine) streamLLMToEventBus(
 	// everything collected is a partial response — a cut-off preamble, a
 	// half-serialized tool call. Always surface it as a Go error so the caller
 	// retries or degrades. Returning it as success once let a 238-character
-	// preamble stand in as the final answer while a 30 KB write_sandbox_file
+	// preamble stand in as the final answer while a large data_analysis
 	// call was silently dropped.
 	if result.StreamError != "" {
 		return result, fmt.Errorf("LLM stream error: %s", result.StreamError)

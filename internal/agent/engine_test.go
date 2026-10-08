@@ -90,60 +90,8 @@ func TestStreamLLMResourceAliasesRoundTrip(t *testing.T) {
 	require.Equal(t, "source=res://0001", model.calls[0][0].Content)
 }
 
-// TestStreamLLMSummarySlugSurvivesDocumentCompaction is the regression guard for
-// the mangled `summary/<uuid>` → `summary/d1` bug. A wiki summary-page slug
-// embeds a document's UUID. The unified model-context registry owns the
-// resource-before-source encoding order so the slug cannot become summary/d1.
-func TestStreamLLMSummarySlugSurvivesDocumentCompaction(t *testing.T) {
-	const knowledgeID = "07a20bb1-a662-47cf-9929-06fb5d5b5b5e"
-	const summarySlug = "summary/" + knowledgeID
-
-	// The model copies the protected token it saw back into a wiki_read call.
-	model := &mockChat{responses: []mockResponse{{chunks: []types.StreamResponse{
-		{
-			ResponseType: types.ResponseTypeAnswer,
-			Content:      "reading the summary",
-			ToolCalls: []types.LLMToolCall{{
-				Type: "function",
-				Function: types.FunctionCall{
-					Name:      "wiki_read_page",
-					Arguments: `{"slugs":["res://0001"]}`,
-				},
-			}},
-			Done:         true,
-			FinishReason: "tool_calls",
-		},
-	}}}}
-
-	engine := newTestEngine(t, model)
-	// The document UUID is registered as citation alias d1, exactly as the RAG
-	// context (<document id="d1">…) would have registered it upstream.
-	require.Equal(t, "d1", engine.modelContext.RegisterDocument(knowledgeID))
-
-	toolMsg := chat.Message{
-		Role:    "tool",
-		Content: `<link>[[` + summarySlug + `|Reliquary 试错记录.md - Summary]]</link>`,
-	}
-	result, err := engine.streamLLMToEventBus(context.Background(),
-		[]chat.Message{toolMsg}, nil, nil)
-	require.NoError(t, err)
-
-	// What the model actually saw must NOT contain the mangled slug; the UUID
-	// must have been aliased to a res:// token before citation compaction ran.
-	require.Len(t, model.calls, 1)
-	sent := model.calls[0][0].Content
-	require.NotContains(t, sent, "summary/d1",
-		"summary slug was clobbered by document-id compaction (encode ordering regressed)")
-	require.Contains(t, sent, "res://", "summary slug must be protected as a res:// token")
-
-	// The model's tool call echoing the token must decode back to the real slug.
-	require.Len(t, result.ToolCalls, 1)
-	require.Contains(t, result.ToolCalls[0].Function.Arguments, summarySlug)
-	require.NotContains(t, result.ToolCalls[0].Function.Arguments, "res://")
-}
-
 // Reproduces the round that ended a 40-round conversation: the stream broke
-// while serializing a large write_sandbox_file call, after a short preamble had
+// while serializing a large data_analysis call, after a short preamble had
 // already streamed. Treating that as a completed turn let the preamble stand in
 // as the final answer and dropped the call, so the stream error must surface.
 func TestStreamLLMToEventBus_ErrorAfterContent_IsNotASuccessfulTurn(t *testing.T) {
@@ -157,8 +105,8 @@ func TestStreamLLMToEventBus_ErrorAfterContent_IsNotASuccessfulTurn(t *testing.T
 			ToolCalls: []types.LLMToolCall{{
 				ID: "call-1",
 				Function: types.FunctionCall{
-					Name:      "write_sandbox_file",
-					Arguments: "{\"path\":\"/a.html\",\"content\":\"<htm",
+					Name:      "data_analysis",
+					Arguments: "{\"sql\":\"SELECT ",
 				},
 			}},
 		},
@@ -475,9 +423,9 @@ func TestContextCompactionDoesNotRunEveryRound(t *testing.T) {
 			chat.Message{Role: "assistant", ToolCalls: []chat.ToolCall{{
 				ID:       id,
 				Type:     "function",
-				Function: chat.FunctionCall{Name: "write_sandbox_file", Arguments: `{"path":"/w/a.html"}`},
+				Function: chat.FunctionCall{Name: "data_analysis", Arguments: `{"sql":"SELECT * FROM data"}`},
 			}}},
-			chat.Message{Role: "tool", Name: "write_sandbox_file", ToolCallID: id, Content: body},
+			chat.Message{Role: "tool", Name: "data_analysis", ToolCallID: id, Content: body},
 		)
 	}
 
@@ -730,23 +678,6 @@ func TestStreamThinkingToEventBus_SetsCompletionTokenBudget(t *testing.T) {
 		require.Len(t, mock.opts, 1)
 		assert.Equal(t, types.DefaultSmartReasoningMaxCompletionTokens, mock.opts[0].MaxTokens)
 		assert.Equal(t, types.DefaultSmartReasoningMaxCompletionTokens, mock.opts[0].MaxCompletionTokens)
-	})
-
-	t.Run("defaults to the write-file budget when a sandbox is bound", func(t *testing.T) {
-		mock := &mockChat{
-			responses: []mockResponse{
-				{chunks: []types.StreamResponse{{Content: "ok", Done: true, FinishReason: "stop"}}},
-			},
-		}
-		engine := newTestEngine(t, mock, func(cfg *types.AgentConfig) {
-			cfg.SandboxConfigID = "cfg-a"
-		})
-		_, err := engine.streamThinkingToEventBus(context.Background(),
-			[]chat.Message{{Role: "user", Content: "test"}}, nil, 0, "sess-1")
-		require.NoError(t, err)
-		require.Len(t, mock.opts, 1)
-		assert.Equal(t, types.DefaultAgentMaxCompletionTokens, mock.opts[0].MaxTokens)
-		assert.Equal(t, types.DefaultAgentMaxCompletionTokens, mock.opts[0].MaxCompletionTokens)
 	})
 
 	t.Run("preserves explicit higher budget", func(t *testing.T) {

@@ -34,11 +34,10 @@ function requestRejectionHandler(translate: (key: string) => string = key => key
   }
   const modules: Record<string, unknown> = {
     axios,
-    './index': { generateRandomString: () => 'domain-error-test', MAX_FILE_SIZE_MB: 50, MAX_SKILL_BUNDLE_SIZE_MB: 256 },
+    './index': { generateRandomString: () => 'domain-error-test', MAX_FILE_SIZE_MB: 50 },
     '@/i18n': { global: { t: translate } },
     './personalServerError': personalServerError,
     './api-base': { getApiBaseUrl: () => '/api/v1' },
-    './uploadLimit': { isSkillBundleUploadUrl: () => false },
   }
   const source = readFileSync(new URL('../../utils/request.ts', import.meta.url), 'utf8')
   const compiled = ts.transpileModule(source, {

@@ -163,7 +163,7 @@ const debouncedFetch = () => {
     debounceTimer = setTimeout(() => { fetchSuggestedQuestions(); }, 300);
 };
 
-// 监听 Agent / 知识库 / 文件 / 标签 / MCP / Skill @mention
+// 监听 Agent / 知识库 / 文件 / 标签 / MCP @mention
 watch(
     () => ({
         agentId: settingsStore.selectedAgentId,
@@ -171,7 +171,6 @@ watch(
         files: settingsStore.settings.selectedFiles,
         tags: settingsStore.settings.selectedTags,
         mcps: settingsStore.settings.selectedMCPServices,
-        skills: settingsStore.settings.selectedSkills,
     }),
     debouncedFetch,
     { deep: true },

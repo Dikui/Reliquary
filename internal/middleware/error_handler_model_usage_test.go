@@ -36,8 +36,7 @@ func TestErrorHandler_PreservesStructuredModelUsageDetails(t *testing.T) {
 						},
 					},
 				},
-				Agents:         []types.ModelUsageResource{},
-				LongTermMemory: types.ModelUsageMemory{Bindings: []types.ModelUsageBinding{}},
+				Agents: []types.ModelUsageResource{},
 			},
 		))
 	})
@@ -66,5 +65,4 @@ func TestErrorHandler_PreservesStructuredModelUsageDetails(t *testing.T) {
 		body.Error.Details.KnowledgeBases[1].Bindings,
 	)
 	assert.Empty(t, body.Error.Details.Agents)
-	assert.Empty(t, body.Error.Details.LongTermMemory.Bindings)
 }

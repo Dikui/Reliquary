@@ -89,10 +89,9 @@ func isContextKeyType(expr ast.Expr) bool {
 
 // A context key that reaches logger.CloneContext without a recorded decision
 // opts out of surviving the detach by accident, and nothing reports it: the
-// background work simply runs without the value. That is how an agent's
-// long-term memory opt-out came to stop recall while leaving the write path
-// running, and how the session→sandbox binding was once re-keyed onto a
-// borrowed tenant. Either answer is fine here; silence is not.
+// background work simply runs without the value. Losing caller identity or
+// workspace scope can widen background access. Either answer is fine here;
+// silence is not.
 func TestEveryContextKeyDeclaresACloneDecision(t *testing.T) {
 	t.Parallel()
 

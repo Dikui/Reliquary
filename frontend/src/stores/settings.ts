@@ -17,7 +17,6 @@ interface Settings {
   selectedFileKbMap: Record<string, string>; // 文件ID -> 知识库ID，用于刷新后带 kb_id 拉取文件
   selectedTags: Array<{ id: string; name: string; kbId: string; kbName?: string }>;
   selectedMCPServices: string[];
-  selectedSkills: string[];
   selectedTools?: string[];
   modelConfig: ModelConfig;  // 模型配置
   ollamaConfig: OllamaConfig;  // Ollama配置
@@ -83,7 +82,6 @@ const defaultSettings: Settings = {
   selectedFileKbMap: {},  // 文件ID -> 知识库ID
   selectedTags: [],
   selectedMCPServices: [],
-  selectedSkills: [],
   modelConfig: {
     chatModels: [],
     embeddingModels: [],
@@ -364,20 +362,6 @@ export const useSettingsStore = defineStore("settings", {
       localStorage.setItem("Reliquary_settings", JSON.stringify(this.settings));
     },
 
-    addSkill(skillName: string) {
-      if (!this.settings.selectedSkills) this.settings.selectedSkills = [];
-      if (!this.settings.selectedSkills.includes(skillName)) {
-        this.settings.selectedSkills.push(skillName);
-        localStorage.setItem("Reliquary_settings", JSON.stringify(this.settings));
-      }
-    },
-
-    removeSkill(skillName: string) {
-      if (!this.settings.selectedSkills) return;
-      this.settings.selectedSkills = this.settings.selectedSkills.filter(name => name !== skillName);
-      localStorage.setItem("Reliquary_settings", JSON.stringify(this.settings));
-    },
-
     setFileKbMap(updates: Record<string, string>) {
       if (!this.settings.selectedFileKbMap) this.settings.selectedFileKbMap = {};
       Object.assign(this.settings.selectedFileKbMap, updates);
@@ -438,7 +422,6 @@ export const useSettingsStore = defineStore("settings", {
       this.settings.selectedFileKbMap = {};
       this.settings.selectedTags = [];
       this.settings.selectedMCPServices = [];
-      this.settings.selectedSkills = [];
       localStorage.setItem("Reliquary_settings", JSON.stringify(this.settings));
     },
 
@@ -522,13 +505,7 @@ export const useSettingsStore = defineStore("settings", {
           this.settings.selectedMCPServices = state.mentioned_items
             .filter(item => item.type === "mcp" && item.id)
             .map(item => item.id);
-        }
-        if (Array.isArray(state.skill_names)) {
-          this.settings.selectedSkills = [...state.skill_names];
-        } else if (Array.isArray(state.mentioned_items)) {
-          this.settings.selectedSkills = state.mentioned_items
-            .filter(item => item.type === "skill" && item.id)
-            .map(item => item.skill_name || item.id);
+
         }
       } finally {
         // 复位必须延后到下一次 flush 之后：监听 selectedAgentId 的 watcher 默认
@@ -556,13 +533,11 @@ export interface SessionLastRequestStatePayload {
   knowledge_ids?: string[];
   tag_ids?: string[];
   mcp_service_ids?: string[];
-  skill_names?: string[];
   mentioned_items?: Array<{
     id: string;
     name?: string;
     type: string;
     kb_id?: string;
     kb_name?: string;
-    skill_name?: string;
   }>;
 }

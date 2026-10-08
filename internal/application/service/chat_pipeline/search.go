@@ -278,7 +278,7 @@ func logSearchScoreSample(ctx context.Context, action string, results []*types.S
 }
 
 // targetReportsEmbedFailure reports whether an embedding failure for a KB should
-// be recorded as a retrieval error. Wiki/graph-only KBs have no vector or keyword
+// be recorded as a retrieval error. KBs with disabled indexing have no vector or keyword
 // index to degrade into; HybridSearch returns empty without error. When KB metadata
 // is unavailable, callers still attempt keyword-degraded search.
 func targetReportsEmbedFailure(kb *types.KnowledgeBase) bool {

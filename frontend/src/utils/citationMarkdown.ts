@@ -134,7 +134,7 @@ export function resolveCitationChunkId(
   return raw
 }
 
-/** Convert <web/> / <kb/> / [[wiki]] tags into inline citation HTML. */
+/** Convert <web/> / <kb/> tags into inline citation HTML. */
 export function preprocessCitationTags(
   contentStr: string,
   refs?: CitationKnowledgeRef[] | null,
@@ -175,19 +175,6 @@ export function preprocessCitationTags(
       const displayDoc = escapeHtml(truncateMiddle(doc))
       return `<span class="citation citation-kb" data-kb-id="${safeKbId}" data-chunk-id="${safeChunkId}" data-doc="${safeDoc}" role="button" tabindex="0"><span class="citation-icon citation-icon--book" aria-hidden="true"></span><span class="citation-text">${displayDoc}</span><span class="citation-tip"><span class="tip-loading">…</span></span></span>`
     })
-    .replace(/\[\[([^\]]+)\]\]/g, (match, inner: string) => {
-      const pipeIdx = inner.indexOf('|')
-      const slug = pipeIdx > 0 ? inner.substring(0, pipeIdx).trim() : inner.trim()
-      if (!slug) return match
-      let display = slug
-      if (pipeIdx > 0) {
-        display = inner.substring(pipeIdx + 1).trim()
-      } else {
-        const parts = slug.split('/')
-        display = parts.length > 1 ? parts.slice(1).join('/') : slug
-      }
-      return `<a href="#" class="wiki-content-link citation-wiki" data-slug="${escapeHtml(slug)}">${escapeHtml(display)}</a>`
-    })
 }
 
 const HTML_PLACEHOLDER_RE = /@@RELIQUARY_HTML_PLACEHOLDER_(\d+)@@/g
@@ -196,7 +183,6 @@ const HTML_PLACEHOLDER_RE = /@@RELIQUARY_HTML_PLACEHOLDER_(\d+)@@/g
 export function extractCitationHtmlPlaceholders(
   contentStr: string,
   refs?: CitationKnowledgeRef[] | null,
-  convertWikiLinks = true,
 ): { content: string; htmlSnippets: string[] } {
   const htmlSnippets: string[] = []
   const storeHtml = (html: string): string => {
@@ -207,9 +193,7 @@ export function extractCitationHtmlPlaceholders(
 
   let content = contentStr
     .replace(KB_WEB_TAG_RE, (match) => storeHtml(preprocessCitationTags(match, refs)))
-  if (convertWikiLinks) {
-    content = content.replace(/\[\[([^\]]+)\]\]/g, (match) => storeHtml(preprocessCitationTags(match, refs)))
-  }
+
 
   return { content, htmlSnippets }
 }

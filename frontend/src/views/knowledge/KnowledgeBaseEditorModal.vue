@@ -96,72 +96,13 @@
                             >{{ $t('knowledgeEditor.indexing.searchTitle') }}</t-checkbox>
                             <p class="indexing-check-desc">{{ $t('knowledgeEditor.indexing.searchDesc') }}</p>
                           </div>
-                          <div
-                            class="indexing-check-item"
-                            :class="{ 'is-checked': formData.indexingStrategy.wikiEnabled, 'is-disabled': isIndexingLocked }"
-                            @click="toggleWikiIndexing"
-                          >
-                            <t-checkbox
-                              :checked="formData.indexingStrategy.wikiEnabled"
-                              :disabled="isIndexingLocked"
-                              class="indexing-check-box"
-                            >
-                              <span class="indexing-check-title">
-                                {{ $t('knowledgeEditor.indexing.wikiTitle') }}
-                                <span class="indexing-new-badge">NEW</span>
-                              </span>
-                            </t-checkbox>
-                            <p class="indexing-check-desc">{{ $t('knowledgeEditor.indexing.wikiDesc') }}</p>
-                          </div>
+
                         </div>
                         <p v-if="isIndexingLocked" class="form-tip locked-tip">
                           {{ $t('knowledgeEditor.indexing.lockedTip') }}
                         </p>
                       </div>
 
-                      <!-- Wiki 提取粒度 (仅当 Wiki 启用时显示) -->
-                      <div v-if="formData.indexingStrategy.wikiEnabled" class="form-item">
-                        <label class="form-label">{{ $t('knowledgeEditor.wiki.extractionGranularityLabel') }}</label>
-                        <p class="form-tip">{{ $t('knowledgeEditor.wiki.extractionGranularityTip') }}</p>
-                        <t-radio-group
-                          :value="resolvedGranularity"
-                          class="granularity-radio-group"
-                          @change="handleGranularityChange"
-                        >
-                          <t-radio-button value="focused">
-                            {{ $t('knowledgeEditor.wiki.granularityFocused') }}
-                          </t-radio-button>
-                          <t-radio-button value="standard">
-                            {{ $t('knowledgeEditor.wiki.granularityStandard') }}
-                          </t-radio-button>
-                          <t-radio-button value="exhaustive">
-                            {{ $t('knowledgeEditor.wiki.granularityExhaustive') }}
-                          </t-radio-button>
-                        </t-radio-group>
-                        <p class="form-tip granularity-hint">{{ granularityHint }}</p>
-                      </div>
-
-                      <div v-if="formData.indexingStrategy.wikiEnabled" class="form-item">
-                        <label class="form-label">{{ $t('knowledgeEditor.wiki.contentInstructionsLabel') }}</label>
-                        <p class="form-tip">{{ $t('knowledgeEditor.wiki.contentInstructionsTip') }}</p>
-                        <t-textarea
-                          v-model="formData.wikiConfig.contentInstructions"
-                          :placeholder="$t('knowledgeEditor.wiki.contentInstructionsPlaceholder')"
-                          :maxlength="4000"
-                          :autosize="{ minRows: 3, maxRows: 8 }"
-                        />
-                      </div>
-
-                      <div v-if="formData.indexingStrategy.wikiEnabled" class="form-item">
-                        <label class="form-label">{{ $t('knowledgeEditor.wiki.extractionInstructionsLabel') }}</label>
-                        <p class="form-tip">{{ $t('knowledgeEditor.wiki.extractionInstructionsTip') }}</p>
-                        <t-textarea
-                          v-model="formData.wikiConfig.extractionInstructions"
-                          :placeholder="$t('knowledgeEditor.wiki.extractionInstructionsPlaceholder')"
-                          :maxlength="4000"
-                          :autosize="{ minRows: 3, maxRows: 8 }"
-                        />
-                      </div>
 
                       <div class="form-item">
                         <label class="form-label required">{{ $t('knowledgeDomains.title') }}</label>
@@ -190,7 +131,7 @@
                         />
                       </div>
 
-                      <!-- Wiki 合成模型移至模型配置页 -->
+
                     </div>
                   </div>
                 </div>
@@ -202,14 +143,12 @@
                     v-if="formData"
                     :config="formData.modelConfig"
                     :has-files="hasFiles"
-                    :wiki-enabled="formData.indexingStrategy?.wikiEnabled"
                     :rag-enabled="formData.indexingStrategy?.vectorEnabled || formData.indexingStrategy?.keywordEnabled"
                     :all-models="allModels"
                     @update:config="handleModelConfigUpdate"
                   />
                   <ModelTierEditor v-if="formData" v-model="formData.modelTiers" scope="knowledge_base" :domain-id="formData.domainId" :all-models="allModels" :legacy-tiers="{ light: formData.autoTagConfig.modelId || formData.modelConfig.llmModelId, extraction: formData.modelConfig.llmModelId, generation: formData.modelConfig.llmModelId, embedding: formData.modelConfig.embeddingModelId }" :disabled="saving" :embedding-locked="hasFiles && kbCreateNeedsEmbedding" @resolved="resolvedModelTiers = $event" />
                 </div>
-
 
 
                 <!-- 解析引擎 -->
@@ -506,15 +445,6 @@ const canEditKB = computed(() => authStore.isLoggedIn)
 // 用户是否在分块设置中手动改过任何值。一旦为 true，就不再根据索引策略自动调整默认分块参数。
 const chunkingDirty = ref(false)
 
-// 仅 Wiki 索引模式下的分块预设：更大 chunk、无 overlap、关闭父子分块。
-// 该预设只在「创建模式」下、且用户尚未手动调整分块参数时生效，避免覆盖既有 KB 的配置。
-const WIKI_ONLY_CHUNKING_PRESET = {
-  chunkSize: 2048,
-  chunkOverlap: 0,
-  enableParentChild: false,
-} as const
-
-// Non-Wiki-only fallback. Mirrors chunker.DefaultChunkSize and
 // DefaultChunkOverlap on the backend so a freshly created KB uses
 // the same numbers whether the editor sets them or the splitter
 // falls back to its package defaults.
@@ -618,7 +548,6 @@ const initFormData = (type: 'document' = 'document') => {
     modelConfig: {
       llmModelId: '',
       embeddingModelId: '',
-      wikiSynthesisModelId: '',
     },
     chunkingConfig: {
       chunkSize: 512,
@@ -659,17 +588,9 @@ const initFormData = (type: 'document' = 'document') => {
       skipIfTagged: true,
       policy: ''
     },
-    wikiConfig: {
-      synthesisModelId: '',
-      maxPagesPerIngest: 0,
-      extractionGranularity: 'standard' as 'focused' | 'standard' | 'exhaustive',
-      contentInstructions: '',
-      extractionInstructions: '',
-    },
     indexingStrategy: {
       vectorEnabled: true,
       keywordEnabled: true,
-      wikiEnabled: false,
     },
   }
 }
@@ -730,7 +651,6 @@ const loadKBData = async (
       modelConfig: {
         llmModelId: kb.summary_model_id || '',
         embeddingModelId: kb.embedding_model_id || '',
-        wikiSynthesisModelId: kb.wiki_config?.synthesis_model_id || ''
       },
       chunkingConfig: {
         chunkSize: kb.chunking_config?.chunk_size || 512,
@@ -774,22 +694,9 @@ const loadKBData = async (
         skipIfTagged: kb.auto_tag_config?.skip_if_tagged ?? true,
         policy: kb.auto_tag_config?.policy || ''
       },
-      wikiConfig: {
-        synthesisModelId: kb.wiki_config?.synthesis_model_id || '',
-        maxPagesPerIngest: kb.wiki_config?.max_pages_per_ingest || 0,
-        extractionGranularity: (
-          kb.wiki_config?.extraction_granularity === 'focused' ||
-          kb.wiki_config?.extraction_granularity === 'exhaustive'
-            ? kb.wiki_config.extraction_granularity
-            : 'standard'
-        ) as 'focused' | 'standard' | 'exhaustive',
-        contentInstructions: kb.wiki_config?.content_instructions || '',
-        extractionInstructions: kb.wiki_config?.extraction_instructions || '',
-      },
       indexingStrategy: {
         vectorEnabled: kb.indexing_strategy?.vector_enabled ?? true,
         keywordEnabled: kb.indexing_strategy?.keyword_enabled ?? true,
-        wikiEnabled: kb.indexing_strategy?.wiki_enabled ?? false,
       },
     }
     initialIndexingStrategy.value = { ...formData.value.indexingStrategy }
@@ -812,39 +719,6 @@ const handleModelConfigUpdate = (config: any) => {
   }
 }
 
-// 粒度选择器：从 formData.wikiConfig 读出并规范化，未知值回退到 'standard'，
-// 与后端 WikiExtractionGranularity.Normalize() 的契约保持一致。
-const resolvedGranularity = computed<'focused' | 'standard' | 'exhaustive'>(() => {
-  const g = formData.value?.wikiConfig?.extractionGranularity
-  if (g === 'focused' || g === 'standard' || g === 'exhaustive') {
-    return g
-  }
-  return 'standard'
-})
-
-const granularityHint = computed<string>(() => {
-  switch (resolvedGranularity.value) {
-    case 'focused':
-      return t('knowledgeEditor.wiki.granularityFocusedHint')
-    case 'exhaustive':
-      return t('knowledgeEditor.wiki.granularityExhaustiveHint')
-    default:
-      return t('knowledgeEditor.wiki.granularityStandardHint')
-  }
-})
-
-const handleGranularityChange = (value: string | number | boolean) => {
-  if (!formData.value) return
-  const next: 'focused' | 'standard' | 'exhaustive' =
-    value === 'focused' || value === 'exhaustive'
-      ? (value as 'focused' | 'exhaustive')
-      : 'standard'
-  formData.value.wikiConfig = {
-    ...formData.value.wikiConfig,
-    extractionGranularity: next,
-  }
-}
-
 const isIndexingLocked = computed(() => editorMode.value === 'edit' && hasFiles.value)
 
 const toggleVectorIndexing = () => {
@@ -855,12 +729,6 @@ const toggleVectorIndexing = () => {
   formData.value.indexingStrategy.keywordEnabled = next
 }
 
-const toggleWikiIndexing = () => {
-  if (!formData.value) return
-  if (isIndexingLocked.value) return
-  formData.value.indexingStrategy.wikiEnabled = !formData.value.indexingStrategy.wikiEnabled
-}
-
 const handleChunkingConfigUpdate = (config: any) => {
   if (formData.value) {
     formData.value.chunkingConfig = { ...config }
@@ -868,26 +736,6 @@ const handleChunkingConfigUpdate = (config: any) => {
     chunkingDirty.value = true
   }
 }
-
-// 判断当前是否为「仅 Wiki 索引」：只开了 Wiki，关了向量/关键词检索
-const isWikiOnlyStrategy = computed(() => {
-  const s = formData.value?.indexingStrategy
-  if (!s) return false
-  return !!s.wikiEnabled && !s.vectorEnabled && !s.keywordEnabled
-})
-
-// 仅在创建模式、用户未改过分块设置时，随索引策略自动应用/撤销 Wiki-only 预设。
-// 编辑模式严格保持后端已有配置不变，避免误改。
-watch(isWikiOnlyStrategy, (wikiOnly) => {
-  if (editorMode.value !== 'create') return
-  if (!formData.value) return
-  if (chunkingDirty.value) return
-  const preset = wikiOnly ? WIKI_ONLY_CHUNKING_PRESET : DEFAULT_CHUNKING_PRESET
-  formData.value.chunkingConfig = {
-    ...formData.value.chunkingConfig,
-    ...preset,
-  }
-})
 
 const handleParserEngineRulesUpdate = (rules: any[]) => {
   if (formData.value) {
@@ -913,10 +761,6 @@ const handleAddVLLMModel = () => {
 
 const handleAddASRModel = () => {
   uiStore.openSettings('models', 'asr')
-}
-
-const handleAddWikiModel = () => {
-  uiStore.openSettings('models', 'knowledgeqa')
 }
 
 
@@ -946,7 +790,7 @@ const validateForm = (): boolean => {
   // 验证索引策略 — 文档类型至少需要开启一种
 
     const s = formData.value.indexingStrategy
-    if (s && !s.vectorEnabled && !s.keywordEnabled && !s.wikiEnabled) {
+    if (s && !s.vectorEnabled && !s.keywordEnabled) {
       MessagePlugin.warning(t('knowledgeEditor.indexing.atLeastOne'))
       currentSection.value = 'basic'
       return false
@@ -973,7 +817,6 @@ const validateForm = (): boolean => {
     currentSection.value = 'multimodal'
     return false
   }
-
 
 
   return true
@@ -1031,7 +874,6 @@ const buildSubmitData = () => {
   }
 
 
-
   // 添加问题生成配置
   if (formData.value.questionGenerationConfig?.enabled) {
     data.question_generation_config = {
@@ -1056,25 +898,11 @@ const buildSubmitData = () => {
   }
 
 
-
-  // Wiki enablement is carried solely by indexing_strategy.wiki_enabled.
-  // wiki_config only holds wiki-specific tunables.
-
-    data.wiki_config = {
-      synthesis_model_id: formData.value.modelConfig?.wikiSynthesisModelId || '',
-      max_pages_per_ingest: formData.value.wikiConfig?.maxPagesPerIngest || 0,
-      extraction_granularity: formData.value.wikiConfig?.extractionGranularity || 'standard',
-      content_instructions: formData.value.wikiConfig?.contentInstructions || '',
-      extraction_instructions: formData.value.wikiConfig?.extractionInstructions || '',
-    }
-
-
   // Send indexing strategy
 
     data.indexing_strategy = {
       vector_enabled: formData.value.indexingStrategy?.vectorEnabled ?? true,
       keyword_enabled: formData.value.indexingStrategy?.keywordEnabled ?? true,
-      wiki_enabled: formData.value.indexingStrategy?.wikiEnabled ?? false,
     }
 
 
@@ -1123,21 +951,12 @@ const doSubmit = async () => {
 
       const updateConfig: any = {}
 
-      if (formData.value.wikiConfig) {
-        updateConfig.wiki_config = {
-          synthesis_model_id: formData.value.modelConfig?.wikiSynthesisModelId || '',
-          max_pages_per_ingest: formData.value.wikiConfig.maxPagesPerIngest || 0,
-          extraction_granularity: formData.value.wikiConfig.extractionGranularity || 'standard',
-          content_instructions: formData.value.wikiConfig.contentInstructions || '',
-          extraction_instructions: formData.value.wikiConfig.extractionInstructions || '',
-        }
-      }
+      {}
 
         updateConfig.auto_tag_config = data.auto_tag_config
         updateConfig.indexing_strategy = {
           vector_enabled: formData.value.indexingStrategy?.vectorEnabled ?? true,
           keyword_enabled: formData.value.indexingStrategy?.keywordEnabled ?? true,
-          wiki_enabled: formData.value.indexingStrategy?.wikiEnabled ?? false,
         }
 
       await updateKnowledgeBase(kbId, {
@@ -1189,8 +1008,7 @@ const doSubmit = async () => {
         const prev = initialIndexingStrategy.value
         const strategyChanged = (
           curr.vectorEnabled !== prev.vectorEnabled ||
-          curr.keywordEnabled !== prev.keywordEnabled ||
-          curr.wikiEnabled !== prev.wikiEnabled
+          curr.keywordEnabled !== prev.keywordEnabled
         )
         if (strategyChanged) {
           const dialog = DialogPlugin.confirm({
@@ -1694,7 +1512,6 @@ watch(() => chatResources.allModels, (list) => {
   line-height: 18px;
   color: var(--td-text-color-placeholder);
 }
-
 
 
 .settings-footer {

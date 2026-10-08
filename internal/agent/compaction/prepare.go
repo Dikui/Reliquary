@@ -32,7 +32,6 @@ type Preparation struct {
 	// than summarized again.
 	PreviousSummary string
 	TokensBefore    int
-	fileOps         fileOps
 }
 
 // Prepare picks the cut point and collects the message ranges around it.
@@ -88,7 +87,6 @@ func Prepare(messages []chat.Message, s Settings, estimator *agenttoken.Estimato
 		IsSplitTurn:         cut.IsSplitTurn,
 		PreviousSummary:     previousSummary,
 		TokensBefore:        estimator.EstimateMessages(messages),
-		fileOps:             extractFileOps(previousSummary, toSummarize, turnPrefix),
 	}
 }
 

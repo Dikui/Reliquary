@@ -1,6 +1,6 @@
 <template>
     <!--
-        ChatArtifactsDrawer — right-side drawer that lists every skill-generated
+        ChatArtifactsDrawer — right-side drawer that lists every message
         file attached to the surrounding assistant message, and opens an inline
         preview that reuses DocumentPreview (same renderer as knowledge files
         and chat attachments).

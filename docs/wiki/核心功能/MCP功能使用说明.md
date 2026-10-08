@@ -52,7 +52,6 @@ source: MCP功能使用说明.md
 ## 相关主题
 
 - [内置MCP服务管理](../核心功能/内置MCP服务管理.md) — 系统管理员视角的内置 MCP 服务配置
-- [Agent技能系统](Agent技能系统.md) — 另一种 Agent 扩展机制
 
 ---
 
@@ -60,4 +59,3 @@ source: MCP功能使用说明.md
 
 - [Home](../Home.md) — Wiki 首页导航
 - [内置MCP服务管理](内置MCP服务管理.md) — MCP 的系统级管理（管理员视角）
-- [Agent技能系统](Agent技能系统.md) — 与 MCP 并列的 Agent 扩展机制

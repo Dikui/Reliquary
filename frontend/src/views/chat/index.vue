@@ -427,7 +427,7 @@ const handleFollowUpSelect = (message, item) => {
     };
     // Knowledge-backed follow-ups are generated from a specific KB. Keep that
     // authorized retrieval anchor for the immediate next request; model-backed
-    // suggestions intentionally do not inherit transient @file/@tag/MCP/Skill scope.
+    // suggestions intentionally do not inherit transient @file/@tag/MCP scope.
     pendingSuggestionKnowledgeBaseIds = [...new Set(item.knowledge_base_ids || [])];
     if (inputFieldRef.value?.triggerSend) inputFieldRef.value.triggerSend(item.text);
     else sendMsg(item.text);
@@ -445,7 +445,7 @@ const debouncedFetchSuggestions = () => {
     suggestedDebounceTimer = setTimeout(() => { fetchSuggestedQuestionsIfNeeded(); }, 300);
 };
 
-// 监听 Agent / 知识库 / 文件 / 标签 / MCP / Skill @mention，重新获取推荐问题
+// 监听 Agent / 知识库 / 文件 / 标签 / MCP @mention，重新获取推荐问题
 watch(
     () => ({
         agentId: useSettingsStoreInstance.selectedAgentId,
@@ -453,7 +453,6 @@ watch(
         files: useSettingsStoreInstance.settings.selectedFiles,
         tags: useSettingsStoreInstance.settings.selectedTags,
         mcps: useSettingsStoreInstance.settings.selectedMCPServices,
-        skills: useSettingsStoreInstance.settings.selectedSkills,
     }),
     debouncedFetchSuggestions,
     { deep: true },
@@ -847,12 +846,10 @@ const sendMsg = async (value, modelId = '', mentionedItems = [], imageFiles = []
     const knowledgeIds = [...fileIdSet];
     const tagIds = [...new Set((mentionedItems || []).filter(item => item.type === 'tag' && item.id).map(item => item.id))];
     const mcpServiceIds = [...new Set((mentionedItems || []).filter(item => item.type === 'mcp' && item.id).map(item => item.id))];
-    const skillNames = [...new Set((mentionedItems || []).filter(item => item.type === 'skill' && item.id).map(item => item.skill_name || item.id))];
 
     const endpoint = agentEnabled ? '/api/v1/agent-chat' : '/api/v1/knowledge-chat';
 
     const requestMcpServiceIds = agentEnabled ? mcpServiceIds : [];
-    const requestSkillNames = agentEnabled ? skillNames : [];
 
     const suggestionAttribution = pendingSuggestionAttribution;
     pendingSuggestionAttribution = null;
@@ -865,7 +862,6 @@ const sendMsg = async (value, modelId = '', mentionedItems = [], imageFiles = []
         agent_id: selectedAgentId,
         summary_model_id: modelId,
         mcp_service_ids: requestMcpServiceIds,
-        skill_names: requestSkillNames,
         tag_ids: tagIds,
         mentioned_items: mentionedItems,
         images: imageAttachments.length > 0 ? imageAttachments : undefined,

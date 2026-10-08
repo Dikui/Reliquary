@@ -50,13 +50,13 @@ const props = withDefaults(
     //   true  — follow parse_status + any running subspan + a
     //           QUIESCE_GRACE_MS grace window after the tree quiesces.
     //           This is what the user-visible drawer mount wants:
-    //           late-arriving subspans (wiki has a 30s debounce, etc.)
+    //           late-arriving asynchronous subspans
     //           surface without forcing a manual refresh.
     //   false — strict mode. Poll ONLY while parse_status itself is
     //           non-terminal; ignore post-pipeline async subspans.
     //           This is what background mounts (the hidden badge
     //           driver in doc-content.vue) want, so they stop firing
-    //           /spans the instant parsing finishes — async wiki/
+    //           /spans the instant parsing finishes; async
     //           summary work doesn't keep a headless poller alive
     //           after the user closed the trace drawer.
     gracePoll?: boolean
@@ -278,20 +278,9 @@ function spanTreeLastActivity(node?: SpanNode): number {
   return max
 }
 
-// Async post-pipeline tasks (summary, question,
-// wiki) open their postprocess.* subspans AFTER the parse pipeline
-// has finalised — wiki in particular fires 30s after enqueue thanks
-// to wikiIngestDelay. At that exact moment parse_status is already
-// 'completed' AND every existing span is 'done', so isLive flips to
-// false and polling stops. The user is then stranded watching a
-// stale tree until they hit refresh.
-//
-// QUIESCE_GRACE_MS keeps the poll loop alive for a bounded window
-// after the trace appears quiescent so late subspans surface
-// automatically. Sized generously past wikiIngestDelay (30s) plus a
-// typical ingest run, but short enough that opening an
-// already-completed knowledge from days ago doesn't waste many
-// polls before the loop falls silent.
+// Summary and question tasks can add postprocess subspans after parsing
+// completes. Keep visible traces polling for a bounded grace window so
+// these tasks appear automatically, while old completed traces stop polling.
 const QUIESCE_GRACE_MS = 2 * 60 * 1000
 
 const lastTraceActivityAt = computed<number>(() =>
@@ -316,13 +305,12 @@ const isWithinQuiesceGrace = computed<boolean>(() => {
 //     Follow the trace through everything the user might want to see
 //     live: the main parse pipeline (parse_status), any running
 //     subspan (traceActive), AND the QUIESCE_GRACE_MS window after
-//     the tree quiesces (so wiki ingest's 30s-debounced subspan
-//     surfaces on its own without a manual refresh).
+//     the tree quiesces, allowing delayed subspans to surface automatically.
 //
 //   gracePoll = false (for background mounts e.g. doc-content's
 //     hidden badge driver):
 //     Strict mode. Poll ONLY while the parse pipeline itself is
-//     non-terminal. Post-pipeline async work (wiki / summary /
+//     non-terminal. Post-pipeline async work (summary /
 //     question subspans) is intentionally ignored —
 //     otherwise the hidden mount would keep firing /spans every
 //     2s until those finish, even though the user has closed the
@@ -358,13 +346,8 @@ async function fetchSpans(opts: { manual?: boolean } = {}) {
       //   - Row has children + user hasn't toggled it → expand
       //   - Row has no children → leave whatever state it was in
       //   - User has toggled the row (either direction) → don't touch
-      // Walking the full depth (not just stages) is what makes deep
-      // subspans like postprocess.wiki — whose own children like
-      // postprocess.wiki.extract / .summary / .classify / .page[*]
-      // appear later in the run — surface automatically. Without this
-      // the user would click the chevron on postprocess.wiki and see
-      // nothing change, because the row would default to collapsed
-      // and the auto-expand pass would skip it.
+      // Walk every level so late child spans appear automatically unless
+      // the user has already chosen whether to expand that row.
       const expanded = new Set(expandedRows.value)
       expanded.add('__root__')
       const autoExpand = (n: SpanNode) => {
@@ -672,8 +655,8 @@ const tEnd = computed<number | null>(() => {
 const totalMs = computed<number>(() => {
   if (t0.value === null || tEnd.value === null) return 0
   // The trace's own duration_ms only covers the parsing pipeline up to
-  // FinalizeAttempt. Async post-processing subspans (summary / question /
-  // Wiki) keep producing rows AFTER the root closes — so the time axis
+  // FinalizeAttempt. Async post-processing subspans (summary / question)
+  // keep producing rows AFTER the root closes — so the time axis
   // must scale to the latest descendant end, otherwise their bars get
   // clipped past the right edge. Take the max of (root duration, observed
   // span tail) regardless of polling state.
@@ -762,7 +745,7 @@ const flatRows = computed<FlatRow[]>(() => {
       })
       // Honour the expand/collapse state for subspans too — without
       // this gate, clicking the chevron on a subspan (e.g.
-      // postprocess.wiki) only rotated the icon but the children
+      // postprocess.summary) only rotated the icon but the children
       // were always rendered, so the toggle looked broken.
       if (!expandedRows.value.has(key)) return
       kids.forEach((c, i) => walk(c, depth + 1, `${idxPath}/${i}`, key))
@@ -898,8 +881,7 @@ function toggleTree(row: FlatRow, ev?: MouseEvent) {
   expandedRows.value = next
   // Record the manual toggle at every depth so the next poll's
   // auto-expand pass leaves this row alone. Without this, a user
-  // who collapsed a noisy subspan (e.g. postprocess.wiki with a
-  // dozen page[*] children) would see it pop back open on the
+  // who collapsed a subspan with many children would see it pop back open on the
   // next 2s tick.
   const touched = new Set(userToggledRows.value)
   touched.add(row.key)
@@ -1137,7 +1119,7 @@ const viewingLatestAttempt = computed<boolean>(() => {
 })
 
 // The authoritative status for the header badge. During the async
-// post-pipeline window (summary / question / wiki), the latest
+// post-pipeline window (summary / question), the latest
 // attempt's ROOT span closes — so trace.status reads 'done' — while
 // those subspans can still be running or can later make the knowledge fail.
 // The latest knowledge row is therefore authoritative for ALL statuses,

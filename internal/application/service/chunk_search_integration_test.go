@@ -80,9 +80,8 @@ func newChunkSearchFixture(t *testing.T, vectorEnabled bool) *chunkSearchFixture
 	f := &chunkSearchFixture{
 		db: db, ctx: ctx, domainID: uuid.NewString(),
 		chunks: repository.NewChunkRepository(db), knowledge: repository.NewKnowledgeRepository(db),
-		kbs:      repository.NewKnowledgeBaseRepository(db),
-		indices:  pgretriever.NewPostgresRetrieveEngineRepository(db),
-
+		kbs:     repository.NewKnowledgeBaseRepository(db),
+		indices: pgretriever.NewPostgresRetrieveEngineRepository(db),
 	}
 	require.NoError(t, db.Exec("INSERT INTO knowledge_domains (id, tenant_id, name) VALUES (?, ?, ?)",
 		f.domainID, types.SingleTenantID, "Chunk search domain").Error)
@@ -241,7 +240,6 @@ func TestChunkKeywordSearchFiltersAndTypes(t *testing.T) {
 	}
 	for _, chunkType := range []string{
 		types.ChunkTypeParentText, types.ChunkTypeEntity, types.ChunkTypeRelationship,
-		types.ChunkTypeWikiPage,
 	} {
 		f.createChunk(t, knowledge, "Filterbodymarker excluded content", "", chunkType)
 	}

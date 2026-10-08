@@ -21,28 +21,6 @@
         </div>
       </div>
 
-      <!-- Wiki -->
-      <div class="setting-row">
-        <div class="setting-info">
-          <label>{{ $t('knowledgeEditor.indexing.wikiTitle') }}</label>
-          <p class="desc">{{ $t('knowledgeEditor.indexing.wikiDesc') }}</p>
-        </div>
-        <div class="setting-control">
-          <t-switch
-            :model-value="modelValue.wikiEnabled"
-            @change="(val: boolean) => update('wikiEnabled', val)"
-            size="medium"
-          />
-        </div>
-      </div>
-
-      <!-- Wiki sub-settings (inline when enabled) -->
-      <template v-if="modelValue.wikiEnabled">
-        <slot name="wiki-settings" />
-      </template>
-
-
-
 
     </div>
   </div>
@@ -54,7 +32,6 @@ import { computed } from 'vue'
 export interface IndexingStrategy {
   vectorEnabled: boolean
   keywordEnabled: boolean
-  wikiEnabled: boolean
 }
 
 const props = defineProps<{
@@ -73,13 +50,6 @@ const handleSearchToggle = (val: boolean) => {
     ...props.modelValue,
     vectorEnabled: val,
     keywordEnabled: val,
-  })
-}
-
-const update = (field: keyof IndexingStrategy, value: boolean) => {
-  emit('update:modelValue', {
-    ...props.modelValue,
-    [field]: value,
   })
 }
 </script>

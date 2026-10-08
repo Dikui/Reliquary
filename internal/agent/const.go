@@ -20,7 +20,7 @@ const (
 
 	// defaultLLMStallTimeout is how long a single LLM stream may produce no
 	// output before it is cancelled. It is a stall budget, not a total budget:
-	// a round that streams a whole file body inside a write_sandbox_file call
+	// a round that streams a large data_analysis query
 	// runs for minutes while emitting continuously, and killing it on elapsed
 	// time throws away the half-assembled call. The overall ceiling belongs to
 	// the provider transport (RELIQUARY_LLM_STREAM_TIMEOUT_SECONDS).
@@ -30,10 +30,6 @@ const (
 	// defaultToolExecTimeout is the default maximum time for a single tool execution.
 	// Prevents long-running tools (web_fetch, database_query) from hanging indefinitely.
 	defaultToolExecTimeout = 60 * time.Second
-	// shellExecToolTimeout is slightly longer than shell_exec's own hard
-	// 600-second command timeout so the tool can return a structured timeout
-	// result instead of being cancelled first by the generic agent wrapper.
-	shellExecToolTimeout = 10*time.Minute + 5*time.Second
 
 	// maxLLMRetries is the maximum number of retries for transient LLM errors.
 	maxLLMRetries = 2
@@ -51,13 +47,6 @@ const (
 	// unhandled finish reasons (e.g., content_filter not caught elsewhere).
 	maxRepeatedResponseRounds = 2
 )
-
-func toolExecutionTimeout(toolName string) time.Duration {
-	if toolName == "shell_exec" {
-		return shellExecToolTimeout
-	}
-	return defaultToolExecTimeout
-}
 
 // transientErrorMarkers are substrings that indicate a transient (retryable) error.
 var transientErrorMarkers = []string{
@@ -101,16 +90,13 @@ func (e *AgentEngine) getLLMStallTimeout() time.Duration {
 const contextSafetyTokens = 4096
 
 // getCompletionTokenBudget is the max_tokens / max_completion_tokens sent on
-// each ReAct LLM round. Unset without a sandbox is 4096; unset with a
-// sandbox (write_sandbox_file / edit_sandbox_file) is 24576.
+// each ReAct LLM round. An unset budget defaults to 4096.
 func (e *AgentEngine) getCompletionTokenBudget() int {
 	configured := 0
-	sandboxID := ""
 	if e.config != nil {
 		configured = e.config.MaxCompletionTokens
-		sandboxID = e.config.SandboxConfigID
 	}
-	return types.AgentRoundMaxCompletionTokensFor(configured, sandboxID)
+	return types.AgentRoundMaxCompletionTokens(configured)
 }
 
 // contextReserveTokens is the part of the window that history may not occupy,

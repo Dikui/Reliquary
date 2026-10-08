@@ -169,20 +169,20 @@ func TestSpanTracker_LookupStage_FindsAcrossProcesses(t *testing.T) {
 }
 
 func TestFitSpanName(t *testing.T) {
-	short := "postprocess.wiki.extract"
+	short := "postprocess.question.extract"
 	if got := fitSpanName(short); got != short {
 		t.Fatalf("short name should pass through, got %q", got)
 	}
 
 	// Regression: names in the 65–223 char window failed under VARCHAR(64)
 	// but must pass through unchanged at VARCHAR(255).
-	mid := "postprocess.wiki.page[concept/" + strings.Repeat("a", 100) + "]"
+	mid := "postprocess.question.page[batch/" + strings.Repeat("a", 100) + "]"
 	if got := fitSpanName(mid); got != mid {
-		t.Fatalf("mid-length wiki page name should pass through, got %q", got)
+		t.Fatalf("mid-length question batch name should pass through, got %q", got)
 	}
 
-	// Use a synthetic overlong wiki span name (> varchar(255)).
-	long := "postprocess.wiki.page[concept/" + strings.Repeat("a", 280) + "]"
+	// Use a synthetic overlong question span name (> varchar(255)).
+	long := "postprocess.question.page[batch/" + strings.Repeat("a", 280) + "]"
 	got := fitSpanName(long)
 	if utf8.RuneCountInString(got) > maxSpanNameLen {
 		t.Fatalf("fitted name runes=%d, want <= %d: %q", utf8.RuneCountInString(got), maxSpanNameLen, got)
@@ -197,13 +197,13 @@ func TestFitSpanName(t *testing.T) {
 		t.Fatal("fitSpanName must be deterministic")
 	}
 
-	other := "postprocess.wiki.page[concept/" + strings.Repeat("b", 280) + "]"
+	other := "postprocess.question.page[batch/" + strings.Repeat("b", 280) + "]"
 	if fitSpanName(other) == got {
 		t.Fatalf("different long names must not collapse to the same fitted name")
 	}
 
 	// CJK slugs must truncate on rune boundaries, not byte boundaries.
-	cjkLong := "postprocess.wiki.page[" + strings.Repeat("中", 260) + "]"
+	cjkLong := "postprocess.question.page[" + strings.Repeat("中", 260) + "]"
 	cjkGot := fitSpanName(cjkLong)
 	if utf8.RuneCountInString(cjkGot) > maxSpanNameLen {
 		t.Fatalf("CJK fitted name runes=%d, want <= %d", utf8.RuneCountInString(cjkGot), maxSpanNameLen)
@@ -213,10 +213,10 @@ func TestFitSpanName(t *testing.T) {
 	}
 }
 
-// TestSpanTracker_BeginSubSpan_LongWikiPageName verifies wiki ingest's
-// postprocess.wiki.page[<slug>] subspans persist even when the slug pushes
+// TestSpanTracker_BeginSubSpan_LongQuestionSpanName verifies question generation's
+// postprocess.question.page[<slug>] subspans persist even when the slug pushes
 // the name past varchar(255).
-func TestSpanTracker_BeginSubSpan_LongWikiPageName(t *testing.T) {
+func TestSpanTracker_BeginSubSpan_LongQuestionSpanName(t *testing.T) {
 	tracker, db := setupSpanTrackerTest(t)
 	ctx := context.Background()
 
@@ -225,9 +225,9 @@ func TestSpanTracker_BeginSubSpan_LongWikiPageName(t *testing.T) {
 	parent := tracker.BeginStage(ctx, "kid", attempt, types.StagePostProcess, nil)
 	require.NotNil(t, parent)
 
-	rawName := "postprocess.wiki.page[concept/" + strings.Repeat("x", 280) + "]"
+	rawName := "postprocess.question.page[batch/" + strings.Repeat("x", 280) + "]"
 	sub := tracker.BeginSubSpan(ctx, parent, rawName, types.SpanKindSubSpan, types.JSONMap{
-		"slug": "concept/" + strings.Repeat("x", 280),
+		"slug": "batch/" + strings.Repeat("x", 280),
 	})
 	require.NotNil(t, sub)
 	require.LessOrEqual(t, utf8.RuneCountInString(sub.Name), maxSpanNameLen)
@@ -240,7 +240,7 @@ func TestSpanTracker_BeginSubSpan_LongWikiPageName(t *testing.T) {
 }
 
 // TestSpanTracker_LookupSpanByName_FitsLongName verifies cross-process
-// callers can look up a wiki page subspan using the raw overlong name.
+// callers can look up a question batch subspan using the raw overlong name.
 func TestSpanTracker_LookupSpanByName_FitsLongName(t *testing.T) {
 	tracker, _ := setupSpanTrackerTest(t)
 	ctx := context.Background()
@@ -250,7 +250,7 @@ func TestSpanTracker_LookupSpanByName_FitsLongName(t *testing.T) {
 	parent := tracker.BeginStage(ctx, "kid", attempt, types.StagePostProcess, nil)
 	require.NotNil(t, parent)
 
-	rawName := "postprocess.wiki.page[concept/" + strings.Repeat("y", 280) + "]"
+	rawName := "postprocess.question.page[batch/" + strings.Repeat("y", 280) + "]"
 	created := tracker.BeginSubSpan(ctx, parent, rawName, types.SpanKindSubSpan, nil)
 	require.NotNil(t, created)
 

@@ -175,7 +175,7 @@ func buildDeadLetter(t *asynq.Task, taskErr error, attempts int) *types.TaskDead
 // existing payload type:
 //
 //   - tenant_id          — uniformly the tenant uint64
-//   - knowledge_base_id  — wiki / chunk / image / post-process / ...
+//   - knowledge_base_id  — chunk / image / post-process / ...
 //   - knowledge_id       — per-document scope
 //   - source_kb_id       — KnowledgeMovePayload (semantic: source KB)
 //
@@ -196,8 +196,8 @@ type payloadProbe struct {
 
 // inferScope picks the most-specific scope tuple available in the
 // probe. The order reflects the conventional "blast radius" of a
-// task: knowledge_base is broader than knowledge, etc. Wiki ingest is
-// scope="knowledge_base"; chunk extract is scope="knowledge"; and so on.
+// task: knowledge_base is broader than knowledge, while chunk extraction
+// can identify an individual knowledge source.
 //
 // Falls back to scope="unknown" with empty scope_id if the payload
 // carries no recognizable identifier — better than silently dropping

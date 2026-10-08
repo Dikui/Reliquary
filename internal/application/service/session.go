@@ -9,14 +9,12 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
-	"reliquary/internal/application/repository"
 	chatpipeline "reliquary/internal/application/service/chat_pipeline"
 	"reliquary/internal/config"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/event"
 	"reliquary/internal/logger"
 	"reliquary/internal/models/chat"
-	"reliquary/internal/sandbox"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -52,16 +50,6 @@ type sessionService struct {
 	knowledgeService     interfaces.KnowledgeService     // Service for knowledge operations
 	chunkService         interfaces.ChunkService         // Service for chunk operations
 	suggestionRepo       interfaces.MessageSuggestionRepository
-	sandboxMgr           sandbox.Manager // Default sandbox backend; used to reclaim per-session MicroVMs on delete
-	sandboxResolver      sandbox.TenantSandboxResolver
-	sandboxPinner        *SessionSandboxPinner
-	sandboxPolicy        WorkspaceSandboxPolicy
-	memoryService        interfaces.MemoryService // Service for cross-session long-term memory
-	// sandboxConfigRepo and tenantSkillRepo answer "which installed skills can
-	// this turn actually invoke". They are repositories rather than
-	// TenantSkillService because that service depends on this one.
-	sandboxConfigRepo repository.TenantSandboxConfigRepository
-	tenantSkillRepo   repository.TenantSkillRepository
 }
 
 // NewSessionService creates a new session service instance with all required dependencies
@@ -76,13 +64,6 @@ func NewSessionService(cfg *config.Config,
 	eventManager *chatpipeline.EventManager,
 	agentService interfaces.AgentService,
 	suggestionRepo interfaces.MessageSuggestionRepository,
-	sandboxMgr sandbox.Manager,
-	sandboxResolver sandbox.TenantSandboxResolver,
-	sandboxPinner *SessionSandboxPinner,
-	sandboxPolicy WorkspaceSandboxPolicy,
-	memoryService interfaces.MemoryService,
-	sandboxConfigRepo repository.TenantSandboxConfigRepository,
-	tenantSkillRepo repository.TenantSkillRepository,
 	db *gorm.DB,
 ) interfaces.SessionService {
 	return &sessionService{
@@ -98,13 +79,6 @@ func NewSessionService(cfg *config.Config,
 		eventManager:         eventManager,
 		agentService:         agentService,
 		suggestionRepo:       suggestionRepo,
-		sandboxMgr:           sandboxMgr,
-		sandboxResolver:      sandboxResolver,
-		sandboxPinner:        sandboxPinner,
-		sandboxPolicy:        sandboxPolicy,
-		memoryService:        memoryService,
-		sandboxConfigRepo:    sandboxConfigRepo,
-		tenantSkillRepo:      tenantSkillRepo,
 	}
 }
 
@@ -313,13 +287,9 @@ func (s *sessionService) UpdateSession(ctx context.Context, session *types.Sessi
 
 	// Update session in repository
 	userID := sessionUserIDFromContext(ctx)
-	existing, err := s.sessionRepo.Get(ctx, session.TenantID, userID, session.ID)
+	_, err := s.sessionRepo.Get(ctx, session.TenantID, userID, session.ID)
 	if err != nil {
 		return err
-	}
-	if existing != nil {
-		session.Description = types.SanitizeClientSessionDescription(
-			session.Description, existing.Description)
 	}
 
 	_, err = s.sessionRepo.Update(ctx, session, userID)
@@ -394,22 +364,12 @@ func (s *sessionService) DeleteSession(ctx context.Context, id string) error {
 		}
 	}()
 
-	// NOTE: Skill-generated artifact blobs are intentionally NOT purged here.
-	// Their lifecycle mirrors messages, which are soft-deleted (deleted_at
-	// timestamp) rather than physically removed. Hard-deleting the blobs on a
-	// soft session delete would (a) diverge from message semantics, (b) make
-	// any future "restore soft-deleted session" flow silently broken, and (c)
-	// leave 404s in the download endpoint if the message row is ever surfaced
-	// again. A dedicated GC job or explicit hard-delete API is the right
-	// place to reclaim storage — not this soft-delete path.
-
 	if s.suggestionRepo != nil {
 		if err := s.suggestionRepo.DeleteBySessionID(ctx, tenantID, id); err != nil {
 			logger.Warnf(ctx, "Failed to delete suggestions for session %s: %v", id, err)
 		}
 	}
 
-	s.destroyBoundSandbox(ctx, id)
 	// Delete session from repository
 	rows, err := s.sessionRepo.Delete(ctx, tenantID, userID, id)
 	if err != nil {
@@ -470,11 +430,6 @@ func (s *sessionService) BatchDeleteSessions(ctx context.Context, ids []string) 
 		// DeleteSession for the rationale.
 	}
 
-	// Tear down sandboxes while session rows (and pins) are still readable.
-	for _, id := range visibleIDs {
-		s.destroyBoundSandbox(ctx, id)
-	}
-
 	// Batch delete sessions from repository
 	if _, err := s.sessionRepo.BatchDelete(ctx, tenantID, userID, visibleIDs); err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
@@ -525,13 +480,6 @@ func (s *sessionService) DeleteAllSessions(ctx context.Context) error {
 		}
 	}
 
-	// Tear down sandboxes while session rows (and pins) are still readable.
-	if sessions != nil {
-		for _, session := range sessions {
-			s.destroyBoundSandbox(ctx, session.ID)
-		}
-	}
-
 	if _, err := s.sessionRepo.DeleteAllByTenantID(ctx, tenantID, userID); err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"tenant_id": tenantID,
@@ -548,63 +496,6 @@ func (s *sessionService) DeleteAllSessions(ctx context.Context) error {
 
 	logger.Infof(ctx, "All sessions deleted for tenant %d", tenantID)
 	return nil
-}
-
-// destroyBoundSandbox tears down the sandbox MicroVM bound to sessionID, if
-// the configured sandbox backend supports session-scoped instances.
-//
-// Only SessionBoundManager implements the DestroySession method, which every
-// session-scoped backend resolves to (Docker). For Disabled
-// the type assertion fails and the call is a no-op — that backend holds no
-// resources keyed on session ID.
-//
-// Errors are logged but never propagated: sandbox teardown must not block
-// session deletion. Call this while the session row is still live so the
-// sandbox_config_id pin resolves to the correct named backend.
-func (s *sessionService) destroyBoundSandbox(ctx context.Context, sessionID string) {
-	if sessionID == "" {
-		return
-	}
-	// Resolve the workspace's own manager: the sandbox to release lives on
-	// whichever backend that workspace is configured for, not necessarily the
-	// process-wide default.
-	tenantID, _ := types.TenantIDFromContext(ctx)
-	configID, err := sandboxConfigForExistingSandbox(ctx, s.sandboxPinner, sessionID)
-	if err != nil {
-		logger.Warnf(ctx, "Failed to read sandbox pin for session %s cleanup: %v", sessionID, err)
-		return
-	}
-	// An empty pin normally means there is nothing to destroy, but sessions
-	// whose sandbox predates the pin column also read as empty. Falling through
-	// to the default manager keeps those reachable: DestroySession is a cheap
-	// binding lookup that no-ops when the session truly has no sandbox, whereas
-	// skipping would abandon a paused instance that keeps billing.
-	//
-	// Pass nil policy so the workspace kill switch cannot strand an already
-	// created sandbox: disabling script execution must still allow teardown.
-	mgr, err := resolveTenantSandboxForConfig(ctx, s.sandboxResolver, s.sandboxMgr, tenantID, configID, nil)
-	if err != nil {
-		logger.Warnf(ctx, "Failed to resolve sandbox for session %s cleanup: %v", sessionID, err)
-		return
-	}
-	if mgr == nil {
-		return
-	}
-	destroyer, ok := mgr.(interface {
-		DestroySession(context.Context, string) error
-	})
-	if !ok {
-		return
-	}
-	if err := destroyer.DestroySession(ctx, sessionID); err != nil {
-		logger.Warnf(ctx, "Failed to destroy sandbox for session %s: %v", sessionID, err)
-		return
-	}
-	if s.sandboxPinner != nil {
-		if err := s.sandboxPinner.Clear(ctx, sessionID); err != nil {
-			logger.Warnf(ctx, "Failed to clear sandbox pin for session %s: %v", sessionID, err)
-		}
-	}
 }
 
 // maxSessionTitleRunes bounds the auto-generated session title. sessions.title
@@ -816,60 +707,4 @@ func (s *sessionService) GenerateTitleAsync(
 			}
 		}
 	}()
-}
-
-// holdSandboxTurn opens a chat-turn lease on the session's remote sandbox so
-// a skill-image change mid-turn cannot rebuild the VM between tool calls.
-// The first resolve of this turn may still pick up a stale mark from the
-// previous turn. The returned closer must be called.
-func (s *sessionService) holdSandboxTurn(
-	ctx context.Context, sessionID, configID string,
-) func() {
-	if strings.TrimSpace(sessionID) == "" {
-		return func() {}
-	}
-	begin := func(mgr sandbox.Manager) sandbox.SessionTurnHolder {
-		if mgr == nil {
-			return nil
-		}
-		holder, ok := mgr.(sandbox.SessionTurnHolder)
-		if !ok {
-			return nil
-		}
-		if err := holder.BeginSessionTurn(ctx, sessionID); err != nil {
-			logger.Warnf(ctx, "[sandbox] begin turn for session %s failed: %v", sessionID, err)
-			return nil
-		}
-		return holder
-	}
-
-	if holder := begin(s.sandboxMgr); holder != nil {
-		return func() {
-			if err := holder.EndSessionTurn(ctx, sessionID); err != nil {
-				logger.Warnf(ctx, "[sandbox] end turn for session %s failed: %v", sessionID, err)
-			}
-		}
-	}
-
-	tenantID, _ := types.TenantIDFromContext(ctx)
-	if s.sandboxResolver == nil || tenantID == 0 {
-		return func() {}
-	}
-	mgr, err := resolveTenantSandboxForConfig(
-		ctx, s.sandboxResolver, s.sandboxMgr, tenantID, configID, s.sandboxPolicy,
-	)
-	if err != nil {
-		logger.Warnf(ctx, "[sandbox] resolve config %s to begin turn of session %s failed: %v",
-			configID, sessionID, err)
-		return func() {}
-	}
-	holder := begin(mgr)
-	if holder == nil {
-		return func() {}
-	}
-	return func() {
-		if err := holder.EndSessionTurn(ctx, sessionID); err != nil {
-			logger.Warnf(ctx, "[sandbox] end turn for session %s failed: %v", sessionID, err)
-		}
-	}
 }

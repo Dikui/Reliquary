@@ -5,7 +5,6 @@ import {
   getKnowledgeSearchSummaryHtml,
   getQueryText,
   getRagPipelineStepTitle,
-  getWikiPageText,
 } from './agent-tool-display.ts'
 
 const t = (key, params) => {
@@ -26,23 +25,6 @@ test('getAgentToolIconName maps rag pipeline tools', () => {
   assert.equal(getAgentToolIconName('knowledge_search'), 'data-search')
 })
 
-test('getAgentToolIconName maps sandbox shell tools to the terminal icon', () => {
-  assert.equal(getAgentToolIconName('shell_exec'), 'terminal')
-})
-
-test('getAgentToolIconName maps skill and sandbox file tools', () => {
-  assert.equal(getAgentToolIconName('read_skill'), 'file')
-  assert.equal(getAgentToolIconName('list_sandbox_files'), 'folder')
-  assert.equal(getAgentToolIconName('read_sandbox_file'), 'file')
-  assert.equal(getAgentToolIconName('execute_skill_script'), 'code')
-})
-
-test('getAgentToolIconName maps Wiki tools to semantic search and reading icons', () => {
-  assert.equal(getAgentToolIconName('wiki_search'), 'search')
-  assert.equal(getAgentToolIconName('wiki_read_page'), 'file-search')
-  assert.equal(getAgentToolIconName('wiki_read_source_doc'), 'file-search')
-})
-
 test('getQueryText joins unique query strings', () => {
   assert.equal(getQueryText({ query: 'foo', queries: ['foo', 'bar'] }), 'foo，bar')
 })
@@ -54,14 +36,6 @@ test('getQueryText parses JSON-encoded queries string', () => {
     }),
     '合力天胜游泳俱乐部介绍，合力天胜游泳训练机构，合力天胜游泳队',
   )
-})
-
-test('getWikiPageText supports persisted slugs arrays', () => {
-  assert.equal(
-    getWikiPageText({ slugs: ['entity/知识助理', 'concept/API管理'] }),
-    'entity/知识助理、concept/API管理',
-  )
-  assert.equal(getWikiPageText('{"slug":"index"}'), 'index')
 })
 
 test('getKnowledgeSearchSummaryHtml includes file count when present', () => {

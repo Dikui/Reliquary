@@ -29,15 +29,13 @@ const SAMPLE_CHUNK_B = '00000002-0000-4000-8000-000000000002'
 const SAMPLE_CHUNK_C = '00000003-0000-4000-8000-000000000003'
 const SAMPLE_CHUNK_PRESERVE = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
 
-test('Wiki citation conversion remains enabled by default and can be disabled for reports', () => {
+test('citation preprocessing preserves nested Markdown link labels and ordinary bracket text', () => {
   const source = '[[C1]](https://example.com/a) [[entity/acme]] <kb doc="Guide" chunk_id="chunk-1"/> <web url="https://example.com" title="Source"/>'
-  const defaults = extractCitationHtmlPlaceholders(source)
-  assert.equal(defaults.htmlSnippets.filter(html => html.includes('citation-wiki')).length, 2)
-  const report = extractCitationHtmlPlaceholders(source, undefined, false)
-  assert.match(report.content, /^\[\[C1\]\]\(https:\/\/example.com\/a\) \[\[entity\/acme\]\]/)
-  assert.equal(report.htmlSnippets.length, 2)
-  assert.match(report.htmlSnippets[0]!, /citation-kb/)
-  assert.match(report.htmlSnippets[1]!, /citation-web/)
+  const result = extractCitationHtmlPlaceholders(source)
+  assert.match(result.content, /^\[\[C1\]\]\(https:\/\/example.com\/a\) \[\[entity\/acme\]\]/)
+  assert.equal(result.htmlSnippets.length, 2)
+  assert.match(result.htmlSnippets[0]!, /citation-kb/)
+  assert.match(result.htmlSnippets[1]!, /citation-web/)
 })
 
 /** Remove the streaming tail-fade wrapper so structural assertions stay focused. */

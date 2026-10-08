@@ -5,13 +5,7 @@ import (
 	"strconv"
 )
 
-const (
-	defaultMaxFileSizeMB        = 50
-	defaultMaxSkillBundleSizeMB = 256
-	// maxSkillBundleSizeMBCeiling matches the install-time uncompressed
-	// archive cap: a download larger than that cannot become a valid skill.
-	maxSkillBundleSizeMBCeiling = 512
-)
+const defaultMaxFileSizeMB = 50
 
 // GetMaxFileSize returns the maximum file upload size in bytes.
 // Default is 50MB, can be configured via MAX_FILE_SIZE_MB environment variable.
@@ -37,30 +31,6 @@ func GetMaxFileSize() int64 {
 // caveat as GetMaxFileSize — handlers should prefer SystemSettingService.GetInt.
 func GetMaxFileSizeMB() int64 {
 	return envSizeMB("MAX_FILE_SIZE_MB", defaultMaxFileSizeMB)
-}
-
-// GetMaxSkillBundleSize is the compressed zip / source-download cap for
-// skills. Knowledge uploads stay on GetMaxFileSize: packages such as
-// ppt-master exceed 50MB, but raising the document limit would also
-// inflate file-processing memory use. A GitHub zipball is the whole
-// repository archive, not the SKILL.md subtree, so a huge monorepo can
-// still be refused here even when the skill itself is small.
-func GetMaxSkillBundleSize() int64 {
-	return GetMaxSkillBundleSizeMB() * 1024 * 1024
-}
-
-// GetMaxSkillBundleSizeMB returns the skill zip cap in MB.
-// MAX_SKILL_BUNDLE_SIZE_MB defaults to 256, is never below MAX_FILE_SIZE_MB,
-// and is capped at 512.
-func GetMaxSkillBundleSizeMB() int64 {
-	skillMB := envSizeMB("MAX_SKILL_BUNDLE_SIZE_MB", defaultMaxSkillBundleSizeMB)
-	if fileMB := GetMaxFileSizeMB(); skillMB < fileMB {
-		skillMB = fileMB
-	}
-	if skillMB > maxSkillBundleSizeMBCeiling {
-		return maxSkillBundleSizeMBCeiling
-	}
-	return skillMB
 }
 
 func envSizeMB(key string, fallback int64) int64 {

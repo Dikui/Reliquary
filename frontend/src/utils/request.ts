@@ -1,10 +1,9 @@
 // src/utils/request.js
 import axios from "axios";
 import { translatePersonalServerMessage } from './personalServerError';
-import { generateRandomString, MAX_FILE_SIZE_MB, MAX_SKILL_BUNDLE_SIZE_MB } from "./index";
+import { generateRandomString, MAX_FILE_SIZE_MB } from "./index";
 import i18n from '@/i18n'
 import { getApiBaseUrl } from './api-base';
-import { isSkillBundleUploadUrl } from './uploadLimit';
 
 const t = (key: string) => i18n.global.t(key)
 
@@ -175,12 +174,9 @@ instance.interceptors.response.use(
 
     // 处理 Nginx 413 Request Entity Too Large
     if (error.response.status === 413) {
-      const skillUpload = isSkillBundleUploadUrl(error.config?.url)
       return Promise.reject({
         status: 413,
-        message: skillUpload
-          ? i18n.global.t('settings.sandbox.skillBundleTooLarge', { size: MAX_SKILL_BUNDLE_SIZE_MB })
-          : i18n.global.t('error.fileSizeExceeded', { size: MAX_FILE_SIZE_MB }),
+        message: i18n.global.t('error.fileSizeExceeded', { size: MAX_FILE_SIZE_MB }),
         success: false
       });
     }

@@ -3,7 +3,7 @@
 // Single source of truth for chat answer Markdown typography and block styles.
 // Used by botmsg, AgentStreamDisplay, embed chat, and the dev Markdown test page.
 // Future chat Markdown visual changes should be made here instead of in
-// individual Vue components. Non-chat document/wiki preview styles intentionally
+// individual Vue components. Non-chat document preview styles intentionally
 // live outside this file.
 //
 // Shared typography for chat answer markdown (botmsg, AgentStreamDisplay, embed).
@@ -635,7 +635,7 @@
     margin: 0;
   }
 
-  // A sandbox-generated file that is not an image (HTML chart, CSV, document)
+  // A message file that is not an image (HTML chart, CSV, document)
   // is referenced inline as a card instead of being embedded: the artifacts are
   // self-contained pages up to a megabyte, and an iframe per reference would be
   // both slow and an active-content risk. Clicking opens the artifact drawer's

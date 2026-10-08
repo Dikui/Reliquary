@@ -33,7 +33,6 @@ CREATE TABLE IF NOT EXISTS knowledge_bases (
     is_pinned BOOLEAN NOT NULL DEFAULT false,
     pinned_at TIMESTAMPTZ NULL,
     asr_config JSONB,
-    wiki_config JSONB,
     indexing_strategy JSONB,
     creator_id VARCHAR(36),
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,

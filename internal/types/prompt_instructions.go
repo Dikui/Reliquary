@@ -32,10 +32,6 @@ func NormalizeKnowledgeBasePromptInstructions(kb *KnowledgeBase) {
 	}
 	kb.ChunkingConfig.TableMetadataInstructions = strings.TrimSpace(kb.ChunkingConfig.TableMetadataInstructions)
 	kb.VLMConfig.CustomInstructions = strings.TrimSpace(kb.VLMConfig.CustomInstructions)
-	if kb.WikiConfig != nil {
-		kb.WikiConfig.ContentInstructions = strings.TrimSpace(kb.WikiConfig.ContentInstructions)
-		kb.WikiConfig.ExtractionInstructions = strings.TrimSpace(kb.WikiConfig.ExtractionInstructions)
-	}
 	if kb.QuestionGenerationConfig != nil {
 		kb.QuestionGenerationConfig.CustomInstructions = strings.TrimSpace(kb.QuestionGenerationConfig.CustomInstructions)
 	}
@@ -50,10 +46,6 @@ func ValidateKnowledgeBasePromptInstructions(kb *KnowledgeBase) error {
 	fields := map[string]string{
 		"table metadata instructions": kb.ChunkingConfig.TableMetadataInstructions,
 		"image instructions":          kb.VLMConfig.CustomInstructions,
-	}
-	if kb.WikiConfig != nil {
-		fields["wiki content instructions"] = kb.WikiConfig.ContentInstructions
-		fields["wiki extraction instructions"] = kb.WikiConfig.ExtractionInstructions
 	}
 	if kb.QuestionGenerationConfig != nil {
 		fields["question generation instructions"] = kb.QuestionGenerationConfig.CustomInstructions

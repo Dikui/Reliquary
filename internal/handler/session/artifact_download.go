@@ -140,7 +140,7 @@ func (h *Handler) ListMessageArtifacts(c *gin.Context) {
 	})
 }
 
-// DownloadMessageArtifact streams a single skill-generated file to the
+// DownloadMessageArtifact streams a single persisted message file to the
 // client. Clients reference the artifact by its position (:index) in the
 // assistant message's Artifacts array; the storage URL never leaves the
 // server so callers cannot pivot to arbitrary blobs.

@@ -26,7 +26,6 @@ import (
 	"reliquary/internal/application/service"
 	chatpipeline "reliquary/internal/application/service/chat_pipeline"
 	"reliquary/internal/application/service/file"
-	"reliquary/internal/application/service/memory"
 	"reliquary/internal/common"
 	"reliquary/internal/config"
 	"reliquary/internal/database"
@@ -106,31 +105,16 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(repository.NewMCPServiceRepository))
 	must(container.Provide(repository.NewMCPToolApprovalRepository))
 	must(container.Provide(repository.NewMCPOAuthRepository))
-	must(container.Provide(repository.NewTenantSandboxConfigRepository))
-	must(container.Provide(repository.NewTenantSkillRepository))
 	must(container.Provide(repository.NewCustomAgentRepository))
 	must(container.Provide(repository.NewUserResourceFavoriteRepository))
 	must(container.Provide(repository.NewDataSourceRepository))
 	must(container.Provide(repository.NewSyncLogRepository))
-	must(container.Provide(repository.NewWikiPageRepository))
-	must(container.Provide(repository.NewMemoryRepository))
-	must(container.Provide(repository.NewTaskPendingOpsRepository))
 	must(container.Provide(repository.NewTaskDeadLetterRepository))
 
 	// MCP manager for managing MCP client connections
 	logger.Debugf(ctx, "[Container] Registering MCP manager...")
 	must(container.Provide(mcp.NewMCPManager))
 	must(container.Provide(mcp.NewOAuthManager))
-
-	// Sandbox manager fallback is disabled; executable backends are resolved
-	// from named workspace configurations.
-	logger.Debugf(ctx, "[Container] Registering sandbox manager...")
-	must(container.Provide(newSandboxManager))
-	// Per-tenant sandbox backends: the resolver builds a manager per request
-	// from the tenant's own configuration, falling back to the singleton above
-	// for tenants that configured nothing.
-	must(container.Provide(service.NewTenantSandboxConfigLoader))
-	must(container.Provide(newTenantSandboxResolver))
 
 	// Business service layer
 	logger.Debugf(ctx, "[Container] Registering business services...")
@@ -147,27 +131,12 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewKnowledgeDomainService))
 	must(container.Provide(service.NewKnowledgeContextWorker))
 	must(container.Provide(service.NewContextNameEmbeddingRebuilder))
-	must(container.Provide(service.NewWorkflowSkillExecutor))
 	must(container.Provide(service.NewKnowledgeWorkflowService))
 	must(container.Provide(func(s *service.KnowledgeContextService) interfaces.KnowledgeContextReader { return s }))
 	must(container.Provide(embedding.NewBatchEmbedder))
 	must(container.Provide(service.NewModelServiceWithRoutingDB))
-	must(container.Provide(service.NewDatasetService))
-	must(container.Provide(service.NewEvaluationService))
 	must(container.Provide(service.NewUserService))
 	must(container.Provide(service.NewSystemSettingService))
-	must(container.Provide(func(
-		repo repository.TenantSandboxConfigRepository,
-		agents interfaces.CustomAgentRepository,
-		skills repository.TenantSkillRepository,
-		files interfaces.FileService,
-	) *service.TenantSandboxConfigService {
-		return service.NewTenantSandboxConfigService(repo, agents, buildGlobalSandboxConfig(), skills, localSandboxBundleResolver{files})
-	}))
-	must(container.Provide(func(s *service.TenantSandboxConfigService) service.WorkspaceSandboxPolicy {
-		return s
-	}))
-
 	// Extract services - register individual extracters with names
 	must(container.Provide(service.NewDataTableSummaryService, dig.Name("dataTableSummary")))
 	must(container.Provide(service.NewImageMultimodalService, dig.Name("imageMultimodal")))
@@ -180,9 +149,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewMCPToolApprovalService))
 	must(container.Provide(service.NewCustomAgentService))
 	must(container.Provide(service.NewUserResourceFavoriteService))
-	must(container.Provide(service.NewWikiPageService))
-	must(container.Provide(service.NewWikiIngestService, dig.Name("wikiIngest")))
-	must(container.Provide(service.NewWikiLintService))
 
 	must(container.Provide(repository.NewResourceRepository))
 	must(container.Provide(repository.NewTemporaryDocumentRepository))
@@ -191,7 +157,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	// SessionService is passed as parameter to CreateAgentEngine method when creating AgentService
 	logger.Debugf(ctx, "[Container] Registering event bus and agent service...")
 	must(container.Provide(event.NewEventBus))
-	must(container.Provide(service.NewSessionSandboxPinner))
 	must(container.Provide(func(cfg *config.Config, s interfaces.MCPToolApprovalService) *approval.Gate {
 		return approval.NewGate(cfg, &approval.Adapter{Svc: s})
 	}))
@@ -201,24 +166,9 @@ func BuildContainer(container *dig.Container) *dig.Container {
 
 	// Session service (depends on agent service)
 	// SessionService is created after AgentService and passes itself to AgentService.CreateAgentEngine when needed
-	logger.Debugf(ctx, "[Container] Registering memory service...")
-	must(container.Provide(memory.NewMemoryService))
 
 	logger.Debugf(ctx, "[Container] Registering session service...")
 	must(container.Provide(service.NewSessionService))
-	must(container.Provide(service.NewTenantSkillService))
-	// The member-facing half of env vars is its own service because its
-	// authority is different in kind: it derives the identity from the context
-	// and touches only that identity's rows.
-	must(container.Provide(service.NewUserEnvService))
-
-	// ArtifactCollector drains skill-generated files from the sandbox on
-	// each agent turn (see spec at
-	// docs/superpowers/specs/2026-07-10-skill-artifact-download-design.md).
-	// The factory returns nil when the sandbox backend does not support
-	// per-session file inspection; downstream code guards on nil.
-	must(container.Provide(service.NewArtifactCollectorFromSandboxManager))
-
 	logger.Debugf(ctx, "[Container] Registering task enqueuer...")
 	must(container.Provide(router.NewAsyncqClient, dig.As(new(interfaces.TaskEnqueuer))))
 	// Dedicated pools guarantee capacity for each task stage.
@@ -227,7 +177,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(router.NewEnrichmentAsynqServer, dig.Name("enrichmentAsynqServer")))
 	must(container.Provide(router.NewMaintenanceAsynqServer, dig.Name("maintenanceAsynqServer")))
 	must(container.Provide(router.NewSharedAsynqServer, dig.Name("sharedAsynqServer")))
-	must(container.Provide(router.NewWikiAsynqServer, dig.Name("wikiAsynqServer")))
 	must(container.Provide(router.NewAsynqInspector))
 	must(container.Provide(router.NewAsynqTaskInspector))
 	must(container.Invoke(registerModelConcurrencyLimiter))
@@ -258,18 +207,8 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Invoke(chatpipeline.NewPluginFilterTopK))
 	must(container.Invoke(chatpipeline.NewPluginQueryUnderstand))
 	must(container.Invoke(chatpipeline.NewPluginLoadHistory))
-	must(container.Invoke(chatpipeline.NewPluginMemoryRecall))
 	must(container.Invoke(chatpipeline.NewPluginSearchParallel))
-	must(container.Invoke(chatpipeline.NewPluginWikiBoost))
-	must(container.Invoke(chatpipeline.NewPluginMemoryAffinity))
 	logger.Debugf(ctx, "[Container] Chat pipeline plugins registered")
-
-	// TenantSkillService is provided next to SessionService (handlers need
-	// it), but Invoke constructs the whole chain. SessionService needs
-	// *chatpipeline.EventManager, which only exists after the pipeline
-	// block above — starting the reaper any earlier panics.
-	must(container.Invoke(startTenantSkillReaper))
-	logger.Debugf(ctx, "[Container] Tenant skill reaper registered")
 
 	// HTTP handlers layer
 	logger.Debugf(ctx, "[Container] Registering HTTP handlers...")
@@ -288,14 +227,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewMessageHandler))
 	must(container.Provide(handler.NewMessageSuggestionHandler))
 	must(container.Provide(handler.NewModelHandler))
-	must(container.Provide(handler.NewSandboxConfigHandler))
-	must(container.Provide(func(
-		s *service.TenantSkillService, streams interfaces.StreamManager,
-	) *handler.SandboxSkillHandler {
-		return handler.NewSandboxSkillHandler(s, streams)
-	}))
-	must(container.Provide(handler.NewMeEnvVarHandler))
-	must(container.Provide(handler.NewEvaluationHandler))
 	must(container.Provide(handler.NewInitializationHandler))
 	must(container.Provide(handler.NewAuthHandler))
 	must(container.Provide(handler.NewSystemHandler))
@@ -306,16 +237,9 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewDataSourceCredentialsHandler))
 	must(container.Provide(handler.NewCustomAgentHandler))
 	must(container.Provide(handler.NewUserResourceFavoriteHandler))
-	must(container.Provide(service.NewSkillService))
-	must(container.Provide(func(s *service.TenantSkillService) *handler.SkillHandler {
-		return handler.NewSkillHandler(s, s)
-	}))
-	must(container.Provide(handler.NewMemoryHandler))
 
 	// Data source handler
 	must(container.Provide(handler.NewDataSourceHandler))
-	// Wiki page handler
-	must(container.Provide(handler.NewWikiPageHandler))
 	logger.Debugf(ctx, "[Container] HTTP handlers registered")
 
 	// Wire the chat package's local image resolver so multimodal chat can read
@@ -328,27 +252,11 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	logger.Debugf(ctx, "[Container] Registering router and starting task server...")
 	must(container.Provide(router.NewRouter))
 	must(container.Invoke(router.RunAsynqServer))
-	// Wiki operation rows are durable, while their wake-up triggers may be
-	// lost across a process restart if persistence succeeded immediately before
-	// trigger enqueue failed. Re-arm
-	// them only after the matching handlers are ready.
-	must(container.Invoke(recoverPendingWikiTasks))
 	must(container.Invoke(recoverContextNameEmbeddings))
 	must(container.Invoke(startKnowledgeWorkflowScheduler))
 
 	logger.Infof(ctx, "[Container] Container initialization completed successfully")
 	return container
-}
-
-// localSandboxBundleResolver supplies local files to the retained sandbox bundle cleanup.
-type localSandboxBundleResolver struct {
-	files interfaces.FileService
-}
-
-func (r localSandboxBundleResolver) ResolveFileService(
-	_ context.Context, _ *types.Tenant, _, _, _ string,
-) (interfaces.FileService, string, error) {
-	return r.files, "local", nil
 }
 
 func registerNameEmbeddingRebuildIntegration(
@@ -685,22 +593,6 @@ func startHousekeepingService(svc *service.HousekeepingService, cleaner interfac
 		logger.Warnf(context.Background(), "[Container] housekeeping start failed: %v", err)
 	}
 	cleaner.RegisterWithName("KnowledgeHousekeeping", func() error {
-		svc.Stop()
-		return nil
-	})
-}
-
-// startTenantSkillReaper starts the stuck-install / orphan-snapshot cron and
-// registers cleanup. Best-effort: a startup error is logged but does NOT abort
-// the container — the rest of the system stays usable.
-func startTenantSkillReaper(svc *service.TenantSkillService, cleaner interfaces.ResourceCleaner) {
-	if svc == nil {
-		return
-	}
-	if err := svc.Start(context.Background()); err != nil {
-		logger.Warnf(context.Background(), "[Container] tenant skill reaper start failed: %v", err)
-	}
-	cleaner.RegisterWithName("TenantSkillReaper", func() error {
 		svc.Stop()
 		return nil
 	})

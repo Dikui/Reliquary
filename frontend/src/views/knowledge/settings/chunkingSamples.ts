@@ -12,7 +12,7 @@ export interface ChunkingSample {
 
 const MARKDOWN_SAMPLE = `# Reliquary 知识框架
 
-Reliquary 是一个基于 LLM 的开源个人知识框架，集 RAG 问答、ReAct 智能体、Wiki 知识图谱于一体。本文介绍其设计动机、架构与典型用法。
+Reliquary 是一个基于 LLM 的开源个人知识框架，集 RAG 问答与 ReAct 智能体于一体。本文介绍其设计动机、架构与典型用法。
 
 ## 设计动机
 

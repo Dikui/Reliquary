@@ -110,11 +110,11 @@ func TestOpenFixtureUsesNativePostgresSchema(t *testing.T) {
 	if err := db.Exec("CREATE TABLE sql_features (payload JSONB, title TEXT)").Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Exec(`INSERT INTO sql_features VALUES ('["wiki"]'::jsonb, 'Postgres')`).Error; err != nil {
+	if err := db.Exec(`INSERT INTO sql_features VALUES ('["document"]'::jsonb, 'Postgres')`).Error; err != nil {
 		t.Fatal(err)
 	}
 	var count int64
-	if err := db.Raw("SELECT COUNT(*) FROM sql_features WHERE payload = ?::jsonb AND title ILIKE ?", `["wiki"]`, "%POSTGRES%").Scan(&count).Error; err != nil || count != 1 {
+	if err := db.Raw("SELECT COUNT(*) FROM sql_features WHERE payload = ?::jsonb AND title ILIKE ?", `["document"]`, "%POSTGRES%").Scan(&count).Error; err != nil || count != 1 {
 		t.Fatalf("native PostgreSQL query: count=%d error=%v", count, err)
 	}
 }

@@ -6,12 +6,10 @@ export const KNOWN_MODEL_USAGE_BINDINGS = [
   'image_processing_model',
   'vlm_model',
   'asr_model',
-  'wiki_synthesis_model',
   'chat_model',
   'rerank_model',
   'query_understand_model',
   'follow_up_model',
-  'extract_model',
   'light_model_tier',
   'extraction_model_tier',
   'generation_model_tier',
@@ -31,9 +29,6 @@ export interface ModelUsageDetails {
   model_tiers?: Array<ModelUsageResource & { scope: 'team' | 'domain' }>
   knowledge_bases: ModelUsageResource[]
   agents: ModelUsageResource[]
-  long_term_memory: {
-    bindings: string[]
-  }
   knowledge_base_total: number
   agent_total: number
 }
@@ -84,12 +79,11 @@ function parseTotal(value: unknown, listed: number): number {
 }
 
 export function parseModelUsageDetails(value: unknown): ModelUsageDetails | null {
-  if (!isRecord(value) || !isRecord(value.long_term_memory)) return null
+  if (!isRecord(value)) return null
 
   const knowledgeBases = parseResources(value.knowledge_bases)
   const agents = parseResources(value.agents)
-  const memoryBindings = parseBindings(value.long_term_memory.bindings)
-  if (!knowledgeBases || !agents || !memoryBindings) return null
+  if (!knowledgeBases || !agents) return null
 
   let tiers: ModelUsageDetails['model_tiers']
   if (value.model_tiers !== undefined) {
@@ -105,12 +99,11 @@ export function parseModelUsageDetails(value: unknown): ModelUsageDetails | null
   const details: ModelUsageDetails = {
     knowledge_bases: knowledgeBases,
     agents,
-    long_term_memory: { bindings: memoryBindings },
     knowledge_base_total: parseTotal(value.knowledge_base_total, knowledgeBases.length),
     agent_total: parseTotal(value.agent_total, agents.length),
   }
   if (tiers) details.model_tiers = tiers
-  if (knowledgeBases.length === 0 && agents.length === 0 && memoryBindings.length === 0 && !tiers?.length) {
+  if (knowledgeBases.length === 0 && agents.length === 0 && !tiers?.length) {
     return null
   }
   return details
@@ -150,7 +143,6 @@ export type AgentModelUsageSection = 'model' | 'multimodal' | 'suggestions'
 const knowledgeBaseUsageSections: Partial<Record<KnownModelUsageBinding, KnowledgeBaseModelUsageSection>> = {
   embedding_model: 'models',
   summary_model: 'models',
-  wiki_synthesis_model: 'models',
   image_processing_model: 'multimodal',
   vlm_model: 'multimodal',
   asr_model: 'asr',

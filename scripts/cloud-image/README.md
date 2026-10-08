@@ -47,7 +47,6 @@ Reliquary 所有容器都从 Docker Hub 拉镜像（`reliquary-*`），Go / Pyth
 
 ```
 - ./config/config.yaml      (单文件)
-- ./skills/preloaded/       (目录)
 ```
 
 所以镜像里需要的运行时文件**总共不到 100KB**：
@@ -57,7 +56,6 @@ Reliquary 所有容器都从 Docker Hub 拉镜像（`reliquary-*`），Go / Pyth
 | `docker-compose.yml` | 12K | 容器编排 |
 | `.env` | 12K | 环境变量 |
 | `config/config.yaml` | 8K | 后端业务配置 |
-| `skills/preloaded/` | 56K | Agent 预置技能 |
 
 `prepare.sh` 用 `curl + tar` 只下载这 4 项，不 `git clone`。
 
@@ -78,7 +76,6 @@ Reliquary `docker-compose.yml` 大量服务是 **profile 限定**，本镜像只
 
 **额外预拉但不常驻：**
 
-- `sandbox` 镜像：Agent Skills 由 app 按需 `docker run`。提前 `pull` 避免新实例首次执行 Skill 卡在下载。
 
 **Profile 限定，不预装（用户需要时自己 `pull`）：**
 
@@ -187,7 +184,6 @@ sudo \
 
 1. 安装 Docker / Docker Compose plugin（已装则跳过）
 2. 用 `curl + tar` 下载 4 个运行时文件到 `/opt/Reliquary`
-3. 拉取并启动默认 5 个容器 + 预拉 sandbox 镜像
 4. 安装 `reliquary.service`（开机自启）+ `reliquary-firstboot.service`（首启 init）
 
 完成后访问 `http://<公网IP>`。

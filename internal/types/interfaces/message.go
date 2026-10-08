@@ -58,7 +58,7 @@ type MessageService interface {
 	// GetChatHistoryKBStats returns statistics about the chat history knowledge base (indexed message count, etc.)
 	GetChatHistoryKBStats(ctx context.Context) (*types.ChatHistoryKBStats, error)
 
-	// GetSessionArtifacts returns every skill-produced MessageArtifact
+	// GetSessionArtifacts returns every persisted MessageArtifact
 	// recorded against any assistant message of the session. Used to power
 	// the frontend "download files generated in this session" drawer and
 	// to clean up storage blobs on session deletion.
@@ -78,14 +78,6 @@ type MessageRepository interface {
 	// GetMessagesBySessionBeforeTime gets messages before a specific time of a session
 	GetMessagesBySessionBeforeTime(
 		ctx context.Context, sessionID string, beforeTime time.Time, limit int,
-	) ([]*types.Message, error)
-	// ListMessagesBySessionAfterTime returns messages created strictly after
-	// afterTime, oldest first. Long-term memory distillation walks forward from
-	// a watermark, so it needs the oldest unprocessed messages rather than the
-	// newest ones: paging from the newest end would skip everything in between
-	// once a session outruns the page size.
-	ListMessagesBySessionAfterTime(
-		ctx context.Context, sessionID string, afterTime time.Time, limit int,
 	) ([]*types.Message, error)
 	// UpdateMessage updates a message
 	UpdateMessage(ctx context.Context, message *types.Message) error
@@ -111,7 +103,7 @@ type MessageRepository interface {
 	GetKnowledgeIDsBySessionID(ctx context.Context, sessionID string) ([]string, error)
 	// UpdateMessageKnowledgeID updates the knowledge_id field for a message
 	UpdateMessageKnowledgeID(ctx context.Context, messageID string, knowledgeID string) error
-	// GetSessionArtifacts returns every skill-produced MessageArtifact recorded
+	// GetSessionArtifacts returns every persisted MessageArtifact recorded
 	// against any assistant message of the session, in creation order. The
 	// implementation only projects the artifacts JSONB column, so it stays
 	// cheap even for long conversations. Empty slice + nil error means the

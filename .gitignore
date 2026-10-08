@@ -35,7 +35,6 @@ data/files/
 data/reliquary.db
 data/reliquary.db-wal
 data/reliquary.db-shm
-skills-lock.json
 
 web/
 
@@ -55,6 +54,4 @@ fix-docker.sh
 
 # WeChat Mini Program local/private configuration
 
-# Staging dir for the Docker sandbox self-check probe (removed after each run)
-.reliquary-sandbox-check-*
 *.egg-info/

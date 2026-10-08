@@ -257,44 +257,44 @@ func (s *partialSearchKnowledgeBaseService) HybridSearch(
 	return []*types.SearchResult{{ID: "chunk-good", Content: "可用结果", KnowledgeID: "knowledge-good"}}, nil
 }
 
-type wikiOnlySearchKnowledgeBaseService struct {
+type unindexedSearchKnowledgeBaseService struct {
 	interfaces.KnowledgeBaseService
 	embedErr     error
 	hybridCalled bool
 }
 
-func (s *wikiOnlySearchKnowledgeBaseService) GetKnowledgeBasesByIDsOnly(
+func (s *unindexedSearchKnowledgeBaseService) GetKnowledgeBasesByIDsOnly(
 	context.Context, []string,
 ) ([]*types.KnowledgeBase, error) {
 	return []*types.KnowledgeBase{{
-		ID:               "wiki-1",
+		ID:               "unindexed-1",
 		Type:             types.KnowledgeBaseTypeDocument,
 		EmbeddingModelID: "embedding-1",
-		IndexingStrategy: types.IndexingStrategy{WikiEnabled: true},
+		IndexingStrategy: types.IndexingStrategy{},
 	}}, nil
 }
 
-func (s *wikiOnlySearchKnowledgeBaseService) ResolveEmbeddingModelKeys(
+func (s *unindexedSearchKnowledgeBaseService) ResolveEmbeddingModelKeys(
 	context.Context, []*types.KnowledgeBase,
 ) map[string]string {
-	return map[string]string{"wiki-1": "doubao|https://ark.cn-beijing.volces.com/api/v3"}
+	return map[string]string{"unindexed-1": "doubao|https://ark.cn-beijing.volces.com/api/v3"}
 }
 
-func (s *wikiOnlySearchKnowledgeBaseService) GetQueryEmbedding(
+func (s *unindexedSearchKnowledgeBaseService) GetQueryEmbedding(
 	context.Context, string, string,
 ) ([]float32, error) {
 	return nil, s.embedErr
 }
 
-func (s *wikiOnlySearchKnowledgeBaseService) HybridSearch(
+func (s *unindexedSearchKnowledgeBaseService) HybridSearch(
 	context.Context, string, types.SearchParams,
 ) ([]*types.SearchResult, error) {
 	s.hybridCalled = true
 	return nil, nil
 }
 
-func TestSearchEmbeddingFailureOnWikiOnlyTargetReportsNoResults(t *testing.T) {
-	svc := &wikiOnlySearchKnowledgeBaseService{
+func TestSearchEmbeddingFailureOnUnindexedTargetReportsNoResults(t *testing.T) {
+	svc := &unindexedSearchKnowledgeBaseService{
 		embedErr: errors.New("embedding endpoint unavailable"),
 	}
 	plugin := &PluginSearch{knowledgeBaseService: svc}
@@ -302,21 +302,21 @@ func TestSearchEmbeddingFailureOnWikiOnlyTargetReportsNoResults(t *testing.T) {
 		PipelineRequest: types.PipelineRequest{
 			SearchTargets: types.SearchTargets{{
 				Type:            types.SearchTargetTypeKnowledgeBase,
-				KnowledgeBaseID: "wiki-1",
+				KnowledgeBaseID: "unindexed-1",
 			}},
 			EmbeddingTopK: 10,
 		},
-		PipelineState: types.PipelineState{RewriteQuery: "wiki only"},
+		PipelineState: types.PipelineState{RewriteQuery: "unindexed"},
 	}
 
 	err := plugin.OnEvent(context.Background(), types.CHUNK_SEARCH, chatManage, func() *PluginError {
 		return nil
 	})
 	if err != ErrSearchNothing {
-		t.Fatalf("expected search_nothing for wiki-only KB, got %#v", err)
+		t.Fatalf("expected search_nothing for unindexed KB, got %#v", err)
 	}
 	if !svc.hybridCalled {
-		t.Fatal("wiki-only target should still delegate empty recall to HybridSearch")
+		t.Fatal("unindexed target should still delegate empty recall to HybridSearch")
 	}
 }
 

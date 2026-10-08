@@ -488,7 +488,7 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 	}
 
 	// Save chunks to database — ALWAYS, regardless of indexing strategy.
-	// Chunks are needed for wiki generation, graph extraction, and summary generation
+	// Chunks are needed for knowledge context and summary generation
 	// even when vector/keyword indexing is disabled.
 	s.beginStage(ctx, knowledge.ID, types.StageChunking, types.JSONMap{
 		"chunks_planned": len(insertChunks),
@@ -512,7 +512,7 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 	})
 
 	// Create index information and perform vector indexing — only when vector/keyword is enabled.
-	// Chunks are ALWAYS saved to DB (above) because wiki and graph need them even without vector indexing.
+	// Chunks are ALWAYS saved to DB (above) because knowledge context needs them even without vector indexing.
 	var totalStorageSize int64
 	if kb.NeedsEmbeddingModel() && embeddingModel != nil {
 		embedInput := types.JSONMap{
@@ -1297,7 +1297,7 @@ func (s *knowledgeService) ProcessSummaryGeneration(ctx context.Context, t *asyn
 	}
 
 	// Create summary chunk and index it — only when RAG indexing is enabled.
-	// Wiki-only KBs don't need summary chunks in the vector index.
+	// KBs with disabled indexing don't need summary chunks in the vector index.
 	if strings.TrimSpace(summary) != "" && kb.NeedsEmbeddingModel() {
 		// Get max chunk index
 		maxChunkIndex := 0
@@ -2468,15 +2468,6 @@ func (s *knowledgeService) ReparseKnowledge(
 	processOverrides, _ = existing.ProcessOverrides()
 	reparseEff := ResolveProcessConfig(kb, processOverrides)
 
-	// Keep wiki's pending queue consistent across both manual and non-manual
-	// paths. The destructive work (swapping old wiki contributions for new)
-	// happens asynchronously inside mapOneDocument — see its oldPageSlugs
-	// handling — once post-process re-enqueues wiki ingest. All we need to
-	// do here is stop any stale pending ingest op from firing against the
-	// pre-reparse chunk set.
-	if kb != nil && kb.IsWikiEnabled() {
-		s.prepareWikiForReparse(ctx, existing)
-	}
 	recordReparseStarted := func() {
 	}
 
@@ -2816,14 +2807,6 @@ func (s *knowledgeService) CancelKnowledgeParse(
 	// Best-effort dequeue. Failures here don't block the cancel — the
 	// downstream tasks will still self-abort at their entry guards.
 	s.dequeueKnowledgeTasks(ctx, knowledgeID)
-	// Wiki ingest lives in its own per-KB pending queue (task_pending_ops)
-	// rather than asynq, so dequeueKnowledgeTasks above can't see it.
-	// Mirror the deletion path's scrub so a cancelled knowledge doesn't
-	// get picked up by the next 30s batch and burn a wiki LLM call on a
-	// doc the user already abandoned. The in-flight worker would skip it
-	// at isWikiKnowledgeAborted anyway, but scrubbing avoids waking the
-	// batch in the first place.
-	s.scrubWikiPendingIngest(ctx, existing.KnowledgeBaseID, knowledgeID, "cancel")
 	return existing, nil
 }
 
@@ -3168,7 +3151,7 @@ func (s *knowledgeService) ProcessManualUpdate(ctx context.Context, t *asynq.Tas
 	// Allocate a fresh span-tracking attempt for this manual (re)index.
 	// Without it attemptFromCtx stays 0, so processChunks drops all stage
 	// spans and KnowledgePostProcess falls back to LatestAttempt — piling
-	// this run's summary/wiki subspans onto the previous attempt's trace.
+	// this run's summary subspans onto the previous attempt's trace.
 	attempt := 0
 	if root, n, err := s.tracker().OpenAttempt(ctx, knowledge.ID); err == nil && root != nil {
 		attempt = n

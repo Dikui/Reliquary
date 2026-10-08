@@ -44,8 +44,6 @@ type HousekeepingService struct {
 	// one whose enrichment subtasks are merely backlogged behind a busy
 	// queue (no span heartbeat yet because no worker has picked them up).
 	// nil-safe — a nil inspector disables only the transient queue check.
-	// Durable Wiki ownership in task_pending_ops is always probed through db,
-	// so the sweep never falls back to the span/updated_at heuristics alone.
 	inspector interfaces.TaskInspector
 
 	mu      sync.Mutex
@@ -151,7 +149,7 @@ func (h *HousekeepingService) runSweep(ctx context.Context) {
 
 	// Second-stage gate: a row can have a stale span heartbeat yet still
 	// be perfectly healthy when its enrichment subtasks (summary /
-	// question / graph / wiki) are merely backlogged behind a busy queue
+	// question / graph) are merely backlogged behind a busy queue
 	// — no worker has picked them up, so no span has been written since
 	// post-process fanned them out. Killing such a row is the false-
 	// positive users hit under heavy upload bursts. Drop any candidate
@@ -265,29 +263,7 @@ func (h *HousekeepingService) filterByLastSpanActivity(ctx context.Context, cand
 	return out
 }
 
-// filterOutQueued returns the subset of candidates that have NO work left
-// in either the durable pending-op table or the queue backend, plus a count
-// of how many were dropped because work still references them. A dropped
-// candidate is "backlogged, not orphaned" — its enrichment subtasks are
-// waiting for a worker, so the missing span heartbeat is expected and
-// recovering it would be a false positive.
-//
-// The asynq inspector alone cannot answer this for Wiki. Wiki ingest work is
-// durable per document in task_pending_ops (dedup_key = knowledge ID), while
-// asynq only carries a per-KB wake-up trigger whose payload has no knowledge
-// ID — and TypeWikiIngest is deliberately absent from the inspector's
-// taskTypesForKnowledgeCancel set anyway. So HasQueuedTasksForKnowledge
-// structurally reports "nothing queued" for a document whose only outstanding
-// work is a queued Wiki ingest, and the sweep force-fails a perfectly healthy
-// row. Probe the durable table directly before consulting the inspector.
-//
-// When no inspector is wired (nil) the durable gate still applies; only the
-// transient queue check is skipped. On probe error we fail safe, but in
-// opposite directions by design: an inspector error KEEPS the candidate as
-// stuck (matching the span heartbeat query), whereas a durable-table error
-// DEFERS every candidate to the next sweep — we cannot tell backlog from
-// orphan without it, and wrongly failing a live document is not recoverable
-// by the user, while waiting one more interval is.
+// filterOutQueued removes candidates whose enrichment work remains queued.
 func (h *HousekeepingService) filterOutQueued(
 	ctx context.Context, candidates []types.Knowledge,
 ) (kept []types.Knowledge, skipped int) {
@@ -295,33 +271,8 @@ func (h *HousekeepingService) filterOutQueued(
 		return candidates, 0
 	}
 
-	ids := make([]string, 0, len(candidates))
-	for _, k := range candidates {
-		ids = append(ids, k.ID)
-	}
-	var durableIDs []string
-	if err := h.db.WithContext(ctx).
-		Model(&types.TaskPendingOp{}).
-		Where("task_type = ? AND scope = ? AND op = ? AND dedup_key IN ?",
-			wikiTaskType, wikiTaskScope, WikiOpIngest, ids).
-		Distinct("dedup_key").
-		Pluck("dedup_key", &durableIDs).Error; err != nil {
-		logger.Warnf(ctx,
-			"[Housekeeping] durable queue probe failed: %v (deferring %d candidate(s))",
-			err, len(candidates))
-		return candidates[:0], len(candidates)
-	}
-	durable := make(map[string]struct{}, len(durableIDs))
-	for _, id := range durableIDs {
-		durable[id] = struct{}{}
-	}
-
 	out := candidates[:0]
 	for _, k := range candidates {
-		if _, ok := durable[k.ID]; ok {
-			skipped++
-			continue
-		}
 		if h.inspector == nil {
 			out = append(out, k)
 			continue

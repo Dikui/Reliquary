@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"reliquary/internal/application/service"
 	"reliquary/internal/config"
 	"reliquary/internal/errors"
 	"reliquary/internal/infrastructure/docparser"
@@ -29,11 +28,6 @@ type Handler struct {
 	modelService         interfaces.ModelService         // Service for model management (VLM access)
 	attachmentProcessor  *AttachmentProcessor            // Processor for file attachments
 	temporaryDocuments   interfaces.TemporaryDocumentService
-	// artifactCollector drains skill-generated files from the session sandbox
-	// after an agent turn completes. May be nil when the sandbox backend does
-	// not support artifact collection; handlers must check before using.
-	artifactCollector *service.ArtifactCollector
-	memoryService     interfaces.MemoryService // Service for cross-session long-term memory
 }
 
 // NewHandler creates a new instance of Handler with all necessary dependencies
@@ -50,8 +44,6 @@ func NewHandler(
 	modelService interfaces.ModelService,
 	imageResolver *docparser.ImageResolver,
 	temporaryDocuments interfaces.TemporaryDocumentService,
-	artifactCollector *service.ArtifactCollector,
-	memoryService interfaces.MemoryService,
 ) *Handler {
 	return &Handler{
 		sessionService:       sessionService,
@@ -65,8 +57,6 @@ func NewHandler(
 		fileService:          fileService,
 		modelService:         modelService,
 		temporaryDocuments:   temporaryDocuments,
-		artifactCollector:    artifactCollector,
-		memoryService:        memoryService,
 		attachmentProcessor: NewAttachmentProcessor(
 			fileService,
 			imageResolver,
@@ -118,7 +108,7 @@ func (h *Handler) CreateSession(c *gin.Context) {
 	createdSession := &types.Session{
 		TenantID:    tenantID.(uint64),
 		Title:       request.Title,
-		Description: types.SanitizeClientSessionDescription(request.Description, ""),
+		Description: request.Description,
 	}
 	// Attach the authenticated user as the session owner when available.
 	if ownerID := types.SessionOwnerIDFromContext(ctx); ownerID != "" {

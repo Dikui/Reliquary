@@ -1,16 +1,9 @@
 // Package ipclass categorises IP addresses for outbound-request policy.
 //
 // The classification lives here, separate from the policy, because Reliquary
-// guards two kinds of outbound target whose threat models differ:
-//
-//   - internal/utils guards URLs an end user submits, so it refuses every
-//     class except Public.
-//   - internal/sandbox guards cluster endpoints a workspace admin configures,
-//     so it has to tell "never routable" apart from "private, which this
-//     workspace may have opted into".
-//
-// Sharing the classification while keeping the policy at each call site is
-// what stops the two from drifting. The drift is not hypothetical: net.IP's
+// guards URLs an end user submits through internal/utils, which refuses
+// every class except Public. Keeping classification separate from policy
+// gives each call site a consistent classification. The drift is not hypothetical: net.IP's
 // IsPrivate covers fc00::/7 but not fec0::/10, and neither it nor
 // IsLinkLocalUnicast looks inside a 6to4, Teredo, NAT64 or IPv4-compatible
 // address, so a hand-rolled "is this private" check silently admits several

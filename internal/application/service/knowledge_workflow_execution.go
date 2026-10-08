@@ -17,7 +17,6 @@ import (
 	"github.com/hibiken/asynq"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"reliquary/internal/application/repository"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/types"
 )
@@ -66,21 +65,6 @@ type workflowReportConfig struct {
 	Window   string `json:"window"`
 	Days     int    `json:"days"`
 	Timezone string `json:"timezone"`
-}
-
-type workflowWikiConfig struct {
-	Slug       string `json:"slug"`
-	Title      string `json:"title"`
-	PageType   string `json:"page_type"`
-	Summary    string `json:"summary"`
-	SourceStep string `json:"source_step"`
-}
-
-type workflowConditionConfig struct {
-	StepID   string `json:"step_id"`
-	Path     string `json:"path"`
-	Operator string `json:"operator"`
-	Value    any    `json:"value"`
 }
 
 func (s *KnowledgeWorkflowService) Run(ctx context.Context, kbID, workflowID, trigger string) (*types.KnowledgeWorkflowRun, error) {
@@ -285,24 +269,11 @@ func (s *KnowledgeWorkflowService) executeRun(ctx context.Context, wf *types.Kno
 		if err != nil {
 			return s.failRun(ctx, run, err)
 		}
-		if stepRun.Status == types.WorkflowStepSucceeded || stepRun.Status == types.WorkflowStepSkipped {
+		if stepRun.Status == types.WorkflowStepSucceeded {
 			continue
-		}
-		if stepRun.Status == types.WorkflowStepRejected {
-			return s.finishRun(ctx, run, types.WorkflowStatusRejected, stepRun.Error)
-		}
-		if stepRun.Status == types.WorkflowStepWaitingReview {
-			return s.finishRun(ctx, run, types.WorkflowStatusPaused, "awaiting human review")
 		}
 		if !workflowDependenciesComplete(step, outputs) {
 			return s.failRun(ctx, run, fmt.Errorf("step %s has incomplete dependencies", step.ID))
-		}
-		if skip, reason := workflowBranchSkip(step, outputs); skip {
-			if err := s.completeStep(ctx, run, stepRun, types.WorkflowStepSkipped, workflowStepOutput{Data: map[string]any{"reason": reason}}, nil); err != nil {
-				return s.failRun(ctx, run, err)
-			}
-			outputs[step.ID] = workflowStepOutput{Data: map[string]any{"reason": reason}}
-			continue
 		}
 		ctx, err = s.refreshWorkflowAuthorization(ctx, wf)
 		if err != nil {
@@ -317,12 +288,6 @@ func (s *KnowledgeWorkflowService) executeRun(ctx context.Context, wf *types.Kno
 		}
 		if err := s.startStep(ctx, run, stepRun, step); err != nil {
 			return s.failRun(ctx, run, err)
-		}
-		if step.Type == types.WorkflowStepHumanReview {
-			if err := s.setStepStatus(ctx, run, stepRun, types.WorkflowStepWaitingReview, nil); err != nil {
-				return s.failRun(ctx, run, err)
-			}
-			return s.finishRun(ctx, run, types.WorkflowStatusPaused, "awaiting human review")
 		}
 		if err := s.assertRunLease(ctx, run); err != nil {
 			return s.failRun(ctx, run, err)
@@ -484,7 +449,7 @@ func (s *KnowledgeWorkflowService) readStepOutputs(ctx context.Context, run *typ
 	}
 	outputs := make(map[string]workflowStepOutput, len(rows))
 	for _, row := range rows {
-		if (row.Status == types.WorkflowStepSucceeded || row.Status == types.WorkflowStepSkipped) && len(row.Output) > 0 {
+		if row.Status == types.WorkflowStepSucceeded && len(row.Output) > 0 {
 			var out workflowStepOutput
 			if err := json.Unmarshal(row.Output, &out); err != nil {
 				return nil, fmt.Errorf("decode step %s output: %w", row.StepID, err)
@@ -501,31 +466,7 @@ func workflowDependenciesComplete(step types.KnowledgeWorkflowStep, outputs map[
 			return false
 		}
 	}
-	if step.When != nil {
-		if _, ok := outputs[step.When.StepID]; !ok {
-			return false
-		}
-	}
 	return true
-}
-
-func workflowBranchSkip(step types.KnowledgeWorkflowStep, outputs map[string]workflowStepOutput) (bool, string) {
-	if step.When == nil {
-		return false, ""
-	}
-	out, ok := outputs[step.When.StepID]
-	if !ok {
-		return false, ""
-	}
-	var state struct {
-		Matched bool `json:"matched"`
-	}
-	raw, _ := json.Marshal(out.Data)
-	_ = json.Unmarshal(raw, &state)
-	if state.Matched != step.When.Equals {
-		return true, fmt.Sprintf("condition %s was %t", step.When.StepID, state.Matched)
-	}
-	return false, ""
 }
 
 func (s *KnowledgeWorkflowService) failRun(ctx context.Context, run *types.KnowledgeWorkflowRun, err error) error {
@@ -559,12 +500,6 @@ func (s *KnowledgeWorkflowService) executeStep(ctx context.Context, wf *types.Kn
 		return s.executeFactQuery(ctx, wf, step)
 	case types.WorkflowStepReport:
 		return s.executeReport(ctx, wf, run, step, outputs)
-	case types.WorkflowStepWikiUpdate:
-		return s.executeWikiUpdate(ctx, wf, run, step, outputs)
-	case types.WorkflowStepSkill:
-		return s.executeSkill(ctx, wf, run, step, outputs)
-	case types.WorkflowStepCondition:
-		return s.executeCondition(step, outputs)
 	default:
 		return workflowStepOutput{}, fmt.Errorf("unsupported step type %q", step.Type)
 	}
@@ -1010,179 +945,6 @@ func gatherWorkflowCitations(outputs map[string]workflowStepOutput) []types.Know
 		}
 	}
 	return citations
-}
-
-func (s *KnowledgeWorkflowService) executeWikiUpdate(ctx context.Context, wf *types.KnowledgeWorkflow, run *types.KnowledgeWorkflowRun, step types.KnowledgeWorkflowStep, outputs map[string]workflowStepOutput) (workflowStepOutput, error) {
-	cfg, err := decodeWorkflowConfig[workflowWikiConfig](step.Config)
-	if err != nil {
-		return workflowStepOutput{}, err
-	}
-	previous, ok := outputs[cfg.SourceStep]
-	if !ok {
-		return workflowStepOutput{}, fmt.Errorf("source step %q has no completed output", cfg.SourceStep)
-	}
-	content := previous.Text
-	if content == "" {
-		if data, ok := previous.Data.(map[string]any); ok {
-			content, _ = data["markdown"].(string)
-		}
-	}
-	if strings.TrimSpace(content) == "" {
-		return workflowStepOutput{}, errors.New("wiki update source has no markdown content")
-	}
-	pageType := cfg.PageType
-	if pageType == "" {
-		pageType = types.WikiPageTypeSynthesis
-	}
-	refs := make([]string, 0)
-	for _, id := range previous.KnowledgeIDs {
-		refs = append(refs, id+"|workflow run "+run.ID)
-	}
-	for _, citation := range previous.Sources {
-		if citation.KnowledgeID != "" {
-			refs = append(refs, citation.KnowledgeID+"|workflow run "+run.ID)
-		}
-	}
-	refs = uniqueWorkflowStrings(refs)
-	page, err := s.wiki.GetPageBySlug(ctx, wf.KnowledgeBaseID, cfg.Slug)
-	if errors.Is(err, repository.ErrWikiPageNotFound) {
-		page = &types.WikiPage{TenantID: wf.TenantID, KnowledgeBaseID: wf.KnowledgeBaseID, Slug: cfg.Slug}
-	} else if err != nil {
-		return workflowStepOutput{}, err
-	}
-	page.Title, page.PageType, page.Content, page.Summary = cfg.Title, pageType, content, cfg.Summary
-	page.Status, page.SourceRefs = types.WikiPageStatusPublished, refs
-	page.PageMetadata = types.JSON(mustJSON(map[string]any{"workflow_id": wf.ID, "run_id": run.ID, "step_id": step.ID}))
-	ctx, err = s.refreshWorkflowAuthorization(ctx, wf)
-	if err != nil {
-		return workflowStepOutput{}, fmt.Errorf("workflow authorization changed before wiki update: %w", err)
-	}
-	ctx = types.WithWikiEditSource(ctx, types.WikiEditSourceAgent)
-	if page.ID == "" {
-		page, err = s.wiki.CreatePage(ctx, page)
-	} else {
-		page, err = s.wiki.UpdatePage(ctx, page)
-	}
-	if err != nil {
-		return workflowStepOutput{}, err
-	}
-	return workflowStepOutput{Data: map[string]any{"slug": page.Slug, "title": page.Title, "version": page.Version}}, nil
-}
-
-func (s *KnowledgeWorkflowService) executeSkill(ctx context.Context, wf *types.KnowledgeWorkflow, run *types.KnowledgeWorkflowRun, step types.KnowledgeWorkflowStep, outputs map[string]workflowStepOutput) (workflowStepOutput, error) {
-	cfg, err := decodeWorkflowConfig[WorkflowSkillConfig](step.Config)
-	if err != nil {
-		return workflowStepOutput{}, err
-	}
-	if s.skillExec == nil {
-		return workflowStepOutput{}, ErrWorkflowSkillUnavailable
-	}
-	cfg.RunID, cfg.StepID = run.ID, step.ID
-	if cfg.InputStep != "" {
-		upstream, ok := outputs[cfg.InputStep]
-		if !ok {
-			return workflowStepOutput{}, fmt.Errorf("input step %q is not complete", cfg.InputStep)
-		}
-		if upstream.Text != "" {
-			cfg.Input = upstream.Text
-		} else {
-			encoded, _ := json.Marshal(upstream.Data)
-			cfg.Input = string(encoded)
-		}
-	}
-	actor := run.OwnerID
-	if actor == "" {
-		return workflowStepOutput{}, ErrWorkflowForbidden
-	}
-	ctx, err = s.refreshWorkflowAuthorization(ctx, wf)
-	if err != nil {
-		return workflowStepOutput{}, fmt.Errorf("workflow authorization changed before skill execution: %w", err)
-	}
-	result, err := s.skillExec(ctx, run.TenantID, actor, wf.KnowledgeBaseID, cfg)
-	if err != nil {
-		return workflowStepOutput{}, err
-	}
-	if result == nil {
-		return workflowStepOutput{}, errors.New("workflow skill executor returned no result")
-	}
-	if result.ExitCode != 0 {
-		return workflowStepOutput{}, fmt.Errorf("skill exited with code %d", result.ExitCode)
-	}
-	return workflowStepOutput{Data: result, Text: result.Output}, nil
-}
-
-func (s *KnowledgeWorkflowService) executeCondition(step types.KnowledgeWorkflowStep, outputs map[string]workflowStepOutput) (workflowStepOutput, error) {
-	cfg, err := decodeWorkflowConfig[workflowConditionConfig](step.Config)
-	if err != nil {
-		return workflowStepOutput{}, err
-	}
-	previous, ok := outputs[cfg.StepID]
-	if !ok {
-		return workflowStepOutput{}, fmt.Errorf("condition source step %q is not complete", cfg.StepID)
-	}
-	value, exists := workflowOutputPath(previous, cfg.Path)
-	matched := false
-	switch cfg.Operator {
-	case "exists":
-		matched = exists && value != nil
-	case "equals":
-		matched = exists && fmt.Sprint(value) == fmt.Sprint(cfg.Value)
-	case "not_equals":
-		matched = !exists || fmt.Sprint(value) != fmt.Sprint(cfg.Value)
-	case "contains":
-		matched = exists && strings.Contains(strings.ToLower(fmt.Sprint(value)), strings.ToLower(fmt.Sprint(cfg.Value)))
-	case "gt", "gte":
-		left, lok := workflowFloat(value)
-		right, rok := workflowFloat(cfg.Value)
-		if !lok || !rok {
-			return workflowStepOutput{}, errors.New("numeric condition requires numeric values")
-		}
-		matched = left > right || (cfg.Operator == "gte" && left == right)
-	default:
-		return workflowStepOutput{}, fmt.Errorf("unsupported condition operator %q", cfg.Operator)
-	}
-	return workflowStepOutput{Data: map[string]any{"matched": matched, "value": value, "path": cfg.Path}}, nil
-}
-
-func workflowOutputPath(output workflowStepOutput, path string) (any, bool) {
-	root, err := json.Marshal(output)
-	if err != nil {
-		return nil, false
-	}
-	var object any
-	if json.Unmarshal(root, &object) != nil {
-		return nil, false
-	}
-	var current any = object
-	for _, part := range strings.Split(path, ".") {
-		mapping, ok := current.(map[string]any)
-		if !ok {
-			return nil, false
-		}
-		current, ok = mapping[part]
-		if !ok {
-			return nil, false
-		}
-	}
-	return current, true
-}
-
-func workflowFloat(value any) (float64, bool) {
-	switch n := value.(type) {
-	case float64:
-		return n, true
-	case float32:
-		return float64(n), true
-	case int:
-		return float64(n), true
-	case int64:
-		return float64(n), true
-	case json.Number:
-		f, err := n.Float64()
-		return f, err == nil
-	default:
-		return 0, false
-	}
 }
 
 func parseWorkflowTime(raw string) (*time.Time, error) {

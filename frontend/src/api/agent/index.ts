@@ -2,10 +2,8 @@ import { get, post, put, del } from "../../utils/request";
 
 // 智能体配置
 // 智能推理下的智能体类型预设 ID
-// 'wiki-qa'      : Wiki 图谱导航问答
-// 'hybrid-rag-wiki': Wiki + 分块混合检索
 // 'custom'       : 完全自定义（不应用预设）
-export type AgentType = 'rag-qa' | 'wiki-qa' | 'hybrid-rag-wiki' | 'data-analysis' | 'custom';
+export type AgentType = 'rag-qa' | 'data-analysis' | 'custom';
 
 export interface QuestionSuggestionConfig {
   starters: {
@@ -43,7 +41,7 @@ export interface CustomAgentConfig {
   model_id?: string;
   rerank_model_id?: string;         // ReRank 模型 ID
   temperature?: number;
-  max_completion_tokens?: number;   // 0 = 跟随系统默认（快速问答 2048；智能推理 4096，绑沙箱可写文件时 24576）。大于 0 为自定义上限
+  max_completion_tokens?: number;   // 0 = 跟随系统默认（快速问答 2048；智能推理 4096）。大于 0 为自定义上限
   thinking?: boolean;                      // 是否启用思考模式（支持扩展思考的模型）
   citation_enabled?: boolean;        // 是否在最终回答中输出知识库/网页来源引用（默认开启）
 
@@ -58,16 +56,6 @@ export interface CustomAgentConfig {
   // 对话中触发 OAuth 授权时的等待超时（秒）：到点后自动跳过授权提示。
   // <=0 时使用服务端默认超时。仅对使用 OAuth 的 MCP 服务生效。
   mcp_auth_wait_timeout?: number;
-
-  // ===== Skills设置（仅Agent模式）=====
-  // Skills选择模式：all=全部预装, selected=指定, none=不使用
-  skills_selection_mode?: 'all' | 'selected' | 'none';
-  selected_skills?: string[];       // 选择的Skill名称列表
-
-  // ===== 沙箱设置 =====
-  // 该智能体的技能脚本运行在哪个沙箱配置上；为空表示不启用沙箱执行。
-  // 指向逻辑配置而非某个具体版本，凭据轮换时无需重新指派每个智能体。
-  sandbox_config_id?: string;
 
   // ===== 知识库设置 =====
   // 知识库选择模式：all=全部知识库, selected=指定知识库, none=不使用知识库
@@ -102,12 +90,6 @@ export interface CustomAgentConfig {
   // ===== 多轮对话设置 =====
   multi_turn_enabled?: boolean;     // 是否启用多轮对话
   history_turns?: number;           // 保留历史轮数
-
-  // ===== 长期记忆 =====
-  // 该智能体是否可以读取用户的长期记忆。
-  // 缺省（旧数据）等同于 true：这是一个只能"关"的开关，空间设置关闭时
-  // 这里打开也不会生效。
-  memory_enabled?: boolean;
 
   // ===== 检索策略设置 =====
   embedding_top_k?: number;         // 向量召回TopK
@@ -246,7 +228,6 @@ export interface AgentTypeKBFilter {
 export interface KBCapabilities {
   vector: boolean;
   keyword: boolean;
-  wiki: boolean;
   graph: boolean;
   }
 
@@ -283,7 +264,7 @@ export function getAgentTypePresets() {
 // 推荐问题
 export interface SuggestedQuestion {
   question: string;
-  source: 'document' | 'agent_config' | 'wiki';
+  source: 'document' | 'agent_config';
   knowledge_base_id?: string;
 }
 

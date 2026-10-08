@@ -118,32 +118,9 @@
         <div class="setting-control">
 
           <div class="setting-control-row">
-          <t-popconfirm
-            v-if="hasEnum(item) && isHighRiskKey(item.key)"
-            v-model:visible="highRiskPopconfirm.visible"
-            :content="highRiskPopconfirm.content"
-            :theme="highRiskPopconfirm.theme"
-            :confirm-btn="highRiskPopconfirm.confirmBtn"
-            :cancel-btn="t('system.globalSettings.confirm.cancelBtn')"
-            :popup-props="PROGRAMMATIC_POPCONFIRM_PROPS"
-            placement="left"
-            @confirm="highRiskPopconfirm.finish(true)"
-            @cancel="highRiskPopconfirm.finish(false)"
-            @visible-change="highRiskPopconfirm.onVisibleChange"
-          >
-            <div class="setting-control-anchor">
-              <t-select
-                v-model="editValues[item.key]"
-                :options="enumOptions(item)"
-                    :aria-label="keyLabel(item.key)"
-                :disabled="savingKey === item.key"
-                class="setting-input"
-                @change="onHighRiskSelectChange(item)"
-              />
-            </div>
-          </t-popconfirm>
+
           <t-select
-            v-else-if="hasEnum(item)"
+            v-if="hasEnum(item)"
             v-model="editValues[item.key]"
             :options="enumOptions(item)"
                 :aria-label="keyLabel(item.key)"
@@ -151,28 +128,7 @@
             class="setting-input"
             @change="onChange(item)"
           />
-          <t-popconfirm
-            v-else-if="item.value_type === 'bool' && isHighRiskKey(item.key)"
-            v-model:visible="highRiskPopconfirm.visible"
-            :content="highRiskPopconfirm.content"
-            :theme="highRiskPopconfirm.theme"
-            :confirm-btn="highRiskPopconfirm.confirmBtn"
-            :cancel-btn="t('system.globalSettings.confirm.cancelBtn')"
-            :popup-props="PROGRAMMATIC_POPCONFIRM_PROPS"
-            placement="left"
-            @confirm="highRiskPopconfirm.finish(true)"
-            @cancel="highRiskPopconfirm.finish(false)"
-            @visible-change="highRiskPopconfirm.onVisibleChange"
-          >
-            <div class="setting-control-anchor">
-              <t-switch
-                v-model="editValues[item.key]"
-                :aria-label="keyLabel(item.key)"
-                :disabled="savingKey === item.key"
-                @change="onHighRiskBoolChange(item)"
-              />
-            </div>
-          </t-popconfirm>
+
           <t-switch
             v-else-if="item.value_type === 'bool'"
             v-model="editValues[item.key]"
@@ -251,7 +207,6 @@
           >
 
 
-
             <t-popconfirm
               v-if="hasOverride(item)"
               :content="t('system.globalSettings.reset.confirmBody', { label: keyLabel(item.key) })"
@@ -317,20 +272,9 @@ function settingDescription(item: { key: string; description?: string }): string
   return te(path) ? t(path) as string : item.description ?? ''
 }
 
-// Enum keys whose change triggers a whole-value inline popconfirm before
-// PUT. ssrf.whitelist is not here — it uses per-tag confirm instead.
-const HIGH_RISK_KEYS = new Set<string>([
-  'sandbox.docker_enabled',
-])
-
 const HIGH_IMPACT_KEYS = new Set<string>([
   'ssrf.whitelist',
-  'sandbox.docker_enabled',
 ])
-
-function isHighRiskKey(key: string): boolean {
-  return HIGH_RISK_KEYS.has(key)
-}
 
 function isHighImpactKey(key: string): boolean {
   return HIGH_IMPACT_KEYS.has(key)
@@ -388,7 +332,6 @@ function createInlinePopconfirm() {
 }
 
 const ssrfPopconfirm = createInlinePopconfirm()
-const highRiskPopconfirm = createInlinePopconfirm()
 
 // Friendly labels for enum options live in i18n
 // (system.globalSettings.enumLabels.<key>.<value>). Falls back to the
@@ -420,10 +363,9 @@ const SETTINGS_SECTION_KEYS: Record<Exclude<SettingsSection, 'other'>, readonly 
     'asynq.postprocess_concurrency',
     'asynq.maintenance_concurrency',
     'asynq.shared_concurrency',
-    'asynq.wiki_concurrency',
     'model.max_concurrency',
   ],
-  security: ['ssrf.whitelist', 'sandbox.docker_enabled'],
+  security: ['ssrf.whitelist'],
 }
 
 const activeSettingsSection = ref<SettingsSection>('runtime')
@@ -639,57 +581,6 @@ async function onChange(item: SystemSettingItem) {
   await persistSetting(currentItem)
 }
 
-async function onHighRiskSelectChange(item: SystemSettingItem) {
-  const currentItem = resolveCurrentSetting(settingsByKey.value, item.key)
-  if (!currentItem) return
-  const newValue = editValues[item.key]
-  if (!isDirty(currentItem)) return
-
-  // Revert the select immediately so cancel leaves the saved value
-  // visible; re-apply only after the inline popconfirm is confirmed.
-  editValues[item.key] = currentItem.value
-
-  const ok = await highRiskPopconfirm.ask({
-    content: highRiskConfirmBody(currentItem, newValue),
-    theme: 'danger',
-    confirmBtn: {
-      content: t('system.globalSettings.confirm.confirmBtn'),
-      theme: 'danger',
-    },
-  })
-  if (!ok) return
-
-  editValues[item.key] = newValue
-  await persistSetting(currentItem)
-}
-
-async function onHighRiskBoolChange(item: SystemSettingItem) {
-  const currentItem = resolveCurrentSetting(settingsByKey.value, item.key)
-  if (!currentItem) return
-  const newValue = editValues[item.key]
-  if (!isDirty(currentItem)) return
-
-  editValues[item.key] = currentItem.value
-  if (newValue !== true) {
-    editValues[item.key] = newValue
-    await persistSetting(currentItem)
-    return
-  }
-
-  const ok = await highRiskPopconfirm.ask({
-    content: t('system.globalSettings.confirm.bodySandboxDockerEnabled'),
-    theme: 'danger',
-    confirmBtn: {
-      content: t('system.globalSettings.confirm.confirmBtn'),
-      theme: 'danger',
-    },
-  })
-  if (!ok) return
-
-  editValues[item.key] = true
-  await persistSetting(currentItem)
-}
-
 function confirmSsrfListEntryChange(
   action: 'add' | 'remove',
   entry: string,
@@ -787,11 +678,6 @@ function highRiskConfirmBody(item: SystemSettingItem, value: unknown): string {
   })
 }
 
-async function refreshSandboxDockerCapability(key: string) {
-  if (key !== 'sandbox.docker_enabled') return
-  await deploymentCapabilities.ensureLoaded(true)
-}
-
 // resetSetting drops the DB override and reloads the row so the UI
 // reflects the resolved fallback (ENV value if set, otherwise the
 // in-code default). We refetch the whole list rather than the single
@@ -806,7 +692,6 @@ async function resetSetting(item: SystemSettingItem) {
     await loadSettings()
     markSettingSaved(item)
     MessagePlugin.success(t('system.globalSettings.reset.success'))
-    await refreshSandboxDockerCapability(item.key)
   } catch (err: any) {
     const msg = err?.message || t('system.globalSettings.reset.failed')
     saveAnnouncement.value = msg
@@ -833,7 +718,6 @@ async function persistSetting(item: SystemSettingItem) {
       : updated.value
     markSettingSaved(updated)
     MessagePlugin.success(t('system.globalSettings.messages.saveSuccess'))
-    await refreshSandboxDockerCapability(item.key)
   } catch (err: any) {
     const msg = err?.message || t('system.globalSettings.messages.saveFailed')
     saveAnnouncement.value = msg

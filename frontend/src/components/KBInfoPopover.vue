@@ -156,9 +156,7 @@ const capabilities = computed<Array<{ key: string; label: string; theme: Capabil
   if (kb.asr_config?.enabled) {
     items.push({ key: 'asr', label: 'ASR', theme: 'primary' })
   }
-  if (kb.indexing_strategy?.wiki_enabled) {
-    items.push({ key: 'wiki', label: 'Wiki', theme: 'warning' })
-  }
+  {}
   return items
 })
 

@@ -134,7 +134,7 @@ func TestEstimateTools(t *testing.T) {
 		Type: "function",
 		Function: chat.FunctionDef{
 			Name:        "shell_exec",
-			Description: strings.Repeat("run a shell command in the sandbox. ", 20),
+			Description: strings.Repeat("execute a SQL query on data. ", 20),
 			Parameters:  []byte(`{"type":"object","properties":{"command":{"type":"string"}}}`),
 		},
 	}}

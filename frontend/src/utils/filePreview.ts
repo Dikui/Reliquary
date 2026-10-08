@@ -1,9 +1,9 @@
 /**
  * Shared file-preview type resolution used by DocumentPreview, chat
- * attachments, and skill-generated artifacts.
+ * attachments, and message artifacts.
  *
  * Unknown extensions are not immediately rejected: callers can fetch a
- * short byte prefix and run sniffPreview() so skill outputs without a
+ * short byte prefix and run sniffPreview() so message files without a
  * conventional suffix (or with a misleading one) still open when the
  * content is HTML, SVG, JSON-like text, PDF, images, audio, or video.
  */
@@ -358,7 +358,7 @@ function sniffFromMagic(bytes: Uint8Array): FilePreviewSniff | null {
 /**
  * Infer a preview kind from a byte prefix. Used when the filename has no
  * known extension, or when callers want a second opinion on unlabeled
- * skill output.
+ * message file.
  */
 export function sniffPreview(bytes: Uint8Array): FilePreviewSniff {
   if (!bytes || bytes.length === 0) {

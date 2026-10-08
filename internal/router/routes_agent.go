@@ -36,19 +36,3 @@ func RegisterUserFavoriteRoutes(r *gin.RouterGroup, h *handler.UserResourceFavor
 		favs.DELETE("/:type/:id", h.RemoveFavorite)
 	}
 }
-
-func RegisterSkillRoutes(r *gin.RouterGroup, skillHandler *handler.SkillHandler, g *accessGuards) {
-	skills := r.Group("/skills")
-	{
-		skills.GET("", skillHandler.ListSkills)
-		skills.GET("/catalog", skillHandler.ListCatalog)
-	}
-	catalogWrite := r.Group("/skills/catalog")
-	{
-		catalogWrite.POST("", skillHandler.RegisterCatalog)
-		catalogWrite.POST("/:id/install", skillHandler.InstallCatalog)
-		catalogWrite.GET("/:id/files", skillHandler.ListCatalogFiles)
-		catalogWrite.GET("/:id/files/content", skillHandler.GetCatalogFile)
-		catalogWrite.DELETE("/:id", skillHandler.DeleteCatalog)
-	}
-}

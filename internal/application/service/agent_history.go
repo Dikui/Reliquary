@@ -211,7 +211,7 @@ func filterNonTerminalToolCalls(calls []types.ToolCall) []types.ToolCall {
 
 // toolCallOutput returns the textual content to use for a historical tool
 // message. Failures still go through CompactToolOutputForHistory so stdout
-// from a crashed skill script is not dropped in favor of a one-line exit code.
+// from a failed data analysis call is not dropped in favor of a short error.
 func toolCallOutput(tc types.ToolCall) string {
 	if tc.Result == nil {
 		return ""

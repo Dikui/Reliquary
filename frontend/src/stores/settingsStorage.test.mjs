@@ -29,7 +29,6 @@ function isStoredSettingsRecord(value) {
 function reconcileLoadedSettings(loaded) {
   loaded.selectedTags ||= [];
   loaded.selectedMCPServices ||= [];
-  loaded.selectedSkills ||= loaded.selectedTools || [];
   loaded.selectedFileKbMap ||= {};
   if (reconcileBuiltinAgentMode(loaded)) {
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(loaded));
@@ -67,7 +66,6 @@ function makeDefaults() {
     selectedAgentId: BUILTIN_QUICK_ANSWER_ID,
     selectedTags: [],
     selectedMCPServices: [],
-    selectedSkills: [],
     selectedFileKbMap: {},
     nested: { items: ["a"] },
   };

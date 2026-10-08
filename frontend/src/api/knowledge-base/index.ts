@@ -49,17 +49,9 @@ export function createKnowledgeBase(data: {
     model_id?: string;
     language?: string;
   };
-  wiki_config?: {
-    synthesis_model_id?: string;
-    max_pages_per_ingest?: number;
-    extraction_granularity?: 'focused' | 'standard' | 'exhaustive';
-    content_instructions?: string;
-    extraction_instructions?: string;
-  };
   indexing_strategy?: {
     vector_enabled: boolean;
     keyword_enabled: boolean;
-    wiki_enabled: boolean;
   };
 }) {
   return post(`/api/v1/knowledge-bases`, data);
@@ -80,18 +72,10 @@ export function updateKnowledgeBase(id: string, data: {
   config?: {
     chunking_config?: any;
     image_processing_config?: any;
-    wiki_config?: {
-      synthesis_model_id?: string;
-      max_pages_per_ingest?: number;
-      extraction_granularity?: 'focused' | 'standard' | 'exhaustive';
-      content_instructions?: string;
-      extraction_instructions?: string;
-    };
     auto_tag_config?: { enabled: boolean; model_id?: string; max_tags?: number; skip_if_tagged?: boolean; policy?: string };
     indexing_strategy?: {
       vector_enabled: boolean;
       keyword_enabled: boolean;
-      wiki_enabled: boolean;
     };
   }
 }) {

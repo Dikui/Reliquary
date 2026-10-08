@@ -20,55 +20,19 @@ import (
 const TypeKnowledgeWorkflowRun = "knowledge_workflow:run"
 
 var (
-	ErrWorkflowNotFound         = errors.New("knowledge workflow not found")
-	ErrWorkflowForbidden        = errors.New("knowledge workflow access denied")
-	ErrWorkflowInvalid          = errors.New("invalid knowledge workflow")
-	ErrWorkflowSkillUnavailable = errors.New("workflow skill executor is unavailable")
-	ErrWorkflowLeaseLost        = errors.New("knowledge workflow run lease lost")
+	ErrWorkflowNotFound  = errors.New("knowledge workflow not found")
+	ErrWorkflowForbidden = errors.New("knowledge workflow access denied")
+	ErrWorkflowInvalid   = errors.New("invalid knowledge workflow")
+	ErrWorkflowLeaseLost = errors.New("knowledge workflow run lease lost")
 )
-
-// WorkflowSkillConfig is the bounded input passed to the existing tenant-aware
-// agent/sandbox execution path. The workflow service never executes skill code
-// in the host process.
-type WorkflowSkillConfig struct {
-	AgentID    string   `json:"agent_id"`
-	SkillName  string   `json:"skill_name"`
-	ScriptPath string   `json:"script_path"`
-	Args       []string `json:"args,omitempty"`
-	Input      string   `json:"input,omitempty"`
-	InputStep  string   `json:"input_step,omitempty"`
-	RunID      string   `json:"-"`
-	StepID     string   `json:"-"`
-}
-
-type WorkflowSkillResult struct {
-	Output     string                 `json:"output"`
-	ExitCode   int                    `json:"exit_code"`
-	DurationMS int64                  `json:"duration_ms"`
-	SessionID  string                 `json:"session_id,omitempty"`
-	MessageID  string                 `json:"message_id,omitempty"`
-	Artifacts  types.MessageArtifacts `json:"artifacts,omitempty"`
-}
-
-// WorkflowSkillExecutor must resolve the requested agent for ownerID and run
-// through that agent's tenant sandbox, allowlist, skill source and env guards.
-type WorkflowSkillExecutor func(
-	ctx context.Context,
-	tenantID uint64,
-	ownerID string,
-	knowledgeBaseID string,
-	cfg WorkflowSkillConfig,
-) (*WorkflowSkillResult, error)
 
 type KnowledgeWorkflowService struct {
 	db        *gorm.DB
 	kbs       interfaces.KnowledgeBaseService
 	knowledge interfaces.KnowledgeService
 	context   *KnowledgeContextService
-	wiki      interfaces.WikiPageService
 	models    interfaces.ModelService
 	tasks     interfaces.TaskEnqueuer
-	skillExec WorkflowSkillExecutor
 	cron      *cron.Cron
 	mu        sync.Mutex
 }
@@ -78,15 +42,12 @@ func NewKnowledgeWorkflowService(
 	kbs interfaces.KnowledgeBaseService,
 	knowledge interfaces.KnowledgeService,
 	contextService *KnowledgeContextService,
-	wiki interfaces.WikiPageService,
 	models interfaces.ModelService,
 	tasks interfaces.TaskEnqueuer,
-	skillExecutor WorkflowSkillExecutor,
 ) *KnowledgeWorkflowService {
 	return &KnowledgeWorkflowService{
 		db: db, kbs: kbs, knowledge: knowledge, context: contextService,
-		wiki: wiki, models: models,
-		tasks: tasks, skillExec: skillExecutor,
+		models: models, tasks: tasks,
 	}
 }
 
@@ -130,33 +91,6 @@ func validateWorkflowInput(in types.KnowledgeWorkflowInput) error {
 				return fmt.Errorf("%w: step %q depends on missing or later step %q", ErrWorkflowInvalid, step.ID, dependency)
 			}
 		}
-		if step.When != nil {
-			prior, ok := seen[step.When.StepID]
-			if !ok || prior.Type != types.WorkflowStepCondition {
-				return fmt.Errorf("%w: step %q must branch on an earlier condition step", ErrWorkflowInvalid, step.ID)
-			}
-		}
-		if step.Type == types.WorkflowStepSkill {
-			if source, _ := step.Config["input_step"].(string); strings.TrimSpace(source) != "" {
-				if _, ok := seen[source]; !ok {
-					return fmt.Errorf("%w: skill step %q references missing or later input step %q", ErrWorkflowInvalid, step.ID, source)
-				}
-			}
-		}
-		if step.Type == types.WorkflowStepWikiUpdate {
-			if source, _ := step.Config["source_step"].(string); source != "" {
-				if _, ok := seen[source]; !ok {
-					return fmt.Errorf("%w: wiki step %q references missing or later source step %q", ErrWorkflowInvalid, step.ID, source)
-				}
-			}
-		}
-		if step.Type == types.WorkflowStepCondition {
-			if source, _ := step.Config["step_id"].(string); source != "" {
-				if _, ok := seen[source]; !ok {
-					return fmt.Errorf("%w: condition step %q references missing or later source step %q", ErrWorkflowInvalid, step.ID, source)
-				}
-			}
-		}
 		if err := validateWorkflowStepConfig(step); err != nil {
 			return fmt.Errorf("%w: step %q: %v", ErrWorkflowInvalid, step.ID, err)
 		}
@@ -168,8 +102,7 @@ func validateWorkflowInput(in types.KnowledgeWorkflowInput) error {
 func validWorkflowStepType(stepType string) bool {
 	switch stepType {
 	case types.WorkflowStepSearch, types.WorkflowStepFactQuery,
-		types.WorkflowStepReport, types.WorkflowStepWikiUpdate, types.WorkflowStepSkill,
-		types.WorkflowStepCondition, types.WorkflowStepHumanReview:
+		types.WorkflowStepReport:
 		return true
 	default:
 		return false
@@ -225,44 +158,7 @@ func validateWorkflowStepConfig(step types.KnowledgeWorkflowStep) error {
 				return errors.New("timezone must be a valid IANA timezone")
 			}
 		}
-	case types.WorkflowStepWikiUpdate:
-		if str("slug") == "" || str("title") == "" {
-			return errors.New("slug and title are required")
-		}
-		if str("source_step") == "" {
-			return errors.New("source_step is required")
-		}
-		pageType := str("page_type")
-		if pageType == "" {
-			pageType = types.WikiPageTypeSynthesis
-		}
-		if !types.IsValidWikiPageType(pageType) {
-			return errors.New("unsupported wiki page_type")
-		}
-	case types.WorkflowStepSkill:
-		if str("agent_id") == "" || str("skill_name") == "" || str("script_path") == "" {
-			return errors.New("agent_id, skill_name and script_path are required")
-		}
-	case types.WorkflowStepCondition:
-		if str("step_id") == "" || str("path") == "" {
-			return errors.New("step_id and path are required")
-		}
-		operator := str("operator")
-		if operator != "exists" && operator != "equals" && operator != "not_equals" && operator != "contains" && operator != "gt" && operator != "gte" {
-			return errors.New("unsupported condition operator")
-		}
-		if operator == "gt" || operator == "gte" {
-			cfg, err := decodeWorkflowConfig[workflowConditionConfig](step.Config)
-			if err != nil {
-				return err
-			}
-			if _, ok := workflowFloat(cfg.Value); !ok {
-				return errors.New("numeric condition requires numeric values")
-			}
-		}
-	case types.WorkflowStepHumanReview:
-		// A review step needs no additional fields; the persisted step itself is
-		// the actionable approval request shown to the user.
+
 	}
 	return nil
 }

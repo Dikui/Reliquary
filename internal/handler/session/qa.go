@@ -46,7 +46,6 @@ type qaRequestContext struct {
 	tagScopes             []types.TagScope
 	tagIDs                []string
 	mcpServiceIDs         []string
-	skillNames            []string
 	summaryModelID        string
 	mentionedItems        types.MentionedItems
 	images                []ImageAttachment        // Uploaded images with analysis text
@@ -82,7 +81,6 @@ func (rc *qaRequestContext) buildQARequest() *types.QARequest {
 		KnowledgeIDs:       rc.knowledgeIDs,
 		TagScopes:          rc.tagScopes,
 		MCPServiceIDs:      rc.mcpServiceIDs,
-		SkillNames:         rc.skillNames,
 		ImageURLs:          imageURLs,
 		ImageDescription:   imageDescription,
 		UserMessageID:      rc.userMessageID,
@@ -187,7 +185,7 @@ func (h *Handler) parseQARequest(c *gin.Context, logPrefix string) (*qaRequestCo
 		logger.Infof(ctx, "[%s] processing %d attachment(s)", logPrefix, len(request.AttachmentUploads))
 
 		// Decode first and validate actual bytes. Client-declared file_size is
-		// metadata only and must not be trusted for memory or sandbox limits.
+		// metadata only and must not be trusted for server-side limits.
 		maxSize := secutils.GetMaxFileSize()
 		decodedAttachments, decodeErr := decodeAndValidateAttachmentUploads(
 			request.AttachmentUploads,
@@ -296,7 +294,6 @@ func (h *Handler) parseQARequest(c *gin.Context, logPrefix string) (*qaRequestCo
 	tagScopes := mergeTagScopesFromRequestIDs(mentionScopes, requestTagIDs, secutils.SanitizeForLogArray(kbIDs))
 	tagIDs := dedupRequestStrings(append(request.TagIDs, mentionedIDsByType(request.MentionedItems, "tag")...))
 	mcpServiceIDs := dedupRequestStrings(append(request.MCPServiceIDs, mentionedIDsByType(request.MentionedItems, "mcp")...))
-	skillNames := dedupRequestStrings(append(request.SkillNames, mentionedIDsByType(request.MentionedItems, "skill")...))
 	executionContext, agentID, modelID := buildMessageExecutionContext(
 		ctx,
 		customAgent,
@@ -306,7 +303,6 @@ func (h *Handler) parseQARequest(c *gin.Context, logPrefix string) (*qaRequestCo
 		secutils.SanitizeForLogArray(tagIDs),
 		tagScopes,
 		secutils.SanitizeForLogArray(mcpServiceIDs),
-		secutils.SanitizeForLogArray(skillNames),
 	)
 
 	// Build request context
@@ -334,7 +330,6 @@ func (h *Handler) parseQARequest(c *gin.Context, logPrefix string) (*qaRequestCo
 		tagScopes:             tagScopes,
 		tagIDs:                secutils.SanitizeForLogArray(tagIDs),
 		mcpServiceIDs:         secutils.SanitizeForLogArray(mcpServiceIDs),
-		skillNames:            secutils.SanitizeForLogArray(skillNames),
 		summaryModelID:        secutils.SanitizeForLog(request.SummaryModelID),
 		mentionedItems:        convertMentionedItems(request.MentionedItems),
 		images:                request.Images,
@@ -388,7 +383,6 @@ func buildMessageExecutionContext(
 	tagIDs []string,
 	tagScopes []types.TagScope,
 	mcpServiceIDs []string,
-	skillNames []string,
 ) (types.MessageExecutionContext, string, string) {
 	locale := types.LanguageFromContextOrDefault(ctx)
 
@@ -398,7 +392,6 @@ func buildMessageExecutionContext(
 		TagIDs:           tagIDs,
 		TagScopes:        cloneTagScopes(tagScopes),
 		MCPServiceIDs:    mcpServiceIDs,
-		SkillNames:       skillNames,
 		Locale:           locale,
 	}
 	if agent == nil {
@@ -535,22 +528,6 @@ func (h *Handler) setupSSEStream(reqCtx *qaRequestContext, generateTitle bool) *
 	)
 
 	baseCtx := reqCtx.ctx
-
-	// The session's sandbox stays bound to the session owner even when the
-	// borrowed tenant above drives everything else, because DeleteSession tears
-	// that sandbox down from a request that only knows the session's tenant.
-	baseCtx = types.WithSandboxTenantID(baseCtx, reqCtx.session.TenantID)
-
-	// An agent that opted out of long-term memory has to be opted out of the
-	// write path too, not just recall. The two run from different contexts:
-	// recall is marked inside the QA services, while extraction, the explicit
-	// "remember this" route and document affinity are all kicked off from
-	// completeAssistantMessage on a context descended from this one. Marking
-	// the root of the async work is what keeps them from disagreeing — an
-	// agent that cannot read the memory must not keep writing to it.
-	if reqCtx.customAgent != nil {
-		baseCtx = types.ApplyAgentMemoryPreference(baseCtx, reqCtx.customAgent.Config.MemoryEnabled)
-	}
 
 	// Create EventBus and cancellable context
 	eventBus := event.NewEventBus()
@@ -1305,7 +1282,6 @@ func (h *Handler) persistLastRequestState(parentCtx context.Context, reqCtx *qaR
 		KnowledgeIDs:     reqCtx.knowledgeIDs,
 		TagIDs:           reqCtx.tagIDs,
 		MCPServiceIDs:    reqCtx.mcpServiceIDs,
-		SkillNames:       reqCtx.skillNames,
 		MentionedItems:   reqCtx.mentionedItems,
 	}
 
@@ -1345,73 +1321,4 @@ func (h *Handler) completeAssistantMessage(
 			}
 		}()
 	}
-	if userQuery != "" {
-		go h.recordTurnMemory(bgCtx, assistantMessage, userQuery, userMessageID)
-	}
-}
-
-// recordTurnMemory runs the long-term memory write path for a finished turn.
-//
-// This is the single place a conversation can produce memory, and it sits at
-// the point where both the RAG and the Agent path converge, so neither mode
-// can silently miss it. A stopped conversation arrives with an empty query and
-// is skipped by the caller.
-func (h *Handler) recordTurnMemory(
-	ctx context.Context, assistantMessage *types.Message, userQuery, userMessageID string,
-) {
-	if h.memoryService == nil {
-		return
-	}
-	// An explicit "remember ..." directive is stored verbatim and immediately,
-	// with no model in the loop. This is what makes the default explicit_only
-	// mode useful rather than merely safe.
-	if statement, ok := types.DetectExplicitMemory(userQuery); ok {
-		if _, err := h.memoryService.Remember(ctx, types.MemoryItem{
-			Kind:            types.MemoryKindFact,
-			Content:         statement,
-			Importance:      4,
-			Origin:          types.MemoryOriginExplicit,
-			SourceSessionID: assistantMessage.SessionID,
-			// Attribute to the user's own message, not the answer. Background
-			// distillation reads that same message, so the two paths must
-			// agree on provenance or a memory deleted from one can be
-			// re-derived by the other.
-			SourceMessageID: userMessageID,
-		}); err != nil {
-			logger.Warnf(ctx, "memory: explicit remember failed for message %s: %v", assistantMessage.ID, err)
-		}
-	}
-	h.recordAnswerSources(ctx, assistantMessage)
-	h.memoryService.ScheduleExtraction(ctx, assistantMessage.SessionID, assistantMessage.ID, assistantMessage.ModelID)
-}
-
-// recordAnswerSources notes which documents this answer drew on, so the
-// reranker can prefer the material this person keeps working from.
-//
-// The references attached to an answer are a weaker signal than an explicit
-// thumbs-up: they say the retriever kept picking a document, not that the user
-// found it useful. They are, however, the only per-person retrieval signal
-// available without asking for anything, and the boost they earn is capped
-// accordingly.
-func (h *Handler) recordAnswerSources(ctx context.Context, assistantMessage *types.Message) {
-	if len(assistantMessage.KnowledgeReferences) == 0 {
-		return
-	}
-	seen := make(map[string]struct{}, len(assistantMessage.KnowledgeReferences))
-	refs := make([]types.MemoryDocAffinity, 0, len(assistantMessage.KnowledgeReferences))
-	for _, ref := range assistantMessage.KnowledgeReferences {
-		if ref.KnowledgeID == "" {
-			continue
-		}
-		if _, dup := seen[ref.KnowledgeID]; dup {
-			continue
-		}
-		seen[ref.KnowledgeID] = struct{}{}
-		refs = append(refs, types.MemoryDocAffinity{
-			KnowledgeID:     ref.KnowledgeID,
-			KnowledgeBaseID: ref.KnowledgeBaseID,
-			Title:           ref.KnowledgeTitle,
-		})
-	}
-	h.memoryService.RecordAnswerSources(ctx, refs)
 }

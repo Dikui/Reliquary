@@ -10,7 +10,7 @@ func TestContextNameEmbeddingRebuildUsesGraphEnrichmentQueue(t *testing.T) {
 	if QueueWeightsForPool(WorkerPoolEnrichment)[queue] <= 0 || QueueWeightsForSharedPool()[queue] <= 0 {
 		t.Fatal("name embedding rebuild requires enrichment and shared workers")
 	}
-	if QueueWeightsForPool(WorkerPoolCore)[queue] != 0 || QueueWeightsForPool(WorkerPoolWiki)[queue] != 0 {
-		t.Fatal("name embedding rebuild must preserve parse and wiki pool capacity")
+	if QueueWeightsForPool(WorkerPoolCore)[queue] != 0 {
+		t.Fatal("name embedding rebuild must preserve parse pool capacity")
 	}
 }

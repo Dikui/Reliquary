@@ -39,12 +39,9 @@ test('artifact count is a top-right overlay instead of t-badge', () => {
   assert.doesNotMatch(agentStream, /<t-badge/)
 })
 
-test('artifact toolbar uses a folder icon and replaces it while collecting', () => {
+test('artifact toolbar uses a folder icon for stored message files', () => {
   assert.match(botMessage, /answer-toolbar__artifact[\s\S]{0,800}name="folder"/)
   assert.match(agentStream, /answer-toolbar__artifact[\s\S]{0,800}name="folder"/)
-  assert.match(botMessage, /class="answer-toolbar__artifact-spinner"/)
-  assert.match(agentStream, /class="answer-toolbar__artifact-spinner"/)
-  assert.match(sharedStyles, /answer-toolbar-artifact-spin/)
   assert.doesNotMatch(botMessage, /answer-toolbar__artifact[\s\S]{0,800}:loading=/)
   assert.doesNotMatch(agentStream, /answer-toolbar__artifact[\s\S]{0,800}:loading=/)
 })

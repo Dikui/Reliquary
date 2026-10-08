@@ -9,7 +9,6 @@ const (
 	WorkerPoolEnrichment  = "enrichment"
 	WorkerPoolMaintenance = "maintenance"
 	WorkerPoolShared      = "shared"
-	WorkerPoolWiki        = "wiki"
 
 	// Upstream defaults are explicit guarantees plus an elastic pool. The
 	// shared pool may consume core and enrichment queues, so idle capacity in
@@ -19,7 +18,6 @@ const (
 	DefaultEnrichmentWorkerConcurrency  = 12
 	DefaultMaintenanceWorkerConcurrency = 4
 	DefaultSharedWorkerConcurrency      = 6
-	DefaultWikiWorkerConcurrency        = 8
 	DefaultUpstreamWorkerConcurrency    = DefaultCoreWorkerConcurrency +
 		DefaultPostProcessWorkerConcurrency + DefaultEnrichmentWorkerConcurrency +
 		DefaultMaintenanceWorkerConcurrency + DefaultSharedWorkerConcurrency
@@ -41,11 +39,6 @@ const (
 	QueueQuestion       = "question"
 	QueueSync           = "sync"
 	QueueMaintenance    = "low"
-	QueueWiki           = "wiki"
-	// QueueMemory carries debounced long-term memory distillation. It sits in
-	// the enrichment pool because it is a background LLM call whose latency
-	// nobody is waiting on.
-	QueueMemory = "memory"
 )
 
 // QueueDefinition is the single source of truth for queue topology. Worker
@@ -78,13 +71,11 @@ var queueDefinitions = []QueueDefinition{
 	{Name: QueueMultimodal, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeImageMultimodal}},
 	{Name: QueueGraph, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeKnowledgeContext, TypeContextNameEmbeddingRebuild}},
 	{Name: QueueQuestion, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeQuestionGeneration}},
-	{Name: QueueMemory, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeMemoryExtract}},
 	{Name: QueueSync, Pool: WorkerPoolMaintenance, Weight: 2, TaskTypes: []string{TypeDataSourceSync}},
 	{Name: QueueMaintenance, Pool: WorkerPoolMaintenance, Weight: 1, TaskTypes: []string{
 		TypeKnowledgeWorkflowRun, TypeKBClone, TypeKBDelete,
 		TypeKnowledgeListDelete, TypeKnowledgeListReparse, TypeKnowledgeMove,
 	}},
-	{Name: QueueWiki, Pool: WorkerPoolWiki, Weight: 1, TaskTypes: []string{TypeWikiIngest, TypeWikiFinalize}},
 }
 
 // QueueDefinitions returns a copy so callers cannot mutate global topology.
@@ -145,7 +136,6 @@ type WorkerPoolConcurrency struct {
 	Enrichment  int
 	Maintenance int
 	Shared      int
-	Wiki        int
 }
 
 func DefaultWorkerPoolConcurrency() WorkerPoolConcurrency {
@@ -155,7 +145,6 @@ func DefaultWorkerPoolConcurrency() WorkerPoolConcurrency {
 		Enrichment:  DefaultEnrichmentWorkerConcurrency,
 		Maintenance: DefaultMaintenanceWorkerConcurrency,
 		Shared:      DefaultSharedWorkerConcurrency,
-		Wiki:        DefaultWikiWorkerConcurrency,
 	}
 }
 
@@ -180,7 +169,6 @@ func ResolveWorkerPoolConcurrency(read func(key, env string, fallback int) int) 
 	allocation.Enrichment = positive("asynq.enrichment_concurrency", "RELIQUARY_ASYNQ_ENRICHMENT_CONCURRENCY", allocation.Enrichment)
 	allocation.Maintenance = positive("asynq.maintenance_concurrency", "RELIQUARY_ASYNQ_MAINTENANCE_CONCURRENCY", allocation.Maintenance)
 	allocation.Shared = positive("asynq.shared_concurrency", "RELIQUARY_ASYNQ_SHARED_CONCURRENCY", allocation.Shared)
-	allocation.Wiki = positive("asynq.wiki_concurrency", "RELIQUARY_WIKI_ASYNQ_CONCURRENCY", allocation.Wiki)
 	return allocation
 }
 
@@ -249,32 +237,8 @@ const (
 	TypeKnowledgeWorkflowRun        = "knowledge_workflow:run"
 	TypeManualProcess               = "manual:process"             // 手工知识更新任务（cleanup + 重新索引）
 	TypeDataSourceSync              = "datasource:sync"            // 数据源同步任务
-	TypeWikiIngest                  = "wiki:ingest"                // Wiki 页面同步任务
-	TypeWikiFinalize                = "wiki:finalize"              // Wiki KB 级收尾任务（防抖：索引重建/死链清理/交叉链接）
 	TypeTemporaryDocumentProcess    = "temporary_document:process" // 会话临时文档解析任务
-	// TypeMemoryExtract 长期记忆抽取任务（会话轮次防抖后异步执行）
-	TypeMemoryExtract = "memory:extract"
 )
-
-// MemoryExtractPayload carries everything the background distillation task
-// needs. Scope (tenant + subject) travels in the payload rather than being
-// read from the worker context: asynq and direct test handlers both start from a
-// bare context, so anything the request knew and the payload does not carry is
-// simply gone by the time the handler runs.
-type MemoryExtractPayload struct {
-	TenantID  uint64 `json:"tenant_id"`
-	SubjectID string `json:"subject_id"`
-	SessionID string `json:"session_id"`
-	// MessageID is the assistant message that closed the triggering turn. It
-	// bounds the extraction window and is stored as the source of any item
-	// produced, so every memory can be traced back to a real message.
-	MessageID string `json:"message_id"`
-	// ChatModelID is the model the conversation itself used. The extraction
-	// task falls back to it when MemoryConfig.ExtractModelID is blank, which
-	// is what the settings UI promises.
-	ChatModelID string `json:"chat_model_id,omitempty"`
-	Language    string `json:"language,omitempty"`
-}
 
 // DocumentProcessPayload represents the document process task payload
 type DocumentProcessPayload struct {

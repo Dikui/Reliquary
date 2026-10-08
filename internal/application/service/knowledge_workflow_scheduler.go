@@ -17,99 +17,7 @@ import (
 	"reliquary/internal/types"
 )
 
-func (s *KnowledgeWorkflowService) Approve(ctx context.Context, kbID, runID, decision string) (*types.KnowledgeWorkflowRun, error) {
-	decision = strings.ToLower(strings.TrimSpace(decision))
-	if decision != "approve" && decision != "reject" {
-		return nil, fmt.Errorf("decision must be approve or reject")
-	}
-	run, err := s.getRun(ctx, kbID, runID)
-	if err != nil {
-		return nil, err
-	}
-	wf, err := s.getWorkflow(ctx, kbID, run.WorkflowID)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.authorizeWorkflow(ctx, wf); err != nil {
-		return nil, err
-	}
-	var step types.KnowledgeWorkflowStepRun
-	err = s.db.WithContext(ctx).Where("run_id = ? AND status = ? AND tenant_id = ? AND knowledge_base_id = ?", runID, types.WorkflowStepWaitingReview, run.TenantID, kbID).First(&step).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, errors.New("workflow run is not waiting for review")
-	}
-	if err != nil {
-		return nil, err
-	}
-	now := time.Now()
-	ownerCtx := context.WithValue(ctx, types.UserIDContextKey, run.OwnerID)
-	err = s.validateActor(ownerCtx, run.TenantID, run.OwnerID)
-	if err != nil && decision == "approve" {
-		return nil, err
-	}
-	if decision == "reject" {
-		err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			result := tx.Model(&step).Where("id = ? AND status = ?", step.ID, types.WorkflowStepWaitingReview).Updates(map[string]any{
-				"status": types.WorkflowStepRejected, "error": "rejected by " + workflowActor(ctx), "finished_at": now, "updated_at": now,
-			})
-			if result.Error != nil {
-				return result.Error
-			}
-			if result.RowsAffected == 0 {
-				return errors.New("workflow run is no longer waiting for review")
-			}
-			result = tx.Model(&types.KnowledgeWorkflowRun{}).Where("id = ? AND status = ?", runID, types.WorkflowStatusPaused).Updates(map[string]any{
-				"status": types.WorkflowStatusRejected, "error": "human reviewer rejected the run", "finished_at": now, "updated_at": now,
-			})
-			if result.Error != nil {
-				return result.Error
-			}
-			if result.RowsAffected == 0 {
-				return errors.New("workflow run is no longer paused")
-			}
-			return nil
-		})
-		if err != nil {
-			return nil, err
-		}
-		return s.GetRun(ctx, kbID, runID)
-	}
-	reviewOutput, _ := json.Marshal(workflowStepOutput{Data: map[string]any{"decision": "approved", "reviewed_by": workflowActor(ctx), "reviewed_at": now.Format(time.RFC3339Nano)}})
-	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		result := tx.Model(&step).Where("id = ? AND status = ?", step.ID, types.WorkflowStepWaitingReview).Updates(map[string]any{
-			"status": types.WorkflowStepSucceeded, "output": types.JSON(reviewOutput), "error": "", "finished_at": now, "updated_at": now,
-		})
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected == 0 {
-			return errors.New("workflow run is no longer waiting for review")
-		}
-		result = tx.Model(&types.KnowledgeWorkflowRun{}).Where("id = ? AND status = ?", runID, types.WorkflowStatusPaused).Updates(map[string]any{
-			"status": types.WorkflowStatusQueued, "error": "", "finished_at": nil, "updated_at": now,
-		})
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected == 0 {
-			return errors.New("workflow run is no longer paused")
-		}
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	payload := types.KnowledgeWorkflowTaskPayload{
-		RunID: run.ID, Initiator: types.TaskInitiator{UserID: run.OwnerID},
-	}
-	if _, err := s.enqueueExisting(ctx, run, payload); err != nil {
-		return nil, err
-	}
-	return s.GetRun(ctx, kbID, runID)
-}
-
-// Resume restarts a run paused because its workflow was disabled while queued
-// or running. Review pauses must go through Approve so the pending decision is
-// persisted and auditable.
+// Resume restarts a run paused because its workflow was disabled while queued or running.
 func (s *KnowledgeWorkflowService) Resume(ctx context.Context, kbID, runID string) (*types.KnowledgeWorkflowRun, error) {
 	run, err := s.getRun(ctx, kbID, runID)
 	if err != nil {
@@ -124,14 +32,6 @@ func (s *KnowledgeWorkflowService) Resume(ctx context.Context, kbID, runID strin
 	}
 	if !wf.Enabled {
 		return nil, errors.New("enable the workflow before resuming")
-	}
-	var review types.KnowledgeWorkflowStepRun
-	err = s.db.WithContext(ctx).Where("run_id = ? AND status = ?", runID, types.WorkflowStepWaitingReview).First(&review).Error
-	if err == nil {
-		return nil, errors.New("run is waiting for human review; approve or reject it")
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, err
 	}
 	if run.Status != types.WorkflowStatusPaused {
 		return nil, fmt.Errorf("run cannot be resumed from status %q", run.Status)

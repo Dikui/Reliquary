@@ -438,7 +438,7 @@
             <div class="workflow-step__top">
               <span class="step-number">{{ index + 1 }}</span>
               <t-input v-model.trim="step.id" :placeholder="t('knowledgeWorkbench.workflows.stepId')" />
-              <t-select v-model="step.type" :options="stepTypeOptions" />
+              <t-select v-model="step.type" :options="stepTypeOptions" class="workflow-step__type" />
               <div class="step-order">
                 <t-button size="small" variant="text" :disabled="index === 0" @click="moveWorkflowStep(index, -1)">↑</t-button>
                 <t-button size="small" variant="text" :disabled="index === workflowDraft.steps.length - 1" @click="moveWorkflowStep(index, 1)">↓</t-button>
@@ -478,41 +478,8 @@
                 <label v-if="!step.config.window"><span>{{ t('knowledgeWorkbench.workflows.config.timeTo') }}</span><input v-model="step.config.time_to" class="native-input" type="date" /></label>
                 <label class="span-two"><span>{{ t('knowledgeWorkbench.workflows.config.prompt') }}</span><t-textarea v-model="step.config.prompt" :autosize="{ minRows: 2, maxRows: 5 }" /></label>
               </template>
-              <template v-else-if="step.type === 'wiki_update'">
-                <label><span>{{ t('knowledgeWorkbench.workflows.config.slug') }}</span><t-input v-model="step.config.slug" /></label>
-                <label><span>{{ t('knowledgeWorkbench.workflows.config.pageTitle') }}</span><t-input v-model="step.config.title" /></label>
-                <label><span>{{ t('knowledgeWorkbench.workflows.config.pageType') }}</span><t-input v-model="step.config.page_type" /></label>
-                <label><span>{{ t('knowledgeWorkbench.workflows.config.sourceStep') }}</span><t-select v-model="step.config.source_step" clearable :options="dependencyOptions(step)" /></label>
-                <label class="span-two"><span>{{ t('knowledgeWorkbench.workflows.config.summary') }}</span><t-textarea v-model="step.config.summary" :autosize="{ minRows: 2, maxRows: 4 }" /></label>
-              </template>
-              <template v-else-if="step.type === 'skill'">
-                <label><span>{{ t('knowledgeWorkbench.workflows.config.agentId') }}</span><t-input v-model="step.config.agent_id" /></label>
-                <label><span>{{ t('knowledgeWorkbench.workflows.config.skillName') }}</span><t-input v-model="step.config.skill_name" /></label>
-                <label><span>{{ t('knowledgeWorkbench.workflows.config.scriptPath') }}</span><t-input v-model="step.config.script_path" /></label>
-                <label><span>{{ t('knowledgeWorkbench.workflows.config.inputStep') }}</span><t-select v-model="step.config.input_step" clearable :options="dependencyOptions(step)" /></label>
-                <label class="span-two"><span>{{ t('knowledgeWorkbench.workflows.config.input') }}</span><t-textarea v-model="step.config.input" :autosize="{ minRows: 2, maxRows: 4 }" /></label>
-                <label class="span-two"><span>{{ t('knowledgeWorkbench.workflows.config.args') }}</span><t-textarea v-model="step.config.args_text" :autosize="{ minRows: 2, maxRows: 4 }" /></label>
-              </template>
-              <template v-else-if="step.type === 'condition'">
-                <label><span>{{ t('knowledgeWorkbench.workflows.config.conditionStep') }}</span><t-select v-model="step.config.step_id" :options="dependencyOptions(step)" /></label>
-                <label><span>{{ t('knowledgeWorkbench.workflows.config.path') }}</span><t-input v-model="step.config.path" /></label>
-                <label><span>{{ t('knowledgeWorkbench.workflows.config.operator') }}</span><t-select v-model="step.config.operator" :options="conditionOperatorOptions" /></label>
-                <label>
-                  <span>{{ t('knowledgeWorkbench.workflows.config.value') }}</span>
-                  <t-input-number v-if="step.config.operator === 'gt' || step.config.operator === 'gte'" v-model="step.config.value" />
-                  <t-input v-else v-model="step.config.value" />
-                </label>
-              </template>
-              <template v-else-if="step.type === 'human_review'">
-                <label class="span-two"><span>{{ t('knowledgeWorkbench.workflows.config.reviewMessage') }}</span><t-textarea v-model="step.config.message" :autosize="{ minRows: 2, maxRows: 4 }" /></label>
-              </template>
-              <label class="step-condition span-two">
-                <t-checkbox :checked="!!step.when" @change="toggleStepCondition(step)">{{ t('knowledgeWorkbench.workflows.onlyWhen') }}</t-checkbox>
-                <template v-if="step.when">
-                  <t-select :value="step.when.step_id" :options="conditionOptions(step)" @change="setConditionStep(step, String($event))" />
-                  <t-select :value="String(step.when.equals)" :options="booleanOptions" @change="setConditionValue(step, $event)" />
-                </template>
-              </label>
+
+
             </div>
           </article>
         </div>
@@ -589,21 +556,9 @@
                 </div>
                 <p v-if="stepRun.error" class="run-error">{{ stepRun.error }}</p>
                 <pre v-if="stepRun.output !== undefined" class="run-output">{{ formatOutput(stepRun.output) }}</pre>
-                <div v-if="stepRun.step_type === 'skill' && stepArtifacts(stepRun).length" class="run-artifacts">
-                  <t-button v-for="artifact in stepArtifacts(stepRun)" :key="artifact.key" size="small" variant="outline"
-                    :loading="downloadingArtifactKey === artifact.key" @click="downloadStepArtifact(artifact)">
-                    <template #icon><t-icon name="download" /></template>
-                    {{ artifact.file_name }}
-                  </t-button>
-                </div>
+
               </div>
-              <div v-if="selectedRun.status === 'paused' && canManage" class="review-actions">
-                <span>{{ t('knowledgeWorkbench.workflows.reviewPending') }}</span>
-                <div>
-                  <t-button size="small" theme="primary" :loading="decisionLoading" @click="decideRun('approve')">{{ t('knowledgeWorkbench.workflows.approve') }}</t-button>
-                  <t-button size="small" theme="danger" variant="outline" :loading="decisionLoading" @click="decideRun('reject')">{{ t('knowledgeWorkbench.workflows.reject') }}</t-button>
-                </div>
-              </div>
+
             </div>
           </div>
         </div>
@@ -737,7 +692,6 @@ import { useAuthStore } from '@/stores/auth'
 import { listKnowledgeDomains, type KnowledgeDomain } from '@/api/knowledge-domains'
 import { knowledgeContextScopeParams } from '@/api/knowledge-context-scope'
 import { markdownCitationSegments } from '@/utils/markdownCitation'
-import { downloadArtifact, type ArtifactMeta } from '@/api/chat/index'
 import {
   correctGlobalKnowledgeFact,
   getGlobalKnowledgeEvidence,
@@ -769,7 +723,6 @@ import {
 } from '@/api/knowledge-context'
 import {
   createKnowledgeWorkflow,
-  decideKnowledgeWorkflowRun,
   downloadKnowledgeWorkflowReport,
   getKnowledgeWorkflowReport,
   getKnowledgeWorkflowRun,
@@ -898,10 +851,8 @@ const workflowRuns = ref<KnowledgeWorkflowRun[]>([])
 const runsLoading = ref(false)
 const selectedRun = ref<KnowledgeWorkflowRun | null>(null)
 const runningWorkflowId = ref('')
-const decisionLoading = ref(false)
 const resumingRun = ref(false)
 const retryingRun = ref(false)
-const downloadingArtifactKey = ref('')
 const reports = ref<KnowledgeWorkflowReport[]>([])
 const reportsLoading = ref(false)
 const selectedReport = ref<KnowledgeWorkflowReport | null>(null)
@@ -918,7 +869,7 @@ const workflowTemplates = [
   { id: 'daily' }, { id: 'weekly' }, { id: 'custom' },
 ]
 const stepTypes: KnowledgeWorkflowStepType[] = [
-  'search', 'fact_query', 'report', 'wiki_update', 'skill', 'condition', 'human_review',
+  'search', 'fact_query', 'report',
 ]
 const stepTypeOptions = computed(() => stepTypes.map(value => ({
   value,
@@ -929,14 +880,11 @@ const reportWindowOptions = computed(() => [
   { value: 'previous_week', label: t('knowledgeWorkbench.workflows.config.previousWeek') },
   { value: 'rolling_days', label: t('knowledgeWorkbench.workflows.config.rollingDays') },
 ])
-const conditionOperatorOptions = ['exists', 'equals', 'not_equals', 'contains', 'gt', 'gte']
-  .map(value => ({ value, label: value }))
 const canRetryRun = computed(() => Boolean(
   props.canManage && selectedRun.value?.status === 'failed' && selectedWorkflow.value?.enabled,
 ))
 const canResumeRun = computed(() => Boolean(
-  props.canManage && selectedRun.value?.status === 'paused' && selectedWorkflow.value?.enabled
-  && !selectedRun.value.steps?.some(step => step.status === 'waiting_review'),
+  props.canManage && selectedRun.value?.status === 'paused' && selectedWorkflow.value?.enabled,
 ))
 const booleanOptions = computed(() => [
   { value: 'true', label: t('common.yes') },
@@ -1549,17 +1497,6 @@ async function runWorkflow(workflow: KnowledgeWorkflow) {
   finally { runningWorkflowId.value = '' }
 }
 
-async function decideRun(decision: 'approve' | 'reject') {
-  if (!selectedRun.value) return
-  decisionLoading.value = true
-  try {
-    selectedRun.value = envelopeData(await decideKnowledgeWorkflowRun(props.kbId, selectedRun.value.id, decision))
-    await loadRuns()
-    MessagePlugin.success(t(`knowledgeWorkbench.workflows.decision.${decision}`))
-  } catch (error) { loadError.value = getErrorMessage(error) }
-  finally { decisionLoading.value = false }
-}
-
 async function resumeRun() {
   if (!selectedRun.value) return
   resumingRun.value = true
@@ -1586,54 +1523,21 @@ function workflowStepName(stepId: string) {
 
 function stepStatusTheme(status: string): 'success' | 'danger' | 'warning' | 'default' {
   if (status === 'succeeded') return 'success'
-  if (status === 'failed' || status === 'rejected') return 'danger'
-  if (status === 'waiting_review' || status === 'running') return 'warning'
+  if (status === 'failed') return 'danger'
+  if (status === 'running') return 'warning'
   return 'default'
 }
 
 function formatOutput(value: unknown) {
   if (typeof value === 'string') return value
-  const redactArtifactMetadata = (item: unknown): unknown => {
-    if (Array.isArray(item)) return item.map(redactArtifactMetadata)
+  const redactMetadata = (item: unknown): unknown => {
+    if (Array.isArray(item)) return item.map(redactMetadata)
     if (!item || typeof item !== 'object') return item
     return Object.fromEntries(Object.entries(item).filter(([key]) =>
-      !['source_path', 'storage_path', 'session_id', 'message_id', 'artifacts', 'provider_url'].includes(key),
-    ).map(([key, child]) => [key, redactArtifactMetadata(child)]))
+      !['source_path', 'storage_path', 'session_id', 'message_id', 'provider_url'].includes(key),
+    ).map(([key, child]) => [key, redactMetadata(child)]))
   }
-  try { return JSON.stringify(redactArtifactMetadata(value), null, 2) } catch { return String(value) }
-}
-
-type WorkflowStepArtifact = ArtifactMeta & { sessionId: string; messageId: string; key: string }
-
-function stepArtifacts(stepRun: KnowledgeWorkflowStepRun): WorkflowStepArtifact[] {
-  const output = stepRun.output && typeof stepRun.output === 'object' ? stepRun.output as Record<string, unknown> : null
-  const data = output?.data && typeof output.data === 'object' ? output.data as Record<string, unknown> : null
-  const sessionId = typeof data?.session_id === 'string' ? data.session_id : ''
-  const messageId = typeof data?.message_id === 'string' ? data.message_id : ''
-  if (!sessionId || !messageId || !Array.isArray(data?.artifacts)) return []
-  return data.artifacts.flatMap((value, index) => {
-    if (!value || typeof value !== 'object') return []
-    const artifact = value as Partial<ArtifactMeta>
-    if (!artifact.file_name) return []
-    const key = `${sessionId}:${messageId}:${index}`
-    return [{ ...artifact, index, sessionId, messageId, key } as WorkflowStepArtifact]
-  })
-}
-
-async function downloadStepArtifact(artifact: WorkflowStepArtifact) {
-  downloadingArtifactKey.value = artifact.key
-  try {
-    const file = await downloadArtifact(artifact.sessionId, artifact.messageId, artifact.index)
-    const url = URL.createObjectURL(file)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = safeFilename(artifact.file_name)
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    URL.revokeObjectURL(url)
-  } catch (error) { loadError.value = getErrorMessage(error) }
-  finally { downloadingArtifactKey.value = '' }
+  try { return JSON.stringify(redactMetadata(value), null, 2) } catch { return String(value) }
 }
 
 function makeStep(type: KnowledgeWorkflowStepType, index: number): KnowledgeWorkflowStep {
@@ -1641,10 +1545,6 @@ function makeStep(type: KnowledgeWorkflowStepType, index: number): KnowledgeWork
     search: { query: '', limit: 20 },
     fact_query: { scope: 'knowledge_base', entity: '', predicate: '', relation: '', object_entity_id: '', since: '', until: '', include_history: true, limit: 50 },
     report: { title: '', prompt: '', time_from: '', time_to: '', window: '', days: 7, timezone: 'Asia/Shanghai' },
-    wiki_update: { slug: '', title: '', page_type: 'topic', summary: '', source_step: '' },
-    skill: { agent_id: '', skill_name: '', script_path: '', args: [], args_text: '[]', input: '', input_step: '' },
-    condition: { step_id: '', path: '', operator: 'equals', value: '' },
-    human_review: { message: '' },
   }[type]
   return { id: `step_${index + 1}`, type, config: { ...config } }
 }
@@ -1712,12 +1612,10 @@ function editWorkflow(workflow: KnowledgeWorkflow) {
     schedule: { ...workflow.schedule },
     steps: workflow.steps.map(step => {
       const config = { ...step.config }
-      if (step.type === 'skill') config.args_text = JSON.stringify(config.args || [])
       return {
         ...step,
         depends_on: [...(step.depends_on || [])],
         config,
-        when: step.when ? { ...step.when } : undefined,
       }
     }),
   }
@@ -1746,7 +1644,6 @@ function removeWorkflowStep(index: number) {
   const [removed] = workflowDraft.value.steps.splice(index, 1)
   for (const step of workflowDraft.value.steps) {
     step.depends_on = (step.depends_on || []).filter(id => id !== removed.id)
-    if (step.when?.step_id === removed.id) step.when = undefined
   }
 }
 
@@ -1762,26 +1659,6 @@ function dependencyOptions(step: KnowledgeWorkflowStep) {
   const stepIndex = steps.findIndex(other => other.id === step.id)
   return steps.slice(0, stepIndex).filter(other => other.id !== step.id)
     .map(other => ({ value: other.id, label: other.id }))
-}
-
-function conditionOptions(step: KnowledgeWorkflowStep) {
-  const steps = workflowDraft.value?.steps || []
-  const stepIndex = steps.findIndex(other => other.id === step.id)
-  return steps.slice(0, stepIndex).filter(other => other.type === 'condition')
-    .map(other => ({ value: other.id, label: other.id }))
-}
-
-function toggleStepCondition(step: KnowledgeWorkflowStep, checked?: boolean) {
-  const enable = checked ?? !step.when
-  step.when = enable ? (step.when || { step_id: '', equals: true }) : undefined
-}
-
-function setConditionStep(step: KnowledgeWorkflowStep, stepId: string) {
-  if (step.when) step.when.step_id = stepId
-}
-
-function setConditionValue(step: KnowledgeWorkflowStep, value: unknown) {
-  if (step.when) step.when.equals = String(value) === 'true'
 }
 
 function setReportWindow(step: KnowledgeWorkflowStep, value: unknown) {
@@ -1803,26 +1680,9 @@ function normalizeWorkflowInput(draft: KnowledgeWorkflowInput): KnowledgeWorkflo
     steps: draft.steps.map(step => {
       const config = { ...step.config }
       if (step.type === 'fact_query' && config.scope === 'domain' && !config.domain_id) throw new Error(t('knowledgeDomains.domainRequired'))
-      if (step.type === 'condition' && (config.operator === 'gt' || config.operator === 'gte')) {
-        const value = typeof config.value === 'string' && config.value.trim() !== '' ? Number(config.value) : config.value
-        if (typeof value !== 'number' || !Number.isFinite(value)) {
-          throw new Error(t('knowledgeWorkbench.workflows.invalidConditionValue', { step: step.id }))
-        }
-        config.value = value
-      }
-      if (step.type === 'skill' && typeof config.args_text === 'string') {
-        try {
-          const args = config.args_text.trim() ? JSON.parse(config.args_text) : []
-          if (!Array.isArray(args) || !args.every(arg => typeof arg === 'string')) throw new Error('args must be a string array')
-          config.args = args
-        }
-        catch { throw new Error(t('knowledgeWorkbench.workflows.invalidArgs', { step: step.id })) }
-        delete config.args_text
-      }
       return {
         id: step.id.trim(), type: step.type,
         depends_on: (step.depends_on || []).filter(Boolean),
-        when: step.when?.step_id ? { ...step.when } : undefined,
         config,
       }
     }),
@@ -2165,7 +2025,7 @@ label { display: flex; flex-direction: column; gap: 6px; color: var(--td-text-co
 }
 .fact-card, .event-card { padding: 14px 16px; margin: 8px 0; }
 :deep(.fact-card__heading), :deep(.fact-card__meta), :deep(.fact-card__actions), :deep(.event-card__heading), :deep(.event-card__meta), :deep(.evidence-card__meta),
-.event-row__meta, .workflow-list__actions, .review-actions, .drawer-form__actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.event-row__meta, .workflow-list__actions, .drawer-form__actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 :deep(.fact-card__heading) { justify-content: space-between; }
 :deep(.fact-expression) { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 :deep(.fact-expression > span) { color: var(--td-text-color-secondary); }
@@ -2260,8 +2120,6 @@ label { display: flex; flex-direction: column; gap: 6px; color: var(--td-text-co
 .step-order { display: flex; align-items: center; gap: 2px; }
 .workflow-step__depends { margin-bottom: 10px; }
 .step-config { grid-template-columns: repeat(3, minmax(0, 1fr)); padding-top: 10px; border-top: 1px solid var(--td-border-level-1-color); }
-.step-condition { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px; padding-top: 8px; }
-.step-condition :deep(.t-select) { min-width: 140px; flex: 1; }
 .workflow-editor__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 .form-error, .run-error { color: var(--td-error-color); font-size: 12px; white-space: pre-wrap; }
 .workflow-layout { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: 14px; margin-top: 14px; }
@@ -2275,7 +2133,7 @@ label { display: flex; flex-direction: column; gap: 6px; color: var(--td-text-co
 .run-list__item.selected { color: var(--td-brand-color); }
 .status-dot { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--td-text-color-placeholder); }
 .status-dot.status-completed { background: var(--td-success-color); }
-.status-dot.status-failed, .status-dot.status-rejected { background: var(--td-error-color); }
+.status-dot.status-failed { background: var(--td-error-color); }
 .status-dot.status-running, .status-dot.status-queued, .status-dot.status-paused { background: var(--td-warning-color); }
 .run-list__copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .run-detail { margin-top: 14px; border-top: 1px solid var(--td-border-level-1-color); padding-top: 12px; }
@@ -2284,8 +2142,6 @@ label { display: flex; flex-direction: column; gap: 6px; color: var(--td-text-co
 .run-step__header { display: flex; align-items: center; gap: 8px; }
 .run-step__header small { color: var(--td-text-color-placeholder); margin-left: auto; }
 .run-output { max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 9px; border-radius: 5px; background: var(--td-bg-color-component); font-size: 11px; }
-.review-actions { justify-content: space-between; margin-top: 12px; padding: 10px; border: 1px solid var(--td-warning-color); border-radius: 7px; color: var(--td-warning-color); }
-.review-actions > div { display: flex; gap: 8px; }
 .report-layout { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: 14px; }
 .report-list { display: flex; flex-direction: column; gap: 6px; }
 .report-list__item { display: flex; flex-direction: column; gap: 5px; text-align: left; color: inherit; border: 1px solid var(--td-border-level-1-color); border-radius: 7px; padding: 10px; background: var(--td-bg-color-container); cursor: pointer; }
@@ -2327,8 +2183,13 @@ label { display: flex; flex-direction: column; gap: 6px; color: var(--td-text-co
   .workbench-nav__item { white-space: normal; padding: 10px 8px; }
   .query-form, .workflow-form-grid, .step-config { grid-template-columns: 1fr; }
   .span-two { grid-column: auto; }
-  .workflow-step__top { grid-template-columns: 26px 1fr; }
-  .workflow-step__top :deep(.t-select), .step-order { grid-column: 2; }
+  .workflow-steps-heading { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .workflow-steps-heading .add-step-select { width: 100%; min-width: 0; }
+  .workflow-steps-heading :deep(.t-button) { justify-self: start; max-width: 100%; height: auto; min-height: 32px; white-space: normal; }
+  .workflow-steps-heading :deep(.t-button__text) { white-space: normal; overflow-wrap: anywhere; }
+  .workflow-step__top { grid-template-columns: 26px minmax(0, 1fr); }
+  .workflow-step__type { grid-column: 1 / -1; width: 100%; min-width: 0; }
+  .step-order { grid-column: 1 / -1; flex-wrap: wrap; }
   .step-order { justify-content: flex-end; }
   .template-grid { grid-template-columns: 1fr; }
   .event-row__title { align-items: flex-start; }

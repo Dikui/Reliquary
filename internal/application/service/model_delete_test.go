@@ -91,12 +91,6 @@ func (s *stubAgentRepoForModelDelete) ListModelUsages(
 ) ([]types.ModelUsageResource, error) {
 	return s.usages, s.usageErr
 }
-func (s *stubAgentRepoForModelDelete) CountBySandboxConfigID(context.Context, uint64, string) (int64, error) {
-	return 0, nil
-}
-func (s *stubAgentRepoForModelDelete) ListNamesBySandboxConfigID(context.Context, uint64, string) ([]string, error) {
-	return nil, nil
-}
 
 type stubModelRepoForDelete struct {
 	model  *types.Model
@@ -221,7 +215,6 @@ func TestGetModelUsageDetails_NormalizesEmptyCollections(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, details.KnowledgeBases)
 	assert.NotNil(t, details.Agents)
-	assert.NotNil(t, details.LongTermMemory.Bindings)
 	assert.Equal(t, int64(0), details.KnowledgeBaseTotal)
 	assert.Equal(t, int64(0), details.AgentTotal)
 }
@@ -321,115 +314,19 @@ func (s *stubTenantServiceForModelDelete) GetTenantByIDForUser(context.Context, 
 	return s.tenant, nil
 }
 
-func TestDeleteModel_RejectsWhenUsedByMemory(t *testing.T) {
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
-	modelID := "memory-embed"
-
-	svc := NewModelService(
-		&stubModelRepoForDelete{model: &types.Model{ID: modelID, TenantID: 1}},
-		&stubKBRepoForModelDelete{},
-		&stubAgentRepoForModelDelete{},
-		nil, nil,
-		&stubTenantServiceForModelDelete{
-			tenant: &types.Tenant{
-				ID:           1,
-				MemoryConfig: &types.MemoryConfig{Enabled: true, EmbeddingModelID: modelID},
-			},
-		},
-	)
-
-	err := svc.DeleteModel(ctx, modelID)
-	require.Error(t, err)
-	appErr, ok := apperrors.IsAppError(err)
-	require.True(t, ok)
-	assert.Equal(t, apperrors.ErrModelInUse, appErr.Code)
-	assert.Contains(t, appErr.Message, "long-term memory")
-	details, ok := appErr.Details.(types.ModelUsageDetails)
-	require.True(t, ok)
-	assert.Equal(t, []types.ModelUsageBinding{types.ModelUsageBindingEmbeddingModel}, details.LongTermMemory.Bindings)
-}
-
-// The extraction model is pinned by the workspace exactly like the embedding
-// one. Deleting it leaves memory_config pointing at a model that is gone, and
-// distillation only warns when it cannot resolve one, so auto extraction would
-// stop silently instead of the delete being refused.
-func TestDeleteModel_RejectsWhenUsedByMemoryExtraction(t *testing.T) {
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
-	modelID := "memory-extract"
-
-	svc := NewModelService(
-		&stubModelRepoForDelete{model: &types.Model{ID: modelID, TenantID: 1}},
-		&stubKBRepoForModelDelete{},
-		&stubAgentRepoForModelDelete{},
-		nil, nil,
-		&stubTenantServiceForModelDelete{
-			tenant: &types.Tenant{
-				ID: 1,
-				MemoryConfig: &types.MemoryConfig{
-					Enabled: true, ExtractModelID: modelID, EmbeddingModelID: "some-other-model",
-				},
-			},
-		},
-	)
-
-	err := svc.DeleteModel(ctx, modelID)
-	require.Error(t, err)
-	appErr, ok := apperrors.IsAppError(err)
-	require.True(t, ok)
-	assert.Equal(t, apperrors.ErrModelInUse, appErr.Code)
-	assert.Contains(t, appErr.Message, "long-term memory")
-	details, ok := appErr.Details.(types.ModelUsageDetails)
-	require.True(t, ok)
-	assert.Equal(t, []types.ModelUsageBinding{types.ModelUsageBindingExtractModel}, details.LongTermMemory.Bindings)
-}
-
-func TestDeleteModel_ReportsAllMemoryBindings(t *testing.T) {
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
-	modelID := "shared-memory-model"
-
-	svc := NewModelService(
-		&stubModelRepoForDelete{model: &types.Model{ID: modelID, TenantID: 1}},
-		&stubKBRepoForModelDelete{},
-		&stubAgentRepoForModelDelete{},
-		nil, nil,
-		&stubTenantServiceForModelDelete{
-			tenant: &types.Tenant{
-				ID: 1,
-				MemoryConfig: &types.MemoryConfig{
-					Enabled: true, EmbeddingModelID: modelID, ExtractModelID: modelID,
-				},
-			},
-		},
-	)
-
-	err := svc.DeleteModel(ctx, modelID)
-	require.Error(t, err)
-	appErr, ok := apperrors.IsAppError(err)
-	require.True(t, ok)
-	details, ok := appErr.Details.(types.ModelUsageDetails)
-	require.True(t, ok)
-	assert.Equal(t, []types.ModelUsageBinding{
-		types.ModelUsageBindingEmbeddingModel,
-		types.ModelUsageBindingExtractModel,
-	}, details.LongTermMemory.Bindings)
-}
-
 func TestFormatModelInUseMessage(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t,
 		"model is used by 1 knowledge base(s); reconfigure or remove those references before deleting",
-		formatModelInUseMessage(1, 0, false),
+		formatModelInUseMessage(1, 0),
 	)
 	assert.Equal(t,
 		"model is used by 2 agent(s); reconfigure or remove those references before deleting",
-		formatModelInUseMessage(0, 2, false),
+		formatModelInUseMessage(0, 2),
 	)
 	assert.Equal(t,
 		"model is used by 1 knowledge base(s) and 1 agent(s); reconfigure or remove those references before deleting",
-		formatModelInUseMessage(1, 1, false),
+		formatModelInUseMessage(1, 1),
 	)
-	assert.Equal(t,
-		"model is used by long-term memory; reconfigure or remove those references before deleting",
-		formatModelInUseMessage(0, 0, true),
-	)
+
 }

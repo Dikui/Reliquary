@@ -1,15 +1,12 @@
 package container
 
 import (
-	"encoding/json"
 	"testing"
 	"time"
 
-	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
-	"reliquary/internal/application/service"
 	"reliquary/internal/testutil/sqlfixture"
 	"reliquary/internal/types"
 )
@@ -124,7 +121,6 @@ func TestResetPendingTasks_DistributedModePreservesEveryStage(t *testing.T) {
 		{"docreader_chunking_embedding", types.ParseStatusProcessing},
 		{"multimodal", types.ParseStatusProcessing},
 		{"postprocess", types.ParseStatusFinalizing},
-		{"wiki", types.ParseStatusFinalizing},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -185,72 +181,4 @@ func TestResetPendingTasks_SyncLogStaleRunning(t *testing.T) {
 	).Row().Scan(&status, &finishedAt))
 	assert.Equal(t, types.SyncLogStatusFailed, status)
 	require.NotNil(t, finishedAt)
-}
-
-type recordingTaskEnqueuer struct {
-	tasks []*asynq.Task
-}
-
-func (r *recordingTaskEnqueuer) Enqueue(task *asynq.Task, _ ...asynq.Option) (*asynq.TaskInfo, error) {
-	r.tasks = append(r.tasks, task)
-	return &asynq.TaskInfo{ID: "test", Type: task.Type()}, nil
-}
-
-func TestRecoverPendingWikiTasks_RecreatesOneTriggerPerLaneAndKB(t *testing.T) {
-	db := setupResetPendingDB(t)
-	require.NoError(t, db.Exec(
-		`INSERT INTO knowledge_bases (id, tenant_id, deleted_at)
-		 VALUES (?, ?, NULL), (?, ?, NULL), (?, ?, ?), (?, ?, NULL)`,
-		"kb-a", types.SingleTenantID, "kb-b", types.SingleTenantID,
-		"kb-deleted", types.SingleTenantID, time.Now(), "kb-other", 2,
-	).Error)
-	rows := []struct {
-		tenantID uint64
-		taskType string
-		kbID     string
-		dedup    string
-	}{
-		{types.SingleTenantID, types.TypeWikiIngest, "kb-a", "k-1"},
-		{types.SingleTenantID, types.TypeWikiIngest, "kb-a", "k-2"}, // same lane: one trigger
-		{types.SingleTenantID, types.TypeWikiFinalize, "kb-a", "slug-a"},
-		{types.SingleTenantID, types.TypeWikiIngest, "kb-b", "k-3"},
-		{types.SingleTenantID, types.TypeWikiIngest, "kb-deleted", "k-deleted"},
-		{types.SingleTenantID, types.TypeWikiFinalize, "kb-missing", "k-missing"},
-		{2, types.TypeWikiIngest, "kb-other", "k-other"},
-	}
-	for _, row := range rows {
-		require.NoError(t, db.Exec(
-			`INSERT INTO task_pending_ops
-			 (tenant_id, task_type, scope, scope_id, op, dedup_key, payload)
-			 VALUES (?, ?, ?, ?, 'ingest', ?, '{}')`,
-			row.tenantID, row.taskType, types.TaskScopeKnowledgeBase, row.kbID, row.dedup,
-		).Error)
-	}
-
-	recorder := &recordingTaskEnqueuer{}
-	recoverPendingWikiTasks(db, recorder)
-	require.Len(t, recorder.tasks, 3)
-
-	seen := map[string]service.WikiIngestPayload{}
-	for _, task := range recorder.tasks {
-		var payload service.WikiIngestPayload
-		require.NoError(t, json.Unmarshal(task.Payload(), &payload))
-		seen[task.Type()+":"+payload.KnowledgeBaseID] = payload
-	}
-	assert.Equal(t, types.SingleTenantID, seen[types.TypeWikiIngest+":kb-a"].TenantID)
-	assert.Equal(t, types.SingleTenantID, seen[types.TypeWikiFinalize+":kb-a"].TenantID)
-	assert.Equal(t, types.SingleTenantID, seen[types.TypeWikiIngest+":kb-b"].TenantID)
-	assert.NotContains(t, seen, types.TypeWikiIngest+":kb-other")
-
-	var outsideTeam int64
-	require.NoError(t, db.Model(&types.TaskPendingOp{}).
-		Where("tenant_id = ? AND scope_id = ?", 2, "kb-other").
-		Count(&outsideTeam).Error)
-	assert.Equal(t, int64(1), outsideTeam)
-
-	var orphaned int64
-	require.NoError(t, db.Model(&types.TaskPendingOp{}).
-		Where("scope_id IN ?", []string{"kb-deleted", "kb-missing"}).
-		Count(&orphaned).Error)
-	assert.Zero(t, orphaned)
 }

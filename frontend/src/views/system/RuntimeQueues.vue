@@ -572,8 +572,6 @@ const runtimeTaskTypeKeys: Record<string, string> = {
   'index:delete': 'indexDelete',
   'kb:clone': 'kbClone',
   'kb:delete': 'kbDelete',
-  'wiki:ingest': 'wikiIngest',
-  'wiki:finalize': 'wikiFinalize',
 }
 
 let pollTimer: ReturnType<typeof setInterval> | null = null

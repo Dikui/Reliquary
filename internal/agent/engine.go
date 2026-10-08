@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"reliquary/internal/agent/compaction"
-	"reliquary/internal/agent/skills"
 	agenttoken "reliquary/internal/agent/token"
 	agenttools "reliquary/internal/agent/tools"
 	"reliquary/internal/common"
@@ -35,11 +34,8 @@ type AgentEngine struct {
 	knowledgeBasesInfo   []*KnowledgeBaseInfo    // Detailed knowledge base information for prompt
 	selectedDocs         []*SelectedDocumentInfo // User-selected documents (via @ mention)
 	pinnedMCPServices    []*PinnedMCPServiceInfo // User @mentioned MCP services for this turn
-	pinnedSkills         []*PinnedSkillInfo      // User @mentioned skills for this turn
 	sessionID            string                  // Session ID for logging and event emission
 	systemPromptTemplate string                  // System prompt template (optional, uses default if empty)
-	memoryPrompt         string                  // Long-term memory envelope appended to the system prompt
-	skillsManager        *skills.Manager         // Skills manager for Progressive Disclosure (optional)
 	appConfig            *appconfig.Config       // Application config for prompt template resolution (optional)
 	imageDescriber       ImageDescriberFunc      // VLM function for describing images in tool results (optional)
 	tokenEstimator       *agenttoken.Estimator   // Token estimator for context window management
@@ -104,23 +100,15 @@ func NewAgentEngine(
 	return engine
 }
 
-// SetPinnedMentions sets per-turn @mention scope for MCP services and skills.
-func (e *AgentEngine) SetPinnedMentions(mcpServices []*PinnedMCPServiceInfo, skills []*PinnedSkillInfo) {
+// SetPinnedMentions sets per-turn @mention scope for MCP services.
+func (e *AgentEngine) SetPinnedMentions(mcpServices []*PinnedMCPServiceInfo) {
 	e.pinnedMCPServices = mcpServices
-	e.pinnedSkills = skills
 }
 
 func (e *AgentEngine) systemPromptOptions(ctx context.Context) *BuildSystemPromptOptions {
 	opts := &BuildSystemPromptOptions{
 		Language: types.LanguageNameFromContext(ctx),
 		Config:   e.appConfig,
-	}
-	if e.skillsManager != nil && e.skillsManager.IsEnabled() {
-		opts.SkillsMetadata = e.skillsManager.GetAllMetadata()
-	}
-	if e.toolRegistry != nil {
-		_, err := e.toolRegistry.GetTool(agenttools.ToolShellExec)
-		opts.ShellExecEnabled = err == nil
 	}
 	return opts
 }
@@ -131,42 +119,8 @@ func (e *AgentEngine) buildSystemPrompt(ctx context.Context) string {
 		e.systemPromptOptions(ctx),
 		e.systemPromptTemplate,
 	)
-	// Memory has to ride in the system prompt: buildMessagesWithLLMContext
-	// drops system messages coming from history, so a separate memory message
-	// would be silently discarded from the second turn onward.
-	return strings.TrimRight(prompt, " \t\r\n") + e.memoryPrompt + e.modelContext.ProtocolPrompt()
-}
+	return strings.TrimRight(prompt, " \t\r\n") + e.modelContext.ProtocolPrompt()
 
-// SetMemoryPrompt supplies the long-term memory envelope for this run. Empty
-// input leaves the system prompt untouched.
-func (e *AgentEngine) SetMemoryPrompt(prompt string) {
-	e.memoryPrompt = prompt
-}
-
-// NewAgentEngineWithSkills creates a new agent engine with skills support
-func NewAgentEngineWithSkills(
-	config *types.AgentConfig,
-	chatModel chat.Chat,
-	toolRegistry *agenttools.ToolRegistry,
-	eventBus *event.EventBus,
-	knowledgeBasesInfo []*KnowledgeBaseInfo,
-	selectedDocs []*SelectedDocumentInfo,
-	sessionID string,
-	systemPromptTemplate string,
-	skillsManager *skills.Manager,
-) *AgentEngine {
-	engine := NewAgentEngine(
-		config,
-		chatModel,
-		toolRegistry,
-		eventBus,
-		knowledgeBasesInfo,
-		selectedDocs,
-		sessionID,
-		systemPromptTemplate,
-	)
-	engine.skillsManager = skillsManager
-	return engine
 }
 
 // SetAppConfig sets the application config for prompt template resolution.
@@ -181,16 +135,6 @@ func (e *AgentEngine) SetAppConfig(cfg *appconfig.Config) {
 // This follows the same pattern as Handler.analyzeImageAttachments() in the handler layer.
 func (e *AgentEngine) SetImageDescriber(fn ImageDescriberFunc) {
 	e.imageDescriber = fn
-}
-
-// SetSkillsManager sets the skills manager for the engine
-func (e *AgentEngine) SetSkillsManager(manager *skills.Manager) {
-	e.skillsManager = manager
-}
-
-// GetSkillsManager returns the skills manager
-func (e *AgentEngine) GetSkillsManager() *skills.Manager {
-	return e.skillsManager
 }
 
 // estimateCurrentTokens returns the best estimate of the current context token
@@ -266,7 +210,6 @@ func (e *AgentEngine) Execute(
 	}
 
 	// Build system prompt using progressive RAG prompt
-	// If skills are enabled, include skills metadata (Level 1 - Progressive Disclosure)
 	systemPrompt := e.buildSystemPrompt(ctx)
 	logger.Debugf(ctx, "[Agent] SystemPrompt: %d chars", len(systemPrompt))
 

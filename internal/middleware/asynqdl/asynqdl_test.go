@@ -89,7 +89,7 @@ func TestMiddleware_FailureWithoutAsynqCtx_RecordsRow(t *testing.T) {
 		"knowledge_id":      "k-1",
 	})
 	wantErr := errors.New("boom")
-	gotErr := runMiddleware(repo, "wiki:ingest", payload, wantErr)
+	gotErr := runMiddleware(repo, "knowledge:process", payload, wantErr)
 	if !errors.Is(gotErr, wantErr) {
 		t.Fatalf("expected the original task error to propagate, got %v", gotErr)
 	}
@@ -97,7 +97,7 @@ func TestMiddleware_FailureWithoutAsynqCtx_RecordsRow(t *testing.T) {
 		t.Fatalf("expected exactly one insert, got %d", got)
 	}
 	row := repo.captureRow(0)
-	if row.TaskType != "wiki:ingest" {
+	if row.TaskType != "knowledge:process" {
 		t.Errorf("task_type: got %q", row.TaskType)
 	}
 	if row.TenantID != types.SingleTenantID {

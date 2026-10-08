@@ -44,12 +44,10 @@ const (
 	ModelUsageBindingImageProcessingModel ModelUsageBinding = "image_processing_model"
 	ModelUsageBindingVLMModel             ModelUsageBinding = "vlm_model"
 	ModelUsageBindingASRModel             ModelUsageBinding = "asr_model"
-	ModelUsageBindingWikiSynthesisModel   ModelUsageBinding = "wiki_synthesis_model"
 	ModelUsageBindingChatModel            ModelUsageBinding = "chat_model"
 	ModelUsageBindingRerankModel          ModelUsageBinding = "rerank_model"
 	ModelUsageBindingQueryUnderstandModel ModelUsageBinding = "query_understand_model"
 	ModelUsageBindingFollowUpModel        ModelUsageBinding = "follow_up_model"
-	ModelUsageBindingExtractModel         ModelUsageBinding = "extract_model"
 )
 
 // ModelUsageResource is the minimal, non-sensitive projection returned when a
@@ -57,11 +55,6 @@ const (
 type ModelUsageResource struct {
 	ID       string              `json:"id"`
 	Name     string              `json:"name"`
-	Bindings []ModelUsageBinding `json:"bindings"`
-}
-
-// ModelUsageMemory describes workspace-level long-term-memory model pins.
-type ModelUsageMemory struct {
 	Bindings []ModelUsageBinding `json:"bindings"`
 }
 
@@ -78,7 +71,6 @@ type ModelUsageDetails struct {
 	ModelTiers         []ModelTierUsageResource `json:"model_tiers"`
 	KnowledgeBases     []ModelUsageResource     `json:"knowledge_bases"`
 	Agents             []ModelUsageResource     `json:"agents"`
-	LongTermMemory     ModelUsageMemory         `json:"long_term_memory"`
 	KnowledgeBaseTotal int64                    `json:"knowledge_base_total"`
 	AgentTotal         int64                    `json:"agent_total"`
 }
@@ -89,8 +81,7 @@ func (d ModelUsageDetails) InUse() bool {
 		return true
 	}
 	return d.KnowledgeBaseTotal > 0 || d.AgentTotal > 0 ||
-		len(d.KnowledgeBases) > 0 || len(d.Agents) > 0 ||
-		len(d.LongTermMemory.Bindings) > 0
+		len(d.KnowledgeBases) > 0 || len(d.Agents) > 0
 }
 
 type ModelTierUsageResource struct {

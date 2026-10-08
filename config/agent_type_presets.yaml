@@ -28,19 +28,18 @@
 agent_type_presets:
   # --------------------------------------------------------------------------
   # RAG Q&A — classic evidence-based retrieval over chunk indexes.
-  # Best for document KBs without wiki.
   # --------------------------------------------------------------------------
   - id: "rag-qa"
     i18n:
       default:
         label: "RAG Q&A"
-        description: "Evidence-based retrieval over document chunks. Best for document KBs without Wiki."
+        description: "Evidence-based retrieval over document chunks."
       zh-CN:
         label: "RAG 问答"
-        description: "基于文档分块的检索式问答，适合未启用 Wiki 的文档知识库。"
+        description: "基于文档分块的检索式问答。"
       zh-TW:
         label: "RAG 問答"
-        description: "基於文件分塊的檢索式問答，適合未啟用 Wiki 的文件知識庫。"
+        description: "基於文件分塊的檢索式問答。"
     config:
       system_prompt_id: "progressive_rag_agent"
       temperature: 0.7
@@ -61,86 +60,6 @@ agent_type_presets:
     # kb_filter derived from allowed_tools: any_of = [vector, keyword]
 
   # --------------------------------------------------------------------------
-  # Wiki Q&A — graph-navigated wiki answering.
-  # Only meaningful on KBs where Wiki is enabled.
-  # --------------------------------------------------------------------------
-  - id: "wiki-qa"
-    i18n:
-      default:
-        label: "Wiki Q&A"
-        description: "Wiki-first answering: search, read and follow links across wiki pages. Requires a Wiki-enabled KB."
-      zh-CN:
-        label: "Wiki 问答"
-        description: "以 Wiki 为主的检索与图谱跳转回答，必须绑定已启用 Wiki 的知识库。"
-      zh-TW:
-        label: "Wiki 問答"
-        description: "以 Wiki 為主的檢索與圖譜跳轉回答，必須綁定已啟用 Wiki 的知識庫。"
-    config:
-      system_prompt_id: "wiki_researcher"
-      temperature: 0.7
-      max_iterations: 30
-      # `thinking` / `todo_write` can be enabled manually if the user wants
-      # explicit reflection or planning across long wiki navigation chains;
-      # not on by default.
-      allowed_tools:
-        - "wiki_search"
-        - "wiki_read_page"
-        - "wiki_read_source_doc"
-        - "wiki_flag_issue"
-      retain_retrieval_history: false
-      kb_selection_mode: "all"
-    # kb_filter derived from allowed_tools: any_of = [wiki]
-
-  # --------------------------------------------------------------------------
-  # Hybrid RAG + Wiki — single agent that orchestrates both indexes.
-  # Requires KBs that expose BOTH wiki AND (vector or keyword).
-  # --------------------------------------------------------------------------
-  - id: "hybrid-rag-wiki"
-    i18n:
-      default:
-        label: "Hybrid (Wiki + RAG)"
-        description: "Uses wiki pages for navigation and context, then drills into chunks for precise quotes. Requires KBs with BOTH Wiki and chunk indexing."
-      zh-CN:
-        label: "Wiki + RAG 混合"
-        description: "先用 Wiki 建立导航和背景，再用分块检索精确引用。需绑定同时启用 Wiki 与向量/关键词索引的知识库。"
-      zh-TW:
-        label: "Wiki + RAG 混合"
-        description: "先用 Wiki 建立導覽和背景，再用分塊檢索精確引用。需綁定同時啟用 Wiki 與向量/關鍵詞索引的知識庫。"
-    config:
-      system_prompt_id: "hybrid_rag_wiki_agent"
-      temperature: 0.7
-      max_iterations: 40
-      # `thinking` and `todo_write` are opt-in. Turn them on manually when the
-      # user wants explicit self-reflection or a visible step-by-step plan for
-      # multi-hop hybrid searches.
-      allowed_tools:
-        - "wiki_search"
-        - "wiki_read_page"
-        - "knowledge_search"
-        - "grep_chunks"
-        - "list_knowledge_chunks"
-        - "get_document_info"
-        - "wiki_flag_issue"
-        - "knowledge_report_anomaly"
-        - "knowledge_import_url"
-      retain_retrieval_history: false
-      kb_selection_mode: "all"
-    # Hybrid is meant to be the most flexible preset: the agent adapts at
-    # runtime based on what each KB exposes.
-    #  - KB has wiki + chunks  → full "wiki-first, RAG-verify" workflow
-    #  - KB has only chunks    → fallback to pure RAG (see prompt's "Fallback rules")
-    #  - KB has only wiki      → fallback to wiki-only answering
-    # kb_filter derived from allowed_tools: any_of = [vector, keyword, wiki].
-    # We only require that the KB expose AT LEAST ONE retrievable surface so
-    # the agent has SOMETHING to call. KBs with zero indexing (e.g. graph-only
-    # or completely unindexed) are still excluded since no tool will return
-    # anything useful.
-
-  # --------------------------------------------------------------------------
-  # Data Analysis — SQL / statistics over tabular files (CSV / Excel) in the KB.
-  # Retrieval capabilities (vector/wiki/…) are largely irrelevant here — the
-  # agent drives `data_schema` + `data_analysis` tools against uploaded files,
-  # so we gate on supported_file_types rather than KB capabilities.
   # --------------------------------------------------------------------------
   - id: "data-analysis"
     i18n:

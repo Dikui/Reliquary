@@ -3,7 +3,6 @@ import markedKatex from 'marked-katex-extension'
 import type { Tokens } from 'marked'
 
 import type { CachedMermaidSvgHtml } from './mermaidStreaming.ts'
-import { normalizeSandboxArtifactRefs } from './sandboxArtifactRefs.ts'
 import {
   collapseStandaloneCitationParagraphs,
   extractCitationHtmlPlaceholders,
@@ -44,8 +43,6 @@ export type RenderChatMarkdownOptions = {
   cachedMermaidSvgHtml?: CachedMermaidSvgHtml
   injectCachedMermaidSvg?: (html: string, cachedSvgHtml?: CachedMermaidSvgHtml) => string
   prepareMarkdown?: (markdown: string, cachedSvgHtml?: CachedMermaidSvgHtml) => string
-  /** Reports use standard Markdown links without the chat Wiki shorthand. */
-  convertWikiLinks?: boolean
   /** An isolated parser prevents other views' global extensions from leaking in. */
   markdownParser?: Marked
 }
@@ -475,10 +472,7 @@ export function renderChatMarkdown(rawMarkdown: unknown, options: RenderChatMark
   const citationSafeText = stripIncompleteCitationTag(imageContextSafeText)
   const { text: tagSafe, tags } = preserveCitationTags(citationSafeText)
   const normalizedImageMarkdown = normalizeFullwidthMarkdownImageParentheses(tagSafe)
-  // Skill-generated file names routinely contain spaces and parentheses, which
-  // marked would split the destination on. Collapse each reference into a
-  // single token before parsing.
-  const artifactSafe = normalizeSandboxArtifactRefs(normalizedImageMarkdown)
+  const artifactSafe = normalizedImageMarkdown
   const imageSafe = replaceIncompleteImageWithPlaceholder(artifactSafe)
   const mathSafe = preprocessMathDelimiters(imageSafe)
   const restoredTags = restoreCitationTags(mathSafe, tags)
@@ -494,10 +488,10 @@ export function renderChatMarkdown(rawMarkdown: unknown, options: RenderChatMark
     ? options.prepareMarkdown(balancedInline, options.cachedMermaidSvgHtml)
     : balancedInline
   const flankingSafeMarkdown = repairFlankingEmphasis(preparedMarkdown)
-  // Convert <kb>/<web>/wiki tags to HTML placeholders before escapeMarkdown so
+  // Convert <kb>/<web> tags to HTML placeholders before escapeMarkdown so
   // agent sanitizers (e.g. UUID stripping) cannot damage chunk_id attributes.
   const { content: markdownWithPlaceholders, htmlSnippets } =
-    extractCitationHtmlPlaceholders(flankingSafeMarkdown, options.knowledgeReferences, options.convertWikiLinks)
+    extractCitationHtmlPlaceholders(flankingSafeMarkdown, options.knowledgeReferences)
   const escapedMarkdown = options.escapeMarkdown(markdownWithPlaceholders)
   const html = (options.markdownParser || marked).parse(markdownWithPlaceholders, {
     renderer: options.renderer,

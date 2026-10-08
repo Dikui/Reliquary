@@ -141,13 +141,6 @@ func (s *sessionService) KnowledgeQA(
 	chatManage.RerankModelID = rerankTierID
 	s.applyAgentOverridesToChatManage(ctx, req.CustomAgent, chatManage)
 
-	// An agent may opt out of long-term memory. The preference is per-request
-	// rather than per-user, so it travels in the context that the recall
-	// plugin reads.
-	if req.CustomAgent != nil {
-		ctx = types.ApplyAgentMemoryPreference(ctx, req.CustomAgent.Config.MemoryEnabled)
-	}
-
 	// Determine the pipeline from the effective knowledge retrieval scope.
 	// Tag-only mentions leave the raw KB/knowledge ID slices
 	// empty but produce SearchTargets, so the unified targets must participate in
@@ -171,14 +164,12 @@ func (s *sessionService) KnowledgeQA(
 
 		pipeline = types.NewPipelineBuilder().
 			AddIf(hasHistory, types.LOAD_HISTORY).
-			Add(types.MEMORY_RECALL).
 			Add(types.CHAT_COMPLETION_STREAM).
 			Build()
 	} else {
 		// RAG — dynamically assemble based on feature flags.
 		pipeline = types.NewPipelineBuilder().
 			AddIf(hasHistory, types.LOAD_HISTORY).
-			Add(types.MEMORY_RECALL).
 			Add(types.QUERY_UNDERSTAND).
 			Add(types.CHUNK_SEARCH_PARALLEL).
 			Add(types.CHUNK_RERANK).
@@ -194,8 +185,7 @@ func (s *sessionService) KnowledgeQA(
 		len(pipeline), hasKB, hasHistory)
 
 	// Start knowledge QA event processing (set session tenant so pipeline session/message lookups use session owner)
-	// Propagate the session ID so the Docker sandbox can
-	// bind script execution to a per-session MicroVM instance.
+	// Propagate the session identity to tools and event processing.
 	ctx = types.WithSessionID(ctx, req.Session.ID)
 	logger.Info(ctx, "Triggering question answering event")
 

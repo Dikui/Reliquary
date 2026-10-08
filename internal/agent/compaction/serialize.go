@@ -17,9 +17,8 @@ const (
 	// textMaxChars caps user and assistant prose, which is rarely the problem
 	// but should not be unbounded either.
 	textMaxChars = 4000
-	// toolArgsMaxChars caps rendered tool-call arguments. A write_sandbox_file
-	// call carries an entire file body in its arguments; the summary needs the
-	// path and the fact of the write, never the content.
+	// toolArgsMaxChars caps rendered tool-call arguments. A data_analysis
+	// query can be large, while its summary needs only the operation and purpose.
 	toolArgsMaxChars = 400
 )
 

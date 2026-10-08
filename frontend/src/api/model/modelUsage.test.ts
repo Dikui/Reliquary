@@ -22,7 +22,6 @@ const details = {
   agents: [
     { id: 'agent-1', name: 'Support', bindings: ['chat_model', 'follow_up_model'] },
   ],
-  long_term_memory: { bindings: ['extract_model'] },
   knowledge_base_total: 2,
   agent_total: 1,
 }
@@ -72,17 +71,14 @@ test('rejects malformed details instead of guessing from the server message', ()
   assert.equal(parseModelUsageDetails({
     knowledge_bases: [],
     agents: [],
-    long_term_memory: { bindings: [] },
   }), null)
   assert.equal(parseModelUsageDetails({
     knowledge_bases: [{ id: 'kb-1', name: 'Docs', bindings: [] }],
     agents: [],
-    long_term_memory: { bindings: [] },
   }), null)
   assert.equal(parseModelUsageDetails({
     knowledge_bases: [{ id: 'kb-1', name: 'Docs', bindings: 'vlm_model' }],
     agents: [],
-    long_term_memory: { bindings: [] },
   }), null)
   assert.equal(modelInUseErrorFromRequest({
     error: {
@@ -117,7 +113,6 @@ test('keeps navigation and localization stable for all resource kinds', () => {
 test('maps knowledge-base bindings to the configuration section that owns them', () => {
   assert.equal(modelUsageKnowledgeBaseSection(['embedding_model']), 'models')
   assert.equal(modelUsageKnowledgeBaseSection(['summary_model']), 'models')
-  assert.equal(modelUsageKnowledgeBaseSection(['wiki_synthesis_model']), 'models')
   assert.equal(modelUsageKnowledgeBaseSection(['image_processing_model']), 'multimodal')
   assert.equal(modelUsageKnowledgeBaseSection(['vlm_model']), 'multimodal')
   assert.equal(modelUsageKnowledgeBaseSection(['asr_model']), 'asr')
@@ -138,7 +133,7 @@ test('maps agent bindings to the configuration section that owns them', () => {
 })
 
 test('tier-only model usage prevents deletion and preserves team and domain references', () => {
-  const details = parseModelUsageDetails({ knowledge_bases: [], agents: [], long_term_memory: { bindings: [] }, model_tiers: [{ scope: 'team', id: '1', name: 'Team', bindings: ['light_model_tier'] }, { scope: 'domain', id: 'domain-a', name: 'AI', bindings: ['extraction_model_tier'] }] })
+  const details = parseModelUsageDetails({ knowledge_bases: [], agents: [], model_tiers: [{ scope: 'team', id: '1', name: 'Team', bindings: ['light_model_tier'] }, { scope: 'domain', id: 'domain-a', name: 'AI', bindings: ['extraction_model_tier'] }] })
   assert.equal(details?.model_tiers?.length, 2)
   assert.equal(details?.model_tiers?.[1]?.scope, 'domain')
   assert.equal(modelUsageBindingI18nKey('light_model_tier'), 'modelSettings.usage.bindings.light_model_tier')

@@ -18,14 +18,7 @@
       </div>
       <!-- Tree children (intermediate steps) -->
       <div v-if="showIntermediateSteps" class="tree-children">
-        <ChatMemoryStep
-          v-if="hasMemory"
-          :memories="memoryItems"
-          :expanded="memoryExpanded"
-          :forgetting-id="memoryForgettingId"
-          @toggle="toggleMemory"
-          @forget="forgetMemory"
-        />
+
         <template v-for="(event, index) in visibleIntermediateEvents" :key="getEventKey(event, index)">
           <div v-if="event && event.type" class="tree-child"
             :class="{ 'tree-child-last': !isConversationDone && index === visibleIntermediateEvents.length - 1 }">
@@ -155,19 +148,10 @@
                       <t-tooltip v-else :content="getToolTitle(event)" placement="top">
                         <span class="action-name">{{ getToolTitle(event) }}</span>
                       </t-tooltip>
-                      <span v-if="getSandboxDiffStat(event)" class="sandbox-diff-stat">
-                        <span v-if="getSandboxDiffStat(event)?.added" class="diff-add">+{{ getSandboxDiffStat(event)?.added }}</span>
-                        <span v-if="getSandboxDiffStat(event)?.removed" class="diff-del">-{{ getSandboxDiffStat(event)?.removed }}</span>
-                      </span>
+
                     </div>
                   </div>
 
-                  <div v-if="event.pending && getSandboxFilePreview(event)" class="sandbox-file-preview">
-                    <pre>{{ getSandboxFilePreview(event) }}</pre>
-                    <div v-if="sandboxPreviewRemaining(event) > 0" class="sandbox-file-preview-more">
-                      {{ t('agentStream.sandboxFiles.moreLines', { count: sandboxPreviewRemaining(event) }) }}
-                    </div>
-                  </div>
 
                   <div v-if="!event.pending && event.tool_name === 'todo_write' && event.tool_data?.steps"
                     class="plan-status-summary-fixed">
@@ -244,19 +228,8 @@
         'streaming-steps-constrained': !answerEverStarted && !isConversationDone,
         'is-streaming-timeline': showStreamingTimeline
       }">
-      <!-- Recalled memory leads the timeline: it is what the turn knew before it
-           started, so it belongs on the same line as the steps that follow it
-           rather than in a card of its own above them. -->
-      <ChatMemoryStep
-        v-if="showMemoryRow"
-        class="event-item"
-        :memories="memoryItems"
-        :expanded="memoryExpanded"
-        :is-last="memoryIsLast"
-        :forgetting-id="memoryForgettingId"
-        @toggle="toggleMemory"
-        @forget="forgetMemory"
-      />
+
+
       <template v-for="(event, index) in displayEvents" :key="getEventKey(event, index)">
         <div v-if="event && event.type" class="event-item" :class="{
           'event-answer': event.type === 'answer',
@@ -383,19 +356,17 @@
                   :title="$t('agent.addToKnowledgeBase')">
                   <t-icon name="bookmark-add" />
                 </t-button>
-                <!-- Skill artifact download: only shown when the persisted
+                <!-- Message file download: only shown when the persisted
                      assistant message recorded any generated files. Agent
-                     mode is the primary path for skills, so this is where
+                     mode shows the associated files, so this is where
                      the button is most likely to appear. -->
-                <span v-if="hasArtifacts || artifactsCollecting" class="answer-toolbar__artifact"
-                  :class="{ 'is-collecting': artifactButtonCollecting, 'is-arrived': artifactArrived }"
+                <span v-if="hasArtifacts" class="answer-toolbar__artifact"
+                  :class="{'is-arrived': artifactArrived }"
                   @animationend="onArtifactArriveEnd">
                   <t-button size="small" variant="outline" shape="round"
-                    :disabled="artifactButtonCollecting"
-                    :title="hasArtifacts ? $t('agent.artifactDrawer.buttonTitle') : $t('agent.artifactDrawer.collecting')"
+                    :title="$t('agent.artifactDrawer.buttonTitle')"
                     @click.stop="openArtifactDrawer()">
-                    <t-icon v-if="artifactButtonCollecting" name="loading" class="answer-toolbar__artifact-spinner" />
-                    <t-icon v-else name="folder" />
+                    <t-icon name="folder" />
                   </t-button>
                   <span v-if="hasArtifacts" class="answer-toolbar__artifact-count" aria-hidden="true">{{ artifactCount }}</span>
                 </span>
@@ -442,19 +413,10 @@
                     <t-tooltip v-else :content="getToolTitle(event)" placement="top">
                       <span class="action-name">{{ getToolTitle(event) }}</span>
                     </t-tooltip>
-                    <span v-if="getSandboxDiffStat(event)" class="sandbox-diff-stat">
-                      <span v-if="getSandboxDiffStat(event)?.added" class="diff-add">+{{ getSandboxDiffStat(event)?.added }}</span>
-                      <span v-if="getSandboxDiffStat(event)?.removed" class="diff-del">-{{ getSandboxDiffStat(event)?.removed }}</span>
-                    </span>
+
                   </div>
                 </div>
 
-                <div v-if="event.pending && getSandboxFilePreview(event)" class="sandbox-file-preview">
-                  <pre>{{ getSandboxFilePreview(event) }}</pre>
-                  <div v-if="sandboxPreviewRemaining(event) > 0" class="sandbox-file-preview-more">
-                    {{ t('agentStream.sandboxFiles.moreLines', { count: sandboxPreviewRemaining(event) }) }}
-                  </div>
-                </div>
 
                 <div v-if="!event.pending && event.tool_name === 'todo_write' && event.tool_data?.steps"
                   class="plan-status-summary-fixed">
@@ -536,39 +498,7 @@
   <!-- Image Preview -->
   <picturePreview :reviewImg="imagePreviewVisible" :reviewUrl="imagePreviewUrl" @closePreImg="closeImagePreview" />
 
-  <!-- Wiki Page Detail Drawer -->
-  <t-drawer v-model:visible="wikiDrawerVisible" :header="wikiDrawerPage?.title || ''" size="480px" :footer="false"
-    placement="right" attach="body" :show-overlay="true" :close-btn="true" :close-on-overlay-click="true"
-    class="wiki-graph-drawer">
-    <template v-if="wikiDrawerPage">
-      <div class="wiki-reader-meta"
-        style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
-        <div style="display: flex; align-items: center; gap: 12px;">
-          <t-tag size="small" :theme="getTypeTheme(wikiDrawerPage.page_type)" variant="light-outline">
-            {{ getTypeLabel(wikiDrawerPage.page_type) }}
-          </t-tag>
-          <span class="wiki-reader-meta-text">{{ $t('knowledgeEditor.wikiBrowser.version', {
-            ver: wikiDrawerPage.version
-              || 1
-          }) }}</span>
-        </div>
-        <t-link
-          theme="primary"
-          hover="color"
-          :href="wikiGraphHref"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <template #prefixIcon><t-icon name="chart-bubble" /></template>
-          {{ $t('knowledgeEditor.wikiBrowser.viewInGraph') }}
-        </t-link>
-      </div>
-      <WikiSourceChanges :key="`${currentWikiKbId}/${wikiDrawerPage.id}`" :page="wikiDrawerPage"
-        :kb-id="currentWikiKbId" :can-edit="false" />
-      <div ref="wikiDrawerBodyRef" class="wiki-reader-body" v-html="wikiDrawerContent" @click="handleWikiDrawerClick">
-      </div>
-    </template>
-  </t-drawer>
+
   <ChatArtifactsDrawer
     v-if="hasArtifacts && sessionIdForArtifacts && messageIdForArtifacts"
     v-model:visible="showArtifactDrawer"
@@ -591,10 +521,7 @@ import ChatRequestInfoButton from '@/components/ChatRequestInfoButton.vue';
 import ChatCitationFloat from '@/components/ChatCitationFloat.vue';
 import picturePreview from '@/components/picture-preview.vue';
 import ChatArtifactsDrawer from './ChatArtifactsDrawer.vue';
-import { isCollectingSkillArtifacts } from '@/utils/skillArtifacts';
 import { useArtifactArriveMotion } from '@/composables/useArtifactArriveMotion';
-import ChatMemoryStep from './ChatMemoryStep.vue';
-import { useChatMemoryRow, type UsedMemory } from '@/composables/useChatMemoryRow';
 import { countGrepDocuments, groupGrepChunkResults } from '@/utils/grepResultsGroup';
 import { getKnowledgeChunksSummaryHtml } from '@/utils/knowledgeChunksDisplay';
 import { getAttachmentParsingSummaryHtml } from '@/utils/attachmentParsingDisplay';
@@ -602,8 +529,6 @@ import { useChatCitationPopover } from '@/composables/useChatCitationPopover';
 import { useChatReferencesDrawer } from '@/composables/useChatReferencesDrawer';
 import type { KnowledgeReferenceLike, ReferenceHighlightTarget } from '@/utils/referenceSources';
 import { resolveCitationChunkId } from '@/utils/citationMarkdown';
-import { getWikiPage, type WikiPage } from '@/api/wiki';
-import WikiSourceChanges from '@/views/knowledge/wiki/WikiSourceChanges.vue';
 import { MessagePlugin } from 'tdesign-vue-next';
 import { useUIStore } from '@/stores/ui';
 import { useSettingsStore } from '@/stores/settings';
@@ -615,25 +540,13 @@ import {
   artifactIndexFromEventTarget,
   hydrateArtifactImages,
   renderArtifactReference,
-} from '@/utils/sandboxArtifactRefs';
+} from '@/utils/messageArtifactRefs';
 import type { ProtectedFileAccessContext } from '@/utils/protectedFileAccess';
 import { unwrapFinalAnswerWrappers, thinkingEqualsAnswer } from '@/utils/finalAnswer';
 import { getAgentToolIconName } from '@/utils/agent-tool-icons';
 import { downloadTemporarySummary } from '@/utils/temporarySummary';
-import { getQueryText, getWikiPageText } from '@/utils/agent-tool-display';
-import {
-  formatToolTitleWithDetail,
-  getEventSkillName,
-  getReadSkillTarget,
-  getSandboxDiffStat,
-  getSandboxFilePreview,
-  getSandboxToolPath,
-  sandboxPreviewRemaining,
-  skillScriptTitleCommand,
-} from '@/utils/skillToolDisplay';
-import { previewShellCommand } from '@/utils/shellExecResult';
+import { getQueryText } from '@/utils/agent-tool-display';
 import type { DisplayType } from '@/types/tool-results';
-import { parseWikiToolReferences } from '@/utils/wikiToolReferences';
 import {
   buildManualMarkdown,
   formatManualTitle,
@@ -679,32 +592,15 @@ const TOOL_NAME_KEYS: Record<string, string> = {
   list_knowledge_chunks: 'agentStream.tools.listKnowledgeChunks',
   get_related_documents: 'agentStream.tools.getRelatedDocuments',
   get_document_content: 'agentStream.tools.getDocumentContent',
-  wiki_search: 'agentEditor.tools.wikiSearch',
-  wiki_read_page: 'agentEditor.tools.wikiReadPage',
-  wiki_read_source_doc: 'agentStream.tools.wikiReadSourceDoc',
-  wiki_flag_issue: 'agentEditor.tools.wikiFlagIssue',
   knowledge_report_anomaly: 'agentEditor.tools.knowledgeReportAnomaly',
   knowledge_import_url: 'agentEditor.tools.knowledgeImportURL',
   knowledge_apply_anomaly: 'agentEditor.tools.knowledgeApplyAnomaly',
-  wiki_write_page: 'agentEditor.tools.wikiWritePage',
-  wiki_replace_text: 'agentEditor.tools.wikiReplaceText',
-  wiki_rename_page: 'agentEditor.tools.wikiRenamePage',
-  wiki_delete_page: 'agentEditor.tools.wikiDeletePage',
-  wiki_read_issue: 'agentEditor.tools.wikiReadIssue',
-  wiki_update_issue: 'agentEditor.tools.wikiUpdateIssue',
   todo_write: 'agentStream.tools.todoWrite',
   thinking: 'agentStream.tools.thinking',
   attachment_parsing: 'agentStream.tools.attachmentParsing',
   image_analysis: 'agentStream.tools.imageAnalysis',
   query_understand: 'agentStream.tools.queryUnderstand',
   query_knowledge_graph: 'agentStream.tools.queryKnowledgeGraph',
-  read_skill: 'agentStream.tools.readSkill',
-  execute_skill_script: 'agentStream.tools.executeSkillScript',
-  list_sandbox_files: 'agentStream.tools.listSandboxFiles',
-  read_sandbox_file: 'agentStream.tools.readSandboxFile',
-  write_sandbox_file: 'agentStream.tools.writeSandboxFile',
-  edit_sandbox_file: 'agentStream.tools.editSandboxFile',
-  shell_exec: 'agentStream.tools.shellExec',
   data_analysis: 'agentStream.tools.dataAnalysis',
   data_schema: 'agentStream.tools.dataSchema',
   database_query: 'agentStream.tools.databaseQuery',
@@ -797,110 +693,9 @@ const closeImagePreview = () => {
   imagePreviewVisible.value = false;
 };
 
-// Wiki Drawer 状态
-const wikiDrawerVisible = ref(false);
-const wikiDrawerPage = ref<WikiPage | null>(null);
-const wikiDrawerBodyRef = ref<HTMLElement | null>(null);
-const currentWikiKbId = ref<string>('');
-
-function getTypeTheme(type: string): string {
-  const map: Record<string, string> = {
-    summary: 'primary', entity: 'success', concept: 'warning',
-    synthesis: 'primary', comparison: 'danger', index: 'default',
-  };
-  return map[type] || 'default';
-}
-
-function getTypeLabel(type: string): string {
-  const map: Record<string, string> = {
-    summary: t('knowledgeEditor.wikiBrowser.filterSummary'),
-    entity: t('knowledgeEditor.wikiBrowser.filterEntity'),
-    concept: t('knowledgeEditor.wikiBrowser.filterConcept'),
-    synthesis: t('knowledgeEditor.wikiBrowser.filterSynthesis'),
-    comparison: t('knowledgeEditor.wikiBrowser.filterComparison'),
-    index: 'Index',
-  };
-  return map[type] || type;
-}
-
-const wikiDrawerContent = computed(() => {
-  if (!wikiDrawerPage.value) return '';
-  const content = wikiDrawerPage.value.content || '';
-
-  // Pre-process wiki links [[slug|name]] to custom HTML tags for the drawer
-  let preprocessed = content.replace(/\[\[([^\]]+)\]\]/g, (_, inner: string) => {
-    const pipeIdx = inner.indexOf('|');
-    const slug = pipeIdx > 0 ? inner.substring(0, pipeIdx).trim() : inner.trim();
-    let display = slug;
-    if (pipeIdx > 0) {
-      display = inner.substring(pipeIdx + 1).trim();
-    } else {
-      const parts = slug.split('/');
-      display = parts.length > 1 ? parts.slice(1).join('/') : slug;
-    }
-    return `<a href="#" class="wiki-content-link citation-wiki" data-slug="${escapeHtml(slug)}">${escapeHtml(display)}</a>`;
-  });
-
-  const html = marked.parse(preprocessed, { breaks: true, async: false }) as string;
-  return sanitizeMarkdownHTML(wrapChatMarkdownTables(html));
-});
-
-watch(wikiDrawerContent, async () => {
-  await nextTick();
-  if (wikiDrawerBodyRef.value) {
-    await hydrateProtectedFileImages(wikiDrawerBodyRef.value, protectedFileAccess.value);
-  }
-});
-
-const openWikiDrawer = async (kbId: string, slug: string) => {
-  if (!kbId || !slug) return;
-  try {
-    currentWikiKbId.value = kbId;
-    const res = await getWikiPage(kbId, slug);
-    wikiDrawerPage.value = (res as any).data || res as any;
-    wikiDrawerVisible.value = true;
-  } catch (e) {
-    console.error(`Failed to load page ${slug}:`, e);
-    MessagePlugin.warning(t('agentStream.citation.loadFailed'));
-  }
-};
-
-const wikiGraphHref = computed(() => {
-  if (!currentWikiKbId.value || !wikiDrawerPage.value?.slug) return '';
-  return router.resolve({
-    path: `/platform/knowledge-bases/${currentWikiKbId.value}`,
-    query: { tab: 'graph', slug: wikiDrawerPage.value.slug },
-  }).href;
-});
-
 const openRouteInNewTab = (path: string) => {
   const href = router.resolve(path).href;
   window.open(href, '_blank', 'noopener,noreferrer');
-};
-
-const handleWikiDrawerClick = (e: MouseEvent) => {
-  const target = e.target as HTMLElement;
-  if (target.closest('.citation-wiki')) {
-    e.preventDefault();
-    e.stopPropagation();
-    const slug = target.closest('.citation-wiki')?.getAttribute('data-slug');
-    if (slug) openWikiDrawer(currentWikiKbId.value, slug);
-  } else if (target.tagName.toLowerCase() === 'img') {
-    e.preventDefault();
-    const src = target.getAttribute('src');
-    if (src) openImagePreview(src);
-  } else {
-    // allow link navigation inside drawer
-    const aEl = target.closest?.('a') as HTMLAnchorElement | null;
-    // @ts-ignore
-    if (aEl && aEl.href && window.runtime && window.runtime.BrowserOpenURL) {
-      if (aEl.href.startsWith('http://') || aEl.href.startsWith('https://')) {
-        e.preventDefault();
-        // @ts-ignore
-        window.runtime.BrowserOpenURL(aEl.href);
-      }
-    }
-  }
 };
 
 // Import icons
@@ -936,15 +731,6 @@ const showRequestInfo = computed(
   () => !props.embeddedMode && !!(props.session?.request_id || props.session?.id),
 );
 
-const {
-  memoryItems,
-  hasMemory,
-  expanded: memoryExpanded,
-  forgettingId: memoryForgettingId,
-  toggle: toggleMemory,
-  forget: forgetMemory,
-} = useChatMemoryRow(() => props.session?.used_memories as UsedMemory[] | undefined);
-
 const resolveAssistantMessageId = (session?: SessionData) =>
   String(session?.assistant_message_id || session?.id || '').trim();
 
@@ -978,12 +764,12 @@ watch(
 );
 
 // -----------------------------------------------------------------------------
-// Skill artifact download drawer (Agent path)
+// Message file download drawer (Agent path)
 // -----------------------------------------------------------------------------
 // Same contract as botmsg.vue: only render the button when the persisted
 // assistant message actually recorded files, then let ChatArtifactsDrawer
 // resolve names/sizes/mtimes and stream downloads via the /artifacts
-// endpoint. Agent mode is the primary path for skills, so this button will
+// endpoint. Agent replies can contain files, so this button will
 // appear more often here than in the RAG path.
 const showArtifactDrawer = ref(false);
 const artifactList = computed(() => {
@@ -993,8 +779,6 @@ const artifactList = computed(() => {
 const hasArtifacts = computed(() => artifactList.value.length > 0);
 const artifactCount = computed(() => artifactList.value.length);
 const { artifactArrived, onArtifactArriveEnd } = useArtifactArriveMotion(artifactCount);
-const artifactsCollecting = computed(() => isCollectingSkillArtifacts(props.session as any));
-const artifactButtonCollecting = computed(() => artifactsCollecting.value && !hasArtifacts.value);
 const sessionIdForArtifacts = computed(() => props.sessionId ?? '');
 const messageIdForArtifacts = computed(() =>
   String(props.session?.id || props.session?.request_id || ''),
@@ -1122,80 +906,9 @@ const isMcpTool = (toolName?: string | null): boolean => String(toolName || '').
 
 const resolveToolDisplayType = (event: any): DisplayType | undefined => {
   if (event?.display_type) return event.display_type as DisplayType
-  if (event?.tool_name === 'shell_exec' || event?.tool_name === 'execute_skill_script') {
-    return 'shell_exec'
-  }
-  if (event?.tool_name === 'list_sandbox_files' && event?.success !== false) {
-    return 'list_sandbox_files'
-  }
-  if (event?.tool_name === 'write_sandbox_file' && event?.success !== false) {
-    return 'write_sandbox_file'
-  }
-  if (event?.tool_name === 'edit_sandbox_file' && event?.success !== false) {
-    return 'edit_sandbox_file'
-  }
-  if (event?.tool_name === 'read_skill' && event?.success !== false) {
-    return 'read_skill'
-  }
+
+
   return undefined
-};
-
-const WIKI_EDIT_TOOL_NAMES = new Set([
-  'wiki_write_page',
-  'wiki_replace_text',
-  'wiki_rename_page',
-  'wiki_delete_page',
-]);
-
-const WIKI_ISSUE_TOOL_NAMES = new Set([
-  'wiki_flag_issue',
-  'wiki_read_issue',
-  'wiki_update_issue',
-]);
-
-const formatWikiEditResultContent = (toolData: any): string => {
-  const rows: Array<[string, unknown]> = [];
-  switch (toolData?.display_type) {
-    case 'wiki_write_page':
-      rows.push(
-        [t('chat.wikiFieldSlug'), toolData.slug],
-        [t('chat.wikiFieldTitle'), toolData.title],
-        [t('chat.wikiFieldPageType'), toolData.page_type],
-        [t('chat.wikiFieldSummary'), toolData.summary],
-      );
-      break;
-    case 'wiki_replace_text':
-      rows.push(
-        [t('chat.wikiFieldSlug'), toolData.slug],
-        [t('chat.wikiFieldTitle'), toolData.title],
-        [t('chat.wikiFieldOldText'), toolData.old_text],
-        [t('chat.wikiFieldNewText'), toolData.new_text],
-      );
-      break;
-    case 'wiki_rename_page':
-      rows.push(
-        [t('chat.wikiFieldOldSlug'), toolData.old_slug],
-        [t('chat.wikiFieldNewSlug'), toolData.new_slug],
-        [t('chat.wikiFieldTitle'), toolData.title],
-        [t('chat.wikiFieldAffectedPages'), Array.isArray(toolData.affected_pages)
-          ? toolData.affected_pages.join(', ')
-          : toolData.affected_pages],
-      );
-      break;
-    case 'wiki_delete_page':
-      rows.push(
-        [t('chat.wikiFieldSlug'), toolData.slug],
-        [t('chat.wikiFieldTitle'), toolData.title],
-        [t('chat.wikiFieldAffectedPages'), Array.isArray(toolData.affected_pages)
-          ? toolData.affected_pages.join(', ')
-          : toolData.affected_pages],
-      );
-      break;
-  }
-  return rows
-    .filter(([, value]) => value !== undefined && value !== null && String(value).trim())
-    .map(([label, value]) => `${label}: ${String(value).trim()}`)
-    .join('\n');
 };
 
 const buildToolResultReference = (
@@ -1228,35 +941,7 @@ function getToolReferenceItems(event: any): KnowledgeReferenceLike[] {
     return buildToolResultReference(event, output);
   }
 
-  if (WIKI_ISSUE_TOOL_NAMES.has(toolName)) {
-    return buildToolResultReference(event, formatToolResultContent(event.output));
-  }
-
   if (!toolData) return [];
-
-  if (toolName === 'wiki_search' || toolName === 'wiki_read_page') {
-    return parseWikiToolReferences(toolName, event.output, event.tool_call_id || toolName)
-      .map((item) => ({
-        id: item.id,
-        chunk_type: 'tool_result',
-        knowledge_title: item.title,
-        content: item.content,
-        metadata: {
-          title: item.title,
-          source: getLocalizedToolName(toolName),
-          tool: toolName,
-          ...(item.slug ? { slug: item.slug } : {}),
-          ...(item.knowledgeBaseId ? { knowledge_base_id: item.knowledgeBaseId } : {}),
-        },
-      }));
-  }
-
-  if (WIKI_EDIT_TOOL_NAMES.has(toolName)) {
-    return buildToolResultReference(
-      event,
-      formatWikiEditResultContent(toolData) || formatToolResultContent(event.output),
-    );
-  }
 
   if (toolName === 'web_fetch') {
     const results = Array.isArray(toolData.results) ? toolData.results : [];
@@ -1320,33 +1005,6 @@ function getToolReferenceItems(event: any): KnowledgeReferenceLike[] {
         chunk_index: index + 1,
         content: item.match_snippet || '',
       })));
-  }
-
-  if (toolName === 'list_knowledge_chunks' || toolName === 'wiki_read_source_doc') {
-    const chunks = Array.isArray(toolData.chunks) ? toolData.chunks : [];
-    if (chunks.length) {
-      return mergeDocumentReferences(chunks
-        .filter((item: any) => item?.content)
-        .map((item: any, index: number) => ({
-          id: item.chunk_id || item.id || `${toolData.knowledge_id || 'doc'}-${index + 1}`,
-          knowledge_id: item.knowledge_id || toolData.knowledge_id,
-          knowledge_title: toolData.knowledge_title || toolData.knowledge_id,
-          knowledge_base_id: item.knowledge_base_id || toolData.knowledge_base_id,
-          chunk_index: item.chunk_index ?? item.index ?? index + 1,
-          chunk_type: item.chunk_type,
-          content: item.content || '',
-        })));
-    }
-
-    const output = cleanToolOutputContent(event.output);
-    if (!output) return [];
-    return [{
-      id: toolData.knowledge_id || event.tool_call_id,
-      knowledge_id: toolData.knowledge_id,
-      knowledge_title: toolData.knowledge_title || toolData.knowledge_id || getToolDescription(event),
-      knowledge_base_id: toolData.knowledge_base_id,
-      content: output,
-    }];
   }
 
   return [];
@@ -1779,19 +1437,6 @@ const shouldShowCollapsedSteps = computed(() => {
   return hasSteps && isConversationDone.value;
 });
 
-// Once the steps collapse, the memory row travels with them into the tree —
-// showing it here as well would leave two rows saying the same thing. In
-// quick-answer mode the pipeline component owns the timeline and its memory row.
-const showMemoryRow = computed(
-  () => !props.ragMode && hasMemory.value && !shouldShowCollapsedSteps.value,
-);
-
-// Memory leads the timeline, so it is only the last node while nothing has
-// followed it yet — and a lone node has no trunk line to draw below it.
-const memoryIsLast = computed(
-  () => lastStreamingTimelineEventIndex.value === -1 && !showAgentActivityIndicator.value,
-);
-
 // Check if event is a "deep thinking" type (either streaming thinking or thinking tool call)
 const isThinkingLikeEvent = (event: any): boolean => {
   if (event.type === 'thinking') return true;
@@ -2120,16 +1765,12 @@ const isEventExpanded = (eventId: string): boolean => {
 
 const isReferenceDrawerTool = (toolName?: string | null): boolean =>
   isMcpTool(toolName) ||
-  WIKI_EDIT_TOOL_NAMES.has(String(toolName || '')) ||
-  WIKI_ISSUE_TOOL_NAMES.has(String(toolName || '')) ||
   toolName === 'search_knowledge' ||
   toolName === 'knowledge_search' ||
   toolName === 'web_fetch' ||
   toolName === 'grep_chunks' ||
   toolName === 'list_knowledge_chunks' ||
-  toolName === 'wiki_search' ||
-  toolName === 'wiki_read_page' ||
-  toolName === 'wiki_read_source_doc';
+  false;
 
 const hasExpandableResults = (event: any): boolean => {
   if (isReferenceDrawerTool(event?.tool_name)) return false;
@@ -2186,49 +1827,6 @@ const handleCitationActivate = (el: HTMLElement) => {
   } catch {
     window.location.assign(url);
   }
-};
-
-const getKbIdForWiki = (slug: string): string => {
-  if (route.params.kbId) return route.params.kbId as string;
-
-  // The backend ships `found_kbs` as a map<slug, string[]> — a single slug can
-  // legitimately resolve to more than one KB when multiple wiki KBs are in
-  // scope. For navigation we just pick the first one; cross-KB disambiguation
-  // (if ever needed) can layer on top. We also defensively handle the legacy
-  // string shape in case older tool outputs are still cached in a session.
-  const pickKbId = (v: unknown): string => {
-    if (!v) return '';
-    if (typeof v === 'string') return v;
-    if (Array.isArray(v)) {
-      for (const item of v) {
-        if (typeof item === 'string' && item) return item;
-      }
-    }
-    return '';
-  };
-
-  // Try to extract from agent event stream (retrieval pipeline). Walk
-  // backwards so we prefer the most recent tool call's mapping.
-  if (props.session?.agentEventStream) {
-    for (let i = props.session.agentEventStream.length - 1; i >= 0; i--) {
-      const event = props.session.agentEventStream[i];
-      const foundKbs = event?.tool_data?.found_kbs;
-      if (event.type === 'tool_call' && foundKbs) {
-        const hit = pickKbId(foundKbs[slug]);
-        if (hit) return hit;
-      }
-    }
-  }
-
-  // Fallbacks
-  const selectedKbs = settingsStore.getSelectedKnowledgeBases();
-  if (selectedKbs && selectedKbs.length > 0) return selectedKbs[0];
-
-  if (authStore.knowledgeBases && authStore.knowledgeBases.length > 0) {
-    return authStore.knowledgeBases[0].id;
-  }
-
-  return '';
 };
 
 const onRootClick = (e: Event) => {
@@ -2297,24 +1895,6 @@ const onRootClick = (e: Event) => {
     return;
   }
 
-  // Handle wiki link clicks -> navigate to KB wiki browser page
-  const wikiEl = target.closest?.('.citation-wiki') as HTMLElement | null;
-  if (wikiEl && wikiEl.getAttribute('data-slug')) {
-    e.preventDefault();
-    e.stopPropagation();
-    const slug = wikiEl.getAttribute('data-slug');
-
-    // Determine the relevant KB ID
-    const kbId = getKbIdForWiki(slug || '');
-
-    if (kbId && slug) {
-      openWikiDrawer(kbId, slug);
-    } else {
-      MessagePlugin.warning(t('agentStream.citation.noKbForWiki'));
-    }
-    return;
-  }
-
 };
 
 const onRootKeydown = (e: KeyboardEvent) => {
@@ -2372,23 +1952,6 @@ const onRootKeydown = (e: KeyboardEvent) => {
     return;
   }
 
-  // Handle wiki citation keyboard -> navigate to KB wiki browser
-  const wikiEl = target.closest?.('.citation-wiki') as HTMLElement | null;
-  if (wikiEl) {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      const slug = wikiEl.getAttribute('data-slug');
-
-      const kbId = getKbIdForWiki(slug || '');
-
-      if (kbId && slug) {
-        openWikiDrawer(kbId, slug);
-      } else {
-        MessagePlugin.warning(t('agentStream.citation.noKbForWiki'));
-      }
-    }
-    return;
-  }
 };
 
 onMounted(() => {
@@ -2434,7 +1997,7 @@ onUpdated(() => {
 const agentRenderer = new marked.Renderer();
 agentRenderer.code = createMermaidCodeRenderer('mermaid-agent');
 
-// Files the agent generated in its sandbox carry the same `resource://` handle
+// Message files carry the same `resource://` handle
 // as any other stored file, so they are matched against this reply's artifacts
 // before marked's default <img>. Everything else — including a handle that
 // belongs to a knowledge-base image rather than to this reply — keeps the
@@ -2710,30 +2273,14 @@ const getToolTitle = (event: any): string => {
     if (event.tool_name === 'attachment_parsing') {
       return t('agentStream.toolStatus.attachmentParsing');
     }
-    if (event.tool_name === 'wiki_search' || event.tool_name === 'wiki_read_page') {
-      return `${getLocalizedToolName(event.tool_name)}...`;
-    }
-    if (event.tool_name === 'read_skill') {
-      const name = getLocalizedToolName(event.tool_name);
-      return `${formatToolTitleWithDetail(name, getReadSkillTarget(event))}...`;
-    }
-    if (event.tool_name === 'execute_skill_script') {
-      const name = getLocalizedToolName(event.tool_name);
-      return `${formatToolTitleWithDetail(name, getEventSkillName(event))}...`;
-    }
-    if (event.tool_name === 'list_sandbox_files' || event.tool_name === 'read_sandbox_file' || event.tool_name === 'write_sandbox_file' || event.tool_name === 'edit_sandbox_file') {
-      const name = getLocalizedToolName(event.tool_name);
-      return `${formatToolTitleWithDetail(name, getSandboxToolPath(event))}...`;
-    }
-    if (event.tool_name === 'shell_exec') {
-      return t('agentStream.toolStatus.shellExecRunning');
-    }
+
+
     const localizedName = getLocalizedToolName(event.tool_name);
     return t('agentStream.toolStatus.calling', { name: localizedName });
   }
 
   const toolName = event.tool_name;
-  const isSearchTool = toolName === 'search_knowledge' || toolName === 'knowledge_search' || toolName === 'wiki_search';
+  const isSearchTool = toolName === 'search_knowledge' || toolName === 'knowledge_search';
   const isGrepTool = toolName === 'grep_chunks';
 
   // For search tools, use description with query text
@@ -2784,54 +2331,10 @@ const getToolTitle = (event: any): string => {
     return baseTitle;
   }
 
-  if (toolName === 'wiki_read_page') {
-    const pageLabel = String(
-      event.tool_data?.title ||
-      getWikiPageText(event.arguments) ||
-      getWikiPageText(event.tool_data)
-    ).trim();
-    const baseTitle = getToolDescription(event);
-    return pageLabel ? `${baseTitle}：「${sanitizeForDisplay(pageLabel)}」` : baseTitle;
-  }
-
-  if (toolName === 'read_skill') {
-    return formatToolTitleWithDetail(getToolDescription(event), getReadSkillTarget(event));
-  }
-
-  if (toolName === 'list_sandbox_files' || toolName === 'read_sandbox_file' || toolName === 'write_sandbox_file' || toolName === 'edit_sandbox_file') {
-    return formatToolTitleWithDetail(getToolDescription(event), getSandboxToolPath(event));
-  }
-
-  if (toolName === 'execute_skill_script') {
-    const command = previewShellCommand(skillScriptCommandLabel(event))
-    const baseTitle = formatToolTitleWithDetail(getToolDescription(event), getEventSkillName(event))
-    const rest = skillScriptTitleCommand(getEventSkillName(event), command)
-    return rest ? `${baseTitle}：${rest}` : baseTitle
-  }
-
-  if (toolName === 'shell_exec') {
-    const command = previewShellCommand(skillScriptCommandLabel(event))
-    const baseTitle = getToolDescription(event)
-    return command ? `${baseTitle}：${command}` : baseTitle
-  }
-
   // Use tool summary if available
   const summary = getToolSummary(event);
   return summary || getToolDescription(event);
 };
-
-const skillScriptCommandLabel = (event: any): string => {
-  const fromData = String(event?.tool_data?.command || event?.arguments?.command || '').trim()
-  if (fromData) return fromData
-  const skill = String(event?.tool_data?.skill_name || event?.arguments?.skill_name || '').trim()
-  const script = String(event?.tool_data?.script_path || event?.arguments?.script_path || '').trim()
-  const path = [skill, script].filter(Boolean).join('/')
-  const args = event?.tool_data?.args || event?.arguments?.args
-  if (Array.isArray(args) && args.length) {
-    return [path, ...args.map((arg: unknown) => String(arg))].filter(Boolean).join(' ')
-  }
-  return path
-}
 
 // Tool description
 const getToolDescription = (event: any): string => {
@@ -2845,21 +2348,8 @@ const getToolDescription = (event: any): string => {
     if (event.tool_name === 'query_understand') {
       return t('agentStream.toolStatus.queryUnderstanding');
     }
-    if (event.tool_name === 'read_skill') {
-      const name = getLocalizedToolName(event.tool_name);
-      return `${formatToolTitleWithDetail(name, getReadSkillTarget(event))}...`;
-    }
-    if (event.tool_name === 'execute_skill_script') {
-      const name = getLocalizedToolName(event.tool_name);
-      return `${formatToolTitleWithDetail(name, getEventSkillName(event))}...`;
-    }
-    if (event.tool_name === 'list_sandbox_files' || event.tool_name === 'read_sandbox_file' || event.tool_name === 'write_sandbox_file' || event.tool_name === 'edit_sandbox_file') {
-      const name = getLocalizedToolName(event.tool_name);
-      return `${formatToolTitleWithDetail(name, getSandboxToolPath(event))}...`;
-    }
-    if (event.tool_name === 'shell_exec') {
-      return t('agentStream.toolStatus.shellExecRunning');
-    }
+
+
     const localizedName = getLocalizedToolName(event.tool_name);
     return t('agentStream.toolStatus.calling', { name: localizedName });
   }
@@ -2869,15 +2359,11 @@ const getToolDescription = (event: any): string => {
 
   if (toolName === 'search_knowledge' || toolName === 'knowledge_search') {
     return success ? t('agentStream.toolStatus.searchKb') : t('agentStream.toolStatus.searchKbFailed');
-  } else if (toolName === 'wiki_search' || toolName === 'wiki_read_page') {
-    const localizedName = getLocalizedToolName(toolName);
-    return success ? localizedName : t('agentStream.toolStatus.calledFailed', { name: localizedName });
-
   } else if (toolName === 'grep_chunks') {
     return success ? t('agentStream.toolStatus.grepSearch') : t('agentStream.toolStatus.grepSearchFailed');
   } else if (toolName === 'get_document_info') {
     return success ? t('agentStream.toolStatus.getDocInfo') : t('agentStream.toolStatus.getDocInfoFailed');
-  } else if (toolName === 'get_document_content' || toolName === 'wiki_read_source_doc') {
+  } else if (toolName === 'get_document_content') {
     return success ? t('agentStream.toolStatus.viewDocument') : t('agentStream.toolStatus.calledFailed', { name: t('agentStream.toolStatus.viewDocument') });
   } else if (toolName === 'thinking') {
     return success ? t('agentStream.toolStatus.thinkingDone') : t('agentStream.toolStatus.thinkingFailed');
@@ -2889,9 +2375,6 @@ const getToolDescription = (event: any): string => {
     return success ? t('agentStream.toolStatus.attachmentParsingDone') : t('agentStream.toolStatus.attachmentParsingFailed');
   } else if (toolName === 'query_understand') {
     return success ? t('agentStream.toolStatus.queryUnderstandDone') : t('agentStream.toolStatus.calledFailed', { name: getLocalizedToolName(toolName) });
-  } else if (toolName === 'shell_exec' || toolName === 'execute_skill_script' || toolName === 'read_skill' || toolName === 'list_sandbox_files' || toolName === 'read_sandbox_file' || toolName === 'write_sandbox_file' || toolName === 'edit_sandbox_file') {
-    const localizedName = getLocalizedToolName(toolName);
-    return success ? localizedName : t('agentStream.toolStatus.calledFailed', { name: localizedName });
   } else {
     const localizedName = getLocalizedToolName(toolName);
     return success ? t('agentStream.toolStatus.called', { name: localizedName }) : t('agentStream.toolStatus.calledFailed', { name: localizedName });
@@ -3491,51 +2974,6 @@ const handleAddToKnowledge = (answerEvent: any) => {
   vertical-align: middle;
 }
 
-.sandbox-diff-stat {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: 4px;
-  font-variant-numeric: tabular-nums;
-  font-size: 12px;
-  font-weight: 600;
-  flex-shrink: 0;
-  letter-spacing: 0.02em;
-
-  .diff-add {
-    color: var(--td-success-color);
-  }
-
-  .diff-del {
-    color: var(--td-error-color);
-  }
-}
-
-.sandbox-file-preview {
-  margin: 6px 0 0;
-  padding: 8px 10px;
-  font-family: var(--app-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--td-text-color-secondary);
-  background: var(--td-bg-color-secondarycontainer);
-  border-radius: 6px;
-
-  pre {
-    margin: 0;
-    white-space: pre-wrap;
-    word-break: break-word;
-    max-height: 180px;
-    overflow: hidden;
-  }
-}
-
-.sandbox-file-preview-more {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--td-text-color-placeholder);
-}
-
 .action-show-icon {
   font-size: 12px;
   padding: 0 2px;
@@ -3902,208 +3340,6 @@ const handleAddToKnowledge = (answerEvent: any) => {
     border-radius: 0;
     font-size: var(--agent-step-text-size);
     color: var(--td-text-color-secondary);
-  }
-}
-</style>
-
-<style lang="less">
-/* Global styles for teleported components */
-
-.wiki-graph-drawer {
-  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.08);
-
-  .wiki-reader-meta {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .wiki-reader-meta-text {
-    font-size: 13px;
-    color: var(--td-text-color-placeholder);
-  }
-
-  // Wiki drawer is a non-chat reader surface. Chat answer Markdown styles are
-  // centralized in chat-markdown.less; do not copy these rules into chat message components.
-  .wiki-reader-body {
-    line-height: 1.6;
-    font-size: 14px;
-    color: var(--td-text-color-primary);
-
-    h1 {
-      font-size: 24px;
-      margin: 28px 0 16px;
-      font-weight: 600;
-      line-height: 1.4;
-    }
-
-    h2 {
-      font-size: 18px;
-      margin: 24px 0 12px;
-      font-weight: 600;
-      line-height: 1.4;
-    }
-
-    h3 {
-      font-size: 16px;
-      margin: 20px 0 10px;
-      font-weight: 600;
-      line-height: 1.5;
-    }
-
-    h4,
-    h5,
-    h6 {
-      font-size: 14px;
-      margin: 16px 0 8px;
-      font-weight: 600;
-      line-height: 1.5;
-    }
-
-    p {
-      margin: 0 0 14px;
-    }
-
-    ul,
-    ol {
-      margin: 0 0 14px;
-      padding-left: 24px;
-    }
-
-    li {
-      margin-bottom: 6px;
-      line-height: 1.6;
-    }
-
-    li>p {
-      margin-bottom: 6px;
-    }
-
-    blockquote {
-      margin: 0 0 14px;
-      padding: 10px 16px;
-      background: var(--td-bg-color-secondarycontainer);
-      border-left: 4px solid var(--td-component-border);
-      border-radius: 0 4px 4px 0;
-      color: var(--td-text-color-secondary);
-    }
-
-    code {
-      font-family: var(--app-font-family-mono);
-      font-size: 13px;
-      padding: 2px 4px;
-      background: var(--td-bg-color-secondarycontainer);
-      border-radius: 4px;
-      color: var(--td-brand-color);
-    }
-
-    pre {
-      margin: 0 0 14px;
-      padding: 12px 16px;
-      background: var(--td-bg-color-secondarycontainer);
-      border-radius: 6px;
-      overflow-x: auto;
-
-      code {
-        padding: 0;
-        background: transparent;
-        color: inherit;
-      }
-    }
-
-    p:has(img) {
-      text-align: center;
-      color: var(--td-text-color-secondary);
-      font-size: 13px;
-      margin-top: 16px;
-      margin-bottom: 24px;
-
-      img {
-        max-width: 100%;
-        max-height: 400px;
-        object-fit: contain;
-        border-radius: 6px;
-        display: block;
-        margin: 0 auto 8px;
-        cursor: zoom-in;
-        transition: opacity 0.2s;
-
-        &:hover {
-          opacity: 0.9;
-        }
-      }
-    }
-
-    a.wiki-content-link {
-      color: var(--td-brand-color);
-      text-decoration: none;
-      border-bottom: 1px dashed var(--td-brand-color);
-      cursor: pointer;
-      font-weight: 500;
-
-      &:hover {
-        border-bottom-style: solid;
-        text-decoration: none !important;
-      }
-    }
-
-    .chat-markdown-table {
-      width: fit-content;
-      max-width: 100%;
-      overflow-x: auto;
-      margin: 0 0 16px;
-      background: var(--td-bg-color-container);
-      border: 1px solid var(--td-component-stroke);
-      border-radius: 6px;
-      -webkit-overflow-scrolling: touch;
-    }
-
-    table {
-      display: table;
-      width: max-content;
-      min-width: 0;
-      border-collapse: separate;
-      border-spacing: 0;
-      font-size: 13px;
-      line-height: 1.55;
-    }
-
-    table thead {
-      background: var(--td-bg-color-secondarycontainer);
-    }
-
-    table th,
-    table td {
-      padding: 8px 12px;
-      border-bottom: 1px solid var(--td-component-stroke);
-      border-right: 1px solid var(--td-component-stroke);
-      text-align: left;
-      vertical-align: top;
-      word-break: break-word;
-    }
-
-    table th {
-      font-weight: 600;
-      color: var(--td-text-color-primary);
-      white-space: nowrap;
-    }
-
-    table th:last-child,
-    table td:last-child {
-      border-right: none;
-    }
-
-    table tbody tr:last-child td {
-      border-bottom: none;
-    }
-
-    table tbody tr:hover {
-      background: var(--td-bg-color-secondarycontainer);
-    }
-
-    table code {
-      font-size: 12px;
-    }
   }
 }
 </style>

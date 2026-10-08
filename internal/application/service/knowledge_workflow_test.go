@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 
-	"reliquary/internal/application/repository"
 	chatmodels "reliquary/internal/models/chat"
 	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
@@ -26,6 +25,8 @@ type workflowTestKBService struct {
 	searchCalls   int
 	searches      []string
 	searchContent string
+	afterSearch   func()
+	searchErrors  map[string]error
 }
 
 func (s *workflowTestKBService) GetKnowledgeBaseByID(context.Context, string) (*types.KnowledgeBase, error) {
@@ -35,6 +36,13 @@ func (s *workflowTestKBService) GetKnowledgeBaseByID(context.Context, string) (*
 func (s *workflowTestKBService) HybridSearch(_ context.Context, _ string, params types.SearchParams) ([]*types.SearchResult, error) {
 	s.searchCalls++
 	s.searches = append(s.searches, params.QueryText)
+	if err := s.searchErrors[params.QueryText]; err != nil {
+		delete(s.searchErrors, params.QueryText)
+		return nil, err
+	}
+	if s.afterSearch != nil {
+		s.afterSearch()
+	}
 	content := s.searchContent
 	if content == "" {
 		content = "approved evidence"
@@ -92,32 +100,6 @@ func (s *workflowTestReportChat) ChatStream(context.Context, []chatmodels.Messag
 func (*workflowTestReportChat) GetModelName() string { return "workflow-test" }
 func (*workflowTestReportChat) GetModelID() string   { return "workflow-test" }
 
-type workflowTestWikiService struct {
-	interfaces.WikiPageService
-	page        *types.WikiPage
-	createCalls int
-	updateCalls int
-}
-
-func (s *workflowTestWikiService) GetPageBySlug(context.Context, string, string) (*types.WikiPage, error) {
-	return nil, repository.ErrWikiPageNotFound
-}
-
-func (s *workflowTestWikiService) CreatePage(_ context.Context, page *types.WikiPage) (*types.WikiPage, error) {
-	created := *page
-	created.ID, created.Version = "workflow-wiki-page", 1
-	s.page = &created
-	s.createCalls++
-	return &created, nil
-}
-
-func (s *workflowTestWikiService) UpdatePage(_ context.Context, page *types.WikiPage) (*types.WikiPage, error) {
-	updated := *page
-	s.page = &updated
-	s.updateCalls++
-	return &updated, nil
-}
-
 type workflowRecordedTask struct {
 	task    *asynq.Task
 	payload types.KnowledgeWorkflowTaskPayload
@@ -155,21 +137,20 @@ func workflowTestContext(user string, tenantID uint64) context.Context {
 	return context.WithValue(ctx, types.UserIDContextKey, user)
 }
 
-func TestKnowledgeWorkflowPausesForReviewAndResumesWithoutRepeatingSuccess(t *testing.T) {
+func TestKnowledgeWorkflowDisabledRunResumesSnapshotWithoutRepeatingSuccess(t *testing.T) {
 	db := workflowTestDB(t)
-	kb := &workflowTestKBService{kb: &types.KnowledgeBase{ID: "kb", TenantID: 1, DomainID: "ai", CreatorID: "owner"}}
+	kb := &workflowTestKBService{kb: &types.KnowledgeBase{ID: "kb", TenantID: 1, DomainID: "ai", CreatorID: "owner", SummaryModelID: "summary-model"}}
 	require.NoError(t, db.Create(kb.kb).Error)
 	require.NoError(t, db.Create(&types.Knowledge{ID: "source-1", TenantID: 1, KnowledgeBaseID: "kb", Title: "Source", ParseStatus: types.ParseStatusCompleted, Metadata: types.JSON(`{"intake":{"decision":"approved","source_info":{"original_url":"https://example.com/source"}}}`)}).Error)
 	require.NoError(t, db.Create(&types.KnowledgeEvidence{ID: "source-evidence", TenantID: 1, KnowledgeBaseID: "kb", KnowledgeID: "source-1", Version: 1, BodyHash: strings.Repeat("a", 64), Title: "Source", Body: "An approved evidence excerpt from the source.", OriginalURL: "https://example.com/source", Status: types.KnowledgeEvidenceCurrent, ExtractionStatus: types.KnowledgeExtractionPending, CreatedAt: time.Now()}).Error)
 	queue := &workflowTestTaskQueue{}
-	svc := NewKnowledgeWorkflowService(db, kb, workflowTestKnowledgeService{}, NewKnowledgeContextService(db, nil), nil, nil,
-		queue, nil)
+	svc := NewKnowledgeWorkflowService(db, kb, workflowTestKnowledgeService{}, NewKnowledgeContextService(db, nil), workflowTestReportModelService{model: &workflowTestReportChat{}}, queue)
 	ctx := workflowTestContext("owner", 1)
 	wf, err := svc.Create(ctx, "kb", types.KnowledgeWorkflowInput{
 		Name: "Weekly report", Enabled: true,
 		Steps: []types.KnowledgeWorkflowStep{
 			{ID: "search", Type: types.WorkflowStepSearch, Config: map[string]any{"query": "source evidence"}},
-			{ID: "review", Type: types.WorkflowStepHumanReview, DependsOn: []string{"search"}},
+			{ID: "report", Type: types.WorkflowStepReport, DependsOn: []string{"search"}, Config: map[string]any{"title": "Report"}},
 		},
 	})
 	require.NoError(t, err)
@@ -181,10 +162,13 @@ func TestKnowledgeWorkflowPausesForReviewAndResumesWithoutRepeatingSuccess(t *te
 		Name: "Weekly report v2", Enabled: true,
 		Steps: []types.KnowledgeWorkflowStep{
 			{ID: "search", Type: types.WorkflowStepSearch, Config: map[string]any{"query": "changed definition"}},
-			{ID: "review", Type: types.WorkflowStepHumanReview, DependsOn: []string{"search"}},
+			{ID: "report", Type: types.WorkflowStepReport, DependsOn: []string{"search"}, Config: map[string]any{"title": "Report"}},
 		},
 	})
 	require.NoError(t, err)
+	kb.afterSearch = func() {
+		require.NoError(t, db.Model(&types.KnowledgeWorkflow{}).Where("id = ?", wf.ID).Update("enabled", false).Error)
+	}
 	require.NoError(t, svc.Handle(ctx, queue.tasks[0].task))
 	require.Equal(t, []string{"source evidence"}, kb.searches)
 	run, err = svc.GetRun(ctx, "kb", run.ID)
@@ -192,16 +176,20 @@ func TestKnowledgeWorkflowPausesForReviewAndResumesWithoutRepeatingSuccess(t *te
 	require.Equal(t, types.WorkflowStatusPaused, run.Status)
 	require.Len(t, run.Steps, 2)
 	require.Equal(t, types.WorkflowStepSucceeded, run.Steps[0].Status)
-	require.Equal(t, types.WorkflowStepWaitingReview, run.Steps[1].Status)
+	require.Equal(t, types.WorkflowStepPending, run.Steps[1].Status)
 	var searchOutput workflowStepOutput
 	require.NoError(t, json.Unmarshal(run.Steps[0].Output, &searchOutput))
 	require.Len(t, searchOutput.Sources, 1)
 	require.Equal(t, "source-evidence", searchOutput.Sources[0].EvidenceID)
 	require.Equal(t, "approved evidence", searchOutput.Sources[0].Quote)
-	// A task retry while the review is pending must not repeat the completed search.
+	// A duplicate task while disabled must not repeat the completed search.
 	require.NoError(t, svc.Handle(ctx, queue.tasks[0].task))
 	require.Equal(t, 1, kb.searchCalls)
-	run, err = svc.Approve(ctx, "kb", run.ID, "approve")
+	_, err = svc.Resume(ctx, "kb", run.ID)
+	require.ErrorContains(t, err, "enable the workflow")
+	require.NoError(t, db.Model(&types.KnowledgeWorkflow{}).Where("id = ?", wf.ID).Update("enabled", true).Error)
+	kb.afterSearch = nil
+	run, err = svc.Resume(ctx, "kb", run.ID)
 	require.NoError(t, err)
 	require.Equal(t, types.WorkflowStatusQueued, run.Status)
 	require.Len(t, queue.tasks, 2)
@@ -212,7 +200,7 @@ func TestKnowledgeWorkflowPausesForReviewAndResumesWithoutRepeatingSuccess(t *te
 	require.Equal(t, 1, kb.searchCalls)
 }
 
-func TestKnowledgeWorkflowReportReviewWikiAndSkillRetriesPreserveSourceEvidence(t *testing.T) {
+func TestKnowledgeWorkflowReportRetriesPreserveSourceEvidence(t *testing.T) {
 	db := workflowTestDB(t)
 	kb := &workflowTestKBService{kb: &types.KnowledgeBase{ID: "kb", TenantID: 1, DomainID: "ai", CreatorID: "owner", SummaryModelID: "summary-model"}}
 	require.NoError(t, db.Create(kb.kb).Error)
@@ -227,45 +215,28 @@ func TestKnowledgeWorkflowReportReviewWikiAndSkillRetriesPreserveSourceEvidence(
 	kb.searchContent = searchSnippet
 	knowledge := &workflowTestIntakeKnowledge{item: item, sourceBody: rawSource}
 	reportModel := &workflowTestReportChat{}
-	wiki := &workflowTestWikiService{}
-	var run *types.KnowledgeWorkflowRun
-	skillCalls := 0
-	skill := func(_ context.Context, tenantID uint64, ownerID, kbID string, cfg WorkflowSkillConfig) (*WorkflowSkillResult, error) {
-		skillCalls++
-		require.Equal(t, uint64(1), tenantID)
-		require.Equal(t, "owner", ownerID)
-		require.Equal(t, "kb", kbID)
-		require.Equal(t, run.ID, cfg.RunID)
-		require.Equal(t, "skill", cfg.StepID)
-		require.Equal(t, "report", cfg.InputStep)
-		require.Contains(t, cfg.Input, "# Evidence report")
-		if skillCalls == 1 {
-			return nil, errors.New("temporary sandbox failure")
-		}
-		return &WorkflowSkillResult{Output: "skill complete", ExitCode: 0}, nil
-	}
-	svc := NewKnowledgeWorkflowService(db, kb, knowledge, NewKnowledgeContextService(db, nil), wiki,
-		workflowTestReportModelService{model: reportModel}, queue, skill)
+	kb.searchErrors = map[string]error{"verify source": errors.New("temporary search failure")}
+	svc := NewKnowledgeWorkflowService(db, kb, knowledge, NewKnowledgeContextService(db, nil),
+		workflowTestReportModelService{model: reportModel}, queue)
 	ctx := workflowTestContext("owner", 1)
 	wf, err := svc.Create(ctx, "kb", types.KnowledgeWorkflowInput{
 		Name: "Evidence report", Enabled: true,
 		Steps: []types.KnowledgeWorkflowStep{
 			{ID: "search", Type: types.WorkflowStepSearch, Config: map[string]any{"query": "market report"}},
 			{ID: "report", Type: types.WorkflowStepReport, DependsOn: []string{"search"}, Config: map[string]any{"title": "Market report", "prompt": "Summarize the source."}},
-			{ID: "review", Type: types.WorkflowStepHumanReview, DependsOn: []string{"report"}},
-			{ID: "wiki", Type: types.WorkflowStepWikiUpdate, DependsOn: []string{"review"}, Config: map[string]any{"slug": "market-report", "title": "Market report", "source_step": "report"}},
-			{ID: "skill", Type: types.WorkflowStepSkill, DependsOn: []string{"wiki"}, Config: map[string]any{"agent_id": "agent-1", "skill_name": "source-check", "script_path": "check.py", "input_step": "report"}},
+			{ID: "verify", Type: types.WorkflowStepSearch, DependsOn: []string{"report"}, Config: map[string]any{"query": "verify source"}},
 		},
 	})
 	require.NoError(t, err)
-	run, err = svc.Run(ctx, "kb", wf.ID, "manual")
+	run, err := svc.Run(ctx, "kb", wf.ID, "manual")
 	require.NoError(t, err)
-	require.NoError(t, svc.Handle(ctx, queue.tasks[0].task))
+	require.ErrorContains(t, svc.Handle(ctx, queue.tasks[0].task), "temporary search failure")
 	run, err = svc.GetRun(ctx, "kb", run.ID)
 	require.NoError(t, err)
-	require.Equal(t, types.WorkflowStatusPaused, run.Status)
-	require.Equal(t, 1, kb.searchCalls)
-	require.Equal(t, types.WorkflowStepWaitingReview, run.Steps[2].Status)
+	require.Equal(t, types.WorkflowStatusFailed, run.Status)
+	require.Equal(t, 2, kb.searchCalls)
+	require.Equal(t, types.WorkflowStepSucceeded, run.Steps[1].Status)
+	require.Equal(t, types.WorkflowStepFailed, run.Steps[2].Status)
 	var sourceSnapshot types.KnowledgeEvidence
 	require.NoError(t, db.Where("knowledge_id = ? AND status = ?", item.ID, types.KnowledgeEvidenceCurrent).First(&sourceSnapshot).Error)
 	require.Equal(t, types.KnowledgeExtractionPending, sourceSnapshot.ExtractionStatus)
@@ -280,20 +251,6 @@ func TestKnowledgeWorkflowReportReviewWikiAndSkillRetriesPreserveSourceEvidence(
 	require.NotEmpty(t, reportModel.messages)
 	require.Contains(t, reportModel.messages[0][1].Content, rawSource)
 	require.NotContains(t, reportModel.messages[0][1].Content, searchSnippet)
-	require.Equal(t, 0, wiki.createCalls)
-
-	_, err = svc.Approve(ctx, "kb", run.ID, "approve")
-	require.NoError(t, err)
-	require.Len(t, queue.tasks, 2)
-	err = svc.Handle(ctx, queue.tasks[1].task)
-	require.ErrorContains(t, err, "temporary sandbox failure")
-	run, err = svc.GetRun(ctx, "kb", run.ID)
-	require.NoError(t, err)
-	require.Equal(t, types.WorkflowStatusFailed, run.Status)
-	require.Equal(t, 1, skillCalls)
-	require.Equal(t, 1, wiki.createCalls)
-	require.Contains(t, wiki.page.Content, "[C1]")
-
 	queuedBeforeRetry := len(queue.tasks)
 	require.NoError(t, db.Model(&types.User{}).Where("id = ?", "owner").Update("is_active", false).Error)
 	_, err = svc.Retry(ctx, "kb", run.ID)
@@ -303,12 +260,13 @@ func TestKnowledgeWorkflowReportReviewWikiAndSkillRetriesPreserveSourceEvidence(
 	_, err = svc.Retry(ctx, "kb", run.ID)
 	require.NoError(t, err)
 	require.Len(t, queue.tasks, queuedBeforeRetry+1)
-	require.NoError(t, svc.Handle(ctx, queue.tasks[2].task))
+	require.NoError(t, svc.Handle(ctx, queue.tasks[1].task))
 	run, err = svc.GetRun(ctx, "kb", run.ID)
 	require.NoError(t, err)
 	require.Equal(t, types.WorkflowStatusCompleted, run.Status)
-	require.Equal(t, 2, skillCalls)
-	require.Equal(t, 1, wiki.createCalls)
+	require.Equal(t, 3, kb.searchCalls)
+	require.Equal(t, []string{"market report", "verify source", "verify source"}, kb.searches)
+	require.Len(t, reportModel.messages, 1)
 	var reportCount int64
 	require.NoError(t, db.Model(&types.KnowledgeWorkflowReport{}).Where("run_id = ?", run.ID).Count(&reportCount).Error)
 	require.EqualValues(t, 1, reportCount)
@@ -326,7 +284,7 @@ func TestKnowledgeWorkflowReportReviewWikiAndSkillRetriesPreserveSourceEvidence(
 
 func TestKnowledgeWorkflowLeaseFencesDuplicateAndStaleWorker(t *testing.T) {
 	db := workflowTestDB(t)
-	svc := NewKnowledgeWorkflowService(db, nil, nil, nil, nil, nil, nil, nil)
+	svc := NewKnowledgeWorkflowService(db, nil, nil, nil, nil, nil)
 	run := &types.KnowledgeWorkflowRun{
 		ID: "run-lease", TenantID: 1, KnowledgeBaseID: "kb", WorkflowID: "wf", OwnerID: "owner",
 		Trigger: "manual", IdempotencyKey: "lease:test", Status: types.WorkflowStatusQueued,
@@ -370,8 +328,7 @@ func TestWorkflowReportRangeUsesTimezoneAndCalendarBoundaries(t *testing.T) {
 func TestKnowledgeWorkflowRejectsOtherTenantAndUnsupportedStep(t *testing.T) {
 	db := workflowTestDB(t)
 	kb := &workflowTestKBService{kb: &types.KnowledgeBase{ID: "kb", TenantID: 1, DomainID: "ai", CreatorID: "owner"}}
-	svc := NewKnowledgeWorkflowService(db, kb, workflowTestKnowledgeService{}, nil, nil, nil,
-		&workflowTestTaskQueue{}, nil)
+	svc := NewKnowledgeWorkflowService(db, kb, workflowTestKnowledgeService{}, nil, nil, &workflowTestTaskQueue{})
 	_, err := svc.Create(workflowTestContext("owner", 2), "kb", types.KnowledgeWorkflowInput{
 		Name: "Cross tenant", Steps: []types.KnowledgeWorkflowStep{{ID: "step", Type: types.WorkflowStepSearch, Config: map[string]any{"query": "x"}}},
 	})
@@ -388,26 +345,76 @@ func TestKnowledgeWorkflowRejectsOtherTenantAndUnsupportedStep(t *testing.T) {
 	require.NoError(t, validateWorkflowInput(input))
 	input.Schedule.Cron = "@daily"
 	require.ErrorIs(t, validateWorkflowInput(input), ErrWorkflowInvalid, "the schedule must use the same five fields as the scheduler")
-	input.Schedule.Cron = ""
-	input.Steps = append(input.Steps, types.KnowledgeWorkflowStep{ID: "condition", Type: types.WorkflowStepCondition,
-		Config: map[string]any{"step_id": "search", "path": "data.count", "operator": "gt", "value": "10"}})
-	require.ErrorIs(t, validateWorkflowInput(input), ErrWorkflowInvalid)
-	input.Steps[1].Config["value"] = 10
-	require.NoError(t, validateWorkflowInput(input))
+
 }
 
-func TestKnowledgeWorkflowCreateRejectsRemovedResearchStep(t *testing.T) {
+func TestKnowledgeWorkflowCreateRejectsRemovedSteps(t *testing.T) {
 	db := workflowTestDB(t)
 	kb := &workflowTestKBService{kb: &types.KnowledgeBase{ID: "kb", TenantID: 1, DomainID: "ai", CreatorID: "owner"}}
-	svc := NewKnowledgeWorkflowService(db, kb, workflowTestKnowledgeService{}, nil, nil, nil, &workflowTestTaskQueue{}, nil)
-	_, err := svc.Create(workflowTestContext("owner", 1), "kb", types.KnowledgeWorkflowInput{
-		Name: "Removed research", Steps: []types.KnowledgeWorkflowStep{{
-			ID: "research", Type: "web_research", Config: map[string]any{"query": "source"},
-		}},
-	})
-	require.ErrorIs(t, err, ErrWorkflowInvalid)
-	require.ErrorContains(t, err, `unsupported step type "web_research"`)
+	svc := NewKnowledgeWorkflowService(db, kb, workflowTestKnowledgeService{}, nil, nil, &workflowTestTaskQueue{})
+	for _, stepType := range []string{"web_research", "condition", "skill", "wiki_update", "human_review"} {
+		t.Run(stepType, func(t *testing.T) {
+			_, err := svc.Create(workflowTestContext("owner", 1), "kb", types.KnowledgeWorkflowInput{
+				Name: "Removed step", Steps: []types.KnowledgeWorkflowStep{{ID: "removed", Type: stepType, Config: map[string]any{}}},
+			})
+			require.ErrorIs(t, err, ErrWorkflowInvalid)
+			require.ErrorContains(t, err, `unsupported step type "`+stepType+`"`)
+		})
+	}
 	var count int64
 	require.NoError(t, db.Model(&types.KnowledgeWorkflow{}).Count(&count).Error)
 	require.Zero(t, count)
+}
+
+func TestKnowledgeWorkflowDailyAndWeeklyTemplatesComplete(t *testing.T) {
+	for _, template := range []struct{ name, sourceType, cron, window string }{
+		{"daily", types.WorkflowStepSearch, "0 8 * * *", "previous_day"},
+		{"weekly", types.WorkflowStepFactQuery, "0 9 * * 1", "previous_week"},
+	} {
+		t.Run(template.name, func(t *testing.T) {
+			db := pgtest.Open(t)
+			require.NoError(t, db.Create(&types.Tenant{ID: 1, Name: "tenant"}).Error)
+			require.NoError(t, db.Create(&types.User{ID: "owner", Username: "owner", Email: "owner@example.com", TenantID: 1, IsActive: true}).Error)
+			domain := BuiltinAIKnowledgeDomain()
+			domain.ID = "ai"
+			domain.TenantID = 1
+			require.NoError(t, db.Create(domain).Error)
+			kb := &workflowTestKBService{kb: &types.KnowledgeBase{ID: "kb", TenantID: 1, DomainID: "ai", CreatorID: "owner", SummaryModelID: "summary-model"}}
+			require.NoError(t, db.Create(kb.kb).Error)
+			from, _, _, err := workflowReportRange(workflowReportConfig{Window: template.window, Timezone: "Asia/Shanghai"}, time.Now())
+			require.NoError(t, err)
+			publishedAt := from.Add(12 * time.Hour).Format(time.RFC3339)
+			require.NoError(t, db.Create(&types.Knowledge{ID: "source-1", TenantID: 1, KnowledgeBaseID: "kb", Title: "Source", ParseStatus: types.ParseStatusCompleted}).Error)
+			require.NoError(t, db.Create(&types.KnowledgeEvidence{ID: "source-evidence", TenantID: 1, KnowledgeBaseID: "kb", KnowledgeID: "source-1", Version: 1, BodyHash: strings.Repeat("a", 64), Title: "Source", Body: "approved evidence", OriginalURL: "https://example.com/source", PublishedAt: publishedAt, Status: types.KnowledgeEvidenceCurrent}).Error)
+			require.NoError(t, db.Create(&types.KnowledgeEntity{ID: "tracked", TenantID: 1, CanonicalName: "Tracked object", NormalizedName: "tracked object", EntityType: "company"}).Error)
+			require.NoError(t, db.Create(&types.KnowledgeEvidenceEntity{TenantID: 1, EvidenceID: "source-evidence", EntityID: "tracked"}).Error)
+			require.NoError(t, db.Create(&types.KnowledgeFact{ID: "fact", TenantID: 1, KnowledgeBaseID: "kb", SubjectEntityID: "tracked", Predicate: "finding", EvidenceID: "source-evidence", Quote: "approved evidence", Status: types.KnowledgeFactCurrent}).Error)
+			queue := &workflowTestTaskQueue{}
+			svc := NewKnowledgeWorkflowService(db, kb, workflowTestKnowledgeService{}, NewKnowledgeContextService(db, nil), workflowTestReportModelService{model: &workflowTestReportChat{}}, queue)
+			ctx := workflowTestContext("owner", 1)
+			wf, err := svc.Create(ctx, "kb", types.KnowledgeWorkflowInput{
+				Name: template.name, Enabled: true, Schedule: types.KnowledgeWorkflowSchedule{Cron: template.cron, Timezone: "Asia/Shanghai"},
+				Steps: []types.KnowledgeWorkflowStep{
+					{ID: "source", Type: template.sourceType, Config: map[string]any{"query": "daily messages", "entity": "Tracked object", "include_history": true}},
+					{ID: "report", Type: types.WorkflowStepReport, DependsOn: []string{"source"}, Config: map[string]any{"title": template.name, "window": template.window, "timezone": "Asia/Shanghai"}},
+				},
+			})
+			require.NoError(t, err)
+			run, err := svc.Run(ctx, "kb", wf.ID, "manual")
+			require.NoError(t, err)
+			require.NoError(t, svc.Handle(ctx, queue.tasks[0].task))
+			run, err = svc.GetRun(ctx, "kb", run.ID)
+			require.NoError(t, err)
+			require.Equal(t, types.WorkflowStatusCompleted, run.Status)
+			require.Len(t, run.Steps, 2)
+			for _, step := range run.Steps {
+				require.Equal(t, types.WorkflowStepSucceeded, step.Status)
+			}
+			var report types.KnowledgeWorkflowReport
+			require.NoError(t, db.Where("run_id = ?", run.ID).First(&report).Error)
+			require.NotEmpty(t, report.Markdown)
+			require.NotNil(t, report.TimeFrom)
+			require.NotNil(t, report.TimeTo)
+		})
+	}
 }

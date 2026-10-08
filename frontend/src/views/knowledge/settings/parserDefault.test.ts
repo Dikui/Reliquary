@@ -4,7 +4,7 @@ import { defineComponent, h, reactive, ref } from 'vue'
 import { createI18n } from 'vue-i18n'
 import zh from '../../../i18n/locales/zh-CN'
 import en from '../../../i18n/locales/en-US'
-import { descendants, element, loadComponent, registerPrimitives, renderer, settle } from '../wiki/wikiComponentTestHarness'
+import { descendants, element, loadComponent, registerPrimitives, renderer, settle } from '../componentTestHarness'
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
   test(`${locale}: PDF keeps unavailable anydoc as the default and allows an explicit MinerU choice`, async () => {

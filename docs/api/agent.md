@@ -432,8 +432,6 @@ curl --location 'http://localhost:8080/api/v1/agents/placeholders' \
 | `allowed_tools` | []string | - | 允许使用的工具列表 |
 | `mcp_selection_mode` | string | - | MCP 服务选择模式：`all`/`selected`/`none` |
 | `mcp_services` | []string | - | 选中的 MCP 服务 ID 列表 |
-| `skills_selection_mode` | string | - | Skills 选择模式：`all`/`selected`/`none` |
-| `selected_skills` | []string | - | 选中的 Skill 名称列表（mode 为 `selected` 时） |
 
 ### 知识库设置
 

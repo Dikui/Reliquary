@@ -176,7 +176,7 @@ func TestBuildOutbound_GeminiProviderMetadata(t *testing.T) {
 				Type:             "function",
 				ProviderMetadata: types.ToolCallMetadata{"google": json.RawMessage(`{"thought_signature":"gemini-signature"}`)},
 				Function: FunctionCall{
-					Name:      "wiki_search",
+					Name:      "knowledge_search",
 					Arguments: `{"query":"MACS"}`,
 				},
 			}},

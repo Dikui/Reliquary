@@ -23,25 +23,6 @@ func TestRegistryAliasesLocalPhysicalReferences(t *testing.T) {
 	require.Equal(t, "![image]("+ref+")", r.DecodeText(encoded))
 }
 
-func TestRegistryAliasesWikiSummarySlug(t *testing.T) {
-	r := newResourceRegistry()
-	slug := "summary/07a20bb1-a662-47cf-9929-06fb5d5b5b5e"
-	// Inside a [[slug|display]] link the model must copy verbatim.
-	encoded := r.EncodeText("see [[" + slug + "|Foo.md - Summary]]")
-	require.Equal(t, "see [[res://0001|Foo.md - Summary]]", encoded)
-	require.Equal(t, "see [["+slug+"|Foo.md - Summary]]", r.DecodeText(encoded))
-
-	// The same slug as a tool-call argument value resolves to one handle.
-	require.Equal(t, "res://0001", r.EncodeText(slug))
-}
-
-func TestRegistryLeavesEntitySlugUntouched(t *testing.T) {
-	r := newResourceRegistry()
-	// Entity slugs are low-entropy and semantically meaningful; not aliased.
-	entity := "[[entity/reliquary-error-log|Reliquary 试错记录]]"
-	require.Equal(t, entity, r.EncodeText(entity))
-}
-
 func TestRegistryEncodesMessageCopies(t *testing.T) {
 	r := newResourceRegistry()
 	ref := "resource://AbCdEfGhIjKlMnOpQrStUv"

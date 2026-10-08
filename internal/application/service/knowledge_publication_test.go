@@ -79,7 +79,7 @@ func TestReportPublicationMissingOnlyPersistsStructuredCountWithoutModel(t *test
 	db := workflowTestDB(t)
 	kb := &workflowTestKBService{kb: &types.KnowledgeBase{ID: "kb", TenantID: 1, DomainID: "ai", CreatorID: "owner"}}
 	require.NoError(t, db.Create(kb.kb).Error)
-	svc := NewKnowledgeWorkflowService(db, kb, nil, nil, nil, nil, nil, nil)
+	svc := NewKnowledgeWorkflowService(db, kb, nil, nil, nil, nil)
 	wf := &types.KnowledgeWorkflow{ID: "wf", TenantID: 1, KnowledgeBaseID: "kb", OwnerID: "owner"}
 	run := &types.KnowledgeWorkflowRun{ID: "run", TenantID: 1, KnowledgeBaseID: "kb"}
 	step := types.KnowledgeWorkflowStep{ID: "report", Config: map[string]any{"title": "日报", "time_from": "2026-10-01"}}

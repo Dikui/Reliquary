@@ -28,7 +28,6 @@ show_help() {
     echo "  -a, --all      构建所有镜像（默认）"
     echo "  -p, --app      仅构建应用镜像"
     echo "  -f, --frontend 仅构建前端镜像"
-    echo "  -s, --sandbox  仅构建沙箱镜像"
     echo "  -c, --clean    清理所有本地镜像"
     echo "  -v, --version  显示版本信息"
     exit 0
@@ -185,38 +184,12 @@ build_frontend_image() {
     fi
 }
 
-# 构建沙箱镜像
-build_sandbox_image() {
-    log_info "构建沙箱镜像 (reliquary-sandbox)..."
-
-    cd "$PROJECT_ROOT"
-
-    # 同时打上 main：默认镜像跟的是 main（见 sandbox.go 的 DefaultDockerImage），
-    # 而 Docker 后端只在本地缺失时才去拉，本地不打这个标签就等于白构建。
-    docker build \
-        --platform $PLATFORM \
-        -f docker/Dockerfile.sandbox \
-        --target sandbox \
-        -t reliquary-sandbox:latest \
-        -t reliquary-sandbox:main \
-        .
-
-    if [ $? -ne 0 ]; then
-        log_error "沙箱镜像构建失败"
-        return 1
-    fi
-
-    log_success "沙箱镜像构建成功"
-    return 0
-}
-
 # 构建所有镜像
 build_all_images() {
     log_info "开始构建所有镜像..."
 
     local app_result=0
     local frontend_result=0
-    local sandbox_result=0
 
     # 构建应用镜像
     build_app_image
@@ -226,10 +199,6 @@ build_all_images() {
     # 构建前端镜像
     build_frontend_image
     frontend_result=$?
-
-    # 构建沙箱镜像
-    build_sandbox_image
-    sandbox_result=$?
 
     # 显示构建结果
     echo ""
@@ -246,13 +215,7 @@ build_all_images() {
         log_error "✗ 前端镜像构建失败"
     fi
 
-    if [ $sandbox_result -eq 0 ]; then
-        log_success "✓ 沙箱镜像构建成功"
-    else
-        log_error "✗ 沙箱镜像构建失败"
-    fi
-
-    if [ $app_result -eq 0 ] && [ $frontend_result -eq 0 ] && [ $sandbox_result -eq 0 ]; then
+    if [ $app_result -eq 0 ] && [ $frontend_result -eq 0 ]; then
         log_success "所有镜像构建完成！"
         return 0
     else
@@ -279,8 +242,6 @@ clean_images() {
     log_info "删除本地镜像..."
     docker rmi reliquary-app:latest 2>/dev/null || true
     docker rmi reliquary-ui:latest 2>/dev/null || true
-    docker rmi reliquary-sandbox:latest 2>/dev/null || true
-    docker rmi reliquary-sandbox:main 2>/dev/null || true
     
     docker image prune -f
     
@@ -292,7 +253,6 @@ clean_images() {
 BUILD_ALL=false
 BUILD_APP=false
 BUILD_FRONTEND=false
-BUILD_SANDBOX=false
 CLEAN_IMAGES=false
 
 # 没有参数时默认构建所有镜像
@@ -309,8 +269,6 @@ while [ "$1" != "" ]; do
         -p | --app )        BUILD_APP=true
                             ;;
         -f | --frontend )   BUILD_FRONTEND=true
-                            ;;
-        -s | --sandbox )    BUILD_SANDBOX=true
                             ;;
         -c | --clean )      CLEAN_IMAGES=true
                             ;;
@@ -354,9 +312,6 @@ if [ "$BUILD_FRONTEND" = true ]; then
     exit $?
 fi
 
-if [ "$BUILD_SANDBOX" = true ]; then
-    build_sandbox_image
-    exit $?
-fi
+
 
 exit 0

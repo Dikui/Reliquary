@@ -43,13 +43,6 @@ test('does not require rerank when knowledge bases are disabled', () => {
   }), false)
 })
 
-test('does not require rerank for wiki-only tools', () => {
-  assert.equal(agentRequiresRerankModel({
-    kb_selection_mode: 'all',
-    allowed_tools: ['wiki_search', 'wiki_read_page'],
-  }), false)
-})
-
 test('matches backend default-tool behavior', () => {
   assert.equal(agentRequiresRerankModel({
     kb_selection_mode: 'all',

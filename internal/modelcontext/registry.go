@@ -3,8 +3,8 @@
 // references and durable-resource codecs independently.
 //
 // Its boundaries are deliberate:
-//   - UUIDs, wiki slugs, URLs, and resource:// handles are durable identities.
-//   - cN/dN/bN/wN/iN/res://NNNN/ref-N values are temporary model handles.
+//   - UUIDs, URLs, and resource:// handles are durable identities.
+//   - cN/dN/bN/wN/res://NNNN values are temporary model handles.
 //   - temporary handles are never persisted or accepted outside their registry.
 //   - every model response is decoded before tools, storage, or UI consume it.
 package modelcontext
@@ -28,21 +28,17 @@ const (
 const resourceHandleProtocolPrompt = `
 
 ## Resource handle protocol (system-owned)
-Some durable resources and high-entropy Wiki slugs are represented by request-local res://NNNN handles. Wiki issues may use iN handles.
+Durable resources are represented by request-local res://NNNN handles.
 - Copy only handles that appeared in supplied context or tool results, preserving them exactly in links, images, and tool arguments.
 - Never invent, edit, or expand any handle. The system restores it after generation.`
 
 // Registry is the single request-scoped boundary between durable application
 // identities and temporary model handles.
 //
-// Durable resource references are encoded before source identifiers. This
-// ordering is intentionally private: summary/<knowledge-id> wiki slugs must be
-// protected as one resource-like handle before the embedded document ID can be
-// compacted to dN. Callers therefore cannot accidentally reverse the codecs.
+// Durable resource references are encoded before source identifiers.
 type Registry struct {
 	sources   *sourceRegistry
 	resources *resourceRegistry
-	issues    *HandleTable
 }
 
 // NewRegistry creates a registry for one model request/Agent execution.
@@ -50,7 +46,6 @@ func NewRegistry(citationsEnabled bool) *Registry {
 	return &Registry{
 		sources:   newSourceRegistry(citationsEnabled),
 		resources: newResourceRegistry(),
-		issues:    NewHandleTable("i", 0, 1),
 	}
 }
 
@@ -69,14 +64,6 @@ func (r *Registry) EncodeMessages(messages []chat.Message) []chat.Message {
 		return messages
 	}
 	messages = r.resources.EncodeMessages(messages)
-	// Register tool-private IDs from all replayed results before encoding any
-	// assistant call. The scan is intentionally order-independent, matching the
-	// source codec's two-pass replay behavior.
-	for i := range messages {
-		if messages[i].Role == "tool" {
-			messages[i].Content = r.encodeToolPrivateResult(messages[i].Name, messages[i].Content)
-		}
-	}
 	messages = r.sources.EncodeMessagesWithPolicies(messages, sourceArgumentAllowed, sourceOutputAllowed)
 	for i := range messages {
 		if len(messages[i].ToolCalls) == 0 {
@@ -170,7 +157,6 @@ func (r *Registry) StreamDecoder() *StreamDecoder {
 	return &StreamDecoder{
 		resources: newResourceStreamDecoder(r.resources),
 		sources:   newCitationStreamExpander(r.sources),
-		issues:    NewHandleStreamDecoder(r.issues),
 		orphans:   newOrphanResourceStreamFilter(),
 	}
 }
@@ -259,8 +245,8 @@ func (r *Registry) ModelToolResultForTool(toolName string, result *types.ToolRes
 	// Error text is encoded on the same path as Output: a failed tool call
 	// routinely echoes the offending argument, so a raw durable ID would leak
 	// through the error branch of an otherwise handle-only tool.
-	copyResult.Output = r.resources.EncodeText(r.encodeToolPrivateResult(toolName, result.Output))
-	copyResult.Error = r.resources.EncodeText(r.encodeToolPrivateResult(toolName, result.Error))
+	copyResult.Output = r.resources.EncodeText(result.Output)
+	copyResult.Error = r.resources.EncodeText(result.Error)
 	var modelOutput string
 	if sourceOutputAllowed(toolName) {
 		modelOutput = r.sources.ModelOutput(&copyResult)
@@ -287,5 +273,5 @@ func (r *Registry) DecodeOutputText(text string) string {
 	text = r.resources.DecodeText(text)
 	text = r.resources.StripOrphanHandles(text)
 	text = r.sources.ExpandText(text)
-	return r.issues.DecodeKnownText(text)
+	return text
 }

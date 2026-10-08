@@ -61,11 +61,6 @@ type knowledgeService struct {
 	taskInspector   interfaces.TaskInspector
 	redisClient     *redis.Client
 	imageResolver   *docparser.ImageResolver
-	taskPendingRepo interfaces.TaskPendingOpsRepository
-
-	// In-memory fallbacks for in-memory fixtures (no Redis)
-	wikiRepo    interfaces.WikiPageRepository
-	wikiService interfaces.WikiPageService
 
 	// spanTracker records the per-attempt span tree for the parsing
 	// pipeline. Best-effort: a nil tracker (test harness) is safely
@@ -99,9 +94,6 @@ func NewKnowledgeService(
 	retrieveEngine interfaces.RetrievalService,
 	redisClient *redis.Client,
 	imageResolver *docparser.ImageResolver,
-	wikiRepo interfaces.WikiPageRepository,
-	wikiService interfaces.WikiPageService,
-	taskPendingRepo interfaces.TaskPendingOpsRepository,
 	spanTracker SpanTracker,
 
 ) (interfaces.KnowledgeService, error) {
@@ -124,9 +116,6 @@ func NewKnowledgeService(
 		retrieveEngine:  retrieveEngine,
 		redisClient:     redisClient,
 		imageResolver:   imageResolver,
-		wikiRepo:        wikiRepo,
-		wikiService:     wikiService,
-		taskPendingRepo: taskPendingRepo,
 		spanTracker:     spanTracker,
 	}, nil
 }
@@ -204,7 +193,7 @@ const finalizeSubtaskDetachedTimeout = 10 * time.Second
 // "finalizing" forever with a non-zero counter. Detaching keeps the counter
 // correct across cancellation; a bounded timeout guards against a wedged DB.
 //
-// source is a free-form tag (e.g. "question_batch[3]", "summary", "wiki")
+// source is a free-form tag (e.g. "question_batch[3]", "summary")
 // used to attribute a decrement failure to a specific subtask in logs.
 func finalizeSubtaskDetached(
 	ctx context.Context,
@@ -289,7 +278,7 @@ func (s *knowledgeService) skipStage(ctx context.Context, kid, name, reason stri
 
 // beginPostprocessSubspan opens a subspan beneath the postprocess stage
 // span for (kid, attempt). Async post-pipeline tasks (summary, question,
-// graph, wiki) call this on entry so their actual processing time shows
+// graph) call this on entry so their actual processing time shows
 // up in the trace tree under postprocess instead of the stage looking
 // like an instant ~10ms enqueue.
 //

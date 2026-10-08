@@ -14,15 +14,12 @@ codec lives in this one package:
 | `resources.go` | durable-resource handles (`res://NNNN`) |
 | `stream.go` | `streamHold` suffix-hold primitive and every streaming decoder |
 | `tool_policy.go` | the single policy layer: per-tool key contracts + `sourceKeySpaces` dispatch |
-| `handles.go` | exported `HandleTable` for invocation-local spaces (`iN`, `ref-N`, `c000`) |
 
 ## Identity rules
 
-- Durable application identities: UUIDs, Wiki slugs, URLs, and
+- Durable application identities: UUIDs, URLs, and
   `resource://...` references.
 - Request-local model handles: `cN`, `dN`, `bN`, `wN`, and `res://NNNN`.
-- Tool-private request handles: `iN` for Wiki issues.
-- Ingest-call handles: `cNNN` and `ref-N`, allocated with `HandleTable`.
 - Temporary handles are decoded before tool execution, persistence, or UI
   delivery. They are never accepted as durable authorization or routing data.
 
@@ -41,20 +38,19 @@ calls and tool results are replayed, so handles neither disappear nor drift to
 new numbers across Agent rounds.
 
 The registry owns codec ordering. Resource references are encoded before
-source IDs so a Wiki slug such as `summary/<knowledge-id>` cannot be corrupted
-into `summary/d1`.
+source IDs so embedded identifiers in stored paths remain protected as a
+complete resource reference.
 
 ## Built-in tool policies
 
-Canonical ID-bearing arguments for knowledge, graph, data, web, and Wiki tools
+Canonical ID-bearing arguments for knowledge, graph, data, and web tools
 are decoded centrally through a tool-name plus JSON-field allowlist. The
 `sourceKeySpaces` table is the single source of truth for which keys are
 ID-bearing and which handle space they register into; per-tool `sourceIDKeys`
 contracts gate which of those keys each tool may use.
 `database_query.sql` and `data_analysis.sql` have an explicit policy because
 source handles can be embedded inside quoted SQL values; unquoted SQL aliases
-and arbitrary prose are never rewritten. Wiki issue IDs use the same lifecycle
-via an `iN` handle space.
+and arbitrary prose are never rewritten.
 
 Dynamic MCP tools are intentionally opaque in both arguments and results.
 Their schemas and identity semantics are controlled by the MCP server, so the
@@ -64,18 +60,9 @@ still use the normal `res://NNNN` codec. A future MCP ID mapping must be an
 explicit server/tool annotation and should plug into this registry rather than
 create a parallel mapper.
 
-## Wiki routing
+## Knowledge scope
 
-`WikiRouteResolver` is intentionally separate. It stores server-side
-slug-to-knowledge-base provenance gathered during Wiki search/read operations,
-and can only return knowledge bases already present in the Agent's authorized
-Wiki scope. It is routing state, not a model handle table. Reads scan every
-legal Wiki KB so cached provenance cannot hide a duplicate slug; mutations
-require one unique owner. New pages use link provenance, a single Wiki scope,
-or a single source-document owner and reject ambiguous routing instead of
-asking the model for a durable KB ID.
-
-Document/tag-constrained Wiki and graph requests are filtered by the same
-server-owned `SearchTargets` provenance. Uncited/global Wiki pages and graph
-results outside that subset fail closed; only an explicit whole-KB target
-authorizes whole-KB content.
+Document/tag-constrained graph requests are filtered by server-owned
+`SearchTargets` provenance. Graph results outside that subset fail closed;
+only an explicit whole-KB target authorizes whole-KB content. Model handles
+identify sources and never grant access to additional knowledge bases.

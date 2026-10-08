@@ -112,16 +112,16 @@ func TestValidateSameEmbeddingModel_DifferentIdentity_400(t *testing.T) {
 	assert.Equal(t, apperrors.ErrBadRequest, app.Code)
 }
 
-func TestValidateSameEmbeddingModel_WikiOnly_Tolerated(t *testing.T) {
+func TestValidateSameEmbeddingModel_Unindexed_Tolerated(t *testing.T) {
 	t.Parallel()
 	models := map[string]*types.Model{
 		"m-1": buildModel("m-1", "bge-m3", "http://embed-a"),
 	}
 	svc := newKBSvcForValidate(&fakeModelSvcForKeys{byID: models})
-	// One vector KB + one wiki-only (empty EmbeddingModelID) → tolerated.
+	// One vector KB + one unindexed (empty EmbeddingModelID) → tolerated.
 	err := svc.validateSameEmbeddingModel(context.Background(), []*types.KnowledgeBase{
 		{ID: "kb-vec", EmbeddingModelID: "m-1", TenantID: 1},
-		{ID: "kb-wiki", EmbeddingModelID: "", TenantID: 1},
+		{ID: "kb-unindexed", EmbeddingModelID: "", TenantID: 1},
 	})
 	assert.NoError(t, err)
 }

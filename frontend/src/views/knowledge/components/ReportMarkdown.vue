@@ -52,7 +52,7 @@ const reportHtml = computed(() => {
   }
   return renderChatMarkdown(props.markdown, {
     renderer, escapeMarkdown: safeMarkdownToHTML, sanitizeHtml: sanitizeMarkdownHTML,
-    streaming: false, convertWikiLinks: false, markdownParser,
+    streaming: false, markdownParser,
   })
 })
 

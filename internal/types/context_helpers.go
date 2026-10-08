@@ -54,20 +54,6 @@ func UserIDFromContext(ctx context.Context) (string, bool) {
 	return v, ok && v != ""
 }
 
-// WithWikiEditSource marks ctx so wiki page writes performed under it are
-// attributed to the given edit source (WikiEditSourceUser / Agent / Revert).
-// Writes without the mark are attributed to the ingest pipeline.
-func WithWikiEditSource(ctx context.Context, source string) context.Context {
-	return context.WithValue(ctx, WikiEditSourceContextKey, NormalizeWikiEditSource(source))
-}
-
-// WikiEditSourceFromContext returns the wiki edit source carried by ctx,
-// defaulting to WikiEditSourcePipeline when absent.
-func WikiEditSourceFromContext(ctx context.Context) string {
-	v, _ := ctx.Value(WikiEditSourceContextKey).(string)
-	return NormalizeWikiEditSource(v)
-}
-
 // TaskInitiator is the authenticated caller that submitted an asynchronous
 // task. Workers restore this identity into their execution context.
 type TaskInitiator struct {
@@ -96,7 +82,7 @@ func (i TaskInitiator) Apply(ctx context.Context) context.Context {
 
 func SessionTenantIDFromContext(ctx context.Context) (uint64, bool) { return TenantIDFromContext(ctx) }
 
-// WithSessionID carries the session ID for Docker execution.
+// WithSessionID carries the active conversation ID.
 func WithSessionID(ctx context.Context, sessionID string) context.Context {
 	if sessionID == "" {
 		return ctx
@@ -112,25 +98,6 @@ func SessionIDFromContext(ctx context.Context) (string, bool) {
 	}
 	v, ok := ctx.Value(SessionIDContextKey).(string)
 	return v, ok && v != ""
-}
-
-// WithSandboxTenantID carries the team ID for background Docker operations.
-func WithSandboxTenantID(ctx context.Context, tenantID uint64) context.Context {
-	if tenantID == 0 {
-		return ctx
-	}
-	return context.WithValue(ctx, SandboxTenantIDContextKey, tenantID)
-}
-
-// SandboxTenantIDFromContext resolves the team ID for Docker bindings.
-func SandboxTenantIDFromContext(ctx context.Context) (uint64, bool) {
-	if ctx == nil {
-		return 0, false
-	}
-	if v, ok := ctx.Value(SandboxTenantIDContextKey).(uint64); ok && v != 0 {
-		return v, true
-	}
-	return TenantIDFromContext(ctx)
 }
 
 func WithMCPOAuthNonInteractive(ctx context.Context) context.Context {

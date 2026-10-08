@@ -38,7 +38,6 @@ type customAgentService struct {
 	repo          interfaces.CustomAgentRepository
 	chunkRepo     interfaces.ChunkRepository
 	kbService     interfaces.KnowledgeBaseService
-	wikiPageRepo  interfaces.WikiPageRepository
 	tagRepo       interfaces.KnowledgeTagRepository
 	knowledgeRepo interfaces.KnowledgeRepository
 }
@@ -48,7 +47,6 @@ func NewCustomAgentService(
 	repo interfaces.CustomAgentRepository,
 	chunkRepo interfaces.ChunkRepository,
 	kbService interfaces.KnowledgeBaseService,
-	wikiPageRepo interfaces.WikiPageRepository,
 	tagRepo interfaces.KnowledgeTagRepository,
 	knowledgeRepo interfaces.KnowledgeRepository,
 ) interfaces.CustomAgentService {
@@ -56,7 +54,6 @@ func NewCustomAgentService(
 		repo:          repo,
 		chunkRepo:     chunkRepo,
 		kbService:     kbService,
-		wikiPageRepo:  wikiPageRepo,
 		tagRepo:       tagRepo,
 		knowledgeRepo: knowledgeRepo,
 	}
@@ -590,10 +587,8 @@ func (s *customAgentService) getSuggestedQuestions(
 				// Return what we have so far (agent_config suggestions)
 				return finalizeStarterSuggestions(curated, nil, starterMode, limit), nil
 			}
-			// Honor the agent's implicit/explicit capability requirements so
-			// e.g. a quick-answer (RAG-only) agent doesn't surface wiki-only
-			// KBs whose wiki pages it could never answer from. Same filter
-			// the @ mention dropdown applies on the frontend.
+			// Apply the same capability requirements as the mention dropdown
+			// so suggestions stay within knowledge bases the agent can query.
 			capFilter := tools.DeriveKBFilterForAgent(agent.Config.AgentMode, agent.Config.AllowedTools)
 			for _, kb := range kbs {
 				if !capFilter.IsEmpty() &&
@@ -679,47 +674,6 @@ func (s *customAgentService) getSuggestedQuestions(
 				Source:          "document",
 				KnowledgeBaseID: chunk.KnowledgeBaseID,
 			})
-		}
-	}
-
-	// Collect Wiki pages as a fallback source, but only for KBs the caller selected
-	// explicitly. A tag's parent KB is merely an ownership boundary; widening a
-	// tag-only scope to arbitrary Wiki pages would make the suggestions unanswerable
-	// inside the user's selected range.
-	//
-	// Skip entirely for quick-answer (RAG-only) agents: those can't ever
-	// retrieve a wiki page, so surfacing wiki-derived suggestions would lure
-	// the user into asking questions the agent will then answer with empty
-	// context. Smart-reasoning agents that opt in to wiki tools keep this.
-	if agent.Config.AgentMode != types.AgentModeQuickAnswer && s.wikiPageRepo != nil {
-		for groupTenantID, groupKBIDs := range kbGroups {
-			explicitGroupKBIDs := intersectSuggestionStrings(groupKBIDs, queryKBIDs)
-			if len(explicitGroupKBIDs) == 0 {
-				continue
-			}
-			wikiPages, err := s.wikiPageRepo.ListRecentForSuggestions(ctx, groupTenantID, explicitGroupKBIDs, fetchLimit)
-			if err != nil {
-				logger.ErrorWithFields(ctx, err, map[string]interface{}{
-					"agent_id":  agentID,
-					"tenant_id": groupTenantID,
-				})
-				continue
-			}
-			locale := types.LanguageFromContextOrDefault(ctx)
-			for _, page := range wikiPages {
-				q := wikiSuggestionFromPage(page, locale)
-				if q == "" || seen[q] {
-					continue
-				}
-				seen[q] = true
-				// Use page.ID as the bucket key so round-robin mixes pages from
-				// different wiki entries rather than clumping them.
-				buckets[page.ID] = append(buckets[page.ID], types.SuggestedQuestion{
-					Question:        q,
-					Source:          "wiki",
-					KnowledgeBaseID: page.KnowledgeBaseID,
-				})
-			}
 		}
 	}
 
@@ -968,40 +922,6 @@ func (s *customAgentService) truncateQuestions(questions []types.SuggestedQuesti
 	return questions
 }
 
-// wikiSuggestionFromPage converts a wiki page into a human-readable suggested
-// question string. The template is chosen per page type so the chip reads
-// naturally for that kind of content:
-//   - concept: "What is <title>?" works for abstract terms (RAG, embedding,
-//     idempotency…).
-//   - entity / summary: "Tell me about <title>" is neutral and works for
-//     people, places, organizations, products and document summaries where
-//     "what is <name>?" would read awkwardly ("什么是张三？").
-//   - everything else (synthesis, comparison, …): the raw title is already a
-//     good topical query on its own.
-func wikiSuggestionFromPage(page *types.WikiPage, locale string) string {
-	if page == nil {
-		return ""
-	}
-	title := strings.TrimSpace(page.Title)
-	if title == "" {
-		return ""
-	}
-	switch page.PageType {
-	case types.WikiPageTypeConcept:
-		if isEnglishLocale(locale) {
-			return "What is " + title + "?"
-		}
-		return "什么是" + title + "？"
-	case types.WikiPageTypeEntity, types.WikiPageTypeSummary:
-		if isEnglishLocale(locale) {
-			return "Tell me about " + title
-		}
-		return "介绍一下" + title
-	default:
-		return title
-	}
-}
-
 func (s *customAgentService) groupKBIDsByEffectiveTenant(
 	ctx context.Context,
 	callerTenantID uint64,
@@ -1034,14 +954,4 @@ func (s *customAgentService) groupKBIDsByEffectiveTenant(
 	}
 
 	return out
-}
-
-// isEnglishLocale reports whether the locale string is an English variant.
-// Unknown / empty locales fall back to Chinese, matching the product default.
-func isEnglishLocale(locale string) bool {
-	switch locale {
-	case "en-US", "en", "en-GB":
-		return true
-	}
-	return false
 }

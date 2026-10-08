@@ -448,31 +448,6 @@ func TestModelOutputDocumentInfoUsesDocumentAliases(t *testing.T) {
 	require.Contains(t, output, `<document id="d1" title="Architecture"`)
 }
 
-func TestModelOutputCompactsLabeledWikiReferences(t *testing.T) {
-	registry := newSourceRegistry()
-	result := &types.ToolResult{
-		Success: true,
-		Output: `<wiki_page>
-<knowledge_base_id>kb-real-id</knowledge_base_id>
-<sources><source knowledge_id="doc-real-id">Source</source></sources>
-</wiki_page>`,
-	}
-
-	output := registry.ModelOutput(result)
-	require.NotContains(t, output, "kb-real-id")
-	require.NotContains(t, output, "doc-real-id")
-	require.Contains(t, output, `<knowledge_base_id>b1</knowledge_base_id>`)
-	require.Contains(t, output, `knowledge_id="d1"`)
-
-	toolCalls := []types.LLMToolCall{
-		{Function: types.FunctionCall{Name: "wiki_read_source_doc", Arguments: `{"knowledge_id":"d1"}`}},
-		{Function: types.FunctionCall{Name: "wiki_search", Arguments: `{"knowledge_base_id":"b1"}`}},
-	}
-	registry.DecodeToolCallsWithPolicy(toolCalls, sourceArgumentAllowed)
-	require.JSONEq(t, `{"knowledge_id":"doc-real-id"}`, toolCalls[0].Function.Arguments)
-	require.JSONEq(t, `{"knowledge_base_id":"kb-real-id"}`, toolCalls[1].Function.Arguments)
-}
-
 func TestModelOutputGraphResultsUseChunkAliases(t *testing.T) {
 	registry := newSourceRegistry()
 	output := registry.ModelOutput(&types.ToolResult{

@@ -21,11 +21,8 @@ test('reference document links open in a new tab', () => {
   )
 })
 
-test('wiki drawer navigation and citation fallbacks open in a new tab', () => {
-  assert.match(
-    agentStream,
-    /:href="wikiGraphHref"[\s\S]*?target="_blank"[\s\S]*?rel="noopener noreferrer"/,
-  )
+test('citation fallbacks open in a new tab', () => {
+
   assert.match(agentStream, /window\.open\(href, '_blank', 'noopener,noreferrer'\)/)
   assert.doesNotMatch(agentStream, /router\.push\(/)
 })
@@ -55,23 +52,6 @@ test('agent citations recover drawer references from retrieval tool events', () 
     agentStream.match(/documentTitle: title,[\s\S]*?knowledgeBaseId: kbId,/g)?.length,
     2,
   )
-})
-
-test('wiki tool results use the right-side references drawer', () => {
-  assert.match(
-    agentStream,
-    /toolName === 'wiki_search' \|\| toolName === 'wiki_read_page'[\s\S]*?parseWikiToolReferences/,
-  )
-  assert.match(
-    agentStream,
-    /toolName === 'list_knowledge_chunks' \|\| toolName === 'wiki_read_source_doc'/,
-  )
-  assert.match(
-    agentStream,
-    /const isReferenceDrawerTool =[\s\S]*?toolName === 'wiki_search'[\s\S]*?toolName === 'wiki_read_page'[\s\S]*?toolName === 'wiki_read_source_doc'/,
-  )
-  assert.match(agentStream, /WIKI_EDIT_TOOL_NAMES\.has\(String\(toolName \|\| ''\)\)/)
-  assert.match(agentStream, /WIKI_ISSUE_TOOL_NAMES\.has\(String\(toolName \|\| ''\)\)/)
 })
 
 test('citation highlighting waits for drawer entry and only scrolls its own body', () => {

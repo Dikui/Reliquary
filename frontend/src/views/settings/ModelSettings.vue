@@ -240,21 +240,7 @@
             <ul><li v-for="resource in usageConflict.model_tiers" :key="`${resource.scope}:${resource.id}`"><div class="model-usage-resource"><strong>{{ resource.name }}</strong><div class="model-usage-bindings"><t-tag v-for="binding in resource.bindings" :key="binding" size="small" variant="light">{{ $t(modelUsageBindingI18nKey(binding)) }}</t-tag></div></div><t-button variant="text" @click="openTierUsageResource(resource.scope)">{{ $t(resource.scope === 'team' ? 'modelTiers.configureTeam' : 'modelTiers.configureDomains') }}</t-button></li></ul>
           </section>
 
-          <section v-if="usageConflict.long_term_memory.bindings.length" class="model-usage-group">
-            <h3>{{ $t('modelSettings.usage.longTermMemory') }}</h3>
-            <div class="model-usage-memory">
-              <div class="model-usage-bindings">
-                <t-tag
-                  v-for="(binding, index) in usageConflict.long_term_memory.bindings"
-                  :key="`${binding}-${index}`"
-                  size="small"
-                  variant="light"
-                >
-                  {{ $t(modelUsageBindingI18nKey(binding)) }}
-                </t-tag>
-              </div>
-            </div>
-          </section>
+
         </div>
 
         <div class="model-usage-dialog__actions">
@@ -1289,12 +1275,6 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-}
-
-.model-usage-memory {
-  padding: 10px 12px;
-  border: 1px solid var(--td-component-stroke);
-  border-radius: 8px;
 }
 
 .model-usage-dialog__actions {

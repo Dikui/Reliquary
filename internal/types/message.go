@@ -27,12 +27,11 @@ type History struct {
 type MentionedItem struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
-	Type      string `json:"type"`       // "kb", "file", "tag", "mcp", "skill"
+	Type      string `json:"type"`       // "kb", "file", "tag", "mcp"
 	KBType    string `json:"kb_type"`    // "document" or "messages-history" (only for kb type)
 	KBID      string `json:"kb_id"`      // Parent knowledge base for file/tag mentions
 	KBName    string `json:"kb_name"`    // Display name for parent KB
 	ServiceID string `json:"service_id"` // Parent MCP service for MCP tool mentions
-	SkillName string `json:"skill_name"` // Preloaded agent skill name
 }
 
 // MessageImage represents an image attached to a chat message
@@ -168,23 +167,16 @@ func (m *MessageAttachments) Scan(value interface{}) error {
 	return json.Unmarshal(b, m)
 }
 
-// MessageArtifact represents a file produced by a skill script during a chat
-// turn. Unlike MessageAttachment (which stores files uploaded by the user),
-// MessageArtifact records files that the sandbox generated on the model's
-// behalf and that Reliquary has persisted to its file service so the user can
-// download them after the sandbox is reaped.
-//
-// URL is the provider-scoped storage path (e.g. "local://tenant/..."), never
-// exposed directly to the client. SourcePath + ModTime form the sandbox-side
-// identity used by ArtifactCollector to de-duplicate files across multi-turn
-// runs (see docs/superpowers/specs/2026-07-10-skill-artifact-download-design.md).
+// MessageArtifact represents a file associated with an assistant message
+// and persisted in the file service for later download. URL is a storage
+// provider path and is never exposed directly to the client.
 type MessageArtifact struct {
 	URL        string    `json:"url"`         // Storage URL (provider://path); persisted, not sent to client
-	FileName   string    `json:"file_name"`   // Original filename inside the sandbox
+	FileName   string    `json:"file_name"`   // Original filename
 	FileType   string    `json:"file_type"`   // File extension (e.g., ".pptx", ".pdf")
 	FileSize   int64     `json:"file_size"`   // File size in bytes
-	SourcePath string    `json:"source_path"` // Absolute path inside the sandbox (used for diff)
-	ModTime    time.Time `json:"mod_time"`    // Sandbox-side modification time (used for diff)
+	SourcePath string    `json:"source_path"` // Original source path
+	ModTime    time.Time `json:"mod_time"`    // Original modification time
 	CreatedAt  time.Time `json:"created_at"`  // When Reliquary persisted the blob
 }
 
@@ -275,9 +267,8 @@ type Message struct {
 	Images MessageImages `json:"images,omitempty" gorm:"type:jsonb;column:images"`
 	// Attached files (documents, audio, etc., for user messages)
 	Attachments MessageAttachments `json:"attachments,omitempty" gorm:"type:jsonb;column:attachments"`
-	// Skill-generated files produced during this assistant turn (assistant messages only).
-	// Populated by ArtifactCollector after the sandbox finishes, referenced by the
-	// artifact download endpoint. Empty for user messages and turns without skills.
+	// Persisted files associated with this assistant message and downloadable
+	// through the artifact endpoint.
 	Artifacts MessageArtifacts `json:"artifacts,omitempty" gorm:"type:jsonb;column:artifacts"`
 	// Whether message generation is complete
 	IsCompleted bool `json:"is_completed"`
@@ -307,11 +298,6 @@ type Message struct {
 	// KnowledgeID links this message to a Knowledge entry in the chat history knowledge base
 	// Used for vector search indexing: when set, the message content has been indexed as a Knowledge passage
 	KnowledgeID string `json:"knowledge_id,omitempty" gorm:"type:varchar(36);index"`
-	// UsedMemories records which long-term memories were injected into this
-	// answer, so the chat UI can show them and let the user delete one on the
-	// spot. Persisted rather than only streamed so reopening a conversation
-	// still explains what the answer saw.
-	UsedMemories UsedMemories `json:"used_memories,omitempty" gorm:"type:jsonb;column:used_memories"`
 	// Message creation timestamp
 	CreatedAt time.Time `json:"created_at"`
 	// Last update timestamp
@@ -330,7 +316,6 @@ type MessageExecutionContext struct {
 	TagIDs                []string                  `json:"tag_ids,omitempty"`
 	TagScopes             []TagScope                `json:"tag_scopes,omitempty"`
 	MCPServiceIDs         []string                  `json:"mcp_service_ids,omitempty"`
-	SkillNames            []string                  `json:"skill_names,omitempty"`
 	Locale                string                    `json:"locale,omitempty"`
 	SuggestionAttribution *SuggestionAttribution    `json:"suggestion_attribution,omitempty"`
 }

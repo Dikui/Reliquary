@@ -23,7 +23,6 @@ type KBCapability string
 const (
 	CapVector  KBCapability = "vector"
 	CapKeyword KBCapability = "keyword"
-	CapWiki    KBCapability = "wiki"
 	CapGraph   KBCapability = "graph"
 )
 
@@ -61,21 +60,8 @@ var ToolCapabilityRequirements = map[string]ToolRequirement{
 	"knowledge_search":      {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
 	"grep_chunks":           {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
 	"list_knowledge_chunks": {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
-	"query_knowledge_graph": {AnyOf: []KBCapability{CapVector, CapKeyword, CapWiki}, ConsumesFiles: true},
 	"get_document_info":     {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
 	"database_query":        {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
-
-	// ---- Wiki (operates on wiki pages; doesn't consume arbitrary file IDs) ----
-	"wiki_search":          {AllOf: []KBCapability{CapWiki}},
-	"wiki_read_page":       {AllOf: []KBCapability{CapWiki}},
-	"wiki_read_source_doc": {AllOf: []KBCapability{CapWiki}},
-	"wiki_flag_issue":      {AllOf: []KBCapability{CapWiki}},
-	"wiki_write_page":      {AllOf: []KBCapability{CapWiki}},
-	"wiki_replace_text":    {AllOf: []KBCapability{CapWiki}},
-	"wiki_rename_page":     {AllOf: []KBCapability{CapWiki}},
-	"wiki_delete_page":     {AllOf: []KBCapability{CapWiki}},
-	"wiki_read_issue":      {AllOf: []KBCapability{CapWiki}},
-	"wiki_update_issue":    {AllOf: []KBCapability{CapWiki}},
 
 	// ---- Data analysis (reads table summary/column chunks from RAG ingest) ----
 	"data_analysis": {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
@@ -88,8 +74,6 @@ func hasCap(caps types.KBCapabilities, c KBCapability) bool {
 		return caps.Vector
 	case CapKeyword:
 		return caps.Keyword
-	case CapWiki:
-		return caps.Wiki
 	case CapGraph:
 		return caps.Graph
 	}
@@ -153,8 +137,8 @@ func KBSatisfiesToolRequirements(caps types.KBCapabilities, allowedTools []strin
 
 // quickAnswerKBFilter is the implicit capability requirement for the
 // "quick-answer" (RAG) agent mode. Quick-answer drives retrieval purely
-// through vector/keyword chunk search, so a KB with neither chunk index
-// (e.g. wiki-only) cannot contribute any context and should be filtered
+// through vector/keyword chunk search, so a KB with neither index
+// cannot contribute any context and should be filtered
 // out everywhere the user can pick a KB (agent KB scope, `@` mention list,
 // chat KB selector).
 //

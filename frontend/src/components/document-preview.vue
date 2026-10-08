@@ -226,7 +226,7 @@ function getPreviewSourceKey(): string {
   return '';
 }
 
-// Skill-generated HTML is often a self-contained chart that needs its own
+// Message HTML files can contain a self-contained chart that needs its own
 // scripts. Knowledge-base files and chat attachments are untrusted uploads:
 // they stay as source, matching the previous text preview.
 function allowsHtmlScriptPreview(): boolean {

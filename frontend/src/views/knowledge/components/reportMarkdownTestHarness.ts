@@ -29,20 +29,6 @@ export function registerDocumentMarkdownForReportTest() {
   evaluateScript(registrations.map(statement => statement.getText(source)).join('\n'), ['marked', 'markedKatex'], [marked, markedKatex])
 }
 
-// Execute the Wiki page's production renderer without mounting its unrelated UI.
-export function wikiMarkdownForReportTest() {
-  const source = productionScript(new URL('../wiki/WikiBrowser.vue', import.meta.url))
-  const functions = source.statements.filter(statement =>
-    ts.isFunctionDeclaration(statement) && ['renderMarkdown', 'slugDisplayName'].includes(statement.name?.text || ''),
-  )
-  if (functions.length !== 2) throw new Error('Wiki Markdown renderer changed; update the test harness')
-  return evaluateScript(
-    functions.map(statement => statement.getText(source)).join('\n') + '\nreturn renderMarkdown',
-    ['marked', 'sanitizeMarkdownHTML', 'pages'],
-    [marked, (html: string) => html, { value: [{ slug: 'entity/acme', title: 'Acme' }] }],
-  ) as (markdown: string) => string
-}
-
 // Compile the production SFC and use the production Markdown renderer.
 // DOMPurify requires a browser DOM, so sanitization is an explicit test seam.
 export function reportMarkdownTestComponent(sanitizeHtml: (html: string) => string = html => html) {

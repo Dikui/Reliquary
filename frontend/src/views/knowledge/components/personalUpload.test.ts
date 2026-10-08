@@ -8,7 +8,7 @@ import ts from 'typescript'
 import zh from '../../../i18n/locales/zh-CN'
 import en from '../../../i18n/locales/en-US'
 import { shouldRejectKnowledgeFileType } from '../../../utils/fileTypeVerification'
-import { loadComponent, renderer, element, descendants, visibleText, registerPrimitives, settle } from '../wiki/wikiComponentTestHarness'
+import { loadComponent, renderer, element, descendants, visibleText, registerPrimitives, settle } from '../componentTestHarness'
 
 const require = createRequire(import.meta.url)
 const pass = vue.defineComponent({ setup: (_props, { slots }) => () => vue.h('div', slots.default?.()) })

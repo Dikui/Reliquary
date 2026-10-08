@@ -60,13 +60,10 @@ import { tagLabel, isConcreteTag } from './tagLabel';
 import { listFavorites, addFavorite, removeFavorite } from '@/api/user-favorites';
 import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess';
 import { useUploadConfirmStore, type UploadConfirmResult, type IntakeSourceInfo } from '@/stores/uploadConfirm';
-import WikiBrowser from './wiki/WikiBrowser.vue';
-import { getWikiStats } from '@/api/wiki';
 import {
   isKnowledgeParseInFlight,
   knowledgeNeedsStatusPolling,
-  shouldRefreshWikiStatusAfterKnowledgePoll,
-} from './wikiStatusRefresh';
+} from './knowledgeStatusPolling';
 import { listMoveTargets, moveKnowledge, getKnowledgeMoveProgress } from '@/api/knowledge-base';
 import { resolveKnowledgeDownloadFileName } from './knowledgeDownloadFileName';
 import {
@@ -91,92 +88,10 @@ const uploadSourceRef = ref<InstanceType<typeof KbUploadSourceDropdown> | null>(
 const uploading = ref(false);
 const kbLoading = ref(false);
 const docListLoading = ref(true);
-const isWiki = computed(() => !!kbInfo.value?.indexing_strategy?.wiki_enabled);
-const validTabs = ['documents', 'wiki', 'graph', 'context'] as const
+const validTabs = ['documents', 'context'] as const
 type KbTab = typeof validTabs[number]
 const initTab = validTabs.includes(route.query.tab as any) ? (route.query.tab as KbTab) : 'documents'
 const activeKbTab = ref<KbTab>(initTab);
-
-// Wiki 状态用于面包屑上的索引中指示。父组件自行拉取，避免依赖 WikiBrowser 挂载状态
-// （用户切到"文档" tab 时 WikiBrowser 会卸载，这里仍需持续反映后台索引进度）。
-const wikiStatus = ref<{ pendingTasks: number; isActive: boolean; pendingIssues: number }>({
-  pendingTasks: 0,
-  isActive: false,
-  pendingIssues: 0,
-})
-const wikiIsIndexing = computed(() => wikiStatus.value.isActive || wikiStatus.value.pendingTasks > 0)
-const wikiIndexingTip = computed(() => {
-  if (!wikiIsIndexing.value) return ''
-  return t('knowledgeEditor.wikiBrowser.queueStatus', { count: wikiStatus.value.pendingTasks || 0 })
-})
-const onWikiStatusChange = (payload: { pendingTasks: number; isActive: boolean; pendingIssues: number }) => {
-  wikiStatus.value = payload
-}
-const onViewWikiInGraph = async (slug: string) => {
-  // Write tab+slug first so the activeKbTab watcher's later replace
-  // (which spreads route.query) preserves slug instead of clobbering it.
-  await router.replace({ query: { ...route.query, tab: 'graph', slug } })
-  activeKbTab.value = 'graph'
-}
-
-let wikiStatusTimer: ReturnType<typeof setInterval> | null = null
-let wikiStatusProbeTimers: Array<ReturnType<typeof setTimeout>> = []
-const stopWikiStatusPolling = () => {
-  if (wikiStatusTimer) {
-    clearInterval(wikiStatusTimer)
-    wikiStatusTimer = null
-  }
-}
-const clearWikiStatusProbes = () => {
-  wikiStatusProbeTimers.forEach(t => clearTimeout(t))
-  wikiStatusProbeTimers = []
-}
-const fetchWikiStatusOnce = async () => {
-  if (!kbId.value || !isWiki.value) return
-  try {
-    const res: any = await getWikiStats(kbId.value)
-    const data = res?.data || res
-    if (!data) return
-    wikiStatus.value = {
-      pendingTasks: data.pending_tasks || 0,
-      isActive: !!data.is_active,
-      pendingIssues: data.pending_issues || 0,
-    }
-    // 活跃时轮询，空闲时停掉定时器，避免无谓请求
-    if (wikiIsIndexing.value) {
-      if (!wikiStatusTimer) {
-        wikiStatusTimer = setInterval(fetchWikiStatusOnce, 5000)
-      }
-    } else {
-      stopWikiStatusPolling()
-    }
-  } catch (_) { /* ignore */ }
-}
-// 用户刚触发了一个上传 / reparse / URL 导入之类的动作后，后台通常要过
-// 一小段时间才会把 wiki 任务真正塞进队列；如果这时空闲轮询刚好停了，
-// 面包屑的"索引中"会延迟很久才亮起。所以这里安排几次退避重试，
-// 主动把面包屑的 loading 尽快点亮，一旦探测到任务就会走正常的 5s 轮询。
-const scheduleWikiStatusProbes = () => {
-  if (!kbId.value || !isWiki.value) return
-  clearWikiStatusProbes()
-  const delays = [500, 2000, 5000, 10000]
-  delays.forEach(delay => {
-    const timer = setTimeout(() => { fetchWikiStatusOnce() }, delay)
-    wikiStatusProbeTimers.push(timer)
-  })
-}
-watch([kbId, isWiki], ([newKbId, newIsWiki]) => {
-  stopWikiStatusPolling()
-  clearWikiStatusProbes()
-  wikiStatus.value = { pendingTasks: 0, isActive: false, pendingIssues: 0 }
-  if (newKbId && newIsWiki) {
-    fetchWikiStatusOnce()
-  }
-}, { immediate: true })
-onUnmounted(() => {
-  stopWikiStatusPolling()
-  clearWikiStatusProbes()
-})
 
 
 const parserEngines = computed<ParserEngineInfo[]>(() => editorResources.parserEngines);
@@ -427,7 +342,6 @@ const confirmBatchReparse = async () => {
       applyOptimisticBatchReparse(ids);
       clearSelection();
       batchMode.value = false;
-      scheduleWikiStatusProbes();
       void awaitBatchReparseReflection(ids);
     } else {
       MessagePlugin.error(res?.message || t('knowledgeBase.batchReparseFailed'));
@@ -1133,7 +1047,6 @@ const handleFileUploaded = (event: CustomEvent) => {
     loadTags(uploadedKbId);
     void loadFolderTree(uploadedKbId);
     // 启动几次探测，尽快让面包屑的"索引中"亮起。
-    scheduleWikiStatusProbes();
   }
 };
 
@@ -1306,7 +1219,6 @@ const updateStatus = (analyzeList: KnowledgeCard[]) => {
   timeout = setTimeout(() => {
     batchQueryKnowledge(query).then((result: any) => {
       let hasChanges = false;
-      let shouldRefreshWikiStatus = false;
       if (result.success && result.data) {
         (result.data as KnowledgeCard[]).forEach((item: KnowledgeCard) => {
           const index = cardList.value.findIndex(card => card.id == item.id);
@@ -1324,10 +1236,6 @@ const updateStatus = (analyzeList: KnowledgeCard[]) => {
           if (cardList.value[index].parse_status !== parseStatus ||
             cardList.value[index].summary_status !== item.summary_status ||
             cardList.value[index].description !== item.description) {
-            shouldRefreshWikiStatus ||= shouldRefreshWikiStatusAfterKnowledgePoll(
-              cardList.value[index],
-              { ...item, parse_status: parseStatus },
-            );
 
             // Always update the card data
             cardList.value[index].parse_status = parseStatus;
@@ -1337,9 +1245,6 @@ const updateStatus = (analyzeList: KnowledgeCard[]) => {
             hasChanges = true;
           }
         });
-      }
-      if (shouldRefreshWikiStatus) {
-        void fetchWikiStatusOnce();
       }
       // If there are no changes, the watch won't trigger, so we must manually poll again
       // Even if there are changes, we can manually poll again just to be safe.
@@ -1368,7 +1273,7 @@ const openCardDetails = (item: KnowledgeCard) => {
   getCardDetails(item);
 };
 
-// Open source document preview from WikiBrowser
+// Open source document preview
 const openSourceDoc = (knowledgeId: string) => {
   isCardDetails.value = true;
   getCardDetails({ id: knowledgeId });
@@ -1895,7 +1800,6 @@ const submitReparse = async (id: string, processConfig?: KnowledgeProcessOverrid
     MessagePlugin.success(t('knowledgeBase.rebuildSubmitted'));
     resetPage();
     loadKnowledgeFiles(kbId.value);
-    scheduleWikiStatusProbes();
   } catch (error: any) {
     MessagePlugin.error(error?.message || t('knowledgeBase.rebuildFailed'));
   }
@@ -2280,32 +2184,8 @@ async function createNewSession(value: string): Promise<void> {
                 </template>
               </button>
               <t-icon name="chevron-right" class="breadcrumb-separator" />
-              <template v-if="isWiki">
-                <span :class="['breadcrumb-tab', { active: activeKbTab === 'documents' }]"
-                  @click="activeKbTab = 'documents'">{{ $t('knowledgeEditor.wikiBrowser.tabDocuments') }}</span>
-                <span class="breadcrumb-tab-sep">/</span>
-                <span :class="['breadcrumb-tab', { active: activeKbTab === 'wiki', indexing: wikiIsIndexing }]"
-                  @click="activeKbTab = 'wiki'">
-                  Wiki
-                  <t-tooltip v-if="wikiIsIndexing" :content="wikiIndexingTip" placement="bottom">
-                    <t-loading size="small" class="breadcrumb-tab-indicator" />
-                  </t-tooltip>
-                </span>
-                <span class="breadcrumb-tab-sep">/</span>
-                <t-tooltip :content="$t('knowledgeEditor.wikiBrowser.tabGraphTip')" placement="bottom">
-                  <span :class="['breadcrumb-tab', { active: activeKbTab === 'graph', indexing: wikiIsIndexing }]"
-                    @click="activeKbTab = 'graph'">
-                    {{ $t('knowledgeEditor.wikiBrowser.tabGraph') }}
-                    <t-tooltip v-if="wikiIsIndexing" :content="wikiIndexingTip" placement="bottom">
-                      <t-loading size="small" class="breadcrumb-tab-indicator" />
-                    </t-tooltip>
-                  </span>
-                </t-tooltip>
-                <span class="breadcrumb-tab-sep">/</span>
-                <span :class="['breadcrumb-tab', { active: activeKbTab === 'context' }]"
-                  @click="activeKbTab = 'context'">{{ $t('knowledgeWorkbench.tabLabel') }}</span>
-              </template>
-              <template v-else>
+
+              <template>
                 <span :class="['breadcrumb-tab', { active: activeKbTab === 'documents' }]"
                   @click="activeKbTab = 'documents'">{{ $t('knowledgeEditor.document.title') }}</span>
                 <span class="breadcrumb-tab-sep">/</span><span :class="['breadcrumb-tab', { active: activeKbTab === 'context' }]"
@@ -2349,19 +2229,13 @@ async function createNewSession(value: string): Promise<void> {
         </div>
       </div>
 
-      <!-- Wiki Browser / Graph (shown when wiki or graph tab is active) -->
-      <div v-if="isWiki && (activeKbTab === 'wiki' || activeKbTab === 'graph')" class="wiki-main-area">
-        <WikiBrowser v-if="kbId" :knowledge-base-id="kbId" :view="activeKbTab === 'graph' ? 'graph' : 'browser'"
-          :can-edit="canEdit" @open-source-doc="openSourceDoc" @status-change="onWikiStatusChange"
-          @view-graph="onViewWikiInGraph" />
-      </div>
 
       <div v-if="activeKbTab === 'context'" class="knowledge-context-area">
         <KnowledgeWorkbench v-if="kbId" :kb-id="kbId" :domain-id="kbInfo?.domain_id" :can-manage="canManage"
           @open-source="openSourceDoc" />
       </div>
 
-      <template v-if="activeKbTab === 'documents' || (!isWiki && activeKbTab !== 'context') || false">
+      <template v-if="activeKbTab === 'documents'">
         <div class="knowledge-main">
           <KbFolderTree v-if="showFolderTree && !folderTreeCollapsed" :tree="folderTree" :selected-path="selectedFolderPath"
             :loading="folderTreeLoading" :can-edit="canEdit"
@@ -2675,7 +2549,7 @@ async function createNewSession(value: string): Promise<void> {
         </div>
       </template>
 
-      <!-- DocContent drawer (shared by documents tab and wiki source refs) -->
+      <!-- Document content drawer -->
       <DocContent ref="docContentRef" :visible="isCardDetails" :details="details" :canEditKB="canEdit" :can-review-intake="canManage"
         :canDownloadKB="canDownloadKnowledge" :kbId="kbId"
         @closeDoc="closeDoc" @getDoc="getDoc" @summaryStateChange="syncDocumentSummaryState" @intake-review="handleIntakeReview"
@@ -2788,7 +2662,7 @@ async function createNewSession(value: string): Promise<void> {
 }
 
 
-// Breadcrumb tab switch (文档/Wiki in breadcrumb)
+// Breadcrumb tab switch
 .breadcrumb-tab {
   cursor: pointer;
   color: var(--td-text-color-placeholder);
@@ -2826,11 +2700,6 @@ async function createNewSession(value: string): Promise<void> {
   font-weight: 400;
 }
 
-.wiki-main-area {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
 
 // 与列表页一致：浅灰底圆角区，左侧筛选为白底卡片
 .knowledge-main {
@@ -3818,7 +3687,6 @@ async function createNewSession(value: string): Promise<void> {
   gap: 6px;
   overflow: hidden;
 }
-
 
 
 @media (max-width: 1250px) and (min-width: 1045px) {

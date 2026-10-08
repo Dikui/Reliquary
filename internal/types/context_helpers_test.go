@@ -118,7 +118,7 @@ func TestResolveLanguageNameNeverReturnsEmpty(t *testing.T) {
 	}
 }
 
-// Wiki carries an already-resolved display name on each queued update, so
+// Each task carries an already-resolved display name on each queued update, so
 // re-resolving it downstream must be a no-op rather than a reset to default.
 func TestResolveLanguageNameIsIdempotentOverDisplayNames(t *testing.T) {
 	for _, name := range []string{"Chinese (Simplified)", "English", "Korean"} {
@@ -185,9 +185,9 @@ func TestLanguageFromContext(t *testing.T) {
 }
 
 func TestLLMCallMetadataContext(t *testing.T) {
-	ctx := WithLLMCallMetadata(context.Background(), "wiki_page_modify", "abc123")
+	ctx := WithLLMCallMetadata(context.Background(), "summary_generation", "abc123")
 	purpose, prefix := LLMCallMetadataFromContext(ctx)
-	if purpose != "wiki_page_modify" || prefix != "abc123" {
+	if purpose != "summary_generation" || prefix != "abc123" {
 		t.Fatalf("metadata = (%q, %q)", purpose, prefix)
 	}
 }

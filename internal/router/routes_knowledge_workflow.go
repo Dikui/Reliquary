@@ -14,7 +14,6 @@ func RegisterKnowledgeWorkflowRoutes(r *gin.RouterGroup, h *handler.KnowledgeWor
 	w.GET("", h.List)
 	w.POST("", h.Create)
 	w.GET("/runs/:run_id", h.GetRun)
-	w.POST("/runs/:run_id/decision", h.Decide)
 	w.POST("/runs/:run_id/resume", h.Resume)
 	w.POST("/runs/:run_id/retry", h.Retry)
 	w.GET("/:workflow_id", h.Get)

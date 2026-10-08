@@ -419,7 +419,7 @@ func (s *ImageMultimodalService) indexChunks(ctx context.Context, payload types.
 	}
 
 	// Skip vector/keyword indexing when the KB has no embedding-based pipeline enabled
-	// (e.g. Wiki-only KBs). Without this check, GetEmbeddingModel would fail because
+	// (e.g. KBs with disabled indexing). Without this check, GetEmbeddingModel would fail because
 	// EmbeddingModelID is intentionally empty for such KBs. The multimodal chunks
 	// themselves are already persisted in the DB above, so skipping index here is safe.
 	if !kb.NeedsEmbeddingModel() {

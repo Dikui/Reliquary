@@ -87,7 +87,7 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 	kbRepo := apprepo.NewKnowledgeBaseRepository(db)
 	knowledgeRepo := apprepo.NewKnowledgeRepository(db)
 	kbService := service.NewKnowledgeBaseService(db, kbRepo, knowledgeRepo, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil, nil, nil)
+		nil, nil, nil, nil, nil, nil)
 	kb := &types.KnowledgeBase{
 		DomainID: service.BuiltinAIKnowledgeDomainID,
 		ID:       fusionKBID, Name: "Fusion KB", TenantID: fusionTenantID, CreatorID: fusionOwnerID,
@@ -97,7 +97,7 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 	require.NoError(t, kbRepo.CreateKnowledgeBase(ctx, kb))
 
 	knowledge, err := service.NewKnowledgeService(db, nil, knowledgeRepo, kbService, nil, nil, nil, nil, nil, nil,
-		nil, nil, fusionModelService{model: fusionChat{}}, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+		nil, nil, fusionModelService{model: fusionChat{}}, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	source := &types.Knowledge{
 		ID: fusionSourceID, TenantID: fusionTenantID, KnowledgeBaseID: fusionKBID,
@@ -146,8 +146,8 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 	require.Empty(t, graphContext.Evidence[0].Body, "graph queries include evidence metadata, not the full source snapshot")
 
 	taskQueue := &fusionTaskQueue{}
-	workflowService := service.NewKnowledgeWorkflowService(db, kbService, knowledge, contextService, nil,
-		modelService, taskQueue, nil)
+	workflowService := service.NewKnowledgeWorkflowService(db, kbService, knowledge, contextService,
+		modelService, taskQueue)
 	contextHandler := handler.NewKnowledgeContextHandler(contextService, contextWorker)
 	workflowHandler := handler.NewKnowledgeWorkflowHandler(workflowService)
 	guards := newAccessGuards(kbService, knowledge, nil)
@@ -181,15 +181,17 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 	require.Equal(t, sourceBody, evidence.Body)
 	require.Equal(t, "https://news.example/acme-widgetco", evidence.OriginalURL)
 
-	invalidWorkflowRec := fusionRequest(t, engine, http.MethodPost,
-		"/api/v1/knowledge-bases/"+fusionKBID+"/workflows",
-		`{"name":"Removed research","steps":[{"id":"research","type":"web_research","config":{"query":"source"}}]}`,
-		fusionTenantID, fusionOwnerID)
-	require.Equal(t, http.StatusBadRequest, invalidWorkflowRec.Code, invalidWorkflowRec.Body.String())
-	require.Contains(t, invalidWorkflowRec.Body.String(), "unsupported step type")
-	require.Contains(t, invalidWorkflowRec.Body.String(), "web_research")
+	for _, removedType := range []string{"web_research", "condition", "skill", "wiki_update", "human_review"} {
+		invalidWorkflowRec := fusionRequest(t, engine, http.MethodPost,
+			"/api/v1/knowledge-bases/"+fusionKBID+"/workflows",
+			fmt.Sprintf(`{"name":"Removed step","steps":[{"id":"removed","type":%q,"config":{}}]}`, removedType),
+			fusionTenantID, fusionOwnerID)
+		require.Equal(t, http.StatusBadRequest, invalidWorkflowRec.Code, invalidWorkflowRec.Body.String())
+		require.Contains(t, invalidWorkflowRec.Body.String(), "unsupported step type")
+		require.Contains(t, invalidWorkflowRec.Body.String(), removedType)
+	}
 
-	workflowBody := `{"name":"Acquisition report","enabled":true,"schedule":{"timezone":"UTC"},"steps":[{"id":"facts","type":"fact_query","config":{"entity":"Acme Holdings","limit":20}},{"id":"report","type":"report","depends_on":["facts"],"config":{"title":"Acquisition report","prompt":"Summarize the sourced acquisition fact."}},{"id":"review","type":"human_review","depends_on":["report"],"config":{"message":"Review the cited report."}}]}`
+	workflowBody := `{"name":"Acquisition report","enabled":true,"schedule":{"timezone":"UTC"},"steps":[{"id":"facts","type":"fact_query","config":{"entity":"Acme Holdings","limit":20}},{"id":"report","type":"report","depends_on":["facts"],"config":{"title":"Acquisition report","prompt":"Summarize the sourced acquisition fact."}}]}`
 	createRec := fusionRequest(t, engine, http.MethodPost,
 		"/api/v1/knowledge-bases/"+fusionKBID+"/workflows", workflowBody,
 		fusionTenantID, fusionOwnerID)
@@ -212,11 +214,10 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 	require.Len(t, taskQueue.tasks, 1)
 	require.NoError(t, workflowService.Handle(ctx, taskQueue.tasks[0]))
 	run = fusionGetRun(t, engine, run.ID, fusionTenantID, fusionOwnerID)
-	require.Equal(t, types.WorkflowStatusPaused, run.Status)
-	require.Len(t, run.Steps, 3)
+	require.Equal(t, types.WorkflowStatusCompleted, run.Status)
+	require.Len(t, run.Steps, 2)
 	require.Equal(t, types.WorkflowStepSucceeded, run.Steps[0].Status)
 	require.Equal(t, types.WorkflowStepSucceeded, run.Steps[1].Status)
-	require.Equal(t, types.WorkflowStepWaitingReview, run.Steps[2].Status)
 
 	var storedReport types.KnowledgeWorkflowReport
 	require.NoError(t, db.Where("run_id = ? AND step_id = ?", run.ID, "report").First(&storedReport).Error)
@@ -227,12 +228,12 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 	decisionRec := fusionRequest(t, engine, http.MethodPost,
 		fmt.Sprintf("/api/v1/knowledge-bases/%s/workflows/runs/%s/decision", fusionKBID, run.ID),
 		`{"decision":"approve"}`, fusionTenantID, fusionOwnerID)
-	require.Equal(t, http.StatusOK, decisionRec.Code, decisionRec.Body.String())
-	require.Len(t, taskQueue.tasks, 2)
-	require.NoError(t, workflowService.Handle(ctx, taskQueue.tasks[1]))
+	require.Equal(t, http.StatusNotFound, decisionRec.Code, decisionRec.Body.String())
+	require.Len(t, taskQueue.tasks, 1)
+	require.NoError(t, workflowService.Handle(ctx, taskQueue.tasks[0]))
 	run = fusionGetRun(t, engine, run.ID, fusionTenantID, fusionOwnerID)
 	require.Equal(t, types.WorkflowStatusCompleted, run.Status)
-	require.Len(t, run.Steps, 3)
+	require.Len(t, run.Steps, 2)
 	for _, step := range run.Steps {
 		require.Equal(t, types.WorkflowStepSucceeded, step.Status)
 	}

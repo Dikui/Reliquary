@@ -13,28 +13,9 @@ import (
 
 func allDeploymentFeaturesAvailable() handler.DeploymentFeatureAvailability {
 	return handler.DeploymentFeatureAvailability{
-		Agents:  true,
-		API:     true,
-		MCP:     true,
-		Sandbox: true,
-	}
-}
-
-func TestBuildDeploymentCapabilitiesHidesDockerUnlessOptedIn(t *testing.T) {
-	result := handler.BuildDeploymentCapabilities("standard", allDeploymentFeaturesAvailable())
-	docker := result.Capabilities["settings.sandbox.docker"]
-	if docker.Supported {
-		t.Fatal("docker sandbox must stay disabled until the deployment opts in")
-	}
-	if docker.Reason != "docker_backend_disabled" {
-		t.Fatalf("docker reason = %q, want docker_backend_disabled", docker.Reason)
-	}
-
-	available := allDeploymentFeaturesAvailable()
-	available.SandboxDocker = true
-	enabled := handler.BuildDeploymentCapabilities("standard", available)
-	if !enabled.Capabilities["settings.sandbox.docker"].Supported {
-		t.Fatal("SandboxDocker true must expose the docker backend")
+		Agents: true,
+		API:    true,
+		MCP:    true,
 	}
 }
 

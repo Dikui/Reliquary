@@ -48,7 +48,7 @@ type Connector interface {
 
 // StreamHandler receives items and progress checkpoints emitted during a
 // streaming fetch. The service implements it to ingest each item as it arrives
-// (bounding memory to one item instead of the whole wiki) and to persist the
+// (bounding memory to one item instead of the whole source) and to persist the
 // connector cursor at page boundaries, so a sync that times out mid-traversal
 // resumes from the last checkpoint instead of restarting from scratch
 // (Tencent/WeKnora#2136).

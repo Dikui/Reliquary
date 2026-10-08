@@ -1,7 +1,5 @@
 package types
 
-import "strings"
-
 // ParserEngineConfigForResponse returns a copy with secret fields redacted
 // when maskSecrets is true.
 func ParserEngineConfigForResponse(cfg *ParserEngineConfig, maskSecrets bool) *ParserEngineConfig {
@@ -55,87 +53,5 @@ func MergeParserEngineConfigForUpdate(incoming, existing *ParserEngineConfig) *P
 	if incoming.ChatParserEngineRules == nil && existing != nil {
 		out.ChatParserEngineRules = existing.ChatParserEngineRules
 	}
-	return &out
-}
-
-// SandboxConfigForResponse returns a copy of cfg safe to serialize into an API
-// response. When maskSecrets is true every secret-bearing field is replaced
-// with RedactedSecretPlaceholder. Unset secrets stay empty so the UI can tell
-// "configured" apart from "not configured".
-func SandboxConfigForResponse(cfg *TenantSandboxConfig, maskSecrets bool) *TenantSandboxConfig {
-	if cfg == nil {
-		return nil
-	}
-	out := *cfg
-	if !maskSecrets {
-		return &out
-	}
-
-	// EnvVars values are encrypted at rest and may hold credentials, so they
-	// are masked as a class rather than by name.
-	if len(out.EnvVars) > 0 {
-		envVars := make(map[string]string, len(out.EnvVars))
-		for name, value := range out.EnvVars {
-			if value != "" {
-				value = RedactedSecretPlaceholder
-			}
-			envVars[name] = value
-		}
-		out.EnvVars = envVars
-	}
-
-	return &out
-}
-
-// MergeSandboxConfigForUpdate resolves redacted placeholders in incoming
-// against the currently stored config, so a client that never received the
-// real secret can submit the rest of the form without wiping it. Pointers
-// the editor does not own (SkillImage) are kept from existing.
-func MergeSandboxConfigForUpdate(incoming, existing *TenantSandboxConfig) *TenantSandboxConfig {
-	if incoming == nil {
-		return nil
-	}
-	out := *incoming
-
-	// Only keys present in incoming survive: deleting a row in the UI must
-	// actually remove the variable rather than silently restore it.
-	if len(out.EnvVars) > 0 {
-		envVars := make(map[string]string, len(out.EnvVars))
-		for name, value := range out.EnvVars {
-			prev := ""
-			if existing != nil {
-				prev = existing.EnvVars[name]
-			}
-			envVars[name] = PreserveIfRedacted(value, prev)
-		}
-		out.EnvVars = envVars
-	}
-
-	if incoming.Network != nil {
-		network := *incoming.Network
-		out.Network = &network
-	}
-
-	// SkillImage is owned by the install path, not
-	// by the sandbox settings form. The editor rebuilds the payload without
-	// that field, so copying incoming as-is would wipe a live snapshot on
-	// every runtime save and leave sessions booting the base template while the
-	// skill rows still claim ready. Reading them from the stored row instead —
-	// and clearing when there is no stored row — also means a crafted PUT can
-	// neither plant nor wipe a pointer.
-	out.SkillImage = nil
-	if existing != nil {
-		if existing.SkillImage != nil {
-			image := *existing.SkillImage
-			out.SkillImage = &image
-		}
-		// The runtime form omits skill_rollout. An empty incoming value must
-		// not reset a saved "new_session" choice; the skills panel sends the
-		// explicit next_turn token when the admin switches back.
-		if strings.TrimSpace(out.SkillRollout) == "" {
-			out.SkillRollout = existing.SkillRollout
-		}
-	}
-
 	return &out
 }

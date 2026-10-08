@@ -472,7 +472,7 @@ func (s *messageService) GetChatHistoryKBStats(ctx context.Context) (*types.Chat
 	return stats, nil
 }
 
-// GetSessionArtifacts returns every skill-produced artifact recorded against
+// GetSessionArtifacts returns every persisted message artifact recorded against
 // any assistant message of the session. Thin pass-through to the repository:
 // the collector and session cleanup both need it, and centralising it here
 // keeps tests able to inject a stub MessageService.

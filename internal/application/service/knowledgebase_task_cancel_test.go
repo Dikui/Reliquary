@@ -74,19 +74,6 @@ type recordingKBDeleteEnqueuer struct {
 	task  *asynq.Task
 }
 
-type recordingKBPendingRepo struct {
-	interfaces.TaskPendingOpsRepository
-	scopeIDs  []string
-	deleteErr error
-}
-
-func (r *recordingKBPendingRepo) DeleteByScope(_ context.Context, scope, scopeID string) error {
-	if scope == types.TaskScopeKnowledgeBase {
-		r.scopeIDs = append(r.scopeIDs, scopeID)
-	}
-	return r.deleteErr
-}
-
 func (r *recordingKBDeleteEnqueuer) Enqueue(
 	task *asynq.Task,
 	_ ...asynq.Option,
@@ -124,13 +111,11 @@ func TestDeleteKnowledgeBaseForwardsDataSourceTaskScope(t *testing.T) {
 
 func TestDeleteKnowledgeBaseCancelsQueuedTasksBestEffort(t *testing.T) {
 	tests := []struct {
-		name       string
-		cancelErr  error
-		pendingErr error
+		name      string
+		cancelErr error
 	}{
 		{name: "success"},
 		{name: "inspector failure", cancelErr: errors.New("redis unavailable")},
-		{name: "durable queue failure", pendingErr: errors.New("database unavailable")},
 	}
 
 	for _, tt := range tests {
@@ -139,13 +124,11 @@ func TestDeleteKnowledgeBaseCancelsQueuedTasksBestEffort(t *testing.T) {
 			kbRepo := &kbDeleteKBRepo{fakeKBRepo: *newFakeKBRepo()}
 			kbRepo.rows[kbID] = &types.KnowledgeBase{ID: kbID, TenantID: 1, Name: "test"}
 			inspector := &recordingKBTaskInspector{repo: kbRepo, cancelErr: tt.cancelErr}
-			pendingRepo := &recordingKBPendingRepo{deleteErr: tt.pendingErr}
 			enqueuer := &recordingKBDeleteEnqueuer{}
 			svc := &knowledgeBaseService{
-				repo:            kbRepo,
-				asynqClient:     enqueuer,
-				taskInspector:   inspector,
-				taskPendingRepo: pendingRepo,
+				repo:          kbRepo,
+				asynqClient:   enqueuer,
+				taskInspector: inspector,
 			}
 
 			err := svc.DeleteKnowledgeBase(ctxWithTenantInfo(1), kbID)
@@ -155,7 +138,6 @@ func TestDeleteKnowledgeBaseCancelsQueuedTasksBestEffort(t *testing.T) {
 			assert.Equal(t, kbID, inspector.calls[0].kbID)
 			assert.Empty(t, inspector.calls[0].knowledgeIDs)
 			assert.True(t, inspector.sawSoftDeletedRecord)
-			assert.Equal(t, []string{kbID}, pendingRepo.scopeIDs)
 			assert.Equal(t, 1, enqueuer.calls)
 		})
 	}
@@ -175,11 +157,9 @@ func (emptyKBKnowledgeRepo) ListKnowledgeByKnowledgeBaseID(
 
 func TestProcessKBDeleteRepeatsQueueCleanup(t *testing.T) {
 	inspector := &recordingKBTaskInspector{}
-	pendingRepo := &recordingKBPendingRepo{}
 	svc := &knowledgeBaseService{
-		kgRepo:          emptyKBKnowledgeRepo{},
-		taskInspector:   inspector,
-		taskPendingRepo: pendingRepo,
+		kgRepo:        emptyKBKnowledgeRepo{},
+		taskInspector: inspector,
 	}
 	payload, err := json.Marshal(types.KBDeletePayload{TenantID: 1, KnowledgeBaseID: "kb-race"})
 	require.NoError(t, err)
@@ -192,7 +172,6 @@ func TestProcessKBDeleteRepeatsQueueCleanup(t *testing.T) {
 		assert.Equal(t, "kb-race", call.kbID)
 		assert.Empty(t, call.knowledgeIDs)
 	}
-	assert.Equal(t, []string{"kb-race", "kb-race"}, pendingRepo.scopeIDs)
 }
 
 type populatedKBKnowledgeRepo struct {

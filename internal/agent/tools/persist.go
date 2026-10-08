@@ -13,27 +13,6 @@ var persistStripFields = map[string][]string{
 	"grep_results":          {"chunk_results"},
 }
 
-// persistStripFieldsByTool drops binary / duplicate blobs. stdout/stderr stay
-// (compacted separately) so a history reload can still render the card.
-var persistStripFieldsByTool = map[string][]string{
-	ToolShellExec:        {"content", "content_base64"},
-	ToolReadSandboxFile:  {"content", "content_base64"},
-	ToolWriteSandboxFile: {"content", "content_base64"},
-	ToolEditSandboxFile:  {"content", "content_base64"},
-}
-
-// clientStripFieldsByTool is the lighter omit list for live SSE. The UI
-// needs stdout/stderr to render a terminal card; those streams are already
-// capped by the tool. Persist still uses persistStripFieldsByTool.
-var clientStripFieldsByTool = map[string][]string{
-	ToolShellExec:        {"content", "content_base64"},
-	ToolReadSandboxFile:  {"content", "content_base64"},
-	ToolWriteSandboxFile: {"content", "content_base64"},
-	ToolEditSandboxFile:  {"content", "content_base64"},
-}
-
-const historicalSandboxOutputChars = 4 * 1024
-
 // ShouldOmitRawToolOutput reports whether the raw XML/text Output should be
 // excluded from SSE replay and persisted agent_steps. The full Output remains
 // available in-memory for the current agent turn.
@@ -47,15 +26,12 @@ func ShouldOmitRawToolOutput(_ string, data map[string]interface{}) bool {
 
 // SanitizeToolDataForPersist returns a copy of tool Data safe for DB / SSE replay.
 func SanitizeToolDataForPersist(toolName string, data map[string]interface{}) map[string]interface{} {
-	return sanitizeToolData(data, persistStripFieldsByTool[toolName])
+	return sanitizeToolData(data, nil)
 }
 
 func sanitizeToolDataForClient(toolName string, data map[string]interface{}) map[string]interface{} {
-	omit := clientStripFieldsByTool[toolName]
-	if omit == nil {
-		omit = persistStripFieldsByTool[toolName]
-	}
-	return sanitizeToolData(data, omit)
+	return sanitizeToolData(data, nil)
+
 }
 
 func sanitizeToolData(data map[string]interface{}, extraOmit []string) map[string]interface{} {
@@ -98,9 +74,6 @@ func StreamContentForToolResult(toolName string, success bool, errMsg string, da
 	if !success {
 		return errMsg
 	}
-	if isSandboxContentTool(toolName) {
-		return compactShellExecHeadline(data)
-	}
 	if ShouldOmitRawToolOutput(toolName, data) {
 		return compactToolSummary(success, errMsg, data)
 	}
@@ -125,17 +98,10 @@ func SanitizeAgentStepsForStorage(steps []types.AgentStep) []types.AgentStep {
 				continue
 			}
 			result := *tc.Result
-			if isSandboxContentTool(tc.Name) {
-				// display_type is for the live card; history still needs the
-				// command, exit, and a head+tail of the streams. Replacing
-				// that with a one-line "output omitted" leaves the next turn
-				// (and a reload of the card) with no structure at all.
-				result.Output = compactHistoricalSandboxOutput(result.Output)
-			} else if ShouldOmitRawToolOutput(tc.Name, result.Data) {
+			if result.Success && ShouldOmitRawToolOutput(tc.Name, result.Data) {
 				result.Output = compactToolSummary(result.Success, result.Error, result.Data)
 			}
 			result.Data = SanitizeToolDataForPersist(tc.Name, result.Data)
-			compactSandboxStreamFields(result.Data)
 			toolCalls[j].Result = &result
 		}
 		out[i].ToolCalls = toolCalls
@@ -148,14 +114,6 @@ func CompactToolOutputForHistory(toolName string, result *types.ToolResult) stri
 	if result == nil {
 		return ""
 	}
-	if isSandboxContentTool(toolName) {
-		if rebuilt := compactSandboxHistory(result); rebuilt != "" {
-			if result.Success {
-				return rebuilt
-			}
-			return failedToolVisibleContent(rebuilt, result.Error)
-		}
-	}
 	if !result.Success {
 		return failedToolVisibleContent(result.Output, result.Error)
 	}
@@ -163,10 +121,6 @@ func CompactToolOutputForHistory(toolName string, result *types.ToolResult) stri
 		return result.Output
 	}
 	return compactToolSummary(result.Success, result.Error, result.Data)
-}
-
-func isSandboxContentTool(toolName string) bool {
-	return toolName == ToolShellExec || toolName == ToolReadSandboxFile || toolName == ToolExecuteSkillScript
 }
 
 // failedToolVisibleContent keeps stdout/stderr (in Output) when a tool fails.
@@ -185,101 +139,6 @@ func failedToolVisibleContent(output, errMsg string) string {
 	default:
 		return output + "\n\nError: " + errMsg
 	}
-}
-
-func compactHistoricalSandboxOutput(output string) string {
-	if len(output) <= historicalSandboxOutputChars {
-		return output
-	}
-	const marker = "\n...[historical tool output compacted]...\n"
-	kept := historicalSandboxOutputChars - len(marker)
-	head := kept / 4
-	tail := kept - head
-	return output[:head] + marker + output[len(output)-tail:]
-}
-
-func compactSandboxStreamFields(data map[string]interface{}) {
-	if data == nil {
-		return
-	}
-	for _, key := range []string{"stdout", "stderr"} {
-		raw, ok := data[key]
-		if !ok || raw == nil {
-			continue
-		}
-		s, ok := raw.(string)
-		if !ok || s == "" {
-			continue
-		}
-		data[key] = compactHistoricalSandboxOutput(s)
-	}
-}
-
-func compactSandboxHistory(result *types.ToolResult) string {
-	if result == nil {
-		return ""
-	}
-	if result.Output != "" && !isOmittedHistoryPlaceholder(result.Output) {
-		return compactHistoricalSandboxOutput(result.Output)
-	}
-	if rebuilt := rebuildShellExecHistory(result.Data); rebuilt != "" {
-		return rebuilt
-	}
-	return compactHistoricalSandboxOutput(result.Output)
-}
-
-func isOmittedHistoryPlaceholder(output string) bool {
-	return strings.Contains(output, "omitted from history")
-}
-
-func compactShellExecHeadline(data map[string]interface{}) string {
-	exit := intField(data, "exit_code")
-	cmd := stringField(data, "command")
-	if cmd == "" {
-		return fmt.Sprintf("shell_exec exit=%d", exit)
-	}
-	const maxCmd = 240
-	if len(cmd) > maxCmd {
-		cmd = cmd[:maxCmd] + "..."
-	}
-	return fmt.Sprintf("shell_exec exit=%d command=%s", exit, cmd)
-}
-
-func rebuildShellExecHistory(data map[string]interface{}) string {
-	if data == nil {
-		return ""
-	}
-	stdout := stringField(data, "stdout")
-	stderr := stringField(data, "stderr")
-	if stdout == "" && stderr == "" {
-		return ""
-	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "shell_exec exit=%d", intField(data, "exit_code"))
-	if cmd := stringField(data, "command"); cmd != "" {
-		fmt.Fprintf(&b, " command=%s", cmd)
-	}
-	if wd := stringField(data, "work_dir"); wd != "" {
-		fmt.Fprintf(&b, " work_dir=%s", wd)
-	}
-	b.WriteByte('\n')
-	if stdout != "" {
-		b.WriteString("## Stdout\n```\n")
-		b.WriteString(stdout)
-		if !strings.HasSuffix(stdout, "\n") {
-			b.WriteByte('\n')
-		}
-		b.WriteString("```\n")
-	}
-	if stderr != "" {
-		b.WriteString("## Stderr\n```\n")
-		b.WriteString(stderr)
-		if !strings.HasSuffix(stderr, "\n") {
-			b.WriteByte('\n')
-		}
-		b.WriteString("```\n")
-	}
-	return compactHistoricalSandboxOutput(b.String())
 }
 
 func compactToolSummary(success bool, errMsg string, data map[string]interface{}) string {
@@ -320,34 +179,6 @@ func compactToolSummary(success bool, errMsg string, data map[string]interface{}
 		}
 		if count > 0 {
 			return fmt.Sprintf("Semantic search returned %d result(s) (details omitted from history)", count)
-		}
-	case "shell_exec":
-		if rebuilt := rebuildShellExecHistory(data); rebuilt != "" {
-			return rebuilt
-		}
-		return compactShellExecHeadline(data)
-	case "write_sandbox_file":
-		path := stringField(data, "path")
-		size := intField(data, "size")
-		if path != "" {
-			added := intField(data, "added_lines")
-			removed := intField(data, "removed_lines")
-			if stat := formatSandboxDiffStat(added, removed); stat != "" {
-				return fmt.Sprintf("Wrote %s (%s, %d bytes)", path, stat, size)
-			}
-			return fmt.Sprintf("Wrote %s (%d bytes)", path, size)
-		}
-	case "edit_sandbox_file":
-		path := stringField(data, "path")
-		size := intField(data, "size")
-		n := intField(data, "replacements")
-		if path != "" {
-			added := intField(data, "added_lines")
-			removed := intField(data, "removed_lines")
-			if stat := formatSandboxDiffStat(added, removed); stat != "" {
-				return fmt.Sprintf("Edited %s (%s, %d replacement(s), %d bytes)", path, stat, n, size)
-			}
-			return fmt.Sprintf("Edited %s (%d replacement(s), %d bytes)", path, n, size)
 		}
 	case "attachment_parsing":
 		parsed := intField(data, "parsed_count")

@@ -31,67 +31,24 @@ func AgentMaxContextTokens(configured, modelContextWindow int) int {
 	return DefaultMaxContextTokens
 }
 
-// DefaultSmartReasoningMaxCompletionTokens is the per-round budget when the
-// agent cannot emit write_sandbox_file / edit_sandbox_file. 4096 matches
-// typical OpenAI-compatible provider defaults and is enough for ordinary
-// tool-call JSON.
+// DefaultSmartReasoningMaxCompletionTokens is the per-round answer budget.
 const DefaultSmartReasoningMaxCompletionTokens = 4096
-
-// DefaultAgentMaxCompletionTokens is the per-round budget when the agent
-// can write or edit sandbox files. Those tool calls carry the file body in
-// JSON; a 4096 cap truncates mid-stream (finish_reason=length).
-const DefaultAgentMaxCompletionTokens = 24576
 
 // DefaultQuickAnswerMaxCompletionTokens is the RAG answer budget.
 const DefaultQuickAnswerMaxCompletionTokens = 2048
 
-// NeedsSandboxWriteCompletionBudget reports whether this agent may register
-// write_sandbox_file / edit_sandbox_file. Those tools follow the bound
-// sandbox, not the allowed_tools checklist.
-func NeedsSandboxWriteCompletionBudget(sandboxConfigID string) bool {
-	return strings.TrimSpace(sandboxConfigID) != ""
-}
-
-// DefaultMaxCompletionTokens is the unset-config default for one agent:
-// quick-answer 2048, smart-reasoning 4096, smart-reasoning with a sandbox 24576.
-func DefaultMaxCompletionTokens(agentMode, sandboxConfigID string) int {
+func DefaultMaxCompletionTokens(agentMode string) int {
 	if agentMode == AgentModeSmartReasoning {
-		if NeedsSandboxWriteCompletionBudget(sandboxConfigID) {
-			return DefaultAgentMaxCompletionTokens
-		}
 		return DefaultSmartReasoningMaxCompletionTokens
 	}
 	return DefaultQuickAnswerMaxCompletionTokens
 }
 
-// AgentRoundMaxCompletionTokens returns the completion-token budget for one
-// ReAct LLM round when no sandbox is bound. Zero (unset) uses
-// DefaultSmartReasoningMaxCompletionTokens. An explicit configured value is
-// honored as-is.
 func AgentRoundMaxCompletionTokens(configured int) int {
-	return AgentRoundMaxCompletionTokensFor(configured, "")
-}
-
-// MinSandboxWriteCompletionTokens is the floor applied to an explicitly
-// configured per-round budget when a sandbox is bound. write_sandbox_file and
-// edit_sandbox_file carry the whole file body inside the tool-call JSON, so a
-// cap sized for ordinary chat truncates the arguments mid-string on every
-// attempt — the agent then burns its rounds rewriting a file it can never
-// finish. Below this the setting is not a preference, it is a deadlock.
-const MinSandboxWriteCompletionTokens = 8192
-
-// AgentRoundMaxCompletionTokensFor is AgentRoundMaxCompletionTokens with
-// the agent's sandbox: unset + sandbox uses the large write-file budget, and a
-// configured value too small to hold a file write is raised to the floor.
-func AgentRoundMaxCompletionTokensFor(configured int, sandboxConfigID string) int {
 	if configured > 0 {
-		if NeedsSandboxWriteCompletionBudget(sandboxConfigID) &&
-			configured < MinSandboxWriteCompletionTokens {
-			return MinSandboxWriteCompletionTokens
-		}
 		return configured
 	}
-	return DefaultMaxCompletionTokens(AgentModeSmartReasoning, sandboxConfigID)
+	return DefaultSmartReasoningMaxCompletionTokens
 }
 
 // UnlimitedMaxIterations is the stored MaxIterations value meaning the ReAct
@@ -105,16 +62,15 @@ type AgentConfig struct {
 	// MaxIterations caps ReAct rounds. Zero is unset (filled with a default);
 	// a negative value is unlimited — the loop runs until the model stops,
 	// the user cancels, or another guard fires. See UnlimitedMaxIterations.
-	MaxIterations  int      `json:"max_iterations"`
-	AllowedTools   []string `json:"allowed_tools"`           // List of allowed tool names
-	Temperature    float64  `json:"temperature"`             // LLM temperature for agent
-	KnowledgeBases []string `json:"knowledge_bases"`         // Accessible knowledge base IDs
-	KnowledgeIDs   []string `json:"knowledge_ids"`           // Accessible knowledge IDs (individual documents)
-	SystemPrompt   string   `json:"system_prompt,omitempty"` // System prompt
+	MaxIterations         int           `json:"max_iterations"`
+	AllowedTools          []string      `json:"allowed_tools"`            // List of allowed tool names
+	Temperature           float64       `json:"temperature"`              // LLM temperature for agent
+	KnowledgeBases        []string      `json:"knowledge_bases"`          // Accessible knowledge base IDs
+	KnowledgeIDs          []string      `json:"knowledge_ids"`            // Accessible knowledge IDs (individual documents)
+	SystemPrompt          string        `json:"system_prompt,omitempty"`  // System prompt
 	UseCustomSystemPrompt bool          `json:"use_custom_system_prompt"` // Whether to use custom system prompt instead of default
 	MultiTurnEnabled      bool          `json:"multi_turn_enabled"`       // Whether multi-turn conversation is enabled
 	HistoryTurns          int           `json:"history_turns"`            // Number of history turns to keep in context
-	MemoryEnabled         *bool         `json:"memory_enabled,omitempty"` // nil inherits workspace
 	SearchTargets         SearchTargets `json:"-"`                        // Pre-computed unified search targets (runtime only)
 	// MCP service selection
 	MCPSelectionMode string   `json:"mcp_selection_mode"` // MCP selection mode: "all", "selected", "none"
@@ -130,32 +86,20 @@ type AgentConfig struct {
 	// Whether to retrieve knowledge base only when explicitly mentioned with @ (default: false)
 	RetrieveKBOnlyWhenMentioned bool `json:"retrieve_kb_only_when_mentioned"`
 
-	// Whether to retain retrieval history (like wiki_read_page results) across turns (default: false)
+	// Whether to retain retrieval history (like knowledge_search results) across turns (default: false)
 	RetainRetrievalHistory bool `json:"retain_retrieval_history"`
 
-	// Skills configuration (Progressive Disclosure pattern)
-	SkillsEnabled bool     `json:"skills_enabled"` // Whether skills are enabled (default: false)
-	SkillDirs     []string `json:"skill_dirs"`     // Directories to search for skills
-	AllowedSkills []string `json:"allowed_skills"` // Skill names whitelist (empty = allow all)
-
 	// Runtime-only fields (not persisted)
-	VLMModelID      string `json:"-"` // VLM model ID for tool result image analysis (set from CustomAgent config)
-	SandboxConfigID string `json:"-"` // Workspace sandbox config ID for skill execution (set from CustomAgent config)
-	// TenantSkills are the skills installed into the selected sandbox config's
-	// snapshot image, already narrowed to the ones this run can actually
-	// invoke. Runtime only: it is derived per turn from the config the agent
-	// selected, never stored on the agent record.
-	TenantSkills []*TenantSkillEntity `json:"-"`
+	VLMModelID string `json:"-"` // VLM model ID for tool result image analysis (set from CustomAgent config)
 	// Per-request @mention pins (runtime only; injected as <must_use> in the user message).
 	PinnedMCPServiceIDs []string `json:"-"`
-	PinnedSkillNames    []string `json:"-"`
 	// its source workspace. It is set from the verified share relation, never
 	// inferred from a client-provided tenant ID.
 	// LLM call timeout in seconds (default: 120). Controls the maximum time for a single LLM call.
 	LLMCallTimeout int `json:"llm_call_timeout,omitempty"`
 
 	// Maximum completion tokens for each ReAct LLM round. Zero means
-	// DefaultMaxCompletionTokens for this agent's mode and sandbox.
+	// DefaultMaxCompletionTokens for this agent's mode.
 	// Explicit values are sent as-is.
 	MaxCompletionTokens int `json:"max_completion_tokens,omitempty"`
 
@@ -176,53 +120,6 @@ type AgentConfig struct {
 	// Whether to execute independent tool calls in parallel (default: false).
 	// When enabled and the LLM returns multiple tool calls, they run concurrently via errgroup.
 	ParallelToolCalls bool `json:"parallel_tool_calls,omitempty"`
-
-	// skillInstallMode routes this run's shell_exec to the privileged
-	// install-mode executor (root, skills image root writable). It is
-	// unexported on purpose: JSON cannot reach it, so no stored agent record
-	// and no API payload can request the privilege, and no other package can
-	// assign it. EnableSkillInstallMode is the only way in and it refuses
-	// every agent except the built-in skill installer.
-	skillInstallMode bool
-
-	// skillInstallDir is the one skill directory this install owns. The skill
-	// file tools are scoped to it, so an installer cannot write a neighbouring
-	// skill in the shared image. Unexported for the same reason as
-	// skillInstallMode: the scope of a privilege must not be settable by
-	// anything a tenant can store or send.
-	skillInstallDir string
-}
-
-// EnableSkillInstallMode grants install-mode shell execution to the built-in
-// skill installer agent and to nothing else, scoped to the skill directory it
-// was started for. The agent ID is checked here rather than at the call site
-// so there is exactly one place to audit.
-//
-// The privilege and its scope are granted together: a caller cannot obtain the
-// root shell without naming the directory the file tools will be confined to.
-// skillDir is stored verbatim and validated where the tools are constructed —
-// types cannot import the sandbox package that owns the path rules.
-func (c *AgentConfig) EnableSkillInstallMode(agentID, skillDir string) {
-	if c == nil || agentID != BuiltinSkillInstallerID {
-		return
-	}
-	c.skillInstallMode = true
-	c.skillInstallDir = skillDir
-}
-
-// SkillInstallMode reports whether this run may use the privileged
-// install-mode shell.
-func (c *AgentConfig) SkillInstallMode() bool {
-	return c != nil && c.skillInstallMode
-}
-
-// SkillInstallDir is the skill directory this install may write, or "" when
-// this run is not an install.
-func (c *AgentConfig) SkillInstallDir() string {
-	if c == nil || !c.skillInstallMode {
-		return ""
-	}
-	return c.skillInstallDir
 }
 
 // UnlimitedIterations reports whether the ReAct loop has no round cap.

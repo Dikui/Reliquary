@@ -13,7 +13,6 @@ import (
 const (
 	// KnowledgeBaseTypeDocument represents the document knowledge base type
 	KnowledgeBaseTypeDocument = "document"
-	KnowledgeBaseTypeWiki     = "wiki"
 )
 
 // KnowledgeBase represents a knowledge base entity
@@ -51,10 +50,8 @@ type KnowledgeBase struct {
 	QuestionGenerationConfig *QuestionGenerationConfig `yaml:"question_generation_config" json:"question_generation_config" gorm:"column:question_generation_config;type:json"`
 	// AutoTagConfig controls asynchronous association of existing tags after parsing.
 	AutoTagConfig *AutoTagConfig `yaml:"auto_tag_config" json:"auto_tag_config" gorm:"type:json"`
-	// WikiConfig stores wiki-specific configuration (only for wiki type knowledge bases)
-	WikiConfig *WikiConfig `yaml:"wiki_config"             json:"wiki_config"             gorm:"column:wiki_config;type:json"`
 	// IndexingStrategy controls which indexing pipelines are active for this knowledge base.
-	// Pipelines: vector search, keyword search, wiki generation, knowledge graph extraction.
+	// Pipelines: vector search and keyword search.
 	IndexingStrategy IndexingStrategy `yaml:"indexing_strategy"       json:"indexing_strategy"       gorm:"column:indexing_strategy;type:json"`
 	// IsPinned and PinnedAt are computed per-caller from user_kb_pins
 	// (see the baseline migration). They used to be stored on the row itself,
@@ -94,8 +91,6 @@ type KnowledgeBaseConfig struct {
 	ChunkingConfig ChunkingConfig `yaml:"chunking_config"         json:"chunking_config"`
 	// Image processing configuration
 	ImageProcessingConfig ImageProcessingConfig `yaml:"image_processing_config" json:"image_processing_config"`
-	// Wiki configuration (only for wiki-enabled knowledge bases)
-	WikiConfig *WikiConfig `yaml:"wiki_config"             json:"wiki_config"`
 	// AutoTagConfig controls optional automatic association of existing KB tags.
 	AutoTagConfig *AutoTagConfig `yaml:"auto_tag_config" json:"auto_tag_config"`
 	// IndexingStrategy controls which indexing pipelines are active.
@@ -480,7 +475,7 @@ func (kb *KnowledgeBase) EnsureDefaults() {
 }
 
 // KBCapabilities describes the functional features a knowledge base exposes.
-// It is computed from the KB's configuration (IndexingStrategy, Type, WikiConfig, …)
+// It is computed from the KB's configuration (IndexingStrategy and Type)
 // and surfaced in the JSON representation of a KnowledgeBase so that the frontend
 // can filter / enable / disable KB options based on what the selected agent type needs.
 type KBCapabilities struct {
@@ -488,8 +483,6 @@ type KBCapabilities struct {
 	Vector bool `json:"vector"`
 	// Keyword means BM25 / sparse keyword search is indexed.
 	Keyword bool `json:"keyword"`
-	// Wiki means the wiki feature is enabled and authored pages exist / will be generated.
-	Wiki bool `json:"wiki"`
 	// Graph means structured knowledge context queries are supported.
 	Graph bool `json:"graph"`
 }
@@ -503,7 +496,6 @@ func (kb *KnowledgeBase) Capabilities() KBCapabilities {
 	return KBCapabilities{
 		Vector:  kb.IsVectorEnabled(),
 		Keyword: kb.IsKeywordEnabled(),
-		Wiki:    kb.IsWikiEnabled(),
 		Graph:   true,
 	}
 }
@@ -521,15 +513,6 @@ func (kb *KnowledgeBase) MarshalJSON() ([]byte, error) {
 		Capabilities: kb.Capabilities(),
 	}
 	return json.Marshal(aux)
-}
-
-// IsWikiEnabled checks if the wiki feature is enabled for this knowledge base.
-// Wiki enablement is the single source of truth on IndexingStrategy.WikiEnabled.
-func (kb *KnowledgeBase) IsWikiEnabled() bool {
-	if kb == nil {
-		return false
-	}
-	return kb.IndexingStrategy.WikiEnabled
 }
 
 // IsVectorEnabled checks if vector (semantic) search is enabled.

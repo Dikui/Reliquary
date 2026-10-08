@@ -117,7 +117,7 @@ type searchResultWithMeta struct {
 
 // KnowledgeSearchTool searches knowledge bases with flexible query modes.
 // seenChunks lets repeated calls in the same session surface previously-
-// returned chunks in a compact form (mirroring wiki_search's de-duping UX)
+// returned chunks in a compact form
 // so the LLM doesn't burn tokens re-reading identical content.
 type KnowledgeSearchTool struct {
 	BaseTool
@@ -446,11 +446,11 @@ func (t *KnowledgeSearchTool) concurrentSearchByTargets(
 		kbList = kbs
 	}
 
-	// Filter out non-searchable KBs (wiki-only / graph-only). knowledge_search
-	// can only serve KBs with vector or keyword indexing; feeding a wiki-only
+	// Filter out KBs with no vector or keyword index. knowledge_search
+	// can only serve KBs with vector or keyword indexing; feeding an unindexed
 	// KB into HybridSearch causes spurious "model ID cannot be empty" errors
 	// because such KBs have no EmbeddingModelID configured. Such scopes
-	// should be queried via wiki_search / graph tools instead.
+	// should be queried via knowledge context tools instead.
 	//
 	// KBs that we couldn't fetch from the repo (not in kbList) are kept so
 	// the downstream HybridSearch path can still surface the real error.
@@ -475,14 +475,14 @@ func (t *KnowledgeSearchTool) concurrentSearchByTargets(
 			continue
 		}
 		if knownKBs[st.KnowledgeBaseID] {
-			logger.Infof(ctx, "[Tool][KnowledgeSearch] Skipping non-searchable KB %s (no vector/keyword index, likely wiki/graph-only)", st.KnowledgeBaseID)
+			logger.Infof(ctx, "[Tool][KnowledgeSearch] Skipping non-searchable KB %s (no vector/keyword index)", st.KnowledgeBaseID)
 			continue
 		}
 		// KB record unavailable; keep so downstream can surface real errors.
 		filteredTargets = append(filteredTargets, st)
 	}
 	if len(filteredTargets) == 0 {
-		logger.Infof(ctx, "[Tool][KnowledgeSearch] No searchable KBs in scope (all wiki/graph-only); skipping retrieval")
+		logger.Infof(ctx, "[Tool][KnowledgeSearch] No searchable KBs in scope (no vector or keyword indexes); skipping retrieval")
 		return nil
 	}
 	searchTargets = filteredTargets
@@ -864,10 +864,7 @@ func (t *KnowledgeSearchTool) formatOutput(
 		kbCounts[r.KnowledgeBaseID]++
 	}
 
-	// Format individual results as XML. Tag names are kept in sync with
-	// wiki_search (`<search_results>`, per-entry element, `<query>`) so that
-	// agents and downstream consumers see a single consistent shape across
-	// all retrieval tools.
+	// Format individual results as XML for agents and downstream consumers.
 	var ob strings.Builder
 	ob.WriteString(fmt.Sprintf("<search_results count=\"%d\">\n", len(results)))
 	for _, q := range queries {

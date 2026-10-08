@@ -169,24 +169,3 @@ func listItemIDsForTest(items []*types.SessionListItem) []string {
 	}
 	return ids
 }
-
-// Maintenance sessions retain their transcripts and stay hidden from the
-// personal conversation list and its total count.
-func TestSessionRepositoryQueryPagedHidesMaintenanceSessions(t *testing.T) {
-	repo, db := newSessionRepositoryForTest(t)
-	ctx := context.Background()
-
-	web := createSessionForTest(t, db, 1, "alice")
-	maintenance := createSessionForTest(t, db, 1, "alice")
-	require.NoError(t, db.Model(&types.Session{}).Where("id = ?", maintenance.ID).
-		Update("description", types.SkillMaintenanceSessionMarker+"install").Error)
-
-	items, total, err := repo.QueryPaged(ctx, &types.SessionListQuery{
-		TenantID: 1, UserID: "alice", Page: 1, PageSize: 50,
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{web.ID}, listItemIDsForTest(items),
-		"conversation list must not include maintenance sessions")
-	require.EqualValues(t, 1, total,
-		"conversation count must not include maintenance sessions")
-}

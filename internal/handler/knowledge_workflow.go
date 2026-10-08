@@ -79,15 +79,6 @@ func (h *KnowledgeWorkflowHandler) GetRun(c *gin.Context) {
 	data, err := h.service.GetRun(c.Request.Context(), c.Param("id"), c.Param("run_id"))
 	workflowResponse(c, data, err)
 }
-func (h *KnowledgeWorkflowHandler) Decide(c *gin.Context) {
-	var in types.KnowledgeWorkflowDecision
-	if err := c.ShouldBindJSON(&in); err != nil {
-		c.Error(werrors.NewBadRequestError("invalid review decision"))
-		return
-	}
-	data, err := h.service.Approve(c.Request.Context(), c.Param("id"), c.Param("run_id"), in.Decision)
-	workflowResponse(c, data, err)
-}
 func (h *KnowledgeWorkflowHandler) Resume(c *gin.Context) {
 	data, err := h.service.Resume(c.Request.Context(), c.Param("id"), c.Param("run_id"))
 	workflowResponse(c, data, err)

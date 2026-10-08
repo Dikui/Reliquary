@@ -14,21 +14,8 @@ import (
 
 // storedRefRE recognizes resource handles and local file paths, assigning
 // either form a compact reference in model input.
-//
-// The final alternative handles wiki summary-page slugs (summary/<uuid>). They
-// are not storage handles, but they share the exact failure mode this registry
-// exists to prevent: a high-entropy identifier the model must reproduce
-// verbatim (inside [[slug|display]] links and as wiki-tool slug arguments).
-// Models routinely mangle the UUID by inserting or dropping hex digits, which
-// yields dead cross-links. Aliasing the slug to a low-entropy res:// token
-// removes the opportunity to mangle at the source; the token round-trips back
-// to the real slug on stream output and in decoded tool-call arguments before
-// anything is persisted. Entity slugs (entity/<readable-title>) are low-entropy
-// and semantically meaningful, so they are deliberately left untouched.
 var storedRefRE = regexp.MustCompile(
-	`resource://[0-9A-Za-z_-]{22}|` +
-		`local://[^\s)\]>"']+|` +
-		`summary/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`,
+	`resource://[0-9A-Za-z_-]{22}|local://[^\s)\]>"']+`,
 )
 
 // resourceHandleShapeRE matches the handle syntax produced by EncodeText. It

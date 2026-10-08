@@ -149,11 +149,9 @@ func TestDuplicateKnowledgeBase_CreatesSettingsOnlyDuplicate(t *testing.T) {
 		ASRConfig:             types.ASRConfig{Enabled: true, ModelID: "asr-1", Language: "zh"},
 
 		QuestionGenerationConfig: &types.QuestionGenerationConfig{Enabled: true, QuestionCount: 5},
-		WikiConfig:               &types.WikiConfig{SynthesisModelID: "wiki-llm", MaxPagesPerIngest: 12},
 		IndexingStrategy: types.IndexingStrategy{
 			VectorEnabled:  true,
 			KeywordEnabled: true,
-			WikiEnabled:    true,
 		},
 		IsPinned:        true,
 		KnowledgeCount:  9,
@@ -183,8 +181,6 @@ func TestDuplicateKnowledgeBase_CreatesSettingsOnlyDuplicate(t *testing.T) {
 	assert.Equal(t, source.ASRConfig, target.ASRConfig)
 	require.NotNil(t, target.QuestionGenerationConfig)
 	assert.Equal(t, 5, target.QuestionGenerationConfig.QuestionCount)
-	require.NotNil(t, target.WikiConfig)
-	assert.Equal(t, "wiki-llm", target.WikiConfig.SynthesisModelID)
 	assert.Equal(t, source.IndexingStrategy, target.IndexingStrategy)
 
 	assert.False(t, target.IsTemporary)

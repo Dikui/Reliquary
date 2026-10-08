@@ -65,7 +65,7 @@
 <script lang="ts">
 import type { InjectionKey } from 'vue'
 
-// Skill manage (and similar) panels teleport compact header actions here so
+// Settings panels teleport compact header actions here so
 // they sit on the title row without each drawer re-declaring the chrome.
 export const SETTING_DRAWER_HEADER_ACTIONS_ID: InjectionKey<string> = Symbol('settingDrawerHeaderActionsId')
 </script>

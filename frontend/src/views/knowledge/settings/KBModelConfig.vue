@@ -25,18 +25,15 @@
         </div>
       </div>
 
-      <!-- Embedding 嵌入模型: RAG 检索启用时必填; 纯 Wiki 时可选(用于目录归类相似度) -->
-      <div v-if="ragEnabled !== false || wikiEnabled" class="setting-row" data-guide="kb-create-embedding">
+      <div v-if="ragEnabled !== false" class="setting-row" data-guide="kb-create-embedding">
         <div class="setting-info">
           <label>
             {{ $t('knowledgeEditor.models.embeddingLabel') }}
             <span v-if="ragEnabled" class="required">*</span>
-            <span v-else-if="wikiEnabled" class="optional">{{ $t('knowledgeEditor.models.embeddingOptional') }}</span>
+
           </label>
           <p class="desc">
-            {{ (wikiEnabled && ragEnabled === false)
-              ? $t('knowledgeEditor.models.embeddingWikiOptionalDesc')
-              : $t('knowledgeEditor.models.embeddingDesc') }}
+            {{ $t('knowledgeEditor.models.embeddingDesc') }}
           </p>
           <t-alert
             v-if="ragEnabled && hasFiles"
@@ -52,7 +49,7 @@
             :selected-model-id="config.embeddingModelId"
             :all-models="allModels"
             :disabled="ragEnabled && hasFiles"
-            :clearable="ragEnabled === false && wikiEnabled"
+            :clearable="false"
             @update:selected-model-id="handleEmbeddingChange"
             @add-model="handleAddModel('embedding')"
             :placeholder="$t('knowledgeEditor.models.embeddingPlaceholder')"
@@ -60,24 +57,6 @@
         </div>
       </div>
 
-      <!-- Wiki 合成模型 (仅当 Wiki 启用时显示) -->
-      <div v-if="wikiEnabled" class="setting-row">
-        <div class="setting-info">
-          <label>{{ $t('knowledgeEditor.wiki.synthesisModelLabel') }}</label>
-          <p class="desc">{{ $t('knowledgeEditor.wiki.synthesisModelTip') }}</p>
-        </div>
-        <div class="setting-control">
-          <ModelSelector
-            model-type="KnowledgeQA"
-            :selected-model-id="config.wikiSynthesisModelId"
-            :all-models="allModels"
-            clearable
-            @update:selected-model-id="handleWikiModelChange"
-            @add-model="handleAddModel('knowledgeqa')"
-            :placeholder="$t('knowledgeEditor.wiki.synthesisModelPlaceholder')"
-          />
-        </div>
-      </div>
 
     </div>
   </div>
@@ -93,13 +72,11 @@ interface ModelConfig {
   llmModelId?: string
   embeddingModelId?: string
   vllmModelId?: string
-  wikiSynthesisModelId?: string
 }
 
 interface Props {
   config: ModelConfig
   hasFiles: boolean
-  wikiEnabled?: boolean
   ragEnabled?: boolean
   allModels?: any[]
 }
@@ -127,13 +104,6 @@ const handleEmbeddingChange = (modelId: string) => {
   emit('update:config', {
     ...props.config,
     embeddingModelId: modelId
-  })
-}
-
-const handleWikiModelChange = (modelId: string) => {
-  emit('update:config', {
-    ...props.config,
-    wikiSynthesisModelId: modelId
   })
 }
 
@@ -224,4 +194,3 @@ const handleAddModel = (subSection: string) => {
   align-items: flex-start;
 }
 </style>
-

@@ -68,7 +68,6 @@ const RUNTIME_WORKER_POOL_NAMES = [
   'enrichment',
   'maintenance',
   'shared',
-  'wiki',
 ] as const
 
 const RUNTIME_QUEUE_NAMES = [
@@ -81,7 +80,6 @@ const RUNTIME_QUEUE_NAMES = [
   'multimodal',
   'graph',
   'question',
-  'wiki',
 ] as const
 
 const RUNTIME_TASK_TYPE_KEYS = [
@@ -100,8 +98,6 @@ const RUNTIME_TASK_TYPE_KEYS = [
   'indexDelete',
   'kbClone',
   'kbDelete',
-  'wikiIngest',
-  'wikiFinalize',
 ] as const
 
 test('runtime queue worker pool and queue labels exist in every locale', () => {

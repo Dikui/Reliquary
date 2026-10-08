@@ -122,7 +122,7 @@ fi
 
 echo "[prepare] 2/6 拉取 Reliquary 运行时文件 (ref=${RELIQUARY_REF})"
 # 只下载实际需要的 4 个文件, 不 clone 整个仓库 (~MB 级 -> ~KB 级)
-mkdir -p "${RELIQUARY_DIR}/config" "${RELIQUARY_DIR}/skills"
+mkdir -p "${RELIQUARY_DIR}/config"
 
 tmp=$(mktemp -d)
 trap 'rm -rf "${tmp}"' EXIT
@@ -136,7 +136,6 @@ tar -xzf "${tmp}/repo.tar.gz" -C "${tmp}" \
   '*/docker-compose.yml' \
   '*/.env.example' \
   '*/config/config.yaml' \
-  '*/skills/preloaded'
 src=$(find "${tmp}" -maxdepth 1 -mindepth 1 -type d -name 'Reliquary-*' | head -1)
 if [[ -z "${src}" ]]; then
   echo "[prepare] 解压失败, 未找到 Reliquary-* 目录" >&2
@@ -146,8 +145,6 @@ fi
 cp    "${src}/docker-compose.yml" "${RELIQUARY_DIR}/"
 cp    "${src}/.env.example"       "${RELIQUARY_DIR}/"
 cp    "${src}/config/config.yaml" "${RELIQUARY_DIR}/config/"
-rm -rf "${RELIQUARY_DIR}/skills/preloaded"
-cp -r "${src}/skills/preloaded"   "${RELIQUARY_DIR}/skills/"
 
 # 记录元信息, 供 firstboot / 升级时参考
 cat >"${RELIQUARY_DIR}/.cloud-image-meta" <<EOF
@@ -179,21 +176,9 @@ echo "[prepare] 4/6 拉取并启动默认 4 个常驻容器 (frontend/app/postgr
 docker compose pull
 docker compose up -d
 
-# 提前 pull sandbox 镜像 (Agent Skills 运行时由 app 按需 docker run, 非常驻)
-# 不预拉的话, 用户首次跑 Skill 会卡在下载
-echo "[prepare] 4.5/6 预拉 sandbox 镜像 (Agent Skills 用, 非常驻)"
-docker compose --profile full pull sandbox || true
-
-# 不预拉, 体积可省 5-15GB. 用户如需启用:
-#   cd /opt/Reliquary && docker compose --profile <name> up -d
-
 # 升级场景: 清理旧版本 tag 的 reliquary-* 镜像。
 # 默认关闭, 保留回滚路径; 制作镜像前显式打开以减小体积。
 #
-# 注意: 不用 `docker image prune -af`!
-# sandbox 镜像在 compose 里只 pull 不 up (Agent Skills 由 app 按需 docker run),
-# 没有任何容器引用它, 一旦 `prune -a` 会把当前版本的 sandbox 一起删掉,
-# 反而违背 prepare.sh 4.5 步预拉 sandbox 的目的。
 # 这里精确按 tag 比对, 只删 reliquary-* 仓库下、tag 不等于当前
 # RELIQUARY_VERSION 的镜像, 基础设施镜像 (paradedb / redis) 不动。
 if [[ "${PRUNE_OLD_IMAGES,,}" == "true" || "${PRUNE_OLD_IMAGES}" == "1" ]]; then
@@ -227,7 +212,6 @@ systemctl enable reliquary-firstboot.service
 echo "[prepare] 6/6 完成"
 echo
 echo "  Reliquary 运行时已部署到 ${RELIQUARY_DIR}"
-echo "    docker-compose.yml / config/config.yaml / skills/preloaded / .env"
 echo "  版本: ${RELIQUARY_REF}  (见 ${RELIQUARY_DIR}/.cloud-image-meta)"
 echo
 echo "  打开浏览器访问  http://<本机公网IP>  验证功能"

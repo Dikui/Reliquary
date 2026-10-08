@@ -250,7 +250,7 @@ func TestBuildAssistantHistoryMessages_ToolFailureSurfacesAsError(t *testing.T) 
 	}, got[1])
 }
 
-func TestBuildAssistantHistoryMessages_SkillScriptFailureKeepsStdout(t *testing.T) {
+func TestBuildAssistantHistoryMessages_DataAnalysisFailureKeepsOutput(t *testing.T) {
 	stdout := `{"chart":{"success":false,"error":{"error":"X轴字段不存在：工作项目"}}}`
 	msg := &types.Message{
 		Role:    "assistant",
@@ -261,17 +261,16 @@ func TestBuildAssistantHistoryMessages_SkillScriptFailureKeepsStdout(t *testing.
 				Thought:   "Plot the chart.",
 				ToolCalls: []types.ToolCall{
 					{
-						ID:   "call_skill",
-						Name: agenttools.ToolExecuteSkillScript,
-						Args: map[string]interface{}{"skill_name": "smart-charts", "script_path": "scripts/cli.py"},
+						ID:   "call_analysis",
+						Name: agenttools.ToolDataAnalysis,
+						Args: map[string]interface{}{"sql": "SELECT missing_axis FROM chart_data"},
 						Result: &types.ToolResult{
 							Success: false,
-							Output:  "=== Script Execution ===\n" + stdout,
-							Error:   "Script exited with code 1",
+							Output:  stdout,
+							Error:   "Unknown chart axis",
 							Data: map[string]interface{}{
-								"display_type": "shell_exec",
-								"stdout":       stdout,
-								"exit_code":    1,
+								"display_type": "data_analysis",
+								"output":       stdout,
 							},
 						},
 					},
@@ -283,7 +282,7 @@ func TestBuildAssistantHistoryMessages_SkillScriptFailureKeepsStdout(t *testing.
 	require.Len(t, got, 3)
 	assert.Equal(t, "tool", got[1].Role)
 	assert.Contains(t, got[1].Content, "X轴字段不存在：工作项目")
-	assert.Contains(t, got[1].Content, "Error: Script exited with code 1")
+	assert.Contains(t, got[1].Content, "Error: Unknown chart axis")
 }
 
 // TestFilterNonTerminalToolCalls confirms a legacy final_answer entry is

@@ -29,20 +29,19 @@ const kbTaskCleanupTimeout = 5 * time.Second
 
 // knowledgeBaseService implements the knowledge base service interface
 type knowledgeBaseService struct {
-	db              *gorm.DB
-	repo            interfaces.KnowledgeBaseRepository
-	kgRepo          interfaces.KnowledgeRepository
-	chunkRepo       interfaces.ChunkRepository
-	modelService    interfaces.ModelService
-	retrieveEngine  interfaces.RetrievalService
-	tenantRepo      interfaces.TenantRepository
-	fileSvc         interfaces.FileService
-	asynqClient     interfaces.TaskEnqueuer
-	taskInspector   interfaces.TaskInspector
-	taskPendingRepo interfaces.TaskPendingOpsRepository
-	dsRepo          interfaces.DataSourceRepository
-	syncLogRepo     interfaces.SyncLogRepository
-	dsScheduler     *datasource.Scheduler
+	db             *gorm.DB
+	repo           interfaces.KnowledgeBaseRepository
+	kgRepo         interfaces.KnowledgeRepository
+	chunkRepo      interfaces.ChunkRepository
+	modelService   interfaces.ModelService
+	retrieveEngine interfaces.RetrievalService
+	tenantRepo     interfaces.TenantRepository
+	fileSvc        interfaces.FileService
+	asynqClient    interfaces.TaskEnqueuer
+	taskInspector  interfaces.TaskInspector
+	dsRepo         interfaces.DataSourceRepository
+	syncLogRepo    interfaces.SyncLogRepository
+	dsScheduler    *datasource.Scheduler
 
 	resourceCatalog        interfaces.ResourceCatalog
 	nameEmbeddingRebuilder ContextNameEmbeddingRebuildTrigger
@@ -58,7 +57,6 @@ func NewKnowledgeBaseService(db *gorm.DB, repo interfaces.KnowledgeBaseRepositor
 	fileSvc interfaces.FileService,
 	asynqClient interfaces.TaskEnqueuer,
 	taskInspector interfaces.TaskInspector,
-	taskPendingRepo interfaces.TaskPendingOpsRepository,
 	dsRepo interfaces.DataSourceRepository,
 	syncLogRepo interfaces.SyncLogRepository,
 	dsScheduler *datasource.Scheduler,
@@ -66,20 +64,19 @@ func NewKnowledgeBaseService(db *gorm.DB, repo interfaces.KnowledgeBaseRepositor
 	resourceCatalog interfaces.ResourceCatalog,
 ) interfaces.KnowledgeBaseService {
 	return &knowledgeBaseService{
-		db:              db,
-		repo:            repo,
-		kgRepo:          kgRepo,
-		chunkRepo:       chunkRepo,
-		modelService:    modelService,
-		retrieveEngine:  retrieveEngine,
-		tenantRepo:      tenantRepo,
-		fileSvc:         fileSvc,
-		asynqClient:     asynqClient,
-		taskInspector:   taskInspector,
-		taskPendingRepo: taskPendingRepo,
-		dsRepo:          dsRepo,
-		syncLogRepo:     syncLogRepo,
-		dsScheduler:     dsScheduler,
+		db:             db,
+		repo:           repo,
+		kgRepo:         kgRepo,
+		chunkRepo:      chunkRepo,
+		modelService:   modelService,
+		retrieveEngine: retrieveEngine,
+		tenantRepo:     tenantRepo,
+		fileSvc:        fileSvc,
+		asynqClient:    asynqClient,
+		taskInspector:  taskInspector,
+		dsRepo:         dsRepo,
+		syncLogRepo:    syncLogRepo,
+		dsScheduler:    dsScheduler,
 
 		resourceCatalog: resourceCatalog,
 	}
@@ -399,9 +396,6 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 		kb.ChunkingConfig = config.ChunkingConfig
 		kb.ImageProcessingConfig = config.ImageProcessingConfig
 
-		if config.WikiConfig != nil {
-			kb.WikiConfig = config.WikiConfig
-		}
 		if config.AutoTagConfig != nil {
 			config.AutoTagConfig.Normalize()
 			kb.AutoTagConfig = config.AutoTagConfig
@@ -412,11 +406,6 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 				return nil, errors.New("at least one indexing strategy must be enabled")
 			}
 			kb.IndexingStrategy = *config.IndexingStrategy
-			// Ensure WikiConfig exists when wiki indexing is enabled so that
-			// wiki-specific tunables (synthesis model, granularity, …) have a home.
-			if kb.WikiConfig == nil && config.IndexingStrategy.WikiEnabled {
-				kb.WikiConfig = &types.WikiConfig{}
-			}
 
 		}
 	}
@@ -595,7 +584,7 @@ func (s *knowledgeBaseService) DeleteKnowledgeBase(ctx context.Context, id strin
 		}
 	}
 
-	// Stop both ephemeral queue work and durable wiki operations that target
+	// Stop queued work that targets
 	// the now-deleted KB. ProcessKBDelete repeats this with document IDs and
 	// performs one final scrub after heavy cleanup to close enqueue races.
 	//
@@ -800,9 +789,7 @@ func (s *knowledgeBaseService) cancelTasksForKnowledgeBase(
 	}
 }
 
-// cleanupTasksForKnowledgeBase removes both asynq records and durable wiki
-// operations. The latter must be cleared as well or startup recovery can
-// recreate Redis triggers for a KB that no longer exists.
+// cleanupTasksForKnowledgeBase removes queued tasks for a deleted knowledge base.
 func (s *knowledgeBaseService) cleanupTasksForKnowledgeBase(
 	ctx context.Context,
 	kbID string,
@@ -811,15 +798,6 @@ func (s *knowledgeBaseService) cleanupTasksForKnowledgeBase(
 ) {
 	if kbID == "" {
 		return
-	}
-	cleaner, ok := s.taskPendingRepo.(interfaces.TaskPendingOpsScopeCleaner)
-	if ok {
-		// Clear durable work before scanning Redis. A large or degraded queue
-		// must not consume the caller's entire deadline and starve the database
-		// fence that prevents startup recovery from reviving this KB.
-		if err := cleaner.DeleteByScope(ctx, types.TaskScopeKnowledgeBase, kbID); err != nil {
-			logger.Warnf(ctx, "Failed to clear durable tasks for deleted KB %s: %v", kbID, err)
-		}
 	}
 	s.cancelTasksForKnowledgeBase(ctx, kbID, knowledgeIDs, dataSourceIDs)
 }

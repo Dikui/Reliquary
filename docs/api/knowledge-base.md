@@ -227,7 +227,7 @@ curl --location 'http://localhost:8080/api/v1/knowledge-bases/kb-00000001' \
 | ----------- | ------ | ---- | ------------------------------------------------------------- |
 | name        | string | 是   | 知识库名称                                                    |
 | description | string | 否   | 知识库描述                                                    |
-| config      | object | 否   | 更新配置；包含 `chunking_config` / `image_processing_config` / `wiki_config` / `indexing_strategy` |
+| config      | object | 否   | 更新配置；包含 `chunking_config` / `image_processing_config` / `indexing_strategy` |
 
 **请求**:
 

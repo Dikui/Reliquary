@@ -177,7 +177,7 @@ func (s *knowledgeService) DeleteKnowledge(ctx context.Context, id string) error
 
 	wg := errgroup.Group{}
 	// Delete knowledge embeddings from PostgreSQL index.
-	// Skip entirely when the knowledge has no embedding model (e.g. Wiki-only KB):
+	// Skip entirely when the knowledge has no embedding model (disabled indexing):
 	// nothing was ever written to the PostgreSQL index, so there is nothing to delete,
 	// and GetEmbeddingModel would fail with "model ID cannot be empty".
 	if strings.TrimSpace(knowledge.EmbeddingModelID) != "" {
@@ -196,12 +196,6 @@ func (s *knowledgeService) DeleteKnowledge(ctx context.Context, id string) error
 		})
 	} else {
 		logger.Infof(ctx, "Knowledge %s has no embedding model, skipping PostgreSQL index cleanup", knowledge.ID)
-	}
-
-	// Clean wiki pages before deleting chunks so cleanup can still identify
-	// which chunk_refs belonged to this source document.
-	if kb != nil && kb.IsWikiEnabled() {
-		s.cleanupWikiOnKnowledgeDelete(ctx, knowledge)
 	}
 
 	// Delete all chunks associated with this knowledge
@@ -258,244 +252,6 @@ func (s *knowledgeService) DeleteKnowledge(ctx context.Context, id string) error
 		logger.GetLogger(ctx).WithField("error", err).Errorf("DeleteKnowledge update tenant storage used failed")
 	}
 	return nil
-}
-
-// cleanupWikiOnKnowledgeDelete handles wiki pages when a source document is deleted.
-//
-// There are three sources of truth we must keep consistent:
-//   - The knowledge row (being soft-deleted right now by the caller)
-//   - Wiki pages whose source_refs include this knowledge
-//   - Pending/in-flight wiki_ingest tasks that may create *new* pages pointing at it
-//
-// The function is deliberately best-effort and idempotent:
-//   - It writes a tombstone + scrubs pending ingest ops so new pages cannot be
-//     born with a stale source_ref (guards (a) queued ingest and (b) ingest
-//     tasks mid-LLM call — both consult the tombstone before writing).
-//   - It immediately reconciles any pages already present (delete-if-only-ref
-//     or strip-ref-if-multi).
-//   - It *unconditionally* enqueues a retract task. Crucially we DO NOT gate
-//     enqueue on "pages currently exist": in the ingest/delete race the
-//     knowledge may have pages that exist only after this function returns
-//     (the ingest task fires later and, absent the tombstone, would have
-//     created them). The retract handler re-queries ListPagesBySourceRef at
-//     run time, so even with an empty PageSlugs it will do the right thing —
-//     and at worst it's a cheap no-op.
-func (s *knowledgeService) cleanupWikiOnKnowledgeDelete(ctx context.Context, knowledge *types.Knowledge) {
-	if knowledge == nil {
-		return
-	}
-	kbID := knowledge.KnowledgeBaseID
-	knowledgeID := knowledge.ID
-	if kbID == "" || knowledgeID == "" {
-		return
-	}
-
-	// (1) Tombstone + scrub pending ingest — must happen first so any
-	// wiki_ingest task that wakes up between here and the retract enqueue
-	// below sees "knowledge gone" and bails out.
-	s.markKnowledgeDeletedForWiki(ctx, kbID, knowledgeID)
-	s.scrubWikiPendingIngest(ctx, kbID, knowledgeID, "cleanup")
-
-	// Pull title/summary from the knowledge itself — do NOT read them from
-	// existing wiki pages. In the race window wiki pages may not exist yet,
-	// and even when they do their "summary" is the LLM-extracted one which
-	// we're about to invalidate anyway. The knowledge row still has the
-	// original Title/FileName/Description, which is what the retract prompt
-	// actually wants.
-	docTitle := knowledge.Title
-	if docTitle == "" {
-		docTitle = knowledge.FileName
-	}
-	if docTitle == "" {
-		docTitle = knowledgeID
-	}
-	docSummary := knowledge.Description
-
-	// (2) Immediate reconciliation for pages already present. If ingest
-	// hasn't run yet this simply finds nothing; that's fine — see (3).
-	pages, err := s.wikiRepo.ListBySourceRef(ctx, kbID, knowledgeID)
-	if err != nil {
-		logger.Warnf(ctx, "wiki cleanup: failed to list pages by source ref %s: %v", knowledgeID, err)
-		pages = nil
-	}
-	sourceChunkRefs := s.wikiChunkRefsForKnowledge(ctx, knowledge)
-
-	// Prefer the on-disk summary if the summary page already exists (it's
-	// richer than the raw user-provided description). Leave docSummary
-	// untouched otherwise so we still pass something meaningful downstream.
-	for _, page := range pages {
-		if page.PageType == types.WikiPageTypeSummary && page.Summary != "" {
-			docSummary = page.Summary
-			break
-		}
-	}
-
-	var deletedSlugs []string
-	var retractSlugs []string
-	var affectedFolderIDs []string
-	for _, page := range pages {
-		if page.PageType == types.WikiPageTypeIndex {
-			continue
-		}
-		if page.FolderID != "" {
-			affectedFolderIDs = append(affectedFolderIDs, page.FolderID)
-		}
-
-		remaining := removeSourceRef(page.SourceRefs, knowledgeID)
-
-		if len(remaining) == 0 {
-			if err := s.wikiService.DeletePage(ctx, kbID, page.Slug); err != nil {
-				logger.Warnf(ctx, "wiki cleanup: failed to delete page %s: %v", page.Slug, err)
-			} else {
-				deletedSlugs = append(deletedSlugs, page.Slug)
-			}
-		} else {
-			page.SourceRefs = remaining
-			page.ChunkRefs = removeChunkRefs(page.ChunkRefs, sourceChunkRefs)
-			if err := s.wikiService.UpdatePageMeta(ctx, page); err != nil {
-				logger.Warnf(ctx, "wiki cleanup: failed to update source refs for page %s: %v", page.Slug, err)
-			} else {
-				retractSlugs = append(retractSlugs, page.Slug)
-			}
-		}
-	}
-
-	if len(deletedSlugs) > 0 {
-		logger.Infof(ctx, "wiki cleanup: deleted %d pages after knowledge %s deletion: %v",
-			len(deletedSlugs), knowledgeID, deletedSlugs)
-	}
-
-	allAffectedSlugs := append(retractSlugs, deletedSlugs...)
-
-	// (3) Unconditionally enqueue the retract task. See function comment —
-	// an empty PageSlugs is not a bug, it's the signal "re-query at run
-	// time". The handler will ListPagesBySourceRef again, pick up any
-	// pages that materialised after we looked, and also rebuild the index
-	// so the knowledge's disappearance is reflected in the UI.
-	lang := types.LanguageFromContextOrDefault(ctx)
-	tenantID, _ := types.TenantIDFromContext(ctx)
-	EnqueueWikiRetract(ctx, s.task, s.taskPendingRepo, WikiRetractPayload{
-		TenantID:        tenantID,
-		KnowledgeBaseID: kbID,
-		KnowledgeID:     knowledgeID,
-		DocTitle:        docTitle,
-		DocSummary:      docSummary,
-		Language:        lang,
-		PageSlugs:       allAffectedSlugs,
-		FolderIDs:       uniqueWikiFolderIDs(affectedFolderIDs),
-	})
-	logger.Infof(ctx, "wiki cleanup: enqueued retract task for knowledge %s (%d known slugs: %v)",
-		knowledgeID, len(allAffectedSlugs), allAffectedSlugs)
-}
-
-func (s *knowledgeService) wikiChunkRefsForKnowledge(ctx context.Context, knowledge *types.Knowledge) map[string]bool {
-	if knowledge == nil || s.chunkRepo == nil {
-		return nil
-	}
-	chunks, err := s.chunkRepo.ListChunksByKnowledgeID(ctx, knowledge.TenantID, knowledge.ID)
-	if err != nil {
-		logger.Warnf(ctx, "wiki cleanup: failed to list chunks for knowledge %s: %v", knowledge.ID, err)
-		return nil
-	}
-	refs := make(map[string]bool, len(chunks))
-	for _, chunk := range chunks {
-		if chunk == nil || chunk.ID == "" {
-			continue
-		}
-		refs[chunk.ID] = true
-	}
-	return refs
-}
-
-// markKnowledgeDeletedForWiki writes a short-TTL tombstone so any wiki_ingest
-// task still running or queued for this knowledge can short-circuit before
-// resurrecting a page with a stale source_ref. No-op when Redis is absent.
-func (s *knowledgeService) markKnowledgeDeletedForWiki(ctx context.Context, kbID, knowledgeID string) {
-	if s.redisClient == nil || kbID == "" || knowledgeID == "" {
-		return
-	}
-	key := WikiDeletedTombstoneKey(kbID, knowledgeID)
-	if err := s.redisClient.Set(ctx, key, "1", wikiDeletedTTL).Err(); err != nil {
-		logger.Warnf(ctx, "wiki cleanup: failed to write tombstone %s: %v", key, err)
-	}
-}
-
-// scrubWikiPendingIngest removes queued WikiOpIngest entries for a knowledge
-// from task_pending_ops. Used by both the delete path (we're about to
-// soft-delete the doc, no point ingesting it) and the reparse path (the
-// old chunks are about to vanish, so any pending ingest would either race
-// with the cleanup or no-op on an empty chunk set — and the post-process
-// task will enqueue a fresh ingest once new chunks land anyway).
-//
-// Retract entries stay put — delete still needs them to unlink referencing
-// pages, and reparse never enqueues retracts for the doc being reparsed.
-// We pass op=WikiOpIngest so DeleteByDedupKey filters to the ingest rows
-// only.
-func (s *knowledgeService) scrubWikiPendingIngest(ctx context.Context, kbID, knowledgeID, reason string) {
-	if s.taskPendingRepo == nil || kbID == "" || knowledgeID == "" {
-		return
-	}
-	if err := s.taskPendingRepo.DeleteByDedupKey(ctx, wikiTaskType, wikiTaskScope, kbID, knowledgeID, WikiOpIngest); err != nil {
-		logger.Warnf(ctx, "wiki %s: failed to scrub pending ingest ops for knowledge %s: %v", reason, knowledgeID, err)
-		return
-	}
-	logger.Infof(ctx, "wiki %s: scrubbed pending ingest ops for knowledge %s", reason, knowledgeID)
-}
-
-// prepareWikiForReparse is the reparse counterpart to
-// cleanupWikiOnKnowledgeDelete. It aligns reparse with the same "pending
-// queue hygiene" the delete path already enforces, without taking any
-// destructive action against existing pages.
-//
-// Why no retract / tombstone here: reparse is not a "K is gone" event, it's
-// a "K's contribution is about to be swapped for a new version" event. The
-// actual swap happens asynchronously inside mapOneDocument (see its
-// oldPageSlugs handling) — that's where we have both the old page set and
-// the freshly extracted candidate slugs, which is exactly the information
-// the WikiPageModifyUserPrompt needs to do a correct replace-not-append.
-//
-// So the only thing worth doing synchronously at reparse time is keeping
-// the Redis pending list clean so the re-ingest enqueued by
-// KnowledgePostProcess doesn't race with a stale ingest op that would
-// fire mid-flight against zero chunks.
-func (s *knowledgeService) prepareWikiForReparse(ctx context.Context, knowledge *types.Knowledge) {
-	if knowledge == nil {
-		return
-	}
-	kbID := knowledge.KnowledgeBaseID
-	knowledgeID := knowledge.ID
-	if kbID == "" || knowledgeID == "" {
-		return
-	}
-	s.scrubWikiPendingIngest(ctx, kbID, knowledgeID, "reparse")
-}
-
-// removeSourceRef removes entries from source_refs that match a knowledge ID.
-// Handles both old format ("knowledgeID") and new format ("knowledgeID|title").
-func removeSourceRef(refs types.StringArray, knowledgeID string) types.StringArray {
-	var result types.StringArray
-	prefix := knowledgeID + "|"
-	for _, ref := range refs {
-		if ref == knowledgeID || strings.HasPrefix(ref, prefix) {
-			continue
-		}
-		result = append(result, ref)
-	}
-	return result
-}
-
-func removeChunkRefs(refs types.StringArray, removed map[string]bool) types.StringArray {
-	if len(refs) == 0 || len(removed) == 0 {
-		return refs
-	}
-	result := make(types.StringArray, 0, len(refs))
-	for _, ref := range refs {
-		if removed[ref] {
-			continue
-		}
-		result = append(result, ref)
-	}
-	return result
 }
 
 type knowledgeVectorDeleteGroup struct {
@@ -639,7 +395,7 @@ func (s *knowledgeService) DeleteKnowledgeList(ctx context.Context, ids []string
 	// 2. Delete knowledge embeddings from PostgreSQL index
 	wg.Go(func() error {
 		for _, group := range buildKnowledgeVectorDeleteGroups(knowledgeList) {
-			// Wiki-only knowledge never had embeddings written to the PostgreSQL index,
+			// Knowledge with disabled indexing never had embeddings written to the PostgreSQL index,
 			// and its EmbeddingModelID is intentionally empty. Skip the whole group
 			// to avoid the spurious "model ID cannot be empty" failure.
 			if strings.TrimSpace(group.EmbeddingModelID) == "" {
@@ -662,15 +418,6 @@ func (s *knowledgeService) DeleteKnowledgeList(ctx context.Context, ids []string
 		}
 		return nil
 	})
-
-	// 3. Clean wiki pages before deleting chunks so cleanup can still identify
-	// which chunk_refs belonged to each source document.
-	for _, knowledge := range knowledgeList {
-		kb, _ := s.kbService.GetKnowledgeBaseByID(ctx, knowledge.KnowledgeBaseID)
-		if kb != nil && kb.IsWikiEnabled() {
-			s.cleanupWikiOnKnowledgeDelete(ctx, knowledge)
-		}
-	}
 
 	// 4. Delete all chunks associated with this knowledge
 	wg.Go(func() error {

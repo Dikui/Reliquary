@@ -555,9 +555,9 @@ func buildRuntimeContextBlock(
 	return sb.String()
 }
 
-// buildMustUseBlock emits a short per-turn hint when the user @mentioned MCP/Skill.
+// buildMustUseBlock emits a short per-turn hint when the user @mentioned MCP.
 // Tool names are not listed here — they are already in the function-calling schema.
-func buildMustUseBlock(mcpServices []*PinnedMCPServiceInfo, skills []*PinnedSkillInfo) string {
+func buildMustUseBlock(mcpServices []*PinnedMCPServiceInfo) string {
 	var lines []string
 	for _, svc := range mcpServices {
 		if svc == nil {
@@ -573,20 +573,13 @@ func buildMustUseBlock(mcpServices []*PinnedMCPServiceInfo, skills []*PinnedSkil
 		}
 		lines = append(lines, fmt.Sprintf("Must use MCP tools whose names start with %s (@%s) to answer the question below.", prefix, display))
 	}
-	for _, skill := range skills {
-		if skill == nil || skill.Name == "" {
-			continue
-		}
-		name := sanitizeMustUseField(skill.Name)
-		lines = append(lines, fmt.Sprintf("Must call read_skill(skill_name=\"%s\") for @Skill \"%s\" before answering.", name, name))
-	}
 	if len(lines) == 0 {
 		return ""
 	}
 	return "<must_use>\n" + strings.Join(lines, "\n") + "\n</must_use>"
 }
 
-// sanitizeMustUseField strips newlines and angle brackets so an MCP/skill name
+// sanitizeMustUseField strips newlines and angle brackets so an MCP service name
 // cannot break out of the <must_use> block or inject extra instruction lines.
 func sanitizeMustUseField(s string) string {
 	replacer := strings.NewReplacer("\n", " ", "\r", " ", "<", " ", ">", " ")
@@ -594,7 +587,7 @@ func sanitizeMustUseField(s string) string {
 }
 
 // mcpToolNamePrefix returns the shared prefix for an MCP service's registered
-// tools (e.g. mcp_iwiki_ from mcp_iwiki_getdocument). Tool names are
+// tools (e.g. mcp_docstore_ from mcp_docstore_getdocument). Tool names are
 // mcp_{sanitized_service_name}_{tool}, and the service slug itself may contain
 // underscores (sanitizeName turns spaces/hyphens into "_"), so we take the
 // longest common prefix across the service's tools and trim it back to the last
@@ -647,7 +640,7 @@ func (e *AgentEngine) RenderUserTurnContent(sessionID, query string) string {
 	e.registerRuntimeReferences()
 	runtimeCtx := buildRuntimeContextBlock(sessionID, e.knowledgeBasesInfo, e.selectedDocs)
 	runtimeCtx = e.modelContext.CompactKnownText(runtimeCtx)
-	mustUse := buildMustUseBlock(e.pinnedMCPServices, e.pinnedSkills)
+	mustUse := buildMustUseBlock(e.pinnedMCPServices)
 	return composeUserTurnContent(runtimeCtx, mustUse, query)
 }
 
@@ -814,9 +807,6 @@ var kbToolNames = map[string]bool{
 	agenttools.ToolListKnowledgeChunks: true,
 	agenttools.ToolQueryKnowledgeGraph: true,
 	agenttools.ToolGetDocumentInfo:     true,
-	agenttools.ToolWikiSearch:          true,
-	agenttools.ToolWikiReadPage:        true,
-	agenttools.ToolWikiReadSourceDoc:   true,
 }
 
 // redactHistoryKBResults replaces full KB tool results in historical context

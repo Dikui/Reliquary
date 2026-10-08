@@ -279,7 +279,7 @@ func TestApplyCompletionToolCallMetadata(t *testing.T) {
 			ID:   "call_1",
 			Type: "function",
 			Function: types.FunctionCall{
-				Name:      "wiki_search",
+				Name:      "knowledge_search",
 				Arguments: `{"query":"MACS"}`,
 			},
 		}},
@@ -290,7 +290,7 @@ func TestApplyCompletionToolCallMetadata(t *testing.T) {
 				"tool_calls":[{
 					"id":"call_1",
 					"type":"function",
-					"function":{"name":"wiki_search","arguments":"{\"query\":\"MACS\"}"},
+					"function":{"name":"knowledge_search","arguments":"{\"query\":\"MACS\"}"},
 					"extra_content":{"google":{"thought_signature":"sig-from-gemini"}}
 				}]
 			}
@@ -315,7 +315,7 @@ func TestApplyStreamToolCallMetadata(t *testing.T) {
 					"index":0,
 					"id":"call_1",
 					"type":"function",
-					"function":{"name":"wiki_search","arguments":"{\"query\":\"MACS\"}"},
+					"function":{"name":"knowledge_search","arguments":"{\"query\":\"MACS\"}"},
 					"extra_content":{"google":{"thought_signature":"stream-sig-from-gemini"}}
 				}]
 			}

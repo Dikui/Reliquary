@@ -123,11 +123,7 @@ Reliquary API 按功能分为以下几类：
 | 知识搜索 | 在知识库中搜索内容 | [knowledge-search.md](./knowledge-search.md) |
 | 聊天功能 | 基于知识库和 Agent 进行问答 | [chat.md](./chat.md) |
 | 消息管理 | 获取和管理对话消息 | [message.md](./message.md) |
-| 评估功能 | 评估模型性能 | [evaluation.md](./evaluation.md) |
 | 初始化管理 | 知识库模型配置与 Ollama 管理 | [initialization.md](./initialization.md) |
 | 系统管理 | 系统信息、解析引擎、存储引擎 | [system.md](./system.md) |
 | MCP 服务 | MCP 工具服务管理 | [mcp-service.md](./mcp-service.md) |
-| Skills | 预装与已安装的智能体技能、技能环境变量 | [skill.md](./skill.md) |
-| 长期记忆 | 当前用户的跨会话记忆（设置、条目、主题、文档亲和度、导出、整理） | [memory.md](./memory.md) |
-| IM 渠道 | 飞书 IM 对接，含渠道 CRUD 与回调 | [../IM集成开发文档.md](../IM集成开发文档.md) |
 | 数据源导入 | RSS 订阅与站点适配器的数据源接入和同步 | [../数据源导入开发文档.md](../数据源导入开发文档.md) |

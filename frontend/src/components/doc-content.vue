@@ -18,7 +18,7 @@ import { MessagePlugin } from "tdesign-vue-next";
 import { sanitizeHTML, safeMarkdownToHTML, createSafeImage, isValidImageURL, hydrateProtectedFileImages, isValidURL } from '@/utils/security';
 import { normalizeSpuriousTablePrefixes } from '@/utils/markdownTableNormalize';
 import { openMermaidFullscreen } from '@/utils/mermaidViewer';
-import { diffWikiLines, type WikiDiffLine } from '@/utils/wikiLineDiff';
+import { diffTextLines, type TextDiffLine } from '@/utils/textLineDiff';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '@/stores/auth';
 import DocumentPreview from '@/components/document-preview.vue';
@@ -1277,7 +1277,7 @@ const retryChunkIndex = async (item: any) => {
   }
 };
 
-type ChunkDiffLine = WikiDiffLine | { type: 'skip'; text: string };
+type ChunkDiffLine = TextDiffLine | { type: 'skip'; text: string };
 
 const chunkHistoryPopup = ref('');
 const chunkHistoryLoading = ref('');
@@ -1343,7 +1343,7 @@ const getSelectedChunkRevision = (item: any) => {
 const compactChunkDiff = (item: any): ChunkDiffLine[] => {
   const revision = getSelectedChunkRevision(item);
   if (!revision) return [];
-  const lines = diffWikiLines(revision.content || '', item.content || '');
+  const lines = diffTextLines(revision.content || '', item.content || '');
   const changed = new Set<number>();
   lines.forEach((line, index) => {
     if (line.type !== 'same') {
