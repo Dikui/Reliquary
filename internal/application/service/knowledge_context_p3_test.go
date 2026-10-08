@@ -323,6 +323,9 @@ func TestP3ConcurrentMessagesCreateOneIdentityWithoutOrphans(t *testing.T) {
 	defer cancel()
 	body := "SimCo has 10 staff."
 	messages := []*types.Knowledge{p3Message(t, db, "simultaneous-one", body), p3Message(t, db, "simultaneous-two", body)}
+	for _, message := range messages {
+		focusContextTestMessage(t, db, message)
+	}
 	entered := make(chan struct{}, 2)
 	release := make(chan struct{})
 	model := &p3CountingChat{reply: func(callCtx context.Context, input []chat.Message) string {
@@ -406,6 +409,9 @@ func TestP3ConcurrentMessagesUpdateEventsInOppositeOrders(t *testing.T) {
 	bodyAlpha := "Alpha changed one. Alpha changed two."
 	bodyBeta := "Beta changed one. Beta changed two."
 	sources := []*types.Knowledge{p3Message(t, db, "events-alpha", bodyAlpha), p3Message(t, db, "events-beta", bodyBeta)}
+	for _, message := range sources {
+		focusContextTestMessage(t, db, message)
+	}
 	planned := make(chan struct{}, 2)
 	release := make(chan struct{})
 	model := &p3CountingChat{reply: func(callCtx context.Context, messages []chat.Message) string {

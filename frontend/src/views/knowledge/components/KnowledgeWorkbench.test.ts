@@ -11,7 +11,7 @@ import * as scope from '../../../api/knowledge-context-scope'
 import * as markdownCitation from '../../../utils/markdownCitation'
 import { compiledSFCStyleRules, LONG_SOURCE_URL, styleDeclarationsAtWidth } from '../../../utils/sfcStyleTestHelpers'
 import { reportCitationClick, reportMarkdownTestComponent } from './reportMarkdownTestHarness'
-import type { KnowledgeEntity, KnowledgeEvent, KnowledgeEvidence, KnowledgeFact } from '../../../api/knowledge-context'
+import type { KnowledgeEntity, KnowledgeEvent, KnowledgeEvidence, KnowledgeFact, KnowledgeFocusScope } from '../../../api/knowledge-context'
 
 const require = createRequire(import.meta.url)
 const filename = 'KnowledgeWorkbench.vue'
@@ -44,11 +44,24 @@ const event = {
 type Scenario = (state: any, beforeUnmount: () => void) => Promise<void>
 async function renderWorkbench({
   role = 'contributor', result = {}, scenario = async () => {}, status = { pending_count: 1, latest_run: null }, workflows = {},
-}: { role?: string; result?: object; scenario?: Scenario; status?: object; workflows?: object } = {}) {
-  const requests = { status: 0, rebuild: 0, query: [] as any[], snapshots: [] as string[] }
+  focus = {}, focusApi = {},
+}: { role?: string; result?: object; scenario?: Scenario; status?: object; workflows?: object; focus?: Partial<KnowledgeFocusScope>; focusApi?: object } = {}) {
+  const requests = { status: 0, rebuild: 0, query: [] as any[], snapshots: [] as string[], focus: [] as object[], stars: [] as Array<{ kind: string; id: string; starred: boolean }> }
   const cleanupCallbacks: Array<() => void> = []
   const envelope = (data: unknown) => Promise.resolve({ success: true, data })
+  let focusData: KnowledgeFocusScope = { starred_entities: [], starred_topics: [], tracked_entities: [], tracked_topics: [], available_topics: [], ...focus }
+  function setStar(kind: 'entity' | 'topic', id: string, starred: boolean) {
+    requests.stars.push({ kind, id, starred })
+    if (kind === 'entity') focusData = { ...focusData, starred_entities: starred ? [entity] : [] }
+    else focusData = { ...focusData, starred_topics: starred ? focusData.available_topics.filter(item => item.id === id) : [] }
+    return Promise.resolve({ success: true })
+  }
   const api = {
+    getKnowledgeFocusScope: (params: object) => { requests.focus.push(params); return envelope(focusData) },
+    starKnowledgeEntity: (id: string) => setStar('entity', id, true),
+    unstarKnowledgeEntity: (id: string) => setStar('entity', id, false),
+    starKnowledgeTopic: (id: string) => setStar('topic', id, true),
+    unstarKnowledgeTopic: (id: string) => setStar('topic', id, false),
     listKnowledgeContextEntities: () => envelope([entity]),
     listKnowledgeContextEvents: () => envelope([]),
     listKnowledgeContextEvidence: () => envelope(evidence),
@@ -60,6 +73,7 @@ async function renderWorkbench({
       requests.rebuild++
       return envelope({ pending_count: 1, latest_run: { status: 'pending', processed_count: 0, total_count: 1 } })
     },
+    ...focusApi,
   }
   const emptyComponent = defineComponent({ setup: () => () => null })
   const reportComponent = reportMarkdownTestComponent()
@@ -213,6 +227,131 @@ test('workbench displays missing publication exclusions returned by the query', 
   })
   assert.match(html, /knowledgeWorkbench.sourceTime.excluded/)
   assert.match(html, /&quot;count&quot;:7/)
+})
+
+for (const queryScope of ['knowledge_base', 'domain', 'team']) {
+  test(`${queryScope} structured queries display the template-only message count`, async () => {
+    const { html, requests } = await renderWorkbench({
+      result: { template_only_message_count: 9 },
+      scenario: async state => { state.queryScope.value = queryScope; await state.runQuery() },
+    })
+    assert.equal(requests.query[0].scope, queryScope)
+    assert.match(html, /knowledgeWorkbench.query.templateOnlyMessages \{&quot;count&quot;:9\}/)
+  })
+}
+
+test('object list and details expose the same accessible star state and preserve existing facts', async () => {
+  const { html, requests, state } = await renderWorkbench({
+    result: { facts: [fact], template_only_message_count: 4 },
+    scenario: async state => {
+      await state.selectSection('entities')
+      await state.selectEntity(entity)
+      await state.toggleFocusStar('entity', entity)
+    },
+  })
+  assert.deepEqual(requests.stars, [{ kind: 'entity', id: entity.id, starred: true }])
+  assert.equal(state.entityContext.value.facts[0].id, fact.id)
+  assert.equal(requests.rebuild, 0)
+  assert.equal(requests.query.length, 0)
+  assert.equal(requests.snapshots.length, 0)
+  assert.equal((html.match(/aria-pressed="true"/g) || []).length, 2)
+  assert.match(html, /knowledgeWorkbench.focus.unstarNamed/)
+  assert.match(html, /knowledgeWorkbench.query.templateOnlyMessages \{&quot;count&quot;:4\}/)
+})
+
+test('removing an entity star refreshes focus without querying or rebuilding historical sources', async () => {
+  const { html, requests, state } = await renderWorkbench({
+    focus: { starred_entities: [entity] },
+    result: { facts: [fact], events: [event] },
+    scenario: async state => {
+      await state.selectSection('entities')
+      await state.selectEntity(entity)
+      await state.toggleFocusStar('entity', entity)
+    },
+  })
+  assert.deepEqual(requests.stars, [{ kind: 'entity', id: entity.id, starred: false }])
+  assert.equal(state.entityContext.value.facts.length, 1)
+  assert.equal(state.entityContext.value.events.length, 1)
+  assert.equal(requests.rebuild, 0)
+  assert.equal(requests.query.length, 0)
+  assert.equal((html.match(/aria-pressed="false"/g) || []).length, 2)
+})
+
+test('focus lists starred topics, tracked objects, and topic tag star controls', async () => {
+  const topic = { id: 'tag-topic', name: 'Agent tools', kind: 'topic', knowledge_base_id: 'kb-a', knowledge_base_name: 'Team library' }
+  const { html, requests } = await renderWorkbench({
+    focus: { available_topics: [topic], tracked_entities: [entity] },
+    scenario: async state => {
+      await state.selectSection('focus')
+      await state.toggleFocusStar('topic', topic)
+    },
+  })
+  assert.deepEqual(requests.stars, [{ kind: 'topic', id: topic.id, starred: true }])
+  assert.match(html, /knowledgeWorkbench.focus.starredTopics/)
+  assert.match(html, /knowledgeWorkbench.focus.trackedEntities/)
+  assert.match(html, /knowledgeWorkbench.focus.futureMessages/)
+  assert.match(html, /Agent tools/)
+  assert.match(html, /Team library/)
+  assert.match(html, /aria-pressed="true"/)
+})
+
+test('failed star mutations retain the prior star state and show an inline retryable error', async () => {
+  const { html, state } = await renderWorkbench({
+    focus: { starred_entities: [entity] },
+    focusApi: { unstarKnowledgeEntity: () => Promise.resolve({ success: false, error: 'Star update unavailable' }) },
+    scenario: async state => { await state.selectSection('entities'); await state.toggleFocusStar('entity', entity) },
+  })
+  assert.equal(state.isEntityStarred(entity.id), true)
+  assert.equal(state.starPending.size, 0)
+  assert.match(html, /role="alert"[^>]*>Star update unavailable/)
+})
+
+test('duplicate star requests remain blocked while a mutation is pending', async () => {
+  let release: (response: object) => void = () => {}
+  let calls = 0
+  await renderWorkbench({
+    focusApi: { starKnowledgeEntity: () => { calls++; return new Promise(resolve => { release = resolve }) } },
+    scenario: async state => {
+      const pending = state.toggleFocusStar('entity', entity)
+      assert.equal(state.starPending.has(`entity:${entity.id}`), true)
+      await state.toggleFocusStar('entity', entity)
+      assert.equal(calls, 1)
+      release({ success: true })
+      await pending
+      assert.equal(state.starPending.size, 0)
+    },
+  })
+})
+
+test('viewers can inspect focus but cannot change stars', async () => {
+  const { html, requests } = await renderWorkbench({
+    role: 'viewer', focus: { starred_entities: [entity] },
+    scenario: async state => { await state.selectSection('focus'); await state.toggleFocusStar('entity', entity) },
+  })
+  assert.match(html, /Aurora/)
+  assert.doesNotMatch(html, /class="focus-star/)
+  assert.equal(requests.stars.length, 0)
+})
+
+test('older focus responses cannot replace a more recent refresh', async () => {
+  let scenarioStarted = false
+  const pending: Array<(result: object) => void> = []
+  await renderWorkbench({
+    focusApi: { getKnowledgeFocusScope: () => scenarioStarted
+      ? new Promise(resolve => pending.push(resolve))
+      : Promise.resolve({ success: true, data: {} }) },
+    scenario: async state => {
+      scenarioStarted = true
+      const older = state.loadFocus()
+      const newer = state.loadFocus()
+      pending[1]({ success: true, data: { starred_entities: [entity] } })
+      await newer
+      pending[0]({ success: true, data: { starred_entities: [] } })
+      await older
+      assert.equal(state.isEntityStarred(entity.id), true)
+      assert.equal(state.focusLoading.value, false)
+    },
+  })
 })
 
 test('unmount cancels name embedding polling and invalidates outstanding status requests', async () => {

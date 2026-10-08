@@ -201,6 +201,22 @@ func (s *KnowledgeContextService) MergeEntities(ctx context.Context, kbID, keepE
 		if err := mergeContextEventEntities(tx, tenantID, keep.ID, merged.ID); err != nil {
 			return err
 		}
+		if err := tx.Exec(`INSERT INTO knowledge_context_evidence_entities (tenant_id, evidence_id, entity_id)
+			SELECT tenant_id, evidence_id, ? FROM knowledge_context_evidence_entities WHERE tenant_id = ? AND entity_id = ?
+			ON CONFLICT DO NOTHING`, keep.ID, tenantID, merged.ID).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("tenant_id = ? AND entity_id = ?", tenantID, merged.ID).Delete(&types.KnowledgeEvidenceEntity{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec(`INSERT INTO knowledge_context_entity_stars (tenant_id, entity_id, created_at)
+			SELECT tenant_id, ?, created_at FROM knowledge_context_entity_stars WHERE tenant_id = ? AND entity_id = ?
+			ON CONFLICT DO NOTHING`, keep.ID, tenantID, merged.ID).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("tenant_id = ? AND entity_id = ?", tenantID, merged.ID).Delete(&types.KnowledgeEntityStar{}).Error; err != nil {
+			return err
+		}
 		if err := tx.Model(&merged).Update("merged_into_id", keep.ID).Error; err != nil {
 			return err
 		}

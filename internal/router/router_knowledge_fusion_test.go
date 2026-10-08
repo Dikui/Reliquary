@@ -120,6 +120,13 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 		SourceInfo: types.SourceInfo{Publisher: "Daily News", OriginalURL: "https://news.example/acme-widgetco", PublishedAt: "2026-09-25T10:00:00Z"},
 	}))
 	require.NoError(t, knowledgeRepo.CreateKnowledge(ctx, source))
+	// The integration's open facts and event are requested by an enabled
+	// object-tracking task before intake, using the existing workflow condition.
+	require.NoError(t, db.Create(&types.KnowledgeEntity{ID: "fusion-tracked-acme", TenantID: fusionTenantID,
+		CanonicalName: "Acme Holdings", NormalizedName: "acme holdings", EntityType: "organization"}).Error)
+	require.NoError(t, db.Create(&types.KnowledgeWorkflow{ID: "fusion-intake-tracking", TenantID: fusionTenantID,
+		KnowledgeBaseID: fusionKBID, Name: "Acme intake focus", Enabled: true,
+		Steps: []types.KnowledgeWorkflowStep{{ID: "facts", Type: "fact_query", Config: map[string]any{"entity_id": "fusion-tracked-acme"}}}}).Error)
 
 	modelService := fusionModelService{model: fusionChat{}}
 	contextService := service.NewKnowledgeContextService(db, modelService)

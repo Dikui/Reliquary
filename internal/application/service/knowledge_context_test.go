@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -25,14 +26,26 @@ func knowledgeContextTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, db.Exec(`INSERT INTO tenants(id) VALUES (9)`).Error)
 	require.NoError(t, db.Exec(`CREATE TABLE knowledge_bases (id TEXT PRIMARY KEY, tenant_id INTEGER NOT NULL, name TEXT NOT NULL DEFAULT 'Test knowledge base', domain_id TEXT NOT NULL DEFAULT 'ai', model_tiers JSONB NOT NULL DEFAULT '{}', embedding_model_id TEXT DEFAULT '', auto_tag_config JSONB, deleted_at TIMESTAMPTZ)`).Error)
 	require.NoError(t, db.AutoMigrate(&types.Knowledge{}, &types.KnowledgeEntity{}, &types.KnowledgeEntityAlias{}, &types.KnowledgeEvidence{},
+		&types.KnowledgeEvidenceEntity{}, &types.KnowledgeEntityStar{}, &types.KnowledgeTopicStar{}, &types.KnowledgeTag{}, &types.KnowledgeTagRelation{}, &types.KnowledgeTagManualDecision{}, &types.KnowledgeWorkflow{},
 		&types.KnowledgeEntityMergeSuggestion{}, &types.KnowledgeFact{}, &types.KnowledgeEvent{}, &types.KnowledgeEventEvidence{},
 		&types.KnowledgeEventEntity{}, &types.KnowledgeEventEvidenceEntity{}, &types.KnowledgeAttention{}, &types.KnowledgeDomain{}, &types.AuditLog{}))
+	require.NoError(t, db.Exec(`ALTER TABLE knowledge_tags ADD COLUMN deleted_at TIMESTAMPTZ`).Error)
 	domain := BuiltinAIKnowledgeDomain()
 	domain.ID = "ai"
 	domain.TenantID = 9
 	require.NoError(t, db.Create(domain).Error)
 	require.NoError(t, db.Exec(`INSERT INTO knowledge_bases(id,tenant_id) VALUES ('kb',9)`).Error)
 	return db
+}
+
+// Full-extraction regressions explicitly opt into focus with a starred topic.
+func focusContextTestMessage(t *testing.T, db *gorm.DB, k *types.Knowledge) {
+	t.Helper()
+	tag := types.KnowledgeTag{ID: uuid.NewString(), TenantID: k.TenantID, KnowledgeBaseID: k.KnowledgeBaseID,
+		Name: "Full extraction " + k.ID, Kind: types.TagKindTopic}
+	require.NoError(t, db.Create(&tag).Error)
+	require.NoError(t, db.Create(&types.KnowledgeTopicStar{TenantID: k.TenantID, TagID: tag.ID}).Error)
+	require.NoError(t, db.Create(&types.KnowledgeTagRelation{KnowledgeID: k.ID, TagID: tag.ID}).Error)
 }
 
 func seedContextEventEntities(t *testing.T, db *gorm.DB, events ...types.KnowledgeEvent) {
@@ -105,6 +118,7 @@ func TestKnowledgeContextCanonicalCollisionKeepsFactAndEventReferences(t *testin
 	require.NoError(t, k.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "approved",
 		SourceInfo: types.SourceInfo{Publisher: "Publisher", OriginalURL: "https://example.com/aliases", PublishedAt: "2026-10-01"}}))
 	require.NoError(t, db.Create(&k).Error)
+	focusContextTestMessage(t, db, &k)
 	model := &knowledgeContextTestChat{response: `{
 		"entities":[
 			{"mention":"Alpha Inc","quote":"Alpha Inc and A Corp are names of Alpha.","canonical_name":"Alpha","entity_type":"organization","aliases":[]},
@@ -156,6 +170,7 @@ func TestKnowledgeContextProcessSnapshotCorrectionAndTenantScope(t *testing.T) {
 	firstPublishedAt := time.Now().UTC().Add(-2 * time.Hour).Format(time.RFC3339)
 	require.NoError(t, k.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "approved", SourceInfo: types.SourceInfo{Publisher: "Daily News", OriginalURL: "https://news.example/story", PublishedAt: firstPublishedAt}}))
 	require.NoError(t, db.Create(&k).Error)
+	focusContextTestMessage(t, db, &k)
 	firstResponse := `{"entities":[{"mention":"ACME Inc.","quote":"ACME Inc. acquired WidgetCo","canonical_name":"Acme Holdings","entity_type":"organization","description":"A business organization","aliases":["ACME Inc."]},{"mention":"WidgetCo","quote":"ACME Inc. acquired WidgetCo","canonical_name":"WidgetCo","entity_type":"organization","description":"WidgetCo","aliases":[]}],"facts":[{"kind":"relation","subject":"ACME Inc.","predicate":"acquired","value":null,"value_type":"entity","unit":"","object":"WidgetCo","effective_from":"2026-09-25","effective_to":"","quote":"ACME Inc. acquired WidgetCo on 2026-09-25."},{"kind":"attribute","subject":"ACME Inc.","predicate":"transaction_status","value":"complete","value_type":"string","unit":"","object":"","effective_from":"2026-09-25","effective_to":"","quote":"ACME Inc. acquired WidgetCo on 2026-09-25."}],"events":[{"title":"Acme Holdings acquired WidgetCo","event_type":"acquisition","description":"Acme Holdings acquired WidgetCo","occurred_at":"2026-09-25","entity_mentions":["ACME Inc.","WidgetCo"],"quote":"ACME Inc. acquired WidgetCo on 2026-09-25."}],"attention":{"novelty":60,"impact":80,"credibility":70,"relevance":75,"actionability":40,"score":68,"reason":"A verified acquisition changes ownership."}}`
 	secondBody := "ACME Inc. acquired WidgetCo on 2026-09-25. An independent report confirms the same transaction."
 	secondResponse := `{"entities":[{"mention":"ACME Inc.","quote":"ACME Inc. acquired WidgetCo","canonical_name":"Acme Holdings","entity_type":"organization","description":"A business organization","aliases":["ACME Inc."]},{"mention":"WidgetCo","quote":"ACME Inc. acquired WidgetCo","canonical_name":"WidgetCo","entity_type":"organization","description":"WidgetCo","aliases":[]}],"facts":[{"kind":"relation","subject":"ACME Inc.","predicate":"acquired","value":null,"value_type":"entity","unit":"","object":"WidgetCo","effective_from":"2026-09-25","effective_to":"","quote":"ACME Inc. acquired WidgetCo on 2026-09-25."},{"kind":"attribute","subject":"ACME Inc.","predicate":"transaction_status","value":"confirmed","value_type":"string","unit":"","object":"","effective_from":"2026-09-25","effective_to":"","quote":"ACME Inc. acquired WidgetCo on 2026-09-25."}],"events":[{"title":"Independent report confirms Acme Holdings acquisition","event_type":"acquisition","description":"A separate outlet confirms this acquisition","occurred_at":"2026-09-25","entity_mentions":["ACME Inc.","WidgetCo"],"quote":"ACME Inc. acquired WidgetCo on 2026-09-25."}],"attention":{"novelty":45,"impact":80,"credibility":85,"relevance":75,"actionability":40,"score":70,"reason":"An independent report corroborates the acquisition."}}`
@@ -184,7 +199,7 @@ func TestKnowledgeContextProcessSnapshotCorrectionAndTenantScope(t *testing.T) {
 	ctx = context.WithValue(ctx, types.UserIDContextKey, "reviewer")
 	require.NoError(t, svc.ProcessMessage(ctx, &k, body))
 	require.NoError(t, svc.ProcessMessage(ctx, &k, body))
-	require.Equal(t, 5, model.calls, "a completed evidence snapshot must make retries idempotent")
+	require.Equal(t, 6, model.calls, "a focused source adds one full extraction pass; completed snapshots remain idempotent")
 
 	result, err := svc.Query(ctx, "kb", types.KnowledgeContextQuery{KnowledgeIDs: []string{k.ID}})
 	require.NoError(t, err)
@@ -214,6 +229,7 @@ func TestKnowledgeContextProcessSnapshotCorrectionAndTenantScope(t *testing.T) {
 	secondPublishedAt := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
 	require.NoError(t, second.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "approved", SourceInfo: types.SourceInfo{Publisher: "Second Gazette", OriginalURL: "https://second.example/story", PublishedAt: secondPublishedAt}}))
 	require.NoError(t, db.Create(&second).Error)
+	focusContextTestMessage(t, db, &second)
 	require.NoError(t, svc.ProcessMessage(ctx, &second, secondBody))
 	require.GreaterOrEqual(t, model.calls, 3, "the second source must be extracted and its event compared to existing events")
 	combined, err := svc.Query(ctx, "kb", types.KnowledgeContextQuery{KnowledgeIDs: []string{k.ID, second.ID}})

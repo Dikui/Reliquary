@@ -161,6 +161,7 @@ func TestIssue04ConcurrentMessagesKeepOneEventEntityAssociation(t *testing.T) {
 	db, ctx, svc := issue04ContextFixture(t)
 	e := p3Entity("acme", "Acme", "company")
 	require.NoError(t, db.Transaction(func(tx *gorm.DB) error { _, err := persistContextEntities(tx, []types.KnowledgeEntity{e}); return err }))
+	require.NoError(t, db.Create(&types.KnowledgeEntityStar{TenantID: 1, EntityID: e.ID}).Error)
 	original := issue04Source(t, db, "original", "p3-kb")
 	issue04CreateEvent(t, db, "shared-event", "p3-kb", []string{e.ID}, original)
 	issue04CreateEventEvidence(t, db, "original-link", "shared-event", original, e.ID)

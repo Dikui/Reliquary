@@ -58,6 +58,7 @@ func TestP2GlobalObjectAndEventIdentityAcrossKnowledgeBases(t *testing.T) {
 	svc.models = knowledgeContextTestModelService{model: model}
 	for _, kbID := range []string{"kb", "energy-one"} {
 		k := p2ContextMessage(t, db, "message-"+kbID, kbID, "Acme released a product.")
+		focusContextTestMessage(t, db, &k)
 		require.NoError(t, svc.ProcessMessage(ctx, &k, "Acme released a product."))
 	}
 	var entities []types.KnowledgeEntity

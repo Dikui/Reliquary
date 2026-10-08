@@ -59,6 +59,7 @@
     </nav>
 
     <t-alert v-if="loadError" theme="error" :message="loadError" />
+    <p v-if="focusError" class="run-error" role="alert">{{ focusError }} <t-button variant="text" :loading="focusLoading" @click="loadFocus">{{ t('knowledgeDomains.retry') }}</t-button></p>
 
     <section v-if="activeSection === 'query'" class="workbench-panel">
       <div class="panel-heading">
@@ -114,6 +115,7 @@
       </div>
 
       <div v-if="queryResult" class="query-results">
+        <p v-if="queryResult.template_only_message_count" class="muted" role="status">{{ t('knowledgeWorkbench.query.templateOnlyMessages', { count: queryResult.template_only_message_count }) }}</p>
         <p class="muted" role="status">{{ t('knowledgeWorkbench.sourceTime.excluded', { count: queryResult.excluded_missing_published_at_count || 0 }) }}</p>
         <div class="result-summary">
           <span>{{ t('knowledgeWorkbench.query.resultCounts', {
@@ -163,15 +165,19 @@
         <div class="entity-layout">
           <div class="entity-list">
             <t-empty v-if="!filteredEntities.length" :description="t('knowledgeWorkbench.entities.empty')" />
-            <button v-for="entity in filteredEntities" :key="entity.id" type="button"
-              :class="['entity-list__item', { selected: selectedEntity?.id === entity.id }]"
-              @click="selectEntity(entity)">
-              <span class="entity-list__avatar">{{ entity.canonical_name.slice(0, 1) }}</span>
-              <span class="entity-list__copy">
-                <strong>{{ entity.canonical_name }}</strong>
-                <small>{{ entity.entity_type || t('knowledgeWorkbench.entities.unknownType') }} · {{ entity.aliases?.length || 0 }} {{ t('knowledgeWorkbench.entities.aliases') }}</small>
-              </span>
-            </button>
+            <div v-for="entity in filteredEntities" :key="entity.id" class="entity-list__row">
+              <button type="button" :class="['entity-list__item', { selected: selectedEntity?.id === entity.id }]"
+                @click="selectEntity(entity)">
+                <span class="entity-list__avatar">{{ entity.canonical_name.slice(0, 1) }}</span>
+                <span class="entity-list__copy">
+                  <strong>{{ entity.canonical_name }}</strong>
+                  <small>{{ entity.entity_type || t('knowledgeWorkbench.entities.unknownType') }} · {{ entity.aliases?.length || 0 }} {{ t('knowledgeWorkbench.entities.aliases') }}</small>
+                </span>
+              </button>
+              <FocusStarButton v-if="canManage" :name="entity.canonical_name" :starred="isEntityStarred(entity.id)" compact
+                :busy="starPending.has(`entity:${entity.id}`)" :disabled="!focusScope || focusLoading"
+                @toggle="toggleFocusStar('entity', entity)" />
+            </div>
             <t-button v-if="hasMoreEntities" block variant="text"
               :loading="entitiesLoading" @click="loadEntities(true)">{{ t('knowledgeWorkbench.loadMore') }}</t-button>
           </div>
@@ -187,12 +193,16 @@
                     <span v-for="alias in selectedEntity.aliases" :key="alias" class="chip">{{ alias }}</span>
                   </div>
                 </div>
-                <t-button v-if="canManage" variant="outline" @click="openMerge">
-                  {{ t('knowledgeWorkbench.entities.merge') }}
-                </t-button>
+                <div v-if="canManage" class="entity-detail__actions">
+                  <FocusStarButton :name="selectedEntity.canonical_name" :starred="isEntityStarred(selectedEntity.id)"
+                    :busy="starPending.has(`entity:${selectedEntity.id}`)" :disabled="!focusScope || focusLoading"
+                    @toggle="toggleFocusStar('entity', selectedEntity)" />
+                  <t-button variant="outline" @click="openMerge">{{ t('knowledgeWorkbench.entities.merge') }}</t-button>
+                </div>
               </div>
               <p class="muted">{{ t('knowledgeWorkbench.scope.detailHint') }}</p>
               <t-loading :loading="entityContextLoading" show-overlay>
+                <p v-if="entityContext?.template_only_message_count" class="muted" role="status">{{ t('knowledgeWorkbench.query.templateOnlyMessages', { count: entityContext.template_only_message_count }) }}</p>
                 <div class="result-group">
                   <div class="group-heading">
                     <h4>{{ t('knowledgeWorkbench.facts') }}</h4>
@@ -215,6 +225,67 @@
               </t-loading>
             </template>
           </div>
+        </div>
+      </t-loading>
+    </section>
+
+    <section v-else-if="activeSection === 'focus'" class="workbench-panel">
+      <div class="panel-heading">
+        <div><h3>{{ t('knowledgeWorkbench.focus.title') }}</h3><p>{{ t('knowledgeWorkbench.focus.description') }}</p></div>
+        <t-button variant="text" :loading="focusLoading" @click="loadFocus">{{ t('knowledgeWorkbench.refresh') }}</t-button>
+      </div>
+      <p class="muted">{{ t('knowledgeWorkbench.focus.futureMessages') }}</p>
+      <t-loading :loading="focusLoading" show-overlay>
+        <div v-if="focusScope" class="focus-groups">
+          <section class="focus-group">
+            <h4>{{ t('knowledgeWorkbench.focus.starredEntities') }} <span>{{ focusScope.starred_entities.length }}</span></h4>
+            <p v-if="!focusScope.starred_entities.length" class="muted">{{ t('knowledgeWorkbench.focus.noStarredEntities') }}</p>
+            <div v-for="item in focusScope.starred_entities" :key="item.id" class="focus-item">
+              <button type="button" class="text-link" @click="openFocusEntity(item)">{{ item.canonical_name }}</button>
+              <FocusStarButton v-if="canManage" :name="item.canonical_name" starred compact :busy="starPending.has(`entity:${item.id}`)"
+                :disabled="focusLoading" @toggle="toggleFocusStar('entity', item)" />
+            </div>
+          </section>
+          <section class="focus-group">
+            <h4>{{ t('knowledgeWorkbench.focus.starredTopics') }} <span>{{ focusScope.starred_topics.length }}</span></h4>
+            <p v-if="!focusScope.starred_topics.length" class="muted">{{ t('knowledgeWorkbench.focus.noStarredTopics') }}</p>
+            <div v-for="item in focusScope.starred_topics" :key="item.id" class="focus-item">
+              <span>{{ item.name }}</span>
+              <FocusStarButton v-if="canManage" :name="item.name" starred compact :busy="starPending.has(`topic:${item.id}`)"
+                :disabled="focusLoading" @toggle="toggleFocusStar('topic', item)" />
+            </div>
+          </section>
+          <section class="focus-group">
+            <h4>{{ t('knowledgeWorkbench.focus.trackedEntities') }} <span>{{ focusScope.tracked_entities.length }}</span></h4>
+            <p v-if="!focusScope.tracked_entities.length" class="muted">{{ t('knowledgeWorkbench.focus.noTrackedEntities') }}</p>
+            <div v-for="item in focusScope.tracked_entities" :key="item.id" class="focus-item">
+              <button type="button" class="text-link" @click="openFocusEntity(item)">{{ item.canonical_name }}</button>
+              <span class="muted">{{ t('knowledgeWorkbench.focus.enabledTracking') }}</span>
+            </div>
+          </section>
+          <section class="focus-group">
+            <h4>{{ t('knowledgeWorkbench.focus.trackedTopics') }} <span>{{ focusScope.tracked_topics.length }}</span></h4>
+            <p v-if="!focusScope.tracked_topics.length" class="muted">{{ t('knowledgeWorkbench.focus.noTrackedTopics') }}</p>
+            <div v-for="item in focusScope.tracked_topics" :key="item.id" class="focus-item">
+              <span>{{ item.name }}</span><span class="muted">{{ t('knowledgeWorkbench.focus.enabledTracking') }}</span>
+            </div>
+          </section>
+        </div>
+        <div class="result-group">
+          <div class="panel-heading">
+            <div><h4>{{ t('knowledgeWorkbench.focus.topics') }}</h4><p>{{ t('knowledgeWorkbench.focus.topicsDescription') }}</p></div>
+            <t-input v-model.trim="topicFilter" class="panel-search" clearable :aria-label="t('knowledgeWorkbench.focus.filterTopics')"
+              :placeholder="t('knowledgeWorkbench.focus.filterTopics')" />
+          </div>
+          <t-empty v-if="focusScope && !filteredTopics.length" :description="t('knowledgeWorkbench.focus.noTopics')" />
+          <div class="focus-topics">
+            <div v-for="item in filteredTopics.slice(0, visibleTopicCount)" :key="item.id" class="focus-topic">
+              <div><strong>{{ item.name }}</strong><small>{{ topicKindLabel(item.kind) }} · {{ item.knowledge_base_name || item.knowledge_base_id }}</small></div>
+              <FocusStarButton v-if="canManage" :name="item.name" :starred="isTopicStarred(item.id)" compact
+                :busy="starPending.has(`topic:${item.id}`)" :disabled="!focusScope || focusLoading" @toggle="toggleFocusStar('topic', item)" />
+            </div>
+          </div>
+          <t-button v-if="filteredTopics.length > visibleTopicCount" block variant="text" @click="visibleTopicCount += pageSize">{{ t('knowledgeWorkbench.loadMore') }}</t-button>
         </div>
       </t-loading>
     </section>
@@ -685,6 +756,11 @@ import {
   queryKnowledgeContext,
   getKnowledgeNameEmbeddingRebuildStatus,
   rebuildKnowledgeNameEmbeddings,
+  getKnowledgeFocusScope,
+  starKnowledgeEntity,
+  unstarKnowledgeEntity,
+  starKnowledgeTopic,
+  unstarKnowledgeTopic,
   type KnowledgeAttention,
   type KnowledgeContextQuery,
   type KnowledgeContextScope,
@@ -694,6 +770,8 @@ import {
   type KnowledgeEvent,
   type KnowledgeFact,
   type KnowledgeNameEmbeddingRebuildStatus,
+  type KnowledgeFocusScope,
+  type KnowledgeFocusTopic,
 } from '@/api/knowledge-context'
 import {
   createKnowledgeWorkflow,
@@ -740,14 +818,27 @@ async function loadDomains() {
   finally { domainsLoading.value = false }
 }
 
-type SectionId = 'merges' | 'query' | 'entities' | 'events' | 'evidence' | 'workflows' | 'reports'
+type SectionId = 'merges' | 'query' | 'entities' | 'focus' | 'events' | 'evidence' | 'workflows' | 'reports'
 const sections: Array<{ id: SectionId }> = [
-  { id: 'query' }, { id: 'entities' }, { id: 'merges' }, { id: 'events' }, { id: 'evidence' }, { id: 'workflows' }, { id: 'reports' },
+  { id: 'query' }, { id: 'entities' }, { id: 'focus' }, { id: 'merges' }, { id: 'events' }, { id: 'evidence' }, { id: 'workflows' }, { id: 'reports' },
 ]
 const mergeSuggestions = ref<InstanceType<typeof MergeSuggestions>>()
 const activeSection = ref<SectionId>('query')
 const loading = ref(false)
 const loadError = ref('')
+const focusScope = ref<KnowledgeFocusScope | null>(null)
+const focusLoading = ref(false)
+const focusError = ref('')
+const starPending = reactive(new Set<string>())
+const topicFilter = ref('')
+const visibleTopicCount = ref(pageSize)
+let focusRequest = 0
+const starredEntityIds = computed(() => new Set(focusScope.value?.starred_entities.map(item => item.id) || []))
+const starredTopicIds = computed(() => new Set(focusScope.value?.starred_topics.map(item => item.id) || []))
+const filteredTopics = computed(() => {
+  const q = topicFilter.value.toLocaleLowerCase()
+  return (focusScope.value?.available_topics || []).filter(item => !q || item.name.toLocaleLowerCase().includes(q))
+})
 const entitiesLoading = ref(false)
 const eventsLoading = ref(false)
 const evidenceLoading = ref(false)
@@ -885,6 +976,58 @@ function getErrorMessage(error: unknown): string {
   return t('knowledgeWorkbench.requestFailed')
 }
 
+function isEntityStarred(id: string) { return starredEntityIds.value.has(id) }
+function isTopicStarred(id: string) { return starredTopicIds.value.has(id) }
+function topicKindLabel(kind: string) {
+  return t(`knowledgeWorkbench.focus.topicKinds.${['topic', 'object', 'event'].includes(kind) ? kind : 'topic'}`)
+}
+
+async function loadFocus() {
+  if (!props.kbId || (queryScope.value === 'domain' && !queryDomainId.value)) return
+  const generation = contextGeneration
+  const request = ++focusRequest
+  focusLoading.value = true
+  focusError.value = ''
+  try {
+    const result = envelopeData(await getKnowledgeFocusScope({ ...scopeParams.value }))
+    if (generation === contextGeneration && request === focusRequest) {
+      focusScope.value = {
+        starred_entities: result?.starred_entities || [], starred_topics: result?.starred_topics || [],
+        tracked_entities: result?.tracked_entities || [], tracked_topics: result?.tracked_topics || [],
+        available_topics: result?.available_topics || [],
+      }
+    }
+  } catch (error) {
+    if (generation === contextGeneration && request === focusRequest) focusError.value = getErrorMessage(error)
+  } finally { if (generation === contextGeneration && request === focusRequest) focusLoading.value = false }
+}
+
+async function toggleFocusStar(kind: 'entity' | 'topic', item: KnowledgeEntity | KnowledgeFocusTopic) {
+  const key = `${kind}:${item.id}`
+  if (!props.canManage || !focusScope.value || focusLoading.value || starPending.has(key)) return
+  const generation = contextGeneration
+  const starred = kind === 'entity' ? isEntityStarred(item.id) : isTopicStarred(item.id)
+  const action = kind === 'entity' ? (starred ? unstarKnowledgeEntity : starKnowledgeEntity) : (starred ? unstarKnowledgeTopic : starKnowledgeTopic)
+  focusRequest++
+  starPending.add(key)
+  focusError.value = ''
+  try {
+    const response = await action(item.id)
+    if (!response.success) throw new Error(response.error || t('knowledgeWorkbench.requestFailed'))
+    if (generation === contextGeneration) {
+      MessagePlugin.success(t(starred ? 'knowledgeWorkbench.focus.unstarred' : 'knowledgeWorkbench.focus.starred'))
+      await loadFocus()
+    }
+  } catch (error) {
+    if (generation === contextGeneration) focusError.value = getErrorMessage(error)
+  } finally { starPending.delete(key) }
+}
+
+async function openFocusEntity(entity: KnowledgeEntity) {
+  activeSection.value = 'entities'
+  await selectEntity(entity)
+}
+
 function clearNameEmbeddingPolling() {
   if (nameEmbeddingPollTimer) clearTimeout(nameEmbeddingPollTimer)
   nameEmbeddingPollTimer = null
@@ -944,6 +1087,7 @@ async function refreshAll() {
       listKnowledgeContextEntities(props.kbId, { ...scopeParams.value, limit: pageSize, offset: 0 }),
       listKnowledgeContextEvents(props.kbId, { ...scopeParams.value, limit: pageSize, offset: 0 }),
       listKnowledgeContextEvidence(props.kbId, { ...scopeParams.value, limit: pageSize, offset: 0 }),
+      loadFocus(),
     ])
     if (generation !== contextGeneration) return
     entities.value = envelopeData(entityResponse) || []
@@ -1025,6 +1169,7 @@ async function selectSection(section: SectionId) {
   if (section === 'entities' && !entities.value.length) await loadEntities()
   if (section === 'events' && !events.value.length) await loadEvents()
   if (section === 'evidence' && !evidence.value.length) await loadEvidence()
+  if (section === 'focus' && !focusScope.value) await loadFocus()
   if (section === 'workflows' && !workflows.value.length) await loadWorkflows()
   if (section === 'reports' && !reports.value.length) await loadReports()
 }
@@ -1727,6 +1872,7 @@ async function saveWorkflow() {
     const current = workflows.value.find(item => item.id === saved.id)
     if (current) await selectWorkflow(current)
     MessagePlugin.success(t('knowledgeWorkbench.workflows.saved'))
+    await loadFocus()
   } catch (error) { workflowEditorError.value = getErrorMessage(error) }
   finally { workflowSaving.value = false }
 }
@@ -1742,6 +1888,7 @@ async function toggleWorkflow(workflow: KnowledgeWorkflow) {
     }
     envelopeData(await updateKnowledgeWorkflow(props.kbId, workflow.id, input))
     await loadWorkflows()
+    await loadFocus()
   } catch (error) { loadError.value = getErrorMessage(error) }
 }
 
@@ -1787,8 +1934,15 @@ function safeFilename(value: string) {
 }
 
 watch(() => props.domainId, id => { if (!queryDomainId.value) queryDomainId.value = id || '' })
+watch(topicFilter, () => { visibleTopicCount.value = pageSize })
 watch([() => props.kbId, queryScope, queryDomainId], async () => {
   contextGeneration++
+  focusRequest++
+  focusScope.value = null
+  focusLoading.value = false
+  focusError.value = ''
+  topicFilter.value = ''
+  visibleTopicCount.value = pageSize
   loading.value = false
   entitiesLoading.value = false
   eventsLoading.value = false
@@ -1836,7 +1990,26 @@ watch(canRebuildNameEmbeddings, allowed => {
   nameEmbeddingError.value = ''
   if (allowed) void loadNameEmbeddingStatus()
 }, { immediate: true })
-onBeforeUnmount(() => { contextGeneration++; snapshotRequest++; nameEmbeddingRequest++; clearRunPolling(); clearNameEmbeddingPolling() })
+onBeforeUnmount(() => { contextGeneration++; focusRequest++; snapshotRequest++; nameEmbeddingRequest++; clearRunPolling(); clearNameEmbeddingPolling() })
+
+const FocusStarButton = defineComponent({
+  name: 'KnowledgeFocusStarButton',
+  props: { name: { type: String, required: true }, starred: Boolean, busy: Boolean, disabled: Boolean, compact: Boolean },
+  emits: ['toggle'],
+  setup(buttonProps, { emit: buttonEmit }) {
+    const { t } = useI18n()
+    return () => {
+      const label = t(buttonProps.starred ? 'knowledgeWorkbench.focus.unstarNamed' : 'knowledgeWorkbench.focus.starNamed', { name: buttonProps.name })
+      return h('button', {
+        type: 'button', class: ['focus-star', { 'is-starred': buttonProps.starred, 'is-compact': buttonProps.compact }],
+        disabled: buttonProps.disabled || buttonProps.busy, 'aria-pressed': buttonProps.starred,
+        'aria-busy': buttonProps.busy, 'aria-label': label, title: label,
+        onClick: () => buttonEmit('toggle'),
+      }, [h('span', { 'aria-hidden': 'true' }, buttonProps.starred ? '★' : '☆'),
+        buttonProps.compact ? null : h('span', t(buttonProps.starred ? 'knowledgeWorkbench.focus.unstar' : 'knowledgeWorkbench.focus.star'))])
+    }
+  },
+})
 
 const FactCard = defineComponent({
   name: 'KnowledgeWorkbenchFactCard',
@@ -2034,8 +2207,29 @@ label { display: flex; flex-direction: column; gap: 6px; color: var(--td-text-co
 :deep(.event-card .text-link) { display: block; margin-top: 8px; }
 .entity-layout { display: grid; grid-template-columns: minmax(230px, 300px) minmax(0, 1fr); gap: 14px; min-height: 360px; }
 .entity-list { padding: 6px; max-height: 660px; overflow: auto; }
-.entity-list__item { display: flex; width: 100%; align-items: center; gap: 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; color: inherit; padding: 10px 8px; cursor: pointer; }
+.entity-list__row { display: flex; align-items: center; gap: 4px; }
+.entity-list__item { display: flex; flex: 1; min-width: 0; width: 100%; align-items: center; gap: 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; color: inherit; padding: 10px 8px; cursor: pointer; }
 .entity-list__item:hover, .entity-list__item.selected { background: var(--td-bg-color-container-hover); }
+.entity-list__item:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: -2px; }
+.entity-detail__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; }
+.focus-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.focus-group { border: 1px solid var(--td-border-level-1-color); border-radius: var(--td-radius-medium); padding: 14px; background: var(--td-bg-color-container); min-width: 0; }
+.focus-group h4 { margin: 0 0 10px; font-size: 14px; }
+.focus-group h4 span { margin-left: 6px; color: var(--td-text-color-secondary); font-weight: 400; }
+.focus-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; }
+.focus-topics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.focus-topic { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--td-border-level-1-color); border-radius: var(--td-radius-medium); background: var(--td-bg-color-container); padding: 10px 12px; min-width: 0; }
+.focus-topic strong, .focus-topic small { display: block; overflow-wrap: anywhere; }
+.focus-topic small { margin-top: 4px; color: var(--td-text-color-secondary); font-size: 11px; }
+:deep(.focus-star) { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 4px 10px; border: 1px solid var(--td-border-level-2-color); border-radius: var(--td-radius-small); background: var(--td-bg-color-container); color: var(--td-text-color-secondary); cursor: pointer; font: inherit; font-size: 12px; }
+:deep(.focus-star.is-compact) { width: 32px; padding: 4px; }
+:deep(.focus-star.is-starred) { color: var(--td-brand-color); }
+:deep(.focus-star:hover:not(:disabled)) { border-color: var(--td-brand-color); background: var(--td-bg-color-container-hover); }
+:deep(.focus-star:active:not(:disabled)) { background: var(--td-brand-color-light); }
+:deep(.focus-star:focus-visible) { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
+:deep(.focus-star:disabled) { cursor: not-allowed; opacity: .55; }
+@media (max-width: 900px) { .focus-topics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .focus-groups, .focus-topics { grid-template-columns: minmax(0, 1fr); } }
 .entity-list__avatar { display: grid; place-items: center; flex: 0 0 32px; width: 32px; height: 32px; border-radius: 50%; color: var(--td-brand-color); background: var(--td-brand-color-light); font-weight: 700; }
 .entity-list__copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .entity-list__copy strong, .entity-list__copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

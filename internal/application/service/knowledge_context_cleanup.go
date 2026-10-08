@@ -58,6 +58,9 @@ func (s *KnowledgeContextService) purgeKnowledgeTx(tx *gorm.DB, tenantID uint64,
 	if err := tx.Where("tenant_id = ? AND evidence_id IN ?", tenantID, evidenceIDs).Delete(&types.KnowledgeEventEvidenceEntity{}).Error; err != nil {
 		return err
 	}
+	if err := tx.Where("tenant_id = ? AND evidence_id IN ?", tenantID, evidenceIDs).Delete(&types.KnowledgeEvidenceEntity{}).Error; err != nil {
+		return err
+	}
 	for _, model := range []any{&types.KnowledgeEntityMergeSuggestion{}, &types.KnowledgeAttention{}, &types.KnowledgeEventEvidence{}, &types.KnowledgeFact{}, &types.KnowledgeEvidence{}} {
 		column := "evidence_id"
 		if _, ok := model.(*types.KnowledgeEvidence); ok {
@@ -130,6 +133,9 @@ func (s *KnowledgeContextService) DeleteKnowledgeBase(ctx context.Context, kbID 
 		if err := tx.Where("tenant_id = ? AND evidence_id IN (?)", tenantID, sourceEvidenceIDs).Delete(&types.KnowledgeEventEvidenceEntity{}).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("tenant_id = ? AND evidence_id IN (?)", tenantID, sourceEvidenceIDs).Delete(&types.KnowledgeEvidenceEntity{}).Error; err != nil {
+			return err
+		}
 		for _, model := range []any{&types.KnowledgeEntityMergeSuggestion{}, &types.KnowledgeAttention{}, &types.KnowledgeEventEvidence{}, &types.KnowledgeFact{}, &types.KnowledgeEvidence{}} {
 			if err := tx.Where("tenant_id = ? AND knowledge_base_id = ?", tenantID, kbID).Delete(model).Error; err != nil {
 				return err
@@ -183,6 +189,17 @@ func (s *KnowledgeContextService) pruneContextEntities(tx *gorm.DB, tenantID uin
 		return err
 	}
 	used := make(map[string]bool)
+	var sourceEntityIDs []string
+	if err := tx.Model(&types.KnowledgeEvidenceEntity{}).Where("tenant_id = ?", tenantID).Distinct().Pluck("entity_id", &sourceEntityIDs).Error; err != nil {
+		return err
+	}
+	var starredEntityIDs []string
+	if err := tx.Model(&types.KnowledgeEntityStar{}).Where("tenant_id = ?", tenantID).Pluck("entity_id", &starredEntityIDs).Error; err != nil {
+		return err
+	}
+	for _, id := range append(sourceEntityIDs, starredEntityIDs...) {
+		used[id] = true
+	}
 	var facts []types.KnowledgeFact
 	// Both current and historical evidence preserve an identity.
 	evidenceIDs := tx.Model(&types.KnowledgeEvidence{}).Select("id").Where("tenant_id = ?", tenantID)

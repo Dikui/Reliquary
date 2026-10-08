@@ -3,11 +3,13 @@ package types
 import "time"
 
 const (
-	KnowledgeEvidenceCurrent    = "current"
-	KnowledgeEvidenceSuperseded = "superseded"
-	KnowledgeExtractionPending  = "pending"
-	KnowledgeExtractionComplete = "complete"
-	KnowledgeExtractionFailed   = "failed"
+	KnowledgeEvidenceCurrent        = "current"
+	KnowledgeEvidenceSuperseded     = "superseded"
+	KnowledgeExtractionPending      = "pending"
+	KnowledgeExtractionComplete     = "complete"
+	KnowledgeExtractionFailed       = "failed"
+	KnowledgeExtractionTemplateOnly = "template_only"
+	KnowledgeExtractionFull         = "full"
 
 	KnowledgeFactAttribute  = "attribute"
 	KnowledgeFactRelation   = "relation"
@@ -105,15 +107,26 @@ type KnowledgeEvidence struct {
 	SourceKind         string                  `json:"source_kind,omitempty" gorm:"type:varchar(32);not null;default:''"`
 	Status             string                  `json:"status" gorm:"type:varchar(16);not null;default:'current';index"`
 	ExtractionStatus   string                  `json:"extraction_status" gorm:"type:varchar(16);not null;default:'pending';index"`
-	ExtractionCoverage string                  `json:"extraction_coverage" gorm:"type:varchar(16);not null;default:'complete'"`
-	ProcessedSegments  int                     `json:"processed_segments" gorm:"not null;default:0"`
-	TotalSegments      int                     `json:"total_segments" gorm:"not null;default:0"`
-	ModelCalls         JSON                    `json:"model_calls" gorm:"type:jsonb;not null;default:'[]'"`
-	ExtractionError    string                  `json:"extraction_error,omitempty" gorm:"type:text;not null;default:''"`
-	CreatedAt          time.Time               `json:"created_at"`
+	// ExtractionMode names the data classes attempted, independently of segment coverage.
+	ExtractionMode     string    `json:"extraction_mode" gorm:"type:varchar(16);not null;default:'full'"`
+	ExtractionCoverage string    `json:"extraction_coverage" gorm:"type:varchar(16);not null;default:'complete'"`
+	ProcessedSegments  int       `json:"processed_segments" gorm:"not null;default:0"`
+	TotalSegments      int       `json:"total_segments" gorm:"not null;default:0"`
+	ModelCalls         JSON      `json:"model_calls" gorm:"type:jsonb;not null;default:'[]'"`
+	ExtractionError    string    `json:"extraction_error,omitempty" gorm:"type:text;not null;default:''"`
+	CreatedAt          time.Time `json:"created_at"`
 }
 
 func (KnowledgeEvidence) TableName() string { return "knowledge_context_evidence" }
+
+// KnowledgeEvidenceEntity preserves object recognition even when a source has no facts or events.
+type KnowledgeEvidenceEntity struct {
+	TenantID   uint64 `json:"tenant_id" gorm:"primaryKey;autoIncrement:false;not null"`
+	EvidenceID string `json:"evidence_id" gorm:"primaryKey;type:varchar(36);not null"`
+	EntityID   string `json:"entity_id" gorm:"primaryKey;type:varchar(36);not null;index"`
+}
+
+func (KnowledgeEvidenceEntity) TableName() string { return "knowledge_context_evidence_entities" }
 
 // KnowledgeFact is a sourced assertion. Relations use ObjectEntityID; scalar
 // attributes use Value, ValueType, and Unit. Conflicting assertions coexist.
@@ -268,6 +281,7 @@ type KnowledgeContextQuery struct {
 }
 
 type KnowledgeContextResult struct {
+	TemplateOnlyMessageCount        int                  `json:"template_only_message_count"`
 	ExcludedMissingPublishedAtCount int                  `json:"excluded_missing_published_at_count"`
 	PublishedAtMissingSourceIDs     []string             `json:"published_at_missing_source_ids"`
 	Entities                        []KnowledgeEntity    `json:"entities"`

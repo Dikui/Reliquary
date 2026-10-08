@@ -882,6 +882,7 @@ CREATE TABLE public.knowledge_context_evidence (
     image_refs jsonb DEFAULT '[]'::jsonb NOT NULL,
     status character varying(16) DEFAULT 'current'::character varying NOT NULL,
     extraction_status character varying(16) DEFAULT 'pending'::character varying NOT NULL,
+    extraction_mode character varying(16) DEFAULT 'full' NOT NULL CHECK (extraction_mode IN ('template_only', 'full')),
     extraction_coverage character varying(16) DEFAULT 'complete' NOT NULL CHECK (extraction_coverage IN ('complete', 'partial')),
     processed_segments integer DEFAULT 0 NOT NULL,
     total_segments integer DEFAULT 0 NOT NULL,
@@ -3688,6 +3689,34 @@ CREATE UNIQUE INDEX idx_kcee_pair ON public.knowledge_context_event_evidence USI
 -- Event objects have one identity per event and retain source-level support.
 ALTER TABLE public.knowledge_context_events ADD CONSTRAINT uq_kcevent_team_id UNIQUE (tenant_id, id);
 ALTER TABLE public.knowledge_context_entities ADD CONSTRAINT uq_kcentity_team_id UNIQUE (tenant_id, id);
+ALTER TABLE public.knowledge_context_evidence ADD CONSTRAINT uq_kcevidence_team_id UNIQUE (tenant_id, id);
+ALTER TABLE public.knowledge_tags ADD CONSTRAINT uq_knowledge_tags_team_id UNIQUE (tenant_id, id);
+
+CREATE TABLE public.knowledge_context_evidence_entities (
+    tenant_id bigint NOT NULL,
+    evidence_id character varying(36) NOT NULL,
+    entity_id character varying(36) NOT NULL,
+    PRIMARY KEY (tenant_id, evidence_id, entity_id),
+    FOREIGN KEY (tenant_id, evidence_id) REFERENCES public.knowledge_context_evidence (tenant_id, id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id, entity_id) REFERENCES public.knowledge_context_entities (tenant_id, id) ON DELETE CASCADE
+);
+CREATE INDEX idx_kcevidence_entity ON public.knowledge_context_evidence_entities (tenant_id, entity_id, evidence_id);
+
+CREATE TABLE public.knowledge_context_entity_stars (
+    tenant_id bigint NOT NULL,
+    entity_id character varying(36) NOT NULL,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    PRIMARY KEY (tenant_id, entity_id),
+    FOREIGN KEY (tenant_id, entity_id) REFERENCES public.knowledge_context_entities (tenant_id, id) ON DELETE CASCADE
+);
+
+CREATE TABLE public.knowledge_context_topic_stars (
+    tenant_id bigint NOT NULL,
+    tag_id character varying(36) NOT NULL,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    PRIMARY KEY (tenant_id, tag_id),
+    FOREIGN KEY (tenant_id, tag_id) REFERENCES public.knowledge_tags (tenant_id, id) ON DELETE CASCADE
+);
 
 CREATE TABLE public.knowledge_context_event_entities (
     tenant_id bigint NOT NULL,

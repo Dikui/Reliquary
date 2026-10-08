@@ -76,8 +76,8 @@ export default {
   "loaded": "已加载 {count} 条建议"
 },
   extractionDetails: {
-  "partial": "部分抽取",
-  "complete": "完整抽取",
+  "partial": "部分段落已处理",
+  "complete": "全部段落已处理",
   "segments": "已处理 {processed} / {total} 段",
   "partialHint": "只有部分段落完成抽取，未处理或抽取失败的段落内容仍保留在原文中。",
   "callsTitle": "模型调用",
@@ -236,6 +236,17 @@ export default {
     }
   },
   knowledgeWorkbench: {
+    focus: {
+      title: '关注范围', description: '星标对象、星标主题和已启用的跟踪任务共同决定新消息的完整抽取范围。',
+      futureMessages: '加星标只影响之后收录的消息，不会自动重抽历史消息。取消星标会保留已有事实和事件；已启用的跟踪任务仍可能使该对象或主题属于关注范围。',
+      star: '加星标', unstar: '取消星标', starNamed: '给“{name}”加星标', unstarNamed: '取消“{name}”的星标',
+      starred: '已加星标', unstarred: '已取消星标',
+      starredEntities: '星标对象', starredTopics: '星标主题', trackedEntities: '跟踪任务涉及的对象', trackedTopics: '跟踪任务涉及的主题',
+      noStarredEntities: '还没有星标对象。可在对象列表或详情中加星标。', noStarredTopics: '还没有星标主题。可在下方主题标签处加星标。',
+      noTrackedEntities: '已启用的跟踪任务尚未涉及对象。', noTrackedTopics: '已启用的跟踪任务尚未涉及主题。', enabledTracking: '已启用跟踪任务',
+      topics: '主题标签', topicsDescription: '给消息上的具体所指标签加星标，之后带该标签的消息会完整抽取事实和事件。', filterTopics: '筛选主题标签', noTopics: '没有匹配的具体所指标签。',
+      topicKinds: { topic: '主题', object: '对象', event: '事件' },
+    },
     sourceTime: { excluded: '因缺少发布时间被排除的来源数：{count}', missing: '缺少发布时间', reposts: '转载来源', unknownPublisher: '未知发布者', matchMethod: '判重方式', matchMethods: { url: '规范化 URL', content_hash: '正文相同', simhash: '近似重复', file_hash: '文件相同', other: '其他方式' } },
     nameEmbeddings: {
       title: '对象名称向量',
@@ -252,11 +263,11 @@ export default {
     scope: {"label": "查询范围", "knowledge_base": "当前知识库", "domain": "领域下全部知识库", "team": "全团队", "selectDomain": "选择查询领域", "sourceKb": "来源知识库", "detailHint": "对象身份在团队内统一，以下事实和事件汇总所有知识库的来源。", "workflowHint": "工作流和报告保留在当前知识库；事实查询步骤可以设置独立范围。"},
     fusion: {"minValue": "数值下限", "maxValue": "数值上限", "unit": "比较单位", "queryHint": "使用领域模板中的字段或别名查询。数值比较需要同一单位族；结果数量只代表当前返回的资料。", "originalField": "原始字段名", "snapshotTitle": "核验引用原文", "quoteMissing": "这段引用没有在该快照中精确匹配。请核对原文；系统不会猜测位置。", "sameStory": "关联的先前事件", "roundup": "汇总材料：保持独立，不累加到各子事件", "current_period": "本期材料", "background": "历史背景", "unknown_date": "日期未知"},
     tabLabel: '知识工作台', title: '知识工作台', subtitle: "管理和组织文档知识库", sections: '知识工作台功能', refresh: '刷新', rebuild: '重新构建知识上下文', requestFailed: '请求失败，请稍后重试。', emptyValue: '未填写', unknownDate: '时间未知', facts: '事实', correct: '纠正事实', correctionSaved: '事实纠正已保存，新事实保留了来源和历史。', correctionTitle: '纠正事实', correctionIntro: '为“{predicate}”提交新的事实版本。引用必须与来源原文一致。', correctionValue: '正确值', correctionValueType: '值类型', correctionUnit: '单位', correctionQuote: '来源原文引用', correctionNote: '纠正说明', correctionFrom: '生效开始时间', correctionTo: '生效结束时间', correctionValueInvalid: '请按类型输入有效值。', cancel: '取消', factPeriod: '有效时间', rebuildQueued: '已将 {count} 条来源加入重建队列；索引结果会在后台处理完成后更新。', loadMore: '加载更多',
-    nav: { merges: '待合并建议', query: '结构化检索', entities: '对象与事实', events: '事件热度', evidence: '来源证据', workflows: '跟踪工作流', reports: '研究报告' },
-    query: { title: '查询知识上下文', description: '按对象、属性、关系和时间范围筛选事实，并检查当前值与历史版本的来源。', entity: '对象名称', entityPlaceholder: '例如：Acme 公司', predicate: '事实属性', predicatePlaceholder: '例如：总部、状态、融资轮次', relation: '关系类型', relationPlaceholder: '例如：投资、收购、合作', since: '开始时间', until: '结束时间', history: '包含已替代的历史事实', submit: '查询', clear: '清空条件', resultCounts: '找到 {entities} 个对象、{facts} 条事实、{events} 个事件和 {evidence} 条证据。', historyIncluded: '结果包含历史版本', empty: '没有匹配的事实、事件或来源。' },
+    nav: { focus: '关注范围', merges: '待合并建议', query: '结构化检索', entities: '对象与事实', events: '事件热度', evidence: '来源证据', workflows: '跟踪工作流', reports: '研究报告' },
+    query: { templateOnlyMessages: '另有 {count} 条相关消息仅抽取了模板字段。', title: '查询知识上下文', description: '按对象、属性、关系和时间范围筛选事实，并检查当前值与历史版本的来源。', entity: '对象名称', entityPlaceholder: '例如：Acme 公司', predicate: '事实属性', predicatePlaceholder: '例如：总部、状态、融资轮次', relation: '关系类型', relationPlaceholder: '例如：投资、收购、合作', since: '开始时间', until: '结束时间', history: '包含已替代的历史事实', submit: '查询', clear: '清空条件', resultCounts: '找到 {entities} 个对象、{facts} 条事实、{events} 个事件和 {evidence} 条证据。', historyIncluded: '结果包含历史版本', empty: '没有匹配的事实、事件或来源。' },
     entities: { title: '对象与事实', description: '浏览知识图谱中的对象，检查关系、属性、来源与事实历史。', filter: '筛选对象', empty: '没有对象', unknownType: '未分类', aliases: '个别名', choose: '选择一个对象查看事实', includeHistory: '包含历史事实', noFacts: '这个对象还没有可显示的事实。', unknownObject: '未知对象', merge: '合并重复对象', mergeTitle: '合并对象', mergeHint: '选择保留为规范对象的目标。事实、关系和别名将转移到目标对象。', mergeSource: '待合并对象', mergeTarget: '保留对象', mergeTargetPlaceholder: '选择保留的对象', mergeWarning: '合并会影响全团队所有知识库中的对象引用，操作写入审计日志，且不能在此界面撤销。', mergeSaved: '对象已合并' },
     events: { title: '事件热度', description: '按热度查看近期事件，展开理由、关联对象和支撑来源。', empty: '没有事件', event: '事件', heat: '热度', sourceCount: '{count} 个来源', hideDetails: '收起详情', showDetails: '查看热度依据', whyHot: '热度和关注度依据', noReason: '暂无热度说明。', scored: '系统关注度评分', attentionScore: '关注度 {score}', noSources: '尚无关联来源。', noDescription: '暂无事件摘要。' },
-    evidence: { title: '来源证据', description: '查看来源快照、版本、抽取状态和引用出处。', filter: '筛选标题、发布者或链接', empty: '没有来源证据', source: '来源', openSnapshot: '展开来源快照', openSource: '打开原始链接', openKnowledge: '打开原始消息', version: '版本', hash: '内容校验值', extraction: '抽取状态', noBody: '来源快照没有正文。', untitled: '无标题来源', status: { current: '当前版本', superseded: '旧版本' }, extractionStatus: { pending: '等待抽取', complete: '抽取完成', failed: '抽取失败' } },
+    evidence: { extractionMode: '抽取模式', extractionModes: { template_only: '仅模板字段', full: '完整抽取' }, templateOnlyHint: '本条消息只抽取了领域模板字段，未抽取开放字段或事件。', title: '来源证据', description: '查看来源快照、版本、抽取状态和引用出处。', filter: '筛选标题、发布者或链接', empty: '没有来源证据', source: '来源', openSnapshot: '展开来源快照', openSource: '打开原始链接', openKnowledge: '打开原始消息', version: '版本', hash: '内容校验值', extraction: '抽取状态', noBody: '来源快照没有正文。', untitled: '无标题来源', status: { current: '当前版本', superseded: '旧版本' }, extractionStatus: { pending: '等待抽取', complete: '抽取完成', failed: '抽取失败' } },
     factStatus: { current: '当前事实', superseded: '已替代', corrected: '已纠正' },
     factDifference: { conflict: '有效期重叠：存在不同记载', potential: '待核实差异：有效时间信息不完整' },
     workflows: {

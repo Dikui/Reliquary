@@ -5,6 +5,12 @@ BEGIN;
 
 DROP TABLE IF EXISTS public.knowledge_repost_sources;
 
+DROP TABLE IF EXISTS public.knowledge_context_entity_stars;
+DROP TABLE IF EXISTS public.knowledge_context_topic_stars;
+DROP TABLE IF EXISTS public.knowledge_context_evidence_entities;
+ALTER TABLE IF EXISTS public.knowledge_context_evidence DROP CONSTRAINT IF EXISTS uq_kcevidence_team_id;
+ALTER TABLE IF EXISTS public.knowledge_tags DROP CONSTRAINT IF EXISTS uq_knowledge_tags_team_id;
+
 DROP TABLE IF EXISTS public.knowledge_context_event_evidence_entities;
 DROP TABLE IF EXISTS public.knowledge_context_event_entities;
 ALTER TABLE IF EXISTS public.knowledge_context_events DROP CONSTRAINT IF EXISTS uq_kcevent_team_id;

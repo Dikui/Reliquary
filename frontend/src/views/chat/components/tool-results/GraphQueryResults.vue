@@ -25,6 +25,8 @@
         </RouterLink>
       </header>
 
+      <p v-if="base.result.template_only_message_count" class="fact-meta" role="status">{{ t('knowledgeWorkbench.query.templateOnlyMessages', { count: base.result.template_only_message_count }) }}</p>
+
       <div v-if="base.result.facts.length" class="fact-list">
         <article v-for="fact in base.result.facts" :key="fact.id" class="fact-card">
           <div class="fact-heading">
@@ -67,6 +69,7 @@
               <div class="snapshot-meta">
                 <span>{{ t('knowledgeWorkbench.evidence.version') }}: {{ snapshot(base.id || '', fact.evidence_id)?.version || evidenceFor(base.result.evidence, fact.evidence_id)?.version || 1 }}</span>
                 <span>{{ t('knowledgeWorkbench.evidence.extraction') }}: {{ snapshot(base.id || '', fact.evidence_id)?.extraction_status || evidenceFor(base.result.evidence, fact.evidence_id)?.extraction_status || 'pending' }}</span>
+                <span v-if="snapshot(base.id || '', fact.evidence_id)?.extraction_mode || evidenceFor(base.result.evidence, fact.evidence_id)?.extraction_mode">{{ t('knowledgeWorkbench.evidence.extractionMode') }}: {{ t(`knowledgeWorkbench.evidence.extractionModes.${snapshot(base.id || '', fact.evidence_id)?.extraction_mode || evidenceFor(base.result.evidence, fact.evidence_id)?.extraction_mode}`) }}</span>
               </div>
               <pre>{{ snapshot(base.id || '', fact.evidence_id)?.body || evidenceFor(base.result.evidence, fact.evidence_id)?.body || t('knowledgeWorkbench.evidence.noBody') }}</pre>
             </template>
@@ -97,6 +100,7 @@ const knowledgeBases = computed(() => Object.entries(props.data.contexts || {}).
     || result.events?.[0]?.knowledge_base_id
     || result.evidence?.[0]?.knowledge_base_id,
   result: {
+    template_only_message_count: result.template_only_message_count || 0,
     entities: result.entities || [],
     facts: result.facts || [],
     events: result.events || [],

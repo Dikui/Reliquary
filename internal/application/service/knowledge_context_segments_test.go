@@ -61,6 +61,10 @@ func (*p3SegmentChat) GetModelID() string   { return "summary" }
 func p3SegmentFixture(t *testing.T) (*gorm.DB, context.Context, *KnowledgeContextService) {
 	t.Helper()
 	db, ctx, svc := p2ContextFixture(t)
+	var domain types.KnowledgeDomain
+	require.NoError(t, db.First(&domain, "id = ?", "energy").Error)
+	domain.Fields = append(domain.Fields, types.DomainField{Key: "staff", Label: "Staff", ValueType: "number"})
+	require.NoError(t, db.Save(&domain).Error)
 	require.NoError(t, db.Exec(`ALTER TABLE knowledge_bases ADD COLUMN summary_model_id TEXT NOT NULL DEFAULT 'summary'`).Error)
 	require.NoError(t, db.Create(&types.Model{ID: "summary", TenantID: 9, Name: "segment-test", Type: types.ModelTypeKnowledgeQA,
 		Source: types.ModelSourceRemote, Status: types.ModelStatusActive, Parameters: types.ModelParameters{ContextWindow: 4096, MaxOutputTokens: 512}}).Error)

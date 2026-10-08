@@ -149,6 +149,7 @@ func TestProcessRoundupKeepsFactsAndSkipsEventLinks(t *testing.T) {
 		ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: time.Now(), UpdatedAt: time.Now(),
 		Metadata: types.JSON(`{"intake":{"decision":"approved"}}`)}
 	require.NoError(t, db.Create(&k).Error)
+	focusContextTestMessage(t, db, &k)
 	model := &knowledgeContextTestChat{response: `{"source_kind":"roundup","entities":[{"mention":"Acme","quote":"Acme launched Product X.","canonical_name":"Acme","entity_type":"organization","description":"Company","aliases":[]}],"facts":[{"kind":"attribute","subject":"Acme","predicate":"launch_status","value":"announced","value_type":"string","unit":"","object":"","effective_from":"","effective_to":"","quote":"Acme launched Product X."}],"events":[{"title":"Acme launched Product X","event_type":"launch","description":"Product X launched","occurred_at":"","entity_mentions":["Acme"],"quote":"Acme launched Product X."}],"attention":{"novelty":20,"impact":10,"credibility":50,"relevance":20,"actionability":10,"score":18,"reason":"A roundup includes product notes."}}`}
 	service := NewKnowledgeContextService(db, knowledgeContextTestModelService{model: model})
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(9))

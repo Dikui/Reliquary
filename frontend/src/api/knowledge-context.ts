@@ -1,4 +1,4 @@
-import { get, post } from '@/utils/request'
+import { del, get, post, put } from '@/utils/request'
 import { knowledgeContextBasePath, type KnowledgeContextScopeParams } from './knowledge-context-scope'
 export type { KnowledgeContextScope } from './knowledge-context-scope'
 
@@ -50,6 +50,7 @@ export interface KnowledgeEvidence {
   extraction_status: 'pending' | 'complete' | 'failed' | string
   extraction_error?: string
   extraction_coverage?: 'complete' | 'partial'
+  extraction_mode?: 'template_only' | 'full'
   processed_segments?: number
   total_segments?: number
   model_calls?: KnowledgeModelCall[]
@@ -138,6 +139,7 @@ export interface KnowledgeContextQuery extends KnowledgeContextScopeParams {
 }
 
 export interface KnowledgeContextResult {
+  template_only_message_count?: number
   excluded_missing_published_at_count?: number
   published_at_missing_source_ids?: string[]
   entities: KnowledgeEntity[]
@@ -145,6 +147,28 @@ export interface KnowledgeContextResult {
   events: KnowledgeEvent[]
   evidence: KnowledgeEvidence[]
   attention: KnowledgeAttention[]
+}
+
+export interface KnowledgeFocusEntity extends KnowledgeEntity {
+  workflow_ids?: string[]
+  knowledge_base_ids?: string[]
+}
+
+export interface KnowledgeFocusTopic {
+  id: string
+  name: string
+  kind: 'topic' | 'object' | 'event' | string
+  knowledge_base_id: string
+  knowledge_base_name?: string
+  workflow_ids?: string[]
+}
+
+export interface KnowledgeFocusScope {
+  starred_entities: KnowledgeFocusEntity[]
+  starred_topics: KnowledgeFocusTopic[]
+  tracked_entities: KnowledgeFocusEntity[]
+  tracked_topics: KnowledgeFocusTopic[]
+  available_topics: KnowledgeFocusTopic[]
 }
 
 export interface KnowledgeRepostSource {
@@ -192,6 +216,18 @@ function queryString(params?: KnowledgeContextListParams): string {
   const serialized = query.toString()
   return serialized ? `?${serialized}` : ''
 }
+
+export const getKnowledgeFocusScope = (params: KnowledgeContextScopeParams) =>
+  get<KnowledgeContextEnvelope<KnowledgeFocusScope>>(`/api/v1/knowledge-context/focus${queryString(params)}`)
+
+export const starKnowledgeEntity = (entityId: string) =>
+  put<KnowledgeContextActionEnvelope>(`/api/v1/knowledge-context/entities/${encodeURIComponent(entityId)}/star`)
+export const unstarKnowledgeEntity = (entityId: string) =>
+  del<KnowledgeContextActionEnvelope>(`/api/v1/knowledge-context/entities/${encodeURIComponent(entityId)}/star`)
+export const starKnowledgeTopic = (tagId: string) =>
+  put<KnowledgeContextActionEnvelope>(`/api/v1/knowledge-context/topics/${encodeURIComponent(tagId)}/star`)
+export const unstarKnowledgeTopic = (tagId: string) =>
+  del<KnowledgeContextActionEnvelope>(`/api/v1/knowledge-context/topics/${encodeURIComponent(tagId)}/star`)
 
 export const queryKnowledgeContext = (kbId: string, query: KnowledgeContextQuery) =>
   post<KnowledgeContextEnvelope<KnowledgeContextResult>>(`${knowledgeContextBasePath(kbId, query.scope)}/query`, query)

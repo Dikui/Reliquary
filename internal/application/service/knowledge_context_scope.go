@@ -116,6 +116,12 @@ func (s *KnowledgeContextService) authorizeContextEntity(ctx context.Context, te
 	}
 	evidenceIDs := s.db.WithContext(ctx).Model(&types.KnowledgeEvidence{}).Select("id").Where("tenant_id = ? AND knowledge_base_id IN ?", tenantID, []string(key.KnowledgeBaseIDs))
 	var count int64
+	if err := s.db.WithContext(ctx).Model(&types.KnowledgeEvidenceEntity{}).Where("tenant_id = ? AND evidence_id IN (?) AND entity_id = ?", tenantID, evidenceIDs, entityID).Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
 	if err := s.db.WithContext(ctx).Model(&types.KnowledgeFact{}).Where("tenant_id = ? AND knowledge_base_id IN ? AND evidence_id IN (?) AND (subject_entity_id = ? OR object_entity_id = ?)", tenantID, []string(key.KnowledgeBaseIDs), evidenceIDs, entityID, entityID).Count(&count).Error; err != nil {
 		return err
 	}

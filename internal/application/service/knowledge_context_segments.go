@@ -21,6 +21,7 @@ const (
 	defaultContextExtractionWindow = 8192
 	defaultContextExtractionOutput = 2048
 	defaultContextMaxSegments      = 32
+	contextExtractionSupplement    = "supplement"
 )
 
 type contextSegmentPlan struct {
@@ -115,12 +116,14 @@ func planContextSegments(body, overhead string, window, output, maxSegments int)
 }
 
 func (s *KnowledgeContextService) extractContextSegments(ctx context.Context, model chat.Chat, modelID string,
-	evidence *types.KnowledgeEvidence, domain *types.KnowledgeDomain) (contextExtraction, contextSegmentPlan, error) {
+	evidence *types.KnowledgeEvidence, domain *types.KnowledgeDomain, modes ...string) (contextExtraction, contextSegmentPlan, error) {
 	window, output, err := s.contextExtractionLimits(ctx, modelID)
 	if err != nil {
 		return contextExtraction{}, contextSegmentPlan{}, err
 	}
-	prompt := knowledgeContextExtractionPrompt + "\n" + knowledgeContextSourceKindPrompt + "\n" + contextDomainPrompt(domain)
+	// Use the original full prompt to plan both passes. Template-only extraction
+	// therefore cannot add segments or calls relative to the former pipeline.
+	prompt := contextExtractionPrompt(domain, types.KnowledgeExtractionFull)
 	metadata := map[string]any{"title": evidence.Title, "published_at": evidence.PublishedAt,
 		"author": evidence.Author, "publisher": evidence.Publisher, "original_url": evidence.OriginalURL, "body": ""}
 	encoded, _ := json.Marshal(metadata)
@@ -129,6 +132,29 @@ func (s *KnowledgeContextService) extractContextSegments(ctx context.Context, mo
 	if err != nil {
 		return contextExtraction{}, plan, err
 	}
+	mode := types.KnowledgeExtractionFull
+	if len(modes) > 0 {
+		mode = modes[0]
+	}
+	return extractContextSegmentsWithPlan(ctx, model, evidence, domain, mode, plan)
+}
+
+func extractContextSegmentsWithPlan(ctx context.Context, model chat.Chat, evidence *types.KnowledgeEvidence,
+	domain *types.KnowledgeDomain, mode string, plan contextSegmentPlan) (contextExtraction, contextSegmentPlan, error) {
+	return extractContextSegmentsUsingPlan(ctx, model, evidence, domain, mode, plan, nil)
+}
+
+func extractContextSupplementSegmentsWithPlan(ctx context.Context, model chat.Chat, evidence *types.KnowledgeEvidence,
+	domain *types.KnowledgeDomain, plan contextSegmentPlan, entities []contextExtractedEntity) (contextExtraction, contextSegmentPlan, error) {
+	return extractContextSegmentsUsingPlan(ctx, model, evidence, domain, contextExtractionSupplement, plan, entities)
+}
+
+func extractContextSegmentsUsingPlan(ctx context.Context, model chat.Chat, evidence *types.KnowledgeEvidence,
+	domain *types.KnowledgeDomain, mode string, plan contextSegmentPlan, verifiedEntities []contextExtractedEntity) (contextExtraction, contextSegmentPlan, error) {
+	prompt := contextExtractionPrompt(domain, mode)
+	metadata := map[string]any{"title": evidence.Title, "published_at": evidence.PublishedAt,
+		"author": evidence.Author, "publisher": evidence.Publisher, "original_url": evidence.OriginalURL}
+	plan.Processed = 0
 	var combined contextExtraction
 	for i, segment := range plan.Segments {
 		metadata["body"] = segment
@@ -148,10 +174,19 @@ func (s *KnowledgeContextService) extractContextSegments(ctx context.Context, mo
 			return contextExtraction{}, plan, fmt.Errorf("invalid knowledge context JSON in segment %d: %w", i+1, err)
 		}
 		extracted.SourceKind = strings.ToLower(strings.TrimSpace(extracted.SourceKind))
+		if mode == types.KnowledgeExtractionTemplateOnly {
+			extracted.Facts = templateContextFacts(extracted.Facts, domain)
+			extracted.Events = nil
+		} else if mode == contextExtractionSupplement {
+			// Only first-pass object recognition and template claims are reused.
+			// A provider returning them again cannot replace or duplicate them.
+			extracted.Entities = nil
+			extracted.Facts = openContextFacts(extracted.Facts, domain)
+		}
 		if extracted.Attention.Reason == "" {
 			extracted.Attention.Reason = "Attention is assessed separately."
 		}
-		if err := validateContextExtraction(extracted, segment); err != nil {
+		if err := validateContextExtraction(extracted, segment, verifiedEntities); err != nil {
 			return contextExtraction{}, plan, fmt.Errorf("segment %d: %w", i+1, err)
 		}
 		plan.Processed++
@@ -166,6 +201,74 @@ func (s *KnowledgeContextService) extractContextSegments(ctx context.Context, mo
 		combined.Events = nil
 	}
 	return combined, plan, nil
+}
+
+func contextExtractionPrompt(domain *types.KnowledgeDomain, mode string) string {
+	if mode == contextExtractionSupplement {
+		return contextSupplementExtractionPrompt(domain)
+	}
+	if mode != types.KnowledgeExtractionTemplateOnly {
+		return knowledgeContextExtractionPrompt + "\n" + knowledgeContextSourceKindPrompt + "\n" + contextDomainPrompt(domain)
+	}
+	domainPrompt := strings.Replace(contextDomainPrompt(domain),
+		"Fields outside the template remain open fields under their original source names.",
+		"Only return defined template fields and relations.", 1)
+	// The built-in hints also permit open fields in the original full prompt.
+	// Keep its object and quotation guidance without expanding this pass.
+	domainPrompt = strings.ReplaceAll(domainPrompt, " Other supported fields may retain their source names.", "")
+	return knowledgeContextTemplateExtractionPrompt + "\n" + knowledgeContextTemplateSourceKindPrompt + "\n" + domainPrompt +
+		"\nReturn only objects and facts using the defined template fields or relations; apply domain hints only within that scope."
+}
+
+func contextSupplementExtractionPrompt(domain *types.KnowledgeDomain) string {
+	domainPrompt := strings.Replace(contextDomainPrompt(domain),
+		"Use the domain template's canonical field and relation keys for equivalent source labels. Preserve source labels in source_predicate. Fields outside the template remain open fields under their original source names.",
+		"Exclude the following template fields and relations, including equivalent labels and aliases. Preserve source labels in source_predicate. Return other fields under their original source names.", 1)
+	return knowledgeContextSupplementExtractionPrompt + "\n" + knowledgeContextSupplementSourceKindPrompt + "\n" + domainPrompt +
+		"\nReturn only facts outside this template and events; object recognition and template facts are already complete."
+}
+
+// Enforce the extraction boundary even when a provider returns an open field.
+// Aliases and labels count as template membership, without rewriting source labels.
+func templateContextFacts(input []contextExtractedFact, domain *types.KnowledgeDomain) []contextExtractedFact {
+	result := make([]contextExtractedFact, 0, len(input))
+	for _, fact := range input {
+		if contextFactInTemplate(fact, domain) {
+			result = append(result, fact)
+		}
+	}
+	return result
+}
+
+func openContextFacts(input []contextExtractedFact, domain *types.KnowledgeDomain) []contextExtractedFact {
+	result := make([]contextExtractedFact, 0, len(input))
+	for _, fact := range input {
+		if !contextFactInTemplate(fact, domain) {
+			result = append(result, fact)
+		}
+	}
+	return result
+}
+
+func contextFactInTemplate(fact contextExtractedFact, domain *types.KnowledgeDomain) bool {
+	if domain == nil {
+		return false
+	}
+	canonical := canonicalContextField(domain, fact.Predicate)
+	if fact.Kind == types.KnowledgeFactRelation {
+		for _, relation := range domain.Relations {
+			if normalizeContextName(canonical) == normalizeContextName(relation.Key) {
+				return true
+			}
+		}
+	} else {
+		for _, field := range domain.Fields {
+			if normalizeContextName(canonical) == normalizeContextName(field.Key) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func contextAttentionEnabled() bool {

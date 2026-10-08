@@ -102,6 +102,7 @@ func TestKnowledgeContextMarkdownCitationPreservesModelQuote(t *testing.T) {
 	body := "Acme **Model** 发布了 *新版本*，支持 `run --fast`。"
 	quote := "  Acme Model 发布了 新版本，支持 run --fast。  "
 	k := p3Message(t, db, "markdown-message", body)
+	focusContextTestMessage(t, db, k)
 	extraction := contextExtraction{
 		Entities:  []contextExtractedEntity{{Mention: "Acme Model", Canonical: "Acme Model", EntityType: "model", Quote: quote}},
 		Facts:     []contextExtractedFact{{Kind: types.KnowledgeFactAttribute, Subject: "Acme Model", Predicate: "status", Value: json.RawMessage(`"released"`), ValueType: "string", Quote: quote}},

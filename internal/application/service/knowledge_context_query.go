@@ -39,8 +39,18 @@ func (s *KnowledgeContextService) contextQueryCandidates(ctx context.Context, sc
 		if err := s.db.WithContext(ctx).Select("entity_id", "alias").Where("tenant_id = ?", tenantID).Find(&aliases).Error; err != nil {
 			return nil, nil, true, err
 		}
+		key, _ := types.TenantAPIKeyScopeFromContext(ctx)
+		limitedAliases := key.IsKnowledgeBaseRestricted() || len(q.KnowledgeIDs) > 0
+		var aliasEvidence []types.KnowledgeEvidence
+		if limitedAliases {
+			var err error
+			aliasEvidence, err = s.listEvidenceCandidates(ctx, "", q)
+			if err != nil {
+				return nil, nil, true, err
+			}
+		}
 		for _, alias := range aliases {
-			if strings.Contains(normalizeContextName(alias.Alias), name) {
+			if (!limitedAliases || contextAliasVisible(alias.Alias, aliasEvidence)) && strings.Contains(normalizeContextName(alias.Alias), name) {
 				matched[alias.EntityID] = true
 			}
 		}
@@ -97,6 +107,16 @@ func (s *KnowledgeContextService) contextQueryCandidates(ctx context.Context, sc
 	}
 	if q.EventID != "" {
 		return uniqueContextIDs(eventEvidenceIDs), entityIDs, true, nil
+	}
+	if len(entityIDs) > 0 && q.Predicate == "" && q.Relation == "" && q.ObjectEntityID == "" {
+		var objectEvidenceIDs []string
+		if err := s.db.WithContext(ctx).Model(&types.KnowledgeEvidenceEntity{}).
+			Joins("JOIN knowledge_context_evidence sources ON sources.tenant_id = knowledge_context_evidence_entities.tenant_id AND sources.id = knowledge_context_evidence_entities.evidence_id").
+			Where("sources.tenant_id = ? AND sources.knowledge_base_id IN ? AND knowledge_context_evidence_entities.entity_id IN ?", tenantID, kbIDs, entityIDs).
+			Distinct().Pluck("knowledge_context_evidence_entities.evidence_id", &objectEvidenceIDs).Error; err != nil {
+			return nil, nil, true, err
+		}
+		evidenceIDs = append(evidenceIDs, objectEvidenceIDs...)
 	}
 	return uniqueContextIDs(append(evidenceIDs, eventEvidenceIDs...)), entityIDs, true, nil
 }
@@ -219,6 +239,10 @@ func (s *KnowledgeContextService) queryContext(ctx context.Context, kbID string,
 	if err != nil {
 		return nil, err
 	}
+	result.TemplateOnlyMessageCount, err = s.templateOnlyMessageCount(ctx, scope, q, candidateEntityIDs)
+	if err != nil {
+		return nil, err
+	}
 	if narrowed && len(candidateEvidenceIDs) == 0 {
 		return result, nil
 	}
@@ -294,7 +318,14 @@ func (s *KnowledgeContextService) queryContext(ctx context.Context, kbID string,
 		return nil, err
 	}
 
+	objectLinks, err := s.contextEvidenceObjects(ctx, tenantID, evidence, q, candidateEntityIDs)
+	if err != nil {
+		return nil, err
+	}
 	entityIDs := make(map[string]bool)
+	for _, link := range objectLinks {
+		entityIDs[link.EntityID] = true
+	}
 	filteredFacts := make([]types.KnowledgeFact, 0, len(facts))
 	for _, fact := range facts {
 		source := allowed[fact.EvidenceID]
@@ -488,7 +519,7 @@ func (s *KnowledgeContextService) queryContext(ctx context.Context, kbID string,
 		})
 	}
 
-	if len(facts) == 0 && len(events) == 0 {
+	if len(facts) == 0 && len(events) == 0 && len(entityIDs) == 0 {
 		return result, nil
 	}
 	if len(entityIDs) > 0 {
@@ -560,6 +591,11 @@ func (s *KnowledgeContextService) queryContext(ctx context.Context, kbID string,
 		}
 	}
 	visibleEvidenceIDs := make(map[string]bool)
+	for _, link := range objectLinks {
+		if pageEntityIDs[link.EntityID] {
+			visibleEvidenceIDs[link.EvidenceID] = true
+		}
+	}
 	for id := range visibleFactEvidence {
 		visibleEvidenceIDs[id] = true
 	}
