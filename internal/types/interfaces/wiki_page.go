@@ -2,6 +2,7 @@ package interfaces
 
 import (
 	"context"
+	"time"
 
 	"reliquary/internal/types"
 )
@@ -10,6 +11,14 @@ import (
 // Provides high-level operations for wiki page CRUD, link management,
 // and chunk synchronization.
 type WikiPageService interface {
+	// IgnoreSourceChanges clears the source warning explicitly.
+	IgnoreSourceChanges(ctx context.Context, kbID, slug string) (*types.WikiPage, error)
+	// RegeneratePage queues an explicit regeneration through the wiki ingest flow.
+	RegeneratePage(ctx context.Context, kbID, slug string, task TaskEnqueuer) (*types.WikiPage, error)
+	// ClearSourceChanges acknowledges only the captured changes after regeneration.
+	ClearSourceChanges(ctx context.Context, kbID, slug string, changes types.WikiSourceChanges) error
+	// MissingChunkRefs returns deleted or out-of-scope chunk references for lint.
+	MissingChunkRefs(ctx context.Context, tenantID uint64, kbID string, chunkIDs []string) ([]string, error)
 	// CreatePage creates a new wiki page, parses outbound links, updates
 	// bidirectional link references, and syncs to chunks for retrieval.
 	CreatePage(ctx context.Context, page *types.WikiPage) (*types.WikiPage, error)
@@ -243,6 +252,10 @@ type WikiPageService interface {
 
 // WikiPageRepository defines the wiki page data persistence interface.
 type WikiPageRepository interface {
+	// MarkSourceChanged atomically merges modification times into referencing pages.
+	MarkSourceChanged(ctx context.Context, tenantID uint64, chunkIDs []string, changedAt time.Time) error
+	// ClearSourceChanges clears all changes when changes is nil, or only matching entries.
+	ClearSourceChanges(ctx context.Context, kbID, slug string, changes types.WikiSourceChanges) error
 	// Create inserts a new wiki page record.
 	Create(ctx context.Context, page *types.WikiPage) error
 

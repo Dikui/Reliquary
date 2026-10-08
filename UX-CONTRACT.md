@@ -30,6 +30,7 @@ Reliquary serves a small team that collects source material and checks entities,
 | Duplicate intake | KnowledgeDuplicateNotice and useKnowledgeDuplicates | Message intake API 409 with optional match_method | Manual, URL and file intake | Actual SFC and hook regression tests |
 | Repost sources | RepostSources | Knowledge detail and context APIs | Message preview, evidence and event heat details | Shared component and full SFC regression tests |
 | Research report body | ReportMarkdown with existing chat Markdown renderer and sanitizer | Workflow report Markdown and citations | Report body, Markdown and JSON downloads | Markdown nodes, evidence navigation and download request tests |
+| Wiki directory | WikiReadingLayout with TDesign Drawer | WikiBrowser page and index selection | Persistent desktop directory; closed mobile drawer below 768px | WikiReadingLayout and WikiBrowser component tests |
 
 ## Flow ledger
 
@@ -51,6 +52,8 @@ The settings dialog uses transient local search, tab and pagination state. Domai
 ## Layout and interaction
 
 The settings content owns vertical scrolling. Long template forms keep their natural height. New controls use TDesign keyboard behavior, visible focus, disabled and busy states, and application-owned dialogs. New icon-only actions have localized labels. Chinese input composition does not submit context queries. Textareas resize through their existing autosize owner and cannot be manually resized.
+
+Wiki reading keeps the existing desktop columns. Below 768px, the directory starts closed and opens in the existing TDesign modal drawer; selecting a page or the index closes it. The reader uses the full content width and wraps header actions. Source modification issues open the affected page and focus its source notice. Ignoring an issue or source notice refreshes the page marker, page and global issue lists, and pending count. Successful queued regeneration refreshes the same state. These behaviors follow `.scratch/knowledge-data-layering/issues/05-wiki-stale-after-chunk-edit.md` and its browser fix request.
 
 Browser checks cover the changed flows, both locales and themes, keyboard input, narrow viewports, open select popups and failure recovery when browser tooling is available. Static checks and unit tests alone do not prove these runtime properties.
 

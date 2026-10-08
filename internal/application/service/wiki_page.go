@@ -1356,7 +1356,16 @@ func (s *wikiPageService) CreateIssue(ctx context.Context, issue *types.WikiPage
 
 // ListIssues retrieves issues for a knowledge base
 func (s *wikiPageService) ListIssues(ctx context.Context, kbID string, slug string, status string) ([]*types.WikiPageIssue, error) {
-	return s.repo.ListIssues(ctx, kbID, slug, status)
+	issues, err := s.repo.ListIssues(ctx, kbID, slug, status)
+	if err != nil {
+		return nil, err
+	}
+	for _, issue := range issues {
+		if issue.IssueType == types.WikiIssueTypeSourceModified {
+			issue.Description = wikiSourceModifiedDescription(ctx, issue.WikiPageTitle, issue.ModifiedChunkCount)
+		}
+	}
+	return issues, nil
 }
 
 // UpdateIssueStatus updates an issue's status

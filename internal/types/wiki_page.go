@@ -3,6 +3,7 @@ package types
 import (
 	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -221,6 +222,9 @@ type WikiPage struct {
 	// need to surface the underlying evidence for a wiki page, or to
 	// retract citations when a source document is deleted.
 	ChunkRefs StringArray `json:"chunk_refs" gorm:"type:json"`
+	// SourceChanges records the latest change to each cited working-copy chunk.
+	// It is maintained separately from page content and ordinary metadata writes.
+	SourceChanges WikiSourceChanges `json:"source_changes" gorm:"type:jsonb;default:'{}'"`
 	// Slugs of pages that link TO this page (backlinks)
 	InLinks StringArray `json:"in_links" gorm:"type:json"`
 	// Slugs of pages this page links to (outbound links)
@@ -252,6 +256,43 @@ type WikiPage struct {
 // TableName specifies the database table name
 func (WikiPage) TableName() string {
 	return "wiki_pages"
+}
+
+// WikiSourceChanges stores one modification time per source chunk.
+type WikiSourceChanges map[string]time.Time
+
+func (c WikiSourceChanges) Value() (driver.Value, error) {
+	if c == nil {
+		return []byte("{}"), nil
+	}
+	return json.Marshal(c)
+}
+
+func (c *WikiSourceChanges) Scan(value interface{}) error {
+	*c = WikiSourceChanges{}
+	if value == nil {
+		return nil
+	}
+	var data []byte
+	switch v := value.(type) {
+	case []byte:
+		data = v
+	case string:
+		data = []byte(v)
+	default:
+		return fmt.Errorf("invalid wiki source changes value %T", value)
+	}
+	if err := json.Unmarshal(data, c); err != nil {
+		return err
+	}
+	for id, changedAt := range *c {
+		(*c)[id] = changedAt.UTC()
+	}
+	return nil
+}
+
+type WikiSourceChangesRequest struct {
+	Slug string `json:"slug" binding:"required"`
 }
 
 // Wiki edit source constants describe who authored a page version. Stored in
@@ -712,15 +753,21 @@ type WikiStats struct {
 	IsActive      bool             `json:"is_active"`      // whether wiki ingestion is currently running
 }
 
+// WikiIssueTypeSourceModified identifies an issue caused by edited working-copy chunks.
+const WikiIssueTypeSourceModified = "source_modified"
+
 // WikiPageIssue represents an issue flagged on a specific wiki page.
 // These issues are typically identified by agents or linters and stored for review.
 type WikiPageIssue struct {
-	ID                    string         `json:"id" gorm:"type:varchar(36);primaryKey"`
-	TenantID              uint64         `json:"tenant_id" gorm:"index"`
-	KnowledgeBaseID       string         `json:"knowledge_base_id" gorm:"type:varchar(36);index"`
-	Slug                  string         `json:"slug" gorm:"type:varchar(255);index"`
-	IssueType             string         `json:"issue_type" gorm:"type:varchar(50)"`
-	Description           string         `json:"description" gorm:"type:text"`
+	ID              string `json:"id" gorm:"type:varchar(36);primaryKey"`
+	TenantID        uint64 `json:"tenant_id" gorm:"index"`
+	KnowledgeBaseID string `json:"knowledge_base_id" gorm:"type:varchar(36);index"`
+	Slug            string `json:"slug" gorm:"type:varchar(255);index"`
+	IssueType       string `json:"issue_type" gorm:"type:varchar(50)"`
+	Description     string `json:"description" gorm:"type:text"`
+	// Source issue details are derived from the current page, not stored twice.
+	ModifiedChunkCount    int            `json:"modified_chunk_count,omitempty" gorm:"->;-:migration"`
+	WikiPageTitle         string         `json:"-" gorm:"->;-:migration"`
 	SuspectedKnowledgeIDs StringArray    `json:"suspected_knowledge_ids" gorm:"type:json"`
 	Status                string         `json:"status" gorm:"type:varchar(20);default:'pending';index"`
 	ReportedBy            string         `json:"reported_by" gorm:"type:varchar(100)"`

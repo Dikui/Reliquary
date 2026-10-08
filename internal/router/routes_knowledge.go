@@ -205,6 +205,8 @@ func RegisterWikiPageRoutes(r *gin.RouterGroup, wikiHandler *handler.WikiPageHan
 		// the slug in the body for the same reason move-page does)
 		wikiRead.GET("/revisions/*slug", g.Viewer(), g.KBAccessRead("kb_id"), wikiHandler.ListRevisions)
 		wiki.POST("/revert", g.Contributor(), g.KBAccessWrite("kb_id"), wikiHandler.RevertPage)
+		wiki.POST("/source-changes/ignore", g.Contributor(), g.KBAccessWrite("kb_id"), wikiHandler.IgnoreSourceChanges)
+		wiki.POST("/source-changes/regenerate", g.Contributor(), g.KBAccessWrite("kb_id"), wikiHandler.RegeneratePage)
 
 		// Folder tree (directory nodes)
 		wikiRead.GET("/folders", g.Viewer(), g.KBAccessRead("kb_id"), wikiHandler.ListFolders)

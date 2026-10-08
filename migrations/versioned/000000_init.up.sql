@@ -2557,6 +2557,7 @@ CREATE TABLE public.wiki_pages (
     sort_order integer DEFAULT 0 NOT NULL,
     source_refs jsonb DEFAULT '[]'::jsonb,
     chunk_refs jsonb DEFAULT '[]'::jsonb,
+    source_changes jsonb DEFAULT '{}'::jsonb NOT NULL,
     in_links jsonb DEFAULT '[]'::jsonb,
     out_links jsonb DEFAULT '[]'::jsonb,
     page_metadata jsonb DEFAULT '{}'::jsonb,
@@ -4767,6 +4768,8 @@ CREATE INDEX idx_wiki_pages_parent_slug ON public.wiki_pages USING btree (knowle
 --
 
 CREATE INDEX idx_wiki_pages_source_refs ON public.wiki_pages USING gin (source_refs jsonb_path_ops);
+
+CREATE INDEX idx_wiki_pages_chunk_refs ON public.wiki_pages USING gin (chunk_refs jsonb_path_ops);
 
 
 --

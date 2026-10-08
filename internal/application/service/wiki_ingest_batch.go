@@ -420,6 +420,7 @@ func (s *wikiIngestService) ProcessWikiIngest(ctx context.Context, t *asynq.Task
 	slugUpdates := make(map[string][]SlugUpdate)
 	var docResults []*docIngestResult
 	var retractFolderIDs []string
+	var regeneratedSlugs []string
 	// rateLimited flips true when any map/reduce LLM failure looks like an
 	// upstream 429/quota trip. It steers the follow-up scheduler onto the
 	// longer wikiRateLimitBackoff so retries don't keep hammering an already
@@ -433,6 +434,20 @@ func (s *wikiIngestService) ProcessWikiIngest(ctx context.Context, t *asynq.Task
 	for _, op := range pendingOps {
 		op := op
 		eg.Go(func() error {
+			if op.Op == WikiOpRegenerate {
+				err := s.regenerateSourcePage(mapCtx, chatModel, payload, op, batchCtx)
+				mapMu.Lock()
+				defer mapMu.Unlock()
+				if err != nil {
+					failedOps = append(failedOps, op)
+					if isLikelyRateLimitError(err) {
+						rateLimited = true
+					}
+				} else {
+					regeneratedSlugs = append(regeneratedSlugs, op.PageSlug)
+				}
+				return nil
+			}
 			if op.Op == WikiOpRetract {
 				// Resolve the authoritative page set at run-time. The caller
 				// (knowledgeService.cleanupWikiOnKnowledgeDelete) captures
@@ -580,7 +595,7 @@ func (s *wikiIngestService) ProcessWikiIngest(ctx context.Context, t *asynq.Task
 	egReduce.SetLimit(reduceParallel) // Reduce phase limit (LLM + DB concurrent connections, configurable)
 
 	var reduceMu sync.Mutex
-	var allPagesAffected []string
+	allPagesAffected := append([]string(nil), regeneratedSlugs...)
 	var ingestPagesAffected []string
 	var retractPagesAffected []string
 	// failedAdditionSlugs collects entity/concept slugs whose page

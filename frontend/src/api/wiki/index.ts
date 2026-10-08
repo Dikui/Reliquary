@@ -26,6 +26,7 @@ export interface WikiPage {
   depth?: number;
   sort_order?: number;
   source_refs: string[];
+  source_changes?: Record<string, string>;
   in_links: string[];
   out_links: string[];
   page_metadata: Record<string, any>;
@@ -102,6 +103,7 @@ export interface WikiPageIssue {
   knowledge_base_id: string;
   slug: string;
   issue_type: string;
+  modified_chunk_count?: number;
   description: string;
   suspected_knowledge_ids: string[];
   status: string;
@@ -180,6 +182,14 @@ export function createWikiPage(kbId: string, data: Partial<WikiPage>) {
 
 export function getWikiPage(kbId: string, slug: string) {
   return get(`/api/v1/knowledgebase/${kbId}/wiki/pages/${encodeSlugPath(slug)}`);
+}
+
+export function ignoreWikiSourceChanges(kbId: string, slug: string) {
+  return post(`/api/v1/knowledgebase/${kbId}/wiki/source-changes/ignore`, { slug });
+}
+
+export function regenerateWikiSourceChanges(kbId: string, slug: string) {
+  return post(`/api/v1/knowledgebase/${kbId}/wiki/source-changes/regenerate`, { slug });
 }
 
 // WikiPageUpdatePayload is a partial update: absent fields keep their stored

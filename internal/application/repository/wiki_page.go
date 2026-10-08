@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -41,6 +42,116 @@ func (r *wikiPageRepository) wikiEmptyInLinksPredicate() string {
 // Create inserts a new wiki page record
 func (r *wikiPageRepository) Create(ctx context.Context, page *types.WikiPage) error {
 	return r.db.WithContext(ctx).Create(page).Error
+}
+
+func (r *wikiPageRepository) MarkSourceChanged(ctx context.Context, tenantID uint64, chunkIDs []string, changedAt time.Time) error {
+	changes := types.WikiSourceChanges{}
+	var predicates []string
+	args := []interface{}{}
+	for _, id := range chunkIDs {
+		if id == "" {
+			continue
+		}
+		if _, exists := changes[id]; exists {
+			continue
+		}
+		changes[id] = changedAt.UTC()
+		ref, _ := json.Marshal([]string{id})
+		predicates = append(predicates, "chunk_refs @> ?::jsonb")
+		args = append(args, string(ref))
+	}
+	if len(changes) == 0 {
+		return nil
+	}
+	encoded, err := json.Marshal(changes)
+	if err != nil {
+		return err
+	}
+	query := `UPDATE wiki_pages SET source_changes = (
+		SELECT COALESCE(jsonb_object_agg(chunk_id, changed_at), '{}'::jsonb)
+		FROM (
+			SELECT chunk_id, MAX(changed_at) AS changed_at FROM (
+				SELECT key AS chunk_id, value::timestamptz AS changed_at
+				FROM jsonb_each_text(source_changes)
+				UNION ALL
+				SELECT key, value::timestamptz FROM jsonb_each_text(?::jsonb)
+				WHERE chunk_refs @> jsonb_build_array(key)
+			) changes GROUP BY chunk_id
+		) merged
+	) WHERE tenant_id = ? AND deleted_at IS NULL AND (` + strings.Join(predicates, " OR ") + `)
+	RETURNING id, tenant_id, knowledge_base_id, slug, title, status, source_changes`
+	values := []interface{}{string(encoded), tenantID}
+	values = append(values, args...)
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var pages []*types.WikiPage
+		if err := tx.Raw(query, values...).Scan(&pages).Error; err != nil {
+			return err
+		}
+		return syncWikiSourceIssues(tx, pages)
+	})
+}
+
+func (r *wikiPageRepository) ClearSourceChanges(ctx context.Context, kbID, slug string, changes types.WikiSourceChanges) error {
+	value := "'{}'::jsonb"
+	var args []interface{}
+	if changes != nil {
+		encoded, err := json.Marshal(changes)
+		if err != nil {
+			return err
+		}
+		value = `(SELECT COALESCE(jsonb_object_agg(key, value), '{}'::jsonb)
+			FROM jsonb_each_text(source_changes)
+			WHERE NOT (jsonb_exists(?::jsonb, key) AND value::timestamptz = (?::jsonb ->> key)::timestamptz))`
+		args = append(args, string(encoded), string(encoded))
+	}
+	query := `UPDATE wiki_pages SET source_changes = ` + value + `
+		WHERE knowledge_base_id = ? AND slug = ? AND deleted_at IS NULL
+		RETURNING id, tenant_id, knowledge_base_id, slug, title, status, source_changes`
+	args = append(args, kbID, slug)
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var pages []*types.WikiPage
+		if err := tx.Raw(query, args...).Scan(&pages).Error; err != nil {
+			return err
+		}
+		if len(pages) == 0 {
+			return ErrWikiPageNotFound
+		}
+		return syncWikiSourceIssues(tx, pages)
+	})
+}
+
+// Source changes and their pending issue share a transaction. A stable ID
+// prevents repeated or concurrent edits from creating duplicate list entries.
+func syncWikiSourceIssues(tx *gorm.DB, pages []*types.WikiPage) error {
+	for _, page := range pages {
+		id := uuid.NewSHA1(uuid.NameSpaceURL, []byte("reliquary/wiki/source_modified/"+page.ID)).String()
+		cleanup := tx.Unscoped().Where("tenant_id = ? AND knowledge_base_id = ? AND slug = ? AND issue_type = ?",
+			page.TenantID, page.KnowledgeBaseID, page.Slug, types.WikiIssueTypeSourceModified)
+		if len(page.SourceChanges) == 0 {
+			if err := cleanup.Delete(&types.WikiPageIssue{}).Error; err != nil {
+				return err
+			}
+			continue
+		}
+		// A replacement page may reuse the slug of a soft-deleted page.
+		if err := cleanup.Where("id <> ?", id).Delete(&types.WikiPageIssue{}).Error; err != nil {
+			return err
+		}
+		issue := &types.WikiPageIssue{
+			ID: id, TenantID: page.TenantID, KnowledgeBaseID: page.KnowledgeBaseID,
+			Slug: page.Slug, IssueType: types.WikiIssueTypeSourceModified,
+			Description: "Wiki page sources have been modified", Status: "pending", ReportedBy: "wiki-lint",
+		}
+		if err := tx.Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "id"}},
+			DoUpdates: clause.Assignments(map[string]interface{}{
+				"status": "pending", "deleted_at": nil, "updated_at": time.Now().UTC(),
+			}),
+		}).Create(issue).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Update updates an existing wiki page record with optimistic locking.
@@ -1174,30 +1285,30 @@ func (r *wikiPageRepository) ListRecentForSuggestions(
 
 // Delete soft-deletes a wiki page by knowledge base ID and slug
 func (r *wikiPageRepository) Delete(ctx context.Context, kbID string, slug string) error {
-	result := r.db.WithContext(ctx).
-		Where("knowledge_base_id = ? AND slug = ?", kbID, slug).
-		Delete(&types.WikiPage{})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return ErrWikiPageNotFound
-	}
-	return nil
+	return r.deletePage(ctx, "knowledge_base_id = ? AND slug = ?", kbID, slug)
 }
 
 // DeleteByID soft-deletes a wiki page by ID
 func (r *wikiPageRepository) DeleteByID(ctx context.Context, id string) error {
-	result := r.db.WithContext(ctx).
-		Where("id = ?", id).
-		Delete(&types.WikiPage{})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return ErrWikiPageNotFound
-	}
-	return nil
+	return r.deletePage(ctx, "id = ?", id)
+}
+
+func (r *wikiPageRepository) deletePage(ctx context.Context, predicate string, args ...interface{}) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var page types.WikiPage
+		if err := tx.Select("id", "tenant_id", "knowledge_base_id", "slug").Where(predicate, args...).First(&page).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrWikiPageNotFound
+			}
+			return err
+		}
+		if err := tx.Where("id = ?", page.ID).Delete(&types.WikiPage{}).Error; err != nil {
+			return err
+		}
+		return tx.Unscoped().Where("tenant_id = ? AND knowledge_base_id = ? AND slug = ? AND issue_type = ?",
+			page.TenantID, page.KnowledgeBaseID, page.Slug, types.WikiIssueTypeSourceModified).
+			Delete(&types.WikiPageIssue{}).Error
+	})
 }
 
 // escapeLikePattern escapes LIKE / ILIKE metacharacters so the returned string
@@ -1303,23 +1414,46 @@ func (r *wikiPageRepository) CreateIssue(ctx context.Context, issue *types.WikiP
 }
 
 func (r *wikiPageRepository) ListIssues(ctx context.Context, kbID string, slug string, status string) ([]*types.WikiPageIssue, error) {
-	query := r.db.WithContext(ctx).Where("knowledge_base_id = ?", kbID)
+	query := r.db.WithContext(ctx).Model(&types.WikiPageIssue{}).
+		Select(`wiki_page_issues.*, wp.title AS wiki_page_title,
+			CASE WHEN wiki_page_issues.issue_type = 'source_modified'
+			THEN (SELECT COUNT(*) FROM jsonb_object_keys(wp.source_changes)) ELSE 0 END AS modified_chunk_count`).
+		Joins(`LEFT JOIN wiki_pages wp ON wp.tenant_id = wiki_page_issues.tenant_id
+			AND wp.knowledge_base_id = wiki_page_issues.knowledge_base_id AND wp.slug = wiki_page_issues.slug
+			AND wp.deleted_at IS NULL`).
+		Where("wiki_page_issues.knowledge_base_id = ?", kbID).
+		Where(`(wiki_page_issues.issue_type <> ? OR
+			(wp.id IS NOT NULL AND wp.status <> ? AND wp.source_changes <> '{}'::jsonb))`,
+			types.WikiIssueTypeSourceModified, types.WikiPageStatusArchived)
 	if slug != "" {
-		query = query.Where("slug = ?", slug)
+		query = query.Where("wiki_page_issues.slug = ?", slug)
 	}
 	if status != "" {
-		query = query.Where("status = ?", status)
+		query = query.Where("wiki_page_issues.status = ?", status)
 	}
 
 	var issues []*types.WikiPageIssue
-	if err := query.Order("created_at DESC").Find(&issues).Error; err != nil {
+	if err := query.Order("wiki_page_issues.created_at DESC").Find(&issues).Error; err != nil {
 		return nil, err
 	}
 	return issues, nil
 }
 
 func (r *wikiPageRepository) UpdateIssueStatus(ctx context.Context, issueID string, status string) error {
-	return r.db.WithContext(ctx).Model(&types.WikiPageIssue{}).
-		Where("id = ?", issueID).
-		Update("status", status).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var issue types.WikiPageIssue
+		if err := tx.Where("id = ?", issueID).First(&issue).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil
+			}
+			return err
+		}
+		if issue.IssueType == types.WikiIssueTypeSourceModified && (status == "ignored" || status == "resolved") {
+			if tenantID, ok := types.TenantIDFromContext(ctx); ok && tenantID != issue.TenantID {
+				return ErrWikiPageNotFound
+			}
+			return NewWikiPageRepository(tx).ClearSourceChanges(ctx, issue.KnowledgeBaseID, issue.Slug, nil)
+		}
+		return tx.Model(&types.WikiPageIssue{}).Where("id = ?", issueID).Update("status", status).Error
+	})
 }

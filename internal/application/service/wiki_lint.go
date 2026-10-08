@@ -17,6 +17,7 @@ const (
 	LintIssueOrphanPage      WikiLintIssueType = "orphan_page"
 	LintIssueBrokenLink      WikiLintIssueType = "broken_link"
 	LintIssueStaleRef        WikiLintIssueType = "stale_ref"
+	LintIssueSourceModified  WikiLintIssueType = "source_modified"
 	LintIssueMissingCrossRef WikiLintIssueType = "missing_cross_ref"
 	LintIssueEmptyContent    WikiLintIssueType = "empty_content"
 	LintIssueDuplicateSlug   WikiLintIssueType = "duplicate_slug"
@@ -122,6 +123,8 @@ func (s *WikiLintService) RunLint(ctx context.Context, kbID string) (*WikiLintRe
 	var issues []WikiLintIssue
 	healthScore := 100
 	knowledgeLive := make(map[string]bool) // kid -> exists; cached across pages
+	chunkChecked := map[string]bool{}
+	chunkMissing := map[string]bool{}
 
 	// First-pass walk: orphan / broken-link / empty / stale-ref
 	// detection. Each check is independent of order; we accumulate
@@ -144,6 +147,39 @@ func (s *WikiLintService) RunLint(ctx context.Context, kbID string) (*WikiLintRe
 			break
 		}
 		for _, page := range pages {
+			if len(page.SourceChanges) > 0 {
+				issues = append(issues, WikiLintIssue{
+					Type: LintIssueSourceModified, Severity: SeverityWarning, PageSlug: page.Slug,
+					Description: wikiSourceModifiedDescription(ctx, page.Title, len(page.SourceChanges)),
+					AutoFixable: false,
+				})
+			}
+			var unchecked []string
+			for _, id := range page.ChunkRefs {
+				if id != "" && !chunkChecked[id] {
+					unchecked = append(unchecked, id)
+				}
+			}
+			if len(unchecked) > 0 {
+				missing, err := s.wikiService.MissingChunkRefs(ctx, page.TenantID, kbID, unchecked)
+				if err != nil {
+					return nil, fmt.Errorf("check wiki chunk refs: %w", err)
+				}
+				for _, id := range unchecked {
+					chunkChecked[id] = true
+				}
+				for _, id := range missing {
+					chunkMissing[id] = true
+				}
+			}
+			for _, id := range page.ChunkRefs {
+				if chunkMissing[id] {
+					issues = append(issues, WikiLintIssue{
+						Type: LintIssueStaleRef, Severity: SeverityError, PageSlug: page.Slug, TargetSlug: id,
+						Description: fmt.Sprintf("Page '%s' references deleted chunk %s", page.Title, id), AutoFixable: false,
+					})
+				}
+			}
 			// Track entity/concept titles for the second pass.
 			if page.PageType == types.WikiPageTypeEntity || page.PageType == types.WikiPageTypeConcept {
 				entitySlugs[page.Slug] = page.Title

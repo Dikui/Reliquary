@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS wiki_pages (
     sort_order        INTEGER NOT NULL DEFAULT 0,
     source_refs       JSONB DEFAULT '[]',
     chunk_refs        JSONB DEFAULT '[]',
+    source_changes    JSONB NOT NULL DEFAULT '{}',
     in_links          JSONB DEFAULT '[]',
     out_links         JSONB DEFAULT '[]',
     page_metadata     JSONB DEFAULT '{}',

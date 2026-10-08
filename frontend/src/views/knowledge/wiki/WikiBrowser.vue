@@ -154,6 +154,9 @@
             <div v-if="graphDrawerNeighborHint" class="wiki-drawer-neighbor-hint" style="margin-bottom: 16px;">
               {{ graphDrawerNeighborHint }}
             </div>
+            <WikiSourceChanges :key="`${knowledgeBaseId}/${graphDrawerPage.id}`" :page="graphDrawerPage"
+              :kb-id="knowledgeBaseId" :can-edit="props.canEdit" :busy="wikiSourceChangesBusy"
+              @updated="handleSourceChangesUpdated" @regenerate-queued="handleSourceRegenerationQueued" />
             <div ref="drawerBodyRef" class="wiki-reader-body" v-html="graphDrawerContent"
               @click="handleGraphDrawerClick"></div>
           </template>
@@ -162,7 +165,15 @@
     </template>
 
     <!-- Browser view (left list + right reader) -->
-    <template v-else>
+    <WikiReadingLayout v-else ref="readingLayoutRef" :selection-key="`${selectedPage?.id || ''}/${activeSystemView}`">
+      <template #toolbar>
+        <t-button v-if="stats && stats.pending_issues > 0" variant="text" theme="default"
+          @click="showGlobalIssuesDrawer = true">
+          <template #icon><t-icon name="error-circle" /></template>
+          {{ $t('knowledgeEditor.wikiBrowser.globalIssuesCount', { count: stats.pending_issues }) }}
+        </t-button>
+      </template>
+      <template #directory>
       <!-- Left Panel: Page List -->
       <aside class="wiki-sidebar">
         <div class="wiki-sidebar-header">
@@ -383,6 +394,7 @@
           </template>
         </div>
       </aside>
+      </template>
 
       <!-- Right Panel: Reader -->
       <div class="wiki-content">
@@ -422,7 +434,7 @@
                                 })
                                 }}</span>
                               </div>
-                              <t-button v-if="props.canEdit" size="small" theme="primary" variant="base"
+                              <t-button v-if="props.canEdit && pageIssues.some(issue => issue.issue_type !== 'source_modified')" size="small" theme="primary" variant="base"
                                 @click="triggerAutoFix">
                                 <template #icon><t-icon name="tools" /></template>
                                 {{ $t('knowledgeEditor.wikiBrowser.issueFixBtn') }}
@@ -441,6 +453,8 @@
                                     <t-tag v-else-if="issue.issue_type === 'out_of_date'" theme="default" variant="light"
                                       size="small">{{
                                         $t('knowledgeEditor.wikiBrowser.issueOutdated') }}</t-tag>
+                                    <t-tag v-else-if="issue.issue_type === 'source_modified'" theme="warning" variant="light"
+                                      size="small">{{ $t('knowledgeEditor.wikiBrowser.sourceChangesTitle') }}</t-tag>
                                     <t-tag v-else theme="primary" variant="light" size="small">{{
                                       $t('knowledgeEditor.wikiBrowser.issueAttention') }}</t-tag>
                                   </div>
@@ -457,15 +471,13 @@
                                         }) }}
                                     </span>
                                     <div v-if="props.canEdit" class="wiki-issue-popup-actions">
-                                      <span class="wiki-issue-popup-action" @click="triggerFixIssue(issue)"
-                                        style="margin-right: 12px; font-weight: 500;">
+                                      <t-button class="wiki-issue-popup-action" size="small" variant="text" @click="triggerFixIssue(issue)">
                                         <t-icon name="tools" style="margin-right: 4px;" />{{
-                                          $t('knowledgeEditor.wikiBrowser.issueFixSingle') }}
-                                      </span>
-                                      <span class="wiki-issue-popup-action"
-                                        style="color: var(--td-text-color-placeholder);"
+                                          $t(issue.issue_type === 'source_modified' ? 'knowledgeEditor.wikiBrowser.issueGoFix' : 'knowledgeEditor.wikiBrowser.issueFixSingle') }}
+                                      </t-button>
+                                      <t-button class="wiki-issue-popup-action" size="small" variant="text" theme="default"
                                         @click="handleIssueIgnore(issue.id)">{{
-                                          $t('knowledgeEditor.wikiBrowser.issueIgnore') }}</span>
+                                          $t('knowledgeEditor.wikiBrowser.issueIgnore') }}</t-button>
                                     </div>
                                   </div>
                                 </div>
@@ -560,6 +572,10 @@
                   </div>
                 </div>
               </div>
+
+              <WikiSourceChanges ref="selectedSourceChangesRef" :key="`${knowledgeBaseId}/${selectedPage.id}`" :page="selectedPage"
+                :kb-id="knowledgeBaseId" :can-edit="props.canEdit" :busy="wikiSourceChangesBusy" :editing="editingPage"
+                @updated="handleSourceChangesUpdated" @regenerate-queued="handleSourceRegenerationQueued" />
 
               <!-- Content -->
               <div v-if="!editingPage" ref="readerBodyRef" class="wiki-reader-body" v-html="renderedContent"
@@ -660,7 +676,7 @@
           </div>
         </div>
       </div>
-    </template>
+    </WikiReadingLayout>
 
     <!-- Image Preview -->
     <Teleport to="body">
@@ -670,7 +686,7 @@
 
     <!-- Global Issues Drawer -->
     <t-drawer v-model:visible="showGlobalIssuesDrawer" :header="$t('knowledgeEditor.wikiBrowser.globalIssuesTitle')"
-      size="480px" :footer="false" class="wiki-global-issues-drawer">
+      size="min(480px, 100vw)" :footer="false" class="wiki-global-issues-drawer">
       <div class="wiki-issue-popup-list">
         <div v-for="issue in globalIssues" :key="issue.id" class="wiki-issue-popup-item">
           <div class="wiki-issue-popup-main">
@@ -682,16 +698,18 @@
                   $t('knowledgeEditor.wikiBrowser.issueConflict') }}</t-tag>
               <t-tag v-else-if="issue.issue_type === 'out_of_date'" theme="default" variant="light" size="small">{{
                 $t('knowledgeEditor.wikiBrowser.issueOutdated') }}</t-tag>
+              <t-tag v-else-if="issue.issue_type === 'source_modified'" theme="warning" variant="light" size="small">{{
+                $t('knowledgeEditor.wikiBrowser.sourceChangesTitle') }}</t-tag>
               <t-tag v-else theme="primary" variant="light" size="small">{{
                 $t('knowledgeEditor.wikiBrowser.issueAttention')
               }}</t-tag>
             </div>
             <div class="wiki-issue-popup-desc">
-              <div style="font-weight: 500; margin-bottom: 4px; color: var(--td-brand-color); cursor: pointer;"
-                @click="navigateToSlugAndFix(issue.slug)">
+              <a class="wiki-issue-page-link" :href="issuePageHref(issue.slug)"
+                @click.prevent="navigateToSlugAndFix(issue.slug, issue.issue_type === 'source_modified')">
                 <t-icon name="link" size="12px" /> {{ $t('knowledgeEditor.wikiBrowser.issuePagePrefix') }}{{
                   slugDisplayName(issue.slug) }}
-              </div>
+              </a>
               {{ issue.description }}
             </div>
             <div class="wiki-issue-popup-meta">
@@ -700,13 +718,12 @@
                   $t('knowledgeEditor.wikiBrowser.issueReportedBy', { reporter: issue.reported_by }) }}
               </span>
               <div class="wiki-issue-popup-actions">
-                <span class="wiki-issue-popup-action" @click="navigateToSlugAndFix(issue.slug)"
-                  style="margin-right: 12px; font-weight: 500;">
+                <t-button class="wiki-issue-popup-action" size="small" variant="text" @click="navigateToSlugAndFix(issue.slug, issue.issue_type === 'source_modified')">
                   <t-icon name="arrow-right-circle" style="margin-right: 4px;" />{{
                     $t('knowledgeEditor.wikiBrowser.issueGoFix') }}
-                </span>
-                <span class="wiki-issue-popup-action" style="color: var(--td-text-color-placeholder);"
-                  @click="handleGlobalIssueIgnore(issue.id)">{{ $t('knowledgeEditor.wikiBrowser.issueIgnore') }}</span>
+                </t-button>
+                <t-button v-if="props.canEdit" class="wiki-issue-popup-action" size="small" variant="text" theme="default"
+                  @click="handleGlobalIssueIgnore(issue.id)">{{ $t('knowledgeEditor.wikiBrowser.issueIgnore') }}</t-button>
               </div>
             </div>
           </div>
@@ -804,6 +821,8 @@ import type { ProtectedFileAccessContext } from '@/utils/protectedFileAccess'
 import picturePreview from '@/components/picture-preview.vue'
 import WikiFolderActions from './WikiFolderActions.vue'
 import WikiRevisionDrawer from './WikiRevisionDrawer.vue'
+import WikiSourceChanges from './WikiSourceChanges.vue'
+import WikiReadingLayout from './WikiReadingLayout.vue'
 import {
   expandedWikiDirectoryPaths,
   expandWikiDirectoryPath,
@@ -978,8 +997,12 @@ const showIssuesBox = ref(false)
 const showFixDrawer = ref(false)
 const showGlobalIssuesDrawer = ref(false)
 const globalIssues = ref<WikiPageIssue[]>([])
+let globalIssuesRequest = 0
+let pageIssuesRequest = 0
 const currentFixSessionId = ref('')
 const stats = ref<WikiStats | null>(null)
+const readingLayoutRef = ref<InstanceType<typeof WikiReadingLayout> | null>(null)
+const selectedSourceChangesRef = ref<InstanceType<typeof WikiSourceChanges> | null>(null)
 const graphData = ref<WikiGraphData | null>(null)
 const searchQuery = ref('')
 const graphSearchValue = ref('')
@@ -1005,38 +1028,40 @@ const GRAPH_OVERVIEW_LIMIT = 500
 const GRAPH_EGO_LIMIT = 500
 const GRAPH_EGO_DEFAULT_DEPTH = 1
 
-watch(showGlobalIssuesDrawer, async (val) => {
-  if (val) {
-    try {
-      const res = await listWikiIssues(props.knowledgeBaseId, '', 'pending')
-      globalIssues.value = (res as any).data || res as any || []
-    } catch (e) {
-      console.error('Failed to load global wiki issues:', e)
-      globalIssues.value = []
-    }
+async function loadGlobalIssues() {
+  const kbId = props.knowledgeBaseId
+  const request = ++globalIssuesRequest
+  try {
+    const res = await listWikiIssues(kbId, '', 'pending')
+    if (props.knowledgeBaseId === kbId && request === globalIssuesRequest) globalIssues.value = (res as any).data || res as any || []
+  } catch (error) {
+    console.error('Failed to load global wiki issues:', error)
   }
-})
+}
 
-async function navigateToSlugAndFix(slug: string) {
+watch(showGlobalIssuesDrawer, (visible) => { if (visible) loadGlobalIssues() })
+
+function issuePageHref(slug: string) {
+  return router.resolve({ path: route.path, query: { ...route.query, slug } }).href
+}
+
+async function navigateToSlugAndFix(slug: string, sourceModified = false) {
   showGlobalIssuesDrawer.value = false
   if (props.view === 'graph') {
     handleGraphSearchSelect(slug)
   } else {
     await navigateToSlug(slug)
-    showIssuesBox.value = true
+    if (sourceModified) {
+      await nextTick()
+      selectedSourceChangesRef.value?.reveal()
+    } else {
+      showIssuesBox.value = true
+    }
   }
 }
 
 async function handleGlobalIssueIgnore(issueId: string) {
-  try {
-    await updateWikiIssueStatus(props.knowledgeBaseId, issueId, 'ignored')
-    // Refresh list
-    const res = await listWikiIssues(props.knowledgeBaseId, '', 'pending')
-    globalIssues.value = (res as any).data || res as any || []
-    loadStats()
-  } catch (e) {
-    console.error('Failed to update issue status:', e)
-  }
+  await handleIssueIgnore(issueId)
 }
 
 // toggleGraphFilterType flips a page_type in the active allow-list and
@@ -2635,6 +2660,7 @@ async function loadIndex() {
 // overview. Re-uses the intro already fetched during loadPages(); only
 // re-fetches on first ever open or if a prior attempt failed.
 async function openIndexView() {
+  readingLayoutRef.value?.closeDirectory()
   selectedPage.value = null
   activeSystemView.value = 'index'
   if (!indexMarkdown.value) {
@@ -2851,6 +2877,37 @@ async function loadPages() {
 }
 
 let statsTimer: ReturnType<typeof setInterval> | null = null
+const wikiSourceChangesBusy = computed(() => !!stats.value && (stats.value.pending_tasks > 0 || stats.value.is_active))
+
+async function handleSourceChangesUpdated(page: WikiPage) {
+  if (page.knowledge_base_id !== props.knowledgeBaseId) return
+  if (selectedPage.value?.id === page.id) selectedPage.value = page
+  if (graphDrawerPage.value?.id === page.id) graphDrawerPage.value = page
+  await Promise.all([
+    selectedPage.value?.id === page.id ? loadPageIssues(page.slug) : Promise.resolve(),
+    loadGlobalIssues(),
+    loadStats(),
+  ])
+}
+
+async function handleSourceRegenerationQueued() {
+  if (!statsTimer) statsTimer = setInterval(() => { loadStats() }, 5000)
+  await loadStats()
+}
+
+async function refreshGraphDrawerPage() {
+  const page = graphDrawerPage.value
+  if (!page) return
+  const kbId = props.knowledgeBaseId
+  try {
+    const response = await getWikiPage(kbId, page.slug)
+    if (props.knowledgeBaseId === kbId && graphDrawerPage.value?.id === page.id) {
+      graphDrawerPage.value = (response as any).data || response as WikiPage
+    }
+  } catch (error) {
+    console.error('Failed to refresh wiki graph page:', error)
+  }
+}
 
 async function loadStats() {
   try {
@@ -2880,6 +2937,8 @@ async function loadStats() {
       loadPages()
       // Also refresh the currently opened page (right panel) so users see updated content
       refreshSelectedPage()
+      refreshGraphDrawerPage()
+      loadGlobalIssues()
       // If currently viewing the graph, reload it as well so new nodes/edges show up
       if (props.view === 'graph') {
         loadGraph()
@@ -3120,8 +3179,10 @@ function editSourceTheme(source?: string): 'primary' | 'success' | 'warning' | '
 async function refreshSelectedPage() {
   if (!selectedPage.value) return
   const slug = selectedPage.value.slug
+  const kbId = props.knowledgeBaseId
   try {
-    const res = await getWikiPage(props.knowledgeBaseId, slug)
+    const res = await getWikiPage(kbId, slug)
+    if (props.knowledgeBaseId !== kbId || selectedPage.value?.slug !== slug) return
     selectedPage.value = (res as any).data || res as any
     await loadPageIssues(slug)
   } catch (e) {
@@ -3521,11 +3582,15 @@ async function growFrontier() {
 }
 
 async function loadPageIssues(slug: string) {
+  const kbId = props.knowledgeBaseId
+  const request = ++pageIssuesRequest
   try {
-    const res = await listWikiIssues(props.knowledgeBaseId, slug, 'pending')
+    const res = await listWikiIssues(kbId, slug, 'pending')
+    if (request !== pageIssuesRequest || props.knowledgeBaseId !== kbId || selectedPage.value?.slug !== slug) return
     pageIssues.value = (res as any).data || res as any || []
     showIssuesBox.value = false
   } catch (e) {
+    if (request !== pageIssuesRequest || props.knowledgeBaseId !== kbId || selectedPage.value?.slug !== slug) return
     console.error('Failed to load wiki issues:', e)
     pageIssues.value = []
     showIssuesBox.value = false
@@ -3546,6 +3611,7 @@ async function selectPage(page: WikiPage) {
     activeSystemView.value = ''
     const res = await getWikiPage(props.knowledgeBaseId, page.slug)
     selectedPage.value = (res as any).data || res as any
+    readingLayoutRef.value?.closeDirectory()
     await loadPageIssues(page.slug)
   } catch (e) {
     console.error('Failed to load wiki page:', e)
@@ -3565,6 +3631,7 @@ async function navigateToSlug(slug: string) {
     activeSystemView.value = ''
     const res = await getWikiPage(props.knowledgeBaseId, slug)
     selectedPage.value = (res as any).data || res as any
+    readingLayoutRef.value?.closeDirectory()
     await loadPageIssues(slug)
   } catch (e) {
     console.error(`Failed to navigate to ${slug}:`, e)
@@ -3589,11 +3656,10 @@ function goBack() {
 }
 
 async function handleIssueIgnore(issueId: string) {
+  if (!props.canEdit) return
   try {
     await updateWikiIssueStatus(props.knowledgeBaseId, issueId, 'ignored')
-    if (selectedPage.value) {
-      await loadPageIssues(selectedPage.value.slug)
-    }
+    await Promise.all([refreshSelectedPage(), refreshGraphDrawerPage(), loadGlobalIssues(), loadStats()])
   } catch (e) {
     console.error('Failed to update issue status:', e)
   }
@@ -3633,6 +3699,11 @@ async function startFixSession(prompt: string) {
 
 function triggerFixIssue(issue: WikiPageIssue) {
   if (!selectedPage.value) return
+  if (issue.issue_type === 'source_modified') {
+    showIssuesBox.value = false
+    nextTick(() => selectedSourceChangesRef.value?.reveal())
+    return
+  }
   const prompt = t('knowledgeEditor.wikiBrowser.issueFixPromptSingle', {
     slug: selectedPage.value.slug,
     id: issue.id
@@ -3641,10 +3712,11 @@ function triggerFixIssue(issue: WikiPageIssue) {
 }
 
 function triggerAutoFix() {
-  if (!selectedPage.value || pageIssues.value.length === 0) return
+  const issues = pageIssues.value.filter(issue => issue.issue_type !== 'source_modified')
+  if (!selectedPage.value || issues.length === 0) return
   let prompt = t('knowledgeEditor.wikiBrowser.issueFixPromptAutoStart', { slug: selectedPage.value.slug }) + '\n\n'
 
-  pageIssues.value.forEach((issue, idx) => {
+  issues.forEach((issue, idx) => {
     prompt += `${idx + 1}. Issue ID: ${issue.id}\n`
   })
 
@@ -4851,6 +4923,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  globalIssuesRequest++
+  pageIssuesRequest++
   if (statsTimer) {
     clearInterval(statsTimer)
   }
@@ -5436,6 +5510,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -6544,6 +6619,28 @@ onUnmounted(() => {
   &:hover {
     opacity: 0.8;
   }
+}
+
+.wiki-issue-page-link {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 500;
+  color: var(--td-brand-color);
+  text-decoration: none;
+
+  &:hover { text-decoration: underline; }
+  &:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
+}
+
+@media (max-width: 767px) {
+  .wiki-reader { padding: 0 12px 16px; }
+  .wiki-reader-title-row { flex-direction: column; gap: 12px; }
+  .wiki-reader-title-block { width: 100%; }
+  .wiki-reader-title-text { overflow-wrap: anywhere; }
+  .wiki-reader-aside { align-items: flex-start; width: 100%; }
+  .wiki-reader-actions { flex-wrap: wrap; }
+  .wiki-reader-aside-meta { align-items: flex-start; max-width: 100%; }
+  .wiki-issue-popup-meta { flex-wrap: wrap; gap: 8px; }
 }
 </style>
 

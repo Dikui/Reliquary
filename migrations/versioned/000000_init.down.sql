@@ -36,6 +36,7 @@ DROP INDEX IF EXISTS public.idx_wiki_pages_title_trgm;
 DROP INDEX IF EXISTS public.idx_wiki_pages_tenant_id;
 DROP INDEX IF EXISTS public.idx_wiki_pages_source_refs_text;
 DROP INDEX IF EXISTS public.idx_wiki_pages_source_refs;
+DROP INDEX IF EXISTS public.idx_wiki_pages_chunk_refs;
 DROP INDEX IF EXISTS public.idx_wiki_pages_parent_slug;
 DROP INDEX IF EXISTS public.idx_wiki_pages_page_type;
 DROP INDEX IF EXISTS public.idx_wiki_pages_kb_slug;

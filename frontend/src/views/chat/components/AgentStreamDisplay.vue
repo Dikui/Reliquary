@@ -577,6 +577,8 @@
           {{ $t('knowledgeEditor.wikiBrowser.viewInGraph') }}
         </t-link>
       </div>
+      <WikiSourceChanges :key="`${currentWikiKbId}/${wikiDrawerPage.id}`" :page="wikiDrawerPage"
+        :kb-id="currentWikiKbId" :can-edit="false" />
       <div ref="wikiDrawerBodyRef" class="wiki-reader-body" v-html="wikiDrawerContent" @click="handleWikiDrawerClick">
       </div>
     </template>
@@ -615,6 +617,7 @@ import { useChatReferencesDrawer } from '@/composables/useChatReferencesDrawer';
 import type { KnowledgeReferenceLike, ReferenceHighlightTarget } from '@/utils/referenceSources';
 import { resolveCitationChunkId } from '@/utils/citationMarkdown';
 import { getWikiPage, type WikiPage } from '@/api/wiki';
+import WikiSourceChanges from '@/views/knowledge/wiki/WikiSourceChanges.vue';
 import { MessagePlugin } from 'tdesign-vue-next';
 import { useUIStore } from '@/stores/ui';
 import { useSettingsStore } from '@/stores/settings';

@@ -311,8 +311,9 @@ type WikiRetractPayload struct {
 }
 
 const (
-	WikiOpIngest  = "ingest"
-	WikiOpRetract = "retract"
+	WikiOpIngest     = "ingest"
+	WikiOpRetract    = "retract"
+	WikiOpRegenerate = "regenerate"
 )
 
 // WikiPendingOp represents a single operation queued in task_pending_ops
@@ -333,10 +334,12 @@ type WikiPendingOp struct {
 	// Ingest fields
 	Language string `json:"language,omitempty"`
 	// Retract fields
-	DocTitle   string   `json:"doc_title,omitempty"`
-	DocSummary string   `json:"doc_summary,omitempty"`
-	PageSlugs  []string `json:"page_slugs,omitempty"`
-	FolderIDs  []string `json:"folder_ids,omitempty"`
+	DocTitle      string                  `json:"doc_title,omitempty"`
+	DocSummary    string                  `json:"doc_summary,omitempty"`
+	PageSlugs     []string                `json:"page_slugs,omitempty"`
+	FolderIDs     []string                `json:"folder_ids,omitempty"`
+	PageSlug      string                  `json:"page_slug,omitempty"`
+	SourceChanges types.WikiSourceChanges `json:"source_changes,omitempty"`
 
 	// dbID is set by peekPendingList from task_pending_ops.id. Zero in
 	// constructions made outside the queue (e.g. legacy tests).

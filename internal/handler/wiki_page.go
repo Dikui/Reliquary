@@ -25,6 +25,7 @@ type WikiPageHandler struct {
 	lintService   *service.WikiLintService
 	auditService  interfaces.AuditLogService
 	memoryService interfaces.MemoryService
+	taskEnqueuer  interfaces.TaskEnqueuer
 }
 
 // NewWikiPageHandler creates a new wiki page handler
@@ -34,6 +35,7 @@ func NewWikiPageHandler(
 	lintService *service.WikiLintService,
 	auditService interfaces.AuditLogService,
 	memoryService interfaces.MemoryService,
+	taskEnqueuer interfaces.TaskEnqueuer,
 ) *WikiPageHandler {
 	return &WikiPageHandler{
 		wikiService:   wikiService,
@@ -41,6 +43,7 @@ func NewWikiPageHandler(
 		lintService:   lintService,
 		auditService:  auditService,
 		memoryService: memoryService,
+		taskEnqueuer:  taskEnqueuer,
 	}
 }
 
@@ -73,6 +76,44 @@ func getSlugParam(c *gin.Context) string {
 	// gin wildcard params include a leading "/"
 	slug = strings.TrimPrefix(slug, "/")
 	return strings.TrimSpace(slug)
+}
+
+func (h *WikiPageHandler) IgnoreSourceChanges(c *gin.Context) {
+	h.sourceChangesAction(c, false)
+}
+
+func (h *WikiPageHandler) RegeneratePage(c *gin.Context) {
+	h.sourceChangesAction(c, true)
+}
+
+func (h *WikiPageHandler) sourceChangesAction(c *gin.Context, regenerate bool) {
+	kbID, _, err := h.validateWikiKB(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	var request types.WikiSourceChangesRequest
+	if err := c.ShouldBindJSON(&request); err != nil || strings.TrimSpace(request.Slug) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Page slug is required"})
+		return
+	}
+	var page *types.WikiPage
+	status := http.StatusOK
+	if regenerate {
+		page, err = h.wikiService.RegeneratePage(c.Request.Context(), kbID, strings.TrimSpace(request.Slug), h.taskEnqueuer)
+		status = http.StatusAccepted
+	} else {
+		page, err = h.wikiService.IgnoreSourceChanges(c.Request.Context(), kbID, strings.TrimSpace(request.Slug))
+	}
+	if err != nil {
+		if stderrors.Is(err, repository.ErrWikiPageNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Wiki page not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(status, gin.H{"data": page})
 }
 
 // ListPages godoc
