@@ -108,6 +108,9 @@ func (s *knowledgeBaseService) CreateKnowledgeBase(ctx context.Context,
 	if err := ValidateModelTierConfig(ctx, s.db, kb.ModelTiers); err != nil {
 		return nil, err
 	}
+	if err := ValidateVLMConfig(ctx, s.modelService, kb.VLMConfig); err != nil {
+		return nil, err
+	}
 	kb.UpdatedAt = time.Now()
 	if uid, ok := types.UserIDFromContext(ctx); ok {
 		kb.CreatorID = uid

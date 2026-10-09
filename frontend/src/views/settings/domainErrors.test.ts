@@ -119,3 +119,30 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     }
   })
 }
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: image model error codes localize real request rejections independently of server text`, async () => {
+    const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zhCN, 'en-US': enUS } })
+    for (const [code, key] of [
+      [2301, 'model.imageProcessingUnsupported'],
+      [2302, 'model.imageProcessingNotFound'],
+      [2303, 'model.imageProcessingUnavailable'],
+    ] as const) {
+      for (const message of ['服务端原文', 'changed server message', undefined]) {
+        for (const url of ['/api/v1/initialization/config/kb', '/api/v1/knowledge-bases/kb/knowledge/file']) {
+          await assert.rejects(requestRejectionHandler(i18n.global.t)({
+            config: { url }, response: { status: 400, data: { success: false, error: { code, message } } },
+          }), error => {
+            const rejected = error as { message: string; error: { code: number } }
+            assert.equal(rejected.message, i18n.global.t(key))
+            assert.notEqual(rejected.message, key, "translation must resolve to product copy")
+            assert.equal(rejected.error.code, code)
+            assert.notEqual(rejected.message, message)
+            return true
+          })
+        }
+      }
+    }
+    assert.equal(personalServerError.translatePersonalServerMessage('Unknown failure', i18n.global.t, 9999), 'Unknown failure')
+  })
+}

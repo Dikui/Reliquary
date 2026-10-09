@@ -18,6 +18,7 @@ import (
 	"github.com/ollama/ollama/api"
 
 	"reliquary/internal/application/repository"
+	"reliquary/internal/application/service"
 	"reliquary/internal/assets"
 	"reliquary/internal/config"
 	"reliquary/internal/errors"
@@ -117,7 +118,6 @@ type KBModelConfigRequest struct {
 	Multimodal struct {
 		Enabled bool `json:"enabled"`
 	} `json:"multimodal"`
-
 
 	// 问题生成配置
 	QuestionGeneration struct {
@@ -240,6 +240,12 @@ func (h *InitializationHandler) UpdateKBConfig(c *gin.Context) {
 	}
 
 	// 更新知识库的模型ID
+	if req.VLMConfig != nil {
+		if err := service.ValidateVLMConfig(ctx, h.modelService, *req.VLMConfig); err != nil {
+			c.Error(err)
+			return
+		}
+	}
 	kb.SummaryModelID = req.LLMModelID
 	if req.EmbeddingModelID != "" {
 		kb.EmbeddingModelID = req.EmbeddingModelID
@@ -248,13 +254,8 @@ func (h *InitializationHandler) UpdateKBConfig(c *gin.Context) {
 	// 处理多模态模型配置
 	kb.VLMConfig = types.VLMConfig{}
 	if req.VLMConfig != nil && req.Multimodal.Enabled && req.VLMConfig.ModelID != "" {
-		vllmModel, err := h.modelService.GetModelByID(ctx, req.VLMConfig.ModelID)
-		if err != nil || vllmModel == nil {
-			logger.Warn(ctx, "VLM model not found")
-		} else {
-			kb.VLMConfig.Enabled = req.VLMConfig.Enabled
-			kb.VLMConfig.ModelID = req.VLMConfig.ModelID
-		}
+		kb.VLMConfig.Enabled = req.VLMConfig.Enabled
+		kb.VLMConfig.ModelID = req.VLMConfig.ModelID
 	}
 	if !kb.VLMConfig.Enabled {
 		kb.VLMConfig.ModelID = ""
@@ -2034,7 +2035,6 @@ type testMultimodalForm struct {
 	COSBucketName string `form:"cos_bucket_name"`
 	COSAppID      string `form:"cos_app_id"`
 	COSPathPrefix string `form:"cos_path_prefix"`
-
 
 	// 文档切分配置（字符串后续自行解析，以避免类型绑定失败）
 	ChunkSize     string `form:"chunk_size"`

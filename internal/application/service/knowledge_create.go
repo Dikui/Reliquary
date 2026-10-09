@@ -63,6 +63,9 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 	if err := validateImportFileType(getFileType(fileName)); err != nil {
 		return nil, err
 	}
+	if err := s.validateProcessVLMConfig(ctx, kb, processOverrides); err != nil {
+		return nil, err
+	}
 
 	// Calculate file hash for deduplication
 	logger.Info(ctx, "Calculating file hash")
@@ -320,6 +323,9 @@ func (s *knowledgeService) createKnowledgeFromURL(ctx context.Context,
 	}
 
 	// Validate URL format and security
+	if err := s.validateProcessVLMConfig(ctx, kb, processOverrides); err != nil {
+		return nil, err
+	}
 	logger.Info(ctx, "Validating URL")
 	if !isValidURL(url) || !secutils.IsValidURL(url) {
 		logger.Error(ctx, "Invalid or unsafe URL format")
@@ -555,6 +561,9 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 	}
 
 	// Validate URL format and security (static check only, no HEAD request)
+	if err := s.validateProcessVLMConfig(ctx, kb, processOverrides); err != nil {
+		return nil, err
+	}
 	if !isValidURL(fileURL) || !secutils.IsValidURL(fileURL) {
 		logger.Error(ctx, "Invalid or unsafe file URL format")
 		return nil, ErrInvalidURL
@@ -832,6 +841,9 @@ func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 	}
 
 	if status == types.ManualKnowledgeStatusPublish {
+		if err := s.validateProcessVLMConfig(ctx, kb, payload.ProcessConfig); err != nil {
+			return nil, err
+		}
 		incoming := &types.Knowledge{TenantID: tenantID, KnowledgeBaseID: kbID}
 		if len(payload.SourceMetadata) > 0 {
 			metadata, err := json.Marshal(payload.SourceMetadata)
@@ -1128,6 +1140,11 @@ func (s *knowledgeService) UpdateManualKnowledge(ctx context.Context,
 	if err != nil {
 		logger.Errorf(ctx, "Failed to get knowledge base for manual update: %v", err)
 		return nil, err
+	}
+	if status == types.ManualKnowledgeStatusPublish {
+		if err := s.validateProcessVLMConfig(ctx, kb, payload.ProcessConfig); err != nil {
+			return nil, err
+		}
 	}
 	intake, err := existing.IntakeMetadata()
 	if err != nil {

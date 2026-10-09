@@ -204,10 +204,11 @@ func TestCreateKnowledgeFromImageUsesLocalStorage(t *testing.T) {
 		VLMConfig: types.VLMConfig{Enabled: true, ModelID: "vlm-1"},
 	}
 	svc := &knowledgeService{
-		repo:      repo,
-		kbService: &createKnowledgeFileKBServiceStub{kb: kb},
-		fileSvc:   fileSvc,
-		task:      task,
+		repo:         repo,
+		kbService:    &createKnowledgeFileKBServiceStub{kb: kb},
+		fileSvc:      fileSvc,
+		task:         task,
+		modelService: visionModelServiceStub{model: &types.Model{Type: types.ModelTypeVLLM}},
 	}
 
 	knowledge, err := svc.CreateKnowledgeFromFile(

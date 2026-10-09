@@ -1492,6 +1492,9 @@ export default {
     languageSaved: '语言设置已保存'
   },
   model: {
+    imageProcessingUnsupported: '图片处理模型必须是 VLLM 模型或已开启支持视觉/多模态的对话模型。',
+    imageProcessingNotFound: '图片处理模型不存在，请重新选择。',
+    imageProcessingUnavailable: '图片处理模型服务不可用，请稍后重试。',
     modelName: '模型名称',
     defaultTag: '默认',
     addModelInSettings: '前往全局设置添加模型',
@@ -1537,7 +1540,7 @@ export default {
       dimensionOverrideLabel: '自定义输出维度',
       dimensionOverrideDesc: '仅在确认该模型支持 dimensions 参数时开启；默认只使用检测到的实际维度。',
       supportsVisionLabel: '支持视觉/多模态',
-      supportsVisionDesc: '模型是否支持图片等多模态输入',
+      supportsVisionDesc: '模型是否支持图片等多模态输入。开启后可在知识库中用于图片文字提取和描述。',
       contextWindowLabel: '上下文窗口',
       contextWindowPlaceholder: '默认 {value}',
       contextWindowDesc: '该模型一次请求能容纳的 token 数。智能体压缩对话历史会按此上限工作。留空则使用默认 200000（200K）。请按厂商文档填写真实值，填大会导致压缩不触发、上游直接拒绝请求。',
@@ -3492,6 +3495,8 @@ export default {
     regenerateSummary: '重新生成摘要',
     generateSummary: '生成摘要',
     noDocumentSummary: '暂无文档摘要',
+    summarySkippedNoText: '无可摘要的文字内容',
+    summaryGenerationFailed: '摘要生成失败',
     summaryRefreshed: '摘要已更新',
     summaryRefreshQueued: '摘要刷新已提交，完成后会自动更新',
     indexFailed: '索引同步失败',

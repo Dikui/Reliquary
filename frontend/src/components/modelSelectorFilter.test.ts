@@ -7,6 +7,7 @@ import type { ModelConfig } from '@/api/model'
 import { filterModelsByType } from './modelSelectorFilter.ts'
 
 const selectorSource = readFileSync(new URL('./ModelSelector.vue', import.meta.url), 'utf8')
+const uploadDialogSource = readFileSync(new URL('../views/knowledge/components/UploadConfirmDialog.vue', import.meta.url), 'utf8')
 const kbEditorSource = readFileSync(new URL('../views/knowledge/KnowledgeBaseEditorModal.vue', import.meta.url), 'utf8')
 const agentEditorSource = readFileSync(new URL('../views/agent/AgentEditorModal.vue', import.meta.url), 'utf8')
 const modelSettingsSource = readFileSync(new URL('../views/settings/ModelSettings.vue', import.meta.url), 'utf8')
@@ -24,6 +25,7 @@ const fixtures: ModelConfig[] = [
   model({ id: 'vllm-1', name: 'MiniMax-M3', display_name: 'MiniMax M3', type: 'VLLM' }),
   model({ id: 'chat-vision', name: 'MiniMax-M3', display_name: 'MiniMax M3', type: 'KnowledgeQA', parameters: { supports_vision: true } }),
   model({ id: 'chat-text', type: 'KnowledgeQA' }),
+  model({ id: 'chat-no-vision', type: 'KnowledgeQA', parameters: { supports_vision: false } }),
   model({ id: 'embed-vision', type: 'Embedding', parameters: { supports_vision: true } }),
   model({ id: 'embed-1', type: 'Embedding' }),
 ]
@@ -53,10 +55,19 @@ test('VLM selection, knowledge-base and agent saves, and deletion preserve the s
 test('VLLM selector excludes non-vision chat and other types even with supports_vision', () => {
   const ids = filterModelsByType(fixtures, 'VLLM')
   assert.ok(!ids.some((m) => m.id === 'chat-text'))
+  assert.ok(!ids.some((m) => m.id === 'chat-no-vision'))
   assert.ok(!ids.some((m) => m.id === 'embed-vision'))
 })
 
 test('non-VLLM selectors still filter strictly by type', () => {
   const ids = filterModelsByType(fixtures, 'KnowledgeQA').map((m) => m.id)
-  assert.deepEqual(ids, ['chat-vision', 'chat-text'])
+  assert.deepEqual(ids, ['chat-vision', 'chat-text', 'chat-no-vision'])
+})
+
+test('knowledge-base settings and upload overrides use the shared VLLM selector', () => {
+  for (const source of [kbEditorSource, uploadDialogSource]) {
+    assert.match(source, /<ModelSelector\s+model-type="VLLM"[\s\S]*?:all-models="allModels"/)
+  }
+  assert.match(selectorSource, /filterModelsByType\(source, props\.modelType\)/)
+  assert.match(selectorSource, /filterModelsByType\(chatResources\.allModels, props\.modelType\)/)
 })

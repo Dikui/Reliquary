@@ -12,7 +12,7 @@ import (
 // TestCheckSufficientSummaryContent verifies the gate that prevents getSummary
 // from calling the LLM (and ProcessSummaryGeneration from creating a summary
 // chunk) when the document has no usable text. This is the entry point for
-// the errInsufficientSummaryContent → SummaryStatusFailed flow that the
+// the errInsufficientSummaryContent to SummaryStatusSkipped flow that the
 // caller in ProcessSummaryGeneration relies on.
 func TestCheckSufficientSummaryContent(t *testing.T) {
 	ctx := context.Background()

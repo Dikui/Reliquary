@@ -584,6 +584,9 @@ func (s *modelService) GetVLMModel(ctx context.Context, modelId string) (vlm.VLM
 	}
 
 	logger.Infof(ctx, "Getting VLM model: %s, source: %s", model.Name, model.Source)
+	if err := validateImageProcessingModel(model); err != nil {
+		return nil, err
+	}
 
 	vlmModel, err := vlm.NewVLM(vlm.ConfigFromModel(model), s.ollamaService)
 	if err != nil {

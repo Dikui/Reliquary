@@ -71,6 +71,8 @@ const (
 	SummaryStatusProcessing = "processing"
 	// SummaryStatusCompleted indicates the summary has been generated successfully
 	SummaryStatusCompleted = "completed"
+	// SummaryStatusSkipped indicates the document has no usable text to summarize.
+	SummaryStatusSkipped = "skipped"
 	// SummaryStatusFailed indicates the summary generation failed
 	SummaryStatusFailed = "failed"
 )

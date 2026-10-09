@@ -784,6 +784,8 @@ export default {
     regenerateSummary: 'Regenerate summary',
     generateSummary: 'Generate summary',
     noDocumentSummary: 'No document summary',
+    summarySkippedNoText: 'No text content available to summarize',
+    summaryGenerationFailed: 'Summary generation failed',
     summaryRefreshed: 'Summary refreshed',
     summaryRefreshQueued: 'Summary refresh queued; it will update automatically when ready',
     indexFailed: 'Index sync failed',
@@ -2528,6 +2530,9 @@ export default {
     }
   },
   model: {
+    imageProcessingUnsupported: 'Image processing requires a VLLM model or a conversation model with vision or multimodal support enabled.',
+    imageProcessingNotFound: 'The image processing model was not found. Select another model.',
+    imageProcessingUnavailable: 'The image processing model service is unavailable. Try again later.',
     modelName: 'Model Name',
     defaultTag: 'Default',
     addModelInSettings: 'Go to global settings to add models',
@@ -2604,7 +2609,7 @@ export default {
       dimensionOverrideLabel: 'Custom Output Dimension',
       dimensionOverrideDesc: 'Enable only if the provider documentation says this model accepts a dimensions parameter.',
       supportsVisionLabel: 'Supports Vision / Multimodal',
-      supportsVisionDesc: 'Whether the model accepts image and multimodal input',
+      supportsVisionDesc: 'Whether the model accepts image and multimodal input. When enabled, it can extract text from images and describe them in knowledge bases.',
       contextWindowLabel: 'Context Window',
       contextWindowPlaceholder: 'Default {value}',
       contextWindowDesc: 'How many tokens this model can take in one request. Agent history compaction uses this limit. Leave empty for the default 200000 (200K). Use the provider’s real window — a larger guess means compaction never fires and the provider rejects the request.',

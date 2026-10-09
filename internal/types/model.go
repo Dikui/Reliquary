@@ -15,6 +15,12 @@ import (
 // ModelType represents the type of AI model
 type ModelType string
 
+// SupportsImageProcessing reports whether a model can extract image text and captions.
+func (m *Model) SupportsImageProcessing() bool {
+	return m != nil && (m.Type == ModelTypeVLLM ||
+		(m.Type == ModelTypeKnowledgeQA && m.Parameters.SupportsVision))
+}
+
 const (
 	ModelTypeEmbedding   ModelType = "Embedding"   // Embedding model
 	ModelTypeRerank      ModelType = "Rerank"      // Rerank model

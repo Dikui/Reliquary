@@ -318,6 +318,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
               <span>{{ item.folder_path }}</span>
             </button>
             <span v-if="item.description" class="row-file-desc" :title="item.description">{{ item.description }}</span>
+            <span v-else-if="item.summary_status === 'skipped'" class="row-file-desc">{{ $t('knowledgeBase.summarySkippedNoText') }}</span>
           </div>
         </div>
 

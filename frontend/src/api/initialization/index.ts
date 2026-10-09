@@ -132,7 +132,7 @@ export function updateKBConfig(kbId: string, config: KBModelConfigRequest): Prom
             })
             .catch((error: any) => {
                 console.error('Failed to update KB config:', error);
-                reject(error.error || error);
+                reject(error);
             });
     });
 }
@@ -148,7 +148,7 @@ export function initializeSystemByKB(kbId: string, config: InitializationConfig)
             })
             .catch((error: any) => {
                 console.error('Failed to update KB config:', error);
-                reject(error.error || error);
+                reject(error);
             });
     });
 }

@@ -226,9 +226,8 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 			"parse_status": types.ParseStatusCompleted,
 			"updated_at":   time.Now(),
 		}
-		if len(textChunks) > 0 {
-			updates["summary_status"] = types.SummaryStatusNone
-		}
+		updates["summary_status"] = types.SummaryStatusSkipped
+		updates["description"] = ""
 		if err := s.knowledgeRepo.UpdateKnowledgeColumns(ctx, payload.KnowledgeID, updates); err != nil {
 			logger.Warnf(ctx, "[KnowledgePostProcess] Failed to mark %s completed (no subtasks): %v",
 				payload.KnowledgeID, err)

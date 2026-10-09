@@ -190,7 +190,8 @@ func finalizeIndexedKnowledgeState(
 		// clear error_message itself — otherwise a successfully indexed row
 		// keeps reporting a failure from an earlier attempt.
 		knowledge.ParseStatus = types.ParseStatusCompleted
-		knowledge.SummaryStatus = types.SummaryStatusNone
+		knowledge.SummaryStatus = types.SummaryStatusSkipped
+		knowledge.Description = ""
 		knowledge.ErrorMessage = ""
 	}
 
@@ -714,7 +715,7 @@ const imageDominatedTextThreshold = 200
 // errInsufficientSummaryContent signals that getSummary refused to call the
 // LLM because the document had no usable text after image markup was stripped
 // (typical for scanned PDFs where VLM OCR yielded nothing). Callers should
-// mark the knowledge's summary as failed instead of falling back to the first
+// mark the knowledge's summary as skipped instead of falling back to the first
 // chunk's raw content (which would just be a bare image reference).
 var (
 	errInsufficientSummaryContent = errors.New("insufficient text content for summary generation")
@@ -825,13 +826,14 @@ func sortChunksForSummary(chunks []*types.Chunk) []*types.Chunk {
 	return sorted
 }
 
-// getSummary generates a summary for knowledge content using an AI model
-func (s *knowledgeService) getSummary(ctx context.Context,
-	summaryModel chat.Chat, knowledge *types.Knowledge, chunks []*types.Chunk,
+// prepareSummaryContent reconstructs and checks the effective text before any
+// summary model is resolved or called.
+func (s *knowledgeService) prepareSummaryContent(ctx context.Context,
+	knowledge *types.Knowledge, chunks []*types.Chunk,
 ) (string, error) {
 	// Get knowledge info from the first chunk
 	if len(chunks) == 0 {
-		return "", fmt.Errorf("no chunks provided for summary generation")
+		return "", errInsufficientSummaryContent
 	}
 
 	// Determine max input chars from config
@@ -913,6 +915,27 @@ func (s *knowledgeService) getSummary(ctx context.Context,
 	if err := checkSufficientSummaryContent(ctx, knowledge.ID, chunkContents); err != nil {
 		return "", err
 	}
+	return chunkContents, nil
+}
+
+// getSummary generates a summary for knowledge content using an AI model.
+func (s *knowledgeService) getSummary(ctx context.Context,
+	summaryModel chat.Chat, knowledge *types.Knowledge, chunks []*types.Chunk,
+) (string, error) {
+	content, err := s.prepareSummaryContent(ctx, knowledge, chunks)
+	if err != nil {
+		return "", err
+	}
+	return s.getSummaryFromContent(ctx, summaryModel, knowledge, content)
+}
+
+func (s *knowledgeService) getSummaryFromContent(ctx context.Context,
+	summaryModel chat.Chat, knowledge *types.Knowledge, chunkContents string,
+) (string, error) {
+	maxInputChars := defaultMaxInputChars
+	if s.config.Conversation.Summary != nil && s.config.Conversation.Summary.MaxInputChars > 0 {
+		maxInputChars = s.config.Conversation.Summary.MaxInputChars
+	}
 
 	// User-authored metadata is trusted document context. Internal ingestion
 	// metadata remains excluded because it contains IDs and pipeline controls.
@@ -959,6 +982,45 @@ func (s *knowledgeService) getSummary(ctx context.Context,
 	}
 	logger.GetLogger(ctx).WithField("summary", content).Infof("GetSummary success")
 	return content, nil
+}
+
+// skipKnowledgeSummary clears the visible summary and disables any previous
+// summary chunks so a refresh cannot keep retrieving obsolete text.
+func (s *knowledgeService) skipKnowledgeSummary(
+	ctx context.Context, knowledge *types.Knowledge, kb *types.KnowledgeBase,
+) error {
+	allSummaries, err := s.chunkRepo.ListChunksByKnowledgeIDAndTypes(
+		ctx, knowledge.TenantID, knowledge.ID, []types.ChunkType{types.ChunkTypeSummary},
+	)
+	if err != nil {
+		return err
+	}
+	var staleSummaries []*types.Chunk
+	var staleIDs []string
+	for _, chunk := range allSummaries {
+		staleIDs = append(staleIDs, chunk.ID)
+		if chunk.IsEnabled {
+			chunk.IsEnabled = false
+			chunk.UpdatedAt = time.Now()
+			staleSummaries = append(staleSummaries, chunk)
+		}
+	}
+	if len(staleSummaries) > 0 {
+		if err := s.chunkRepo.UpdateChunks(ctx, staleSummaries); err != nil {
+			return err
+		}
+	}
+	if len(staleIDs) > 0 && s.retrieveEngine != nil {
+		// PostgreSQL deletes by chunk ID and does not require an embedding
+		// dimension or a configured model for this cleanup.
+		if err := s.retrieveEngine.DeleteByChunkIDList(ctx, staleIDs, 0, kb.Type); err != nil {
+			return err
+		}
+	}
+	knowledge.Description = ""
+	knowledge.SummaryStatus = types.SummaryStatusSkipped
+	knowledge.UpdatedAt = time.Now()
+	return s.repo.UpdateKnowledge(ctx, knowledge)
 }
 
 // sampleLongContent returns content that fits within maxChars.
@@ -1060,6 +1122,7 @@ func (s *knowledgeService) ProcessSummaryGeneration(ctx context.Context, t *asyn
 			"language": payload.Language,
 		})
 	var summaryErr error
+	var summarySkipped bool
 	summaryOut := types.JSONMap{}
 	defer func() {
 		// Decrement the parent's enrichment counter on terminal exit.
@@ -1076,7 +1139,9 @@ func (s *knowledgeService) ProcessSummaryGeneration(ctx context.Context, t *asyn
 		if span == nil {
 			return
 		}
-		if summaryErr != nil {
+		if summarySkipped {
+			s.tracker().SkipSpan(ctx, span, "no usable text content")
+		} else if summaryErr != nil {
 			s.failPostprocessSubspan(ctx, span, "SUMMARY_FAILED", summaryErr.Error(), summaryErr)
 		} else {
 			s.endPostprocessSubspan(ctx, span, summaryOut)
@@ -1090,25 +1155,6 @@ func (s *knowledgeService) ProcessSummaryGeneration(ctx context.Context, t *asyn
 		summaryErr = err
 		return nil
 	}
-	// Capture the resolved model id on the span output the moment we
-	// know it — debugging "summary stage took 60s" benefits hugely from
-	// seeing WHICH chat model was actually used (kb config drift, fall-
-	// throughs to a slow upstream, etc.).
-	summaryModelID, resolveErr := ResolveModelTier(ctx, s.db, kb, types.ModelTierGeneration)
-	if resolveErr != nil {
-		summaryErr = resolveErr
-		return resolveErr
-	}
-	summaryOut["model_id"] = summaryModelID
-	summaryOut["model_tier"] = types.ModelTierGeneration
-
-	if summaryModelID == "" {
-		logger.Warn(ctx, "Knowledge base summary model ID is empty, skipping summary generation")
-		_ = s.repo.UpdateKnowledgeColumn(ctx, payload.KnowledgeID, "summary_status", types.SummaryStatusFailed)
-		summaryOut["skipped"] = "no_summary_model"
-		return nil
-	}
-
 	// Get knowledge
 	knowledge, err := s.repo.GetKnowledgeByID(ctx, payload.TenantID, payload.KnowledgeID)
 	if err != nil {
@@ -1155,21 +1201,11 @@ func (s *knowledgeService) ProcessSummaryGeneration(ctx context.Context, t *asyn
 	// Filter text chunks only
 	textChunks := make([]*types.Chunk, 0)
 	for _, chunk := range chunks {
-		if chunk.ChunkType == types.ChunkTypeText {
+		if chunk.ChunkType == types.ChunkTypeText && chunk.IsEnabled {
 			textChunks = append(textChunks, chunk)
 		}
 	}
 	summaryOut["text_chunks"] = len(textChunks)
-
-	if len(textChunks) == 0 {
-		logger.Infof(ctx, "No text chunks found for knowledge: %s", payload.KnowledgeID)
-		knowledge.Description = ""
-		knowledge.SummaryStatus = types.SummaryStatusFailed
-		knowledge.UpdatedAt = time.Now()
-		s.repo.UpdateKnowledge(ctx, knowledge)
-		summaryOut["skipped"] = "no_text_chunks"
-		return nil
-	}
 
 	// Sort chunks by ChunkIndex for proper ordering
 	sort.Slice(textChunks, func(i, j int) bool {
@@ -1177,6 +1213,34 @@ func (s *knowledgeService) ProcessSummaryGeneration(ctx context.Context, t *asyn
 	})
 
 	summaryMetadataVersion := string(knowledge.CustomMetadata)
+	summaryContent, err := s.prepareSummaryContent(ctx, knowledge, textChunks)
+	if errors.Is(err, errInsufficientSummaryContent) {
+		stale, staleErr := summarySourceChanged(ctx, s.repo, s.chunkRepo,
+			payload.TenantID, payload.KnowledgeID, summaryMetadataVersion, textChunks)
+		if staleErr != nil {
+			markSummaryFailed()
+			summaryErr = staleErr
+			return staleErr
+		}
+		if stale {
+			summaryOut["skipped"] = "content_revision_changed"
+			return nil
+		}
+		if updateErr := s.skipKnowledgeSummary(ctx, knowledge, kb); updateErr != nil {
+			markSummaryFailed()
+			summaryErr = updateErr
+			return fmt.Errorf("save skipped summary: %w", updateErr)
+		}
+		summaryOut["skipped"] = "insufficient_content"
+		summarySkipped = true
+		return nil
+	}
+	if err != nil {
+		markSummaryFailed()
+		summaryErr = err
+		return err
+	}
+
 	handleRetryableSummaryFailure := func(generationErr error) error {
 		summaryErr = generationErr
 		summaryOut["error"] = previewText(generationErr.Error(), 500)
@@ -1225,6 +1289,13 @@ func (s *knowledgeService) ProcessSummaryGeneration(ctx context.Context, t *asyn
 		return fmt.Errorf("summary generation exhausted retries: %w", generationErr)
 	}
 
+	summaryModelID, resolveErr := ResolveModelTier(ctx, s.db, kb, types.ModelTierGeneration)
+	if resolveErr != nil {
+		return handleRetryableSummaryFailure(resolveErr)
+	}
+	summaryOut["model_id"] = summaryModelID
+	summaryOut["model_tier"] = types.ModelTierGeneration
+
 	// Initialize chat model for summary. Model resolution failures use the same
 	// retry budget and terminal first-chunk fallback as LLM request failures.
 	chatModel, err := GetTierChatModel(ctx, s.db, s.modelService, kb, types.ModelTierGeneration)
@@ -1234,7 +1305,7 @@ func (s *knowledgeService) ProcessSummaryGeneration(ctx context.Context, t *asyn
 	}
 
 	// Generate summary
-	summary, err := s.getSummary(ctx, chatModel, knowledge, textChunks)
+	summary, err := s.getSummaryFromContent(ctx, chatModel, knowledge, summaryContent)
 	if err != nil {
 		logger.Errorf(ctx, "Failed to generate summary for knowledge %s: %v", payload.KnowledgeID, err)
 		// Surface the underlying LLM/IO error on the span so the trace UI
@@ -1244,23 +1315,6 @@ func (s *knowledgeService) ProcessSummaryGeneration(ctx context.Context, t *asyn
 		// (deadline exceeded vs unexpected EOF vs 5xx, etc.).
 		summaryOut["error"] = previewText(err.Error(), 500)
 		summaryOut["error_type"] = fmt.Sprintf("%T", err)
-		// For the insufficient-content case (scanned PDF without OCR, etc.)
-		// we deliberately do NOT fall back to the first chunk's raw content,
-		// since that chunk is typically just a bare markdown image reference
-		// and surfacing it in the description is misleading.
-		if errors.Is(err, errInsufficientSummaryContent) {
-			knowledge.Description = ""
-			knowledge.SummaryStatus = types.SummaryStatusFailed
-			knowledge.UpdatedAt = time.Now()
-			if updateErr := s.repo.UpdateKnowledge(ctx, knowledge); updateErr != nil {
-				logger.Errorf(ctx, "Failed to mark summary as failed: %v", updateErr)
-				summaryErr = updateErr
-				return fmt.Errorf("failed to update knowledge: %w", updateErr)
-			}
-			summaryOut["fallback"] = "insufficient_content"
-			summaryErr = err
-			return nil
-		}
 		return handleRetryableSummaryFailure(err)
 	}
 	// Do not publish an answer derived from a superseded chunk or metadata
@@ -2264,13 +2318,6 @@ func (s *knowledgeService) RegenerateKnowledgeSummary(
 	if err != nil {
 		return nil, err
 	}
-	modelID, resolveErr := ResolveModelTier(ctx, s.db, kb, types.ModelTierGeneration)
-	if resolveErr != nil {
-		return nil, resolveErr
-	}
-	if modelID == "" {
-		return nil, fmt.Errorf("summary model is not configured")
-	}
 	allChunks, err := s.chunkRepo.ListChunksByKnowledgeID(ctx, tenantID, knowledgeID)
 	if err != nil {
 		return nil, err
@@ -2281,33 +2328,35 @@ func (s *knowledgeService) RegenerateKnowledgeSummary(
 			textChunks = append(textChunks, chunk)
 		}
 	}
-	if len(textChunks) == 0 {
-		knowledge.Description = ""
-		knowledge.SummaryStatus = types.SummaryStatusFailed
-		knowledge.UpdatedAt = time.Now()
-		if updateErr := s.repo.UpdateKnowledge(ctx, knowledge); updateErr != nil {
-			return knowledge, updateErr
-		}
-		return knowledge, errInsufficientSummaryContent
-	}
 	sort.Slice(textChunks, func(i, j int) bool {
 		return textChunks[i].ChunkIndex < textChunks[j].ChunkIndex
 	})
 	metadataVersion := string(knowledge.CustomMetadata)
+	summaryContent, err := s.prepareSummaryContent(ctx, knowledge, textChunks)
+	if errors.Is(err, errInsufficientSummaryContent) {
+		stale, staleErr := summarySourceChanged(ctx, s.repo, s.chunkRepo,
+			tenantID, knowledgeID, metadataVersion, textChunks)
+		if staleErr != nil {
+			return knowledge, staleErr
+		}
+		if stale {
+			return knowledge, ErrSummaryRefreshStale
+		}
+		if updateErr := s.skipKnowledgeSummary(ctx, knowledge, kb); updateErr != nil {
+			knowledge.SummaryStatus = types.SummaryStatusFailed
+			_ = s.repo.UpdateKnowledge(ctx, knowledge)
+			return knowledge, updateErr
+		}
+		return knowledge, nil
+	}
+	if err != nil {
+		return knowledge, err
+	}
 	knowledge.SummaryStatus = types.SummaryStatusProcessing
 	if err := s.repo.UpdateKnowledge(ctx, knowledge); err != nil {
 		return nil, err
 	}
 	handleGenerationFailure := func(generationErr error) (*types.Knowledge, error) {
-		if errors.Is(generationErr, errInsufficientSummaryContent) {
-			knowledge.Description = ""
-			knowledge.SummaryStatus = types.SummaryStatusFailed
-			knowledge.UpdatedAt = time.Now()
-			if updateErr := s.repo.UpdateKnowledge(ctx, knowledge); updateErr != nil {
-				return knowledge, updateErr
-			}
-			return knowledge, generationErr
-		}
 		if summaryTaskWillRetry(ctx) {
 			applyRetryableSummaryFailureState(knowledge, textChunks, true)
 			if updateErr := s.repo.UpdateKnowledge(ctx, knowledge); updateErr != nil {
@@ -2339,7 +2388,7 @@ func (s *knowledgeService) RegenerateKnowledgeSummary(
 	if err != nil {
 		return handleGenerationFailure(fmt.Errorf("get chat model: %w", err))
 	}
-	summary, err := s.getSummary(ctx, chatModel, knowledge, textChunks)
+	summary, err := s.getSummaryFromContent(ctx, chatModel, knowledge, summaryContent)
 	if err != nil {
 		return handleGenerationFailure(err)
 	}
@@ -2451,6 +2500,13 @@ func (s *knowledgeService) ReparseKnowledge(
 	// dialog), validate them against this knowledge's file type, then persist
 	// to metadata so both this call's enqueue and the worker re-read the same
 	// config. nil keeps whatever was stored at upload time.
+	validationOverrides := processOverrides
+	if validationOverrides == nil {
+		validationOverrides, _ = existing.ProcessOverrides()
+	}
+	if err := s.validateProcessVLMConfig(ctx, kb, validationOverrides); err != nil {
+		return nil, err
+	}
 	if processOverrides != nil {
 		if err := ValidateProcessOverrides(ctx, kb, processOverrides, reparseFileTypes(existing)); err != nil {
 			return nil, err

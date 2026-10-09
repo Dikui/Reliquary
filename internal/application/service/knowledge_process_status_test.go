@@ -31,7 +31,7 @@ func TestFinalizeIndexedKnowledgeState(t *testing.T) {
 			name:              "empty indexed document is completed without summary work",
 			textChunkCount:    0,
 			wantParseStatus:   types.ParseStatusCompleted,
-			wantSummaryStatus: types.SummaryStatusNone,
+			wantSummaryStatus: types.SummaryStatusSkipped,
 			wantErrorMessage:  "",
 		},
 		{

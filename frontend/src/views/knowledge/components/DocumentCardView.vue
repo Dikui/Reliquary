@@ -535,7 +535,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
           <span class="card-analyze-txt">{{ $t('knowledgeBase.generatingSummary') }}</span>
         </div>
         <div v-else-if="item.parse_status === 'completed'" class="card-content-txt">
-          {{ item.description }}
+          {{ item.description || (item.summary_status === 'skipped' ? $t('knowledgeBase.summarySkippedNoText') : '') }}
         </div>
       </div>
 
@@ -649,7 +649,9 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
           {{ $t('knowledgeBase.draft') }}
         </div>
         <template v-else>
-          <div v-if="hoveredCardItem.description" class="card-popover-desc">{{ hoveredCardItem.description }}</div>
+          <div v-if="hoveredCardItem.description || hoveredCardItem.summary_status === 'skipped'" class="card-popover-desc">
+            {{ hoveredCardItem.description || $t('knowledgeBase.summarySkippedNoText') }}
+          </div>
           <div v-if="(hoveredCardItem as any).source" class="card-popover-source" :title="(hoveredCardItem as any).source">
             <t-icon name="link" size="12px" /> {{ (hoveredCardItem as any).source }}
           </div>

@@ -61,6 +61,7 @@ func TestKnowledgePostProcessCompletesWithoutRemovedTasks(t *testing.T) {
 		t.Run(scenario.name, func(t *testing.T) {
 			db := setupHousekeepingDB(t)
 			require.NoError(t, db.Exec("ALTER TABLE knowledges ADD COLUMN processed_at TIMESTAMPTZ").Error)
+			require.NoError(t, db.Exec("ALTER TABLE knowledges ADD COLUMN description TEXT").Error)
 			const knowledgeID = "completion-source"
 			insertKnowledge(t, db, knowledgeID, types.ParseStatusProcessing, time.Now())
 			repo := repository.NewKnowledgeRepository(db)
@@ -92,6 +93,9 @@ func TestKnowledgePostProcessCompletesWithoutRemovedTasks(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, types.ParseStatusCompleted, completed.ParseStatus)
 			require.Zero(t, completed.PendingSubtasksCount)
+			if len(scenario.chunks) == 0 {
+				require.Equal(t, types.SummaryStatusSkipped, completed.SummaryStatus)
+			}
 			// Duplicate post-process deliveries cannot recreate work after completion.
 			require.NoError(t, service.Handle(context.Background(), asynq.NewTask(types.TypeKnowledgePostProcess, payload)))
 			require.Equal(t, scenario.wantTasks, queue.taskTypes)

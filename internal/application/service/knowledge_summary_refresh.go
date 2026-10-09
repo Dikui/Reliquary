@@ -100,20 +100,13 @@ func enqueueSummaryRefresh(
 		markFailed()
 		return fmt.Errorf("summary refresh dependencies are unavailable")
 	}
-	kb, err := kbReader.GetKnowledgeBaseByID(ctx, knowledge.KnowledgeBaseID)
+	_, err := kbReader.GetKnowledgeBaseByID(ctx, knowledge.KnowledgeBaseID)
 	if err != nil {
 		markFailed()
 		return err
 	}
-	modelID, resolveErr := ResolveModelTier(ctx, modelRoutingDB(kbReader), kb, types.ModelTierGeneration)
-	if resolveErr != nil {
-		markFailed()
-		return resolveErr
-	}
-	if modelID == "" {
-		markFailed()
-		return fmt.Errorf("summary model is not configured")
-	}
+	// The worker checks effective text before resolving its summary model, so
+	// an empty document remains skipped even when no model is configured.
 	if tracker == nil {
 		tracker = noopSpanTracker{}
 	}

@@ -200,7 +200,7 @@ instance.interceptors.response.use(
     return Promise.reject({
       status,
       ...(typeof data === 'object' ? data : {}),
-      message: translatePersonalServerMessage(errorMessage, t)
+      message: translatePersonalServerMessage(errorMessage, t, data?.error?.code ?? data?.code)
     });
   }
 );

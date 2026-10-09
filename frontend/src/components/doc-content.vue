@@ -176,6 +176,10 @@ const refreshSummary = async () => {
     const status = result?.data?.summary_status;
     if (status === 'pending' || status === 'processing') {
       MessagePlugin.success(t('knowledgeBase.summaryRefreshQueued'));
+    } else if (status === 'skipped') {
+      MessagePlugin.info(t('knowledgeBase.summarySkippedNoText'));
+    } else if (status === 'failed') {
+      MessagePlugin.error(t('knowledgeBase.summaryGenerationFailed'));
     } else {
       MessagePlugin.success(t('knowledgeBase.summaryRefreshed'));
     }
@@ -206,6 +210,8 @@ const showSummarySection = computed(() =>
   Boolean(props.details?.description)
   || props.details?.summary_status === 'pending'
   || props.details?.summary_status === 'processing'
+  || props.details?.summary_status === 'skipped'
+  || props.details?.summary_status === 'failed'
   || Boolean(props.details?.id && canEditContent.value),
 );
 
@@ -1893,6 +1899,10 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
             <template v-if="details.summary_status === 'pending' || details.summary_status === 'processing'">
               <t-loading size="small" />
               <span>{{ $t('knowledgeBase.generatingSummary') }}</span>
+            </template>
+            <template v-else-if="details.summary_status === 'skipped'">
+              <t-icon name="info-circle" size="18px" />
+              <span>{{ $t('knowledgeBase.summarySkippedNoText') }}</span>
             </template>
             <template v-else>
               <t-icon name="file-unknown" size="18px" />
