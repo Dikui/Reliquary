@@ -2098,7 +2098,6 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
                         </div>
                       </template>
                     </t-popup>
-                    <template>
                       <t-tooltip :content="$t('common.edit')" placement="top">
                         <t-button class="icon-action-btn" :class="{ 'is-active': editingChunkId === chunk.original.id }"
                           size="small" variant="text" shape="square" @click="startChunkEdit(chunk.original)">
@@ -2195,7 +2194,6 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
                           :disabled="chunkStatusLoading === chunk.original.id"
                           @change="(value: boolean) => toggleChunkEnabled(chunk.original, value)" />
                       </t-tooltip>
-                    </template>
                   </div>
                 </div>
                 <div v-if="editingChunkId === chunk.original.id" class="chunk-editor">

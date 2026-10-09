@@ -2181,12 +2181,10 @@ async function createNewSession(value: string): Promise<void> {
               </button>
               <t-icon name="chevron-right" class="breadcrumb-separator" />
 
-              <template>
                 <span :class="['breadcrumb-tab', { active: activeKbTab === 'documents' }]"
                   @click="activeKbTab = 'documents'">{{ $t('knowledgeEditor.document.title') }}</span>
                 <span class="breadcrumb-tab-sep">/</span><span :class="['breadcrumb-tab', { active: activeKbTab === 'context' }]"
                     @click="activeKbTab = 'context'">{{ $t('knowledgeWorkbench.tabLabel') }}</span>
-              </template>
             </h2>
             <!-- 标题行右侧的动作锚点：聚拢"信息"和"设置"两个圆形按钮。 -->
             <div class="kb-title-actions">

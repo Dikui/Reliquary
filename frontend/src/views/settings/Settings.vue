@@ -62,7 +62,6 @@
                 'content-wrapper--wide': currentSection === 'domains',
                 'content-wrapper--full': SYSTEM_SECTIONS.has(currentSection) || isIntegrationSection(currentSection),
               }">
-                <template>
                   <!-- 常规设置 -->
                   <div v-if="currentSection === 'general'" class="section">
                     <GeneralSettings />
@@ -141,7 +140,6 @@
                   <div v-if="currentSection === 'mcp'" class="section">
                     <McpSettings />
                   </div>
-                </template>
               </div>
             </div>
           </div>

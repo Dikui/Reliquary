@@ -133,7 +133,6 @@
                         <t-icon class="menu-icon" name="file-copy" />
                         <span>{{ $t('knowledgeList.menu.duplicate') }}</span>
                       </div>
-                      <template>
                         <div class="popup-menu-item" @click.stop="handleSettingsById(kb.id)">
                           <t-icon class="menu-icon" name="setting" />
                           <span>{{ $t('knowledgeBase.settings') }}</span>
@@ -142,7 +141,6 @@
                           <t-icon class="menu-icon" name="delete" />
                           <span>{{ $t('common.delete') }}</span>
                         </div>
-                      </template>
                     </div>
                   </template>
                 </t-popup>

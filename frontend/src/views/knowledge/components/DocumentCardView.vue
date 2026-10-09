@@ -546,7 +546,6 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
         <div class="card-bottom-right">
           <div v-if="tagList.length" class="card-tag-selector" @click.stop>
             <!-- Editable mode -->
-            <template>
               <template v-if="(item.tags || []).length > 0">
                 <t-tooltip
                   v-if="hasTagOverflow(item.id, (item.tags || []).length)"
@@ -579,7 +578,6 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
                 <t-icon name="add" size="12px" />
                 <span>{{ $t('knowledgeBase.tagLabel') }}</span>
               </span>
-            </template>
           </div>
           <div class="card-type">
             <span>{{ getKnowledgeType(item) }}</span>
