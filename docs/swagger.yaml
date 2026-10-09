@@ -267,6 +267,36 @@ definitions:
     required:
     - llmModelId
     type: object
+  internal_handler.KnowledgeContextBackfillBatchResponse:
+    properties:
+      data:
+        $ref: '#/definitions/reliquary_internal_types.KnowledgeContextBackfillBatch'
+      success:
+        type: boolean
+    type: object
+  internal_handler.KnowledgeContextBackfillBatchesResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/reliquary_internal_types.KnowledgeContextBackfillBatch'
+        type: array
+      success:
+        type: boolean
+    type: object
+  internal_handler.KnowledgeContextBackfillEstimateResponse:
+    properties:
+      data:
+        $ref: '#/definitions/reliquary_internal_types.KnowledgeContextBackfillEstimate'
+      success:
+        type: boolean
+    type: object
+  internal_handler.KnowledgeContextQueryResponse:
+    properties:
+      data:
+        $ref: '#/definitions/reliquary_internal_types.KnowledgeContextResult'
+      success:
+        type: boolean
+    type: object
   internal_handler.ModelTestRequest:
     properties:
       apiKey:
@@ -914,6 +944,7 @@ definitions:
     type: object
   reliquary_internal_errors.ErrorCode:
     enum:
+    - 2400
     - 1000
     - 1001
     - 1002
@@ -939,9 +970,9 @@ definitions:
     - 2301
     - 2302
     - 2303
-    - 2400
     type: integer
     x-enum-varnames:
+    - ErrKnowledgeDomainReferenced
     - ErrBadRequest
     - ErrUnauthorized
     - ErrForbidden
@@ -967,7 +998,6 @@ definitions:
     - ErrImageProcessingModelUnsupported
     - ErrImageProcessingModelNotFound
     - ErrImageProcessingModelUnavailable
-    - ErrKnowledgeDomainReferenced
   reliquary_internal_infrastructure_chunker.DocProfile:
     properties:
       all_caps_short_line_count:
@@ -1662,6 +1692,35 @@ definitions:
     - KBCloneStatusProcessing
     - KBCloneStatusCompleted
     - KBCloneStatusFailed
+  reliquary_internal_types.KnowledgeAttention:
+    properties:
+      actionability:
+        type: number
+      created_at:
+        type: string
+      credibility:
+        type: number
+      event_id:
+        type: string
+      evidence_id:
+        type: string
+      id:
+        type: string
+      impact:
+        type: number
+      knowledge_base_id:
+        type: string
+      novelty:
+        type: number
+      reason:
+        type: string
+      relevance:
+        type: number
+      score:
+        type: number
+      tenant_id:
+        type: integer
+    type: object
   reliquary_internal_types.KnowledgeBase:
     properties:
       asr_config:
@@ -1799,6 +1858,82 @@ definitions:
       model_tiers:
         $ref: '#/definitions/reliquary_internal_types.ModelTierConfig'
     type: object
+  reliquary_internal_types.KnowledgeContextBackfillBatch:
+    properties:
+      completed_at:
+        type: string
+      created_at:
+        type: string
+      entity_id:
+        type: string
+      failure_count:
+        type: integer
+      id:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/reliquary_internal_types.KnowledgeContextBackfillItem'
+        type: array
+      message_count:
+        type: integer
+      status:
+        type: string
+      success_count:
+        type: integer
+      tenant_id:
+        type: integer
+      topic_id:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  reliquary_internal_types.KnowledgeContextBackfillEstimate:
+    properties:
+      batch_message_count:
+        type: integer
+      estimate_note:
+        type: string
+      estimated_event_calls:
+        type: integer
+      estimated_extraction_calls:
+        type: integer
+      estimated_model_calls:
+        type: integer
+      pending_message_count:
+        type: integer
+      remaining_message_count:
+        type: integer
+      template_only_message_count:
+        type: integer
+    type: object
+  reliquary_internal_types.KnowledgeContextBackfillItem:
+    properties:
+      batch_id:
+        type: string
+      created_at:
+        type: string
+      error:
+        type: string
+      evidence_id:
+        type: string
+      id:
+        type: string
+      knowledge_id:
+        type: string
+      status:
+        type: string
+      tenant_id:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  reliquary_internal_types.KnowledgeContextBackfillTarget:
+    properties:
+      entity_id:
+        type: string
+      topic_id:
+        type: string
+    type: object
   reliquary_internal_types.KnowledgeContextQuery:
     properties:
       domain_id:
@@ -1840,6 +1975,46 @@ definitions:
       until:
         type: string
     type: object
+  reliquary_internal_types.KnowledgeContextResult:
+    properties:
+      attention:
+        items:
+          $ref: '#/definitions/reliquary_internal_types.KnowledgeAttention'
+        type: array
+      entities:
+        items:
+          $ref: '#/definitions/reliquary_internal_types.KnowledgeEntity'
+        type: array
+      events:
+        items:
+          $ref: '#/definitions/reliquary_internal_types.KnowledgeEvent'
+        type: array
+      events_coverage_notice:
+        type: string
+      evidence:
+        items:
+          $ref: '#/definitions/reliquary_internal_types.KnowledgeEvidence'
+        type: array
+      excluded_missing_published_at_count:
+        type: integer
+      facts:
+        items:
+          $ref: '#/definitions/reliquary_internal_types.KnowledgeFact'
+        type: array
+      published_at_missing_source_ids:
+        items:
+          type: string
+        type: array
+      template_only_message_count:
+        type: integer
+    type: object
+  reliquary_internal_types.KnowledgeContextSource:
+    properties:
+      knowledge_base_id:
+        type: string
+      knowledge_base_name:
+        type: string
+    type: object
   reliquary_internal_types.KnowledgeDomain:
     properties:
       created_at:
@@ -1879,6 +2054,217 @@ definitions:
           $ref: '#/definitions/reliquary_internal_types.DomainUnitFamily'
         type: array
       updated_at:
+        type: string
+    type: object
+  reliquary_internal_types.KnowledgeEntity:
+    properties:
+      aliases:
+        items:
+          type: string
+        type: array
+      canonical_name:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      embedding_dimension:
+        type: integer
+      embedding_model_id:
+        type: string
+      embedding_needs_rebuild:
+        type: boolean
+      entity_type:
+        type: string
+      id:
+        type: string
+      knowledge_base_id:
+        type: string
+      merged_into_id:
+        type: string
+      tenant_id:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  reliquary_internal_types.KnowledgeEvent:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      entity_ids:
+        items:
+          type: string
+        type: array
+      event_type:
+        type: string
+      evidence_ids:
+        items:
+          type: string
+        type: array
+      excluded_missing_published_at_count:
+        type: integer
+      heat:
+        type: number
+      id:
+        type: string
+      knowledge_base_id:
+        type: string
+      occurred_at:
+        type: string
+      relations:
+        items:
+          $ref: '#/definitions/reliquary_internal_types.KnowledgeEventRelation'
+        type: array
+      repost_sources:
+        items:
+          $ref: '#/definitions/reliquary_internal_types.KnowledgeRepostSource'
+        type: array
+      source_count:
+        type: integer
+      sources:
+        items:
+          $ref: '#/definitions/reliquary_internal_types.KnowledgeContextSource'
+        type: array
+      tenant_id:
+        type: integer
+      title:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  reliquary_internal_types.KnowledgeEventRelation:
+    properties:
+      evidence_id:
+        type: string
+      related_event_id:
+        type: string
+      related_title:
+        type: string
+      relation:
+        type: string
+    type: object
+  reliquary_internal_types.KnowledgeEvidence:
+    properties:
+      author:
+        type: string
+      backfill_template_updated_at:
+        type: string
+      backfilled_at:
+        type: string
+      body:
+        type: string
+      body_hash:
+        type: string
+      created_at:
+        type: string
+      extraction_coverage:
+        type: string
+      extraction_error:
+        type: string
+      extraction_mode:
+        description: ExtractionMode names the data classes attempted, independently
+          of segment coverage.
+        type: string
+      extraction_path:
+        type: string
+      extraction_status:
+        type: string
+      id:
+        type: string
+      image_refs:
+        items:
+          type: string
+        type: array
+      knowledge_base_id:
+        type: string
+      knowledge_base_name:
+        type: string
+      knowledge_id:
+        type: string
+      model_calls:
+        items:
+          type: integer
+        type: array
+      original_url:
+        type: string
+      processed_segments:
+        type: integer
+      published_at:
+        type: string
+      published_at_missing:
+        type: boolean
+      publisher:
+        type: string
+      repost_sources:
+        items:
+          $ref: '#/definitions/reliquary_internal_types.KnowledgeRepostSource'
+        type: array
+      source_kind:
+        type: string
+      status:
+        type: string
+      superseded_by_id:
+        type: string
+      tenant_id:
+        type: integer
+      title:
+        type: string
+      total_segments:
+        type: integer
+      version:
+        type: integer
+    type: object
+  reliquary_internal_types.KnowledgeFact:
+    properties:
+      corrected_by:
+        type: string
+      correction_actor:
+        description: CorrectionActor identifies the authenticated principal that made
+          this version.
+        type: string
+      correction_note:
+        type: string
+      created_at:
+        type: string
+      effective_from:
+        type: string
+      effective_to:
+        type: string
+      evidence_id:
+        type: string
+      id:
+        type: string
+      kind:
+        type: string
+      knowledge_base_id:
+        type: string
+      knowledge_base_name:
+        type: string
+      object_entity_id:
+        type: string
+      original_predicate:
+        type: string
+      predicate:
+        type: string
+      quote:
+        type: string
+      status:
+        type: string
+      subject_entity_id:
+        type: string
+      supersedes_id:
+        type: string
+      tenant_id:
+        type: integer
+      unit:
+        type: string
+      value:
+        items:
+          type: integer
+        type: array
+      value_type:
         type: string
     type: object
   reliquary_internal_types.KnowledgeFactCorrection:
@@ -1959,6 +2345,33 @@ definitions:
         $ref: '#/definitions/reliquary_internal_types.QuestionGenerationConfig'
       vlm_config:
         $ref: '#/definitions/reliquary_internal_types.VLMConfig'
+    type: object
+  reliquary_internal_types.KnowledgeRepostSource:
+    properties:
+      author:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      knowledge_base_id:
+        type: string
+      knowledge_id:
+        type: string
+      match_method:
+        type: string
+      original_url:
+        type: string
+      published_at:
+        type: string
+      published_at_missing:
+        type: boolean
+      publisher:
+        type: string
+      simhash_distance:
+        type: integer
+      tenant_id:
+        type: integer
     type: object
   reliquary_internal_types.LoginRequest:
     properties:
@@ -5877,6 +6290,96 @@ paths:
       summary: 更新标签
       tags:
       - 标签管理
+  /knowledge-bases/{id}/workflows/{workflow_id}/run:
+    post:
+      parameters:
+      - description: Knowledge base ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Workflow or run ID
+        in: path
+        name: workflow_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Workflow disabled; enable before running, retrying, or resuming.
+            Localized in Chinese and English.
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Run knowledge workflow
+      tags:
+      - knowledge-workflows
+  /knowledge-bases/{id}/workflows/runs/{run_id}/resume:
+    post:
+      parameters:
+      - description: Knowledge base ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Workflow or run ID
+        in: path
+        name: run_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Workflow disabled; enable before running, retrying, or resuming.
+            Localized in Chinese and English.
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Resume knowledge workflow
+      tags:
+      - knowledge-workflows
+  /knowledge-bases/{id}/workflows/runs/{run_id}/retry:
+    post:
+      parameters:
+      - description: Knowledge base ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Workflow or run ID
+        in: path
+        name: run_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Workflow disabled; enable before running, retrying, or resuming.
+            Localized in Chinese and English.
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Retry knowledge workflow
+      tags:
+      - knowledge-workflows
   /knowledge-bases/copy:
     post:
       consumes:
@@ -5979,6 +6482,115 @@ paths:
       summary: 知识问答
       tags:
       - 问答
+  /knowledge-context/backfill:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: One starred object or topic
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/reliquary_internal_types.KnowledgeContextBackfillTarget'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Backfill batch
+          schema:
+            $ref: '#/definitions/internal_handler.KnowledgeContextBackfillBatchResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: Backfill historical messages for a starred object or topic
+      tags:
+      - Knowledge Context
+  /knowledge-context/backfill/batches:
+    get:
+      parameters:
+      - description: Object ID
+        in: query
+        name: entity_id
+        type: string
+      - description: Concrete topic tag ID
+        in: query
+        name: topic_id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Recent backfill batches
+          schema:
+            $ref: '#/definitions/internal_handler.KnowledgeContextBackfillBatchesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: List historical message backfill batches
+      tags:
+      - Knowledge Context
+  /knowledge-context/backfill/batches/{batch_id}:
+    get:
+      parameters:
+      - description: Batch ID
+        in: path
+        name: batch_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Backfill batch and message results
+          schema:
+            $ref: '#/definitions/internal_handler.KnowledgeContextBackfillBatchResponse'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: Get a historical message backfill batch
+      tags:
+      - Knowledge Context
+  /knowledge-context/backfill/estimate:
+    get:
+      parameters:
+      - description: Starred object ID
+        in: query
+        name: entity_id
+        type: string
+      - description: Concrete topic tag ID
+        in: query
+        name: topic_id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Backfill estimate
+          schema:
+            $ref: '#/definitions/internal_handler.KnowledgeContextBackfillEstimateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: Estimate historical message backfill
+      tags:
+      - Knowledge Context
   /knowledge-context/entities:
     get:
       parameters:
@@ -6262,10 +6874,10 @@ paths:
       - application/json
       responses:
         "200":
-          description: Sourced entities, facts and events
+          description: Sourced entities, facts, events and latest template-only message
+            count
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/internal_handler.KnowledgeContextQueryResponse'
         "400":
           description: Bad Request
           schema:

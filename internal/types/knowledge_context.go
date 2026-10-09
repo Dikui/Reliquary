@@ -111,13 +111,16 @@ type KnowledgeEvidence struct {
 	Status             string                  `json:"status" gorm:"type:varchar(16);not null;default:'current';index"`
 	ExtractionStatus   string                  `json:"extraction_status" gorm:"type:varchar(16);not null;default:'pending';index"`
 	// ExtractionMode names the data classes attempted, independently of segment coverage.
-	ExtractionMode     string    `json:"extraction_mode" gorm:"type:varchar(16);not null;default:'full'"`
-	ExtractionCoverage string    `json:"extraction_coverage" gorm:"type:varchar(16);not null;default:'complete'"`
-	ProcessedSegments  int       `json:"processed_segments" gorm:"not null;default:0"`
-	TotalSegments      int       `json:"total_segments" gorm:"not null;default:0"`
-	ModelCalls         JSON      `json:"model_calls" gorm:"type:jsonb;not null;default:'[]'"`
-	ExtractionError    string    `json:"extraction_error,omitempty" gorm:"type:text;not null;default:''"`
-	CreatedAt          time.Time `json:"created_at"`
+	ExtractionMode            string     `json:"extraction_mode" gorm:"type:varchar(16);not null;default:'full'"`
+	ExtractionPath            string     `json:"extraction_path" gorm:"type:varchar(32);not null;default:''"`
+	BackfilledAt              *time.Time `json:"backfilled_at,omitempty"`
+	BackfillTemplateUpdatedAt *time.Time `json:"backfill_template_updated_at,omitempty"`
+	ExtractionCoverage        string     `json:"extraction_coverage" gorm:"type:varchar(16);not null;default:'complete'"`
+	ProcessedSegments         int        `json:"processed_segments" gorm:"not null;default:0"`
+	TotalSegments             int        `json:"total_segments" gorm:"not null;default:0"`
+	ModelCalls                JSON       `json:"model_calls" gorm:"type:jsonb;not null;default:'[]'"`
+	ExtractionError           string     `json:"extraction_error,omitempty" gorm:"type:text;not null;default:''"`
+	CreatedAt                 time.Time  `json:"created_at"`
 }
 
 func (KnowledgeEvidence) TableName() string { return "knowledge_context_evidence" }
@@ -284,6 +287,7 @@ type KnowledgeContextQuery struct {
 }
 
 type KnowledgeContextResult struct {
+	EventsCoverageNotice            string               `json:"events_coverage_notice"`
 	TemplateOnlyMessageCount        int                  `json:"template_only_message_count"`
 	ExcludedMissingPublishedAtCount int                  `json:"excluded_missing_published_at_count"`
 	PublishedAtMissingSourceIDs     []string             `json:"published_at_missing_source_ids"`

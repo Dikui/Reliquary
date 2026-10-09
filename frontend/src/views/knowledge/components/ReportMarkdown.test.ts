@@ -9,6 +9,18 @@ import { registerDocumentMarkdownForReportTest, reportCitationClick, reportMarkd
 
 const citations = [{ id: 'C1', kind: 'evidence', evidence_id: 'evidence-1', quote: 'Acme 发布了 新模型。' }]
 
+for (const markdown of [
+  '只包含收录时命中关注范围的消息。相关消息中仍有 3 条仅抽取了模板字段。\n\n## 事件\n\nAurora 发布新模型。[C1]',
+  'Only messages in focus at ingestion are included. 3 related messages still have only template fields extracted.\n\n## Events\n\nAurora released a new model. [C1]',
+]) {
+  test(`report body preserves its recorded event coverage and count: ${markdown.slice(0, 20)}`, async () => {
+    const html = await renderToString(createSSRApp(reportMarkdownTestComponent(), { markdown, citations }))
+    assert.match(html, /3/)
+    assert.match(html, markdown.startsWith('只') ? /只包含收录时命中关注范围的消息/ : /Only messages in focus at ingestion are included/)
+    assert.match(html, /data-report-citation="C1"/)
+  })
+}
+
 test('report SFC keeps complete long URL labels and destinations alongside code and tables', async () => {
   const html = await renderToString(createSSRApp(reportMarkdownTestComponent(), {
     markdown: `${LONG_SOURCE_URL}\n\n[${LONG_SOURCE_URL}](${LONG_SOURCE_URL})\n\n[[C1]](${LONG_SOURCE_URL})\n\n\`\`\`text\n${LONG_SOURCE_URL}\n\`\`\`\n\n| Source | Label |\n| --- | --- |\n| [Original](${LONG_SOURCE_URL}) | Source |`, citations,

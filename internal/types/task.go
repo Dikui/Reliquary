@@ -75,6 +75,7 @@ var queueDefinitions = []QueueDefinition{
 	{Name: QueueMaintenance, Pool: WorkerPoolMaintenance, Weight: 1, TaskTypes: []string{
 		TypeKnowledgeWorkflowRun, TypeKBClone, TypeKBDelete,
 		TypeKnowledgeListDelete, TypeKnowledgeListReparse, TypeKnowledgeMove,
+		TypeKnowledgeContextBackfill,
 	}},
 }
 
@@ -233,6 +234,7 @@ const (
 	TypeKnowledgePostProcess        = "knowledge:post_process" // 知识后处理任务（统一调度）
 	TypeKnowledgeAutoTag            = "knowledge:auto_tag"     // 文档自动关联知识库已有标签
 	TypeKnowledgeContext            = "knowledge:context"
+	TypeKnowledgeContextBackfill    = "knowledge_context:backfill"
 	TypeContextNameEmbeddingRebuild = "knowledge_context:name_embedding_rebuild"
 	TypeKnowledgeWorkflowRun        = "knowledge_workflow:run"
 	TypeManualProcess               = "manual:process"             // 手工知识更新任务（cleanup + 重新索引）

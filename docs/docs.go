@@ -3941,6 +3941,135 @@ const docTemplate = `{
                 }
             }
         },
+        "/knowledge-bases/{id}/workflows/runs/{run_id}/resume": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "knowledge-workflows"
+                ],
+                "summary": "Resume knowledge workflow",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Knowledge base ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Workflow or run ID",
+                        "name": "run_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "409": {
+                        "description": "Workflow disabled; enable before running, retrying, or resuming. Localized in Chinese and English.",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/knowledge-bases/{id}/workflows/runs/{run_id}/retry": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "knowledge-workflows"
+                ],
+                "summary": "Retry knowledge workflow",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Knowledge base ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Workflow or run ID",
+                        "name": "run_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "409": {
+                        "description": "Workflow disabled; enable before running, retrying, or resuming. Localized in Chinese and English.",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/knowledge-bases/{id}/workflows/{workflow_id}/run": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "knowledge-workflows"
+                ],
+                "summary": "Run knowledge workflow",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Knowledge base ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Workflow or run ID",
+                        "name": "workflow_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "409": {
+                        "description": "Workflow disabled; enable before running, retrying, or resuming. Localized in Chinese and English.",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/knowledge-chat/{session_id}": {
             "post": {
                 "security": [
@@ -4003,6 +4132,181 @@ const docTemplate = `{
                         "description": "请求参数错误",
                         "schema": {
                             "$ref": "#/definitions/reliquary_internal_errors.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/knowledge-context/backfill": {
+            "post": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Knowledge Context"
+                ],
+                "summary": "Backfill historical messages for a starred object or topic",
+                "parameters": [
+                    {
+                        "description": "One starred object or topic",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/reliquary_internal_types.KnowledgeContextBackfillTarget"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Backfill batch",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.KnowledgeContextBackfillBatchResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/knowledge-context/backfill/batches": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Knowledge Context"
+                ],
+                "summary": "List historical message backfill batches",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Object ID",
+                        "name": "entity_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Concrete topic tag ID",
+                        "name": "topic_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Recent backfill batches",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.KnowledgeContextBackfillBatchesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/knowledge-context/backfill/batches/{batch_id}": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Knowledge Context"
+                ],
+                "summary": "Get a historical message backfill batch",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Batch ID",
+                        "name": "batch_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Backfill batch and message results",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.KnowledgeContextBackfillBatchResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/knowledge-context/backfill/estimate": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Knowledge Context"
+                ],
+                "summary": "Estimate historical message backfill",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Starred object ID",
+                        "name": "entity_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Concrete topic tag ID",
+                        "name": "topic_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Backfill estimate",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.KnowledgeContextBackfillEstimateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     }
                 }
@@ -4453,10 +4757,9 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "Sourced entities, facts and events",
+                        "description": "Sourced entities, facts, events and latest template-only message count",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_handler.KnowledgeContextQueryResponse"
                         }
                     },
                     "400": {
@@ -8941,6 +9244,53 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_handler.KnowledgeContextBackfillBatchResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/reliquary_internal_types.KnowledgeContextBackfillBatch"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "internal_handler.KnowledgeContextBackfillBatchesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reliquary_internal_types.KnowledgeContextBackfillBatch"
+                    }
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "internal_handler.KnowledgeContextBackfillEstimateResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/reliquary_internal_types.KnowledgeContextBackfillEstimate"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "internal_handler.KnowledgeContextQueryResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/reliquary_internal_types.KnowledgeContextResult"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
         "internal_handler.ModelTestRequest": {
             "type": "object",
             "required": [
@@ -9860,6 +10210,7 @@ const docTemplate = `{
         "reliquary_internal_errors.ErrorCode": {
             "type": "integer",
             "enum": [
+                2400,
                 1000,
                 1001,
                 1002,
@@ -9884,10 +10235,10 @@ const docTemplate = `{
                 2300,
                 2301,
                 2302,
-                2303,
-                2400
+                2303
             ],
             "x-enum-varnames": [
+                "ErrKnowledgeDomainReferenced",
                 "ErrBadRequest",
                 "ErrUnauthorized",
                 "ErrForbidden",
@@ -9912,8 +10263,7 @@ const docTemplate = `{
                 "ErrModelInUse",
                 "ErrImageProcessingModelUnsupported",
                 "ErrImageProcessingModelNotFound",
-                "ErrImageProcessingModelUnavailable",
-                "ErrKnowledgeDomainReferenced"
+                "ErrImageProcessingModelUnavailable"
             ]
         },
         "reliquary_internal_infrastructure_chunker.DocProfile": {
@@ -10740,6 +11090,50 @@ const docTemplate = `{
                 "KBCloneStatusFailed"
             ]
         },
+        "reliquary_internal_types.KnowledgeAttention": {
+            "type": "object",
+            "properties": {
+                "actionability": {
+                    "type": "number"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "credibility": {
+                    "type": "number"
+                },
+                "event_id": {
+                    "type": "string"
+                },
+                "evidence_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "impact": {
+                    "type": "number"
+                },
+                "knowledge_base_id": {
+                    "type": "string"
+                },
+                "novelty": {
+                    "type": "number"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "relevance": {
+                    "type": "number"
+                },
+                "score": {
+                    "type": "number"
+                },
+                "tenant_id": {
+                    "type": "integer"
+                }
+            }
+        },
         "reliquary_internal_types.KnowledgeBase": {
             "type": "object",
             "properties": {
@@ -10926,6 +11320,122 @@ const docTemplate = `{
                 }
             }
         },
+        "reliquary_internal_types.KnowledgeContextBackfillBatch": {
+            "type": "object",
+            "properties": {
+                "completed_at": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "entity_id": {
+                    "type": "string"
+                },
+                "failure_count": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reliquary_internal_types.KnowledgeContextBackfillItem"
+                    }
+                },
+                "message_count": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "success_count": {
+                    "type": "integer"
+                },
+                "tenant_id": {
+                    "type": "integer"
+                },
+                "topic_id": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.KnowledgeContextBackfillEstimate": {
+            "type": "object",
+            "properties": {
+                "batch_message_count": {
+                    "type": "integer"
+                },
+                "estimate_note": {
+                    "type": "string"
+                },
+                "estimated_event_calls": {
+                    "type": "integer"
+                },
+                "estimated_extraction_calls": {
+                    "type": "integer"
+                },
+                "estimated_model_calls": {
+                    "type": "integer"
+                },
+                "pending_message_count": {
+                    "type": "integer"
+                },
+                "remaining_message_count": {
+                    "type": "integer"
+                },
+                "template_only_message_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "reliquary_internal_types.KnowledgeContextBackfillItem": {
+            "type": "object",
+            "properties": {
+                "batch_id": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "evidence_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "knowledge_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "tenant_id": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.KnowledgeContextBackfillTarget": {
+            "type": "object",
+            "properties": {
+                "entity_id": {
+                    "type": "string"
+                },
+                "topic_id": {
+                    "type": "string"
+                }
+            }
+        },
         "reliquary_internal_types.KnowledgeContextQuery": {
             "type": "object",
             "properties": {
@@ -10988,6 +11498,67 @@ const docTemplate = `{
                 }
             }
         },
+        "reliquary_internal_types.KnowledgeContextResult": {
+            "type": "object",
+            "properties": {
+                "attention": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reliquary_internal_types.KnowledgeAttention"
+                    }
+                },
+                "entities": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reliquary_internal_types.KnowledgeEntity"
+                    }
+                },
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reliquary_internal_types.KnowledgeEvent"
+                    }
+                },
+                "events_coverage_notice": {
+                    "type": "string"
+                },
+                "evidence": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reliquary_internal_types.KnowledgeEvidence"
+                    }
+                },
+                "excluded_missing_published_at_count": {
+                    "type": "integer"
+                },
+                "facts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reliquary_internal_types.KnowledgeFact"
+                    }
+                },
+                "published_at_missing_source_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "template_only_message_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "reliquary_internal_types.KnowledgeContextSource": {
+            "type": "object",
+            "properties": {
+                "knowledge_base_id": {
+                    "type": "string"
+                },
+                "knowledge_base_name": {
+                    "type": "string"
+                }
+            }
+        },
         "reliquary_internal_types.KnowledgeDomain": {
             "type": "object",
             "properties": {
@@ -11046,6 +11617,321 @@ const docTemplate = `{
                     }
                 },
                 "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.KnowledgeEntity": {
+            "type": "object",
+            "properties": {
+                "aliases": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "canonical_name": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "embedding_dimension": {
+                    "type": "integer"
+                },
+                "embedding_model_id": {
+                    "type": "string"
+                },
+                "embedding_needs_rebuild": {
+                    "type": "boolean"
+                },
+                "entity_type": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "knowledge_base_id": {
+                    "type": "string"
+                },
+                "merged_into_id": {
+                    "type": "string"
+                },
+                "tenant_id": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.KnowledgeEvent": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "entity_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "event_type": {
+                    "type": "string"
+                },
+                "evidence_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "excluded_missing_published_at_count": {
+                    "type": "integer"
+                },
+                "heat": {
+                    "type": "number"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "knowledge_base_id": {
+                    "type": "string"
+                },
+                "occurred_at": {
+                    "type": "string"
+                },
+                "relations": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reliquary_internal_types.KnowledgeEventRelation"
+                    }
+                },
+                "repost_sources": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reliquary_internal_types.KnowledgeRepostSource"
+                    }
+                },
+                "source_count": {
+                    "type": "integer"
+                },
+                "sources": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reliquary_internal_types.KnowledgeContextSource"
+                    }
+                },
+                "tenant_id": {
+                    "type": "integer"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.KnowledgeEventRelation": {
+            "type": "object",
+            "properties": {
+                "evidence_id": {
+                    "type": "string"
+                },
+                "related_event_id": {
+                    "type": "string"
+                },
+                "related_title": {
+                    "type": "string"
+                },
+                "relation": {
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.KnowledgeEvidence": {
+            "type": "object",
+            "properties": {
+                "author": {
+                    "type": "string"
+                },
+                "backfill_template_updated_at": {
+                    "type": "string"
+                },
+                "backfilled_at": {
+                    "type": "string"
+                },
+                "body": {
+                    "type": "string"
+                },
+                "body_hash": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "extraction_coverage": {
+                    "type": "string"
+                },
+                "extraction_error": {
+                    "type": "string"
+                },
+                "extraction_mode": {
+                    "description": "ExtractionMode names the data classes attempted, independently of segment coverage.",
+                    "type": "string"
+                },
+                "extraction_path": {
+                    "type": "string"
+                },
+                "extraction_status": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "image_refs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "knowledge_base_id": {
+                    "type": "string"
+                },
+                "knowledge_base_name": {
+                    "type": "string"
+                },
+                "knowledge_id": {
+                    "type": "string"
+                },
+                "model_calls": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "original_url": {
+                    "type": "string"
+                },
+                "processed_segments": {
+                    "type": "integer"
+                },
+                "published_at": {
+                    "type": "string"
+                },
+                "published_at_missing": {
+                    "type": "boolean"
+                },
+                "publisher": {
+                    "type": "string"
+                },
+                "repost_sources": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reliquary_internal_types.KnowledgeRepostSource"
+                    }
+                },
+                "source_kind": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "superseded_by_id": {
+                    "type": "string"
+                },
+                "tenant_id": {
+                    "type": "integer"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "total_segments": {
+                    "type": "integer"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "reliquary_internal_types.KnowledgeFact": {
+            "type": "object",
+            "properties": {
+                "corrected_by": {
+                    "type": "string"
+                },
+                "correction_actor": {
+                    "description": "CorrectionActor identifies the authenticated principal that made this version.",
+                    "type": "string"
+                },
+                "correction_note": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "effective_from": {
+                    "type": "string"
+                },
+                "effective_to": {
+                    "type": "string"
+                },
+                "evidence_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "knowledge_base_id": {
+                    "type": "string"
+                },
+                "knowledge_base_name": {
+                    "type": "string"
+                },
+                "object_entity_id": {
+                    "type": "string"
+                },
+                "original_predicate": {
+                    "type": "string"
+                },
+                "predicate": {
+                    "type": "string"
+                },
+                "quote": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "subject_entity_id": {
+                    "type": "string"
+                },
+                "supersedes_id": {
+                    "type": "string"
+                },
+                "tenant_id": {
+                    "type": "integer"
+                },
+                "unit": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "value_type": {
                     "type": "string"
                 }
             }
@@ -11158,6 +12044,47 @@ const docTemplate = `{
                 },
                 "vlm_config": {
                     "$ref": "#/definitions/reliquary_internal_types.VLMConfig"
+                }
+            }
+        },
+        "reliquary_internal_types.KnowledgeRepostSource": {
+            "type": "object",
+            "properties": {
+                "author": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "knowledge_base_id": {
+                    "type": "string"
+                },
+                "knowledge_id": {
+                    "type": "string"
+                },
+                "match_method": {
+                    "type": "string"
+                },
+                "original_url": {
+                    "type": "string"
+                },
+                "published_at": {
+                    "type": "string"
+                },
+                "published_at_missing": {
+                    "type": "boolean"
+                },
+                "publisher": {
+                    "type": "string"
+                },
+                "simhash_distance": {
+                    "type": "integer"
+                },
+                "tenant_id": {
+                    "type": "integer"
                 }
             }
         },

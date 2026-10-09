@@ -205,7 +205,8 @@ func (s *KnowledgeContextService) queryContext(ctx context.Context, kbID string,
 	limitedEntities := len(q.KnowledgeIDs) > 0
 	projectEventSources := len(q.KnowledgeIDs) > 0 || scope.kind != "all"
 	result := &types.KnowledgeContextResult{
-		Entities: []types.KnowledgeEntity{}, Facts: []types.KnowledgeFact{},
+		EventsCoverageNotice: contextEventsCoverageNotice,
+		Entities:             []types.KnowledgeEntity{}, Facts: []types.KnowledgeFact{},
 		Events: []types.KnowledgeEvent{}, Evidence: []types.KnowledgeEvidence{}, Attention: []types.KnowledgeAttention{},
 	}
 	if q.MinValue != nil && (math.IsNaN(*q.MinValue) || math.IsInf(*q.MinValue, 0)) ||

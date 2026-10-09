@@ -6,14 +6,14 @@ import (
 	"reliquary/internal/types"
 )
 
-// Template-only coverage counts source messages, independently of fact pages.
+const contextEventsCoverageNotice = "只包含收录时命中关注范围的消息"
+
+// Coverage uses the latest evidence even when assertions include history.
 // Unextracted values cannot establish whether a source meets a field filter.
 func (s *KnowledgeContextService) templateOnlyMessageCount(ctx context.Context, scope *contextQueryScope, q types.KnowledgeContextQuery, entityIDs []string) (int, error) {
 	query := s.db.WithContext(ctx).Model(&types.KnowledgeEvidence{}).
-		Where("tenant_id = ? AND knowledge_base_id IN ? AND extraction_mode = ? AND extraction_status = ?", scope.tenantID, scope.kbIDs, "template_only", types.KnowledgeExtractionComplete)
-	if !q.IncludeHistory {
-		query = query.Where("status = ?", types.KnowledgeEvidenceCurrent)
-	}
+		Where("tenant_id = ? AND knowledge_base_id IN ? AND extraction_mode = ? AND status = ?", scope.tenantID, scope.kbIDs, types.KnowledgeExtractionTemplateOnly, types.KnowledgeEvidenceCurrent).
+		Where("version = (SELECT MAX(newer.version) FROM knowledge_context_evidence newer WHERE newer.tenant_id = knowledge_context_evidence.tenant_id AND newer.knowledge_id = knowledge_context_evidence.knowledge_id)")
 	if len(q.KnowledgeIDs) > 0 {
 		query = query.Where("knowledge_id IN ?", uniqueContextIDs(q.KnowledgeIDs))
 	}
@@ -31,11 +31,10 @@ func (s *KnowledgeContextService) templateOnlyMessageCount(ctx context.Context, 
 		}
 		query = query.Where("id IN (?)", s.db.Model(&types.KnowledgeEvidenceEntity{}).Select("evidence_id").Where("tenant_id = ? AND entity_id IN ?", scope.tenantID, eventEntities))
 	}
-	links := s.db.Model(&types.KnowledgeEvidenceEntity{}).Select("evidence_id").Where("tenant_id = ?", scope.tenantID)
 	if len(entityIDs) > 0 {
-		links = links.Where("entity_id IN ?", entityIDs)
+		links := s.db.Model(&types.KnowledgeEvidenceEntity{}).Select("evidence_id").Where("tenant_id = ? AND entity_id IN ?", scope.tenantID, entityIDs)
+		query = query.Where("id IN (?)", links)
 	}
-	query = query.Where("id IN (?)", links)
 	if q.ObjectEntityID != "" {
 		query = query.Where("id IN (?)", s.db.Model(&types.KnowledgeEvidenceEntity{}).Select("evidence_id").Where("tenant_id = ? AND entity_id = ?", scope.tenantID, q.ObjectEntityID))
 	}
@@ -43,7 +42,7 @@ func (s *KnowledgeContextService) templateOnlyMessageCount(ctx context.Context, 
 	if err := query.Find(&evidence).Error; err != nil {
 		return 0, err
 	}
-	evidence, err := s.visibleContextEvidence(ctx, scope.tenantID, "", evidence, q.IncludeHistory)
+	evidence, err := s.visibleContextEvidence(ctx, scope.tenantID, "", evidence, false)
 	if err != nil {
 		return 0, err
 	}

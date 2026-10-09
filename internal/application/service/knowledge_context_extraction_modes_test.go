@@ -86,8 +86,14 @@ func onDemandRecordingModel(t *testing.T, records *[]onDemandPromptRecord) *p3Se
 			TotalSegments int    `json:"total_segments"`
 		}
 		require.NoError(t, json.Unmarshal([]byte(messages[1].Content), &input))
-		response, items := onDemandSplitReply(t, stage, input.Body)
 		schema := onDemandPromptSchema(t, messages[0].Content)
+		responseStage := stage
+		if _, hasObjects := schema["entities"]; hasObjects {
+			if _, hasEvents := schema["events"]; hasEvents {
+				responseStage = "legacy_full_extraction"
+			}
+		}
+		response, items := onDemandSplitReply(t, responseStage, input.Body)
 		keys := make([]string, 0, len(schema))
 		for key := range schema {
 			keys = append(keys, key)
@@ -174,7 +180,7 @@ func TestOnDemandOutsideUsesOneLeanRequest(t *testing.T) {
 	require.Zero(t, events)
 }
 
-func TestOnDemandSupplementReusesObjectsAndTemplateFactsWithBaselineParity(t *testing.T) {
+func TestOnDemandPrecheckFullPreservesOriginalObjectsAndFacts(t *testing.T) {
 	db, ctx, svc, _ := onDemandFixture(t)
 	require.NoError(t, svc.SetEntityStar(ctx, "acme", true))
 	k := p3Message(t, db, "split-full-source", onDemandBody)
@@ -196,12 +202,9 @@ func TestOnDemandSupplementReusesObjectsAndTemplateFactsWithBaselineParity(t *te
 	var records []onDemandPromptRecord
 	svc.models = knowledgeContextTestModelService{model: onDemandRecordingModel(t, &records)}
 	require.NoError(t, svc.ProcessMessage(ctx, k, onDemandBody))
-	require.Len(t, records, 2)
-	require.Equal(t, []string{"entities", "facts"}, records[0].ExpectedOutputKeys)
-	require.Equal(t, []string{"events", "facts"}, records[1].ExpectedOutputKeys)
-	require.Zero(t, records[1].ExpectedOutputItems["objects"])
-	require.Zero(t, records[1].ExpectedOutputItems["template_facts"])
-	require.Equal(t, records[0].Body, records[1].Body)
+	require.Len(t, records, 1)
+	require.Equal(t, []string{"entities", "events", "facts"}, records[0].ExpectedOutputKeys)
+	require.Equal(t, baselineRecords[0].Body, records[0].Body)
 	stored := onDemandEvidence(t, db, k.ID)
 	require.Equal(t, types.KnowledgeExtractionFull, stored.ExtractionMode)
 	var actualFacts []types.KnowledgeFact
@@ -242,10 +245,11 @@ func TestOnDemandSupplementReusesObjectsAndTemplateFactsWithBaselineParity(t *te
 	var eventEvidence types.KnowledgeEventEvidence
 	require.NoError(t, db.Where("event_id = ?", actualEvent.ID).First(&eventEvidence).Error)
 	require.Equal(t, expectedEvents[0].Relation, eventEvidence.Relation)
-	require.Equal(t, map[string]int{"context_extraction": 1, "context_full_extraction": 1, "context_event_judgment": 1}, onDemandRecordedCalls(t, stored))
+	require.Equal(t, "precheck_hit", stored.ExtractionPath)
+	require.Equal(t, map[string]int{"context_extraction": 1, "context_event_judgment": 1}, onDemandRecordedCalls(t, stored))
 }
 
-func TestOnDemandFixedSegmentsMatchLegacyAndBothRounds(t *testing.T) {
+func TestOnDemandFixedSegmentsMatchLegacyForBothFocusModes(t *testing.T) {
 	for _, focused := range []bool{false, true} {
 		t.Run(fmt.Sprintf("focused_%v", focused), func(t *testing.T) {
 			db, ctx, svc, _ := onDemandFixture(t)
@@ -286,17 +290,11 @@ func TestOnDemandFixedSegmentsMatchLegacyAndBothRounds(t *testing.T) {
 				require.LessOrEqual(t, record.RequestTokenEstimate, baselineRecords[i].RequestTokenEstimate)
 			}
 			if focused {
-				require.Len(t, second, len(first))
-				for i, record := range second {
-					require.Equal(t, first[i].Body, record.Body)
-					require.Equal(t, first[i].Segment, record.Segment)
-					require.Equal(t, first[i].TotalSegments, record.TotalSegments)
-					require.Equal(t, first[i].ReservedOutputTokens, record.ReservedOutputTokens)
-					require.LessOrEqual(t, record.RequestTokenEstimate, baselineRecords[i].RequestTokenEstimate, "the reused full-window plan must also fit the supplement prompt")
+				for _, record := range first {
+					require.Equal(t, []string{"entities", "events", "facts"}, record.ExpectedOutputKeys)
 				}
-			} else {
-				require.Empty(t, second)
 			}
+			require.Empty(t, second, "direct focus names use one extraction request for each segment")
 			stored := onDemandEvidence(t, db, k.ID)
 			require.Equal(t, legacyPlan.Total, stored.TotalSegments)
 			require.Equal(t, legacyPlan.Processed, stored.ProcessedSegments)
@@ -374,11 +372,11 @@ func TestOnDemandPromptCostComparison(t *testing.T) {
 	require.NoError(t, svc.ProcessMessage(ctx, focused, onDemandBody))
 	require.Len(t, baseline, 1)
 	require.Len(t, outside, 1)
-	require.Len(t, inside, 2)
+	require.Len(t, inside, 1)
 	require.Less(t, outside[0].RequestBytes, baseline[0].RequestBytes)
 	require.Less(t, outside[0].OutputBytes, baseline[0].OutputBytes)
-	require.Less(t, inside[0].RequestBytes+inside[1].RequestBytes, 2*baseline[0].RequestBytes)
-	require.LessOrEqual(t, inside[0].OutputBytes+inside[1].OutputBytes, baseline[0].OutputBytes+16, "split array envelopes add only a few bytes, with no repeated objects or template facts")
+	require.Equal(t, baseline[0].SystemBytes, inside[0].SystemBytes)
+	require.Equal(t, baseline[0].OutputBytes, inside[0].OutputBytes)
 	totalCalls := func(calls map[string]int) int {
 		total := 0
 		for _, count := range calls {
@@ -390,7 +388,7 @@ func TestOnDemandPromptCostComparison(t *testing.T) {
 	insideCalls := onDemandRecordedCalls(t, onDemandEvidence(t, db, focused.ID))
 	require.Equal(t, 2, totalCalls(baselineModel.calls))
 	require.Equal(t, 1, totalCalls(outsideCalls))
-	require.Equal(t, 3, totalCalls(insideCalls))
+	require.Equal(t, 2, totalCalls(insideCalls))
 	comparison := map[string]any{
 		"fixture_body":        onDemandBody,
 		"measurement":         "UTF-8 byte counts of recorded system and user prompts and source-matched fixture responses; conservative token estimate uses the existing P3 estimator, not provider billing tokens",
@@ -403,7 +401,7 @@ func TestOnDemandPromptCostComparison(t *testing.T) {
 	encoded, err := json.MarshalIndent(comparison, "", "  ")
 	require.NoError(t, err)
 	t.Log(string(encoded))
-	if destination := os.Getenv("RELIQUARY_ISSUE06_FIX_COST_PATH"); destination != "" {
+	if destination := os.Getenv("RELIQUARY_ISSUE07_PRECHECK_COST_PATH"); destination != "" {
 		require.NoError(t, os.MkdirAll(filepath.Dir(destination), 0755))
 		require.NoError(t, os.WriteFile(destination, append(encoded, '\n'), 0644))
 	}

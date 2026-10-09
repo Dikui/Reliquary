@@ -41,6 +41,7 @@ type AsynqTaskParams struct {
 	KnowledgeAutoTag     interfaces.TaskHandler `name:"knowledgeAutoTag"`
 	KnowledgeContext     *service.KnowledgeContextWorker
 	ContextNameEmbedding *service.ContextNameEmbeddingRebuilder
+	ContextBackfill      *service.KnowledgeContextBackfillService
 	KnowledgeWorkflow    *service.KnowledgeWorkflowService
 	TemporaryDocument    interfaces.TemporaryDocumentService
 	DeadLetterRepo       interfaces.TaskDeadLetterRepository
@@ -261,6 +262,7 @@ func RunAsynqServer(params AsynqTaskParams) *asynq.ServeMux {
 	mux.HandleFunc(types.TypeKnowledgePostProcess, params.KnowledgePostProcess.Handle)
 	mux.HandleFunc(types.TypeKnowledgeAutoTag, params.KnowledgeAutoTag.Handle)
 	mux.HandleFunc(types.TypeKnowledgeContext, params.KnowledgeContext.Handle)
+	mux.HandleFunc(types.TypeKnowledgeContextBackfill, params.ContextBackfill.Handle)
 	mux.HandleFunc(types.TypeContextNameEmbeddingRebuild, params.ContextNameEmbedding.Handle)
 	mux.HandleFunc(service.TypeKnowledgeWorkflowRun, params.KnowledgeWorkflow.Handle)
 

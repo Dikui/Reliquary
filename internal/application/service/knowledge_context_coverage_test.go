@@ -27,7 +27,7 @@ func TestTemplateOnlyCoverageAcrossQueryScopes(t *testing.T) {
 		id := fmt.Sprintf("coverage-source-%d", index)
 		k := p3Message(t, db, id, "Acme and Other.")
 		require.NoError(t, db.Model(k).Update("knowledge_base_id", kbID).Error)
-		e := types.KnowledgeEvidence{ID: id, TenantID: 1, KnowledgeBaseID: kbID, KnowledgeID: id, Version: 1,
+		e := types.KnowledgeEvidence{ID: id, TenantID: 1, KnowledgeBaseID: kbID, KnowledgeID: id, Version: 2,
 			BodyHash: strings.Repeat("a", 64), Body: "Acme and Other.", PublishedAt: "2026-10-07", Status: types.KnowledgeEvidenceCurrent,
 			ExtractionMode: types.KnowledgeExtractionTemplateOnly, ExtractionStatus: types.KnowledgeExtractionComplete}
 		require.NoError(t, db.Create(&e).Error)
@@ -36,7 +36,7 @@ func TestTemplateOnlyCoverageAcrossQueryScopes(t *testing.T) {
 		}
 	}
 	// Historical versions and multiple object associations still count one message.
-	history := types.KnowledgeEvidence{ID: "coverage-history", TenantID: 1, KnowledgeBaseID: "p3-kb", KnowledgeID: "coverage-source-0", Version: 2,
+	history := types.KnowledgeEvidence{ID: "coverage-history", TenantID: 1, KnowledgeBaseID: "p3-kb", KnowledgeID: "coverage-source-0", Version: 1,
 		BodyHash: strings.Repeat("b", 64), Body: "Acme.", PublishedAt: "2026-10-07", Status: types.KnowledgeEvidenceSuperseded,
 		ExtractionMode: types.KnowledgeExtractionTemplateOnly, ExtractionStatus: types.KnowledgeExtractionComplete}
 	require.NoError(t, db.Create(&history).Error)
@@ -64,12 +64,13 @@ func TestTemplateOnlyCoverageAcrossQueryScopes(t *testing.T) {
 	require.Empty(t, result.Facts)
 	require.Empty(t, result.Events)
 	require.NoError(t, db.Create(&types.KnowledgeEntityAlias{ID: "private-alias", TenantID: 1, EntityID: "acme", EntityType: "company", Alias: "Private identity", NormalizedAlias: "private identity"}).Error)
-	// Disabled messages and failed extraction are not described as extracted.
+	// Failed latest evidence is still a timeline gap; disabled sources are hidden.
 	require.NoError(t, db.Model(&types.Knowledge{}).Where("id = ?", "coverage-source-1").Update("enable_status", "disabled").Error)
 	require.NoError(t, db.Model(&types.KnowledgeEvidence{}).Where("id = ?", "coverage-source-2").Update("extraction_status", types.KnowledgeExtractionFailed).Error)
 	result, err = svc.Query(ctx, "", types.KnowledgeContextQuery{Scope: "team", EntityID: "acme"})
 	require.NoError(t, err)
-	require.Equal(t, 1, result.TemplateOnlyMessageCount)
+	require.Equal(t, 2, result.TemplateOnlyMessageCount)
+	require.Equal(t, contextEventsCoverageNotice, result.EventsCoverageNotice)
 	until := time.Date(2026, 10, 6, 23, 59, 59, 0, time.UTC)
 	result, err = svc.Query(ctx, "", types.KnowledgeContextQuery{Scope: "team", EntityID: "acme", Until: &until})
 	require.NoError(t, err)

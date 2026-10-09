@@ -154,6 +154,9 @@ func extractContextSegmentsUsingPlan(ctx context.Context, model chat.Chat, evide
 	prompt := contextExtractionPrompt(domain, mode)
 	metadata := map[string]any{"title": evidence.Title, "published_at": evidence.PublishedAt,
 		"author": evidence.Author, "publisher": evidence.Publisher, "original_url": evidence.OriginalURL}
+	if mode == contextExtractionSupplement {
+		metadata["verified_entities"] = contextSupplementObjects(verifiedEntities)
+	}
 	plan.Processed = 0
 	var combined contextExtraction
 	for i, segment := range plan.Segments {
@@ -225,7 +228,28 @@ func contextSupplementExtractionPrompt(domain *types.KnowledgeDomain) string {
 		"Use the domain template's canonical field and relation keys for equivalent source labels. Preserve source labels in source_predicate. Fields outside the template remain open fields under their original source names.",
 		"Exclude the following template fields and relations, including equivalent labels and aliases. Preserve source labels in source_predicate. Return other fields under their original source names.", 1)
 	return knowledgeContextSupplementExtractionPrompt + "\n" + knowledgeContextSupplementSourceKindPrompt + "\n" + domainPrompt +
-		"\nReturn only facts outside this template and events; object recognition and template facts are already complete."
+		"\nReturn only facts outside this template and events. Use verified_entities.allowed_mentions as endpoints, choosing a name in the quote."
+}
+
+func contextSupplementMentions(entity contextExtractedEntity) []string {
+	names := []string{entity.Mention}
+	// Intake reuses only the first round's quoted mentions. Historical backfill
+	// reconstructs identities without those identifying quotes and uses all
+	// stored names, while each returned assertion still needs its own quote.
+	if entity.Quote == "" {
+		names = append(names, entity.Canonical)
+		names = append(names, entity.Aliases...)
+	}
+	return uniqueContextIDs(names)
+}
+
+func contextSupplementObjects(entities []contextExtractedEntity) []map[string]any {
+	objects := make([]map[string]any, 0, len(entities))
+	for _, entity := range entities {
+		objects = append(objects, map[string]any{"mention": entity.Mention, "canonical_name": entity.Canonical,
+			"aliases": entity.Aliases, "allowed_mentions": contextSupplementMentions(entity)})
+	}
+	return objects
 }
 
 // Enforce the extraction boundary even when a provider returns an open field.

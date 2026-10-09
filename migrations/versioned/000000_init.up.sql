@@ -635,6 +635,9 @@ CREATE TABLE public.knowledge_context_evidence (
     status character varying(16) DEFAULT 'current'::character varying NOT NULL,
     extraction_status character varying(16) DEFAULT 'pending'::character varying NOT NULL,
     extraction_mode character varying(16) DEFAULT 'full' NOT NULL CHECK (extraction_mode IN ('template_only', 'full')),
+    extraction_path character varying(32) DEFAULT '' NOT NULL,
+    backfilled_at timestamp with time zone,
+    backfill_template_updated_at timestamp with time zone,
     extraction_coverage character varying(16) DEFAULT 'complete' NOT NULL CHECK (extraction_coverage IN ('complete', 'partial')),
     processed_segments integer DEFAULT 0 NOT NULL,
     total_segments integer DEFAULT 0 NOT NULL,
@@ -2465,6 +2468,37 @@ CREATE TABLE public.knowledge_context_evidence_entities (
     FOREIGN KEY (tenant_id, entity_id) REFERENCES public.knowledge_context_entities (tenant_id, id) ON DELETE CASCADE
 );
 CREATE INDEX idx_kcevidence_entity ON public.knowledge_context_evidence_entities (tenant_id, entity_id, evidence_id);
+
+CREATE TABLE public.knowledge_context_backfill_batches (
+    id character varying(36) PRIMARY KEY,
+    tenant_id bigint NOT NULL,
+    entity_id character varying(36) DEFAULT '' NOT NULL,
+    topic_id character varying(36) DEFAULT '' NOT NULL,
+    message_count integer DEFAULT 0 NOT NULL,
+    success_count integer DEFAULT 0 NOT NULL,
+    failure_count integer DEFAULT 0 NOT NULL,
+    status character varying(32) DEFAULT 'pending' NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    completed_at timestamp with time zone,
+    CHECK ((entity_id <> '') <> (topic_id <> ''))
+);
+CREATE INDEX idx_kcbb_scope ON public.knowledge_context_backfill_batches (tenant_id, entity_id, topic_id, created_at DESC);
+
+CREATE TABLE public.knowledge_context_backfill_items (
+    id character varying(36) PRIMARY KEY,
+    tenant_id bigint NOT NULL,
+    batch_id character varying(36) NOT NULL REFERENCES public.knowledge_context_backfill_batches(id) ON DELETE CASCADE,
+    knowledge_id character varying(36) NOT NULL,
+    evidence_id character varying(36) NOT NULL,
+    status character varying(16) DEFAULT 'pending' NOT NULL,
+    error text DEFAULT '' NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    UNIQUE (batch_id, evidence_id)
+);
+CREATE INDEX idx_kcbi_batch ON public.knowledge_context_backfill_items (tenant_id, batch_id);
+CREATE INDEX idx_kcbi_evidence_active ON public.knowledge_context_backfill_items (tenant_id, evidence_id) WHERE status IN ('pending','processing');
 
 CREATE TABLE public.knowledge_context_entity_stars (
     tenant_id bigint NOT NULL,

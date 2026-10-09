@@ -5,6 +5,9 @@ import { createRequire } from 'node:module'
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc'
 import { renderToString } from '@vue/server-renderer'
 import { createSSRApp, defineComponent, h, nextTick, onServerPrefetch } from 'vue'
+import { createI18n } from 'vue-i18n'
+import zhCN from '../../../i18n/locales/zh-CN'
+import enUS from '../../../i18n/locales/en-US'
 import ts from 'typescript'
 import * as display from './knowledgeContextDisplay'
 import * as scope from '../../../api/knowledge-context-scope'
@@ -45,7 +48,8 @@ type Scenario = (state: any, beforeUnmount: () => void) => Promise<void>
 async function renderWorkbench({
   result = {}, scenario = async () => {}, status = { pending_count: 1, latest_run: null }, workflows = {},
   focus = {}, focusApi = {},
-}: { result?: object; scenario?: Scenario; status?: object; workflows?: object; focus?: Partial<KnowledgeFocusScope>; focusApi?: object } = {}) {
+  locale,
+}: { result?: object; scenario?: Scenario; status?: object; workflows?: object; focus?: Partial<KnowledgeFocusScope>; focusApi?: object; locale?: 'zh-CN' | 'en-US' } = {}) {
   const requests = { status: 0, rebuild: 0, query: [] as any[], snapshots: [] as string[], focus: [] as object[], stars: [] as Array<{ kind: string; id: string; starred: boolean }> }
   const cleanupCallbacks: Array<() => void> = []
   const envelope = (data: unknown) => Promise.resolve({ success: true, data })
@@ -76,13 +80,16 @@ async function renderWorkbench({
     ...focusApi,
   }
   const emptyComponent = defineComponent({ setup: () => () => null })
+  const i18n = locale ? createI18n({ legacy: false, locale, messages: { 'zh-CN': zhCN, 'en-US': enUS } }) : null
   const reportComponent = reportMarkdownTestComponent()
   const modules: Record<string, unknown> = {
     vue: { ...require('vue'), onBeforeUnmount: (callback: () => void) => { cleanupCallbacks.push(callback) } },
     'tdesign-vue-next': { MessagePlugin: { success() {} } },
-    'vue-i18n': { useI18n: () => ({ t: (key: string, params?: object) => params ? `${key} ${JSON.stringify(params)}` : key }) },
+    'vue-i18n': { useI18n: () => i18n?.global || ({ t: (key: string, params?: object) => params ? `${key} ${JSON.stringify(params)}` : key }) },
     './MergeSuggestions.vue': { __esModule: true, default: emptyComponent },
     './EvidenceExtractionDetails.vue': { __esModule: true, default: emptyComponent },
+    './HistoryBackfill.vue': { __esModule: true, default: emptyComponent },
+    './EventsCoverageNotice.vue': { __esModule: true, default: defineComponent({ props: ['count', 'loading'], setup: props => () => h('div', { class: 'events-coverage-notice' }, `knowledgeWorkbench.events.coverageNotice ${props.loading ? 'knowledgeWorkbench.events.countLoading' : props.count === null ? 'knowledgeWorkbench.events.countUnavailable' : `knowledgeWorkbench.events.templateOnlyCount ${props.count}`}`) }) },
     './RepostSources.vue': { __esModule: true, default: emptyComponent },
     './ReportMarkdown.vue': { __esModule: true, default: reportComponent },
     './knowledgeContextDisplay': display,
@@ -181,6 +188,97 @@ test('object details use the same event evidence filter', async () => {
   assert.doesNotMatch(html, /Source unrelated/)
 })
 
+for (const queryScope of ['knowledge_base', 'domain', 'all'] as const) {
+  test(`${queryScope} event timeline gets a server count and displays coverage even when empty`, async () => {
+    const { html, requests } = await renderWorkbench({
+      result: { template_only_message_count: 7, entities: [], facts: [], events: [], evidence: [], attention: [] },
+      scenario: async state => { state.queryScope.value = queryScope; await nextTick(); await state.selectSection('events') },
+    })
+    assert.match(html, /knowledgeWorkbench.events.coverageNotice/)
+    assert.match(html, /knowledgeWorkbench.events.templateOnlyCount 7/)
+    assert.equal(requests.query.at(-1).scope, queryScope)
+    assert.equal(requests.query.at(-1).limit, 1, 'the full count is independent of returned records')
+  })
+}
+
+test('a topic opens its profile in the existing workbench without changing routes', async () => {
+  const topic = { id: 'tag-a', name: 'AI releases', kind: 'topic', knowledge_base_id: 'kb-a' }
+  const { state } = await renderWorkbench({
+    focus: { starred_topics: [topic] },
+    scenario: async state => { await state.selectSection('focus'); state.openFocusTopic(topic) },
+  })
+  assert.equal(state.topicProfileVisible.value, true)
+  assert.equal(state.selectedTopic.value.id, topic.id)
+  assert.equal(state.isTopicStarred(topic.id), true)
+})
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: starring an entity reveals backfill at the same list row and opens its profile`, async () => {
+    const { html, state, requests } = await renderWorkbench({
+      locale, result: { entities: [entity], facts: [], events: [], evidence: [], attention: [] },
+      scenario: async state => {
+        await state.selectSection('entities')
+        await state.toggleFocusStar('entity', entity)
+        await state.openFocusEntity(entity)
+      },
+    })
+    const row = html.match(/<div class="entity-list__row">([\s\S]*?)<\/div><\/div>/)?.[1]
+    assert.ok(row)
+    assert.match(row, /class="focus-backfill-entry"/)
+    assert.match(row, locale === 'zh-CN' ? /补抽历史消息/ : /Backfill historical messages/)
+    assert.equal(state.selectedEntity.value.id, entity.id)
+    assert.equal(state.activeSection.value, 'entities')
+    assert.equal(requests.rebuild, 0)
+  })
+
+  test(`${locale}: starring a topic reveals backfill on the same topic card and opens its profile`, async () => {
+    const topic = { id: 'tag-a', name: 'AI releases', kind: 'topic', knowledge_base_id: 'kb-a' }
+    const { html, state, requests } = await renderWorkbench({
+      locale, focus: { available_topics: [topic] },
+      scenario: async state => {
+        await state.selectSection('focus')
+        await state.toggleFocusStar('topic', topic)
+        state.openFocusTopic(topic)
+      },
+    })
+    const card = html.match(/<div class="focus-topic">([\s\S]*?)<\/div><\/div>/)?.[1]
+    assert.ok(card)
+    assert.match(card, /class="focus-backfill-entry"/)
+    assert.match(card, locale === 'zh-CN' ? /补抽历史消息/ : /Backfill historical messages/)
+    assert.equal(state.topicProfileVisible.value, true)
+    assert.equal(state.selectedTopic.value.id, topic.id)
+    assert.equal(requests.rebuild, 0)
+  })
+}
+
+test('an event count HTTP failure shows unavailable instead of a zero count', async () => {
+  const { html, state } = await renderWorkbench({
+    focusApi: { queryKnowledgeContext: () => Promise.reject({ status: 500, message: 'Coverage query unavailable' }) },
+    scenario: async state => { await state.selectSection('events') },
+  })
+  assert.equal(state.eventsTemplateOnlyCount.value, null)
+  assert.match(html, /knowledgeWorkbench.events.countUnavailable/)
+  assert.doesNotMatch(html, /knowledgeWorkbench.events.templateOnlyCount 0/)
+  assert.equal(state.loadError.value, 'Coverage query unavailable')
+})
+
+test('refreshing an event count clears its previous value until the server responds', async () => {
+  let finish!: (value: unknown) => void
+  const { state } = await renderWorkbench({
+    focusApi: { queryKnowledgeContext: () => new Promise(resolve => { finish = resolve }) },
+    scenario: async state => {
+      state.eventsTemplateOnlyCount.value = 3
+      const pending = state.loadEvents()
+      assert.equal(state.eventsTemplateOnlyCount.value, null)
+      assert.equal(state.eventsLoading.value, true)
+      finish({ success: true, data: { template_only_message_count: 0 } })
+      await pending
+      assert.equal(state.eventsTemplateOnlyCount.value, 0)
+    },
+  })
+  assert.equal(state.eventsTemplateOnlyCount.value, 0)
+})
+
 test('an event with null evidence_ids does not inherit unrelated query evidence', async () => {
   const { html } = await renderWorkbench({
     result: { events: [{ ...event, evidence_ids: null }], evidence, attention: null },
@@ -245,7 +343,8 @@ test('object list and details expose the same accessible star state and preserve
   assert.equal(requests.snapshots.length, 0)
   assert.equal((html.match(/aria-pressed="true"/g) || []).length, 2)
   assert.match(html, /knowledgeWorkbench.focus.unstarNamed/)
-  assert.match(html, /knowledgeWorkbench.query.templateOnlyMessages \{&quot;count&quot;:4\}/)
+  assert.match(html, /knowledgeWorkbench.events.coverageNotice/)
+  assert.match(html, /knowledgeWorkbench.events.templateOnlyCount 4/)
 })
 
 test('removing an entity star refreshes focus without querying or rebuilding historical sources', async () => {
@@ -576,3 +675,49 @@ test('enabled workflows still allow resuming a paused run', async () => {
   assert.equal(state.selectedRun.value.status, 'running')
   assert.equal(state.canResumeRun.value, false)
 })
+
+test('backfill completion reloads cached evidence, events, coverage and the selected object profile', async () => {
+  const calls = { evidence: 0, events: 0, profile: 0 }
+  const { state } = await renderWorkbench({
+    result: { template_only_message_count: 0 },
+    focusApi: {
+      listKnowledgeContextEvidence: () => { calls.evidence++; return Promise.resolve({ success: true, data: [{ ...evidence[0], extraction_mode: 'full' }] }) },
+      listKnowledgeContextEvents: () => { calls.events++; return Promise.resolve({ success: true, data: [event] }) },
+      getGlobalKnowledgeEntityContext: () => { calls.profile++; return Promise.resolve({ success: true, data: { entities: [entity], template_only_message_count: 0 } }) },
+    },
+    scenario: async state => {
+      await state.selectEntity(entity)
+      state.evidence.value = [{ ...evidence[0], extraction_mode: 'template_only' }]
+      state.eventsTemplateOnlyCount.value = 3
+      state.eventContexts.value = { old: {} }
+      const before = { ...calls }
+      await state.onBackfillChanged()
+      assert.deepEqual(calls, { evidence: before.evidence + 1, events: before.events + 1, profile: before.profile + 1 })
+      assert.equal(state.evidence.value[0].extraction_mode, 'full')
+      assert.equal(state.events.value[0].id, event.id)
+      assert.equal(state.eventsTemplateOnlyCount.value, 0)
+      assert.equal(state.entityContext.value.template_only_message_count, 0)
+      assert.deepEqual(state.eventContexts.value, {})
+    },
+  })
+  assert.ok(state.entityContext.value)
+  assert.equal((source.match(/@changed="onBackfillChanged"/g) || []).length, 4, 'all object and topic entry points subscribe')
+})
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: disabled workflows cannot run and show the enable-first instruction`, async () => {
+    let runs = 0
+    const { html } = await renderWorkbench({ locale,
+      workflows: { runKnowledgeWorkflow: () => { runs++; return Promise.reject(new Error('must not run')) } },
+      scenario: async state => {
+        const workflow = { id: 'disabled-workflow', name: 'Disabled workflow', enabled: false, schedule: {}, steps: [] }
+        state.workflows.value = [workflow]
+        state.activeSection.value = 'workflows'
+        await state.runWorkflow(workflow)
+      },
+    })
+    assert.equal(runs, 0)
+    assert.match(html, /<div(?=[^>]*data-disabled="true")(?=[^>]*title="[^"]*")[^>]*>(?:\s|<!--.*?-->)*(?:立即运行|Run now)(?:\s|<!--.*?-->)*<\/div>/)
+    assert.match(html, locale === 'zh-CN' ? /工作流已停用，请先启用后再运行/ : /This workflow is disabled\. Enable it before running/)
+  })
+}

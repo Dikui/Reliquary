@@ -4,7 +4,10 @@ import { createRequire } from 'node:module'
 import test from 'node:test'
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc'
 import { renderToString } from '@vue/server-renderer'
-import { createSSRApp, defineComponent, h } from 'vue'
+import { createSSRApp, defineComponent, h, ref } from 'vue'
+import { createI18n } from 'vue-i18n'
+import zhCN from '../../../i18n/locales/zh-CN'
+import enUS from '../../../i18n/locales/en-US'
 import ts from 'typescript'
 import { shouldShowExtractionCoverage } from '../../../utils/extractionCoverage'
 
@@ -19,12 +22,13 @@ const template = compileTemplate({
 })
 assert.deepEqual(template.errors, [])
 
-async function renderDetails(evidence: object, compact = false) {
+async function renderDetails(evidence: object, compact = false, locale?: 'zh-CN' | 'en-US') {
   const emptyComponent = defineComponent({ setup: () => () => null })
+  const i18n = locale ? createI18n({ legacy: false, locale, messages: { 'zh-CN': zhCN, 'en-US': enUS } }) : null
   const modules: Record<string, unknown> = {
     '@/utils/extractionCoverage': { shouldShowExtractionCoverage },
     '@/components/ModelCallSummary.vue': { __esModule: true, default: emptyComponent },
-    'vue-i18n': { useI18n: () => ({ t: (key: string, params?: object) => params ? `${key} ${JSON.stringify(params)}` : key }) },
+    'vue-i18n': { useI18n: () => i18n?.global || ({ locale: ref('en-US'), t: (key: string, params?: object) => params ? `${key} ${JSON.stringify(params)}` : key }) },
   }
   function evaluate(code: string) {
     const module = { exports: {} as any }
@@ -63,3 +67,16 @@ test('compact evidence cards show the mode without the expanded explanation', as
   assert.match(html, /extractionModes.template_only/)
   assert.doesNotMatch(html, /knowledgeWorkbench.evidence.templateOnlyHint/)
 })
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  for (const extraction_path of ['precheck_hit', 'precheck_miss_supplemented', 'precheck_miss']) {
+    test(`${locale}: evidence details explain ${extraction_path} and preserve backfill metadata`, async () => {
+      const html = await renderDetails({ extraction_mode: 'full', extraction_path, backfilled_at: '2026-10-09T12:00:00Z', backfill_template_updated_at: '2026-10-08T12:00:00Z' }, false, locale)
+      assert.match(html, locale === 'zh-CN' ? /本次抽取路径/ : /Extraction path/)
+      assert.match(html, locale === 'zh-CN' ? /补抽时间/ : /Backfilled at/)
+      assert.match(html, locale === 'zh-CN' ? /补抽所用领域模板更新时间/ : /Domain template updated at for backfill/)
+      assert.doesNotMatch(html, /knowledgeWorkbench\./)
+      assert.match(html, /2026/)
+    })
+  }
+}

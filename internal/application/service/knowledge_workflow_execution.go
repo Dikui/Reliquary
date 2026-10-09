@@ -76,7 +76,7 @@ func (s *KnowledgeWorkflowService) Run(ctx context.Context, kbID, workflowID, tr
 		return nil, err
 	}
 	if !wf.Enabled {
-		return nil, fmt.Errorf("workflow is disabled")
+		return nil, ErrWorkflowDisabled
 	}
 	if trigger == "" {
 		trigger = "manual"
@@ -769,9 +769,19 @@ func (s *KnowledgeWorkflowService) executeReport(ctx context.Context, wf *types.
 		return workflowStepOutput{}, err
 	}
 	material, citations := buildWorkflowReportMaterial(outputs, timeFrom, timeTo, location)
+	if err := s.refreshReportEventCoverage(ctx, wf, &material); err != nil {
+		return workflowStepOutput{}, err
+	}
+	if len(material.EventCoverage) == 0 {
+		count, countErr := s.reportSourceTemplateOnlyCount(ctx, citations)
+		if countErr != nil {
+			return workflowStepOutput{}, countErr
+		}
+		material.EventCoverage = append(material.EventCoverage, workflowReportEventCoverage{StepID: "report_sources", TemplateOnlyMessageCount: count})
+	}
 	if len(citations) == 0 {
 		if material.ExcludedMissingPublishedAtCount > 0 {
-			return s.saveWorkflowReport(ctx, wf, run, step, cfg.Title, "没有可引用的已知发布时间来源。", citations, timeFrom, timeTo, material.ExcludedMissingPublishedAtCount)
+			return s.saveWorkflowReport(ctx, wf, run, step, cfg.Title, "没有可引用的已知发布时间来源。"+workflowReportCoverageMarkdown(material), citations, timeFrom, timeTo, material.ExcludedMissingPublishedAtCount)
 		}
 		return workflowStepOutput{}, errors.New("report generation requires approved, source-linked evidence")
 	}
@@ -815,7 +825,7 @@ func (s *KnowledgeWorkflowService) executeReport(ctx context.Context, wf *types.
 			return workflowStepOutput{}, fmt.Errorf("report contains unknown citation [%s]", marker[1])
 		}
 	}
-	return s.saveWorkflowReport(ctx, wf, run, step, cfg.Title, strings.TrimSpace(response.Content), citations, timeFrom, timeTo, material.ExcludedMissingPublishedAtCount)
+	return s.saveWorkflowReport(ctx, wf, run, step, cfg.Title, strings.TrimSpace(response.Content)+workflowReportCoverageMarkdown(material), citations, timeFrom, timeTo, material.ExcludedMissingPublishedAtCount)
 }
 
 func workflowReportOutput(report types.KnowledgeWorkflowReport) workflowStepOutput {

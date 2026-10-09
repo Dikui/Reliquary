@@ -27,13 +27,20 @@ type workflowReportStructure struct {
 	Events   []map[string]any        `json:"events"`
 }
 
+type workflowReportEventCoverage struct {
+	StepID                   string `json:"step_id"`
+	TemplateOnlyMessageCount int    `json:"template_only_message_count"`
+}
+
 type workflowReportMaterial struct {
-	ExcludedMissingPublishedAtCount int                       `json:"excluded_missing_published_at_count"`
-	TimeFrom                        *time.Time                `json:"time_from,omitempty"`
-	TimeTo                          *time.Time                `json:"time_to,omitempty"`
-	Evidence                        []workflowReportEvidence  `json:"evidence"`
-	Structured                      []workflowReportStructure `json:"structured"`
-	Coverage                        string                    `json:"coverage"`
+	ExcludedMissingPublishedAtCount int                           `json:"excluded_missing_published_at_count"`
+	TimeFrom                        *time.Time                    `json:"time_from,omitempty"`
+	TimeTo                          *time.Time                    `json:"time_to,omitempty"`
+	Evidence                        []workflowReportEvidence      `json:"evidence"`
+	Structured                      []workflowReportStructure     `json:"structured"`
+	Coverage                        string                        `json:"coverage"`
+	EventsCoverageNotice            string                        `json:"events_coverage_notice"`
+	EventCoverage                   []workflowReportEventCoverage `json:"event_coverage"`
 }
 
 func workflowEvidenceRole(citation types.KnowledgeWorkflowCitation, from, to *time.Time, loc *time.Location) string {
@@ -56,7 +63,7 @@ func workflowEvidenceRole(citation types.KnowledgeWorkflowCitation, from, to *ti
 // Keep the two input contracts explicit. Only evidence with assigned citations
 // may enter structured output; raw bodies and arbitrary step data are excluded.
 func buildWorkflowReportMaterial(outputs map[string]workflowStepOutput, from, to *time.Time, loc *time.Location) (workflowReportMaterial, []types.KnowledgeWorkflowCitation) {
-	material := workflowReportMaterial{TimeFrom: from, TimeTo: to, Evidence: []workflowReportEvidence{}, Structured: []workflowReportStructure{}, Coverage: "Selected workflow results; pagination and extraction gaps may limit coverage. Not an exhaustive census."}
+	material := workflowReportMaterial{TimeFrom: from, TimeTo: to, Evidence: []workflowReportEvidence{}, Structured: []workflowReportStructure{}, Coverage: "Selected workflow results; pagination and extraction gaps may limit coverage. Not an exhaustive census.", EventsCoverageNotice: contextEventsCoverageNotice, EventCoverage: []workflowReportEventCoverage{}}
 	all := gatherWorkflowCitations(outputs)
 	missing := map[string]bool{}
 	if from != nil || to != nil {
@@ -109,6 +116,9 @@ func buildWorkflowReportMaterial(outputs map[string]workflowStepOutput, from, to
 		var contextResult types.KnowledgeContextResult
 		if json.Unmarshal(encoded, &contextResult) != nil {
 			continue
+		}
+		if contextResult.Entities != nil || contextResult.Facts != nil || contextResult.Events != nil || contextResult.Evidence != nil {
+			material.EventCoverage = append(material.EventCoverage, workflowReportEventCoverage{StepID: id, TemplateOnlyMessageCount: contextResult.TemplateOnlyMessageCount})
 		}
 		for _, sourceID := range contextResult.PublishedAtMissingSourceIDs {
 			missing[sourceID] = true
@@ -168,6 +178,20 @@ func buildWorkflowReportMaterial(outputs map[string]workflowStepOutput, from, to
 	}
 	material.ExcludedMissingPublishedAtCount = len(missing)
 	return material, citations
+}
+
+// Persist the coverage statement independently of model compliance. Counts are
+// per query because overlapping query scopes must not be added together.
+func workflowReportCoverageMarkdown(material workflowReportMaterial) string {
+	var text strings.Builder
+	text.WriteString("\n\n事件与基于事件的统计只包含收录时命中关注范围的消息。历史消息可通过手动补抽补齐；该说明不保证时间线完整。\n")
+	for _, coverage := range material.EventCoverage {
+		fmt.Fprintf(&text, "\n相关的最新证据版本仍为 template_only 的消息数：%d（查询步骤 %s）。\n", coverage.TemplateOnlyMessageCount, coverage.StepID)
+	}
+	if len(material.EventCoverage) > 1 {
+		text.WriteString("\n各查询步骤的消息可能重叠，以上计数不能相加。\n")
+	}
+	return text.String()
 }
 
 func workflowMissingSourceID(citation types.KnowledgeWorkflowCitation) string {

@@ -198,3 +198,64 @@ func swaggerInteger(value any) int {
 		return 0
 	}
 }
+
+func TestFocusPrecheckAndBackfillContract(t *testing.T) {
+	for _, tt := range swaggerDocuments() {
+		t.Run(tt.name, func(t *testing.T) {
+			var spec struct {
+				Paths       map[string]map[string]any `json:"paths" yaml:"paths"`
+				Definitions map[string]struct {
+					Properties map[string]any `json:"properties" yaml:"properties"`
+				} `json:"definitions" yaml:"definitions"`
+			}
+			if err := tt.parse(tt.loadSpec(t), &spec); err != nil {
+				t.Fatal(err)
+			}
+			for path, method := range map[string]string{
+				"/knowledge-context/backfill/estimate":           "get",
+				"/knowledge-context/backfill":                    "post",
+				"/knowledge-context/backfill/batches":            "get",
+				"/knowledge-context/backfill/batches/{batch_id}": "get",
+			} {
+				if _, ok := spec.Paths[path][method]; !ok {
+					t.Errorf("missing %s %s", method, path)
+				}
+			}
+			for definition, fields := range map[string][]string{
+				"reliquary_internal_types.KnowledgeEvidence":                {"extraction_path", "backfilled_at", "backfill_template_updated_at"},
+				"reliquary_internal_types.KnowledgeContextResult":           {"template_only_message_count", "events_coverage_notice"},
+				"reliquary_internal_types.KnowledgeContextBackfillEstimate": {"pending_message_count", "batch_message_count", "remaining_message_count", "estimated_model_calls", "template_only_message_count"},
+				"reliquary_internal_types.KnowledgeContextBackfillBatch":    {"entity_id", "topic_id", "message_count", "success_count", "failure_count", "status"},
+			} {
+				for _, field := range fields {
+					if _, ok := spec.Definitions[definition].Properties[field]; !ok {
+						t.Errorf("missing %s.%s", definition, field)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestWorkflowDisabledConflictContract(t *testing.T) {
+	for _, tt := range swaggerDocuments() {
+		t.Run(tt.name, func(t *testing.T) {
+			var spec struct {
+				Paths map[string]map[string]struct {
+					Responses map[string]struct {
+						Description string `json:"description" yaml:"description"`
+					} `json:"responses" yaml:"responses"`
+				} `json:"paths" yaml:"paths"`
+			}
+			if err := tt.parse(tt.loadSpec(t), &spec); err != nil {
+				t.Fatal(err)
+			}
+			for _, path := range []string{"/knowledge-bases/{id}/workflows/{workflow_id}/run", "/knowledge-bases/{id}/workflows/runs/{run_id}/retry", "/knowledge-bases/{id}/workflows/runs/{run_id}/resume"} {
+				response, ok := spec.Paths[path]["post"].Responses["409"]
+				if !ok || !strings.Contains(response.Description, "Workflow disabled") {
+					t.Errorf("%s must document disabled workflow conflict: %+v", path, response)
+				}
+			}
+		})
+	}
+}

@@ -187,6 +187,7 @@ func TestKnowledgeWorkflowDisabledRunResumesSnapshotWithoutRepeatingSuccess(t *t
 	require.Equal(t, 1, kb.searchCalls)
 	_, err = svc.Resume(ctx, "kb", run.ID)
 	require.ErrorContains(t, err, "enable the workflow")
+	require.ErrorIs(t, err, ErrWorkflowDisabled)
 	require.NoError(t, db.Model(&types.KnowledgeWorkflow{}).Where("id = ?", wf.ID).Update("enabled", true).Error)
 	kb.afterSearch = nil
 	run, err = svc.Resume(ctx, "kb", run.ID)
@@ -243,6 +244,8 @@ func TestKnowledgeWorkflowReportRetriesPreserveSourceEvidence(t *testing.T) {
 
 	var report types.KnowledgeWorkflowReport
 	require.NoError(t, db.Where("run_id = ? AND step_id = ?", run.ID, "report").First(&report).Error)
+	require.Contains(t, report.Markdown, "只包含收录时命中关注范围的消息")
+	require.Contains(t, report.Markdown, "template_only 的消息数：1")
 	require.Len(t, report.Citations, 1)
 	require.Equal(t, "evidence", report.Citations[0].Kind)
 	require.NotEmpty(t, report.Citations[0].EvidenceID)

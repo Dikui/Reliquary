@@ -51,6 +51,9 @@ export interface KnowledgeEvidence {
   extraction_error?: string
   extraction_coverage?: 'complete' | 'partial'
   extraction_mode?: 'template_only' | 'full'
+  extraction_path?: 'precheck_hit' | 'precheck_miss_supplemented' | 'precheck_miss' | string
+  backfilled_at?: string
+  backfill_template_updated_at?: string
   processed_segments?: number
   total_segments?: number
   model_calls?: KnowledgeModelCall[]
@@ -140,6 +143,7 @@ export interface KnowledgeContextQuery extends KnowledgeContextScopeParams {
 
 export interface KnowledgeContextResult {
   template_only_message_count?: number
+  events_coverage_notice?: string
   excluded_missing_published_at_count?: number
   published_at_missing_source_ids?: string[]
   entities: KnowledgeEntity[]
@@ -308,3 +312,43 @@ export const getKnowledgeNameEmbeddingRebuildStatus = () =>
   get<KnowledgeContextEnvelope<KnowledgeNameEmbeddingRebuildStatus>>(nameEmbeddingRebuildPath)
 export const rebuildKnowledgeNameEmbeddings = () =>
   post<KnowledgeContextEnvelope<KnowledgeNameEmbeddingRebuildStatus>>(nameEmbeddingRebuildPath, {})
+
+export type KnowledgeBackfillTarget = { entity_id: string; topic_id?: never } | { topic_id: string; entity_id?: never }
+
+export interface KnowledgeBackfillEstimate {
+  template_only_message_count: number
+  pending_message_count: number
+  batch_message_count: number
+  remaining_message_count: number
+  estimated_model_calls: number
+  estimated_extraction_calls?: number
+  estimated_event_calls?: number
+  estimate_note?: string
+}
+
+export interface KnowledgeBackfillBatch {
+  id: string
+  entity_id?: string
+  topic_id?: string
+  message_count: number
+  success_count: number
+  failure_count: number
+  status: 'pending' | 'processing' | 'completed' | 'completed_with_failures' | 'failed' | string
+  created_at: string
+  updated_at: string
+  completed_at?: string
+  items?: Array<{ knowledge_id: string; evidence_id: string; status: string; error?: string }>
+}
+
+function backfillTargetQuery(target: KnowledgeBackfillTarget): string {
+  return new URLSearchParams(Object.entries(target).filter((entry): entry is [string, string] => typeof entry[1] === 'string')).toString()
+}
+const backfillPath = '/api/v1/knowledge-context/backfill'
+export const getKnowledgeBackfillEstimate = (target: KnowledgeBackfillTarget) =>
+  get<KnowledgeContextEnvelope<KnowledgeBackfillEstimate>>(`${backfillPath}/estimate?${backfillTargetQuery(target)}`)
+export const startKnowledgeBackfill = (target: KnowledgeBackfillTarget) =>
+  post<KnowledgeContextEnvelope<KnowledgeBackfillBatch>>(backfillPath, target)
+export const listKnowledgeBackfillBatches = (target: KnowledgeBackfillTarget) =>
+  get<KnowledgeContextEnvelope<KnowledgeBackfillBatch[]>>(`${backfillPath}/batches?${backfillTargetQuery(target)}`)
+export const getKnowledgeBackfillBatch = (batchId: string) =>
+  get<KnowledgeContextEnvelope<KnowledgeBackfillBatch>>(`${backfillPath}/batches/${encodeURIComponent(batchId)}`)

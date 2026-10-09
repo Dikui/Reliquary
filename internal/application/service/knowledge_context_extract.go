@@ -151,7 +151,19 @@ func (s *KnowledgeContextService) ProcessMessage(ctx context.Context, k *types.K
 	if err != nil {
 		return s.failContextExtraction(ctx, tenantID, evidence.ID, err)
 	}
-	mode := types.KnowledgeExtractionTemplateOnly
+	prechecked, err := s.PrechecksFocus(ctx, stored, evidence.Body)
+	if err != nil {
+		return s.failContextExtraction(ctx, tenantID, evidence.ID, err)
+	}
+	mode, path := types.KnowledgeExtractionTemplateOnly, "precheck_miss"
+	if prechecked {
+		mode, path = types.KnowledgeExtractionFull, "precheck_hit"
+	}
+	if err := s.db.WithContext(ctx).Model(&types.KnowledgeEvidence{}).
+		Where("id = ? AND tenant_id = ? AND extraction_status <> ?", evidence.ID, tenantID, types.KnowledgeExtractionComplete).
+		Update("extraction_path", path).Error; err != nil {
+		return err
+	}
 	extracted, plan, err := s.extractContextSegments(types.WithLLMCallMetadata(ctx, "context_extraction", ""), model, modelID, evidence, domain, mode)
 	if writeErr := s.recordContextExtractionCoverage(ctx, evidence, mode, plan, err); writeErr != nil {
 		return writeErr
@@ -171,8 +183,23 @@ func (s *KnowledgeContextService) ProcessMessage(ctx context.Context, k *types.K
 	if err != nil {
 		return s.failContextExtraction(ctx, tenantID, evidence.ID, err)
 	}
-	if focused {
+	if prechecked && !focused {
+		// A matching spelling can refer to another object. Preserve the same
+		// template boundary as a source that was outside focus from the start.
+		mode = types.KnowledgeExtractionTemplateOnly
+		extracted.Facts = templateContextFacts(extracted.Facts, domain)
+		extracted.Events = nil
+		if err := s.recordContextExtractionCoverage(ctx, evidence, mode, plan, nil); err != nil {
+			return err
+		}
+	} else if !prechecked && focused {
 		mode = types.KnowledgeExtractionFull
+		path = "precheck_miss_supplemented"
+		if err := s.db.WithContext(ctx).Model(&types.KnowledgeEvidence{}).
+			Where("id = ? AND tenant_id = ? AND extraction_status <> ?", evidence.ID, tenantID, types.KnowledgeExtractionComplete).
+			Update("extraction_path", path).Error; err != nil {
+			return err
+		}
 		supplement, fullPlan, fullErr := extractContextSupplementSegmentsWithPlan(types.WithLLMCallMetadata(ctx, "context_full_extraction", ""), model, evidence, domain, plan, extracted.Entities)
 		if writeErr := s.recordContextExtractionCoverage(ctx, evidence, mode, fullPlan, fullErr); writeErr != nil {
 			return writeErr
@@ -335,6 +362,7 @@ func (s *KnowledgeContextService) ProcessMessage(ctx context.Context, k *types.K
 		encodedCalls, _ := json.Marshal(calls.Snapshot())
 		return tx.Model(&current).Updates(map[string]any{
 			"extraction_status": types.KnowledgeExtractionComplete, "extraction_error": "", "source_kind": extracted.SourceKind, "extraction_mode": mode,
+			"extraction_path":     path,
 			"model_calls":         types.JSON(encodedCalls),
 			"extraction_coverage": plan.Coverage, "processed_segments": plan.Processed, "total_segments": plan.Total,
 		}).Error
@@ -565,7 +593,9 @@ func validateContextExtraction(ex contextExtraction, body string, verifiedEntiti
 	// validation; their identifying quotes may belong to another segment.
 	for _, entities := range verifiedEntities {
 		for _, entity := range entities {
-			mentions[normalizeContextName(entity.Mention)] = true
+			for _, name := range contextSupplementMentions(entity) {
+				mentions[normalizeContextName(name)] = true
+			}
 		}
 	}
 	for _, fact := range ex.Facts {

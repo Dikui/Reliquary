@@ -22,6 +22,7 @@ const TypeKnowledgeWorkflowRun = "knowledge_workflow:run"
 var (
 	ErrWorkflowNotFound  = errors.New("knowledge workflow not found")
 	ErrWorkflowForbidden = errors.New("knowledge workflow access denied")
+	ErrWorkflowDisabled  = errors.New("workflow is disabled; enable the workflow before running")
 	ErrWorkflowInvalid   = errors.New("invalid knowledge workflow")
 	ErrWorkflowLeaseLost = errors.New("knowledge workflow run lease lost")
 )

@@ -5,6 +5,8 @@ BEGIN;
 
 DROP TABLE IF EXISTS public.knowledge_repost_sources;
 
+DROP TABLE IF EXISTS public.knowledge_context_backfill_items;
+DROP TABLE IF EXISTS public.knowledge_context_backfill_batches;
 DROP TABLE IF EXISTS public.knowledge_context_entity_stars;
 DROP TABLE IF EXISTS public.knowledge_context_topic_stars;
 DROP TABLE IF EXISTS public.knowledge_context_evidence_entities;

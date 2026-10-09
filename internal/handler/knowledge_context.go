@@ -15,6 +15,7 @@ type KnowledgeContextHandler struct {
 	service   *service.KnowledgeContextService
 	worker    *service.KnowledgeContextWorker
 	rebuilder *service.ContextNameEmbeddingRebuilder
+	backfill  *service.KnowledgeContextBackfillService
 }
 
 func NewKnowledgeContextHandler(s *service.KnowledgeContextService, w *service.KnowledgeContextWorker) *KnowledgeContextHandler {
@@ -76,7 +77,7 @@ func (h *KnowledgeContextHandler) UpdateEntityDescription(c *gin.Context) {
 // @Produce json
 // @Security Bearer
 // @Param request body types.KnowledgeContextQuery true "Scope and structured conditions"
-// @Success 200 {object} map[string]interface{} "Sourced entities, facts and events"
+// @Success 200 {object} KnowledgeContextQueryResponse "Sourced entities, facts, events and latest template-only message count"
 // @Failure 400 {object} map[string]interface{}
 // @Router /knowledge-context/query [post]
 func (h *KnowledgeContextHandler) Query(c *gin.Context) {

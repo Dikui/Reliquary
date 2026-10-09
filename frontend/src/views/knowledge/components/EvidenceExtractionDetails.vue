@@ -1,6 +1,9 @@
 <template>
   <div class="extraction-details">
     <p v-if="evidence.extraction_mode" class="extraction-mode" role="status">{{ t('knowledgeWorkbench.evidence.extractionMode') }}: {{ t(`knowledgeWorkbench.evidence.extractionModes.${evidence.extraction_mode}`) }}</p>
+    <p v-if="!compact && evidence.extraction_path" class="extraction-path">{{ t('knowledgeWorkbench.evidence.extractionPath') }}: {{ extractionPathLabel }}</p>
+    <p v-if="!compact && evidence.backfilled_at">{{ t('knowledgeWorkbench.evidence.backfilledAt') }}: {{ formatDate(evidence.backfilled_at) }}</p>
+    <p v-if="!compact && evidence.backfill_template_updated_at">{{ t('knowledgeWorkbench.evidence.backfillTemplateUpdatedAt') }}: {{ formatDate(evidence.backfill_template_updated_at) }}</p>
     <p v-if="!compact && evidence.extraction_mode === 'template_only'" class="extraction-partial-hint">{{ t('knowledgeWorkbench.evidence.templateOnlyHint') }}</p>
     <div v-if="shouldShowExtractionCoverage(evidence)" class="extraction-coverage" role="status"><t-tag v-if="evidence.extraction_coverage === 'partial'" theme="warning" variant="light" size="small">{{ t('extractionDetails.partial') }}</t-tag><span v-else>{{ t('extractionDetails.complete') }}</span><span>{{ t('extractionDetails.segments', { processed: evidence.processed_segments || 0, total: evidence.total_segments || 0 }) }}</span></div>
     <p v-if="evidence.extraction_coverage === 'partial' && !compact" class="extraction-partial-hint">{{ t('extractionDetails.partialHint') }}</p>
@@ -15,8 +18,14 @@ import ModelCallSummary from '@/components/ModelCallSummary.vue'
 import { useI18n } from 'vue-i18n'
 import type { KnowledgeEvidence } from '@/api/knowledge-context'
 const props = withDefaults(defineProps<{ evidence: KnowledgeEvidence; compact?: boolean }>(), { compact: false })
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const calls = computed(() => Array.isArray(props.evidence.model_calls) ? props.evidence.model_calls : [])
+const extractionPathLabel = computed(() => ['precheck_hit', 'precheck_miss_supplemented', 'precheck_miss'].includes(props.evidence.extraction_path || '')
+  ? t(`knowledgeWorkbench.evidence.extractionPaths.${props.evidence.extraction_path}`) : props.evidence.extraction_path)
+function formatDate(value: string) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString(locale.value)
+}
 </script>
 <style scoped lang="less">
 .extraction-details { font-size: 12px; margin: 10px 0; color: var(--td-text-color-secondary); }

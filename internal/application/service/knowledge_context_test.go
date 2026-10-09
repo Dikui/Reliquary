@@ -199,7 +199,7 @@ func TestKnowledgeContextProcessSnapshotCorrectionAndTenantScope(t *testing.T) {
 	ctx = context.WithValue(ctx, types.UserIDContextKey, "reviewer")
 	require.NoError(t, svc.ProcessMessage(ctx, &k, body))
 	require.NoError(t, svc.ProcessMessage(ctx, &k, body))
-	require.Equal(t, 6, model.calls, "a focused source adds one full extraction pass; completed snapshots remain idempotent")
+	require.Equal(t, 5, model.calls, "a prechecked source uses one full extraction, two object judgments, one event judgment and one attention call; completed snapshots remain idempotent")
 
 	result, err := svc.Query(ctx, "kb", types.KnowledgeContextQuery{KnowledgeIDs: []string{k.ID}})
 	require.NoError(t, err)
@@ -216,6 +216,8 @@ func TestKnowledgeContextProcessSnapshotCorrectionAndTenantScope(t *testing.T) {
 		require.Equal(t, body, fact.Quote)
 	}
 	require.Equal(t, body, result.Evidence[0].Body)
+	require.Equal(t, "precheck_hit", result.Evidence[0].ExtractionPath)
+	require.Equal(t, types.KnowledgeExtractionFull, result.Evidence[0].ExtractionMode)
 	require.Len(t, result.Events, 1)
 	require.Len(t, result.Attention, 1)
 	require.Equal(t, "WidgetCo", result.Entities[1].CanonicalName)

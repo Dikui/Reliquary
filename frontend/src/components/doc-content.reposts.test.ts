@@ -130,6 +130,7 @@ async function renderWorkbench(sources: KnowledgeRepostSource[], locale: keyof t
   const component = workbenchSFC.create({
     'tdesign-vue-next': { MessagePlugin: { error: unexpectedAPI } },
     './MergeSuggestions.vue': emptyModule, './EvidenceExtractionDetails.vue': emptyModule,
+    './EventsCoverageNotice.vue': emptyModule, './HistoryBackfill.vue': emptyModule,
     './ReportMarkdown.vue': emptyModule, './RepostSources.vue': sharedRepostModule,
     './knowledgeContextDisplay': display,
     '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true }) },

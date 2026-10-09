@@ -130,6 +130,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewKnowledgeContextService))
 	must(container.Provide(service.NewKnowledgeDomainService))
 	must(container.Provide(service.NewKnowledgeContextWorker))
+	must(container.Provide(service.NewKnowledgeContextBackfillService))
 	must(container.Provide(service.NewContextNameEmbeddingRebuilder))
 	must(container.Provide(service.NewKnowledgeWorkflowService))
 	must(container.Provide(func(s *service.KnowledgeContextService) interfaces.KnowledgeContextReader { return s }))
@@ -247,6 +248,9 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	// (which is not encoded in the local:// URL).
 	must(container.Invoke(registerChatLocalImageResolver))
 	must(container.Invoke(registerNameEmbeddingRebuildIntegration))
+	must(container.Invoke(func(backfill *service.KnowledgeContextBackfillService, h *handler.KnowledgeContextHandler) {
+		h.SetBackfillService(backfill)
+	}))
 
 	// Router configuration
 	logger.Debugf(ctx, "[Container] Registering router and starting task server...")

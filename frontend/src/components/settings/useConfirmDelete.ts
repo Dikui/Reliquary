@@ -7,6 +7,7 @@ interface ConfirmDeleteOptions {
   confirmText?: string
   cancelText?: string
   onConfirm: () => Promise<void> | void
+  onClose?: () => void
 }
 
 /**
@@ -23,6 +24,10 @@ export function useConfirmDelete() {
       confirmBtn: opts.confirmText || (t('common.delete') as string),
       cancelBtn: opts.cancelText || (t('common.cancel') as string),
       theme: 'warning',
+      onClose: () => {
+        dialog.hide()
+        opts.onClose?.()
+      },
       onConfirm: async () => {
         try {
           await opts.onConfirm()

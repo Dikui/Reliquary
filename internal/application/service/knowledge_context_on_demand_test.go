@@ -131,8 +131,8 @@ func TestOnDemandStarredObjectFullMatchesOriginalOutput(t *testing.T) {
 	require.Equal(t, baseline.Events[0].EventType, event.EventType)
 	require.Equal(t, baseline.Events[0].Description, event.Description)
 	require.Equal(t, verifiedContextTime(baseline.Events[0].OccurredAt, baseline.Events[0].Quote), event.OccurredAt)
-	require.Equal(t, map[string]int{"context_extraction": 1, "context_full_extraction": 1, "context_event_judgment": 1}, onDemandRecordedCalls(t, stored))
-	t.Log("starred object message: extraction=2, object_judgment=0, event_judgment=1, attention=0, total=3")
+	require.Equal(t, map[string]int{"context_extraction": 1, "context_event_judgment": 1}, onDemandRecordedCalls(t, stored))
+	t.Log("starred object message: extraction=1, object_judgment=0, event_judgment=1, attention=0, total=2")
 }
 
 func TestOnDemandStarredTopicAndEnabledTrackingTriggerFull(t *testing.T) {
@@ -244,7 +244,7 @@ func TestOnDemandFailedFullPassRecordsModeAndCoverageSeparately(t *testing.T) {
 	require.NoError(t, svc.SetEntityStar(ctx, "acme", true))
 	model.reply = func(ctx context.Context, _ []chat.Message, _ *chat.ChatOptions) (string, error) {
 		stage, _ := types.LLMCallMetadataFromContext(ctx)
-		if stage == "context_full_extraction" {
+		if stage == "context_extraction" {
 			return "", errors.New("full-pass provider failure")
 		}
 		return onDemandOutput, nil
@@ -257,7 +257,7 @@ func TestOnDemandFailedFullPassRecordsModeAndCoverageSeparately(t *testing.T) {
 	require.Equal(t, "partial", evidence.ExtractionCoverage)
 	require.Zero(t, evidence.ProcessedSegments)
 	require.Equal(t, 1, evidence.TotalSegments)
-	require.Equal(t, map[string]int{"context_extraction": 1, "context_full_extraction": 1}, onDemandRecordedCalls(t, evidence))
+	require.Equal(t, map[string]int{"context_extraction": 1}, onDemandRecordedCalls(t, evidence))
 }
 
 func TestOnDemandCompletedFullEvidenceRejectsDelayedTemplateCoverage(t *testing.T) {
@@ -300,7 +300,7 @@ func TestOnDemandFirstPassPreservesQuotedAliasesWithoutRepeatingObjects(t *testi
 	require.Equal(t, "A Company", aliases[0].Alias)
 	require.Equal(t, "exact", aliases[0].ResolutionMethod)
 	require.Equal(t, body, aliases[0].Quote)
-	require.Equal(t, map[string]int{"context_extraction": 1, "context_full_extraction": 1}, onDemandRecordedCalls(t, onDemandEvidence(t, db, k.ID)))
+	require.Equal(t, map[string]int{"context_extraction": 1}, onDemandRecordedCalls(t, onDemandEvidence(t, db, k.ID)))
 }
 
 func TestOnDemandDelayedDuplicateWorkerPreservesCompletedModeAndBudget(t *testing.T) {
@@ -348,7 +348,7 @@ func TestOnDemandDelayedDuplicateWorkerPreservesCompletedModeAndBudget(t *testin
 	require.Equal(t, "complete", completed.ExtractionCoverage)
 	require.Equal(t, 1, completed.ProcessedSegments)
 	require.Equal(t, 1, completed.TotalSegments)
-	require.Equal(t, map[string]int{"context_extraction": 1, "context_full_extraction": 1, "context_event_judgment": 1}, onDemandRecordedCalls(t, completed))
+	require.Equal(t, map[string]int{"context_extraction": 1, "context_event_judgment": 1}, onDemandRecordedCalls(t, completed))
 	require.NoError(t, svc.SetEntityStar(ctx, "acme", false))
 	unblock()
 	require.NoError(t, <-delayed)
@@ -381,5 +381,5 @@ func TestOnDemandCompletionRestoresWinningCoverageAfterFailedDuplicate(t *testin
 	require.Equal(t, 1, completed.ProcessedSegments)
 	require.Equal(t, 1, completed.TotalSegments)
 	require.Empty(t, completed.ExtractionError)
-	require.Equal(t, map[string]int{"context_extraction": 1, "context_full_extraction": 1, "context_event_judgment": 1}, onDemandRecordedCalls(t, completed))
+	require.Equal(t, map[string]int{"context_extraction": 1, "context_event_judgment": 1}, onDemandRecordedCalls(t, completed))
 }

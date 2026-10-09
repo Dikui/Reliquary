@@ -138,6 +138,7 @@
         </div>
         <div v-if="queryResult.events.length" class="result-group">
           <h4>{{ t('knowledgeWorkbench.events.title') }}</h4>
+          <EventsCoverageNotice :count="queryResult.template_only_message_count || 0" />
           <EventCard v-for="event in queryResult.events" :key="event.id" :event="event"
             :attention="queryResult.attention.filter(item => item.event_id === event.id)"
             :evidence="eventEvidence(event, queryResult.evidence)" @open-evidence="openEvidence" />
@@ -177,6 +178,9 @@
               <FocusStarButton :name="entity.canonical_name" :starred="isEntityStarred(entity.id)" compact
                 :busy="starPending.has(`entity:${entity.id}`)" :disabled="!focusScope || focusLoading"
                 @toggle="toggleFocusStar('entity', entity)" />
+              <div v-if="isEntityStarred(entity.id)" class="focus-backfill-entry">
+                <t-button variant="text" size="small" @click="openFocusEntity(entity)">{{ t('knowledgeWorkbench.backfill.start') }}</t-button>
+              </div>
             </div>
             <t-button v-if="hasMoreEntities" block variant="text"
               :loading="entitiesLoading" @click="loadEntities(true)">{{ t('knowledgeWorkbench.loadMore') }}</t-button>
@@ -202,7 +206,9 @@
               </div>
               <p class="muted">{{ t('knowledgeWorkbench.scope.detailHint') }}</p>
               <t-loading :loading="entityContextLoading" show-overlay>
-                <p v-if="entityContext?.template_only_message_count" class="muted" role="status">{{ t('knowledgeWorkbench.query.templateOnlyMessages', { count: entityContext.template_only_message_count }) }}</p>
+                <EventsCoverageNotice v-if="entityContext" :count="entityContext.template_only_message_count || 0" />
+                <HistoryBackfill v-if="isEntityStarred(selectedEntity.id)" :key="`entity:${selectedEntity.id}`" kind="entity" :target-id="selectedEntity.id" :name="selectedEntity.canonical_name"
+                  @changed="onBackfillChanged" @open-source="emit('open-source', $event)" />
                 <div class="result-group">
                   <div class="group-heading">
                     <h4>{{ t('knowledgeWorkbench.facts') }}</h4>
@@ -244,15 +250,17 @@
               <button type="button" class="text-link" @click="openFocusEntity(item)">{{ item.canonical_name }}</button>
               <FocusStarButton :name="item.canonical_name" starred compact :busy="starPending.has(`entity:${item.id}`)"
                 :disabled="focusLoading" @toggle="toggleFocusStar('entity', item)" />
+              <HistoryBackfill :key="`focus-entity:${item.id}`" kind="entity" :target-id="item.id" :name="item.canonical_name" compact @changed="onBackfillChanged" @open-source="emit('open-source', $event)" />
             </div>
           </section>
           <section class="focus-group">
             <h4>{{ t('knowledgeWorkbench.focus.starredTopics') }} <span>{{ focusScope.starred_topics.length }}</span></h4>
             <p v-if="!focusScope.starred_topics.length" class="muted">{{ t('knowledgeWorkbench.focus.noStarredTopics') }}</p>
             <div v-for="item in focusScope.starred_topics" :key="item.id" class="focus-item">
-              <span>{{ item.name }}</span>
+              <button type="button" class="text-link" @click="openFocusTopic(item)">{{ item.name }}</button>
               <FocusStarButton :name="item.name" starred compact :busy="starPending.has(`topic:${item.id}`)"
                 :disabled="focusLoading" @toggle="toggleFocusStar('topic', item)" />
+              <HistoryBackfill :key="`focus-topic:${item.id}`" kind="topic" :target-id="item.id" :name="item.name" compact @changed="onBackfillChanged" @open-source="emit('open-source', $event)" />
             </div>
           </section>
           <section class="focus-group">
@@ -280,9 +288,12 @@
           <t-empty v-if="focusScope && !filteredTopics.length" :description="t('knowledgeWorkbench.focus.noTopics')" />
           <div class="focus-topics">
             <div v-for="item in filteredTopics.slice(0, visibleTopicCount)" :key="item.id" class="focus-topic">
-              <div><strong>{{ item.name }}</strong><small>{{ topicKindLabel(item.kind) }} · {{ item.knowledge_base_name || item.knowledge_base_id }}</small></div>
+              <div><button type="button" class="text-link" @click="openFocusTopic(item)">{{ item.name }}</button><small>{{ topicKindLabel(item.kind) }} · {{ item.knowledge_base_name || item.knowledge_base_id }}</small></div>
               <FocusStarButton :name="item.name" :starred="isTopicStarred(item.id)" compact
                 :busy="starPending.has(`topic:${item.id}`)" :disabled="!focusScope || focusLoading" @toggle="toggleFocusStar('topic', item)" />
+              <div v-if="isTopicStarred(item.id)" class="focus-backfill-entry">
+                <t-button variant="text" size="small" @click="openFocusTopic(item)">{{ t('knowledgeWorkbench.backfill.start') }}</t-button>
+              </div>
             </div>
           </div>
           <t-button v-if="filteredTopics.length > visibleTopicCount" block variant="text" @click="visibleTopicCount += pageSize">{{ t('knowledgeWorkbench.loadMore') }}</t-button>
@@ -301,6 +312,7 @@
           <p>{{ t('knowledgeWorkbench.events.description') }}</p>
         </div>
       </div>
+      <EventsCoverageNotice :count="eventsTemplateOnlyCount" :loading="eventsLoading || loading" />
       <t-loading :loading="eventsLoading" show-overlay>
         <t-empty v-if="!events.length" :description="t('knowledgeWorkbench.events.empty')" />
         <article v-for="event in events" :key="event.id" class="event-row">
@@ -506,13 +518,14 @@
               <p>{{ workflow.description || t('knowledgeWorkbench.workflows.noDescription') }}</p>
               <small>{{ workflow.schedule.cron || t('knowledgeWorkbench.workflows.manualOnly') }} · {{ workflow.schedule.timezone || 'UTC' }}</small>
               <div class="workflow-list__actions">
-                <t-button size="small" theme="primary" variant="outline" :loading="runningWorkflowId === workflow.id"
+                <t-button size="small" theme="primary" variant="outline" :loading="runningWorkflowId === workflow.id" :disabled="!workflow.enabled" :title="!workflow.enabled ? t('knowledgeWorkbench.workflows.enableFirst') : undefined"
                   @click.stop="runWorkflow(workflow)">{{ t('knowledgeWorkbench.workflows.run') }}</t-button>
                 <t-button size="small" variant="text" @click.stop="editWorkflow(workflow)">{{ t('knowledgeWorkbench.workflows.edit') }}</t-button>
                 <t-button size="small" variant="text" @click.stop="toggleWorkflow(workflow)">
                   {{ workflow.enabled ? t('knowledgeWorkbench.workflows.disable') : t('knowledgeWorkbench.workflows.enable') }}
                 </t-button>
               </div>
+              <p v-if="!workflow.enabled" class="muted">{{ t('knowledgeWorkbench.workflows.enableFirst') }}</p>
             </article>
           </div>
           <div class="workflow-runs">
@@ -627,6 +640,18 @@
       </t-loading>
     </section>
 
+    <t-drawer v-model:visible="topicProfileVisible" :header="t('knowledgeWorkbench.focus.topicProfile')" size="min(560px, 95vw)" :footer="false">
+      <template v-if="selectedTopic">
+        <h3>{{ selectedTopic.name }}</h3>
+        <p>{{ topicKindLabel(selectedTopic.kind) }} · {{ selectedTopic.knowledge_base_name || selectedTopic.knowledge_base_id }}</p>
+        <FocusStarButton :name="selectedTopic.name" :starred="isTopicStarred(selectedTopic.id)" :busy="starPending.has(`topic:${selectedTopic.id}`)"
+          :disabled="!focusScope || focusLoading" @toggle="toggleFocusStar('topic', selectedTopic)" />
+        <p class="muted">{{ t('knowledgeWorkbench.focus.futureMessages') }}</p>
+        <HistoryBackfill :key="`profile-topic:${selectedTopic.id}`" kind="topic" :target-id="selectedTopic.id" :name="selectedTopic.name"
+          :enabled="isTopicStarred(selectedTopic.id)" show-coverage @changed="onBackfillChanged" @open-source="emit('open-source', $event)" />
+      </template>
+    </t-drawer>
+
     <t-drawer v-model:visible="snapshotVisible" :header="t('knowledgeWorkbench.fusion.snapshotTitle')" size="min(680px, 95vw)" :footer="false">
       <t-loading :loading="snapshotLoading" show-overlay>
         <p v-if="snapshotError" class="run-error" role="alert">{{ snapshotError }}</p>
@@ -688,6 +713,8 @@ import EvidenceExtractionDetails from './EvidenceExtractionDetails.vue'
 import RepostSources from './RepostSources.vue'
 import ReportMarkdown from './ReportMarkdown.vue'
 import { eventEvidence, normalizeKnowledgeContextResult } from './knowledgeContextDisplay'
+import EventsCoverageNotice from './EventsCoverageNotice.vue'
+import HistoryBackfill from './HistoryBackfill.vue'
 import { listKnowledgeDomains, type KnowledgeDomain } from '@/api/knowledge-domains'
 import { knowledgeContextScopeParams } from '@/api/knowledge-context-scope'
 import { markdownCitationSegments } from '@/utils/markdownCitation'
@@ -785,6 +812,7 @@ const filteredTopics = computed(() => {
 })
 const entitiesLoading = ref(false)
 const eventsLoading = ref(false)
+const eventsTemplateOnlyCount = ref<number | null>(null)
 const evidenceLoading = ref(false)
 const evidenceExcludedCount = ref(0)
 const entities = ref<KnowledgeEntity[]>([])
@@ -799,6 +827,8 @@ const hasMoreEvidence = ref(false)
 const entityFilter = ref('')
 const evidenceFilter = ref('')
 const selectedEntity = ref<KnowledgeEntity | null>(null)
+const selectedTopic = ref<KnowledgeFocusTopic | null>(null)
+const topicProfileVisible = ref(false)
 const entityContext = ref<KnowledgeContextResult | null>(null)
 const entityContextLoading = ref(false)
 const showEntityHistory = ref(true)
@@ -967,6 +997,11 @@ async function openFocusEntity(entity: KnowledgeEntity) {
   await selectEntity(entity)
 }
 
+function openFocusTopic(topic: KnowledgeFocusTopic) {
+  selectedTopic.value = topic
+  topicProfileVisible.value = true
+}
+
 function clearNameEmbeddingPolling() {
   if (nameEmbeddingPollTimer) clearTimeout(nameEmbeddingPollTimer)
   nameEmbeddingPollTimer = null
@@ -1020,6 +1055,7 @@ async function refreshAll() {
   if (!props.kbId || (queryScope.value === 'domain' && !queryDomainId.value)) return
   const generation = contextGeneration
   loading.value = true
+  if (activeSection.value === 'events') eventsTemplateOnlyCount.value = null
   loadError.value = ''
   try {
     const [entityResponse, eventResponse, evidenceResponse] = await Promise.all([
@@ -1031,6 +1067,11 @@ async function refreshAll() {
     if (generation !== contextGeneration) return
     entities.value = envelopeData(entityResponse) || []
     events.value = envelopeData(eventResponse) || []
+    if (activeSection.value === 'events') {
+      const countResponse = await queryKnowledgeContext(props.kbId, { ...scopeParams.value, limit: 1 })
+      if (generation !== contextGeneration) return
+      eventsTemplateOnlyCount.value = envelopeData(countResponse).template_only_message_count || 0
+    }
     evidence.value = envelopeData(evidenceResponse) || []
     evidenceExcludedCount.value = evidenceResponse.excluded_missing_published_at_count || 0
     entityOffset.value = entities.value.length
@@ -1050,6 +1091,17 @@ async function refreshAll() {
   } finally {
     if (generation === contextGeneration) loading.value = false
   }
+}
+
+async function onBackfillChanged() {
+  eventContexts.value = {}
+  for (const id of Object.keys(evidenceSnapshots)) delete evidenceSnapshots[id]
+  const eventId = expandedEventId.value
+  const evidenceId = expandedEvidenceId.value
+  expandedEventId.value = ''
+  expandedEvidenceId.value = ''
+  await Promise.all([loadEvidence(), loadEvents(), loadEntityContext()])
+  await Promise.all([eventId ? toggleEvent(eventId) : Promise.resolve(), evidenceId ? openEvidence(evidenceId) : Promise.resolve()])
 }
 
 async function loadEntities(loadMore = false) {
@@ -1072,11 +1124,17 @@ async function loadEvents(loadMore = false) {
   if (queryScope.value === 'domain' && !queryDomainId.value) return
   const generation = contextGeneration
   eventsLoading.value = true
+  eventsTemplateOnlyCount.value = null
   try {
     const offset = loadMore ? eventOffset.value : 0
-    const items = envelopeData(await listKnowledgeContextEvents(props.kbId, { ...scopeParams.value, limit: pageSize, offset })) || []
+    const [response, countResponse] = await Promise.all([
+      listKnowledgeContextEvents(props.kbId, { ...scopeParams.value, limit: pageSize, offset }),
+      queryKnowledgeContext(props.kbId, { ...scopeParams.value, limit: 1 }),
+    ])
+    const items = envelopeData(response) || []
     if (generation !== contextGeneration) return
     events.value = loadMore ? [...events.value, ...items] : items
+    eventsTemplateOnlyCount.value = envelopeData(countResponse).template_only_message_count || 0
     eventOffset.value = offset + items.length
     hasMoreEvents.value = items.length === pageSize
   }
@@ -1106,7 +1164,7 @@ async function selectSection(section: SectionId) {
   activeSection.value = section
   loadError.value = ''
   if (section === 'entities' && !entities.value.length) await loadEntities()
-  if (section === 'events' && !events.value.length) await loadEvents()
+  if (section === 'events') await loadEvents()
   if (section === 'evidence' && !evidence.value.length) await loadEvidence()
   if (section === 'focus' && !focusScope.value) await loadFocus()
   if (section === 'workflows' && !workflows.value.length) await loadWorkflows()
@@ -1483,6 +1541,7 @@ function updateRunPolling() {
 }
 
 async function runWorkflow(workflow: KnowledgeWorkflow) {
+  if (!workflow.enabled) return
   runningWorkflowId.value = workflow.id
   try {
     const run = envelopeData(await runKnowledgeWorkflow(props.kbId, workflow.id))
@@ -1780,6 +1839,7 @@ watch([() => props.kbId, queryScope, queryDomainId], async () => {
   loading.value = false
   entitiesLoading.value = false
   eventsLoading.value = false
+  eventsTemplateOnlyCount.value = null
   evidenceLoading.value = false
   queryLoading.value = false
   entityContextLoading.value = false
@@ -1801,6 +1861,8 @@ watch([() => props.kbId, queryScope, queryDomainId], async () => {
   events.value = []
   evidence.value = []
   selectedEntity.value = null
+  selectedTopic.value = null
+  topicProfileVisible.value = false
   entityContext.value = null
   queryResult.value = null
   workflows.value = []
@@ -2032,7 +2094,7 @@ label { display: flex; flex-direction: column; gap: 6px; color: var(--td-text-co
 :deep(.event-card .text-link) { display: block; margin-top: 8px; }
 .entity-layout { display: grid; grid-template-columns: minmax(230px, 300px) minmax(0, 1fr); gap: 14px; min-height: 360px; }
 .entity-list { padding: 6px; max-height: 660px; overflow: auto; }
-.entity-list__row { display: flex; align-items: center; gap: 4px; }
+.entity-list__row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
 .entity-list__item { display: flex; flex: 1; min-width: 0; width: 100%; align-items: center; gap: 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; color: inherit; padding: 10px 8px; cursor: pointer; }
 .entity-list__item:hover, .entity-list__item.selected { background: var(--td-bg-color-container-hover); }
 .entity-list__item:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: -2px; }
@@ -2041,9 +2103,10 @@ label { display: flex; flex-direction: column; gap: 6px; color: var(--td-text-co
 .focus-group { border: 1px solid var(--td-border-level-1-color); border-radius: var(--td-radius-medium); padding: 14px; background: var(--td-bg-color-container); min-width: 0; }
 .focus-group h4 { margin: 0 0 10px; font-size: 14px; }
 .focus-group h4 span { margin-left: 6px; color: var(--td-text-color-secondary); font-weight: 400; }
-.focus-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; }
+.focus-item { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; padding: 6px 0; }
 .focus-topics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.focus-topic { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--td-border-level-1-color); border-radius: var(--td-radius-medium); background: var(--td-bg-color-container); padding: 10px 12px; min-width: 0; }
+.focus-topic { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; border: 1px solid var(--td-border-level-1-color); border-radius: var(--td-radius-medium); background: var(--td-bg-color-container); padding: 10px 12px; min-width: 0; }
+.focus-backfill-entry { flex-basis: 100%; }
 .focus-topic strong, .focus-topic small { display: block; overflow-wrap: anywhere; }
 .focus-topic small { margin-top: 4px; color: var(--td-text-color-secondary); font-size: 11px; }
 :deep(.focus-star) { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 4px 10px; border: 1px solid var(--td-border-level-2-color); border-radius: var(--td-radius-small); background: var(--td-bg-color-container); color: var(--td-text-color-secondary); cursor: pointer; font: inherit; font-size: 12px; }

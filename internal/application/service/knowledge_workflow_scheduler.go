@@ -31,7 +31,7 @@ func (s *KnowledgeWorkflowService) Resume(ctx context.Context, kbID, runID strin
 		return nil, err
 	}
 	if !wf.Enabled {
-		return nil, errors.New("enable the workflow before resuming")
+		return nil, ErrWorkflowDisabled
 	}
 	if run.Status != types.WorkflowStatusPaused {
 		return nil, fmt.Errorf("run cannot be resumed from status %q", run.Status)
@@ -76,7 +76,7 @@ func (s *KnowledgeWorkflowService) Retry(ctx context.Context, kbID, runID string
 		return nil, fmt.Errorf("run cannot be retried from status %q", run.Status)
 	}
 	if !wf.Enabled {
-		return nil, errors.New("enable the workflow before retrying")
+		return nil, ErrWorkflowDisabled
 	}
 	roleCtx := context.WithValue(ctx, types.UserIDContextKey, run.OwnerID)
 	err = s.validateActor(roleCtx, run.TenantID, run.OwnerID)
