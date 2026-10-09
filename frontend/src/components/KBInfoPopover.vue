@@ -8,7 +8,7 @@
       :overlay-inner-style="{ padding: 0 }"
     >
       <template #content>
-      <div class="kb-info-card">
+      <div class="kb-info-card" :lang="locale">
         <div class="kb-info-card-header">{{ t('knowledgeBase.infoCard.title') }}</div>
         <div class="kb-info-card-body">
           <section class="setting-drawer__section">
@@ -120,7 +120,7 @@ const props = defineProps<{
   supportedFileTypes?: string[]
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 // KB.UpdatedAt is auto-bumped by GORM only when the KB row itself is
 // touched (rename, config edit, …). For a freshly created KB whose
 // only mutations were document uploads, updated_at == created_at and
@@ -370,6 +370,18 @@ const statRows = computed<Array<{ key: string; label: string; value: number | st
 .kb-info-card-label {
   flex: 0 0 80px;
   color: var(--td-text-color-secondary);
+}
+
+.kb-info-card:lang(en) .kb-info-card-label {
+  flex-basis: 112px;
+  word-break: normal;
+  overflow-wrap: break-word;
+  white-space: normal;
+  overflow: visible;
+}
+
+.kb-info-card:lang(en) .kb-info-card-value {
+  min-width: 0;
 }
 
 .kb-info-card-value {

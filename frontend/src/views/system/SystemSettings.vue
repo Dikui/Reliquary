@@ -664,18 +664,6 @@ async function handleSSRFListChange(item: SystemSettingItem) {
   }
 }
 
-function highRiskConfirmBody(item: SystemSettingItem, value: unknown): string {
-  const renderedValue = Array.isArray(value)
-    ? value.length === 0
-      ? t('system.globalSettings.confirm.emptyValue')
-      : value.join(', ')
-    : String(value)
-  return t('system.globalSettings.confirm.highRiskBody', {
-    label: keyLabel(item.key),
-    value: renderedValue,
-  })
-}
-
 // resetSetting drops the DB override and reloads the row so the UI
 // reflects the resolved fallback (ENV value if set, otherwise the
 // in-code default). We refetch the whole list rather than the single

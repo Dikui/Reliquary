@@ -2467,7 +2467,6 @@ export default {
         confirmBtn: 'Confirm save',
         cancelBtn: 'Cancel',
         emptyValue: '(empty)',
-        highRiskBody: 'About to change "{label}" to: {value}\n\nConfirm this change to the high-risk setting.',
       },
       listConfirm: {
         ssrf: {

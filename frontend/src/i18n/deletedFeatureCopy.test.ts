@@ -55,10 +55,20 @@ test('settings templates contain no hard-coded descriptions of removed features'
   assert.deepEqual(unexpected, [])
 })
 
-test('high-risk settings confirmation describes the setting rather than an open-registration mode', () => {
+test('unused generic high-risk confirmation is removed while SSRF entry confirmations remain', () => {
+  const source = readFileSync(new URL('../views/system/SystemSettings.vue', import.meta.url), 'utf8')
+  assert.doesNotMatch(source, /highRiskConfirmBody|confirm\.highRiskBody/)
+  assert.match(source, /system\.globalSettings\.listConfirm\./)
+  for (const action of ['add', 'remove']) {
+    assert.ok(source.includes(`confirmSsrfListEntryChange('${action}', entry)`))
+  }
   for (const bundle of [enUS, zhCN]) {
-    assert.match(bundle.system.globalSettings.confirm.highRiskBody, /\{label\}/)
-    assert.match(bundle.system.globalSettings.confirm.highRiskBody, /\{value\}/)
+    assert.equal('highRiskBody' in bundle.system.globalSettings.confirm, false)
     assert.equal('bodyAuthRegistrationMode' in bundle.system.globalSettings.confirm, false)
+    for (const action of ['add', 'remove'] as const) {
+      const confirmation = bundle.system.globalSettings.listConfirm.ssrf.whitelist[action]
+      assert.match(confirmation.body, /\{entry\}/)
+      assert.ok(confirmation.confirmBtn)
+    }
   }
 })

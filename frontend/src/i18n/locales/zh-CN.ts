@@ -1896,7 +1896,6 @@ export default {
         confirmBtn: '确认保存',
         cancelBtn: '取消',
         emptyValue: '（空）',
-        highRiskBody: '即将把「{label}」改为：{value}\n\n请确认对该高风险设置的修改。',
       },
       enumLabels: {
         auth: {
