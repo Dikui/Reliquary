@@ -15,7 +15,7 @@ test('global popup wrapping overrides TDesign only for English document language
     assert.equal(declarations['word-break'], 'normal')
     assert.equal(declarations['overflow-wrap'], 'break-word')
   })
-  assert.deepEqual(selectors, ['html[lang^="en"] .t-popup__content'])
+  assert.deepEqual(selectors, ['html[lang^="en"] .t-popup__content,\nhtml[lang^="en"] .t-message,\nhtml[lang^="en"] .t-notification__content'])
   const main = readFileSync(new URL('../main.ts', import.meta.url), 'utf8')
   const imports = [...main.matchAll(/import\s+["']([^"']+\.css)["']/g)].map(match => match[1])
   assert.ok(imports.indexOf('./assets/popup-word-wrapping.css') > imports.indexOf('tdesign-vue-next/dist/tdesign.css'))

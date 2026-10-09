@@ -168,7 +168,9 @@
                 :placeholder="emptyListPlaceholder"
                     :aria-label="keyLabel(item.key)"
                 :disabled="savingKey === item.key"
-                class="setting-input setting-input--wide"
+                class="setting-input setting-input--wide ssrf-whitelist-input"
+                excess-tags-display-type="break-line"
+                :tag-props="{ maxWidth: '100%' }"
                 clearable
                 @update:model-value="onSsrfWhitelistModelUpdate"
               />
@@ -1128,6 +1130,35 @@ onUnmounted(() => {
 
   .desc {
     max-width: none;
+  }
+}
+.ssrf-whitelist-input {
+  :deep(.t-input) {
+    padding-right: calc(var(--td-comp-paddingLR-s) + var(--t-tag-input-suffix-width, 0px) + var(--t-tag-input-suffix-icon-width, 24px));
+  }
+
+  :deep(.t-input.t-input--prefix > .t-input__prefix) {
+    display: flex;
+    flex-wrap: wrap;
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
+  }
+
+  :deep(.t-tag) {
+    min-width: 0;
+    max-width: calc(100% - var(--td-comp-margin-xs));
+  }
+
+  :deep(.t-tag--text) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  :deep(.t-tag__icon-close) {
+    flex-shrink: 0;
   }
 }
 </style>

@@ -17,7 +17,7 @@
             v-model="localLanguage"
             :placeholder="$t('language.selectLanguage')"
             @change="handleLanguageChange"
-            style="width: 280px;"
+            class="setting-select"
           >
             <t-option value="zh-CN" :label="$t('language.zhCN')">{{ $t('language.zhCN') }}</t-option>
             <t-option value="en-US" :label="$t('language.enUS')">{{ $t('language.enUS') }}</t-option>
@@ -34,7 +34,7 @@
         <div class="setting-control">
           <t-select
             v-model="localTheme"
-            style="width: 280px;"
+            class="setting-select"
             :placeholder="$t('theme.selectTheme')"
             @change="handleThemeChange"
           >
@@ -54,7 +54,7 @@
         <div class="setting-control setting-control--stacked">
           <t-select
             v-model="localSansFont"
-            style="width: 280px;"
+            class="setting-select"
             :placeholder="$t('font.selectFont')"
             @change="handleSansFontChange"
           >
@@ -82,7 +82,7 @@
         <div class="setting-control setting-control--stacked">
           <t-select
             v-model="localMonoFont"
-            style="width: 280px;"
+            class="setting-select"
             :placeholder="$t('font.selectFont')"
             @change="handleMonoFontChange"
           >
@@ -338,6 +338,39 @@ const handleFontSizeChange = (val: FontSizeKey) => {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+}
+.setting-select {
+  width: 280px;
+}
+
+@media (max-width: 640px) {
+  .setting-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .setting-info {
+    flex: none;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    padding-right: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .setting-control {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    justify-content: flex-start;
+    align-items: flex-start;
+  }
+
+  .setting-select,
+  .font-preview {
+    width: 100%;
+    max-width: 100%;
   }
 }
 </style>
