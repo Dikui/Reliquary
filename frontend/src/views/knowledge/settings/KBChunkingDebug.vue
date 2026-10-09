@@ -154,7 +154,7 @@
           <div class="chunk-stats">
             <span class="stats-count">
               <strong>{{ result.stats.count }}</strong>
-              {{ $t('knowledgeEditor.chunking.debug.stats.chunks') }}
+              {{ $t('knowledgeEditor.chunking.debug.stats.chunks', result.stats.count) }}
             </span>
             <span class="stats-sep">·</span>
             <span>Ø {{ result.stats.avg_chars }}</span>
@@ -186,7 +186,7 @@
               >
                 <span class="chunk-seq">#{{ c.seq }}</span>
                 <span class="chunk-size">
-                  {{ c.size_chars }} {{ $t('knowledgeEditor.chunking.characters') }}
+                  {{ c.size_chars }} {{ $t('knowledgeEditor.chunking.characters', c.size_chars) }}
                   <span class="chunk-tokens">· ~{{ c.size_tokens_approx }} tok</span>
                 </span>
                 <span class="chunk-pos">{{ c.start }}–{{ c.end }}</span>

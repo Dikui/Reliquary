@@ -1110,10 +1110,10 @@ const getChunkMeta = (item: any) => {
   if (!item) return '';
   const parts = [];
   if (item.char_count) {
-    parts.push(`${item.char_count} ${t('knowledgeBase.characters')}`);
+    parts.push(`${item.char_count} ${t('knowledgeBase.characters', item.char_count)}`);
   }
   if (item.token_count) {
-    parts.push(`${item.token_count} tokens`);
+    parts.push(t('countCopy.tokens', { count: item.token_count }));
   }
   return parts.join(' · ');
 };

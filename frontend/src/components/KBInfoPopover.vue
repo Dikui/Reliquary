@@ -181,19 +181,18 @@ const chunkingRows = computed<Array<{ key: string; label: string; value: string 
       value: chunkingStrategyLabel.value,
     })
   }
-  const chars = t('knowledgeEditor.chunking.characters')
   if (typeof cfg.chunk_size === 'number' && cfg.chunk_size > 0) {
     rows.push({
       key: 'size',
       label: t('knowledgeEditor.chunking.sizeLabel'),
-      value: `${cfg.chunk_size} ${chars}`,
+      value: `${cfg.chunk_size} ${t('knowledgeEditor.chunking.characters', cfg.chunk_size)}`,
     })
   }
   if (typeof cfg.chunk_overlap === 'number') {
     rows.push({
       key: 'overlap',
       label: t('knowledgeEditor.chunking.overlapLabel'),
-      value: `${cfg.chunk_overlap} ${chars}`,
+      value: `${cfg.chunk_overlap} ${t('knowledgeEditor.chunking.characters', cfg.chunk_overlap)}`,
     })
   }
   if (cfg.enable_parent_child) {

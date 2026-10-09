@@ -118,10 +118,10 @@
               <span class="rq-pool-meta">
                 {{ t('system.globalSettings.runtime.poolConfigured', { value: pool.concurrency }) }}
                 <template v-if="pool.instances > 0">
-                  · {{ t('system.globalSettings.runtime.poolInstances', { value: pool.instances }) }}
+                  · {{ t('system.globalSettings.runtime.poolInstances', { value: pool.instances }, pool.instances) }}
                   · {{ t('system.globalSettings.runtime.poolUtilization', { value: poolUtilization(pool) }) }}
                 </template>
-                · {{ t('system.globalSettings.runtime.queueCount', { value: pool.queue_count }) }}
+                · {{ t('system.globalSettings.runtime.queueCount', { value: pool.queue_count }, pool.queue_count) }}
               </span>
             </p>
           </div>
@@ -343,7 +343,7 @@
             <t-popconfirm
               v-if="taskState === 'archived' && tasks.length > 0"
               theme="danger"
-              :content="t('system.globalSettings.runtime.tasks.purgeArchivedConfirm', { count: taskStateCount(taskQueue, 'archived') })"
+              :content="formatCountCopy(t, 'system.globalSettings.runtime.tasks.purgeArchivedConfirm', { count: taskStateCount(taskQueue, 'archived') })"
               @confirm="purgeArchivedTasks"
             >
               <t-button
@@ -507,6 +507,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatCountCopy } from '@/i18n/countCopy'
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'

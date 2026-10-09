@@ -14,7 +14,7 @@ export function getKnowledgeChunksSummaryHtml(
     t('agentStream.knowledgeChunksList.chunkRange', {
       fetched: `<strong>${toolData.fetched_chunks ?? 0}</strong>`,
       total: `<strong>${toolData.total_chunks ?? '?'}</strong>`,
-    }),
+    }, Number(toolData.total_chunks ?? 0)),
   ]
 
   const total = Number(toolData.total_chunks ?? 0)

@@ -95,7 +95,7 @@ const addFiles = async (files: File[]) => {
   for (const file of files) {
     // Check max files limit
     if (attachments.value.length >= maxFiles.value) {
-      MessagePlugin.warning(t('chat.attachmentTooMany', { max: maxFiles.value }));
+      MessagePlugin.warning(t('chat.attachmentTooMany', { max: maxFiles.value }, maxFiles.value));
       break;
     }
 

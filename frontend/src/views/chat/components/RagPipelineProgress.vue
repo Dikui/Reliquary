@@ -219,6 +219,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatCountCopy } from '@/i18n/countCopy'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getAgentToolIconName } from '@/utils/agent-tool-icons'
@@ -443,7 +444,7 @@ const referenceSummaryText = computed(() => {
   const webCount = referenceSections.value.find((section) => section.id === 'web')?.items.length ?? 0
 
   if (docCount > 0 && webCount > 0) {
-    return t('chat.referencesDocAndWebCount', { docCount, webCount })
+    return formatCountCopy(t, 'chat.referencesDocAndWebCount', { docCount, webCount })
   }
   if (docCount > 0) {
     return t('chat.referencesDocCount', { count: docCount })

@@ -1201,7 +1201,7 @@ const headMetaParts = computed(() => {
   if (data.value.parse_status === 'completed' && postprocess.running > 0) {
     parts.push(t('knowledgeStages.head.completedWithActiveTrace', {
       n: postprocess.running,
-    }))
+    }, postprocess.running))
   }
   if (attemptTabs.value.length === 0 && data.value.current_attempt) {
     parts.push(t('knowledgeStages.attempt', { n: data.value.current_attempt }))

@@ -1,3 +1,4 @@
+import { formatCountCopy } from '../i18n/countCopy'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
@@ -24,7 +25,7 @@ const compile = (code: string) => ts.transpileModule(code, {
 function evaluate(code: string, modules: Record<string, unknown>, environment: Record<string, unknown> = {}) {
   const module = { exports: {} as any }
   new Function('require', 'module', 'exports', 'window', 'localStorage', compile(code))(
-    (name: string) => name.endsWith('.css') ? {} : modules[name] ?? require(name), module, module.exports,
+    (name: string) => name.endsWith('.css') ? {} : modules[name] ?? (name === '@/i18n/countCopy' ? { formatCountCopy } : require(name)), module, module.exports,
     environment.window, environment.localStorage,
   )
   return module.exports
@@ -495,3 +496,10 @@ test('dark original preview links and visited links use the theme token with bod
   const contrast = (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05)
   assert.ok(contrast >= 4.5, `the source link contrast is ${contrast.toFixed(2)}:1, below the required 4.5:1 if this fails`)
 })
+
+for (const count of [1, 2]) {
+  test(`English message details use the segment quantity ${count}`, async () => {
+    const html = await renderDetails([], 'en-US', { details: { total: count } })
+    assert.ok(html.includes(`Total ${count} ${count === 1 ? 'segment' : 'segments'}<`), html)
+  })
+}

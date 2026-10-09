@@ -267,7 +267,7 @@ const formatDate = (dateStr: string): string => {
 
   if (days === 0) return t('ollama.today')
   if (days === 1) return t('ollama.yesterday')
-  if (days < 7) return t('ollama.daysAgo', { days })
+  if (days < 7) return t('ollama.daysAgo', { days }, days)
   return date.toLocaleDateString()
 }
 

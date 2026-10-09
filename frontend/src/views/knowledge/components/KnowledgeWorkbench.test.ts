@@ -1,3 +1,4 @@
+import { formatCountCopy } from '../../../i18n/countCopy'
 import assert from 'node:assert/strict'
 import test, { mock } from 'node:test'
 import { readFileSync } from 'node:fs'
@@ -105,7 +106,7 @@ async function renderWorkbench({
   function evaluate(code: string) {
     const module = { exports: {} as any }
     new Function('require', 'module', 'exports', compile(code))(
-      (name: string) => modules[name] ?? require(name), module, module.exports,
+      (name: string) => modules[name] ?? (name === '@/i18n/countCopy' ? { formatCountCopy } : require(name)), module, module.exports,
     )
     return module.exports
   }
@@ -747,4 +748,11 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.ok(html.includes(`${expected}</small>`), html)
     })
   }
+}
+
+for (const count of [1, 2]) {
+  test(`English event cards use the source quantity ${count}`, async () => {
+    const { html } = await renderWorkbench({ locale: 'en-US', focusApi: { listKnowledgeContextEvents: () => Promise.resolve({ success: true, data: [{ ...event, source_count: count }] }) }, scenario: async state => { await state.selectSection('events') } })
+    assert.ok(html.includes(`${count} ${count === 1 ? 'source' : 'sources'}<`), html)
+  })
 }

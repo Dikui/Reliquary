@@ -1622,7 +1622,7 @@ const handleUploadConfirmResult = async (result: UploadConfirmResult) => {
   if (files.length > 0) {
     const hasFolderPaths = files.some(isFolderUpload);
     if (hasFolderPaths) {
-      MessagePlugin.info(t('knowledgeBase.uploadingFolder', { total: files.length }));
+      MessagePlugin.info(t('knowledgeBase.uploadingFolder', { total: files.length }, files.length));
     }
     await executeUploadBatch(files, {
       processConfig,

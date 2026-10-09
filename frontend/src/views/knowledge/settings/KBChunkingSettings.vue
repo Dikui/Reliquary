@@ -55,7 +55,7 @@
               @change="handleChunkSizeChange"
               :style="sliderStyle"
             />
-            <span class="value-display">{{ localChunkSize }} {{ $t('knowledgeEditor.chunking.characters') }}</span>
+            <span class="value-display">{{ localChunkSize }} {{ $t('knowledgeEditor.chunking.characters', localChunkSize) }}</span>
           </div>
         </div>
       </div>
@@ -78,7 +78,7 @@
               @change="handleChunkOverlapChange"
               :style="sliderStyle"
             />
-            <span class="value-display">{{ localChunkOverlap }} {{ $t('knowledgeEditor.chunking.characters') }}</span>
+            <span class="value-display">{{ localChunkOverlap }} {{ $t('knowledgeEditor.chunking.characters', localChunkOverlap) }}</span>
           </div>
         </div>
       </div>
@@ -134,7 +134,7 @@
               @change="handleParentChunkSizeChange"
               :style="sliderStyle"
             />
-            <span class="value-display">{{ localParentChunkSize }} {{ $t('knowledgeEditor.chunking.characters') }}</span>
+            <span class="value-display">{{ localParentChunkSize }} {{ $t('knowledgeEditor.chunking.characters', localParentChunkSize) }}</span>
           </div>
         </div>
       </div>
@@ -156,7 +156,7 @@
               @change="handleChildChunkSizeChange"
               :style="sliderStyle"
             />
-            <span class="value-display">{{ localChildChunkSize }} {{ $t('knowledgeEditor.chunking.characters') }}</span>
+            <span class="value-display">{{ localChildChunkSize }} {{ $t('knowledgeEditor.chunking.characters', localChildChunkSize) }}</span>
           </div>
         </div>
       </div>

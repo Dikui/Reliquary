@@ -15,7 +15,7 @@
       </div>
       <div v-if="data.content_length" class="info-field">
         <span class="field-label">{{ $t('chat.contentLengthLabelSimple') }}</span>
-        <span class="field-value">{{ $t('chat.lengthChars', { value: data.content_length }) }}</span>
+        <span class="field-value">{{ $t('chat.lengthChars', { value: data.content_length }, data.content_length) }}</span>
       </div>
     </div>
 

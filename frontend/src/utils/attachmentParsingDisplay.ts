@@ -55,9 +55,9 @@ export function getAttachmentParsingSummaryHtml(
     return t('agentStream.attachmentParsing.parsedWithSkipped', {
       parsed: `<strong>${parsed}</strong>`,
       skipped: `<strong>${skipped}</strong>`,
-    })
+    }, parsed)
   }
   return t('agentStream.attachmentParsing.parsedSummary', {
     count: `<strong>${parsed}</strong>`,
-  })
+  }, parsed)
 }

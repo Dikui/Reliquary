@@ -80,3 +80,10 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     })
   }
 }
+
+for (const count of [1, 2]) {
+  test(`English segment coverage uses the total quantity ${count}`, async () => {
+    const html = await renderDetails({ extraction_status: 'complete', extraction_coverage: 'complete', processed_segments: 1, total_segments: count }, false, 'en-US')
+    assert.ok(html.includes(`Processed 1 / ${count} ${count === 1 ? 'segment' : 'segments'}<`), html)
+  })
+}

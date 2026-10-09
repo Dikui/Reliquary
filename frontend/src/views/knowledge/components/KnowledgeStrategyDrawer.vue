@@ -23,7 +23,7 @@
         <t-button :loading="reprocessing" :disabled="scopeMode === 'messages' ? !reprocessIDs.length : !tagID" @click="reprocess">
           {{ t('knowledgeBase.strategy.runReprocess') }}
         </t-button>
-        <p v-if="lastResult">{{ t('knowledgeBase.strategy.reprocessResult', lastResult) }}</p>
+        <p v-if="lastResult">{{ formatCountCopy(t, 'knowledgeBase.strategy.reprocessResult', { flagged: lastResult.flagged, conflicts: lastResult.conflicts }, lastResult) }}</p>
         <p v-for="error in lastResult?.errors || []" :key="error">{{ error }}</p>
       </div>
       <t-loading :loading="loading" size="small">
@@ -102,6 +102,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatCountCopy } from '@/i18n/countCopy'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'

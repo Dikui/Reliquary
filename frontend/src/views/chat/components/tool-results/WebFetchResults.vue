@@ -207,14 +207,14 @@ const safeHostname = (url: string): string => {
 };
 
 const formatLength = (length: number): string => {
-  if (!length || Number.isNaN(length)) return t('chat.lengthChars', { value: 0 });
+  if (!length || Number.isNaN(length)) return t('chat.lengthChars', { value: 0 }, 0);
   if (length >= 10000) {
     return t('chat.lengthTenThousands', { value: (length / 10000).toFixed(1) });
   }
   if (length >= 1000) {
     return t('chat.lengthThousands', { value: (length / 1000).toFixed(1) });
   }
-  return t('chat.lengthChars', { value: length });
+  return t('chat.lengthChars', { value: length }, length);
 };
 
 const formatMethod = (method: string): string => {

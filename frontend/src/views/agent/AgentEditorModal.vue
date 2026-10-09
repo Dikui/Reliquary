@@ -1078,7 +1078,7 @@
                         </template>
                         <template v-else>
                           <span class="tools-status-metric">
-                            <strong>{{ ragKbCount }}</strong> {{ $t('agentEditor.tools.kbMetricRag') }}
+                            <strong>{{ ragKbCount }}</strong> {{ $t('agentEditor.tools.kbMetricRag', ragKbCount) }}
                           </span>
                           <span class="tools-status-sep">·</span>
 

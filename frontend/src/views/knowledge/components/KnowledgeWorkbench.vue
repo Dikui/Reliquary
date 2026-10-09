@@ -21,7 +21,7 @@
       <div class="name-embedding-rebuild__summary">
         <div>
           <h3>{{ t('knowledgeWorkbench.nameEmbeddings.title') }}</h3>
-          <p role="status">{{ t('knowledgeWorkbench.nameEmbeddings.pending', { count: nameEmbeddingStatus?.pending_count ?? (nameEmbeddingStatusLoading ? t('common.loading') : t('knowledgeWorkbench.nameEmbeddings.unknown')) }) }}</p>
+          <p role="status">{{ t('knowledgeWorkbench.nameEmbeddings.pending', { count: nameEmbeddingStatus?.pending_count ?? (nameEmbeddingStatusLoading ? t('common.loading') : t('knowledgeWorkbench.nameEmbeddings.unknown')) }, nameEmbeddingStatus?.pending_count ?? 0) }}</p>
         </div>
         <div class="name-embedding-rebuild__actions">
           <t-button variant="text" :loading="nameEmbeddingStatusLoading" :disabled="nameEmbeddingRebuilding" @click="loadNameEmbeddingStatus">{{ t('knowledgeWorkbench.refresh') }}</t-button>
@@ -33,7 +33,7 @@
           status: nameEmbeddingRunStatus,
           processed: nameEmbeddingStatus.latest_run.processed_count,
           total: nameEmbeddingStatus.latest_run.total_count,
-        }) }}
+        }, nameEmbeddingStatus.latest_run.total_count) }}
         <span>{{ formatDate(nameEmbeddingStatus.latest_run.finished_at || nameEmbeddingStatus.latest_run.started_at || nameEmbeddingStatus.latest_run.created_at) }}</span>
       </p>
       <p v-else-if="nameEmbeddingStatus" class="muted">{{ t('knowledgeWorkbench.nameEmbeddings.noRun') }}</p>
@@ -118,7 +118,7 @@
         <p v-if="queryResult.template_only_message_count" class="muted" role="status">{{ t('knowledgeWorkbench.query.templateOnlyMessages', { count: queryResult.template_only_message_count }) }}</p>
         <p class="muted" role="status">{{ t('knowledgeWorkbench.sourceTime.excluded', { count: queryResult.excluded_missing_published_at_count || 0 }) }}</p>
         <div class="result-summary">
-          <span>{{ t('knowledgeWorkbench.query.resultCounts', {
+          <span>{{ formatCountCopy(t, 'knowledgeWorkbench.query.resultCounts', {
             entities: queryResult.entities.length,
             facts: queryResult.facts.length,
             events: queryResult.events.length,
@@ -705,6 +705,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatCountCopy } from '@/i18n/countCopy'
 import { computed, defineComponent, h, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'

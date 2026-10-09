@@ -1,3 +1,4 @@
+import { formatCountCopy } from '../i18n/countCopy'
 import type { ComposerTranslation } from 'vue-i18n'
 
 
@@ -67,7 +68,7 @@ export function getKnowledgeSearchSummaryHtml(
     if (candidateCount > 0) {
       return t('agentStream.search.candidatesBelowThreshold', {
         count: `<strong>${candidateCount}</strong>`,
-      })
+      }, candidateCount)
     }
     return t('agentStream.search.noResults')
   }
@@ -75,13 +76,13 @@ export function getKnowledgeSearchSummaryHtml(
   const kbCounts = toolData.kb_counts
   const kbCount = kbCounts && typeof kbCounts === 'object' ? Object.keys(kbCounts).length : 0
   if (kbCount > 0) {
-    return t('agentStream.search.foundResultsFromFiles', {
+    return formatCountCopy(t, 'agentStream.search.foundResultsFromFiles', { count, files: kbCount }, {
       count: `<strong>${count}</strong>`,
       files: `<strong>${kbCount}</strong>`,
     })
   }
 
-  return t('agentStream.search.foundResults', { count: `<strong>${count}</strong>` })
+  return t('agentStream.search.foundResults', { count: `<strong>${count}</strong>` }, count)
 }
 
 type RagPipelineEvent = {

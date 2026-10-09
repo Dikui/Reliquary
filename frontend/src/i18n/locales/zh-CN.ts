@@ -710,7 +710,7 @@ export default {
       model: '选择智能体使用的大语言模型',
       temperature: '控制输出的随机性，0 最确定，1 最随机',
       maxTokens: '模型生成回复的最大 Token 数。选「默认」时为 2048；选「自定义」后按你填的数保存。',
-      maxTokensAgent: '每一轮推理的最大生成 Token（含工具调用 JSON）。选「默认」时，未绑沙箱为 4096，绑了沙箱（可写/改文件）为 24576。选「自定义」后按你填的数保存，不再自动改。',
+      maxTokensAgent: '每一轮推理的最大生成 Token（含工具调用 JSON）。默认值为 4096。选「自定义」后按填写值保存，不再自动改动。',
       thinking: '启用模型的扩展思考能力（需要模型支持）',
       conversationSection: '配置多轮对话开关与问题改写开关（改写提示词见「提示词」）',
       conversationSectionAgent: '配置每轮携带多少历史对话。智能推理始终为多轮模式。',
@@ -1896,7 +1896,7 @@ export default {
         confirmBtn: '确认保存',
         cancelBtn: '取消',
         emptyValue: '（空）',
-        bodyAuthRegistrationMode: '即将把「{label}」改为：{value}\n\n如果切到 self_serve，公网任何人都可以注册账号 — 务必确认是预期行为。',
+        highRiskBody: '即将把「{label}」改为：{value}\n\n请确认对该高风险设置的修改。',
       },
       enumLabels: {
         auth: {
@@ -2148,7 +2148,7 @@ export default {
         security: {
           tab: '网络安全 {count}',
           title: '网络安全',
-          description: '管理 SSRF 白名单，以及是否允许 Docker 沙箱（本机 docker.sock 等同宿主机 root）。'
+          description: '管理出站请求的 SSRF 防护白名单。'
         },
         runtime: {
           tab: '运行与并发 {count}',
@@ -2926,9 +2926,9 @@ export default {
   },
   chatHistorySettings: {
     title: '消息管理',
-    description: '配置聊天历史知识库，将对话消息自动向量化索引，实现语义搜索',
+    description: '配置消息知识库，将对话消息自动向量化索引。',
     enableLabel: '启用消息索引',
-    enableDescription: '开启后，新的对话消息将自动索引到知识库，支持向量搜索',
+    enableDescription: '开启后，新的对话消息将自动索引到消息知识库。',
     embeddingModelLabel: 'Embedding 模型',
     embeddingModelDescription: '选择用于消息向量化的 Embedding 模型',
     embeddingModelLocked: '已有消息被索引，Embedding 模型不可修改（修改需清空索引数据）',
@@ -4006,5 +4006,20 @@ export default {
     myChats: '我的对话',
     apiChats: 'API 会话',
     noSessions: '暂无对话'
-  }
+  },
+  countCopy: {
+    "entities": "{count} 个对象",
+    "facts": "{count} 条事实",
+    "events": "{count} 个事件",
+    "evidenceItems": "{count} 条证据",
+    "documents": "{count} 份文档",
+    "webSources": "{count} 个网页来源",
+    "results": "{count} 条结果",
+    "files": "{count} 个文件",
+    "matchingChunks": "{count} 个匹配片段",
+    "tokens": "{count} tokens",
+    "reviewFlags": "{count} 个审核标记",
+    "manualConflicts": "{count} 个人工冲突",
+    "failedRecords": "{count} 条失败记录"
+  },
 }

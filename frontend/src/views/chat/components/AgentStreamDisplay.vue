@@ -510,6 +510,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatCountCopy } from '@/i18n/countCopy'
 import { normalizeToolName } from '@/utils/toolNames';
 import { ref, computed, watch, onMounted, onBeforeUnmount, onUpdated, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
@@ -1403,15 +1404,15 @@ const intermediateStepsSummary = computed(() => {
 
   const parts: string[] = [];
   if (rounds > 0) {
-    parts.push(t('agent.reasoningRounds', { rounds }));
+    parts.push(t('agent.reasoningRounds', { rounds }, rounds));
   }
   if (tools > 0) {
-    parts.push(t('agent.toolCalls', { tools }));
+    parts.push(t('agent.toolCalls', { tools }, tools));
   }
   // Fallback to a generic step count if neither bucket has anything (shouldn't
   // normally happen once the tree is shown).
   if (parts.length === 0) {
-    parts.push(t('agent.stepsCompleted', { steps: intermediateStepsCount.value }));
+    parts.push(t('agent.stepsCompleted', { steps: intermediateStepsCount.value }, intermediateStepsCount.value));
   }
 
   if (elapsed > 0) {
@@ -2197,7 +2198,7 @@ const compactionSummaryText = (event: any): string => {
   const parts: string[] = [];
   if (before > 0 && after > 0) {
     parts.push(
-      t('agent.contextCompactedSummary', {
+      formatCountCopy(t, 'agent.contextCompactedSummary', { before, after }, {
         before: before.toLocaleString(),
         after: after.toLocaleString(),
       }),
@@ -2231,9 +2232,9 @@ const getSearchResultsSummary = (event: any): string => {
   let summary = '';
   const kbCount = toolData.kb_counts ? Object.keys(toolData.kb_counts).length : 0;
   if (kbCount > 0) {
-    summary = t('agentStream.search.foundResultsFromFiles', { count: `<strong>${count}</strong>`, files: `<strong>${kbCount}</strong>` });
+    summary = formatCountCopy(t, 'agentStream.search.foundResultsFromFiles', { count, files: kbCount }, { count: `<strong>${count}</strong>`, files: `<strong>${kbCount}</strong>` });
   } else {
-    summary = t('agentStream.search.foundResults', { count: `<strong>${count}</strong>` });
+    summary = t('agentStream.search.foundResults', { count: `<strong>${count}</strong>` }, count);
   }
   return summary;
 };
@@ -2249,7 +2250,7 @@ const getGrepResultsSummary = (toolData: any): string => {
     return t('agentStream.search.noResults');
   }
 
-  return t('agentStream.search.grepSummary', {
+  return formatCountCopy(t, 'agentStream.search.grepSummary', { chunks: totalChunks, docs: docCount }, {
     chunks: `<strong>${totalChunks}</strong>`,
     docs: `<strong>${docCount}</strong>`,
   });

@@ -286,7 +286,7 @@ const groupedLogs = computed(() => {
                 <!-- Localised failure summary; raw error_message only for a
                      pure infra failure with no per-document detail. -->
                 <div v-if="log.items_failed > 0" class="tl-error">
-                  {{ t('datasource.logDetail.docsFailedSummary', { n: log.items_failed }) }}
+                  {{ t('datasource.logDetail.docsFailedSummary', { n: log.items_failed }, log.items_failed) }}
                 </div>
                 <div v-else-if="log.error_message" class="tl-error">
                   {{ log.error_message }}
@@ -303,7 +303,7 @@ const groupedLogs = computed(() => {
                     {{ formatSyncError(e) }}
                   </div>
                   <div v-if="log.items_failed > failedItems(log).length" class="tl-failed-more">
-                    {{ t('datasource.logDetail.failedItemsMore', { n: (log.items_failed - failedItems(log).length) }) }}
+                    {{ t('datasource.logDetail.failedItemsMore', { n: (log.items_failed - failedItems(log).length) }, (log.items_failed - failedItems(log).length)) }}
                   </div>
                 </div>
               </div>

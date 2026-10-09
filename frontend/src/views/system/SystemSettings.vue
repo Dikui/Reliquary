@@ -670,7 +670,7 @@ function highRiskConfirmBody(item: SystemSettingItem, value: unknown): string {
       ? t('system.globalSettings.confirm.emptyValue')
       : value.join(', ')
     : String(value)
-  return t('system.globalSettings.confirm.bodyAuthRegistrationMode', {
+  return t('system.globalSettings.confirm.highRiskBody', {
     label: keyLabel(item.key),
     value: renderedValue,
   })

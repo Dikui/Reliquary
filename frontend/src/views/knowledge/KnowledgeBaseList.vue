@@ -48,8 +48,8 @@
               <div class="progress-subtitle">
                 {{
                   summary.completed === summary.total
-                    ? $t('knowledgeList.uploadProgress.completedDetail', { total: summary.total })
-                    : $t('knowledgeList.uploadProgress.detail', { completed: summary.completed, total: summary.total })
+                    ? $t('knowledgeList.uploadProgress.completedDetail', { total: summary.total }, summary.total)
+                    : $t('knowledgeList.uploadProgress.detail', { completed: summary.completed, total: summary.total }, summary.total)
                 }}
               </div>
               <div class="progress-subtitle secondary">

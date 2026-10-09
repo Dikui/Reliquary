@@ -60,6 +60,7 @@
     </div>
 </template>
 <script setup>
+import { formatCountCopy } from '@/i18n/countCopy'
 import { computed, ref, reactive } from "vue";
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
@@ -146,7 +147,7 @@ const headerText = computed(() => {
     const docCount = groupedKnowledgeRefs.value.length;
     const webCount = webReferenceRefs.value.length;
     if (docCount > 0 && webCount > 0) {
-        return t('chat.referencesDocAndWebCount', { docCount, webCount });
+        return formatCountCopy(t, 'chat.referencesDocAndWebCount', { docCount, webCount });
     }
     if (docCount > 0) {
         return t('chat.referencesDocCount', { count: docCount });
