@@ -292,3 +292,35 @@ test('each terminal batch refreshes its estimate and notifies the workbench once
     assert.equal(requests.changes, 1)
   }
 })
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  for (const [messages, calls, remaining] of [[1, 1, 1], [1, 2, 2], [2, 1, 1], [2, 3, 0]] as const) {
+    test(`${locale}: coverage and backfill pluralize ${messages} messages, ${calls} calls and ${remaining} remaining independently`, async () => {
+      const currentBatch = { ...batch, message_count: messages, success_count: messages, failure_count: 0, status: 'completed', items: [] }
+      const { html, confirmations } = await renderBackfill({
+        locale, batches: [currentBatch],
+        api: { getKnowledgeBackfillEstimate: () => Promise.resolve({ success: true, data: { ...estimate, template_only_message_count: messages, pending_message_count: messages, batch_message_count: messages, remaining_message_count: remaining, estimated_model_calls: calls } }) },
+        scenario: async state => { state.confirmStart(); await state.openResults() },
+      })
+      assert.equal(confirmations.length, 1)
+      if (locale === 'zh-CN') {
+        assert.ok(html.includes(`相关消息中仍有 ${messages} 条仅抽取了模板字段。`), html)
+        assert.ok(html.includes(`待补抽 ${messages} 条消息，本批预计调用模型 ${calls} 次。`), html)
+        assert.ok(html.includes(`本批从最新消息开始处理 ${messages} 条，剩余 ${remaining} 条可在后续批次处理。`), html)
+        assert.ok(html.includes(`消息 ${messages} 条，成功 ${messages} 条，失败 0 条。`), html)
+        assert.ok(html.includes(`最近批次：已完成，共 ${messages} 条，成功 ${messages} 条，失败 0 条。`), html)
+        assert.ok(confirmations[0].body.includes(`补抽最新 ${messages} 条消息，预计调用模型 ${calls} 次，剩余 ${remaining} 条。`), confirmations[0].body)
+      } else {
+        const messageText = `${messages} ${messages === 1 ? 'message' : 'messages'}`
+        const callText = `${calls} model ${calls === 1 ? 'call' : 'calls'}`
+        const remainingText = `${remaining} ${remaining === 1 ? 'message remains' : 'messages remain'}`
+        assert.ok(html.includes(`${messageText} pending; this batch needs an estimated ${callText}.`), html)
+        assert.ok(html.includes(`${messages} related ${messages === 1 ? 'message still has' : 'messages still have'} only template fields extracted.`), html)
+        assert.ok(html.includes(`This batch processes the latest ${messageText}. ${remainingText} for later batches.`), html)
+        assert.ok(html.includes(`${messageText}, ${messages} succeeded, 0 failed.`), html)
+        assert.ok(html.includes(`Latest batch: Completed; ${messageText}, ${messages} succeeded, 0 failed.`), html)
+        assert.ok(confirmations[0].body.includes(`Backfill the latest ${messageText} for “Aurora”, with an estimated ${callText}. ${remainingText}.`), confirmations[0].body)
+      }
+    })
+  }
+}

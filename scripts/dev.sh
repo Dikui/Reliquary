@@ -320,6 +320,9 @@ enable_anydoc_build_tag() {
 
 # 启动后端应用（本地）
 start_app() {
+    # 保留调用方的覆盖值，包括显式空字符串，优先于 .env 和 .env.local。
+    local ssrf_whitelist_extra_set="${SSRF_WHITELIST_EXTRA+x}"
+    local ssrf_whitelist_extra="${SSRF_WHITELIST_EXTRA-}"
     log_info "启动后端应用（本地开发模式）..."
     
     cd "$PROJECT_ROOT"
@@ -334,6 +337,13 @@ start_app() {
     if ! load_env_files; then
         log_error ".env 文件不存在，请先创建配置文件"
         return 1
+    fi
+
+    # 默认放行代理 fake-ip 网段；仅变量未设置时使用默认，显式空字符串关闭。
+    if [ -n "$ssrf_whitelist_extra_set" ]; then
+        export SSRF_WHITELIST_EXTRA="$ssrf_whitelist_extra"
+    else
+        export SSRF_WHITELIST_EXTRA="${SSRF_WHITELIST_EXTRA-198.18.0.0/15}"
     fi
     
     # 本地 docker-compose.dev 模式：把容器服务名映射到宿主机回环地址

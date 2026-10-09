@@ -26,6 +26,7 @@ go run ./cmd/server reset-password
 
 ```bash
 make anydoc-lib
+export SSRF_WHITELIST_EXTRA="${SSRF_WHITELIST_EXTRA-198.18.0.0/15}"
 go run -tags anydoc ./cmd/server
 ```
 
@@ -34,6 +35,12 @@ go run -tags anydoc ./cmd/server
 只运行一个后端进程。流式事件、模型并发与速率限制、接口限流、工具审批和 MCP OAuth state 保存在进程内存中，重启后不保留未完成的流式事件或审批；OAuth state 为单次使用，10 分钟过期。Redis 继续用于 Asynq 任务队列及任务检查、多模态图像任务计数、知识库克隆与知识移动进度，以及运行配置缓存变更通知。
 
 当前版本不提供联网搜索：普通问答仅检索知识库，Agent 不提供搜索互联网的工具，工作流不提供网页研究步骤和专题调研模板。抓取指定网址的 `web_fetch`、Agent 按网址收录的 `knowledge_import_url`、RSS 与站点适配器继续可用。主动调研的后续计划见 [ADR 0007](adr/0007-personal-single-user.md) 和 `.scratch/web-research/issues/01-active-research.md`。
+
+Docker Compose、`make run`、`scripts/dev.sh app` 和委托该脚本的 `scripts/quick-dev.sh` 默认设置 `SSRF_WHITELIST_EXTRA=198.18.0.0/15`。这一基准测试保留网段正常公网不会使用；本机代理采用 fake-ip 时，公网域名可能解析到该网段，默认放行使按网址收录和抓取继续可用。该项不会放行回环、私网、链路本地地址、`localhost`、`postgres` 或 `redis` 等 Docker 服务名，已有 SSRF 校验规则继续生效。
+
+Docker Compose 和开发脚本可在 `.env` 中设置自定义 `SSRF_WHITELIST_EXTRA` 覆盖默认值，多个值用逗号分隔；显式写入 `SSRF_WHITELIST_EXTRA=` 关闭默认放行，修改后需重启应用。Docker Compose 也可用 `SSRF_WHITELIST_EXTRA= docker compose up -d app` 关闭。宿主机开发脚本优先使用调用方已设置的环境变量，其次为 `.env.local`、`.env`，最后为默认值；`SSRF_WHITELIST_EXTRA= ./scripts/dev.sh app` 同样关闭。`docker-compose.dev.yml` 仅启动 PostgreSQL 和 Redis，宿主机后端通过上述脚本获得该默认值。直接 `go run` 或执行二进制时，请先按上面的 `export` 示例设置此变量；`make run` 已带默认值，并使用当前 shell 中导出的变量，不单独加载 `.env`。
+
+`SSRF_WHITELIST_EXTRA` 始终与设置页的 SSRF 白名单合并，设置页保存为空列表或修改白名单不会覆盖部署配置。要关闭 fake-ip 放行，应在部署环境中将该变量显式设为空，同时从设置页白名单移除自行添加的同一网段。
 
 
 工作流只提供 `search`、`fact_query`、`report`，每日与每周模板可继续使用。运行期间禁用工作流会暂停，可在重新启用后恢复；失败运行可重试。Wiki、Agent 长期记忆与历史对话搜索、RAG 评测、沙箱、技能及个人环境变量已删除。对话历史、MCP/OAuth、数据分析、数据库查询、知识上下文、策略评测、待审区与消息纠错继续保留。MCP 的 stdio 环境变量和内置模型配置的环境变量展开独立保留。

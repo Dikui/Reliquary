@@ -721,3 +721,30 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.match(html, locale === 'zh-CN' ? /工作流已停用，请先启用后再运行/ : /This workflow is disabled\. Enable it before running/)
   })
 }
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  for (const count of [1, 2]) {
+    test(`${locale}: a structured query uses the correct template-only count for ${count}`, async () => {
+      const { html } = await renderWorkbench({
+        locale, result: { template_only_message_count: count },
+        scenario: async state => { await state.selectSection('query'); await state.runQuery() },
+      })
+      const expected = locale === 'zh-CN' ? `另有 ${count} 条相关消息仅抽取了模板字段。`
+        : count === 1 ? 'Another relevant message has only template fields extracted.' : `Another ${count} relevant messages have only template fields extracted.`
+      assert.ok(html.includes(expected), html)
+    })
+  }
+  for (const count of [0, 1, 2]) {
+    test(`${locale}: an entity list uses the correct alias noun for ${count}`, async () => {
+      const { html } = await renderWorkbench({
+        locale,
+        scenario: async state => {
+          await state.selectSection('entities')
+          state.entities.value = [{ ...entity, aliases: Array.from({ length: count }, (_, index) => `Alias ${index}`) }]
+        },
+      })
+      const expected = locale === 'zh-CN' ? `${count} 个别名` : `${count} ${count === 1 ? 'alias' : 'aliases'}`
+      assert.ok(html.includes(`${expected}</small>`), html)
+    })
+  }
+}

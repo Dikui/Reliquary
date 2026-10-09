@@ -2392,6 +2392,17 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
   word-break: break-word;
 }
 
+.doc-drawer-body .intake-review-panel > a {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .doc-drawer-body :deep(.md-content img) {
   max-width: min(444px, 100%);
 }
@@ -3361,6 +3372,11 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
      content background need to be flushed for the timeline to fill
      edge-to-edge. -->
 <style lang="less">
+[theme-mode="dark"] .t-drawer.doc-main-drawer .intake-review-panel > a,
+[theme-mode="dark"] .t-drawer.doc-main-drawer .intake-review-panel > a:visited {
+  color: var(--td-text-color-link);
+}
+
 .t-drawer.doc-main-drawer {
   .t-drawer__header {
     padding: 14px 18px;

@@ -96,7 +96,7 @@ build-anydoc: anydoc-lib
 
 # Run the application
 run: build
-	./$(BINARY_NAME)
+	SSRF_WHITELIST_EXTRA="$${SSRF_WHITELIST_EXTRA-198.18.0.0/15}" ./$(BINARY_NAME)
 
 reset-password:
 	go run ./cmd/server reset-password

@@ -424,3 +424,74 @@ test('compiled source anchor and inline flex URL styles allow shrinking and wrap
   assert.equal(urlText['overflow-wrap'], 'anywhere')
   assert.equal(urlText['word-break'], 'break-word')
 })
+
+test('the original preview URL has a bounded block container at desktop and narrow widths', async () => {
+  const rules = await compiledStyleRules(detailSFC)
+  const selector = '.doc-drawer-body .intake-review-panel > a'
+  const style = Object.assign({}, ...rules.filter(rule => !rule.media
+    && rule.selector.replace(/\[data-v-layout-test\]/g, '') === selector).map(rule => rule.declarations))
+  for (const [property, value] of Object.entries({
+    display: 'block', width: '100%', 'min-width': '0', 'max-width': '100%',
+    'box-sizing': 'border-box', 'white-space': 'normal', 'overflow-wrap': 'anywhere', 'word-break': 'break-word',
+  })) {
+    assert.equal(style[property], value, `the original preview link receives ${property} outside media rules`)
+  }
+  assert.equal(style['overflow-x'], undefined, 'the source wraps rather than adding a horizontal scrolling region')
+  assert.equal(style['text-overflow'], undefined, 'the complete original URL remains visible')
+})
+
+function relativeLuminance(hex: string) {
+  assert.match(hex, /^#(?:[a-f\d]{3}|[a-f\d]{6})$/i, 'contrast is calculated from the actual opaque theme colors')
+  const color = hex.length === 4 ? hex.slice(1).split('').map(value => value.repeat(2)).join('') : hex.slice(1)
+  const linear = color.match(/.{2}/g)!.map(value => {
+    const channel = parseInt(value, 16) / 255
+    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+  })
+  return linear[0]! * 0.2126 + linear[1]! * 0.7152 + linear[2]! * 0.0722
+}
+
+test('dark original preview links and visited links use the theme token with body-text AA contrast', async () => {
+  const rules = await compiledStyleRules(detailSFC)
+  const anchor = '[theme-mode="dark"] .t-drawer.doc-main-drawer .intake-review-panel > a'
+  for (const state of ['', ':visited']) {
+    const style = Object.assign({}, ...rules.filter(rule => !rule.media && rule.selector === `${anchor}${state}`)
+      .map(rule => rule.declarations))
+    assert.equal(style.color, 'var(--td-text-color-link)', `the ${state || 'unvisited'} source link overrides the browser color`)
+  }
+  assert.ok(!rules.some(rule => rule.selector.includes('.intake-review-panel > a') && rule.declarations.color
+    && !rule.selector.startsWith('[theme-mode="dark"]')), 'the color correction stays limited to the dark theme')
+
+  const theme = await compileStyleAsync({
+    filename: 'theme.css', id: 'source-link-token-test', scoped: false,
+    source: readFileSync(new URL('../assets/theme/theme.css', import.meta.url), 'utf8'),
+  })
+  assert.deepEqual(theme.errors, [])
+  const tokens: Record<string, string> = {}
+  theme.rawResult!.root.walkRules(rule => {
+    if (rule.selector === ':root:root[theme-mode="dark"]') {
+      rule.walkDecls(declaration => { tokens[declaration.prop] = declaration.value })
+    }
+  })
+  function resolveToken(name: string): string {
+    const value = tokens[name]
+    assert.ok(value, `the dark theme defines ${name}`)
+    const alias = value.match(/^var\((--[^)]+)\)$/)?.[1]
+    return alias ? resolveToken(alias) : value
+  }
+  const drawer = await compileStyleAsync({
+    filename: 'tdesign-drawer.css', id: 'drawer-background-test', scoped: false,
+    source: readFileSync(new URL('../../node_modules/tdesign-vue-next/es/drawer/style/index.css', import.meta.url), 'utf8'),
+  })
+  assert.deepEqual(drawer.errors, [])
+  let drawerBackground = ''
+  drawer.rawResult!.root.walkRules(rule => {
+    if (rule.selector === '.t-drawer__content-wrapper') {
+      rule.walkDecls('background', declaration => { drawerBackground = declaration.value })
+    }
+  })
+  assert.equal(drawerBackground, 'var(--td-bg-color-container)', 'contrast uses the installed drawer background token')
+  const foreground = relativeLuminance(resolveToken('--td-text-color-link'))
+  const background = relativeLuminance(resolveToken('--td-bg-color-container'))
+  const contrast = (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05)
+  assert.ok(contrast >= 4.5, `the source link contrast is ${contrast.toFixed(2)}:1, below the required 4.5:1 if this fails`)
+})

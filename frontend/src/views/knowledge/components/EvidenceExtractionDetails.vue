@@ -8,7 +8,7 @@
     <div v-if="shouldShowExtractionCoverage(evidence)" class="extraction-coverage" role="status"><t-tag v-if="evidence.extraction_coverage === 'partial'" theme="warning" variant="light" size="small">{{ t('extractionDetails.partial') }}</t-tag><span v-else>{{ t('extractionDetails.complete') }}</span><span>{{ t('extractionDetails.segments', { processed: evidence.processed_segments || 0, total: evidence.total_segments || 0 }) }}</span></div>
     <p v-if="evidence.extraction_coverage === 'partial' && !compact" class="extraction-partial-hint">{{ t('extractionDetails.partialHint') }}</p>
     <t-alert v-if="!compact && evidence.extraction_error" theme="error" :message="evidence.extraction_error" role="alert" />
-    <ModelCallSummary v-if="!compact" :calls="calls" />
+    <ModelCallSummary v-if="!compact" :calls="calls" :extraction-path="evidence.extraction_path" />
   </div>
 </template>
 <script setup lang="ts">

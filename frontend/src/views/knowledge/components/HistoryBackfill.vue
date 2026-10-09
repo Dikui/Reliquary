@@ -3,7 +3,7 @@
     <EventsCoverageNotice v-if="showCoverage" :count="estimateValid ? estimate?.template_only_message_count ?? null : null" :loading="loading" />
     <p v-if="error" class="history-backfill__error" role="alert">{{ error }}</p>
     <div class="history-backfill__summary" aria-live="polite">
-      <p v-if="estimateValid && estimate">{{ t('knowledgeWorkbench.backfill.estimate', { count: estimate.pending_message_count, calls: estimate.estimated_model_calls }) }}</p>
+      <p v-if="estimateValid && estimate">{{ t('knowledgeWorkbench.backfill.estimate', countLabels(estimate.pending_message_count, estimate.estimated_model_calls)) }}</p>
       <p v-else>{{ t(loading ? 'knowledgeWorkbench.backfill.loading' : 'knowledgeWorkbench.backfill.unavailable') }}</p>
       <div class="history-backfill__actions">
         <t-button v-if="enabled" variant="outline" size="small" :loading="starting" :disabled="loading || !estimateValid || !estimate?.batch_message_count || activeBatch" @click="confirmStart">
@@ -14,7 +14,7 @@
       </div>
     </div>
     <template v-if="estimateValid && estimate && !compact">
-      <p>{{ t('knowledgeWorkbench.backfill.batchLimit', { count: estimate.batch_message_count, remaining: estimate.remaining_message_count }) }}</p>
+      <p>{{ t('knowledgeWorkbench.backfill.batchLimit', countLabels(estimate.batch_message_count, 0, estimate.remaining_message_count)) }}</p>
       <p>{{ t('knowledgeWorkbench.backfill.callEstimateHint') }}</p>
       <p v-if="!enabled">{{ t('knowledgeWorkbench.backfill.starFirst') }}</p>
     </template>
@@ -33,7 +33,7 @@
             <strong>{{ formatDate(batch.created_at) }}</strong>
             <t-tag :theme="batch.status === 'completed' ? 'success' : ['failed', 'completed_with_failures'].includes(batch.status) ? 'warning' : 'default'" variant="light">{{ statusLabel(batch.status) }}</t-tag>
           </div>
-          <p>{{ t('knowledgeWorkbench.backfill.batchCounts', { total: batch.message_count, success: batch.success_count, failure: batch.failure_count }) }}</p>
+          <p>{{ t('knowledgeWorkbench.backfill.batchCounts', { ...countLabels(batch.message_count), total: batch.message_count, success: batch.success_count, failure: batch.failure_count }) }}</p>
           <t-button variant="text" size="small" :loading="detailsLoading && selectedBatchId === batch.id" @click="loadBatchDetails(batch.id)">{{ t('knowledgeWorkbench.backfill.messageResults') }}</t-button>
           <p v-if="detailsError && selectedBatchId === batch.id" class="history-backfill__error" role="alert">{{ detailsError }}</p>
           <ul v-if="selectedBatchId === batch.id && selectedBatch?.items?.some(item => item.error)" class="history-backfill__failures">
@@ -87,7 +87,15 @@ function formatDate(value: string) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString(locale.value)
 }
 function batchSummary(batch: KnowledgeBackfillBatch) {
-  return t('knowledgeWorkbench.backfill.latest', { status: statusLabel(batch.status), total: batch.message_count, success: batch.success_count, failure: batch.failure_count })
+  return t('knowledgeWorkbench.backfill.latest', { ...countLabels(batch.message_count), status: statusLabel(batch.status), total: batch.message_count, success: batch.success_count, failure: batch.failure_count })
+}
+function countLabels(count: number, calls = 0, remaining = 0) {
+  return {
+    count, calls, remaining,
+    messages: t('knowledgeWorkbench.backfill.messageCount', { count }),
+    modelCalls: t('knowledgeWorkbench.backfill.modelCallCount', { count: calls }),
+    remainingMessages: t('knowledgeWorkbench.backfill.remainingMessages', { count: remaining }),
+  }
 }
 function clearPolling() {
   if (pollTimer) clearTimeout(pollTimer)
@@ -140,7 +148,7 @@ function confirmStart() {
   const confirmedRequest = request
   confirmation = confirmBackfill({
     title: t('knowledgeWorkbench.backfill.title', { name: props.name }),
-    body: t('knowledgeWorkbench.backfill.confirm', { name: props.name, count: estimate.value.batch_message_count, calls: estimate.value.estimated_model_calls, remaining: estimate.value.remaining_message_count }),
+    body: t('knowledgeWorkbench.backfill.confirm', { name: props.name, ...countLabels(estimate.value.batch_message_count, estimate.value.estimated_model_calls, estimate.value.remaining_message_count) }),
     confirmText: t('knowledgeWorkbench.backfill.start'),
     onClose: () => { confirmation = null },
     onConfirm: async () => {

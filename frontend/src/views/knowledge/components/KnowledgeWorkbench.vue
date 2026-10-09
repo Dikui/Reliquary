@@ -172,7 +172,7 @@
                 <span class="entity-list__avatar">{{ entity.canonical_name.slice(0, 1) }}</span>
                 <span class="entity-list__copy">
                   <strong>{{ entity.canonical_name }}</strong>
-                  <small>{{ entity.entity_type || t('knowledgeWorkbench.entities.unknownType') }} · {{ entity.aliases?.length || 0 }} {{ t('knowledgeWorkbench.entities.aliases') }}</small>
+                  <small>{{ entity.entity_type || t('knowledgeWorkbench.entities.unknownType') }} · {{ entity.aliases?.length || 0 }} {{ t('knowledgeWorkbench.entities.aliases', entity.aliases?.length || 0) }}</small>
                 </span>
               </button>
               <FocusStarButton :name="entity.canonical_name" :starred="isEntityStarred(entity.id)" compact

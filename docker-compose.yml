@@ -130,6 +130,8 @@ services:
       #   改用 SYSTEM_AES_KEY，Go 主应用不再读取这三个变量。）
       - SYSTEM_AES_KEY=${SYSTEM_AES_KEY:-}
       - SSRF_WHITELIST=${SSRF_WHITELIST:-}
+      # 默认放行本机代理 fake-ip 使用的基准测试保留网段；显式设为空字符串即关闭。
+      - SSRF_WHITELIST_EXTRA=${SSRF_WHITELIST_EXTRA-198.18.0.0/15}
       # 保留原始 URL 的图片域名白名单（逗号分隔，不替换为 provider://）
       - IMAGE_HOST_KEEP_URL=${IMAGE_HOST_KEEP_URL:-}
       - CONCURRENCY_POOL_SIZE=${CONCURRENCY_POOL_SIZE:-5}
