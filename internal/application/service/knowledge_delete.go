@@ -144,7 +144,7 @@ func (s *knowledgeService) DeleteKnowledge(ctx context.Context, id string) error
 	}
 
 	// Best-effort: purge any queued downstream tasks for this knowledge
-	// (multimodal / post-process / question / summary / graph extract).
+	// (multimodal / post-process / question / summary / context extract).
 	// Worker checkpoints already drop them on the floor, but dequeuing
 	// here avoids waking workers just to no-op when the parse was still
 	// in flight at delete time. No-op in in-memory fixtures and on completed rows
@@ -215,7 +215,7 @@ func (s *knowledgeService) DeleteKnowledge(ctx context.Context, id string) error
 	}
 	// Delete the knowledge row FIRST, then drop its physical file. Physical
 	// cleanup is deliberately deferred until the row is gone: if any of the
-	// index/chunk/graph cleanups above failed we already returned early with the
+	// index/chunk/context cleanups above failed we already returned early with the
 	// row (and its file) intact, so the queued retry — or a user-triggered
 	// reparse — can still read the original file. Deleting the file before the
 	// row could leave a "file missing but row present" zombie that can neither be

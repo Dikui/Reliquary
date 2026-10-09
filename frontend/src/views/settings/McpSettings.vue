@@ -17,11 +17,8 @@
         <p>{{ $t('mcpSettings.manageAndTest') }}</p>
       </div>
 
-      <div v-if="services.length === 0 && !authStore.isLoggedIn" class="empty-state">
-        <t-empty :description="$t('mcpSettings.empty')" />
-      </div>
 
-      <div v-else class="services-grid">
+      <div class="services-grid">
         <!-- 与 ModelSettings / ModelSettings 同形的卡片：左侧 transport 徽章 +
              标题 / 副标题 / url 三段式。开关挂在标题行右侧，三点菜单 hover 才出现。
              SettingCard 当前没有其它消费者了，但保留组件供未来需要时复用。 -->
@@ -33,11 +30,11 @@
             `service-card--${service.transport_type || 'unknown'}`,
             {
               'service-card--builtin': service.is_builtin,
-              'service-card--clickable': isServiceCardClickable(),
+              'service-card--clickable': true,
             },
           ]"
-          :role="isServiceCardClickable() ? 'button' : undefined"
-          :tabindex="isServiceCardClickable() ? 0 : undefined"
+          role="button"
+          tabindex="0"
           @click="onServiceCardClick($event, service)"
           @keydown.enter="onServiceCardClick($event, service)"
         >
@@ -93,7 +90,7 @@
           </div>
         </div>
         <button
-          v-if="authStore.isLoggedIn"
+
           type="button"
           class="service-card service-card--add"
           @click="handleAdd"
@@ -130,10 +127,8 @@ import {
 } from '@/api/mcp-service'
 import McpServiceDialog from './components/McpServiceDialog.vue'
 import { useConfirmDelete } from '@/components/settings/useConfirmDelete'
-import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
-const authStore = useAuthStore()
 const confirmDelete = useConfirmDelete()
 
 const services = ref<MCPService[]>([])
@@ -162,10 +157,8 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const isServiceCardClickable = () => authStore.isLoggedIn
 
 const onServiceCardClick = (event: Event, service: MCPService) => {
-  if (!isServiceCardClickable()) return
   if (event.type === 'keydown') {
     const ke = event as KeyboardEvent
     if (ke.key !== 'Enter' && ke.key !== ' ') return
@@ -236,13 +229,10 @@ const handleDelete = (service: MCPService) => {
 }
 
 // Get service options for dropdown menu. MCP service mutations are all
-// Admin+ in the backend matrix, so non-Admins see an empty action menu.
+// Every signed-in user can manage services.
 // 测试连接已挪到编辑抽屉的 footer，不再放在外层菜单里 — 单一入口减少
 // 用户疑惑（"为什么有两个测试入口，结果一样吗？"）。
 const getServiceOptions = (service: MCPService) => {
-  if (!authStore.isLoggedIn) {
-    return []
-  }
   return [
     {
       content: service.enabled ? t('common.off') : t('common.on'),
@@ -253,12 +243,9 @@ const getServiceOptions = (service: MCPService) => {
   ]
 }
 
-// Builtin: 仅编辑（同样 Admin+ only）。内置服务测试也通过抽屉的 footer 触发，
+// Builtin: 仅编辑。内置服务测试也通过抽屉的 footer 触发，
 // 不再在外层菜单露出"测试连接"项。
 const getBuiltinServiceOptions = () => {
-  if (!authStore.isLoggedIn) {
-    return []
-  }
   return [
     { content: t('common.edit'), value: 'edit' }
   ]

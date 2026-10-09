@@ -12,14 +12,14 @@ import (
 	"time"
 )
 
-var queryKnowledgeGraphTool = BaseTool{
-	name:        ToolQueryKnowledgeGraph,
-	description: `Query real, cross-message entities, sourced facts and relationships. Use entity names, predicate/relation and effective time filters. Assertions preserve quotes and evidence IDs; conflicting sources may coexist. Ordinary knowledge_search retrieves supporting original text when structured knowledge is insufficient. This tool does not execute Cypher or turn document chunks into graph nodes.`,
-	schema:      utils.GenerateSchema[QueryKnowledgeGraphInput](),
+var queryKnowledgeContextTool = BaseTool{
+	name:        ToolQueryKnowledgeContext,
+	description: `Query knowledge context stored in PostgreSQL: cross-message objects, sourced facts, relationships and events. Use entity names, predicate/relation and effective time filters. Assertions preserve quotes and evidence IDs; conflicting sources may coexist. Ordinary knowledge_search retrieves supporting original text when structured knowledge is insufficient. Direct event relationships expand by at most one layer; this tool does not traverse a graph.`,
+	schema:      utils.GenerateSchema[QueryKnowledgeContextInput](),
 }
 
-type QueryKnowledgeGraphInput struct {
-	Scope            string     `json:"scope,omitempty" jsonschema:"Query scope: knowledge_base (default), domain or team"`
+type QueryKnowledgeContextInput struct {
+	Scope            string     `json:"scope,omitempty" jsonschema:"Query scope: knowledge_base (default), domain or all"`
 	DomainID         string     `json:"domain_id,omitempty" jsonschema:"Required when scope is domain"`
 	KnowledgeBaseIDs []string   `json:"knowledge_base_ids" jsonschema:"Authorized short bN knowledge base IDs, 1-10"`
 	Query            string     `json:"query,omitempty" jsonschema:"Entity name or alias, not a full natural-language question"`
@@ -35,7 +35,7 @@ type QueryKnowledgeGraphInput struct {
 	IncludeHistory   bool       `json:"include_history,omitempty"`
 }
 
-type QueryKnowledgeGraphTool struct {
+type QueryKnowledgeContextTool struct {
 	BaseTool
 	knowledgeService      interfaces.KnowledgeBaseService
 	scopeKnowledgeService interfaces.KnowledgeService
@@ -44,16 +44,16 @@ type QueryKnowledgeGraphTool struct {
 	queryContext          func(context.Context, string, types.KnowledgeContextQuery) (*types.KnowledgeContextResult, error)
 }
 
-func (t *QueryKnowledgeGraphTool) WithKnowledgeScope(s interfaces.KnowledgeService) *QueryKnowledgeGraphTool {
+func (t *QueryKnowledgeContextTool) WithKnowledgeScope(s interfaces.KnowledgeService) *QueryKnowledgeContextTool {
 	t.scopeKnowledgeService = s
 	return t
 }
-func (t *QueryKnowledgeGraphTool) WithContextQuery(query func(context.Context, string, types.KnowledgeContextQuery) (*types.KnowledgeContextResult, error)) *QueryKnowledgeGraphTool {
+func (t *QueryKnowledgeContextTool) WithContextQuery(query func(context.Context, string, types.KnowledgeContextQuery) (*types.KnowledgeContextResult, error)) *QueryKnowledgeContextTool {
 	t.queryContext = query
 	return t
 }
-func NewQueryKnowledgeGraphTool(s interfaces.KnowledgeBaseService, targets ...types.SearchTargets) *QueryKnowledgeGraphTool {
-	t := &QueryKnowledgeGraphTool{BaseTool: queryKnowledgeGraphTool, knowledgeService: s}
+func NewQueryKnowledgeContextTool(s interfaces.KnowledgeBaseService, targets ...types.SearchTargets) *QueryKnowledgeContextTool {
+	t := &QueryKnowledgeContextTool{BaseTool: queryKnowledgeContextTool, knowledgeService: s}
 	if len(targets) > 0 {
 		t.searchTargets = targets[0]
 		t.scopeEnforced = true
@@ -61,15 +61,16 @@ func NewQueryKnowledgeGraphTool(s interfaces.KnowledgeBaseService, targets ...ty
 	return t
 }
 
-func (t *QueryKnowledgeGraphTool) Execute(ctx context.Context, args json.RawMessage) (*types.ToolResult, error) {
-	var input QueryKnowledgeGraphInput
+func (t *QueryKnowledgeContextTool) Execute(ctx context.Context, args json.RawMessage) (*types.ToolResult, error) {
+	var input QueryKnowledgeContextInput
 	fail := func(err error) (*types.ToolResult, error) {
 		return &types.ToolResult{Success: false, Error: err.Error()}, err
 	}
 	if err := json.Unmarshal(args, &input); err != nil {
 		return fail(err)
 	}
-	broad := input.Scope == "domain" || input.Scope == "team"
+	input.Scope = types.NormalizeKnowledgeContextScope(input.Scope)
+	broad := input.Scope == "domain" || input.Scope == "all"
 	if input.Scope != "" && input.Scope != "knowledge_base" && !broad {
 		return fail(fmt.Errorf("invalid query scope"))
 	}
@@ -178,5 +179,5 @@ func (t *QueryKnowledgeGraphTool) Execute(ctx context.Context, args json.RawMess
 	if len(nodes) == 0 {
 		output.WriteString("No matching structured assertions; use knowledge_search for original evidence.\n")
 	}
-	return &types.ToolResult{Success: true, Output: output.String(), Data: map[string]any{"scope": input.Scope, "domain_id": input.DomainID, "knowledge_base_ids": bases, "contexts": contexts, "graph_data": map[string]any{"nodes": nodes, "edges": edges, "total_nodes": len(nodes), "total_edges": len(edges)}, "display_type": "graph_query_results"}}, nil
+	return &types.ToolResult{Success: true, Output: output.String(), Data: map[string]any{"scope": input.Scope, "domain_id": input.DomainID, "knowledge_base_ids": bases, "contexts": contexts, "context_data": map[string]any{"nodes": nodes, "edges": edges, "total_nodes": len(nodes), "total_edges": len(edges)}, "display_type": "context_query_results"}}, nil
 }

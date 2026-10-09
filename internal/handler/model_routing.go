@@ -26,15 +26,23 @@ func NewModelRoutingHandler(db *gorm.DB, models interfaces.ModelService) *ModelR
 	return &ModelRoutingHandler{db: db, models: models}
 }
 
+// Get returns global model defaults or the selected scope's effective models.
+// @Summary 获取模型分级默认配置
+// @Tags 空间
+// @Produce json
+// @Param domain_id query string false "领域 ID"
+// @Param knowledge_base_id query string false "知识库 ID"
+// @Success 200 {object} map[string]interface{}
+// @Router /space/model-tiers [get]
 func (h *ModelRoutingHandler) Get(c *gin.Context) {
 	ctx := c.Request.Context()
 	tenantID := types.MustTenantIDFromContext(ctx)
-	var team types.Tenant
-	if err := h.db.WithContext(ctx).Select("model_tiers").Where("id = ?", tenantID).First(&team).Error; err != nil {
+	var space types.Tenant
+	if err := h.db.WithContext(ctx).Select("model_tiers").Where("id = ?", tenantID).First(&space).Error; err != nil {
 		c.Error(err)
 		return
 	}
-	overrides := team.ModelTiers
+	overrides := space.ModelTiers
 	var kb *types.KnowledgeBase
 	if id := c.Query("knowledge_base_id"); id != "" {
 		kb = &types.KnowledgeBase{}
@@ -60,6 +68,14 @@ func (h *ModelRoutingHandler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": view})
 }
 
+// Update saves global model defaults.
+// @Summary 保存模型分级全局默认
+// @Tags 空间
+// @Accept json
+// @Produce json
+// @Param request body types.ModelTierConfig true "全局默认模型"
+// @Success 200 {object} map[string]interface{}
+// @Router /space/model-tiers [put]
 func (h *ModelRoutingHandler) Update(c *gin.Context) {
 	ctx := c.Request.Context()
 	tenantID := types.MustTenantIDFromContext(ctx)
@@ -85,8 +101,8 @@ func (h *ModelRoutingHandler) Update(c *gin.Context) {
 		return
 	}
 	if h.nameEmbeddingRebuilder != nil && changed {
-		if err := h.nameEmbeddingRebuilder.MarkAndEnqueue(ctx, tenantID, "team_embedding_profile_changed"); err != nil {
-			c.Error(apperrors.NewInternalServerError("team settings saved but name embedding rebuild could not be queued").WithDetails(map[string]any{"settings_saved": true, "retry_action": "name_embedding_rebuild"}))
+		if err := h.nameEmbeddingRebuilder.MarkAndEnqueue(ctx, tenantID, "global_embedding_profile_changed"); err != nil {
+			c.Error(apperrors.NewInternalServerError("global settings saved but name embedding rebuild could not be queued").WithDetails(map[string]any{"settings_saved": true, "retry_action": "name_embedding_rebuild"}))
 			return
 		}
 	}

@@ -77,7 +77,7 @@ func TestMain(m *testing.M) {
 	os.Exit(pgtest.Run(m))
 }
 
-func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
+func TestKnowledgeFusionPersistsContextWorkflowReportAndEvidence(t *testing.T) {
 	db := fusionFixtureDB(t)
 
 	ctx := fusionContext(fusionTenantID, fusionOwnerID)
@@ -131,19 +131,19 @@ func TestKnowledgeFusionPersistsGraphWorkflowReportAndEvidence(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, contextWorker.Handle(ctx, asynq.NewTask(types.TypeKnowledgeAutoTag, contextPayload)))
 
-	graphTool := tools.NewQueryKnowledgeGraphTool(kbService).WithContextQuery(func(ctx context.Context, id string, query types.KnowledgeContextQuery) (*types.KnowledgeContextResult, error) {
+	contextTool := tools.NewQueryKnowledgeContextTool(kbService).WithContextQuery(func(ctx context.Context, id string, query types.KnowledgeContextQuery) (*types.KnowledgeContextResult, error) {
 		return contextService.Query(ctx, id, query)
 	})
-	graphArgs, err := json.Marshal(tools.QueryKnowledgeGraphInput{KnowledgeBaseIDs: []string{fusionKBID}, Query: "Acme Holdings"})
+	contextArgs, err := json.Marshal(tools.QueryKnowledgeContextInput{KnowledgeBaseIDs: []string{fusionKBID}, Query: "Acme Holdings"})
 	require.NoError(t, err)
-	graphResult, err := graphTool.Execute(ctx, graphArgs)
+	toolResult, err := contextTool.Execute(ctx, contextArgs)
 	require.NoError(t, err)
-	require.True(t, graphResult.Success, graphResult.Error)
-	graphData := graphResult.Data["graph_data"].(map[string]any)
-	require.Equal(t, 1, graphData["total_edges"])
-	graphContext := graphResult.Data["contexts"].(map[string]*types.KnowledgeContextResult)[fusionKBID]
-	require.Len(t, graphContext.Facts, 2)
-	require.Empty(t, graphContext.Evidence[0].Body, "graph queries include evidence metadata, not the full source snapshot")
+	require.True(t, toolResult.Success, toolResult.Error)
+	contextData := toolResult.Data["context_data"].(map[string]any)
+	require.Equal(t, 1, contextData["total_edges"])
+	toolContext := toolResult.Data["contexts"].(map[string]*types.KnowledgeContextResult)[fusionKBID]
+	require.Len(t, toolContext.Facts, 2)
+	require.Empty(t, toolContext.Evidence[0].Body, "context queries include evidence metadata, not the full source snapshot")
 
 	taskQueue := &fusionTaskQueue{}
 	workflowService := service.NewKnowledgeWorkflowService(db, kbService, knowledge, contextService,

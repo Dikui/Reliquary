@@ -97,7 +97,7 @@ func DeduplicateWithScore[T ScoreComparable, K comparable](keyFunc func(T) K, it
 // ```
 // or regular JSON responses directly.
 // jsonCodeFenceRE extracts a JSON payload wrapped in a Markdown code fence.
-// Compiled once: ParseLLMJsonResponse runs on the graph-extraction path.
+// Compiled once: ParseLLMJsonResponse runs on the context-extraction path.
 var jsonCodeFenceRE = regexp.MustCompile("```(?:json)?\\s*([\\s\\S]*?)```")
 
 func ParseLLMJsonResponse(content string, target interface{}) error {

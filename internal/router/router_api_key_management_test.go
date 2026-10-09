@@ -11,7 +11,7 @@ import (
 
 func TestPersonalAPIKeyCanManageAPIKeys(t *testing.T) {
 	f := newPersonalAuthFixture(t)
-	create := personalRequest(t, f.router, http.MethodPost, "/api/v1/tenants/1/api-keys", `{"name":"managed through key"}`, f.key, true)
+	create := personalRequest(t, f.router, http.MethodPost, "/api/v1/space/api-keys", `{"name":"managed through key"}`, f.key, true)
 	require.Equal(t, http.StatusCreated, create.Code, create.Body.String())
 	var response struct {
 		Data struct {
@@ -21,7 +21,7 @@ func TestPersonalAPIKeyCanManageAPIKeys(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(create.Body.Bytes(), &response))
 	require.NotEmpty(t, response.Data.Token)
-	path := fmt.Sprintf("/api/v1/tenants/1/api-keys/%d", response.Data.ID)
+	path := fmt.Sprintf("/api/v1/space/api-keys/%d", response.Data.ID)
 	updated := personalRequest(t, f.router, http.MethodPut, path, `{"name":"renamed"}`, f.key, true)
 	require.Equal(t, http.StatusOK, updated.Code, updated.Body.String())
 	require.Contains(t, updated.Body.String(), "renamed")

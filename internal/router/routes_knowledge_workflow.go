@@ -10,7 +10,7 @@ func RegisterKnowledgeWorkflowRoutes(r *gin.RouterGroup, h *handler.KnowledgeWor
 		return
 	}
 	w := r.Group("/knowledge-bases/:id/workflows")
-	w.Use(g.KBAccessWrite("id"))
+	w.Use(g.KBExists("id"))
 	w.GET("", h.List)
 	w.POST("", h.Create)
 	w.GET("/runs/:run_id", h.GetRun)
@@ -22,7 +22,7 @@ func RegisterKnowledgeWorkflowRoutes(r *gin.RouterGroup, h *handler.KnowledgeWor
 	w.POST("/:workflow_id/run", h.Run)
 	w.GET("/:workflow_id/runs", h.ListRuns)
 	rp := r.Group("/knowledge-bases/:id/reports")
-	rp.Use(g.KBAccessRead("id"))
+	rp.Use(g.KBExists("id"))
 	rp.GET("", h.ListReports)
 	rp.GET("/:report_id", h.GetReport)
 	rp.GET("/:report_id/download", h.DownloadReport)

@@ -36,10 +36,10 @@ function toolsFor(t, scope, hasKb) {
 
 for (const [locale, name] of [['zh-CN', '数据分析'], ['en-US', 'Data analysis']]) {
   for (const [state, scope, hasKb, reasonKey] of [
-    ['vector indexing', { vector: true, keyword: false, graph: false }, true, null],
-    ['keyword indexing', { vector: false, keyword: true, graph: false }, true, null],
-    ['no indexing', { vector: false, keyword: false, graph: false }, true, 'requiresRagKb'],
-    ['no knowledge base', { vector: false, keyword: false, graph: false }, false, 'requiresKb'],
+    ['vector indexing', { vector: true, keyword: false, context: false }, true, null],
+    ['keyword indexing', { vector: false, keyword: true, context: false }, true, null],
+    ['no indexing', { vector: false, keyword: false, context: false }, true, 'requiresRagKb'],
+    ['no knowledge base', { vector: false, keyword: false, context: false }, false, 'requiresKb'],
   ]) {
     test(`${locale} tool cards keep their names with ${state} and show only missing dependency hints`, async () => {
       const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zhCN, 'en-US': enUS } })

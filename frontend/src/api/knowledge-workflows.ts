@@ -122,13 +122,19 @@ const reportBase = (kbId: string) =>
 export const listKnowledgeWorkflows = (kbId: string) =>
   get<KnowledgeContextEnvelope<KnowledgeWorkflow[]>>(workflowBase(kbId))
 
+export function normalizeKnowledgeWorkflowInput(input: KnowledgeWorkflowInput): KnowledgeWorkflowInput {
+  return { ...input, steps: input.steps.map(step => ({ ...step, config: { ...step.config,
+    ...(step.config.scope === 'team' ? { scope: 'all' } : {}),
+  } })) }
+}
+
 export const createKnowledgeWorkflow = (kbId: string, input: KnowledgeWorkflowInput) =>
-  post<KnowledgeContextEnvelope<KnowledgeWorkflow>>(workflowBase(kbId), input)
+  post<KnowledgeContextEnvelope<KnowledgeWorkflow>>(workflowBase(kbId), normalizeKnowledgeWorkflowInput(input))
 
 export const updateKnowledgeWorkflow = (kbId: string, workflowId: string, input: KnowledgeWorkflowInput) =>
   put<KnowledgeContextEnvelope<KnowledgeWorkflow>>(
     `${workflowBase(kbId)}/${encodeURIComponent(workflowId)}`,
-    input,
+    normalizeKnowledgeWorkflowInput(input),
   )
 
 export const listKnowledgeWorkflowRuns = (kbId: string, workflowId: string) =>

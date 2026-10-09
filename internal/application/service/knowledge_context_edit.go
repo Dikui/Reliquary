@@ -146,7 +146,7 @@ func (s *KnowledgeContextService) MergeEntities(ctx context.Context, kbID, keepE
 			err := tx.Where("tenant_id = ? AND entity_type = ? AND normalized_alias = ? AND entity_id <> ?", tenantID, keep.EntityType, alias.NormalizedAlias, merged.ID).First(&collision).Error
 			if err == nil {
 				if collision.EntityID != keep.ID {
-					return werrors.NewBadRequestError("merge alias conflicts with another team object")
+					return werrors.NewBadRequestError("merge alias conflicts with another space object")
 				}
 				if err := tx.Delete(&alias).Error; err != nil {
 					return err

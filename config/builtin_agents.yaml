@@ -54,7 +54,7 @@ builtin_agents:
       ja-JP:
         name: "スマート推論"
         description: "ReAct 推論フレームワーク、マルチステップ思考とツール呼び出し対応"
-    config:
+    config: &smart_reasoning_config
       agent_mode: "smart-reasoning"
       agent_type: "rag-qa"
       system_prompt: ""
@@ -67,7 +67,7 @@ builtin_agents:
         - "knowledge_search"
         - "grep_chunks"
         - "list_knowledge_chunks"
-        - "query_knowledge_graph"
+        - "query_knowledge_context"
         - "get_document_info"
         - "knowledge_report_anomaly"
         - "knowledge_import_url"
@@ -121,3 +121,21 @@ builtin_agents:
       rerank_top_k: 5
       rerank_threshold: 0.3
 
+
+  - id: "builtin-knowledge-graph-expert"
+    avatar: ""
+    is_builtin: true
+    i18n:
+      default:
+        name: "Knowledge Context"
+        description: "Query objects, facts, relationships and events with traceable source evidence"
+      zh-CN:
+        name: "知识上下文"
+        description: "查询对象、事实、关系和事件，并核验可追溯的来源证据"
+      zh-TW:
+        name: "知識上下文"
+        description: "查詢物件、事實、關係和事件，並核驗可追溯的來源證據"
+      ja-JP:
+        name: "ナレッジコンテキスト"
+        description: "対象、事実、関係、イベントを検索し、追跡可能な出典を確認します"
+    config: *smart_reasoning_config

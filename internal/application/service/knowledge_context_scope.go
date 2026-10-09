@@ -23,12 +23,12 @@ func (s *KnowledgeContextService) resolveContextQueryScope(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	scope := strings.TrimSpace(q.Scope)
+	scope := types.NormalizeKnowledgeContextScope(q.Scope)
 	if scope == "" {
 		if kbID != "" || q.KnowledgeBaseID != "" {
 			scope = "knowledge_base"
 		} else {
-			scope = "team"
+			scope = "all"
 		}
 	}
 	query := s.db.WithContext(ctx).Model(&types.KnowledgeBase{}).Select("id", "name", "domain_id").Where("tenant_id = ?", tenantID)
@@ -53,9 +53,9 @@ func (s *KnowledgeContextService) resolveContextQueryScope(ctx context.Context, 
 			return nil, err
 		}
 		query = query.Where("domain_id = ?", q.DomainID)
-	case "team":
+	case "all":
 	default:
-		return nil, werrors.NewBadRequestError("scope must be knowledge_base, domain or team")
+		return nil, werrors.NewBadRequestError("scope must be knowledge_base, domain or all")
 	}
 
 	var bases []types.KnowledgeBase
@@ -80,7 +80,7 @@ func (s *KnowledgeContextService) resolveContextQueryScope(ctx context.Context, 
 	return resolved, nil
 }
 
-// A field's aliases belong to its source domain, even during a team query.
+// A field's aliases belong to its source domain, even during an all-knowledge-base query.
 func (scope *contextQueryScope) factFields(query *gorm.DB, q types.KnowledgeContextQuery) *gorm.DB {
 	if q.Predicate == "" && q.Relation == "" {
 		return query

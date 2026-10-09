@@ -212,7 +212,7 @@ func TestGetRuntimeQueuesReportsIsolatedPoolCapacity(t *testing.T) {
 	}
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/v1/system/admin/runtime/queues", nil)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/v1/system/runtime/queues", nil)
 
 	handler.GetRuntimeQueues(ctx)
 	if recorder.Code != http.StatusOK {
@@ -265,7 +265,7 @@ func TestGetRuntimeQueuesFallsBackFromInvalidHistoricalConcurrency(t *testing.T)
 	}
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/v1/system/admin/runtime/queues", nil)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/v1/system/runtime/queues", nil)
 
 	handler.GetRuntimeQueues(ctx)
 
@@ -299,7 +299,7 @@ func TestListRuntimeTasksReturnsSafeTaskDetails(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Params = gin.Params{{Key: "queue", Value: types.QueueDefault}}
-	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/v1/system/admin/runtime/queues/default/tasks?state=archived", nil)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/v1/system/runtime/queues/default/tasks?state=archived", nil)
 
 	handler.ListRuntimeTasks(ctx)
 	if recorder.Code != http.StatusOK {
@@ -329,7 +329,7 @@ func TestListRuntimeTasksReturnsAndForwardsCursor(t *testing.T) {
 	ctx.Params = gin.Params{{Key: "queue", Value: types.QueueDefault}}
 	ctx.Request = httptest.NewRequest(
 		http.MethodGet,
-		"/api/v1/system/admin/runtime/queues/default/tasks?state=archived&cursor=previous-page&page_size=25",
+		"/api/v1/system/runtime/queues/default/tasks?state=archived&cursor=previous-page&page_size=25",
 		nil,
 	)
 
@@ -359,7 +359,7 @@ func TestListRuntimeTasksReportsExpiredCursorForFrontendRefresh(t *testing.T) {
 	ctx.Params = gin.Params{{Key: "queue", Value: types.QueueDefault}}
 	ctx.Request = httptest.NewRequest(
 		http.MethodGet,
-		"/api/v1/system/admin/runtime/queues/default/tasks?state=pending&cursor=expired",
+		"/api/v1/system/runtime/queues/default/tasks?state=pending&cursor=expired",
 		nil,
 	)
 

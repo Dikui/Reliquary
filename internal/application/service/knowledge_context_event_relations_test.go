@@ -208,7 +208,7 @@ func TestProjectVisibleContextEventRelationsChecksBothEvidenceEnds(t *testing.T)
 	require.Empty(t, events[1].Relations, "relations to an unapproved source are hidden")
 	require.Len(t, events[2].Relations, 1)
 	require.Equal(t, types.KnowledgeEventRelationUnrelated, events[2].Relations[0].Relation)
-	require.Empty(t, events[2].Relations[0].RelatedEventID, "unrelated classification has no graph target")
+	require.Empty(t, events[2].Relations[0].RelatedEventID, "unrelated classification has no related event target")
 
 	query.KnowledgeIDs = []string{"followup-source"}
 	require.NoError(t, service.projectVisibleEventRelations(context.Background(), 9, []string{"kb"}, events[:3], visibleSourceEvidence, query))

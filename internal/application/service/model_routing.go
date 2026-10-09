@@ -64,7 +64,7 @@ func ValidateModelTierConfig(ctx context.Context, db *gorm.DB, config types.Mode
 	return nil
 }
 
-// ResolveModelTier resolves a KB override, domain override, then team default.
+// ResolveModelTier resolves a KB override, domain override, then global default.
 // Legacy model fields apply only after all three scopes are unconfigured.
 func ResolveModelTier(ctx context.Context, db *gorm.DB, kb *types.KnowledgeBase, tier types.ModelTier) (string, error) {
 	resolved, err := resolveModelTier(ctx, db, kb, tier)
@@ -105,10 +105,10 @@ func resolveModelTier(ctx context.Context, db *gorm.DB, kb *types.KnowledgeBase,
 	if db != nil {
 		var tenant types.Tenant
 		if err := db.WithContext(ctx).Select("model_tiers").Where("id = ?", tenantID).First(&tenant).Error; err != nil {
-			return ResolvedModelTier{}, fmt.Errorf("read team model tiers: %w", err)
+			return ResolvedModelTier{}, fmt.Errorf("read global default model tiers: %w", err)
 		}
 		if id := tenant.ModelTiers.ModelID(tier); id != "" {
-			return ResolvedModelTier{id, "team"}, nil
+			return ResolvedModelTier{id, "global"}, nil
 		}
 	}
 	if kb != nil {

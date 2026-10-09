@@ -21,6 +21,7 @@ import (
 	"reliquary/internal/runtime"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
+	"reliquary/internal/utils"
 )
 
 type runtimeKnowledgeCanceller interface {
@@ -65,13 +66,14 @@ func NewSystemHandler(cfg *config.Config,
 
 // GetSystemInfoResponse defines the response structure for system info
 type GetSystemInfoResponse struct {
-	Version            string `json:"version"`
-	Edition            string `json:"edition"`
-	CommitID           string `json:"commit_id,omitempty"`
-	BuildTime          string `json:"build_time,omitempty"`
-	GoVersion          string `json:"go_version,omitempty"`
-	KeywordIndexEngine string `json:"keyword_index_engine,omitempty"`
-	DBVersion          string `json:"db_version,omitempty"`
+	CredentialEncryptionEnabled bool   `json:"credential_encryption_enabled"`
+	Version                     string `json:"version"`
+	Edition                     string `json:"edition"`
+	CommitID                    string `json:"commit_id,omitempty"`
+	BuildTime                   string `json:"build_time,omitempty"`
+	GoVersion                   string `json:"go_version,omitempty"`
+	KeywordIndexEngine          string `json:"keyword_index_engine,omitempty"`
+	DBVersion                   string `json:"db_version,omitempty"`
 	// DBMigrationError carries the human-readable error message recorded when
 	// the most recent startup migration attempt failed. Empty when migrations
 	// succeeded; non-empty values let the frontend surface a troubleshooting
@@ -131,16 +133,17 @@ func (h *SystemHandler) GetSystemInfo(c *gin.Context) {
 	}
 
 	response := GetSystemInfoResponse{
-		Version:            Version,
-		Edition:            Edition,
-		CommitID:           CommitID,
-		BuildTime:          BuildTime,
-		GoVersion:          GoVersion,
-		KeywordIndexEngine: keywordIndexEngine,
-		DBVersion:          dbVersion,
-		DBMigrationError:   dbMigrationErr,
-		StartedAt:          startedAt,
-		UptimeSeconds:      uptimeSec,
+		CredentialEncryptionEnabled: utils.GetAESKey() != nil,
+		Version:                     Version,
+		Edition:                     Edition,
+		CommitID:                    CommitID,
+		BuildTime:                   BuildTime,
+		GoVersion:                   GoVersion,
+		KeywordIndexEngine:          keywordIndexEngine,
+		DBVersion:                   dbVersion,
+		DBMigrationError:            dbMigrationErr,
+		StartedAt:                   startedAt,
+		UptimeSeconds:               uptimeSec,
 	}
 
 	logger.Info(ctx, "System info retrieved successfully")
@@ -259,7 +262,7 @@ func sameQueueWeights(left, right map[string]int) bool {
 // @Tags         系统管理
 // @Produce      json
 // @Success      200  {object}  RuntimeQueuesResponse
-// @Router       /system/admin/runtime/queues [get]
+// @Router       /system/runtime/queues [get]
 func (h *SystemHandler) GetRuntimeQueues(c *gin.Context) {
 	ctx := logger.CloneContext(c.Request.Context())
 	var allocation types.WorkerPoolConcurrency
@@ -395,14 +398,14 @@ func (h *SystemHandler) listRuntimeTasks(c *gin.Context, state types.RuntimeTask
 // ListRuntimeTasks returns one live task-state page for the unified operator
 // drawer. Raw task payloads are never included.
 // @Summary      List runtime queue tasks by state
-// @Tags         System Admin
+// @Tags         System
 // @Produce      json
 // @Param        queue path string true "Queue name"
 // @Param        state query string true "Task state" Enums(pending,active,scheduled,retry,archived,completed)
 // @Param        cursor query string false "Opaque continuation cursor"
 // @Param        page_size query int false "Page size" default(20)
 // @Success      200 {object} RuntimeTasksResponse
-// @Router       /system/admin/runtime/queues/{queue}/tasks [get]
+// @Router       /system/runtime/queues/{queue}/tasks [get]
 func (h *SystemHandler) ListRuntimeTasks(c *gin.Context) {
 	h.listRuntimeTasks(c, types.RuntimeTaskState(c.Query("state")))
 }
@@ -437,7 +440,7 @@ func (h *SystemHandler) mutateRuntimeTask(c *gin.Context, action types.RuntimeTa
 		return
 	}
 	if task.TenantID != 0 && task.TenantID != types.SingleTenantID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Task does not belong to the team workspace"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "Task does not belong to the personal space"})
 		return
 	}
 	if !task.Allows(action) {
@@ -533,28 +536,28 @@ func (h *SystemHandler) purgeOrphanRuntimeTask(
 // MutateRuntimeTask executes a backend-advertised action after re-reading the
 // current task state to close click/race windows.
 // @Summary      Run a safe runtime task action
-// @Tags         System Admin
+// @Tags         System
 // @Produce      json
 // @Param        queue path string true "Queue name"
 // @Param        task_id path string true "Task ID"
 // @Param        action path string true "Action" Enums(cancel,run_now,delete)
 // @Success      200 {object} map[string]bool
-// @Router       /system/admin/runtime/queues/{queue}/tasks/{task_id}/actions/{action} [post]
+// @Router       /system/runtime/queues/{queue}/tasks/{task_id}/actions/{action} [post]
 func (h *SystemHandler) MutateRuntimeTask(c *gin.Context) {
 	h.mutateRuntimeTask(c, types.RuntimeTaskAction(c.Param("action")))
 }
 
-// PurgeArchivedRuntimeTasks clears the team's archived (finally-failed) tasks in one
+// PurgeArchivedRuntimeTasks clears the space's archived (finally-failed) tasks in one
 // queue. It only touches the archived dead-letter set — live pending/active/
 // scheduled/retry tasks are untouched — and mirrors single-record delete
 // semantics by leaving business state as-is (archived tasks already had their
 // document status flipped to "failed" on their last retry).
 // @Summary      Purge all archived tasks in a queue
-// @Tags         System Admin
+// @Tags         System
 // @Produce      json
 // @Param        queue path string true "Queue name"
 // @Success      200 {object} map[string]interface{}
-// @Router       /system/admin/runtime/queues/{queue}/archived [delete]
+// @Router       /system/runtime/queues/{queue}/archived [delete]
 func (h *SystemHandler) PurgeArchivedRuntimeTasks(c *gin.Context) {
 	queue := c.Param("queue")
 	if !isKnownRuntimeQueue(queue) {
@@ -579,6 +582,14 @@ func (h *SystemHandler) PurgeArchivedRuntimeTasks(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "deleted": deleted})
 }
 
+// ListSystemSettings godoc
+// @Summary      List system settings
+// @Tags         System
+// @Produce      json
+// @Success      200 {array} types.SystemSetting
+// @Security     Bearer
+// @Security     ApiKeyAuth
+// @Router       /system/settings [get]
 func (h *SystemHandler) ListSystemSettings(c *gin.Context) {
 	ctx := logger.CloneContext(c.Request.Context())
 	rows, err := h.systemSettingSvc.List(ctx)
@@ -648,13 +659,13 @@ func (h *SystemHandler) enrichSettingsModifiedBy(ctx context.Context, rows []*ty
 // @Summary      Get a single system setting by key
 // @Description  Returns the row matching :key. 404 when the key is unknown
 // @Description  to the registry; 200 with the row when known.
-// @Tags         System Admin
+// @Tags         System
 // @Produce      json
 // @Param        key path string true "Setting key (e.g. file.max_size_mb)"
 // @Success      200 {object} types.SystemSetting "the setting row"
 // @Failure      400 {object} map[string]interface{} "Unknown key"
 // @Failure      404 {object} map[string]interface{} "Key registered but DB row absent"
-// @Router       /system/admin/settings/{key} [get]
+// @Router       /system/settings/{key} [get]
 func (h *SystemHandler) GetSystemSetting(c *gin.Context) {
 	ctx := logger.CloneContext(c.Request.Context())
 	key := c.Param("key")
@@ -673,6 +684,17 @@ func (h *SystemHandler) GetSystemSetting(c *gin.Context) {
 	c.JSON(http.StatusOK, row)
 }
 
+// UpdateSystemSetting godoc
+// @Summary      Update a system setting
+// @Tags         System
+// @Accept       json
+// @Produce      json
+// @Param        key path string true "Setting key"
+// @Param        request body UpdateSystemSettingRequest true "Setting value"
+// @Success      200 {object} types.SystemSetting
+// @Security     Bearer
+// @Security     ApiKeyAuth
+// @Router       /system/settings/{key} [put]
 func (h *SystemHandler) UpdateSystemSetting(c *gin.Context) {
 	ctx := logger.CloneContext(c.Request.Context())
 	key := c.Param("key")
@@ -705,12 +727,12 @@ func (h *SystemHandler) UpdateSystemSetting(c *gin.Context) {
 // @Description  falls back to the environment variable (when configured)
 // @Description  or the in-code default. Idempotent — resetting a key
 // @Description  that was never persisted returns 200.
-// @Tags         System Admin
+// @Tags         System
 // @Param        key path string true "Setting key"
 // @Success      200 {object} map[string]interface{} "Reset acknowledged"
 // @Failure      400 {object} map[string]interface{} "Unknown key"
 // @Failure      500 {object} map[string]interface{} "DB write failed"
-// @Router       /system/admin/settings/{key} [delete]
+// @Router       /system/settings/{key} [delete]
 func (h *SystemHandler) ResetSystemSetting(c *gin.Context) {
 	ctx := logger.CloneContext(c.Request.Context())
 	key := c.Param("key")
@@ -754,7 +776,7 @@ type RuntimeWorkerPool struct {
 	Utilization     float64 `json:"utilization"`      // Active / ClusterCapacity
 }
 
-// UpdateSystemSettingRequest is the body for PUT /system/admin/settings/:key.
+// UpdateSystemSettingRequest is the body for PUT /system/settings/:key.
 // `value` carries the new value as raw JSON — int / string / bool depending
 // on the registry-declared value_type. The service validates the type
 // strictly and rejects mismatches with 400.

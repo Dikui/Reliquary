@@ -1,7 +1,7 @@
 # 0006 结构化数据按关注范围生成
 
 Status: accepted
-部分被 [0007](0007-personal-single-user.md) 取代
+部分被 [0007](0007-personal-single-user.md) 取代；收录时的两轮流程与"不补抽"部分被 [0008](0008-focus-precheck-and-backfill.md) 取代
 日期：2026-10-08
 
 ## 背景

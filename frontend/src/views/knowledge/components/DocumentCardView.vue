@@ -43,9 +43,6 @@ const props = defineProps<{
   items: KnowledgeCard[];
   selectedIds: Set<string>;
   batchMode: boolean;
-  canEdit: boolean;
-  canDownload: boolean;
-  canMutateKnowledge: boolean;
   traceAvailableById: Record<string, boolean>;
   tagList: Tag[];
   starredTagIds: Set<string>;
@@ -346,7 +343,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
     >
       <div class="card-content">
         <div class="card-content-nav">
-          <div v-if="canEdit && batchMode" class="card-nav-check" @click.stop>
+          <div v-if="batchMode" class="card-nav-check" @click.stop>
             <t-checkbox
               class="card-select-checkbox"
               size="small"
@@ -357,7 +354,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
           </div>
           <span class="card-content-title" :title="item.file_name">{{ item.file_name }}</span>
           <t-popup
-            v-if="canEdit"
+
             v-model="item.isMore"
             overlayClassName="card-more"
             :on-visible-change="(v: boolean) => onMenuVisibleChange(v, item)"
@@ -389,8 +386,8 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
               <div v-else-if="moveMenuMode === 'normal'" class="card-menu">
                 <DocumentActionMenu
                   :item="item"
-                  :can-download="canDownload"
-                  :can-mutate-knowledge="canMutateKnowledge"
+
+
                   :trace-visible="isTraceMenuVisible(item)"
                   @download="handleAction('download', item)"
                   @edit="handleAction('edit', item)"
@@ -549,7 +546,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
         <div class="card-bottom-right">
           <div v-if="tagList.length" class="card-tag-selector" @click.stop>
             <!-- Editable mode -->
-            <template v-if="canEdit">
+            <template>
               <template v-if="(item.tags || []).length > 0">
                 <t-tooltip
                   v-if="hasTagOverflow(item.id, (item.tags || []).length)"
@@ -582,33 +579,6 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
                 <t-icon name="add" size="12px" />
                 <span>{{ $t('knowledgeBase.tagLabel') }}</span>
               </span>
-            </template>
-            <!-- Read-only mode -->
-            <template v-else-if="(item.tags || []).length > 0">
-              <t-tooltip
-                v-if="hasTagOverflow(item.id, (item.tags || []).length)"
-                :content="displayTags(item.tags).map((tag: Tag) => `${isStarredTag(tag) ? '★ ' : ''}${tagLabel(tag, t)}`).join(', ')"
-                placement="top"
-              >
-                <div
-                  class="card-tag-chips"
-                  :ref="(el: any) => setupTagChipsObserver(el, item.id, (item.tags || []).length)"
-                >
-                  <t-tag v-for="tag in displayTags(item.tags).slice(0, getTagLimit(item.id))" :key="tag.id" size="small" variant="light-outline" class="card-tag-chip" :class="{ 'is-starred': isStarredTag(tag) }">
-                    <span class="tag-text">{{ isStarredTag(tag) ? '★ ' : '' }}{{ tagLabel(tag, t) }}</span>
-                  </t-tag>
-                  <span class="card-tag-overflow">+{{ getOverflowCount(item.id, (item.tags || []).length) }}</span>
-                </div>
-              </t-tooltip>
-              <div
-                v-else
-                class="card-tag-chips"
-                :ref="(el: any) => setupTagChipsObserver(el, item.id, (item.tags || []).length)"
-              >
-                <t-tag v-for="tag in displayTags(item.tags).slice(0, getTagLimit(item.id))" :key="tag.id" size="small" variant="light-outline" class="card-tag-chip" :class="{ 'is-starred': isStarredTag(tag) }">
-                  <span class="tag-text">{{ isStarredTag(tag) ? '★ ' : '' }}{{ tagLabel(tag, t) }}</span>
-                </t-tag>
-              </div>
             </template>
           </div>
           <div class="card-type">

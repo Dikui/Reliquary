@@ -79,7 +79,7 @@ export interface CustomAgentConfig {
   attachment_parse_wait_timeout_sec?: number;
 
   // ===== 聊天附件解析引擎策略 =====
-  // 按文件类型选择解析引擎；优先级：请求 parser_engine > 智能体规则 > 租户规则 > auto
+  // 按文件类型选择解析引擎；优先级：请求 parser_engine > 智能体规则 > 空间规则 > auto
   chat_parser_engine_rules?: { file_types: string[]; engine: string }[];
 
   // ===== 文件类型限制 =====
@@ -228,7 +228,7 @@ export interface AgentTypeKBFilter {
 export interface KBCapabilities {
   vector: boolean;
   keyword: boolean;
-  graph: boolean;
+  context: boolean;
   }
 
 // 预设的"自动填充"配置载荷：仅包含被预设覆盖的字段；其他字段不动

@@ -2,7 +2,7 @@
   <section class="domain-settings">
     <header class="domain-header">
       <div><h2>{{ t('knowledgeDomains.title') }}</h2><p>{{ t('knowledgeDomains.description') }}</p></div>
-      <t-button v-if="canEdit && !draft" theme="primary" @click="startCreate">{{ t('knowledgeDomains.create') }}</t-button>
+      <t-button v-if="!draft" theme="primary" @click="startCreate">{{ t('knowledgeDomains.create') }}</t-button>
     </header>
     <t-alert v-if="error" theme="error" :message="error" role="alert" />
 
@@ -12,13 +12,13 @@
       <t-tabs v-model="editorTab" class="domain-editor-tabs">
         <t-tab-panel value="template" :label="t('knowledgeDomains.template')">
           <form novalidate class="domain-form" @submit.prevent="saveDomain">
-            <label><span>{{ t('knowledgeDomains.name') }}</span><t-input v-model="draft.name" :disabled="!canEdit || saving" :maxlength="255" /></label>
-            <label><span>{{ t('knowledgeDomains.domainDescription') }}</span><t-textarea v-model="draft.description" :disabled="!canEdit || saving" :autosize="{ minRows: 2, maxRows: 6 }" /></label>
+            <label><span>{{ t('knowledgeDomains.name') }}</span><t-input v-model="draft.name" :disabled="saving" :maxlength="255" /></label>
+            <label><span>{{ t('knowledgeDomains.domainDescription') }}</span><t-textarea v-model="draft.description" :disabled="saving" :autosize="{ minRows: 2, maxRows: 6 }" /></label>
             <t-alert v-if="selectedDomain?.is_builtin" theme="info" :message="t('knowledgeDomains.builtinHint')" />
-            <DomainTemplateEditor v-model="draft" :disabled="!canEdit || saving" />
-            <ModelTierEditor :model-value="draft.model_tiers || {}" scope="domain" :before-navigate="confirmLeave" :disabled="!canEdit || saving" @update:model-value="draft.model_tiers = $event" />
+            <DomainTemplateEditor v-model="draft" :disabled="saving" />
+            <ModelTierEditor :model-value="draft.model_tiers || {}" scope="domain" :before-navigate="confirmLeave" :disabled="saving" @update:model-value="draft.model_tiers = $event" />
             <p v-if="editorError" class="inline-error" role="alert">{{ editorError }}</p>
-            <div class="domain-actions"><t-button variant="outline" :disabled="saving" @click="closeEditor">{{ t('common.cancel') }}</t-button><t-button v-if="canEdit" theme="primary" type="submit" :loading="saving">{{ t('common.save') }}</t-button></div>
+            <div class="domain-actions"><t-button variant="outline" :disabled="saving" @click="closeEditor">{{ t('common.cancel') }}</t-button><t-button theme="primary" type="submit" :loading="saving">{{ t('common.save') }}</t-button></div>
           </form>
         </t-tab-panel>
         <t-tab-panel v-if="selectedId" value="consolidation" :label="t('knowledgeDomains.consolidation')">
@@ -27,7 +27,7 @@
           <t-table row-key="name" :data="pagedOpenFields" :columns="openFieldColumns" :loading="openFieldsLoading" :empty="t('knowledgeDomains.noOpenFields')">
             <template #name="{ row }"><code>{{ row.name }}</code></template>
             <template #example="{ row }"><div v-for="fact in row.example_facts || []" :key="fact.id" class="open-field-example"><strong>{{ formatValue(fact.value) }}{{ fact.unit ? ` ${fact.unit}` : '' }}</strong><q v-if="fact.quote">{{ fact.quote }}</q></div></template>
-            <template #actions="{ row }"><div class="table-actions" v-if="canEdit"><t-button variant="text" :disabled="!selectedDomain?.fields.length" @click="startMapping(row.name)">{{ t('knowledgeDomains.map') }}</t-button><t-button variant="text" @click="startNewField(row.name)">{{ t('knowledgeDomains.newField') }}</t-button></div></template>
+            <template #actions="{ row }"><div class="table-actions"><t-button variant="text" :disabled="!selectedDomain?.fields.length" @click="startMapping(row.name)">{{ t('knowledgeDomains.map') }}</t-button><t-button variant="text" @click="startNewField(row.name)">{{ t('knowledgeDomains.newField') }}</t-button></div></template>
           </t-table>
           <t-pagination v-if="openFields.length > pageSize" v-model="openPage" :total="openFields.length" :page-size="pageSize" :show-page-size="false" />
         </t-tab-panel>
@@ -38,7 +38,7 @@
       <t-table row-key="id" :data="pagedDomains" :columns="domainColumns" :loading="loading" :empty="search ? t('knowledgeDomains.noResults') : t('knowledgeDomains.empty')">
         <template #name="{ row }"><div class="domain-name"><t-button variant="text" @click="openDomain(row)">{{ row.name }}</t-button><t-tag v-if="row.is_builtin" size="small" variant="light">{{ t('knowledgeDomains.builtin') }}</t-tag></div></template>
         <template #types="{ row }"><span>{{ (row.entity_types || []).join('、') || t('knowledgeDomains.allTypes') }}</span></template>
-        <template #actions="{ row }"><div class="table-actions"><t-button variant="text" @click="openDomain(row)">{{ canEdit ? t('common.edit') : t('knowledgeDomains.view') }}</t-button><t-tooltip v-if="canEdit" :content="row.is_builtin ? t('knowledgeDomains.builtinHint') : t('knowledgeDomains.deleteHint')"><t-button theme="danger" variant="text" :disabled="row.is_builtin || deletingId === row.id" :loading="deletingId === row.id" @click="confirmRemove(row)">{{ t('common.delete') }}</t-button></t-tooltip></div></template>
+        <template #actions="{ row }"><div class="table-actions"><t-button variant="text" @click="openDomain(row)">{{ t('common.edit') }}</t-button><t-tooltip :content="row.is_builtin ? t('knowledgeDomains.builtinHint') : t('knowledgeDomains.deleteHint')"><t-button theme="danger" variant="text" :disabled="row.is_builtin || deletingId === row.id" :loading="deletingId === row.id" @click="confirmRemove(row)">{{ t('common.delete') }}</t-button></t-tooltip></div></template>
       </t-table>
       <t-pagination v-if="filteredDomains.length > pageSize" v-model="page" :total="filteredDomains.length" :page-size="pageSize" :show-page-size="false" />
     </template>
@@ -55,7 +55,6 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
-import { useAuthStore } from '@/stores/auth'
 import { useConfirmDelete } from '@/components/settings/useConfirmDelete'
 import { createDomainField, createKnowledgeDomain, deleteKnowledgeDomain, getKnowledgeDomain, listDomainOpenFields, listKnowledgeDomains, mapDomainOpenField, updateKnowledgeDomain, type DomainEnvelope, type DomainOpenField, type KnowledgeDomain, type KnowledgeDomainInput } from '@/api/knowledge-domains'
 import ModelTierEditor from '@/components/ModelTierEditor.vue'
@@ -64,9 +63,7 @@ import DomainTemplateEditor from './DomainTemplateEditor.vue'
 import { copyDomainInput, emptyDomainField, emptyKnowledgeDomain, templateFieldFromOpenField, validateDomainInput } from './domainTemplate'
 import { domainErrorMessage } from './domainErrors'
 const { t } = useI18n()
-const auth = useAuthStore()
 const confirmDelete = useConfirmDelete()
-const canEdit = computed(() => auth.isLoggedIn)
 const domains = ref<KnowledgeDomain[]>([])
 const loading = ref(false)
 const error = ref('')
@@ -103,7 +100,7 @@ const pagedDomains = computed(() => filteredDomains.value.slice((page.value - 1)
 const pagedOpenFields = computed(() => openFields.value.slice((openPage.value - 1) * pageSize, openPage.value * pageSize))
 const mappingOptions = computed(() => (selectedDomain.value?.fields || []).map(field => ({ value: field.key, label: `${field.label || field.key} (${field.key})` })))
 const domainColumns = computed(() => [{ colKey: 'name', title: t('knowledgeDomains.name'), width: 180 }, { colKey: 'description', title: t('knowledgeDomains.domainDescription') }, { colKey: 'types', title: t('knowledgeDomains.entityTypes') }, { colKey: 'actions', title: t('knowledgeDomains.actions'), width: 160 }])
-const openFieldColumns = computed(() => [{ colKey: 'name', title: t('knowledgeDomains.openField'), width: 160 }, { colKey: 'count', title: t('knowledgeDomains.count'), width: 90 }, { colKey: 'example', title: t('knowledgeDomains.examples') }, ...(canEdit.value ? [{ colKey: 'actions', title: t('knowledgeDomains.actions'), width: 180 }] : [])])
+const openFieldColumns = computed(() => [{ colKey: 'name', title: t('knowledgeDomains.openField'), width: 160 }, { colKey: 'count', title: t('knowledgeDomains.count'), width: 90 }, { colKey: 'example', title: t('knowledgeDomains.examples') }, { colKey: 'actions', title: t('knowledgeDomains.actions'), width: 180 }])
 function data<T>(response: DomainEnvelope<T>): T { if (!response.success) throw new Error(response.error || response.message || t('knowledgeDomains.failed')); return response.data }
 function errorMessage(cause: unknown): string {
   return domainErrorMessage(cause, t('knowledgeDomains.failed'), count => t('knowledgeDomains.deleteReferenced', { count }, count))
@@ -117,12 +114,12 @@ async function loadDomains() {
   catch (cause) { if (request === listRequest) error.value = errorMessage(cause) }
   finally { if (request === listRequest) loading.value = false }
 }
-function startCreate() { if (!canEdit.value) return; selectedId.value = ''; draft.value = emptyKnowledgeDomain(); savedDraft.value = JSON.stringify(draft.value); editorTab.value = 'template'; editorError.value = '' }
+function startCreate() {  selectedId.value = ''; draft.value = emptyKnowledgeDomain(); savedDraft.value = JSON.stringify(draft.value); editorTab.value = 'template'; editorError.value = '' }
 function openDomain(domain: KnowledgeDomain) { selectedId.value = domain.id; draft.value = copyDomainInput(domain); savedDraft.value = JSON.stringify(draft.value); editorTab.value = 'template'; editorError.value = ''; openFields.value = []; openPage.value = 1 }
 function discardEditor() { fieldsRequest++; draft.value = null; selectedId.value = ''; editorError.value = '' }
 function confirmLeave(): Promise<boolean> {
   if (saving.value) return Promise.resolve(false)
-  if (!canEdit.value || !draft.value || JSON.stringify(draft.value) === savedDraft.value) return Promise.resolve(true)
+  if (!draft.value || JSON.stringify(draft.value) === savedDraft.value) return Promise.resolve(true)
   return new Promise(resolve => {
     const dialog = confirmDelete({ title: t('knowledgeDomains.discardTitle'), body: t('knowledgeDomains.discardHint'), confirmText: t('knowledgeDomains.discard'), onConfirm: () => { discardEditor(); resolve(true) } })
     dialog.update({ onCancel: () => { dialog.hide(); resolve(false) }, onClose: () => resolve(false) })
@@ -131,7 +128,7 @@ function confirmLeave(): Promise<boolean> {
 async function closeEditor() { if (await confirmLeave()) discardEditor() }
 defineExpose({ confirmLeave })
 async function saveDomain() {
-  if (!draft.value || !canEdit.value || saving.value) return
+  if (!draft.value || saving.value) return
   const invalid = validateDomainInput(draft.value)
   if (invalid) { editorError.value = t(`knowledgeDomains.validation.${invalid}`); return }
   saving.value = true; editorError.value = ''
@@ -140,7 +137,7 @@ async function saveDomain() {
   finally { saving.value = false }
 }
 function confirmRemove(domain: KnowledgeDomain) {
-  if (!canEdit.value || domain.is_builtin || deletingId.value) return
+  if (domain.is_builtin || deletingId.value) return
   confirmDelete({ title: t('knowledgeDomains.deleteTitle'), body: t('knowledgeDomains.deleteConfirm', { name: domain.name }), onConfirm: async () => { deletingId.value = domain.id; error.value = ''; try { data(await deleteKnowledgeDomain(domain.id)); await loadDomains(); MessagePlugin.success(t('knowledgeDomains.deleted')) } catch (cause) { error.value = errorMessage(cause) } finally { deletingId.value = '' } } })
 }
 async function loadOpenFields() {
@@ -151,18 +148,18 @@ async function loadOpenFields() {
   catch (cause) { if (request === fieldsRequest) openFieldsError.value = errorMessage(cause) }
   finally { if (request === fieldsRequest) openFieldsLoading.value = false }
 }
-function startMapping(name: string) { if (!canEdit.value) return; activeOpenField.value = name; mappingTarget.value = ''; mappingError.value = ''; mappingVisible.value = true }
-function startNewField(name: string) { if (!canEdit.value) return; activeOpenField.value = name; newField.value = emptyDomainField(name); newField.value.aliases = [name]; mappingError.value = ''; newFieldVisible.value = true }
+function startMapping(name: string) {  activeOpenField.value = name; mappingTarget.value = ''; mappingError.value = ''; mappingVisible.value = true }
+function startNewField(name: string) {  activeOpenField.value = name; newField.value = emptyDomainField(name); newField.value.aliases = [name]; mappingError.value = ''; newFieldVisible.value = true }
 async function refreshSelectedDomain() { const updated = data(await getKnowledgeDomain(selectedId.value)); domains.value = domains.value.map(domain => domain.id === updated.id ? updated : domain); draft.value = copyDomainInput(updated); savedDraft.value = JSON.stringify(draft.value); await loadOpenFields() }
 async function saveMapping() {
-  if (!canEdit.value || !mappingTarget.value || mappingSaving.value) return
+  if (!mappingTarget.value || mappingSaving.value) return
   mappingSaving.value = true; mappingError.value = ''
   try { data(await mapDomainOpenField(selectedId.value, activeOpenField.value, mappingTarget.value)); await refreshSelectedDomain(); mappingVisible.value = false; MessagePlugin.success(t('knowledgeDomains.mapped')) }
   catch (cause) { mappingError.value = errorMessage(cause) }
   finally { mappingSaving.value = false }
 }
 async function saveNewField() {
-  if (!canEdit.value || !selectedDomain.value || mappingSaving.value) return
+  if (!selectedDomain.value || mappingSaving.value) return
   const field = templateFieldFromOpenField(newField.value, activeOpenField.value)
   const invalid = validateDomainInput({ ...copyDomainInput(selectedDomain.value), fields: [...selectedDomain.value.fields, field] })
   if (invalid) { mappingError.value = t(`knowledgeDomains.validation.${invalid}`); return }

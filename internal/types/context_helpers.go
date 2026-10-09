@@ -115,7 +115,7 @@ func IsMCPOAuthNonInteractive(ctx context.Context) bool {
 }
 
 // WithBackgroundTask marks ctx as originating from an asynq background worker
-// (document parse / summary / question / graph / multimodal enrichment). The
+// (document parse / summary / question / context / multimodal enrichment). The
 // chat concurrency governor throttles only background LLM traffic, so this flag
 // determines whether the per-model concurrency limit applies. See
 // BackgroundTaskContextKey.

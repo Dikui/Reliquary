@@ -19,7 +19,7 @@ test('focus requests preserve all three scopes and stars use their dedicated enc
       }]))
     }, module, module.exports,
   )
-  for (const queryScope of ['knowledge_base', 'domain', 'team'] as const) {
+  for (const queryScope of ['knowledge_base', 'domain', 'all'] as const) {
     await module.exports.getKnowledgeFocusScope(scope.knowledgeContextScopeParams(queryScope, 'kb/1', 'domain/1'))
   }
   await module.exports.starKnowledgeEntity('entity/1')
@@ -29,7 +29,7 @@ test('focus requests preserve all three scopes and stars use their dedicated enc
   assert.deepEqual(requested, [
     { method: 'get', url: '/api/v1/knowledge-context/focus?scope=knowledge_base&knowledge_base_id=kb%2F1' },
     { method: 'get', url: '/api/v1/knowledge-context/focus?scope=domain&domain_id=domain%2F1' },
-    { method: 'get', url: '/api/v1/knowledge-context/focus?scope=team' },
+    { method: 'get', url: '/api/v1/knowledge-context/focus?scope=all' },
     { method: 'put', url: '/api/v1/knowledge-context/entities/entity%2F1/star' },
     { method: 'del', url: '/api/v1/knowledge-context/entities/entity%2F1/star' },
     { method: 'put', url: '/api/v1/knowledge-context/topics/tag%3F1/star' },

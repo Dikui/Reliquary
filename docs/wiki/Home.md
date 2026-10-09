@@ -57,7 +57,7 @@ aliases: [Home, Index, wiki首页]
 
 ---
 
-## 知识图谱
+## 知识上下文
 
 ```mermaid
 graph TB
@@ -72,7 +72,7 @@ graph TB
 
     项目概述 --> ROADMAP[版本路线图]
 
-    核心功能 --> KG[知识图谱]
+    核心功能 --> KG[知识上下文]
     核心功能 --> MCP[MCP功能使用说明]
     核心功能 --> BuiltinMCP[内置MCP服务管理]
     核心功能 --> BuiltinModel[内置模型管理]

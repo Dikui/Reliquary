@@ -61,7 +61,7 @@
           <t-icon name="user-circle" class="menu-icon" />
           <span>{{ $t('settings.workspaceSettings') }}</span>
         </div>
-        <div v-if="canManageModels" class="menu-item" @click="handleQuickNav('models')">
+        <div class="menu-item" @click="handleQuickNav('models')">
           <t-icon name="control-platform" class="menu-icon" />
           <span>{{ $t('settings.modelManagement') }}</span>
         </div>
@@ -72,7 +72,7 @@
           <span>{{ $t('general.allSettings') }}</span>
         </div>
 
-        <div v-if="authStore.isLoggedIn" class="menu-item" @click="handleSystemAdmin">
+        <div class="menu-item" @click="handleSystem">
           <t-icon name="server" class="menu-icon" />
           <span>{{ $t('settings.navGroups.systemAdministration') }}</span>
         </div>
@@ -133,7 +133,6 @@ const activeTenantName = computed(() => {
     ''
   )
 })
-const canManageModels = computed(() => authStore.isLoggedIn)
 
 const menuRef = ref<HTMLElement>()
 const menuVisible = ref(false)
@@ -175,7 +174,7 @@ const handleSettings = () => {
 
 // Open the platform administration group inside the standard Settings
 // modal. Global settings is the group's landing page; task queues, platform
-const handleSystemAdmin = () => {
+const handleSystem = () => {
   menuVisible.value = false
   uiStore.openSettings('system-global')
   router.push({ path: '/platform/settings', query: { section: 'system-global' } })

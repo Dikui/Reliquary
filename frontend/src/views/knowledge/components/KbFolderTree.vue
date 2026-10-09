@@ -40,7 +40,7 @@
           :class="{
             active: selectedPath === row.path,
             'is-root': row.kind === 'root',
-            'is-editable': canEdit && row.kind === 'folder',
+            'is-editable': row.kind === 'folder',
             'is-menu-open': menuOpenPath === row.path,
           }"
           :style="{ '--kb-folder-depth': row.depth }"
@@ -86,7 +86,7 @@
             <span class="kb-folder-row__trailing">
               <span class="kb-folder-row__count">{{ row.totalCount }}</span>
               <t-popup
-                v-if="canEdit && row.kind === 'folder'"
+                v-if="row.kind === 'folder'"
                 :visible="menuOpenPath === row.path"
                 trigger="click"
                 placement="bottom-right"
@@ -138,11 +138,9 @@ const props = withDefaults(defineProps<{
   selectedPath: string
   loading?: boolean
   collapsed?: boolean
-  canEdit?: boolean
 }>(), {
   loading: false,
   collapsed: false,
-  canEdit: false,
 })
 
 const emit = defineEmits<{

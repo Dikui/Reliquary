@@ -35,7 +35,7 @@ const (
 	// (DocReader / chunking / embedding stage).
 	ParseStatusProcessing = "processing"
 	// ParseStatusFinalizing indicates the primary parse has finished but
-	// enrichment subtasks (summary, question generation, graph extract)
+	// enrichment subtasks (summary, question generation, context extract)
 	// are still in flight. The user-facing intuition behind this state is
 	// "the document is queryable for vector search but is still spending
 	// resources" — cancel-parse can interrupt enrichment from here.
@@ -140,7 +140,7 @@ type Knowledge struct {
 	// Parse status of the knowledge
 	ParseStatus string `json:"parse_status"`
 	// PendingSubtasksCount is the outstanding enrichment subtask count
-	// (summary + question + graph chunks). Only meaningful while
+	// (summary + question + context chunks). Only meaningful while
 	// ParseStatus == "finalizing"; defaults to 0 in any terminal state.
 	PendingSubtasksCount int `json:"pending_subtasks_count" gorm:"type:int;not null;default:0"`
 	// Summary status for async summary generation

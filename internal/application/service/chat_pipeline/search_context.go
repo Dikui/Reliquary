@@ -76,7 +76,7 @@ func (p *PluginSearchParallel) searchStructuredContext(ctx context.Context, cm *
 				continue
 			}
 			// Preserve evidence metadata and quotes; full snapshots are fetched on
-			// demand so graph context does not duplicate every original document.
+			// demand so knowledge context does not duplicate every original document.
 			for i := range result.Evidence {
 				result.Evidence[i].Body = ""
 			}
@@ -133,7 +133,7 @@ func chunk2SearchResult(chunk *types.Chunk, knowledge *types.Knowledge) *types.S
 		EndAt:             chunk.EndAt,
 		Seq:               chunk.ChunkIndex,
 		Score:             1.0,
-		MatchType:         types.MatchTypeGraph,
+		MatchType:         types.MatchTypeContext,
 		Metadata:          knowledge.GetMetadata(),
 		ChunkType:         string(chunk.ChunkType),
 		ParentChunkID:     chunk.ParentChunkID,

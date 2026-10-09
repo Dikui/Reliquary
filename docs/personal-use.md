@@ -37,3 +37,7 @@ go run -tags anydoc ./cmd/server
 
 
 工作流只提供 `search`、`fact_query`、`report`，每日与每周模板可继续使用。运行期间禁用工作流会暂停，可在重新启用后恢复；失败运行可重试。Wiki、Agent 长期记忆与历史对话搜索、RAG 评测、沙箱、技能及个人环境变量已删除。对话历史、MCP/OAuth、数据分析、数据库查询、知识上下文、策略评测、待审区与消息纠错继续保留。MCP 的 stdio 环境变量和内置模型配置的环境变量展开独立保留。
+
+空间信息与 API Key 使用 `/api/v1/space` 及其子路径，系统设置与队列使用 `/api/v1/system/settings` 和 `/api/v1/system/runtime/queues`。已用空间继续统计，不设存储限额。
+
+未设置 `SYSTEM_AES_KEY` 时，MCP 凭据和模型 API Key 将以明文保存；启动日志输出警告，系统信息页显示凭据加密状态。设置有效的 32 字节密钥后按现有行为加密保存。

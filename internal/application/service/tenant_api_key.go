@@ -35,7 +35,7 @@ func (s *tenantAPIKeyService) CreateAPIKey(
 	ctx context.Context, req interfaces.TenantAPIKeyCreateRequest,
 ) (*interfaces.TenantAPIKeyCreateResult, error) {
 	if req.TenantID != types.SingleTenantID {
-		return nil, errors.New("only the team workspace is available")
+		return nil, errors.New("only the personal space is available")
 	}
 	name := strings.TrimSpace(req.Name)
 	if name == "" {

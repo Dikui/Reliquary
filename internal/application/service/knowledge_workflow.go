@@ -125,7 +125,7 @@ func validateWorkflowStepConfig(step types.KnowledgeWorkflowStep) error {
 			return err
 		}
 		switch cfg.Scope {
-		case "", "knowledge_base", "team":
+		case "", "knowledge_base", "all", "team":
 		case "domain":
 			if strings.TrimSpace(cfg.DomainID) == "" {
 				return errors.New("domain_id is required for domain scope")
@@ -180,6 +180,7 @@ func workflowInt(value any) int {
 }
 
 func (s *KnowledgeWorkflowService) Create(ctx context.Context, kbID string, in types.KnowledgeWorkflowInput) (*types.KnowledgeWorkflow, error) {
+	in.Steps = normalizeWorkflowScopes(in.Steps)
 	kb, tenantID, ownerID, err := s.authorizeKB(ctx, kbID)
 	if err != nil {
 		return nil, err
@@ -202,6 +203,7 @@ func (s *KnowledgeWorkflowService) Create(ctx context.Context, kbID string, in t
 }
 
 func (s *KnowledgeWorkflowService) Update(ctx context.Context, kbID, id string, in types.KnowledgeWorkflowInput) (*types.KnowledgeWorkflow, error) {
+	in.Steps = normalizeWorkflowScopes(in.Steps)
 	wf, err := s.getWorkflow(ctx, kbID, id)
 	if err != nil {
 		return nil, err
@@ -431,4 +433,25 @@ func (s *KnowledgeWorkflowService) authorizeActor(ctx context.Context, tenantID 
 		return ErrWorkflowForbidden
 	}
 	return s.validateActor(ctx, tenantID, actor)
+}
+
+// normalizeWorkflowScopes writes the current scope without mutating caller-owned configs.
+func normalizeWorkflowScopes(steps []types.KnowledgeWorkflowStep) []types.KnowledgeWorkflowStep {
+	result := append([]types.KnowledgeWorkflowStep(nil), steps...)
+	for i, step := range result {
+		if step.Type != types.WorkflowStepFactQuery {
+			continue
+		}
+		scope, ok := step.Config["scope"].(string)
+		if !ok {
+			continue
+		}
+		config := make(map[string]any, len(step.Config))
+		for key, value := range step.Config {
+			config[key] = value
+		}
+		config["scope"] = types.NormalizeKnowledgeContextScope(scope)
+		result[i].Config = config
+	}
+	return result
 }

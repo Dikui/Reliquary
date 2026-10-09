@@ -43,7 +43,7 @@ complete resource reference.
 
 ## Built-in tool policies
 
-Canonical ID-bearing arguments for knowledge, graph, data, and web tools
+Canonical ID-bearing arguments for knowledge context, data, and web tools
 are decoded centrally through a tool-name plus JSON-field allowlist. The
 `sourceKeySpaces` table is the single source of truth for which keys are
 ID-bearing and which handle space they register into; per-tool `sourceIDKeys`
@@ -62,7 +62,7 @@ create a parallel mapper.
 
 ## Knowledge scope
 
-Document/tag-constrained graph requests are filtered by server-owned
-`SearchTargets` provenance. Graph results outside that subset fail closed;
+Document/tag-constrained knowledge context requests are filtered by server-owned
+`SearchTargets` provenance. Knowledge context results outside that subset fail closed;
 only an explicit whole-KB target authorizes whole-KB content. Model handles
 identify sources and never grant access to additional knowledge bases.

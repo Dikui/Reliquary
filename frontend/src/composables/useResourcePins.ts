@@ -2,7 +2,7 @@
 // KBs and custom agents.
 //
 // Favorites are DB-backed so they sync across devices and survive logout.
-// The server scopes favorites to each team member.
+// The server scopes favorites to each user.
 //
 // Recents stay in localStorage. They're a personal navigation aid, not a
 // shareable resource; round-tripping every card click through the
@@ -130,7 +130,7 @@ async function fetchFavorites(type: ResourceType): Promise<void> {
   return inFlight[type]!
 }
 
-// Refresh favorites when team authentication becomes available or clears.
+// Refresh favorites when authentication becomes available or clears.
 let tenantWatcherInstalled = false
 function installTenantWatcher(): void {
   if (tenantWatcherInstalled) return

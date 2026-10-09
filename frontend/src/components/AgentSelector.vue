@@ -223,8 +223,7 @@ const activeDetailNotReadyLabels = computed(() => {
 const canShowDetailHeaderAction = computed(() => {
   const detail = activeDetail.value;
   if (!detail) return false;
-  if (authStore.isLoggedIn) return true;
-  return activeDetailNotReadyLabels.value.length === 0;
+  return true;
 });
 
 const getKbCapability = (agent: CustomAgent): string => {
@@ -393,9 +392,6 @@ const selectAgent = (agent: CustomAgent) => {
 };
 
 const goToSettings = (agent: CustomAgent) => {
-  if (!authStore.isLoggedIn && getAgentNotReadyLabels(agent).length > 0) {
-    return;
-  }
   const reasonKeys = getAgentNotReadyReasonKeysFor(agent);
   const section = reasonKeys.length > 0 ? resolveAgentNotReadySection(reasonKeys) : 'basic';
   const highlight = resolveAgentNotReadyHighlight(reasonKeys);

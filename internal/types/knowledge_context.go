@@ -1,6 +1,9 @@
 package types
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 const (
 	KnowledgeEvidenceCurrent        = "current"
@@ -23,7 +26,7 @@ const (
 	KnowledgeEvidenceSourceKindRoundup   = "roundup"
 )
 
-// KnowledgeEntity is a canonical object shared by the whole team space.
+// KnowledgeEntity is a canonical object shared by the personal space.
 type KnowledgeEntity struct {
 	ID                       string                           `json:"id" gorm:"type:varchar(36);primaryKey"`
 	TenantID                 uint64                           `json:"tenant_id" gorm:"not null;uniqueIndex:idx_kce_canonical"`
@@ -299,4 +302,13 @@ type KnowledgeFactCorrection struct {
 	EffectiveTo    *time.Time `json:"effective_to,omitempty"`
 	Quote          string     `json:"quote"`
 	CorrectionNote string     `json:"correction_note"`
+}
+
+// NormalizeKnowledgeContextScope accepts the historical all-knowledge-base scope alias.
+func NormalizeKnowledgeContextScope(scope string) string {
+	scope = strings.TrimSpace(scope)
+	if scope == "team" {
+		return "all"
+	}
+	return scope
 }

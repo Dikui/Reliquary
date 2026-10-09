@@ -7,7 +7,7 @@
         <div class="header-title">
           <div class="title-row">
             <h2>{{ $t('agent.title') }}</h2>
-            <t-tooltip v-if="authStore.isLoggedIn" :content="$t('agent.createAgent')" placement="bottom">
+            <t-tooltip :content="$t('agent.createAgent')" placement="bottom">
               <t-button variant="text" theme="default" size="small" class="header-action-btn"
                 data-guide="agent-list-create" @click="handleCreateAgent">
                 <template #icon>
@@ -107,7 +107,7 @@
                   <span class="card-title" :title="agent.name">{{ agent.name }}</span>
                 </div>
                 <t-popup
-                  v-if="(canManageAgent(agent) || authStore.isLoggedIn || authStore.isLoggedIn)"
+
                   :visible="openMoreAgentId === agent.id" trigger="hover" overlayClassName="card-more-popup"
                   destroy-on-close placement="bottom-right" @visible-change="onVisibleChange"
                   @update:visible="(v: boolean) => { if (!v) openMoreAgentId = null }">
@@ -117,13 +117,13 @@
                   </div>
                   <template #content>
                     <div class="popup-menu">
-                      <div v-if="canEditAgent(agent)" class="popup-menu-item" @click="handleEdit(agent)"><t-icon
+                      <div class="popup-menu-item" @click="handleEdit(agent)"><t-icon
                           class="menu-icon" name="edit" /><span>{{ $t('common.edit') }}</span></div>
-                      <div v-if="authStore.isLoggedIn" class="popup-menu-item" @click="handleCopy(agent)">
+                      <div class="popup-menu-item" @click="handleCopy(agent)">
                         <t-icon class="menu-icon" name="file-copy" /><span>{{ $t('common.copy') }}</span>
                       </div>
 
-                      <div v-if="!agent.is_builtin && canManageAgent(agent)" class="popup-menu-item delete"
+                      <div v-if="!agent.is_builtin" class="popup-menu-item delete"
                         @click="handleDelete(agent)"><t-icon class="menu-icon" name="delete" /><span>{{
                           $t('common.delete') }}</span></div>
                     </div>
@@ -190,7 +190,7 @@
           <img class="empty-img" src="@/assets/img/upload.svg" alt="">
           <span class="empty-txt">{{ $t('agent.empty.title') }}</span>
           <span class="empty-desc">{{ $t('agent.empty.description') }}</span>
-          <t-button v-if="authStore.isLoggedIn" class="agent-create-btn empty-state-btn"
+          <t-button class="agent-create-btn empty-state-btn"
             data-guide="agent-list-create" @click="handleCreateAgent">
             <template #icon>
               <span class="btn-icon-wrapper">
@@ -257,7 +257,6 @@
     <AgentEditorModal :visible="editorVisible" :mode="editorMode" :agent="editingAgent"
       :initialSection="editorInitialSection"
       :initialHighlightField="editorInitialHighlightField"
-      :readOnly="editorMode === 'edit' && editingAgent != null && !canEditAgent(editingAgent as AgentWithUI)"
       @update:visible="editorVisible = $event" @success="handleEditorSuccess" />
 
     <TenantModelsGuide :when="showAgentTenantModelsGuide" variant="agent" />
@@ -339,7 +338,6 @@ const openMoreAgentId = ref<string | null>(null)
 
 const showAgentListEmpty = computed(() => {
   if (loading.value) return false
-  if (!authStore.isLoggedIn) return false
   if (spaceSelection.value === 'all' && filteredAgents.value.length === 0) return true
   return false
 })
@@ -473,14 +471,9 @@ const handleEdit = (agent: AgentWithUI) => {
   editorInitialHighlightField.value = ''
   editorVisible.value = true
 }
-function canEditAgent(_agent: AgentWithUI): boolean { return authStore.isLoggedIn }
-function canManageAgent(agent: AgentWithUI): boolean { return !agent.is_builtin && authStore.isLoggedIn }
 
 
-// isMyAgent 仅用于卡片来源徽章在「我创建」与「同空间其他成员创建」之间切换。
-// 跟 canManageAgent 区别：管理权限有 admin 兜底；徽章纯粹按 created_by 匹配。
-// 内建 agent（created_by=""）也归到非 mine 一档，由模板上的 builtin 分支
-// 提前拦截，不会落到 ResourceOriginBadge。
+// 来源徽章依据保存的创建者信息展示。
 function isMyAgent(agent: { created_by?: string }): boolean {
   const userId = authStore.user?.id || ''
   return !!(agent.created_by && userId && agent.created_by === userId)

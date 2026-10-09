@@ -16,6 +16,7 @@ export interface SystemInfo {
   started_at?: string
   /** Seconds since process start. */
   uptime_seconds?: number
+  credential_encryption_enabled: boolean
 }
 
 export interface DeploymentCapability {
@@ -70,7 +71,7 @@ export function getSystemInfo(): Promise<{ data: SystemInfo }> {
 }
 
 export function getPromptTemplates(): Promise<{ data: PromptTemplatesConfig }> {
-  return get('/api/v1/tenants/kv/prompt-templates')
+  return get('/api/v1/space/kv/prompt-templates')
 }
 
 export interface ParserEngineInfo {
@@ -117,11 +118,11 @@ export function checkParserEngines(config: ParserEngineConfig): Promise<ParserEn
 }
 
 export function getParserEngineConfig(): Promise<{ data: ParserEngineConfig }> {
-  return get('/api/v1/tenants/kv/parser-engine-config')
+  return get('/api/v1/space/kv/parser-engine-config')
 }
 
 export function updateParserEngineConfig(config: ParserEngineConfig): Promise<{ data: ParserEngineConfig }> {
-  return put('/api/v1/tenants/kv/parser-engine-config', config)
+  return put('/api/v1/space/kv/parser-engine-config', config)
 }
 export interface SystemSettingItem {
   id: number
@@ -159,7 +160,7 @@ export interface SystemSettingItem {
  * the project-wide axios contract (see utils/request.ts:97).
  */
 export async function listSystemSettings(): Promise<SystemSettingItem[]> {
-  const response = await get('/api/v1/system/admin/settings')
+  const response = await get('/api/v1/system/settings')
   return response as unknown as SystemSettingItem[]
 }
 
@@ -168,7 +169,7 @@ export async function listSystemSettings(): Promise<SystemSettingItem[]> {
  * if the key is unknown to the registry, or if the row is not yet persisted.
  */
 export async function getSystemSetting(key: string): Promise<SystemSettingItem> {
-  const response = await get(`/api/v1/system/admin/settings/${encodeURIComponent(key)}`)
+  const response = await get(`/api/v1/system/settings/${encodeURIComponent(key)}`)
   return response as unknown as SystemSettingItem
 }
 
@@ -185,7 +186,7 @@ export async function updateSystemSetting(
   value: unknown,
 ): Promise<SystemSettingItem> {
   const response = await put(
-    `/api/v1/system/admin/settings/${encodeURIComponent(key)}`,
+    `/api/v1/system/settings/${encodeURIComponent(key)}`,
     { value },
   )
   return response as unknown as SystemSettingItem
@@ -197,7 +198,7 @@ export async function updateSystemSetting(
  * persisted resolves successfully.
  */
 export async function resetSystemSetting(key: string): Promise<void> {
-  await del(`/api/v1/system/admin/settings/${encodeURIComponent(key)}`)
+  await del(`/api/v1/system/settings/${encodeURIComponent(key)}`)
 }
 
 // ---- Runtime queue observability (system-scope) ----
@@ -309,7 +310,7 @@ export interface RuntimeTasksResponse {
  * utils/request.ts interceptor).
  */
 export async function getRuntimeQueues(): Promise<RuntimeQueuesResponse> {
-  const response = await get('/api/v1/system/admin/runtime/queues')
+  const response = await get('/api/v1/system/runtime/queues')
   return response as unknown as RuntimeQueuesResponse
 }
 
@@ -319,7 +320,7 @@ export async function getRuntimeTasks(
   cursor = '',
   pageSize = 20,
 ): Promise<RuntimeTasksResponse> {
-  return get(`/api/v1/system/admin/runtime/queues/${encodeURIComponent(queue)}/tasks`, {
+  return get(`/api/v1/system/runtime/queues/${encodeURIComponent(queue)}/tasks`, {
     params: { state, ...(cursor ? { cursor } : {}), page_size: pageSize },
   })
 }
@@ -330,21 +331,21 @@ export async function mutateRuntimeTask(
   action: RuntimeTaskAction,
 ): Promise<void> {
   await post(
-    `/api/v1/system/admin/runtime/queues/${encodeURIComponent(queue)}/tasks/${encodeURIComponent(taskID)}/actions/${encodeURIComponent(action)}`,
+    `/api/v1/system/runtime/queues/${encodeURIComponent(queue)}/tasks/${encodeURIComponent(taskID)}/actions/${encodeURIComponent(action)}`,
   )
 }
 
 /**
  * Clear every archived (finally-failed) task in one queue in a single call.
  * Only touches the archived dead-letter set — live tasks are never affected.
- * Backend: DELETE /api/v1/system/admin/runtime/queues/{queue}/archived.
+ * Backend: DELETE /api/v1/system/runtime/queues/{queue}/archived.
  * Returns the object directly (no {data: ...} wrapping, see request.ts).
  */
 export async function purgeArchivedRuntimeTasks(
   queue: string,
 ): Promise<{ success: boolean; deleted: number }> {
   const response = await del(
-    `/api/v1/system/admin/runtime/queues/${encodeURIComponent(queue)}/archived`,
+    `/api/v1/system/runtime/queues/${encodeURIComponent(queue)}/archived`,
   )
   return response as unknown as { success: boolean; deleted: number }
 }

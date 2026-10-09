@@ -46,10 +46,10 @@ func TestAgentRequiresRerankModel(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "knowledge graph query does not use reranker",
+			name: "knowledge context query does not use reranker",
 			agent: &types.CustomAgent{Config: types.CustomAgentConfig{
 				KBSelectionMode: "all",
-				AllowedTools:    []string{tools.ToolQueryKnowledgeGraph},
+				AllowedTools:    []string{tools.ToolQueryKnowledgeContext},
 			}},
 			want: false,
 		},

@@ -69,7 +69,7 @@ func (s *KnowledgeContextService) SetTopicStar(ctx context.Context, tagID string
 	})
 }
 
-// FocusScope scopes topics and workflow queries by knowledge base/domain/team.
+// FocusScope scopes topics and workflow queries by knowledge base/domain/all knowledge bases.
 // Object stars apply globally and remain visible across these display scopes,
 // subject to API key identity visibility. Only explicit object conditions in
 // enabled fact_query steps become tracking focus.
@@ -264,7 +264,7 @@ func (s *KnowledgeContextService) MatchesFocus(ctx context.Context, k *types.Kno
 		return false, err
 	}
 	if tenantID != k.TenantID {
-		return false, werrors.NewForbiddenError("message is outside this team")
+		return false, werrors.NewForbiddenError("message is outside this space")
 	}
 	var count int64
 	if len(entityIDs) > 0 {

@@ -119,7 +119,7 @@ async function renderWorkbench({
     })
     return state
   }
-  const app = createSSRApp(component, { kbId: 'kb-a', domainId: 'domain-a', canManage: true })
+  const app = createSSRApp(component, { kbId: 'kb-a', domainId: 'domain-a' })
   const stub = defineComponent({
     props: ['message', 'description', 'disabled', 'visible'],
     setup(props, { attrs, slots }) {
@@ -156,7 +156,7 @@ test('null query lists render the empty result state', async () => {
   assert.match(html, /knowledgeWorkbench.query.empty/)
 })
 
-for (const queryScope of ['knowledge_base', 'domain', 'team']) {
+for (const queryScope of ['knowledge_base', 'domain', 'all']) {
   test(`${queryScope} event cards only render evidence named by evidence_ids`, async () => {
     const { html, requests } = await renderWorkbench({
       result: { entities: [entity], facts: [], events: [event], evidence, attention: null },
@@ -218,7 +218,7 @@ test('workbench displays missing publication exclusions returned by the query', 
   assert.match(html, /&quot;count&quot;:7/)
 })
 
-for (const queryScope of ['knowledge_base', 'domain', 'team']) {
+for (const queryScope of ['knowledge_base', 'domain', 'all']) {
   test(`${queryScope} structured queries display the template-only message count`, async () => {
     const { html, requests } = await renderWorkbench({
       result: { template_only_message_count: 9 },

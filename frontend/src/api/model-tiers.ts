@@ -8,7 +8,7 @@ export function modelTierSettingsPath(scope: ModelTierScope = {}): string {
   const query = new URLSearchParams()
   if (scope.knowledge_base_id) query.set('knowledge_base_id', scope.knowledge_base_id)
   else if (scope.domain_id) query.set('domain_id', scope.domain_id)
-  return `/api/v1/tenants/model-tiers${query.size ? `?${query}` : ''}`
+  return `/api/v1/space/model-tiers${query.size ? `?${query}` : ''}`
 }
 export const getModelTierSettings = (scope: ModelTierScope = {}) => get<ModelTierEnvelope>(modelTierSettingsPath(scope))
-export const updateTeamModelTiers = (config: ModelTierConfig) => put<ModelTierEnvelope>(modelTierSettingsPath(), config)
+export const updateGlobalModelTiers = (config: ModelTierConfig) => put<ModelTierEnvelope>(modelTierSettingsPath(), config)

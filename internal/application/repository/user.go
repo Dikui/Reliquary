@@ -29,7 +29,7 @@ func NewUserRepository(db *gorm.DB) interfaces.UserRepository {
 // CreateUser creates a user
 func (r *userRepository) CreateUser(ctx context.Context, user *types.User) error {
 	if user == nil || user.TenantID != types.SingleTenantID {
-		return errors.New("invalid team workspace")
+		return errors.New("invalid personal space")
 	}
 
 	return r.db.WithContext(ctx).Create(user).Error
@@ -104,7 +104,7 @@ func (r *userRepository) GetUserByTenantID(ctx context.Context, tenantID uint64)
 // UpdateUser updates a user
 func (r *userRepository) UpdateUser(ctx context.Context, user *types.User) error {
 	if user == nil || user.TenantID != types.SingleTenantID {
-		return errors.New("invalid team workspace")
+		return errors.New("invalid personal space")
 	}
 
 	return r.db.WithContext(ctx).Save(user).Error

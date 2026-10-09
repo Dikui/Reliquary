@@ -13,7 +13,7 @@ const KB_FILE_PROXY_PATH_RE = /^\/api\/v1\/knowledge-bases\/[^/]+\/files$/;
 const MESSAGE_FILE_PROXY_PATH_RE = /^\/api\/v1\/sessions\/[^/]+\/messages\/[^/]+\/files$/;
 
 export type ProtectedFileAccessContext =
-  /** 团队成员通过 Bearer 访问文件。 */
+  /** 登录用户通过 Bearer 访问文件。 */
   | { mode: 'tenant' }
   /** 知识库作用域。 */
   | { mode: 'knowledgeBase'; kbId: string }

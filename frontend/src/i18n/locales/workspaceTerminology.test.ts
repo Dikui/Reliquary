@@ -29,8 +29,8 @@ function withoutTechnicalTenantTokens(value: string): string {
 }
 
 const localeChecks = [
-  { name: 'zh-CN', locale: zhCN, forbidden: /租户/ },
-  { name: 'en-US', locale: enUS, forbidden: /\btenants?\b/i },
+  { name: 'zh-CN', locale: zhCN, forbidden: /租户|团队|成员|知识图谱/ },
+  { name: 'en-US', locale: enUS, forbidden: /\b(?:tenants?|teams?|members?)\b|knowledge graph/i },
 ]
 
 test('user-facing locale values use workspace terminology', () => {

@@ -14,15 +14,12 @@ import { humanizeCron, relativeTime } from '@/utils/cronHumanize'
 import DataSourceEditorDialog from './DataSourceEditorDialog.vue'
 import DataSourceSyncLogs from './DataSourceSyncLogs.vue'
 import DataSourceTypeIcon from './DataSourceTypeIcon.vue'
-import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps<{ kbId: string }>()
 const emit = defineEmits<{ (e: 'count', value: number): void }>()
 const { t } = useI18n()
-const authStore = useAuthStore()
 
-// 增删改和触发同步全部隐藏，而不是按下去再撞 403。
-const canManageDataSource = computed(() => authStore.isLoggedIn)
+// 登录用户可以管理数据源和触发同步。
 
 const dataSources = ref<DataSource[]>([])
 const loading = ref(false)
@@ -187,21 +184,14 @@ onBeforeUnmount(stopPolling)
     </div>
 
     <t-loading :loading="loading" size="small" class="ds-list-loading">
-      <div
-        v-if="!loading && dataSources.length === 0 && !canManageDataSource"
-        class="empty-state"
-      >
-        <t-empty :description="t('datasource.empty')" />
-      </div>
 
-      <div v-else-if="!loading" class="ds-grid">
-        <component
-          :is="canManageDataSource ? 'button' : 'div'"
+      <div v-if="!loading" class="ds-grid">
+        <button
           v-for="ds in dataSources"
           :key="ds.id"
-          :type="canManageDataSource ? 'button' : undefined"
-          :class="['ds-card', `ds-card--${ds.type}`, { 'ds-card--clickable': canManageDataSource }]"
-          @click="canManageDataSource ? openEdit(ds) : undefined"
+          type="button"
+          :class="['ds-card', `ds-card--${ds.type}`, 'ds-card--clickable']"
+          @click="openEdit(ds)"
         >
           <div class="ds-card__badge">
             <DataSourceTypeIcon :type="ds.type" variant="badge" />
@@ -222,11 +212,11 @@ onBeforeUnmount(stopPolling)
                   </t-button>
                   <template #dropdown>
                     <t-dropdown-menu>
-                      <t-dropdown-item v-if="canManageDataSource" @click="openEdit(ds)">
+                      <t-dropdown-item @click="openEdit(ds)">
                         <t-icon name="edit" /> {{ t('datasource.edit') }}
                       </t-dropdown-item>
                       <t-dropdown-item
-                        v-if="canManageDataSource"
+
                         :disabled="isSyncRunning(ds)"
                         @click="handleSync(ds)"
                       >
@@ -237,19 +227,19 @@ onBeforeUnmount(stopPolling)
                         <t-icon name="root-list" /> {{ t('datasource.logs') }}
                       </t-dropdown-item>
                       <t-dropdown-item
-                        v-if="canManageDataSource && ds.status === 'active'"
+                        v-if="ds.status === 'active'"
                         @click="handlePause(ds)"
                       >
                         <t-icon name="pause-circle" /> {{ t('datasource.pause') }}
                       </t-dropdown-item>
                       <t-dropdown-item
-                        v-else-if="canManageDataSource && ds.status === 'paused'"
+                        v-else-if="ds.status === 'paused'"
                         @click="handleResume(ds)"
                       >
                         <t-icon name="play-circle" /> {{ t('datasource.resume') }}
                       </t-dropdown-item>
                       <t-dropdown-item
-                        v-if="canManageDataSource"
+
                         theme="error"
                         class="ds-dropdown-delete-item"
                       >
@@ -306,10 +296,10 @@ onBeforeUnmount(stopPolling)
               <span>{{ ds.error_message }}</span>
             </div>
           </div>
-        </component>
+        </button>
 
         <button
-          v-if="canManageDataSource"
+
           type="button"
           class="ds-card ds-card--add"
           @click="openCreate"

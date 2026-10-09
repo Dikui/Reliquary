@@ -146,7 +146,7 @@ func (s *knowledgeBaseService) validateKnowledgeBaseDomain(ctx context.Context, 
 	}
 	if _, err := getKnowledgeDomain(ctx, s.db, tenantID, domainID, false); err != nil {
 		if appErr, ok := apperrors.IsAppError(err); ok && appErr.Code == apperrors.ErrNotFound {
-			return apperrors.NewBadRequestError("domain_id must reference an existing team domain")
+			return apperrors.NewBadRequestError("domain_id must reference an existing space domain")
 		}
 		return err
 	}
@@ -177,7 +177,7 @@ func (s *knowledgeBaseService) persistKnowledgeBase(ctx context.Context, kb *typ
 		var domain types.KnowledgeDomain
 		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("tenant_id = ? AND id = ?", kb.TenantID, kb.DomainID).First(&domain).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return apperrors.NewBadRequestError("domain_id must reference an existing team domain")
+				return apperrors.NewBadRequestError("domain_id must reference an existing space domain")
 			}
 			return err
 		}
@@ -447,7 +447,7 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 // move.
 //
 // The KB still has to belong to the caller's tenant — the route is
-// already gated behind KBAccessRead, but we re-check via
+// already gated behind KBExists, but we re-check via
 // GetKnowledgeBaseByIDAndTenant so a stale param survives a tenant
 // switch cleanly.
 func (s *knowledgeBaseService) TogglePinKnowledgeBase(
@@ -556,7 +556,7 @@ func (s *knowledgeBaseService) applyUserKBPins(
 
 // DeleteKnowledgeBase deletes a knowledge base by its ID
 // This method marks the knowledge base as deleted and enqueues an async task
-// to handle the heavy cleanup operations (embeddings, chunks, files, graph data)
+// to handle the heavy cleanup operations (embeddings, chunks, files, knowledge context data)
 func (s *knowledgeBaseService) DeleteKnowledgeBase(ctx context.Context, id string) error {
 	if id == "" {
 		logger.Error(ctx, "Knowledge base ID is empty")
@@ -641,7 +641,7 @@ func (s *knowledgeBaseService) DeleteKnowledgeBase(ctx context.Context, id strin
 }
 
 // ProcessKBDelete handles async knowledge base deletion task
-// This method performs heavy cleanup operations: deleting embeddings, chunks, files, and graph data
+// This method performs heavy cleanup operations: deleting embeddings, chunks, files, and knowledge context data
 func (s *knowledgeBaseService) ProcessKBDelete(ctx context.Context, t *asynq.Task) error {
 	var payload types.KBDeletePayload
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil {

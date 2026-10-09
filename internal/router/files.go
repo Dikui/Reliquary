@@ -265,7 +265,7 @@ func serveKBScopedFiles(
 	globalFileService interfaces.FileService,
 	resourceCatalogs ...interfaces.ResourceCatalog) {
 	logger.Infof(context.Background(), "[Router] Serving KB-scoped files from /knowledge-bases/:id/files")
-	r.Handle(http.MethodGet, "/knowledge-bases/:id/files", g.KBAccessRead("id"), newKBScopedFileServeHandlerWithResources(
+	r.Handle(http.MethodGet, "/knowledge-bases/:id/files", g.KBExists("id"), newKBScopedFileServeHandlerWithResources(
 		tenantService,
 		globalFileService,
 		firstResourceCatalog(resourceCatalogs)))
@@ -394,7 +394,7 @@ func newMessageScopedFileServeHandler(
 		}
 
 		if ownerTenantID != callerTenantID {
-			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: resource outside team"})
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: resource outside space"})
 			return
 		}
 

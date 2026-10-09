@@ -18,7 +18,7 @@
   <circle cx="700" cy="520" r="140" fill="#34D399" opacity="0.06"/>
 
   <text x="64" y="84" font-family="Arial, sans-serif" font-size="32" font-weight="700" fill="#065F46">Hybrid Search Strategy</text>
-  <text x="64" y="116" font-family="Arial, sans-serif" font-size="15" fill="#059669">Keyword + vector semantics + knowledge graph, fused for the best result</text>
+  <text x="64" y="116" font-family="Arial, sans-serif" font-size="15" fill="#059669">Keyword + vector semantics + knowledge context, fused for the best result</text>
 
   <g filter="url(#soft2)">
     <rect x="64" y="148" width="672" height="396" rx="20" fill="#FFFFFF"/>
@@ -52,16 +52,16 @@
     <text x="92" y="206" font-family="Arial, sans-serif" font-size="13" font-weight="600" fill="#2563EB" text-anchor="middle">Understands meaning</text>
   </g>
 
-  <!-- Graph -->
+  <!-- Context -->
   <g transform="translate(520, 184)">
     <rect width="184" height="220" rx="14" fill="#ECFDF5" stroke="#6EE7B7" stroke-width="1.5"/>
     <rect width="184" height="48" rx="14" fill="#D1FAE5"/>
     <rect y="34" width="184" height="14" fill="#D1FAE5"/>
-    <text x="92" y="31" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#065F46" text-anchor="middle">Knowledge Graph</text>
+    <text x="92" y="31" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#065F46" text-anchor="middle">Knowledge Context</text>
     <g font-family="Arial, sans-serif" font-size="12.5" fill="#064E3B">
       <rect x="20" y="70" width="144" height="30" rx="8" fill="#FFFFFF" stroke="#A7F3D0"/><text x="92" y="90" text-anchor="middle">Entity recognition</text>
       <rect x="20" y="110" width="144" height="30" rx="8" fill="#FFFFFF" stroke="#A7F3D0"/><text x="92" y="130" text-anchor="middle">Relation paths</text>
-      <rect x="20" y="150" width="144" height="30" rx="8" fill="#FFFFFF" stroke="#A7F3D0"/><text x="92" y="170" text-anchor="middle">Subgraph match</text>
+      <rect x="20" y="150" width="144" height="30" rx="8" fill="#FFFFFF" stroke="#A7F3D0"/><text x="92" y="170" text-anchor="middle">Direct relationships</text>
     </g>
     <text x="92" y="206" font-family="Arial, sans-serif" font-size="13" font-weight="600" fill="#059669" text-anchor="middle">Reasons over links</text>
   </g>

@@ -127,7 +127,7 @@ func backgroundTaskMiddleware() asynq.MiddlewareFunc {
 					}
 					var tenantID uint64
 					if json.Unmarshal(raw, &tenantID) != nil || tenantID != types.SingleTenantID {
-						return fmt.Errorf("task must belong to the team: %w", asynq.SkipRetry)
+						return fmt.Errorf("task must belong to the space: %w", asynq.SkipRetry)
 					}
 				}
 			}
@@ -166,7 +166,7 @@ func NewPostProcessAsynqServer(svc interfaces.SystemSettingService) *asynq.Serve
 	return newAsynqServer(allocation.PostProcess, types.QueueWeightsForPool(types.WorkerPoolPostProcess))
 }
 
-// NewEnrichmentAsynqServer runs high-fanout summary, multimodal, graph, and
+// NewEnrichmentAsynqServer runs high-fanout summary, multimodal, context, and
 // question generation without consuming core parsing capacity.
 func NewEnrichmentAsynqServer(svc interfaces.SystemSettingService) *asynq.Server {
 	allocation := resolveWorkerPoolConcurrency(svc)

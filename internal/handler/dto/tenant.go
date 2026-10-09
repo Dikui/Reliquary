@@ -15,7 +15,6 @@ type TenantResponse struct {
 	Description        string                    `json:"description"`
 	Status             string                    `json:"status"`
 	Business           string                    `json:"business"`
-	StorageQuota       int64                     `json:"storage_quota"`
 	StorageUsed        int64                     `json:"storage_used"`
 	ContextConfig      *types.ContextConfig      `json:"context_config,omitempty"`
 	ParserEngineConfig *types.ParserEngineConfig `json:"parser_engine_config,omitempty"`
@@ -32,8 +31,7 @@ func NewTenantResponse(ctx context.Context, tenant *types.Tenant) *TenantRespons
 	return NewTenantResponseWithSecrets(tenant)
 }
 
-// NewTenantResponseWithRole converts a stored tenant using an explicit role
-// (for auth flows where tenant role is not yet in request context).
+// NewTenantResponseWithSecrets converts stored personal-space data with redacted credentials.
 func NewTenantResponseWithSecrets(tenant *types.Tenant) *TenantResponse {
 	if tenant == nil {
 		return nil
@@ -45,7 +43,6 @@ func NewTenantResponseWithSecrets(tenant *types.Tenant) *TenantResponse {
 		Description:       tenant.Description,
 		Status:            tenant.Status,
 		Business:          tenant.Business,
-		StorageQuota:      tenant.StorageQuota,
 		StorageUsed:       tenant.StorageUsed,
 		ContextConfig:     tenant.ContextConfig,
 		ChatHistoryConfig: tenant.ChatHistoryConfig,

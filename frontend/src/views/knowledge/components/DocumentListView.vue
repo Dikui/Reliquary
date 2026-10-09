@@ -34,9 +34,6 @@ interface KnowledgeItem {
 const props = defineProps<{
   items: KnowledgeItem[];
   selectedIds: Set<string>;
-  canEdit: boolean;
-  canDownload: boolean;
-  canMutateKnowledge: boolean;
   traceVisibleIds: Record<string, boolean>;
   tagList: Tag[];
   starredTagIds: Set<string>;
@@ -135,7 +132,7 @@ const computeStatus = (item: KnowledgeItem): StatusInfo => {
   // when summary is what's actually outstanding (preserves the old UX
   // where this label was tied to completed+summary_pending). Otherwise
   // fall back to the generic "finalizing" label — covers question gen
-  // and graph extract, which the user historically had no visibility on.
+  // and context extract, which the user historically had no visibility on.
   if (item.parse_status === 'finalizing') {
     if (item.summary_status === 'pending' || item.summary_status === 'processing') {
       return { label: t('knowledgeBase.generatingSummary'), theme: 'primary', icon: 'loading', spin: true };
@@ -265,7 +262,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
       <div class="cell cell-size" role="columnheader">{{ t('knowledgeBase.columnSize') }}</div>
       <div class="cell cell-status" role="columnheader">{{ t('knowledgeBase.columnStatus') }}</div>
       <div class="cell cell-time" role="columnheader">{{ t('knowledgeBase.columnUpdatedAt') }}</div>
-      <div class="cell cell-actions" role="columnheader" v-if="canEdit"></div>
+      <div class="cell cell-actions" role="columnheader"></div>
     </div>
 
     <div class="doc-list-body">
@@ -295,7 +292,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
         <div class="cell cell-size"></div>
         <div class="cell cell-status"></div>
         <div class="cell cell-time"></div>
-        <div v-if="canEdit" class="cell cell-actions" aria-hidden="true"></div>
+        <div class="cell cell-actions" aria-hidden="true"></div>
       </div>
 
       <div v-for="item in items" :key="item.id" class="doc-list-row"
@@ -327,8 +324,8 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
           <template v-if="item.tags && item.tags.length > 0">
             <t-tooltip v-if="hasTagOverflow(item.id, (item.tags || []).length)"
               :content="displayTags(item.tags).map((tag: Tag) => `${isStarredTag(tag) ? '★ ' : ''}${tagLabel(tag, t)}`).join(', ')" placement="top">
-              <div class="row-tag-chips" :ref="(el: any) => setupTagChipsObserver(el, item.id, (item.tags || []).length)"
-                :class="{ 'is-clickable': canEdit }" @click.stop="canEdit && emit('tag-edit', item)">
+              <div class="row-tag-chips is-clickable" :ref="(el: any) => setupTagChipsObserver(el, item.id, (item.tags || []).length)"
+                @click.stop="emit('tag-edit', item)">
                 <t-tag v-for="tag in displayTags(item.tags).slice(0, getTagLimit(item.id))" :key="tag.id" size="small"
                   variant="light-outline" class="row-tag" :class="{ 'is-starred': isStarredTag(tag) }">
                   {{ isStarredTag(tag) ? '★ ' : '' }}{{ tagLabel(tag, t) }}
@@ -336,15 +333,15 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
                 <span class="row-tag-overflow">+{{ getOverflowCount(item.id, (item.tags || []).length) }}</span>
               </div>
             </t-tooltip>
-            <div v-else class="row-tag-chips" :ref="(el: any) => setupTagChipsObserver(el, item.id, (item.tags || []).length)"
-              :class="{ 'is-clickable': canEdit }" @click.stop="canEdit && emit('tag-edit', item)">
+            <div v-else class="row-tag-chips is-clickable" :ref="(el: any) => setupTagChipsObserver(el, item.id, (item.tags || []).length)"
+              @click.stop="emit('tag-edit', item)">
               <t-tag v-for="tag in displayTags(item.tags).slice(0, getTagLimit(item.id))" :key="tag.id" size="small"
                 variant="light-outline" class="row-tag" :class="{ 'is-starred': isStarredTag(tag) }">
                 {{ isStarredTag(tag) ? '★ ' : '' }}{{ tagLabel(tag, t) }}
               </t-tag>
             </div>
           </template>
-          <span v-else class="row-tag-chips is-clickable" @click.stop="canEdit && emit('tag-edit', item)">
+          <span v-else class="row-tag-chips is-clickable" @click.stop="emit('tag-edit', item)">
             <span class="row-tag-add">+ {{ t('knowledgeBase.tagLabel') }}</span>
           </span>
         </div>
@@ -376,7 +373,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
           <span class="row-mono">{{ formatTime(item.updated_at) }}</span>
         </div>
 
-        <div class="cell cell-actions" v-if="canEdit" @click.stop>
+        <div class="cell cell-actions" @click.stop>
           <t-popup placement="bottom-right" trigger="click" destroy-on-close overlay-class-name="card-more"
             :on-visible-change="(v: boolean) => onMoreVisible(item.id, v)">
             <button class="row-more-btn" :class="{ active: moreOpen === item.id }" type="button"
@@ -399,8 +396,8 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
               <div v-else-if="moveMenuMode === 'normal'" class="card-menu">
                 <DocumentActionMenu
                   :item="item"
-                  :can-download="canDownload"
-                  :can-mutate-knowledge="canMutateKnowledge"
+
+
                   :trace-visible="!!traceVisibleIds[item.id] || (item.parse_status === 'pending' || item.parse_status === 'processing' || item.parse_status === 'finalizing')"
                   @download="handleAction('download', item)"
                   @edit="handleAction('edit', item)"

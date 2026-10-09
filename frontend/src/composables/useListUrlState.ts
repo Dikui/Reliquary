@@ -1,4 +1,4 @@
-// Team lists preserve their view and search query in the URL.
+// Resource lists preserve their view and search query in the URL.
 import { ref, watch, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 

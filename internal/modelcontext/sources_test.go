@@ -448,30 +448,34 @@ func TestModelOutputDocumentInfoUsesDocumentAliases(t *testing.T) {
 	require.Contains(t, output, `<document id="d1" title="Architecture"`)
 }
 
-func TestModelOutputGraphResultsUseChunkAliases(t *testing.T) {
-	registry := newSourceRegistry()
-	output := registry.ModelOutput(&types.ToolResult{
-		Success: true,
-		Data: map[string]interface{}{
-			"display_type": "graph_query_results",
-			"results": []map[string]interface{}{{
-				"chunk_id":          "graph-chunk-real",
-				"chunk_index":       4,
-				"knowledge_id":      "graph-doc-real",
-				"knowledge_base_id": "graph-kb-real",
-				"knowledge_title":   "Graph Source",
-				"content":           "A relates to B.",
-			}},
-		},
-	})
+func TestModelOutputContextAndLegacyResultsUseChunkAliases(t *testing.T) {
+	for _, displayType := range []string{"context_query_results", "graph_query_results"} {
+		t.Run(displayType, func(t *testing.T) {
+			registry := newSourceRegistry()
+			output := registry.ModelOutput(&types.ToolResult{
+				Success: true,
+				Data: map[string]interface{}{
+					"display_type": displayType,
+					"results": []map[string]interface{}{{
+						"chunk_id":          "context-chunk-real",
+						"chunk_index":       4,
+						"knowledge_id":      "context-doc-real",
+						"knowledge_base_id": "context-kb-real",
+						"knowledge_title":   "Context Source",
+						"content":           "A relates to B.",
+					}},
+				},
+			})
 
-	require.Contains(t, output, `<retrieval type="knowledge" mode="graph">`)
-	require.Contains(t, output, `<chunk id="c1" index="4" view="full">`)
-	require.NotContains(t, output, "graph-chunk-real")
-	require.Equal(t,
-		`<kb doc="Graph Source" chunk_id="graph-chunk-real" kb_id="graph-kb-real" />`,
-		registry.ExpandText(`<ref id="c1"/>`),
-	)
+			require.Contains(t, output, `<retrieval type="knowledge" mode="context">`)
+			require.Contains(t, output, `<chunk id="c1" index="4" view="full">`)
+			require.NotContains(t, output, "context-chunk-real")
+			require.Equal(t,
+				`<kb doc="Context Source" chunk_id="context-chunk-real" kb_id="context-kb-real" />`,
+				registry.ExpandText(`<ref id="c1"/>`),
+			)
+		})
+	}
 }
 
 func TestModelOutputDoesNotRegisterInternalSchemesAsWebSources(t *testing.T) {

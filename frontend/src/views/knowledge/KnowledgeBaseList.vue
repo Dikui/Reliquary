@@ -7,7 +7,7 @@
         <div class="header-title">
           <div class="title-row">
             <h2>{{ $t('knowledgeBase.title') }}</h2>
-            <t-tooltip v-if="authStore.isLoggedIn" :content="$t('knowledgeList.create')" placement="bottom">
+            <t-tooltip :content="$t('knowledgeList.create')" placement="bottom">
               <t-button variant="text" theme="default" size="small" class="header-action-btn"
                 data-guide="kb-list-create" @click="handleCreateKnowledgeBase">
                 <template #icon><t-icon name="folder-add" size="16px" /></template>
@@ -116,7 +116,7 @@
                 <!-- The card menu always exists when the card is visible: pin
                      is now per-user and available to anyone who can see the KB
                      (backend route only requires KB read access). Settings /
-                     Delete are mutations, so they stay behind canManageKBCard. -->
+                     Every action is available to the signed-in user. -->
                 <t-popup overlayClassName="card-more-popup" trigger="click" destroy-on-close
                   placement="bottom-right">
                   <div class="more-wrap" @click.stop>
@@ -128,17 +128,17 @@
                         <t-icon class="menu-icon" :name="kb.is_pinned ? 'pin-filled' : 'pin'" />
                         <span>{{ kb.is_pinned ? $t('knowledgeList.pin.unpin') : $t('knowledgeList.pin.pin') }}</span>
                       </div>
-                      <div v-if="canDuplicateKBCard(kb)" class="popup-menu-item"
+                      <div class="popup-menu-item"
                         @click.stop="handleDuplicateById(kb.id)">
                         <t-icon class="menu-icon" name="file-copy" />
                         <span>{{ $t('knowledgeList.menu.duplicate') }}</span>
                       </div>
-                      <template v-if="authStore.isLoggedIn">
+                      <template>
                         <div class="popup-menu-item" @click.stop="handleSettingsById(kb.id)">
                           <t-icon class="menu-icon" name="setting" />
                           <span>{{ $t('knowledgeBase.settings') }}</span>
                         </div>
-                        <div v-if="canManageKBCard(kb)" class="popup-menu-item delete" @click.stop="handleDeleteById(kb.id)">
+                        <div class="popup-menu-item delete" @click.stop="handleDeleteById(kb.id)">
                           <t-icon class="menu-icon" name="delete" />
                           <span>{{ $t('common.delete') }}</span>
                         </div>
@@ -192,7 +192,7 @@
           <img class="empty-img" src="@/assets/img/upload.svg" alt="">
           <span class="empty-txt">{{ $t('knowledgeList.empty.title') }}</span>
           <span class="empty-desc">{{ $t('knowledgeList.empty.description') }}</span>
-          <t-button v-if="authStore.isLoggedIn" class="kb-create-btn empty-state-btn"
+          <t-button class="kb-create-btn empty-state-btn"
             data-guide="kb-list-create" @click="handleCreateKnowledgeBase">
             <template #icon><t-icon name="folder-add" /></template>
             {{ $t('knowledgeList.create') }}
@@ -283,7 +283,7 @@ const { loaded: modelsReadyLoaded, isReadyForDocumentKb } = useTenantModelReadin
 const chatResources = useChatResourcesStore()
 const { t } = useI18n()
 
-// 列表默认展示整个团队的知识库，收藏和最近视图保留个人偏好。
+// 列表默认展示整个空间的知识库，收藏和最近视图保留个人偏好。
 const defaultScope = 'all' as const
 const { scope: spaceSelection } = useListUrlState({
   defaultScope,
@@ -343,7 +343,6 @@ const filteredKnowledgeBases = computed(() => {
 
 const showKbListEmpty = computed(() => {
   if (loading.value) return false
-  if (!authStore.isLoggedIn) return false
   if (spaceSelection.value === 'all' && filteredKnowledgeBases.value.length === 0) return true
   return false
 })
@@ -442,15 +441,9 @@ const handleSettings = (kb: KB) => {
   kb.showMore = false
   goSettings(kb.id)
 }
-function canManageKBCard(_kb: KB): boolean { return authStore.isLoggedIn }
-
-function canDuplicateKBCard(_kb: any): boolean { return authStore.isLoggedIn }
 
 
-// isMyKb 仅用于卡片右下角徽章在「我创建」与「同空间其他成员创建」之间切换。
-// 与 canManageKBCard 不同：管理权限有 admin 兜底，徽章纯粹按创建者匹配。
-// creator_id 为空（PR 5 RBAC 迁移之前的老 KB）一律按 tenant 处理——避免把
-// 全空间共有的旧 KB 错误地都标成「我创建」。
+// 来源徽章依据保存的创建者信息展示。
 function isMyKb(kb: { creator_id?: string }): boolean {
   const userId = authStore.user?.id || ''
   return !!(kb.creator_id && userId && kb.creator_id === userId)

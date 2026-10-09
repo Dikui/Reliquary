@@ -510,6 +510,7 @@
 </template>
 
 <script setup lang="ts">
+import { normalizeToolName } from '@/utils/toolNames';
 import { ref, computed, watch, onMounted, onBeforeUnmount, onUpdated, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { marked } from 'marked';
@@ -532,7 +533,6 @@ import { resolveCitationChunkId } from '@/utils/citationMarkdown';
 import { MessagePlugin } from 'tdesign-vue-next';
 import { useUIStore } from '@/stores/ui';
 import { useSettingsStore } from '@/stores/settings';
-import { useAuthStore } from '@/stores/auth';
 import { useI18n } from 'vue-i18n';
 import i18n from '@/i18n';
 import { hydrateProtectedFileImages, clearProtectedFileFailureCache, sanitizeMarkdownHTML } from '@/utils/security';
@@ -578,7 +578,6 @@ const router = useRouter();
 const route = useRoute();
 const uiStore = useUIStore();
 const settingsStore = useSettingsStore();
-const authStore = useAuthStore();
 const { t } = useI18n();
 
 ensureMermaidInitialized();
@@ -600,7 +599,7 @@ const TOOL_NAME_KEYS: Record<string, string> = {
   attachment_parsing: 'agentStream.tools.attachmentParsing',
   image_analysis: 'agentStream.tools.imageAnalysis',
   query_understand: 'agentStream.tools.queryUnderstand',
-  query_knowledge_graph: 'agentStream.tools.queryKnowledgeGraph',
+  query_knowledge_context: 'agentStream.tools.queryKnowledgeContext',
   data_analysis: 'agentStream.tools.dataAnalysis',
   data_schema: 'agentStream.tools.dataSchema',
   database_query: 'agentStream.tools.databaseQuery',
@@ -608,7 +607,7 @@ const TOOL_NAME_KEYS: Record<string, string> = {
 
 const getLocalizedToolName = (toolName?: string | null): string => {
   if (!toolName) return t('agent.toolFallback');
-  const key = TOOL_NAME_KEYS[toolName];
+  const key = TOOL_NAME_KEYS[normalizeToolName(toolName)];
   if (key) return t(key);
 
   // Format MCP tool names: "mcp_my_server_search_docs" → "My Server: search docs"

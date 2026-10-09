@@ -6,13 +6,15 @@
 
 | 方法 | 路径 | 描述 |
 | --- | --- | --- |
-| GET | `/tenants/1` | 获取空间信息 |
-| PUT | `/tenants/1` | 更新空间设置 |
-| GET | `/tenants/1/api-keys` | 列出 API Key |
-| POST | `/tenants/1/api-keys` | 创建 API Key |
-| PUT | `/tenants/1/api-keys/:key_id` | 更新 API Key |
-| DELETE | `/tenants/1/api-keys/:key_id` | 撤销 API Key |
+| GET | `/space` | 获取空间信息 |
+| PUT | `/space` | 更新空间设置 |
+| GET | `/space/api-keys` | 列出 API Key |
+| POST | `/space/api-keys` | 创建 API Key |
+| PUT | `/space/api-keys/:key_id` | 更新 API Key |
+| DELETE | `/space/api-keys/:key_id` | 撤销 API Key |
 
 API Key 使用 `X-API-Key`，拥有与登录用户相同的完整权限。创建和更新参数为 `name` 与可选的 `expires_at_unix`（Unix 秒）。
 
-空间 KV 配置继续使用 `/tenants/kv/:key`，租户由认证上下文提供。模型、RSS 数据源、工作流、MCP 客户端等接口保持业务行为，详细配置请参考 Swagger。
+空间 KV 配置继续使用 `/space/kv/:key`，空间由认证上下文提供。模型、RSS 数据源、工作流、MCP 客户端等接口保持业务行为，详细配置请参考 Swagger。
+
+空间信息返回 `storage_used`，表示已用空间的字节数。空间不设置存储限额。模型分级全局默认使用 `GET/PUT /space/model-tiers`。

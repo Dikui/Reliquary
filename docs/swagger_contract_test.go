@@ -3,6 +3,7 @@ package docs_test
 import (
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -117,7 +118,7 @@ func assertModelDeleteUsageContract(t *testing.T, data []byte, parse func([]byte
 		t.Fatal("model DELETE Swagger contract does not document the model-in-use 400 response")
 	}
 
-	const errorCodeDefinition = "github_com_Tencent_Reliquary_internal_errors.ErrorCode"
+	const errorCodeDefinition = "reliquary_internal_errors.ErrorCode"
 	errorCodes, ok := spec.Definitions[errorCodeDefinition]
 	if !ok {
 		t.Fatalf("generated Swagger document does not expose %s", errorCodeDefinition)
@@ -139,6 +140,52 @@ func assertModelDeleteUsageContract(t *testing.T, data []byte, parse func([]byte
 		}
 	}
 	t.Fatal("generated Swagger ErrorCode enum does not include model-in-use code 2300")
+}
+
+func TestPersonalSpaceRouteContract(t *testing.T) {
+	for _, tt := range swaggerDocuments() {
+		t.Run(tt.name, func(t *testing.T) {
+			var spec struct {
+				Paths       map[string]map[string]any `json:"paths" yaml:"paths"`
+				Definitions map[string]struct {
+					Properties map[string]any `json:"properties" yaml:"properties"`
+				} `json:"definitions" yaml:"definitions"`
+			}
+			if err := tt.parse(tt.loadSpec(t), &spec); err != nil {
+				t.Fatal(err)
+			}
+			for path, methods := range map[string][]string{
+				"/space":                   {"get", "put"},
+				"/space/api-keys":          {"get", "post"},
+				"/space/api-keys/{key_id}": {"put", "delete"},
+				"/space/kv/{key}":          {"get", "put"},
+				"/space/model-tiers":       {"get", "put"},
+				"/system/settings":         {"get"},
+				"/system/settings/{key}":   {"get", "put", "delete"},
+				"/system/runtime/queues":   {"get"},
+			} {
+				for _, method := range methods {
+					if _, ok := spec.Paths[path][method]; !ok {
+						t.Errorf("missing %s %s", method, path)
+					}
+				}
+			}
+			for path := range spec.Paths {
+				if strings.HasPrefix(path, "/tenants/") || strings.HasPrefix(path, "/system/admin/") {
+					t.Errorf("stale route %s", path)
+				}
+			}
+			for name, definition := range spec.Definitions {
+				if _, ok := definition.Properties["storage_quota"]; ok {
+					t.Errorf("stale storage quota in %s", name)
+				}
+			}
+			info := spec.Definitions["internal_handler.GetSystemInfoResponse"]
+			if _, ok := info.Properties["credential_encryption_enabled"]; !ok {
+				t.Error("system info does not document credential encryption state")
+			}
+		})
+	}
 }
 
 func swaggerInteger(value any) int {

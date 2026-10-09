@@ -1,5 +1,5 @@
 import { del, get, post, put } from '@/utils/request'
-import { knowledgeContextBasePath, type KnowledgeContextScopeParams } from './knowledge-context-scope'
+import { knowledgeContextBasePath, normalizeKnowledgeContextScope, type KnowledgeContextScopeParams } from './knowledge-context-scope'
 export type { KnowledgeContextScope } from './knowledge-context-scope'
 
 export interface KnowledgeContextEnvelope<T> {
@@ -211,7 +211,7 @@ function queryString(params?: KnowledgeContextListParams): string {
   if (!params) return ''
   const query = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== '') query.set(key, String(value))
+    if (value !== undefined && value !== '') query.set(key, String(key === 'scope' ? normalizeKnowledgeContextScope(value as KnowledgeContextScopeParams['scope']) : value))
   }
   const serialized = query.toString()
   return serialized ? `?${serialized}` : ''
@@ -230,7 +230,7 @@ export const unstarKnowledgeTopic = (tagId: string) =>
   del<KnowledgeContextActionEnvelope>(`/api/v1/knowledge-context/topics/${encodeURIComponent(tagId)}/star`)
 
 export const queryKnowledgeContext = (kbId: string, query: KnowledgeContextQuery) =>
-  post<KnowledgeContextEnvelope<KnowledgeContextResult>>(`${knowledgeContextBasePath(kbId, query.scope)}/query`, query)
+  post<KnowledgeContextEnvelope<KnowledgeContextResult>>(`${knowledgeContextBasePath(kbId, query.scope)}/query`, { ...query, scope: normalizeKnowledgeContextScope(query.scope) })
 
 export const listKnowledgeContextEntities = (kbId: string, params?: KnowledgeContextListParams) =>
   get<KnowledgeContextEnvelope<KnowledgeEntity[]>>(`${knowledgeContextBasePath(kbId, params?.scope)}/entities${queryString(params)}`)

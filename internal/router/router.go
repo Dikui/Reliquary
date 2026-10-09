@@ -173,7 +173,6 @@ func NewRouter(params RouterParams) *gin.Engine {
 		RegisterInitializationRoutes(v1, params.InitializationHandler, accessGuards)
 		params.SystemHandler.BindDeploymentCapabilities(deploymentCapabilitiesFromRouter(params))
 		RegisterSystemRoutes(v1, params.SystemHandler, accessGuards)
-		RegisterSystemAdminRoutes(v1, params.SystemHandler, accessGuards)
 		RegisterMCPServiceRoutes(v1, params.MCPServiceHandler, params.MCPCredentialsHandler, params.MCPOAuthHandler, accessGuards)
 		RegisterCustomAgentRoutes(v1, params.CustomAgentHandler, accessGuards)
 		RegisterUserFavoriteRoutes(v1, params.UserFavoriteHandler, accessGuards)

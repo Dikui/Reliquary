@@ -230,7 +230,7 @@ func TestP3ConcurrentMessagesCreateOneObjectWithoutOrphanReferences(t *testing.T
 		}
 	}
 	// Both provider calls are paused. An exclusive maintenance lock is still
-	// immediately obtainable, proving model latency does not hold graph locks.
+	// immediately obtainable, proving model latency does not hold context locks.
 	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
 		var acquired bool
 		if err := tx.Raw("SELECT pg_try_advisory_xact_lock(hashtextextended(?, 0))", "reliquary:knowledge-context:team:9").Scan(&acquired).Error; err != nil {

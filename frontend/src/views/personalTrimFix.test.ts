@@ -40,7 +40,7 @@ async function componentScenario(path: string, locale: 'zh-CN' | 'en-US', module
   }
   function evaluate(code: string) {
     const module = { exports: {} as any }
-    new Function('require', 'module', 'exports', ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText)(
+    new Function('require', 'module', 'exports', ts.transpileModule(code.replaceAll('__FRONTEND_VERSION__', "'test'").replaceAll('__FRONTEND_COMMIT__', "'test'"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText)(
       (name: string) => (name.endsWith('.css') || name.startsWith('swiper/css')) ? {} : name.endsWith('.svg') ? { default: '', __esModule: true } : mocks[name] ?? require(name), module, module.exports)
     return module.exports
   }
@@ -55,7 +55,7 @@ async function componentScenario(path: string, locale: 'zh-CN' | 'en-US', module
   }
   const app = createSSRApp(component, props)
   app.config.globalProperties.$t = t
-  for (const name of ['t-form', 't-form-item', 't-input', 't-button', 't-icon', 't-alert', 't-empty', 't-loading', 't-table', 't-tooltip', 't-textarea']) app.component(name, stub)
+  for (const name of ['t-form', 't-form-item', 't-input', 't-button', 't-icon', 't-alert', 't-empty', 't-loading', 't-table', 't-tooltip', 't-textarea', 't-tag']) app.component(name, stub)
   app.component('t-drawer', drawer)
   const errors: unknown[] = []
   app.config.errorHandler = error => errors.push(error)
@@ -70,7 +70,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const { state } = await componentScenario('./integrations/ApiIntegrationSettings.vue', locale, {
       'tdesign-vue-next': { MessagePlugin: { success() {} } },
       '@/api/tenant': {
-        createTenantAPIKey: async (tenant: number, payload: object) => { requests.push({ tenant, payload }); return { success: true, data: { token: 'test-key' } } },
+        createTenantAPIKey: async (payload: object) => { requests.push({ payload }); return { success: true, data: { token: 'test-key' } } },
         listTenantAPIKeys: async () => ({ success: true, data: [] }),
       },
     }, async state => {
@@ -82,7 +82,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       assert.equal(state.createdToken.value, 'test-key')
       assert.equal(state.editingVisible.value, false)
     })
-    assert.deepEqual(requests, [{ tenant: 1, payload: { name: 'Personal automation' } }])
+    assert.deepEqual(requests, [{ payload: { name: 'Personal automation' } }])
     assert.equal(state.columns.value.at(-1).title, locale === 'zh-CN' ? '操作' : 'Actions')
     const t = translator(locale)
     assert.equal(personalError.apiKeyErrorMessage({ message: 'expires_at_unix must be in the future' }, t, 'integrations.api.createApiKeyFailed'), t('integrations.api.apiKeyExpiresAtInvalid'))
@@ -128,3 +128,46 @@ test('390px login navigation reserves its own normal-flow row before the introdu
   assert.equal(styleDeclarationsAtWidth(rules, '.header-links', 390).position, 'static')
   assert.equal(styleDeclarationsAtWidth(rules, '.header-logo', 1280).position, 'fixed')
 })
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: space info shows used storage above the former limit without a quota or percentage`, async () => {
+    const { html, state } = await componentScenario('./settings/TenantInfo.vue', locale, {
+      './GlobalModelTierSettings.vue': { default: stub, __esModule: true },
+      'tdesign-vue-next': { MessagePlugin: { success() {} } },
+      '@/api/tenant': { getTenantInfo: async () => ({ success: true, data: { id: 1, name: 'Personal space', storage_used: 11 * 1024 ** 3, created_at: '2026-10-09T00:00:00Z' } }) },
+    }, async state => { await state.loadInfo() })
+    assert.equal(state.error.value, '')
+    assert.ok(html.includes(translator(locale)('tenant.storage.usedLabel')))
+    assert.ok(html.includes('11 GB'))
+    assert.ok(!html.includes('%'))
+    assert.ok(!html.includes(locale === 'zh-CN' ? '配额' : 'Quota'))
+    assert.ok(html.includes(translator(locale)('tenant.details.editName')))
+  })
+
+  for (const encrypted of [false, true]) {
+    test(`${locale}: system info displays ${encrypted ? 'encrypted' : 'plaintext'} credential storage`, async () => {
+      const { html } = await componentScenario('./settings/SystemInfo.vue', locale, {
+        '@/api/system': { getSystemInfo: async () => ({ data: { version: 'test', credential_encryption_enabled: encrypted } }) },
+      }, async state => { await state.loadInfo() })
+      const t = translator(locale)
+      assert.ok(html.includes(t(encrypted ? 'system.credentialEncryptionEnabled' : 'system.credentialEncryptionDisabled')))
+      assert.ok(html.includes(t(encrypted ? 'system.credentialEncryptionEnabledDescription' : 'system.credentialEncryptionDisabledDescription')))
+      if (encrypted) assert.ok(!html.includes(t('system.credentialEncryptionDisabledDescription')))
+    })
+  }
+}
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: saved context result aliases render the same visible entity summary`, async () => {
+    const summary = { nodes: [{ id: 'entity-a', label: 'Saved object', type: 'object', kb_id: 'kb-a' }], edges: [], total_nodes: 1, total_edges: 0 }
+    const html: string[] = []
+    for (const legacy of [false, true]) {
+      const rendered = await componentScenario('./chat/components/tool-results/ContextQueryResults.vue', locale, {
+        '@/api/knowledge-context': {},
+      }, async () => {}, { data: { display_type: legacy ? 'graph_query_results' : 'context_query_results', contexts: {}, knowledge_base_ids: ['kb-a'], [legacy ? 'graph_data' : 'context_data']: summary } })
+      assert.ok(rendered.html.includes('Saved object'))
+      html.push(rendered.html)
+    }
+    assert.equal(html[0], html[1])
+  })
+}

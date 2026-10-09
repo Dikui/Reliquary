@@ -154,7 +154,7 @@ func (s *KnowledgeContextService) Query(ctx context.Context, kbID string, q type
 	return s.queryContext(ctx, kbID, q, true)
 }
 
-// EntityDetail includes team history by default, without list pagination.
+// EntityDetail includes space history by default, without list pagination.
 func (s *KnowledgeContextService) EntityDetail(ctx context.Context, entityID string, history ...bool) (*types.KnowledgeContextResult, error) {
 	_, err := s.requireTenant(ctx)
 	if err != nil {
@@ -165,7 +165,7 @@ func (s *KnowledgeContextService) EntityDetail(ctx context.Context, entityID str
 	if len(history) > 0 {
 		includeHistory = history[0]
 	}
-	result, err := s.queryContext(ctx, "", types.KnowledgeContextQuery{Scope: "team", EntityID: entityID, IncludeHistory: includeHistory}, false)
+	result, err := s.queryContext(ctx, "", types.KnowledgeContextQuery{Scope: "all", EntityID: entityID, IncludeHistory: includeHistory}, false)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +203,7 @@ func (s *KnowledgeContextService) queryContext(ctx context.Context, kbID string,
 	}
 	tenantID, kbIDs := scope.tenantID, scope.kbIDs
 	limitedEntities := len(q.KnowledgeIDs) > 0
-	projectEventSources := len(q.KnowledgeIDs) > 0 || scope.kind != "team"
+	projectEventSources := len(q.KnowledgeIDs) > 0 || scope.kind != "all"
 	result := &types.KnowledgeContextResult{
 		Entities: []types.KnowledgeEntity{}, Facts: []types.KnowledgeFact{},
 		Events: []types.KnowledgeEvent{}, Evidence: []types.KnowledgeEvidence{}, Attention: []types.KnowledgeAttention{},

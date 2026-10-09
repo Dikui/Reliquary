@@ -4,6 +4,7 @@ package docs
 import "github.com/swaggo/swag"
 
 const docTemplate = `{
+    "schemes": {{ marshal .Schemes }},
     "swagger": "2.0",
     "info": {
         "description": "{{escape .Description}}",
@@ -11,10 +12,11 @@ const docTemplate = `{
         "termsOfService": "http://swagger.io/terms/",
         "contact": {
             "name": "Reliquary Github",
-            "url": "https://github.com/Tencent/WeKnora"
+            "url": "http://192.168.1.146:3000/dikui/reliquary"
         },
         "version": "{{.Version}}"
     },
+    "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
         "/agent-chat/{session_id}": {
@@ -78,7 +80,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -132,13 +134,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "409": {
                         "description": "用户尚未完成授权",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -179,7 +181,7 @@ const docTemplate = `{
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -236,13 +238,13 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "404": {
                         "description": "待审批记录不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -280,11 +282,10 @@ const docTemplate = `{
                     "500": {
                         "description": "服务器错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
-                },
-                "parameters": []
+                }
             },
             "post": {
                 "security": [
@@ -328,7 +329,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -363,8 +364,7 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "parameters": []
+                }
             }
         },
         "/agents/type-presets": {
@@ -396,8 +396,7 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "parameters": []
+                }
             }
         },
         "/agents/{id}": {
@@ -441,13 +440,13 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "404": {
                         "description": "智能体不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -501,13 +500,13 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "403": {
                         "description": "无法修改内置智能体",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -552,19 +551,19 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "403": {
                         "description": "无法删除内置智能体",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "404": {
                         "description": "智能体不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -611,13 +610,13 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "404": {
                         "description": "智能体不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -688,13 +687,13 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "404": {
                         "description": "智能体不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -702,7 +701,7 @@ const docTemplate = `{
         },
         "/api/v1/knowledge/{id}/spans": {
             "get": {
-                "description": "返回该知识在解析流水线的 trace tree（root → stage → subspan）：每段状态、耗时、input/output、错误码、langfuse_trace_id。支持 ?attempt=N 查看历史尝试；不传则返回最新尝试。前端用于渲染时间线 + 多模态/embedding 子节点 + 一键跳转 Langfuse。",
+                "description": "返回该知识在解析流水线的 trace tree（root → stage → subspan）：每段状态、耗时、input/output、错误码。支持 ?attempt=N 查看历史尝试；不传则返回最新尝试。前端用于渲染时间线 + 多模态/embedding 子节点。",
                 "consumes": [
                     "application/json"
                 ],
@@ -787,7 +786,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -814,8 +813,7 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "parameters": []
+                }
             }
         },
         "/auth/login": {
@@ -838,7 +836,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.LoginRequest"
+                            "$ref": "#/definitions/reliquary_internal_types.LoginRequest"
                         }
                     }
                 ],
@@ -846,13 +844,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.LoginResponse"
+                            "$ref": "#/definitions/reliquary_internal_types.LoginResponse"
                         }
                     },
                     "401": {
                         "description": "认证失败",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -887,11 +885,10 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
-                },
-                "parameters": []
+                }
             }
         },
         "/auth/me": {
@@ -923,11 +920,10 @@ const docTemplate = `{
                     "401": {
                         "description": "未授权",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
-                },
-                "parameters": []
+                }
             }
         },
         "/auth/refresh": {
@@ -970,7 +966,7 @@ const docTemplate = `{
                     "401": {
                         "description": "令牌无效",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -996,7 +992,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.RegisterRequest"
+                            "$ref": "#/definitions/reliquary_internal_types.RegisterRequest"
                         }
                     }
                 ],
@@ -1004,19 +1000,19 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.RegisterResponse"
+                            "$ref": "#/definitions/reliquary_internal_types.RegisterResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "403": {
                         "description": "注册功能已禁用",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -1051,11 +1047,10 @@ const docTemplate = `{
                     "401": {
                         "description": "令牌无效",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
-                },
-                "parameters": []
+                }
             }
         },
         "/chunker/preview": {
@@ -1131,7 +1126,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "仅通过分块 ID 获取团队分块详情。",
+                "description": "仅通过分块ID获取分块详情（不需要knowledge_id）",
                 "consumes": [
                     "application/json"
                 ],
@@ -1162,13 +1157,13 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "404": {
                         "description": "分块不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -1229,13 +1224,13 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "404": {
                         "description": "分块不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -1296,7 +1291,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -1341,7 +1336,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -1404,13 +1399,13 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "404": {
                         "description": "分块不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -1462,13 +1457,13 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "404": {
                         "description": "分块不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -1499,7 +1494,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.DataSource"
+                                "$ref": "#/definitions/reliquary_internal_types.DataSource"
                             }
                         }
                     },
@@ -1533,7 +1528,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.DataSource"
+                            "$ref": "#/definitions/reliquary_internal_types.DataSource"
                         }
                     }
                 ],
@@ -1541,7 +1536,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.DataSource"
+                            "$ref": "#/definitions/reliquary_internal_types.DataSource"
                         }
                     },
                     "400": {
@@ -1579,7 +1574,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.SyncLog"
+                            "$ref": "#/definitions/reliquary_internal_types.SyncLog"
                         }
                     },
                     "404": {
@@ -1610,12 +1605,11 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_datasource.ConnectorMetadata"
+                                "$ref": "#/definitions/reliquary_internal_datasource.ConnectorMetadata"
                             }
                         }
                     }
-                },
-                "parameters": []
+                }
             }
         },
         "/datasource/validate-credentials": {
@@ -1687,7 +1681,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.DataSource"
+                            "$ref": "#/definitions/reliquary_internal_types.DataSource"
                         }
                     },
                     "404": {
@@ -1727,7 +1721,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.DataSource"
+                            "$ref": "#/definitions/reliquary_internal_types.DataSource"
                         }
                     }
                 ],
@@ -1735,7 +1729,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.DataSource"
+                            "$ref": "#/definitions/reliquary_internal_types.DataSource"
                         }
                     },
                     "400": {
@@ -1817,7 +1811,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.SyncLog"
+                                "$ref": "#/definitions/reliquary_internal_types.SyncLog"
                             }
                         }
                     },
@@ -1929,7 +1923,7 @@ const docTemplate = `{
         },
         "/datasource/{id}/resources": {
             "get": {
-                "description": "List RSS feeds available for sync.",
+                "description": "List resources available for sync in the external system. Pass parent_id to lazily load the direct children of a resource .",
                 "produces": [
                     "application/json"
                 ],
@@ -1958,7 +1952,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.Resource"
+                                "$ref": "#/definitions/reliquary_internal_types.Resource"
                             }
                         }
                     },
@@ -2032,7 +2026,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.SyncLog"
+                            "$ref": "#/definitions/reliquary_internal_types.SyncLog"
                         }
                     },
                     "400": {
@@ -2128,7 +2122,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -2175,7 +2169,7 @@ const docTemplate = `{
                     "404": {
                         "description": "知识库不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -2229,13 +2223,62 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "404": {
                         "description": "知识库不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/initialization/embedding/test": {
+            "post": {
+                "security": [
+                    {
+                        "Bearer": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "测试Embedding接口是否可用并返回向量维度",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "初始化"
+                ],
+                "summary": "测试Embedding模型",
+                "parameters": [
+                    {
+                        "description": "Embedding测试请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.ModelTestRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "测试结果",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -2291,7 +2334,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -2364,7 +2407,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -2411,7 +2454,7 @@ const docTemplate = `{
                     "404": {
                         "description": "任务不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -2446,8 +2489,7 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "parameters": []
+                }
             }
         },
         "/initialization/ollama/models": {
@@ -2482,11 +2524,10 @@ const docTemplate = `{
                     "500": {
                         "description": "服务器错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
-                },
-                "parameters": []
+                }
             }
         },
         "/initialization/ollama/models/check": {
@@ -2540,7 +2581,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -2594,7 +2635,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -2621,8 +2662,7 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "parameters": []
+                }
             }
         },
         "/initialization/remote/check": {
@@ -2668,7 +2708,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -2717,50 +2757,13 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
             }
         },
         "/knowledge-bases": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "获取团队的所有知识库。",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "知识库"
-                ],
-                "summary": "获取知识库列表",
-                "parameters": [],
-                "responses": {
-                    "200": {
-                        "description": "知识库列表",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            },
             "post": {
                 "security": [
                     {
@@ -2788,7 +2791,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.KnowledgeBase"
+                            "$ref": "#/definitions/reliquary_internal_types.KnowledgeBase"
                         }
                     }
                 ],
@@ -2803,7 +2806,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -2852,7 +2855,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -2899,64 +2902,13 @@ const docTemplate = `{
                     "404": {
                         "description": "任务不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
             }
         },
         "/knowledge-bases/{id}": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "根据 ID 获取团队知识库详情。",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "知识库"
-                ],
-                "summary": "获取知识库详情",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "知识库ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "知识库详情",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    },
-                    "404": {
-                        "description": "知识库不存在",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            },
             "put": {
                 "security": [
                     {
@@ -3006,7 +2958,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -3051,51 +3003,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/knowledge-bases/{id}/duplicate": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "创建一个只包含设置的新知识库副本，不复制知识、分块、索引或置顶状态",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "知识库"
-                ],
-                "summary": "创建知识库副本",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "源知识库 ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "创建后的知识库副本",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -3136,7 +3044,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.SearchParams"
+                            "$ref": "#/definitions/reliquary_internal_types.SearchParams"
                         }
                     },
                     {
@@ -3162,7 +3070,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -3201,7 +3109,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.SearchParams"
+                            "$ref": "#/definitions/reliquary_internal_types.SearchParams"
                         }
                     },
                     {
@@ -3227,7 +3135,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -3340,7 +3248,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -3385,13 +3293,13 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -3446,6 +3354,12 @@ const docTemplate = `{
                         "in": "formData"
                     },
                     {
+                        "type": "string",
+                        "description": "来源信息JSON",
+                        "name": "source_info",
+                        "in": "formData"
+                    },
+                    {
                         "type": "boolean",
                         "description": "启用多模态处理",
                         "name": "enable_multimodel",
@@ -3475,7 +3389,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "409": {
@@ -3529,7 +3443,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -3583,13 +3497,13 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -3630,7 +3544,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ManualKnowledgePayload"
+                            "$ref": "#/definitions/reliquary_internal_types.ManualKnowledgePayload"
                         }
                     }
                 ],
@@ -3645,7 +3559,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -3724,7 +3638,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "409": {
@@ -3775,13 +3689,13 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "404": {
                         "description": "知识库不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -3828,7 +3742,7 @@ const docTemplate = `{
                     "404": {
                         "description": "知识库不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -3893,7 +3807,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -3958,7 +3872,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -4021,56 +3935,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "删除团队标签及其关联，保留文档。",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "标签管理"
-                ],
-                "summary": "删除标签",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "知识库ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "标签ID (UUID或seq_id)",
-                        "name": "tag_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "删除成功",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -4137,7 +4002,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -4162,10 +4027,11 @@ const docTemplate = `{
                         "enum": [
                             "knowledge_base",
                             "domain",
+                            "all",
                             "team"
                         ],
                         "type": "string",
-                        "description": "Query scope",
+                        "description": "Query scope; team is a legacy alias of all",
                         "name": "scope",
                         "in": "query"
                     },
@@ -4203,6 +4069,60 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/knowledge-context/entities/merge": {
+            "post": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Knowledge Context"
+                ],
+                "summary": "Merge global objects",
+                "parameters": [
+                    {
+                        "description": "Global object IDs",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "keep_entity_id": {
+                                    "type": "string"
+                                },
+                                "merge_entity_id": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -4284,10 +4204,11 @@ const docTemplate = `{
                         "enum": [
                             "knowledge_base",
                             "domain",
+                            "all",
                             "team"
                         ],
                         "type": "string",
-                        "description": "Query scope",
+                        "description": "Query scope; team is a legacy alias of all",
                         "name": "scope",
                         "in": "query"
                     },
@@ -4325,6 +4246,175 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/knowledge-context/evidence": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Knowledge Context"
+                ],
+                "summary": "List evidence by scope",
+                "parameters": [
+                    {
+                        "enum": [
+                            "knowledge_base",
+                            "domain",
+                            "all",
+                            "team"
+                        ],
+                        "type": "string",
+                        "description": "Query scope; team is a legacy alias of all",
+                        "name": "scope",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Knowledge base for knowledge_base scope",
+                        "name": "knowledge_base_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Domain for domain scope",
+                        "name": "domain_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Related global object",
+                        "name": "entity_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Related event",
+                        "name": "event_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (1-100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page offset",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/knowledge-context/evidence/{evidence_id}": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Knowledge Context"
+                ],
+                "summary": "View source evidence",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Evidence ID",
+                        "name": "evidence_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/knowledge-context/facts/{fact_id}/correction": {
+            "post": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Knowledge Context"
+                ],
+                "summary": "Correct a sourced fact",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Fact ID",
+                        "name": "fact_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fact correction",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/reliquary_internal_types.KnowledgeFactCorrection"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -4404,8 +4494,7 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "parameters": []
+                }
             },
             "post": {
                 "security": [
@@ -4559,6 +4648,13 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "409": {
+                        "description": "Domain is referenced by active knowledge bases",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -4756,64 +4852,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/knowledge/batch": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "根据 ID 列表批量获取团队知识条目，可选 kb_id 用于限定知识库范围。",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "知识管理"
-                ],
-                "summary": "批量获取知识",
-                "parameters": [
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "知识ID列表",
-                        "name": "ids",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "可选，限定知识库范围。",
-                        "name": "kb_id",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "知识列表",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -4862,13 +4901,13 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -4917,13 +4956,13 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -4972,13 +5011,13 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -5046,7 +5085,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -5087,7 +5126,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ManualKnowledgePayload"
+                            "$ref": "#/definitions/reliquary_internal_types.ManualKnowledgePayload"
                         }
                     }
                 ],
@@ -5102,7 +5141,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -5150,7 +5189,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -5187,86 +5226,13 @@ const docTemplate = `{
                     "200": {
                         "description": "进度信息",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.KnowledgeMoveProgress"
+                            "$ref": "#/definitions/reliquary_internal_types.KnowledgeMoveProgress"
                         }
                     },
                     "404": {
                         "description": "任务不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/knowledge/search": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Search knowledge files by keyword. Pass recent=true without a keyword to browse recent files. When agent_id is set, scope is the agent's configured knowledge bases.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Knowledge"
-                ],
-                "summary": "Search knowledge",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Keyword to search",
-                        "name": "keyword",
-                        "in": "query"
-                    },
-                    {
-                        "minimum": 0,
-                        "type": "integer",
-                        "description": "Offset for pagination (minimum 0)",
-                        "name": "offset",
-                        "in": "query"
-                    },
-                    {
-                        "maximum": 100,
-                        "minimum": 1,
-                        "type": "integer",
-                        "description": "Limit for pagination (default 20, maximum 100)",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Comma-separated file extensions to filter (e.g., csv,xlsx)",
-                        "name": "file_types",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Return recent files when keyword is empty",
-                        "name": "recent",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Search results",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -5282,7 +5248,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "批量更新团队知识条目的标签，可选 kb_id 用于限定知识库范围。",
+                "description": "批量更新知识条目的标签。可选 kb_id：指定时按该知识库校验编辑权限",
                 "consumes": [
                     "application/json"
                 ],
@@ -5315,7 +5281,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -5362,13 +5328,13 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "404": {
                         "description": "知识不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -5422,7 +5388,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -5467,7 +5433,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -5514,19 +5480,19 @@ const docTemplate = `{
                     "400": {
                         "description": "状态不支持取消",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "404": {
                         "description": "知识不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -5572,7 +5538,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -5621,7 +5587,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -5676,13 +5642,13 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "403": {
                         "description": "权限不足",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -5720,11 +5686,10 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
-                },
-                "parameters": []
+                }
             },
             "post": {
                 "security": [
@@ -5753,7 +5718,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.MCPService"
+                            "$ref": "#/definitions/reliquary_internal_types.MCPService"
                         }
                     }
                 ],
@@ -5768,7 +5733,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -5849,7 +5814,7 @@ const docTemplate = `{
                     "404": {
                         "description": "服务不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -5903,7 +5868,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -5948,7 +5913,7 @@ const docTemplate = `{
                     "500": {
                         "description": "服务器错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -6005,13 +5970,13 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "404": {
                         "description": "服务不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -6058,13 +6023,13 @@ const docTemplate = `{
                     "400": {
                         "description": "字段名非法",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "404": {
                         "description": "服务不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -6118,7 +6083,7 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -6237,7 +6202,7 @@ const docTemplate = `{
                     "500": {
                         "description": "服务器错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -6284,7 +6249,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -6348,13 +6313,13 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "404": {
                         "description": "MCP 服务或工具不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -6401,7 +6366,7 @@ const docTemplate = `{
                     "500": {
                         "description": "服务器错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -6436,8 +6401,7 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                },
-                "parameters": []
+                }
             }
         },
         "/messages/search": {
@@ -6483,7 +6447,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -6554,7 +6518,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -6608,7 +6572,7 @@ const docTemplate = `{
                     "500": {
                         "description": "服务器错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -6646,11 +6610,10 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
-                },
-                "parameters": []
+                }
             },
             "post": {
                 "security": [
@@ -6694,7 +6657,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -6781,7 +6744,7 @@ const docTemplate = `{
                     "404": {
                         "description": "模型不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -6835,7 +6798,7 @@ const docTemplate = `{
                     "404": {
                         "description": "模型不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -6880,87 +6843,19 @@ const docTemplate = `{
                     "400": {
                         "description": "模型仍被知识库、智能体或长期记忆引用",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "404": {
                         "description": "模型不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
             }
         },
         "/sessions": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "获取当前空间的会话列表，支持分页、关键字搜索、按来源/Agent 筛选",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "会话"
-                ],
-                "summary": "获取会话列表",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "页码",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "每页数量",
-                        "name": "page_size",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "标题模糊搜索",
-                        "name": "keyword",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "会话列表",
-                        "name": "source",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "按 Agent 过滤（仅对 IM 会话生效）",
-                        "name": "agent_id",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "会话列表",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            },
             "post": {
                 "security": [
                     {
@@ -7003,7 +6898,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -7052,7 +6947,7 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -7117,7 +7012,7 @@ const docTemplate = `{
                     "404": {
                         "description": "会话或消息不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -7164,7 +7059,7 @@ const docTemplate = `{
                     "404": {
                         "description": "会话不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -7203,7 +7098,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.Session"
+                            "$ref": "#/definitions/reliquary_internal_types.Session"
                         }
                     }
                 ],
@@ -7218,7 +7113,7 @@ const docTemplate = `{
                     "404": {
                         "description": "会话不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -7263,7 +7158,7 @@ const docTemplate = `{
                     "404": {
                         "description": "会话不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -7310,13 +7205,13 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     },
                     "404": {
                         "description": "会话不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -7360,7 +7255,7 @@ const docTemplate = `{
                     "404": {
                         "description": "会话不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -7401,7 +7296,7 @@ const docTemplate = `{
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -7409,14 +7304,12 @@ const docTemplate = `{
         },
         "/sessions/{session_id}/messages/{message_id}/artifacts": {
             "get": {
-                "responses": {},
-                "parameters": []
+                "responses": {}
             }
         },
         "/sessions/{session_id}/messages/{message_id}/artifacts/{index}/download": {
             "get": {
-                "responses": {},
-                "parameters": []
+                "responses": {}
             }
         },
         "/sessions/{session_id}/messages/{message_id}/suggestions": {
@@ -7562,7 +7455,7 @@ const docTemplate = `{
                     "404": {
                         "description": "会话不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -7618,7 +7511,7 @@ const docTemplate = `{
                     "404": {
                         "description": "会话或消息不存在",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
@@ -7717,15 +7610,554 @@ const docTemplate = `{
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
                         }
                     }
                 }
             }
         },
-        "/system/admin/runtime/queues": {
+        "/space": {
             "get": {
-                "description": "返回各 asynq 队列的实时深度（pending/active/scheduled/retry 等）与 worker 并发配置，仅系统管理员可见",
+                "security": [
+                    {
+                        "Bearer": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "获取当前个人空间详情",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "空间管理"
+                ],
+                "summary": "获取空间详情",
+                "responses": {
+                    "200": {
+                        "description": "空间详情",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
+                        }
+                    },
+                    "404": {
+                        "description": "空间不存在",
+                        "schema": {
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "更新空间信息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "空间管理"
+                ],
+                "summary": "更新空间",
+                "parameters": [
+                    {
+                        "description": "空间信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/reliquary_internal_types.Tenant"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新后的空间",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/space/api-keys": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "空间管理"
+                ],
+                "summary": "获取空间 API Key 列表",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "Bearer": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "空间管理"
+                ],
+                "summary": "创建空间 API Key",
+                "parameters": [
+                    {
+                        "description": "API Key 配置",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.tenantAPIKeyCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/space/api-keys/{key_id}": {
+            "put": {
+                "security": [
+                    {
+                        "Bearer": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "空间管理"
+                ],
+                "summary": "更新空间 API Key",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "API Key ID",
+                        "name": "key_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "API Key 配置",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.tenantAPIKeyUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "Bearer": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "空间管理"
+                ],
+                "summary": "撤销空间 API Key",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "API Key ID",
+                        "name": "key_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/space/kv/prompt-templates": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "获取系统配置的提示词模板列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "空间管理"
+                ],
+                "summary": "获取提示词模板",
+                "responses": {
+                    "200": {
+                        "description": "提示词模板配置",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/space/kv/{key}": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "获取空间级别的KV配置（支持prompt-templates、parser-engine-config、chat-history-config、retrieval-config）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "空间管理"
+                ],
+                "summary": "获取空间KV配置",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "配置键名",
+                        "name": "key",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "配置值",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "不支持的键",
+                        "schema": {
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "Bearer": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "更新空间级别的KV配置（支持parser-engine-config、chat-history-config、retrieval-config）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "空间管理"
+                ],
+                "summary": "更新空间KV配置",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "配置键名",
+                        "name": "key",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "配置值",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "不支持的键",
+                        "schema": {
+                            "$ref": "#/definitions/reliquary_internal_errors.AppError"
+                        }
+                    }
+                }
+            }
+        },
+        "/space/model-tiers": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "空间"
+                ],
+                "summary": "获取模型分级默认配置",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "领域 ID",
+                        "name": "domain_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "知识库 ID",
+                        "name": "knowledge_base_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "空间"
+                ],
+                "summary": "保存模型分级全局默认",
+                "parameters": [
+                    {
+                        "description": "全局默认模型",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/reliquary_internal_types.ModelTierConfig"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/system/capabilities": {
+            "get": {
+                "description": "返回当前部署版本及实际注册的后端路由所对应的功能能力；仅 supported=false 表示入口应隐藏",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "系统"
+                ],
+                "summary": "获取部署能力清单",
+                "responses": {
+                    "200": {
+                        "description": "标准 code/msg/data 包装，data 为 DeploymentCapabilitiesData",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/system/info": {
+            "get": {
+                "description": "获取系统版本、构建信息和引擎配置",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "系统"
+                ],
+                "summary": "获取系统信息",
+                "responses": {
+                    "200": {
+                        "description": "系统信息",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.GetSystemInfoResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/system/parser-engines": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "系统"
+                ],
+                "summary": "列出可用的文档解析引擎",
+                "responses": {
+                    "200": {
+                        "description": "解析引擎列表",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/system/parser-engines/check": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "系统"
+                ],
+                "summary": "使用当前参数检测解析引擎可用性",
+                "parameters": [
+                    {
+                        "description": "解析引擎配置（与保存接口同结构）",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        },
+        "/system/runtime/queues": {
+            "get": {
+                "description": "返回各 asynq 队列的实时深度（pending/active/scheduled/retry 等）与 worker 并发配置，供登录用户查看",
                 "produces": [
                     "application/json"
                 ],
@@ -7740,17 +8172,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/internal_handler.RuntimeQueuesResponse"
                         }
                     }
-                },
-                "parameters": []
+                }
             }
         },
-        "/system/admin/runtime/queues/{queue}/archived": {
+        "/system/runtime/queues/{queue}/archived": {
             "delete": {
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "System Admin"
+                    "System"
                 ],
                 "summary": "Purge all archived tasks in a queue",
                 "parameters": [
@@ -7773,13 +8204,13 @@ const docTemplate = `{
                 }
             }
         },
-        "/system/admin/runtime/queues/{queue}/tasks": {
+        "/system/runtime/queues/{queue}/tasks": {
             "get": {
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "System Admin"
+                    "System"
                 ],
                 "summary": "List runtime queue tasks by state",
                 "parameters": [
@@ -7829,13 +8260,13 @@ const docTemplate = `{
                 }
             }
         },
-        "/system/admin/runtime/queues/{queue}/tasks/{task_id}/actions/{action}": {
+        "/system/runtime/queues/{queue}/tasks/{task_id}/actions/{action}": {
             "post": {
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "System Admin"
+                    "System"
                 ],
                 "summary": "Run a safe runtime task action",
                 "parameters": [
@@ -7879,14 +8310,44 @@ const docTemplate = `{
                 }
             }
         },
-        "/system/admin/settings/{key}": {
+        "/system/settings": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "System"
+                ],
+                "summary": "List system settings",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/reliquary_internal_types.SystemSetting"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/system/settings/{key}": {
             "get": {
                 "description": "Returns the row matching :key. 404 when the key is unknown\nto the registry; 200 with the row when known.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "System Admin"
+                    "System"
                 ],
                 "summary": "Get a single system setting by key",
                 "parameters": [
@@ -7902,7 +8363,7 @@ const docTemplate = `{
                     "200": {
                         "description": "the setting row",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.SystemSetting"
+                            "$ref": "#/definitions/reliquary_internal_types.SystemSetting"
                         }
                     },
                     "400": {
@@ -7922,7 +8383,14 @@ const docTemplate = `{
                 }
             },
             "put": {
-                "description": "Persist a new value for :key. Service validates the\nrawValue against the registry's declared value_type and\nrejects mismatches with 400. Authenticated users and API keys have full access.",
+                "security": [
+                    {
+                        "Bearer": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "consumes": [
                     "application/json"
                 ],
@@ -7930,9 +8398,9 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "System Admin"
+                    "System"
                 ],
-                "summary": "Update a system setting value",
+                "summary": "Update a system setting",
                 "parameters": [
                     {
                         "type": "string",
@@ -7942,7 +8410,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "New value",
+                        "description": "Setting value",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -7953,23 +8421,9 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "the updated row",
+                        "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.SystemSetting"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request / unknown key / type mismatch",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden: not a system admin",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/reliquary_internal_types.SystemSetting"
                         }
                     }
                 }
@@ -7977,7 +8431,7 @@ const docTemplate = `{
             "delete": {
                 "description": "Removes the DB override for :key so the 3-tier resolver\nfalls back to the environment variable (when configured)\nor the in-code default. Idempotent — resetting a key\nthat was never persisted returns 200.",
                 "tags": [
-                    "System Admin"
+                    "System"
                 ],
                 "summary": "Reset a system setting to ENV / built-in default",
                 "parameters": [
@@ -8014,347 +8468,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/system/capabilities": {
-            "get": {
-                "description": "返回当前部署版本及实际注册的后端路由所对应的功能能力；仅 supported=false 表示入口应隐藏",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "系统"
-                ],
-                "summary": "获取部署能力清单",
-                "responses": {
-                    "200": {
-                        "description": "标准 code/msg/data 包装，data 为 DeploymentCapabilitiesData",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                },
-                "parameters": []
-            }
-        },
-        "/system/info": {
-            "get": {
-                "description": "获取系统版本、构建信息和引擎配置",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "系统"
-                ],
-                "summary": "获取系统信息",
-                "responses": {
-                    "200": {
-                        "description": "系统信息",
-                        "schema": {
-                            "$ref": "#/definitions/internal_handler.GetSystemInfoResponse"
-                        }
-                    }
-                },
-                "parameters": []
-            }
-        },
-        "/system/parser-engines": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "系统"
-                ],
-                "summary": "列出可用的文档解析引擎",
-                "responses": {
-                    "200": {
-                        "description": "解析引擎列表",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                },
-                "parameters": []
-            }
-        },
-        "/system/parser-engines/check": {
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "系统"
-                ],
-                "summary": "使用当前参数检测解析引擎可用性",
-                "parameters": [
-                    {
-                        "description": "解析引擎配置（与保存接口同结构）",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK"
-                    }
-                }
-            }
-        },
-        "/tenants/kv/prompt-templates": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "获取系统配置的提示词模板列表",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "空间管理"
-                ],
-                "summary": "获取提示词模板",
-                "responses": {
-                    "200": {
-                        "description": "提示词模板配置",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                },
-                "parameters": []
-            }
-        },
-        "/tenants/kv/{key}": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "获取空间级别的KV配置（支持prompt-templates、parser-engine-config、storage-engine-config、chat-history-config、retrieval-config）",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "空间管理"
-                ],
-                "summary": "获取空间KV配置",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "配置键名",
-                        "name": "key",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "配置值",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "不支持的键",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            },
-            "put": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "更新空间级别的KV配置（支持parser-engine-config、storage-engine-config、chat-history-config、retrieval-config）",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "空间管理"
-                ],
-                "summary": "更新空间KV配置",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "配置键名",
-                        "name": "key",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "配置值",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "更新成功",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "不支持的键",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
-        "/tenants/{id}": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    },
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "根据ID获取空间详情",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "空间管理"
-                ],
-                "summary": "获取空间详情",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "空间ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "空间详情",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    },
-                    "404": {
-                        "description": "空间不存在",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            },
-            "put": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "更新空间信息",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "空间管理"
-                ],
-                "summary": "更新空间",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "空间ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "空间信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.Tenant"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "更新后的空间",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.AppError"
-                        }
-                    }
-                }
-            }
-        },
         "/user/favorites": {
             "get": {
                 "description": "Lists this user's starred resources in the current workspace for a given type",
@@ -8365,7 +8478,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Resource type (kb | agent)",
+                        "description": "Resource type (kb | agent | tag)",
                         "name": "type",
                         "in": "query",
                         "required": true
@@ -8440,3264 +8553,9 @@ const docTemplate = `{
                     }
                 }
             }
-        },
-        "/knowledge-context/entities/merge": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Knowledge Context"
-                ],
-                "summary": "Merge global objects",
-                "parameters": [
-                    {
-                        "description": "Global object IDs",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "keep_entity_id": {
-                                    "type": "string"
-                                },
-                                "merge_entity_id": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/knowledge-context/evidence": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Knowledge Context"
-                ],
-                "summary": "List evidence by scope",
-                "parameters": [
-                    {
-                        "enum": [
-                            "knowledge_base",
-                            "domain",
-                            "team"
-                        ],
-                        "type": "string",
-                        "description": "Query scope",
-                        "name": "scope",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Knowledge base for knowledge_base scope",
-                        "name": "knowledge_base_id",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Domain for domain scope",
-                        "name": "domain_id",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Related global object",
-                        "name": "entity_id",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Related event",
-                        "name": "event_id",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Page size (1-100)",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Page offset",
-                        "name": "offset",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/knowledge-context/evidence/{evidence_id}": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Knowledge Context"
-                ],
-                "summary": "View source evidence",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Evidence ID",
-                        "name": "evidence_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/knowledge-context/facts/{fact_id}/correction": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Knowledge Context"
-                ],
-                "summary": "Correct a sourced fact",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Fact ID",
-                        "name": "fact_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Fact correction",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/reliquary_internal_types.KnowledgeFactCorrection"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
         }
     },
     "definitions": {
-        "github_com_Tencent_Reliquary_internal_datasource.ConnectorMetadata": {
-            "type": "object",
-            "properties": {
-                "auth_type": {
-                    "description": "\"oauth2\", \"api_key\", \"token\", etc.",
-                    "type": "string"
-                },
-                "capabilities": {
-                    "description": "\"incremental\", \"webhook\", \"deletion_sync\", etc.",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "description": {
-                    "type": "string"
-                },
-                "icon": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "priority": {
-                    "description": "Priority order for UI display (lower = higher priority)",
-                    "type": "integer"
-                },
-                "type": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_errors.AppError": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_errors.ErrorCode"
-                },
-                "details": {},
-                "message": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_errors.ErrorCode": {
-            "type": "integer",
-            "enum": [
-                1000,
-                1001,
-                1002,
-                1003,
-                1004,
-                1005,
-                1006,
-                1007,
-                1008,
-                1009,
-                1010,
-                2000,
-                2001,
-                2002,
-                2003,
-                2004,
-                2005,
-                2100,
-                2101,
-                2102,
-                2103,
-                2300
-            ],
-            "x-enum-varnames": [
-                "ErrBadRequest",
-                "ErrUnauthorized",
-                "ErrForbidden",
-                "ErrNotFound",
-                "ErrMethodNotAllowed",
-                "ErrConflict",
-                "ErrTooManyRequests",
-                "ErrInternalServer",
-                "ErrServiceUnavailable",
-                "ErrTimeout",
-                "ErrValidation",
-                "ErrTenantNotFound",
-                "ErrTenantAlreadyExists",
-                "ErrTenantInactive",
-                "ErrTenantNameRequired",
-                "ErrTenantInvalidStatus",
-                "ErrTenantCreationDisabled",
-                "ErrAgentMissingThinkingModel",
-                "ErrAgentMissingAllowedTools",
-                "ErrAgentInvalidMaxIterations",
-                "ErrAgentInvalidTemperature",
-                "ErrModelInUse"
-            ]
-        },
-        "github_com_Tencent_Reliquary_internal_infrastructure_chunker.DocProfile": {
-            "type": "object",
-            "properties": {
-                "all_caps_short_line_count": {
-                    "type": "integer"
-                },
-                "avg_line_len": {
-                    "type": "number"
-                },
-                "blank_paragraph_breaks": {
-                    "type": "integer"
-                },
-                "chinese_chapter_count": {
-                    "type": "integer"
-                },
-                "code_ratio": {
-                    "type": "number"
-                },
-                "detected_langs": {
-                    "description": "Detected language hints (best-effort)",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "english_chapter_count": {
-                    "type": "integer"
-                },
-                "form_feed_count": {
-                    "type": "integer"
-                },
-                "german_chapter_count": {
-                    "type": "integer"
-                },
-                "has_code": {
-                    "type": "boolean"
-                },
-                "has_tables": {
-                    "description": "Content characteristics",
-                    "type": "boolean"
-                },
-                "md_heading_counts": {
-                    "description": "Markdown structure",
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "integer"
-                    }
-                },
-                "md_heading_total": {
-                    "type": "integer"
-                },
-                "numbered_section_count": {
-                    "description": "Heuristic indicators",
-                    "type": "integer"
-                },
-                "repeated_footer_count": {
-                    "type": "integer"
-                },
-                "std_line_len": {
-                    "type": "number"
-                },
-                "total_chars": {
-                    "type": "integer"
-                },
-                "total_lines": {
-                    "type": "integer"
-                },
-                "visual_sep_count": {
-                    "type": "integer"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_infrastructure_chunker.StrategyTier": {
-            "type": "string",
-            "enum": [
-                "heading",
-                "heuristic",
-                "legacy"
-            ],
-            "x-enum-varnames": [
-                "TierHeading",
-                "TierHeuristic",
-                "TierLegacy"
-            ]
-        },
-        "github_com_Tencent_Reliquary_internal_infrastructure_chunker.TierRejection": {
-            "type": "object",
-            "properties": {
-                "reason": {
-                    "type": "string"
-                },
-                "tier": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_infrastructure_chunker.StrategyTier"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_models_limiter.RuntimeStat": {
-            "type": "object",
-            "properties": {
-                "active": {
-                    "type": "integer"
-                },
-                "limit": {
-                    "type": "integer"
-                },
-                "model_id": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "waiting": {
-                    "type": "integer"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.ASRConfig": {
-            "type": "object",
-            "properties": {
-                "enabled": {
-                    "type": "boolean"
-                },
-                "language": {
-                    "description": "optional: language hint for transcription",
-                    "type": "string"
-                },
-                "model_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.AdminCreateUserRequest": {
-            "type": "object",
-            "required": [
-                "email",
-                "username"
-            ],
-            "properties": {
-                "email": {
-                    "type": "string"
-                },
-                "password": {
-                    "type": "string"
-                },
-                "username": {
-                    "type": "string",
-                    "maxLength": 50,
-                    "minLength": 2
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.AgentStep": {
-            "type": "object",
-            "properties": {
-                "iteration": {
-                    "description": "Iteration number (0-indexed)",
-                    "type": "integer"
-                },
-                "reasoning_content": {
-                    "description": "ReasoningContent stores the OpenAI-protocol reasoning_content emitted by the\nmodel in this round. Persisted on AgentStep so cross-turn replay can put it\nback on the assistant message — required by MiMo / DeepSeek V3.2+ thinking\nmode, ignored by providers that don't recognize the field.",
-                    "type": "string"
-                },
-                "thought": {
-                    "description": "LLM's reasoning/thinking (Think phase)",
-                    "type": "string"
-                },
-                "timestamp": {
-                    "description": "When this step occurred",
-                    "type": "string"
-                },
-                "tool_calls": {
-                    "description": "Tools called in this step (Act phase)",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ToolCall"
-                    }
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.AnswerStrategy": {
-            "type": "string",
-            "enum": [
-                "all",
-                "random"
-            ],
-            "x-enum-varnames": [
-                "AnswerStrategyAll",
-                "AnswerStrategyRandom"
-            ]
-        },
-        "github_com_Tencent_Reliquary_internal_types.AutoTagConfig": {
-            "type": "object",
-            "properties": {
-                "enabled": {
-                    "type": "boolean"
-                },
-                "max_tags": {
-                    "type": "integer"
-                },
-                "model_id": {
-                    "type": "string"
-                },
-                "skip_if_tagged": {
-                    "description": "SkipIfTagged leaves documents that already carry tags untouched, so a\ndeliberate manual classification is not diluted by model guesses. It is\na pointer because the default is true: rows written before this field\nexisted decode to nil and must not silently flip to \"always append\".",
-                    "type": "boolean"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.ChatHistoryConfig": {
-            "type": "object",
-            "properties": {
-                "embedding_model_id": {
-                    "description": "EmbeddingModelID is the ID of the embedding model used for vectorizing chat messages.\nOnce messages have been indexed, the model cannot be changed (requires re-indexing).",
-                    "type": "string"
-                },
-                "enabled": {
-                    "description": "Enabled controls whether chat history indexing is active",
-                    "type": "boolean"
-                },
-                "knowledge_base_id": {
-                    "description": "KnowledgeBaseID is the auto-managed hidden knowledge base for chat history.\nThis is set internally when the feature is first enabled; users should not set this directly.",
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.ChunkingConfig": {
-            "type": "object",
-            "properties": {
-                "child_chunk_size": {
-                    "description": "ChildChunkSize is the size of child chunks used for embedding (default: 384).\nOnly used when EnableParentChild is true.",
-                    "type": "integer"
-                },
-                "chunk_overlap": {
-                    "description": "Chunk overlap",
-                    "type": "integer"
-                },
-                "chunk_size": {
-                    "description": "Chunk size",
-                    "type": "integer"
-                },
-                "enable_parent_child": {
-                    "description": "EnableParentChild enables two-level parent-child chunking strategy.\nWhen enabled, large parent chunks provide context while small child chunks\nare used for vector matching. Retrieval matches on child but returns parent content.",
-                    "type": "boolean"
-                },
-                "languages": {
-                    "description": "Languages hints the heuristic patterns. Empty = auto-detect from content.\nExamples: [\"de\"], [\"en\", \"zh\"].",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "parent_chunk_size": {
-                    "description": "ParentChunkSize is the size of parent chunks (default: 4096).\nOnly used when EnableParentChild is true.",
-                    "type": "integer"
-                },
-                "parser_engine_rules": {
-                    "description": "ParserEngineRules configures which parser engine to use for each file type.\nWhen empty, DefaultParserEngine is used (builtin/simple routing, except\ntypes that only a specific engine can parse: ppt/pptx fall back to\nmarkitdown). A linked anydoc binding is preferred for every type it\nconverts.",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ParserEngineRule"
-                    }
-                },
-                "separators": {
-                    "description": "Separators",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "strategy": {
-                    "description": "Strategy selects the adaptive chunking tier. Empty / \"legacy\" preserves\nthe historical recursive splitter; \"auto\" lets a profiler pick between\nheading-aware, heuristic and recursive tiers; \"heading\" / \"heuristic\" /\n\"recursive\" pin the tier explicitly.",
-                    "type": "string"
-                },
-                "table_metadata_instructions": {
-                    "description": "TableMetadataInstructions contains optional business guidance used when\ngenerating searchable summaries for CSV/Excel tables. The system-owned\noutput contract remains fixed; these instructions only add domain context.",
-                    "type": "string"
-                },
-                "token_limit": {
-                    "description": "TokenLimit caps chunk size in approximate tokens. 0 = use ChunkSize\nas a character count.",
-                    "type": "integer"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.ContextCompressionStrategy": {
-            "type": "string",
-            "enum": [
-                "sliding_window",
-                "smart"
-            ],
-            "x-enum-varnames": [
-                "ContextCompressionSlidingWindow",
-                "ContextCompressionSmart"
-            ]
-        },
-        "github_com_Tencent_Reliquary_internal_types.ContextConfig": {
-            "type": "object",
-            "properties": {
-                "compression_strategy": {
-                    "description": "Compression strategy: \"sliding_window\" or \"smart\"",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ContextCompressionStrategy"
-                        }
-                    ]
-                },
-                "max_tokens": {
-                    "description": "Maximum tokens allowed in LLM context",
-                    "type": "integer"
-                },
-                "recent_message_count": {
-                    "description": "For sliding_window: number of messages to keep\nFor smart: number of recent messages to keep uncompressed",
-                    "type": "integer"
-                },
-                "summarize_threshold": {
-                    "description": "Summarize threshold: number of messages before summarization",
-                    "type": "integer"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.CredentialsConfig": {
-            "type": "object",
-            "properties": {
-                "weknoracloud": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.WeKnoraCloudCredentials"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.CustomAgentConfig": {
-            "type": "object",
-            "properties": {
-                "agent_mode": {
-                    "description": "===== Basic Settings =====\nAgent mode: \"quick-answer\" for RAG mode, \"smart-reasoning\" for ReAct agent mode",
-                    "type": "string"
-                },
-                "agent_type": {
-                    "description": "AgentType is a preset category under smart-reasoning mode that pre-fills\nsystem prompt, allowed tools and recommended KB compatibility.\nValid values: \"rag-qa\", \"data-analysis\", \"custom\".\nEmpty / unknown values are treated as \"custom\" (no preset applied).\nIgnored for quick-answer mode.",
-                    "type": "string"
-                },
-                "allowed_tools": {
-                    "description": "Allowed tools (only for agent type)",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "asr_model_id": {
-                    "description": "ASR model ID for audio transcription (optional)",
-                    "type": "string"
-                },
-                "attachment_image_understanding": {
-                    "description": "AttachmentImageUnderstanding enables VLM OCR fallback for image-only /\nscanned documents (PDF/PPT whose pages are images). Disabled by default\nbecause it materially increases parse latency; only triggers when the\nextracted text is below a threshold and a VLM model is configured.",
-                    "type": "boolean"
-                },
-                "attachment_ocr_max_pages": {
-                    "description": "AttachmentOCRMaxPages caps how many pages of a scanned / image-only\ndocument this agent sends to the VLM for OCR. 0 falls back to the global\ndefault (RELIQUARY_CHAT_ATTACHMENT_OCR_MAX_PAGES). More pages means higher\ncoverage but slower parsing and more VLM cost.",
-                    "type": "integer"
-                },
-                "attachment_parse_wait_timeout_sec": {
-                    "description": "AttachmentParseWaitTimeoutSec bounds, in seconds, how long a chat turn\nwaits for this agent's still-parsing attachments before proceeding with\nonly the finished ones. 0 falls back to the global default\n(RELIQUARY_CHAT_ATTACHMENT_WAIT_TIMEOUT_SEC).",
-                    "type": "integer"
-                },
-                "audio_upload_enabled": {
-                    "description": "Whether audio upload (ASR transcription) is enabled for this agent (default: false)",
-                    "type": "boolean"
-                },
-                "chat_parser_engine_rules": {
-                    "description": "===== Chat Attachment Parsing Settings =====\nChatParserEngineRules selects parser engines for session-scoped chat\nattachments by file type. Takes precedence over the tenant-level\nParserEngineConfig.ChatParserEngineRules; an explicit per-request\nparser_engine still overrides both.",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ParserEngineRule"
-                    }
-                },
-                "citation_enabled": {
-                    "description": "Whether final answers include knowledge/web source citations. Nil defaults to true\nso agents saved before this option was introduced keep their existing behavior.",
-                    "type": "boolean"
-                },
-                "context_template": {
-                    "description": "Context template for normal mode (how to format retrieved chunks)",
-                    "type": "string"
-                },
-                "context_template_id": {
-                    "description": "ContextTemplateID references a template ID in prompt_templates/ YAML files.\nIf set and ContextTemplate is empty, the template content will be resolved at startup.",
-                    "type": "string"
-                },
-                "data_analysis_enabled": {
-                    "description": "===== Data Analysis Settings =====\nWhether to run the legacy in-pipeline DuckDB SQL data-analysis stage when\nthe retrieved chunks include CSV/Excel files. This issues an extra LLM\ncall to generate a SQL query and is disabled by default because most\nquick-answer / RAG-style agents do not want the added latency.",
-                    "type": "boolean"
-                },
-                "embedding_top_k": {
-                    "description": "===== Retrieval Strategy Settings (for both modes) =====\nEmbedding/Vector retrieval top K",
-                    "type": "integer"
-                },
-                "enable_query_expansion": {
-                    "description": "===== Advanced Settings (mainly for normal mode) =====\nWhether to enable query expansion",
-                    "type": "boolean"
-                },
-                "enable_rewrite": {
-                    "description": "Whether to enable query rewrite for multi-turn conversations",
-                    "type": "boolean"
-                },
-                "fallback_prompt": {
-                    "description": "Fallback prompt (when FallbackStrategy is \"model\")",
-                    "type": "string"
-                },
-                "fallback_response": {
-                    "description": "Fixed fallback response (when FallbackStrategy is \"fixed\")",
-                    "type": "string"
-                },
-                "fallback_strategy": {
-                    "description": "Fallback strategy: \"fixed\" for fixed response, \"model\" for model generation",
-                    "type": "string"
-                },
-                "history_turns": {
-                    "description": "Number of history turns to keep in context",
-                    "type": "integer"
-                },
-                "image_upload_enabled": {
-                    "description": "===== Image Upload / Multimodal Settings =====\nWhether image upload is enabled for this agent (default: false)",
-                    "type": "boolean"
-                },
-                "intent_prompts": {
-                    "description": "IntentPrompts holds per-intent system prompt overrides for non-retrieval\nintents (greeting, chitchat, etc.). Empty values fall back to templates\nunder config/prompt_templates/intent_prompts.yaml.",
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
-                },
-                "kb_selection_mode": {
-                    "description": "===== Knowledge Base Settings =====\nKnowledge base selection mode: \"all\" = all KBs, \"selected\" = specific KBs, \"none\" = no KB",
-                    "type": "string"
-                },
-                "keyword_threshold": {
-                    "description": "Keyword retrieval threshold",
-                    "type": "number"
-                },
-                "knowledge_bases": {
-                    "description": "Associated knowledge base IDs (only used when KBSelectionMode is \"selected\")",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "llm_call_timeout": {
-                    "description": "Timeout for a single LLM call in seconds (0 = use global default)",
-                    "type": "integer"
-                },
-                "max_completion_tokens": {
-                    "description": "Maximum completion tokens. Quick-answer uses this for the RAG answer.\nSmart-reasoning ReAct rounds send this value as-is (zero becomes\nDefaultMaxCompletionTokens at call time: 4096).",
-                    "type": "integer"
-                },
-                "max_iterations": {
-                    "description": "===== Agent Mode Settings =====\nMaximum iterations for the ReAct loop. Zero is unset (filled with a\ndefault). A negative value is unlimited: the loop runs until the model\nstops, the user cancels, or another guard fires.",
-                    "type": "integer"
-                },
-                "mcp_auth_wait_timeout": {
-                    "description": "MCPAuthWaitTimeout is how many seconds to wait for in-conversation OAuth\nauthorization before skipping. <=0 uses the gate's configured timeout.",
-                    "type": "integer"
-                },
-                "mcp_selection_mode": {
-                    "description": "MCP service selection mode: \"all\" = all enabled MCP services, \"selected\" = specific services, \"none\" = no MCP",
-                    "type": "string"
-                },
-                "mcp_services": {
-                    "description": "Selected MCP service IDs (only used when MCPSelectionMode is \"selected\")",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "model_id": {
-                    "description": "===== Model Settings =====\nModel ID to use for conversations",
-                    "type": "string"
-                },
-                "multi_turn_enabled": {
-                    "description": "===== Multi-turn Conversation Settings =====\nWhether multi-turn conversation is enabled",
-                    "type": "boolean"
-                },
-                "query_understand_model_id": {
-                    "description": "Dedicated chat model ID for the query-understanding (rewrite + intent) step.\nWhen empty, the main conversation ModelID is used as a fallback.",
-                    "type": "string"
-                },
-                "question_suggestions": {
-                    "description": "===== Conversation Question Suggestions =====\nQuestionSuggestions owns both the static/knowledge-backed prompts shown\nbefore the first user turn and the contextual follow-up questions shown\nafter a completed assistant answer.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.QuestionSuggestionConfig"
-                        }
-                    ]
-                },
-                "rerank_model_id": {
-                    "description": "ReRank model ID for retrieval",
-                    "type": "string"
-                },
-                "rerank_threshold": {
-                    "description": "Rerank threshold",
-                    "type": "number"
-                },
-                "rerank_top_k": {
-                    "description": "Rerank top K",
-                    "type": "integer"
-                },
-                "retain_retrieval_history": {
-                    "description": "Whether to retain retrieval history across turns",
-                    "type": "boolean"
-                },
-                "retrieve_kb_only_when_mentioned": {
-                    "description": "Whether to retrieve knowledge base only when explicitly mentioned with @ (default: false)\nWhen true, knowledge base retrieval only happens if user explicitly mentions KB/files with @\nWhen false, knowledge base retrieval happens according to KBSelectionMode",
-                    "type": "boolean"
-                },
-                "rewrite_prompt_system": {
-                    "description": "Rewrite prompt system message",
-                    "type": "string"
-                },
-                "rewrite_prompt_user": {
-                    "description": "Rewrite prompt user message template",
-                    "type": "string"
-                },
-                "supported_file_types": {
-                    "description": "===== File Type Restriction Settings =====\nSupported file types for this agent (e.g., [\"csv\", \"xlsx\", \"xls\"])\nEmpty means all file types are supported\nWhen set, only files with matching extensions can be used with this agent",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "system_prompt": {
-                    "description": "System prompt for the agent",
-                    "type": "string"
-                },
-                "system_prompt_id": {
-                    "description": "SystemPromptID references a template ID in prompt_templates/ YAML files.\nIf set and SystemPrompt is empty, the template content will be resolved at startup.",
-                    "type": "string"
-                },
-                "temperature": {
-                    "description": "Temperature for LLM (0-1)",
-                    "type": "number"
-                },
-                "thinking": {
-                    "description": "Whether to enable thinking mode (for models that support extended thinking)",
-                    "type": "boolean"
-                },
-                "vector_threshold": {
-                    "description": "Vector retrieval threshold",
-                    "type": "number"
-                },
-                "vlm_model_id": {
-                    "description": "VLM model ID for image analysis (optional, falls back to workspace-level VLM)",
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.DataSource": {
-            "type": "object",
-            "properties": {
-                "config": {
-                    "description": "Encrypted configuration (API credentials, tokens, etc.)\nStored as JSON with AES-256-GCM encryption",
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "conflict_strategy": {
-                    "description": "Conflict resolution strategy: overwrite or skip",
-                    "type": "string"
-                },
-                "created_at": {
-                    "description": "Creation timestamp",
-                    "type": "string"
-                },
-                "deleted_at": {
-                    "description": "Soft delete timestamp",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/gorm.DeletedAt"
-                        }
-                    ]
-                },
-                "error_message": {
-                    "description": "Error message if status is \"error\"",
-                    "type": "string"
-                },
-                "id": {
-                    "description": "Unique identifier",
-                    "type": "string"
-                },
-                "knowledge_base_id": {
-                    "description": "Target knowledge base ID",
-                    "type": "string"
-                },
-                "last_sync_at": {
-                    "description": "Last successful sync timestamp",
-                    "type": "string"
-                },
-                "last_sync_cursor": {
-                    "description": "Cursor or state for incremental sync (connector-specific)",
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "last_sync_result": {
-                    "description": "Summary of last sync result",
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "latest_sync_log": {
-                    "description": "Latest sync log (not stored in DB, populated on query)",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.SyncLog"
-                        }
-                    ]
-                },
-                "name": {
-                    "description": "User-friendly name",
-                    "type": "string"
-                },
-                "status": {
-                    "description": "Current status: active, paused, error",
-                    "type": "string"
-                },
-                "sync_deletions": {
-                    "description": "Whether to sync deletions from source",
-                    "type": "boolean"
-                },
-                "sync_log_retention_days": {
-                    "description": "Number of days to keep sync logs (default: 30)",
-                    "type": "integer"
-                },
-                "sync_mode": {
-                    "description": "Sync mode: \"incremental\" (recommended) or \"full\"",
-                    "type": "string"
-                },
-                "sync_schedule": {
-                    "description": "Cron expression for scheduled syncs (e.g., \"0 */6 * * *\" = every 6 hours)",
-                    "type": "string"
-                },
-                "tenant_id": {
-                    "description": "Workspace ID for multi-workspace isolation",
-                    "type": "integer"
-                },
-                "total_items_synced": {
-                    "description": "Total items synced (not stored in DB, calculated on query)",
-                    "type": "integer"
-                },
-                "type": {
-                    "description": "Connector type (rss).",
-                    "type": "string"
-                },
-                "updated_at": {
-                    "description": "Last update timestamp",
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.EmbeddingParameters": {
-            "type": "object",
-            "properties": {
-                "dimension": {
-                    "type": "integer"
-                },
-                "supports_dimension_override": {
-                    "type": "boolean"
-                },
-                "truncate_prompt_tokens": {
-                    "type": "integer"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.FollowUpSuggestionConfig": {
-            "type": "object",
-            "properties": {
-                "additional_instruction": {
-                    "type": "string"
-                },
-                "allow_regenerate": {
-                    "type": "boolean"
-                },
-                "categories": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "count": {
-                    "type": "integer"
-                },
-                "enabled": {
-                    "type": "boolean"
-                },
-                "knowledge_fallback": {
-                    "type": "boolean"
-                },
-                "max_context_turns": {
-                    "type": "integer"
-                },
-                "mode": {
-                    "type": "string"
-                },
-                "model_id": {
-                    "type": "string"
-                },
-                "suppress_on_fallback": {
-                    "type": "boolean"
-                },
-                "suppress_when_answer_asks_question": {
-                    "type": "boolean"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.ImageProcessingConfig": {
-            "type": "object",
-            "properties": {
-                "model_id": {
-                    "description": "Model ID",
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.IndexingStrategy": {
-            "type": "object",
-            "properties": {
-                "keyword_enabled": {
-                    "description": "KeywordEnabled enables keyword-based (BM25) search",
-                    "type": "boolean"
-                },
-                "vector_enabled": {
-                    "description": "VectorEnabled enables semantic vector embedding and search",
-                    "type": "boolean"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.KBCloneTaskStatus": {
-            "type": "string",
-            "enum": [
-                "pending",
-                "processing",
-                "completed",
-                "failed"
-            ],
-            "x-enum-varnames": [
-                "KBCloneStatusPending",
-                "KBCloneStatusProcessing",
-                "KBCloneStatusCompleted",
-                "KBCloneStatusFailed"
-            ]
-        },
-        "github_com_Tencent_Reliquary_internal_types.KnowledgeBase": {
-            "type": "object",
-            "properties": {
-                "asr_config": {
-                    "description": "ASR config (Automatic Speech Recognition)",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ASRConfig"
-                        }
-                    ]
-                },
-                "auto_tag_config": {
-                    "description": "AutoTagConfig controls asynchronous association of existing tags after parsing.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.AutoTagConfig"
-                        }
-                    ]
-                },
-                "chunk_count": {
-                    "description": "Chunk count (not stored in database, calculated on query)",
-                    "type": "integer"
-                },
-                "chunking_config": {
-                    "description": "Chunking configuration",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ChunkingConfig"
-                        }
-                    ]
-                },
-                "created_at": {
-                    "description": "Creation time of the knowledge base",
-                    "type": "string"
-                },
-                "creator_id": {
-                    "description": "CreatorID records who created the knowledge base. It does not restrict access.",
-                    "type": "string"
-                },
-                "creator_name": {
-                    "description": "CreatorName 是 CreatorID 对应用户的展示名（username / email 等），\n仅在列表场景由 handler 批量回填，不落库；为空表示创建者无法解析（用户已删除、\nCreatorID 为空的老数据等）。前端用它在卡片来源徽章上做 mine vs workspace 的二分。",
-                    "type": "string"
-                },
-                "deleted_at": {
-                    "description": "Deletion time of the knowledge base",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/gorm.DeletedAt"
-                        }
-                    ]
-                },
-                "description": {
-                    "description": "Description of the knowledge base",
-                    "type": "string"
-                },
-                "embedding_model_id": {
-                    "description": "ID of the embedding model",
-                    "type": "string"
-                },
-                "id": {
-                    "description": "Unique identifier of the knowledge base",
-                    "type": "string"
-                },
-                "image_processing_config": {
-                    "description": "Image processing configuration",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ImageProcessingConfig"
-                        }
-                    ]
-                },
-                "indexing_strategy": {
-                    "description": "IndexingStrategy controls which indexing pipelines are active for this knowledge base.\nPipelines: vector search, keyword search, knowledge graph extraction.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.IndexingStrategy"
-                        }
-                    ]
-                },
-                "is_pinned": {
-                    "description": "IsPinned and PinnedAt are computed per-caller from user_kb_pins\n(see the baseline migration). They used to be stored on the row itself,\nwhich made pinning a workspace-wide ordering decision gated behind\nthe kb-edit RBAC guard. The columns are still present in legacy\nschemas for rollback safety but are no longer read or written by\nthe application — both fields are tagged ` + "`" + `gorm:\"-\"` + "`" + ` so GORM\nignores them on every CRUD call and the list handler stamps them\nafter enriching with the caller's pin set.",
-                    "type": "boolean"
-                },
-                "is_processing": {
-                    "description": "IsProcessing indicates whether a document processing task is active.",
-                    "type": "boolean"
-                },
-                "is_temporary": {
-                    "description": "Whether this knowledge base is temporary (ephemeral) and should be hidden from UI",
-                    "type": "boolean"
-                },
-                "knowledge_count": {
-                    "description": "Knowledge count (not stored in database, calculated on query)",
-                    "type": "integer"
-                },
-                "name": {
-                    "description": "Name of the knowledge base",
-                    "type": "string"
-                },
-                "pinned_at": {
-                    "description": "PinnedAt records when the current caller pinned this knowledge\nbase; nil when they have not.",
-                    "type": "string"
-                },
-                "processing_count": {
-                    "description": "ProcessingCount indicates the number of knowledge items being processed (for document type knowledge bases)",
-                    "type": "integer"
-                },
-                "question_generation_config": {
-                    "description": "QuestionGenerationConfig stores question generation configuration for document knowledge bases",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.QuestionGenerationConfig"
-                        }
-                    ]
-                },
-                "summary_model_id": {
-                    "description": "Summary model ID",
-                    "type": "string"
-                },
-                "tenant_id": {
-                    "description": "Workspace ID",
-                    "type": "integer"
-                },
-                "type": {
-                    "description": "Type of the knowledge base (document)",
-                    "type": "string"
-                },
-                "updated_at": {
-                    "description": "Last updated time of the knowledge base",
-                    "type": "string"
-                },
-                "vlm_config": {
-                    "description": "VLM config",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.VLMConfig"
-                        }
-                    ]
-                },
-                "domain_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.KnowledgeBaseConfig": {
-            "type": "object",
-            "properties": {
-                "auto_tag_config": {
-                    "description": "AutoTagConfig controls optional automatic association of existing KB tags.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.AutoTagConfig"
-                        }
-                    ]
-                },
-                "chunking_config": {
-                    "description": "Chunking configuration",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ChunkingConfig"
-                        }
-                    ]
-                },
-                "image_processing_config": {
-                    "description": "Image processing configuration",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ImageProcessingConfig"
-                        }
-                    ]
-                },
-                "indexing_strategy": {
-                    "description": "IndexingStrategy controls which indexing pipelines are active.\nnil means \"no change\" when updating (preserves existing strategy).",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.IndexingStrategy"
-                        }
-                    ]
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.KnowledgeMoveProgress": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "description": "任务创建时间",
-                    "type": "integer"
-                },
-                "error": {
-                    "description": "错误信息",
-                    "type": "string"
-                },
-                "failed": {
-                    "description": "失败数",
-                    "type": "integer"
-                },
-                "message": {
-                    "description": "状态消息",
-                    "type": "string"
-                },
-                "processed": {
-                    "description": "已处理数",
-                    "type": "integer"
-                },
-                "progress": {
-                    "description": "0-100",
-                    "type": "integer"
-                },
-                "source_kb_id": {
-                    "type": "string"
-                },
-                "status": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.KBCloneTaskStatus"
-                },
-                "target_kb_id": {
-                    "type": "string"
-                },
-                "task_id": {
-                    "type": "string"
-                },
-                "total": {
-                    "description": "总知识数",
-                    "type": "integer"
-                },
-                "updated_at": {
-                    "description": "最后更新时间",
-                    "type": "integer"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.KnowledgeProcessOverrides": {
-            "type": "object",
-            "properties": {
-                "asr_config": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ASRConfig"
-                },
-                "chunking_config": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ChunkingConfig"
-                },
-                "enable_multimodel": {
-                    "type": "boolean"
-                },
-                "parser_engine_overrides": {
-                    "description": "ParserEngineOverrides passes per-upload configuration to retained parsers; these values override workspace settings.",
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
-                },
-                "parser_engine_rules": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ParserEngineRule"
-                    }
-                },
-                "question_generation_config": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.QuestionGenerationConfig"
-                },
-                "vlm_config": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.VLMConfig"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.LoginRequest": {
-            "type": "object",
-            "required": [
-                "email",
-                "password"
-            ],
-            "properties": {
-                "email": {
-                    "type": "string"
-                },
-                "password": {
-                    "type": "string",
-                    "minLength": 6
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.LoginResponse": {
-            "type": "object",
-            "properties": {
-                "active_tenant": {
-                    "description": "ActiveTenant is the workspace whose ID is encoded in the issued JWT;\nfuture requests are scoped to it until the client calls /auth/switch-tenant.\nDefaults to the user's home workspace on a fresh login.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.Tenant"
-                        }
-                    ]
-                },
-                "message": {
-                    "type": "string"
-                },
-                "refresh_token": {
-                    "type": "string"
-                },
-                "success": {
-                    "type": "boolean"
-                },
-                "token": {
-                    "type": "string"
-                },
-                "user": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.User"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.MCPAdvancedConfig": {
-            "type": "object",
-            "properties": {
-                "retry_count": {
-                    "description": "Number of retries, default: 3",
-                    "type": "integer"
-                },
-                "retry_delay": {
-                    "description": "Delay between retries in seconds, default: 1",
-                    "type": "integer"
-                },
-                "timeout": {
-                    "description": "Timeout in seconds, default: 30",
-                    "type": "integer"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.MCPAuthConfig": {
-            "type": "object",
-            "properties": {
-                "api_key": {
-                    "type": "string"
-                },
-                "api_key_header": {
-                    "description": "APIKeyHeader is the header name that carries APIKey when AuthType is\napi_key. Empty defaults to \"X-API-Key\". This is non-secret structural\nconfig (the secret is APIKey), so it is not encrypted and is safe to echo\nback in responses. It lets services that expect the key in a different\nheader (e.g. the raw token directly in \"Authorization\") work without\nresorting to plaintext custom headers.",
-                    "type": "string"
-                },
-                "auth_server_metadata_url": {
-                    "description": "AuthServerMetadataURL optionally pins the OAuth authorization server\nmetadata URL. When empty, the server is discovered automatically from\nthe MCP URL (RFC 9728 / RFC 8414).",
-                    "type": "string"
-                },
-                "auth_type": {
-                    "description": "AuthType selects the authentication strategy. Empty (\"\") is treated as\nnone for backward compatibility with rows that pre-date this field.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.MCPAuthType"
-                        }
-                    ]
-                },
-                "custom_headers": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
-                },
-                "scopes": {
-                    "description": "Scopes are the OAuth scopes requested during authorization. Optional.",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "token": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.MCPAuthType": {
-            "type": "string",
-            "enum": [
-                "",
-                "api_key",
-                "bearer",
-                "oauth"
-            ],
-            "x-enum-varnames": [
-                "MCPAuthNone",
-                "MCPAuthAPIKey",
-                "MCPAuthBearer",
-                "MCPAuthOAuth"
-            ]
-        },
-        "github_com_Tencent_Reliquary_internal_types.MCPEnvVars": {
-            "type": "object",
-            "additionalProperties": {
-                "type": "string"
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.MCPHeaders": {
-            "type": "object",
-            "additionalProperties": {
-                "type": "string"
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.MCPService": {
-            "type": "object",
-            "properties": {
-                "advanced_config": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.MCPAdvancedConfig"
-                },
-                "auth_config": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.MCPAuthConfig"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "deleted_at": {
-                    "$ref": "#/definitions/gorm.DeletedAt"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "enabled": {
-                    "type": "boolean"
-                },
-                "env_vars": {
-                    "description": "Environment variables for stdio",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.MCPEnvVars"
-                        }
-                    ]
-                },
-                "headers": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.MCPHeaders"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "is_builtin": {
-                    "description": "Whether this is a builtin MCP service (visible to all workspaces)",
-                    "type": "boolean"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "stdio_config": {
-                    "description": "Required for stdio transport",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.MCPStdioConfig"
-                        }
-                    ]
-                },
-                "tenant_id": {
-                    "type": "integer"
-                },
-                "transport_type": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.MCPTransportType"
-                },
-                "updated_at": {
-                    "type": "string"
-                },
-                "url": {
-                    "description": "Optional: required for SSE/HTTP Streamable",
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.MCPStdioConfig": {
-            "type": "object",
-            "properties": {
-                "args": {
-                    "description": "Command arguments array",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "command": {
-                    "description": "Command: \"uvx\" or \"npx\"",
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.MCPTransportType": {
-            "type": "string",
-            "enum": [
-                "sse",
-                "http-streamable",
-                "stdio"
-            ],
-            "x-enum-comments": {
-                "MCPTransportHTTPStreamable": "HTTP Streamable",
-                "MCPTransportSSE": "Server-Sent Events",
-                "MCPTransportStdio": "Stdio (Standard Input/Output)"
-            },
-            "x-enum-descriptions": [
-                "Server-Sent Events",
-                "HTTP Streamable",
-                "Stdio (Standard Input/Output)"
-            ],
-            "x-enum-varnames": [
-                "MCPTransportSSE",
-                "MCPTransportHTTPStreamable",
-                "MCPTransportStdio"
-            ]
-        },
-        "github_com_Tencent_Reliquary_internal_types.ManualKnowledgePayload": {
-            "type": "object",
-            "properties": {
-                "channel": {
-                    "type": "string"
-                },
-                "content": {
-                    "type": "string"
-                },
-                "process_config": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.KnowledgeProcessOverrides"
-                },
-                "status": {
-                    "type": "string"
-                },
-                "tag_ids": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "title": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.MatchType": {
-            "type": "integer",
-            "enum": [
-                0,
-                1,
-                2,
-                3,
-                4,
-                5,
-                6,
-                8,
-                9
-            ],
-            "x-enum-comments": {
-                "MatchTypeDataAnalysis": "数据分析匹配类型",
-                "MatchTypeDirectLoad": "Deprecated: reserved to preserve serialized enum values",
-                "MatchTypeParentChunk": "父Chunk匹配类型",
-                "MatchTypeRelationChunk": "关系Chunk匹配类型"
-            },
-            "x-enum-descriptions": [
-                "",
-                "",
-                "",
-                "",
-                "父Chunk匹配类型",
-                "关系Chunk匹配类型",
-                "",
-                "Deprecated: reserved to preserve serialized enum values",
-                "数据分析匹配类型"
-            ],
-            "x-enum-varnames": [
-                "MatchTypeEmbedding",
-                "MatchTypeKeywords",
-                "MatchTypeNearByChunk",
-                "MatchTypeHistory",
-                "MatchTypeParentChunk",
-                "MatchTypeRelationChunk",
-                "MatchTypeGraph",
-                "MatchTypeDirectLoad",
-                "MatchTypeDataAnalysis"
-            ]
-        },
-        "github_com_Tencent_Reliquary_internal_types.MentionedItem": {
-            "type": "object",
-            "properties": {
-                "id": {
-                    "type": "string"
-                },
-                "kb_id": {
-                    "description": "Parent knowledge base for file/tag mentions",
-                    "type": "string"
-                },
-                "kb_name": {
-                    "description": "Display name for parent KB",
-                    "type": "string"
-                },
-                "kb_type": {
-                    "description": "\"document\" (only for kb type)",
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "service_id": {
-                    "description": "Parent MCP service for MCP tool mentions",
-                    "type": "string"
-                },
-                "type": {
-                    "description": "\"kb\", \"file\", \"tag\", \"mcp\"",
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.Message": {
-            "type": "object",
-            "properties": {
-                "agent_duration_ms": {
-                    "description": "Agent total execution duration in milliseconds (from query start to answer start)",
-                    "type": "integer"
-                },
-                "agent_id": {
-                    "description": "AgentID is the agent used for this individual assistant turn. Unlike the\nsession's last_request_state it remains stable when users switch agents.",
-                    "type": "string"
-                },
-                "agent_steps": {
-                    "description": "Agent execution steps (only for assistant messages generated by agent)\nThis contains the detailed reasoning process and tool calls made by the agent\nStored for user history display, but NOT included in LLM context to avoid redundancy",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.AgentStep"
-                    }
-                },
-                "artifacts": {
-                    "description": "Stored files associated with an assistant message, referenced by the artifact download endpoint.",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.MessageArtifact"
-                    }
-                },
-                "attachments": {
-                    "description": "Attached files (documents, audio, etc., for user messages)",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.MessageAttachment"
-                    }
-                },
-                "channel": {
-                    "description": "Channel indicates the source channel of this message (e.g., \"web\", \"api\", \"im\")",
-                    "type": "string"
-                },
-                "content": {
-                    "description": "Message text content",
-                    "type": "string"
-                },
-                "created_at": {
-                    "description": "Message creation timestamp",
-                    "type": "string"
-                },
-                "deleted_at": {
-                    "description": "Soft delete timestamp",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/gorm.DeletedAt"
-                        }
-                    ]
-                },
-                "id": {
-                    "description": "Unique identifier for the message",
-                    "type": "string"
-                },
-                "images": {
-                    "description": "Attached images with OCR/Caption text (for user messages)",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.MessageImage"
-                    }
-                },
-                "is_completed": {
-                    "description": "Whether message generation is complete",
-                    "type": "boolean"
-                },
-                "is_fallback": {
-                    "description": "Whether this response is a fallback (no knowledge base match found)",
-                    "type": "boolean"
-                },
-                "knowledge_id": {
-                    "description": "KnowledgeID links this message to a Knowledge entry in the chat history knowledge base\nUsed for vector search indexing: when set, the message content has been indexed as a Knowledge passage",
-                    "type": "string"
-                },
-                "knowledge_references": {
-                    "description": "References to knowledge chunks used in the response",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.SearchResult"
-                    }
-                },
-                "mentioned_items": {
-                    "description": "Mentioned knowledge bases and files (for user messages)\nStores the @mentioned items when user sends a message",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.MentionedItem"
-                    }
-                },
-                "model_id": {
-                    "description": "ModelID is the requested/effective chat model binding captured for this\nturn. It is useful for reproducibility and suggestion generation.",
-                    "type": "string"
-                },
-                "request_id": {
-                    "description": "Request identifier for tracking API requests",
-                    "type": "string"
-                },
-                "role": {
-                    "description": "Message role: \"user\", \"assistant\", \"system\"",
-                    "type": "string"
-                },
-                "session_id": {
-                    "description": "ID of the session this message belongs to",
-                    "type": "string"
-                },
-                "updated_at": {
-                    "description": "Last update timestamp",
-                    "type": "string"
-                },
-                "usage": {
-                    "description": "LLM token usage aggregated across every round of the turn that produced this\nassistant message. Persisted so history reads can attribute cost after the\nlive stream is gone; NULL (nil) for user messages and pre-feature rows.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.TokenUsage"
-                        }
-                    ]
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.MessageArtifact": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "description": "When Reliquary persisted the blob",
-                    "type": "string"
-                },
-                "file_name": {
-                    "description": "Original filename",
-                    "type": "string"
-                },
-                "file_size": {
-                    "description": "File size in bytes",
-                    "type": "integer"
-                },
-                "file_type": {
-                    "description": "File extension (e.g., \".pptx\", \".pdf\")",
-                    "type": "string"
-                },
-                "mod_time": {
-                    "description": "File modification time",
-                    "type": "string"
-                },
-                "source_path": {
-                    "description": "Original file path",
-                    "type": "string"
-                },
-                "url": {
-                    "description": "Storage URL (provider://path); persisted, not sent to client",
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.MessageAttachment": {
-            "type": "object",
-            "properties": {
-                "content": {
-                    "description": "Extracted text content (for small text files)",
-                    "type": "string"
-                },
-                "content_mode": {
-                    "description": "full or selected_chunks",
-                    "type": "string"
-                },
-                "file_name": {
-                    "description": "Original filename",
-                    "type": "string"
-                },
-                "file_size": {
-                    "description": "File size in bytes",
-                    "type": "integer"
-                },
-                "file_type": {
-                    "description": "File extension (e.g., \".pdf\", \".docx\")",
-                    "type": "string"
-                },
-                "id": {
-                    "description": "Temporary document ID for session-scoped uploads",
-                    "type": "string"
-                },
-                "is_truncated": {
-                    "description": "Whether content was truncated",
-                    "type": "boolean"
-                },
-                "line_count": {
-                    "description": "Total line count (for text files)",
-                    "type": "integer"
-                },
-                "selected_chunks": {
-                    "description": "Chunks included in this message prompt",
-                    "type": "integer"
-                },
-                "token_count": {
-                    "description": "Approximate tokens in the parsed document",
-                    "type": "integer"
-                },
-                "total_chunks": {
-                    "description": "Total parsed chunks",
-                    "type": "integer"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.MessageImage": {
-            "type": "object",
-            "properties": {
-                "caption": {
-                    "type": "string"
-                },
-                "url": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.ModelParameters": {
-            "type": "object",
-            "properties": {
-                "api_key": {
-                    "type": "string"
-                },
-                "app_secret": {
-                    "description": "AES-256 加密存储，实际承载上游 API Key",
-                    "type": "string"
-                },
-                "base_url": {
-                    "type": "string"
-                },
-                "context_window": {
-                    "description": "ContextWindow is the model's total context window in tokens and\nMaxOutputTokens the most it emits in one response. Both are provider\nfacts the agent cannot discover but has to act on: the context window is\nwhat decides when conversation history gets compacted, and assuming a\nwindow larger than the real one means compaction never fires and the\nprovider rejects the request mid-conversation instead. 0 means unknown,\nwhich falls back to DefaultMaxContextTokens.",
-                    "type": "integer"
-                },
-                "custom_headers": {
-                    "description": "CustomHeaders 允许在调用远程模型 API 时附加自定义 HTTP 请求头，\n用途类似 Python OpenAI SDK 的 extra_headers 参数，\n常见场景包括透传企业网关鉴权信息、追踪 ID、路由标识等。\n保留字段（Authorization、api-key、Content-Type、Accept 等）会在运行期被忽略以避免破坏签名/鉴权流程。",
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
-                },
-                "embedding_parameters": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.EmbeddingParameters"
-                },
-                "extra_config": {
-                    "description": "Provider-specific configuration",
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
-                },
-                "interface_type": {
-                    "type": "string"
-                },
-                "max_concurrency": {
-                    "description": "MaxConcurrency caps concurrent in-flight BACKGROUND (ingestion /\nenrichment) calls to THIS specific model, keyed by model ID and shared\nacross all replicas. 0 (the default) means \"fall back to the\nprocess-wide model.max_concurrency\". Interactive user-facing calls are\nnever gated. Only chat / vlm / embedding honour this (see limiter.Gate).",
-                    "type": "integer"
-                },
-                "max_output_tokens": {
-                    "type": "integer"
-                },
-                "parameter_size": {
-                    "description": "Ollama model parameter size (e.g., \"7B\", \"13B\", \"70B\")",
-                    "type": "string"
-                },
-                "provider": {
-                    "description": "Provider identifier: openai, aliyun, zhipu, generic",
-                    "type": "string"
-                },
-                "supports_vision": {
-                    "description": "Whether the model accepts image/multimodal input",
-                    "type": "boolean"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.ModelSource": {
-            "type": "string",
-            "enum": [
-                "local",
-                "remote",
-                "aliyun",
-                "zhipu",
-                "volcengine",
-                "deepseek",
-                "hunyuan",
-                "minimax",
-                "openai",
-                "gemini",
-                "mimo",
-                "siliconflow",
-                "jina",
-                "openrouter",
-                "litellm",
-                "requesty",
-                "nvidia",
-                "novita",
-                "azure_openai"
-            ],
-            "x-enum-comments": {
-                "ModelSourceAliyun": "Aliyun DashScope model",
-                "ModelSourceAzureOpenAI": "Azure OpenAI model",
-                "ModelSourceDeepseek": "Deepseek model",
-                "ModelSourceGemini": "Gemini model",
-                "ModelSourceHunyuan": "Hunyuan model",
-                "ModelSourceJina": "Jina AI model",
-                "ModelSourceLiteLLM": "LiteLLM proxy model",
-                "ModelSourceLocal": "Local model",
-                "ModelSourceMimo": "Mimo model",
-                "ModelSourceMinimax": "Minimax mode",
-                "ModelSourceNovita": "Novita AI model",
-                "ModelSourceNvidia": "NVIDIA model",
-                "ModelSourceOpenAI": "OpenAI model",
-                "ModelSourceOpenRouter": "OpenRouter model",
-                "ModelSourceRemote": "Remote model",
-                "ModelSourceRequesty": "Requesty model",
-                "ModelSourceSiliconFlow": "SiliconFlow model",
-                "ModelSourceVolcengine": "Volcengine model",
-                "ModelSourceZhipu": "Zhipu model"
-            },
-            "x-enum-descriptions": [
-                "Local model",
-                "Remote model",
-                "Aliyun DashScope model",
-                "Zhipu model",
-                "Volcengine model",
-                "Deepseek model",
-                "Hunyuan model",
-                "Minimax mode",
-                "OpenAI model",
-                "Gemini model",
-                "Mimo model",
-                "SiliconFlow model",
-                "Jina AI model",
-                "OpenRouter model",
-                "LiteLLM proxy model",
-                "Requesty model",
-                "NVIDIA model",
-                "Novita AI model",
-                "Azure OpenAI model"
-            ],
-            "x-enum-varnames": [
-                "ModelSourceLocal",
-                "ModelSourceRemote",
-                "ModelSourceAliyun",
-                "ModelSourceZhipu",
-                "ModelSourceVolcengine",
-                "ModelSourceDeepseek",
-                "ModelSourceHunyuan",
-                "ModelSourceMinimax",
-                "ModelSourceOpenAI",
-                "ModelSourceGemini",
-                "ModelSourceMimo",
-                "ModelSourceSiliconFlow",
-                "ModelSourceJina",
-                "ModelSourceOpenRouter",
-                "ModelSourceLiteLLM",
-                "ModelSourceRequesty",
-                "ModelSourceNvidia",
-                "ModelSourceNovita",
-                "ModelSourceAzureOpenAI"
-            ]
-        },
-        "github_com_Tencent_Reliquary_internal_types.ModelType": {
-            "type": "string",
-            "enum": [
-                "Embedding",
-                "Rerank",
-                "KnowledgeQA",
-                "VLLM",
-                "ASR"
-            ],
-            "x-enum-comments": {
-                "ModelTypeASR": "ASR (Automatic Speech Recognition) model",
-                "ModelTypeEmbedding": "Embedding model",
-                "ModelTypeKnowledgeQA": "KnowledgeQA model",
-                "ModelTypeRerank": "Rerank model",
-                "ModelTypeVLLM": "VLLM model"
-            },
-            "x-enum-descriptions": [
-                "Embedding model",
-                "Rerank model",
-                "KnowledgeQA model",
-                "VLLM model",
-                "ASR (Automatic Speech Recognition) model"
-            ],
-            "x-enum-varnames": [
-                "ModelTypeEmbedding",
-                "ModelTypeRerank",
-                "ModelTypeKnowledgeQA",
-                "ModelTypeVLLM",
-                "ModelTypeASR"
-            ]
-        },
-        "github_com_Tencent_Reliquary_internal_types.ParserEngineConfig": {
-            "type": "object",
-            "properties": {
-                "chat_parser_engine_rules": {
-                    "description": "ChatParserEngineRules selects parser engines for session-scoped chat\ndocuments. Knowledge bases keep their own rules in ChunkingConfig.",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ParserEngineRule"
-                    }
-                },
-                "mineru_api_key": {
-                    "description": "MinerU 云 API Key",
-                    "type": "string"
-                },
-                "mineru_cloud_enable_formula": {
-                    "type": "boolean"
-                },
-                "mineru_cloud_enable_ocr": {
-                    "type": "boolean"
-                },
-                "mineru_cloud_enable_table": {
-                    "type": "boolean"
-                },
-                "mineru_cloud_language": {
-                    "type": "string"
-                },
-                "mineru_cloud_model": {
-                    "description": "MinerU 云 API 解析参数",
-                    "type": "string"
-                },
-                "mineru_enable_formula": {
-                    "type": "boolean"
-                },
-                "mineru_enable_ocr": {
-                    "description": "MinerUEnableOCR is retained for compatibility with configurations saved\nbefore parse_method supported auto/ocr/txt.",
-                    "type": "boolean"
-                },
-                "mineru_enable_table": {
-                    "type": "boolean"
-                },
-                "mineru_endpoint": {
-                    "description": "MinerU 自建服务端点",
-                    "type": "string"
-                },
-                "mineru_language": {
-                    "type": "string"
-                },
-                "mineru_model": {
-                    "description": "MinerU 自建解析参数",
-                    "type": "string"
-                },
-                "mineru_parse_method": {
-                    "type": "string"
-                },
-                "mineru_vlm_server_url": {
-                    "description": "vLLM 服务器地址 (vlm-http-client / hybrid-http-client)",
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.ParserEngineRule": {
-            "type": "object",
-            "properties": {
-                "engine": {
-                    "type": "string"
-                },
-                "file_types": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.PromptCacheStatus": {
-            "type": "string",
-            "enum": [
-                "unsupported",
-                "unreported",
-                "miss",
-                "hit"
-            ],
-            "x-enum-varnames": [
-                "PromptCacheStatusUnsupported",
-                "PromptCacheStatusUnreported",
-                "PromptCacheStatusMiss",
-                "PromptCacheStatusHit"
-            ]
-        },
-        "github_com_Tencent_Reliquary_internal_types.QuestionGenerationConfig": {
-            "type": "object",
-            "properties": {
-                "custom_instructions": {
-                    "description": "CustomInstructions describes the intended audience or question style.\nIt is appended to the stable system question-generation template.",
-                    "type": "string"
-                },
-                "enabled": {
-                    "type": "boolean"
-                },
-                "question_count": {
-                    "description": "Number of questions to generate per chunk (default: 3, max: 10)",
-                    "type": "integer"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.QuestionSuggestionConfig": {
-            "type": "object",
-            "properties": {
-                "follow_ups": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.FollowUpSuggestionConfig"
-                },
-                "starters": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.StarterSuggestionConfig"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.QueueStat": {
-            "type": "object",
-            "properties": {
-                "active": {
-                    "type": "integer"
-                },
-                "archived": {
-                    "type": "integer"
-                },
-                "completed": {
-                    "type": "integer"
-                },
-                "failed": {
-                    "type": "integer"
-                },
-                "latency_ms": {
-                    "description": "LatencyMs is the age of the oldest pending task, in milliseconds.",
-                    "type": "integer"
-                },
-                "memory_usage_bytes": {
-                    "description": "MemoryUsageBytes is the approximate Redis memory the queue occupies.",
-                    "type": "integer"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "paused": {
-                    "description": "Paused reports whether the queue is paused (tasks not consumed).",
-                    "type": "boolean"
-                },
-                "pending": {
-                    "type": "integer"
-                },
-                "pool": {
-                    "description": "Pool is the independent worker pool that drains this queue.",
-                    "type": "string"
-                },
-                "processed": {
-                    "description": "Processed / Failed are today's counters (reset daily).",
-                    "type": "integer"
-                },
-                "retry": {
-                    "type": "integer"
-                },
-                "scheduled": {
-                    "type": "integer"
-                },
-                "size": {
-                    "description": "Size is the total number of tasks in the queue (pending + active +\nscheduled + retry + aggregating + archived).",
-                    "type": "integer"
-                },
-                "weight": {
-                    "description": "Weight is the queue's scheduling weight inside its pool.",
-                    "type": "integer"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.RegisterRequest": {
-            "type": "object",
-            "required": [
-                "email",
-                "password",
-                "username"
-            ],
-            "properties": {
-                "email": {
-                    "type": "string"
-                },
-                "password": {
-                    "type": "string",
-                    "minLength": 6
-                },
-                "username": {
-                    "type": "string",
-                    "maxLength": 50,
-                    "minLength": 2
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.RegisterResponse": {
-            "type": "object",
-            "properties": {
-                "message": {
-                    "type": "string"
-                },
-                "success": {
-                    "type": "boolean"
-                },
-                "tenant": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.Tenant"
-                },
-                "user": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.User"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.Resource": {
-            "type": "object",
-            "properties": {
-                "description": {
-                    "description": "Optional description",
-                    "type": "string"
-                },
-                "external_id": {
-                    "description": "Unique identifier in the external system",
-                    "type": "string"
-                },
-                "has_children": {
-                    "description": "Whether this resource has children that can be expanded",
-                    "type": "boolean"
-                },
-                "metadata": {
-                    "description": "Additional metadata",
-                    "type": "object",
-                    "additionalProperties": true
-                },
-                "modified_at": {
-                    "description": "Last modified time in external system",
-                    "type": "string"
-                },
-                "name": {
-                    "description": "Display name",
-                    "type": "string"
-                },
-                "parent_id": {
-                    "description": "For hierarchical resources (parent ID if applicable)",
-                    "type": "string"
-                },
-                "type": {
-                    "description": "Resource type (document, folder, space, page, etc.)",
-                    "type": "string"
-                },
-                "url": {
-                    "description": "URL to access in external system",
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.RetrievalConfig": {
-            "type": "object",
-            "properties": {
-                "embedding_top_k": {
-                    "description": "EmbeddingTopK is the maximum number of chunks returned by vector search (default: 50)",
-                    "type": "integer"
-                },
-                "keyword_threshold": {
-                    "description": "KeywordThreshold is the minimum keyword match score (0-1, default: 0.3)",
-                    "type": "number"
-                },
-                "rerank_model_id": {
-                    "description": "RerankModelID is the ID of the rerank model to use (required for search)",
-                    "type": "string"
-                },
-                "rerank_threshold": {
-                    "description": "RerankThreshold is the minimum rerank score (-10 to 10, default: 0.2)",
-                    "type": "number"
-                },
-                "rerank_top_k": {
-                    "description": "RerankTopK is the maximum number of results after reranking (default: 10)",
-                    "type": "integer"
-                },
-                "rrf_k": {
-                    "description": "RRFK is the smoothing constant of Reciprocal Rank Fusion. Larger values\nflatten the curve, reducing the bias towards top-1 results.\nDefault: 60. Sensible range: 30..100 depending on corpus size.",
-                    "type": "integer"
-                },
-                "rrf_keyword_weight": {
-                    "description": "RRFKeywordWeight is the keyword counterpart. Default: 0.3.",
-                    "type": "number"
-                },
-                "rrf_vector_weight": {
-                    "description": "RRFVectorWeight is the weight applied to the vector retriever inside RRF.\nRRFVectorWeight + RRFKeywordWeight should usually sum to 1.0 but the math\nworks for any positive weights. Default: 0.7.",
-                    "type": "number"
-                },
-                "vector_threshold": {
-                    "description": "VectorThreshold is the minimum vector similarity score (0-1, default: 0.15)",
-                    "type": "number"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.RetrieverEngineType": {
-            "type": "string",
-            "enum": [
-                "postgres"
-            ],
-            "x-enum-varnames": [
-                "PostgresRetrieverEngineType",
-                "ElasticsearchRetrieverEngineType",
-                "InfinityRetrieverEngineType",
-                "ElasticFaissRetrieverEngineType",
-                "QdrantRetrieverEngineType",
-                "MilvusRetrieverEngineType",
-                "WeaviateRetrieverEngineType",
-                "DorisRetrieverEngineType",
-                "SQLiteRetrieverEngineType",
-                "TencentVectorDBRetrieverEngineType",
-                "OpenSearchRetrieverEngineType"
-            ]
-        },
-        "github_com_Tencent_Reliquary_internal_types.RetrieverType": {
-            "type": "string",
-            "enum": [
-                "keywords",
-                "vector"
-            ],
-            "x-enum-comments": {
-                "KeywordsRetrieverType": "Keywords retriever",
-                "VectorRetrieverType": "Vector retriever"
-            },
-            "x-enum-descriptions": [
-                "Keywords retriever",
-                "Vector retriever"
-            ],
-            "x-enum-varnames": [
-                "KeywordsRetrieverType",
-                "VectorRetrieverType"
-            ]
-        },
-        "github_com_Tencent_Reliquary_internal_types.RuntimeTaskAction": {
-            "type": "string",
-            "enum": [
-                "cancel",
-                "run_now",
-                "delete"
-            ],
-            "x-enum-varnames": [
-                "RuntimeTaskActionCancel",
-                "RuntimeTaskActionRunNow",
-                "RuntimeTaskActionDelete"
-            ]
-        },
-        "github_com_Tencent_Reliquary_internal_types.RuntimeTaskInfo": {
-            "type": "object",
-            "properties": {
-                "allowed_actions": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.RuntimeTaskAction"
-                    }
-                },
-                "completed_at": {
-                    "type": "string"
-                },
-                "data_source_id": {
-                    "type": "string"
-                },
-                "deadline": {
-                    "type": "string"
-                },
-                "enqueued_at": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "is_orphaned": {
-                    "type": "boolean"
-                },
-                "knowledge_base_id": {
-                    "type": "string"
-                },
-                "knowledge_count": {
-                    "type": "integer"
-                },
-                "knowledge_id": {
-                    "type": "string"
-                },
-                "last_error": {
-                    "type": "string"
-                },
-                "last_failed_at": {
-                    "type": "string"
-                },
-                "max_retry": {
-                    "type": "integer"
-                },
-                "next_process_at": {
-                    "type": "string"
-                },
-                "queue": {
-                    "type": "string"
-                },
-                "retried": {
-                    "type": "integer"
-                },
-                "source_id": {
-                    "type": "string"
-                },
-                "source_kb_id": {
-                    "type": "string"
-                },
-                "started_at": {
-                    "type": "string"
-                },
-                "state": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.RuntimeTaskState"
-                },
-                "sync_log_id": {
-                    "type": "string"
-                },
-                "target_id": {
-                    "type": "string"
-                },
-                "target_kb_id": {
-                    "type": "string"
-                },
-                "task_id": {
-                    "type": "string"
-                },
-                "tenant_id": {
-                    "type": "integer"
-                },
-                "type": {
-                    "type": "string"
-                },
-                "worker": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.RuntimeTaskState": {
-            "type": "string",
-            "enum": [
-                "pending",
-                "active",
-                "scheduled",
-                "retry",
-                "archived",
-                "completed"
-            ],
-            "x-enum-varnames": [
-                "RuntimeTaskPending",
-                "RuntimeTaskActive",
-                "RuntimeTaskScheduled",
-                "RuntimeTaskRetry",
-                "RuntimeTaskArchived",
-                "RuntimeTaskCompleted"
-            ]
-        },
-        "github_com_Tencent_Reliquary_internal_types.SearchParams": {
-            "type": "object",
-            "properties": {
-                "disable_keywords_match": {
-                    "type": "boolean"
-                },
-                "disable_vector_match": {
-                    "type": "boolean"
-                },
-                "keyword_threshold": {
-                    "type": "number"
-                },
-                "knowledge_base_ids": {
-                    "description": "KnowledgeBaseIDs overrides the single KB ID passed to HybridSearch,\nallowing a single retrieval call to span multiple KBs that share the\nsame embedding model. When empty, HybridSearch uses its own id parameter.",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "knowledge_ids": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "match_count": {
-                    "type": "integer"
-                },
-                "only_recommended": {
-                    "type": "boolean"
-                },
-                "query_embedding": {
-                    "type": "array",
-                    "items": {
-                        "type": "number"
-                    }
-                },
-                "query_text": {
-                    "description": "QueryText is required unless query_embedding is provided, keyword matching is disabled,\nand vector matching remains enabled.",
-                    "type": "string"
-                },
-                "scope_tag_ids": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "skip_context_enrichment": {
-                    "description": "SkipContextEnrichment skips fetching parent, nearby, and relation chunks\nin processSearchResults. Used by the chat pipeline where context assembly\nis handled separately in the merge stage.",
-                    "type": "boolean"
-                },
-                "tag_ids": {
-                    "description": "Tag IDs for filtering",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "vector_threshold": {
-                    "type": "number"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.SearchResult": {
-            "type": "object",
-            "properties": {
-                "chunk_index": {
-                    "description": "Chunk index",
-                    "type": "integer"
-                },
-                "chunk_metadata": {
-                    "description": "ChunkMetadata stores chunk-level metadata (e.g., generated questions)",
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "chunk_type": {
-                    "description": "Chunk 类型",
-                    "type": "string"
-                },
-                "content": {
-                    "description": "Content",
-                    "type": "string"
-                },
-                "end_at": {
-                    "description": "End at",
-                    "type": "integer"
-                },
-                "id": {
-                    "description": "ID",
-                    "type": "string"
-                },
-                "image_info": {
-                    "description": "图片信息 (JSON 格式)",
-                    "type": "string"
-                },
-                "knowledge_base_id": {
-                    "description": "KnowledgeBaseID is the ID of the knowledge base this result belongs to",
-                    "type": "string"
-                },
-                "knowledge_channel": {
-                    "description": "KnowledgeChannel indicates the source channel (web, api, rss).",
-                    "type": "string"
-                },
-                "knowledge_custom_metadata": {
-                    "description": "KnowledgeCustomMetadata is user-authored context safe to expose to models.",
-                    "type": "string"
-                },
-                "knowledge_description": {
-                    "description": "KnowledgeDescription is the description of the knowledge document",
-                    "type": "string"
-                },
-                "knowledge_filename": {
-                    "description": "Knowledge file name\nUsed for file type knowledge, contains the original file name",
-                    "type": "string"
-                },
-                "knowledge_id": {
-                    "description": "Knowledge ID",
-                    "type": "string"
-                },
-                "knowledge_source": {
-                    "description": "Knowledge source\nUsed to indicate the source of the knowledge, such as \"url\"",
-                    "type": "string"
-                },
-                "knowledge_title": {
-                    "description": "Knowledge title",
-                    "type": "string"
-                },
-                "match_type": {
-                    "description": "Match type",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.MatchType"
-                        }
-                    ]
-                },
-                "matched_content": {
-                    "description": "MatchedContent is the actual content that was matched in vector search\nMatched document text",
-                    "type": "string"
-                },
-                "metadata": {
-                    "description": "Metadata",
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
-                },
-                "parent_chunk_id": {
-                    "description": "父 Chunk ID",
-                    "type": "string"
-                },
-                "score": {
-                    "description": "Score",
-                    "type": "number"
-                },
-                "seq": {
-                    "description": "Seq",
-                    "type": "integer"
-                },
-                "start_at": {
-                    "description": "Start at",
-                    "type": "integer"
-                },
-                "sub_chunk_id": {
-                    "description": "SubChunkIndex",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.Session": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "type": "string"
-                },
-                "deleted_at": {
-                    "$ref": "#/definitions/gorm.DeletedAt"
-                },
-                "description": {
-                    "description": "Description",
-                    "type": "string"
-                },
-                "id": {
-                    "description": "ID",
-                    "type": "string"
-                },
-                "is_pinned": {
-                    "description": "IsPinned indicates whether the session is pinned in the list.",
-                    "type": "boolean"
-                },
-                "last_request_state": {
-                    "description": "LastRequestState records the input-bar state used the last time this\nsession sent a question (agent, model, KB scope, MCPs).\nPersisted on every successful POST to /knowledge-chat or /agent-chat so\nthat reopening the session can restore the original request context to\nthe chat UI. Stored in the legacy sessions.agent_config JSONB column to\navoid a new migration; the shape used today is ` + "`" + `SessionLastRequestState` + "`" + `.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.SessionLastRequestState"
-                        }
-                    ]
-                },
-                "pinned_at": {
-                    "description": "PinnedAt records when the session was pinned; nil when not pinned.",
-                    "type": "string"
-                },
-                "tenant_id": {
-                    "description": "Workspace ID",
-                    "type": "integer"
-                },
-                "title": {
-                    "description": "Title",
-                    "type": "string"
-                },
-                "updated_at": {
-                    "type": "string"
-                },
-                "user_id": {
-                    "description": "UserID identifies the personal user who owns the session.",
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.SessionLastRequestState": {
-            "type": "object",
-            "properties": {
-                "agent_enabled": {
-                    "type": "boolean"
-                },
-                "agent_id": {
-                    "type": "string"
-                },
-                "knowledge_base_ids": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "knowledge_ids": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "mcp_service_ids": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "mentioned_items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.MentionedItem"
-                    }
-                },
-                "model_id": {
-                    "type": "string"
-                },
-                "tag_ids": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.StarterSuggestionConfig": {
-            "type": "object",
-            "properties": {
-                "count": {
-                    "type": "integer"
-                },
-                "enabled": {
-                    "type": "boolean"
-                },
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "mode": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.SuggestionAttribution": {
-            "type": "object",
-            "properties": {
-                "question_id": {
-                    "type": "string"
-                },
-                "suggestion_set_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.SyncLog": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "description": "Creation timestamp (usually same as StartedAt)",
-                    "type": "string"
-                },
-                "data_source_id": {
-                    "description": "Reference to the data source",
-                    "type": "string"
-                },
-                "error_message": {
-                    "description": "Error details if status is \"failed\"",
-                    "type": "string"
-                },
-                "finished_at": {
-                    "description": "Sync completion time",
-                    "type": "string"
-                },
-                "id": {
-                    "description": "Unique identifier",
-                    "type": "string"
-                },
-                "items_created": {
-                    "description": "New items created in knowledge base",
-                    "type": "integer"
-                },
-                "items_deleted": {
-                    "description": "Items deleted from knowledge base",
-                    "type": "integer"
-                },
-                "items_failed": {
-                    "description": "Items that failed to sync",
-                    "type": "integer"
-                },
-                "items_skipped": {
-                    "description": "Items skipped (no changes detected)",
-                    "type": "integer"
-                },
-                "items_total": {
-                    "description": "Total items fetched from source",
-                    "type": "integer"
-                },
-                "items_updated": {
-                    "description": "Existing items updated",
-                    "type": "integer"
-                },
-                "result": {
-                    "description": "Detailed sync result (JSON-encoded)",
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "started_at": {
-                    "description": "Sync start time",
-                    "type": "string"
-                },
-                "status": {
-                    "description": "Sync status: running, success, partial, failed, canceled",
-                    "type": "string"
-                },
-                "tenant_id": {
-                    "description": "Workspace ID",
-                    "type": "integer"
-                },
-                "updated_at": {
-                    "description": "Last update timestamp",
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.SystemSetting": {
-            "type": "object",
-            "properties": {
-                "category": {
-                    "description": "Category groups settings in the management UI (\"limits\", \"agent\",\n\"auth\", ...). Free-form string so adding a new category is a\ndata-only change.",
-                    "type": "string"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "enum": [
-                    "description",
-                    "type",
-                    "items"
-                ],
-                "id": {
-                    "type": "integer"
-                },
-                "is_secret": {
-                    "description": "IsSecret reserves UI affordances for P3 (mask + reveal-with-confirm).\nIn P1 every row is is_secret=false; service Update accepts the\ncolumn but does not yet enforce special handling.",
-                    "type": "boolean"
-                },
-                "key": {
-                    "type": "string"
-                },
-                "last_modified_by": {
-                    "type": "string"
-                },
-                "last_modified_by_name": {
-                    "description": "LastModifiedByName is a display label resolved from LastModifiedBy\n(the user's UUID) at handler time — username when available,\notherwise email. Empty for virtual rows that were never persisted\n(LastModifiedBy=\"\"). Not stored: derived per request so renaming\na user reflects on the next reload without a backfill job.",
-                    "type": "string"
-                },
-                "requires_restart": {
-                    "description": "RequiresRestart reserves UI affordances for P3 (banner \"this\nchange won't take effect until the next restart\"). In P1 the\nonly seeded key is per-request, so always false.",
-                    "type": "boolean"
-                },
-                "updated_at": {
-                    "type": "string"
-                },
-                "value": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "value_type": {
-                    "description": "ValueType is one of \"int\", \"string\", \"bool\". Service layer rejects\nupdates whose payload type does not match; UI uses it to pick\nInputNumber vs Input vs Switch.",
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.Tenant": {
-            "type": "object",
-            "properties": {
-                "business": {
-                    "description": "Business",
-                    "type": "string"
-                },
-                "chat_history_config": {
-                    "description": "Chat history config: knowledge base configuration for indexing and searching chat messages via vector search",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ChatHistoryConfig"
-                        }
-                    ]
-                },
-                "context_config": {
-                    "description": "Global Context configuration for this workspace (default for all sessions)",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ContextConfig"
-                        }
-                    ]
-                },
-                "created_at": {
-                    "description": "Creation time",
-                    "type": "string"
-                },
-                "credentials": {
-                    "description": "Credentials config: third-party provider credentials (e.g. WeKnoraCloud AppID/AppSecret)",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.CredentialsConfig"
-                        }
-                    ]
-                },
-                "deleted_at": {
-                    "description": "Deletion time",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/gorm.DeletedAt"
-                        }
-                    ]
-                },
-                "description": {
-                    "description": "Description",
-                    "type": "string"
-                },
-                "id": {
-                    "description": "ID",
-                    "type": "integer"
-                },
-                "name": {
-                    "description": "Name",
-                    "type": "string"
-                },
-                "parser_engine_config": {
-                    "description": "Parser engine config overrides (MinerU endpoint, API key, etc.). Used when parsing documents; overrides env.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ParserEngineConfig"
-                        }
-                    ]
-                },
-                "retrieval_config": {
-                    "description": "Retrieval config: global search/retrieval parameters shared by knowledge search and message search",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.RetrievalConfig"
-                        }
-                    ]
-                },
-                "status": {
-                    "description": "Status",
-                    "type": "string"
-                },
-                "storage_quota": {
-                    "description": "Storage quota (Bytes), default is 10GB, including vector, original file, text, index, etc.",
-                    "type": "integer"
-                },
-                "storage_used": {
-                    "description": "Storage used (Bytes)",
-                    "type": "integer"
-                },
-                "updated_at": {
-                    "description": "Last updated time",
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.TokenUsage": {
-            "type": "object",
-            "properties": {
-                "cache_miss_tokens": {
-                    "type": "integer"
-                },
-                "cache_read_tokens": {
-                    "type": "integer"
-                },
-                "cache_reported": {
-                    "type": "boolean"
-                },
-                "cache_status": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.PromptCacheStatus"
-                },
-                "cache_write_tokens": {
-                    "type": "integer"
-                },
-                "cached_tokens": {
-                    "description": "CachedTokens is the legacy alias for CacheReadTokens. It remains on the\nwire for compatibility with existing API consumers.",
-                    "type": "integer"
-                },
-                "completion_tokens": {
-                    "type": "integer"
-                },
-                "prompt_tokens": {
-                    "type": "integer"
-                },
-                "total_tokens": {
-                    "type": "integer"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.ToolCall": {
-            "type": "object",
-            "properties": {
-                "args": {
-                    "description": "Tool arguments",
-                    "type": "object",
-                    "additionalProperties": true
-                },
-                "duration": {
-                    "description": "Execution time in milliseconds",
-                    "type": "integer"
-                },
-                "id": {
-                    "description": "Function call ID from LLM",
-                    "type": "string"
-                },
-                "name": {
-                    "description": "Tool name",
-                    "type": "string"
-                },
-                "provider_metadata": {
-                    "description": "Provider-specific tool-call state for replay",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ToolCallMetadata"
-                        }
-                    ]
-                },
-                "reflection": {
-                    "description": "Agent's reflection on this tool call result (if enabled)",
-                    "type": "string"
-                },
-                "result": {
-                    "description": "Execution result (contains Output)",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ToolResult"
-                        }
-                    ]
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.ToolCallMetadata": {
-            "type": "object",
-            "additionalProperties": {
-                "type": "array",
-                "items": {
-                    "type": "integer"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.ToolResult": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "description": "Structured data for programmatic use",
-                    "type": "object",
-                    "additionalProperties": true
-                },
-                "error": {
-                    "description": "Error message if execution failed",
-                    "type": "string"
-                },
-                "images": {
-                    "description": "Base64 data URIs from tool (e.g. MCP image content)",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "output": {
-                    "description": "Human-readable output",
-                    "type": "string"
-                },
-                "success": {
-                    "description": "Whether the tool executed successfully",
-                    "type": "boolean"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.User": {
-            "type": "object",
-            "properties": {
-                "avatar": {
-                    "description": "Avatar URL of the user",
-                    "type": "string"
-                },
-                "created_at": {
-                    "description": "Creation time of the user",
-                    "type": "string"
-                },
-                "deleted_at": {
-                    "description": "Deletion time of the user",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/gorm.DeletedAt"
-                        }
-                    ]
-                },
-                "email": {
-                    "description": "Email address of the user",
-                    "type": "string"
-                },
-                "id": {
-                    "description": "Unique identifier of the user",
-                    "type": "string"
-                },
-                "is_active": {
-                    "description": "Whether the user is active",
-                    "type": "boolean"
-                },
-                "tenant": {
-                    "description": "Association relationship, not stored in the database",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.Tenant"
-                        }
-                    ]
-                },
-                "tenant_id": {
-                    "description": "Workspace ID that the user belongs to",
-                    "type": "integer"
-                },
-                "updated_at": {
-                    "description": "Last updated time of the user",
-                    "type": "string"
-                },
-                "username": {
-                    "description": "Username of the user",
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.UserInfo": {
-            "type": "object",
-            "properties": {
-                "avatar": {
-                    "type": "string"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "email": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "is_active": {
-                    "type": "boolean"
-                },
-                "tenant_id": {
-                    "type": "integer"
-                },
-                "updated_at": {
-                    "type": "string"
-                },
-                "username": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.VLMConfig": {
-            "type": "object",
-            "properties": {
-                "api_key": {
-                    "description": "API Key",
-                    "type": "string"
-                },
-                "base_url": {
-                    "description": "Base URL",
-                    "type": "string"
-                },
-                "custom_instructions": {
-                    "description": "CustomInstructions adds KB-specific image interpretation guidance without\nreplacing the system-owned OCR and Markdown output contract.",
-                    "type": "string"
-                },
-                "description_language": {
-                    "description": "DescriptionLanguage controls the language used for generated image\ncaptions. Empty means follow the document/request language.",
-                    "type": "string"
-                },
-                "enabled": {
-                    "type": "boolean"
-                },
-                "interface_type": {
-                    "description": "Interface Type: \"ollama\" or \"openai\"",
-                    "type": "string"
-                },
-                "model_id": {
-                    "type": "string"
-                },
-                "model_name": {
-                    "description": "兼容老版本\nModel Name",
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_Tencent_Reliquary_internal_types.WeKnoraCloudCredentials": {
-            "type": "object",
-            "properties": {
-                "app_id": {
-                    "type": "string"
-                },
-                "app_secret": {
-                    "type": "string"
-                }
-            }
-        },
         "gorm.DeletedAt": {
             "type": "object",
             "properties": {
@@ -11766,7 +8624,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "config": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.CustomAgentConfig"
+                    "$ref": "#/definitions/reliquary_internal_types.CustomAgentConfig"
                 },
                 "description": {
                     "type": "string"
@@ -11795,13 +8653,13 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "parameters": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ModelParameters"
+                    "$ref": "#/definitions/reliquary_internal_types.ModelParameters"
                 },
                 "source": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ModelSource"
+                    "$ref": "#/definitions/reliquary_internal_types.ModelSource"
                 },
                 "type": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ModelType"
+                    "$ref": "#/definitions/reliquary_internal_types.ModelType"
                 }
             }
         },
@@ -11821,6 +8679,9 @@ const docTemplate = `{
                 },
                 "commit_id": {
                     "type": "string"
+                },
+                "credential_encryption_enabled": {
+                    "type": "boolean"
                 },
                 "db_migration_error": {
                     "description": "DBMigrationError carries the human-readable error message recorded when\nthe most recent startup migration attempt failed. Empty when migrations\nsucceeded; non-empty values let the frontend surface a troubleshooting\nbanner instead of silently hiding the DB version row (see issue #1319).",
@@ -11993,7 +8854,7 @@ const docTemplate = `{
             ],
             "properties": {
                 "asr_config": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ASRConfig"
+                    "$ref": "#/definitions/reliquary_internal_types.ASRConfig"
                 },
                 "documentSplitting": {
                     "description": "文档分块配置",
@@ -12023,7 +8884,7 @@ const docTemplate = `{
                         "parserEngineRules": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ParserEngineRule"
+                                "$ref": "#/definitions/reliquary_internal_types.ParserEngineRule"
                             }
                         },
                         "separators": {
@@ -12052,7 +8913,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "multimodal": {
-                    "description": "多模态配置（仅模型相关；存储引擎在 storageProvider 中配置）",
+                    "description": "多模态模型配置",
                     "type": "object",
                     "properties": {
                         "enabled": {
@@ -12076,7 +8937,7 @@ const docTemplate = `{
                     }
                 },
                 "vlm_config": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.VLMConfig"
+                    "$ref": "#/definitions/reliquary_internal_types.VLMConfig"
                 }
             }
         },
@@ -12291,16 +9152,16 @@ const docTemplate = `{
                     }
                 },
                 "profile": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_infrastructure_chunker.DocProfile"
+                    "$ref": "#/definitions/reliquary_internal_infrastructure_chunker.DocProfile"
                 },
                 "rejected": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_infrastructure_chunker.TierRejection"
+                        "$ref": "#/definitions/reliquary_internal_infrastructure_chunker.TierRejection"
                     }
                 },
                 "selected_tier": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_infrastructure_chunker.StrategyTier"
+                    "$ref": "#/definitions/reliquary_internal_infrastructure_chunker.StrategyTier"
                 },
                 "stats": {
                     "$ref": "#/definitions/internal_handler.PreviewChunkingStats"
@@ -12308,7 +9169,7 @@ const docTemplate = `{
                 "tier_chain": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_infrastructure_chunker.StrategyTier"
+                        "$ref": "#/definitions/reliquary_internal_infrastructure_chunker.StrategyTier"
                     }
                 }
             }
@@ -12417,7 +9278,7 @@ const docTemplate = `{
                 "models": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_models_limiter.RuntimeStat"
+                        "$ref": "#/definitions/reliquary_internal_models_limiter.RuntimeStat"
                     }
                 },
                 "parse_concurrency": {
@@ -12433,7 +9294,7 @@ const docTemplate = `{
                 "queues": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.QueueStat"
+                        "$ref": "#/definitions/reliquary_internal_types.QueueStat"
                     }
                 },
                 "timestamp": {
@@ -12462,13 +9323,12 @@ const docTemplate = `{
                 "tasks": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.RuntimeTaskInfo"
+                        "$ref": "#/definitions/reliquary_internal_types.RuntimeTaskInfo"
                     }
                 }
             }
         },
         "internal_handler.RuntimeWorkerPool": {
-            "description": "Return every row in the system_settings table (system-scope, not workspace-scoped). Authenticated user or API Key.",
             "type": "object",
             "properties": {
                 "active": {
@@ -12551,7 +9411,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "config": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.CustomAgentConfig"
+                    "$ref": "#/definitions/reliquary_internal_types.CustomAgentConfig"
                 },
                 "description": {
                     "type": "string"
@@ -12582,15 +9442,18 @@ const docTemplate = `{
             ],
             "properties": {
                 "config": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.KnowledgeBaseConfig"
+                    "$ref": "#/definitions/reliquary_internal_types.KnowledgeBaseConfig"
                 },
                 "description": {
                     "type": "string"
                 },
-                "name": {
+                "domain_id": {
                     "type": "string"
                 },
-                "domain_id": {
+                "model_tiers": {
+                    "$ref": "#/definitions/reliquary_internal_types.ModelTierConfig"
+                },
+                "name": {
                     "type": "string"
                 }
             }
@@ -12625,13 +9488,13 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "parameters": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ModelParameters"
+                    "$ref": "#/definitions/reliquary_internal_types.ModelParameters"
                 },
                 "source": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ModelSource"
+                    "$ref": "#/definitions/reliquary_internal_types.ModelSource"
                 },
                 "type": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.ModelType"
+                    "$ref": "#/definitions/reliquary_internal_types.ModelType"
                 }
             }
         },
@@ -12640,21 +9503,6 @@ const docTemplate = `{
             "properties": {
                 "value": {
                     "description": "Value is intentionally ` + "`" + `any` + "`" + ` (decoded as float64 / string / bool /\netc. by the JSON unmarshaller). Service.encodeForType normalises\nthese against the registry's declared type and rejects mismatches."
-                }
-            }
-        },
-        "internal_handler.addSimilarQuestionsRequest": {
-            "type": "object",
-            "required": [
-                "similar_questions"
-            ],
-            "properties": {
-                "similar_questions": {
-                    "type": "array",
-                    "minItems": 1,
-                    "items": {
-                        "type": "string"
-                    }
                 }
             }
         },
@@ -12675,7 +9523,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "process_config": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.KnowledgeProcessOverrides"
+                    "$ref": "#/definitions/reliquary_internal_types.KnowledgeProcessOverrides"
                 }
             }
         },
@@ -12687,6 +9535,28 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "internal_handler.tenantAPIKeyCreateRequest": {
+            "type": "object",
+            "properties": {
+                "expires_at_unix": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler.tenantAPIKeyUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "expires_at_unix": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
                 }
             }
         },
@@ -12718,7 +9588,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "agent_id": {
-                    "description": "Selected team agent ID",
+                    "description": "Selected custom agent ID",
                     "type": "string"
                 },
                 "attachment_ids": {
@@ -12783,7 +9653,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "suggestion_attribution": {
-                    "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.SuggestionAttribution"
+                    "$ref": "#/definitions/reliquary_internal_types.SuggestionAttribution"
                 },
                 "summary_model_id": {
                     "description": "Optional summary model ID for this request (overrides session default)",
@@ -12821,7 +9691,7 @@ const docTemplate = `{
                     "description": "Messages to use as context for title generation",
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_Tencent_Reliquary_internal_types.Message"
+                        "$ref": "#/definitions/reliquary_internal_types.Message"
                     }
                 }
             }
@@ -12858,7 +9728,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "kb_type": {
-                    "description": "\"document\" (only for kb type)",
+                    "description": "\"document\" or \"messages-history\" (only for kb type)",
                     "type": "string"
                 },
                 "name": {
@@ -12940,6 +9810,738 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "reliquary_internal_datasource.ConnectorMetadata": {
+            "type": "object",
+            "properties": {
+                "auth_type": {
+                    "description": "\"oauth2\", \"api_key\", \"token\", etc.",
+                    "type": "string"
+                },
+                "capabilities": {
+                    "description": "\"incremental\", \"webhook\", \"deletion_sync\", etc.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "description": {
+                    "type": "string"
+                },
+                "icon": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "priority": {
+                    "description": "Priority order for UI display (lower = higher priority)",
+                    "type": "integer"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_errors.AppError": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "$ref": "#/definitions/reliquary_internal_errors.ErrorCode"
+                },
+                "details": {},
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_errors.ErrorCode": {
+            "type": "integer",
+            "enum": [
+                1000,
+                1001,
+                1002,
+                1003,
+                1004,
+                1005,
+                1006,
+                1007,
+                1008,
+                1009,
+                1010,
+                2000,
+                2001,
+                2002,
+                2003,
+                2004,
+                2005,
+                2100,
+                2101,
+                2102,
+                2103,
+                2300,
+                2301,
+                2302,
+                2303,
+                2400
+            ],
+            "x-enum-varnames": [
+                "ErrBadRequest",
+                "ErrUnauthorized",
+                "ErrForbidden",
+                "ErrNotFound",
+                "ErrMethodNotAllowed",
+                "ErrConflict",
+                "ErrTooManyRequests",
+                "ErrInternalServer",
+                "ErrServiceUnavailable",
+                "ErrTimeout",
+                "ErrValidation",
+                "ErrTenantNotFound",
+                "ErrTenantAlreadyExists",
+                "ErrTenantInactive",
+                "ErrTenantNameRequired",
+                "ErrTenantInvalidStatus",
+                "ErrTenantCreationDisabled",
+                "ErrAgentMissingThinkingModel",
+                "ErrAgentMissingAllowedTools",
+                "ErrAgentInvalidMaxIterations",
+                "ErrAgentInvalidTemperature",
+                "ErrModelInUse",
+                "ErrImageProcessingModelUnsupported",
+                "ErrImageProcessingModelNotFound",
+                "ErrImageProcessingModelUnavailable",
+                "ErrKnowledgeDomainReferenced"
+            ]
+        },
+        "reliquary_internal_infrastructure_chunker.DocProfile": {
+            "type": "object",
+            "properties": {
+                "all_caps_short_line_count": {
+                    "type": "integer"
+                },
+                "avg_line_len": {
+                    "type": "number"
+                },
+                "blank_paragraph_breaks": {
+                    "type": "integer"
+                },
+                "chinese_chapter_count": {
+                    "type": "integer"
+                },
+                "code_ratio": {
+                    "type": "number"
+                },
+                "detected_langs": {
+                    "description": "Detected language hints (best-effort)",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "english_chapter_count": {
+                    "type": "integer"
+                },
+                "form_feed_count": {
+                    "type": "integer"
+                },
+                "german_chapter_count": {
+                    "type": "integer"
+                },
+                "has_code": {
+                    "type": "boolean"
+                },
+                "has_tables": {
+                    "description": "Content characteristics",
+                    "type": "boolean"
+                },
+                "md_heading_counts": {
+                    "description": "Markdown structure",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "md_heading_total": {
+                    "type": "integer"
+                },
+                "numbered_section_count": {
+                    "description": "Heuristic indicators",
+                    "type": "integer"
+                },
+                "repeated_footer_count": {
+                    "type": "integer"
+                },
+                "std_line_len": {
+                    "type": "number"
+                },
+                "total_chars": {
+                    "type": "integer"
+                },
+                "total_lines": {
+                    "type": "integer"
+                },
+                "visual_sep_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "reliquary_internal_infrastructure_chunker.StrategyTier": {
+            "type": "string",
+            "enum": [
+                "heading",
+                "heuristic",
+                "legacy"
+            ],
+            "x-enum-varnames": [
+                "TierHeading",
+                "TierHeuristic",
+                "TierLegacy"
+            ]
+        },
+        "reliquary_internal_infrastructure_chunker.TierRejection": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string"
+                },
+                "tier": {
+                    "$ref": "#/definitions/reliquary_internal_infrastructure_chunker.StrategyTier"
+                }
+            }
+        },
+        "reliquary_internal_models_limiter.RuntimeStat": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "integer"
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "model_id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "waiting": {
+                    "type": "integer"
+                }
+            }
+        },
+        "reliquary_internal_types.ASRConfig": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "language": {
+                    "description": "optional: language hint for transcription",
+                    "type": "string"
+                },
+                "model_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.AgentStep": {
+            "type": "object",
+            "properties": {
+                "iteration": {
+                    "description": "Iteration number (0-indexed)",
+                    "type": "integer"
+                },
+                "reasoning_content": {
+                    "description": "ReasoningContent stores the OpenAI-protocol reasoning_content emitted by the\nmodel in this round. Persisted on AgentStep so cross-turn replay can put it\nback on the assistant message — required by MiMo / DeepSeek V3.2+ thinking\nmode, ignored by providers that don't recognize the field.",
+                    "type": "string"
+                },
+                "thought": {
+                    "description": "LLM's reasoning/thinking (Think phase)",
+                    "type": "string"
+                },
+                "timestamp": {
+                    "description": "When this step occurred",
+                    "type": "string"
+                },
+                "tool_calls": {
+                    "description": "Tools called in this step (Act phase)",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reliquary_internal_types.ToolCall"
+                    }
+                }
+            }
+        },
+        "reliquary_internal_types.AutoTagConfig": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "max_tags": {
+                    "type": "integer"
+                },
+                "model_id": {
+                    "type": "string"
+                },
+                "policy": {
+                    "description": "Policy refines message classification while fixed tag kinds remain enforced by validation.",
+                    "type": "string"
+                },
+                "skip_if_tagged": {
+                    "description": "SkipIfTagged leaves documents that already carry tags untouched, so a\ndeliberate manual classification is not diluted by model guesses. It is\na pointer because the default is true: rows written before this field\nexisted decode to nil and must not silently flip to \"always append\".",
+                    "type": "boolean"
+                }
+            }
+        },
+        "reliquary_internal_types.ChatHistoryConfig": {
+            "type": "object",
+            "properties": {
+                "embedding_model_id": {
+                    "description": "EmbeddingModelID is the ID of the embedding model used for vectorizing chat messages.\nOnce messages have been indexed, the model cannot be changed (requires re-indexing).",
+                    "type": "string"
+                },
+                "enabled": {
+                    "description": "Enabled controls whether chat history indexing is active",
+                    "type": "boolean"
+                },
+                "knowledge_base_id": {
+                    "description": "KnowledgeBaseID is the auto-managed hidden knowledge base for chat history.\nThis is set internally when the feature is first enabled; users should not set this directly.",
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.ChunkingConfig": {
+            "type": "object",
+            "properties": {
+                "child_chunk_size": {
+                    "description": "ChildChunkSize is the size of child chunks used for embedding (default: 384).\nOnly used when EnableParentChild is true.",
+                    "type": "integer"
+                },
+                "chunk_overlap": {
+                    "description": "Chunk overlap",
+                    "type": "integer"
+                },
+                "chunk_size": {
+                    "description": "Chunk size",
+                    "type": "integer"
+                },
+                "enable_parent_child": {
+                    "description": "EnableParentChild enables two-level parent-child chunking strategy.\nWhen enabled, large parent chunks provide context while small child chunks\nare used for vector matching. Retrieval matches on child but returns parent content.",
+                    "type": "boolean"
+                },
+                "languages": {
+                    "description": "Languages hints the heuristic patterns. Empty = auto-detect from content.\nExamples: [\"de\"], [\"en\", \"zh\"].",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "parent_chunk_size": {
+                    "description": "ParentChunkSize is the size of parent chunks (default: 4096).\nOnly used when EnableParentChild is true.",
+                    "type": "integer"
+                },
+                "parser_engine_rules": {
+                    "description": "ParserEngineRules configures which parser engine to use for each file type.\nWhen empty, DefaultParserEngine is used (builtin/simple routing, except\ntypes that only a specific engine can parse: ppt/pptx fall back to\nmarkitdown). A linked anydoc binding is preferred for every type it\nconverts.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reliquary_internal_types.ParserEngineRule"
+                    }
+                },
+                "separators": {
+                    "description": "Separators",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "strategy": {
+                    "description": "Strategy selects the adaptive chunking tier. Empty / \"legacy\" preserves\nthe historical recursive splitter; \"auto\" lets a profiler pick between\nheading-aware, heuristic and recursive tiers; \"heading\" / \"heuristic\" /\n\"recursive\" pin the tier explicitly.",
+                    "type": "string"
+                },
+                "table_metadata_instructions": {
+                    "description": "TableMetadataInstructions contains optional business guidance used when\ngenerating searchable summaries for CSV/Excel tables. The system-owned\noutput contract remains fixed; these instructions only add domain context.",
+                    "type": "string"
+                },
+                "token_limit": {
+                    "description": "TokenLimit caps chunk size in approximate tokens. 0 = use ChunkSize\nas a character count.",
+                    "type": "integer"
+                }
+            }
+        },
+        "reliquary_internal_types.ContextCompressionStrategy": {
+            "type": "string",
+            "enum": [
+                "sliding_window",
+                "smart"
+            ],
+            "x-enum-varnames": [
+                "ContextCompressionSlidingWindow",
+                "ContextCompressionSmart"
+            ]
+        },
+        "reliquary_internal_types.ContextConfig": {
+            "type": "object",
+            "properties": {
+                "compression_strategy": {
+                    "description": "Compression strategy: \"sliding_window\" or \"smart\"",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.ContextCompressionStrategy"
+                        }
+                    ]
+                },
+                "max_tokens": {
+                    "description": "Maximum tokens allowed in LLM context",
+                    "type": "integer"
+                },
+                "recent_message_count": {
+                    "description": "For sliding_window: number of messages to keep\nFor smart: number of recent messages to keep uncompressed",
+                    "type": "integer"
+                },
+                "summarize_threshold": {
+                    "description": "Summarize threshold: number of messages before summarization",
+                    "type": "integer"
+                }
+            }
+        },
+        "reliquary_internal_types.CredentialsConfig": {
+            "type": "object",
+            "properties": {
+                "weknoracloud": {
+                    "$ref": "#/definitions/reliquary_internal_types.WeKnoraCloudCredentials"
+                }
+            }
+        },
+        "reliquary_internal_types.CustomAgentConfig": {
+            "type": "object",
+            "properties": {
+                "agent_mode": {
+                    "description": "===== Basic Settings =====\nAgent mode: \"quick-answer\" for RAG mode, \"smart-reasoning\" for ReAct agent mode",
+                    "type": "string"
+                },
+                "agent_type": {
+                    "description": "AgentType is a preset category under smart-reasoning mode that pre-fills\nsystem prompt, allowed tools and recommended KB compatibility.\nValid values: \"rag-qa\", \"data-analysis\", \"custom\".\nEmpty / unknown values are treated as \"custom\" (no preset applied).\nIgnored for quick-answer mode.",
+                    "type": "string"
+                },
+                "allowed_tools": {
+                    "description": "Allowed tools (only for agent type)",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "asr_model_id": {
+                    "description": "ASR model ID for audio transcription (optional)",
+                    "type": "string"
+                },
+                "attachment_image_understanding": {
+                    "description": "AttachmentImageUnderstanding enables VLM OCR fallback for image-only /\nscanned documents (PDF/PPT whose pages are images). Disabled by default\nbecause it materially increases parse latency; only triggers when the\nextracted text is below a threshold and a VLM model is configured.",
+                    "type": "boolean"
+                },
+                "attachment_ocr_max_pages": {
+                    "description": "AttachmentOCRMaxPages caps how many pages of a scanned / image-only\ndocument this agent sends to the VLM for OCR. 0 falls back to the global\ndefault (RELIQUARY_CHAT_ATTACHMENT_OCR_MAX_PAGES). More pages means higher\ncoverage but slower parsing and more VLM cost.",
+                    "type": "integer"
+                },
+                "attachment_parse_wait_timeout_sec": {
+                    "description": "AttachmentParseWaitTimeoutSec bounds, in seconds, how long a chat turn\nwaits for this agent's still-parsing attachments before proceeding with\nonly the finished ones. 0 falls back to the global default\n(RELIQUARY_CHAT_ATTACHMENT_WAIT_TIMEOUT_SEC).",
+                    "type": "integer"
+                },
+                "audio_upload_enabled": {
+                    "description": "Whether audio upload (ASR transcription) is enabled for this agent (default: false)",
+                    "type": "boolean"
+                },
+                "chat_parser_engine_rules": {
+                    "description": "===== Chat Attachment Parsing Settings =====\nChatParserEngineRules selects parser engines for session-scoped chat\nattachments by file type. Takes precedence over the tenant-level\nParserEngineConfig.ChatParserEngineRules; an explicit per-request\nparser_engine still overrides both.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reliquary_internal_types.ParserEngineRule"
+                    }
+                },
+                "citation_enabled": {
+                    "description": "Whether final answers include knowledge/web source citations. Nil defaults to true\nso agents saved before this option was introduced keep their existing behavior.",
+                    "type": "boolean"
+                },
+                "context_template": {
+                    "description": "Context template for normal mode (how to format retrieved chunks)",
+                    "type": "string"
+                },
+                "context_template_id": {
+                    "description": "ContextTemplateID references a template ID in prompt_templates/ YAML files.\nIf set and ContextTemplate is empty, the template content will be resolved at startup.",
+                    "type": "string"
+                },
+                "data_analysis_enabled": {
+                    "description": "===== Data Analysis Settings =====\nWhether to run the legacy in-pipeline DuckDB SQL data-analysis stage when\nthe retrieved chunks include CSV/Excel files. This issues an extra LLM\ncall to generate a SQL query and is disabled by default because most\nquick-answer / RAG-style agents do not want the added latency.",
+                    "type": "boolean"
+                },
+                "embedding_top_k": {
+                    "description": "===== Retrieval Strategy Settings (for both modes) =====\nEmbedding/Vector retrieval top K",
+                    "type": "integer"
+                },
+                "enable_query_expansion": {
+                    "description": "===== Advanced Settings (mainly for normal mode) =====\nWhether to enable query expansion",
+                    "type": "boolean"
+                },
+                "enable_rewrite": {
+                    "description": "Whether to enable query rewrite for multi-turn conversations",
+                    "type": "boolean"
+                },
+                "fallback_prompt": {
+                    "description": "Fallback prompt (when FallbackStrategy is \"model\")",
+                    "type": "string"
+                },
+                "fallback_response": {
+                    "description": "Fixed fallback response (when FallbackStrategy is \"fixed\")",
+                    "type": "string"
+                },
+                "fallback_strategy": {
+                    "description": "Fallback strategy: \"fixed\" for fixed response, \"model\" for model generation",
+                    "type": "string"
+                },
+                "history_turns": {
+                    "description": "Number of history turns to keep in context",
+                    "type": "integer"
+                },
+                "image_upload_enabled": {
+                    "description": "===== Image Upload / Multimodal Settings =====\nWhether image upload is enabled for this agent (default: false)",
+                    "type": "boolean"
+                },
+                "intent_prompts": {
+                    "description": "IntentPrompts holds per-intent system prompt overrides for non-retrieval\nintents (greeting, chitchat, etc.). Empty values fall back to templates\nunder config/prompt_templates/intent_prompts.yaml.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "kb_selection_mode": {
+                    "description": "===== Knowledge Base Settings =====\nKnowledge base selection mode: \"all\" = all KBs, \"selected\" = specific KBs, \"none\" = no KB",
+                    "type": "string"
+                },
+                "keyword_threshold": {
+                    "description": "Keyword retrieval threshold",
+                    "type": "number"
+                },
+                "knowledge_bases": {
+                    "description": "Associated knowledge base IDs (only used when KBSelectionMode is \"selected\")",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "llm_call_timeout": {
+                    "description": "Timeout for a single LLM call in seconds (0 = use global default)",
+                    "type": "integer"
+                },
+                "max_completion_tokens": {
+                    "description": "Maximum completion tokens. Quick-answer uses this for the RAG answer.\nSmart-reasoning ReAct rounds send this value as-is (zero becomes\nDefaultMaxCompletionTokens at call time: 4096).",
+                    "type": "integer"
+                },
+                "max_iterations": {
+                    "description": "===== Agent Mode Settings =====\nMaximum iterations for the ReAct loop. Zero is unset (filled with a\ndefault). A negative value is unlimited: the loop runs until the model\nstops, the user cancels, or another guard fires.",
+                    "type": "integer"
+                },
+                "mcp_auth_wait_timeout": {
+                    "description": "MCPAuthWaitTimeout is how many seconds to wait for in-conversation OAuth\nauthorization before skipping. \u003c=0 uses the gate's configured timeout.",
+                    "type": "integer"
+                },
+                "mcp_selection_mode": {
+                    "description": "MCP service selection mode: \"all\" = all enabled MCP services, \"selected\" = specific services, \"none\" = no MCP",
+                    "type": "string"
+                },
+                "mcp_services": {
+                    "description": "Selected MCP service IDs (only used when MCPSelectionMode is \"selected\")",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "model_id": {
+                    "description": "===== Model Settings =====\nModel ID to use for conversations",
+                    "type": "string"
+                },
+                "multi_turn_enabled": {
+                    "description": "===== Multi-turn Conversation Settings =====\nWhether multi-turn conversation is enabled",
+                    "type": "boolean"
+                },
+                "query_understand_model_id": {
+                    "description": "Dedicated chat model ID for the query-understanding (rewrite + intent) step.\nWhen empty, the main conversation ModelID is used as a fallback.",
+                    "type": "string"
+                },
+                "question_suggestions": {
+                    "description": "===== Conversation Question Suggestions =====\nQuestionSuggestions owns both the static/knowledge-backed prompts shown\nbefore the first user turn and the contextual follow-up questions shown\nafter a completed assistant answer.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.QuestionSuggestionConfig"
+                        }
+                    ]
+                },
+                "rerank_model_id": {
+                    "description": "ReRank model ID for retrieval",
+                    "type": "string"
+                },
+                "rerank_threshold": {
+                    "description": "Rerank threshold",
+                    "type": "number"
+                },
+                "rerank_top_k": {
+                    "description": "Rerank top K",
+                    "type": "integer"
+                },
+                "retain_retrieval_history": {
+                    "description": "Whether to retain retrieval history across turns",
+                    "type": "boolean"
+                },
+                "retrieve_kb_only_when_mentioned": {
+                    "description": "Whether to retrieve knowledge base only when explicitly mentioned with @ (default: false)\nWhen true, knowledge base retrieval only happens if user explicitly mentions KB/files with @\nWhen false, knowledge base retrieval happens according to KBSelectionMode",
+                    "type": "boolean"
+                },
+                "rewrite_prompt_system": {
+                    "description": "Rewrite prompt system message",
+                    "type": "string"
+                },
+                "rewrite_prompt_user": {
+                    "description": "Rewrite prompt user message template",
+                    "type": "string"
+                },
+                "supported_file_types": {
+                    "description": "===== File Type Restriction Settings =====\nSupported file types for this agent (e.g., [\"csv\", \"xlsx\", \"xls\"])\nEmpty means all file types are supported\nWhen set, only files with matching extensions can be used with this agent",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "system_prompt": {
+                    "description": "System prompt for the agent",
+                    "type": "string"
+                },
+                "system_prompt_id": {
+                    "description": "SystemPromptID references a template ID in prompt_templates/ YAML files.\nIf set and SystemPrompt is empty, the template content will be resolved at startup.",
+                    "type": "string"
+                },
+                "temperature": {
+                    "description": "Temperature for LLM (0-1)",
+                    "type": "number"
+                },
+                "thinking": {
+                    "description": "Whether to enable thinking mode (for models that support extended thinking)",
+                    "type": "boolean"
+                },
+                "vector_threshold": {
+                    "description": "Vector retrieval threshold",
+                    "type": "number"
+                },
+                "vlm_model_id": {
+                    "description": "VLM model ID for image analysis (optional, falls back to workspace-level VLM)",
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.DataSource": {
+            "type": "object",
+            "properties": {
+                "config": {
+                    "description": "Encrypted configuration (API credentials, tokens, etc.)\nStored as JSON with AES-256-GCM encryption",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "conflict_strategy": {
+                    "description": "Conflict resolution strategy: overwrite or skip",
+                    "type": "string"
+                },
+                "created_at": {
+                    "description": "Creation timestamp",
+                    "type": "string"
+                },
+                "deleted_at": {
+                    "description": "Soft delete timestamp",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/gorm.DeletedAt"
+                        }
+                    ]
+                },
+                "error_message": {
+                    "description": "Error message if status is \"error\"",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "Unique identifier",
+                    "type": "string"
+                },
+                "knowledge_base_id": {
+                    "description": "Target knowledge base ID",
+                    "type": "string"
+                },
+                "last_sync_at": {
+                    "description": "Last successful sync timestamp",
+                    "type": "string"
+                },
+                "last_sync_cursor": {
+                    "description": "Cursor or state for incremental sync (connector-specific)",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "last_sync_result": {
+                    "description": "Summary of last sync result",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "latest_sync_log": {
+                    "description": "Latest sync log (not stored in DB, populated on query)",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.SyncLog"
+                        }
+                    ]
+                },
+                "name": {
+                    "description": "User-friendly name",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "Current status: active, paused, error",
+                    "type": "string"
+                },
+                "sync_deletions": {
+                    "description": "Whether to sync deletions from source",
+                    "type": "boolean"
+                },
+                "sync_log_retention_days": {
+                    "description": "Number of days to keep sync logs (default: 30)",
+                    "type": "integer"
+                },
+                "sync_mode": {
+                    "description": "Sync mode: \"incremental\" (recommended) or \"full\"",
+                    "type": "string"
+                },
+                "sync_schedule": {
+                    "description": "Cron expression for scheduled syncs (e.g., \"0 */6 * * *\" = every 6 hours)",
+                    "type": "string"
+                },
+                "tenant_id": {
+                    "description": "Workspace ID for multi-workspace isolation",
+                    "type": "integer"
+                },
+                "total_items_synced": {
+                    "description": "Total items synced (not stored in DB, calculated on query)",
+                    "type": "integer"
+                },
+                "type": {
+                    "description": "Connector type (rss).",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "description": "Last update timestamp",
+                    "type": "string"
                 }
             }
         },
@@ -13046,6 +10648,284 @@ const docTemplate = `{
                 }
             }
         },
+        "reliquary_internal_types.EmbeddingParameters": {
+            "type": "object",
+            "properties": {
+                "dimension": {
+                    "type": "integer"
+                },
+                "supports_dimension_override": {
+                    "type": "boolean"
+                },
+                "truncate_prompt_tokens": {
+                    "type": "integer"
+                }
+            }
+        },
+        "reliquary_internal_types.FollowUpSuggestionConfig": {
+            "type": "object",
+            "properties": {
+                "additional_instruction": {
+                    "type": "string"
+                },
+                "allow_regenerate": {
+                    "type": "boolean"
+                },
+                "categories": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "count": {
+                    "type": "integer"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "knowledge_fallback": {
+                    "type": "boolean"
+                },
+                "max_context_turns": {
+                    "type": "integer"
+                },
+                "mode": {
+                    "type": "string"
+                },
+                "model_id": {
+                    "type": "string"
+                },
+                "suppress_on_fallback": {
+                    "type": "boolean"
+                },
+                "suppress_when_answer_asks_question": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "reliquary_internal_types.ImageProcessingConfig": {
+            "type": "object",
+            "properties": {
+                "model_id": {
+                    "description": "Model ID",
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.IndexingStrategy": {
+            "type": "object",
+            "properties": {
+                "keyword_enabled": {
+                    "description": "KeywordEnabled enables keyword-based (BM25) search",
+                    "type": "boolean"
+                },
+                "vector_enabled": {
+                    "description": "VectorEnabled enables semantic vector embedding and search",
+                    "type": "boolean"
+                }
+            }
+        },
+        "reliquary_internal_types.KBCloneTaskStatus": {
+            "type": "string",
+            "enum": [
+                "pending",
+                "processing",
+                "completed",
+                "failed"
+            ],
+            "x-enum-varnames": [
+                "KBCloneStatusPending",
+                "KBCloneStatusProcessing",
+                "KBCloneStatusCompleted",
+                "KBCloneStatusFailed"
+            ]
+        },
+        "reliquary_internal_types.KnowledgeBase": {
+            "type": "object",
+            "properties": {
+                "asr_config": {
+                    "description": "ASR config (Automatic Speech Recognition)",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.ASRConfig"
+                        }
+                    ]
+                },
+                "auto_tag_config": {
+                    "description": "AutoTagConfig controls asynchronous association of existing tags after parsing.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.AutoTagConfig"
+                        }
+                    ]
+                },
+                "chunk_count": {
+                    "description": "Chunk count (not stored in database, calculated on query)",
+                    "type": "integer"
+                },
+                "chunking_config": {
+                    "description": "Chunking configuration",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.ChunkingConfig"
+                        }
+                    ]
+                },
+                "created_at": {
+                    "description": "Creation time of the knowledge base",
+                    "type": "string"
+                },
+                "creator_id": {
+                    "description": "CreatorID records the user who created this team knowledge base.",
+                    "type": "string"
+                },
+                "creator_name": {
+                    "description": "CreatorName 是 CreatorID 对应用户的展示名（username / email 等），\n仅在列表场景由 handler 批量回填，不落库；为空表示创建者无法解析（用户已删除、\nCreatorID 为空的老数据等）。前端用它在卡片来源徽章上做 mine vs workspace 的二分。",
+                    "type": "string"
+                },
+                "deleted_at": {
+                    "description": "Deletion time of the knowledge base",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/gorm.DeletedAt"
+                        }
+                    ]
+                },
+                "description": {
+                    "description": "Description of the knowledge base",
+                    "type": "string"
+                },
+                "domain_id": {
+                    "description": "DomainID selects the editable template used for this knowledge base.",
+                    "type": "string"
+                },
+                "embedding_model_id": {
+                    "description": "ID of the embedding model",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "Unique identifier of the knowledge base",
+                    "type": "string"
+                },
+                "image_processing_config": {
+                    "description": "Image processing configuration",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.ImageProcessingConfig"
+                        }
+                    ]
+                },
+                "indexing_strategy": {
+                    "description": "IndexingStrategy controls which indexing pipelines are active for this knowledge base.\nPipelines: vector search and keyword search.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.IndexingStrategy"
+                        }
+                    ]
+                },
+                "is_pinned": {
+                    "description": "IsPinned and PinnedAt are computed per-caller from user_kb_pins\n(see the baseline migration). They used to be stored on the row itself,\nwhich made pinning a workspace-wide ordering decision gated behind\nthe kb-edit RBAC guard. The columns are still present in legacy\nschemas for rollback safety but are no longer read or written by\nthe application — both fields are tagged ` + "`" + `gorm:\"-\"` + "`" + ` so GORM\nignores them on every CRUD call and the list handler stamps them\nafter enriching with the caller's pin set.",
+                    "type": "boolean"
+                },
+                "is_processing": {
+                    "type": "boolean"
+                },
+                "is_temporary": {
+                    "description": "Whether this knowledge base is temporary (ephemeral) and should be hidden from UI",
+                    "type": "boolean"
+                },
+                "knowledge_count": {
+                    "description": "Knowledge count (not stored in database, calculated on query)",
+                    "type": "integer"
+                },
+                "model_tiers": {
+                    "$ref": "#/definitions/reliquary_internal_types.ModelTierConfig"
+                },
+                "name": {
+                    "description": "Name of the knowledge base",
+                    "type": "string"
+                },
+                "pinned_at": {
+                    "description": "PinnedAt records when the current caller pinned this knowledge\nbase; nil when they have not.",
+                    "type": "string"
+                },
+                "processing_count": {
+                    "description": "ProcessingCount indicates the number of knowledge items being processed (for document type knowledge bases)",
+                    "type": "integer"
+                },
+                "question_generation_config": {
+                    "description": "Extract config\nQuestionGenerationConfig stores question generation configuration for document knowledge bases",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.QuestionGenerationConfig"
+                        }
+                    ]
+                },
+                "summary_model_id": {
+                    "description": "Summary model ID",
+                    "type": "string"
+                },
+                "tenant_id": {
+                    "description": "Workspace ID",
+                    "type": "integer"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "description": "Last updated time of the knowledge base",
+                    "type": "string"
+                },
+                "vlm_config": {
+                    "description": "VLM config",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.VLMConfig"
+                        }
+                    ]
+                }
+            }
+        },
+        "reliquary_internal_types.KnowledgeBaseConfig": {
+            "type": "object",
+            "properties": {
+                "auto_tag_config": {
+                    "description": "AutoTagConfig controls optional automatic association of existing KB tags.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.AutoTagConfig"
+                        }
+                    ]
+                },
+                "chunking_config": {
+                    "description": "Chunking configuration",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.ChunkingConfig"
+                        }
+                    ]
+                },
+                "image_processing_config": {
+                    "description": "Image processing configuration",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.ImageProcessingConfig"
+                        }
+                    ]
+                },
+                "indexing_strategy": {
+                    "description": "IndexingStrategy controls which indexing pipelines are active.\nnil means \"no change\" when updating (preserves existing strategy).",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.IndexingStrategy"
+                        }
+                    ]
+                },
+                "model_tiers": {
+                    "$ref": "#/definitions/reliquary_internal_types.ModelTierConfig"
+                }
+            }
+        },
         "reliquary_internal_types.KnowledgeContextQuery": {
             "type": "object",
             "properties": {
@@ -13144,6 +11024,9 @@ const docTemplate = `{
                 "is_builtin": {
                     "type": "boolean"
                 },
+                "model_tiers": {
+                    "$ref": "#/definitions/reliquary_internal_types.ModelTierConfig"
+                },
                 "name": {
                     "type": "string"
                 },
@@ -13195,11 +11078,2000 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
+        },
+        "reliquary_internal_types.KnowledgeMoveProgress": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "description": "任务创建时间",
+                    "type": "integer"
+                },
+                "error": {
+                    "description": "错误信息",
+                    "type": "string"
+                },
+                "failed": {
+                    "description": "失败数",
+                    "type": "integer"
+                },
+                "message": {
+                    "description": "状态消息",
+                    "type": "string"
+                },
+                "processed": {
+                    "description": "已处理数",
+                    "type": "integer"
+                },
+                "progress": {
+                    "description": "0-100",
+                    "type": "integer"
+                },
+                "source_kb_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/reliquary_internal_types.KBCloneTaskStatus"
+                },
+                "target_kb_id": {
+                    "type": "string"
+                },
+                "task_id": {
+                    "type": "string"
+                },
+                "total": {
+                    "description": "总知识数",
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "description": "最后更新时间",
+                    "type": "integer"
+                }
+            }
+        },
+        "reliquary_internal_types.KnowledgeProcessOverrides": {
+            "type": "object",
+            "properties": {
+                "asr_config": {
+                    "$ref": "#/definitions/reliquary_internal_types.ASRConfig"
+                },
+                "chunking_config": {
+                    "$ref": "#/definitions/reliquary_internal_types.ChunkingConfig"
+                },
+                "enable_multimodel": {
+                    "type": "boolean"
+                },
+                "parser_engine_overrides": {
+                    "description": "ParserEngineOverrides passes key-value configuration to document parsers\n(e.g. mineru_parse_method=ocr). Merged with workspace-level overrides in the\nparse pipeline; per-upload values take priority on conflict.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "parser_engine_rules": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reliquary_internal_types.ParserEngineRule"
+                    }
+                },
+                "question_generation_config": {
+                    "$ref": "#/definitions/reliquary_internal_types.QuestionGenerationConfig"
+                },
+                "vlm_config": {
+                    "$ref": "#/definitions/reliquary_internal_types.VLMConfig"
+                }
+            }
+        },
+        "reliquary_internal_types.LoginRequest": {
+            "type": "object",
+            "required": [
+                "email",
+                "password"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string",
+                    "minLength": 6
+                }
+            }
+        },
+        "reliquary_internal_types.LoginResponse": {
+            "type": "object",
+            "properties": {
+                "active_tenant": {
+                    "description": "ActiveTenant identifies the personal workspace encoded in the issued JWT.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.Tenant"
+                        }
+                    ]
+                },
+                "message": {
+                    "type": "string"
+                },
+                "refresh_token": {
+                    "type": "string"
+                },
+                "success": {
+                    "type": "boolean"
+                },
+                "token": {
+                    "type": "string"
+                },
+                "user": {
+                    "$ref": "#/definitions/reliquary_internal_types.User"
+                }
+            }
+        },
+        "reliquary_internal_types.MCPAdvancedConfig": {
+            "type": "object",
+            "properties": {
+                "retry_count": {
+                    "description": "Number of retries, default: 3",
+                    "type": "integer"
+                },
+                "retry_delay": {
+                    "description": "Delay between retries in seconds, default: 1",
+                    "type": "integer"
+                },
+                "timeout": {
+                    "description": "Timeout in seconds, default: 30",
+                    "type": "integer"
+                }
+            }
+        },
+        "reliquary_internal_types.MCPAuthConfig": {
+            "type": "object",
+            "properties": {
+                "api_key": {
+                    "type": "string"
+                },
+                "api_key_header": {
+                    "description": "APIKeyHeader is the header name that carries APIKey when AuthType is\napi_key. Empty defaults to \"X-API-Key\". This is non-secret structural\nconfig (the secret is APIKey), so it is not encrypted and is safe to echo\nback in responses. It lets services that expect the key in a different\nheader (e.g. the raw token directly in \"Authorization\") work without\nresorting to plaintext custom headers.",
+                    "type": "string"
+                },
+                "auth_server_metadata_url": {
+                    "description": "AuthServerMetadataURL optionally pins the OAuth authorization server\nmetadata URL. When empty, the server is discovered automatically from\nthe MCP URL (RFC 9728 / RFC 8414).",
+                    "type": "string"
+                },
+                "auth_type": {
+                    "description": "AuthType selects the authentication strategy. Empty (\"\") is treated as\nnone for backward compatibility with rows that pre-date this field.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.MCPAuthType"
+                        }
+                    ]
+                },
+                "custom_headers": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "scopes": {
+                    "description": "Scopes are the OAuth scopes requested during authorization. Optional.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.MCPAuthType": {
+            "type": "string",
+            "enum": [
+                "",
+                "api_key",
+                "bearer",
+                "oauth"
+            ],
+            "x-enum-varnames": [
+                "MCPAuthNone",
+                "MCPAuthAPIKey",
+                "MCPAuthBearer",
+                "MCPAuthOAuth"
+            ]
+        },
+        "reliquary_internal_types.MCPEnvVars": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "string"
+            }
+        },
+        "reliquary_internal_types.MCPHeaders": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "string"
+            }
+        },
+        "reliquary_internal_types.MCPService": {
+            "type": "object",
+            "properties": {
+                "advanced_config": {
+                    "$ref": "#/definitions/reliquary_internal_types.MCPAdvancedConfig"
+                },
+                "auth_config": {
+                    "$ref": "#/definitions/reliquary_internal_types.MCPAuthConfig"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "deleted_at": {
+                    "$ref": "#/definitions/gorm.DeletedAt"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "env_vars": {
+                    "description": "Environment variables for stdio",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.MCPEnvVars"
+                        }
+                    ]
+                },
+                "headers": {
+                    "$ref": "#/definitions/reliquary_internal_types.MCPHeaders"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_builtin": {
+                    "description": "Whether this is a builtin MCP service (visible to all workspaces)",
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "stdio_config": {
+                    "description": "Required for stdio transport",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.MCPStdioConfig"
+                        }
+                    ]
+                },
+                "tenant_id": {
+                    "type": "integer"
+                },
+                "transport_type": {
+                    "$ref": "#/definitions/reliquary_internal_types.MCPTransportType"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "url": {
+                    "description": "Optional: required for SSE/HTTP Streamable",
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.MCPStdioConfig": {
+            "type": "object",
+            "properties": {
+                "args": {
+                    "description": "Command arguments array",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "command": {
+                    "description": "Command: \"uvx\" or \"npx\"",
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.MCPTransportType": {
+            "type": "string",
+            "enum": [
+                "sse",
+                "http-streamable",
+                "stdio"
+            ],
+            "x-enum-comments": {
+                "MCPTransportHTTPStreamable": "HTTP Streamable",
+                "MCPTransportSSE": "Server-Sent Events",
+                "MCPTransportStdio": "Stdio (Standard Input/Output)"
+            },
+            "x-enum-descriptions": [
+                "Server-Sent Events",
+                "HTTP Streamable",
+                "Stdio (Standard Input/Output)"
+            ],
+            "x-enum-varnames": [
+                "MCPTransportSSE",
+                "MCPTransportHTTPStreamable",
+                "MCPTransportStdio"
+            ]
+        },
+        "reliquary_internal_types.ManualKnowledgePayload": {
+            "type": "object",
+            "properties": {
+                "channel": {
+                    "type": "string"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "process_config": {
+                    "$ref": "#/definitions/reliquary_internal_types.KnowledgeProcessOverrides"
+                },
+                "source_info": {
+                    "$ref": "#/definitions/reliquary_internal_types.SourceInfo"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "tag_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.MatchType": {
+            "type": "integer",
+            "enum": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9
+            ],
+            "x-enum-comments": {
+                "MatchTypeDataAnalysis": "数据分析匹配类型",
+                "MatchTypeDirectLoad": "Deprecated: reserved to preserve serialized enum values",
+                "MatchTypeParentChunk": "父Chunk匹配类型",
+                "MatchTypeRelationChunk": "关系Chunk匹配类型",
+                "_": "Reserved to preserve subsequent serialized values"
+            },
+            "x-enum-descriptions": [
+                "",
+                "",
+                "",
+                "",
+                "父Chunk匹配类型",
+                "关系Chunk匹配类型",
+                "",
+                "Reserved to preserve subsequent serialized values",
+                "Deprecated: reserved to preserve serialized enum values",
+                "数据分析匹配类型"
+            ],
+            "x-enum-varnames": [
+                "MatchTypeEmbedding",
+                "MatchTypeKeywords",
+                "MatchTypeNearByChunk",
+                "MatchTypeHistory",
+                "MatchTypeParentChunk",
+                "MatchTypeRelationChunk",
+                "MatchTypeContext",
+                "_",
+                "MatchTypeDirectLoad",
+                "MatchTypeDataAnalysis"
+            ]
+        },
+        "reliquary_internal_types.MentionedItem": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "kb_id": {
+                    "description": "Parent knowledge base for file/tag mentions",
+                    "type": "string"
+                },
+                "kb_name": {
+                    "description": "Display name for parent KB",
+                    "type": "string"
+                },
+                "kb_type": {
+                    "description": "\"document\" or \"messages-history\" (only for kb type)",
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "service_id": {
+                    "description": "Parent MCP service for MCP tool mentions",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "\"kb\", \"file\", \"tag\", \"mcp\"",
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.Message": {
+            "type": "object",
+            "properties": {
+                "agent_duration_ms": {
+                    "description": "Agent total execution duration in milliseconds (from query start to answer start)",
+                    "type": "integer"
+                },
+                "agent_id": {
+                    "description": "AgentID is the agent used for this individual assistant turn. Unlike the\nsession's last_request_state it remains stable when users switch agents.",
+                    "type": "string"
+                },
+                "agent_steps": {
+                    "description": "Agent execution steps (only for assistant messages generated by agent)\nThis contains the detailed reasoning process and tool calls made by the agent\nStored for user history display, but NOT included in LLM context to avoid redundancy",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reliquary_internal_types.AgentStep"
+                    }
+                },
+                "artifacts": {
+                    "description": "Persisted files associated with this assistant message and downloadable\nthrough the artifact endpoint.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reliquary_internal_types.MessageArtifact"
+                    }
+                },
+                "attachments": {
+                    "description": "Attached files (documents, audio, etc., for user messages)",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reliquary_internal_types.MessageAttachment"
+                    }
+                },
+                "channel": {
+                    "description": "Channel indicates the source channel of this message (e.g., \"web\", \"api\")",
+                    "type": "string"
+                },
+                "content": {
+                    "description": "Message text content",
+                    "type": "string"
+                },
+                "created_at": {
+                    "description": "Message creation timestamp",
+                    "type": "string"
+                },
+                "deleted_at": {
+                    "description": "Soft delete timestamp",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/gorm.DeletedAt"
+                        }
+                    ]
+                },
+                "id": {
+                    "description": "Unique identifier for the message",
+                    "type": "string"
+                },
+                "images": {
+                    "description": "Attached images with OCR/Caption text (for user messages)",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reliquary_internal_types.MessageImage"
+                    }
+                },
+                "is_completed": {
+                    "description": "Whether message generation is complete",
+                    "type": "boolean"
+                },
+                "is_fallback": {
+                    "description": "Whether this response is a fallback (no knowledge base match found)",
+                    "type": "boolean"
+                },
+                "knowledge_id": {
+                    "description": "KnowledgeID links this message to a Knowledge entry in the chat history knowledge base\nUsed for vector search indexing: when set, the message content has been indexed as a Knowledge passage",
+                    "type": "string"
+                },
+                "knowledge_references": {
+                    "description": "References to knowledge chunks used in the response",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reliquary_internal_types.SearchResult"
+                    }
+                },
+                "mentioned_items": {
+                    "description": "Mentioned knowledge bases and files (for user messages)\nStores the @mentioned items when user sends a message",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reliquary_internal_types.MentionedItem"
+                    }
+                },
+                "model_id": {
+                    "description": "ModelID is the requested/effective chat model binding captured for this\nturn. It is useful for reproducibility and suggestion generation.",
+                    "type": "string"
+                },
+                "request_id": {
+                    "description": "Request identifier for tracking API requests",
+                    "type": "string"
+                },
+                "role": {
+                    "description": "Message role: \"user\", \"assistant\", \"system\"",
+                    "type": "string"
+                },
+                "session_id": {
+                    "description": "ID of the session this message belongs to",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "description": "Last update timestamp",
+                    "type": "string"
+                },
+                "usage": {
+                    "description": "LLM token usage aggregated across every round of the turn that produced this\nassistant message. Persisted so history reads can attribute cost after the\nlive stream is gone; NULL (nil) for user messages and pre-feature rows.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.TokenUsage"
+                        }
+                    ]
+                }
+            }
+        },
+        "reliquary_internal_types.MessageArtifact": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "description": "When Reliquary persisted the blob",
+                    "type": "string"
+                },
+                "file_name": {
+                    "description": "Original filename",
+                    "type": "string"
+                },
+                "file_size": {
+                    "description": "File size in bytes",
+                    "type": "integer"
+                },
+                "file_type": {
+                    "description": "File extension (e.g., \".pptx\", \".pdf\")",
+                    "type": "string"
+                },
+                "mod_time": {
+                    "description": "Original modification time",
+                    "type": "string"
+                },
+                "source_path": {
+                    "description": "Original source path",
+                    "type": "string"
+                },
+                "url": {
+                    "description": "Storage URL (provider://path); persisted, not sent to client",
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.MessageAttachment": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "description": "Extracted text content (for small text files)",
+                    "type": "string"
+                },
+                "content_mode": {
+                    "description": "full or selected_chunks",
+                    "type": "string"
+                },
+                "file_name": {
+                    "description": "Original filename",
+                    "type": "string"
+                },
+                "file_size": {
+                    "description": "File size in bytes",
+                    "type": "integer"
+                },
+                "file_type": {
+                    "description": "File extension (e.g., \".pdf\", \".docx\")",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "Temporary document ID for session-scoped uploads",
+                    "type": "string"
+                },
+                "is_truncated": {
+                    "description": "Whether content was truncated",
+                    "type": "boolean"
+                },
+                "line_count": {
+                    "description": "Total line count (for text files)",
+                    "type": "integer"
+                },
+                "selected_chunks": {
+                    "description": "Chunks included in this message prompt",
+                    "type": "integer"
+                },
+                "token_count": {
+                    "description": "Approximate tokens in the parsed document",
+                    "type": "integer"
+                },
+                "total_chunks": {
+                    "description": "Total parsed chunks",
+                    "type": "integer"
+                }
+            }
+        },
+        "reliquary_internal_types.MessageImage": {
+            "type": "object",
+            "properties": {
+                "caption": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.ModelParameters": {
+            "type": "object",
+            "properties": {
+                "api_key": {
+                    "type": "string"
+                },
+                "app_secret": {
+                    "description": "AES-256 加密存储，实际承载上游 API Key",
+                    "type": "string"
+                },
+                "base_url": {
+                    "type": "string"
+                },
+                "context_window": {
+                    "description": "ContextWindow is the model's total context window in tokens and\nMaxOutputTokens the most it emits in one response. Both are provider\nfacts the agent cannot discover but has to act on: the context window is\nwhat decides when conversation history gets compacted, and assuming a\nwindow larger than the real one means compaction never fires and the\nprovider rejects the request mid-conversation instead. 0 means unknown,\nwhich falls back to DefaultMaxContextTokens.",
+                    "type": "integer"
+                },
+                "custom_headers": {
+                    "description": "CustomHeaders 允许在调用远程模型 API 时附加自定义 HTTP 请求头，\n用途类似 Python OpenAI SDK 的 extra_headers 参数，\n常见场景包括透传企业网关鉴权信息、追踪 ID、路由标识等。\n保留字段（Authorization、api-key、Content-Type、Accept 等）会在运行期被忽略以避免破坏签名/鉴权流程。",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "embedding_parameters": {
+                    "$ref": "#/definitions/reliquary_internal_types.EmbeddingParameters"
+                },
+                "extra_config": {
+                    "description": "Provider-specific configuration",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "interface_type": {
+                    "type": "string"
+                },
+                "max_concurrency": {
+                    "description": "MaxConcurrency caps concurrent in-flight BACKGROUND (ingestion /\nenrichment) calls to THIS specific model, keyed by model ID and shared\nwithin this process. 0 (the default) means \"fall back to the\nprocess-wide model.max_concurrency\". Interactive user-facing calls are\nnever gated. Only chat / vlm / embedding honour this (see limiter.Gate).",
+                    "type": "integer"
+                },
+                "max_output_tokens": {
+                    "type": "integer"
+                },
+                "parameter_size": {
+                    "description": "Ollama model parameter size (e.g., \"7B\", \"13B\", \"70B\")",
+                    "type": "string"
+                },
+                "provider": {
+                    "description": "Provider identifier: openai, aliyun, zhipu, generic",
+                    "type": "string"
+                },
+                "requests_per_minute": {
+                    "type": "integer"
+                },
+                "supports_vision": {
+                    "description": "Whether the model accepts image/multimodal input",
+                    "type": "boolean"
+                }
+            }
+        },
+        "reliquary_internal_types.ModelSource": {
+            "type": "string",
+            "enum": [
+                "local",
+                "remote",
+                "aliyun",
+                "zhipu",
+                "volcengine",
+                "deepseek",
+                "hunyuan",
+                "minimax",
+                "openai",
+                "gemini",
+                "mimo",
+                "siliconflow",
+                "jina",
+                "openrouter",
+                "litellm",
+                "requesty",
+                "nvidia",
+                "novita",
+                "azure_openai"
+            ],
+            "x-enum-comments": {
+                "ModelSourceAliyun": "Aliyun DashScope model",
+                "ModelSourceAzureOpenAI": "Azure OpenAI model",
+                "ModelSourceDeepseek": "Deepseek model",
+                "ModelSourceGemini": "Gemini model",
+                "ModelSourceHunyuan": "Hunyuan model",
+                "ModelSourceJina": "Jina AI model",
+                "ModelSourceLiteLLM": "LiteLLM proxy model",
+                "ModelSourceLocal": "Local model",
+                "ModelSourceMimo": "Mimo model",
+                "ModelSourceMinimax": "Minimax mode",
+                "ModelSourceNovita": "Novita AI model",
+                "ModelSourceNvidia": "NVIDIA model",
+                "ModelSourceOpenAI": "OpenAI model",
+                "ModelSourceOpenRouter": "OpenRouter model",
+                "ModelSourceRemote": "Remote model",
+                "ModelSourceRequesty": "Requesty model",
+                "ModelSourceSiliconFlow": "SiliconFlow model",
+                "ModelSourceVolcengine": "Volcengine model",
+                "ModelSourceZhipu": "Zhipu model"
+            },
+            "x-enum-descriptions": [
+                "Local model",
+                "Remote model",
+                "Aliyun DashScope model",
+                "Zhipu model",
+                "Volcengine model",
+                "Deepseek model",
+                "Hunyuan model",
+                "Minimax mode",
+                "OpenAI model",
+                "Gemini model",
+                "Mimo model",
+                "SiliconFlow model",
+                "Jina AI model",
+                "OpenRouter model",
+                "LiteLLM proxy model",
+                "Requesty model",
+                "NVIDIA model",
+                "Novita AI model",
+                "Azure OpenAI model"
+            ],
+            "x-enum-varnames": [
+                "ModelSourceLocal",
+                "ModelSourceRemote",
+                "ModelSourceAliyun",
+                "ModelSourceZhipu",
+                "ModelSourceVolcengine",
+                "ModelSourceDeepseek",
+                "ModelSourceHunyuan",
+                "ModelSourceMinimax",
+                "ModelSourceOpenAI",
+                "ModelSourceGemini",
+                "ModelSourceMimo",
+                "ModelSourceSiliconFlow",
+                "ModelSourceJina",
+                "ModelSourceOpenRouter",
+                "ModelSourceLiteLLM",
+                "ModelSourceRequesty",
+                "ModelSourceNvidia",
+                "ModelSourceNovita",
+                "ModelSourceAzureOpenAI"
+            ]
+        },
+        "reliquary_internal_types.ModelTierConfig": {
+            "type": "object",
+            "properties": {
+                "embedding": {
+                    "type": "string"
+                },
+                "extraction": {
+                    "type": "string"
+                },
+                "generation": {
+                    "type": "string"
+                },
+                "light": {
+                    "type": "string"
+                },
+                "rerank": {
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.ModelType": {
+            "type": "string",
+            "enum": [
+                "Embedding",
+                "Rerank",
+                "KnowledgeQA",
+                "VLLM",
+                "ASR"
+            ],
+            "x-enum-comments": {
+                "ModelTypeASR": "ASR (Automatic Speech Recognition) model",
+                "ModelTypeEmbedding": "Embedding model",
+                "ModelTypeKnowledgeQA": "KnowledgeQA model",
+                "ModelTypeRerank": "Rerank model",
+                "ModelTypeVLLM": "VLLM model"
+            },
+            "x-enum-descriptions": [
+                "Embedding model",
+                "Rerank model",
+                "KnowledgeQA model",
+                "VLLM model",
+                "ASR (Automatic Speech Recognition) model"
+            ],
+            "x-enum-varnames": [
+                "ModelTypeEmbedding",
+                "ModelTypeRerank",
+                "ModelTypeKnowledgeQA",
+                "ModelTypeVLLM",
+                "ModelTypeASR"
+            ]
+        },
+        "reliquary_internal_types.ParserEngineConfig": {
+            "type": "object",
+            "properties": {
+                "chat_parser_engine_rules": {
+                    "description": "ChatParserEngineRules selects parser engines for session-scoped chat\ndocuments. Knowledge bases keep their own rules in ChunkingConfig.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reliquary_internal_types.ParserEngineRule"
+                    }
+                },
+                "mineru_api_key": {
+                    "description": "MinerU 云 API Key",
+                    "type": "string"
+                },
+                "mineru_cloud_enable_formula": {
+                    "type": "boolean"
+                },
+                "mineru_cloud_enable_ocr": {
+                    "type": "boolean"
+                },
+                "mineru_cloud_enable_table": {
+                    "type": "boolean"
+                },
+                "mineru_cloud_language": {
+                    "type": "string"
+                },
+                "mineru_cloud_model": {
+                    "description": "MinerU 云 API 解析参数",
+                    "type": "string"
+                },
+                "mineru_enable_formula": {
+                    "type": "boolean"
+                },
+                "mineru_enable_ocr": {
+                    "description": "MinerUEnableOCR is retained for compatibility with configurations saved\nbefore parse_method supported auto/ocr/txt.",
+                    "type": "boolean"
+                },
+                "mineru_enable_table": {
+                    "type": "boolean"
+                },
+                "mineru_endpoint": {
+                    "description": "MinerU 自建服务端点",
+                    "type": "string"
+                },
+                "mineru_language": {
+                    "type": "string"
+                },
+                "mineru_model": {
+                    "description": "MinerU 自建解析参数",
+                    "type": "string"
+                },
+                "mineru_parse_method": {
+                    "type": "string"
+                },
+                "mineru_vlm_server_url": {
+                    "description": "vLLM 服务器地址 (vlm-http-client / hybrid-http-client)",
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.ParserEngineRule": {
+            "type": "object",
+            "properties": {
+                "engine": {
+                    "type": "string"
+                },
+                "file_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "reliquary_internal_types.PromptCacheStatus": {
+            "type": "string",
+            "enum": [
+                "unsupported",
+                "unreported",
+                "miss",
+                "hit"
+            ],
+            "x-enum-varnames": [
+                "PromptCacheStatusUnsupported",
+                "PromptCacheStatusUnreported",
+                "PromptCacheStatusMiss",
+                "PromptCacheStatusHit"
+            ]
+        },
+        "reliquary_internal_types.QuestionGenerationConfig": {
+            "type": "object",
+            "properties": {
+                "custom_instructions": {
+                    "description": "CustomInstructions describes the intended audience or question style.\nIt is appended to the stable system question-generation template.",
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "question_count": {
+                    "description": "Number of questions to generate per chunk (default: 3, max: 10)",
+                    "type": "integer"
+                }
+            }
+        },
+        "reliquary_internal_types.QuestionSuggestionConfig": {
+            "type": "object",
+            "properties": {
+                "follow_ups": {
+                    "$ref": "#/definitions/reliquary_internal_types.FollowUpSuggestionConfig"
+                },
+                "starters": {
+                    "$ref": "#/definitions/reliquary_internal_types.StarterSuggestionConfig"
+                }
+            }
+        },
+        "reliquary_internal_types.QueueStat": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "integer"
+                },
+                "archived": {
+                    "type": "integer"
+                },
+                "completed": {
+                    "type": "integer"
+                },
+                "failed": {
+                    "type": "integer"
+                },
+                "latency_ms": {
+                    "description": "LatencyMs is the age of the oldest pending task, in milliseconds.",
+                    "type": "integer"
+                },
+                "memory_usage_bytes": {
+                    "description": "MemoryUsageBytes is the approximate Redis memory the queue occupies.",
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "paused": {
+                    "description": "Paused reports whether the queue is paused (tasks not consumed).",
+                    "type": "boolean"
+                },
+                "pending": {
+                    "type": "integer"
+                },
+                "pool": {
+                    "description": "Pool is the independent worker pool that drains this queue.",
+                    "type": "string"
+                },
+                "processed": {
+                    "description": "Processed / Failed are today's counters (reset daily).",
+                    "type": "integer"
+                },
+                "retry": {
+                    "type": "integer"
+                },
+                "scheduled": {
+                    "type": "integer"
+                },
+                "size": {
+                    "description": "Size is the total number of tasks in the queue (pending + active +\nscheduled + retry + aggregating + archived).",
+                    "type": "integer"
+                },
+                "weight": {
+                    "description": "Weight is the queue's scheduling weight inside its pool.",
+                    "type": "integer"
+                }
+            }
+        },
+        "reliquary_internal_types.RegisterRequest": {
+            "type": "object",
+            "required": [
+                "email",
+                "password",
+                "username"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string",
+                    "minLength": 6
+                },
+                "username": {
+                    "type": "string",
+                    "maxLength": 50,
+                    "minLength": 2
+                }
+            }
+        },
+        "reliquary_internal_types.RegisterResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "success": {
+                    "type": "boolean"
+                },
+                "tenant": {
+                    "$ref": "#/definitions/reliquary_internal_types.Tenant"
+                },
+                "user": {
+                    "$ref": "#/definitions/reliquary_internal_types.User"
+                }
+            }
+        },
+        "reliquary_internal_types.Resource": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "description": "Optional description",
+                    "type": "string"
+                },
+                "external_id": {
+                    "description": "Unique identifier in the external system",
+                    "type": "string"
+                },
+                "has_children": {
+                    "description": "Whether this resource has children that can be expanded",
+                    "type": "boolean"
+                },
+                "metadata": {
+                    "description": "Additional metadata",
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "modified_at": {
+                    "description": "Last modified time in external system",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Display name",
+                    "type": "string"
+                },
+                "parent_id": {
+                    "description": "For hierarchical resources (parent ID if applicable)",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "Resource type (document, folder, space, page, etc.)",
+                    "type": "string"
+                },
+                "url": {
+                    "description": "URL to access in external system",
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.RetrievalConfig": {
+            "type": "object",
+            "properties": {
+                "embedding_top_k": {
+                    "description": "EmbeddingTopK is the maximum number of chunks returned by vector search (default: 50)",
+                    "type": "integer"
+                },
+                "keyword_threshold": {
+                    "description": "KeywordThreshold is the minimum keyword match score (0-1, default: 0.3)",
+                    "type": "number"
+                },
+                "rerank_model_id": {
+                    "description": "RerankModelID is the ID of the rerank model to use (required for search)",
+                    "type": "string"
+                },
+                "rerank_threshold": {
+                    "description": "RerankThreshold is the minimum rerank score (-10 to 10, default: 0.2)",
+                    "type": "number"
+                },
+                "rerank_top_k": {
+                    "description": "RerankTopK is the maximum number of results after reranking (default: 10)",
+                    "type": "integer"
+                },
+                "rrf_k": {
+                    "description": "RRFK is the smoothing constant of Reciprocal Rank Fusion. Larger values\nflatten the curve, reducing the bias towards top-1 results.\nDefault: 60. Sensible range: 30..100 depending on corpus size.",
+                    "type": "integer"
+                },
+                "rrf_keyword_weight": {
+                    "description": "RRFKeywordWeight is the keyword counterpart. Default: 0.3.",
+                    "type": "number"
+                },
+                "rrf_vector_weight": {
+                    "description": "RRFVectorWeight is the weight applied to the vector retriever inside RRF.\nRRFVectorWeight + RRFKeywordWeight should usually sum to 1.0 but the math\nworks for any positive weights. Default: 0.7.",
+                    "type": "number"
+                },
+                "vector_threshold": {
+                    "description": "VectorThreshold is the minimum vector similarity score (0-1, default: 0.15)",
+                    "type": "number"
+                }
+            }
+        },
+        "reliquary_internal_types.RuntimeTaskAction": {
+            "type": "string",
+            "enum": [
+                "cancel",
+                "run_now",
+                "delete"
+            ],
+            "x-enum-varnames": [
+                "RuntimeTaskActionCancel",
+                "RuntimeTaskActionRunNow",
+                "RuntimeTaskActionDelete"
+            ]
+        },
+        "reliquary_internal_types.RuntimeTaskInfo": {
+            "type": "object",
+            "properties": {
+                "allowed_actions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reliquary_internal_types.RuntimeTaskAction"
+                    }
+                },
+                "completed_at": {
+                    "type": "string"
+                },
+                "data_source_id": {
+                    "type": "string"
+                },
+                "deadline": {
+                    "type": "string"
+                },
+                "enqueued_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_orphaned": {
+                    "type": "boolean"
+                },
+                "knowledge_base_id": {
+                    "type": "string"
+                },
+                "knowledge_count": {
+                    "type": "integer"
+                },
+                "knowledge_id": {
+                    "type": "string"
+                },
+                "last_error": {
+                    "type": "string"
+                },
+                "last_failed_at": {
+                    "type": "string"
+                },
+                "max_retry": {
+                    "type": "integer"
+                },
+                "next_process_at": {
+                    "type": "string"
+                },
+                "queue": {
+                    "type": "string"
+                },
+                "retried": {
+                    "type": "integer"
+                },
+                "source_id": {
+                    "type": "string"
+                },
+                "source_kb_id": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "state": {
+                    "$ref": "#/definitions/reliquary_internal_types.RuntimeTaskState"
+                },
+                "sync_log_id": {
+                    "type": "string"
+                },
+                "target_id": {
+                    "type": "string"
+                },
+                "target_kb_id": {
+                    "type": "string"
+                },
+                "task_id": {
+                    "type": "string"
+                },
+                "tenant_id": {
+                    "type": "integer"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "worker": {
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.RuntimeTaskState": {
+            "type": "string",
+            "enum": [
+                "pending",
+                "active",
+                "scheduled",
+                "retry",
+                "archived",
+                "completed"
+            ],
+            "x-enum-varnames": [
+                "RuntimeTaskPending",
+                "RuntimeTaskActive",
+                "RuntimeTaskScheduled",
+                "RuntimeTaskRetry",
+                "RuntimeTaskArchived",
+                "RuntimeTaskCompleted"
+            ]
+        },
+        "reliquary_internal_types.SearchParams": {
+            "type": "object",
+            "properties": {
+                "disable_keywords_match": {
+                    "type": "boolean"
+                },
+                "disable_vector_match": {
+                    "type": "boolean"
+                },
+                "keyword_threshold": {
+                    "type": "number"
+                },
+                "knowledge_base_ids": {
+                    "description": "KnowledgeBaseIDs overrides the single KB ID passed to HybridSearch,\nallowing a single retrieval call to span multiple KBs that share the\nsame embedding model. When empty, HybridSearch uses its own id parameter.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "knowledge_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "match_count": {
+                    "type": "integer"
+                },
+                "only_recommended": {
+                    "type": "boolean"
+                },
+                "query_embedding": {
+                    "type": "array",
+                    "items": {
+                        "type": "number"
+                    }
+                },
+                "query_text": {
+                    "description": "QueryText is required unless query_embedding is provided, keyword matching is disabled,\nand vector matching remains enabled.",
+                    "type": "string"
+                },
+                "scope_tag_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "skip_context_enrichment": {
+                    "description": "SkipContextEnrichment skips fetching parent, nearby, and relation chunks\nin processSearchResults. Used by the chat pipeline where context assembly\nis handled separately in the merge stage.",
+                    "type": "boolean"
+                },
+                "tag_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "vector_threshold": {
+                    "type": "number"
+                }
+            }
+        },
+        "reliquary_internal_types.SearchResult": {
+            "type": "object",
+            "properties": {
+                "chunk_index": {
+                    "description": "Chunk index",
+                    "type": "integer"
+                },
+                "chunk_metadata": {
+                    "description": "ChunkMetadata stores chunk-level metadata (e.g., generated questions)",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "chunk_type": {
+                    "description": "Chunk 类型",
+                    "type": "string"
+                },
+                "content": {
+                    "description": "Content",
+                    "type": "string"
+                },
+                "end_at": {
+                    "description": "End at",
+                    "type": "integer"
+                },
+                "id": {
+                    "description": "ID",
+                    "type": "string"
+                },
+                "image_info": {
+                    "description": "图片信息 (JSON 格式)",
+                    "type": "string"
+                },
+                "knowledge_base_id": {
+                    "description": "KnowledgeBaseID is the ID of the knowledge base this result belongs to",
+                    "type": "string"
+                },
+                "knowledge_channel": {
+                    "description": "KnowledgeChannel indicates through which channel the knowledge was ingested (web, api, rss)",
+                    "type": "string"
+                },
+                "knowledge_custom_metadata": {
+                    "description": "KnowledgeCustomMetadata is user-authored context safe to expose to models.",
+                    "type": "string"
+                },
+                "knowledge_description": {
+                    "description": "KnowledgeDescription is the description of the knowledge document",
+                    "type": "string"
+                },
+                "knowledge_filename": {
+                    "description": "Knowledge file name\nUsed for file type knowledge, contains the original file name",
+                    "type": "string"
+                },
+                "knowledge_id": {
+                    "description": "Knowledge ID",
+                    "type": "string"
+                },
+                "knowledge_source": {
+                    "description": "Knowledge source\nUsed to indicate the source of the knowledge, such as \"url\"",
+                    "type": "string"
+                },
+                "knowledge_title": {
+                    "description": "Knowledge title",
+                    "type": "string"
+                },
+                "match_type": {
+                    "description": "Match type",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.MatchType"
+                        }
+                    ]
+                },
+                "matched_content": {
+                    "description": "MatchedContent is the actual content that was matched in vector search",
+                    "type": "string"
+                },
+                "metadata": {
+                    "description": "Metadata",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "parent_chunk_id": {
+                    "description": "父 Chunk ID",
+                    "type": "string"
+                },
+                "score": {
+                    "description": "Score",
+                    "type": "number"
+                },
+                "seq": {
+                    "description": "Seq",
+                    "type": "integer"
+                },
+                "start_at": {
+                    "description": "Start at",
+                    "type": "integer"
+                },
+                "sub_chunk_id": {
+                    "description": "SubChunkIndex",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "reliquary_internal_types.Session": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "deleted_at": {
+                    "$ref": "#/definitions/gorm.DeletedAt"
+                },
+                "description": {
+                    "description": "Description",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "ID",
+                    "type": "string"
+                },
+                "is_pinned": {
+                    "description": "IsPinned indicates whether the session is pinned in the list.",
+                    "type": "boolean"
+                },
+                "last_request_state": {
+                    "description": "LastRequestState records the input-bar state used the last time this\nsession sent a question (agent, model, KB scope, web search, MCPs).\nPersisted on every successful POST to /knowledge-chat or /agent-chat so\nthat reopening the session can restore the original request context to\nthe chat UI. Stored in the legacy sessions.agent_config JSONB column to\navoid a new migration; the shape used today is ` + "`" + `SessionLastRequestState` + "`" + `.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.SessionLastRequestState"
+                        }
+                    ]
+                },
+                "pinned_at": {
+                    "description": "PinnedAt records when the session was pinned; nil when not pinned.",
+                    "type": "string"
+                },
+                "tenant_id": {
+                    "description": "Workspace ID",
+                    "type": "integer"
+                },
+                "title": {
+                    "description": "Title",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "description": "UserID is the owner scope for this session. Reliquary user UUIDs, API\nexternal-user principals, and embed visitor principals all use this column.",
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.SessionLastRequestState": {
+            "type": "object",
+            "properties": {
+                "agent_enabled": {
+                    "type": "boolean"
+                },
+                "agent_id": {
+                    "type": "string"
+                },
+                "knowledge_base_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "knowledge_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "mcp_service_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "mentioned_items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reliquary_internal_types.MentionedItem"
+                    }
+                },
+                "model_id": {
+                    "type": "string"
+                },
+                "tag_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "reliquary_internal_types.SourceInfo": {
+            "type": "object",
+            "properties": {
+                "author": {
+                    "type": "string"
+                },
+                "original_url": {
+                    "type": "string"
+                },
+                "published_at": {
+                    "type": "string"
+                },
+                "publisher": {
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.StarterSuggestionConfig": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "mode": {
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.SuggestionAttribution": {
+            "type": "object",
+            "properties": {
+                "question_id": {
+                    "type": "string"
+                },
+                "suggestion_set_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.SyncLog": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "description": "Creation timestamp (usually same as StartedAt)",
+                    "type": "string"
+                },
+                "data_source_id": {
+                    "description": "Reference to the data source",
+                    "type": "string"
+                },
+                "error_message": {
+                    "description": "Error details if status is \"failed\"",
+                    "type": "string"
+                },
+                "finished_at": {
+                    "description": "Sync completion time",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "Unique identifier",
+                    "type": "string"
+                },
+                "items_created": {
+                    "description": "New items created in knowledge base",
+                    "type": "integer"
+                },
+                "items_deleted": {
+                    "description": "Items deleted from knowledge base",
+                    "type": "integer"
+                },
+                "items_failed": {
+                    "description": "Items that failed to sync",
+                    "type": "integer"
+                },
+                "items_skipped": {
+                    "description": "Items skipped (no changes detected)",
+                    "type": "integer"
+                },
+                "items_total": {
+                    "description": "Total items fetched from source",
+                    "type": "integer"
+                },
+                "items_updated": {
+                    "description": "Existing items updated",
+                    "type": "integer"
+                },
+                "result": {
+                    "description": "Detailed sync result (JSON-encoded)",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "started_at": {
+                    "description": "Sync start time",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "Sync status: running, success, partial, failed, canceled",
+                    "type": "string"
+                },
+                "tenant_id": {
+                    "description": "Workspace ID",
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "description": "Last update timestamp",
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.SystemSetting": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "description": "Category groups settings in the management UI (\"limits\", \"agent\",\n\"auth\", ...). Free-form string so adding a new category is a\ndata-only change.",
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "enum": {
+                    "description": "Enum is populated by the service layer (NOT persisted) from the\nin-code registry. Empty/nil means \"free-form input\"; non-empty\nmeans the UI should render a select with these options. Tagged\n` + "`" + `gorm:\"-\"` + "`" + ` so GORM never tries to read/write the column.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_secret": {
+                    "description": "IsSecret reserves UI affordances for P3 (mask + reveal-with-confirm).\nIn P1 every row is is_secret=false; service Update accepts the\ncolumn but does not yet enforce special handling.",
+                    "type": "boolean"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "last_modified_by": {
+                    "type": "string"
+                },
+                "last_modified_by_name": {
+                    "description": "LastModifiedByName is a display label resolved from LastModifiedBy\n(the user's UUID) at handler time — username when available,\notherwise email. Empty for virtual rows that were never persisted\n(LastModifiedBy=\"\"). Not stored: derived per request so renaming\na user reflects on the next reload without a backfill job.",
+                    "type": "string"
+                },
+                "requires_restart": {
+                    "description": "RequiresRestart reserves UI affordances for P3 (banner \"this\nchange won't take effect until the next restart\"). In P1 the\nonly seeded key is per-request, so always false.",
+                    "type": "boolean"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "value_type": {
+                    "description": "ValueType is one of \"int\", \"string\", \"bool\". Service layer rejects\nupdates whose payload type does not match; UI uses it to pick\nInputNumber vs Input vs Switch.",
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.Tenant": {
+            "type": "object",
+            "properties": {
+                "business": {
+                    "description": "Business",
+                    "type": "string"
+                },
+                "chat_history_config": {
+                    "description": "Chat history config: knowledge base configuration for indexing and searching chat messages via vector search",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.ChatHistoryConfig"
+                        }
+                    ]
+                },
+                "context_config": {
+                    "description": "Global Context configuration for this workspace (default for all sessions)",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.ContextConfig"
+                        }
+                    ]
+                },
+                "created_at": {
+                    "description": "Creation time",
+                    "type": "string"
+                },
+                "credentials": {
+                    "description": "Credentials retains encrypted metadata from existing deployments.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.CredentialsConfig"
+                        }
+                    ]
+                },
+                "deleted_at": {
+                    "description": "Deletion time",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/gorm.DeletedAt"
+                        }
+                    ]
+                },
+                "description": {
+                    "description": "Description",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "ID",
+                    "type": "integer"
+                },
+                "model_tiers": {
+                    "$ref": "#/definitions/reliquary_internal_types.ModelTierConfig"
+                },
+                "name": {
+                    "description": "Name",
+                    "type": "string"
+                },
+                "parser_engine_config": {
+                    "description": "Parser engine config overrides (MinerU endpoint, API key, etc.). Used when parsing documents; overrides env.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.ParserEngineConfig"
+                        }
+                    ]
+                },
+                "retrieval_config": {
+                    "description": "Retrieval config: global search/retrieval parameters shared by knowledge search and message search",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.RetrievalConfig"
+                        }
+                    ]
+                },
+                "status": {
+                    "description": "Status",
+                    "type": "string"
+                },
+                "storage_used": {
+                    "description": "Storage used (Bytes)",
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "description": "Last updated time",
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.TokenUsage": {
+            "type": "object",
+            "properties": {
+                "cache_miss_tokens": {
+                    "type": "integer"
+                },
+                "cache_read_tokens": {
+                    "type": "integer"
+                },
+                "cache_reported": {
+                    "type": "boolean"
+                },
+                "cache_status": {
+                    "$ref": "#/definitions/reliquary_internal_types.PromptCacheStatus"
+                },
+                "cache_write_tokens": {
+                    "type": "integer"
+                },
+                "cached_tokens": {
+                    "description": "CachedTokens is the legacy alias for CacheReadTokens. It remains on the\nwire for compatibility with existing API consumers.",
+                    "type": "integer"
+                },
+                "completion_tokens": {
+                    "type": "integer"
+                },
+                "prompt_tokens": {
+                    "type": "integer"
+                },
+                "total_tokens": {
+                    "type": "integer"
+                }
+            }
+        },
+        "reliquary_internal_types.ToolCall": {
+            "type": "object",
+            "properties": {
+                "args": {
+                    "description": "Tool arguments",
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "duration": {
+                    "description": "Execution time in milliseconds",
+                    "type": "integer"
+                },
+                "id": {
+                    "description": "Function call ID from LLM",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Tool name",
+                    "type": "string"
+                },
+                "provider_metadata": {
+                    "description": "Provider-specific tool-call state for replay",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.ToolCallMetadata"
+                        }
+                    ]
+                },
+                "reflection": {
+                    "description": "Agent's reflection on this tool call result (if enabled)",
+                    "type": "string"
+                },
+                "result": {
+                    "description": "Execution result (contains Output)",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.ToolResult"
+                        }
+                    ]
+                }
+            }
+        },
+        "reliquary_internal_types.ToolCallMetadata": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "array",
+                "items": {
+                    "type": "integer"
+                }
+            }
+        },
+        "reliquary_internal_types.ToolResult": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "description": "Structured data for programmatic use",
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "error": {
+                    "description": "Error message if execution failed",
+                    "type": "string"
+                },
+                "images": {
+                    "description": "Base64 data URIs from tool (e.g. MCP image content)",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "output": {
+                    "description": "Human-readable output",
+                    "type": "string"
+                },
+                "success": {
+                    "description": "Whether the tool executed successfully",
+                    "type": "boolean"
+                }
+            }
+        },
+        "reliquary_internal_types.User": {
+            "type": "object",
+            "properties": {
+                "avatar": {
+                    "description": "Avatar URL of the user",
+                    "type": "string"
+                },
+                "created_at": {
+                    "description": "Creation time of the user",
+                    "type": "string"
+                },
+                "deleted_at": {
+                    "description": "Deletion time of the user",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/gorm.DeletedAt"
+                        }
+                    ]
+                },
+                "email": {
+                    "description": "Email address of the user",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "Unique identifier of the user",
+                    "type": "string"
+                },
+                "is_active": {
+                    "description": "Whether the user is active",
+                    "type": "boolean"
+                },
+                "tenant": {
+                    "description": "Association relationship, not stored in the database",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/reliquary_internal_types.Tenant"
+                        }
+                    ]
+                },
+                "tenant_id": {
+                    "description": "Workspace ID that the user belongs to",
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "description": "Last updated time of the user",
+                    "type": "string"
+                },
+                "username": {
+                    "description": "Username of the user",
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.VLMConfig": {
+            "type": "object",
+            "properties": {
+                "api_key": {
+                    "description": "API Key",
+                    "type": "string"
+                },
+                "base_url": {
+                    "description": "Base URL",
+                    "type": "string"
+                },
+                "custom_instructions": {
+                    "description": "CustomInstructions adds KB-specific image interpretation guidance without\nreplacing the system-owned OCR and Markdown output contract.",
+                    "type": "string"
+                },
+                "description_language": {
+                    "description": "DescriptionLanguage controls the language used for generated image\ncaptions. Empty means follow the document/request language.",
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "interface_type": {
+                    "description": "Interface Type: \"ollama\" or \"openai\"",
+                    "type": "string"
+                },
+                "model_id": {
+                    "type": "string"
+                },
+                "model_name": {
+                    "description": "兼容老版本\nModel Name",
+                    "type": "string"
+                }
+            }
+        },
+        "reliquary_internal_types.WeKnoraCloudCredentials": {
+            "type": "object",
+            "properties": {
+                "app_id": {
+                    "type": "string"
+                },
+                "app_secret": {
+                    "type": "string"
+                }
+            }
         }
     },
     "securityDefinitions": {
         "ApiKeyAuth": {
-            "description": "API Key 认证，以唯一用户身份访问个人空间",
+            "description": "API Key 认证：以唯一用户身份访问个人空间",
             "type": "apiKey",
             "name": "X-API-Key",
             "in": "header"
@@ -13210,9 +13082,7 @@ const docTemplate = `{
             "name": "Authorization",
             "in": "header"
         }
-    },
-    "schemes": {{ marshal .Schemes }},
-    "host": "{{.Host}}"
+    }
 }`
 
 // SwaggerInfo holds exported Swagger Info so clients can modify it

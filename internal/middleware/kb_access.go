@@ -16,7 +16,7 @@ var ErrResourceNotFound = stderrors.New("resource not found")
 
 // KBAccess captures the result of a successful KB access resolution.
 // Stashed on gin.Context under KBAccessContextKey so handlers that
-// need the resolved KB / permission (e.g. to render
+// need the resolved KB (e.g. to render
 // resource projection in the response) can pull it without re-running the
 // resolution.
 type KBAccess struct {
@@ -160,7 +160,8 @@ func isResourceNotFound(err error) bool {
 		stderrors.Is(err, ErrResourceNotFound)
 }
 
-func RequireKBAccess(resolveKBID KBIDResolver, kbService KBLookup) gin.HandlerFunc {
+// RequireKBExists resolves the requested knowledge base and preserves missing-resource errors.
+func RequireKBExists(resolveKBID KBIDResolver, kbService KBLookup) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := resolveKBID(c)
 		if err != nil {

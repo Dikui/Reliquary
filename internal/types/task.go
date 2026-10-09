@@ -35,7 +35,7 @@ const (
 	QueuePostProcess    = "postprocess"
 	QueueSummary        = "summary"
 	QueueMultimodal     = "multimodal"
-	QueueGraph          = "graph"
+	QueueContext        = "context"
 	QueueQuestion       = "question"
 	QueueSync           = "sync"
 	QueueMaintenance    = "low"
@@ -69,7 +69,7 @@ var queueDefinitions = []QueueDefinition{
 		TypeSummaryGeneration, TypeDataTableSummary, TypeKnowledgeAutoTag,
 	}},
 	{Name: QueueMultimodal, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeImageMultimodal}},
-	{Name: QueueGraph, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeKnowledgeContext, TypeContextNameEmbeddingRebuild}},
+	{Name: QueueContext, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeKnowledgeContext, TypeContextNameEmbeddingRebuild}},
 	{Name: QueueQuestion, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeQuestionGeneration}},
 	{Name: QueueSync, Pool: WorkerPoolMaintenance, Weight: 2, TaskTypes: []string{TypeDataSourceSync}},
 	{Name: QueueMaintenance, Pool: WorkerPoolMaintenance, Weight: 1, TaskTypes: []string{
@@ -177,7 +177,7 @@ func (c WorkerPoolConcurrency) UpstreamTotal() int {
 }
 
 // QueueStat is a read-only depth snapshot of a single asynq queue, used
-// by the System Admin runtime dashboard. Field names mirror the counts
+// by the System runtime dashboard. Field names mirror the counts
 // exposed by asynq.QueueInfo. Pool / Weight are static metadata (which
 // worker pool drains the queue and its scheduling weight within that
 // pool) so the UI can group and explain the lanes without the frontend

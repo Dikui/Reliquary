@@ -122,7 +122,9 @@ func LogStartupEnv(ctx context.Context) {
 	// Targeted warnings for footguns. SYSTEM_AES_KEY set to wrong length
 	// is the most common one — utils.GetAESKey() silently falls back to
 	// nil (== "no encryption") when len != 32.
-	if k := os.Getenv("SYSTEM_AES_KEY"); k != "" && len(k) != 32 {
+	if k := os.Getenv("SYSTEM_AES_KEY"); k == "" {
+		logger.Warn(ctx, "[startup-env] SYSTEM_AES_KEY is not set; MCP credentials and model API keys will be stored in plaintext")
+	} else if len(k) != 32 {
 		logger.Warnf(ctx,
 			"[startup-env] SYSTEM_AES_KEY is set but %d bytes long; AES-256 requires exactly 32 bytes — encryption is DISABLED",
 			len(k))

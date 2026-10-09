@@ -33,9 +33,9 @@ func RegisterModelRoutes(
 }
 
 func RegisterInitializationRoutes(r *gin.RouterGroup, handler *handler.InitializationHandler, g *accessGuards) {
-	r.Handle(http.MethodGet, "/initialization/config/:kbId", g.KBAccessRead("kbId"), handler.GetCurrentConfigByKB)
-	r.Handle(http.MethodPost, "/initialization/initialize/:kbId", g.KBAccessWrite("kbId"), handler.InitializeByKB)
-	r.Handle(http.MethodPut, "/initialization/config/:kbId", g.KBAccessWrite("kbId"), handler.UpdateKBConfig)
+	r.Handle(http.MethodGet, "/initialization/config/:kbId", g.KBExists("kbId"), handler.GetCurrentConfigByKB)
+	r.Handle(http.MethodPost, "/initialization/initialize/:kbId", g.KBExists("kbId"), handler.InitializeByKB)
+	r.Handle(http.MethodPut, "/initialization/config/:kbId", g.KBExists("kbId"), handler.UpdateKBConfig)
 
 	r.Handle(http.MethodGet, "/initialization/ollama/status", handler.CheckOllamaStatus)
 	r.Handle(http.MethodGet, "/initialization/ollama/models", handler.ListOllamaModels)

@@ -298,14 +298,14 @@ const kbToScopeCaps = (kb: any): Partial<ScopeCapabilities> => {
     return {
       vector: !!kb.capabilities.vector,
       keyword: !!kb.capabilities.keyword,
-      graph: !!kb.capabilities.graph,
+      context: !!kb.capabilities.context,
     };
   }
   const s = kb?.indexing_strategy;
   return {
     vector: s ? !!s.vector_enabled : false,
     keyword: s ? !!s.keyword_enabled : false,
-    graph: true,
+    context: true,
     };
 };
 
@@ -603,7 +603,7 @@ const loadAgents = async (force = false) => {
 
 // LAST_CHAT_MODEL_KEY scopes the per-user "last selected chat model"
 // to localStorage. The previous implementation wrote this back to the
-// tenant-level KV /tenants/kv/conversation-config — which (a) required
+// space-level KV /space/kv/conversation-config — which (a) required
 // chat input got a 403, and (b) silently overwrote the tenant default
 // for everyone else. localStorage is per-user-per-browser, which is
 // what "remember my last pick" actually wants.
@@ -1950,7 +1950,6 @@ const showAgentNotReadyMessage = (
   reasonKeys?: AgentNotReadyReasonKey[],
 ) => {
   const reasonsText = formatLocalizedList(reasons, locale.value)
-  const canEditAgent = authStore.isLoggedIn
 
   const messageContent = h('div', { style: 'display: flex; flex-direction: column; gap: 8px; max-width: 320px;' }, [
     h(
@@ -1958,7 +1957,7 @@ const showAgentNotReadyMessage = (
       { style: 'color: var(--td-text-color-primary); line-height: 1.5;' },
       t('input.agentNotReadyDetail', { agentName: agent.name, reasons: reasonsText }),
     ),
-    ...(canEditAgent ? [
+    ...[
       h('a', {
         href: '#',
         onClick: (e: Event) => {
@@ -1975,7 +1974,7 @@ const showAgentNotReadyMessage = (
           (e.target as HTMLElement).style.textDecoration = 'none';
         }
       }, t('input.goToAgentEditor')),
-    ] : []),
+    ],
   ]);
 
   MessagePlugin.warning({

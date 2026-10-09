@@ -16,7 +16,7 @@ test('uses a compact flat dialog with selected and available sections', () => {
   assert.match(component, /class="setting-drawer__section-title"/)
   assert.match(component, /tagEditSelectedSection/)
   assert.match(component, /tagEditAvailableSection/)
-  assert.match(component, /canManage/)
+  assert.doesNotMatch(component, /canManage/)
   assert.match(component, /tagManageLink/)
   assert.match(component, /open-manage/)
   assert.match(component, /selectedTagsList/)

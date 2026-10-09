@@ -67,10 +67,10 @@
               <t-button v-for="id in item.knowledge_ids" :key="id" variant="text" size="small" @click="emit('open-message', id)">
                 {{ t('knowledgeBase.anomalies.openMessage') }} · {{ id.slice(0, 8) }}
               </t-button>
-              <t-button v-if="isOwner && item.status === 'pending' && item.knowledge_ids.length === 1" variant="text" size="small"
+              <t-button v-if="item.status === 'pending' && item.knowledge_ids.length === 1" variant="text" size="small"
                 @click="emit('edit-tags', item.knowledge_ids[0], item.id)">{{ t('knowledgeBase.anomalies.editTags') }}</t-button>
             </div>
-            <div v-if="(item.status === 'pending' || item.status === 'applying') && isOwner" class="anomaly-item__decisions">
+            <div v-if="(item.status === 'pending' || item.status === 'applying')" class="anomaly-item__decisions">
               <t-textarea v-if="item.kind === 'source_conflict' && item.status === 'pending'" v-model.trim="decisionNotes[item.id]"
                 :placeholder="t('knowledgeBase.anomalies.ownerDecision')" :maxlength="500" />
               <t-button v-if="item.proposal_type !== 'none'" size="small" theme="primary" :loading="decidingId === item.id"
@@ -113,7 +113,6 @@ import { listKnowledgeAnomalies, createKnowledgeAnomaly, decideKnowledgeAnomaly,
 const props = defineProps<{
   visible: boolean
   kbId: string
-  isOwner: boolean
   initialKnowledgeId?: string
   tags: Array<{ id: string; name: string }>
 }>()

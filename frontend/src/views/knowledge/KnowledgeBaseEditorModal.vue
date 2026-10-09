@@ -323,7 +323,7 @@
                   <t-button theme="default" variant="outline" @click="handleClose">
                     {{ $t('common.cancel') }}
                   </t-button>
-                  <t-button v-if="canEditKB" theme="primary" data-guide="kb-create-submit" @click="handleSubmit" :loading="saving"
+                  <t-button theme="primary" data-guide="kb-create-submit" @click="handleSubmit" :loading="saving"
                     :disabled="loading">
                     {{ saveButtonLabel }}
                   </t-button>
@@ -353,7 +353,6 @@ import { selectInitialModelId } from '@/utils/modelDefaults'
 import { copyWithToast } from '@/utils/clipboard'
 import { useEditorResourcesStore } from '@/stores/editorResources'
 import { useUIStore } from '@/stores/ui'
-import { useAuthStore } from '@/stores/auth'
 import ModelTierEditor from '@/components/ModelTierEditor.vue'
 import { copyModelTiers } from '@/utils/modelTiers'
 import type { ResolvedModelTiers } from '@/types/modelTiers'
@@ -366,7 +365,6 @@ import DataSourceSettings from './settings/DataSourceSettings.vue'
 import { useI18n } from 'vue-i18n'
 
 const uiStore = useUIStore()
-const authStore = useAuthStore()
 const chatResources = useChatResourcesStore()
 const editorResources = useEditorResourcesStore()
 const { t } = useI18n()
@@ -440,7 +438,6 @@ const allModels = ref<any[]>([])
 const hasFiles = ref(false)
 const initialIndexingStrategy = ref<any>(null)
 const dsCount = ref(0)
-const canEditKB = computed(() => authStore.isLoggedIn)
 
 // 用户是否在分块设置中手动改过任何值。一旦为 true，就不再根据索引策略自动调整默认分块参数。
 const chunkingDirty = ref(false)
@@ -455,7 +452,6 @@ const DEFAULT_CHUNKING_PRESET = {
 } as const
 
 const navItems = computed(() => {
-  if (!canEditKB.value) return []
   const items: { key: string; icon: string; label: string; badge?: number }[] = [
     { key: 'basic', icon: 'info-circle', label: t('knowledgeEditor.sidebar.basic') },
     { key: 'models', icon: 'control-platform', label: t('knowledgeEditor.sidebar.models') },
@@ -911,7 +907,6 @@ const buildSubmitData = () => {
 
 // 提交表单
 const handleSubmit = async () => {
-  if (!canEditKB.value) return []
   if (!validateForm()) {
     return
   }
@@ -967,7 +962,7 @@ const doSubmit = async () => {
         config: updateConfig
       })
 
-      // 2. 更新完整配置（模型、分块、多模态、存储引擎、知识图谱等）
+      // 2. 更新完整配置（模型、分块、多模态、存储引擎、知识上下文等）
       const config: KBModelConfigRequest = {
         llmModelId: data.summary_model_id,
         embeddingModelId: data.embedding_model_id,
@@ -1097,7 +1092,6 @@ watch(() => props.visible, async (newVal) => {
     // 根据模式加载数据
     if (props.mode === 'edit' && targetKbId) {
       await loadKBData(targetKbId, generation)
-      if (!canEditKB.value) currentSection.value = 'activity'
     } else {
       // 创建模式：初始化空表单，并预填空间默认存储引擎
       formData.value = initFormData(props.initialType || 'document')

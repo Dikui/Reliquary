@@ -8,7 +8,7 @@
         <article v-for="item in items" :key="item.id" class="merge-suggestion">
           <div class="merge-suggestion-heading"><strong>{{ t('mergeSuggestions.pair', { source: item.new_entity_name || item.new_entity_id, target: item.candidate_entity_name || item.candidate_entity_id }) }}</strong><t-tag :theme="item.status === 'pending' ? 'warning' : item.status === 'accepted' ? 'success' : 'default'" variant="light">{{ t(`mergeSuggestions.status.${item.status}`) }}</t-tag></div>
           <p>{{ item.reason || t('mergeSuggestions.noReason') }}</p><blockquote v-if="item.quote">{{ item.quote }}</blockquote>
-          <div class="merge-suggestion-actions"><t-button variant="text" @click="emit('open-evidence', item.evidence_id, item.quote)">{{ t('knowledgeWorkbench.evidence.openSnapshot') }}</t-button><template v-if="canManage && item.status === 'pending'"><t-button variant="outline" :disabled="!!decidingId" :loading="decidingId === item.id && decision === 'reject'" @click="decide(item, 'reject')">{{ t('mergeSuggestions.reject') }}</t-button><t-button theme="primary" variant="outline" :disabled="!!decidingId" :loading="decidingId === item.id && decision === 'accept'" @click="confirmAccept(item)">{{ t('mergeSuggestions.accept') }}</t-button></template></div>
+          <div class="merge-suggestion-actions"><t-button variant="text" @click="emit('open-evidence', item.evidence_id, item.quote)">{{ t('knowledgeWorkbench.evidence.openSnapshot') }}</t-button><template v-if="item.status === 'pending'"><t-button variant="outline" :disabled="!!decidingId" :loading="decidingId === item.id && decision === 'reject'" @click="decide(item, 'reject')">{{ t('mergeSuggestions.reject') }}</t-button><t-button theme="primary" variant="outline" :disabled="!!decidingId" :loading="decidingId === item.id && decision === 'accept'" @click="confirmAccept(item)">{{ t('mergeSuggestions.accept') }}</t-button></template></div>
         </article>
       </div>
     </t-loading>
@@ -22,7 +22,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import { acceptKnowledgeMergeSuggestion, listKnowledgeMergeSuggestions, rejectKnowledgeMergeSuggestion, type KnowledgeMergeSuggestion, type KnowledgeContextScope } from '@/api/knowledge-context'
 import { knowledgeContextScopeParams } from '@/api/knowledge-context-scope'
 import { useConfirmDelete } from '@/components/settings/useConfirmDelete'
-const props = defineProps<{ kbId: string; domainId: string; scope: KnowledgeContextScope; canManage: boolean }>()
+const props = defineProps<{ kbId: string; domainId: string; scope: KnowledgeContextScope }>()
 const emit = defineEmits<{ 'open-evidence': [id: string, quote?: string]; changed: [] }>()
 const { t } = useI18n(), confirmDelete = useConfirmDelete()
 const status = ref<'pending' | 'accepted' | 'rejected'>('pending')
@@ -40,9 +40,9 @@ async function load(more = false) {
   catch (cause) { if (current === request) error.value = cause instanceof Error ? cause.message : t('knowledgeWorkbench.requestFailed') }
   finally { if (current === request) loading.value = false }
 }
-function confirmAccept(item: KnowledgeMergeSuggestion) { if (!props.canManage || decidingId.value || item.status !== 'pending') return; confirmDelete({ title: t('mergeSuggestions.confirmTitle'), body: t('mergeSuggestions.confirmBody', { source: item.new_entity_name || item.new_entity_id, target: item.candidate_entity_name || item.candidate_entity_id }), confirmText: t('mergeSuggestions.accept'), onConfirm: () => decide(item, 'accept') }) }
+function confirmAccept(item: KnowledgeMergeSuggestion) { if (decidingId.value || item.status !== 'pending') return; confirmDelete({ title: t('mergeSuggestions.confirmTitle'), body: t('mergeSuggestions.confirmBody', { source: item.new_entity_name || item.new_entity_id, target: item.candidate_entity_name || item.candidate_entity_id }), confirmText: t('mergeSuggestions.accept'), onConfirm: () => decide(item, 'accept') }) }
 async function decide(item: KnowledgeMergeSuggestion, action: 'accept' | 'reject') {
-  if (!props.canManage || decidingId.value || item.status !== 'pending') return
+  if (decidingId.value || item.status !== 'pending') return
   const current = request
   decidingId.value = item.id; decision.value = action; error.value = ''
   try { const response = await (action === 'accept' ? acceptKnowledgeMergeSuggestion(item.id) : rejectKnowledgeMergeSuggestion(item.id)); if (!response.success) throw new Error(response.error || t('knowledgeWorkbench.requestFailed')); if (current === request) { MessagePlugin.success(t(`mergeSuggestions.feedback.${action}`)); await load(false); emit('changed') } }

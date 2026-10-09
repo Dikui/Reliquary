@@ -304,9 +304,7 @@ func (s *stubTenantServiceForModelDelete) DeleteTenant(context.Context, uint64) 
 func (s *stubTenantServiceForModelDelete) ListAllTenants(context.Context) ([]*types.Tenant, error) {
 	return nil, nil
 }
-func (s *stubTenantServiceForModelDelete) BulkSetStorageQuota(context.Context, int64) (int64, error) {
-	return 0, nil
-}
+
 func (s *stubTenantServiceForModelDelete) SearchTenants(context.Context, string, uint64, int, int) ([]*types.Tenant, int64, error) {
 	return nil, 0, nil
 }

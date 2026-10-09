@@ -40,7 +40,7 @@ func enqueueKnowledgeContext(ctx context.Context, tasks interfaces.TaskEnqueuer,
 	if err != nil {
 		return err
 	}
-	_, err = tasks.Enqueue(asynq.NewTask(types.TypeKnowledgeContext, body), asynq.Queue(types.QueueGraph),
+	_, err = tasks.Enqueue(asynq.NewTask(types.TypeKnowledgeContext, body), asynq.Queue(types.QueueContext),
 		asynq.MaxRetry(3), asynq.Timeout(10*time.Minute))
 	return err
 }

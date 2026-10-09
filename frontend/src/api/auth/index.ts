@@ -28,19 +28,17 @@ export interface LoginResponse {
     description: string
     status: string
     business: string
-    storage_quota: number
     storage_used: number
     created_at: string
     updated_at: string
   } | null
-  // Current team returned by password login.
+  // Current space returned by password login.
   active_tenant?: {
     id: number
     name: string
     description?: string
     status?: string
     business?: string
-    storage_quota?: number
     storage_used?: number
     created_at?: string
     updated_at?: string
@@ -86,7 +84,7 @@ export interface UserInfo {
 /**
  * 将后端用户信息规范化为前端 UserInfo，统一登录与令牌恢复时的字段。
  * 新增用户字段只需修改此处，避免遗漏系统管理员等权限属性。
- * fallbackTenantId 用于响应中用户对象缺少 tenant_id 时补充团队 ID。
+ * fallbackTenantId 用于响应中用户对象缺少 tenant_id 时补充空间 ID。
  * 权限字段严格按 boolean true 读取。
  */
 export function userInfoFromApi(
@@ -117,7 +115,6 @@ export interface TenantInfo {
   status?: string
   business?: string
   owner_id: string
-  storage_quota?: number
   storage_used?: number
   created_at: string
   updated_at: string

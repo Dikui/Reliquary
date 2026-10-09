@@ -70,7 +70,7 @@ func TestPersonalUserAndAPIKeyCanAccessAllSystemRoutes(t *testing.T) {
 	h := handler.NewSystemHandler(cfg, tenantSvc, users, personalSystemRouteSettings{}, keys, personalSystemRouteInspector{}, nil)
 	r := gin.New()
 	r.Use(middleware.ErrorHandler(), middleware.Auth(tenantSvc, users, keys))
-	RegisterSystemAdminRoutes(r.Group("/api/v1"), h, newAccessGuards(nil, nil, nil))
+	RegisterSystemRoutes(r.Group("/api/v1"), h, newAccessGuards(nil, nil, nil))
 
 	for _, route := range []struct{ method, path, body string }{
 		{http.MethodGet, "/settings", ""},
@@ -90,7 +90,7 @@ func TestPersonalUserAndAPIKeyCanAccessAllSystemRoutes(t *testing.T) {
 			{"API key", f.key, true},
 		} {
 			t.Run(route.method+route.path+"/"+actor.name, func(t *testing.T) {
-				response := personalRequest(t, r, route.method, "/api/v1/system/admin"+route.path, route.body, actor.credential, actor.apiKey)
+				response := personalRequest(t, r, route.method, "/api/v1/system"+route.path, route.body, actor.credential, actor.apiKey)
 				require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 			})
 		}

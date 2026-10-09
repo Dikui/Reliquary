@@ -18,7 +18,7 @@ test('uses a compact flat dialog with selected and available sections', () => {
   assert.match(component, /batchTagAvailableSection/)
   assert.match(component, /preSelectedTagIds/)
   assert.match(component, /confirmLoading/)
-  assert.match(component, /canManage/)
+  assert.doesNotMatch(component, /canManage/)
   assert.match(component, /tagManageLink/)
   assert.match(component, /open-manage/)
   assert.match(component, /selectedTagsList/)

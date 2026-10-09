@@ -1431,6 +1431,7 @@
 </template>
 
 <script setup lang="ts">
+import { normalizeToolNames } from '@/utils/toolNames';
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import AgentCreateContextualGuide from '@/components/AgentCreateContextualGuide.vue';
@@ -1459,7 +1460,6 @@ import {
   type PromptTemplatesConfig,
 } from '@/api/system';
 import { useUIStore } from '@/stores/ui';
-import { useAuthStore } from '@/stores/auth';
 import { useChatResourcesStore } from '@/stores/chatResources';
 import { useEditorResourcesStore } from '@/stores/editorResources';
 import AgentAvatar from '@/components/AgentAvatar.vue';
@@ -1483,7 +1483,6 @@ const CHAT_PARSER_EXTENSIONS = [
 ];
 
 const uiStore = useUIStore();
-const authStore = useAuthStore();
 const router = useRouter();
 const chatResources = useChatResourcesStore();
 const editorResources = useEditorResourcesStore();
@@ -1683,7 +1682,7 @@ const defaultMaxCompletionTokensFor = (mode: string) => mode === 'smart-reasonin
   : defaultQuickAnswerMaxCompletionTokens;
 
 // 知识库相关工具列表（用于 watch(hasKnowledgeBase) 从"无"变"有"时 seed 默认工具）
-const knowledgeBaseTools = ['grep_chunks', 'knowledge_search', 'list_knowledge_chunks', 'query_knowledge_graph', 'get_document_info', 'database_query', 'knowledge_report_anomaly', 'knowledge_import_url', 'knowledge_apply_anomaly'];
+const knowledgeBaseTools = ['grep_chunks', 'knowledge_search', 'list_knowledge_chunks', 'query_knowledge_context', 'get_document_info', 'database_query', 'knowledge_report_anomaly', 'knowledge_import_url', 'knowledge_apply_anomaly'];
 
 // 初始化标志，防止初始化时触发 watch 自动添加工具
 const isInitializing = ref(false);
@@ -1707,7 +1706,7 @@ const allTools = computed(() => [
   { value: 'grep_chunks', label: t('agentEditor.tools.grepChunks'), description: t('agentEditor.tools.grepChunksDesc'), group: 'rag' },
   { value: 'knowledge_search', label: t('agentEditor.tools.knowledgeSearch'), description: t('agentEditor.tools.knowledgeSearchDesc'), group: 'rag' },
   { value: 'list_knowledge_chunks', label: t('agentEditor.tools.listChunks'), description: t('agentEditor.tools.listChunksDesc'), group: 'rag' },
-  { value: 'query_knowledge_graph', label: t('agentEditor.tools.queryGraph'), description: t('agentEditor.tools.queryGraphDesc'), group: 'rag' },
+  { value: 'query_knowledge_context', label: t('agentEditor.tools.queryContext'), description: t('agentEditor.tools.queryContextDesc'), group: 'rag' },
   { value: 'get_document_info', label: t('agentEditor.tools.getDocInfo'), description: t('agentEditor.tools.getDocInfoDesc'), group: 'rag' },
   { value: 'database_query', label: t('agentEditor.tools.dbQuery'), description: t('agentEditor.tools.dbQueryDesc'), group: 'rag' },
   { value: 'knowledge_report_anomaly', label: t('agentEditor.tools.knowledgeReportAnomaly'), description: t('agentEditor.tools.knowledgeReportAnomalyDesc'), group: 'rag' },
@@ -1758,13 +1757,13 @@ const ragKbCount = computed(() => kbsInScope.value.filter(kb => kb.ragEnabled).l
 // 把"作用域内 KB 能力"聚合成一个 ScopeCapabilities 对象，交给
 // `evaluateToolRequirement` 统一判定；UI 上的所有可用性提示都应出自此处。
 const scopeCapabilities = computed<ScopeCapabilities>(() => {
-  const scope: ScopeCapabilities = { vector: false, keyword: false, graph: false, };
+  const scope: ScopeCapabilities = { vector: false, keyword: false, context: false, };
   for (const kb of kbsInScope.value) {
     const caps = kb.capabilities;
     if (caps) {
       if (caps.vector) scope.vector = true;
       if (caps.keyword) scope.keyword = true;
-      if (caps.graph) scope.graph = true;
+      if (caps.context) scope.context = true;
     } else {
       // 向后兼容：capabilities 尚未加载时，退回到 ragEnabled 推断
       if (kb.ragEnabled) { scope.vector = true; scope.keyword = true; }
@@ -1780,7 +1779,7 @@ const missKindToReason = (kind: RequirementMissKind): string | undefined => {
   switch (kind) {
     case 'needsKb': return t('agentEditor.tools.requiresKb');
     case 'needsRag': return t('agentEditor.tools.requiresRagKb');
-    case 'needsGraph':
+    case 'needsContext':
     case 'none':
     default: return undefined;
   }
@@ -2440,13 +2439,13 @@ const kbSatisfiesPresetFilter = (kb: { capabilities?: KBCapabilities; ragEnabled
   const caps = kb.capabilities || {
     vector: !!kb.ragEnabled,
     keyword: !!kb.ragEnabled,
-    graph: false,
+    context: false,
     };
   const has = (name: string): boolean => {
     switch (name) {
       case 'vector': return !!caps.vector;
       case 'keyword': return !!caps.keyword;
-      case 'graph': return !!caps.graph;
+      case 'context': return !!caps.context;
       default: return false;
     }
   };
@@ -2525,7 +2524,7 @@ const applyAgentTypePreset = (preset: AgentTypePreset | null) => {
   }
   if (typeof c.temperature === 'number') target.temperature = c.temperature;
   if (typeof c.max_iterations === 'number') target.max_iterations = c.max_iterations;
-  if (Array.isArray(c.allowed_tools)) target.allowed_tools = [...c.allowed_tools];
+  if (Array.isArray(c.allowed_tools)) target.allowed_tools = normalizeToolNames(c.allowed_tools);
   if (typeof c.retain_retrieval_history === 'boolean') target.retain_retrieval_history = c.retain_retrieval_history;
   // supported_file_types 采用"强同步"语义：只有 data-analysis 需要限定 csv/xlsx，
   // 其余类型切过来时必须清空，否则会从上一个类型带过来残留。
@@ -2651,7 +2650,7 @@ watch(() => props.visible, async (val) => {
       };
       // 确保数组字段存在
       if (!agentData.config.knowledge_bases) agentData.config.knowledge_bases = [];
-      if (!agentData.config.allowed_tools) agentData.config.allowed_tools = [];
+      agentData.config.allowed_tools = normalizeToolNames(agentData.config.allowed_tools || []);
       if (!agentData.config.mcp_services) agentData.config.mcp_services = [];
       // 授权等待超时：旧数据缺省时用默认 600 秒
       if (agentData.config.mcp_auth_wait_timeout == null || agentData.config.mcp_auth_wait_timeout <= 0) {
@@ -2868,7 +2867,7 @@ watch(agentMode, (val, _oldVal) => {
           'knowledge_search',
           'grep_chunks',
           'list_knowledge_chunks',
-          'query_knowledge_graph',
+          'query_knowledge_context',
           'get_document_info',
           'database_query',
         );

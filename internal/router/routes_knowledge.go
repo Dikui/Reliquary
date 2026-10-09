@@ -17,16 +17,16 @@ func RegisterChunkRoutes(r *gin.RouterGroup, handler *handler.ChunkHandler, g *a
 	chunks := r.Group("/chunks")
 	chunkRead := chunks
 	{
-		chunkRead.GET("/:knowledge_id", g.KBAccessReadFromKnowledgeIDParam("knowledge_id"), handler.ListKnowledgeChunks)
-		chunkRead.GET("/by-id/:id", g.KBAccessReadFromChunkIDParam("id"), handler.GetChunkByIDOnly)
-		chunkRead.GET("/:knowledge_id/:id/revisions", g.KBAccessReadFromKnowledgeIDParam("knowledge_id"), handler.ListChunkRevisions)
-		chunks.DELETE("/:knowledge_id/:id", g.KBAccessWriteFromKnowledgeIDParam("knowledge_id"), handler.DeleteChunk)
-		chunks.DELETE("/:knowledge_id", g.KBAccessWriteFromKnowledgeIDParam("knowledge_id"), handler.DeleteChunksByKnowledgeID)
-		chunks.PUT("/:knowledge_id/:id", g.KBAccessWriteFromKnowledgeIDParam("knowledge_id"), handler.UpdateChunk)
-		chunks.POST("/:knowledge_id/:id/revert", g.KBAccessWriteFromKnowledgeIDParam("knowledge_id"), handler.RevertChunk)
-		chunks.DELETE("/by-id/:id/questions", g.KBAccessWriteFromChunkIDParam("id"), handler.DeleteGeneratedQuestion)
-		chunks.PUT("/by-id/:id/questions", g.KBAccessWriteFromChunkIDParam("id"), handler.UpsertGeneratedQuestion)
-		chunks.POST("/by-id/:id/questions/regenerate", g.KBAccessWriteFromChunkIDParam("id"), handler.RegenerateGeneratedQuestions)
+		chunkRead.GET("/:knowledge_id", g.KBExistsFromKnowledgeIDParam("knowledge_id"), handler.ListKnowledgeChunks)
+		chunkRead.GET("/by-id/:id", g.KBExistsFromChunkIDParam("id"), handler.GetChunkByIDOnly)
+		chunkRead.GET("/:knowledge_id/:id/revisions", g.KBExistsFromKnowledgeIDParam("knowledge_id"), handler.ListChunkRevisions)
+		chunks.DELETE("/:knowledge_id/:id", g.KBExistsFromKnowledgeIDParam("knowledge_id"), handler.DeleteChunk)
+		chunks.DELETE("/:knowledge_id", g.KBExistsFromKnowledgeIDParam("knowledge_id"), handler.DeleteChunksByKnowledgeID)
+		chunks.PUT("/:knowledge_id/:id", g.KBExistsFromKnowledgeIDParam("knowledge_id"), handler.UpdateChunk)
+		chunks.POST("/:knowledge_id/:id/revert", g.KBExistsFromKnowledgeIDParam("knowledge_id"), handler.RevertChunk)
+		chunks.DELETE("/by-id/:id/questions", g.KBExistsFromChunkIDParam("id"), handler.DeleteGeneratedQuestion)
+		chunks.PUT("/by-id/:id/questions", g.KBExistsFromChunkIDParam("id"), handler.UpsertGeneratedQuestion)
+		chunks.POST("/by-id/:id/questions/regenerate", g.KBExistsFromChunkIDParam("id"), handler.RegenerateGeneratedQuestions)
 	}
 }
 
@@ -34,13 +34,13 @@ func RegisterKnowledgeRoutes(r *gin.RouterGroup, handler *handler.KnowledgeHandl
 	kb := r.Group("/knowledge-bases/:id/knowledge")
 	kbRead := kb
 	{
-		kb.POST("/file", g.KBAccessWrite("id"), handler.CreateKnowledgeFromFile)
-		kb.POST("/url", g.KBAccessWrite("id"), handler.CreateKnowledgeFromURL)
-		kb.POST("/manual", g.KBAccessWrite("id"), handler.CreateManualKnowledge)
-		kbRead.GET("", g.KBAccessRead("id"), handler.ListKnowledge)
-		kbRead.GET("/folders", g.KBAccessRead("id"), handler.ListKnowledgeFolders)
-		kb.PUT("/folders", g.KBAccessWrite("id"), handler.RenameKnowledgeFolder)
-		kb.DELETE("", g.KBAccessWrite("id"), handler.ClearKnowledgeBaseContents)
+		kb.POST("/file", g.KBExists("id"), handler.CreateKnowledgeFromFile)
+		kb.POST("/url", g.KBExists("id"), handler.CreateKnowledgeFromURL)
+		kb.POST("/manual", g.KBExists("id"), handler.CreateManualKnowledge)
+		kbRead.GET("", g.KBExists("id"), handler.ListKnowledge)
+		kbRead.GET("/folders", g.KBExists("id"), handler.ListKnowledgeFolders)
+		kb.PUT("/folders", g.KBExists("id"), handler.RenameKnowledgeFolder)
+		kb.DELETE("", g.KBExists("id"), handler.ClearKnowledgeBaseContents)
 	}
 
 	// 知识路由组（URL :id is a knowledge id; the guard walks it to the parent KB）
@@ -62,19 +62,19 @@ func RegisterKnowledgeRoutes(r *gin.RouterGroup, handler *handler.KnowledgeHandl
 		// ingest capability, matching their single-document siblings
 		// (k.DELETE("/:id"), k.POST("/:id/reparse"), k.PUT("/:id")).
 		kRead.GET("/batch", handler.GetKnowledgeBatch)
-		kRead.GET("/:id", g.KBAccessReadFromKnowledgeIDParam("id"), handler.GetKnowledge)
-		kRead.GET("/:id/stages", g.KBAccessReadFromKnowledgeIDParam("id"), handler.GetKnowledgeSpans)
-		kRead.GET("/:id/spans", g.KBAccessReadFromKnowledgeIDParam("id"), handler.GetKnowledgeSpans)
-		k.DELETE("/:id", g.KBAccessWriteFromKnowledgeIDParam("id"), handler.DeleteKnowledge)
-		k.PUT("/:id", g.KBAccessWriteFromKnowledgeIDParam("id"), handler.UpdateKnowledge)
-		k.POST("/:id/regenerate-summary", g.KBAccessWriteFromKnowledgeIDParam("id"), handler.RegenerateKnowledgeSummary)
-		k.PUT("/manual/:id", g.KBAccessWriteFromKnowledgeIDParam("id"), handler.UpdateManualKnowledge)
-		k.POST("/:id/reparse", g.KBAccessWriteFromKnowledgeIDParam("id"), handler.ReparseKnowledge)
-		k.POST("/:id/cancel-parse", g.KBAccessWriteFromKnowledgeIDParam("id"), handler.CancelKnowledgeParse)
-		k.POST("/:id/review", g.KBAccessWriteFromKnowledgeIDParam("id"), handler.ReviewKnowledgeIntake)
-		kRead.GET("/:id/download", g.KBAccessWriteFromKnowledgeIDParam("id"), handler.DownloadKnowledgeFile)
-		kRead.GET("/:id/preview", g.KBAccessReadFromKnowledgeIDParam("id"), handler.PreviewKnowledgeFile)
-		k.PUT("/image/:id/:chunk_id", g.KBAccessWriteFromKnowledgeIDParam("id"), handler.UpdateImageInfo)
+		kRead.GET("/:id", g.KBExistsFromKnowledgeIDParam("id"), handler.GetKnowledge)
+		kRead.GET("/:id/stages", g.KBExistsFromKnowledgeIDParam("id"), handler.GetKnowledgeSpans)
+		kRead.GET("/:id/spans", g.KBExistsFromKnowledgeIDParam("id"), handler.GetKnowledgeSpans)
+		k.DELETE("/:id", g.KBExistsFromKnowledgeIDParam("id"), handler.DeleteKnowledge)
+		k.PUT("/:id", g.KBExistsFromKnowledgeIDParam("id"), handler.UpdateKnowledge)
+		k.POST("/:id/regenerate-summary", g.KBExistsFromKnowledgeIDParam("id"), handler.RegenerateKnowledgeSummary)
+		k.PUT("/manual/:id", g.KBExistsFromKnowledgeIDParam("id"), handler.UpdateManualKnowledge)
+		k.POST("/:id/reparse", g.KBExistsFromKnowledgeIDParam("id"), handler.ReparseKnowledge)
+		k.POST("/:id/cancel-parse", g.KBExistsFromKnowledgeIDParam("id"), handler.CancelKnowledgeParse)
+		k.POST("/:id/review", g.KBExistsFromKnowledgeIDParam("id"), handler.ReviewKnowledgeIntake)
+		kRead.GET("/:id/download", g.KBExistsFromKnowledgeIDParam("id"), handler.DownloadKnowledgeFile)
+		kRead.GET("/:id/preview", g.KBExistsFromKnowledgeIDParam("id"), handler.PreviewKnowledgeFile)
+		k.PUT("/image/:id/:chunk_id", g.KBExistsFromKnowledgeIDParam("id"), handler.UpdateImageInfo)
 		kRead.GET("/search", handler.SearchKnowledge)
 		kRead.GET("/move/progress/:task_id", handler.GetKnowledgeMoveProgress)
 		k.PUT("/tags", handler.UpdateKnowledgeTagBatch)
@@ -93,17 +93,17 @@ func RegisterKnowledgeBaseRoutes(r *gin.RouterGroup, handler *handler.KnowledgeB
 	{
 		kbManagement.POST("", handler.CreateKnowledgeBase)
 		kb.GET("", handler.ListKnowledgeBases)
-		kb.GET("/:id", g.KBAccessRead("id"), handler.GetKnowledgeBase)
-		kbManagement.PUT("/:id", g.KBAccessWrite("id"), handler.UpdateKnowledgeBase)
-		kbManagement.DELETE("/:id", g.KBAccessWrite("id"), handler.DeleteKnowledgeBase)
-		kb.PUT("/:id/pin", g.KBAccessRead("id"), handler.TogglePinKnowledgeBase)
-		kb.POST("/:id/hybrid-search", g.KBAccessRead("id"), handler.HybridSearch)
-		kb.GET("/:id/hybrid-search", g.KBAccessRead("id"), handler.HybridSearch)
+		kb.GET("/:id", g.KBExists("id"), handler.GetKnowledgeBase)
+		kbManagement.PUT("/:id", g.KBExists("id"), handler.UpdateKnowledgeBase)
+		kbManagement.DELETE("/:id", g.KBExists("id"), handler.DeleteKnowledgeBase)
+		kb.PUT("/:id/pin", g.KBExists("id"), handler.TogglePinKnowledgeBase)
+		kb.POST("/:id/hybrid-search", g.KBExists("id"), handler.HybridSearch)
+		kb.GET("/:id/hybrid-search", g.KBExists("id"), handler.HybridSearch)
 		kbManagement.POST("/copy", handler.CopyKnowledgeBase)
-		kbManagement.POST("/:id/duplicate", g.KBAccessRead("id"), handler.DuplicateKnowledgeBase)
+		kbManagement.POST("/:id/duplicate", g.KBExists("id"), handler.DuplicateKnowledgeBase)
 		kb.
 			GET("/copy/progress/:task_id", handler.GetKBCloneProgress)
-		kb.GET("/:id/move-targets", g.KBAccessRead("id"), handler.ListMoveTargets)
+		kb.GET("/:id/move-targets", g.KBExists("id"), handler.ListMoveTargets)
 	}
 }
 
@@ -113,9 +113,9 @@ func RegisterKnowledgeAnomalyRoutes(r *gin.RouterGroup, h *handler.KnowledgeAnom
 	}
 	group := r.Group("/knowledge-bases/:id/anomalies")
 	read := group
-	read.GET("", g.KBAccessRead("id"), h.List)
-	group.POST("", g.KBAccessRead("id"), h.Create)
-	group.POST("/:anomaly_id/decision", g.KBAccessWrite("id"), h.Resolve)
+	read.GET("", g.KBExists("id"), h.List)
+	group.POST("", g.KBExists("id"), h.Create)
+	group.POST("/:anomaly_id/decision", g.KBExists("id"), h.Resolve)
 }
 
 func RegisterKnowledgeStrategyRoutes(r *gin.RouterGroup, h *handler.KnowledgeStrategyHandler, g *accessGuards) {
@@ -124,11 +124,11 @@ func RegisterKnowledgeStrategyRoutes(r *gin.RouterGroup, h *handler.KnowledgeStr
 	}
 	// Strategy routes validate that the knowledge base belongs to the workspace.
 	group := r.Group("/knowledge-bases/:id/strategies")
-	group.GET("", g.KBAccessRead("id"), h.List)
-	group.POST("", g.KBAccessWrite("id"), h.Propose)
-	group.POST("/:version_id/activate", g.KBAccessWrite("id"), h.Activate)
-	group.POST("/:version_id/evaluate", g.KBAccessWrite("id"), h.Evaluate)
-	group.POST("/reprocess", g.KBAccessWrite("id"), h.Reprocess)
+	group.GET("", g.KBExists("id"), h.List)
+	group.POST("", g.KBExists("id"), h.Propose)
+	group.POST("/:version_id/activate", g.KBExists("id"), h.Activate)
+	group.POST("/:version_id/evaluate", g.KBExists("id"), h.Evaluate)
+	group.POST("/reprocess", g.KBExists("id"), h.Reprocess)
 }
 
 func RegisterKnowledgeTagRoutes(r *gin.RouterGroup, tagHandler *handler.TagHandler, g *accessGuards) {
@@ -138,13 +138,10 @@ func RegisterKnowledgeTagRoutes(r *gin.RouterGroup, tagHandler *handler.TagHandl
 	kbTags := r.Group("/knowledge-bases/:id/tags")
 	kbTagsRead := kbTags
 	{
-		// KBAccessRead/Write resolve own/shared/agent-visible access and
-		// rewrite the request's tenant context to the effective tenant
-		// for the duration of the handler — so the handler no longer
-		// needs its own effectiveCtxForKB helper.
-		kbTagsRead.GET("", g.KBAccessRead("id"), tagHandler.ListTags)
-		kbTags.POST("", g.KBAccessWrite("id"), tagHandler.CreateTag)
-		kbTags.PUT("/:tag_id", g.KBAccessWrite("id"), tagHandler.UpdateTag)
-		kbTags.DELETE("/:tag_id", g.KBAccessWrite("id"), tagHandler.DeleteTag)
+		// Check the knowledge base exists before looking up or changing its tags.
+		kbTagsRead.GET("", g.KBExists("id"), tagHandler.ListTags)
+		kbTags.POST("", g.KBExists("id"), tagHandler.CreateTag)
+		kbTags.PUT("/:tag_id", g.KBExists("id"), tagHandler.UpdateTag)
+		kbTags.DELETE("/:tag_id", g.KBExists("id"), tagHandler.DeleteTag)
 	}
 }

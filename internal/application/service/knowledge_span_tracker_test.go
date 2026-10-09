@@ -368,7 +368,7 @@ func TestSpanTracker_FailSpan_CascadesDependentSubspans(t *testing.T) {
 }
 
 // TestPostprocessSubspan_AttachesUnderPostProcessStage covers the contract
-// that the async post-pipeline tasks (summary, question, graph) rely on:
+// that the async post-pipeline tasks (summary, question, context) rely on:
 // after the parsing pipeline closes the postprocess stage span, an
 // out-of-band worker can still LookupStage + BeginSubSpan to record its
 // real processing time as a child of postprocess. Without this guarantee

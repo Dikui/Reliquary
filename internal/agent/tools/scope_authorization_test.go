@@ -181,7 +181,7 @@ func TestValidateKnowledgeBaseIDsInSearchTargetsRejectsMixedScope(t *testing.T) 
 	}
 }
 
-func TestFilterGraphResultsHonorsDocumentScope(t *testing.T) {
+func TestFilterContextResultsHonorsDocumentScope(t *testing.T) {
 	targets := types.SearchTargets{{
 		Type: types.SearchTargetTypeKnowledge, KnowledgeBaseID: "kb-1", KnowledgeIDs: []string{"doc-allowed"},
 	}}
@@ -194,6 +194,6 @@ func TestFilterGraphResultsHonorsDocumentScope(t *testing.T) {
 		t.Fatalf("filterSearchResultsInSearchTargets() error = %v", err)
 	}
 	if len(filtered) != 1 || filtered[0].KnowledgeID != "doc-allowed" {
-		t.Fatalf("graph result scope leaked: %+v", filtered)
+		t.Fatalf("context result scope leaked: %+v", filtered)
 	}
 }

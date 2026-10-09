@@ -10,7 +10,7 @@ import (
 // and ChatHistoryConfig. Both knowledge search and message search share these parameters.
 //
 // Stored as a JSONB column on the tenants table, managed via the settings UI
-// at /tenants/kv/retrieval-config.
+// at /space/kv/retrieval-config.
 type RetrievalConfig struct {
 	// EmbeddingTopK is the maximum number of chunks returned by vector search (default: 50)
 	EmbeddingTopK int `json:"embedding_top_k"`

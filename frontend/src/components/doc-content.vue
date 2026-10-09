@@ -20,7 +20,6 @@ import { normalizeSpuriousTablePrefixes } from '@/utils/markdownTableNormalize';
 import { openMermaidFullscreen } from '@/utils/mermaidViewer';
 import { diffTextLines, type TextDiffLine } from '@/utils/textLineDiff';
 import { useI18n } from 'vue-i18n';
-import { useAuthStore } from '@/stores/auth';
 import DocumentPreview from '@/components/document-preview.vue';
 import RepostSources from '@/views/knowledge/components/RepostSources.vue';
 import KnowledgeProcessingTimeline from '@/components/knowledge-processing-timeline.vue';
@@ -29,15 +28,7 @@ import { isKnownPreviewableExt, resolveFilePreviewExt } from '@/utils/filePrevie
 import { getApiBaseUrl } from '@/utils/api-base';
 
 const { t } = useI18n();
-const authStore = useAuthStore();
 
-// canDeleteGeneratedQuestion 对应后端 DELETE /chunks/by-id/:id/questions
-// 才允许删除。父组件 KnowledgeBase.vue 通过 :canEditKB 把 KB 级权限
-const canDeleteGeneratedQuestion = computed(() => {
-  if (props.canEditKB === true) return true;
-  return authStore.isLoggedIn;
-});
-const canEditContent = canDeleteGeneratedQuestion;
 
 type MetadataValueType = 'text' | 'number' | 'boolean' | 'null';
 interface MetadataDraftRow {
@@ -212,7 +203,7 @@ const showSummarySection = computed(() =>
   || props.details?.summary_status === 'processing'
   || props.details?.summary_status === 'skipped'
   || props.details?.summary_status === 'failed'
-  || Boolean(props.details?.id && canEditContent.value),
+  || Boolean(props.details?.id),
 );
 
 // Mermaid 初始化计数器，用于生成唯一ID
@@ -246,7 +237,7 @@ mermaid.initialize({
     topPadding: 50
   }
 });
-const props = defineProps(["visible", "details", "knowledgeType", "sourceInfo", "canEditKB", "canDownloadKB", "canReviewIntake", "parse_status", "kbId"]);
+const props = defineProps(["visible", "details", "knowledgeType", "sourceInfo", "parse_status", "kbId"]);
 const emit = defineEmits(["closeDoc", "getDoc", "questionDeleted", "summaryStateChange", "intakeReview", "reportAnomaly"]);
 const intakeOriginal = ref('');
 const intakeOriginalOffset = ref(0);
@@ -332,7 +323,7 @@ const applySummaryState = (summaryStatus?: string, description?: string) => {
 
 const isSummaryStatusInFlight = (status?: string) => status === 'pending' || status === 'processing';
 const summaryStatusRefreshing = computed(() => isSummaryStatusInFlight(props.details?.summary_status));
-const canEditSummary = computed(() => canEditContent.value && !summaryStatusRefreshing.value);
+const canEditSummary = computed(() => !summaryStatusRefreshing.value);
 let summaryStatusPollTimer: ReturnType<typeof setTimeout> | null = null;
 let summaryStatusPollGeneration = 0;
 
@@ -1667,7 +1658,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
               @click="emit('reportAnomaly', details.id)">
               <template #icon><t-icon name="error-circle" size="16px" /></template>
             </t-button>
-            <t-button v-if="canDownloadKB && (details.type === 'file' || details.type === 'manual')" class="header-action-btn" size="small"
+            <t-button v-if="(details.type === 'file' || details.type === 'manual')" class="header-action-btn" size="small"
               variant="text" shape="square" theme="default" :title="$t('common.download') || 'Download'"
               @click="downloadFile()">
               <template #icon>
@@ -1759,7 +1750,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
           <t-button v-if="intake.original_path" size="small" :loading="intakeOriginalLoading" :disabled="intakeOriginalDone" @click="loadIntakeOriginal">{{ intakeOriginal ? (intakeOriginalDone ? $t('knowledgeBase.intakePreviewOriginal') : $t('knowledgeBase.intakeLoadMore')) : $t('knowledgeBase.intakePreviewOriginal') }}</t-button>
           <p v-if="intakeOriginalError" class="field-hint field-hint--error">{{ intakeOriginalError }}</p>
           <div v-if="intakeOriginal" class="md-content" v-html="processMarkdown(intakeOriginal)" />
-          <template v-if="isIntakeRejected && canReviewIntake">
+          <template v-if="isIntakeRejected">
             <t-input v-model="intakeSourceDraft.author" :placeholder="$t('knowledgeBase.intakeAuthor')" />
             <t-input v-model="intakeSourceDraft.publisher" :placeholder="$t('knowledgeBase.intakePublisher')" />
             <t-input v-model="intakeSourceDraft.original_url" :placeholder="$t('knowledgeBase.intakeOriginalUrl')" />
@@ -1784,7 +1775,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
                 {{ Object.keys(details.custom_metadata || {}).length }}/20
               </span>
             </h4>
-            <t-tooltip v-if="canEditContent && !metadataEditing" :content="$t('common.edit')" placement="top">
+            <t-tooltip v-if="!metadataEditing" :content="$t('common.edit')" placement="top">
               <t-button class="icon-action-btn" size="small" variant="text" shape="square" @click="startMetadataEdit">
                 <template #icon><t-icon name="edit" size="15px" /></template>
               </t-button>
@@ -1798,11 +1789,10 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
                 <span class="metadata-item-value">{{ formatMetadataValue(value) }}</span>
               </div>
             </div>
-            <button v-else-if="canEditContent" type="button" class="metadata-empty-action" @click="startMetadataEdit">
+            <button v-else type="button" class="metadata-empty-action" @click="startMetadataEdit">
               <t-icon name="add" size="15px" />
               <span>{{ $t('knowledgeBase.addMetadataField') }}</span>
             </button>
-            <span v-else class="metadata-empty">{{ $t('knowledgeBase.noCustomMetadata') }}</span>
           </div>
 
           <div v-else class="metadata-editor">
@@ -1857,7 +1847,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
                 <span>{{ $t('knowledgeBase.generatingSummary') }}</span>
               </span>
             </div>
-            <div v-if="canEditContent && !summaryEditing" class="summary-title-actions">
+            <div v-if="!summaryEditing" class="summary-title-actions">
               <t-tooltip v-if="canEditSummary" :content="$t('common.edit')" placement="top">
                 <t-button class="icon-action-btn" size="small" variant="text" shape="square"
                   @click="startSummaryEdit">
@@ -1907,7 +1897,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
             <template v-else>
               <t-icon name="file-unknown" size="18px" />
               <span>{{ $t('knowledgeBase.noDocumentSummary') }}</span>
-              <t-button v-if="canEditContent" size="small" variant="text" :loading="summaryRefreshing" @click="refreshSummary">
+              <t-button size="small" variant="text" :loading="summaryRefreshing" @click="refreshSummary">
                 <template #icon><t-icon name="refresh" size="14px" /></template>
                 {{ $t('knowledgeBase.generateSummary') }}
               </t-button>
@@ -1982,7 +1972,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
                     <span class="chunk-meta">{{ chunk.meta }}</span>
                   </div>
                   <div class="chunk-header-right">
-                    <t-tooltip v-if="chunk.original.index_status === 'failed' && canEditContent"
+                    <t-tooltip v-if="chunk.original.index_status === 'failed'"
                       :content="$t('knowledgeBase.retryIndex')" placement="top">
                       <t-button class="icon-action-btn" size="small" theme="danger" variant="text" shape="square"
                         @click="retryChunkIndex(chunk.original)">
@@ -2014,7 +2004,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
                         </div>
                       </template>
                     </t-popup>
-                    <t-popup v-if="chunk.questions.length > 0 || canEditContent"
+                    <t-popup
                       :visible="questionPopupChunk === chunk.original.id" trigger="click" placement="bottom-right"
                       :show-arrow="true" destroy-on-close :overlay-inner-style="{ padding: 0 }"
                       overlay-class-name="chunk-questions-popup-overlay"
@@ -2035,7 +2025,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
                                 {{ $t('knowledgeBase.staleGeneratedQuestions') }}
                               </span>
                             </div>
-                            <div v-if="canEditContent" class="chunk-popup-actions">
+                            <div class="chunk-popup-actions">
                               <t-tooltip :content="$t('knowledgeBase.addGeneratedQuestion')" placement="top">
                                 <t-button class="icon-action-btn" size="small" variant="text" shape="square"
                                   @click.stop="openQuestionComposer(chunk.original)">
@@ -2052,7 +2042,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
                             </div>
                           </div>
                           <div class="chunk-questions-popup-body">
-                            <div v-if="canEditContent && questionComposerChunk === chunk.original.id" class="question-composer">
+                            <div v-if="questionComposerChunk === chunk.original.id" class="question-composer">
                               <t-input v-model="questionDrafts[chunk.original.id]" autofocus
                                 :placeholder="$t('knowledgeBase.addGeneratedQuestion')" @enter="addQuestion(chunk.original)" />
                               <t-tooltip :content="$t('common.cancel')" placement="top">
@@ -2081,7 +2071,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
                                 <template v-else>
                                   <span class="question-text">{{ question.question }}</span>
                                   <div class="question-actions">
-                                    <t-tooltip v-if="canEditContent && !question.id.startsWith('legacy-')"
+                                    <t-tooltip v-if="!question.id.startsWith('legacy-')"
                                       :content="$t('common.edit')" placement="top">
                                       <t-button class="icon-action-btn" theme="default" variant="text" shape="square"
                                         size="small" @click.stop="startQuestionEdit(chunk.original, question)">
@@ -2108,7 +2098,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
                         </div>
                       </template>
                     </t-popup>
-                    <template v-if="canEditContent">
+                    <template>
                       <t-tooltip :content="$t('common.edit')" placement="top">
                         <t-button class="icon-action-btn" :class="{ 'is-active': editingChunkId === chunk.original.id }"
                           size="small" variant="text" shape="square" @click="startChunkEdit(chunk.original)">

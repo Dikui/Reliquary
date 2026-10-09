@@ -483,8 +483,8 @@ type KBCapabilities struct {
 	Vector bool `json:"vector"`
 	// Keyword means BM25 / sparse keyword search is indexed.
 	Keyword bool `json:"keyword"`
-	// Graph means structured knowledge context queries are supported.
-	Graph bool `json:"graph"`
+	// Context means structured knowledge context queries are supported.
+	Context bool `json:"context"`
 }
 
 // Capabilities returns the computed capability flags for this KB.
@@ -496,7 +496,7 @@ func (kb *KnowledgeBase) Capabilities() KBCapabilities {
 	return KBCapabilities{
 		Vector:  kb.IsVectorEnabled(),
 		Keyword: kb.IsKeywordEnabled(),
-		Graph:   true,
+		Context: true,
 	}
 }
 

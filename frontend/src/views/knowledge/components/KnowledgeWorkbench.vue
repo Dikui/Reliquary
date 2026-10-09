@@ -10,14 +10,14 @@
           <template #icon><t-icon name="refresh" /></template>
           {{ t('knowledgeWorkbench.refresh') }}
         </t-button>
-        <t-button v-if="canManage" variant="outline" :loading="rebuilding" @click="rebuild">
+        <t-button variant="outline" :loading="rebuilding" @click="rebuild">
           <template #icon><t-icon name="refresh" /></template>
           {{ t('knowledgeWorkbench.rebuild') }}
         </t-button>
       </div>
     </header>
 
-    <section v-if="canRebuildNameEmbeddings" class="name-embedding-rebuild" :aria-label="t('knowledgeWorkbench.nameEmbeddings.title')">
+    <section class="name-embedding-rebuild" :aria-label="t('knowledgeWorkbench.nameEmbeddings.title')">
       <div class="name-embedding-rebuild__summary">
         <div>
           <h3>{{ t('knowledgeWorkbench.nameEmbeddings.title') }}</h3>
@@ -133,7 +133,7 @@
         <div v-if="queryResult.facts.length" class="result-group">
           <h4>{{ t('knowledgeWorkbench.facts') }}</h4>
           <FactCard v-for="fact in queryResult.facts" :key="fact.id" :fact="fact"
-            :facts="queryResult.facts" :entities="queryResult.entities" :evidence="queryResult.evidence" :can-manage="canManage"
+            :facts="queryResult.facts" :entities="queryResult.entities" :evidence="queryResult.evidence"
             @correct="startCorrection" @open-evidence="openEvidence" @open-source="emit('open-source', $event)" />
         </div>
         <div v-if="queryResult.events.length" class="result-group">
@@ -174,7 +174,7 @@
                   <small>{{ entity.entity_type || t('knowledgeWorkbench.entities.unknownType') }} · {{ entity.aliases?.length || 0 }} {{ t('knowledgeWorkbench.entities.aliases') }}</small>
                 </span>
               </button>
-              <FocusStarButton v-if="canManage" :name="entity.canonical_name" :starred="isEntityStarred(entity.id)" compact
+              <FocusStarButton :name="entity.canonical_name" :starred="isEntityStarred(entity.id)" compact
                 :busy="starPending.has(`entity:${entity.id}`)" :disabled="!focusScope || focusLoading"
                 @toggle="toggleFocusStar('entity', entity)" />
             </div>
@@ -193,7 +193,7 @@
                     <span v-for="alias in selectedEntity.aliases" :key="alias" class="chip">{{ alias }}</span>
                   </div>
                 </div>
-                <div v-if="canManage" class="entity-detail__actions">
+                <div class="entity-detail__actions">
                   <FocusStarButton :name="selectedEntity.canonical_name" :starred="isEntityStarred(selectedEntity.id)"
                     :busy="starPending.has(`entity:${selectedEntity.id}`)" :disabled="!focusScope || focusLoading"
                     @toggle="toggleFocusStar('entity', selectedEntity)" />
@@ -213,7 +213,7 @@
                   <t-empty v-if="!entityContext?.facts?.length" :description="t('knowledgeWorkbench.entities.noFacts')" />
                   <FactCard v-for="fact in entityContext?.facts || []" :key="fact.id" :fact="fact"
                     :facts="entityContext?.facts || []" :entities="entityContext?.entities?.length ? entityContext.entities : [selectedEntity]" :evidence="entityContext?.evidence || []"
-                    :can-manage="canManage" @correct="startCorrection" @open-evidence="openEvidence"
+                    @correct="startCorrection" @open-evidence="openEvidence"
                     @open-source="emit('open-source', $event)" />
                 </div>
                 <div class="result-group" v-if="entityContext?.events?.length">
@@ -242,7 +242,7 @@
             <p v-if="!focusScope.starred_entities.length" class="muted">{{ t('knowledgeWorkbench.focus.noStarredEntities') }}</p>
             <div v-for="item in focusScope.starred_entities" :key="item.id" class="focus-item">
               <button type="button" class="text-link" @click="openFocusEntity(item)">{{ item.canonical_name }}</button>
-              <FocusStarButton v-if="canManage" :name="item.canonical_name" starred compact :busy="starPending.has(`entity:${item.id}`)"
+              <FocusStarButton :name="item.canonical_name" starred compact :busy="starPending.has(`entity:${item.id}`)"
                 :disabled="focusLoading" @toggle="toggleFocusStar('entity', item)" />
             </div>
           </section>
@@ -251,7 +251,7 @@
             <p v-if="!focusScope.starred_topics.length" class="muted">{{ t('knowledgeWorkbench.focus.noStarredTopics') }}</p>
             <div v-for="item in focusScope.starred_topics" :key="item.id" class="focus-item">
               <span>{{ item.name }}</span>
-              <FocusStarButton v-if="canManage" :name="item.name" starred compact :busy="starPending.has(`topic:${item.id}`)"
+              <FocusStarButton :name="item.name" starred compact :busy="starPending.has(`topic:${item.id}`)"
                 :disabled="focusLoading" @toggle="toggleFocusStar('topic', item)" />
             </div>
           </section>
@@ -281,7 +281,7 @@
           <div class="focus-topics">
             <div v-for="item in filteredTopics.slice(0, visibleTopicCount)" :key="item.id" class="focus-topic">
               <div><strong>{{ item.name }}</strong><small>{{ topicKindLabel(item.kind) }} · {{ item.knowledge_base_name || item.knowledge_base_id }}</small></div>
-              <FocusStarButton v-if="canManage" :name="item.name" :starred="isTopicStarred(item.id)" compact
+              <FocusStarButton :name="item.name" :starred="isTopicStarred(item.id)" compact
                 :busy="starPending.has(`topic:${item.id}`)" :disabled="!focusScope || focusLoading" @toggle="toggleFocusStar('topic', item)" />
             </div>
           </div>
@@ -291,7 +291,7 @@
     </section>
 
     <section v-else-if="activeSection === 'merges'" class="workbench-panel">
-      <MergeSuggestions ref="mergeSuggestions" :kb-id="kbId" :scope="queryScope" :domain-id="queryDomainId" :can-manage="canManage" @open-evidence="openEvidence" @changed="refreshAll" />
+      <MergeSuggestions ref="mergeSuggestions" :kb-id="kbId" :scope="queryScope" :domain-id="queryDomainId" @open-evidence="openEvidence" @changed="refreshAll" />
     </section>
 
     <section v-else-if="activeSection === 'events'" class="workbench-panel">
@@ -386,7 +386,7 @@
           <h3>{{ t('knowledgeWorkbench.workflows.title') }}</h3>
           <p>{{ t('knowledgeWorkbench.workflows.description') }}</p>
         </div>
-        <t-button v-if="canManage" theme="primary" @click="startNewWorkflow">
+        <t-button theme="primary" @click="startNewWorkflow">
           <template #icon><t-icon name="add" /></template>
           {{ t('knowledgeWorkbench.workflows.create') }}
         </t-button>
@@ -506,10 +506,10 @@
               <p>{{ workflow.description || t('knowledgeWorkbench.workflows.noDescription') }}</p>
               <small>{{ workflow.schedule.cron || t('knowledgeWorkbench.workflows.manualOnly') }} · {{ workflow.schedule.timezone || 'UTC' }}</small>
               <div class="workflow-list__actions">
-                <t-button v-if="canManage" size="small" theme="primary" variant="outline" :loading="runningWorkflowId === workflow.id"
+                <t-button size="small" theme="primary" variant="outline" :loading="runningWorkflowId === workflow.id"
                   @click.stop="runWorkflow(workflow)">{{ t('knowledgeWorkbench.workflows.run') }}</t-button>
-                <t-button v-if="canManage" size="small" variant="text" @click.stop="editWorkflow(workflow)">{{ t('knowledgeWorkbench.workflows.edit') }}</t-button>
-                <t-button v-if="canManage" size="small" variant="text" @click.stop="toggleWorkflow(workflow)">
+                <t-button size="small" variant="text" @click.stop="editWorkflow(workflow)">{{ t('knowledgeWorkbench.workflows.edit') }}</t-button>
+                <t-button size="small" variant="text" @click.stop="toggleWorkflow(workflow)">
                   {{ workflow.enabled ? t('knowledgeWorkbench.workflows.disable') : t('knowledgeWorkbench.workflows.enable') }}
                 </t-button>
               </div>
@@ -688,7 +688,6 @@ import EvidenceExtractionDetails from './EvidenceExtractionDetails.vue'
 import RepostSources from './RepostSources.vue'
 import ReportMarkdown from './ReportMarkdown.vue'
 import { eventEvidence, normalizeKnowledgeContextResult } from './knowledgeContextDisplay'
-import { useAuthStore } from '@/stores/auth'
 import { listKnowledgeDomains, type KnowledgeDomain } from '@/api/knowledge-domains'
 import { knowledgeContextScopeParams } from '@/api/knowledge-context-scope'
 import { markdownCitationSegments } from '@/utils/markdownCitation'
@@ -742,18 +741,16 @@ import {
   type KnowledgeWorkflowStepType,
 } from '@/api/knowledge-workflows'
 
-const props = defineProps<{ kbId: string; domainId?: string; canManage: boolean }>()
+const props = defineProps<{ kbId: string; domainId?: string }>()
 const emit = defineEmits<{ 'open-source': [knowledgeId: string] }>()
 const { t } = useI18n()
-const authStore = useAuthStore()
-const canRebuildNameEmbeddings = computed(() => authStore.isLoggedIn)
 const pageSize = 50
 const queryScope = ref<KnowledgeContextScope>('knowledge_base')
 const queryDomainId = ref(props.domainId || '')
 const domains = ref<KnowledgeDomain[]>([])
 const domainsLoading = ref(false)
 const domainLoadError = ref('')
-const scopeOptions = computed(() => ['knowledge_base', 'domain', 'team'].map(value => ({ value, label: t(`knowledgeWorkbench.scope.${value}`) })))
+const scopeOptions = computed(() => ['knowledge_base', 'domain', 'all'].map(value => ({ value, label: t(`knowledgeWorkbench.scope.${value}`) })))
 const domainOptions = computed(() => domains.value.map(domain => ({ value: domain.id, label: domain.name })))
 const scopeParams = computed(() => knowledgeContextScopeParams(queryScope.value, props.kbId, queryDomainId.value))
 let contextGeneration = 0
@@ -881,10 +878,10 @@ const reportWindowOptions = computed(() => [
   { value: 'rolling_days', label: t('knowledgeWorkbench.workflows.config.rollingDays') },
 ])
 const canRetryRun = computed(() => Boolean(
-  props.canManage && selectedRun.value?.status === 'failed' && selectedWorkflow.value?.enabled,
+  selectedRun.value?.status === 'failed' && selectedWorkflow.value?.enabled,
 ))
 const canResumeRun = computed(() => Boolean(
-  props.canManage && selectedRun.value?.status === 'paused' && selectedWorkflow.value?.enabled,
+  selectedRun.value?.status === 'paused' && selectedWorkflow.value?.enabled,
 ))
 const booleanOptions = computed(() => [
   { value: 'true', label: t('common.yes') },
@@ -946,7 +943,7 @@ async function loadFocus() {
 
 async function toggleFocusStar(kind: 'entity' | 'topic', item: KnowledgeEntity | KnowledgeFocusTopic) {
   const key = `${kind}:${item.id}`
-  if (!props.canManage || !focusScope.value || focusLoading.value || starPending.has(key)) return
+  if (!focusScope.value || focusLoading.value || starPending.has(key)) return
   const generation = contextGeneration
   const starred = kind === 'entity' ? isEntityStarred(item.id) : isTopicStarred(item.id)
   const action = kind === 'entity' ? (starred ? unstarKnowledgeEntity : starKnowledgeEntity) : (starred ? unstarKnowledgeTopic : starKnowledgeTopic)
@@ -977,13 +974,13 @@ function clearNameEmbeddingPolling() {
 
 function updateNameEmbeddingPolling() {
   clearNameEmbeddingPolling()
-  if (canRebuildNameEmbeddings.value && nameEmbeddingBusy.value) {
+  if (nameEmbeddingBusy.value) {
     nameEmbeddingPollTimer = setTimeout(() => { void loadNameEmbeddingStatus() }, 5000)
   }
 }
 
 async function loadNameEmbeddingStatus() {
-  if (!canRebuildNameEmbeddings.value || nameEmbeddingRebuilding.value) return
+  if (nameEmbeddingRebuilding.value) return
   const request = ++nameEmbeddingRequest
   nameEmbeddingStatusLoading.value = true
   nameEmbeddingError.value = ''
@@ -1002,7 +999,7 @@ async function loadNameEmbeddingStatus() {
 }
 
 async function rebuildNameEmbeddings() {
-  if (!canRebuildNameEmbeddings.value || nameEmbeddingRebuilding.value || nameEmbeddingBusy.value || !nameEmbeddingStatus.value?.pending_count) return
+  if (nameEmbeddingRebuilding.value || nameEmbeddingBusy.value || !nameEmbeddingStatus.value?.pending_count) return
   const request = ++nameEmbeddingRequest
   clearNameEmbeddingPolling()
   nameEmbeddingRebuilding.value = true
@@ -1331,7 +1328,7 @@ function dateToISO(value: string) {
 }
 
 function startCorrection(fact: KnowledgeFact) {
-  if (!props.canManage || fact.kind !== 'attribute' || fact.status !== 'current') return
+  if (fact.kind !== 'attribute' || fact.status !== 'current') return
   editingFact.value = {
     fact,
     value: formatValue(fact.value),
@@ -1611,7 +1608,7 @@ function editWorkflow(workflow: KnowledgeWorkflow) {
     enabled: workflow.enabled,
     schedule: { ...workflow.schedule },
     steps: workflow.steps.map(step => {
-      const config = { ...step.config }
+      const config: Record<string, unknown> = { ...step.config, ...(step.config.scope === 'team' ? { scope: 'all' } : {}) }
       return {
         ...step,
         depends_on: [...(step.depends_on || [])],
@@ -1678,7 +1675,7 @@ function normalizeWorkflowInput(draft: KnowledgeWorkflowInput): KnowledgeWorkflo
     description: draft.description?.trim() || '',
     schedule: { cron: draft.schedule.cron?.trim() || '', timezone: draft.schedule.timezone?.trim() || 'Asia/Shanghai' },
     steps: draft.steps.map(step => {
-      const config = { ...step.config }
+      const config: Record<string, unknown> = { ...step.config, ...(step.config.scope === 'team' ? { scope: 'all' } : {}) }
       if (step.type === 'fact_query' && config.scope === 'domain' && !config.domain_id) throw new Error(t('knowledgeDomains.domainRequired'))
       return {
         id: step.id.trim(), type: step.type,
@@ -1818,15 +1815,7 @@ watch([() => props.kbId, queryScope, queryDomainId], async () => {
 }, { immediate: true })
 
 watch(selectedRun, updateRunPolling)
-watch(canRebuildNameEmbeddings, allowed => {
-  nameEmbeddingRequest++
-  clearNameEmbeddingPolling()
-  nameEmbeddingStatus.value = null
-  nameEmbeddingStatusLoading.value = false
-  nameEmbeddingRebuilding.value = false
-  nameEmbeddingError.value = ''
-  if (allowed) void loadNameEmbeddingStatus()
-}, { immediate: true })
+void loadNameEmbeddingStatus()
 onBeforeUnmount(() => { contextGeneration++; focusRequest++; snapshotRequest++; nameEmbeddingRequest++; clearRunPolling(); clearNameEmbeddingPolling() })
 
 const FocusStarButton = defineComponent({
@@ -1855,7 +1844,6 @@ const FactCard = defineComponent({
     facts: { type: Array as () => KnowledgeFact[], required: true },
     entities: { type: Array as () => KnowledgeEntity[], required: true },
     evidence: { type: Array as () => KnowledgeEvidence[], required: true },
-    canManage: { type: Boolean, default: false },
   },
   emits: ['correct', 'openEvidence', 'openSource'],
   setup(cardProps, { emit: cardEmit }) {
@@ -1896,7 +1884,7 @@ const FactCard = defineComponent({
         cardProps.evidence.find(item => item.id === cardProps.fact.evidence_id)?.knowledge_id
           ? h('button', { type: 'button', class: 'text-link', onClick: () => cardEmit('openSource', cardProps.evidence.find(item => item.id === cardProps.fact.evidence_id)?.knowledge_id) }, t('knowledgeWorkbench.evidence.openKnowledge'))
           : null,
-        cardProps.canManage && cardProps.fact.kind === 'attribute' && cardProps.fact.status === 'current'
+        cardProps.fact.kind === 'attribute' && cardProps.fact.status === 'current'
           ? h('button', { type: 'button', class: 'text-link', onClick: () => cardEmit('correct', cardProps.fact) }, t('knowledgeWorkbench.correct'))
           : null,
       ]),

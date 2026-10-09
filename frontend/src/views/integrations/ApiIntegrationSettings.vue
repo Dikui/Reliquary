@@ -46,7 +46,6 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
-import { useAuthStore } from '@/stores/auth'
 import SettingDrawer from '@/components/settings/SettingDrawer.vue'
 import { apiKeyErrorMessage } from '@/utils/personalServerError'
 import { getApiBaseUrl } from '@/utils/api-base'
@@ -54,7 +53,6 @@ import { copyWithToast } from '@/utils/clipboard'
 import { listTenantAPIKeys, createTenantAPIKey, updateTenantAPIKey, deleteTenantAPIKey, type TenantAPIKey } from '@/api/tenant'
 
 const { t } = useI18n()
-const authStore = useAuthStore()
 const apiBaseUrl = computed(() => getApiBaseUrl().replace(/\/$/, '') || window.location.origin)
 const keys = ref<TenantAPIKey[]>([])
 const loading = ref(false)
@@ -87,7 +85,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const response = await listTenantAPIKeys(Number(authStore.currentTenantId))
+    const response = await listTenantAPIKeys()
     if (!response.success) throw new Error(response.message || t('integrations.api.loadApiKeysFailed'))
     keys.value = response.data || []
     pagination.total = keys.value.length
@@ -111,7 +109,7 @@ async function save() {
   formError.value = ''
   try {
     const payload = { name: form.name.trim(), ...(expires ? { expires_at_unix: expires } : {}) }
-    const response = editingId.value ? await updateTenantAPIKey(Number(authStore.currentTenantId), editingId.value, payload) : await createTenantAPIKey(Number(authStore.currentTenantId), payload)
+    const response = editingId.value ? await updateTenantAPIKey(editingId.value, payload) : await createTenantAPIKey(payload)
     if (!response.success) throw new Error(response.message || t('integrations.api.createApiKeyFailed'))
     if (!editingId.value) { createdToken.value = (response.data as any)?.token || ''; createdVisible.value = true }
     editingVisible.value = false
@@ -125,7 +123,7 @@ function revoke(key: TenantAPIKey) {
     header: t('integrations.api.apiKeyRevoke'), body: t('integrations.api.apiKeyRevokeConfirm', { name: key.name }),
     confirmBtn: { content: t('integrations.api.apiKeyRevoke'), theme: 'danger' },
     onConfirm: async () => {
-      try { const response = await deleteTenantAPIKey(Number(authStore.currentTenantId), key.id); if (!response.success) throw new Error(response.message); dialog.hide(); await load(); MessagePlugin.success(t('integrations.api.apiKeyRevoked')) }
+      try { const response = await deleteTenantAPIKey(key.id); if (!response.success) throw new Error(response.message); dialog.hide(); await load(); MessagePlugin.success(t('integrations.api.apiKeyRevoked')) }
       catch (e: any) { MessagePlugin.error(apiKeyErrorMessage(e, t, 'integrations.api.deleteApiKeyFailed')) }
     },
   })

@@ -119,7 +119,6 @@ export const useAuthStore = defineStore('auth', () => {
           description: tenantSnapshot.description,
           status: tenantSnapshot.status,
           business: tenantSnapshot.business,
-          storage_quota: tenantSnapshot.storage_quota,
           storage_used: tenantSnapshot.storage_used,
           created_at: tenantSnapshot.created_at || new Date().toISOString(),
           updated_at: tenantSnapshot.updated_at || new Date().toISOString(),

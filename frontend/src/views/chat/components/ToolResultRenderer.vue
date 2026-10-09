@@ -16,8 +16,8 @@
     <!-- Document Info -->
     <DocumentInfo v-else-if="displayType === 'document_info'" :data="toolData as DocumentInfoData" />
 
-    <!-- Graph Query Results -->
-    <GraphQueryResults v-else-if="displayType === 'graph_query_results'" :data="toolData as GraphQueryResultsData" />
+    <!-- Knowledge Context Query Results -->
+    <ContextQueryResults v-else-if="displayType === 'context_query_results' || displayType === 'graph_query_results'" :data="toolData as ContextQueryResultsData" />
 
     <!-- Thinking Display -->
     <ThinkingDisplay v-else-if="displayType === 'thinking'" :data="toolData as ThinkingData" />
@@ -60,7 +60,7 @@ import type {
   RelatedChunksData,
   KnowledgeBaseListData,
   DocumentInfoData,
-  GraphQueryResultsData,
+  ContextQueryResultsData,
   ThinkingData,
   PlanData,
   DatabaseQueryData,
@@ -74,7 +74,7 @@ import ChunkDetail from './tool-results/ChunkDetail.vue';
 import RelatedChunks from './tool-results/RelatedChunks.vue';
 import KnowledgeBaseList from './tool-results/KnowledgeBaseList.vue';
 import DocumentInfo from './tool-results/DocumentInfo.vue';
-import GraphQueryResults from './tool-results/GraphQueryResults.vue';
+import ContextQueryResults from './tool-results/ContextQueryResults.vue';
 import ThinkingDisplay from './tool-results/ThinkingDisplay.vue';
 import PlanDisplay from './tool-results/PlanDisplay.vue';
 import DatabaseQuery from './tool-results/DatabaseQuery.vue';

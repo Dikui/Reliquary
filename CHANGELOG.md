@@ -8,7 +8,6 @@ All notable changes to this project will be documented in this file.
 
 - **NEW**: **Skill Sandbox Runtime (Docker / E2B / Cube)** — the headline of this release. Agent skills now run in a **session-persistent sandbox**: one sandbox per chat session, with `shell_exec`, file read/write/edit, attachment staging, and generated-file collection all landing in the same workspace. Three backends share one `RemoteSandboxClient` protocol: **Docker** (single-host / self-hosted, talking to the Engine API rather than `docker run --rm`), **E2B** (cloud or any E2B-compatible control plane, including self-hosted), and **CubeSandbox**. Per-workspace configs cover image, CPU/memory, TTL, DNS, templates and snapshots (migrations `000082_tenant_sandbox_config`, `000083_session_sandbox_config`). Admins can set a **network policy** per config (default-deny egress, allow/deny lists, Cube L7 rules, E2B host rules) (#2995). The old **Local host-process backend is removed**. The Docker backend is **opt-in** (`WEKNORA_SANDBOX_DOCKER_ENABLED` or System Settings → Network Security) because a mounted `docker.sock` is host root (#2936). See [`docs/sandbox-docker-backend.md`](./docs/sandbox-docker-backend.md) and [`docs/sandbox-protocol.md`](./docs/sandbox-protocol.md).
 - **NEW**: **Tenant Skill Catalog** — skills are first-class workspace resources, not files dropped next to the process (migrations `000086_tenant_skills`, `000087_skill_install_transcript`, `000088_skill_snapshot_planned_name`, `000090_skill_catalog`). Install from **ClawHub**, **SkillHub / skills.sh**, **GitHub/GitLab URLs**, or a zip upload; each install is a snapshot on the chosen sandbox config, with live circular progress, install transcripts, stop/reinstall, and uninstall that keeps catalog archives. Browse and edit installed skill files from Settings; agents get `write_skill_file` / `edit_skill_file` plus `shell_exec` that no longer requires a skill to be installed. Personal and workspace **skill env vars** inject at execution without ever being read back (migration `000089_env_vars`). `@mention` no longer silently shrinks the skill whitelist.
-- **NEW**: **Cross-Session Long-Term Memory** — a new memory product (migration `000084_memory`), independent of the Neo4j conversation-memory that 0.7.1 removed. Workspaces opt in; each user can further turn it off. Memories are typed (`profile` / `preference` / `fact` / `task` / `interest`), written either explicitly or by a background extractor, and **inferred items stay pending until the user confirms**. Resident profile/preference blocks ride in every turn; situational facts are recalled lexically and (optionally) semantically; `search_memory` looks up on demand. Document affinity conditions retrieval toward sources the user keeps citing. Settings, items, topics, document affinity, confirm/reject, export and forced consolidation are exposed as `/api/v1/memory/*` (full-access API keys only; the subject is always the caller).
 - **NEW**: **In-Process anydoc Parser** — Office documents (doc/docx/ppt/pptx and the types anydoc converts) can be parsed **inside the Go app** via `third_party/anydoc-go`, without a round-trip to docreader. When the binding is linked, anydoc is preferred for every type it converts; PPT/PPTX still default to MarkItDown when no engine rule is set. The app image links anydoc by default.
 - **NEW**: **DeepSeek Harness Plugin** — official npm package [`@wxg-prc-cpg/dsh-weknora`](https://www.npmjs.com/package/@wxg-prc-cpg/dsh-weknora) exposes four read-only tools (`weknora_search`, `weknora_read_document`, `weknora_ask`, `weknora_list_knowledge_bases`) so a DeepSeek Harness coding agent can retrieve from a WeKnora deployment (#2759).
 - **NEW**: **GitLab & Tencent IMA Data Sources** — GitLab projects sync as a knowledge source (#2656); Tencent IMA notes sync through the note OpenAPI, with retries on transient failures.
@@ -154,7 +153,6 @@ All notable changes to this project will be documented in this file.
 ### Improvements
 
 - **IMPROVED**: **Unified Wiki activity history** — removed the duplicate Wiki Browser log feed and its dedicated storage/API. Wiki mutations continue to appear in the knowledge-base Activity view, which is now the single operation-history surface (migration `000077_remove_wiki_log`).
-- **IMPROVED**: **Removed Neo4j conversation memory** — the Neo4j-based episodic memory pipeline, its API fields, settings UI, and embed toggles were dropped, so chat no longer depends on Neo4j graph storage. This simplifies deployment and reduces the required infrastructure footprint.
 - **IMPROVED**: **Shared SSRF-safe HTTP transport** — model clients, embedders, the Doris Stream Load client, and datasource connectors now reuse a single SSRF-safe HTTP transport, consolidating outbound-request protection.
 - **IMPROVED**: **Resilient Feishu large-wiki sync** — Feishu wiki synchronization now retries, resumes streaming, and surfaces failure reasons for large spaces.
 - **IMPROVED**: **Organization & shared-space UI** — polished organization space UI, share-to-space panels, shared-space settings, and join-preview UI, with disambiguated shared-space terminology and tightened invite search.
@@ -219,7 +217,7 @@ All notable changes to this project will be documented in this file.
 ### Bug Fixes
 
 - **FIXED**: Chat now emits retrieval references even when citation output is disabled.
-- **FIXED**: `/api/v1/tenants/kv/storage-engine-config` returned no Huawei OBS config, causing the KB-creation dialog to omit the OBS unavailable marker.
+- **FIXED**: `/api/v1/space/kv/storage-engine-config` returned no Huawei OBS config, causing the KB-creation dialog to omit the OBS unavailable marker.
 - **FIXED**: Empty tenant `default_provider` fell back to `local` even when `local` was not in `STORAGE_ALLOW_LIST`, breaking KB creation.
 - **FIXED**: DingTalk file/image messages now ingest into the knowledge base with SSRF-checked downloads and `pictureDownloadCode` fallback (#1771).
 - **FIXED**: Feishu WebSocket long connection now actually closes when the channel is stopped; replies land in the original thread.
@@ -758,7 +756,6 @@ All notable changes to this project will be documented in this file.
 - Fixed Dockerfile build error with duplicate libsqlite3-0 and ffmpeg installation
 - Fixed OSS S3-compatible API signature mismatch by disabling automatic checksum calculation and adjusting path-style settings
 - Fixed missing closing brace in checkOSS function
-- Fixed neo4j driver compatibility with Go 1.24 on Windows: reverted to v6 with -p=1 compiler workaround
 
 ### 🔧 Refactoring
 - Replaced CryptoService with lightweight utils AES helpers, simplifying encryption logic across the codebase
@@ -860,7 +857,7 @@ All notable changes to this project will be documented in this file.
 - Fixed image markdown being stripped during message sanitization
 - Fixed MCP tool naming to use service.Name instead of UUID, preventing tool call failures after server reconnection
 - Fixed global default storage engine not respected when creating a new knowledge base (was hardcoded to "local")
-- Fixed API key encryption loss when updating tenant settings via PUT /tenants/kv/{key}: AfterFind-decrypted plaintext no longer written back to DB
+- Fixed API key encryption loss when updating tenant settings via PUT /space/kv/{key}: AfterFind-decrypted plaintext no longer written back to DB
 - Fixed empty passage filtering in rerank to prevent Aliyun and Baidu Qianfan 400 errors
 - Fixed markdown table rows being passed raw to rerank; now converted to plain text (col1, col2) before reranking
 - Fixed OpenRouter embedding provider missing support
@@ -1168,7 +1165,6 @@ All notable changes to this project will be documented in this file.
 
 - **NEW**: Helm Chart for Kubernetes Deployment
   - Complete Helm chart for Kubernetes deployment
-  - Neo4j template support for GraphRAG functionality
   - Versioned image tags and official images compatibility
 
 - **NEW**: Enhanced FAQ Management
@@ -1294,7 +1290,6 @@ All notable changes to this project will be documented in this file.
 ### ⚡ Improvements
 - **IMPROVED**: Optimized async task retry logic to update failure status only on last retry
 - **IMPROVED**: Enhanced hybrid search result fusion strategy
-- **IMPROVED**: Updated MinIO, Jaeger, and Neo4j image versions for stability
 
 ### 🐛 Bug Fixes
 - **FIXED**: Environment variable saving logic in MCP service dialog
@@ -1343,12 +1338,9 @@ All notable changes to this project will be documented in this file.
 
 ### ⚡ Infrastructure Improvements
 - **IMPROVED**: Docker Compose Profile Management
-  - Added profiles for optional services: `minio`, `qdrant`, `neo4j`, `jaeger`, `full`
-  - Enhanced `dev.sh` script with `--minio`, `--qdrant`, `--neo4j`, `--jaeger`, `--full` flags
   - Pinned Qdrant Docker image version to `v1.16.2` for stability
 - **IMPROVED**: Database Migration System
   - Added automatic dirty state recovery for failed migrations
-  - Added Neo4j connection retry mechanism with exponential backoff
   - Improved migration error handling and logging
 - **IMPROVED**: Retriever Engine Configuration
   - Retriever engines now auto-configured from `RETRIEVE_DRIVER` environment variable

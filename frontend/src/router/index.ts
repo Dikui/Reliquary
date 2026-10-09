@@ -44,7 +44,6 @@ async function hydrateSessionFromToken(authStore: ReturnType<typeof useAuthStore
         description: tenant.description,
         status: tenant.status,
         business: tenant.business,
-        storage_quota: tenant.storage_quota,
         storage_used: tenant.storage_used,
         created_at: tenant.created_at || new Date().toISOString(),
         updated_at: tenant.updated_at || new Date().toISOString(),

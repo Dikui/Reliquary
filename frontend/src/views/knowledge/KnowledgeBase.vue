@@ -151,10 +151,6 @@ const goToParserSettings = () => {
   }
 }
 
-const canEdit = computed(() => authStore.isLoggedIn);
-const canManage = computed(() => authStore.isLoggedIn);
-const canMutateKnowledge = computed(() => authStore.isLoggedIn);
-const canDownloadKnowledge = computed(() => authStore.isLoggedIn);
 
 const knowledgeList = ref<Array<{ id: string; name: string; type?: string }>>([]);
 let { cardList, total, moreIndex, details, getKnowled, delKnowledge, openMore, onVisibleChange: _onVisibleChange, getCardDetails, getfDetails,
@@ -162,7 +158,7 @@ let { cardList, total, moreIndex, details, getKnowled, delKnowledge, openMore, o
 
 const showKbDetailContextualGuide = computed(() => {
   return Boolean(kbId.value)
-    && canEdit.value
+
     && !docListLoading.value
     && cardList.value.length === 0;
 });
@@ -1199,7 +1195,7 @@ type KnowledgeCard = {
 // enough that the doc list should keep refreshing it. Keep in sync with
 // the backend lifecycle: pending / processing are the primary parse
 // phase, finalizing is the post-process fan-out (summary / question /
-// graph extract still running), and a `completed` row whose summary
+// context extract still running), and a `completed` row whose summary
 // hasn't landed yet keeps polling so the description fills in.
 const needsStatusPolling = (item: KnowledgeCard) => {
   return knowledgeNeedsStatusPolling(item);
@@ -1745,7 +1741,7 @@ const handleViewTrace = (index: number, item: KnowledgeCard) => {
 
 const confirmRebuildKnowledge = async (index: number, item: KnowledgeCard) => {
 
-  if (!canEdit.value) return;
+
   if (!item?.id) {
     MessagePlugin.warning(t('knowledgeEditor.messages.missingId'));
     return;
@@ -1919,7 +1915,7 @@ const {
   itemSelector: '.knowledge-card[data-select-id], .doc-list-row[data-select-id]',
   selectedIds,
   getItemId: (el) => el.dataset.selectId || null,
-  enabled: computed(() => canEdit.value && cardList.value.length > 0),
+  enabled: computed(() => cardList.value.length > 0),
   onSelectionStart: () => {
     batchMode.value = true;
   },
@@ -1930,7 +1926,7 @@ const isManualDraftKnowledge = (item: KnowledgeCard) =>
 
 const openKnowledgeItem = (item: KnowledgeCard) => {
   if (shouldSuppressDocClick()) return;
-  if (canEdit.value && isManualDraftKnowledge(item)) {
+  if (isManualDraftKnowledge(item)) {
     const index = cardList.value.findIndex((c) => c.id === item.id);
     if (index >= 0) {
       handleManualEdit(index, item);
@@ -1941,7 +1937,7 @@ const openKnowledgeItem = (item: KnowledgeCard) => {
 };
 
 const handleIntakeReview = async (payload: { action: 'retry' | 'discard'; sourceInfo?: IntakeSourceInfo }) => {
-  if (!details.id || !canManage.value) return
+  if (!details.id) return
   try {
     await reviewKnowledge(details.id, { action: payload.action, source_info: payload.sourceInfo })
     MessagePlugin.success(t('knowledgeBase.intakeReviewSubmitted'))
@@ -2194,7 +2190,7 @@ async function createNewSession(value: string): Promise<void> {
             </h2>
             <!-- 标题行右侧的动作锚点：聚拢"信息"和"设置"两个圆形按钮。 -->
             <div class="kb-title-actions">
-              <t-tooltip v-if="kbId && canManage" :content="$t('knowledgeBase.strategy.title')" placement="top">
+              <t-tooltip v-if="kbId" :content="$t('knowledgeBase.strategy.title')" placement="top">
                 <button type="button" class="kb-settings-button" :aria-label="$t('knowledgeBase.strategy.title')"
                   @click="strategyDrawerVisible = true">
                   <t-icon name="adjustment" size="16px" />
@@ -2208,7 +2204,7 @@ async function createNewSession(value: string): Promise<void> {
               </t-tooltip>
               <KBInfoPopover v-if="kbInfo" :kb-info="kbInfo"
                 :supported-file-types="[...supportedFileTypes]" />
-              <t-tooltip v-if="authStore.isLoggedIn" :content="$t('knowledgeBase.settings')" placement="top">
+              <t-tooltip :content="$t('knowledgeBase.settings')" placement="top">
                 <button type="button" class="kb-settings-button" :disabled="!kbId" @click="handleOpenKBSettings">
                   <t-icon name="setting" size="16px" />
                 </button>
@@ -2231,14 +2227,14 @@ async function createNewSession(value: string): Promise<void> {
 
 
       <div v-if="activeKbTab === 'context'" class="knowledge-context-area">
-        <KnowledgeWorkbench v-if="kbId" :kb-id="kbId" :domain-id="kbInfo?.domain_id" :can-manage="canManage"
+        <KnowledgeWorkbench v-if="kbId" :kb-id="kbId" :domain-id="kbInfo?.domain_id"
           @open-source="openSourceDoc" />
       </div>
 
       <template v-if="activeKbTab === 'documents'">
         <div class="knowledge-main">
           <KbFolderTree v-if="showFolderTree && !folderTreeCollapsed" :tree="folderTree" :selected-path="selectedFolderPath"
-            :loading="folderTreeLoading" :can-edit="canEdit"
+            :loading="folderTreeLoading"
             @select="handleFolderSelect" @update:collapsed="handleFolderTreeCollapsedChange"
             @rename="handleFolderRename" />
           <div class="tag-content">
@@ -2340,7 +2336,7 @@ async function createNewSession(value: string): Promise<void> {
                           </div>
                         </template>
                       </div>
-                      <div v-if="canEdit" class="tag-filter-panel__footer">
+                      <div class="tag-filter-panel__footer">
                         <t-button variant="text" size="small" class="tag-manage-link" @click="openTagManageDrawer">
                           {{ $t('knowledgeBase.tagManageLink') }}
                         </t-button>
@@ -2435,7 +2431,7 @@ async function createNewSession(value: string): Promise<void> {
                       </button>
                     </t-tooltip>
                   </div>
-                  <div v-if="canEdit" class="doc-filter-actions">
+                  <div class="doc-filter-actions">
                     <KbUploadSourceDropdown ref="uploadSourceRef" :accept-file-types="acceptFileTypes"
                       :supported-file-types="[...supportedFileTypes]" include-manual trigger-icon="file-add"
                       trigger-class="content-bar-icon-btn" data-guide="kb-detail-add-doc"
@@ -2475,9 +2471,8 @@ async function createNewSession(value: string): Promise<void> {
                     :folders="currentChildFolders" :folder-options="folderOptions"
                     :selected-ids="selectedIds"
                     :batch-mode="batchMode"
-                    :can-edit="canEdit"
-                    :can-download="canDownloadKnowledge"
-                    :can-mutate-knowledge="canMutateKnowledge"
+
+
                     :trace-available-by-id="traceAvailableById"
                     :tag-list="tagList"
                     :starred-tag-ids="starredTagIds"
@@ -2504,7 +2499,7 @@ async function createNewSession(value: string): Promise<void> {
                 <template v-else-if="(cardList.length || currentChildFolders.length) && (viewMode === 'list' || selectedParseStatus === 'rejected')">
                   <DocumentListView :items="cardList" :folders="currentChildFolders" :folder-options="folderOptions"
                     :selected-ids="selectedIds" :tag-list="tagList" :starred-tag-ids="starredTagIds"
-                    :can-edit="canEdit" :can-download="canDownloadKnowledge" :can-mutate-knowledge="canMutateKnowledge"
+
                     :trace-visible-ids="traceAvailableById"
                     :move-menu-mode="moveMenuMode"
                     :move-target-kbs="moveTargetKbs"
@@ -2539,7 +2534,7 @@ async function createNewSession(value: string): Promise<void> {
               <div class="doc-batch-bar-anchor" v-show="batchMode || selectedIds.size > 0">
                 <DocumentBatchBar :count="selectedIds.size" :delete-loading="batchDeleting"
                   :reparse-loading="batchReparsing" :tag-loading="batchTagging" :visible="batchMode || selectedIds.size > 0"
-                  :show-move-to-folder="canEdit" :folder-options="folderOptions"
+                  :show-move-to-folder="true" :folder-options="folderOptions"
                   @cancel="handleBatchCancel" @delete="confirmBatchDelete" @reparse="confirmBatchReparse"
                   @batch-tag="handleBatchTag"
                   @move-to-folder="(path: string) => moveKnowledgeIntoFolder(Array.from(selectedIds), path)" />
@@ -2550,8 +2545,8 @@ async function createNewSession(value: string): Promise<void> {
       </template>
 
       <!-- Document content drawer -->
-      <DocContent ref="docContentRef" :visible="isCardDetails" :details="details" :canEditKB="canEdit" :can-review-intake="canManage"
-        :canDownloadKB="canDownloadKnowledge" :kbId="kbId"
+      <DocContent ref="docContentRef" :visible="isCardDetails" :details="details"
+        :kbId="kbId"
         @closeDoc="closeDoc" @getDoc="getDoc" @summaryStateChange="syncDocumentSummaryState" @intake-review="handleIntakeReview"
         @report-anomaly="openAnomalyWindow">
       </DocContent>
@@ -2568,14 +2563,14 @@ async function createNewSession(value: string): Promise<void> {
   <!-- 标签编辑弹窗 -->
   <TagEditDialog :visible="tagEditDialogVisible"
     :knowledge-name="tagEditTarget?.display_name || tagEditTarget?.file_name || tagEditTarget?.title || ''"
-    :kb-id="kbId" :tag-list="tagList" :selected-tags="tagEditTarget?.tags || []" :can-manage="canEdit"
+    :kb-id="kbId" :tag-list="tagList" :selected-tags="tagEditTarget?.tags || []"
     @update:visible="tagEditDialogVisible = $event" @confirm="onTagEditConfirm" @tag-created="loadTags(kbId, true)"
     @open-manage="openTagManageFromEditDialog" />
 
   <!-- 批量打标签弹窗 -->
   <BatchTagDialog :visible="batchTagDialogVisible"
     :count="selectedIds.size" :kb-id="kbId" :tag-list="tagList"
-    :pre-selected-tag-ids="batchTagPreSelectedIds" :can-manage="canEdit"
+    :pre-selected-tag-ids="batchTagPreSelectedIds"
     :confirm-loading="batchTagging"
     @update:visible="batchTagDialogVisible = $event" @confirm="onBatchTagConfirm"
     @tag-created="loadTags(kbId, true)" @open-manage="openTagManageFromBatchDialog" />
@@ -2587,10 +2582,10 @@ async function createNewSession(value: string): Promise<void> {
     @changed="onTagManageChanged"
   />
   <KnowledgeAnomaliesDrawer  ref="anomalyDrawerRef" v-model:visible="anomalyDrawerVisible" :kb-id="kbId"
-    :is-owner="canManage" :initial-knowledge-id="anomalyKnowledgeId" :tags="tagList"
+    :initial-knowledge-id="anomalyKnowledgeId" :tags="tagList"
     @open-message="openSourceDoc"
     @edit-tags="editAnomalyMessageTags" @changed="() => { resetPage(); loadKnowledgeFiles(kbId); loadTags(kbId, true) }" />
-  <KnowledgeStrategyDrawer v-if="canManage" v-model:visible="strategyDrawerVisible" :kb-id="kbId"
+  <KnowledgeStrategyDrawer v-model:visible="strategyDrawerVisible" :kb-id="kbId"
     :selected-ids="Array.from(selectedIds)" :tags="tagList" :initial-tag-id="selectedTagIds[0] || ''"
     @reprocessed="() => { resetPage(); loadTags(kbId, true) }" />
 </template>

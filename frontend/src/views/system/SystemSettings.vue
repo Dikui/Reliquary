@@ -247,11 +247,9 @@ import {
   resetSystemSetting,
   type SystemSettingItem,
 } from '@/api/system'
-import { useAuthStore } from '@/stores/auth'
 import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities'
 import { isSettingValueDirty, resolveCurrentSetting } from './systemSettingsEdit'
 
-const authStore = useAuthStore()
 const deploymentCapabilities = useDeploymentCapabilitiesStore()
 
 const { t, tm, te, locale } = useI18n()

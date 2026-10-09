@@ -17,7 +17,7 @@ test('the rename sentinel cannot collide with the root folder path', () => {
 })
 
 test('only real folders expose a rename affordance', () => {
-  assert.match(tree, /v-if="canEdit && row\.kind === 'folder'"/)
+  assert.match(tree, /v-if="row\.kind === 'folder'"/)
   assert.match(tree, /popup-menu-item/)
   assert.match(tree, /onFolderMenuRename/)
 })

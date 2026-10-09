@@ -1586,7 +1586,7 @@ func (h *KnowledgeHandler) ReviewKnowledgeIntake(c *gin.Context) {
 // GetKnowledgeBatchRequest defines parameters for batch knowledge retrieval
 type GetKnowledgeBatchRequest struct {
 	IDs  []string `form:"ids" binding:"required"` // List of knowledge IDs
-	KBID string   `form:"kb_id"`                  // Optional: scope to this KB (validates team knowledge-base access)
+	KBID string   `form:"kb_id"`                  // Optional: scope to this KB (validates knowledge-base existence)
 }
 
 func (h *KnowledgeHandler) GetKnowledgeBatch(c *gin.Context) {

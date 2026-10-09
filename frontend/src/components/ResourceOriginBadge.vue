@@ -11,7 +11,7 @@ import { Icon as TIcon } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 
-/** Displays the creator of a team resource. */
+/** Displays the creator of a space resource. */
 const props = withDefaults(
   defineProps<{
     variant: 'mine' | 'tenant' | 'creator'

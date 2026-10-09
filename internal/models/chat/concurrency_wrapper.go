@@ -8,7 +8,7 @@ import (
 )
 
 // Model provider budgets are the real bottleneck shared by every LLM-backed
-// background stage (summary / question / graph / multimodal enrichment), which
+// background stage (summary / question / context / multimodal enrichment), which
 // all target the same model. This governor caps concurrent calls per model at
 // the client layer — the one place that sees all task types — instead of at the
 // asynq queue layer, whose weights are scheduling priority rather than

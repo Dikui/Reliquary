@@ -26,7 +26,7 @@ export interface ModelUsageResource {
 }
 
 export interface ModelUsageDetails {
-  model_tiers?: Array<ModelUsageResource & { scope: 'team' | 'domain' }>
+  model_tiers?: Array<ModelUsageResource & { scope: 'global' | 'domain' }>
   knowledge_bases: ModelUsageResource[]
   agents: ModelUsageResource[]
   knowledge_base_total: number
@@ -92,8 +92,8 @@ export function parseModelUsageDetails(value: unknown): ModelUsageDetails | null
     tiers = []
     for (let index = 0; index < resources.length; index++) {
       const original = value.model_tiers[index]
-      if (!isRecord(original) || (original.scope !== 'team' && original.scope !== 'domain')) return null
-      tiers.push({ ...resources[index]!, scope: original.scope })
+      if (!isRecord(original) || (original.scope !== 'global' && original.scope !== 'team' && original.scope !== 'domain')) return null
+      tiers.push({ ...resources[index]!, scope: original.scope === 'team' ? 'global' : original.scope })
     }
   }
   const details: ModelUsageDetails = {

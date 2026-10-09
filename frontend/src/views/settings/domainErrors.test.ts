@@ -107,7 +107,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zhCN, 'en-US': enUS } })
     for (const [url, status, reason, key] of [
       ['/api/v1/auth/register', 403, 'Registration is closed', 'auth.registrationClosed'],
-      ['/api/v1/tenants/1/api-keys', 400, 'expires_at_unix must be in the future', 'integrations.api.apiKeyExpiresAtInvalid'],
+      ['/api/v1/space/api-keys', 400, 'expires_at_unix must be in the future', 'integrations.api.apiKeyExpiresAtInvalid'],
     ] as const) {
       await assert.rejects(requestRejectionHandler(i18n.global.t)({
         config: { url }, response: { status, data: { message: reason, error: { message: reason } } },

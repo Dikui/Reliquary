@@ -9,16 +9,15 @@ import (
 
 // RegisterTenantRoutes exposes personal workspace settings and API keys.
 func RegisterTenantRoutes(r *gin.RouterGroup, h *handler.TenantHandler, g *accessGuards) {
-	routes := r.Group("/tenants")
+	routes := r.Group("/space")
 	routes.GET("/kv/:key", h.GetTenantKV)
 	routes.PUT("/kv/:key", h.UpdateTenantKV)
-	team := routes.Group("/:id", g.PathTenantMatch())
-	team.GET("", h.GetTenant)
-	team.PUT("", h.UpdateTenant)
-	team.GET("/api-keys", h.ListAPIKeys)
-	team.POST("/api-keys", h.CreateAPIKey)
-	team.PUT("/api-keys/:key_id", h.UpdateAPIKey)
-	team.DELETE("/api-keys/:key_id", h.DeleteAPIKey)
+	routes.GET("", h.GetTenant)
+	routes.PUT("", h.UpdateTenant)
+	routes.GET("/api-keys", h.ListAPIKeys)
+	routes.POST("/api-keys", h.CreateAPIKey)
+	routes.PUT("/api-keys/:key_id", h.UpdateAPIKey)
+	routes.DELETE("/api-keys/:key_id", h.DeleteAPIKey)
 }
 
 // RegisterAuthRoutes registers authentication routes
@@ -34,21 +33,12 @@ func RegisterAuthRoutes(r *gin.RouterGroup, h *handler.AuthHandler, g *accessGua
 	r.POST("/auth/change-password", h.ChangePassword)
 }
 
-func RegisterSystemRoutes(
-	r *gin.RouterGroup,
-	handler *handler.SystemHandler,
-	g *accessGuards) {
-	systemRoutes := r.Group("/system")
-	{
-		systemRoutes.GET("/capabilities", handler.GetDeploymentCapabilities)
-		systemRoutes.GET("/info", handler.GetSystemInfo)
-		systemRoutes.GET("/parser-engines", handler.ListParserEngines)
-		systemRoutes.POST("/parser-engines/check", handler.CheckParserEngines)
-	}
-}
-
-func RegisterSystemAdminRoutes(r *gin.RouterGroup, h *handler.SystemHandler, g *accessGuards) {
-	routes := r.Group("/system/admin")
+func RegisterSystemRoutes(r *gin.RouterGroup, h *handler.SystemHandler, g *accessGuards) {
+	routes := r.Group("/system")
+	routes.GET("/capabilities", h.GetDeploymentCapabilities)
+	routes.GET("/info", h.GetSystemInfo)
+	routes.GET("/parser-engines", h.ListParserEngines)
+	routes.POST("/parser-engines/check", h.CheckParserEngines)
 	routes.GET("/settings", h.ListSystemSettings)
 	routes.GET("/settings/:key", h.GetSystemSetting)
 	routes.PUT("/settings/:key", h.UpdateSystemSetting)

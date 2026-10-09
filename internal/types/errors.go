@@ -2,23 +2,6 @@ package types
 
 import "fmt"
 
-// StorageQuotaExceededError represents the storage quota exceeded error
-type StorageQuotaExceededError struct {
-	Message string
-}
-
-// Error implements the error interface
-func (e *StorageQuotaExceededError) Error() string {
-	return e.Message
-}
-
-// NewStorageQuotaExceededError creates a storage quota exceeded error
-func NewStorageQuotaExceededError() *StorageQuotaExceededError {
-	return &StorageQuotaExceededError{
-		Message: "Storage quota exceeded",
-	}
-}
-
 // DuplicateKnowledgeError duplicate knowledge error, contains the existing knowledge object
 type DuplicateKnowledgeError struct {
 	Message   string

@@ -32,7 +32,7 @@
         <div class="batch-tag-section-head">
           <h4 class="setting-drawer__section-title">{{ $t('knowledgeBase.batchTagAvailableSection') }}</h4>
           <t-button
-            v-if="canManage"
+
             variant="text"
             size="small"
             theme="default"
@@ -114,7 +114,6 @@ const props = defineProps<{
   kbId: string;
   tagList: Tag[];
   preSelectedTagIds?: string[];
-  canManage?: boolean;
   confirmLoading?: boolean;
 }>();
 

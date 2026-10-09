@@ -347,7 +347,7 @@ func (s *knowledgeBaseService) resolveQueryEmbedding(
 func (s *knowledgeBaseService) authorizeKBAccess(ctx context.Context, kbs []*types.KnowledgeBase, tenantID uint64) error {
 	for _, kb := range kbs {
 		if kb == nil || kb.TenantID != tenantID {
-			return apperrors.NewForbiddenError("knowledge base is outside the team")
+			return apperrors.NewForbiddenError("knowledge base is outside the space")
 		}
 	}
 	return nil

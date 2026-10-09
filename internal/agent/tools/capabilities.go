@@ -23,7 +23,7 @@ type KBCapability string
 const (
 	CapVector  KBCapability = "vector"
 	CapKeyword KBCapability = "keyword"
-	CapGraph   KBCapability = "graph"
+	CapContext KBCapability = "context"
 )
 
 // ToolRequirement declares what a tool needs from the KB scope.
@@ -57,11 +57,12 @@ var ToolCapabilityRequirements = map[string]ToolRequirement{
 	"knowledge_apply_anomaly":  {},
 
 	// ---- RAG / chunk retrieval (need at least one chunk-indexed KB) ----
-	"knowledge_search":      {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
-	"grep_chunks":           {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
-	"list_knowledge_chunks": {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
-	"get_document_info":     {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
-	"database_query":        {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
+	"knowledge_search":        {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
+	"grep_chunks":             {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
+	"list_knowledge_chunks":   {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
+	ToolQueryKnowledgeContext: {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
+	"get_document_info":       {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
+	"database_query":          {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
 
 	// ---- Data analysis (reads table summary/column chunks from RAG ingest) ----
 	"data_analysis": {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
@@ -74,8 +75,8 @@ func hasCap(caps types.KBCapabilities, c KBCapability) bool {
 		return caps.Vector
 	case CapKeyword:
 		return caps.Keyword
-	case CapGraph:
-		return caps.Graph
+	case CapContext:
+		return caps.Context
 	}
 	return false
 }
@@ -97,7 +98,7 @@ func (f KBFilter) IsEmpty() bool { return len(f.AnyOf) == 0 }
 func DeriveKBFilterFromTools(allowedTools []string) KBFilter {
 	seen := make(map[KBCapability]struct{})
 	for _, t := range allowedTools {
-		req, ok := ToolCapabilityRequirements[t]
+		req, ok := ToolCapabilityRequirements[CanonicalToolName(t)]
 		if !ok {
 			continue
 		}
@@ -201,7 +202,7 @@ func ToolsConsumeFiles(allowedTools []string) bool {
 		return true
 	}
 	for _, t := range allowedTools {
-		req, ok := ToolCapabilityRequirements[t]
+		req, ok := ToolCapabilityRequirements[CanonicalToolName(t)]
 		// Unknown tools (e.g. MCP tools, new builtin not yet registered here):
 		// assume potentially file-consuming to avoid accidentally hiding the
 		// file picker for users who just added a custom tool.

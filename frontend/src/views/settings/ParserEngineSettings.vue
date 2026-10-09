@@ -74,7 +74,7 @@
       v-model:visible="drawerVisible"
       :title="drawerTitle"
       :class="currentEngine ? `parser-engine-drawer parser-engine-drawer--${currentEngine.Name}` : 'parser-engine-drawer'"
-      :hide-footer="!authStore.isLoggedIn && !needsTestButton"
+      :hide-footer="false"
       :confirm-loading="saving"
       @confirm="onSave"
       @cancel="drawerVisible = false"
@@ -248,7 +248,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useAuthStore } from '@/stores/auth'
 import { MessagePlugin } from 'tdesign-vue-next'
 import SettingDrawer from '@/components/settings/SettingDrawer.vue'
 import {
@@ -261,7 +260,6 @@ import {
 } from '@/api/system'
 
 const { t } = useI18n()
-const authStore = useAuthStore()
 
 const CONFIGURABLE_ENGINES = new Set(['mineru', 'mineru_cloud'])
 

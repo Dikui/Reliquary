@@ -37,8 +37,8 @@ func (r *sourceRegistry) ModelOutput(result *types.ToolResult) string {
 		return r.modelKnowledgeChunksOutput(result.Data, result.Output)
 	case "document_info":
 		return r.modelDocumentInfoOutput(mapsValue(result.Data["documents"]), result.Output)
-	case "graph_query_results":
-		return r.modelKnowledgeOutput("graph", mapsValue(result.Data["results"]), result.Output)
+	case "context_query_results", "graph_query_results":
+		return r.modelKnowledgeOutput("context", mapsValue(result.Data["results"]), result.Output)
 	case "database_query":
 		return r.modelDatabaseQueryOutput(mapsValue(result.Data["rows"]), result.Output)
 	default:

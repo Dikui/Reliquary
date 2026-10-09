@@ -463,7 +463,7 @@ func (s *modelService) getModelUsageDetails(
 		return details, nil
 	}
 	if bindings := tenant.ModelTiers.UsageBindings(modelID); len(bindings) > 0 {
-		details.ModelTiers = append(details.ModelTiers, types.ModelTierUsageResource{Scope: "team", ID: strconv.FormatUint(tenantID, 10), Name: tenant.Name, Bindings: bindings})
+		details.ModelTiers = append(details.ModelTiers, types.ModelTierUsageResource{Scope: "global", ID: strconv.FormatUint(tenantID, 10), Name: tenant.Name, Bindings: bindings})
 	}
 	return details, nil
 }

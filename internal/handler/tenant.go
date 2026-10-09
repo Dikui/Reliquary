@@ -50,7 +50,7 @@ func NewTenantHandler(
 	}
 }
 
-// updateTenantRequest is the JSON body for PUT /tenants/:id.
+// updateTenantRequest is the JSON body for PUT /space.
 // It binds the name and description. Configuration fields use dedicated
 // endpoints with their own validation.
 //
@@ -86,32 +86,22 @@ type tenantAPIKeyCreateResponse struct {
 	Token string `json:"token"`
 }
 
-// defaultMaxOwnedTenantsPerUser is the cap applied when
-// cover legitimate "personal + a couple of side-projects" use while
-// blunting drive-by abuse against POST /tenants (see CreateTenant).
-
 // GetTenant godoc
 // @Summary      获取空间详情
-// @Description  根据ID获取空间详情
+// @Description  获取当前个人空间详情
 // @Tags         空间管理
 // @Accept       json
 // @Produce      json
-// @Param        id   path      int  true  "空间ID"
 // @Success      200  {object}  map[string]interface{}  "空间详情"
 // @Failure      400  {object}  errors.AppError         "请求参数错误"
 // @Failure      404  {object}  errors.AppError         "空间不存在"
 // @Security     Bearer
 // @Security     ApiKeyAuth
-// @Router       /tenants/{id} [get]
+// @Router       /space [get]
 func (h *TenantHandler) GetTenant(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		logger.Errorf(ctx, "Invalid workspace ID: %s", secutils.SanitizeForLog(c.Param("id")))
-		c.Error(errors.NewBadRequestError("Invalid workspace ID"))
-		return
-	}
+	id := types.MustTenantIDFromContext(ctx)
 
 	tenant, err := h.service.GetTenantByID(ctx, id)
 	if err != nil {
@@ -137,23 +127,17 @@ func (h *TenantHandler) GetTenant(c *gin.Context) {
 // @Tags         空间管理
 // @Accept       json
 // @Produce      json
-// @Param        id       path      int           true  "空间ID"
 // @Param        request  body      types.Tenant  true  "空间信息"
 // @Success      200      {object}  map[string]interface{}  "更新后的空间"
 // @Failure      400      {object}  errors.AppError         "请求参数错误"
 // @Security     Bearer
-// @Router       /tenants/{id} [put]
+// @Router       /space [put]
 func (h *TenantHandler) UpdateTenant(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	logger.Info(ctx, "Start updating tenant")
 
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		logger.Errorf(ctx, "Invalid workspace ID: %s", secutils.SanitizeForLog(c.Param("id")))
-		c.Error(errors.NewBadRequestError("Invalid workspace ID"))
-		return
-	}
+	id := types.MustTenantIDFromContext(ctx)
 
 	// Bind the name and description; configuration fields use dedicated
 	// endpoints. Pointers distinguish omitted fields from explicit empty strings.
@@ -216,13 +200,17 @@ func (h *TenantHandler) UpdateTenant(c *gin.Context) {
 	})
 }
 
+// ListAPIKeys godoc
+// @Summary      获取空间 API Key 列表
+// @Tags         空间管理
+// @Produce      json
+// @Success      200 {object} map[string]interface{}
+// @Security     Bearer
+// @Security     ApiKeyAuth
+// @Router       /space/api-keys [get]
 func (h *TenantHandler) ListAPIKeys(c *gin.Context) {
 	ctx := c.Request.Context()
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		c.Error(errors.NewBadRequestError("Invalid workspace ID"))
-		return
-	}
+	id := types.MustTenantIDFromContext(ctx)
 	keys, err := h.apiKeyService.ListAPIKeys(ctx, id)
 	if err != nil {
 		c.Error(errors.NewInternalServerError("Failed to list API keys").WithDetails(err.Error()))
@@ -235,13 +223,19 @@ func (h *TenantHandler) ListAPIKeys(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": resp})
 }
 
+// CreateAPIKey godoc
+// @Summary      创建空间 API Key
+// @Tags         空间管理
+// @Accept       json
+// @Produce      json
+// @Param        request body tenantAPIKeyCreateRequest true "API Key 配置"
+// @Success      201 {object} map[string]interface{}
+// @Security     Bearer
+// @Security     ApiKeyAuth
+// @Router       /space/api-keys [post]
 func (h *TenantHandler) CreateAPIKey(c *gin.Context) {
 	ctx := c.Request.Context()
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		c.Error(errors.NewBadRequestError("Invalid workspace ID"))
-		return
-	}
+	id := types.MustTenantIDFromContext(ctx)
 	var req tenantAPIKeyCreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.Error(errors.NewValidationError("Invalid request data").WithDetails(err.Error()))
@@ -280,13 +274,19 @@ func (h *TenantHandler) CreateAPIKey(c *gin.Context) {
 
 // UpdateAPIKey 修改个人空间 API Key 的名称和到期时间。
 // 字段校验与创建接口保持一致。
+// @Summary      更新空间 API Key
+// @Tags         空间管理
+// @Accept       json
+// @Produce      json
+// @Param        key_id path int true "API Key ID"
+// @Param        request body tenantAPIKeyUpdateRequest true "API Key 配置"
+// @Success      200 {object} map[string]interface{}
+// @Security     Bearer
+// @Security     ApiKeyAuth
+// @Router       /space/api-keys/{key_id} [put]
 func (h *TenantHandler) UpdateAPIKey(c *gin.Context) {
 	ctx := c.Request.Context()
-	tenantID, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || tenantID == 0 {
-		c.Error(errors.NewBadRequestError("Invalid workspace ID"))
-		return
-	}
+	tenantID := types.MustTenantIDFromContext(ctx)
 	keyID, err := strconv.ParseUint(c.Param("key_id"), 10, 64)
 	if err != nil || keyID == 0 {
 		c.Error(errors.NewBadRequestError("Invalid API key ID"))
@@ -317,13 +317,18 @@ func (h *TenantHandler) UpdateAPIKey(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": tenantAPIKeyForResponse(updated)})
 }
 
+// DeleteAPIKey godoc
+// @Summary      撤销空间 API Key
+// @Tags         空间管理
+// @Produce      json
+// @Param        key_id path int true "API Key ID"
+// @Success      200 {object} map[string]interface{}
+// @Security     Bearer
+// @Security     ApiKeyAuth
+// @Router       /space/api-keys/{key_id} [delete]
 func (h *TenantHandler) DeleteAPIKey(c *gin.Context) {
 	ctx := c.Request.Context()
-	tenantID, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		c.Error(errors.NewBadRequestError("Invalid workspace ID"))
-		return
-	}
+	tenantID := types.MustTenantIDFromContext(ctx)
 	keyID, err := strconv.ParseUint(c.Param("key_id"), 10, 64)
 	if err != nil || keyID == 0 {
 		c.Error(errors.NewBadRequestError("Invalid API key ID"))
@@ -357,12 +362,6 @@ func validateTenantAPIKeyRequest(ctx context.Context, kbService interfaces.Knowl
 	return nil
 }
 
-// validateTenantAPIKeyKnowledgeBaseIDs 校验白名单中的知识库真实存在且属于目标租户。
-// 入参是请求上下文、知识库服务、租户 ID 和待授权 ID；成功无返回值，失败返回可直接响应的应用错误。
-
-// validateTenantAPIKeyKnowledgeBaseIDsWithLookup 将归属校验与大型知识库服务接口解耦，便于覆盖边界测试。
-// lookup 输入知识库 ID 并返回真实知识库；函数输出 nil 或可直接响应的校验错误。
-
 // GetTenantKV godoc
 // @Summary      获取空间KV配置
 // @Description  获取空间级别的KV配置（支持prompt-templates、parser-engine-config、chat-history-config、retrieval-config）
@@ -374,7 +373,7 @@ func validateTenantAPIKeyRequest(ctx context.Context, kbService interfaces.Knowl
 // @Failure      400  {object}  errors.AppError         "不支持的键"
 // @Security     Bearer
 // @Security     ApiKeyAuth
-// @Router       /tenants/kv/{key} [get]
+// @Router       /space/kv/{key} [get]
 func (h *TenantHandler) GetTenantKV(c *gin.Context) {
 	ctx := c.Request.Context()
 	key := secutils.SanitizeForLog(c.Param("key"))
@@ -419,7 +418,7 @@ func (h *TenantHandler) GetTenantKV(c *gin.Context) {
 // @Failure      400      {object}  errors.AppError         "不支持的键"
 // @Security     Bearer
 // @Security     ApiKeyAuth
-// @Router       /tenants/kv/{key} [put]
+// @Router       /space/kv/{key} [put]
 func (h *TenantHandler) UpdateTenantKV(c *gin.Context) {
 	ctx := c.Request.Context()
 	key := secutils.SanitizeForLog(c.Param("key"))
@@ -516,7 +515,7 @@ func (h *TenantHandler) updateTenantParserEngineConfigInternal(c *gin.Context) {
 // @Failure      400  {object}  errors.AppError         "请求参数错误"
 // @Security     Bearer
 // @Security     ApiKeyAuth
-// @Router       /tenants/kv/prompt-templates [get]
+// @Router       /space/kv/prompt-templates [get]
 func (h *TenantHandler) GetPromptTemplates(c *gin.Context) {
 	// Return prompt templates from config.yaml
 	templates := h.config.PromptTemplates

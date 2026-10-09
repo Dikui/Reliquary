@@ -19,12 +19,6 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
       meta: { requiresAuth: false, requiresInit: false }
     },
     {
-      path: "/knowledgeBase",
-      name: "home",
-      component: () => import("../views/knowledge/KnowledgeBase.vue"),
-      meta: { requiresInit: true, requiresAuth: true }
-    },
-    {
       path: "/platform",
       name: "Platform",
       redirect: "/platform/knowledge-bases",

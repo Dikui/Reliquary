@@ -465,7 +465,7 @@ COMMENT ON COLUMN public.knowledge_bases.asr_config IS 'ASR (Automatic Speech Re
 -- Name: COLUMN knowledge_bases.indexing_strategy; Type: COMMENT; Schema: public
 --
 
-COMMENT ON COLUMN public.knowledge_bases.indexing_strategy IS 'Indexing pipelines strategy: {"vector_enabled": bool, "keyword_enabled": bool, "graph_enabled": bool}';
+COMMENT ON COLUMN public.knowledge_bases.indexing_strategy IS 'Indexing pipelines strategy: {"vector_enabled": bool, "keyword_enabled": bool}';
 
 
 --
@@ -1506,7 +1506,6 @@ CREATE TABLE public.tenants (
     description text,
     status character varying(50) DEFAULT 'active'::character varying,
     business character varying(255) NOT NULL,
-    storage_quota bigint DEFAULT '10737418240'::bigint NOT NULL,
     storage_used bigint DEFAULT 0 NOT NULL,
     agent_config jsonb,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,

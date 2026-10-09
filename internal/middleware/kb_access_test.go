@@ -49,12 +49,12 @@ func TestIsResourceNotFound_RecognisesKnowledgeSentinel(t *testing.T) {
 		"a genuine transient error must NOT be classified as not-found")
 }
 
-func TestRequireKBAccessWithinWorkspace(t *testing.T) {
+func TestRequireKBExistsWithinWorkspace(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Params = gin.Params{{Key: "id", Value: "kb"}}
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
 	c.Request = httptest.NewRequest("GET", "/", nil).WithContext(ctx)
-	RequireKBAccess(KBIDFromParam("id"), &stubKBLookup{kbs: map[string]*types.KnowledgeBase{"kb": {ID: "kb", TenantID: 1}}})(c)
+	RequireKBExists(KBIDFromParam("id"), &stubKBLookup{kbs: map[string]*types.KnowledgeBase{"kb": {ID: "kb", TenantID: 1}}})(c)
 	require.False(t, c.IsAborted())
 	access, ok := KBAccessFromContext(c)
 	require.True(t, ok)
@@ -62,23 +62,23 @@ func TestRequireKBAccessWithinWorkspace(t *testing.T) {
 	require.Equal(t, "kb", access.KnowledgeBase.ID)
 }
 
-func TestRequireKBAccessRejectsOutsideTeam(t *testing.T) {
+func TestRequireKBExistsRejectsOutsideWorkspace(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Params = gin.Params{{Key: "id", Value: "kb"}}
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
 
 	c.Request = httptest.NewRequest("GET", "/", nil).WithContext(ctx)
-	RequireKBAccess(KBIDFromParam("id"), &stubKBLookup{kbs: map[string]*types.KnowledgeBase{"kb": {ID: "kb", TenantID: 2}}})(c)
+	RequireKBExists(KBIDFromParam("id"), &stubKBLookup{kbs: map[string]*types.KnowledgeBase{"kb": {ID: "kb", TenantID: 2}}})(c)
 	require.True(t, c.IsAborted())
 }
-func TestRequireKBAccessNotFoundAndLookupFailure(t *testing.T) {
+func TestRequireKBExistsNotFoundAndLookupFailure(t *testing.T) {
 	for _, err := range []error{apprepo.ErrKnowledgeBaseNotFound, errors.New("database unavailable")} {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
 		c.Params = gin.Params{{Key: "id", Value: "kb"}}
 		ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
 
 		c.Request = httptest.NewRequest("GET", "/", nil).WithContext(ctx)
-		RequireKBAccess(KBIDFromParam("id"), &stubKBLookup{getErr: err})(c)
+		RequireKBExists(KBIDFromParam("id"), &stubKBLookup{getErr: err})(c)
 		require.True(t, c.IsAborted())
 		require.NotEmpty(t, c.Errors)
 	}

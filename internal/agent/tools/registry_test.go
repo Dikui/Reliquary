@@ -80,7 +80,7 @@ func TestGetFunctionDefinitions_DeterministicOrder(t *testing.T) {
 // prefix sent to the LLM stays stable and explicit caches can hit.
 func TestGetFunctionDefinitions_JSONByteStable(t *testing.T) {
 	r := NewToolRegistry()
-	registerMany(t, r, []string{"search", "fetch", "code_run", "answer", "graph", "kb_query"})
+	registerMany(t, r, []string{"search", "fetch", "code_run", "answer", "context_query", "kb_query"})
 
 	first, err := json.Marshal(r.GetFunctionDefinitions())
 	require.NoError(t, err)

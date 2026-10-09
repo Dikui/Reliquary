@@ -168,7 +168,7 @@ type ProcessChunksOptions struct {
 // and indexes are persisted (enable_status=enabled), but it deliberately does
 // NOT mark the row completed when enrichment is still expected. Whenever the
 // document still has work to fan out — pending multimodal image tasks, or text
-// chunks that feed summary/question/graph generation — parse_status stays
+// chunks that feed summary/question/context generation — parse_status stays
 // "processing" so KnowledgePostProcess remains the single authority that drives
 // processing → finalizing → completed. Marking the row completed here would make
 // post-process hit its "non-processing status" guard and skip the summary
@@ -548,25 +548,6 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 
 		// Calculate storage size required for embeddings
 		totalStorageSize = retrieveEngine.EstimateStorageSize(ctx, embeddingModel, indexInfoList)
-		if tenantInfo.StorageQuota > 0 {
-			// Re-fetch tenant storage information
-			tenantInfo, err = s.tenantRepo.GetTenantByID(ctx, tenantInfo.ID)
-			if err != nil {
-				knowledge.ParseStatus = types.ParseStatusFailed
-				knowledge.ErrorMessage = err.Error()
-				knowledge.UpdatedAt = time.Now()
-				s.repo.UpdateKnowledge(ctx, knowledge)
-				return
-			}
-			// Check if there's enough storage quota available
-			if tenantInfo.StorageUsed+totalStorageSize > tenantInfo.StorageQuota {
-				knowledge.ParseStatus = types.ParseStatusFailed
-				knowledge.ErrorMessage = "存储空间不足"
-				knowledge.UpdatedAt = time.Now()
-				s.repo.UpdateKnowledge(ctx, knowledge)
-				return
-			}
-		}
 
 		// Check again before batch indexing (heavy operation).
 		// deleting → row is going away anyway, drop the chunks we just wrote.
@@ -1819,7 +1800,7 @@ func (s *knowledgeService) processQuestionGenerationForKnowledge(ctx context.Con
 
 // processQuestionGenerationForChunks generates questions for a batch (window)
 // of text chunks. This is the batched fan-out path (one asynq task per
-// questionGenChunkBatchSize chunks), aligned with the graph-extract
+// questionGenChunkBatchSize chunks), aligned with the context-extract
 // TypeChunkExtract pattern: independent retry, per-batch cancellation, and a
 // postprocess.question.batch[i] subspan. The payload carries only chunk ids
 // (never content); content is read fresh here, and all questions for the batch
@@ -2818,7 +2799,7 @@ func (s *knowledgeService) CancelKnowledgeParse(
 		return nil, werrors.NewBadRequestError("知识正在删除中，无法取消解析")
 	case types.ParseStatusPending, types.ParseStatusProcessing, types.ParseStatusFinalizing:
 		// Cancellable. `finalizing` is the post-process fan-out window
-		// where graph-extract / summary / question subtasks are still
+		// where context-extract / summary / question subtasks are still
 		// running; cancel here stops the LLM cost they would burn.
 	default:
 		// Unknown status — let it through but log. Should never happen
@@ -2850,7 +2831,7 @@ func (s *knowledgeService) CancelKnowledgeParse(
 	// Close the active attempt span tree so the UI stops showing "进行中"
 	// for the cancelled run. AbortAttempt cascade-cancels every still-
 	// running descendant (multimodal per-image, postprocess subtasks,
-	// graph chunks) BEFORE closing the root, otherwise the trace
+	// context chunks) BEFORE closing the root, otherwise the trace
 	// viewer would leave those striped/running bars hanging forever
 	// because workers exit via their abort-guard without ever calling
 	// FailSpan on their own subspan. Best-effort: nil tracker / missing
@@ -3216,7 +3197,7 @@ func (s *knowledgeService) ProcessManualUpdate(ctx context.Context, t *asynq.Tas
 	}
 	ctx = withAttempt(ctx, attempt)
 
-	// Cleanup old resources (indexes, chunks, graph) for update operations
+	// Cleanup old resources (indexes, chunks, context) for update operations
 	if payload.NeedCleanup {
 		if err := s.cleanupKnowledgeResources(ctx, knowledge); err != nil {
 			logger.ErrorWithFields(ctx, err, map[string]interface{}{

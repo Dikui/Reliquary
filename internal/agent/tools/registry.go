@@ -64,7 +64,7 @@ func (r *ToolRegistry) RegisterTool(tool types.Tool) {
 
 // GetTool retrieves a tool by name
 func (r *ToolRegistry) GetTool(name string) (types.Tool, error) {
-	tool, exists := r.tools[name]
+	tool, exists := r.tools[CanonicalToolName(name)]
 	if !exists {
 		return nil, fmt.Errorf("tool not found: %s", name)
 	}

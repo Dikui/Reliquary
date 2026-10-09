@@ -60,9 +60,9 @@
             <div class="settings-content">
               <div class="content-wrapper" :class="{
                 'content-wrapper--wide': currentSection === 'domains',
-                'content-wrapper--full': SYSTEM_ADMIN_SECTIONS.has(currentSection) || isIntegrationSection(currentSection),
+                'content-wrapper--full': SYSTEM_SECTIONS.has(currentSection) || isIntegrationSection(currentSection),
               }">
-                <template v-if="authStore.isLoggedIn">
+                <template>
                   <!-- 常规设置 -->
                   <div v-if="currentSection === 'general'" class="section">
                     <GeneralSettings />
@@ -87,7 +87,7 @@
                   <!-- 我的记忆（个人记忆管理） -->
 
 
-                  <!-- 沙箱密钥（成员自己的技能 / 沙箱密钥） -->
+                  <!-- 沙箱密钥 -->
 
 
                   <!-- 解析引擎 -->
@@ -108,12 +108,12 @@
                     <SystemInfo />
                   </div>
 
-                  <!-- 系统管理员可见的全局运行时设置 -->
+                  <!-- 全局运行时设置 -->
                   <div v-if="currentSection === 'system-global'" class="section">
                     <SystemSettings />
                   </div>
 
-                  <!-- 系统管理员可见的任务队列运行状态 -->
+                  <!-- 任务队列运行状态 -->
                   <div v-if="currentSection === 'runtime-queues'" class="section">
                     <RuntimeQueues />
                   </div>
@@ -156,7 +156,6 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { LocationQueryRaw } from 'vue-router'
 import { useUIStore } from '@/stores/ui'
-import { useAuthStore } from '@/stores/auth'
 import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
@@ -193,7 +192,6 @@ import {
 const route = useRoute()
 const router = useRouter()
 const uiStore = useUIStore()
-const authStore = useAuthStore()
 const deploymentCapabilities = useDeploymentCapabilitiesStore()
 const { t } = useI18n()
 
@@ -220,7 +218,7 @@ type NavGroup = {
   items: NavItem[]
 }
 
-const SYSTEM_ADMIN_SECTIONS = SYSTEM_SETTINGS_SECTIONS
+const SYSTEM_SECTIONS = SYSTEM_SETTINGS_SECTIONS
 
 const normalizeSettingsSection = (section: string) => {
   return normalizeSettingsSectionFromQuery(section, route.query.tab as string | undefined)
@@ -245,7 +243,6 @@ const isSectionSupported = (key: string): boolean => {
   return deploymentCapabilities.isSupported(SETTINGS_SECTION_CAPABILITY[key])
 }
 
-const canSeeSection = (_key: string): boolean => authStore.isLoggedIn
 
 const navItems = computed(() => {
   const integrationItems: NavItem[] = INTEGRATION_PREVIEW_ITEMS.map((item) => ({
@@ -271,7 +268,7 @@ const navItems = computed(() => {
   ]
   // 入口的策略一致。
 
-  return all.filter((it) => canSeeSection(it.key) && isSectionSupported(it.key))
+  return all.filter((it) => isSectionSupported(it.key))
 })
 
 const navGroups = computed<NavGroup[]>(() => {

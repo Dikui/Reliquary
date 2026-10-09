@@ -96,7 +96,7 @@ func (s *KnowledgeWorkflowService) Run(ctx context.Context, kbID, workflowID, tr
 		ID: uuid.NewString(), TenantID: tenantID, KnowledgeBaseID: kbID,
 		WorkflowID: workflowID, OwnerID: actor, Trigger: trigger,
 		IdempotencyKey: "manual:" + uuid.NewString(), Status: types.WorkflowStatusQueued,
-		WorkflowSnapshot: append([]types.KnowledgeWorkflowStep(nil), wf.Steps...),
+		WorkflowSnapshot: normalizeWorkflowScopes(wf.Steps),
 	}
 	payload := types.KnowledgeWorkflowTaskPayload{
 		RunID:     run.ID,

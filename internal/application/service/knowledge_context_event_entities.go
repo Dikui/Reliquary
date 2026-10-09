@@ -81,7 +81,7 @@ func attachContextEventEntities(tx *gorm.DB, tenantID uint64, eventID, evidenceI
 	return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&sources).Error
 }
 
-// Source deletion holds the team's exclusive maintenance lock. A pair is
+// Source deletion holds the space's exclusive maintenance lock. A pair is
 // retracted only after its final supporting source is gone.
 func pruneContextEventEntities(tx *gorm.DB, tenantID uint64, eventID string) error {
 	return tx.Exec(`DELETE FROM knowledge_context_event_entities AS objects

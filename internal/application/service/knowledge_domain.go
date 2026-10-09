@@ -176,7 +176,7 @@ func (s *KnowledgeDomainService) Delete(ctx context.Context, id string) error {
 func knowledgeDomainWriteError(err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-		return apperrors.NewConflictError("knowledge domain name already exists in the team")
+		return apperrors.NewConflictError("knowledge domain name already exists in the space")
 	}
 	return err
 }

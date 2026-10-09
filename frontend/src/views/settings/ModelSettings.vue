@@ -7,7 +7,7 @@
           <p class="section-description">{{ $t('modelSettings.description') }}</p>
         </div>
         <t-button
-          v-if="authStore.isLoggedIn"
+
           type="button"
           theme="primary"
           variant="text"
@@ -23,9 +23,7 @@
       <div class="builtin-models-hint" role="note">
         <p class="builtin-hint-label">{{ $t('modelSettings.builtinModels.title') }}</p>
         <p class="builtin-hint-text">
-          {{ $t(authStore.isLoggedIn
-            ? 'modelSettings.builtinModels.descriptionAdmin'
-            : 'modelSettings.builtinModels.description') }}
+          {{ $t('modelSettings.builtinModels.descriptionAdmin') }}
         </p>
         <a class="doc-link" href="http://192.168.1.146:3000/dikui/reliquary/src/branch/main/docs/BUILTIN_MODELS.md" target="_blank"
           rel="noopener noreferrer">
@@ -46,18 +44,15 @@
     </t-tabs>
 
     <t-loading :loading="loading" size="small" class="model-list-loading">
-      <div v-if="!loading && filteredModels.length === 0 && !authStore.isLoggedIn" class="empty-state">
-        <t-empty :description="emptyHint" />
-      </div>
-      <div v-else-if="!loading" class="model-grid">
+      <div v-if="!loading" class="model-grid">
         <div v-for="model in filteredModels" :key="`${model._modelType}-${model.id}`" class="model-card" :class="[
           `model-card--${model._modelType}`,
           {
             'model-card--builtin': model.isBuiltin,
-            'model-card--clickable': isModelCardClickable(model),
+            'model-card--clickable': true,
           },
-        ]" :role="isModelCardClickable(model) ? 'button' : undefined"
-          :tabindex="isModelCardClickable(model) ? 0 : undefined"
+        ]" role="button"
+          tabindex="0"
           @click="onModelCardClick($event, model._modelType, model)"
           @keydown.enter="onModelCardClick($event, model._modelType, model)">
           <div class="model-card__badge" :aria-label="typeLabel(model._modelType)">
@@ -68,9 +63,9 @@
               <h3 class="model-card__title">{{ modelDisplayName(model) }}</h3>
               <span v-if="model.isBuiltin" class="model-card__lock" :title="$t('modelSettings.builtinTag')"
                 :aria-label="$t('modelSettings.builtinTag')">
-                <t-icon :name="authStore.isLoggedIn ? 'edit-1' : 'lock-on'" />
+                <t-icon name="edit-1" />
               </span>
-              <div v-if="canManageModel(model)" class="model-card__actions" @click.stop>
+              <div class="model-card__actions" @click.stop>
                 <t-dropdown :options="getModelOptions(model._modelType, model)" placement="bottom-right" attach="body"
                   trigger="click"
                   @click="(data: any) => handleMenuAction({ value: data.value }, model._modelType, model)">
@@ -126,7 +121,7 @@
           </div>
         </div>
         <button
-          v-if="authStore.isLoggedIn"
+
           type="button"
           class="model-card model-card--add"
           data-guide="settings-add-model"
@@ -237,7 +232,7 @@
 
           <section v-if="usageConflict.model_tiers?.length" class="model-usage-group">
             <h3>{{ $t('modelTiers.title') }}</h3>
-            <ul><li v-for="resource in usageConflict.model_tiers" :key="`${resource.scope}:${resource.id}`"><div class="model-usage-resource"><strong>{{ resource.name }}</strong><div class="model-usage-bindings"><t-tag v-for="binding in resource.bindings" :key="binding" size="small" variant="light">{{ $t(modelUsageBindingI18nKey(binding)) }}</t-tag></div></div><t-button variant="text" @click="openTierUsageResource(resource.scope)">{{ $t(resource.scope === 'team' ? 'modelTiers.configureTeam' : 'modelTiers.configureDomains') }}</t-button></li></ul>
+            <ul><li v-for="resource in usageConflict.model_tiers" :key="`${resource.scope}:${resource.id}`"><div class="model-usage-resource"><strong>{{ resource.name }}</strong><div class="model-usage-bindings"><t-tag v-for="binding in resource.bindings" :key="binding" size="small" variant="light">{{ $t(modelUsageBindingI18nKey(binding)) }}</t-tag></div></div><t-button variant="text" @click="openTierUsageResource(resource.scope)">{{ $t(resource.scope === 'global' ? 'modelTiers.configureGlobal' : 'modelTiers.configureDomains') }}</t-button></li></ul>
           </section>
 
 
@@ -280,7 +275,6 @@ import {
   type ModelUsageDetails,
   type ModelUsageResourceKind,
 } from '@/api/model'
-import { useAuthStore } from '@/stores/auth'
 import { useUIStore } from '@/stores/ui'
 import { focusKbEditorSection } from '@/config/contextualGuides'
 import { useChatResourcesStore } from '@/stores/chatResources'
@@ -291,7 +285,6 @@ import {
 } from '@/utils/contextWindow'
 
 const { t, te } = useI18n()
-const authStore = useAuthStore()
 const uiStore = useUIStore()
 const chatResources = useChatResourcesStore()
 const router = useRouter()
@@ -303,7 +296,7 @@ const showDebugDrawer = ref(false)
 const showUsageDialog = ref(false)
 const usageConflict = ref<ModelUsageDetails | null>(null)
 const usageConflictModelName = ref('')
-function openTierUsageResource(scope: 'team' | 'domain') { showUsageDialog.value = false; uiStore.openSettings(scope === 'team' ? 'tenant' : 'domains') }
+function openTierUsageResource(scope: 'global' | 'domain') { showUsageDialog.value = false; uiStore.openSettings(scope === 'global' ? 'tenant' : 'domains') }
 const currentModelType = ref<ModelType>('chat')
 const editingModel = ref<any>(null)
 const loading = ref(true)
@@ -492,20 +485,11 @@ const openAddDialog = () => {
   showDialog.value = true
 }
 
-// built-in models. The backend repeats this distinction authoritatively.
-const canEditModel = (model: any) =>
-  model.isBuiltin ? authStore.isLoggedIn : authStore.isLoggedIn
-
-const isModelCardClickable = (model: any) => canEditModel(model)
-
-const canManageModel = (model: any) => canEditModel(model)
-
 // Built-in lifecycle remains deployment-managed (YAML / SQL). The UI only
 const canDeleteModel = (model: any) =>
-  authStore.isLoggedIn && !model.isBuiltin
+  !model.isBuiltin
 
 const onModelCardClick = (event: Event, type: ModelType, model: any) => {
-  if (!isModelCardClickable(model)) return
   if (event.type === 'keydown') {
     const ke = event as KeyboardEvent
     if (ke.key !== 'Enter' && ke.key !== ' ') return
@@ -518,13 +502,6 @@ const onModelCardClick = (event: Event, type: ModelType, model: any) => {
 
 // 编辑模型
 const editModel = (type: ModelType, model: any) => {
-  if (model.isBuiltin && !authStore.isLoggedIn) {
-    MessagePlugin.warning(t('modelSettings.toasts.builtinCannotEdit'))
-    return
-  }
-  if (!model.isBuiltin && !authStore.isLoggedIn) {
-    return
-  }
   currentModelType.value = type
   editingModel.value = { ...model }
   showDialog.value = true
@@ -729,18 +706,10 @@ const getModelOptions = (type: ModelType, model: any) => {
   const options: any[] = []
 
   if (model.isBuiltin) {
-    if (authStore.isLoggedIn) {
-      options.push({
+    options.push({
         content: t('common.edit'),
         value: `edit-${type}-${model.id}`
-      })
-    }
-    return options
-  }
-
-  // Models are tenant-wide infrastructure (LLM credentials); the
-  // copying (also goes through createModel), and deleting are not.
-  if (!authStore.isLoggedIn) {
+    })
     return options
   }
 

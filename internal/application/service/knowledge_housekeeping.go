@@ -130,7 +130,7 @@ func (h *HousekeepingService) runSweep(ctx context.Context) {
 	// Include 'pending' so a task whose enqueue was lost is eventually
 	// recovered too; filterOutQueued below protects legitimately backlogged
 	// tasks. Include 'finalizing' alongside 'processing': finalizing rows still
-	// consume LLM compute via enrichment subtasks (summary/question/graph),
+	// consume LLM compute via enrichment subtasks (summary/question/context),
 	// and the same stall modes (subtask worker dies, retry budget exhausted
 	// without decrementing the counter) leave the row hanging just as
 	// visibly. Housekeeping promotes both states to 'failed' once the
@@ -149,7 +149,7 @@ func (h *HousekeepingService) runSweep(ctx context.Context) {
 
 	// Second-stage gate: a row can have a stale span heartbeat yet still
 	// be perfectly healthy when its enrichment subtasks (summary /
-	// question / graph) are merely backlogged behind a busy queue
+	// question / context) are merely backlogged behind a busy queue
 	// — no worker has picked them up, so no span has been written since
 	// post-process fanned them out. Killing such a row is the false-
 	// positive users hit under heavy upload bursts. Drop any candidate

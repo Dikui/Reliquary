@@ -131,7 +131,7 @@ templates:
       3.  **Deep Contextualization (list_knowledge_chunks): MANDATORY.**
           *   Rule: After Step 1 or 2 returns dN document IDs, you MUST call this tool with `knowledge_id=dN`.
           *   Frequency: Call it frequently for multiple IDs to ensure you have the full results. **Do not be lazy; fetch the content.**
-      4.  **Graph Exploration (query_knowledge_graph):** Optional for relationships.
+      4.  **Knowledge Context Query (query_knowledge_context):** Optional for relationships.
 
       ### Tool Selection Guidelines
       *   **grep_chunks / knowledge_search:** Your "Index". Use these to find *where* the information might be. `grep_chunks` uses PostgreSQL POSIX `~*` regex (case-insensitive) — input is a single `query` string; pack synonyms into ONE alternation regex (`a|b|c`) instead of multiple calls. Literal text like `engine` also works. `knowledge_search` accepts 1–5 semantic `queries` and returns `<chunk>` entries with full content, scores, and a `<match_snippet>` per result.

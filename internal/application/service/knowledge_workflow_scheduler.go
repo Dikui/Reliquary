@@ -207,7 +207,7 @@ func (s *KnowledgeWorkflowService) Tick(ctx context.Context) error {
 		run := &types.KnowledgeWorkflowRun{
 			ID: uuid.NewString(), TenantID: wf.TenantID, KnowledgeBaseID: wf.KnowledgeBaseID,
 			WorkflowID: wf.ID, OwnerID: wf.OwnerID, Trigger: "scheduled", IdempotencyKey: key, Status: types.WorkflowStatusQueued,
-			WorkflowSnapshot: append([]types.KnowledgeWorkflowStep(nil), wf.Steps...),
+			WorkflowSnapshot: normalizeWorkflowScopes(wf.Steps),
 		}
 		payload := types.KnowledgeWorkflowTaskPayload{RunID: run.ID, Initiator: types.TaskInitiator{UserID: wf.OwnerID}}
 		if _, createErr := s.createScheduledRun(ctx, run, payload); createErr != nil {

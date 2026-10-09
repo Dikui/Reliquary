@@ -12,8 +12,6 @@ interface KnowledgeItem {
 
 const props = defineProps<{
   item: KnowledgeItem;
-  canDownload: boolean;
-  canMutateKnowledge: boolean;
   traceVisible: boolean;
   /** Whether the knowledge base has a folder structure to file documents into. */
   foldersAvailable?: boolean;
@@ -45,7 +43,7 @@ const fileName = computed(() => props.item.file_name || props.item.title || prop
 <template>
   <!-- 下载原始文档 -->
   <div
-    v-if="canDownload && (item.type === 'file' || item.type === 'manual')"
+    v-if="(item.type === 'file' || item.type === 'manual')"
     class="doc-action-menu-item"
     @click.stop="emit('download')"
   >
@@ -96,19 +94,19 @@ const fileName = computed(() => props.item.file_name || props.item.title || prop
   </t-popconfirm>
 
   <!-- 移动到目录 -->
-  <div v-if="canMutateKnowledge" class="doc-action-menu-item" @click.stop="emit('move-folder')">
+  <div class="doc-action-menu-item" @click.stop="emit('move-folder')">
     <t-icon class="icon" name="folder" />
     <span>{{ $t('knowledgeBase.moveToFolder.action') }}</span>
   </div>
 
   <!-- 移动到其他知识库 -->
-  <div v-if="canMutateKnowledge" class="doc-action-menu-item" @click.stop="emit('move')">
+  <div class="doc-action-menu-item" @click.stop="emit('move')">
     <t-icon class="icon" name="swap" />
     <span>{{ $t('knowledgeBase.moveDocument') }}</span>
   </div>
 
   <!-- 批量管理 -->
-  <div v-if="canMutateKnowledge" class="doc-action-menu-item" @click.stop="emit('batch-manage')">
+  <div class="doc-action-menu-item" @click.stop="emit('batch-manage')">
     <t-icon class="icon" name="queue" />
     <span>{{ $t('menu.batchManage') }}</span>
   </div>

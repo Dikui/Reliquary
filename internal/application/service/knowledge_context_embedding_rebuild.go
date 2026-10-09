@@ -20,7 +20,7 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-// ContextNameEmbeddingRebuilder maintains the one team embedding profile used
+// ContextNameEmbeddingRebuilder maintains the global default embedding profile used
 // by global identities. Scope overrides never select the identity profile.
 type ContextNameEmbeddingRebuilder struct {
 	db     *gorm.DB
@@ -62,7 +62,7 @@ func (r *ContextNameEmbeddingRebuilder) profileMetadata(ctx context.Context, id 
 		return nil, err
 	}
 	if metadata.Type != types.ModelTypeEmbedding || metadata.Status != types.ModelStatusActive {
-		return nil, errors.New("team embedding model must be active and have Embedding type")
+		return nil, errors.New("global embedding model must be active and have Embedding type")
 	}
 	return &metadata, nil
 }
@@ -75,7 +75,7 @@ func (r *ContextNameEmbeddingRebuilder) profile(ctx context.Context, tenantID ui
 		return profile, err
 	}
 	if id == "" {
-		return profile, errors.New("team embedding model is not configured")
+		return profile, errors.New("global embedding model is not configured")
 	}
 	if r.models == nil {
 		return profile, errors.New("embedding model service is unavailable")
@@ -86,7 +86,7 @@ func (r *ContextNameEmbeddingRebuilder) profile(ctx context.Context, tenantID ui
 	}
 	model, err := r.models.GetEmbeddingModel(types.WithModelTier(ctx, types.ModelTierEmbedding), id)
 	if err != nil {
-		return profile, fmt.Errorf("team embedding model is unavailable: %w", err)
+		return profile, fmt.Errorf("global embedding model is unavailable: %w", err)
 	}
 	if model == nil || model.GetDimensions() < 1 {
 		return profile, errors.New("embedding model has no usable dimensions")
@@ -166,7 +166,7 @@ func (r *ContextNameEmbeddingRebuilder) Enqueue(ctx context.Context, tenantID ui
 	if r.tasks == nil {
 		queueErr = errors.New("embedding rebuild task queue is unavailable")
 	} else {
-		_, queueErr = r.tasks.Enqueue(asynq.NewTask(types.TypeContextNameEmbeddingRebuild, payload), asynq.Queue(types.QueueGraph), asynq.MaxRetry(3), asynq.Timeout(30*time.Minute))
+		_, queueErr = r.tasks.Enqueue(asynq.NewTask(types.TypeContextNameEmbeddingRebuild, payload), asynq.Queue(types.QueueContext), asynq.MaxRetry(3), asynq.Timeout(30*time.Minute))
 	}
 	if queueErr != nil {
 		if err := r.finish(ctx, &run, "failed", queueErr); err != nil {
@@ -199,8 +199,8 @@ func (r *ContextNameEmbeddingRebuilder) Startup(ctx context.Context) error {
 	if !ok {
 		tenantID = 1
 	}
-	var team types.Tenant
-	if err := r.db.WithContext(ctx).Select("id").Where("id=?", tenantID).First(&team).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+	var space types.Tenant
+	if err := r.db.WithContext(ctx).Select("id").Where("id=?", tenantID).First(&space).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil
 	} else if err != nil {
 		return err
@@ -352,12 +352,12 @@ func (r *ContextNameEmbeddingRebuilder) Handle(ctx context.Context, task *asynq.
 	return nil
 }
 func (r *ContextNameEmbeddingRebuilder) checkProfile(tx *gorm.DB, tenantID uint64, profile contextEmbeddingProfile) error {
-	var team types.Tenant
-	if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Select("id", "model_tiers").Where("id=?", tenantID).First(&team).Error; err != nil {
+	var space types.Tenant
+	if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Select("id", "model_tiers").Where("id=?", tenantID).First(&space).Error; err != nil {
 		return err
 	}
-	if team.ModelTiers.ModelID(types.ModelTierEmbedding) != profile.modelID {
-		return errors.New("team embedding profile changed during rebuild")
+	if space.ModelTiers.ModelID(types.ModelTierEmbedding) != profile.modelID {
+		return errors.New("global embedding profile changed during rebuild")
 	}
 	var metadata types.Model
 	err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("id=? AND (tenant_id=? OR is_builtin=true)", profile.modelID, tenantID).First(&metadata).Error

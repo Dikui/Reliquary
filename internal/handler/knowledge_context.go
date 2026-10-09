@@ -69,7 +69,7 @@ func (h *KnowledgeContextHandler) UpdateEntityDescription(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": entity})
 }
 
-// Query queries sourced facts in a knowledge base, domain or team.
+// Query queries sourced facts in a knowledge base, domain or all knowledge bases.
 // @Summary Query structured knowledge
 // @Tags Knowledge Context
 // @Accept json
@@ -131,7 +131,7 @@ func contextListQuery(c *gin.Context) (types.KnowledgeContextQuery, error) {
 // @Tags Knowledge Context
 // @Produce json
 // @Security Bearer
-// @Param scope query string false "Query scope" Enums(knowledge_base,domain,team)
+// @Param scope query string false "Query scope; team is a legacy alias of all" Enums(knowledge_base,domain,all,team)
 // @Param knowledge_base_id query string false "Knowledge base for knowledge_base scope"
 // @Param domain_id query string false "Domain for domain scope"
 // @Param entity query string false "Object name or alias"
@@ -158,7 +158,7 @@ func (h *KnowledgeContextHandler) Entities(c *gin.Context) {
 // @Tags Knowledge Context
 // @Produce json
 // @Security Bearer
-// @Param scope query string false "Query scope" Enums(knowledge_base,domain,team)
+// @Param scope query string false "Query scope; team is a legacy alias of all" Enums(knowledge_base,domain,all,team)
 // @Param knowledge_base_id query string false "Knowledge base for knowledge_base scope"
 // @Param domain_id query string false "Domain for domain scope"
 // @Param entity_id query string false "Related global object"
@@ -185,7 +185,7 @@ func (h *KnowledgeContextHandler) Events(c *gin.Context) {
 // @Tags Knowledge Context
 // @Produce json
 // @Security Bearer
-// @Param scope query string false "Query scope" Enums(knowledge_base,domain,team)
+// @Param scope query string false "Query scope; team is a legacy alias of all" Enums(knowledge_base,domain,all,team)
 // @Param knowledge_base_id query string false "Knowledge base for knowledge_base scope"
 // @Param domain_id query string false "Domain for domain scope"
 // @Param entity_id query string false "Related global object"
@@ -296,7 +296,7 @@ func (h *KnowledgeContextHandler) Rebuild(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"queued": count}})
 }
 
-// EntityDetail collects an object's sourced facts and events across the team.
+// EntityDetail collects an object's sourced facts and events across the space.
 // @Summary View a global object with source knowledge bases
 // @Tags Knowledge Context
 // @Produce json

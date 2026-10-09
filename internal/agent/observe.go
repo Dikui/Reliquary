@@ -802,11 +802,11 @@ func countTotalToolCalls(steps []types.AgentStep) int {
 // may become stale across turns (KB can be switched, updated, or deleted).
 // Historical results from these tools are redacted to force fresh retrieval.
 var kbToolNames = map[string]bool{
-	agenttools.ToolKnowledgeSearch:     true,
-	agenttools.ToolGrepChunks:          true,
-	agenttools.ToolListKnowledgeChunks: true,
-	agenttools.ToolQueryKnowledgeGraph: true,
-	agenttools.ToolGetDocumentInfo:     true,
+	agenttools.ToolKnowledgeSearch:       true,
+	agenttools.ToolGrepChunks:            true,
+	agenttools.ToolListKnowledgeChunks:   true,
+	agenttools.ToolQueryKnowledgeContext: true,
+	agenttools.ToolGetDocumentInfo:       true,
 }
 
 // redactHistoryKBResults replaces full KB tool results in historical context
@@ -815,7 +815,7 @@ var kbToolNames = map[string]bool{
 func redactHistoryKBResults(llmContext []chat.Message) []chat.Message {
 	redacted := make([]chat.Message, 0, len(llmContext))
 	for _, msg := range llmContext {
-		if msg.Role == "tool" && kbToolNames[msg.Name] {
+		if msg.Role == "tool" && kbToolNames[agenttools.CanonicalToolName(msg.Name)] {
 			redacted = append(redacted, chat.Message{
 				Role:       msg.Role,
 				Content:    "[Previous retrieval result omitted — knowledge base may have changed. Please perform a fresh search.]",

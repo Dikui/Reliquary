@@ -42,7 +42,6 @@ type TenantRepository interface {
 	DeleteTenant(ctx context.Context, id uint64) error
 	// AdjustStorageUsed adjusts the storage used for a tenant
 	AdjustStorageUsed(ctx context.Context, tenantID uint64, delta int64) error
-	// BulkSetStorageQuota — see TenantService.BulkSetStorageQuota.
 }
 
 type TenantAPIKeyCreateRequest struct {

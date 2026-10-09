@@ -151,7 +151,7 @@ func TestContextNameEmbeddingRebuildAfterInitialConfiguration(t *testing.T) {
 	configureNameEmbedding(t, db, "embedding-two", 2)
 	embedder := &nameRebuildEmbedder{dimension: 2, id: "embedding-two"}
 	models.models["embedding-two"] = embedder
-	require.NoError(t, rebuilder.MarkAndEnqueue(ctx, 1, "team_embedding_profile_changed"))
+	require.NoError(t, rebuilder.MarkAndEnqueue(ctx, 1, "global_embedding_profile_changed"))
 	require.NoError(t, rebuilder.Handle(ctx, queue.last(t)))
 	status, err := rebuilder.Status(ctx, 1)
 	require.NoError(t, err)
@@ -186,7 +186,7 @@ func TestContextNameEmbeddingRebuildSwitchesDimensionsAndUsesBatches(t *testing.
 	configureNameEmbedding(t, db, "new-three", 3)
 	newModel := &nameRebuildEmbedder{dimension: 3, id: "new-three"}
 	models.models["new-three"] = newModel
-	require.NoError(t, rebuilder.MarkAndEnqueue(ctx, 1, "team_embedding_profile_changed"))
+	require.NoError(t, rebuilder.MarkAndEnqueue(ctx, 1, "global_embedding_profile_changed"))
 	before := readNameEntity(t, db, "object-0")
 	require.True(t, before.EmbeddingNeedsRebuild)
 	require.Len(t, before.NameEmbedding, 2, "marking preserves prior vector until successful replacement")

@@ -168,7 +168,17 @@
         </div>
       </div>
 
-      <!-- Graph Database Engine -->
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>{{ $t('system.credentialEncryptionLabel') }}</label>
+          <p class="desc">{{ $t(systemInfo?.credential_encryption_enabled ? 'system.credentialEncryptionEnabledDescription' : 'system.credentialEncryptionDisabledDescription') }}</p>
+        </div>
+        <div class="setting-control">
+          <t-tag :theme="systemInfo?.credential_encryption_enabled ? 'success' : 'warning'" variant="light" size="small">
+            {{ $t(systemInfo?.credential_encryption_enabled ? 'system.credentialEncryptionEnabled' : 'system.credentialEncryptionDisabled') }}
+          </t-tag>
+        </div>
+      </div>
 
     </div>
   </div>

@@ -1,3 +1,4 @@
+import { normalizeToolName } from './toolNames'
 /**
  * Tool Capability Requirements
  *
@@ -12,7 +13,7 @@
  * Capability names mirror the backend's KB capability set:
  *   - vector:  vector chunk index (embedding-based retrieval)
  *   - keyword: keyword/BM25 chunk index
- *   - graph:   knowledge graph index
+ *   - context:   structured knowledge context
  *
  * Requirement semantics:
  *   - `anyOf`: KB scope must expose at least ONE listed capability.
@@ -24,7 +25,7 @@
  * "always available" so new tools don't silently start disabled.
  */
 
-export type KBCapability = 'vector' | 'keyword' | 'graph';
+export type KBCapability = 'vector' | 'keyword' | 'context';
 
 export interface ToolRequirement {
   anyOf?: KBCapability[];
@@ -51,7 +52,7 @@ export const TOOL_CAPABILITY_REQUIREMENTS: Record<string, ToolRequirement> = {
   knowledge_search:      { anyOf: ['vector', 'keyword'], consumesFiles: true },
   grep_chunks:           { anyOf: ['vector', 'keyword'], consumesFiles: true },
   list_knowledge_chunks: { anyOf: ['vector', 'keyword'], consumesFiles: true },
-  query_knowledge_graph: { anyOf: ['vector', 'keyword'], consumesFiles: true },
+  query_knowledge_context: { anyOf: ['vector', 'keyword'], consumesFiles: true },
   get_document_info:     { anyOf: ['vector', 'keyword'], consumesFiles: true },
   database_query:        { anyOf: ['vector', 'keyword'], consumesFiles: true },
 
@@ -67,14 +68,14 @@ export const TOOL_CAPABILITY_REQUIREMENTS: Record<string, ToolRequirement> = {
 export interface ScopeCapabilities {
   vector: boolean;
   keyword: boolean;
-  graph: boolean;
+  context: boolean;
   }
 
 /**
  * Machine-readable reason a tool is unsatisfiable. Map to a user-facing
  * string via i18n on the caller side (see `AgentEditorModal.vue`).
  */
-export type RequirementMissKind = 'none' | 'needsKb' | 'needsRag' | 'needsGraph';
+export type RequirementMissKind = 'none' | 'needsKb' | 'needsRag' | 'needsContext';
 
 /**
  * Evaluate whether a tool's requirements are satisfied by the scope.
@@ -89,7 +90,7 @@ export function evaluateToolRequirement(
   scope: ScopeCapabilities,
   hasAnyKb: boolean,
 ): { ok: boolean; missKind: RequirementMissKind } {
-  const req = TOOL_CAPABILITY_REQUIREMENTS[toolName];
+  const req = TOOL_CAPABILITY_REQUIREMENTS[normalizeToolName(toolName)];
   // Tools absent from the map or with no requirements: always available.
   if (!req || (!req.anyOf?.length && !req.allOf?.length)) {
     return { ok: true, missKind: 'none' };
@@ -115,7 +116,7 @@ export function evaluateToolRequirement(
 
 function primaryMissKind(c: KBCapability): RequirementMissKind {
   switch (c) {
-    case 'graph':   return 'needsGraph';
+    case 'context':   return 'needsContext';
     case 'vector':
     case 'keyword': return 'needsRag';
   }
@@ -137,7 +138,7 @@ export function deriveKbFilterFromTools(
 ): { any_of: KBCapability[] } | null {
   const caps = new Set<KBCapability>();
   for (const t of tools) {
-    const req = TOOL_CAPABILITY_REQUIREMENTS[t];
+    const req = TOOL_CAPABILITY_REQUIREMENTS[normalizeToolName(t)];
     if (!req) continue;
     req.anyOf?.forEach(c => caps.add(c));
     req.allOf?.forEach(c => caps.add(c));
@@ -231,7 +232,7 @@ export function toolsConsumeFiles(
 ): boolean {
   if (!allowedTools || allowedTools.length === 0) return true;
   for (const t of allowedTools) {
-    const req = TOOL_CAPABILITY_REQUIREMENTS[t];
+    const req = TOOL_CAPABILITY_REQUIREMENTS[normalizeToolName(t)];
     // Unknown tools (e.g. MCP tools) are treated as potentially file-consuming.
     if (!req) return true;
     if (req.consumesFiles) return true;

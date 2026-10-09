@@ -564,7 +564,7 @@ const runtimeTaskTypeKeys: Record<string, string> = {
   'datatable:summary': 'tableSummary',
   'question:generation': 'question',
   'image:multimodal': 'multimodal',
-  'chunk:extract': 'graph',
+  'chunk:extract': 'context',
   'datasource:sync': 'sync',
   'knowledge:list_reparse': 'batchReparse',
   'knowledge:list_delete': 'batchDelete',

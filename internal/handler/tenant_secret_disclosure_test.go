@@ -44,9 +44,7 @@ func (s *stubTenantService) ListAllTenants(context.Context) ([]*types.Tenant, er
 func (s *stubTenantService) SearchTenants(context.Context, string, uint64, int, int) ([]*types.Tenant, int64, error) {
 	return nil, 0, nil
 }
-func (s *stubTenantService) BulkSetStorageQuota(context.Context, int64) (int64, error) {
-	return 0, nil
-}
+
 func (s *stubTenantService) GetTenantByIDForUser(context.Context, uint64, string) (*types.Tenant, error) {
 	return s.tenant, nil
 }

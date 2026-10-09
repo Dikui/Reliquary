@@ -190,7 +190,7 @@ func searchTargetsAllowKnowledgeID(
 
 // filterSearchResultsInSearchTargets applies the same whole-KB/document/tag
 // union semantics to tools whose backend can only query by KB (notably the
-// knowledge graph). It batches tag lookup and rejects results without enough
+// knowledge context). It batches tag lookup and rejects results without enough
 // provenance instead of turning a narrow mention into whole-KB access.
 func filterSearchResultsInSearchTargets(
 	ctx context.Context,
@@ -229,7 +229,7 @@ func filterSearchResultsInSearchTargets(
 		}
 		if result.KnowledgeBaseID != "" && result.KnowledgeBaseID != kbID {
 			return nil, fmt.Errorf(
-				"graph result document %s belongs to knowledge base %s, expected %s",
+				"context result document %s belongs to knowledge base %s, expected %s",
 				result.KnowledgeID, result.KnowledgeBaseID, kbID,
 			)
 		}
@@ -240,14 +240,14 @@ func filterSearchResultsInSearchTargets(
 	var tagMatches map[string]bool
 	if len(tagIDs) > 0 {
 		if knowledgeService == nil {
-			return nil, fmt.Errorf("knowledge service is unavailable for tag-scoped graph filtering")
+			return nil, fmt.Errorf("knowledge service is unavailable for tag-scoped context filtering")
 		}
 		var err error
 		tagMatches, err = knowledgeIDsMatchingAnyTag(
 			ctx, remainingIDs, tagIDs, knowledgeService.GetKnowledgeTags,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("failed to validate graph result scope: %w", err)
+			return nil, fmt.Errorf("failed to validate context result scope: %w", err)
 		}
 	}
 

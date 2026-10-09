@@ -20,7 +20,7 @@
       </t-alert>
     </div>
 
-    <!-- 团队信息列表 -->
+    <!-- 空间信息列表 -->
     <div v-else class="tenant-info-body">
       <div class="settings-group">
         <!-- Tenant ID -->
@@ -41,11 +41,11 @@
             <p class="desc">{{ $t('tenant.details.nameDescription') }}</p>
           </div>
           <div class="setting-control">
-            <!-- 只读态：显示名称 + 编辑按钮（owner 才看得见编辑入口）。
+            <!-- 只读态：显示名称 + 编辑按钮（登录后可编辑）。
                原地编辑取代弹窗：少一层视觉打断，与其它行的展示节奏一致。 -->
             <template v-if="!editing">
               <span class="info-value">{{ tenantInfo?.name || '-' }}</span>
-              <t-button v-if="canEditTenant" theme="default" variant="text" shape="square" size="small"
+              <t-button theme="default" variant="text" shape="square" size="small"
                 class="edit-btn" :title="$t('tenant.details.editName')" :aria-label="$t('tenant.details.editName')"
                 @click="startEditName">
                 <template #icon>
@@ -75,13 +75,13 @@
             <p class="desc">{{ $t('tenant.details.descriptionDescription') }}</p>
           </div>
           <div class="setting-control">
-            <!-- 只读态：显示描述（空时给占位）+ 编辑按钮（owner 才看得见编辑入口）。
+            <!-- 只读态：显示描述（空时给占位）+ 编辑按钮（登录后可编辑）。
                与名称同款"原地编辑"模式，少一层弹窗打断。 -->
             <template v-if="!editingDescription">
               <span class="info-value description-value" :class="{ 'is-empty': !tenantInfo?.description }">
                 {{ tenantInfo?.description || $t('tenant.details.descriptionEmptyPlaceholder') }}
               </span>
-              <t-button v-if="canEditTenant" theme="default" variant="text" shape="square" size="small"
+              <t-button theme="default" variant="text" shape="square" size="small"
                 class="edit-btn" :title="$t('tenant.details.editDescription')"
                 :aria-label="$t('tenant.details.editDescription')" @click="startEditDescription">
                 <template #icon>
@@ -145,43 +145,17 @@
           </div>
         </div>
 
-        <!-- Storage quota -->
-        <div v-if="tenantInfo?.storage_quota !== undefined" class="setting-row">
-          <div class="setting-info">
-            <label>{{ $t('tenant.storage.quotaLabel') }}</label>
-            <p class="desc">{{ $t('tenant.storage.quotaDescription') }}</p>
-          </div>
-          <div class="setting-control">
-            <span class="info-value">{{ formatBytes(tenantInfo.storage_quota) }}</span>
-          </div>
-        </div>
-
         <!-- Used storage -->
-        <div v-if="tenantInfo?.storage_quota !== undefined" class="setting-row">
+        <div class="setting-row">
           <div class="setting-info">
             <label>{{ $t('tenant.storage.usedLabel') }}</label>
             <p class="desc">{{ $t('tenant.storage.usedDescription') }}</p>
           </div>
           <div class="setting-control">
-            <span class="info-value">{{ formatBytes(tenantInfo.storage_used || 0) }}</span>
+            <span class="info-value">{{ formatBytes(tenantInfo?.storage_used || 0) }}</span>
           </div>
         </div>
 
-        <!-- Storage usage -->
-        <div v-if="tenantInfo?.storage_quota !== undefined" class="setting-row">
-          <div class="setting-info">
-            <label>{{ $t('tenant.storage.usageLabel') }}</label>
-            <p class="desc">{{ $t('tenant.storage.usageDescription') }}</p>
-          </div>
-          <div class="setting-control">
-            <div class="usage-control">
-              <span class="usage-text">{{ getUsagePercentage() }}%</span>
-              <!-- t-progress: theme = 形态（line/plump/circle）；颜色用 status -->
-              <t-progress :percentage="getUsagePercentage()" :show-info="false" size="small"
-                :status="getUsagePercentage() > 80 ? 'warning' : 'success'" style="flex: 1;" />
-            </div>
-          </div>
-        </div>
 
       </div>
 
@@ -190,20 +164,19 @@
 
 
     </div>
-    <TeamModelTierSettings ref="modelTierSettings" />
+    <GlobalModelTierSettings ref="modelTierSettings" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import TeamModelTierSettings from './TeamModelTierSettings.vue'
-import { getCurrentUser, type TenantInfo } from '@/api/auth'
-import { updateTenant as updateTenantApi } from '@/api/tenant'
+import GlobalModelTierSettings from './GlobalModelTierSettings.vue'
+import { getTenantInfo, updateTenant as updateTenantApi, type TenantInfo } from '@/api/tenant'
 import { useAuthStore } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
 
-const modelTierSettings = ref<InstanceType<typeof TeamModelTierSettings>>()
+const modelTierSettings = ref<InstanceType<typeof GlobalModelTierSettings>>()
 defineExpose({ confirmLeave: () => modelTierSettings.value?.confirmLeave() ?? Promise.resolve(true) })
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
@@ -212,10 +185,6 @@ const authStore = useAuthStore()
 const tenantInfo = ref<TenantInfo | null>(null)
 const loading = ref(true)
 const error = ref('')
-
-// 仅 owner 可改空间名（与后端 router.go 中 g.Owner() 守卫一致；
-// 服务端始终是权限的最终裁判，这里只决定 UI 是否露出入口）。
-const canEditTenant = computed(() => authStore.isLoggedIn)
 
 
 // 原地编辑空间名称：editing 控制行内只读 / 编辑两种形态切换。
@@ -294,7 +263,7 @@ const saveTenantDescription = async () => {
 
   try {
     savingDescription.value = true
-    const resp = await updateTenantApi(Number(tenantInfo.value.id), { description: newDesc })
+    const resp = await updateTenantApi({ description: newDesc })
     if (resp.success) {
       // 本地立即回显，避免等 /auth/me 往返。
       if (tenantInfo.value) {
@@ -326,16 +295,15 @@ const saveTenantName = async () => {
 
   try {
     saving.value = true
-    const resp = await updateTenantApi(Number(tenantInfo.value.id), { name: newName })
+    const resp = await updateTenantApi({ name: newName })
     if (resp.success) {
-      // 本地立即回显，并同步登录态中的团队名称。
+      // 本地立即回显，并同步登录态中的空间名称。
       if (tenantInfo.value) {
         tenantInfo.value = { ...tenantInfo.value, name: newName }
       }
       if (authStore.tenant && String(authStore.tenant.id) === String(tenantInfo.value?.id)) {
         authStore.setTenant({ ...authStore.tenant, name: newName })
       }
-      // 同步成员记录中的团队名称。
 
       MessagePlugin.success(t('tenant.details.editNameSuccess'))
       editing.value = false
@@ -355,13 +323,12 @@ const loadInfo = async () => {
     loading.value = true
     error.value = ''
 
-    const userResponse = await getCurrentUser()
+    const spaceResponse = await getTenantInfo()
 
-    const data = userResponse?.data as { tenant?: TenantInfo } | undefined
-    if ((userResponse as any).success && data?.tenant) {
-      tenantInfo.value = data.tenant
+    if (spaceResponse.success && spaceResponse.data) {
+      tenantInfo.value = spaceResponse.data
     } else {
-      error.value = userResponse.message || t('tenant.messages.fetchFailed')
+      error.value = spaceResponse.message || t('tenant.messages.fetchFailed')
     }
   } catch (err: any) {
     error.value = err?.message || t('tenant.messages.networkError')
@@ -424,15 +391,6 @@ const formatBytes = (bytes: number) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
-const getUsagePercentage = () => {
-  if (!tenantInfo.value?.storage_quota || tenantInfo.value.storage_quota === 0) {
-    return 0
-  }
-
-  const used = tenantInfo.value.storage_used || 0
-  const percentage = (used / tenantInfo.value.storage_quota) * 100
-  return Math.min(Math.round(percentage * 100) / 100, 100)
-}
 
 // Lifecycle
 onMounted(() => {
@@ -596,19 +554,5 @@ onMounted(() => {
   }
 }
 
-.usage-control {
-  //   width: 100%;
-  //   display: flex;
-  //   align-items: center;
-  //   gap: 12px;
-
-  .usage-text {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--td-text-color-primary);
-    min-width: 50px;
-    text-align: right;
-  }
-}
 
 </style>

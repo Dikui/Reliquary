@@ -11,7 +11,7 @@ database connection limits.
 | --- | ---: | --- | --- |
 | Core | 8 | `default` | Document parsing and manual reparse guarantee |
 | Post-process | 2 | `postprocess` | Parse finalization and enrichment fan-out |
-| Enrichment | 12 | `summary`, `multimodal`, `graph`, `question` | Model-heavy enrichment guarantee |
+| Enrichment | 12 | `summary`, `multimodal`, `context`, `question` | Model-heavy enrichment guarantee |
 | Maintenance | 4 | `sync`, `low` | Source sync, batch work, move/delete/cleanup |
 | Shared | 6 | Core and enrichment queues | Elastic capacity borrowed by the side with backlog |
 
@@ -64,7 +64,7 @@ required workers = ceil(peak task arrival rate * mean task runtime / 0.70)
 ```
 
 Use task arrival rate after fan-out. One parsed document can create one summary,
-multiple question batches, one graph task per chunk, and multiple image tasks.
+multiple question batches, one knowledge context task per chunk, and multiple image tasks.
 Queue count is not a capacity signal.
 
 The runtime dashboard reports:

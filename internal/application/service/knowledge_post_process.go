@@ -115,7 +115,7 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 
 	// Skip post-processing entirely when the knowledge has been cancelled
 	// by the user or marked for deletion. We must NOT enqueue summary /
-	// question / graph child tasks for an aborted knowledge. We
+	// question / context child tasks for an aborted knowledge. We
 	// MUST also close postSpan before returning, otherwise it stays in
 	// running state forever and the trace viewer shows an orange bar
 	// long after the user cancelled (the AbortAttempt sweep ran before
@@ -168,7 +168,7 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 	enqueuedAutoTag := false
 
 	// Question generation now fans out one subtask per plain text chunk
-	// (mirroring the graph-extract per-chunk pattern) so each chunk's LLM
+	// (mirroring the context-extract per-chunk pattern) so each chunk's LLM
 	// call retries / cancels / traces independently. We only target
 	// ChunkTypeText here — OCR / Caption chunks were never fed to question
 	// generation in the legacy whole-knowledge loop, so excluding them
@@ -221,7 +221,7 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 		return nil
 	case expectedSubtasks == 0:
 		// Nothing to enrich — fast path keeps the previous behavior so
-		// users without summary/question/graph see 'completed' immediately.
+		// users without summary/question/context see 'completed' immediately.
 		updates := map[string]interface{}{
 			"parse_status": types.ParseStatusCompleted,
 			"updated_at":   time.Now(),
@@ -394,7 +394,7 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 	}
 	s.tracker().EndSpan(ctx, postSpan, postOutput)
 	// Close the root span — the parse pipeline is done. Async
-	// downstream stages (summary/question/graph) record their
+	// downstream stages (summary/question/context) record their
 	// own spans independently; their finishing extends the trace's
 	// end-time but does not reopen the root. A late failure in one
 	// of those stages does not poison the parse result.

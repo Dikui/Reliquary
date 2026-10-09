@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/crc32"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -34,6 +35,9 @@ type personalAuthFixture struct {
 func personalRequest(t *testing.T, r *gin.Engine, method, path, body, credential string, apiKey bool) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	// Each test gets its own client IP so auth budgets do not leak across fixtures.
+	client := crc32.ChecksumIEEE([]byte(t.Name()))
+	req.RemoteAddr = fmt.Sprintf("192.%d.%d.%d:12345", byte(client>>16), byte(client>>8), byte(client))
 	req.Header.Set("Content-Type", "application/json")
 	if credential != "" {
 		if apiKey {
@@ -72,8 +76,9 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 	v1 := r.Group("/api/v1")
 	RegisterAuthRoutes(v1, handler.NewAuthHandler(users, tenantSvc), guards)
 	RegisterTenantRoutes(v1, handler.NewTenantHandler(tenantSvc, keys, users, kb, cfg, settings), guards)
-	RegisterSystemAdminRoutes(v1, system, guards)
+	RegisterSystemRoutes(v1, system, guards)
 	RegisterModelRoutes(v1, handler.NewModelHandler(models), nil, guards)
+	RegisterModelRoutingRoutes(v1, handler.NewModelRoutingHandler(db, models), guards)
 	RegisterKnowledgeDomainRoutes(v1, handler.NewKnowledgeDomainHandler(service.NewKnowledgeDomainService(db)), guards)
 	RegisterKnowledgeContextRoutes(v1, handler.NewKnowledgeContextHandler(service.NewKnowledgeContextService(db, nil), nil), guards)
 	v1.GET("/knowledge/search", handler.NewKnowledgeHandler(cfg, knowledge, kb, nil, nil).SearchKnowledge)
@@ -98,7 +103,7 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 	require.NoError(t, json.Unmarshal(login.Body.Bytes(), &loggedIn))
 	require.True(t, loggedIn.Success)
 	f.token = loggedIn.Token
-	created := personalRequest(t, r, http.MethodPost, "/api/v1/tenants/1/api-keys", `{"name":"personal integration"}`, f.token, false)
+	created := personalRequest(t, r, http.MethodPost, "/api/v1/space/api-keys", `{"name":"personal integration"}`, f.token, false)
 	require.Equal(t, http.StatusCreated, created.Code, created.Body.String())
 	var createdKey struct {
 		Data struct {
@@ -113,7 +118,7 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 
 func TestPersonalRegistrationAuthenticationAndManagement(t *testing.T) {
 	f := newPersonalAuthFixture(t)
-	for _, path := range []string{"/api/v1/system/admin/settings", "/api/v1/system/admin/runtime/queues", "/api/v1/models", "/api/v1/knowledge-domains", "/api/v1/tenants/1/api-keys"} {
+	for _, path := range []string{"/api/v1/system/settings", "/api/v1/system/runtime/queues", "/api/v1/models", "/api/v1/knowledge-domains", "/api/v1/space/api-keys"} {
 		for _, credential := range []string{"", "invalid-key"} {
 			rec := personalRequest(t, f.router, http.MethodGet, path, "", credential, true)
 			require.Equal(t, http.StatusUnauthorized, rec.Code, path+" "+rec.Body.String())
@@ -132,7 +137,7 @@ func TestPersonalRegistrationAuthenticationAndManagement(t *testing.T) {
 		if apiKey {
 			credential = f.key
 		}
-		settings := personalRequest(t, f.router, http.MethodPut, "/api/v1/system/admin/settings/asynq.core_concurrency", `{"value":4}`, credential, apiKey)
+		settings := personalRequest(t, f.router, http.MethodPut, "/api/v1/system/settings/asynq.core_concurrency", `{"value":4}`, credential, apiKey)
 		require.Equal(t, http.StatusOK, settings.Code, settings.Body.String())
 		model := personalRequest(t, f.router, http.MethodPost, "/api/v1/models", fmt.Sprintf(`{"name":"test-model-%d","type":"KnowledgeQA","source":"remote","parameters":{}}`, i), credential, apiKey)
 		require.Equal(t, http.StatusCreated, model.Code, model.Body.String())
@@ -208,7 +213,7 @@ func TestPersonalAPIKeyAndLoginReturnAllKnowledgeContext(t *testing.T) {
 func TestPersonalAPIKeyWithoutExpirationIsUsable(t *testing.T) {
 	f := newPersonalAuthFixture(t)
 	for _, body := range []string{`{"name":"No expiration"}`, `{"name":"Zero expiration","expires_at_unix":0}`} {
-		created := personalRequest(t, f.router, http.MethodPost, "/api/v1/tenants/1/api-keys", body, f.token, false)
+		created := personalRequest(t, f.router, http.MethodPost, "/api/v1/space/api-keys", body, f.token, false)
 		require.Equal(t, http.StatusCreated, created.Code, created.Body.String())
 		var response struct {
 			Data struct {

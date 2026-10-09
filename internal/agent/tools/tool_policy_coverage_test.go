@@ -19,7 +19,7 @@ func TestEveryBuiltInToolDeclaresAModelHandlePolicy(t *testing.T) {
 		ToolGrepChunks,
 		ToolKnowledgeSearch,
 		ToolListKnowledgeChunks,
-		ToolQueryKnowledgeGraph,
+		ToolQueryKnowledgeContext,
 		ToolGetDocumentInfo,
 		ToolDatabaseQuery,
 		ToolDataAnalysis,

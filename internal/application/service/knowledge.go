@@ -278,7 +278,7 @@ func (s *knowledgeService) skipStage(ctx context.Context, kid, name, reason stri
 
 // beginPostprocessSubspan opens a subspan beneath the postprocess stage
 // span for (kid, attempt). Async post-pipeline tasks (summary, question,
-// graph) call this on entry so their actual processing time shows
+// context) call this on entry so their actual processing time shows
 // up in the trace tree under postprocess instead of the stage looking
 // like an instant ~10ms enqueue.
 //

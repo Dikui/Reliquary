@@ -1,14 +1,14 @@
 <template>
-  <div class="graph-query-results">
-    <div v-if="data.graph_data" class="stats-card">
-      <div class="stats-title">{{ t('chat.graphResultsHeader', { count: factCount }) }}</div>
-      <div class="graph-summary">
-        <span>{{ t('knowledgeWorkbench.entities.title') }}: {{ data.graph_data.total_nodes }}</span>
+  <div class="context-query-results">
+    <div v-if="contextData" class="stats-card">
+      <div class="stats-title">{{ t('chat.contextResultsHeader', { count: factCount }) }}</div>
+      <div class="context-summary">
+        <span>{{ t('knowledgeWorkbench.entities.title') }}: {{ contextData.total_nodes }}</span>
         <span>{{ t('knowledgeWorkbench.facts') }}: {{ factCount }}</span>
-        <span>{{ t('knowledgeWorkbench.query.relation') }}: {{ data.graph_data.total_edges }}</span>
+        <span>{{ t('knowledgeWorkbench.query.relation') }}: {{ contextData.total_edges }}</span>
       </div>
-      <div v-if="data.graph_data.nodes.length" class="entity-list">
-        <span v-for="node in data.graph_data.nodes" :key="`${node.kb_id}:${node.id}`" class="entity-chip">
+      <div v-if="contextData.nodes.length" class="entity-list">
+        <span v-for="node in contextData.nodes" :key="`${node.kb_id}:${node.id}`" class="entity-chip">
           {{ node.label }}<small>{{ node.type }}</small>
         </span>
       </div>
@@ -79,7 +79,7 @@
     </section>
 
     <div v-if="factCount === 0" class="empty-state">
-      {{ t('chat.graphNoResults') }}
+      {{ t('chat.contextNoResults') }}
     </div>
   </div>
 </template>
@@ -88,10 +88,11 @@
 import { computed, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getKnowledgeEvidence, type KnowledgeContextResult, type KnowledgeEvidence } from '@/api/knowledge-context'
-import type { GraphQueryResultsData } from '@/types/tool-results'
+import type { ContextQueryResultsData } from '@/types/tool-results'
 
-const props = defineProps<{ data: GraphQueryResultsData }>()
+const props = defineProps<{ data: ContextQueryResultsData }>()
 const { t } = useI18n()
+const contextData = computed(() => props.data.context_data || props.data.graph_data)
 
 const knowledgeBases = computed(() => Object.entries(props.data.contexts || {}).map(([key, result]) => ({
   key,
@@ -198,8 +199,8 @@ function safeExternalUrl(value?: string) {
 <style lang="less" scoped>
 @import './tool-results.less';
 
-.graph-query-results { display: flex; flex-direction: column; gap: 12px; }
-.graph-summary { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--td-text-color-secondary); font-size: 12px; }
+.context-query-results { display: flex; flex-direction: column; gap: 12px; }
+.context-summary { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--td-text-color-secondary); font-size: 12px; }
 .entity-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .entity-chip { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--td-component-stroke); border-radius: 12px; padding: 3px 9px; font-size: 12px; }
 .entity-chip small { color: var(--td-text-color-placeholder); }

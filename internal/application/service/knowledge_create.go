@@ -102,13 +102,6 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 		return existingKnowledge, types.NewDuplicateFileError(existingKnowledge)
 	}
 
-	// Check storage quota
-	tenantInfo := ctx.Value(types.TenantInfoContextKey).(*types.Tenant)
-	if tenantInfo.StorageQuota > 0 && tenantInfo.StorageUsed >= tenantInfo.StorageQuota {
-		logger.Error(ctx, "Storage quota exceeded")
-		return nil, types.NewStorageQuotaExceededError()
-	}
-
 	// Convert metadata to JSON format if provided
 	var metadataJSON types.JSON
 	if metadata != nil {
@@ -386,13 +379,6 @@ func (s *knowledgeService) createKnowledgeFromURL(ctx context.Context,
 		}
 	}
 
-	// Check storage quota
-	tenantInfo := ctx.Value(types.TenantInfoContextKey).(*types.Tenant)
-	if tenantInfo.StorageQuota > 0 && tenantInfo.StorageUsed >= tenantInfo.StorageQuota {
-		logger.Error(ctx, "Storage quota exceeded")
-		return nil, types.NewStorageQuotaExceededError()
-	}
-
 	// Create knowledge record
 	logger.Info(ctx, "Creating knowledge record")
 	knowledge := &types.Knowledge{
@@ -651,13 +637,6 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 			}
 			return existingKnowledge, types.NewDuplicateURLError(existingKnowledge)
 		}
-	}
-
-	// Check storage quota
-	tenantInfo := ctx.Value(types.TenantInfoContextKey).(*types.Tenant)
-	if tenantInfo.StorageQuota > 0 && tenantInfo.StorageUsed >= tenantInfo.StorageQuota {
-		logger.Error(ctx, "Storage quota exceeded")
-		return nil, types.NewStorageQuotaExceededError()
 	}
 
 	// Create knowledge record

@@ -26,7 +26,7 @@ const (
 	// context. It is declared here so context_clone.go can name every context key
 	// without importing the middleware that authenticates it.
 	// BackgroundTaskContextKey marks a context whose model calls originate from
-	// an asynq background worker (document parse / summary / question / graph /
+	// an asynq background worker (document parse / summary / question / context /
 	// multimodal enrichment) rather than a user-facing HTTP request. The chat
 	// concurrency governor uses this to throttle only background LLM traffic,
 	// leaving interactive chat latency untouched. See WithBackgroundTask.

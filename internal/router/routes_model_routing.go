@@ -7,7 +7,7 @@ import (
 )
 
 func RegisterModelRoutingRoutes(r *gin.RouterGroup, h *handler.ModelRoutingHandler, g *accessGuards) {
-	team := r.Group("/tenants")
-	team.Handle(http.MethodGet, "/model-tiers", h.Get)
-	team.Handle(http.MethodPut, "/model-tiers", h.Update)
+	space := r.Group("/space")
+	space.Handle(http.MethodGet, "/model-tiers", h.Get)
+	space.Handle(http.MethodPut, "/model-tiers", h.Update)
 }
