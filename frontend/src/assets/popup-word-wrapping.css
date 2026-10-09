@@ -1,0 +1,4 @@
+html[lang^="en"] .t-popup__content {
+  word-break: normal;
+  overflow-wrap: break-word;
+}

@@ -2,6 +2,7 @@ import { createI18n } from 'vue-i18n'
 import zhCN from './locales/zh-CN.ts'
 import enUS from './locales/en-US.ts'
 import { BUILT_IN_DEFAULT, SUPPORTED_LOCALES, resolveDefaultLocale } from './resolveDefaultLocale.ts'
+import { syncDocumentLanguage } from './syncDocumentLanguage.ts'
 
 const messages = {
   'zh-CN': zhCN,
@@ -28,5 +29,7 @@ const i18n = createI18n({
   warnHtmlMessage: false,
   messages
 })
+
+syncDocumentLanguage(i18n.global.locale, document)
 
 export default i18n
