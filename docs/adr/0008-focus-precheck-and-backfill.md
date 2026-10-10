@@ -1,6 +1,7 @@
 # 0008 关注范围先判断、时间线提示与可选补抽
 
-Status: accepted
+Status: superseded
+被 [0009](0009-kb-collect-store-retrieve.md) 取代
 日期：2026-10-09
 部分取代 [0006](0006-on-demand-structured-extraction.md) 的收录流程
 

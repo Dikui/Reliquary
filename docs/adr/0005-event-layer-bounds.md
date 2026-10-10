@@ -1,6 +1,7 @@
 # 0005 事件层只记录对象时间线，关联最多展开一层
 
-Status: accepted
+Status: superseded
+被 [0009](0009-kb-collect-store-retrieve.md) 取代
 日期：2026-10-08
 
 ## 背景

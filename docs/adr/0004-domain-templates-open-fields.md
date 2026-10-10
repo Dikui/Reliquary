@@ -1,6 +1,7 @@
 # 0004 领域模板加开放字段
 
-Status: accepted
+Status: superseded
+被 [0009](0009-kb-collect-store-retrieve.md) 取代
 日期：2026-10-07
 
 ## 背景

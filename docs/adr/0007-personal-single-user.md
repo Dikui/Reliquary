@@ -1,6 +1,7 @@
 # 0007 改为个人单用户使用
 
 Status: accepted
+部分被 [0009](0009-kb-collect-store-retrieve.md) 取代（入口、MCP 服务端、工作流；站内对话、智能体、DuckDB 数据分析、MCP 客户端一并删除）
 日期：2026-10-08
 
 ## 背景
