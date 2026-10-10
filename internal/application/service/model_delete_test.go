@@ -30,16 +30,12 @@ func (s *stubKBRepoForModelDelete) GetKnowledgeBaseByIDAndTenant(context.Context
 func (s *stubKBRepoForModelDelete) GetKnowledgeBaseByIDs(context.Context, []string) ([]*types.KnowledgeBase, error) {
 	return nil, nil
 }
-func (s *stubKBRepoForModelDelete) ListKnowledgeBases(context.Context) ([]*types.KnowledgeBase, error) {
-	return nil, nil
-}
-func (s *stubKBRepoForModelDelete) ListKnowledgeBasesByTenantID(context.Context, uint64) ([]*types.KnowledgeBase, error) {
+func (s *stubKBRepoForModelDelete) GetKnowledgeBaseByTenantID(context.Context, uint64) (*types.KnowledgeBase, error) {
 	return nil, nil
 }
 func (s *stubKBRepoForModelDelete) UpdateKnowledgeBase(context.Context, *types.KnowledgeBase) error {
 	return nil
 }
-func (s *stubKBRepoForModelDelete) DeleteKnowledgeBase(context.Context, string) error { return nil }
 func (s *stubKBRepoForModelDelete) CountByModelID(context.Context, uint64, string) (int64, error) {
 	if s.count != nil {
 		return *s.count, s.usageErr

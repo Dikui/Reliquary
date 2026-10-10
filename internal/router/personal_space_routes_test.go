@@ -11,7 +11,7 @@ import (
 
 func TestPersonalSpaceRoutesUseAuthenticatedSpace(t *testing.T) {
 	f := newPersonalAuthFixture(t)
-	paths := []string{"/api/v1/space", "/api/v1/space/api-keys", "/api/v1/space/kv/retrieval-config", "/api/v1/space/kv/parser-engine-config", "/api/v1/space/kv/prompt-templates", "/api/v1/space/model-tiers"}
+	paths := []string{"/api/v1/space", "/api/v1/space/api-keys", "/api/v1/space/kv/retrieval-config", "/api/v1/space/kv/parser-engine-config", "/api/v1/space/kv/prompt-templates"}
 	for _, path := range paths {
 		response := personalRequest(t, f.router, http.MethodGet, path, "", "", false)
 		require.Equal(t, http.StatusUnauthorized, response.Code, path+" "+response.Body.String())
@@ -35,7 +35,7 @@ func TestPersonalSpaceRoutesUseAuthenticatedSpace(t *testing.T) {
 		require.NotContains(t, updated.Body.String(), "storage_quota")
 		kv := personalRequest(t, f.router, http.MethodPut, "/api/v1/space/kv/retrieval-config", `{}`, actor.credential, actor.apiKey)
 		require.Equal(t, http.StatusOK, kv.Code, kv.Body.String())
-		tiers := personalRequest(t, f.router, http.MethodPut, "/api/v1/space/model-tiers", `{}`, actor.credential, actor.apiKey)
+		tiers := personalRequest(t, f.router, http.MethodPut, "/api/v1/knowledge-base", `{"name":"知识库","model_tiers":{}}`, actor.credential, actor.apiKey)
 		require.Equal(t, http.StatusOK, tiers.Code, tiers.Body.String())
 	}
 }
@@ -43,7 +43,7 @@ func TestPersonalSpaceRoutesUseAuthenticatedSpace(t *testing.T) {
 func TestPersonalOldManagementRoutesReturnNotFound(t *testing.T) {
 	f := newPersonalAuthFixture(t)
 	for _, path := range []string{
-		"/api/v1/tenants/1", "/api/v1/tenants/1/api-keys", "/api/v1/tenants/1/api-keys/1", "/api/v1/tenants/kv/retrieval-config", "/api/v1/tenants/model-tiers",
+		"/api/v1/space/model-tiers", "/api/v1/model-routing", "/api/v1/tenants/1", "/api/v1/tenants/1/api-keys", "/api/v1/tenants/1/api-keys/1", "/api/v1/tenants/kv/retrieval-config", "/api/v1/tenants/model-tiers",
 		"/api/v1/system/admin/settings", "/api/v1/system/admin/settings/file.max_size_mb", "/api/v1/system/admin/runtime/queues",
 		"/api/v1/system/admin/runtime/queues/default/tasks", "/api/v1/system/admin/runtime/queues/default/archived",
 		"/api/v1/system/admin/runtime/queues/default/tasks/task/actions/delete",

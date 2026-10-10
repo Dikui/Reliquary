@@ -90,12 +90,10 @@ type EntityCandidate struct {
 }
 
 type EntityQuery struct {
-	Scope           string `json:"scope,omitempty"`
-	KnowledgeBaseID string `json:"knowledge_base_id,omitempty"`
-	Entity          string `json:"entity,omitempty"`
-	EntityType      string `json:"entity_type,omitempty"`
-	Limit           int    `json:"limit,omitempty"`
-	Offset          int    `json:"offset,omitempty"`
+	Entity     string `json:"entity,omitempty"`
+	EntityType string `json:"entity_type,omitempty"`
+	Limit      int    `json:"limit,omitempty"`
+	Offset     int    `json:"offset,omitempty"`
 }
 
 type EntityDetail struct {

@@ -11,7 +11,7 @@ test('an invalidated knowledge base request cannot restore the previous account 
     computed: (get: () => unknown) => ({ get value() { return get() } }),
     watch: () => {},
     getCurrentLanguage: () => 'en-US',
-    listKnowledgeBases: () => new Promise(resolve => pending.push(resolve)),
+    getKnowledgeBase: () => new Promise(resolve => pending.push(resolve)),
   }
   // Execute the actual store setup with controlled API timing, without browser dependencies.
   const source = readFileSync(new URL('./resources.ts', import.meta.url), 'utf8')
@@ -21,16 +21,16 @@ test('an invalidated knowledge base request cannot restore the previous account 
   const exports: any = {}
   new Function('require', 'exports', outputText)(() => dependencies, exports)
   const store = exports.useResourcesStore()
-  const previous = store.fetchKnowledgeBasesForList()
+  const previous = store.fetchKnowledgeBase()
   store.invalidate()
-  pending.shift()!({ data: [{ id: 'previous-account-kb' }] })
-  assert.deepEqual(await previous, [])
-  assert.deepEqual(store.rawKnowledgeBases.value, [])
-  assert.equal(store.isFresh('knowledgeBases'), false)
+  pending.shift()!({ data: { id: 'previous-account-kb' } })
+  assert.equal(await previous, null)
+  assert.equal(store.knowledgeBase.value, null)
+  assert.equal(store.isFresh('knowledgeBase'), false)
 
-  const current = store.fetchKnowledgeBasesForList()
-  pending.shift()!({ data: [{ id: 'current-account-kb' }] })
-  assert.deepEqual(await current, [{ id: 'current-account-kb' }])
-  assert.deepEqual(await store.fetchKnowledgeBasesForList(), [{ id: 'current-account-kb' }])
+  const current = store.fetchKnowledgeBase()
+  pending.shift()!({ data: { id: 'current-account-kb' } })
+  assert.deepEqual(await current, { id: 'current-account-kb' })
+  assert.deepEqual(await store.fetchKnowledgeBase(), { id: 'current-account-kb' })
   assert.equal(pending.length, 0)
 })

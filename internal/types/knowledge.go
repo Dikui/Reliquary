@@ -100,13 +100,6 @@ type KnowledgeListFilter struct {
 	UpdatedFrom time.Time
 	// UpdatedTo, when non-zero, keeps rows with updated_at <= UpdatedTo.
 	UpdatedTo time.Time
-	// FolderPath is the folder navigated to in the sidebar tree. It is only
-	// applied when FolderScope is not FolderScopeAny, so the empty string can
-	// unambiguously mean "the knowledge base root".
-	FolderPath string
-	// FolderScope selects whether FolderPath matches exactly or includes
-	// descendant folders. FolderScopeAny (the default) ignores folders.
-	FolderScope KnowledgeFolderScope
 }
 
 // Knowledge represents a knowledge entity in the system.
@@ -146,12 +139,6 @@ type Knowledge struct {
 	EmbeddingModelID string `json:"embedding_model_id"`
 	// File name of the knowledge
 	FileName string `json:"file_name"`
-	// FolderPath is the canonical relative directory this entry belongs to
-	// inside the knowledge base, e.g. "docs/spec" for a folder upload of
-	// "docs/spec/design.md". Empty means the knowledge base root. It is a
-	// display/navigation concern only: it never affects where the file is
-	// physically stored (see FilePath).
-	FolderPath string `json:"folder_path"        gorm:"type:varchar(1024);not null;default:''"`
 	// File type of the knowledge
 	FileType string `json:"file_type"`
 	// File size of the knowledge
@@ -328,7 +315,7 @@ type ManualKnowledgePayload struct {
 	SourceMetadata map[string]string          `json:"-"`
 }
 
-// KnowledgeSearchScope defines a (tenant_id, knowledge_base_id) scope for knowledge search (e.g. own KBs + shared KBs).
+// KnowledgeSearchScope keeps tenant and knowledge base boundaries explicit for repository queries.
 type KnowledgeSearchScope struct {
 	TenantID uint64
 	KBID     string

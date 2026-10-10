@@ -2,20 +2,14 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
-	"strings"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
 	"reliquary/internal/application/repository"
-	"reliquary/internal/datasource"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
@@ -25,8 +19,6 @@ import (
 // ErrInvalidTenantID represents an error for invalid tenant ID
 var ErrInvalidTenantID = errors.New("invalid tenant ID")
 
-const kbTaskCleanupTimeout = 5 * time.Second
-
 // knowledgeBaseService implements the knowledge base service interface
 type knowledgeBaseService struct {
 	db             *gorm.DB
@@ -35,13 +27,6 @@ type knowledgeBaseService struct {
 	chunkRepo      interfaces.ChunkRepository
 	modelService   interfaces.ModelService
 	retrieveEngine interfaces.RetrievalService
-	tenantRepo     interfaces.TenantRepository
-	fileSvc        interfaces.FileService
-	asynqClient    interfaces.TaskEnqueuer
-	taskInspector  interfaces.TaskInspector
-	dsRepo         interfaces.DataSourceRepository
-	syncLogRepo    interfaces.SyncLogRepository
-	dsScheduler    *datasource.Scheduler
 
 	resourceCatalog        interfaces.ResourceCatalog
 	nameEmbeddingRebuilder EntityNameEmbeddingRebuildTrigger
@@ -53,13 +38,6 @@ func NewKnowledgeBaseService(db *gorm.DB, repo interfaces.KnowledgeBaseRepositor
 	chunkRepo interfaces.ChunkRepository,
 	modelService interfaces.ModelService,
 	retrieveEngine interfaces.RetrievalService,
-	tenantRepo interfaces.TenantRepository,
-	fileSvc interfaces.FileService,
-	asynqClient interfaces.TaskEnqueuer,
-	taskInspector interfaces.TaskInspector,
-	dsRepo interfaces.DataSourceRepository,
-	syncLogRepo interfaces.SyncLogRepository,
-	dsScheduler *datasource.Scheduler,
 
 	resourceCatalog interfaces.ResourceCatalog,
 ) interfaces.KnowledgeBaseService {
@@ -70,91 +48,35 @@ func NewKnowledgeBaseService(db *gorm.DB, repo interfaces.KnowledgeBaseRepositor
 		chunkRepo:      chunkRepo,
 		modelService:   modelService,
 		retrieveEngine: retrieveEngine,
-		tenantRepo:     tenantRepo,
-		fileSvc:        fileSvc,
-		asynqClient:    asynqClient,
-		taskInspector:  taskInspector,
-		dsRepo:         dsRepo,
-		syncLogRepo:    syncLogRepo,
-		dsScheduler:    dsScheduler,
 
 		resourceCatalog: resourceCatalog,
 	}
 }
 
-// GetRepository gets the knowledge base repository
-// Parameters:
-//   - ctx: Context with authentication and request information
-//
-// Returns:
-//   - interfaces.KnowledgeBaseRepository: Knowledge base repository
-func (s *knowledgeBaseService) GetRepository() interfaces.KnowledgeBaseRepository {
-	return s.repo
-}
-
-// CreateKnowledgeBase creates a new knowledge base.
-func (s *knowledgeBaseService) CreateKnowledgeBase(ctx context.Context,
-	kb *types.KnowledgeBase,
-) (*types.KnowledgeBase, error) {
-	// Generate UUID and set creation timestamps
-	if kb.ID == "" {
-		kb.ID = uuid.New().String()
-	}
-	kb.CreatedAt = time.Now()
-	kb.TenantID = types.MustTenantIDFromContext(ctx)
-	if err := ValidateModelTierConfig(ctx, s.db, kb.ModelTiers); err != nil {
+// GetKnowledgeBase returns the only active knowledge base in the personal space.
+func (s *knowledgeBaseService) GetKnowledgeBase(ctx context.Context) (*types.KnowledgeBase, error) {
+	kb, err := s.repo.GetKnowledgeBaseByTenantID(ctx, types.MustTenantIDFromContext(ctx))
+	if err != nil {
 		return nil, err
-	}
-	if err := ValidateVLMConfig(ctx, s.modelService, kb.VLMConfig); err != nil {
-		return nil, err
-	}
-	kb.UpdatedAt = time.Now()
-	if uid, ok := types.UserIDFromContext(ctx); ok {
-		kb.CreatorID = uid
 	}
 	kb.EnsureDefaults()
-
-	logger.Infof(ctx, "Creating knowledge base, ID: %s, tenant ID: %d, name: %s", kb.ID, kb.TenantID, kb.Name)
-
-	if err := s.persistKnowledgeBase(ctx, kb, true); err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"knowledge_base_id": kb.ID,
-			"tenant_id":         kb.TenantID,
-		})
-		return nil, err
-	}
-	if s.nameEmbeddingRebuilder != nil && kb.ModelTiers.ModelID(types.ModelTierEmbedding) != "" {
-		if err := s.nameEmbeddingRebuilder.MarkAndEnqueue(ctx, kb.TenantID, "knowledge_base_embedding_override_changed"); err != nil {
-			return kb, fmt.Errorf("knowledge base saved but name embedding rebuild could not be queued: %w", err)
-		}
-	}
-
-	logger.Infof(ctx, "Knowledge base created successfully, ID: %s, name: %s", kb.ID, kb.Name)
 	return kb, nil
 }
 
-// Lock the existing row while persisting knowledge-base changes.
-func (s *knowledgeBaseService) persistKnowledgeBase(ctx context.Context, kb *types.KnowledgeBase, create bool) error {
-	persist := func(repo interfaces.KnowledgeBaseRepository) error {
-		if create {
-			return repo.CreateKnowledgeBase(ctx, kb)
-		}
-		return repo.UpdateKnowledgeBase(ctx, kb)
-	}
+// Lock the existing row while persisting knowledge base settings.
+func (s *knowledgeBaseService) persistKnowledgeBase(ctx context.Context, kb *types.KnowledgeBase) error {
 	if s.db == nil {
-		return persist(s.repo)
+		return s.repo.UpdateKnowledgeBase(ctx, kb)
 	}
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if !create {
-			var active types.KnowledgeBase
-			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Where("tenant_id = ? AND id = ?", kb.TenantID, kb.ID).First(&active).Error; err != nil {
-				if errors.Is(err, gorm.ErrRecordNotFound) {
-					return apperrors.NewNotFoundError("knowledge base not found")
-				}
-				return err
+		var active types.KnowledgeBase
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Where("tenant_id = ? AND id = ?", kb.TenantID, kb.ID).First(&active).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return apperrors.NewNotFoundError("knowledge base not found")
 			}
+			return err
 		}
-		return persist(repository.NewKnowledgeBaseRepository(tx))
+		return repository.NewKnowledgeBaseRepository(tx).UpdateKnowledgeBase(ctx, kb)
 	})
 }
 
@@ -220,82 +142,6 @@ func (s *knowledgeBaseService) GetKnowledgeBasesByIDsOnly(ctx context.Context, i
 	return teamKBs, nil
 }
 
-// ListKnowledgeBases returns all knowledge bases for a tenant
-func (s *knowledgeBaseService) ListKnowledgeBases(ctx context.Context) ([]*types.KnowledgeBase, error) {
-	tenantID := types.MustTenantIDFromContext(ctx)
-
-	kbs, err := s.repo.ListKnowledgeBasesByTenantID(ctx, tenantID)
-	if err != nil {
-		for _, kb := range kbs {
-			kb.EnsureDefaults()
-		}
-
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"tenant_id": tenantID,
-		})
-		return nil, err
-	}
-
-	// Query knowledge count and chunk count for each knowledge base
-	for _, kb := range kbs {
-		kb.EnsureDefaults()
-
-		// Get knowledge count
-		switch kb.Type {
-		case types.KnowledgeBaseTypeDocument:
-			knowledgeCount, err := s.kgRepo.CountKnowledgeByKnowledgeBaseID(ctx, tenantID, kb.ID)
-			if err != nil {
-				logger.Warnf(ctx, "Failed to get knowledge count for knowledge base %s: %v", kb.ID, err)
-			} else {
-				kb.KnowledgeCount = knowledgeCount
-			}
-		}
-
-		// Check if there is a processing import task
-		processingCount, err := s.kgRepo.CountKnowledgeByStatus(
-			ctx,
-			tenantID,
-			kb.ID,
-			[]string{"pending", "processing"},
-		)
-		if err != nil {
-			logger.Warnf(ctx, "Failed to check processing status for knowledge base %s: %v", kb.ID, err)
-		} else {
-			kb.IsProcessing = processingCount > 0
-			kb.ProcessingCount = processingCount
-		}
-	}
-
-	sortKnowledgeBasePins(kbs)
-	return kbs, nil
-}
-
-func (s *knowledgeBaseService) ListKnowledgeBasesByTenantID(ctx context.Context, tenantID uint64) ([]*types.KnowledgeBase, error) {
-	kbs, err := s.repo.ListKnowledgeBasesByTenantID(ctx, tenantID)
-	if err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"tenant_id": tenantID,
-		})
-		return nil, err
-	}
-	for _, kb := range kbs {
-		kb.EnsureDefaults()
-		switch kb.Type {
-		case types.KnowledgeBaseTypeDocument:
-			if cnt, err := s.kgRepo.CountKnowledgeByKnowledgeBaseID(ctx, tenantID, kb.ID); err == nil {
-				kb.KnowledgeCount = cnt
-			}
-		}
-		if processingCount, err := s.kgRepo.CountKnowledgeByStatus(ctx, tenantID, kb.ID, []string{"pending", "processing"}); err == nil {
-			kb.IsProcessing = processingCount > 0
-			kb.ProcessingCount = processingCount
-		}
-	}
-
-	sortKnowledgeBasePins(kbs)
-	return kbs, nil
-}
-
 // FillKnowledgeBaseCounts fills KnowledgeCount, ChunkCount, IsProcessing, ProcessingCount for the given KB using kb.TenantID.
 func (s *knowledgeBaseService) FillKnowledgeBaseCounts(ctx context.Context, kb *types.KnowledgeBase) error {
 	if kb == nil {
@@ -303,11 +149,8 @@ func (s *knowledgeBaseService) FillKnowledgeBaseCounts(ctx context.Context, kb *
 	}
 	tenantID := kb.TenantID
 	kb.EnsureDefaults()
-	switch kb.Type {
-	case types.KnowledgeBaseTypeDocument:
-		if cnt, err := s.kgRepo.CountKnowledgeByKnowledgeBaseID(ctx, tenantID, kb.ID); err == nil {
-			kb.KnowledgeCount = cnt
-		}
+	if cnt, err := s.kgRepo.CountKnowledgeByKnowledgeBaseID(ctx, tenantID, kb.ID); err == nil {
+		kb.KnowledgeCount = cnt
 	}
 	if processingCount, err := s.kgRepo.CountKnowledgeByStatus(ctx, tenantID, kb.ID, []string{"pending", "processing"}); err == nil {
 		kb.IsProcessing = processingCount > 0
@@ -339,29 +182,36 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 		return nil, err
 	}
 
-	changedFields := make([]string, 0, 3)
-	previousEmbeddingOverride := kb.ModelTiers.ModelID(types.ModelTierEmbedding)
-	if kb.Name != name {
-		changedFields = append(changedFields, "name")
-	}
-	if kb.Description != description {
-		changedFields = append(changedFields, "description")
-	}
-	if config != nil {
-		changedFields = append(changedFields, "config")
-	}
-
+	current := *kb
+	kb = &current
+	previousEmbeddingModelID, _ := ResolveModelTier(ctx, nil, kb, types.ModelTierEmbedding)
 	// Update the knowledge base properties
 	kb.Name = name
 	kb.Description = description
 	if config != nil {
-		kb.ChunkingConfig = config.ChunkingConfig
-		kb.ImageProcessingConfig = config.ImageProcessingConfig
+		if config.ChunkingConfig != nil {
+			if config.ChunkingConfig.ChunkSize <= 0 || config.ChunkingConfig.ChunkOverlap < 0 || config.ChunkingConfig.ChunkOverlap >= config.ChunkingConfig.ChunkSize {
+				return nil, apperrors.NewBadRequestError("chunk size must be positive and chunk overlap must be smaller than chunk size")
+			}
+			kb.ChunkingConfig = *config.ChunkingConfig
+		}
+		if config.ImageProcessingConfig != nil {
+			kb.ImageProcessingConfig = *config.ImageProcessingConfig
+		}
+		if config.VLMConfig != nil {
+			if err := ValidateVLMConfig(ctx, s.modelService, *config.VLMConfig); err != nil {
+				return nil, err
+			}
+			kb.VLMConfig = *config.VLMConfig
+		}
+		if config.QuestionGenerationConfig != nil {
+			kb.QuestionGenerationConfig = config.QuestionGenerationConfig
+		}
 
 		// Update the enabled indexing strategy.
 		if config.IndexingStrategy != nil {
 			if !config.IndexingStrategy.HasAnyIndexing() {
-				return nil, errors.New("at least one indexing strategy must be enabled")
+				return nil, apperrors.NewBadRequestError("at least one indexing strategy must be enabled")
 			}
 			kb.IndexingStrategy = *config.IndexingStrategy
 
@@ -372,19 +222,23 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 			return nil, err
 		}
 		kb.ModelTiers = *config.ModelTiers
+		// Scalar bindings mirror the same settings for shared indexing consumers.
+		kb.SummaryModelID = kb.ModelTiers.ModelID(types.ModelTierGeneration)
+		kb.EmbeddingModelID = kb.ModelTiers.ModelID(types.ModelTierEmbedding)
 	}
 	kb.UpdatedAt = time.Now()
 	kb.EnsureDefaults()
 
 	logger.Info(ctx, "Saving knowledge base update")
-	if err := s.persistKnowledgeBase(ctx, kb, false); err != nil {
+	if err := s.persistKnowledgeBase(ctx, kb); err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{
 			"knowledge_base_id": id,
 		})
 		return nil, err
 	}
-	if s.nameEmbeddingRebuilder != nil && previousEmbeddingOverride != kb.ModelTiers.ModelID(types.ModelTierEmbedding) {
-		if err := s.nameEmbeddingRebuilder.MarkAndEnqueue(ctx, kb.TenantID, "knowledge_base_embedding_override_changed"); err != nil {
+	currentEmbeddingModelID, _ := ResolveModelTier(ctx, nil, kb, types.ModelTierEmbedding)
+	if s.nameEmbeddingRebuilder != nil && previousEmbeddingModelID != currentEmbeddingModelID {
+		if err := s.nameEmbeddingRebuilder.MarkAndEnqueue(ctx, kb.TenantID, "knowledge_base_embedding_model_changed"); err != nil {
 			return kb, fmt.Errorf("knowledge base saved but name embedding rebuild could not be queued: %w", err)
 		}
 	}
@@ -393,497 +247,4 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 	return kb, nil
 }
 
-// TogglePinKnowledgeBase changes the shared pin state in the personal space.
-func (s *knowledgeBaseService) TogglePinKnowledgeBase(ctx context.Context, id string) (*types.KnowledgeBase, error) {
-	if id == "" {
-		return nil, errors.New("knowledge base ID cannot be empty")
-	}
-	tenantID := types.MustTenantIDFromContext(ctx)
-	kb, err := s.repo.GetKnowledgeBaseByIDAndTenant(ctx, id, tenantID)
-	if err != nil {
-		return nil, err
-	}
-	kb.IsPinned = !kb.IsPinned
-	kb.PinnedAt = nil
-	if kb.IsPinned {
-		now := time.Now()
-		kb.PinnedAt = &now
-	}
-	if err := s.repo.UpdateKnowledgeBasePin(ctx, kb); err != nil {
-		return nil, err
-	}
-	kb.EnsureDefaults()
-	return kb, nil
-}
-
-func sortKnowledgeBasePins(kbs []*types.KnowledgeBase) {
-	sort.SliceStable(kbs, func(i, j int) bool {
-		a, b := kbs[i], kbs[j]
-		if a.IsPinned != b.IsPinned {
-			return a.IsPinned
-		}
-		if a.IsPinned && a.PinnedAt != nil && b.PinnedAt != nil && !a.PinnedAt.Equal(*b.PinnedAt) {
-			return a.PinnedAt.After(*b.PinnedAt)
-		}
-		return a.CreatedAt.After(b.CreatedAt)
-	})
-}
-
-// DeleteKnowledgeBase deletes a knowledge base by its ID
-// This method marks the knowledge base as deleted and enqueues an async task
-// to handle the heavy cleanup operations (embeddings, chunks, files, entity associations)
-func (s *knowledgeBaseService) DeleteKnowledgeBase(ctx context.Context, id string) error {
-	if id == "" {
-		logger.Error(ctx, "Knowledge base ID is empty")
-		return errors.New("knowledge base ID cannot be empty")
-	}
-
-	logger.Infof(ctx, "Deleting knowledge base, ID: %s", id)
-
-	// Get tenant ID from context
-	tenantID := types.MustTenantIDFromContext(ctx)
-	if _, err := s.repo.GetKnowledgeBaseByID(ctx, id); err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{"knowledge_base_id": id})
-		return err
-	}
-
-	// Step 1: Delete the knowledge base record first (mark as deleted)
-	logger.Infof(ctx, "Deleting knowledge base from database")
-	err := s.repo.DeleteKnowledgeBase(ctx, id)
-	if err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"knowledge_base_id": id,
-		})
-		return err
-	}
-
-	// Stop queued work that targets
-	// the now-deleted KB. ProcessKBDelete repeats this with document IDs and
-	// performs one final scrub after heavy cleanup to close enqueue races.
-	//
-	// Run detached with a bounded timeout so a disconnecting API client cannot
-	// truncate this best-effort scrub mid-scan, matching ProcessKBDelete's
-	// cleanup semantics. The KB row is already soft-deleted, so the async
-	// delete task remains the durable backstop even if this pass is cut short.
-	kbCleanupCtx, cancelKBCleanup := context.WithTimeout(
-		context.WithoutCancel(ctx), kbTaskCleanupTimeout,
-	)
-	s.cleanupTasksForKnowledgeBase(kbCleanupCtx, id, nil, nil)
-	cancelKBCleanup()
-
-	// Step 1c: Stop and soft-delete all data sources bound to this KB so cron
-	// schedules and in-flight sync logs do not keep running against a deleted KB.
-	dataSourceIDs := s.deleteDataSourcesForKnowledgeBase(ctx, id)
-	if len(dataSourceIDs) > 0 {
-		dsCancelCtx, cancelDSCancel := context.WithTimeout(
-			context.WithoutCancel(ctx), kbTaskCleanupTimeout,
-		)
-		s.cancelTasksForKnowledgeBase(dsCancelCtx, id, nil, dataSourceIDs)
-		cancelDSCancel()
-	}
-
-	// Step 2: Enqueue async task for heavy cleanup operations
-	payload := types.KBDeletePayload{
-		TenantID:        tenantID,
-		KnowledgeBaseID: id,
-		DataSourceIDs:   dataSourceIDs,
-	}
-
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		logger.Warnf(ctx, "Failed to marshal KB delete payload: %v", err)
-		// Don't fail the request, the KB record is already deleted
-		return nil
-	}
-
-	task := asynq.NewTask(types.TypeKBDelete, payloadBytes,
-		asynq.Queue(types.QueueMaintenance), asynq.MaxRetry(3), asynq.Timeout(2*time.Hour))
-	info, err := s.asynqClient.Enqueue(task)
-	if err != nil {
-		logger.Warnf(ctx, "Failed to enqueue KB delete task: %v", err)
-		// Don't fail the request, the KB record is already deleted
-		return nil
-	}
-
-	logger.Infof(ctx, "KB delete task enqueued: %s, knowledge base ID: %s", info.ID, id)
-	logger.Infof(ctx, "Knowledge base deleted successfully, ID: %s", id)
-	return nil
-}
-
-// ProcessKBDelete handles async knowledge base deletion task
-// This method performs heavy cleanup operations: deleting embeddings, chunks, files, and entity associations
-func (s *knowledgeBaseService) ProcessKBDelete(ctx context.Context, t *asynq.Task) error {
-	var payload types.KBDeletePayload
-	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
-		logger.Errorf(ctx, "Failed to unmarshal KB delete payload: %v", err)
-		return err
-	}
-
-	tenantID := payload.TenantID
-	kbID := payload.KnowledgeBaseID
-	var knowledgeIDs []string
-
-	// Set tenant context for downstream services
-	ctx = context.WithValue(ctx, types.TenantIDContextKey, tenantID)
-	defer func() {
-		// Workers may enqueue downstream work while the delete task performs
-		// heavy storage cleanup. A detached, bounded final scrub runs on every
-		// return path, including retryable failures and cancellation.
-		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), kbTaskCleanupTimeout)
-		defer cancel()
-		s.cleanupTasksForKnowledgeBase(cleanupCtx, kbID, knowledgeIDs, payload.DataSourceIDs)
-	}()
-
-	logger.Infof(ctx, "Processing KB delete task for knowledge base: %s", kbID)
-
-	// Step 1: Get all knowledge entries in this knowledge base
-	logger.Infof(ctx, "Fetching all knowledge entries in knowledge base, ID: %s", kbID)
-	knowledgeList, err := s.kgRepo.ListKnowledgeByKnowledgeBaseID(ctx, tenantID, kbID)
-	if err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"knowledge_base_id": kbID,
-		})
-		return err
-	}
-	logger.Infof(ctx, "Found %d knowledge entries to delete", len(knowledgeList))
-	knowledgeIDs = make([]string, 0, len(knowledgeList))
-	for _, knowledge := range knowledgeList {
-		knowledgeIDs = append(knowledgeIDs, knowledge.ID)
-	}
-
-	// Repeat the best-effort queue scrub with document IDs. Some batch tasks
-	// only carry knowledge_id(s), and active work from the first pass may have
-	// enqueued another downstream task before cancellation reached it.
-	s.cleanupTasksForKnowledgeBase(ctx, kbID, knowledgeIDs, payload.DataSourceIDs)
-
-	// Step 2: Delete all knowledge entries and their resources
-	if len(knowledgeList) > 0 {
-		logger.Infof(ctx, "Deleting all knowledge entries and their resources")
-
-		retrieveEngine := s.retrieveEngine
-		// Group knowledge by embedding model and type
-		type groupKey struct {
-			EmbeddingModelID string
-			Type             string
-		}
-		embeddingGroups := make(map[groupKey][]string)
-		for _, knowledge := range knowledgeList {
-			key := groupKey{EmbeddingModelID: knowledge.EmbeddingModelID, Type: knowledge.Type}
-			embeddingGroups[key] = append(embeddingGroups[key], knowledge.ID)
-		}
-
-		for key, knowledgeGroup := range embeddingGroups {
-			embeddingModel, err := s.modelService.GetEmbeddingModel(ctx, key.EmbeddingModelID)
-			if err != nil {
-				logger.Warnf(ctx, "Failed to get embedding model %s: %v", key.EmbeddingModelID, err)
-				continue
-			}
-			if err := retrieveEngine.DeleteByKnowledgeIDList(ctx, knowledgeGroup, embeddingModel.GetDimensions(), key.Type); err != nil {
-				logger.Warnf(ctx, "Failed to delete embeddings for model %s: %v", key.EmbeddingModelID, err)
-			}
-		}
-
-		// Collect image URLs before chunks are deleted
-		chunkImageInfos, imgErr := s.chunkRepo.ListImageInfoByKnowledgeIDs(ctx, tenantID, knowledgeIDs)
-		if imgErr != nil {
-			logger.Warnf(ctx, "Failed to collect image URLs for KB delete: %v", imgErr)
-		}
-		var imageInfoStrs []string
-		for _, ci := range chunkImageInfos {
-			imageInfoStrs = append(imageInfoStrs, ci.ImageInfo)
-		}
-		imageURLs := collectImageURLs(ctx, imageInfoStrs)
-
-		// Delete all chunks
-		logger.Infof(ctx, "Deleting all chunks in knowledge base")
-		for _, knowledgeID := range knowledgeIDs {
-			if err := s.chunkRepo.DeleteChunksByKnowledgeID(ctx, tenantID, knowledgeID); err != nil {
-				logger.Warnf(ctx, "Failed to delete chunks for knowledge %s: %v", knowledgeID, err)
-			}
-		}
-
-		// Delete physical files, extracted images, and adjust storage
-		logger.Infof(ctx, "Deleting physical files and extracted images")
-		storageAdjust := int64(0)
-		for _, knowledge := range knowledgeList {
-			if knowledge.FilePath != "" {
-				if err := s.fileSvc.DeleteFile(ctx, knowledge.FilePath); err != nil {
-					logger.Warnf(ctx, "Failed to delete file %s: %v", knowledge.FilePath, err)
-				}
-			}
-			storageAdjust -= knowledge.StorageSize
-		}
-		deleteExtractedImages(ctx, s.fileSvc, knowledgeResourceOwners(s.resourceCatalog, knowledgeIDs...), imageURLs)
-		if storageAdjust != 0 {
-			if err := s.tenantRepo.AdjustStorageUsed(ctx, tenantID, storageAdjust); err != nil {
-				logger.Warnf(ctx, "Failed to adjust tenant storage: %v", err)
-			}
-		}
-
-		// Delete all knowledge entries from database
-		logger.Infof(ctx, "Deleting knowledge entries from database")
-		if err := s.kgRepo.DeleteKnowledgeList(ctx, tenantID, knowledgeIDs); err != nil {
-			logger.ErrorWithFields(ctx, err, map[string]interface{}{
-				"knowledge_base_id": kbID,
-			})
-			return err
-		}
-	}
-
-	if err := s.cleanupKnowledgeEntities(ctx, kbID); err != nil {
-		return err
-	}
-
-	logger.Infof(ctx, "KB delete task completed successfully, knowledge base ID: %s", kbID)
-	return nil
-}
-
-// cancelTasksForKnowledgeBase removes queue work for a deleted KB when the
-// configured task backend supports knowledge-base-wide inspection. Queue
-// cleanup is an optimization: the soft-deleted database row remains the
-// durable source of truth, so backend failures must not fail KB deletion.
-func (s *knowledgeBaseService) cancelTasksForKnowledgeBase(
-	ctx context.Context,
-	kbID string,
-	knowledgeIDs []string,
-	dataSourceIDs []string,
-) {
-	canceller, ok := s.taskInspector.(interfaces.KnowledgeBaseTaskCanceller)
-	if !ok || kbID == "" {
-		return
-	}
-	if _, _, err := canceller.CancelTasksForKnowledgeBase(ctx, kbID, knowledgeIDs, dataSourceIDs); err != nil {
-		logger.Warnf(ctx, "Failed to cancel queued tasks for deleted KB %s: %v", kbID, err)
-	}
-}
-
-// cleanupTasksForKnowledgeBase removes queued tasks for a deleted knowledge base.
-func (s *knowledgeBaseService) cleanupTasksForKnowledgeBase(
-	ctx context.Context,
-	kbID string,
-	knowledgeIDs []string,
-	dataSourceIDs []string,
-) {
-	if kbID == "" {
-		return
-	}
-	s.cancelTasksForKnowledgeBase(ctx, kbID, knowledgeIDs, dataSourceIDs)
-}
-
-// deleteDataSourcesForKnowledgeBase mirrors DataSourceService.DeleteDataSource for
-// every data source attached to the KB. Errors on individual sources are logged
-// but do not fail KB deletion — the KB record is already soft-deleted.
-func (s *knowledgeBaseService) deleteDataSourcesForKnowledgeBase(ctx context.Context, kbID string) []string {
-	if s.dsRepo == nil {
-		return nil
-	}
-
-	dataSources, err := s.dsRepo.FindByKnowledgeBase(ctx, kbID)
-	if err != nil {
-		logger.Warnf(ctx, "Failed to list data sources for deleted KB %s: %v", kbID, err)
-		return nil
-	}
-	dataSourceIDs := make([]string, 0, len(dataSources))
-	for _, ds := range dataSources {
-		if ds == nil || ds.ID == "" {
-			continue
-		}
-		dataSourceIDs = append(dataSourceIDs, ds.ID)
-		if err := s.dsRepo.Delete(ctx, ds.ID); err != nil {
-			logger.Warnf(ctx, "Failed to delete data source %s for KB %s: %v", ds.ID, kbID, err)
-			continue
-		}
-		if s.dsScheduler != nil {
-			s.dsScheduler.Remove(ds.ID)
-		}
-		if s.syncLogRepo != nil {
-			if err := s.syncLogRepo.CancelPendingByDataSource(ctx, ds.ID); err != nil {
-				logger.Warnf(ctx, "Failed to cancel pending sync logs for ds=%s (kb=%s): %v", ds.ID, kbID, err)
-			}
-		}
-		logger.Infof(ctx, "Data source deleted with knowledge base: ds=%s kb=%s", ds.ID, kbID)
-	}
-	return dataSourceIDs
-}
-
-// SetEmbeddingModel sets the embedding model for a knowledge base
-func (s *knowledgeBaseService) SetEmbeddingModel(ctx context.Context, id string, modelID string) error {
-	if id == "" {
-		logger.Error(ctx, "Knowledge base ID is empty")
-		return errors.New("knowledge base ID cannot be empty")
-	}
-
-	if modelID == "" {
-		logger.Error(ctx, "Model ID is empty")
-		return errors.New("model ID cannot be empty")
-	}
-
-	logger.Infof(ctx, "Setting embedding model for knowledge base, knowledge base ID: %s, model ID: %s", id, modelID)
-
-	// Get the knowledge base
-	kb, err := s.repo.GetKnowledgeBaseByID(ctx, id)
-	if err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"knowledge_base_id": id,
-		})
-		return err
-	}
-
-	// Update the knowledge base's embedding model
-	kb.EmbeddingModelID = modelID
-	kb.UpdatedAt = time.Now()
-
-	logger.Info(ctx, "Saving knowledge base embedding model update")
-	err = s.repo.UpdateKnowledgeBase(ctx, kb)
-	if err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"knowledge_base_id":  id,
-			"embedding_model_id": modelID,
-		})
-		return err
-	}
-
-	logger.Infof(
-		ctx,
-		"Knowledge base embedding model set successfully, knowledge base ID: %s, model ID: %s",
-		id,
-		modelID,
-	)
-	return nil
-}
-
-func (s *knowledgeBaseService) DuplicateKnowledgeBase(
-	ctx context.Context,
-	srcKB string,
-) (*types.KnowledgeBase, error) {
-	srcKB = strings.TrimSpace(srcKB)
-	if srcKB == "" {
-		return nil, apperrors.NewBadRequestError("source knowledge base ID cannot be empty")
-	}
-
-	tenantID := types.MustTenantIDFromContext(ctx)
-	sourceKB, err := s.repo.GetKnowledgeBaseByIDAndTenant(ctx, srcKB, tenantID)
-	if err != nil {
-		logger.Errorf(ctx, "Get source knowledge base failed: %v", err)
-		return nil, err
-	}
-	sourceKB.EnsureDefaults()
-
-	targetKB, err := cloneKnowledgeBaseConfiguration(sourceKB)
-	if err != nil {
-		return nil, err
-	}
-	targetKB.ID = uuid.New().String()
-	targetKB.TenantID = tenantID
-	targetKB.Name = s.buildDuplicateKnowledgeBaseName(ctx, tenantID, sourceKB.Name)
-	targetKB.CreatorID = ""
-	if uid, ok := types.UserIDFromContext(ctx); ok {
-		targetKB.CreatorID = uid
-	}
-	now := time.Now()
-	targetKB.CreatedAt = now
-	targetKB.UpdatedAt = now
-	targetKB.DeletedAt.Valid = false
-	targetKB.DeletedAt.Time = time.Time{}
-	targetKB.IsPinned = false
-	targetKB.PinnedAt = nil
-	targetKB.KnowledgeCount = 0
-	targetKB.ChunkCount = 0
-	targetKB.IsProcessing = false
-	targetKB.ProcessingCount = 0
-	targetKB.CreatorName = ""
-	targetKB.EnsureDefaults()
-
-	if err := s.persistKnowledgeBase(ctx, targetKB, true); err != nil {
-		return nil, err
-	}
-	return targetKB, nil
-}
-
-func duplicateKBCopySuffix(locale string) string {
-	locale = strings.ToLower(locale)
-	switch {
-	case strings.HasPrefix(locale, "zh"):
-		return " 副本"
-	default:
-		return " Copy"
-	}
-}
-
-func duplicateKBDefaultName(locale string) string {
-	locale = strings.ToLower(locale)
-	switch {
-	case strings.HasPrefix(locale, "zh"):
-		return "知识库"
-	case strings.HasPrefix(locale, "ko"):
-		return "지식베이스"
-	case strings.HasPrefix(locale, "ru"):
-		return "База знаний"
-	default:
-		return "Knowledge Base"
-	}
-}
-
-func (s *knowledgeBaseService) buildDuplicateKnowledgeBaseName(
-	ctx context.Context,
-	tenantID uint64,
-	sourceName string,
-) string {
-	locale := types.LanguageFromContextOrDefault(ctx)
-	suffix := duplicateKBCopySuffix(locale)
-
-	baseName := strings.TrimSpace(sourceName)
-	if baseName == "" {
-		baseName = duplicateKBDefaultName(locale)
-	}
-
-	kbs, err := s.repo.ListKnowledgeBasesByTenantID(ctx, tenantID)
-	if err != nil {
-		logger.Warnf(ctx, "List tenant knowledge bases failed while building duplicate name: %v", err)
-		return baseName + suffix
-	}
-
-	existing := make(map[string]struct{}, len(kbs))
-	for _, kb := range kbs {
-		if kb == nil {
-			continue
-		}
-		existing[kb.Name] = struct{}{}
-	}
-
-	candidate := baseName + suffix
-	if _, ok := existing[candidate]; !ok {
-		return candidate
-	}
-	for i := 2; ; i++ {
-		candidate = fmt.Sprintf("%s%s %d", baseName, suffix, i)
-		if _, ok := existing[candidate]; !ok {
-			return candidate
-		}
-	}
-}
-
-func cloneKnowledgeBaseConfiguration(sourceKB *types.KnowledgeBase) (*types.KnowledgeBase, error) {
-	if sourceKB == nil {
-		return nil, apperrors.NewBadRequestError("source knowledge base cannot be empty")
-	}
-	data, err := json.Marshal(sourceKB)
-	if err != nil {
-		return nil, err
-	}
-	var targetKB types.KnowledgeBase
-	if err := json.Unmarshal(data, &targetKB); err != nil {
-		return nil, err
-	}
-	return &targetKB, nil
-}
-
 func (s *knowledgeBaseService) ModelRoutingDB() *gorm.DB { return s.db }
-
-func (s *knowledgeBaseService) cleanupKnowledgeEntities(ctx context.Context, kbID string) error {
-	if s.db == nil {
-		return nil
-	}
-	ids := s.db.Model(&types.Knowledge{}).Unscoped().Select("id").Where("tenant_id = ? AND knowledge_base_id = ?", types.MustTenantIDFromContext(ctx), kbID)
-	return s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_id IN (?)", types.MustTenantIDFromContext(ctx), ids).Delete(&types.KnowledgeEntity{}).Error
-}

@@ -78,24 +78,13 @@ const ModelUsageListLimit = 50
 // ModelUsageListLimit entries; KnowledgeBaseTotal is the
 // untruncated counts used by the deletion guard and UI headings.
 type ModelUsageDetails struct {
-	ModelTiers         []ModelTierUsageResource `json:"model_tiers"`
-	KnowledgeBases     []ModelUsageResource     `json:"knowledge_bases"`
-	KnowledgeBaseTotal int64                    `json:"knowledge_base_total"`
+	KnowledgeBases     []ModelUsageResource `json:"knowledge_bases"`
+	KnowledgeBaseTotal int64                `json:"knowledge_base_total"`
 }
 
 // InUse reports whether at least one active object references the model.
 func (d ModelUsageDetails) InUse() bool {
-	if len(d.ModelTiers) > 0 {
-		return true
-	}
 	return d.KnowledgeBaseTotal > 0 || len(d.KnowledgeBases) > 0
-}
-
-type ModelTierUsageResource struct {
-	Scope    string              `json:"scope"`
-	ID       string              `json:"id"`
-	Name     string              `json:"name"`
-	Bindings []ModelUsageBinding `json:"bindings"`
 }
 
 // ModelSource represents the source of the model

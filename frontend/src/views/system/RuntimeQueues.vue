@@ -567,9 +567,7 @@ const runtimeTaskTypeKeys: Record<string, string> = {
   'datasource:sync': 'sync',
   'knowledge:list_reparse': 'batchReparse',
   'knowledge:list_delete': 'batchDelete',
-  'knowledge:move': 'move',
   'index:delete': 'indexDelete',
-  'kb:delete': 'kbDelete',
   'entity:name_embedding_rebuild': 'entityNameEmbeddingRebuild',
 }
 

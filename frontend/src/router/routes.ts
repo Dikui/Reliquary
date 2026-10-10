@@ -2,7 +2,7 @@ import type { RouteRecordRaw } from 'vue-router'
 import { normalizeSettingsSection } from '../config/settingsRoute'
 import { removedPlatformRoutes, removedRootRoutes } from './routeFallbacks'
 
-const knowledgeBaseList = () => import('../views/knowledge/KnowledgeBaseList.vue')
+const knowledgePage = () => import('../views/knowledge/KnowledgeBase.vue')
 const notFound = () => import('../views/NotFound.vue')
 
 // Settings is owned by the platform layout. Its route supplies only the background.
@@ -10,7 +10,7 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
   return [
     {
       path: "/",
-      redirect: "/platform/knowledge-bases",
+      redirect: "/platform/knowledge",
     },
     {
       path: "/login",
@@ -21,7 +21,7 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
     {
       path: "/platform",
       name: "Platform",
-      redirect: "/platform/knowledge-bases",
+      redirect: "/platform/knowledge",
       component: () => import("../views/platform/index.vue"),
       meta: { requiresInit: true, requiresAuth: true },
       children: [
@@ -33,19 +33,23 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
         {
           path: "settings",
           name: "settings",
-          component: knowledgeBaseList,
+          component: knowledgePage,
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
           path: "knowledge-bases",
-          name: "knowledgeBaseList",
-          component: knowledgeBaseList,
+          redirect: "/platform/knowledge",
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
-          path: "knowledge-bases/:kbId",
-          name: "knowledgeBaseDetail",
-          component: () => import("../views/knowledge/KnowledgeBase.vue"),
+          path: "knowledge-bases/:legacyKnowledgeBaseId/:pathMatch(.*)*",
+          redirect: to => ({ path: '/platform/knowledge', query: to.query }),
+          meta: { requiresInit: true, requiresAuth: true }
+        },
+        {
+          path: "knowledge",
+          name: "knowledge",
+          component: knowledgePage,
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
@@ -54,7 +58,7 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
           redirect: (to) => {
             const q = to.query.q
             return {
-              path: '/platform/knowledge-bases',
+              path: '/platform/knowledge',
               query: typeof q === 'string' ? { cmdk: q } : { cmdk: '' },
             }
           },

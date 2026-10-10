@@ -132,7 +132,7 @@ func TestEntityExactNamesRecallAliasesAndVersions(t *testing.T) {
 
 func TestEntityVectorRecallSkipsStaleModelsAndMismatchedDimensions(t *testing.T) {
 	db, ctx, svc := entityFixture(t)
-	require.NoError(t, db.Model(&types.Tenant{}).Where("id=1").Update("model_tiers", types.ModelTierConfig{Embedding: "entity-embedding"}).Error)
+	require.NoError(t, db.Model(&types.KnowledgeBase{}).Where("id='entity-kb'").Update("model_tiers", types.ModelTierConfig{Embedding: "entity-embedding"}).Error)
 	records := []types.Entity{entityRecord("vector-good", "Unique unrelated canonical", "product"), entityRecord("vector-wrong-dimension", "Foreign vector dimension", "product"), entityRecord("vector-stale-model", "Obsolete model vector", "product")}
 	records[0].NameEmbedding = types.EntityNameEmbedding{1, 0}
 	records[0].EmbeddingModelID = "entity-embedding"
@@ -207,7 +207,7 @@ func TestEntityResolutionCreatesAliasesAndIdempotentArticleMentions(t *testing.T
 	require.NoError(t, err)
 	require.Len(t, detail.Knowledge, 1)
 	require.Equal(t, article.ID, detail.Knowledge[0].ID)
-	entities, err := svc.ListEntities(ctx, types.EntityQuery{Scope: "knowledge_base", KnowledgeBaseID: "entity-kb", Entity: "艾克米", EntityType: "company"})
+	entities, err := svc.ListEntities(ctx, types.EntityQuery{Entity: "艾克米", EntityType: "company"})
 	require.NoError(t, err)
 	require.Len(t, entities, 1)
 }
@@ -237,7 +237,7 @@ func TestEntityResolutionUncertainIdentityCreatesDecidableSuggestions(t *testing
 	require.NoError(t, err)
 	require.Len(t, entities, 1)
 	require.NotEqual(t, "acme", entities[0].ID)
-	suggestions, err := svc.ListMergeSuggestions(ctx, types.EntityQuery{Scope: "all"}, "pending")
+	suggestions, err := svc.ListMergeSuggestions(ctx, types.EntityQuery{}, "pending")
 	require.NoError(t, err)
 	require.Len(t, suggestions, 1)
 	require.Equal(t, article.ID, suggestions[0].KnowledgeID)

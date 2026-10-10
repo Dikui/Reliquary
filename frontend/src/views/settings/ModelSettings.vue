@@ -148,9 +148,7 @@
         <div class="model-usage-dialog__content">
           <section v-if="usageConflict.knowledge_bases.length" class="model-usage-group">
             <h3>
-              {{ $t('modelSettings.usage.knowledgeBases', {
-                count: modelUsageResourceCount(usageConflict.knowledge_bases, usageConflict.knowledge_base_total)
-              }) }}
+              {{ $t('modelSettings.usage.knowledgeSettings') }}
             </h3>
             <ul>
               <li v-for="resource in usageConflict.knowledge_bases" :key="resource.id">
@@ -189,11 +187,6 @@
           </section>
 
 
-
-          <section v-if="usageConflict.model_tiers?.length" class="model-usage-group">
-            <h3>{{ $t('modelTiers.title') }}</h3>
-            <ul><li v-for="resource in usageConflict.model_tiers" :key="`${resource.scope}:${resource.id}`"><div class="model-usage-resource"><strong>{{ resource.name }}</strong><div class="model-usage-bindings"><t-tag v-for="binding in resource.bindings" :key="binding" size="small" variant="light">{{ $t(modelUsageBindingI18nKey(binding)) }}</t-tag></div></div><t-button variant="text" @click="openTierUsageResource(resource.scope)">{{ $t('modelTiers.configureGlobal') }}</t-button></li></ul>
-          </section>
 
         </div>
 
@@ -235,7 +228,6 @@ import {
   type ModelUsageResourceKind,
 } from '@/api/model'
 import { useUIStore } from '@/stores/ui'
-import { focusKbEditorSection } from '@/config/editorNavigation'
 import { useResourcesStore } from '@/stores/resources'
 import {
   formatContextWindow,
@@ -255,7 +247,6 @@ const showDebugDrawer = ref(false)
 const showUsageDialog = ref(false)
 const usageConflict = ref<ModelUsageDetails | null>(null)
 const usageConflictModelName = ref('')
-function openTierUsageResource(_scope: 'global') { showUsageDialog.value = false; uiStore.openSettings('tenant') }
 const currentModelType = ref<ModelType>('chat')
 const editingModel = ref<any>(null)
 const loading = ref(true)
@@ -612,37 +603,7 @@ const openUsageResource = async (
 ) => {
   showUsageDialog.value = false
   const knowledgeBaseSection = modelUsageKnowledgeBaseSection(bindings)
-  // The UI store can outlive the route component that owns the KB editor.
-  // Only focus an existing editor when the current route still mounts one;
-  // otherwise a stale visible/id pair would make a direct Settings page no-op.
-  const routeName = router.currentRoute.value.name
-  const canFocusExistingKnowledgeBase = kind === 'knowledge_base'
-    && uiStore.showKBEditorModal
-    && uiStore.currentKBId === id
-    && typeof routeName === 'string'
-    && KNOWLEDGE_BASE_EDITOR_HOST_ROUTES.has(routeName)
-
-  uiStore.closeSettings()
-  await nextTick()
-
-  if (canFocusExistingKnowledgeBase) {
-    // Keep unsaved edits when the referenced KB is already open underneath
-    // global Settings; only move the existing editor to the relevant section.
-    focusKbEditorSection(knowledgeBaseSection)
-    return
-  }
-
-  if (kind === 'knowledge_base') {
-    uiStore.closeKBEditor()
-    await nextTick()
-  }
-  // Both the KB editor and global Settings can already be open underneath the
-  // usage dialog. Flush their false state before reusing either component so
-  // its visible watcher reloads the target object instead of keeping stale data.
-  await router.push(modelUsageResourceRoute(kind, id, bindings))
-  if (kind === 'knowledge_base') {
-    uiStore.openKBSettings(id, knowledgeBaseSection)
-  }
+  uiStore.openSettings('knowledge', knowledgeBaseSection)
 }
 
 // 获取模型操作菜单选项
@@ -985,7 +946,6 @@ onMounted(() => {
   background: rgba(201, 62, 62, 0.1);
   color: #C93E3E;
 }
-
 
 .model-card__body {
   flex: 1;

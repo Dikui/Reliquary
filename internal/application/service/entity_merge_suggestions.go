@@ -13,7 +13,7 @@ import (
 )
 
 func (s *EntityService) ListMergeSuggestions(ctx context.Context, q types.EntityQuery, status string) ([]types.EntityMergeSuggestion, error) {
-	tenantID, kbID, err := s.scopeKnowledgeBase(ctx, q)
+	tenantID, kbID, err := s.resolveKnowledgeBase(ctx)
 	if err != nil {
 		return nil, err
 	}

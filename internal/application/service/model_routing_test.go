@@ -13,34 +13,25 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-func TestModelTierFallback(t *testing.T) {
+func TestModelTiersUseOnlyKnowledgeBaseSettings(t *testing.T) {
 	db := pgtest.Open(t)
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
-	global := types.Tenant{ID: 1, Name: "Space", ModelTiers: types.ModelTierConfig{Light: "global-light", EntityResolution: "global-extract", Generation: "global-generate", Embedding: "global-embedding", Rerank: "global-rerank"}}
-	require.NoError(t, db.Create(&global).Error)
-	kb := &types.KnowledgeBase{ID: "kb", TenantID: 1, SummaryModelID: "legacy", EmbeddingModelID: "legacy-embedding", ModelTiers: types.ModelTierConfig{Light: "kb-light"}}
-	for _, test := range []struct {
-		tier             types.ModelTier
-		expected, source string
-	}{
-		{types.ModelTierLight, "kb-light", "knowledge_base"}, {types.ModelTierEntityResolution, "global-extract", "global"}, {types.ModelTierGeneration, "global-generate", "global"}, {types.ModelTierEmbedding, "global-embedding", "global"}, {types.ModelTierRerank, "global-rerank", "global"},
-	} {
-		resolved, err := resolveModelTier(ctx, db, kb, test.tier)
+	kb := &types.KnowledgeBase{ID: "kb", TenantID: 1, Name: "Knowledge Base", SummaryModelID: "summary", EmbeddingModelID: "embedding", ModelTiers: types.ModelTierConfig{Light: "chosen-light", EntityResolution: "chosen-entity", Generation: "chosen-generation", Embedding: "chosen-embedding", Rerank: "chosen-rerank"}}
+	require.NoError(t, db.Create(kb).Error)
+	for _, tier := range types.ModelTiers {
+		resolved, err := resolveModelTier(ctx, db, nil, tier)
 		require.NoError(t, err)
-		require.Equal(t, test.expected, resolved.ModelID)
-		require.Equal(t, test.source, resolved.Source)
+		require.Equal(t, kb.ModelTiers.ModelID(tier), resolved.ModelID)
+		require.Equal(t, "knowledge_base", resolved.Source)
 	}
-	kb.ModelTiers.Light = ""
-	id, err := ResolveModelTier(ctx, db, kb, types.ModelTierLight)
+	kb.ModelTiers = types.ModelTierConfig{}
+	require.NoError(t, db.Save(kb).Error)
+	id, err := ResolveModelTier(ctx, db, nil, types.ModelTierLight)
 	require.NoError(t, err)
-	require.Equal(t, "global-light", id)
-	require.NoError(t, db.Model(&types.Tenant{}).Where("id = 1").Update("model_tiers", types.ModelTierConfig{}).Error)
-	id, err = ResolveModelTier(ctx, db, kb, types.ModelTierLight)
-	require.NoError(t, err)
-	require.Equal(t, "legacy", id)
-	require.NoError(t, db.Delete(&types.Tenant{}, "id = ?", uint64(1)).Error)
-	_, err = ResolveModelTier(ctx, db, kb, types.ModelTierLight)
-	require.Error(t, err, "configuration read failures must be visible")
+	require.Equal(t, "summary", id)
+	require.NoError(t, db.Delete(kb).Error)
+	_, err = ResolveModelTier(ctx, db, nil, types.ModelTierLight)
+	require.Error(t, err, "missing knowledge base must remain visible")
 }
 
 type tierTestModels struct {
@@ -105,7 +96,7 @@ func TestIntakeReviewUsesLightModelInOneCall(t *testing.T) {
 func TestModelTierReferencesProtectModelDeletion(t *testing.T) {
 	db := pgtest.Open(t)
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
-	global := &types.Tenant{ID: 1, Name: "Space", ModelTiers: types.ModelTierConfig{Light: "bound-model"}}
+	global := &types.Tenant{ID: 1, Name: "Space"}
 	require.NoError(t, db.Create(global).Error)
 	kb := &types.KnowledgeBase{ID: "tier-bound-kb", TenantID: 1, Name: "Research KB", Type: types.KnowledgeBaseTypeDocument, ModelTiers: types.ModelTierConfig{Generation: "bound-model"}}
 	kb.EnsureDefaults()
@@ -116,6 +107,4 @@ func TestModelTierReferencesProtectModelDeletion(t *testing.T) {
 	require.True(t, usage.InUse())
 	require.Equal(t, int64(1), usage.KnowledgeBaseTotal)
 	require.Equal(t, []types.ModelUsageBinding{"generation_model_tier"}, usage.KnowledgeBases[0].Bindings)
-	require.Len(t, usage.ModelTiers, 1)
-	require.Equal(t, "global", usage.ModelTiers[0].Scope)
 }

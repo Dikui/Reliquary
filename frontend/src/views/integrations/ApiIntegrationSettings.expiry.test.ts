@@ -27,7 +27,7 @@ const template = compileTemplate({
 assert.deepEqual(template.errors, [])
 const stub = defineComponent({ setup(_, { slots }) { return () => h('div', slots.default?.()) } })
 
-async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any) => Promise<void>, knowledgeBases: Array<{ id: string; name: string }> | Error = []) {
+async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any) => Promise<void>) {
   const requests: Array<{ id?: number; payload: object }> = []
   const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zh, 'en-US': en } })
   const modules: Record<string, unknown> = {
@@ -36,7 +36,6 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any) => Promi
     '@/utils/personalServerError': personalServerError,
     '@/utils/api-base': { getApiBaseUrl: () => 'http://localhost' },
     '@/utils/clipboard': { copyWithToast() {} },
-    '@/api/knowledge-base': { listKnowledgeBases: async () => { if (knowledgeBases instanceof Error) throw knowledgeBases; return { success: true, data: knowledgeBases } } },
     '@/api/tenant': {
       listTenantAPIKeys: async () => ({ success: true, data: [] }),
       createTenantAPIKey: async (payload: object) => { requests.push({ payload }); return { success: true, data: { token: 'token' } } },
@@ -130,54 +129,34 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
-  test(`${locale}: Playground includes the selected knowledge scope in its request`, async () => {
-    const originalFetch = globalThis.fetch
-    const calls: any[] = []
+  test(`${locale}: Playground searches the unique knowledge base without range parameters`, async () => {
+    const originalFetch = globalThis.fetch, calls: any[] = []
     globalThis.fetch = async (_url, options) => { calls.push(options); return { ok: true, json: async () => ({ data: [] }) } as Response }
     try {
       await scenario(locale, async state => {
-        if (state.openPlayground) await state.openPlayground(); else state.playgroundVisible.value = true
-        if (state.openPlayground) assert.equal(state.playground.knowledgeBaseId, 'kb-1')
+        state.openPlayground()
         state.playground.apiKey = ' secret '
         state.playground.query = ' question '
         await state.runQuery()
-      }, [{ id: 'kb-1', name: 'Knowledge' }])
-      await scenario(locale, async state => {
-        if (state.openPlayground) await state.openPlayground(); else state.playgroundVisible.value = true
-        if (state.openPlayground) assert.equal(state.playground.knowledgeBaseId, '')
-        state.playground.knowledgeBaseId = 'kb-2'
-        state.playground.apiKey = 'secret'; state.playground.query = 'question'
-        await state.runQuery()
-      }, [{ id: 'kb-1', name: 'One' }, { id: 'kb-2', name: 'Two' }])
-      assert.equal(calls.length, 2)
-      assert.deepEqual(JSON.parse(calls[1].body), { query: 'question', knowledge_base_ids: ['kb-2'] })
-      assert.deepEqual(JSON.parse(calls[0].body), { query: 'question', knowledge_base_ids: ['kb-1'] })
+      })
+      assert.equal(calls.length, 1)
+      assert.deepEqual(JSON.parse(calls[0].body), { query: 'question' })
       assert.equal(calls[0].headers['X-API-Key'], 'secret')
     } finally { globalThis.fetch = originalFetch }
   })
-  test(`${locale}: Playground missing scope, empty libraries or load failure shows a hint without requesting search`, async () => {
+  test(`${locale}: Playground requires an API key and query before requesting search`, async () => {
     const originalFetch = globalThis.fetch
     let calls = 0
     globalThis.fetch = async () => { calls++; throw new Error('must not request') }
     try {
-      for (const libraries of [[], [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], new Error('offline')]) {
-        await scenario(locale, async state => {
-          if (state.openPlayground) await state.openPlayground(); else state.playgroundVisible.value = true
-          if (state.openPlayground) assert.ok(state.playgroundError.value || state.knowledgeBaseOptions.value.length === 2)
-          state.playground.apiKey = 'secret'; state.playground.query = 'question'
-          await state.runQuery()
-          assert.ok(state.playgroundError.value)
-          const messages = (locale === 'zh-CN' ? zh : en).integrations.api
-          const expected = libraries instanceof Error ? messages.playgroundLoadKnowledgeBasesFailed
-            : libraries.length ? messages.playgroundNeedKnowledgeBase : messages.playgroundNoKnowledgeBases
-          assert.equal(state.playgroundError.value, expected)
-          if (!(libraries instanceof Error) && libraries.length) {
-            state.playground.knowledgeBaseId = 'deleted-kb'
-            await state.runQuery()
-            assert.equal(state.playgroundError.value, expected)
-          }
-        }, libraries)
-      }
+      await scenario(locale, async state => {
+        state.openPlayground()
+        await state.runQuery()
+        assert.equal(state.playgroundError.value, (locale === 'zh-CN' ? zh : en).integrations.api.playgroundNeedQuestionAndKey)
+        state.playground.apiKey = 'secret'
+        await state.runQuery()
+        assert.ok(state.playgroundError.value)
+      })
       assert.equal(calls, 0)
     } finally { globalThis.fetch = originalFetch }
   })

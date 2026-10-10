@@ -56,8 +56,6 @@ type runtimeTaskPayloadProbe struct {
 	KnowledgeBaseID string   `json:"knowledge_base_id,omitempty"`
 	KnowledgeID     string   `json:"knowledge_id,omitempty"`
 	TaskID          string   `json:"task_id,omitempty"`
-	SourceKBID      string   `json:"source_kb_id,omitempty"`
-	TargetKBID      string   `json:"target_kb_id,omitempty"`
 	DataSourceID    string   `json:"data_source_id,omitempty"`
 	SyncLogID       string   `json:"sync_log_id,omitempty"`
 	KnowledgeIDs    []string `json:"knowledge_ids,omitempty"`
@@ -111,40 +109,6 @@ func (a *asynqTaskInspector) CancelTasksForKnowledge(
 	logger.Infof(ctx,
 		"[TaskInspector] knowledge=%s cancel summary: deleted_from_queue=%d active_cancel_signaled=%d",
 		knowledgeID, deleted, cancelled)
-	return deleted, cancelled, nil
-}
-
-// CancelTasksForKnowledgeBase removes tasks that still reference a knowledge
-// base (or one of its knowledges) after the knowledge base has been deleted.
-// The kb:delete task is deliberately excluded because it performs the durable
-// storage cleanup and must remain queued.
-func (a *asynqTaskInspector) CancelTasksForKnowledgeBase(
-	ctx context.Context, knowledgeBaseID string, knowledgeIDs []string, dataSourceIDs []string) (int, int, error) {
-	if a == nil || a.inspector == nil {
-		return 0, 0, nil
-	}
-	knowledgeIDSet := make(map[string]struct{}, len(knowledgeIDs))
-	for _, knowledgeID := range knowledgeIDs {
-		if knowledgeID != "" {
-			knowledgeIDSet[knowledgeID] = struct{}{}
-		}
-	}
-	dataSourceIDSet := make(map[string]struct{}, len(dataSourceIDs))
-	for _, dataSourceID := range dataSourceIDs {
-		if dataSourceID != "" {
-			dataSourceIDSet[dataSourceID] = struct{}{}
-		}
-	}
-	if knowledgeBaseID == "" && len(knowledgeIDSet) == 0 && len(dataSourceIDSet) == 0 {
-		return 0, 0, nil
-	}
-
-	deleted, cancelled := a.cancelMatchingTasks(ctx, func(taskType string, payload []byte) bool {
-		return matchesKnowledgeBase(taskType, payload, knowledgeBaseID, knowledgeIDSet, dataSourceIDSet)
-	})
-	logger.Infof(ctx,
-		"[TaskInspector] knowledge_base=%s cancel summary: deleted_from_queue=%d active_cancel_signaled=%d",
-		knowledgeBaseID, deleted, cancelled)
 	return deleted, cancelled, nil
 }
 
@@ -324,8 +288,6 @@ func projectRuntimeTask(task *asynq.TaskInfo, worker runtimeWorkerMetadata) (typ
 		KnowledgeBaseID: kbID,
 		KnowledgeID:     probe.KnowledgeID,
 		TaskID:          probe.TaskID,
-		SourceKBID:      probe.SourceKBID,
-		TargetKBID:      probe.TargetKBID,
 		DataSourceID:    probe.DataSourceID,
 		SyncLogID:       probe.SyncLogID,
 		KnowledgeCount:  len(probe.KnowledgeIDs),
@@ -1040,51 +1002,4 @@ func matchesKnowledge(taskType string, payload []byte, knowledgeID string) bool 
 		return false
 	}
 	return probe.KnowledgeID == knowledgeID
-}
-
-// matchesKnowledgeBase identifies work made obsolete by deleting a knowledge
-// base. In addition to direct KB fields, move payloads carry semantic KB
-// references under task-specific field names. knowledgeIDs catches tasks whose
-// payload does not carry a KB ID at all.
-func matchesKnowledgeBase(
-	taskType string,
-	payload []byte,
-	knowledgeBaseID string,
-	knowledgeIDs map[string]struct{},
-	dataSourceIDs map[string]struct{}) bool {
-	// These cleanup tasks carry snapshots specifically so they can still run
-	// after the KB row has been soft-deleted. Removing them leaks resources.
-	if taskType == types.TypeKBDelete {
-		return false
-	}
-	var probe runtimeTaskPayloadProbe
-	if err := json.Unmarshal(payload, &probe); err != nil {
-		return false
-	}
-
-	if knowledgeBaseID != "" {
-		if probe.KnowledgeBaseID == knowledgeBaseID {
-			return true
-		}
-		switch taskType {
-
-		case types.TypeKnowledgeMove:
-			if probe.SourceKBID == knowledgeBaseID || probe.TargetKBID == knowledgeBaseID {
-				return true
-			}
-		}
-	}
-
-	if _, ok := knowledgeIDs[probe.KnowledgeID]; ok && probe.KnowledgeID != "" {
-		return true
-	}
-	for _, knowledgeID := range probe.KnowledgeIDs {
-		if _, ok := knowledgeIDs[knowledgeID]; ok && knowledgeID != "" {
-			return true
-		}
-	}
-	if _, ok := dataSourceIDs[probe.DataSourceID]; ok && probe.DataSourceID != "" {
-		return true
-	}
-	return false
 }

@@ -6,25 +6,6 @@
     </div>
 
     <div class="settings-group">
-      <!-- Rerank Model -->
-      <div class="setting-item">
-        <div class="setting-label">
-          <span>{{ t('retrievalSettings.rerankModelLabel') }} <span class="required-mark">*</span></span>
-        </div>
-        <p class="setting-desc">{{ t('retrievalSettings.rerankModelDescription') }}</p>
-        <p v-if="!localConfig.rerank_model_id" class="setting-desc warning-text">
-          {{ t('retrievalSettings.rerankModelRequired') }}
-        </p>
-        <div class="setting-control-full">
-          <ModelSelector
-            model-type="Rerank"
-            :selected-model-id="localConfig.rerank_model_id"
-
-            @update:selected-model-id="handleModelChange"
-          />
-        </div>
-      </div>
-
       <!-- Embedding Top K -->
       <div class="setting-item">
         <div class="setting-label-row">
@@ -112,7 +93,6 @@
 import { reactive, computed, onMounted, nextTick } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
-import ModelSelector from '@/components/ModelSelector.vue'
 import {
   getTenantRetrievalConfig,
   updateTenantRetrievalConfig,
@@ -126,7 +106,6 @@ const defaultConfig: RetrievalConfig = {
   keyword_threshold: 0.3,
   rerank_top_k: 10,
   rerank_threshold: 0.2,
-  rerank_model_id: '',
 }
 
 const localConfig = reactive<RetrievalConfig>({ ...defaultConfig })
@@ -144,7 +123,6 @@ const loadConfig = async () => {
         keyword_threshold: cfg.keyword_threshold || defaultConfig.keyword_threshold,
         rerank_top_k: cfg.rerank_top_k || defaultConfig.rerank_top_k,
         rerank_threshold: cfg.rerank_threshold ?? defaultConfig.rerank_threshold,
-        rerank_model_id: cfg.rerank_model_id || '',
       })
       initialConfig = { ...localConfig }
     }
@@ -186,11 +164,6 @@ const debouncedSave = () => {
 }
 
 const handleParamChange = () => debouncedSave()
-const handleModelChange = (modelId: string) => {
-  localConfig.rerank_model_id = modelId
-  debouncedSave()
-}
-
 onMounted(async () => {
   isInitializing = true
   await loadConfig()

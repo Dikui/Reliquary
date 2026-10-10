@@ -3,8 +3,8 @@
     <t-icon name="error-circle" size="48px" aria-hidden="true" />
     <h1>{{ t('navigation.pageNotFound') }}</h1>
     <p>{{ t('navigation.pageNotFoundDescription') }}</p>
-    <t-button theme="primary" @click="router.push('/platform/knowledge-bases')">
-      {{ t('navigation.returnToKnowledgeBases') }}
+    <t-button theme="primary" @click="router.push('/platform/knowledge')">
+      {{ t('navigation.returnToKnowledge') }}
     </t-button>
   </section>
 </template>

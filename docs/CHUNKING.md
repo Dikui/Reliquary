@@ -135,8 +135,7 @@ The `strategy`, `tokenLimit`, and `languages` fields use pointer-based
 DTOs server-side: omitting them in the payload means "no change",
 sending an empty string / 0 / [] explicitly resets to default.
 
-The KB CRUD endpoints (`POST /api/v1/knowledge-bases`,
-`PUT /api/v1/knowledge-bases/:id`) take the same fields but in
+The knowledge base settings endpoint (`PUT /api/v1/knowledge-base`) takes the same fields but in
 **snake_case** under a `chunking_config` envelope:
 `{ "chunking_config": { "chunk_size": 512, "chunk_overlap": 80,
 "strategy": "auto", "token_limit": 0, "languages": ["de", "en"], ... } }`.

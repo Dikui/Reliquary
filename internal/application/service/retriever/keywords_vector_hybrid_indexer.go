@@ -313,24 +313,6 @@ func (v *KeywordsVectorHybridRetrieveEngineService) EstimateStorageSize(
 	return v.indexRepository.EstimateStorageSize(ctx, indexInfoList, params)
 }
 
-// CopyIndices copies indices from a source knowledge base to a target knowledge base
-func (v *KeywordsVectorHybridRetrieveEngineService) CopyIndices(
-	ctx context.Context,
-	sourceKnowledgeBaseID string,
-	sourceToTargetKBIDMap map[string]string,
-	sourceToTargetChunkIDMap map[string]string,
-	targetKnowledgeBaseID string,
-	dimension int,
-	knowledgeType string,
-) error {
-	logger.Infof(ctx, "Copy indices from knowledge base %s to %s, mapping relation count: %d",
-		sourceKnowledgeBaseID, targetKnowledgeBaseID, len(sourceToTargetChunkIDMap),
-	)
-	return v.indexRepository.CopyIndices(
-		ctx, sourceKnowledgeBaseID, sourceToTargetKBIDMap, sourceToTargetChunkIDMap, targetKnowledgeBaseID, dimension, knowledgeType,
-	)
-}
-
 // BatchUpdateChunkEnabledStatus updates the enabled status of chunks in batch
 func (v *KeywordsVectorHybridRetrieveEngineService) BatchUpdateChunkEnabledStatus(
 	ctx context.Context,

@@ -15,12 +15,7 @@
             <h4 class="setting-drawer__section-title">
               {{ t('knowledgeBase.infoCard.basic') }}
             </h4>
-            <div class="kb-info-card-row">
-              <span class="kb-info-card-label">{{ t('knowledgeBase.infoCard.type') }}</span>
-              <span class="kb-info-card-value">
-                {{ t('knowledgeEditor.basic.typeDocument') }}
-              </span>
-            </div>
+
             <div v-if="kbInfo.description" class="kb-info-card-row">
               <span class="kb-info-card-label">{{ t('knowledgeBase.description') }}</span>
               <span class="kb-info-card-value kb-info-card-value-block">{{ kbInfo.description }}</span>

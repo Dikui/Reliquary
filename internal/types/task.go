@@ -64,8 +64,7 @@ var queueDefinitions = []QueueDefinition{
 	{Name: QueueQuestion, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeQuestionGeneration}},
 	{Name: QueueSync, Pool: WorkerPoolMaintenance, Weight: 2, TaskTypes: []string{TypeDataSourceSync}},
 	{Name: QueueMaintenance, Pool: WorkerPoolMaintenance, Weight: 1, TaskTypes: []string{
-		TypeKBDelete,
-		TypeKnowledgeListDelete, TypeKnowledgeListReparse, TypeKnowledgeMove,
+		TypeKnowledgeListDelete, TypeKnowledgeListReparse,
 	}},
 }
 
@@ -214,10 +213,8 @@ const (
 	TypeDocumentProcess            = "document:process"       // 文档处理任务
 	TypeQuestionGeneration         = "question:generation"    // 问题生成任务
 	TypeSummaryGeneration          = "summary:generation"     // 摘要生成任务
-	TypeKBDelete                   = "kb:delete"              // 知识库删除任务
 	TypeKnowledgeListDelete        = "knowledge:list_delete"  // 批量删除知识任务
 	TypeKnowledgeListReparse       = "knowledge:list_reparse" // 批量重解析知识任务
-	TypeKnowledgeMove              = "knowledge:move"         // 知识移动任务
 	TypeDataTableSummary           = "datatable:summary"      // 表格摘要任务
 	TypeImageMultimodal            = "image:multimodal"       // 图片多模态处理任务（OCR + VLM Caption）
 	TypeKnowledgePostProcess       = "knowledge:post_process" // 知识后处理任务（统一调度）
@@ -310,13 +307,6 @@ type SummaryGenerationPayload struct {
 	Attempt int `json:"attempt,omitempty"`
 }
 
-// KBDeletePayload represents the knowledge base delete task payload
-type KBDeletePayload struct {
-	TenantID        uint64   `json:"tenant_id"`
-	KnowledgeBaseID string   `json:"knowledge_base_id"`
-	DataSourceIDs   []string `json:"data_source_ids,omitempty"`
-}
-
 // KnowledgeListDeletePayload represents the batch knowledge delete task payload
 type KnowledgeListDeletePayload struct {
 	TenantID     uint64        `json:"tenant_id"`
@@ -330,33 +320,6 @@ type KnowledgeListReparsePayload struct {
 	KnowledgeIDs  []string                   `json:"knowledge_ids"`
 	ProcessConfig *KnowledgeProcessOverrides `json:"process_config,omitempty"`
 	Initiator     TaskInitiator              `json:"initiator,omitempty"`
-}
-
-// KnowledgeMovePayload represents the knowledge move task payload
-type KnowledgeMovePayload struct {
-	TenantID     uint64        `json:"tenant_id"`
-	TaskID       string        `json:"task_id"`
-	KnowledgeIDs []string      `json:"knowledge_ids"`
-	SourceKBID   string        `json:"source_kb_id"`
-	TargetKBID   string        `json:"target_kb_id"`
-	Mode         string        `json:"mode"` // "reuse_vectors" or "reparse"
-	Initiator    TaskInitiator `json:"initiator,omitempty"`
-}
-
-// KnowledgeMoveProgress represents the progress of a knowledge move task
-type KnowledgeMoveProgress struct {
-	TaskID     string                  `json:"task_id"`
-	SourceKBID string                  `json:"source_kb_id"`
-	TargetKBID string                  `json:"target_kb_id"`
-	Status     KnowledgeMoveTaskStatus `json:"status"`
-	Progress   int                     `json:"progress"`   // 0-100
-	Total      int                     `json:"total"`      // 总知识数
-	Processed  int                     `json:"processed"`  // 已处理数
-	Failed     int                     `json:"failed"`     // 失败数
-	Message    string                  `json:"message"`    // 状态消息
-	Error      string                  `json:"error"`      // 错误信息
-	CreatedAt  int64                   `json:"created_at"` // 任务创建时间
-	UpdatedAt  int64                   `json:"updated_at"` // 最后更新时间
 }
 
 // ManualProcessPayload represents the manual knowledge processing task payload.
@@ -400,13 +363,3 @@ type KnowledgePostProcessPayload struct {
 	Language        string `json:"language,omitempty"` // Request locale for {{language}} in prompt templates
 	Attempt         int    `json:"attempt,omitempty"`
 }
-
-// KnowledgeMoveTaskStatus represents the status of a knowledge move task
-type KnowledgeMoveTaskStatus string
-
-const (
-	KnowledgeMoveStatusPending    KnowledgeMoveTaskStatus = "pending"
-	KnowledgeMoveStatusProcessing KnowledgeMoveTaskStatus = "processing"
-	KnowledgeMoveStatusCompleted  KnowledgeMoveTaskStatus = "completed"
-	KnowledgeMoveStatusFailed     KnowledgeMoveTaskStatus = "failed"
-)

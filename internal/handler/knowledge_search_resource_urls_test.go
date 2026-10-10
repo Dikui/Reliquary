@@ -22,7 +22,7 @@ type stubKnowledgeSearchService struct {
 }
 
 func (s *stubKnowledgeSearchService) SearchKnowledge(
-	_ context.Context, _ []string, _ []string, _ string,
+	_ context.Context, _ []string, _ string,
 ) ([]*types.SearchResult, error) {
 	return []*types.SearchResult{{
 		Content:   "chunk ![c](" + testResourceHandle + ")",
@@ -40,7 +40,7 @@ func TestSearchKnowledge_PublicResourceURLs(t *testing.T) {
 	}
 	r.POST("/knowledge-search", h.SearchKnowledge)
 
-	body := bytes.NewBufferString(`{"query":"diagram","knowledge_base_ids":["kb-1"]}`)
+	body := bytes.NewBufferString(`{"query":"diagram"}`)
 	req := httptest.NewRequest(http.MethodPost, "/knowledge-search?resource_urls=public", body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -61,7 +61,7 @@ func TestSearchKnowledge_InvalidResourceURLMode(t *testing.T) {
 	}
 	r.POST("/knowledge-search", h.SearchKnowledge)
 
-	body := bytes.NewBufferString(`{"query":"diagram","knowledge_base_ids":["kb-1"]}`)
+	body := bytes.NewBufferString(`{"query":"diagram"}`)
 	req := httptest.NewRequest(http.MethodPost, "/knowledge-search?resource_urls=signed", body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -81,7 +81,7 @@ func TestSearchKnowledge_DefaultKeepsHandles(t *testing.T) {
 	}
 	r.POST("/knowledge-search", h.SearchKnowledge)
 
-	body := bytes.NewBufferString(`{"query":"diagram","knowledge_base_ids":["kb-1"]}`)
+	body := bytes.NewBufferString(`{"query":"diagram"}`)
 	req := httptest.NewRequest(http.MethodPost, "/knowledge-search", body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

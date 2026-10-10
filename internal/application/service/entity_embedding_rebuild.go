@@ -20,8 +20,7 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-// EntityNameEmbeddingRebuilder maintains the global default embedding profile used
-// by global identities. Scope overrides never select the identity profile.
+// EntityNameEmbeddingRebuilder uses the knowledge base embedding model for entity names.
 type EntityNameEmbeddingRebuilder struct {
 	db     *gorm.DB
 	models interfaces.ModelService
@@ -62,7 +61,7 @@ func (r *EntityNameEmbeddingRebuilder) profileMetadata(ctx context.Context, id s
 		return nil, err
 	}
 	if metadata.Type != types.ModelTypeEmbedding || metadata.Status != types.ModelStatusActive {
-		return nil, errors.New("global embedding model must be active and have Embedding type")
+		return nil, errors.New("knowledge base embedding model must be active and have Embedding type")
 	}
 	return &metadata, nil
 }
@@ -75,7 +74,7 @@ func (r *EntityNameEmbeddingRebuilder) profile(ctx context.Context, tenantID uin
 		return profile, err
 	}
 	if id == "" {
-		return profile, errors.New("global embedding model is not configured")
+		return profile, errors.New("knowledge base embedding model is not configured")
 	}
 	if r.models == nil {
 		return profile, errors.New("embedding model service is unavailable")
@@ -86,7 +85,7 @@ func (r *EntityNameEmbeddingRebuilder) profile(ctx context.Context, tenantID uin
 	}
 	model, err := r.models.GetEmbeddingModel(types.WithModelTier(ctx, types.ModelTierEmbedding), id)
 	if err != nil {
-		return profile, fmt.Errorf("global embedding model is unavailable: %w", err)
+		return profile, fmt.Errorf("knowledge base embedding model is unavailable: %w", err)
 	}
 	if model == nil || model.GetDimensions() < 1 {
 		return profile, errors.New("embedding model has no usable dimensions")
@@ -352,15 +351,16 @@ func (r *EntityNameEmbeddingRebuilder) Handle(ctx context.Context, task *asynq.T
 	return nil
 }
 func (r *EntityNameEmbeddingRebuilder) checkProfile(tx *gorm.DB, tenantID uint64, profile entityEmbeddingProfile) error {
-	var space types.Tenant
-	if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Select("id", "model_tiers").Where("id=?", tenantID).First(&space).Error; err != nil {
+	var kb types.KnowledgeBase
+	if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Select("id", "model_tiers", "embedding_model_id").Where("tenant_id=?", tenantID).First(&kb).Error; err != nil {
 		return err
 	}
-	if space.ModelTiers.ModelID(types.ModelTierEmbedding) != profile.modelID {
-		return errors.New("global embedding profile changed during rebuild")
+	id, err := ResolveModelTier(context.Background(), nil, &kb, types.ModelTierEmbedding)
+	if err != nil || id != profile.modelID {
+		return errors.New("knowledge base embedding profile changed during rebuild")
 	}
 	var metadata types.Model
-	err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("id=? AND (tenant_id=? OR is_builtin=true)", profile.modelID, tenantID).First(&metadata).Error
+	err = tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("id=? AND (tenant_id=? OR is_builtin=true)", profile.modelID, tenantID).First(&metadata).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}

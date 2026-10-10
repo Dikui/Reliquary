@@ -15,7 +15,6 @@ import DataSourceEditorDialog from './DataSourceEditorDialog.vue'
 import DataSourceSyncLogs from './DataSourceSyncLogs.vue'
 import DataSourceTypeIcon from './DataSourceTypeIcon.vue'
 
-const props = defineProps<{ kbId: string }>()
 const emit = defineEmits<{ (e: 'count', value: number): void }>()
 const { t } = useI18n()
 
@@ -47,7 +46,7 @@ function schedulePolling() {
 async function loadList(silent = false) {
   if (!silent) loading.value = true
   try {
-    const res = await listDataSources(props.kbId)
+    const res = await listDataSources()
     dataSources.value = res?.data || res || []
     emit('count', dataSources.value.length)
 
@@ -314,7 +313,6 @@ onBeforeUnmount(stopPolling)
 
     <DataSourceEditorDialog
       v-model:visible="editorVisible"
-      :kb-id="kbId"
       :data-source="editingDs"
       @saved="onEditorSaved"
     />
@@ -448,8 +446,6 @@ onBeforeUnmount(stopPolling)
     color: #07c05f;
     overflow: hidden;
   }
-
-
 
   &__body {
     flex: 1;

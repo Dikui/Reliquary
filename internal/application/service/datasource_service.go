@@ -65,14 +65,11 @@ func (s *DataSourceService) CreateDataSource(ctx context.Context, ds *types.Data
 		return nil, datasource.ErrDataSourceInvalid
 	}
 
-	// Validate knowledge base exists
-	kb, err := s.kbService.GetKnowledgeBaseByID(ctx, ds.KnowledgeBaseID)
-	if err != nil || kb == nil {
+	kb, err := s.kbService.GetKnowledgeBase(ctx)
+	if err != nil || kb == nil || kb.TenantID != ds.TenantID {
 		return nil, datasource.ErrKnowledgeBaseNotFound
 	}
-	if kb.TenantID != ds.TenantID {
-		return nil, datasource.ErrKnowledgeBaseNotFound
-	}
+	ds.KnowledgeBaseID = kb.ID
 
 	// Validate connector type
 	_, err = s.connectorRegistry.Get(ds.Type)

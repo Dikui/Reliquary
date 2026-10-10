@@ -112,7 +112,7 @@ async function renderDetails(locale: keyof typeof messages, summary_status: stri
 const listModules = {
   '../tagLabel': {}, '@/utils/files': { formatFileSize: () => '100 B', getFileIcon: () => 'image' },
   '@/composables/useTagChipsOverflow': { useTagChipsOverflow: () => ({ getTagLimit: () => 0 }) },
-  './DocumentActionMenu.vue': emptyModule, './FolderPickerMenu.vue': emptyModule,
+  './DocumentActionMenu.vue': emptyModule,
   '@/components/knowledge-processing-timeline.vue': emptyModule,
 }
 const listProps = {

@@ -124,11 +124,11 @@ func TestVisionConversationImageUploadProducesOCRAndCaption(t *testing.T) {
 	chunkRepo := repository.NewChunkRepository(db)
 	tenantRepo := repository.NewTenantRepository(db)
 	kbService := &knowledgeBaseService{db: db, repo: kbRepo, kgRepo: knowledgeRepo, modelService: models}
-	kb, err := kbService.CreateKnowledgeBase(ctx, &types.KnowledgeBase{
+	kb := &types.KnowledgeBase{ID: "vision-kb", TenantID: types.SingleTenantID,
 		Name: "Vision conversation knowledge base", EmbeddingModelID: "test-embedding", SummaryModelID: model.ID,
-		VLMConfig: types.VLMConfig{Enabled: true, ModelID: model.ID},
-	})
-	require.NoError(t, err)
+		VLMConfig: types.VLMConfig{Enabled: true, ModelID: model.ID}}
+	kb.EnsureDefaults()
+	require.NoError(t, kbRepo.CreateKnowledgeBase(ctx, kb))
 	selected, err := kbService.GetKnowledgeBaseByID(ctx, kb.ID)
 	require.NoError(t, err)
 	require.Equal(t, model.ID, selected.VLMConfig.ModelID)

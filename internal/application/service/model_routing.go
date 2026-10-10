@@ -16,22 +16,6 @@ type ResolvedModelTier struct {
 	ModelID string `json:"model_id"`
 	Source  string `json:"source"`
 }
-type ModelRoutingView struct {
-	Overrides types.ModelTierConfig                 `json:"overrides"`
-	Resolved  map[types.ModelTier]ResolvedModelTier `json:"resolved"`
-}
-
-func ModelRoutingForScope(ctx context.Context, db *gorm.DB, kb *types.KnowledgeBase, overrides types.ModelTierConfig) (ModelRoutingView, error) {
-	view := ModelRoutingView{Overrides: overrides, Resolved: map[types.ModelTier]ResolvedModelTier{}}
-	for _, tier := range types.ModelTiers {
-		resolved, err := resolveModelTier(ctx, db, kb, tier)
-		if err != nil {
-			return view, err
-		}
-		view.Resolved[tier] = resolved
-	}
-	return view, nil
-}
 
 func ValidateModelTierConfig(ctx context.Context, db *gorm.DB, config types.ModelTierConfig) error {
 	if err := config.Validate(); err != nil {
@@ -63,8 +47,7 @@ func ValidateModelTierConfig(ctx context.Context, db *gorm.DB, config types.Mode
 	return nil
 }
 
-// ResolveModelTier resolves a KB override, then global default.
-// Legacy model fields apply only after both scopes are unconfigured.
+// ResolveModelTier reads the model choices stored on the only knowledge base.
 func ResolveModelTier(ctx context.Context, db *gorm.DB, kb *types.KnowledgeBase, tier types.ModelTier) (string, error) {
 	resolved, err := resolveModelTier(ctx, db, kb, tier)
 	return resolved.ModelID, err
@@ -80,26 +63,16 @@ func resolveModelTier(ctx context.Context, db *gorm.DB, kb *types.KnowledgeBase,
 	if !valid {
 		return ResolvedModelTier{}, fmt.Errorf("unknown model tier %q", tier)
 	}
-	tenantID, _ := types.TenantIDFromContext(ctx)
-	if tenantID == 0 {
-		tenantID = 1
+	if kb == nil && db != nil {
+		tenantID := types.MustTenantIDFromContext(ctx)
+		kb = &types.KnowledgeBase{}
+		if err := db.WithContext(ctx).Where("tenant_id = ?", tenantID).First(kb).Error; err != nil {
+			return ResolvedModelTier{}, fmt.Errorf("read knowledge base model tiers: %w", err)
+		}
 	}
 	if kb != nil {
-		if kb.TenantID != 0 {
-			tenantID = kb.TenantID
-		}
 		if id := kb.ModelTiers.ModelID(tier); id != "" {
 			return ResolvedModelTier{id, "knowledge_base"}, nil
-		}
-
-	}
-	if db != nil {
-		var tenant types.Tenant
-		if err := db.WithContext(ctx).Select("model_tiers").Where("id = ?", tenantID).First(&tenant).Error; err != nil {
-			return ResolvedModelTier{}, fmt.Errorf("read global default model tiers: %w", err)
-		}
-		if id := tenant.ModelTiers.ModelID(tier); id != "" {
-			return ResolvedModelTier{id, "global"}, nil
 		}
 	}
 	if kb != nil {
@@ -115,7 +88,7 @@ func resolveModelTier(ctx context.Context, db *gorm.DB, kb *types.KnowledgeBase,
 			id = kb.EmbeddingModelID
 		}
 		if id = strings.TrimSpace(id); id != "" {
-			return ResolvedModelTier{id, "legacy"}, nil
+			return ResolvedModelTier{id, "knowledge_base"}, nil
 		}
 	}
 	return ResolvedModelTier{Source: "unconfigured"}, nil

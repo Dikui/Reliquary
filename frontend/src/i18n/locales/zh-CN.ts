@@ -10,18 +10,18 @@ export default {
   "logoutSuccess": "已退出登录"
 },
   navigation: {
-    removedFeature: '此功能已移除，已返回知识库列表。',
+    removedFeature: '此功能已移除，已返回文章页面。',
     pageNotFound: '页面不存在',
-    pageNotFoundDescription: '请检查页面地址，或返回知识库列表继续使用。',
-    returnToKnowledgeBases: '返回知识库列表',
+    pageNotFoundDescription: '请检查页面地址，或返回文章页面继续使用。',
+    returnToKnowledge: '返回文章页面',
   },
 
   modelTiers: {
-  "configureGlobal": "设置全局默认",
+  "configure": "配置模型档位",
   "title": "模型档位",
   "scopeHint": {
-    "global": "设置全局默认模型，知识库可以覆盖各档位。清空后使用已有默认配置。",
-    "knowledge_base": "覆盖全局模型，清空后继承全局和已有默认配置。"
+
+    "knowledge_base": "所有文章共用此处保存的模型档位。"
   },
   "names": {
     "light": "轻量",
@@ -38,14 +38,15 @@ export default {
     "entity_resolution": "判断实体候选是否属于已有实体"
   },
   "sources": {
-    "global": "全局默认",
-    "knowledge_base": "知识库覆盖",
+    "generation": "生成模型档位",
+
+    "knowledge_base": "知识库设置",
     "legacy": "已有模型配置",
     "default": "系统默认",
     "unconfigured": "未配置"
   },
-  "inherit": "继承上级配置",
-  "useDefault": "使用已有默认配置",
+
+  "useDefault": "选择模型",
   "effective": "当前使用：{model}（{source}）",
   "unconfigured": "未配置模型",
   "explicitChoice": "摘要和检索问题生成使用生成模型层级。",
@@ -111,12 +112,7 @@ export default {
     "entities": "实体",
     "merges": "待合并建议"
   },
-  "scope": {
-    "label": "查询范围",
-    "knowledge_base": "当前知识库",
-    "all": "全部知识库",
-    "detailHint": "实体档案在空间内统一，下面显示所有知识库中提及该实体的文章。"
-  },
+
   "sourceTime": {
     "excluded": "因缺少发布时间被排除的来源数：{count}",
     "missing": "缺少发布时间",
@@ -222,8 +218,7 @@ export default {
       editApiKey: '编辑 API Key',
       updateApiKeySuccess: 'API Key 已保存',
       updateApiKeyFailed: 'API Key 保存失败',
-      playgroundKnowledgeBase: '知识库',
-      playgroundKnowledgeBasePlaceholder: '选择要查询的知识库',
+
       playgroundNeedKnowledgeBase: '请选择要查询的知识库。',
       playgroundNoKnowledgeBases: '请先创建知识库并收录知识，再运行查询。',
       playgroundLoadKnowledgeBasesFailed: '知识库加载失败，请关闭后重试。',
@@ -325,7 +320,7 @@ export default {
     connectionFailed: '连接失败',
     isRequired: '为必填项',
     credentialsLabel: '凭证',
-    resourceHint: '选择要同步的内容空间/文件夹',
+
     untitled: '无标题',
     resourceLoadFailed: '加载资源列表失败',
     retryLoadResources: '重新加载',
@@ -493,7 +488,7 @@ export default {
       adjustRetrieval: '调整检索参数'
     },
     quick: {
-      knowledgeBases: '打开知识库',
+      knowledge: '打开知识库',
       settings: '打开设置',
     },
     match: {
@@ -502,15 +497,12 @@ export default {
     },
     group: {
       chunks: '知识库文件',
-      kbs: '知识库',
+
       commands: '命令',
       recent: '最近搜索',
       quickActions: '快捷操作'
     },
-    scope: {
-      placeholder: '在本知识库中搜索…',
-      remove: '移除范围过滤（Backspace）'
-    }
+
   },
   preview: {
     tab: '预览',
@@ -577,7 +569,7 @@ export default {
     usage: {
       title: '模型无法删除',
       description: '模型「{name}」仍被以下配置引用。请先打开对应配置并更换模型，再重新删除。',
-      knowledgeBases: '知识库（{count}）',
+      knowledgeSettings: '知识库设置',
       openConfiguration: '打开配置',
       truncated: '仅显示前 {shown} 个，共 {total} 个',
       bindings: {
@@ -713,7 +705,7 @@ export default {
     last30Days: '近30天',
     lastYear: '近1年',
     earlier: '更早',
-    pinned: '已置顶'
+
   },
   platform: {
     subtitle: '大模型驱动的个人知识框架',
@@ -1247,9 +1239,9 @@ export default {
             sync: '数据源同步',
             batchReparse: '批量重新解析',
             batchDelete: '批量删除',
-            move: '文档移动',
+
             indexDelete: '索引删除',
-            kbDelete: '知识库删除',
+
             entityNameEmbeddingRebuild: '实体名称向量重建',
           }
         },
@@ -1418,7 +1410,7 @@ export default {
     },
   },
   knowledgeEditor: {
-    titleCreate: '新建知识库',
+
     titleEdit: '知识库设置',
     advanced: {
       title: '高级设置',
@@ -1571,22 +1563,17 @@ export default {
       nameRequired: '请输入知识库名称',
       summaryRequired: '请选择 Summary 模型',
       multimodalInvalid: '多模态配置验证失败',
-      createSuccess: '知识库创建成功',
-      createFailed: '创建知识库失败',
+
       missingId: '缺少知识库 ID',
       buildDataFailed: '数据构建失败',
       updateSuccess: '配置保存成功',
     },
     buttons: {
-      create: '创建知识库',
+
       save: '保存配置',
-      saveAndClose: '保存并关闭',
+
     },
-    postCreateHint: {
-      title: '创建成功',
-      footer: "可继续调整配置与数据源，完成后点击「保存并关闭」。",
-      followUpDesc: "可在左侧配置数据源。",
-    },
+
     indexing: {
       title: '索引策略',
       description: '配置文档上传后的处理管道，可以独立开启或关闭每种索引方式',
@@ -1595,19 +1582,12 @@ export default {
       atLeastOne: '至少需要开启一种索引策略',
       embeddingRequired: 'RAG 检索需要配置 Embedding 模型',
       lockedTip: '知识库已有内容，索引策略暂不支持调整。如需变更，请先清空知识库。',
-      rebuildConfirmTitle: '重建索引',
-      rebuildConfirmBody: '索引策略已变更，是否对已有的 {count} 篇文档重新处理？这可能需要一些时间。',
-      rebuildSuccess: '已提交重建任务，共 {count} 篇文档',
-      rebuildSkip: '稍后可在数据源中手动触发重建'
+
     },
     basic: {
       title: '基本信息',
       description: '设置知识库的名称和描述信息',
-      kbId: '知识库 ID',
-      kbIdDesc: 'API 集成时可使用此 ID 指定知识库',
-      typeLabel: '知识库类型',
-      typeDocument: '文档',
-      typeDescription: "文档知识库支持文件解析与分块。",
+
       nameLabel: '知识库名称',
       namePlaceholder: '请输入知识库名称',
       descriptionLabel: '知识库描述',
@@ -1631,60 +1611,11 @@ export default {
       management: '管理'
     },
   },
-  knowledgeList: {
-    create: '新建知识库',
-    subtitle: "管理和组织文档知识库",
-    uninitializedBanner: '部分知识库尚未初始化，需要先在设置中配置模型信息才能添加知识文档',
-    uploadProgress: {
-      uploadingTitle: '正在向「{name}」上传文件夹中的文档',
-      detail: '已完成 {completed}/{total} 个文件',
-      keepPageOpen: '请保持页面打开，上传完成后会自动刷新解析状态。',
-      completedTitle: '「{name}」的上传已完成',
-      completedDetail: '共上传 {total} 个文件，正在刷新列表查看解析状态...',
-      refreshing: '正在刷新列表并获取最新解析状态...',
-      errorTip: '部分文件上传失败，请查看右上角通知详情。',
-      unknownKb: '知识库 {id}'
-    },
-    features: {
-      multimodal: '多模态',
-      questionGeneration: '问题生成',
-    },
-    messages: {
-      deleted: '已删除',
-      deleteFailed: '删除失败',
-      duplicateSuccess: '知识库副本已创建（不包含知识内容）',
-      duplicateFailed: '创建知识库副本失败'
-    },
-    pin: {
-      pin: '置顶',
-      unpin: '取消置顶',
-      pinSuccess: '已置顶',
-      unpinSuccess: '已取消置顶',
-      failed: '操作失败'
-    },
-    menu: {
-    batchManage: '批量管理',
-      viewDetails: '查看详情',
-      duplicate: '创建副本'
-    },
-    delete: {
-      confirmTitle: '删除确认',
-      confirmMessage: '确认要删除知识库"{name}"？删除后不可恢复',
-      confirmButton: '确认删除'
-    },
-    empty: {
-      title: '暂无知识库',
-      description: '点击左侧快捷操作"新建知识库"按钮创建第一个知识库',
-      favoritesTitle: '暂无收藏',
-      favoritesDescription: '在知识库卡片右上角点击星标即可收藏',
-      recentsTitle: '暂无最近访问',
-      recentsDescription: '最近打开过的知识库会出现在这里'
-    }
-  },
+
   manualEditor: {
     description: '使用 Markdown 编写知识内容，支持实时预览',
     defaultTitlePrefix: '新建文档',
-    noDocumentKnowledgeBases: '暂无可用的文档型知识库，请先创建一个文档型知识库',
+
     actions: {
       cancel: '取消',
       saveDraft: '暂存草稿',
@@ -1700,8 +1631,7 @@ export default {
       lastUpdated: '最近更新：{time}'
     },
     form: {
-      knowledgeBaseLabel: '目标知识库',
-      knowledgeBasePlaceholder: '请选择知识库',
+
       titleLabel: '知识标题',
       titlePlaceholder: '请输入标题',
       contentPlaceholder: '支持 Markdown 语法，可使用 # 标题、列表、代码块等'
@@ -1711,7 +1641,7 @@ export default {
       published: '消息已提交，正在审核'
     },
     warning: {
-      selectKnowledgeBase: '请选择目标知识库',
+      knowledgeUnavailable: '无法加载知识库，请关闭编辑器后重试。',
       enterTitle: '请输入知识标题',
       enterContent: '请输入知识内容',
       contentTooShort: '内容过短，建议补充更多信息后再发布'
@@ -1720,9 +1650,7 @@ export default {
       fetchDetailFailed: '获取知识详情失败',
       saveFailed: '保存失败，请稍后重试'
     },
-    labels: {
-      currentKnowledgeBase: '当前知识库'
-    },
+
     section: {
       basic: '基本信息',
       content: '知识内容'
@@ -1845,8 +1773,7 @@ export default {
     errors: {
       parseUserFailed: '解析用户信息失败',
       parseTenantFailed: '解析空间信息失败',
-      parseKnowledgeBasesFailed: '解析知识库列表失败',
-      parseCurrentKnowledgeBaseFailed: '解析当前知识库失败'
+
     }
   },
   auth: {
@@ -1903,15 +1830,15 @@ export default {
     keywordThresholdLabel: '关键词匹配阈值',
     rerankTopKLabel: 'Rerank 数量 (Top K)',
     rerankThresholdLabel: 'Rerank 阈值',
-    rerankModelLabel: 'Rerank 模型',
-    rerankModelDescription: '选择用于搜索结果重排序的模型',
-    rerankModelRequired: '请选择 Rerank 模型，搜索功能需要此模型对结果进行重排序',
+
     toasts: {
       saveSuccess: '检索配置已保存',
       saveFailed: '保存配置失败: {message}'
     }
   },
   settings: {
+    knowledgeSettings: '知识库设置',
+    dataSources: '订阅源',
     modelManagement: '模型管理',
     parserEngine: '解析引擎',
     versionInfo: '版本信息',
@@ -2152,11 +2079,7 @@ export default {
     vlmModelRequired: '请配置多模态模型',
     vlmModelSelectRequired: '已启用多模态，请选择 VLM 模型',
     continueAdd: '继续添加',
-    destinationLabel: '上传位置',
-    destinationChange: '更改上传位置',
-    destinationToRoot: '改到根目录',
-    folderUploadTitle: '文件夹「{name}」',
-    folderUploadHint: '共 {count} 个文件，将保留本地目录结构',
+
     filesAdded: '已添加 {count} 个文件',
     filesAllDuplicate: '所选文件已在列表中',
     titleManual: '在线编辑发布确认',
@@ -2177,38 +2100,7 @@ export default {
     name: '名称',
     description: '描述',
     settings: '设置',
-    folderTree: {
-      title: '目录',
-      rootRow: '根目录',
-      rootRowTip: '知识库根目录，未归入子文件夹的文档在此',
-      folderCardCount: '{count} 个文档',
-      searchingSubtree: '（含子目录）',
-      emptyFolder: '这个文件夹里还没有文档',
-      emptySearch: '没有匹配的文档',
-      collapse: '收起目录',
-      expand: '展开目录',
-      collapseFolder: '收起该文件夹',
-      expandFolder: '展开该文件夹',
-      rename: '重命名',
-      renamePlaceholder: '输入文件夹名称',
-      renameSuccess: '文件夹已重命名',
-      renameFailed: '文件夹重命名失败',
-      renameInvalid: '不能把文件夹移动到它自己的子目录下',
-    },
-    moveToFolder: {
-      action: '移动到目录',
-      newFolder: '新建子目录',
-      newFolderPlaceholder: '输入新目录名称',
-      newFolderCreate: '创建',
-      newFolderAddRoot: '在根目录下新建子目录',
-      newFolderAddUnder: '在「{folder}」下新建子目录',
-      newFolderHint: '回车创建并移动',
-      newFolderHintRoot: '将在根目录下创建',
-      newFolderHintUnder: '将在「{folder}」下创建',
-      success: '已移动 {count} 个文档',
-      failed: '移动失败',
-      duplicate: '该目录已存在',
-    },
+
     searchMessageContent: '搜索消息内容',
     uploadSuccess: '文件上传成功！',
     uploadFailed: '文件上传失败！',
@@ -2220,7 +2112,7 @@ export default {
     uploadAllSuccess: '成功上传 {count} 个文件！',
     uploadPartialSuccess: '上传完成：成功 {success} 个，失败 {fail} 个',
     uploadAllFailed: '所有文件上传失败',
-    uploadingFolder: '正在上传文件夹中的 {total} 个文件...',
+
     videosFilteredNoVLM: '已跳过 {count} 个视频文件（暂不支持视频上传）',
     unsupportedTypesHint: '部分文档类型（{types}）暂无可用解析引擎，上传后将无法解析',
     goToParserSettings: '前往配置',
@@ -2319,19 +2211,7 @@ export default {
     untitledDocument: '未命名文档',
     moreOptions: '更多操作',
     deleteDocument: '删除文档',
-    moveDocument: '移动到...',
-    moveToKnowledgeBase: '移动到知识库',
-    moveNoTargets: '没有兼容的目标知识库（需要相同类型和 Embedding 模型）',
-    moveModeReuseVectors: '复用向量（快速）',
-    moveModeReuseVectorsDesc: '直接移动分块和向量索引，适用于分片配置相同的情况',
-    moveModeReparse: '重新解析',
-    moveModeReparseDesc: '使用目标知识库的分片配置重新解析文档',
-    moveConfirm: '确认移动',
-    moveConfirmTitle: '确认移动设置',
-    moveStarted: '移动任务已提交',
-    moveFailed: '移动失败',
-    moveCompleted: '移动完成',
-    moveCompletedWithErrors: '移动完成：{success} 成功，{failed} 失败',
+
     parsingFailed: '解析失败',
     parsingInProgress: '解析中...',
     generatingSummary: '生成摘要中...',
@@ -2437,16 +2317,9 @@ export default {
     tenantTooltip: '在本空间中创建',
     tenantTooltipWithCreator: '由 {creator} 创建',
   },
-  listSpaceSidebar: {
-    all: '全部',
-    workspace: '本空间',
-    favorites: '收藏',
-    recents: '最近'
-  },
+
   countCopy: {
     "entities": "{count} 个实体",
-
-
 
     "documents": "{count} 份文档",
     "files": "{count} 个文件",

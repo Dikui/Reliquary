@@ -1,3 +1,4 @@
+DROP INDEX IF EXISTS public.idx_knowledge_bases_active_tenant;
 -- PostgreSQL baseline compacted on 2026-10-07 from migrations 000000-000098.
 -- Source: 45daf07. Existing databases must be rebuilt before applying this baseline.
 
@@ -25,8 +26,6 @@ DROP INDEX IF EXISTS public.idx_users_username;
 DROP INDEX IF EXISTS public.idx_users_tenant_id;
 DROP INDEX IF EXISTS public.idx_users_email;
 DROP INDEX IF EXISTS public.idx_users_deleted_at;
-DROP INDEX IF EXISTS public.idx_resource_favorites_tenant_type_created_at;
-DROP INDEX IF EXISTS public.idx_resource_favorites_tenant_id;
 DROP INDEX IF EXISTS public.idx_tenants_status;
 DROP INDEX IF EXISTS public.idx_tenant_api_keys_tenant;
 DROP INDEX IF EXISTS public.idx_tenant_api_keys_revoked_at;
@@ -64,7 +63,6 @@ DROP INDEX IF EXISTS public.idx_knowledges_tenant_id;
 DROP INDEX IF EXISTS public.idx_knowledges_summary_status;
 DROP INDEX IF EXISTS public.idx_knowledges_parse_status;
 DROP INDEX IF EXISTS public.idx_knowledges_kb_metadata_external_id;
-DROP INDEX IF EXISTS public.idx_knowledges_folder_path;
 DROP INDEX IF EXISTS public.idx_knowledges_enable_status;
 DROP INDEX IF EXISTS public.idx_knowledges_base_id;
 DROP INDEX IF EXISTS public.idx_knowledge_bases_tenant_id;
@@ -98,7 +96,6 @@ DROP INDEX IF EXISTS public.embeddings_embedding_idx_1024;
 ALTER TABLE IF EXISTS ONLY public.users DROP CONSTRAINT IF EXISTS users_username_key;
 ALTER TABLE IF EXISTS ONLY public.users DROP CONSTRAINT IF EXISTS users_pkey;
 ALTER TABLE IF EXISTS ONLY public.users DROP CONSTRAINT IF EXISTS users_email_key;
-ALTER TABLE IF EXISTS ONLY public.resource_favorites DROP CONSTRAINT IF EXISTS resource_favorites_pkey;
 ALTER TABLE IF EXISTS ONLY public.knowledge_processing_spans DROP CONSTRAINT IF EXISTS uq_kpspan_attempt_span;
 ALTER TABLE IF EXISTS ONLY public.tenants DROP CONSTRAINT IF EXISTS tenants_pkey;
 ALTER TABLE IF EXISTS ONLY public.tenant_api_keys DROP CONSTRAINT IF EXISTS tenant_api_keys_pkey;
@@ -129,7 +126,6 @@ ALTER TABLE IF EXISTS public.system_settings ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.knowledge_processing_spans ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.embeddings ALTER COLUMN id DROP DEFAULT;
 DROP TABLE IF EXISTS public.users;
-DROP TABLE IF EXISTS public.resource_favorites;
 DROP SEQUENCE IF EXISTS public.tenants_id_seq;
 DROP TABLE IF EXISTS public.tenants;
 DROP SEQUENCE IF EXISTS public.tenant_api_keys_id_seq;

@@ -44,6 +44,3 @@ func (s *PostgresRetrievalService) BatchIndex(ctx context.Context, embedder embe
 func (s *PostgresRetrievalService) EstimateStorageSize(ctx context.Context, embedder embedding.Embedder, indices []*types.IndexInfo) int64 {
 	return s.RetrieveEngineService.EstimateStorageSize(ctx, embedder, indices, s.Support())
 }
-func (s *PostgresRetrievalService) CopyIndices(ctx context.Context, sourceKBID, targetKBID string, kbIDs, chunkIDs map[string]string, dimension int, knowledgeType string) error {
-	return s.RetrieveEngineService.CopyIndices(ctx, sourceKBID, kbIDs, chunkIDs, targetKBID, dimension, knowledgeType)
-}

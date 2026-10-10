@@ -52,7 +52,6 @@ const (
 	// 当设置此标志时，该 Chunk 可以被推荐给用户
 	ChunkFlagRecommended ChunkFlags = 1 << 0
 	// 未来可扩展更多标志位：
-	// ChunkFlagPinned ChunkFlags = 1 << 1  // 置顶
 	// ChunkFlagHot    ChunkFlags = 1 << 2  // 热门
 )
 

@@ -21,8 +21,6 @@ type RetrievalConfig struct {
 	RerankTopK int `json:"rerank_top_k"`
 	// RerankThreshold is the minimum rerank score (-10 to 10, default: 0.2)
 	RerankThreshold float64 `json:"rerank_threshold"`
-	// RerankModelID is the ID of the rerank model to use (required for search)
-	RerankModelID string `json:"rerank_model_id"`
 
 	// RRFK is the smoothing constant of Reciprocal Rank Fusion. Larger values
 	// flatten the curve, reducing the bias towards top-1 results.

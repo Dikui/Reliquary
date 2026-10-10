@@ -38,7 +38,7 @@
 
 **[Reliquary（维娜拉）](https://weknora.weixin.qq.com)** 是一款开源的、基于大语言模型（LLM）的知识管理框架，用于个人文章收集、存储、去重与检索。
 
-框架负责文章收集、存储、去重与检索。树形文件夹、按网址收录、RSS 订阅、站点适配器、收录审核、完整访问 API Key 和模型集成共同支持个人知识管理。数据统一保存在 PostgreSQL 与本地磁盘。综合分析和报告由外部 AI 工具完成。
+框架在唯一知识库中收集、存储、去重与检索文章。文件上传、按网址收录、全局 RSS 订阅、站点适配器、收录审核、完整访问 API Key 和模型集成共同支持个人知识管理。数据统一保存在 PostgreSQL 与本地磁盘。综合分析和报告由外部 AI 工具完成。
 
 框架支持从 RSS 订阅和站点适配器自动同步知识，覆盖 PDF、Word、图片、Excel、EPUB 等十余种文档格式。生成模型使用 OpenAI 兼容接口、Anthropic 原生接口或本地 Ollama。服务商预设包括 OpenAI、Anthropic、DeepSeek、阿里云百炼、智谱、月之暗面、硅基流动、火山方舟、OpenRouter、Google Gemini 和 Ollama，其他服务可通过通用 OpenAI 兼容选项填写地址使用。Office 文档可由 **anydoc** 在 Go 进程内解析。全流程模块化设计，大模型可灵活配置，检索统一使用 PostgreSQL，存储支持本地磁盘，支持本地与私有云部署，数据完全自主可控。模型用量继续记录在 `model_usage` 表中。
 
@@ -46,7 +46,7 @@
 
 <table>
   <tr>
-    <td width="50%" align="center"><b>📁 文件夹树与批量操作</b><br/><img src="./docs/images/kb-document-list.png" alt="知识库文件夹树与批量操作" width="100%"></td>
+    <td width="50%" align="center"><b>📄 文章列表与批量操作</b><br/><img src="./docs/images/kb-document-list.png" alt="文章列表与批量操作" width="100%"></td>
   </tr>
 </table>
 
@@ -60,11 +60,11 @@
 
 | 能力 | 详情 |
 |------|------|
-| 知识库类型 | 文档，支持文件夹导入、URL 导入和在线录入 |
-| 文件夹树 | 文件夹上传保留原始目录结构，侧栏树形浏览、重命名文件夹、把文档重新归档到其他文件夹 |
+| 唯一知识库 | 自动创建文档知识库，登录后直接进入文章页面 |
+| 知识库设置 | 模型档位、分块、解析规则、图片处理与索引在同一设置页面配置 |
 | 按批次解析配置 | 上传确认对话框或 `process_config` API 覆盖解析引擎、分块、图片多模态（VLM）、问题生成；支持 reparse 时调整配置 |
 | 批量重新解析 | 一次为多篇文档重新排队解析，可携带批次级 `process_config` |
-| 数据源导入 | RSS、Atom、JSON Feed 和站点适配器，支持增量与全量同步 |
+| 订阅源 | 在设置中管理全局 RSS、Atom、JSON Feed 和站点适配器，保留增量与全量同步、计划与日志 |
 | 文档格式 | PDF / Word / Txt / Markdown / EPUB / 图片 / CSV / Excel / PPT / JSON |
 | 检索策略 | BM25 稀疏召回 / Dense 稠密召回 / 父子分块 / pgvector HNSW 加速（1024 维）/ 多维度索引 |
 | 批量选择 | 知识库文档列表支持框选（marquee）多选，可批量重新解析和删除 |
@@ -91,7 +91,7 @@
 | 安全 | API Key 与数据源凭据 AES-256-GCM 静态加密、支持平滑密钥轮换；Redis TLS；防 SSRF HTTP 客户端（覆盖数据源、URL 导入、重定向链等）；密钥响应脱敏 |
 | 可观测性 | `model_usage` 模型用量、文档处理时间线、运行时任务队列与 Worker 池治理 |
 | 任务管理 | MQ 异步任务，分阶段独立 Worker 池治理（core / 后处理 / enrichment / maintenance + 弹性共享池）与按模型后台并发治理；版本升级自动数据库迁移 |
-| 模型管理 | 集中配置，YAML 声明式内置模型配置，知识库级别模型选择，按模型思考模式与 Embedding 维度覆盖，交互式模型调试器，WeKnora Cloud 托管模型与文档解析 |
+| 模型管理 | 唯一知识库统一配置模型档位，YAML 声明式内置模型配置，按模型思考模式与 Embedding 维度覆盖，交互式模型调试器，WeKnora Cloud 托管模型与文档解析 |
 
 ## 🧩 Chrome 插件
 

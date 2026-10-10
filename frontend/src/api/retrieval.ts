@@ -8,7 +8,6 @@ export interface RetrievalConfig {
   keyword_threshold: number
   rerank_top_k: number
   rerank_threshold: number
-  rerank_model_id: string
 }
 
 // Get tenant retrieval config via KV API

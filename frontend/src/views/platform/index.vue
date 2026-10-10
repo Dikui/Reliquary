@@ -37,7 +37,6 @@ import Settings from '@/views/settings/Settings.vue'
 import GlobalCommandPalette from '@/components/GlobalCommandPalette.vue'
 import { useCommandPaletteStore } from '@/stores/commandPalette'
 import { useResourcesStore } from '@/stores/resources'
-import { getKnowledgeBaseById } from '@/api/knowledge-base/index'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import { collectDroppedFiles } from './collectDroppedFiles'
@@ -74,12 +73,12 @@ let dragCounter = 0;
 
 // 获取当前知识库ID
 const getCurrentKbId = (): string | null => {
-    return (route.params as any)?.kbId as string || null
+    return useResourcesStore().knowledgeBase?.id || null
 }
 
 // 检查知识库初始化状态
 const checkKnowledgeBaseInitialization = async (): Promise<boolean> => {
-    const currentKbId = getCurrentKbId();
+    const currentKbId = (await useResourcesStore().fetchKnowledgeBase())?.id;
 
     if (!currentKbId) {
         MessagePlugin.error(t('knowledgeBase.missingId'));
@@ -87,8 +86,7 @@ const checkKnowledgeBaseInitialization = async (): Promise<boolean> => {
     }
 
     try {
-        const kbResponse = await getKnowledgeBaseById(currentKbId);
-        const kb = kbResponse.data;
+        const kb = await useResourcesStore().fetchKnowledgeBase();
 
         if (!kb.summary_model_id) {
             MessagePlugin.warning(t('knowledgeBase.notInitialized'));
@@ -109,7 +107,7 @@ const checkKnowledgeBaseInitialization = async (): Promise<boolean> => {
 
 // isFileDrag distinguishes an OS file drag (the only thing the global upload
 // drop zone cares about) from an in-app element drag such as the document
-// folder/page drag-and-drop. Element drags carry only "text/*" types, never
+// drag-and-drop. Element drags carry only "text/*" types, never
 // "Files", so we bail out and let the originating component handle the drop.
 const isFileDrag = (event: DragEvent): boolean => {
     const types = event.dataTransfer?.types

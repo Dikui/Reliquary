@@ -22,7 +22,6 @@ export interface ModelUsageResource {
 }
 
 export interface ModelUsageDetails {
-  model_tiers?: Array<ModelUsageResource & { scope: 'global' }>
   knowledge_bases: ModelUsageResource[]
   knowledge_base_total: number
 }
@@ -78,23 +77,11 @@ export function parseModelUsageDetails(value: unknown): ModelUsageDetails | null
   const knowledgeBases = parseResources(value.knowledge_bases)
   if (!knowledgeBases) return null
 
-  let tiers: ModelUsageDetails['model_tiers']
-  if (value.model_tiers !== undefined) {
-    const resources = parseResources(value.model_tiers)
-    if (!resources || !Array.isArray(value.model_tiers)) return null
-    tiers = []
-    for (let index = 0; index < resources.length; index++) {
-      const original = value.model_tiers[index]
-      if (!isRecord(original) || (original.scope !== 'global' && original.scope !== 'team')) return null
-      tiers.push({ ...resources[index]!, scope: original.scope === 'team' ? 'global' : original.scope })
-    }
-  }
   const details: ModelUsageDetails = {
     knowledge_bases: knowledgeBases,
     knowledge_base_total: parseTotal(value.knowledge_base_total, knowledgeBases.length),
   }
-  if (tiers) details.model_tiers = tiers
-  if (knowledgeBases.length === 0 && !tiers?.length) {
+  if (knowledgeBases.length === 0) {
     return null
   }
   return details
@@ -151,5 +138,5 @@ export function modelUsageResourceRoute(
   id: string,
   bindings: readonly string[] = [],
 ) {
-  return { path: `/platform/knowledge-bases/${encodeURIComponent(id)}` }
+  return { path: '/platform/settings', query: { section: 'knowledge', subsection: modelUsageKnowledgeBaseSection(bindings) } }
 }

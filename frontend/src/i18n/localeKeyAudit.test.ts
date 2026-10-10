@@ -121,9 +121,7 @@ const RUNTIME_TASK_TYPE_KEYS = [
   'sync',
   'batchReparse',
   'batchDelete',
-  'move',
   'indexDelete',
-  'kbDelete',
   'entityNameEmbeddingRebuild',
 ] as const
 

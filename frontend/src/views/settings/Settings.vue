@@ -78,14 +78,12 @@
 
                   <!-- 消息管理 -->
 
-
-
                   <!-- 我的记忆（个人记忆管理） -->
-
 
                   <!-- 沙箱密钥 -->
 
-
+                  <div v-if="currentSection === 'knowledge'" class="section"><KnowledgeSettings ref="knowledgeSettingsView" :initial-section="currentSubSection || undefined" /></div>
+                  <div v-if="currentSection === 'datasource'" class="section"><DataSourceSettings /></div>
                   <!-- 解析引擎 -->
                   <div v-if="currentSection === 'parser'" class="section">
                     <ParserEngineSettings />
@@ -94,7 +92,6 @@
                   <!-- 存储引擎 -->
 
                   <!-- 沙箱 -->
-
 
                   <!-- 系统信息 -->
                   <div v-if="currentSection === 'system'" class="section">
@@ -111,7 +108,6 @@
                     <RuntimeQueues />
                   </div>
 
-
                   <!-- 用户信息（账户基础信息：ID / 用户名 / 邮箱 / 注册时间）。
                      用户的基本信息不该跟 owner 权限绑定。 -->
                   <div v-if="currentSection === 'userprofile'" class="section">
@@ -122,7 +118,6 @@
                   <div v-if="currentSection === 'tenant'" class="section">
                     <TenantInfo ref="tenantInfoView" />
                   </div>
-
 
                   <!-- 发布集成 -->
                   <div v-if="isIntegrationSection(currentSection)" class="section">
@@ -153,6 +148,8 @@ import GeneralSettings from './GeneralSettings.vue'
 import ModelSettings from './ModelSettings.vue'
 import OllamaSettings from './OllamaSettings.vue'
 import ParserEngineSettings from './ParserEngineSettings.vue'
+import KnowledgeSettings from './KnowledgeSettings.vue'
+import DataSourceSettings from '@/views/knowledge/settings/DataSourceSettings.vue'
 import SystemSettings from '@/views/system/SystemSettings.vue'
 import RuntimeQueues from '@/views/system/RuntimeQueues.vue'
 import IntegrationSettingsSection from '@/views/integrations/IntegrationSettingsSection.vue'
@@ -179,10 +176,11 @@ const uiStore = useUIStore()
 const deploymentCapabilities = useDeploymentCapabilitiesStore()
 const { t } = useI18n()
 
+const knowledgeSettingsView = ref<InstanceType<typeof KnowledgeSettings>>()
 const tenantInfoView = ref<InstanceType<typeof TenantInfo>>()
 const canLeaveCurrentSection = () => currentSection.value === 'tenant'
   ? tenantInfoView.value?.confirmLeave() ?? Promise.resolve(true)
-  : Promise.resolve(true)
+  : currentSection.value === 'knowledge' ? knowledgeSettingsView.value?.confirmLeave() ?? Promise.resolve(true) : Promise.resolve(true)
 const currentSection = ref<string>('general')
 const currentSubSection = ref<string>('')
 const expandedMenus = ref<string[]>([])
@@ -226,7 +224,6 @@ const isSectionSupported = (key: string): boolean => {
   return deploymentCapabilities.isSupported(SETTINGS_SECTION_CAPABILITY[key])
 }
 
-
 const navItems = computed(() => {
   const integrationItems: NavItem[] = INTEGRATION_PREVIEW_ITEMS.map((item) => ({
     key: integrationSectionKey(item.key),
@@ -238,6 +235,8 @@ const navItems = computed(() => {
     { key: 'general', icon: 'setting', label: t('general.title') },
     { key: 'ollama', icon: 'server', label: 'Ollama' },
     { key: 'models', icon: 'control-platform', label: t('settings.modelManagement') },
+    { key: 'knowledge', icon: 'file', label: t('settings.knowledgeSettings') },
+    { key: 'datasource', icon: 'rss', label: t('settings.dataSources') },
     { key: 'parser', icon: 'file-search', label: t('settings.parserEngine') },
     { key: 'system', icon: 'info-circle', label: t('settings.versionInfo') },
     { key: 'system-global', icon: 'server', label: t('settings.system') },
@@ -284,7 +283,7 @@ const navGroups = computed<NavGroup[]>(() => {
       key: 'data_extensions',
       label: t('settings.navGroups.dataExtensions'),
       items: pickItems([
-        'parser',
+        'knowledge', 'datasource', 'parser',
       ]),
     },
     {
@@ -365,7 +364,7 @@ const handleClose = async () => {
   if (route.path === '/platform/settings') {
     const sec = route.query.section
     if (!router.options.history.state.back || sec === 'system-global' || sec === 'runtime-queues') {
-      router.push('/platform/knowledge-bases')
+      router.push('/platform/knowledge')
     } else {
       router.back()
     }
@@ -399,11 +398,10 @@ watch(() => uiStore.settingsInitialSection, (section) => {
         }, 300)
       }
     } else {
-      currentSubSection.value = ''
+      currentSubSection.value = uiStore.settingsInitialSubSection || ''
     }
   }
 }, { immediate: true })
-
 
 watch(
   () => [visible.value, route.path, route.query.section, deploymentCapabilities.loaded] as const,

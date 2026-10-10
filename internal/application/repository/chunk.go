@@ -437,13 +437,6 @@ func (r *chunkRepository) DeleteByKnowledgeList(ctx context.Context, tenantID ui
 	).Delete(&types.Chunk{}).Error
 }
 
-// MoveChunksByKnowledgeID updates knowledge_base_id for all chunks of a knowledge item
-func (r *chunkRepository) MoveChunksByKnowledgeID(ctx context.Context, tenantID uint64, knowledgeID string, targetKBID string) error {
-	return r.db.WithContext(ctx).Model(&types.Chunk{}).
-		Where("tenant_id = ? AND knowledge_id = ?", tenantID, knowledgeID).
-		Update("knowledge_base_id", targetKBID).Error
-}
-
 // CountChunksByKnowledgeBaseID counts the number of chunks in a knowledge base
 func (r *chunkRepository) CountChunksByKnowledgeBaseID(
 	ctx context.Context,

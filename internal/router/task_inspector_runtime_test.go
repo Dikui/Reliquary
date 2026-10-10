@@ -150,22 +150,20 @@ func TestProjectRuntimeTaskActionsRespectSingleTeamBoundary(t *testing.T) {
 func TestProjectRuntimeTaskUsesAllowListedBatchMetadata(t *testing.T) {
 	payload := []byte(`{
 		"tenant_id":9,
-		"task_id":"move-1",
-		"source_kb_id":"source-kb",
-		"target_kb_id":"target-kb",
+		"task_id":"reparse-1",
+		"knowledge_base_id":"kb",
 		"knowledge_ids":["a","b"],
 		"created_at":1700000000,
 		"content":"must-not-be-projected"
 	}`)
 	info, err := projectRuntimeTask(&asynq.TaskInfo{
-		ID: "task-move", Queue: types.QueueMaintenance, Type: types.TypeKnowledgeMove,
+		ID: "task-reparse", Queue: types.QueueMaintenance, Type: types.TypeKnowledgeListReparse,
 		Payload: payload, State: asynq.TaskStatePending,
 	}, runtimeWorkerMetadata{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.TaskID != "move-1" || info.SourceKBID != "source-kb" ||
-		info.TargetKBID != "target-kb" || info.KnowledgeCount != 2 || info.EnqueuedAt == nil {
+	if info.TaskID != "reparse-1" || info.KnowledgeBaseID != "kb" || info.KnowledgeCount != 2 || info.EnqueuedAt == nil {
 		t.Fatalf("batch projection mismatch: %+v", info)
 	}
 	if len(info.AllowedActions) != 0 {

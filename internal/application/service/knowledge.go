@@ -20,7 +20,6 @@ import (
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
-	secutils "reliquary/internal/utils"
 )
 
 // Error definitions for knowledge service operations
@@ -451,95 +450,6 @@ func (s *knowledgeService) ListPagedKnowledgeByKnowledgeBaseID(ctx context.Conte
 	return types.NewPageResult(total, page, knowledges), nil
 }
 
-// ListKnowledgeFolderTree returns the folder hierarchy of a knowledge base with
-// per-folder document counts, derived from the folder_path stored on each
-// knowledge entry.
-func (s *knowledgeService) ListKnowledgeFolderTree(ctx context.Context,
-	kbID string,
-) (*types.KnowledgeFolderTree, error) {
-	counts, err := s.repo.ListKnowledgeFolderCounts(ctx,
-		ctx.Value(types.TenantIDContextKey).(uint64), kbID)
-	if err != nil {
-		return nil, err
-	}
-	return types.BuildKnowledgeFolderTree(counts), nil
-}
-
-// MoveKnowledgeToFolder re-files knowledge entries under folderPath. Since
-// folders are derived from the stored paths, a folder that does not exist yet is
-// created by this call; a folder whose last entry moves away disappears.
-func (s *knowledgeService) MoveKnowledgeToFolder(ctx context.Context,
-	kbID string, ids []string, folderPath string,
-) (int64, error) {
-	if len(ids) == 0 {
-		return 0, werrors.NewBadRequestError("knowledge_ids cannot be empty")
-	}
-	normalized, err := normalizeTargetFolderPath(ctx, folderPath)
-	if err != nil {
-		return 0, err
-	}
-	tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
-	affected, err := s.repo.UpdateKnowledgeFolderPath(ctx, tenantID, kbID, ids, normalized)
-	if err != nil {
-		logger.Errorf(ctx, "Failed to move knowledge to folder %q: %v", normalized, err)
-		return 0, err
-	}
-	logger.Infof(ctx, "Moved %d knowledge entries to folder %q in kb %s", affected, normalized, kbID)
-	return affected, nil
-}
-
-// RenameKnowledgeFolder moves a folder and its whole subtree to a new path.
-// Renaming onto an existing folder merges them, which is the same outcome the
-// user would get by moving the documents one by one.
-func (s *knowledgeService) RenameKnowledgeFolder(ctx context.Context,
-	kbID string, from string, to string,
-) (int64, error) {
-	source := types.NormalizeKnowledgeFolderPath(from)
-	if source == "" {
-		return 0, werrors.NewBadRequestError("源文件夹路径不能为空")
-	}
-	target, err := normalizeTargetFolderPath(ctx, to)
-	if err != nil {
-		return 0, err
-	}
-	if target == "" {
-		return 0, werrors.NewBadRequestError("目标文件夹路径不能为空")
-	}
-	if target == source {
-		return 0, nil
-	}
-	// Moving a folder inside itself would make its own subtree unreachable.
-	if strings.HasPrefix(target, source+"/") {
-		return 0, werrors.NewBadRequestError("不能将文件夹移动到它自己的子目录下")
-	}
-
-	tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
-	affected, err := s.repo.RenameKnowledgeFolderPath(ctx, tenantID, kbID, source, target)
-	if err != nil {
-		logger.Errorf(ctx, "Failed to rename folder %q to %q: %v", source, target, err)
-		return 0, err
-	}
-	logger.Infof(ctx, "Renamed folder %q to %q in kb %s, %d entries affected",
-		source, target, kbID, affected)
-	return affected, nil
-}
-
-// normalizeTargetFolderPath canonicalizes a caller-supplied destination folder
-// and applies the same input validation as the upload path, since the value ends
-// up rendered as sidebar tree labels.
-func normalizeTargetFolderPath(ctx context.Context, folderPath string) (string, error) {
-	trimmed := strings.TrimSpace(folderPath)
-	if trimmed == "" {
-		return "", nil
-	}
-	safe, valid := secutils.ValidateInput(trimmed)
-	if !valid {
-		logger.Errorf(ctx, "Invalid folder path: %s", secutils.SanitizeForLog(trimmed))
-		return "", werrors.NewValidationError("文件夹路径包含非法字符")
-	}
-	return types.NormalizeKnowledgeFolderPath(safe), nil
-}
-
 // GetKnowledgeFile retrieves the physical file associated with a knowledge entry
 func (s *knowledgeService) GetKnowledgeFile(ctx context.Context, id string) (io.ReadCloser, string, error) {
 	// Get knowledge record
@@ -694,27 +604,9 @@ func (s *knowledgeService) SearchKnowledge(ctx context.Context, keyword string, 
 		return nil, false, 0, werrors.NewUnauthorizedError("Workspace ID not found in context")
 	}
 
-	scopes := make([]types.KnowledgeSearchScope, 0)
-
-	// Own tenant: document-type knowledge bases
-	ownKBs, err := s.kbService.ListKnowledgeBases(ctx)
-	if err == nil {
-		for _, kb := range ownKBs {
-			if kb != nil && kb.Type == types.KnowledgeBaseTypeDocument {
-				scopes = append(scopes, types.KnowledgeSearchScope{TenantID: tenantID, KBID: kb.ID})
-			}
-		}
+	kb, err := s.kbService.GetKnowledgeBase(ctx)
+	if err != nil {
+		return nil, false, 0, err
 	}
-
-	if len(scopes) == 0 {
-		return nil, false, 0, nil
-	}
-	return s.repo.SearchKnowledgeInScopes(ctx, scopes, keyword, offset, limit, fileTypes)
-}
-
-func (s *knowledgeService) SearchKnowledgeForScopes(ctx context.Context, scopes []types.KnowledgeSearchScope, keyword string, offset, limit int, fileTypes []string) ([]*types.Knowledge, bool, int64, error) {
-	if len(scopes) == 0 {
-		return nil, false, 0, nil
-	}
-	return s.repo.SearchKnowledgeInScopes(ctx, scopes, keyword, offset, limit, fileTypes)
+	return s.repo.SearchKnowledgeInScopes(ctx, []types.KnowledgeSearchScope{{TenantID: tenantID, KBID: kb.ID}}, keyword, offset, limit, fileTypes)
 }

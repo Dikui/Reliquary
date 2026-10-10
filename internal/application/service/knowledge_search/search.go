@@ -380,7 +380,6 @@ func (p *SearchStage) searchByTargets(
 					params := types.SearchParams{
 						QueryText:             queryText,
 						QueryEmbedding:        queryEmbedding,
-						KnowledgeBaseIDs:      fullKBIDs,
 						VectorThreshold:       state.VectorThreshold,
 						KeywordThreshold:      state.KeywordThreshold,
 						MatchCount:            state.EmbeddingTopK,

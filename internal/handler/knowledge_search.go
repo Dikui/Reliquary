@@ -20,10 +20,8 @@ func NewKnowledgeSearchHandler(search interfaces.KnowledgeSearchService, files i
 }
 
 type SearchKnowledgeRequest struct {
-	Query            string   `json:"query" binding:"required"`
-	KnowledgeBaseID  string   `json:"knowledge_base_id"`
-	KnowledgeBaseIDs []string `json:"knowledge_base_ids"`
-	KnowledgeIDs     []string `json:"knowledge_ids"`
+	Query        string   `json:"query" binding:"required"`
+	KnowledgeIDs []string `json:"knowledge_ids"`
 }
 
 func (h *KnowledgeSearchHandler) SearchKnowledge(c *gin.Context) {
@@ -41,27 +39,15 @@ func (h *KnowledgeSearchHandler) SearchKnowledge(c *gin.Context) {
 		}
 		return
 	}
-	if request.KnowledgeBaseID != "" {
-		found := false
-		for _, id := range request.KnowledgeBaseIDs {
-			if id == request.KnowledgeBaseID {
-				found = true
-				break
-			}
-		}
-		if !found {
-			request.KnowledgeBaseIDs = append(request.KnowledgeBaseIDs, request.KnowledgeBaseID)
-		}
-	}
-	if len(request.KnowledgeBaseIDs) == 0 && len(request.KnowledgeIDs) == 0 {
-		c.Error(errors.NewBadRequestError("At least one knowledge_base_id, knowledge_base_ids, or knowledge_ids must be provided"))
-		return
-	}
 	ctx := c.Request.Context()
-	results, err := h.service.SearchKnowledge(ctx, request.KnowledgeBaseIDs, request.KnowledgeIDs, request.Query)
+	results, err := h.service.SearchKnowledge(ctx, request.KnowledgeIDs, request.Query)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, nil)
-		c.Error(errors.NewInternalServerError(err.Error()))
+		if appErr, ok := errors.IsAppError(err); ok {
+			c.Error(appErr)
+		} else {
+			c.Error(errors.NewInternalServerError(err.Error()))
+		}
 		return
 	}
 	rewriter := storageurl.NewRequestRewriter(ctx, mode, h.fileService)

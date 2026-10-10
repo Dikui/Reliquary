@@ -1,7 +1,7 @@
 export default {
   menu: {
     batchManage: 'Batch manage',
-  "knowledgeBase": "Knowledge bases",
+  "knowledgeBase": "Knowledge Base",
   "settings": "System settings",
   "logout": "Logout",
   "search": "Search",
@@ -10,18 +10,18 @@ export default {
   "logoutSuccess": "Logged out successfully"
 },
   navigation: {
-    removedFeature: 'This feature has been removed. You have been returned to the knowledge base list.',
+    removedFeature: 'This feature has been removed. You have been returned to the articles page.',
     pageNotFound: 'Page not found',
-    pageNotFoundDescription: 'Check the page address or return to your knowledge bases.',
-    returnToKnowledgeBases: 'Return to knowledge bases',
+    pageNotFoundDescription: 'Check the page address or return to the articles page.',
+    returnToKnowledge: 'Return to articles',
   },
 
   modelTiers: {
-  "configureGlobal": "Configure global defaults",
+  "configure": "Configure model tiers",
   "title": "Model tiers",
   "scopeHint": {
-    "global": "Set global defaults. Knowledge bases can override each tier. Clear a tier to use existing defaults.",
-    "knowledge_base": "Override global models. Clear a tier to inherit global and existing defaults."
+
+    "knowledge_base": "All articles use the model tiers saved here."
   },
   "names": {
     "light": "Light",
@@ -38,14 +38,15 @@ export default {
     "entity_resolution": "Determine whether entity candidates belong to existing entities"
   },
   "sources": {
-    "global": "Global default",
-    "knowledge_base": "Knowledge base override",
+    "generation": "Generation tier",
+
+    "knowledge_base": "Knowledge settings",
     "legacy": "Existing model configuration",
     "default": "System default",
     "unconfigured": "Unconfigured"
   },
-  "inherit": "Inherit parent configuration",
-  "useDefault": "Use existing defaults",
+
+  "useDefault": "Choose a model",
   "effective": "Current model: {model} ({source})",
   "unconfigured": "No model configured",
   "explicitChoice": "Summaries and retrieval questions use the generation model tier.",
@@ -111,12 +112,7 @@ export default {
     "entities": "Entities",
     "merges": "Merge suggestions"
   },
-  "scope": {
-    "label": "Query scope",
-    "knowledge_base": "Current knowledge base",
-    "all": "All knowledge bases",
-    "detailHint": "Entity profiles are shared across the space. Articles below include mentions from every knowledge base."
-  },
+
   "sourceTime": {
     "excluded": "Source excluded because publication time is missing: {count} | Sources excluded because publication time is missing: {count}",
     "missing": "Publication time missing",
@@ -182,12 +178,7 @@ export default {
     "mergeSaved": "Entities merged"
   }
 },
-  listSpaceSidebar: {
-    all: 'All',
-    workspace: 'Workspace',
-    favorites: 'Starred',
-    recents: 'Recent'
-  },
+
   resourceOrigin: {
     mine: 'Mine',
     mineTooltip: 'Created by you',
@@ -223,38 +214,7 @@ export default {
     name: 'Name',
     description: 'Description',
     settings: 'Settings',
-    folderTree: {
-      title: 'Folders',
-      rootRow: 'Root',
-      rootRowTip: 'Knowledge base root; documents not in a subfolder live here',
-      folderCardCount: '{count} document | {count} documents',
-      searchingSubtree: '(including sub-folders)',
-      emptyFolder: 'This folder has no documents yet',
-      emptySearch: 'No matching documents',
-      collapse: 'Collapse folders',
-      expand: 'Expand folders',
-      collapseFolder: 'Collapse this folder',
-      expandFolder: 'Expand this folder',
-      rename: 'Rename',
-      renamePlaceholder: 'Folder name',
-      renameSuccess: 'Folder renamed',
-      renameFailed: 'Could not rename the folder',
-      renameInvalid: 'A folder cannot be moved inside itself',
-    },
-    moveToFolder: {
-      action: 'Move to folder',
-      newFolder: 'New sub-folder',
-      newFolderPlaceholder: 'New folder name',
-      newFolderCreate: 'Create',
-      newFolderAddRoot: 'New sub-folder under root',
-      newFolderAddUnder: 'New sub-folder under “{folder}”',
-      newFolderHint: 'Press Enter to create and move',
-      newFolderHintRoot: 'Will be created under root',
-      newFolderHintUnder: 'Will be created under “{folder}”',
-      success: 'Moved {count} document | Moved {count} documents',
-      failed: 'Could not move the documents',
-      duplicate: 'That folder already exists',
-    },
+
     searchMessageContent: 'Search message content',
     uploadSuccess: 'File uploaded successfully!',
     uploadFailed: 'File upload failed!',
@@ -266,7 +226,7 @@ export default {
     uploadAllSuccess: 'Successfully uploaded {count} file! | Successfully uploaded {count} files!',
     uploadPartialSuccess: 'Upload completed: {success} succeeded, {fail} failed',
     uploadAllFailed: 'All files failed to upload',
-    uploadingFolder: 'Uploading {total} file from folder... | Uploading {total} files from folder...',
+
     videosFilteredNoVLM: 'Skipped {count} video file (video upload is not supported) | Skipped {count} video files (video upload is not supported)',
     unsupportedTypesHint: 'Some document types ({types}) have no available parser engine and cannot be processed',
     goToParserSettings: 'Configure',
@@ -365,19 +325,7 @@ export default {
     untitledDocument: 'Untitled Document',
     moreOptions: 'More actions',
     deleteDocument: 'Delete Document',
-    moveDocument: 'Move to...',
-    moveToKnowledgeBase: 'Move to Knowledge Base',
-    moveNoTargets: 'No compatible knowledge bases found (same type and embedding model required)',
-    moveModeReuseVectors: 'Reuse Vectors (Fast)',
-    moveModeReuseVectorsDesc: 'Directly move chunks and vector indices. Use when chunking config is the same.',
-    moveModeReparse: 'Re-parse',
-    moveModeReparseDesc: 'Re-parse documents using the target knowledge base\'s chunking config.',
-    moveConfirm: 'Confirm Move',
-    moveConfirmTitle: 'Confirm move settings',
-    moveStarted: 'Move task submitted',
-    moveFailed: 'Move failed',
-    moveCompleted: 'Move completed',
-    moveCompletedWithErrors: 'Move completed: {success} succeeded, {failed} failed',
+
     parsingFailed: 'Parsing failed',
     parsingInProgress: 'Parsing...',
     generatingSummary: 'Generating summary...',
@@ -483,11 +431,7 @@ export default {
       description: 'Useful for web-print, scanned, or image-heavy PDFs. Every page will be rendered as an image and processed via OCR/VLM. May increase processing time and model costs.'
     },
     continueAdd: 'Add more',
-    destinationLabel: 'Upload location',
-    destinationChange: 'Change upload location',
-    destinationToRoot: 'Use root',
-    folderUploadTitle: 'Folder “{name}”',
-    folderUploadHint: '{count} file; the local folder structure will be kept | {count} files; the local folder structure will be kept',
+
     filesAdded: 'Added {count} file | Added {count} files',
     filesAllDuplicate: 'Selected files are already in the list',
     titleManual: 'Confirm online publish',
@@ -652,6 +596,8 @@ export default {
     }
   },
   settings: {
+    knowledgeSettings: 'Knowledge settings',
+    dataSources: 'Subscriptions',
     modelManagement: 'Model Management',
     parserEngine: 'Parser Engine',
     versionInfo: 'Version Info',
@@ -722,9 +668,7 @@ export default {
     keywordThresholdLabel: 'Keyword Match Threshold',
     rerankTopKLabel: 'Rerank Top K',
     rerankThresholdLabel: 'Rerank Threshold',
-    rerankModelLabel: 'Rerank Model',
-    rerankModelDescription: 'Select the model for reranking search results',
-    rerankModelRequired: 'Please select a Rerank model. Search requires this model to rerank results.',
+
     toasts: {
       saveSuccess: 'Retrieval configuration saved',
       saveFailed: 'Failed to save configuration: {message}'
@@ -780,8 +724,7 @@ export default {
     errors: {
       parseUserFailed: 'Failed to parse user information',
       parseTenantFailed: 'Failed to parse workspace information',
-      parseKnowledgeBasesFailed: 'Failed to parse knowledge base list',
-      parseCurrentKnowledgeBaseFailed: 'Failed to parse current knowledge base'
+
     }
   },
   common: {
@@ -903,16 +846,14 @@ export default {
       basic: 'Basic Info',
       content: 'Content'
     },
-    labels: {
-      currentKnowledgeBase: 'Current knowledge base'
-    },
+
     defaultTitlePrefix: 'New Document',
     error: {
       fetchDetailFailed: 'Failed to fetch knowledge details',
       saveFailed: 'Save failed, please try again later'
     },
     warning: {
-      selectKnowledgeBase: 'Please select a target knowledge base',
+      knowledgeUnavailable: 'Could not load the knowledge base. Close the editor and try again.',
       enterTitle: 'Please enter a knowledge title',
       enterContent: 'Please enter knowledge content',
       contentTooShort: 'Content is too short. Please add more information before publishing'
@@ -922,13 +863,12 @@ export default {
       published: 'Message submitted and under review'
     },
     form: {
-      knowledgeBaseLabel: 'Target knowledge base',
-      knowledgeBasePlaceholder: 'Select knowledge base',
+
       titleLabel: 'Knowledge title',
       titlePlaceholder: 'Enter title',
       contentPlaceholder: 'Supports Markdown. Use # headings, lists, code blocks, etc.'
     },
-    noDocumentKnowledgeBases: 'No document-type knowledge bases available. Please create one first',
+
     status: {
       draftTag: 'Status: Draft',
       publishedTag: 'Status: Published',
@@ -944,58 +884,9 @@ export default {
       publish: 'Publish'
     }
   },
-  knowledgeList: {
-    create: 'Create Knowledge Base',
-    subtitle: "Manage and organize document knowledge bases",
-    uninitializedBanner: 'Some knowledge bases are not initialized. Configure model information in settings before adding documents.',
-    empty: {
-      title: 'No knowledge bases yet',
-      description: 'Click "Create Knowledge Base" in the top-right corner to add your first one.',
-      favoritesTitle: 'No favorites yet',
-      favoritesDescription: 'Star a knowledge base from its card to add it here',
-      recentsTitle: 'Nothing here yet',
-      recentsDescription: 'Knowledge bases you recently opened will show up here'
-    },
-    delete: {
-      confirmTitle: 'Delete Confirmation',
-      confirmMessage: 'Are you sure you want to delete the knowledge base "{name}"? This action cannot be undone.',
-      confirmButton: 'Delete'
-    },
-    menu: {
-    batchManage: 'Batch manage',
-      viewDetails: 'View Details',
-      duplicate: 'Duplicate'
-    },
-    pin: {
-      pin: 'Pin to Top',
-      unpin: 'Unpin',
-      pinSuccess: 'Pinned',
-      unpinSuccess: 'Unpinned',
-      failed: 'Operation failed'
-    },
-    messages: {
-      deleted: 'Knowledge base deleted',
-      deleteFailed: 'Failed to delete knowledge base',
-      duplicateSuccess: 'Knowledge base duplicate created (content not included)',
-      duplicateFailed: 'Failed to create knowledge base duplicate'
-    },
-    features: {
-      multimodal: 'Multimodal',
-      questionGeneration: 'Question Generation',
-    },
-    uploadProgress: {
-      uploadingTitle: 'Uploading folder documents to "{name}"',
-      detail: '{completed}/{total} file finished | {completed}/{total} files finished',
-      keepPageOpen: 'Please keep this page open while files upload.',
-      completedTitle: 'Upload finished for "{name}"',
-      completedDetail: 'The {total} file uploaded. Refreshing list to show parsing status... | All {total} files uploaded. Refreshing list to show parsing status...',
-      refreshing: 'Refreshing list to show parsing status...',
-      errorTip: 'Some files failed to upload. Please check the notifications.',
-      unknownKb: 'Knowledge Base {id}'
-    }
-  },
+
   knowledgeEditor: {
-    titleCreate: 'Create Knowledge Base',
+
     titleEdit: 'Knowledge Base Settings',
     navGroups: {
       basic: 'Basics',
@@ -1017,11 +908,7 @@ export default {
     basic: {
       title: 'Basic Information',
       description: 'Configure the knowledge base name and description',
-      kbId: 'Knowledge Base ID',
-      kbIdDesc: 'Use this ID to target the knowledge base in API integrations',
-      typeLabel: 'Knowledge Base Type',
-      typeDocument: 'Document-based',
-      typeDescription: "Document knowledge bases support file parsing and chunking.",
+
       nameLabel: 'Knowledge Base Name',
       namePlaceholder: 'Enter knowledge base name',
       descriptionLabel: 'Knowledge Base Description',
@@ -1035,21 +922,14 @@ export default {
       atLeastOne: 'At least one indexing strategy must be enabled',
       embeddingRequired: 'RAG search requires an Embedding model',
       lockedTip: 'The indexing strategy cannot be changed once the knowledge base contains content. Please clear the knowledge base first.',
-      rebuildConfirmTitle: 'Rebuild Index',
-      rebuildConfirmBody: 'Indexing strategy has changed. Re-process {count} existing document? This may take some time. | Indexing strategy has changed. Re-process {count} existing documents? This may take some time.',
-      rebuildSuccess: 'Rebuild task submitted for {count} document | Rebuild task submitted for {count} documents',
-      rebuildSkip: 'You can manually trigger a rebuild later from Data Sources'
+
     },
     buttons: {
-      create: 'Create Knowledge Base',
+
       save: 'Save Configuration',
-      saveAndClose: 'Save and Close',
+
     },
-    postCreateHint: {
-      title: 'Created successfully',
-      footer: "Continue configuring settings and data sources, then click Save and close.",
-      followUpDesc: "Configure data sources from the left sidebar.",
-    },
+
     messages: {
       loadModelsFailed: 'Failed to load model list',
       loadDataFailed: 'Failed to load knowledge base data',
@@ -1057,8 +937,7 @@ export default {
       nameRequired: 'Please enter the knowledge base name',
       summaryRequired: 'Please select a summary model',
       multimodalInvalid: 'Multimodal configuration validation failed',
-      createSuccess: 'Knowledge base created successfully',
-      createFailed: 'Failed to create knowledge base',
+
       missingId: 'Knowledge base ID is missing',
       buildDataFailed: 'Failed to construct submission data',
       updateSuccess: 'Configuration saved successfully',
@@ -1489,9 +1368,9 @@ export default {
             sync: 'Data-source sync',
             batchReparse: 'Batch reparse',
             batchDelete: 'Batch delete',
-            move: 'Document move',
+
             indexDelete: 'Index deletion',
-            kbDelete: 'Knowledge-base deletion',
+
             entityNameEmbeddingRebuild: 'Entity name embedding rebuild',
           }
         },
@@ -1917,7 +1796,7 @@ export default {
     last30Days: 'Last 30 Days',
     lastYear: 'Last Year',
     earlier: 'Earlier',
-    pinned: 'Pinned'
+
   },
   upload: {
     uploadDocument: 'Upload Document',
@@ -1993,7 +1872,7 @@ export default {
     usage: {
       title: 'Model cannot be deleted',
       description: 'Model "{name}" is still referenced by the following settings. Open each configuration and choose another model before deleting it.',
-      knowledgeBases: 'Knowledge base ({count}) | Knowledge bases ({count})',
+      knowledgeSettings: 'Knowledge settings',
       openConfiguration: 'Open settings',
       truncated: 'Showing the first {shown} of {total}',
       bindings: {
@@ -2117,13 +1996,10 @@ export default {
     placeholder: "Search knowledge bases and files…",
     clearRecent: 'Clear',
     retrieval: 'Retrieval settings',
-    scope: {
-      placeholder: 'Search within this knowledge base…',
-      remove: 'Remove scope (Backspace)'
-    },
+
     group: {
       chunks: 'Files',
-      kbs: 'Knowledge bases',
+
       commands: 'Commands',
       recent: 'Recent',
       quickActions: 'Quick actions'
@@ -2133,7 +2009,7 @@ export default {
       keyword: 'Keyword'
     },
     quick: {
-      knowledgeBases: 'Open knowledge bases',
+      knowledge: 'Open knowledge bases',
       settings: 'Open settings',
     },
     empty: {
@@ -2244,7 +2120,7 @@ export default {
     connectionFailed: 'Connection failed',
     isRequired: 'is required',
     credentialsLabel: 'credentials',
-    resourceHint: 'Select the spaces or folders to sync',
+
     untitled: 'Untitled',
     resourceLoadFailed: 'Failed to load resources',
     retryLoadResources: 'Retry',
@@ -2344,8 +2220,7 @@ export default {
       editApiKey: 'Edit API key',
       updateApiKeySuccess: 'API key saved',
       updateApiKeyFailed: 'Could not save the API key',
-      playgroundKnowledgeBase: 'Knowledge base',
-      playgroundKnowledgeBasePlaceholder: 'Select a knowledge base to query',
+
       playgroundNeedKnowledgeBase: 'Select a knowledge base before running the query.',
       playgroundNoKnowledgeBases: 'Create a knowledge base and add knowledge before running a query.',
       playgroundLoadKnowledgeBasesFailed: 'Could not load knowledge bases. Close and reopen to retry.',
@@ -2445,8 +2320,6 @@ export default {
   },
   countCopy: {
     "entities": "{count} entity | {count} entities",
-
-
 
     "documents": "{count} document | {count} documents",
     "files": "{count} file | {count} files",

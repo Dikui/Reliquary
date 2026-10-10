@@ -35,7 +35,7 @@ Go 主模块为 `reliquary`；
 
 [**Reliquary**](https://weknora.weixin.qq.com) is an open-source, LLM-powered knowledge framework built for personal document collection, storage, and retrieval.
 
-Reliquary collects, stores, deduplicates, and retrieves articles. Folder import, URL import, RSS feeds, site adapters, intake review, full-access API keys and model integrations support personal knowledge management. Data remains in PostgreSQL and local file storage. Analysis and report writing use external AI tools.
+Reliquary collects, stores, deduplicates, and retrieves articles in one knowledge base. File uploads, URL import, global RSS subscriptions, site adapters, intake review, full-access API keys and model integrations support personal knowledge management. Data remains in PostgreSQL and local file storage. Analysis and report writing use external AI tools.
 
 The framework supports auto-syncing RSS feeds and site adapters, handles 10+ document formats including PDF, Word, images, Excel and EPUB. Generation models use OpenAI-compatible APIs, the native Anthropic API, or local Ollama. Provider presets cover OpenAI, Anthropic, DeepSeek, Alibaba Cloud, Zhipu, Moonshot, SiliconFlow, Volcengine, OpenRouter, Google Gemini and Ollama, plus a generic OpenAI-compatible option for other services. Office files can be parsed in-process with **anydoc**. Its fully modular design supports configurable LLMs, PostgreSQL retrieval, and local file storage, with support for local and private cloud deployment ensuring complete data sovereignty. Model usage is recorded in the `model_usage` table.
 
@@ -44,7 +44,7 @@ The framework supports auto-syncing RSS feeds and site adapters, handles 10+ doc
 
 <table>
   <tr>
-    <td width="50%" align="center"><b>📁 Folder Tree & Batch Operations</b><br/><img src="./docs/images/kb-document-list.png" alt="Knowledge Base Folder Tree and Batch Operations" width="100%"></td>
+    <td width="50%" align="center"><b>📄 Articles & Batch Operations</b><br/><img src="./docs/images/kb-document-list.png" alt="Article List and Batch Operations" width="100%"></td>
   </tr>
 </table>
 
@@ -58,11 +58,11 @@ Files, URLs and RSS articles pass through intake review, parsing and chunking. S
 
 | Capability | Details |
 |------------|---------|
-| Knowledge Base Types | Documents with folder import, URL import, and online entry |
-| Folder Tree | Folder uploads keep their original directory structure, with a sidebar tree for browsing, folder rename, and re-filing documents into another folder |
+| Knowledge Base | One automatically created document knowledge base; sign in directly to the article page |
+| Knowledge Settings | Model tiers, chunking, parser rules, image processing and indexing in one settings page |
 | Per-Upload Process Config | Override parser, chunking, multimodal images (VLM), and question generation per upload batch via upload-confirm dialog or `process_config` API; reparse with new settings |
 | Batch Reparse | Re-queue parsing for multiple documents at once with optional per-batch `process_config` |
-| Data Source Import | RSS, Atom, JSON Feed and site adapters with incremental and full sync |
+| Subscriptions | Global RSS, Atom, JSON Feed and site adapters in Settings, with incremental and full sync, schedules and logs |
 | Document Formats | PDF / Word / Txt / Markdown / EPUB / Images / CSV / Excel / PPT / JSON |
 | Retrieval Strategies | BM25 sparse / Dense retrieval / parent-child chunking / HNSW-accelerated pgvector (1024-dim) / multi-dimensional indexing |
 | Batch Selection | Marquee drag-select multiple documents in the KB list for batch reparse and deletion |
@@ -88,7 +88,7 @@ Files, URLs and RSS articles pass through intake review, parsing and chunking. S
 | Security | AES-256-GCM at-rest encryption for API keys and data-source credentials with graceful key rotation; Redis TLS; SSRF-safe HTTP client (data sources, URL import, redirect chains); secret redaction in responses |
 | Observability | Model usage in `model_usage`, document processing timelines, runtime task queues and worker governance |
 | Task Management | MQ async tasks with per-stage worker-pool governance (core / post-process / enrichment / maintenance + elastic shared pool) and per-model background concurrency governors; automatic database migration on version upgrade |
-| Model Management | Centralized config, declarative built-in models via YAML, per-knowledge-base model selection, per-model thinking-mode and embedding-dimension overrides, interactive model test debugger, WeKnora Cloud hosted models and parsing |
+| Model Management | Centralized model tiers for the single knowledge base, declarative built-in models via YAML, per-model thinking-mode and embedding-dimension overrides, interactive model test debugger, WeKnora Cloud hosted models and parsing |
 
 ## 🧩 Chrome Extension
 

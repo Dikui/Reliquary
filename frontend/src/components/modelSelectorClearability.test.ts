@@ -3,8 +3,7 @@ import test from 'node:test'
 import { readFileSync } from 'node:fs'
 
 const selector = readFileSync(new URL('./ModelSelector.vue', import.meta.url), 'utf8')
-const kbModelConfig = readFileSync(new URL('../views/knowledge/settings/KBModelConfig.vue', import.meta.url), 'utf8')
-const kbEditor = readFileSync(new URL('../views/knowledge/KnowledgeBaseEditorModal.vue', import.meta.url), 'utf8')
+const kbEditor = readFileSync(new URL('../views/settings/KnowledgeSettings.vue', import.meta.url), 'utf8')
 const uploadConfirm = readFileSync(new URL('../views/knowledge/components/UploadConfirmDialog.vue', import.meta.url), 'utf8')
 
 function modelSelectorTag(source: string, selectedModelBinding: string): string {
@@ -29,10 +28,7 @@ test('ModelSelector 清空时向父组件回传空字符串，默认仍不可清
   assert.match(selector, /emit\('update:selectedModelId', value \|\| ''\)/)
 })
 
-
 test('必填模型继续保持不可清空', () => {
-  assert.match(modelSelectorTag(kbModelConfig, 'config.embeddingModelId'), /:clearable="false"/)
-  assertNotClearable(modelSelectorTag(kbModelConfig, 'config.llmModelId'))
   assertNotClearable(modelSelectorTag(kbEditor, 'formData.multimodalConfig.vllmModelId'))
   assertNotClearable(modelSelectorTag(uploadConfirm, 'uiState.multimodalConfig.vllmModelId'))
 })

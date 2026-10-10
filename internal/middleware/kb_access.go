@@ -65,7 +65,7 @@ type ChunkLookup interface {
 
 // KBIDResolver tells the guard how to find the kb_id for a given
 // request. Built-in resolvers below cover the param shapes we use:
-// :id, :kb_id, :kbId, :knowledge_id (-> parent KB).
+// :id, :kb_id, :knowledge_id (-> parent KB).
 //
 // On error, resolvers MUST return either a 4xx apperror (bad request /
 // not found) or a generic Go error for transient/internal failures;

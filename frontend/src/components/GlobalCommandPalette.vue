@@ -5,17 +5,10 @@
       <!-- Input row -->
       <div class="cmdk__input-row">
         <t-icon name="search" class="cmdk__input-icon" />
-        <span v-if="activeKbScope" class="cmdk__scope-chip" :title="activeKbScope.name">
-          <t-icon name="folder" size="12px" />
-          <span class="cmdk__scope-chip-name">{{ activeKbScope.name }}</span>
-          <button type="button" class="cmdk__scope-chip-x" :title="t('commandPalette.scope.remove')"
-            :aria-label="t('commandPalette.scope.remove')" @click="clearKbScope">
-            <t-icon name="close" size="12px" />
-          </button>
-        </span>
+
         <input ref="inputRef" v-model="query" type="text" class="cmdk__input"
-          :placeholder="activeKbScope ? t('commandPalette.scope.placeholder') : t('commandPalette.placeholder')"
-          autofocus spellcheck="false" @keydown="onInputKeyDown" />
+          :placeholder="t('commandPalette.placeholder')"
+          autofocus spellcheck="false" />
         <span v-if="loading" class="cmdk__input-spinner">
           <t-loading size="small" />
         </span>
@@ -62,7 +55,6 @@
                 @primary="openChunk(item)" @hover="selectItemAt($event)">
                 <template #title>
                   <span class="cmdk-chunk-title">{{ item.file.title }}</span>
-                  <span v-if="item.file.kbName" class="cmdk-chunk-kb">{{ item.file.kbName }}</span>
                 </template>
                 <template #subtitle>
                   <span v-html="highlight(item.chunk.matched_content || item.chunk.content)" />
@@ -72,20 +64,6 @@
           </ResultGroup>
 
           <!-- Messages -->
-
-
-          <!-- KB name matches -->
-          <ResultGroup v-if="isGroupVisible('kbs') && kbMatches.length" :label="t('commandPalette.group.kbs')">
-            <ResultItem v-for="(kb, i) in kbMatches" :key="'k-' + kb.id" :index="flatIndexFor('kbs', i)"
-              :selected="selectedIndex === flatIndexFor('kbs', i)" :shortcut="shortcutFor(flatIndexFor('kbs', i))"
-              icon-name="folder" :title="kb.name" @primary="openKb(kb.id)" @hover="selectItemAt($event)" />
-          </ResultGroup>
-
-
-
-
-
-
 
           <!-- Commands matching the query -->
           <ResultGroup v-if="isGroupVisible('commands') && filteredCommands.length"
@@ -154,19 +132,7 @@ const { open, initialQuery, recentQueries } = storeToRefs(commandPaletteStore)
 // Per-group display caps — keep the palette compact.
 const CHUNK_LIMIT = 5
 
-// Active KB scope: when the palette opens on a KB detail page, we default to
-// searching within that KB. The user can remove the chip to expand scope.
-const activeKbScope = ref<{ id: string; name: string } | null>(null)
-const scopeDismissed = ref(false) // user clicked ✕, remember for this session
-
-const {
-  query, loading, hasSearched,
-  fileGroups, kbMatches,
-  knowledgeBases,
-  clearResults,
-} = useCmdkSearch({
-  lockedKbIds: () => (activeKbScope.value ? [activeKbScope.value.id] : []),
-})
+const { query, loading, hasSearched, fileGroups, clearResults } = useCmdkSearch({})
 
 const drawerVisible = ref(false)
 const inputRef = ref<HTMLInputElement | null>(null)
@@ -217,18 +183,13 @@ const groupOrder = computed<readonly string[]>(() => {
     // Empty state: recents + full command list.
     return ['recent', 'commands'] as const
   }
-  if (activeKbScope.value) {
-    // Scoped to one KB: only chunk results are available.
-    return ['chunks'] as const
-  }
-  return ['chunks', 'kbs', 'commands'] as const
+  return ['chunks', 'commands'] as const
 })
 
 const groupSizes = computed<Record<string, number>>(() => ({
   recent: recentQueries.value.length,
   commands: query.value.trim() ? filteredCommands.value.length : allCommands.value.length,
   chunks: flatChunkItems.value.length,
-  kbs: kbMatches.value.length,
 }))
 
 const flatIndexFor = (group: string, localIndex: number): number => {
@@ -275,10 +236,6 @@ const flatItems = computed<FlatItem[]>(() => {
           run: () => openChunk(item),
         })
       })
-    } else if (g === 'kbs') {
-      kbMatches.value.forEach((kb) => {
-        out.push({ key: `kb:${kb.id}`, group: g, run: () => openKb(kb.id) })
-      })
     }
   }
   return out
@@ -317,12 +274,12 @@ const openChunk = (item: FlatChunkItem) => {
   commandPaletteStore.pushRecent(query.value)
   commandPaletteStore.closePalette()
   if (!item.file.kbId) return
-  const currentKbId = typeof route.params.kbId === 'string' ? route.params.kbId : ''
-  // If the user is already on this KB page, router.push to the same path+query
+  const alreadyViewingKnowledge = route.name === 'knowledge'
+  // On the articles page, router.push to the same path+query
   // is a no-op (vue-router dedupes identical navigations), so the document
   // auto-open logic never fires. Dispatch a global event that KnowledgeBase.vue
-  // listens for instead; this also avoids reloading the KB list on every click.
-  if (currentKbId === item.file.kbId) {
+  // listens for to open the matching article.
+  if (alreadyViewingKnowledge) {
     window.dispatchEvent(
       new CustomEvent('reliquary:open-knowledge', {
         detail: { kbId: item.file.kbId, knowledgeId: item.file.knowledgeId },
@@ -331,15 +288,9 @@ const openChunk = (item: FlatChunkItem) => {
     return
   }
   router.push({
-    path: `/platform/knowledge-bases/${item.file.kbId}`,
+    path: '/platform/knowledge',
     query: { knowledge_id: item.file.knowledgeId },
   })
-}
-
-const openKb = (kbId: string) => {
-  commandPaletteStore.pushRecent(query.value)
-  commandPaletteStore.closePalette()
-  router.push(`/platform/knowledge-bases/${kbId}`)
 }
 
 const highlight = (text: string) => highlightText(text, query.value)
@@ -406,20 +357,6 @@ const onKeyDown = (e: KeyboardEvent) => {
   }
 }
 
-// Keys handled specifically on the input element. Main purpose: let the user
-// escape a KB scope chip with the keyboard. Uses the same behavior for
-// pill/tag tokens — Backspace on an empty input removes the preceding chip.
-const onInputKeyDown = (e: KeyboardEvent) => {
-  if (
-    e.key === 'Backspace' &&
-    !query.value &&
-    activeKbScope.value
-  ) {
-    e.preventDefault()
-    clearKbScope()
-  }
-}
-
 const handleClose = () => {
   drawerVisible.value = false
   commandPaletteStore.closePalette()
@@ -453,7 +390,7 @@ const onGlobalKey = (e: KeyboardEvent) => {
 }
 
 // When the palette opens programmatically (from router redirect or elsewhere),
-// sync the query and initialize scope. Focus is moved to the input by
+// sync the query. Focus is moved to the input by
 // `onDialogOpened` once the dialog's enter animation has finished — doing it
 // here in a plain `nextTick` is too early for t-dialog (the input may not be
 // attached to the document yet, so `.focus()` silently no-ops).
@@ -461,25 +398,10 @@ watch(open, (val) => {
   if (val) {
     query.value = initialQuery.value || ''
     selectedKey.value = null
-    // Infer KB scope from current route. Reset scopeDismissed on each open so
-    // the default behavior is "scope to current KB unless user clicks ✕".
-    scopeDismissed.value = false
-    const kbIdFromRoute = typeof route.params.kbId === 'string' ? route.params.kbId : ''
-    if (kbIdFromRoute) {
-      // Best-effort name resolution; falls back to short id.
-      const match = knowledgeBases.value.find((k) => k.id === kbIdFromRoute)
-      activeKbScope.value = {
-        id: kbIdFromRoute,
-        name: match?.name || kbIdFromRoute,
-      }
-    } else {
-      activeKbScope.value = null
-    }
   } else {
     clearResults()
     query.value = ''
     drawerVisible.value = false
-    activeKbScope.value = null
   }
 })
 
@@ -507,20 +429,6 @@ const focusInputWithRetry = () => {
 
 const onDialogOpened = () => {
   focusInputWithRetry()
-}
-
-// Once KB list loads, backfill the scope name if we only had an id at open time.
-watch(knowledgeBases, (list) => {
-  if (activeKbScope.value && activeKbScope.value.name === activeKbScope.value.id) {
-    const match = list.find((k) => k.id === activeKbScope.value!.id)
-    if (match) activeKbScope.value = { id: match.id, name: match.name }
-  }
-})
-
-const clearKbScope = () => {
-  activeKbScope.value = null
-  scopeDismissed.value = true
-  nextTick(() => inputRef.value?.focus())
 }
 
 onMounted(() => {
@@ -552,57 +460,6 @@ onUnmounted(() => {
 .cmdk__input-icon {
   color: var(--td-text-color-placeholder);
   font-size: 16px;
-}
-
-.cmdk__scope-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 220px;
-  height: 26px;
-  padding: 0 2px 0 8px;
-  background: var(--td-bg-color-secondarycontainer);
-  color: var(--td-text-color-primary);
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 500;
-  flex-shrink: 0;
-
-  :deep(.t-icon:first-child) {
-    color: var(--td-text-color-secondary);
-  }
-}
-
-.cmdk__scope-chip-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cmdk__scope-chip-x {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border: none;
-  border-radius: 3px;
-  background: transparent;
-  color: var(--td-text-color-placeholder);
-  cursor: pointer;
-  line-height: 1;
-  padding: 0;
-
-  :deep(svg) {
-    width: 12px;
-    height: 12px;
-    display: block;
-  }
-
-  &:hover {
-    color: var(--td-text-color-primary);
-    background: rgba(0, 0, 0, 0.05);
-  }
 }
 
 .cmdk__input {
@@ -700,14 +557,7 @@ onUnmounted(() => {
   }
 }
 
-.cmdk-chunk-kb {
-  font-size: 11px;
-  color: var(--td-text-color-placeholder);
-  padding: 1px 6px;
-  background: var(--td-bg-color-secondarycontainer);
-  border-radius: 3px;
-  font-weight: 400;
-}
+
 
 .cmdk-chunk-title {
   overflow: hidden;

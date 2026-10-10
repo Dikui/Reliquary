@@ -2,7 +2,7 @@
 
 系统只有一个用户和一个个人空间，租户 ID 固定为 `1`。首个用户注册成功后，注册接口拒绝后续请求，登录页隐藏注册入口。
 
-登录用户拥有全部权限，可以管理系统设置、运行队列、模型和实体档案。API Key 通过 `X-API-Key` 鉴权，具有相同的访问权限，可按名称和有效期管理、撤销。知识查询中的知识库和时间条件继续作为业务筛选条件。
+登录用户拥有全部权限，可以管理系统设置、运行队列、模型和实体档案。API Key 通过 `X-API-Key` 鉴权，具有相同的访问权限，可按名称和有效期管理、撤销。检索固定查询唯一知识库，时间条件继续作为业务筛选条件。
 
 用户可在登录后修改自己的密码。忘记密码时，在仓库根目录导出与服务器相同的 `DB_HOST`、`DB_PORT`、`DB_USER`、`DB_PASSWORD`、`DB_NAME` 环境变量，将新密码从标准输入交给本地命令：
 
@@ -12,11 +12,11 @@ go run ./cmd/server reset-password
 
 输入新密码后按回车。命令直接更新唯一用户的密码哈希，并撤销旧登录令牌；密码最少 8 个字符，UTF-8 编码不超过 72 字节。本地重置没有 HTTP 接口。
 
-数据源仅支持 RSS、Atom、JSON Feed 和 RSS 连接器内的站点适配器，保留定时同步、手动同步、订阅筛选及可选鉴权头。
+设置中的“订阅源”页面统一管理 RSS、Atom、JSON Feed 和 RSS 连接器内的站点适配器，保留定时同步、手动同步、订阅筛选、同步日志及可选鉴权头。订阅文章自动进入唯一知识库。
 
 决策依据见 [ADR 0007](adr/0007-personal-single-user.md)。
 
-检索直接查询同一个 PostgreSQL（ParadeDB）数据库，保留 pgvector 与 BM25 混合检索、融合和重排。知识库可以选择嵌入模型，文件统一保存到 `LOCAL_STORAGE_BASE_DIR` 指定的本地目录。备份需包含 PostgreSQL 数据和该目录。
+检索直接查询同一个 PostgreSQL（ParadeDB）数据库，保留 pgvector 与 BM25 混合检索、融合和重排。设置中的“知识库”页面统一配置模型档位、分块、解析规则、图片处理与索引策略，配置保存在唯一知识库中。解析引擎设置管理服务地址和凭据。文件统一保存到 `LOCAL_STORAGE_BASE_DIR` 指定的本地目录。备份需包含 PostgreSQL 数据和该目录。
 
 生成模型只使用三种接口：OpenAI 兼容、Anthropic 原生和 Ollama 本地。服务商下拉框从后端预设表读取，包含通用 OpenAI 兼容、OpenAI、Anthropic、DeepSeek、阿里云百炼、智谱、月之暗面、硅基流动、火山方舟、OpenRouter、Google Gemini 和 Ollama。其他服务可选择通用 OpenAI 兼容并填写地址。Gemini 使用官方兼容地址 `https://generativelanguage.googleapis.com/v1beta/openai/`。Ollama 模型列表和拉取管理继续保留。
 
@@ -36,7 +36,7 @@ go run -tags anydoc ./cmd/server
 
 应用镜像默认以 `WITH_ANYDOC=1` 构建。普通 `go run ./cmd/server` 不链接 anydoc，PDF 和 Office 解析会提示静态库和 `-tags anydoc` 的构建要求；可以在设置中为 PDF 显式选择已配置的 MinerU。单次解析调用超时由 `PARSER_CALL_TIMEOUT` 设置，默认 30 分钟。
 
-只运行一个后端进程。模型并发与速率限制、接口限流保存在进程内存中，重启后重新计数。Redis 继续用于 Asynq 任务队列及任务检查、多模态图像任务计数、知识移动进度，以及运行配置缓存变更通知。
+只运行一个后端进程。模型并发与速率限制、接口限流保存在进程内存中，重启后重新计数。Redis 继续用于 Asynq 任务队列及任务检查、多模态图像任务计数，以及运行配置缓存变更通知。
 
 按网址收录、RSS 与站点适配器继续可用，使用带 SSRF 防护的 HTTP 抓取。综合分析和报告由外部 AI 工具完成。
 
@@ -53,4 +53,6 @@ Docker Compose 和开发脚本可在 `.env` 中设置自定义 `SSRF_WHITELIST_E
 
 未设置 `SYSTEM_AES_KEY` 时，模型 API Key 与数据源凭据将以明文保存；启动日志输出警告，系统信息页显示凭据加密状态。设置有效的 32 字节密钥后按现有行为加密保存。
 
-知识库置顶与资源收藏保存在个人空间中，登录用户和 API Key 看到相同结果。知识库列表中的复制只创建相同配置的空知识库，移动知识及其进度继续保留。登录后默认进入知识库列表。
+注册时自动创建名为“知识库”或“Knowledge Base”的唯一知识库，服务启动时会补建缺失记录。PostgreSQL 唯一约束保证每个空间最多有一个未删除的知识库。登录后直接进入 `/platform/knowledge` 的文章页面，旧知识库页面地址重定向到此页面。
+
+`GET /api/v1/knowledge-base` 读取唯一知识库，`PUT /api/v1/knowledge-base` 更新设置。文章列表、上传、网址收录与混合检索等子资源统一保留 `/api/v1/knowledge-bases/:id/...`，ID 必须是实际存在的唯一知识库，否则返回 404。订阅源使用全局 `/api/v1/data-sources` 及其子路径。

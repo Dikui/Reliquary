@@ -197,12 +197,6 @@ func TestInferScope_Priority(t *testing.T) {
 			wantID:    "kb1",
 		},
 		{
-			name:      "source_kb_id from KnowledgeMovePayload",
-			probe:     payloadProbe{SourceKBID: "src-kb"},
-			wantScope: types.TaskScopeKnowledgeBase,
-			wantID:    "src-kb",
-		},
-		{
 			name:      "knowledge_id only",
 			probe:     payloadProbe{KnowledgeID: "k-only"},
 			wantScope: types.TaskScopeKnowledge,

@@ -116,7 +116,7 @@ func configureNameEmbedding(t *testing.T, db *gorm.DB, id string, dimension int)
 	t.Helper()
 	record := types.Model{ID: id, TenantID: 1, Name: id, Type: types.ModelTypeEmbedding, Status: types.ModelStatusActive, Source: types.ModelSourceRemote, Parameters: types.ModelParameters{BaseURL: "https://example.com/v1", EmbeddingParameters: types.EmbeddingParameters{Dimension: dimension}}}
 	require.NoError(t, db.Save(&record).Error)
-	require.NoError(t, db.Model(&types.Tenant{}).Where("id=1").Update("model_tiers", types.ModelTierConfig{Embedding: id}).Error)
+	require.NoError(t, db.Model(&types.KnowledgeBase{}).Where("tenant_id=1").Update("model_tiers", types.ModelTierConfig{Embedding: id}).Error)
 }
 func nameRebuildFixture(t *testing.T) (*gorm.DB, context.Context, *EntityService, *EntityNameEmbeddingRebuilder, *nameRebuildModels, *nameRebuildQueue) {
 	t.Helper()
@@ -151,7 +151,7 @@ func TestEntityNameEmbeddingRebuildAfterInitialConfiguration(t *testing.T) {
 	configureNameEmbedding(t, db, "embedding-two", 2)
 	embedder := &nameRebuildEmbedder{dimension: 2, id: "embedding-two"}
 	models.models["embedding-two"] = embedder
-	require.NoError(t, rebuilder.MarkAndEnqueue(ctx, 1, "global_embedding_profile_changed"))
+	require.NoError(t, rebuilder.MarkAndEnqueue(ctx, 1, "knowledge_base_embedding_model_changed"))
 	require.NoError(t, rebuilder.Handle(ctx, queue.last(t)))
 	status, err := rebuilder.Status(ctx, 1)
 	require.NoError(t, err)
@@ -186,7 +186,7 @@ func TestEntityNameEmbeddingRebuildSwitchesDimensionsAndUsesBatches(t *testing.T
 	configureNameEmbedding(t, db, "new-three", 3)
 	newModel := &nameRebuildEmbedder{dimension: 3, id: "new-three"}
 	models.models["new-three"] = newModel
-	require.NoError(t, rebuilder.MarkAndEnqueue(ctx, 1, "global_embedding_profile_changed"))
+	require.NoError(t, rebuilder.MarkAndEnqueue(ctx, 1, "knowledge_base_embedding_model_changed"))
 	before := readNameEntity(t, db, "entity-0")
 	require.True(t, before.EmbeddingNeedsRebuild)
 	require.Len(t, before.NameEmbedding, 2, "marking preserves prior vector until successful replacement")

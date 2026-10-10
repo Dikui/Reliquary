@@ -9,7 +9,7 @@ import { createI18n } from 'vue-i18n'
 import ts from 'typescript'
 import zhCN from '../../../i18n/locales/zh-CN'
 import enUS from '../../../i18n/locales/en-US'
-import { ENTITY_TYPES, entityScopeParams } from '../../../api/entity-scope'
+import { ENTITY_TYPES } from '../../../api/entity-types'
 import type { Entity } from '../../../api/entities'
 const require = createRequire(import.meta.url), filename = 'KnowledgeWorkbench.vue'
 const source = readFileSync(new URL('./KnowledgeWorkbench.vue', import.meta.url), 'utf8')
@@ -23,7 +23,7 @@ async function renderWorkbench(options: { locale?: 'zh-CN' | 'en-US'; api?: Reco
   const i18n = createI18n({ legacy: false, locale: options.locale || 'zh-CN', messages: { 'zh-CN': zhCN, 'en-US': enUS } })
   const cleanups: Array<() => void> = []
   const requests = { lists: [] as any[], details: [] as string[], rebuild: 0, status: 0, merges: [] as any[] }
-  const api = { ENTITY_TYPES, entityScopeParams,
+  const api = { ENTITY_TYPES,
     listEntities: (params: object) => { requests.lists.push(params); return envelope(options.entities || [entity]) },
     getEntity: (id: string) => { requests.details.push(id); return envelope({ entity, knowledge: [{ id: 'article-a', title: 'Aurora announcement', knowledge_base_id: 'kb-a', created_at: '2026-10-01T00:00:00Z' }] }) },
     mergeEntities: (input: object) => { requests.merges.push(input); return Promise.resolve({ success: true }) },
@@ -38,7 +38,7 @@ async function renderWorkbench(options: { locale?: 'zh-CN' | 'en-US'; api?: Reco
   const component = evaluate(script.content).default; component.ssrRender = evaluate(template.code).ssrRender
   const setup = component.setup; let state: any
   component.setup = (props: object, context: object) => { state = setup(props, context); onServerPrefetch(async () => { try { await state.refreshAll(); await options.scenario?.(state, () => cleanups.forEach(callback => callback())); await nextTick() } finally { state.clearNameEmbeddingPoll(); if (state.entitySearchTimer) clearTimeout(state.entitySearchTimer) } }); return state }
-  const app = createSSRApp(component, { kbId: 'kb-a' })
+  const app = createSSRApp(component)
   const stub = defineComponent({ props: ['message', 'description', 'disabled', 'visible'], setup: (props, { attrs, slots }) => () => props.visible === false ? null : h('div', { ...attrs, 'data-disabled': props.disabled || undefined }, [props.message, props.description, slots.default?.()]) })
   for (const name of ['t-button', 't-icon', 't-select', 't-input', 't-alert', 't-empty', 't-loading', 't-dialog']) app.component(name, stub)
   const errors: unknown[] = []; app.config.errorHandler = error => errors.push(error)
@@ -66,7 +66,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.ok(nav.includes(locale === 'zh-CN' ? '实体' : 'Entities')); assert.ok(nav.includes(locale === 'zh-CN' ? '待合并建议' : 'Merge suggestions'))
     assert.match(html, locale === 'zh-CN' ? /<h2>实体<\/h2>/ : /<h2>Entities<\/h2>/)
     assert.doesNotMatch(html, /知识工作台|Knowledge workbench|知识上下文|对象|领域|结构化检索|关注范围|补抽|跟踪工作流|研究报告/i)
-    assert.deepEqual(state.scopeOptions.value.map((item: any) => item.value), ['knowledge_base', 'all']); assert.deepEqual(state.entityTypeOptions.value.map((item: any) => item.value), ENTITY_TYPES)
+    assert.deepEqual(state.entityTypeOptions.value.map((item: any) => item.value), ENTITY_TYPES)
   })
   test(`${locale}: entity details render type, aliases and article actions`, async () => {
     const { html, requests } = await renderWorkbench({ locale, scenario: state => state.selectEntity(entity) }); assert.deepEqual(requests.details, ['entity-a'])
@@ -88,5 +88,5 @@ test('older entity details cannot replace a more recently selected entity', asyn
   await renderWorkbench({ api: { getEntity: (id: string) => id === entity.id ? new Promise(resolve => { resolveOld = resolve }) : envelope({ entity: second, knowledge: [] }) }, scenario: async state => { const old = state.selectEntity(entity); await state.selectEntity(second); resolveOld({ success: true, data: { entity, knowledge: [] } }); await old; assert.equal(state.selectedEntity.value.id, second.id) } })
 })
 test('failed entity detail loads keep the selection and expose retry feedback', async () => { const { html } = await renderWorkbench({ api: { getEntity: () => Promise.resolve({ success: false, error: 'Article list unavailable' }) }, scenario: state => state.selectEntity(entity) }); assert.match(html, /Aurora/); assert.match(html, /Article list unavailable/) })
-test('scope and type filters are sent to the entity list API', async () => { const { requests } = await renderWorkbench({ scenario: async state => { state.queryScope.value = 'all'; state.entityTypeFilter.value = 'company'; await nextTick(); await state.loadEntities() } }); assert.equal(requests.lists.at(-1).scope, 'all'); assert.equal(requests.lists.at(-1).entity_type, 'company'); assert.equal(requests.lists.at(-1).knowledge_base_id, undefined) })
+test('type filters are sent to the entity list API', async () => { const { requests } = await renderWorkbench({ scenario: async state => { state.entityTypeFilter.value = 'company'; await nextTick(); await state.loadEntities() } }); assert.equal(requests.lists.at(-1).scope, undefined); assert.equal(requests.lists.at(-1).entity_type, 'company'); assert.equal(requests.lists.at(-1).knowledge_base_id, undefined) })
 test('merge transfers the selected entity into the explicit retained target', async () => { const { requests } = await renderWorkbench({ scenario: async state => { await state.selectEntity(entity); state.mergeTargetId.value = 'entity-b'; await state.confirmMerge(); assert.equal(state.mergeVisible.value, false) } }); assert.deepEqual(requests.merges, [{ keep_entity_id: 'entity-b', merge_entity_id: 'entity-a' }]) })

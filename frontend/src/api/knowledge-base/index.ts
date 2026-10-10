@@ -16,93 +16,12 @@ export interface KnowledgeDuplicateResponse {
   data?: { id: string; knowledge_base_id?: string; title?: string; file_name?: string };
 }
 
-// 知识库管理 API（列表、创建、获取、更新、删除、复制）
-export function listKnowledgeBases(params?: {
-}) {
-  const query = new URLSearchParams();
-  const qs = query.toString();
-  return get(qs ? `/api/v1/knowledge-bases?${qs}` : '/api/v1/knowledge-bases');
+export function getKnowledgeBase() {
+  return get('/api/v1/knowledge-base');
 }
 
-export function createKnowledgeBase(data: {
-  model_tiers?: ModelTierConfig;
-  name: string;
-  description?: string;
-  type?: 'document';
-  chunking_config?: any;
-  embedding_model_id?: string;
-  summary_model_id?: string;
-  // Concrete tenant-owned storage instance. When omitted, the tenant default
-  // backend is bound by the server at creation time.
-  vlm_config?: {
-    enabled: boolean;
-    model_id?: string;
-    description_language?: string;
-    custom_instructions?: string;
-  };
-  indexing_strategy?: {
-    vector_enabled: boolean;
-    keyword_enabled: boolean;
-  };
-}) {
-  return post(`/api/v1/knowledge-bases`, data);
-}
-
-export function getKnowledgeBaseById(id: string) {
-  const query = new URLSearchParams();
-  const qs = query.toString();
-  return get(qs ? `/api/v1/knowledge-bases/${id}?${qs}` : `/api/v1/knowledge-bases/${id}`);
-}
-
-export function updateKnowledgeBase(id: string, data: {
-  model_tiers?: ModelTierConfig;
-  name: string;
-  description?: string;
-  config?: {
-    chunking_config?: any;
-    image_processing_config?: any;
-    indexing_strategy?: {
-      vector_enabled: boolean;
-      keyword_enabled: boolean;
-    };
-  }
-}) {
-  return put(`/api/v1/knowledge-bases/${id}`, data);
-}
-
-export function rebuildKBIndex(kbId: string) {
-  return post(`/api/v1/knowledge-bases/${kbId}/rebuild-index`, {});
-}
-
-export function deleteKnowledgeBase(id: string) {
-  return del(`/api/v1/knowledge-bases/${id}`);
-}
-export function duplicateKnowledgeBase(id: string) {
-  return post(`/api/v1/knowledge-bases/${id}/duplicate`);
-}
-
-// 获取可移动目标知识库列表（同类型、同Embedding模型）
-export function listMoveTargets(sourceKbId: string) {
-  return get(`/api/v1/knowledge-bases/${sourceKbId}/move-targets`);
-}
-
-// 移动知识到其他知识库
-export function moveKnowledge(data: {
-  knowledge_ids: string[];
-  source_kb_id: string;
-  target_kb_id: string;
-  mode: 'reuse_vectors' | 'reparse';
-}) {
-  return post('/api/v1/knowledge/move', data);
-}
-
-// 获取知识移动进度
-export function getKnowledgeMoveProgress(taskId: string) {
-  return get(`/api/v1/knowledge/move/progress/${taskId}`);
-}
-
-export function togglePinKnowledgeBase(id: string) {
-  return put(`/api/v1/knowledge-bases/${id}/pin`);
+export function updateKnowledgeBase(data: { name: string; description?: string; config?: Record<string, unknown> }) {
+  return put('/api/v1/knowledge-base', data);
 }
 
 // 知识文件 API（基于具体知识库）
@@ -163,14 +82,6 @@ export function listKnowledgeFiles(
     source?: string;
     start_time?: string;
     end_time?: string;
-    /**
-     * Folder to browse. An empty string means the knowledge base root, so the
-     * parameter is only sent when it is defined — leaving it out lists every
-     * folder (the flat view).
-     */
-    folder_path?: string;
-    /** Include documents stored in sub-folders of folder_path. */
-    folder_recursive?: boolean;
   },
 ) {
   const query = new URLSearchParams();
@@ -182,55 +93,8 @@ export function listKnowledgeFiles(
   if (params.source) query.append('source', params.source);
   if (params.start_time) query.append('start_time', params.start_time);
   if (params.end_time) query.append('end_time', params.end_time);
-  if (params.folder_path !== undefined) {
-    query.append('folder_path', params.folder_path);
-    if (params.folder_recursive) query.append('folder_recursive', 'true');
-  }
   const qs = query.toString();
   return get(`/api/v1/knowledge-bases/${kbId}/knowledge?${qs}`);
-}
-
-/** One node of the knowledge base folder tree. */
-export interface KnowledgeFolderNode {
-  /** Canonical folder path, e.g. "docs/spec". */
-  path: string;
-  /** Last segment of the path, used as the row label. */
-  name: string;
-  /** Documents stored directly in this folder. */
-  document_count: number;
-  /** Documents in this folder plus every descendant folder. */
-  total_count: number;
-  children?: KnowledgeFolderNode[];
-}
-
-export interface KnowledgeFolderTree {
-  /** Documents that are not part of any uploaded folder. */
-  root_document_count: number;
-  /** Documents in the whole knowledge base. */
-  total_document_count: number;
-  folders: KnowledgeFolderNode[];
-}
-
-export function listKnowledgeFolders(kbId: string) {
-  return get(`/api/v1/knowledge-bases/${kbId}/knowledge/folders`);
-}
-
-/**
- * Re-file documents under `folderPath` ('' = knowledge base top level). Folders
- * are derived from the stored paths, so a path that does not exist yet is
- * created by this call. Only the grouping changes; documents are not re-parsed.
- */
-export function moveKnowledgeToFolder(kbId: string, ids: string[], folderPath: string) {
-  return post('/api/v1/knowledge/folder', {
-    kb_id: kbId,
-    knowledge_ids: ids,
-    folder_path: folderPath,
-  });
-}
-
-/** Rename or move a folder together with everything below it. */
-export function renameKnowledgeFolder(kbId: string, from: string, to: string) {
-  return put(`/api/v1/knowledge-bases/${kbId}/knowledge/folders`, { from, to });
 }
 
 export function getKnowledgeDetails(id: string) {
@@ -264,8 +128,8 @@ export function delKnowledgeDetails(id: string) {
 }
 
 // 批量删除（同一知识库内）。后端会校验所有 id 隶属于 kb_id 且具有编辑权限。
-export function batchDeleteKnowledge(kbId: string, ids: string[]) {
-  return post(`/api/v1/knowledge/batch-delete`, { kb_id: kbId, ids });
+export function batchDeleteKnowledge(ids: string[]) {
+  return post(`/api/v1/knowledge/batch-delete`, { ids });
 }
 
 export function downKnowledgeDetails(id: string) {
@@ -281,10 +145,8 @@ export function reviewKnowledge(id: string, data: { action: 'retry' | 'discard';
 }
 
 /** @param idsQueryString - query string with ids (e.g. ids=xxx&ids=yyy) */
-export function batchQueryKnowledge(idsQueryString: string, kbId?: string) {
-  let qs = idsQueryString;
-  if (kbId) qs += `&kb_id=${encodeURIComponent(kbId)}`;
-  return get(`/api/v1/knowledge/batch?${qs}`);
+export function batchQueryKnowledge(idsQueryString: string) {
+  return get(`/api/v1/knowledge/batch?${idsQueryString}`);
 }
 
 export const KNOWLEDGE_CHUNK_PAGE_SIZE = 25;
@@ -359,15 +221,13 @@ export function searchKnowledge(
 
 export function knowledgeSemanticSearch(data: {
   query: string;
-  knowledge_base_ids?: string[];
   knowledge_ids?: string[];
 }) {
   return post('/api/v1/knowledge-search', data);
 }
 
-export function batchReparseKnowledge(kbId: string, ids: string[], processConfig?: KnowledgeProcessOverrides) {
+export function batchReparseKnowledge(ids: string[], processConfig?: KnowledgeProcessOverrides) {
   return post(`/api/v1/knowledge/batch-reparse`, {
-    kb_id: kbId,
     ids,
     process_config: processConfig,
   });

@@ -121,30 +121,14 @@ func (s *EntityService) ResolveEntities(ctx context.Context, knowledgeID string,
 	return entities, s.loadAliases(ctx, tenantID, entities)
 }
 
-func (s *EntityService) scopeKnowledgeBase(ctx context.Context, q types.EntityQuery) (uint64, string, error) {
+func (s *EntityService) resolveKnowledgeBase(ctx context.Context) (uint64, string, error) {
 	tenantID, err := s.requireTenant(ctx)
 	if err != nil {
 		return 0, "", err
 	}
-	scope := strings.TrimSpace(q.Scope)
-	if scope == "" {
-		if q.KnowledgeBaseID != "" {
-			scope = "knowledge_base"
-		} else {
-			scope = "all"
-		}
-	}
-	if scope == "all" {
-		return tenantID, "", nil
-	}
-	if scope != "knowledge_base" {
-		return 0, "", werrors.NewBadRequestError("scope must be knowledge_base or all")
-	}
-	if q.KnowledgeBaseID == "" {
-		return 0, "", werrors.NewBadRequestError("knowledge_base_id is required")
-	}
+
 	var kb types.KnowledgeBase
-	if err := s.db.WithContext(ctx).Select("id").Where("id=? AND tenant_id=?", q.KnowledgeBaseID, tenantID).First(&kb).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+	if err := s.db.WithContext(ctx).Select("id").Where("tenant_id=?", tenantID).First(&kb).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 		return 0, "", werrors.NewNotFoundError("knowledge base not found")
 	} else if err != nil {
 		return 0, "", err
@@ -180,7 +164,7 @@ func (s *EntityService) loadAliases(ctx context.Context, tenantID uint64, entiti
 	return nil
 }
 func (s *EntityService) ListEntities(ctx context.Context, q types.EntityQuery) ([]types.Entity, error) {
-	tenantID, kbID, err := s.scopeKnowledgeBase(ctx, q)
+	tenantID, kbID, err := s.resolveKnowledgeBase(ctx)
 	if err != nil {
 		return nil, err
 	}

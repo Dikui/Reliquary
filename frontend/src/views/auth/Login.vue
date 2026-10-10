@@ -154,7 +154,6 @@
         <div class="feature-tags">
           <span class="tag">{{ $t('platform.rag') }}</span>
 
-
           <span class="tag">{{ $t('platform.hybridSearch') }}</span>
         </div>
 
@@ -212,7 +211,6 @@
                   {{ $t('auth.createAccount') }}
                 </t-button>
               </div>
-
 
             </t-form>
 
@@ -482,7 +480,7 @@ const persistLoginResponse = async (response: any, skipRedirect = false) => {
   await authStore.refreshFromAuthMe()
   await nextTick()
   if (skipRedirect) return
-  router.replace('/platform/knowledge-bases')
+  router.replace('/platform/knowledge')
 }
 
 // loadAuthConfig fetches /auth/config and caches whether self-service
@@ -562,7 +560,7 @@ const handleRegister = async () => {
 
 onMounted(async () => {
   if (authStore.isLoggedIn) {
-    router.replace('/platform/knowledge-bases')
+    router.replace('/platform/knowledge')
     return
   }
 
@@ -1072,7 +1070,6 @@ onMounted(async () => {
   width: 100%;
 }
 
-
 .form-header {
   text-align: center;
   margin-bottom: 32px;
@@ -1225,7 +1222,6 @@ onMounted(async () => {
   font-family: var(--app-font-family);
   margin: 20px 0 16px 0;
 }
-
 
 .form-footer {
   text-align: center;

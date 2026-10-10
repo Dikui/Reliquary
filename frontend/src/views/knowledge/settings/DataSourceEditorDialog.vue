@@ -6,7 +6,7 @@ import { useI18n } from 'vue-i18n'
 import SettingDrawer from '@/components/settings/SettingDrawer.vue'
 import { createDataSource, updateDataSource, triggerSync, validateCredentials, putDataSourceCredentials, deleteDataSourceCredentials, type DataSource } from '@/api/datasource'
 
-const props = defineProps<{ kbId: string; dataSource: DataSource | null }>()
+const props = defineProps<{ dataSource: DataSource | null }>()
 const visible = defineModel<boolean>('visible', { default: false })
 const emit = defineEmits<{ saved: [] }>()
 const { t } = useI18n()
@@ -79,7 +79,7 @@ async function save() {
   try {
     const credentials = form.value.authHeaders.trim() ? { auth_headers: form.value.authHeaders } : {}
     const settings = { feed_urls: form.value.feedUrls.trim(), publisher: form.value.publisher, article_path_prefix: form.value.articlePathPrefix }
-    const payload: Partial<DataSource> = { name: form.value.name.trim(), type: 'rss', knowledge_base_id: props.kbId, config: { credentials: props.dataSource ? {} : credentials, settings, resource_ids: [] }, sync_schedule: form.value.sync_schedule, sync_mode: form.value.sync_mode, sync_deletions: form.value.sync_deletions, status: 'active' }
+    const payload: Partial<DataSource> = { name: form.value.name.trim(), type: 'rss', config: { credentials: props.dataSource ? {} : credentials, settings, resource_ids: [] }, sync_schedule: form.value.sync_schedule, sync_mode: form.value.sync_mode, sync_deletions: form.value.sync_deletions, status: 'active' }
     if (props.dataSource) {
       if (replaceCredentials.value) await putDataSourceCredentials(props.dataSource.id, credentials)
       await updateDataSource(props.dataSource.id, payload)

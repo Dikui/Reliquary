@@ -42,7 +42,7 @@ func (s *multipartKnowledgeService) CreateKnowledgeFromFile(_ context.Context, _
 func TestKnowledgeFileMultipartAcceptsSourceAndProcessJSON(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	service := &multipartKnowledgeService{}
-	h := &KnowledgeHandler{kbService: &stubFolderKBService{}, kgService: service}
+	h := &KnowledgeHandler{kbService: &stubArticleKBService{}, kgService: service}
 	router := gin.New()
 	router.Use(middleware.ErrorHandler(), func(c *gin.Context) {
 		c.Set(types.TenantIDContextKey.String(), uint64(1))

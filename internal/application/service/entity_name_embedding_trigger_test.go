@@ -45,8 +45,9 @@ func nameEmbeddingTriggerDB(t *testing.T) (*gorm.DB, context.Context) {
 	t.Helper()
 	db := pgtest.Open(t)
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
-	team := types.Tenant{ID: 1, Name: "Rebuild triggers", ModelTiers: types.ModelTierConfig{Embedding: "team-vector"}}
+	team := types.Tenant{ID: 1, Name: "Rebuild triggers"}
 	require.NoError(t, db.Create(&team).Error)
+	require.NoError(t, db.Create(&types.KnowledgeBase{ID: "trigger-kb", TenantID: 1, Name: "Knowledge Base", EmbeddingModelID: "team-vector"}).Error)
 	for _, id := range []string{"team-vector", "override-vector"} {
 		require.NoError(t, db.Create(&types.Model{ID: id, TenantID: 1, Name: id, Type: types.ModelTypeEmbedding, Source: types.ModelSourceRemote, Status: types.ModelStatusActive, Parameters: types.ModelParameters{EmbeddingParameters: types.EmbeddingParameters{Dimension: 3}}}).Error)
 	}
@@ -55,8 +56,8 @@ func nameEmbeddingTriggerDB(t *testing.T) (*gorm.DB, context.Context) {
 
 func TestKnowledgeBaseNameEmbeddingTriggersAfterCommittedChanges(t *testing.T) {
 	db, ctx := nameEmbeddingTriggerDB(t)
-	kb := &types.KnowledgeBase{ID: "trigger-kb", TenantID: 1, Name: "Trigger KB", EmbeddingModelID: "team-vector"}
-	require.NoError(t, db.Create(kb).Error)
+	kb := &types.KnowledgeBase{}
+	require.NoError(t, db.Where("tenant_id=1").First(kb).Error)
 	spy := &nameEmbeddingTriggerSpy{}
 	svc := &knowledgeBaseService{db: db, repo: repository.NewKnowledgeBaseRepository(db)}
 	svc.SetNameEmbeddingRebuilder(spy)
@@ -68,7 +69,7 @@ func TestKnowledgeBaseNameEmbeddingTriggersAfterCommittedChanges(t *testing.T) {
 	}
 	_, err := svc.UpdateKnowledgeBase(ctx, kb.ID, kb.Name, "", config)
 	require.NoError(t, err)
-	require.Equal(t, []nameEmbeddingTriggerCall{{true, 1, "knowledge_base_embedding_override_changed"}}, spy.calls)
+	require.Equal(t, []nameEmbeddingTriggerCall{{true, 1, "knowledge_base_embedding_model_changed"}}, spy.calls)
 	spy.calls = nil
 	_, err = svc.UpdateKnowledgeBase(ctx, kb.ID, kb.Name, "rename metadata", config)
 	require.NoError(t, err)
@@ -78,7 +79,7 @@ func TestKnowledgeBaseNameEmbeddingTriggersAfterCommittedChanges(t *testing.T) {
 	saved, err := svc.UpdateKnowledgeBase(ctx, kb.ID, kb.Name, "", config)
 	require.ErrorContains(t, err, "knowledge base saved")
 	require.NotNil(t, saved)
-	require.Equal(t, []nameEmbeddingTriggerCall{{true, 1, "knowledge_base_embedding_override_changed"}}, spy.calls)
+	require.Equal(t, []nameEmbeddingTriggerCall{{true, 1, "knowledge_base_embedding_model_changed"}}, spy.calls)
 }
 
 func TestEmbeddingModelUpdateTriggersCurrentTeamProfileOnly(t *testing.T) {
@@ -110,7 +111,7 @@ func TestEmbeddingModelUpdateTriggersCurrentTeamProfileOnly(t *testing.T) {
 	require.NoError(t, db.First(&model, "id = ?", "override-vector").Error)
 	model.Parameters.EmbeddingParameters.Dimension = 4
 	require.NoError(t, svc.UpdateModel(ctx, &model))
-	require.Empty(t, spy.calls, "a knowledge-base override does not change the global entity profile")
+	require.Empty(t, spy.calls, "an unused model does not change the entity profile")
 }
 
 type nameEmbeddingTriggerQueue struct{ tasks []*asynq.Task }
@@ -154,8 +155,8 @@ func TestNameEmbeddingConfigurationAndEmptyWorkbenchIntegrateWithDurableTask(t *
 	queue := &nameEmbeddingTriggerQueue{}
 	models := &nameEmbeddingTriggerModels{embedder: &nameEmbeddingTriggerEmbedder{}}
 	rebuilder := NewEntityNameEmbeddingRebuilder(db, models, queue)
-	kb := &types.KnowledgeBase{ID: "override-kb", TenantID: 1, Name: "Override", EmbeddingModelID: "team-vector"}
-	require.NoError(t, db.Create(kb).Error)
+	kb := &types.KnowledgeBase{}
+	require.NoError(t, db.Where("tenant_id=1").First(kb).Error)
 	bases := &knowledgeBaseService{db: db, repo: repository.NewKnowledgeBaseRepository(db)}
 	bases.SetNameEmbeddingRebuilder(rebuilder)
 	_, err := bases.UpdateKnowledgeBase(ctx, kb.ID, kb.Name, "", &types.KnowledgeBaseConfig{ModelTiers: &types.ModelTierConfig{Embedding: "override-vector"}})
@@ -167,10 +168,10 @@ func TestNameEmbeddingConfigurationAndEmptyWorkbenchIntegrateWithDurableTask(t *
 	require.NoError(t, rebuilder.Handle(ctx, queue.tasks[0]))
 	require.NoError(t, db.First(&entity, "id = ?", entity.ID).Error)
 	require.False(t, entity.EmbeddingNeedsRebuild)
-	require.Equal(t, "team-vector", entity.EmbeddingModelID)
+	require.Equal(t, "override-vector", entity.EmbeddingModelID)
 	require.Equal(t, 1, models.embedder.calls)
 	for _, selected := range models.selected {
-		require.Equal(t, "team-vector", selected, "scope overrides never select the global entity profile")
+		require.Equal(t, "override-vector", selected, "entity names use the knowledge base profile")
 	}
 	require.NoError(t, db.Model(&entity).Update("embedding_needs_rebuild", true).Error)
 	require.NoError(t, rebuilder.Enqueue(ctx, 1, "workbench_rebuild"))

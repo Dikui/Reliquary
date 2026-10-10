@@ -10,7 +10,6 @@ import ts from 'typescript';
 import zhCN from '../i18n/locales/zh-CN';
 import enUS from '../i18n/locales/en-US';
 import * as duplicate from '../utils/knowledgeDuplicate';
-import * as folderTree from '../views/knowledge/folderTree';
 import * as knowledgeStatus from '../views/knowledge/knowledgeStatusPolling';
 
 const require = createRequire(import.meta.url);
@@ -37,7 +36,7 @@ function createEnvironment(locale = 'zh-CN') {
   const requests: Array<{ kind: string; payload: any }> = [];
   const originalWindow = globalThis.window;
   globalThis.window = { innerHeight: 900, dispatchEvent: (event: CustomEvent) => { events.push(event); return true; } } as unknown as Window & typeof globalThis;
-  const route = { params: { kbId: 'kb-a' }, query: {} };
+  const route = { name: 'knowledge', params: {}, query: {} };
   const uiStore = {
     manualEditorVisible: true, manualEditorMode: 'create', manualEditorKnowledgeId: null,
     manualEditorKBId: 'kb-a', manualEditorInitialTitle: 'New source',
@@ -57,8 +56,7 @@ function createEnvironment(locale = 'zh-CN') {
     createManualKnowledge: (kbId: string, payload: any) => intake('manual', kbId, payload),
     createKnowledgeFromURL: (kbId: string, payload: any) => intake('url', kbId, payload),
     uploadKnowledgeFile: (kbId: string, payload: any) => intake('file', kbId, payload),
-    listKnowledgeBases: () => envelope([{ id: 'kb-a', name: 'Team sources', type: 'document' }]),
-    getKnowledgeBaseById: () => envelope({ id: 'kb-a' }),
+    getKnowledgeBase: () => envelope({ id: 'kb-a' }),
     getKnowledgeDetails: () => envelope({ id: 'owner-a', knowledge_base_id: 'kb-a', title: 'Existing message' }),
     getKnowledgeDetailsCon: () => Promise.resolve({ success: true, data: [], total: 0 }),
     listKnowledgeFiles: () => Promise.resolve({ success: true, data: [], total: 0 }),
@@ -79,14 +77,13 @@ function createEnvironment(locale = 'zh-CN') {
     '@/stores/menu': { useMenuStore: () => ({}) },
     '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true, effectiveTenantId: '' }) },
     '@/stores/commandPalette': { useCommandPaletteStore: () => ({}) },
-    '@/stores/resources': { useResourcesStore: () => ({ knowledgeBases: [] }) },
+    '@/stores/resources': { useResourcesStore: () => ({ knowledgeBase: { id: 'kb-a' } }) },
     '@/stores/editorResources': { useEditorResourcesStore: () => ({ parserEngines: [] }) },
     '@/stores/uploadConfirm': { useUploadConfirmStore: () => ({ open: async () => ({ manual: { sourceInfo: { publisher: 'Publisher A' } } }) }) },
     '@/utils/security': { sanitizeHTML: (value: string) => value, safeMarkdownToHTML: (value: string) => value },
     '@/utils/knowledgeDuplicate': duplicate,
     '../utils/knowledgeDuplicate': duplicate,
     '../utils/index': { formatStringDate: (value: Date) => value.toISOString(), kbFileTypeVerification: () => false },
-    './folderTree': folderTree,
     './knowledgeStatusPolling': knowledgeStatus,
     './knowledgeDownloadFileName': {},
     '@/utils/knowledgeTrace': {},
@@ -241,15 +238,15 @@ test('batch upload keeps duplicate feedback separate from real upload errors and
   } finally { env.cleanup(); }
 });
 
-test('view action navigates to a different knowledge base with the existing preview query', async () => {
+test('view action opens the unique article page with the existing preview query', async () => {
   const env = createEnvironment();
   try {
     env.state.response = duplicateResponse();
     env.state.reject = true;
-    env.route.params.kbId = 'kb-b';
+    env.route.name = 'settings';
     await env.render('manual', async value => { await value.initialize(); await value.handleSave('draft'); });
     await env.action('knowledgeBase.viewExistingMessage');
-    assert.deepEqual(env.pushes, [{ path: '/platform/knowledge-bases/kb-a', query: { knowledge_id: 'owner-a' } }]);
+    assert.deepEqual(env.pushes, [{ path: '/platform/knowledge', query: { knowledge_id: 'owner-a' } }]);
     assert.deepEqual(env.events, []);
   } finally { env.cleanup(); }
 });

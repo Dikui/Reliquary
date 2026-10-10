@@ -7,12 +7,10 @@ import useKnowledgeBase from '@/hooks/useKnowledgeBase';
 import { useRoute, useRouter } from 'vue-router';
 import EmptyKnowledge from '@/components/empty-knowledge.vue';
 import KBInfoPopover from '@/components/KBInfoPopover.vue';
-import KBSwitcherDropdown from '@/components/KBSwitcherDropdown.vue';
 import { useUIStore } from '@/stores/ui';
 import { useCommandPaletteStore } from '@/stores/commandPalette';
 import { useResourcesStore } from '@/stores/resources';
 import { useEditorResourcesStore } from '@/stores/editorResources';
-import KnowledgeBaseEditorModal from './KnowledgeBaseEditorModal.vue';
 const uiStore = useUIStore();
 const commandPalette = useCommandPaletteStore();
 const resources = useResourcesStore();
@@ -28,19 +26,14 @@ import {
   batchReparseKnowledge,
   getKnowledgeSpans,
   getKnowledgeDetails,
-  listKnowledgeFolders,
-  moveKnowledgeToFolder,
-  renameKnowledgeFolder,
   downKnowledgeDetails,
   reviewKnowledge,
-  type KnowledgeFolderTree,
 } from "@/api/knowledge-base/index";
 import { knowledgeSpansPayloadHasTrace } from '@/utils/knowledgeTrace';
 import DocumentListView from './components/DocumentListView.vue';
 import DocumentCardView from './components/DocumentCardView.vue';
 import DocumentBatchBar from './components/DocumentBatchBar.vue';
 import KbUploadSourceDropdown from './components/KbUploadSourceDropdown.vue';
-import KbFolderTree from './components/KbFolderTree.vue';
 import KnowledgeWorkbench from './components/KnowledgeWorkbench.vue';
 import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess';
 import { useUploadConfirmStore, type UploadConfirmResult, type IntakeSourceInfo } from '@/stores/uploadConfirm';
@@ -48,25 +41,14 @@ import {
   isKnowledgeParseInFlight,
   knowledgeNeedsStatusPolling,
 } from './knowledgeStatusPolling';
-import { listMoveTargets, moveKnowledge, getKnowledgeMoveProgress } from '@/api/knowledge-base';
 import { resolveKnowledgeDownloadFileName } from './knowledgeDownloadFileName';
-import {
-  buildUploadFileName,
-  canMoveFolderTo,
-  childFolders,
-  folderBreadcrumbs as buildFolderBreadcrumbs,
-  folderPathExists as folderExistsInTree,
-  isFilteringDocuments,
-  isFolderUpload,
-  ROOT_FOLDER_PATH,
-} from './folderTree';
 import { useI18n } from 'vue-i18n';
 import { useMarqueeSelect } from '@/hooks/useMarqueeSelect';
 import type { ParserEngineInfo } from '@/api/system';
 import { getUploadFileKey, filterUnsupportedAudioFiles } from './utils/uploadSources';
 const route = useRoute();
 const { t } = useI18n();
-const kbId = computed(() => (route.params as any).kbId as string || '');
+const kbId = computed(() => resources.knowledgeBase?.id || '');
 const kbInfo = ref<any>(null);
 const uploadSourceRef = ref<InstanceType<typeof KbUploadSourceDropdown> | null>(null);
 const uploading = ref(false);
@@ -128,22 +110,10 @@ const unsupportedFileTypes = computed<string[]>(() => {
   return [...allTypes].filter(ft => !supported.has(ft)).sort()
 })
 
-const goToParserSettings = () => {
-  if (kbId.value) {
-    uiStore.openKBSettings(kbId.value, 'parser')
-  }
-}
+const goToParserSettings = () => uiStore.openSettings('knowledge', 'parser');
 
-const knowledgeList = ref<Array<{ id: string; name: string; type?: string }>>([]);
 let { cardList, total, moreIndex, details, getKnowled, delKnowledge, openMore, onVisibleChange: _onVisibleChange, getCardDetails, getfDetails,
   duplicateNotices, showDuplicate, dismissDuplicate, clearDuplicateNotices, openDuplicate } = useKnowledgeBase(kbId.value)
-
-const onVisibleChange = (visible: boolean) => {
-  _onVisibleChange(visible);
-  if (!visible) {
-    moveMenuMode.value = 'normal';
-  }
-};
 
 /** Per-knowledge cache: whether /spans has a real trace (see knowledgeSpansPayloadHasTrace). */
 const traceAvailableById = reactive<Record<string, boolean>>({});
@@ -191,7 +161,7 @@ async function probeTraceAvailable(item: KnowledgeCard) {
 }
 
 const onCardMoreVisibleChange = (visible: boolean, item: KnowledgeCard) => {
-  onVisibleChange(visible);
+  _onVisibleChange(visible);
   if (visible) {
     probeTraceAvailable(item);
   }
@@ -203,17 +173,6 @@ let page = 1;
 let pageSize = 35;
 let scrollLoading = false;
 const resetPage = () => { page = 1; scrollLoading = false; };
-
-// Move state — inline in card menu
-const moveMenuMode = ref<'normal' | 'targets' | 'confirm'>('normal');
-const moveKnowledgeId = ref('');
-const moveTargetKbs = ref<any[]>([]);
-const moveTargetsLoading = ref(false);
-const moveSelectedTargetId = ref('');
-const moveSelectedTargetName = ref('');
-const moveMode = ref<'reuse_vectors' | 'reparse'>('reuse_vectors');
-const moveSubmitting = ref(false);
-let movePollTimer: ReturnType<typeof setInterval> | null = null;
 
 // View mode (grid / list) — persisted per browser
 type DocViewMode = 'grid' | 'list';
@@ -289,7 +248,7 @@ const confirmBatchReparse = async () => {
   }
   batchReparsing.value = true;
   try {
-    const res: any = await batchReparseKnowledge(kbId.value, ids);
+    const res: any = await batchReparseKnowledge(ids);
     if (res?.success) {
       MessagePlugin.success(t('knowledgeBase.batchReparseSuccess', { count: ids.length }));
       applyOptimisticBatchReparse(ids);
@@ -355,56 +314,6 @@ const updatedTimeRange = ref<string[]>([]);
 // Disable any date after today so users cannot filter into the future.
 const disableFutureDate = { after: new Date(new Date().setHours(23, 59, 59, 999)) };
 
-// ── Folder tree (documents uploaded as a folder keep their relative path) ──
-const FOLDER_TREE_COLLAPSED_KEY = 'reliquary.kbFolderTreeCollapsed';
-const readStoredFlag = (key: string, fallback = false) => {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw === null ? fallback : raw === 'true';
-  } catch {
-    return fallback;
-  }
-};
-const writeStoredFlag = (key: string, value: boolean) => {
-  try {
-    localStorage.setItem(key, String(value));
-  } catch {
-    // Private-mode storage failures must not break navigation.
-  }
-};
-const folderTree = ref<KnowledgeFolderTree | null>(null);
-const folderTreeLoading = ref(false);
-// The folder being browsed; ROOT_FOLDER_PATH ('') is the knowledge base top
-// level, a real node of the tree rather than a separate mode.
-const selectedFolderPath = ref<string>(ROOT_FOLDER_PATH);
-const folderTreeCollapsed = ref(readStoredFlag(FOLDER_TREE_COLLAPSED_KEY));
-const hasFolders = computed(() => (folderTree.value?.folders?.length ?? 0) > 0);
-// The folder column only earns its space once the knowledge base actually has
-// folders, so knowledge bases filled with single-file uploads look unchanged.
-const showFolderTree = computed(() => hasFolders.value);
-// Browsing lists one folder's own contents; filtering searches its whole
-// subtree. There is no mode switch: the list follows what the user is doing.
-const isFiltering = computed(() =>
-  isFilteringDocuments({
-    keyword: docSearchKeyword.value,
-    fileType: selectedFileType.value,
-    parseStatus: selectedParseStatus.value,
-    source: selectedSource.value,
-    timeRange: updatedTimeRange.value,
-  }),
-);
-// Sub-folder entries shown at the top of the list while browsing. Search results
-// are flat, so they are dropped as soon as a filter is active. When the sidebar
-// tree is open it already lists the same folders, so skip the duplicate rows.
-const currentChildFolders = computed(() => {
-  if (isFiltering.value) return [];
-  if (showFolderTree.value && !folderTreeCollapsed.value) return [];
-  return childFolders(folderTree.value, selectedFolderPath.value);
-});
-// A row's folder is worth showing only when the list can span folders.
-const showDocumentFolderPath = computed(() => hasFolders.value && isFiltering.value);
-const folderBreadcrumbs = computed(() => buildFolderBreadcrumbs(selectedFolderPath.value));
-
 const filterParams = computed(() => {
   const [start, end] = updatedTimeRange.value || [];
   return {
@@ -414,10 +323,6 @@ const filterParams = computed(() => {
     source: selectedSource.value || undefined,
     start_time: start ? `${start} 00:00:00` : undefined,
     end_time: end ? `${end} 23:59:59` : undefined,
-    folder_path: selectedFolderPath.value,
-    // Searching descends into sub-folders; browsing shows one level, with the
-    // sub-folders themselves rendered as entries in the list.
-    folder_recursive: isFiltering.value,
   };
 });
 const getPageSize = () => {
@@ -449,103 +354,6 @@ const loadKnowledgeFiles = (kbIdValue: string): Promise<void> => {
 
 const isCurrentKb = (targetKbId: string) => targetKbId === kbId.value;
 
-const loadFolderTree = async (kbIdValue: string) => {
-  if (!kbIdValue) {
-    folderTree.value = null;
-    return;
-  }
-  folderTreeLoading.value = true;
-  try {
-    const res: any = await listKnowledgeFolders(kbIdValue);
-    if (!isCurrentKb(kbIdValue)) return;
-    folderTree.value = (res?.data as KnowledgeFolderTree) || null;
-    // A folder can disappear (its last document was deleted or moved); fall
-    // back to the root instead of leaving an empty, unreachable view.
-    if (!folderExistsInTree(folderTree.value?.folders || [], selectedFolderPath.value)) {
-      selectedFolderPath.value = ROOT_FOLDER_PATH;
-    }
-  } catch (error) {
-    if (!isCurrentKb(kbIdValue)) return;
-    console.error('Failed to load knowledge folders', error);
-    folderTree.value = null;
-  } finally {
-    if (isCurrentKb(kbIdValue)) {
-      folderTreeLoading.value = false;
-    }
-  }
-};
-
-const handleFolderSelect = (path: string) => {
-  if (selectedFolderPath.value === path) return;
-  selectedFolderPath.value = path;
-};
-
-// ── Re-filing documents and renaming folders ──
-// folder_path is display-only, so both operations are a plain column update:
-// nothing is re-parsed, re-chunked or re-embedded.
-
-// Flat folder list shared by every "move to folder" picker.
-const folderOptions = computed(() => {
-  const result: Array<{ path: string; name: string; depth: number }> = [];
-  const walk = (nodes: KnowledgeFolderTree['folders'], depth: number) => {
-    nodes.forEach((node) => {
-      result.push({ path: node.path, name: node.name, depth });
-      walk(node.children || [], depth + 1);
-    });
-  };
-  walk(folderTree.value?.folders || [], 0);
-  return result;
-});
-
-const moveKnowledgeIntoFolder = async (ids: string[], folderPath: string) => {
-  if (!kbId.value || ids.length === 0) return;
-  try {
-    await moveKnowledgeToFolder(kbId.value, ids, folderPath);
-    MessagePlugin.success(t('knowledgeBase.moveToFolder.success', { count: ids.length }));
-    clearSelection();
-    batchMode.value = false;
-    resetPage();
-    await loadKnowledgeFiles(kbId.value);
-    await loadFolderTree(kbId.value);
-  } catch (error: any) {
-    MessagePlugin.error(error?.message || t('knowledgeBase.moveToFolder.failed'));
-  }
-};
-
-const handleFolderRename = async ({ from, to }: { from: string; to: string }) => {
-  if (!kbId.value || !to || from === to) return;
-  if (!canMoveFolderTo(from, to)) {
-    MessagePlugin.warning(t('knowledgeBase.folderTree.renameInvalid'));
-    return;
-  }
-  try {
-    const res: any = await renameKnowledgeFolder(kbId.value, from, to);
-    const movedCount = res?.data?.moved_count ?? 0;
-    if (movedCount === 0) {
-      MessagePlugin.warning(t('knowledgeBase.folderTree.renameFailed'));
-      await loadFolderTree(kbId.value);
-      return;
-    }
-    MessagePlugin.success(t('knowledgeBase.folderTree.renameSuccess'));
-    // Follow the folder to its new path so the user stays where they were.
-    if (selectedFolderPath.value === from) {
-      selectedFolderPath.value = to;
-    } else if (selectedFolderPath.value.startsWith(`${from}/`)) {
-      selectedFolderPath.value = to + selectedFolderPath.value.slice(from.length);
-    }
-    resetPage();
-    await loadKnowledgeFiles(kbId.value);
-    await loadFolderTree(kbId.value);
-  } catch (error: any) {
-    MessagePlugin.error(error?.message || t('knowledgeBase.folderTree.renameFailed'));
-  }
-};
-
-const handleFolderTreeCollapsedChange = (value: boolean) => {
-  folderTreeCollapsed.value = value;
-  writeStoredFlag(FOLDER_TREE_COLLAPSED_KEY, value);
-};
-
 const loadKnowledgeBaseInfo = async (targetKbId: string, force = false) => {
   if (!targetKbId) {
     kbInfo.value = null;
@@ -555,13 +363,12 @@ const loadKnowledgeBaseInfo = async (targetKbId: string, force = false) => {
   }
   kbLoading.value = true;
   try {
-    const data = await resources.fetchKnowledgeBaseById(targetKbId, force);
+    const data = await resources.fetchKnowledgeBase(force);
     if (!isCurrentKb(targetKbId)) return;
 
     kbInfo.value = data;
 
       loadKnowledgeFiles(targetKbId);
-      void loadFolderTree(targetKbId);
 
   } catch (error) {
     if (!isCurrentKb(targetKbId)) return;
@@ -577,22 +384,7 @@ const loadKnowledgeBaseInfo = async (targetKbId: string, force = false) => {
   }
 };
 
-const loadKnowledgeList = async () => {
-  try {
-    await resources.ensureKnowledgeBases();
-    const myKbs = resources.rawKnowledgeBases.map((item: any) => ({
-      id: String(item.id),
-      name: item.name,
-      type: item.type || 'document',
-    }));
-
-    knowledgeList.value = myKbs;
-  } catch (error) {
-    console.error('Failed to load knowledge list:', error);
-  }
-};
-
-// 监听路由参数变化，重新获取知识库内容
+// 唯一知识库加载后获取文章内容
 // Sync activeKbTab to URL query so it survives page refresh
 watch(activeKbTab, (tab) => {
   const query = { ...route.query }
@@ -620,8 +412,6 @@ watch(() => kbId.value, (newKbId, oldKbId) => {
     total.value = 0;
     docListLoading.value = true;
     resetPage();
-    folderTree.value = null;
-    selectedFolderPath.value = ROOT_FOLDER_PATH;
   }
   loadKnowledgeBaseInfo(newKbId);
 }, { immediate: true });
@@ -659,12 +449,6 @@ watch([selectedParseStatus, selectedSource, updatedTimeRange], () => {
 
 // 切换目录只改变列表范围，行为与其他筛选一致。浏览态与筛选态之间的切换由各筛选项
 // 自身的 watcher 触发刷新，这里不重复请求。
-watch(selectedFolderPath, () => {
-  if (!kbId.value) return;
-  clearSelection();
-  resetPage();
-  loadKnowledgeFiles(kbId.value);
-});
 
 // 监听文件上传事件
 const handleFileUploaded = (event: CustomEvent) => {
@@ -675,7 +459,6 @@ const handleFileUploaded = (event: CustomEvent) => {
     // 如果上传的文件属于当前知识库，使用 loadKnowledgeFiles 刷新文件列表
     resetPage(); // Reset page counter when reloading files after upload
     loadKnowledgeFiles(uploadedKbId);
-    void loadFolderTree(uploadedKbId);
     // 启动几次探测，尽快让面包屑的"索引中"亮起。
   }
 };
@@ -704,8 +487,8 @@ const handleKnowledgeFileDrop = (event: CustomEvent) => {
 // Auto-open document detail when navigated with ?knowledge_id=xxx.
 // Note: this runs both when the KB page mounts with a query param AND when a
 // subsequent in-page navigation (e.g. from the global command palette) only
-// changes the query without re-mounting the component — in that case kbId is
-// the same and cardList may already be populated, so relying solely on the
+// changes the query without re-mounting the component; the internal ID is
+// stable and cardList may already be populated, so relying solely on the
 // cardList watcher misses the trigger.
 const pendingKnowledgeId = ref<string | null>(
   (route.query.knowledge_id as string) || null
@@ -720,10 +503,6 @@ const tryAutoOpenDocument = async () => {
   const request = ++autoOpenRequest;
   const card = cardList.value.find((c: KnowledgeCard) => c.id === targetId);
 
-  // The current card list only contains the folder being browsed. A document
-  // opened from retrieval results may live in any nested folder, so resolve its
-  // folder from the detail endpoint before opening the drawer. Otherwise the
-  // drawer opens correctly while the page misleadingly remains at KB root.
   let target = card || ({ id: targetId } as KnowledgeCard);
   try {
     const response: any = await getKnowledgeDetails(targetId);
@@ -731,12 +510,11 @@ const tryAutoOpenDocument = async () => {
     const detail = response?.data || response;
     if (detail && typeof detail === 'object') {
       target = { ...target, ...detail, id: targetId } as KnowledgeCard;
-      selectedFolderPath.value = detail.folder_path || ROOT_FOLDER_PATH;
     }
   } catch (error) {
     // Keep the previous ID-only fallback: getCardDetails will surface the
     // normal detail loading error, while links to root-level files still work.
-    console.error('Failed to resolve referenced document folder', error);
+    console.error('Failed to load referenced article', error);
   }
 
   if (request !== autoOpenRequest) return;
@@ -766,7 +544,7 @@ const handleOpenKnowledgeEvent = (e: Event) => {
 };
 
 onMounted(() => {
-  loadKnowledgeList();
+  void resources.fetchKnowledgeBase();
   editorResources.ensureParserEngines();
 
   window.addEventListener('knowledgeFileUploaded', handleFileUploaded as EventListener);
@@ -780,7 +558,6 @@ onUnmounted(() => {
   window.removeEventListener('openURLImportDialog', handleOpenURLImportDialog as EventListener);
   window.removeEventListener('reliquary:knowledge-file-drop', handleKnowledgeFileDrop as EventListener);
   window.removeEventListener('reliquary:open-knowledge', handleOpenKnowledgeEvent as EventListener);
-  stopMovePoll();
   if (timeout !== null) {
     clearTimeout(timeout);
     timeout = null;
@@ -928,7 +705,6 @@ const confirmDeleteKnowledge = (index: number, item: KnowledgeCard) => {
       if (!stillPresent) break;
       await new Promise<void>((r) => setTimeout(r, delayMs));
     }
-    void loadFolderTree(kbId.value);
   });
 };
 
@@ -938,108 +714,10 @@ const onReparseMenuClick = (index: number, item: KnowledgeCard) => {
   }
 };
 
-const handleMoveKnowledge = async (item: KnowledgeCard) => {
-  moveKnowledgeId.value = item.id;
-  moveMenuMode.value = 'targets';
-  moveTargetsLoading.value = true;
-  moveTargetKbs.value = [];
-  try {
-    const res: any = await listMoveTargets(kbId.value);
-    moveTargetKbs.value = res.data || [];
-  } catch {
-    moveTargetKbs.value = [];
-  } finally {
-    moveTargetsLoading.value = false;
-  }
-};
-
-const handleMoveSelectTarget = (kb: any) => {
-  moveSelectedTargetId.value = kb.id;
-  moveSelectedTargetName.value = kb.name;
-  moveMode.value = 'reuse_vectors';
-  moveMenuMode.value = 'confirm';
-};
-
-const handleMoveBack = () => {
-  if (moveMenuMode.value === 'confirm') {
-    moveMenuMode.value = 'targets';
-  } else {
-    moveMenuMode.value = 'normal';
-  }
-};
-
-const handleMoveConfirm = async () => {
-  if (!moveSelectedTargetId.value || moveSubmitting.value) return;
-  moveSubmitting.value = true;
-  try {
-    const res: any = await moveKnowledge({
-      knowledge_ids: [moveKnowledgeId.value],
-      source_kb_id: kbId.value,
-      target_kb_id: moveSelectedTargetId.value,
-      mode: moveMode.value,
-    });
-    const taskId = res.data?.task_id;
-    MessagePlugin.info(t('knowledgeBase.moveStarted'));
-    // Close the card menu
-    moveMenuMode.value = 'normal';
-    cardList.value.forEach(c => { c.isMore = false; });
-
-    if (taskId) {
-      startMovePoll(taskId);
-    } else {
-      moveSubmitting.value = false;
-      resetPage(); // Reset page counter when reloading files after move
-      loadKnowledgeFiles(kbId.value);
-      void loadFolderTree(kbId.value);
-    }
-  } catch (e: any) {
-    MessagePlugin.error(e?.message || t('knowledgeBase.moveFailed'));
-    moveSubmitting.value = false;
-  }
-};
-
-const startMovePoll = (taskId: string) => {
-  if (movePollTimer) clearInterval(movePollTimer);
-  movePollTimer = setInterval(async () => {
-    try {
-      const res: any = await getKnowledgeMoveProgress(taskId);
-      const data = res.data;
-      if (!data) return;
-      if (data.status === 'completed') {
-        stopMovePoll();
-        moveSubmitting.value = false;
-        const failed = data.failed || 0;
-        if (failed > 0) {
-          MessagePlugin.warning(t('knowledgeBase.moveCompletedWithErrors', { success: (data.processed || 0) - failed, failed }));
-        } else {
-          MessagePlugin.success(t('knowledgeBase.moveCompleted'));
-        }
-        resetPage(); // Reset page counter when reloading files after move completion
-        loadKnowledgeFiles(kbId.value);
-        void loadFolderTree(kbId.value);
-      } else if (data.status === 'failed') {
-        stopMovePoll();
-        moveSubmitting.value = false;
-        MessagePlugin.error(t('knowledgeBase.moveFailed'));
-      }
-    } catch {
-      // ignore poll errors
-    }
-  }, 2000);
-};
-
-const stopMovePoll = () => {
-  if (movePollTimer) {
-    clearInterval(movePollTimer);
-    movePollTimer = null;
-  }
-};
-
 const manualEditorSuccess = ({ kbId: savedKbId }: { kbId: string; knowledgeId: string; status: 'draft' | 'publish' }) => {
   if (savedKbId === kbId.value) {
     resetPage(); // Reset page counter when reloading files after manual edit
     loadKnowledgeFiles(savedKbId);
-    void loadFolderTree(savedKbId);
   }
 };
 
@@ -1074,26 +752,11 @@ const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
 
 const uploadConfirmStore = useUploadConfirmStore();
 
-const getFolderUploadFileName = (file: File, targetFolder: string) =>
-  buildUploadFileName(file, targetFolder);
-
 const showUploadResultMessages = (
   successCount: number,
   failCount: number,
   totalCount: number,
-  mode: 'document' | 'folder',
 ) => {
-  if (mode === 'folder') {
-    if (failCount === 0) {
-      MessagePlugin.success(t('knowledgeBase.uploadAllSuccess', { count: successCount }));
-    } else if (successCount > 0) {
-      MessagePlugin.warning(t('knowledgeBase.uploadPartialSuccess', { success: successCount, fail: failCount }));
-    } else {
-      MessagePlugin.error(t('knowledgeBase.uploadAllFailed'));
-    }
-    return;
-  }
-
   if (totalCount === 1) {
     if (successCount === 1) {
       MessagePlugin.success(t('knowledgeBase.uploadSuccess'));
@@ -1114,8 +777,6 @@ const executeUploadBatch = async (
   files: File[],
   options: {
     processConfig?: KnowledgeProcessOverrides;
-    /** Destination folder confirmed in the upload dialog; '' is the root. */
-    targetFolder?: string;
     sourceInfoByItem?: Record<string, IntakeSourceInfo>;
   } = {},
 ) => {
@@ -1128,7 +789,6 @@ const executeUploadBatch = async (
   let failCount = 0;
   let duplicateCount = 0;
   const totalCount = files.length;
-  const hasFolderPaths = files.some(isFolderUpload);
 
   for (const file of files) {
     try {
@@ -1139,8 +799,6 @@ const executeUploadBatch = async (
         source_info?: IntakeSourceInfo
       } = { file };
 
-      const fileName = getFolderUploadFileName(file, options.targetFolder || ROOT_FOLDER_PATH);
-      if (fileName) uploadData.fileName = fileName;
       if (options.processConfig) {
         uploadData.process_config = options.processConfig;
       }
@@ -1187,7 +845,7 @@ const executeUploadBatch = async (
   }
 
   if (successCount > 0 || failCount > 0) {
-    showUploadResultMessages(successCount, failCount, totalCount, hasFolderPaths ? 'folder' : 'document');
+    showUploadResultMessages(successCount, failCount, totalCount);
   }
   return { successCount, failCount, duplicateCount };
 };
@@ -1242,13 +900,8 @@ const handleUploadConfirmResult = async (result: UploadConfirmResult) => {
   const processConfig = result.processConfig;
 
   if (files.length > 0) {
-    const hasFolderPaths = files.some(isFolderUpload);
-    if (hasFolderPaths) {
-      MessagePlugin.info(t('knowledgeBase.uploadingFolder', { total: files.length }, files.length));
-    }
-    await executeUploadBatch(files, {
+      await executeUploadBatch(files, {
       processConfig,
-      targetFolder: result.targetFolder || ROOT_FOLDER_PATH,
       sourceInfoByItem: result.sourceInfoByItem,
     });
   }
@@ -1269,10 +922,6 @@ const openUploadConfirmDialog = async (files: File[], urls: string[] = []) => {
       urls,
       acceptFileTypes: acceptFileTypes.value,
       supportedFileTypes: [...supportedFileTypes.value],
-      // Pre-fill the destination with the folder being browsed; the dialog shows
-      // it and lets the user pick another folder (or the root) before confirming.
-      targetFolder: selectedFolderPath.value,
-      folderOptions: folderOptions.value,
     });
     await handleUploadConfirmResult(result);
   } catch {
@@ -1304,28 +953,7 @@ const handleManualCreate = () => {
   });
 };
 
-const handleOpenKBSettings = () => {
-  if (!kbId.value) {
-    MessagePlugin.warning(t('knowledgeEditor.messages.missingId'));
-    return;
-  }
-  uiStore.openKBSettings(kbId.value);
-};
-
-const handleNavigateToKbList = () => {
-  router.push('/platform/knowledge-bases');
-};
-
-const handleNavigateToCurrentKB = () => {
-  if (!kbId.value) return;
-  router.push(`/platform/knowledge-bases/${kbId.value}`);
-};
-
-const handleKnowledgeDropdownSelect = (data: { value: string }) => {
-  if (!data?.value) return;
-  if (data.value === kbId.value) return;
-  router.push(`/platform/knowledge-bases/${data.value}`);
-};
+const handleOpenKBSettings = () => uiStore.openSettings('knowledge');
 
 const handleManualEdit = (index: number, item: KnowledgeCard) => {
 
@@ -1577,7 +1205,7 @@ const confirmBatchDelete = async () => {
   const deletedIdSet = new Set(ids);
   batchDeleting.value = true;
   try {
-    const res: any = await batchDeleteKnowledge(kbId.value, ids);
+    const res: any = await batchDeleteKnowledge(ids);
     if (res?.success) {
       MessagePlugin.success(t('knowledgeBase.batchDeleteSuccess', { count: ids.length }));
       clearSelection();
@@ -1592,7 +1220,6 @@ const confirmBatchDelete = async () => {
         if (!stillPresent) break;
         await new Promise<void>((r) => setTimeout(r, delayMs));
       }
-      void loadFolderTree(kbId.value);
     } else {
       MessagePlugin.error(res?.message || t('knowledgeBase.batchDeleteFailed'));
     }
@@ -1637,7 +1264,7 @@ const downloadKnowledge = async (item: KnowledgeCard) => {
 
 // Bridge card-view actions back to existing per-card handlers.
 const handleCardAction = (
-  action: 'download' | 'edit' | 'reparse' | 'cancel-parse' | 'move' | 'move-folder' | 'delete' | 'view-trace' | 'batch-manage',
+  action: 'download' | 'edit' | 'reparse' | 'cancel-parse' | 'delete' | 'view-trace' | 'batch-manage',
   item: KnowledgeCard,
 ) => {
   const idx = (cardList.value || []).findIndex((i: KnowledgeCard) => i.id === item.id);
@@ -1648,7 +1275,6 @@ const handleCardAction = (
     return confirmRebuildKnowledge(idx, item);
   }
   if (action === 'cancel-parse') return confirmCancelParseKnowledge(item);
-  if (action === 'move') return handleMoveKnowledge(item);
   if (action === 'delete') return confirmDeleteKnowledge(idx, item);
   if (action === 'view-trace') return handleViewTrace(idx, item);
   if (action === 'batch-manage') return handleEnterBatchFromCard(item);
@@ -1656,7 +1282,7 @@ const handleCardAction = (
 
 // Bridge list-view actions back to existing per-card handlers.
 const handleListAction = (
-  action: 'download' | 'edit' | 'reparse' | 'cancel-parse' | 'move' | 'move-folder' | 'delete' | 'view-trace' | 'batch-manage',
+  action: 'download' | 'edit' | 'reparse' | 'cancel-parse' | 'delete' | 'view-trace' | 'batch-manage',
   item: KnowledgeCard,
 ) => {
   const idx = (cardList.value || []).findIndex((i: KnowledgeCard) => i.id === item.id);
@@ -1664,7 +1290,6 @@ const handleListAction = (
   if (action === 'edit') return handleManualEdit(idx, item);
   if (action === 'reparse') return confirmRebuildKnowledge(idx, item);
   if (action === 'cancel-parse') return confirmCancelParseKnowledge(item);
-  if (action === 'move') return handleMoveKnowledge(item);
   if (action === 'delete') return confirmDeleteKnowledge(idx, item);
   if (action === 'view-trace') return handleViewTrace(idx, item);
   if (action === 'batch-manage') return handleEnterBatchFromCard(item);
@@ -1696,14 +1321,9 @@ watch(cardList, () => {
 }, { deep: false });
 
 // 处理知识库编辑成功后的回调
-const handleKBEditorSuccess = (kbIdValue: string) => {
-  resources.invalidateKnowledgeBaseDetail(kbIdValue);
-  resources.invalidate('knowledgeBases');
-  loadKnowledgeList();
-  if (kbIdValue === kbId.value) {
-    loadKnowledgeBaseInfo(kbIdValue, true);
-  }
-};
+onMounted(() => window.addEventListener('reliquary:knowledge-settings-saved', refreshKnowledgeSettings));
+onUnmounted(() => window.removeEventListener('reliquary:knowledge-settings-saved', refreshKnowledgeSettings));
+const refreshKnowledgeSettings = () => { if (kbId.value) void loadKnowledgeBaseInfo(kbId.value, true); };
 </script>
 
 <template>
@@ -1716,32 +1336,8 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
         <div class="document-header-title">
           <div class="document-title-row">
             <h2 class="document-breadcrumb">
-              <button type="button" class="breadcrumb-link" @click="handleNavigateToKbList">
-                {{ $t('menu.knowledgeBase') }}
-              </button>
+              <span>{{ kbInfo?.name || $t('menu.knowledgeBase') }}</span>
               <t-icon name="chevron-right" class="breadcrumb-separator" />
-              <KBSwitcherDropdown v-if="knowledgeList.length" :kb-list="knowledgeList" :current-kb-id="kbId"
-                @select="(id) => handleKnowledgeDropdownSelect({ value: id })">
-                <button type="button" class="breadcrumb-link dropdown" :disabled="!kbId">
-                  <template v-if="!kbInfo">
-                    <t-skeleton animation="gradient" :row-col="[{ width: '120px', height: '20px' }]" />
-                  </template>
-                  <template v-else>
-                    <span>{{ kbInfo.name }}</span>
-                    <t-icon name="chevron-down" />
-                  </template>
-                </button>
-              </KBSwitcherDropdown>
-              <button v-else type="button" class="breadcrumb-link" :disabled="!kbId" @click="handleNavigateToCurrentKB">
-                <template v-if="!kbInfo">
-                  <t-skeleton animation="gradient" :row-col="[{ width: '120px', height: '20px' }]" />
-                </template>
-                <template v-else>
-                  {{ kbInfo.name }}
-                </template>
-              </button>
-              <t-icon name="chevron-right" class="breadcrumb-separator" />
-
                 <button type="button" :class="['breadcrumb-tab', { active: activeKbTab === 'documents' }]" :aria-pressed="activeKbTab === 'documents'"
                   @click="activeKbTab = 'documents'">{{ $t('knowledgeEditor.document.title') }}</button>
                 <span class="breadcrumb-tab-sep">/</span><button type="button" :class="['breadcrumb-tab', { active: activeKbTab === 'entities' }]" :aria-pressed="activeKbTab === 'entities'"
@@ -1749,7 +1345,6 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
             </h2>
             <!-- 标题行右侧的动作锚点：聚拢"信息"和"设置"两个圆形按钮。 -->
             <div class="kb-title-actions">
-
 
               <KBInfoPopover v-if="kbInfo" :kb-info="kbInfo"
                 :supported-file-types="[...supportedFileTypes]" />
@@ -1775,48 +1370,16 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
       </div>
 
       <div v-if="activeKbTab === 'entities'" class="entity-workbench-area">
-        <KnowledgeWorkbench v-if="kbId" :kb-id="kbId"
+        <KnowledgeWorkbench v-if="kbId"
           @open-source="openSourceDoc" />
       </div>
 
       <template v-if="activeKbTab === 'documents'">
         <div class="knowledge-main">
-          <KbFolderTree v-if="showFolderTree && !folderTreeCollapsed" :tree="folderTree" :selected-path="selectedFolderPath"
-            :loading="folderTreeLoading"
-            @select="handleFolderSelect" @update:collapsed="handleFolderTreeCollapsedChange"
-            @rename="handleFolderRename" />
+
           <div class="documents-content">
             <div class="doc-card-area">
-              <nav v-if="showFolderTree" class="doc-folder-path"
-                :aria-label="$t('knowledgeBase.folderTree.title')">
-                <t-tooltip v-if="folderTreeCollapsed" :content="$t('knowledgeBase.folderTree.expand')" placement="top">
-                  <button type="button" class="doc-folder-path__tree-toggle"
-                    :aria-label="$t('knowledgeBase.folderTree.expand')"
-                    @click="handleFolderTreeCollapsedChange(false)">
-                    <t-icon name="folder" size="14px" />
-                  </button>
-                </t-tooltip>
-                <span v-if="!folderBreadcrumbs.length" class="doc-folder-path__crumb is-current">
-                  {{ $t('knowledgeBase.folderTree.rootRow') }}
-                </span>
-                <button v-else type="button" class="doc-folder-path__crumb"
-                  @click="handleFolderSelect('')">
-                  {{ $t('knowledgeBase.folderTree.rootRow') }}
-                </button>
-                <template v-for="(crumb, index) in folderBreadcrumbs" :key="crumb.path">
-                  <t-icon name="chevron-right" class="doc-folder-path__sep" />
-                  <span v-if="index === folderBreadcrumbs.length - 1" class="doc-folder-path__crumb is-current">
-                    {{ crumb.name }}
-                  </span>
-                  <button v-else type="button" class="doc-folder-path__crumb" @click="handleFolderSelect(crumb.path)">
-                    {{ crumb.name }}
-                  </button>
-                </template>
-                <!-- Filtering silently widens the scope to sub-folders, so say so. -->
-                <span v-if="isFiltering" class="doc-folder-path__scope">
-                  {{ $t('knowledgeBase.folderTree.searchingSubtree') }}
-                </span>
-              </nav>
+
               <div class="doc-filter-bar">
                 <t-input v-model.trim="docSearchKeyword" :placeholder="$t('knowledgeBase.docSearchPlaceholder')"
                   clearable class="doc-search-input" @clear="loadKnowledgeFiles(kbId)"
@@ -1894,7 +1457,7 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
               </div>
               <div class="doc-scroll-container"
                 :class="{
-                  'is-empty': !cardList.length && !currentChildFolders.length && !docListLoading,
+                  'is-empty': !cardList.length && !docListLoading,
                   'is-marquee-active': docMarqueeVisible,
                 }"
                 ref="knowledgeScroll" @scroll="handleScroll" @mousedown="onDocMarqueeMouseDown">
@@ -1902,7 +1465,7 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
                   :class="{ 'is-add': docMarqueeMode === 'add', 'is-subtract': docMarqueeMode === 'subtract' }"
                   :style="docMarqueeBoxStyle" aria-hidden="true" />
                 <!-- 文档骨架屏 -->
-                <div v-if="docListLoading && cardList.length === 0 && !currentChildFolders.length" class="doc-card-list doc-card-list-animated">
+                <div v-if="docListLoading && cardList.length === 0" class="doc-card-list doc-card-list-animated">
                   <div v-for="n in 8" :key="'doc-skel-' + n" class="knowledge-card knowledge-card-skeleton">
                     <div class="card-content">
                       <div class="card-content-nav">
@@ -1917,74 +1480,48 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
                     </div>
                   </div>
                 </div>
-                <template v-else-if="(cardList.length || currentChildFolders.length) && viewMode === 'grid' && selectedParseStatus !== 'rejected'">
+                <template v-else-if="cardList.length && viewMode === 'grid' && selectedParseStatus !== 'rejected'">
                   <DocumentCardView
                     :items="cardList"
-                    :folders="currentChildFolders" :folder-options="folderOptions"
+
                     :selected-ids="selectedIds"
                     :batch-mode="batchMode"
 
-
                     :trace-available-by-id="traceAvailableById"
-                    :move-menu-mode="moveMenuMode"
-                    :move-target-kbs="moveTargetKbs"
-                    :move-targets-loading="moveTargetsLoading"
-                    :move-selected-target-name="moveSelectedTargetName"
-                    :move-mode="moveMode"
-                    :move-submitting="moveSubmitting"
-                    :show-folder-path="showDocumentFolderPath"
+
                     @open="(item: any) => openKnowledgeItem(item)"
-                    @open-folder="handleFolderSelect"
-                    @move-to-folder="(item: any, path: string) => moveKnowledgeIntoFolder([item.id], path)"
+
                     @toggle-checkbox="onCardGridCheckboxChange"
                     @menu-visible-change="(visible: boolean, item: any) => onCardMoreVisibleChange(visible, item)"
                     @action="(action: any, item: any) => handleCardAction(action, item)"
-                    @move-select-target="(kb: any) => handleMoveSelectTarget(kb)"
-                    @move-back="handleMoveBack"
-                    @move-confirm="handleMoveConfirm"
-                    @update:move-mode="(mode: any) => moveMode = mode"
+
                   />
                 </template>
-                <template v-else-if="(cardList.length || currentChildFolders.length) && (viewMode === 'list' || selectedParseStatus === 'rejected')">
-                  <DocumentListView :items="cardList" :folders="currentChildFolders" :folder-options="folderOptions"
+                <template v-else-if="cardList.length && (viewMode === 'list' || selectedParseStatus === 'rejected')">
+                  <DocumentListView :items="cardList"
                     :selected-ids="selectedIds"
 
                     :trace-visible-ids="traceAvailableById"
-                    :move-menu-mode="moveMenuMode"
-                    :move-target-kbs="moveTargetKbs"
-                    :move-targets-loading="moveTargetsLoading"
-                    :move-selected-target-name="moveSelectedTargetName"
-                    :move-mode="moveMode"
-                    :move-submitting="moveSubmitting"
-                    :show-folder-path="showDocumentFolderPath"
-                    @open-folder="handleFolderSelect"
-                    @move-to-folder="(item: any, path: string) => moveKnowledgeIntoFolder([item.id], path)"
+
                     @open="(item: any) => openKnowledgeItem(item)" @toggle-row="toggleSelectRow"
                     @toggle-all="toggleSelectAll" @action="(action: any, item: any) => handleListAction(action, item)"
                     @probe-trace="(item: any) => probeTraceAvailable(item)"
-                    @move-select-target="(kb: any) => handleMoveSelectTarget(kb)"
-                    @move-back="handleMoveBack"
-                    @move-confirm="handleMoveConfirm"
-                    @update:move-mode="(mode: any) => moveMode = mode"
-                    @reset-move-state="moveMenuMode = 'normal'" />
+
+                     />
                 </template>
                 <template v-else-if="!docListLoading">
                   <div class="doc-empty-state">
-                    <p v-if="selectedFolderPath || isFiltering" class="doc-empty-folder">
-                      {{ isFiltering
-                        ? $t('knowledgeBase.folderTree.emptySearch')
-                        : $t('knowledgeBase.folderTree.emptyFolder') }}
-                    </p>
-                    <EmptyKnowledge v-else :supported-file-types="[...supportedFileTypes]" />
+
+                    <EmptyKnowledge :supported-file-types="[...supportedFileTypes]" />
                   </div>
                 </template>
               </div>
               <div class="doc-batch-bar-anchor" v-show="batchMode || selectedIds.size > 0">
                 <DocumentBatchBar :count="selectedIds.size" :delete-loading="batchDeleting"
                   :reparse-loading="batchReparsing" :visible="batchMode || selectedIds.size > 0"
-                  :show-move-to-folder="true" :folder-options="folderOptions"
+
                   @cancel="handleBatchCancel" @delete="confirmBatchDelete" @reparse="confirmBatchReparse"
-                  @move-to-folder="(path: string) => moveKnowledgeIntoFolder(Array.from(selectedIds), path)" />
+                   />
               </div>
             </div>
           </div>
@@ -1999,13 +1536,6 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
     </div>
 
   <!-- 知识库编辑器（创建/编辑统一组件） -->
-  <KnowledgeBaseEditorModal :visible="uiStore.showKBEditorModal" :mode="uiStore.kbEditorMode"
-    :kb-id="uiStore.currentKBId || undefined" :initial-type="uiStore.kbEditorType"
-    @update:visible="(val) => val ? null : uiStore.closeKBEditor()" @success="handleKBEditorSuccess" />
-
-
-
-
 
 </template>
 <style scoped lang="less">
@@ -2030,7 +1560,6 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
   max-height: 30vh;
   overflow-y: auto;
 }
-
 
 // Breadcrumb tab switch
 .breadcrumb-tab {
@@ -2079,7 +1608,6 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
   font-weight: 400;
 }
 
-
 // 与列表页一致：浅灰底圆角区，左侧筛选为白底卡片
 .knowledge-main {
   display: flex;
@@ -2096,8 +1624,6 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
   overflow-y: auto;
   overflow-x: hidden;
 }
-
-
 
 .documents-content {
   flex: 1;
@@ -2124,76 +1650,6 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
 }
 
 // 目录树选中路径的面包屑：与顶部知识库面包屑同一套视觉语言，只是更轻量。
-.doc-folder-path {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 2px;
-  padding: 0 0 8px;
-  flex-shrink: 0;
-
-  &__tree-toggle {
-    flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    margin-right: 4px;
-    padding: 0;
-    border: 1px solid var(--td-component-border);
-    border-radius: 6px;
-    background: var(--td-bg-color-container);
-    color: var(--td-text-color-secondary);
-    cursor: pointer;
-    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
-
-    &:hover {
-      border-color: var(--td-brand-color);
-      color: var(--td-brand-color);
-      background: var(--td-bg-color-container-hover);
-    }
-  }
-
-  &__crumb {
-    max-width: 220px;
-    padding: 2px 4px;
-    border: 0;
-    border-radius: 4px;
-    background: transparent;
-    color: var(--td-text-color-secondary);
-    font-family: var(--app-font-family);
-    font-size: 12px;
-    line-height: 18px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    cursor: pointer;
-    transition: color 0.15s ease, background 0.15s ease;
-
-    &:hover {
-      color: var(--td-brand-color);
-      background: var(--td-bg-color-container-hover);
-    }
-
-    &.is-current {
-      color: var(--td-text-color-primary);
-      font-weight: 500;
-      cursor: default;
-
-      &:hover {
-        background: transparent;
-        color: var(--td-text-color-primary);
-      }
-    }
-  }
-
-  &__sep {
-    flex-shrink: 0;
-    font-size: 12px;
-    color: var(--td-text-color-placeholder);
-  }
-}
 
 .doc-filter-bar {
   padding: 0 0 12px 0;
@@ -2244,8 +1700,8 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
     z-index: 1;
   }
 
-  // The folder tree changes the available document width without changing the
-  // viewport width. Switch to a single row only when this content area itself
+  // The document area width can differ from the viewport width.
+  // Switch to a single row only when this content area itself
   // is wide enough for TDesign's fixed-width filter controls.
   @container doc-card-area (min-width: 1240px) {
     display: flex;
@@ -2271,7 +1727,6 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
       width: 100%;
     }
   }
-
 
   @media (min-width: 1280px) {
     .doc-search-input {
@@ -2653,8 +2108,6 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
   }
 }
 
-
-
 .card-bottom-right {
   flex: 1 1 auto;
   min-width: 0;
@@ -2838,115 +2291,6 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
 
     &:active {
       background: var(--td-error-color-2);
-    }
-  }
-}
-
-.move-menu {
-  min-width: 220px;
-  max-width: 280px;
-  max-height: 360px;
-  overflow-y: auto;
-
-  .move-menu-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 12px;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--td-text-color-primary);
-    border-bottom: 1px solid var(--td-component-stroke);
-    cursor: pointer;
-
-    &:hover {
-      background: var(--td-bg-color-container-hover);
-    }
-  }
-
-  .move-menu-loading {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px 0;
-  }
-
-  .move-menu-empty {
-    padding: 12px 16px;
-    font-size: 12px;
-    color: var(--td-text-color-placeholder);
-    text-align: center;
-    line-height: 1.5;
-  }
-
-  .move-target-name {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .move-target-count {
-    font-size: 12px;
-    color: var(--td-text-color-placeholder);
-  }
-
-  .move-confirm-body {
-    padding: 8px;
-
-    .move-target-info {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 8px;
-      background: var(--td-bg-color-container-hover);
-      border-radius: 6px;
-      font-size: 13px;
-      color: var(--td-text-color-secondary);
-      margin-bottom: 8px;
-    }
-
-    .move-mode-item {
-      display: flex;
-      align-items: flex-start;
-      gap: 6px;
-      padding: 6px 8px;
-      border-radius: 6px;
-      cursor: pointer;
-      margin-bottom: 4px;
-
-      &:hover {
-        background: var(--td-bg-color-container-hover);
-      }
-
-      &.active {
-        background: var(--td-brand-color-light);
-      }
-
-      .move-mode-text {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-
-        .move-mode-label {
-          font-size: 13px;
-          font-weight: 500;
-          color: var(--td-text-color-primary);
-        }
-
-        .move-mode-desc {
-          font-size: 11px;
-          color: var(--td-text-color-placeholder);
-          line-height: 1.4;
-        }
-      }
-    }
-
-    .move-confirm-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 8px;
-      margin-top: 8px;
     }
   }
 }
@@ -3325,8 +2669,6 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
     color: var(--td-warning-color);
     border-radius: 4px;
   }
-
-
 
   .card-popover-type {
     padding: 1px 6px;

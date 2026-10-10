@@ -33,8 +33,6 @@ func RegisterKnowledgeRoutes(r *gin.RouterGroup, handler *handler.KnowledgeHandl
 		kb.POST("/url", g.KBExists("id"), handler.CreateKnowledgeFromURL)
 		kb.POST("/manual", g.KBExists("id"), handler.CreateManualKnowledge)
 		kbRead.GET("", g.KBExists("id"), handler.ListKnowledge)
-		kbRead.GET("/folders", g.KBExists("id"), handler.ListKnowledgeFolders)
-		kb.PUT("/folders", g.KBExists("id"), handler.RenameKnowledgeFolder)
 		kb.DELETE("", g.KBExists("id"), handler.ClearKnowledgeBaseContents)
 	}
 
@@ -43,19 +41,6 @@ func RegisterKnowledgeRoutes(r *gin.RouterGroup, handler *handler.KnowledgeHandl
 	k := kgrp
 	kRead := k
 	{
-		// Cross-knowledge endpoints (no :id) can't be gated on a single
-		// KB via the URL — they accept a kb_id (or source/target KB) in the
-		// body and the handler fans out the access check itself. /batch and
-		// /search are read routes (retrieve). /move, /batch-delete,
-		// /batch-reparse are content writes that each bound
-		// themselves to a single (or source+target) KB and enforce the API
-		// key's KB allow-list downstream — MoveKnowledge via
-		// requireTenantAPIKeyKnowledgeBases(source,target); the batch ops via
-		// validateKnowledgeBaseAccessWithKBID (requireTenantAPIKeyKnowledgeBase)
-		// plus a per-item "belongs to the authorized KB" check in the handler
-		// and service. They are therefore declared for API keys under the
-		// ingest capability, matching their single-document siblings
-		// (k.DELETE("/:id"), k.POST("/:id/reparse"), k.PUT("/:id")).
 		kRead.GET("/batch", handler.GetKnowledgeBatch)
 		kRead.GET("/:id", g.KBExistsFromKnowledgeIDParam("id"), handler.GetKnowledge)
 		kRead.GET("/:id/stages", g.KBExistsFromKnowledgeIDParam("id"), handler.GetKnowledgeSpans)
@@ -70,29 +55,15 @@ func RegisterKnowledgeRoutes(r *gin.RouterGroup, handler *handler.KnowledgeHandl
 		kRead.GET("/:id/download", g.KBExistsFromKnowledgeIDParam("id"), handler.DownloadKnowledgeFile)
 		kRead.GET("/:id/preview", g.KBExistsFromKnowledgeIDParam("id"), handler.PreviewKnowledgeFile)
 		kRead.GET("/search", handler.SearchKnowledge)
-		kRead.GET("/move/progress/:task_id", handler.GetKnowledgeMoveProgress)
 		k.POST("/batch-reparse", handler.BatchReparseKnowledge)
 		k.POST("/batch-delete", handler.BatchDeleteKnowledge)
-		k.POST("/folder", handler.MoveKnowledgeToFolder)
-		k.POST("/move", handler.MoveKnowledge)
 	}
 }
 
-// RegisterKnowledgeBaseRoutes 注册知识库相关的路由
-func RegisterKnowledgeBaseRoutes(r *gin.RouterGroup, handler *handler.KnowledgeBaseHandler, g *accessGuards) {
-	kbgrp := r.Group("/knowledge-bases")
-	kb := kbgrp
-	kbManagement := kb
-	{
-		kbManagement.POST("", handler.CreateKnowledgeBase)
-		kb.GET("", handler.ListKnowledgeBases)
-		kb.GET("/:id", g.KBExists("id"), handler.GetKnowledgeBase)
-		kbManagement.PUT("/:id", g.KBExists("id"), handler.UpdateKnowledgeBase)
-		kbManagement.DELETE("/:id", g.KBExists("id"), handler.DeleteKnowledgeBase)
-		kb.PUT("/:id/pin", g.KBExists("id"), handler.TogglePinKnowledgeBase)
-		kb.POST("/:id/hybrid-search", g.KBExists("id"), handler.HybridSearch)
-		kb.GET("/:id/hybrid-search", g.KBExists("id"), handler.HybridSearch)
-		kbManagement.POST("/:id/duplicate", g.KBExists("id"), handler.DuplicateKnowledgeBase)
-		kb.GET("/:id/move-targets", g.KBExists("id"), handler.ListMoveTargets)
-	}
+// RegisterKnowledgeBaseRoutes exposes one settings resource and ID-based child resources.
+func RegisterKnowledgeBaseRoutes(r *gin.RouterGroup, h *handler.KnowledgeBaseHandler, g *accessGuards) {
+	r.GET("/knowledge-base", h.GetKnowledgeBase)
+	r.PUT("/knowledge-base", h.UpdateKnowledgeBase)
+	r.POST("/knowledge-bases/:id/hybrid-search", g.KBExists("id"), h.HybridSearch)
+	r.GET("/knowledge-bases/:id/hybrid-search", g.KBExists("id"), h.HybridSearch)
 }

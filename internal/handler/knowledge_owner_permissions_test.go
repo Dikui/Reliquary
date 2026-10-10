@@ -46,16 +46,6 @@ func (s *ownerKnowledgePermissionsService) GetKnowledgeBatch(_ context.Context, 
 	return items, nil
 }
 
-func (s *ownerKnowledgePermissionsService) MoveKnowledgeToFolder(context.Context, string, []string, string) (int64, error) {
-	s.actions++
-	return 1, nil
-}
-
-func (s *ownerKnowledgePermissionsService) RenameKnowledgeFolder(context.Context, string, string, string) (int64, error) {
-	s.actions++
-	return 1, nil
-}
-
 func (s *ownerKnowledgePermissionsService) ListKnowledgeByKnowledgeBaseID(context.Context, string) ([]*types.Knowledge, error) {
 	s.actions++
 	return []*types.Knowledge{}, nil
@@ -83,10 +73,8 @@ func ownerKnowledgePermissionsCases() []ownerKnowledgePermissionsCase {
 		{name: "manual", method: http.MethodPost, pattern: "/knowledge-bases/:id/knowledge/manual", path: "/knowledge-bases/kb-1/knowledge/manual", body: `{"title":"Manual","content":"Complete sourced article","status":"publish"}`, status: http.StatusOK, handler: func(h *KnowledgeHandler) gin.HandlerFunc { return h.CreateManualKnowledge }},
 		{name: "url", method: http.MethodPost, pattern: "/knowledge-bases/:id/knowledge/url", path: "/knowledge-bases/kb-1/knowledge/url", body: `{"url":"https://owner-permissions.invalid/article"}`, status: http.StatusCreated, handler: func(h *KnowledgeHandler) gin.HandlerFunc { return h.CreateKnowledgeFromURL }},
 		{name: "file", method: http.MethodPost, pattern: "/knowledge-bases/:id/knowledge/file", path: "/knowledge-bases/kb-1/knowledge/file", status: http.StatusOK, handler: func(h *KnowledgeHandler) gin.HandlerFunc { return h.CreateKnowledgeFromFile }},
-		{name: "rename_folder", method: http.MethodPut, pattern: "/knowledge-bases/:id/knowledge/folders", path: "/knowledge-bases/kb-1/knowledge/folders", body: `{"from":"before","to":"after"}`, status: http.StatusOK, handler: func(h *KnowledgeHandler) gin.HandlerFunc { return h.RenameKnowledgeFolder }},
-		{name: "move_folder", method: http.MethodPost, pattern: "/knowledge/folder", path: "/knowledge/folder", body: `{"kb_id":"kb-1","knowledge_ids":["message"],"folder_path":"after"}`, status: http.StatusOK, handler: func(h *KnowledgeHandler) gin.HandlerFunc { return h.MoveKnowledgeToFolder }},
-		{name: "batch_delete", method: http.MethodPost, pattern: "/knowledge/batch-delete", path: "/knowledge/batch-delete", body: `{"kb_id":"kb-1","ids":["message"]}`, status: http.StatusOK, handler: func(h *KnowledgeHandler) gin.HandlerFunc { return h.BatchDeleteKnowledge }},
-		{name: "batch_reparse", method: http.MethodPost, pattern: "/knowledge/batch-reparse", path: "/knowledge/batch-reparse", body: `{"kb_id":"kb-1","ids":["message"]}`, status: http.StatusOK, handler: func(h *KnowledgeHandler) gin.HandlerFunc { return h.BatchReparseKnowledge }},
+		{name: "batch_delete", method: http.MethodPost, pattern: "/knowledge/batch-delete", path: "/knowledge/batch-delete", body: `{"ids":["message"]}`, status: http.StatusOK, handler: func(h *KnowledgeHandler) gin.HandlerFunc { return h.BatchDeleteKnowledge }},
+		{name: "batch_reparse", method: http.MethodPost, pattern: "/knowledge/batch-reparse", path: "/knowledge/batch-reparse", body: `{"ids":["message"]}`, status: http.StatusOK, handler: func(h *KnowledgeHandler) gin.HandlerFunc { return h.BatchReparseKnowledge }},
 		{name: "clear", method: http.MethodDelete, pattern: "/knowledge-bases/:id/knowledge", path: "/knowledge-bases/kb-1/knowledge", status: http.StatusOK, handler: func(h *KnowledgeHandler) gin.HandlerFunc { return h.ClearKnowledgeBaseContents }},
 	}
 }
@@ -114,7 +102,7 @@ func ownerKnowledgePermissionsRouter(item ownerKnowledgePermissionsCase) (*gin.E
 	gin.SetMode(gin.TestMode)
 	service := &ownerKnowledgePermissionsService{}
 	queue := &ownerKnowledgePermissionsQueue{}
-	h := &KnowledgeHandler{kbService: &stubFolderKBService{}, kgService: service, asynqClient: queue}
+	h := &KnowledgeHandler{kbService: &stubArticleKBService{}, kgService: service, asynqClient: queue}
 	router := gin.New()
 	router.Use(middleware.ErrorHandler(), func(c *gin.Context) {
 		c.Set(types.TenantIDContextKey.String(), uint64(1))

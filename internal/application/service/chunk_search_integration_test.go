@@ -233,20 +233,16 @@ func TestChunkKeywordSearchFiltersAndTypes(t *testing.T) {
 	require.NoError(t, f.db.Model(&types.Chunk{}).Where("id = ?", disabled.ID).Update("is_enabled", false).Error)
 	deleted := f.createChunk(t, knowledge, "Filterbodymarker deleted content", "", types.ChunkTypeText)
 	require.NoError(t, f.db.Delete(deleted).Error)
-	otherKB := f.createKB(t, false, true)
-	otherKnowledge := f.createKnowledge(t, otherKB, "Other document")
-	f.createChunk(t, otherKnowledge, "Filterbodymarker other knowledge base", "", types.ChunkTypeText)
-	noKeywordKB := f.createKB(t, true, false)
-	noKeywordKnowledge := f.createKnowledge(t, noKeywordKB, "Vector only document")
-	f.createChunk(t, noKeywordKnowledge, "Filterbodymarker keywords disabled", "", types.ChunkTypeText)
 	f.assertKeywordHits(t, kb.ID, "Filterbodymarker", expected...)
-	f.assertKeywordHits(t, noKeywordKB.ID, "Filterbodymarker")
-
-	hits := f.retrieve(t, types.RetrieveParams{
-		Query: "Filterbodymarker", KnowledgeBaseIDs: []string{kb.ID}, KnowledgeIDs: []string{otherKnowledge.ID},
-	})
+	hits := f.retrieve(t, types.RetrieveParams{Query: "Filterbodymarker", KnowledgeBaseIDs: []string{kb.ID}, KnowledgeIDs: []string{"missing-article"}})
+	require.Empty(t, hits, "article restrictions are applied within the knowledge base")
+	hits = f.retrieve(t, types.RetrieveParams{Query: "Filterbodymarker", KnowledgeBaseIDs: []string{"missing-kb"}, KnowledgeIDs: []string{knowledge.ID}})
 	require.Empty(t, hits, "knowledge and knowledge base restrictions combine with AND")
-	f.assertKeywordHits(t, otherKB.ID, "Filterbodymarker", hitsForKnowledge(t, f, otherKnowledge.ID)...)
+	strategy, err := json.Marshal(types.IndexingStrategy{VectorEnabled: true, KeywordEnabled: false})
+	require.NoError(t, err)
+	require.NoError(t, f.db.Model(&types.KnowledgeBase{}).Where("id = ?", kb.ID).Update("indexing_strategy", string(strategy)).Error)
+	f.assertKeywordHits(t, kb.ID, "Filterbodymarker")
+
 }
 
 func hitsForKnowledge(t *testing.T, f *chunkSearchFixture, knowledgeID string) []string {
@@ -303,57 +299,6 @@ func TestChunkVectorSearchRestoresGeneratedQuestionMatchedContent(t *testing.T) 
 	})
 	require.Len(t, hits, 1)
 	require.Equal(t, buildKnowledgeIndexContent(knowledge, chunk.EmbeddingContent()), hits[0].Content)
-}
-
-func TestChunkKeywordSearchMoveKnowledge(t *testing.T) {
-	f := newChunkSearchFixture(t, true)
-	sourceKB := f.createKB(t, true, true)
-	movedKB := f.createKB(t, true, true)
-	source := f.createKnowledge(t, sourceKB, "Source title sourcetitlemarker")
-	var sourceChunks []*types.Chunk
-	for _, chunkType := range []string{
-		types.ChunkTypeText, types.ChunkTypeSummary, types.ChunkTypeImageOCR,
-		types.ChunkTypeImageCaption, types.ChunkTypeTableSummary, types.ChunkTypeTableColumn,
-	} {
-		sourceChunks = append(sourceChunks, f.createChunk(t, source, "Copybodymarker original body", "## Copysectionmarker", chunkType))
-	}
-	questionID := uuid.NewString()
-	require.NoError(t, sourceChunks[0].SetDocumentMetadata(&types.DocumentChunkMetadata{
-		GeneratedQuestions: []types.GeneratedQuestion{{ID: questionID, Question: "Copyquestionmarker generated question"}},
-	}))
-	require.NoError(t, f.chunks.UpdateChunk(f.ctx, sourceChunks[0]))
-	for _, chunk := range sourceChunks {
-		require.NoError(t, f.service.syncChunkIndex(f.ctx, chunk))
-	}
-	disabled := f.createChunk(t, source, "Copydisabledmarker unavailable body", "", types.ChunkTypeText)
-	disabled.IsEnabled = false
-	require.NoError(t, f.chunks.UpdateChunk(f.ctx, disabled))
-	require.NoError(t, f.indices.Save(f.ctx, &types.IndexInfo{
-		Content: disabled.Content, SourceID: disabled.ID, ChunkID: disabled.ID,
-		KnowledgeID: source.ID, KnowledgeBaseID: sourceKB.ID,
-	}, map[string]any{
-		"embedding":     map[string][]float32{disabled.ID: {1, 0, 0}},
-		"chunk_enabled": map[string]bool{disabled.ID: false},
-	}))
-	service := &knowledgeService{
-		db: f.db, repo: f.knowledge, chunkRepo: f.chunks,
-		kbService: chunkSearchKBReader{repo: f.kbs}, modelService: chunkSearchModels{}, retrieveEngine: f.retrieval,
-	}
-	require.NoError(t, service.moveOneKnowledge(f.ctx, source.ID, sourceKB, movedKB, "reuse_vectors"))
-	f.assertKeywordHits(t, sourceKB.ID, "Copybodymarker")
-	sourceIDs := make([]string, len(sourceChunks))
-	for i, chunk := range sourceChunks {
-		sourceIDs[i] = chunk.ID
-	}
-	f.assertKeywordHits(t, movedKB.ID, "Copybodymarker", sourceIDs...)
-	f.assertKeywordHits(t, movedKB.ID, "Copysectionmarker", sourceIDs...)
-	f.assertKeywordHits(t, movedKB.ID, "sourcetitlemarker", sourceIDs...)
-	f.assertKeywordHits(t, movedKB.ID, "Copyquestionmarker", sourceChunks[0].ID)
-	var movedVectorCount int64
-	require.NoError(t, f.db.Table("embeddings").Where("knowledge_base_id = ? AND knowledge_id = ?", movedKB.ID, source.ID).Count(&movedVectorCount).Error)
-	require.Equal(t, int64(len(sourceChunks)+2), movedVectorCount)
-	require.NoError(t, f.db.Table("embeddings").Where("knowledge_base_id = ?", sourceKB.ID).Count(&movedVectorCount).Error)
-	require.Zero(t, movedVectorCount)
 }
 
 type chunkSearchSQLTrace struct {

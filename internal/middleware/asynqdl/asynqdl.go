@@ -177,7 +177,6 @@ func buildDeadLetter(t *asynq.Task, taskErr error, attempts int) *types.TaskDead
 //   - tenant_id          — uniformly the tenant uint64
 //   - knowledge_base_id  — chunk / image / post-process / ...
 //   - knowledge_id       — per-document scope
-//   - source_kb_id       — KnowledgeMovePayload (semantic: source KB)
 //
 // Other plausible-looking keys (`source_id`, `target_id`) are NOT
 // probed: different payloads use them with different meanings (KB
@@ -191,7 +190,6 @@ type payloadProbe struct {
 	TenantID        uint64 `json:"tenant_id,omitempty"`
 	KnowledgeBaseID string `json:"knowledge_base_id,omitempty"`
 	KnowledgeID     string `json:"knowledge_id,omitempty"`
-	SourceKBID      string `json:"source_kb_id,omitempty"` // KnowledgeMovePayload
 }
 
 // inferScope picks the most-specific scope tuple available in the
@@ -206,11 +204,6 @@ func inferScope(p payloadProbe) (string, string) {
 	switch {
 	case p.KnowledgeBaseID != "":
 		return types.TaskScopeKnowledgeBase, p.KnowledgeBaseID
-	case p.SourceKBID != "":
-		// Knowledge move spans two KBs; the source is the better
-		// blast-radius indicator (it's where the work was being read
-		// from when the failure occurred).
-		return types.TaskScopeKnowledgeBase, p.SourceKBID
 	case p.KnowledgeID != "":
 		return types.TaskScopeKnowledge, p.KnowledgeID
 	case p.TenantID != 0:

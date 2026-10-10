@@ -29,7 +29,7 @@ func TestEntityRoutesFilterValidatePaginationAndReturnArticleDetail(t *testing.T
 	engine := gin.New()
 	engine.Use(middleware.ErrorHandler(), entityIdentityMiddleware())
 	RegisterEntityRoutes(engine.Group("/api/v1"), handler.NewEntityHandler(service.NewEntityService(db, nil)))
-	response := entityRequest(t, engine, http.MethodGet, "/api/v1/entities?scope=knowledge_base&knowledge_base_id=route-kb&entity_type=company&entity=艾克米&limit=1&offset=0", "", 1, entityOwnerID)
+	response := entityRequest(t, engine, http.MethodGet, "/api/v1/entities?entity_type=company&entity=艾克米&limit=1&offset=0", "", 1, entityOwnerID)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	var envelope entityEnvelope
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &envelope))
@@ -46,7 +46,7 @@ func TestEntityRoutesFilterValidatePaginationAndReturnArticleDetail(t *testing.T
 	require.Equal(t, []string{"艾克米"}, detail.Entity.Aliases)
 	require.Len(t, detail.Knowledge, 1)
 	require.Equal(t, article.ID, detail.Knowledge[0].ID)
-	for _, query := range []string{"limit=0", "limit=101", "offset=-1", "scope=obsolete", "scope=knowledge_base"} {
+	for _, query := range []string{"limit=0", "limit=101", "offset=-1"} {
 		response = entityRequest(t, engine, http.MethodGet, "/api/v1/entities?"+query, "", 1, entityOwnerID)
 		require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
 	}

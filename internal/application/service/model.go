@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"gorm.io/gorm"
-	"strconv"
 	"strings"
 
 	apperrors "reliquary/internal/errors"
@@ -407,7 +406,6 @@ func (s *modelService) getModelUsageDetails(
 	ctx context.Context, tenantID uint64, modelID string,
 ) (types.ModelUsageDetails, error) {
 	details := types.ModelUsageDetails{
-		ModelTiers:     []types.ModelTierUsageResource{},
 		KnowledgeBases: make([]types.ModelUsageResource, 0),
 	}
 
@@ -426,19 +424,6 @@ func (s *modelService) getModelUsageDetails(
 		}
 	}
 
-	if s.tenantService == nil {
-		return details, nil
-	}
-	tenant, err := s.tenantService.GetTenantByID(ctx, tenantID)
-	if err != nil {
-		return details, err
-	}
-	if tenant == nil {
-		return details, nil
-	}
-	if bindings := tenant.ModelTiers.UsageBindings(modelID); len(bindings) > 0 {
-		details.ModelTiers = append(details.ModelTiers, types.ModelTierUsageResource{Scope: "global", ID: strconv.FormatUint(tenantID, 10), Name: tenant.Name, Bindings: bindings})
-	}
 	return details, nil
 }
 

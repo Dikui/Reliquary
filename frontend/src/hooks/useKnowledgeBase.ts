@@ -10,17 +10,16 @@ import {
   getKnowledgeDetailsCon,
 } from "@/api/knowledge-base/index";
 import { knowledgeStore } from "@/stores/knowledge";
-import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import type { KnowledgeRepostSource } from '@/api/knowledge-base/index';
+import { useResourcesStore } from '@/stores/resources';
 import { useKnowledgeDuplicates } from './useKnowledgeDuplicates';
 
 export default function (knowledgeBaseId?: string) {
   const usemenuStore = knowledgeStore();
-  const route = useRoute();
   const { t } = useI18n();
   const { cardList, total } = storeToRefs(usemenuStore);
-  const duplicates = useKnowledgeDuplicates(() => (route.params as any)?.kbId || knowledgeBaseId);
+  const duplicates = useKnowledgeDuplicates(() => knowledgeBaseId || useResourcesStore().knowledgeBase?.id);
   let moreIndex = ref(-1);
   const details = reactive({
     title: "",
@@ -55,8 +54,6 @@ export default function (knowledgeBaseId?: string) {
       source?: string;
       start_time?: string;
       end_time?: string;
-      folder_path?: string;
-      folder_recursive?: boolean;
     } = { page: 1, page_size: 35 },
     kbId?: string,
   ): Promise<void> => {
@@ -67,9 +64,6 @@ export default function (knowledgeBaseId?: string) {
     return listKnowledgeFiles(targetKbId, query)
       .then((result: any) => {
         if (requestGeneration !== knowledgeListGeneration) return;
-
-        const currentRouteKbId = (route.params as any)?.kbId as string | undefined;
-        if (currentRouteKbId && currentRouteKbId !== targetKbId) return;
 
         const { data, total: totalResult } = result;
     const cardList_ = data.map((item: any) => {
@@ -82,7 +76,6 @@ export default function (knowledgeBaseId?: string) {
         original_file_name: item.file_name,
         display_name: displayName,
         file_name: displayName,
-        folder_path: item.folder_path || '',
         updated_at: formatStringDate(new Date(item.updated_at)),
         isMore: false,
         file_type: fileTypeSource ? String(fileTypeSource).toLocaleUpperCase() : '',
@@ -148,15 +141,7 @@ export default function (knowledgeBaseId?: string) {
       return;
     }
 
-    // 获取当前知识库ID
-    let currentKbId: string | undefined = (route.params as any)?.kbId as string;
-    if (!currentKbId && typeof window !== 'undefined') {
-      const match = window.location.pathname.match(/knowledge-bases\/([^/]+)/);
-      if (match?.[1]) currentKbId = match[1];
-    }
-    if (!currentKbId) {
-      currentKbId = knowledgeBaseId;
-    }
+    const currentKbId = knowledgeBaseId || useResourcesStore().knowledgeBase?.id;
     if (!currentKbId) {
       MessagePlugin.error(t('error.missingKbId'));
       return;

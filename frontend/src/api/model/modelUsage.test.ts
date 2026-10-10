@@ -80,7 +80,7 @@ test('rejects malformed details instead of guessing from the server message', ()
 test('keeps navigation and localization stable for all resource kinds', () => {
   assert.deepEqual(
     modelUsageResourceRoute('knowledge_base', 'kb/with slash'),
-    { path: '/platform/knowledge-bases/kb%2Fwith%20slash' },
+    { path: '/platform/settings', query: { section: 'knowledge', subsection: 'models' } },
   )
   assert.equal(modelUsageBindingI18nKey('vlm_model'), 'modelSettings.usage.bindings.vlm_model')
   assert.equal(modelUsageBindingI18nKey('future_binding'), 'modelSettings.usage.bindings.unknown')
@@ -95,10 +95,9 @@ test('maps knowledge-base bindings to the configuration section that owns them',
   assert.equal(modelUsageKnowledgeBaseSection(['summary_model', 'vlm_model']), 'models')
 })
 
-
-test('tier-only model usage prevents deletion and preserves global references', () => {
-  const details = parseModelUsageDetails({ knowledge_bases: [], model_tiers: [{ scope: 'global', id: '1', name: 'Global defaults', bindings: ['light_model_tier'] }, { scope: 'global', id: '2', name: 'Entity resolution', bindings: ['entity_resolution_model_tier'] }] })
-  assert.equal(details?.model_tiers?.length, 2)
-  assert.equal(details?.model_tiers?.[1]?.scope, 'global')
+test('model tier bindings stay attached to the unique knowledge settings', () => {
+  const details = parseModelUsageDetails({ knowledge_bases: [{ id: 'kb-1', name: 'Knowledge Base', bindings: ['light_model_tier', 'entity_resolution_model_tier'] }] })
+  assert.equal(details?.knowledge_bases.length, 1)
+  assert.deepEqual(details?.knowledge_bases[0]?.bindings, ['light_model_tier', 'entity_resolution_model_tier'])
   assert.equal(modelUsageBindingI18nKey('light_model_tier'), 'modelSettings.usage.bindings.light_model_tier')
 })

@@ -1,8 +1,8 @@
 import { get, post } from '@/utils/request'
 
-import { ENTITY_TYPES, type EntityScope, type EntityType } from './entity-scope'
-export { ENTITY_TYPES, entityScopeParams } from './entity-scope'
-export type { EntityScope, EntityType } from './entity-scope'
+import { ENTITY_TYPES, type EntityType } from './entity-types'
+export { ENTITY_TYPES } from './entity-types'
+export type { EntityType } from './entity-types'
 export interface EntityEnvelope<T> { success: boolean; data: T; error?: string }
 export interface EntityActionEnvelope { success: boolean; error?: string }
 export interface Entity {
@@ -25,15 +25,12 @@ export interface EntityArticle {
 }
 export interface EntityDetail { entity: Entity; knowledge: EntityArticle[] }
 export interface EntityListParams {
-  scope?: EntityScope
-  knowledge_base_id?: string
   entity?: string
   entity_type?: EntityType
   limit?: number
   offset?: number
 }
 function queryString(params?: EntityListParams & { status?: string }): string {
-  if (params?.scope !== undefined && !['knowledge_base', 'all'].includes(params.scope)) throw new TypeError('scope must be knowledge_base or all')
   const query = new URLSearchParams()
   for (const [key, value] of Object.entries(params || {})) if (value !== undefined && value !== '') query.set(key, String(value))
   return query.size ? `?${query}` : ''

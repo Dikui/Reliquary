@@ -44,9 +44,9 @@ Reliquary serves a single user collecting source material and maintaining entity
 
 ## Dataset and draft state
 
-Entity and suggestion lists use explicit load more with fifty and twenty rows per request. Scope changes invalidate older results. Entity details show the shared identity and articles across all knowledge bases. Workbench scope, filters and selected section are transient within the owning knowledge base view; its main documents/entities tab remains in URL state. Composing Chinese input does not trigger entity search. Clearing search refreshes immediately. Merge target options also use explicit load more and load across the entire space.
+Entity and suggestion lists use explicit load more with fifty and twenty rows per request. Filter changes invalidate older results. Entity details show the shared identity and articles in the single knowledge base. Workbench filters and selected section are transient within the article view; its main documents/entities tab remains in URL state. Composing Chinese input does not trigger entity search. Clearing search refreshes immediately. Merge target options also use explicit load more and load across the entire space.
 
-Global model tier saves stay in space settings. Knowledge base overrides save with the existing edit draft. Clearing an override restores inheritance. The server validates model compatibility. Leaving changed model tiers uses the shared application confirmation dialog. Failed saves preserve drafts and inline errors.
+Model tiers and article processing configuration save in the knowledge base settings page. The server validates model compatibility. Leaving changed model tiers uses the shared application confirmation dialog. Failed saves preserve drafts and inline errors.
 
 ## Layout and interaction
 

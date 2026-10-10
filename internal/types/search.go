@@ -212,10 +212,6 @@ type SearchParams struct {
 	DisableVectorMatch   bool      `json:"disable_vector_match"`
 	KnowledgeIDs         []string  `json:"knowledge_ids"`
 	OnlyRecommended      bool      `json:"only_recommended"`
-	// KnowledgeBaseIDs overrides the single KB ID passed to HybridSearch,
-	// allowing a single retrieval call to span multiple KBs that share the
-	// same embedding model. When empty, HybridSearch uses its own id parameter.
-	KnowledgeBaseIDs []string `json:"knowledge_base_ids,omitempty"`
 	// SkipContextEnrichment skips fetching parent, nearby, and relation chunks
 	// in processSearchResults when callers perform their own context assembly.
 	SkipContextEnrichment bool `json:"skip_context_enrichment,omitempty"`

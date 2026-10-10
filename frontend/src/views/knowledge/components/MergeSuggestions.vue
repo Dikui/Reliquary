@@ -19,9 +19,8 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { acceptEntityMergeSuggestion, listEntityMergeSuggestions, rejectEntityMergeSuggestion, entityScopeParams, type EntityMergeSuggestion, type EntityScope } from '@/api/entities'
+import { acceptEntityMergeSuggestion, listEntityMergeSuggestions, rejectEntityMergeSuggestion, type EntityMergeSuggestion } from '@/api/entities'
 import { useConfirmDelete } from '@/components/settings/useConfirmDelete'
-const props = defineProps<{ kbId: string; scope: EntityScope }>()
 const emit = defineEmits<{ 'open-source': [id: string]; changed: [] }>()
 const { t } = useI18n(), confirmDelete = useConfirmDelete()
 const status = ref<'pending' | 'accepted' | 'rejected'>('pending')
@@ -34,7 +33,7 @@ async function load(more = false) {
   if (more && loading.value) return
   const current = ++request, offset = more ? items.value.length : 0
   loading.value = true; error.value = ''
-  try { const response = await listEntityMergeSuggestions({ ...entityScopeParams(props.scope, props.kbId), status: status.value, limit: pageSize, offset }); if (!response.success) throw new Error(response.error || t('knowledgeWorkbench.requestFailed')); if (current === request) { const page = response.data || []; items.value = more ? [...items.value, ...page] : page; hasMore.value = page.length === pageSize } }
+  try { const response = await listEntityMergeSuggestions({ status: status.value, limit: pageSize, offset }); if (!response.success) throw new Error(response.error || t('knowledgeWorkbench.requestFailed')); if (current === request) { const page = response.data || []; items.value = more ? [...items.value, ...page] : page; hasMore.value = page.length === pageSize } }
   catch (cause) { if (current === request) error.value = cause instanceof Error ? cause.message : t('knowledgeWorkbench.requestFailed') }
   finally { if (current === request) loading.value = false }
 }
@@ -49,7 +48,7 @@ async function decide(item: EntityMergeSuggestion, action: 'accept' | 'reject') 
 }
 function refresh() { return load(false) }
 defineExpose({ refresh })
-watch(() => [props.kbId, props.scope, status.value], () => { request++; items.value = []; hasMore.value = false; void load(false) }, { immediate: true })
+watch(status, () => { request++; items.value = []; hasMore.value = false; void load(false) }, { immediate: true })
 onBeforeUnmount(() => { request++ })
 </script>
 <style scoped lang="less">

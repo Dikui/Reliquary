@@ -1,0 +1,449 @@
+<template>
+  <section class="knowledge-settings">
+    <div class="section-header"><h2>{{ $t('settings.knowledgeSettings') }}</h2></div>
+    <t-alert v-if="error" theme="error" :message="error" role="alert"><template #operation><t-button v-if="!formData" variant="text" :loading="loading" @click="load">{{ $t('common.retry') }}</t-button></template></t-alert>
+    <t-loading :loading="loading" show-overlay>
+      <t-tabs v-model="currentSection"><t-tab-panel v-for="tab in tabs" :key="tab" :value="tab" :label="$t(tab === 'parser' ? 'settings.parserEngine' : `knowledgeEditor.sidebar.${tab}`)" /></t-tabs>
+      <div class="knowledge-settings-body">
+                <!-- 基本信息 -->
+                <div v-show="currentSection === 'basic'" class="section">
+                  <div v-if="formData" class="section-content">
+                    <div class="section-header">
+                      <h3 class="section-title">{{ $t('knowledgeEditor.basic.title') }}</h3>
+                      <p class="section-desc">{{ $t('knowledgeEditor.basic.description') }}</p>
+                    </div>
+                    <div class="section-body">
+
+                      <!-- 索引策略 (紧跟类型选择) -->
+                      <div  class="form-item">
+                        <label class="form-label required">{{ $t('knowledgeEditor.indexing.title') }}</label>
+                        <p class="form-tip">{{ $t('knowledgeEditor.indexing.description') }}</p>
+                        <div class="indexing-checks" :class="{ 'is-locked': isIndexingLocked }">
+                          <div
+                            class="indexing-check-item"
+                            :class="{ 'is-checked': formData.indexingStrategy.vectorEnabled, 'is-disabled': isIndexingLocked }"
+                            @click="toggleVectorIndexing"
+                          >
+                            <t-checkbox
+                              :checked="formData.indexingStrategy.vectorEnabled"
+                              :disabled="isIndexingLocked"
+                              class="indexing-check-box"
+                            >{{ $t('knowledgeEditor.indexing.searchTitle') }}</t-checkbox>
+                            <p class="indexing-check-desc">{{ $t('knowledgeEditor.indexing.searchDesc') }}</p>
+                          </div>
+
+                        </div>
+                        <p v-if="isIndexingLocked" class="form-tip locked-tip">
+                          {{ $t('knowledgeEditor.indexing.lockedTip') }}
+                        </p>
+                      </div>
+                      <div class="form-item">
+                        <label class="form-label required">{{ $t('knowledgeEditor.basic.nameLabel') }}</label>
+                        <t-input
+                          v-model="formData.name"
+                          :placeholder="$t('knowledgeEditor.basic.namePlaceholder')"
+                          :maxlength="50"
+                        />
+                      </div>
+                      <div class="form-item">
+                        <label class="form-label">{{ $t('knowledgeEditor.basic.descriptionLabel') }}</label>
+                        <SafeTextarea
+                          v-model="formData.description"
+                          :placeholder="$t('knowledgeEditor.basic.descriptionPlaceholder')"
+                          :maxlength="200"
+                          :autosize="{ minRows: 3, maxRows: 6 }"
+                        />
+                      </div>
+
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 模型配置 -->
+                <div v-show="currentSection === 'models'" class="section">
+
+                  <ModelTierEditor v-if="formData" v-model="formData.modelTiers" :all-models="allModels" :before-navigate="confirmLeave" :disabled="saving" :embedding-locked="hasFiles && needsEmbedding" @resolved="resolvedModelTiers = $event" />
+                </div>
+
+                <!-- 解析引擎 -->
+                <div v-if="formData && currentSection === 'parser'" class="section">
+                  <KBParserSettings
+                    :parser-engine-rules="formData.chunkingConfig.parserEngineRules"
+                    @update:parser-engine-rules="handleParserEngineRulesUpdate"
+                  />
+                </div>
+
+                <!-- 存储引擎 -->
+
+                <!-- 分块设置 -->
+                <div  v-show="currentSection === 'chunking'" class="section">
+                  <KBChunkingSettings
+                    v-if="formData"
+                    :config="formData.chunkingConfig"
+                    @update:config="handleChunkingConfigUpdate"
+                  />
+                </div>
+
+                <!-- 多模态配置 -->
+                <div  v-show="currentSection === 'multimodal'" class="section">
+                  <div v-if="formData" class="kb-multimodal-settings">
+                    <div class="section-header">
+                      <h2>{{ $t('knowledgeEditor.multimodal.title') }}</h2>
+                      <p class="section-description">{{ $t('knowledgeEditor.multimodal.description') }}</p>
+                    </div>
+
+                    <div class="settings-group">
+                      <!-- 多模态开关 -->
+                      <div class="setting-row">
+                        <div class="setting-info">
+                          <label>{{ $t('knowledgeEditor.advanced.multimodal.label') }}</label>
+                          <p class="desc">{{ $t('knowledgeEditor.advanced.multimodal.description') }}</p>
+                        </div>
+                        <div class="setting-control">
+                          <t-switch
+                            v-model="formData.multimodalConfig.enabled"
+
+                            size="medium"
+                          />
+                        </div>
+                      </div>
+
+                      <!-- VLLM 模型选择（多模态启用时） -->
+                      <div v-if="formData.multimodalConfig.enabled" class="setting-row">
+                        <div class="setting-info">
+                          <label>{{ $t('knowledgeEditor.advanced.multimodal.vllmLabel') }} <span class="required">*</span></label>
+                          <p class="desc">{{ $t('knowledgeEditor.advanced.multimodal.vllmDescription') }}</p>
+                        </div>
+                        <div class="setting-control">
+                          <ModelSelector
+                            model-type="VLLM"
+                            :selected-model-id="formData.multimodalConfig.vllmModelId"
+                            :all-models="allModels"
+                            @update:selected-model-id="handleMultimodalVLLMChange"
+                            @add-model="handleAddVLLMModel"
+                            :placeholder="$t('knowledgeEditor.advanced.multimodal.vllmPlaceholder')"
+                          />
+                        </div>
+                      </div>
+
+                      <div v-if="formData.multimodalConfig.enabled" class="setting-row">
+                        <div class="setting-info">
+                          <label>{{ $t('knowledgeEditor.advanced.multimodal.descriptionLanguageLabel') }}</label>
+                          <p class="desc">{{ $t('knowledgeEditor.advanced.multimodal.descriptionLanguageDescription') }}</p>
+                        </div>
+                        <div class="setting-control">
+                          <t-select v-model="formData.multimodalConfig.descriptionLanguage" clearable
+                            :placeholder="$t('knowledgeEditor.advanced.multimodal.descriptionLanguageAuto')">
+                            <t-option value="Chinese" :label="$t('language.zhCN')" />
+                            <t-option value="English" :label="$t('language.enUS')" />
+                            <t-option value="Korean" :label="$t('language.koKR')" />
+                            <t-option value="Russian" :label="$t('language.ruRU')" />
+                          </t-select>
+                        </div>
+                      </div>
+
+                      <div v-if="formData.multimodalConfig.enabled" class="setting-row setting-row-vertical">
+                        <div class="setting-info">
+                          <label>{{ $t('knowledgeEditor.advanced.multimodal.customInstructionsLabel') }}</label>
+                          <p class="desc">{{ $t('knowledgeEditor.advanced.multimodal.customInstructionsDescription') }}</p>
+                        </div>
+                        <div class="setting-control setting-control-full">
+                          <SafeTextarea v-model="formData.multimodalConfig.customInstructions"
+                            :placeholder="$t('knowledgeEditor.advanced.multimodal.customInstructionsPlaceholder')"
+                            :maxlength="4000" :autosize="{ minRows: 3, maxRows: 8 }" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 高级设置 -->
+                <div  v-show="currentSection === 'advanced'" class="section">
+                  <KBAdvancedSettings
+
+                    v-if="formData"
+                    :question-generation="formData.questionGenerationConfig"
+                    :rag-enabled="formData.indexingStrategy?.vectorEnabled || formData.indexingStrategy?.keywordEnabled"
+                    :all-models="allModels"
+                    :table-metadata-instructions="formData.chunkingConfig.tableMetadataInstructions"
+                    @update:question-generation="handleQuestionGenerationUpdate"
+                    @update:table-metadata-instructions="(value: string) => { if (formData) formData.chunkingConfig.tableMetadataInstructions = value }"
+                  />
+                </div>
+
+      </div>
+    </t-loading>
+    <div class="knowledge-settings-actions"><t-button variant="outline" :disabled="!dirty || saving || loading" @click="reset">{{ $t('common.cancel') }}</t-button><t-button theme="primary" :loading="saving" :disabled="!dirty || loading" @click="handleSubmit">{{ $t('common.save') }}</t-button></div>
+  </section>
+</template>
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
+import { getKnowledgeBase, listKnowledgeFiles, updateKnowledgeBase } from '@/api/knowledge-base'
+import { useResourcesStore } from '@/stores/resources'
+import { useUIStore } from '@/stores/ui'
+import { copyModelTiers } from '@/utils/modelTiers'
+import type { ResolvedModelTiers } from '@/types/modelTiers'
+import ModelTierEditor from '@/components/ModelTierEditor.vue'
+import ModelSelector from '@/components/ModelSelector.vue'
+import SafeTextarea from '@/components/SafeTextarea.vue'
+import KBParserSettings from '@/views/knowledge/settings/KBParserSettings.vue'
+import KBChunkingSettings from '@/views/knowledge/settings/KBChunkingSettings.vue'
+import KBAdvancedSettings from '@/views/knowledge/settings/KBAdvancedSettings.vue'
+const { t } = useI18n()
+const props = defineProps<{ initialSection?: string }>()
+const resources = useResourcesStore(), uiStore = useUIStore()
+const currentSection = ref(props.initialSection || uiStore.settingsInitialSubSection || 'basic')
+const formData = ref<any>(null), saved = ref(''), loading = ref(false), saving = ref(false), error = ref('')
+const activeKbId = ref(''), hasFiles = ref(false), initialIndexingStrategy = ref<any>(null)
+const resolvedModelTiers = ref<ResolvedModelTiers>({})
+const allModels = computed(() => resources.allModels)
+const dirty = computed(() => !!formData.value && JSON.stringify(formData.value) !== saved.value)
+const needsEmbedding = computed(() => formData.value?.indexingStrategy?.vectorEnabled || formData.value?.indexingStrategy?.keywordEnabled)
+const isIndexingLocked = computed(() => hasFiles.value)
+const tabs = ['basic', 'models', 'parser', 'chunking', 'multimodal', 'advanced']
+let generation = 0
+async function load() {
+  const request = ++generation
+  loading.value = true; error.value = ''
+  try {
+    const [response] = await Promise.all([getKnowledgeBase(), resources.ensureModels()])
+    if (request !== generation) return
+    const kb = response?.data
+    if (!kb) throw new Error(t('knowledgeEditor.messages.loadDataFailed'))
+    activeKbId.value = kb.id
+    const files: any = await listKnowledgeFiles(kb.id, { page: 1, page_size: 1 })
+    if (request !== generation) return
+    hasFiles.value = (files?.total || 0) > 0
+    formData.value = {
+
+      modelTiers: copyModelTiers({ light: kb.summary_model_id || '', entity_resolution: kb.summary_model_id || '', generation: kb.summary_model_id || '', embedding: kb.embedding_model_id || '', ...kb.model_tiers }),
+      imageProcessingConfig: kb.image_processing_config || {},
+      name: kb.name || '',
+      description: kb.description || '',
+
+      chunkingConfig: {
+        chunkSize: kb.chunking_config?.chunk_size || 512,
+        // Fallback only used when the loaded KB has no chunk_overlap stored.
+        // Aligned with chunker.DefaultChunkOverlap on the backend.
+        chunkOverlap: kb.chunking_config?.chunk_overlap ?? 80,
+        separators: kb.chunking_config?.separators || ['\n\n', '\n', '。', '！', '？', ';', '；'],
+        parserEngineRules: kb.chunking_config?.parser_engine_rules || undefined,
+        enableParentChild: kb.chunking_config?.enable_parent_child,
+        parentChunkSize: kb.chunking_config?.parent_chunk_size || 4096,
+        childChunkSize: kb.chunking_config?.child_chunk_size || 384,
+        // Existing KBs without strategy field render as empty (= legacy behavior).
+        // The user has to actively pick a value to opt in to the new tiers.
+        strategy: kb.chunking_config?.strategy || '',
+        tokenLimit: kb.chunking_config?.token_limit || 0,
+        languages: kb.chunking_config?.languages || [],
+        tableMetadataInstructions: kb.chunking_config?.table_metadata_instructions || ''
+      },
+      multimodalConfig: {
+        enabled: !!kb.vlm_config?.enabled,
+        vllmModelId: kb.vlm_config?.model_id || '',
+        descriptionLanguage: kb.vlm_config?.description_language || '',
+        customInstructions: kb.vlm_config?.custom_instructions || ''
+      },
+      questionGenerationConfig: {
+        enabled: kb.question_generation_config?.enabled,
+        questionCount: kb.question_generation_config?.question_count || 3,
+        customInstructions: kb.question_generation_config?.custom_instructions || ''
+      },
+        indexingStrategy: {
+        vectorEnabled: kb.indexing_strategy?.vector_enabled ?? true,
+        keywordEnabled: kb.indexing_strategy?.keyword_enabled ?? true,
+      },
+    }
+
+    initialIndexingStrategy.value = { ...formData.value.indexingStrategy }
+    saved.value = JSON.stringify(formData.value)
+  } catch (cause: any) { if (request === generation) error.value = cause.message || t('knowledgeEditor.messages.loadDataFailed') }
+  finally { if (request === generation) loading.value = false }
+}
+function handleChunkingConfigUpdate(value: any) { formData.value.chunkingConfig = { ...value } }
+function handleParserEngineRulesUpdate(value: any) { formData.value.chunkingConfig.parserEngineRules = value }
+function handleQuestionGenerationUpdate(value: any) { formData.value.questionGenerationConfig = { ...value } }
+function handleMultimodalVLLMChange(value: string) { formData.value.multimodalConfig.vllmModelId = value }
+function handleAddVLLMModel() { void confirmLeave().then(allowed => { if (allowed) uiStore.openSettings('models') }) }
+function toggleVectorIndexing() { if (!isIndexingLocked.value) { const enabled = !formData.value.indexingStrategy.vectorEnabled; formData.value.indexingStrategy = { vectorEnabled: enabled, keywordEnabled: enabled } } }
+const buildSubmitData = () => {
+  if (!formData.value) return null
+
+  const data: any = {
+    model_tiers: copyModelTiers(formData.value.modelTiers),
+    name: formData.value.name,
+    description: formData.value.description,
+    chunking_config: {
+      chunk_size: formData.value.chunkingConfig.chunkSize,
+      chunk_overlap: formData.value.chunkingConfig.chunkOverlap,
+      separators: formData.value.chunkingConfig.separators,
+      enable_parent_child: formData.value.chunkingConfig.enableParentChild,
+      parent_chunk_size: formData.value.chunkingConfig.parentChunkSize,
+      child_chunk_size: formData.value.chunkingConfig.childChunkSize,
+      // Adaptive chunking fields are always sent (empty/zero values
+      // included) so the user can clear them — backend uses pointer DTOs
+      // to distinguish "not in payload" from "explicitly empty".
+      strategy: formData.value.chunkingConfig.strategy ?? '',
+      token_limit: formData.value.chunkingConfig.tokenLimit ?? 0,
+      languages: formData.value.chunkingConfig.languages ?? [],
+      table_metadata_instructions: formData.value.chunkingConfig.tableMetadataInstructions || '',
+      parser_engine_rules: formData.value.chunkingConfig.parserEngineRules || []
+    },
+    embedding_model_id: formData.value.modelTiers.embedding || '',
+    summary_model_id: formData.value.modelTiers.generation || ''
+  }
+
+  // 添加多模态配置
+  data.vlm_config = {
+    enabled: formData.value.multimodalConfig.enabled,
+    model_id: formData.value.multimodalConfig.enabled
+      ? (formData.value.multimodalConfig.vllmModelId || '')
+      : '',
+    description_language: formData.value.multimodalConfig.descriptionLanguage || '',
+    custom_instructions: formData.value.multimodalConfig.customInstructions || ''
+  }
+
+  // 添加问题生成配置
+  if (formData.value.questionGenerationConfig?.enabled) {
+    data.question_generation_config = {
+      enabled: true,
+      question_count: formData.value.questionGenerationConfig.questionCount || 3,
+      custom_instructions: formData.value.questionGenerationConfig.customInstructions || ''
+    }
+  } else {
+    data.question_generation_config = {
+      enabled: false,
+      question_count: 3,
+      custom_instructions: formData.value.questionGenerationConfig?.customInstructions || ''
+    }
+  }
+
+  // Send indexing strategy
+
+    data.indexing_strategy = {
+      vector_enabled: formData.value.indexingStrategy?.vectorEnabled ?? true,
+      keyword_enabled: formData.value.indexingStrategy?.keywordEnabled ?? true,
+    }
+
+  return data
+}
+
+async function handleSubmit() {
+  if (saving.value || loading.value || !formData.value) return
+  if (!formData.value.name.trim()) { error.value = t('knowledgeEditor.messages.nameRequired'); currentSection.value = 'basic'; return }
+  if (needsEmbedding.value && !formData.value.modelTiers.embedding) { error.value = t('knowledgeEditor.indexing.embeddingRequired'); currentSection.value = 'models'; return }
+  if (!formData.value.modelTiers.generation) { error.value = t('knowledgeEditor.messages.summaryRequired'); currentSection.value = 'models'; return }
+  saving.value = true; error.value = ''
+  try {
+    const data = buildSubmitData()
+    const result: any = await updateKnowledgeBase({ name: data.name, description: data.description, config: {
+      model_tiers: data.model_tiers, chunking_config: data.chunking_config, image_processing_config: formData.value.imageProcessingConfig,
+      indexing_strategy: data.indexing_strategy, vlm_config: data.vlm_config, question_generation_config: data.question_generation_config,
+    } })
+    if (!result.success) throw new Error(result.message || t('common.operationFailed'))
+    saved.value = JSON.stringify(formData.value)
+    resources.invalidateKnowledgeBaseDetail()
+    window.dispatchEvent(new CustomEvent('reliquary:knowledge-settings-saved'))
+    MessagePlugin.success(t('knowledgeEditor.messages.updateSuccess'))
+  } catch (cause: any) { error.value = cause.message || t('common.operationFailed') }
+  finally { saving.value = false }
+}
+function reset() { if (saved.value && !saving.value) formData.value = JSON.parse(saved.value) }
+function confirmLeave(): Promise<boolean> {
+  if (saving.value) return Promise.resolve(false)
+  if (!dirty.value) return Promise.resolve(true)
+  return new Promise(resolve => { const dialog = DialogPlugin.confirm({ header: t('common.discardTitle'), body: t('common.discardHint'), confirmBtn: t('common.discard'), cancelBtn: t('common.cancel'), onConfirm: () => { reset(); dialog.destroy(); resolve(true) }, onCancel: () => { dialog.destroy(); resolve(false) }, onClose: () => { dialog.destroy(); resolve(false) } }) })
+}
+function beforeUnload(event: BeforeUnloadEvent) { if (dirty.value) { event.preventDefault(); event.returnValue = '' } }
+defineExpose({ confirmLeave })
+onMounted(() => { void load(); window.addEventListener('beforeunload', beforeUnload) })
+onBeforeUnmount(() => { generation++; window.removeEventListener('beforeunload', beforeUnload) })
+</script>
+<style scoped lang="less">
+@import '../../assets/settings-layout.less';
+.knowledge-settings-body { padding-top: 24px; min-height: 300px; }
+.section-title, .section-header h2 { font-size: 20px; margin: 0 0 8px; }
+.section-desc, .form-tip { color: var(--td-text-color-secondary); line-height: 1.6; font-size: 13px; }
+.form-item { margin-bottom: 22px; }
+.form-label { display: block; margin-bottom: 8px; font-weight: 500; }
+.indexing-check-item { cursor: pointer; }
+.is-locked .indexing-check-item { cursor: default; }
+.knowledge-settings-actions { display: flex; justify-content: flex-end; gap: 12px; padding-top: 24px; }
+// 多模态配置内联样式（与子组件 KBAdvancedSettings 一致）
+.kb-multimodal-settings {
+  width: 100%;
+
+  .section-header {
+    margin-bottom: 20px;
+
+    h2 {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--td-text-color-primary);
+      margin: 0 0 6px 0;
+    }
+
+    .section-description {
+      font-size: 14px;
+      color: var(--td-text-color-secondary);
+      margin: 0;
+      line-height: 1.5;
+    }
+  }
+
+  .settings-group {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .setting-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--td-component-stroke);
+
+    &:last-child {
+      border-bottom: none;
+    }
+  }
+
+  .setting-info {
+    flex: 1;
+    max-width: 65%;
+    padding-right: 24px;
+
+    label {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--td-text-color-primary);
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .desc {
+      font-size: 13px;
+      color: var(--td-text-color-secondary);
+      margin: 0;
+      line-height: 1.5;
+    }
+  }
+
+  .setting-control {
+    flex-shrink: 0;
+    min-width: 280px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+  }
+
+  .required {
+    color: var(--td-error-color);
+    margin-left: 2px;
+    font-weight: 500;
+  }
+}
+
+</style>

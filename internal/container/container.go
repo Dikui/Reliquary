@@ -90,7 +90,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(repository.NewUserRepository))
 	must(container.Provide(repository.NewAuthTokenRepository))
 	must(container.Provide(repository.NewSystemSettingRepository))
-	must(container.Provide(repository.NewResourceFavoriteRepository))
 	must(container.Provide(repository.NewDataSourceRepository))
 	must(container.Provide(repository.NewSyncLogRepository))
 	must(container.Provide(repository.NewTaskDeadLetterRepository))
@@ -114,8 +113,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewDataTableSummaryService, dig.Name("dataTableSummary")))
 	must(container.Provide(service.NewImageMultimodalService, dig.Name("imageMultimodal")))
 	must(container.Provide(service.NewKnowledgePostProcessService, dig.Name("knowledgePostProcess")))
-
-	must(container.Provide(service.NewResourceFavoriteService))
 
 	must(container.Provide(repository.NewResourceRepository))
 	must(container.Provide(service.NewResourceCatalog))
@@ -149,7 +146,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewKnowledgeHandler))
 	must(container.Provide(handler.NewKnowledgeSearchHandler))
 	must(container.Provide(handler.NewEntityHandler))
-	must(container.Provide(handler.NewModelRoutingHandler))
 	must(container.Provide(handler.NewChunkHandler))
 	must(container.Provide(handler.NewModelHandler))
 	must(container.Provide(handler.NewInitializationHandler))
@@ -157,7 +153,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewSystemHandler))
 	must(container.Provide(handler.NewModelCredentialsHandler))
 	must(container.Provide(handler.NewDataSourceCredentialsHandler))
-	must(container.Provide(handler.NewResourceFavoriteHandler))
 
 	// Data source handler
 	must(container.Provide(handler.NewDataSourceHandler))
@@ -185,7 +180,6 @@ func registerNameEmbeddingRebuildIntegration(
 	knowledgeBases interfaces.KnowledgeBaseService,
 	models interfaces.ModelService,
 	entityHandler *handler.EntityHandler,
-	modelRoutingHandler *handler.ModelRoutingHandler,
 ) error {
 	setter := func(target any) error {
 		integration, ok := target.(interface {
@@ -205,7 +199,6 @@ func registerNameEmbeddingRebuildIntegration(
 	}
 	entityService.SetNameEmbeddingRebuilder(rebuilder)
 	entityHandler.SetNameEmbeddingRebuilder(rebuilder)
-	modelRoutingHandler.SetNameEmbeddingRebuilder(rebuilder)
 	return nil
 }
 
@@ -338,6 +331,9 @@ func initDatabase(_ *config.Config) (*gorm.DB, error) {
 		logger.Infof(context.Background(), "Auto-migration is disabled (AUTO_MIGRATE=false)")
 	}
 	if err := service.EnsureSingleTeamSpace(context.Background(), db); err != nil {
+		return nil, err
+	}
+	if err := service.EnsureSingleKnowledgeBase(context.Background(), db); err != nil {
 		return nil, err
 	}
 	sqlDB, err := db.DB()

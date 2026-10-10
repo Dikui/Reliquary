@@ -23,7 +23,7 @@ const (
 
 var ModelTiers = []ModelTier{ModelTierLight, ModelTierEntityResolution, ModelTierGeneration, ModelTierEmbedding, ModelTierRerank}
 
-// ModelTierConfig uses an empty ID to inherit the parent scope's choice.
+// ModelTierConfig stores the model choices for the knowledge base.
 type ModelTierConfig struct {
 	Light            string `json:"light"`
 	EntityResolution string `json:"entity_resolution"`

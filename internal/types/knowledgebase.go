@@ -23,7 +23,6 @@ type KnowledgeBase struct {
 	// Name of the knowledge base
 	Name string `yaml:"name"                    json:"name"`
 	Type string `yaml:"type"                    json:"type"                    gorm:"type:varchar(32);default:'document'"`
-	// Whether this knowledge base is temporary (ephemeral) and should be hidden from UI
 	// Description of the knowledge base
 	Description string `yaml:"description"             json:"description"`
 	// Workspace ID
@@ -40,16 +39,11 @@ type KnowledgeBase struct {
 	SummaryModelID string `yaml:"summary_model_id"        json:"summary_model_id"`
 	// VLM config
 	VLMConfig VLMConfig `yaml:"vlm_config"              json:"vlm_config"              gorm:"type:json"`
-	// Extract config
 	// QuestionGenerationConfig stores question generation configuration for document knowledge bases
 	QuestionGenerationConfig *QuestionGenerationConfig `yaml:"question_generation_config" json:"question_generation_config" gorm:"column:question_generation_config;type:json"`
 	// IndexingStrategy controls which indexing pipelines are active for this knowledge base.
 	// Pipelines: vector search and keyword search.
 	IndexingStrategy IndexingStrategy `yaml:"indexing_strategy"       json:"indexing_strategy"       gorm:"column:indexing_strategy;type:json"`
-	// Pin state belongs to the personal space and is shared by all API callers.
-	IsPinned bool       `yaml:"is_pinned" json:"is_pinned" gorm:"default:false"`
-	PinnedAt *time.Time `yaml:"pinned_at" json:"pinned_at"`
-
 	// Creation time of the knowledge base
 	CreatedAt time.Time `yaml:"created_at"              json:"created_at"`
 	// Last updated time of the knowledge base
@@ -63,19 +57,17 @@ type KnowledgeBase struct {
 	IsProcessing bool  `yaml:"is_processing"           json:"is_processing"           gorm:"-"`
 	// ProcessingCount indicates the number of knowledge items being processed (for document type knowledge bases)
 	ProcessingCount int64 `yaml:"processing_count"        json:"processing_count"        gorm:"-"`
-	// CreatorName 是 CreatorID 对应用户的展示名（username / email 等），
-	// 仅在列表场景由 handler 批量回填，不落库；为空表示创建者无法解析（用户已删除、
-	// CreatorID 为空的老数据等）。前端用它在卡片来源徽章上做 mine vs workspace 的二分。
-	CreatorName string `yaml:"-"                       json:"creator_name,omitempty"  gorm:"-"`
 }
 
 // KnowledgeBaseConfig represents the knowledge base configuration
 type KnowledgeBaseConfig struct {
 	ModelTiers *ModelTierConfig `json:"model_tiers,omitempty"`
 	// Chunking configuration
-	ChunkingConfig ChunkingConfig `yaml:"chunking_config"         json:"chunking_config"`
+	ChunkingConfig *ChunkingConfig `yaml:"chunking_config"         json:"chunking_config,omitempty"`
 	// Image processing configuration
-	ImageProcessingConfig ImageProcessingConfig `yaml:"image_processing_config" json:"image_processing_config"`
+	ImageProcessingConfig    *ImageProcessingConfig    `yaml:"image_processing_config" json:"image_processing_config,omitempty"`
+	VLMConfig                *VLMConfig                `json:"vlm_config,omitempty"`
+	QuestionGenerationConfig *QuestionGenerationConfig `json:"question_generation_config,omitempty"`
 	// IndexingStrategy controls which indexing pipelines are active.
 	// nil means "no change" when updating (preserves existing strategy).
 	IndexingStrategy *IndexingStrategy `yaml:"indexing_strategy"       json:"indexing_strategy"`
@@ -338,8 +330,15 @@ func (kb *KnowledgeBase) EnsureDefaults() {
 	if kb == nil {
 		return
 	}
-	if kb.Type == "" {
-		kb.Type = KnowledgeBaseTypeDocument
+	kb.Type = KnowledgeBaseTypeDocument
+	if kb.ChunkingConfig.ChunkSize <= 0 {
+		kb.ChunkingConfig.ChunkSize = 512
+	}
+	if !kb.ChunkingConfig.ChunkOverlapSet && kb.ChunkingConfig.ChunkOverlap == 0 {
+		kb.ChunkingConfig.ChunkOverlap = min(50, kb.ChunkingConfig.ChunkSize/10)
+	}
+	if len(kb.ChunkingConfig.Separators) == 0 {
+		kb.ChunkingConfig.Separators = []string{"\n\n", "\n", "。"}
 	}
 
 	// Ensure IndexingStrategy has defaults.

@@ -20,7 +20,7 @@ func (h *EntityHandler) SetNameEmbeddingRebuilder(r *service.EntityNameEmbedding
 	h.rebuilder = r
 }
 func entityListQuery(c *gin.Context) (types.EntityQuery, error) {
-	q := types.EntityQuery{Scope: c.Query("scope"), KnowledgeBaseID: c.Query("knowledge_base_id"), Entity: c.Query("entity"), EntityType: c.Query("entity_type")}
+	q := types.EntityQuery{Entity: c.Query("entity"), EntityType: c.Query("entity_type")}
 	var err error
 	q.Limit, err = strconv.Atoi(c.DefaultQuery("limit", "50"))
 	if err != nil || q.Limit < 1 || q.Limit > 100 {

@@ -27,19 +27,19 @@ export interface CommandContext {
 
 /**
  * Build the flat command list. Commands are intentionally static — dynamic
- * knowledge bases live in their own result groups.
+ * article matches live in their own result group.
  */
 export function buildCommands(ctx: CommandContext): CmdkCommand[] {
   const { router, t, close } = ctx
   return [
     {
-      id: 'open-kb-list',
-      label: t('commandPalette.quick.knowledgeBases'),
-      icon: 'folder',
+      id: 'open-knowledge',
+      label: t('commandPalette.quick.knowledge'),
+      icon: 'file',
       keywords: ['kb', 'knowledge', 'base', '知识库', '文档'],
       run: () => {
         close()
-        router.push('/platform/knowledge-bases')
+        router.push('/platform/knowledge')
       },
     },
     {

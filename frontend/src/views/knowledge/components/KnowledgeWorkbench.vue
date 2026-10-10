@@ -17,7 +17,7 @@
       <p v-if="nameEmbeddingStatus?.latest_run?.error" class="run-error" role="alert">{{ t('knowledgeWorkbench.nameEmbeddings.failure', { reason: nameEmbeddingStatus.latest_run.error }) }}</p>
       <p v-if="nameEmbeddingError" class="run-error" role="alert">{{ nameEmbeddingError }}</p>
     </section>
-    <div class="workbench-scope"><label><span>{{ t('knowledgeWorkbench.scope.label') }}</span><t-select v-model="queryScope" :options="scopeOptions" :aria-label="t('knowledgeWorkbench.scope.label')" /></label></div>
+
     <nav class="workbench-nav" :aria-label="t('knowledgeWorkbench.sections')">
       <button v-for="section in sections" :key="section" type="button" :class="['workbench-nav__item', { active: activeSection === section }]" :aria-pressed="activeSection === section" @click="activeSection = section">{{ t(`knowledgeWorkbench.nav.${section}`) }}</button>
     </nav>
@@ -40,7 +40,7 @@
             <t-empty v-if="!selectedEntity" :description="t('knowledgeWorkbench.entities.choose')" />
             <section v-else>
               <div class="entity-detail__header"><div><span class="eyebrow">{{ entityTypeLabel(selectedEntity.entity_type) }}</span><h3>{{ selectedEntity.canonical_name }}</h3><p v-if="selectedEntity.description">{{ selectedEntity.description }}</p><h4>{{ t('knowledgeWorkbench.entities.aliasLabel') }}</h4><div v-if="selectedEntity.aliases?.length" class="chips"><span v-for="alias in selectedEntity.aliases" :key="alias" class="chip">{{ alias }}</span></div><p v-else class="muted">{{ t('knowledgeWorkbench.entities.noAliases') }}</p></div><t-button variant="outline" @click="openMerge">{{ t('knowledgeWorkbench.entities.merge') }}</t-button></div>
-              <p class="muted">{{ t('knowledgeWorkbench.scope.detailHint') }}</p>
+
               <t-alert v-if="entityDetailError" theme="error" :message="entityDetailError" role="alert"><template #operation><t-button variant="text" :loading="entityDetailLoading" @click="selectEntity(selectedEntity)">{{ t('knowledgeWorkbench.refresh') }}</t-button></template></t-alert>
               <t-loading :loading="entityDetailLoading" show-overlay><div class="entity-articles"><h4>{{ t('knowledgeWorkbench.entities.articles') }}</h4><t-empty v-if="!entityArticles.length && !entityDetailLoading && !entityDetailError" :description="t('knowledgeWorkbench.entities.noArticles')" /><ul v-if="entityArticles.length"><li v-for="article in entityArticles" :key="article.id"><t-button variant="text" @click="emit('open-source', article.id)">{{ article.title || article.file_name || t('knowledgeWorkbench.entities.untitledArticle') }}</t-button><small>{{ formatDate(article.created_at) }}</small></li></ul></div></t-loading>
             </section>
@@ -48,7 +48,7 @@
         </div>
       </t-loading>
     </section>
-    <MergeSuggestions v-else ref="mergeSuggestions" :kb-id="kbId" :scope="queryScope" @open-source="emit('open-source', $event)" @changed="refreshAfterMerge" />
+    <MergeSuggestions v-else ref="mergeSuggestions" @open-source="emit('open-source', $event)" @changed="refreshAfterMerge" />
     <t-dialog v-model:visible="mergeVisible" :header="t('knowledgeWorkbench.entities.mergeTitle')" :footer="false" :close-on-overlay-click="false" :close-btn="!merging" :close-on-esc-keydown="!merging" width="min(520px, 95vw)">
       <div class="merge-form"><p>{{ t('knowledgeWorkbench.entities.mergeHint') }}</p><p>{{ t('knowledgeWorkbench.entities.mergeSource') }}: {{ selectedEntity?.canonical_name }}</p><label><span>{{ t('knowledgeWorkbench.entities.mergeTarget') }}</span><t-select v-model="mergeTargetId" filterable :options="mergeTargetOptions" :loading="mergeTargetsLoading" :disabled="merging" :placeholder="t('knowledgeWorkbench.entities.mergeTargetPlaceholder')" :aria-label="t('knowledgeWorkbench.entities.mergeTarget')" /></label><t-alert theme="warning" :message="t('knowledgeWorkbench.entities.mergeWarning')" /><p v-if="mergeError" class="run-error" role="alert">{{ mergeError }}</p><div class="merge-actions"><t-button variant="outline" :disabled="merging" @click="mergeVisible = false">{{ t('common.cancel') }}</t-button><t-button theme="primary" :loading="merging" :disabled="!mergeTargetId || mergeTargetsLoading" @click="confirmMerge">{{ t('knowledgeWorkbench.entities.merge') }}</t-button></div><t-button v-if="hasMoreMergeTargets" variant="text" :loading="mergeTargetsLoading" :disabled="merging" @click="loadMergeTargets(true)">{{ t('knowledgeWorkbench.loadMore') }}</t-button></div>
     </t-dialog>
@@ -58,17 +58,14 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
-import { ENTITY_TYPES, entityScopeParams, getEntity, getEntityNameEmbeddingRebuildStatus, listEntities, mergeEntities, rebuildEntityNameEmbeddings, type Entity, type EntityArticle, type EntityNameEmbeddingRebuildStatus, type EntityScope, type EntityType } from '@/api/entities'
+import { ENTITY_TYPES, getEntity, getEntityNameEmbeddingRebuildStatus, listEntities, mergeEntities, rebuildEntityNameEmbeddings, type Entity, type EntityArticle, type EntityNameEmbeddingRebuildStatus, type EntityType } from '@/api/entities'
 import MergeSuggestions from './MergeSuggestions.vue'
-const props = defineProps<{ kbId: string }>()
+
 const emit = defineEmits<{ 'open-source': [knowledgeId: string] }>()
 const { t, locale } = useI18n()
 const pageSize = 50
 const sections = ['entities', 'merges'] as const
-const queryScope = ref<EntityScope>('knowledge_base')
 const activeSection = ref<typeof sections[number]>('entities')
-const scopeOptions = computed(() => ['knowledge_base', 'all'].map(value => ({ value, label: t(`knowledgeWorkbench.scope.${value}`) })))
-const scopeParams = computed(() => entityScopeParams(queryScope.value, props.kbId))
 const entityFilter = ref(''), entityTypeFilter = ref<EntityType | ''>(''), entityComposing = ref(false)
 const entityTypeOptions = computed(() => ENTITY_TYPES.map(value => ({ value, label: entityTypeLabel(value) })))
 const entities = ref<Entity[]>([]), entitiesLoading = ref(false), hasMoreEntities = ref(false), loadError = ref('')
@@ -87,7 +84,7 @@ async function loadEntities(more = false) {
   if (more && entitiesLoading.value) return
   const current = ++entityRequest
   entitiesLoading.value = true; loadError.value = ''
-  try { const page = envelopeData(await listEntities({ ...scopeParams.value, entity: entityFilter.value.trim(), entity_type: entityTypeFilter.value || undefined, limit: pageSize, offset: more ? entities.value.length : 0 })) || []; if (current === entityRequest) { entities.value = more ? [...entities.value, ...page] : page; hasMoreEntities.value = page.length === pageSize } }
+  try { const page = envelopeData(await listEntities({ entity: entityFilter.value.trim(), entity_type: entityTypeFilter.value || undefined, limit: pageSize, offset: more ? entities.value.length : 0 })) || []; if (current === entityRequest) { entities.value = more ? [...entities.value, ...page] : page; hasMoreEntities.value = page.length === pageSize } }
   catch (cause) { if (current === entityRequest) loadError.value = errorMessage(cause) }
   finally { if (current === entityRequest) entitiesLoading.value = false }
 }
@@ -107,7 +104,7 @@ async function refreshAll() { loading.value = true; try { await Promise.all([loa
 async function loadMergeTargets(more = false) {
   if (more && mergeTargetsLoading.value) return
   const current = ++mergeTargetRequest; mergeTargetsLoading.value = true; mergeError.value = ''
-  try { const page = envelopeData(await listEntities({ scope: 'all', limit: pageSize, offset: more ? mergeTargets.value.length : 0 })) || []; if (current === mergeTargetRequest) { mergeTargets.value = more ? [...mergeTargets.value, ...page] : page; hasMoreMergeTargets.value = page.length === pageSize } }
+  try { const page = envelopeData(await listEntities({ limit: pageSize, offset: more ? mergeTargets.value.length : 0 })) || []; if (current === mergeTargetRequest) { mergeTargets.value = more ? [...mergeTargets.value, ...page] : page; hasMoreMergeTargets.value = page.length === pageSize } }
   catch (cause) { if (current === mergeTargetRequest) mergeError.value = errorMessage(cause) }
   finally { if (current === mergeTargetRequest) mergeTargetsLoading.value = false }
 }
@@ -140,7 +137,7 @@ async function rebuildNameEmbeddings() {
   finally { if (current === nameEmbeddingRequest) nameEmbeddingRebuilding.value = false }
 }
 watch(entityFilter, scheduleEntitySearch)
-watch(() => [props.kbId, queryScope.value, entityTypeFilter.value], resetEntityList)
+watch(entityTypeFilter, resetEntityList)
 onMounted(() => { void refreshAll() })
 onBeforeUnmount(() => { entityRequest++; detailRequest++; mergeTargetRequest++; nameEmbeddingRequest++; clearNameEmbeddingPoll(); if (entitySearchTimer) clearTimeout(entitySearchTimer) })
 </script>
@@ -153,8 +150,7 @@ onBeforeUnmount(() => { entityRequest++; detailRequest++; mergeTargetRequest++; 
 .name-embedding-rebuild h3 { margin: 0; font-size: 15px; }
 .name-embedding-rebuild__actions, .merge-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .name-embedding-rebuild__latest { margin-bottom: 0; }
-.workbench-scope { display: flex; gap: 16px; margin: 20px 0; }
-.workbench-scope label, .merge-form label { display: flex; flex-direction: column; gap: 8px; min-width: 220px; font-size: 13px; }
+.merge-form label { display: flex; flex-direction: column; gap: 8px; min-width: 220px; font-size: 13px; }
 .workbench-nav { display: flex; gap: 8px; border-bottom: 1px solid var(--td-component-stroke); margin: 20px 0; }
 .workbench-nav__item { background: none; border: 0; padding: 12px 16px; cursor: pointer; color: var(--td-text-color-secondary); border-bottom: 2px solid transparent; }
 .workbench-nav__item:hover, .workbench-nav__item.active { color: var(--td-brand-color); background: var(--td-bg-color-container-hover); }
@@ -187,5 +183,5 @@ onBeforeUnmount(() => { entityRequest++; detailRequest++; mergeTargetRequest++; 
 .merge-form { display: flex; flex-direction: column; gap: 16px; }
 .merge-actions { justify-content: flex-end; }
 .run-error { color: var(--td-error-color); font-size: 13px; overflow-wrap: anywhere; }
-@media (max-width: 720px) { .knowledge-workbench { padding: 16px; } .panel-heading, .name-embedding-rebuild__summary, .entity-detail__header { flex-direction: column; } .entity-layout { grid-template-columns: minmax(0, 1fr); } .entity-filters { flex-direction: column; } .workbench-scope, .workbench-scope label { width: 100%; min-width: 0; } }
+@media (max-width: 720px) { .knowledge-workbench { padding: 16px; } .panel-heading, .name-embedding-rebuild__summary, .entity-detail__header { flex-direction: column; } .entity-layout { grid-template-columns: minmax(0, 1fr); } .entity-filters { flex-direction: column; } }
 </style>

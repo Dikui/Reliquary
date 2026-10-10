@@ -156,15 +156,9 @@
           </div>
         </div>
 
-
       </div>
 
-
-
-
-
     </div>
-    <GlobalModelTierSettings ref="modelTierSettings" />
   </div>
 </template>
 
@@ -172,13 +166,11 @@
 import SafeTextarea from '@/components/SafeTextarea.vue'
 import { ref, computed, onMounted } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
-import GlobalModelTierSettings from './GlobalModelTierSettings.vue'
 import { getTenantInfo, updateTenant as updateTenantApi, type TenantInfo } from '@/api/tenant'
 import { useAuthStore } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
 
-const modelTierSettings = ref<InstanceType<typeof GlobalModelTierSettings>>()
-defineExpose({ confirmLeave: () => modelTierSettings.value?.confirmLeave() ?? Promise.resolve(true) })
+defineExpose({ confirmLeave: () => Promise.resolve(true) })
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
 
@@ -186,7 +178,6 @@ const authStore = useAuthStore()
 const tenantInfo = ref<TenantInfo | null>(null)
 const loading = ref(true)
 const error = ref('')
-
 
 // 原地编辑空间名称：editing 控制行内只读 / 编辑两种形态切换。
 // 不沿用 dialog 是因为这里只有一个字段，弹窗反而打断了配置浏览节奏。
@@ -391,7 +382,6 @@ const formatBytes = (bytes: number) => {
 
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
-
 
 // Lifecycle
 onMounted(() => {

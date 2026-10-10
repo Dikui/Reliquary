@@ -64,7 +64,7 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 	keys := service.NewTenantAPIKeyService(apprepo.NewTenantAPIKeyRepository(db))
 	knowledgeRepo := apprepo.NewKnowledgeRepository(db)
 	kbRepo := apprepo.NewKnowledgeBaseRepository(db)
-	kb := service.NewKnowledgeBaseService(db, kbRepo, knowledgeRepo, nil, nil, nil, tenantRepo, nil, nil, nil, nil, nil, nil, nil)
+	kb := service.NewKnowledgeBaseService(db, kbRepo, knowledgeRepo, nil, nil, nil, nil)
 	models := service.NewModelService(apprepo.NewModelRepository(db), kbRepo, nil, nil, tenantSvc)
 	knowledge, err := service.NewKnowledgeService(db, cfg, knowledgeRepo, kb, tenantRepo, tenantSvc,
 		nil, nil, nil, nil, models, nil, nil, nil, nil, nil, nil)
@@ -74,11 +74,10 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 	params := RouterParams{
 		Config: cfg, UserService: users, TenantService: tenantSvc,
 		TenantAPIKeyService: keys, KBService: kb, KnowledgeService: knowledge,
-		KBHandler:              handler.NewKnowledgeBaseHandler(kb, users, nil),
+		KBHandler:              handler.NewKnowledgeBaseHandler(kb, nil),
 		KnowledgeHandler:       handler.NewKnowledgeHandler(cfg, knowledge, kb, nil, nil),
 		KnowledgeSearchHandler: &handler.KnowledgeSearchHandler{},
 		ModelHandler:           handler.NewModelHandler(models),
-		ModelRoutingHandler:    handler.NewModelRoutingHandler(db, models),
 		EntityHandler:          handler.NewEntityHandler(service.NewEntityService(db, nil)),
 		TenantHandler:          handler.NewTenantHandler(tenantSvc, keys, users, kb, cfg, settings),
 		AuthHandler:            handler.NewAuthHandler(users, tenantSvc), SystemHandler: system,
@@ -91,9 +90,9 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 	RegisterTenantRoutes(v1, params.TenantHandler, guards)
 	RegisterSystemRoutes(v1, system, guards)
 	RegisterModelRoutes(v1, params.ModelHandler, nil, guards)
-	RegisterModelRoutingRoutes(v1, params.ModelRoutingHandler, guards)
 	RegisterEntityRoutes(v1, params.EntityHandler)
 	RegisterKnowledgeRoutes(v1, params.KnowledgeHandler, guards)
+	RegisterKnowledgeBaseRoutes(v1, params.KBHandler, guards)
 	f := &personalAuthFixture{db: db, router: r, params: params}
 	register := personalRequest(t, r, http.MethodPost, "/api/v1/auth/register", `{"username":"personal","email":"personal@example.test","password":"initial-password"}`, "", false)
 	require.Equal(t, http.StatusCreated, register.Code, register.Body.String())
@@ -160,13 +159,12 @@ func TestPersonalRegistrationAuthenticationAndManagement(t *testing.T) {
 func seedPersonalEntities(t *testing.T, f *personalAuthFixture) {
 	t.Helper()
 	now := time.Now().UTC()
+	kb, err := f.params.KBService.GetKnowledgeBase(context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID))
+	require.NoError(t, err)
 	for i := 1; i <= 2; i++ {
-		kbID := fmt.Sprintf("personal-kb-%d", i)
+		kbID := kb.ID
 		knowledgeID := fmt.Sprintf("personal-message-%d", i)
 		entityID := fmt.Sprintf("personal-entity-%d", i)
-		kb := &types.KnowledgeBase{ID: kbID, TenantID: 1, Name: kbID, CreatorID: f.userID, Type: types.KnowledgeBaseTypeDocument}
-		kb.EnsureDefaults()
-		require.NoError(t, f.db.Create(kb).Error)
 		require.NoError(t, f.db.Create(&types.Knowledge{ID: knowledgeID, TenantID: 1, KnowledgeBaseID: kbID, Type: types.KnowledgeTypeManual, Title: "Acme source", FileName: knowledgeID, ParseStatus: types.ParseStatusCompleted, EnableStatus: "enabled", CreatedAt: now, UpdatedAt: now}).Error)
 		require.NoError(t, f.db.Create(&types.Entity{ID: entityID, TenantID: 1, CanonicalName: fmt.Sprintf("Acme %d", i), NormalizedName: fmt.Sprintf("acme %d", i), EntityType: "company", CreatedAt: now, UpdatedAt: now}).Error)
 
@@ -179,7 +177,7 @@ func TestPersonalAPIKeyAndLoginReturnAllEntities(t *testing.T) {
 	seedPersonalEntities(t, f)
 	cases := []struct{ method, path, body string }{
 		{http.MethodGet, "/api/v1/knowledge/search?keyword=Acme", ""},
-		{http.MethodGet, "/api/v1/entities?scope=all", ""},
+		{http.MethodGet, "/api/v1/entities", ""},
 		{http.MethodGet, "/api/v1/entities/personal-entity-2", ""},
 	}
 	for _, tc := range cases {
@@ -198,23 +196,15 @@ func TestPersonalAPIKeyAndLoginReturnAllEntities(t *testing.T) {
 	}
 }
 
-func TestEntityRoutesRejectLegacyTeamScope(t *testing.T) {
+func TestEntityRoutesIgnoreRemovedScopeParameter(t *testing.T) {
 	f := newPersonalAuthFixture(t)
 	seedPersonalEntities(t, f)
-	cases := []struct{ method, path, body string }{
-		{http.MethodGet, "/api/v1/entities?scope=team", ""},
-	}
-	for _, tc := range cases {
-		t.Run(tc.path, func(t *testing.T) {
-			for _, credential := range []struct {
-				value  string
-				apiKey bool
-			}{{f.token, false}, {f.key, true}} {
-				response := personalRequest(t, f.router, tc.method, tc.path, tc.body, credential.value, credential.apiKey)
-				require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
-				require.Contains(t, response.Body.String(), "scope must be knowledge_base or all")
-			}
-		})
+	expected := personalRequest(t, f.router, http.MethodGet, "/api/v1/entities", "", f.token, false)
+	require.Equal(t, http.StatusOK, expected.Code, expected.Body.String())
+	for _, query := range []string{"scope=team", "scope=knowledge_base&knowledge_base_id=missing", "scope=all"} {
+		got := personalRequest(t, f.router, http.MethodGet, "/api/v1/entities?"+query, "", f.key, true)
+		require.Equal(t, http.StatusOK, got.Code, got.Body.String())
+		require.JSONEq(t, expected.Body.String(), got.Body.String())
 	}
 }
 
@@ -235,7 +225,7 @@ func TestPersonalAPIKeyWithoutExpirationIsUsable(t *testing.T) {
 		var stored types.TenantAPIKey
 		require.NoError(t, f.db.First(&stored, response.Data.ID).Error)
 		require.Nil(t, stored.ExpiresAt)
-		queried := personalRequest(t, f.router, http.MethodGet, "/api/v1/entities?scope=all", "", response.Data.Token, true)
+		queried := personalRequest(t, f.router, http.MethodGet, "/api/v1/entities", "", response.Data.Token, true)
 		require.Equal(t, http.StatusOK, queried.Code, queried.Body.String())
 	}
 }

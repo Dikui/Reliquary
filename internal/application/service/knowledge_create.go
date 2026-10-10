@@ -28,19 +28,9 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 ) (*types.Knowledge, error) {
 	logger.Info(ctx, "Start creating knowledge from file")
 
-	// Use custom filename if provided, otherwise use original filename. Folder
-	// uploads pass a path-qualified name ("docs/spec/design.md"): the directory
-	// part becomes the knowledge's folder_path and only the base name is kept as
-	// the display / storage file name.
-	fileName := file.Filename
-	folderPath := ""
+	fileName := path.Base(strings.ReplaceAll(file.Filename, "\\", "/"))
 	if customFileName != "" {
-		folderPath, fileName = types.SplitKnowledgeRelativePath(customFileName)
-		if fileName == "" {
-			fileName = file.Filename
-		}
-		logger.Infof(ctx, "Using custom filename: %s (original: %s, folder: %s)",
-			fileName, file.Filename, folderPath)
+		fileName = path.Base(strings.ReplaceAll(customFileName, "\\", "/"))
 	}
 
 	logger.Infof(ctx, "Knowledge base ID: %s, file: %s", kbID, fileName)
@@ -120,17 +110,6 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 		return nil, werrors.NewValidationError("文件名包含非法字符")
 	}
 
-	// The folder path is rendered as sidebar tree labels, so it goes through the
-	// same input validation as the file name before it is stored.
-	if folderPath != "" {
-		safeFolderPath, folderValid := secutils.ValidateInput(folderPath)
-		if !folderValid {
-			logger.Errorf(ctx, "Invalid folder path: %s", folderPath)
-			return nil, werrors.NewValidationError("文件夹路径包含非法字符")
-		}
-		folderPath = types.NormalizeKnowledgeFolderPath(safeFolderPath)
-	}
-
 	eff, err := resolveFileImportProcessConfig(ctx, kb, getFileType(safeFilename), processOverrides, enableMultimodel)
 	if err != nil {
 		return nil, err
@@ -146,7 +125,6 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 		Channel:          defaultChannel(channel),
 		Title:            safeFilename,
 		FileName:         safeFilename,
-		FolderPath:       folderPath,
 		FileType:         getFileType(safeFilename),
 		FileSize:         file.Size,
 		FileHash:         hash,

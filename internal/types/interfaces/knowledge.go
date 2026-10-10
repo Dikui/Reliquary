@@ -71,21 +71,6 @@ type KnowledgeService interface {
 		page *types.Pagination,
 		filter types.KnowledgeListFilter,
 	) (*types.PageResult, error)
-	// ListKnowledgeFolderTree returns the folder hierarchy derived from the
-	// folder_path of every knowledge entry in a knowledge base, with per-folder
-	// document counts. It powers the document sidebar tree.
-	ListKnowledgeFolderTree(ctx context.Context, kbID string) (*types.KnowledgeFolderTree, error)
-	// MoveKnowledgeToFolder re-files knowledge entries under the given folder
-	// path (empty means the knowledge base top level). Folders are derived from
-	// the stored paths, so a path that does not exist yet is created implicitly.
-	MoveKnowledgeToFolder(
-		ctx context.Context,
-		kbID string,
-		ids []string,
-		folderPath string,
-	) (int64, error)
-	// RenameKnowledgeFolder moves a folder and everything below it to a new path.
-	RenameKnowledgeFolder(ctx context.Context, kbID string, from string, to string) (int64, error)
 	// DeleteKnowledge deletes knowledge by ID.
 	DeleteKnowledge(ctx context.Context, id string) error
 	// DeleteKnowledgeList deletes multiple knowledge entries by IDs.
@@ -134,20 +119,13 @@ type KnowledgeService interface {
 	ProcessQuestionGeneration(ctx context.Context, t *asynq.Task) error
 	// ProcessSummaryGeneration handles Asynq summary generation tasks
 	ProcessSummaryGeneration(ctx context.Context, t *asynq.Task) error
-	// ProcessKnowledgeMove handles Asynq knowledge move tasks
-	ProcessKnowledgeMove(ctx context.Context, t *asynq.Task) error
 	// ProcessKnowledgeListDelete handles Asynq knowledge list delete tasks
 	ProcessKnowledgeListDelete(ctx context.Context, t *asynq.Task) error
 	// ProcessKnowledgeListReparse handles Asynq knowledge list reparse tasks
 	ProcessKnowledgeListReparse(ctx context.Context, t *asynq.Task) error
-	// GetKnowledgeMoveProgress retrieves the progress of a knowledge move task
-	GetKnowledgeMoveProgress(ctx context.Context, taskID string) (*types.KnowledgeMoveProgress, error)
-	// SaveKnowledgeMoveProgress saves the progress of a knowledge move task
-	SaveKnowledgeMoveProgress(ctx context.Context, progress *types.KnowledgeMoveProgress) error
 	// SearchKnowledge searches knowledge items by keyword across the tenant.
 	// fileTypes: optional list of file extensions to filter by (e.g., ["csv", "xlsx"])
 	SearchKnowledge(ctx context.Context, keyword string, offset, limit int, fileTypes []string) ([]*types.Knowledge, bool, int64, error)
-	SearchKnowledgeForScopes(ctx context.Context, scopes []types.KnowledgeSearchScope, keyword string, offset, limit int, fileTypes []string) ([]*types.Knowledge, bool, int64, error)
 }
 
 // KnowledgeRepository defines the interface for knowledge repositories.
@@ -180,30 +158,6 @@ type KnowledgeRepository interface {
 		kbID string,
 		params *types.KnowledgeCheckParams,
 	) (bool, *types.Knowledge, error)
-	// ListKnowledgeFolderCounts aggregates the number of knowledge entries
-	// stored directly in each folder_path of a knowledge base.
-	ListKnowledgeFolderCounts(
-		ctx context.Context,
-		tenantID uint64,
-		kbID string,
-	) ([]*types.KnowledgeFolderCount, error)
-	// UpdateKnowledgeFolderPath files the given entries under folderPath.
-	UpdateKnowledgeFolderPath(
-		ctx context.Context,
-		tenantID uint64,
-		kbID string,
-		ids []string,
-		folderPath string,
-	) (int64, error)
-	// RenameKnowledgeFolderPath rewrites folder_path for a folder and all of its
-	// descendants. Renaming onto an existing path merges the folders.
-	RenameKnowledgeFolderPath(
-		ctx context.Context,
-		tenantID uint64,
-		kbID string,
-		from string,
-		to string,
-	) (int64, error)
 	UpdateKnowledgeColumn(ctx context.Context, id string, column string, value interface{}) error
 	// UpdateKnowledgeColumns updates multiple columns of a knowledge row in a single
 	// statement so callers that flip several related fields (e.g. parse_status +
@@ -247,6 +201,6 @@ type KnowledgeRepository interface {
 	HardDeleteKnowledge(ctx context.Context, tenantID uint64, id string) error
 	// HardDeleteKnowledgeList is the batch counterpart of HardDeleteKnowledge.
 	HardDeleteKnowledgeList(ctx context.Context, tenantID uint64, ids []string) error
-	// SearchKnowledgeInScopes searches knowledge items by keyword within the given (tenant_id, kb_id) scopes (own + shared).
+	// SearchKnowledgeInScopes searches articles inside explicit tenant and knowledge base boundaries.
 	SearchKnowledgeInScopes(ctx context.Context, scopes []types.KnowledgeSearchScope, keyword string, offset, limit int, fileTypes []string) ([]*types.Knowledge, bool, int64, error)
 }

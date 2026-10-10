@@ -62,41 +62,21 @@ func (r *knowledgeBaseRepository) GetKnowledgeBaseByIDs(ctx context.Context, ids
 	return kbs, nil
 }
 
-// ListKnowledgeBases lists all knowledge bases
-func (r *knowledgeBaseRepository) ListKnowledgeBases(ctx context.Context) ([]*types.KnowledgeBase, error) {
-	var kbs []*types.KnowledgeBase
-	if err := r.db.WithContext(ctx).Find(&kbs).Error; err != nil {
+// GetKnowledgeBaseByTenantID returns the active knowledge base for one space.
+func (r *knowledgeBaseRepository) GetKnowledgeBaseByTenantID(ctx context.Context, tenantID uint64) (*types.KnowledgeBase, error) {
+	var kb types.KnowledgeBase
+	if err := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID).First(&kb).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrKnowledgeBaseNotFound
+		}
 		return nil, err
 	}
-	return kbs, nil
-}
-
-func (r *knowledgeBaseRepository) ListKnowledgeBasesByTenantID(
-	ctx context.Context, tenantID uint64,
-) ([]*types.KnowledgeBase, error) {
-	var kbs []*types.KnowledgeBase
-	if err := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID).
-		Order("created_at DESC").Find(&kbs).Error; err != nil {
-		return nil, err
-	}
-	return kbs, nil
+	return &kb, nil
 }
 
 // UpdateKnowledgeBase updates a knowledge base
 func (r *knowledgeBaseRepository) UpdateKnowledgeBase(ctx context.Context, kb *types.KnowledgeBase) error {
 	return r.db.WithContext(ctx).Save(kb).Error
-}
-
-// UpdateKnowledgeBasePin leaves content and modification timestamps unchanged.
-func (r *knowledgeBaseRepository) UpdateKnowledgeBasePin(ctx context.Context, kb *types.KnowledgeBase) error {
-	return r.db.WithContext(ctx).Model(&types.KnowledgeBase{}).
-		Where("id = ? AND tenant_id = ?", kb.ID, kb.TenantID).
-		UpdateColumns(map[string]interface{}{"is_pinned": kb.IsPinned, "pinned_at": kb.PinnedAt}).Error
-}
-
-// DeleteKnowledgeBase deletes a knowledge base
-func (r *knowledgeBaseRepository) DeleteKnowledgeBase(ctx context.Context, id string) error {
-	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&types.KnowledgeBase{}).Error
 }
 
 // CountByModelID counts active knowledge bases that reference modelID in any

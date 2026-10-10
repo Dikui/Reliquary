@@ -116,8 +116,8 @@ type processSyncKBService struct {
 	kb     *types.KnowledgeBase
 }
 
-func (s *processSyncKBService) CreateKnowledgeBase(context.Context, *types.KnowledgeBase) (*types.KnowledgeBase, error) {
-	return nil, nil
+func (s *processSyncKBService) GetKnowledgeBase(context.Context) (*types.KnowledgeBase, error) {
+	return s.kb, nil
 }
 
 func (s *processSyncKBService) GetKnowledgeBaseByID(context.Context, string) (*types.KnowledgeBase, error) {
@@ -136,24 +136,11 @@ func (s *processSyncKBService) FillKnowledgeBaseCounts(context.Context, *types.K
 	return nil
 }
 
-func (s *processSyncKBService) ListKnowledgeBases(context.Context) ([]*types.KnowledgeBase, error) {
-	return nil, nil
-}
-
-func (s *processSyncKBService) ListKnowledgeBasesByTenantID(context.Context, uint64) ([]*types.KnowledgeBase, error) {
-	return nil, nil
-}
-
 func (s *processSyncKBService) UpdateKnowledgeBase(
 	context.Context, string, string, string, *types.KnowledgeBaseConfig,
 ) (*types.KnowledgeBase, error) {
 	return nil, nil
 }
-func (s *processSyncKBService) DeleteKnowledgeBase(context.Context, string) error { return nil }
-func (s *processSyncKBService) TogglePinKnowledgeBase(context.Context, string) (*types.KnowledgeBase, error) {
-	return nil, nil
-}
-
 func (s *processSyncKBService) HybridSearch(context.Context, string, types.SearchParams) ([]*types.SearchResult, error) {
 	return nil, nil
 }
@@ -165,16 +152,6 @@ func (s *processSyncKBService) GetQueryEmbedding(context.Context, string, string
 func (s *processSyncKBService) ResolveEmbeddingModelKeys(context.Context, []*types.KnowledgeBase) map[string]string {
 	return nil
 }
-
-func (s *processSyncKBService) DuplicateKnowledgeBase(context.Context, string) (*types.KnowledgeBase, error) {
-	return nil, nil
-}
-func (s *processSyncKBService) GetRepository() interfaces.KnowledgeBaseRepository { return nil }
-func (s *processSyncKBService) ProcessKBDelete(context.Context, *asynq.Task) error {
-	return nil
-}
-
-var _ interfaces.KnowledgeBaseService = (*processSyncKBService)(nil)
 
 type processSyncSyncLogRepo struct {
 	logs map[string]*types.SyncLog

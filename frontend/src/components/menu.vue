@@ -1,7 +1,7 @@
 <template>
   <aside class="aside_box" :class="{ 'aside_box--collapsed': sidebarCollapsed }">
     <div class="logo_row">
-      <button v-if="!sidebarCollapsed" type="button" class="logo_box" :aria-label="t('menu.knowledgeBase')" @click="navigate('knowledge-bases')">
+      <button v-if="!sidebarCollapsed" type="button" class="logo_box" :aria-label="t('menu.knowledgeBase')" @click="navigate('knowledge')">
         <img class="logo" src="@/assets/img/reliquary.svg" alt="Reliquary">
       </button>
       <t-tooltip :content="t(sidebarCollapsed ? 'menu.expandSidebar' : 'menu.collapseSidebar')" placement="right">
@@ -41,14 +41,13 @@ const route = useRoute(), router = useRouter()
 const uiStore = useUIStore(), commandPaletteStore = useCommandPaletteStore()
 const { visibleMenuArr } = storeToRefs(useMenuStore())
 const sidebarCollapsed = computed(() => !props.mobileOverlay && uiStore.sidebarCollapsed)
-const active = (path: string) => path === 'knowledge-bases'
-  ? ['knowledgeBaseList', 'knowledgeBaseDetail'].includes(String(route.name))
+const active = (path: string) => path === 'knowledge'
+  ? ['knowledge'].includes(String(route.name))
   : route.path === `/platform/${path}`
 function toggleNavigation() { if (props.mobileOverlay) emit('close'); else uiStore.toggleSidebar() }
 function navigate(path: string) {
   if (path === 'settings') uiStore.openSettings()
-  const kbId = path === 'knowledge-bases' && route.name === 'knowledgeBaseDetail' && typeof route.params.kbId === 'string' ? route.params.kbId : ''
-  void router.push(`/platform/${path}${kbId ? `/${kbId}` : ''}`)
+  void router.push(`/platform/${path}`)
   if (props.mobileOverlay) emit('close')
 }
 </script>

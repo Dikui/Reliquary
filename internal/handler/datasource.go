@@ -92,13 +92,13 @@ func (h *DataSourceHandler) CreateDataSource(c *gin.Context) {
 		return
 	}
 
-	if _, status, msg := h.getOwnedKnowledgeBase(ctx, tenantID, req.KnowledgeBaseID); status != http.StatusOK {
-		c.JSON(status, gin.H{"error": msg})
+	kb, err := h.kbService.GetKnowledgeBase(ctx)
+	if err != nil || kb == nil || kb.TenantID != tenantID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "knowledge base not found"})
 		return
 	}
-
-	// Enforce tenant isolation
 	req.TenantID = tenantID
+	req.KnowledgeBaseID = kb.ID
 
 	ds, err := h.service.CreateDataSource(ctx, &req)
 	if err != nil {
@@ -140,12 +140,12 @@ func (h *DataSourceHandler) ListDataSources(c *gin.Context) {
 		return
 	}
 
-	kbID := c.Query("kb_id")
-	if _, status, msg := h.getOwnedKnowledgeBase(ctx, tenantID, kbID); status != http.StatusOK {
-		c.JSON(status, gin.H{"error": msg})
+	kb, err := h.kbService.GetKnowledgeBase(ctx)
+	if err != nil || kb == nil || kb.TenantID != tenantID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "knowledge base not found"})
 		return
 	}
-	dataSources, err := h.service.ListDataSources(ctx, kbID)
+	dataSources, err := h.service.ListDataSources(ctx, kb.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list data sources"})
 		return

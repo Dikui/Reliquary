@@ -41,7 +41,7 @@
     <SettingDrawer v-model:visible="playgroundVisible" :title="t('integrations.api.playgroundTitle')" :confirm-text="t('integrations.api.playgroundRun')" :confirm-loading="running" storage-key="setting-drawer:width:api-playground" width="680px" @confirm="runQuery">
       <t-form :data="playground" layout="vertical" label-align="top" @submit.prevent>
         <t-form-item :label="t('integrations.api.apiKeyValue')"><t-input v-model="playground.apiKey" type="password" autocomplete="off" :disabled="running" /></t-form-item>
-        <t-form-item :label="t('integrations.api.playgroundKnowledgeBase')"><t-select v-model="playground.knowledgeBaseId" :options="knowledgeBaseOptions" :loading="knowledgeBasesLoading" :disabled="running || knowledgeBasesLoading" :placeholder="t('integrations.api.playgroundKnowledgeBasePlaceholder')" clearable /></t-form-item>
+
         <t-form-item :label="t('integrations.api.playgroundQuestion')"><SafeTextarea v-model="playground.query" :autosize="{ minRows: 3, maxRows: 8 }" :disabled="running" /></t-form-item>
       </t-form>
       <t-alert v-if="playgroundError" theme="error" :message="playgroundError" />
@@ -59,7 +59,6 @@ import SafeTextarea from '@/components/SafeTextarea.vue'
 import { apiKeyErrorMessage } from '@/utils/personalServerError'
 import { getApiBaseUrl } from '@/utils/api-base'
 import { copyWithToast } from '@/utils/clipboard'
-import { listKnowledgeBases } from '@/api/knowledge-base'
 import { listTenantAPIKeys, createTenantAPIKey, updateTenantAPIKey, deleteTenantAPIKey, type TenantAPIKey } from '@/api/tenant'
 
 const { t } = useI18n()
@@ -88,10 +87,7 @@ const rules = computed(() => ({ name: [{ required: true, message: t('integration
 const createdVisible = ref(false)
 const createdToken = ref('')
 const playgroundVisible = ref(false)
-const playground = reactive({ apiKey: '', query: '', knowledgeBaseId: '' })
-const knowledgeBaseOptions = ref<Array<{ label: string; value: string }>>([])
-const knowledgeBasesLoading = ref(false)
-const knowledgeBasesLoaded = ref(false)
+const playground = reactive({ apiKey: '', query: '' })
 const running = ref(false)
 const playgroundError = ref('')
 const playgroundResult = ref('')
@@ -145,37 +141,14 @@ function revoke(key: TenantAPIKey) {
     },
   })
 }
-async function openPlayground() {
-  playgroundVisible.value = true
-  knowledgeBasesLoading.value = true
-  playgroundError.value = ''
-  knowledgeBaseOptions.value = []
-  knowledgeBasesLoaded.value = false
-  try {
-    const response = await listKnowledgeBases()
-    if (!response.success) throw new Error(response.message)
-    knowledgeBasesLoaded.value = true
-    knowledgeBaseOptions.value = (response.data || []).map((kb: { id: string; name: string }) => ({ label: kb.name, value: kb.id }))
-    if (!knowledgeBaseOptions.value.some(option => option.value === playground.knowledgeBaseId)) {
-      playground.knowledgeBaseId = knowledgeBaseOptions.value.length === 1 ? knowledgeBaseOptions.value[0]!.value : ''
-    }
-    if (!knowledgeBaseOptions.value.length) playgroundError.value = t('integrations.api.playgroundNoKnowledgeBases')
-  } catch { playgroundError.value = t('integrations.api.playgroundLoadKnowledgeBasesFailed') }
-  finally { knowledgeBasesLoading.value = false }
-}
+function openPlayground() { playgroundVisible.value = true; playgroundError.value = '' }
 async function runQuery() {
-  if (running.value || knowledgeBasesLoading.value) return
+  if (running.value) return
   if (!playground.apiKey.trim() || !playground.query.trim()) { playgroundError.value = t('integrations.api.playgroundNeedQuestionAndKey'); return }
-  if (!knowledgeBaseOptions.value.some(option => option.value === playground.knowledgeBaseId)) {
-    const hint = !knowledgeBasesLoaded.value ? 'playgroundLoadKnowledgeBasesFailed'
-      : knowledgeBaseOptions.value.length ? 'playgroundNeedKnowledgeBase' : 'playgroundNoKnowledgeBases'
-    playgroundError.value = t(`integrations.api.${hint}`)
-    return
-  }
   running.value = true
   playgroundError.value = ''
   try {
-    const response = await fetch(`${apiBaseUrl.value}/api/v1/knowledge-search`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': playground.apiKey.trim() }, body: JSON.stringify({ query: playground.query.trim(), knowledge_base_ids: [playground.knowledgeBaseId] }) })
+    const response = await fetch(`${apiBaseUrl.value}/api/v1/knowledge-search`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': playground.apiKey.trim() }, body: JSON.stringify({ query: playground.query.trim() }) })
     const body = await response.json()
     if (!response.ok) throw new Error(body.message || body.error?.message || t('integrations.api.playgroundRunFailed'))
     playgroundResult.value = JSON.stringify(body, null, 2)

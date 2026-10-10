@@ -87,65 +87,65 @@ export interface Resource {
 // --- API calls ---
 
 export function getConnectorTypes() {
-  return get('/api/v1/datasource/types')
+  return get('/api/v1/data-sources/types')
 }
 
-export function listDataSources(kbId: string) {
-  return get(`/api/v1/datasource?kb_id=${encodeURIComponent(kbId)}`)
+export function listDataSources() {
+  return get('/api/v1/data-sources')
 }
 
 export function getDataSource(id: string) {
-  return get(`/api/v1/datasource/${id}`)
+  return get(`/api/v1/data-sources/${id}`)
 }
 
 export function createDataSource(data: Partial<DataSource>) {
-  return post('/api/v1/datasource', data)
+  return post('/api/v1/data-sources', data)
 }
 
 export function updateDataSource(id: string, data: Partial<DataSource>) {
-  return put(`/api/v1/datasource/${id}`, data)
+  return put(`/api/v1/data-sources/${id}`, data)
 }
 
 export function deleteDataSource(id: string) {
-  return del(`/api/v1/datasource/${id}`)
+  return del(`/api/v1/data-sources/${id}`)
 }
 
 export function validateConnection(id: string) {
-  return post(`/api/v1/datasource/${id}/validate`, {})
+  return post(`/api/v1/data-sources/${id}/validate`, {})
 }
 
 // Validate credentials without persisting (for "Test Connection" during creation)
 export function validateCredentials(type: string, credentials: Record<string, any>) {
-  return post('/api/v1/datasource/validate-credentials', { type, credentials })
+  return post('/api/v1/data-sources/validate-credentials', { type, credentials })
 }
 
 // List selectable RSS feed resources.
 export function listResources(id: string, parentId?: string) {
   const query = parentId ? `?parent_id=${encodeURIComponent(parentId)}` : ''
-  return get(`/api/v1/datasource/${id}/resources${query}`, { timeout: 120000 })
+  return get(`/api/v1/data-sources/${id}/resources${query}`, { timeout: 120000 })
 }
 
 // resolveResourceAncestors returns the ExternalIDs of every parent that must be
 // expanded to reveal the given (possibly deeply nested) selections in a lazily
 // loaded picker. Used when editing a data source to restore an existing selection.
 export function resolveResourceAncestors(id: string, resourceIds: string[]) {
-  return post(`/api/v1/datasource/${id}/resource-ancestors`, { resource_ids: resourceIds }, { timeout: 120000 })
+  return post(`/api/v1/data-sources/${id}/resource-ancestors`, { resource_ids: resourceIds }, { timeout: 120000 })
 }
 
 export function triggerSync(id: string) {
-  return post(`/api/v1/datasource/${id}/sync`, {})
+  return post(`/api/v1/data-sources/${id}/sync`, {})
 }
 
 export function pauseDataSource(id: string) {
-  return post(`/api/v1/datasource/${id}/pause`, {})
+  return post(`/api/v1/data-sources/${id}/pause`, {})
 }
 
 export function resumeDataSource(id: string) {
-  return post(`/api/v1/datasource/${id}/resume`, {})
+  return post(`/api/v1/data-sources/${id}/resume`, {})
 }
 
 export function getSyncLogs(id: string, limit = 20, offset = 0) {
-  return get(`/api/v1/datasource/${id}/logs?limit=${limit}&offset=${offset}`)
+  return get(`/api/v1/data-sources/${id}/logs?limit=${limit}&offset=${offset}`)
 }
 
 // ----------------------------------------------------------------------------
@@ -164,10 +164,10 @@ export async function putDataSourceCredentials(
   id: string,
   credentials: Record<string, unknown>,
 ): Promise<DataSourceCredentialsResponse> {
-  const response: any = await put(`/api/v1/datasource/${id}/credentials`, { credentials })
+  const response: any = await put(`/api/v1/data-sources/${id}/credentials`, { credentials })
   return (response.data ?? response) as DataSourceCredentialsResponse
 }
 
 export async function deleteDataSourceCredentials(id: string): Promise<void> {
-  await del(`/api/v1/datasource/${id}/credentials/credentials`)
+  await del(`/api/v1/data-sources/${id}/credentials/credentials`)
 }

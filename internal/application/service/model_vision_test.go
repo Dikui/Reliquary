@@ -73,13 +73,15 @@ func TestGetVLMModelRejectsTextOnlyLanguageModel(t *testing.T) {
 	requireVisionBadRequest(t, err)
 }
 
-func TestKnowledgeBaseCreationRejectsTextOnlyVLM(t *testing.T) {
+func TestKnowledgeBaseSettingsRejectTextOnlyVLM(t *testing.T) {
 	repo := newFakeKBRepo()
 	svc := &knowledgeBaseService{repo: repo, modelService: visionModelServiceStub{model: &types.Model{Type: types.ModelTypeKnowledgeQA}}}
-	kb, err := svc.CreateKnowledgeBase(newCreateKnowledgeFileContext(), &types.KnowledgeBase{VLMConfig: types.VLMConfig{Enabled: true, ModelID: "text-only"}})
+	repo.rows["kb"] = &types.KnowledgeBase{ID: "kb", TenantID: 1}
+	config := types.VLMConfig{Enabled: true, ModelID: "text-only"}
+	kb, err := svc.UpdateKnowledgeBase(newCreateKnowledgeFileContext(), "kb", "知识库", "", &types.KnowledgeBaseConfig{VLMConfig: &config})
 	require.Nil(t, kb)
 	requireVisionBadRequest(t, err)
-	require.Empty(t, repo.rows)
+	require.False(t, repo.rows["kb"].VLMConfig.Enabled)
 }
 
 func TestImageUploadRejectsTextOnlyVLMBeforeStorage(t *testing.T) {

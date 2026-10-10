@@ -266,14 +266,11 @@ CREATE TABLE public.knowledge_bases (
     embedding_model_id character varying(64) NOT NULL,
     summary_model_id character varying(64) NOT NULL,
     vlm_config jsonb DEFAULT '{}'::jsonb NOT NULL,
-    extract_config jsonb,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     deleted_at timestamp with time zone,
-    type character varying(32) DEFAULT 'document'::character varying NOT NULL,
+    type character varying(32) DEFAULT 'document'::character varying NOT NULL CHECK (type = 'document'),
     question_generation_config jsonb,
-    is_pinned boolean DEFAULT false NOT NULL,
-    pinned_at timestamp with time zone,
     indexing_strategy jsonb,
     creator_id character varying(36)
 );
@@ -453,8 +450,7 @@ CREATE TABLE public.knowledges (
     summary_status character varying(32) DEFAULT 'none'::character varying,
     channel character varying(50) DEFAULT 'web'::character varying NOT NULL,
     pending_subtasks_count integer DEFAULT 0 NOT NULL,
-    custom_metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
-    folder_path character varying(1024) DEFAULT ''::character varying NOT NULL
+    custom_metadata jsonb DEFAULT '{}'::jsonb NOT NULL
 );
 
 
@@ -748,7 +744,6 @@ ALTER SEQUENCE public.tenant_api_keys_id_seq OWNED BY public.tenant_api_keys.id;
 --
 
 CREATE TABLE public.tenants (
-    model_tiers jsonb DEFAULT '{}'::jsonb NOT NULL,
     id integer NOT NULL CHECK (id = 1),
     name character varying(255) NOT NULL,
     description text,
@@ -798,16 +793,6 @@ CREATE SEQUENCE public.tenants_id_seq
 ALTER SEQUENCE public.tenants_id_seq OWNED BY public.tenants.id;
 
 
---
--- Name: resource_favorites; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.resource_favorites (
-    tenant_id bigint NOT NULL,
-    resource_type character varying(16) NOT NULL,
-    resource_id character varying(64) NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
-);
 
 
 --
@@ -1110,12 +1095,6 @@ ALTER TABLE ONLY public.knowledge_processing_spans
     ADD CONSTRAINT uq_kpspan_attempt_span UNIQUE (knowledge_id, attempt, span_id);
 
 
---
--- Name: resource_favorites resource_favorites_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.resource_favorites
-    ADD CONSTRAINT resource_favorites_pkey PRIMARY KEY (tenant_id, resource_type, resource_id);
 
 
 --
@@ -1357,11 +1336,6 @@ CREATE INDEX idx_knowledges_base_id ON public.knowledges USING btree (knowledge_
 CREATE INDEX idx_knowledges_enable_status ON public.knowledges USING btree (enable_status);
 
 
---
--- Name: idx_knowledges_folder_path; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_knowledges_folder_path ON public.knowledges USING btree (tenant_id, knowledge_base_id, folder_path);
 
 
 --
@@ -1560,18 +1534,8 @@ CREATE INDEX idx_tenant_api_keys_tenant ON public.tenant_api_keys USING btree (t
 CREATE INDEX idx_tenants_status ON public.tenants USING btree (status);
 
 
---
--- Name: idx_resource_favorites_tenant_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_resource_favorites_tenant_id ON public.resource_favorites USING btree (tenant_id);
 
 
---
--- Name: idx_resource_favorites_tenant_type_created_at; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_resource_favorites_tenant_type_created_at ON public.resource_favorites USING btree (tenant_id, resource_type, created_at DESC);
 
 
 --
@@ -1691,7 +1655,6 @@ SELECT pg_catalog.setval('public.task_pending_ops_id_seq', 1, false);
 SELECT pg_catalog.setval('public.tenant_api_keys_id_seq', 1, false);
 SELECT pg_catalog.setval('public.tenants_id_seq', 10000, false);
 
-CREATE INDEX idx_knowledge_bases_pinned ON public.knowledge_bases (tenant_id, is_pinned DESC, pinned_at DESC, created_at DESC);
 
 CREATE INDEX idx_entity_aliases_entity ON public.entity_aliases USING btree (tenant_id, entity_id);
 
@@ -1710,5 +1673,7 @@ CREATE TABLE public.knowledge_entities (
 );
 CREATE INDEX idx_knowledge_entities_entity ON public.knowledge_entities (tenant_id, entity_id, knowledge_id);
 
+
+CREATE UNIQUE INDEX idx_knowledge_bases_active_tenant ON public.knowledge_bases (tenant_id) WHERE deleted_at IS NULL;
 
 COMMIT;

@@ -33,7 +33,6 @@ type RouterParams struct {
 	KnowledgeHandler             *handler.KnowledgeHandler
 	KnowledgeSearchHandler       *handler.KnowledgeSearchHandler
 	EntityHandler                *handler.EntityHandler
-	ModelRoutingHandler          *handler.ModelRoutingHandler
 	TenantHandler                *handler.TenantHandler
 	TenantService                interfaces.TenantService
 	TenantAPIKeyService          interfaces.TenantAPIKeyService
@@ -44,7 +43,6 @@ type RouterParams struct {
 	InitializationHandler        *handler.InitializationHandler
 	SystemHandler                *handler.SystemHandler
 	ResourceCatalog              interfaces.ResourceCatalog
-	UserFavoriteHandler          *handler.ResourceFavoriteHandler
 	RedisClient                  *redis.Client
 	DataSourceHandler            *handler.DataSourceHandler
 	DataSourceCredentialsHandler *handler.DataSourceCredentialsHandler
@@ -123,15 +121,11 @@ func NewRouter(params RouterParams) *gin.Engine {
 		RegisterKnowledgeRoutes(v1, params.KnowledgeHandler, accessGuards)
 		v1.POST("/knowledge-search", params.KnowledgeSearchHandler.SearchKnowledge)
 		RegisterEntityRoutes(v1, params.EntityHandler)
-		if params.ModelRoutingHandler != nil {
-			RegisterModelRoutingRoutes(v1, params.ModelRoutingHandler, accessGuards)
-		}
 		RegisterChunkRoutes(v1, params.ChunkHandler, accessGuards)
 		RegisterModelRoutes(v1, params.ModelHandler, params.ModelCredentialsHandler, accessGuards)
 		RegisterInitializationRoutes(v1, params.InitializationHandler, accessGuards)
 		params.SystemHandler.BindDeploymentCapabilities(deploymentCapabilitiesFromRouter(params))
 		RegisterSystemRoutes(v1, params.SystemHandler, accessGuards)
-		RegisterUserFavoriteRoutes(v1, params.UserFavoriteHandler, accessGuards)
 		RegisterDataSourceRoutes(v1, params.DataSourceHandler, params.DataSourceCredentialsHandler, accessGuards)
 		RegisterChunkerDebugRoutes(v1, accessGuards)
 
