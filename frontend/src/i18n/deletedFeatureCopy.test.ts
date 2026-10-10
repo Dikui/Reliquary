@@ -15,7 +15,7 @@ const allowed: Record<string, string> = {
   'agent.subtitle': '组织 is a verb meaning organize documents.',
   'knowledgeList.subtitle': '组织 is a verb meaning organize documents.',
   'knowledgeEditor.document.subtitle': '组织 is a verb meaning organize documents.',
-  'system.globalSettings.runtime.queueDescriptions.context': 'Organization means organizing knowledge, not an organization account.',
+  'knowledgeWorkbench.entities.types.organization': 'Organization is a supported entity type, not an organization account.',
 }
 
 for (const [locale, bundle] of Object.entries({ 'en-US': enUS, 'zh-CN': zhCN })) {

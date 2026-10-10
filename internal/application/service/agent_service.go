@@ -341,7 +341,6 @@ func (s *agentService) registerTools(
 			tools.ToolKnowledgeSearch:        true,
 			tools.ToolGrepChunks:             true,
 			tools.ToolListKnowledgeChunks:    true,
-			tools.ToolQueryKnowledgeContext:  true,
 			tools.ToolGetDocumentInfo:        true,
 			tools.ToolDataAnalysis:           true,
 			tools.ToolDataSchema:             true,
@@ -368,11 +367,10 @@ func (s *agentService) registerTools(
 	// in AgentEditorModal.vue. These are *all* tools that retrieve/inspect
 	// content from RAG-style knowledge bases.
 	ragToolSet := map[string]bool{
-		tools.ToolKnowledgeSearch:       true,
-		tools.ToolGrepChunks:            true,
-		tools.ToolListKnowledgeChunks:   true,
-		tools.ToolQueryKnowledgeContext: true,
-		tools.ToolGetDocumentInfo:       true,
+		tools.ToolKnowledgeSearch:     true,
+		tools.ToolGrepChunks:          true,
+		tools.ToolListKnowledgeChunks: true,
+		tools.ToolGetDocumentInfo:     true,
 	}
 	if !hasVectorKB {
 		filtered := make([]string, 0, len(allowedTools))
@@ -417,10 +415,6 @@ func (s *agentService) registerTools(
 			logger.Infof(ctx, "Registered grep_chunks tool with searchTargets: %d targets", len(config.SearchTargets))
 		case tools.ToolListKnowledgeChunks:
 			toolToRegister = tools.NewListKnowledgeChunksTool(s.knowledgeService, s.chunkService, config.SearchTargets)
-		case tools.ToolQueryKnowledgeContext:
-			toolToRegister = tools.NewQueryKnowledgeContextTool(s.knowledgeBaseService, config.SearchTargets).
-				WithKnowledgeScope(s.knowledgeService).
-				WithContextQuery(NewKnowledgeContextService(s.db, s.modelService).Query)
 		case tools.ToolGetDocumentInfo:
 			toolToRegister = tools.NewGetDocumentInfoTool(s.knowledgeService, s.chunkService, config.SearchTargets)
 		case tools.ToolWebFetch:

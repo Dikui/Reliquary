@@ -28,7 +28,6 @@ export function listKnowledgeBases(params?: {
 
 export function createKnowledgeBase(data: {
   model_tiers?: ModelTierConfig;
-  domain_id: string;
   name: string;
   description?: string;
   type?: 'document';
@@ -61,7 +60,6 @@ export function getKnowledgeBaseById(id: string, options?: { agent_id?: string }
 
 export function updateKnowledgeBase(id: string, data: {
   model_tiers?: ModelTierConfig;
-  domain_id?: string;
   name: string;
   description?: string;
   config?: {
@@ -443,3 +441,5 @@ export function batchReparseKnowledge(kbId: string, ids: string[], processConfig
     process_config: processConfig,
   });
 }
+
+export interface KnowledgeRepostSource { id: string; knowledge_id: string; original_url?: string; publisher?: string; author?: string; published_at?: string; published_at_missing?: boolean; match_method: string }

@@ -51,7 +51,7 @@ remains reachable to help you diagnose the problem), but:
 - The failing migration is rolled back, leaving the database at the previous
   version. Any tables / indexes introduced by that migration **are not
   created**.
-- Downstream features depending on those tables (knowledge context and
+- Downstream features depending on those tables (entity registry and
   task queues) may silently produce nothing.
 - The system info page shows the partial DB version + a red "Migration failed"
   tag and the captured error.
@@ -198,7 +198,7 @@ database rebuild procedure above.
    - Run `make migrate-up` from a checkout to apply migrations outside the
      server process.
 5. **Verify**: the system info page should now show the DB version without
-   the "Migration failed" tag, and the previously broken feature (knowledge context or task queues) should start producing output.
+   the "Migration failed" tag, and the previously broken feature (entity registry or task queues) should start producing output.
 
 ---
 

@@ -44,7 +44,7 @@ type knowledgeBaseService struct {
 	dsScheduler    *datasource.Scheduler
 
 	resourceCatalog        interfaces.ResourceCatalog
-	nameEmbeddingRebuilder ContextNameEmbeddingRebuildTrigger
+	nameEmbeddingRebuilder EntityNameEmbeddingRebuildTrigger
 }
 
 // NewKnowledgeBaseService creates a new knowledge base service
@@ -102,9 +102,6 @@ func (s *knowledgeBaseService) CreateKnowledgeBase(ctx context.Context,
 	}
 	kb.CreatedAt = time.Now()
 	kb.TenantID = types.MustTenantIDFromContext(ctx)
-	if err := s.validateKnowledgeBaseDomain(ctx, kb.TenantID, kb.DomainID); err != nil {
-		return nil, err
-	}
 	if err := ValidateModelTierConfig(ctx, s.db, kb.ModelTiers); err != nil {
 		return nil, err
 	}
@@ -136,24 +133,7 @@ func (s *knowledgeBaseService) CreateKnowledgeBase(ctx context.Context,
 	return kb, nil
 }
 
-func (s *knowledgeBaseService) validateKnowledgeBaseDomain(ctx context.Context, tenantID uint64, domainID string) error {
-	if strings.TrimSpace(domainID) == "" {
-		return apperrors.NewBadRequestError("domain_id is required")
-	}
-	// In-memory repository doubles omit the database; production always has it.
-	if s.db == nil {
-		return nil
-	}
-	if _, err := getKnowledgeDomain(ctx, s.db, tenantID, domainID, false); err != nil {
-		if appErr, ok := apperrors.IsAppError(err); ok && appErr.Code == apperrors.ErrNotFound {
-			return apperrors.NewBadRequestError("domain_id must reference an existing space domain")
-		}
-		return err
-	}
-	return nil
-}
-
-// The row lock keeps domain deletion and knowledge-base writes consistent.
+// Lock the existing row while persisting knowledge-base changes.
 func (s *knowledgeBaseService) persistKnowledgeBase(ctx context.Context, kb *types.KnowledgeBase, create bool) error {
 	persist := func(repo interfaces.KnowledgeBaseRepository) error {
 		if create {
@@ -173,13 +153,6 @@ func (s *knowledgeBaseService) persistKnowledgeBase(ctx context.Context, kb *typ
 				}
 				return err
 			}
-		}
-		var domain types.KnowledgeDomain
-		if err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Where("tenant_id = ? AND id = ?", kb.TenantID, kb.DomainID).First(&domain).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return apperrors.NewBadRequestError("domain_id must reference an existing space domain")
-			}
-			return err
 		}
 		return persist(repository.NewKnowledgeBaseRepository(tx))
 	})
@@ -349,7 +322,6 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 	name string,
 	description string,
 	config *types.KnowledgeBaseConfig,
-	domainIDs ...string,
 ) (*types.KnowledgeBase, error) {
 	if id == "" {
 		logger.Error(ctx, "Knowledge base ID is empty")
@@ -369,15 +341,6 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 
 	changedFields := make([]string, 0, 3)
 	previousEmbeddingOverride := kb.ModelTiers.ModelID(types.ModelTierEmbedding)
-	if len(domainIDs) > 0 {
-		if err := s.validateKnowledgeBaseDomain(ctx, kb.TenantID, domainIDs[0]); err != nil {
-			return nil, err
-		}
-		if kb.DomainID != domainIDs[0] {
-			changedFields = append(changedFields, "domain_id")
-			kb.DomainID = domainIDs[0]
-		}
-	}
 	if kb.Name != name {
 		changedFields = append(changedFields, "name")
 	}
@@ -399,7 +362,7 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 			config.AutoTagConfig.Normalize()
 			kb.AutoTagConfig = config.AutoTagConfig
 		}
-		// Update indexing strategy — syncs to ExtractConfig for backward compat
+		// Update the enabled indexing strategy.
 		if config.IndexingStrategy != nil {
 			if !config.IndexingStrategy.HasAnyIndexing() {
 				return nil, errors.New("at least one indexing strategy must be enabled")
@@ -472,7 +435,7 @@ func sortKnowledgeBasePins(kbs []*types.KnowledgeBase) {
 
 // DeleteKnowledgeBase deletes a knowledge base by its ID
 // This method marks the knowledge base as deleted and enqueues an async task
-// to handle the heavy cleanup operations (embeddings, chunks, files, knowledge context data)
+// to handle the heavy cleanup operations (embeddings, chunks, files, entity associations)
 func (s *knowledgeBaseService) DeleteKnowledgeBase(ctx context.Context, id string) error {
 	if id == "" {
 		logger.Error(ctx, "Knowledge base ID is empty")
@@ -496,11 +459,6 @@ func (s *knowledgeBaseService) DeleteKnowledgeBase(ctx context.Context, id strin
 			"knowledge_base_id": id,
 		})
 		return err
-	}
-	if s.db != nil && s.db.Migrator().HasTable(&types.KnowledgeWorkflow{}) {
-		if err := s.disableKnowledgeWorkflows(ctx, id); err != nil {
-			logger.Warnf(ctx, "Stop deleted KB workflows: %v", err)
-		}
 	}
 
 	// Stop queued work that targets
@@ -557,7 +515,7 @@ func (s *knowledgeBaseService) DeleteKnowledgeBase(ctx context.Context, id strin
 }
 
 // ProcessKBDelete handles async knowledge base deletion task
-// This method performs heavy cleanup operations: deleting embeddings, chunks, files, and knowledge context data
+// This method performs heavy cleanup operations: deleting embeddings, chunks, files, and entity associations
 func (s *knowledgeBaseService) ProcessKBDelete(ctx context.Context, t *asynq.Task) error {
 	var payload types.KBDeletePayload
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
@@ -639,11 +597,6 @@ func (s *knowledgeBaseService) ProcessKBDelete(ctx context.Context, t *asynq.Tas
 			imageInfoStrs = append(imageInfoStrs, ci.ImageInfo)
 		}
 		imageURLs := collectImageURLs(ctx, imageInfoStrs)
-		historicalImages, err := evidenceImageReferences(ctx, s.db, tenantID, knowledgeIDs)
-		if err != nil {
-			return err
-		}
-		imageURLs = append(imageURLs, historicalImages...)
 
 		// Delete all chunks
 		logger.Infof(ctx, "Deleting all chunks in knowledge base")
@@ -681,7 +634,7 @@ func (s *knowledgeBaseService) ProcessKBDelete(ctx context.Context, t *asynq.Tas
 		}
 	}
 
-	if err := s.cleanupKnowledgeFusion(ctx, kbID); err != nil {
+	if err := s.cleanupKnowledgeEntities(ctx, kbID); err != nil {
 		return err
 	}
 
@@ -930,40 +883,12 @@ func cloneKnowledgeBaseConfiguration(sourceKB *types.KnowledgeBase) (*types.Know
 	return &targetKB, nil
 }
 
-func (s *knowledgeBaseService) disableKnowledgeWorkflows(ctx context.Context, kbID string) error {
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		scope := func(q *gorm.DB) *gorm.DB {
-			return q.Where("tenant_id = ? AND knowledge_base_id = ?", types.MustTenantIDFromContext(ctx), kbID)
-		}
-		if err := scope(tx.Model(&types.KnowledgeWorkflow{})).Update("enabled", false).Error; err != nil {
-			return err
-		}
-		return scope(tx.Model(&types.KnowledgeWorkflowRun{})).Where("status IN ?", []string{types.WorkflowStatusQueued, types.WorkflowStatusRunning, types.WorkflowStatusPaused}).Updates(map[string]any{"status": types.WorkflowStatusCancelled, "error": "knowledge base deleted", "updated_at": time.Now()}).Error
-	})
-}
-func (s *knowledgeBaseService) cleanupKnowledgeFusion(ctx context.Context, kbID string) error {
+func (s *knowledgeBaseService) ModelRoutingDB() *gorm.DB { return s.db }
+
+func (s *knowledgeBaseService) cleanupKnowledgeEntities(ctx context.Context, kbID string) error {
 	if s.db == nil {
 		return nil
 	}
-	if s.db.Migrator().HasTable(&types.KnowledgeWorkflow{}) {
-		if err := s.disableKnowledgeWorkflows(ctx, kbID); err != nil {
-			return err
-		}
-		if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			for _, model := range []any{&types.KnowledgeWorkflowStepRun{}, &types.KnowledgeWorkflowRun{}, &types.KnowledgeWorkflowReport{}, &types.KnowledgeWorkflow{}} {
-				if err := tx.Where("tenant_id = ? AND knowledge_base_id = ?", types.MustTenantIDFromContext(ctx), kbID).Delete(model).Error; err != nil {
-					return err
-				}
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-	}
-	if s.db.Migrator().HasTable(&types.KnowledgeEvidence{}) {
-		return NewKnowledgeContextService(s.db, s.modelService).DeleteKnowledgeBase(ctx, kbID)
-	}
-	return nil
+	ids := s.db.Model(&types.Knowledge{}).Unscoped().Select("id").Where("tenant_id = ? AND knowledge_base_id = ?", types.MustTenantIDFromContext(ctx), kbID)
+	return s.db.WithContext(ctx).Where("tenant_id = ? AND knowledge_id IN (?)", types.MustTenantIDFromContext(ctx), ids).Delete(&types.KnowledgeEntity{}).Error
 }
-
-func (s *knowledgeBaseService) ModelRoutingDB() *gorm.DB { return s.db }

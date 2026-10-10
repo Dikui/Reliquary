@@ -87,7 +87,7 @@ const uploadSourceRef = ref<InstanceType<typeof KbUploadSourceDropdown> | null>(
 const uploading = ref(false);
 const kbLoading = ref(false);
 const docListLoading = ref(true);
-const validTabs = ['documents', 'context'] as const
+const validTabs = ['documents', 'entities'] as const
 type KbTab = typeof validTabs[number]
 const initTab = validTabs.includes(route.query.tab as any) ? (route.query.tab as KbTab) : 'documents'
 const activeKbTab = ref<KbTab>(initTab);
@@ -2172,10 +2172,10 @@ async function createNewSession(value: string): Promise<void> {
               </button>
               <t-icon name="chevron-right" class="breadcrumb-separator" />
 
-                <span :class="['breadcrumb-tab', { active: activeKbTab === 'documents' }]"
-                  @click="activeKbTab = 'documents'">{{ $t('knowledgeEditor.document.title') }}</span>
-                <span class="breadcrumb-tab-sep">/</span><span :class="['breadcrumb-tab', { active: activeKbTab === 'context' }]"
-                    @click="activeKbTab = 'context'">{{ $t('knowledgeWorkbench.tabLabel') }}</span>
+                <button type="button" :class="['breadcrumb-tab', { active: activeKbTab === 'documents' }]" :aria-pressed="activeKbTab === 'documents'"
+                  @click="activeKbTab = 'documents'">{{ $t('knowledgeEditor.document.title') }}</button>
+                <span class="breadcrumb-tab-sep">/</span><button type="button" :class="['breadcrumb-tab', { active: activeKbTab === 'entities' }]" :aria-pressed="activeKbTab === 'entities'"
+                    @click="activeKbTab = 'entities'">{{ $t('knowledgeWorkbench.tabLabel') }}</button>
             </h2>
             <!-- 标题行右侧的动作锚点：聚拢"信息"和"设置"两个圆形按钮。 -->
             <div class="kb-title-actions">
@@ -2200,7 +2200,7 @@ async function createNewSession(value: string): Promise<void> {
               </t-tooltip>
             </div>
           </div>
-          <p v-if="activeKbTab !== 'context'" class="document-subtitle">{{ $t('knowledgeEditor.document.subtitle') }}</p>
+          <p v-if="activeKbTab !== 'entities'" class="document-subtitle">{{ $t('knowledgeEditor.document.subtitle') }}</p>
           <p v-if="unsupportedFileTypes.length" class="parser-hint knowledge-header-hint" @click="goToParserSettings">
             <t-icon name="info-circle" class="parser-hint-icon" />
             <span class="knowledge-header-hint__text">{{$t('knowledgeBase.unsupportedTypesHint', {
@@ -2214,8 +2214,8 @@ async function createNewSession(value: string): Promise<void> {
         </div>
       </div>
 
-      <div v-if="activeKbTab === 'context'" class="knowledge-context-area">
-        <KnowledgeWorkbench v-if="kbId" :kb-id="kbId" :domain-id="kbInfo?.domain_id"
+      <div v-if="activeKbTab === 'entities'" class="entity-workbench-area">
+        <KnowledgeWorkbench v-if="kbId" :kb-id="kbId"
           @open-source="openSourceDoc" />
       </div>
 
@@ -2644,6 +2644,10 @@ async function createNewSession(value: string): Promise<void> {
 
 // Breadcrumb tab switch
 .breadcrumb-tab {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
   cursor: pointer;
   color: var(--td-text-color-placeholder);
   font-weight: 400;
@@ -2659,6 +2663,11 @@ async function createNewSession(value: string): Promise<void> {
   &.active {
     color: var(--td-brand-color);
     font-weight: 600;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--td-brand-color);
+    outline-offset: 2px;
   }
 
   &.indexing {
@@ -2690,7 +2699,7 @@ async function createNewSession(value: string): Promise<void> {
   border: none;
 }
 
-.knowledge-context-area {
+.entity-workbench-area {
   flex: 1;
   min-height: 0;
   min-width: 0;

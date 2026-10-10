@@ -43,7 +43,7 @@ aliases: [Home, Index, wiki首页]
 |------|------|
 | [常见问题](运维排障/常见问题.md) | 部署与使用中的 FAQ |
 
-## 知识上下文
+## 文档导航
 
 ```mermaid
 graph TB
@@ -55,7 +55,7 @@ graph TB
     Home --> 运维排障
 
 
-    核心功能 --> KG[知识上下文]
+    核心功能 --> KG[实体档案]
     核心功能 --> MCP[MCP功能使用说明]
     核心功能 --> BuiltinMCP[内置MCP服务管理]
     核心功能 --> BuiltinModel[内置模型管理]

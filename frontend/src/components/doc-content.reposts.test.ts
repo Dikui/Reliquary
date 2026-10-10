@@ -13,10 +13,7 @@ import ts from 'typescript'
 import zhCN from '../i18n/locales/zh-CN'
 import enUS from '../i18n/locales/en-US'
 import { safeExternalUrl } from '../utils/externalUrl'
-import * as display from '../views/knowledge/components/knowledgeContextDisplay'
-import * as scope from '../api/knowledge-context-scope'
-import * as citation from '../utils/markdownCitation'
-import type { KnowledgeRepostSource } from '../api/knowledge-context'
+import type { KnowledgeRepostSource } from '../api/knowledge-base/index'
 
 const require = createRequire(import.meta.url)
 const messages = { 'zh-CN': zhCN, 'en-US': enUS }
@@ -49,7 +46,6 @@ function compileSFC(path: string) {
 }
 const repostSFC = compileSFC('../views/knowledge/components/RepostSources.vue')
 const detailSFC = compileSFC('./doc-content.vue')
-const workbenchSFC = compileSFC('../views/knowledge/components/KnowledgeWorkbench.vue')
 const actualRepostSources = repostSFC.create({ '@/utils/externalUrl': { safeExternalUrl } })
 const sharedRepostModule = { __esModule: true, default: actualRepostSources }
 const emptyComponent = defineComponent({ setup: () => () => null })
@@ -128,31 +124,6 @@ async function renderDetails(sources: KnowledgeRepostSource[] | null | undefined
   }, locale, options.ssrContext)
 }
 
-async function renderWorkbench(sources: KnowledgeRepostSource[], locale: keyof typeof messages) {
-  const component = workbenchSFC.create({
-    'tdesign-vue-next': { MessagePlugin: { error: unexpectedAPI } },
-    './MergeSuggestions.vue': emptyModule, './EvidenceExtractionDetails.vue': emptyModule,
-    './EventsCoverageNotice.vue': emptyModule, './HistoryBackfill.vue': emptyModule,
-    './ReportMarkdown.vue': emptyModule, './RepostSources.vue': sharedRepostModule,
-    './knowledgeContextDisplay': display,
-    '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true }) },
-    '@/api/knowledge-domains': { listKnowledgeDomains: () => envelope([]) },
-    '@/api/knowledge-context-scope': scope,
-    '@/api/knowledge-context': {
-      listKnowledgeContextEntities: () => envelope([]), listKnowledgeContextEvents: () => envelope([]),
-      listKnowledgeContextEvidence: () => envelope([{ id: 'evidence-a', title: 'Original source',
-        knowledge_base_id: 'kb-a', body_hash: 'abc', version: 1, status: 'current', extraction_status: 'complete', repost_sources: sources }]),
-    },
-    '@/api/knowledge-workflows': {}, '@/api/chat/index': {}, '@/utils/markdownCitation': citation,
-  })
-  const setup = component.setup
-  component.setup = (props: object, context: object) => {
-    const state = setup(props, context)
-    onServerPrefetch(async () => { await state.selectSection('evidence'); await nextTick() })
-    return state
-  }
-  return renderComponent(component, { kbId: 'kb-a', canManage: false }, locale)
-}
 function repostBlock(html: string) {
   const block = html.match(/<div class="repost-sources"[^>]*>[\s\S]*?<\/ul><\/div>/)?.[0]
   assert.ok(block, 'the actual shared component rendered a repost list')
@@ -178,13 +149,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.doesNotMatch(block, /knowledgeWorkbench\.sourceTime\./)
   })
 
-  test(`${locale} workbench and detail render the same real RepostSources component`, async () => {
-    const detail = await renderDetails(sourceRows, locale)
-    const workbench = await renderWorkbench(sourceRows, locale)
-    assert.equal(repostBlock(detail), repostBlock(workbench), 'shared rendering gives identical labels, fields and links')
-    assert.match(detailSFC.source, /import RepostSources from ['"]@\/views\/knowledge\/components\/RepostSources\.vue['"]/)
-    assert.match(workbenchSFC.source, /import RepostSources from ['"]\.\/RepostSources\.vue['"]/)
-  })
 
   test(`${locale} fallback publisher, missing publication time and unknown method stay localized`, async () => {
     const html = await renderDetails([source({ publisher: '', author: '', published_at_missing: true, match_method: 'future' })], locale)

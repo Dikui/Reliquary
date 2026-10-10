@@ -159,18 +159,3 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     })
   }
 }
-
-for (const locale of ['zh-CN', 'en-US'] as const) {
-  test(`${locale}: saved context result aliases render the same visible entity summary`, async () => {
-    const summary = { nodes: [{ id: 'entity-a', label: 'Saved object', type: 'object', kb_id: 'kb-a' }], edges: [], total_nodes: 1, total_edges: 0 }
-    const html: string[] = []
-    for (const legacy of [false, true]) {
-      const rendered = await componentScenario('./chat/components/tool-results/ContextQueryResults.vue', locale, {
-        '@/api/knowledge-context': {},
-      }, async () => {}, { data: { display_type: legacy ? 'graph_query_results' : 'context_query_results', contexts: {}, knowledge_base_ids: ['kb-a'], [legacy ? 'graph_data' : 'context_data']: summary } })
-      assert.ok(rendered.html.includes('Saved object'))
-      html.push(rendered.html)
-    }
-    assert.equal(html[0], html[1])
-  })
-}

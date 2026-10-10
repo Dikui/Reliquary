@@ -39,10 +39,7 @@ type AsynqTaskParams struct {
 	ImageMultimodal      interfaces.TaskHandler `name:"imageMultimodal"`
 	KnowledgePostProcess interfaces.TaskHandler `name:"knowledgePostProcess"`
 	KnowledgeAutoTag     interfaces.TaskHandler `name:"knowledgeAutoTag"`
-	KnowledgeContext     *service.KnowledgeContextWorker
-	ContextNameEmbedding *service.ContextNameEmbeddingRebuilder
-	ContextBackfill      *service.KnowledgeContextBackfillService
-	KnowledgeWorkflow    *service.KnowledgeWorkflowService
+	EntityNameEmbedding  *service.EntityNameEmbeddingRebuilder
 	TemporaryDocument    interfaces.TemporaryDocumentService
 	DeadLetterRepo       interfaces.TaskDeadLetterRepository
 	SpanTracker          service.SpanTracker
@@ -260,10 +257,7 @@ func RunAsynqServer(params AsynqTaskParams) *asynq.ServeMux {
 	// Register knowledge post process handler
 	mux.HandleFunc(types.TypeKnowledgePostProcess, params.KnowledgePostProcess.Handle)
 	mux.HandleFunc(types.TypeKnowledgeAutoTag, params.KnowledgeAutoTag.Handle)
-	mux.HandleFunc(types.TypeKnowledgeContext, params.KnowledgeContext.Handle)
-	mux.HandleFunc(types.TypeKnowledgeContextBackfill, params.ContextBackfill.Handle)
-	mux.HandleFunc(types.TypeContextNameEmbeddingRebuild, params.ContextNameEmbedding.Handle)
-	mux.HandleFunc(service.TypeKnowledgeWorkflowRun, params.KnowledgeWorkflow.Handle)
+	mux.HandleFunc(types.TypeEntityNameEmbeddingRebuild, params.EntityNameEmbedding.Handle)
 
 	// Register data source sync handler
 	mux.HandleFunc(types.TypeDataSourceSync, params.DataSourceService.ProcessSync)

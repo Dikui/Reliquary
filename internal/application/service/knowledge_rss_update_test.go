@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"reliquary/internal/application/repository"
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -38,8 +39,8 @@ func TestWaitRSSUpdateCandidateUsesFinalizedRow(t *testing.T) {
 	require.Equal(t, types.JSON(`{"rss_update_candidate":"true"}`), candidate.Metadata)
 }
 
-func TestSourceUpdateCandidatePromotesAfterEvidenceIsReady(t *testing.T) {
-	db := knowledgeContextTestDB(t)
+func TestSourceUpdateCandidatePromotesAfterOriginalIsReady(t *testing.T) {
+	db := pgtest.Open(t)
 	require.NoError(t, db.AutoMigrate(&types.KnowledgeTag{}, &types.KnowledgeTagRelation{}, &types.KnowledgeTagManualDecision{}))
 	repo := repository.NewKnowledgeRepository(db)
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(9))
@@ -71,10 +72,6 @@ func TestSourceUpdateCandidatePromotesAfterEvidenceIsReady(t *testing.T) {
 	require.NoError(t, db.Create(&types.KnowledgeTagManualDecision{
 		KnowledgeID: old.ID, TagID: "manual-remove", Selected: false, ActorID: "owner", Reason: "remove explicit label", UpdatedAt: time.Now(),
 	}).Error)
-	require.NoError(t, svc.snapshotContextSource(ctx, &old))
-	var oldEvidenceCount int64
-	require.NoError(t, db.Model(&types.KnowledgeEvidence{}).Where("knowledge_id = ?", old.ID).Count(&oldEvidenceCount).Error)
-	require.EqualValues(t, 1, oldEvidenceCount)
 	var storedOld types.Knowledge
 	require.NoError(t, db.Where("id = ?", old.ID).First(&storedOld).Error)
 	storedIntake, err := storedOld.IntakeMetadata()
@@ -84,11 +81,9 @@ func TestSourceUpdateCandidatePromotesAfterEvidenceIsReady(t *testing.T) {
 	require.Equal(t, "enabled", storedOld.EnableStatus)
 	require.False(t, storedOld.IsSourceUpdateCandidate())
 	require.False(t, storedOld.IsArchivedSource())
-	contextService := NewKnowledgeContextService(db, nil)
-	before, err := contextService.ListEvidence(ctx, "kb", types.KnowledgeContextQuery{KnowledgeIDs: []string{old.ID}})
+	storedBody, err := storedOld.ManualMetadata()
 	require.NoError(t, err)
-	require.Len(t, before, 1)
-	require.Equal(t, oldBody, before[0].Body, "the approved original remains retrievable while its replacement is pending")
+	require.Equal(t, oldBody, storedBody.Content, "the approved original remains readable while its replacement is pending")
 
 	candidateBody := "Approved updated source: the company opened two factories."
 	candidate := types.Knowledge{
@@ -101,8 +96,6 @@ func TestSourceUpdateCandidatePromotesAfterEvidenceIsReady(t *testing.T) {
 	require.NoError(t, candidate.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "approved"}))
 	require.NoError(t, db.Create(&candidate).Error)
 	require.NoError(t, repo.SetKnowledgeTags(ctx, candidate.ID, []string{"candidate-auto", "manual-remove"}))
-	_, err = contextService.SnapshotMessage(ctx, &candidate, candidateBody)
-	require.ErrorContains(t, err, "not promoted", "the public snapshot entry still rejects unpromoted candidates")
 	require.NoError(t, svc.promoteSourceUpdateCandidate(ctx, candidate.ID))
 
 	updatedOld, err := repo.GetKnowledgeByID(ctx, 9, old.ID)
@@ -116,6 +109,12 @@ func TestSourceUpdateCandidatePromotesAfterEvidenceIsReady(t *testing.T) {
 	require.Equal(t, "enabled", updatedCandidate.EnableStatus)
 	require.False(t, updatedCandidate.IsSourceUpdateCandidate())
 	require.Equal(t, "external-1", updatedCandidate.GetMetadata()["external_id"])
+	retainedBody, err := updatedOld.ManualMetadata()
+	require.NoError(t, err)
+	require.Equal(t, oldBody, retainedBody.Content)
+	replacementBody, err := updatedCandidate.ManualMetadata()
+	require.NoError(t, err)
+	require.Equal(t, candidateBody, replacementBody.Content)
 	updatedTags, err := repo.GetKnowledgeTags(ctx, []string{candidate.ID})
 	require.NoError(t, err)
 	updatedTagIDs := make(map[string]bool)
@@ -129,31 +128,10 @@ func TestSourceUpdateCandidatePromotesAfterEvidenceIsReady(t *testing.T) {
 	var copiedDecisions []types.KnowledgeTagManualDecision
 	require.NoError(t, db.Where("knowledge_id = ?", candidate.ID).Find(&copiedDecisions).Error)
 	require.Len(t, copiedDecisions, 2)
-
-	var evidence []types.KnowledgeEvidence
-	require.NoError(t, db.Where("knowledge_id IN ?", []string{old.ID, candidate.ID}).Find(&evidence).Error)
-	require.Len(t, evidence, 2)
-	var original, replacement *types.KnowledgeEvidence
-	for i := range evidence {
-		item := &evidence[i]
-		switch item.KnowledgeID {
-		case old.ID:
-			original = item
-		case candidate.ID:
-			replacement = item
-		}
-	}
-	require.NotNil(t, original)
-	require.NotNil(t, replacement)
-	require.Equal(t, oldBody, original.Body)
-	require.Equal(t, types.KnowledgeEvidenceSuperseded, original.Status)
-	require.Equal(t, replacement.ID, original.SupersededByID)
-	require.Equal(t, candidateBody, replacement.Body)
-	require.Equal(t, types.KnowledgeEvidenceCurrent, replacement.Status)
 }
 
 func TestSourceUpdateCandidateFailureLeavesApprovedOriginalCurrent(t *testing.T) {
-	db := knowledgeContextTestDB(t)
+	db := pgtest.Open(t)
 	repo := repository.NewKnowledgeRepository(db)
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(9))
 	svc := &knowledgeService{db: db, repo: repo}
@@ -165,7 +143,6 @@ func TestSourceUpdateCandidateFailureLeavesApprovedOriginalCurrent(t *testing.T)
 	require.NoError(t, old.SetManualMetadata(types.NewManualKnowledgeMetadata("Original retained", types.ManualKnowledgeStatusPublish, 1)))
 	require.NoError(t, old.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "approved"}))
 	require.NoError(t, db.Create(&old).Error)
-	require.NoError(t, svc.snapshotContextSource(ctx, &old))
 	candidate := types.Knowledge{
 		ID: "replacement-candidate", TenantID: 9, KnowledgeBaseID: "kb", Type: types.KnowledgeTypeManual,
 		ParseStatus: types.ParseStatusFailed, EnableStatus: "disabled",
@@ -190,8 +167,7 @@ func TestSourceUpdateCandidateFailureLeavesApprovedOriginalCurrent(t *testing.T)
 	require.NoError(t, err)
 	require.NotEmpty(t, failedCandidate.GetMetadata()["source_update_error"], "promotion failure must be visible on the retained candidate")
 	require.NotEmpty(t, failedCandidate.ErrorMessage)
-	var evidence types.KnowledgeEvidence
-	require.NoError(t, db.Where("knowledge_id = ?", old.ID).First(&evidence).Error)
-	require.Equal(t, types.KnowledgeEvidenceCurrent, evidence.Status)
-	require.Equal(t, "Original retained", evidence.Body)
+	original, err := current.ManualMetadata()
+	require.NoError(t, err)
+	require.Equal(t, "Original retained", original.Content)
 }

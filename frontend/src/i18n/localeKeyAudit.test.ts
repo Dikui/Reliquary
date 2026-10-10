@@ -107,7 +107,7 @@ const RUNTIME_QUEUE_NAMES = [
   'sync',
   'low',
   'multimodal',
-  'context',
+  'entity',
   'question',
 ] as const
 
@@ -126,6 +126,7 @@ const RUNTIME_TASK_TYPE_KEYS = [
   'move',
   'indexDelete',
   'kbDelete',
+  'entityNameEmbeddingRebuild',
 ] as const
 
 test('runtime queue worker pool and queue labels exist in every locale', () => {

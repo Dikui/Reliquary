@@ -53,7 +53,7 @@ func TestPersonalKnowledgeBaseResponsesKeepEmbeddingWithoutVectorBinding(t *test
 		method, path, body string
 		status             int
 	}{
-		{http.MethodPost, "/knowledge-bases", `{"domain_id":"domain","name":"Personal","embedding_model_id":"chosen-embedding"}`, http.StatusCreated},
+		{http.MethodPost, "/knowledge-bases", `{"name":"Personal","embedding_model_id":"chosen-embedding"}`, http.StatusCreated},
 		{http.MethodGet, "/knowledge-bases/personal-kb", "", http.StatusOK},
 		{http.MethodGet, "/knowledge-bases", "", http.StatusOK},
 	}

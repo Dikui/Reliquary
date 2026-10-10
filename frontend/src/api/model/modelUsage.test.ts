@@ -124,9 +124,9 @@ test('maps agent bindings to the configuration section that owns them', () => {
   assert.equal(modelUsageAgentSection(['chat_model', 'vlm_model']), 'model')
 })
 
-test('tier-only model usage prevents deletion and preserves global and domain references', () => {
-  const details = parseModelUsageDetails({ knowledge_bases: [], agents: [], model_tiers: [{ scope: 'global', id: '1', name: 'Global defaults', bindings: ['light_model_tier'] }, { scope: 'domain', id: 'domain-a', name: 'AI', bindings: ['extraction_model_tier'] }] })
+test('tier-only model usage prevents deletion and preserves global references', () => {
+  const details = parseModelUsageDetails({ knowledge_bases: [], agents: [], model_tiers: [{ scope: 'global', id: '1', name: 'Global defaults', bindings: ['light_model_tier'] }, { scope: 'global', id: '2', name: 'Entity resolution', bindings: ['entity_resolution_model_tier'] }] })
   assert.equal(details?.model_tiers?.length, 2)
-  assert.equal(details?.model_tiers?.[1]?.scope, 'domain')
+  assert.equal(details?.model_tiers?.[1]?.scope, 'global')
   assert.equal(modelUsageBindingI18nKey('light_model_tier'), 'modelSettings.usage.bindings.light_model_tier')
 })

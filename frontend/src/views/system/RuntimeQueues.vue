@@ -571,6 +571,7 @@ const runtimeTaskTypeKeys: Record<string, string> = {
   'knowledge:move': 'move',
   'index:delete': 'indexDelete',
   'kb:delete': 'kbDelete',
+  'entity:name_embedding_rebuild': 'entityNameEmbeddingRebuild',
 }
 
 let pollTimer: ReturnType<typeof setInterval> | null = null

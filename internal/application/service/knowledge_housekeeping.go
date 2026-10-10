@@ -130,7 +130,7 @@ func (h *HousekeepingService) runSweep(ctx context.Context) {
 	// Include 'pending' so a task whose enqueue was lost is eventually
 	// recovered too; filterOutQueued below protects legitimately backlogged
 	// tasks. Include 'finalizing' alongside 'processing': finalizing rows still
-	// consume LLM compute via enrichment subtasks (summary/question/context),
+	// consume LLM compute via enrichment subtasks (summary/question),
 	// and the same stall modes (subtask worker dies, retry budget exhausted
 	// without decrementing the counter) leave the row hanging just as
 	// visibly. Housekeeping promotes both states to 'failed' once the

@@ -9,7 +9,7 @@ export const KNOWN_MODEL_USAGE_BINDINGS = [
   'rerank_model',
   'query_understand_model',
   'light_model_tier',
-  'extraction_model_tier',
+  'entity_resolution_model_tier',
   'generation_model_tier',
   'embedding_model_tier',
   'rerank_model_tier',
@@ -24,7 +24,7 @@ export interface ModelUsageResource {
 }
 
 export interface ModelUsageDetails {
-  model_tiers?: Array<ModelUsageResource & { scope: 'global' | 'domain' }>
+  model_tiers?: Array<ModelUsageResource & { scope: 'global' }>
   knowledge_bases: ModelUsageResource[]
   agents: ModelUsageResource[]
   knowledge_base_total: number
@@ -90,7 +90,7 @@ export function parseModelUsageDetails(value: unknown): ModelUsageDetails | null
     tiers = []
     for (let index = 0; index < resources.length; index++) {
       const original = value.model_tiers[index]
-      if (!isRecord(original) || (original.scope !== 'global' && original.scope !== 'team' && original.scope !== 'domain')) return null
+      if (!isRecord(original) || (original.scope !== 'global' && original.scope !== 'team')) return null
       tiers.push({ ...resources[index]!, scope: original.scope === 'team' ? 'global' : original.scope })
     }
   }

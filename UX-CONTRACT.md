@@ -2,82 +2,62 @@
 
 ## Product context
 
-Reliquary serves a single user that collects source material and checks entities, facts, events and evidence. The supported locales are zh-CN and en-US; existing locale files own product copy. Light and dark themes retain the same hierarchy. The accessibility target for new controls is WCAG 2.2 AA.
+Reliquary serves a single user collecting source material and maintaining entity profiles. The supported locales are zh-CN and en-US. Existing locale files own product copy. Light and dark themes retain the same hierarchy. New controls target WCAG 2.2 AA.
 
 ## Business-context sources
 
 | Scope | Source |
 | --- | --- |
-| Single-user access | CONTEXT.md and docs/adr/0007-personal-single-user.md |
-| Global entity identity and source attribution | docs/adr/0002-global-entity-registry.md |
-| Domain templates and field consolidation | docs/adr/0004-domain-templates-open-fields.md |
-| Model routing, segmented extraction and uncertain identity | .scratch/architecture-reshape/spec.md, phase P3, sections 6.4 to 6.6 |
-| Built in domains and deletion restrictions | .scratch/architecture-reshape/spec.md, phase P2 |
+| Current entity terminology and component scope | CONTEXT.md and docs/adr/0009-kb-collect-store-retrieve.md |
+| Shared entity identity and article attribution | docs/adr/0002-global-entity-registry.md and the task 01 entity API contract |
+| Features retained during staged implementation | .scratch/kb-reshape/spec.md and the explicit task 01 request |
+| Single-user access | docs/adr/0007-personal-single-user.md |
 
 ## Canonical UI Map
 
 | Capability | Canonical owner | Source of truth | Allowed variants | Verification |
 | --- | --- | --- | --- | --- |
-| Select/Listbox | TDesign Select and TagInput | Existing TDesign installation and locale provider | Filtered, multiple and tag input | Frontend type check; browser verification required when available |
-| Date | Existing typed storage with native date input; TDesign DatePicker for API Key expiry | KnowledgeWorkbench.vue and ApiIntegrationSettings.vue | Native date picker accepts platform locale and geometry; API Key expiry uses the active TDesign locale and minute precision | Frontend type check; API Key expiry submission tests |
-| Form | TDesign inputs and application validation | DomainFieldEditor.vue and domainTemplate.ts | Domain creation, template editing, field consolidation | domainTemplate.test.ts |
-| Textarea autosize | SafeTextarea wrapping TDesign Textarea | SafeTextarea.vue and utils/textareaAutosize.ts | Boolean autosize or minRows/maxRows, including conditional forms and dialogs | Actual component mount and height regression tests |
-| Scrollbar | Global application theme stylesheet | DESIGN.md and frontend/src/assets/theme/theme.css | Stable gutter for bounded regions | Premium static audit; browser verification required when available |
-| Toast | TDesign MessagePlugin | Existing settings workflows | Success, warning, error and information | Frontend type check |
-| Model tiers | ModelTierEditor and ModelSelector | Model routing API and existing model catalogue | Global default, domain override and knowledge base override | Model preview tests; frontend checks; browser verification |
-| Merge suggestions | MergeSuggestions and shared useConfirmDelete | Global entity merge API and ADR 0002 | Pending, accepted and rejected | Backend lifecycle tests; browser verification |
-| Model call budgets | ModelCallSummary | Evidence model_calls and processing spans | Evidence details and processing details | Span budget validation test; browser verification |
-| CRUD | Knowledge domain API and settings view | DomainSettings.vue | Return to list on domain save; stay on consolidation after mapping | Template validation tests and backend domain tests |
-| Duplicate intake | KnowledgeDuplicateNotice and useKnowledgeDuplicates | Message intake API 409 with optional match_method | Manual, URL and file intake | Actual SFC and hook regression tests |
-| Repost sources | RepostSources | Knowledge detail and context APIs | Message preview, evidence and event heat details | Shared component and full SFC regression tests |
-| Research report body | ReportMarkdown with existing chat Markdown renderer and sanitizer | Workflow report Markdown and citations | Report body, Markdown and JSON downloads | Markdown nodes, evidence navigation and download request tests |
-| Event coverage | EventsCoverageNotice | ADR 0008 and server count of current template-only evidence | Event timeline, entity profile and topic profile | Localized SFC and scoped count tests |
-| Historical backfill | HistoryBackfill with shared useConfirmDelete | ADR 0008 and maintenance batch API | Starred entity/topic profiles and focus scope | Estimate, explicit confirmation, batch outcomes and failure recovery tests |
+| Select/Listbox | TDesign Select and TagInput | Existing TDesign installation and locale provider | Filtered, multiple and tag input | Frontend type check and component tests |
+| Date | TDesign DatePicker for API Key expiry | ApiIntegrationSettings.vue and active locale | Local minute precision, Unix seconds on submission | API Key expiry tests |
+| Form | TDesign inputs and application validation | Existing knowledge base editor and settings forms | Create and edit | Editor validation tests |
+| Textarea autosize | SafeTextarea wrapping TDesign Textarea | SafeTextarea.vue and utils/textareaAutosize.ts | Boolean autosize or minRows/maxRows | Actual component mount and height regression tests |
+| Scrollbar | Global application theme stylesheet | DESIGN.md and frontend/src/assets/theme/theme.css | Stable gutter for bounded regions | Premium static audit |
+| Toast | TDesign MessagePlugin | Existing settings workflows | Success, warning, error and information | Frontend component tests |
+| Model tiers | ModelTierEditor and ModelSelector | Model routing API and existing model catalogue | Global default and knowledge base override | Model preview tests and frontend checks |
+| Merge suggestions | MergeSuggestions and shared useConfirmDelete | Entity API and ADR 0002 | Pending, accepted and rejected | Backend lifecycle and frontend component tests |
+| Model call budgets | ModelCallSummary | Processing span model_calls | Processing details | Budget validation and component tests |
+| CRUD | Knowledge base editor, entity API and existing document detail | Entity profiles and knowledge base management | Entity merge refreshes the owning list | Entity lifecycle and editor tests |
+| Duplicate intake | KnowledgeDuplicateNotice and useKnowledgeDuplicates | Intake API 409 with optional match_method | Manual, URL and file intake | Actual SFC and hook regression tests |
+| Repost sources | RepostSources | Knowledge detail API | Document preview | Shared component and full SFC regression tests |
 
 ## Flow ledger
 
 | Operation | Pending | Success | Failure recovery |
 | --- | --- | --- | --- |
-| Create or edit domain | Form controls and save action disabled | Return to domain list with success toast | Keep the draft and show inline error |
-| Delete domain | Shared useConfirmDelete dialog and busy action | Refresh and clamp the current list page | Keep list visible and show error; server prevents referenced domain deletion |
-| Map or create a template field | Dialog controls disabled | Refresh selected domain and open-field statistics, remain in consolidation | Keep dialog values and show inline error |
-| Query context | Existing loading controls | Keep query and show source-labelled results | Preserve query, show error and allow retry |
-| View entity | Clear previous detail and show loading indicator | Show facts and events from all knowledge bases | Preserve selection and show error |
-| Collect a duplicate | Existing intake busy controls | Keep a localized notice with an explicit view-existing-message action | Preserve the manual draft; URL and file batches count duplicates separately from failed inputs |
-
-Built in domain deletion stays disabled with an explanation. The signed-in user can browse and edit domains. The server remains authoritative for permissions.
+| View entity | Clear the previous article list and show loading | Show type, aliases and articles mentioning the entity from all knowledge bases | Keep selection, show inline error and allow refresh |
+| Filter entity list | Debounce search and invalidate older requests | Show the filtered list with explicit load more | Show inline error and allow refresh |
+| Merge entity | App-owned dialog names the retained entity and space-wide consequences; disable duplicate requests | Refresh the entity list and announce success | Keep selected target and show inline error |
+| Accept merge suggestion | Shared confirmation names both entities and space-wide consequences | Refresh the list, retain filter and announce success | Keep list and show inline error |
+| Reject merge suggestion | Disable duplicate requests | Keep entities separate and refresh suggestions | Keep list and show inline error |
+| Rebuild entity name embeddings | Disable duplicate starts; poll active runs every five seconds | Show status and processed/total counts | Preserve failure reason and retry controls |
+| Collect a duplicate | Existing intake busy controls | Localized notice offers an explicit view-existing-document action | Preserve manual draft and distinguish duplicate from failed batch inputs |
 
 ## Dataset and draft state
 
-The settings dialog uses transient local search, tab and pagination state. Domain and open-field tables show ten rows per page. Context lists use explicit load more. Scope changes reset scoped results and invalidate requests; an old response cannot replace results from a later scope. Domain template editing uses an independent copy of saved data. Leaving a dirty template requires the existing application confirmation dialog. Field consolidation is available after template changes are saved or cancelled.
+Entity and suggestion lists use explicit load more with fifty and twenty rows per request. Scope changes invalidate older results. Entity details show the shared identity and articles across all knowledge bases. Workbench scope, filters and selected section are transient within the owning knowledge base view; its main documents/entities tab remains in URL state. Composing Chinese input does not trigger entity search. Clearing search refreshes immediately. Merge target options also use explicit load more and load across the entire space.
+
+Global model tier saves stay in space settings. Knowledge base overrides save with the existing edit draft. Clearing an override restores inheritance. The server validates model compatibility. Leaving changed model tiers uses the shared application confirmation dialog. Failed saves preserve drafts and inline errors.
 
 ## Layout and interaction
 
-The settings content owns vertical scrolling. Long template forms keep their natural height. New controls use TDesign keyboard behavior, visible focus, disabled and busy states, and application-owned dialogs. New icon-only actions have localized labels. Chinese input composition does not submit context queries. Autosizing textareas use SafeTextarea to measure only mounted, connected, visible elements and stop pending work on unmount. They retain TDesign input behavior and minRows/maxRows, and cannot be manually resized. Domain table names wrap inside their existing column so the full name remains readable.
+Settings content owns vertical scrolling. Long forms keep their natural height. New controls use TDesign keyboard behavior, visible focus, disabled and busy states, and app-owned dialogs. Native entity selection buttons have visible focus and hover states. Entities and article titles wrap and remain readable in narrow views. Autosizing textareas use SafeTextarea and cancel pending measurements on unmount.
 
-Settings retain their desktop navigation order at narrow desktop widths. The settings-content container measures the usable content width after sidebar and padding: rows stack at 720px or less, controls fit the row, and dense tables retain local horizontal scrolling. The shared settings-layout.less owns the breakpoint and common row rules. Existing rules below 640px remain in place; dedicated mobile adaptation is outside this change.
+The settings-content container stacks rows at 720px or less. Shared settings-layout.less owns that breakpoint. Existing rules below 640px remain in place.
 
+Document details fill the viewport at widths of 720px or less. Desktop drawer width remains the user's preference. Narrow details hide the desktop resize handle. Long source links wrap; code and tables may keep bounded local scrolling. Anomaly links and drawers remain in this staged task.
 
-Browser checks cover the changed flows, both locales and themes, keyboard input, narrow viewports, open select popups and failure recovery when browser tooling is available. Static checks and unit tests alone do not prove these runtime properties.
+Source lists show publisher, original URL, publication time or a missing marker, and matching method. URLs use the shared absolute HTTP(S) URL helper; unsafe values remain escaped text. Opening a different document clears old source data and ignores earlier responses.
 
-## P3 configuration and review
+API Key expiry uses TDesign DatePicker and the active locale. Values retain local date-time at minute precision and convert to Unix seconds on submission. Clearing expiry omits expires_at_unix.
 
-Global model tier saves stay in space settings. Domain and knowledge base overrides remain part of their existing edit drafts and save with those drafts. Every tier displays its effective model and source, and clearing an override restores inheritance. The server validates model compatibility. The signed-in user can edit workspace, domain and knowledge base configuration. Pending requests disable the relevant controls, and failures preserve the draft with an inline error and retry. Leaving changed global or domain model tiers through settings navigation, adding a model or closing settings uses the shared application confirmation dialog.
-
-Merge suggestions use explicit load more with twenty rows per request and transient local status filters, consistent with other context lists. Scope and status changes invalidate old requests. Accepting names both objects and the workspace-wide consequences in the shared confirmation dialog. Rejecting keeps the objects separate. Both actions refresh the list, retain the filter and announce success through MessagePlugin. The signed-in user can inspect evidence and edit suggestions; the server validates authentication.
-
-Evidence cards and the source snapshot drawer display complete or partial extraction with processed and total segment counts. The same model-call table shows stage, tier and count in evidence and processing details. Existing native date fields remain platform owned as documented above. API Key expiry uses TDesign DatePicker with time selection and the application's locale provider. Its form value keeps the existing local date-time format at minute precision, and submission retains the existing conversion to Unix seconds. Clearing expiry omits expires_at_unix when creating or updating a key, preserving the API's existing never-expire behavior. No new scrollbar owner or runtime token system is introduced.
-
-## P4 source verification
-
-Duplicate notices use the current intake response to distinguish near duplicates. Historical repost records do not determine that message. Viewing the existing message uses the current knowledge base's document-opening event or the existing knowledge_id route parameter. A manual editor closes only after that explicit action. Source lists show publisher, original URL, publication time or a missing marker, and the matching method. Opening another message clears the old source list and ignores responses for the previous selection.
-
-Message details fill the viewport at widths of 720px or less. The desktop drawer width remains the user's preferred width, including after a narrow viewport is restored to desktop. Narrow details hide the desktop resize handle. At every width, padded detail content stays within the drawer and long source URLs wrap without horizontal drawer scrolling. Original source links, reposts, evidence, report citations and anomaly links retain their full address and share the same wrapping behavior on desktop and narrow screens. Code and tables may keep their own bounded scrolling regions. The anomaly drawer also stays within the viewport while retaining its desktop width.
-
-Adapter failures display a localized type with site, source URL, adapter and reason. All source URLs pass through the shared absolute HTTP(S) URL helper; other values remain plain escaped text. Report bodies use the existing Markdown rendering and sanitization path. Valid report citation buttons open the existing evidence snapshot and preserve its quote; code examples and link labels keep their literal citation text, including nested labels such as [[C1]](URL). Download actions disable concurrent downloads and release temporary links and object URLs after completion or failure. Browser checks for this fix are deferred to the separately requested review.
-
-## Historical backfill and event coverage
-
-ADR 0008 owns the coverage and backfill rules. Event views always show the scope notice and server count, including zero. Reports retain the notice and count recorded in their Markdown body at generation time. Topic profiles open in the existing workbench drawer.
-
-Adding a star exposes manual historical backfill at the same location, including an entry on the original entity list row or topic card. Opening a profile, starring an item or enabling a workflow never starts a batch. The shared confirmation names the target, the latest batch of at most 200 messages, the estimated calls and the remaining messages. It explains that calls vary with event count and preserves template facts and corrections. Active batches disable duplicate starts; result dialogs show total, success and failure counts, with message failure details available on demand. Estimate or queue errors keep the action retryable. Unavailable counts remain unknown; a failed estimate disables confirmation until a fresh estimate succeeds, while batch results refresh independently. Active batches poll every five seconds; unmount or target changes cancel polling and invalidate old responses. Browser verification for task 07 is deferred to the separately requested review.
+Browser inspection is handled by the user's separate task. This task records static, component, localization, type-check and build evidence without claiming browser verification.

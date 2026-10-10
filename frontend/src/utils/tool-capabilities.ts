@@ -13,7 +13,6 @@ import { normalizeToolName } from './toolNames'
  * Capability names mirror the backend's KB capability set:
  *   - vector:  vector chunk index (embedding-based retrieval)
  *   - keyword: keyword/BM25 chunk index
- *   - context:   structured knowledge context
  *
  * Requirement semantics:
  *   - `anyOf`: KB scope must expose at least ONE listed capability.
@@ -25,7 +24,7 @@ import { normalizeToolName } from './toolNames'
  * "always available" so new tools don't silently start disabled.
  */
 
-export type KBCapability = 'vector' | 'keyword' | 'context';
+export type KBCapability = 'vector' | 'keyword';
 
 export interface ToolRequirement {
   anyOf?: KBCapability[];
@@ -52,7 +51,6 @@ export const TOOL_CAPABILITY_REQUIREMENTS: Record<string, ToolRequirement> = {
   knowledge_search:      { anyOf: ['vector', 'keyword'], consumesFiles: true },
   grep_chunks:           { anyOf: ['vector', 'keyword'], consumesFiles: true },
   list_knowledge_chunks: { anyOf: ['vector', 'keyword'], consumesFiles: true },
-  query_knowledge_context: { anyOf: ['vector', 'keyword'], consumesFiles: true },
   get_document_info:     { anyOf: ['vector', 'keyword'], consumesFiles: true },
 
   // ---- Data analysis (reads table summary/column chunks produced by RAG ingest) ----
@@ -67,14 +65,13 @@ export const TOOL_CAPABILITY_REQUIREMENTS: Record<string, ToolRequirement> = {
 export interface ScopeCapabilities {
   vector: boolean;
   keyword: boolean;
-  context: boolean;
   }
 
 /**
  * Machine-readable reason a tool is unsatisfiable. Map to a user-facing
  * string via i18n on the caller side (see `AgentEditorModal.vue`).
  */
-export type RequirementMissKind = 'none' | 'needsKb' | 'needsRag' | 'needsContext';
+export type RequirementMissKind = 'none' | 'needsKb' | 'needsRag';
 
 /**
  * Evaluate whether a tool's requirements are satisfied by the scope.
@@ -115,7 +112,6 @@ export function evaluateToolRequirement(
 
 function primaryMissKind(c: KBCapability): RequirementMissKind {
   switch (c) {
-    case 'context':   return 'needsContext';
     case 'vector':
     case 'keyword': return 'needsRag';
   }

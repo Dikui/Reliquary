@@ -570,7 +570,6 @@ const TOOL_NAME_KEYS: Record<string, string> = {
   attachment_parsing: 'agentStream.tools.attachmentParsing',
   image_analysis: 'agentStream.tools.imageAnalysis',
   query_understand: 'agentStream.tools.queryUnderstand',
-  query_knowledge_context: 'agentStream.tools.queryKnowledgeContext',
   data_analysis: 'agentStream.tools.dataAnalysis',
   data_schema: 'agentStream.tools.dataSchema',
 };

@@ -9,7 +9,7 @@ import { createI18n } from 'vue-i18n'
 import ts from 'typescript'
 import enUS from '../../../i18n/locales/en-US'
 import zhCN from '../../../i18n/locales/zh-CN'
-import { knowledgeContextScopeParams } from '../../../api/knowledge-context-scope'
+import { entityScopeParams } from '../../../api/entity-scope'
 
 const require = createRequire(import.meta.url)
 const filename = 'MergeSuggestions.vue'
@@ -24,8 +24,7 @@ async function renderSuggestions(locale: 'zh-CN' | 'en-US', count: number, statu
     'vue-i18n': { useI18n: () => i18n.global },
     'tdesign-vue-next': { MessagePlugin: { success() {} } },
     '@/components/settings/useConfirmDelete': { useConfirmDelete: () => () => {} },
-    '@/api/knowledge-context-scope': { knowledgeContextScopeParams },
-    '@/api/knowledge-context': { listKnowledgeMergeSuggestions: () => Promise.resolve({ success: true, data: Array.from({ length: count }, (_, index) => ({ id: `suggestion-${index}`, status, new_entity_name: 'Aurora', candidate_entity_name: 'Aurora model' })) }) },
+    '@/api/entities': { entityScopeParams, listEntityMergeSuggestions: () => Promise.resolve({ success: true, data: Array.from({ length: count }, (_, index) => ({ id: `suggestion-${index}`, status, new_entity_name: 'Aurora', candidate_entity_name: 'Aurora model' })) }) },
   }
   function evaluate(code: string) {
     const module = { exports: {} as any }
@@ -41,7 +40,7 @@ async function renderSuggestions(locale: 'zh-CN' | 'en-US', count: number, statu
     onServerPrefetch(async () => { state.status.value = status; await nextTick(); await state.refresh() })
     return state
   }
-  const app = createSSRApp(component, { kbId: 'kb-a', domainId: '', scope: 'knowledge_base' })
+  const app = createSSRApp(component, { kbId: 'kb-a', scope: 'knowledge_base' })
   const stub = defineComponent({ props: ['message', 'description'], setup: (props, { attrs, slots }) => () => h('div', attrs, [props.message, props.description, slots.default?.()]) })
   for (const name of ['t-alert', 't-button', 't-empty', 't-loading', 't-select', 't-tag']) app.component(name, stub)
   return renderToString(app)

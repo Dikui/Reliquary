@@ -29,14 +29,14 @@ func (r *routingEmbeddingTrigger) MarkAndEnqueue(ctx context.Context, tenantID u
 func (*routingEmbeddingTrigger) Enqueue(context.Context, uint64, string) error { return nil }
 
 func TestGlobalEmbeddingConfigurationTriggersCommittedRebuildAndShowsQueueFailure(t *testing.T) {
-	db := fusionFixtureDB(t)
+	db := entityFixtureDB(t)
 	require.NoError(t, db.Create(&types.Tenant{ID: 1, Name: "Global routing trigger"}).Error)
 	require.NoError(t, db.Create(&types.Model{ID: "configured-vector", TenantID: 1, Name: "vector", Type: types.ModelTypeEmbedding, Status: types.ModelStatusActive}).Error)
 	h := handler.NewModelRoutingHandler(db, nil)
 	trigger := &routingEmbeddingTrigger{}
 	h.SetNameEmbeddingRebuilder(trigger)
 	engine := gin.New()
-	engine.Use(middleware.ErrorHandler(), fusionIdentityMiddleware())
+	engine.Use(middleware.ErrorHandler(), entityIdentityMiddleware())
 	engine.PUT("/api/v1/space/model-tiers", h.Update)
 	trigger.onMark = func(_ context.Context, tenantID uint64, reason string) {
 		require.Equal(t, uint64(1), tenantID)
@@ -45,10 +45,10 @@ func TestGlobalEmbeddingConfigurationTriggersCommittedRebuildAndShowsQueueFailur
 		require.NoError(t, db.First(&team, "id = ?", 1).Error)
 		require.Equal(t, "configured-vector", team.ModelTiers.Embedding)
 	}
-	response := fusionRequest(t, engine, http.MethodPut, "/api/v1/space/model-tiers", `{"embedding":"configured-vector"}`, 1, fusionOwnerID)
+	response := entityRequest(t, engine, http.MethodPut, "/api/v1/space/model-tiers", `{"embedding":"configured-vector"}`, 1, entityOwnerID)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	require.Equal(t, 1, trigger.calls)
-	response = fusionRequest(t, engine, http.MethodPut, "/api/v1/space/model-tiers", `{"embedding":"configured-vector"}`, 1, fusionOwnerID)
+	response = entityRequest(t, engine, http.MethodPut, "/api/v1/space/model-tiers", `{"embedding":"configured-vector"}`, 1, entityOwnerID)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	require.Equal(t, 1, trigger.calls, "unchanged overrides do not schedule another rebuild")
 	trigger.err = errors.New("redis queue unavailable")
@@ -57,7 +57,7 @@ func TestGlobalEmbeddingConfigurationTriggersCommittedRebuildAndShowsQueueFailur
 		require.NoError(t, db.First(&team, "id = ?", 1).Error)
 		require.Empty(t, team.ModelTiers.Embedding)
 	}
-	response = fusionRequest(t, engine, http.MethodPut, "/api/v1/space/model-tiers", `{}`, 1, fusionOwnerID)
+	response = entityRequest(t, engine, http.MethodPut, "/api/v1/space/model-tiers", `{}`, 1, entityOwnerID)
 	require.Equal(t, http.StatusInternalServerError, response.Code, response.Body.String())
 	require.Contains(t, response.Body.String(), "global settings saved")
 	require.Equal(t, 2, trigger.calls)

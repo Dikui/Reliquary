@@ -2,7 +2,7 @@
 
 系统只有一个用户和一个个人空间，租户 ID 固定为 `1`。首个用户注册成功后，注册接口拒绝后续请求，登录页隐藏注册入口。
 
-登录用户拥有全部权限，可以管理系统设置、运行队列、模型和领域模板。API Key 通过 `X-API-Key` 鉴权，具有相同的访问权限，可按名称和有效期管理、撤销。知识查询中的知识库、领域和时间条件继续作为业务筛选条件。
+登录用户拥有全部权限，可以管理系统设置、运行队列、模型和实体档案。API Key 通过 `X-API-Key` 鉴权，具有相同的访问权限，可按名称和有效期管理、撤销。知识查询中的知识库和时间条件继续作为业务筛选条件。
 
 用户可在登录后修改自己的密码。忘记密码时，在仓库根目录导出与服务器相同的 `DB_HOST`、`DB_PORT`、`DB_USER`、`DB_PASSWORD`、`DB_NAME` 环境变量，将新密码从标准输入交给本地命令：
 
@@ -38,7 +38,7 @@ go run -tags anydoc ./cmd/server
 
 只运行一个后端进程。流式事件、模型并发与速率限制、接口限流、工具审批保存在进程内存中，重启后不保留未完成的流式事件或审批。Redis 继续用于 Asynq 任务队列及任务检查、多模态图像任务计数、知识移动进度，以及运行配置缓存变更通知。
 
-当前版本不提供联网搜索：普通问答仅检索知识库，Agent 不提供搜索互联网的工具，工作流不提供网页研究步骤和专题调研模板。抓取指定网址的 `web_fetch`、Agent 按网址收录的 `knowledge_import_url`、RSS 与站点适配器继续可用。主动调研的后续计划见 [ADR 0007](adr/0007-personal-single-user.md) 和 `.scratch/web-research/issues/01-active-research.md`。
+当前版本不提供联网搜索：普通问答仅检索知识库，Agent 不提供搜索互联网的工具。抓取指定网址的 `web_fetch`、Agent 按网址收录的 `knowledge_import_url`、RSS 与站点适配器继续可用。主动调研的后续计划见 [ADR 0007](adr/0007-personal-single-user.md) 和 `.scratch/web-research/issues/01-active-research.md`。
 
 Docker Compose、`make run`、`scripts/dev.sh app` 和委托该脚本的 `scripts/quick-dev.sh` 默认设置 `SSRF_WHITELIST_EXTRA=198.18.0.0/15`。这一基准测试保留网段正常公网不会使用；本机代理采用 fake-ip 时，公网域名可能解析到该网段，默认放行使按网址收录和抓取继续可用。该项不会放行回环、私网、链路本地地址、`localhost`、`postgres` 或 `redis` 等 Docker 服务名，已有 SSRF 校验规则继续生效。
 
@@ -47,7 +47,7 @@ Docker Compose 和开发脚本可在 `.env` 中设置自定义 `SSRF_WHITELIST_E
 `SSRF_WHITELIST_EXTRA` 始终与设置页的 SSRF 白名单合并，设置页保存为空列表或修改白名单不会覆盖部署配置。要关闭 fake-ip 放行，应在部署环境中将该变量显式设为空，同时从设置页白名单移除自行添加的同一网段。
 
 
-工作流只提供 `search`、`fact_query`、`report`，每日与每周模板可继续使用。运行期间禁用工作流会暂停，可在重新启用后恢复；失败运行可重试。Wiki、Agent 长期记忆与历史对话搜索、RAG 评测、沙箱、技能及个人环境变量已删除。对话历史、MCP（无鉴权、API Key、Bearer）、数据分析、知识上下文、策略评测、待审区与消息纠错继续保留。内置模型配置的环境变量展开独立保留。
+Wiki、Agent 长期记忆与历史对话搜索、RAG 评测、沙箱、技能及个人环境变量已删除。对话历史、MCP（无鉴权、API Key、Bearer）、数据分析、实体档案、策略评测、待审区与消息纠错继续保留。内置模型配置的环境变量展开独立保留。
 
 空间信息与 API Key 使用 `/api/v1/space` 及其子路径，系统设置与队列使用 `/api/v1/system/settings` 和 `/api/v1/system/runtime/queues`。已用空间继续统计，不设存储限额。
 

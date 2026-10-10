@@ -36,10 +36,8 @@ type RouterParams struct {
 	KnowledgeHandler             *handler.KnowledgeHandler
 	KnowledgeAnomalyHandler      *handler.KnowledgeAnomalyHandler
 	KnowledgeStrategyHandler     *handler.KnowledgeStrategyHandler
-	KnowledgeContextHandler      *handler.KnowledgeContextHandler
-	KnowledgeDomainHandler       *handler.KnowledgeDomainHandler
+	EntityHandler                *handler.EntityHandler
 	ModelRoutingHandler          *handler.ModelRoutingHandler
-	KnowledgeWorkflowHandler     *handler.KnowledgeWorkflowHandler
 	TenantHandler                *handler.TenantHandler
 	TenantService                interfaces.TenantService
 	TenantAPIKeyService          interfaces.TenantAPIKeyService
@@ -143,12 +141,10 @@ func NewRouter(params RouterParams) *gin.Engine {
 		RegisterKnowledgeRoutes(v1, params.KnowledgeHandler, accessGuards)
 		RegisterKnowledgeAnomalyRoutes(v1, params.KnowledgeAnomalyHandler, accessGuards)
 		RegisterKnowledgeStrategyRoutes(v1, params.KnowledgeStrategyHandler, accessGuards)
-		RegisterKnowledgeContextRoutes(v1, params.KnowledgeContextHandler, accessGuards)
-		RegisterKnowledgeDomainRoutes(v1, params.KnowledgeDomainHandler, accessGuards)
+		RegisterEntityRoutes(v1, params.EntityHandler)
 		if params.ModelRoutingHandler != nil {
 			RegisterModelRoutingRoutes(v1, params.ModelRoutingHandler, accessGuards)
 		}
-		RegisterKnowledgeWorkflowRoutes(v1, params.KnowledgeWorkflowHandler, accessGuards)
 		RegisterChunkRoutes(v1, params.ChunkHandler, accessGuards)
 		RegisterSessionRoutes(v1, params.SessionHandler, accessGuards)
 		RegisterChatRoutes(v1, params.SessionHandler, accessGuards)

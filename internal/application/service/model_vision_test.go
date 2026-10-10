@@ -76,7 +76,7 @@ func TestGetVLMModelRejectsTextOnlyConversation(t *testing.T) {
 func TestKnowledgeBaseCreationRejectsTextOnlyVLM(t *testing.T) {
 	repo := newFakeKBRepo()
 	svc := &knowledgeBaseService{repo: repo, modelService: visionModelServiceStub{model: &types.Model{Type: types.ModelTypeKnowledgeQA}}}
-	kb, err := svc.CreateKnowledgeBase(newCreateKnowledgeFileContext(), &types.KnowledgeBase{DomainID: "test-domain", VLMConfig: types.VLMConfig{Enabled: true, ModelID: "text-only"}})
+	kb, err := svc.CreateKnowledgeBase(newCreateKnowledgeFileContext(), &types.KnowledgeBase{VLMConfig: types.VLMConfig{Enabled: true, ModelID: "text-only"}})
 	require.Nil(t, kb)
 	requireVisionBadRequest(t, err)
 	require.Empty(t, repo.rows)

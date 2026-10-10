@@ -50,7 +50,7 @@ func scopeKnowledgeBasesByModelID(db *gorm.DB, modelID string) *gorm.DB {
 			"image_processing_config->>'model_id' = ? OR "+
 			"vlm_config->>'model_id' = ? OR "+
 			"auto_tag_config->>'model_id' = ? OR "+
-			"model_tiers->>'light' = ? OR model_tiers->>'extraction' = ? OR model_tiers->>'generation' = ? OR model_tiers->>'embedding' = ? OR model_tiers->>'rerank' = ?",
+			"model_tiers->>'light' = ? OR model_tiers->>'entity_resolution' = ? OR model_tiers->>'generation' = ? OR model_tiers->>'embedding' = ? OR model_tiers->>'rerank' = ?",
 		modelID, modelID, modelID, modelID, modelID, modelID, modelID, modelID, modelID, modelID,
 	)
 }

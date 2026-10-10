@@ -102,17 +102,15 @@ type PipelineState struct {
 	Intent       QueryIntent `json:"intent,omitempty"`
 	History      []*History  `json:"history,omitempty"`
 
-	SearchResult         []*SearchResult         `json:"-"`
-	RerankResult         []*SearchResult         `json:"-"`
-	MergeResult          []*SearchResult         `json:"-"`
-	Entity               []string                `json:"-"`
-	KnowledgeQueries     []KnowledgeContextQuery `json:"-"`
-	KnowledgeContext     string                  `json:"-"`
-	UserContent          string                  `json:"-"`
-	RenderedContexts     string                  `json:"-"`
-	ChatResponse         *ChatResponse           `json:"-"`
-	ImageDescription     string                  `json:"-"`
-	SystemPromptOverride string                  `json:"-"`
+	SearchResult         []*SearchResult `json:"-"`
+	RerankResult         []*SearchResult `json:"-"`
+	MergeResult          []*SearchResult `json:"-"`
+	Entity               []string        `json:"-"`
+	UserContent          string          `json:"-"`
+	RenderedContexts     string          `json:"-"`
+	ChatResponse         *ChatResponse   `json:"-"`
+	ImageDescription     string          `json:"-"`
+	SystemPromptOverride string          `json:"-"`
 }
 
 // PipelineContext holds runtime context for the current pipeline execution.
@@ -214,8 +212,6 @@ func (c *ChatManage) Clone() *ChatManage {
 			ImageDescription:     c.ImageDescription,
 			SystemPromptOverride: c.SystemPromptOverride,
 			RenderedContexts:     c.RenderedContexts,
-			KnowledgeQueries:     append([]KnowledgeContextQuery(nil), c.KnowledgeQueries...),
-			KnowledgeContext:     c.KnowledgeContext,
 			Entity:               entity,
 		},
 	}

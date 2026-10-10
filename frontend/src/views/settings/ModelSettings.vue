@@ -230,7 +230,7 @@
 
           <section v-if="usageConflict.model_tiers?.length" class="model-usage-group">
             <h3>{{ $t('modelTiers.title') }}</h3>
-            <ul><li v-for="resource in usageConflict.model_tiers" :key="`${resource.scope}:${resource.id}`"><div class="model-usage-resource"><strong>{{ resource.name }}</strong><div class="model-usage-bindings"><t-tag v-for="binding in resource.bindings" :key="binding" size="small" variant="light">{{ $t(modelUsageBindingI18nKey(binding)) }}</t-tag></div></div><t-button variant="text" @click="openTierUsageResource(resource.scope)">{{ $t(resource.scope === 'global' ? 'modelTiers.configureGlobal' : 'modelTiers.configureDomains') }}</t-button></li></ul>
+            <ul><li v-for="resource in usageConflict.model_tiers" :key="`${resource.scope}:${resource.id}`"><div class="model-usage-resource"><strong>{{ resource.name }}</strong><div class="model-usage-bindings"><t-tag v-for="binding in resource.bindings" :key="binding" size="small" variant="light">{{ $t(modelUsageBindingI18nKey(binding)) }}</t-tag></div></div><t-button variant="text" @click="openTierUsageResource(resource.scope)">{{ $t('modelTiers.configureGlobal') }}</t-button></li></ul>
           </section>
 
         </div>
@@ -293,7 +293,7 @@ const showDebugDrawer = ref(false)
 const showUsageDialog = ref(false)
 const usageConflict = ref<ModelUsageDetails | null>(null)
 const usageConflictModelName = ref('')
-function openTierUsageResource(scope: 'global' | 'domain') { showUsageDialog.value = false; uiStore.openSettings(scope === 'global' ? 'tenant' : 'domains') }
+function openTierUsageResource(_scope: 'global') { showUsageDialog.value = false; uiStore.openSettings('tenant') }
 const currentModelType = ref<ModelType>('chat')
 const editingModel = ref<any>(null)
 const loading = ref(true)

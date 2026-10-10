@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"reliquary/internal/common"
 	"reliquary/internal/types"
@@ -335,14 +336,26 @@ func (r *knowledgeRepository) UpdateKnowledgeBatch(ctx context.Context, knowledg
 	return r.db.Debug().WithContext(ctx).Omit(omitFieldsOnUpdate...).Save(knowledgeList).Error
 }
 
-// DeleteKnowledge deletes knowledge
+// DeleteKnowledge deletes an article and its entity associations atomically.
 func (r *knowledgeRepository) DeleteKnowledge(ctx context.Context, tenantID uint64, id string) error {
-	return r.db.WithContext(ctx).Where("tenant_id = ? AND id = ?", tenantID, id).Delete(&types.Knowledge{}).Error
+	return r.DeleteKnowledgeList(ctx, tenantID, []string{id})
 }
 
-// DeleteKnowledge deletes knowledge
+// DeleteKnowledgeList locks articles before deleting mentions, excluding concurrent resolution.
 func (r *knowledgeRepository) DeleteKnowledgeList(ctx context.Context, tenantID uint64, ids []string) error {
-	return r.db.WithContext(ctx).Where("tenant_id = ? AND id in ?", tenantID, ids).Delete(&types.Knowledge{}).Error
+	if len(ids) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var articles []types.Knowledge
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Where("tenant_id=? AND id IN ?", tenantID, ids).Order("id").Find(&articles).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("tenant_id=? AND knowledge_id IN ?", tenantID, ids).Delete(&types.KnowledgeEntity{}).Error; err != nil {
+			return err
+		}
+		return tx.Where("tenant_id=? AND id IN ?", tenantID, ids).Delete(&types.Knowledge{}).Error
+	})
 }
 
 // GetKnowledgeBatch gets knowledge in batch

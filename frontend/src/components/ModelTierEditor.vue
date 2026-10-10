@@ -26,7 +26,7 @@ import { modelTypeForTier, previewModelTiers } from '@/utils/modelTiers'
 import { useChatResourcesStore } from '@/stores/chatResources'
 import { useUIStore } from '@/stores/ui'
 import ModelSelector from './ModelSelector.vue'
-const props = withDefaults(defineProps<{ modelValue: ModelTierConfig; scope: 'global' | 'domain' | 'knowledge_base'; domainId?: string; allModels?: ModelConfig[]; legacyTiers?: ModelTierConfig; beforeNavigate?: () => Promise<boolean>; disabled?: boolean; embeddingLocked?: boolean }>(), { disabled: false, embeddingLocked: false })
+const props = withDefaults(defineProps<{ modelValue: ModelTierConfig; scope: 'global' | 'knowledge_base'; allModels?: ModelConfig[]; legacyTiers?: ModelTierConfig; beforeNavigate?: () => Promise<boolean>; disabled?: boolean; embeddingLocked?: boolean }>(), { disabled: false, embeddingLocked: false })
 const emit = defineEmits<{ 'update:modelValue': [value: ModelTierConfig]; resolved: [value: ResolvedModelTiers]; refresh: [] }>()
 const { t, te } = useI18n()
 const resources = useChatResourcesStore()
@@ -49,13 +49,13 @@ async function loadInherited() {
   const current = ++request
   loading.value = true; error.value = ''; inherited.value = {}
   try {
-    const [response] = await Promise.all([getModelTierSettings(props.scope === 'knowledge_base' && props.domainId ? { domain_id: props.domainId } : {}), props.allModels ? Promise.resolve() : resources.ensureModels()])
+    const [response] = await Promise.all([getModelTierSettings({}), props.allModels ? Promise.resolve() : resources.ensureModels()])
     if (!response.success) throw new Error(response.error || response.message || t('modelTiers.loadFailed'))
     if (current === request) inherited.value = Object.fromEntries(Object.entries(response.data?.resolved || {}).filter(([, value]) => props.scope !== 'global' || value.source !== 'global'))
   } catch (cause) { if (current === request) error.value = cause instanceof Error ? cause.message : t('modelTiers.loadFailed') }
   finally { if (current === request) loading.value = false }
 }
-watch(() => [props.scope, props.domainId], loadInherited, { immediate: true })
+watch(() => props.scope, loadInherited, { immediate: true })
 watch(resolved, value => emit('resolved', value), { immediate: true })
 function refresh() { emit('refresh'); void loadInherited() }
 onBeforeUnmount(() => { request++ })

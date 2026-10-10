@@ -64,8 +64,8 @@ func ValidateModelTierConfig(ctx context.Context, db *gorm.DB, config types.Mode
 	return nil
 }
 
-// ResolveModelTier resolves a KB override, domain override, then global default.
-// Legacy model fields apply only after all three scopes are unconfigured.
+// ResolveModelTier resolves a KB override, then global default.
+// Legacy model fields apply only after both scopes are unconfigured.
 func ResolveModelTier(ctx context.Context, db *gorm.DB, kb *types.KnowledgeBase, tier types.ModelTier) (string, error) {
 	resolved, err := resolveModelTier(ctx, db, kb, tier)
 	return resolved.ModelID, err
@@ -92,15 +92,7 @@ func resolveModelTier(ctx context.Context, db *gorm.DB, kb *types.KnowledgeBase,
 		if id := kb.ModelTiers.ModelID(tier); id != "" {
 			return ResolvedModelTier{id, "knowledge_base"}, nil
 		}
-		if db != nil && kb.DomainID != "" {
-			var domain types.KnowledgeDomain
-			if err := db.WithContext(ctx).Select("model_tiers").Where("tenant_id = ? AND id = ?", tenantID, kb.DomainID).First(&domain).Error; err != nil {
-				return ResolvedModelTier{}, fmt.Errorf("read domain model tiers: %w", err)
-			}
-			if id := domain.ModelTiers.ModelID(tier); id != "" {
-				return ResolvedModelTier{id, "domain"}, nil
-			}
-		}
+
 	}
 	if db != nil {
 		var tenant types.Tenant
@@ -121,7 +113,7 @@ func resolveModelTier(ctx context.Context, db *gorm.DB, kb *types.KnowledgeBase,
 			if strings.TrimSpace(id) == "" {
 				id = kb.SummaryModelID
 			}
-		case types.ModelTierExtraction, types.ModelTierGeneration:
+		case types.ModelTierEntityResolution, types.ModelTierGeneration:
 			id = kb.SummaryModelID
 		case types.ModelTierEmbedding:
 			id = kb.EmbeddingModelID
@@ -133,7 +125,7 @@ func resolveModelTier(ctx context.Context, db *gorm.DB, kb *types.KnowledgeBase,
 	return ResolvedModelTier{Source: "unconfigured"}, nil
 }
 
-// ResolveGenerationModel preserves an explicit session or workflow selection.
+// ResolveGenerationModel preserves an explicit session selection.
 func ResolveGenerationModel(ctx context.Context, db *gorm.DB, kb *types.KnowledgeBase, explicit string) (string, error) {
 	if id := strings.TrimSpace(explicit); id != "" {
 		return id, nil

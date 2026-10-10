@@ -300,14 +300,12 @@ const kbToScopeCaps = (kb: any): Partial<ScopeCapabilities> => {
     return {
       vector: !!kb.capabilities.vector,
       keyword: !!kb.capabilities.keyword,
-      context: !!kb.capabilities.context,
     };
   }
   const s = kb?.indexing_strategy;
   return {
     vector: s ? !!s.vector_enabled : false,
     keyword: s ? !!s.keyword_enabled : false,
-    context: true,
     };
 };
 

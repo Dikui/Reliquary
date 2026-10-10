@@ -16,7 +16,6 @@ export const toolIcons: Record<string, string> = {
     list_knowledge_bases: '📂',
     list_knowledge_chunks: '🧩',
     get_document_info: 'ℹ️',
-    query_knowledge_context: '🕸️',
     think: '💭',
     todo_write: '📋',
 };
@@ -29,8 +28,6 @@ const matchTypeIconKeys: Record<string, string> = {
     history: '📜',
     parent: '⬆️',
     relation: '🔗',
-    context: '🕸️',
-    graph: '🕸️',
 };
 
 // Match type to icon mapping (keys match backend API response)
@@ -41,10 +38,6 @@ export const matchTypeIcons: Record<string, string> = {
     'History Match': '📜',
     'Parent Chunk Match': '⬆️',
     'Relation Chunk Match': '🔗',
-    'Knowledge Context Match': '🕸️',
-    'Knowledge Graph Match': '🕸️',
-    'Context Match': '🕸️',
-    'Graph Match': '🕸️',
 };
 
 // Get icon for a tool name
@@ -66,7 +59,6 @@ const toolDisplayNameKeys: Record<string, string> = {
     list_knowledge_chunks: 'tools.listKnowledgeChunks',
     list_knowledge_bases: 'tools.listKnowledgeBases',
     get_document_info: 'tools.getDocumentInfo',
-    query_knowledge_context: 'tools.queryKnowledgeContext',
     think: 'tools.think',
     todo_write: 'tools.todoWrite',
 };

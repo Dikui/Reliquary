@@ -526,7 +526,7 @@ func (t *spanTracker) FailSpan(ctx context.Context, span *Span, errorCode, error
 		// Any failure in a MAIN pipeline stage means the attempt is
 		// done — the parse cannot succeed past this point. Close the
 		// root span as failed so the UI doesn't show "进行中" forever.
-		// Optional downstream stages (summary/question/context) do
+		// Optional downstream stages (summary/question) do
 		// not poison the attempt: they can fail without invalidating
 		// the parsed document.
 		if isMainPipelineStage(span.Name) {

@@ -99,16 +99,6 @@
                           {{ $t('knowledgeEditor.indexing.lockedTip') }}
                         </p>
                       </div>
-
-                      <div class="form-item">
-                        <label class="form-label required">{{ $t('knowledgeDomains.title') }}</label>
-                        <t-select v-model="formData.domainId" :options="domainOptions" filterable
-                          :loading="domainsLoading" :disabled="domainsLoading || !!domainsError"
-                          :placeholder="$t('knowledgeDomains.selectDomain')" :aria-label="$t('knowledgeDomains.title')"
-                          :popup-props="{ zIndex: 6200 }" />
-                        <p class="form-tip">{{ $t('knowledgeDomains.kbDomainHint') }}</p>
-                        <p v-if="domainsError" class="form-tip" role="alert">{{ domainsError }} <t-button variant="text" @click="loadDomains">{{ $t('knowledgeDomains.retry') }}</t-button></p>
-                      </div>
                       <div class="form-item">
                         <label class="form-label required">{{ $t('knowledgeEditor.basic.nameLabel') }}</label>
                         <t-input
@@ -142,7 +132,7 @@
                     :all-models="allModels"
                     @update:config="handleModelConfigUpdate"
                   />
-                  <ModelTierEditor v-if="formData" v-model="formData.modelTiers" scope="knowledge_base" :domain-id="formData.domainId" :all-models="allModels" :legacy-tiers="{ light: formData.autoTagConfig.modelId || formData.modelConfig.llmModelId, extraction: formData.modelConfig.llmModelId, generation: formData.modelConfig.llmModelId, embedding: formData.modelConfig.embeddingModelId }" :disabled="saving" :embedding-locked="hasFiles && kbCreateNeedsEmbedding" @resolved="resolvedModelTiers = $event" />
+                  <ModelTierEditor v-if="formData" v-model="formData.modelTiers" scope="knowledge_base" :all-models="allModels" :legacy-tiers="{ light: formData.autoTagConfig.modelId || formData.modelConfig.llmModelId, entity_resolution: formData.modelConfig.llmModelId, generation: formData.modelConfig.llmModelId, embedding: formData.modelConfig.embeddingModelId }" :disabled="saving" :embedding-locked="hasFiles && kbCreateNeedsEmbedding" @resolved="resolvedModelTiers = $event" />
                 </div>
 
                 <!-- 解析引擎 -->
@@ -293,7 +283,6 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { KB_EDITOR_FOCUS_SECTION_EVENT } from '@/config/editorNavigation'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { createKnowledgeBase, getKnowledgeBaseById, listKnowledgeFiles, updateKnowledgeBase, rebuildKBIndex } from '@/api/knowledge-base'
-import { listKnowledgeDomains, type KnowledgeDomain } from '@/api/knowledge-domains'
 import { updateKBConfig, type KBModelConfigRequest } from '@/api/initialization'
 import { useChatResourcesStore } from '@/stores/chatResources'
 import { selectInitialModelId } from '@/utils/modelDefaults'
@@ -365,22 +354,6 @@ onBeforeUnmount(() => {
 })
 const saving = ref(false)
 const loading = ref(false)
-const domains = ref<KnowledgeDomain[]>([])
-const domainsLoading = ref(false)
-const domainsError = ref('')
-const domainOptions = computed(() => domains.value.map(domain => ({ value: domain.id, label: domain.name })))
-async function loadDomains() {
-  const generation = kbEditorLoadGeneration
-  domainsLoading.value = true
-  domainsError.value = ''
-  try {
-    const response = await listKnowledgeDomains()
-    if (generation !== kbEditorLoadGeneration || !props.visible) return
-    if (!response.success) throw new Error(response.error || response.message || t('knowledgeDomains.loadFailed'))
-    domains.value = response.data || []
-  } catch { if (generation === kbEditorLoadGeneration) domainsError.value = t('knowledgeDomains.loadFailed') }
-  finally { if (generation === kbEditorLoadGeneration) domainsLoading.value = false }
-}
 const allModels = ref<any[]>([])
 const hasFiles = ref(false)
 const initialIndexingStrategy = ref<any>(null)
@@ -485,7 +458,6 @@ const initFormData = (type: 'document' = 'document') => {
     type,
     name: '',
     description: '',
-    domainId: '',
     modelTiers: copyModelTiers(),
     modelConfig: {
       llmModelId: '',
@@ -581,7 +553,6 @@ const loadKBData = async (
     const kbType = (kb.type as 'document') || 'document'
     formData.value = {
       type: kbType,
-      domainId: kb.domain_id || '',
       modelTiers: copyModelTiers(kb.model_tiers),
       name: kb.name || '',
       description: kb.description || '',
@@ -701,11 +672,6 @@ const handleQuestionGenerationUpdate = (config: any) => {
 const validateForm = (): boolean => {
   if (!formData.value) return false
 
-  if (!formData.value.domainId) {
-    MessagePlugin.warning(t('knowledgeDomains.domainRequired'))
-    currentSection.value = 'basic'
-    return false
-  }
 
   // 验证基本信息
   if (!formData.value.name || !formData.value.name.trim()) {
@@ -754,7 +720,6 @@ const buildSubmitData = () => {
   if (!formData.value) return null
 
   const data: any = {
-    domain_id: formData.value.domainId,
     model_tiers: copyModelTiers(formData.value.modelTiers),
     name: formData.value.name,
     description: formData.value.description,
@@ -877,14 +842,13 @@ const doSubmit = async () => {
         }
 
       await updateKnowledgeBase(kbId, {
-        domain_id: data.domain_id,
         model_tiers: data.model_tiers,
         name: data.name,
         description: data.description,
         config: updateConfig
       })
 
-      // 2. 更新完整配置（模型、分块、多模态、存储引擎、知识上下文等）
+      // 2. 更新完整配置（模型、分块、多模态、存储引擎等）
       const config: KBModelConfigRequest = {
         llmModelId: data.summary_model_id,
         embeddingModelId: data.embedding_model_id,
@@ -981,7 +945,7 @@ const resetState = () => {
 const handleClose = () => {
   if (saving.value) return
   if (formData.value && JSON.stringify(copyModelTiers(formData.value.modelTiers)) !== savedModelTiers.value) {
-    const dialog = DialogPlugin.confirm({ header: t('knowledgeDomains.discardTitle'), body: t('knowledgeDomains.discardHint'), confirmBtn: t('knowledgeDomains.discard'), cancelBtn: t('common.cancel'), theme: 'warning', onConfirm: () => { savedModelTiers.value = JSON.stringify(copyModelTiers(formData.value?.modelTiers)); dialog.hide(); handleClose() } })
+    const dialog = DialogPlugin.confirm({ header: t('common.discardTitle'), body: t('common.discardHint'), confirmBtn: t('common.discard'), cancelBtn: t('common.cancel'), theme: 'warning', onConfirm: () => { savedModelTiers.value = JSON.stringify(copyModelTiers(formData.value?.modelTiers)); dialog.hide(); handleClose() } })
     return
   }
   emit('update:visible', false)
@@ -1006,7 +970,7 @@ watch(() => props.visible, async (newVal) => {
     }
 
     // 加载模型列表与空间默认存储引擎（创建 KB 时即使用，不依赖是否打开「存储引擎」Tab）
-    await Promise.all([loadAllModels(), loadDomains()])
+    await loadAllModels()
 
     if (generation !== kbEditorLoadGeneration || !props.visible) return
 

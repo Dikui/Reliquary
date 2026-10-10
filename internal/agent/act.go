@@ -18,16 +18,15 @@ import (
 
 // toolDisplayNames maps internal tool names to user-friendly display labels.
 var toolDisplayNames = map[string]string{
-	agenttools.ToolThinking:              "深度思考",
-	agenttools.ToolTodoWrite:             "制定计划",
-	agenttools.ToolGrepChunks:            "关键词搜索",
-	agenttools.ToolKnowledgeSearch:       "知识搜索",
-	agenttools.ToolListKnowledgeChunks:   "查看文档分块",
-	agenttools.ToolQueryKnowledgeContext: "查询知识上下文",
-	agenttools.ToolGetDocumentInfo:       "获取文档信息",
-	agenttools.ToolDataAnalysis:          "数据分析",
-	agenttools.ToolDataSchema:            "查看数据结构",
-	agenttools.ToolWebFetch:              "获取网页",
+	agenttools.ToolThinking:            "深度思考",
+	agenttools.ToolTodoWrite:           "制定计划",
+	agenttools.ToolGrepChunks:          "关键词搜索",
+	agenttools.ToolKnowledgeSearch:     "知识搜索",
+	agenttools.ToolListKnowledgeChunks: "查看文档分块",
+	agenttools.ToolGetDocumentInfo:     "获取文档信息",
+	agenttools.ToolDataAnalysis:        "数据分析",
+	agenttools.ToolDataSchema:          "查看数据结构",
+	agenttools.ToolWebFetch:            "获取网页",
 }
 
 // formatToolHint returns a concise human-readable hint for a tool call, e.g. `搜索网页("query text")`.

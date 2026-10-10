@@ -210,7 +210,6 @@ export interface AgentTypeKBFilter {
 export interface KBCapabilities {
   vector: boolean;
   keyword: boolean;
-  context: boolean;
   }
 
 // 预设的"自动填充"配置载荷：仅包含被预设覆盖的字段；其他字段不动

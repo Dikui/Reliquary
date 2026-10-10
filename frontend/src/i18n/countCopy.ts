@@ -1,7 +1,6 @@
 type CountTranslation = (key: string, named: Record<string, unknown>, plural?: number) => string
 
 const countFields: Record<string, Record<string, readonly [string, string]>> = {
-  'knowledgeWorkbench.query.resultCounts': {'entities': ['entityCount', 'entities'], 'facts': ['factCount', 'facts'], 'events': ['eventCount', 'events'], 'evidence': ['evidenceCount', 'evidenceItems']},
   'chat.referencesDocAndWebCount': {'docCount': ['documents', 'documents'], 'webCount': ['webSources', 'webSources']},
   'agentStream.search.foundResultsFromFiles': {'count': ['results', 'results'], 'files': ['fileCount', 'files']},
   'agentStream.search.grepSummary': {'chunks': ['matchingChunks', 'matchingChunks'], 'docs': ['documents', 'documents']},

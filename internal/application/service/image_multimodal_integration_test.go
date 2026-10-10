@@ -56,8 +56,6 @@ func TestVisionConversationImageUploadProducesOCRAndCaption(t *testing.T) {
 	withSSRFWhitelist(t, "127.0.0.1,localhost")
 	ctx := newCreateKnowledgeFileContext()
 	require.NoError(t, EnsureSingleTeamSpace(ctx, db))
-	domain, err := NewKnowledgeDomainService(db).Create(ctx, types.KnowledgeDomain{Name: "Image model integration"})
-	require.NoError(t, err)
 
 	var requestsMu sync.Mutex
 	var requests []visionIntegrationRequest
@@ -127,7 +125,7 @@ func TestVisionConversationImageUploadProducesOCRAndCaption(t *testing.T) {
 	tenantRepo := repository.NewTenantRepository(db)
 	kbService := &knowledgeBaseService{db: db, repo: kbRepo, kgRepo: knowledgeRepo, modelService: models}
 	kb, err := kbService.CreateKnowledgeBase(ctx, &types.KnowledgeBase{
-		Name: "Vision conversation knowledge base", DomainID: domain.ID, EmbeddingModelID: "test-embedding", SummaryModelID: model.ID,
+		Name: "Vision conversation knowledge base", EmbeddingModelID: "test-embedding", SummaryModelID: model.ID,
 		VLMConfig: types.VLMConfig{Enabled: true, ModelID: model.ID},
 	})
 	require.NoError(t, err)

@@ -20,8 +20,8 @@ const (
 	BuiltinDeepResearcherID = "builtin-deep-researcher"
 	// BuiltinDataAnalystID is the ID for the built-in data analyst agent
 	BuiltinDataAnalystID = "builtin-data-analyst"
-	// BuiltinKnowledgeContextExpertID retains the saved agent ID for the knowledge context expert.
-	BuiltinKnowledgeContextExpertID = "builtin-knowledge-graph-expert"
+	// BuiltinKnowledgeExpertID retains the saved agent ID for the document research expert.
+	BuiltinKnowledgeExpertID = "builtin-knowledge-graph-expert"
 	// BuiltinDocumentAssistantID is the ID for the built-in document assistant agent
 	BuiltinDocumentAssistantID = "builtin-document-assistant"
 )
@@ -442,7 +442,7 @@ var builtinAgentIDsOrdered = []string{
 	BuiltinSmartReasoningID,
 	BuiltinDeepResearcherID,
 	BuiltinDataAnalystID,
-	BuiltinKnowledgeContextExpertID,
+	BuiltinKnowledgeExpertID,
 	BuiltinDocumentAssistantID,
 }
 

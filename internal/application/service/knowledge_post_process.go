@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -23,6 +24,7 @@ type KnowledgePostProcessService struct {
 	chunkService     interfaces.ChunkService
 	taskEnqueuer     interfaces.TaskEnqueuer
 	spanTracker      SpanTracker
+	attentionService *KnowledgeAttentionService
 }
 
 func NewKnowledgePostProcessService(
@@ -32,6 +34,7 @@ func NewKnowledgePostProcessService(
 	chunkService interfaces.ChunkService,
 	taskEnqueuer interfaces.TaskEnqueuer,
 	spanTracker SpanTracker,
+	attentionService *KnowledgeAttentionService,
 ) interfaces.TaskHandler {
 	return &KnowledgePostProcessService{
 		knowledgeRepo:    knowledgeRepo,
@@ -40,6 +43,7 @@ func NewKnowledgePostProcessService(
 		chunkService:     chunkService,
 		taskEnqueuer:     taskEnqueuer,
 		spanTracker:      spanTracker,
+		attentionService: attentionService,
 	}
 }
 
@@ -115,7 +119,7 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 
 	// Skip post-processing entirely when the knowledge has been cancelled
 	// by the user or marked for deletion. We must NOT enqueue summary /
-	// question / context child tasks for an aborted knowledge. We
+	// question child tasks for an aborted knowledge. We
 	// MUST also close postSpan before returning, otherwise it stays in
 	// running state forever and the trace viewer shows an orange bar
 	// long after the user cancelled (the AbortAttempt sweep ran before
@@ -168,7 +172,7 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 	enqueuedAutoTag := false
 
 	// Question generation now fans out one subtask per plain text chunk
-	// (mirroring the context-extract per-chunk pattern) so each chunk's LLM
+	// (using a per-chunk pattern) so each chunk's LLM
 	// call retries / cancels / traces independently. We only target
 	// ChunkTypeText here — OCR / Caption chunks were never fed to question
 	// generation in the legacy whole-knowledge loop, so excluding them
@@ -221,7 +225,7 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 		return nil
 	case expectedSubtasks == 0:
 		// Nothing to enrich — fast path keeps the previous behavior so
-		// users without summary/question/context see 'completed' immediately.
+		// users without summary/question see 'completed' immediately.
 		updates := map[string]interface{}{
 			"parse_status": types.ParseStatusCompleted,
 			"updated_at":   time.Now(),
@@ -288,17 +292,21 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 	if willSpawnAutoTag {
 		enqueuedAutoTag = s.enqueueAutoTagTask(ctx, payload, attempt)
 	}
-	// Structured context is independently retryable; a model failure must not
-	// discard the approved source or prevent ordinary RAG from becoming available.
-	extractionModelID, resolveErr := ResolveModelTier(ctx, modelRoutingDB(s.kbService), kb, types.ModelTierExtraction)
-	if resolveErr != nil {
-		return resolveErr
-	}
-	if extractionModelID != "" && len(textChunks) > 0 && !knowledge.IsSourceUpdateCandidate() {
-		if err := enqueueKnowledgeContext(ctx, s.taskEnqueuer, types.KnowledgeAutoTagPayload{
-			TenantID: payload.TenantID, KnowledgeBaseID: payload.KnowledgeBaseID, KnowledgeID: payload.KnowledgeID, Attempt: attempt,
-		}); err != nil {
-			logger.Warnf(ctx, "Failed to queue knowledge context for %s: %v", payload.KnowledgeID, err)
+
+	if s.attentionService != nil && len(textChunks) > 0 && !knowledge.IsSourceUpdateCandidate() {
+		var body strings.Builder
+		for _, chunk := range textChunks {
+			if body.Len() > 0 {
+				body.WriteString("\n\n")
+			}
+			text := chunk.SourceContent
+			if text == "" {
+				text = chunk.Content
+			}
+			body.WriteString(text)
+		}
+		if err := s.attentionService.ScoreArticle(ctx, kb, knowledge, body.String()); err != nil {
+			logger.Warnf(ctx, "Attention scoring failed for %s: %v", knowledge.ID, err)
 		}
 	}
 
@@ -394,7 +402,7 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 	}
 	s.tracker().EndSpan(ctx, postSpan, postOutput)
 	// Close the root span — the parse pipeline is done. Async
-	// downstream stages (summary/question/context) record their
+	// downstream stages (summary/question) record their
 	// own spans independently; their finishing extends the trace's
 	// end-time but does not reopen the root. A late failure in one
 	// of those stages does not poison the parse result.

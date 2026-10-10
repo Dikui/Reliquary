@@ -7,31 +7,28 @@ export default {
   },
 
   modelTiers: {
-  configureGlobal: '设置全局默认',
-  configureDomains: '设置领域档位',
+  "configureGlobal": "设置全局默认",
   "title": "模型档位",
   "scopeHint": {
-    "global": "设置全局默认模型，领域和知识库可以覆盖各档位。清空后使用已有默认配置。",
-    "domain": "覆盖全局默认模型，清空后继承全局默认配置。",
-    "knowledge_base": "覆盖领域与全局模型，清空后依次继承领域、全局和已有默认配置。"
+    "global": "设置全局默认模型，知识库可以覆盖各档位。清空后使用已有默认配置。",
+    "knowledge_base": "覆盖全局模型，清空后继承全局和已有默认配置。"
   },
   "names": {
     "light": "轻量",
-    "extraction": "抽取",
     "generation": "生成",
     "embedding": "向量",
-    "rerank": "重排"
+    "rerank": "重排",
+    "entity_resolution": "实体解析"
   },
   "uses": {
-    "light": "筛选、标签、关注评分与对象及事件判断",
-    "extraction": "从原文抽取对象、事实和事件",
-    "generation": "问答与报告内容生成",
-    "embedding": "内容检索与对象名称相似度",
-    "rerank": "重排检索结果"
+    "light": "筛选、标签、关注评分与实体判断",
+    "generation": "问答内容生成",
+    "embedding": "内容检索与实体名称相似度",
+    "rerank": "重排检索结果",
+    "entity_resolution": "判断实体候选是否属于已有实体"
   },
   "sources": {
     "global": "全局默认",
-    "domain": "领域覆盖",
     "knowledge_base": "知识库覆盖",
     "legacy": "已有模型配置",
     "default": "系统默认",
@@ -41,7 +38,7 @@ export default {
   "useDefault": "使用已有默认配置",
   "effective": "当前使用：{model}（{source}）",
   "unconfigured": "未配置模型",
-  "explicitChoice": "会话和报告中已有的显式模型选择优先使用，未选择时使用生成档位。",
+  "explicitChoice": "会话中已有的显式模型选择优先使用，未选择时使用生成档位。",
   "loadFailed": "无法加载模型配置，请重试。",
   "saveFailed": "模型配置保存失败，请重试。",
   "saved": "模型档位已保存",
@@ -49,7 +46,7 @@ export default {
 },
   mergeSuggestions: {
   "title": "待合并建议",
-  "description": "无法确认的对象保持独立，核验原文后决定是否合并到候选对象。",
+  "description": "无法确认的实体保持独立，核验文章后决定是否合并到候选实体。",
   "statusFilter": "建议状态",
   "status": {
     "pending": "待处理",
@@ -65,39 +62,28 @@ export default {
   "noReason": "未提供判断理由。",
   "accept": "接受并合并",
   "reject": "拒绝建议",
-  "confirmTitle": "接受并合并对象",
-  "confirmBody": "将“{source}”合并到“{target}”？本空间的事实、关系和别名将引用保留对象。",
+  "confirmTitle": "接受并合并实体",
+  "confirmBody": "将“{source}”合并到“{target}”？本空间的别名和文章关联将转移到保留实体。",
   "feedback": {
-    "accept": "建议已接受，对象已合并",
-    "reject": "建议已拒绝，对象保持独立"
+    "accept": "建议已接受，实体已合并",
+    "reject": "建议已拒绝，实体保持独立"
   },
   "loaded": "已加载 {count} 条建议"
 },
-  extractionDetails: {
-  "partial": "部分段落已处理",
-  "complete": "全部段落已处理",
-  "segments": "已处理 {processed} / {total} 段",
-  "partialHint": "只有部分段落完成抽取，未处理或抽取失败的段落内容仍保留在原文中。",
+  modelCalls: {
   "callsTitle": "模型调用",
   "noCalls": "没有模型调用记录。",
   "stage": "处理阶段",
   "tier": "模型档位",
   "calls": "调用次数",
   "totalCalls": "合计",
-  "fullExtraction": "完整抽取",
-  "unspecifiedExtraction": "结构化抽取",
   "otherCall": "其他模型调用",
   "stages": {
-    "context_extraction": "对象与模板字段抽取",
-    "context_full_extraction": "开放字段与事件补缺",
-    "context_backfill_extraction": "历史消息补缺",
-    "context_entity_judgment": "对象身份判断",
-    "context_event_judgment": "事件同次变化判断",
-    "context_entity_resolution": "对象身份解析",
-    "context_event_resolution": "事件聚合解析",
-    "context_attention": "关注价值评分",
-    "context_entity_embedding": "对象名称向量生成",
-    "context_entity_embedding_rebuild": "对象名称向量重建",
+    "entity_judgment": "实体身份判断",
+    "entity_resolution": "实体身份解析",
+    "entity_embedding": "实体名称向量生成",
+    "entity_embedding_rebuild": "实体名称向量重建",
+    "attention": "关注价值评分",
     "intake": "筛选与标签",
     "classification": "筛选与标签",
     "auto_tag": "标签分类",
@@ -105,99 +91,7 @@ export default {
     "generation": "内容生成"
   }
 },
-  knowledgeDomains: {
-    view: '查看',
-    "title": "领域",
-    "description": "管理各知识库使用的领域模板，统一对象类型、事实字段、关系和单位。",
-    "create": "新建领域",
-    "edit": "编辑领域",
-    "template": "领域模板",
-    "name": "名称",
-    "domainDescription": "说明",
-    "builtin": "内置",
-    "builtinHint": "内置领域可以编辑，不能删除。",
-    "search": "搜索领域名称或说明",
-    "empty": "还没有领域。新建领域后可添加知识库。",
-    "noResults": "没有匹配的领域，请调整搜索条件。",
-    "actions": "操作",
-    "entityTypes": "对象类型",
-    "fields": "字段",
-    "relations": "关系",
-    "unitFamilies": "单位族",
-    "extractionHints": "抽取提示",
-    "key": "字段名",
-    "label": "显示名",
-    "aliases": "别名",
-    "valueType": "值类型",
-    "unitFamily": "单位族",
-    "appliesTo": "适用对象类型",
-    "allTypes": "全部类型",
-    "tagHint": "输入后按 Enter 添加",
-    "fieldsHint": "抽取优先使用模板字段，模板外的信息按原始字段名保留。",
-    "newField": "新建字段",
-    "addField": "添加字段",
-    "noFields": "没有模板字段，抽取结果将作为开放字段保留。",
-    "subjectTypes": "主体类型",
-    "objectTypes": "客体类型",
-    "newRelation": "新建关系",
-    "addRelation": "添加关系",
-    "noRelations": "还没有关系定义。",
-    "unitsHint": "换算系数表示该单位相当于多少规范单位。规范单位的系数必须为 1。缺少或未知单位的数值不做推断。",
-    "canonicalUnit": "规范单位",
-    "unitName": "单位名称",
-    "factor": "换算系数",
-    "addUnit": "添加单位",
-    "deleteUnit": "删除单位 {name}",
-    "newUnitFamily": "新建单位族",
-    "addUnitFamily": "添加单位族",
-    "noUnits": "没有单位族，数值只按已有单位比较。",
-    "hintsDescription": "补充对象身份、版本、条件和冲突记载等抽取规则。",
-    "saved": "领域已保存",
-    "deleted": "领域已删除",
-    "failed": "操作失败，请重试。",
-    "deleteTitle": "删除领域",
-    "deleteHint": "有知识库引用的领域不能删除。",
-    "deleteReferenced": "该领域正被 {count} 个知识库使用，无法删除。",
-    "deleteConfirm": "删除领域“{name}”？有知识库引用的领域不能删除。",
-    "discardTitle": "放弃未保存的修改",
-    "discardHint": "本次修改尚未保存，返回后将丢弃这些修改。",
-    "discard": "放弃修改",
-    "consolidation": "字段归并",
-    "consolidationHint": "把开放字段映射到模板字段后，查询会同时匹配原名。原始事实和证据保持原样。",
-    "saveBeforeConsolidation": "请先保存或取消模板修改，再执行字段归并。",
-    "noOpenFields": "没有待归并的开放字段。",
-    "openField": "开放字段名",
-    "count": "出现次数",
-    "examples": "示例事实",
-    "map": "映射字段",
-    "mapTitle": "映射开放字段“{name}”",
-    "targetField": "模板字段",
-    "newFieldTitle": "将“{name}”新建为模板字段",
-    "newFieldHint": "修改字段名时，原开放字段名会自动保留为别名。",
-    "mapped": "字段映射已保存",
-    "fieldCreated": "模板字段已创建",
-    "domainRequired": "请选择知识库所属领域。",
-    "selectDomain": "选择领域",
-    "kbDomainHint": "领域模板决定抽取时使用的对象类型、字段、关系和单位。",
-    "loadFailed": "无法加载领域，请重试。",
-    "retry": "重新加载领域",
-    "valueTypes": {
-      "number": "数值",
-      "text": "文本",
-      "date": "日期",
-      "boolean": "布尔"
-    },
-    "validation": {
-      "duplicateAliases": "字段及关系的显示名或别名不能指向不同的模板项。",
-      "unknownEntityType": "对象类型不能重复，字段和关系引用的类型必须在本领域中定义。",
-      "nameRequired": "请填写领域名称。",
-      "keysRequired": "字段、关系和单位族的名称不能为空。",
-      "duplicateKeys": "同一类型的名称不能重复。",
-      "invalidUnit": "请填写单位名称及正数换算系数，并提供系数为 1 的规范单位。",
-      "unknownFamily": "字段的单位族必须来自本领域的单位族定义。",
-      "invalidType": "请选择有效的字段值类型。"
-    }
-  },
+
   knowledgeStrategy: {
     "evaluation": {
       "title": "筛选评测",
@@ -239,71 +133,89 @@ export default {
     }
   },
   knowledgeWorkbench: {
-    backfill: {
-      start: '补抽历史消息', title: '补抽“{name}”的历史消息',
-      estimate: '待补抽 {count} 条消息，本批预计调用模型 {calls} 次。',
-      batchLimit: '本批从最新消息开始处理 {count} 条，剩余 {remaining} 条可在后续批次处理。',
-      messageCount: '{count} 条消息',
-      modelCallCount: '{count} 次模型调用',
-      remainingMessages: '剩余 {count} 条消息',
-      callEstimateHint: '调用次数包含补缺抽取和事件判断，实际次数随事件数变化。',
-      confirm: '为“{name}”补抽最新 {count} 条消息，预计调用模型 {calls} 次，剩余 {remaining} 条。调用次数随事件数变化。仅补充开放字段和事件，保留已有模板事实及其纠正。',
-      queued: '历史消息补抽已加入维护队列', results: '查看补抽批次',
-      resultsHint: '批次记录消息数、成功数和失败数。正在执行的批次会自动刷新。',
-      messageResults: '查看消息结果', noBatches: '还没有补抽批次。', loading: '正在计算待补抽消息和调用次数。', unavailable: '待补抽数量暂不可用。',
-      inProgress: '补抽正在进行，请查看批次结果。', starFirst: '加星标后可手动补抽历史消息。',
-      latest: '最近批次：{status}，共 {total} 条，成功 {success} 条，失败 {failure} 条。',
-      batchCounts: '消息 {total} 条，成功 {success} 条，失败 {failure} 条。',
-      status: { pending: '等待执行', processing: '正在补抽', completed: '已完成', completed_with_failures: '已完成，部分失败', failed: '失败' },
-    },
-    focus: {
-      title: '关注范围', description: '星标对象、星标主题和已启用的跟踪任务共同决定新消息的完整抽取范围。',
-      futureMessages: '加星标只影响之后收录的消息，不会自动重抽历史消息。取消星标会保留已有事实和事件；已启用的跟踪任务仍可能使该对象或主题属于关注范围。',
-      star: '加星标', unstar: '取消星标', starNamed: '给“{name}”加星标', unstarNamed: '取消“{name}”的星标',
-      starred: '已加星标', unstarred: '已取消星标',
-      starredEntities: '星标对象', starredTopics: '星标主题', trackedEntities: '跟踪任务涉及的对象', trackedTopics: '跟踪任务涉及的主题',
-      noStarredEntities: '还没有星标对象。可在对象列表或详情中加星标。', noStarredTopics: '还没有星标主题。可在下方主题标签处加星标。',
-      noTrackedEntities: '已启用的跟踪任务尚未涉及对象。', noTrackedTopics: '已启用的跟踪任务尚未涉及主题。', enabledTracking: '已启用跟踪任务',
-      topics: '主题标签', topicsDescription: '给消息上的具体所指标签加星标，之后带该标签的消息会完整抽取事实和事件。', filterTopics: '筛选主题标签', noTopics: '没有匹配的具体所指标签。',
-      topicProfile: '主题档案', topicKinds: { topic: '主题', object: '对象', event: '事件' },
-    },
-    sourceTime: { excluded: '因缺少发布时间被排除的来源数：{count}', missing: '缺少发布时间', reposts: '转载来源', unknownPublisher: '未知发布者', matchMethod: '判重方式', matchMethods: { url: '规范化 URL', content_hash: '正文相同', simhash: '近似重复', file_hash: '文件相同', other: '其他方式' } },
-    nameEmbeddings: {
-      title: '对象名称向量',
-      pending: '对象名称向量待重建数量：{count}',
-      unknown: '暂不可用',
-      rebuild: '立即重建',
-      latest: '最近一次重建：{status}，已处理 {processed}/{total} 个对象',
-      noRun: '尚无重建记录',
-      failure: '失败原因：{reason}',
-      queued: '对象名称向量重建已加入队列',
-      status: { pending: '等待执行', running: '正在重建', completed: '已完成', failed: '失败' },
-    },
-
-    scope: {"label": "查询范围", "knowledge_base": "当前知识库", "domain": "领域下全部知识库", "all": "全部知识库", "selectDomain": "选择查询领域", "sourceKb": "来源知识库", "detailHint": "对象身份在空间内统一，以下事实和事件汇总所有知识库的来源。", "workflowHint": "工作流和报告保留在当前知识库；事实查询步骤可以设置独立范围。"},
-    fusion: {"minValue": "数值下限", "maxValue": "数值上限", "unit": "比较单位", "queryHint": "使用领域模板中的字段或别名查询。数值比较需要同一单位族；结果数量只代表当前返回的资料。", "originalField": "原始字段名", "snapshotTitle": "核验引用原文", "quoteMissing": "这段引用没有在该快照中精确匹配。请核对原文；系统不会猜测位置。", "sameStory": "关联的先前事件", "roundup": "汇总材料：保持独立，不累加到各子事件", "current_period": "本期材料", "background": "历史背景", "unknown_date": "日期未知"},
-    tabLabel: '知识工作台', title: '知识工作台', subtitle: "管理和组织文档知识库", sections: '知识工作台功能', refresh: '刷新', rebuild: '重新构建知识上下文', requestFailed: '请求失败，请稍后重试。', emptyValue: '未填写', unknownDate: '时间未知', facts: '事实', correct: '纠正事实', correctionSaved: '事实纠正已保存，新事实保留了来源和历史。', correctionTitle: '纠正事实', correctionIntro: '为“{predicate}”提交新的事实版本。引用必须与来源原文一致。', correctionValue: '正确值', correctionValueType: '值类型', correctionUnit: '单位', correctionQuote: '来源原文引用', correctionNote: '纠正说明', correctionFrom: '生效开始时间', correctionTo: '生效结束时间', correctionValueInvalid: '请按类型输入有效值。', cancel: '取消', factPeriod: '有效时间', rebuildQueued: '已将 {count} 条来源加入重建队列；索引结果会在后台处理完成后更新。', loadMore: '加载更多',
-    nav: { focus: '关注范围', merges: '待合并建议', query: '结构化检索', entities: '对象与事实', events: '事件热度', evidence: '来源证据', workflows: '跟踪工作流', reports: '研究报告' },
-    query: { templateOnlyMessages: '另有 {count} 条相关消息仅抽取了模板字段。', title: '查询知识上下文', description: '按对象、属性、关系和时间范围筛选事实，并检查当前值与历史版本的来源。', entity: '对象名称', entityPlaceholder: '例如：Acme 公司', predicate: '事实属性', predicatePlaceholder: '例如：总部、状态、融资轮次', relation: '关系类型', relationPlaceholder: '例如：投资、收购、合作', since: '开始时间', until: '结束时间', history: '包含已替代的历史事实', submit: '查询', clear: '清空条件', resultCounts: '找到 {entities} 个对象、{facts} 条事实、{events} 个事件和 {evidence} 条证据。', historyIncluded: '结果包含历史版本', empty: '没有匹配的事实、事件或来源。' },
-    entities: { title: '对象与事实', description: '浏览知识上下文中的对象，检查关系、属性、来源与事实历史。', filter: '筛选对象', empty: '没有对象', unknownType: '未分类', aliases: '个别名', choose: '选择一个对象查看事实', includeHistory: '包含历史事实', noFacts: '这个对象还没有可显示的事实。', unknownObject: '未知对象', merge: '合并重复对象', mergeTitle: '合并对象', mergeHint: '选择保留为规范对象的目标。事实、关系和别名将转移到目标对象。', mergeSource: '待合并对象', mergeTarget: '保留对象', mergeTargetPlaceholder: '选择保留的对象', mergeWarning: '合并会影响本空间所有知识库中的对象引用，且不能在此界面撤销。', mergeSaved: '对象已合并' },
-    events: { countLoading: '正在统计相关消息。', countUnavailable: '相关模板抽取消息数暂不可用。', coverageNotice: '只包含收录时命中关注范围的消息。', templateOnlyCount: '相关消息中仍有 {count} 条仅抽取了模板字段。', title: '事件热度', description: '按热度查看近期事件，展开理由、关联对象和支撑来源。', empty: '没有事件', event: '事件', heat: '热度', sourceCount: '{count} 个来源', hideDetails: '收起详情', showDetails: '查看热度依据', whyHot: '热度和关注度依据', noReason: '暂无热度说明。', scored: '系统关注度评分', attentionScore: '关注度 {score}', noSources: '尚无关联来源。', noDescription: '暂无事件摘要。' },
-    evidence: { extractionPath: '本次抽取路径', extractionPaths: { precheck_hit: '预判命中，完整抽取一轮', precheck_miss_supplemented: '预判未命中，解析后补缺', precheck_miss: '预判未命中，仅模板抽取' }, backfilledAt: '补抽时间', backfillTemplateUpdatedAt: '补抽所用领域模板更新时间', extractionMode: '抽取模式', extractionModes: { template_only: '仅模板字段', full: '完整抽取' }, templateOnlyHint: '本条消息只抽取了领域模板字段，未抽取开放字段或事件。', title: '来源证据', description: '查看来源快照、版本、抽取状态和引用出处。', filter: '筛选标题、发布者或链接', empty: '没有来源证据', source: '来源', openSnapshot: '展开来源快照', openSource: '打开原始链接', openKnowledge: '打开原始消息', version: '版本', hash: '内容校验值', extraction: '抽取状态', noBody: '来源快照没有正文。', untitled: '无标题来源', status: { current: '当前版本', superseded: '旧版本' }, extractionStatus: { pending: '等待抽取', complete: '抽取完成', failed: '抽取失败' } },
-    factStatus: { current: '当前事实', superseded: '已替代', corrected: '已纠正' },
-    factDifference: { conflict: '有效期重叠：存在不同记载', potential: '待核实差异：有效时间信息不完整' },
-    workflows: {
-      title: '跟踪工作流', description: '定期查询知识并生成带引用的报告，可组合知识搜索、事实查询和报告步骤。', create: '新建工作流', edit: '编辑工作流', new: '配置工作流', cancel: '取消编辑', name: '名称', namePlaceholder: '例如：每周竞品动态追踪', descriptionField: '说明', cron: 'Cron 计划', manualOnly: '留空表示仅手动运行', timezone: '时区', enabled: '已启用', disabled: '已停用', steps: '执行步骤', stepsHint: '步骤按列表顺序执行，步骤依赖和结果会保留在运行记录中。', addStep: '添加步骤', stepId: '步骤 ID', remove: '删除步骤', dependsOn: '依赖步骤', save: '保存工作流', validation: '请填写名称，并确保每个步骤都有唯一 ID。', saved: '工作流已保存', enableFirst: '工作流已停用，请先启用后再运行。', run: '立即运行', disable: '停用', enable: '启用', noDescription: '无说明', runs: '运行记录', selectWorkflow: '选择工作流查看运行记录', noRuns: '还没有运行记录。', runDetail: '运行详情', retry: '重试失败步骤', resume: '恢复暂停的运行', attempt: '第 {count} 次尝试', runStarted: '工作流已启动', empty: '还没有工作流。创建每日或每周知识查询流程。',
-      config: { query: '查询内容', limit: '结果数量上限', entity: '对象名称（必填）', predicate: '事实属性', relation: '关系类型', objectEntityId: '关联对象 ID', since: '开始时间', until: '结束时间', includeHistory: '包含历史事实', reportTitle: '报告标题', timeFrom: '报告开始时间', timeTo: '报告结束时间', timeWindow: '报告时间窗口', days: '滚动天数（1–365）', timezone: '时区', previousDay: '前一天', previousWeek: '前一周', rollingDays: '最近 N 天', prompt: '报告要求', },
-      stepTypes: { search: '知识搜索', fact_query: '事实查询', report: '生成报告', },
-      runStatus: { queued: '排队中', running: '运行中', paused: '已暂停', completed: '已完成', failed: '失败', cancelled: '已取消' },
-      stepStatus: { pending: '等待中', running: '运行中', succeeded: '已完成', failed: '失败', },
-      templates: {
-        daily: { title: '每日动态简报', description: '每天搜索最新知识并生成带引用的摘要。', searchQuery: '搜索知识库和近期动态中的重要变化', reportTitle: '每日知识动态', reportPrompt: '总结本次搜索中的关键变化、影响和来源，并区分已确认事实与待核实内容。' },
-        weekly: { title: '每周事实回顾', description: '每周汇总指定对象的事实及变化记录。', reportTitle: '每周事实变化', reportPrompt: '回顾所选对象在本周发生的事实变化，保留时间、证据和历史差异。' },
-        custom: { title: '自定义流程', description: '从空白步骤开始组合知识搜索、事实查询和报告。' }
-      }
-    },
-    reports: { title: '研究报告', description: '阅读工作流生成的报告、来源引用，可下载 Markdown 或 JSON。', empty: '还没有研究报告。', download: '下载 Markdown', downloadJson: '下载 JSON', citations: '引用与来源', noCitations: '此报告没有附加引用。' }
+  "tabLabel": "实体",
+  "title": "实体",
+  "subtitle": "管理实体档案与待合并建议",
+  "sections": "实体功能",
+  "refresh": "刷新",
+  "requestFailed": "请求失败，请稍后重试。",
+  "unknownDate": "时间未知",
+  "loadMore": "加载更多",
+  "nav": {
+    "entities": "实体",
+    "merges": "待合并建议"
   },
+  "scope": {
+    "label": "查询范围",
+    "knowledge_base": "当前知识库",
+    "all": "全部知识库",
+    "detailHint": "实体档案在空间内统一，下面显示所有知识库中提及该实体的文章。"
+  },
+  "sourceTime": {
+    "excluded": "因缺少发布时间被排除的来源数：{count}",
+    "missing": "缺少发布时间",
+    "reposts": "转载来源",
+    "unknownPublisher": "未知发布者",
+    "matchMethod": "判重方式",
+    "matchMethods": {
+      "url": "规范化 URL",
+      "content_hash": "正文相同",
+      "simhash": "近似重复",
+      "file_hash": "文件相同",
+      "other": "其他方式"
+    }
+  },
+  "nameEmbeddings": {
+    "title": "实体名称向量",
+    "pending": "实体名称向量待重建数量：{count}",
+    "unknown": "暂不可用",
+    "rebuild": "立即重建",
+    "latest": "最近一次重建：{status}，已处理 {processed}/{total} 个实体",
+    "noRun": "尚无重建记录",
+    "failure": "失败原因：{reason}",
+    "queued": "实体名称向量重建已加入队列",
+    "status": {
+      "pending": "等待执行",
+      "running": "正在重建",
+      "completed": "已完成",
+      "failed": "失败"
+    }
+  },
+  "entities": {
+    "title": "实体",
+    "description": "查看实体类型、别名和提及该实体的文章。",
+    "filter": "搜索实体名称或别名",
+    "type": "实体类型",
+    "allTypes": "全部类型",
+    "types": {
+      "company": "公司",
+      "person": "人物",
+      "product": "产品",
+      "project": "项目",
+      "organization": "组织",
+      "other": "其他"
+    },
+    "empty": "还没有实体",
+    "noResults": "没有匹配的实体，请调整筛选条件。",
+    "aliases": "个别名",
+    "aliasLabel": "别名",
+    "noAliases": "暂无别名",
+    "choose": "选择一个实体查看档案",
+    "articles": "提及该实体的文章",
+    "noArticles": "还没有文章提及该实体。",
+    "openArticle": "打开文章",
+    "untitledArticle": "无标题文章",
+    "loaded": "已加载 {count} 个实体",
+    "merge": "合并重复实体",
+    "mergeTitle": "合并实体",
+    "mergeHint": "选择要保留的实体，别名和文章关联将转移到保留的实体。",
+    "mergeSource": "待合并实体",
+    "mergeTarget": "保留实体",
+    "mergeTargetPlaceholder": "选择保留的实体",
+    "mergeWarning": "合并会影响本空间所有知识库中的实体引用，且不能在此界面撤销。",
+    "mergeSaved": "实体已合并"
+  }
+},
   userProfile: {
     title: '用户信息',
     description: '查看您的账户基础信息（用户 ID、用户名、邮箱、注册时间），并可修改登录密码',
@@ -671,8 +583,8 @@ export default {
       knowledgeSearchDesc: '理解问题并查找语义相关内容',
       listChunks: '查看文档分块',
       listChunksDesc: '获取文档完整分块内容',
-      queryContext: '查询知识上下文',
-      queryContextDesc: '从知识上下文中查询关系',
+
+
       getDocInfo: '获取文档信息',
       getDocInfoDesc: '查看文档元数据',
       dataAnalysis: '数据分析',
@@ -872,7 +784,7 @@ export default {
       attachmentParsing: '解析附件',
       imageAnalysis: '查看图片内容',
       queryUnderstand: '理解问题',
-      queryKnowledgeContext: '知识上下文查询',
+
       dataAnalysis: '数据分析',
       dataSchema: '数据结构',
     },
@@ -940,7 +852,7 @@ export default {
     listKnowledgeChunks: '查看知识分块',
     listKnowledgeBases: '列出知识库',
     getDocumentInfo: '获取文档信息',
-    queryKnowledgeContext: '查询知识上下文',
+
     think: '深度思考',
     todoWrite: '制定计划'
   },
@@ -1132,7 +1044,7 @@ export default {
       truncated: '仅显示前 {shown} 个，共 {total} 个',
       bindings: {
           light_model_tier: '轻量档位',
-          extraction_model_tier: '抽取档位',
+          entity_resolution_model_tier: "实体解析档位",
           generation_model_tier: '生成档位',
           embedding_model_tier: '向量档位',
           rerank_model_tier: '重排档位',
@@ -1384,7 +1296,7 @@ export default {
     agent: 'ReAct 智能体',
     hybridSearch: '混合检索',
     multimodalParsing: '多模态文档解析',
-    hybridSearchEngine: '混合检索 + 知识上下文',
+    hybridSearchEngine: "混合检索",
     ragQandA: 'ReAct 智能体问答',
     independentTenant: "个人知识管理",
     fullApiAccess: '完整 API 访问',
@@ -1393,7 +1305,7 @@ export default {
       agenticRagTitle: 'Agentic RAG',
       agenticRagDesc: 'ReAct 推理 + 工具调用 + 多步思考',
       hybridSearchTitle: '混合检索策略',
-      hybridSearchDesc: 'BM25 + 向量 + 知识上下文',
+      hybridSearchDesc: "BM25 + 向量检索",
       smartDocRetrievalTitle: '智能文档检索',
       smartDocRetrievalDesc: 'PDF/Word/图片多格式解析'
     }
@@ -1780,7 +1692,7 @@ export default {
         asynq: {
           core_concurrency: '文档解析与手工重解析的每实例保底并发，可额外借用共享弹性池；修改后需重启。',
           postprocess_concurrency: '解析完成后的轻量收尾和富化扇出专用并发；修改后需重启。',
-          enrichment_concurrency: '摘要、图片、知识上下文与问题生成的每实例保底并发，可额外借用共享弹性池；修改后需重启。',
+          enrichment_concurrency: "摘要、图片与问题生成的每实例保底并发，可额外借用共享弹性池；修改后需重启。",
           maintenance_concurrency: '数据源同步、批处理和清理任务的每实例并发，与用户面流水线硬隔离；修改后需重启。',
           shared_concurrency: '核心解析与内容富化共同使用的每实例弹性并发，由有积压的一侧自动借用；修改后需重启。',
         },
@@ -1931,6 +1843,7 @@ export default {
             move: '文档移动',
             indexDelete: '索引删除',
             kbDelete: '知识库删除',
+            entityNameEmbeddingRebuild: '实体名称向量重建',
           }
         },
         failedNotice: {
@@ -1973,7 +1886,7 @@ export default {
         poolDescriptions: {
           core: '文档解析与手工重解析的保底容量',
           postprocess: '解析完成后的收尾与富化扇出',
-          enrichment: '摘要、图片、知识上下文与问题生成',
+          enrichment: "摘要、图片与问题生成",
           maintenance: '数据源同步、批处理与删除清理',
           shared: '由核心解析与内容富化按积压借用',
         },
@@ -1985,7 +1898,7 @@ export default {
           sync: '数据源同步',
           low: '维护与批处理',
           multimodal: '多模态处理',
-          context: '知识上下文',
+          entity: "实体",
           question: '问题生成',
         },
         queueDescriptions: {
@@ -1996,7 +1909,7 @@ export default {
           sync: '手动与定时同步',
           low: "批量重解析、删除清理",
           multimodal: '图片 OCR、视觉描述',
-          context: '知识上下文抽取和整理',
+          entity: "实体名称向量重建",
           question: '分块问题生成',
         },
         errors: {
@@ -2160,11 +2073,8 @@ export default {
     relevanceWeak: '弱相关',
     otherSource: '其他来源',
     webGroupIntro: '以下 {count} 条内容来自',
-    contextConfigTitle: '知识上下文配置',
-    entityTypesLabel: '实体类型:',
-    relationTypesLabel: '关系类型:',
-    contextResultsHeader: '找到 {count} 条相关结果',
-    contextNoResults: '未找到相关的知识上下文信息',
+
+
     unknownLink: '未知链接',
     contentLengthLabel: '长度 {value}',
     notProvided: '未提供',
@@ -2266,7 +2176,7 @@ export default {
         skipIfTaggedLabel: '跳过已有标签的文档',
         skipIfTaggedDescription: '开启后，上传时已手动设置标签的文档不再自动打标签，避免覆盖人工分类意图。',
         policyLabel: '消息标签整理策略',
-        policyDescription: '用于已审核消息的内容性质及主题、对象、事件识别；固定类别和输出格式不能更改。',
+        policyDescription: "用于已审核消息的内容性质及主题、实体、事件识别；固定类别和输出格式不能更改。",
         policyPlaceholder: '例如：优先识别明确发生的事件，避免把预测写成已发生事件。'
       }
     },
@@ -2708,7 +2618,11 @@ export default {
     retry: '重试',
     expand: '展开',
     collapse: '收起'
-  },
+  ,
+    discardTitle: "放弃未保存的修改",
+    discardHint: "本次修改尚未保存，返回后将丢弃这些修改。",
+    discard: "放弃修改"
+},
   authStore: {
     errors: {
       parseUserFailed: '解析用户信息失败',
@@ -3329,7 +3243,7 @@ export default {
     tagKindLabel: '标签类别',
     tagKindNature: '内容性质',
     tagKindTopic: '主题',
-    tagKindObject: '对象',
+    tagKindObject: "实体",
     tagKindEvent: '事件',
     tagStarAction: '星标 {name}',
     tagUnstarAction: '取消星标 {name}',
@@ -3356,8 +3270,8 @@ export default {
       activate: '确认生效', restore: '恢复此版本', confirmTitle: '确认策略版本', confirm: '生效后只影响后续任务，不自动重处理已有消息。',
       failed: '策略操作失败', candidateSaved: '候选策略已保存，请检查差异', activeSaved: '策略已生效',
       status: { candidate: '待确认', active: '当前生效', archived: '历史版本' },
-      reprocess: '指定范围重处理', reprocessHint: '仅处理选中的消息或一个主题／对象／事件。审核疑点交异常窗口；人工标签修正保留。',
-      messagesScope: '消息集合', tagScope: '具体标签', selectTag: '选择主题、对象或事件', runReprocess: '开始重处理',
+      reprocess: '指定范围重处理', reprocessHint: "仅处理选中的消息或一个主题／实体／事件。审核疑点交异常窗口；人工标签修正保留。",
+      messagesScope: '消息集合', tagScope: '具体标签', selectTag: "选择主题、实体或事件", runReprocess: '开始重处理',
       reprocessConfirmTitle: '确认重处理', reprocessConfirm: '将按当前生效策略重新审核和整理指定范围，不自动处理其他消息。',
       reprocessResult: '处理 {processed} 条，更新 {updated} 条，审核疑点 {flagged} 条，人工冲突 {conflicts} 条，失败 {failed} 条',
     },
@@ -3481,7 +3395,7 @@ export default {
     rebuildFailed: '重建失败，请稍后再试',
     rebuildInProgress: '当前文档正在解析中，请稍后重试',
     cancelParse: '停止解析',
-    cancelParseConfirmBody: '确认停止解析"{title}"？已写入的分块会保留，可稍后通过"重建"重新触发；优化阶段（摘要 / 问答 / 知识上下文）的待执行任务会被立即丢弃。',
+    cancelParseConfirmBody: "确认停止解析\"{title}\"？已写入的分块会保留，可稍后通过\"重建\"重新触发；优化阶段（摘要 / 问答）的待执行任务会被立即丢弃。",
     cancelParseSubmitted: '已停止解析',
     cancelParseFailed: '停止失败，请稍后再试',
     draft: '草稿',
@@ -3702,10 +3616,10 @@ export default {
     noSessions: '暂无对话'
   },
   countCopy: {
-    "entities": "{count} 个对象",
-    "facts": "{count} 条事实",
-    "events": "{count} 个事件",
-    "evidenceItems": "{count} 条证据",
+    "entities": "{count} 个实体",
+
+
+
     "documents": "{count} 份文档",
     "webSources": "{count} 个网页来源",
     "results": "{count} 条结果",

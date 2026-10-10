@@ -9,15 +9,14 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-// PluginSearchParallel implements structured context and chunk search
+// PluginSearchParallel implements document chunk search
 type PluginSearchParallel struct {
 	// Chunk search dependencies
 	knowledgeBaseService interfaces.KnowledgeBaseService
 	knowledgeService     interfaces.KnowledgeService
 	config               *config.Config
 
-	contextReader interfaces.KnowledgeContextReader
-	searchPlugin  *PluginSearch
+	searchPlugin *PluginSearch
 }
 
 // NewPluginSearchParallel creates a new parallel search plugin
@@ -27,7 +26,6 @@ func NewPluginSearchParallel(
 	knowledgeService interfaces.KnowledgeService,
 	chunkService interfaces.ChunkService,
 	config *config.Config,
-	contextReader interfaces.KnowledgeContextReader,
 ) *PluginSearchParallel {
 	// Create internal plugins without registering them
 	searchPlugin := &PluginSearch{
@@ -41,7 +39,6 @@ func NewPluginSearchParallel(
 		knowledgeBaseService: knowledgeBaseService,
 		knowledgeService:     knowledgeService,
 		config:               config,
-		contextReader:        contextReader,
 		searchPlugin:         searchPlugin,
 	}
 	eventManager.Register(res)
@@ -53,7 +50,7 @@ func (p *PluginSearchParallel) ActivationEvents() []types.EventType {
 	return []types.EventType{types.CHUNK_SEARCH_PARALLEL}
 }
 
-// OnEvent handles search events using structured context and chunk retrieval
+// OnEvent handles search events using document chunk retrieval
 func (p *PluginSearchParallel) OnEvent(ctx context.Context,
 	eventType types.EventType, chatManage *types.ChatManage, next func() *PluginError,
 ) *PluginError {
@@ -72,10 +69,6 @@ func (p *PluginSearchParallel) OnEvent(ctx context.Context,
 		"rewrite_query": chatManage.RewriteQuery,
 	})
 
-	// Resolve structured lookups first. Original-text retrieval then supplies
-	// explanations, missing fields and conflicting evidence.
-	p.searchStructuredContext(ctx, chatManage)
-	structuredSources := append([]*types.SearchResult{}, chatManage.SearchResult...)
 	// Deep-copy to avoid concurrent read/write on shared slice fields
 	chunkCM := chatManage.Clone()
 	chunkCM.SearchResult = nil
@@ -88,10 +81,8 @@ func (p *PluginSearchParallel) OnEvent(ctx context.Context,
 		logger.Warnf(ctx, "[SearchParallel] chunk search error: %v", err.Err)
 	}
 
-	// Merge chunk results with structured evidence sources
-	chatManage.SearchResult = append(chunkCM.SearchResult, structuredSources...)
+	chatManage.SearchResult = chunkCM.SearchResult
 	chatManage.SearchResult = removeDuplicateResults(chatManage.SearchResult)
-	p.searchStructuredContext(ctx, chatManage, true)
 
 	pipelineInfo(ctx, "SearchParallel", "complete", map[string]interface{}{
 		"session_id":    chatManage.SessionID,
@@ -99,7 +90,7 @@ func (p *PluginSearchParallel) OnEvent(ctx context.Context,
 		"total_results": len(chatManage.SearchResult),
 		"has_error":     err != nil,
 	})
-	if len(chatManage.SearchResult) == 0 && chatManage.KnowledgeContext == "" {
+	if len(chatManage.SearchResult) == 0 {
 		if err != nil {
 			return err
 		}

@@ -85,8 +85,7 @@ func ctxWithTenant(tenantID uint64) context.Context {
 
 func TestDuplicateKnowledgeBase_CreatesSettingsOnlyDuplicate(t *testing.T) {
 	repo := newFakeKBRepo()
-	source := &types.KnowledgeBase{DomainID: "test-domain",
-		ID:          "src",
+	source := &types.KnowledgeBase{ID: "src",
 		Name:        "Source KB",
 		Type:        types.KnowledgeBaseTypeDocument,
 		Description: "source description",
@@ -132,7 +131,6 @@ func TestDuplicateKnowledgeBase_CreatesSettingsOnlyDuplicate(t *testing.T) {
 	assert.Equal(t, "copy-user", target.CreatorID)
 	assert.Equal(t, "Source KB 副本", target.Name)
 	assert.Equal(t, source.Description, target.Description)
-	assert.Equal(t, source.DomainID, target.DomainID)
 	assert.Equal(t, source.ChunkingConfig, target.ChunkingConfig)
 	assert.Equal(t, source.ImageProcessingConfig, target.ImageProcessingConfig)
 	assert.Equal(t, source.EmbeddingModelID, target.EmbeddingModelID)
@@ -155,14 +153,12 @@ func TestDuplicateKnowledgeBase_CreatesSettingsOnlyDuplicate(t *testing.T) {
 
 func TestDuplicateKnowledgeBase_UsesDistinctNameWhenDuplicateExists(t *testing.T) {
 	repo := newFakeKBRepo()
-	repo.rows["src"] = &types.KnowledgeBase{DomainID: "test-domain",
-		ID:       "src",
+	repo.rows["src"] = &types.KnowledgeBase{ID: "src",
 		Name:     "Source KB",
 		Type:     types.KnowledgeBaseTypeDocument,
 		TenantID: 1,
 	}
-	repo.rows["existing-copy"] = &types.KnowledgeBase{DomainID: "test-domain",
-		ID:       "existing-copy",
+	repo.rows["existing-copy"] = &types.KnowledgeBase{ID: "existing-copy",
 		Name:     "Source KB 副本",
 		Type:     types.KnowledgeBaseTypeDocument,
 		TenantID: 1,
@@ -177,8 +173,7 @@ func TestDuplicateKnowledgeBase_UsesDistinctNameWhenDuplicateExists(t *testing.T
 
 func TestDuplicateKnowledgeBase_UsesLocalizedEnglishSuffix(t *testing.T) {
 	repo := newFakeKBRepo()
-	repo.rows["src"] = &types.KnowledgeBase{DomainID: "test-domain",
-		ID:       "src",
+	repo.rows["src"] = &types.KnowledgeBase{ID: "src",
 		Name:     "Source KB",
 		Type:     types.KnowledgeBaseTypeDocument,
 		TenantID: 1,

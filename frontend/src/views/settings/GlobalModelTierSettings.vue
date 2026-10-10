@@ -20,7 +20,7 @@ const dirty = computed(() => JSON.stringify(copyModelTiers(draft.value)) !== JSO
 let request = 0
 async function load() {
   if (saving.value) return
-  if (dirty.value) { confirmDelete({ title: t('knowledgeDomains.discardTitle'), body: t('knowledgeDomains.discardHint'), confirmText: t('knowledgeDomains.discard'), onConfirm: async () => { reset(); await load() } }); return }
+  if (dirty.value) { confirmDelete({ title: t('common.discardTitle'), body: t('common.discardHint'), confirmText: t('common.discard'), onConfirm: async () => { reset(); await load() } }); return }
   const current = ++request
   loading.value = true; error.value = ''
   try { const response = await getModelTierSettings(); if (!response.success) throw new Error(response.error || response.message || t('modelTiers.loadFailed')); if (current === request) { saved.value = copyModelTiers(response.data?.overrides); reset() } }
@@ -36,7 +36,7 @@ async function save() {
   catch (cause) { error.value = cause instanceof Error ? cause.message : t('modelTiers.saveFailed') }
   finally { saving.value = false }
 }
-function confirmLeave(): Promise<boolean> { if (saving.value) return Promise.resolve(false); if (!dirty.value) return Promise.resolve(!saving.value); return new Promise(resolve => { const dialog = confirmDelete({ title: t('knowledgeDomains.discardTitle'), body: t('knowledgeDomains.discardHint'), confirmText: t('knowledgeDomains.discard'), onConfirm: () => { reset(); resolve(true) } }); dialog.update({ onCancel: () => { dialog.hide(); resolve(false) }, onClose: () => resolve(false) }) }) }
+function confirmLeave(): Promise<boolean> { if (saving.value) return Promise.resolve(false); if (!dirty.value) return Promise.resolve(!saving.value); return new Promise(resolve => { const dialog = confirmDelete({ title: t('common.discardTitle'), body: t('common.discardHint'), confirmText: t('common.discard'), onConfirm: () => { reset(); resolve(true) } }); dialog.update({ onCancel: () => { dialog.hide(); resolve(false) }, onClose: () => resolve(false) }) }) }
 function beforeUnload(event: BeforeUnloadEvent) { if (dirty.value) { event.preventDefault(); event.returnValue = '' } }
 defineExpose({ confirmLeave })
 onMounted(() => { void load(); window.addEventListener('beforeunload', beforeUnload) })

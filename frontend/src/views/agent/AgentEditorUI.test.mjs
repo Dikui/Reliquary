@@ -14,7 +14,6 @@ import { evaluateToolRequirement } from '../../utils/tool-capabilities.ts'
 
 const require = createRequire(import.meta.url)
 const agentSource = readFileSync(new URL('./AgentEditorModal.vue', import.meta.url), 'utf8')
-const workflowSource = readFileSync(new URL('../knowledge/components/KnowledgeWorkbench.vue', import.meta.url), 'utf8')
 const toolsExpression = agentSource.match(/const allTools = computed\(\(\) => (\[[\s\S]*?\])\);/)?.[1]
 const reasonFunction = agentSource.match(/const missKindToReason = [\s\S]*?\n};/)?.[0]
 const availabilityBody = agentSource.match(/const availableTools = computed\(\(\) => \{([\s\S]*?)\n\}\);/)?.[1]
@@ -45,8 +44,8 @@ for (const [locale, name] of [['zh-CN', '数据分析'], ['en-US', 'Data analysi
       const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zhCN, 'en-US': enUS } })
       const t = (...args) => i18n.global.t(...args)
       const tools = toolsFor(t, scope, hasKb)
-      assert.equal(tools.length, 13)
-      assert.equal(new Set(tools.map(tool => tool.label)).size, 13)
+      assert.equal(tools.length, 12)
+      assert.equal(new Set(tools.map(tool => tool.label)).size, 12)
       assert.equal(tools.find(tool => tool.value === 'data_analysis').label, name)
       for (const tool of tools) {
         for (const key of ['requiresKb', 'requiresRagKb']) {
@@ -64,7 +63,7 @@ for (const [locale, name] of [['zh-CN', '数据分析'], ['en-US', 'Data analysi
       }))
       const html = await renderToString(app)
       const names = [...html.matchAll(/class="tool-card-name">([^<]+)<\/span>/g)].map(match => match[1])
-      assert.equal(names.length, 13)
+      assert.equal(names.length, 12)
       assert.ok(names.includes(name))
       assert.equal((html.match(/class="tool-card-hint"/g) || []).length, tools.filter(tool => tool.disabled).length)
       assert.equal(tools.some(tool => tool.disabled), !!reasonKey)
@@ -130,20 +129,4 @@ test('390px agent editor uses top navigation, full-width fields and readable car
   assert.equal(at(1440, ['content-wrapper']).padding, '28px 40px 48px')
   assert.equal(at(1440, ['setting-control'])['max-width'], '58%')
   assert.equal(at(1440, ['settings-container'])['flex-direction'], undefined)
-})
-
-test('390px workflow types occupy a full grid row and add-step labels wrap without changing desktop layout', async () => {
-  const at = await stylesheet(workflowSource)
-  assert.match(workflowSource, /<t-select v-model="step.type"[^>]*class="workflow-step__type"/)
-  assert.equal(at(390, ['workflow-step__top'])['grid-template-columns'], '26px minmax(0, 1fr)')
-  assert.equal(at(390, ['workflow-step__type'])['grid-column'], '1 / -1')
-  assert.equal(at(390, ['workflow-step__type']).width, '100%')
-  assert.equal(at(390, ['workflow-step__type'])['min-width'], '0')
-  assert.equal(at(390, ['workflow-steps-heading'])['grid-template-columns'], 'minmax(0, 1fr)')
-  assert.equal(at(390, ['add-step-select'], ['workflow-steps-heading']).width, '100%')
-  assert.equal(at(390, ['t-button'], ['workflow-steps-heading'])['white-space'], 'normal')
-  assert.equal(at(390, ['t-button__text'], ['workflow-steps-heading'])['overflow-wrap'], 'anywhere')
-  assert.equal(at(1440, ['workflow-step__top'])['grid-template-columns'], '30px minmax(100px, 1fr) minmax(150px, 1fr) auto')
-  assert.equal(at(1440, ['workflow-steps-heading']).display, 'flex')
-  assert.equal(at(1440, ['workflow-step__type'])['grid-column'], undefined)
 })

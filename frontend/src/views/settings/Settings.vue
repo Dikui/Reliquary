@@ -59,7 +59,6 @@
             <!-- 右侧内容区域 -->
             <div class="settings-content">
               <div class="content-wrapper" :class="{
-                'content-wrapper--wide': currentSection === 'domains',
                 'content-wrapper--full': SYSTEM_SECTIONS.has(currentSection) || isIntegrationSection(currentSection),
               }">
                   <!-- 常规设置 -->
@@ -129,7 +128,6 @@
                     <TenantInfo ref="tenantInfoView" />
                   </div>
 
-                  <div v-if="currentSection === 'domains'" class="section"><DomainSettings ref="domainSettingsView" /></div>
 
                   <!-- 发布集成 -->
                   <div v-if="isIntegrationSection(currentSection)" class="section">
@@ -166,7 +164,6 @@ import OllamaSettings from './OllamaSettings.vue'
 import McpSettings from './McpSettings.vue'
 import ChatHistorySettings from './ChatHistorySettings.vue'
 import ParserEngineSettings from './ParserEngineSettings.vue'
-import DomainSettings from './DomainSettings.vue'
 import SystemSettings from '@/views/system/SystemSettings.vue'
 import RuntimeQueues from '@/views/system/RuntimeQueues.vue'
 import IntegrationSettingsSection from '@/views/integrations/IntegrationSettingsSection.vue'
@@ -194,10 +191,9 @@ const deploymentCapabilities = useDeploymentCapabilitiesStore()
 const { t } = useI18n()
 
 const tenantInfoView = ref<InstanceType<typeof TenantInfo>>()
-const domainSettingsView = ref<InstanceType<typeof DomainSettings>>()
 const canLeaveCurrentSection = () => currentSection.value === 'tenant'
   ? tenantInfoView.value?.confirmLeave() ?? Promise.resolve(true)
-  : currentSection.value === 'domains' ? domainSettingsView.value?.confirmLeave() ?? Promise.resolve(true) : Promise.resolve(true)
+  : Promise.resolve(true)
 const currentSection = ref<string>('general')
 const currentSubSection = ref<string>('')
 const expandedMenus = ref<string[]>([])
@@ -261,7 +257,6 @@ const navItems = computed(() => {
     { key: 'runtime-queues', icon: 'queue', label: t('settings.taskQueue') },
     { key: 'userprofile', icon: 'user', label: t('userProfile.title') },
     { key: 'tenant', icon: 'user-circle', label: t('settings.tenantInfo') },
-    { key: 'domains', icon: 'layers', label: t('knowledgeDomains.title') },
     ...integrationItems,
   ]
   // 入口的策略一致。
@@ -285,7 +280,7 @@ const navGroups = computed<NavGroup[]>(() => {
     {
       key: 'workspace',
       label: t('settings.navGroups.workspace'),
-      items: pickItems(['tenant', 'domains', 'chathistory', ]),
+      items: pickItems(['tenant', 'chathistory', ]),
     },
     {
       key: 'models_runtime',

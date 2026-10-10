@@ -28,6 +28,12 @@ func TestP4MessageURLNormalization(t *testing.T) {
 	require.Empty(t, normalizeMessageURL("not a URL"))
 }
 
+func TestP4RepostNamePreservesFullWidthCharacters(t *testing.T) {
+	require.Equal(t, "acme news", normalizeRepostName("  ACME\t News  "))
+	require.Equal(t, "ａｃｍｅ", normalizeRepostName(" ＡＣＭＥ "))
+	require.NotEqual(t, normalizeRepostName("ＡＣＭＥ"), normalizeRepostName("ACME"))
+}
+
 func TestP4BodyFingerprintAndNearDuplicateBoundary(t *testing.T) {
 	body := "Acme released the Orion model with improved reasoning, fast inference, multimodal input, and a context window of one million tokens. The report includes benchmark results, evaluation methodology, pricing, and deployment requirements."
 	changed := strings.Replace(body, "one million", "two million", 1)
@@ -122,7 +128,7 @@ func TestP4DuplicateIntakeDoesNotSaveOrEnqueueAndPreservesReposts(t *testing.T) 
 		}
 		require.Equal(t, expectedMethod, item.DuplicateMatchMethod)
 	}
-	require.Zero(t, queue.calls, "there is no queued extraction for duplicate messages")
+	require.Zero(t, queue.calls, "there is no queued processing for duplicate articles")
 	require.Zero(t, files.saveCalls, "duplicate bodies are not saved again")
 	var count int64
 	require.NoError(t, db.Model(&types.Knowledge{}).Count(&count).Error)
@@ -139,37 +145,7 @@ func TestP4DuplicateIntakeDoesNotSaveOrEnqueueAndPreservesReposts(t *testing.T) 
 	require.Empty(t, detail.DuplicateMatchMethod, "the result of a previous intake is not stored on the message")
 }
 
-func TestP4EventHeatCountsDistinctRepostPublishers(t *testing.T) {
-	db := knowledgeContextTestDB(t)
-	now := time.Now().UTC().Format(time.RFC3339)
-	k := types.Knowledge{ID: "owner", TenantID: 9, KnowledgeBaseID: "kb", ParseStatus: "completed", EnableStatus: "enabled"}
-	require.NoError(t, db.Create(&k).Error)
-	evidence := types.KnowledgeEvidence{ID: "evidence", TenantID: 9, KnowledgeBaseID: "kb", KnowledgeID: k.ID, Version: 1, BodyHash: strings.Repeat("a", 64), Body: "original", Publisher: "Acme", PublishedAt: now, Status: "current"}
-	require.NoError(t, db.Create(&evidence).Error)
-	event := types.KnowledgeEvent{ID: "event", TenantID: 9, KnowledgeBaseID: "kb", Title: "Release", EvidenceIDs: types.StringArray{evidence.ID}}
-	require.NoError(t, db.Create(&event).Error)
-	require.NoError(t, db.Create(&types.KnowledgeEventEvidence{ID: "link", TenantID: 9, KnowledgeBaseID: "kb", EventID: event.ID, EvidenceID: evidence.ID}).Error)
-	for _, source := range []types.SourceInfo{
-		{Publisher: "News", OriginalURL: "https://news.example/one", PublishedAt: now},
-		{Publisher: " news ", OriginalURL: "https://news.example/two", PublishedAt: now},
-		{Publisher: "Acme", OriginalURL: "https://acme.example/reprint", PublishedAt: now},
-		{Publisher: "No date", OriginalURL: "https://other.example/reprint"},
-	} {
-		incoming := types.Knowledge{TenantID: 9, KnowledgeBaseID: "kb"}
-		require.NoError(t, incoming.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{SourceInfo: source}))
-		require.NoError(t, recordMessageRepost(db, &k, &incoming, "content_hash", 0))
-	}
-	require.NoError(t, db.First(&event, "id = ?", event.ID).Error)
-	require.Equal(t, 2, event.SourceCount, "original publisher and repeated syndicated publisher each count once")
-	result, err := NewKnowledgeContextService(db, nil).Query(ctxWithTenant(9), "kb", types.KnowledgeContextQuery{EventID: event.ID})
-	require.NoError(t, err)
-	require.Len(t, result.Events, 1)
-	require.Equal(t, 2, result.Events[0].SourceCount)
-	require.Len(t, result.Events[0].RepostSources, 4)
-	require.Equal(t, 1, result.Events[0].ExcludedMissingPublishedAtCount)
-}
-
-func TestP4ParsedDuplicateStopsBeforeExtraction(t *testing.T) {
+func TestP4ParsedDuplicateStopsBeforeEnrichment(t *testing.T) {
 	db := pgtest.Open(t)
 	body := "The original article describes a sourced announcement."
 	owner := types.Knowledge{ID: uuid.NewString(), TenantID: 1, KnowledgeBaseID: "kb", ParseStatus: "completed", EnableStatus: "enabled"}
@@ -183,8 +159,6 @@ func TestP4ParsedDuplicateStopsBeforeExtraction(t *testing.T) {
 	var count int64
 	require.NoError(t, db.Model(&types.Knowledge{}).Where("id = ?", incoming.ID).Count(&count).Error)
 	require.Zero(t, count, "a duplicate parser result does not remain a separate message")
-	require.NoError(t, db.Model(&types.KnowledgeFact{}).Count(&count).Error)
-	require.Zero(t, count)
 }
 
 func TestP4URLDuplicatesAndConcurrentIntakeHaveOneOwner(t *testing.T) {
@@ -308,16 +282,11 @@ func TestP4FileDuplicateCleansSavedFileAndDoesNotEnqueue(t *testing.T) {
 	require.EqualValues(t, 1, count)
 }
 
-func TestP4RepostMissingRedeliveryPreservesVerifiedPublicationAndHeat(t *testing.T) {
-	db := knowledgeContextTestDB(t)
+func TestP4RepostMissingRedeliveryPreservesVerifiedPublication(t *testing.T) {
+	db := pgtest.Open(t)
 	publication := time.Now().UTC().Format(time.RFC3339)
 	owner := types.Knowledge{ID: "dated-owner", TenantID: 9, KnowledgeBaseID: "kb", ParseStatus: "completed", EnableStatus: "enabled"}
 	require.NoError(t, db.Create(&owner).Error)
-	evidence := types.KnowledgeEvidence{ID: "dated-evidence", TenantID: 9, KnowledgeBaseID: "kb", KnowledgeID: owner.ID, Version: 1, BodyHash: strings.Repeat("a", 64), Body: "Original body", Publisher: "Acme", PublishedAt: publication, Status: "current"}
-	require.NoError(t, db.Create(&evidence).Error)
-	event := types.KnowledgeEvent{ID: "dated-event", TenantID: 9, KnowledgeBaseID: "kb", Title: "Announcement", EvidenceIDs: types.StringArray{evidence.ID}}
-	require.NoError(t, db.Create(&event).Error)
-	require.NoError(t, db.Create(&types.KnowledgeEventEvidence{ID: "dated-link", TenantID: 9, KnowledgeBaseID: "kb", EventID: event.ID, EvidenceID: evidence.ID}).Error)
 	for _, date := range []string{publication, ""} {
 		incoming := types.Knowledge{TenantID: 9, KnowledgeBaseID: "kb"}
 		require.NoError(t, incoming.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{SourceInfo: types.SourceInfo{Publisher: "News", OriginalURL: "https://news.example/announcement", PublishedAt: date}}))
@@ -328,11 +297,5 @@ func TestP4RepostMissingRedeliveryPreservesVerifiedPublicationAndHeat(t *testing
 	require.Len(t, reposts, 1)
 	require.Equal(t, publication, reposts[0].PublishedAt)
 	require.False(t, reposts[0].PublishedAtMissing)
-	require.NoError(t, db.First(&event, "id = ?", event.ID).Error)
-	require.Equal(t, 2, event.SourceCount, "a missing-date redelivery does not remove the publisher from heat")
-	result, err := NewKnowledgeContextService(db, nil).Query(ctxWithTenant(9), "kb", types.KnowledgeContextQuery{EventID: event.ID})
-	require.NoError(t, err)
-	require.Len(t, result.Events, 1)
-	require.Equal(t, 2, result.Events[0].SourceCount)
-	require.Zero(t, result.Events[0].ExcludedMissingPublishedAtCount)
+
 }

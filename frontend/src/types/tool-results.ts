@@ -3,10 +3,9 @@
  * TypeScript interfaces for all tool result types
  */
 
-import type { KnowledgeContextResult } from '@/api/knowledge-context'
 
 // Relevance levels — values match the backend API response.
-// Display labels are resolved via i18n in SearchResults.vue and ContextQueryResults.vue.
+// Display labels are resolved via i18n in SearchResults.vue.
 export type RelevanceLevel = 'High Relevance' | 'Medium Relevance' | 'Low Relevance' | 'Weak Relevance';
 
 // Display types
@@ -16,8 +15,6 @@ export type DisplayType =
     | 'related_chunks'
     | 'knowledge_base_list'
     | 'document_info'
-    | 'context_query_results'
-    | 'graph_query_results'
     | 'thinking'
     | 'plan'
     | 'web_fetch_results'
@@ -54,12 +51,6 @@ export interface KnowledgeBaseItem {
     id: string;
     name: string;
     description: string;
-}
-
-// Context result summary config
-export interface ContextConfig {
-    nodes: string[];
-    relations: string[];
 }
 
 // Search results data
@@ -123,30 +114,6 @@ export interface DocumentInfoData {
     requested: number;
     errors?: string[];
     title?: string;
-}
-
-// Knowledge context query results data
-export interface ContextQueryResultsData {
-    display_type: 'context_query_results' | 'graph_query_results';
-    knowledge_base_ids: string[];
-    contexts: Record<string, KnowledgeContextResult>;
-    context_data?: ContextQuerySummary;
-    /** Saved conversation results may use the previous data key. */
-    graph_data?: ContextQuerySummary;
-}
-
-export interface ContextQuerySummary {
-        nodes: Array<{ id: string; label: string; type: string; kb_id: string }>;
-        edges: Array<{
-            id: string;
-            source: string;
-            target: string;
-            type: string;
-            evidence_id: string;
-            quote: string;
-        }>;
-        total_nodes: number;
-        total_edges: number;
 }
 
 // Thinking data
@@ -263,7 +230,6 @@ export type ToolResultData =
     | RelatedChunksData
     | KnowledgeBaseListData
     | DocumentInfoData
-    | ContextQueryResultsData
     | ThinkingData
     | PlanData
     | WebFetchResultsData

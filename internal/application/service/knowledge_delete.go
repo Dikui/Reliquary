@@ -169,11 +169,6 @@ func (s *knowledgeService) DeleteKnowledge(ctx context.Context, id string) error
 		imageInfoStrs = append(imageInfoStrs, ci.ImageInfo)
 	}
 	imageURLs := collectImageURLs(ctx, imageInfoStrs)
-	historicalImages, err := evidenceImageReferences(ctx, s.db, tenantID, []string{id})
-	if err != nil {
-		return err
-	}
-	imageURLs = append(imageURLs, historicalImages...)
 
 	wg := errgroup.Group{}
 	// Delete knowledge embeddings from PostgreSQL index.
@@ -215,16 +210,14 @@ func (s *knowledgeService) DeleteKnowledge(ctx context.Context, id string) error
 	}
 	// Delete the knowledge row FIRST, then drop its physical file. Physical
 	// cleanup is deliberately deferred until the row is gone: if any of the
-	// index/chunk/context cleanups above failed we already returned early with the
+	// index/chunk cleanups above failed we already returned early with the
 	// row (and its file) intact, so the queued retry — or a user-triggered
 	// reparse — can still read the original file. Deleting the file before the
 	// row could leave a "file missing but row present" zombie that can neither be
 	// reparsed nor cleanly re-deleted (issue #2192). Orphaning a file after the
 	// row is gone is the tolerable failure mode instead.
-	if s.db != nil && s.db.Migrator().HasTable(&types.KnowledgeEvidence{}) {
-		if err := NewKnowledgeContextService(s.db, s.modelService).DeleteMessages(ctx, knowledge.KnowledgeBaseID, []string{id}); err != nil {
-			return err
-		}
+	if err := deleteArticleEntityAssociations(ctx, s.db, tenantID, []string{id}); err != nil {
+		return err
 	}
 	if err := s.repo.DeleteKnowledge(ctx, tenantID, id); err != nil {
 		return err
@@ -369,11 +362,6 @@ func (s *knowledgeService) DeleteKnowledgeList(ctx context.Context, ids []string
 	kbImageURLs := make(map[string][]string) // kbID → []imageURL
 	for _, k := range knowledgeList {
 		knowledgeToKB[k.ID] = k.KnowledgeBaseID
-		historicalImages, err := evidenceImageReferences(ctx, s.db, tenantInfo.ID, []string{k.ID})
-		if err != nil {
-			return err
-		}
-		kbImageURLs[k.KnowledgeBaseID] = append(kbImageURLs[k.KnowledgeBaseID], historicalImages...)
 		if intake, _ := k.IntakeMetadata(); intake != nil {
 			kbImageURLs[k.KnowledgeBaseID] = append(kbImageURLs[k.KnowledgeBaseID], intake.Images...)
 		}
@@ -441,12 +429,8 @@ func (s *knowledgeService) DeleteKnowledgeList(ctx context.Context, ids []string
 	// gone avoids "file missing but row present" zombies that break reparse /
 	// re-delete when an earlier cleanup step failed (issue #2192). A failure below
 	// only orphans storage.
-	if s.db != nil && s.db.Migrator().HasTable(&types.KnowledgeEvidence{}) {
-		for kbID, sourceIDs := range kbKnowledgeIDs {
-			if err := NewKnowledgeContextService(s.db, s.modelService).DeleteMessages(ctx, kbID, sourceIDs); err != nil {
-				return err
-			}
-		}
+	if err := deleteArticleEntityAssociations(ctx, s.db, tenantInfo.ID, ids); err != nil {
+		return err
 	}
 	if err := s.repo.DeleteKnowledgeList(ctx, tenantInfo.ID, ids); err != nil {
 		return err
@@ -522,12 +506,13 @@ func (s *knowledgeService) cleanupKnowledgeResources(ctx context.Context, knowle
 		imageInfoStrs = append(imageInfoStrs, ci.ImageInfo)
 	}
 	imageURLs := collectImageURLs(ctx, imageInfoStrs)
-	historicalImages, err := evidenceImageReferences(ctx, s.db, tenantInfo.ID, []string{knowledge.ID})
-	if err != nil {
-		return errors.Join(cleanupErr, err)
-	}
 	retained := map[string]bool{}
-	for _, ref := range historicalImages {
+	intake, _ := knowledge.IntakeMetadata()
+	var originalImages []string
+	if intake != nil {
+		originalImages = intake.Images
+	}
+	for _, ref := range originalImages {
 		retained[ref] = true
 	}
 	deletableImages := imageURLs[:0]

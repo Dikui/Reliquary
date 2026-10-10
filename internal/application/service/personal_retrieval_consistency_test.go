@@ -99,7 +99,7 @@ func TestPersonalKnowledgeBasePostgresSchemaAndEmbedding(t *testing.T) {
 	require.NoError(t, f.db.Exec("INSERT INTO tenants (id, name, business) VALUES (?, ?, 'personal')", types.SingleTenantID, "Personal fixture").Error)
 	service := &knowledgeBaseService{db: f.db, repo: f.kbs}
 	created, err := service.CreateKnowledgeBase(f.ctx, &types.KnowledgeBase{
-		DomainID: f.domainID, Name: "Personal knowledge base", EmbeddingModelID: "chunk-search-fixed",
+		Name: "Personal knowledge base", EmbeddingModelID: "chunk-search-fixed",
 	})
 	require.NoError(t, err)
 	loaded, err := service.GetKnowledgeBaseByID(f.ctx, created.ID)

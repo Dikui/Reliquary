@@ -356,7 +356,6 @@ type UpdateKnowledgeBaseRequest struct {
 	Name        string                     `json:"name"        binding:"required"`
 	Description string                     `json:"description"`
 	Config      *types.KnowledgeBaseConfig `json:"config"`
-	DomainID    *string                    `json:"domain_id"`
 	ModelTiers  *types.ModelTierConfig     `json:"model_tiers"`
 }
 
@@ -400,11 +399,7 @@ func (h *KnowledgeBaseHandler) UpdateKnowledgeBase(c *gin.Context) {
 		secutils.SanitizeForLog(id), secutils.SanitizeForLog(req.Name))
 
 	// Update the knowledge base
-	var domainIDs []string
-	if req.DomainID != nil {
-		domainIDs = []string{*req.DomainID}
-	}
-	kb, err := h.service.UpdateKnowledgeBase(ctx, id, req.Name, req.Description, req.Config, domainIDs...)
+	kb, err := h.service.UpdateKnowledgeBase(ctx, id, req.Name, req.Description, req.Config)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, nil)
 		if appErr, ok := apperrors.IsAppError(err); ok {

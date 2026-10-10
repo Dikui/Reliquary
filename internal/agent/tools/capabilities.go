@@ -57,11 +57,10 @@ var ToolCapabilityRequirements = map[string]ToolRequirement{
 	"knowledge_apply_anomaly":  {},
 
 	// ---- RAG / chunk retrieval (need at least one chunk-indexed KB) ----
-	"knowledge_search":        {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
-	"grep_chunks":             {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
-	"list_knowledge_chunks":   {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
-	ToolQueryKnowledgeContext: {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
-	"get_document_info":       {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
+	"knowledge_search":      {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
+	"grep_chunks":           {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
+	"list_knowledge_chunks": {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
+	"get_document_info":     {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
 
 	// ---- Data analysis (reads table summary/column chunks from RAG ingest) ----
 	"data_analysis": {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},

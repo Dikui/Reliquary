@@ -1138,9 +1138,6 @@ func (s *knowledgeService) UpdateManualKnowledge(ctx context.Context,
 	}
 
 	if !existing.IsSourceUpdateCandidate() && (existing.ParseStatus == types.ParseStatusCompleted || existing.ParseStatus == types.ParseStatusFinalizing) {
-		if err := s.snapshotContextSource(ctx, existing); err != nil {
-			return nil, fmt.Errorf("preserve original evidence: %w", err)
-		}
 	}
 
 	if intake != nil {
@@ -1233,9 +1230,6 @@ func (s *knowledgeService) createManualSourceUpdateCandidate(
 	payload *types.ManualKnowledgePayload,
 	status, cleanContent, safeTitle string,
 ) (*types.Knowledge, error) {
-	if err := s.snapshotContextSource(ctx, old); err != nil {
-		return nil, fmt.Errorf("preserve original evidence: %w", err)
-	}
 	metadata := stringMetadata(old.Metadata)
 	if externalID := metadata["external_id"]; externalID != "" {
 		metadata[sourceUpdateExternalIDKey] = externalID

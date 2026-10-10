@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"reliquary/internal/application/repository"
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -14,6 +16,28 @@ type intakeDeleteRepo struct {
 	interfaces.KnowledgeRepository
 	knowledge *types.Knowledge
 	deleted   bool
+}
+
+func TestDeleteArticleRemovesEntityAssociationsAndRetainsEntity(t *testing.T) {
+	db := pgtest.Open(t)
+	article := &types.Knowledge{ID: "article", TenantID: 1, KnowledgeBaseID: "kb", ParseStatus: types.ParseStatusCompleted}
+	entity := &types.Entity{ID: "entity", TenantID: 1, CanonicalName: "Acme", NormalizedName: "acme", EntityType: "company"}
+	require.NoError(t, db.Create(article).Error)
+	require.NoError(t, db.Create(entity).Error)
+	require.NoError(t, db.Create(&types.KnowledgeEntity{TenantID: 1, KnowledgeID: article.ID, EntityID: entity.ID}).Error)
+	svc := &knowledgeService{
+		db: db, repo: repository.NewKnowledgeRepository(db), kbService: intakeDeleteKB{},
+		fileSvc: &intakeFileService{}, chunkService: intakeDeleteChunks{repo: intakeDeleteChunkRepo{}},
+		tenantRepo: intakeTenantRepo{},
+	}
+	ctx := context.WithValue(context.Background(), types.TenantInfoContextKey, &types.Tenant{ID: 1})
+	ctx = context.WithValue(ctx, types.TenantIDContextKey, uint64(1))
+	require.NoError(t, svc.DeleteKnowledgeList(ctx, []string{article.ID}))
+	var count int64
+	require.NoError(t, db.Model(&types.KnowledgeEntity{}).Where("knowledge_id = ?", article.ID).Count(&count).Error)
+	require.Zero(t, count)
+	require.NoError(t, db.First(&types.Entity{}, "id = ?", entity.ID).Error)
+	require.Error(t, db.First(&types.Knowledge{}, "id = ?", article.ID).Error)
 }
 
 func (r *intakeDeleteRepo) GetKnowledgeBatch(context.Context, uint64, []string) ([]*types.Knowledge, error) {

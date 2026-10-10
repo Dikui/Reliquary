@@ -11,7 +11,6 @@ const (
 	ToolGrepChunks             = "grep_chunks"
 	ToolKnowledgeSearch        = "knowledge_search"
 	ToolListKnowledgeChunks    = "list_knowledge_chunks"
-	ToolQueryKnowledgeContext  = "query_knowledge_context"
 	ToolGetDocumentInfo        = "get_document_info"
 	ToolDataAnalysis           = "data_analysis"
 	ToolDataSchema             = "data_schema"
@@ -37,7 +36,6 @@ func AvailableToolDefinitions() []AvailableTool {
 		{Name: ToolGrepChunks, Label: "关键词搜索", Description: "快速定位包含特定关键词的文档和分块"},
 		{Name: ToolKnowledgeSearch, Label: "语义搜索", Description: "理解问题并查找语义相关内容"},
 		{Name: ToolListKnowledgeChunks, Label: "查看文档分块", Description: "获取文档完整分块内容"},
-		{Name: ToolQueryKnowledgeContext, Label: "查询知识上下文", Description: "查询对象、事实、关系和事件"},
 		{Name: ToolGetDocumentInfo, Label: "获取文档信息", Description: "查看文档元数据"},
 		{Name: ToolDataAnalysis, Label: "数据分析", Description: "理解数据文件并进行数据分析"},
 		{Name: ToolWebFetch, Label: "抓取网页", Description: "抓取指定网址的正文并分析内容"},
@@ -56,7 +54,6 @@ func DefaultAllowedTools() []string {
 		ToolKnowledgeSearch,
 		ToolGrepChunks,
 		ToolListKnowledgeChunks,
-		ToolQueryKnowledgeContext,
 		ToolGetDocumentInfo,
 		ToolKnowledgeReportAnomaly,
 		ToolKnowledgeImportURL,
@@ -68,8 +65,5 @@ func DefaultAllowedTools() []string {
 
 // CanonicalToolName accepts historical tool names while advertising only current names.
 func CanonicalToolName(name string) string {
-	if name == "query_knowledge_graph" {
-		return ToolQueryKnowledgeContext
-	}
 	return name
 }

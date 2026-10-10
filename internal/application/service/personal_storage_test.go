@@ -28,10 +28,8 @@ func TestPersonalIntakeBeyondFormerStorageLimitKeepsUsageAccounting(t *testing.T
 	require.False(t, db.Migrator().HasColumn(&types.Tenant{}, "storage_quota"))
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, tenant.ID)
 	ctx = context.WithValue(ctx, types.TenantInfoContextKey, tenant)
-	domain := BuiltinAIKnowledgeDomain()
-	require.NoError(t, db.Create(domain).Error)
 	kb := &types.KnowledgeBase{
-		ID: "personal-storage-kb", TenantID: tenant.ID, Name: "Personal library", DomainID: domain.ID, Type: types.KnowledgeBaseTypeDocument,
+		ID: "personal-storage-kb", TenantID: tenant.ID, Name: "Personal library", Type: types.KnowledgeBaseTypeDocument,
 		EmbeddingModelID: "embedding-1", IndexingStrategy: types.IndexingStrategy{VectorEnabled: true},
 	}
 	require.NoError(t, db.Create(kb).Error)

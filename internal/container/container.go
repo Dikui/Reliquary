@@ -124,13 +124,9 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewKnowledgeTagService))
 	must(container.Provide(service.NewKnowledgeAnomalyService))
 	must(container.Provide(service.NewKnowledgeStrategyService))
-	must(container.Provide(service.NewKnowledgeContextService))
-	must(container.Provide(service.NewKnowledgeDomainService))
-	must(container.Provide(service.NewKnowledgeContextWorker))
-	must(container.Provide(service.NewKnowledgeContextBackfillService))
-	must(container.Provide(service.NewContextNameEmbeddingRebuilder))
-	must(container.Provide(service.NewKnowledgeWorkflowService))
-	must(container.Provide(func(s *service.KnowledgeContextService) interfaces.KnowledgeContextReader { return s }))
+	must(container.Provide(service.NewKnowledgeAttentionService))
+	must(container.Provide(service.NewEntityService))
+	must(container.Provide(service.NewEntityNameEmbeddingRebuilder))
 	must(container.Provide(embedding.NewBatchEmbedder))
 	must(container.Provide(service.NewModelServiceWithRoutingDB))
 	must(container.Provide(service.NewUserService))
@@ -214,10 +210,8 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewKnowledgeHandler))
 	must(container.Provide(handler.NewKnowledgeAnomalyHandler))
 	must(container.Provide(handler.NewKnowledgeStrategyHandler))
-	must(container.Provide(handler.NewKnowledgeContextHandler))
-	must(container.Provide(handler.NewKnowledgeDomainHandler))
+	must(container.Provide(handler.NewEntityHandler))
 	must(container.Provide(handler.NewModelRoutingHandler))
-	must(container.Provide(handler.NewKnowledgeWorkflowHandler))
 	must(container.Provide(handler.NewChunkHandler))
 	must(container.Provide(handler.NewTagHandler))
 	must(container.Provide(session.NewHandler))
@@ -242,34 +236,28 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	// (which is not encoded in the local:// URL).
 	must(container.Invoke(registerChatLocalImageResolver))
 	must(container.Invoke(registerNameEmbeddingRebuildIntegration))
-	must(container.Invoke(func(backfill *service.KnowledgeContextBackfillService, h *handler.KnowledgeContextHandler) {
-		h.SetBackfillService(backfill)
-	}))
 
 	// Router configuration
 	logger.Debugf(ctx, "[Container] Registering router and starting task server...")
 	must(container.Provide(router.NewRouter))
 	must(container.Invoke(router.RunAsynqServer))
-	must(container.Invoke(recoverContextNameEmbeddings))
-	must(container.Invoke(startKnowledgeWorkflowScheduler))
+	must(container.Invoke(recoverEntityNameEmbeddings))
 
 	logger.Infof(ctx, "[Container] Container initialization completed successfully")
 	return container
 }
 
 func registerNameEmbeddingRebuildIntegration(
-	rebuilder *service.ContextNameEmbeddingRebuilder,
-	contextService *service.KnowledgeContextService,
-	domains *service.KnowledgeDomainService,
-	worker *service.KnowledgeContextWorker,
+	rebuilder *service.EntityNameEmbeddingRebuilder,
+	entityService *service.EntityService,
 	knowledgeBases interfaces.KnowledgeBaseService,
 	models interfaces.ModelService,
-	contextHandler *handler.KnowledgeContextHandler,
+	entityHandler *handler.EntityHandler,
 	modelRoutingHandler *handler.ModelRoutingHandler,
 ) error {
 	setter := func(target any) error {
 		integration, ok := target.(interface {
-			SetNameEmbeddingRebuilder(service.ContextNameEmbeddingRebuildTrigger)
+			SetNameEmbeddingRebuilder(service.EntityNameEmbeddingRebuildTrigger)
 		})
 		if !ok {
 			return fmt.Errorf("name embedding rebuild integration unavailable for %T", target)
@@ -283,15 +271,13 @@ func registerNameEmbeddingRebuildIntegration(
 	if err := setter(models); err != nil {
 		return err
 	}
-	domains.SetNameEmbeddingRebuilder(rebuilder)
-	worker.SetNameEmbeddingRebuilder(rebuilder)
-	contextService.SetNameEmbeddingRebuilder(rebuilder)
-	contextHandler.SetNameEmbeddingRebuilder(rebuilder)
+	entityService.SetNameEmbeddingRebuilder(rebuilder)
+	entityHandler.SetNameEmbeddingRebuilder(rebuilder)
 	modelRoutingHandler.SetNameEmbeddingRebuilder(rebuilder)
 	return nil
 }
 
-func recoverContextNameEmbeddings(rebuilder *service.ContextNameEmbeddingRebuilder) error {
+func recoverEntityNameEmbeddings(rebuilder *service.EntityNameEmbeddingRebuilder) error {
 	if err := rebuilder.Startup(context.Background()); err != nil {
 		logger.Warnf(context.Background(), "[Container] Name embedding rebuild startup recovery failed: %v", err)
 	}
@@ -421,9 +407,6 @@ func initDatabase(_ *config.Config) (*gorm.DB, error) {
 	}
 	if err := service.EnsureSingleTeamSpace(context.Background(), db); err != nil {
 		return nil, err
-	}
-	if err := service.EnsureBuiltinKnowledgeDomains(context.Background(), db); err != nil {
-		return nil, fmt.Errorf("initialize built-in knowledge domains: %w", err)
 	}
 	sqlDB, err := db.DB()
 	if err != nil {
@@ -619,13 +602,6 @@ func startTemporaryDocumentCleanup(svc interfaces.TemporaryDocumentService, clea
 		close(stop)
 		return nil
 	})
-}
-
-func startKnowledgeWorkflowScheduler(svc *service.KnowledgeWorkflowService, cleaner interfaces.ResourceCleaner) {
-	if err := svc.Start(context.Background()); err != nil {
-		logger.Warnf(context.Background(), "[Container] knowledge workflow scheduler: %v", err)
-	}
-	cleaner.RegisterWithName("KnowledgeWorkflowScheduler", func() error { svc.Stop(); return nil })
 }
 
 func registerStreamCleanup(manager interfaces.StreamManager, cleaner interfaces.ResourceCleaner) {

@@ -149,7 +149,7 @@ var registry = map[string]settingSpec{
 		Default:         int64(types.DefaultEnrichmentWorkerConcurrency),
 		Category:        "worker",
 		RequiresRestart: true,
-		Description:     "摘要、图片、知识上下文和问题生成的每实例保底并发。可额外使用共享弹性池；修改后需重启。",
+		Description:     "摘要、图片、实体档案和问题生成的每实例保底并发。可额外使用共享弹性池；修改后需重启。",
 	},
 	"asynq.maintenance_concurrency": {
 		Type:            "int",

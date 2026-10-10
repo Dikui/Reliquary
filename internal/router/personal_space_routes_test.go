@@ -58,9 +58,9 @@ func TestPersonalOldManagementRoutesReturnNotFound(t *testing.T) {
 func TestPersonalKnowledgeBaseExistenceGuardReturnsNotFound(t *testing.T) {
 	f := newPersonalAuthFixture(t)
 	for _, route := range []struct{ method, path, body string }{
-		{http.MethodGet, "/api/v1/knowledge-bases/missing/context/entities", ""},
-		{http.MethodPost, "/api/v1/knowledge-bases/missing/context/query", `{}`},
-		{http.MethodPost, "/api/v1/knowledge-bases/missing/context/rebuild", `{}`},
+		{http.MethodGet, "/api/v1/knowledge-bases/missing/knowledge", ""},
+		{http.MethodPost, "/api/v1/knowledge-bases/missing/knowledge/manual", `{}`},
+		{http.MethodPost, "/api/v1/knowledge-bases/missing/knowledge/url", `{}`},
 	} {
 		response := personalRequest(t, f.router, route.method, route.path, route.body, f.token, false)
 		require.Equal(t, http.StatusNotFound, response.Code, response.Body.String())

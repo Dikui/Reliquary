@@ -1,4 +1,4 @@
-import type { KnowledgeModelCall } from '../api/knowledge-context'
+export interface KnowledgeModelCall { stage: string; tier: string; model_id?: string; calls: number }
 
 export function modelCallsFromSpan(span?: { output?: unknown; metadata?: unknown }): KnowledgeModelCall[] {
   for (const value of [span?.metadata, span?.output]) {

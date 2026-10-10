@@ -55,9 +55,6 @@ func (s *knowledgeService) ReviewRSSUpdate(ctx context.Context, oldID string, pa
 	if err != nil {
 		return false, err
 	}
-	if err := s.snapshotContextSource(ctx, old); err != nil {
-		return false, fmt.Errorf("preserve original evidence: %w", err)
-	}
 	staged := *payload
 	staged.Status = types.ManualKnowledgeStatusDraft
 	staged.SourceMetadata = make(map[string]string, len(payload.SourceMetadata))
@@ -94,11 +91,6 @@ func (s *knowledgeService) ReviewRSSUpdate(ctx context.Context, oldID string, pa
 			}
 			if err := s.repo.DeleteKnowledgeTagRelations(ctx, candidate.ID); err != nil {
 				return err
-			}
-			if s.db != nil && s.db.Migrator().HasTable(&types.KnowledgeEvidence{}) {
-				if err := NewKnowledgeContextService(s.db, s.modelService).DeleteMessages(ctx, kb.ID, []string{candidate.ID}); err != nil {
-					return err
-				}
 			}
 		} else {
 			if err := s.DeleteKnowledge(ctx, candidate.ID); err != nil {
@@ -357,22 +349,6 @@ func (s *knowledgeService) promoteSourceUpdateCandidate(ctx context.Context, id 
 		return fmt.Errorf("preserve manual tag corrections: %w", err)
 	}
 
-	withContext := s.db != nil && s.db.Migrator().HasTable(&types.KnowledgeEvidence{})
-	if withContext {
-		body, err := s.contextMessageBody(ctx, candidate)
-		if err != nil {
-			return fmt.Errorf("read source update candidate original: %w", err)
-		}
-		if strings.TrimSpace(body) == "" {
-			return fmt.Errorf("source update candidate original is empty")
-		}
-		// Snapshot while the candidate is still hidden. Context queries and
-		// workers reject candidate rows, so evidence cannot leak before commit.
-		if _, err := NewKnowledgeContextService(s.db, s.modelService).snapshotFormalMessage(ctx, tenantID, candidate, body); err != nil {
-			return fmt.Errorf("snapshot source update evidence: %w", err)
-		}
-	}
-
 	var promotedKeep []string
 	var datasourceID, externalID string
 	var replacesSubtree bool
@@ -457,46 +433,6 @@ func (s *knowledgeService) promoteSourceUpdateCandidate(ctx context.Context, id 
 			return err
 		}
 		promoted = true
-		if !withContext {
-			return nil
-		}
-		var replacementEvidence types.KnowledgeEvidence
-		if err := tx.Where("knowledge_id = ? AND tenant_id = ? AND knowledge_base_id = ? AND status = ?", current.ID, tenantID, current.KnowledgeBaseID, types.KnowledgeEvidenceCurrent).
-			Order("version DESC").First(&replacementEvidence).Error; err != nil {
-			return fmt.Errorf("replacement evidence was not snapshotted: %w", err)
-		}
-		var oldEvidence []types.KnowledgeEvidence
-		if err := tx.Where("knowledge_id = ? AND tenant_id = ? AND knowledge_base_id = ? AND status = ?", old.ID, tenantID, old.KnowledgeBaseID, types.KnowledgeEvidenceCurrent).Find(&oldEvidence).Error; err != nil {
-			return err
-		}
-		affectedEvents := make(map[string]types.KnowledgeEvent)
-		for _, evidence := range oldEvidence {
-			if err := tx.Model(&types.KnowledgeEvidence{}).Where("id = ? AND tenant_id = ?", evidence.ID, tenantID).
-				Updates(map[string]any{"status": types.KnowledgeEvidenceSuperseded, "superseded_by_id": replacementEvidence.ID}).Error; err != nil {
-				return err
-			}
-			if err := tx.Model(&types.KnowledgeFact{}).Where("tenant_id = ? AND knowledge_base_id = ? AND evidence_id = ? AND status IN ?", tenantID, old.KnowledgeBaseID, evidence.ID,
-				[]string{types.KnowledgeFactCurrent, types.KnowledgeFactCorrected}).Update("status", types.KnowledgeFactSuperseded).Error; err != nil {
-				return err
-			}
-			var links []types.KnowledgeEventEvidence
-			if err := tx.Where("tenant_id = ? AND knowledge_base_id = ? AND evidence_id = ?", tenantID, old.KnowledgeBaseID, evidence.ID).Find(&links).Error; err != nil {
-				return err
-			}
-			for _, link := range links {
-				var event types.KnowledgeEvent
-				if err := tx.Where("id = ? AND tenant_id = ? AND knowledge_base_id = ?", link.EventID, tenantID, old.KnowledgeBaseID).First(&event).Error; err == nil {
-					affectedEvents[event.ID] = event
-				} else if err != gorm.ErrRecordNotFound {
-					return err
-				}
-			}
-		}
-		for _, event := range affectedEvents {
-			if err := updateContextEventHeat(tx, tenantID, old.KnowledgeBaseID, &event); err != nil {
-				return err
-			}
-		}
 		return nil
 	})
 	if err != nil {
@@ -507,13 +443,18 @@ func (s *knowledgeService) promoteSourceUpdateCandidate(ctx context.Context, id 
 			&types.DataSource{TenantID: tenantID, KnowledgeBaseID: candidate.KnowledgeBaseID, ID: datasourceID},
 			&types.FetchedItem{ExternalID: externalID, ReplacesSubtree: true, SubtreeKeep: promotedKeep})
 	}
-	if promoted {
+	if promoted && s.modelService != nil && s.kbService != nil {
 		var current types.Knowledge
 		if err := s.db.WithContext(ctx).Where("id = ? AND tenant_id = ?", id, tenantID).First(&current).Error; err != nil {
-			logger.Warnf(ctx, "load promoted source update %s for downstream refresh: %v", id, err)
+			logger.Warnf(ctx, "Load promoted article %s for attention scoring: %v", id, err)
 		} else if current.EnableStatus == "enabled" {
-			s.queueContextSource(ctx, &current)
-
+			kb, err := s.kbService.GetKnowledgeBaseByID(ctx, current.KnowledgeBaseID)
+			if err == nil {
+				err = s.scoreArticleAttention(ctx, kb, &current)
+			}
+			if err != nil {
+				logger.Warnf(ctx, "Attention scoring failed for promoted article %s: %v", id, err)
+			}
 		}
 	}
 	return nil

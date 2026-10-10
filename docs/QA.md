@@ -177,7 +177,7 @@ docker compose restart app
 
 ## 38. 使用与接口文档在哪里看？
 
-个人部署和登录说明见[个人使用指南](personal-use.md)，知识上下文与工作流说明见[知识库融合说明](知识库融合说明.md)。项目文档导航保留在 [docs/wiki](wiki/Home.md)。
+个人部署和登录说明见[个人使用指南](personal-use.md)，实体档案说明见[知识库融合说明](知识库融合说明.md)。项目文档导航保留在 [docs/wiki](wiki/Home.md)。
 
 ## 39. 文件夹上传后文档标题变成了一长串路径？
 

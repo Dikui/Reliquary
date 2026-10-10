@@ -25,10 +25,9 @@ type PluginQueryUnderstand struct {
 var rewriteImageSepPattern = regexp.MustCompile(`(?s)^(.*?)\s*\n?---\n(.*)$`)
 
 type queryUnderstandOutput struct {
-	RewriteQuery     string                        `json:"rewrite_query"`
-	Intent           types.QueryIntent             `json:"intent"`
-	ImageDescription string                        `json:"image_description"`
-	KnowledgeQueries []types.KnowledgeContextQuery `json:"knowledge_queries"`
+	RewriteQuery     string            `json:"rewrite_query"`
+	Intent           types.QueryIntent `json:"intent"`
+	ImageDescription string            `json:"image_description"`
 }
 
 // NewPluginQueryUnderstand creates a new query-understanding plugin instance
@@ -293,8 +292,7 @@ func (p *PluginQueryUnderstand) buildPrompts(
 	if chatManage.RewritePromptSystem != "" {
 		systemPrompt = chatManage.RewritePromptSystem
 	}
-	systemPrompt += `
-In the same JSON response, add knowledge_queries: up to 4 structured lookups derived from the question and conversation. Each has optional entity (object name/alias), predicate or relation, since/until (RFC3339 when specified), and include_history (true only for historical/change questions). Model-selection fields: context_length, local_deployment, license, released_on; relations: developed_by, successor_of. An entity may be empty when the user asks which objects satisfy a named field. Numeric min_value/max_value and unit are allowed only for thresholds explicitly given by the user; do not infer unknown units. Use an empty array for questions with no identifiable structured field or object. Do not invent IDs, facts or thresholds. Structured results are queried first; original text supplements gaps and explanations.`
+	systemPrompt += ``
 
 	conversationText := formatConversationHistory(historyList)
 
@@ -336,7 +334,6 @@ func (p *PluginQueryUnderstand) parseOutput(chatManage *types.ChatManage, raw st
 		}
 		chatManage.Intent = output.Intent
 		chatManage.ImageDescription = strings.TrimSpace(output.ImageDescription)
-		chatManage.KnowledgeQueries = output.KnowledgeQueries
 		return
 	}
 
@@ -375,20 +372,6 @@ func parseStructuredQueryOutputJSON(content string) (queryUnderstandOutput, bool
 	out := queryUnderstandOutput{
 		RewriteQuery: strings.TrimSpace(firstStringField(obj,
 			"rewrite_query", "rewritten_query", "query", "question")),
-	}
-	var queries []types.KnowledgeContextQuery
-	if json.Unmarshal(obj["knowledge_queries"], &queries) == nil {
-		for _, q := range queries {
-			if strings.TrimSpace(q.Entity) == "" && strings.TrimSpace(q.Predicate) == "" && strings.TrimSpace(q.Relation) == "" || len([]rune(q.Entity)) > 512 {
-				continue
-			}
-			q.EntityID, q.ObjectEntityID, q.EventID, q.KnowledgeIDs = "", "", "", nil
-			q.Limit, q.Offset = 30, 0
-			out.KnowledgeQueries = append(out.KnowledgeQueries, q)
-			if len(out.KnowledgeQueries) == 4 {
-				break
-			}
-		}
 	}
 
 	intentStr := strings.TrimSpace(firstStringField(obj, "intent"))

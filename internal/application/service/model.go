@@ -32,7 +32,7 @@ type modelService struct {
 	ollamaService          *ollama.OllamaService
 	pooler                 embedding.EmbedderPooler
 	tenantService          interfaces.TenantService
-	nameEmbeddingRebuilder ContextNameEmbeddingRebuildTrigger
+	nameEmbeddingRebuilder EntityNameEmbeddingRebuildTrigger
 }
 
 func NewModelServiceWithRoutingDB(repo interfaces.ModelRepository, kbRepo interfaces.KnowledgeBaseRepository, agentRepo interfaces.CustomAgentRepository, ollamaService *ollama.OllamaService, pooler embedding.EmbedderPooler, tenantService interfaces.TenantService, db *gorm.DB) interfaces.ModelService {
@@ -247,7 +247,7 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 	logger.Infof(ctx, "Model updated successfully: %s", model.ID)
 	if s.nameEmbeddingRebuilder != nil && existingModel != nil &&
 		(existingModel.Type == types.ModelTypeEmbedding || model.Type == types.ModelTypeEmbedding) &&
-		contextEmbeddingProfileHash(existingModel.ID, existingModel.Parameters.EmbeddingParameters.Dimension, existingModel) != contextEmbeddingProfileHash(model.ID, model.Parameters.EmbeddingParameters.Dimension, model) {
+		entityEmbeddingProfileHash(existingModel.ID, existingModel.Parameters.EmbeddingParameters.Dimension, existingModel) != entityEmbeddingProfileHash(model.ID, model.Parameters.EmbeddingParameters.Dimension, model) {
 		profileModel, resolveErr := ResolveModelTier(ctx, s.db, nil, types.ModelTierEmbedding)
 		if resolveErr != nil {
 			return fmt.Errorf("model saved but name embedding profile could not be resolved: %w", resolveErr)
@@ -416,15 +416,6 @@ func (s *modelService) getModelUsageDetails(
 		ModelTiers:     []types.ModelTierUsageResource{},
 		KnowledgeBases: make([]types.ModelUsageResource, 0),
 		Agents:         make([]types.ModelUsageResource, 0),
-	}
-	if s.db != nil {
-		var domains []types.KnowledgeDomain
-		if err := s.db.WithContext(ctx).Select("id", "name", "model_tiers").Where("tenant_id = ? AND (model_tiers->>'light' = ? OR model_tiers->>'extraction' = ? OR model_tiers->>'generation' = ? OR model_tiers->>'embedding' = ? OR model_tiers->>'rerank' = ?)", tenantID, modelID, modelID, modelID, modelID, modelID).Find(&domains).Error; err != nil {
-			return details, err
-		}
-		for _, domain := range domains {
-			details.ModelTiers = append(details.ModelTiers, types.ModelTierUsageResource{Scope: "domain", ID: domain.ID, Name: domain.Name, Bindings: domain.ModelTiers.UsageBindings(modelID)})
-		}
 	}
 
 	kbCount, err := s.kbRepo.CountByModelID(ctx, tenantID, modelID)

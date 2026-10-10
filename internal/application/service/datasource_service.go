@@ -1423,11 +1423,6 @@ func (s *DataSourceService) markSourceUpdateCandidate(
 	ctx context.Context, ds *types.DataSource, old *types.Knowledge, metadata map[string]string,
 	contentHash string, subtreeKeep []string, replacesSubtree bool,
 ) (map[string]string, error) {
-	if concrete, ok := s.knowledgeService.(*knowledgeService); ok {
-		if err := concrete.snapshotContextSource(ctx, old); err != nil {
-			return nil, fmt.Errorf("preserve replaced source evidence: %w", err)
-		}
-	}
 	result := make(map[string]string, len(metadata)+5)
 	for key, value := range metadata {
 		if key != "external_id" {

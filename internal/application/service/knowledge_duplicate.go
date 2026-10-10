@@ -22,6 +22,10 @@ import (
 
 const minimumSimHashRunes = 100
 
+func normalizeRepostName(name string) string {
+	return strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(name)), " "))
+}
+
 // normalizeMessageURL gives repeated deliveries a stable key. Query values are
 // preserved because they can identify different articles.
 func normalizeMessageURL(raw string) string {
@@ -188,7 +192,7 @@ func findMessageDuplicate(tx *gorm.DB, k *types.Knowledge, earlierPendingOnly ..
 }
 
 func recordMessageRepost(tx *gorm.DB, existing, incoming *types.Knowledge, method string, distance int) error {
-	if err := lockContextTeamShared(tx, existing.TenantID); err != nil {
+	if err := lockEntitySpaceShared(tx, existing.TenantID); err != nil {
 		return err
 	}
 	source := types.SourceInfo{OriginalURL: incoming.Source}
@@ -196,9 +200,8 @@ func recordMessageRepost(tx *gorm.DB, existing, incoming *types.Knowledge, metho
 		source = intake.SourceInfo
 	}
 	normalizedURL := normalizeMessageURL(source.OriginalURL)
-	// Publisher is part of provenance identity: syndicated reports from one
-	// publisher may have multiple URLs but still contribute one heat source.
-	origin := normalizedURL + "\x00" + normalizeContextName(source.Publisher) + "\x00" + normalizeContextName(source.Author)
+	// Publisher and author distinguish the provenance of repeated deliveries.
+	origin := normalizedURL + "\x00" + normalizeRepostName(source.Publisher) + "\x00" + normalizeRepostName(source.Author)
 	if normalizedURL == "" {
 		origin += "\x00" + source.PublishedAt
 	}
@@ -206,7 +209,7 @@ func recordMessageRepost(tx *gorm.DB, existing, incoming *types.Knowledge, metho
 	repost := types.KnowledgeRepostSource{
 		ID: uuid.NewString(), TenantID: existing.TenantID, KnowledgeBaseID: incoming.KnowledgeBaseID, KnowledgeID: existing.ID,
 		OriginalURL: source.OriginalURL, NormalizedURL: normalizedURL, SourceFingerprint: hex.EncodeToString(hash[:]),
-		Author: source.Author, Publisher: source.Publisher, PublishedAt: source.PublishedAt, PublishedAtMissing: parseContextTime(source.PublishedAt) == nil,
+		Author: source.Author, Publisher: source.Publisher, PublishedAt: source.PublishedAt, PublishedAtMissing: parsePublicationTime(source.PublishedAt) == nil,
 		MatchMethod: method, SimHashDistance: distance, CreatedAt: time.Now(),
 	}
 	updates := clause.Assignments(map[string]any{
@@ -235,17 +238,6 @@ func recordMessageRepost(tx *gorm.DB, existing, incoming *types.Knowledge, metho
 			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "tenant_id"}, {Name: "knowledge_id"}, {Name: "source_fingerprint"}}, DoNothing: true}).Create(&source).Error; err != nil {
 				return err
 			}
-		}
-	}
-	var events []types.KnowledgeEvent
-	linked := tx.Model(&types.KnowledgeEventEvidence{}).Select("event_id").Where("tenant_id = ? AND evidence_id IN (?)", existing.TenantID,
-		tx.Model(&types.KnowledgeEvidence{}).Select("id").Where("tenant_id = ? AND knowledge_id = ? AND status = ?", existing.TenantID, existing.ID, types.KnowledgeEvidenceCurrent))
-	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("tenant_id = ? AND id IN (?)", existing.TenantID, linked).Order("id ASC").Find(&events).Error; err != nil {
-		return err
-	}
-	for i := range events {
-		if err := updateContextEventHeat(tx, existing.TenantID, existing.KnowledgeBaseID, &events[i]); err != nil {
-			return err
 		}
 	}
 	existing.DuplicateMatchMethod = method
@@ -332,20 +324,12 @@ func loadKnowledgeRepostSources(db *gorm.DB, tenantID uint64, knowledgeIDs, kbID
 	if db == nil || len(knowledgeIDs) == 0 {
 		return items, nil
 	}
-	query := db.Where("tenant_id = ? AND knowledge_id IN ?", tenantID, uniqueContextIDs(knowledgeIDs))
+	query := db.Where("tenant_id = ? AND knowledge_id IN ?", tenantID, uniqueArticleIDs(knowledgeIDs))
 	if len(kbIDs) > 0 {
 		query = query.Where("knowledge_base_id IN ?", kbIDs)
 	}
 	err := query.Order("created_at ASC, id ASC").Find(&items).Error
 	return items, err
-}
-
-func contextHeatWithReposts(evidence []types.KnowledgeEvidence, reposts []types.KnowledgeRepostSource) (int, float64) {
-	items := append([]types.KnowledgeEvidence(nil), evidence...)
-	for _, source := range reposts {
-		items = append(items, types.KnowledgeEvidence{Publisher: source.Publisher, Author: source.Author, OriginalURL: source.OriginalURL, PublishedAt: source.PublishedAt})
-	}
-	return contextHeat(items, contextHeatWindow, contextHeatHalfLife)
 }
 
 func (s *knowledgeService) stopDuplicateProcessing(ctx context.Context, incoming *types.Knowledge) error {
@@ -357,4 +341,26 @@ func (s *knowledgeService) stopDuplicateProcessing(ctx context.Context, incoming
 	}
 	s.tracker().FinalizeAttempt(ctx, incoming.ID, s.tracker().LatestAttempt(ctx, incoming.ID), "done", types.JSONMap{"duplicate": true}, "", "")
 	return s.repo.HardDeleteKnowledge(ctx, incoming.TenantID, incoming.ID)
+}
+
+func parsePublicationTime(value string) *time.Time {
+	value = strings.TrimSpace(value)
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339, time.DateOnly, "2006-01-02 15:04:05"} {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			return &parsed
+		}
+	}
+	return nil
+}
+
+func uniqueArticleIDs(ids []string) []string {
+	result := make([]string, 0, len(ids))
+	seen := map[string]bool{}
+	for _, id := range ids {
+		if id != "" && !seen[id] {
+			result = append(result, id)
+			seen[id] = true
+		}
+	}
+	return result
 }

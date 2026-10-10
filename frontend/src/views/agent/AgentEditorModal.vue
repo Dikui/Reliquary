@@ -1526,7 +1526,7 @@ const defaultMaxCompletionTokensFor = (mode: string) => mode === 'smart-reasonin
   : defaultQuickAnswerMaxCompletionTokens;
 
 // 知识库相关工具列表（用于 watch(hasKnowledgeBase) 从"无"变"有"时 seed 默认工具）
-const knowledgeBaseTools = ['grep_chunks', 'knowledge_search', 'list_knowledge_chunks', 'query_knowledge_context', 'get_document_info', 'knowledge_report_anomaly', 'knowledge_import_url', 'knowledge_apply_anomaly'];
+const knowledgeBaseTools = ['grep_chunks', 'knowledge_search', 'list_knowledge_chunks', 'get_document_info', 'knowledge_report_anomaly', 'knowledge_import_url', 'knowledge_apply_anomaly'];
 
 // 初始化标志，防止初始化时触发 watch 自动添加工具
 const isInitializing = ref(false);
@@ -1550,7 +1550,6 @@ const allTools = computed(() => [
   { value: 'grep_chunks', label: t('agentEditor.tools.grepChunks'), description: t('agentEditor.tools.grepChunksDesc'), group: 'rag' },
   { value: 'knowledge_search', label: t('agentEditor.tools.knowledgeSearch'), description: t('agentEditor.tools.knowledgeSearchDesc'), group: 'rag' },
   { value: 'list_knowledge_chunks', label: t('agentEditor.tools.listChunks'), description: t('agentEditor.tools.listChunksDesc'), group: 'rag' },
-  { value: 'query_knowledge_context', label: t('agentEditor.tools.queryContext'), description: t('agentEditor.tools.queryContextDesc'), group: 'rag' },
   { value: 'get_document_info', label: t('agentEditor.tools.getDocInfo'), description: t('agentEditor.tools.getDocInfoDesc'), group: 'rag' },
   { value: 'knowledge_report_anomaly', label: t('agentEditor.tools.knowledgeReportAnomaly'), description: t('agentEditor.tools.knowledgeReportAnomalyDesc'), group: 'rag' },
   { value: 'knowledge_import_url', label: t('agentEditor.tools.knowledgeImportURL'), description: t('agentEditor.tools.knowledgeImportURLDesc'), group: 'rag' },
@@ -1600,13 +1599,12 @@ const ragKbCount = computed(() => kbsInScope.value.filter(kb => kb.ragEnabled).l
 // 把"作用域内 KB 能力"聚合成一个 ScopeCapabilities 对象，交给
 // `evaluateToolRequirement` 统一判定；UI 上的所有可用性提示都应出自此处。
 const scopeCapabilities = computed<ScopeCapabilities>(() => {
-  const scope: ScopeCapabilities = { vector: false, keyword: false, context: false, };
+  const scope: ScopeCapabilities = { vector: false, keyword: false, };
   for (const kb of kbsInScope.value) {
     const caps = kb.capabilities;
     if (caps) {
       if (caps.vector) scope.vector = true;
       if (caps.keyword) scope.keyword = true;
-      if (caps.context) scope.context = true;
     } else {
       // 向后兼容：capabilities 尚未加载时，退回到 ragEnabled 推断
       if (kb.ragEnabled) { scope.vector = true; scope.keyword = true; }
@@ -1622,7 +1620,6 @@ const missKindToReason = (kind: RequirementMissKind): string | undefined => {
   switch (kind) {
     case 'needsKb': return t('agentEditor.tools.requiresKb');
     case 'needsRag': return t('agentEditor.tools.requiresRagKb');
-    case 'needsContext':
     case 'none':
     default: return undefined;
   }
@@ -2256,13 +2253,11 @@ const kbSatisfiesPresetFilter = (kb: { capabilities?: KBCapabilities; ragEnabled
   const caps = kb.capabilities || {
     vector: !!kb.ragEnabled,
     keyword: !!kb.ragEnabled,
-    context: false,
     };
   const has = (name: string): boolean => {
     switch (name) {
       case 'vector': return !!caps.vector;
       case 'keyword': return !!caps.keyword;
-      case 'context': return !!caps.context;
       default: return false;
     }
   };
@@ -2675,7 +2670,6 @@ watch(agentMode, (val, _oldVal) => {
           'knowledge_search',
           'grep_chunks',
           'list_knowledge_chunks',
-          'query_knowledge_context',
           'get_document_info',
         );
       }

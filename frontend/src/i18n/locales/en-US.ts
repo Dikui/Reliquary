@@ -7,31 +7,28 @@ export default {
   },
 
   modelTiers: {
-  configureGlobal: 'Configure global defaults',
-  configureDomains: 'Configure domain tiers',
+  "configureGlobal": "Configure global defaults",
   "title": "Model tiers",
   "scopeHint": {
-    "global": "Set global defaults. Domains and knowledge bases can override each tier. Clear a selection to use existing defaults.",
-    "domain": "Override global defaults. Clear a tier to inherit the global configuration.",
-    "knowledge_base": "Override domain and global defaults. Clear a tier to inherit the domain, then the global and existing defaults."
+    "global": "Set global defaults. Knowledge bases can override each tier. Clear a tier to use existing defaults.",
+    "knowledge_base": "Override global models. Clear a tier to inherit global and existing defaults."
   },
   "names": {
     "light": "Light",
-    "extraction": "Extraction",
     "generation": "Generation",
     "embedding": "Embedding",
-    "rerank": "Rerank"
+    "rerank": "Rerank",
+    "entity_resolution": "Entity resolution"
   },
   "uses": {
-    "light": "Filtering, tags, attention scores, and entity and event decisions",
-    "extraction": "Extract entities, facts and events from source text",
-    "generation": "Answers and reports",
-    "embedding": "Content retrieval and entity name similarity",
-    "rerank": "Rank retrieved results"
+    "light": "Screening, tags, attention scoring and entity judgment",
+    "generation": "Generate answers",
+    "embedding": "Document retrieval and entity name similarity",
+    "rerank": "Rank retrieved results",
+    "entity_resolution": "Determine whether entity candidates belong to existing entities"
   },
   "sources": {
     "global": "Global default",
-    "domain": "Domain override",
     "knowledge_base": "Knowledge base override",
     "legacy": "Existing model configuration",
     "default": "System default",
@@ -41,7 +38,7 @@ export default {
   "useDefault": "Use existing defaults",
   "effective": "Current model: {model} ({source})",
   "unconfigured": "No model configured",
-  "explicitChoice": "Explicit conversation and report model selections take priority. Otherwise, they use the generation tier.",
+  "explicitChoice": "Explicit model choices in conversations take precedence. Otherwise use the generation tier.",
   "loadFailed": "Could not load model configuration. Try again.",
   "saveFailed": "Could not save model configuration. Try again.",
   "saved": "Model tiers saved",
@@ -49,7 +46,7 @@ export default {
 },
   mergeSuggestions: {
   "title": "Merge suggestions",
-  "description": "Entities remain separate when a match is uncertain. Check the source before deciding whether to merge into the candidate.",
+  "description": "Uncertain entities stay separate. Check the article before merging into a candidate.",
   "statusFilter": "Suggestion status",
   "status": {
     "pending": "Pending",
@@ -66,38 +63,27 @@ export default {
   "accept": "Accept and merge",
   "reject": "Reject suggestion",
   "confirmTitle": "Accept and merge entities",
-  "confirmBody": "Merge “{source}” into “{target}”? Facts, relations and aliases across the workspace will refer to the retained entity.",
+  "confirmBody": "Merge “{source}” into “{target}”? Aliases and article links in this space will move to the retained entity.",
   "feedback": {
     "accept": "Suggestion accepted and entities merged",
-    "reject": "Suggestion rejected; entities remain separate"
+    "reject": "Suggestion rejected and entities kept separate"
   },
   "loaded": "Loaded {count} suggestion | Loaded {count} suggestions"
 },
-  extractionDetails: {
-  "partial": "Some segments processed",
-  "complete": "All segments processed",
-  "segments": "Processed {processed} / {total} segment | Processed {processed} / {total} segments",
-  "partialHint": "Only some segments completed extraction. Content from unprocessed or failed segments remains in the source.",
+  modelCalls: {
   "callsTitle": "Model calls",
   "noCalls": "No model calls recorded.",
   "stage": "Processing stage",
   "tier": "Model tier",
   "calls": "Calls",
   "totalCalls": "Total",
-  "fullExtraction": "Full extraction",
-  "unspecifiedExtraction": "Structured extraction",
   "otherCall": "Other model call",
   "stages": {
-    "context_extraction": "Entity and template field extraction",
-    "context_full_extraction": "Open field and event supplementation",
-    "context_backfill_extraction": "Historical message supplementation",
-    "context_entity_judgment": "Entity identity judgment",
-    "context_event_judgment": "Event occurrence judgment",
-    "context_entity_resolution": "Entity identity resolution",
-    "context_event_resolution": "Event aggregation resolution",
-    "context_attention": "Attention value scoring",
-    "context_entity_embedding": "Entity name embedding",
-    "context_entity_embedding_rebuild": "Entity name embedding rebuild",
+    "entity_judgment": "Entity identity judgment",
+    "entity_resolution": "Entity identity resolution",
+    "entity_embedding": "Entity name embedding",
+    "entity_embedding_rebuild": "Entity name embedding rebuild",
+    "attention": "Attention value scoring",
     "intake": "Filtering and tags",
     "classification": "Filtering and tags",
     "auto_tag": "Tag classification",
@@ -105,99 +91,7 @@ export default {
     "generation": "Content generation"
   }
 },
-  knowledgeDomains: {
-    view: 'View',
-    "title": "Domains",
-    "description": "Define the entity types, fact fields, relations, and units used by each knowledge base.",
-    "create": "Create domain",
-    "edit": "Edit domain",
-    "template": "Domain template",
-    "name": "Name",
-    "domainDescription": "Description",
-    "builtin": "Built in",
-    "builtinHint": "Built in domains can be edited and cannot be deleted.",
-    "search": "Search domain names or descriptions",
-    "empty": "No domains yet. Create a domain before adding knowledge bases.",
-    "noResults": "No matching domains. Try a different search.",
-    "actions": "Actions",
-    "entityTypes": "Entity types",
-    "fields": "Fields",
-    "relations": "Relations",
-    "unitFamilies": "Unit families",
-    "extractionHints": "Extraction hints",
-    "key": "Key",
-    "label": "Label",
-    "aliases": "Aliases",
-    "valueType": "Value type",
-    "unitFamily": "Unit family",
-    "appliesTo": "Applicable entity types",
-    "allTypes": "All types",
-    "tagHint": "Type and press Enter to add",
-    "fieldsHint": "Extraction prefers template fields and keeps other information under its original field name.",
-    "newField": "Create field",
-    "addField": "Add field",
-    "noFields": "No template fields. Extracted fields remain open fields.",
-    "subjectTypes": "Subject types",
-    "objectTypes": "Object types",
-    "newRelation": "New relation",
-    "addRelation": "Add relation",
-    "noRelations": "No relations defined yet.",
-    "unitsHint": "The conversion factor expresses the value in canonical units. The canonical unit must have a factor of 1. Missing or unknown units are never inferred.",
-    "canonicalUnit": "Canonical unit",
-    "unitName": "Unit name",
-    "factor": "Conversion factor",
-    "addUnit": "Add unit",
-    "deleteUnit": "Delete unit {name}",
-    "newUnitFamily": "New unit family",
-    "addUnitFamily": "Add unit family",
-    "noUnits": "No unit families. Numeric values are compared using their stated units.",
-    "hintsDescription": "Add rules about identity, versions, conditions, and conflicting statements.",
-    "saved": "Domain saved",
-    "deleted": "Domain deleted",
-    "failed": "The operation failed. Try again.",
-    "deleteTitle": "Delete domain",
-    "deleteHint": "A domain used by a knowledge base cannot be deleted.",
-    "deleteReferenced": "This domain is used by {count} knowledge base and cannot be deleted. | This domain is used by {count} knowledge bases and cannot be deleted.",
-    "deleteConfirm": "Delete domain “{name}”? Domains used by knowledge bases cannot be deleted.",
-    "discardTitle": "Discard unsaved changes",
-    "discardHint": "These changes have not been saved. Going back will discard them.",
-    "discard": "Discard changes",
-    "consolidation": "Field consolidation",
-    "consolidationHint": "Mapping an open field adds its name to template queries. Original facts and evidence remain unchanged.",
-    "saveBeforeConsolidation": "Save or cancel template changes before consolidating fields.",
-    "noOpenFields": "No open fields need consolidation.",
-    "openField": "Open field name",
-    "count": "Occurrences",
-    "examples": "Example facts",
-    "map": "Map field",
-    "mapTitle": "Map open field “{name}”",
-    "targetField": "Template field",
-    "newFieldTitle": "Create a template field from “{name}”",
-    "newFieldHint": "If you change the key, the original open field name is kept as an alias.",
-    "mapped": "Field mapping saved",
-    "fieldCreated": "Template field created",
-    "domainRequired": "Select a domain for this knowledge base.",
-    "selectDomain": "Select domain",
-    "kbDomainHint": "The domain template supplies entity types, fields, relations, and units for extraction.",
-    "loadFailed": "Domains could not be loaded. Try again.",
-    "retry": "Reload domains",
-    "valueTypes": {
-      "number": "Number",
-      "text": "Text",
-      "date": "Date",
-      "boolean": "Boolean"
-    },
-    "validation": {
-      "duplicateAliases": "A label or alias cannot identify different fields or relations.",
-      "unknownEntityType": "Entity types must be unique. Field and relation types must be defined in this domain.",
-      "nameRequired": "Enter a domain name.",
-      "keysRequired": "Field, relation, and unit family keys cannot be empty.",
-      "duplicateKeys": "Keys must be unique within each definition type.",
-      "invalidUnit": "Enter unit names and positive conversion factors, including a canonical unit with a factor of 1.",
-      "unknownFamily": "Each field unit family must be defined in this domain.",
-      "invalidType": "Select a valid field value type."
-    }
-  },
+
   knowledgeStrategy: {
     "evaluation": {
       "title": "Filter evaluation",
@@ -239,71 +133,89 @@ export default {
     }
   },
   knowledgeWorkbench: {
-    backfill: {
-      start: 'Backfill historical messages', title: 'Backfill historical messages for “{name}”',
-      estimate: '{messages} pending; this batch needs an estimated {modelCalls}.',
-      batchLimit: 'This batch processes the latest {messages}. {remainingMessages} for later batches.',
-      messageCount: '{count} message | {count} messages',
-      modelCallCount: '{count} model call | {count} model calls',
-      remainingMessages: '{count} message remains | {count} messages remain',
-      callEstimateHint: 'The estimate includes supplement extraction and event decisions. Actual calls vary with the number of events.',
-      confirm: 'Backfill the latest {messages} for “{name}”, with an estimated {modelCalls}. {remainingMessages}. Calls vary with event count. Only open fields and events are added; existing template facts and corrections are preserved.',
-      queued: 'Historical message backfill queued for maintenance', results: 'View backfill batches',
-      resultsHint: 'Each batch records message, success, and failure counts. Active batches refresh automatically.',
-      messageResults: 'View message results', noBatches: 'No backfill batches yet.', loading: 'Calculating pending messages and model calls.', unavailable: 'Pending message count is unavailable.',
-      inProgress: 'Backfill is in progress. Check the batch results.', starFirst: 'Add a star to backfill historical messages manually.',
-      latest: 'Latest batch: {status}; {messages}, {success} succeeded, {failure} failed.',
-      batchCounts: '{messages}, {success} succeeded, {failure} failed.',
-      status: { pending: 'Pending', processing: 'Processing', completed: 'Completed', completed_with_failures: 'Completed with failures', failed: 'Failed' },
-    },
-    focus: {
-      title: 'Focus scope', description: 'Starred entities, starred topics, and enabled tracking workflows determine which new messages receive full extraction.',
-      futureMessages: 'Starring applies to messages ingested afterward and does not automatically extract historical messages again. Removing a star preserves existing facts and events; an enabled tracking workflow may still keep the entity or topic in focus.',
-      star: 'Add star', unstar: 'Remove star', starNamed: 'Star “{name}”', unstarNamed: 'Remove star from “{name}”',
-      starred: 'Star added', unstarred: 'Star removed',
-      starredEntities: 'Starred entities', starredTopics: 'Starred topics', trackedEntities: 'Entities in tracking workflows', trackedTopics: 'Topics in tracking workflows',
-      noStarredEntities: 'No starred entities yet. Add a star in the entity list or details.', noStarredTopics: 'No starred topics yet. Add a star to a topic tag below.',
-      noTrackedEntities: 'Enabled tracking workflows do not refer to any entities yet.', noTrackedTopics: 'Enabled tracking workflows do not refer to any topics yet.', enabledTracking: 'Enabled tracking workflow',
-      topics: 'Topic tags', topicsDescription: 'Star a specific referent tag so new messages carrying that tag receive full fact and event extraction.', filterTopics: 'Filter topic tags', noTopics: 'No matching specific referent tags.',
-      topicProfile: 'Topic profile', topicKinds: { topic: 'Topic', object: 'Entity', event: 'Event' },
-    },
-    sourceTime: { excluded: 'Source excluded because publication time is missing: {count} | Sources excluded because publication time is missing: {count}', missing: 'Publication time missing', reposts: 'Repost sources', unknownPublisher: 'Unknown publisher', matchMethod: 'Duplicate detection', matchMethods: { url: 'Normalized URL', content_hash: 'Identical content', simhash: 'Near duplicate', file_hash: 'Identical file', other: 'Other method' } },
-    nameEmbeddings: {
-      title: 'Object name embeddings',
-      pending: 'Object name pending rebuild: {count} | Object names pending rebuild: {count}',
-      unknown: 'Unavailable',
-      rebuild: 'Rebuild now',
-      latest: 'Latest rebuild: {status}, {processed}/{total} object processed | Latest rebuild: {status}, {processed}/{total} objects processed',
-      noRun: 'No rebuild has run yet',
-      failure: 'Failure reason: {reason}',
-      queued: 'Object name embedding rebuild queued',
-      status: { pending: 'Pending', running: 'Running', completed: 'Completed', failed: 'Failed' },
-    },
-
-    scope: {"label": "Query scope", "knowledge_base": "Current knowledge base", "domain": "All knowledge bases in a domain", "all": "All knowledge bases", "selectDomain": "Select a query domain", "sourceKb": "Source knowledge base", "detailHint": "Entity identities are shared across the workspace. The facts and events below include sources from every knowledge base.", "workflowHint": "Workflows and reports belong to the current knowledge base. Fact query steps can use a separate scope."},
-    fusion: {"minValue": "Minimum value", "maxValue": "Maximum value", "unit": "Comparison unit", "queryHint": "Query using fields or aliases from domain templates. Numeric comparisons require compatible units from the same family; counts describe only the returned records.", "originalField": "Original field label", "snapshotTitle": "Verify the source quote", "quoteMissing": "This quote does not exactly match the snapshot. Check the original text; no position is guessed.", "sameStory": "Related earlier event", "roundup": "Roundup: kept separate from the individual events", "current_period": "This period", "background": "Historical background", "unknown_date": "Unknown date"},
-    tabLabel: 'Knowledge Workbench', title: 'Knowledge Workbench', subtitle: "Manage and organize document knowledge bases", sections: 'Knowledge workbench sections', refresh: 'Refresh', rebuild: 'Rebuild knowledge context', requestFailed: 'The request failed. Please try again.', emptyValue: 'Not set', unknownDate: 'Unknown time', facts: 'Facts', correct: 'Correct fact', correctionSaved: 'Fact correction saved with its source and history.', correctionTitle: 'Correct fact', correctionIntro: 'Create a new version of “{predicate}”. The quote must match the source text.', correctionValue: 'Correct value', correctionValueType: 'Value type', correctionUnit: 'Unit', correctionQuote: 'Verbatim source quote', correctionNote: 'Correction note', correctionFrom: 'Effective from', correctionTo: 'Effective until', correctionValueInvalid: 'Enter a valid value for the selected type.', cancel: 'Cancel', factPeriod: 'Effective period', rebuildQueued: '{count} source was queued for rebuilding. Results will update after background processing finishes. | {count} sources were queued for rebuilding. Results will update after background processing finishes.', loadMore: 'Load more',
-    nav: { focus: 'Focus scope', merges: 'Merge suggestions', query: 'Structured query', entities: 'Entities & facts', events: 'Event attention', evidence: 'Source evidence', workflows: 'Tracking workflows', reports: 'Research reports' },
-    query: { templateOnlyMessages: 'Another relevant message has only template fields extracted. | Another {count} relevant messages have only template fields extracted.', title: 'Query knowledge context', description: 'Filter facts by entity, attribute, relation, and time, then inspect current values, history, and evidence.', entity: 'Entity name', entityPlaceholder: 'For example: Acme Inc.', predicate: 'Fact attribute', predicatePlaceholder: 'For example: headquarters, status, funding round', relation: 'Relation type', relationPlaceholder: 'For example: invested in, acquired, partnered with', since: 'From', until: 'Until', history: 'Include superseded facts', submit: 'Query', clear: 'Clear filters', resultCounts: 'Found {entityCount}, {factCount}, {eventCount}, and {evidenceCount}.', historyIncluded: 'Results include historical versions', empty: 'No matching facts, events, or sources.' },
-    entities: { title: 'Entities & facts', description: 'Browse entities and inspect their relations, attributes, sources, and history.', filter: 'Filter entities', empty: 'No entities found', unknownType: 'Uncategorized', aliases: 'alias | aliases', choose: 'Select an entity to inspect its facts', includeHistory: 'Include historical facts', noFacts: 'This entity has no facts to show.', unknownObject: 'Unknown entity', merge: 'Merge duplicate', mergeTitle: 'Merge entities', mergeHint: 'Choose the canonical entity to keep. Facts, relations, and aliases will move to it.', mergeSource: 'Entity to merge', mergeTarget: 'Keep this entity', mergeTargetPlaceholder: 'Select the entity to keep', mergeWarning: "Merging changes entity references across every knowledge base in the workspace. It cannot be undone in this view.", mergeSaved: 'Entities merged' },
-    events: { countLoading: 'Counting related messages.', countUnavailable: 'The related template-only message count is unavailable.', coverageNotice: 'Only messages in focus at ingestion are included.', templateOnlyCount: '{count} related message still has only template fields extracted. | {count} related messages still have only template fields extracted.', title: 'Event attention', description: 'Review recent events by heat and expand their reasons, related entities, and evidence.', empty: 'No events found', event: 'Event', heat: 'Heat', sourceCount: '{count} source | {count} sources', hideDetails: 'Hide details', showDetails: 'Why it is trending', whyHot: 'Heat and attention reasons', noReason: 'No attention reason is available.', scored: 'Attention score', attentionScore: 'Attention {score}', noSources: 'No linked sources yet.', noDescription: 'No event summary available.' },
-    evidence: { extractionPath: 'Extraction path', extractionPaths: { precheck_hit: 'Precheck matched: one full extraction round', precheck_miss_supplemented: 'Precheck missed: supplemented after resolution', precheck_miss: 'Precheck missed: template extraction only' }, backfilledAt: 'Backfilled at', backfillTemplateUpdatedAt: 'Domain template updated at for backfill', extractionMode: 'Extraction mode', extractionModes: { template_only: 'Template fields only', full: 'Full extraction' }, templateOnlyHint: 'This message has only domain template fields extracted. Open fields and events were not extracted.', title: 'Source evidence', description: 'Inspect source snapshots, versions, extraction status, and citations.', filter: 'Filter title, publisher, or URL', empty: 'No source evidence found', source: 'Source', openSnapshot: 'Open source snapshot', openSource: 'Open original link', openKnowledge: 'Open original message', version: 'Version', hash: 'Content hash', extraction: 'Extraction', noBody: 'This source snapshot has no body.', untitled: 'Untitled source', status: { current: 'Current version', superseded: 'Older version' }, extractionStatus: { pending: 'Pending extraction', complete: 'Extracted', failed: 'Extraction failed' } },
-    factStatus: { current: 'Current', superseded: 'Superseded', corrected: 'Corrected' },
-    factDifference: { conflict: 'Overlapping effective periods have different recorded values', potential: 'Possible discrepancy: effective dates are incomplete' },
-    workflows: {
-      title: 'Tracking workflows', description: 'Schedule knowledge searches, fact queries, and cited reports.', create: 'New workflow', edit: 'Edit workflow', new: 'Configure workflow', cancel: 'Cancel editing', name: 'Name', namePlaceholder: 'For example: Weekly competitor tracking', descriptionField: 'Description', cron: 'Cron schedule', manualOnly: 'Leave blank for manual runs only', timezone: 'Time zone', enabled: 'Enabled', disabled: 'Disabled', steps: 'Workflow steps', stepsHint: 'Steps run in order. Queries, reports, and dependencies are kept in the run record.', addStep: 'Add step', stepId: 'Step ID', remove: 'Remove step', dependsOn: 'Depends on', save: 'Save workflow', validation: 'Enter a name and ensure every step has a unique ID.', saved: 'Workflow saved', enableFirst: 'This workflow is disabled. Enable it before running.', run: 'Run now', disable: 'Disable', enable: 'Enable', noDescription: 'No description', runs: 'Runs', selectWorkflow: 'Select a workflow to view its runs', noRuns: 'No runs yet.', runDetail: 'Run details', retry: 'Retry failed run', resume: 'Resume paused run', attempt: 'Attempt {count}', runStarted: 'Workflow started', empty: 'No workflows yet. Create a daily or weekly knowledge query workflow.',
-      config: { query: 'Query', limit: 'Maximum results', entity: 'Entity name (required)', predicate: 'Fact attribute', relation: 'Relation type', objectEntityId: 'Related entity ID', since: 'From', until: 'Until', includeHistory: 'Include historical facts', reportTitle: 'Report title', timeFrom: 'Report start date', timeTo: 'Report end date', timeWindow: 'Report time window', days: 'Rolling days (1–365)', timezone: 'Time zone', previousDay: 'Previous day', previousWeek: 'Previous week', rollingDays: 'Last N days', prompt: 'Report instructions', },
-      stepTypes: { search: 'Knowledge search', fact_query: 'Fact query', report: 'Generate report', },
-      runStatus: { queued: 'Queued', running: 'Running', paused: 'Paused', completed: 'Completed', failed: 'Failed', cancelled: 'Cancelled' },
-      stepStatus: { pending: 'Pending', running: 'Running', succeeded: 'Completed', failed: 'Failed', },
-      templates: {
-        daily: { title: 'Daily briefing', description: 'Search recent knowledge every day and produce a cited summary.', searchQuery: 'Find important changes in the knowledge base and recent updates', reportTitle: 'Daily knowledge updates', reportPrompt: 'Summarize key changes, their impact, and sources. Separate confirmed facts from items that need verification.' },
-        weekly: { title: 'Weekly fact review', description: 'Summarize facts and changes for a selected entity each week.', reportTitle: 'Weekly fact changes', reportPrompt: 'Review this week’s fact changes for the selected entity, preserving dates, evidence, and historical differences.' },
-        custom: { title: 'Custom workflow', description: 'Combine knowledge searches, fact queries, and reports from scratch.' }
-      }
-    },
-    reports: { title: 'Research reports', description: 'Read workflow reports with source citations and download them as Markdown or JSON.', empty: 'No research reports yet.', download: 'Download Markdown', downloadJson: 'Download JSON', citations: 'Citations and sources', noCitations: 'This report has no attached citations.' }
+  "tabLabel": "Entities",
+  "title": "Entities",
+  "subtitle": "Manage entity profiles and merge suggestions",
+  "sections": "Entity sections",
+  "refresh": "Refresh",
+  "requestFailed": "The request failed. Please try again.",
+  "unknownDate": "Unknown time",
+  "loadMore": "Load more",
+  "nav": {
+    "entities": "Entities",
+    "merges": "Merge suggestions"
   },
+  "scope": {
+    "label": "Query scope",
+    "knowledge_base": "Current knowledge base",
+    "all": "All knowledge bases",
+    "detailHint": "Entity profiles are shared across the space. Articles below include mentions from every knowledge base."
+  },
+  "sourceTime": {
+    "excluded": "Source excluded because publication time is missing: {count} | Sources excluded because publication time is missing: {count}",
+    "missing": "Publication time missing",
+    "reposts": "Repost sources",
+    "unknownPublisher": "Unknown publisher",
+    "matchMethod": "Duplicate detection",
+    "matchMethods": {
+      "url": "Normalized URL",
+      "content_hash": "Identical content",
+      "simhash": "Near duplicate",
+      "file_hash": "Identical file",
+      "other": "Other method"
+    }
+  },
+  "nameEmbeddings": {
+    "title": "Entity name embeddings",
+    "pending": "Entity name pending rebuild: {count} | Entity names pending rebuild: {count}",
+    "unknown": "Unavailable",
+    "rebuild": "Rebuild now",
+    "latest": "Latest rebuild: {status}, {processed}/{total} entity processed | Latest rebuild: {status}, {processed}/{total} entities processed",
+    "noRun": "No rebuild has run yet",
+    "failure": "Failure reason: {reason}",
+    "queued": "Entity name embedding rebuild queued",
+    "status": {
+      "pending": "Pending",
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed"
+    }
+  },
+  "entities": {
+    "title": "Entities",
+    "description": "Browse entity types, aliases and articles mentioning each entity.",
+    "filter": "Search entity names or aliases",
+    "type": "Entity type",
+    "allTypes": "All types",
+    "types": {
+      "company": "Company",
+      "person": "Person",
+      "product": "Product",
+      "project": "Project",
+      "organization": "Organization",
+      "other": "Other"
+    },
+    "empty": "No entities yet",
+    "noResults": "No matching entities. Adjust the filters.",
+    "aliases": "alias | aliases",
+    "aliasLabel": "Aliases",
+    "noAliases": "No aliases",
+    "choose": "Select an entity to view its profile",
+    "articles": "Articles mentioning this entity",
+    "noArticles": "No articles mention this entity yet.",
+    "openArticle": "Open article",
+    "untitledArticle": "Untitled article",
+    "loaded": "Loaded {count} entity | Loaded {count} entities",
+    "merge": "Merge duplicate",
+    "mergeTitle": "Merge entities",
+    "mergeHint": "Choose the entity to keep. Aliases and article links will move to it.",
+    "mergeSource": "Entity to merge",
+    "mergeTarget": "Entity to keep",
+    "mergeTargetPlaceholder": "Select the entity to keep",
+    "mergeWarning": "Merging changes entity references across every knowledge base in this space. It cannot be undone in this view.",
+    "mergeSaved": "Entities merged"
+  }
+},
   menu: {
     knowledgeBase: 'Knowledge Base',
     agents: 'Agents',
@@ -470,7 +382,7 @@ export default {
     tagKindLabel: 'Tag category',
     tagKindNature: 'Content kind',
     tagKindTopic: 'Topic',
-    tagKindObject: 'Object',
+    tagKindObject: "Entity",
     tagKindEvent: 'Event',
     tagStarAction: 'Star {name}',
     tagUnstarAction: 'Unstar {name}',
@@ -497,8 +409,8 @@ export default {
       activate: 'Confirm and activate', restore: 'Restore this version', confirmTitle: 'Confirm strategy version', confirm: 'This affects future work only; existing messages are not reprocessed.',
       failed: 'Strategy operation failed', candidateSaved: 'Candidate saved; review its results', activeSaved: 'Strategy activated',
       status: { candidate: 'Candidate', active: 'Active', archived: 'History' },
-      reprocess: 'Reprocess selected history', reprocessHint: 'Only selected messages or one topic/object/event. Review flags go to Issues; manual tag corrections stay.',
-      messagesScope: 'Message set', tagScope: 'Concrete tag', selectTag: 'Select topic, object or event', runReprocess: 'Start reprocessing',
+      reprocess: 'Reprocess selected history', reprocessHint: "Process only selected messages or a topic, entity or event. Review flags go to the anomaly drawer; manual tag corrections are preserved.",
+      messagesScope: 'Message set', tagScope: 'Concrete tag', selectTag: "Select a topic, entity or event", runReprocess: 'Start reprocessing',
       reprocessConfirmTitle: 'Confirm reprocessing', reprocessConfirm: 'Recheck and retag only this scope under the active strategy.',
       reprocessResult: 'Processed {processed}; updated {updated}; {reviewFlags}; {manualConflicts}; failed {failed}',
     },
@@ -622,7 +534,7 @@ export default {
     rebuildFailed: 'Rebuild failed. Please try again later',
     rebuildInProgress: 'This document is currently being parsed. Please try again later',
     cancelParse: 'Stop parsing',
-    cancelParseConfirmBody: 'Stop parsing "{title}"? Already-written chunks are kept and can be re-parsed later via "Rebuild"; pending optimization tasks (summary / Q&A / knowledge context) will be dropped immediately.',
+    cancelParseConfirmBody: "Stop parsing \"{title}\"? Saved chunks remain and can be rebuilt later. Pending optimization tasks for summaries and questions will be discarded.",
     cancelParseSubmitted: 'Parsing stopped',
     cancelParseFailed: 'Failed to stop, please try again later',
     draft: 'Draft',
@@ -1353,7 +1265,11 @@ export default {
     retry: 'Retry',
     expand: 'Expand',
     collapse: 'Collapse'
-  },
+  ,
+    discardTitle: "Discard unsaved changes",
+    discardHint: "Your changes are not saved. Leaving will discard them.",
+    discard: "Discard changes"
+},
   mentionDetail: {
     readOnlyFromAgent: 'Read-only in this conversation; not shown in Knowledge Base list',
     kbCount: '{count} document | {count} documents',
@@ -1760,7 +1676,7 @@ export default {
         skipIfTaggedLabel: 'Skip documents that already have tags',
         skipIfTaggedDescription: 'When enabled, documents tagged manually at upload time are left untouched, so a deliberate classification is not diluted.',
         policyLabel: 'Message tagging policy',
-        policyDescription: 'Guides content-kind and topic/object/event tagging for approved messages; fixed categories and output format remain unchanged.',
+        policyDescription: "Classify approved messages by content type, topic, entity and event. Fixed categories and output format cannot be changed.",
         policyPlaceholder: 'For example: prefer confirmed events and do not label predictions as completed events.'
       },
       tableMetadataInstructions: {
@@ -1844,11 +1760,8 @@ export default {
     relevanceWeak: 'Weak relevance',
     otherSource: 'Other sources',
     webGroupIntro: 'The following {count} item is from | The following {count} items are from',
-    contextConfigTitle: 'Knowledge Context Configuration',
-    entityTypesLabel: 'Entity types:',
-    relationTypesLabel: 'Relation types:',
-    contextResultsHeader: '{count} related result found | {count} related results found',
-    contextNoResults: 'No related knowledge context information found',
+
+
     unknownLink: 'Unknown link',
     contentLengthLabel: 'Length {value}',
     notProvided: 'Not provided',
@@ -2191,6 +2104,7 @@ export default {
             move: 'Document move',
             indexDelete: 'Index deletion',
             kbDelete: 'Knowledge-base deletion',
+            entityNameEmbeddingRebuild: 'Entity name embedding rebuild',
           }
         },
         models: {
@@ -2221,7 +2135,7 @@ export default {
         poolDescriptions: {
           core: 'Guaranteed document and manual parsing capacity',
           postprocess: 'Parse finalization and enrichment fan-out',
-          enrichment: 'Summaries, images, knowledge context, and question generation',
+          enrichment: "Summaries, images and question generation",
           maintenance: 'Source sync, batch work, and deletion cleanup',
           shared: 'Borrowed by core or enrichment according to backlog',
         },
@@ -2233,7 +2147,7 @@ export default {
           sync: 'Source sync',
           low: 'Maintenance & batch',
           multimodal: 'Multimodal',
-          context: 'Knowledge context',
+          entity: "Entities",
           question: 'Questions',
         },
         queueDescriptions: {
@@ -2244,7 +2158,7 @@ export default {
           sync: 'Manual & scheduled sync',
           low: "Batch reparse and cleanup",
           multimodal: 'Image OCR, vision captions',
-          context: 'Knowledge context extraction and organization',
+          entity: "Entity name embedding rebuild",
           question: 'Chunk-level question generation',
         }
       },
@@ -2274,7 +2188,7 @@ export default {
         asynq: {
           core_concurrency: 'Guaranteed per-process concurrency for document and manual parsing. Core may also borrow the shared elastic pool. Minimum 1; requires a service restart.',
           postprocess_concurrency: 'Dedicated per-process concurrency for lightweight parse finalization and enrichment fan-out. Minimum 1; requires a service restart.',
-          enrichment_concurrency: 'Guaranteed per-process concurrency for summaries, images, context, and question generation. Enrichment may also borrow the shared elastic pool. Minimum 1; requires a service restart.',
+          enrichment_concurrency: "Reserved concurrency per instance for summaries, images and question generation, with extra capacity from the shared pool. Restart after changing.",
           maintenance_concurrency: 'Per-process concurrency for source sync, batch work, and cleanup, hard-isolated from the user-facing pipeline. Minimum 1; requires a service restart.',
           shared_concurrency: 'Per-process elastic concurrency shared by core parsing and enrichment; whichever side has backlog borrows it automatically. Minimum 1; requires a service restart.',
         },
@@ -2614,7 +2528,7 @@ export default {
     agent: 'ReAct Agent',
     hybridSearch: 'Hybrid Search',
     multimodalParsing: 'Multimodal Document Parsing',
-    hybridSearchEngine: 'Hybrid Search + Knowledge Context',
+    hybridSearchEngine: "Hybrid retrieval",
     ragQandA: 'ReAct Agent Q&A',
     independentTenant: "Personal knowledge management",
     fullApiAccess: 'Full API Access',
@@ -2623,7 +2537,7 @@ export default {
       agenticRagTitle: 'Agentic RAG',
       agenticRagDesc: 'ReAct reasoning + tool calls + multi-step thinking',
       hybridSearchTitle: 'Hybrid search strategy',
-      hybridSearchDesc: 'BM25 + Vector + Knowledge Context',
+      hybridSearchDesc: "BM25 + vector retrieval",
       smartDocRetrievalTitle: 'Intelligent document retrieval',
       smartDocRetrievalDesc: 'PDF/Word/Image multi-format parsing'
     }
@@ -2827,7 +2741,7 @@ export default {
       truncated: 'Showing the first {shown} of {total}',
       bindings: {
           light_model_tier: 'Light tier',
-          extraction_model_tier: 'Extraction tier',
+          entity_resolution_model_tier: "Entity resolution tier",
           generation_model_tier: 'Generation tier',
           embedding_model_tier: 'Embedding tier',
           rerank_model_tier: 'Rerank tier',
@@ -3069,7 +2983,7 @@ export default {
     listKnowledgeChunks: 'List Knowledge Chunks',
     listKnowledgeBases: 'List Knowledge Bases',
     getDocumentInfo: 'Get Document Info',
-    queryKnowledgeContext: 'Query Knowledge Context',
+
     think: 'Deep Thinking',
     todoWrite: 'Make Plan'
   },
@@ -3142,7 +3056,7 @@ export default {
       attachmentParsing: 'Parsing Attachment',
       imageAnalysis: 'Image Analysis',
       queryUnderstand: 'Understand Query',
-      queryKnowledgeContext: 'Knowledge Context Query',
+
       dataAnalysis: 'Data analysis',
       dataSchema: 'Data Schema',
     },
@@ -3317,8 +3231,8 @@ export default {
       knowledgeSearchDesc: 'Understand questions and find semantically relevant content',
       listChunks: 'View Document Chunks',
       listChunksDesc: 'Get complete chunk content of a document',
-      queryContext: 'Query Knowledge Context',
-      queryContextDesc: 'Query relationships from knowledge context',
+
+
       getDocInfo: 'Get Document Info',
       getDocInfoDesc: 'View document metadata',
       dataAnalysis: 'Data analysis',
@@ -3703,9 +3617,9 @@ export default {
   },
   countCopy: {
     "entities": "{count} entity | {count} entities",
-    "facts": "{count} fact | {count} facts",
-    "events": "{count} event | {count} events",
-    "evidenceItems": "{count} evidence item | {count} evidence items",
+
+
+
     "documents": "{count} document | {count} documents",
     "webSources": "{count} web source | {count} web sources",
     "results": "{count} result | {count} results",

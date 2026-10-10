@@ -5,15 +5,13 @@ import { createI18n } from 'vue-i18n'
 import enUS from './locales/en-US'
 import zhCN from './locales/zh-CN'
 
-const cases = [["extractionDetails.segments","total","Processed {processed} / {total} segment","Processed {processed} / {total} segments"],
+const cases = [
   ["knowledgeStrategy.evaluation.countedSamples","count","{count} sample counted in metrics","{count} samples counted in metrics"],
   ["knowledgeStrategy.evaluation.allSamples","count","The {count} sample","All {count} samples"],
   ["knowledgeStrategy.evaluation.mistakes","count","{count} example with a wrong decision","{count} examples with a wrong decision"],
   ["knowledgeWorkbench.sourceTime.excluded","count","Source excluded because publication time is missing: {count}","Sources excluded because publication time is missing: {count}"],
-  ["knowledgeWorkbench.nameEmbeddings.pending","count","Object name pending rebuild: {count}","Object names pending rebuild: {count}"],
-  ["knowledgeWorkbench.nameEmbeddings.latest","total","Latest rebuild: {status}, {processed}/{total} object processed","Latest rebuild: {status}, {processed}/{total} objects processed"],
-  ["knowledgeWorkbench.rebuildQueued","count","{count} source was queued for rebuilding. Results will update after background processing finishes.","{count} sources were queued for rebuilding. Results will update after background processing finishes."],
-  ["knowledgeWorkbench.events.sourceCount","count","{count} source","{count} sources"],
+  ["knowledgeWorkbench.nameEmbeddings.pending","count","Entity name pending rebuild: {count}","Entity names pending rebuild: {count}"],
+  ["knowledgeWorkbench.nameEmbeddings.latest","total","Latest rebuild: {status}, {processed}/{total} entity processed","Latest rebuild: {status}, {processed}/{total} entities processed"],
   ["batchManage.deleteConfirmBody","count","Are you sure you want to delete the selected {count} conversation? This action cannot be undone.","Are you sure you want to delete the selected {count} conversations? This action cannot be undone."],
   ["knowledgeBase.folderTree.folderCardCount","count","{count} document","{count} documents"],
   ["knowledgeBase.moveToFolder.success","count","Moved {count} document","Moved {count} documents"],
@@ -27,7 +25,6 @@ const cases = [["extractionDetails.segments","total","Processed {processed} / {t
   ["agent.capabilities.kbCount","count","{count} knowledge base specified","{count} knowledge bases specified"],
   ["mentionDetail.kbCount","count","{count} document","{count} documents"],
   ["chat.referenceChunkCount","count","{count} chunk","{count} chunks"],
-  ["chat.contextResultsHeader","count","{count} related result found","{count} related results found"],
   ["chat.chunkCountValue","count","{count} chunk","{count} chunks"],
   ["chat.knowledgeBaseCount","count","{count} knowledge base","{count} knowledge bases"],
   ["model.editor.contextWindowTokens","count","{count} token","{count} tokens"],
@@ -95,9 +92,7 @@ for (const [key, selector, singular, plural] of cases) {
   }
 }
 
-const composedCases: Array<[string, Record<string, number>, Record<string, number>, string, string]> = [["knowledgeWorkbench.query.resultCounts",{"entities":1,"facts":1,"events":1,"evidence":1},{"entities":1,"facts":1,"events":1,"evidence":1,"processed":1,"updated":2,"failed":0},"Found 1 entity, 1 fact, 1 event, and 1 evidence item.","找到 1 个对象、1 条事实、1 个事件和 1 条证据。"],
-  ["knowledgeWorkbench.query.resultCounts",{"entities":2,"facts":2,"events":2,"evidence":2},{"entities":2,"facts":2,"events":2,"evidence":2,"processed":1,"updated":2,"failed":0},"Found 2 entities, 2 facts, 2 events, and 2 evidence items.","找到 2 个对象、2 条事实、2 个事件和 2 条证据。"],
-  ["knowledgeWorkbench.query.resultCounts",{"entities":1,"facts":2,"events":1,"evidence":2},{"entities":1,"facts":2,"events":1,"evidence":2,"processed":1,"updated":2,"failed":0},"Found 1 entity, 2 facts, 1 event, and 2 evidence items.","找到 1 个对象、2 条事实、1 个事件和 2 条证据。"],
+const composedCases: Array<[string, Record<string, number>, Record<string, number>, string, string]> = [
   ["chat.referencesDocAndWebCount",{"docCount":1,"webCount":1},{"docCount":1,"webCount":1,"processed":1,"updated":2,"failed":0},"Referenced 1 document and 1 web source","引用了1篇文档和1条网页"],
   ["chat.referencesDocAndWebCount",{"docCount":2,"webCount":2},{"docCount":2,"webCount":2,"processed":1,"updated":2,"failed":0},"Referenced 2 documents and 2 web sources","引用了2篇文档和2条网页"],
   ["chat.referencesDocAndWebCount",{"docCount":1,"webCount":2},{"docCount":1,"webCount":2,"processed":1,"updated":2,"failed":0},"Referenced 1 document and 2 web sources","引用了1篇文档和2条网页"],

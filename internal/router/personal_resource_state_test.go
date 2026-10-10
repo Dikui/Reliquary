@@ -55,12 +55,10 @@ func personalKBIDs(list []*types.KnowledgeBase) []string {
 func TestPersonalKnowledgeBasePinsSharedAcrossLoginAndAPIKey(t *testing.T) {
 	f := newPersonalAuthFixture(t)
 	kbService := registerPersonalResourceRoutes(t, f)
-	domain := service.BuiltinAIKnowledgeDomain()
-	require.NoError(t, f.db.Create(domain).Error)
 	createdAt := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
 	for i, id := range []string{"pin-old", "pin-middle", "pin-new"} {
 		kb := &types.KnowledgeBase{
-			ID: id, TenantID: 1, Name: id, DomainID: domain.ID, CreatorID: f.userID,
+			ID: id, TenantID: 1, Name: id, CreatorID: f.userID,
 			Type: types.KnowledgeBaseTypeDocument, CreatedAt: createdAt.Add(time.Duration(i) * time.Hour),
 		}
 		require.NoError(t, f.db.Create(kb).Error)
@@ -214,14 +212,11 @@ func TestPersonalResourceFavoritesSharedAcrossLoginAndAPIKey(t *testing.T) {
 func TestPersonalKnowledgeBasePinPreservesUpdatedAtAndListOrder(t *testing.T) {
 	f := newPersonalAuthFixture(t)
 	registerPersonalResourceRoutes(t, f)
-	domain := service.BuiltinAIKnowledgeDomain()
-	require.NoError(t, f.db.Create(domain).Error)
 	baseTime := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
 	beforeTimes := map[string]time.Time{}
 	for i, id := range []string{"timestamp-old", "timestamp-middle", "timestamp-new"} {
 		updated := baseTime.Add(time.Duration(i) * time.Hour)
-		kb := &types.KnowledgeBase{ID: id, TenantID: 1, Name: id, DomainID: domain.ID,
-			CreatorID: f.userID, Type: types.KnowledgeBaseTypeDocument,
+		kb := &types.KnowledgeBase{ID: id, TenantID: 1, Name: id, CreatorID: f.userID, Type: types.KnowledgeBaseTypeDocument,
 			CreatedAt: baseTime.Add(-time.Duration(i) * time.Hour), UpdatedAt: updated}
 		require.NoError(t, f.db.Create(kb).Error)
 		beforeTimes[id] = updated

@@ -98,9 +98,6 @@ func prepareMessagesWithHistory(chatManage *types.ChatManage) []chat.Message {
 	if len(chatManage.MergeResult) > 0 {
 		systemPrompt += "\n\nFor this knowledge-backed answer, compare relevant retrieved messages and cite the source of each conclusion. Deliver supported findings, identify missing evidence and conflicting sources, and do not state unsupported inferences as facts. Pending-review material is not formal evidence."
 	}
-	if chatManage.KnowledgeContext != "" {
-		systemPrompt += "\n\nStructured knowledge contains sourced assertions with validity times and stable evidence IDs. Combine it with original-text sources, cite evidence, expose conflicting values and gaps, and never treat popularity or an extracted assertion as proof."
-	}
 
 	chatMessages := []chat.Message{
 		{Role: "system", Content: systemPrompt},

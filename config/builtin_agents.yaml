@@ -67,7 +67,6 @@ builtin_agents:
         - "knowledge_search"
         - "grep_chunks"
         - "list_knowledge_chunks"
-        - "query_knowledge_context"
         - "get_document_info"
         - "knowledge_report_anomaly"
         - "knowledge_import_url"
@@ -127,15 +126,15 @@ builtin_agents:
     is_builtin: true
     i18n:
       default:
-        name: "Knowledge Context"
-        description: "Query objects, facts, relationships and events with traceable source evidence"
+        name: "Document Research"
+        description: "Search source documents and answer with document citations"
       zh-CN:
-        name: "知识上下文"
-        description: "查询对象、事实、关系和事件，并核验可追溯的来源证据"
+        name: "文档研究"
+        description: "检索来源文档，并使用文档引用回答问题"
       zh-TW:
-        name: "知識上下文"
-        description: "查詢物件、事實、關係和事件，並核驗可追溯的來源證據"
+        name: "文件研究"
+        description: "檢索來源文件，並使用文件引用回答問題"
       ja-JP:
-        name: "ナレッジコンテキスト"
-        description: "対象、事実、関係、イベントを検索し、追跡可能な出典を確認します"
+        name: "ドキュメント調査"
+        description: "出典ドキュメントを検索し、引用を付けて回答します"
     config: *smart_reasoning_config

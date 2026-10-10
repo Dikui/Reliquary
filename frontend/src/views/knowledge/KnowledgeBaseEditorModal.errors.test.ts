@@ -78,7 +78,6 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       const component = evaluate(script.content, {
         '@/api/initialization': api,
         '@/api/knowledge-base': { updateKnowledgeBase: async () => ({ success: true }) },
-        '@/api/knowledge-domains': {},
         '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true }) },
         '@/stores/ui': { useUIStore: () => ({}) },
         '@/stores/chatResources': { useChatResourcesStore: () => ({ allModels: [] }) },
@@ -97,7 +96,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         const state = originalSetup(props, context)
         onServerPrefetch(async () => {
           state.formData.value = state.initFormData()
-          Object.assign(state.formData.value, { name: 'Vision KB', domainId: 'domain' })
+          Object.assign(state.formData.value, { name: 'Vision KB' })
           Object.assign(state.formData.value.modelConfig, { llmModelId: 'chat', embeddingModelId: 'embedding' })
           Object.assign(state.formData.value.multimodalConfig, { enabled: true, vllmModelId: 'selected-image-model' })
           assert.equal(state.validateForm(), true)

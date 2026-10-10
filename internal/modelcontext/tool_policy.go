@@ -49,13 +49,11 @@ type toolHandlePolicy struct {
 // alone are deliberately insufficient: a dynamic MCP tool may use the same
 // name with unrelated semantics and must remain opaque.
 var toolHandlePolicies = map[string]toolHandlePolicy{
-	"knowledge_search":        {sourceIDKeys: map[string]struct{}{"knowledge_base_ids": {}}, sourceOutput: true},
-	"grep_chunks":             {sourceOutput: true},
-	"list_knowledge_chunks":   {sourceIDKeys: map[string]struct{}{"knowledge_id": {}, "chunk_id": {}}, sourceOutput: true},
-	"get_document_info":       {sourceIDKeys: map[string]struct{}{"knowledge_ids": {}}, sourceOutput: true},
-	"query_knowledge_context": {sourceIDKeys: map[string]struct{}{"knowledge_base_ids": {}}, sourceOutput: true},
+	"knowledge_search":      {sourceIDKeys: map[string]struct{}{"knowledge_base_ids": {}}, sourceOutput: true},
+	"grep_chunks":           {sourceOutput: true},
+	"list_knowledge_chunks": {sourceIDKeys: map[string]struct{}{"knowledge_id": {}, "chunk_id": {}}, sourceOutput: true},
+	"get_document_info":     {sourceIDKeys: map[string]struct{}{"knowledge_ids": {}}, sourceOutput: true},
 	// Historical conversations retain this tool name.
-	"query_knowledge_graph":    {sourceIDKeys: map[string]struct{}{"knowledge_base_ids": {}}, sourceOutput: true},
 	toolDataAnalysis:           {sourceIDKeys: map[string]struct{}{"knowledge_id": {}}, sourceTextKeys: map[string]struct{}{"sql": {}}},
 	"data_schema":              {sourceIDKeys: map[string]struct{}{"knowledge_id": {}}},
 	"web_fetch":                {sourceIDKeys: map[string]struct{}{"url": {}, "urls": {}}, sourceOutput: true},

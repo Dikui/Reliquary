@@ -27,7 +27,7 @@ Go 主模块为 `reliquary`；
 
 本版本供个人单用户使用，首次注册后关闭注册。登录用户和有效 API Key 拥有全部权限，密码恢复使用本地命令，详见[个人使用说明](docs/personal-use.md)。
 
-知识库新增对象与事实、证据历史、多源事件，以及定时研究和报告工作流。架构、配置、数据升级和使用方法见 [知识库融合说明](docs/知识库融合说明.md)。
+知识工作台提供实体档案、别名、实体合并与待合并建议。问答基于文档检索并保留原文引用，使用方法见 [实体档案说明](docs/知识库融合说明.md)。
 
 ## 上游功能与使用说明
 
@@ -35,7 +35,7 @@ Go 主模块为 `reliquary`；
 
 [**Reliquary**](https://weknora.weixin.qq.com) is an open-source, LLM-powered knowledge framework built for enterprise-grade document understanding, semantic retrieval, and autonomous reasoning.
 
-Reliquary provides **RAG-based Quick Q&A**, a **ReAct Agent** with knowledge retrieval, MCP tools and in-process data analysis, and scheduled knowledge reports. Folder import, chunk editing with revision history, RSS feeds, site adapters, full-access API keys and model integrations support personal knowledge management. Data remains in PostgreSQL and local file storage.
+Reliquary provides **RAG-based Quick Q&A**, a **ReAct Agent** with knowledge retrieval, MCP tools and in-process data analysis. Folder import, chunk editing with revision history, RSS feeds, site adapters, full-access API keys and model integrations support personal knowledge management. Data remains in PostgreSQL and local file storage.
 
 The framework supports auto-syncing RSS feeds and site adapters, handles 10+ document formats including PDF, Word, images, Excel and EPUB. Chat models use OpenAI-compatible APIs, the native Anthropic API, or local Ollama. Provider presets cover OpenAI, Anthropic, DeepSeek, Alibaba Cloud, Zhipu, Moonshot, SiliconFlow, Volcengine, OpenRouter, Google Gemini and Ollama, plus a generic OpenAI-compatible option for other services. Office files can be parsed in-process with **anydoc**. Its fully modular design supports configurable LLMs, PostgreSQL retrieval, and local file storage, with support for local and private cloud deployment ensuring complete data sovereignty. Model usage is recorded in the `model_usage` table.
 
@@ -150,7 +150,7 @@ Once started, visit **http://localhost** to get started.
 
 ## 📘 API Reference
 
-Start with the [personal use guide](./docs/personal-use.md) and [knowledge workflow guide](./docs/知识库融合说明.md).
+Start with the [personal use guide](./docs/personal-use.md) and [entity registry guide](./docs/知识库融合说明.md).
 
 Troubleshooting FAQ: [Troubleshooting FAQ](./docs/QA.md)
 

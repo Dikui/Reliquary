@@ -62,7 +62,6 @@ func (r chunkSearchKBReader) GetKnowledgeBaseByID(ctx context.Context, id string
 type chunkSearchFixture struct {
 	db        *gorm.DB
 	ctx       context.Context
-	domainID  string
 	chunks    interfaces.ChunkRepository
 	knowledge interfaces.KnowledgeRepository
 	kbs       interfaces.KnowledgeBaseRepository
@@ -78,13 +77,11 @@ func newChunkSearchFixture(t *testing.T, vectorEnabled bool) *chunkSearchFixture
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, types.SingleTenantID)
 	ctx = context.WithValue(ctx, types.TenantInfoContextKey, tenant)
 	f := &chunkSearchFixture{
-		db: db, ctx: ctx, domainID: uuid.NewString(),
+		db: db, ctx: ctx,
 		chunks: repository.NewChunkRepository(db), knowledge: repository.NewKnowledgeRepository(db),
 		kbs:     repository.NewKnowledgeBaseRepository(db),
 		indices: pgretriever.NewPostgresRetrieveEngineRepository(db),
 	}
-	require.NoError(t, db.Exec("INSERT INTO knowledge_domains (id, tenant_id, name) VALUES (?, ?, ?)",
-		f.domainID, types.SingleTenantID, "Chunk search domain").Error)
 	f.retrieval = retriever.NewPostgresRetrievalService(f.indices)
 	f.service = &chunkService{
 		chunkRepository: f.chunks, knowledgeRepo: f.knowledge, kbRepository: f.kbs,
@@ -99,8 +96,8 @@ func (f *chunkSearchFixture) createKB(t *testing.T, vectorEnabled, keywordEnable
 	strategy, err := json.Marshal(types.IndexingStrategy{VectorEnabled: vectorEnabled, KeywordEnabled: keywordEnabled})
 	require.NoError(t, err)
 	require.NoError(t, f.db.Exec(`INSERT INTO knowledge_bases
-		(id, tenant_id, domain_id, name, embedding_model_id, summary_model_id, indexing_strategy)
-		VALUES (?, ?, ?, ?, ?, '', ?::jsonb)`, id, types.SingleTenantID, f.domainID,
+		(id, tenant_id, name, embedding_model_id, summary_model_id, indexing_strategy)
+		VALUES (?, ?, ?, ?, '', ?::jsonb)`, id, types.SingleTenantID,
 		"Chunk search knowledge base", "chunk-search-fixed", string(strategy)).Error)
 	kb, err := f.kbs.GetKnowledgeBaseByID(f.ctx, id)
 	require.NoError(t, err)

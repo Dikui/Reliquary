@@ -31,7 +31,7 @@ func TestMatchesKnowledgeBase(t *testing.T) {
 		{name: "move source", taskType: types.TypeKnowledgeMove, payload: `{"source_kb_id":"kb-1"}`, want: true},
 		{name: "move target", taskType: types.TypeKnowledgeMove, payload: `{"target_kb_id":"kb-1"}`, want: true},
 		{name: "move fields are task specific", taskType: types.TypeDocumentProcess, payload: `{"source_kb_id":"kb-1"}`},
-		{name: "single knowledge", taskType: types.TypeKnowledgeContext, payload: `{"knowledge_id":"knowledge-1"}`, want: true},
+		{name: "single knowledge", taskType: types.TypeKnowledgePostProcess, payload: `{"knowledge_id":"knowledge-1"}`, want: true},
 		{
 			name:     "knowledge collection",
 			taskType: types.TypeKnowledgeListReparse,

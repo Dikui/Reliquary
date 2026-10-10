@@ -15,10 +15,10 @@ import (
 type ModelRoutingHandler struct {
 	db                     *gorm.DB
 	models                 interfaces.ModelService
-	nameEmbeddingRebuilder service.ContextNameEmbeddingRebuildTrigger
+	nameEmbeddingRebuilder service.EntityNameEmbeddingRebuildTrigger
 }
 
-func (h *ModelRoutingHandler) SetNameEmbeddingRebuilder(rebuilder service.ContextNameEmbeddingRebuildTrigger) {
+func (h *ModelRoutingHandler) SetNameEmbeddingRebuilder(rebuilder service.EntityNameEmbeddingRebuildTrigger) {
 	h.nameEmbeddingRebuilder = rebuilder
 }
 
@@ -44,14 +44,7 @@ func (h *ModelRoutingHandler) Get(c *gin.Context) {
 			return
 		}
 		overrides = kb.ModelTiers
-	} else if id := c.Query("domain_id"); id != "" {
-		var domain types.KnowledgeDomain
-		if err := h.db.WithContext(ctx).Where("tenant_id = ? AND id = ?", tenantID, id).First(&domain).Error; err != nil {
-			c.Error(apperrors.NewNotFoundError("domain not found"))
-			return
-		}
-		kb = &types.KnowledgeBase{TenantID: tenantID, DomainID: domain.ID}
-		overrides = domain.ModelTiers
+
 	}
 	view, err := service.ModelRoutingForScope(ctx, h.db, kb, overrides)
 	if err != nil {
