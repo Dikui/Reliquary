@@ -16,7 +16,24 @@ go run ./cmd/server reset-password
 
 决策依据见 [ADR 0007](adr/0007-personal-single-user.md)。
 
-检索直接查询同一个 PostgreSQL（ParadeDB）数据库，保留 pgvector 与 BM25 混合检索、融合和重排。设置中的“知识库”页面统一配置模型档位、分块、解析规则、图片处理与索引策略，配置保存在唯一知识库中。解析引擎设置管理服务地址和凭据。文件统一保存到 `LOCAL_STORAGE_BASE_DIR` 指定的本地目录。备份需包含 PostgreSQL 数据和该目录。
+检索直接查询同一个 PostgreSQL（ParadeDB）数据库，保留 pgvector 与 BM25 混合检索、融合和重排。设置中的“知识库”页面统一配置模型档位、分块、解析规则、图片处理与索引策略，配置保存在唯一知识库中。解析引擎设置管理服务地址和凭据。文件库由必填的 `VAULT_ROOT` 指定；上传和解析过程中使用的资源继续保存在 `LOCAL_STORAGE_BASE_DIR`。备份需包含 PostgreSQL、文件库和资源目录。
+
+文件库启动时创建 `articles/`、`mine/`、`reports/`、`attachments/`。Compose 将文件库挂载为独立的 `vault-data` 卷，默认路径 `/data/vault`；`scripts/dev.sh app` 默认使用仓库下的 `.local-data/vault`。直接执行服务器时需先导出 `VAULT_ROOT`。文章表头以数据库为准，正文首次写入后保持不变。用户在 Obsidian 中修改的表头会在下一次字段变化时被覆盖。
+
+`mine/` 和 `reports/` 的 Markdown 只读并建立索引。`VAULT_STABLE_WAIT` 设置文件停止变化后的等待时长，默认 `10m`；`VAULT_SCAN_INTERVAL` 设置兜底全量扫描间隔，默认 `1m`。文章表头重写通过 `VAULT_HEADER_DEBOUNCE` 合并同一文章的连续变化，默认 `5s`。设置页显示文件库根目录和两个目录的扫描状态。
+
+`POST /api/v1/reports` 接收 `title`、`markdown`、可选的 `related_article_ids`，保存整理结果后立即建索引。`GET /api/v1/vault/status` 读取扫描状态；`GET /api/v1/knowledge/:id/vault-attachment?path=...` 使用登录态或 API Key 读取该文章的附件，路径相对文章文件。它们沿用现有认证。
+
+停止服务器后，可在空知识数据库上执行以下命令。配置和账号可以保留，文章记录必须为空；完全空的应用数据库会创建个人空间与唯一知识库。
+
+```bash
+export VAULT_ROOT=/path/to/vault
+go run ./cmd/server vault-rebuild
+```
+
+命令使用与服务器相同的 PostgreSQL 环境变量及迁移，不启动监听器或任务消费者，不修改文件库内容。无法解析的文件在输出的 `skipped` 清单中列出。已有向量模型配置时重新建立向量索引；完全空的数据库默认建立关键词索引。要在空数据库中同时重建向量，可导出 `VAULT_REBUILD_EMBEDDING_URL`、`VAULT_REBUILD_EMBEDDING_MODEL`、`VAULT_REBUILD_EMBEDDING_DIMENSION`，以及需要时的 `VAULT_REBUILD_EMBEDDING_API_KEY`，配置 OpenAI 兼容嵌入接口；保留模型配置时也可用 `VAULT_REBUILD_EMBEDDING_MODEL_ID` 指定现有模型。
+
+重建恢复表头中的字段、正文、实体和主题名称及关联。表头没有实体类型、别名、实体说明、主题说明、账号或模型配置，这些数据需随数据库备份；无既有实体可归入时，新建实体类型为“其他”。
 
 生成模型只使用三种接口：OpenAI 兼容、Anthropic 原生和 Ollama 本地。服务商下拉框从后端预设表读取，包含通用 OpenAI 兼容、OpenAI、Anthropic、DeepSeek、阿里云百炼、智谱、月之暗面、硅基流动、火山方舟、OpenRouter、Google Gemini 和 Ollama。其他服务可选择通用 OpenAI 兼容并填写地址。Gemini 使用官方兼容地址 `https://generativelanguage.googleapis.com/v1beta/openai/`。Ollama 模型列表和拉取管理继续保留。
 

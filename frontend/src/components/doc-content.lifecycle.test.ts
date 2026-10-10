@@ -75,6 +75,7 @@ test('mounted detail switches articles and modes, closes and unmounts without un
     previous.set(name, Object.getOwnPropertyDescriptor(globalThis, name)); Object.defineProperty(globalThis, name, { configurable: true, value })
   }
   const errors: unknown[] = []; const warnings: string[] = []; const unhandled: unknown[] = []
+  let imageHydrations = 0
   const rejection = (error: unknown) => unhandled.push(error)
   process.on('unhandledRejection', rejection)
   let app: ReturnType<typeof renderer.createApp> | undefined
@@ -87,7 +88,8 @@ test('mounted detail switches articles and modes, closes and unmounts without un
       'highlight.js': { __esModule: true, default: {} }, mermaid: { __esModule: true, default: { initialize() {} } },
       'vue-i18n': { useI18n: () => ({ t: (key: string) => key }) }, 'tdesign-vue-next': { MessagePlugin: { success() {}, warning() {}, error() {} } },
       '@/api/knowledge-base/index': { KNOWLEDGE_CHUNK_PAGE_SIZE: 25 },
-      '@/utils/security': { sanitizeHTML: passthrough, safeMarkdownToHTML: passthrough, isValidURL: () => true, hydrateProtectedFileImages: async () => {} },
+      '@/utils/clipboard': { copyWithToast() {} },
+      '@/utils/security': { sanitizeHTML: passthrough, safeMarkdownToHTML: passthrough, isValidURL: () => true, hydrateProtectedFileImages: async () => { imageHydrations++ } },
       '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: passthrough }, '@/utils/mermaidViewer': {},
       '@/components/SafeTextarea.vue': empty, '@/components/document-preview.vue': empty, '@/components/knowledge-processing-timeline.vue': empty, '@/components/KnowledgeClassification.vue': empty,
       '@/views/knowledge/components/RepostSources.vue': empty, '@/views/knowledge/knowledgeDownloadFileName': {}, '@/utils/filePreview': { isKnownPreviewableExt: () => false }, '@/utils/api-base': {},
@@ -105,6 +107,10 @@ test('mounted detail switches articles and modes, closes and unmounts without un
     app.config.errorHandler = error => errors.push(error)
     app.config.warnHandler = warning => warnings.push(warning)
     app.mount(node()); await nextTick()
+    const beforeVaultMetadata = imageHydrations
+    Object.assign(props.details, { source_kind: 'article', vault_path: 'articles/2026-10/event.md' })
+    await nextTick(); await nextTick()
+    assert.ok(imageHydrations > beforeVaultMetadata, 'late vault metadata hydrates images even when chunks arrived first')
     for (const value of [article('another-event'), article('tutorial', 'summary_only'), article('research'), article('reference', 'summary_only')]) {
       state.chunkPage.value = 3; state.loadedChunkPage.value = 3
       props.details = value; await nextTick()

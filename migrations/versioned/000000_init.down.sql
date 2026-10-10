@@ -3,6 +3,7 @@ DROP INDEX IF EXISTS public.idx_knowledge_bases_active_tenant;
 -- Source: 45daf07. Existing databases must be rebuilt before applying this baseline.
 
 BEGIN;
+DROP INDEX IF EXISTS public.knowledges_vault_path_unique;
 
 
 DROP TABLE IF EXISTS public.knowledge_repost_sources;

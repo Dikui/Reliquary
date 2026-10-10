@@ -109,6 +109,8 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewModelServiceWithRoutingDB))
 	must(container.Provide(service.NewUserService))
 	must(container.Provide(service.NewSystemSettingService))
+	must(container.Provide(service.NewVaultService))
+	must(container.Provide(newVaultDocumentService))
 	// Extract services - register individual extracters with names
 
 	must(container.Provide(repository.NewResourceRepository))
@@ -140,6 +142,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewTenantHandler))
 	must(container.Provide(handler.NewKnowledgeBaseHandler))
 	must(container.Provide(handler.NewKnowledgeHandler))
+	must(container.Provide(handler.NewVaultHandler))
 	must(container.Provide(handler.NewKnowledgeSearchHandler))
 	must(container.Provide(handler.NewEntityHandler))
 	must(container.Provide(handler.NewChunkHandler))
@@ -159,6 +162,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	// (which is not encoded in the local:// URL).
 	must(container.Invoke(registerModelLocalImageResolver))
 	must(container.Invoke(registerNameEmbeddingRebuildIntegration))
+	must(container.Invoke(registerVaultIntegration))
 
 	// Router configuration
 	logger.Debugf(ctx, "[Container] Registering router and starting task server...")

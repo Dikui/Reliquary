@@ -80,6 +80,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       'tdesign-vue-next': { MessagePlugin: { success: (text: string) => notifications.push(text), error: (text: string) => notifications.push(text) } },
       '@/api/knowledge-base/index': { KNOWLEDGE_CHUNK_PAGE_SIZE: 25, reprocessKnowledge: async (id: string) => { requests.push(id); return { success: true, data: { parse_status: 'pending' } } } },
       '@/utils/security': { isValidURL: (value: string) => /^https?:\/\//.test(value) }, '@/utils/markdownTableNormalize': {}, '@/utils/mermaidViewer': {}, '@/components/SafeTextarea.vue': safeTextareaTestModule, '@/components/document-preview.vue': emptyModule,
+      '@/utils/clipboard': { copyWithToast() {} },
       '@/components/knowledge-processing-timeline.vue': emptyModule, '@/views/knowledge/components/RepostSources.vue': emptyModule, '@/components/KnowledgeClassification.vue': classificationModule, '@/views/knowledge/knowledgeDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
     }
     const detail = component('./doc-content.vue', modules)

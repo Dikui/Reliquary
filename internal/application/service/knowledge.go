@@ -62,7 +62,12 @@ type knowledgeService struct {
 	// handled because the public surface is the SpanTracker interface,
 	// which has a no-op fallback. See knowledge_span_tracker.go.
 	spanTracker SpanTracker
+	vault       *VaultService
 }
+
+// SetVault attaches the local article library without expanding the public
+// ingestion interface or requiring unrelated callers to implement new methods.
+func (s *knowledgeService) SetVault(v *VaultService) { s.vault = v }
 
 const (
 	manualContentMaxLength = 200000
@@ -331,6 +336,11 @@ func (s *knowledgeService) GetKnowledgeFile(ctx context.Context, id string) (io.
 		return nil, "", err
 	}
 
+	if s.vault != nil && knowledge.VaultOriginalPath != "" {
+		file, err := s.vault.ReadOriginal(knowledge)
+		return file, knowledge.FileName, err
+	}
+
 	// Uploaded source bytes take precedence over the immutable parsed body.
 	if knowledge.FilePath != "" {
 		kb, _ := s.kbService.GetKnowledgeBaseByID(ctx, knowledge.KnowledgeBaseID)
@@ -354,6 +364,13 @@ func (s *knowledgeService) getKnowledgeBody(ctx context.Context, knowledge *type
 
 	if knowledge.ProcessingMode == "summary_only" {
 		return nil, "", errors.New("article stores a summary and original link; parsed body has been removed")
+	}
+	if s.vault != nil && knowledge.VaultPath != "" {
+		body, err := s.vault.ReadBody(knowledge)
+		if err != nil {
+			return nil, "", err
+		}
+		return io.NopCloser(strings.NewReader(string(body))), sanitizeManualDownloadFilename(knowledge.Title), nil
 	}
 	var parsed struct {
 		Path string `json:"processed_body_path"`
@@ -452,6 +469,9 @@ func (s *knowledgeService) UpdateKnowledge(ctx context.Context, knowledge *types
 	if err := s.repo.UpdateKnowledge(ctx, record); err != nil {
 		logger.Errorf(ctx, "Failed to update knowledge: %v", err)
 		return err
+	}
+	if s.vault != nil && record.SourceKind == "article" && record.VaultPath != "" {
+		s.vault.ScheduleRefresh(ctx, record.ID)
 	}
 	logger.Infof(ctx, "Knowledge updated successfully, ID: %s", knowledge.ID)
 	return nil

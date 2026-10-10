@@ -370,6 +370,10 @@ start_app() {
         export LOCAL_STORAGE_BASE_DIR="$PROJECT_ROOT/.local-data/files"
     fi
     mkdir -p "$LOCAL_STORAGE_BASE_DIR"
+    if [ -z "${VAULT_ROOT:-}" ] || [ "$VAULT_ROOT" = "/data/vault" ]; then
+        export VAULT_ROOT="$PROJECT_ROOT/.local-data/vault"
+    fi
+    mkdir -p "$VAULT_ROOT"
     
     # 确保必要的环境变量已设置
     if [ -z "$DB_DRIVER" ]; then

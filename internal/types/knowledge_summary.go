@@ -42,9 +42,9 @@ func ProcessingModeForContentType(value string) string {
 
 // KnowledgeSummary is the common article summary contract.
 type KnowledgeSummary struct {
-	Overview string   `json:"overview"`
-	Points   []string `json:"points"`
-	KeyTerms []string `json:"key_terms"`
+	Overview string   `json:"overview" yaml:"overview"`
+	Points   []string `json:"points" yaml:"points"`
+	KeyTerms []string `json:"key_terms" yaml:"key_terms"`
 }
 
 // RenderText supplies deterministic Markdown for existing previews and keyword search.

@@ -99,10 +99,85 @@ func (s *EntityService) MergeEntities(ctx context.Context, keepEntityID, mergeEn
 	if err != nil {
 		return err
 	}
+	if err := s.refreshArticleHeadersForEntity(ctx, tenantID, keepEntityID); err != nil {
+		return err
+	}
 	if s.nameEmbeddingRebuilder != nil && !entityDatabaseInTransaction(s.db) {
 		return s.nameEmbeddingRebuilder.Enqueue(ctx, tenantID, "entity_merge")
 	}
 	return nil
+}
+
+func (s *EntityService) refreshArticleHeadersForEntity(ctx context.Context, tenantID uint64, entityID string) error {
+	if s.headerRefresher == nil || entityDatabaseInTransaction(s.db) {
+		return nil
+	}
+	var ids []string
+	if err := s.db.WithContext(ctx).Model(&types.KnowledgeEntity{}).
+		Where("tenant_id=? AND entity_id=?", tenantID, entityID).Pluck("knowledge_id", &ids).Error; err != nil {
+		return err
+	}
+	for _, id := range ids {
+		s.headerRefresher.ScheduleRefresh(ctx, id)
+	}
+	return nil
+}
+
+// RenameEntity preserves the old canonical spelling as an alias and schedules
+// a header refresh for every article linked to this identity.
+func (s *EntityService) RenameEntity(ctx context.Context, entityID, name string) (*types.Entity, error) {
+	tenantID, err := s.requireTenant(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := types.PrincipalFromContext(ctx); !ok {
+		return nil, werrors.NewUnauthorizedError("authenticated entity editor required")
+	}
+	name = strings.TrimSpace(name)
+	if name == "" || len([]rune(name)) > 512 {
+		return nil, werrors.NewBadRequestError("entity name must contain 1 to 512 characters")
+	}
+	var entity types.Entity
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := lockEntitySpace(tx, tenantID); err != nil {
+			return err
+		}
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id=? AND tenant_id=? AND merged_into_id=''", entityID, tenantID).First(&entity).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+			return werrors.NewNotFoundError("entity not found")
+		} else if err != nil {
+			return err
+		}
+		var collisions int64
+		if err := tx.Model(&types.Entity{}).Where("tenant_id=? AND entity_type=? AND normalized_name=? AND id<>? AND merged_into_id=''", tenantID, entity.EntityType, normalizeEntityName(name), entity.ID).Count(&collisions).Error; err != nil {
+			return err
+		}
+		if collisions > 0 {
+			return werrors.NewBadRequestError("entity name conflicts with another entity")
+		}
+		if err := saveEntityAlias(tx, entity, name, "rename"); err != nil {
+			return err
+		}
+		if err := saveEntityAlias(tx, entity, entity.CanonicalName, "rename"); err != nil {
+			return err
+		}
+		if err := tx.Model(&entity).Updates(map[string]any{"canonical_name": name, "normalized_name": normalizeEntityName(name), "embedding_needs_rebuild": true, "updated_at": time.Now()}).Error; err != nil {
+			return err
+		}
+		entity.CanonicalName, entity.NormalizedName, entity.EmbeddingNeedsRebuild = name, normalizeEntityName(name), true
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err = s.refreshArticleHeadersForEntity(ctx, tenantID, entityID); err != nil {
+		return &entity, err
+	}
+	if s.nameEmbeddingRebuilder != nil && !entityDatabaseInTransaction(s.db) {
+		if err = s.nameEmbeddingRebuilder.Enqueue(ctx, tenantID, "entity_renamed"); err != nil {
+			return &entity, err
+		}
+	}
+	return &entity, nil
 }
 
 func entityDatabaseInTransaction(db *gorm.DB) bool {

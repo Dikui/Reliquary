@@ -967,6 +967,12 @@ func (s *knowledgeService) UpdateManualKnowledge(ctx context.Context,
 		logger.Errorf(ctx, "Failed to load knowledge: %v", err)
 		return nil, err
 	}
+	if existing.SourceKind != "" && existing.SourceKind != "article" {
+		return nil, werrors.NewBadRequestError("vault documents are edited directly in their files")
+	}
+	if existing.VaultPath != "" {
+		return nil, werrors.NewBadRequestError("an approved article body cannot be changed")
+	}
 	if !existing.IsManual() {
 		return nil, werrors.NewBadRequestError("仅支持手工知识的在线编辑")
 	}
@@ -1252,7 +1258,7 @@ func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 			logger.Infof(ctx, "Resolved %d remote images for manual knowledge %s", len(storedImages), knowledge.ID)
 			resolvedImages = append(resolvedImages, storedImages...)
 		}
-		if intake, _ := knowledge.IntakeMetadata(); intake != nil && docparser.HasUnstoredImages(clean) {
+		if intake, _ := knowledge.IntakeMetadata(); intake != nil && s.hasUnstoredArticleImages(knowledge, clean) {
 			knowledge.ParseStatus, knowledge.ErrorMessage, knowledge.UpdatedAt = types.ParseStatusFailed, "intake has unstored content images", time.Now()
 			_ = s.repo.UpdateKnowledge(ctx, knowledge)
 			return errors.New("manual article processing failed")
@@ -1274,7 +1280,7 @@ func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 	}
 
 	if intake, _ := knowledge.IntakeMetadata(); intake != nil {
-		if docparser.HasUnstoredImages(clean) {
+		if s.hasUnstoredArticleImages(knowledge, clean) {
 			knowledge.ParseStatus = types.ParseStatusFailed
 			return errors.New("manual article processing failed")
 		}

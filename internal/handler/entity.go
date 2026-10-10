@@ -91,6 +91,21 @@ func (h *EntityHandler) UpdateEntityDescription(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
 }
+func (h *EntityHandler) RenameEntity(c *gin.Context) {
+	var input struct {
+		Name string `json:"name" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.Error(werrors.NewBadRequestError("entity name is required"))
+		return
+	}
+	item, err := h.service.RenameEntity(c.Request.Context(), c.Param("entity_id"), input.Name)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
+}
 func (h *EntityHandler) MergeSuggestions(c *gin.Context) {
 	q, err := entityListQuery(c)
 	if err != nil {

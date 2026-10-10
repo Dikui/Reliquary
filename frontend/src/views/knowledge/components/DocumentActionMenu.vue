@@ -9,6 +9,8 @@ interface KnowledgeItem {
   type?: string;
   parse_status?: string;
   processing_mode?: string;
+  source_kind?: string;
+  vault_path?: string;
 }
 
 const props = defineProps<{
@@ -35,6 +37,9 @@ const isParseInFlight = computed(() =>
 );
 
 const fileName = computed(() => props.item.file_name || props.item.title || props.item.id);
+const canReprocess = computed(() => !['mine', 'report'].includes(props.item.source_kind || ''));
+const canEditBody = computed(() => canReprocess.value && !props.item.vault_path
+  && props.item.type === 'manual' && props.item.processing_mode !== 'summary_only');
 </script>
 
 <template>
@@ -49,7 +54,7 @@ const fileName = computed(() => props.item.file_name || props.item.title || prop
   </div>
 
   <!-- 编辑文档 -->
-  <div v-if="item.type === 'manual' && item.processing_mode !== 'summary_only'" class="doc-action-menu-item" @click.stop="emit('edit')">
+  <div v-if="canEditBody" class="doc-action-menu-item" @click.stop="emit('edit')">
     <t-icon class="icon" name="edit" />
     <span>{{ $t('knowledgeBase.editDocument') }}</span>
   </div>
@@ -61,13 +66,13 @@ const fileName = computed(() => props.item.file_name || props.item.title || prop
   </div>
 
   <!-- 重建知识 (in-flight: no popconfirm, just emits) -->
-  <div v-if="isParseInFlight" class="doc-action-menu-item" @click.stop="emit('reparse')">
+  <div v-if="canReprocess && isParseInFlight" class="doc-action-menu-item" @click.stop="emit('reparse')">
     <t-icon class="icon" name="refresh" />
     <span>{{ $t('knowledgeBase.rebuildDocument') }}</span>
   </div>
 
   <!-- 重建知识 (normal: with popconfirm) -->
-  <t-popconfirm v-else theme="warning"
+  <t-popconfirm v-else-if="canReprocess" theme="warning"
     :content="$t('knowledgeBase.rebuildConfirm', { fileName })"
     :confirm-btn="{ content: $t('common.confirm'), theme: 'primary' }"
     :cancel-btn="{ content: $t('common.cancel') }" placement="left"

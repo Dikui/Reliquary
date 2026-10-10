@@ -31,6 +31,7 @@ type RouterParams struct {
 	ModelService                 interfaces.ModelService
 	KBHandler                    *handler.KnowledgeBaseHandler
 	KnowledgeHandler             *handler.KnowledgeHandler
+	VaultHandler                 *handler.VaultHandler `optional:"true"`
 	KnowledgeSearchHandler       *handler.KnowledgeSearchHandler
 	EntityHandler                *handler.EntityHandler
 	TenantHandler                *handler.TenantHandler
@@ -119,6 +120,11 @@ func NewRouter(params RouterParams) *gin.Engine {
 			params.FileService,
 			params.ResourceCatalog)
 		RegisterKnowledgeRoutes(v1, params.KnowledgeHandler, accessGuards)
+		if params.VaultHandler != nil {
+			v1.GET("/vault/status", params.VaultHandler.Status)
+			v1.POST("/reports", params.VaultHandler.CreateReport)
+			v1.GET("/knowledge/:id/vault-attachment", accessGuards.KBExistsFromKnowledgeIDParam("id"), params.VaultHandler.Attachment)
+		}
 		v1.POST("/knowledge-search", params.KnowledgeSearchHandler.SearchKnowledge)
 		RegisterEntityRoutes(v1, params.EntityHandler)
 		RegisterChunkRoutes(v1, params.ChunkHandler, accessGuards)

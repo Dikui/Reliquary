@@ -29,6 +29,8 @@ export default function (knowledgeBaseId?: string) {
     id: "",
     total: 0,
     type: "",
+    source_kind: '' as NonNullable<ClassifiedKnowledge['source_kind']> | '',
+    vault_path: '',
     source: "",
     channel: "",
     file_type: "",
@@ -73,9 +75,11 @@ export default function (knowledgeBaseId?: string) {
 
         const { data, total: totalResult } = result;
     const cardList_ = data.map((item: any) => {
-      const rawName = item.file_name || item.title || item.source || t('knowledgeBase.untitledDocument')
+      const isVaultDocument = item.source_kind === 'mine' || item.source_kind === 'report'
+      const rawName = (isVaultDocument ? item.title || item.file_name : item.file_name || item.title)
+        || item.source || t('knowledgeBase.untitledDocument')
       const dotIndex = rawName.lastIndexOf('.')
-      const displayName = dotIndex > 0 ? rawName.substring(0, dotIndex) : rawName
+      const displayName = !isVaultDocument && dotIndex > 0 ? rawName.substring(0, dotIndex) : rawName
       const fileTypeSource = item.file_type || (item.type === 'manual' ? 'MANUAL' : '')
       return {
         ...item,
@@ -182,6 +186,8 @@ export default function (knowledgeBaseId?: string) {
       md: [],
       id: "",
       type: "",
+      source_kind: '',
+      vault_path: '',
       source: "",
       channel: "",
       file_type: "",
@@ -204,10 +210,14 @@ export default function (knowledgeBaseId?: string) {
         if (result.success && result.data) {
           const { data } = result;
           Object.assign(details, {
-            title: data.file_name || data.title || data.source || t('knowledgeBase.untitledDocument'),
+            title: ((data.source_kind === 'mine' || data.source_kind === 'report')
+              ? data.title || data.file_name : data.file_name || data.title)
+              || data.source || t('knowledgeBase.untitledDocument'),
             time: formatStringDate(new Date(data.updated_at)),
             id: data.id,
             type: data.type || 'file',
+            source_kind: data.source_kind || '',
+            vault_path: data.vault_path || '',
             source: data.source || '',
             channel: data.channel || '',
             file_type: data.file_type || '',

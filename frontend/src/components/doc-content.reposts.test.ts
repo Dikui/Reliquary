@@ -14,6 +14,8 @@ import zhCN from '../i18n/locales/zh-CN'
 import enUS from '../i18n/locales/en-US'
 import { safeExternalUrl } from '../utils/externalUrl'
 import type { KnowledgeRepostSource } from '../api/knowledge-base/index'
+import { createSafeImage, isValidImageURL, protectProviderImageSrcInHTML } from '../utils/security'
+import { buildProtectedFileRequest } from '../utils/protectedFileAccess'
 
 const require = createRequire(import.meta.url)
 const messages = { 'zh-CN': zhCN, 'en-US': enUS }
@@ -46,6 +48,8 @@ function compileSFC(path: string) {
 }
 const repostSFC = compileSFC('../views/knowledge/components/RepostSources.vue')
 const detailSFC = compileSFC('./doc-content.vue')
+const actionMenuSFC = compileSFC('../views/knowledge/components/DocumentActionMenu.vue')
+const batchBarSFC = compileSFC('../views/knowledge/components/DocumentBatchBar.vue')
 const actualRepostSources = repostSFC.create({ '@/utils/externalUrl': { safeExternalUrl } })
 const sharedRepostModule = { __esModule: true, default: actualRepostSources }
 const emptyComponent = defineComponent({ setup: () => () => null })
@@ -88,6 +92,7 @@ async function renderComponent(component: any, props: Record<string, unknown>, l
 }
 
 interface DetailRenderOptions {
+  copyRequests?: { text: string; successKey: string }[]
   environment?: Record<string, unknown>
   scenario?: (state: any) => void | Promise<void>
   ssrContext?: Record<string, any>
@@ -101,8 +106,10 @@ async function renderDetails(sources: KnowledgeRepostSource[] | null | undefined
     mermaid: { __esModule: true, default: { initialize() {} } },
     'tdesign-vue-next': { MessagePlugin: { error: unexpectedAPI, warning: unexpectedAPI } },
     '@/api/knowledge-base/index': { KNOWLEDGE_CHUNK_PAGE_SIZE: 20, getKnowledgeDetails: unexpectedAPI },
-    '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) },
-    '@/utils/markdownTableNormalize': {}, '@/utils/mermaidViewer': {}, '@/utils/textLineDiff': {},
+    '@/utils/clipboard': { copyWithToast: async (text: string, successKey: string) => { options.copyRequests?.push({ text, successKey }); return true } },
+    '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)), createSafeImage, isValidImageURL,
+      safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value },
+    '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: (value: string) => value }, '@/utils/mermaidViewer': {}, '@/utils/textLineDiff': {},
     '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true }) },
     '@/components/KnowledgeClassification.vue': emptyModule,
     '@/components/document-preview.vue': emptyModule,
@@ -132,6 +139,83 @@ function repostBlock(html: string) {
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: article renderer sends relative attachment images through protected vault access`, async () => {
+    const ref = '../../attachments/vault-article/图表.png'
+    let imageHTML = ''
+    await renderDetails([], locale, {
+      details: { id: 'vault-article', source_kind: 'article', vault_path: 'articles/2026-10/标题-vaultart.md' },
+      scenario: async state => { imageHTML = state.renderer.image({ href: ref, title: '图表', text: 'Chart' }) },
+    })
+    const source = `vault://vault-article/${encodeURIComponent(ref)}`
+    assert.ok(imageHTML.includes(`src="${source}"`))
+    const protectedHTML = protectProviderImageSrcInHTML(imageHTML)
+    assert.ok(protectedHTML.includes(`data-protected-src="${source}"`))
+    const request = buildProtectedFileRequest(source, { mode: 'tenant' })!
+    const url = new URL(request.url, 'http://localhost')
+    assert.equal(url.pathname, '/api/v1/knowledge/vault-article/vault-attachment')
+    assert.equal(url.searchParams.get('path'), ref)
+    assert.doesNotMatch(request.url, /token=/)
+  })
+
+  test(`${locale}: article HTML images also use protected relative attachment access`, async () => {
+    const ref = '../../attachments/vault-article/图表.png'
+    let html = ''
+    await renderDetails([], locale, {
+      details: { id: 'vault-article', source_kind: 'article', vault_path: 'articles/2026-10/标题-vaultart.md' },
+      scenario: state => { html = state.processMarkdown(`<img src="${ref}" alt="Chart">`) },
+    })
+    const source = `vault://vault-article/${encodeURIComponent(ref)}`
+    assert.ok(protectProviderImageSrcInHTML(html).includes(`data-protected-src="${source}"`))
+  })
+
+  for (const source_kind of ['mine', 'report']) {
+    test(`${locale}: ${source_kind} detail hides reprocessing and never submits a model request`, async () => {
+      const html = await renderDetails([], locale, {
+        details: { source_kind, vault_path: `${source_kind}/note.md` },
+        scenario: state => state.reprocess(),
+      })
+      assert.ok(!html.includes(messages[locale].knowledgeBase.reprocess))
+    })
+  }
+
+  test(`${locale}: vault documents have no body editor and personal documents have no reprocessing action`, async () => {
+    const component = actionMenuSFC.create()
+    const item = { id: 'article', type: 'manual', parse_status: 'completed', processing_mode: 'full' }
+    const render = (fields: Record<string, unknown>) => renderComponent(component, { item: { ...item, ...fields }, traceVisible: false }, locale)
+    const editable = await render({})
+    const editLabel = `<span>${messages[locale].knowledgeBase.editDocument}</span>`
+    const reprocessLabel = `<span>${messages[locale].knowledgeBase.rebuildDocument}</span>`
+    assert.ok(editable.includes(editLabel))
+    assert.ok(editable.includes(reprocessLabel))
+    const article = await render({ source_kind: 'article', vault_path: 'articles/note.md' })
+    assert.ok(!article.includes(editLabel))
+    assert.ok(article.includes(reprocessLabel))
+    for (const source_kind of ['mine', 'report']) {
+      for (const parse_status of ['completed', 'processing']) {
+        const html = await render({ source_kind, parse_status })
+        assert.ok(!html.includes(editLabel))
+        assert.ok(!html.includes(reprocessLabel))
+      }
+    }
+    const mixedBatch = await renderComponent(batchBarSFC.create(), { count: 2, reparseAllowed: false }, locale)
+    assert.ok(!mixedBatch.includes(messages[locale].knowledgeBase.rebuildDocument))
+    assert.ok(mixedBatch.includes(messages[locale].knowledgeBase.batchDelete))
+  })
+
+  test(`${locale}: article detail shows the relative vault path and copies it through the shared clipboard helper`, async () => {
+    const path = 'articles/2026-10/中文文章-abc12345.md'
+    const copyRequests: { text: string; successKey: string }[] = []
+    const html = await renderDetails([], locale, {
+      details: { vault_path: path }, copyRequests,
+      scenario: async state => { await state.copyWithToast(path, 'common.copySuccess') },
+    })
+    assert.ok(html.includes(messages[locale].knowledgeBase.vaultPath))
+    assert.ok(html.includes(messages[locale].knowledgeBase.copyVaultPath))
+    assert.ok(html.includes(`<code>${path}</code>`))
+    assert.deepEqual(copyRequests, [{ text: path, successKey: 'common.copySuccess' }])
+    assert.doesNotMatch(await renderDetails([], locale), /doc-vault-path-row/)
+  })
+
   test(`${locale} full message detail SFC shows publishers, safe URLs, times and all four duplicate methods`, async () => {
     const html = await renderDetails(sourceRows, locale)
     assert.match(html, /class="setting-drawer__section doc-repost-section"/)

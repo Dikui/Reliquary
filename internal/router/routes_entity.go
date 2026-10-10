@@ -20,4 +20,5 @@ func RegisterEntityRoutes(r *gin.RouterGroup, h *handler.EntityHandler) {
 	group.GET("/:entity_id", h.EntityDetail)
 	group.GET("/:entity_id/merge-records", h.MergeRecords)
 	group.PATCH("/:entity_id/description", h.UpdateEntityDescription)
+	group.PATCH("/:entity_id/name", h.RenameEntity)
 }

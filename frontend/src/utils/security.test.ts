@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { protectProviderImageSrcInHTML } from './security.ts'
+import { hydrateProtectedFileImages, isValidImageURL, protectProviderImageSrcInHTML } from './security.ts'
 
 test('protectProviderImageSrcInHTML uses a placeholder src for provider images', () => {
   const html = '<p><img alt="preview" src="local://10000/exports/a.jpg"></p>'
@@ -22,4 +22,56 @@ test('protectProviderImageSrcInHTML uses a placeholder src for resource referenc
     sanitized,
     /data-protected-src="resource:\/\/AbCdEfGhIjKlMnOpQrStUv"/,
   )
+})
+
+test('vault image references are protected and hydrated through the authenticated article endpoint', async () => {
+  const relative = '../../attachments/vault-hydration-id/图表.png'
+  const source = `vault://vault-hydration-id/${encodeURIComponent(relative)}`
+  assert.equal(isValidImageURL(source), true)
+  const protectedHTML = protectProviderImageSrcInHTML(`<img src="${source}" alt="Chart">`)
+  assert.match(protectedHTML, /src="data:image\/gif;base64,/)
+  assert.ok(protectedHTML.includes(`data-protected-src="${source}"`))
+
+  const previous = new Map<string, PropertyDescriptor | undefined>()
+  const requests: { url: string; options: RequestInit }[] = []
+  const attributes = new Map([['src', source]])
+  const image = {
+    dataset: {} as Record<string, string>, src: source,
+    getAttribute: (key: string) => attributes.get(key) ?? null,
+    setAttribute: (key: string, value: string) => { attributes.set(key, value) },
+    removeAttribute: (key: string) => { attributes.delete(key) },
+  }
+  const selectors: string[] = []
+  const root = { querySelectorAll: (selector: string) => { selectors.push(selector); return [image] } }
+  for (const [key, value] of Object.entries({
+    window: { location: { origin: 'http://localhost' } },
+    localStorage: { getItem: () => 'vault-hydration-token' },
+    fetch: async (url: string, options: RequestInit) => {
+      requests.push({ url, options })
+      return { ok: true, blob: async () => new Blob(['image fixture'], { type: 'image/png' }) }
+    },
+  })) {
+    previous.set(key, Object.getOwnPropertyDescriptor(globalThis, key))
+    Object.defineProperty(globalThis, key, { configurable: true, value })
+  }
+  try {
+    await hydrateProtectedFileImages(root as unknown as ParentNode, { mode: 'knowledgeBase', kbId: 'kb-a' })
+    assert.equal(requests.length, 1)
+    const request = requests[0]
+    const url = new URL(request.url, 'http://localhost')
+    assert.equal(url.pathname, '/api/v1/knowledge/vault-hydration-id/vault-attachment')
+    assert.equal(url.searchParams.get('path'), relative)
+    assert.deepEqual(request.options.headers, { Authorization: 'Bearer vault-hydration-token' })
+    assert.equal(request.options.credentials, 'include')
+    assert.doesNotMatch(request.url, /vault-hydration-token|token=/)
+    assert.equal(image.dataset.authHydrated, '1')
+    assert.match(image.src, /^blob:/)
+    assert.ok(selectors.some(selector => selector.includes('img[src^="vault://"]')))
+    URL.revokeObjectURL(image.src)
+  } finally {
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor)
+      else Reflect.deleteProperty(globalThis, key)
+    }
+  }
 })

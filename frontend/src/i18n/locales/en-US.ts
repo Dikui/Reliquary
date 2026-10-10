@@ -187,6 +187,8 @@ export default {
     tenantTooltipWithCreator: 'Created by {creator}',
   },
   knowledgeBase: {
+    vaultPath: 'Vault path',
+    copyVaultPath: 'Copy vault path',
     contentTypes: {"event":"Event","opinion":"Opinion","research":"Research","tutorial":"Tutorial","case":"Case","reference":"Reference","unclassified":"Unclassified"},
     processingModes: {"full":"Full text","summary_only":"Summary and link"},
     contentTypeFilter: "Content type",
@@ -579,6 +581,19 @@ export default {
     }
   },
   settings: {
+    vault: {
+      title: 'File vault',
+      root: 'Root directory',
+      rootHint: 'Configured on the server. This value is read-only.',
+      mine: 'User documents',
+      reports: 'Reports',
+      lastScan: 'Last scan',
+      indexedFiles: 'Indexed files',
+      lastError: 'Latest error',
+      noError: 'None',
+      notScanned: 'Not scanned yet',
+      loadFailed: 'Could not load vault status. Try again.',
+    },
     knowledgeSettings: 'Knowledge settings',
     dataSources: 'Subscriptions',
     modelManagement: 'Model Management',

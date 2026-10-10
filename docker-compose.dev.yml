@@ -1,4 +1,5 @@
 # 开发环境配置 - 只启动基础设施服务，app 和 frontend 在本地运行
+# Native app files use VAULT_ROOT, defaulting to .local-data/vault in scripts/dev.sh.
 services:
   # 只启动依赖的基础设施服务
   postgres:

@@ -129,6 +129,7 @@ func hydrateMessageSource(k *types.Knowledge, metadata map[string]string) error 
 
 func findMessageDuplicate(tx *gorm.DB, k *types.Knowledge, earlierPendingOnly ...bool) (*types.Knowledge, string, int, error) {
 	query := tx.Model(&types.Knowledge{}).Where("tenant_id = ? AND knowledge_base_id = ? AND id <> ?", k.TenantID, k.KnowledgeBaseID, k.ID).
+		Where("source_kind = ?", "article").
 		Where("parse_status NOT IN ?", []string{types.ParseStatusFailed, types.ParseStatusRejected, types.ManualKnowledgeStatusDraft, types.ParseStatusDeleting, types.ParseStatusCancelled})
 	// Parser workers can see several already-persisted pending messages. A
 	// stable owner order prevents them from choosing and then deleting each

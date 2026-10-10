@@ -1778,6 +1778,19 @@ export default {
     }
   },
   settings: {
+    vault: {
+      title: '文件库',
+      root: '根目录',
+      rootHint: '由服务器配置，此处只读。',
+      mine: '用户文档',
+      reports: '整理结果',
+      lastScan: '最近扫描时间',
+      indexedFiles: '已索引文件数',
+      lastError: '最近错误',
+      noError: '无',
+      notScanned: '尚未扫描',
+      loadFailed: '无法加载文件库状态，请重试。',
+    },
     knowledgeSettings: '知识库设置',
     dataSources: '订阅源',
     modelManagement: '模型管理',
@@ -2021,6 +2034,8 @@ export default {
     }
   },
   knowledgeBase: {
+    vaultPath: '文件库路径',
+    copyVaultPath: '复制文件库路径',
     contentTypes: {"event":"事件","opinion":"观点","research":"研究","tutorial":"教程","case":"案例","reference":"参考","unclassified":"未分类"},
     processingModes: {"full":"全文保存","summary_only":"摘要加链接"},
     contentTypeFilter: "内容类型",

@@ -232,7 +232,7 @@ const awaitBatchReparseReflection = async (ids: string[]) => {
 };
 
 const confirmBatchReparse = async () => {
-  if (batchReparsing.value || batchDeleting.value || selectedIds.value.size === 0) return;
+  if (!selectedDocumentsReprocessable.value || batchReparsing.value || batchDeleting.value || selectedIds.value.size === 0) return;
   const allIds = Array.from(selectedIds.value);
   const ids = allIds.filter((id) => {
     const item = cardList.value.find((c) => c.id === id);
@@ -591,6 +591,8 @@ watch(() => cardList.value, (newValue) => {
 }, { deep: true })
 type KnowledgeCard = {
   id: string;
+  source_kind?: string;
+  vault_path?: string;
   knowledge_base_id?: string;
   parse_status: string;
   description?: string;
@@ -953,7 +955,7 @@ const handleManualCreate = () => {
 const handleOpenKBSettings = () => uiStore.openSettings('knowledge');
 
 const handleManualEdit = (index: number, item: KnowledgeCard) => {
-
+  if (item.vault_path || ['mine', 'report'].includes(item.source_kind || '')) return;
   if (cardList.value[index]) {
     cardList.value[index].isMore = false;
   }
@@ -988,7 +990,7 @@ const handleViewTrace = (index: number, item: KnowledgeCard) => {
 };
 
 const confirmRebuildKnowledge = async (index: number, item: KnowledgeCard) => {
-
+  if (['mine', 'report'].includes(item.source_kind || '')) return;
   if (!item?.id) {
     MessagePlugin.warning(t('knowledgeEditor.messages.missingId'));
     return;
@@ -1163,7 +1165,13 @@ const {
 });
 
 const isManualDraftKnowledge = (item: KnowledgeCard) =>
-  item.type === 'manual' && item.parse_status === 'draft';
+  item.type === 'manual' && item.parse_status === 'draft' && !item.vault_path
+  && !['mine', 'report'].includes(item.source_kind || '');
+
+const selectedDocumentsReprocessable = computed(() => Array.from(selectedIds.value).every(id => {
+  const item = cardList.value.find((card: KnowledgeCard) => card.id === id);
+  return item && !['mine', 'report'].includes(item.source_kind || '');
+}));
 
 const openKnowledgeItem = (item: KnowledgeCard) => {
   if (shouldSuppressDocClick()) return;
@@ -1513,6 +1521,7 @@ const refreshKnowledgeSettings = () => { if (kbId.value) void loadKnowledgeBaseI
               <div class="doc-batch-bar-anchor" v-show="batchMode || selectedIds.size > 0">
                 <DocumentBatchBar :count="selectedIds.size" :delete-loading="batchDeleting"
                   :reparse-loading="batchReparsing" :visible="batchMode || selectedIds.size > 0"
+                  :reparse-allowed="selectedDocumentsReprocessable"
 
                   @cancel="handleBatchCancel" @delete="confirmBatchDelete" @reparse="confirmBatchReparse"
                    />

@@ -122,6 +122,12 @@ type Knowledge struct {
 	Description       string            `json:"description"`
 	ContentType       string            `json:"content_type" gorm:"type:varchar(16)"`
 	ProcessingMode    string            `json:"processing_mode" gorm:"type:varchar(16);not null;default:'full'"`
+	SourceKind        string            `json:"source_kind" gorm:"type:varchar(16);not null;default:'article'"`
+	VaultPath         string            `json:"vault_path" gorm:"type:text;not null;default:''"`
+	VaultBody         string            `json:"-" gorm:"type:text;not null;default:''"`
+	VaultOriginalPath string            `json:"-" gorm:"type:text;not null;default:''"`
+	Starred           bool              `json:"starred" gorm:"not null;default:false"`
+	CollectReason     string            `json:"collect_reason" gorm:"type:text;not null;default:''"`
 	StructuredSummary *KnowledgeSummary `json:"structured_summary" gorm:"type:jsonb"`
 	Entities          []Entity          `json:"entities" gorm:"-"`
 	Topics            []Topic           `json:"topics" gorm:"-"`

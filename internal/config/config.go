@@ -14,6 +14,7 @@ import (
 
 // Config 应用程序总配置
 type Config struct {
+	Vault             *VaultConfig             `yaml:"vault" json:"vault"`
 	ArticleProcessing *ArticleProcessingConfig `yaml:"article_processing" json:"article_processing"`
 	Server            *ServerConfig            `yaml:"server"           json:"server"`
 	KnowledgeBase     *KnowledgeBaseConfig     `yaml:"knowledge_base"   json:"knowledge_base"`
@@ -142,6 +143,9 @@ func LoadConfig() (*Config, error) {
 
 	// Validate configuration values
 	applyKnowledgeBaseEnvOverrides(&cfg)
+	if err := applyVaultEnvOverrides(&cfg); err != nil {
+		return nil, err
+	}
 
 	if err := ValidateConfig(&cfg); err != nil {
 		return nil, err

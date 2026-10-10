@@ -222,6 +222,11 @@ func (s *knowledgeService) DeleteKnowledge(ctx context.Context, id string) error
 
 	// Best-effort physical cleanup. Errors here only leak storage; they must not
 	// fail the delete now that the row is already gone.
+	if s.vault != nil {
+		if err := s.vault.DeleteArticle(ctx, knowledge); err != nil {
+			logger.Errorf(ctx, "DeleteKnowledge vault cleanup failed: %v", err)
+		}
+	}
 	if knowledge.FilePath != "" {
 		if err := kbFileSvc.DeleteFile(ctx, knowledge.FilePath); err != nil {
 			logger.GetLogger(ctx).WithField("error", err).Errorf("DeleteKnowledge delete file failed")
@@ -431,6 +436,11 @@ func (s *knowledgeService) DeleteKnowledgeList(ctx context.Context, ids []string
 
 	storageAdjust := int64(0)
 	for _, knowledge := range knowledgeList {
+		if s.vault != nil {
+			if err := s.vault.DeleteArticle(ctx, knowledge); err != nil {
+				logger.Errorf(ctx, "DeleteKnowledgeList vault cleanup failed: %v", err)
+			}
+		}
 		if knowledge.FilePath != "" {
 			fSvc := kbFileServices[knowledge.KnowledgeBaseID]
 			if err := fSvc.DeleteFile(ctx, knowledge.FilePath); err != nil {

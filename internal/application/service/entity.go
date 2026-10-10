@@ -18,6 +18,7 @@ type EntityService struct {
 	db                     *gorm.DB
 	models                 interfaces.ModelService
 	nameEmbeddingRebuilder *EntityNameEmbeddingRebuilder
+	headerRefresher        ArticleHeaderRefresher
 }
 
 func NewEntityService(db *gorm.DB, models interfaces.ModelService) *EntityService {
@@ -25,6 +26,9 @@ func NewEntityService(db *gorm.DB, models interfaces.ModelService) *EntityServic
 }
 func (s *EntityService) SetNameEmbeddingRebuilder(r *EntityNameEmbeddingRebuilder) {
 	s.nameEmbeddingRebuilder = r
+}
+func (s *EntityService) SetHeaderRefresher(r ArticleHeaderRefresher) {
+	s.headerRefresher = r
 }
 func (s *EntityService) requireTenant(ctx context.Context) (uint64, error) {
 	id, ok := types.TenantIDFromContext(ctx)

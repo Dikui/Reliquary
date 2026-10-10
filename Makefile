@@ -94,7 +94,7 @@ build-anydoc: anydoc-lib
 
 # Run the application
 run: build
-	SSRF_WHITELIST_EXTRA="$${SSRF_WHITELIST_EXTRA-198.18.0.0/15}" ./$(BINARY_NAME)
+	VAULT_ROOT="$${VAULT_ROOT:-$(CURDIR)/.local-data/vault}" SSRF_WHITELIST_EXTRA="$${SSRF_WHITELIST_EXTRA-198.18.0.0/15}" ./$(BINARY_NAME)
 
 reset-password:
 	go run ./cmd/server reset-password

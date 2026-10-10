@@ -191,6 +191,11 @@ function providerSourceFromImageSrc(src: string): string | null {
     }
 
     const filePath = (url.searchParams.get('file_path') || '').trim();
+    const vaultAttachment = /^\/api\/v1\/knowledge\/([^/]+)\/vault-attachment$/.exec(url.pathname);
+    if (vaultAttachment) {
+      const path = url.searchParams.get('path');
+      return path ? `vault://${vaultAttachment[1]}/${encodeURIComponent(path)}` : null;
+    }
     return isProviderFileURL(filePath) ? filePath : null;
   } catch {
     return null;
@@ -461,7 +466,7 @@ export async function hydrateProtectedFileImages(
   }
 
   const images = root.querySelectorAll<HTMLImageElement>(
-    'img[data-protected-src], img[src^="resource://"], img[src^="local://"]',
+    'img[data-protected-src], img[src^="resource://"], img[src^="local://"], img[src^="vault://"]',
   );
   if (!images.length) {
     return;

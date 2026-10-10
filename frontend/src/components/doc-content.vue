@@ -27,6 +27,7 @@ import KnowledgeProcessingTimeline from '@/components/knowledge-processing-timel
 import { resolveKnowledgeDownloadFileName } from '@/views/knowledge/knowledgeDownloadFileName';
 import { isKnownPreviewableExt, resolveFilePreviewExt } from '@/utils/filePreview';
 import { getApiBaseUrl } from '@/utils/api-base';
+import { copyWithToast } from '@/utils/clipboard';
 
 const { t } = useI18n();
 
@@ -129,8 +130,9 @@ const saveMetadata = async () => {
 };
 
 const reprocessing = ref(false);
+const canReprocess = computed(() => !['mine', 'report'].includes(props.details?.source_kind || ''));
 const reprocess = async () => {
-  if (reprocessing.value || isProcessing.value) return;
+  if (!canReprocess.value || reprocessing.value || isProcessing.value) return;
   reprocessing.value = true;
   try {
     const result: any = await reprocessKnowledge(props.details.id);
@@ -650,12 +652,17 @@ const checkImage = (url) => {
     img.src = url;
   });
 };
+const resolveVaultImageSource = (href: string) => props.details?.source_kind === 'article' && props.details?.vault_path && href
+    && !/^(?:[a-z][a-z\d+.-]*:|\/)/i.test(href)
+    ? `vault://${encodeURIComponent(props.details.id)}/${encodeURIComponent(href)}`
+    : href;
 renderer.image = function ({ href, title, text }) {
-  if (!isValidImageURL(href)) {
+  const source = resolveVaultImageSource(href);
+  if (!isValidImageURL(source)) {
     return `<p>${t('error.invalidImageLink')}</p>`;
   }
 
-  const safeImage = createSafeImage(href, text || '', title || '');
+  const safeImage = createSafeImage(source, text || '', title || '');
   return `<figure>
                 ${safeImage}
                 <figcaption style="text-align: left;">${text || ''}</figcaption>
@@ -804,7 +811,7 @@ const runMarkdownPostRenderPipeline = async () => {
   await renderMermaidDiagrams();
 };
 
-watch(() => props.details.md, () => {
+watch(() => [props.details.md, props.details.source_kind, props.details.vault_path], () => {
   runMarkdownPostRenderPipeline();
 }, { immediate: true, deep: true, flush: 'post' })
 
@@ -909,6 +916,8 @@ const processMarkdown = (markdownText) => {
   // `marked` module; registering here made its later Markdown preview reuse
   // this image validator after the user had opened the chunk view.
   let html = marked.parse(safeMarkdown, { renderer }) as string;
+  html = html.replace(/(<img\b[^>]*\ssrc\s*=\s*)(["'])([^"']+)\2/gi,
+    (_match, prefix, quote, src) => `${prefix}${quote}${resolveVaultImageSource(src)}${quote}`);
 
   // 还原被转义的 <br>
   html = html.replace(/&lt;br\s*\/?&gt;/gi, '<br>');
@@ -1184,6 +1193,13 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
                 <t-tag size="small" variant="light" theme="warning">{{ getChannelLabel(details.channel) }}</t-tag>
               </span>
             </div>
+            <div v-if="details.vault_path" class="doc-detail-row doc-vault-path-row">
+              <span class="doc-detail-label">{{ $t('knowledgeBase.vaultPath') }}</span>
+              <span class="doc-detail-value doc-vault-path-value">
+                <code>{{ details.vault_path }}</code>
+                <t-button size="small" variant="text" :aria-label="$t('knowledgeBase.copyVaultPath')" @click="copyWithToast(details.vault_path, 'common.copySuccess')">{{ $t('common.copy') }}</t-button>
+              </span>
+            </div>
 
           </div>
         </section>
@@ -1289,7 +1305,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
         <section class="setting-drawer__section summary-section">
           <div class="section-title-actions">
             <h4 class="setting-drawer__section-title">{{ $t('knowledgeBase.documentSummary') }}</h4>
-            <t-button size="small" variant="outline" :loading="reprocessing" :disabled="isProcessing" @click="reprocess">
+            <t-button v-if="canReprocess" size="small" variant="outline" :loading="reprocessing" :disabled="isProcessing" @click="reprocess">
               <template #icon><t-icon name="refresh" size="15px" /></template>
               {{ $t('knowledgeBase.reprocess') }}
             </t-button>
@@ -1658,6 +1674,8 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
   color: var(--td-text-color-primary);
   word-break: break-word;
 }
+
+.doc-vault-path-value code { overflow-wrap: anywhere; font-size: 12px; }
 
 .metadata-editor-row {
   display: flex;

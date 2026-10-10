@@ -14,6 +14,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
+	github.com/fsnotify/fsnotify v1.9.0
 	github.com/hibiken/asynq v0.26.0
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/mmcdole/gofeed v1.3.0
@@ -72,7 +73,6 @@ require (
 	github.com/duckdb/duckdb-go-bindings/lib/linux-arm64 v0.10502.0 // indirect
 	github.com/duckdb/duckdb-go-bindings/lib/windows-amd64 v0.10502.0 // indirect
 	github.com/firecrawl/anydoc/go v0.1.8
-	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.12 // indirect
 	github.com/gin-contrib/sse v1.1.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect

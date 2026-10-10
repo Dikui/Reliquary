@@ -428,6 +428,12 @@ CREATE TABLE public.knowledges (
     description text,
     content_type character varying(16) CHECK (content_type IS NULL OR content_type IN ('', 'event', 'opinion', 'research', 'tutorial', 'case', 'reference')),
     processing_mode character varying(16) DEFAULT 'full' NOT NULL CHECK (processing_mode IN ('full', 'summary_only')),
+	 source_kind character varying(16) DEFAULT 'article' NOT NULL CHECK (source_kind IN ('article', 'mine', 'report')),
+	 vault_path text DEFAULT '' NOT NULL,
+	 vault_body text DEFAULT '' NOT NULL,
+	 vault_original_path text DEFAULT '' NOT NULL,
+	 starred boolean DEFAULT false NOT NULL,
+	 collect_reason text DEFAULT '' NOT NULL,
     structured_summary jsonb,
     source character varying(2048) NOT NULL,
     parse_status character varying(50) DEFAULT 'unprocessed'::character varying NOT NULL,
@@ -461,6 +467,9 @@ CREATE TABLE public.knowledges (
 --
 
 COMMENT ON COLUMN public.knowledges.channel IS 'Source channel of the knowledge: web, api, rss';
+
+CREATE UNIQUE INDEX knowledges_vault_path_unique ON public.knowledges (tenant_id, vault_path)
+WHERE vault_path <> '' AND deleted_at IS NULL;
 
 
 CREATE TABLE public.knowledge_repost_sources (

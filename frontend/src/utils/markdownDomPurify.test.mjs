@@ -11,9 +11,10 @@ test('markdownDomPurifyConfig FORBID_TAGS includes script', () => {
   assert.ok(markdownDomPurifyConfig.FORBID_TAGS.includes('script'));
 });
 
-test('ALLOWED_URI_REGEXP allows local:// and rejects javascript:', () => {
+test('ALLOWED_URI_REGEXP allows local:// and vault:// and rejects javascript:', () => {
   const re = markdownDomPurifyConfig.ALLOWED_URI_REGEXP ?? domPurifyAllowedUriRegexp;
   assert.match('local://1/exports/image.png', re);
+  assert.match('vault://article-id/..%2F..%2Fattachments%2Farticle-id%2Fimage.png', re);
   assert.doesNotMatch('javascript:alert(1)', re);
 });
 

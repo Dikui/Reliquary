@@ -84,6 +84,7 @@ check_var "DB_NAME"
 echo ""
 log_info "存储配置:"
 check_var "LOCAL_STORAGE_BASE_DIR"
+check_var "VAULT_ROOT"
 
 echo ""
 log_info "Redis 配置:"

@@ -153,7 +153,7 @@ func articleImagesInOrder(body string, stored []docparser.StoredImage) []string 
 	return urls
 }
 
-func (s *knowledgeService) processingImageDataURI(ctx context.Context, kb *types.KnowledgeBase, ref string) (string, error) {
+func (s *knowledgeService) processingImageDataURI(ctx context.Context, kb *types.KnowledgeBase, k *types.Knowledge, ref string) (string, error) {
 	if strings.HasPrefix(ref, "data:image/") {
 		return ref, nil
 	}
@@ -162,7 +162,13 @@ func (s *knowledgeService) processingImageDataURI(ctx context.Context, kb *types
 	if strings.HasPrefix(ref, "https://") || strings.HasPrefix(ref, "http://") {
 		data, err = secutils.DownloadBytes(ref)
 	} else {
-		file, readErr := s.resolveFileServiceForPath(ctx, kb, ref).GetFile(ctx, ref)
+		var file io.ReadCloser
+		var readErr error
+		if s.vault != nil && k.VaultPath != "" && !strings.Contains(ref, "://") {
+			file, readErr = s.vault.ReadImage(k, ref)
+		} else {
+			file, readErr = s.resolveFileServiceForPath(ctx, kb, ref).GetFile(ctx, ref)
+		}
 		if readErr != nil {
 			return "", fmt.Errorf("read processing image %s: %w", ref, readErr)
 		}
@@ -232,7 +238,7 @@ func (s *knowledgeService) callArticleProcessing(ctx context.Context, kb *types.
 	if model != nil && model.Parameters.SupportsVision {
 		refs := articleImagesInOrder(body, stored)
 		for _, ref := range refs[:min(len(refs), imageLimit)] {
-			uri, err := s.processingImageDataURI(ctx, kb, ref)
+			uri, err := s.processingImageDataURI(ctx, kb, k, ref)
 			if err != nil {
 				return nil, err
 			}
@@ -341,8 +347,10 @@ func (s *knowledgeService) processArticleBody(ctx context.Context, kb *types.Kno
 			return err
 		}
 	} else {
-		if err := s.storeProcessedBody(ctx, kb, k, body, images); err != nil {
-			return err
+		if s.vault == nil {
+			if err := s.storeProcessedBody(ctx, kb, k, body, images); err != nil {
+				return err
+			}
 		}
 		chunks, options := splitArticleBody(body, eff.ChunkingConfig)
 		s.processChunks(ctx, kb, k, chunks, options)
@@ -350,7 +358,70 @@ func (s *knowledgeService) processArticleBody(ctx context.Context, kb *types.Kno
 			return errors.New(k.ErrorMessage)
 		}
 	}
+	if s.vault != nil {
+		read := func(ctx context.Context, ref string) (io.ReadCloser, error) {
+			return s.resolveFileServiceForPath(ctx, kb, ref).GetFile(ctx, ref)
+		}
+		if err := s.vault.WriteArticle(ctx, k, body, read); err != nil {
+			s.vault.recordArticleError(ctx, k.ID, err)
+			return fmt.Errorf("write article to vault: %w", err)
+		}
+		if err := s.removeParsedBodyCopies(ctx, kb, k, body, images); err != nil {
+			return err
+		}
+	}
 	s.tracker().FinalizeAttempt(ctx, k.ID, attemptFromCtx(ctx), "done", types.JSONMap{"content_type": k.ContentType, "processing_mode": k.ProcessingMode}, "", "")
+	return nil
+}
+
+// removeParsedBodyCopies drops internal Markdown originals only after the
+// approved article is available in the vault. Uploaded source bytes and image
+// providers remain for downloads, parsing original formats and indexed images.
+func (s *knowledgeService) removeParsedBodyCopies(ctx context.Context, kb *types.KnowledgeBase, k *types.Knowledge, body string, images []docparser.StoredImage) error {
+	metadata := map[string]json.RawMessage{}
+	if len(k.Metadata) > 0 {
+		if err := json.Unmarshal(k.Metadata, &metadata); err != nil {
+			return err
+		}
+	}
+	var copies []string
+	var processedPath string
+	_ = json.Unmarshal(metadata["processed_body_path"], &processedPath)
+	if processedPath != "" {
+		copies = append(copies, processedPath)
+		delete(metadata, "processed_body_path")
+	}
+	if intake, err := k.IntakeMetadata(); err != nil {
+		return err
+	} else if intake != nil && intake.OriginalPath != "" {
+		copies = append(copies, intake.OriginalPath)
+		intake.OriginalPath = ""
+		metadata["intake"], _ = json.Marshal(intake)
+	}
+	metadata["processed_images"], _ = json.Marshal(articleImagesInOrder(body, images))
+	if manual, err := k.ManualMetadata(); err != nil {
+		return err
+	} else if manual != nil && k.IsManual() {
+		// Manual processing payloads still carry their content, while subsequent
+		// reprocessing reads the vault body instead of this metadata copy.
+		delete(metadata, "content")
+	}
+	data, err := json.Marshal(metadata)
+	if err != nil {
+		return err
+	}
+	k.Metadata = data
+	if err = s.repo.UpdateKnowledge(ctx, k); err != nil {
+		return err
+	}
+	for _, ref := range copies {
+		if ref == k.FilePath {
+			continue
+		}
+		if err = s.resolveFileServiceForPath(ctx, kb, ref).DeleteFile(ctx, ref); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("delete replaced parsed body copy %s: %w", ref, err)
+		}
+	}
 	return nil
 }
 
@@ -384,6 +455,26 @@ func articleChunkImages(content string) []types.ParsedImage {
 		images = append(images, types.ParsedImage{URL: ref})
 	}
 	return images
+}
+
+// Relative image destinations in a persisted article already point to managed
+// vault attachments. Validate their presence before the existing intake check.
+func (s *knowledgeService) hasUnstoredArticleImages(k *types.Knowledge, body string) bool {
+	if s.vault == nil || k.VaultPath == "" {
+		return docparser.HasUnstoredImages(body)
+	}
+	for _, ref := range articleImagesInOrder(body, nil) {
+		if strings.Contains(ref, "://") || strings.HasPrefix(ref, "/files/") || strings.HasPrefix(ref, "data:") {
+			continue
+		}
+		file, err := s.vault.ReadImage(k, ref)
+		if err != nil {
+			return true
+		}
+		file.Close()
+		body = strings.ReplaceAll(body, ref, "local://vault/attachment")
+	}
+	return docparser.HasUnstoredImages(body)
 }
 
 func (s *knowledgeService) storeProcessedBody(ctx context.Context, kb *types.KnowledgeBase, k *types.Knowledge, body string, images []docparser.StoredImage) error {

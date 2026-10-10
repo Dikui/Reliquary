@@ -496,6 +496,9 @@ func (s *knowledgeService) ReparseKnowledge(
 		logger.Errorf(ctx, "Failed to load knowledge: %v", err)
 		return nil, err
 	}
+	if existing.SourceKind != "" && existing.SourceKind != "article" {
+		return nil, werrors.NewBadRequestError("vault documents are indexed directly from their files")
+	}
 
 	if intake, _ := existing.IntakeMetadata(); intake != nil && (intake.Decision == "rejected" || intake.Decision == "error") {
 		return nil, werrors.NewBadRequestError("use the intake review action for this message")
@@ -586,7 +589,7 @@ func (s *knowledgeService) ReparseKnowledge(
 			return nil, werrors.NewBadRequestError("无法获取手工知识内容")
 		}
 
-		if intake, _ := existing.IntakeMetadata(); intake != nil {
+		if intake, _ := existing.IntakeMetadata(); intake != nil || (s.vault != nil && existing.VaultPath != "") {
 			file, _, err := s.GetKnowledgeBody(ctx, existing.ID)
 			if err != nil {
 				return nil, err

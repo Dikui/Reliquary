@@ -27,8 +27,11 @@ func runServerCommand(args []string, input io.Reader, output io.Writer) (bool, e
 	if len(args) == 0 {
 		return false, nil
 	}
+	if len(args) == 1 && args[0] == "vault-rebuild" {
+		return true, runVaultRebuild(output)
+	}
 	if len(args) != 1 || args[0] != "reset-password" {
-		return true, errors.New("usage: server [reset-password]")
+		return true, errors.New("usage: server [reset-password|vault-rebuild]")
 	}
 	fmt.Fprintln(output, "Enter the new password:")
 	reader := bufio.NewReader(input)

@@ -5,6 +5,7 @@ defineProps<{
   count: number;
   deleteLoading?: boolean;
   reparseLoading?: boolean;
+  reparseAllowed?: boolean;
   // When true the bar stays visible even with 0 selections, so users can exit
   // batch mode from here without selecting anything first.
   visible?: boolean;
@@ -32,7 +33,7 @@ const { t } = useI18n();
           </t-button>
         </div>
         <div class="batch-bar-actions">
-          <t-popconfirm theme="warning" :content="t('knowledgeBase.confirmBatchReparseDocument', { count })"
+          <t-popconfirm v-if="reparseAllowed !== false" theme="warning" :content="t('knowledgeBase.confirmBatchReparseDocument', { count })"
             :confirm-btn="{ content: t('knowledgeBase.confirmBatchReparse'), theme: 'warning' }"
             :cancel-btn="{ content: t('common.cancel') }" placement="top" @confirm="emit('reparse')">
             <t-button theme="default" variant="outline" size="small"
