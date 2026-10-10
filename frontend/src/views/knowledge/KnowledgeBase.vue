@@ -2319,7 +2319,7 @@ async function createNewSession(value: string): Promise<void> {
                           <div v-if="tagHasMore" class="tag-load-more">
                             <t-button variant="text" size="small" :loading="tagLoadingMore"
                               @click.stop="kbId && loadTags(kbId)">
-                              {{ $t('tenant.loadMore') }}
+                              {{ $t('common.loadMore') }}
                             </t-button>
                           </div>
                         </template>

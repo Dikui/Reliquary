@@ -735,6 +735,8 @@ onUnmounted(() => {
 </script>
 
 <style lang="less" scoped>
+@import '../../assets/settings-layout.less';
+
 .system-settings {
   width: 100%;
 }
@@ -1126,6 +1128,72 @@ onUnmounted(() => {
   .setting-input--wide {
     width: 100%;
     flex: 1;
+  }
+
+  .desc {
+    max-width: none;
+  }
+}
+
+@container settings-content (max-width: @settings-narrow-width) {
+  .settings-section-intro {
+    flex-direction: column;
+    min-width: 0;
+
+    :deep(.t-tag) {
+      max-width: 100%;
+      height: auto;
+      white-space: normal;
+    }
+  }
+
+  .runtime-table-header {
+    display: none;
+  }
+
+  .settings-group--runtime {
+    border-radius: 8px;
+
+    .setting-row {
+      display: flex;
+      .settings-stack-row();
+    }
+
+    .setting-input {
+      width: 100%;
+    }
+  }
+
+  .setting-row {
+    .settings-stack-row();
+  }
+
+  .setting-info {
+    .settings-stack-info();
+  }
+
+  .setting-control {
+    .settings-stack-control();
+  }
+
+  .setting-control-row {
+    min-width: 0;
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .setting-control-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .setting-input,
+  .setting-input--wide {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    flex: 1 1 240px;
   }
 
   .desc {

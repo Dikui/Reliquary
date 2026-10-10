@@ -109,8 +109,6 @@ const formatTime = (time?: string) => {
 
 const getSourceInfo = (item: KnowledgeItem): { icon: string; label: string } => {
   const ch = item.channel;
-  // Drive (云盘) connectors use their own channel so Drive docs show
-  if (ch === 'im') return { icon: 'cloud-download', label: t('knowledgeBase.channelIm') };
   if (ch === 'rss') return { icon: 'cloud-download', label: t(`datasource.connector.${ch}`) };
   if (item.type === 'url') return { icon: 'link', label: t('knowledgeBase.channelUrl') };
   if (item.type === 'manual') return { icon: 'edit', label: t('knowledgeBase.channelManual') };

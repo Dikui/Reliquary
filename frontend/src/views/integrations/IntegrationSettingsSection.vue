@@ -29,6 +29,7 @@ const props = defineProps<{
 .integrations-settings {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .integrations-settings__body {

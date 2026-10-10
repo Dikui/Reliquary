@@ -367,6 +367,8 @@ onMounted(async () => {
 </script>
 
 <style lang="less" scoped>
+@import '../../assets/settings-layout.less';
+
 .ollama-settings {
   width: 100%;
 }
@@ -602,5 +604,14 @@ onMounted(async () => {
   to {
     transform: rotate(360deg);
   }
+}
+
+.settings-responsive-rows();
+
+@container settings-content (max-width: @settings-narrow-width) {
+  .status-display, .model-meta { flex-wrap: wrap; }
+  .model-list-container { grid-template-columns: minmax(0, 1fr); }
+  .model-name, .progress-info { overflow-wrap: anywhere; }
+  .download-content .input-group :deep(.t-input__wrap) { min-width: 0; }
 }
 </style>

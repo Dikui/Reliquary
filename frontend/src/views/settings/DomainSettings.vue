@@ -174,6 +174,8 @@ onMounted(loadDomains)
 onBeforeUnmount(() => { listRequest++; fieldsRequest++ })
 </script>
 <style scoped lang="less">
+@import '../../assets/settings-layout.less';
+
 .domain-settings { color: var(--td-text-color-primary); display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 .domain-mobile-nav { display: none; }
 .domain-header, .editor-heading, .domain-list-toolbar, .consolidation-header, .domain-name, .table-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
@@ -190,6 +192,14 @@ onBeforeUnmount(() => { listRequest++; fieldsRequest++ })
 .open-field-example q { color: var(--td-text-color-secondary); font-size: 12px; }
 code { overflow-wrap: anywhere; }
 :deep(textarea) { resize: none; }
+@container settings-content (max-width: @settings-narrow-width) {
+  .domain-header, .consolidation-header { .settings-stack-row(); }
+  .domain-list-toolbar, .table-actions, .domain-actions { flex-wrap: wrap; }
+  :deep(.t-table__content) { max-width: 100%; overflow-x: auto; }
+  :deep(.t-table__content > table) { min-width: 640px; }
+  :deep(.t-pagination) { flex-wrap: wrap; gap: 8px; }
+}
+
 @media (max-width: 600px) {
   .domain-header, .consolidation-header { align-items: flex-start; flex-direction: column; }
   .domain-list-toolbar { flex-wrap: wrap; }

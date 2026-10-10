@@ -305,7 +305,7 @@
       <!-- Section 5 — 测试结果（内联，避免在抽屉上再叠一个居中弹窗） -->
       <section v-if="testResult" ref="testResultSection" class="setting-drawer__section">
         <div class="test-result-header">
-          <h4 class="setting-drawer__section-title">{{ t('mcpServiceDialog.testResultTitle', '测试结果') }}</h4>
+          <h4 class="setting-drawer__section-title">{{ t('mcpServiceDialog.testResultTitle') }}</h4>
           <t-button
             variant="text"
             theme="default"

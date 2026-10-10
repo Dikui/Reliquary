@@ -524,7 +524,7 @@ const openCreateModal = () => {
 // 创建智能体
 const handleCreateAgent = () => {
   if (!isReadyForAgent.value) {
-    MessagePlugin.warning(t('agentEditor.messages.chatModelRequired'))
+    MessagePlugin.warning(t('agent.editor.modelRequired'))
     uiStore.openSettings('models')
     return
   }

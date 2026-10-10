@@ -243,6 +243,8 @@ const handleFontSizeChange = (val: FontSizeKey) => {
 </script>
 
 <style lang="less" scoped>
+@import '../../assets/settings-layout.less';
+
 .general-settings {
   width: 100%;
 }
@@ -342,6 +344,15 @@ const handleFontSizeChange = (val: FontSizeKey) => {
 }
 .setting-select {
   width: 280px;
+}
+
+.settings-responsive-rows();
+
+@container settings-content (max-width: @settings-narrow-width) {
+  .setting-select, .font-preview {
+    width: 100%;
+    max-width: 100%;
+  }
 }
 
 @media (max-width: 640px) {

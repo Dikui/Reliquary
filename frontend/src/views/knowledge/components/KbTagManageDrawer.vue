@@ -207,7 +207,7 @@
 
         <div v-if="hasMore && tags.length" class="tag-load-more">
           <t-button variant="text" size="small" :loading="loadingMore" @click="loadTags(false)">
-            {{ $t('tenant.loadMore') }}
+            {{ $t('common.loadMore') }}
           </t-button>
         </div>
       </t-loading>

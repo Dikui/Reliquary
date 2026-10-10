@@ -312,6 +312,8 @@ onMounted(loadInfo)
 </script>
 
 <style lang="less" scoped>
+@import '../../assets/settings-layout.less';
+
 .user-profile {
   width: 100%;
 }
@@ -451,6 +453,21 @@ onMounted(loadInfo)
   gap: 8px;
   margin-top: 16px;
 }
+
+.settings-responsive-rows();
+
+@container settings-content (max-width: @settings-narrow-width) {
+  .setting-control .info-value {
+    min-width: 0;
+    max-width: 100%;
+    text-align: left;
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 1100px) {
+  .password-popup-footer { flex-wrap: wrap; }
+}
 </style>
 
 <style lang="less">
@@ -481,5 +498,13 @@ onMounted(loadInfo)
     0 0 0 0.5px rgba(255, 255, 255, 0.05),
     0 2px 4px rgba(0, 0, 0, 0.12),
     0 8px 32px rgba(0, 0, 0, 0.28) !important;
+}
+
+@media (max-width: 1100px) {
+  .user-profile-password-popup-overlay .t-popup__content {
+    min-width: 0;
+    width: min(360px, calc(100vw - 72px));
+    box-sizing: border-box;
+  }
 }
 </style>

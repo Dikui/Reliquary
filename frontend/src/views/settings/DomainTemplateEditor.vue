@@ -70,6 +70,8 @@ const tabOptions = computed(() => [
 const typeOptions = computed(() => draft.value.entity_types.map(value => ({ value, label: value })))
 </script>
 <style scoped lang="less">
+@import '../../assets/settings-layout.less';
+
 .domain-template-editor { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 .template-mobile-nav { display: none; }
 .template-label, .entry-grid label, .unit-entry label { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
@@ -80,6 +82,13 @@ const typeOptions = computed(() => draft.value.entity_types.map(value => ({ valu
 .full-width { grid-column: 1 / -1; }
 .template-hint { color: var(--td-text-color-secondary); line-height: 1.6; }
 :deep(textarea) { resize: none; }
+@container settings-content (max-width: @settings-narrow-width) {
+  .entry-grid, .unit-entry { grid-template-columns: minmax(0, 1fr); }
+  .unit-entry :deep(.t-input-number) { width: 100%; max-width: 100%; }
+  .entry-heading { flex-wrap: wrap; }
+  .template-tabs :deep(.t-tabs__header) { max-width: 100%; }
+}
+
 @media (max-width: 600px) {
   .template-mobile-nav { display: block; }
   .template-tabs > :deep(.t-tabs__header) { display: none; }

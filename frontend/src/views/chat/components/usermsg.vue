@@ -107,7 +107,6 @@ const attachmentPreviewDrawer = useChatAttachmentPreviewDrawer();
 const channelLabelMap = {
     web: () => t('chat.channelWeb'),
     api: () => t('chat.channelApi'),
-    im: () => t('chat.channelIm'),
 };
 
 const channelLabel = computed(() => {

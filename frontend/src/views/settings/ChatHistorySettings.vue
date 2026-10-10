@@ -29,7 +29,7 @@
             {{ t('chatHistorySettings.embeddingModelLocked') }}
           </p>
         </div>
-        <div class="setting-control" style="min-width: 280px;">
+        <div class="setting-control">
           <ModelSelector
             model-type="Embedding"
             :selected-model-id="localEmbeddingModelId"
@@ -201,6 +201,8 @@ onMounted(async () => {
 </script>
 
 <style lang="less" scoped>
+@import '../../assets/settings-layout.less';
+
 .chat-history-settings {
   width: 100%;
 }
@@ -332,5 +334,13 @@ onMounted(async () => {
   font-size: 13px;
   color: var(--td-text-color-placeholder);
   margin: 0;
+}
+
+.settings-responsive-rows();
+
+@container settings-content (max-width: @settings-narrow-width) {
+  .setting-control :deep(.t-select) { width: 100%; max-width: 100%; }
+  .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stat-card { min-width: 0; overflow-wrap: anywhere; }
 }
 </style>

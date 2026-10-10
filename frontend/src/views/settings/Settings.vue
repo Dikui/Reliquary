@@ -736,6 +736,8 @@ onUnmounted(() => {
 .settings-mobile-nav { display: none; }
 
 .content-wrapper {
+  container-name: settings-content;
+  container-type: inline-size;
   // Bumped from 600 to 760 when the modal grew from 900→1080 (see
   // .settings-modal). Without this, single-column panes (General,
   // Tenant, API key, …) leave a wide right-hand gutter inside the
@@ -829,6 +831,18 @@ onUnmounted(() => {
 
 .settings-content::-webkit-scrollbar-thumb:hover {
   background: var(--td-gray-color-6);
+}
+
+@media (max-width: 1100px) {
+  .content-wrapper, .content-wrapper--wide, .content-wrapper--full {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+}
+
+@media (max-width: 900px) {
+  .settings-sidebar { width: 176px; }
+  .nav-label { min-width: 0; overflow-wrap: anywhere; }
 }
 
 @media (max-width: 640px) {

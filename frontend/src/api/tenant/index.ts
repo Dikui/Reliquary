@@ -50,7 +50,7 @@ export async function listTenantAPIKeys(
   } catch (error: any) {
     return {
       success: false,
-      message: error.message || t('error.tenant.listApiKeysFailed'),
+      message: error.message || t('integrations.api.loadApiKeysFailed'),
     }
   }
 }
@@ -64,7 +64,7 @@ export async function createTenantAPIKey(
   } catch (error: any) {
     return {
       success: false,
-      message: error.message || t('error.tenant.createApiKeyFailed'),
+      message: error.message || t('integrations.api.createApiKeyFailed'),
     }
   }
 }
@@ -94,7 +94,7 @@ export async function deleteTenantAPIKey(
   } catch (error: any) {
     return {
       success: false,
-      message: error.message || t('error.tenant.deleteApiKeyFailed'),
+      message: error.message || t('integrations.api.deleteApiKeyFailed'),
     }
   }
 }

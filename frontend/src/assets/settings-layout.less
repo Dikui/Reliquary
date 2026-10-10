@@ -1,0 +1,34 @@
+@settings-narrow-width: 720px;
+
+.settings-stack-row() {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.settings-stack-info() {
+  flex: none;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  padding-right: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-stack-control() {
+  flex-shrink: 1;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  justify-content: flex-start;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.settings-responsive-rows() {
+  @container settings-content (max-width: @settings-narrow-width) {
+    .setting-row { .settings-stack-row(); }
+    .setting-info { .settings-stack-info(); }
+    .setting-control { .settings-stack-control(); }
+  }
+}

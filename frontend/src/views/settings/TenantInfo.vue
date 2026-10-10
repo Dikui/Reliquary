@@ -399,6 +399,8 @@ onMounted(() => {
 </script>
 
 <style lang="less" scoped>
+@import '../../assets/settings-layout.less';
+
 .tenant-info {
   width: 100%;
 }
@@ -554,5 +556,13 @@ onMounted(() => {
   }
 }
 
+.settings-responsive-rows();
+
+@container settings-content (max-width: @settings-narrow-width) {
+  .setting-control .info-value { text-align: left; }
+  .inline-edit, .inline-edit-actions { justify-content: flex-start; flex-wrap: wrap; }
+  .inline-edit-input { min-width: 0; max-width: 100%; }
+  .inline-edit-description { max-width: 100%; }
+}
 
 </style>

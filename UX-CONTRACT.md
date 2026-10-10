@@ -54,6 +54,8 @@ The settings dialog uses transient local search, tab and pagination state. Domai
 
 The settings content owns vertical scrolling. Long template forms keep their natural height. New controls use TDesign keyboard behavior, visible focus, disabled and busy states, and application-owned dialogs. New icon-only actions have localized labels. Chinese input composition does not submit context queries. Textareas resize through their existing autosize owner and cannot be manually resized.
 
+Settings retain their desktop navigation order at narrow desktop widths. The settings-content container measures the usable content width after sidebar and padding: rows stack at 720px or less, controls fit the row, and dense tables retain local horizontal scrolling. The shared settings-layout.less owns the breakpoint and common row rules. Existing rules below 640px remain in place; dedicated mobile adaptation is outside this change.
+
 
 Browser checks cover the changed flows, both locales and themes, keyboard input, narrow viewports, open select popups and failure recovery when browser tooling is available. Static checks and unit tests alone do not prove these runtime properties.
 

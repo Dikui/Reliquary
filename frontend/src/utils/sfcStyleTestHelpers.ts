@@ -10,6 +10,7 @@ export const LONG_SOURCE_URL = 'http://127.0.0.1:18091/samples/orion-original/'
 export type CompiledStyleRule = {
   selector: string
   media: string[]
+  containers: string[]
   declarations: Record<string, string>
 }
 
@@ -27,15 +28,17 @@ export async function compiledSFCStyleRules(url: URL): Promise<CompiledStyleRule
     assert.deepEqual(compiled.errors, [], 'the production Less and scoped CSS compile successfully')
     compiled.rawResult!.root.walkRules(rule => {
       const media: string[] = []
+      const containers: string[] = []
       let parent: any = rule.parent
       while (parent) {
         if (parent.type === 'atrule' && parent.name === 'media') media.push(parent.params)
+        if (parent.type === 'atrule' && parent.name === 'container') containers.push(parent.params)
         parent = parent.parent
       }
       const declarations: Record<string, string> = {}
       rule.walkDecls(declaration => { declarations[declaration.prop] = declaration.value })
       for (const selector of rule.selector.split(',')) {
-        rules.push({ selector: selector.replace(/\[data-v-layout-test\]/g, '').trim(), media, declarations })
+        rules.push({ selector: selector.replace(/\[data-v-layout-test\]/g, '').trim(), media, containers, declarations })
       }
     })
   }
@@ -50,7 +53,12 @@ function mediaAppliesAtWidth(media: string, width: number): boolean {
 }
 
 // Merge matching selector declarations in stylesheet order at a screen width.
-export function styleDeclarationsAtWidth(rules: CompiledStyleRule[], selector: string, width: number): Record<string, string> {
+export function styleDeclarationsAtWidth(rules: CompiledStyleRule[], selector: string, width: number, containerWidths: Record<string, number> = {}): Record<string, string> {
   return Object.assign({}, ...rules.filter(rule => rule.selector === selector
-    && rule.media.every(media => mediaAppliesAtWidth(media, width))).map(rule => rule.declarations))
+    && rule.media.every(media => mediaAppliesAtWidth(media, width))
+    && rule.containers.every(container => {
+      const name = container.match(/^([\w-]+)\s+/)?.[1]
+      return name !== undefined && containerWidths[name] !== undefined
+        && mediaAppliesAtWidth(container.slice(name.length), containerWidths[name])
+    })).map(rule => rule.declarations))
 }

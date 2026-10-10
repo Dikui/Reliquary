@@ -565,7 +565,6 @@ const runtimeTaskTypeKeys: Record<string, string> = {
   'datatable:summary': 'tableSummary',
   'question:generation': 'question',
   'image:multimodal': 'multimodal',
-  'chunk:extract': 'context',
   'datasource:sync': 'sync',
   'knowledge:list_reparse': 'batchReparse',
   'knowledge:list_delete': 'batchDelete',
@@ -967,6 +966,8 @@ onUnmounted(() => {
 </script>
 
 <style lang="less" scoped>
+@import '../../assets/settings-layout.less';
+
 .runtime-queues {
   color: var(--td-text-color-primary);
 }
@@ -1017,6 +1018,10 @@ onUnmounted(() => {
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
+}
+
+.rq-title-block {
+  min-width: 0;
 }
 
 .rq-refresh {
@@ -1308,6 +1313,8 @@ onUnmounted(() => {
 }
 
 .rq-pool-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: var(--td-text-color-primary);
   font-size: 14px;
   font-weight: 500;
@@ -1315,6 +1322,7 @@ onUnmounted(() => {
 }
 
 .rq-pool-value {
+  flex-shrink: 0;
   color: var(--td-brand-color);
   font-size: 22px;
   font-weight: 600;
@@ -1424,6 +1432,7 @@ onUnmounted(() => {
 
 .rq-task-state-filter {
   display: flex;
+  overflow-x: auto;
   margin-bottom: 12px;
   border-bottom: 1px solid var(--td-component-stroke);
 }
@@ -1435,7 +1444,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  min-width: 0;
+  min-width: 104px;
   padding: 10px 6px;
   border: 0;
   border-radius: 0;
@@ -1499,6 +1508,7 @@ onUnmounted(() => {
 
 .rq-failed-section-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -1511,6 +1521,8 @@ onUnmounted(() => {
 
 .rq-failed-section-actions {
   display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
@@ -1683,6 +1695,8 @@ onUnmounted(() => {
 }
 
 .data-table-shell.rq-table-shell {
+  min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
   border: 1px solid var(--td-component-stroke);
   border-radius: 10px;
@@ -1927,6 +1941,70 @@ onUnmounted(() => {
 
   .rq-pool-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container settings-content (max-width: @settings-narrow-width) {
+  .rq-header,
+  .rq-details-header,
+  .rq-pools-header {
+    min-width: 0;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .rq-actions {
+    max-width: 100%;
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+
+  .rq-pools-note,
+  .rq-updated-at {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .rq-overview {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .rq-overview-metrics,
+  .rq-loading-metrics,
+  .rq-pool-grid {
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rq-metric-label {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .rq-pool-topline {
+    flex-wrap: wrap;
+  }
+
+  .rq-table-shell :deep(table) {
+    min-width: 794px;
+  }
+
+  .rq-models .rq-table-shell :deep(table) {
+    min-width: 698px;
+  }
+
+  .rq-state {
+    grid-template-columns: auto minmax(0, 1fr);
+
+    .t-button {
+      grid-column: 2;
+      justify-self: start;
+    }
   }
 }
 

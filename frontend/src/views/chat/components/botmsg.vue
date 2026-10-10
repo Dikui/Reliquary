@@ -344,7 +344,7 @@ const handleCopyAnswer = async () => {
         return;
     }
 
-    await copyWithToast(content, 'chat.copySuccess', 'chat.copyFailed');
+    await copyWithToast(content, 'common.copySuccess', 'common.copyFailed');
 };
 
 // 添加到知识库
@@ -366,7 +366,7 @@ const handleAddToKnowledge = () => {
         status: 'draft',
     });
 
-    MessagePlugin.info(t('chat.editorOpened'));
+    MessagePlugin.info(t('agentStream.saveToKb.editorOpened'));
 };
 
 // 处理 markdown-content 中图片的点击事件

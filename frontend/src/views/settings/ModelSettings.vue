@@ -783,6 +783,8 @@ onMounted(() => {
 </script>
 
 <style lang="less" scoped>
+@import '../../assets/settings-layout.less';
+
 .model-settings {
   width: 100%;
 }
@@ -895,7 +897,7 @@ onMounted(() => {
 
 .model-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
   gap: 12px;
 
   .model-card--add {
@@ -1231,5 +1233,12 @@ onMounted(() => {
   display: flex;
   justify-content: flex-end;
   margin-top: 20px;
+}
+@container settings-content (max-width: @settings-narrow-width) {
+  .section-header__top { align-items: flex-start; flex-wrap: wrap; }
+  .model-type-tabs :deep(.t-tabs__nav-scroll) {
+    scrollbar-width: auto;
+    &::-webkit-scrollbar { display: block; }
+  }
 }
 </style>

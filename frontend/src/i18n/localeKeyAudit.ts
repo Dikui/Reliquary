@@ -10,6 +10,7 @@ import { writeLocaleModule } from './localeSerialize.ts'
 
 import enUS from './locales/en-US.ts'
 import zhCN from './locales/zh-CN.ts'
+import { collectLiteralTranslationKeys, collectTranslationCallsFromSources } from './translationCallAudit.ts'
 
 export const LOCALE_BUNDLES = {
   'en-US': enUS,
@@ -63,6 +64,7 @@ const EXTRA_PREFIXES = [
   'integrations.tabs.',
   'knowledgeStages.stage.',
   'knowledgeStages.status.',
+  'knowledgeStages.errorCode.',
   'system.globalSettings.runtime.pools.',
   'system.globalSettings.runtime.poolDescriptions.',
   'system.globalSettings.runtime.queueNames.',
@@ -230,7 +232,7 @@ function addTemplatePattern(usage: I18nUsage, template: string): void {
 
 export function collectI18nUsageFromSources(rootDir = SOURCE_ROOT): I18nUsage {
   const usage: I18nUsage = {
-    staticKeys: new Set<string>(),
+    staticKeys: collectLiteralTranslationKeys(collectTranslationCallsFromSources(rootDir)),
     prefixes: new Set<string>(EXTRA_PREFIXES),
     segmentPatterns: [],
   }

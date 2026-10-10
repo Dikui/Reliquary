@@ -339,6 +339,7 @@ export default {
     deleteSession: 'Delete Conversation',
     renamePlaceholder: 'Enter a conversation title',
     unpinSuccess: 'Conversation unpinned',
+    pinSuccess: 'Conversation pinned',
     sessionIdCopied: 'Session ID copied',
     linkCopied: 'Conversation link copied',
     copyFailed: 'Copy failed. Check your browser clipboard permission.',
@@ -638,6 +639,9 @@ export default {
     intakeReviewSubmitted: 'Review submitted',
     intakeReviewFailed: 'Review failed',
     untitledDocument: 'Untitled Document',
+    moreOptions: 'More actions',
+    createSessionFailed: 'Failed to create conversation',
+    createSessionError: 'An error occurred while creating the conversation',
     deleteDocument: 'Delete Document',
     moveDocument: 'Move to...',
     moveToKnowledgeBase: 'Move to Knowledge Base',
@@ -795,6 +799,16 @@ export default {
     processConfig: {
       title: 'Parse config for this run',
       kbDefault: 'Using knowledge base defaults',
+      chunkSize: 'Chunk size {n}',
+      chunking: 'Chunking',
+      parser: 'Parser engine',
+      multimodal: 'Multimodal understanding',
+      on: 'Enabled',
+      off: 'Disabled',
+      parentChildOn: 'Parent-child chunking enabled',
+      parentChildOff: 'Parent-child chunking disabled',
+      question: 'Question generation',
+      questionOn: 'Enabled, {n} questions per chunk',
     },
     attempt: 'Attempt {n}',
     retry: 'Retry parsing',
@@ -869,12 +883,66 @@ export default {
       pending: 'Pending',
       running: 'Running',
       finalizing: 'Finalizing',
+      deleting: 'Deleting',
+      rejected: 'Intake rejected',
+      draft: 'Draft',
       done: 'Done',
       failed: 'Failed',
       skipped: 'Skipped',
       cancelled: 'Cancelled'
     },
     errorCode: {
+      invalid_url: "Invalid page URL",
+      invalid_url_SUGGESTION: "Check the URL format and use a complete HTTP or HTTPS address.",
+      dns_failed: "Page DNS lookup failed",
+      dns_failed_SUGGESTION: "Check the URL and server DNS configuration, then retry later.",
+      connection_timeout: "Page fetch timed out",
+      connection_timeout_SUGGESTION: "Check whether the site is accessible, retry later, or upload a file instead.",
+      tls_failed: "Secure connection to the site failed",
+      tls_failed_SUGGESTION: "Check the site certificate and server time, then retry after fixing the secure connection.",
+      http_403: "Site access denied",
+      http_403_SUGGESTION: "The site denied the fetch request. Upload a file or use the site's RSS feed instead.",
+      http_429: "Site requests rate limited",
+      http_429_SUGGESTION: "Retry later and reduce fetch requests to this site.",
+      http_5xx: "Site server error",
+      http_5xx_SUGGESTION: "The site returned a server error. Retry later or upload a file instead.",
+      http_status: "Page request failed",
+      http_status_SUGGESTION: "Check the URL and page availability, or upload a file instead.",
+      ssrf_rejected: "Page URL blocked by security policy",
+      ssrf_rejected_SUGGESTION: "Use a public page URL allowed by the security policy, or upload a file instead.",
+      redirect_rejected: "Page redirect rejected",
+      redirect_rejected_SUGGESTION: "Check the redirect destination and count, and use the final page URL allowed by the security policy.",
+      read_failed: "Failed to read page content",
+      read_failed_SUGGESTION: "Retry later or upload a file instead.",
+      html_parse_failed: "Page HTML parsing failed",
+      html_parse_failed_SUGGESTION: "Check that the page content is valid, or upload a file instead.",
+      empty_content: "Page has no readable body text",
+      empty_content_SUGGESTION: "Check that the URL points to a page with body text, or upload a file instead.",
+      javascript_required: "Page requires JavaScript rendering; body text cannot be fetched",
+      javascript_required_SUGGESTION: "Upload a file or use the site's RSS feed instead.",
+      connection_failed: "Connection to the page failed",
+      connection_failed_SUGGESTION: "Check the site URL and server network connection, then retry later.",
+      DOCREADER_TIMEOUT: 'Document parsing timed out',
+      DOCREADER_TIMEOUT_SUGGESTION: 'Try splitting large files and check parser service load before retrying.',
+      DOCREADER_UNAVAILABLE: 'Document parser unavailable',
+      DOCREADER_UNAVAILABLE_SUGGESTION: 'Check the parser configuration for this file type and the service connection.',
+      DOCREADER_PARSE_FAILED: 'Document parsing failed',
+      DOCREADER_PARSE_FAILED_SUGGESTION: 'Check whether the original file is damaged and review the parser service logs.',
+      CHUNKING_FAILED: 'Document chunking failed',
+      CHUNKING_FAILED_SUGGESTION: 'Check the chunking configuration and try splitting oversized documents before retrying.',
+      EMBEDDING_RATE_LIMIT: 'Embedding requests rate limited',
+      EMBEDDING_RATE_LIMIT_SUGGESTION: 'Retry later, or reduce request concurrency and check the model service limits.',
+      EMBEDDING_PROVIDER_FAIL: 'Embedding model call failed',
+      EMBEDDING_PROVIDER_FAIL_SUGGESTION: 'Check the embedding model name, service URL and credentials.',
+      VECTORSTORE_WRITE_FAILED: 'Index write failed',
+      VECTORSTORE_WRITE_FAILED_SUGGESTION: 'Check the PostgreSQL connection and database logs, then retry parsing after fixing the issue.',
+      MULTIMODAL_VLM_FAILED: 'Image understanding failed',
+      MULTIMODAL_VLM_FAILED_SUGGESTION: 'Check the image understanding model configuration and service status, then retry image processing.',
+      MULTIMODAL_ALL_FAILED: 'All image understanding tasks failed',
+      MULTIMODAL_ALL_FAILED_SUGGESTION: 'Check the image understanding model configuration, limits and service status before retrying parsing.',
+      TASK_TIMEOUT: 'Processing task retries exhausted',
+      TASK_TIMEOUT_SUGGESTION: 'Review the task error and application logs, fix the cause and retry parsing.',
+      UNKNOWN: 'Parsing failed',
       UNKNOWN_SUGGESTION: 'Check the application logs for details.'
     }
   },
@@ -922,6 +990,8 @@ export default {
       kbCount: '{count} knowledge base specified | {count} knowledge bases specified',
       kbAll: 'Access to all knowledge bases',
       mcpEnabled: 'MCP services enabled',
+      mcpAll: 'All MCP services',
+      mcpSelected: '{count} MCP service selected | {count} MCP services selected',
       multiTurn: 'Multi-turn conversation'
     },
     type: {
@@ -1117,6 +1187,7 @@ export default {
       parseMethodText: 'Text extraction only',
       parseMethodHint: 'Auto mode uses OCR for scanned PDFs and extracts the native text layer from digital PDFs.',
       sealRecognition: 'Seal Recognition',
+      checking: 'Testing connection...',
       chartRecognition: 'Chart Recognition',
       language: 'Language',
       testConnection: 'Test Connection',
@@ -1291,7 +1362,8 @@ export default {
     noCompatibleKbForAgent: 'This agent\'s tools don\'t match any knowledge base\'s capabilities in scope, so nothing can be referenced.'
   },
   file: {
-    upload: 'Upload File'
+    upload: 'Upload File',
+    downloadFailed: 'Failed to download file. Please retry later.',
   },
   manualEditor: {
     placeholders: {
@@ -1712,6 +1784,7 @@ export default {
     }
   },
   chat: {
+    emptyContentWarning: 'There is no answer content to use yet',
     suggestedQuestions: 'You can ask me',
     refreshSuggestedQuestions: 'More',
     thinking: 'Thinking...',
@@ -2474,6 +2547,8 @@ export default {
   language: {
     zhCN: '简体中文',
     enUS: 'English',
+    koKR: 'Korean',
+    ruRU: 'Russian',
     selectLanguage: 'Select Language',
     language: 'Language',
     languageDescription: 'Select interface display language',
@@ -2861,6 +2936,7 @@ export default {
     connectionSection: 'Connection',
     enableServiceDesc: 'When off, this service will not be invoked',
     testAfterSaveHint: 'Save first to test the connection',
+    testResultTitle: 'Test results',
     unitSecond: 's',
     unitTimes: '×',
     name: 'Service Name',
@@ -3319,7 +3395,10 @@ export default {
       waitTimeoutLabel: 'Attachment Parse Wait Timeout (s)',
       waitTimeoutDesc: 'How long a chat turn waits for still-parsing attachments before proceeding with only the finished ones. Raise for large / scanned files. 0 uses the global default.'
     },
-    dataAnalysis: 'Data analysis',
+    dataAnalysis: {
+      enableLabel: 'Table data analysis',
+      enableDesc: 'Analyze retrieved CSV / Excel tables in quick answer mode. Enabling this makes an extra model call to generate SQL.',
+    },
     fallback: {
       fixed: 'Fixed Response',
       model: 'Model Generated'
@@ -3374,6 +3453,7 @@ export default {
     paused: 'Paused',
     resumed: 'Resumed',
     pauseFailed: 'Failed to pause',
+    resumeFailed: 'Failed to resume',
     logs: 'Logs',
     syncModeLabel: 'Sync mode',
     syncMode: {
@@ -3488,7 +3568,9 @@ export default {
     syncError: {
       deletion_lookup_failed: 'Failed to look up the item before deletion; see server logs',
       deletion_failed: 'Deletion failed; see server logs',
-      ingest_failed: 'Ingest failed; see server logs'
+      ingest_failed: 'Ingest failed; see server logs',
+      source_adapter_anomaly_failed: 'Failed to record a source anomaly. Check application logs.',
+      rss_update_rejected: 'Feed content update was rejected. Check the message status and application logs.',
     }
   },
   integrations: {

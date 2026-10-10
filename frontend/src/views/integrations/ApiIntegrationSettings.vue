@@ -11,11 +11,13 @@
     <t-loading v-if="loading" :text="t('integrations.api.loading')" />
     <t-alert v-else-if="error" theme="error" :message="error"><template #operation><t-button variant="text" @click="load">{{ t('integrations.api.retry') }}</t-button></template></t-alert>
     <t-empty v-else-if="!keys.length" :description="t('integrations.api.noApiKeys')" />
-    <t-table v-else row-key="id" :data="keys" :columns="columns" :pagination="pagination" @page-change="onPageChange">
-      <template #api_key="{ row }"><code>{{ row.api_key }}</code></template>
-      <template #expires_at="{ row }">{{ row.expires_at ? new Date(row.expires_at).toLocaleString() : t('integrations.api.apiKeyNeverExpires') }}</template>
-      <template #actions="{ row }"><t-button variant="text" @click="openEdit(row)">{{ t('integrations.api.editApiKey') }}</t-button><t-button theme="danger" variant="text" @click="revoke(row)">{{ t('integrations.api.apiKeyRevoke') }}</t-button></template>
-    </t-table>
+    <div v-else class="api-table-shell">
+      <t-table row-key="id" :data="keys" :columns="columns" :pagination="pagination" @page-change="onPageChange">
+        <template #api_key="{ row }"><code>{{ row.api_key }}</code></template>
+        <template #expires_at="{ row }">{{ row.expires_at ? new Date(row.expires_at).toLocaleString() : t('integrations.api.apiKeyNeverExpires') }}</template>
+        <template #actions="{ row }"><t-button variant="text" @click="openEdit(row)">{{ t('integrations.api.editApiKey') }}</t-button><t-button theme="danger" variant="text" @click="revoke(row)">{{ t('integrations.api.apiKeyRevoke') }}</t-button></template>
+      </t-table>
+    </div>
     <div class="setting-row">
       <div class="setting-info"><label>{{ t('integrations.api.playgroundTitle') }}</label><p>{{ t('integrations.api.playgroundDesc') }}</p></div>
       <t-button variant="outline" @click="playgroundVisible = true">{{ t('integrations.api.playgroundOpen') }}</t-button>
@@ -145,12 +147,40 @@ onMounted(load)
 </script>
 
 <style scoped lang="less">
+@import '../../assets/settings-layout.less';
+
 .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .setting-info label { color: var(--td-text-color-primary); font-weight: 500; }
 .setting-info p { color: var(--td-text-color-secondary); margin: 6px 0 0; }
 .setting-control, .token-value { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.setting-control code { min-width: 0; }
+.setting-control .t-button { flex-shrink: 0; }
+.api-table-shell { min-width: 0; max-width: 100%; }
 .token-value { margin-top: 16px; }
 code { overflow-wrap: anywhere; }
 .query-result { overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 600px) { .setting-row { align-items: flex-start; flex-direction: column; } }
+
+.settings-responsive-rows();
+
+@container settings-content (max-width: @settings-narrow-width) {
+  .setting-row > .t-button {
+    max-width: 100%;
+    height: auto;
+    white-space: normal;
+  }
+
+  .api-table-shell :deep(.t-table__content) {
+    overflow-x: auto;
+  }
+
+  .api-table-shell :deep(table) {
+    min-width: 640px;
+  }
+
+  .api-table-shell :deep(.t-pagination) {
+    flex-wrap: wrap;
+    row-gap: 12px;
+  }
+}
 </style>

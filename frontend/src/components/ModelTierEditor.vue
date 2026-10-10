@@ -61,6 +61,8 @@ function refresh() { emit('refresh'); void loadInherited() }
 onBeforeUnmount(() => { request++ })
 </script>
 <style scoped lang="less">
+@import '../assets/settings-layout.less';
+
 .model-tier-editor { color: var(--td-text-color-primary); }
 .model-tier-heading { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
 .model-tier-heading h3 { font-size: 16px; margin: 0 0 6px; }
@@ -70,5 +72,9 @@ onBeforeUnmount(() => { request++ })
 .model-tier-current { font-size: 12px; color: var(--td-text-color-secondary); min-height: 20px; margin: 6px 0 0; overflow-wrap: anywhere; }
 .model-tier-control { min-width: 0; }
 .model-tier-footnote { margin-top: 12px; }
+@container settings-content (max-width: @settings-narrow-width) {
+  .model-tier-row { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .model-tier-heading { flex-wrap: wrap; }
+}
 @media (max-width: 600px) { .model-tier-row { grid-template-columns: 1fr; gap: 8px; } }
 </style>

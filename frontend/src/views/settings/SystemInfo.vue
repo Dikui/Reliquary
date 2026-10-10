@@ -304,6 +304,8 @@ onUnmounted(() => {
 </script>
 
 <style lang="less" scoped>
+@import '../../assets/settings-layout.less';
+
 .system-info {
   width: 100%;
 }
@@ -435,6 +437,17 @@ onUnmounted(() => {
       font-size: 12px;
       margin-left: 6px;
     }
+  }
+}
+
+.settings-responsive-rows();
+
+@container settings-content (max-width: @settings-narrow-width) {
+  .setting-control .info-value {
+    min-width: 0;
+    max-width: 100%;
+    text-align: left;
+    overflow-wrap: anywhere;
   }
 }
 

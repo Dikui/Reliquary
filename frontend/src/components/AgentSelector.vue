@@ -252,9 +252,9 @@ const getMcpCapability = (agent: CustomAgent): string => {
   if (config.mcp_selection_mode === 'none' || (!config.mcp_services?.length && config.mcp_selection_mode !== 'all')) {
     return '';
   }
-  if (config.mcp_selection_mode === 'all') return t('agent.shareScope.mcpAll');
+  if (config.mcp_selection_mode === 'all') return t('agent.capabilities.mcpAll');
   if (config.mcp_services?.length) {
-    return t('agent.shareScope.mcpSelected', { count: config.mcp_services.length });
+    return t('agent.capabilities.mcpSelected', { count: config.mcp_services.length });
   }
   return t('agent.capabilities.mcpEnabled');
 };
