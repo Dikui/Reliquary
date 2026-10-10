@@ -28,15 +28,17 @@ const template = compileTemplate({
 assert.deepEqual(template.errors, [])
 const stub = defineComponent({ setup(_, { slots }) { return () => h('div', slots.default?.()) } })
 
-async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any) => Promise<void>) {
+async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any) => Promise<void>, options: { baseUrl?: string; origin?: string } = {}) {
   const requests: Array<{ id?: number; payload: object }> = []
+  const copies: Array<{ value: string; successKey: string }> = []
+  const buttons: Array<{ label: unknown; click: (() => unknown) | undefined }> = []
   const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zh, 'en-US': en } })
   const modules: Record<string, unknown> = {
     'vue-i18n': { useI18n: () => i18n.global },
     'tdesign-vue-next': { MessagePlugin: { success() {} }, DialogPlugin: {} },
     '@/utils/personalServerError': personalServerError,
-    '@/utils/api-base': { getApiBaseUrl: () => 'http://localhost' },
-    '@/utils/clipboard': { copyWithToast() {} },
+    '@/utils/api-base': { getApiBaseUrl: () => options.baseUrl ?? 'http://localhost' },
+    '@/utils/clipboard': { copyWithToast(value: string, successKey: string) { copies.push({ value, successKey }) } },
     '@/utils/knowledgeSearch': searchHelpers,
     '@/api/knowledge-search': { getKnowledgeSearchOptions: async () => ({ success: true, data: { entities: [], topics: [] } }) },
     '@/api/tenant': {
@@ -48,8 +50,8 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any) => Promi
   function evaluate(code: string) {
     const module = { exports: {} as any }
     const compiled = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText
-    new Function('require', 'module', 'exports', compiled)((name: string) => name.endsWith('.vue')
-      ? { __esModule: true, default: stub } : modules[name] ?? require(name), module, module.exports)
+    new Function('require', 'module', 'exports', 'window', compiled)((name: string) => name.endsWith('.vue')
+      ? { __esModule: true, default: stub } : modules[name] ?? require(name), module, module.exports, { location: { origin: options.origin ?? 'http://localhost' } })
     return module.exports
   }
   const component = evaluate(script.content).default
@@ -71,7 +73,11 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any) => Promi
     return () => h(DatePicker, { ...attrs, ...props })
   } })
   const app = createSSRApp({ render: () => h(ConfigProvider, { globalConfig: localeConfigs[locale] }, () => h(component)) })
-  for (const name of ['t-form', 't-form-item', 't-button', 't-icon', 't-alert', 't-empty', 't-loading', 't-table', 't-textarea', 't-select']) app.component(name, stub)
+  for (const name of ['t-form', 't-form-item', 't-icon', 't-alert', 't-empty', 't-loading', 't-table', 't-textarea', 't-select']) app.component(name, stub)
+  app.component('t-button', defineComponent({ setup(_, { attrs, slots }) {
+    buttons.push({ label: attrs['aria-label'], click: attrs.onClick as (() => unknown) | undefined })
+    return () => h('button', attrs, slots.default?.())
+  } }))
   app.component('t-input', Input)
   app.component('t-date-picker', picker)
   const warnings: string[] = []
@@ -80,7 +86,32 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any) => Promi
   app.config.errorHandler = error => errors.push(error)
   const html = await renderToString(app)
   assert.deepEqual(errors, [])
-  return { state, requests, pickerProps, warnings, html }
+  return { state, requests, copies, buttons, pickerProps, warnings, html }
+}
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: external Agent endpoints have localized guidance and copy their addresses`, async () => {
+    const messages = (locale === 'zh-CN' ? zh : en).integrations.api
+    const result = await scenario(locale, async () => {})
+    assert.deepEqual(result.warnings, [])
+    for (const text of [messages.ingestUrl, messages.mcpUrl, 'POST http://localhost/api/v1/ingest', 'http://localhost/mcp', 'Streamable HTTP', 'Authorization: Bearer API_KEY']) assert.ok(result.html.includes(text), text)
+    for (const label of [messages.copyIngestUrl, messages.copyMcpUrl]) {
+      const button = result.buttons.find(button => button.label === label)
+      assert.ok(button?.click, label)
+      await button.click()
+    }
+    assert.deepEqual(result.copies, [
+      { value: 'http://localhost/api/v1/ingest', successKey: 'common.copySuccess' },
+      { value: 'http://localhost/mcp', successKey: 'common.copySuccess' },
+    ])
+    assert.deepEqual(result.requests, [])
+  })
+  test(`${locale}: external Agent endpoints preserve the reverse proxy path and use an absolute origin`, async () => {
+    const result = await scenario(locale, async () => {}, { baseUrl: '/app/reliquary/', origin: 'https://reliquary.internal' })
+    assert.deepEqual(result.warnings, [])
+    assert.ok(result.html.includes('POST https://reliquary.internal/app/reliquary/api/v1/ingest'))
+    assert.ok(result.html.includes('https://reliquary.internal/app/reliquary/mcp'))
+  })
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {

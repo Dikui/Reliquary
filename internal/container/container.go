@@ -149,6 +149,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewEntityHandler))
 	must(container.Provide(handler.NewTopicHandler))
 	must(container.Provide(handler.NewOperationLogHandler))
+	must(container.Provide(newMCPHandler))
 	must(container.Provide(handler.NewChunkHandler))
 	must(container.Provide(handler.NewModelHandler))
 	must(container.Provide(handler.NewInitializationHandler))

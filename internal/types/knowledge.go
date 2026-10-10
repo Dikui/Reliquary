@@ -131,6 +131,9 @@ type Knowledge struct {
 	VaultOriginalPath    string            `json:"-" gorm:"type:text;not null;default:''"`
 	Starred              bool              `json:"starred" gorm:"not null;default:false"`
 	CollectReason        string            `json:"collect_reason" gorm:"type:text;not null;default:''"`
+	AgentSummary         string            `json:"agent_summary" gorm:"type:text;not null;default:''"`
+	AgentTags            JSON              `json:"agent_tags" gorm:"type:jsonb;not null"`
+	SourceName           string            `json:"source_name" gorm:"type:text;not null;default:''"`
 	StructuredSummary    *KnowledgeSummary `json:"structured_summary" gorm:"type:jsonb"`
 	Entities             []Entity          `json:"entities" gorm:"-"`
 	Topics               []Topic           `json:"topics" gorm:"-"`
@@ -247,6 +250,9 @@ func (k *Knowledge) BeforeCreate(tx *gorm.DB) (err error) {
 	// invariant for every knowledge creation path.
 	if len(k.CustomMetadata) == 0 {
 		k.CustomMetadata = JSON(`{}`)
+	}
+	if len(k.AgentTags) == 0 {
+		k.AgentTags = JSON(`[]`)
 	}
 	return nil
 }

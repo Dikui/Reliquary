@@ -91,7 +91,9 @@ export default {
     "merge_entities": "合并实体",
     "create_topic": "新建主题",
     "update_topic": "修改主题",
-    "delete_topic": "删除主题"
+    "delete_topic": "删除主题",
+    "ingest": "收录",
+    "write_report": "写入整理结果"
   }
 },
   menu: {
@@ -336,6 +338,12 @@ export default {
       copySuccess: '已复制',
       baseUrl: 'API 地址',
       baseUrlDesc: '与 REST API 路径拼接使用。',
+      ingestUrl: '外部 Agent 收录接口',
+      ingestUrlDesc: '发送 JSON，url 与 content 必填。作为主动收藏直接处理，返回文章 ID 和状态。内网访问，使用 Authorization: Bearer API_KEY。',
+      copyIngestUrl: '复制收录接口地址',
+      mcpUrl: 'MCP 服务地址',
+      mcpUrlDesc: '通过 Streamable HTTP 连接，支持检索、读取文章、收录、待审区、星标和写入整理结果。内网访问，使用同一个 API Key：Authorization: Bearer API_KEY。',
+      copyMcpUrl: '复制 MCP 服务地址',
       apiKeys: 'API Keys',
       apiKeysDesc: "API Key 拥有与你登录后相同的全部访问权限。",
       createApiKey: '创建 API Key',

@@ -229,6 +229,25 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       `${messages[locale].operationLogs.actor} API Key #4`,
     ])
   })
+  test(`${locale}: external Agent writes have localized operation labels and URL filters`, async () => {
+    const route = { query: { operation_type: 'ingest' } }, calls: unknown[] = []
+    const view = component('./OperationLogs.vue', {
+      'vue-router': { useRoute: () => route, useRouter: () => ({ replace: async () => {} }) },
+      '@/api/operation-logs': { OPERATION_TYPES, listOperationLogs: async (input: unknown) => { calls.push(input); return { success: true, data: {
+        items: ['ingest', 'write_report'].map((operation_type, index) => ({ id: String(index), actor: 'api_key:2', actor_name: 'Grok Bot', operation_type, object_id: 'article-a', before: null, after: { source_name: 'grok-bot' }, created_at: '2026-10-11T04:00:00Z' })), total: 2,
+      } } } },
+    })
+    const html = await render(view, {}, locale, async state => {
+      state.readURL()
+      assert.ok(state.options.value.some((option: any) => option.value === 'ingest' && option.label === messages[locale].operationLogs.types.ingest))
+      assert.ok(state.options.value.some((option: any) => option.value === 'write_report' && option.label === messages[locale].operationLogs.types.write_report))
+      await state.load()
+    })
+    assert.deepEqual(calls, [{ operation_type: 'ingest', page: 1, page_size: 30 }])
+    assert.ok(html.includes(messages[locale].operationLogs.types.ingest))
+    assert.ok(html.includes(messages[locale].operationLogs.types.write_report))
+    assert.doesNotMatch(html, /operationLogs\.types\./)
+  })
   test(`${locale}: a duplicate topic name keeps the editor and entered text`, async () => {
     const view = component('./TopicManagement.vue', {
       '@/components/SafeTextarea.vue': safeTextareaTestModule, 'tdesign-vue-next': notifications,

@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS knowledges (
     vault_original_path TEXT NOT NULL DEFAULT '',
     starred BOOLEAN NOT NULL DEFAULT false,
     collect_reason TEXT NOT NULL DEFAULT '',
+    agent_summary TEXT NOT NULL DEFAULT '',
+    agent_tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+    source_name TEXT NOT NULL DEFAULT '',
     structured_summary JSONB,
     source VARCHAR(2048) NOT NULL DEFAULT '',
     parse_status VARCHAR(50) NOT NULL DEFAULT 'unprocessed',
@@ -342,6 +345,29 @@ func TestUpdateKnowledge_PendingCounterOmittedOnReset(t *testing.T) {
 	require.NoError(t, repo.UpdateKnowledgeColumn(ctx, id, "pending_subtasks_count", 0))
 	_, count = reloadKnowledgeRow(t, db, id)
 	assert.Equal(t, 0, count)
+}
+
+func TestUpdateKnowledgePreservesCollectionReasonFromConcurrentIntake(t *testing.T) {
+	db := pgtest.Open(t)
+	repo := NewKnowledgeRepository(db)
+	ctx := context.Background()
+	id := insertProcessingKnowledge(t, db)
+	stale, err := repo.GetKnowledgeByID(ctx, 1, id)
+	require.NoError(t, err)
+	require.Empty(t, stale.CollectReason)
+	require.NoError(t, repo.UpdateKnowledgeColumn(ctx, id, "collect_reason", "Preserve the measured result"))
+	stale.Description = "Processing finished after the user supplied a collection reason."
+	require.NoError(t, repo.UpdateKnowledge(ctx, stale))
+	current, err := repo.GetKnowledgeByID(ctx, 1, id)
+	require.NoError(t, err)
+	require.Equal(t, "Preserve the measured result", current.CollectReason)
+	require.Equal(t, stale.Description, current.Description)
+	stale.Description = "A later batch update also preserves the user judgment."
+	require.NoError(t, repo.UpdateKnowledgeBatch(ctx, []*types.Knowledge{stale}))
+	current, err = repo.GetKnowledgeByID(ctx, 1, id)
+	require.NoError(t, err)
+	require.Equal(t, "Preserve the measured result", current.CollectReason)
+	require.Equal(t, stale.Description, current.Description)
 }
 
 func TestUpdateActiveDeletingKnowledgeColumns_GuardsStateAndSoftDelete(t *testing.T) {

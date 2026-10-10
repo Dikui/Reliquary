@@ -43,15 +43,25 @@ func Auth(tenants interfaces.TenantService, users interfaces.UserService, keys i
 			return
 		}
 		ctx := c.Request.Context()
+		mcpRequest := c.Request.URL.Path == "/mcp"
 		var user *types.User
 		var principal types.Principal
 		if token, ok := bearerToken(c); ok {
-			candidate, tenantID, err := users.ValidateToken(ctx, token)
-			if err == nil && tenantID == types.SingleTenantID {
-				user = candidate
+			if !mcpRequest {
+				candidate, tenantID, err := users.ValidateToken(ctx, token)
+				if err == nil && tenantID == types.SingleTenantID {
+					user = candidate
+				}
+			}
+			if user == nil && keys != nil {
+				key, err := keys.AuthenticateAPIKey(ctx, token)
+				if err == nil && key != nil && key.TenantIDValue() == types.SingleTenantID {
+					user, _ = users.GetUserByTenantID(ctx, types.SingleTenantID)
+					principal = types.Principal{Type: types.PrincipalAPIKey, ID: strconv.FormatUint(key.ID, 10)}
+				}
 			}
 		}
-		if user == nil && keys != nil && c.GetHeader("X-API-Key") != "" {
+		if !mcpRequest && user == nil && keys != nil && c.GetHeader("X-API-Key") != "" {
 			key, err := keys.AuthenticateAPIKey(ctx, c.GetHeader("X-API-Key"))
 			if err == nil && key != nil && key.TenantIDValue() == types.SingleTenantID {
 				user, _ = users.GetUserByTenantID(ctx, types.SingleTenantID)

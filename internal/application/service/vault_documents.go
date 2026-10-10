@@ -20,6 +20,8 @@ import (
 	"github.com/google/uuid"
 	"gopkg.in/yaml.v3"
 	"gorm.io/gorm"
+	pgretriever "reliquary/internal/application/repository/retriever/postgres"
+	"reliquary/internal/application/service/retriever"
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/chunker"
 	"reliquary/internal/logger"
@@ -645,14 +647,30 @@ func (s *VaultDocumentService) CreateReport(ctx context.Context, title, markdown
 		return nil, writeErr
 	}
 	s.observations[path] = vaultObservation{hash: vaultContentHash(content), changedAt: created.Add(-s.stableWait)}
-	knowledge, err := s.indexDocument(ctx, kb, path, "report", content, created)
+	var knowledge *types.Knowledge
+	indexed := false
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		transactional := &VaultDocumentService{db: tx, models: s.models,
+			retrieval: retriever.NewPostgresRetrievalService(pgretriever.NewPostgresRetrieveEngineRepository(tx))}
+		knowledge, err = transactional.indexDocument(ctx, kb, path, "report", content, created)
+		if err != nil {
+			return err
+		}
+		indexed = true
+		return NewOperationLogService(tx).RecordTx(ctx, tx, "write_report", knowledge.ID, nil,
+			map[string]any{"title": title, "vault_path": path, "related_article_ids": selected})
+	})
 	if err != nil {
+		if indexed {
+			delete(s.observations, path)
+			if cleanupErr := os.Remove(absolutePath); cleanupErr != nil {
+				return nil, fmt.Errorf("report transaction failed: %v; remove unsaved report: %w", err, cleanupErr)
+			}
+			return nil, err
+		}
+		// Keep the saved source on ordinary indexing failure, as other vault
+		// documents do, so a later scan can retry the same immutable file.
 		return nil, fmt.Errorf("report saved at %s but indexing failed: %w", path, err)
-	}
-	metadata, _ := json.Marshal(map[string]interface{}{"related_article_ids": selected})
-	knowledge.Metadata = types.JSON(metadata)
-	if err := s.db.WithContext(ctx).Save(knowledge).Error; err != nil {
-		return nil, err
 	}
 	return knowledge, nil
 }

@@ -42,9 +42,9 @@ func escapeLikeKeyword(keyword string) string {
 // counter jump back up and never reach zero (the "stuck
 // pending_subtasks_count / never promoted to completed" bug). Omitting
 // the column here means Save can never touch it.
-// User star choices and the correction marker are also owned by dedicated
+// User star choices, collection reasons and the correction marker are owned by dedicated
 // editing methods, so background snapshots cannot overwrite those columns.
-var omitFieldsOnUpdate = []string{"DeletedAt", "PendingSubtasksCount", "Starred", "ContentTypeCorrected"}
+var omitFieldsOnUpdate = []string{"DeletedAt", "PendingSubtasksCount", "Starred", "CollectReason", "ContentTypeCorrected"}
 
 // knowledgeRepository implements knowledge base and knowledge repository interface
 type knowledgeRepository struct {

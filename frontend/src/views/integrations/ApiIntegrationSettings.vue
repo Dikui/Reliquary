@@ -5,6 +5,14 @@
       <div class="setting-control"><code>{{ apiBaseUrl }}</code><t-button variant="text" :aria-label="t('integrations.api.copy')" @click="copy(apiBaseUrl)"><t-icon name="copy" /></t-button></div>
     </div>
     <div class="setting-row">
+      <div class="setting-info"><label>{{ t('integrations.api.ingestUrl') }}</label><p>{{ t('integrations.api.ingestUrlDesc') }}</p></div>
+      <div class="setting-control"><code>POST {{ ingestUrl }}</code><t-button variant="text" :aria-label="t('integrations.api.copyIngestUrl')" @click="copy(ingestUrl)"><t-icon name="copy" /></t-button></div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-info"><label>{{ t('integrations.api.mcpUrl') }}</label><p>{{ t('integrations.api.mcpUrlDesc') }}</p></div>
+      <div class="setting-control"><code>{{ mcpUrl }}</code><t-button variant="text" :aria-label="t('integrations.api.copyMcpUrl')" @click="copy(mcpUrl)"><t-icon name="copy" /></t-button></div>
+    </div>
+    <div class="setting-row">
       <div class="setting-info"><label>{{ t('integrations.api.apiKeys') }}</label><p>{{ t('integrations.api.apiKeysDesc') }}</p></div>
       <t-button theme="primary" @click="openCreate">{{ t('integrations.api.createApiKey') }}</t-button>
     </div>
@@ -71,6 +79,9 @@ import { listTenantAPIKeys, createTenantAPIKey, updateTenantAPIKey, deleteTenant
 
 const { t } = useI18n()
 const apiBaseUrl = computed(() => getApiBaseUrl().replace(/\/$/, '') || window.location.origin)
+const externalAgentBaseUrl = computed(() => apiBaseUrl.value.startsWith('/') ? `${window.location.origin}${apiBaseUrl.value}` : apiBaseUrl.value)
+const ingestUrl = computed(() => `${externalAgentBaseUrl.value}/api/v1/ingest`)
+const mcpUrl = computed(() => `${externalAgentBaseUrl.value}/mcp`)
 const keys = ref<TenantAPIKey[]>([])
 const loading = ref(false)
 const error = ref('')
@@ -187,6 +198,7 @@ onMounted(load)
 @import '../../assets/settings-layout.less';
 
 .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.setting-info { min-width: 0; }
 .setting-info label { color: var(--td-text-color-primary); font-weight: 500; }
 .setting-info p { color: var(--td-text-color-secondary); margin: 6px 0 0; }
 .setting-control, .token-value { display: flex; align-items: center; gap: 8px; min-width: 0; }

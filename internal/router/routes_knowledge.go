@@ -23,6 +23,7 @@ func RegisterChunkRoutes(r *gin.RouterGroup, handler *handler.ChunkHandler, g *a
 }
 
 func RegisterKnowledgeRoutes(r *gin.RouterGroup, handler *handler.KnowledgeHandler, g *accessGuards) {
+	r.POST("/ingest", handler.Ingest)
 	kb := r.Group("/knowledge-bases/:id/knowledge")
 	kbRead := kb
 	{

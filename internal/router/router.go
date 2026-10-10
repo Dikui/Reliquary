@@ -14,6 +14,7 @@ import (
 	"reliquary/internal/config"
 	"reliquary/internal/handler"
 	"reliquary/internal/logger"
+	"reliquary/internal/mcpserver"
 	"reliquary/internal/middleware"
 	"reliquary/internal/types/interfaces"
 )
@@ -36,6 +37,7 @@ type RouterParams struct {
 	EntityHandler                *handler.EntityHandler
 	TopicHandler                 *handler.TopicHandler        `optional:"true"`
 	OperationLogHandler          *handler.OperationLogHandler `optional:"true"`
+	MCPHandler                   *mcpserver.Handler           `optional:"true"`
 	TenantHandler                *handler.TenantHandler
 	TenantService                interfaces.TenantService
 	TenantAPIKeyService          interfaces.TenantAPIKeyService
@@ -97,6 +99,9 @@ func NewRouter(params RouterParams) *gin.Engine {
 
 	// 认证中间件
 	r.Use(middleware.Auth(params.TenantService, params.UserService, params.TenantAPIKeyService))
+	if params.MCPHandler != nil {
+		r.Any("/mcp", gin.WrapH(params.MCPHandler))
+	}
 
 	// 本地文件访问代理（需要认证）
 	serveFilesWithResources(r, params.FileService, params.ResourceCatalog)

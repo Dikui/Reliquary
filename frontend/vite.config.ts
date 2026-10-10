@@ -98,6 +98,11 @@ export default defineConfig({
         target: DEV_PROXY_TARGET,
         changeOrigin: true,
         secure: false,
+      },
+      '/mcp': {
+        target: DEV_PROXY_TARGET,
+        changeOrigin: true,
+        secure: false,
       }
     }
   },
@@ -114,6 +119,11 @@ export default defineConfig({
         secure: false,
       },
       '/files': {
+        target: DEV_PROXY_TARGET,
+        changeOrigin: true,
+        secure: false,
+      },
+      '/mcp': {
         target: DEV_PROXY_TARGET,
         changeOrigin: true,
         secure: false,

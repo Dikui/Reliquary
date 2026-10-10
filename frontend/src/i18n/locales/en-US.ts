@@ -91,7 +91,9 @@ export default {
     "merge_entities": "Merge entities",
     "create_topic": "Create topic",
     "update_topic": "Update topic",
-    "delete_topic": "Delete topic"
+    "delete_topic": "Delete topic",
+    "ingest": "Ingest",
+    "write_report": "Write report"
   }
 },
   menu: {
@@ -2317,6 +2319,12 @@ export default {
       copySuccess: 'Copied',
       baseUrl: 'API Base URL',
       baseUrlDesc: 'Use this base URL with REST API paths.',
+      ingestUrl: 'External Agent ingest endpoint',
+      ingestUrlDesc: 'Send JSON with required url and content. Active collections are processed directly and return an article ID and status. Access over the intranet using Authorization: Bearer API_KEY.',
+      copyIngestUrl: 'Copy ingest endpoint',
+      mcpUrl: 'MCP server URL',
+      mcpUrlDesc: 'Connect via Streamable HTTP to search, read articles, ingest, review pending articles, set stars and write reports. Access over the intranet with the same API key: Authorization: Bearer API_KEY.',
+      copyMcpUrl: 'Copy MCP server URL',
       apiKeys: 'API Keys',
       apiKeysDesc: "API keys have the same full access as your signed-in account.",
       createApiKey: 'Create API Key',
