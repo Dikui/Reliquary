@@ -39,7 +39,7 @@ func TestPersonalIntakeBeyondFormerStorageLimitKeepsUsageAccounting(t *testing.T
 	engine := &personalStorageRetrieveEngine{}
 	retrieval := &retriever.PostgresRetrievalService{RetrieveEngineService: engine}
 	queue := &createKnowledgeTaskEnqueuerStub{}
-	chunks := NewChunkService(repository.NewChunkRepository(db), repo, repository.NewKnowledgeBaseRepository(db), models, retrieval, queue, nil)
+	chunks := NewChunkService(repository.NewChunkRepository(db), repo, repository.NewKnowledgeBaseRepository(db), models, retrieval)
 	svc := &knowledgeService{
 		db: db, repo: repo, tenantRepo: tenantRepo, kbService: &createKnowledgeFileKBServiceStub{kb: kb},
 		fileSvc: filesvc.NewLocalFileService(t.TempDir(), ""), task: queue, chunkService: chunks, modelService: models, retrieveEngine: retrieval,
@@ -53,13 +53,13 @@ func TestPersonalIntakeBeyondFormerStorageLimitKeepsUsageAccounting(t *testing.T
 		create func() (*types.Knowledge, error)
 	}{
 		{"upload", func() (*types.Knowledge, error) {
-			return svc.CreateKnowledgeFromFile(ctx, kb.ID, newMultipartFileHeader(t, "upload.txt", "uploaded content"), nil, nil, "", nil, types.ChannelWeb, nil)
+			return svc.CreateKnowledgeFromFile(ctx, kb.ID, newMultipartFileHeader(t, "upload.txt", "uploaded content"), nil, nil, "", types.ChannelWeb, nil)
 		}},
 		{"website", func() (*types.Knowledge, error) {
-			return svc.CreateKnowledgeFromURL(ctx, kb.ID, "https://storage-test.example/article", "", "", nil, "Website content", nil, types.ChannelWeb, nil)
+			return svc.CreateKnowledgeFromURL(ctx, kb.ID, "https://storage-test.example/article", "", "", nil, "Website content", types.ChannelWeb, nil)
 		}},
 		{"file URL", func() (*types.Knowledge, error) {
-			return svc.CreateKnowledgeFromURL(ctx, kb.ID, "https://storage-test.example/document.pdf", "", "", nil, "Downloaded content", nil, types.ChannelWeb, nil)
+			return svc.CreateKnowledgeFromURL(ctx, kb.ID, "https://storage-test.example/document.pdf", "", "", nil, "Downloaded content", types.ChannelWeb, nil)
 		}},
 		{"manual", func() (*types.Knowledge, error) {
 			return svc.CreateKnowledgeFromManual(ctx, kb.ID, &types.ManualKnowledgePayload{Title: "Manual content", Content: "Personal manually created body", Status: types.ManualKnowledgeStatusPublish}, types.ChannelWeb)

@@ -49,7 +49,7 @@ export const domPurifySecurityHooks = {
   },
 };
 
-/** Chat markdown links must never replace the conversation page. */
+/** Markdown links open without replacing the current page. */
 export const markdownDomPurifySecurityHooks = {
   ...domPurifySecurityHooks,
   afterSanitizeElements: (currentNode: Node) => {
@@ -63,7 +63,7 @@ export const markdownDomPurifySecurityHooks = {
   },
 };
 
-/** Shared DOMPurify config for chat / dev markdown (KaTeX + Mermaid SVG). */
+/** Shared DOMPurify config for rendered Markdown (KaTeX + Mermaid SVG). */
 export const markdownDomPurifyConfig = {
   ALLOWED_TAGS: [
     'p', 'br', 'strong', 'em', 'u', 'code', 'pre', 'ul', 'ol', 'li', 'blockquote',

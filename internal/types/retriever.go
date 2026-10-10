@@ -27,7 +27,6 @@ type RetrieveParams struct {
 	KnowledgeBaseIDs []string
 	// Knowledge IDs
 	KnowledgeIDs []string
-	TagIDs       []string
 	// Excluded knowledge IDs
 	ExcludeKnowledgeIDs []string
 	// Excluded chunk IDs
@@ -59,8 +58,6 @@ type IndexWithScore struct {
 	KnowledgeID string
 	// Knowledge base ID
 	KnowledgeBaseID string
-	// Tag ID
-	TagID string
 	// Score
 	Score float64
 	// Match type

@@ -59,74 +59,11 @@
       </div>
       </template>
 
-      <div class="setting-row">
-        <div class="setting-info">
-          <label>{{ $t('knowledgeEditor.advanced.autoTag.label') }}</label>
-          <p class="desc">{{ $t('knowledgeEditor.advanced.autoTag.description') }}</p>
-        </div>
-        <div class="setting-control">
-          <t-switch v-model="localAutoTag.enabled" size="medium" @change="emitAutoTag" />
-        </div>
-      </div>
 
-      <div v-if="localAutoTag.enabled" class="subsection">
-        <div class="setting-row setting-row-vertical">
-          <div class="setting-info">
-            <label>{{ $t('knowledgeEditor.advanced.autoTag.modelLabel') }}</label>
-            <p class="desc">{{ $t('knowledgeEditor.advanced.autoTag.modelDescription') }}</p>
-          </div>
-          <div class="setting-control">
-            <ModelSelector
-              model-type="KnowledgeQA"
-              :selected-model-id="localAutoTag.modelId"
-              :all-models="allModels"
-              clearable
-              :placeholder="$t('knowledgeEditor.advanced.autoTag.modelPlaceholder')"
-              @update:selected-model-id="(value: string) => { localAutoTag.modelId = value; emitAutoTag() }"
-            />
-          </div>
-        </div>
-        <div class="setting-row">
-          <div class="setting-info">
-            <label>{{ $t('knowledgeEditor.advanced.autoTag.maxTagsLabel') }}</label>
-            <p class="desc">{{ $t('knowledgeEditor.advanced.autoTag.maxTagsDescription') }}</p>
-          </div>
-          <div class="setting-control">
-            <t-input-number
-              v-model="localAutoTag.maxTags"
-              :min="1"
-              :max="10"
-              :step="1"
-              theme="normal"
-              style="width: 120px;"
-              @change="emitAutoTag"
-            />
-          </div>
-        </div>
-        <div class="setting-row">
-          <div class="setting-info">
-            <label>{{ $t('knowledgeEditor.advanced.autoTag.skipIfTaggedLabel') }}</label>
-            <p class="desc">{{ $t('knowledgeEditor.advanced.autoTag.skipIfTaggedDescription') }}</p>
-          </div>
-          <div class="setting-control">
-            <t-switch v-model="localAutoTag.skipIfTagged" size="medium" @change="emitAutoTag" />
-          </div>
-        </div>
-      </div>
 
-      <div class="setting-row setting-row-vertical">
-        <div class="setting-info">
-          <label>{{ $t('knowledgeEditor.advanced.autoTag.policyLabel') }}</label>
-          <p class="desc">{{ $t('knowledgeEditor.advanced.autoTag.policyDescription') }}</p>
-        </div>
-        <SafeTextarea
-          v-model="localAutoTag.policy"
-          :maxlength="4000"
-          :autosize="{ minRows: 3, maxRows: 8 }"
-          :placeholder="$t('knowledgeEditor.advanced.autoTag.policyPlaceholder')"
-          @change="emitAutoTag"
-        />
-      </div>
+
+
+
 
       <div class="setting-row setting-row-vertical">
         <div class="setting-info">
@@ -151,7 +88,6 @@
 <script setup lang="ts">
 import SafeTextarea from '@/components/SafeTextarea.vue'
 import { ref, watch } from 'vue'
-import ModelSelector from '@/components/ModelSelector.vue'
 
 interface QuestionGenerationConfig {
   enabled: boolean
@@ -159,17 +95,8 @@ interface QuestionGenerationConfig {
   customInstructions?: string
 }
 
-interface AutoTagConfig {
-  enabled: boolean
-  modelId: string
-  maxTags: number
-  skipIfTagged: boolean
-  policy: string
-}
-
 interface Props {
   questionGeneration?: QuestionGenerationConfig
-  autoTag?: AutoTagConfig
   ragEnabled?: boolean
   allModels?: any[]
   embedded?: boolean
@@ -182,7 +109,6 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   'update:questionGeneration': [value: QuestionGenerationConfig]
-  'update:autoTag': [value: AutoTagConfig]
   'update:tableMetadataInstructions': [value: string]
 }>()
 
@@ -192,25 +118,12 @@ const localQuestionGeneration = ref<QuestionGenerationConfig>(
     : { enabled: false, questionCount: 3, customInstructions: '' }
 )
 
-const localAutoTag = ref<AutoTagConfig>(
-  props.autoTag ? { ...props.autoTag } : { enabled: false, modelId: '', maxTags: 3, skipIfTagged: true, policy: '' }
-)
-
 watch(() => props.questionGeneration, (newVal) => {
   if (newVal) {
     localQuestionGeneration.value = { customInstructions: '', ...newVal }
   }
 }, { deep: true })
 
-watch(() => props.autoTag, (newVal) => {
-  if (newVal) localAutoTag.value = { ...newVal }
-}, { deep: true })
-
-const emitAutoTag = () => {
-  if (!localAutoTag.value.maxTags) localAutoTag.value.maxTags = 3
-  localAutoTag.value.maxTags = Math.min(10, Math.max(1, Math.trunc(localAutoTag.value.maxTags)))
-  emit('update:autoTag', { ...localAutoTag.value })
-}
 
 const handleQuestionGenerationToggle = () => {
   if (!localQuestionGeneration.value.enabled) {

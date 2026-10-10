@@ -6,9 +6,9 @@
 
 1. 新建独立 Go 文件，返回一个 `SiteAdapter`。`Rules` 声明域名及完整路径或目录前缀，域名忽略大小写，路径保留大小写并忽略末尾斜杠；必要时用 `ExcludePaths` 排除更具体的适配器。
 2. `Recover` 从 `SitePage.Document` 和 `SitePage.Content` 恢复正文。返回 `SiteRecovery{Success: true}`，可提供完整正文 `ContentHTML`、作者、发布者和原始发布时间。必需结构缺失或数据不完整时返回 `Success: false` 与可操作的 `Reason`。无法恢复的组件不能假装成功。只调整可选归属信息的适配器，缺少归属字段时可以继续使用通用解析值。
-3. 在 `defaultSiteAdapters` 注册。恢复函数拿到隔离的 DOM 与可读正文；失败改动全部丢弃，继续保留通用正文。连接器返回 `FetchedItem.AdapterFailures`，数据源同步和 Agent 原文收录入口写入 `knowledge_anomalies` 的 `source_adapter_failed` 记录。
+3. 在 `defaultSiteAdapters` 注册。恢复函数拿到隔离的 DOM 与可读正文；失败改动全部丢弃，继续保留通用正文。连接器返回 `FetchedItem.AdapterFailures`，数据源同步保留 `source_adapter_failed` 错误样本和跳过统计，不再写入纠错记录。
 4. 将固定 HTML 样本保存到 `testdata`，保留 HTML 注释的成对起止符；API 驱动列表同时保存 JSON 响应。测试不得临时抓取外部网站。媒体校验通过测试 HTTP transport 返回固定响应，仍使用原有 SSRF 检查。
-5. 为成功恢复、结构变化后的失败原因、通用正文回退写回归测试。运行 `go test ./internal/datasource/connector/rss`。新增异常持久化或入库入口时，以 `internal/testutil/pgtest` 验证 PostgreSQL。
+5. 为成功恢复、结构变化后的失败原因、通用正文回退写回归测试。运行 `go test ./internal/datasource/connector/rss`。新增入库入口时，以 `internal/testutil/pgtest` 验证 PostgreSQL。
 
 列表或请求配置的差异使用适配器私有扩展：`discovery` 可声明同站 API 和 feed 条目恢复；`listing` 指定正文列表选择器、卡片日期和排除路径；`requestHeaders` 仅对匹配的正文请求配置请求头。这些扩展不改变通用 HTTP 客户端的权限、大小限制或 SSRF 规则。
 

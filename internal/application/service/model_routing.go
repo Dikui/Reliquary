@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -107,9 +106,6 @@ func resolveModelTier(ctx context.Context, db *gorm.DB, kb *types.KnowledgeBase,
 		id := ""
 		switch tier {
 		case types.ModelTierLight:
-			if kb.AutoTagConfig != nil {
-				id = kb.AutoTagConfig.ModelID
-			}
 			if strings.TrimSpace(id) == "" {
 				id = kb.SummaryModelID
 			}
@@ -123,14 +119,6 @@ func resolveModelTier(ctx context.Context, db *gorm.DB, kb *types.KnowledgeBase,
 		}
 	}
 	return ResolvedModelTier{Source: "unconfigured"}, nil
-}
-
-// ResolveGenerationModel preserves an explicit session selection.
-func ResolveGenerationModel(ctx context.Context, db *gorm.DB, kb *types.KnowledgeBase, explicit string) (string, error) {
-	if id := strings.TrimSpace(explicit); id != "" {
-		return id, nil
-	}
-	return ResolveModelTier(ctx, db, kb, types.ModelTierGeneration)
 }
 
 func GetTierChatModel(ctx context.Context, db *gorm.DB, models interfaces.ModelService, kb *types.KnowledgeBase, tier types.ModelTier) (chat.Chat, error) {
@@ -163,29 +151,6 @@ func (m *tierChat) ChatStream(ctx context.Context, messages []chat.Message, opts
 	ctx = types.WithModelTier(ctx, m.tier)
 	types.RecordModelCall(ctx, m.GetModelID())
 	return m.inner.ChatStream(ctx, messages, opts)
-}
-
-// ReadModelLimits reads current configuration, rather than a stale client copy.
-func ReadModelLimits(ctx context.Context, db *gorm.DB, modelID string) (contextWindow, maxOutputTokens int, err error) {
-	contextWindow, maxOutputTokens = 8192, 2048
-	if db == nil || modelID == "" {
-		return
-	}
-	var model types.Model
-	if readErr := db.WithContext(ctx).Select("parameters").Where("id = ? AND (tenant_id = ? OR is_builtin = true)", modelID, types.MustTenantIDFromContext(ctx)).First(&model).Error; readErr != nil {
-		if errors.Is(readErr, gorm.ErrRecordNotFound) {
-			return
-		}
-		err = readErr
-		return
-	}
-	if model.Parameters.ContextWindow > 0 {
-		contextWindow = model.Parameters.ContextWindow
-	}
-	if model.Parameters.MaxOutputTokens > 0 {
-		maxOutputTokens = model.Parameters.MaxOutputTokens
-	}
-	return
 }
 
 func (m *tierChat) GetModelName() string { return m.inner.GetModelName() }
@@ -234,12 +199,4 @@ func modelRoutingDB(reader any) *gorm.DB {
 		return provider.ModelRoutingDB()
 	}
 	return nil
-}
-
-func getGenerationChatModel(ctx context.Context, models interfaces.ModelService, id string) (chat.Chat, error) {
-	model, err := models.GetChatModel(types.WithModelTier(ctx, types.ModelTierGeneration), id)
-	if err != nil {
-		return nil, err
-	}
-	return &tierChat{inner: model, tier: types.ModelTierGeneration, modelID: id}, nil
 }

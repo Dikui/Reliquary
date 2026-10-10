@@ -258,7 +258,7 @@ export const renderMermaidInContainer = async (
   await initPromise
 
   const mermaidElements = rootElement.querySelectorAll<HTMLElement>(
-    'pre[data-mermaid="false"], .chat-mermaid-block__canvas[data-mermaid="false"]',
+    'pre[data-mermaid="false"], .markdown-mermaid-block__canvas[data-mermaid="false"]',
   )
   for (const el of mermaidElements) {
     try {

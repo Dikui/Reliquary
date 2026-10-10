@@ -270,7 +270,7 @@ func TestP4FileDuplicateCleansSavedFileAndDoesNotEnqueue(t *testing.T) {
 	files := &createKnowledgeFileServiceStub{}
 	queue := &createKnowledgeTaskEnqueuerStub{}
 	svc := &knowledgeService{db: db, repo: repository.NewKnowledgeRepository(db), kbService: &createKnowledgeFileKBServiceStub{kb: &types.KnowledgeBase{ID: "kb"}}, fileSvc: files, task: queue}
-	message, err := svc.CreateKnowledgeFromFile(newCreateKnowledgeFileContext(), "kb", newMultipartFileHeader(t, "article.txt", "The downloaded article body"), map[string]string{"original_url": "https://EXAMPLE.COM/REPORT/?utm_source=file", "publisher": "Reprint"}, nil, "", nil, "", nil)
+	message, err := svc.CreateKnowledgeFromFile(newCreateKnowledgeFileContext(), "kb", newMultipartFileHeader(t, "article.txt", "The downloaded article body"), map[string]string{"original_url": "https://EXAMPLE.COM/REPORT/?utm_source=file", "publisher": "Reprint"}, nil, "", "", nil)
 	var duplicate *types.DuplicateKnowledgeError
 	require.ErrorAs(t, err, &duplicate)
 	require.Equal(t, owner.ID, message.ID)

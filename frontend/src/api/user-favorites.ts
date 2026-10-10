@@ -1,6 +1,6 @@
 import { get, post, del } from '@/utils/request'
 
-export type FavoriteResourceType = 'kb' | 'agent'
+export type FavoriteResourceType = 'kb'
 type FavoriteTargetType = FavoriteResourceType | 'tag'
 
 export interface FavoriteEntry {

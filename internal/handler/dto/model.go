@@ -30,7 +30,7 @@ type ModelResponse struct {
 	CreatedAt   time.Time          `json:"created_at"`
 	UpdatedAt   time.Time          `json:"updated_at"`
 	// Per-field "configured?" map. Built-in model metadata requires an
-	// authenticated caller. See MCPServiceResponse.Credentials.
+	// authenticated caller. Credential values never appear in this response.
 	Credentials map[string]CredentialFieldMetadata `json:"credentials,omitempty"`
 }
 

@@ -28,12 +28,12 @@ func (s *ownerKnowledgePermissionsService) CreateKnowledgeFromManual(context.Con
 	return &types.Knowledge{ID: "created-manual", KnowledgeBaseID: "kb-1"}, nil
 }
 
-func (s *ownerKnowledgePermissionsService) CreateKnowledgeFromURL(context.Context, string, string, string, string, *bool, string, []string, string, *types.KnowledgeProcessOverrides, ...types.SourceInfo) (*types.Knowledge, error) {
+func (s *ownerKnowledgePermissionsService) CreateKnowledgeFromURL(context.Context, string, string, string, string, *bool, string, string, *types.KnowledgeProcessOverrides, ...types.SourceInfo) (*types.Knowledge, error) {
 	s.actions++
 	return &types.Knowledge{ID: "created-url", KnowledgeBaseID: "kb-1"}, nil
 }
 
-func (s *ownerKnowledgePermissionsService) CreateKnowledgeFromFile(context.Context, string, *multipart.FileHeader, map[string]string, *bool, string, []string, string, *types.KnowledgeProcessOverrides) (*types.Knowledge, error) {
+func (s *ownerKnowledgePermissionsService) CreateKnowledgeFromFile(context.Context, string, *multipart.FileHeader, map[string]string, *bool, string, string, *types.KnowledgeProcessOverrides) (*types.Knowledge, error) {
 	s.actions++
 	return &types.Knowledge{ID: "created-file", KnowledgeBaseID: "kb-1"}, nil
 }
@@ -54,11 +54,6 @@ func (s *ownerKnowledgePermissionsService) MoveKnowledgeToFolder(context.Context
 func (s *ownerKnowledgePermissionsService) RenameKnowledgeFolder(context.Context, string, string, string) (int64, error) {
 	s.actions++
 	return 1, nil
-}
-
-func (s *ownerKnowledgePermissionsService) UpdateKnowledgeTagBatch(context.Context, string, map[string][]string, ...string) error {
-	s.actions++
-	return nil
 }
 
 func (s *ownerKnowledgePermissionsService) ListKnowledgeByKnowledgeBaseID(context.Context, string) ([]*types.Knowledge, error) {
@@ -92,7 +87,6 @@ func ownerKnowledgePermissionsCases() []ownerKnowledgePermissionsCase {
 		{name: "move_folder", method: http.MethodPost, pattern: "/knowledge/folder", path: "/knowledge/folder", body: `{"kb_id":"kb-1","knowledge_ids":["message"],"folder_path":"after"}`, status: http.StatusOK, handler: func(h *KnowledgeHandler) gin.HandlerFunc { return h.MoveKnowledgeToFolder }},
 		{name: "batch_delete", method: http.MethodPost, pattern: "/knowledge/batch-delete", path: "/knowledge/batch-delete", body: `{"kb_id":"kb-1","ids":["message"]}`, status: http.StatusOK, handler: func(h *KnowledgeHandler) gin.HandlerFunc { return h.BatchDeleteKnowledge }},
 		{name: "batch_reparse", method: http.MethodPost, pattern: "/knowledge/batch-reparse", path: "/knowledge/batch-reparse", body: `{"kb_id":"kb-1","ids":["message"]}`, status: http.StatusOK, handler: func(h *KnowledgeHandler) gin.HandlerFunc { return h.BatchReparseKnowledge }},
-		{name: "batch_tags", method: http.MethodPut, pattern: "/knowledge/tags", path: "/knowledge/tags", body: `{"kb_id":"kb-1","updates":{"message":["tag"]}}`, status: http.StatusOK, handler: func(h *KnowledgeHandler) gin.HandlerFunc { return h.UpdateKnowledgeTagBatch }},
 		{name: "clear", method: http.MethodDelete, pattern: "/knowledge-bases/:id/knowledge", path: "/knowledge-bases/kb-1/knowledge", status: http.StatusOK, handler: func(h *KnowledgeHandler) gin.HandlerFunc { return h.ClearKnowledgeBaseContents }},
 	}
 }

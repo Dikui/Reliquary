@@ -12,7 +12,6 @@ export interface DataSource {
   sync_schedule: string
   sync_mode: 'incremental' | 'full'
   status: 'active' | 'paused' | 'error'
-  conflict_strategy: 'overwrite' | 'skip'
   sync_deletions: boolean
   last_sync_at: string | null
   last_sync_result: any

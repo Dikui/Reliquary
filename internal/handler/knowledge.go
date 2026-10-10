@@ -324,13 +324,10 @@ func (h *KnowledgeHandler) CreateKnowledgeFromFile(c *gin.Context) {
 		}
 	}
 
-	// 获取分类ID列表（如果提供），逗号分隔，用于知识多标签分类管理
-	tagIDs := parseCommaSeparatedTagIDs(c.PostForm("tag_ids"))
-
 	channel := c.PostForm("channel")
 
 	// Create knowledge entry from the file
-	knowledge, err := h.kgService.CreateKnowledgeFromFile(ctx, kbID, file, metadata, enableMultimodel, customFileName, tagIDs, channel, processOverrides)
+	knowledge, err := h.kgService.CreateKnowledgeFromFile(ctx, kbID, file, metadata, enableMultimodel, customFileName, channel, processOverrides)
 	// Check for duplicate knowledge error
 	if err != nil {
 		if h.handleDuplicateKnowledgeError(c, err, knowledge, "file") {
@@ -379,7 +376,6 @@ func (h *KnowledgeHandler) CreateKnowledgeFromURL(c *gin.Context) {
 		FileType         string                           `json:"file_type"`
 		EnableMultimodel *bool                            `json:"enable_multimodel"`
 		Title            string                           `json:"title"`
-		TagIDs           []string                         `json:"tag_ids"`
 		Channel          string                           `json:"channel"`
 		ProcessConfig    *types.KnowledgeProcessOverrides `json:"process_config"`
 		SourceInfo       types.SourceInfo                 `json:"source_info"`
@@ -411,7 +407,7 @@ func (h *KnowledgeHandler) CreateKnowledgeFromURL(c *gin.Context) {
 
 	// Create knowledge entry from the URL
 	knowledge, err := h.kgService.CreateKnowledgeFromURL(
-		ctx, kbID, req.URL, req.FileName, req.FileType, req.EnableMultimodel, req.Title, req.TagIDs, req.Channel, req.ProcessConfig, req.SourceInfo,
+		ctx, kbID, req.URL, req.FileName, req.FileType, req.EnableMultimodel, req.Title, req.Channel, req.ProcessConfig, req.SourceInfo,
 	)
 	// Check for duplicate knowledge error
 	if err != nil {
@@ -505,7 +501,7 @@ func (h *KnowledgeHandler) GetKnowledge(c *gin.Context) {
 		return
 	}
 
-	// Re-fetch with tenant-scoped service so tags and other joined fields are populated.
+	// Re-fetch with the tenant-scoped service to populate joined source fields.
 	if knowledge, err = h.kgService.GetKnowledgeByID(effCtx, id); err != nil {
 		logger.ErrorWithFields(ctx, err, nil)
 		c.Error(errors.NewNotFoundError("Knowledge not found"))
@@ -802,7 +798,6 @@ func (h *KnowledgeHandler) ListKnowledge(c *gin.Context) {
 	}
 
 	filter := types.KnowledgeListFilter{
-		TagIDs:      parseCommaSeparatedTagIDs(c.Query("tag_ids")),
 		Keyword:     c.Query("keyword"),
 		FileType:    c.Query("file_type"),
 		ParseStatus: c.Query("parse_status"),
@@ -837,9 +832,8 @@ func (h *KnowledgeHandler) ListKnowledge(c *gin.Context) {
 
 	logger.Infof(
 		ctx,
-		"Retrieving knowledge list under knowledge base, kb_id=%s tag_ids=%s keyword=%s file_type=%s parse_status=%s source=%s start_time=%s end_time=%s folder_path=%s folder_scope=%s page=%d page_size=%d effectiveTenantID=%d",
+		"Retrieving knowledge list under knowledge base, kb_id=%s keyword=%s file_type=%s parse_status=%s source=%s start_time=%s end_time=%s folder_path=%s folder_scope=%s page=%d page_size=%d effectiveTenantID=%d",
 		secutils.SanitizeForLog(kbID),
-		secutils.SanitizeForLog(strings.Join(filter.TagIDs, ",")),
 		secutils.SanitizeForLog(filter.Keyword),
 		secutils.SanitizeForLog(filter.FileType),
 		secutils.SanitizeForLog(filter.ParseStatus),
@@ -1712,123 +1706,13 @@ func (h *KnowledgeHandler) CancelKnowledgeParse(c *gin.Context) {
 	})
 }
 
-type knowledgeTagBatchRequest struct {
-	Updates map[string][]string `json:"updates" binding:"required,min=1"`
-	KBID    string              `json:"kb_id"` // Optional: scope to a knowledge base in the current workspace.
-	Reason  string              `json:"reason"`
-}
-
-// UpdateKnowledgeTagBatch godoc
-func (h *KnowledgeHandler) UpdateKnowledgeTagBatch(c *gin.Context) {
-	ctx := c.Request.Context()
-
-	// Ensure tenant ID is in context (service reads it; may be missing if request context was not set by auth)
-	tenantID := c.GetUint64(types.TenantIDContextKey.String())
-	if tenantID == 0 {
-		c.Error(errors.NewUnauthorizedError("Unauthorized"))
-		return
-	}
-	ctx = context.WithValue(ctx, types.TenantIDContextKey, tenantID)
-
-	var req knowledgeTagBatchRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		logger.Error(ctx, "Failed to parse knowledge tag batch request", err)
-		c.Error(errors.NewBadRequestError("请求参数不合法").WithDetails(err.Error()))
-		return
-	}
-	// Resolve effective tenant and the authorized KB scope.
-	var authorizedKBID string
-	if kbID := secutils.SanitizeForLog(req.KBID); kbID != "" {
-		_, _, effID, err := h.validateKnowledgeBaseAccessWithKBID(c, kbID)
-		if err != nil {
-			c.Error(err)
-			return
-		}
-
-		authorizedKBID = kbID
-		ctx = context.WithValue(ctx, types.TenantIDContextKey, effID)
-	} else if len(req.Updates) > 0 {
-		var firstKnowledgeID string
-		for id := range req.Updates {
-			firstKnowledgeID = id
-			break
-		}
-		if firstKnowledgeID != "" {
-			knowledge, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, firstKnowledgeID)
-			if err != nil {
-				c.Error(err)
-				return
-			}
-			authorizedKBID = knowledge.KnowledgeBaseID
-			ctx = effCtx
-		}
-	}
-	if err := h.kgService.UpdateKnowledgeTagBatch(ctx, authorizedKBID, req.Updates, req.Reason); err != nil {
-		logger.ErrorWithFields(ctx, err, nil)
-		c.Error(err)
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-	})
-}
-
-// UpdateImageInfo godoc
-func (h *KnowledgeHandler) UpdateImageInfo(c *gin.Context) {
-	ctx := c.Request.Context()
-	logger.Info(ctx, "Start updating image info")
-
-	id := secutils.SanitizeForLog(c.Param("id"))
-	if id == "" {
-		logger.Error(ctx, "Knowledge ID is empty")
-		c.Error(errors.NewBadRequestError("Knowledge ID cannot be empty"))
-		return
-	}
-	chunkID := secutils.SanitizeForLog(c.Param("chunk_id"))
-	if chunkID == "" {
-		logger.Error(ctx, "Chunk ID is empty")
-		c.Error(errors.NewBadRequestError("Chunk ID cannot be empty"))
-		return
-	}
-
-	_, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, id)
-	if err != nil {
-		c.Error(err)
-		return
-	}
-
-	var request struct {
-		ImageInfo string `json:"image_info"`
-	}
-
-	if err := c.ShouldBindJSON(&request); err != nil {
-		logger.Error(ctx, "Failed to parse request parameters", err)
-		c.Error(errors.NewBadRequestError(err.Error()))
-		return
-	}
-
-	logger.Infof(ctx, "Updating knowledge chunk, knowledge ID: %s, chunk ID: %s", id, chunkID)
-	err = h.kgService.UpdateImageInfo(effCtx, id, chunkID, secutils.SanitizeForLog(request.ImageInfo))
-	if err != nil {
-		logger.ErrorWithFields(ctx, err, nil)
-		c.Error(errors.NewInternalServerError(err.Error()))
-		return
-	}
-
-	logger.Infof(ctx, "Knowledge chunk updated successfully, knowledge ID: %s, chunk ID: %s", id, chunkID)
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "Knowledge chunk image updated successfully",
-	})
-}
-
 func (h *KnowledgeHandler) SearchKnowledge(c *gin.Context) {
 	ctx := c.Request.Context()
 	if userID, ok := c.Get(types.UserIDContextKey.String()); ok {
 		ctx = context.WithValue(ctx, types.UserIDContextKey, userID)
 	}
 	// Accept both ?keyword= (legacy / upstream name) and ?query= (what most
-	// MCP / agent integrations send). Empty input is only valid for an explicit
+	// API callers send). Empty input is only valid for an explicit
 	// recent-file browse request; ordinary callers still get a clear 400 instead
 	// of silently receiving the same newest cards for every missing query.
 	keyword := c.Query("keyword")
@@ -2062,24 +1946,6 @@ func (h *KnowledgeHandler) GetKnowledgeMoveProgress(c *gin.Context) {
 		"success": true,
 		"data":    progress,
 	})
-}
-
-// parseCommaSeparatedTagIDs splits a comma-separated string of tag IDs and
-// filters out empty strings and the "__untagged__" sentinel value.
-func parseCommaSeparatedTagIDs(raw string) []string {
-	if raw == "" {
-		return nil
-	}
-	parts := strings.Split(raw, ",")
-	result := make([]string, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p == "" || p == "__untagged__" {
-			continue
-		}
-		result = append(result, p)
-	}
-	return result
 }
 
 // parseFilterTime parses a query-string timestamp accepted by knowledge list

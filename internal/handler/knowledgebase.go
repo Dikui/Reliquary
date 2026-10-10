@@ -315,7 +315,7 @@ func enrichKBCreatorNames(ctx context.Context, userSvc interfaces.UserService, k
 
 // pickUserDisplayName picks the field most users will recognise: Username
 // if present (it's required at registration), Email as a fallback. Used by
-// both KB and Agent list enrichment so the badge text stays consistent.
+// KB list enrichment so the badge text stays consistent.
 func pickUserDisplayName(u *types.User) string {
 	if u == nil {
 		return ""
@@ -568,9 +568,6 @@ func (h *KnowledgeBaseHandler) ListMoveTargets(c *gin.Context) {
 	targets := make([]*types.KnowledgeBase, 0)
 	for _, kb := range allKBs {
 		if kb.ID == sourceKBID {
-			continue
-		}
-		if kb.IsTemporary {
 			continue
 		}
 		if kb.Type != sourceKB.Type {

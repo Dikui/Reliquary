@@ -183,7 +183,6 @@ test('any active filter turns browsing into a subtree search', () => {
   assert.equal(isFilteringDocuments({ timeRange: ['', ''] }), false)
 
   assert.equal(isFilteringDocuments({ keyword: 'spec' }), true)
-  assert.equal(isFilteringDocuments({ tagIds: ['t1'] }), true)
   assert.equal(isFilteringDocuments({ fileType: 'pdf' }), true)
   assert.equal(isFilteringDocuments({ parseStatus: 'failed' }), true)
   assert.equal(isFilteringDocuments({ source: 'web' }), true)

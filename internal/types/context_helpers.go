@@ -80,29 +80,9 @@ func (i TaskInitiator) Apply(ctx context.Context) context.Context {
 	return ctx
 }
 
-func SessionTenantIDFromContext(ctx context.Context) (uint64, bool) { return TenantIDFromContext(ctx) }
-
-// WithSessionID carries the active conversation ID.
-func WithSessionID(ctx context.Context, sessionID string) context.Context {
-	if sessionID == "" {
-		return ctx
-	}
-	return context.WithValue(ctx, SessionIDContextKey, sessionID)
-}
-
-// SessionIDFromContext extracts the current session ID from ctx.
-// Returns ("", false) when the key is absent or the value is not a non-empty string.
-func SessionIDFromContext(ctx context.Context) (string, bool) {
-	if ctx == nil {
-		return "", false
-	}
-	v, ok := ctx.Value(SessionIDContextKey).(string)
-	return v, ok && v != ""
-}
-
 // WithBackgroundTask marks ctx as originating from an asynq background worker
-// (document parse / summary / question / context / multimodal enrichment). The
-// chat concurrency governor throttles only background LLM traffic, so this flag
+// (document parse / summary / question / multimodal enrichment). The
+// model concurrency governor throttles only background LLM traffic, so this flag
 // determines whether the per-model concurrency limit applies. See
 // BackgroundTaskContextKey.
 func WithBackgroundTask(ctx context.Context) context.Context {

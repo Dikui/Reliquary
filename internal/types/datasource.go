@@ -34,8 +34,6 @@ const (
 	SyncLogStatusCanceled = "canceled"
 
 	// Conflict resolution strategies
-	ConflictStrategyOverwrite = "overwrite"
-	ConflictStrategySkip      = "skip"
 )
 
 // DataSource represents a configured external data source for synchronization
@@ -67,9 +65,6 @@ type DataSource struct {
 
 	// Current status: active, paused, error
 	Status string `json:"status" gorm:"type:varchar(32);default:'active'"`
-
-	// Conflict resolution strategy: overwrite or skip
-	ConflictStrategy string `json:"conflict_strategy" gorm:"type:varchar(32);default:'overwrite'"`
 
 	// Whether to sync deletions from source
 	SyncDeletions bool `json:"sync_deletions" gorm:"default:true"`

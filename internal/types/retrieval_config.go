@@ -6,8 +6,7 @@ import (
 )
 
 // RetrievalConfig holds the global retrieval/search configuration for a tenant.
-// This replaces the retrieval-related fields previously scattered in ConversationConfig
-// and ChatHistoryConfig. Both knowledge search and message search share these parameters.
+// Knowledge retrieval uses these parameters before optional reranking.
 //
 // Stored as a JSONB column on the tenants table, managed via the settings UI
 // at /space/kv/retrieval-config.

@@ -101,7 +101,6 @@ const RUNTIME_WORKER_POOL_NAMES = [
 
 const RUNTIME_QUEUE_NAMES = [
   'default',
-  'chat_attachment',
   'postprocess',
   'summary',
   'sync',
@@ -114,7 +113,6 @@ const RUNTIME_QUEUE_NAMES = [
 const RUNTIME_TASK_TYPE_KEYS = [
   'documentProcess',
   'manualProcess',
-  'temporaryDocumentProcess',
   'postProcess',
   'summary',
   'tableSummary',

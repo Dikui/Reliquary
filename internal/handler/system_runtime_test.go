@@ -233,11 +233,11 @@ func TestGetRuntimeQueuesReportsIsolatedPoolCapacity(t *testing.T) {
 		concurrency int
 		queueCount  int
 	}{
-		types.WorkerPoolCore:        {8, 2},
+		types.WorkerPoolCore:        {8, 1},
 		types.WorkerPoolPostProcess: {2, 1},
 		types.WorkerPoolEnrichment:  {12, 4},
 		types.WorkerPoolMaintenance: {4, 2},
-		types.WorkerPoolShared:      {6, 6},
+		types.WorkerPoolShared:      {6, 5},
 	}
 	if len(response.Pools) != len(want) {
 		t.Fatalf("pool count = %d, want %d", len(response.Pools), len(want))
@@ -415,15 +415,15 @@ func TestPurgeArchivedRuntimeTasksDelegatesToInspector(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Params = gin.Params{{Key: "queue", Value: types.QueueChatAttachment}}
+	ctx.Params = gin.Params{{Key: "queue", Value: types.QueueDefault}}
 	ctx.Request = httptest.NewRequest(http.MethodDelete, "/archived", nil)
 
 	handler.PurgeArchivedRuntimeTasks(ctx)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body=%s", recorder.Code, recorder.Body.String())
 	}
-	if inspector.purgedQueue != types.QueueChatAttachment {
-		t.Fatalf("purged queue = %q, want %q", inspector.purgedQueue, types.QueueChatAttachment)
+	if inspector.purgedQueue != types.QueueDefault {
+		t.Fatalf("purged queue = %q, want %q", inspector.purgedQueue, types.QueueDefault)
 	}
 	var response map[string]any
 	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {

@@ -32,7 +32,6 @@ const (
 	// ParseStatusPending indicates the knowledge is waiting to be processed
 	ParseStatusPending = "pending"
 	// ParseStatusProcessing indicates the knowledge is being processed
-	// (DocReader / chunking / embedding stage).
 	ParseStatusProcessing = "processing"
 	// ParseStatusFinalizing indicates the primary parse has finished but
 	// enrichment subtasks (summary, question generation, context extract)
@@ -87,8 +86,6 @@ const (
 // KnowledgeListFilter aggregates optional filters for listing knowledge entries
 // under a knowledge base. Empty / zero fields mean "no filter on that dimension".
 type KnowledgeListFilter struct {
-	// TagIDs filters by multiple tags (OR semantics: match any of the given tags).
-	TagIDs []string
 	// Keyword performs a LIKE match on file_name / title when non-empty.
 	Keyword string
 	// FileType filters by file_type, or by type for the special values "manual" / "url".
@@ -122,8 +119,6 @@ type Knowledge struct {
 	TenantID uint64 `json:"tenant_id"`
 	// ID of the knowledge base
 	KnowledgeBaseID string `json:"knowledge_base_id"`
-	// Tags holds the tags associated with this knowledge (populated on query, not persisted directly).
-	Tags []*KnowledgeTag `json:"tags"               gorm:"-"`
 	// Type of the knowledge
 	Type string `json:"type"`
 	// Title of the knowledge
@@ -273,20 +268,15 @@ type SourceInfo struct {
 
 // KnowledgeIntakeMetadata records the single-message intake decision. Original
 // bodies stay in object storage; this only contains the audit/display fields.
-type KnowledgeIntakeTag struct {
-	Kind string `json:"kind"`
-	Name string `json:"name"`
-}
 
 type KnowledgeIntakeMetadata struct {
-	Classification []KnowledgeIntakeTag `json:"classification,omitempty"`
-	ModelCalls     []ModelCallCount     `json:"model_calls,omitempty"`
-	Source         string               `json:"source"`
-	OriginalPath   string               `json:"original_path,omitempty"`
-	Images         []string             `json:"images,omitempty"`
-	Reason         string               `json:"reason,omitempty"`
-	Decision       string               `json:"decision"`
-	SourceInfo     SourceInfo           `json:"source_info,omitempty"`
+	ModelCalls   []ModelCallCount `json:"model_calls,omitempty"`
+	Source       string           `json:"source"`
+	OriginalPath string           `json:"original_path,omitempty"`
+	Images       []string         `json:"images,omitempty"`
+	Reason       string           `json:"reason,omitempty"`
+	Decision     string           `json:"decision"`
+	SourceInfo   SourceInfo       `json:"source_info,omitempty"`
 }
 
 func (k *Knowledge) IntakeMetadata() (*KnowledgeIntakeMetadata, error) {
@@ -300,37 +290,6 @@ func (k *Knowledge) IntakeMetadata() (*KnowledgeIntakeMetadata, error) {
 		return nil, err
 	}
 	return raw.Intake, nil
-}
-
-// IsArchivedSource identifies a retained historical source, not current knowledge.
-func (k *Knowledge) IsArchivedSource() bool {
-	if k == nil {
-		return false
-	}
-	var meta struct {
-		SourceArchived bool `json:"source_archived"`
-	}
-	return json.Unmarshal(k.Metadata, &meta) == nil && meta.SourceArchived
-}
-
-// IsSourceUpdateCandidate keeps an unpromoted replacement out of current knowledge.
-func (k *Knowledge) IsSourceUpdateCandidate() bool {
-	if k == nil {
-		return false
-	}
-	var meta map[string]json.RawMessage
-	if json.Unmarshal(k.Metadata, &meta) != nil {
-		return false
-	}
-	for _, key := range []string{"source_update_candidate", "rss_update_candidate"} {
-		var flag bool
-		var text string
-		if (json.Unmarshal(meta[key], &flag) == nil && flag) ||
-			(json.Unmarshal(meta[key], &text) == nil && strings.EqualFold(text, "true")) {
-			return true
-		}
-	}
-	return false
 }
 
 func (k *Knowledge) SetIntakeMetadata(intake *KnowledgeIntakeMetadata) error {
@@ -363,7 +322,6 @@ type ManualKnowledgePayload struct {
 	Title          string                     `json:"title"`
 	Content        string                     `json:"content"`
 	Status         string                     `json:"status"`
-	TagIDs         []string                   `json:"tag_ids"`
 	Channel        string                     `json:"channel"`
 	ProcessConfig  *KnowledgeProcessOverrides `json:"process_config,omitempty"`
 	SourceInfo     SourceInfo                 `json:"source_info,omitempty"`

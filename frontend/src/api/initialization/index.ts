@@ -415,27 +415,6 @@ export function fabriText(request: FabriTextRequest): Promise<FabriTextResponse>
     });
 }
 
-export interface FabriTagRequest {
-}
-
-export interface FabriTagResponse {
-    tags: string[];
-}
-
-// 标签生成
-export function fabriTag(request: FabriTagRequest): Promise<FabriTagResponse> {
-    return new Promise((resolve, reject) => {
-        post('/api/v1/initialization/extract/fabri-tag', request)
-            .then((response: any) => {
-                resolve(response.data || { tags: [] as string[] });
-            })
-            .catch((error: any) => {
-                console.error('Failed to generate tags:', error);
-                reject(error);
-            });
-    });
-}
-
 // 模型厂商信息类型
 export interface ModelProviderOption {
     value: string;        // provider 标识符

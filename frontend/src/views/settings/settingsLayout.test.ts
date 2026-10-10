@@ -31,7 +31,7 @@ test('settings shell names the usable content container and preserves wide deskt
 
 for (const [file, wideMinimum] of [
   ['GeneralSettings.vue', '280px'], ['UserProfile.vue', '280px'],
-  ['ChatHistorySettings.vue', '280px'], ['OllamaSettings.vue', '360px'],
+  ['OllamaSettings.vue', '360px'],
   ['SystemInfo.vue', '280px'], ['TenantInfo.vue', '0'],
 ] as const) {
   test(`${file}: narrow content stacks labels and allows controls to shrink`, async () => {
@@ -77,8 +77,6 @@ test('narrow font choices, information values and password popup preserve readab
     assert.equal(style['box-sizing'], 'border-box')
     assert.equal(styleDeclarationsAtWidth(profile, '.password-popup-footer', viewport)['flex-wrap'], 'wrap')
   }
-  const history = readFileSync(new URL('./ChatHistorySettings.vue', import.meta.url), 'utf8')
-  assert.doesNotMatch(history, /class="setting-control"\s+style="min-width:/)
 })
 
 test('narrow model tier forms keep their natural height', async () => {
@@ -93,9 +91,9 @@ test('narrow model tier forms keep their natural height', async () => {
   assert.equal(styleDeclarationsAtWidth(tiers, '.model-tier-row', 1440)['grid-template-columns'], 'minmax(0, 2fr) minmax(0, 3fr)')
 })
 
-test('model, parser and MCP grids can shrink below their preferred card width', async () => {
+test('model and parser grids can shrink below their preferred card width', async () => {
   for (const [file, selector] of [
-    ['ModelSettings.vue', '.model-grid'], ['ParserEngineSettings.vue', '.engine-cards'], ['McpSettings.vue', '.services-grid'],
+    ['ModelSettings.vue', '.model-grid'], ['ParserEngineSettings.vue', '.engine-cards'],
   ]) {
     const rules = await compiledSFCStyleRules(new URL(`./${file}`, import.meta.url))
     assert.equal(styleDeclarationsAtWidth(rules, selector, 1440)['grid-template-columns'], 'repeat(auto-fill, minmax(min(320px, 100%), 1fr))')

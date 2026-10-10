@@ -52,8 +52,6 @@ type knowledgeService struct {
 	tenantService   interfaces.TenantService
 	chunkService    interfaces.ChunkService
 	chunkRepo       interfaces.ChunkRepository
-	tagRepo         interfaces.KnowledgeTagRepository
-	tagService      interfaces.KnowledgeTagService
 	fileSvc         interfaces.FileService
 	resourceCatalog interfaces.ResourceCatalog
 	modelService    interfaces.ModelService
@@ -84,8 +82,6 @@ func NewKnowledgeService(
 	tenantService interfaces.TenantService,
 	chunkService interfaces.ChunkService,
 	chunkRepo interfaces.ChunkRepository,
-	tagRepo interfaces.KnowledgeTagRepository,
-	tagService interfaces.KnowledgeTagService,
 	fileSvc interfaces.FileService,
 	resourceCatalog interfaces.ResourceCatalog,
 	modelService interfaces.ModelService,
@@ -106,8 +102,6 @@ func NewKnowledgeService(
 		tenantService:   tenantService,
 		chunkService:    chunkService,
 		chunkRepo:       chunkRepo,
-		tagRepo:         tagRepo,
-		tagService:      tagService,
 		fileSvc:         fileSvc,
 		resourceCatalog: resourceCatalog,
 		modelService:    modelService,
@@ -201,7 +195,6 @@ func finalizeSubtaskDetached(
 	knowledgeID, source string,
 	retErr error,
 	superseded, final bool,
-	onPromoted ...func(context.Context, string) error,
 ) {
 	willDrain := repo != nil && knowledgeID != "" && !superseded && (retErr == nil || final)
 	if !willDrain {
@@ -209,17 +202,11 @@ func finalizeSubtaskDetached(
 	}
 	dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), finalizeSubtaskDetachedTimeout)
 	defer cancel()
-	_, promoted, err := repo.FinalizeSubtask(dctx, knowledgeID)
+	_, _, err := repo.FinalizeSubtask(dctx, knowledgeID)
 	if err != nil {
 		logger.Warnf(ctx, "finalize subtask decrement failed source=%s knowledge=%s err=%v",
 			source, knowledgeID, err)
 		return
-	}
-	if promoted && len(onPromoted) > 0 && onPromoted[0] != nil {
-		if err := onPromoted[0](dctx, knowledgeID); err != nil {
-			logger.Warnf(ctx, "promote source update after finalization failed source=%s knowledge=%s err=%v",
-				source, knowledgeID, err)
-		}
 	}
 }
 
@@ -435,14 +422,6 @@ func (s *knowledgeService) GetKnowledgeByID(ctx context.Context, id string) (*ty
 	}
 	knowledge.RepostSources = reposts
 
-	// Load tags for this knowledge
-	tagMap, err := s.repo.GetKnowledgeTags(ctx, []string{knowledge.ID})
-	if err != nil {
-		logger.Warnf(ctx, "Failed to load tags for knowledge %s: %v", knowledge.ID, err)
-	} else if tags, ok := tagMap[knowledge.ID]; ok {
-		knowledge.Tags = tags
-	}
-
 	logger.Infof(ctx, "Knowledge retrieved successfully, ID: %s, type: %s", knowledge.ID, knowledge.Type)
 	return knowledge, nil
 }
@@ -467,25 +446,6 @@ func (s *knowledgeService) ListPagedKnowledgeByKnowledgeBaseID(ctx context.Conte
 		ctx.Value(types.TenantIDContextKey).(uint64), kbID, page, filter)
 	if err != nil {
 		return nil, err
-	}
-
-	// Batch load tags for all knowledge entries
-	if len(knowledges) > 0 {
-		ids := make([]string, len(knowledges))
-		for i, k := range knowledges {
-			ids[i] = k.ID
-		}
-		tagMap, err := s.repo.GetKnowledgeTags(ctx, ids)
-		if err != nil {
-			logger.Errorf(ctx, "Failed to load tags for knowledge list: %v", err)
-			// Non-fatal: continue without tags
-		} else {
-			for _, k := range knowledges {
-				if tags, ok := tagMap[k.ID]; ok {
-					k.Tags = tags
-				}
-			}
-		}
 	}
 
 	return types.NewPageResult(total, page, knowledges), nil
@@ -717,234 +677,6 @@ func (s *knowledgeService) GetKnowledgeBatch(ctx context.Context,
 		return nil, nil
 	}
 	return s.repo.GetKnowledgeBatch(ctx, tenantID, ids)
-}
-
-// SetKnowledgeTags replaces all tags for a single knowledge entry.
-func (s *knowledgeService) SetKnowledgeTags(ctx context.Context, knowledgeID string, tagIDs []string) error {
-	return s.repo.SetKnowledgeTags(ctx, knowledgeID, tagIDs)
-}
-
-// ListKnowledgeIDsByTagIDs returns document knowledge IDs carrying any of the
-// specified KB-local tags.
-func (s *knowledgeService) ListKnowledgeIDsByTagIDs(
-	ctx context.Context,
-	tenantID uint64,
-	kbID string,
-	tagIDs []string,
-) ([]string, error) {
-	return s.repo.ListIDsByTagIDs(ctx, tenantID, kbID, tagIDs)
-}
-
-// validateKnowledgeTagIDs ensures every tag exists and belongs to the given knowledge base.
-func (s *knowledgeService) validateKnowledgeTagIDs(
-	ctx context.Context,
-	tenantID uint64,
-	kbID string,
-	tagIDs []string,
-) error {
-	unique := make([]string, 0, len(tagIDs))
-	seen := make(map[string]struct{}, len(tagIDs))
-	for _, tagID := range tagIDs {
-		if tagID == "" {
-			continue
-		}
-		if _, dup := seen[tagID]; dup {
-			continue
-		}
-		seen[tagID] = struct{}{}
-		unique = append(unique, tagID)
-	}
-	if len(unique) == 0 {
-		return nil
-	}
-
-	tags, err := s.tagRepo.GetByIDs(ctx, tenantID, unique)
-	if err != nil {
-		return err
-	}
-	tagMap := make(map[string]*types.KnowledgeTag, len(tags))
-	for _, tag := range tags {
-		tagMap[tag.ID] = tag
-	}
-	for _, tagID := range unique {
-		tag, ok := tagMap[tagID]
-		if !ok {
-			return werrors.NewBadRequestError(fmt.Sprintf("标签 %s 不存在", tagID))
-		}
-		if tag.KnowledgeBaseID != kbID {
-			return werrors.NewBadRequestError("标签不属于当前知识库")
-		}
-	}
-	return nil
-}
-
-// attachTagsToKnowledge populates knowledge.Tags from the join table.
-func (s *knowledgeService) attachTagsToKnowledge(ctx context.Context, knowledge *types.Knowledge) {
-	if knowledge == nil {
-		return
-	}
-	tagMap, err := s.repo.GetKnowledgeTags(ctx, []string{knowledge.ID})
-	if err != nil {
-		logger.Warnf(ctx, "Failed to load tags for knowledge %s: %v", knowledge.ID, err)
-		return
-	}
-	if tags, ok := tagMap[knowledge.ID]; ok {
-		knowledge.Tags = tags
-	}
-}
-
-// setAndAttachKnowledgeTags validates, persists, and populates tags on a knowledge entry.
-func (s *knowledgeService) setAndAttachKnowledgeTags(
-	ctx context.Context,
-	tenantID uint64,
-	kbID string,
-	knowledge *types.Knowledge,
-	tagIDs []string,
-) error {
-	if err := s.validateKnowledgeTagIDs(ctx, tenantID, kbID, tagIDs); err != nil {
-		return err
-	}
-	if len(tagIDs) > 0 {
-		if err := s.repo.SetKnowledgeTags(ctx, knowledge.ID, tagIDs); err != nil {
-			return err
-		}
-	}
-	s.attachTagsToKnowledge(ctx, knowledge)
-	return nil
-}
-
-// GetKnowledgeTags returns tags for multiple knowledge IDs.
-func (s *knowledgeService) GetKnowledgeTags(ctx context.Context, knowledgeIDs []string) (map[string][]*types.KnowledgeTag, error) {
-	return s.repo.GetKnowledgeTags(ctx, knowledgeIDs)
-}
-
-// UpdateKnowledgeTag updates the tags assigned to a knowledge document.
-func (s *knowledgeService) UpdateKnowledgeTag(ctx context.Context, knowledgeID string, tagIDs []string) error {
-	tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
-	knowledge, err := s.repo.GetKnowledgeByID(ctx, tenantID, knowledgeID)
-	if err != nil {
-		return err
-	}
-
-	// Validate all tag IDs
-	if err := s.validateKnowledgeTagIDs(ctx, tenantID, knowledge.KnowledgeBaseID, tagIDs); err != nil {
-		return err
-	}
-
-	actorID, _ := types.UserIDFromContext(ctx)
-	added, removed, err := s.repo.SetKnowledgeTagsManually(ctx, knowledgeID, tagIDs, actorID, "")
-	if err == nil && (len(added) > 0 || len(removed) > 0) {
-	}
-	return err
-}
-
-// UpdateKnowledgeTagBatch updates tags for document knowledge items in batch.
-// authorizedKBID restricts all updates to knowledge items belonging to this KB;
-// pass empty string to skip the check (caller must ensure authorization by other means).
-func (s *knowledgeService) UpdateKnowledgeTagBatch(ctx context.Context, authorizedKBID string, updates map[string][]string, reasons ...string) error {
-	if len(updates) == 0 {
-		return nil
-	}
-	tenantIDVal := ctx.Value(types.TenantIDContextKey)
-	if tenantIDVal == nil {
-		return werrors.NewUnauthorizedError("workspace ID not found in context")
-	}
-	tenantID, ok := tenantIDVal.(uint64)
-	if !ok {
-		return werrors.NewUnauthorizedError("invalid workspace ID in context")
-	}
-
-	// Get all knowledge items in batch
-	knowledgeIDs := make([]string, 0, len(updates))
-	for knowledgeID := range updates {
-		knowledgeIDs = append(knowledgeIDs, knowledgeID)
-	}
-	knowledgeList, err := s.repo.GetKnowledgeBatch(ctx, tenantID, knowledgeIDs)
-	if err != nil {
-		return err
-	}
-
-	// Validate all requested IDs were found and belong to the authorized KB
-	if authorizedKBID != "" {
-		if len(knowledgeList) != len(updates) {
-			return werrors.NewForbiddenError("some knowledge IDs are not accessible in the authorized scope")
-		}
-		for _, k := range knowledgeList {
-			if k.KnowledgeBaseID != authorizedKBID {
-				return werrors.NewForbiddenError(
-					fmt.Sprintf("knowledge %s does not belong to authorized knowledge base", k.ID))
-			}
-		}
-	}
-
-	// Collect all unique tag IDs for validation
-	tagIDSet := make(map[string]bool)
-	for _, tagIDs := range updates {
-		for _, tagID := range tagIDs {
-			if tagID != "" {
-				tagIDSet[tagID] = true
-			}
-		}
-	}
-
-	// Validate all tags exist and belong to the correct KB
-	tagMap := make(map[string]*types.KnowledgeTag)
-	if len(tagIDSet) > 0 {
-		tagIDList := make([]string, 0, len(tagIDSet))
-		for tagID := range tagIDSet {
-			tagIDList = append(tagIDList, tagID)
-		}
-		tags, err := s.tagRepo.GetByIDs(ctx, tenantID, tagIDList)
-		if err != nil {
-			return err
-		}
-		for _, tag := range tags {
-			tagMap[tag.ID] = tag
-		}
-	}
-
-	// Validate tag ownership per knowledge
-	for _, knowledge := range knowledgeList {
-		tagIDs, exists := updates[knowledge.ID]
-		if !exists {
-			continue
-		}
-		for _, tagID := range tagIDs {
-			if tagID == "" {
-				continue
-			}
-			tag, ok := tagMap[tagID]
-			if !ok {
-				return werrors.NewBadRequestError(fmt.Sprintf("标签 %s 不存在", tagID))
-			}
-			if tag.KnowledgeBaseID != knowledge.KnowledgeBaseID {
-				return werrors.NewBadRequestError(fmt.Sprintf("标签 %s 不属于知识库 %s", tagID, knowledge.KnowledgeBaseID))
-			}
-		}
-	}
-
-	actorID, _ := types.UserIDFromContext(ctx)
-	reason := ""
-	if len(reasons) > 0 {
-		reason = strings.TrimSpace(reasons[0])
-	}
-	if len([]rune(reason)) > 500 {
-		return werrors.NewBadRequestError("标签修正理由不能超过500字")
-	}
-	// Set tags for each knowledge and record explicit corrections.
-	for knowledgeID, tagIDs := range updates {
-		added, removed, err := s.repo.SetKnowledgeTagsManually(ctx, knowledgeID, tagIDs, actorID, reason)
-		if err != nil {
-			return err
-		}
-		if len(added) > 0 || len(removed) > 0 {
-			knowledge := findKnowledgeByID(knowledgeList, knowledgeID)
-			if knowledge != nil {
-			}
-		}
-	}
-
-	return nil
 }
 
 func findKnowledgeByID(list []*types.Knowledge, id string) *types.Knowledge {

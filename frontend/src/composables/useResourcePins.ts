@@ -44,7 +44,7 @@ function readRecents(): PinEntry[] {
       (e: unknown): e is PinEntry =>
         !!e &&
         typeof (e as PinEntry).type === 'string' &&
-        ((e as PinEntry).type === 'kb' || (e as PinEntry).type === 'agent') &&
+        (e as PinEntry).type === 'kb' &&
         typeof (e as PinEntry).id === 'string' &&
         typeof (e as PinEntry).ts === 'number'
     )
@@ -62,10 +62,9 @@ function writeRecents(list: PinEntry[]): void {
 // views don't double-fetch the same data.
 const favoritesByType: Record<ResourceType, Ref<PinEntry[]>> = {
   kb: ref<PinEntry[]>([]),
-  agent: ref<PinEntry[]>([]),
 }
-const loaded: Record<ResourceType, boolean> = { kb: false, agent: false }
-const inFlight: Record<ResourceType, Promise<void> | null> = { kb: null, agent: null }
+const loaded: Record<ResourceType, boolean> = { kb: false }
+const inFlight: Record<ResourceType, Promise<void> | null> = { kb: null }
 
 // recents revision counter — same bump-to-invalidate pattern as before.
 const recentsRevision = ref(0)
@@ -116,13 +115,10 @@ function installTenantWatcher(): void {
     () => authStore.effectiveTenantId,
     () => {
       loaded.kb = false
-      loaded.agent = false
       favoritesByType.kb.value = []
-      favoritesByType.agent.value = []
-      // Eagerly refetch both types so any already-mounted list view sees
+      // Eagerly refetch knowledge bases so any already-mounted list view sees
       // fresh data without a manual refresh.
       void fetchFavorites('kb')
-      void fetchFavorites('agent')
       // Recents are keyed on the tenant id (see `recentsKey`); bump the
       // revision so any active computed re-reads against the new key.
       bumpRecents()
@@ -145,15 +141,14 @@ export function useResourcePins(): UseResourcePinsResult {
   installTenantWatcher()
 
   // Lazy first load. Calling the composable always kicks off (or reuses)
-  // the in-flight fetch for both types; the templates render with empty
+  // the in-flight fetch for knowledge bases; the templates render with empty
   // arrays until data lands, which is fine because the counts default to
   // 0 and no view depends on a synchronous read.
   if (!loaded.kb) void fetchFavorites('kb')
-  if (!loaded.agent) void fetchFavorites('agent')
 
   const favorites = computed<PinEntry[]>(() => {
-    // Merge both type lists and sort by ts desc.
-    return [...favoritesByType.kb.value, ...favoritesByType.agent.value].sort(
+    // Merge knowledge base entries and sort by ts desc.
+    return [...favoritesByType.kb.value].sort(
       (a, b) => b.ts - a.ts
     )
   })
@@ -221,8 +216,7 @@ export function useResourcePins(): UseResourcePinsResult {
 
   const refresh = async (): Promise<void> => {
     loaded.kb = false
-    loaded.agent = false
-    await Promise.all([fetchFavorites('kb'), fetchFavorites('agent')])
+    await fetchFavorites('kb')
   }
 
   return { favorites, recents, isFavorite, toggleFavorite, touchRecent, removeRecent, refresh }

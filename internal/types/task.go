@@ -27,18 +27,14 @@ const (
 // name "low" so tasks enqueued by older releases remain consumable during a
 // rolling deployment. New code uses the business-semantic constant.
 const (
-	QueueDefault = "default"
-	// QueueChatAttachment carries session-scoped chat attachment parsing. It
-	// lives in the core pool but with a higher weight than QueueDefault so
-	// interactive chat uploads are not starved by knowledge-base batch imports.
-	QueueChatAttachment = "chat_attachment"
-	QueuePostProcess    = "postprocess"
-	QueueSummary        = "summary"
-	QueueMultimodal     = "multimodal"
-	QueueEntity         = "entity"
-	QueueQuestion       = "question"
-	QueueSync           = "sync"
-	QueueMaintenance    = "low"
+	QueueDefault     = "default"
+	QueuePostProcess = "postprocess"
+	QueueSummary     = "summary"
+	QueueMultimodal  = "multimodal"
+	QueueEntity      = "entity"
+	QueueQuestion    = "question"
+	QueueSync        = "sync"
+	QueueMaintenance = "low"
 )
 
 // QueueDefinition is the single source of truth for queue topology. Worker
@@ -57,16 +53,11 @@ var queueDefinitions = []QueueDefinition{
 	{Name: QueueDefault, Pool: WorkerPoolCore, Weight: 1, SharedWeight: 3, TaskTypes: []string{
 		TypeDocumentProcess, TypeManualProcess,
 	}},
-	// Interactive chat attachment parsing: higher core weight than the default
-	// queue so a large KB import cannot make chat uploads queue behind it.
-	{Name: QueueChatAttachment, Pool: WorkerPoolCore, Weight: 3, SharedWeight: 3, TaskTypes: []string{
-		TypeTemporaryDocumentProcess,
-	}},
 	{Name: QueuePostProcess, Pool: WorkerPoolPostProcess, Weight: 1, TaskTypes: []string{
 		TypeKnowledgePostProcess,
 	}},
 	{Name: QueueSummary, Pool: WorkerPoolEnrichment, Weight: 2, SharedWeight: 2, TaskTypes: []string{
-		TypeSummaryGeneration, TypeDataTableSummary, TypeKnowledgeAutoTag,
+		TypeSummaryGeneration, TypeDataTableSummary,
 	}},
 	{Name: QueueMultimodal, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeImageMultimodal}},
 	{Name: QueueEntity, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeEntityNameEmbeddingRebuild}},
@@ -230,11 +221,9 @@ const (
 	TypeDataTableSummary           = "datatable:summary"      // 表格摘要任务
 	TypeImageMultimodal            = "image:multimodal"       // 图片多模态处理任务（OCR + VLM Caption）
 	TypeKnowledgePostProcess       = "knowledge:post_process" // 知识后处理任务（统一调度）
-	TypeKnowledgeAutoTag           = "knowledge:auto_tag"     // 文档自动关联知识库已有标签
 	TypeEntityNameEmbeddingRebuild = "entity:name_embedding_rebuild"
-	TypeManualProcess              = "manual:process"             // 手工知识更新任务（cleanup + 重新索引）
-	TypeDataSourceSync             = "datasource:sync"            // 数据源同步任务
-	TypeTemporaryDocumentProcess   = "temporary_document:process" // 会话临时文档解析任务
+	TypeManualProcess              = "manual:process"  // 手工知识更新任务（cleanup + 重新索引）
+	TypeDataSourceSync             = "datasource:sync" // 数据源同步任务
 )
 
 // DocumentProcessPayload represents the document process task payload
@@ -311,8 +300,8 @@ type SummaryGenerationPayload struct {
 	KnowledgeBaseID string `json:"knowledge_base_id"`
 	KnowledgeID     string `json:"knowledge_id"`
 	Language        string `json:"language,omitempty"`
-	// Refresh marks an independently queued refresh after document metadata or
-	// chunk edits. Refresh tasks are not part of the parse attempt's pending
+	// Refresh marks an independently queued refresh after document metadata updates.
+	// Refresh tasks are not part of the parse attempt's pending
 	// subtask counter and update existing summary chunks in place.
 	Refresh bool `json:"refresh,omitempty"`
 	// Attempt links this task to the parent parse attempt so the worker
@@ -409,16 +398,6 @@ type KnowledgePostProcessPayload struct {
 	KnowledgeID     string `json:"knowledge_id"`
 	KnowledgeBaseID string `json:"knowledge_base_id"`
 	Language        string `json:"language,omitempty"` // Request locale for {{language}} in prompt templates
-	Attempt         int    `json:"attempt,omitempty"`
-}
-
-// KnowledgeAutoTagPayload identifies a document whose parsed content should be
-// classified against the latest set of existing tags in its knowledge base.
-type KnowledgeAutoTagPayload struct {
-	TenantID        uint64 `json:"tenant_id"`
-	KnowledgeID     string `json:"knowledge_id"`
-	KnowledgeBaseID string `json:"knowledge_base_id"`
-	Language        string `json:"language,omitempty"`
 	Attempt         int    `json:"attempt,omitempty"`
 }
 

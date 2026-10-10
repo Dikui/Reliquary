@@ -27,28 +27,22 @@ Go 主模块为 `reliquary`；
 
 本版本供个人单用户使用，首次注册后关闭注册。登录用户和有效 API Key 拥有全部权限，密码恢复使用本地命令，详见[个人使用说明](docs/personal-use.md)。
 
-知识工作台提供实体档案、别名、实体合并与待合并建议。问答基于文档检索并保留原文引用，使用方法见 [实体档案说明](docs/知识库融合说明.md)。
+知识工作台提供实体档案、别名、实体合并与待合并建议。文章通过全文与向量检索访问，使用方法见 [实体档案说明](docs/知识库融合说明.md)。
 
 ## 上游功能与使用说明
 
 ## 📌 Overview
 
-[**Reliquary**](https://weknora.weixin.qq.com) is an open-source, LLM-powered knowledge framework built for enterprise-grade document understanding, semantic retrieval, and autonomous reasoning.
+[**Reliquary**](https://weknora.weixin.qq.com) is an open-source, LLM-powered knowledge framework built for personal document collection, storage, and retrieval.
 
-Reliquary provides **RAG-based Quick Q&A**, a **ReAct Agent** with knowledge retrieval, MCP tools and in-process data analysis. Folder import, chunk editing with revision history, RSS feeds, site adapters, full-access API keys and model integrations support personal knowledge management. Data remains in PostgreSQL and local file storage.
+Reliquary collects, stores, deduplicates, and retrieves articles. Folder import, URL import, RSS feeds, site adapters, intake review, full-access API keys and model integrations support personal knowledge management. Data remains in PostgreSQL and local file storage. Analysis and report writing use external AI tools.
 
-The framework supports auto-syncing RSS feeds and site adapters, handles 10+ document formats including PDF, Word, images, Excel and EPUB. Chat models use OpenAI-compatible APIs, the native Anthropic API, or local Ollama. Provider presets cover OpenAI, Anthropic, DeepSeek, Alibaba Cloud, Zhipu, Moonshot, SiliconFlow, Volcengine, OpenRouter, Google Gemini and Ollama, plus a generic OpenAI-compatible option for other services. Office files can be parsed in-process with **anydoc**. Its fully modular design supports configurable LLMs, PostgreSQL retrieval, and local file storage, with support for local and private cloud deployment ensuring complete data sovereignty. Model usage is recorded in the `model_usage` table.
+The framework supports auto-syncing RSS feeds and site adapters, handles 10+ document formats including PDF, Word, images, Excel and EPUB. Generation models use OpenAI-compatible APIs, the native Anthropic API, or local Ollama. Provider presets cover OpenAI, Anthropic, DeepSeek, Alibaba Cloud, Zhipu, Moonshot, SiliconFlow, Volcengine, OpenRouter, Google Gemini and Ollama, plus a generic OpenAI-compatible option for other services. Office files can be parsed in-process with **anydoc**. Its fully modular design supports configurable LLMs, PostgreSQL retrieval, and local file storage, with support for local and private cloud deployment ensuring complete data sovereignty. Model usage is recorded in the `model_usage` table.
 
 
 ## 📱 Interface Showcase
 
 <table>
-      <tr>
-    <td colspan="2" align="center"><b>💬 Intelligent Q&A Conversation</b><br/><img src="./docs/images/qa.png" alt="Intelligent Q&A Conversation" width="100%"></td>
-  </tr>
-    <tr>
-    <td width="50%" align="center"><b>✂️ Chunk Editing & Revision History</b><br/><img src="./docs/images/kb-chunk-edit.png" alt="Chunk Editing and Revision History" width="100%"></td>
-  </tr>
   <tr>
     <td width="50%" align="center"><b>📁 Folder Tree & Batch Operations</b><br/><img src="./docs/images/kb-document-list.png" alt="Knowledge Base Folder Tree and Batch Operations" width="100%"></td>
   </tr>
@@ -56,41 +50,22 @@ The framework supports auto-syncing RSS feeds and site adapters, handles 10+ doc
 
 ## 🏗️ Architecture
 
-Upstream v0.8.0 architecture reference. See the [personal use guide](docs/personal-use.md) for the current supported features.
-
-![reliquary-architecture.png](./docs/images/architecture.png)
-
-Fully modular pipeline from document parsing, vectorization, and retrieval to LLM inference — every component is swappable and extensible. Supports local / private cloud deployment with full data sovereignty and a zero-barrier Web UI for quick onboarding.
+Files, URLs and RSS articles pass through intake review, parsing and chunking. Summaries and retrieval indexes use configured models. PostgreSQL stores article records, entities, chunks and search indexes; local storage keeps source files and images. The Web UI retrieves knowledge without generating answers.
 
 ## 🧩 Feature Overview
-
-**Intelligent Conversation**
-
-| Capability | Details |
-|------------|---------|
-| Intelligent Reasoning | ReACT progressive multi-step reasoning, autonomously orchestrating knowledge retrieval, MCP tools and data analysis |
-| Quick Q&A | RAG-based Q&A over knowledge bases for fast and accurate answers |
-| Tool Calling | Built-in tools, MCP tools (no authentication, API Key, or Bearer); `@MCP` mentions to scope the agent runtime per turn |
-| Conversation Strategy | Online Prompt editing, retrieval threshold tuning, multi-turn context awareness, per-agent citation output toggle |
-| Suggested Questions | Agent questions shown before a conversation, using curated or generated starters |
-| Temporary Attachments | Session-scoped image / document uploads with async parsing for one-off Q&A, with a combined image + attachment limit |
-| Citations & RAG Progress | Inline citation popovers and a references drawer, shared markdown rendering, and stage-by-stage RAG pipeline progress in chat |
-| Session Management | Browse sidebar sessions with inline session-title rename |
 
 **Knowledge Management**
 
 | Capability | Details |
 |------------|---------|
-| Knowledge Base Types | Document with folder import, URL import, multi-tag management, and online entry |
+| Knowledge Base Types | Documents with folder import, URL import, and online entry |
 | Folder Tree | Folder uploads keep their original directory structure, with a sidebar tree for browsing, folder rename, and re-filing documents into another folder |
-| Chunk Editing & Revisions | Edit retrieval chunks directly in the UI with per-version snapshots, diff and one-click rollback, and automatic reindexing after an edit; generated questions can be added, edited, deleted and regenerated; custom document metadata supported |
 | Per-Upload Process Config | Override parser, chunking, multimodal images (VLM), and question generation per upload batch via upload-confirm dialog or `process_config` API; reparse with new settings |
 | Batch Reparse | Re-queue parsing for multiple documents at once with optional per-batch `process_config` |
 | Data Source Import | RSS, Atom, JSON Feed and site adapters with incremental and full sync |
 | Document Formats | PDF / Word / Txt / Markdown / EPUB / Images / CSV / Excel / PPT / JSON |
-| Auto-Tagging | After parse, pick matching tags from the knowledge base's existing set without creating tags or overwriting manual ones |
 | Retrieval Strategies | BM25 sparse / Dense retrieval / parent-child chunking / HNSW-accelerated pgvector (1024-dim) / multi-dimensional indexing |
-| Batch Selection & Tagging | Marquee drag-select multiple documents in the KB list for batch reparse and batch tagging (common tags pre-selected) |
+| Batch Selection | Marquee drag-select multiple documents in the KB list for batch reparse and deletion |
 
 **Integrations & Extensions**
 
@@ -101,7 +76,7 @@ Fully modular pipeline from document parsing, vectorization, and retrieval to LL
 | Reranking | Generic `/rerank` APIs and Alibaba Cloud Bailian |
 | Vector DB | PostgreSQL (ParadeDB: pgvector + pg_search) |
 | Object Storage | Local filesystem |
-| API Integration | Full-access API keys with an API integration playground; `resource_urls=public` returns directly loadable file/image URLs |
+| API Integration | Full-access API keys with API Key management; `resource_urls=public` returns directly loadable file/image URLs |
 
 **Platform**
 
@@ -110,7 +85,7 @@ Fully modular pipeline from document parsing, vectorization, and retrieval to LL
 | Deployment | Docker Compose with private and offline support |
 | UI | Web UI / RESTful API |
 | Access Control | One personal user with complete access, automatic registration closure, full-access API keys and local password recovery |
-| Security | AES-256-GCM at-rest encryption for API keys and MCP / data-source credentials with graceful key rotation; Redis TLS; SSRF-safe HTTP client (data sources, URL import, redirect chains); secret redaction in responses |
+| Security | AES-256-GCM at-rest encryption for API keys and data-source credentials with graceful key rotation; Redis TLS; SSRF-safe HTTP client (data sources, URL import, redirect chains); secret redaction in responses |
 | Observability | Model usage in `model_usage`, document processing timelines, runtime task queues and worker governance |
 | Task Management | MQ async tasks with per-stage worker-pool governance (core / post-process / enrichment / maintenance + elastic shared pool) and per-model background concurrency governors; automatic database migration on version upgrade |
 | Model Management | Centralized config, declarative built-in models via YAML, per-knowledge-base model selection, per-model thinking-mode and embedding-dimension overrides, interactive model test debugger, WeKnora Cloud hosted models and parsing |

@@ -13,7 +13,7 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-func TestModelTierFallbackAndExplicitGeneration(t *testing.T) {
+func TestModelTierFallback(t *testing.T) {
 	db := pgtest.Open(t)
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
 	global := types.Tenant{ID: 1, Name: "Space", ModelTiers: types.ModelTierConfig{Light: "global-light", EntityResolution: "global-extract", Generation: "global-generate", Embedding: "global-embedding", Rerank: "global-rerank"}}
@@ -30,14 +30,8 @@ func TestModelTierFallbackAndExplicitGeneration(t *testing.T) {
 		require.Equal(t, test.expected, resolved.ModelID)
 		require.Equal(t, test.source, resolved.Source)
 	}
-	id, err := ResolveGenerationModel(ctx, db, kb, "session-choice")
-	require.NoError(t, err)
-	require.Equal(t, "session-choice", id)
-	id, err = ResolveGenerationModel(ctx, db, kb, "")
-	require.NoError(t, err)
-	require.Equal(t, "global-generate", id)
 	kb.ModelTiers.Light = ""
-	id, err = ResolveModelTier(ctx, db, kb, types.ModelTierLight)
+	id, err := ResolveModelTier(ctx, db, kb, types.ModelTierLight)
 	require.NoError(t, err)
 	require.Equal(t, "global-light", id)
 	require.NoError(t, db.Model(&types.Tenant{}).Where("id = 1").Update("model_tiers", types.ModelTierConfig{}).Error)
@@ -69,7 +63,7 @@ type tierTestChat struct {
 func (m *tierTestChat) Chat(ctx context.Context, _ []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
 	m.calls++
 	m.tier = types.ModelTierFromContext(ctx)
-	return &types.ChatResponse{Content: `{"approved":true,"reason":"supported","natures":["描述"],"referents":[{"kind":"object","name":"Acme"}]}`}, m.err
+	return &types.ChatResponse{Content: `{"approved":true,"reason":"supported"}`}, m.err
 }
 func (m *tierTestChat) ChatStream(context.Context, []chat.Message, *chat.ChatOptions) (<-chan types.StreamResponse, error) {
 	return nil, errors.New("unused")
@@ -90,7 +84,7 @@ func TestTierChatCountsAttemptAndAnnotatesCalls(t *testing.T) {
 	require.Equal(t, []types.ModelCallCount{{Stage: "entity_resolution", Tier: types.ModelTierLight, ModelID: "chosen-light", Calls: 1}}, calls.Snapshot())
 }
 
-func TestIntakeReviewClassifiesLabelsInOneCall(t *testing.T) {
+func TestIntakeReviewUsesLightModelInOneCall(t *testing.T) {
 	model := &tierTestChat{}
 	models := &tierTestModels{chat: model}
 	message := &types.Knowledge{ID: "message", TenantID: 1, KnowledgeBaseID: "kb", Channel: "manual"}
@@ -104,7 +98,6 @@ func TestIntakeReviewClassifiesLabelsInOneCall(t *testing.T) {
 	intake, err := message.IntakeMetadata()
 	require.NoError(t, err)
 	require.Equal(t, "approved", intake.Decision)
-	require.Equal(t, []types.KnowledgeIntakeTag{{Kind: "nature", Name: "描述"}, {Kind: "object", Name: "Acme"}}, intake.Classification)
 	require.Equal(t, 1, intake.ModelCalls[0].Calls)
 	require.Equal(t, types.ModelTierLight, intake.ModelCalls[0].Tier)
 }
@@ -117,7 +110,7 @@ func TestModelTierReferencesProtectModelDeletion(t *testing.T) {
 	kb := &types.KnowledgeBase{ID: "tier-bound-kb", TenantID: 1, Name: "Research KB", Type: types.KnowledgeBaseTypeDocument, ModelTiers: types.ModelTierConfig{Generation: "bound-model"}}
 	kb.EnsureDefaults()
 	require.NoError(t, db.Create(kb).Error)
-	svc := &modelService{db: db, kbRepo: repository.NewKnowledgeBaseRepository(db), agentRepo: &stubAgentRepoForModelDelete{}, tenantService: &stubTenantServiceForModelDelete{tenant: global}}
+	svc := &modelService{db: db, kbRepo: repository.NewKnowledgeBaseRepository(db), tenantService: &stubTenantServiceForModelDelete{tenant: global}}
 	usage, err := svc.getModelUsageDetails(ctx, 1, "bound-model")
 	require.NoError(t, err)
 	require.True(t, usage.InUse())

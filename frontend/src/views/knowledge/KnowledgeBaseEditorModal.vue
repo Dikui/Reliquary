@@ -132,7 +132,7 @@
                     :all-models="allModels"
                     @update:config="handleModelConfigUpdate"
                   />
-                  <ModelTierEditor v-if="formData" v-model="formData.modelTiers" scope="knowledge_base" :all-models="allModels" :legacy-tiers="{ light: formData.autoTagConfig.modelId || formData.modelConfig.llmModelId, entity_resolution: formData.modelConfig.llmModelId, generation: formData.modelConfig.llmModelId, embedding: formData.modelConfig.embeddingModelId }" :disabled="saving" :embedding-locked="hasFiles && kbCreateNeedsEmbedding" @resolved="resolvedModelTiers = $event" />
+                  <ModelTierEditor v-if="formData" v-model="formData.modelTiers" scope="knowledge_base" :all-models="allModels" :legacy-tiers="{ light: formData.modelConfig.llmModelId, entity_resolution: formData.modelConfig.llmModelId, generation: formData.modelConfig.llmModelId, embedding: formData.modelConfig.embeddingModelId }" :disabled="saving" :embedding-locked="hasFiles && kbCreateNeedsEmbedding" @resolved="resolvedModelTiers = $event" />
                 </div>
 
                 <!-- 解析引擎 -->
@@ -233,12 +233,10 @@
                     ref="advancedSettingsRef"
                     v-if="formData"
                     :question-generation="formData.questionGenerationConfig"
-                    :auto-tag="formData.autoTagConfig"
                     :rag-enabled="formData.indexingStrategy?.vectorEnabled || formData.indexingStrategy?.keywordEnabled"
                     :all-models="allModels"
                     :table-metadata-instructions="formData.chunkingConfig.tableMetadataInstructions"
                     @update:question-generation="handleQuestionGenerationUpdate"
-                    @update:auto-tag="(value) => { if (formData) formData.autoTagConfig = value }"
                     @update:table-metadata-instructions="(value: string) => { if (formData) formData.chunkingConfig.tableMetadataInstructions = value }"
                   />
                 </div>
@@ -284,7 +282,7 @@ import { KB_EDITOR_FOCUS_SECTION_EVENT } from '@/config/editorNavigation'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { createKnowledgeBase, getKnowledgeBaseById, listKnowledgeFiles, updateKnowledgeBase, rebuildKBIndex } from '@/api/knowledge-base'
 import { updateKBConfig, type KBModelConfigRequest } from '@/api/initialization'
-import { useChatResourcesStore } from '@/stores/chatResources'
+import { useResourcesStore } from '@/stores/resources'
 import { selectInitialModelId } from '@/utils/modelDefaults'
 import { copyWithToast } from '@/utils/clipboard'
 import { useEditorResourcesStore } from '@/stores/editorResources'
@@ -301,7 +299,7 @@ import DataSourceSettings from './settings/DataSourceSettings.vue'
 import { useI18n } from 'vue-i18n'
 
 const uiStore = useUIStore()
-const chatResources = useChatResourcesStore()
+const resources = useResourcesStore()
 const editorResources = useEditorResourcesStore()
 const { t } = useI18n()
 
@@ -390,7 +388,7 @@ const navItems = computed(() => {
   return items
 })
 
-// 左侧导航分组（与 AgentEditorModal 对齐）
+// 左侧导航分组
 const navGroups = computed(() => {
   const itemMap = new Map(navItems.value.map((item) => [item.key, item]))
   const pickItems = (keys: string[]) =>
@@ -490,13 +488,6 @@ const initFormData = (type: 'document' = 'document') => {
       questionCount: 3,
       customInstructions: ''
     },
-    autoTagConfig: {
-      enabled: false,
-      modelId: '',
-      maxTags: 3,
-      skipIfTagged: true,
-      policy: ''
-    },
     indexingStrategy: {
       vectorEnabled: true,
       keywordEnabled: true,
@@ -507,8 +498,8 @@ const initFormData = (type: 'document' = 'document') => {
 // 加载所有模型
 const loadAllModels = async (force = false) => {
   try {
-    await chatResources.ensureModels(force)
-    allModels.value = chatResources.allModels || []
+    await resources.ensureModels(force)
+    allModels.value = resources.allModels || []
   } catch (error) {
     console.error('Failed to load model list:', error)
     MessagePlugin.error(t('knowledgeEditor.messages.loadModelsFailed'))
@@ -588,16 +579,7 @@ const loadKBData = async (
         questionCount: kb.question_generation_config?.question_count || 3,
         customInstructions: kb.question_generation_config?.custom_instructions || ''
       },
-      autoTagConfig: {
-        enabled: kb.auto_tag_config?.enabled,
-        modelId: kb.auto_tag_config?.model_id || '',
-        maxTags: kb.auto_tag_config?.max_tags || 3,
-        // Absent on knowledge bases saved before the toggle existed; the
-        // backend treats that as "skip", so mirror it here.
-        skipIfTagged: kb.auto_tag_config?.skip_if_tagged ?? true,
-        policy: kb.auto_tag_config?.policy || ''
-      },
-      indexingStrategy: {
+        indexingStrategy: {
         vectorEnabled: kb.indexing_strategy?.vector_enabled ?? true,
         keywordEnabled: kb.indexing_strategy?.keyword_enabled ?? true,
       },
@@ -773,13 +755,6 @@ const buildSubmitData = () => {
     }
   }
 
-  data.auto_tag_config = {
-    enabled: formData.value.autoTagConfig?.enabled,
-    model_id: formData.value.autoTagConfig?.modelId || '',
-    max_tags: formData.value.autoTagConfig?.maxTags || 3,
-    skip_if_tagged: formData.value.autoTagConfig?.skipIfTagged ?? true,
-    policy: formData.value.autoTagConfig?.policy || ''
-  }
 
 
   // Send indexing strategy
@@ -834,8 +809,6 @@ const doSubmit = async () => {
       const updateConfig: any = {}
 
       {}
-
-        updateConfig.auto_tag_config = data.auto_tag_config
         updateConfig.indexing_strategy = {
           vector_enabled: formData.value.indexingStrategy?.vectorEnabled ?? true,
           keyword_enabled: formData.value.indexingStrategy?.keywordEnabled ?? true,
@@ -1004,7 +977,7 @@ watch(
   }
 )
 
-watch(() => chatResources.allModels, (list) => {
+watch(() => resources.allModels, (list) => {
   if (props.visible) {
     allModels.value = list || []
   }
@@ -1081,7 +1054,7 @@ watch(() => chatResources.allModels, (list) => {
   overflow: hidden;
 }
 
-/* 左侧导航：与 AgentEditorModal 对齐 */
+/* 左侧导航 */
 .settings-sidebar {
   width: 208px;
   background-color: var(--td-bg-color-settings-modal);

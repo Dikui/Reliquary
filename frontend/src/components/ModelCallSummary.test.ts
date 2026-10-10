@@ -13,7 +13,6 @@ import zhCN from '../i18n/locales/zh-CN'
 const require = createRequire(import.meta.url)
 const stageNames = {
   entity_judgment: ['实体身份判断', 'Entity identity judgment'],
-  attention: ['关注价值评分', 'Attention value scoring'],
   entity_embedding: ['实体名称向量生成', 'Entity name embedding'],
   entity_embedding_rebuild: ['实体名称向量重建', 'Entity name embedding rebuild'],
 } as const
@@ -24,7 +23,7 @@ function productionStages(directory: URL): string[] {
     const path = new URL(entry.name + (entry.isDirectory() ? '/' : ''), directory)
     if (entry.isDirectory()) for (const stage of productionStages(path)) stages.add(stage)
     else if (entry.name.endsWith('.go') && !entry.name.endsWith('_test.go')) {
-      for (const match of readFileSync(path, 'utf8').matchAll(/WithLLMCallMetadata\([^\n]*?"(entity_[a-z_]+|attention)"/g)) stages.add(match[1]!)
+      for (const match of readFileSync(path, 'utf8').matchAll(/WithLLMCallMetadata\([^\n]*?"(entity_[a-z_]+)"/g)) stages.add(match[1]!)
     }
   }
   return [...stages].sort()
@@ -62,7 +61,7 @@ async function renderCalls(locale: 'zh-CN' | 'en-US', stages: string[]) {
   return renderToString(app)
 }
 
-test('every entity and attention model call produced in Go has a Chinese and English stage name', () => {
+test('every entity model call produced in Go has a Chinese and English stage name', () => {
   const stages = productionStages(new URL('../../../internal/', import.meta.url))
   assert.deepEqual(stages, Object.keys(stageNames).sort())
   for (const stage of stages) {
@@ -76,7 +75,7 @@ for (const [locale, language] of [['zh-CN', 0], ['en-US', 1]] as const) {
   test(`${locale}: all current stages render localized names`, async () => {
     const html = await renderCalls(locale, Object.keys(stageNames))
     for (const names of Object.values(stageNames)) assert.ok(html.includes(names[language]), names[language])
-    assert.doesNotMatch(html, /entity_[a-z_]+|attention/)
+    assert.doesNotMatch(html, /entity_[a-z_]+/)
   })
 
   test(`${locale}: an unknown stage never displays its internal identifier`, async () => {

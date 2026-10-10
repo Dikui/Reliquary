@@ -18,7 +18,6 @@ const (
 	UserIDContextKey ContextKey = "UserID"
 	// PrincipalContextKey is the context key for the terminal caller principal.
 	PrincipalContextKey ContextKey = "Principal"
-	SessionIDContextKey ContextKey = "SessionID"
 	// EmbedQueryContextKey is the context key for embedding query text
 	EmbedQueryContextKey ContextKey = "EmbedQuery"
 	// LanguageContextKey is the context key for user language preference (e.g. "zh-CN", "en-US")
@@ -27,19 +26,16 @@ const (
 	// without importing the middleware that authenticates it.
 	// BackgroundTaskContextKey marks a context whose model calls originate from
 	// an asynq background worker (document parse / summary / question / context /
-	// multimodal enrichment) rather than a user-facing HTTP request. The chat
+	// multimodal enrichment) rather than a user-facing HTTP request. The model
 	// concurrency governor uses this to throttle only background LLM traffic,
-	// leaving interactive chat latency untouched. See WithBackgroundTask.
+	// leaving foreground model latency untouched. See WithBackgroundTask.
 	BackgroundTaskContextKey ContextKey = "BackgroundTask"
 	// LLMCallPurposeContextKey labels the product-level reason for a model
-	// request (for example agent_round).
+	// request (for example article_summary).
 	LLMCallPurposeContextKey ContextKey = "LLMCallPurpose"
 	// LLMPromptPrefixFingerprintContextKey carries a non-sensitive hash of the
 	// intended reusable prompt prefix for cache diagnostics.
 	LLMPromptPrefixFingerprintContextKey ContextKey = "LLMPromptPrefixFingerprint"
-	// ChatParserEngineContextKey carries the resolved parser engine
-	// from the agent's ChatParserEngineRules for chat attachment processing.
-	ChatParserEngineContextKey ContextKey = "ChatParserEngine"
 )
 
 // String returns the string representation of the context key

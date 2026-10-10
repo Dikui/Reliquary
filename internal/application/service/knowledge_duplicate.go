@@ -130,7 +130,6 @@ func hydrateMessageSource(k *types.Knowledge, metadata map[string]string) error 
 func findMessageDuplicate(tx *gorm.DB, k *types.Knowledge, earlierPendingOnly ...bool) (*types.Knowledge, string, int, error) {
 	query := tx.Model(&types.Knowledge{}).Where("tenant_id = ? AND knowledge_base_id = ? AND id <> ?", k.TenantID, k.KnowledgeBaseID, k.ID).
 		Where("parse_status NOT IN ?", []string{types.ParseStatusFailed, types.ParseStatusRejected, types.ManualKnowledgeStatusDraft, types.ParseStatusDeleting, types.ParseStatusCancelled})
-	query = query.Where("COALESCE(metadata->>'source_archived', 'false') <> 'true' AND COALESCE(metadata->>'source_update_candidate', 'false') <> 'true' AND COALESCE(metadata->>'rss_update_candidate', 'false') <> 'true'")
 	// Parser workers can see several already-persisted pending messages. A
 	// stable owner order prevents them from choosing and then deleting each
 	// other while duplicate cleanup happens outside the fingerprint transaction.
@@ -268,7 +267,7 @@ func lockMessageDeduplication(tx *gorm.DB, k *types.Knowledge) error {
 // checkMessageDuplicate is also called before parser output reaches any model.
 func (s *knowledgeService) checkMessageDuplicate(ctx context.Context, incoming *types.Knowledge, body string) (existing *types.Knowledge, err error) {
 	setMessageFingerprint(incoming, body)
-	if s.db == nil || incoming.IsSourceUpdateCandidate() {
+	if s.db == nil {
 		return nil, nil
 	}
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -295,9 +294,6 @@ func (s *knowledgeService) checkMessageDuplicate(ctx context.Context, incoming *
 // transaction as creation so concurrent identical intake has one owner.
 func (s *knowledgeService) createMessageWithDeduplication(ctx context.Context, incoming *types.Knowledge, body string) (existing *types.Knowledge, err error) {
 	setMessageFingerprint(incoming, body)
-	if incoming.IsSourceUpdateCandidate() {
-		return nil, s.repo.CreateKnowledge(ctx, incoming)
-	}
 	if s.db == nil {
 		return nil, s.repo.CreateKnowledge(ctx, incoming)
 	}
@@ -334,9 +330,6 @@ func loadKnowledgeRepostSources(db *gorm.DB, tenantID uint64, knowledgeIDs, kbID
 
 func (s *knowledgeService) stopDuplicateProcessing(ctx context.Context, incoming *types.Knowledge) error {
 	if err := s.clearIntakeSource(ctx, incoming); err != nil {
-		return err
-	}
-	if err := s.repo.DeleteKnowledgeTagRelations(ctx, incoming.ID); err != nil {
 		return err
 	}
 	s.tracker().FinalizeAttempt(ctx, incoming.ID, s.tracker().LatestAttempt(ctx, incoming.ID), "done", types.JSONMap{"duplicate": true}, "", "")

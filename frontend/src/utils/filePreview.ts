@@ -1,6 +1,6 @@
 /**
- * Shared file-preview type resolution used by DocumentPreview, chat
- * attachments, and message artifacts.
+ * Shared file-preview type resolution used by DocumentPreview and
+ * files, and message artifacts.
  *
  * Unknown extensions are not immediately rejected: callers can fetch a
  * short byte prefix and run sniffPreview() so message files without a

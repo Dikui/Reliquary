@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"reliquary/internal/models/provider"
-	"reliquary/internal/types"
 )
 
 func TestClampPromptCacheKey(t *testing.T) {
@@ -97,10 +96,10 @@ func TestApplyPromptCacheToJSONBody_AliyunCacheControlBreakpoints(t *testing.T) 
 	assert.Equal(t, "ephemeral", toolCache["type"])
 }
 
-func TestBuildOutbound_OpenAIPromptCacheKeyFromSession(t *testing.T) {
+func TestBuildOutbound_OpenAIPromptCacheKeyFromOptions(t *testing.T) {
 	c := newOutboundChat(t, string(provider.ProviderOpenAI), "gpt-4o", nil)
-	ctx := types.WithSessionID(context.Background(), "sess-live")
-	body, _, useRaw, err := c.buildOutbound(ctx, []Message{{Role: "user", Content: "hi"}}, &ChatOptions{}, false)
+	ctx := context.Background()
+	body, _, useRaw, err := c.buildOutbound(ctx, []Message{{Role: "user", Content: "hi"}}, &ChatOptions{PromptCacheKey: "sess-live"}, false)
 	require.NoError(t, err)
 	require.True(t, useRaw)
 	payload := body.(map[string]any)

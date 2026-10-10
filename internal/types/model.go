@@ -58,34 +58,29 @@ const (
 	ModelUsageBindingSummaryModel         ModelUsageBinding = "summary_model"
 	ModelUsageBindingImageProcessingModel ModelUsageBinding = "image_processing_model"
 	ModelUsageBindingVLMModel             ModelUsageBinding = "vlm_model"
-	ModelUsageBindingChatModel            ModelUsageBinding = "chat_model"
-	ModelUsageBindingRerankModel          ModelUsageBinding = "rerank_model"
-	ModelUsageBindingQueryUnderstandModel ModelUsageBinding = "query_understand_model"
 )
 
 // ModelUsageResource is the minimal, non-sensitive projection returned when a
-// knowledge base or agent prevents model deletion.
+// knowledge base prevents model deletion.
 type ModelUsageResource struct {
 	ID       string              `json:"id"`
 	Name     string              `json:"name"`
 	Bindings []ModelUsageBinding `json:"bindings"`
 }
 
-// ModelUsageListLimit caps how many knowledge bases or agents are listed in a
+// ModelUsageListLimit caps how many knowledge bases are listed in a
 // model-in-use error. Totals are returned separately so the cap cannot
 // under-count the references that actually block deletion.
 const ModelUsageListLimit = 50
 
 // ModelUsageDetails explains every active tenant-scoped reference that blocks
-// model deletion. KnowledgeBases and Agents may be truncated to
-// ModelUsageListLimit entries; KnowledgeBaseTotal and AgentTotal are the
+// model deletion. KnowledgeBases may be truncated to
+// ModelUsageListLimit entries; KnowledgeBaseTotal is the
 // untruncated counts used by the deletion guard and UI headings.
 type ModelUsageDetails struct {
 	ModelTiers         []ModelTierUsageResource `json:"model_tiers"`
 	KnowledgeBases     []ModelUsageResource     `json:"knowledge_bases"`
-	Agents             []ModelUsageResource     `json:"agents"`
 	KnowledgeBaseTotal int64                    `json:"knowledge_base_total"`
-	AgentTotal         int64                    `json:"agent_total"`
 }
 
 // InUse reports whether at least one active object references the model.
@@ -93,8 +88,7 @@ func (d ModelUsageDetails) InUse() bool {
 	if len(d.ModelTiers) > 0 {
 		return true
 	}
-	return d.KnowledgeBaseTotal > 0 || d.AgentTotal > 0 ||
-		len(d.KnowledgeBases) > 0 || len(d.Agents) > 0
+	return d.KnowledgeBaseTotal > 0 || len(d.KnowledgeBases) > 0
 }
 
 type ModelTierUsageResource struct {
@@ -142,12 +136,8 @@ type ModelParameters struct {
 	CustomHeaders  map[string]string `yaml:"custom_headers,omitempty" json:"custom_headers,omitempty"`
 	SupportsVision bool              `yaml:"supports_vision"      json:"supports_vision"` // Whether the model accepts image/multimodal input
 	// ContextWindow is the model's total context window in tokens and
-	// MaxOutputTokens the most it emits in one response. Both are provider
-	// facts the agent cannot discover but has to act on: the context window is
-	// what decides when conversation history gets compacted, and assuming a
-	// window larger than the real one means compaction never fires and the
-	// provider rejects the request mid-conversation instead. 0 means unknown,
-	// which falls back to DefaultMaxContextTokens.
+	// MaxOutputTokens the most it emits in one response. These provider limits
+	// remain configurable through model settings. 0 means unknown.
 	ContextWindow   int `yaml:"context_window,omitempty"    json:"context_window,omitempty"`
 	MaxOutputTokens int `yaml:"max_output_tokens,omitempty" json:"max_output_tokens,omitempty"`
 	// MaxConcurrency caps concurrent in-flight BACKGROUND (ingestion /

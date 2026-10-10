@@ -75,7 +75,7 @@ func (r *knowledgeBaseRepository) ListKnowledgeBasesByTenantID(
 	ctx context.Context, tenantID uint64,
 ) ([]*types.KnowledgeBase, error) {
 	var kbs []*types.KnowledgeBase
-	if err := r.db.WithContext(ctx).Where("tenant_id = ? AND is_temporary = ?", tenantID, false).
+	if err := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID).
 		Order("created_at DESC").Find(&kbs).Error; err != nil {
 		return nil, err
 	}
@@ -124,7 +124,7 @@ func (r *knowledgeBaseRepository) ListModelUsages(
 		Model(&types.KnowledgeBase{}).
 		Select(
 			"id", "name", "embedding_model_id", "summary_model_id",
-			"model_tiers", "auto_tag_config",
+			"model_tiers",
 			"image_processing_config", "vlm_config",
 		).
 		Where("tenant_id = ?", tenantID)

@@ -1,4 +1,14 @@
 export default {
+  menu: {
+    batchManage: '批量管理',
+  "knowledgeBase": "知识库",
+  "settings": "系统设置",
+  "logout": "退出登录",
+  "search": "搜索",
+  "collapseSidebar": "收起侧栏",
+  "expandSidebar": "展开侧栏",
+  "logoutSuccess": "已退出登录"
+},
   navigation: {
     removedFeature: '此功能已移除，已返回知识库列表。',
     pageNotFound: '页面不存在',
@@ -21,8 +31,8 @@ export default {
     "entity_resolution": "实体解析"
   },
   "uses": {
-    "light": "筛选、标签、关注评分与实体判断",
-    "generation": "问答内容生成",
+    "light": "收录审核与实体判断",
+    "generation": "生成摘要和检索问题",
     "embedding": "内容检索与实体名称相似度",
     "rerank": "重排检索结果",
     "entity_resolution": "判断实体候选是否属于已有实体"
@@ -38,7 +48,7 @@ export default {
   "useDefault": "使用已有默认配置",
   "effective": "当前使用：{model}（{source}）",
   "unconfigured": "未配置模型",
-  "explicitChoice": "会话中已有的显式模型选择优先使用，未选择时使用生成档位。",
+  "explicitChoice": "摘要和检索问题生成使用生成模型层级。",
   "loadFailed": "无法加载模型配置，请重试。",
   "saveFailed": "模型配置保存失败，请重试。",
   "saved": "模型档位已保存",
@@ -83,55 +93,11 @@ export default {
     "entity_resolution": "实体身份解析",
     "entity_embedding": "实体名称向量生成",
     "entity_embedding_rebuild": "实体名称向量重建",
-    "attention": "关注价值评分",
-    "intake": "筛选与标签",
-    "classification": "筛选与标签",
-    "auto_tag": "标签分类",
-    "filter": "消息筛选",
+    "intake": "收录审核",
+    "filter": "收录审核",
     "generation": "内容生成"
   }
 },
-
-  knowledgeStrategy: {
-    "evaluation": {
-      "title": "筛选评测",
-      "intro": "为原始材料添加人工标签，分别比较旧规则与候选规则在开发集和留出集上的结果。留出集不用于调参；评测不会激活策略。",
-      "format": "每行一条：knowledge_id, select|reject|either, development|holdout",
-      "run": "评测此版本",
-      "result": "评测结果",
-      "invalidCount": "请输入 1 到 20 行样本。",
-      "invalidFormat": "每行需要包含知识 ID、有效标签和有效数据集。",
-      "duplicateIDs": "每个知识 ID 只能出现一次。",
-      "countedSamples": "{count} 条计入指标的样本",
-    "allSamples": "全部 {count} 条样本",
-    "tp": "正确收录",
-    "fp": "错误收录",
-    "fn": "遗漏收录",
-    "tn": "正确拒绝",
-    "correct": "正确",
-    "incorrect": "错误",
-    "notCounted": "不计入指标",
-      "old": "旧规则",
-      "new": "候选规则",
-      "precision": "精确率",
-      "recall": "召回率",
-      "mistakes": "{count} 条判断错误的样本",
-      "note": "“任一结果”样本会显示判断，但不计入统计。分母为零时，精确率或召回率显示为 —。",
-      "labels": {
-        "select": "应收录",
-        "reject": "应拒绝",
-        "either": "任一结果"
-      },
-      "splits": {
-        "development": "开发集",
-        "holdout": "留出集"
-      },
-      "decisions": {
-        "approved": "收录",
-        "rejected": "拒绝"
-      }
-    }
-  },
   knowledgeWorkbench: {
   "tabLabel": "实体",
   "title": "实体",
@@ -252,12 +218,6 @@ export default {
   },
   integrations: {
     title: '发布集成',
-    selectAgentPlaceholder: '请选择智能体',
-    selectAgentHint: '请先选择一个智能体',
-    boundAgent: '绑定智能体',
-    filterByAgent: '按智能体筛选',
-    filterByAgentWithName: '按智能体筛选：{name}',
-    filterAllAgents: '全部智能体',
     api: {
       editApiKey: '编辑 API Key',
       updateApiKeySuccess: 'API Key 已保存',
@@ -304,8 +264,6 @@ export default {
       createApiKeyFailed: '创建 API Key 失败',
       loadApiKeysFailed: '加载 API Key 列表失败',
       apiKeyCreated: 'API Key 已创建',
-      requestExampleCreateSession: '# 1. 创建会话',
-      requestExampleAgentChat: '# 2. Agent 对话（SSE；将 <session_id> 替换为第 1 步返回的 id）',
       requestExample: '请求示例',
       playgroundTitle: 'API Playground',
       playgroundDesc: '使用 API Key 查询知识并查看响应。',
@@ -314,24 +272,13 @@ export default {
       playgroundSectionRequest: '请求配置',
       playgroundSectionPreview: '请求预览',
       playgroundSectionResult: '运行结果',
-      playgroundAgent: '测试智能体',
-      playgroundAgentPlaceholder: '选择要测试的智能体',
-      playgroundBuiltin: '内置',
-      playgroundAgentsLoadFailed: '智能体列表加载失败',
       playgroundQuestion: '知识查询',
       playgroundQuestionPlaceholder: '输入知识查询内容',
       playgroundRequestPreview: '请求预览（已遮蔽密钥）',
       playgroundRun: '运行测试',
       playgroundStop: '停止',
       playgroundNeedApiKey: '当前空间没有 API Key。',
-      playgroundNeedAgent: '请选择测试智能体。',
       playgroundNeedQuestion: '请输入知识查询。',
-      playgroundMissingSessionId: '创建会话成功，但响应中没有 session id。',
-      playgroundNoStream: '对话接口没有返回可读取的 SSE 流。',
-      playgroundStepSession: '步骤 1：创建 Session',
-      playgroundStepChat: '步骤 2：Agent Chat SSE',
-      playgroundFinalAnswer: '提取出的回答',
-      playgroundEmptyResult: '运行后将在这里显示 Session 响应、SSE 原始输出和提取出的回答。',
       playgroundSuccess: '测试完成（{ms}ms）',
       playgroundStopped: '测试已停止',
       playgroundFailed: 'API Playground 测试失败',
@@ -383,7 +330,6 @@ export default {
     resourceLoadFailed: '加载资源列表失败',
     retryLoadResources: '重新加载',
     syncScheduleLabel: '同步频率',
-    conflictLabel: '冲突策略',
     syncDeletions: '同步删除（源端删除时同步删除知识库中的条目）',
     createAndSync: '创建并立即同步',
     createAndSyncSuccess: '数据源创建成功，同步任务已提交',
@@ -460,11 +406,6 @@ export default {
       selectType: '选择类型',
       credentials: '配置凭证',
       resources: '选择范围',
-      strategy: '同步策略'
-    },
-    conflict: {
-      overwrite: '覆盖更新',
-      skip: '跳过已存在'
     },
     status: {
       active: '已连接',
@@ -479,9 +420,9 @@ export default {
       deletion_lookup_failed: '删除前查找文档失败，请查看服务器日志',
       deletion_failed: '删除失败，请查看服务器日志',
       ingest_failed: '导入失败，请查看服务器日志',
-      source_adapter_anomaly_failed: '来源异常记录失败，请查看应用日志',
-      rss_update_rejected: '订阅内容更新被拒绝，请查看消息状态和应用日志',
-    },
+
+    source_adapter_failed: "站点适配器处理失败，请检查应用日志。",
+},
   },
   ollama: {
     unknown: '未知',
@@ -498,313 +439,6 @@ export default {
     download: '下载图片',
     close: '关闭',
     downloading: '下载中...'
-  },
-  agentEditor: {
-    builtinHint: '这是内置智能体，名称和描述不可修改，但可以调整配置参数',
-    fileTypes: {
-      label: '支持的文件类型',
-      desc: '限制可选择的文件类型，留空表示支持所有类型',
-      allTypes: '全部类型',
-      pdf: 'PDF 文档',
-      word: 'Word 文档 (.docx/.doc)',
-      textLabel: '文本',
-      text: '纯文本文件 (.txt)',
-      markdown: 'Markdown 文档',
-      csv: '逗号分隔值文件',
-      excel: 'Excel 表格 (.xlsx/.xls)',
-      imageLabel: '图片',
-      image: '图片文件 (.jpg/.jpeg/.png)'
-    },
-    fallback: {
-      fixed: '固定回复',
-      model: '模型生成'
-    },
-    dataAnalysis: {
-      enableLabel: '表格数据分析',
-      enableDesc: '在普通模式下分析检索到的 CSV / Excel 表格。开启后会额外调用模型生成 SQL。',
-    },
-    chatParser: {
-      label: '聊天附件解析策略',
-      desc: '为不同文件类型指定解析引擎，仅对当前智能体的聊天附件生效',
-      waitTimeoutLabel: '附件解析等待超时（秒）',
-      waitTimeoutDesc: '单轮问答等待附件解析完成的最长时间，超时后未完成的附件会被跳过。大文件 / 扫描件可调大。0 表示使用全局默认。'
-    },
-    imageUpload: {
-      navLabel: '附件上传',
-      sectionTitle: '附件上传',
-      sectionDesc: '配置对话中图片和文档附件的上传、解析及对应模型',
-      label: '图片上传',
-      desc: '启用后用户可在对话中上传图片并由 VLM 理解',
-      vlmModel: 'VLM 模型',
-      vlmModelDesc: '用于图片分析的视觉语言模型',
-      vlmModelPlaceholder: '请选择 VLM 模型',
-      vlmModelRequired: '启用图片上传时必须选择 VLM 模型',
-      imageUnderstandingLabel: '附件图片理解 / 扫描件 OCR',
-      imageUnderstandingDesc: '对图片型 PDF/PPT 等扫描件，当解析不出文字时用 VLM 进行 OCR 识别。开启会增加解析耗时，默认关闭。',
-      ocrMaxPagesLabel: '扫描件 OCR 最大页数',
-      ocrMaxPagesDesc: '扫描件送入 VLM 做 OCR 的最大页数，越多覆盖越全但越慢、越贵。0 表示使用全局默认。',
-      useGlobalDefault: '0 = 全局默认',
-      notConfigured: '未配置',
-    },
-    llmCallTimeout: {
-      label: 'LLM 调用超时',
-      desc: '单次 LLM 调用的最大等待时间（秒），超过此时间后调用将被中止',
-      hint: '留空或填 0 表示使用默认值（120 秒）',
-      placeholder: '输入秒数，建议范围 60-1800'
-    },
-    mcp: {
-      label: 'MCP 服务',
-      desc: '选择 Agent 可以调用的 MCP 服务',
-      selectLabel: '选择 MCP 服务',
-      selectDesc: '选择要启用的 MCP 服务',
-      selectPlaceholder: '选择 MCP 服务',
-      unavailableService: '不可用服务'
-    },
-    agentType: {
-      label: '智能体类型',
-      desc: '选择一个预设会自动填充系统提示词、工具列表和推荐的知识库范围。',
-      defaultNamePattern: '我的{label}',
-      kbIncompatibleWarn: '已选的 {count} 个知识库不适用于当前类型，请手动调整',
-      kbMismatch: {
-        ragQa: '未启用 RAG 检索',
-        dataAnalysis: "需启用 RAG",
-        quickAnswer: '快速问答模式需启用 RAG 检索',
-        generic: '不适用于当前类型'
-      }
-    },
-    tools: {
-      thinking: '思考',
-      thinkingDesc: '动态和反思性的问题解决思考工具',
-      todoWrite: '制定计划',
-      todoWriteDesc: '创建结构化的研究计划',
-      grepChunks: '关键词搜索',
-      grepChunksDesc: '快速定位包含特定关键词的文档和分块',
-      knowledgeSearch: '语义搜索',
-      knowledgeSearchDesc: '理解问题并查找语义相关内容',
-      listChunks: '查看文档分块',
-      listChunksDesc: '获取文档完整分块内容',
-
-
-      getDocInfo: '获取文档信息',
-      getDocInfoDesc: '查看文档元数据',
-      dataAnalysis: '数据分析',
-      dataAnalysisDesc: '理解数据文件并进行数据分析',
-      dataSchema: '查看数据元信息',
-      dataSchemaDesc: '获取表格文件的元信息',
-      requiresKb: '（需要配置知识库）',
-      requiresRagKb: '（需要关联启用向量/关键词索引的知识库）',
-      knowledgeReportAnomaly: '报告消息异常',
-      knowledgeReportAnomalyDesc: '提交消息纠错或标签建议，等待知识库本人处理',
-      knowledgeImportURL: '按网址收录',
-      knowledgeImportURLDesc: '抓取原文并经过完整性、来源与质量审核后收录',
-      knowledgeApplyAnomaly: '执行消息纠错',
-      knowledgeApplyAnomalyDesc: '仅在知识库本人明确指示后执行指定纠错建议',
-      webFetch: '网页抓取',
-      webFetchDesc: '抓取指定网址的内容',
-      groupBase: '基础',
-      groupRag: '知识库检索（RAG）',
-      groupData: '数据分析',
-      dangerTag: '可写',
-      statusNoKb: '当前未关联任何知识库',
-      kbMetricRag: 'RAG 知识库',
-      statusInactive: '有 {count} 个已勾选工具在当前配置下无法生效',
-      effectiveLabel: '最终启用的工具',
-      effectiveDesc: '根据当前配置计算，这是智能体保存后实际能调用的工具集合',
-      effectiveEmpty: '当前没有可用工具，智能体将退化为纯模型问答'
-    },
-    desc: {
-      name: '为智能体设置一个易于识别的名称',
-      description: '简要描述智能体的用途和特点',
-      systemPrompt: '自定义系统提示词，定义智能体的行为和角色',
-      leaveEmptyDefault: '（留空则使用系统默认）',
-      contextTemplate: '定义如何将检索到的内容格式化后传递给模型',
-      model: '选择智能体使用的大语言模型',
-      temperature: '控制输出的随机性，0 最确定，1 最随机',
-      maxTokens: '模型生成回复的最大 Token 数。选「默认」时为 2048；选「自定义」后按你填的数保存。',
-      maxTokensAgent: '每一轮推理的最大生成 Token（含工具调用 JSON）。默认值为 4096。选「自定义」后按填写值保存，不再自动改动。',
-      thinking: '启用模型的扩展思考能力（需要模型支持）',
-      conversationSection: '配置多轮对话开关与问题改写开关（改写提示词见「提示词」）',
-      conversationSectionAgent: '配置每轮携带多少历史对话。智能推理始终为多轮模式。',
-      multiTurn: '开启后将保留历史对话上下文',
-      historyRounds: '保留最近几轮对话作为上下文',
-      retainRetrievalHistory: '保留此前轮次的知识库检索结果。关闭时每轮重新检索',
-      rewrite: '多轮对话时自动改写用户问题，消解指代和补全省略',
-      queryUnderstandModel: '用于问题理解（改写与意图识别）的模型，留空则复用主对话模型',
-      rewriteSystemPrompt: '用于问题改写的系统提示词（留空使用默认）',
-      rewriteUserPrompt: '用于问题改写的用户提示词模板（留空使用默认）',
-      selectTools: '选择 Agent 可以使用的工具',
-      maxIterations: '限制 Agent 单次任务的推理步数。选「不限制」时会一直跑到模型自然结束或你手动停止。',
-      kbScope: '选择智能体可访问的知识库范围',
-      retrievalSection: "配置知识库检索召回与排序",
-      queryExpansion: '自动扩展查询词以提高召回率',
-      embeddingTopK: '向量检索返回的最大结果数量',
-      keywordThreshold: '关键词检索的最低相关性分数',
-      vectorThreshold: '向量检索的最低相似度分数',
-      rerankTopK: '重排序后保留的最大结果数量',
-      rerankThreshold: '重排序的最低相关性分数',
-      fallbackStrategy: '当无法从知识库找到相关内容时的处理方式',
-      fallbackResponse: '当无法回答时返回的固定文本',
-      fallbackPrompt: '当无法从知识库找到答案时，引导模型生成回复的提示词'
-    },
-    selection: {
-      all: '全部',
-      selected: '指定',
-      disabled: '禁用'
-    },
-    promptNav: {
-      ariaLabel: '提示词目录',
-      system: '系统提示词',
-      context: '上下文模板',
-      intent: '意图提示词',
-      rewriteSystem: '改写 · 系统',
-      rewriteUser: '改写 · 用户',
-      fallback: '检索兜底'
-    },
-    intentPrompts: {
-      title: '意图提示词',
-      sectionDesc: '为不同查询意图配置专属系统提示词；未自定义时使用系统默认模板',
-      intentLabel: '意图',
-      promptPlaceholder: '输入自定义系统提示词...',
-      customized: '已自定义',
-      empty: '暂无可用的意图模板'
-    },
-    placeholders: {
-      available: '可用变量：',
-      clickToInsert: '（点击插入）',
-      hint: '（点击插入，或输入 {\'{{\'} 唤起列表）'
-    },
-    questionSuggestions: {
-      navLabel: '问题推荐',
-      title: '对话问题推荐',
-      description: '配置首次提问前展示的推荐问题，可使用预设问题、知识库或混合来源。',
-      startersTitle: '开场推荐',
-      enableStarters: '展示开场问题',
-      enableStartersDesc: '在用户首次提问前展示，可使用运营配置、知识库或混合来源。',
-      sourceMode: '内容来源',
-      count: '展示数量',
-      curatedItems: '运营配置问题',
-      curatedItemsDesc: '用于开场推荐；混合模式下优先展示。',
-      addItem: '添加问题',
-      modeCurated: '运营配置',
-      modeKnowledge: '知识库',
-      modeHybrid: '混合',
-    },
-    navGroups: {
-      basic: '基础',
-      knowledge: '知识检索',
-      capability: '能力扩展',
-      integration: '发布集成'
-    }
-  },
-  agentStream: {
-    saveToKb: {
-      emptyContent: '当前回答为空，无法保存到知识库',
-      editorOpened: '已打开编辑器，请选择知识库后保存'
-    },
-    copy: {
-      emptyContent: '当前回答为空，无法复制',
-      success: '已复制到剪贴板',
-      failed: '复制失败，请手动复制'
-    },
-    toolStatus: {
-      calling: '正在调用 {name}...',
-      searchKb: '检索知识库',
-      searchKbFailed: '检索知识库失败',
-      grepSearch: '搜索关键词',
-      grepSearchFailed: '搜索关键词失败',
-      getDocInfo: '获取文档信息',
-      getDocInfoFailed: '获取文档信息失败',
-      viewDocument: '查看文档',
-      thinkingDone: '完成思考',
-      thinkingFailed: '思考失败',
-      updateTodos: '更新任务列表',
-      updateTodosFailed: '更新任务列表失败',
-      imageAnalyzing: '正在查看图片内容...',
-      imageAnalysisDone: '已查看图片内容',
-      imageAnalysisFailed: '图片内容查看失败',
-      attachmentParsing: '正在解析附件...',
-      attachmentParsingDone: '已解析附件',
-      attachmentParsingFailed: '附件解析失败',
-      queryUnderstanding: '正在理解问题...',
-      queryUnderstandDone: '已完成问题理解',
-      called: '调用 {name}',
-      calledFailed: '调用 {name} 失败',
-    },
-    ragPipeline: {
-      searching: '正在检索知识库...',
-      searchingWithQuery: '正在检索知识库：「{query}」',
-      searchDone: '检索完成'
-    },
-    attachmentParsing: {
-      parsedSummary: '已解析 {count} 个附件',
-      parsedWithSkipped: '已解析 {parsed} 个附件，{skipped} 个未完成已跳过',
-      noneReady: '没有可用的已解析附件'
-    },
-    knowledgeChunksList: {
-      chunkRange: '已加载 {fetched} / {total} 个分块',
-      page: '第 {page} 页，每页 {pageSize} 个'
-    },
-    grepResults: {
-      chunkHits: '{count} 片段',
-      keywordHits: '{count} 次',
-      titleMatch: '标题匹配',
-    },
-    search: {
-      noResults: '未找到匹配的内容',
-      candidatesBelowThreshold: '命中 {count} 条候选，相关性不足，未用于回答',
-      foundResultsFromFiles: '找到 {count} 个结果，来自 {files} 个文件',
-      foundResults: '找到 {count} 个结果',
-      grepSummary: '找到 {chunks} 个匹配片段，来自 {docs} 个文档'
-    },
-    plan: {
-      inProgress: '进行中',
-      pending: '待处理',
-      completed: '已完成'
-    },
-    toolSummary: {
-      getDocument: '获取文档：{title}',
-      document: '文档',
-      listChunks: '查看 {title}',
-      deepThinking: '深度思考'
-    },
-    citation: {
-      notFound: '未找到内容',
-      loadFailed: '加载失败',
-    },
-    tools: {
-      searchKnowledge: '知识库检索',
-      grepChunks: '搜索关键词',
-      webFetch: '网页抓取',
-      getDocumentInfo: '获取文档信息',
-      listKnowledgeChunks: '查看知识分块',
-      getRelatedDocuments: '查找相关文档',
-      getDocumentContent: '获取文档内容',
-      todoWrite: '计划管理',
-      thinking: '思考',
-      attachmentParsing: '解析附件',
-      imageAnalysis: '查看图片内容',
-      queryUnderstand: '理解问题',
-
-      dataAnalysis: '数据分析',
-      dataSchema: '数据结构',
-    },
-    toolApproval: {
-      waiting: '等待审核 · {target}',
-      waitingStatus: '等待审核',
-      targetWithTool: '{service} › {tool}',
-      titleWithTarget: '人工审核 · {service} › {tool}',
-      argsLabel: '调用参数',
-      argsModified: '已修改',
-      countdownShort: '{seconds}s',
-      approve: '通过并执行',
-      reject: '拒绝',
-      approvedTag: '已通过',
-      rejectedTag: '已拒绝',
-      invalidJson: '参数不是合法 JSON',
-      submitted: '已提交',
-      submitFailed: '提交失败',
-      userRejected: '用户拒绝'
-    }
   },
   kbSettings: {
     parser: {
@@ -844,39 +478,22 @@ export default {
       }
     },
   },
-  tools: {
-    multiKbSearch: '跨库搜索',
-    knowledgeSearch: '知识库搜索',
-    grepChunks: '搜索关键词',
-    getChunkDetail: '获取片段详情',
-    listKnowledgeChunks: '查看知识分块',
-    listKnowledgeBases: '列出知识库',
-    getDocumentInfo: '获取文档信息',
-
-    think: '深度思考',
-    todoWrite: '制定计划'
-  },
   commandPalette: {
-    placeholder: '搜索知识库、文件、对话…',
+    placeholder: "搜索知识库、文件…",
     clearRecent: '清除',
     retrieval: '检索参数',
-    untitledSession: '未命名对话',
     hotkey: {
       select: '选择',
       enter: '打开',
       cmdNumber: '直接打开',
-      cmdEnter: '发起对话',
       esc: '关闭'
     },
     empty: {
       noResults: '没有找到匹配结果',
-      askAi: '直接向 AI 提问',
       adjustRetrieval: '调整检索参数'
     },
     quick: {
-      newChat: '新建对话',
       knowledgeBases: '打开知识库',
-      agents: '打开智能体',
       settings: '打开设置',
     },
     match: {
@@ -885,10 +502,7 @@ export default {
     },
     group: {
       chunks: '知识库文件',
-      messages: '对话消息',
       kbs: '知识库',
-      agents: '智能体',
-      sessionsByTitle: '对话（按标题）',
       commands: '命令',
       recent: '最近搜索',
       quickActions: '快捷操作'
@@ -912,81 +526,6 @@ export default {
     audioLoading: '加载音频中…',
     audioNotSupported: '您的浏览器不支持音频播放',
     videoNotSupported: '您的浏览器不支持视频播放'
-  },
-  promptTemplate: {
-    noTemplates: '暂无模板',
-    selectTemplate: '选择模板',
-    useTemplate: '使用模板',
-    resetDefault: '恢复默认',
-    default: '默认',
-    withKnowledgeBase: '知识库',
-  },
-  mcpServiceDialog: {
-    addTitle: '添加 MCP 服务',
-    editTitle: '编辑 MCP 服务',
-    basicSection: '基本信息',
-    connectionSection: '连接配置',
-    enableServiceDesc: '关闭后该服务不会被调用',
-    testAfterSaveHint: '保存后可测试连接',
-    testResultTitle: '测试结果',
-    unitSecond: '秒',
-    unitTimes: '次',
-    name: '服务名称',
-    namePlaceholder: '请输入服务名称',
-    description: '描述',
-    descriptionPlaceholder: '请输入服务描述',
-    transportType: '传输类型',
-    serviceUrl: '服务 URL',
-    serviceUrlPlaceholder: 'https://example.com/mcp',
-    enableService: '启用服务',
-    authConfig: '认证配置',
-    authType: '认证方式',
-    authTypeNone: '无 / 自定义 Header',
-    authTypeApiKey: 'API Key / Token',
-    apiKeyHeader: '请求头名称',
-    apiKeyHeaderDesc: '留空默认 X-API-Key。Bearer 方式请填 Authorization，并在下方密钥值中写 “Bearer <token>”；需要裸 token 时填 Authorization 并直接填入 token。',
-    credentialValue: '密钥值 / Token',
-    optional: '可选',
-    advancedConfig: '高级配置',
-    timeoutSec: '超时时间(秒)',
-    retryCount: '重试次数',
-    retryDelaySec: '重试延迟(秒)',
-    codeImport: {
-      toggle: '从代码导入',
-      hint: '粘贴标准 mcpServers JSON 配置，自动填充表单',
-      parse: '解析并填充',
-      editOverwriteHint: '导入会覆盖当前表单内容（不影响已保存的凭证，需点保存生效）',
-      toasts: {
-        filled: '已填充表单，请检查后保存',
-        multipleServers: '检测到多个服务，已导入第一个：{name}'
-      },
-      errors: {
-        empty: '请先粘贴配置内容',
-        invalidJson: '无法解析，请检查 JSON 格式',
-        noServer: '未找到 MCP 服务配置',
-        missingUrl: '配置缺少 url',
-        stdioUnsupported: '暂不支持 stdio（command/args）配置，请使用带 url 的远程配置'
-      }
-    },
-    customHeaders: {
-      label: '自定义请求头（可选）',
-      desc: '附加到每次 MCP 请求的 HTTP 请求头，常用于企业网关鉴权、链路追踪等场景。',
-      add: '添加请求头',
-      keyPlaceholder: 'Header 名称',
-      valuePlaceholder: 'Header 值'
-    },
-    toasts: {
-      created: 'MCP 服务已创建',
-      updated: 'MCP 服务已更新',
-      createFailed: '创建 MCP 服务失败',
-      updateFailed: '更新 MCP 服务失败',
-    },
-    rules: {
-      nameRequired: '请输入服务名称',
-      transportRequired: '请选择传输类型',
-      urlRequired: '请输入服务 URL',
-      urlInvalid: '请输入有效的 URL'
-    }
   },
   ollamaSettings: {
     title: 'Ollama 配置',
@@ -1039,7 +578,6 @@ export default {
       title: '模型无法删除',
       description: '模型「{name}」仍被以下配置引用。请先打开对应配置并更换模型，再重新删除。',
       knowledgeBases: '知识库（{count}）',
-      agents: '智能体（{count}）',
       openConfiguration: '打开配置',
       truncated: '仅显示前 {shown} 个，共 {total} 个',
       bindings: {
@@ -1053,9 +591,7 @@ export default {
         summary_model: '摘要模型',
         image_processing_model: '图片处理模型',
         vlm_model: '视觉理解模型',
-        chat_model: '对话模型',
         rerank_model: '重排序模型',
-        query_understand_model: '问题理解模型',
         unknown: '其他模型配置'
       }
     },
@@ -1144,9 +680,9 @@ export default {
       empty: '暂无 Embedding 模型'
     },
     chat: {
-      title: '对话模型',
-      desc: '配置用于对话的大语言模型',
-      empty: '暂无对话模型'
+      title: "生成模型",
+      desc: "配置用于审核、摘要和检索问题生成的大语言模型",
+      empty: "暂无生成模型"
     },
     source: {
       remote: 'Remote',
@@ -1158,120 +694,10 @@ export default {
       debugModel: '模型测试'
     },
     typeShort: {
-      chat: '对话',
+      chat: "生成",
       embedding: 'Embedding',
       rerank: 'ReRank',
       vllm: '视觉',
-    }
-  },
-  mcpSettings: {
-    title: 'MCP 服务管理',
-    description: '管理外部 MCP (Model Context Protocol) 服务，在 Agent 模式下调用外部工具和资源',
-    enabled: '已启用',
-    disabled: '已禁用',
-    configuredServices: '已配置的服务',
-    manageAndTest: '管理和测试 MCP 服务连接',
-    addService: '添加服务',
-    empty: '暂无 MCP 服务',
-    deleteConfirmBody: '确定要删除 MCP 服务"{name}"吗？此操作无法撤销。',
-    unnamed: '未命名',
-    builtin: '内置',
-    toasts: {
-      loadFailed: '加载 MCP 服务列表失败',
-      enabled: '已启用 MCP 服务',
-      disabled: '已禁用 MCP 服务',
-      updateStateFailed: '更新 MCP 服务状态失败',
-      testing: '正在测试 {name}...',
-      noResponse: '测试失败：未收到服务器响应',
-      testFailed: '测试 MCP 服务失败',
-      deleted: 'MCP 服务已删除',
-      deleteFailed: '删除 MCP 服务失败'
-    },
-    actions: {
-      testing: '测试中...',
-      test: '测试连接'
-    }
-  },
-  conversationSettings: {
-    maxTokens: {
-      desc: '生成回答的最大Token数量'
-    },
-    temperature: {
-      desc: '控制模型输出的随机性，0最确定，1最随机'
-    },
-    systemPrompt: {
-      desc: '用于普通模式对话的系统级Prompt'
-    },
-    contextTemplate: {
-      desc: '用于普通模式下基于检索结果生成回答的Prompt模板'
-    },
-    rerankModel: {
-      desc: '用于搜索结果重排序的模型（可选）'
-    },
-    chatModel: {
-      desc: '用于总结和摘要的大语言模型'
-    },
-    rewritePrompt: {
-      desc: '控制问题改写的系统提示词'
-    },
-    fallbackPrompt: {
-      desc: '当选择模型兜底时使用的提示模板'
-    },
-    fallbackResponse: {
-      desc: '当兜底策略为固定回复时返回的文本'
-    },
-    fallbackStrategy: {
-      desc: '检索无结果时采用的处理方式'
-    },
-    enableQueryExpansion: {
-      desc: '召回不足时调用大模型生成扩展查询（增加时延与成本）'
-    },
-    enableRewrite: {
-      desc: '多轮对话自动改写问题以获得更优召回'
-    },
-    rerankThreshold: {
-      desc: '重排序阶段的最低得分阈值'
-    },
-    rerankTopK: {
-      desc: '重排序后进入答案生成的文档数量'
-    },
-    vectorThreshold: {
-      desc: '向量召回的最低相似度阈值'
-    },
-    keywordThreshold: {
-      desc: '关键词检索的最低得分阈值'
-    },
-    embeddingTopK: {
-      desc: '向量召回阶段保留的文档数量'
-    },
-    maxRounds: {
-      desc: '用于多轮上下文和问题改写的历史轮数'
-    },
-    models: {
-      chatGroupLabel: '思考 / 对话模型'
-    }
-  },
-  agentSettings: {
-    systemPrompt: {
-      desc: '配置 Agent 的系统提示词，支持占位符模板。占位符会在运行时自动替换为实际内容。'
-    },
-    allowedTools: {
-      desc: '当前 Agent 可使用的工具列表'
-    },
-    temperature: {
-      desc: '控制模型输出的随机性，0 最确定，1 最随机'
-    },
-    rerankModel: {
-      desc: '搜索结果重排序，统一不同来源的相关度分数'
-    },
-    thinkingModel: {
-      desc: '用于 Agent 推理和规划的 LLM 模型'
-    },
-    maxIterations: {
-      desc: '限制 Agent 单次任务的推理步数。选「不限制」时会一直跑到模型自然结束或你手动停止。'
-    },
-    modelRecommendation: {
-      title: '模型推荐'
     }
   },
   upload: {
@@ -1291,19 +717,16 @@ export default {
   },
   platform: {
     subtitle: '大模型驱动的个人知识框架',
-    description: 'RAG 检索与智能体推理，让文档真正被理解和运用',
+    description: "收录、保存和检索你的知识资料",
     rag: 'RAG 增强生成',
-    agent: 'ReAct 智能体',
     hybridSearch: '混合检索',
     multimodalParsing: '多模态文档解析',
     hybridSearchEngine: "混合检索",
-    ragQandA: 'ReAct 智能体问答',
+    ragQandA: "知识检索",
     independentTenant: "个人知识管理",
     fullApiAccess: '完整 API 访问',
     knowledgeBaseManagement: '知识库管理',
     carousel: {
-      agenticRagTitle: 'Agentic RAG',
-      agenticRagDesc: 'ReAct 推理 + 工具调用 + 多步思考',
       hybridSearchTitle: '混合检索策略',
       hybridSearchDesc: "BM25 + 向量检索",
       smartDocRetrievalTitle: '智能文档检索',
@@ -1374,7 +797,7 @@ export default {
     languageSaved: '语言设置已保存'
   },
   model: {
-    imageProcessingUnsupported: '图片处理模型必须是 VLLM 模型或已开启支持视觉/多模态的对话模型。',
+    imageProcessingUnsupported: "图片处理模型必须是 VLLM 模型或已开启视觉或多模态支持的生成模型。",
     imageProcessingNotFound: '图片处理模型不存在，请重新选择。',
     imageProcessingUnavailable: '图片处理模型服务不可用，请稍后重试。',
     modelName: '模型名称',
@@ -1424,14 +847,14 @@ export default {
       supportsVisionDesc: '模型是否支持图片等多模态输入。开启后可在知识库中用于图片文字提取和描述。',
       contextWindowLabel: '上下文窗口',
       contextWindowPlaceholder: '默认 {value}',
-      contextWindowDesc: '该模型一次请求能容纳的 token 数。智能体压缩对话历史会按此上限工作。留空则使用默认 200000（200K）。请按厂商文档填写真实值，填大会导致压缩不触发、上游直接拒绝请求。',
+      contextWindowDesc: "模型支持的最大上下文长度，按 token 计算。",
       contextWindowDefaultHint: '未设置，使用默认 {value}',
       contextWindowTokens: '{count} tokens',
       maxConcurrencyLabel: '后台并发上限',
       maxConcurrencyPlaceholder: '0 表示使用全局默认',
-      maxConcurrencyDesc: '限制文档入库/富化等后台任务对该模型的并发调用数（按模型在本进程内共享）。0 或留空表示沿用全局默认；不影响交互式对话。',
+      maxConcurrencyDesc: "限制本进程内此模型的并行后台调用数。0 或留空时使用全局默认值。",
       thinkingControlLabel: '思考模式参数格式',
-      thinkingControlDesc: '决定智能体「思考模式」开/关时如何写入 API。已尝试按厂商/模型预选，若与实际情况不符请按 API 文档手动修改；选「不写入」时，智能体「思考模式」开关不生效。',
+      thinkingControlDesc: "配置思考选项写入模型 API 的方式。系统会根据厂商和模型预选，可按 API 文档调整。选择不发送时，不传递思考选项。",
       dimensionHint: '模型已选择，点击"检测维度"按钮自动获取向量维度',
       loadModelListFailed: '加载模型列表失败',
       listRefreshed: '列表已刷新',
@@ -1453,7 +876,7 @@ export default {
       providers: {
         generic: {
           label: '通用 OpenAI 兼容',
-          description: '填写 OpenAI 兼容地址，支持对话、文本嵌入和通用重排接口'
+          description: '填写 OpenAI 兼容地址，支持文本生成、文本嵌入和通用重排接口'
         },
         openai: {
           label: 'OpenAI',
@@ -1461,7 +884,7 @@ export default {
         },
         anthropic: {
           label: 'Anthropic',
-          description: '使用原生 Anthropic Messages API 的 Claude 对话模型'
+          description: '使用原生 Anthropic Messages API 的 Claude 生成模型'
         },
         deepseek: {
           label: 'DeepSeek',
@@ -1481,7 +904,7 @@ export default {
         },
         siliconflow: {
           label: '硅基流动 SiliconFlow',
-          description: '对话、文本嵌入和通用重排模型'
+          description: '文本生成、文本嵌入和通用重排模型'
         },
         volcengine: {
           label: '火山方舟',
@@ -1497,7 +920,7 @@ export default {
         },
         ollama: {
           label: 'Ollama',
-          description: '本地对话、嵌入和视觉模型，支持模型列表与拉取'
+          description: '本地生成、嵌入和视觉模型，支持模型列表与拉取'
         }
       },
       validation: {
@@ -1511,7 +934,7 @@ export default {
       thinkingControl: {
         thinkingType: {
           label: 'thinking.type',
-          hint: '火山方舟对话模型'
+          hint: '火山方舟生成模型'
         },
         enableThinking: {
           label: 'enable_thinking',
@@ -1523,7 +946,7 @@ export default {
         },
         none: {
           label: '不写入思考参数',
-          hint: '智能体「思考模式」开关不生效，不会在请求中写入思考相关参数'
+          hint: "不在请求中发送思考相关参数"
         }
       },
       modelNamePlaceholder: {
@@ -1533,7 +956,7 @@ export default {
         remoteVllm: '例如：gpt-4-vision-preview',
       },
       description: {
-        chat: '配置用于对话的大语言模型',
+        chat: "配置用于审核和内容生成的大语言模型",
         embedding: '配置用于文本向量化的嵌入模型',
         rerank: '配置用于结果重排序的模型',
         vllm: '配置用于视觉理解和多模态的视觉语言模型',
@@ -1580,27 +1003,12 @@ export default {
       validateTokenFailed: 'Token验证失败'
     }
   },
-  mcp: {
-    testResult: {
-      title: '测试结果: {name}',
-      connectionSuccess: '连接成功',
-      connectionFailed: '连接失败',
-      toolsTitle: '可用工具',
-      resourcesTitle: '可用资源',
-      descriptionLabel: '描述',
-      schemaLabel: '参数结构',
-      emptyDescription: '该服务未提供工具或资源',
-      requireApproval: '需人工审核',
-      requireApprovalTip: '开启后，Agent 调用该工具前会暂停并等待确认，适用于可能改库/删文件等高危操作',
-      approvalSaveFailed: '保存审核设置失败'
-    }
-  },
   system: {
     credentialEncryptionLabel: '凭据保存方式',
     credentialEncryptionEnabled: '已加密',
     credentialEncryptionDisabled: '明文保存',
-    credentialEncryptionEnabledDescription: 'MCP 凭据和模型 API Key 使用 SYSTEM_AES_KEY 加密保存。',
-    credentialEncryptionDisabledDescription: '未设置 SYSTEM_AES_KEY，MCP 凭据和模型 API Key 将以明文保存。',
+    credentialEncryptionEnabledDescription: "模型 API Key 使用 SYSTEM_AES_KEY 加密存储。",
+    credentialEncryptionDisabledDescription: "未设置 SYSTEM_AES_KEY，模型 API Key 以明文存储。",
     title: '系统信息',
     sectionDescription: '查看系统版本信息和用户账户配置',
     loadingInfo: '正在加载信息...',
@@ -1670,7 +1078,7 @@ export default {
             },
             add: {
               header: '添加 SSRF 白名单条目',
-              body: '确认把 {entry} 加入 SSRF 白名单？该条目匹配到的主机 / IP / 网段会绕过 SSRF 防护，可能让 Agent 访问内网服务，请仅在确知用途时添加。',
+              body: "将 {entry} 加入 SSRF 白名单？匹配的主机、IP 或 CIDR 会绕过 SSRF 防护，可能允许服务访问内网。请只加入完全信任的条目。",
               confirmBtn: '确认添加'
             }
           }
@@ -1687,7 +1095,7 @@ export default {
       },
       keyDescriptions: {
         model: {
-          max_concurrency: '后台任务（文档入库/富化）对单个模型的默认并发上限，按模型 ID 在本进程内共享。每次调用实时读取，修改后立即生效、无需重启。0 或负数表示关闭默认限制（各模型仍会尊重自身在模型管理里配置的上限）。仅影响后台任务，不影响交互式对话。'
+          max_concurrency: "后台任务对单个模型的默认并发上限，按模型 ID 在本进程内共享。每次调用读取并立即生效，无需重启。0 或负数关闭默认上限，每个模型仍遵守模型管理中设置的独立上限。"
         },
         asynq: {
           core_concurrency: '文档解析与手工重解析的每实例保底并发，可额外借用共享弹性池；修改后需重启。',
@@ -1747,7 +1155,7 @@ export default {
           scope: '占用为集群全局 · 等待为当前实例',
           disabled: '模型后台并发治理未启用。可在全局设置中配置模型默认并发上限。',
           empty: '暂无模型调用数据；模型首次执行后台任务后会出现在这里。',
-          backgroundOnly: '仅统计后台任务，不包含交互式对话',
+          backgroundOnly: "应用于后台任务",
           status: {
             queued: '限流中',
             full: '已满载'
@@ -1831,7 +1239,6 @@ export default {
           taskTypes: {
             documentProcess: '文档解析',
             manualProcess: '手工重新处理',
-            temporaryDocumentProcess: '聊天附件解析',
             postProcess: '文档后处理',
             summary: '摘要生成',
             tableSummary: '表格摘要生成',
@@ -1892,7 +1299,6 @@ export default {
         },
         queueNames: {
           default: '文档解析',
-          chat_attachment: '对话附件解析',
           postprocess: '后处理编排',
           summary: '摘要生成',
           sync: '数据源同步',
@@ -1903,7 +1309,6 @@ export default {
         },
         queueDescriptions: {
           default: '文档解析、手工重解析',
-          chat_attachment: '会话内上传附件解析',
           postprocess: '解析收尾、富化扇出',
           summary: '文档摘要、表格摘要',
           sync: '手动与定时同步',
@@ -2012,126 +1417,6 @@ export default {
       descriptionEmptyPlaceholder: '未填写'
     },
   },
-  chat: {
-    emptyContentWarning: '暂无可操作的回答内容',
-    suggestedQuestions: '你可以这样问我',
-    refreshSuggestedQuestions: '换一批',
-    thinking: '思考中...',
-    thinkingAlt: '正在思考',
-    conversationTime: {
-      today: '今天 {time}',
-      yesterday: '昨天 {time}',
-      thisYear: '{month}月{day}日 {time}',
-      otherYear: '{year}年{month}月{day}日 {time}',
-    },
-    preparingAnswer: '正在准备回答…',
-    connectingModelAndGeneratingAnswer: '正在连接模型并生成回答…',
-    modelStillResponding: '模型响应较慢，仍在等待…',
-    deepThoughtCompleted: '已深度思考',
-    deepThoughtAlt: '深度思考完成',
-    referencesTitle: '参考了{count}个相关内容',
-    referencesDocCount: '引用了{count}篇文档',
-    referencesWebCount: '参考了{count}条网页',
-    referencesDocAndWebCount: '引用了{docCount}篇文档和{webCount}条网页',
-    referencesDrawerTitle: '参考来源',
-    referencesDrawerTitleWeb: '网页来源',
-    referencesDrawerTitleDocs: '文档来源',
-    referencesDrawerTitleTools: '工具结果',
-    referencesDrawerTitleMixed: '参考来源',
-    referencesDrawerWebSection: '网页',
-    referencesDrawerDocsSection: '知识库文档',
-    referencesDrawerToolsSection: '工具',
-    referencesDrawerEmpty: '暂无参考来源',
-    questionMinimapTitle: '问答',
-    questionMinimapAriaLabel: '提问目录',
-    questionMinimapAttachmentPlaceholder: '（附件）',
-    referenceChunkCount: '{count}个片段',
-    fallbackHint: '未从知识库中检索到相关内容，以上为模型直接回答',
-    requestInfoTitle: '请求信息',
-    requestInfoRequestId: 'Request ID',
-    requestInfoMessageId: '消息 ID',
-    requestInfoSessionId: '会话 ID',
-    requestInfoUrl: '请求',
-    requestInfoSentAt: '发起时间',
-    requestInfoEmpty: '暂无请求信息',
-    channelWeb: '网页',
-    channelApi: 'API',
-    chunkLabel: '片段{index}:',
-    navigateToDocument: '查看文档详情',
-    chunkIdLabel: '片段ID:',
-    documentIdLabel: '文档ID:',
-    chunkOrdinal: '片段 {index}',
-    previewContent: '预览内容',
-    noPlanSteps: '未提供具体步骤',
-    chunkIndexLabel: '片段 #{index}',
-    chunkPositionLabel: '(位置: {position})',
-    noRelatedChunks: '没有找到相关片段',
-    noSearchResults: '没有找到搜索结果',
-    relevanceHigh: '高相关',
-    relevanceMedium: '中相关',
-    relevanceLow: '低相关',
-    relevanceWeak: '弱相关',
-    otherSource: '其他来源',
-    webGroupIntro: '以下 {count} 条内容来自',
-
-
-    unknownLink: '未知链接',
-    contentLengthLabel: '长度 {value}',
-    notProvided: '未提供',
-    promptLabel: '提示词',
-    errorMessageLabel: '错误信息',
-    summaryLabel: '总结',
-    rawTextLabel: '原始文本',
-    collapseRaw: '收起原文',
-    expandRaw: '展开原文',
-    noWebContent: '未获取到网页内容',
-    webFetchStatusSuccess: '抓取成功',
-    webFetchStatusFailed: '抓取失败',
-    webFetchStatusSkipped: '已跳过',
-    webFetchErrorCode: '错误码',
-    webFetchRetryable: '可重试',
-    webFetchSummaryFailed: '摘要失败',
-    lengthChars: '{value} 字',
-    lengthThousands: '{value} 千字',
-    lengthTenThousands: '{value} 万字',
-    noDatabaseRecords: '未找到匹配的记录',
-    nullValuePlaceholder: '<NULL>',
-    chunkCountValue: '{count} 个片段',
-    documentDescriptionLabel: '文档描述:',
-    documentSourceLabel: '来源:',
-    documentFileLabel: '文件信息:',
-    documentMetadataLabel: '元数据',
-    documentInfoEmpty: '暂无文档信息',
-    positionLabel: '位置:',
-    chunkPositionValue: '第 {index} 个片段',
-    contentLengthLabelSimple: '内容长度:',
-    fullContentLabel: '完整内容',
-    copyContent: '复制内容',
-    knowledgeBaseCount: '共 {count} 个知识库',
-    noKnowledgeBases: '没有可用的知识库',
-    enterDescription: '输入描述',
-    rawOutputLabel: '原始输出',
-    processError: '处理出错',
-    sessionExcerpt: '会话摘录',
-    noAnswerContent: '（无回答内容）',
-    noMatchFound: '未找到匹配的内容',
-    deleteSessionFailed: '删除失败，请稍后再试！',
-    imageTooMany: '最多上传5张图片',
-    imageTypeSizeError: '仅支持 JPG/PNG/GIF/WEBP 格式，单张不超过 10MB',
-    imageUploadTooltip: '上传图片（支持粘贴/拖拽）',
-    attachmentUploadTooltip: '上传附件（文档）',
-    attachmentWithCount: '已上传 {count} 个附件',
-    attachmentTooMany: '最多上传 {max} 个附件',
-    attachmentTotalTooMany: '图片和附件合计最多 {max} 个',
-    attachmentTooLarge: '文件 {name} 超过 {max}MB 限制',
-    attachmentTypeNotSupported: '不支持的文件类型：{name}',
-    attachmentUploading: '上传中 {progress}%',
-    attachmentParsing: '正在解析',
-    attachmentReady: '解析完成',
-    attachmentUploadFailed: '附件上传失败',
-    attachmentParseFailed: '附件解析失败',
-    attachmentStillProcessing: '附件 {name} 仍在解析，请稍候'
-  },
   knowledgeEditor: {
     titleCreate: '新建知识库',
     titleEdit: '知识库设置',
@@ -2165,20 +1450,6 @@ export default {
         instructionsDescription: '指定问题面向的人群、场景和表达方式，系统仍维护稳定输出格式',
         instructionsPlaceholder: '例如：生成客服用户常问的自然语言问题，避免考试题式表达…'
       },
-      autoTag: {
-        label: '自动关联标签',
-        description: '文档解析完成后，从当前知识库已有标签中选择合适标签自动关联。不会创建或删除标签，并会增加一次模型调用。',
-        modelLabel: '分类模型',
-        modelDescription: '留空时使用知识库摘要模型。',
-        modelPlaceholder: '请选择分类模型',
-        maxTagsLabel: '单篇文档最多标签数',
-        maxTagsDescription: '每篇文档最多自动关联 1-10 个已有标签。',
-        skipIfTaggedLabel: '跳过已有标签的文档',
-        skipIfTaggedDescription: '开启后，上传时已手动设置标签的文档不再自动打标签，避免覆盖人工分类意图。',
-        policyLabel: '消息标签整理策略',
-        policyDescription: "用于已审核消息的内容性质及主题、实体、事件识别；固定类别和输出格式不能更改。",
-        policyPlaceholder: '例如：优先识别明确发生的事件，避免把预测写成已发生事件。'
-      }
     },
     multimodal: {
       title: '图像处理配置',
@@ -2392,6 +1663,7 @@ export default {
       failed: '操作失败'
     },
     menu: {
+    batchManage: '批量管理',
       viewDetails: '查看详情',
       duplicate: '创建副本'
     },
@@ -2408,53 +1680,6 @@ export default {
       recentsTitle: '暂无最近访问',
       recentsDescription: '最近打开过的知识库会出现在这里'
     }
-  },
-  createChat: {
-    title: 'Hi，我是 Reliquary，让你的知识触手可及',
-    newSessionTitle: '新会话',
-    messages: {
-      createFailed: '创建会话失败',
-      createError: '创建会话失败，请稍后重试'
-    }
-  },
-  input: {
-    addModel: '添加模型',
-    placeholder: '直接向模型提问',
-    placeholderWithContext: '输入问题，将基于上方选中的知识库/文件回答',
-    placeholderAgent: '向 {name} 提问',
-    agentMode: '智能推理',
-    normalMode: '快速问答',
-    normalModeDesc: '基于知识库的 RAG 问答',
-    agentModeDesc: '多步思考，深度分析',
-    agentMissingAllowedTools: '允许的工具',
-    agentMissingSummaryModel: '对话模型',
-    agentMissingRerankModel: '重排模型',
-    customAgentMissingSummaryModel: '对话模型',
-    customAgentMissingRerankModel: '重排模型',
-    goToAgentEditor: '前往配置 →',
-    agentNotReadyDetail: '智能体「{agentName}」未就绪，需要配置以下内容：{reasons}',
-    knowledgeBase: '知识库',
-    knowledgeBaseWithCount: '知识库({count})',
-    notConfigured: '未配置',
-    noModel: '暂无可用模型',
-    stopGeneration: '停止生成',
-    send: '发送',
-    kbLockedByAgent: '当前智能体已锁定知识库配置',
-    kbDisabledByAgent: '当前智能体已禁用知识库功能',
-    modelLockedByAgent: '当前智能体已锁定模型配置',
-    imageUploadDisabledByAgent: '当前智能体未启用图片上传',
-    goToAgentSettings: '去设置智能体',
-    messages: {
-      enterContent: '请先输入内容!',
-      replying: '正在回复中，请稍后再试!',
-      agentSwitchedOn: '已切换到智能推理',
-      agentSwitchedOff: '已切换到快速问答',
-      agentSelected: '已选择智能体「{name}」',
-      sessionMissing: '会话 ID 不存在',
-      messageMissing: '无法获取消息 ID，请刷新页面后重试',
-      stopSuccess: '已停止生成',
-      stopFailed: '停止失败，请重试'
-    },
   },
   manualEditor: {
     description: '使用 Markdown 编写知识内容，支持实时预览',
@@ -2554,13 +1779,6 @@ export default {
     upload: '上传文件',
     downloadFailed: '下载文件失败，请稍后重试',
   },
-  mentionDetail: {
-    readOnlyFromAgent: '仅在此对话中只读，不显示在知识库列表中',
-    kbCount: '共 {count} 个文档',
-    belongsToKb: '所属知识库：',
-    belongsToOrg: '所属空间：',
-    noCompatibleKbForAgent: '当前智能体的工具与作用域内知识库的能力不匹配，暂无可引用的知识库。'
-  },
   common: {
     operation: '操作',
     copyCode: "复制代码",
@@ -2652,7 +1870,7 @@ export default {
     firstTime: '首次使用 Reliquary？',
     registerSuccess: '注册成功，请登录',
     registerFailed: '注册失败',
-    subtitle: 'RAG 问答与 ReAct 智能体，大模型驱动的个人知识框架',
+    subtitle: "个人知识的收录、保存与检索",
     registerSubtitle: '创建账户并开始使用 Reliquary',
     emailPlaceholder: '输入邮箱地址',
     passwordPlaceholder: '输入密码',
@@ -2693,27 +1911,9 @@ export default {
       saveFailed: '保存配置失败: {message}'
     }
   },
-  chatHistorySettings: {
-    title: '消息管理',
-    description: '配置消息知识库，将对话消息自动向量化索引。',
-    enableLabel: '启用消息索引',
-    enableDescription: '开启后，新的对话消息将自动索引到消息知识库。',
-    embeddingModelLabel: 'Embedding 模型',
-    embeddingModelDescription: '选择用于消息向量化的 Embedding 模型',
-    embeddingModelLocked: '已有消息被索引，Embedding 模型不可修改（修改需清空索引数据）',
-    statsTitle: '索引统计',
-    statsIndexedMessages: '已索引消息',
-    statsNotConfigured: '消息索引未配置',
-    statsNotConfiguredDesc: '启用并选择 Embedding 模型后，对话消息将自动向量化索引',
-    toasts: {
-      saveSuccess: '消息管理配置已保存',
-      saveFailed: '保存配置失败: {message}'
-    }
-  },
   settings: {
     modelManagement: '模型管理',
     parserEngine: '解析引擎',
-    mcpService: 'MCP服务',
     versionInfo: '版本信息',
     taskQueue: '任务队列',
     tenantInfo: '空间信息',
@@ -2772,205 +1972,6 @@ export default {
       dataExtensions: '数据与扩展',
       systemAdministration: '系统管理',
       platform: '平台'
-    }
-  },
-  agent: {
-    taskLabel: '任务:',
-    think: '思考',
-    copy: '复制',
-    addToKnowledgeBase: '添加到知识库',
-    artifactDrawer: {
-      buttonTitle: '查看本次生成的文件',
-      title: '生成的文件',
-      empty: '本次未生成可下载的文件',
-      preview: '预览',
-      previewBack: '返回列表',
-      collecting: '正在保存生成的文件…',
-      download: '下载',
-      downloadFailed: '下载失败，请稍后重试',
-      inlinePreviewHint: '点击预览',
-      inlineMissing: '文件不可用',
-    },
-    updatePlan: '更新计划',
-    toolFallback: '工具',
-    stepsCompleted: '已完成 <strong>{steps}</strong> 个步骤',
-    reasoningRounds: '思考 <strong>{rounds}</strong> 轮',
-    toolCalls: '调用 <strong>{tools}</strong> 次工具',
-    durationSuffix: '耗时 <strong>{duration}</strong>',
-    stepSummarySeparator: ' · ',
-    contextCompacted: '压缩上下文',
-    contextCompactedSummary: '{before} → {after} tokens',
-    contextCompactedDegraded: '摘要不可用，已保留原始记录',
-    title: '智能体',
-    subtitle: "管理和组织文档知识库",
-    createAgent: '创建智能体',
-    builtin: '内置',
-    disabled: '已停用',
-    disable: '停用',
-    enable: '启用',
-    noDescription: '暂无描述',
-    selectAgent: '选择智能体',
-    noAgents: '暂无智能体',
-    manageAgents: '管理',
-    builtinAgents: '内置智能体',
-    customAgents: '自定义智能体',
-    selector: {
-      title: '选择智能体',
-      current: '当前',
-      goToSettings: '设置',
-      notReadyHint: '尚未就绪，还需配置：{items}',
-      notReadyStatus: '待配置',
-      configureAction: '去配置',
-      capabilitiesSection: '能力',
-      imageUploadCapability: '图片上传',
-      capabilityEnabled: '开启',
-      capabilityDisabled: '关闭',
-      capabilitySupported: '支持',
-      capabilityUnsupported: '不支持',
-      capabilityUnconfigured: '未配置'
-    },
-    editor: {
-      createTitle: '创建智能体',
-      editTitle: '编辑智能体',
-      buttons: {
-        create: '创建智能体',
-        saveAndClose: '保存并关闭',
-      },
-      postCreateHint: {
-        title: '创建成功',
-        footer: "可继续调整智能体配置，完成后点击「保存并关闭」。",
-      },
-      basicInfo: '基本信息',
-      basicInfoDesc: '配置智能体的名称、描述与运行模式',
-      promptsConfig: '提示词',
-      promptsConfigDesc: '配置系统提示词、上下文模板、意图/改写/兜底提示词',
-      modelConfig: '模型配置',
-      modelConfigDesc: '配置对话模型、ReRank 等辅助模型及生成参数',
-      toolsConfig: '工具配置',
-      toolsConfigDesc: '配置 Agent 可以使用的工具',
-      knowledgeConfig: '知识库',
-      knowledgeConfigDesc: "配置智能体可访问的知识库范围",
-      agentId: '智能体 ID',
-      agentIdDesc: 'API 集成时可使用此 ID 指定智能体',
-      name: '名称',
-      namePlaceholder: '请输入智能体名称',
-      nameRequired: '请输入智能体名称',
-      systemPromptRequired: '请输入系统提示词',
-      modelRequired: '请选择模型',
-      queryMissingInRewrite: '改写用户提示词必须包含 {\'{{\'}query{\'}}\'} 占位符',
-      queryMissingInFallback: '兜底提示词必须包含 {\'{{\'}query{\'}}\'} 占位符',
-      description: '描述',
-      descriptionPlaceholder: '请输入智能体描述',
-      normalDesc: '快速响应，直接回答问题',
-      agentDesc: '多步思考，深度分析复杂问题',
-      model: '模型',
-      modelPlaceholder: '请选择模型',
-      systemPrompt: '系统提示词',
-      systemPromptPlaceholder: '自定义系统提示词，定义智能体的行为和角色',
-      contextTemplateRequired: '请输入上下文模板',
-      temperature: '温度',
-      thinking: '思考模式',
-      citationEnabled: '输出来源引用',
-      citationEnabledDesc: '在最终回答中展示知识库和网页来源；关闭后仍会正常检索和使用证据',
-      mode: '运行模式',
-      knowledgeBases: '关联知识库',
-      allKnowledgeBases: '全部知识库',
-      selectedKnowledgeBases: '指定知识库',
-      noKnowledgeBase: '不使用知识库',
-      selectKnowledgeBases: '选择知识库',
-      selectKnowledgeBasesDesc: '选择要关联的知识库（包括协作知识库）',
-      myKnowledgeBases: '我的知识库',
-      retrieveKBOnlyWhenMentioned: '仅在 {\'@\'} 提及时检索',
-      retrieveKBOnlyWhenMentionedDesc: '关闭：自动检索已配置的知识库，开启：仅当用户 {\'@\'} 提及时才检索',
-      rerankModel: 'ReRank 模型',
-      rerankModelDesc: '用于对知识库检索结果进行重排序，提高回答准确性',
-      rerankModelPlaceholder: '请选择 ReRank 模型',
-      rerankModelOptionalHint: '当前作用域内暂无 RAG 类型知识库，可不填；后续若加入 RAG 知识库，将自动使用空间默认重排模型，仍建议显式配置。',
-      maxIterations: '最大迭代次数',
-      maxIterationsLimit: '限制',
-      maxIterationsUnlimited: '不限制',
-      allowedTools: '允许的工具',
-      multiTurn: '多轮对话',
-      historyTurns: '保留轮数',
-      retainRetrievalHistory: '保留检索结果',
-      retrievalStrategy: '检索策略',
-      embeddingTopK: '向量召回数量',
-      keywordThreshold: '关键词阈值',
-      vectorThreshold: '向量阈值',
-      rerankTopK: '重排数量',
-      rerankThreshold: '重排阈值',
-      conversationSettings: '多轮对话',
-      contextTemplate: '上下文模板',
-      contextTemplatePlaceholder: '自定义上下文模板...',
-      enableQueryExpansion: '查询扩展',
-      enableRewrite: '问题改写',
-      queryUnderstandModel: '问题理解模型',
-      queryUnderstandModelPlaceholder: '留空则复用主对话模型',
-      rewritePromptSystem: '改写系统提示词',
-      rewritePromptSystemPlaceholder: '留空使用系统默认提示词',
-      rewritePromptUser: '改写用户提示词',
-      rewritePromptUserPlaceholder: '留空使用系统默认提示词',
-      maxCompletionTokens: '最大生成Token数',
-      maxCompletionTokensDefault: '默认',
-      maxCompletionTokensCustom: '自定义',
-      fallbackStrategy: '兜底策略',
-      fallbackResponse: '固定回复内容',
-      fallbackResponsePlaceholder: '抱歉，我无法回答这个问题。',
-      fallbackPrompt: '兜底提示词',
-      fallbackPromptPlaceholder: '留空使用系统默认提示词',
-      installShort: '安装',
-      viewInstallProgress: '查看进度',
-    },
-    messages: {
-      created: '智能体创建成功',
-      updated: '智能体更新成功',
-      deleted: '智能体已删除',
-      deleteFailed: '删除失败',
-      saveFailed: '保存失败',
-      copied: '智能体复制成功',
-      copyFailed: '复制失败',
-      disabled: '已停用',
-      enabled: '已启用'
-    },
-    delete: {
-      confirmTitle: '删除智能体',
-      confirmMessage: '确定要删除智能体「{name}」吗？此操作不可恢复。',
-      confirmButton: '确认删除'
-    },
-    detail: {
-      title: '智能体详情',
-      useInChat: '在对话中使用'
-    },
-    empty: {
-      title: '暂无自定义智能体',
-      description: '点击右上角按钮创建您的第一个智能体',
-      favoritesTitle: '暂无收藏',
-      favoritesDescription: '在智能体卡片右上角点击星标即可收藏',
-      recentsTitle: '暂无最近访问',
-      recentsDescription: '最近使用过的智能体会出现在这里'
-    },
-    tabs: {
-    },
-    features: {
-      knowledgeBase: '关联知识库',
-      mcp: '支持MCP服务',
-      multiTurn: '多轮对话'
-    },
-    mode: {
-      normal: '快速问答',
-      agent: '智能推理'
-    },
-    type: {
-      normal: '快速问答',
-      agent: '智能推理'
-    },
-    capabilities: {
-      kbCount: '指定 {count} 个知识库',
-      kbAll: '可访问全部知识库',
-      mcpEnabled: '启用 MCP 服务',
-      mcpAll: '全部 MCP 服务',
-      mcpSelected: '已选择 {count} 个 MCP 服务',
-      multiTurn: '多轮对话'
     }
   },
   knowledgeStages: {
@@ -3140,15 +2141,8 @@ export default {
     statusOn: '已开启',
     statusOff: '未开启',
     notSet: '未设置',
-    summaryNoTags: '未设置',
-    summaryTagsCount: '{count} 个标签',
     confirm: '确认上传并解析',
     cancel: '取消',
-    tabTags: '文档标签',
-    tagsDescription: '为本批次导入的所有文档选择标签，可多选',
-    tagsPlaceholder: '请选择标签（可多选）',
-    tagsEmpty: '当前知识库暂无标签，可上传后在标签管理中创建',
-    tagsLoadFailed: '标签加载失败，可稍后在文档列表中设置',
     noItems: '请至少添加一个文件或 URL',
     urlItemLabel: 'URL',
     urlAdded: '已添加 URL',
@@ -3183,12 +2177,6 @@ export default {
     name: '名称',
     description: '描述',
     settings: '设置',
-    tagUpdateSuccess: '标签更新成功',
-    tagEditDialogHeading: '编辑标签',
-    tagEditSearch: '搜索标签...',
-    tagEditSelectedSection: '已选标签',
-    tagEditAvailableSection: '可选标签',
-    tagEditNoSelected: '暂未选择',
     folderTree: {
       title: '目录',
       rootRow: '根目录',
@@ -3221,67 +2209,7 @@ export default {
       failed: '移动失败',
       duplicate: '该目录已存在',
     },
-    tagFilterTitle: '按标签筛选',
-    tagFilterPlaceholder: '标签',
-    tagFilterMulti: '{count} 个标签',
-    tagManageTitle: '管理标签',
-    tagManageDescription: '新建、重命名或删除知识库标签',
-    tagManageLink: '管理标签…',
-    tagManageListSection: '标签列表',
-    tagManageDocCount: '{count} 个文档',
-    tagSelectedCount: '已选 {count} 个标签',
-    tagNewPlaceholder: '输入新标签名称，回车添加',
-    untagged: '无标签',
-    tagClearAction: '清空已选',
-    tagCreateAction: '新建标签',
-    tagSearchPlaceholder: '输入标签名称关键字',
-    tagNamePlaceholder: '请输入标签名称',
-    tagNameRequired: '请先输入标签名称',
-    tagCreateSuccess: '标签创建成功',
-    tagEditSuccess: '标签更新成功',
-    tagDeleteDescDoc: '确定删除标签“{name}”及其关联？消息和图片会保留。',
-    tagKindLabel: '标签类别',
-    tagKindNature: '内容性质',
-    tagKindTopic: '主题',
-    tagKindObject: "实体",
-    tagKindEvent: '事件',
-    tagStarAction: '星标 {name}',
-    tagUnstarAction: '取消星标 {name}',
     searchMessageContent: '搜索消息内容',
-    anomalies: {
-      title: '消息异常', report: '报告异常', messageId: '消息 ID（多个用逗号分隔）', description: '描述问题或修正建议', submit: '提交',
-      site: '站点', sourceUrl: '来源 URL', adapter: '适配器', reason: '失败原因', systemReporter: '系统',
-      list: '异常与处理记录', empty: '暂无异常', proposedTags: '建议关联标签', noTags: '不关联标签', proposedDelete: '建议删除标签',
-      addTags: '建议新增关联', removeTags: '建议移除关联', loadMore: '查看更多历史记录', loadMoreTags: '加载更多标签', retry: '重试执行',
-      proposal: { none: '仅报告问题', change_tags: '建议修改标签关联', delete_tag: '建议删除标签' },
-      openMessage: '查看原文与图片', editTags: '修改标签', apply: '确认并执行', resolved: '已处理', dismiss: '忽略', decision: '处理结果', ownerDecision: '本人处理依据与结论（必填）',
-      loadFailed: '加载异常失败', saveFailed: '保存失败', submitted: '异常已提交', saved: '处理结果已保存',
-      deleteConfirmTitle: '确认删除标签', deleteConfirm: '删除标签“{name}”及其关联？消息和图片会保留。',
-      kind: { suspected_error: '疑似错误', outdated: '内容过时', source_conflict: '来源矛盾', manual_conflict: '人工纠正冲突', tag_deletion: '标签删除建议', source_adapter_failed: '站点适配器失败', other: '其他异常' },
-      status: { pending: '待处理', applying: '执行中', applied: '已执行', resolved: '已处理', dismiss: '已忽略' },
-      result: { tags_updated: '消息标签已更新', tag_deleted: '标签及关联已删除，消息保留' },
-    },
-    strategy: {
-      title: '策略版本', hint: '选择 1–3 条已入库消息试跑。候选策略经确认后仅用于后续任务。',
-      instruction: '明确说明要怎样调整筛选、标签、采集或调研策略', samples: '消息 ID，多个用逗号分隔；可先在列表中选择',
-      trial: '生成候选并试跑', empty: '暂无策略版本', filter: '质量筛选规则', tags: '标签规则', default: '使用默认规则',
-      comparison: '查看真实消息新旧结果', oldFilter: '旧筛选', newFilter: '新筛选', oldTags: '旧标签', newTags: '新标签',
-      collection: '日常采集规则', research: '主动调研规则', oldCollection: '旧采集', newCollection: '新采集', oldResearch: '旧查询', newResearch: '新查询',
-      activate: '确认生效', restore: '恢复此版本', confirmTitle: '确认策略版本', confirm: '生效后只影响后续任务，不自动重处理已有消息。',
-      failed: '策略操作失败', candidateSaved: '候选策略已保存，请检查差异', activeSaved: '策略已生效',
-      status: { candidate: '待确认', active: '当前生效', archived: '历史版本' },
-      reprocess: '指定范围重处理', reprocessHint: "仅处理选中的消息或一个主题／实体／事件。审核疑点交异常窗口；人工标签修正保留。",
-      messagesScope: '消息集合', tagScope: '具体标签', selectTag: "选择主题、实体或事件", runReprocess: '开始重处理',
-      reprocessConfirmTitle: '确认重处理', reprocessConfirm: '将按当前生效策略重新审核和整理指定范围，不自动处理其他消息。',
-      reprocessResult: '处理 {processed} 条，更新 {updated} 条，审核疑点 {flagged} 条，人工冲突 {conflicts} 条，失败 {failed} 条',
-    },
-    tagDeleteSuccess: '标签已删除',
-    tagEditAction: '重命名',
-    tagDeleteAction: '删除',
-    tagEmptyResult: '未找到匹配的标签',
-    tagLabel: '标签',
-    tagPlaceholder: '请选择标签',
-    noTags: '暂无标签',
     uploadSuccess: '文件上传成功！',
     uploadFailed: '文件上传失败！',
     fileExists: '文件已存在',
@@ -3356,38 +2284,15 @@ export default {
     summaryGenerationFailed: '摘要生成失败',
     summaryRefreshed: '摘要已更新',
     summaryRefreshQueued: '摘要刷新已提交，完成后会自动更新',
-    indexFailed: '索引同步失败',
-    chunkSavedIndexFailed: '内容已保存，但索引同步失败，请点击重试索引',
-    chunkEditConflict: '分块已被他人修改，列表已刷新，请重试',
-    retryIndex: '重试索引',
-    indexRetrySuccess: '索引已同步',
-    chunkHistory: '分块编辑历史',
-    currentVersion: '当前版本',
-    noChunkHistory: '暂无编辑历史',
-    compareRevisionWithCurrent: 'v{revision} 与当前 v{current} 的内容差异',
-    diffAddedInCurrent: '当前版本新增',
-    diffRemovedFromCurrent: '当前版本删除',
-    noContentChanges: '内容没有变化，该版本仅包含状态变更',
-    revertRevision: '回滚版本',
-    revertRevisionConfirm: '确定回滚到 v{revision} 吗？回滚后会生成一个新版本。',
-    chunkReverted: '分块已回滚',
-    chunkContentRequired: '分块内容不能为空',
-    disableChunk: '停用',
-    enableChunk: '启用',
-    enabledStatus: '已启用',
-    disabledStatus: '已停用',
-    editChunkContent: '编辑分块内容',
     addGeneratedQuestion: '添加辅助召回问题',
     regenerateQuestions: '重新生成问题',
     questionsRegenerated: '辅助召回问题已更新',
-    staleGeneratedQuestions: '问题基于编辑前内容生成，可按需重新生成',
     noGeneratedQuestions: '暂无辅助召回问题',
     notInitialized: '该知识库尚未完成初始化配置，请先前往设置页面配置模型信息后再上传文件',
     getInfoFailed: '获取知识库信息失败，无法上传文件',
     missingId: '缺少知识库ID',
     deleteFailed: '删除失败，请稍后再试！',
     uploadTime: '上传时间',
-    newSession: '新会话',
     editDocument: '编辑文档',
     rebuildDocument: '重建知识',
     rebuildConfirm: '确认重建文档"{fileName}"？该操作会清理现有分块并重新解析。',
@@ -3413,8 +2318,6 @@ export default {
     intakeReviewFailed: '审核操作失败',
     untitledDocument: '未命名文档',
     moreOptions: '更多操作',
-    createSessionFailed: '创建对话失败',
-    createSessionError: '创建对话时发生错误',
     deleteDocument: '删除文档',
     moveDocument: '移动到...',
     moveToKnowledgeBase: '移动到知识库',
@@ -3440,7 +2343,6 @@ export default {
     viewModeList: '列表视图',
     viewModeToggle: '切换视图',
     columnName: '文件名',
-    columnTag: '标签',
     columnSize: '大小',
     columnSource: '来源',
     columnStatus: '状态',
@@ -3453,14 +2355,6 @@ export default {
     confirmBatchDeleteDocument: '确认删除选中的 {count} 个文档？删除后将无法恢复。',
     batchDeleteSuccess: '成功删除 {count} 个文档',
     batchDeleteFailed: '批量删除失败',
-    batchTag: '批量打标签',
-    batchTagDialogHeading: '批量打标签',
-    batchTagSubtitle: '为选中的 {count} 个文档统一设置标签（将替换文档原有标签）',
-    batchTagSelectedSection: '已选标签',
-    batchTagAvailableSection: '可选标签',
-    batchTagNoSelected: '暂未选择',
-    batchTagSuccess: '已为 {count} 个文档成功设置标签',
-    batchTagFailed: '批量打标签失败',
     confirmBatchReparseDocument: '确认重建选中的 {count} 个文档？现有内容将被清除并重新解析。',
     confirmBatchReparse: '确认并重新解析',
     batchReparseSuccess: '已提交 {count} 个重建任务',
@@ -3484,7 +2378,6 @@ export default {
     docSearchPlaceholder: '搜索文档名称...',
     fileTypeFilter: '文件类型',
     allFileTypes: '全部类型',
-    allTags: '全部标签',
     parseStatusFilter: '解析状态',
     allParseStatuses: '全部状态',
     parseStatusPending: '等待中',
@@ -3550,84 +2443,15 @@ export default {
     favorites: '收藏',
     recents: '最近'
   },
-  batchManage: {
-    selectAll: '全选',
-    cancel: '取消',
-    delete: '删除对话',
-    deleteConfirmTitle: '删除对话',
-    deleteConfirmBody: '确定要删除选中的 {count} 条对话吗？删除后无法恢复。',
-    deleteAllConfirmBody: '确定要删除所有对话吗？此操作无法恢复。',
-    deleteSuccess: '删除成功',
-    deleteFailed: '删除失败，请稍后再试'
-  },
-  chatHeader: {
-    moreActions: '更多对话操作',
-    copySessionId: '复制会话 ID',
-    copyLink: '复制对话链接',
-    copyMarkdown: '复制为 Markdown',
-    openNewWindow: '在新窗口中打开',
-    deleteSession: '删除对话',
-    renamePlaceholder: '输入对话标题',
-    unpinSuccess: '已取消置顶',
-    pinSuccess: '已置顶',
-    sessionIdCopied: '会话 ID 已复制',
-    linkCopied: '对话链接已复制',
-    copyFailed: '复制失败，请检查浏览器剪贴板权限',
-    markdownCopied: '完整对话已复制为 Markdown',
-    markdownCopyFailed: '复制 Markdown 失败，请稍后重试',
-    clearConfirmTitle: '清空对话消息',
-    clearConfirmBody: '确认清空当前对话的全部消息？对话本身会保留，此操作无法恢复。',
-    deleteConfirmTitle: '删除对话',
-    deleteConfirmBody: '确认删除当前对话？删除后将无法恢复。',
-    deleteSuccess: '对话已删除',
-    markdown: {
-      sessionId: '会话 ID',
-      exportedAt: '导出时间',
-      user: '用户',
-      assistant: '助手',
-      attachments: '附件',
-      references: '引用'
-    }
-  },
-  menu: {
-    knowledgeBase: '知识库',
-    agents: '智能体',
-    newChat: '新对话',
-    settings: '系统设置',
-    logout: '退出登录',
-    clearMessages: '清空消息',
-    clearMessagesSuccess: '消息已清空',
-    clearMessagesFailed: '清空消息失败，请稍后再试',
-    renameSession: '修改标题',
-    renameSessionSuccess: '标题已更新',
-    renameSessionFailed: '修改标题失败，请稍后再试',
-    batchManage: '批量管理',
-    newSession: '新会话',
-    pin: '置顶',
-    unpin: '取消置顶',
-    pinFailed: '置顶失败，请稍后再试',
-    unpinFailed: '取消置顶失败，请稍后再试',
-    search: '搜索',
-    collapseSidebar: '收起侧边栏',
-    expandSidebar: '展开侧边栏',
-    logoutSuccess: '已退出登录',
-    myChats: '我的对话',
-    apiChats: 'API 会话',
-    noSessions: '暂无对话'
-  },
   countCopy: {
     "entities": "{count} 个实体",
 
 
 
     "documents": "{count} 份文档",
-    "webSources": "{count} 个网页来源",
-    "results": "{count} 条结果",
     "files": "{count} 个文件",
-    "matchingChunks": "{count} 个匹配片段",
-    "tokens": "{count} tokens",
-    "reviewFlags": "{count} 个审核标记",
-    "manualConflicts": "{count} 个人工冲突",
-    "failedRecords": "{count} 条失败记录"
-  },
+    "failedRecords": "{count} 条失败记录",
+
+    tokens: "token",
+},
 }

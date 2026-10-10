@@ -146,8 +146,8 @@ func TestProcessDocumentIntakeQualityGate(t *testing.T) {
 		source     types.SourceInfo
 		channel    string
 	}{
-		{"approved", intakeChat{response: `{"approved":true,"reason":"analysis","natures":["描述"],"referents":[{"kind":"topic","name":"行业"}]}`}, "", true, true, false, types.SourceInfo{}, ""},
-		{"publisher without personal author", intakeChat{response: `{"approved":true,"reason":"reported facts","natures":["描述"],"referents":[{"kind":"topic","name":"行业"}]}`}, "", true, true, false, types.SourceInfo{Publisher: "Google DeepMind", OriginalURL: "https://example.com/post", PublishedAt: "2026-01-01"}, ""},
+		{"approved", intakeChat{response: `{"approved":true,"reason":"analysis"}`}, "", true, true, false, types.SourceInfo{}, ""},
+		{"publisher without personal author", intakeChat{response: `{"approved":true,"reason":"reported facts"}`}, "", true, true, false, types.SourceInfo{Publisher: "Google DeepMind", OriginalURL: "https://example.com/post", PublishedAt: "2026-01-01"}, ""},
 
 		{"rejected", intakeChat{response: `{"approved":false,"reason":"opinion only"}`}, types.ParseStatusRejected, true, false, false, types.SourceInfo{}, ""},
 		{"model error", intakeChat{err: errors.New("model unavailable")}, types.ParseStatusFailed, false, false, true, types.SourceInfo{}, ""},
@@ -245,7 +245,7 @@ func TestReviewKnowledgeIntakeCorrectionClearsQwenRejection(t *testing.T) {
 	task := &intakeTask{}
 	svc := &knowledgeService{repo: repo, kbService: intakeKBService{creatorID: "owner"},
 		fileSvc:      &intakeFileService{saved: map[string][]byte{"original": []byte("Complete original body")}},
-		modelService: intakeModelService{chat: intakeChat{response: `{"approved":true,"reason":"sourced article","natures":["描述"],"referents":[{"kind":"topic","name":"行业"}]}`}}, task: task}
+		modelService: intakeModelService{chat: intakeChat{response: `{"approved":true,"reason":"sourced article"}`}}, task: task}
 	ctx := context.WithValue(context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1)), types.UserIDContextKey, "other-editor")
 	ctx = context.WithValue(ctx, types.UserIDContextKey, "personal-user")
 	updated, err := svc.ReviewKnowledgeIntake(ctx, knowledge.ID, "retry", types.SourceInfo{PublishedAt: "2026-09-20"})

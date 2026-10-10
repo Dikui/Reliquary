@@ -105,19 +105,11 @@ func (r *knowledgeRepository) ListKnowledgeByKnowledgeBaseID(
 // KnowledgeListFilter to a GORM query. Tenant / knowledge base scoping must be
 // applied by the caller before invoking this helper.
 func applyKnowledgeListFilter(query *gorm.DB, filter types.KnowledgeListFilter) *gorm.DB {
-	// Historical versions remain addressable by citation but are absent from the current document list.
-	query = query.Where("COALESCE(metadata->>'source_archived', 'false') <> 'true'")
-	if len(filter.TagIDs) > 0 {
-		query = query.Where(
-			"knowledges.id IN (SELECT knowledge_id FROM knowledge_tag_relations WHERE tag_id IN (?))",
-			filter.TagIDs,
-		)
-	}
 	if filter.Keyword != "" {
 		// Case-insensitive (LOWER … LIKE LOWER) so keyword search matches
 		// regardless of the stored casing — consistent with the sibling
 		// LOWER() filters in this file and with the client-side `search kb`
-		// / `search sessions` filters. Plain LIKE is case-sensitive in
+		// and article filters. Plain LIKE is case-sensitive in
 		// Postgres, which surprised callers searching with lowercase.
 		escaped := strings.ToLower(escapeLikeKeyword(filter.Keyword))
 		query = query.Where("(LOWER(file_name) LIKE ? OR LOWER(title) LIKE ?)", "%"+escaped+"%", "%"+escaped+"%")
@@ -978,25 +970,4 @@ func (r *knowledgeRepository) SearchKnowledgeInScopes(
 		knowledges[i] = &k
 	}
 	return knowledges, hasMore, total, nil
-}
-
-// ListIDsByTagIDs returns all knowledge IDs that have any of the specified tag IDs (OR semantics)
-func (r *knowledgeRepository) ListIDsByTagIDs(
-	ctx context.Context,
-	tenantID uint64,
-	kbID string,
-	tagIDs []string,
-) ([]string, error) {
-	if len(tagIDs) == 0 {
-		return nil, nil
-	}
-	var ids []string
-	err := r.db.WithContext(ctx).Model(&types.Knowledge{}).
-		Joins("JOIN knowledge_tag_relations ktr ON knowledges.id = ktr.knowledge_id").
-		Where("knowledges.tenant_id = ? AND knowledges.knowledge_base_id = ? AND ktr.tag_id IN (?)",
-			tenantID, kbID, tagIDs).
-		Where("knowledges.parse_status IN ?", []string{types.ParseStatusFinalizing, types.ParseStatusCompleted}).
-		Distinct("knowledges.id").
-		Pluck("knowledges.id", &ids).Error
-	return ids, err
 }

@@ -73,7 +73,7 @@ func (h *ResourceFavoriteHandler) AddFavorite(c *gin.Context) {
 		return
 	}
 	if err := h.service.Add(ctx, tenantID, req.ResourceType, req.ResourceID); err != nil {
-		if stderrors.Is(err, service.ErrFavoriteInvalidType) || stderrors.Is(err, service.ErrFavoriteEmptyID) || stderrors.Is(err, service.ErrFavoriteInvalidTag) {
+		if stderrors.Is(err, service.ErrFavoriteInvalidType) || stderrors.Is(err, service.ErrFavoriteEmptyID) {
 			c.Error(apperrors.NewBadRequestError(err.Error()))
 			return
 		}

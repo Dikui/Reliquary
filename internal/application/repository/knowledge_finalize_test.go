@@ -45,7 +45,6 @@ CREATE TABLE IF NOT EXISTS knowledges (
     content_rune_count INTEGER NOT NULL DEFAULT 0,
     storage_size BIGINT NOT NULL DEFAULT 0,
     metadata JSONB,
-    tag_id VARCHAR(36),
     summary_status VARCHAR(32) DEFAULT 'none',
     channel VARCHAR(50) NOT NULL DEFAULT 'web',
     pending_subtasks_count INT NOT NULL DEFAULT 0,

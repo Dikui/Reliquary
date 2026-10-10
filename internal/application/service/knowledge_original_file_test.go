@@ -39,7 +39,7 @@ func TestUploadedOriginalIsSeparateFromParsedBody(t *testing.T) {
 			files := filesvc.NewLocalFileService(t.TempDir(), "")
 			svc := &knowledgeService{repo: repo, fileSvc: files, task: &createKnowledgeTaskEnqueuerStub{}, kbService: &createKnowledgeFileKBServiceStub{kb: &types.KnowledgeBase{ID: "kb-1"}}}
 			ctx := newCreateKnowledgeFileContext()
-			k, err := svc.CreateKnowledgeFromFile(ctx, "kb-1", newMultipartFileHeader(t, sample.name, string(sample.data)), nil, nil, "", nil, "", nil)
+			k, err := svc.CreateKnowledgeFromFile(ctx, "kb-1", newMultipartFileHeader(t, sample.name, string(sample.data)), nil, nil, "", "", nil)
 			require.NoError(t, err)
 			bodyText := "# Parsed body\n![image](resource://rewritten)"
 			parsedPath, err := files.SaveBytes(ctx, []byte(bodyText), k.TenantID, k.ID+".md", false)
@@ -78,7 +78,7 @@ func TestSimpleImageProcessingWithoutVisionKeepsOriginal(t *testing.T) {
 			input, err := files.SaveBytes(context.Background(), imageBytes.Bytes(), 1, "image.png", false)
 			require.NoError(t, err)
 			k.FilePath = input
-			svc := &knowledgeService{repo: repo, kbService: intakeKBService{}, tenantRepo: intakeTenantRepo{}, tenantService: intakeTenantService{}, fileSvc: files, imageResolver: docparser.NewImageResolver(), modelService: intakeModelService{chat: intakeChat{response: `{"approved":true,"reason":"valid source","natures":["描述"],"referents":[{"kind":"topic","name":"行业"}]}`}}, chunkService: &parentChildChunkService{}, retrieveEngine: &retriever.PostgresRetrievalService{RetrieveEngineService: &parentChildRetrieveEngine{}}, task: parentChildTaskEnqueuer{}}
+			svc := &knowledgeService{repo: repo, kbService: intakeKBService{}, tenantRepo: intakeTenantRepo{}, tenantService: intakeTenantService{}, fileSvc: files, imageResolver: docparser.NewImageResolver(), modelService: intakeModelService{chat: intakeChat{response: `{"approved":true,"reason":"valid source"}`}}, chunkService: &parentChildChunkService{}, retrieveEngine: &retriever.PostgresRetrievalService{RetrieveEngineService: &parentChildRetrieveEngine{}}, task: parentChildTaskEnqueuer{}}
 			payload, err := json.Marshal(types.DocumentProcessPayload{TenantID: 1, KnowledgeID: k.ID, KnowledgeBaseID: "kb", FilePath: input, FileName: "image.png", FileType: "png", EnableMultimodel: enableMultimodal})
 			require.NoError(t, err)
 			require.NoError(t, svc.ProcessDocument(context.Background(), asynq.NewTask(types.TypeDocumentProcess, payload, asynq.MaxRetry(0))))

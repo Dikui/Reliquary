@@ -1,19 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, onBeforeUnmount, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { tagLabel, isConcreteTag } from '../tagLabel';
 import { formatFileSize } from '@/utils/files';
-import { useTagChipsOverflow } from '@/composables/useTagChipsOverflow';
 import DocumentActionMenu from './DocumentActionMenu.vue';
 import FolderPickerMenu, { type FolderOption } from './FolderPickerMenu.vue';
 import KnowledgeProcessingTimeline from '@/components/knowledge-processing-timeline.vue';
-
-interface Tag {
-  id: string;
-  name: string;
-  kind?: string;
-  color?: string;
-}
 
 interface KnowledgeCard {
   id: string;
@@ -32,7 +23,6 @@ interface KnowledgeCard {
   isMore?: boolean;
   metadata?: any;
   error_message?: string;
-  tags?: Tag[];
   source?: string;
   created_at?: string;
   file_size?: number | string;
@@ -44,8 +34,6 @@ const props = defineProps<{
   selectedIds: Set<string>;
   batchMode: boolean;
   traceAvailableById: Record<string, boolean>;
-  tagList: Tag[];
-  starredTagIds: Set<string>;
   /** Sub-folders of the folder currently being browsed. */
   folders?: Array<{ path: string; name: string; total_count: number }>;
   /** Every folder of the knowledge base, for the "move to folder" picker. */
@@ -69,7 +57,6 @@ const emit = defineEmits<{
   (e: 'toggle-checkbox', id: string, checked: boolean, ctx?: { e?: Event }): void;
   (e: 'menu-visible-change', visible: boolean, item: KnowledgeCard): void;
   (e: 'action', action: 'download' | 'edit' | 'view-trace' | 'reparse' | 'cancel-parse' | 'move' | 'move-folder' | 'batch-manage' | 'delete', item: KnowledgeCard): void;
-  (e: 'tag-edit', item: KnowledgeCard): void;
   (e: 'open-folder', path: string): void;
   (e: 'move-to-folder', item: KnowledgeCard, folderPath: string): void;
   // Move sub-flow emits
@@ -80,15 +67,6 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
-const isStarredTag = (tag: Tag) => isConcreteTag(tag) && props.starredTagIds.has(tag.id);
-const displayTags = (tags?: Tag[]) => [...(tags || [])].sort((a, b) => Number(isStarredTag(b)) - Number(isStarredTag(a)));
-
-const {
-  setupTagChipsObserver,
-  getTagLimit,
-  hasTagOverflow,
-  getOverflowCount,
-} = useTagChipsOverflow('tagItemId');
 
 // Which row's action popup is currently showing the folder picker. Kept local so
 // picking a folder stays inside the menu the user already opened, exactly like
@@ -544,41 +522,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
         </button>
         <span v-else class="card-time">{{ formatDocTime(item.updated_at) }}</span>
         <div class="card-bottom-right">
-          <div v-if="tagList.length" class="card-tag-selector" @click.stop>
-            <!-- Editable mode -->
-              <template v-if="(item.tags || []).length > 0">
-                <t-tooltip
-                  v-if="hasTagOverflow(item.id, (item.tags || []).length)"
-                  :content="displayTags(item.tags).map((tag: Tag) => `${isStarredTag(tag) ? '★ ' : ''}${tagLabel(tag, t)}`).join(', ')"
-                  placement="top"
-                >
-                  <div
-                    class="card-tag-chips"
-                    :ref="(el: any) => setupTagChipsObserver(el, item.id, (item.tags || []).length)"
-                    @click="emit('tag-edit', item)"
-                  >
-                    <t-tag v-for="tag in displayTags(item.tags).slice(0, getTagLimit(item.id))" :key="tag.id" size="small" variant="light-outline" class="card-tag-chip" :class="{ 'is-starred': isStarredTag(tag) }">
-                      <span class="tag-text">{{ isStarredTag(tag) ? '★ ' : '' }}{{ tagLabel(tag, t) }}</span>
-                    </t-tag>
-                    <span class="card-tag-overflow">+{{ getOverflowCount(item.id, (item.tags || []).length) }}</span>
-                  </div>
-                </t-tooltip>
-                <div
-                  v-else
-                  class="card-tag-chips"
-                  :ref="(el: any) => setupTagChipsObserver(el, item.id, (item.tags || []).length)"
-                  @click="emit('tag-edit', item)"
-                >
-                  <t-tag v-for="tag in displayTags(item.tags).slice(0, getTagLimit(item.id))" :key="tag.id" size="small" variant="light-outline" class="card-tag-chip" :class="{ 'is-starred': isStarredTag(tag) }">
-                    <span class="tag-text">{{ isStarredTag(tag) ? '★ ' : '' }}{{ tagLabel(tag, t) }}</span>
-                  </t-tag>
-                </div>
-              </template>
-              <span v-else class="card-tag-add" @click="emit('tag-edit', item)">
-                <t-icon name="add" size="12px" />
-                <span>{{ $t('knowledgeBase.tagLabel') }}</span>
-              </span>
-          </div>
+
           <div class="card-type">
             <span>{{ getKnowledgeType(item) }}</span>
           </div>
@@ -638,17 +582,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
             v-if="(hoveredCardItem as any).channel && (hoveredCardItem as any).channel !== 'web'"
             class="card-popover-channel"
           >{{ getChannelLabel((hoveredCardItem as any).channel) }}</span>
-          <div v-if="(hoveredCardItem as any).tags && (hoveredCardItem as any).tags.length > 0" class="card-popover-tags">
-            <t-tag
-              v-for="tag in (hoveredCardItem as any).tags"
-              :key="tag.id"
-              size="small"
-              variant="light-outline"
-              class="card-popover-tag-chip"
-            >
-              <span class="tag-text">{{ tagLabel(tag, t) }}</span>
-            </t-tag>
-          </div>
+
           <span class="card-popover-type">{{ getKnowledgeType(hoveredCardItem) }}</span>
         </div>
         <div class="card-popover-hint">{{ $t('knowledgeBase.clickToViewFull') }}</div>
@@ -999,100 +933,6 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
   font-size: 11px;
 }
 
-// --- Tag selector ---
-.card-tag-selector {
-  display: flex;
-  align-items: center;
-
-  .card-tag-chips {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    flex-wrap: nowrap;
-    cursor: pointer;
-  }
-
-  .card-tag-overflow {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    height: 18px;
-    min-width: 18px;
-    padding: 0 5px;
-    border-radius: 999px;
-    border: 1px solid var(--td-component-stroke);
-    color: var(--td-text-color-placeholder);
-    font-size: 10px;
-    line-height: 1;
-    cursor: pointer;
-    transition: all 0.2s ease;
-
-    &:hover {
-      border-color: var(--td-brand-color);
-      color: var(--td-brand-color);
-      background: var(--td-bg-color-secondarycontainer);
-    }
-  }
-
-  :deep(.t-tag) {
-    cursor: pointer;
-    max-width: 120px;
-    height: 18px;
-    line-height: 18px;
-    border-radius: 999px;
-    border-color: var(--td-component-stroke);
-    color: var(--td-text-color-secondary);
-    padding: 0 6px;
-    background: transparent;
-    transition: all 0.2s ease;
-
-    &:hover {
-      border-color: var(--td-brand-color);
-      color: var(--td-brand-color-active);
-      background: var(--td-bg-color-secondarycontainer);
-    }
-  }
-
-  .tag-text {
-    display: inline-block;
-    max-width: 80px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    vertical-align: middle;
-    font-size: 11px;
-  }
-
-  .card-tag-add {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    height: 18px;
-    padding: 0 6px;
-    border-radius: 999px;
-    border: 1px dashed var(--td-component-stroke);
-    color: var(--td-text-color-placeholder);
-    font-size: 11px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-
-    .t-icon { font-size: 12px; }
-
-    &:hover {
-      border-color: var(--td-brand-color);
-      color: var(--td-brand-color-active);
-      background: var(--td-bg-color-secondarycontainer);
-      border-style: solid;
-    }
-  }
-}
-
-.card-tag-chip.is-starred {
-  color: var(--td-warning-color);
-  border-color: var(--td-warning-color);
-  font-weight: 600;
-}
-
 // --- Hover popover ---
 .knowledge-card-hover-popover {
   position: fixed;
@@ -1189,34 +1029,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
     border-radius: 4px;
   }
 
-  .card-popover-tags {
-    display: inline-flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 4px;
-    max-width: 100%;
-  }
 
-  .card-popover-tag-chip {
-    max-width: 120px;
-    height: 18px;
-    line-height: 18px;
-    border-radius: 999px;
-    border-color: var(--td-component-stroke);
-    color: var(--td-text-color-secondary);
-    padding: 0 6px;
-    background: transparent;
-
-    .tag-text {
-      display: inline-block;
-      max-width: 80px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      vertical-align: middle;
-      font-size: 11px;
-    }
-  }
 
   .card-popover-type {
     padding: 1px 6px;

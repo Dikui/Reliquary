@@ -45,7 +45,7 @@ func TestBuildChatCompletionRequest_ParallelToolCalls(t *testing.T) {
 			Tools: []Tool{{
 				Type: "function",
 				Function: FunctionDef{
-					Name:        "mcp_weather_getforecast",
+					Name:        "weather_get_forecast",
 					Description: "Get weather",
 					Parameters:  json.RawMessage(`{"type":"object"}`),
 				},
@@ -62,7 +62,7 @@ func TestBuildChatCompletionRequest_ParallelToolCalls(t *testing.T) {
 		}
 
 		assert.Len(t, req.Tools, 1)
-		assert.Equal(t, "mcp_weather_getforecast", req.Tools[0].Function.Name)
+		assert.Equal(t, "weather_get_forecast", req.Tools[0].Function.Name)
 	})
 
 	t.Run("ParallelToolCalls false is propagated", func(t *testing.T) {
@@ -83,24 +83,24 @@ func TestBuildChatCompletionRequest_ParallelToolCalls(t *testing.T) {
 	})
 }
 
-func TestBuildChatCompletionRequest_MCPToolsFormat(t *testing.T) {
+func TestBuildChatCompletionRequest_ToolsFormat(t *testing.T) {
 	chat := newTestRemoteChat(t)
 	messages := []Message{{Role: "user", Content: "查询乙醇的理化性质"}}
 
-	mcpTools := []Tool{
+	schemaTools := []Tool{
 		{
 			Type: "function",
 			Function: FunctionDef{
-				Name:        "mcp_hazardous_chemicals_gethazardouschemicals",
-				Description: "[MCP Service: hazardous_chemicals (external)] Get hazardous chemicals list",
+				Name:        "chemicals_list",
+				Description: "Get chemicals list",
 				Parameters:  json.RawMessage(`{"type":"object","properties":{}}`),
 			},
 		},
 		{
 			Type: "function",
 			Function: FunctionDef{
-				Name:        "mcp_hazardous_chemicals_gethazardouschemicalbybizid",
-				Description: "[MCP Service: hazardous_chemicals (external)] Get hazardous chemical by biz ID",
+				Name:        "chemicals_get_by_id",
+				Description: "Get chemical by business ID",
 				Parameters:  json.RawMessage(`{"type":"object","properties":{"bizId":{"type":"string"}},"required":["bizId"]}`),
 			},
 		},
@@ -109,21 +109,21 @@ func TestBuildChatCompletionRequest_MCPToolsFormat(t *testing.T) {
 	ptc := true
 	opts := &ChatOptions{
 		Temperature:       0.7,
-		Tools:             mcpTools,
+		Tools:             schemaTools,
 		ParallelToolCalls: &ptc,
 	}
 
 	req := chat.BuildChatCompletionRequest(messages, opts, true)
 
 	assert.Len(t, req.Tools, 2)
-	assert.Equal(t, "mcp_hazardous_chemicals_gethazardouschemicals", req.Tools[0].Function.Name)
-	assert.Equal(t, "mcp_hazardous_chemicals_gethazardouschemicalbybizid", req.Tools[1].Function.Name)
+	assert.Equal(t, "chemicals_list", req.Tools[0].Function.Name)
+	assert.Equal(t, "chemicals_get_by_id", req.Tools[1].Function.Name)
 	assert.Equal(t, true, req.ParallelToolCalls)
 	assert.True(t, req.Stream)
 
 	for _, tool := range req.Tools {
 		name := tool.Function.Name
-		assert.NotContains(t, name, "ed606721", "tool name must use service name, not UUID")
+		assert.NotContains(t, name, "ed606721", "tool name must preserve the supplied readable identifier")
 		assert.Regexp(t, `^[a-zA-Z0-9_-]+$`, name, "tool name must match OpenAI pattern")
 		assert.LessOrEqual(t, len(name), 64, "tool name must be <= 64 chars")
 	}
@@ -211,7 +211,7 @@ func TestBuildChatCompletionRequest_ToolChoice(t *testing.T) {
 	})
 
 	t.Run("specific tool choice", func(t *testing.T) {
-		opts := &ChatOptions{ToolChoice: "mcp_svc_tool"}
+		opts := &ChatOptions{ToolChoice: "weather_get_forecast"}
 		req := chat.BuildChatCompletionRequest(messages, opts, false)
 		assert.NotNil(t, req.ToolChoice)
 	})

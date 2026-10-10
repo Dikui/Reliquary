@@ -66,9 +66,8 @@ func contentRef(char string) string {
 	return types.BuildResourcePath(strings.Repeat(char, types.ResourceHandleLength))
 }
 
-// Saving a chat answer into the knowledge base must claim the files it shows
-// without copying them: the assistant message keeps its own claim, so either
-// side can be deleted without breaking the other.
+// An article must claim every file it references without copying the files.
+// Independent articles keep their own claims so deleting one preserves the others.
 func TestBindContentResourcesClaimsEveryReferencedFile(t *testing.T) {
 	chart := contentRef("a")
 	table := contentRef("b")

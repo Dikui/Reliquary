@@ -24,7 +24,6 @@ type KnowledgeBase struct {
 	Name string `yaml:"name"                    json:"name"`
 	Type string `yaml:"type"                    json:"type"                    gorm:"type:varchar(32);default:'document'"`
 	// Whether this knowledge base is temporary (ephemeral) and should be hidden from UI
-	IsTemporary bool `yaml:"is_temporary"            json:"is_temporary"            gorm:"default:false"`
 	// Description of the knowledge base
 	Description string `yaml:"description"             json:"description"`
 	// Workspace ID
@@ -44,13 +43,11 @@ type KnowledgeBase struct {
 	// Extract config
 	// QuestionGenerationConfig stores question generation configuration for document knowledge bases
 	QuestionGenerationConfig *QuestionGenerationConfig `yaml:"question_generation_config" json:"question_generation_config" gorm:"column:question_generation_config;type:json"`
-	// AutoTagConfig controls asynchronous association of existing tags after parsing.
-	AutoTagConfig *AutoTagConfig `yaml:"auto_tag_config" json:"auto_tag_config" gorm:"type:json"`
 	// IndexingStrategy controls which indexing pipelines are active for this knowledge base.
 	// Pipelines: vector search and keyword search.
 	IndexingStrategy IndexingStrategy `yaml:"indexing_strategy"       json:"indexing_strategy"       gorm:"column:indexing_strategy;type:json"`
 	// Pin state belongs to the personal space and is shared by all API callers.
-	IsPinned bool `yaml:"is_pinned" json:"is_pinned" gorm:"default:false"`
+	IsPinned bool       `yaml:"is_pinned" json:"is_pinned" gorm:"default:false"`
 	PinnedAt *time.Time `yaml:"pinned_at" json:"pinned_at"`
 
 	// Creation time of the knowledge base
@@ -79,79 +76,9 @@ type KnowledgeBaseConfig struct {
 	ChunkingConfig ChunkingConfig `yaml:"chunking_config"         json:"chunking_config"`
 	// Image processing configuration
 	ImageProcessingConfig ImageProcessingConfig `yaml:"image_processing_config" json:"image_processing_config"`
-	// AutoTagConfig controls optional automatic association of existing KB tags.
-	AutoTagConfig *AutoTagConfig `yaml:"auto_tag_config" json:"auto_tag_config"`
 	// IndexingStrategy controls which indexing pipelines are active.
 	// nil means "no change" when updating (preserves existing strategy).
 	IndexingStrategy *IndexingStrategy `yaml:"indexing_strategy"       json:"indexing_strategy"`
-}
-
-const (
-	// DefaultAutoTagMaxTags is applied when max_tags is unset or non-positive.
-	DefaultAutoTagMaxTags = 3
-	// MaximumAutoTagMaxTags caps how many tags one document may auto-acquire.
-	MaximumAutoTagMaxTags = 10
-)
-
-// AutoTagConfig controls asynchronous document auto-tagging. It is deliberately
-// opt-in so upgrading an existing deployment does not add model calls or alter
-// document tags unexpectedly.
-type AutoTagConfig struct {
-	Enabled bool   `yaml:"enabled" json:"enabled"`
-	ModelID string `yaml:"model_id,omitempty" json:"model_id,omitempty"`
-	MaxTags int    `yaml:"max_tags,omitempty" json:"max_tags,omitempty"`
-	// Policy refines message classification while fixed tag kinds remain enforced by validation.
-	Policy string `yaml:"policy,omitempty" json:"policy,omitempty"`
-	// SkipIfTagged leaves documents that already carry tags untouched, so a
-	// deliberate manual classification is not diluted by model guesses. It is
-	// a pointer because the default is true: rows written before this field
-	// existed decode to nil and must not silently flip to "always append".
-	SkipIfTagged *bool `yaml:"skip_if_tagged,omitempty" json:"skip_if_tagged,omitempty"`
-}
-
-// ShouldSkipIfTagged reports whether documents with existing tags are left
-// alone. Defaults to true for nil receivers and unset values.
-func (c *AutoTagConfig) ShouldSkipIfTagged() bool {
-	if c == nil || c.SkipIfTagged == nil {
-		return true
-	}
-	return *c.SkipIfTagged
-}
-
-// Value serializes the automatic-tagging configuration for database storage.
-func (c AutoTagConfig) Value() (driver.Value, error) { return json.Marshal(c) }
-
-// Scan deserializes the automatic-tagging configuration from a database value.
-func (c *AutoTagConfig) Scan(value interface{}) error {
-	if value == nil {
-		return nil
-	}
-	b, ok := value.([]byte)
-	if !ok {
-		if s, ok := value.(string); ok {
-			b = []byte(s)
-		} else {
-			return nil
-		}
-	}
-	return json.Unmarshal(b, c)
-}
-
-// Normalize applies defaults and bounds to the automatic-tagging configuration.
-func (c *AutoTagConfig) Normalize() {
-	if c == nil {
-		return
-	}
-	if c.MaxTags <= 0 {
-		c.MaxTags = DefaultAutoTagMaxTags
-	}
-	if c.MaxTags > MaximumAutoTagMaxTags {
-		c.MaxTags = MaximumAutoTagMaxTags
-	}
-	if c.SkipIfTagged == nil {
-		skip := true
-		c.SkipIfTagged = &skip
-	}
 }
 
 // ParserEngineRule maps a set of file types to a specific parser engine.
@@ -203,7 +130,6 @@ type ChunkingConfig struct {
 	TableMetadataInstructions string `yaml:"table_metadata_instructions,omitempty" json:"table_metadata_instructions,omitempty"`
 }
 
-// DefaultParserEngine selects a retained parser independent of build tags.
 // Office documents and PDFs use anydoc so a missing binding reports an error.
 func DefaultParserEngine(fileType string) string {
 	switch normalizeParserFileType(fileType) {
@@ -415,13 +341,6 @@ func (kb *KnowledgeBase) EnsureDefaults() {
 	if kb.Type == "" {
 		kb.Type = KnowledgeBaseTypeDocument
 	}
-	// Clear type-specific configs that don't belong
-
-	if kb.Type != KnowledgeBaseTypeDocument {
-		kb.AutoTagConfig = nil
-	} else if kb.AutoTagConfig != nil {
-		kb.AutoTagConfig.Normalize()
-	}
 
 	// Ensure IndexingStrategy has defaults.
 	// For existing rows where indexing_strategy is NULL, GORM Scan() returns
@@ -436,7 +355,7 @@ func (kb *KnowledgeBase) EnsureDefaults() {
 // KBCapabilities describes the functional features a knowledge base exposes.
 // It is computed from the KB's configuration (IndexingStrategy and Type)
 // and surfaced in the JSON representation of a KnowledgeBase so that the frontend
-// can filter / enable / disable KB options based on what the selected agent type needs.
+// can identify which retrieval operations are available.
 type KBCapabilities struct {
 	// Vector means semantic (embedding) search is indexed.
 	Vector bool `json:"vector"`
@@ -460,7 +379,7 @@ func (kb *KnowledgeBase) Capabilities() KBCapabilities {
 }
 
 // MarshalJSON augments the default JSON encoding of KnowledgeBase with a computed
-// `capabilities` field so clients (agent editor) can filter KBs by feature.
+// `capabilities` field so clients can inspect indexing support.
 // It preserves all existing fields verbatim.
 func (kb *KnowledgeBase) MarshalJSON() ([]byte, error) {
 	type alias KnowledgeBase

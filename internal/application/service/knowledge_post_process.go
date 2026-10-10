@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -18,32 +17,26 @@ import (
 // KnowledgePostProcessService acts as an orchestrator for all post-processing tasks
 // after a document has been parsed and split into chunks (including multimodal OCR/Caption).
 type KnowledgePostProcessService struct {
-	knowledgeRepo    interfaces.KnowledgeRepository
-	knowledgeService interfaces.KnowledgeService
-	kbService        interfaces.KnowledgeBaseService
-	chunkService     interfaces.ChunkService
-	taskEnqueuer     interfaces.TaskEnqueuer
-	spanTracker      SpanTracker
-	attentionService *KnowledgeAttentionService
+	knowledgeRepo interfaces.KnowledgeRepository
+	kbService     interfaces.KnowledgeBaseService
+	chunkService  interfaces.ChunkService
+	taskEnqueuer  interfaces.TaskEnqueuer
+	spanTracker   SpanTracker
 }
 
 func NewKnowledgePostProcessService(
 	knowledgeRepo interfaces.KnowledgeRepository,
-	knowledgeService interfaces.KnowledgeService,
 	kbService interfaces.KnowledgeBaseService,
 	chunkService interfaces.ChunkService,
 	taskEnqueuer interfaces.TaskEnqueuer,
 	spanTracker SpanTracker,
-	attentionService *KnowledgeAttentionService,
 ) interfaces.TaskHandler {
 	return &KnowledgePostProcessService{
-		knowledgeRepo:    knowledgeRepo,
-		knowledgeService: knowledgeService,
-		kbService:        kbService,
-		chunkService:     chunkService,
-		taskEnqueuer:     taskEnqueuer,
-		spanTracker:      spanTracker,
-		attentionService: attentionService,
+		knowledgeRepo: knowledgeRepo,
+		kbService:     kbService,
+		chunkService:  chunkService,
+		taskEnqueuer:  taskEnqueuer,
+		spanTracker:   spanTracker,
 	}
 }
 
@@ -165,12 +158,6 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 	willSpawnSummary := len(textChunks) > 0
 	willSpawnQuestion := willSpawnSummary && kb.NeedsEmbeddingModel() &&
 		eff.QuestionGenerationConfig.Enabled
-	intake, _ := knowledge.IntakeMetadata()
-	willSpawnAutoTag := kb.Type == types.KnowledgeBaseTypeDocument && len(textChunks) > 0 &&
-		((intake != nil && intake.Decision == "approved") || (kb.AutoTagConfig != nil && kb.AutoTagConfig.Enabled)) &&
-		!knowledge.IsSourceUpdateCandidate() // The update path classifies after enrichment and manual decisions.
-	enqueuedAutoTag := false
-
 	// Question generation now fans out one subtask per plain text chunk
 	// (using a per-chunk pattern) so each chunk's LLM
 	// call retries / cancels / traces independently. We only target
@@ -238,11 +225,6 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 		} else {
 			logger.Infof(ctx, "[KnowledgePostProcess] Knowledge %s marked completed (no enrichment subtasks).",
 				payload.KnowledgeID)
-			if promote := sourceUpdatePromotionCallback(s.knowledgeService); promote != nil {
-				if err := promote(ctx, payload.KnowledgeID); err != nil {
-					logger.Warnf(ctx, "[KnowledgePostProcess] Failed to promote source update %s: %v", payload.KnowledgeID, err)
-				}
-			}
 		}
 	default:
 		// Flip processing to finalizing before fan-out so a parallel
@@ -283,30 +265,6 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 					"skipped": "knowledge_no_longer_processing",
 				}, "", "")
 			return nil
-		}
-	}
-
-	// Queue best-effort automatic tagging only after the processing row has
-	// successfully handed off to finalizing. This avoids model calls from a
-	// duplicate post-process delivery that observes an already terminal row.
-	if willSpawnAutoTag {
-		enqueuedAutoTag = s.enqueueAutoTagTask(ctx, payload, attempt)
-	}
-
-	if s.attentionService != nil && len(textChunks) > 0 && !knowledge.IsSourceUpdateCandidate() {
-		var body strings.Builder
-		for _, chunk := range textChunks {
-			if body.Len() > 0 {
-				body.WriteString("\n\n")
-			}
-			text := chunk.SourceContent
-			if text == "" {
-				text = chunk.Content
-			}
-			body.WriteString(text)
-		}
-		if err := s.attentionService.ScoreArticle(ctx, kb, knowledge, body.String()); err != nil {
-			logger.Warnf(ctx, "Attention scoring failed for %s: %v", knowledge.ID, err)
 		}
 	}
 
@@ -375,19 +333,12 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 			for i := 0; i < shortfall; i++ {
 				rctx, cancel := context.WithTimeout(
 					context.WithoutCancel(ctx), finalizeSubtaskDetachedTimeout)
-				_, promoted, err := s.knowledgeRepo.FinalizeSubtask(rctx, payload.KnowledgeID)
+				_, _, err := s.knowledgeRepo.FinalizeSubtask(rctx, payload.KnowledgeID)
 				cancel()
 				if err != nil {
 					logger.Warnf(ctx, "[KnowledgePostProcess] Failed to release subtask slot for %s: %v",
 						payload.KnowledgeID, err)
 					break
-				}
-				if promoted {
-					if promote := sourceUpdatePromotionCallback(s.knowledgeService); promote != nil {
-						if err := promote(ctx, payload.KnowledgeID); err != nil {
-							logger.Warnf(ctx, "[KnowledgePostProcess] Failed to promote source update %s: %v", payload.KnowledgeID, err)
-						}
-					}
 				}
 			}
 		}
@@ -398,7 +349,6 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 		"enqueued_summary":        enqueuedSummary,
 		"enqueued_question":       enqueuedQuestionCount > 0,
 		"enqueued_question_count": enqueuedQuestionCount,
-		"enqueued_auto_tag":       enqueuedAutoTag,
 	}
 	s.tracker().EndSpan(ctx, postSpan, postOutput)
 	// Close the root span — the parse pipeline is done. Async
@@ -409,40 +359,6 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 	s.tracker().FinalizeAttempt(ctx, payload.KnowledgeID, attempt,
 		types.SpanStatusDone, postOutput, "", "")
 	return nil
-}
-
-// enqueueAutoTagTask schedules best-effort classification against the KB's
-// existing tags. It intentionally owns no pending-subtask slot: a model or
-// configuration failure must never keep document parsing in finalizing.
-func (s *KnowledgePostProcessService) enqueueAutoTagTask(
-	ctx context.Context,
-	payload types.KnowledgePostProcessPayload,
-	attempt int,
-) bool {
-	if s.taskEnqueuer == nil {
-		return false
-	}
-	taskPayload := types.KnowledgeAutoTagPayload{
-		TenantID:        payload.TenantID,
-		KnowledgeBaseID: payload.KnowledgeBaseID,
-		KnowledgeID:     payload.KnowledgeID,
-		Language:        payload.Language,
-		Attempt:         attempt,
-	}
-
-	payloadBytes, err := json.Marshal(taskPayload)
-	if err != nil {
-		logger.Warnf(ctx, "[KnowledgePostProcess] Failed to marshal auto tag payload: %v", err)
-		return false
-	}
-	task := asynq.NewTask(types.TypeKnowledgeAutoTag, payloadBytes,
-		asynq.Queue(types.QueueSummary), asynq.MaxRetry(2), asynq.Timeout(2*time.Minute))
-	if _, err := s.taskEnqueuer.Enqueue(task); err != nil {
-		logger.Warnf(ctx, "[KnowledgePostProcess] Failed to enqueue automatic tagging for %s: %v", payload.KnowledgeID, err)
-		return false
-	}
-	logger.Infof(ctx, "[KnowledgePostProcess] Enqueued automatic tagging for %s", payload.KnowledgeID)
-	return true
 }
 
 // enqueueSummaryGenerationTask enqueues the summary task. Returns true only

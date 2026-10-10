@@ -25,9 +25,8 @@ func FingerprintPromptPrefix(parts ...string) string {
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }
 
-// PromptPrefixFingerprint hashes the stable portion common to normal chat and
-// agent requests: leading system messages plus the deterministic tool schema.
-// Dynamic conversation/user messages intentionally do not participate.
+// PromptPrefixFingerprint hashes leading system messages and the deterministic
+// tool schema. User messages do not participate in the stable prefix.
 func PromptPrefixFingerprint(messages []Message, opts *ChatOptions) string {
 	type stablePrefix struct {
 		System []Message `json:"system,omitempty"`
@@ -146,8 +145,7 @@ func valueOrZero(value *int) int {
 }
 
 // CacheRetention is the prompt-cache TTL preference. Empty means short (the
-// default 5-minute provider cache). Compaction/summarization uses none so a
-// different prompt prefix does not occupy the session's cache slot.
+// default 5-minute provider cache). None disables provider cache markers.
 type CacheRetention string
 
 const (
@@ -176,12 +174,9 @@ func resolveCacheRetention(opts *ChatOptions) CacheRetention {
 	return CacheRetentionShort
 }
 
-func promptCacheSessionID(ctx context.Context, opts *ChatOptions) string {
+func promptCacheKey(ctx context.Context, opts *ChatOptions) string {
 	if opts != nil && opts.PromptCacheKey != "" {
 		return clampPromptCacheKey(opts.PromptCacheKey)
-	}
-	if sessionID, ok := types.SessionIDFromContext(ctx); ok {
-		return clampPromptCacheKey(sessionID)
 	}
 	return ""
 }
@@ -230,7 +225,7 @@ func cacheControlFor(retention CacheRetention, longTTL string) *cacheControlMark
 func applyPromptCacheToJSONBody(
 	body any,
 	policy promptCachePolicy,
-	sessionID string,
+	cacheKey string,
 	retention CacheRetention,
 ) (any, bool, error) {
 	if retention == CacheRetentionNone {
@@ -250,8 +245,8 @@ func applyPromptCacheToJSONBody(
 	}
 
 	rewritten := false
-	if policy.sendKey && sessionID != "" {
-		payload["prompt_cache_key"] = sessionID
+	if policy.sendKey && cacheKey != "" {
+		payload["prompt_cache_key"] = cacheKey
 		if retention == CacheRetentionLong {
 			payload["prompt_cache_retention"] = "24h"
 		}
@@ -363,11 +358,11 @@ func addCacheControlToMessageContent(msg map[string]any, marker *cacheControlMar
 	return false
 }
 
-func attachPromptCacheHeaders(req *http.Request, policy promptCachePolicy, sessionID string) {
-	if req == nil || !policy.sendAffinity || sessionID == "" {
+func attachPromptCacheHeaders(req *http.Request, policy promptCachePolicy, cacheKey string) {
+	if req == nil || !policy.sendAffinity || cacheKey == "" {
 		return
 	}
-	req.Header.Set("session_id", sessionID)
-	req.Header.Set("x-client-request-id", sessionID)
-	req.Header.Set("x-session-affinity", sessionID)
+	req.Header.Set("session_id", cacheKey)
+	req.Header.Set("x-client-request-id", cacheKey)
+	req.Header.Set("x-session-affinity", cacheKey)
 }

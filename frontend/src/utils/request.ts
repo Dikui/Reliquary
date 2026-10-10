@@ -233,15 +233,6 @@ export function postUpload(
   }) as unknown as Promise<any>;
 }
 
-export function postChat<T = any>(url: string, data = {}): Promise<T> {
-  return instance.post(url, data, {
-    headers: {
-      "Content-Type": "text/event-stream;charset=utf-8",
-      "X-Request-ID": `${generateRandomString(12)}`,
-    },
-  }) as unknown as Promise<T>;
-}
-
 export function post<T = any>(url: string, data = {}, config?: any): Promise<T> {
   return instance.post<T>(url, data, config) as unknown as Promise<T>;
 }

@@ -4,7 +4,7 @@ import "net/http"
 
 // NewImageProcessingModelUnsupportedError reports an incompatible image model.
 func NewImageProcessingModelUnsupportedError() *AppError {
-	return &AppError{Code: ErrImageProcessingModelUnsupported, Message: "图片处理模型必须是 VLLM 模型或已开启支持视觉/多模态的对话模型", HTTPCode: http.StatusBadRequest}
+	return &AppError{Code: ErrImageProcessingModelUnsupported, Message: "图片处理模型必须是 VLLM 模型或已开启支持视觉/多模态的语言模型", HTTPCode: http.StatusBadRequest}
 }
 
 // NewImageProcessingModelNotFoundError reports a missing selected image model.

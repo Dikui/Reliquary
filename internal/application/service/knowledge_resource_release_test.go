@@ -25,7 +25,7 @@ func handleRef(char string) string {
 }
 
 func TestDeleteExtractedImagesKeepsFilesAnotherOwnerStillClaims(t *testing.T) {
-	shared := handleRef("a")    // also shown by the chat message it was saved from
+	shared := handleRef("a")    // also referenced by another article
 	exclusive := handleRef("b") // only this knowledge references it
 	legacy := "local://7/exports/old.png"
 

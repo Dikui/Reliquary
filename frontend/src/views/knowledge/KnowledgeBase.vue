@@ -8,25 +8,18 @@ import { useRoute, useRouter } from 'vue-router';
 import EmptyKnowledge from '@/components/empty-knowledge.vue';
 import KBInfoPopover from '@/components/KBInfoPopover.vue';
 import KBSwitcherDropdown from '@/components/KBSwitcherDropdown.vue';
-import { getSessionsList, createSessions, generateSessionsTitle } from "@/api/chat/index";
-import { useMenuStore } from '@/stores/menu';
 import { useUIStore } from '@/stores/ui';
-import { useAuthStore } from '@/stores/auth';
 import { useCommandPaletteStore } from '@/stores/commandPalette';
-import { useChatResourcesStore } from '@/stores/chatResources';
+import { useResourcesStore } from '@/stores/resources';
 import { useEditorResourcesStore } from '@/stores/editorResources';
 import KnowledgeBaseEditorModal from './KnowledgeBaseEditorModal.vue';
-const usemenuStore = useMenuStore();
 const uiStore = useUIStore();
-const authStore = useAuthStore();
 const commandPalette = useCommandPaletteStore();
-const chatResources = useChatResourcesStore();
+const resources = useResourcesStore();
 const editorResources = useEditorResourcesStore();
 const router = useRouter();
 import {
   batchQueryKnowledge,
-  listKnowledgeTags,
-  updateKnowledgeTagBatch,
   uploadKnowledgeFile,
   createKnowledgeFromURL,
   reparseKnowledge,
@@ -48,15 +41,7 @@ import DocumentCardView from './components/DocumentCardView.vue';
 import DocumentBatchBar from './components/DocumentBatchBar.vue';
 import KbUploadSourceDropdown from './components/KbUploadSourceDropdown.vue';
 import KbFolderTree from './components/KbFolderTree.vue';
-import TagEditDialog from './components/TagEditDialog.vue';
-import BatchTagDialog from './components/BatchTagDialog.vue';
-import KbTagManageDrawer from './components/KbTagManageDrawer.vue';
-import KnowledgeAnomaliesDrawer from './components/KnowledgeAnomaliesDrawer.vue';
-import KnowledgeStrategyDrawer from './components/KnowledgeStrategyDrawer.vue';
 import KnowledgeWorkbench from './components/KnowledgeWorkbench.vue';
-import { decideKnowledgeAnomaly } from '@/api/knowledge-anomalies';
-import { tagLabel, isConcreteTag } from './tagLabel';
-import { listFavorites, addFavorite, removeFavorite } from '@/api/user-favorites';
 import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess';
 import { useUploadConfirmStore, type UploadConfirmResult, type IntakeSourceInfo } from '@/stores/uploadConfirm';
 import {
@@ -249,24 +234,6 @@ const selectedIds = ref<Set<string>>(new Set());
 let lastSelectedIndex = -1;
 const batchDeleting = ref(false);
 const batchReparsing = ref(false);
-const batchTagging = ref(false);
-const batchTagDialogVisible = ref(false);
-const batchTagPreSelectedIds = computed(() => {
-  const ids = Array.from(selectedIds.value);
-  if (ids.length === 0) return [];
-  const cards = ids
-    .map((id) => cardList.value.find((c) => c.id === id))
-    .filter((c): c is KnowledgeCard => Boolean(c));
-  if (cards.length === 0) return [];
-  const firstTagIds = new Set((cards[0].tags || []).map((t) => t.id));
-  for (let i = 1; i < cards.length; i++) {
-    const cur = new Set((cards[i].tags || []).map((t) => t.id));
-    for (const tid of firstTagIds) {
-      if (!cur.has(tid)) firstTagIds.delete(tid);
-    }
-  }
-  return Array.from(firstTagIds);
-});
 // IDs submitted for async batch reparse; hold optimistic pending until the worker updates DB.
 const pendingReparseAck = ref<Set<string>>(new Set());
 
@@ -338,51 +305,6 @@ const confirmBatchReparse = async () => {
     batchReparsing.value = false;
   }
 };
-
-const tagFilterPanelVisible = ref(false);
-const tagFilterTriggerHover = ref(false);
-const tagFilterCleared = ref(false);
-const tagManageDrawerVisible = ref(false);
-const anomalyDrawerVisible = ref(false);
-const strategyDrawerVisible = ref(false);
-const anomalyKnowledgeId = ref('');
-const anomalyDrawerRef = ref<{ refresh: () => Promise<void> } | null>(null);
-const editingAnomalyId = ref('');
-const openAnomalyWindow = (knowledgeId = '') => {
-  anomalyKnowledgeId.value = knowledgeId;
-  isCardDetails.value = false;
-  anomalyDrawerVisible.value = true;
-};
-const editAnomalyMessageTags = async (knowledgeId: string, anomalyId: string) => {
-  try {
-    const response = await getKnowledgeDetails(knowledgeId);
-    if (response?.success && response.data) {
-      openTagEditDialog(response.data as KnowledgeCard);
-      editingAnomalyId.value = anomalyId;
-    }
-  } catch (error) {
-    MessagePlugin.error(t('knowledgeBase.anomalies.loadFailed'));
-  }
-};
-
-const showTagFilterClear = computed(
-  () => selectedTagIds.value.length > 0 && tagFilterTriggerHover.value,
-);
-
-const isTagFilterPlaceholder = computed(
-  () => selectedTagIds.value.length === 0 && tagFilterCleared.value,
-);
-
-const selectedTagIds = ref<string[]>([]);
-const tagList = ref<any[]>([]);
-const tagLoading = ref(false);
-const tagSearchQuery = ref('');
-const TAG_PAGE_SIZE = 50;
-const tagPage = ref(1);
-const tagHasMore = ref(false);
-const tagLoadingMore = ref(false);
-const tagTotal = ref(0);
-let tagSearchDebounce: number | null = null;
 let docSearchDebounce: number | null = null;
 const docSearchKeyword = ref('');
 const selectedFileType = ref('');
@@ -465,7 +387,6 @@ const showFolderTree = computed(() => hasFolders.value);
 const isFiltering = computed(() =>
   isFilteringDocuments({
     keyword: docSearchKeyword.value,
-    tagIds: selectedTagIds.value,
     fileType: selectedFileType.value,
     parseStatus: selectedParseStatus.value,
     source: selectedSource.value,
@@ -487,7 +408,6 @@ const folderBreadcrumbs = computed(() => buildFolderBreadcrumbs(selectedFolderPa
 const filterParams = computed(() => {
   const [start, end] = updatedTimeRange.value || [];
   return {
-    tag_ids: selectedTagIds.value.length > 0 ? selectedTagIds.value.join(',') : undefined,
     keyword: docSearchKeyword.value ? docSearchKeyword.value.trim() : undefined,
     file_type: selectedFileType.value || undefined,
     parse_status: selectedParseStatus.value || undefined,
@@ -500,107 +420,6 @@ const filterParams = computed(() => {
     folder_recursive: isFiltering.value,
   };
 });
-const tagMap = computed<Record<string, any>>(() => {
-  const map: Record<string, any> = {};
-  tagList.value.forEach((tag) => {
-    map[tag.id] = tag;
-  });
-  return map;
-});
-const starredTagIds = ref<Set<string>>(new Set());
-watch(() => authStore.effectiveTenantId, async (tenantId) => {
-  starredTagIds.value = new Set();
-  if (!tenantId) return;
-  try {
-    const res = await listFavorites('tag');
-    if (authStore.effectiveTenantId === tenantId) {
-      starredTagIds.value = new Set((res?.data || []).map((entry) => entry.resource_id));
-    }
-  } catch (error) {
-    console.error('Failed to load starred tags', error);
-  }
-}, { immediate: true });
-const toggleTagStar = async (tag: { id: string; kind?: string }) => {
-  if (!isConcreteTag(tag)) return;
-  const wasStarred = starredTagIds.value.has(tag.id);
-  try {
-    if (wasStarred) await removeFavorite('tag', tag.id);
-    else await addFavorite('tag', tag.id);
-    const next = new Set(starredTagIds.value);
-    if (wasStarred) next.delete(tag.id);
-    else next.add(tag.id);
-    starredTagIds.value = next;
-  } catch (error: any) {
-    MessagePlugin.error(error?.message || t('common.operationFailed'));
-  }
-};
-const sidebarCategoryCount = computed(() => tagTotal.value || tagList.value.length);
-const sidebarTags = computed(() => {
-  const list = tagList.value;
-  const selectedIds = selectedTagIds.value;
-  if (selectedIds.length === 0) {
-    return list;
-  }
-  const missing = selectedIds
-    .filter((id) => !list.some((tag) => tag.id === id))
-    .map((id) => tagMap.value[id])
-    .filter(Boolean);
-  if (missing.length === 0) {
-    return list;
-  }
-  return [...missing, ...list];
-});
-
-const activeTagFilterLabel = computed(() => {
-  if (selectedTagIds.value.length === 0) {
-    return tagFilterCleared.value
-      ? t('knowledgeBase.tagFilterPlaceholder')
-      : t('knowledgeBase.allTags');
-  }
-  if (selectedTagIds.value.length === 1) {
-    const id = selectedTagIds.value[0];
-    return tagMap.value[id]?.name || t('knowledgeBase.allTags');
-  }
-  return t('knowledgeBase.tagFilterMulti', { count: selectedTagIds.value.length });
-});
-
-const activeTagFilterTitle = computed(() => {
-  if (selectedTagIds.value.length === 0) {
-    return t('knowledgeBase.tagFilterTitle');
-  }
-  const names = selectedTagIds.value
-    .map((id) => tagMap.value[id]?.name)
-    .filter(Boolean);
-  return names.length > 0 ? names.join('、') : t('knowledgeBase.tagFilterTitle');
-});
-
-const isTagFilterActive = (tagId: string) => selectedTagIds.value.includes(tagId);
-
-// 标签编辑弹窗
-const tagEditDialogVisible = ref(false);
-const tagEditTarget = ref<KnowledgeCard | null>(null);
-
-function openTagEditDialog(item: KnowledgeCard) {
-  if (!anomalyDrawerVisible.value) editingAnomalyId.value = '';
-  tagEditTarget.value = item;
-  tagEditDialogVisible.value = true;
-}
-
-async function onTagEditConfirm(tagIds: string[]) {
-  if (!tagEditTarget.value) return;
-  const oldIds = new Set((tagEditTarget.value.tags || []).map(tag => tag.id));
-  const changed = await handleKnowledgeTagChange(tagEditTarget.value.id, tagIds);
-  if (!changed || !editingAnomalyId.value) return;
-  const added = tagIds.filter(id => !oldIds.has(id));
-  const removed = [...oldIds].filter(id => !tagIds.includes(id));
-  try {
-    await decideKnowledgeAnomaly(kbId.value, editingAnomalyId.value, 'resolved', `+${added.join(',')} −${removed.join(',')}`.slice(0, 500));
-    await anomalyDrawerRef.value?.refresh();
-    editingAnomalyId.value = '';
-  } catch (error: any) {
-    MessagePlugin.error(error?.message || t('knowledgeBase.anomalies.saveFailed'));
-  }
-}
 const getPageSize = () => {
   const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
   const itemHeight = 148;
@@ -608,12 +427,6 @@ const getPageSize = () => {
   pageSize = Math.max(35, itemsInView);
 }
 getPageSize()
-// 直接调用 API 获取知识库文件列表
-const getTagName = (tagId?: string | number) => {
-  if (!tagId && tagId !== 0) return '';
-  const key = String(tagId);
-  return tagMap.value[key]?.name || '';
-};
 
 const loadKnowledgeFiles = (kbIdValue: string): Promise<void> => {
   if (!kbIdValue) return Promise.resolve();
@@ -733,146 +546,6 @@ const handleFolderTreeCollapsedChange = (value: boolean) => {
   writeStoredFlag(FOLDER_TREE_COLLAPSED_KEY, value);
 };
 
-const loadTags = async (kbIdValue: string, reset = false) => {
-  if (!kbIdValue) {
-    tagList.value = [];
-    tagTotal.value = 0;
-    tagHasMore.value = false;
-    tagPage.value = 1;
-    return;
-  }
-
-  if (reset) {
-    tagPage.value = 1;
-    tagList.value = [];
-    tagTotal.value = 0;
-    tagHasMore.value = false;
-  } else if (tagLoading.value || tagLoadingMore.value) {
-    return;
-  }
-
-  const currentPage = tagPage.value || 1;
-  tagLoading.value = currentPage === 1;
-  tagLoadingMore.value = currentPage > 1;
-
-  try {
-    const res: any = await listKnowledgeTags(kbIdValue, {
-      page: currentPage,
-      page_size: TAG_PAGE_SIZE,
-      keyword: tagSearchQuery.value || undefined,
-    });
-    if (!isCurrentKb(kbIdValue)) return;
-
-    const pageData = (res?.data || {}) as {
-      data?: any[];
-      total?: number;
-    };
-    const pageTags = (pageData.data || []).map((tag: any) => ({
-      ...tag,
-      id: String(tag.id),
-    }));
-
-    if (currentPage === 1) {
-      tagList.value = pageTags;
-    } else {
-      tagList.value = [...tagList.value, ...pageTags];
-    }
-
-    tagTotal.value = pageData.total || tagList.value.length;
-    tagHasMore.value = tagList.value.length < tagTotal.value;
-    if (tagHasMore.value) {
-      tagPage.value = currentPage + 1;
-    }
-  } catch (error) {
-    if (!isCurrentKb(kbIdValue)) return;
-    console.error('Failed to load tags', error);
-  } finally {
-    if (isCurrentKb(kbIdValue)) {
-      tagLoading.value = false;
-      tagLoadingMore.value = false;
-    }
-  }
-};
-
-const handleTagFilterChange = (tagIds: string[]) => {
-  selectedTagIds.value = tagIds;
-  // 同步更新 store 中的 selectedTagIds，供 menu.vue 上传时使用
-  uiStore.clearSelectedTagIds();
-  tagIds.forEach(id => uiStore.toggleSelectedTagId(id));
-  resetPage();
-};
-
-const handleTagRowClick = (tagId: string) => {
-  const next = new Set(selectedTagIds.value);
-  if (next.has(tagId)) {
-    next.delete(tagId);
-  } else {
-    next.add(tagId);
-  }
-  if (next.size > 0) {
-    tagFilterCleared.value = false;
-  }
-  handleTagFilterChange([...next]);
-};
-
-const clearTagFilter = () => {
-  tagFilterCleared.value = true;
-  handleTagFilterChange([]);
-};
-
-const openTagManageDrawer = () => {
-  tagFilterPanelVisible.value = false;
-  tagManageDrawerVisible.value = true;
-};
-
-const openTagManageFromEditDialog = () => {
-  tagEditDialogVisible.value = false;
-  tagManageDrawerVisible.value = true;
-};
-
-const openTagManageFromBatchDialog = () => {
-  batchTagDialogVisible.value = false;
-  tagManageDrawerVisible.value = true;
-};
-
-const onTagManageChanged = (payload?: { deletedTagId?: string }) => {
-  if (!kbId.value) return;
-  void loadTags(kbId.value, true);
-  if (payload?.deletedTagId && selectedTagIds.value.includes(payload.deletedTagId)) {
-    selectedTagIds.value = [];
-    handleTagFilterChange([]);
-    resetPage();
-    loadKnowledgeFiles(kbId.value);
-    return;
-  }
-  if (payload?.deletedTagId) {
-    void (async () => {
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      if (!kbId.value) return;
-      resetPage();
-      await loadKnowledgeFiles(kbId.value);
-      await loadTags(kbId.value, true);
-    })();
-    return;
-  }
-  resetPage();
-  loadKnowledgeFiles(kbId.value);
-};
-
-const handleKnowledgeTagChange = async (knowledgeId: string, tagIds: string[]) => {
-  try {
-    await updateKnowledgeTagBatch({ updates: { [knowledgeId]: tagIds } });
-    MessagePlugin.success(t('knowledgeBase.tagUpdateSuccess'));
-    resetPage(); // Reset page counter to 1 when reloading files after tag change
-    loadKnowledgeFiles(kbId.value);
-    loadTags(kbId.value, true);
-    return true;
-  } catch (error: any) {
-    MessagePlugin.error(error?.message || t('common.operationFailed'));
-    return false;
-  }
-};
-
 const loadKnowledgeBaseInfo = async (targetKbId: string, force = false) => {
   if (!targetKbId) {
     kbInfo.value = null;
@@ -882,20 +555,14 @@ const loadKnowledgeBaseInfo = async (targetKbId: string, force = false) => {
   }
   kbLoading.value = true;
   try {
-    const data = await chatResources.fetchKnowledgeBaseById(targetKbId, force);
+    const data = await resources.fetchKnowledgeBaseById(targetKbId, force);
     if (!isCurrentKb(targetKbId)) return;
 
     kbInfo.value = data;
-    selectedTagIds.value = [];
-    tagFilterCleared.value = false;
-    uiStore.clearSelectedTagIds();
-    // 重置store中的标签选择状态，避免上传文档时自动带上之前选择的标签
-    uiStore.clearSelectedTagIds();
 
       loadKnowledgeFiles(targetKbId);
       void loadFolderTree(targetKbId);
 
-    loadTags(targetKbId, true);
   } catch (error) {
     if (!isCurrentKb(targetKbId)) return;
 
@@ -912,8 +579,8 @@ const loadKnowledgeBaseInfo = async (targetKbId: string, force = false) => {
 
 const loadKnowledgeList = async () => {
   try {
-    await chatResources.ensureKnowledgeBases();
-    const myKbs = chatResources.rawKnowledgeBases.map((item: any) => ({
+    await resources.ensureKnowledgeBases();
+    const myKbs = resources.rawKnowledgeBases.map((item: any) => ({
       id: String(item.id),
       name: item.name,
       type: item.type || 'document',
@@ -953,33 +620,11 @@ watch(() => kbId.value, (newKbId, oldKbId) => {
     total.value = 0;
     docListLoading.value = true;
     resetPage();
-    tagSearchQuery.value = '';
-    tagPage.value = 1;
-    uiStore.clearSelectedTagIds();
     folderTree.value = null;
     selectedFolderPath.value = ROOT_FOLDER_PATH;
   }
   loadKnowledgeBaseInfo(newKbId);
 }, { immediate: true });
-
-watch(selectedTagIds, (newVal, oldVal) => {
-  if (oldVal === undefined) return;
-  if (kbId.value) {
-    loadKnowledgeFiles(kbId.value);
-  }
-}, { deep: true });
-
-watch(tagSearchQuery, (newVal, oldVal) => {
-  if (newVal === oldVal) return;
-  if (tagSearchDebounce) {
-    window.clearTimeout(tagSearchDebounce);
-  }
-  tagSearchDebounce = window.setTimeout(() => {
-    if (kbId.value) {
-      loadTags(kbId.value, true);
-    }
-  }, 300);
-});
 
 // 监听文档搜索关键词变化
 watch(docSearchKeyword, (newVal, oldVal) => {
@@ -1030,7 +675,6 @@ const handleFileUploaded = (event: CustomEvent) => {
     // 如果上传的文件属于当前知识库，使用 loadKnowledgeFiles 刷新文件列表
     resetPage(); // Reset page counter when reloading files after upload
     loadKnowledgeFiles(uploadedKbId);
-    loadTags(uploadedKbId);
     void loadFolderTree(uploadedKbId);
     // 启动几次探测，尽快让面包屑的"索引中"亮起。
   }
@@ -1048,7 +692,7 @@ const handleOpenURLImportDialog = (event: CustomEvent) => {
 };
 
 // Global file drops are captured by the platform shell. Route them back into
-// the same confirmation flow as the page upload button so tags and per-batch
+// the same confirmation flow as the page upload button so per-batch
 // processing settings are never skipped.
 const handleKnowledgeFileDrop = (event: CustomEvent) => {
   const eventKbId = event.detail?.kbId;
@@ -1077,7 +721,7 @@ const tryAutoOpenDocument = async () => {
   const card = cardList.value.find((c: KnowledgeCard) => c.id === targetId);
 
   // The current card list only contains the folder being browsed. A document
-  // opened from chat references may live in any nested folder, so resolve its
+  // opened from retrieval results may live in any nested folder, so resolve its
   // folder from the detail endpoint before opening the drawer. Otherwise the
   // drawer opens correctly while the page misleadingly remains at KB root.
   let target = card || ({ id: targetId } as KnowledgeCard);
@@ -1179,7 +823,6 @@ type KnowledgeCard = {
   isMore?: boolean;
   metadata?: any;
   error_message?: string;
-  tags?: Array<{ id: string; name: string; color?: string }>;
 };
 // needsStatusPolling decides whether a card row is still "in flight"
 // enough that the doc list should keep refreshing it. Keep in sync with
@@ -1285,7 +928,6 @@ const confirmDeleteKnowledge = (index: number, item: KnowledgeCard) => {
       if (!stillPresent) break;
       await new Promise<void>((r) => setTimeout(r, delayMs));
     }
-    loadTags(kbId.value, true);
     void loadFolderTree(kbId.value);
   });
 };
@@ -1472,7 +1114,6 @@ const executeUploadBatch = async (
   files: File[],
   options: {
     processConfig?: KnowledgeProcessOverrides;
-    tagIds?: string[];
     /** Destination folder confirmed in the upload dialog; '' is the root. */
     targetFolder?: string;
     sourceInfoByItem?: Record<string, IntakeSourceInfo>;
@@ -1483,9 +1124,6 @@ const executeUploadBatch = async (
     return { successCount: 0, failCount: files.length, duplicateCount: 0 };
   }
 
-  const tagIdsToUpload = options.tagIds && options.tagIds.length > 0
-    ? [...options.tagIds]
-    : undefined;
   let successCount = 0;
   let failCount = 0;
   let duplicateCount = 0;
@@ -1496,11 +1134,10 @@ const executeUploadBatch = async (
     try {
       const uploadData: {
         file: File
-        tag_ids?: string[]
         fileName?: string
         process_config?: KnowledgeProcessOverrides
         source_info?: IntakeSourceInfo
-      } = { file, tag_ids: tagIdsToUpload };
+      } = { file };
 
       const fileName = getFolderUploadFileName(file, options.targetFolder || ROOT_FOLDER_PATH);
       if (fileName) uploadData.fileName = fileName;
@@ -1558,7 +1195,6 @@ const executeUploadBatch = async (
 const executeUrlImport = async (
   url: string,
   processConfig?: KnowledgeProcessOverrides,
-  tagIds?: string[],
   sourceInfo?: IntakeSourceInfo,
 ) => {
   const targetKbId = kbId.value;
@@ -1567,11 +1203,9 @@ const executeUrlImport = async (
     return;
   }
 
-  const tagIdsToUpload = tagIds && tagIds.length > 0 ? [...tagIds] : undefined;
   try {
     const responseData: any = await createKnowledgeFromURL(targetKbId, {
       url,
-      tag_ids: tagIdsToUpload,
       process_config: processConfig,
       source_info: sourceInfo,
     });
@@ -1606,7 +1240,6 @@ const handleUploadConfirmResult = async (result: UploadConfirmResult) => {
   const files = result.files || [];
   const urls = result.urls || [];
   const processConfig = result.processConfig;
-  const tagIds = result.tagIds || [];
 
   if (files.length > 0) {
     const hasFolderPaths = files.some(isFolderUpload);
@@ -1615,14 +1248,13 @@ const handleUploadConfirmResult = async (result: UploadConfirmResult) => {
     }
     await executeUploadBatch(files, {
       processConfig,
-      tagIds,
       targetFolder: result.targetFolder || ROOT_FOLDER_PATH,
       sourceInfoByItem: result.sourceInfoByItem,
     });
   }
 
   for (const url of urls) {
-    await executeUrlImport(url, processConfig, tagIds, result.sourceInfoByItem?.[`url:${url}`]);
+    await executeUrlImport(url, processConfig, result.sourceInfoByItem?.[`url:${url}`]);
   }
 };
 
@@ -1633,7 +1265,6 @@ const openUploadConfirmDialog = async (files: File[], urls: string[] = []) => {
     const result = await uploadConfirmStore.open({
       mode: 'file',
       kbInfo: kbInfo.value,
-      tagIds: [...selectedTagIds.value],
       files,
       urls,
       acceptFileTypes: acceptFileTypes.value,
@@ -1867,7 +1498,7 @@ const clearSelection = () => {
   lastSelectedIndex = -1;
 };
 
-// Batch (multi-select) mode mirrors the session list's "批量管理" UX: while off,
+// Batch selection keeps checkboxes hidden while off,
 // no checkbox is rendered so the title doesn't jitter on hover; while on,
 // checkboxes are persistent and clicking a card toggles its selection.
 const batchMode = ref(false);
@@ -1887,7 +1518,7 @@ watch(viewMode, (mode) => {
     batchMode.value = true;
   }
 });
-// Triggered from a card / row "..." menu — match the session-list UX where
+// Triggered from a card / row "..." menu. Use the batch selection flow where
 // the menu item simply opens batch mode (no auto-selection).
 const handleEnterBatchFromCard = (item: any) => {
   if (item) item.isMore = false;
@@ -1961,7 +1592,6 @@ const confirmBatchDelete = async () => {
         if (!stillPresent) break;
         await new Promise<void>((r) => setTimeout(r, delayMs));
       }
-      loadTags(kbId.value, true);
       void loadFolderTree(kbId.value);
     } else {
       MessagePlugin.error(res?.message || t('knowledgeBase.batchDeleteFailed'));
@@ -1970,35 +1600,6 @@ const confirmBatchDelete = async () => {
     MessagePlugin.error(e?.message || t('knowledgeBase.batchDeleteFailed'));
   } finally {
     batchDeleting.value = false;
-  }
-};
-
-const handleBatchTag = () => {
-  if (batchDeleting.value || batchReparsing.value || batchTagging.value || selectedIds.value.size === 0) return;
-  batchTagDialogVisible.value = true;
-};
-
-const onBatchTagConfirm = async (tagIds: string[]) => {
-  if (batchTagging.value || selectedIds.value.size === 0) return;
-  const ids = Array.from(selectedIds.value);
-  const updateMap: Record<string, string[]> = {};
-  for (const id of ids) {
-    updateMap[id] = tagIds;
-  }
-  batchTagging.value = true;
-  try {
-    await updateKnowledgeTagBatch({ updates: updateMap });
-    MessagePlugin.success(t('knowledgeBase.batchTagSuccess', { count: ids.length }));
-    batchTagDialogVisible.value = false;
-    clearSelection();
-    batchMode.value = false;
-    resetPage();
-    loadKnowledgeFiles(kbId.value);
-    loadTags(kbId.value, true);
-  } catch (e: any) {
-    MessagePlugin.error(e?.message || t('knowledgeBase.batchTagFailed'));
-  } finally {
-    batchTagging.value = false;
   }
 };
 
@@ -2069,9 +1670,9 @@ const handleListAction = (
   if (action === 'batch-manage') return handleEnterBatchFromCard(item);
 };
 
-// Clear selection on filter/tag/kb change to avoid acting on hidden items.
+// Clear selection on filter/kb change to avoid acting on hidden items.
 watch(
-  [selectedTagIds, docSearchKeyword, selectedFileType, selectedParseStatus, selectedSource, updatedTimeRange, kbId],
+  [docSearchKeyword, selectedFileType, selectedParseStatus, selectedSource, updatedTimeRange, kbId],
   () => {
     clearSelection();
   },
@@ -2096,44 +1697,13 @@ watch(cardList, () => {
 
 // 处理知识库编辑成功后的回调
 const handleKBEditorSuccess = (kbIdValue: string) => {
-  chatResources.invalidateKnowledgeBaseDetail(kbIdValue);
-  chatResources.invalidate('knowledgeBases');
+  resources.invalidateKnowledgeBaseDetail(kbIdValue);
+  resources.invalidate('knowledgeBases');
   loadKnowledgeList();
   if (kbIdValue === kbId.value) {
     loadKnowledgeBaseInfo(kbIdValue, true);
   }
 };
-
-const getTitle = (session_id: string, value: string) => {
-  const now = new Date().toISOString();
-  let obj = {
-    title: t('knowledgeBase.newSession'),
-    path: `chat/${session_id}`,
-    id: session_id,
-    isMore: false,
-    isNoTitle: true,
-    created_at: now,
-    updated_at: now
-  };
-  usemenuStore.updataMenuChildren(obj);
-  usemenuStore.changeIsFirstSession(true);
-  usemenuStore.changeFirstQuery(value);
-  router.push(`/platform/chat/${session_id}`);
-};
-
-async function createNewSession(value: string): Promise<void> {
-  // Session 不再和知识库绑定，直接创建 Session
-  createSessions({}).then(res => {
-    if (res.data && res.data.id) {
-      getTitle(res.data.id, value);
-    } else {
-      // 错误处理
-      console.error(t('knowledgeBase.createSessionFailed'));
-    }
-  }).catch(error => {
-    console.error(t('knowledgeBase.createSessionError'), error);
-  });
-}
 </script>
 
 <template>
@@ -2179,18 +1749,8 @@ async function createNewSession(value: string): Promise<void> {
             </h2>
             <!-- 标题行右侧的动作锚点：聚拢"信息"和"设置"两个圆形按钮。 -->
             <div class="kb-title-actions">
-              <t-tooltip v-if="kbId" :content="$t('knowledgeBase.strategy.title')" placement="top">
-                <button type="button" class="kb-settings-button" :aria-label="$t('knowledgeBase.strategy.title')"
-                  @click="strategyDrawerVisible = true">
-                  <t-icon name="adjustment" size="16px" />
-                </button>
-              </t-tooltip>
-              <t-tooltip v-if="kbId" :content="$t('knowledgeBase.anomalies.title')" placement="top">
-                <button type="button" class="kb-settings-button" :aria-label="$t('knowledgeBase.anomalies.title')"
-                  @click="openAnomalyWindow()">
-                  <t-icon name="error-circle" size="16px" />
-                </button>
-              </t-tooltip>
+
+
               <KBInfoPopover v-if="kbInfo" :kb-info="kbInfo"
                 :supported-file-types="[...supportedFileTypes]" />
               <t-tooltip :content="$t('knowledgeBase.settings')" placement="top">
@@ -2225,7 +1785,7 @@ async function createNewSession(value: string): Promise<void> {
             :loading="folderTreeLoading"
             @select="handleFolderSelect" @update:collapsed="handleFolderTreeCollapsedChange"
             @rename="handleFolderRename" />
-          <div class="tag-content">
+          <div class="documents-content">
             <div class="doc-card-area">
               <nav v-if="showFolderTree" class="doc-folder-path"
                 :aria-label="$t('knowledgeBase.folderTree.title')">
@@ -2266,103 +1826,7 @@ async function createNewSession(value: string): Promise<void> {
                   </template>
                 </t-input>
                 <div class="doc-filter-bar__filters">
-                <t-popup v-model:visible="tagFilterPanelVisible" trigger="click" placement="bottom-left"
-                  overlay-class-name="tag-filter-popup" :overlay-inner-style="{ padding: 0 }">
-                  <template #content>
-                    <div class="tag-filter-panel" @click.stop>
-                      <div class="tag-filter-panel__header">
-                        <div class="tag-filter-panel__title">
-                          <span>{{ $t('knowledgeBase.tagFilterTitle') }}</span>
-                          <span class="tag-filter-panel__count">({{ sidebarCategoryCount }})</span>
-                        </div>
-                      </div>
-                      <div class="tag-search-bar">
-                        <t-input v-model.trim="tagSearchQuery" size="small"
-                          :placeholder="$t('knowledgeBase.tagSearchPlaceholder')" clearable>
-                          <template #prefix-icon>
-                            <t-icon name="search" size="14px" />
-                          </template>
-                        </t-input>
-                      </div>
-                      <div class="tag-filter-panel__body">
-                        <template v-if="tagLoading && !sidebarTags.length">
-                          <div class="tag-filter-chips">
-                            <div v-for="n in 8" :key="'skel-tag-' + n" class="tag-filter-chip-skeleton">
-                              <t-skeleton animation="gradient"
-                                :row-col="[{ width: '56px', height: '24px', type: 'rect' }]" />
-                            </div>
-                          </div>
-                        </template>
-                        <template v-else>
-                          <div class="tag-filter-chips">
-                            <span v-for="tag in sidebarTags" :key="tag.id" class="tag-filter-item">
-                              <button
-                                type="button"
-                                class="tag-filter-chip"
-                                :class="{ active: isTagFilterActive(tag.id), 'is-starred': isConcreteTag(tag) && starredTagIds.has(tag.id) }"
-                                :title="`${tagLabel(tag, t)} (${tag.knowledge_count || 0})`"
-                                @click="handleTagRowClick(tag.id)"
-                              >
-                                <span class="tag-filter-chip__label">{{ tagLabel(tag, t) }}</span>
-                                <span class="tag-filter-chip__count">{{ tag.knowledge_count || 0 }}</span>
-                              </button>
-                              <button v-if="isConcreteTag(tag) && Number(tag.tenant_id) === Number(authStore.effectiveTenantId)" type="button" class="tag-star-button"
-                                :aria-label="$t(starredTagIds.has(tag.id) ? 'knowledgeBase.tagUnstarAction' : 'knowledgeBase.tagStarAction', { name: tag.name })"
-                                :aria-pressed="starredTagIds.has(tag.id)" @click.stop="toggleTagStar(tag)">
-                                <t-icon :name="starredTagIds.has(tag.id) ? 'star-filled' : 'star'" size="13px" />
-                              </button>
-                            </span>
-                          </div>
-                          <div v-if="!sidebarTags.length" class="tag-empty-state">
-                            {{ $t('knowledgeBase.tagEmptyResult') }}
-                          </div>
-                          <div v-if="tagHasMore" class="tag-load-more">
-                            <t-button variant="text" size="small" :loading="tagLoadingMore"
-                              @click.stop="kbId && loadTags(kbId)">
-                              {{ $t('common.loadMore') }}
-                            </t-button>
-                          </div>
-                        </template>
-                      </div>
-                      <div class="tag-filter-panel__footer">
-                        <t-button variant="text" size="small" class="tag-manage-link" @click="openTagManageDrawer">
-                          {{ $t('knowledgeBase.tagManageLink') }}
-                        </t-button>
-                      </div>
-                    </div>
-                  </template>
-                  <div class="doc-filter-field">
-                    <button type="button" class="doc-tag-filter-trigger doc-filter-field__control"
-                      :class="{ open: tagFilterPanelVisible, 'is-placeholder': isTagFilterPlaceholder }"
-                      :aria-label="$t('knowledgeBase.tagFilterTitle')"
-                      :title="activeTagFilterTitle"
-                      @mouseenter="tagFilterTriggerHover = true"
-                      @mouseleave="tagFilterTriggerHover = false">
-                      <span class="doc-tag-filter-trigger__prefix" aria-hidden="true">
-                        <t-icon name="discount" size="16px" />
-                      </span>
-                      <span class="doc-tag-filter-trigger__label">{{ activeTagFilterLabel }}</span>
-                      <span class="doc-tag-filter-trigger__suffix">
-                        <span
-                          v-if="showTagFilterClear"
-                          class="t-input__suffix t-input__suffix-icon t-input__clear"
-                          :aria-label="$t('common.clear')"
-                          @click.stop="clearTagFilter"
-                          @mousedown.stop
-                        >
-                          <t-icon name="close-circle-filled" class="t-input__suffix-clear" />
-                        </span>
-                        <t-icon
-                          v-else
-                          name="chevron-down"
-                          size="16px"
-                          class="doc-tag-filter-trigger__caret"
-                          :class="{ open: tagFilterPanelVisible }"
-                        />
-                      </span>
-                    </button>
-                  </div>
-                </t-popup>
+
                 <div class="doc-filter-field">
                   <t-select v-model="selectedFileType" :options="fileTypeOptions"
                     :placeholder="$t('knowledgeBase.fileTypeFilter')" class="doc-type-select doc-filter-field__control"
@@ -2462,8 +1926,6 @@ async function createNewSession(value: string): Promise<void> {
 
 
                     :trace-available-by-id="traceAvailableById"
-                    :tag-list="tagList"
-                    :starred-tag-ids="starredTagIds"
                     :move-menu-mode="moveMenuMode"
                     :move-target-kbs="moveTargetKbs"
                     :move-targets-loading="moveTargetsLoading"
@@ -2477,7 +1939,6 @@ async function createNewSession(value: string): Promise<void> {
                     @toggle-checkbox="onCardGridCheckboxChange"
                     @menu-visible-change="(visible: boolean, item: any) => onCardMoreVisibleChange(visible, item)"
                     @action="(action: any, item: any) => handleCardAction(action, item)"
-                    @tag-edit="(item: any) => openTagEditDialog(item)"
                     @move-select-target="(kb: any) => handleMoveSelectTarget(kb)"
                     @move-back="handleMoveBack"
                     @move-confirm="handleMoveConfirm"
@@ -2486,7 +1947,7 @@ async function createNewSession(value: string): Promise<void> {
                 </template>
                 <template v-else-if="(cardList.length || currentChildFolders.length) && (viewMode === 'list' || selectedParseStatus === 'rejected')">
                   <DocumentListView :items="cardList" :folders="currentChildFolders" :folder-options="folderOptions"
-                    :selected-ids="selectedIds" :tag-list="tagList" :starred-tag-ids="starredTagIds"
+                    :selected-ids="selectedIds"
 
                     :trace-visible-ids="traceAvailableById"
                     :move-menu-mode="moveMenuMode"
@@ -2501,7 +1962,6 @@ async function createNewSession(value: string): Promise<void> {
                     @open="(item: any) => openKnowledgeItem(item)" @toggle-row="toggleSelectRow"
                     @toggle-all="toggleSelectAll" @action="(action: any, item: any) => handleListAction(action, item)"
                     @probe-trace="(item: any) => probeTraceAvailable(item)"
-                    @tag-edit="(item: any) => openTagEditDialog(item)"
                     @move-select-target="(kb: any) => handleMoveSelectTarget(kb)"
                     @move-back="handleMoveBack"
                     @move-confirm="handleMoveConfirm"
@@ -2521,10 +1981,9 @@ async function createNewSession(value: string): Promise<void> {
               </div>
               <div class="doc-batch-bar-anchor" v-show="batchMode || selectedIds.size > 0">
                 <DocumentBatchBar :count="selectedIds.size" :delete-loading="batchDeleting"
-                  :reparse-loading="batchReparsing" :tag-loading="batchTagging" :visible="batchMode || selectedIds.size > 0"
+                  :reparse-loading="batchReparsing" :visible="batchMode || selectedIds.size > 0"
                   :show-move-to-folder="true" :folder-options="folderOptions"
                   @cancel="handleBatchCancel" @delete="confirmBatchDelete" @reparse="confirmBatchReparse"
-                  @batch-tag="handleBatchTag"
                   @move-to-folder="(path: string) => moveKnowledgeIntoFolder(Array.from(selectedIds), path)" />
               </div>
             </div>
@@ -2535,8 +1994,7 @@ async function createNewSession(value: string): Promise<void> {
       <!-- Document content drawer -->
       <DocContent ref="docContentRef" :visible="isCardDetails" :details="details"
         :kbId="kbId"
-        @closeDoc="closeDoc" @getDoc="getDoc" @summaryStateChange="syncDocumentSummaryState" @intake-review="handleIntakeReview"
-        @report-anomaly="openAnomalyWindow">
+        @closeDoc="closeDoc" @getDoc="getDoc" @summaryStateChange="syncDocumentSummaryState" @intake-review="handleIntakeReview">
       </DocContent>
     </div>
 
@@ -2545,79 +2003,11 @@ async function createNewSession(value: string): Promise<void> {
     :kb-id="uiStore.currentKBId || undefined" :initial-type="uiStore.kbEditorType"
     @update:visible="(val) => val ? null : uiStore.closeKBEditor()" @success="handleKBEditorSuccess" />
 
-  <!-- 标签编辑弹窗 -->
-  <TagEditDialog :visible="tagEditDialogVisible"
-    :knowledge-name="tagEditTarget?.display_name || tagEditTarget?.file_name || tagEditTarget?.title || ''"
-    :kb-id="kbId" :tag-list="tagList" :selected-tags="tagEditTarget?.tags || []"
-    @update:visible="tagEditDialogVisible = $event" @confirm="onTagEditConfirm" @tag-created="loadTags(kbId, true)"
-    @open-manage="openTagManageFromEditDialog" />
 
-  <!-- 批量打标签弹窗 -->
-  <BatchTagDialog :visible="batchTagDialogVisible"
-    :count="selectedIds.size" :kb-id="kbId" :tag-list="tagList"
-    :pre-selected-tag-ids="batchTagPreSelectedIds"
-    :confirm-loading="batchTagging"
-    @update:visible="batchTagDialogVisible = $event" @confirm="onBatchTagConfirm"
-    @tag-created="loadTags(kbId, true)" @open-manage="openTagManageFromBatchDialog" />
 
-  <KbTagManageDrawer
 
-    v-model:visible="tagManageDrawerVisible"
-    :kb-id="kbId"
-    @changed="onTagManageChanged"
-  />
-  <KnowledgeAnomaliesDrawer  ref="anomalyDrawerRef" v-model:visible="anomalyDrawerVisible" :kb-id="kbId"
-    :initial-knowledge-id="anomalyKnowledgeId" :tags="tagList"
-    @open-message="openSourceDoc"
-    @edit-tags="editAnomalyMessageTags" @changed="() => { resetPage(); loadKnowledgeFiles(kbId); loadTags(kbId, true) }" />
-  <KnowledgeStrategyDrawer v-model:visible="strategyDrawerVisible" :kb-id="kbId"
-    :selected-ids="Array.from(selectedIds)" :tags="tagList" :initial-tag-id="selectedTagIds[0] || ''"
-    @reprocessed="() => { resetPage(); loadTags(kbId, true) }" />
+
 </template>
-<style>
-/* 下拉菜单容器样式已统一至 @/assets/dropdown-menu.less */
-.tag-filter-popup {
-  z-index: 5500 !important;
-}
-
-.tag-filter-popup .t-popup__content {
-  padding: 0 !important;
-  border-radius: 8px !important;
-  background: var(--td-bg-color-container) !important;
-  border: 0.5px solid var(--td-component-stroke) !important;
-  box-shadow:
-    0 0 0 0.5px rgba(0, 0, 0, 0.03),
-    0 2px 4px rgba(0, 0, 0, 0.04),
-    0 8px 24px rgba(0, 0, 0, 0.1) !important;
-}
-
-.tag-more-popup .tag-menu {
-  display: flex;
-  flex-direction: column;
-}
-
-.tag-more-popup .tag-menu-item {
-  display: flex;
-  align-items: center;
-  padding: 8px 16px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  color: var(--td-text-color-primary);
-  font-family: var(--app-font-family);
-  font-size: 14px;
-  font-weight: 400;
-}
-
-.tag-more-popup .tag-menu-item .menu-icon {
-  margin-right: 8px;
-  font-size: 16px;
-}
-
-.tag-more-popup .tag-menu-item:hover {
-  background: var(--td-bg-color-secondarycontainer);
-  color: var(--td-text-color-primary);
-}
-</style>
 <style scoped lang="less">
 .knowledge-layout {
   display: flex;
@@ -2707,243 +2097,9 @@ async function createNewSession(value: string): Promise<void> {
   overflow-x: hidden;
 }
 
-// 标签筛选浮层：点击工具栏入口展开，不占文档列表横向空间
-.tag-filter-panel {
-  width: 320px;
-  max-width: min(320px, calc(100vw - 32px));
-  max-height: min(70vh, 480px);
-  display: flex;
-  flex-direction: column;
-  padding: 12px 14px;
-  box-sizing: border-box;
-  font-size: 12px;
-  color: var(--td-text-color-primary);
 
-  .tag-filter-panel__header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 10px;
-    padding: 0;
-    color: var(--td-text-color-primary);
-  }
 
-  .tag-filter-panel__title {
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-    font-size: 14px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-  }
-
-  .tag-filter-panel__count {
-    font-size: 12px;
-    color: var(--td-text-color-placeholder);
-    font-weight: 400;
-  }
-
-  .tag-search-bar {
-    margin-bottom: 10px;
-    padding: 0;
-
-    :deep(.t-input) {
-      font-size: 13px;
-      background-color: var(--td-bg-color-secondarycontainer);
-      border-color: transparent;
-      border-radius: 6px;
-      box-shadow: none !important;
-
-      &:hover,
-      &:focus,
-      &.t-is-focused {
-        border-color: var(--td-component-border);
-        background-color: var(--td-bg-color-container);
-        box-shadow: none !important;
-      }
-    }
-
-    :deep(.t-input__inner) {
-      font-size: 13px;
-    }
-
-    :deep(.t-input__prefix-icon) {
-      margin-right: 0;
-    }
-  }
-
-  .tag-filter-panel__body {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-    scrollbar-width: thin;
-
-    &::-webkit-scrollbar {
-      width: 4px;
-    }
-
-    &::-webkit-scrollbar-thumb {
-      border-radius: 2px;
-      background: var(--td-scrollbar-color);
-    }
-  }
-
-  .tag-filter-chips {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    gap: 6px;
-  }
-
-  .tag-filter-item {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-  }
-
-  .tag-star-button {
-    border: 0;
-    background: transparent;
-    color: var(--td-text-color-placeholder);
-    cursor: pointer;
-    padding: 2px;
-
-    &[aria-pressed='true'] {
-      color: var(--td-warning-color);
-    }
-  }
-
-  .tag-filter-chip-skeleton {
-    flex-shrink: 0;
-  }
-
-  .tag-filter-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    box-sizing: border-box;
-    max-width: 100%;
-    height: 24px;
-    padding: 0 8px;
-    border: 1px solid var(--td-component-stroke);
-    border-radius: 4px;
-    background: transparent;
-    color: var(--td-text-color-secondary);
-    font-family: var(--app-font-family);
-    font-size: 11px;
-    font-weight: 400;
-    line-height: 24px;
-    cursor: pointer;
-    outline: none;
-    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
-    -webkit-font-smoothing: antialiased;
-
-    &:hover:not(.active) {
-      border-color: var(--td-component-border);
-      background: var(--td-bg-color-secondarycontainer);
-      color: var(--td-text-color-primary);
-    }
-
-    &:focus-visible {
-      box-shadow: 0 0 0 2px color-mix(in srgb, var(--td-component-stroke) 60%, transparent);
-    }
-
-    &.active {
-      border-color: color-mix(in srgb, var(--td-brand-color) 35%, var(--td-component-stroke));
-      color: var(--td-brand-color);
-      font-weight: 500;
-      background-color: color-mix(in srgb, var(--td-brand-color) 6%, transparent);
-
-      .tag-filter-chip__count {
-        color: color-mix(in srgb, var(--td-brand-color) 72%, var(--td-text-color-secondary));
-      }
-
-      &:hover {
-        background-color: color-mix(in srgb, var(--td-brand-color) 10%, transparent);
-      }
-    }
-
-    &.is-starred {
-      border-color: var(--td-warning-color);
-      font-weight: 600;
-    }
-  }
-
-  .tag-filter-chip__label {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    max-width: 120px;
-  }
-
-  .tag-filter-chip__count {
-    flex-shrink: 0;
-    font-size: 10px;
-    font-weight: 400;
-    font-variant-numeric: tabular-nums;
-    color: var(--td-text-color-placeholder);
-
-    &::before {
-      content: '·';
-      margin-right: 2px;
-      opacity: 0.65;
-    }
-  }
-
-  .tag-filter-panel__footer {
-    margin-top: 10px;
-    padding-top: 10px;
-    border-top: 1px solid var(--td-component-stroke);
-    display: flex;
-    justify-content: flex-start;
-
-    :deep(.tag-manage-link.t-button) {
-      padding: 0;
-      height: auto;
-      min-height: 0;
-      font-size: 13px;
-      color: var(--td-text-color-secondary);
-      border: none !important;
-      background: transparent !important;
-      box-shadow: none !important;
-      transition: color 0.15s ease;
-
-      &:hover,
-      &:focus-visible {
-        color: var(--td-brand-color) !important;
-        background: transparent !important;
-        border-color: transparent !important;
-        text-decoration: none;
-      }
-    }
-  }
-
-  .tag-load-more {
-    display: flex;
-    justify-content: center;
-    padding-top: 2px;
-
-    :deep(.t-button) {
-      padding: 0;
-      font-size: 12px;
-      color: var(--td-text-color-placeholder);
-    }
-  }
-
-  .tag-empty-state {
-    text-align: center;
-    padding: 6px 0;
-    color: var(--td-text-color-placeholder);
-    font-size: 12px;
-  }
-}
-
-.tag-content {
+.documents-content {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -3116,76 +2272,6 @@ async function createNewSession(value: string): Promise<void> {
     }
   }
 
-  .doc-tag-filter-trigger {
-    display: inline-flex;
-    align-items: center;
-    box-sizing: border-box;
-    width: 100%;
-    height: 32px;
-    padding: 0 8px;
-    border: 1px solid transparent;
-    border-radius: var(--td-radius-default);
-    background: var(--td-bg-color-secondarycontainer);
-    color: var(--td-text-color-primary);
-    font-family: var(--app-font-family);
-    font-size: 14px;
-    line-height: 1;
-    cursor: pointer;
-    transition: background 0.2s ease, border-color 0.2s ease;
-
-    &:hover,
-    &.open {
-      background: var(--td-bg-color-secondarycontainer);
-      border-color: transparent;
-    }
-
-    &.is-placeholder {
-      color: var(--td-text-color-placeholder);
-    }
-
-    &__prefix {
-      flex-shrink: 0;
-      display: inline-flex;
-      align-items: center;
-      margin-right: var(--td-comp-margin-s);
-      color: var(--td-text-color-placeholder);
-    }
-
-    &__label {
-      flex: 1;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      text-align: left;
-    }
-
-    &__suffix {
-      flex-shrink: 0;
-      display: inline-flex;
-      align-items: center;
-      margin-left: var(--td-comp-margin-s);
-
-      :deep(.t-input__suffix) {
-        margin-left: 0;
-      }
-
-      :deep(.t-input__suffix-clear) {
-        font-size: 16px;
-      }
-    }
-
-    &__caret {
-      flex-shrink: 0;
-      color: var(--td-text-color-placeholder);
-      transition: transform 0.2s ease, color 0.2s ease;
-
-      &.open {
-        color: var(--td-brand-color);
-        transform: rotate(180deg);
-      }
-    }
-  }
 
   @media (min-width: 1280px) {
     .doc-search-input {
@@ -3567,105 +2653,7 @@ async function createNewSession(value: string): Promise<void> {
   }
 }
 
-.tag-filter-bar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
 
-  .tag-filter-label {
-    color: var(--td-text-color-placeholder);
-    font-size: 14px;
-  }
-}
-
-.card-tag-selector {
-  display: flex;
-  align-items: center;
-
-  .card-tag-chips {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    flex-wrap: nowrap;
-    cursor: pointer;
-  }
-
-  .card-tag-overflow {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    height: 18px;
-    min-width: 18px;
-    padding: 0 5px;
-    border-radius: 999px;
-    border: 1px solid var(--td-component-stroke);
-    color: var(--td-text-color-placeholder);
-    font-size: 10px;
-    line-height: 1;
-    cursor: pointer;
-    transition: all 0.2s ease;
-
-    &:hover {
-      border-color: var(--td-brand-color);
-      color: var(--td-brand-color);
-      background: var(--td-bg-color-secondarycontainer);
-    }
-  }
-
-  :deep(.t-tag) {
-    cursor: pointer;
-    max-width: 120px;
-    height: 18px;
-    line-height: 18px;
-    border-radius: 999px;
-    border-color: var(--td-component-stroke);
-    color: var(--td-text-color-secondary);
-    padding: 0 6px;
-    background: transparent;
-    transition: all 0.2s ease;
-
-    &:hover {
-      border-color: var(--td-brand-color);
-      color: var(--td-brand-color-active);
-      background: var(--td-bg-color-secondarycontainer);
-    }
-  }
-
-  .tag-text {
-    display: inline-block;
-    max-width: 80px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    vertical-align: middle;
-    font-size: 11px;
-  }
-
-  .card-tag-add {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    height: 18px;
-    padding: 0 6px;
-    border-radius: 999px;
-    border: 1px dashed var(--td-component-stroke);
-    color: var(--td-text-color-placeholder);
-    font-size: 11px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-
-    .t-icon {
-      font-size: 12px;
-    }
-
-    &:hover {
-      border-color: var(--td-brand-color);
-      color: var(--td-brand-color-active);
-      background: var(--td-bg-color-secondarycontainer);
-      border-style: solid;
-    }
-  }
-}
 
 .card-bottom-right {
   flex: 1 1 auto;
@@ -3732,7 +2720,7 @@ async function createNewSession(value: string): Promise<void> {
 .doc-card-list {
   box-sizing: border-box;
   display: grid;
-  // 文档卡片信息量较大（标题 + 摘要 + 标签/类型），保持稍宽的最小列宽，避免一行塞太多导致内容拥挤。
+  // 文档卡片信息量较大（标题 + 摘要 + 类型），保持稍宽的最小列宽，避免一行塞太多导致内容拥挤。
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 12px;
   align-content: flex-start;
@@ -4338,34 +3326,7 @@ async function createNewSession(value: string): Promise<void> {
     border-radius: 4px;
   }
 
-  .card-popover-tags {
-    display: inline-flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 4px;
-    max-width: 100%;
-  }
 
-  .card-popover-tag-chip {
-    max-width: 120px;
-    height: 18px;
-    line-height: 18px;
-    border-radius: 999px;
-    border-color: var(--td-component-stroke);
-    color: var(--td-text-color-secondary);
-    padding: 0 6px;
-    background: transparent;
-
-    .tag-text {
-      display: inline-block;
-      max-width: 80px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      vertical-align: middle;
-      font-size: 11px;
-    }
-  }
 
   .card-popover-type {
     padding: 1px 6px;

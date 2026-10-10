@@ -91,7 +91,6 @@ func TestDuplicateKnowledgeBase_CreatesSettingsOnlyDuplicate(t *testing.T) {
 		Description: "source description",
 		TenantID:    1,
 		CreatorID:   "source-owner",
-		IsTemporary: true,
 		ChunkingConfig: types.ChunkingConfig{
 			ChunkSize:       800,
 			ChunkOverlap:    80,
@@ -140,7 +139,6 @@ func TestDuplicateKnowledgeBase_CreatesSettingsOnlyDuplicate(t *testing.T) {
 	assert.Equal(t, 5, target.QuestionGenerationConfig.QuestionCount)
 	assert.Equal(t, source.IndexingStrategy, target.IndexingStrategy)
 
-	assert.False(t, target.IsTemporary)
 	assert.False(t, target.IsPinned)
 	assert.Nil(t, target.PinnedAt)
 	assert.Zero(t, target.KnowledgeCount)

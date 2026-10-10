@@ -26,17 +26,6 @@ type getRouteRegistrar interface {
 	GET(string, ...gin.HandlerFunc) gin.IRoutes
 }
 
-// messageFileLookup is the narrow message-service surface needed by the
-// message-scoped file proxy. Keeping it small makes the authorization boundary
-// independently testable.
-type messageFileLookup interface {
-	GetMessage(ctx context.Context, sessionID, messageID string) (*types.Message, error)
-}
-
-// sharedAgentFileLookup verifies that a source workspace's agent is still
-// shared to the caller. Revoking the share therefore also revokes historical
-// message-file access.
-
 // localStorageBaseDir resolves LOCAL_STORAGE_BASE_DIR with the container
 // default.
 func localStorageBaseDir() string {
@@ -343,117 +332,6 @@ func newKBScopedFileServeHandlerWithResources(
 		// CDNs do not cache one tenant's view for another.
 		streamStoredFile(c, reader, contentType, inline, "private, max-age=86400", "/knowledge-bases/:id/files")
 	}
-}
-
-// newMessageScopedFileServeHandler verifies session access and team ownership of message files.
-func newMessageScopedFileServeHandler(
-	messageService messageFileLookup,
-	tenantService interfaces.TenantService,
-	globalFileService interfaces.FileService,
-	resourceCatalog interfaces.ResourceCatalog) gin.HandlerFunc {
-	absDir := localStorageAbsDir()
-
-	return func(c *gin.Context) {
-		ctx := c.Request.Context()
-		filePath, ok := requireFilePathQuery(c)
-		if !ok {
-			return
-		}
-
-		callerTenantID, ok := types.TenantIDFromContext(ctx)
-		if !ok || callerTenantID == 0 {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized: workspace context missing"})
-			return
-		}
-		if messageService == nil {
-			c.Status(http.StatusNotFound)
-			return
-		}
-
-		message, err := messageService.GetMessage(ctx, c.Param("id"), c.Param("message_id"))
-		if err != nil || message == nil {
-			// Do not reveal whether a message exists outside the caller's session.
-			c.Status(http.StatusNotFound)
-			return
-		}
-
-		resolvedPath := filePath
-		var resource *types.StoredResource
-		if resourceCatalog != nil {
-			resolvedPath, resource, err = resourceCatalog.ResolvePath(ctx, filePath)
-			if err != nil {
-				c.Status(http.StatusNotFound)
-				return
-			}
-		}
-
-		ownerTenantID := callerTenantID
-		if resource != nil {
-			ownerTenantID = resource.TenantID
-
-		}
-
-		if ownerTenantID != callerTenantID {
-			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: resource outside space"})
-			return
-		}
-
-		// Registered resources carry authoritative tenant ownership. Legacy
-		// provider paths must still encode the authorized owner tenant.
-		if resource == nil {
-			if err := secutils.ValidateStoragePathTenant(resolvedPath, ownerTenantID); err != nil {
-				logger.Warnf(ctx,
-					"[Router] message files denied cross-tenant or invalid path: owner_tenant_id=%d file_path=%q err=%v",
-					ownerTenantID, resolvedPath, err)
-				c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: file path not accessible"})
-				return
-			}
-		}
-
-		ownerTenant, err := tenantService.GetTenantByID(ctx, ownerTenantID)
-		if err != nil || ownerTenant == nil {
-			c.Status(http.StatusNotFound)
-			return
-		}
-
-		fileSvc, ok := localFileService(resolvedPath, absDir, globalFileService)
-		if !ok {
-			c.Status(http.StatusBadRequest)
-			return
-		}
-
-		reader, err := fileSvc.GetFile(ctx, resolvedPath)
-		if err != nil {
-			logger.Warnf(ctx,
-				"[Router] message files get file failed: owner_tenant_id=%d provider=%s path=%q err=%v",
-				ownerTenantID, "local", resolvedPath, err)
-			c.Status(http.StatusNotFound)
-			return
-		}
-
-		contentType, inline := secutils.SafeContentTypeByFilename(resolvedPath)
-		if resource != nil && resource.MimeType != "" && inline {
-			contentType = resource.MimeType
-		}
-		streamStoredFile(c, reader, contentType, inline, "private, max-age=86400", "message files")
-	}
-}
-
-// serveMessageScopedFiles registers the authenticated proxy used by the chat
-// renderer for assistant-message resources. The chat API-key capability is
-// sufficient because GetMessage enforces ownership of the API key's session.
-func serveMessageScopedFiles(
-	r *gin.RouterGroup,
-	g *accessGuards,
-	messageService interfaces.MessageService,
-	tenantService interfaces.TenantService,
-	globalFileService interfaces.FileService,
-	resourceCatalog interfaces.ResourceCatalog) {
-	r.Handle(http.MethodGet, "/sessions/:id/messages/:message_id/files", newMessageScopedFileServeHandler(
-		messageService,
-		tenantService,
-		globalFileService,
-		resourceCatalog))
 }
 
 func servePresignedFiles(r *gin.Engine, tenantService interfaces.TenantService) {

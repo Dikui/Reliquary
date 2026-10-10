@@ -539,7 +539,7 @@ onMounted(loadAll)
   margin-top: 24px;
 }
 
-// 与 ModelSettings / ModelSettings / McpSettings 同形的提供者卡片。
+// 与 ModelSettings 同形的提供者卡片。
 // 这里整张卡是一个 button —— 单击即打开配置抽屉；active 状态用品牌色描边。
 .engine-card {
   display: flex;
@@ -619,7 +619,7 @@ onMounted(loadAll)
   white-space: nowrap;
 }
 
-// 与 McpSettings 一致的 dot+文字状态徽章。on=绿、err=红、help 用 cursor:help 提示。
+// 提供的 dot+文字状态徽章。on=绿、err=红、help 用 cursor:help 提示。
 .engine-card__status {
   flex-shrink: 0;
   display: inline-flex;

@@ -35,7 +35,6 @@ type IndexInfo struct {
 	KnowledgeID     string     // ID of the knowledge
 	KnowledgeBaseID string     // ID of the knowledge base
 	KnowledgeType   string     // Type of the knowledge (e.g., "manual", "file")
-	TagID           string     // Tag ID for categorization
 	IsEnabled       bool       // Whether the chunk is enabled for retrieval
 	IsRecommended   bool       // Whether the chunk is recommended
 }

@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 
-	"reliquary/internal/agent/tools"
+	"reliquary/internal/infrastructure/datatable"
 	"reliquary/internal/logger"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
@@ -284,13 +284,13 @@ func (s *DataTableSummaryService) resolveFileServiceForKnowledge(ctx context.Con
 // 思路：将数据处理的核心流程集中在一起，保持逻辑连贯性
 func (s *DataTableSummaryService) processTableData(ctx context.Context, resources *extractionResources) ([]*types.Chunk, error) {
 	// 创建DuckDB会话并加载数据
-	sessionID := fmt.Sprintf("table_summary_%s", resources.knowledge.ID)
+	jobID := fmt.Sprintf("table_summary_%s", resources.knowledge.ID)
 	fileSvc := s.resolveFileServiceForKnowledge(ctx, resources)
-	duckdbTool := tools.NewDataAnalysisTool(s.knowledgeBaseService, s.knowledgeService, s.tenantService, fileSvc, s.sqlDB, sessionID)
-	defer duckdbTool.Cleanup(ctx)
+	tableLoader := datatable.NewLoader(fileSvc, s.sqlDB, jobID)
+	defer tableLoader.Cleanup(ctx)
 
 	// 使用knowledge.ID作为表名，根据文件类型自动加载数据
-	tableSchema, err := duckdbTool.LoadFromKnowledge(ctx, resources.knowledge)
+	tableSchema, err := tableLoader.LoadFromKnowledge(ctx, resources.knowledge)
 	if err != nil {
 		logger.Errorf(ctx, "failed to load data into DuckDB: %v", err)
 		return nil, err
@@ -299,16 +299,7 @@ func (s *DataTableSummaryService) processTableData(ctx context.Context, resource
 	logger.Infof(ctx, "Loaded table %s with %d columns and %d rows", tableSchema.TableName, len(tableSchema.Columns), tableSchema.RowCount)
 
 	// 获取样本数据用于生成摘要
-	input := tools.DataAnalysisInput{
-		KnowledgeID: resources.knowledge.ID,
-		Sql:         fmt.Sprintf("SELECT * FROM \"%s\" LIMIT 10", tableSchema.TableName),
-	}
-	jsonData, err := json.Marshal(input)
-	if err != nil {
-		logger.Errorf(ctx, "failed to marshal input: %v", err)
-		return nil, err
-	}
-	sampleResult, err := duckdbTool.Execute(ctx, jsonData)
+	sampleRows, err := tableLoader.SampleRows(ctx, tableSchema, 10)
 	if err != nil {
 		logger.Errorf(ctx, "failed to get sample data: %v", err)
 		return nil, err
@@ -316,7 +307,7 @@ func (s *DataTableSummaryService) processTableData(ctx context.Context, resource
 
 	// 构建共用的schema和样本数据描述
 	schemaDesc := tableSchema.Description()
-	sampleDesc := s.buildSampleDataDescription(ctx, sampleResult, 10)
+	sampleDesc := s.buildSampleDataDescription(ctx, sampleRows, 10)
 
 	// 使用AI生成表格摘要和列描述
 	customInstructions := ""
@@ -527,22 +518,10 @@ func (s *DataTableSummaryService) generateColumnDescriptions(ctx context.Context
 }
 
 // buildSampleDataDescription builds a formatted sample data description
-func (s *DataTableSummaryService) buildSampleDataDescription(ctx context.Context, sampleData *types.ToolResult, maxRows int) string {
+func (s *DataTableSummaryService) buildSampleDataDescription(ctx context.Context, rawRows interface{}, maxRows int) string {
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("Sample data (first %d rows):\n", maxRows))
 
-	if sampleData == nil || sampleData.Data == nil {
-		return builder.String()
-	}
-
-	rawRows, exists := sampleData.Data["rows"]
-	if !exists || rawRows == nil {
-		return builder.String()
-	}
-
-	// DataAnalysisTool returns []map[string]string. A decoded ToolResult can
-	// instead contain []map[string]interface{}, so normalize both shapes before
-	// serializing the sample rows.
 	var rows []interface{}
 	switch typedRows := rawRows.(type) {
 	case []map[string]string:

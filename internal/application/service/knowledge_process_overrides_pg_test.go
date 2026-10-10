@@ -123,7 +123,7 @@ func newProcessOverridesPGHarness(t *testing.T) *processOverridesPGHarness {
 	queue := &processOverridesPGQueue{}
 	svc, err := service.NewKnowledgeService(db, nil, repo, kbs,
 		repository.NewTenantRepository(db), nil, processOverridesPGChunks{repo: chunks}, chunks,
-		nil, nil, files, nil, nil, queue, nil, nil, nil, nil, service.NewSpanTracker(spans, db))
+		files, nil, nil, queue, nil, nil, nil, nil, service.NewSpanTracker(spans, db))
 	require.NoError(t, err)
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
 	ctx = context.WithValue(ctx, types.TenantInfoContextKey, &types.Tenant{ID: 1})
@@ -225,7 +225,7 @@ func TestProcessOverridesPGURLFetchFailure(t *testing.T) {
 	h := newProcessOverridesPGHarness(t)
 	overrides := processOverridesPGConfig()
 	k, err := h.svc.CreateKnowledgeFromURL(h.ctx, "kb", server.URL+"/article", "", "", nil,
-		"Source article", nil, types.ChannelWeb, overrides)
+		"Source article", types.ChannelWeb, overrides)
 	require.NoError(t, err)
 	want := processOverridesPGStoredConfig(t, k)
 	require.JSONEq(t, mustProcessOverridesPGJSON(t, overrides), want)
@@ -264,7 +264,7 @@ func TestProcessOverridesPGFileFailures(t *testing.T) {
 				h.queue.err = errors.New("queue unavailable")
 			}
 			k, err := h.svc.CreateKnowledgeFromFile(h.ctx, "kb", form.File["file"][0],
-				map[string]string{"discard_on_cleanup": "source metadata"}, nil, "", nil, types.ChannelWeb, processOverridesPGConfig())
+				map[string]string{"discard_on_cleanup": "source metadata"}, nil, "", types.ChannelWeb, processOverridesPGConfig())
 			require.NoError(t, err)
 			if failure == "approved parser error" {
 				intake, err := k.IntakeMetadata()
@@ -348,7 +348,7 @@ func TestProcessOverridesPGFileURLDownloadFailure(t *testing.T) {
 	t.Cleanup(server.Close)
 	h := newProcessOverridesPGHarness(t)
 	k, err := h.svc.CreateKnowledgeFromURL(h.ctx, "kb", server.URL+"/source.json", "", "", nil,
-		"Source file", nil, types.ChannelWeb, processOverridesPGConfig())
+		"Source file", types.ChannelWeb, processOverridesPGConfig())
 	require.NoError(t, err)
 	require.Equal(t, "file_url", k.Type)
 	want := processOverridesPGStoredConfig(t, k)

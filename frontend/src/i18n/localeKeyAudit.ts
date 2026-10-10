@@ -88,7 +88,7 @@ function buildI18nLiteralPattern(): RegExp {
   const namespaces = Object.keys(enUS as Record<string, unknown>)
     .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
     .join('|')
-  // Only match object-literal values (e.g. labelKey: 'foo.bar'), not Vue bindings like :name="agent.name".
+  // Only match object-literal values (e.g. labelKey: 'foo.bar'), not Vue bindings like :name="resource.name".
   return new RegExp(`(?:[:,(]\\s*)['"]((?:${namespaces})\\.[^'"]+)['"]`, 'g')
 }
 

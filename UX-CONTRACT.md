@@ -10,7 +10,7 @@ Reliquary serves a single user collecting source material and maintaining entity
 | --- | --- |
 | Current entity terminology and component scope | CONTEXT.md and docs/adr/0009-kb-collect-store-retrieve.md |
 | Shared entity identity and article attribution | docs/adr/0002-global-entity-registry.md and the task 01 entity API contract |
-| Features retained during staged implementation | .scratch/kb-reshape/spec.md and the explicit task 01 request |
+| Features retained during staged implementation | .scratch/kb-reshape/spec.md and the explicit task 02 request |
 | Single-user access | docs/adr/0007-personal-single-user.md |
 
 ## Canonical UI Map
@@ -54,7 +54,7 @@ Settings content owns vertical scrolling. Long forms keep their natural height. 
 
 The settings-content container stacks rows at 720px or less. Shared settings-layout.less owns that breakpoint. Existing rules below 640px remain in place.
 
-Document details fill the viewport at widths of 720px or less. Desktop drawer width remains the user's preference. Narrow details hide the desktop resize handle. Long source links wrap; code and tables may keep bounded local scrolling. Anomaly links and drawers remain in this staged task.
+Document details fill the viewport at widths of 720px or less. Desktop drawer width remains the user's preference. Narrow details hide the desktop resize handle. Long source links wrap; code and tables may keep bounded local scrolling.
 
 Source lists show publisher, original URL, publication time or a missing marker, and matching method. URLs use the shared absolute HTTP(S) URL helper; unsafe values remain escaped text. Opening a different document clears old source data and ignores earlier responses.
 

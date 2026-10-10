@@ -12,9 +12,6 @@
     <a href="https://weknora.weixin.qq.com" target="_blank">
         <img alt="官方网站" src="https://img.shields.io/badge/官方网站-WeKnora-4e6b99">
     </a>
-    <a href="https://chatbot.weixin.qq.com" target="_blank">
-        <img alt="微信对话开放平台" src="https://img.shields.io/badge/微信对话开放平台-5ac725">
-    </a>
     <a href="https://chromewebstore.google.com/detail/jpemjbopikggjlmikmclgbmkhhopjdgd" target="_blank">
         <img alt="Chrome 插件" src="https://img.shields.io/badge/Chrome 插件-Reliquary-4285F4">
     </a>
@@ -35,25 +32,19 @@
   </h4>
 </p>
 
-# 💡 Reliquary：个人知识库、RAG 问答与 Agent 推理
+# 💡 Reliquary：个人知识收集、存储与检索
 
 ## 📌 项目介绍
 
-**[Reliquary（维娜拉）](https://weknora.weixin.qq.com)** 是一款开源的、基于大语言模型（LLM）的知识管理框架，专为企业级文档理解、语义检索与智能推理场景打造。
+**[Reliquary（维娜拉）](https://weknora.weixin.qq.com)** 是一款开源的、基于大语言模型（LLM）的知识管理框架，用于个人文章收集、存储、去重与检索。
 
-框架提供 **RAG 快速问答**、编排知识检索与 MCP 工具的 **ReAct Agent 智能推理**、进程内数据分析以及定时知识报告。树形文件夹、分块编辑与版本历史、RSS 订阅、站点适配器、完整访问 API Key 和模型集成共同支持个人知识管理。数据统一保存在 PostgreSQL 与本地磁盘。
+框架负责文章收集、存储、去重与检索。树形文件夹、按网址收录、RSS 订阅、站点适配器、收录审核、完整访问 API Key 和模型集成共同支持个人知识管理。数据统一保存在 PostgreSQL 与本地磁盘。综合分析和报告由外部 AI 工具完成。
 
-框架支持从 RSS 订阅和站点适配器自动同步知识，覆盖 PDF、Word、图片、Excel、EPUB 等十余种文档格式。对话模型使用 OpenAI 兼容接口、Anthropic 原生接口或本地 Ollama。服务商预设包括 OpenAI、Anthropic、DeepSeek、阿里云百炼、智谱、月之暗面、硅基流动、火山方舟、OpenRouter、Google Gemini 和 Ollama，其他服务可通过通用 OpenAI 兼容选项填写地址使用。Office 文档可由 **anydoc** 在 Go 进程内解析。全流程模块化设计，大模型可灵活配置，检索统一使用 PostgreSQL，存储支持本地磁盘，支持本地与私有云部署，数据完全自主可控。模型用量继续记录在 `model_usage` 表中。
+框架支持从 RSS 订阅和站点适配器自动同步知识，覆盖 PDF、Word、图片、Excel、EPUB 等十余种文档格式。生成模型使用 OpenAI 兼容接口、Anthropic 原生接口或本地 Ollama。服务商预设包括 OpenAI、Anthropic、DeepSeek、阿里云百炼、智谱、月之暗面、硅基流动、火山方舟、OpenRouter、Google Gemini 和 Ollama，其他服务可通过通用 OpenAI 兼容选项填写地址使用。Office 文档可由 **anydoc** 在 Go 进程内解析。全流程模块化设计，大模型可灵活配置，检索统一使用 PostgreSQL，存储支持本地磁盘，支持本地与私有云部署，数据完全自主可控。模型用量继续记录在 `model_usage` 表中。
 
 ## 📱 功能展示
 
 <table>
-      <tr>
-    <td colspan="2" align="center"><b>💬 智能问答对话</b><br/><img src="./docs/images/qa.png" alt="智能问答对话" width="100%"></td>
-  </tr>
-    <tr>
-    <td width="50%" align="center"><b>✂️ 分块编辑与版本历史</b><br/><img src="./docs/images/kb-chunk-edit.png" alt="分块编辑与版本历史" width="100%"></td>
-  </tr>
   <tr>
     <td width="50%" align="center"><b>📁 文件夹树与批量操作</b><br/><img src="./docs/images/kb-document-list.png" alt="知识库文件夹树与批量操作" width="100%"></td>
   </tr>
@@ -61,41 +52,22 @@
 
 ## 🏗️ 架构设计
 
-上游 v0.8.0 架构参考，当前支持范围见[个人使用说明](docs/personal-use.md)。
-
-![reliquary-architecture.png](./docs/images/architecture.png)
-
-从文档解析、向量化、检索到大模型推理，全流程模块化解耦，组件可灵活替换与扩展。支持本地 / 私有云部署，数据完全自主可控，零门槛 Web UI 快速上手。
+文件、网址和 RSS 文章经过收录审核、解析与分块。配置的模型生成摘要和检索索引。PostgreSQL 保存文章记录、实体、分块和搜索索引，本地磁盘保存原始文件和图片。网页提供知识检索，不生成问答。
 
 ## 🧩 功能概览
-
-**智能对话**
-
-| 能力 | 详情 |
-|------|------|
-| 智能推理 | ReACT 渐进式多步推理，自主编排知识检索、MCP 工具与数据分析 |
-| 快速问答 | 基于知识库的 RAG 问答，快速准确地回答问题 |
-| 工具调用 | 内置工具、MCP 工具（无鉴权、API Key 或 Bearer）；支持 `@MCP` 提及以按轮次范围化 Agent 运行时 |
-| 对话策略 | 在线 Prompt 编辑、检索阈值调节、多轮上下文感知、按 Agent 引用输出开关 |
-| 推荐问题 | 对话开始前展示智能体配置的推荐问题，支持预设或自动生成 |
-| 临时附件 | 会话级临时上传图片 / 文档，异步解析后用于一次性问答，支持图片与附件合并限额 |
-| 引用与 RAG 进度 | 对话内引用浮层与引用抽屉、统一 Markdown 渲染、RAG 流水线分阶段进度展示 |
-| 会话管理 | 查看历史会话与消息，支持会话标题内联重命名 |
 
 **知识管理**
 
 | 能力 | 详情 |
 |------|------|
-| 知识库类型 | 文档，支持文件夹导入、URL 导入、多标签管理、在线录入 |
+| 知识库类型 | 文档，支持文件夹导入、URL 导入和在线录入 |
 | 文件夹树 | 文件夹上传保留原始目录结构，侧栏树形浏览、重命名文件夹、把文档重新归档到其他文件夹 |
-| 分块编辑与版本历史 | 在界面直接编辑检索分块，保留逐版本快照，支持 diff 与一键回滚，编辑后自动重建索引；生成问题可增删改与重新生成；支持文档自定义元数据 |
 | 按批次解析配置 | 上传确认对话框或 `process_config` API 覆盖解析引擎、分块、图片多模态（VLM）、问题生成；支持 reparse 时调整配置 |
 | 批量重新解析 | 一次为多篇文档重新排队解析，可携带批次级 `process_config` |
 | 数据源导入 | RSS、Atom、JSON Feed 和站点适配器，支持增量与全量同步 |
 | 文档格式 | PDF / Word / Txt / Markdown / EPUB / 图片 / CSV / Excel / PPT / JSON |
-| 自动打标签 | 解析完成后从知识库已有标签中选择匹配项增量关联，不创建新标签、不覆盖人工标签 |
 | 检索策略 | BM25 稀疏召回 / Dense 稠密召回 / 父子分块 / pgvector HNSW 加速（1024 维）/ 多维度索引 |
-| 批量选择与打标签 | 知识库文档列表支持框选（marquee）多选，可批量重新解析、批量打标签（自动预选公共标签） |
+| 批量选择 | 知识库文档列表支持框选（marquee）多选，可批量重新解析和删除 |
 
 **集成与扩展**
 
@@ -106,7 +78,7 @@
 | Embedding | OpenAI 兼容接口与 Ollama；阿里云文本嵌入、智谱、硅基流动使用兼容接口 |
 | 重排 | 通用 `/rerank` 接口与阿里云百炼 |
 | 对象存储 | 本地文件系统|
-| API 集成 | 完整访问 API Key 与 API 集成调试台；`resource_urls=public` 直接返回可加载的文件与图片直链 |
+| API 集成 | 完整访问 API Key 与 API Key 管理；`resource_urls=public` 直接返回可加载的文件与图片直链 |
 
 
 **平台能力**
@@ -116,7 +88,7 @@
 | 部署 | Docker Compose，支持私有化离线部署 |
 | 界面 | Web UI / RESTful API |
 | 权限控制 | 唯一用户拥有全部权限，首次注册后关闭注册，API Key 完整访问，本地命令重置密码 |
-| 安全 | API Key 与 MCP / 数据源凭据 AES-256-GCM 静态加密、支持平滑密钥轮换；Redis TLS；防 SSRF HTTP 客户端（覆盖数据源、URL 导入、重定向链等）；密钥响应脱敏 |
+| 安全 | API Key 与数据源凭据 AES-256-GCM 静态加密、支持平滑密钥轮换；Redis TLS；防 SSRF HTTP 客户端（覆盖数据源、URL 导入、重定向链等）；密钥响应脱敏 |
 | 可观测性 | `model_usage` 模型用量、文档处理时间线、运行时任务队列与 Worker 池治理 |
 | 任务管理 | MQ 异步任务，分阶段独立 Worker 池治理（core / 后处理 / enrichment / maintenance + 弹性共享池）与按模型后台并发治理；版本升级自动数据库迁移 |
 | 模型管理 | 集中配置，YAML 声明式内置模型配置，知识库级别模型选择，按模型思考模式与 Embedding 维度覆盖，交互式模型调试器，WeKnora Cloud 托管模型与文档解析 |
@@ -158,7 +130,7 @@ docker compose up -d --build
 
 ## 📘 文档
 
-使用说明见[个人使用指南](./docs/personal-use.md)与[知识工作流说明](./docs/知识库融合说明.md)。
+使用说明见[个人使用指南](./docs/personal-use.md)与[实体档案说明](./docs/知识库融合说明.md)。
 
 常见问题排查：[常见问题排查](./docs/QA.md)
 

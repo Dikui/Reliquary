@@ -327,9 +327,6 @@ func (h *TenantHandler) GetTenantKV(c *gin.Context) {
 	case "parser-engine-config":
 		h.GetTenantParserEngineConfig(c)
 		return
-	case "chat-history-config":
-		h.GetTenantChatHistoryConfig(c)
-		return
 	case "retrieval-config":
 		h.GetTenantRetrievalConfig(c)
 		return
@@ -356,9 +353,6 @@ func (h *TenantHandler) UpdateTenantKV(c *gin.Context) {
 	switch key {
 	case "parser-engine-config":
 		h.updateTenantParserEngineConfigInternal(c)
-		return
-	case "chat-history-config":
-		h.updateTenantChatHistoryConfigInternal(c)
 		return
 	case "retrieval-config":
 		h.updateTenantRetrievalConfigInternal(c)
@@ -440,117 +434,13 @@ func (h *TenantHandler) GetPromptTemplates(c *gin.Context) {
 
 	// Build a localized copy so the original config is never mutated
 	localized := &config.PromptTemplatesConfig{
-		SystemPrompt:         config.LocalizeTemplates(templates.SystemPrompt, lang),
-		ContextTemplate:      config.LocalizeTemplates(templates.ContextTemplate, lang),
-		Rewrite:              config.LocalizeTemplates(templates.Rewrite, lang),
-		Fallback:             config.LocalizeTemplates(templates.Fallback, lang),
-		GenerateSessionTitle: templates.GenerateSessionTitle,
-		GenerateSummary:      templates.GenerateSummary,
-		KeywordsExtraction:   templates.KeywordsExtraction,
-		AgentSystemPrompt:    config.LocalizeTemplates(templates.AgentSystemPrompt, lang),
-		IntentPrompts:        config.LocalizeTemplates(templates.IntentPrompts, lang),
+		GenerateSummary:   config.LocalizeTemplates(templates.GenerateSummary, lang),
+		GenerateQuestions: config.LocalizeTemplates(templates.GenerateQuestions, lang),
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data":    localized,
-	})
-}
-
-// GetTenantChatHistoryConfig returns the tenant's chat history KB configuration.
-func (h *TenantHandler) GetTenantChatHistoryConfig(c *gin.Context) {
-	ctx := c.Request.Context()
-	tenant, _ := types.TenantInfoFromContext(ctx)
-	if tenant == nil {
-		logger.Error(ctx, "Workspace is empty")
-		c.Error(errors.NewBadRequestError("Workspace is empty"))
-		return
-	}
-	data := tenant.ChatHistoryConfig
-	if data == nil {
-		data = &types.ChatHistoryConfig{}
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    data,
-	})
-}
-
-// updateTenantChatHistoryConfigInternal updates the tenant's chat history KB configuration.
-// When enabled with an embedding model and no KB exists yet, it auto-creates a hidden KB.
-func (h *TenantHandler) updateTenantChatHistoryConfigInternal(c *gin.Context) {
-	ctx := c.Request.Context()
-
-	// The frontend sends: enabled, embedding_model_id
-	// knowledge_base_id is managed internally.
-	var req types.ChatHistoryConfig
-	if err := c.ShouldBindJSON(&req); err != nil {
-		logger.Error(ctx, "Failed to parse request parameters", err)
-		c.Error(errors.NewValidationError("Invalid request data").WithDetails(err.Error()))
-		return
-	}
-
-	tenant, _ := types.TenantInfoFromContext(ctx)
-	if tenant == nil {
-		logger.Error(ctx, "Workspace is empty")
-		c.Error(errors.NewBadRequestError("Workspace is empty"))
-		return
-	}
-
-	existing := tenant.ChatHistoryConfig
-
-	// Build the new config, preserving the internally-managed knowledge_base_id
-	cfg := &types.ChatHistoryConfig{
-		Enabled:          req.Enabled,
-		EmbeddingModelID: req.EmbeddingModelID,
-		KnowledgeBaseID:  "", // will be set below
-	}
-
-	// Carry over existing KB ID if the embedding model hasn't changed
-	if existing != nil && existing.KnowledgeBaseID != "" {
-		if existing.EmbeddingModelID == req.EmbeddingModelID {
-			cfg.KnowledgeBaseID = existing.KnowledgeBaseID
-		} else {
-			// Embedding model changed — the old KB is incompatible.
-			// We'll create a new one below. The old KB remains but is orphaned (can be cleaned up later).
-			logger.Infof(ctx, "Embedding model changed from %s to %s, will create new chat history KB", existing.EmbeddingModelID, req.EmbeddingModelID)
-		}
-	}
-
-	// Auto-create hidden KB if enabled + model set + no KB yet
-	if cfg.Enabled && cfg.EmbeddingModelID != "" && cfg.KnowledgeBaseID == "" {
-		kb := &types.KnowledgeBase{
-			Name:             "__chat_history__",
-			Type:             types.KnowledgeBaseTypeDocument,
-			IsTemporary:      true,
-			Description:      "Auto-managed knowledge base for chat history message indexing",
-			EmbeddingModelID: cfg.EmbeddingModelID,
-		}
-		createdKB, err := h.kbService.CreateKnowledgeBase(ctx, kb)
-		if err != nil {
-			logger.ErrorWithFields(ctx, err, nil)
-			c.Error(errors.NewInternalServerError("Failed to create chat history knowledge base").WithDetails(err.Error()))
-			return
-		}
-		cfg.KnowledgeBaseID = createdKB.ID
-		logger.Infof(ctx, "Auto-created chat history KB: id=%s, embedding_model=%s", createdKB.ID, cfg.EmbeddingModelID)
-	}
-
-	tenant.ChatHistoryConfig = cfg
-	updatedTenant, err := h.service.UpdateTenant(ctx, tenant)
-	if err != nil {
-		if appErr, ok := errors.IsAppError(err); ok {
-			c.Error(appErr)
-		} else {
-			logger.ErrorWithFields(ctx, err, nil)
-			c.Error(errors.NewInternalServerError("Failed to update chat history config").WithDetails(err.Error()))
-		}
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    updatedTenant.ChatHistoryConfig,
-		"message": "Chat history configuration updated successfully",
 	})
 }
 

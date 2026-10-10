@@ -132,7 +132,7 @@ func TestKnowledgeSummaryTerminalStates(t *testing.T) {
 				service := &knowledgeService{repo: repo, chunkRepo: chunkRepo,
 					chunkService: &chunkService{chunkRepository: chunkRepo}, kbService: summaryStateKBService{kb: kb},
 					modelService: models, spanTracker: tracker,
-					config: &config.Config{Conversation: &config.ConversationConfig{GenerateSummaryPrompt: "Summarize the document."}}}
+					config: &config.Config{ArticleProcessing: &config.ArticleProcessingConfig{GenerateSummaryPrompt: "Summarize the document."}}}
 				if mode == "generation" {
 					payload, marshalErr := json.Marshal(types.SummaryGenerationPayload{TenantID: 1, KnowledgeID: knowledge.ID,
 						KnowledgeBaseID: kb.ID, Attempt: attempt})
@@ -193,7 +193,7 @@ func TestSummaryRefreshSkippedCanCompleteAfterTextIsAdded(t *testing.T) {
 	queue := &metadataUpdateTaskEnqueuer{}
 	service := &knowledgeService{repo: repo, chunkRepo: chunkRepo, kbService: summaryStateKBService{kb: kb},
 		modelService: models, retrieveEngine: retriever, task: queue,
-		config: &config.Config{Conversation: &config.ConversationConfig{GenerateSummaryPrompt: "Summarize the document."}}}
+		config: &config.Config{ArticleProcessing: &config.ArticleProcessingConfig{GenerateSummaryPrompt: "Summarize the document."}}}
 	got, err := service.RegenerateKnowledgeSummary(ctx, knowledge.ID)
 	require.NoError(t, err)
 	require.Equal(t, types.SummaryStatusSkipped, got.SummaryStatus)
@@ -214,7 +214,6 @@ func TestSummaryRefreshSkippedCanCompleteAfterTextIsAdded(t *testing.T) {
 	require.NoError(t, err)
 
 	chunk.Content = "The added text contains enough details to produce a document summary."
-	chunk.ContentRevision++
 	chunk.UpdatedAt = time.Now()
 	require.NoError(t, chunkRepo.UpdateChunk(ctx, chunk))
 	kb.SummaryModelID = "summary-model"

@@ -201,14 +201,6 @@ func (g *pgRepository) KeywordsRetrieve(ctx context.Context,
 			Values: common.ToInterfaceSlice(params.KnowledgeIDs),
 		})
 	}
-	// Filter by tag IDs if specified
-	if len(params.TagIDs) > 0 {
-		logger.GetLogger(ctx).Debugf("[Postgres] Filtering by tag IDs: %v", params.TagIDs)
-		conds = append(conds, clause.IN{
-			Column: "c.tag_id",
-			Values: common.ToInterfaceSlice(params.TagIDs),
-		})
-	}
 
 	// Match only searchable text, including the generated questions in metadata.
 	conds = append(conds, clause.Expr{
@@ -222,10 +214,12 @@ func (g *pgRepository) KeywordsRetrieve(ctx context.Context,
 	})
 
 	// A chunk is the source of keyword availability, even without a vector row.
+	// Keep the parent-context exclusion explicit: ParadeDB includes heap-filter
+	// clauses in its scoring plan, and this preserves existing keyword scores.
 	conds = append(conds, clause.Expr{
 		SQL: `c.deleted_at IS NULL
 			AND (c.is_enabled IS NULL OR c.is_enabled = true)
-			AND c.index_status NOT IN ('processing', 'failed')
+			AND c.chunk_type <> 'parent_text'
 			AND c.chunk_type IN ('text', 'summary', 'image_ocr', 'image_caption', 'table_summary', 'table_column')
 			AND k.deleted_at IS NULL AND kb.deleted_at IS NULL
 			AND (kb.indexing_strategy IS NULL OR kb.indexing_strategy->>'keyword_enabled' = 'true')`,
@@ -248,7 +242,6 @@ func (g *pgRepository) KeywordsRetrieve(ctx context.Context,
 			"c.id AS chunk_id",
 			"c.knowledge_id",
 			"c.knowledge_base_id",
-			"c.tag_id",
 		}).
 		Limit(int(params.TopK)).
 		Find(&embeddingDBList).Error
@@ -343,21 +336,6 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 		whereParts = append(whereParts, fmt.Sprintf("knowledge_id IN (%s)",
 			strings.Join(placeholders, ", ")))
 	}
-	// Filter by tag IDs if specified
-	if len(params.TagIDs) > 0 {
-		logger.GetLogger(ctx).Debugf(
-			"[Postgres] Filtering vector search by tag IDs: %v",
-			params.TagIDs,
-		)
-		placeholders := make([]string, len(params.TagIDs))
-		paramStart := len(allVars) + 1
-		for i := range params.TagIDs {
-			placeholders[i] = fmt.Sprintf("$%d", paramStart+i)
-			allVars = append(allVars, params.TagIDs[i])
-		}
-		whereParts = append(whereParts, fmt.Sprintf("tag_id IN (%s)",
-			strings.Join(placeholders, ", ")))
-	}
 
 	// is_enabled filter
 	whereParts = append(whereParts, fmt.Sprintf("(is_enabled IS NULL OR is_enabled = $%d)", len(allVars)+1))
@@ -406,7 +384,7 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 	querySQL := fmt.Sprintf(`
 		SELECT 
 			e.id, c.content, c.context_header, k.title, c.metadata,
-			e.source_id, e.source_type, e.chunk_id, e.knowledge_id, e.knowledge_base_id, c.tag_id,
+			e.source_id, e.source_type, e.chunk_id, e.knowledge_id, e.knowledge_base_id,
 			(1 - candidates.distance) as score
 		FROM (
 			SELECT 
@@ -423,7 +401,6 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 		WHERE candidates.distance <= $%[4]d
 			AND c.deleted_at IS NULL
 			AND (c.is_enabled IS NULL OR c.is_enabled = true)
-			AND c.index_status NOT IN ('processing', 'failed')
 			AND c.chunk_type IN ('text', 'summary', 'image_ocr', 'image_caption', 'table_summary', 'table_column')
 			AND k.deleted_at IS NULL
 		ORDER BY candidates.distance ASC
@@ -458,7 +435,7 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 		}
 		// pgvector >= 0.8 supports iterative scan, which keeps pulling more
 		// candidates from HNSW until the post-filter (knowledge_base_id /
-		// knowledge_id / tag_id / is_enabled) yields enough rows. Without it,
+		// knowledge_id / is_enabled) yields enough rows. Without it,
 		// HNSW returns at most ef_search candidates and the outer filter may
 		// silently lose recall when the filter is selective.
 		// Best-effort: ignore failure on older pgvector versions.
@@ -607,7 +584,7 @@ func (g *pgRepository) CopyIndices(ctx context.Context,
 			}
 		}
 		var chunks []*types.Chunk
-		if err := g.db.WithContext(ctx).Select("id", "metadata", "tag_id").
+		if err := g.db.WithContext(ctx).Select("id", "metadata").
 			Where("id IN ?", chunkIDs).Find(&chunks).Error; err != nil {
 			return err
 		}
@@ -665,11 +642,6 @@ func (g *pgRepository) CopyIndices(ctx context.Context,
 				continue
 			}
 
-			targetTagID := sourceVector.TagID
-			if chunk := chunksByID[targetChunkID]; chunk != nil {
-				targetTagID = chunk.TagID
-			}
-
 			// Copy vectors and source identifiers; keyword indexing follows chunks.
 			targetVector := &pgVector{
 				SourceID:        targetSourceID, // Handle SourceID transformation properly
@@ -677,7 +649,6 @@ func (g *pgRepository) CopyIndices(ctx context.Context,
 				ChunkID:         targetChunkID,         // Update to target chunk ID
 				KnowledgeID:     targetKnowledgeID,     // Update to target knowledge ID
 				KnowledgeBaseID: targetKnowledgeBaseID, // Update to target knowledge base ID
-				TagID:           targetTagID,
 				IsEnabled:       sourceVector.IsEnabled,
 				Dimension:       sourceVector.Dimension,
 				Embedding:       sourceVector.Embedding, // Copy the vector embedding directly, avoid recalculation
@@ -763,37 +734,5 @@ func (g *pgRepository) BatchUpdateChunkEnabledStatus(ctx context.Context, chunkS
 	}
 
 	logger.GetLogger(ctx).Infof("[Postgres] Successfully batch updated chunk enabled status")
-	return nil
-}
-
-// BatchUpdateChunkTagID updates the tag ID of chunks in batch
-func (g *pgRepository) BatchUpdateChunkTagID(ctx context.Context, chunkTagMap map[string]string) error {
-	if len(chunkTagMap) == 0 {
-		logger.GetLogger(ctx).Warnf("[Postgres] Chunk tag map is empty, skipping update")
-		return nil
-	}
-
-	logger.GetLogger(ctx).Infof("[Postgres] Batch updating chunk tag ID, count: %d", len(chunkTagMap))
-
-	// Group chunks by tag ID for batch updates
-	tagGroups := make(map[string][]string)
-	for chunkID, tagID := range chunkTagMap {
-		tagGroups[tagID] = append(tagGroups[tagID], chunkID)
-	}
-
-	// Batch update chunks for each tag ID
-	for tagID, chunkIDs := range tagGroups {
-		result := g.db.WithContext(ctx).Model(&pgVector{}).
-			Where("chunk_id IN ?", chunkIDs).
-			Update("tag_id", tagID)
-		if result.Error != nil {
-			logger.GetLogger(ctx).Errorf("[Postgres] Failed to update chunks with tag_id %s: %v", tagID, result.Error)
-			return result.Error
-		}
-		logger.GetLogger(ctx).
-			Infof("[Postgres] Updated %d chunks to tag_id=%s, rows affected: %d", len(chunkIDs), tagID, result.RowsAffected)
-	}
-
-	logger.GetLogger(ctx).Infof("[Postgres] Successfully batch updated chunk tag ID")
 	return nil
 }

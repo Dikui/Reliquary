@@ -32,7 +32,6 @@ interface KnowledgeDetailResponse {
   file_name?: string
   metadata?: any
   parse_status?: string
-  tags?: Array<{ id: string }>
 }
 
 type ManualStatus = 'draft' | 'publish'
@@ -72,7 +71,6 @@ const visible = computed({
 const mode = computed(() => uiStore.manualEditorMode)
 const knowledgeId = computed(() => uiStore.manualEditorKnowledgeId)
 const currentKnowledgeId = ref<string | null>(null)
-const manualTagIds = ref<string[]>([])
 const manualSourceInfo = ref<IntakeSourceInfo>({})
 
 const form = reactive({
@@ -529,7 +527,6 @@ const loadKnowledgeContent = async () => {
       form.content = await (await previewKnowledgeFile(currentKnowledgeId.value)).text()
     }
     form.status = resolveManualKnowledgeStatus(meta?.status, data.parse_status)
-    manualTagIds.value = (data.tags || []).map(tag => String(tag.id))
     if (meta?.updatedAt) {
       lastUpdatedAt.value = meta.updatedAt
     }
@@ -558,7 +555,6 @@ const resetForm = () => {
   activeTab.value = 'edit'
   lastUpdatedAt.value = ''
   initialLoaded.value = false
-  manualTagIds.value = mode.value === 'create' ? [...uiStore.selectedTagIds] : []
   manualSourceInfo.value = {}
   selectionRange.start = 0
   selectionRange.end = 0
@@ -622,7 +618,6 @@ const handleSave = async (targetStatus: ManualStatus) => {
       title: string
       content: string
       status: string
-      tag_ids?: string[]
       process_config?: KnowledgeProcessOverrides
       source_info?: IntakeSourceInfo
     } = {
@@ -631,7 +626,6 @@ const handleSave = async (targetStatus: ManualStatus) => {
       status: targetStatus,
       source_info: { ...manualSourceInfo.value },
     }
-    payload.tag_ids = [...manualTagIds.value]
 
     if (targetStatus === 'publish') {
       let kbInfo: any
@@ -655,13 +649,10 @@ const handleSave = async (targetStatus: ManualStatus) => {
             knowledgeId: currentKnowledgeId.value || undefined,
             title: payload.title,
             content: payload.content,
-            tagIds: [...manualTagIds.value],
             sourceInfo: { ...manualSourceInfo.value },
           },
         })
         payload.process_config = confirmResult.processConfig
-        manualTagIds.value = [...(confirmResult.tagIds || [])]
-        payload.tag_ids = [...manualTagIds.value]
         payload.source_info = confirmResult.manual?.sourceInfo
         manualSourceInfo.value = { ...(payload.source_info || {}) }
       } catch {

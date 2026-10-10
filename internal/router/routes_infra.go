@@ -52,41 +52,6 @@ func RegisterInitializationRoutes(r *gin.RouterGroup, handler *handler.Initializ
 
 }
 
-func RegisterMCPServiceRoutes(
-	r *gin.RouterGroup,
-	handler *handler.MCPServiceHandler,
-	credHandler *handler.MCPCredentialsHandler,
-	g *accessGuards) {
-	mcpServices := r.Group("/mcp-services")
-	{
-		// Create MCP service
-		mcpServices.POST("", handler.CreateMCPService)
-		mcpServices.GET("", handler.ListMCPServices)
-		mcpServices.GET("/:id", handler.GetMCPService)
-		// Update MCP service
-		mcpServices.PUT("/:id", handler.UpdateMCPService)
-		// Delete MCP service
-		mcpServices.DELETE("/:id", handler.DeleteMCPService)
-		// Test MCP service connection (probes external infrastructure)
-		mcpServices.POST("/:id/test", handler.TestMCPService)
-		mcpServices.GET("/:id/tools", handler.GetMCPServiceTools)
-		mcpServices.GET("/:id/resources", handler.GetMCPServiceResources)
-		// Per-field credential subresource: secrets never travel via the main
-		// PUT body. See internal/handler/mcp_credentials.go for the contract.
-		mcpServices.PUT("/:id/credentials", credHandler.Put)
-		mcpServices.DELETE("/:id/credentials/:field", credHandler.DeleteField)
-		mcpServices.GET("/:id/tool-approvals", handler.ListMCPToolApprovals)
-		mcpServices.PUT("/:id/tool-approvals/:tool_name", handler.SetMCPToolApproval)
-	}
-
-	// /agent tool approval is an interactive human flow;
-	// not declared for API keys (default-deny).
-	agentTool := r.Group("/agent")
-	{
-		agentTool.POST("/tool-approvals/:pending_id", handler.ResolveToolApproval)
-	}
-}
-
 func RegisterDataSourceRoutes(
 	r *gin.RouterGroup,
 	handler *handler.DataSourceHandler,
@@ -126,4 +91,11 @@ func RegisterDataSourceRoutes(
 		ds.GET("/:id/logs", handler.GetSyncLogs)
 		ds.GET("/logs/:log_id", handler.GetSyncLog)
 	}
+}
+
+func RegisterUserFavoriteRoutes(r *gin.RouterGroup, h *handler.ResourceFavoriteHandler, g *accessGuards) {
+	favorites := r.Group("/user/favorites")
+	favorites.GET("", h.ListFavorites)
+	favorites.POST("", h.AddFavorite)
+	favorites.DELETE("/:type/:id", h.RemoveFavorite)
 }

@@ -70,7 +70,7 @@ func TestVisionConversationImageUploadProducesOCRAndCaption(t *testing.T) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		response := `{"approved":true,"reason":"complete sourced image","natures":["描述"],"referents":[{"kind":"topic","name":"图片验证"}]}`
+		response := `{"approved":true,"reason":"complete sourced image"}`
 		for _, message := range req.Messages {
 			if len(message.Content) == 0 || message.Content[0] != '[' {
 				continue
@@ -110,7 +110,7 @@ func TestVisionConversationImageUploadProducesOCRAndCaption(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	models := NewModelService(repository.NewModelRepository(db), nil, nil, nil, nil, nil)
+	models := NewModelService(repository.NewModelRepository(db), nil, nil, nil, nil)
 	model := &types.Model{
 		TenantID: types.SingleTenantID, Name: "vision-conversation", Type: types.ModelTypeKnowledgeQA, Source: types.ModelSourceRemote,
 		Parameters: types.ModelParameters{
@@ -136,7 +136,7 @@ func TestVisionConversationImageUploadProducesOCRAndCaption(t *testing.T) {
 	queue := &visionIntegrationQueue{}
 	fileSvc := files.NewLocalFileService(t.TempDir(), "")
 	processingModels := visionIntegrationModels{ModelService: models}
-	chunkService := NewChunkService(chunkRepo, knowledgeRepo, kbRepo, processingModels, nil, queue, nil)
+	chunkService := NewChunkService(chunkRepo, knowledgeRepo, kbRepo, processingModels, nil)
 	retrieval := &retriever.PostgresRetrievalService{RetrieveEngineService: &parentChildRetrieveEngine{}}
 	svc := &knowledgeService{
 		db: db, repo: knowledgeRepo, kbService: kbService, chunkRepo: chunkRepo, chunkService: chunkService,
@@ -149,7 +149,7 @@ func TestVisionConversationImageUploadProducesOCRAndCaption(t *testing.T) {
 	require.NoError(t, png.Encode(&pngBytes, picture))
 	knowledge, err := svc.CreateKnowledgeFromFile(ctx, kb.ID, newMultipartFileHeader(t, "vision.png", pngBytes.String()), map[string]string{
 		"author": "Image fixture author", "original_url": "https://example.com/vision.png", "published_at": "2026-10-01",
-	}, nil, "", nil, "", nil)
+	}, nil, "", "", nil)
 	require.NoError(t, err)
 	require.Len(t, queue.tasks, 1)
 	require.Equal(t, types.TypeDocumentProcess, queue.tasks[0].Type())

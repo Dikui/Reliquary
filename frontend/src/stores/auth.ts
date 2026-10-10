@@ -6,13 +6,12 @@ import i18n from '@/i18n'
 import { reloadFontFromStorage } from '@/composables/useFont'
 import { reloadThemeFromStorage } from '@/composables/useTheme'
 import { resetMigrationLatch } from '@/composables/preferenceStorage'
-import { BUILTIN_QUICK_ANSWER_ID } from '@/api/agent'
-import { useChatResourcesStore } from '@/stores/chatResources'
+import { useResourcesStore } from '@/stores/resources'
 import { useEditorResourcesStore } from '@/stores/editorResources'
 
 /** 登出时丢弃 Pinia 内的空间级资源缓存，避免 SPA 重登复用上一账号数据。 */
 function clearSessionResourceCaches() {
-  useChatResourcesStore().invalidate()
+  useResourcesStore().invalidate()
   useEditorResourcesStore().invalidate()
 }
 

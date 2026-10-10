@@ -255,10 +255,7 @@ func (s *knowledgeService) moveKnowledgeReuseVectors(
 		return fmt.Errorf("failed to move chunks: %w", err)
 	}
 
-	// 4. Update knowledge record (tags are KB-scoped; clear relations before moving)
-	if err := s.repo.DeleteKnowledgeTagRelations(ctx, knowledge.ID); err != nil {
-		return fmt.Errorf("failed to clear knowledge tag relations: %w", err)
-	}
+	// 4. Update the knowledge record.
 	knowledge.KnowledgeBaseID = targetKB.ID
 	knowledge.ParseStatus = types.ParseStatusCompleted
 	knowledge.UpdatedAt = time.Now()
@@ -283,10 +280,7 @@ func (s *knowledgeService) moveKnowledgeReparse(
 		// Continue - partial cleanup is acceptable
 	}
 
-	// 2. Update knowledge to belong to target KB (tags are KB-scoped; clear relations)
-	if err := s.repo.DeleteKnowledgeTagRelations(ctx, knowledge.ID); err != nil {
-		return fmt.Errorf("failed to clear knowledge tag relations: %w", err)
-	}
+	// 2. Assign the knowledge to the target knowledge base.
 	knowledge.KnowledgeBaseID = targetKB.ID
 	knowledge.EmbeddingModelID = targetKB.EmbeddingModelID
 	knowledge.ParseStatus = types.ParseStatusPending

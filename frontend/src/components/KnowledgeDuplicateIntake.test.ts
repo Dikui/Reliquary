@@ -11,7 +11,6 @@ import zhCN from '../i18n/locales/zh-CN';
 import enUS from '../i18n/locales/en-US';
 import * as duplicate from '../utils/knowledgeDuplicate';
 import * as folderTree from '../views/knowledge/folderTree';
-import * as tagLabel from '../views/knowledge/tagLabel';
 import * as knowledgeStatus from '../views/knowledge/knowledgeStatusPolling';
 
 const require = createRequire(import.meta.url);
@@ -43,9 +42,9 @@ function createEnvironment(locale = 'zh-CN') {
     manualEditorVisible: true, manualEditorMode: 'create', manualEditorKnowledgeId: null,
     manualEditorKBId: 'kb-a', manualEditorInitialTitle: 'New source',
     manualEditorInitialContent: 'The collected source content remains in this draft.',
-    manualEditorInitialStatus: 'draft', selectedTagIds: ['tag-a'],
+    manualEditorInitialStatus: 'draft',
     closeManualEditor() { this.manualEditorVisible = false; },
-    notifyManualEditorSuccess() {}, clearSelectedTagIds() {},
+    notifyManualEditorSuccess() {},
   };
   const state = { response: { success: true, data: { id: 'new-message' } } as any, reject: false };
   async function intake(kind: string, _kbId: string, payload: any) {
@@ -80,20 +79,19 @@ function createEnvironment(locale = 'zh-CN') {
     '@/stores/menu': { useMenuStore: () => ({}) },
     '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true, effectiveTenantId: '' }) },
     '@/stores/commandPalette': { useCommandPaletteStore: () => ({}) },
-    '@/stores/chatResources': { useChatResourcesStore: () => ({ knowledgeBases: [] }) },
+    '@/stores/resources': { useResourcesStore: () => ({ knowledgeBases: [] }) },
     '@/stores/editorResources': { useEditorResourcesStore: () => ({ parserEngines: [] }) },
-    '@/stores/uploadConfirm': { useUploadConfirmStore: () => ({ open: async () => ({ tagIds: ['tag-a'], manual: { sourceInfo: { publisher: 'Publisher A' } } }) }) },
+    '@/stores/uploadConfirm': { useUploadConfirmStore: () => ({ open: async () => ({ manual: { sourceInfo: { publisher: 'Publisher A' } } }) }) },
     '@/utils/security': { sanitizeHTML: (value: string) => value, safeMarkdownToHTML: (value: string) => value },
     '@/utils/knowledgeDuplicate': duplicate,
     '../utils/knowledgeDuplicate': duplicate,
     '../utils/index': { formatStringDate: (value: Date) => value.toISOString(), kbFileTypeVerification: () => false },
     './folderTree': folderTree,
-    './tagLabel': tagLabel,
     './knowledgeStatusPolling': knowledgeStatus,
     './knowledgeDownloadFileName': {},
     '@/utils/knowledgeTrace': {},
     './utils/uploadSources': { getUploadFileKey: (file: File) => `${file.name}\0${file.size}` },
-    '@/api/chat/index': {}, '@/api/user-favorites': {}, '@/api/knowledge-anomalies': {},
+    '@/api/user-favorites': {},
     '@/hooks/useMarqueeSelect': { useMarqueeSelect: () => ({ marqueeVisible: vue.ref(false), marqueeMode: vue.ref('select'), boxStyle: vue.ref({}), shouldSuppressClick: () => false }) },
   };
   function evaluate(code: string) {

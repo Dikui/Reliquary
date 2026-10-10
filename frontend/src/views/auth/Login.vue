@@ -153,7 +153,7 @@
 
         <div class="feature-tags">
           <span class="tag">{{ $t('platform.rag') }}</span>
-          <span class="tag">{{ $t('platform.agent') }}</span>
+
 
           <span class="tag">{{ $t('platform.hybridSearch') }}</span>
         </div>
@@ -321,7 +321,6 @@ import { useI18n } from 'vue-i18n'
 // Import screenshot images
 import screenshot1 from '@/assets/img/screenshot-1.svg'
 import screenshot2 from '@/assets/img/screenshot-2.svg'
-import screenshot4 from '@/assets/img/screenshot-4.svg'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -332,11 +331,6 @@ const modules = [Autoplay, EffectFade, Pagination]
 
 // Carousel slides data
 const slides = [
-  {
-    image: screenshot4,
-    title: t('platform.carousel.agenticRagTitle'),
-    description: t('platform.carousel.agenticRagDesc')
-  },
   {
     image: screenshot2,
     title: t('platform.carousel.hybridSearchTitle'),

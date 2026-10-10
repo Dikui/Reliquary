@@ -10,7 +10,6 @@ export interface UploadConfirmManualSource {
   knowledgeId?: string
   title: string
   content: string
-  tagIds?: string[]
   sourceInfo?: IntakeSourceInfo
 }
 
@@ -24,7 +23,6 @@ export interface UploadConfirmReparseSource {
 export interface UploadConfirmResult {
   processConfig: KnowledgeProcessOverrides
   mode: UploadConfirmMode
-  tagIds?: string[]
   files?: File[]
   urls?: string[]
   manual?: UploadConfirmManualSource
@@ -42,7 +40,6 @@ export interface UploadConfirmResult {
 export interface OpenUploadConfirmOptions {
   mode: UploadConfirmMode
   kbInfo: any
-  tagIds?: string[]
   files?: File[]
   urls?: string[]
   manual?: UploadConfirmManualSource
@@ -62,7 +59,6 @@ export const useUploadConfirmStore = defineStore('uploadConfirm', {
     kbInfo: null as any,
     files: [] as File[],
     urls: [] as string[],
-    tagIds: [] as string[],
     manual: null as UploadConfirmManualSource | null,
     reparse: null as UploadConfirmReparseSource | null,
     acceptFileTypes: '',
@@ -81,9 +77,6 @@ export const useUploadConfirmStore = defineStore('uploadConfirm', {
         this.kbInfo = options.kbInfo
         this.files = options.files ? [...options.files] : []
         this.urls = options.urls ? [...options.urls] : []
-        this.tagIds = options.tagIds
-          ? [...options.tagIds]
-          : [...(options.manual?.tagIds || [])]
         this.manual = options.manual || null
         this.reparse = options.reparse || null
         this.acceptFileTypes = options.acceptFileTypes || ''
@@ -111,7 +104,6 @@ export const useUploadConfirmStore = defineStore('uploadConfirm', {
       this.kbInfo = null
       this.files = []
       this.urls = []
-      this.tagIds = []
       this.manual = null
       this.reparse = null
       this.acceptFileTypes = ''

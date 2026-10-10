@@ -21,7 +21,6 @@ type pgVector struct {
 	ChunkID         string              `json:"chunk_id"          gorm:"column:chunk_id"`
 	KnowledgeID     string              `json:"knowledge_id"      gorm:"column:knowledge_id"`
 	KnowledgeBaseID string              `json:"knowledge_base_id" gorm:"column:knowledge_base_id"`
-	TagID           string              `json:"tag_id"            gorm:"column:tag_id;index"`
 	Dimension       int                 `json:"dimension"         gorm:"column:dimension;not null"`
 	Embedding       pgvector.HalfVector `json:"embedding"         gorm:"column:embedding;not null"`
 	IsEnabled       bool                `json:"is_enabled"        gorm:"column:is_enabled;index"`
@@ -37,7 +36,6 @@ type pgVectorWithScore struct {
 	ChunkID         string              `json:"chunk_id"          gorm:"column:chunk_id"`
 	KnowledgeID     string              `json:"knowledge_id"      gorm:"column:knowledge_id"`
 	KnowledgeBaseID string              `json:"knowledge_base_id" gorm:"column:knowledge_base_id"`
-	TagID           string              `json:"tag_id"            gorm:"column:tag_id;index"`
 	Content         string              `json:"content"           gorm:"column:content;->"`
 	ContextHeader   string              `json:"-"                 gorm:"column:context_header;->"`
 	Title           string              `json:"-"                 gorm:"column:title;->"`
@@ -66,7 +64,6 @@ func toDBVectorEmbedding(indexInfo *types.IndexInfo, additionalParams map[string
 		ChunkID:         indexInfo.ChunkID,
 		KnowledgeID:     indexInfo.KnowledgeID,
 		KnowledgeBaseID: indexInfo.KnowledgeBaseID,
-		TagID:           indexInfo.TagID,
 		// Preserve the historical default for callers that omit IsEnabled.
 		// Disabled chunks are filtered from chunks and explicit status maps win below.
 		IsEnabled: true,
@@ -122,7 +119,6 @@ func fromDBVectorEmbeddingWithScore(embedding *pgVectorWithScore, matchType type
 		ChunkID:         embedding.ChunkID,
 		KnowledgeID:     embedding.KnowledgeID,
 		KnowledgeBaseID: embedding.KnowledgeBaseID,
-		TagID:           embedding.TagID,
 		Content:         content,
 		Score:           embedding.Score,
 		MatchType:       matchType,

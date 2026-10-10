@@ -14,8 +14,6 @@ aliases: [Home, Index, wiki首页]
 
 | 页面 | 简介 |
 |------|------|
-| [MCP功能使用说明](核心功能/MCP功能使用说明.md) | MCP 服务的用户操作指南 |
-| [内置MCP服务管理](核心功能/内置MCP服务管理.md) | 内置 MCP 服务的系统级管理 |
 | [内置模型管理](核心功能/内置模型管理.md) | 内置模型的系统级管理 |
 
 ## 集成与扩展
@@ -56,8 +54,6 @@ graph TB
 
 
     核心功能 --> KG[实体档案]
-    核心功能 --> MCP[MCP功能使用说明]
-    核心功能 --> BuiltinMCP[内置MCP服务管理]
     核心功能 --> BuiltinModel[内置模型管理]
 
     集成扩展 --> DS[数据源导入开发]
@@ -70,8 +66,6 @@ graph TB
     运维排障 --> FAQ[常见问题]
 
 
-    MCP -.-> BuiltinMCP
-    BuiltinMCP -.-> BuiltinModel
     DevGuide -.-> QuickDev
     FAQ -.-> DevGuide
 ```

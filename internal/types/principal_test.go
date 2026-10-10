@@ -32,23 +32,3 @@ func TestPrincipalStorageID(t *testing.T) {
 		t.Fatalf("StorageID() = %q", got)
 	}
 }
-
-func TestSessionOwnerIDFromContextUsesAuthenticatedUser(t *testing.T) {
-	ctx := WithPrincipal(context.Background(), Principal{
-		Type: PrincipalWebUser,
-		ID:   "user-7",
-	})
-	ctx = context.WithValue(ctx, UserIDContextKey, "user-7")
-
-	if got := SessionOwnerIDFromContext(ctx); got != "user-7" {
-		t.Fatalf("SessionOwnerIDFromContext() = %q", got)
-	}
-}
-
-func TestSessionOwnerIDFromContextFallsBackToUserID(t *testing.T) {
-	ctx := context.WithValue(context.Background(), UserIDContextKey, "user-7")
-
-	if got := SessionOwnerIDFromContext(ctx); got != "user-7" {
-		t.Fatalf("SessionOwnerIDFromContext() = %q", got)
-	}
-}

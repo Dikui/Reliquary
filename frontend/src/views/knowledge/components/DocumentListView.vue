@@ -1,18 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { tagLabel, isConcreteTag } from '../tagLabel';
 import { formatFileSize, getFileIcon } from '@/utils/files';
-import { useTagChipsOverflow } from '@/composables/useTagChipsOverflow';
 import DocumentActionMenu from './DocumentActionMenu.vue';
 import FolderPickerMenu, { type FolderOption } from './FolderPickerMenu.vue';
-
-interface Tag {
-  id: string;
-  name: string;
-  kind?: string;
-  color?: string;
-}
 
 interface KnowledgeItem {
   id: string;
@@ -21,7 +12,6 @@ interface KnowledgeItem {
   file_type?: string;
   file_size?: number | string;
   type?: string;
-  tags?: Tag[];
   parse_status?: string;
   summary_status?: string;
   updated_at?: string;
@@ -35,8 +25,6 @@ const props = defineProps<{
   items: KnowledgeItem[];
   selectedIds: Set<string>;
   traceVisibleIds: Record<string, boolean>;
-  tagList: Tag[];
-  starredTagIds: Set<string>;
   loading?: boolean;
   /** Sub-folders of the folder currently being browsed. */
   folders?: Array<{ path: string; name: string; total_count: number }>;
@@ -63,7 +51,6 @@ const emit = defineEmits<{
   (e: 'toggle-all', checked: boolean): void;
   (e: 'action', action: 'download' | 'edit' | 'reparse' | 'cancel-parse' | 'move' | 'move-folder' | 'delete' | 'view-trace' | 'batch-manage', item: KnowledgeItem): void;
   (e: 'probe-trace', item: KnowledgeItem): void;
-  (e: 'tag-edit', item: KnowledgeItem): void;
   (e: 'open-folder', path: string): void;
   (e: 'move-to-folder', item: KnowledgeItem, folderPath: string): void;
   // Move sub-flow emits
@@ -75,25 +62,6 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
-const isStarredTag = (tag: Tag) => isConcreteTag(tag) && props.starredTagIds.has(tag.id);
-const displayTags = (tags?: Tag[]) => [...(tags || [])].sort((a, b) => Number(isStarredTag(b)) - Number(isStarredTag(a)));
-
-const {
-  setupTagChipsObserver,
-  getTagLimit,
-  hasTagOverflow,
-  getOverflowCount,
-} = useTagChipsOverflow('listTagItemId');
-
-const tagMap = computed(() => {
-  const map: Record<string, Tag> = {};
-  for (const tag of props.tagList) map[String(tag.id)] = tag;
-  return map;
-});
-const getTagName = (tagId?: string | number) => {
-  if (!tagId && tagId !== 0) return '';
-  return tagMap.value[String(tagId)]?.name || '';
-};
 
 const formatTime = (time?: string) => {
   if (!time) return '--';
@@ -255,7 +223,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
           :disabled="!items.length" :title="t('knowledgeBase.selectAll')" @change="onHeaderCheckboxChange" />
       </div>
       <div class="cell cell-name" role="columnheader">{{ t('knowledgeBase.columnName') }}</div>
-      <div class="cell cell-tag" role="columnheader">{{ t('knowledgeBase.columnTag') }}</div>
+
       <div class="cell cell-source" role="columnheader">{{ t('knowledgeBase.columnSource') }}</div>
       <div class="cell cell-size" role="columnheader">{{ t('knowledgeBase.columnSize') }}</div>
       <div class="cell cell-status" role="columnheader">{{ t('knowledgeBase.columnStatus') }}</div>
@@ -281,7 +249,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
             <span class="row-file-name">{{ folder.name }}</span>
           </div>
         </div>
-        <div class="cell cell-tag"></div>
+
         <div class="cell cell-source">
           <span class="row-folder-meta">
             {{ t('knowledgeBase.folderTree.folderCardCount', { count: folder.total_count }) }}
@@ -318,31 +286,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
         </div>
 
 
-        <div class="cell cell-tag">
-          <template v-if="item.tags && item.tags.length > 0">
-            <t-tooltip v-if="hasTagOverflow(item.id, (item.tags || []).length)"
-              :content="displayTags(item.tags).map((tag: Tag) => `${isStarredTag(tag) ? '★ ' : ''}${tagLabel(tag, t)}`).join(', ')" placement="top">
-              <div class="row-tag-chips is-clickable" :ref="(el: any) => setupTagChipsObserver(el, item.id, (item.tags || []).length)"
-                @click.stop="emit('tag-edit', item)">
-                <t-tag v-for="tag in displayTags(item.tags).slice(0, getTagLimit(item.id))" :key="tag.id" size="small"
-                  variant="light-outline" class="row-tag" :class="{ 'is-starred': isStarredTag(tag) }">
-                  {{ isStarredTag(tag) ? '★ ' : '' }}{{ tagLabel(tag, t) }}
-                </t-tag>
-                <span class="row-tag-overflow">+{{ getOverflowCount(item.id, (item.tags || []).length) }}</span>
-              </div>
-            </t-tooltip>
-            <div v-else class="row-tag-chips is-clickable" :ref="(el: any) => setupTagChipsObserver(el, item.id, (item.tags || []).length)"
-              @click.stop="emit('tag-edit', item)">
-              <t-tag v-for="tag in displayTags(item.tags).slice(0, getTagLimit(item.id))" :key="tag.id" size="small"
-                variant="light-outline" class="row-tag" :class="{ 'is-starred': isStarredTag(tag) }">
-                {{ isStarredTag(tag) ? '★ ' : '' }}{{ tagLabel(tag, t) }}
-              </t-tag>
-            </div>
-          </template>
-          <span v-else class="row-tag-chips is-clickable" @click.stop="emit('tag-edit', item)">
-            <span class="row-tag-add">+ {{ t('knowledgeBase.tagLabel') }}</span>
-          </span>
-        </div>
+
 
         <div class="cell cell-source">
           <t-icon class="row-source-icon" :name="getSourceInfo(item).icon" />
@@ -507,7 +451,6 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
   grid-template-columns:
     44px // checkbox
     minmax(260px, 2.6fr) // name
-    minmax(100px, 0.9fr) // tag
     minmax(96px, 0.8fr) // source
     96px // size
     minmax(96px, 0.7fr) // status
@@ -750,74 +693,10 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
   color: var(--td-text-color-secondary);
 }
 
-.row-tag {
-  max-width: 100%;
 
-  :deep(.t-tag__text) {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 120px;
-    display: inline-block;
-  }
-}
 
-.row-tag.is-starred {
-  color: var(--td-warning-color);
-  border-color: var(--td-warning-color);
-  font-weight: 600;
-}
 
-.row-tag-chips {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: nowrap;
 
-  &.is-clickable {
-    cursor: pointer;
-  }
-}
-
-.row-tag-overflow {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 20px;
-  min-width: 20px;
-  padding: 0 4px;
-  border-radius: 999px;
-  border: 1px solid var(--td-component-stroke);
-  color: var(--td-text-color-placeholder);
-  font-size: 10px;
-  line-height: 1;
-  cursor: pointer;
-  transition: all 0.2s ease;
-
-  &:hover {
-    border-color: var(--td-brand-color);
-    color: var(--td-brand-color);
-    background: var(--td-bg-color-secondarycontainer);
-  }
-}
-
-.row-tag-add {
-  font-size: 11px;
-  color: var(--td-text-color-placeholder);
-  border: 1px dashed var(--td-component-stroke);
-  border-radius: 999px;
-  padding: 0 6px;
-  height: 20px;
-  display: inline-flex;
-  align-items: center;
-  white-space: nowrap;
-
-  &:hover {
-    border-color: var(--td-brand-color);
-    color: var(--td-brand-color);
-    background: var(--td-bg-color-secondarycontainer);
-    border-style: solid;
-  }
-}
 
 .row-muted {
   color: var(--td-text-color-disabled, #bbb);

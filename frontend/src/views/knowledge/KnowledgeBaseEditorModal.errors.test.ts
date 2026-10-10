@@ -15,11 +15,11 @@ import * as modelTiers from '../../utils/modelTiers'
 const require = createRequire(import.meta.url)
 const expectedMessages: Record<'zh-CN' | 'en-US', Record<number, string>> = {
   'zh-CN': {
-    2301: '图片处理模型必须是 VLLM 模型或已开启支持视觉/多模态的对话模型。',
+    2301: '图片处理模型必须是 VLLM 模型或已开启视觉或多模态支持的生成模型。',
     2302: '图片处理模型不存在，请重新选择。',
   },
   'en-US': {
-    2301: 'Image processing requires a VLLM model or a conversation model with vision or multimodal support enabled.',
+    2301: 'Image processing requires a VLLM model or a generation model with vision or multimodal support.',
     2302: 'The image processing model was not found. Select another model.',
   },
 }
@@ -80,7 +80,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         '@/api/knowledge-base': { updateKnowledgeBase: async () => ({ success: true }) },
         '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true }) },
         '@/stores/ui': { useUIStore: () => ({}) },
-        '@/stores/chatResources': { useChatResourcesStore: () => ({ allModels: [] }) },
+        '@/stores/resources': { useResourcesStore: () => ({ allModels: [] }) },
         '@/stores/editorResources': { useEditorResourcesStore: () => ({}) },
         '@/config/editorNavigation': {}, '@/utils/modelDefaults': {}, '@/utils/clipboard': {},
         '@/utils/modelTiers': modelTiers,

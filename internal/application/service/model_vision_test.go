@@ -39,8 +39,8 @@ func TestValidateVLMConfigModelCapabilities(t *testing.T) {
 		accept bool
 	}{
 		{name: "dedicated VLLM", model: &types.Model{Type: types.ModelTypeVLLM}, accept: true},
-		{name: "vision conversation", model: &types.Model{Type: types.ModelTypeKnowledgeQA, Parameters: types.ModelParameters{SupportsVision: true}}, accept: true},
-		{name: "text conversation", model: &types.Model{Type: types.ModelTypeKnowledgeQA}},
+		{name: "vision language model", model: &types.Model{Type: types.ModelTypeKnowledgeQA, Parameters: types.ModelParameters{SupportsVision: true}}, accept: true},
+		{name: "text language model", model: &types.Model{Type: types.ModelTypeKnowledgeQA}},
 		{name: "embedding with vision flag", model: &types.Model{Type: types.ModelTypeEmbedding, Parameters: types.ModelParameters{SupportsVision: true}}},
 		{name: "missing model"},
 	} {
@@ -65,7 +65,7 @@ func TestValidateVLMConfigModelCapabilities(t *testing.T) {
 	requireVisionBadRequest(t, ValidateVLMConfig(context.Background(), visionModelServiceStub{model: &types.Model{Type: types.ModelTypeKnowledgeQA}}, types.VLMConfig{ModelID: "text-only"}))
 }
 
-func TestGetVLMModelRejectsTextOnlyConversation(t *testing.T) {
+func TestGetVLMModelRejectsTextOnlyLanguageModel(t *testing.T) {
 	ctx := newCreateKnowledgeFileContext()
 	svc := &modelService{repo: &stubModelRepoForDelete{model: &types.Model{ID: "text-only", Type: types.ModelTypeKnowledgeQA}}}
 	model, err := svc.GetVLMModel(ctx, "text-only")
@@ -103,7 +103,7 @@ func TestImageUploadRejectsTextOnlyVLMBeforeStorage(t *testing.T) {
 				kbService: &createKnowledgeFileKBServiceStub{kb: kb}, fileSvc: fileSvc, task: queue,
 				modelService: visionModelServiceStub{model: &types.Model{Type: types.ModelTypeKnowledgeQA}},
 			}
-			knowledge, err := svc.CreateKnowledgeFromFile(newCreateKnowledgeFileContext(), kb.ID, newMultipartFileHeader(t, "image.png", "png bytes"), nil, nil, "", nil, "", overrides)
+			knowledge, err := svc.CreateKnowledgeFromFile(newCreateKnowledgeFileContext(), kb.ID, newMultipartFileHeader(t, "image.png", "png bytes"), nil, nil, "", "", overrides)
 			require.Nil(t, knowledge)
 			requireVisionBadRequest(t, err)
 			require.Zero(t, fileSvc.saveCalls)

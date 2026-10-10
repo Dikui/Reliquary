@@ -61,21 +61,21 @@ func TestSummarySourceChangedDetectsMetadataDrift(t *testing.T) {
 	}
 }
 
-func TestSummarySourceChangedDetectsChunkRevisionDrift(t *testing.T) {
+func TestSummarySourceChangedDetectsChunkContentDrift(t *testing.T) {
 	t.Parallel()
 	stale, err := summarySourceChanged(
 		context.Background(),
 		&summaryStaleKnowledgeRepo{knowledge: &types.Knowledge{CustomMetadata: types.JSON(`{}`)}},
 		&summaryStaleChunkRepo{chunks: map[string]*types.Chunk{
-			"chunk-1": {ID: "chunk-1", ContentRevision: 2, IsEnabled: true},
+			"chunk-1": {ID: "chunk-1", Content: "latest body", IsEnabled: true},
 		}},
-		1, "knowledge-1", `{}`, []*types.Chunk{{ID: "chunk-1", ContentRevision: 1, IsEnabled: true}},
+		1, "knowledge-1", `{}`, []*types.Chunk{{ID: "chunk-1", Content: "earlier body", IsEnabled: true}},
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !stale {
-		t.Fatal("expected chunk revision drift to be stale")
+		t.Fatal("expected chunk content drift to be stale")
 	}
 }
 
@@ -109,10 +109,10 @@ func TestSummarySourceChangedAcceptsCurrentSnapshot(t *testing.T) {
 		context.Background(),
 		&summaryStaleKnowledgeRepo{knowledge: &types.Knowledge{CustomMetadata: types.JSON(`{"region":"Shanghai"}`)}},
 		&summaryStaleChunkRepo{chunks: map[string]*types.Chunk{
-			"chunk-1": {ID: "chunk-1", ContentRevision: 3, IsEnabled: true},
+			"chunk-1": {ID: "chunk-1", Content: "current body", IsEnabled: true},
 		}},
 		1, "knowledge-1", `{"region":"Shanghai"}`,
-		[]*types.Chunk{{ID: "chunk-1", ContentRevision: 3, IsEnabled: true}},
+		[]*types.Chunk{{ID: "chunk-1", Content: "current body", IsEnabled: true}},
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

@@ -13,19 +13,17 @@ import (
 
 func allDeploymentFeaturesAvailable() handler.DeploymentFeatureAvailability {
 	return handler.DeploymentFeatureAvailability{
-		Agents: true,
-		API:    true,
-		MCP:    true,
+		API: true,
 	}
 }
 
 func TestBuildDeploymentCapabilitiesReflectsMissingRoutes(t *testing.T) {
 	available := allDeploymentFeaturesAvailable()
-	available.MCP = false
+	available.API = false
 
 	result := handler.BuildDeploymentCapabilities("standard", available)
 
-	for _, key := range []string{"settings.mcp"} {
+	for _, key := range []string{"integrations.api"} {
 		capability := result.Capabilities[key]
 		if capability.Supported {
 			t.Fatalf("%s should be unsupported", key)
@@ -33,9 +31,6 @@ func TestBuildDeploymentCapabilitiesReflectsMissingRoutes(t *testing.T) {
 		if capability.Reason != "route_not_registered" {
 			t.Fatalf("%s reason = %q, want route_not_registered", key, capability.Reason)
 		}
-	}
-	if !result.Capabilities["integrations.api"].Supported {
-		t.Fatal("an available route should remain supported")
 	}
 }
 
@@ -64,7 +59,7 @@ func TestGetDeploymentCapabilitiesHandlerReturnsSnapshot(t *testing.T) {
 	if body.Code != 0 || body.Data.Edition != "standard" {
 		t.Fatalf("response = %#v", body)
 	}
-	if !body.Data.Capabilities["settings.mcp"].Supported {
-		t.Fatal("MCP capability should be returned")
+	if !body.Data.Capabilities["integrations.api"].Supported {
+		t.Fatal("API capability should be returned")
 	}
 }

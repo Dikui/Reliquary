@@ -247,7 +247,7 @@ import { onMounted, onUnmounted, ref, computed, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { MessagePlugin, Icon as TIcon } from 'tdesign-vue-next'
 import { deleteKnowledgeBase, duplicateKnowledgeBase, togglePinKnowledgeBase } from '@/api/knowledge-base'
-import { useChatResourcesStore } from '@/stores/chatResources'
+import { useResourcesStore } from '@/stores/resources'
 import { formatStringDate } from '@/utils/index'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
@@ -264,7 +264,7 @@ const route = useRoute()
 const uiStore = useUIStore()
 const authStore = useAuthStore()
 const { loaded: modelsReadyLoaded, isReadyForDocumentKb } = useTenantModelReadiness()
-const chatResources = useChatResourcesStore()
+const resources = useResourcesStore()
 const { t } = useI18n()
 
 // 列表默认展示整个空间的知识库，收藏和最近视图保留个人偏好。
@@ -359,7 +359,7 @@ const applyKbListData = (data: any[]) => {
     processing_count: kb.processing_count || 0
   }))
 }
-const fetchList = (force = false) => chatResources.fetchKnowledgeBasesForList(force).then(applyKbListData)
+const fetchList = (force = false) => resources.fetchKnowledgeBasesForList(force).then(applyKbListData)
 
 onMounted(() => {
   fetchList().then(() => {
@@ -685,7 +685,7 @@ const handleCreateKnowledgeBase = () => {
 const handleKBEditorSuccess = (kbId: string) => {
   console.log('[KnowledgeBaseList] knowledge operation success:', kbId)
   // 列表页编辑同样要让单 KB 详情缓存失效，否则侧栏 / 详情页 60s 内仍显示旧信息
-  chatResources.invalidateKnowledgeBaseDetail(kbId)
+  resources.invalidateKnowledgeBaseDetail(kbId)
   fetchList(true).then(() => {
     // 如果是从路由参数中获取的高亮ID，触发闪烁效果
     if (route.query.highlightKbId === kbId) {

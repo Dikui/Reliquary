@@ -77,9 +77,7 @@
                   </div>
 
                   <!-- 消息管理 -->
-                  <div v-if="currentSection === 'chathistory'" class="section">
-                    <ChatHistorySettings />
-                  </div>
+
 
 
                   <!-- 我的记忆（个人记忆管理） -->
@@ -96,9 +94,6 @@
                   <!-- 存储引擎 -->
 
                   <!-- 沙箱 -->
-
-
-                  <!-- 技能目录：登记后可装到多份沙箱，智能体只从当前沙箱的就绪集合选用 -->
 
 
                   <!-- 系统信息 -->
@@ -134,10 +129,6 @@
                     <IntegrationSettingsSection :tab="integrationTabFromSection(currentSection)" />
                   </div>
 
-                  <!-- MCP 服务 -->
-                  <div v-if="currentSection === 'mcp'" class="section">
-                    <McpSettings />
-                  </div>
               </div>
             </div>
           </div>
@@ -161,8 +152,6 @@ import UserProfile from './UserProfile.vue'
 import GeneralSettings from './GeneralSettings.vue'
 import ModelSettings from './ModelSettings.vue'
 import OllamaSettings from './OllamaSettings.vue'
-import McpSettings from './McpSettings.vue'
-import ChatHistorySettings from './ChatHistorySettings.vue'
 import ParserEngineSettings from './ParserEngineSettings.vue'
 import SystemSettings from '@/views/system/SystemSettings.vue'
 import RuntimeQueues from '@/views/system/RuntimeQueues.vue'
@@ -249,9 +238,7 @@ const navItems = computed(() => {
     { key: 'general', icon: 'setting', label: t('general.title') },
     { key: 'ollama', icon: 'server', label: 'Ollama' },
     { key: 'models', icon: 'control-platform', label: t('settings.modelManagement') },
-    { key: 'chathistory', icon: 'chat', label: t('chatHistorySettings.title') },
     { key: 'parser', icon: 'file-search', label: t('settings.parserEngine') },
-    { key: 'mcp', icon: 'tools', label: t('settings.mcpService') },
     { key: 'system', icon: 'info-circle', label: t('settings.versionInfo') },
     { key: 'system-global', icon: 'server', label: t('settings.system') },
     { key: 'runtime-queues', icon: 'queue', label: t('settings.taskQueue') },
@@ -269,7 +256,6 @@ const navGroups = computed<NavGroup[]>(() => {
   const pickItems = (keys: string[]) => keys.map((key) => itemMap.get(key)).filter(Boolean) as NavItem[]
   // 分组：账户 → 空间 → 模型 → 发布集成 → 数据与扩展 → 系统管理 → 平台
   // 关键调整：把个人偏好(general)和用户信息收进「账户」；
-  // 把空间内功能开关(chathistory)从「平台」挪到「空间」；
   // 把检索引擎和外部集成合并为「数据与扩展」，避免两个 2~3 项的窄分组。
   return [
     {
@@ -280,7 +266,7 @@ const navGroups = computed<NavGroup[]>(() => {
     {
       key: 'workspace',
       label: t('settings.navGroups.workspace'),
-      items: pickItems(['tenant', 'chathistory', ]),
+      items: pickItems(['tenant']),
     },
     {
       key: 'models_runtime',
@@ -299,7 +285,6 @@ const navGroups = computed<NavGroup[]>(() => {
       label: t('settings.navGroups.dataExtensions'),
       items: pickItems([
         'parser',
-        'mcp',
       ]),
     },
     {

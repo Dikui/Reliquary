@@ -1,20 +1,12 @@
 import assert from 'node:assert/strict'
-import { createRequire } from 'node:module'
 import * as vue from 'vue'
 import { createI18n } from 'vue-i18n'
 import RawTextarea from 'tdesign-vue-next/es/textarea/textarea.mjs'
 import { loadComponent } from '../../views/knowledge/componentTestHarness.ts'
 import zhCN from '../../i18n/locales/zh-CN.ts'
 import enUS from '../../i18n/locales/en-US.ts'
-import * as toolCapabilities from '../../utils/tool-capabilities.ts'
-import * as toolNames from '../../utils/toolNames.ts'
-import * as modelDefaults from '../../utils/modelDefaults.ts'
-import * as readiness from '../../utils/agent-readiness.ts'
-import * as navigation from '../../config/editorNavigation.ts'
-import * as settingsRoutes from '../../config/settingsRoute.ts'
 import * as autosize from '../../utils/textareaAutosize.ts'
 
-const require = createRequire(import.meta.url)
 class TestElement {
   constructor(tag, text='') {this.tag=tag;this.text=text;this.nodeType=1;this.value='';this.placeholder='';this.style={};this.props={};this.children=[];this.parent=null;this.focusCount=0;this.blurCount=0;this.clientWidth=500;this.hidden=false;this.offsetWidth=500}
   get scrollHeight(){return (String(this.value||'').split('\n').length)*24}
@@ -61,52 +53,12 @@ const register=app=>{
 }
 async function settle(){for(let i=0;i<30;i++)await vue.nextTick();await new Promise(resolve=>setImmediate(resolve))}
 function mount(component,props){const root=new TestElement('main');body.appendChild(root);const app=renderer.createApp(vue.defineComponent({setup:()=>()=>vue.h(component,props)}));register(app);app.mount(root);return {app,root}}
-const mode=process.argv[2]||'agent'
+const mode=process.argv[2]||'wrapper'
 const intentValues=[]
 const readonlyWarnings=[]
 const originalWarn=console.warn
 console.warn=(...args)=>{if(args.join(' ').includes('target is readonly'))readonlyWarnings.push(args.join(' '));else originalWarn(...args)}
-if(mode==='agent' || mode==='agent-readonly'){
-  const modules={
-    vue:vueForTemplate,'vue-router':{useRouter:()=>({push(){}})},'tdesign-vue-next':{MessagePlugin:{success(){},warning(){},error(){}}},
-    '@/utils/toolNames':toolNames,'@/config/editorNavigation':navigation,'@/utils/modelDefaults':modelDefaults,'@/utils/clipboard':{copyWithToast:async()=>{}},'@/utils/agent-readiness':readiness,'@/utils/tool-capabilities':toolCapabilities,'@/config/settingsRoute':settingsRoutes,
-    '@/api/agent':{createAgent:async()=>{},updateAgent:async()=>{}},
-    '@/stores/ui':{useUIStore:()=>vue.reactive({showSettingsModal:false,openSettings(){}})},
-    '@/stores/chatResources':{useChatResourcesStore:()=>vue.reactive({allModels:[],rawKnowledgeBases:[],ensureModels:async()=>{},ensureKnowledgeBases:async()=>{}})},
-    '@/stores/editorResources':{useEditorResourcesStore:()=>({agentTypePresets:[],promptTemplates:{intent_prompts:[{id:'search',name:'Search',content:'default intent'}]},placeholders:null,tenantRetrievalConfig:null,mcpServices:[],parserEngines:[],prefetchAgentEditorDeps:async()=>{}})},
-    '@/components/AgentAvatar.vue':empty,'@/components/PromptTemplateSelector.vue':empty,'@/components/ModelSelector.vue':empty,'@/views/knowledge/settings/KBParserSettings.vue':empty,'@/utils/zoom':{getRootZoom:()=>1,rectToCssPx:value=>value},
-  }
-  if(require('node:fs').existsSync(new URL('../SafeTextarea.vue',import.meta.url)))modules['@/components/SafeTextarea.vue']=safeTextarea()
-  const componentSource=process.env.RELIQUARY_AGENT_EDITOR_SOURCE ? new URL(`file://${process.env.RELIQUARY_AGENT_EDITOR_SOURCE}`) : new URL('../../views/agent/AgentEditorModal.vue',import.meta.url)
-  const component=loadComponent(componentSource,modules)
-  const props=vue.reactive({visible:false,mode:'edit',agent:{id:'built-in-quick-answer',name:'quick',is_builtin:false,config:{agent_mode:'quick-answer',system_prompt:'normal',context_template:'context'}},'onUpdate:visible':value=>{props.visible=value}})
-  const {app,root}=mount(component,props)
-  for(let cycle=0;cycle<3;cycle++){
-    props.visible=true;await settle()
-    const navItems=descendants(root).filter(node=>String(node.props.class).split(' ').includes('nav-item'))
-    assert.ok(navItems.length>=4, 'all editor sections must be mounted')
-    for(const nav of navItems){nav.props.onClick();await settle();assert.ok(String(nav.props.class).split(' ').includes('active'))}
-    const radios=descendants(root).find(node=>node.props['onUpdate:modelValue'] && node.props.modelValue==='quick-answer')
-    assert.ok(radios, 'mode selector must be mounted')
-    if(radios && mode!=='agent-readonly'){radios.props['onUpdate:modelValue']('smart-reasoning');await vue.nextTick();radios.props['onUpdate:modelValue']('quick-answer');await settle()}
-    if(mode==='agent-readonly'){
-      const inputs=descendants(root).filter(node=>node.tag==='textarea')
-      const textarea=inputs.find(node=>node.placeholder==='default intent')
-      assert.ok(textarea,JSON.stringify(inputs.map(n=>({value:n.value,placeholder:n.placeholder}))))
-      for(const value of ['short','']){textarea.value=value;textarea.props.onInput({target:textarea});await settle()}
-      intentValues.push(textarea.value)
-    }
-    const textarea=descendants(root).find(node=>node.tag==='textarea')
-    assert.ok(textarea, 'editor must contain an actual textarea')
-    if(mode!=='agent-readonly')textarea.props.onInput({target:{value:`last input ${cycle}`}})
-    props.visible=false;await settle()
-  }
-  app.unmount();await settle()
-  assert.ok(!measurements.includes(null))
-  if(mode==='agent-readonly'){console.log(JSON.stringify({readonlyWarnings:readonlyWarnings.length,warnings:readonlyWarnings}));assert.deepEqual(readonlyWarnings,[]);assert.ok(intentValues.every(value=>value==='default intent'),'clearing returns to the existing default template')}
-  assert.equal(observers.size,0)
-  console.log(JSON.stringify({mode,locale:process.argv[3]||'zh-CN',cycles:3,measurements:measurements.length,invalidMeasurements:measurements.filter(value=>value===null).length,resizeObserversAfterUnmount:observers.size}))
-}else if(mode==='readonly'){
+if(mode==='readonly'){
   const props=vue.reactive({modelValue:'old text',autosize:{minRows:2,maxRows:4},'onUpdate:modelValue':value=>{props.modelValue=value}})
   const {app,root}=mount(safeTextarea(),props)
   await settle()

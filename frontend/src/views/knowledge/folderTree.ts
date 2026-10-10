@@ -185,7 +185,6 @@ export function childFolders(
  */
 export function isFilteringDocuments(filters: {
   keyword?: string
-  tagIds?: string[]
   fileType?: string
   parseStatus?: string
   source?: string
@@ -193,7 +192,6 @@ export function isFilteringDocuments(filters: {
 }): boolean {
   return !!(
     filters.keyword?.trim() ||
-    filters.tagIds?.length ||
     filters.fileType ||
     filters.parseStatus ||
     filters.source ||

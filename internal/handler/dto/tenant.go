@@ -16,10 +16,8 @@ type TenantResponse struct {
 	Status             string                    `json:"status"`
 	Business           string                    `json:"business"`
 	StorageUsed        int64                     `json:"storage_used"`
-	ContextConfig      *types.ContextConfig      `json:"context_config,omitempty"`
 	ParserEngineConfig *types.ParserEngineConfig `json:"parser_engine_config,omitempty"`
 	Credentials        *types.CredentialsConfig  `json:"credentials,omitempty"`
-	ChatHistoryConfig  *types.ChatHistoryConfig  `json:"chat_history_config,omitempty"`
 	RetrievalConfig    *types.RetrievalConfig    `json:"retrieval_config,omitempty"`
 	CreatedAt          time.Time                 `json:"created_at"`
 	UpdatedAt          time.Time                 `json:"updated_at"`
@@ -38,18 +36,16 @@ func NewTenantResponseWithSecrets(tenant *types.Tenant) *TenantResponse {
 	}
 	includeSecrets := true
 	resp := &TenantResponse{
-		ID:                tenant.ID,
-		Name:              tenant.Name,
-		Description:       tenant.Description,
-		Status:            tenant.Status,
-		Business:          tenant.Business,
-		StorageUsed:       tenant.StorageUsed,
-		ContextConfig:     tenant.ContextConfig,
-		ChatHistoryConfig: tenant.ChatHistoryConfig,
-		RetrievalConfig:   tenant.RetrievalConfig,
-		CreatedAt:         tenant.CreatedAt,
-		UpdatedAt:         tenant.UpdatedAt,
-		DeletedAt:         tenant.DeletedAt,
+		ID:              tenant.ID,
+		Name:            tenant.Name,
+		Description:     tenant.Description,
+		Status:          tenant.Status,
+		Business:        tenant.Business,
+		StorageUsed:     tenant.StorageUsed,
+		RetrievalConfig: tenant.RetrievalConfig,
+		CreatedAt:       tenant.CreatedAt,
+		UpdatedAt:       tenant.UpdatedAt,
+		DeletedAt:       tenant.DeletedAt,
 	}
 	if includeSecrets {
 		resp.ParserEngineConfig = types.ParserEngineConfigForResponse(tenant.ParserEngineConfig, true)

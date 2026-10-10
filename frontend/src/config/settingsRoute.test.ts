@@ -14,7 +14,6 @@ test('every settings nav item writes only section', () => {
     buildSettingsRouteQuery('models', {
       section: 'system-global',
       tab: 'api',
-      agentId: 'agt_1',
     }),
     { section: 'models' },
   )
@@ -37,9 +36,8 @@ test('every settings nav item writes only section', () => {
     buildSettingsRouteQuery(integrationSectionKey('api'), {
       section: 'integrations',
       tab: 'api',
-      agentId: 'agt_1',
     }),
-    { section: 'integration-api', agentId: 'agt_1' },
+    { section: 'integration-api' },
   )
 })
 
@@ -78,7 +76,6 @@ test('deleted and unknown settings sections fall back to the default section', (
     assert.deepEqual(buildSettingsRouteQuery(normalizeSettingsSection(section), {
       section,
       tab: 'embed',
-      agentId: 'removed-agent',
     }), { section: 'general' })
   }
   for (const section of ['general', 'tenant', 'system-global', 'runtime-queues']) {

@@ -33,46 +33,10 @@ export function getDeploymentCapabilities(): Promise<{ data: DeploymentCapabilit
   return get('/api/v1/system/capabilities')
 }
 
-export interface PlaceholderDefinition {
-  name: string
-  label: string
-  description: string
-}
-
-export interface PromptTemplate {
-  id: string
-  name: string
-  description: string
-  content: string
-  user?: string
-  has_knowledge_base?: boolean
-  default?: boolean
-  mode?: string
-}
-
-export interface PromptTemplatesConfig {
-  system_prompt: PromptTemplate[]
-  context_template: PromptTemplate[]
-  // Rewrite templates — each template contains both content (system) + user fields
-  rewrite: PromptTemplate[]
-  // Fallback templates — fixed responses + model fallback prompts (mode: "model")
-  fallback: PromptTemplate[]
-
-  generate_session_title?: PromptTemplate[]
-  generate_summary?: PromptTemplate[]
-  keywords_extraction?: PromptTemplate[]
-  chat_summary?: PromptTemplate[]
-  agent_system_prompt?: PromptTemplate[]
-  intent_prompts?: PromptTemplate[]
-}
-
 export function getSystemInfo(): Promise<{ data: SystemInfo }> {
   return get('/api/v1/system/info')
 }
 
-export function getPromptTemplates(): Promise<{ data: PromptTemplatesConfig }> {
-  return get('/api/v1/space/kv/prompt-templates')
-}
 
 export interface ParserEngineInfo {
   Name: string
@@ -82,7 +46,7 @@ export interface ParserEngineInfo {
   UnavailableReason?: string
 }
 
-/** 解析引擎配置（引擎连接参数存空间；聊天附件解析策略在智能体中配置） */
+/** 解析引擎配置（引擎连接参数存空间） */
 export type MinerUParseMethod = 'auto' | 'ocr' | 'txt'
 
 export interface ParserEngineConfig {

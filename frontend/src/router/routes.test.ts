@@ -97,3 +97,19 @@ test('settings deep links and system shortcuts mount one settings instance', asy
     assert.match(html, /data-page="settings"/, path)
   }
 })
+
+test('login and registration return to knowledge bases and removed conversation pages show not found', async () => {
+  const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
+  for (const path of ['/', '/platform']) {
+    await router.push(path)
+    assert.equal(router.currentRoute.value.name, 'knowledgeBaseList')
+  }
+  for (const path of ['/platform/chat/old-id', '/platform/creatChat', '/platform/agents', '/platform/knowledge-bases/kb/creatChat']) {
+    await router.push(path)
+    assert.equal(router.currentRoute.value.name, 'platformNotFound', path)
+  }
+  const login = readFileSync(new URL('../views/auth/Login.vue', import.meta.url), 'utf8')
+  assert.equal((login.match(/router\.replace\('\/platform\/knowledge-bases'\)/g) || []).length, 2)
+  const navigation = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
+  assert.match(navigation, /to\.path === '\/login' && authStore\.isLoggedIn[\s\S]*next\('\/platform\/knowledge-bases'\)/)
+})

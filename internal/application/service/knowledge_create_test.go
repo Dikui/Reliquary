@@ -40,21 +40,6 @@ func (r *createKnowledgeFileRepoStub) CreateKnowledge(ctx context.Context, knowl
 	return r.createErr
 }
 
-// GetKnowledgeTags is invoked by setAndAttachKnowledgeTags after create even
-// when no tags were supplied; a fresh knowledge has none, so return empty.
-func (r *createKnowledgeFileRepoStub) GetKnowledgeTags(
-	ctx context.Context,
-	knowledgeIDs []string,
-) (map[string][]*types.KnowledgeTag, error) {
-	return map[string][]*types.KnowledgeTag{}, nil
-}
-
-type createKnowledgeFileKBServiceStub struct {
-	interfaces.KnowledgeBaseService
-
-	kb *types.KnowledgeBase
-}
-
 func (s *createKnowledgeFileKBServiceStub) GetKnowledgeBaseByID(
 	ctx context.Context,
 	id string,
@@ -146,7 +131,6 @@ func TestCreateKnowledgeFromFileDoesNotPersistWhenStorageSaveFails(t *testing.T)
 		nil,
 		nil,
 		"",
-		nil,
 		"",
 		nil,
 	)
@@ -177,7 +161,6 @@ func TestCreateKnowledgeFromFilePersistsStoredFilePathOnCreate(t *testing.T) {
 		nil,
 		nil,
 		"",
-		nil,
 		"",
 		nil,
 	)
@@ -218,7 +201,6 @@ func TestCreateKnowledgeFromImageUsesLocalStorage(t *testing.T) {
 		nil,
 		nil,
 		"",
-		nil,
 		"",
 		nil,
 	)
@@ -248,7 +230,6 @@ func TestCreateKnowledgeFromFileDeletesStoredFileWhenCreateFails(t *testing.T) {
 		nil,
 		nil,
 		"",
-		nil,
 		"",
 		nil,
 	)
@@ -286,7 +267,6 @@ func TestCreateKnowledgeFromFile_PersistsProcessOverrides(t *testing.T) {
 		map[string]string{"source": "test"},
 		nil,
 		"",
-		nil,
 		"",
 		overrides,
 	)
@@ -328,4 +308,10 @@ func newMultipartFileHeader(t *testing.T, filename string, content string) *mult
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	require.NoError(t, req.ParseMultipartForm(1024))
 	return req.MultipartForm.File["file"][0]
+}
+
+type createKnowledgeFileKBServiceStub struct {
+	interfaces.KnowledgeBaseService
+
+	kb *types.KnowledgeBase
 }

@@ -8,9 +8,8 @@ import (
 
 // GeneratedQuestion 表示AI生成的单个问题
 type GeneratedQuestion struct {
-	ID              string `json:"id"`                         // 唯一标识，用于构造 source_id
-	Question        string `json:"question"`                   // 问题内容
-	ContentRevision *int   `json:"content_revision,omitempty"` // 该问题对应的 Chunk 内容版本
+	ID       string `json:"id"`       // 唯一标识，用于构造 source_id
+	Question string `json:"question"` // 问题内容
 }
 
 const maxGeneratedQuestionSourceIDLength = 64
@@ -37,19 +36,6 @@ type DocumentChunkMetadata struct {
 	// GeneratedQuestions 存储AI为该Chunk生成的相关问题
 	// 这些问题会被独立索引以提高召回率
 	GeneratedQuestions []GeneratedQuestion `json:"generated_questions,omitempty"`
-	// GeneratedQuestionsRevision ties the questions to Chunk.ContentRevision.
-	GeneratedQuestionsRevision int `json:"generated_questions_revision,omitempty"`
-}
-
-// IsQuestionCurrent reports whether a generated question was authored for the
-// current chunk body. This is advisory metadata for the UI: questions remain
-// valid retrieval aliases across chunk edits. Legacy rows fall back to the
-// metadata-level revision.
-func (m *DocumentChunkMetadata) IsQuestionCurrent(question GeneratedQuestion, chunkRevision int) bool {
-	if question.ContentRevision != nil {
-		return *question.ContentRevision == chunkRevision
-	}
-	return m != nil && m.GeneratedQuestionsRevision == chunkRevision
 }
 
 // GetQuestionStrings 返回问题内容字符串列表（兼容旧代码）

@@ -56,10 +56,6 @@ type RetrieveEngineRepository interface {
 	// chunkStatusMap: map of chunk ID to enabled status (true = enabled, false = disabled)
 	BatchUpdateChunkEnabledStatus(ctx context.Context, chunkStatusMap map[string]bool) error
 
-	// BatchUpdateChunkTagID updates the tag ID of chunks in batch
-	// chunkTagMap: map of chunk ID to tag ID (empty string means no tag)
-	BatchUpdateChunkTagID(ctx context.Context, chunkTagMap map[string]string) error
-
 	// RetrieveEngine retrieves the engine
 	RetrieveEngine
 }
@@ -113,10 +109,6 @@ type RetrieveEngineService interface {
 	// chunkStatusMap: map of chunk ID to enabled status (true = enabled, false = disabled)
 	BatchUpdateChunkEnabledStatus(ctx context.Context, chunkStatusMap map[string]bool) error
 
-	// BatchUpdateChunkTagID updates the tag ID of chunks in batch
-	// chunkTagMap: map of chunk ID to tag ID (empty string means no tag)
-	BatchUpdateChunkTagID(ctx context.Context, chunkTagMap map[string]string) error
-
 	// RetrieveEngine retrieves the engine
 	RetrieveEngine
 }
@@ -132,6 +124,5 @@ type RetrievalService interface {
 	DeleteBySourceIDList(context.Context, []string, int, string) error
 	DeleteByKnowledgeIDList(context.Context, []string, int, string) error
 	BatchUpdateChunkEnabledStatus(context.Context, map[string]bool) error
-	BatchUpdateChunkTagID(context.Context, map[string]string) error
 	CopyIndices(context.Context, string, string, map[string]string, map[string]string, int, string) error
 }

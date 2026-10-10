@@ -69,7 +69,7 @@ for (const locale of ['zh-CN', 'en-US']) {
           './KbUploadSourceDropdown.vue': nullComponent,
           './FolderPickerMenu.vue': {default:nullComponent},
           '../folderTree': {folderOptionFromPath: (path: string) => ({path}), sortFolderOptions: (options:any)=>options},
-          '@/stores/chatResources': {useChatResourcesStore:()=>({ensureModels:async()=>{},allModels:[]})},
+          '@/stores/resources': {useResourcesStore:()=>({ensureModels:async()=>{},allModels:[]})},
           '@/stores/editorResources': {useEditorResourcesStore:()=>({parserEngines:[]})},
           '@/stores/ui': {useUIStore:()=>({openSettings(){}})},
           '@/utils/files': {formatFileSize:()=> '1 KB',getFileIcon:()=> 'file'},

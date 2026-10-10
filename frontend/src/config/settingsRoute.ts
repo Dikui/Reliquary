@@ -57,9 +57,6 @@ export function buildSettingsRouteQuery(
 ): SettingsRouteQuery {
   const query: SettingsRouteQuery = { ...(currentQuery as SettingsRouteQuery) }
   delete query.tab
-  if (!isIntegrationSection(sectionKey)) {
-    delete query.agentId
-  }
   query.section = sectionKey
   return query
 }
@@ -72,5 +69,4 @@ export function settingsQueryUnchanged(
   return String(current.section ?? '') === String(nextQuery.section ?? '')
     && current.tab == null
     && nextQuery.tab == null
-    && String(current.agentId ?? '') === String(nextQuery.agentId ?? '')
 }

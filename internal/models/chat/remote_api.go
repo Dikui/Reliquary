@@ -126,8 +126,8 @@ func (c *RemoteAPIChat) buildOutbound(
 
 	retention := resolveCacheRetention(opts)
 	policy := promptCachePolicyFor(c.provider, c.baseURL)
-	sessionID := promptCacheSessionID(ctx, opts)
-	cachedBody, forceRaw, err := applyPromptCacheToJSONBody(body, policy, sessionID, retention)
+	cacheKey := promptCacheKey(ctx, opts)
+	cachedBody, forceRaw, err := applyPromptCacheToJSONBody(body, policy, cacheKey, retention)
 	if err != nil {
 		return nil, "", false, err
 	}
@@ -210,7 +210,7 @@ func (c *RemoteAPIChat) chatWithRawHTTP(ctx context.Context, endpoint string, cu
 
 	// 注入用户自定义 header（保留头会在工具内部自动跳过）
 	secutils.ApplyCustomHeaders(httpReq, c.customHeaders)
-	attachPromptCacheHeaders(httpReq, promptCachePolicyFor(c.provider, c.baseURL), promptCacheSessionID(ctx, opts))
+	attachPromptCacheHeaders(httpReq, promptCachePolicyFor(c.provider, c.baseURL), promptCacheKey(ctx, opts))
 
 	logger.Infof(ctx, "[LLM Request] Remote HTTP, endpoint=%s, model=%s",
 		endpoint, c.modelName)
@@ -347,7 +347,7 @@ func (c *RemoteAPIChat) chatStreamWithRawHTTP(ctx context.Context, endpoint stri
 
 	// 注入用户自定义 header（保留头会在工具内部自动跳过）
 	secutils.ApplyCustomHeaders(httpReq, c.customHeaders)
-	attachPromptCacheHeaders(httpReq, promptCachePolicyFor(c.provider, c.baseURL), promptCacheSessionID(ctx, opts))
+	attachPromptCacheHeaders(httpReq, promptCachePolicyFor(c.provider, c.baseURL), promptCacheKey(ctx, opts))
 
 	resp, err := rawHTTPClient.Do(httpReq)
 	if err != nil {

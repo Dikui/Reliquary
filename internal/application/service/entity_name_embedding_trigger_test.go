@@ -83,7 +83,7 @@ func TestKnowledgeBaseNameEmbeddingTriggersAfterCommittedChanges(t *testing.T) {
 
 func TestEmbeddingModelUpdateTriggersCurrentTeamProfileOnly(t *testing.T) {
 	db, ctx := nameEmbeddingTriggerDB(t)
-	svc := NewModelServiceWithRoutingDB(repository.NewModelRepository(db), nil, nil, nil, nil, nil, db).(*modelService)
+	svc := NewModelServiceWithRoutingDB(repository.NewModelRepository(db), nil, nil, nil, nil, db).(*modelService)
 	spy := &nameEmbeddingTriggerSpy{}
 	svc.SetNameEmbeddingRebuilder(spy)
 	var model types.Model

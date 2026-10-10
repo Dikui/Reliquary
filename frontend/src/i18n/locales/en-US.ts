@@ -1,4 +1,14 @@
 export default {
+  menu: {
+    batchManage: 'Batch manage',
+  "knowledgeBase": "Knowledge bases",
+  "settings": "System settings",
+  "logout": "Logout",
+  "search": "Search",
+  "collapseSidebar": "Collapse sidebar",
+  "expandSidebar": "Expand sidebar",
+  "logoutSuccess": "Logged out successfully"
+},
   navigation: {
     removedFeature: 'This feature has been removed. You have been returned to the knowledge base list.',
     pageNotFound: 'Page not found',
@@ -21,8 +31,8 @@ export default {
     "entity_resolution": "Entity resolution"
   },
   "uses": {
-    "light": "Screening, tags, attention scoring and entity judgment",
-    "generation": "Generate answers",
+    "light": "Intake review and entity judgment",
+    "generation": "Generate summaries and retrieval questions",
     "embedding": "Document retrieval and entity name similarity",
     "rerank": "Rank retrieved results",
     "entity_resolution": "Determine whether entity candidates belong to existing entities"
@@ -38,7 +48,7 @@ export default {
   "useDefault": "Use existing defaults",
   "effective": "Current model: {model} ({source})",
   "unconfigured": "No model configured",
-  "explicitChoice": "Explicit model choices in conversations take precedence. Otherwise use the generation tier.",
+  "explicitChoice": "Summaries and retrieval questions use the generation model tier.",
   "loadFailed": "Could not load model configuration. Try again.",
   "saveFailed": "Could not save model configuration. Try again.",
   "saved": "Model tiers saved",
@@ -83,55 +93,11 @@ export default {
     "entity_resolution": "Entity identity resolution",
     "entity_embedding": "Entity name embedding",
     "entity_embedding_rebuild": "Entity name embedding rebuild",
-    "attention": "Attention value scoring",
-    "intake": "Filtering and tags",
-    "classification": "Filtering and tags",
-    "auto_tag": "Tag classification",
-    "filter": "Message filtering",
+    "intake": "Intake review",
+    "filter": "Intake review",
     "generation": "Content generation"
   }
 },
-
-  knowledgeStrategy: {
-    "evaluation": {
-      "title": "Filter evaluation",
-      "intro": "Label original messages and compare previous and candidate filters on development and holdout sets. Keep holdout out of tuning. Evaluation does not activate rules.",
-      "format": "One per line: knowledge_id, select|reject|either, development|holdout",
-      "run": "Evaluate this version",
-      "result": "Evaluation results",
-      "invalidCount": "Enter between 1 and 20 sample rows.",
-      "invalidFormat": "Each row must contain an ID, a valid label, and a valid split.",
-      "duplicateIDs": "Each knowledge ID can appear only once.",
-      "countedSamples": "{count} sample counted in metrics | {count} samples counted in metrics",
-    "allSamples": "The {count} sample | All {count} samples",
-    "tp": "Correctly selected",
-    "fp": "Incorrectly selected",
-    "fn": "Missed selection",
-    "tn": "Correctly rejected",
-    "correct": "Correct",
-    "incorrect": "Incorrect",
-    "notCounted": "Not counted",
-      "old": "Previous rules",
-      "new": "Candidate rules",
-      "precision": "Precision",
-      "recall": "Recall",
-      "mistakes": "{count} example with a wrong decision | {count} examples with a wrong decision",
-      "note": "“Either” samples are shown but excluded from counts. Precision or recall is — when its denominator is zero.",
-      "labels": {
-        "select": "Select",
-        "reject": "Reject",
-        "either": "Either"
-      },
-      "splits": {
-        "development": "Development set",
-        "holdout": "Holdout set"
-      },
-      "decisions": {
-        "approved": "Approved",
-        "rejected": "Rejected"
-      }
-    }
-  },
   knowledgeWorkbench: {
   "tabLabel": "Entities",
   "title": "Entities",
@@ -216,71 +182,6 @@ export default {
     "mergeSaved": "Entities merged"
   }
 },
-  menu: {
-    knowledgeBase: 'Knowledge Base',
-    agents: 'Agents',
-    newChat: 'New Chat',
-    settings: 'System Settings',
-    logout: 'Logout',
-    clearMessages: 'Clear Messages',
-    clearMessagesSuccess: 'Messages cleared',
-    clearMessagesFailed: 'Failed to clear messages, please try again later',
-    renameSession: 'Rename',
-    renameSessionSuccess: 'Title updated',
-    renameSessionFailed: 'Failed to update title, please try again later',
-    batchManage: 'Batch Manage',
-    newSession: 'New Chat',
-    pin: 'Pin',
-    unpin: 'Unpin',
-    pinFailed: 'Failed to pin, please try again later',
-    unpinFailed: 'Failed to unpin, please try again later',
-    search: 'Search',
-    collapseSidebar: 'Collapse Sidebar',
-    expandSidebar: 'Expand Sidebar',
-    logoutSuccess: 'Logged out successfully',
-    myChats: 'My chats',
-    apiChats: 'API sessions',
-    noSessions: 'No conversations yet'
-  },
-  chatHeader: {
-    moreActions: 'More conversation actions',
-    copySessionId: 'Copy Session ID',
-    copyLink: 'Copy Conversation Link',
-    copyMarkdown: 'Copy as Markdown',
-    openNewWindow: 'Open in New Window',
-    deleteSession: 'Delete Conversation',
-    renamePlaceholder: 'Enter a conversation title',
-    unpinSuccess: 'Conversation unpinned',
-    pinSuccess: 'Conversation pinned',
-    sessionIdCopied: 'Session ID copied',
-    linkCopied: 'Conversation link copied',
-    copyFailed: 'Copy failed. Check your browser clipboard permission.',
-    markdownCopied: 'Full conversation copied as Markdown',
-    markdownCopyFailed: 'Failed to copy Markdown. Please try again.',
-    clearConfirmTitle: 'Clear Conversation Messages',
-    clearConfirmBody: 'Clear all messages in this conversation? The conversation will remain, but this cannot be undone.',
-    deleteConfirmTitle: 'Delete Conversation',
-    deleteConfirmBody: 'Delete this conversation? This cannot be undone.',
-    deleteSuccess: 'Conversation deleted',
-    markdown: {
-      sessionId: 'Session ID',
-      exportedAt: 'Exported at',
-      user: 'User',
-      assistant: 'Assistant',
-      attachments: 'Attachments',
-      references: 'References'
-    }
-  },
-  batchManage: {
-    selectAll: 'Select All',
-    cancel: 'Cancel',
-    delete: 'Delete Conversations',
-    deleteConfirmTitle: 'Delete Conversations',
-    deleteConfirmBody: 'Are you sure you want to delete the selected {count} conversation? This action cannot be undone. | Are you sure you want to delete the selected {count} conversations? This action cannot be undone.',
-    deleteAllConfirmBody: 'Are you sure you want to delete all conversations? This action cannot be undone.',
-    deleteSuccess: 'Deleted successfully',
-    deleteFailed: 'Delete failed, please try again later'
-  },
   listSpaceSidebar: {
     all: 'All',
     workspace: 'Workspace',
@@ -322,12 +223,6 @@ export default {
     name: 'Name',
     description: 'Description',
     settings: 'Settings',
-    tagUpdateSuccess: 'Tag updated successfully',
-    tagEditDialogHeading: 'Edit tags',
-    tagEditSearch: 'Search tags...',
-    tagEditSelectedSection: 'Selected',
-    tagEditAvailableSection: 'Available',
-    tagEditNoSelected: 'None selected',
     folderTree: {
       title: 'Folders',
       rootRow: 'Root',
@@ -360,67 +255,7 @@ export default {
       failed: 'Could not move the documents',
       duplicate: 'That folder already exists',
     },
-    tagFilterTitle: 'Filter by tag',
-    tagFilterPlaceholder: 'Tags',
-    tagFilterMulti: '{count} tag | {count} tags',
-    tagManageTitle: 'Manage tags',
-    tagManageDescription: 'Create, rename, or delete knowledge base tags',
-    tagManageLink: 'Manage tags…',
-    tagManageListSection: 'Tags',
-    tagManageDocCount: '{count} document | {count} documents',
-    tagSelectedCount: '{count} selected',
-    tagNewPlaceholder: 'New tag name, press Enter to add',
-    untagged: 'Untagged',
-    tagClearAction: 'Clear selection',
-    tagCreateAction: 'Create tag',
-    tagSearchPlaceholder: 'Type to filter tags',
-    tagNamePlaceholder: 'Enter tag name',
-    tagNameRequired: 'Please provide a tag name',
-    tagCreateSuccess: 'Tag created',
-    tagEditSuccess: 'Tag updated',
-    tagDeleteDescDoc: 'Delete tag "{name}" and its associations? Messages and images will be kept.',
-    tagKindLabel: 'Tag category',
-    tagKindNature: 'Content kind',
-    tagKindTopic: 'Topic',
-    tagKindObject: "Entity",
-    tagKindEvent: 'Event',
-    tagStarAction: 'Star {name}',
-    tagUnstarAction: 'Unstar {name}',
     searchMessageContent: 'Search message content',
-    anomalies: {
-      title: 'Message issues', report: 'Report issue', messageId: 'Message IDs (comma-separated)', description: 'Describe the issue or correction', submit: 'Submit',
-      site: 'Site', sourceUrl: 'Source URL', adapter: 'Adapter', reason: 'Failure reason', systemReporter: 'System',
-      list: 'Issues and decisions', empty: 'No issues yet', proposedTags: 'Suggested tags', noTags: 'No tags', proposedDelete: 'Suggested tag deletion',
-      addTags: 'Add tag links', removeTags: 'Remove tag links', loadMore: 'Load older issues', loadMoreTags: 'Load more tags', retry: 'Retry applying',
-      proposal: { none: 'Report only', change_tags: 'Change tag links', delete_tag: 'Delete a tag' },
-      openMessage: 'View original and images', editTags: 'Edit tags', apply: 'Approve and apply', resolved: 'Mark resolved', dismiss: 'Dismiss', decision: 'Decision', ownerDecision: 'Owner decision and reasoning (required)',
-      loadFailed: 'Could not load issues', saveFailed: 'Could not save', submitted: 'Issue submitted', saved: 'Decision saved',
-      deleteConfirmTitle: 'Confirm tag deletion', deleteConfirm: 'Delete tag "{name}" and its associations? Messages and images remain.',
-      kind: { suspected_error: 'Possible error', outdated: 'Outdated content', source_conflict: 'Source conflict', manual_conflict: 'Manual correction conflict', tag_deletion: 'Tag deletion suggestion', source_adapter_failed: 'Site adapter failed', other: 'Other issue' },
-      status: { pending: 'Pending', applying: 'Applying', applied: 'Applied', resolved: 'Resolved', dismiss: 'Dismissed' },
-      result: { tags_updated: 'Message tags updated', tag_deleted: 'Tag and links removed; messages kept' },
-    },
-    strategy: {
-      title: 'Strategy versions', hint: 'Trial on 1–3 existing messages. Confirmed rules apply only to future work.',
-      instruction: 'Describe the filtering, tagging, collection or research change you want', samples: 'Message IDs, comma-separated; select them in the list first',
-      trial: 'Draft and trial', empty: 'No strategy versions', filter: 'Quality filter', tags: 'Tagging rules', default: 'Default rules',
-      comparison: 'Compare results on real messages', oldFilter: 'Old filter', newFilter: 'New filter', oldTags: 'Old tags', newTags: 'New tags',
-      collection: 'Daily collection rule', research: 'Active research rule', oldCollection: 'Old collection', newCollection: 'New collection', oldResearch: 'Old query', newResearch: 'New query',
-      activate: 'Confirm and activate', restore: 'Restore this version', confirmTitle: 'Confirm strategy version', confirm: 'This affects future work only; existing messages are not reprocessed.',
-      failed: 'Strategy operation failed', candidateSaved: 'Candidate saved; review its results', activeSaved: 'Strategy activated',
-      status: { candidate: 'Candidate', active: 'Active', archived: 'History' },
-      reprocess: 'Reprocess selected history', reprocessHint: "Process only selected messages or a topic, entity or event. Review flags go to the anomaly drawer; manual tag corrections are preserved.",
-      messagesScope: 'Message set', tagScope: 'Concrete tag', selectTag: "Select a topic, entity or event", runReprocess: 'Start reprocessing',
-      reprocessConfirmTitle: 'Confirm reprocessing', reprocessConfirm: 'Recheck and retag only this scope under the active strategy.',
-      reprocessResult: 'Processed {processed}; updated {updated}; {reviewFlags}; {manualConflicts}; failed {failed}',
-    },
-    tagDeleteSuccess: 'Tag deleted',
-    tagEditAction: 'Rename',
-    tagDeleteAction: 'Delete',
-    tagEmptyResult: 'No matching tags',
-    tagLabel: 'Tag',
-    tagPlaceholder: 'Select tags',
-    noTags: 'No tags',
     uploadSuccess: 'File uploaded successfully!',
     uploadFailed: 'File upload failed!',
     fileExists: 'File already exists',
@@ -495,38 +330,15 @@ export default {
     summaryGenerationFailed: 'Summary generation failed',
     summaryRefreshed: 'Summary refreshed',
     summaryRefreshQueued: 'Summary refresh queued; it will update automatically when ready',
-    indexFailed: 'Index sync failed',
-    chunkSavedIndexFailed: 'Content saved, but index sync failed. Use Retry index.',
-    chunkEditConflict: 'This chunk was modified by someone else. The list was refreshed; please try again.',
-    retryIndex: 'Retry index',
-    indexRetrySuccess: 'Index synchronized',
-    chunkHistory: 'Chunk edit history',
-    currentVersion: 'Current version',
-    noChunkHistory: 'No edit history',
-    compareRevisionWithCurrent: 'Content changes from v{revision} to current v{current}',
-    diffAddedInCurrent: 'Added in current',
-    diffRemovedFromCurrent: 'Removed from current',
-    noContentChanges: 'No content changes; this revision only changed status',
-    revertRevision: 'Revert revision',
-    revertRevisionConfirm: 'Revert to v{revision}? A new revision will be created.',
-    chunkReverted: 'Chunk reverted',
-    chunkContentRequired: 'Chunk content is required',
-    disableChunk: 'Disable',
-    enableChunk: 'Enable',
-    enabledStatus: 'Enabled',
-    disabledStatus: 'Disabled',
-    editChunkContent: 'Edit chunk content',
     addGeneratedQuestion: 'Add retrieval question',
     regenerateQuestions: 'Regenerate questions',
     questionsRegenerated: 'Retrieval questions refreshed',
-    staleGeneratedQuestions: 'Generated from an earlier version; regenerate if needed',
     noGeneratedQuestions: 'No retrieval questions',
     notInitialized: 'Knowledge base is not initialized. Please configure models in settings before uploading files',
     getInfoFailed: 'Failed to get knowledge base information, file upload is not possible',
     missingId: 'Knowledge base ID is missing',
     deleteFailed: 'Delete failed. Please try again later!',
     uploadTime: 'Upload Time',
-    newSession: 'New Chat',
     editDocument: 'Edit Document',
     rebuildDocument: 'Rebuild Document',
     rebuildConfirm: 'Rebuild document "{fileName}"? This will clear existing chunks and parse it again.',
@@ -552,8 +364,6 @@ export default {
     intakeReviewFailed: 'Review failed',
     untitledDocument: 'Untitled Document',
     moreOptions: 'More actions',
-    createSessionFailed: 'Failed to create conversation',
-    createSessionError: 'An error occurred while creating the conversation',
     deleteDocument: 'Delete Document',
     moveDocument: 'Move to...',
     moveToKnowledgeBase: 'Move to Knowledge Base',
@@ -579,7 +389,6 @@ export default {
     viewModeList: 'List view',
     viewModeToggle: 'Toggle view',
     columnName: 'Name',
-    columnTag: 'Tag',
     columnSize: 'Size',
     columnSource: 'Source',
     columnStatus: 'Status',
@@ -592,14 +401,6 @@ export default {
     confirmBatchDeleteDocument: 'Delete {count} selected document? This action cannot be undone. | Delete {count} selected documents? This action cannot be undone.',
     batchDeleteSuccess: 'Deleted {count} document | Deleted {count} documents',
     batchDeleteFailed: 'Batch delete failed',
-    batchTag: 'Batch Tag',
-    batchTagDialogHeading: 'Batch Tag',
-    batchTagSubtitle: 'Set tags for {count} selected document (will replace existing tags) | Set tags for {count} selected documents (will replace existing tags)',
-    batchTagSelectedSection: 'Selected',
-    batchTagAvailableSection: 'Available',
-    batchTagNoSelected: 'None selected',
-    batchTagSuccess: 'Tags applied to {count} document | Tags applied to {count} documents',
-    batchTagFailed: 'Batch tag failed',
     confirmBatchReparseDocument: 'Rebuild {count} selected document? Existing content will be cleared and the document will be re-parsed. | Rebuild {count} selected documents? Existing content will be cleared and each document will be re-parsed.',
     confirmBatchReparse: 'Confirm and reparse',
     batchReparseSuccess: 'Submitted {count} rebuild task | Submitted {count} rebuild tasks',
@@ -623,7 +424,6 @@ export default {
     docSearchPlaceholder: 'Search document names...',
     fileTypeFilter: 'File Type',
     allFileTypes: 'All Types',
-    allTags: 'All Tags',
     parseStatusFilter: 'Status',
     allParseStatuses: 'All Statuses',
     parseStatusPending: 'Pending',
@@ -668,15 +468,8 @@ export default {
     statusOn: 'On',
     statusOff: 'Off',
     notSet: 'Not set',
-    summaryNoTags: 'Not set',
-    summaryTagsCount: '{count} tag | {count} tags',
     confirm: 'Upload and parse',
     cancel: 'Cancel',
-    tabTags: 'Document tags',
-    tagsDescription: 'Select one or more tags for every document in this import batch',
-    tagsPlaceholder: 'Select tags (multiple allowed)',
-    tagsEmpty: 'This knowledge base has no tags. You can create them in tag management after upload.',
-    tagsLoadFailed: 'Failed to load tags. You can set them later from the document list.',
     noItems: 'Add at least one file or URL',
     urlItemLabel: 'URL',
     urlAdded: 'URL added',
@@ -858,209 +651,9 @@ export default {
       UNKNOWN_SUGGESTION: 'Check the application logs for details.'
     }
   },
-  agent: {
-    taskLabel: 'Task:',
-    think: 'Thinking',
-    copy: 'Copy',
-    addToKnowledgeBase: 'Add to Knowledge Base',
-    artifactDrawer: {
-      buttonTitle: 'View files generated in this reply',
-      title: 'Generated files',
-      empty: 'No downloadable files were generated this turn.',
-      preview: 'Preview',
-      previewBack: 'Back to list',
-      collecting: 'Saving generated files…',
-      download: 'Download',
-      downloadFailed: 'Download failed, please retry.',
-      inlinePreviewHint: 'Click to preview',
-      inlineMissing: 'File unavailable',
-    },
-    updatePlan: 'Update Plan',
-    toolFallback: 'Tool',
-    stepsCompleted: 'Completed <strong>{steps}</strong> step | Completed <strong>{steps}</strong> steps',
-    reasoningRounds: '<strong>{rounds}</strong> reasoning round | <strong>{rounds}</strong> reasoning rounds',
-    toolCalls: '<strong>{tools}</strong> tool call | <strong>{tools}</strong> tool calls',
-    durationSuffix: '<strong>{duration}</strong>',
-    stepSummarySeparator: ' · ',
-    contextCompacted: 'Compacted context',
-    contextCompactedSummary: '{beforeTokens} → {afterTokens}',
-    contextCompactedDegraded: 'Summary unavailable, raw transcript kept',
-    title: 'Agents',
-    subtitle: "Manage and organize document knowledge bases",
-    createAgent: 'Create Agent',
-    builtin: 'Built-in',
-    disabled: 'Disabled',
-    disable: 'Disable',
-    enable: 'Enable',
-    noDescription: 'No description',
-    selectAgent: 'Select Agent',
-    noAgents: 'No agents',
-    manageAgents: 'Manage',
-    builtinAgents: 'Built-in Agents',
-    customAgents: 'Custom Agents',
-    capabilities: {
-      kbCount: '{count} knowledge base specified | {count} knowledge bases specified',
-      kbAll: 'Access to all knowledge bases',
-      mcpEnabled: 'MCP services enabled',
-      mcpAll: 'All MCP services',
-      mcpSelected: '{count} MCP service selected | {count} MCP services selected',
-      multiTurn: 'Multi-turn conversation'
-    },
-    type: {
-      normal: 'Quick Answer',
-      agent: 'Smart Reasoning'
-    },
-    mode: {
-      normal: 'Quick Answer',
-      agent: 'Smart Reasoning'
-    },
-    features: {
-      knowledgeBase: 'Knowledge Base Linked',
-      mcp: 'MCP Services Enabled',
-      multiTurn: 'Multi-turn Conversation'
-    },
-    tabs: {
-    },
-    empty: {
-      title: 'No Custom Agents',
-      description: 'Click the button in the top right to create your first agent',
-      favoritesTitle: 'No favorites yet',
-      favoritesDescription: 'Star an agent from its card to add it here',
-      recentsTitle: 'Nothing here yet',
-      recentsDescription: 'Agents you recently used will show up here'
-    },
-    detail: {
-      title: 'Agent Details',
-      useInChat: 'Use in Chat'
-    },
-    delete: {
-      confirmTitle: 'Delete Agent',
-      confirmMessage: 'Are you sure you want to delete agent "{name}"? This action cannot be undone.',
-      confirmButton: 'Confirm Delete'
-    },
-    messages: {
-      created: 'Agent created successfully',
-      updated: 'Agent updated successfully',
-      deleted: 'Agent deleted',
-      deleteFailed: 'Delete failed',
-      saveFailed: 'Save failed',
-      copied: 'Agent copied successfully',
-      copyFailed: 'Copy failed',
-      disabled: 'Agent disabled',
-      enabled: 'Agent enabled'
-    },
-    editor: {
-      createTitle: 'Create Agent',
-      editTitle: 'Edit Agent',
-      buttons: {
-        create: 'Create Agent',
-        saveAndClose: 'Save and Close',
-      },
-      postCreateHint: {
-        title: 'Created successfully',
-        footer: "Continue configuring the agent, then click Save and close.",
-      },
-      basicInfo: 'Basic Info',
-      basicInfoDesc: 'Configure agent name, description, and run mode',
-      promptsConfig: 'Prompts',
-      promptsConfigDesc: 'Configure system, context, intent, rewrite, and fallback prompts',
-      modelConfig: 'Model Config',
-      modelConfigDesc: 'Configure chat model, auxiliary models (ReRank), and generation parameters',
-      toolsConfig: 'Tools',
-      toolsConfigDesc: 'Configure tools available to the Agent',
-      knowledgeConfig: 'Knowledge Base',
-      knowledgeConfigDesc: "Configure the knowledge base scope for the agent",
-      agentId: 'Agent ID',
-      agentIdDesc: 'Use this ID to target the agent in API integrations',
-      name: 'Name',
-      namePlaceholder: 'Enter agent name',
-      nameRequired: 'Agent name is required',
-      systemPromptRequired: 'System prompt is required',
-      modelRequired: 'Please select a model',
-      queryMissingInRewrite: 'Rewrite user prompt must contain {\'{{\'}query{\'}}\'} placeholder',
-      queryMissingInFallback: 'Fallback prompt must contain {\'{{\'}query{\'}}\'} placeholder',
-      description: 'Description',
-      descriptionPlaceholder: 'Enter agent description',
-      normalDesc: 'Quick response, direct answers',
-      agentDesc: 'Multi-step thinking, deep analysis for complex questions',
-      model: 'Model',
-      modelPlaceholder: 'Select Model',
-      systemPrompt: 'System Prompt',
-      systemPromptPlaceholder: 'Custom system prompt to define agent behavior and role',
-      contextTemplateRequired: 'Context template is required',
-      temperature: 'Temperature',
-      thinking: 'Thinking Mode',
-      citationEnabled: 'Show Source Citations',
-      citationEnabledDesc: 'Show knowledge-base and web sources in final answers; retrieval and grounding still work when disabled',
-      mode: 'Running Mode',
-      knowledgeBases: 'Knowledge Bases',
-      allKnowledgeBases: 'All Knowledge Bases',
-      selectedKnowledgeBases: 'Selected Knowledge Bases',
-      noKnowledgeBase: 'No Knowledge Base',
-      selectKnowledgeBases: 'Select Knowledge Bases',
-      selectKnowledgeBasesDesc: 'Select knowledge bases to associate (including collaborative ones)',
-      myKnowledgeBases: 'My Knowledge Bases',
-      retrieveKBOnlyWhenMentioned: 'Retrieve Only When Mentioned',
-      retrieveKBOnlyWhenMentionedDesc: 'Off: auto-retrieve configured KBs; On: retrieve only when user {\'@\'} mentions',
-      rerankModel: 'ReRank Model',
-      rerankModelDesc: 'Used to rerank knowledge base retrieval results for better accuracy',
-      rerankModelPlaceholder: 'Select ReRank Model',
-      rerankModelOptionalHint: 'No RAG knowledge base in current scope, so this is optional. If a RAG knowledge base is added later, the workspace default rerank model will be used as a fallback. Configuring it explicitly is still recommended.',
-      maxIterations: 'Max Iterations',
-      maxIterationsLimit: 'Limit',
-      maxIterationsUnlimited: 'Unlimited',
-      allowedTools: 'Allowed Tools',
-      multiTurn: 'Multi-turn Conversation',
-      historyTurns: 'History Turns',
-      retainRetrievalHistory: 'Keep retrieval results',
-      retrievalStrategy: 'Retrieval Strategy',
-      embeddingTopK: 'Embedding Top K',
-      keywordThreshold: 'Keyword Threshold',
-      vectorThreshold: 'Vector Threshold',
-      rerankTopK: 'Rerank Top K',
-      rerankThreshold: 'Rerank Threshold',
-      conversationSettings: 'Conversation',
-      contextTemplate: 'Context Template',
-      contextTemplatePlaceholder: 'Custom context template...',
-      enableQueryExpansion: 'Query Expansion',
-      enableRewrite: 'Query Rewrite',
-      queryUnderstandModel: 'Query Understand Model',
-      queryUnderstandModelPlaceholder: 'Leave empty to reuse the main chat model',
-      rewritePromptSystem: 'Rewrite System Prompt',
-      rewritePromptSystemPlaceholder: 'Leave empty to use default prompt',
-      rewritePromptUser: 'Rewrite User Prompt',
-      rewritePromptUserPlaceholder: 'Leave empty to use default prompt',
-      maxCompletionTokens: 'Max Completion Tokens',
-      maxCompletionTokensDefault: 'Default',
-      maxCompletionTokensCustom: 'Custom',
-      fallbackStrategy: 'Fallback Strategy',
-      fallbackResponse: 'Fixed Response',
-      fallbackResponsePlaceholder: 'Sorry, I cannot answer this question.',
-      fallbackPrompt: 'Fallback Prompt',
-      fallbackPromptPlaceholder: 'Leave empty to use default prompt',
-      installShort: 'Install',
-      viewInstallProgress: 'View progress',
-    },
-    selector: {
-      title: 'Select Agent',
-      current: 'Current',
-      goToSettings: 'Settings',
-      notReadyHint: 'Not ready. Configure: {items}',
-      notReadyStatus: 'Setup needed',
-      configureAction: 'Configure',
-      capabilitiesSection: 'Capabilities',
-      imageUploadCapability: 'Image upload',
-      capabilityEnabled: 'On',
-      capabilityDisabled: 'Off',
-      capabilitySupported: 'Supported',
-      capabilityUnsupported: 'Unsupported',
-      capabilityUnconfigured: 'Not set'
-    }
-  },
   settings: {
     modelManagement: 'Model Management',
     parserEngine: 'Parser Engine',
-    mcpService: 'MCP Service',
     versionInfo: 'Version Info',
     taskQueue: 'Task Queues',
     tenantInfo: 'Workspace Info',
@@ -1121,23 +714,6 @@ export default {
       vlmServerUrlHint: 'Required when Backend is vlm-http-client or hybrid-http-client',
     },
   },
-  chatHistorySettings: {
-    title: 'Message Management',
-    description: 'Configure automatic indexing of conversation messages into the message knowledge base.',
-    enableLabel: 'Enable Message Indexing',
-    enableDescription: 'When enabled, new conversation messages are automatically indexed into the message knowledge base.',
-    embeddingModelLabel: 'Embedding Model',
-    embeddingModelDescription: 'Select the embedding model for vectorizing chat messages',
-    embeddingModelLocked: 'Messages have been indexed; the embedding model cannot be changed (clearing indexed data is required)',
-    statsTitle: 'Index Statistics',
-    statsIndexedMessages: 'Indexed Messages',
-    statsNotConfigured: 'Message indexing not configured',
-    statsNotConfiguredDesc: 'Enable and select an embedding model to start auto-indexing conversation messages',
-    toasts: {
-      saveSuccess: 'Message management configuration saved',
-      saveFailed: 'Failed to save configuration: {message}'
-    }
-  },
   retrievalSettings: {
     title: 'Search Settings',
     description: 'Configure global retrieval parameters for knowledge search and message search',
@@ -1179,7 +755,7 @@ export default {
     firstTime: 'New to Reliquary?',
     registerSuccess: 'Registration successful. Please sign in',
     registerFailed: 'Registration failed',
-    subtitle: 'RAG Q&A and ReAct Agent for your personal knowledge',
+    subtitle: "Collect, store and retrieve your personal knowledge",
     registerSubtitle: 'Create your account and start using Reliquary',
     emailPlaceholder: 'Enter email address',
     passwordPlaceholder: 'Enter password',
@@ -1270,13 +846,6 @@ export default {
     discardHint: "Your changes are not saved. Leaving will discard them.",
     discard: "Discard changes"
 },
-  mentionDetail: {
-    readOnlyFromAgent: 'Read-only in this conversation; not shown in Knowledge Base list',
-    kbCount: '{count} document | {count} documents',
-    belongsToKb: 'Knowledge base: ',
-    belongsToOrg: 'Space: ',
-    noCompatibleKbForAgent: 'This agent\'s tools don\'t match any knowledge base\'s capabilities in scope, so nothing can be referenced.'
-  },
   file: {
     upload: 'Upload File',
     downloadFailed: 'Failed to download file. Please retry later.',
@@ -1375,53 +944,6 @@ export default {
       publish: 'Publish'
     }
   },
-  input: {
-    addModel: 'Add Model',
-    placeholder: 'Ask questions directly to the model',
-    placeholderWithContext: 'Enter your question, will answer based on selected knowledge bases/files above',
-    placeholderAgent: 'Ask {name}',
-    agentMode: 'Smart Reasoning',
-    normalMode: 'Quick Answer',
-    normalModeDesc: 'Knowledge base RAG Q&A',
-    agentModeDesc: 'Multi-step thinking, deep analysis',
-    agentMissingAllowedTools: 'Allowed tools',
-    agentMissingSummaryModel: 'Chat model',
-    agentMissingRerankModel: 'Rerank model',
-    customAgentMissingSummaryModel: 'Chat model',
-    customAgentMissingRerankModel: 'Rerank model',
-    goToAgentEditor: 'Go to configure →',
-    agentNotReadyDetail: 'Agent "{agentName}" is not ready. Please configure: {reasons}',
-    knowledgeBase: 'Knowledge Base',
-    knowledgeBaseWithCount: 'Knowledge Base ({count}) | Knowledge Bases ({count})',
-    notConfigured: 'Not configured',
-    noModel: 'No available models',
-    stopGeneration: 'Stop Generation',
-    send: 'Send',
-    messages: {
-      enterContent: 'Please enter content first!',
-      replying: 'Currently replying, please try again later!',
-      agentSwitchedOn: 'Switched to Intelligent Reasoning',
-      agentSwitchedOff: 'Switched to Quick Q&A',
-      agentSelected: 'Selected agent "{name}"',
-      sessionMissing: 'Session ID does not exist',
-      messageMissing: 'Unable to get message ID. Please refresh the page and try again.',
-      stopSuccess: 'Generation stopped',
-      stopFailed: 'Failed to stop. Please try again.'
-    },
-    kbLockedByAgent: 'Knowledge base configuration is locked by the current agent',
-    kbDisabledByAgent: 'Knowledge base is disabled by the current agent',
-    modelLockedByAgent: 'Model selection is locked by the current agent',
-    imageUploadDisabledByAgent: 'Image upload is not enabled for this agent',
-    goToAgentSettings: 'Go to agent settings'
-  },
-  createChat: {
-    title: 'Hi, I am Reliquary — your knowledge, within reach',
-    newSessionTitle: 'New Session',
-    messages: {
-      createFailed: 'Failed to create session',
-      createError: 'Failed to create session, please try again later'
-    }
-  },
   knowledgeList: {
     create: 'Create Knowledge Base',
     subtitle: "Manage and organize document knowledge bases",
@@ -1440,6 +962,7 @@ export default {
       confirmButton: 'Delete'
     },
     menu: {
+    batchManage: 'Batch manage',
       viewDetails: 'View Details',
       duplicate: 'Duplicate'
     },
@@ -1665,20 +1188,6 @@ export default {
         instructionsDescription: 'Specify audience, scenario, and wording while the system retains the stable output format',
         instructionsPlaceholder: 'For example: generate natural customer-support questions and avoid exam-style wording…'
       },
-      autoTag: {
-        label: 'Automatic Tagging',
-        description: 'After parsing, select suitable tags from the existing knowledge-base tags. Tags are never created or deleted, but one extra model call is required.',
-        modelLabel: 'Classification Model',
-        modelDescription: 'Leave empty to reuse the knowledge-base summary model.',
-        modelPlaceholder: 'Select a classification model',
-        maxTagsLabel: 'Maximum tags per document',
-        maxTagsDescription: 'Automatically associate 1-10 existing tags per document.',
-        skipIfTaggedLabel: 'Skip documents that already have tags',
-        skipIfTaggedDescription: 'When enabled, documents tagged manually at upload time are left untouched, so a deliberate classification is not diluted.',
-        policyLabel: 'Message tagging policy',
-        policyDescription: "Classify approved messages by content type, topic, entity and event. Fixed categories and output format cannot be changed.",
-        policyPlaceholder: 'For example: prefer confirmed events and do not label predictions as completed events.'
-      },
       tableMetadataInstructions: {
         label: 'Table Metadata Instructions',
         description: 'Add business context and field semantics to CSV/Excel summaries for better retrieval',
@@ -1698,126 +1207,6 @@ export default {
         customInstructionsPlaceholder: 'For example: prioritize nameplates, model numbers, alarm codes, and table units…'
       }
     }
-  },
-  chat: {
-    emptyContentWarning: 'There is no answer content to use yet',
-    suggestedQuestions: 'You can ask me',
-    refreshSuggestedQuestions: 'More',
-    thinking: 'Thinking...',
-    thinkingAlt: 'Thinking in progress',
-    conversationTime: {
-      today: 'Today {time}',
-      yesterday: 'Yesterday {time}',
-      thisYear: '{month}/{day} {time}',
-      otherYear: '{month}/{day}/{year} {time}',
-    },
-    preparingAnswer: 'Preparing an answer…',
-    connectingModelAndGeneratingAnswer: 'Connecting to the model and generating an answer…',
-    modelStillResponding: 'The model is taking longer than usual, still waiting…',
-    deepThoughtCompleted: 'Deep thinking completed',
-    deepThoughtAlt: 'Deep thinking finished',
-    referencesTitle: 'Referenced {count} related item | Referenced {count} related items',
-    referencesDocCount: 'Referenced {count} document | Referenced {count} documents',
-    referencesWebCount: 'Referenced {count} web source | Referenced {count} web sources',
-    referencesDocAndWebCount: 'Referenced {documents} and {webSources}',
-    referencesDrawerTitle: 'Sources',
-    referencesDrawerTitleWeb: 'Web sources',
-    referencesDrawerTitleDocs: 'Document sources',
-    referencesDrawerTitleTools: 'Tool results',
-    referencesDrawerTitleMixed: 'Sources',
-    referencesDrawerWebSection: 'Web',
-    referencesDrawerDocsSection: 'Documents',
-    referencesDrawerToolsSection: 'Tools',
-    referencesDrawerEmpty: 'No sources available',
-    questionMinimapTitle: 'Q&A',
-    questionMinimapAriaLabel: 'Question outline',
-    questionMinimapAttachmentPlaceholder: '(Attachment)',
-    referenceChunkCount: '{count} chunk | {count} chunks',
-    fallbackHint: 'No relevant content found in knowledge base. Above is a direct response from the model.',
-    requestInfoTitle: 'Request info',
-    requestInfoRequestId: 'Request ID',
-    requestInfoMessageId: 'Message ID',
-    requestInfoSessionId: 'Session ID',
-    requestInfoUrl: 'Request',
-    requestInfoSentAt: 'Sent at',
-    requestInfoEmpty: 'No request info available',
-    channelWeb: 'Web',
-    channelApi: 'API',
-    chunkLabel: 'Chunk {index}:',
-    navigateToDocument: 'View document details',
-    chunkIdLabel: 'Chunk ID:',
-    documentIdLabel: 'Document ID:',
-    chunkOrdinal: 'Chunk {index}',
-    previewContent: 'Preview content',
-    noPlanSteps: 'No detailed steps provided',
-    chunkIndexLabel: 'Chunk #{index}',
-    chunkPositionLabel: '(Position: {position})',
-    noRelatedChunks: 'No related chunks found',
-    noSearchResults: 'No search results found',
-    relevanceHigh: 'High relevance',
-    relevanceMedium: 'Medium relevance',
-    relevanceLow: 'Low relevance',
-    relevanceWeak: 'Weak relevance',
-    otherSource: 'Other sources',
-    webGroupIntro: 'The following {count} item is from | The following {count} items are from',
-
-
-    unknownLink: 'Unknown link',
-    contentLengthLabel: 'Length {value}',
-    notProvided: 'Not provided',
-    promptLabel: 'Prompt',
-    errorMessageLabel: 'Error message',
-    summaryLabel: 'Summary',
-    rawTextLabel: 'Raw text',
-    collapseRaw: 'Collapse original',
-    expandRaw: 'Expand original',
-    noWebContent: 'No web content fetched',
-    webFetchStatusSuccess: 'Fetched',
-    webFetchStatusFailed: 'Failed',
-    webFetchStatusSkipped: 'Skipped',
-    webFetchErrorCode: 'Error code',
-    webFetchRetryable: 'Retryable',
-    webFetchSummaryFailed: 'Summary failed',
-    lengthChars: '{value} character | {value} characters',
-    lengthThousands: '{value}k characters',
-    lengthTenThousands: '{value} ten-thousand characters',
-    noDatabaseRecords: 'No matching records found',
-    nullValuePlaceholder: '<NULL>',
-    chunkCountValue: '{count} chunk | {count} chunks',
-    documentDescriptionLabel: 'Description:',
-    documentSourceLabel: 'Source:',
-    documentFileLabel: 'File:',
-    documentMetadataLabel: 'Metadata',
-    documentInfoEmpty: 'No document information available',
-    positionLabel: 'Position:',
-    chunkPositionValue: 'Chunk #{index}',
-    contentLengthLabelSimple: 'Content length:',
-    fullContentLabel: 'Full content',
-    copyContent: 'Copy content',
-    knowledgeBaseCount: '{count} knowledge base | {count} knowledge bases',
-    noKnowledgeBases: 'No knowledge bases available',
-    enterDescription: 'Enter description',
-    rawOutputLabel: 'Raw output',
-    processError: 'Processing error',
-    sessionExcerpt: 'Session Excerpt',
-    noAnswerContent: '(No answer content)',
-    noMatchFound: 'No matching content found',
-    deleteSessionFailed: 'Delete failed, please try again later!',
-    imageTooMany: 'Maximum 5 images allowed',
-    imageTypeSizeError: 'Only JPG/PNG/GIF/WEBP under 10MB supported',
-    imageUploadTooltip: 'Upload image (paste/drop supported)',
-    attachmentUploadTooltip: 'Upload attachment (documents)',
-    attachmentWithCount: '{count} attachment uploaded | {count} attachments uploaded',
-    attachmentTooMany: 'Maximum {max} attachment allowed | Maximum {max} attachments allowed',
-    attachmentTotalTooMany: 'Images and attachments combined can be at most {max}',
-    attachmentTooLarge: 'File {name} exceeds {max}MB limit',
-    attachmentTypeNotSupported: 'Unsupported file type: {name}',
-    attachmentUploading: 'Uploading {progress}%',
-    attachmentParsing: 'Parsing',
-    attachmentReady: 'Ready',
-    attachmentUploadFailed: 'Attachment upload failed',
-    attachmentParseFailed: 'Attachment parsing failed',
-    attachmentStillProcessing: 'Attachment {name} is still being parsed'
   },
   tenant: {
     title: 'Workspace Information',
@@ -1885,8 +1274,8 @@ export default {
     credentialEncryptionLabel: 'Credential storage',
     credentialEncryptionEnabled: 'Encrypted',
     credentialEncryptionDisabled: 'Plaintext',
-    credentialEncryptionEnabledDescription: 'MCP credentials and model API keys are encrypted with SYSTEM_AES_KEY.',
-    credentialEncryptionDisabledDescription: 'SYSTEM_AES_KEY is not set. MCP credentials and model API keys are stored in plaintext.',
+    credentialEncryptionEnabledDescription: "Model API keys are encrypted with SYSTEM_AES_KEY.",
+    credentialEncryptionDisabledDescription: "SYSTEM_AES_KEY is not set. Model API keys are stored in plaintext.",
     title: 'System Information',
     sectionDescription: 'View system version information and user account configuration',
     loadingInfo: 'Loading information...',
@@ -2092,7 +1481,6 @@ export default {
           taskTypes: {
             documentProcess: 'Document parsing',
             manualProcess: 'Manual reprocessing',
-            temporaryDocumentProcess: 'Chat attachment parsing',
             postProcess: 'Document post-processing',
             summary: 'Summary generation',
             tableSummary: 'Table summary generation',
@@ -2113,7 +1501,7 @@ export default {
           scope: 'Active is cluster-wide · waiting is local',
           disabled: 'Background model concurrency governance is disabled. Configure the default model concurrency limit in Global settings.',
           empty: 'No model activity yet. A model appears after its first background call.',
-          backgroundOnly: 'Background tasks only; interactive chat is excluded',
+          backgroundOnly: "Applies to background tasks",
           columns: {
             model: 'Model ID',
             active: 'In flight',
@@ -2141,7 +1529,6 @@ export default {
         },
         queueNames: {
           default: 'Document parsing',
-          chat_attachment: 'Chat attachments',
           postprocess: 'Post-process',
           summary: 'Summaries',
           sync: 'Source sync',
@@ -2152,7 +1539,6 @@ export default {
         },
         queueDescriptions: {
           default: 'Document parse, manual reparse',
-          chat_attachment: 'Session-scoped chat upload parsing',
           postprocess: 'Parse finalization, enrichment fan-out',
           summary: 'Document & table summaries',
           sync: 'Manual & scheduled sync',
@@ -2193,7 +1579,7 @@ export default {
           shared_concurrency: 'Per-process elastic concurrency shared by core parsing and enrichment; whichever side has backlog borrows it automatically. Minimum 1; requires a service restart.',
         },
         model: {
-          max_concurrency: 'Default cap on concurrent background (ingestion/enrichment) calls to a single model, keyed by model ID and shared within this process. Read on every call and applied immediately with no restart. 0 or a negative value disables the default cap (each model still honours its own limit configured in model management). Affects background tasks only, not interactive chat.'
+          max_concurrency: "Default concurrent background call limit shared by model ID within this process. Read on each call and applied immediately without a restart. Zero or negative disables the default limit; each model retains its own configured limit."
         }
       },
       enumLabels: {
@@ -2210,7 +1596,7 @@ export default {
           whitelist: {
             add: {
               header: 'Add SSRF allowlist entry',
-              body: 'Add {entry} to the SSRF allowlist? Hosts / IPs / CIDRs that match this entry will bypass SSRF protection and may let agents reach internal services. Only add entries you fully trust.',
+              body: "Add {entry} to the SSRF allowlist? Matching hosts, IPs or CIDRs bypass SSRF protection and may allow the service to access internal networks. Only add entries you fully trust.",
               confirmBtn: 'Add'
             },
             remove: {
@@ -2234,21 +1620,6 @@ export default {
         success: 'Reset to default',
         failed: 'Reset failed'
       },
-    }
-  },
-  mcp: {
-    testResult: {
-      title: 'Test Result: {name}',
-      connectionSuccess: 'Connection successful',
-      connectionFailed: 'Connection failed',
-      toolsTitle: 'Available tools',
-      resourcesTitle: 'Available resources',
-      descriptionLabel: 'Description',
-      schemaLabel: 'Parameter schema',
-      emptyDescription: 'This service did not provide tools or resources',
-      requireApproval: 'Require human approval',
-      requireApprovalTip: 'When enabled, the agent pauses before calling this tool until you approve — use for DB writes, deletes, etc.',
-      approvalSaveFailed: 'Failed to save approval setting'
     }
   },
   error: {
@@ -2291,7 +1662,7 @@ export default {
     }
   },
   model: {
-    imageProcessingUnsupported: 'Image processing requires a VLLM model or a conversation model with vision or multimodal support enabled.',
+    imageProcessingUnsupported: "Image processing requires a VLLM model or a generation model with vision or multimodal support.",
     imageProcessingNotFound: 'The image processing model was not found. Select another model.',
     imageProcessingUnavailable: 'The image processing model service is unavailable. Try again later.',
     modelName: 'Model Name',
@@ -2312,7 +1683,7 @@ export default {
       sourceLocal: 'Ollama',
       sourceRemote: 'API',
       description: {
-        chat: 'Configure large language models for conversations',
+        chat: "Configure language models for review and content generation",
         embedding: 'Configure embedding models for text vectorization',
         rerank: 'Configure models for result re-ranking',
         vllm: 'Configure vision-language models for multimodal understanding',
@@ -2353,18 +1724,18 @@ export default {
       supportsVisionDesc: 'Whether the model accepts image and multimodal input. When enabled, it can extract text from images and describe them in knowledge bases.',
       contextWindowLabel: 'Context Window',
       contextWindowPlaceholder: 'Default {value}',
-      contextWindowDesc: 'How many tokens this model can take in one request. Agent history compaction uses this limit. Leave empty for the default 200000 (200K). Use the provider’s real window — a larger guess means compaction never fires and the provider rejects the request.',
+      contextWindowDesc: "Maximum model context length in tokens.",
       contextWindowDefaultHint: 'Unset, using default {value}',
       contextWindowTokens: '{count} token | {count} tokens',
       maxConcurrencyLabel: 'Background concurrency limit',
       maxConcurrencyPlaceholder: '0 = use global default',
-      maxConcurrencyDesc: 'Caps concurrent background (ingestion/enrichment) calls to this model, shared per model within this process. 0 or empty falls back to the global default; interactive chat is never affected.',
+      maxConcurrencyDesc: "Limit concurrent background calls to this model within this process. Zero or empty uses the global default.",
       thinkingControlLabel: 'Thinking mode request format',
-      thinkingControlDesc: 'Controls how the agent’s “Thinking mode” on/off switch is written to the API. We pre-select based on vendor/model when possible; change it to match your API docs. With “Do not send”, the agent Thinking mode switch has no effect.',
+      thinkingControlDesc: "Configure how thinking options are sent to the model API. The default follows the provider and model; adjust it to match the API documentation. Do not send omits the option.",
       thinkingControl: {
         none: {
           label: 'Do not send thinking fields',
-          hint: 'Agent “Thinking mode” switch has no effect; thinking parameters are not sent in requests'
+          hint: "Do not send thinking parameters in requests"
         },
         chatTemplateKwargs: {
           label: 'chat_template_kwargs',
@@ -2376,7 +1747,7 @@ export default {
         },
         thinkingType: {
           label: 'thinking.type',
-          hint: 'Volcengine Ark chat models'
+          hint: 'Volcengine Ark generation models'
         }
       },
       dimensionHint: 'Model selected. Click "Detect Dimension" to fetch the vector dimension automatically.',
@@ -2408,7 +1779,7 @@ export default {
       providers: {
         generic: {
           label: 'Generic OpenAI-compatible',
-          description: 'Custom OpenAI-compatible endpoints for chat, text embeddings and generic reranking'
+          description: 'Custom OpenAI-compatible endpoints for text generation, text embeddings and generic reranking'
         },
         openai: {
           label: 'OpenAI',
@@ -2416,7 +1787,7 @@ export default {
         },
         anthropic: {
           label: 'Anthropic',
-          description: 'Claude chat models via the native Anthropic Messages API'
+          description: 'Claude generation models via the native Anthropic Messages API'
         },
         deepseek: {
           label: 'DeepSeek',
@@ -2523,19 +1894,16 @@ export default {
   },
   platform: {
     subtitle: 'LLM-Powered Personal Knowledge Framework',
-    description: 'RAG retrieval and agentic reasoning help you understand and use your documents',
+    description: "Collect, store and retrieve your knowledge",
     rag: 'RAG Enhanced Generation',
-    agent: 'ReAct Agent',
     hybridSearch: 'Hybrid Search',
     multimodalParsing: 'Multimodal Document Parsing',
     hybridSearchEngine: "Hybrid retrieval",
-    ragQandA: 'ReAct Agent Q&A',
+    ragQandA: "Knowledge retrieval",
     independentTenant: "Personal knowledge management",
     fullApiAccess: 'Full API Access',
     knowledgeBaseManagement: 'Knowledge Base Management',
     carousel: {
-      agenticRagTitle: 'Agentic RAG',
-      agenticRagDesc: 'ReAct reasoning + tool calls + multi-step thinking',
       hybridSearchTitle: 'Hybrid search strategy',
       hybridSearchDesc: "BM25 + vector retrieval",
       smartDocRetrievalTitle: 'Intelligent document retrieval',
@@ -2557,121 +1925,11 @@ export default {
     onlineEdit: 'Online Edit',
     deleteRecord: 'Delete Record'
   },
-  agentSettings: {
-    modelRecommendation: {
-      title: 'Model Recommendation'
-    },
-    maxIterations: {
-      desc: 'Caps how many reasoning steps one task may take. Unlimited keeps going until the model stops on its own or you stop it.'
-    },
-    thinkingModel: {
-      desc: 'LLM used for Agent reasoning and planning'
-    },
-    rerankModel: {
-      desc: 'Re-rank search results and normalize relevance scores'
-    },
-    temperature: {
-      desc: 'Controls randomness in outputs. 0 is most deterministic; 1 is most random'
-    },
-    allowedTools: {
-      desc: 'Tools currently enabled for the Agent'
-    },
-    systemPrompt: {
-      desc: 'Configure the Agent’s system prompt with placeholders that are resolved at runtime.'
-    }
-  },
-  conversationSettings: {
-    models: {
-      chatGroupLabel: 'Thinking / Chat Models'
-    },
-    maxRounds: {
-      desc: 'Number of rounds kept for context and query rewrite'
-    },
-    embeddingTopK: {
-      desc: 'Number of documents kept after vector retrieval'
-    },
-    keywordThreshold: {
-      desc: 'Minimum score for keyword retrieval'
-    },
-    vectorThreshold: {
-      desc: 'Minimum similarity for vector retrieval'
-    },
-    rerankTopK: {
-      desc: 'Documents kept after re-ranking'
-    },
-    rerankThreshold: {
-      desc: 'Minimum score required after re-ranking'
-    },
-    enableRewrite: {
-      desc: 'Automatically rewrite multi-turn queries for better recall'
-    },
-    enableQueryExpansion: {
-      desc: 'When recall is low, call a reasoning model to generate expansion queries (adds latency & cost)'
-    },
-    fallbackStrategy: {
-      desc: 'How to respond when no relevant documents are found'
-    },
-    fallbackResponse: {
-      desc: 'Text returned when using the fixed fallback strategy'
-    },
-    fallbackPrompt: {
-      desc: 'Prompt used when fallback strategy is "model"'
-    },
-    rewritePrompt: {
-      desc: 'System prompt used during query rewrite'
-    },
-    chatModel: {
-      desc: 'Large language model used for summarization and abstract generation'
-    },
-    rerankModel: {
-      desc: 'Model for re-ranking search results (optional)'
-    },
-    contextTemplate: {
-      desc: 'Prompt template for generating answers based on retrieval results in normal mode'
-    },
-    systemPrompt: {
-      desc: 'System-level prompt for normal mode conversations'
-    },
-    temperature: {
-      desc: 'Controls randomness in outputs. 0 is most deterministic; 1 is most random'
-    },
-    maxTokens: {
-      desc: 'Maximum number of tokens to generate in the response'
-    }
-  },
-  mcpSettings: {
-    title: 'MCP Services',
-    description: 'Manage external MCP (Model Context Protocol) services for tools/resources in Agent mode',
-    enabled: 'Enabled',
-    disabled: 'Disabled',
-    configuredServices: 'Configured Services',
-    manageAndTest: 'Manage and test MCP service connections',
-    addService: 'Add Service',
-    empty: 'No MCP services',
-    actions: {
-      testing: 'Testing...',
-      test: 'Test Connection'
-    },
-    toasts: {
-      loadFailed: 'Failed to load MCP services',
-      enabled: 'MCP service enabled',
-      disabled: 'MCP service disabled',
-      updateStateFailed: 'Failed to update MCP service status',
-      testing: 'Testing {name}...',
-      noResponse: 'Test failed: no response from server',
-      testFailed: 'Failed to test MCP service',
-      deleted: 'MCP service deleted',
-      deleteFailed: 'Failed to delete MCP service'
-    },
-    deleteConfirmBody: 'Delete MCP service "{name}"? This action cannot be undone.',
-    unnamed: 'Unnamed',
-    builtin: 'Built-in'
-  },
   modelSettings: {
     title: 'Model Settings',
     description: 'Manage different types of AI models, including local Ollama and remote APIs',
     typeShort: {
-      chat: 'Chat',
+      chat: "Generation",
       embedding: 'Embedding',
       rerank: 'ReRank',
       vllm: 'Vision',
@@ -2686,9 +1944,9 @@ export default {
       custom: 'Custom'
     },
     chat: {
-      title: 'Chat Models',
-      desc: 'Configure large language models for chatting',
-      empty: 'No chat models'
+      title: "Generation models",
+      desc: "Configure language models for review, summaries and retrieval questions",
+      empty: "No generation models"
     },
     embedding: {
       title: 'Embedding Models',
@@ -2736,7 +1994,6 @@ export default {
       title: 'Model cannot be deleted',
       description: 'Model "{name}" is still referenced by the following settings. Open each configuration and choose another model before deleting it.',
       knowledgeBases: 'Knowledge base ({count}) | Knowledge bases ({count})',
-      agents: 'Agent ({count}) | Agents ({count})',
       openConfiguration: 'Open settings',
       truncated: 'Showing the first {shown} of {total}',
       bindings: {
@@ -2750,9 +2007,7 @@ export default {
         summary_model: 'Summary model',
         image_processing_model: 'Image processing model',
         vlm_model: 'Vision model',
-        chat_model: 'Chat model',
         rerank_model: 'Re-ranking model',
-        query_understand_model: 'Query understanding model',
         unknown: 'Other model setting'
       }
     },
@@ -2843,81 +2098,6 @@ export default {
       progressFailed: 'Failed to query download progress'
     }
   },
-  mcpServiceDialog: {
-    addTitle: 'Add MCP Service',
-    editTitle: 'Edit MCP Service',
-    basicSection: 'Basic',
-    connectionSection: 'Connection',
-    enableServiceDesc: 'When off, this service will not be invoked',
-    testAfterSaveHint: 'Save first to test the connection',
-    testResultTitle: 'Test results',
-    unitSecond: 's',
-    unitTimes: '×',
-    name: 'Service Name',
-    namePlaceholder: 'Enter service name',
-    description: 'Description',
-    descriptionPlaceholder: 'Enter service description',
-    transportType: 'Transport Type',
-    serviceUrl: 'Service URL',
-    serviceUrlPlaceholder: 'https://example.com/mcp',
-    enableService: 'Enable Service',
-    authConfig: 'Authentication',
-    authType: 'Auth Method',
-    authTypeNone: 'None / Custom Header',
-    authTypeApiKey: 'API Key / Token',
-    apiKeyHeader: 'Header Name',
-    apiKeyHeaderDesc: 'Defaults to X-API-Key. For Bearer, set Authorization and put "Bearer <token>" in the value below; for raw-token services use Authorization with the raw token.',
-    credentialValue: 'Secret / Token',
-    optional: 'Optional',
-    advancedConfig: 'Advanced',
-    timeoutSec: 'Timeout (s)',
-    retryCount: 'Retry Count',
-    retryDelaySec: 'Retry Delay (s)',
-    rules: {
-      nameRequired: 'Please enter the service name',
-      transportRequired: 'Please select a transport type',
-      urlRequired: 'Please enter the service URL',
-      urlInvalid: 'Please enter a valid URL'
-    },
-    toasts: {
-      created: 'MCP service created',
-      updated: 'MCP service updated',
-      createFailed: 'Failed to create MCP service',
-      updateFailed: 'Failed to update MCP service',
-    },
-    customHeaders: {
-      label: 'Custom Headers (optional)',
-      desc: 'HTTP headers attached to every MCP request, commonly used for enterprise gateway auth, tracing, etc.',
-      add: 'Add Header',
-      keyPlaceholder: 'Header name',
-      valuePlaceholder: 'Header value'
-    },
-    codeImport: {
-      toggle: 'Import from code',
-      hint: 'Paste a standard mcpServers JSON config to auto-fill the form',
-      parse: 'Parse & Fill',
-      editOverwriteHint: 'Importing overwrites the current form (saved credentials are unaffected; click Save to apply)',
-      errors: {
-        empty: 'Please paste the config first',
-        invalidJson: 'Unable to parse, please check the JSON format',
-        noServer: 'No MCP service config found',
-        missingUrl: 'The config is missing a url',
-        stdioUnsupported: 'stdio (command/args) configs are not supported; please use a remote config with a url'
-      },
-      toasts: {
-        filled: 'Form filled, please review and save',
-        multipleServers: 'Multiple services detected, imported the first one: {name}'
-      }
-    }
-  },
-  promptTemplate: {
-    noTemplates: 'No templates available',
-    selectTemplate: 'Select Template',
-    useTemplate: 'Use Template',
-    resetDefault: 'Reset Default',
-    default: 'Default',
-    withKnowledgeBase: 'KB',
-  },
   preview: {
     tab: 'Preview',
     loading: 'Loading document preview...',
@@ -2934,20 +2114,16 @@ export default {
     videoNotSupported: 'Your browser does not support video playback'
   },
   commandPalette: {
-    placeholder: 'Search knowledge bases, files, conversations…',
+    placeholder: "Search knowledge bases and files…",
     clearRecent: 'Clear',
     retrieval: 'Retrieval settings',
-    untitledSession: 'Untitled conversation',
     scope: {
       placeholder: 'Search within this knowledge base…',
       remove: 'Remove scope (Backspace)'
     },
     group: {
       chunks: 'Files',
-      messages: 'Messages',
       kbs: 'Knowledge bases',
-      agents: 'Agents',
-      sessionsByTitle: 'Chats (by title)',
       commands: 'Commands',
       recent: 'Recent',
       quickActions: 'Quick actions'
@@ -2957,35 +2133,19 @@ export default {
       keyword: 'Keyword'
     },
     quick: {
-      newChat: 'New conversation',
       knowledgeBases: 'Open knowledge bases',
-      agents: 'Open agents',
       settings: 'Open settings',
     },
     empty: {
       noResults: 'No matches found',
-      askAi: 'Ask the AI directly',
       adjustRetrieval: 'Adjust retrieval'
     },
     hotkey: {
       select: 'Navigate',
       enter: 'Open',
       cmdNumber: 'Jump to',
-      cmdEnter: 'Start chat',
       esc: 'Close'
     }
-  },
-  tools: {
-    multiKbSearch: 'Cross-KB Search',
-    knowledgeSearch: 'Knowledge Search',
-    grepChunks: 'Text Pattern Search',
-    getChunkDetail: 'Get Chunk Detail',
-    listKnowledgeChunks: 'List Knowledge Chunks',
-    listKnowledgeBases: 'List Knowledge Bases',
-    getDocumentInfo: 'Get Document Info',
-
-    think: 'Deep Thinking',
-    todoWrite: 'Make Plan'
   },
   kbSettings: {
     parser: {
@@ -3023,313 +2183,6 @@ export default {
           desc: 'MinerU Cloud API'
         },
       }
-    }
-  },
-  agentStream: {
-    toolApproval: {
-      waiting: 'Awaiting review · {target}',
-      waitingStatus: 'Awaiting review',
-      targetWithTool: '{service} › {tool}',
-      titleWithTarget: 'Review · {service} › {tool}',
-      argsLabel: 'Arguments',
-      argsModified: 'Modified',
-      countdownShort: '{seconds}s',
-      approve: 'Approve & run',
-      reject: 'Reject',
-      approvedTag: 'Approved',
-      rejectedTag: 'Rejected',
-      invalidJson: 'Arguments must be valid JSON',
-      submitted: 'Submitted',
-      submitFailed: 'Submit failed',
-      userRejected: 'User rejected'
-    },
-    tools: {
-      searchKnowledge: 'Knowledge Search',
-      grepChunks: 'Text Pattern Search',
-      webFetch: 'Web Fetch',
-      getDocumentInfo: 'Get Document Info',
-      listKnowledgeChunks: 'List Knowledge Chunks',
-      getRelatedDocuments: 'Find Related Documents',
-      getDocumentContent: 'Get Document Content',
-      todoWrite: 'Plan Management',
-      thinking: 'Thinking',
-      attachmentParsing: 'Parsing Attachment',
-      imageAnalysis: 'Image Analysis',
-      queryUnderstand: 'Understand Query',
-
-      dataAnalysis: 'Data analysis',
-      dataSchema: 'Data Schema',
-    },
-    citation: {
-      notFound: 'Content not found',
-      loadFailed: 'Failed to load',
-    },
-    toolSummary: {
-      getDocument: 'Get document: {title}',
-      document: 'Document',
-      listChunks: 'View {title}',
-      deepThinking: 'Deep Thinking'
-    },
-    plan: {
-      inProgress: 'In Progress',
-      pending: 'Pending',
-      completed: 'Completed'
-    },
-    search: {
-      noResults: 'No matching content found',
-      candidatesBelowThreshold: 'Matched {count} candidate, none relevant enough to use | Matched {count} candidates, none relevant enough to use',
-      foundResultsFromFiles: 'Found {results} from {fileCount}',
-      foundResults: 'Found {count} result | Found {count} results',
-      grepSummary: 'Found {matchingChunks} across {documents}'
-    },
-    grepResults: {
-      chunkHits: '{count} chunk | {count} chunks',
-      keywordHits: '{count} hit | {count} hits',
-      titleMatch: 'title',
-    },
-    knowledgeChunksList: {
-      chunkRange: 'Loaded {fetched} / {total} chunk | Loaded {fetched} / {total} chunks',
-      page: 'Page {page}, {pageSize} per page'
-    },
-    attachmentParsing: {
-      parsedSummary: 'Parsed {count} attachment | Parsed {count} attachments',
-      parsedWithSkipped: 'Parsed {parsed} attachment, {skipped} skipped (still processing) | Parsed {parsed} attachments, {skipped} skipped (still processing)',
-      noneReady: 'No parsed attachments available'
-    },
-    ragPipeline: {
-      searching: 'Searching knowledge base...',
-      searchingWithQuery: 'Searching knowledge base: "{query}"',
-      searchDone: 'Search complete'
-    },
-    toolStatus: {
-      calling: 'Calling {name}...',
-      searchKb: 'Searching knowledge base',
-      searchKbFailed: 'Knowledge base search failed',
-      grepSearch: 'Keyword search',
-      grepSearchFailed: 'Keyword search failed',
-      getDocInfo: 'Getting document info',
-      getDocInfoFailed: 'Failed to get document info',
-      viewDocument: 'View document',
-      thinkingDone: 'Thinking complete',
-      thinkingFailed: 'Thinking failed',
-      updateTodos: 'Updating task list',
-      updateTodosFailed: 'Failed to update task list',
-      imageAnalyzing: 'Viewing image content...',
-      imageAnalysisDone: 'Image content viewed',
-      imageAnalysisFailed: 'Image viewing failed',
-      attachmentParsing: 'Parsing attachments...',
-      attachmentParsingDone: 'Attachments parsed',
-      attachmentParsingFailed: 'Attachment parsing failed',
-      queryUnderstanding: 'Understanding query...',
-      queryUnderstandDone: 'Query understood',
-      called: 'Called {name}',
-      calledFailed: 'Failed to call {name}',
-    },
-    copy: {
-      emptyContent: 'Current response is empty, cannot copy',
-      success: 'Copied to clipboard',
-      failed: 'Copy failed, please copy manually'
-    },
-    saveToKb: {
-      emptyContent: 'Current response is empty, cannot save to knowledge base',
-      editorOpened: 'Editor opened, please select a knowledge base and save'
-    }
-  },
-  agentEditor: {
-    builtinHint: 'This is a built-in agent. Name and description cannot be modified, but configuration parameters can be adjusted.',
-    navGroups: {
-      basic: 'Basics',
-      knowledge: 'Knowledge & Retrieval',
-      capability: 'Extensions',
-      integration: 'Publish & Integrations'
-    },
-    questionSuggestions: {
-      navLabel: 'Question suggestions',
-      title: 'Conversation question suggestions',
-      description: 'Configure questions shown before the first message, using curated questions, knowledge bases, or both.',
-      startersTitle: 'Conversation starters',
-      enableStarters: 'Show starter questions',
-      enableStartersDesc: 'Shown before the first user message from curated, knowledge, or mixed sources.',
-      sourceMode: 'Source mode',
-      count: 'Question count',
-      curatedItems: 'Curated questions',
-      curatedItemsDesc: 'Used for starters and prioritized in hybrid mode.',
-      addItem: 'Add question',
-      modeCurated: 'Curated',
-      modeKnowledge: 'Knowledge',
-      modeHybrid: 'Hybrid',
-    },
-    placeholders: {
-      available: 'Available variables: ',
-      clickToInsert: '(click to insert)',
-      hint: '(click to insert, or type {\'{{\'} to show list)'
-    },
-    intentPrompts: {
-      title: 'Intent Prompts',
-      sectionDesc: 'Configure intent-specific system prompts; defaults apply when not customized',
-      intentLabel: 'Intent',
-      promptPlaceholder: 'Enter a custom system prompt...',
-      customized: 'Customized',
-      empty: 'No intent templates available'
-    },
-    promptNav: {
-      ariaLabel: 'Prompt outline',
-      system: 'System prompt',
-      context: 'Context template',
-      intent: 'Intent prompts',
-      rewriteSystem: 'Rewrite · System',
-      rewriteUser: 'Rewrite · User',
-      fallback: 'Retrieval fallback'
-    },
-    selection: {
-      all: 'All',
-      selected: 'Selected',
-      disabled: 'Disabled'
-    },
-    desc: {
-      name: 'Set an easily identifiable name for the agent',
-      description: 'Briefly describe the purpose and features of the agent',
-      systemPrompt: 'Custom system prompt to define the agent behavior and role',
-      leaveEmptyDefault: '(leave empty to use system default)',
-      contextTemplate: 'Define how retrieved content is formatted before passing to the model',
-      model: 'Select the LLM used by the agent',
-      temperature: 'Control output randomness, 0 is most deterministic, 1 is most random',
-      maxTokens: 'Maximum tokens for the model reply. Default is 2048. Custom values are saved as entered.',
-      maxTokensAgent: 'Maximum tokens generated in each reasoning round, including tool-call JSON. Default is 4096. A custom value is saved as entered and is not changed later.',
-      thinking: 'Enable extended thinking capability (requires model support)',
-      conversationSection: 'Configure multi-turn conversation and query rewriting parameters',
-      conversationSectionAgent: 'How much earlier conversation each turn carries. Smart reasoning is always multi-turn',
-      multiTurn: 'When enabled, historical conversation context will be preserved',
-      historyRounds: 'Number of recent conversation rounds to keep as context',
-      retainRetrievalHistory: 'Keep knowledge base results from earlier turns. When off, each turn searches again',
-      rewrite: 'Automatically rewrite user questions in multi-turn conversations to resolve references and omissions',
-      queryUnderstandModel: 'Model used for query understanding (rewriting and intent detection). Leave empty to reuse the main chat model.',
-      rewriteSystemPrompt: 'System prompt for question rewriting (leave empty for default)',
-      rewriteUserPrompt: 'User prompt template for question rewriting (leave empty for default)',
-      selectTools: 'Select tools available to the Agent',
-      maxIterations: 'Caps how many reasoning steps one task may take. Unlimited keeps going until the model stops on its own or you stop it.',
-      kbScope: 'Select the scope of knowledge bases accessible to the agent',
-      retrievalSection: "Configure knowledge retrieval and ranking",
-      queryExpansion: 'Automatically expand query terms to improve recall',
-      embeddingTopK: 'Maximum number of results from vector retrieval',
-      keywordThreshold: 'Minimum relevance score for keyword retrieval',
-      vectorThreshold: 'Minimum similarity score for vector retrieval',
-      rerankTopK: 'Maximum number of results retained after reranking',
-      rerankThreshold: 'Minimum relevance score for reranking',
-      fallbackStrategy: 'How to handle when no relevant content is found in the knowledge base',
-      fallbackResponse: 'Fixed text returned when unable to answer',
-      fallbackPrompt: 'Prompt to guide model response when no answer is found in knowledge base'
-    },
-    tools: {
-      thinking: 'Thinking',
-      thinkingDesc: 'Dynamic and reflective problem-solving thinking tool',
-      todoWrite: 'Plan',
-      todoWriteDesc: 'Create structured research plans',
-      grepChunks: 'Keyword Search',
-      grepChunksDesc: 'Quickly locate documents and chunks containing specific keywords',
-      knowledgeSearch: 'Semantic Search',
-      knowledgeSearchDesc: 'Understand questions and find semantically relevant content',
-      listChunks: 'View Document Chunks',
-      listChunksDesc: 'Get complete chunk content of a document',
-
-
-      getDocInfo: 'Get Document Info',
-      getDocInfoDesc: 'View document metadata',
-      dataAnalysis: 'Data analysis',
-      dataAnalysisDesc: 'Understand data files and perform data analysis',
-      dataSchema: 'View Data Schema',
-      dataSchemaDesc: 'Get metadata of tabular files',
-      requiresKb: '(requires knowledge base configuration)',
-      requiresRagKb: '(requires a KB with vector/keyword indexing enabled)',
-      knowledgeReportAnomaly: 'Report message issue',
-      knowledgeReportAnomalyDesc: 'Suggest a correction or tag change for the knowledge base owner',
-      knowledgeImportURL: 'Import page by URL',
-      knowledgeImportURLDesc: 'Fetch the original page for completeness, source, and quality review',
-      knowledgeApplyAnomaly: 'Apply message correction',
-      knowledgeApplyAnomalyDesc: 'Apply a specific correction only after the owner explicitly asks',
-      webFetch: 'Web Fetch',
-      webFetchDesc: 'Fetch content from a specified URL',
-      groupBase: 'Basic',
-      groupRag: 'Knowledge Retrieval (RAG)',
-      groupData: 'Data Analysis',
-      dangerTag: 'Write',
-      statusNoKb: 'No knowledge base is linked',
-      kbMetricRag: 'RAG KB | RAG KBs',
-      statusInactive: '{count} ticked tool cannot take effect with the current config | {count} ticked tools cannot take effect with the current config',
-      effectiveLabel: 'Effective Tools',
-      effectiveDesc: 'Computed from the current config — these are the tools the agent will actually be able to call',
-      effectiveEmpty: 'No tool available — the agent will fall back to plain model chat'
-    },
-    agentType: {
-      label: 'Agent Type',
-      desc: 'Picking a preset auto-fills the system prompt, tool list and recommended KB scope.',
-      defaultNamePattern: 'My {label}',
-      kbMismatch: {
-        ragQa: 'RAG retrieval not enabled',
-        dataAnalysis: "Requires RAG",
-        quickAnswer: 'Quick Answer mode requires RAG retrieval',
-        generic: 'Not compatible with current type'
-      },
-      kbIncompatibleWarn: '{count} selected KB is not compatible with this type, please adjust manually. | {count} selected KBs are not compatible with this type, please adjust manually.'
-    },
-    mcp: {
-      label: 'MCP Services',
-      desc: 'Select MCP services available to the Agent',
-      selectLabel: 'Select MCP Services',
-      selectDesc: 'Select MCP services to enable',
-      selectPlaceholder: 'Select MCP services',
-      unavailableService: 'Unavailable service'
-    },
-    llmCallTimeout: {
-      label: 'LLM Call Timeout',
-      desc: 'Maximum waiting time for a single LLM call (seconds). Call will be terminated if this time is exceeded',
-      hint: 'Leave empty or 0 to use the default (120 seconds)',
-      placeholder: 'Enter seconds, recommended range 60-1800'
-    },
-    imageUpload: {
-      navLabel: 'Attachment Upload',
-      sectionTitle: 'Attachment Upload',
-      sectionDesc: 'Configure image and document attachments in chat, plus parse rules and related models',
-      label: 'Image Upload',
-      desc: 'Allow users to upload images in chat for VLM understanding',
-      vlmModel: 'VLM Model',
-      vlmModelDesc: 'Vision language model for image analysis',
-      vlmModelPlaceholder: 'Select VLM model',
-      vlmModelRequired: 'VLM model is required when image upload is enabled',
-      imageUnderstandingLabel: 'Attachment Image Understanding / Scanned OCR',
-      imageUnderstandingDesc: 'For image-only PDFs/PPTs (scanned documents), run VLM OCR when no text can be extracted. Increases parse latency; off by default.',
-      ocrMaxPagesLabel: 'Scanned OCR Max Pages',
-      ocrMaxPagesDesc: 'Max pages of a scanned document sent to the VLM for OCR. More pages means better coverage but slower and costlier parsing. 0 uses the global default.',
-      useGlobalDefault: '0 = global default',
-      notConfigured: 'Not Configured',
-    },
-    chatParser: {
-      label: 'Chat Attachment Parsing Policy',
-      desc: 'Choose a parser engine per file type for this agent\'s chat attachments.',
-      waitTimeoutLabel: 'Attachment Parse Wait Timeout (s)',
-      waitTimeoutDesc: 'How long a chat turn waits for still-parsing attachments before proceeding with only the finished ones. Raise for large / scanned files. 0 uses the global default.'
-    },
-    dataAnalysis: {
-      enableLabel: 'Table data analysis',
-      enableDesc: 'Analyze retrieved CSV / Excel tables in quick answer mode. Enabling this makes an extra model call to generate SQL.',
-    },
-    fallback: {
-      fixed: 'Fixed Response',
-      model: 'Model Generated'
-    },
-    fileTypes: {
-      label: 'Supported File Types',
-      desc: 'Restrict selectable file types, leave empty to support all types',
-      allTypes: 'All Types',
-      pdf: 'PDF Documents',
-      word: 'Word Documents (.docx/.doc)',
-      textLabel: 'Text',
-      text: 'Plain Text Files (.txt)',
-      markdown: 'Markdown Documents',
-      csv: 'Comma-Separated Value Files',
-      excel: 'Excel Spreadsheets (.xlsx/.xls)',
-      imageLabel: 'Images',
-      image: 'Image Files (.jpg/.jpeg/.png)'
     }
   },
   mermaid: {
@@ -3396,11 +2249,6 @@ export default {
     resourceLoadFailed: 'Failed to load resources',
     retryLoadResources: 'Retry',
     syncScheduleLabel: 'Sync schedule',
-    conflictLabel: 'Conflict strategy',
-    conflict: {
-      overwrite: 'Overwrite',
-      skip: 'Skip existing'
-    },
     syncDeletions: 'Sync deletions (remove knowledge when deleted at source)',
     createAndSync: 'Create & Sync Now',
     createAndSyncSuccess: 'Data source created and sync task submitted',
@@ -3411,7 +2259,6 @@ export default {
       selectType: 'Select Type',
       credentials: 'Credentials',
       resources: 'Resources',
-      strategy: 'Strategy'
     },
     syncHistory: 'Sync History',
     refreshLogs: 'Refresh logs',
@@ -3483,9 +2330,9 @@ export default {
       deletion_lookup_failed: 'Failed to look up the item before deletion; see server logs',
       deletion_failed: 'Deletion failed; see server logs',
       ingest_failed: 'Ingest failed; see server logs',
-      source_adapter_anomaly_failed: 'Failed to record a source anomaly. Check application logs.',
-      rss_update_rejected: 'Feed content update was rejected. Check the message status and application logs.',
-    }
+
+    source_adapter_failed: "Site adapter processing failed. Check application logs.",
+}
   },
   integrations: {
     title: 'Publish & Integrations',
@@ -3539,8 +2386,6 @@ export default {
       createApiKeyFailed: 'Failed to create API key',
       loadApiKeysFailed: 'Failed to load API keys',
       apiKeyCreated: 'API key created',
-      requestExampleCreateSession: '# 1. Create a session',
-      requestExampleAgentChat: '# 2. Agent chat (SSE; replace <session_id> with the id from step 1)',
       requestExample: 'Request example',
       playgroundTitle: 'API Playground',
       playgroundDesc: 'Use an API key to query your knowledge and inspect the response.',
@@ -3549,24 +2394,13 @@ export default {
       playgroundSectionRequest: 'Request setup',
       playgroundSectionPreview: 'Request preview',
       playgroundSectionResult: 'Run result',
-      playgroundAgent: 'Test agent',
-      playgroundAgentPlaceholder: 'Select an agent to test',
-      playgroundBuiltin: 'Built-in',
-      playgroundAgentsLoadFailed: 'Failed to load agents',
       playgroundQuestion: 'Knowledge query',
       playgroundQuestionPlaceholder: 'Enter a knowledge query',
       playgroundRequestPreview: 'Request preview (secrets masked)',
       playgroundRun: 'Run test',
       playgroundStop: 'Stop',
       playgroundNeedApiKey: 'This workspace has no API key.',
-      playgroundNeedAgent: 'Select a test agent.',
       playgroundNeedQuestion: 'Enter a test question.',
-      playgroundMissingSessionId: 'Session creation succeeded, but the response did not include a session id.',
-      playgroundNoStream: 'The chat API did not return a readable SSE stream.',
-      playgroundStepSession: 'Step 1: Create Session',
-      playgroundStepChat: 'Step 2: Agent Chat SSE',
-      playgroundFinalAnswer: 'Extracted answer',
-      playgroundEmptyResult: 'Run a test to show the session response, raw SSE output, and extracted answer here.',
       playgroundSuccess: 'Test completed ({ms}ms)',
       playgroundStopped: 'Test stopped',
       playgroundFailed: 'API Playground test failed',
@@ -3574,12 +2408,6 @@ export default {
       saveFailed: 'Failed to save API integration settings',
       saveSuccess: 'API integration settings saved',
     },
-    selectAgentPlaceholder: 'Choose an agent',
-    selectAgentHint: 'Please select an agent first',
-    boundAgent: 'Bound agent',
-    filterByAgent: 'Filter by agent',
-    filterByAgentWithName: 'Filter by agent: {name}',
-    filterAllAgents: 'All agents',
   },
   credential: {
     configured: 'Configured',
@@ -3621,13 +2449,9 @@ export default {
 
 
     "documents": "{count} document | {count} documents",
-    "webSources": "{count} web source | {count} web sources",
-    "results": "{count} result | {count} results",
     "files": "{count} file | {count} files",
-    "matchingChunks": "{count} matching chunk | {count} matching chunks",
-    "tokens": "{count} token | {count} tokens",
-    "reviewFlags": "{count} review flag | {count} review flags",
-    "manualConflicts": "{count} manual conflict | {count} manual conflicts",
-    "failedRecords": "{count} failed record | {count} failed records"
-  },
+    "failedRecords": "{count} failed record | {count} failed records",
+
+    tokens: "token | tokens",
+},
 }

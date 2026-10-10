@@ -12,7 +12,7 @@ import (
 // connector Credentials map stripped from the Config jsonb. Credential
 // presence is exposed via the dedicated /credentials subresource.
 //
-// Unlike MCP / Model (which have a flat set of named credential
+// Unlike Model (which has a flat set of named credential
 // fields), DataSource credentials are a per-connector atomic map — an OAuth
 // token pair, a Confluence email+token bundle, etc. Splitting them at the
 // field level would leave half-configured states that can't actually
@@ -28,7 +28,6 @@ type DataSourceResponse struct {
 	SyncSchedule         string               `json:"sync_schedule"`
 	SyncMode             string               `json:"sync_mode"`
 	Status               string               `json:"status"`
-	ConflictStrategy     string               `json:"conflict_strategy"`
 	SyncDeletions        bool                 `json:"sync_deletions"`
 	LastSyncAt           *time.Time           `json:"last_sync_at"`
 	LastSyncCursor       json.RawMessage      `json:"last_sync_cursor,omitempty"`
@@ -79,7 +78,6 @@ func NewDataSourceResponse(ds *types.DataSource) *DataSourceResponse {
 		SyncSchedule:         ds.SyncSchedule,
 		SyncMode:             ds.SyncMode,
 		Status:               ds.Status,
-		ConflictStrategy:     ds.ConflictStrategy,
 		SyncDeletions:        ds.SyncDeletions,
 		LastSyncAt:           ds.LastSyncAt,
 		LastSyncCursor:       json.RawMessage(ds.LastSyncCursor),

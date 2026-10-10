@@ -38,9 +38,7 @@ type AsynqTaskParams struct {
 	DataTableSummary     interfaces.TaskHandler `name:"dataTableSummary"`
 	ImageMultimodal      interfaces.TaskHandler `name:"imageMultimodal"`
 	KnowledgePostProcess interfaces.TaskHandler `name:"knowledgePostProcess"`
-	KnowledgeAutoTag     interfaces.TaskHandler `name:"knowledgeAutoTag"`
 	EntityNameEmbedding  *service.EntityNameEmbeddingRebuilder
-	TemporaryDocument    interfaces.TemporaryDocumentService
 	DeadLetterRepo       interfaces.TaskDeadLetterRepository
 	SpanTracker          service.SpanTracker
 }
@@ -111,9 +109,9 @@ func newAsynqServer(concurrency int, queues map[string]int) *asynq.Server {
 }
 
 // backgroundTaskMiddleware tags every task's context as a background worker
-// execution (types.WithBackgroundTask) so the per-model chat concurrency
+// execution (types.WithBackgroundTask) so the per-model generation concurrency
 // governor applies to ingestion/enrichment LLM calls but not to interactive
-// user-facing chat.
+// foreground model tests.
 func backgroundTaskMiddleware() asynq.MiddlewareFunc {
 	return func(next asynq.Handler) asynq.Handler {
 		return asynq.HandlerFunc(func(ctx context.Context, t *asynq.Task) error {
@@ -213,9 +211,9 @@ func RunAsynqServer(params AsynqTaskParams) *asynq.ServeMux {
 	knowledgeFailer := newDeadLetterKnowledgeFailer(params.KnowledgeService, params.SpanTracker)
 	mux.Use(asynqdl.MiddlewareWithCallback(params.DeadLetterRepo, knowledgeFailer))
 
-	// Mark every asynq worker execution as a background task so the chat
+	// Mark every asynq worker execution as a background task so the generation
 	// concurrency governor throttles ingestion/enrichment LLM traffic while
-	// leaving user-facing interactive chat ungated. Installed early so all
+	// leaving foreground model tests ungated. Installed early so all
 	// downstream handlers (and their model calls) inherit the flag.
 	mux.Use(backgroundTaskMiddleware())
 
@@ -224,7 +222,6 @@ func RunAsynqServer(params AsynqTaskParams) *asynq.ServeMux {
 
 	// Register document processing handler
 	mux.HandleFunc(types.TypeDocumentProcess, params.KnowledgeService.ProcessDocument)
-	mux.HandleFunc(types.TypeTemporaryDocumentProcess, params.TemporaryDocument.Process)
 
 	// Register manual knowledge processing handler (cleanup + re-indexing)
 	mux.HandleFunc(types.TypeManualProcess, params.KnowledgeService.ProcessManualUpdate)
@@ -256,7 +253,6 @@ func RunAsynqServer(params AsynqTaskParams) *asynq.ServeMux {
 
 	// Register knowledge post process handler
 	mux.HandleFunc(types.TypeKnowledgePostProcess, params.KnowledgePostProcess.Handle)
-	mux.HandleFunc(types.TypeKnowledgeAutoTag, params.KnowledgeAutoTag.Handle)
 	mux.HandleFunc(types.TypeEntityNameEmbeddingRebuild, params.EntityNameEmbedding.Handle)
 
 	// Register data source sync handler

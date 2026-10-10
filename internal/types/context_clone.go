@@ -31,8 +31,6 @@ var contextCloneAcrossDetach = map[ContextKey]bool{
 	UserIDContextKey:     true,
 	PrincipalContextKey:  true,
 
-	SessionIDContextKey: true,
-
 	// The visitor identity must remain distinct across background work.
 	EmbedQueryContextKey: true,
 
@@ -41,8 +39,8 @@ var contextCloneAcrossDetach = map[ContextKey]bool{
 	RequestIDContextKey: true,
 	LanguageContextKey:  true,
 
-	// Marks model calls as coming from an asynq worker so the per-model chat
-	// concurrency governor throttles them, leaving interactive chat latency
+	// Marks model calls as coming from an asynq worker so the per-model
+	// concurrency governor throttles them, leaving foreground model latency
 	// alone. Document ingestion detaches mid-flight — knowledge_create hands
 	// processChunks to a goroutine on a cloned context, and processChunks is
 	// what vectorises every chunk. Dropping the mark there would let exactly
@@ -62,10 +60,6 @@ var contextCloneAcrossDetach = map[ContextKey]bool{
 	// would be filed under whatever its parent was doing.
 	LLMCallPurposeContextKey:             false,
 	LLMPromptPrefixFingerprintContextKey: false,
-	// The parser engine resolved from one agent's ChatParserEngineRules for
-	// one attachment's file type. Read by the attachment processor on the same
-	// context that set it, and meaningless for anything else.
-	ChatParserEngineContextKey: false,
 }
 
 // ContextKeysClonedAcrossDetach returns the keys logger.CloneContext carries

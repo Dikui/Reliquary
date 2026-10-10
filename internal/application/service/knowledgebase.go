@@ -358,10 +358,6 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 		kb.ChunkingConfig = config.ChunkingConfig
 		kb.ImageProcessingConfig = config.ImageProcessingConfig
 
-		if config.AutoTagConfig != nil {
-			config.AutoTagConfig.Normalize()
-			kb.AutoTagConfig = config.AutoTagConfig
-		}
 		// Update the enabled indexing strategy.
 		if config.IndexingStrategy != nil {
 			if !config.IndexingStrategy.HasAnyIndexing() {
@@ -789,7 +785,6 @@ func (s *knowledgeBaseService) DuplicateKnowledgeBase(
 	targetKB.UpdatedAt = now
 	targetKB.DeletedAt.Valid = false
 	targetKB.DeletedAt.Time = time.Time{}
-	targetKB.IsTemporary = false
 	targetKB.IsPinned = false
 	targetKB.PinnedAt = nil
 	targetKB.KnowledgeCount = 0

@@ -28,15 +28,14 @@ type modelService struct {
 	db                     *gorm.DB
 	repo                   interfaces.ModelRepository
 	kbRepo                 interfaces.KnowledgeBaseRepository
-	agentRepo              interfaces.CustomAgentRepository
 	ollamaService          *ollama.OllamaService
 	pooler                 embedding.EmbedderPooler
 	tenantService          interfaces.TenantService
 	nameEmbeddingRebuilder EntityNameEmbeddingRebuildTrigger
 }
 
-func NewModelServiceWithRoutingDB(repo interfaces.ModelRepository, kbRepo interfaces.KnowledgeBaseRepository, agentRepo interfaces.CustomAgentRepository, ollamaService *ollama.OllamaService, pooler embedding.EmbedderPooler, tenantService interfaces.TenantService, db *gorm.DB) interfaces.ModelService {
-	s := NewModelService(repo, kbRepo, agentRepo, ollamaService, pooler, tenantService).(*modelService)
+func NewModelServiceWithRoutingDB(repo interfaces.ModelRepository, kbRepo interfaces.KnowledgeBaseRepository, ollamaService *ollama.OllamaService, pooler embedding.EmbedderPooler, tenantService interfaces.TenantService, db *gorm.DB) interfaces.ModelService {
+	s := NewModelService(repo, kbRepo, ollamaService, pooler, tenantService).(*modelService)
 	s.db = db
 	return s
 }
@@ -44,7 +43,6 @@ func NewModelServiceWithRoutingDB(repo interfaces.ModelRepository, kbRepo interf
 // NewModelService creates a new model service instance
 func NewModelService(repo interfaces.ModelRepository,
 	kbRepo interfaces.KnowledgeBaseRepository,
-	agentRepo interfaces.CustomAgentRepository,
 	ollamaService *ollama.OllamaService,
 	pooler embedding.EmbedderPooler,
 	tenantService interfaces.TenantService,
@@ -52,7 +50,6 @@ func NewModelService(repo interfaces.ModelRepository,
 	return &modelService{
 		repo:          repo,
 		kbRepo:        kbRepo,
-		agentRepo:     agentRepo,
 		ollamaService: ollamaService,
 		pooler:        pooler,
 		tenantService: tenantService,
@@ -262,7 +259,8 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 }
 
 // UpdateModelCredentials writes one or more credential fields on the model's
-// Parameters jsonb. Models are not pooled per-instance the way MCP clients
+// Parameters jsonb. Model clients read credentials from current configuration.
+// Model clients
 // are (each call to GetEmbeddingModel/GetChatModel rebuilds the client from
 // the current Parameters), so no explicit cache invalidation is required —
 // the next call will pick up the new credential automatically.
@@ -384,13 +382,9 @@ func (s *modelService) DeleteModel(ctx context.Context, id string) error {
 		if kbCount == 0 {
 			kbCount = int64(len(usage.KnowledgeBases))
 		}
-		agentCount := usage.AgentTotal
-		if agentCount == 0 {
-			agentCount = int64(len(usage.Agents))
-		}
-		logger.Warnf(ctx, "Model %s is in use: kb=%d agent=%d", id, kbCount, agentCount)
+		logger.Warnf(ctx, "Model %s is in use: kb=%d", id, kbCount)
 		return apperrors.NewModelInUseError(
-			formatModelInUseMessage(kbCount, agentCount),
+			formatModelInUseMessage(kbCount),
 			usage,
 		)
 	}
@@ -415,7 +409,6 @@ func (s *modelService) getModelUsageDetails(
 	details := types.ModelUsageDetails{
 		ModelTiers:     []types.ModelTierUsageResource{},
 		KnowledgeBases: make([]types.ModelUsageResource, 0),
-		Agents:         make([]types.ModelUsageResource, 0),
 	}
 
 	kbCount, err := s.kbRepo.CountByModelID(ctx, tenantID, modelID)
@@ -430,21 +423,6 @@ func (s *modelService) getModelUsageDetails(
 		}
 		if details.KnowledgeBases == nil {
 			details.KnowledgeBases = make([]types.ModelUsageResource, 0)
-		}
-	}
-
-	agentCount, err := s.agentRepo.CountByModelID(ctx, tenantID, modelID)
-	if err != nil {
-		return details, err
-	}
-	details.AgentTotal = agentCount
-	if agentCount > 0 {
-		details.Agents, err = s.agentRepo.ListModelUsages(ctx, tenantID, modelID)
-		if err != nil {
-			return details, err
-		}
-		if details.Agents == nil {
-			details.Agents = make([]types.ModelUsageResource, 0)
 		}
 	}
 
@@ -596,14 +574,12 @@ func (s *modelService) GetVLMModel(ctx context.Context, modelId string) (vlm.VLM
 	return vlmModel, nil
 }
 
-func formatModelInUseMessage(kbCount, agentCount int64) string {
+func formatModelInUseMessage(kbCount int64) string {
 	var parts []string
 	if kbCount > 0 {
 		parts = append(parts, fmt.Sprintf("%d knowledge base(s)", kbCount))
 	}
-	if agentCount > 0 {
-		parts = append(parts, fmt.Sprintf("%d agent(s)", agentCount))
-	}
+
 	joined := strings.Join(parts, " and ")
 	return fmt.Sprintf(
 		"model is used by %s; reconfigure or remove those references before deleting",

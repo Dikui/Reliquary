@@ -48,9 +48,6 @@ func (r *intakeDeleteRepo) DeleteKnowledgeList(context.Context, uint64, []string
 	r.deleted = true
 	return nil
 }
-func (r *intakeDeleteRepo) DeleteKnowledgeTagRelations(context.Context, string) error { return nil }
-
-type intakeDeleteChunkRepo struct{ interfaces.ChunkRepository }
 
 func (intakeDeleteChunkRepo) ListImageInfoByKnowledgeIDs(context.Context, uint64, []string) ([]interfaces.ChunkImageInfo, error) {
 	return nil, nil
@@ -103,3 +100,5 @@ func TestDeleteKnowledgeListIntakeAndResources(t *testing.T) {
 		})
 	}
 }
+
+type intakeDeleteChunkRepo struct{ interfaces.ChunkRepository }

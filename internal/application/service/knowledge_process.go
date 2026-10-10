@@ -111,9 +111,6 @@ func finalizeIndexedKnowledgeState(
 	}
 
 	knowledge.EnableStatus = "enabled"
-	if knowledge.IsSourceUpdateCandidate() {
-		knowledge.EnableStatus = "disabled"
-	}
 	knowledge.StorageSize = totalStorageSize
 	knowledge.ProcessedAt = &now
 	knowledge.UpdatedAt = now
@@ -549,10 +546,6 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 
 	if err := s.repo.UpdateKnowledge(ctx, knowledge); err != nil {
 		logger.GetLogger(ctx).WithField("error", err).Errorf("processChunks update knowledge failed")
-	} else if knowledge.ParseStatus == types.ParseStatusCompleted {
-		if err := s.promoteSourceUpdateCandidate(ctx, knowledge.ID); err != nil {
-			logger.Warnf(ctx, "source update candidate promotion after indexing failed for %s: %v", knowledge.ID, err)
-		}
 	}
 
 	// Enqueue multimodal tasks for images (async, non-blocking)
@@ -697,26 +690,11 @@ func checkSufficientSummaryContent(ctx context.Context, knowledgeID, content str
 	return nil
 }
 
-// sortChunksForSummary orders chunks for document reconstruction. Parser
-// StartAt offsets stay authoritative until any chunk has been manually edited;
-// after that ChunkIndex is the safer reading order.
+// sortChunksForSummary orders parser output by its original document offsets.
 func sortChunksForSummary(chunks []*types.Chunk) []*types.Chunk {
 	sorted := make([]*types.Chunk, len(chunks))
 	copy(sorted, chunks)
-	edited := false
-	for _, chunk := range sorted {
-		if chunk.ContentRevision > 0 {
-			edited = true
-			break
-		}
-	}
 	sort.Slice(sorted, func(i, j int) bool {
-		if edited {
-			if sorted[i].ChunkIndex != sorted[j].ChunkIndex {
-				return sorted[i].ChunkIndex < sorted[j].ChunkIndex
-			}
-			return sorted[i].ID < sorted[j].ID
-		}
 		return sorted[i].StartAt < sorted[j].StartAt
 	})
 	return sorted
@@ -734,41 +712,19 @@ func (s *knowledgeService) prepareSummaryContent(ctx context.Context,
 
 	// Determine max input chars from config
 	maxInputChars := defaultMaxInputChars
-	if s.config.Conversation.Summary != nil && s.config.Conversation.Summary.MaxInputChars > 0 {
-		maxInputChars = s.config.Conversation.Summary.MaxInputChars
+	if s.config.ArticleProcessing.Summary != nil && s.config.ArticleProcessing.Summary.MaxInputChars > 0 {
+		maxInputChars = s.config.ArticleProcessing.Summary.MaxInputChars
 	}
 
-	// Sort chunks for reconstruction. Parser offsets remain authoritative until
-	// any chunk has been manually edited; after that ChunkIndex is safer.
+	// Preserve the original document order during reconstruction.
 	sortedChunks := sortChunksForSummary(chunks)
 
 	// Reconstruct the document before enriching it with image info. Enrichment
 	// must happen AFTER reconstruction because StartAt is based on original
 	// document offsets; enriched (longer) content would break the positioning.
-	chunkContents := ""
-	hasEditedChunk := false
-	for _, chunk := range sortedChunks {
-		if chunk.ContentRevision > 0 {
-			hasEditedChunk = true
-			break
-		}
-	}
-	if hasEditedChunk {
-		// Parser offsets describe the immutable source. Once a replacement has
-		// changed length they can no longer be applied to the effective content;
-		// concatenate current chunks instead of truncating at stale offsets.
-		parts := make([]string, 0, len(sortedChunks))
-		for _, chunk := range sortedChunks {
-			if chunk.IsEnabled && strings.TrimSpace(chunk.Content) != "" {
-				parts = append(parts, chunk.Content)
-			}
-		}
-		chunkContents = strings.Join(parts, "\n\n")
-	} else {
-		// Synthetic table headers are not represented in StartAt/EndAt. Match
-		// real text overlap instead of slicing by source offsets.
-		chunkContents = searchutil.MergeTextChunks(sortedChunks, "")
-	}
+	// Synthetic table headers are not represented in StartAt/EndAt. Match
+	// real text overlap instead of slicing by source offsets.
+	chunkContents := searchutil.MergeTextChunks(sortedChunks, "")
 
 	// Collect image_info from image_ocr/image_caption children and enrich
 	chunkIDs := make([]string, len(sortedChunks))
@@ -829,8 +785,8 @@ func (s *knowledgeService) getSummaryFromContent(ctx context.Context,
 	summaryModel chat.Chat, knowledge *types.Knowledge, chunkContents string,
 ) (string, error) {
 	maxInputChars := defaultMaxInputChars
-	if s.config.Conversation.Summary != nil && s.config.Conversation.Summary.MaxInputChars > 0 {
-		maxInputChars = s.config.Conversation.Summary.MaxInputChars
+	if s.config.ArticleProcessing.Summary != nil && s.config.ArticleProcessing.Summary.MaxInputChars > 0 {
+		maxInputChars = s.config.ArticleProcessing.Summary.MaxInputChars
 	}
 
 	// User-authored metadata is trusted document context. Internal ingestion
@@ -843,12 +799,12 @@ func (s *knowledgeService) getSummaryFromContent(ctx context.Context,
 
 	// Determine max output tokens from config
 	maxTokens := 2048
-	if s.config.Conversation.Summary != nil && s.config.Conversation.Summary.MaxCompletionTokens > 0 {
-		maxTokens = s.config.Conversation.Summary.MaxCompletionTokens
+	if s.config.ArticleProcessing.Summary != nil && s.config.ArticleProcessing.Summary.MaxCompletionTokens > 0 {
+		maxTokens = s.config.ArticleProcessing.Summary.MaxCompletionTokens
 	}
 
 	// Generate summary using AI model
-	summaryPrompt := types.RenderPromptPlaceholders(s.config.Conversation.GenerateSummaryPrompt, types.PlaceholderValues{
+	summaryPrompt := types.RenderPromptPlaceholders(s.config.ArticleProcessing.GenerateSummaryPrompt, types.PlaceholderValues{
 		"language": types.LanguageNameFromContext(ctx),
 	})
 	thinking := false
@@ -1031,7 +987,7 @@ func (s *knowledgeService) ProcessSummaryGeneration(ctx context.Context, t *asyn
 		// "finalizing". When we DO return an error asynq will retry, so
 		// we only drain on the final attempt.
 		finalizeSubtaskDetached(ctx, s.repo, payload.KnowledgeID, "summary",
-			retErr, false, isFinalAsynqAttempt(ctx), sourceUpdatePromotionCallback(s))
+			retErr, false, isFinalAsynqAttempt(ctx))
 		if span == nil {
 			return
 		}
@@ -1119,7 +1075,7 @@ func (s *knowledgeService) ProcessSummaryGeneration(ctx context.Context, t *asyn
 			return staleErr
 		}
 		if stale {
-			summaryOut["skipped"] = "content_revision_changed"
+			summaryOut["skipped"] = "body_changed"
 			return nil
 		}
 		if updateErr := s.skipKnowledgeSummary(ctx, knowledge, kb); updateErr != nil {
@@ -1166,7 +1122,7 @@ func (s *knowledgeService) ProcessSummaryGeneration(ctx context.Context, t *asyn
 		}
 		if stale {
 			logger.Infof(ctx, "Discarding stale summary fallback for knowledge %s", payload.KnowledgeID)
-			summaryOut["skipped"] = "content_revision_changed"
+			summaryOut["skipped"] = "body_changed"
 			return nil
 		}
 
@@ -1213,8 +1169,7 @@ func (s *knowledgeService) ProcessSummaryGeneration(ctx context.Context, t *asyn
 		summaryOut["error_type"] = fmt.Sprintf("%T", err)
 		return handleRetryableSummaryFailure(err)
 	}
-	// Do not publish an answer derived from a superseded chunk or metadata
-	// version. A user can explicitly refresh again from the latest revision.
+	// Keep a summary only when its source body and metadata still match.
 	staleSummary, staleErr := summarySourceChanged(
 		ctx, s.repo, s.chunkRepo, payload.TenantID, payload.KnowledgeID, summaryMetadataVersion, textChunks,
 	)
@@ -1226,7 +1181,7 @@ func (s *knowledgeService) ProcessSummaryGeneration(ctx context.Context, t *asyn
 	}
 	if staleSummary {
 		logger.Infof(ctx, "Discarding stale summary for knowledge %s", payload.KnowledgeID)
-		summaryOut["skipped"] = "content_revision_changed"
+		summaryOut["skipped"] = "body_changed"
 		return nil
 	}
 
@@ -1395,7 +1350,7 @@ func (s *knowledgeService) processQuestionGenerationForKnowledge(ctx context.Con
 	// unwind LIFO, so this one declared first executes last.
 	defer func() {
 		finalizeSubtaskDetached(ctx, s.repo, payload.KnowledgeID, "question_legacy",
-			retErr, superseded, isFinalAsynqAttempt(ctx), sourceUpdatePromotionCallback(s))
+			retErr, superseded, isFinalAsynqAttempt(ctx))
 	}()
 	defer func() {
 		logger.Infof(
@@ -1493,9 +1448,9 @@ func (s *knowledgeService) processQuestionGenerationForKnowledge(ctx context.Con
 		ctx = context.WithValue(ctx, types.LanguageContextKey, payload.Language)
 	}
 
-	if strings.TrimSpace(s.config.Conversation.GenerateQuestionsPrompt) == "" {
+	if strings.TrimSpace(s.config.ArticleProcessing.GenerateQuestionsPrompt) == "" {
 		exitStatus = "prompt_not_configured"
-		logger.Errorf(ctx, "GenerateQuestionsPrompt is empty: configure conversation.generate_questions_prompt_id")
+		logger.Errorf(ctx, "GenerateQuestionsPrompt is empty: configure article_processing.generate_questions_prompt_id")
 		qErr = fmt.Errorf("generate questions prompt not configured")
 		return qErr
 	}
@@ -1628,7 +1583,7 @@ func (s *knowledgeService) processQuestionGenerationForKnowledge(ctx context.Con
 			nextContent = enrichContent(textChunks[i+1])
 		}
 
-		generationRevision := chunk.ContentRevision
+		generationContent := chunk.Content
 		llmCallAttempts++
 		questions, err := s.generateQuestionsWithContext(ctx, chatModel, enrichContent(chunk), prevContent, nextContent,
 			knowledge.Title, questionCount, customInstructions)
@@ -1643,8 +1598,8 @@ func (s *knowledgeService) processQuestionGenerationForKnowledge(ctx context.Con
 			continue
 		}
 		latestChunk, latestErr := s.chunkRepo.GetChunkByID(ctx, payload.TenantID, chunk.ID)
-		if latestErr != nil || latestChunk.ContentRevision != generationRevision {
-			logger.Infof(ctx, "Skipping stale generated questions for chunk %s (revision changed)", chunk.ID)
+		if latestErr != nil || latestChunk.Content != generationContent {
+			logger.Infof(ctx, "Skipping stale generated questions for chunk %s (content changed)", chunk.ID)
 			continue
 		}
 		chunk = latestChunk
@@ -1656,17 +1611,15 @@ func (s *knowledgeService) processQuestionGenerationForKnowledge(ctx context.Con
 
 		// Update chunk metadata with unique IDs for each question
 		generatedQuestions := make([]types.GeneratedQuestion, len(questions))
-		questionRevision := chunk.ContentRevision
 		for j, question := range questions {
 			questionID := fmt.Sprintf("q%d", time.Now().UnixNano()+int64(j))
 			generatedQuestions[j] = types.GeneratedQuestion{
-				ID:              questionID,
-				Question:        question,
-				ContentRevision: &questionRevision,
+				ID:       questionID,
+				Question: question,
 			}
 		}
 		meta := &types.DocumentChunkMetadata{
-			GeneratedQuestions: generatedQuestions, GeneratedQuestionsRevision: chunk.ContentRevision,
+			GeneratedQuestions: generatedQuestions,
 		}
 		if err := chunk.SetDocumentMetadata(meta); err != nil {
 			chunkMetadataSetFailed++
@@ -1760,7 +1713,7 @@ func (s *knowledgeService) processQuestionGenerationForChunks(ctx context.Contex
 	defer func() {
 		finalizeSubtaskDetached(ctx, s.repo, payload.KnowledgeID,
 			fmt.Sprintf("question_batch[%d]", payload.BatchIndex),
-			retErr, superseded, isFinalAsynqAttempt(ctx), sourceUpdatePromotionCallback(s))
+			retErr, superseded, isFinalAsynqAttempt(ctx))
 	}()
 	defer func() {
 		logger.Infof(ctx,
@@ -1828,9 +1781,9 @@ func (s *knowledgeService) processQuestionGenerationForChunks(ctx context.Contex
 			"language":       payload.Language,
 		})
 
-	if strings.TrimSpace(s.config.Conversation.GenerateQuestionsPrompt) == "" {
+	if strings.TrimSpace(s.config.ArticleProcessing.GenerateQuestionsPrompt) == "" {
 		exitStatus = "prompt_not_configured"
-		logger.Errorf(ctx, "GenerateQuestionsPrompt is empty: configure conversation.generate_questions_prompt_id")
+		logger.Errorf(ctx, "GenerateQuestionsPrompt is empty: configure article_processing.generate_questions_prompt_id")
 		qErr = fmt.Errorf("generate questions prompt not configured")
 		return qErr
 	}
@@ -1962,7 +1915,7 @@ func (s *knowledgeService) processQuestionGenerationForChunks(ctx context.Contex
 			continue
 		}
 
-		generationRevision := chunk.ContentRevision
+		generationContent := chunk.Content
 		questions, gerr := s.generateQuestionsWithContext(
 			ctx, chatModel, enrich(chunk), prevContentAt(i), nextContentAt(i), knowledge.Title, questionCount,
 			customInstructions)
@@ -1975,8 +1928,8 @@ func (s *knowledgeService) processQuestionGenerationForChunks(ctx context.Contex
 			continue
 		}
 		latestChunk, latestErr := s.chunkRepo.GetChunkByID(ctx, payload.TenantID, chunk.ID)
-		if latestErr != nil || latestChunk.ContentRevision != generationRevision {
-			logger.Infof(ctx, "Skipping stale generated questions for chunk %s (revision changed)", chunk.ID)
+		if latestErr != nil || latestChunk.Content != generationContent {
+			logger.Infof(ctx, "Skipping stale generated questions for chunk %s (content changed)", chunk.ID)
 			continue
 		}
 		chunk = latestChunk
@@ -1987,16 +1940,14 @@ func (s *knowledgeService) processQuestionGenerationForChunks(ctx context.Contex
 		}
 
 		generatedQuestions := make([]types.GeneratedQuestion, len(questions))
-		questionRevision := chunk.ContentRevision
 		for j, question := range questions {
 			generatedQuestions[j] = types.GeneratedQuestion{
-				ID:              fmt.Sprintf("q%d", time.Now().UnixNano()+int64(j)),
-				Question:        question,
-				ContentRevision: &questionRevision,
+				ID:       fmt.Sprintf("q%d", time.Now().UnixNano()+int64(j)),
+				Question: question,
 			}
 		}
 		meta := &types.DocumentChunkMetadata{
-			GeneratedQuestions: generatedQuestions, GeneratedQuestionsRevision: chunk.ContentRevision,
+			GeneratedQuestions: generatedQuestions,
 		}
 		if err := chunk.SetDocumentMetadata(meta); err != nil {
 			logger.Warnf(ctx, "Failed to set document metadata for chunk %s: %v", chunk.ID, err)
@@ -2043,7 +1994,7 @@ func (s *knowledgeService) generateQuestionsWithContext(ctx context.Context,
 		return nil, nil
 	}
 
-	prompt := strings.TrimSpace(s.config.Conversation.GenerateQuestionsPrompt)
+	prompt := strings.TrimSpace(s.config.ArticleProcessing.GenerateQuestionsPrompt)
 	if prompt == "" {
 		return nil, fmt.Errorf("generate questions prompt not configured")
 	}
@@ -2109,7 +2060,7 @@ func (s *knowledgeService) generateQuestionsWithContext(ctx context.Context,
 }
 
 // RegenerateChunkQuestions synchronously refreshes Doc2Query-style auxiliary
-// questions for the current chunk revision and atomically replaces their
+// questions for the chunk body and atomically replaces their
 // retrieval entries through updateChunkVector.
 func (s *knowledgeService) RegenerateChunkQuestions(
 	ctx context.Context, chunkID string,
@@ -2122,7 +2073,7 @@ func (s *knowledgeService) RegenerateChunkQuestions(
 	if chunk.ChunkType != types.ChunkTypeText {
 		return nil, fmt.Errorf("questions can only be generated for text chunks")
 	}
-	generationRevision := chunk.ContentRevision
+	generationContent := chunk.Content
 	knowledge, err := s.repo.GetKnowledgeByID(ctx, tenantID, chunk.KnowledgeID)
 	if err != nil {
 		return nil, err
@@ -2172,19 +2123,18 @@ func (s *knowledgeService) RegenerateChunkQuestions(
 	if err != nil {
 		return nil, err
 	}
-	if latestChunk.ContentRevision != generationRevision {
-		return nil, ErrChunkRevisionConflict
+	if latestChunk.Content != generationContent {
+		return nil, fmt.Errorf("chunk content changed while generating questions")
 	}
 	chunk = latestChunk
 	generated := make([]types.GeneratedQuestion, 0, len(questions))
-	questionRevision := chunk.ContentRevision
 	for _, question := range questions {
 		generated = append(generated, types.GeneratedQuestion{
-			ID: uuid.NewString(), Question: question, ContentRevision: &questionRevision,
+			ID: uuid.NewString(), Question: question,
 		})
 	}
 	meta := &types.DocumentChunkMetadata{
-		GeneratedQuestions: generated, GeneratedQuestionsRevision: chunk.ContentRevision,
+		GeneratedQuestions: generated,
 	}
 	if err := chunk.SetDocumentMetadata(meta); err != nil {
 		return nil, err
@@ -2324,7 +2274,6 @@ func (s *knowledgeService) RegenerateKnowledgeSummary(
 		summaryChunks := make([]*types.Chunk, 0, len(existingSummaries))
 		for _, chunk := range existingSummaries {
 			chunk.Content = "# Summary\n" + summary
-			chunk.SourceContent = chunk.Content
 			chunk.IsEnabled = true
 			chunk.UpdatedAt = time.Now()
 			if err := s.chunkRepo.UpdateChunk(ctx, chunk); err != nil {
@@ -2849,175 +2798,6 @@ func (s *knowledgeService) updateChunkVector(ctx context.Context, kbID string, c
 	if err != nil {
 		return err
 	}
-	return nil
-}
-
-func (s *knowledgeService) UpdateImageInfo(
-	ctx context.Context,
-	knowledgeID string,
-	chunkID string,
-	imageInfo string,
-) error {
-	imageInfo = common.CleanInvalidUTF8(imageInfo)
-	var images []*types.ImageInfo
-	if err := json.Unmarshal([]byte(imageInfo), &images); err != nil {
-		logger.Errorf(ctx, "Failed to unmarshal image info: %v", err)
-		return err
-	}
-	if len(images) != 1 {
-		logger.Warnf(ctx, "Expected exactly one image info, got %d", len(images))
-		return nil
-	}
-	image := images[0]
-
-	// Retrieve all chunks with the given parent chunk ID
-	chunk, err := s.chunkService.GetChunkByID(ctx, chunkID)
-	if err != nil {
-		logger.Errorf(ctx, "Failed to get chunk: %v", err)
-		return err
-	}
-	chunk.ImageInfo = imageInfo
-	tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
-	chunkChildren, err := s.chunkService.ListChunkByParentID(ctx, tenantID, chunkID)
-	if err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"parent_chunk_id": chunkID,
-			"tenant_id":       tenantID,
-		})
-		return err
-	}
-	logger.Infof(ctx, "Found %d chunks with parent chunk ID: %s", len(chunkChildren), chunkID)
-
-	// Iterate through each chunk and update its content based on the image information
-	updateChunk := []*types.Chunk{chunk}
-	var addChunk []*types.Chunk
-
-	// Track whether we've found OCR and caption child chunks for this image
-	hasOCRChunk := false
-	hasCaptionChunk := false
-
-	for i, child := range chunkChildren {
-		// Skip chunks that are not image types
-		var cImageInfo []*types.ImageInfo
-		err = json.Unmarshal([]byte(child.ImageInfo), &cImageInfo)
-		if err != nil {
-			logger.Warnf(ctx, "Failed to unmarshal image %s info: %v", child.ID, err)
-			continue
-		}
-		if len(cImageInfo) == 0 {
-			continue
-		}
-		if cImageInfo[0].OriginalURL != image.OriginalURL {
-			logger.Warnf(ctx, "Skipping chunk ID: %s, image URL mismatch: %s != %s",
-				child.ID, cImageInfo[0].OriginalURL, image.OriginalURL)
-			continue
-		}
-
-		// Mark that we've found chunks for this image
-		switch child.ChunkType {
-		case types.ChunkTypeImageCaption:
-			hasCaptionChunk = true
-			// Update caption if it has changed
-			if image.Caption != cImageInfo[0].Caption {
-				child.Content = image.Caption
-				child.ImageInfo = imageInfo
-				updateChunk = append(updateChunk, chunkChildren[i])
-			}
-		case types.ChunkTypeImageOCR:
-			hasOCRChunk = true
-			// Update OCR if it has changed
-			if image.OCRText != cImageInfo[0].OCRText {
-				child.Content = image.OCRText
-				child.ImageInfo = imageInfo
-				updateChunk = append(updateChunk, chunkChildren[i])
-			}
-		}
-	}
-
-	// Create a new caption chunk if it doesn't exist and we have caption data
-	if !hasCaptionChunk && image.Caption != "" {
-		captionChunk := &types.Chunk{
-			ID:              uuid.New().String(),
-			TenantID:        tenantID,
-			KnowledgeID:     chunk.KnowledgeID,
-			KnowledgeBaseID: chunk.KnowledgeBaseID,
-			Content:         image.Caption,
-			ChunkType:       types.ChunkTypeImageCaption,
-			ParentChunkID:   chunk.ID,
-			ImageInfo:       imageInfo,
-			// CreateChunks inserts with Select("*"), so the gorm default:true never
-			// applies -- an unset IsEnabled lands in the database as false and the
-			// chunk is silently excluded from retrieval and model context.
-			IsEnabled: true,
-		}
-		addChunk = append(addChunk, captionChunk)
-		logger.Infof(ctx, "Created new caption chunk ID: %s for image URL: %s", captionChunk.ID, image.OriginalURL)
-	}
-
-	// Create a new OCR chunk if it doesn't exist and we have OCR data
-	if !hasOCRChunk && image.OCRText != "" {
-		ocrChunk := &types.Chunk{
-			ID:              uuid.New().String(),
-			TenantID:        tenantID,
-			KnowledgeID:     chunk.KnowledgeID,
-			KnowledgeBaseID: chunk.KnowledgeBaseID,
-			Content:         image.OCRText,
-			ChunkType:       types.ChunkTypeImageOCR,
-			ParentChunkID:   chunk.ID,
-			ImageInfo:       imageInfo,
-			IsEnabled:       true,
-		}
-		addChunk = append(addChunk, ocrChunk)
-		logger.Infof(ctx, "Created new OCR chunk ID: %s for image URL: %s", ocrChunk.ID, image.OriginalURL)
-	}
-	logger.Infof(ctx, "Updated %d chunks out of %d total chunks", len(updateChunk), len(chunkChildren)+1)
-
-	if len(addChunk) > 0 {
-		err := s.chunkService.CreateChunks(ctx, addChunk)
-		if err != nil {
-			logger.ErrorWithFields(ctx, err, map[string]interface{}{
-				"add_chunk_size": len(addChunk),
-			})
-			return err
-		}
-	}
-
-	// Update the chunks
-	for _, c := range updateChunk {
-		err := s.chunkService.UpdateChunk(ctx, c)
-		if err != nil {
-			logger.ErrorWithFields(ctx, err, map[string]interface{}{
-				"chunk_id":     c.ID,
-				"knowledge_id": c.KnowledgeID,
-			})
-			return err
-		}
-	}
-
-	// Update the chunk vector
-	err = s.updateChunkVector(ctx, chunk.KnowledgeBaseID, append(updateChunk, addChunk...))
-	if err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"chunk_id":     chunk.ID,
-			"knowledge_id": chunk.KnowledgeID,
-		})
-		return err
-	}
-
-	// Update the knowledge file hash
-	knowledge, err := s.repo.GetKnowledgeByID(ctx, tenantID, knowledgeID)
-	if err != nil {
-		logger.Errorf(ctx, "Failed to get knowledge: %v", err)
-		return err
-	}
-	fileHash := calculateStr(knowledgeID, knowledge.FileHash, imageInfo)
-	knowledge.FileHash = fileHash
-	err = s.repo.UpdateKnowledge(ctx, knowledge)
-	if err != nil {
-		logger.Warnf(ctx, "Failed to update knowledge file hash: %v", err)
-	}
-
-	logger.Infof(ctx, "Updated chunk successfully, chunk ID: %s, knowledge ID: %s", chunk.ID, chunk.KnowledgeID)
 	return nil
 }
 

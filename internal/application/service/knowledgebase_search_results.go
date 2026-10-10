@@ -30,7 +30,7 @@ func (s *knowledgeBaseService) processSearchResults(ctx context.Context,
 		return nil, err
 	}
 	for id, knowledge := range knowledgeMap {
-		if knowledge.IsArchivedSource() || knowledge.IsSourceUpdateCandidate() || knowledge.ParseStatus == types.ParseStatusRejected {
+		if knowledge.ParseStatus == types.ParseStatusRejected {
 			delete(knowledgeMap, id)
 		}
 	}
@@ -312,7 +312,6 @@ func (s *knowledgeBaseService) buildSearchResult(chunk *types.Chunk,
 	return &types.SearchResult{
 		ID:                      chunk.ID,
 		Content:                 chunk.Content,
-		ContentRevision:         chunk.ContentRevision,
 		KnowledgeID:             chunk.KnowledgeID,
 		ChunkIndex:              chunk.ChunkIndex,
 		KnowledgeTitle:          knowledge.Title,
@@ -339,12 +338,6 @@ func (s *knowledgeBaseService) buildSearchResult(chunk *types.Chunk,
 // isSearchableChunk checks if a chunk type should be included in search results.
 func (s *knowledgeBaseService) isSearchableChunk(chunk *types.Chunk) bool {
 	if chunk == nil || !chunk.IsEnabled {
-		return false
-	}
-	// An edit is persisted before its retrieval artifacts are synchronized.
-	// Do not hydrate stale vector hits while that synchronization is pending or
-	// failed. Empty is accepted for legacy rows created before index_status.
-	if chunk.IndexStatus == "processing" || chunk.IndexStatus == "failed" {
 		return false
 	}
 	return slices.Contains([]types.ChunkType{

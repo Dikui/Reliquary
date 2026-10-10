@@ -8,37 +8,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 	"reliquary/internal/types"
 )
 
-const customAgentsTestDDL = `
-CREATE TABLE IF NOT EXISTS custom_agents (
-    id VARCHAR(36) NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    avatar VARCHAR(64),
-    is_builtin BOOLEAN NOT NULL DEFAULT false,
-    tenant_id INTEGER NOT NULL,
-    created_by VARCHAR(36),
-    config JSONB NOT NULL DEFAULT '{}',
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMPTZ,
-    PRIMARY KEY (id, tenant_id)
-);
-`
-
-func setupModelUsageTestDB(t *testing.T) *gorm.DB {
-	t.Helper()
-	db := setupKBTestDB(t)
-	require.NoError(t, db.Exec(customAgentsTestDDL).Error)
-	return db
-}
-
 func TestCountByModelID_KnowledgeBase(t *testing.T) {
 	ctx := context.Background()
-	db := setupModelUsageTestDB(t)
+	db := setupKBTestDB(t)
 	repo := NewKnowledgeBaseRepository(db)
 	modelID := "embed-model-1"
 
@@ -71,7 +46,7 @@ func TestCountByModelID_KnowledgeBase(t *testing.T) {
 
 func TestListModelUsages_KnowledgeBase(t *testing.T) {
 	ctx := context.Background()
-	db := setupModelUsageTestDB(t)
+	db := setupKBTestDB(t)
 	repo := NewKnowledgeBaseRepository(db)
 	modelID := "all-kb-bindings"
 
@@ -116,7 +91,7 @@ func TestListModelUsages_KnowledgeBase(t *testing.T) {
 
 func TestListModelUsages_KnowledgeBaseRespectsLimit(t *testing.T) {
 	ctx := context.Background()
-	db := setupModelUsageTestDB(t)
+	db := setupKBTestDB(t)
 	repo := NewKnowledgeBaseRepository(db)
 	modelID := "shared-embed"
 
@@ -135,102 +110,4 @@ func TestListModelUsages_KnowledgeBaseRespectsLimit(t *testing.T) {
 	count, err := repo.CountByModelID(ctx, 1, modelID)
 	require.NoError(t, err)
 	assert.Equal(t, int64(types.ModelUsageListLimit+3), count)
-}
-
-func TestCountByModelID_CustomAgent(t *testing.T) {
-	ctx := context.Background()
-	db := setupModelUsageTestDB(t)
-	repo := NewCustomAgentRepository(db)
-	modelID := "chat-model-1"
-
-	agent := &types.CustomAgent{
-		ID:       uuid.New().String(),
-		Name:     "test-agent",
-		TenantID: 1,
-		Config: types.CustomAgentConfig{
-			ModelID: modelID,
-		},
-	}
-	require.NoError(t, repo.CreateAgent(ctx, agent))
-
-	count, err := repo.CountByModelID(ctx, 1, modelID)
-	require.NoError(t, err)
-	assert.Equal(t, int64(1), count)
-
-	agent2 := &types.CustomAgent{
-		ID:       uuid.New().String(),
-		Name:     "rerank-agent",
-		TenantID: 1,
-		Config: types.CustomAgentConfig{
-			RerankModelID: modelID,
-		},
-	}
-	require.NoError(t, repo.CreateAgent(ctx, agent2))
-
-	count, err = repo.CountByModelID(ctx, 1, modelID)
-	require.NoError(t, err)
-	assert.Equal(t, int64(2), count)
-
-	count, err = repo.CountByModelID(ctx, 2, modelID)
-	require.NoError(t, err)
-	assert.Equal(t, int64(0), count)
-
-	require.NoError(t, repo.DeleteAgent(ctx, agent2.ID, 1))
-	count, err = repo.CountByModelID(ctx, 1, modelID)
-	require.NoError(t, err)
-	assert.Equal(t, int64(1), count)
-}
-
-func TestListModelUsages_CustomAgent(t *testing.T) {
-	ctx := context.Background()
-	db := setupModelUsageTestDB(t)
-	repo := NewCustomAgentRepository(db)
-	modelID := "all-agent-bindings"
-
-	allBindings := &types.CustomAgent{
-		ID:       uuid.New().String(),
-		Name:     "Zulu agent",
-		TenantID: 1,
-		Config: types.CustomAgentConfig{
-			ModelID:                modelID,
-			RerankModelID:          modelID,
-			VLMModelID:             modelID,
-			QueryUnderstandModelID: modelID,
-		},
-	}
-	require.NoError(t, repo.CreateAgent(ctx, allBindings))
-
-	vlmOnly := &types.CustomAgent{
-		ID:       uuid.New().String(),
-		Name:     "Alpha agent",
-		TenantID: 1,
-		Config:   types.CustomAgentConfig{VLMModelID: modelID},
-	}
-	require.NoError(t, repo.CreateAgent(ctx, vlmOnly))
-
-	otherTenant := &types.CustomAgent{
-		ID: uuid.New().String(), Name: "Other tenant", TenantID: 2,
-		Config: types.CustomAgentConfig{ModelID: modelID},
-	}
-	require.NoError(t, repo.CreateAgent(ctx, otherTenant))
-
-	deleted := &types.CustomAgent{
-		ID: uuid.New().String(), Name: "Deleted agent", TenantID: 1,
-		Config: types.CustomAgentConfig{ModelID: modelID},
-	}
-	require.NoError(t, repo.CreateAgent(ctx, deleted))
-	require.NoError(t, repo.DeleteAgent(ctx, deleted.ID, deleted.TenantID))
-
-	usages, err := repo.ListModelUsages(ctx, 1, modelID)
-	require.NoError(t, err)
-	require.Len(t, usages, 2)
-	assert.Equal(t, "Alpha agent", usages[0].Name)
-	assert.Equal(t, []types.ModelUsageBinding{types.ModelUsageBindingVLMModel}, usages[0].Bindings)
-	assert.Equal(t, "Zulu agent", usages[1].Name)
-	assert.Equal(t, []types.ModelUsageBinding{
-		types.ModelUsageBindingChatModel,
-		types.ModelUsageBindingRerankModel,
-		types.ModelUsageBindingVLMModel,
-		types.ModelUsageBindingQueryUnderstandModel,
-	}, usages[1].Bindings)
 }

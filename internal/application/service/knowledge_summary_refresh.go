@@ -47,7 +47,7 @@ func summarySourceChanged(
 		if getErr != nil {
 			return false, getErr
 		}
-		if latestChunk.ContentRevision != sourceChunk.ContentRevision ||
+		if latestChunk.Content != sourceChunk.Content ||
 			latestChunk.IsEnabled != sourceChunk.IsEnabled {
 			return true, nil
 		}

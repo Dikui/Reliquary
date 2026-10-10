@@ -2,8 +2,6 @@
 <script setup lang="ts">
 import { ref, shallowRef, watch, onUnmounted, nextTick, defineAsyncComponent } from 'vue';
 import { previewKnowledgeFile } from '@/api/knowledge-base/index';
-import { previewTemporaryAttachment } from '@/api/chat/temporary-attachments';
-import { downloadArtifact } from '@/api/chat';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/github.css';
 import markedKatex from 'marked-katex-extension';
@@ -32,10 +30,6 @@ const { t } = useI18n();
 
 const props = defineProps<{
   knowledgeId?: string;
-  sessionId?: string;
-  attachmentId?: string;
-  messageId?: string;
-  artifactIndex?: number;
   fileType: string;
   fileName: string;
   active: boolean;
@@ -51,7 +45,6 @@ const highlightedCode = ref('');
 const markdownHtml = ref('');
 const excelHtml = ref('');
 const mermaidSvg = ref('');
-const htmlViewMode = ref<'render' | 'source'>('render');
 const pptxData = shallowRef<ArrayBuffer | null>(null);
 const docxContainer = ref<HTMLElement | null>(null);
 const imageNaturalWidth = ref(0);
@@ -213,42 +206,12 @@ function onImageLoad(e: Event) {
 }
 
 function getPreviewSourceKey(): string {
-  if (props.knowledgeId) return `knowledge:${props.knowledgeId}`;
-  if (props.sessionId && props.attachmentId) return `attachment:${props.sessionId}:${props.attachmentId}`;
-  if (
-    props.sessionId &&
-    props.messageId &&
-    Number.isInteger(props.artifactIndex) &&
-    (props.artifactIndex as number) >= 0
-  ) {
-    return `artifact:${props.sessionId}:${props.messageId}:${props.artifactIndex}`;
-  }
-  return '';
-}
-
-// Message HTML files can contain a self-contained chart that needs its own
-// scripts. Knowledge-base files and chat attachments are untrusted uploads:
-// they stay as source, matching the previous text preview.
-function allowsHtmlScriptPreview(): boolean {
-  return getPreviewSourceKey().startsWith('artifact:');
+  return props.knowledgeId ? `knowledge:${props.knowledgeId}` : ''
 }
 
 async function fetchPreviewBlob(): Promise<Blob> {
-  if (props.knowledgeId) {
-    return previewKnowledgeFile(props.knowledgeId);
-  }
-  if (props.sessionId && props.attachmentId) {
-    return previewTemporaryAttachment(props.sessionId, props.attachmentId);
-  }
-  if (
-    props.sessionId &&
-    props.messageId &&
-    Number.isInteger(props.artifactIndex) &&
-    (props.artifactIndex as number) >= 0
-  ) {
-    return downloadArtifact(props.sessionId, props.messageId, props.artifactIndex as number);
-  }
-  throw new Error('Missing preview source');
+  if (props.knowledgeId) return previewKnowledgeFile(props.knowledgeId)
+  throw new Error('Missing preview source')
 }
 
 async function renderMermaid(blob: Blob) {
@@ -274,7 +237,6 @@ async function loadPreview() {
   cleanup();
   loading.value = true;
   error.value = '';
-  htmlViewMode.value = allowsHtmlScriptPreview() ? 'render' : 'source';
 
   let ft = resolveFilePreviewExt(props.fileName, props.fileType);
   previewType.value = resolvePreviewKind(ft);
@@ -310,9 +272,6 @@ async function loadPreview() {
         break;
       }
       case 'html': {
-        if (allowsHtmlScriptPreview()) {
-          blobUrl.value = URL.createObjectURL(blob);
-        }
         await renderText(blob, ft || 'html');
         break;
       }
@@ -359,7 +318,6 @@ function cleanup() {
   markdownHtml.value = '';
   excelHtml.value = '';
   mermaidSvg.value = '';
-  htmlViewMode.value = 'render';
   pptxData.value = null;
   imageNaturalWidth.value = 0;
   imageNaturalHeight.value = 0;
@@ -370,7 +328,7 @@ function cleanup() {
 }
 
 watch(
-  () => [props.active, props.knowledgeId, props.sessionId, props.attachmentId, props.messageId, props.artifactIndex],
+  () => [props.active, props.knowledgeId],
   ([active]) => {
     if (active && getPreviewSourceKey()) {
       loadPreview();
@@ -390,15 +348,7 @@ onUnmounted(() => {
     <!-- Toolbar -->
     <div class="preview-toolbar" v-if="!loading && !error && previewType !== 'unsupported'">
       <t-space size="small">
-        <t-tooltip
-          v-if="previewType === 'html' && allowsHtmlScriptPreview()"
-          :content="htmlViewMode === 'render' ? $t('preview.htmlSource') : $t('preview.htmlRendered')"
-          placement="bottom"
-        >
-          <t-button theme="default" variant="text" shape="square" @click="htmlViewMode = htmlViewMode === 'render' ? 'source' : 'render'">
-            <template #icon><t-icon :name="htmlViewMode === 'render' ? 'code' : 'browse'" /></template>
-          </t-button>
-        </t-tooltip>
+
         <t-tooltip :content="isFullscreen ? $t('preview.exitFullscreen') : $t('preview.fullscreen')" placement="bottom">
           <t-button theme="default" variant="text" shape="square" @click="toggleFullscreen">
             <template #icon><t-icon :name="isFullscreen ? 'fullscreen-exit' : 'fullscreen'" /></template>
@@ -434,16 +384,10 @@ onUnmounted(() => {
       <iframe :src="blobUrl" class="pdf-iframe" />
     </div>
 
-    <!-- HTML: artifacts render in a unique-origin iframe; other sources stay as source. -->
+    <!-- HTML source preview. -->
     <div v-else-if="previewType === 'html'" class="preview-html">
-      <iframe
-        v-if="allowsHtmlScriptPreview() && htmlViewMode === 'render' && blobUrl"
-        :src="blobUrl"
-        class="html-iframe"
-        sandbox="allow-scripts"
-        referrerpolicy="no-referrer"
-      />
-      <pre v-show="!allowsHtmlScriptPreview() || htmlViewMode === 'source'" class="code-preview"><code class="hljs" v-html="highlightedCode"></code></pre>
+
+      <pre class="code-preview"><code class="hljs" v-html="highlightedCode"></code></pre>
     </div>
 
     <!-- Image -->

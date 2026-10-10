@@ -13,7 +13,6 @@ import (
 
 	"reliquary/internal/config"
 	"reliquary/internal/handler"
-	"reliquary/internal/handler/session"
 	"reliquary/internal/logger"
 	"reliquary/internal/middleware"
 	"reliquary/internal/types/interfaces"
@@ -29,31 +28,22 @@ type RouterParams struct {
 	KBService                    interfaces.KnowledgeBaseService
 	KnowledgeService             interfaces.KnowledgeService
 	ChunkService                 interfaces.ChunkService
-	SessionService               interfaces.SessionService
-	MessageService               interfaces.MessageService
 	ModelService                 interfaces.ModelService
 	KBHandler                    *handler.KnowledgeBaseHandler
 	KnowledgeHandler             *handler.KnowledgeHandler
-	KnowledgeAnomalyHandler      *handler.KnowledgeAnomalyHandler
-	KnowledgeStrategyHandler     *handler.KnowledgeStrategyHandler
+	KnowledgeSearchHandler       *handler.KnowledgeSearchHandler
 	EntityHandler                *handler.EntityHandler
 	ModelRoutingHandler          *handler.ModelRoutingHandler
 	TenantHandler                *handler.TenantHandler
 	TenantService                interfaces.TenantService
 	TenantAPIKeyService          interfaces.TenantAPIKeyService
 	ChunkHandler                 *handler.ChunkHandler
-	SessionHandler               *session.Handler
-	MessageHandler               *handler.MessageHandler
 	ModelHandler                 *handler.ModelHandler
 	ModelCredentialsHandler      *handler.ModelCredentialsHandler
 	AuthHandler                  *handler.AuthHandler
 	InitializationHandler        *handler.InitializationHandler
 	SystemHandler                *handler.SystemHandler
-	MCPServiceHandler            *handler.MCPServiceHandler
-	MCPCredentialsHandler        *handler.MCPCredentialsHandler
 	ResourceCatalog              interfaces.ResourceCatalog
-	TagHandler                   *handler.TagHandler
-	CustomAgentHandler           *handler.CustomAgentHandler
 	UserFavoriteHandler          *handler.ResourceFavoriteHandler
 	RedisClient                  *redis.Client
 	DataSourceHandler            *handler.DataSourceHandler
@@ -130,31 +120,17 @@ func NewRouter(params RouterParams) *gin.Engine {
 			params.TenantService,
 			params.FileService,
 			params.ResourceCatalog)
-		serveMessageScopedFiles(
-			v1,
-			accessGuards,
-			params.MessageService,
-			params.TenantService,
-			params.FileService,
-			params.ResourceCatalog)
-		RegisterKnowledgeTagRoutes(v1, params.TagHandler, accessGuards)
 		RegisterKnowledgeRoutes(v1, params.KnowledgeHandler, accessGuards)
-		RegisterKnowledgeAnomalyRoutes(v1, params.KnowledgeAnomalyHandler, accessGuards)
-		RegisterKnowledgeStrategyRoutes(v1, params.KnowledgeStrategyHandler, accessGuards)
+		v1.POST("/knowledge-search", params.KnowledgeSearchHandler.SearchKnowledge)
 		RegisterEntityRoutes(v1, params.EntityHandler)
 		if params.ModelRoutingHandler != nil {
 			RegisterModelRoutingRoutes(v1, params.ModelRoutingHandler, accessGuards)
 		}
 		RegisterChunkRoutes(v1, params.ChunkHandler, accessGuards)
-		RegisterSessionRoutes(v1, params.SessionHandler, accessGuards)
-		RegisterChatRoutes(v1, params.SessionHandler, accessGuards)
-		RegisterMessageRoutes(v1, params.MessageHandler, accessGuards)
 		RegisterModelRoutes(v1, params.ModelHandler, params.ModelCredentialsHandler, accessGuards)
 		RegisterInitializationRoutes(v1, params.InitializationHandler, accessGuards)
 		params.SystemHandler.BindDeploymentCapabilities(deploymentCapabilitiesFromRouter(params))
 		RegisterSystemRoutes(v1, params.SystemHandler, accessGuards)
-		RegisterMCPServiceRoutes(v1, params.MCPServiceHandler, params.MCPCredentialsHandler, accessGuards)
-		RegisterCustomAgentRoutes(v1, params.CustomAgentHandler, accessGuards)
 		RegisterUserFavoriteRoutes(v1, params.UserFavoriteHandler, accessGuards)
 		RegisterDataSourceRoutes(v1, params.DataSourceHandler, params.DataSourceCredentialsHandler, accessGuards)
 		RegisterChunkerDebugRoutes(v1, accessGuards)

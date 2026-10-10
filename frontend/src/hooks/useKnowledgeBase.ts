@@ -10,7 +10,6 @@ import {
   getKnowledgeDetailsCon,
 } from "@/api/knowledge-base/index";
 import { knowledgeStore } from "@/stores/knowledge";
-import { useUIStore } from "@/stores/ui";
 import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import type { KnowledgeRepostSource } from '@/api/knowledge-base/index';
@@ -41,7 +40,6 @@ export default function (knowledgeBaseId?: string) {
 	custom_metadata: {} as Record<string, unknown>,
     chunkLoading: false,
     chunkLoadError: "",
-    tags: [] as Array<{ id: string; name: string; color?: string }>,
     repost_sources: [] as KnowledgeRepostSource[],
   });
   let knowledgeListGeneration = 0;
@@ -51,7 +49,6 @@ export default function (knowledgeBaseId?: string) {
     query: {
       page: number;
       page_size: number;
-      tag_ids?: string;
       keyword?: string;
       file_type?: string;
       parse_status?: string;
@@ -165,11 +162,7 @@ export default function (knowledgeBaseId?: string) {
       return;
     }
 
-    // 获取当前选中的标签 ID
-    const uiStore = useUIStore();
-    const tagIdsToUpload = uiStore.selectedTagIds.length > 0 ? [...uiStore.selectedTagIds] : undefined;
-
-    return uploadKnowledgeFile(currentKbId, { file, tag_ids: tagIdsToUpload })
+    return uploadKnowledgeFile(currentKbId, { file })
       .then((result: any) => {
         if (duplicates.showDuplicate(result, file.name)) return;
         if (result.success) {
@@ -208,7 +201,6 @@ export default function (knowledgeBaseId?: string) {
 	  metadata: {},
 	  custom_metadata: {},
       chunkLoadError: "",
-      tags: item?.tags ? [...item.tags] : [],
       repost_sources: [],
     });
     getKnowledgeDetails(item.id)
@@ -230,7 +222,6 @@ export default function (knowledgeBaseId?: string) {
             error_message: data.error_message || '',
 			metadata: data.metadata || {},
 			custom_metadata: data.custom_metadata || {},
-            tags: data.tags?.length ? data.tags : (item?.tags || []),
             repost_sources: Array.isArray(data.repost_sources) ? data.repost_sources : [],
           });
         }

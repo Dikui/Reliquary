@@ -188,45 +188,7 @@
             </p>
           </section>
 
-          <section v-if="usageConflict.agents.length" class="model-usage-group">
-            <h3>{{ $t('modelSettings.usage.agents', {
-              count: modelUsageResourceCount(usageConflict.agents, usageConflict.agent_total)
-            }) }}</h3>
-            <ul>
-              <li v-for="resource in usageConflict.agents" :key="resource.id">
-                <div class="model-usage-resource">
-                  <strong>{{ resource.name || resource.id }}</strong>
-                  <div class="model-usage-bindings">
-                    <t-tag
-                      v-for="(binding, index) in resource.bindings"
-                      :key="`${binding}-${index}`"
-                      size="small"
-                      variant="light"
-                    >
-                      {{ $t(modelUsageBindingI18nKey(binding)) }}
-                    </t-tag>
-                  </div>
-                </div>
-                <t-button
-                  theme="primary"
-                  variant="text"
-                  size="small"
-                  @click="openUsageResource('agent', resource.id, resource.bindings)"
-                >
-                  {{ $t('modelSettings.usage.openConfiguration') }}
-                </t-button>
-              </li>
-            </ul>
-            <p
-              v-if="modelUsageListTruncated(usageConflict.agents, usageConflict.agent_total)"
-              class="model-usage-truncated"
-            >
-              {{ $t('modelSettings.usage.truncated', {
-                shown: usageConflict.agents.length,
-                total: modelUsageResourceCount(usageConflict.agents, usageConflict.agent_total)
-              }) }}
-            </p>
-          </section>
+
 
           <section v-if="usageConflict.model_tiers?.length" class="model-usage-group">
             <h3>{{ $t('modelTiers.title') }}</h3>
@@ -274,7 +236,7 @@ import {
 } from '@/api/model'
 import { useUIStore } from '@/stores/ui'
 import { focusKbEditorSection } from '@/config/editorNavigation'
-import { useChatResourcesStore } from '@/stores/chatResources'
+import { useResourcesStore } from '@/stores/resources'
 import {
   formatContextWindow,
   isDefaultContextWindow,
@@ -283,7 +245,7 @@ import {
 
 const { t, te } = useI18n()
 const uiStore = useUIStore()
-const chatResources = useChatResourcesStore()
+const resources = useResourcesStore()
 const router = useRouter()
 type ModelType = 'chat' | 'embedding' | 'rerank' | 'vllm'
 type FilterType = 'all' | ModelType
@@ -304,9 +266,6 @@ const KNOWLEDGE_BASE_EDITOR_HOST_ROUTES = new Set([
   'home',
   'knowledgeBaseList',
   'knowledgeBaseDetail',
-  'globalCreatChat',
-  'kbCreatChat',
-  'chat',
 ])
 watch(
   () => uiStore.settingsInitialSubSection,
@@ -460,9 +419,8 @@ const loadModels = async () => {
   try {
     const models = await listModels()
     allModels.value = models
-    // 设置页自己 listModels 之后立刻写回空间级缓存。否则对话输入栏 /
-    // 智能体编辑器会继续拿 60s TTL 里的旧 context_window，刷新页面才对。
-    chatResources.replaceModels(models)
+    // 加载后立即更新空间级模型缓存，让知识库编辑器和模型选择器读取最新配置。
+    resources.replaceModels(models)
   } catch (error: any) {
     console.error('加载模型列表失败:', error)
     MessagePlugin.error(error.message)

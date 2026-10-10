@@ -29,9 +29,6 @@ test('TDesign does not clip overflowing textarea content at its row limit', () =
   assert.doesNotMatch(inner, /overflow(?:-y)?:\s*(?:hidden|clip)/)
 })
 
-test('input followed by clearing the actual intent editor produces no Vue readonly warning', () => {
-  assert.equal(probe('agent-readonly').invalidMeasurements, 0)
-})
 
 test('clearing, IME composition and external edits preserve the model without readonly warnings or replacing the DOM node', () => {
   assert.equal(probe('readonly').readonlyWarnings, 0)

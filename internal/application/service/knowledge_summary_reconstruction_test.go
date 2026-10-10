@@ -53,7 +53,7 @@ func TestGetSummaryReconstructsTableChunksWithSyntheticHeaders(t *testing.T) {
 
 	firstContent := header + rowOne + rowTwo
 	service := &knowledgeService{
-		config: &config.Config{Conversation: &config.ConversationConfig{
+		config: &config.Config{ArticleProcessing: &config.ArticleProcessingConfig{
 			GenerateSummaryPrompt: "Summarize the document.",
 		}},
 		chunkRepo: summaryImageInfoChunkRepo{},

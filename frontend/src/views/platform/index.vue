@@ -36,7 +36,7 @@ import UploadMask from '@/components/upload-mask.vue'
 import Settings from '@/views/settings/Settings.vue'
 import GlobalCommandPalette from '@/components/GlobalCommandPalette.vue'
 import { useCommandPaletteStore } from '@/stores/commandPalette'
-import { useChatResourcesStore } from '@/stores/chatResources'
+import { useResourcesStore } from '@/stores/resources'
 import { getKnowledgeBaseById } from '@/api/knowledge-base/index'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
@@ -75,12 +75,6 @@ let dragCounter = 0;
 // 获取当前知识库ID
 const getCurrentKbId = (): string | null => {
     return (route.params as any)?.kbId as string || null
-}
-
-const CHAT_DROP_ROUTE_NAMES = new Set(['chat', 'globalCreatChat', 'kbCreatChat']);
-
-const isChatDropRoute = () => {
-    return CHAT_DROP_ROUTE_NAMES.has(String(route.name || ''));
 }
 
 // 检查知识库初始化状态
@@ -163,14 +157,6 @@ const handleGlobalDrop = async (event: DragEvent) => {
         return;
     }
 
-    if (isChatDropRoute()) {
-        event.stopPropagation();
-        window.dispatchEvent(new CustomEvent('reliquary:chat-file-drop', {
-            detail: { files: droppedFiles }
-        }));
-        return;
-    }
-
     const isInitialized = await checkKnowledgeBaseInitialization();
     if (!isInitialized) {
         return;
@@ -191,8 +177,6 @@ onMounted(() => {
     // 支持通过 URL 查询参数打开全局命令面板，例如旧路径
     // /platform/knowledge-search?q=foo 重定向后携带 ?cmdk=foo
     maybeOpenCmdkFromRoute()
-    // 后台预取对话输入栏资源，进入 creatChat / chat 时复用缓存
-    void useChatResourcesStore().prefetchChatInput()
 });
 
 // 监听路由变化，兼容 SPA 内部跳转时的 ?cmdk= 参数

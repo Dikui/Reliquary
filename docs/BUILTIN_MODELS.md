@@ -17,7 +17,7 @@ Reliquary 支持两种方式添加内置模型：**推荐**使用 YAML 声明式
 
 #### 文件位置
 
-默认路径是 `config/builtin_models.yaml`（与 `config.yaml`、`builtin_agents.yaml` 同目录）。如需挂载到其他位置，设置环境变量 `BUILTIN_MODELS_CONFIG=/absolute/path/builtin_models.yaml` 覆盖。
+默认路径是 `config/builtin_models.yaml`（与 `config.yaml` 同目录）。如需挂载到其他位置，设置环境变量 `BUILTIN_MODELS_CONFIG=/absolute/path/builtin_models.yaml` 覆盖。
 
 文件不存在时启动期会跳过、不报错；解析失败仅记录 Warning、不影响主流程。每次应用启动会重新读取并按 `id` 字段 UPSERT 到 `models` 表（保留 `created_at`，刷新其他字段）。如果同 ID 模型已经在界面保存并转为运行时托管，则保留运行时配置，不再由 YAML 覆盖。
 
@@ -37,7 +37,7 @@ builtin_models:
       base_url: <string>
       api_key: <string, supports ${ENV_VAR}>
       provider: <string>                     # openai | generic | moonshot | ...
-      context_window: <int, optional>        # 对话/VLM 上下文窗口（token）；省略则默认 200000
+      context_window: <int, optional>        # 生成/VLM 上下文窗口（token）；省略则默认 200000
       embedding_parameters:                  # 仅 Embedding 类型
         dimension: <int>
         truncate_prompt_tokens: <int>
@@ -51,7 +51,7 @@ builtin_models:
     name: gpt-4o-mini
     type: KnowledgeQA
     source: remote
-    description: OpenAI 默认对话模型
+    description: OpenAI 默认生成模型
     is_default: false
     parameters:
       base_url: https://api.openai.com/v1
@@ -163,7 +163,7 @@ services:
 
 服务商预设标识：`generic`（通用 OpenAI 兼容）、`openai`、`anthropic`、`deepseek`、`aliyun`、`zhipu`、`moonshot`、`siliconflow`、`volcengine`、`openrouter`、`gemini`、`ollama`。服务商下拉框按模型类型显示支持的预设，其他兼容服务填写 `provider: generic` 和相应地址。
 
-对话实现为 OpenAI 兼容、Anthropic 原生和 Ollama。嵌入实现为 OpenAI 兼容和 Ollama；阿里云文本嵌入使用 `https://dashscope.aliyuncs.com/compatible-mode/v1`。重排实现为通用 `/rerank` 格式和阿里云百炼，Jina 等兼容服务使用 `generic`。Gemini 默认使用 `https://generativelanguage.googleapis.com/v1beta/openai/`。
+生成模型实现为 OpenAI 兼容、Anthropic 原生和 Ollama。嵌入实现为 OpenAI 兼容和 Ollama；阿里云文本嵌入使用 `https://dashscope.aliyuncs.com/compatible-mode/v1`。重排实现为通用 `/rerank` 格式和阿里云百炼，Jina 等兼容服务使用 `generic`。Gemini 默认使用 `https://generativelanguage.googleapis.com/v1beta/openai/`。
 
 ```sql
 -- 示例：LLM 内置模型

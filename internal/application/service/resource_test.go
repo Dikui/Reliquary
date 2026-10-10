@@ -65,8 +65,7 @@ func TestResourceCatalogBindingAndAccessGrant(t *testing.T) {
 	require.Equal(t, uint64(9), resource.TenantID)
 }
 
-// The two-owner case that "save this answer to the knowledge base" creates:
-// one blob, claimed by both the assistant message and the new document.
+// Two articles may share one resource.
 // Deleting either owner must leave the other's copy intact.
 func TestResourceCatalogReleaseKeepsFileWhileAnotherOwnerClaimsIt(t *testing.T) {
 	catalog, _ := newResourceCatalogForTest(t)
@@ -74,14 +73,14 @@ func TestResourceCatalogReleaseKeepsFileWhileAnotherOwnerClaimsIt(t *testing.T) 
 	ref, err := catalog.Register(ctx, 7, "local://7/exports/chart.html", interfaces.ResourceRegistration{})
 	require.NoError(t, err)
 
-	require.NoError(t, catalog.Bind(ctx, ref, types.ResourceOwnerMessage, "msg-1", types.ResourceRelationArtifact))
+	require.NoError(t, catalog.Bind(ctx, ref, types.ResourceOwnerKnowledge, "kn-2", types.ResourceRelationAttachment))
 	require.NoError(t, catalog.Bind(ctx, ref, types.ResourceOwnerKnowledge, "kn-1", types.ResourceRelationAttachment))
 
 	remaining, err := catalog.Release(ctx, ref, types.ResourceOwnerKnowledge, "kn-1")
 	require.NoError(t, err)
-	require.EqualValues(t, 1, remaining, "the message still shows this file")
+	require.EqualValues(t, 1, remaining, "the other article still owns this file")
 
-	remaining, err = catalog.Release(ctx, ref, types.ResourceOwnerMessage, "msg-1")
+	remaining, err = catalog.Release(ctx, ref, types.ResourceOwnerKnowledge, "kn-2")
 	require.NoError(t, err)
 	require.EqualValues(t, 0, remaining, "the last claim is gone, the bytes can go too")
 }

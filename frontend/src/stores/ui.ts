@@ -7,8 +7,6 @@ export const useUIStore = defineStore('ui', {
     kbEditorMode: 'create' as 'create' | 'edit',
     currentKBId: null as string | null,
     kbEditorType: 'document' as 'document',
-    // 当前选中的标签 ID，用于文件上传时传递
-    selectedTagIds: [] as string[],
     kbEditorInitialSection: null as string | null,
     settingsInitialSection: null as string | null,
     settingsInitialSubSection: null as string | null,
@@ -104,20 +102,6 @@ export const useUIStore = defineStore('ui', {
         }
       }
       this.manualEditorOnSuccess = null
-    },
-
-    // 设置当前选中的标签 ID
-    toggleSelectedTagId(tagId: string) {
-      const idx = this.selectedTagIds.indexOf(tagId)
-      if (idx >= 0) {
-        this.selectedTagIds.splice(idx, 1)
-      } else {
-        this.selectedTagIds.push(tagId)
-      }
-    },
-
-    clearSelectedTagIds() {
-      this.selectedTagIds = []
     },
 
     toggleSidebar() {

@@ -1,7 +1,6 @@
 package handler
 
 import (
-	stderrors "errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -110,150 +109,6 @@ func (h *ChunkHandler) ListKnowledgeChunks(c *gin.Context) {
 	})
 }
 
-// UpdateChunkRequest defines the request structure for updating a chunk
-type UpdateChunkRequest struct {
-	Content          *string `json:"content"`
-	IsEnabled        *bool   `json:"is_enabled"`
-	ExpectedRevision *int    `json:"expected_revision"`
-}
-
-// fetchChunkAndVerifyOwnership fetches a chunk by ID and verifies it
-// belongs to the URL :knowledge_id (defence in depth: the route-level
-// KB-access guard already ensured the caller has write access to the
-// KB; this check stops a same-tenant attacker from passing one
-// knowledge_id while addressing a chunk owned by a different
-// knowledge in the same KB).
-func (h *ChunkHandler) fetchChunkAndVerifyOwnership(c *gin.Context) (*types.Chunk, string, error) {
-	ctx := c.Request.Context()
-
-	knowledgeID := secutils.SanitizeForLog(c.Param("knowledge_id"))
-	if knowledgeID == "" {
-		logger.Error(ctx, "Knowledge ID is empty")
-		return nil, "", errors.NewBadRequestError("Knowledge ID cannot be empty")
-	}
-	id := secutils.SanitizeForLog(c.Param("id"))
-	if id == "" {
-		logger.Error(ctx, "Chunk ID is empty")
-		return nil, knowledgeID, errors.NewBadRequestError("Chunk ID cannot be empty")
-	}
-	chunk, err := h.service.GetChunkByID(ctx, id)
-	if err != nil {
-		if err == service.ErrChunkNotFound {
-			logger.Warnf(ctx, "Chunk not found, knowledge ID: %s, chunk ID: %s", knowledgeID, id)
-			return nil, knowledgeID, errors.NewNotFoundError("Chunk not found")
-		}
-		logger.ErrorWithFields(ctx, err, nil)
-		return nil, knowledgeID, errors.NewInternalServerError(err.Error())
-	}
-	if chunk.KnowledgeID != knowledgeID {
-		logger.Warnf(ctx, "Chunk does not belong to knowledge, knowledge ID: %s, chunk ID: %s", knowledgeID, id)
-		return nil, knowledgeID, errors.NewForbiddenError("No permission to access this chunk")
-	}
-	return chunk, knowledgeID, nil
-}
-
-// UpdateChunk godoc
-func (h *ChunkHandler) UpdateChunk(c *gin.Context) {
-	ctx := c.Request.Context()
-	logger.Info(ctx, "Start updating knowledge chunk")
-
-	chunk, knowledgeID, err := h.fetchChunkAndVerifyOwnership(c)
-	if err != nil {
-		c.Error(err)
-		return
-	}
-	var req UpdateChunkRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		logger.Errorf(ctx, "Failed to parse request parameters: %s", secutils.SanitizeForLog(err.Error()))
-		c.Error(errors.NewBadRequestError(err.Error()))
-		return
-	}
-
-	chunk, err = h.service.UpdateDocumentChunk(ctx, chunk.ID, req.Content, req.IsEnabled, req.ExpectedRevision)
-	if err != nil {
-		logger.ErrorWithFields(ctx, err, nil)
-		if stderrors.Is(err, service.ErrChunkRevisionConflict) {
-			c.Error(errors.NewConflictError("Chunk was modified by another user; refresh and retry"))
-			return
-		}
-		c.Error(errors.NewInternalServerError(err.Error()))
-		return
-	}
-
-	logger.Infof(ctx, "Knowledge chunk updated successfully, knowledge ID: %s, chunk ID: %s",
-		secutils.SanitizeForLog(knowledgeID), secutils.SanitizeForLog(chunk.ID))
-	knowledge, getErr := h.kgService.GetKnowledgeByID(ctx, knowledgeID)
-	if getErr != nil {
-		logger.Warnf(ctx, "Chunk updated but failed to reload summary status for %s: %v", knowledgeID, getErr)
-	}
-	response := gin.H{"success": true, "data": chunk}
-	if knowledge != nil {
-		response["summary_status"] = knowledge.SummaryStatus
-		response["description"] = knowledge.Description
-	}
-	c.JSON(http.StatusOK, response)
-}
-
-func (h *ChunkHandler) ListChunkRevisions(c *gin.Context) {
-	chunk, _, err := h.fetchChunkAndVerifyOwnership(c)
-	if err != nil {
-		c.Error(err)
-		return
-	}
-	items, err := h.service.ListChunkRevisions(c.Request.Context(), chunk.ID)
-	if err != nil {
-		c.Error(errors.NewInternalServerError(err.Error()))
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": items})
-}
-
-type RevertChunkRequest struct {
-	Revision         *int `json:"revision" binding:"required"`
-	ExpectedRevision *int `json:"expected_revision"`
-}
-
-func (h *ChunkHandler) RevertChunk(c *gin.Context) {
-	chunk, knowledgeID, err := h.fetchChunkAndVerifyOwnership(c)
-	if err != nil {
-		c.Error(err)
-		return
-	}
-	var req RevertChunkRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.Error(errors.NewBadRequestError(err.Error()))
-		return
-	}
-	if req.Revision == nil || *req.Revision < 0 {
-		c.Error(errors.NewBadRequestError("revision must be a non-negative integer"))
-		return
-	}
-	updated, err := h.service.RevertDocumentChunk(c.Request.Context(), chunk.ID, *req.Revision, req.ExpectedRevision)
-	if stderrors.Is(err, service.ErrChunkRevisionConflict) {
-		c.Error(errors.NewConflictError("Chunk was modified by another user; refresh and retry"))
-		return
-	}
-	if err != nil {
-		c.Error(errors.NewBadRequestError(err.Error()))
-		return
-	}
-	knowledge, getErr := h.kgService.GetKnowledgeByID(c.Request.Context(), knowledgeID)
-	if getErr != nil {
-		logger.Warnf(c.Request.Context(), "Chunk reverted but failed to reload summary status for %s: %v", knowledgeID, getErr)
-	}
-	response := gin.H{"success": true, "data": updated}
-	if knowledge != nil {
-		response["summary_status"] = knowledge.SummaryStatus
-		response["description"] = knowledge.Description
-	}
-	c.JSON(http.StatusOK, response)
-}
-
-type UpsertGeneratedQuestionRequest struct {
-	QuestionID string `json:"question_id"`
-	Question   string `json:"question" binding:"required"`
-}
-
 func (h *ChunkHandler) UpsertGeneratedQuestion(c *gin.Context) {
 	chunkID := secutils.SanitizeForLog(c.Param("id"))
 	if chunkID == "" {
@@ -285,53 +140,6 @@ func (h *ChunkHandler) RegenerateGeneratedQuestions(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": items})
-}
-
-// DeleteChunk godoc
-func (h *ChunkHandler) DeleteChunk(c *gin.Context) {
-	ctx := c.Request.Context()
-	logger.Info(ctx, "Start deleting knowledge chunk")
-
-	chunk, _, err := h.fetchChunkAndVerifyOwnership(c)
-	if err != nil {
-		c.Error(err)
-		return
-	}
-
-	if err := h.service.DeleteChunk(ctx, chunk.ID); err != nil {
-		logger.ErrorWithFields(ctx, err, nil)
-		c.Error(errors.NewInternalServerError(err.Error()))
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "Chunk deleted",
-	})
-}
-
-// DeleteChunksByKnowledgeID godoc
-func (h *ChunkHandler) DeleteChunksByKnowledgeID(c *gin.Context) {
-	ctx := c.Request.Context()
-	logger.Info(ctx, "Start deleting all chunks under knowledge")
-
-	knowledgeID := secutils.SanitizeForLog(c.Param("knowledge_id"))
-	if knowledgeID == "" {
-		logger.Error(ctx, "Knowledge ID is empty")
-		c.Error(errors.NewBadRequestError("Knowledge ID cannot be empty"))
-		return
-	}
-
-	if err := h.service.DeleteChunksByKnowledgeID(ctx, knowledgeID); err != nil {
-		logger.ErrorWithFields(ctx, err, nil)
-		c.Error(errors.NewInternalServerError(err.Error()))
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "All chunks under knowledge deleted",
-	})
 }
 
 // DeleteGeneratedQuestion godoc
@@ -367,4 +175,9 @@ func (h *ChunkHandler) DeleteGeneratedQuestion(c *gin.Context) {
 		"success": true,
 		"message": "Generated question deleted",
 	})
+}
+
+type UpsertGeneratedQuestionRequest struct {
+	QuestionID string `json:"question_id"`
+	Question   string `json:"question" binding:"required"`
 }

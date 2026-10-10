@@ -1,6 +1,6 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useUIStore } from '@/stores/ui'
-import { useChatResourcesStore } from '@/stores/chatResources'
+import { useResourcesStore } from '@/stores/resources'
 import {
   evaluateTenantModelReadiness,
   type TenantModelReadiness,
@@ -8,7 +8,7 @@ import {
 
 export function useTenantModelReadiness() {
   const uiStore = useUIStore()
-  const chatResources = useChatResourcesStore()
+  const resources = useResourcesStore()
   const readiness = ref<TenantModelReadiness | null>(null)
   const loaded = ref(false)
   const loading = ref(false)
@@ -16,8 +16,8 @@ export function useTenantModelReadiness() {
   const refresh = async (force = false) => {
     loading.value = true
     try {
-      await chatResources.ensureModels(force)
-      readiness.value = evaluateTenantModelReadiness(chatResources.allModels)
+      await resources.ensureModels(force)
+      readiness.value = evaluateTenantModelReadiness(resources.allModels)
     } finally {
       loading.value = false
       loaded.value = true
@@ -41,9 +41,8 @@ export function useTenantModelReadiness() {
     () => readiness.value?.isReadyForDocumentKb ?? false,
   )
 
-  const isReadyForAgent = computed(() => readiness.value?.isReadyForAgent ?? false)
 
-  const hasChat = computed(() => readiness.value?.hasChat ?? false)
+  const hasGeneration = computed(() => readiness.value?.hasGeneration ?? false)
 
   return {
     readiness,
@@ -51,7 +50,6 @@ export function useTenantModelReadiness() {
     loading,
     refresh,
     isReadyForDocumentKb,
-    isReadyForAgent,
-    hasChat,
+    hasGeneration,
   }
 }

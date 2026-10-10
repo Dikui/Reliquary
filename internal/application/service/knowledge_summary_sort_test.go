@@ -6,21 +6,7 @@ import (
 	"reliquary/internal/types"
 )
 
-func TestSortChunksForSummaryUsesChunkIndexAfterEdits(t *testing.T) {
-	t.Parallel()
-	chunks := []*types.Chunk{
-		{ID: "b", ChunkIndex: 2, StartAt: 0, Content: "second"},
-		{ID: "a", ChunkIndex: 1, StartAt: 100, Content: "first", ContentRevision: 1},
-	}
-
-	sorted := sortChunksForSummary(chunks)
-
-	if len(sorted) != 2 || sorted[0].ID != "a" || sorted[1].ID != "b" {
-		t.Fatalf("edited chunks should sort by chunk index, got %#v", sorted)
-	}
-}
-
-func TestSortChunksForSummaryUsesStartAtBeforeEdits(t *testing.T) {
+func TestSortChunksForSummaryUsesStartAt(t *testing.T) {
 	t.Parallel()
 	chunks := []*types.Chunk{
 		{ID: "later", ChunkIndex: 2, StartAt: 50, Content: "later"},

@@ -62,7 +62,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { type ModelConfig } from '@/api/model'
-import { useChatResourcesStore } from '@/stores/chatResources'
+import { useResourcesStore } from '@/stores/resources'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import { filterModelsByType } from './modelSelectorFilter'
@@ -100,7 +100,7 @@ const emit = defineEmits<{
 const models = ref<ModelConfig[]>([])
 const loading = ref(false)
 const { t } = useI18n()
-const chatResources = useChatResourcesStore()
+const resources = useResourcesStore()
 
 const placeholderText = computed(() => {
   return props.placeholder || t('model.selectModelPlaceholder')
@@ -122,9 +122,9 @@ const contextWindowTitle = (tokens?: number) => {
 
 // 外部传入 allModels 时跟着 prop 走；否则用空间级缓存，设置页改完窗口立刻能看见。
 watch(
-  () => [props.allModels, props.modelType, chatResources.allModels] as const,
+  () => [props.allModels, props.modelType, resources.allModels] as const,
   ([newModels]) => {
-    const source = Array.isArray(newModels) ? newModels : chatResources.allModels
+    const source = Array.isArray(newModels) ? newModels : resources.allModels
     models.value = filterModelsByType(source, props.modelType)
   },
   { immediate: true },
@@ -143,8 +143,8 @@ const loadModels = async () => {
 
   loading.value = true
   try {
-    await chatResources.ensureModels()
-    models.value = filterModelsByType(chatResources.allModels, props.modelType)
+    await resources.ensureModels()
+    models.value = filterModelsByType(resources.allModels, props.modelType)
   } catch (error) {
     console.error(t('model.loadFailed'), error)
     MessagePlugin.error(t('model.loadFailed'))

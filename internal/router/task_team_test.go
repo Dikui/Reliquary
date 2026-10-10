@@ -11,7 +11,7 @@ import (
 )
 
 func TestBackgroundTaskMiddlewareUsesSingleTeam(t *testing.T) {
-	for _, payload := range []string{`{"tenant_id":1}`, `{"session_id":"s-1"}`, `{}`} {
+	for _, payload := range []string{`{"tenant_id":1}`, `{"knowledge_id":"article-1"}`, `{}`} {
 		t.Run(payload, func(t *testing.T) {
 			called := false
 			handler := backgroundTaskMiddleware()(asynq.HandlerFunc(func(ctx context.Context, task *asynq.Task) error {

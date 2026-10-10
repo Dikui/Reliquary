@@ -281,7 +281,7 @@
           </div>
         </div>
 
-        <!-- Chat / VLM: context window. Agent compaction sizes itself from this. -->
+        <!-- Text and vision model context window. -->
         <div v-if="activeModelType === 'chat' || activeModelType === 'vllm'" class="form-item">
           <label class="form-label">{{ $t('model.editor.contextWindowLabel') }}</label>
           <t-input v-model.number="formData.contextWindow" type="number" :min="1024" :max="10000000"
@@ -383,11 +383,11 @@ interface ModelFormData {
   interfaceType?: 'ollama' | 'openai'
   isDefault: boolean
   supportsVision?: boolean
-  /** 对话/VLM 上下文窗口（token）。空/0 表示使用默认 200000。 */
+  /** 生成/VLM 上下文窗口（token）。空/0 表示使用默认 200000。 */
   contextWindow?: number
   /** 后台任务对该模型的并发上限；0/undefined 表示沿用全局默认。仅 chat/embedding/vllm 生效。 */
   maxConcurrency?: number
-  /** extra_config.thinking_control — how agent thinking on/off maps to API fields. */
+  /** extra_config.thinking_control maps model thinking parameters to API fields. */
   thinkingControl?: string
   // 自定义 HTTP 请求头（类似 OpenAI Python SDK 的 extra_headers）
   customHeaders?: CustomHeaderItem[]
@@ -1107,7 +1107,7 @@ const checkRemoteAPI = async () => {
 
     switch (activeModelType.value) {
       case 'chat':
-        // 对话模型（KnowledgeQA）
+        // 生成模型（KnowledgeQA）
         result = await checkRemoteModel({
           modelName: formData.value.modelName,
           baseUrl: formData.value.baseUrl || '',
@@ -1961,7 +1961,7 @@ const handleCancel = () => {
 }
 
 // Destructive-action checkbox for "Remove this credential". Styled to match
-// the pattern used in McpServiceDialog so the two dialogs read identically.
+// the shared setting drawer style.
 .clear-credential {
   display: inline-flex;
   margin-top: 8px;

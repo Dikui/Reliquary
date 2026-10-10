@@ -28,7 +28,6 @@ func createKnowledgeInFolder(t *testing.T, uploadName, customFileName string) *t
 		nil,
 		nil,
 		customFileName,
-		nil,
 		"",
 		nil,
 	)

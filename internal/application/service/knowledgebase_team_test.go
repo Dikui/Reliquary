@@ -44,10 +44,3 @@ func TestKnowledgeBaseLookupsRejectObjectsOutsideTeam(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []*types.KnowledgeBase{teamKB}, got)
 }
-
-func TestQARetrievalAlwaysUsesSingleTeam(t *testing.T) {
-	svc := &sessionService{}
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(2))
-	req := &types.QARequest{Session: &types.Session{TenantID: 2}, CustomAgent: &types.CustomAgent{TenantID: 2}}
-	require.Equal(t, types.SingleTenantID, svc.resolveRetrievalTenantID(ctx, req))
-}

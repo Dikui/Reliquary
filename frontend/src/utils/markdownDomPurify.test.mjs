@@ -17,7 +17,7 @@ test('ALLOWED_URI_REGEXP allows local:// and rejects javascript:', () => {
   assert.doesNotMatch('javascript:alert(1)', re);
 });
 
-test('chat markdown links always open in a new tab', () => {
+test('markdown links always open in a new tab', () => {
   const attributes = new Map([['href', '/platform/knowledge-bases/kb-1']]);
   const anchor = {
     tagName: 'A',

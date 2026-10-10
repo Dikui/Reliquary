@@ -54,9 +54,8 @@ func knowledgeResourceOwners(catalog interfaces.ResourceCatalog, knowledgeIDs ..
 // resourceReleaser decides whether a stored file's bytes may be deleted along
 // with the domain object that referenced them.
 //
-// A file can be claimed by more than one owner — an answer saved into the
-// knowledge base shares the very blob the chat message still shows, and two
-// knowledge entries can share an image. Deleting one owner must drop only that
+// A file can be claimed by more than one owner. Two knowledge entries can
+// share an image. Deleting one owner must drop only that
 // owner's claim; the bytes go away when the last claim does.
 type resourceReleaser struct {
 	catalog   interfaces.ResourceCatalog
@@ -69,7 +68,7 @@ type resourceReleaser struct {
 //
 // An unreadable binding count keeps the file. The cost of keeping it is an
 // orphaned blob that a later delete can still reclaim; the cost of guessing
-// wrong the other way is an image vanishing from a conversation or document
+// wrong the other way is an image vanishing from another article
 // that nobody deleted.
 func (r *resourceReleaser) deletable(ctx context.Context, ref string) bool {
 	if r == nil || r.catalog == nil {
@@ -204,9 +203,6 @@ func (s *knowledgeService) DeleteKnowledge(ctx context.Context, id string) error
 
 	if err = wg.Wait(); err != nil {
 		return err
-	}
-	if err := s.repo.DeleteKnowledgeTagRelations(ctx, id); err != nil {
-		logger.Warnf(ctx, "Failed to delete tag relations for knowledge %s: %v", id, err)
 	}
 	// Delete the knowledge row FIRST, then drop its physical file. Physical
 	// cleanup is deliberately deferred until the row is gone: if any of the
@@ -418,11 +414,6 @@ func (s *knowledgeService) DeleteKnowledgeList(ctx context.Context, ids []string
 
 	if err = wg.Wait(); err != nil {
 		return err
-	}
-	for _, knowledgeID := range ids {
-		if err := s.repo.DeleteKnowledgeTagRelations(ctx, knowledgeID); err != nil {
-			logger.Warnf(ctx, "Failed to delete tag relations for knowledge %s: %v", knowledgeID, err)
-		}
 	}
 	// 6. Delete the knowledge rows FIRST, then drop their physical files. See
 	// DeleteKnowledge for the rationale: deferring file removal until the rows are

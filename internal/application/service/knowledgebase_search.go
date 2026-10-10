@@ -150,9 +150,8 @@ func (s *knowledgeBaseService) HybridSearch(ctx context.Context,
 
 	// Compute the query embedding once for all selected knowledge bases.
 	//
-	// Skip when params already carries an embedding (e.g. the agent
-	// pre-computed it) or when the primary KB has no vector indexing
-	// configured.
+	// Skip when the caller already supplied an embedding or when the primary
+	// KB has no vector indexing configured.
 	if len(params.QueryEmbedding) == 0 &&
 		kb.IsVectorEnabled() && kb.EmbeddingModelID != "" &&
 		!params.DisableVectorMatch {
@@ -247,9 +246,8 @@ func (s *knowledgeBaseService) buildRetrievalParams(
 	// vector indexing enabled (e.g. KBs with disabled indexing) has no
 	// embeddings to retrieve from, and typically has no EmbeddingModelID
 	// configured either; such KBs are skipped for vector retrieval to avoid
-	// spurious "model ID cannot be empty" errors when an agent's retrieval
-	// scope happens to include them (e.g. KBSelectionMode=all picking up a
-	// unindexed KB).
+	// spurious "model ID cannot be empty" errors when the retrieval scope
+	// includes an unindexed KB.
 	var docVectorKBIDs, docKeywordKBIDs []string
 	for _, kb := range groupKBs {
 		if kb.IsVectorEnabled() && kb.EmbeddingModelID != "" {
@@ -279,7 +277,6 @@ func (s *knowledgeBaseService) buildRetrievalParams(
 				Threshold:        params.VectorThreshold,
 				RetrieverType:    types.VectorRetrieverType,
 				KnowledgeIDs:     params.KnowledgeIDs,
-				TagIDs:           params.TagIDs,
 				KnowledgeType:    knowledgeType,
 			})
 		}
@@ -302,7 +299,6 @@ func (s *knowledgeBaseService) buildRetrievalParams(
 			Threshold:        params.KeywordThreshold,
 			RetrieverType:    types.KeywordsRetrieverType,
 			KnowledgeIDs:     params.KnowledgeIDs,
-			TagIDs:           params.TagIDs,
 		})
 		logger.Info(ctx, "Keyword retrieval parameters setup completed")
 	}

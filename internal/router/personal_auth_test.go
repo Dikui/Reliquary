@@ -27,6 +27,7 @@ import (
 type personalAuthFixture struct {
 	db     *gorm.DB
 	router *gin.Engine
+	params RouterParams
 	token  string
 	key    string
 	userID string
@@ -56,7 +57,7 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 	gin.SetMode(gin.TestMode)
 	db := pgtest.Open(t)
 	require.NoError(t, service.EnsureSingleTeamSpace(context.Background(), db))
-	cfg := &config.Config{Conversation: &config.ConversationConfig{}, Tenant: &config.TenantConfig{}}
+	cfg := &config.Config{}
 	tenantRepo := apprepo.NewTenantRepository(db)
 	tenantSvc := service.NewTenantService(tenantRepo)
 	users := service.NewUserService(cfg, apprepo.NewUserRepository(db), apprepo.NewAuthTokenRepository(db), tenantSvc)
@@ -64,24 +65,36 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 	knowledgeRepo := apprepo.NewKnowledgeRepository(db)
 	kbRepo := apprepo.NewKnowledgeBaseRepository(db)
 	kb := service.NewKnowledgeBaseService(db, kbRepo, knowledgeRepo, nil, nil, nil, tenantRepo, nil, nil, nil, nil, nil, nil, nil)
-	models := service.NewModelService(apprepo.NewModelRepository(db), kbRepo, nil, nil, nil, tenantSvc)
+	models := service.NewModelService(apprepo.NewModelRepository(db), kbRepo, nil, nil, tenantSvc)
 	knowledge, err := service.NewKnowledgeService(db, cfg, knowledgeRepo, kb, tenantRepo, tenantSvc,
-		nil, nil, nil, nil, nil, nil, models, nil, nil, nil, nil, nil, nil)
+		nil, nil, nil, nil, models, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	settings := service.NewSystemSettingService(apprepo.NewSystemSettingRepository(db), nil, cfg)
 	system := handler.NewSystemHandler(cfg, tenantSvc, users, settings, keys, nil, nil)
+	params := RouterParams{
+		Config: cfg, UserService: users, TenantService: tenantSvc,
+		TenantAPIKeyService: keys, KBService: kb, KnowledgeService: knowledge,
+		KBHandler:              handler.NewKnowledgeBaseHandler(kb, users, nil),
+		KnowledgeHandler:       handler.NewKnowledgeHandler(cfg, knowledge, kb, nil, nil),
+		KnowledgeSearchHandler: &handler.KnowledgeSearchHandler{},
+		ModelHandler:           handler.NewModelHandler(models),
+		ModelRoutingHandler:    handler.NewModelRoutingHandler(db, models),
+		EntityHandler:          handler.NewEntityHandler(service.NewEntityService(db, nil)),
+		TenantHandler:          handler.NewTenantHandler(tenantSvc, keys, users, kb, cfg, settings),
+		AuthHandler:            handler.NewAuthHandler(users, tenantSvc), SystemHandler: system,
+	}
 	guards := newAccessGuards(kb, knowledge, nil)
 	r := gin.New()
 	r.Use(middleware.ErrorHandler(), middleware.Auth(tenantSvc, users, keys))
 	v1 := r.Group("/api/v1")
-	RegisterAuthRoutes(v1, handler.NewAuthHandler(users, tenantSvc), guards)
-	RegisterTenantRoutes(v1, handler.NewTenantHandler(tenantSvc, keys, users, kb, cfg, settings), guards)
+	RegisterAuthRoutes(v1, params.AuthHandler, guards)
+	RegisterTenantRoutes(v1, params.TenantHandler, guards)
 	RegisterSystemRoutes(v1, system, guards)
-	RegisterModelRoutes(v1, handler.NewModelHandler(models), nil, guards)
-	RegisterModelRoutingRoutes(v1, handler.NewModelRoutingHandler(db, models), guards)
-	RegisterEntityRoutes(v1, handler.NewEntityHandler(service.NewEntityService(db, nil)))
-	RegisterKnowledgeRoutes(v1, handler.NewKnowledgeHandler(cfg, knowledge, kb, nil, nil), guards)
-	f := &personalAuthFixture{db: db, router: r}
+	RegisterModelRoutes(v1, params.ModelHandler, nil, guards)
+	RegisterModelRoutingRoutes(v1, params.ModelRoutingHandler, guards)
+	RegisterEntityRoutes(v1, params.EntityHandler)
+	RegisterKnowledgeRoutes(v1, params.KnowledgeHandler, guards)
+	f := &personalAuthFixture{db: db, router: r, params: params}
 	register := personalRequest(t, r, http.MethodPost, "/api/v1/auth/register", `{"username":"personal","email":"personal@example.test","password":"initial-password"}`, "", false)
 	require.Equal(t, http.StatusCreated, register.Code, register.Body.String())
 	var registration types.RegisterResponse

@@ -72,22 +72,7 @@
           </ResultGroup>
 
           <!-- Messages -->
-          <ResultGroup v-if="isGroupVisible('messages') && messageGroups.length"
-            :label="t('commandPalette.group.messages')" :count="totalMessages">
-            <template v-for="(item, i) in flatMessageItems" :key="'m-' + item.msg.request_id">
-              <ResultItem :index="flatIndexFor('messages', i)" :selected="selectedIndex === flatIndexFor('messages', i)"
-                :shortcut="shortcutFor(flatIndexFor('messages', i))" icon-name="chat" :score="item.msg.score"
-                @primary="openMessage(item)" @hover="selectItemAt($event)">
-                <template #title>
-                  <span>{{ item.group.sessionTitle || t('commandPalette.untitledSession') }}</span>
-                </template>
-                <template #subtitle>
-                  <span class="cmdk-msg-role">{{ item.msg.query_content ? 'Q' : 'A' }}</span>
-                  <span v-html="highlight(item.msg.query_content || item.msg.answer_content)" />
-                </template>
-              </ResultItem>
-            </template>
-          </ResultGroup>
+
 
           <!-- KB name matches -->
           <ResultGroup v-if="isGroupVisible('kbs') && kbMatches.length" :label="t('commandPalette.group.kbs')">
@@ -96,22 +81,11 @@
               icon-name="folder" :title="kb.name" @primary="openKb(kb.id)" @hover="selectItemAt($event)" />
           </ResultGroup>
 
-          <!-- Agent matches -->
-          <ResultGroup v-if="isGroupVisible('agents') && agentMatches.length" :label="t('commandPalette.group.agents')">
-            <ResultItem v-for="(a, i) in agentMatches" :key="'a-' + a.id" :index="flatIndexFor('agents', i)"
-              :selected="selectedIndex === flatIndexFor('agents', i)" :shortcut="shortcutFor(flatIndexFor('agents', i))"
-              icon-name="user-circle" :title="a.name" :subtitle="a.description" @primary="openAgent(a.id)"
-              @hover="selectItemAt($event)" />
-          </ResultGroup>
 
-          <!-- Session (chat) title matches -->
-          <ResultGroup v-if="isGroupVisible('sessions') && sessionMatches.length"
-            :label="t('commandPalette.group.sessionsByTitle')">
-            <ResultItem v-for="(s, i) in sessionMatches" :key="'s-' + s.id" :index="flatIndexFor('sessions', i)"
-              :selected="selectedIndex === flatIndexFor('sessions', i)"
-              :shortcut="shortcutFor(flatIndexFor('sessions', i))" icon-name="chat" :title="s.title"
-              @primary="openSession(s.id)" @hover="selectItemAt($event)" />
-          </ResultGroup>
+
+
+
+
 
           <!-- Commands matching the query -->
           <ResultGroup v-if="isGroupVisible('commands') && filteredCommands.length"
@@ -126,10 +100,7 @@
           <div v-if="!loading && !hasAnyResults && hasSearched" class="cmdk__empty">
             <p>{{ t('commandPalette.empty.noResults') }}</p>
             <div class="cmdk__empty-actions">
-              <t-button theme="primary" variant="outline" size="small" @click="askAi">
-                <template #icon><t-icon name="chat" size="14px" /></template>
-                {{ t('commandPalette.empty.askAi') }}
-              </t-button>
+
               <t-button variant="outline" size="small" @click="drawerVisible = true">
                 <template #icon><t-icon name="setting" size="14px" /></template>
                 {{ t('commandPalette.empty.adjustRetrieval') }}
@@ -145,7 +116,7 @@
         <span class="cmdk__hotkey"><kbd>↵</kbd> {{ t('commandPalette.hotkey.enter') }}</span>
         <span class="cmdk__hotkey"><kbd>⌘</kbd><kbd>1</kbd>-<kbd>9</kbd> {{ t('commandPalette.hotkey.cmdNumber')
           }}</span>
-        <span class="cmdk__hotkey"><kbd>⌘</kbd><kbd>↵</kbd> {{ t('commandPalette.hotkey.cmdEnter') }}</span>
+
         <span class="cmdk__hotkey"><kbd>Esc</kbd> {{ t('commandPalette.hotkey.esc') }}</span>
       </div>
     </div>
@@ -165,29 +136,23 @@ import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useCommandPaletteStore } from '@/stores/commandPalette'
 import { useAuthStore } from '@/stores/auth'
-import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities'
-import { useCmdkSearch, type CmdkFileGroup, type CmdkChunk, type CmdkMsgGroup } from './GlobalCommandPalette/useSearch'
+import { useCmdkSearch, type CmdkFileGroup, type CmdkChunk } from './GlobalCommandPalette/useSearch'
 import { visibleFileChunks } from './GlobalCommandPalette/visibleFileChunks'
 import { highlightText } from './GlobalCommandPalette/useHighlight'
-import { useStartChat } from './GlobalCommandPalette/useStartChat'
 import { buildCommands, filterCommands } from './GlobalCommandPalette/commands'
 import ResultGroup from './GlobalCommandPalette/ResultGroup.vue'
 import ResultItem from './GlobalCommandPalette/ResultItem.vue'
 import RetrievalSettings from '@/views/settings/RetrievalSettings.vue'
-import type { MessageSearchGroupItem } from '@/api/chat-history'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const commandPaletteStore = useCommandPaletteStore()
 const authStore = useAuthStore()
-const deploymentCapabilities = useDeploymentCapabilitiesStore()
 const { open, initialQuery, recentQueries } = storeToRefs(commandPaletteStore)
-const { startChat } = useStartChat()
 
 // Per-group display caps — keep the palette compact.
 const CHUNK_LIMIT = 5
-const MSG_LIMIT = 4
 
 // Active KB scope: when the palette opens on a KB detail page, we default to
 // searching within that KB. The user can remove the chip to expand scope.
@@ -196,14 +161,11 @@ const scopeDismissed = ref(false) // user clicked ✕, remember for this session
 
 const {
   query, loading, hasSearched,
-  fileGroups, messageGroups, kbMatches,
+  fileGroups, kbMatches,
   knowledgeBases,
-  agentMatches, sessionMatches,
-  totalMessages,
   clearResults,
 } = useCmdkSearch({
   lockedKbIds: () => (activeKbScope.value ? [activeKbScope.value.id] : []),
-  agentsEnabled: () => deploymentCapabilities.isSupported('agents'),
 })
 
 const drawerVisible = ref(false)
@@ -227,22 +189,10 @@ const dialogVisible = computed<boolean>({
 
 // Flatten visible items into one indexable list for keyboard nav.
 interface FlatChunkItem { kind: 'chunk'; file: CmdkFileGroup; chunk: CmdkChunk }
-interface FlatMsgItem { kind: 'msg'; group: CmdkMsgGroup; msg: MessageSearchGroupItem }
 
 const flatChunkItems = computed<FlatChunkItem[]>(() =>
   visibleFileChunks(fileGroups.value, CHUNK_LIMIT).map(item => ({ kind: 'chunk', ...item })),
 )
-
-const flatMessageItems = computed<FlatMsgItem[]>(() => {
-  const out: FlatMsgItem[] = []
-  for (const g of messageGroups.value) {
-    for (const m of g.items) {
-      out.push({ kind: 'msg', group: g, msg: m })
-      if (out.length >= MSG_LIMIT) return out
-    }
-  }
-  return out
-})
 
 // ─── Commands ───
 // All palette commands live in a shared module so quick-action (empty state)
@@ -253,12 +203,7 @@ const allCommands = computed(() => {
     t,
     close: () => commandPaletteStore.closePalette(),
   })
-  return cmds.filter((command) => {
-    if (command.id === 'open-agents') {
-      return deploymentCapabilities.isSupported('agents')
-    }
-    return true
-  })
+  return cmds
 })
 
 const filteredCommands = computed(() => filterCommands(allCommands.value, query.value))
@@ -273,20 +218,17 @@ const groupOrder = computed<readonly string[]>(() => {
     return ['recent', 'commands'] as const
   }
   if (activeKbScope.value) {
-    // Scoped to one KB: only chunks make sense (messages disabled in useSearch).
+    // Scoped to one KB: only chunk results are available.
     return ['chunks'] as const
   }
-  return ['chunks', 'messages', 'kbs', 'agents', 'sessions', 'commands'] as const
+  return ['chunks', 'kbs', 'commands'] as const
 })
 
 const groupSizes = computed<Record<string, number>>(() => ({
   recent: recentQueries.value.length,
   commands: query.value.trim() ? filteredCommands.value.length : allCommands.value.length,
   chunks: flatChunkItems.value.length,
-  messages: flatMessageItems.value.length,
   kbs: kbMatches.value.length,
-  agents: agentMatches.value.length,
-  sessions: sessionMatches.value.length,
 }))
 
 const flatIndexFor = (group: string, localIndex: number): number => {
@@ -330,28 +272,12 @@ const flatItems = computed<FlatItem[]>(() => {
         out.push({
           key: `knowledge:${item.file.knowledgeId}`,
           group: g,
-          run: (ev) => (ev?.cmd ? cmdEnterChunk(item) : openChunk(item)),
-        })
-      })
-    } else if (g === 'messages') {
-      flatMessageItems.value.forEach((item) => {
-        out.push({
-          key: `msg:${item.msg.request_id}`,
-          group: g,
-          run: () => openMessage(item),
+          run: () => openChunk(item),
         })
       })
     } else if (g === 'kbs') {
       kbMatches.value.forEach((kb) => {
         out.push({ key: `kb:${kb.id}`, group: g, run: () => openKb(kb.id) })
-      })
-    } else if (g === 'agents') {
-      agentMatches.value.forEach((a) => {
-        out.push({ key: `agent:${a.id}`, group: g, run: () => openAgent(a.id) })
-      })
-    } else if (g === 'sessions') {
-      sessionMatches.value.forEach((s) => {
-        out.push({ key: `session:${s.id}`, group: g, run: () => openSession(s.id) })
       })
     }
   }
@@ -410,48 +336,10 @@ const openChunk = (item: FlatChunkItem) => {
   })
 }
 
-const cmdEnterChunk = (item: FlatChunkItem) => {
-  commandPaletteStore.pushRecent(query.value)
-  commandPaletteStore.closePalette()
-  const kbIds = item.file.kbId ? [item.file.kbId] : []
-  startChat(query.value, kbIds, [item.file.knowledgeId])
-}
-
-const openMessage = (item: FlatMsgItem) => {
-  commandPaletteStore.pushRecent(query.value)
-  commandPaletteStore.closePalette()
-  if (item.group.sessionId) {
-    router.push(`/platform/chat/${item.group.sessionId}`)
-  }
-}
-
 const openKb = (kbId: string) => {
   commandPaletteStore.pushRecent(query.value)
   commandPaletteStore.closePalette()
   router.push(`/platform/knowledge-bases/${kbId}`)
-}
-
-// Agents have no standalone detail route; the natural "jump" is opening a new
-// chat pre-scoped to that agent — the agent editor is a modal that requires
-// more context (permissions, edit intent) so we don't trigger it from ⌘K.
-const openAgent = (agentId: string) => {
-  commandPaletteStore.pushRecent(query.value)
-  commandPaletteStore.closePalette()
-  router.push({ path: '/platform/creatChat', query: { agent_id: agentId } })
-}
-
-const openSession = (sessionId: string) => {
-  if (!sessionId) return
-  commandPaletteStore.pushRecent(query.value)
-  commandPaletteStore.closePalette()
-  router.push(`/platform/chat/${sessionId}`)
-}
-
-const askAi = () => {
-  if (!query.value.trim()) return
-  commandPaletteStore.pushRecent(query.value)
-  commandPaletteStore.closePalette()
-  startChat(query.value)
 }
 
 const highlight = (text: string) => highlightText(text, query.value)
@@ -519,7 +407,7 @@ const onKeyDown = (e: KeyboardEvent) => {
 }
 
 // Keys handled specifically on the input element. Main purpose: let the user
-// escape a KB scope chip with the keyboard. Mirrors how chat apps treat
+// escape a KB scope chip with the keyboard. Uses the same behavior for
 // pill/tag tokens — Backspace on an empty input removes the preceding chip.
 const onInputKeyDown = (e: KeyboardEvent) => {
   if (

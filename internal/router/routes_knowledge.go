@@ -19,11 +19,6 @@ func RegisterChunkRoutes(r *gin.RouterGroup, handler *handler.ChunkHandler, g *a
 	{
 		chunkRead.GET("/:knowledge_id", g.KBExistsFromKnowledgeIDParam("knowledge_id"), handler.ListKnowledgeChunks)
 		chunkRead.GET("/by-id/:id", g.KBExistsFromChunkIDParam("id"), handler.GetChunkByIDOnly)
-		chunkRead.GET("/:knowledge_id/:id/revisions", g.KBExistsFromKnowledgeIDParam("knowledge_id"), handler.ListChunkRevisions)
-		chunks.DELETE("/:knowledge_id/:id", g.KBExistsFromKnowledgeIDParam("knowledge_id"), handler.DeleteChunk)
-		chunks.DELETE("/:knowledge_id", g.KBExistsFromKnowledgeIDParam("knowledge_id"), handler.DeleteChunksByKnowledgeID)
-		chunks.PUT("/:knowledge_id/:id", g.KBExistsFromKnowledgeIDParam("knowledge_id"), handler.UpdateChunk)
-		chunks.POST("/:knowledge_id/:id/revert", g.KBExistsFromKnowledgeIDParam("knowledge_id"), handler.RevertChunk)
 		chunks.DELETE("/by-id/:id/questions", g.KBExistsFromChunkIDParam("id"), handler.DeleteGeneratedQuestion)
 		chunks.PUT("/by-id/:id/questions", g.KBExistsFromChunkIDParam("id"), handler.UpsertGeneratedQuestion)
 		chunks.POST("/by-id/:id/questions/regenerate", g.KBExistsFromChunkIDParam("id"), handler.RegenerateGeneratedQuestions)
@@ -52,7 +47,7 @@ func RegisterKnowledgeRoutes(r *gin.RouterGroup, handler *handler.KnowledgeHandl
 		// KB via the URL — they accept a kb_id (or source/target KB) in the
 		// body and the handler fans out the access check itself. /batch and
 		// /search are read routes (retrieve). /move, /batch-delete,
-		// /batch-reparse and /tags are content writes that each bound
+		// /batch-reparse are content writes that each bound
 		// themselves to a single (or source+target) KB and enforce the API
 		// key's KB allow-list downstream — MoveKnowledge via
 		// requireTenantAPIKeyKnowledgeBases(source,target); the batch ops via
@@ -74,10 +69,8 @@ func RegisterKnowledgeRoutes(r *gin.RouterGroup, handler *handler.KnowledgeHandl
 		k.POST("/:id/review", g.KBExistsFromKnowledgeIDParam("id"), handler.ReviewKnowledgeIntake)
 		kRead.GET("/:id/download", g.KBExistsFromKnowledgeIDParam("id"), handler.DownloadKnowledgeFile)
 		kRead.GET("/:id/preview", g.KBExistsFromKnowledgeIDParam("id"), handler.PreviewKnowledgeFile)
-		k.PUT("/image/:id/:chunk_id", g.KBExistsFromKnowledgeIDParam("id"), handler.UpdateImageInfo)
 		kRead.GET("/search", handler.SearchKnowledge)
 		kRead.GET("/move/progress/:task_id", handler.GetKnowledgeMoveProgress)
-		k.PUT("/tags", handler.UpdateKnowledgeTagBatch)
 		k.POST("/batch-reparse", handler.BatchReparseKnowledge)
 		k.POST("/batch-delete", handler.BatchDeleteKnowledge)
 		k.POST("/folder", handler.MoveKnowledgeToFolder)
@@ -101,44 +94,5 @@ func RegisterKnowledgeBaseRoutes(r *gin.RouterGroup, handler *handler.KnowledgeB
 		kb.GET("/:id/hybrid-search", g.KBExists("id"), handler.HybridSearch)
 		kbManagement.POST("/:id/duplicate", g.KBExists("id"), handler.DuplicateKnowledgeBase)
 		kb.GET("/:id/move-targets", g.KBExists("id"), handler.ListMoveTargets)
-	}
-}
-
-func RegisterKnowledgeAnomalyRoutes(r *gin.RouterGroup, h *handler.KnowledgeAnomalyHandler, g *accessGuards) {
-	if h == nil {
-		return
-	}
-	group := r.Group("/knowledge-bases/:id/anomalies")
-	read := group
-	read.GET("", g.KBExists("id"), h.List)
-	group.POST("", g.KBExists("id"), h.Create)
-	group.POST("/:anomaly_id/decision", g.KBExists("id"), h.Resolve)
-}
-
-func RegisterKnowledgeStrategyRoutes(r *gin.RouterGroup, h *handler.KnowledgeStrategyHandler, g *accessGuards) {
-	if h == nil {
-		return
-	}
-	// Strategy routes validate that the knowledge base belongs to the workspace.
-	group := r.Group("/knowledge-bases/:id/strategies")
-	group.GET("", g.KBExists("id"), h.List)
-	group.POST("", g.KBExists("id"), h.Propose)
-	group.POST("/:version_id/activate", g.KBExists("id"), h.Activate)
-	group.POST("/:version_id/evaluate", g.KBExists("id"), h.Evaluate)
-	group.POST("/reprocess", g.KBExists("id"), h.Reprocess)
-}
-
-func RegisterKnowledgeTagRoutes(r *gin.RouterGroup, tagHandler *handler.TagHandler, g *accessGuards) {
-	if tagHandler == nil {
-		return
-	}
-	kbTags := r.Group("/knowledge-bases/:id/tags")
-	kbTagsRead := kbTags
-	{
-		// Check the knowledge base exists before looking up or changing its tags.
-		kbTagsRead.GET("", g.KBExists("id"), tagHandler.ListTags)
-		kbTags.POST("", g.KBExists("id"), tagHandler.CreateTag)
-		kbTags.PUT("/:tag_id", g.KBExists("id"), tagHandler.UpdateTag)
-		kbTags.DELETE("/:tag_id", g.KBExists("id"), tagHandler.DeleteTag)
 	}
 }

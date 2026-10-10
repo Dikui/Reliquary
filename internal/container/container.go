@@ -21,28 +21,22 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
-	"reliquary/internal/agent/approval"
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
-	chatpipeline "reliquary/internal/application/service/chat_pipeline"
 	"reliquary/internal/application/service/file"
 	"reliquary/internal/common"
 	"reliquary/internal/config"
 	"reliquary/internal/database"
 	"reliquary/internal/datasource"
 	rssConnector "reliquary/internal/datasource/connector/rss"
-	"reliquary/internal/event"
 	"reliquary/internal/handler"
-	"reliquary/internal/handler/session"
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/logger"
-	"reliquary/internal/mcp"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/models/limiter"
 	"reliquary/internal/models/utils/ollama"
 	"reliquary/internal/router"
-	"reliquary/internal/stream"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
@@ -80,8 +74,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	logger.Debugf(ctx, "[Container] Registering external service clients...")
 	must(container.Provide(docparser.NewImageResolver))
 	must(container.Provide(initOllamaService))
-	must(container.Provide(stream.NewStreamManager))
-	must(container.Invoke(registerStreamCleanup))
 	logger.Debugf(ctx, "[Container] Initializing DuckDB...")
 	must(container.Provide(NewDuckDB))
 	logger.Debugf(ctx, "[Container] DuckDB registered")
@@ -94,24 +86,14 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(repository.NewKnowledgeRepository))
 	must(container.Provide(repository.NewKnowledgeSpanRepository))
 	must(container.Provide(repository.NewChunkRepository))
-	must(container.Provide(repository.NewKnowledgeTagRepository))
-	must(container.Provide(repository.NewSessionRepository))
-	must(container.Provide(repository.NewMessageRepository))
 	must(container.Provide(repository.NewModelRepository))
 	must(container.Provide(repository.NewUserRepository))
 	must(container.Provide(repository.NewAuthTokenRepository))
 	must(container.Provide(repository.NewSystemSettingRepository))
-	must(container.Provide(repository.NewMCPServiceRepository))
-	must(container.Provide(repository.NewMCPToolApprovalRepository))
-	must(container.Provide(repository.NewCustomAgentRepository))
 	must(container.Provide(repository.NewResourceFavoriteRepository))
 	must(container.Provide(repository.NewDataSourceRepository))
 	must(container.Provide(repository.NewSyncLogRepository))
 	must(container.Provide(repository.NewTaskDeadLetterRepository))
-
-	// MCP manager for managing MCP client connections
-	logger.Debugf(ctx, "[Container] Registering MCP manager...")
-	must(container.Provide(mcp.NewMCPManager))
 
 	// Business service layer
 	logger.Debugf(ctx, "[Container] Registering business services...")
@@ -119,12 +101,9 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewTenantAPIKeyService))
 	must(container.Provide(service.NewKnowledgeBaseService))
 	must(container.Provide(service.NewKnowledgeService))
+	must(container.Provide(service.NewKnowledgeSearchService))
 	must(container.Provide(service.NewSpanTracker))
 	must(container.Provide(service.NewChunkService))
-	must(container.Provide(service.NewKnowledgeTagService))
-	must(container.Provide(service.NewKnowledgeAnomalyService))
-	must(container.Provide(service.NewKnowledgeStrategyService))
-	must(container.Provide(service.NewKnowledgeAttentionService))
 	must(container.Provide(service.NewEntityService))
 	must(container.Provide(service.NewEntityNameEmbeddingRebuilder))
 	must(container.Provide(embedding.NewBatchEmbedder))
@@ -135,33 +114,11 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewDataTableSummaryService, dig.Name("dataTableSummary")))
 	must(container.Provide(service.NewImageMultimodalService, dig.Name("imageMultimodal")))
 	must(container.Provide(service.NewKnowledgePostProcessService, dig.Name("knowledgePostProcess")))
-	must(container.Provide(service.NewKnowledgeAutoTagService, dig.Name("knowledgeAutoTag")))
 
-	must(container.Provide(service.NewMessageService))
-	must(container.Provide(service.NewMCPServiceService))
-	must(container.Provide(service.NewMCPToolApprovalService))
-	must(container.Provide(service.NewCustomAgentService))
 	must(container.Provide(service.NewResourceFavoriteService))
 
 	must(container.Provide(repository.NewResourceRepository))
-	must(container.Provide(repository.NewTemporaryDocumentRepository))
 	must(container.Provide(service.NewResourceCatalog))
-	// Agent service layer (requires event bus)
-	// SessionService is passed as parameter to CreateAgentEngine method when creating AgentService
-	logger.Debugf(ctx, "[Container] Registering event bus and agent service...")
-	must(container.Provide(event.NewEventBus))
-	must(container.Provide(func(cfg *config.Config, s interfaces.MCPToolApprovalService) *approval.Gate {
-		return approval.NewGate(cfg, &approval.Adapter{Svc: s})
-	}))
-	// Expose Gate as MCPApproval interface so AgentService and others can depend on the abstraction.
-	must(container.Provide(func(g *approval.Gate) approval.MCPApproval { return g }))
-	must(container.Provide(service.NewAgentService))
-
-	// Session service (depends on agent service)
-	// SessionService is created after AgentService and passes itself to AgentService.CreateAgentEngine when needed
-
-	logger.Debugf(ctx, "[Container] Registering session service...")
-	must(container.Provide(service.NewSessionService))
 	logger.Debugf(ctx, "[Container] Registering task enqueuer...")
 	must(container.Provide(router.NewAsyncqClient, dig.As(new(interfaces.TaskEnqueuer))))
 	// Dedicated pools guarantee capacity for each task stage.
@@ -173,11 +130,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(router.NewAsynqInspector))
 	must(container.Provide(router.NewAsynqTaskInspector))
 	must(container.Invoke(registerModelConcurrencyLimiter))
-	must(container.Provide(service.NewTemporaryDocumentService))
-	must(container.Invoke(startTemporaryDocumentCleanup))
-
-	// Chat pipeline components for processing chat requests
-	logger.Debugf(ctx, "[Container] Registering chat pipeline plugins...")
 
 	// Data source sync framework
 	logger.Debugf(ctx, "[Container] Registering data source sync framework...")
@@ -189,52 +141,32 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewHousekeepingService))
 	must(container.Invoke(startHousekeepingService))
 	logger.Debugf(ctx, "[Container] Knowledge housekeeping runner registered")
-	must(container.Provide(chatpipeline.NewEventManager))
-	must(container.Invoke(chatpipeline.NewPluginSearch))
-	must(container.Invoke(chatpipeline.NewPluginRerank))
-	must(container.Invoke(chatpipeline.NewPluginMerge))
-	must(container.Invoke(chatpipeline.NewPluginDataAnalysis))
-	must(container.Invoke(chatpipeline.NewPluginIntoChatMessage))
-	must(container.Invoke(chatpipeline.NewPluginChatCompletion))
-	must(container.Invoke(chatpipeline.NewPluginChatCompletionStream))
-	must(container.Invoke(chatpipeline.NewPluginFilterTopK))
-	must(container.Invoke(chatpipeline.NewPluginQueryUnderstand))
-	must(container.Invoke(chatpipeline.NewPluginLoadHistory))
-	must(container.Invoke(chatpipeline.NewPluginSearchParallel))
-	logger.Debugf(ctx, "[Container] Chat pipeline plugins registered")
 
 	// HTTP handlers layer
 	logger.Debugf(ctx, "[Container] Registering HTTP handlers...")
 	must(container.Provide(handler.NewTenantHandler))
 	must(container.Provide(handler.NewKnowledgeBaseHandler))
 	must(container.Provide(handler.NewKnowledgeHandler))
-	must(container.Provide(handler.NewKnowledgeAnomalyHandler))
-	must(container.Provide(handler.NewKnowledgeStrategyHandler))
+	must(container.Provide(handler.NewKnowledgeSearchHandler))
 	must(container.Provide(handler.NewEntityHandler))
 	must(container.Provide(handler.NewModelRoutingHandler))
 	must(container.Provide(handler.NewChunkHandler))
-	must(container.Provide(handler.NewTagHandler))
-	must(container.Provide(session.NewHandler))
-	must(container.Provide(handler.NewMessageHandler))
 	must(container.Provide(handler.NewModelHandler))
 	must(container.Provide(handler.NewInitializationHandler))
 	must(container.Provide(handler.NewAuthHandler))
 	must(container.Provide(handler.NewSystemHandler))
-	must(container.Provide(handler.NewMCPServiceHandler))
-	must(container.Provide(handler.NewMCPCredentialsHandler))
 	must(container.Provide(handler.NewModelCredentialsHandler))
 	must(container.Provide(handler.NewDataSourceCredentialsHandler))
-	must(container.Provide(handler.NewCustomAgentHandler))
 	must(container.Provide(handler.NewResourceFavoriteHandler))
 
 	// Data source handler
 	must(container.Provide(handler.NewDataSourceHandler))
 	logger.Debugf(ctx, "[Container] HTTP handlers registered")
 
-	// Wire the chat package's local image resolver so multimodal chat can read
+	// Wire the model package's local image resolver so multimodal processing can read
 	// local:// images that live under a tenant's configured storage PathPrefix
 	// (which is not encoded in the local:// URL).
-	must(container.Invoke(registerChatLocalImageResolver))
+	must(container.Invoke(registerModelLocalImageResolver))
 	must(container.Invoke(registerNameEmbeddingRebuildIntegration))
 
 	// Router configuration
@@ -284,8 +216,8 @@ func recoverEntityNameEmbeddings(rebuilder *service.EntityNameEmbeddingRebuilder
 	return nil
 }
 
-// registerChatLocalImageResolver loads catalog-backed local images for model calls.
-func registerChatLocalImageResolver(files interfaces.FileService) {
+// registerModelLocalImageResolver loads catalog-backed local images for model calls.
+func registerModelLocalImageResolver(files interfaces.FileService) {
 	chat.LocalImageResolver = func(storageURL string) ([]byte, bool) {
 		rc, err := files.GetFile(context.Background(), storageURL)
 		if err != nil {
@@ -323,7 +255,7 @@ func resolveModelMaxConcurrency(ss interfaces.SystemSettingService) int {
 }
 
 // registerModelConcurrencyLimiter builds the process-local per-model background
-// concurrency governor (chat + vlm) and installs it.
+// concurrency governor (text generation + vlm) and installs it.
 func registerModelConcurrencyLimiter(ss interfaces.SystemSettingService) {
 	limit := resolveModelMaxConcurrency(ss)
 	limiter.SetGovernor(limiter.NewLocalLimiter(), limit)
@@ -427,7 +359,6 @@ func syncSequences(db *gorm.DB) {
 	}
 	pairs := [][2]string{
 		{"chunks", "chunks_seq_id_seq"},
-		{"knowledge_tags", "knowledge_tags_seq_id_seq"},
 	}
 	for _, p := range pairs {
 		table, seq := p[0], p[1]
@@ -577,37 +508,4 @@ func startHousekeepingService(svc *service.HousekeepingService, cleaner interfac
 		svc.Stop()
 		return nil
 	})
-}
-
-// startTemporaryDocumentCleanup removes expired session attachments and their
-// extracted images. The durable expiry timestamp is the source of truth; the
-// ticker only controls how quickly storage is reclaimed.
-func startTemporaryDocumentCleanup(svc interfaces.TemporaryDocumentService, cleaner interfaces.ResourceCleaner) {
-	stop := make(chan struct{})
-	go func() {
-		ticker := time.NewTicker(10 * time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if err := svc.CleanupExpired(context.Background()); err != nil {
-					logger.Warnf(context.Background(), "[TemporaryDocument] cleanup failed: %v", err)
-				}
-			case <-stop:
-				return
-			}
-		}
-	}()
-	cleaner.RegisterWithName("TemporaryDocumentCleanup", func() error {
-		close(stop)
-		return nil
-	})
-}
-
-func registerStreamCleanup(manager interfaces.StreamManager, cleaner interfaces.ResourceCleaner) {
-	local := manager.(*stream.MemoryStreamManager)
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() { defer close(done); local.RunCleanup(ctx) }()
-	cleaner.RegisterWithName("MemoryStream", func() error { cancel(); <-done; return nil })
 }

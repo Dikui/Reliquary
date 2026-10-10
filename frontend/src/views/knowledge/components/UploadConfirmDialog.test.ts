@@ -7,23 +7,7 @@ const host = readFileSync(new URL('../../../components/UploadConfirmHost.vue', i
 const knowledgeBase = readFileSync(new URL('../KnowledgeBase.vue', import.meta.url), 'utf8')
 const platform = readFileSync(new URL('../../platform/index.vue', import.meta.url), 'utf8')
 
-test('selects multiple document tags and returns them with the confirmation result', () => {
-  assert.match(host, /:tag-ids="uploadConfirmStore\.tagIds"/)
-  assert.match(dialog, /v-model="selectedTagIds"/)
-  assert.match(dialog, /multiple/)
-  assert.match(dialog, /listKnowledgeTags\(kbId, \{ page: 1, page_size: 1000 \}\)/)
-  assert.match(dialog, /tagIds: \[\.\.\.selectedTagIds\.value\]/)
-})
 
-test('uses confirmed tags for file and URL imports instead of reading the list filter at upload time', () => {
-  assert.match(knowledgeBase, /const tagIds = result\.tagIds \|\| \[\]/)
-  assert.match(knowledgeBase, /executeUploadBatch\(files, \{[\s\S]*?\btagIds,[\s\S]*?\}\)/)
-  assert.match(knowledgeBase, /executeUrlImport\(url, processConfig, tagIds(?:, [^)]*)?\)/)
-  assert.doesNotMatch(
-    knowledgeBase,
-    /const tagIdsToUpload = selectedTagIds\.value\.length > 0 \? \[\.\.\.selectedTagIds\.value\] : undefined/,
-  )
-})
 
 // Browsing a folder pre-fills the upload destination, so the dialog must show it
 // and the batch must use the folder the user confirmed there — never the sidebar

@@ -102,7 +102,7 @@ func TestProcessSyncRSSPartialFailureKeepsCursorForRetry(t *testing.T) {
 	svc := &DataSourceService{dsRepo: newKBDeleteDSRepo(ds.KnowledgeBaseID, ds), syncLogRepo: logs,
 		kbService:         &processSyncKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, TenantID: 1}},
 		connectorRegistry: registry, tenantRepo: &processSyncTenantRepo{tenant: &types.Tenant{ID: 1}},
-		tagService: &processSyncTagService{}, knowledgeService: &rssIntakeKnowledgeService{repo: &deletionLookupKnowledgeRepo{}},
+		knowledgeService: &rssIntakeKnowledgeService{repo: &deletionLookupKnowledgeRepo{}},
 	}
 	payload, err := json.Marshal(types.DataSourceSyncPayload{DataSourceID: ds.ID, TenantID: 1, SyncLogID: log.ID})
 	require.NoError(t, err)
@@ -301,28 +301,6 @@ func (r *processSyncTenantRepo) GetTenantByID(context.Context, uint64) (*types.T
 	return r.tenant, nil
 }
 
-type processSyncTagService struct {
-	interfaces.KnowledgeTagService
-}
-
-func (*processSyncTagService) FindOrCreateTagByName(context.Context, string, string) (*types.KnowledgeTag, error) {
-	return nil, nil
-}
-
-type deletionLookupKnowledgeRepo struct {
-	interfaces.KnowledgeRepository
-	knowledge         *types.Knowledge
-	lookupErr         error
-	metadataUpdates   []map[string]string // metadata persisted via UpdateKnowledge
-	metadataUpdateErr error
-	hardDeleted       []string
-	hardDeleteErr     error
-	tenantID          uint64
-	knowledgeBaseID   string
-	dataSourceID      string
-	externalID        string
-}
-
 func (r *deletionLookupKnowledgeRepo) UpdateKnowledge(_ context.Context, knowledge *types.Knowledge) error {
 	if r.metadataUpdateErr != nil {
 		return r.metadataUpdateErr
@@ -490,7 +468,6 @@ func newSyncDeletionHarness(
 			kbService:         &processSyncKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, TenantID: ds.TenantID}},
 			connectorRegistry: registry,
 			tenantRepo:        &processSyncTenantRepo{tenant: &types.Tenant{ID: ds.TenantID}},
-			tagService:        &processSyncTagService{},
 		},
 	}
 }
@@ -542,7 +519,7 @@ func TestIngestItem_URLCreationAttachesDataSourceMetadata(t *testing.T) {
 	isUpdate, err := svc.ingestItem(context.Background(), ds, &types.FetchedItem{
 		ExternalID: "url:1",
 		URL:        "https://example.com/doc",
-	}, nil)
+	})
 	require.NoError(t, err)
 	assert.False(t, isUpdate)
 	require.Len(t, repo.metadataUpdates, 1)
@@ -565,10 +542,6 @@ func (s *rssIntakeKnowledgeService) CreateKnowledgeFromManual(_ context.Context,
 	s.payload, s.channel = payload, channel
 	return &types.Knowledge{ID: "received"}, nil
 }
-func (s *rssIntakeKnowledgeService) ReviewRSSUpdate(_ context.Context, oldID string, payload *types.ManualKnowledgePayload) (bool, error) {
-	s.updatedID, s.payload = oldID, payload
-	return s.rejected, s.updateErr
-}
 
 func TestIngestItem_RSSUsesUnifiedIntakeWithSourceEvidence(t *testing.T) {
 	repo := &deletionLookupKnowledgeRepo{}
@@ -578,7 +551,7 @@ func TestIngestItem_RSSUsesUnifiedIntakeWithSourceEvidence(t *testing.T) {
 	updated, err := svc.ingestItem(context.Background(), ds, &types.FetchedItem{
 		ExternalID: "feed-item", Title: "Article", Content: []byte("Full original text"), URL: "https://example.com/article",
 		Metadata: map[string]string{"author": "Original Author", "publisher": "Publishing Institution", "published_at": "2026-09-23T08:30:00Z", "channel": types.ChannelRSS},
-	}, []string{"source-tag"})
+	})
 	require.NoError(t, err)
 	require.False(t, updated)
 	require.Equal(t, types.ManualKnowledgeStatusPublish, ks.payload.Status)
@@ -586,7 +559,6 @@ func TestIngestItem_RSSUsesUnifiedIntakeWithSourceEvidence(t *testing.T) {
 	require.Equal(t, types.SourceInfo{Author: "Original Author", Publisher: "Publishing Institution", OriginalURL: "https://example.com/article", PublishedAt: "2026-09-23T08:30:00Z"}, ks.payload.SourceInfo)
 	require.Equal(t, "rss-source", ks.payload.SourceMetadata["datasource_id"])
 	require.NotEmpty(t, ks.payload.SourceMetadata["content_sha256"])
-	require.Equal(t, []string{"source-tag"}, ks.payload.TagIDs)
 	oldMetadata, err := json.Marshal(ks.payload.SourceMetadata)
 	require.NoError(t, err)
 	var stored map[string]json.RawMessage
@@ -597,39 +569,30 @@ func TestIngestItem_RSSUsesUnifiedIntakeWithSourceEvidence(t *testing.T) {
 	repo.knowledge = &types.Knowledge{ID: "old", Metadata: types.JSON(oldMetadata)}
 	_, err = svc.ingestItem(context.Background(), ds, &types.FetchedItem{
 		ExternalID: "feed-item", Title: "Article", Content: []byte("Full original text"), URL: "https://example.com/article",
-	}, nil)
+	})
 	var duplicate *types.DuplicateKnowledgeError
 	require.ErrorAs(t, err, &duplicate)
 	updated, err = svc.ingestItem(context.Background(), ds, &types.FetchedItem{
 		ExternalID: "feed-item", Title: "Article", Content: []byte("Changed original text"), URL: "https://example.com/article",
-	}, nil)
-	require.NoError(t, err)
-	require.True(t, updated)
-	require.Equal(t, "old", ks.updatedID)
-	require.Equal(t, "Changed original text", ks.payload.Content)
-	ks.rejected = true
-	_, err = svc.ingestItem(context.Background(), ds, &types.FetchedItem{
-		ExternalID: "feed-item", Title: "Article", Content: []byte("Changed original text"), URL: "https://example.com/article",
-	}, nil)
-	require.ErrorIs(t, err, errRSSUpdateRejected)
+	})
+	require.ErrorAs(t, err, &duplicate)
+	require.False(t, updated)
+	require.Equal(t, "Full original text", ks.payload.Content)
 	result := &types.SyncResult{}
 	svc.applyFetchedItem(context.Background(), ds, &types.FetchedItem{
 		ExternalID: "feed-item", Title: "Article", Content: []byte("Changed original text"), URL: "https://example.com/article",
-	}, nil, result)
-	require.Equal(t, 1, result.Deleted)
-	require.Len(t, result.Errors, 1)
-	require.Equal(t, "rss_update_rejected", result.Errors[0].Code)
-	ks.rejected, ks.updateErr = false, errors.New("model unavailable")
-	_, err = svc.ingestItem(context.Background(), ds, &types.FetchedItem{
-		ExternalID: "feed-item", Title: "Article", Content: []byte("Changed original text"), URL: "https://example.com/article",
-	}, nil)
-	require.ErrorContains(t, err, "model unavailable")
+	}, result)
+	require.Equal(t, 1, result.Skipped)
+	require.Zero(t, result.Created)
+	require.Zero(t, result.Updated)
+	require.Zero(t, result.Deleted)
+	require.Empty(t, result.Errors)
 	require.Equal(t, types.ChannelRSS, ks.channel)
 	repo.knowledge = nil
 	_, err = svc.ingestItem(context.Background(), ds, &types.FetchedItem{
 		ExternalID: "qwen:undated", Title: "Undated", Content: []byte("Original body"),
 		Metadata: map[string]string{"publisher": "Qwen", "intake_reject_reason": "Qwen article missing publication date"},
-	}, nil)
+	})
 	require.NoError(t, err)
 	require.Equal(t, "Qwen article missing publication date", ks.payload.SourceMetadata["intake_reject_reason"])
 	require.Empty(t, ks.payload.SourceInfo.OriginalURL)
@@ -739,7 +702,7 @@ func TestApplyFetchedItem_SyncDeletionScopedPerDataSource(t *testing.T) {
 	svc.applyFetchedItem(context.Background(), dsA, &types.FetchedItem{
 		ExternalID: "file:shared",
 		IsDeleted:  true,
-	}, nil, result)
+	}, result)
 
 	assert.Equal(t, 1, result.Deleted)
 	assert.Equal(t, []string{"knowledge-a"}, ks.deleted)
@@ -808,7 +771,6 @@ func TestProcessSync_SyncDeletionsPartialWhenMixedResults(t *testing.T) {
 		kbService:         &processSyncKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, TenantID: ds.TenantID}},
 		connectorRegistry: registry,
 		tenantRepo:        &processSyncTenantRepo{tenant: &types.Tenant{ID: ds.TenantID}},
-		tagService:        &processSyncTagService{},
 	}
 
 	payload, err := json.Marshal(types.DataSourceSyncPayload{
@@ -835,7 +797,21 @@ func TestIngestItem_URLCreationMetadataAttachFailure(t *testing.T) {
 	_, err := svc.ingestItem(context.Background(), ds, &types.FetchedItem{
 		ExternalID: "url:1",
 		URL:        "https://example.com/doc",
-	}, nil)
+	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "attach datasource metadata")
+}
+
+type deletionLookupKnowledgeRepo struct {
+	interfaces.KnowledgeRepository
+	knowledge         *types.Knowledge
+	lookupErr         error
+	metadataUpdates   []map[string]string // metadata persisted via UpdateKnowledge
+	metadataUpdateErr error
+	hardDeleted       []string
+	hardDeleteErr     error
+	tenantID          uint64
+	knowledgeBaseID   string
+	dataSourceID      string
+	externalID        string
 }

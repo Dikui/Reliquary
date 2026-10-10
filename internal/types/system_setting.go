@@ -30,8 +30,8 @@ type SystemSetting struct {
 	// updates whose payload type does not match; UI uses it to pick
 	// InputNumber vs Input vs Switch.
 	ValueType string `gorm:"type:varchar(16);not null"  json:"value_type"`
-	// Category groups settings in the management UI ("limits", "agent",
-	// "auth", ...). Free-form string so adding a new category is a
+	// Category groups settings in the management UI ("security", "worker",
+	// ...). Free-form string so adding a new category is a
 	// data-only change.
 	Category    string `gorm:"type:varchar(32);not null"  json:"category"`
 	Description string `gorm:"type:text;not null;default:''" json:"description"`

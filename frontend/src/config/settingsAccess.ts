@@ -1,6 +1,6 @@
 export const SETTINGS_SECTIONS = new Set([
-  'general', 'ollama', 'models', 'chathistory',
-  'parser', 'storage', 'mcp', 'system', 'userprofile',
+  'general', 'ollama', 'models',
+  'parser', 'storage', 'system', 'userprofile',
   'tenant',
 ])
 

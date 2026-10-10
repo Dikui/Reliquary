@@ -18,7 +18,7 @@ go run ./cmd/server reset-password
 
 检索直接查询同一个 PostgreSQL（ParadeDB）数据库，保留 pgvector 与 BM25 混合检索、融合和重排。知识库可以选择嵌入模型，文件统一保存到 `LOCAL_STORAGE_BASE_DIR` 指定的本地目录。备份需包含 PostgreSQL 数据和该目录。
 
-对话模型只使用三种接口：OpenAI 兼容、Anthropic 原生和 Ollama 本地。服务商下拉框从后端预设表读取，包含通用 OpenAI 兼容、OpenAI、Anthropic、DeepSeek、阿里云百炼、智谱、月之暗面、硅基流动、火山方舟、OpenRouter、Google Gemini 和 Ollama。其他服务可选择通用 OpenAI 兼容并填写地址。Gemini 使用官方兼容地址 `https://generativelanguage.googleapis.com/v1beta/openai/`。Ollama 模型列表和拉取管理继续保留。
+生成模型只使用三种接口：OpenAI 兼容、Anthropic 原生和 Ollama 本地。服务商下拉框从后端预设表读取，包含通用 OpenAI 兼容、OpenAI、Anthropic、DeepSeek、阿里云百炼、智谱、月之暗面、硅基流动、火山方舟、OpenRouter、Google Gemini 和 Ollama。其他服务可选择通用 OpenAI 兼容并填写地址。Gemini 使用官方兼容地址 `https://generativelanguage.googleapis.com/v1beta/openai/`。Ollama 模型列表和拉取管理继续保留。
 
 嵌入使用 OpenAI 兼容接口或 Ollama。阿里云文本嵌入默认地址为 `https://dashscope.aliyuncs.com/compatible-mode/v1`，智谱和硅基流动嵌入也使用兼容接口。重排使用通用 `/rerank` 格式或阿里云百炼原生接口；硅基流动、Jina、vLLM 和 Xinference 等兼容服务可使用通用格式。服务商预设按模型类型筛选，具体模型需支持相应接口。模型测试调用、思考模式、并发与速率限制、模型分级和路由继续保留。
 
@@ -36,9 +36,9 @@ go run -tags anydoc ./cmd/server
 
 应用镜像默认以 `WITH_ANYDOC=1` 构建。普通 `go run ./cmd/server` 不链接 anydoc，PDF 和 Office 解析会提示静态库和 `-tags anydoc` 的构建要求；可以在设置中为 PDF 显式选择已配置的 MinerU。单次解析调用超时由 `PARSER_CALL_TIMEOUT` 设置，默认 30 分钟。
 
-只运行一个后端进程。流式事件、模型并发与速率限制、接口限流、工具审批保存在进程内存中，重启后不保留未完成的流式事件或审批。Redis 继续用于 Asynq 任务队列及任务检查、多模态图像任务计数、知识移动进度，以及运行配置缓存变更通知。
+只运行一个后端进程。模型并发与速率限制、接口限流保存在进程内存中，重启后重新计数。Redis 继续用于 Asynq 任务队列及任务检查、多模态图像任务计数、知识移动进度，以及运行配置缓存变更通知。
 
-当前版本不提供联网搜索：普通问答仅检索知识库，Agent 不提供搜索互联网的工具。抓取指定网址的 `web_fetch`、Agent 按网址收录的 `knowledge_import_url`、RSS 与站点适配器继续可用。主动调研的后续计划见 [ADR 0007](adr/0007-personal-single-user.md) 和 `.scratch/web-research/issues/01-active-research.md`。
+按网址收录、RSS 与站点适配器继续可用，使用带 SSRF 防护的 HTTP 抓取。综合分析和报告由外部 AI 工具完成。
 
 Docker Compose、`make run`、`scripts/dev.sh app` 和委托该脚本的 `scripts/quick-dev.sh` 默认设置 `SSRF_WHITELIST_EXTRA=198.18.0.0/15`。这一基准测试保留网段正常公网不会使用；本机代理采用 fake-ip 时，公网域名可能解析到该网段，默认放行使按网址收录和抓取继续可用。该项不会放行回环、私网、链路本地地址、`localhost`、`postgres` 或 `redis` 等 Docker 服务名，已有 SSRF 校验规则继续生效。
 
@@ -47,10 +47,10 @@ Docker Compose 和开发脚本可在 `.env` 中设置自定义 `SSRF_WHITELIST_E
 `SSRF_WHITELIST_EXTRA` 始终与设置页的 SSRF 白名单合并，设置页保存为空列表或修改白名单不会覆盖部署配置。要关闭 fake-ip 放行，应在部署环境中将该变量显式设为空，同时从设置页白名单移除自行添加的同一网段。
 
 
-Wiki、Agent 长期记忆与历史对话搜索、RAG 评测、沙箱、技能及个人环境变量已删除。对话历史、MCP（无鉴权、API Key、Bearer）、数据分析、实体档案、策略评测、待审区与消息纠错继续保留。内置模型配置的环境变量展开独立保留。
+网页保留知识库、文章查看、实体档案、检索、收录审核与待审区、模型配置、队列、系统设置和 API Key 管理。CSV、Excel 收录摘要继续使用进程内 DuckDB 读取表结构和样本。
 
 空间信息与 API Key 使用 `/api/v1/space` 及其子路径，系统设置与队列使用 `/api/v1/system/settings` 和 `/api/v1/system/runtime/queues`。已用空间继续统计，不设存储限额。
 
-未设置 `SYSTEM_AES_KEY` 时，MCP 凭据和模型 API Key 将以明文保存；启动日志输出警告，系统信息页显示凭据加密状态。设置有效的 32 字节密钥后按现有行为加密保存。
+未设置 `SYSTEM_AES_KEY` 时，模型 API Key 与数据源凭据将以明文保存；启动日志输出警告，系统信息页显示凭据加密状态。设置有效的 32 字节密钥后按现有行为加密保存。
 
-知识库置顶与资源收藏保存在个人空间中，登录用户和 API Key 看到相同结果。知识库列表中的复制只创建相同配置的空知识库，移动知识及其进度继续保留。回答后不再生成追问推荐，智能体对话开始前的推荐问题继续保留。
+知识库置顶与资源收藏保存在个人空间中，登录用户和 API Key 看到相同结果。知识库列表中的复制只创建相同配置的空知识库，移动知识及其进度继续保留。登录后默认进入知识库列表。

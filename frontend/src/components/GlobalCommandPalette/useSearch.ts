@@ -1,26 +1,11 @@
 import { ref, watch, onMounted, computed } from 'vue'
 import { knowledgeSemanticSearch } from '@/api/knowledge-base'
-import { searchMessages, type MessageSearchGroupItem } from '@/api/chat-history'
-import { useChatResourcesStore } from '@/stores/chatResources'
-import { useMenuStore } from '@/stores/menu'
+import { useResourcesStore } from '@/stores/resources'
 
 export interface CmdkKb {
   id: string
   name: string
   type?: string
-}
-
-export interface CmdkAgent {
-  id: string
-  name: string
-  description?: string
-  avatar?: string
-  isBuiltin: boolean
-}
-
-export interface CmdkSessionItem {
-  id: string
-  title: string
 }
 
 export interface CmdkChunk {
@@ -44,26 +29,7 @@ export interface CmdkFileGroup {
   chunks: CmdkChunk[]
 }
 
-export interface CmdkMsgGroup {
-  sessionId: string
-  sessionTitle: string
-  items: MessageSearchGroupItem[]
-}
-
-/**
- * useCmdkSearch — debounced, cancellable search that fans out to
- *   • /api/v1/knowledge-search (chunks / files)
- *   • /api/v1/messages/search  (chat history)
- * and produces three client-side groups: kbs / files / messages.
- *
- * Cancellation is implemented with a monotonically-increasing request id so
- * that stale responses are dropped (AbortController is not used to keep the
- * backend API untouched).
- *
- * `lockedKbIds` is a getter returning the current scope. When it returns a
- * non-empty array, chunk search is limited to those KBs and message search
- * is skipped. Changes to the getter's return value re-trigger the search.
- */
+/** Knowledge search with debouncing and protection against stale responses. */
 export function useCmdkSearch(options: {
   /** When set, scopes knowledge search to these KBs. Re-evaluated on each search. */
   lockedKbIds?: () => string[]
@@ -71,8 +37,6 @@ export function useCmdkSearch(options: {
   chunkLimit?: number
   /** Debounce delay in ms. */
   debounceMs?: number
-  /** 当前部署是否提供智能体路由；不提供时不发起预加载请求。 */
-  agentsEnabled?: () => boolean
 }) {
   const debounceMs = options.debounceMs ?? 350
   const query = ref('')
@@ -84,24 +48,18 @@ export function useCmdkSearch(options: {
   let kbsLoadingPromise: Promise<void> | null = null
 
   const fileGroups = ref<CmdkFileGroup[]>([])
-  const messageGroups = ref<CmdkMsgGroup[]>([])
   const totalChunks = ref(0)
-  const totalMessages = ref(0)
 
-  const agents = ref<CmdkAgent[]>([])
-  const agentsLoaded = ref(false)
-  let agentsLoadingPromise: Promise<void> | null = null
 
-  const menuStore = useMenuStore()
 
   const ensureKbs = async (): Promise<void> => {
     if (kbsLoaded.value) return
     if (kbsLoadingPromise) return kbsLoadingPromise
     kbsLoadingPromise = (async () => {
       try {
-        const chatResources = useChatResourcesStore()
-        await chatResources.ensureKnowledgeBases()
-        const own: CmdkKb[] = chatResources.rawKnowledgeBases.map((kb: any) => ({
+        const resources = useResourcesStore()
+        await resources.ensureKnowledgeBases()
+        const own: CmdkKb[] = resources.rawKnowledgeBases.map((kb: any) => ({
           id: String(kb.id),
           name: kb.name || '',
           type: kb.type,
@@ -133,81 +91,13 @@ export function useCmdkSearch(options: {
       .slice(0, 4)
   })
 
-  // exists so we always filter client-side.
-  const ensureAgents = async (): Promise<void> => {
-    if (options.agentsEnabled?.() === false) return
-    if (agentsLoaded.value) return
-    if (agentsLoadingPromise) return agentsLoadingPromise
-    agentsLoadingPromise = (async () => {
-      try {
-        const chatResources = useChatResourcesStore()
-        await chatResources.ensureAgents()
-        const own: CmdkAgent[] = chatResources.agents.map((a: any) => ({
-          id: String(a.id),
-          name: a.name || '',
-          description: a.description,
-          avatar: a.avatar,
-          isBuiltin: !!a.is_builtin,
-        }))
-        agents.value = own
-        agentsLoaded.value = true
-      } catch (e) {
-        console.error('[cmdk] failed to load agents', e)
-      } finally {
-        agentsLoadingPromise = null
-      }
-    })()
-    return agentsLoadingPromise
-  }
-
-  const agentMatches = computed<CmdkAgent[]>(() => {
-    if (options.agentsEnabled?.() === false) return []
-    const q = query.value.trim().toLowerCase()
-    if (!q) return []
-    return agents.value
-      .filter(a => {
-        const name = (a.name || '').toLowerCase()
-        const desc = (a.description || '').toLowerCase()
-        return name.includes(q) || desc.includes(q)
-      })
-      .slice(0, 5)
-  })
-
-  // Sessions: no dedicated list API; we re-use whatever menuStore already has
-  // cached (the sidebar already paginates them). Good enough for "jump to a
-  // session I've seen recently" — not a substitute for message-content search.
-  const sessionList = computed<CmdkSessionItem[]>(() => {
-    const chatMenu = (menuStore.menuArr as any[]).find((m: any) => m.path === 'creatChat')
-    const children = (chatMenu?.children as any[]) || []
-    return children.map((c: any) => ({
-      id: String(c.id || ''),
-      title: c.title || '',
-    }))
-  })
-
-  const sessionMatches = computed<CmdkSessionItem[]>(() => {
-    const q = query.value.trim().toLowerCase()
-    if (!q) return []
-    // If a session already appears in the message-content group, suppress it
-    // here — showing the same session title twice (once with a message hit,
-    // once by title match) is noise. The message-group entry is strictly
-    // more informative (it shows which message matched), so it wins.
-    const coveredBySession = new Set(messageGroups.value.map(g => g.sessionId))
-    return sessionList.value
-      .filter(s => s.title && s.title.toLowerCase().includes(q))
-      .filter(s => !coveredBySession.has(s.id))
-      .slice(0, 5)
-  })
-
   // Monotonic id to drop stale responses.
   let requestSeq = 0
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
   const clearResults = () => {
     fileGroups.value = []
-    messageGroups.value = []
     totalChunks.value = 0
-    totalMessages.value = 0
     hasSearched.value = false
   }
 
@@ -216,7 +106,7 @@ export function useCmdkSearch(options: {
     hasSearched.value = true
 
     // Determine knowledge_base_ids for chunk search. A non-empty lockedKbIds
-    // narrows the scope and also disables message search (out of scope).
+    // narrows the scope.
     const locked = options.lockedKbIds?.() || []
     const scoped = locked.length > 0
     let kbIds: string[]
@@ -236,16 +126,7 @@ export function useCmdkSearch(options: {
           })
       : Promise.resolve([])
 
-    const messagesPromise = scoped
-      ? Promise.resolve({ items: [], total: 0 })
-      : searchMessages({ query: q, mode: 'hybrid', limit: 30 })
-          .then((res: any) => (res?.success && res.data ? res.data : { items: [], total: 0 }))
-          .catch((e) => {
-            console.error('[cmdk] message search failed', e)
-            return { items: [], total: 0 }
-          })
-
-    const [chunks, msgRes] = await Promise.all([knowledgePromise, messagesPromise])
+    const chunks = await knowledgePromise
 
     // Stale response guard.
     if (seq !== requestSeq) return
@@ -279,23 +160,6 @@ export function useCmdkSearch(options: {
     fileGroups.value = Array.from(fmap.values())
     totalChunks.value = (chunks as any[]).length
 
-    // Group messages by session_id.
-    const mmap = new Map<string, CmdkMsgGroup>()
-    const items: MessageSearchGroupItem[] = (msgRes as any).items || []
-    for (const m of items) {
-      const sid = m.session_id || 'unknown'
-      if (!mmap.has(sid)) {
-        mmap.set(sid, {
-          sessionId: sid,
-          sessionTitle: m.session_title || '',
-          items: [],
-        })
-      }
-      mmap.get(sid)!.items.push(m)
-    }
-    messageGroups.value = Array.from(mmap.values())
-    totalMessages.value = (msgRes as any).total || items.length
-
     loading.value = false
   }
 
@@ -320,13 +184,7 @@ export function useCmdkSearch(options: {
   })
 
   onMounted(() => {
-    // Preload KB and agent lists so name matches show up instantly on first
-    // keystroke. Sessions come from the menuStore (already populated by the
-    // sidebar) so no extra fetch needed here.
     ensureKbs()
-    if (options.agentsEnabled?.() !== false) {
-      ensureAgents()
-    }
   })
 
   return {
@@ -335,15 +193,9 @@ export function useCmdkSearch(options: {
     hasSearched,
     knowledgeBases,
     fileGroups,
-    messageGroups,
     kbMatches,
-    agents,
-    agentMatches,
-    sessionMatches,
     totalChunks,
-    totalMessages,
     clearResults,
     ensureKbs,
-    ensureAgents,
   }
 }

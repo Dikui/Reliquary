@@ -23,13 +23,13 @@ import { useI18n } from 'vue-i18n'
 import { getModelTierSettings, MODEL_TIERS, type ModelTier, type ModelTierConfig, type ResolvedModelTiers } from '@/api/model-tiers'
 import { type ModelConfig } from '@/api/model'
 import { modelTypeForTier, previewModelTiers } from '@/utils/modelTiers'
-import { useChatResourcesStore } from '@/stores/chatResources'
+import { useResourcesStore } from '@/stores/resources'
 import { useUIStore } from '@/stores/ui'
 import ModelSelector from './ModelSelector.vue'
 const props = withDefaults(defineProps<{ modelValue: ModelTierConfig; scope: 'global' | 'knowledge_base'; allModels?: ModelConfig[]; legacyTiers?: ModelTierConfig; beforeNavigate?: () => Promise<boolean>; disabled?: boolean; embeddingLocked?: boolean }>(), { disabled: false, embeddingLocked: false })
 const emit = defineEmits<{ 'update:modelValue': [value: ModelTierConfig]; resolved: [value: ResolvedModelTiers]; refresh: [] }>()
 const { t, te } = useI18n()
-const resources = useChatResourcesStore()
+const resources = useResourcesStore()
 const ui = useUIStore()
 const id = useId()
 const loading = ref(false), error = ref('')

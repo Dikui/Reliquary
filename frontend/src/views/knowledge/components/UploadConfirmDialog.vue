@@ -176,38 +176,7 @@
 
             <div class="config-panel">
               <div class="content-wrapper upload-confirm-content">
-                  <div v-show="activeSection === 'tags'" class="section">
-                    <div class="section-content">
-                      <div class="section-header">
-                        <h2 class="section-title">{{ t('uploadConfirm.tabTags') }}</h2>
-                        <p class="section-desc">{{ t('uploadConfirm.tagsDescription') }}</p>
-                      </div>
-                      <div class="settings-group">
-                        <div class="setting-row setting-row-vertical">
-                          <div class="setting-info">
-                            <label>{{ t('uploadConfirm.tagsPlaceholder') }}</label>
-                          </div>
-                          <div class="setting-control setting-control-full">
-                            <t-select
-                              v-model="selectedTagIds"
-                              :options="tagOptions"
-                              :loading="tagsLoading"
-                              multiple
-                              filterable
-                              clearable
-                              :placeholder="t('uploadConfirm.tagsPlaceholder')"
-                            />
-                            <p v-if="tagsLoadFailed" class="field-hint field-hint--error">
-                              {{ t('uploadConfirm.tagsLoadFailed') }}
-                            </p>
-                            <p v-else-if="!tagsLoading && tagOptions.length === 0" class="field-hint">
-                              {{ t('uploadConfirm.tagsEmpty') }}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+
 
                   <div v-show="activeSection === 'parser'" class="section">
                     <KBParserSettings
@@ -511,12 +480,11 @@ import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import ModelSelector from '@/components/ModelSelector.vue'
 import KBParserSettings from '../settings/KBParserSettings.vue'
-import { useChatResourcesStore } from '@/stores/chatResources'
+import { useResourcesStore } from '@/stores/resources'
 import { useEditorResourcesStore } from '@/stores/editorResources'
 import { useUIStore } from '@/stores/ui'
 import { formatFileSize, getFileIcon } from '@/utils/files'
 import { getUploadFileKey } from '../utils/uploadSources'
-import { listKnowledgeTags } from '@/api/knowledge-base'
 import KbUploadSourceDropdown from './KbUploadSourceDropdown.vue'
 import FolderPickerMenu, { type FolderOption } from './FolderPickerMenu.vue'
 import { folderOptionFromPath, sortFolderOptions } from '../folderTree'
@@ -531,7 +499,7 @@ import type {
 
 const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp']
 
-type ConfigSectionKey = 'tags' | 'parser' | 'chunking' | 'multimodal' | 'question'
+type ConfigSectionKey = 'parser' | 'chunking' | 'multimodal' | 'question'
 type IssueSectionKey = 'multimodal'
 
 interface ChunkingUIConfig {
@@ -564,10 +532,8 @@ const props = withDefaults(defineProps<{
   mode?: UploadConfirmMode
   files?: File[]
   urls?: string[]
-  tagIds?: string[]
   manualPreview?: UploadConfirmManualSource | null
   reparsePreview?: UploadConfirmReparseSource | null
-  tagId?: string
   acceptFileTypes?: string
   supportedFileTypes?: string[]
   /** Folder the batch will be uploaded into; '' means the knowledge base root. */
@@ -578,7 +544,6 @@ const props = withDefaults(defineProps<{
   mode: 'file',
   files: () => [],
   urls: () => [],
-  tagIds: () => [],
   manualPreview: null,
   reparsePreview: null,
   acceptFileTypes: '',
@@ -594,7 +559,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const chatResources = useChatResourcesStore()
+const resources = useResourcesStore()
 const editorResources = useEditorResourcesStore()
 const uiStore = useUIStore()
 
@@ -605,12 +570,8 @@ const sourceInfoByItem = ref<Record<string, IntakeSourceInfo>>({})
 const sourceInfo = (key: string) => sourceInfoByItem.value[key] ||= {}
 const fileSourceKey = (file: File) => `file:${getUploadFileKey(file)}`
 const urlSourceKey = (url: string) => `url:${url}`
-const availableTags = ref<Array<{ id: string; name: string }>>([])
-const selectedTagIds = ref<string[]>([])
-const tagsLoading = ref(false)
-const tagsLoadFailed = ref(false)
 const chunkingMoreOpen = ref(false)
-const activeSection = ref<ConfigSectionKey>('tags')
+const activeSection = ref<ConfigSectionKey>('parser')
 const uiState = ref<UploadUIState>(createDefaultUIState())
 // Destination folder for this batch. Pre-filled from the sidebar tree, but
 // editable here so browsing a folder never silently decides where files land.
@@ -786,11 +747,6 @@ const languageOptions = computed(() => [
   { label: t('knowledgeEditor.chunking.languageOptions.zh'), value: 'zh' },
 ])
 
-const tagOptions = computed(() => availableTags.value.map(tag => ({
-  label: tag.name,
-  value: tag.id,
-})))
-
 const hasImages = computed(() => {
   if (props.mode === 'manual' && props.manualPreview?.content) {
     const content = props.manualPreview.content
@@ -840,9 +796,6 @@ const navItems = computed(() => {
     })
   }
 
-  if (props.mode !== 'reparse') {
-    push('tags', 'tag', t('uploadConfirm.tabTags'))
-  }
   push('parser', 'file-search', t('settings.parserEngine'))
   push('chunking', 'file-copy', t('knowledgeEditor.sidebar.chunking'))
   push(
@@ -860,13 +813,6 @@ function getSectionNavStatus(
   issue?: boolean,
 ): { status: string; statusTone?: 'warning' | 'error' | 'muted' } {
   switch (key) {
-    case 'tags':
-      if (selectedTagIds.value.length === 0) {
-        return { status: t('uploadConfirm.summaryNoTags'), statusTone: 'muted' }
-      }
-      return {
-        status: t('uploadConfirm.summaryTagsCount', { count: selectedTagIds.value.length }),
-      }
     case 'parser':
       if (uiState.value.pdfForceScanned && hasPdf.value) {
         return { status: t('uploadConfirm.summaryParserForceScanned') }
@@ -922,7 +868,7 @@ const canConfirm = computed(() => {
 function getDefaultSection(): ConfigSectionKey {
   if (props.mode === 'reparse') return 'parser'
   if (issueSectionKeys.value.has('multimodal')) return 'multimodal'
-  return 'tags'
+  return 'parser'
 }
 
 function goToSection(key: ConfigSectionKey) {
@@ -1069,31 +1015,10 @@ function applyOverridesToState(o?: KnowledgeProcessOverrides | null) {
 
 async function loadModels() {
   try {
-    await chatResources.ensureModels()
-    allModels.value = chatResources.allModels || []
+    await resources.ensureModels()
+    allModels.value = resources.allModels || []
   } catch {
     allModels.value = []
-  }
-}
-
-async function loadTags() {
-  const kbId = props.kbInfo?.id
-  availableTags.value = []
-  tagsLoadFailed.value = false
-  if (!kbId || props.mode === 'reparse') return
-
-  tagsLoading.value = true
-  try {
-    const response: any = await listKnowledgeTags(kbId, { page: 1, page_size: 1000 })
-    const tags = response?.data?.data || []
-    availableTags.value = tags.map((tag: any) => ({
-      id: String(tag.id),
-      name: String(tag.name || ''),
-    }))
-  } catch {
-    tagsLoadFailed.value = true
-  } finally {
-    tagsLoading.value = false
   }
 }
 
@@ -1107,7 +1032,6 @@ watch(
     if (props.mode === 'manual' && props.manualPreview?.sourceInfo) {
       sourceInfoByItem.value.manual = { ...props.manualPreview.sourceInfo }
     }
-    selectedTagIds.value = props.mode === 'reparse' ? [] : [...(props.tagIds || [])]
     localTargetFolder.value = props.mode === 'file' ? (props.targetFolder || '') : ''
     pendingFolderPaths.value = []
     destinationPickerVisible.value = false
@@ -1118,7 +1042,6 @@ watch(
     activeSection.value = getDefaultSection()
     chunkingMoreOpen.value = false
     loadModels()
-    loadTags()
   },
 )
 
@@ -1204,8 +1127,7 @@ const handleConfirm = () => {
     emit('confirm', {
       processConfig,
       mode: 'manual',
-      tagIds: [...selectedTagIds.value],
-      manual: { ...props.manualPreview, tagIds: [...selectedTagIds.value], sourceInfo: sourceInfo('manual') },
+      manual: { ...props.manualPreview, sourceInfo: sourceInfo('manual') },
     })
   } else if (props.mode === 'reparse' && props.reparsePreview) {
     emit('confirm', { processConfig, mode: 'reparse', reparse: { ...props.reparsePreview } })
@@ -1213,7 +1135,6 @@ const handleConfirm = () => {
     emit('confirm', {
       processConfig,
       mode: 'file',
-      tagIds: [...selectedTagIds.value],
       files: [...localFiles.value],
       urls: [...localUrls.value],
       targetFolder: localTargetFolder.value,

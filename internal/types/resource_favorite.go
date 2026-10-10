@@ -6,9 +6,7 @@ import "time"
 // new favoritable resource is just a new constant string + a frontend hook,
 // no schema change required.
 const (
-	ResourceTypeKB    = "kb"
-	ResourceTypeAgent = "agent"
-	ResourceTypeTag   = "tag"
+	ResourceTypeKB = "kb"
 )
 
 // ResourceFavorite is a per-tenant star on a single resource.
@@ -33,7 +31,7 @@ func (ResourceFavorite) TableName() string {
 // the table and break the frontend's segmented view).
 func IsValidFavoriteResourceType(t string) bool {
 	switch t {
-	case ResourceTypeKB, ResourceTypeAgent, ResourceTypeTag:
+	case ResourceTypeKB:
 		return true
 	default:
 		return false

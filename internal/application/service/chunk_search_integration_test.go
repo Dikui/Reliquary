@@ -121,8 +121,8 @@ func (f *chunkSearchFixture) createChunk(t *testing.T, knowledge *types.Knowledg
 	chunk := &types.Chunk{
 		ID: uuid.NewString(), TenantID: types.SingleTenantID,
 		KnowledgeID: knowledge.ID, KnowledgeBaseID: knowledge.KnowledgeBaseID,
-		Content: body, SourceContent: body, ContextHeader: header, ChunkType: chunkType,
-		IsEnabled: true, IndexStatus: "ready", Status: int(types.ChunkStatusIndexed),
+		Content: body, ContextHeader: header, ChunkType: chunkType,
+		IsEnabled: true, Status: int(types.ChunkStatusIndexed),
 	}
 	require.NoError(t, f.chunks.CreateChunks(f.ctx, []*types.Chunk{chunk}))
 	return chunk
@@ -202,22 +202,11 @@ func TestChunkKeywordSearchUpdatesThroughChunkService(t *testing.T) {
 	f.assertKeywordHits(t, kb.ID, "Beforequestionmarker")
 	f.assertKeywordHits(t, kb.ID, "Afterquestionmarker", chunk.ID)
 
-	newBody := "Afterbodymarker 当前正文已编辑"
-	updated, err := f.service.UpdateDocumentChunk(f.ctx, chunk.ID, &newBody, nil, nil)
-	require.NoError(t, err)
-	require.Equal(t, "ready", updated.IndexStatus)
-	require.Equal(t, chunk.SourceContent, updated.SourceContent)
-	require.Equal(t, 1, updated.ContentRevision)
-	f.assertKeywordHits(t, kb.ID, "Beforebodymarker")
-	f.assertKeywordHits(t, kb.ID, "Afterbodymarker", chunk.ID)
+	f.assertKeywordHits(t, kb.ID, "Beforebodymarker", chunk.ID)
 	f.assertKeywordHits(t, kb.ID, "Chaptermarker", chunk.ID)
 	f.assertKeywordHits(t, kb.ID, "Afterquestionmarker", chunk.ID)
 	require.NoError(t, f.service.DeleteGeneratedQuestion(f.ctx, chunk.ID, question.ID))
 	f.assertKeywordHits(t, kb.ID, "Afterquestionmarker")
-	revisions, err := f.chunks.ListChunkRevisions(f.ctx, types.SingleTenantID, chunk.ID)
-	require.NoError(t, err)
-	require.Len(t, revisions, 1)
-	require.Equal(t, chunk.Content, revisions[0].Content)
 	var count int64
 	require.NoError(t, f.db.Table("embeddings").Count(&count).Error)
 	require.Zero(t, count, "keyword indexing does not need vector placeholder rows")
@@ -240,11 +229,6 @@ func TestChunkKeywordSearchFiltersAndTypes(t *testing.T) {
 	} {
 		f.createChunk(t, knowledge, "Filterbodymarker excluded content", "", chunkType)
 	}
-	for _, status := range []string{"processing", "failed"} {
-		chunk := f.createChunk(t, knowledge, "Filterbodymarker stale content", "", types.ChunkTypeText)
-		chunk.IndexStatus = status
-		require.NoError(t, f.chunks.UpdateChunk(f.ctx, chunk))
-	}
 	disabled := f.createChunk(t, knowledge, "Filterbodymarker disabled content", "", types.ChunkTypeText)
 	require.NoError(t, f.db.Model(&types.Chunk{}).Where("id = ?", disabled.ID).Update("is_enabled", false).Error)
 	deleted := f.createChunk(t, knowledge, "Filterbodymarker deleted content", "", types.ChunkTypeText)
@@ -258,14 +242,7 @@ func TestChunkKeywordSearchFiltersAndTypes(t *testing.T) {
 	f.assertKeywordHits(t, kb.ID, "Filterbodymarker", expected...)
 	f.assertKeywordHits(t, noKeywordKB.ID, "Filterbodymarker")
 
-	tagID := uuid.NewString()
-	require.NoError(t, f.db.Model(&types.Chunk{}).Where("id = ?", expected[0]).Update("tag_id", tagID).Error)
 	hits := f.retrieve(t, types.RetrieveParams{
-		Query: "Filterbodymarker", KnowledgeBaseIDs: []string{kb.ID}, KnowledgeIDs: []string{knowledge.ID}, TagIDs: []string{tagID},
-	})
-	require.Len(t, hits, 1)
-	require.Equal(t, expected[0], hits[0].ChunkID)
-	hits = f.retrieve(t, types.RetrieveParams{
 		Query: "Filterbodymarker", KnowledgeBaseIDs: []string{kb.ID}, KnowledgeIDs: []string{otherKnowledge.ID},
 	})
 	require.Empty(t, hits, "knowledge and knowledge base restrictions combine with AND")

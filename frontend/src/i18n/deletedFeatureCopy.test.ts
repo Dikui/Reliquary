@@ -72,3 +72,14 @@ test('unused generic high-risk confirmation is removed while SSRF entry confirma
     }
   }
 })
+
+test('both locales remove knowledge labels and retired interaction sections with matching keys', () => {
+  const english = collectLocaleKeys(enUS)
+  const chinese = collectLocaleKeys(zhCN)
+  assert.deepEqual([...english].sort(), [...chinese].sort())
+  const retired = /^(?:knowledgeStrategy|chatHeader|agent|chatHistorySettings|mentionDetail|input|createChat|chat|mcp|agentSettings|conversationSettings|mcpSettings|mcpServiceDialog|tools|agentStream|agentEditor|promptTemplate)\./
+  for (const key of english) {
+    assert.doesNotMatch(key, retired)
+    assert.doesNotMatch(key, /^knowledgeBase\.(?:tag|batchTag|anomalies|strategy|chunkHistory|sourceUpdate|rssUpdate)/)
+  }
+})

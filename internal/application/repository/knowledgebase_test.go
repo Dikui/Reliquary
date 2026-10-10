@@ -27,8 +27,6 @@ CREATE TABLE IF NOT EXISTS knowledge_bases (
     vlm_config JSONB NOT NULL DEFAULT '{}',
     extract_config JSONB NULL DEFAULT NULL,
     question_generation_config JSONB NULL,
-    auto_tag_config JSONB NULL,
-    is_temporary BOOLEAN NOT NULL DEFAULT false,
     is_pinned BOOLEAN NOT NULL DEFAULT false,
     pinned_at TIMESTAMPTZ NULL,
     indexing_strategy JSONB,

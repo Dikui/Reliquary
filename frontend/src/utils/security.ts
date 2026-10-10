@@ -114,7 +114,7 @@ export function sanitizeHTML(html: string): string {
   }
 }
 
-/** Sanitize assistant markdown HTML (code/mermaid toolbars, KaTeX, SVG). */
+/** Sanitize rendered Markdown HTML (code/mermaid toolbars, KaTeX, SVG). */
 export function sanitizeMarkdownHTML(html: string): string {
   if (!html || typeof html !== 'string') {
     return '';
@@ -139,15 +139,13 @@ function buildProtectedImageTag(
   protectedSrc: string,
   after: string,
 ): string {
-  // A definitive 404 should not leave a skeleton behind. Streaming
-  // re-renders call this function repeatedly, so remember the missing
-  // source until the explicit end-of-stream retry clears the cache.
+  // A definitive 404 should not leave a skeleton behind. Remember missing
+  // sources while rendering the same content repeatedly.
   if (protectedFileMissingSources.has(protectedSrc)) {
     return '';
   }
   // Reuse the already-hydrated blob if we have one, so repeated re-renders
-  // (typewriter streaming) keep the same stable image instead of flashing
-  // back to the placeholder every frame.
+  // keep the same stable image instead of flashing back to the placeholder.
   const cachedBlobURL = protectedFileBlobBySource.get(protectedSrc);
   if (cachedBlobURL) {
     return `<img${before} src=${quote}${cachedBlobURL}${quote} data-protected-src=${quote}${protectedSrc}${quote}${after}>`;
