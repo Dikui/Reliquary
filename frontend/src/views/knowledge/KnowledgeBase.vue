@@ -36,6 +36,7 @@ import DocumentBatchBar from './components/DocumentBatchBar.vue';
 import KbUploadSourceDropdown from './components/KbUploadSourceDropdown.vue';
 import KnowledgeWorkbench from './components/KnowledgeWorkbench.vue';
 import { CONTENT_TYPES } from '@/types/knowledgeClassification';
+import type { ArticleJudgment } from '@/api/knowledge-judgments';
 import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess';
 import { useUploadConfirmStore, type UploadConfirmResult, type IntakeSourceInfo } from '@/stores/uploadConfirm';
 import {
@@ -268,6 +269,12 @@ let docSearchDebounce: number | null = null;
 const docSearchKeyword = ref('');
 const selectedFileType = ref('');
 const selectedContentType = ref('');
+const selectedStarred = ref('');
+const starredOptions = computed(() => [
+  { value: '', label: t('articleJudgments.allStars') },
+  { value: 'true', label: t('articleJudgments.starredOnly') },
+  { value: 'false', label: t('articleJudgments.unstarredOnly') },
+]);
 const contentTypeOptions = computed(() => [...CONTENT_TYPES, 'unclassified'].map(value => ({ value, label: t(`knowledgeBase.contentTypes.${value}`) })));
 const selectedEntityId = ref('');
 const openArticleEntity = (id: string) => { selectedEntityId.value = id; activeKbTab.value = 'entities'; closeDoc(); };
@@ -324,6 +331,7 @@ const filterParams = computed(() => {
     keyword: docSearchKeyword.value ? docSearchKeyword.value.trim() : undefined,
     file_type: selectedFileType.value || undefined,
     content_type: selectedContentType.value || undefined,
+    starred: selectedStarred.value === '' ? undefined : selectedStarred.value === 'true',
     parse_status: selectedParseStatus.value || undefined,
     source: selectedSource.value || undefined,
     start_time: start ? `${start} 00:00:00` : undefined,
@@ -445,7 +453,7 @@ watch(selectedFileType, (newVal, oldVal) => {
 });
 
 // 监听解析状态/来源/更新时间范围筛选变化（与文件类型行为一致）
-watch([selectedContentType, selectedParseStatus, selectedSource, updatedTimeRange], () => {
+watch([selectedContentType, selectedStarred, selectedParseStatus, selectedSource, updatedTimeRange], () => {
   if (kbId.value) {
     resetPage();
     loadKnowledgeFiles(kbId.value);
@@ -591,6 +599,7 @@ watch(() => cardList.value, (newValue) => {
 }, { deep: true })
 type KnowledgeCard = {
   id: string;
+  starred?: boolean;
   source_kind?: string;
   vault_path?: string;
   knowledge_base_id?: string;
@@ -1081,6 +1090,15 @@ const syncDocumentProcessingState = (state: { id?: string; [key: string]: unknow
   if (!state?.id) return;
   const card = cardList.value.find((item: KnowledgeCard) => item.id === state.id);
   if (card) Object.assign(card, state);
+  if (selectedStarred.value !== '' && typeof state.starred === 'boolean' && String(state.starred) !== selectedStarred.value) {
+    selectedIds.value.delete(state.id);
+    resetPage();
+    void loadKnowledgeFiles(kbId.value);
+  }
+};
+const syncArticleJudgment = (state: ArticleJudgment) => {
+  syncDocumentProcessingState({ ...state });
+  if (details.id === state.id) Object.assign(details, state);
 };
 
 const toggleSelectRow = (id: string, checked: boolean, shiftKey?: boolean) => {
@@ -1185,17 +1203,26 @@ const openKnowledgeItem = (item: KnowledgeCard) => {
   openCardDetails(item);
 };
 
-const handleIntakeReview = async (payload: { action: 'retry' | 'discard'; sourceInfo?: IntakeSourceInfo }) => {
-  if (!details.id) return
+const intakeReviewLoading = ref(false), intakeReviewError = ref('');
+watch(() => details.id, () => { intakeReviewError.value = ''; });
+const handleIntakeReview = async (payload: { action: 'approve' | 'reject' | 'retry' | 'discard'; sourceInfo?: IntakeSourceInfo }) => {
+  if (!details.id || intakeReviewLoading.value) return
+  const id = details.id
+  intakeReviewLoading.value = true
+  intakeReviewError.value = ''
   try {
-    await reviewKnowledge(details.id, { action: payload.action, source_info: payload.sourceInfo })
+    const response = await reviewKnowledge(id, { action: payload.action, source_info: payload.sourceInfo })
     MessagePlugin.success(t('knowledgeBase.intakeReviewSubmitted'))
-    details.parse_status = payload.action === 'retry' ? 'pending' : ''
+    if (details.id === id) {
+      if (payload.action === 'discard') closeDoc()
+      else if (response?.data) Object.assign(details, response.data)
+      else details.parse_status = payload.action === 'reject' ? 'rejected' : 'pending'
+    }
     resetPage()
     await loadKnowledgeFiles(kbId.value)
   } catch (error: any) {
-    MessagePlugin.error(error?.message || t('knowledgeBase.intakeReviewFailed'))
-  }
+    if (details.id === id) intakeReviewError.value = error?.message || t('knowledgeBase.intakeReviewFailed')
+  } finally { intakeReviewLoading.value = false }
 }
 
 const confirmBatchDelete = async () => {
@@ -1393,6 +1420,9 @@ const refreshKnowledgeSettings = () => { if (kbId.value) void loadKnowledgeBaseI
                   <t-select v-model="selectedContentType" :options="contentTypeOptions" clearable :placeholder="$t('knowledgeBase.contentTypeFilter')" :aria-label="$t('knowledgeBase.contentTypeFilter')" class="doc-type-select doc-filter-field__control" />
                 </div>
                 <div class="doc-filter-field">
+                  <t-select v-model="selectedStarred" :options="starredOptions" :aria-label="$t('articleJudgments.starLabel')" class="doc-type-select doc-filter-field__control" />
+                </div>
+                <div class="doc-filter-field">
                   <t-select v-model="selectedFileType" :options="fileTypeOptions"
                     :placeholder="$t('knowledgeBase.fileTypeFilter')" class="doc-type-select doc-filter-field__control"
                     clearable>
@@ -1484,7 +1514,7 @@ const refreshKnowledgeSettings = () => { if (kbId.value) void loadKnowledgeBaseI
                 </div>
                 <template v-else-if="cardList.length && viewMode === 'grid' && selectedParseStatus !== 'rejected'">
                   <DocumentCardView
-                    :items="cardList" @open-entity="openArticleEntity"
+                    :items="cardList" @open-entity="openArticleEntity" @judgment-updated="syncArticleJudgment"
 
                     :selected-ids="selectedIds"
                     :batch-mode="batchMode"
@@ -1500,7 +1530,7 @@ const refreshKnowledgeSettings = () => { if (kbId.value) void loadKnowledgeBaseI
                   />
                 </template>
                 <template v-else-if="cardList.length && (viewMode === 'list' || selectedParseStatus === 'rejected')">
-                  <DocumentListView :items="cardList" @open-entity="openArticleEntity"
+                  <DocumentListView :items="cardList" @open-entity="openArticleEntity" @judgment-updated="syncArticleJudgment"
                     :selected-ids="selectedIds"
 
                     :trace-visible-ids="traceAvailableById"
@@ -1534,6 +1564,7 @@ const refreshKnowledgeSettings = () => { if (kbId.value) void loadKnowledgeBaseI
       <!-- Document content drawer -->
       <DocContent ref="docContentRef" :visible="isCardDetails" :details="details"
         :kbId="kbId"
+        :review-loading="intakeReviewLoading" :review-error="intakeReviewError"
         @openEntity="openArticleEntity" @closeDoc="closeDoc" @getDoc="getDoc" @processingStateChange="syncDocumentProcessingState" @intake-review="handleIntakeReview">
       </DocContent>
     </div>

@@ -1710,12 +1710,60 @@ CREATE TABLE public.knowledge_topics (
     tenant_id bigint NOT NULL,
     knowledge_id character varying(36) NOT NULL,
     topic_id character varying(36) NOT NULL,
+    source character varying(8) DEFAULT 'model' NOT NULL CHECK (source IN ('model','user')),
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT uq_knowledge_topics_pair UNIQUE (knowledge_id, topic_id),
     FOREIGN KEY (tenant_id, knowledge_id) REFERENCES public.knowledges (tenant_id, id) ON DELETE CASCADE,
     FOREIGN KEY (tenant_id, topic_id) REFERENCES public.topics (tenant_id, id) ON DELETE CASCADE
 );
 CREATE INDEX idx_knowledge_topics_topic ON public.knowledge_topics (tenant_id, topic_id, knowledge_id);
+
+ALTER TABLE public.knowledges ADD COLUMN content_type_corrected boolean DEFAULT false NOT NULL;
+CREATE TABLE public.operation_logs (
+    id character varying(36) PRIMARY KEY,
+    tenant_id bigint NOT NULL,
+    actor text NOT NULL,
+    operation_type character varying(32) NOT NULL,
+    object_id text NOT NULL,
+    before_value jsonb NOT NULL,
+    after_value jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+CREATE INDEX idx_operation_logs_time ON public.operation_logs (tenant_id, created_at DESC, id DESC);
+CREATE INDEX idx_operation_logs_type ON public.operation_logs (tenant_id, operation_type, created_at DESC, id DESC);
+
+CREATE TABLE public.topic_backfill_jobs (
+    id character varying(36) NOT NULL PRIMARY KEY,
+    tenant_id bigint NOT NULL,
+    topic_id character varying(36) NOT NULL,
+    topic_name character varying(255) NOT NULL,
+    topic_description text DEFAULT '' NOT NULL,
+    status character varying(16) DEFAULT 'pending' NOT NULL CHECK (status IN ('pending','running','completed','failed','cancelled')),
+    total integer DEFAULT 0 NOT NULL CHECK (total >= 0),
+    processed integer DEFAULT 0 NOT NULL CHECK (processed >= 0),
+    failed_articles integer DEFAULT 0 NOT NULL CHECK (failed_articles >= 0),
+    failed_batches integer DEFAULT 0 NOT NULL CHECK (failed_batches >= 0),
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    FOREIGN KEY (tenant_id,topic_id) REFERENCES public.topics(tenant_id,id) ON DELETE CASCADE
+);
+CREATE INDEX idx_topic_backfill_jobs_topic ON public.topic_backfill_jobs(tenant_id,topic_id,created_at DESC);
+CREATE INDEX idx_topic_backfill_jobs_pending ON public.topic_backfill_jobs(status,created_at) WHERE status IN ('pending','running');
+
+CREATE TABLE public.topic_backfill_batches (
+    id character varying(36) NOT NULL PRIMARY KEY,
+    job_id character varying(36) NOT NULL REFERENCES public.topic_backfill_jobs(id) ON DELETE CASCADE,
+    ordinal integer NOT NULL CHECK (ordinal > 0),
+    knowledge_ids jsonb NOT NULL CHECK (jsonb_typeof(knowledge_ids) = 'array'),
+    article_count integer NOT NULL CHECK (article_count > 0),
+    status character varying(16) DEFAULT 'pending' NOT NULL CHECK (status IN ('pending','running','completed','failed')),
+    attempts integer DEFAULT 0 NOT NULL CHECK (attempts >= 0),
+    error text DEFAULT '' NOT NULL,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    UNIQUE (job_id,ordinal)
+);
+CREATE INDEX idx_topic_backfill_batches_pending ON public.topic_backfill_batches(job_id,status,ordinal);
 
 CREATE TABLE public.article_embeddings (
     knowledge_id character varying(36) NOT NULL PRIMARY KEY,

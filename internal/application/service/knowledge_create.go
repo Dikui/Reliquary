@@ -1219,7 +1219,7 @@ func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 	// Resolve embedded data:base64 images and remote http(s) images → storage, replace URLs.
 	// Runs before chunking so chunks contain stable provider:// URLs.
 	var resolvedImages []docparser.StoredImage
-	if s.imageResolver != nil {
+	if s.imageResolver != nil && !(s.vault != nil && knowledge.VaultPath != "" && knowledge.ProcessingMode == types.ProcessingModeFull) {
 		fileSvc := s.resolveFileService(ctx, kb)
 		afterDataURI, fromDataURI, dataErr := s.imageResolver.ResolveAndStore(ctx, &types.ReadResult{MarkdownContent: clean}, fileSvc, knowledge.TenantID)
 		if err := s.recordIntakeImages(ctx, knowledge, fromDataURI); err != nil {

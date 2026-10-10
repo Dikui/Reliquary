@@ -104,6 +104,8 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewSpanTracker))
 	must(container.Provide(service.NewChunkService))
 	must(container.Provide(service.NewEntityService))
+	must(container.Provide(service.NewTopicService))
+	must(container.Provide(service.NewOperationLogService))
 	must(container.Provide(service.NewEntityNameEmbeddingRebuilder))
 	must(container.Provide(embedding.NewBatchEmbedder))
 	must(container.Provide(service.NewModelServiceWithRoutingDB))
@@ -145,6 +147,8 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewVaultHandler))
 	must(container.Provide(handler.NewKnowledgeSearchHandler))
 	must(container.Provide(handler.NewEntityHandler))
+	must(container.Provide(handler.NewTopicHandler))
+	must(container.Provide(handler.NewOperationLogHandler))
 	must(container.Provide(handler.NewChunkHandler))
 	must(container.Provide(handler.NewModelHandler))
 	must(container.Provide(handler.NewInitializationHandler))
@@ -163,6 +167,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Invoke(registerModelLocalImageResolver))
 	must(container.Invoke(registerNameEmbeddingRebuildIntegration))
 	must(container.Invoke(registerVaultIntegration))
+	must(container.Invoke(registerTopicIntegration))
 
 	// Router configuration
 	logger.Debugf(ctx, "[Container] Registering router and starting task server...")

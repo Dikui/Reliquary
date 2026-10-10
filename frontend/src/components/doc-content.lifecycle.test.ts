@@ -36,7 +36,7 @@ function unresolvedReferences(path: string, text = source(path)) {
 }
 
 test('detail and related article components have defined script and template references', () => {
-  for (const path of [detailPath, resolve('src/components/KnowledgeClassification.vue'), resolve('src/components/knowledge-processing-timeline.vue'), resolve('src/views/knowledge/components/DocumentActionMenu.vue'), resolve('src/views/knowledge/components/DocumentCardView.vue'), resolve('src/views/knowledge/components/DocumentListView.vue'), resolve('src/views/knowledge/components/RepostSources.vue')]) assert.deepEqual(unresolvedReferences(path), [], path)
+  for (const path of [detailPath, resolve('src/components/KnowledgeClassification.vue'), resolve('src/components/KnowledgeStarToggle.vue'), resolve('src/components/KnowledgeArticleJudgments.vue'), resolve('src/views/knowledge/TopicManagement.vue'), resolve('src/views/knowledge/OperationLogs.vue'), resolve('src/components/knowledge-processing-timeline.vue'), resolve('src/views/knowledge/components/DocumentActionMenu.vue'), resolve('src/views/knowledge/components/DocumentCardView.vue'), resolve('src/views/knowledge/components/DocumentListView.vue'), resolve('src/views/knowledge/components/RepostSources.vue')]) assert.deepEqual(unresolvedReferences(path), [], path)
 })
 
 test('reference audit detects deleted callbacks in watchers, lifecycle, expose and template events', () => {
@@ -91,7 +91,7 @@ test('mounted detail switches articles and modes, closes and unmounts without un
       '@/utils/clipboard': { copyWithToast() {} },
       '@/utils/security': { sanitizeHTML: passthrough, safeMarkdownToHTML: passthrough, isValidURL: () => true, hydrateProtectedFileImages: async () => { imageHydrations++ } },
       '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: passthrough }, '@/utils/mermaidViewer': {},
-      '@/components/SafeTextarea.vue': empty, '@/components/document-preview.vue': empty, '@/components/knowledge-processing-timeline.vue': empty, '@/components/KnowledgeClassification.vue': empty,
+      '@/components/SafeTextarea.vue': empty, '@/components/document-preview.vue': empty, '@/components/knowledge-processing-timeline.vue': empty, '@/components/KnowledgeArticleJudgments.vue': empty, '@/components/KnowledgeClassification.vue': empty,
       '@/views/knowledge/components/RepostSources.vue': empty, '@/views/knowledge/knowledgeDownloadFileName': {}, '@/utils/filePreview': { isKnownPreviewableExt: () => false }, '@/utils/api-base': {},
     }).default
     detail.render = evaluate(template.code, {}).render

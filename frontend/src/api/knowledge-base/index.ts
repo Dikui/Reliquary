@@ -80,6 +80,7 @@ export function listKnowledgeFiles(
     keyword?: string;
     file_type?: string;
     content_type?: string;
+    starred?: boolean;
     parse_status?: string;
     source?: string;
     start_time?: string;
@@ -92,6 +93,7 @@ export function listKnowledgeFiles(
   if (params.keyword) query.append('keyword', params.keyword);
   if (params.file_type) query.append('file_type', params.file_type);
   if (params.content_type) query.append('content_type', params.content_type);
+  if (typeof params.starred === 'boolean') query.append('starred', String(params.starred));
   if (params.parse_status) query.append('parse_status', params.parse_status);
   if (params.source) query.append('source', params.source);
   if (params.start_time) query.append('start_time', params.start_time);
@@ -143,7 +145,7 @@ export function previewKnowledgeFile(id: string) {
   return getDown(`/api/v1/knowledge/${id}/preview`);
 }
 
-export function reviewKnowledge(id: string, data: { action: 'retry' | 'discard'; source_info?: IntakeSourceInfo }) {
+export function reviewKnowledge(id: string, data: { action: 'approve' | 'reject' | 'retry' | 'discard'; source_info?: IntakeSourceInfo }) {
   return post(`/api/v1/knowledge/${id}/review`, data);
 }
 

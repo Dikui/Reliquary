@@ -295,6 +295,7 @@ func TestVaultRebuildRestoresGeneratedArticlesMetadataAndSearchWithoutWritingFil
 		require.NoError(t, fresh.db.Where("id=?", original.ID).First(&restored).Error)
 		require.Equal(t, original.Title, restored.Title)
 		require.Equal(t, original.ContentType, restored.ContentType)
+		require.True(t, restored.ContentTypeCorrected, "a header cannot reveal whether its type was corrected by the user")
 		require.Equal(t, original.ProcessingMode, restored.ProcessingMode)
 		require.Equal(t, original.StructuredSummary, restored.StructuredSummary)
 		require.Equal(t, original.Description, restored.Description)
@@ -334,6 +335,14 @@ func TestVaultRebuildRestoresGeneratedArticlesMetadataAndSearchWithoutWritingFil
 	var topics []string
 	require.NoError(t, fresh.db.Table("topics").Joins("JOIN knowledge_topics links ON links.topic_id=topics.id").Where("links.knowledge_id=?", full.ID).Pluck("topics.name", &topics).Error)
 	require.Equal(t, []string{topic.Name}, topics)
+	var restoredTopicLinks []types.KnowledgeTopic
+	require.NoError(t, fresh.db.Where("knowledge_id=?", full.ID).Find(&restoredTopicLinks).Error)
+	require.Len(t, restoredTopicLinks, 1)
+	require.Equal(t, types.TopicSourceUser, restoredTopicLinks[0].Source, "recovery conservatively preserves every topic selection")
+	require.NoError(t, NewTopicService(fresh.db).ReplaceKnowledgeTopics(fresh.ctx, full.ID, nil))
+	var restoredTopicCount int64
+	require.NoError(t, fresh.db.Model(&types.KnowledgeTopic{}).Where("knowledge_id=?", full.ID).Count(&restoredTopicCount).Error)
+	require.EqualValues(t, 1, restoredTopicCount, "later model output cannot erase recovered topics")
 	var entities []string
 	require.NoError(t, fresh.db.Table("entities").Joins("JOIN knowledge_entities links ON links.entity_id=entities.id").Where("links.knowledge_id=?", full.ID).Pluck("entities.canonical_name", &entities).Error)
 	require.Equal(t, []string{"研究实体"}, entities)

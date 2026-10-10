@@ -94,7 +94,9 @@ func (s *EntityService) MergeEntities(ctx context.Context, keepEntityID, mergeEn
 		if err := tx.Model(&keep).Updates(map[string]any{"embedding_needs_rebuild": true, "updated_at": time.Now()}).Error; err != nil {
 			return err
 		}
-		return nil
+		return NewOperationLogService(tx).RecordTx(ctx, tx, "merge_entities", keep.ID,
+			map[string]any{"keep_entity_id": keep.ID, "merge_entity_id": merged.ID, "merged_into_id": ""},
+			map[string]any{"keep_entity_id": keep.ID, "merge_entity_id": merged.ID, "merged_into_id": keep.ID})
 	})
 	if err != nil {
 		return err

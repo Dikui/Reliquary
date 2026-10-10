@@ -36,6 +36,7 @@ export default function (knowledgeBaseId?: string) {
     file_type: "",
     description: "",
     content_type: '',
+    starred: false,
     processing_mode: 'full' as 'full' | 'summary_only',
     structured_summary: null as StructuredSummary | null,
     entities: [] as NonNullable<ClassifiedKnowledge['entities']>,
@@ -58,6 +59,7 @@ export default function (knowledgeBaseId?: string) {
       keyword?: string;
       file_type?: string;
       content_type?: string;
+      starred?: boolean;
       parse_status?: string;
       source?: string;
       start_time?: string;
@@ -193,6 +195,7 @@ export default function (knowledgeBaseId?: string) {
       file_type: "",
       description: "",
       content_type: '',
+      starred: false,
       processing_mode: 'full',
       structured_summary: null,
       entities: [],
@@ -223,6 +226,7 @@ export default function (knowledgeBaseId?: string) {
             file_type: data.file_type || '',
             description: data.description || '',
             content_type: data.content_type || '',
+            starred: Boolean(data.starred),
             processing_mode: data.processing_mode || 'full',
             structured_summary: data.structured_summary || null,
             entities: Array.isArray(data.entities) ? data.entities : [],

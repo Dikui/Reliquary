@@ -10,6 +10,7 @@ type ArticleSearchRequest struct {
 	EntityIDs       []string `json:"entity_ids,omitempty"`
 	TopicIDs        []string `json:"topic_ids,omitempty"`
 	Sources         []string `json:"sources,omitempty"`
+	Starred         *bool    `json:"starred,omitempty"`
 	PublishedFrom   string   `json:"published_from,omitempty"`
 	PublishedTo     string   `json:"published_to,omitempty"`
 	CollapseSimilar *bool    `json:"collapse_similar,omitempty"`
@@ -43,6 +44,7 @@ type ArticleSearchResult struct {
 	PublishedAt    *time.Time             `json:"published_at"`
 	ContentType    string                 `json:"content_type"`
 	ProcessingMode string                 `json:"processing_mode"`
+	Starred        bool                   `json:"starred"`
 	Summary        *KnowledgeSummary      `json:"summary"`
 	Entities       []ArticleSearchEntity  `json:"entities"`
 	Topics         []ArticleSearchTopic   `json:"topics"`

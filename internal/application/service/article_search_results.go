@@ -73,7 +73,7 @@ func (s *knowledgeSearchService) mergeArticleHits(ctx context.Context, tenantID 
 		result := &types.ArticleSearchResult{
 			ArticleID: article.ID, Title: article.Title, Source: article.SourceKind,
 			PublishedAt: article.SearchPublishedAt, ContentType: article.ContentType,
-			ProcessingMode: article.ProcessingMode, Summary: article.StructuredSummary,
+			ProcessingMode: article.ProcessingMode, Summary: article.StructuredSummary, Starred: article.Starred,
 			Entities: entities[article.ID], Topics: topics[article.ID],
 			Score: scores[article.ID], SimilarReports: []*types.ArticleSearchResult{},
 			VaultPath: article.VaultPath, OriginalURL: originalURL,

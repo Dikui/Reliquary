@@ -166,7 +166,7 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, kb *type
 	now := time.Now().UTC()
 	knowledge := &types.Knowledge{ID: header.ID, TenantID: kb.TenantID, KnowledgeBaseID: kb.ID,
 		Type: types.KnowledgeTypeManual, SourceKind: "article", VaultPath: path, VaultBody: string(body),
-		Source: header.URL, Title: header.Title, ContentType: header.ContentType, ProcessingMode: mode,
+		Source: header.URL, Title: header.Title, ContentType: header.ContentType, ContentTypeCorrected: true, ProcessingMode: mode,
 		StructuredSummary: header.Summary, Starred: header.Starred, CollectReason: header.CollectReason,
 		ParseStatus: types.ParseStatusCompleted, SummaryStatus: types.SummaryStatusCompleted,
 		EnableStatus: "enabled", Channel: types.ChannelAPI, FileName: filepath.Base(path), FileType: "md",
@@ -220,8 +220,10 @@ func (s *VaultDocumentService) restoreVaultArticle(ctx context.Context, kb *type
 			if err != nil {
 				return err
 			}
+			// Headers cannot distinguish model and user selections. Preserve all
+			// recovered selections against later automatic classification.
 			if err := tx.Create(&types.KnowledgeTopic{TenantID: kb.TenantID, KnowledgeID: knowledge.ID,
-				TopicID: topic.ID, CreatedAt: collected.UTC()}).Error; err != nil {
+				TopicID: topic.ID, Source: types.TopicSourceUser, CreatedAt: collected.UTC()}).Error; err != nil {
 				return err
 			}
 		}

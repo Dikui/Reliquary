@@ -22,6 +22,9 @@ DROP TABLE IF EXISTS public.article_embeddings;
 
 
 DROP TABLE IF EXISTS public.knowledge_repost_sources;
+DROP TABLE IF EXISTS public.operation_logs;
+DROP TABLE IF EXISTS public.topic_backfill_batches;
+DROP TABLE IF EXISTS public.topic_backfill_jobs;
 DROP TABLE IF EXISTS public.knowledge_topics;
 DROP TABLE IF EXISTS public.topics;
 DROP TABLE IF EXISTS public.knowledge_entities;

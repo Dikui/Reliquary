@@ -13,6 +13,7 @@ export function buildKnowledgeSearchRequest(query: string, filters: KnowledgeSea
     })),
     ...(filters.published_from ? { published_from: filters.published_from } : {}),
     ...(filters.published_to ? { published_to: filters.published_to } : {}),
+    ...(typeof filters.starred === 'boolean' ? { starred: filters.starred } : {}),
     collapse_similar: filters.collapse_similar,
     limit: filters.limit,
   }
@@ -28,6 +29,7 @@ export function searchStateFromURL(query: Record<string, URLValue>): { query: st
   filters.topic_ids = list('topic_ids')
   filters.published_from = first('published_from')
   filters.published_to = first('published_to')
+  if (first('starred') === 'true' || first('starred') === 'false') filters.starred = first('starred') === 'true'
   filters.collapse_similar = first('collapse_similar') !== 'false'
   const limit = Number(first('limit'))
   if (Number.isInteger(limit) && limit >= 1 && limit <= 100) filters.limit = limit

@@ -44,6 +44,8 @@ func RegisterKnowledgeRoutes(r *gin.RouterGroup, handler *handler.KnowledgeHandl
 		kRead.GET("/:id/spans", g.KBExistsFromKnowledgeIDParam("id"), handler.GetKnowledgeSpans)
 		k.DELETE("/:id", g.KBExistsFromKnowledgeIDParam("id"), handler.DeleteKnowledge)
 		k.PUT("/:id", g.KBExistsFromKnowledgeIDParam("id"), handler.UpdateKnowledge)
+		k.PUT("/:id/star", g.KBExistsFromKnowledgeIDParam("id"), handler.SetStarred)
+		k.PUT("/:id/content-type", g.KBExistsFromKnowledgeIDParam("id"), handler.CorrectContentType)
 		k.POST("/:id/reprocess", g.KBExistsFromKnowledgeIDParam("id"), handler.ReparseKnowledge)
 		k.PUT("/manual/:id", g.KBExistsFromKnowledgeIDParam("id"), handler.UpdateManualKnowledge)
 		k.POST("/:id/reparse", g.KBExistsFromKnowledgeIDParam("id"), handler.ReparseKnowledge)

@@ -95,7 +95,7 @@ func TestArticleSearchHTTPSharedRequestAndArticleResponse(t *testing.T) {
 }
 
 func TestArticleSearchHTTPRejectsOldAndUnknownParameters(t *testing.T) {
-	for _, field := range []string{"knowledge_base_ids", "knowledge_base_id", "knowledge_ids", "query_text", "query_embedding", "match_count", "only_recommended", "starred", "unknown"} {
+	for _, field := range []string{"knowledge_base_ids", "knowledge_base_id", "knowledge_ids", "query_text", "query_embedding", "match_count", "only_recommended", "unknown"} {
 		t.Run(field, func(t *testing.T) {
 			svc := &articleSearchHandlerService{}
 			request := httptest.NewRequest(http.MethodPost, "/knowledge-search", strings.NewReader(`{"query":"query","`+field+`":null}`))

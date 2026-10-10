@@ -111,7 +111,7 @@ async function renderDetails(sources: KnowledgeRepostSource[] | null | undefined
       safeMarkdownToHTML: (value: string) => value, sanitizeHTML: (value: string) => value },
     '@/utils/markdownTableNormalize': { normalizeSpuriousTablePrefixes: (value: string) => value }, '@/utils/mermaidViewer': {}, '@/utils/textLineDiff': {},
     '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true }) },
-    '@/components/KnowledgeClassification.vue': emptyModule,
+    '@/components/KnowledgeArticleJudgments.vue': emptyModule, '@/components/KnowledgeClassification.vue': emptyModule,
     '@/components/document-preview.vue': emptyModule,
     '@/components/knowledge-processing-timeline.vue': emptyModule,
     '@/views/knowledge/components/RepostSources.vue': sharedRepostModule,

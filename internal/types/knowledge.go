@@ -88,6 +88,8 @@ const (
 type KnowledgeListFilter struct {
 	// ContentType filters the article purpose; unclassified matches an empty classification.
 	ContentType string
+	// Starred filters the user's article marker when supplied.
+	Starred *bool
 	// Keyword performs a LIKE match on file_name / title when non-empty.
 	Keyword string
 	// FileType filters by file_type, or by type for the special values "manual" / "url".
@@ -119,18 +121,19 @@ type Knowledge struct {
 	// Title of the knowledge
 	Title string `json:"title"`
 	// Description of the knowledge
-	Description       string            `json:"description"`
-	ContentType       string            `json:"content_type" gorm:"type:varchar(16)"`
-	ProcessingMode    string            `json:"processing_mode" gorm:"type:varchar(16);not null;default:'full'"`
-	SourceKind        string            `json:"source_kind" gorm:"type:varchar(16);not null;default:'article'"`
-	VaultPath         string            `json:"vault_path" gorm:"type:text;not null;default:''"`
-	VaultBody         string            `json:"-" gorm:"type:text;not null;default:''"`
-	VaultOriginalPath string            `json:"-" gorm:"type:text;not null;default:''"`
-	Starred           bool              `json:"starred" gorm:"not null;default:false"`
-	CollectReason     string            `json:"collect_reason" gorm:"type:text;not null;default:''"`
-	StructuredSummary *KnowledgeSummary `json:"structured_summary" gorm:"type:jsonb"`
-	Entities          []Entity          `json:"entities" gorm:"-"`
-	Topics            []Topic           `json:"topics" gorm:"-"`
+	Description          string            `json:"description"`
+	ContentType          string            `json:"content_type" gorm:"type:varchar(16)"`
+	ContentTypeCorrected bool              `json:"content_type_corrected" gorm:"not null;default:false"`
+	ProcessingMode       string            `json:"processing_mode" gorm:"type:varchar(16);not null;default:'full'"`
+	SourceKind           string            `json:"source_kind" gorm:"type:varchar(16);not null;default:'article'"`
+	VaultPath            string            `json:"vault_path" gorm:"type:text;not null;default:''"`
+	VaultBody            string            `json:"-" gorm:"type:text;not null;default:''"`
+	VaultOriginalPath    string            `json:"-" gorm:"type:text;not null;default:''"`
+	Starred              bool              `json:"starred" gorm:"not null;default:false"`
+	CollectReason        string            `json:"collect_reason" gorm:"type:text;not null;default:''"`
+	StructuredSummary    *KnowledgeSummary `json:"structured_summary" gorm:"type:jsonb"`
+	Entities             []Entity          `json:"entities" gorm:"-"`
+	Topics               []Topic           `json:"topics" gorm:"-"`
 	// DescriptionSpecified distinguishes an explicitly supplied empty description
 	// from an omitted field in partial update requests.
 	DescriptionSpecified bool `json:"-" gorm:"-"`

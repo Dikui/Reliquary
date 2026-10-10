@@ -20,6 +20,7 @@ export interface KnowledgeSearchArticle {
   similar_reports: KnowledgeSearchArticle[]
   vault_path: string
   original_url: string
+  starred?: boolean
 }
 export interface KnowledgeSearchFilters {
   content_types: ContentType[]
@@ -30,6 +31,7 @@ export interface KnowledgeSearchFilters {
   published_to: string
   collapse_similar: boolean
   limit: number
+  starred?: boolean
 }
 export interface KnowledgeSearchRequest extends Partial<KnowledgeSearchFilters> { query: string }
 export interface KnowledgeSearchData { results: KnowledgeSearchArticle[]; excluded_missing_published_at: number }

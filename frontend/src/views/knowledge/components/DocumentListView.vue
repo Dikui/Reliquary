@@ -4,6 +4,8 @@ import { useI18n } from 'vue-i18n';
 import { formatFileSize, getFileIcon } from '@/utils/files';
 import DocumentActionMenu from './DocumentActionMenu.vue';
 import KnowledgeClassification from '@/components/KnowledgeClassification.vue';
+import KnowledgeStarToggle from '@/components/KnowledgeStarToggle.vue';
+import type { ArticleJudgment } from '@/api/knowledge-judgments';
 import type { ClassifiedKnowledge } from '@/types/knowledgeClassification';
 
 interface KnowledgeItem extends ClassifiedKnowledge {
@@ -30,6 +32,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'open', item: KnowledgeItem): void;
   (e: 'open-entity', id: string): void;
+  (e: 'judgment-updated', value: ArticleJudgment): void;
   (e: 'toggle-row', id: string, checked: boolean, shiftKey: boolean): void;
   (e: 'toggle-all', checked: boolean): void;
   (e: 'action', action: 'download' | 'edit' | 'reparse' | 'cancel-parse' | 'delete' | 'view-trace' | 'batch-manage', item: KnowledgeItem): void;
@@ -214,6 +217,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
         </div>
 
         <div class="cell cell-actions" @click.stop>
+          <KnowledgeStarToggle v-if="!['mine', 'report'].includes(item.source_kind || '') && item.parse_status === 'completed'" :knowledge="item" @updated="emit('judgment-updated', $event)" />
           <t-popup placement="bottom-right" trigger="click" destroy-on-close overlay-class-name="card-more"
             :on-visible-change="(v: boolean) => onMoreVisible(item.id, v)">
             <button class="row-more-btn" :class="{ active: moreOpen === item.id }" type="button"
@@ -281,7 +285,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
     96px // size
     minmax(96px, 0.7fr) // status
     140px // updated_at
-    48px; // actions
+    80px; // actions
   align-items: center;
   column-gap: 0;
   padding: 0 16px;
@@ -380,6 +384,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
 
 .cell-actions {
   justify-content: flex-end;
+  gap: 4px;
 }
 
 /* TDesign 勾选框：去掉空白 label、与表格行对齐 */

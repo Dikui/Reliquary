@@ -4,6 +4,8 @@ import { useI18n } from 'vue-i18n';
 import { formatFileSize } from '@/utils/files';
 import DocumentActionMenu from './DocumentActionMenu.vue';
 import KnowledgeClassification from '@/components/KnowledgeClassification.vue';
+import KnowledgeStarToggle from '@/components/KnowledgeStarToggle.vue';
+import type { ArticleJudgment } from '@/api/knowledge-judgments';
 import type { ClassifiedKnowledge } from '@/types/knowledgeClassification';
 import KnowledgeProcessingTimeline from '@/components/knowledge-processing-timeline.vue';
 
@@ -38,6 +40,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'open', item: KnowledgeCard): void;
   (e: 'open-entity', id: string): void;
+  (e: 'judgment-updated', value: ArticleJudgment): void;
   (e: 'toggle-checkbox', id: string, checked: boolean, ctx?: { e?: Event }): void;
   (e: 'menu-visible-change', visible: boolean, item: KnowledgeCard): void;
   (e: 'action', action: 'download' | 'edit' | 'view-trace' | 'reparse' | 'cancel-parse' | 'batch-manage' | 'delete', item: KnowledgeCard): void;
@@ -263,6 +266,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
             />
           </div>
           <span class="card-content-title" :title="item.file_name">{{ item.file_name }}</span>
+          <KnowledgeStarToggle v-if="!['mine', 'report'].includes(item.source_kind || '') && item.parse_status === 'completed'" :knowledge="item" @updated="emit('judgment-updated', $event)" />
           <t-popup
 
             v-model="item.isMore"

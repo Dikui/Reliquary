@@ -42,7 +42,9 @@ func escapeLikeKeyword(keyword string) string {
 // counter jump back up and never reach zero (the "stuck
 // pending_subtasks_count / never promoted to completed" bug). Omitting
 // the column here means Save can never touch it.
-var omitFieldsOnUpdate = []string{"DeletedAt", "PendingSubtasksCount"}
+// User star choices and the correction marker are also owned by dedicated
+// editing methods, so background snapshots cannot overwrite those columns.
+var omitFieldsOnUpdate = []string{"DeletedAt", "PendingSubtasksCount", "Starred", "ContentTypeCorrected"}
 
 // knowledgeRepository implements knowledge base and knowledge repository interface
 type knowledgeRepository struct {
@@ -105,6 +107,9 @@ func (r *knowledgeRepository) ListKnowledgeByKnowledgeBaseID(
 // KnowledgeListFilter to a GORM query. Tenant / knowledge base scoping must be
 // applied by the caller before invoking this helper.
 func applyKnowledgeListFilter(query *gorm.DB, filter types.KnowledgeListFilter) *gorm.DB {
+	if filter.Starred != nil {
+		query = query.Where("source_kind='article' AND starred=?", *filter.Starred)
+	}
 	if filter.ContentType == "unclassified" {
 		query = query.Where("(content_type IS NULL OR content_type = '')")
 	} else if filter.ContentType != "" {

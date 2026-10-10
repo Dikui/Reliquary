@@ -23,6 +23,7 @@ import { useI18n } from 'vue-i18n';
 import DocumentPreview from '@/components/document-preview.vue';
 import RepostSources from '@/views/knowledge/components/RepostSources.vue';
 import KnowledgeClassification from '@/components/KnowledgeClassification.vue';
+import KnowledgeArticleJudgments from '@/components/KnowledgeArticleJudgments.vue';
 import KnowledgeProcessingTimeline from '@/components/knowledge-processing-timeline.vue';
 import { resolveKnowledgeDownloadFileName } from '@/views/knowledge/knowledgeDownloadFileName';
 import { isKnownPreviewableExt, resolveFilePreviewExt } from '@/utils/filePreview';
@@ -130,9 +131,10 @@ const saveMetadata = async () => {
 };
 
 const reprocessing = ref(false);
+const articleJudgmentsBusy = ref(false);
 const canReprocess = computed(() => !['mine', 'report'].includes(props.details?.source_kind || ''));
 const reprocess = async () => {
-  if (!canReprocess.value || reprocessing.value || isProcessing.value) return;
+  if (!canReprocess.value || reprocessing.value || isProcessing.value || articleJudgmentsBusy.value) return;
   reprocessing.value = true;
   try {
     const result: any = await reprocessKnowledge(props.details.id);
@@ -187,7 +189,7 @@ mermaid.initialize({
     topPadding: 50
   }
 });
-const props = defineProps(["visible", "details", "knowledgeType", "sourceInfo", "parse_status", "kbId"]);
+const props = defineProps(["visible", "details", "knowledgeType", "sourceInfo", "parse_status", "kbId", "reviewLoading", "reviewError"]);
 const emit = defineEmits(["closeDoc", "getDoc", "processingStateChange", "openEntity", "intakeReview"]);
 const intakeOriginal = ref('');
 const intakeOriginalOffset = ref(0);
@@ -258,6 +260,14 @@ watch(() => props.details?.id, resetIntakePreview);
 const applyProcessingState = (value: Record<string, unknown>) => {
   Object.assign(props.details, value);
   if (props.details?.id) emit('processingStateChange', { ...value, id: props.details.id });
+};
+const applyArticleJudgment = (value: Record<string, unknown>) => {
+  const previousMode = props.details.processing_mode;
+  applyProcessingState(value);
+  if (props.details.processing_mode === 'summary_only') {
+    props.details.md = [];
+    props.details.total = 0;
+  } else if (previousMode === 'summary_only' && !isProcessing.value) emit('getDoc', 1);
 };
 let processingPollTimer: ReturnType<typeof setTimeout> | null = null;
 let processingPollGeneration = 0;
@@ -1219,8 +1229,13 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
             <t-input v-model="intakeSourceDraft.publisher" :placeholder="$t('knowledgeBase.intakePublisher')" />
             <t-input v-model="intakeSourceDraft.original_url" :placeholder="$t('knowledgeBase.intakeOriginalUrl')" />
             <t-input v-model="intakeSourceDraft.published_at" :placeholder="$t('knowledgeBase.intakePublishedAt')" />
-            <t-button theme="primary" @click="emit('intakeReview', { action: 'retry', sourceInfo: intakeSourceDraft })">{{ $t('knowledgeBase.intakeRetry') }}</t-button>
-            <t-button theme="danger" variant="outline" @click="emit('intakeReview', { action: 'discard' })">{{ $t('knowledgeBase.intakeDiscard') }}</t-button>
+            <div class="intake-review-actions">
+              <t-button theme="primary" :loading="reviewLoading" :disabled="reviewLoading" @click="emit('intakeReview', { action: 'approve', sourceInfo: intakeSourceDraft })">{{ $t('articleJudgments.approveReview') }}</t-button>
+              <t-button variant="outline" :disabled="reviewLoading" @click="emit('intakeReview', { action: 'reject', sourceInfo: intakeSourceDraft })">{{ $t('articleJudgments.rejectReview') }}</t-button>
+              <t-button variant="outline" :disabled="reviewLoading" @click="emit('intakeReview', { action: 'retry', sourceInfo: intakeSourceDraft })">{{ $t('knowledgeBase.intakeRetry') }}</t-button>
+              <t-button theme="danger" variant="outline" :disabled="reviewLoading" @click="emit('intakeReview', { action: 'discard' })">{{ $t('knowledgeBase.intakeDiscard') }}</t-button>
+            </div>
+            <p v-if="reviewError" class="processing-error" role="alert">{{ reviewError }}</p>
           </template>
         </section>
 
@@ -1305,12 +1320,13 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
         <section class="setting-drawer__section summary-section">
           <div class="section-title-actions">
             <h4 class="setting-drawer__section-title">{{ $t('knowledgeBase.documentSummary') }}</h4>
-            <t-button v-if="canReprocess" size="small" variant="outline" :loading="reprocessing" :disabled="isProcessing" @click="reprocess">
+            <t-button v-if="canReprocess" size="small" variant="outline" :loading="reprocessing" :disabled="isProcessing || articleJudgmentsBusy" @click="reprocess">
               <template #icon><t-icon name="refresh" size="15px" /></template>
               {{ $t('knowledgeBase.reprocess') }}
             </t-button>
           </div>
           <KnowledgeClassification :knowledge="details" @open-entity="emit('openEntity', $event)" />
+          <KnowledgeArticleJudgments v-if="canReprocess && !isIntakeRejected" :knowledge="details" :disabled="isProcessing || reprocessing" @updated="applyArticleJudgment($event)" @busy-change="articleJudgmentsBusy = $event" />
           <p v-if="isProcessing" role="status">{{ $t('knowledgeBase.statusProcessing') }}</p>
           <p v-else-if="details.parse_status === 'failed'" class="processing-error" role="alert">{{ details.error_message || $t('knowledgeBase.parsingFailed') }}</p>
         </section>
@@ -1440,6 +1456,8 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
 </template>
 <style scoped lang="less">
 @import "./css/markdown.less";
+
+.intake-review-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 
 .section-title-actions,
 .metadata-actions,

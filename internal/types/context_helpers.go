@@ -57,25 +57,29 @@ func UserIDFromContext(ctx context.Context) (string, bool) {
 // TaskInitiator is the authenticated caller that submitted an asynchronous
 // task. Workers restore this identity into their execution context.
 type TaskInitiator struct {
-	UserID string `json:"user_id,omitempty"`
+	UserID    string    `json:"user_id,omitempty"`
+	Principal Principal `json:"principal,omitempty"`
 }
 
 // TaskInitiatorFromContext snapshots the authenticated user for a task payload.
 func TaskInitiatorFromContext(ctx context.Context) TaskInitiator {
 	userID, ok := UserIDFromContext(ctx)
-	if !ok {
+	principal, hasPrincipal := PrincipalFromContext(ctx)
+	if !ok && !hasPrincipal {
 		return TaskInitiator{}
 	}
-	return TaskInitiator{UserID: userID}
+	return TaskInitiator{UserID: userID, Principal: principal}
 }
 
 // Apply restores a captured task initiator onto a worker context. Empty or
 // legacy payloads are a no-op and therefore retain the system-task fallback.
 func (i TaskInitiator) Apply(ctx context.Context) context.Context {
-	if i.UserID == "" {
-		return ctx
+	if i.UserID != "" {
+		ctx = context.WithValue(ctx, UserIDContextKey, i.UserID)
 	}
-	ctx = context.WithValue(ctx, UserIDContextKey, i.UserID)
+	if i.Principal.Valid() {
+		ctx = WithPrincipal(ctx, i.Principal)
+	}
 
 	return ctx
 }

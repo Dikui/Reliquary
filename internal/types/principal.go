@@ -6,6 +6,7 @@ import (
 )
 
 const PrincipalWebUser = "web_user"
+const PrincipalAPIKey = "api_key"
 
 type Principal struct {
 	Type string

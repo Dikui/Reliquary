@@ -54,7 +54,7 @@ const article = {
 }
 const listModules = {
   '@/utils/files': { formatFileSize: () => '100 B', getFileIcon: () => 'file' }, './DocumentActionMenu.vue': emptyModule,
-  '@/components/knowledge-processing-timeline.vue': emptyModule, '@/components/KnowledgeClassification.vue': classificationModule,
+  '@/components/knowledge-processing-timeline.vue': emptyModule, '@/components/KnowledgeClassification.vue': classificationModule, '@/components/KnowledgeStarToggle.vue': emptyModule,
 }
 const props = { selectedIds: new Set(), batchMode: false, traceAvailableById: {}, traceVisibleIds: {} }
 for (const locale of ['zh-CN', 'en-US'] as const) {
@@ -81,7 +81,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       '@/api/knowledge-base/index': { KNOWLEDGE_CHUNK_PAGE_SIZE: 25, reprocessKnowledge: async (id: string) => { requests.push(id); return { success: true, data: { parse_status: 'pending' } } } },
       '@/utils/security': { isValidURL: (value: string) => /^https?:\/\//.test(value) }, '@/utils/markdownTableNormalize': {}, '@/utils/mermaidViewer': {}, '@/components/SafeTextarea.vue': safeTextareaTestModule, '@/components/document-preview.vue': emptyModule,
       '@/utils/clipboard': { copyWithToast() {} },
-      '@/components/knowledge-processing-timeline.vue': emptyModule, '@/views/knowledge/components/RepostSources.vue': emptyModule, '@/components/KnowledgeClassification.vue': classificationModule, '@/views/knowledge/knowledgeDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
+      '@/components/KnowledgeArticleJudgments.vue': emptyModule, '@/components/knowledge-processing-timeline.vue': emptyModule, '@/views/knowledge/components/RepostSources.vue': emptyModule, '@/components/KnowledgeClassification.vue': classificationModule, '@/views/knowledge/knowledgeDownloadFileName': {}, '@/utils/filePreview': {}, '@/utils/api-base': {},
     }
     const detail = component('./doc-content.vue', modules)
     const html = await render(detail, { visible: true, details: { ...article, processing_mode: 'summary_only', source: 'https://example.com/tutorial' } }, locale)
@@ -89,6 +89,8 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     assert.doesNotMatch(html, /class="[^\"]*doc-content-section/)
     const failed = await render(detail, { visible: true, details: { ...article, parse_status: 'failed', error_message: 'Cannot fetch original article: HTTP 404' } }, locale)
     assert.match(failed, /role="alert"[^>]*>Cannot fetch original article: HTTP 404/)
+    const rejected = await render(detail, { visible: true, details: { ...article, parse_status: 'rejected', metadata: { intake: { source: 'url', decision: 'rejected', source_info: {} } } } }, locale)
+    for (const text of [messages[locale].articleJudgments.approveReview, messages[locale].articleJudgments.rejectReview, copy.intakeRetry, copy.intakeDiscard]) assert.ok(rejected.includes(text))
     const setup = detail.setup
     detail.setup = (props: object, context: object) => {
       const state = setup(props, context)

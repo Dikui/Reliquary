@@ -53,6 +53,18 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
+          path: "topics",
+          name: "topics",
+          component: () => import('../views/knowledge/TopicManagement.vue'),
+          meta: { requiresInit: true, requiresAuth: true },
+        },
+        {
+          path: "operation-logs",
+          name: "operationLogs",
+          component: () => import('../views/knowledge/OperationLogs.vue'),
+          meta: { requiresInit: true, requiresAuth: true },
+        },
+        {
           path: "knowledge-search",
           name: "knowledgeSearch",
           component: () => import('../views/knowledge/KnowledgeSearch.vue'),

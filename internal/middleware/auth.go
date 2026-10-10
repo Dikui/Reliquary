@@ -44,6 +44,7 @@ func Auth(tenants interfaces.TenantService, users interfaces.UserService, keys i
 		}
 		ctx := c.Request.Context()
 		var user *types.User
+		var principal types.Principal
 		if token, ok := bearerToken(c); ok {
 			candidate, tenantID, err := users.ValidateToken(ctx, token)
 			if err == nil && tenantID == types.SingleTenantID {
@@ -54,6 +55,7 @@ func Auth(tenants interfaces.TenantService, users interfaces.UserService, keys i
 			key, err := keys.AuthenticateAPIKey(ctx, c.GetHeader("X-API-Key"))
 			if err == nil && key != nil && key.TenantIDValue() == types.SingleTenantID {
 				user, _ = users.GetUserByTenantID(ctx, types.SingleTenantID)
+				principal = types.Principal{Type: types.PrincipalAPIKey, ID: strconv.FormatUint(key.ID, 10)}
 			}
 		}
 		if user == nil || !user.IsActive || user.TenantID != types.SingleTenantID {
@@ -72,7 +74,10 @@ func Auth(tenants interfaces.TenantService, users interfaces.UserService, keys i
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid personal workspace"})
 			return
 		}
-		applyAuthSession(c, authSession{User: user, Principal: types.Principal{Type: types.PrincipalWebUser, ID: user.ID}, TenantID: types.SingleTenantID, Tenant: tenant})
+		if !principal.Valid() {
+			principal = types.Principal{Type: types.PrincipalWebUser, ID: user.ID}
+		}
+		applyAuthSession(c, authSession{User: user, Principal: principal, TenantID: types.SingleTenantID, Tenant: tenant})
 		c.Next()
 	}
 }

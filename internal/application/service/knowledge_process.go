@@ -542,6 +542,25 @@ func (s *knowledgeService) ReparseKnowledge(
 	recordReparseStarted := func() {
 	}
 
+	// A summary-only file import may have its original source removed before a
+	// user later converts it to full storage. Its first vault body is then the
+	// authoritative source for reprocessing, even though its import type is file.
+	if existing.ProcessingMode == types.ProcessingModeFull && s.vault != nil && existing.VaultPath != "" && existing.FilePath == "" && !existing.IsManual() {
+		body, err := s.vault.ReadBody(existing)
+		if err != nil {
+			return nil, err
+		}
+		resetKnowledgeForReparse(existing, kb)
+		if err := s.repo.UpdateKnowledge(ctx, existing); err != nil {
+			return nil, err
+		}
+		if _, err := s.enqueueManualProcessing(ctx, existing, string(body), true); err != nil {
+			s.markKnowledgeEnqueueFailed(ctx, existing)
+			return existing, err
+		}
+		return existing, nil
+	}
+
 	if existing.ProcessingMode == "summary_only" {
 		source, err := articleSourceInfo(existing)
 		if err != nil {

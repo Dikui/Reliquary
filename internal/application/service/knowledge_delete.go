@@ -9,7 +9,9 @@ import (
 
 	"github.com/hibiken/asynq"
 	"golang.org/x/sync/errgroup"
+	"gorm.io/gorm"
 
+	"reliquary/internal/application/repository"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
@@ -300,7 +302,6 @@ func (s *knowledgeService) DeleteKnowledgeList(ctx context.Context, ids []string
 	// Rejected intake rows retain their source specifically for the KB creator's
 	// decision. The async worker restores the submitting user in its context,
 	// so enforce the same boundary here rather than trusting enqueue callers.
-	userID, _ := types.UserIDFromContext(ctx)
 	for _, knowledge := range knowledgeList {
 		intake, intakeErr := knowledge.IntakeMetadata()
 		if intakeErr != nil {
@@ -313,7 +314,7 @@ func (s *knowledgeService) DeleteKnowledgeList(ctx context.Context, ids []string
 		if kbErr != nil {
 			return kbErr
 		}
-		if userID == "" || !types.IsAuthenticatedFromContext(ctx) {
+		if _, ok := types.PrincipalFromContext(ctx); !ok {
 			return errors.New("an authenticated user is required to delete rejected intake")
 		}
 	}
@@ -427,10 +428,32 @@ func (s *knowledgeService) DeleteKnowledgeList(ctx context.Context, ids []string
 	// gone avoids "file missing but row present" zombies that break reparse /
 	// re-delete when an earlier cleanup step failed (issue #2192). A failure below
 	// only orphans storage.
-	if err := deleteArticleEntityAssociations(ctx, s.db, tenantInfo.ID, ids); err != nil {
-		return err
+	deleteRows := func(svc *knowledgeService) error {
+		for _, knowledge := range knowledgeList {
+			if intake, _ := knowledge.IntakeMetadata(); intake != nil && intake.Decision == "rejected" {
+				if svc.db == nil {
+					continue
+				}
+				if err := NewOperationLogService(svc.db).RecordTx(ctx, svc.db, "review_discard", knowledge.ID, intake, nil); err != nil {
+					return err
+				}
+			}
+		}
+		if err := deleteArticleEntityAssociations(ctx, svc.db, tenantInfo.ID, ids); err != nil {
+			return err
+		}
+		return svc.repo.DeleteKnowledgeList(ctx, tenantInfo.ID, ids)
 	}
-	if err := s.repo.DeleteKnowledgeList(ctx, tenantInfo.ID, ids); err != nil {
+	if s.db == nil {
+		if err := deleteRows(s); err != nil {
+			return err
+		}
+	} else if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		copy := *s
+		copy.db = tx
+		copy.repo = repository.NewKnowledgeRepository(tx)
+		return deleteRows(&copy)
+	}); err != nil {
 		return err
 	}
 

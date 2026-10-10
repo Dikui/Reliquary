@@ -164,6 +164,9 @@ func (s *knowledgeSearchService) Search(ctx context.Context, request types.Artic
 func (s *knowledgeSearchService) eligibleArticles(ctx context.Context, tenantID uint64, kbID string, f articleSearchFilters, dates bool) *gorm.DB {
 	query := s.db.WithContext(ctx).Table("knowledges AS k").Where(`k.tenant_id = ? AND k.knowledge_base_id = ?
 		AND k.deleted_at IS NULL AND k.parse_status = 'completed' AND k.enable_status = 'enabled'`, tenantID, kbID)
+	if f.request.Starred != nil {
+		query = query.Where("k.source_kind='article' AND k.starred=?", *f.request.Starred)
+	}
 	if len(f.request.ContentTypes) > 0 {
 		query = query.Where("k.content_type IN ?", f.request.ContentTypes)
 	}

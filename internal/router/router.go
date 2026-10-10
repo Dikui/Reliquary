@@ -34,6 +34,8 @@ type RouterParams struct {
 	VaultHandler                 *handler.VaultHandler `optional:"true"`
 	KnowledgeSearchHandler       *handler.KnowledgeSearchHandler
 	EntityHandler                *handler.EntityHandler
+	TopicHandler                 *handler.TopicHandler        `optional:"true"`
+	OperationLogHandler          *handler.OperationLogHandler `optional:"true"`
 	TenantHandler                *handler.TenantHandler
 	TenantService                interfaces.TenantService
 	TenantAPIKeyService          interfaces.TenantAPIKeyService
@@ -128,6 +130,12 @@ func NewRouter(params RouterParams) *gin.Engine {
 		v1.POST("/knowledge-search", params.KnowledgeSearchHandler.SearchKnowledge)
 		v1.GET("/knowledge-search/options", params.KnowledgeSearchHandler.Options)
 		RegisterEntityRoutes(v1, params.EntityHandler)
+		if params.TopicHandler != nil {
+			RegisterTopicRoutes(v1, params.TopicHandler, accessGuards)
+		}
+		if params.OperationLogHandler != nil {
+			v1.GET("/operation-logs", params.OperationLogHandler.List)
+		}
 		RegisterChunkRoutes(v1, params.ChunkHandler, accessGuards)
 		RegisterModelRoutes(v1, params.ModelHandler, params.ModelCredentialsHandler, accessGuards)
 		RegisterInitializationRoutes(v1, params.InitializationHandler, accessGuards)

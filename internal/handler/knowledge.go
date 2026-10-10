@@ -171,8 +171,7 @@ func (h *KnowledgeHandler) enqueueKnowledgeListDelete(
 		if err != nil {
 			return "", err
 		}
-		userID, _ := ctx.Value(types.UserIDContextKey).(string)
-		if userID == "" || !types.IsAuthenticatedFromContext(ctx) {
+		if _, ok := types.PrincipalFromContext(ctx); !ok {
 			return "", errors.NewForbiddenError("an authenticated user is required to discard intake")
 		}
 	}
@@ -785,6 +784,14 @@ func (h *KnowledgeHandler) ListKnowledge(c *gin.Context) {
 		FileType:    c.Query("file_type"),
 		ParseStatus: c.Query("parse_status"),
 		Source:      c.Query("source"),
+	}
+	if raw, supplied := c.GetQuery("starred"); supplied {
+		if raw != "true" && raw != "false" {
+			c.Error(errors.NewBadRequestError("starred must be true or false"))
+			return
+		}
+		value := raw == "true"
+		filter.Starred = &value
 	}
 	if filter.ContentType != "" && filter.ContentType != "unclassified" && types.NormalizeContentType(filter.ContentType) == "" {
 		c.Error(errors.NewBadRequestError("invalid content_type"))

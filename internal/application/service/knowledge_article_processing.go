@@ -298,12 +298,33 @@ func (s *knowledgeService) processArticleBody(ctx context.Context, kb *types.Kno
 	if err != nil {
 		return err
 	}
+	return s.persistArticleProcessingResult(ctx, kb, k, body, images, eff, result, true)
+}
+
+// persistArticleProcessingResult is shared by ingestion and a user conversion.
+// A conversion prepares the model result before opening its database transaction
+// and owns the file write so it can restore the previous file on rollback.
+func (s *knowledgeService) persistArticleProcessingResult(ctx context.Context, kb *types.KnowledgeBase, k *types.Knowledge, body string, images []docparser.StoredImage, eff types.EffectiveProcessConfig, result *articleProcessingResult, writeFiles bool) error {
 	if aborted, _ := s.isKnowledgeAborted(ctx, k.TenantID, k.ID); aborted {
 		return nil
 	}
-	k.ContentType = types.NormalizeContentType(*result.ContentType)
-	if k.ContentType != *result.ContentType {
-		k.ContentType = ""
+	if s.db != nil {
+		var current struct {
+			ContentType          string
+			ContentTypeCorrected bool
+		}
+		if err := s.db.WithContext(ctx).Model(&types.Knowledge{}).Select("content_type", "content_type_corrected").Where("id=? AND tenant_id=?", k.ID, k.TenantID).Take(&current).Error; err != nil {
+			return err
+		}
+		if current.ContentTypeCorrected {
+			k.ContentType, k.ContentTypeCorrected = current.ContentType, true
+		}
+	}
+	if !k.ContentTypeCorrected {
+		k.ContentType = types.NormalizeContentType(*result.ContentType)
+		if k.ContentType != *result.ContentType {
+			k.ContentType = ""
+		}
 	}
 	k.ProcessingMode = types.ProcessingModeForContentType(k.ContentType)
 	k.StructuredSummary = result.Summary
@@ -346,7 +367,7 @@ func (s *knowledgeService) processArticleBody(ctx context.Context, kb *types.Kno
 			return err
 		}
 	} else {
-		if s.vault == nil {
+		if writeFiles && s.vault == nil {
 			if err := s.storeProcessedBody(ctx, kb, k, body, images); err != nil {
 				return err
 			}
@@ -370,7 +391,7 @@ func (s *knowledgeService) processArticleBody(ctx context.Context, kb *types.Kno
 			s.skipStage(ctx, k.ID, types.StageEmbedding, "vector_disabled")
 		}
 	}
-	if s.vault != nil {
+	if writeFiles && s.vault != nil {
 		read := func(ctx context.Context, ref string) (io.ReadCloser, error) {
 			return s.resolveFileServiceForPath(ctx, kb, ref).GetFile(ctx, ref)
 		}
@@ -423,7 +444,7 @@ func (s *knowledgeService) removeParsedBodyCopies(ctx context.Context, kb *types
 		return err
 	}
 	k.Metadata = data
-	if err = s.repo.UpdateKnowledge(ctx, k); err != nil {
+	if err = s.repo.UpdateKnowledgeColumn(ctx, k.ID, "metadata", data); err != nil {
 		return err
 	}
 	for _, ref := range copies {
