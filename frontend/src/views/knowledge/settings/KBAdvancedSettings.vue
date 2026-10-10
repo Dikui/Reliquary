@@ -47,7 +47,7 @@
             <p class="desc">{{ $t('knowledgeEditor.advanced.questionGeneration.instructionsDescription') }}</p>
           </div>
           <div class="setting-control">
-            <t-textarea
+            <SafeTextarea
               v-model="localQuestionGeneration.customInstructions"
               :placeholder="$t('knowledgeEditor.advanced.questionGeneration.instructionsPlaceholder')"
               :maxlength="4000"
@@ -119,7 +119,7 @@
           <label>{{ $t('knowledgeEditor.advanced.autoTag.policyLabel') }}</label>
           <p class="desc">{{ $t('knowledgeEditor.advanced.autoTag.policyDescription') }}</p>
         </div>
-        <t-textarea
+        <SafeTextarea
           v-model="localAutoTag.policy"
           :maxlength="4000"
           :autosize="{ minRows: 3, maxRows: 8 }"
@@ -134,7 +134,7 @@
           <p class="desc">{{ $t('knowledgeEditor.advanced.tableMetadataInstructions.description') }}</p>
         </div>
         <div class="setting-control">
-          <t-textarea
+          <SafeTextarea
             :model-value="tableMetadataInstructions"
             :placeholder="$t('knowledgeEditor.advanced.tableMetadataInstructions.placeholder')"
             :maxlength="4000"
@@ -149,6 +149,7 @@
 </template>
 
 <script setup lang="ts">
+import SafeTextarea from '@/components/SafeTextarea.vue'
 import { ref, watch } from 'vue'
 import ModelSelector from '@/components/ModelSelector.vue'
 

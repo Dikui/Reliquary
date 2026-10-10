@@ -119,7 +119,7 @@
                       </div>
                       <div class="form-item">
                         <label class="form-label">{{ $t('knowledgeEditor.basic.descriptionLabel') }}</label>
-                        <t-textarea
+                        <SafeTextarea
                           v-model="formData.description"
                           :placeholder="$t('knowledgeEditor.basic.descriptionPlaceholder')"
                           :maxlength="200"
@@ -228,7 +228,7 @@
                           <p class="desc">{{ $t('knowledgeEditor.advanced.multimodal.customInstructionsDescription') }}</p>
                         </div>
                         <div class="setting-control setting-control-full">
-                          <t-textarea v-model="formData.multimodalConfig.customInstructions"
+                          <SafeTextarea v-model="formData.multimodalConfig.customInstructions"
                             :placeholder="$t('knowledgeEditor.advanced.multimodal.customInstructionsPlaceholder')"
                             :maxlength="4000" :autosize="{ minRows: 3, maxRows: 8 }" />
                         </div>
@@ -288,6 +288,7 @@
 </template>
 
 <script setup lang="ts">
+import SafeTextarea from '@/components/SafeTextarea.vue'
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { KB_EDITOR_FOCUS_SECTION_EVENT } from '@/config/editorNavigation'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'

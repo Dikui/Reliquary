@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { safeTextareaTestModule } from '../../../components/__tests__/safeTextareaStub'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -60,6 +61,7 @@ for (const locale of ['zh-CN', 'en-US']) {
       test(`${locale}: PNG uploads with multimodal=${enabled} and model=${modelId || 'none'}`, async () => {
         const confirmations: any[] = []
         const component = loadComponent(new URL('./UploadConfirmDialog.vue', import.meta.url), {
+          '@/components/SafeTextarea.vue': safeTextareaTestModule,
           vue: {...vue, Teleport: pass, Transition: pass, vShow: {beforeMount() {}, updated() {}}},
           'tdesign-vue-next': {MessagePlugin:{warning(){}}},
           '@/components/ModelSelector.vue': nullComponent,

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { createImeEnterGuard } from "@/utils/imeEnter";
+import SafeTextarea from '@/components/SafeTextarea.vue'
 import { useAuthStore } from '@/stores/auth';
 import { ref, onMounted, onUnmounted, computed, watch, nextTick, h } from "vue";
 import { storeToRefs } from 'pinia';
@@ -1200,11 +1202,15 @@ const onInput = (val: string | InputEvent) => {
   }
 };
 
+const imeEnterGuard = createImeEnterGuard();
+
 const onCompositionStart = () => {
+  imeEnterGuard.start();
   isComposing.value = true;
 };
 
 const onCompositionEnd = (e: CompositionEvent) => {
+  imeEnterGuard.end();
   isComposing.value = false;
   // 手动触发 onInput 逻辑
   // 注意：在 compositionend 时，v-model 可能还没更新，或者已经更新但我们需要用最新值
@@ -1806,7 +1812,8 @@ const clearPendingUploads = () => {
   uploadedAttachments.value = [];
 }
 
-const onKeydown = (val: string, event: { e: { preventDefault(): unknown; keyCode: number; shiftKey: any; ctrlKey: any; }; }) => {
+const onKeydown = (val: string, event: { e: KeyboardEvent }) => {
+  if (imeEnterGuard.shouldIgnore(event.e)) return;
   if (showMention.value) {
     if (event.e.keyCode === 38) { // Up
       event.e.preventDefault();
@@ -2071,7 +2078,7 @@ defineExpose({
       </div>
 
       <!-- 实际输入框 -->
-      <t-textarea ref="textareaRef" v-model="query" :placeholder="inputPlaceholder" name="description" :autosize="true"
+      <SafeTextarea ref="textareaRef" v-model="query" :placeholder="inputPlaceholder" name="description" :autosize="true"
         @keydown="onKeydown" @input="onInput" @compositionstart="onCompositionStart" @compositionend="onCompositionEnd"
         @paste="onPaste" />
 

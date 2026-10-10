@@ -73,7 +73,7 @@
           <p v-if="mode === 'edit'" class="form-desc code-import__warn">
             {{ t('mcpServiceDialog.codeImport.editOverwriteHint') }}
           </p>
-          <t-textarea
+          <SafeTextarea
             v-model="codeImportText"
             :autosize="{ minRows: 5, maxRows: 14 }"
             :placeholder="codeImportPlaceholder"
@@ -99,7 +99,7 @@
 
         <div class="form-item">
           <label class="form-label">{{ t('mcpServiceDialog.description') }}</label>
-          <t-textarea
+          <SafeTextarea
             v-model="formData.description"
             :autosize="{ minRows: 2, maxRows: 5 }"
             :placeholder="t('mcpServiceDialog.descriptionPlaceholder')"
@@ -324,6 +324,7 @@
 </template>
 
 <script setup lang="ts">
+import SafeTextarea from '@/components/SafeTextarea.vue'
 import { ref, watch, computed, nextTick } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import type { FormInstanceFunctions, FormRule } from 'tdesign-vue-next'

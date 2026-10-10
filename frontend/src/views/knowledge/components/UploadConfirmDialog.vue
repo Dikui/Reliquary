@@ -72,7 +72,7 @@
                   <div class="intake-source-fields">
                     <label class="intake-source-field"><span>{{ t('knowledgeBase.intakeAuthor') }}</span><t-input v-model="sourceInfo('manual').author" :placeholder="t('knowledgeBase.intakeAuthor')" /></label>
                     <label class="intake-source-field"><span>{{ t('knowledgeBase.intakePublisher') }}</span><t-input v-model="sourceInfo('manual').publisher" :placeholder="t('knowledgeBase.intakePublisher')" /></label>
-                    <label class="intake-source-field"><span>{{ t('knowledgeBase.intakeOriginalUrl') }}</span><t-textarea v-model="sourceInfo('manual').original_url" :placeholder="t('knowledgeBase.intakeOriginalUrl')" :autosize="{ minRows: 2, maxRows: 4 }" /></label>
+                    <label class="intake-source-field"><span>{{ t('knowledgeBase.intakeOriginalUrl') }}</span><SafeTextarea v-model="sourceInfo('manual').original_url" :placeholder="t('knowledgeBase.intakeOriginalUrl')" :autosize="{ minRows: 2, maxRows: 4 }" /></label>
                     <label class="intake-source-field"><span>{{ t('knowledgeBase.intakePublishedAt') }}</span><t-input v-model="sourceInfo('manual').published_at" :placeholder="t('knowledgeBase.intakePublishedAt')" /></label>
                   </div>
                 </div>
@@ -102,7 +102,7 @@
                     <div class="intake-source-fields">
                       <label class="intake-source-field"><span>{{ t('knowledgeBase.intakeAuthor') }}</span><t-input v-model="sourceInfo(urlSourceKey(url)).author" :placeholder="t('knowledgeBase.intakeAuthor')" /></label>
                       <label class="intake-source-field"><span>{{ t('knowledgeBase.intakePublisher') }}</span><t-input v-model="sourceInfo(urlSourceKey(url)).publisher" :placeholder="t('knowledgeBase.intakePublisher')" /></label>
-                      <label class="intake-source-field"><span>{{ t('knowledgeBase.intakeOriginalUrl') }}</span><t-textarea v-model="sourceInfo(urlSourceKey(url)).original_url" :placeholder="t('knowledgeBase.intakeOriginalUrl')" :autosize="{ minRows: 2, maxRows: 4 }" /></label>
+                      <label class="intake-source-field"><span>{{ t('knowledgeBase.intakeOriginalUrl') }}</span><SafeTextarea v-model="sourceInfo(urlSourceKey(url)).original_url" :placeholder="t('knowledgeBase.intakeOriginalUrl')" :autosize="{ minRows: 2, maxRows: 4 }" /></label>
                       <label class="intake-source-field"><span>{{ t('knowledgeBase.intakePublishedAt') }}</span><t-input v-model="sourceInfo(urlSourceKey(url)).published_at" :placeholder="t('knowledgeBase.intakePublishedAt')" /></label>
                     </div>
                   </li>
@@ -131,7 +131,7 @@
                     <div class="intake-source-fields">
                       <label class="intake-source-field"><span>{{ t('knowledgeBase.intakeAuthor') }}</span><t-input v-model="sourceInfo(fileSourceKey(file)).author" :placeholder="t('knowledgeBase.intakeAuthor')" /></label>
                       <label class="intake-source-field"><span>{{ t('knowledgeBase.intakePublisher') }}</span><t-input v-model="sourceInfo(fileSourceKey(file)).publisher" :placeholder="t('knowledgeBase.intakePublisher')" /></label>
-                      <label class="intake-source-field"><span>{{ t('knowledgeBase.intakeOriginalUrl') }}</span><t-textarea v-model="sourceInfo(fileSourceKey(file)).original_url" :placeholder="t('knowledgeBase.intakeOriginalUrl')" :autosize="{ minRows: 2, maxRows: 4 }" /></label>
+                      <label class="intake-source-field"><span>{{ t('knowledgeBase.intakeOriginalUrl') }}</span><SafeTextarea v-model="sourceInfo(fileSourceKey(file)).original_url" :placeholder="t('knowledgeBase.intakeOriginalUrl')" :autosize="{ minRows: 2, maxRows: 4 }" /></label>
                       <label class="intake-source-field"><span>{{ t('knowledgeBase.intakePublishedAt') }}</span><t-input v-model="sourceInfo(fileSourceKey(file)).published_at" :placeholder="t('knowledgeBase.intakePublishedAt')" /></label>
                     </div>
                   </li>
@@ -431,7 +431,7 @@
                             <p class="desc">{{ t('knowledgeEditor.advanced.multimodal.customInstructionsDescription') }}</p>
                           </div>
                           <div class="setting-control setting-control-full">
-                            <t-textarea
+                            <SafeTextarea
                               v-model="uiState.multimodalConfig.customInstructions"
                               :placeholder="t('knowledgeEditor.advanced.multimodal.customInstructionsPlaceholder')"
                               :maxlength="4000"
@@ -474,7 +474,7 @@
                             <p class="desc">{{ t('knowledgeEditor.advanced.questionGeneration.instructionsDescription') }}</p>
                           </div>
                           <div class="setting-control setting-control-full">
-                            <t-textarea
+                            <SafeTextarea
                               v-model="uiState.questionGenerationConfig.customInstructions"
                               :placeholder="t('knowledgeEditor.advanced.questionGeneration.instructionsPlaceholder')"
                               :maxlength="4000"
@@ -505,6 +505,7 @@
 </template>
 
 <script setup lang="ts">
+import SafeTextarea from '@/components/SafeTextarea.vue'
 import { ref, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'

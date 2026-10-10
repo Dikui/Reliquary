@@ -141,7 +141,7 @@
                         <p class="desc">{{ $t('agentEditor.desc.description') }}</p>
                       </div>
                       <div class="setting-control">
-                        <t-textarea v-model="formData.description"
+                        <SafeTextarea v-model="formData.description"
                           :placeholder="$t('agent.editor.descriptionPlaceholder')"
                           :autosize="{ minRows: 2, maxRows: 4 }" :disabled="isBuiltinAgent" />
                       </div>
@@ -196,7 +196,7 @@
                       <div class="setting-control setting-control-full" style="position: relative;">
                         <!-- Agent模式：统一提示词 -->
                         <div v-if="isAgentMode" class="textarea-with-template">
-                          <t-textarea ref="promptTextareaRef" v-model="formData.config.system_prompt"
+                          <SafeTextarea ref="promptTextareaRef" v-model="formData.config.system_prompt"
                             :placeholder="systemPromptPlaceholder" :autosize="{ minRows: 10, maxRows: 25 }"
                             @input="handlePromptInput" class="system-prompt-textarea" />
                           <PromptTemplateSelector type="agentSystemPrompt" position="corner"
@@ -205,7 +205,7 @@
                         </div>
                         <!-- 普通模式：单个提示词 -->
                         <div v-else class="textarea-with-template">
-                          <t-textarea ref="promptTextareaRef" v-model="formData.config.system_prompt"
+                          <SafeTextarea ref="promptTextareaRef" v-model="formData.config.system_prompt"
                             :placeholder="systemPromptPlaceholder" :autosize="{ minRows: 10, maxRows: 25 }"
                             @input="handlePromptInput" class="system-prompt-textarea" />
                           <PromptTemplateSelector type="systemPrompt" position="corner"
@@ -253,7 +253,7 @@
                       </div>
                       <div class="setting-control setting-control-full" style="position: relative;">
                         <div class="textarea-with-template">
-                          <t-textarea ref="contextTemplateTextareaRef" v-model="formData.config.context_template"
+                          <SafeTextarea ref="contextTemplateTextareaRef" v-model="formData.config.context_template"
                             :placeholder="contextTemplatePlaceholder" :autosize="{ minRows: 8, maxRows: 20 }"
                             @input="handleContextTemplateInput" class="system-prompt-textarea" />
                           <PromptTemplateSelector type="contextTemplate" position="corner"
@@ -324,7 +324,7 @@
                             </div>
 
                             <div class="textarea-with-template">
-                              <t-textarea ref="intentPromptTextareaRef" v-model="intentEditorValue"
+                              <SafeTextarea ref="intentPromptTextareaRef" v-model="intentEditorValue"
                                 class="system-prompt-textarea" :autosize="{ minRows: 10, maxRows: 25 }"
                                 :disabled="props.readOnly || !selectedIntent"
                                 :placeholder="currentIntentTemplate?.content || $t('agentEditor.intentPrompts.promptPlaceholder')"
@@ -377,7 +377,7 @@
                         </div>
                         <div class="setting-control setting-control-full" style="position: relative;">
                           <div class="textarea-with-template">
-                            <t-textarea ref="rewriteSystemTextareaRef" v-model="formData.config.rewrite_prompt_system"
+                            <SafeTextarea ref="rewriteSystemTextareaRef" v-model="formData.config.rewrite_prompt_system"
                               :placeholder="defaultRewritePromptSystem || $t('agent.editor.rewritePromptSystemPlaceholder')"
                               :autosize="{ minRows: 4, maxRows: 10 }" @input="handleRewriteSystemInput" />
                             <PromptTemplateSelector type="rewrite" position="corner" @select="handleRewriteTemplateSelect"
@@ -422,7 +422,7 @@
                         </div>
                         <div class="setting-control setting-control-full" style="position: relative;">
                           <div class="textarea-with-template">
-                            <t-textarea ref="rewriteUserTextareaRef" v-model="formData.config.rewrite_prompt_user"
+                            <SafeTextarea ref="rewriteUserTextareaRef" v-model="formData.config.rewrite_prompt_user"
                               :placeholder="defaultRewritePromptUser || $t('agent.editor.rewritePromptUserPlaceholder')"
                               :autosize="{ minRows: 4, maxRows: 10 }" @input="handleRewriteUserInput" />
                             <PromptTemplateSelector type="rewrite" position="corner" @select="handleRewriteTemplateSelect"
@@ -473,7 +473,7 @@
                         </div>
                         <div class="setting-control setting-control-full">
                           <div class="textarea-with-template">
-                            <t-textarea v-model="formData.config.fallback_response"
+                            <SafeTextarea v-model="formData.config.fallback_response"
                               :placeholder="defaultFallbackResponse || $t('agent.editor.fallbackResponsePlaceholder')"
                               :autosize="{ minRows: 2, maxRows: 6 }" />
                             <PromptTemplateSelector type="fallback" position="corner" fallbackMode="fixed"
@@ -502,7 +502,7 @@
                         </div>
                         <div class="setting-control setting-control-full" style="position: relative;">
                           <div class="textarea-with-template">
-                            <t-textarea ref="fallbackPromptTextareaRef" v-model="formData.config.fallback_prompt"
+                            <SafeTextarea ref="fallbackPromptTextareaRef" v-model="formData.config.fallback_prompt"
                               :placeholder="defaultFallbackPrompt || $t('agent.editor.fallbackPromptPlaceholder')"
                               :autosize="{ minRows: 4, maxRows: 10 }" @input="handleFallbackPromptInput" />
                             <PromptTemplateSelector type="fallback" position="corner" fallbackMode="model"
@@ -1277,6 +1277,7 @@
 </template>
 
 <script setup lang="ts">
+import SafeTextarea from '@/components/SafeTextarea.vue'
 import { normalizeToolNames } from '@/utils/toolNames';
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';

@@ -46,12 +46,13 @@
         <t-button v-if="!disabled" variant="outline" @click="draft.unit_families.push({ key: '', canonical_unit: '', units: [] })">{{ t('knowledgeDomains.addUnitFamily') }}</t-button>
       </t-tab-panel>
       <t-tab-panel value="hints" :label="t('knowledgeDomains.extractionHints')">
-        <label class="template-label"><span>{{ t('knowledgeDomains.hintsDescription') }}</span><t-textarea v-model="draft.extraction_hints" :disabled="disabled" :autosize="{ minRows: 6, maxRows: 16 }" /></label>
+        <label class="template-label"><span>{{ t('knowledgeDomains.hintsDescription') }}</span><SafeTextarea v-model="draft.extraction_hints" :disabled="disabled" :autosize="{ minRows: 6, maxRows: 16 }" /></label>
       </t-tab-panel>
     </t-tabs>
   </div>
 </template>
 <script setup lang="ts">
+import SafeTextarea from '@/components/SafeTextarea.vue'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { KnowledgeDomainInput } from '@/api/knowledge-domains'

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 // @ts-nocheck
+import SafeTextarea from '@/components/SafeTextarea.vue'
 import { marked } from "marked";
 import markedKatex from 'marked-katex-extension';
 import 'katex/dist/katex.min.css';
@@ -1863,7 +1864,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
             </div>
           </div>
           <div v-if="summaryEditing" class="summary_editor">
-            <t-textarea v-model="summaryDraft" :autosize="{ minRows: 4, maxRows: 10 }"
+            <SafeTextarea v-model="summaryDraft" :autosize="{ minRows: 4, maxRows: 10 }"
               :placeholder="$t('knowledgeBase.noDocumentSummary')" />
             <div class="summary_editor_actions">
               <t-button size="small" variant="outline" :disabled="summarySaving" @click="cancelSummaryEdit">
@@ -2201,7 +2202,7 @@ const handleChunkPageChange = (pageInfo: { current: number }) => {
                     <t-icon name="edit" size="14px" />
                     <span>{{ $t('knowledgeBase.editChunkContent') }}</span>
                   </div>
-                  <t-textarea v-model="chunkDraft" :autosize="{ minRows: 6, maxRows: 20 }" autofocus />
+                  <SafeTextarea v-model="chunkDraft" :autosize="{ minRows: 6, maxRows: 20 }" autofocus />
                   <div class="chunk-editor-actions">
                     <t-button size="small" variant="outline" :disabled="savingChunkId === chunk.original.id"
                       @click="editingChunkId = ''">{{ $t('common.cancel') }}</t-button>

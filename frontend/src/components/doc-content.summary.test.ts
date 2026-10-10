@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { safeTextareaTestModule } from './__tests__/safeTextareaStub'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import test from 'node:test'
@@ -86,6 +87,7 @@ async function renderDetails(locale: keyof typeof messages, summary_status: stri
     },
     '@/utils/security': {}, '@/utils/markdownTableNormalize': {}, '@/utils/mermaidViewer': {}, '@/utils/textLineDiff': {},
     '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: options.loggedIn ?? true }) },
+    '@/components/SafeTextarea.vue': safeTextareaTestModule,
     '@/components/document-preview.vue': emptyModule,
     '@/components/knowledge-processing-timeline.vue': emptyModule,
     '@/views/knowledge/components/RepostSources.vue': emptyModule,

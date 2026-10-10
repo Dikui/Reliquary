@@ -20,12 +20,17 @@
     </div>
     <div class="setting-row">
       <div class="setting-info"><label>{{ t('integrations.api.playgroundTitle') }}</label><p>{{ t('integrations.api.playgroundDesc') }}</p></div>
-      <t-button variant="outline" @click="playgroundVisible = true">{{ t('integrations.api.playgroundOpen') }}</t-button>
+      <t-button variant="outline" @click="openPlayground">{{ t('integrations.api.playgroundOpen') }}</t-button>
     </div>
     <SettingDrawer v-model:visible="editingVisible" :title="editingId ? t('integrations.api.editApiKey') : t('integrations.api.createApiKey')" :confirm-text="t('common.save')" :confirm-loading="saving" storage-key="setting-drawer:width:api-key" width="560px" @confirm="save">
       <t-form ref="formRef" :data="form" :rules="rules" layout="vertical" label-align="top" @submit.prevent>
         <t-form-item :label="t('integrations.api.apiKeyName')" name="name"><t-input v-model="form.name" :disabled="saving" /></t-form-item>
-        <t-form-item :label="t('integrations.api.apiKeyExpiresAt')" name="expiresAt"><t-input v-model="form.expiresAt" type="datetime-local" :disabled="saving" /><p>{{ t('integrations.api.apiKeyExpiresAtHint') }}</p></t-form-item>
+        <t-form-item :label="t('integrations.api.apiKeyExpiresAt')" name="expiresAt">
+          <t-date-picker v-model="expiryPickerValue" class="api-key-expiry" enable-time-picker clearable allow-input
+            format="YYYY-MM-DD HH:mm" value-type="YYYY-MM-DD HH:mm"
+            :time-picker-props="{ format: 'HH:mm' }" :popup-props="{ zIndex: 6200 }" :disabled="saving" />
+          <p>{{ t('integrations.api.apiKeyExpiresAtHint') }}</p>
+        </t-form-item>
         <t-alert v-if="formError" theme="error" :message="formError" />
       </t-form>
     </SettingDrawer>
@@ -36,7 +41,8 @@
     <SettingDrawer v-model:visible="playgroundVisible" :title="t('integrations.api.playgroundTitle')" :confirm-text="t('integrations.api.playgroundRun')" :confirm-loading="running" storage-key="setting-drawer:width:api-playground" width="680px" @confirm="runQuery">
       <t-form :data="playground" layout="vertical" label-align="top" @submit.prevent>
         <t-form-item :label="t('integrations.api.apiKeyValue')"><t-input v-model="playground.apiKey" type="password" autocomplete="off" :disabled="running" /></t-form-item>
-        <t-form-item :label="t('integrations.api.playgroundQuestion')"><t-textarea v-model="playground.query" :autosize="{ minRows: 3, maxRows: 8 }" :disabled="running" /></t-form-item>
+        <t-form-item :label="t('integrations.api.playgroundKnowledgeBase')"><t-select v-model="playground.knowledgeBaseId" :options="knowledgeBaseOptions" :loading="knowledgeBasesLoading" :disabled="running || knowledgeBasesLoading" :placeholder="t('integrations.api.playgroundKnowledgeBasePlaceholder')" clearable /></t-form-item>
+        <t-form-item :label="t('integrations.api.playgroundQuestion')"><SafeTextarea v-model="playground.query" :autosize="{ minRows: 3, maxRows: 8 }" :disabled="running" /></t-form-item>
       </t-form>
       <t-alert v-if="playgroundError" theme="error" :message="playgroundError" />
       <pre v-if="playgroundResult" class="query-result">{{ playgroundResult }}</pre>
@@ -46,12 +52,14 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
+import { DialogPlugin, MessagePlugin, type DateValue, type DateMultipleValue } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import SettingDrawer from '@/components/settings/SettingDrawer.vue'
+import SafeTextarea from '@/components/SafeTextarea.vue'
 import { apiKeyErrorMessage } from '@/utils/personalServerError'
 import { getApiBaseUrl } from '@/utils/api-base'
 import { copyWithToast } from '@/utils/clipboard'
+import { listKnowledgeBases } from '@/api/knowledge-base'
 import { listTenantAPIKeys, createTenantAPIKey, updateTenantAPIKey, deleteTenantAPIKey, type TenantAPIKey } from '@/api/tenant'
 
 const { t } = useI18n()
@@ -72,11 +80,18 @@ const formRef = ref()
 const saving = ref(false)
 const formError = ref('')
 const form = reactive({ name: '', expiresAt: '' })
+const expiryPickerValue = computed({
+  get: () => form.expiresAt.replace('T', ' '),
+  set: (value: DateValue | DateMultipleValue) => { form.expiresAt = typeof value === 'string' ? value.replace(' ', 'T') : '' },
+})
 const rules = computed(() => ({ name: [{ required: true, message: t('integrations.api.apiKeyNameRequired'), type: 'error' as const }] }))
 const createdVisible = ref(false)
 const createdToken = ref('')
 const playgroundVisible = ref(false)
-const playground = reactive({ apiKey: '', query: '' })
+const playground = reactive({ apiKey: '', query: '', knowledgeBaseId: '' })
+const knowledgeBaseOptions = ref<Array<{ label: string; value: string }>>([])
+const knowledgeBasesLoading = ref(false)
+const knowledgeBasesLoaded = ref(false)
 const running = ref(false)
 const playgroundError = ref('')
 const playgroundResult = ref('')
@@ -130,13 +145,37 @@ function revoke(key: TenantAPIKey) {
     },
   })
 }
+async function openPlayground() {
+  playgroundVisible.value = true
+  knowledgeBasesLoading.value = true
+  playgroundError.value = ''
+  knowledgeBaseOptions.value = []
+  knowledgeBasesLoaded.value = false
+  try {
+    const response = await listKnowledgeBases()
+    if (!response.success) throw new Error(response.message)
+    knowledgeBasesLoaded.value = true
+    knowledgeBaseOptions.value = (response.data || []).map((kb: { id: string; name: string }) => ({ label: kb.name, value: kb.id }))
+    if (!knowledgeBaseOptions.value.some(option => option.value === playground.knowledgeBaseId)) {
+      playground.knowledgeBaseId = knowledgeBaseOptions.value.length === 1 ? knowledgeBaseOptions.value[0]!.value : ''
+    }
+    if (!knowledgeBaseOptions.value.length) playgroundError.value = t('integrations.api.playgroundNoKnowledgeBases')
+  } catch { playgroundError.value = t('integrations.api.playgroundLoadKnowledgeBasesFailed') }
+  finally { knowledgeBasesLoading.value = false }
+}
 async function runQuery() {
-  if (running.value) return
+  if (running.value || knowledgeBasesLoading.value) return
   if (!playground.apiKey.trim() || !playground.query.trim()) { playgroundError.value = t('integrations.api.playgroundNeedQuestionAndKey'); return }
+  if (!knowledgeBaseOptions.value.some(option => option.value === playground.knowledgeBaseId)) {
+    const hint = !knowledgeBasesLoaded.value ? 'playgroundLoadKnowledgeBasesFailed'
+      : knowledgeBaseOptions.value.length ? 'playgroundNeedKnowledgeBase' : 'playgroundNoKnowledgeBases'
+    playgroundError.value = t(`integrations.api.${hint}`)
+    return
+  }
   running.value = true
   playgroundError.value = ''
   try {
-    const response = await fetch(`${apiBaseUrl.value}/api/v1/knowledge-search`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': playground.apiKey.trim() }, body: JSON.stringify({ query: playground.query.trim() }) })
+    const response = await fetch(`${apiBaseUrl.value}/api/v1/knowledge-search`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': playground.apiKey.trim() }, body: JSON.stringify({ query: playground.query.trim(), knowledge_base_ids: [playground.knowledgeBaseId] }) })
     const body = await response.json()
     if (!response.ok) throw new Error(body.message || body.error?.message || t('integrations.api.playgroundRunFailed'))
     playgroundResult.value = JSON.stringify(body, null, 2)
@@ -156,6 +195,7 @@ onMounted(load)
 .setting-control code { min-width: 0; }
 .setting-control .t-button { flex-shrink: 0; }
 .api-table-shell { min-width: 0; max-width: 100%; }
+.api-key-expiry { width: 100%; min-width: 0; }
 .token-value { margin-top: 16px; }
 code { overflow-wrap: anywhere; }
 .query-result { overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }

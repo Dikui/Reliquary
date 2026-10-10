@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { safeTextareaTestModule } from '../components/__tests__/safeTextareaStub'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -25,6 +26,7 @@ async function componentScenario(path: string, locale: 'zh-CN' | 'en-US', module
   assert.deepEqual(template.errors, [])
   const t = translator(locale)
   const mocks: Record<string, unknown> = {
+    '@/components/SafeTextarea.vue': safeTextareaTestModule,
     'vue-i18n': { useI18n: () => ({ t, tm: () => [], locale: ref(locale) }) },
     '@/utils/personalServerError': personalError,
     '@/stores/auth': { useAuthStore: () => ({ currentTenantId: '1', isLoggedIn: false }) },
@@ -69,6 +71,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     const requests: any[] = []
     const { state } = await componentScenario('./integrations/ApiIntegrationSettings.vue', locale, {
       'tdesign-vue-next': { MessagePlugin: { success() {} } },
+      '@/api/knowledge-base': { listKnowledgeBases: async () => ({ success: true, data: [] }) },
       '@/api/tenant': {
         createTenantAPIKey: async (payload: object) => { requests.push({ payload }); return { success: true, data: { token: 'test-key' } } },
         listTenantAPIKeys: async () => ({ success: true, data: [] }),

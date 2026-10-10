@@ -11,7 +11,7 @@
       <section class="strategy-evaluation-input">
         <h3>{{ t('knowledgeStrategy.evaluation.title') }}</h3>
         <p>{{ t('knowledgeStrategy.evaluation.intro') }}</p>
-        <t-textarea v-model="evaluationText" :placeholder="t('knowledgeStrategy.evaluation.format')" :autosize="{ minRows: 4, maxRows: 8 }" />
+        <SafeTextarea v-model="evaluationText" :placeholder="t('knowledgeStrategy.evaluation.format')" :autosize="{ minRows: 4, maxRows: 8 }" />
         <p v-if="evaluationInputError" class="strategy-evaluation__error">{{ evaluationInputError }}</p>
       </section>
       <div class="strategy-reprocess">
@@ -102,6 +102,7 @@
 </template>
 
 <script setup lang="ts">
+import SafeTextarea from '@/components/SafeTextarea.vue'
 import { formatCountCopy } from '@/i18n/countCopy'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'

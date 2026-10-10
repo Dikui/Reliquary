@@ -47,7 +47,7 @@
               </t-button>
             </div>
           </div>
-          <t-textarea
+          <SafeTextarea
             v-model="sample"
             :placeholder="$t('knowledgeEditor.chunking.debug.samplePlaceholder')"
             :autosize="{ minRows: 6, maxRows: 12 }"
@@ -207,6 +207,7 @@
 </template>
 
 <script setup lang="ts">
+import SafeTextarea from '@/components/SafeTextarea.vue'
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'

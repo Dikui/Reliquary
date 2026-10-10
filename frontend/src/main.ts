@@ -1,3 +1,4 @@
+import { installImeEnterGuard } from "./utils/imeEnter";
 import { createApp } from "vue";
 import { createPinia } from "pinia";
 import App from "./App.vue";
@@ -54,6 +55,8 @@ async function bootstrap() {
 
   // 等首屏路由（含导航守卫、显式 QA 自动登录）完成后再挂载，避免先闪默认页再跳转
   await router.isReady();
+  const removeImeEnterGuard = installImeEnterGuard(document);
+  app.onUnmount(removeImeEnterGuard);
   app.mount("#app");
   installAutofillGuard();
 }

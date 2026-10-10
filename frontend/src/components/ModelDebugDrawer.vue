@@ -78,7 +78,7 @@
           <h4 class="setting-drawer__section-title">{{ $t('modelSettings.debug.groupInput') }}</h4>
           <div class="form-item">
             <label class="form-label">{{ inputLabel }}</label>
-            <t-textarea
+            <SafeTextarea
               v-model="input"
               :placeholder="inputPlaceholder"
               :autosize="{ minRows: 4, maxRows: 8 }"
@@ -87,7 +87,7 @@
 
           <div v-if="selectedModel.type === 'Rerank'" class="form-item">
             <label class="form-label">{{ $t('modelSettings.debug.documents') }}</label>
-            <t-textarea
+            <SafeTextarea
               v-model="documentsText"
               :placeholder="$t('modelSettings.debug.documentsPlaceholder')"
               :autosize="{ minRows: 4, maxRows: 8 }"
@@ -132,7 +132,7 @@
           </div>
           <div class="form-item">
             <label class="form-label">{{ $t('modelSettings.debug.systemPrompt') }}</label>
-            <t-textarea
+            <SafeTextarea
               v-model="systemPrompt"
               :placeholder="$t('modelSettings.debug.systemPromptPlaceholder')"
               :autosize="{ minRows: 2, maxRows: 4 }"
@@ -197,6 +197,7 @@
 </template>
 
 <script setup lang="ts">
+import SafeTextarea from '@/components/SafeTextarea.vue'
 import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'

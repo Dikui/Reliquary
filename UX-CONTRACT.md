@@ -19,8 +19,9 @@ Reliquary serves a single user that collects source material and checks entities
 | Capability | Canonical owner | Source of truth | Allowed variants | Verification |
 | --- | --- | --- | --- | --- |
 | Select/Listbox | TDesign Select and TagInput | Existing TDesign installation and locale provider | Filtered, multiple and tag input | Frontend type check; browser verification required when available |
-| Date | Existing typed storage with native date input | KnowledgeWorkbench.vue | Existing native date picker accepts platform locale and geometry | Frontend type check |
+| Date | Existing typed storage with native date input; TDesign DatePicker for API Key expiry | KnowledgeWorkbench.vue and ApiIntegrationSettings.vue | Native date picker accepts platform locale and geometry; API Key expiry uses the active TDesign locale and minute precision | Frontend type check; API Key expiry submission tests |
 | Form | TDesign inputs and application validation | DomainFieldEditor.vue and domainTemplate.ts | Domain creation, template editing, field consolidation | domainTemplate.test.ts |
+| Textarea autosize | SafeTextarea wrapping TDesign Textarea | SafeTextarea.vue and utils/textareaAutosize.ts | Boolean autosize or minRows/maxRows, including conditional forms and dialogs | Actual component mount and height regression tests |
 | Scrollbar | Global application theme stylesheet | DESIGN.md and frontend/src/assets/theme/theme.css | Stable gutter for bounded regions | Premium static audit; browser verification required when available |
 | Toast | TDesign MessagePlugin | Existing settings workflows | Success, warning, error and information | Frontend type check |
 | Model tiers | ModelTierEditor and ModelSelector | Model routing API and existing model catalogue | Global default, domain override and knowledge base override | Model preview tests; frontend checks; browser verification |
@@ -52,7 +53,7 @@ The settings dialog uses transient local search, tab and pagination state. Domai
 
 ## Layout and interaction
 
-The settings content owns vertical scrolling. Long template forms keep their natural height. New controls use TDesign keyboard behavior, visible focus, disabled and busy states, and application-owned dialogs. New icon-only actions have localized labels. Chinese input composition does not submit context queries. Textareas resize through their existing autosize owner and cannot be manually resized.
+The settings content owns vertical scrolling. Long template forms keep their natural height. New controls use TDesign keyboard behavior, visible focus, disabled and busy states, and application-owned dialogs. New icon-only actions have localized labels. Chinese input composition does not submit context queries. Autosizing textareas use SafeTextarea to measure only mounted, connected, visible elements and stop pending work on unmount. They retain TDesign input behavior and minRows/maxRows, and cannot be manually resized. Domain table names wrap inside their existing column so the full name remains readable.
 
 Settings retain their desktop navigation order at narrow desktop widths. The settings-content container measures the usable content width after sidebar and padding: rows stack at 720px or less, controls fit the row, and dense tables retain local horizontal scrolling. The shared settings-layout.less owns the breakpoint and common row rules. Existing rules below 640px remain in place; dedicated mobile adaptation is outside this change.
 
@@ -65,7 +66,7 @@ Global model tier saves stay in space settings. Domain and knowledge base overri
 
 Merge suggestions use explicit load more with twenty rows per request and transient local status filters, consistent with other context lists. Scope and status changes invalidate old requests. Accepting names both objects and the workspace-wide consequences in the shared confirmation dialog. Rejecting keeps the objects separate. Both actions refresh the list, retain the filter and announce success through MessagePlugin. The signed-in user can inspect evidence and edit suggestions; the server validates authentication.
 
-Evidence cards and the source snapshot drawer display complete or partial extraction with processed and total segment counts. The same model-call table shows stage, tier and count in evidence and processing details. Existing native date fields remain platform owned as documented above. No new date picker, scrollbar owner or runtime token system is introduced.
+Evidence cards and the source snapshot drawer display complete or partial extraction with processed and total segment counts. The same model-call table shows stage, tier and count in evidence and processing details. Existing native date fields remain platform owned as documented above. API Key expiry uses TDesign DatePicker with time selection and the application's locale provider. Its form value keeps the existing local date-time format at minute precision, and submission retains the existing conversion to Unix seconds. Clearing expiry omits expires_at_unix when creating or updating a key, preserving the API's existing never-expire behavior. No new scrollbar owner or runtime token system is introduced.
 
 ## P4 source verification
 

@@ -1,5 +1,6 @@
 import { formatCountCopy } from '../../../i18n/countCopy'
 import assert from 'node:assert/strict'
+import { safeTextareaTestModule } from '../../../components/__tests__/safeTextareaStub'
 import test, { mock } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -84,6 +85,7 @@ async function renderWorkbench({
   const i18n = locale ? createI18n({ legacy: false, locale, messages: { 'zh-CN': zhCN, 'en-US': enUS } }) : null
   const reportComponent = reportMarkdownTestComponent()
   const modules: Record<string, unknown> = {
+    '@/components/SafeTextarea.vue': safeTextareaTestModule,
     vue: { ...require('vue'), onBeforeUnmount: (callback: () => void) => { cleanupCallbacks.push(callback) } },
     'tdesign-vue-next': { MessagePlugin: { success() {} } },
     'vue-i18n': { useI18n: () => i18n?.global || ({ t: (key: string, params?: object) => params ? `${key} ${JSON.stringify(params)}` : key }) },

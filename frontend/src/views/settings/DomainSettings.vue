@@ -13,7 +13,7 @@
         <t-tab-panel value="template" :label="t('knowledgeDomains.template')">
           <form novalidate class="domain-form" @submit.prevent="saveDomain">
             <label><span>{{ t('knowledgeDomains.name') }}</span><t-input v-model="draft.name" :disabled="saving" :maxlength="255" /></label>
-            <label><span>{{ t('knowledgeDomains.domainDescription') }}</span><t-textarea v-model="draft.description" :disabled="saving" :autosize="{ minRows: 2, maxRows: 6 }" /></label>
+            <label><span>{{ t('knowledgeDomains.domainDescription') }}</span><SafeTextarea v-model="draft.description" :disabled="saving" :autosize="{ minRows: 2, maxRows: 6 }" /></label>
             <t-alert v-if="selectedDomain?.is_builtin" theme="info" :message="t('knowledgeDomains.builtinHint')" />
             <DomainTemplateEditor v-model="draft" :disabled="saving" />
             <ModelTierEditor :model-value="draft.model_tiers || {}" scope="domain" :before-navigate="confirmLeave" :disabled="saving" @update:model-value="draft.model_tiers = $event" />
@@ -36,7 +36,7 @@
     <template v-else>
       <div class="domain-list-toolbar"><t-input v-model="search" clearable :placeholder="t('knowledgeDomains.search')" :aria-label="t('knowledgeDomains.search')" /><t-button variant="outline" :loading="loading" @click="loadDomains">{{ t('common.refresh') }}</t-button></div>
       <t-table row-key="id" :data="pagedDomains" :columns="domainColumns" :loading="loading" :empty="search ? t('knowledgeDomains.noResults') : t('knowledgeDomains.empty')">
-        <template #name="{ row }"><div class="domain-name"><t-button variant="text" @click="openDomain(row)">{{ row.name }}</t-button><t-tag v-if="row.is_builtin" size="small" variant="light">{{ t('knowledgeDomains.builtin') }}</t-tag></div></template>
+        <template #name="{ row }"><div class="domain-name"><t-button class="domain-name-link" variant="text" @click="openDomain(row)">{{ row.name }}</t-button><t-tag v-if="row.is_builtin" size="small" variant="light">{{ t('knowledgeDomains.builtin') }}</t-tag></div></template>
         <template #types="{ row }"><span>{{ (row.entity_types || []).join('、') || t('knowledgeDomains.allTypes') }}</span></template>
         <template #actions="{ row }"><div class="table-actions"><t-button variant="text" @click="openDomain(row)">{{ t('common.edit') }}</t-button><t-tooltip :content="row.is_builtin ? t('knowledgeDomains.builtinHint') : t('knowledgeDomains.deleteHint')"><t-button theme="danger" variant="text" :disabled="row.is_builtin || deletingId === row.id" :loading="deletingId === row.id" @click="confirmRemove(row)">{{ t('common.delete') }}</t-button></t-tooltip></div></template>
       </t-table>
@@ -58,6 +58,7 @@ import { useI18n } from 'vue-i18n'
 import { useConfirmDelete } from '@/components/settings/useConfirmDelete'
 import { createDomainField, createKnowledgeDomain, deleteKnowledgeDomain, getKnowledgeDomain, listDomainOpenFields, listKnowledgeDomains, mapDomainOpenField, updateKnowledgeDomain, type DomainEnvelope, type DomainOpenField, type KnowledgeDomain, type KnowledgeDomainInput } from '@/api/knowledge-domains'
 import ModelTierEditor from '@/components/ModelTierEditor.vue'
+import SafeTextarea from '@/components/SafeTextarea.vue'
 import DomainFieldEditor from './DomainFieldEditor.vue'
 import DomainTemplateEditor from './DomainTemplateEditor.vue'
 import { copyDomainInput, emptyDomainField, emptyKnowledgeDomain, templateFieldFromOpenField, validateDomainInput } from './domainTemplate'
@@ -182,6 +183,9 @@ onBeforeUnmount(() => { listRequest++; fieldsRequest++ })
 .domain-header h2 { margin: 0; font-size: 20px; }
 .domain-header p, .consolidation-header p { color: var(--td-text-color-secondary); line-height: 1.6; }
 .domain-header > div, .domain-name { min-width: 0; }
+.domain-name-link { min-width: 0; max-width: 100%; height: auto; min-height: var(--td-comp-size-m); white-space: normal; }
+.domain-name-link :deep(.t-button__text) { display: block; min-width: 0; white-space: normal; overflow-wrap: anywhere; text-align: left; }
+.domain-name :deep(.t-tag) { flex-shrink: 0; }
 .domain-list-toolbar :deep(.t-input__wrap) { max-width: 340px; }
 .domain-form, .mapping-form { display: flex; flex-direction: column; gap: 18px; padding-top: 18px; }
 .domain-form > label, .mapping-form > label { display: flex; flex-direction: column; gap: 6px; }

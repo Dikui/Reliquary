@@ -488,7 +488,7 @@
                 <label><span>{{ t('knowledgeWorkbench.workflows.config.timezone') }}</span><t-input v-model="step.config.timezone" placeholder="Asia/Shanghai" /></label>
                 <label v-if="!step.config.window"><span>{{ t('knowledgeWorkbench.workflows.config.timeFrom') }}</span><input v-model="step.config.time_from" class="native-input" type="date" /></label>
                 <label v-if="!step.config.window"><span>{{ t('knowledgeWorkbench.workflows.config.timeTo') }}</span><input v-model="step.config.time_to" class="native-input" type="date" /></label>
-                <label class="span-two"><span>{{ t('knowledgeWorkbench.workflows.config.prompt') }}</span><t-textarea v-model="step.config.prompt" :autosize="{ minRows: 2, maxRows: 5 }" /></label>
+                <label class="span-two"><span>{{ t('knowledgeWorkbench.workflows.config.prompt') }}</span><SafeTextarea v-model="step.config.prompt" :autosize="{ minRows: 2, maxRows: 5 }" /></label>
               </template>
 
 
@@ -674,11 +674,11 @@
     <t-drawer v-model:visible="correctionVisible" :header="t('knowledgeWorkbench.correctionTitle')" size="520px" :footer="false">
       <div v-if="editingFact" class="drawer-form">
         <p>{{ t('knowledgeWorkbench.correctionIntro', { predicate: editingFact.fact.predicate }) }}</p>
-        <label><span>{{ t('knowledgeWorkbench.correctionValue') }}</span><t-textarea v-model="editingFact.value" :autosize="{ minRows: 2, maxRows: 4 }" /></label>
+        <label><span>{{ t('knowledgeWorkbench.correctionValue') }}</span><SafeTextarea v-model="editingFact.value" :autosize="{ minRows: 2, maxRows: 4 }" /></label>
         <label><span>{{ t('knowledgeWorkbench.correctionValueType') }}</span><t-select v-model="editingFact.valueType" :options="valueTypeOptions" /></label>
         <label><span>{{ t('knowledgeWorkbench.correctionUnit') }}</span><t-input v-model.trim="editingFact.unit" /></label>
-        <label><span>{{ t('knowledgeWorkbench.correctionQuote') }}</span><t-textarea v-model="editingFact.quote" :autosize="{ minRows: 2, maxRows: 4 }" /></label>
-        <label><span>{{ t('knowledgeWorkbench.correctionNote') }}</span><t-textarea v-model="editingFact.correctionNote" :autosize="{ minRows: 2, maxRows: 4 }" /></label>
+        <label><span>{{ t('knowledgeWorkbench.correctionQuote') }}</span><SafeTextarea v-model="editingFact.quote" :autosize="{ minRows: 2, maxRows: 4 }" /></label>
+        <label><span>{{ t('knowledgeWorkbench.correctionNote') }}</span><SafeTextarea v-model="editingFact.correctionNote" :autosize="{ minRows: 2, maxRows: 4 }" /></label>
         <label><span>{{ t('knowledgeWorkbench.correctionFrom') }}</span><input v-model="editingFact.effectiveFrom" class="native-input" type="date" /></label>
         <label><span>{{ t('knowledgeWorkbench.correctionTo') }}</span><input v-model="editingFact.effectiveTo" class="native-input" type="date" /></label>
         <div class="drawer-form__actions">
@@ -705,6 +705,7 @@
 </template>
 
 <script setup lang="ts">
+import SafeTextarea from '@/components/SafeTextarea.vue'
 import { formatCountCopy } from '@/i18n/countCopy'
 import { computed, defineComponent, h, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'

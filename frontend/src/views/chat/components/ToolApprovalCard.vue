@@ -60,7 +60,7 @@
       </div>
 
       <div v-if="!resolved" class="interaction-args-block">
-        <t-textarea v-model="argsText" class="interaction-args-input" :autosize="{ minRows: 2, maxRows: 8 }"
+        <SafeTextarea v-model="argsText" class="interaction-args-input" :autosize="{ minRows: 2, maxRows: 8 }"
           placeholder="{}" @click.stop />
       </div>
 
@@ -70,6 +70,7 @@
 </template>
 
 <script setup lang="ts">
+import SafeTextarea from '@/components/SafeTextarea.vue'
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'

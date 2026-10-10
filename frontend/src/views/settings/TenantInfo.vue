@@ -92,7 +92,7 @@
             <!-- 编辑态：textarea + 保存/取消。Esc 取消、Ctrl/⌘+Enter 保存；
                textarea 上 Enter 默认换行更顺手，不接管 Enter 提交。 -->
             <div v-else class="inline-edit inline-edit-description">
-              <t-textarea v-model="editDescription"
+              <SafeTextarea v-model="editDescription"
                 :placeholder="$t('tenant.details.editDescriptionPlaceholder')" :maxlength="512"
                 :autosize="{ minRows: 2, maxRows: 6 }" :disabled="savingDescription" autofocus
                 class="inline-edit-textarea" @keydown="onEditDescriptionKeydown" />
@@ -169,6 +169,7 @@
 </template>
 
 <script setup lang="ts">
+import SafeTextarea from '@/components/SafeTextarea.vue'
 import { ref, computed, onMounted } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import GlobalModelTierSettings from './GlobalModelTierSettings.vue'

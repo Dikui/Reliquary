@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SafeTextarea from '@/components/SafeTextarea.vue'
 import { computed, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
@@ -102,7 +103,7 @@ async function save() {
     <t-form :data="form" layout="vertical" label-align="top" @submit.prevent>
       <t-form-item :label="t('datasource.nameLabel')" name="name"><t-input v-model="form.name" :disabled="submitting" /></t-form-item>
       <div class="rss-presets"><t-button v-for="[name, url, publisher, prefix] in rssPresets" :key="url" variant="outline" size="small" :disabled="submitting" @click="selectPreset(name, url, publisher, prefix)">{{ name }}</t-button></div>
-      <t-form-item :label="t('datasource.field.feedUrls')" name="feedUrls"><t-textarea v-model="form.feedUrls" :autosize="{ minRows: 3, maxRows: 8 }" :disabled="submitting" /><p>{{ t('datasource.field.feedUrlsHint') }}</p></t-form-item>
+      <t-form-item :label="t('datasource.field.feedUrls')" name="feedUrls"><SafeTextarea v-model="form.feedUrls" :autosize="{ minRows: 3, maxRows: 8 }" :disabled="submitting" /><p>{{ t('datasource.field.feedUrlsHint') }}</p></t-form-item>
       <t-form-item :label="t('datasource.field.feedPublisher')" name="publisher"><t-input v-model="form.publisher" :disabled="submitting" /></t-form-item>
       <t-form-item :label="t('datasource.field.articlePathPrefix')" name="articlePathPrefix"><t-input v-model="form.articlePathPrefix" :disabled="submitting" /><p>{{ t('datasource.field.articlePathPrefixHint') }}</p></t-form-item>
       <div v-if="configured && !replaceCredentials" class="credential-actions"><span>{{ t('credential.configured') }}</span><t-button variant="text" @click="replaceCredentials = true">{{ t('credential.update') }}</t-button><t-popconfirm :content="t('credential.confirmRemovePrompt')" @confirm="removeCredentials"><t-button variant="text" theme="danger">{{ t('credential.remove') }}</t-button></t-popconfirm></div>

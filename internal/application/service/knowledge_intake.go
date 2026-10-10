@@ -362,6 +362,20 @@ func (s *knowledgeService) clearIntakeSource(ctx context.Context, k *types.Knowl
 	if err != nil || intake == nil || intake.Decision == "approved" {
 		return err
 	}
+	// Upload configuration belongs to the processing attempt, even after
+	// its source is removed. Retain the raw value so unknown options survive.
+	var sourceMetadata map[string]json.RawMessage
+	if err := json.Unmarshal(k.Metadata, &sourceMetadata); err != nil {
+		return err
+	}
+	retainedMetadata := make(map[string]json.RawMessage)
+	if overrides, ok := sourceMetadata["process_overrides"]; ok {
+		retainedMetadata["process_overrides"] = overrides
+	}
+	metadata, err := json.Marshal(retainedMetadata)
+	if err != nil {
+		return err
+	}
 	releaser := knowledgeResourceOwners(s.resourceCatalog, k.ID)
 	refs := append([]string{k.FilePath, intake.OriginalPath}, intake.Images...)
 	seen := make(map[string]bool)
@@ -381,7 +395,7 @@ func (s *knowledgeService) clearIntakeSource(ctx context.Context, k *types.Knowl
 	}
 	intake.OriginalPath, intake.Images = "", nil
 	k.FilePath, k.Description = "", ""
-	k.Metadata, k.CustomMetadata = nil, nil
+	k.Metadata, k.CustomMetadata = types.JSON(metadata), nil
 	if err := k.SetIntakeMetadata(intake); err != nil {
 		return err
 	}
