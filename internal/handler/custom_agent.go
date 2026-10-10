@@ -55,17 +55,6 @@ type UpdateAgentRequest struct {
 }
 
 // CreateAgent godoc
-// @Summary      创建智能体
-// @Description  创建新的自定义智能体
-// @Tags         智能体
-// @Accept       json
-// @Produce      json
-// @Param        request  body      CreateAgentRequest  true  "智能体信息"
-// @Success      201      {object}  map[string]interface{}  "创建的智能体"
-// @Failure      400      {object}  errors.AppError         "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /agents [post]
 func (h *CustomAgentHandler) CreateAgent(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -116,18 +105,6 @@ func (h *CustomAgentHandler) CreateAgent(c *gin.Context) {
 }
 
 // GetAgent godoc
-// @Summary      获取智能体详情
-// @Description  根据ID获取智能体详情
-// @Tags         智能体
-// @Accept       json
-// @Produce      json
-// @Param        id   path      string  true  "智能体ID"
-// @Success      200  {object}  map[string]interface{}  "智能体详情"
-// @Failure      400  {object}  errors.AppError         "请求参数错误"
-// @Failure      404  {object}  errors.AppError         "智能体不存在"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /agents/{id} [get]
 func (h *CustomAgentHandler) GetAgent(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -163,16 +140,6 @@ func (h *CustomAgentHandler) GetAgent(c *gin.Context) {
 }
 
 // ListAgents godoc
-// @Summary      获取智能体列表
-// @Description  获取当前空间的所有智能体（包括内置智能体）
-// @Tags         智能体
-// @Accept       json
-// @Produce      json
-// @Success      200  {object}  map[string]interface{}  "智能体列表"
-// @Failure      500  {object}  errors.AppError         "服务器错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /agents [get]
 func (h *CustomAgentHandler) ListAgents(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -233,19 +200,6 @@ func enrichAgentCreatorNames(ctx context.Context, userSvc interfaces.UserService
 }
 
 // UpdateAgent godoc
-// @Summary      更新智能体
-// @Description  更新智能体的名称、描述和配置
-// @Tags         智能体
-// @Accept       json
-// @Produce      json
-// @Param        id       path      string              true  "智能体ID"
-// @Param        request  body      UpdateAgentRequest  true  "更新请求"
-// @Success      200      {object}  map[string]interface{}  "更新后的智能体"
-// @Failure      400      {object}  errors.AppError         "请求参数错误"
-// @Failure      403      {object}  errors.AppError         "无法修改内置智能体"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /agents/{id} [put]
 func (h *CustomAgentHandler) UpdateAgent(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -311,19 +265,6 @@ func (h *CustomAgentHandler) UpdateAgent(c *gin.Context) {
 }
 
 // DeleteAgent godoc
-// @Summary      删除智能体
-// @Description  删除指定的智能体
-// @Tags         智能体
-// @Accept       json
-// @Produce      json
-// @Param        id   path      string  true  "智能体ID"
-// @Success      200  {object}  map[string]interface{}  "删除成功"
-// @Failure      400  {object}  errors.AppError         "请求参数错误"
-// @Failure      403  {object}  errors.AppError         "无法删除内置智能体"
-// @Failure      404  {object}  errors.AppError         "智能体不存在"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /agents/{id} [delete]
 func (h *CustomAgentHandler) DeleteAgent(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -364,18 +305,6 @@ func (h *CustomAgentHandler) DeleteAgent(c *gin.Context) {
 }
 
 // CopyAgent godoc
-// @Summary      复制智能体
-// @Description  复制指定的智能体
-// @Tags         智能体
-// @Accept       json
-// @Produce      json
-// @Param        id   path      string  true  "智能体ID"
-// @Success      201  {object}  map[string]interface{}  "复制成功"
-// @Failure      400  {object}  errors.AppError         "请求参数错误"
-// @Failure      404  {object}  errors.AppError         "智能体不存在"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /agents/{id}/copy [post]
 func (h *CustomAgentHandler) CopyAgent(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -428,15 +357,6 @@ func (h *CustomAgentHandler) CopyAgent(c *gin.Context) {
 }
 
 // GetPlaceholders godoc
-// @Summary      获取占位符定义
-// @Description  获取所有可用的提示词占位符定义，按字段类型分组
-// @Tags         智能体
-// @Accept       json
-// @Produce      json
-// @Success      200  {object}  map[string]interface{}  "占位符定义"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /agents/placeholders [get]
 func (h *CustomAgentHandler) GetPlaceholders(c *gin.Context) {
 	// Return all placeholder definitions grouped by field type
 	c.JSON(http.StatusOK, gin.H{
@@ -454,15 +374,6 @@ func (h *CustomAgentHandler) GetPlaceholders(c *gin.Context) {
 }
 
 // GetAgentTypePresets godoc
-// @Summary      获取智能体类型预设列表
-// @Description  返回所有 smart-reasoning 下可用的智能体类型预设（RAG/Data Analysis/Custom），用于编辑器自动填充系统提示词、工具和 KB 兼容性
-// @Tags         智能体
-// @Accept       json
-// @Produce      json
-// @Success      200  {object}  map[string]interface{}  "预设列表"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /agents/type-presets [get]
 func (h *CustomAgentHandler) GetAgentTypePresets(c *gin.Context) {
 	ctx := c.Request.Context()
 	presets := types.ListAgentTypePresetsWithContext(ctx)
@@ -473,22 +384,6 @@ func (h *CustomAgentHandler) GetAgentTypePresets(c *gin.Context) {
 }
 
 // GetSuggestedQuestions godoc
-// @Summary      获取推荐问题
-// @Description  基于智能体关联的知识库，返回推荐问题供用户快捷提问
-// @Tags         智能体
-// @Accept       json
-// @Produce      json
-// @Param        id                  path      string  true   "智能体ID"
-// @Param        knowledge_base_ids  query     string  false  "知识库ID列表（逗号分隔），覆盖智能体默认配置"
-// @Param        knowledge_ids       query     string  false  "知识ID列表（逗号分隔），限定到具体文档"
-// @Param        tag_scopes          query     string  false  "带知识库归属的标签范围（JSON）"
-// @Param        limit               query     int     false  "返回数量上限（未传时使用智能体配置的开场问题数量，最大30）"
-// @Success      200                 {object}  map[string]interface{}  "推荐问题列表"
-// @Failure      400                 {object}  errors.AppError         "请求参数错误"
-// @Failure      404                 {object}  errors.AppError         "智能体不存在"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /agents/{id}/suggested-questions [get]
 func (h *CustomAgentHandler) GetSuggestedQuestions(c *gin.Context) {
 	ctx := c.Request.Context()
 

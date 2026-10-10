@@ -219,25 +219,6 @@ func (h *KnowledgeHandler) enqueueKnowledgeListReparse(
 }
 
 // CreateKnowledgeFromFile godoc
-// @Summary      从文件创建知识
-// @Description  上传文件并创建知识条目
-// @Tags         知识管理
-// @Accept       multipart/form-data
-// @Produce      json
-// @Param        id                path      string  true   "知识库ID"
-// @Param        file              formData  file    true   "上传的文件"
-// @Param        fileName          formData  string  false  "自定义文件名"
-// @Param        metadata          formData  string  false  "元数据JSON"
-// @Param        source_info       formData  string  false  "来源信息JSON"
-// @Param        enable_multimodel formData  bool    false  "启用多模态处理"
-// @Param        tag_ids       formData  string  false  "分类ID列表，逗号分隔"
-// @Param        process_config    formData  string  false  "处理配置JSON（KnowledgeProcessOverrides）"
-// @Success      200               {object}  map[string]interface{}  "创建的知识"
-// @Failure      400               {object}  errors.AppError         "请求参数错误"
-// @Failure      409               {object}  map[string]interface{}  "文件重复"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge-bases/{id}/knowledge/file [post]
 func (h *KnowledgeHandler) CreateKnowledgeFromFile(c *gin.Context) {
 	ctx := c.Request.Context()
 	logger.Info(ctx, "Start creating knowledge from file")
@@ -377,19 +358,6 @@ func (h *KnowledgeHandler) CreateKnowledgeFromFile(c *gin.Context) {
 }
 
 // CreateKnowledgeFromURL godoc
-// @Summary      从URL创建知识
-// @Description  从指定URL抓取内容并创建知识条目。当提供 file_name/file_type 或 URL 路径含已知文件扩展名时，自动切换为文件下载模式
-// @Tags         知识管理
-// @Accept       json
-// @Produce      json
-// @Param        id       path      string  true  "知识库ID"
-// @Param        request  body      object{url=string,file_name=string,file_type=string,enable_multimodel=bool,title=string,tag_ids=[]string}  true  "URL请求"
-// @Success      201      {object}  map[string]interface{}  "创建的知识"
-// @Failure      400      {object}  errors.AppError         "请求参数错误"
-// @Failure      409      {object}  map[string]interface{}  "URL重复"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge-bases/{id}/knowledge/url [post]
 func (h *KnowledgeHandler) CreateKnowledgeFromURL(c *gin.Context) {
 	ctx := c.Request.Context()
 	logger.Info(ctx, "Start creating knowledge from URL")
@@ -472,18 +440,6 @@ func (h *KnowledgeHandler) CreateKnowledgeFromURL(c *gin.Context) {
 }
 
 // CreateManualKnowledge godoc
-// @Summary      手工创建知识
-// @Description  手工录入Markdown格式的知识内容
-// @Tags         知识管理
-// @Accept       json
-// @Produce      json
-// @Param        id       path      string                       true  "知识库ID"
-// @Param        request  body      types.ManualKnowledgePayload true  "手工知识内容"
-// @Success      200      {object}  map[string]interface{}       "创建的知识"
-// @Failure      400      {object}  errors.AppError              "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge-bases/{id}/knowledge/manual [post]
 func (h *KnowledgeHandler) CreateManualKnowledge(c *gin.Context) {
 	ctx := c.Request.Context()
 	logger.Info(ctx, "Start creating manual knowledge")
@@ -530,18 +486,6 @@ func (h *KnowledgeHandler) CreateManualKnowledge(c *gin.Context) {
 }
 
 // GetKnowledge godoc
-// @Summary      获取知识详情
-// @Description  根据ID获取知识条目详情
-// @Tags         知识管理
-// @Accept       json
-// @Produce      json
-// @Param        id   path      string  true  "知识ID"
-// @Success      200  {object}  map[string]interface{}  "知识详情"
-// @Failure      400  {object}  errors.AppError         "请求参数错误"
-// @Failure      404  {object}  errors.AppError         "知识不存在"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge/{id} [get]
 func (h *KnowledgeHandler) GetKnowledge(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -577,15 +521,6 @@ func (h *KnowledgeHandler) GetKnowledge(c *gin.Context) {
 }
 
 // GetKnowledgeSpans godoc
-// @Summary      获取知识文档解析的 Span 树（含历史尝试）
-// @Description  返回该知识在解析流水线的 trace tree（root → stage → subspan）：每段状态、耗时、input/output、错误码。支持 ?attempt=N 查看历史尝试；不传则返回最新尝试。前端用于渲染时间线 + 多模态/embedding 子节点。
-// @Tags         知识管理
-// @Accept       json
-// @Produce      json
-// @Param        id        path   string  true   "知识ID"
-// @Param        attempt   query  int     false  "指定尝试号；省略=最新"
-// @Success      200       {object}  map[string]interface{}
-// @Router       /api/v1/knowledge/{id}/spans [get]
 //
 // Always returns the canonical 5-stage timeline; missing stage rows are
 // synthesized as "pending" so the frontend timeline always renders five
@@ -844,28 +779,6 @@ func buildSpanTree(knowledgeID string, attempt int, rows []types.KnowledgeProces
 }
 
 // ListKnowledge godoc
-// @Summary      获取知识列表
-// @Description  获取知识库下的知识列表，支持分页和筛选
-// @Tags         知识管理
-// @Accept       json
-// @Produce      json
-// @Param        id         path      string  true   "知识库ID"
-// @Param        page       query     int     false  "页码"
-// @Param        page_size  query     int     false  "每页数量"
-// @Param        tag_ids       query     string  false  "标签ID筛选，逗号分隔（OR语义）"
-// @Param        keyword       query     string  false  "关键词搜索"
-// @Param        file_type     query     string  false  "文件类型筛选"
-// @Param        parse_status  query     string  false  "解析状态筛选 (pending/processing/completed/failed)"
-// @Param        source        query     string  false  "来源/渠道筛选 (web/api/rss，或 manual/url 按 type 过滤)"
-// @Param        start_time    query     string  false  "更新时间起点，RFC3339 格式"
-// @Param        end_time      query     string  false  "更新时间终点，RFC3339 格式"
-// @Param        folder_path      query     string  false  "文件夹路径筛选，空字符串表示知识库根目录；不传该参数则不按文件夹过滤"
-// @Param        folder_recursive query     bool    false  "为 true 时同时返回子文件夹内的文档"
-// @Success      200        {object}  map[string]interface{}  "知识列表"
-// @Failure      400        {object}  errors.AppError         "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge-bases/{id}/knowledge [get]
 func (h *KnowledgeHandler) ListKnowledge(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -964,17 +877,6 @@ func (h *KnowledgeHandler) ListKnowledge(c *gin.Context) {
 }
 
 // ListKnowledgeFolders godoc
-// @Summary      获取知识库文件夹目录树
-// @Description  返回知识库内由文件夹上传形成的目录树，包含每个文件夹的直接文档数与含子目录的总数
-// @Tags         知识管理
-// @Accept       json
-// @Produce      json
-// @Param        id   path      string  true  "知识库ID"
-// @Success      200  {object}  map[string]interface{}  "目录树"
-// @Failure      400  {object}  errors.AppError         "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge-bases/{id}/knowledge/folders [get]
 func (h *KnowledgeHandler) ListKnowledgeFolders(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -1011,18 +913,6 @@ type MoveKnowledgeToFolderRequest struct {
 }
 
 // MoveKnowledgeToFolder godoc
-// @Summary      移动知识到文件夹
-// @Description  批量修改知识条目所属文件夹。文件夹由路径推导而来，因此目标路径不存在时会自动创建；空路径表示知识库顶层。仅调整归类，不会重新解析文档
-// @Tags         知识管理
-// @Accept       json
-// @Produce      json
-// @Param        request  body      MoveKnowledgeToFolderRequest  true  "移动请求"
-// @Success      200      {object}  map[string]interface{}        "移动成功"
-// @Failure      400      {object}  errors.AppError               "请求参数错误"
-// @Failure      403      {object}  errors.AppError               "权限不足"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge/folder [post]
 func (h *KnowledgeHandler) MoveKnowledgeToFolder(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -1085,19 +975,6 @@ type RenameKnowledgeFolderRequest struct {
 }
 
 // RenameKnowledgeFolder godoc
-// @Summary      重命名或移动文件夹
-// @Description  把一个文件夹及其所有子目录改到新路径。目标路径已存在时两个文件夹合并；不能移动到自身子目录下
-// @Tags         知识管理
-// @Accept       json
-// @Produce      json
-// @Param        id       path      string                        true  "知识库ID"
-// @Param        request  body      RenameKnowledgeFolderRequest  true  "重命名请求"
-// @Success      200      {object}  map[string]interface{}        "重命名成功"
-// @Failure      400      {object}  errors.AppError               "请求参数错误"
-// @Failure      403      {object}  errors.AppError               "权限不足"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge-bases/{id}/knowledge/folders [put]
 func (h *KnowledgeHandler) RenameKnowledgeFolder(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -1195,18 +1072,6 @@ func (h *KnowledgeHandler) requireKnowledgeInKB(
 }
 
 // DeleteKnowledge godoc
-// @Summary      删除知识
-// @Description  根据ID异步删除知识条目。请求会被入队到与批量删除相同的异步管道（asynq）；
-// @Description  接口返回 200 仅表示任务已提交（响应 data.task_id 为任务 ID），实际删除由后台 worker 完成。
-// @Tags         知识管理
-// @Accept       json
-// @Produce      json
-// @Param        id   path      string  true  "知识ID"
-// @Success      200  {object}  map[string]interface{}  "任务已提交，返回 task_id"
-// @Failure      400  {object}  errors.AppError         "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge/{id} [delete]
 func (h *KnowledgeHandler) DeleteKnowledge(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -1260,18 +1125,6 @@ type BatchDeleteKnowledgeRequest struct {
 }
 
 // BatchDeleteKnowledge godoc
-// @Summary      批量删除知识
-// @Description  按 ID 列表批量删除单个知识库下的多个知识条目
-// @Tags         知识管理
-// @Accept       json
-// @Produce      json
-// @Param        request  body      BatchDeleteKnowledgeRequest  true  "批量删除请求"
-// @Success      200      {object}  map[string]interface{}       "删除成功"
-// @Failure      400      {object}  errors.AppError              "请求参数错误"
-// @Failure      403      {object}  errors.AppError              "权限不足"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge/batch-delete [post]
 func (h *KnowledgeHandler) BatchDeleteKnowledge(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -1344,18 +1197,6 @@ func (h *KnowledgeHandler) BatchDeleteKnowledge(c *gin.Context) {
 }
 
 // ClearKnowledgeBaseContents godoc
-// @Summary      清空知识库内容
-// @Description  删除知识库下的所有知识条目（异步任务）。知识库本身保留，仅清空其中的内容
-// @Tags         知识管理
-// @Accept       json
-// @Produce      json
-// @Param        id   path      string  true  "知识库ID"
-// @Success      200  {object}  map[string]interface{}  "清空任务已提交"
-// @Failure      400  {object}  errors.AppError         "请求参数错误"
-// @Failure      403  {object}  errors.AppError         "权限不足"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge-bases/{id}/knowledge [delete]
 func (h *KnowledgeHandler) ClearKnowledgeBaseContents(c *gin.Context) {
 	ctx := c.Request.Context()
 	logger.Info(ctx, "Start clearing knowledge base contents")
@@ -1415,17 +1256,6 @@ func (h *KnowledgeHandler) ClearKnowledgeBaseContents(c *gin.Context) {
 }
 
 // DownloadKnowledgeFile godoc
-// @Summary      下载知识文件
-// @Description  下载知识条目关联的原始文件
-// @Tags         知识管理
-// @Accept       json
-// @Produce      application/octet-stream
-// @Param        id   path      string  true  "知识ID"
-// @Success      200  {file}    file    "文件内容"
-// @Failure      400  {object}  errors.AppError  "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge/{id}/download [get]
 func (h *KnowledgeHandler) DownloadKnowledgeFile(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -1489,17 +1319,6 @@ func mimeTypeByExt(filename string) string {
 }
 
 // PreviewKnowledgeFile godoc
-// @Summary      预览知识文件
-// @Description  返回知识条目关联的原始文件，Content-Type 根据文件类型设置，用于浏览器内嵌预览
-// @Tags         知识管理
-// @Accept       json
-// @Produce      application/pdf,image/jpeg,image/png,text/plain
-// @Param        id   path      string  true  "知识ID"
-// @Success      200  {file}    file    "文件内容"
-// @Failure      400  {object}  errors.AppError  "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge/{id}/preview [get]
 func (h *KnowledgeHandler) PreviewKnowledgeFile(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -1668,18 +1487,6 @@ type UpdateKnowledgeRequest struct {
 }
 
 // UpdateKnowledge godoc
-// @Summary      更新知识
-// @Description  部分更新知识条目（标题/描述/自定义元数据）；未传字段保持不变，显式传空 description 可清空摘要
-// @Tags         知识管理
-// @Accept       json
-// @Produce      json
-// @Param        id       path      string                   true  "知识ID"
-// @Param        request  body      UpdateKnowledgeRequest   true  "更新字段（均可选）"
-// @Success      200      {object}  map[string]interface{}  "更新成功"
-// @Failure      400      {object}  errors.AppError         "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge/{id} [put]
 func (h *KnowledgeHandler) UpdateKnowledge(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -1765,18 +1572,6 @@ func (h *KnowledgeHandler) RegenerateKnowledgeSummary(c *gin.Context) {
 }
 
 // UpdateManualKnowledge godoc
-// @Summary      更新手工知识
-// @Description  更新手工录入的Markdown知识内容
-// @Tags         知识管理
-// @Accept       json
-// @Produce      json
-// @Param        id       path      string                       true  "知识ID"
-// @Param        request  body      types.ManualKnowledgePayload true  "手工知识内容"
-// @Success      200      {object}  map[string]interface{}       "更新后的知识"
-// @Failure      400      {object}  errors.AppError              "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge/manual/{id} [put]
 func (h *KnowledgeHandler) UpdateManualKnowledge(c *gin.Context) {
 	ctx := c.Request.Context()
 	logger.Info(ctx, "Start updating manual knowledge")
@@ -1822,19 +1617,6 @@ func (h *KnowledgeHandler) UpdateManualKnowledge(c *gin.Context) {
 }
 
 // ReparseKnowledge godoc
-// @Summary      重新解析知识
-// @Description  删除知识中现有的文档内容并重新解析，使用异步任务方式处理
-// @Tags         知识管理
-// @Accept       json
-// @Produce      json
-// @Param        id   path      string  true  "知识ID"
-// @Param        body body      object  false  "可选的处理配置覆盖：{\"process_config\": KnowledgeProcessOverrides}"
-// @Success      200  {object}  map[string]interface{}  "重新解析任务已提交"
-// @Failure      400  {object}  errors.AppError         "请求参数错误"
-// @Failure      403  {object}  errors.AppError         "权限不足"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge/{id}/reparse [post]
 func (h *KnowledgeHandler) ReparseKnowledge(c *gin.Context) {
 	ctx := c.Request.Context()
 	logger.Info(ctx, "Start re-parsing knowledge")
@@ -1891,19 +1673,6 @@ func (h *KnowledgeHandler) ReparseKnowledge(c *gin.Context) {
 }
 
 // CancelKnowledgeParse godoc
-// @Summary      取消知识解析
-// @Description  取消进行中的知识解析任务。当前已写入的 chunk / 索引保留，可通过 reparse 接口重新触发解析。已完成 / 已失败 / 删除中的知识不支持取消。
-// @Tags         知识管理
-// @Accept       json
-// @Produce      json
-// @Param        id   path      string  true  "知识ID"
-// @Success      200  {object}  map[string]interface{}  "取消已提交"
-// @Failure      400  {object}  errors.AppError         "状态不支持取消"
-// @Failure      403  {object}  errors.AppError         "权限不足"
-// @Failure      404  {object}  errors.AppError         "知识不存在"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge/{id}/cancel-parse [post]
 func (h *KnowledgeHandler) CancelKnowledgeParse(c *gin.Context) {
 	ctx := c.Request.Context()
 	logger.Info(ctx, "Start cancelling knowledge parse")
@@ -1950,17 +1719,6 @@ type knowledgeTagBatchRequest struct {
 }
 
 // UpdateKnowledgeTagBatch godoc
-// @Summary      批量更新知识标签
-// @Description  批量更新知识条目的标签。可选 kb_id：指定时按该知识库校验编辑权限
-// @Tags         知识管理
-// @Accept       json
-// @Produce      json
-// @Param        request  body      object  true  "标签更新请求（updates 必填，kb_id 可选）"
-// @Success      200      {object}  map[string]interface{}  "更新成功"
-// @Failure      400      {object}  errors.AppError         "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge/tags [put]
 func (h *KnowledgeHandler) UpdateKnowledgeTagBatch(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -2016,19 +1774,6 @@ func (h *KnowledgeHandler) UpdateKnowledgeTagBatch(c *gin.Context) {
 }
 
 // UpdateImageInfo godoc
-// @Summary      更新图像信息
-// @Description  更新知识分块的图像信息
-// @Tags         知识管理
-// @Accept       json
-// @Produce      json
-// @Param        id        path      string  true  "知识ID"
-// @Param        chunk_id  path      string  true  "分块ID"
-// @Param        request   body      object{image_info=string}  true  "图像信息"
-// @Success      200       {object}  map[string]interface{}     "更新成功"
-// @Failure      400       {object}  errors.AppError            "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge/image/{id}/{chunk_id} [put]
 func (h *KnowledgeHandler) UpdateImageInfo(c *gin.Context) {
 	ctx := c.Request.Context()
 	logger.Info(ctx, "Start updating image info")
@@ -2146,17 +1891,6 @@ type MoveKnowledgeResponse struct {
 // MoveKnowledge moves knowledge items from one knowledge base to another (async task).
 //
 // MoveKnowledge godoc
-// @Summary      移动知识到其他知识库
-// @Description  将一条或多条知识从源知识库移动到目标知识库（异步），返回任务 ID 用于查询进度
-// @Tags         知识
-// @Accept       json
-// @Produce      json
-// @Param        request  body      handler.MoveKnowledgeRequest  true  "{source_kb_id, target_kb_id, knowledge_ids}"
-// @Success      200      {object}  handler.MoveKnowledgeResponse  "任务信息"
-// @Failure      400      {object}  errors.AppError                "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge/move [post]
 func (h *KnowledgeHandler) MoveKnowledge(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -2304,16 +2038,6 @@ func (h *KnowledgeHandler) MoveKnowledge(c *gin.Context) {
 // GetKnowledgeMoveProgress retrieves the progress of a knowledge move task.
 //
 // GetKnowledgeMoveProgress godoc
-// @Summary      获取知识移动进度
-// @Description  按任务 ID 查询移动进度
-// @Tags         知识
-// @Produce      json
-// @Param        task_id  path      string                       true  "移动任务 ID"
-// @Success      200      {object}  types.KnowledgeMoveProgress  "进度信息"
-// @Failure      404      {object}  errors.AppError              "任务不存在"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge/move/progress/{task_id} [get]
 func (h *KnowledgeHandler) GetKnowledgeMoveProgress(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -2385,18 +2109,6 @@ type batchReparseKnowledgeRequest struct {
 }
 
 // BatchReparseKnowledge godoc
-// @Summary      批量重新解析知识
-// @Description  按 ID 列表批量重新解析单个知识库下的多个知识条目
-// @Tags         知识管理
-// @Accept       json
-// @Produce      json
-// @Param        request  body      batchReparseKnowledgeRequest  true  "批量重解析请求"
-// @Success      200      {object}  map[string]interface{}        "任务已提交"
-// @Failure      400      {object}  errors.AppError               "请求参数错误"
-// @Failure      403      {object}  errors.AppError               "权限不足"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge/batch-reparse [post]
 func (h *KnowledgeHandler) BatchReparseKnowledge(c *gin.Context) {
 	ctx := c.Request.Context()
 	var req batchReparseKnowledgeRequest

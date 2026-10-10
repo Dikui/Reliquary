@@ -87,17 +87,6 @@ type tenantAPIKeyCreateResponse struct {
 }
 
 // GetTenant godoc
-// @Summary      获取空间详情
-// @Description  获取当前个人空间详情
-// @Tags         空间管理
-// @Accept       json
-// @Produce      json
-// @Success      200  {object}  map[string]interface{}  "空间详情"
-// @Failure      400  {object}  errors.AppError         "请求参数错误"
-// @Failure      404  {object}  errors.AppError         "空间不存在"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /space [get]
 func (h *TenantHandler) GetTenant(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -122,16 +111,6 @@ func (h *TenantHandler) GetTenant(c *gin.Context) {
 }
 
 // UpdateTenant godoc
-// @Summary      更新空间
-// @Description  更新空间信息
-// @Tags         空间管理
-// @Accept       json
-// @Produce      json
-// @Param        request  body      types.Tenant  true  "空间信息"
-// @Success      200      {object}  map[string]interface{}  "更新后的空间"
-// @Failure      400      {object}  errors.AppError         "请求参数错误"
-// @Security     Bearer
-// @Router       /space [put]
 func (h *TenantHandler) UpdateTenant(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -201,13 +180,6 @@ func (h *TenantHandler) UpdateTenant(c *gin.Context) {
 }
 
 // ListAPIKeys godoc
-// @Summary      获取空间 API Key 列表
-// @Tags         空间管理
-// @Produce      json
-// @Success      200 {object} map[string]interface{}
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /space/api-keys [get]
 func (h *TenantHandler) ListAPIKeys(c *gin.Context) {
 	ctx := c.Request.Context()
 	id := types.MustTenantIDFromContext(ctx)
@@ -224,15 +196,6 @@ func (h *TenantHandler) ListAPIKeys(c *gin.Context) {
 }
 
 // CreateAPIKey godoc
-// @Summary      创建空间 API Key
-// @Tags         空间管理
-// @Accept       json
-// @Produce      json
-// @Param        request body tenantAPIKeyCreateRequest true "API Key 配置"
-// @Success      201 {object} map[string]interface{}
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /space/api-keys [post]
 func (h *TenantHandler) CreateAPIKey(c *gin.Context) {
 	ctx := c.Request.Context()
 	id := types.MustTenantIDFromContext(ctx)
@@ -274,16 +237,6 @@ func (h *TenantHandler) CreateAPIKey(c *gin.Context) {
 
 // UpdateAPIKey 修改个人空间 API Key 的名称和到期时间。
 // 字段校验与创建接口保持一致。
-// @Summary      更新空间 API Key
-// @Tags         空间管理
-// @Accept       json
-// @Produce      json
-// @Param        key_id path int true "API Key ID"
-// @Param        request body tenantAPIKeyUpdateRequest true "API Key 配置"
-// @Success      200 {object} map[string]interface{}
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /space/api-keys/{key_id} [put]
 func (h *TenantHandler) UpdateAPIKey(c *gin.Context) {
 	ctx := c.Request.Context()
 	tenantID := types.MustTenantIDFromContext(ctx)
@@ -318,14 +271,6 @@ func (h *TenantHandler) UpdateAPIKey(c *gin.Context) {
 }
 
 // DeleteAPIKey godoc
-// @Summary      撤销空间 API Key
-// @Tags         空间管理
-// @Produce      json
-// @Param        key_id path int true "API Key ID"
-// @Success      200 {object} map[string]interface{}
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /space/api-keys/{key_id} [delete]
 func (h *TenantHandler) DeleteAPIKey(c *gin.Context) {
 	ctx := c.Request.Context()
 	tenantID := types.MustTenantIDFromContext(ctx)
@@ -363,17 +308,6 @@ func validateTenantAPIKeyRequest(ctx context.Context, kbService interfaces.Knowl
 }
 
 // GetTenantKV godoc
-// @Summary      获取空间KV配置
-// @Description  获取空间级别的KV配置（支持prompt-templates、parser-engine-config、chat-history-config、retrieval-config）
-// @Tags         空间管理
-// @Accept       json
-// @Produce      json
-// @Param        key  path      string  true  "配置键名"
-// @Success      200  {object}  map[string]interface{}  "配置值"
-// @Failure      400  {object}  errors.AppError         "不支持的键"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /space/kv/{key} [get]
 func (h *TenantHandler) GetTenantKV(c *gin.Context) {
 	ctx := c.Request.Context()
 	key := secutils.SanitizeForLog(c.Param("key"))
@@ -407,18 +341,6 @@ func (h *TenantHandler) GetTenantKV(c *gin.Context) {
 }
 
 // UpdateTenantKV godoc
-// @Summary      更新空间KV配置
-// @Description  更新空间级别的KV配置（支持parser-engine-config、chat-history-config、retrieval-config）
-// @Tags         空间管理
-// @Accept       json
-// @Produce      json
-// @Param        key      path      string  true  "配置键名"
-// @Param        request  body      object  true  "配置值"
-// @Success      200      {object}  map[string]interface{}  "更新成功"
-// @Failure      400      {object}  errors.AppError         "不支持的键"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /space/kv/{key} [put]
 func (h *TenantHandler) UpdateTenantKV(c *gin.Context) {
 	ctx := c.Request.Context()
 	key := secutils.SanitizeForLog(c.Param("key"))
@@ -506,16 +428,6 @@ func (h *TenantHandler) updateTenantParserEngineConfigInternal(c *gin.Context) {
 }
 
 // GetPromptTemplates godoc
-// @Summary      获取提示词模板
-// @Description  获取系统配置的提示词模板列表
-// @Tags         空间管理
-// @Accept       json
-// @Produce      json
-// @Success      200  {object}  map[string]interface{}  "提示词模板配置"
-// @Failure      400  {object}  errors.AppError         "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /space/kv/prompt-templates [get]
 func (h *TenantHandler) GetPromptTemplates(c *gin.Context) {
 	// Return prompt templates from config.yaml
 	templates := h.config.PromptTemplates

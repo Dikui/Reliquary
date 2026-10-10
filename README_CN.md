@@ -21,13 +21,10 @@
     <a href="https://github.com/Tencent/WeKnora/blob/main/LICENSE">
         <img src="https://img.shields.io/badge/License-MIT-ffffff?labelColor=d4eaf7&color=2e6cc4" alt="License">
     </a>
-    <a href="./CHANGELOG.md">
-        <img alt="版本" src="https://img.shields.io/badge/version-0.8.0-2e6cc4?labelColor=d4eaf7">
-    </a>
 </p>
 
 <p align="center">
-| <a href="./README.md"><b>English</b></a> | <b>简体中文</b> | <a href="./README_JA.md"><b>日本語</b></a> | <a href="./README_KO.md"><b>한국어</b></a> |
+| <a href="./README.md"><b>English</b></a> | <b>简体中文</b> |
 </p>
 
 <p align="center">
@@ -63,6 +60,8 @@
 </table>
 
 ## 🏗️ 架构设计
+
+上游 v0.8.0 架构参考，当前支持范围见[个人使用说明](docs/personal-use.md)。
 
 ![reliquary-architecture.png](./docs/images/architecture.png)
 
@@ -106,7 +105,6 @@
 | 向量数据库 | PostgreSQL（ParadeDB：pgvector + pg_search）|
 | Embedding | Ollama / BGE / GTE / 智谱 / OpenAI 兼容接口 |
 | 对象存储 | 本地文件系统|
-| 网站嵌入 | 通过嵌入 Widget 发布智能体，支持域名白名单、限流与安全模式 Token 交换 |
 | API 集成 | 完整访问 API Key 与 API 集成调试台；`resource_urls=public` 直接返回可加载的文件与图片直链 |
 
 
@@ -120,7 +118,7 @@
 | 安全 | API Key 与 MCP / 数据源凭据 AES-256-GCM 静态加密、支持平滑密钥轮换；Redis TLS；防 SSRF HTTP 客户端（覆盖数据源、URL 导入、重定向链等）；密钥响应脱敏 |
 | 可观测性 | `model_usage` 模型用量、文档处理时间线、运行时任务队列与 Worker 池治理 |
 | 任务管理 | MQ 异步任务，分阶段独立 Worker 池治理（core / 后处理 / enrichment / maintenance + 弹性共享池）与按模型后台并发治理；版本升级自动数据库迁移 |
-| 模型管理 | 集中配置，YAML 声明式内置模型配置，知识库级别模型选择，按模型思考模式与 Embedding 维度覆盖，交互式模型调试器，团队内置模型，WeKnora Cloud 托管模型与文档解析 |
+| 模型管理 | 集中配置，YAML 声明式内置模型配置，知识库级别模型选择，按模型思考模式与 Embedding 维度覆盖，交互式模型调试器，WeKnora Cloud 托管模型与文档解析 |
 
 ## 🧩 Chrome 插件
 
@@ -140,37 +138,13 @@
 git clone http://192.168.1.146:3000/dikui/reliquary.git
 cd Reliquary
 cp .env.example .env   # 按需编辑 .env，详见文件内注释
-docker compose pull     # 拉取最新镜像
-docker compose up -d    # 启动核心服务
+./scripts/build_frontend_dist.sh
+docker compose up -d --build
 ```
 
 启动成功后访问 **http://localhost** 即可使用。
 
 > 如需使用本地 Ollama 模型，请先运行 `ollama serve > /dev/null 2>&1 &`
-
-### 🔄 版本升级
-
-若已有部署并下载了更新的 release：
-
-```bash
-# 在 .env 中将 RELIQUARY_VERSION 设为目标版本（如 0.7.0），或保持 latest
-docker compose pull     # 拉取与 RELIQUARY_VERSION 匹配的镜像
-docker compose up -d    # 用新镜像重建容器
-```
-
-> 仅执行 `docker compose up -d` 会复用本地缓存镜像，可能导致 Web UI 显示版本与下载的 release 不一致。
-
-### 🔧 可选服务（Docker Compose Profile）
-
-按需添加 `--profile` 启动额外组件，多个 profile 可叠加使用：
-
-| Profile | 说明 | 启动命令 |
-|---------|------|----------|
-| _(默认)_ | 核心服务 | `docker compose pull && docker compose up -d` |
-| `full` | 所有保留的可选服务 | `docker compose --profile full pull && docker compose --profile full up -d` |
-
-
-停止服务：`docker compose down`
 
 ### 🌐 服务地址
 
@@ -181,24 +155,11 @@ docker compose up -d    # 用新镜像重建容器
 
 
 
-## 🔌 使用微信对话开放平台
-
-Reliquary 作为[微信对话开放平台](https://chatbot.weixin.qq.com)的核心技术框架，提供更简便的使用方式：
-
-- **零代码部署**：只需上传知识，即可在微信生态中快速部署智能问答服务，实现"即问即答"的体验
-- **高效问题管理**：支持高频问题的独立分类管理，提供丰富的数据工具，确保回答精准可靠且易于维护
-- **微信生态覆盖**：通过微信对话开放平台，Reliquary 的智能问答能力可无缝集成到公众号、小程序等微信场景中，提升用户交互体验
-
-
 ## 📘 文档
 
-使用说明见[个人使用指南](./docs/personal-use.md)、[API 文档](./docs/api/README.md)与[知识工作流说明](./docs/知识库融合说明.md)。
+使用说明见[个人使用指南](./docs/personal-use.md)与[知识工作流说明](./docs/知识库融合说明.md)。
 
 常见问题排查：[常见问题排查](./docs/QA.md)
-
-详细接口说明请参考：[API 文档](./docs/api/README.md)
-
-产品规划与计划：[路线图 (Roadmap)](./docs/ROADMAP.md)
 
 ## 🧭 开发指南
 

@@ -71,15 +71,6 @@ func (h *KnowledgeContextHandler) UpdateEntityDescription(c *gin.Context) {
 }
 
 // Query queries sourced facts in a knowledge base, domain or all knowledge bases.
-// @Summary Query structured knowledge
-// @Tags Knowledge Context
-// @Accept json
-// @Produce json
-// @Security Bearer
-// @Param request body types.KnowledgeContextQuery true "Scope and structured conditions"
-// @Success 200 {object} KnowledgeContextQueryResponse "Sourced entities, facts, events and latest template-only message count"
-// @Failure 400 {object} map[string]interface{}
-// @Router /knowledge-context/query [post]
 func (h *KnowledgeContextHandler) Query(c *gin.Context) {
 	var input types.KnowledgeContextQuery
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -128,18 +119,6 @@ func contextListQuery(c *gin.Context) (types.KnowledgeContextQuery, error) {
 }
 
 // Entities lists the distinct global objects visible in the selected scope.
-// @Summary List global objects
-// @Tags Knowledge Context
-// @Produce json
-// @Security Bearer
-// @Param scope query string false "Query scope; team is a legacy alias of all" Enums(knowledge_base,domain,all,team)
-// @Param knowledge_base_id query string false "Knowledge base for knowledge_base scope"
-// @Param domain_id query string false "Domain for domain scope"
-// @Param entity query string false "Object name or alias"
-// @Param limit query int false "Page size (1-100)"
-// @Param offset query int false "Page offset"
-// @Success 200 {object} map[string]interface{}
-// @Router /knowledge-context/entities [get]
 func (h *KnowledgeContextHandler) Entities(c *gin.Context) {
 	q, err := contextListQuery(c)
 	if err != nil {
@@ -155,18 +134,6 @@ func (h *KnowledgeContextHandler) Entities(c *gin.Context) {
 }
 
 // Events lists sourced events in the selected scope.
-// @Summary List events by scope
-// @Tags Knowledge Context
-// @Produce json
-// @Security Bearer
-// @Param scope query string false "Query scope; team is a legacy alias of all" Enums(knowledge_base,domain,all,team)
-// @Param knowledge_base_id query string false "Knowledge base for knowledge_base scope"
-// @Param domain_id query string false "Domain for domain scope"
-// @Param entity_id query string false "Related global object"
-// @Param limit query int false "Page size (1-100)"
-// @Param offset query int false "Page offset"
-// @Success 200 {object} map[string]interface{}
-// @Router /knowledge-context/events [get]
 func (h *KnowledgeContextHandler) Events(c *gin.Context) {
 	q, err := contextListQuery(c)
 	if err != nil {
@@ -182,19 +149,6 @@ func (h *KnowledgeContextHandler) Events(c *gin.Context) {
 }
 
 // Evidence lists source evidence in the selected scope.
-// @Summary List evidence by scope
-// @Tags Knowledge Context
-// @Produce json
-// @Security Bearer
-// @Param scope query string false "Query scope; team is a legacy alias of all" Enums(knowledge_base,domain,all,team)
-// @Param knowledge_base_id query string false "Knowledge base for knowledge_base scope"
-// @Param domain_id query string false "Domain for domain scope"
-// @Param entity_id query string false "Related global object"
-// @Param event_id query string false "Related event"
-// @Param limit query int false "Page size (1-100)"
-// @Param offset query int false "Page offset"
-// @Success 200 {object} map[string]interface{}
-// @Router /knowledge-context/evidence [get]
 func (h *KnowledgeContextHandler) Evidence(c *gin.Context) {
 	q, err := contextListQuery(c)
 	if err != nil {
@@ -210,14 +164,6 @@ func (h *KnowledgeContextHandler) Evidence(c *gin.Context) {
 }
 
 // GetEvidence returns a source evidence record.
-// @Summary View source evidence
-// @Tags Knowledge Context
-// @Produce json
-// @Security Bearer
-// @Param evidence_id path string true "Evidence ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Router /knowledge-context/evidence/{evidence_id} [get]
 func (h *KnowledgeContextHandler) GetEvidence(c *gin.Context) {
 	item, err := h.service.GetEvidence(c.Request.Context(), c.Param("id"), c.Param("evidence_id"))
 	if err != nil {
@@ -228,16 +174,6 @@ func (h *KnowledgeContextHandler) GetEvidence(c *gin.Context) {
 }
 
 // CorrectFact records a sourced correction and an audit entry.
-// @Summary Correct a sourced fact
-// @Tags Knowledge Context
-// @Accept json
-// @Produce json
-// @Security Bearer
-// @Param fact_id path string true "Fact ID"
-// @Param request body types.KnowledgeFactCorrection true "Fact correction"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Router /knowledge-context/facts/{fact_id}/correction [post]
 func (h *KnowledgeContextHandler) CorrectFact(c *gin.Context) {
 	var input types.KnowledgeFactCorrection
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -253,15 +189,6 @@ func (h *KnowledgeContextHandler) CorrectFact(c *gin.Context) {
 }
 
 // MergeEntities merges global identity and audits affected knowledge bases.
-// @Summary Merge global objects
-// @Tags Knowledge Context
-// @Accept json
-// @Produce json
-// @Security Bearer
-// @Param request body object{keep_entity_id=string,merge_entity_id=string} true "Global object IDs"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Router /knowledge-context/entities/merge [post]
 func (h *KnowledgeContextHandler) MergeEntities(c *gin.Context) {
 	var input struct {
 		Keep  string `json:"keep_entity_id" binding:"required"`
@@ -298,16 +225,6 @@ func (h *KnowledgeContextHandler) Rebuild(c *gin.Context) {
 }
 
 // EntityDetail collects an object's sourced facts and events across the space.
-// @Summary View a global object with source knowledge bases
-// @Tags Knowledge Context
-// @Produce json
-// @Security Bearer
-// @Param entity_id path string true "Global object ID"
-// @Param include_history query boolean false "Include historical facts and evidence (default true)"
-// @Failure 400 {object} map[string]interface{}
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]interface{}
-// @Router /knowledge-context/entities/{entity_id} [get]
 func (h *KnowledgeContextHandler) EntityDetail(c *gin.Context) {
 	includeHistory, err := strconv.ParseBool(c.DefaultQuery("include_history", "true"))
 	if err != nil {

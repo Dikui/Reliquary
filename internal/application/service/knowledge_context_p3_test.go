@@ -179,7 +179,7 @@ func TestP3MergeSuggestionsCreateAcceptAndReject(t *testing.T) {
 	require.Len(t, resolved, 1)
 	require.NotEqual(t, "acme", resolved[0].ID)
 	require.NoError(t, db.Transaction(func(tx *gorm.DB) error { _, err := persistContextEntities(tx, resolved); return err }))
-	items, err := svc.ListMergeSuggestions(ctx, "", types.KnowledgeContextQuery{Scope: "team"}, "pending")
+	items, err := svc.ListMergeSuggestions(ctx, "", types.KnowledgeContextQuery{Scope: "all"}, "pending")
 	require.NoError(t, err)
 	require.Len(t, items, 1)
 	require.Equal(t, "Acme Systems Ltd", items[0].NewEntityName)

@@ -56,6 +56,8 @@ The framework supports auto-syncing RSS feeds and site adapters, handles 10+ doc
 
 ## 🏗️ Architecture
 
+Upstream v0.8.0 architecture reference. See the [personal use guide](docs/personal-use.md) for the current supported features.
+
 ![reliquary-architecture.png](./docs/images/architecture.png)
 
 Fully modular pipeline from document parsing, vectorization, and retrieval to LLM inference — every component is swappable and extensible. Supports local / private cloud deployment with full data sovereignty and a zero-barrier Web UI for quick onboarding.
@@ -85,7 +87,7 @@ Fully modular pipeline from document parsing, vectorization, and retrieval to LL
 | Per-Upload Process Config | Override parser, chunking, multimodal (VLM / ASR), and question generation per upload batch via upload-confirm dialog or `process_config` API; reparse with new settings |
 | Batch Reparse | Re-queue parsing for multiple documents at once with optional per-batch `process_config` |
 | Data Source Import | RSS, Atom, JSON Feed and site adapters with incremental and full sync |
-| Document Formats | PDF / Word / Txt / Markdown / HTML / EPUB / MHTML / Images / CSV / Excel / PPT / JSON / XMind |
+| Document Formats | PDF / Word / Txt / Markdown / EPUB / Images / CSV / Excel / PPT / JSON |
 | Auto-Tagging | After parse, pick matching tags from the knowledge base's existing set without creating tags or overwriting manual ones |
 | Retrieval Strategies | BM25 sparse / Dense retrieval / parent-child chunking / HNSW-accelerated pgvector (1024-dim) / multi-dimensional indexing |
 | Batch Selection & Tagging | Marquee drag-select multiple documents in the KB list for batch reparse and batch tagging (common tags pre-selected) |
@@ -98,7 +100,6 @@ Fully modular pipeline from document parsing, vectorization, and retrieval to LL
 | Embeddings | Ollama / BGE / GTE / Zhipu / OpenAI-compatible APIs |
 | Vector DB | PostgreSQL (ParadeDB: pgvector + pg_search) |
 | Object Storage | Local filesystem |
-| Website Embed | Publish agents via embed widget with domain allowlists, rate limits, and secure-mode token exchange |
 | API Integration | Full-access API keys with an API integration playground; `resource_urls=public` returns directly loadable file/image URLs |
 
 **Platform**
@@ -111,7 +112,7 @@ Fully modular pipeline from document parsing, vectorization, and retrieval to LL
 | Security | AES-256-GCM at-rest encryption for API keys and MCP / data-source credentials with graceful key rotation; Redis TLS; SSRF-safe HTTP client (data sources, URL import, redirect chains); secret redaction in responses |
 | Observability | Model usage in `model_usage`, document processing timelines, runtime task queues and worker governance |
 | Task Management | MQ async tasks with per-stage worker-pool governance (core / post-process / enrichment / maintenance + elastic shared pool) and per-model background concurrency governors; automatic database migration on version upgrade |
-| Model Management | Centralized config, declarative built-in models via YAML, per-knowledge-base model selection, per-model thinking-mode and embedding-dimension overrides, interactive model test debugger, multi-workspace built-in model sharing, WeKnora Cloud hosted models and parsing |
+| Model Management | Centralized config, declarative built-in models via YAML, per-knowledge-base model selection, per-model thinking-mode and embedding-dimension overrides, interactive model test debugger, WeKnora Cloud hosted models and parsing |
 
 ## 🧩 Chrome Extension
 
@@ -131,37 +132,13 @@ Fully modular pipeline from document parsing, vectorization, and retrieval to LL
 git clone http://192.168.1.146:3000/dikui/Reliquary.git
 cd Reliquary
 cp .env.example .env   # Edit .env as needed, see comments in the file
-docker compose pull     # Pull the latest images
-docker compose up -d    # Start core services
+./scripts/build_frontend_dist.sh
+docker compose up -d --build
 ```
 
 Once started, visit **http://localhost** to get started.
 
 > To use a local Ollama model, run `ollama serve > /dev/null 2>&1 &` first.
-
-### 🔄 Upgrading
-
-If you already have Reliquary running and downloaded a newer release:
-
-```bash
-# Set RELIQUARY_VERSION in .env to the target release (e.g. 0.7.0), or keep latest
-docker compose pull     # Pull images matching RELIQUARY_VERSION
-docker compose up -d    # Recreate containers with new images
-```
-
-> `docker compose up -d` alone reuses locally cached images and may leave the UI version out of sync with the release you downloaded.
-
-### 🔧 Optional Services (Docker Compose Profiles)
-
-Add `--profile` flags to enable additional components. Multiple profiles can be combined:
-
-| Profile | Description | Command |
-|---------|-------------|---------|
-| _(default)_ | Core services | `docker compose pull && docker compose up -d` |
-| `full` | Retained optional services | `docker compose --profile full pull && docker compose --profile full up -d` |
-
-
-Stop services: `docker compose down`
 
 ### 🌐 Service URLs
 
@@ -172,13 +149,9 @@ Stop services: `docker compose down`
 
 ## 📘 API Reference
 
-Start with the [personal use guide](./docs/personal-use.md), [API reference](./docs/api/README.md), and [knowledge workflow guide](./docs/知识库融合说明.md).
+Start with the [personal use guide](./docs/personal-use.md) and [knowledge workflow guide](./docs/知识库融合说明.md).
 
 Troubleshooting FAQ: [Troubleshooting FAQ](./docs/QA.md)
-
-Detailed API documentation is available at: [API Docs](./docs/api/README.md)
-
-Product plans and upcoming features: [Roadmap](./docs/ROADMAP.md)
 
 ## 🧭 Developer Guide
 

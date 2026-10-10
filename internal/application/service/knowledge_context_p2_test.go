@@ -68,13 +68,13 @@ func TestP2GlobalObjectAndEventIdentityAcrossKnowledgeBases(t *testing.T) {
 	require.NoError(t, db.Find(&events).Error)
 	require.Len(t, events, 1)
 	require.Len(t, events[0].EvidenceIDs, 2)
-	team, err := svc.Query(ctx, "", types.KnowledgeContextQuery{Scope: "team", EntityID: entities[0].ID})
+	all, err := svc.Query(ctx, "", types.KnowledgeContextQuery{Scope: "all", EntityID: entities[0].ID})
 	require.NoError(t, err)
-	require.Len(t, team.Entities, 1)
-	require.Len(t, team.Facts, 2)
-	require.Len(t, team.Events, 1)
-	require.Len(t, team.Events[0].Sources, 2)
-	for _, fact := range team.Facts {
+	require.Len(t, all.Entities, 1)
+	require.Len(t, all.Facts, 2)
+	require.Len(t, all.Events, 1)
+	require.Len(t, all.Events[0].Sources, 2)
+	for _, fact := range all.Facts {
 		require.NotEmpty(t, fact.KnowledgeBaseName)
 	}
 	// Deleting the original source preserves the global object and shared event.
@@ -82,11 +82,11 @@ func TestP2GlobalObjectAndEventIdentityAcrossKnowledgeBases(t *testing.T) {
 	var remaining types.KnowledgeEntity
 	require.NoError(t, db.First(&remaining, "id = ?", entities[0].ID).Error)
 	require.Empty(t, remaining.KnowledgeBaseID)
-	team, err = svc.Query(ctx, "", types.KnowledgeContextQuery{Scope: "team"})
+	all, err = svc.Query(ctx, "", types.KnowledgeContextQuery{Scope: "all"})
 	require.NoError(t, err)
-	require.Len(t, team.Facts, 1)
-	require.Len(t, team.Events, 1)
-	require.Len(t, team.Events[0].EvidenceIDs, 1)
+	require.Len(t, all.Facts, 1)
+	require.Len(t, all.Events, 1)
+	require.Len(t, all.Events[0].EvidenceIDs, 1)
 	require.NoError(t, svc.DeleteKnowledgeBase(ctx, "energy-one"))
 	var count int64
 	require.NoError(t, db.Model(&types.KnowledgeEntity{}).Count(&count).Error)
@@ -130,7 +130,7 @@ func TestP2QueryScopesAndOpenFieldMappingPreserveFacts(t *testing.T) {
 	for _, test := range []struct {
 		query types.KnowledgeContextQuery
 		count int
-	}{{types.KnowledgeContextQuery{Scope: "knowledge_base", KnowledgeBaseID: "kb"}, 1}, {types.KnowledgeContextQuery{Scope: "domain", DomainID: "energy"}, 2}, {types.KnowledgeContextQuery{Scope: "team"}, 3}} {
+	}{{types.KnowledgeContextQuery{Scope: "knowledge_base", KnowledgeBaseID: "kb"}, 1}, {types.KnowledgeContextQuery{Scope: "domain", DomainID: "energy"}, 2}, {types.KnowledgeContextQuery{Scope: "all"}, 3}} {
 		result, err := svc.Query(ctx, "", test.query)
 		require.NoError(t, err)
 		require.Len(t, result.Facts, test.count)
@@ -143,7 +143,7 @@ func TestP2QueryScopesAndOpenFieldMappingPreserveFacts(t *testing.T) {
 	var domain types.KnowledgeDomain
 	require.NoError(t, db.First(&domain, "id = ?", "energy").Error)
 	threshold := 1500.0
-	query := types.KnowledgeContextQuery{Scope: "team", Predicate: "power", MinValue: &threshold, Unit: "W"}
+	query := types.KnowledgeContextQuery{Scope: "all", Predicate: "power", MinValue: &threshold, Unit: "W"}
 	result, err := svc.Query(ctx, "", query)
 	require.NoError(t, err)
 	require.Empty(t, result.Facts)

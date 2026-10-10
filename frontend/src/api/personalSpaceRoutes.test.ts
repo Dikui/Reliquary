@@ -56,21 +56,31 @@ test('settings, runtime queues and space key values use the current API routes',
   ])
 })
 
-test('new workflow writes normalize the saved team alias to all without mutating the draft', async () => {
+test('new workflow writes keep the all scope without mutating the draft', async () => {
   const requests: Request[] = [], api = loadAPI('./knowledge-workflows.ts', requests)
-  const draft = { name: 'Object tracking', enabled: false, schedule: {}, steps: [{ id: 'facts', type: 'fact_query', config: { scope: 'team', entity: 'Object' } }] }
+  const draft = { name: 'Object tracking', enabled: false, schedule: {}, steps: [{ id: 'facts', type: 'fact_query', config: { scope: 'all', entity: 'Object' } }] }
   await api.createKnowledgeWorkflow('kb/a', draft)
   await api.updateKnowledgeWorkflow('kb/a', 'workflow/a', draft)
-  assert.equal(draft.steps[0].config.scope, 'team')
+  assert.equal(draft.steps[0].config.scope, 'all')
   for (const request of requests) assert.equal((request.body as any).steps[0].config.scope, 'all')
 })
 
-test('context query and its old scope alias send the same normalized input', async () => {
+test('context query rejects the removed team scope before sending a request', async () => {
   const requests: Request[] = [], api = loadAPI('./knowledge-context.ts', requests)
   await api.queryKnowledgeContext('kb/a', { scope: 'all', entity: 'Object' })
-  await api.queryKnowledgeContext('kb/a', { scope: 'team', entity: 'Object' })
-  assert.deepEqual(requests[0], requests[1])
+  assert.throws(() => api.queryKnowledgeContext('kb/a', { scope: 'team', entity: 'Object' }), /scope must be knowledge_base, domain or all/)
+  assert.equal(requests.length, 1)
   assert.deepEqual(requests[0], { method: 'post', url: '/api/v1/knowledge-context/query', body: { scope: 'all', entity: 'Object' } })
+})
+
+test('workflow fact queries reject the removed team scope before saving', () => {
+  const requests: Request[] = [], api = loadAPI('./knowledge-workflows.ts', requests)
+  const draft = { name: 'Object tracking', enabled: false, schedule: {}, steps: [{ id: 'facts', type: 'fact_query', config: { scope: 'team', entity: 'Object' } }] }
+  const error = /scope must be knowledge_base, domain or all/
+  assert.throws(() => api.createKnowledgeWorkflow('kb/a', draft), error)
+  assert.throws(() => api.updateKnowledgeWorkflow('kb/a', 'workflow/a', draft), error)
+  assert.equal(draft.steps[0].config.scope, 'team')
+  assert.equal(requests.length, 0)
 })
 
 test('legacy agent tool selections retain the context capability requirements and save the current name', () => {

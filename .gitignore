@@ -30,7 +30,6 @@ logs/
 
 Reliquary
 /models/
-test/data/mswag.txt
 data/files/
 data/reliquary.db
 data/reliquary.db-wal

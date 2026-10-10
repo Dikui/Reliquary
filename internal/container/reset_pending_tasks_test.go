@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
-	"reliquary/internal/testutil/sqlfixture"
+	"reliquary/internal/testutil/pgtest"
 	"reliquary/internal/types"
 )
 
@@ -18,8 +18,8 @@ CREATE TABLE IF NOT EXISTS knowledges (
     summary_status  VARCHAR(32) NOT NULL DEFAULT 'none',
     pending_subtasks_count INTEGER NOT NULL DEFAULT 0,
     error_message   TEXT,
-    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
-    deleted_at      DATETIME
+    updated_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    deleted_at      TIMESTAMPTZ
 );
 `
 
@@ -29,17 +29,17 @@ CREATE TABLE IF NOT EXISTS sync_logs (
     data_source_id  VARCHAR(64) NOT NULL DEFAULT '',
     tenant_id       INTEGER NOT NULL DEFAULT 0,
     status          VARCHAR(32) NOT NULL,
-    started_at      DATETIME,
-    finished_at     DATETIME,
+    started_at      TIMESTAMPTZ,
+    finished_at     TIMESTAMPTZ,
     error_message   TEXT,
-    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 `
 
 const resetPendingSpansDDL = `
 CREATE TABLE IF NOT EXISTS knowledge_processing_spans (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    id              BIGSERIAL PRIMARY KEY,
     knowledge_id    VARCHAR(64) NOT NULL,
     attempt         INTEGER NOT NULL DEFAULT 1,
     span_id         VARCHAR(64) NOT NULL,
@@ -49,18 +49,18 @@ CREATE TABLE IF NOT EXISTS knowledge_processing_spans (
     status          VARCHAR(16) NOT NULL,
     error_code      VARCHAR(64),
     error_message   TEXT,
-    started_at      DATETIME,
-    finished_at     DATETIME,
+    started_at      TIMESTAMPTZ,
+    finished_at     TIMESTAMPTZ,
     duration_ms     INTEGER,
-    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (knowledge_id, attempt, span_id)
 );
 `
 
 const resetPendingOpsDDL = `
 CREATE TABLE IF NOT EXISTS task_pending_ops (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    id          BIGSERIAL PRIMARY KEY,
     tenant_id   INTEGER NOT NULL DEFAULT 0,
     task_type   VARCHAR(64) NOT NULL,
     scope       VARCHAR(32) NOT NULL,
@@ -69,8 +69,8 @@ CREATE TABLE IF NOT EXISTS task_pending_ops (
     dedup_key   VARCHAR(128) NOT NULL DEFAULT '',
     payload     TEXT NOT NULL DEFAULT '{}',
     fail_count  INTEGER NOT NULL DEFAULT 0,
-    enqueued_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    claimed_at  DATETIME
+    enqueued_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    claimed_at  TIMESTAMPTZ
 );
 `
 
@@ -78,14 +78,14 @@ const resetPendingKnowledgeBasesDDL = `
 CREATE TABLE IF NOT EXISTS knowledge_bases (
     id          VARCHAR(64) PRIMARY KEY,
     tenant_id   INTEGER NOT NULL DEFAULT 0,
-    deleted_at  DATETIME
+    deleted_at  TIMESTAMPTZ
 );
 `
 
 func setupResetPendingDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := sqlfixture.Open(":memory:", &gorm.Config{})
-	require.NoError(t, err)
+	db := pgtest.OpenFixture(t)
+	require.NoError(t, db.Error)
 	require.NoError(t, db.Exec(resetPendingKnowledgeDDL).Error)
 	require.NoError(t, db.Exec(resetPendingSyncLogDDL).Error)
 	require.NoError(t, db.Exec(resetPendingSpansDDL).Error)

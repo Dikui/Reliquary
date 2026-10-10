@@ -27,13 +27,6 @@ func NewModelRoutingHandler(db *gorm.DB, models interfaces.ModelService) *ModelR
 }
 
 // Get returns global model defaults or the selected scope's effective models.
-// @Summary 获取模型分级默认配置
-// @Tags 空间
-// @Produce json
-// @Param domain_id query string false "领域 ID"
-// @Param knowledge_base_id query string false "知识库 ID"
-// @Success 200 {object} map[string]interface{}
-// @Router /space/model-tiers [get]
 func (h *ModelRoutingHandler) Get(c *gin.Context) {
 	ctx := c.Request.Context()
 	tenantID := types.MustTenantIDFromContext(ctx)
@@ -69,13 +62,6 @@ func (h *ModelRoutingHandler) Get(c *gin.Context) {
 }
 
 // Update saves global model defaults.
-// @Summary 保存模型分级全局默认
-// @Tags 空间
-// @Accept json
-// @Produce json
-// @Param request body types.ModelTierConfig true "全局默认模型"
-// @Success 200 {object} map[string]interface{}
-// @Router /space/model-tiers [put]
 func (h *ModelRoutingHandler) Update(c *gin.Context) {
 	ctx := c.Request.Context()
 	tenantID := types.MustTenantIDFromContext(ctx)

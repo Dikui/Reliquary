@@ -11,7 +11,7 @@ source: MCP功能使用说明.md
 
 - MCP（Model Context Protocol）让 Reliquary 可以安全地连接外部工具或数据源，扩展 Agent 在推理时可调用的能力。
 - 在前端 `设置 > MCP 服务`（`frontend/src/views/settings/McpSettings.vue`）中集中管理所有服务，无需手动改配置文件。
-- 每个服务都包含名称、传输方式（SSE / HTTP Streamable / Stdio）、连接地址或命令、认证信息以及高级超时与重试策略。
+- 每个服务都包含名称、传输方式（SSE / HTTP Streamable）、连接地址、认证信息以及高级超时与重试策略。
 
 > 关于系统级的内置 MCP 服务管理，参见 [内置MCP服务管理](内置MCP服务管理.md)
 
@@ -26,7 +26,7 @@ source: MCP功能使用说明.md
 ### 1. 新建服务
 
 - 点击"添加服务"，填写名称与描述，选择传输方式。
-- SSE / HTTP Streamable 需提供可访问的服务 URL；Stdio 需配置 `uvx`/`npx` 命令与参数，可附加环境变量。
+- SSE / HTTP Streamable 需提供可访问的服务 URL。
 - 根据需要填写 API Key、Bearer Token、超时与重试策略，保存后服务会出现在列表中。
 
 ### 2. 启停服务
@@ -45,7 +45,7 @@ source: MCP功能使用说明.md
 
 ## 使用建议
 
-- **传输方式选择**：优先使用 SSE 获取流式体验；需要标准 HTTP Streamable 兼容时再切换；本地调试或离线环境适合使用 Stdio 并在同机启动 MCP Server。
+- **传输方式选择**：优先使用 SSE 获取流式体验；需要标准 HTTP Streamable 兼容时再切换。
 - **鉴权管理**：将 API Key / Token 保存在"认证配置"中，生产环境建议单独创建最小权限 Key，并定期轮换。
 - **重试策略**：对公网或第三方服务适当提高 `retry_count` 与 `retry_delay`，避免间歇性超时导致 Agent 中断
 

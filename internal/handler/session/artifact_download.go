@@ -29,15 +29,6 @@ func paramSessionID(c *gin.Context) string {
 }
 
 // ListSessionArtifacts godoc
-// @Summary      列出会话生成的产物文件
-// @Description  返回本会话中所有 assistant 消息产生的技能产物元数据（不含 URL）
-// @Tags         会话
-// @Produce      json
-// @Param        session_id  path  string  true  "会话ID"
-// @Success      200  {object}  map[string]interface{}
-// @Failure      404  {object}  errors.AppError
-// @Security     Bearer
-// @Router       /sessions/{session_id}/artifacts [get]
 //
 // The endpoint powers the drawer that lists every file generated in the
 // session; it does NOT return the storage URL (only names/sizes/mtimes), so
@@ -95,8 +86,6 @@ func (h *Handler) ListSessionArtifacts(c *gin.Context) {
 //
 // Same-tenant/same-owner check flows through h.sessionService.GetSession
 // exactly like ListSessionArtifacts.
-//
-// @Router /sessions/{session_id}/messages/{message_id}/artifacts [get]
 func (h *Handler) ListMessageArtifacts(c *gin.Context) {
 	ctx := c.Request.Context()
 	sessionID := secutils.SanitizeForLog(paramSessionID(c))
@@ -144,8 +133,6 @@ func (h *Handler) ListMessageArtifacts(c *gin.Context) {
 // client. Clients reference the artifact by its position (:index) in the
 // assistant message's Artifacts array; the storage URL never leaves the
 // server so callers cannot pivot to arbitrary blobs.
-//
-// @Router /sessions/{session_id}/messages/{message_id}/artifacts/{index}/download [get]
 func (h *Handler) DownloadMessageArtifact(c *gin.Context) {
 	ctx := c.Request.Context()
 

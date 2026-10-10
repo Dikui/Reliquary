@@ -75,14 +75,6 @@ func (h *KnowledgeWorkflowHandler) Delete(c *gin.Context) {
 }
 
 // Run queues a workflow run when enabled.
-// @Summary Run knowledge workflow
-// @Tags knowledge-workflows
-// @Produce json
-// @Param id path string true "Knowledge base ID"
-// @Param workflow_id path string true "Workflow or run ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 409 {object} map[string]interface{} "Workflow disabled; enable before running, retrying, or resuming. Localized in Chinese and English."
-// @Router /knowledge-bases/{id}/workflows/{workflow_id}/run [post]
 func (h *KnowledgeWorkflowHandler) Run(c *gin.Context) {
 	data, err := h.service.Run(c.Request.Context(), c.Param("id"), c.Param("workflow_id"), "manual")
 	workflowResponse(c, data, err)
@@ -97,28 +89,12 @@ func (h *KnowledgeWorkflowHandler) GetRun(c *gin.Context) {
 }
 
 // Resume queues a workflow run when enabled.
-// @Summary Resume knowledge workflow
-// @Tags knowledge-workflows
-// @Produce json
-// @Param id path string true "Knowledge base ID"
-// @Param run_id path string true "Workflow or run ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 409 {object} map[string]interface{} "Workflow disabled; enable before running, retrying, or resuming. Localized in Chinese and English."
-// @Router /knowledge-bases/{id}/workflows/runs/{run_id}/resume [post]
 func (h *KnowledgeWorkflowHandler) Resume(c *gin.Context) {
 	data, err := h.service.Resume(c.Request.Context(), c.Param("id"), c.Param("run_id"))
 	workflowResponse(c, data, err)
 }
 
 // Retry queues a workflow run when enabled.
-// @Summary Retry knowledge workflow
-// @Tags knowledge-workflows
-// @Produce json
-// @Param id path string true "Knowledge base ID"
-// @Param run_id path string true "Workflow or run ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 409 {object} map[string]interface{} "Workflow disabled; enable before running, retrying, or resuming. Localized in Chinese and English."
-// @Router /knowledge-bases/{id}/workflows/runs/{run_id}/retry [post]
 func (h *KnowledgeWorkflowHandler) Retry(c *gin.Context) {
 	data, err := h.service.Retry(c.Request.Context(), c.Param("id"), c.Param("run_id"))
 	workflowResponse(c, data, err)

@@ -19,46 +19,6 @@ docker compose logs -f app postgres redis
 ./scripts/start_all.sh --stop && make clean-db
 ```
 
-## 3. 服务启动后无法正常上传文档？
-
-通常是Embedding模型和对话模型没有正确被设置导致。按照以下步骤进行排查
-
-1. 查看`.env`配置中的模型信息是否配置完整，其中如果使用ollama访问本地模型，需要确保本地ollama服务正常运行，同时在`.env`中的如下环境变量需要正确设置:
-```bash
-# LLM Model
-INIT_LLM_MODEL_NAME=your_llm_model
-# Embedding Model
-INIT_EMBEDDING_MODEL_NAME=your_embedding_model
-# Embedding模型向量维度
-INIT_EMBEDDING_MODEL_DIMENSION=your_embedding_model_dimension
-# Embedding模型的ID，通常是一个字符串
-INIT_EMBEDDING_MODEL_ID=your_embedding_model_id
-```
-
-如果是通过remote api访问模型，则需要额外提供对应的`BASE_URL`和`API_KEY`:
-```bash
-# LLM模型的访问地址
-INIT_LLM_MODEL_BASE_URL=your_llm_model_base_url
-# LLM模型的API密钥，如果需要身份验证，可以设置
-INIT_LLM_MODEL_API_KEY=your_llm_model_api_key
-# Embedding模型的访问地址
-INIT_EMBEDDING_MODEL_BASE_URL=your_embedding_model_base_url
-# Embedding模型的API密钥，如果需要身份验证，可以设置
-INIT_EMBEDDING_MODEL_API_KEY=your_embedding_model_api_key
-```
-
-当需要重排序功能时，需要额外配置Rerank模型，具体配置如下：
-```bash
-# 使用的Rerank模型名称
-INIT_RERANK_MODEL_NAME=your_rerank_model_name
-# Rerank模型的访问地址
-INIT_RERANK_MODEL_BASE_URL=your_rerank_model_base_url
-# Rerank模型的API密钥，如果需要身份验证，可以设置
-INIT_RERANK_MODEL_API_KEY=your_rerank_model_api_key
-```
-
-2. 查看主服务日志，是否有`ERROR`日志输出
-
 ## 4. 没有图片或者显示无效的图片链接？
 
 当使用多模态功能时，如果遇到图片无法显示或显示无效链接的问题，请按照以下步骤排查：
@@ -136,14 +96,6 @@ docker compose restart app
 
 唯一用户登录后拥有全部权限，有效 API Key 的权限相同。出现 401 时检查登录令牌或 API Key 是否过期、撤销或填写错误。
 
-## 12. 为什么登录后没有自动回到上次的工作区？
-
-升级到 0.6.0 后系统会记住「最后活跃工作区」并在登录后自动恢复。若仍未恢复，通常是：
-
-1. 浏览器清理了 LocalStorage / 切换了浏览器；
-2. 你最后访问的那个工作区已经把你移除（`/leave` 或被管理员剔除）— 系统会回退到默认空间；
-3. JWT 中携带了 `tenant_id` 但已无效 — 退出重登录即可。
-
 ## 14. 文档解析卡在「处理中」/ 解析追踪时间线打不开怎么办？
 
 0.6.1 起每个文档解析都会记录一棵 文档处理 Span 树（`knowledge_processing_spans` 表），可在知识库卡片菜单或卡片上的「Trace」入口打开侧边时间线，逐阶段查看进度。常见情况：
@@ -166,12 +118,11 @@ docker compose restart app
 
 ## 18. 上传时如何自定义解析配置（process_config）？
 
-0.6.2 起，文件 / URL / 文件夹上传可携带 `process_config`（`KnowledgeProcessOverrides`），在**本次批次**内覆盖知识库默认的解析引擎、分块、多模态（VLM / ASR）、问题生成等设置，而不会改动 KB 全局配置。Web UI 在上传前会弹出确认对话框供调整；API 与 `reliquary doc upload` 传同名 JSON 即可。
+0.6.2 起，文件 / URL / 文件夹上传可携带 `process_config`（`KnowledgeProcessOverrides`），在**本次批次**内覆盖知识库默认的解析引擎、分块、多模态（VLM / ASR）、问题生成等设置，而不会改动 KB 全局配置。Web UI 在上传前会弹出确认对话框供调整。
 
 - **与 KB 默认配置的关系**：未传的字段沿用 KB 默认值。
 - **重新解析**：`POST /knowledge/:id/reparse` 可在 body 中传 `process_config` 以新配置重跑解析，覆盖项会写入 `knowledge.metadata.process_overrides`。
 - **图片 / 音频校验**：批次含图片时需 KB 已配置 VLM；含音频时需已配置 ASR，否则上传会被拒绝。
-- 详见 [`docs/api/knowledge.md`](./api/knowledge.md)。
 
 ## 20. pgvector 检索变慢或刚升级后需要做什么？
 
@@ -191,7 +142,7 @@ docker compose restart app
 
 ## 25. MCP 远程服务如何配置 OAuth2？
 
-0.6.3 支持 MCP 服务的 **OAuth2 授权**（相关结构已纳入数据库基线）。在 **设置 → MCP** 添加 HTTP 类型服务并选择 OAuth2，按向导完成授权回调；另支持自定义 HTTP Header 与 JSON **代码导入**快速粘贴配置。授权 Token 加密存储，过期后需在 UI 重新授权。
+0.6.3 支持 MCP 服务的 **OAuth2 授权**（相关结构已纳入数据库基线）。在 **设置 → MCP** 添加 HTTP 类型服务并选择 OAuth2，按向导完成授权回调；另支持自定义 HTTP Header 与 JSON **代码导入**快速粘贴配置。过期后需在 UI 重新授权。
 
 ## 26. Embedding 维度如何覆盖？
 
@@ -207,7 +158,7 @@ docker compose restart app
 
 ## 30. 后台解析/入库任务积压或需要排查失败任务怎么办？
 
-0.7.0 新增系统管理员的**运行时任务队列面板**与 **Worker 池治理**。文档处理从单一聚合池改为分阶段独立池（core / 后处理 / enrichment / maintenance）+ 弹性共享池：
+0.7.0 新增**运行时任务队列面板**与 **Worker 池治理**。文档处理从单一聚合池改为分阶段独立池（core / 后处理 / enrichment / maintenance）+ 弹性共享池：
 
 - 在 **系统设置 → 运行时队列** 查看队列深度、按模型并发统计、失败任务详情，并可手动重试。
 - 可通过 `RELIQUARY_ASYNQ_*_CONCURRENCY` 与 `asynq.*_concurrency` 系统设置调整各池并发（需重启服务）；`model.max_concurrency` 用于约束单模型后台并发。
@@ -229,7 +180,7 @@ docker compose restart app
 
 ## 38. 使用与接口文档在哪里看？
 
-个人部署和登录说明见[个人使用指南](personal-use.md)，接口说明见[API 文档](api/README.md)，知识上下文与工作流说明见[知识库融合说明](知识库融合说明.md)。项目文档导航保留在 [docs/wiki](wiki/Home.md)。
+个人部署和登录说明见[个人使用指南](personal-use.md)，知识上下文与工作流说明见[知识库融合说明](知识库融合说明.md)。项目文档导航保留在 [docs/wiki](wiki/Home.md)。
 
 ## 39. 文件夹上传后文档标题变成了一长串路径？
 
@@ -255,20 +206,10 @@ docker compose restart app
 
 注意事项：
 
-- 直链依赖 `APP_EXTERNAL_URL`（或存储后端本身公网可达）才能生成；无法生成时该引用会保持 `resource://` 原样，客户端仍可回退到 `/files`。
+- 直链依赖 `APP_EXTERNAL_URL`才能生成；无法生成时该引用会保持 `resource://` 原样，客户端仍可回退到 `/files`。
 - `public` 会为每个被引用文件签发**限时匿名可读**链接（2 小时），请评估是否符合你的安全要求。
-- 限定了知识库范围的 API Key **始终返回 handle**，不受该变量影响。
 - 建议同时配置 `SYSTEM_AES_KEY`，以便复用 grant 行、稳定直链 URL 并降低读接口的写入压力。
 
-详见 [API 文档 · 文件与图片引用](./api/README.md)。
-
-## 48. anydoc 如何启用？
-
-anydoc 是进程内文档转换引擎，PDF、Office、EPUB 和 CSV 默认使用它。本地需安装 Rust，执行 `make anydoc-lib` 后使用 `go run -tags anydoc ./cmd/server`。应用镜像默认链接 anydoc。未链接时明确提示构建要求；扫描件和复杂排版可在设置中选择 MinerU。
-
-## 50. 开启复杂密码后注册 / 改密失败？
-
-系统设置或 `RELIQUARY_AUTH_COMPLEX_PASSWORD_ENABLED=true` 打开后，密码必须同时包含大写、小写、数字和特殊字符（`!@#$%^&*()_+-=[]{}|;:,.<>?`），长度 8–32。注册、个人中心改密、管理员重置走同一套规则。未打开时仍只要求长度。
 
 ## P.S.
 如果以上方式未解决问题，请在issue中描述您的问题，并提供必要的日志信息辅助我们进行问题排查

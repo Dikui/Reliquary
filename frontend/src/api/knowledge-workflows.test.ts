@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import ts from 'typescript'
+import * as scope from './knowledge-context-scope'
 
 test('report downloads preserve the Markdown URL and request JSON explicitly', async () => {
   const requested: string[] = []
@@ -10,6 +11,7 @@ test('report downloads preserve the Markdown URL and request JSON explicitly', a
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   new Function('require', 'module', 'exports', compiled)(
     (name: string) => {
+      if (name === './knowledge-context-scope') return scope
       assert.equal(name, '@/utils/request')
       return { getDown: (url: string) => { requested.push(url); return Promise.resolve(new Blob(['report'])) } }
     }, module, module.exports,

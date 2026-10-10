@@ -184,10 +184,10 @@ func TestPersonalAPIKeyAndLoginReturnAllKnowledgeContext(t *testing.T) {
 	seedPersonalContext(t, f)
 	cases := []struct{ method, path, body string }{
 		{http.MethodGet, "/api/v1/knowledge/search?keyword=Acme", ""},
-		{http.MethodGet, "/api/v1/knowledge-context/entities?scope=team", ""},
+		{http.MethodGet, "/api/v1/knowledge-context/entities?scope=all", ""},
 		{http.MethodGet, "/api/v1/knowledge-context/entities/personal-entity-2", ""},
-		{http.MethodGet, "/api/v1/knowledge-context/events?scope=team", ""},
-		{http.MethodPost, "/api/v1/knowledge-context/query", `{"scope":"team","include_history":true,"limit":50}`},
+		{http.MethodGet, "/api/v1/knowledge-context/events?scope=all", ""},
+		{http.MethodPost, "/api/v1/knowledge-context/query", `{"scope":"all","include_history":true,"limit":50}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.path, func(t *testing.T) {
@@ -210,6 +210,31 @@ func TestPersonalAPIKeyAndLoginReturnAllKnowledgeContext(t *testing.T) {
 	}
 }
 
+func TestKnowledgeContextRoutesRejectLegacyTeamScope(t *testing.T) {
+	f := newPersonalAuthFixture(t)
+	seedPersonalContext(t, f)
+	cases := []struct{ method, path, body string }{
+		{http.MethodGet, "/api/v1/knowledge-context/entities?scope=team", ""},
+		{http.MethodGet, "/api/v1/knowledge-context/events?scope=team", ""},
+		{http.MethodGet, "/api/v1/knowledge-context/evidence?scope=team", ""},
+		{http.MethodGet, "/api/v1/knowledge-context/focus?scope=team", ""},
+		{http.MethodPost, "/api/v1/knowledge-context/query", `{"scope":"team"}`},
+		{http.MethodPost, "/api/v1/knowledge-bases/personal-kb-1/context/query", `{"scope":"team"}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.path, func(t *testing.T) {
+			for _, credential := range []struct {
+				value  string
+				apiKey bool
+			}{{f.token, false}, {f.key, true}} {
+				response := personalRequest(t, f.router, tc.method, tc.path, tc.body, credential.value, credential.apiKey)
+				require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
+				require.Contains(t, response.Body.String(), "scope must be knowledge_base, domain or all")
+			}
+		})
+	}
+}
+
 func TestPersonalAPIKeyWithoutExpirationIsUsable(t *testing.T) {
 	f := newPersonalAuthFixture(t)
 	for _, body := range []string{`{"name":"No expiration"}`, `{"name":"Zero expiration","expires_at_unix":0}`} {
@@ -227,7 +252,7 @@ func TestPersonalAPIKeyWithoutExpirationIsUsable(t *testing.T) {
 		var stored types.TenantAPIKey
 		require.NoError(t, f.db.First(&stored, response.Data.ID).Error)
 		require.Nil(t, stored.ExpiresAt)
-		queried := personalRequest(t, f.router, http.MethodGet, "/api/v1/knowledge-context/entities?scope=team", "", response.Data.Token, true)
+		queried := personalRequest(t, f.router, http.MethodGet, "/api/v1/knowledge-context/entities?scope=all", "", response.Data.Token, true)
 		require.Equal(t, http.StatusOK, queried.Code, queried.Body.String())
 	}
 }

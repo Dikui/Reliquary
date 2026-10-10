@@ -126,13 +126,13 @@ func validateWorkflowStepConfig(step types.KnowledgeWorkflowStep) error {
 			return err
 		}
 		switch cfg.Scope {
-		case "", "knowledge_base", "all", "team":
+		case "", "knowledge_base", "all":
 		case "domain":
 			if strings.TrimSpace(cfg.DomainID) == "" {
 				return errors.New("domain_id is required for domain scope")
 			}
 		default:
-			return errors.New("invalid fact query scope")
+			return errors.New("scope must be knowledge_base, domain or all")
 		}
 		if (cfg.MinValue != nil || cfg.MaxValue != nil) && str("predicate") == "" {
 			return errors.New("numeric comparison requires an attribute predicate")

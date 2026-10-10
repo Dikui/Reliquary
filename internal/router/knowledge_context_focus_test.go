@@ -34,7 +34,7 @@ func TestIssue06FocusRoutesUseTenantRules(t *testing.T) {
 		added := fusionRequest(t, engine, http.MethodPut, target, "", 1, "editor")
 		require.Equal(t, http.StatusOK, added.Code, added.Body.String())
 	}
-	focus := fusionRequest(t, engine, http.MethodGet, "/api/v1/knowledge-context/focus?scope=team", "", 1, "personal-user")
+	focus := fusionRequest(t, engine, http.MethodGet, "/api/v1/knowledge-context/focus?scope=all", "", 1, "personal-user")
 	require.Equal(t, http.StatusOK, focus.Code, focus.Body.String())
 	var response struct {
 		Data types.KnowledgeFocusScope `json:"data"`

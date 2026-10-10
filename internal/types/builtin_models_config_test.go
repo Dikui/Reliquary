@@ -10,17 +10,17 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 
-	"reliquary/internal/testutil/sqlfixture"
+	"reliquary/internal/testutil/pgtest"
 )
 
-// setupBuiltinModelsDB creates an in-memory SQLite DB with `models` migrated
+// setupBuiltinModelsDB creates an isolated PostgreSQL DB with `models` migrated
 // via GORM AutoMigrate. AutoMigrate honours the struct tags so the
 // `managed_by` and soft-delete columns are present, matching what the real
 // migrations produce.
 func setupBuiltinModelsDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := sqlfixture.Open(":memory:", &gorm.Config{})
-	require.NoError(t, err)
+	db := pgtest.OpenFixture(t)
+	require.NoError(t, db.Error)
 	require.NoError(t, db.AutoMigrate(&Model{}))
 	return db
 }

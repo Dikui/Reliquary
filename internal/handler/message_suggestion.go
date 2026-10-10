@@ -32,19 +32,6 @@ type SuggestionEventRequest struct {
 }
 
 // Ensure godoc
-// @Summary      确保生成回答后推荐问题
-// @Description  对已完成的助手消息异步生成或重新生成推荐问题；相同配置快照会复用持久化结果
-// @Tags         会话
-// @Accept       json
-// @Produce      json
-// @Param        session_id  path  string  true  "会话 ID"
-// @Param        message_id  path  string  true  "助手消息 ID"
-// @Param        request     body  EnsureMessageSuggestionsRequest  false  "生成选项"
-// @Success      200  {object}  map[string]interface{}
-// @Success      202  {object}  map[string]interface{}
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /sessions/{session_id}/messages/{message_id}/suggestions [post]
 func (h *MessageSuggestionHandler) Ensure(c *gin.Context) {
 	var request EnsureMessageSuggestionsRequest
 	if c.Request.ContentLength > 0 {
@@ -71,15 +58,6 @@ func (h *MessageSuggestionHandler) Ensure(c *gin.Context) {
 }
 
 // Get godoc
-// @Summary      获取回答后推荐问题
-// @Tags         会话
-// @Produce      json
-// @Param        session_id  path  string  true  "会话 ID"
-// @Param        message_id  path  string  true  "助手消息 ID"
-// @Success      200  {object}  map[string]interface{}
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /sessions/{session_id}/messages/{message_id}/suggestions [get]
 func (h *MessageSuggestionHandler) Get(c *gin.Context) {
 	set, err := h.service.GetFollowUps(
 		c.Request.Context(),
@@ -102,16 +80,6 @@ func messageSuggestionSessionID(c *gin.Context) string {
 }
 
 // RecordEvent godoc
-// @Summary      上报推荐问题事件
-// @Description  记录曝光、点击或关闭事件
-// @Tags         会话
-// @Accept       json
-// @Param        session_id  path  string  true  "会话 ID"
-// @Param        request     body  SuggestionEventRequest  true  "事件"
-// @Success      204
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /sessions/{session_id}/suggestion-events [post]
 func (h *MessageSuggestionHandler) RecordEvent(c *gin.Context) {
 	var request SuggestionEventRequest
 	if err := c.ShouldBindJSON(&request); err != nil {

@@ -573,18 +573,6 @@ func (h *Handler) setupSSEStream(reqCtx *qaRequestContext, generateTitle bool) *
 }
 
 // SearchKnowledge godoc
-// @Summary      知识搜索
-// @Description  在知识库中搜索（不使用LLM总结）
-// @Tags         问答
-// @Accept       json
-// @Produce      json
-// @Param        request  body      SearchKnowledgeRequest  true  "搜索请求"
-// @Param        resource_urls  query     string  false  "文件引用形式，public 返回可加载直链"  Enums(handle, public)  default(handle)
-// @Success      200      {object}  map[string]interface{}  "搜索结果"
-// @Failure      400      {object}  errors.AppError         "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge-search [post]
 func (h *Handler) SearchKnowledge(c *gin.Context) {
 	ctx := logger.CloneContext(c.Request.Context())
 	logger.Info(ctx, "Start processing knowledge search request")
@@ -669,19 +657,6 @@ func (h *Handler) SearchKnowledge(c *gin.Context) {
 }
 
 // KnowledgeQA godoc
-// @Summary      知识问答
-// @Description  基于知识库的问答（使用LLM总结），支持SSE流式响应
-// @Tags         问答
-// @Accept       json
-// @Produce      text/event-stream
-// @Param        session_id  path      string                   true  "会话ID"
-// @Param        request     body      CreateKnowledgeQARequest true  "问答请求"
-// @Param        resource_urls  query     string  false  "文件引用形式，public 返回可加载直链"  Enums(handle, public)  default(handle)
-// @Success      200         {object}  map[string]interface{}   "问答结果（SSE流）"
-// @Failure      400         {object}  errors.AppError          "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge-chat/{session_id} [post]
 func (h *Handler) KnowledgeQA(c *gin.Context) {
 	// Parse and validate request
 	reqCtx, request, err := h.parseQARequest(c, "KnowledgeQA")
@@ -695,19 +670,6 @@ func (h *Handler) KnowledgeQA(c *gin.Context) {
 }
 
 // AgentQA godoc
-// @Summary      Agent问答
-// @Description  基于Agent的智能问答，支持多轮对话和SSE流式响应
-// @Tags         问答
-// @Accept       json
-// @Produce      text/event-stream
-// @Param        session_id  path      string                   true  "会话ID"
-// @Param        request     body      CreateKnowledgeQARequest true  "问答请求"
-// @Param        resource_urls  query     string  false  "文件引用形式，public 返回可加载直链"  Enums(handle, public)  default(handle)
-// @Success      200         {object}  map[string]interface{}   "问答结果（SSE流）"
-// @Failure      400         {object}  errors.AppError          "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /agent-chat/{session_id} [post]
 func (h *Handler) AgentQA(c *gin.Context) {
 	// Parse and validate request
 	reqCtx, request, err := h.parseQARequest(c, "AgentQA")

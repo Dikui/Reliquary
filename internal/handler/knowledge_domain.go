@@ -19,13 +19,6 @@ func NewKnowledgeDomainHandler(s *service.KnowledgeDomainService) *KnowledgeDoma
 }
 
 // List godoc
-// @Summary List knowledge domains
-// @Tags Knowledge domains
-// @Produce json
-// @Success 200 {object} map[string]interface{}
-// @Security Bearer
-// @Security ApiKeyAuth
-// @Router /knowledge-domains [get]
 func (h *KnowledgeDomainHandler) List(c *gin.Context) {
 	items, err := h.service.List(c.Request.Context())
 	if err != nil {
@@ -36,14 +29,6 @@ func (h *KnowledgeDomainHandler) List(c *gin.Context) {
 }
 
 // Get godoc
-// @Summary Get a knowledge domain
-// @Tags Knowledge domains
-// @Produce json
-// @Param id path string true "Domain ID"
-// @Success 200 {object} map[string]interface{}
-// @Security Bearer
-// @Security ApiKeyAuth
-// @Router /knowledge-domains/{id} [get]
 func (h *KnowledgeDomainHandler) Get(c *gin.Context) {
 	item, err := h.service.Get(c.Request.Context(), c.Param("id"))
 	if err != nil {
@@ -54,15 +39,6 @@ func (h *KnowledgeDomainHandler) Get(c *gin.Context) {
 }
 
 // Create godoc
-// @Summary Create a knowledge domain
-// @Tags Knowledge domains
-// @Accept json
-// @Produce json
-// @Param request body types.KnowledgeDomain true "Domain template"
-// @Success 201 {object} map[string]interface{}
-// @Security Bearer
-// @Security ApiKeyAuth
-// @Router /knowledge-domains [post]
 func (h *KnowledgeDomainHandler) Create(c *gin.Context) {
 	var input types.KnowledgeDomain
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -78,16 +54,6 @@ func (h *KnowledgeDomainHandler) Create(c *gin.Context) {
 }
 
 // Update godoc
-// @Summary Update a knowledge domain
-// @Tags Knowledge domains
-// @Accept json
-// @Produce json
-// @Param id path string true "Domain ID"
-// @Param request body types.KnowledgeDomain true "Domain template"
-// @Success 200 {object} map[string]interface{}
-// @Security Bearer
-// @Security ApiKeyAuth
-// @Router /knowledge-domains/{id} [put]
 func (h *KnowledgeDomainHandler) Update(c *gin.Context) {
 	var input types.KnowledgeDomain
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -103,15 +69,6 @@ func (h *KnowledgeDomainHandler) Update(c *gin.Context) {
 }
 
 // Delete godoc
-// @Summary Delete an unused custom knowledge domain
-// @Tags Knowledge domains
-// @Produce json
-// @Param id path string true "Domain ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 409 {object} map[string]interface{} "Domain is referenced by active knowledge bases"
-// @Security Bearer
-// @Security ApiKeyAuth
-// @Router /knowledge-domains/{id} [delete]
 func (h *KnowledgeDomainHandler) Delete(c *gin.Context) {
 	if err := h.service.Delete(c.Request.Context(), c.Param("id")); err != nil {
 		c.Error(err)
@@ -121,14 +78,6 @@ func (h *KnowledgeDomainHandler) Delete(c *gin.Context) {
 }
 
 // OpenFields godoc
-// @Summary List unmapped open fields with counts and sample facts
-// @Tags Knowledge domains
-// @Produce json
-// @Param id path string true "Domain ID"
-// @Success 200 {object} map[string]interface{}
-// @Security Bearer
-// @Security ApiKeyAuth
-// @Router /knowledge-domains/{id}/open-fields [get]
 func (h *KnowledgeDomainHandler) OpenFields(c *gin.Context) {
 	items, err := h.service.OpenFields(c.Request.Context(), c.Param("id"))
 	if err != nil {
@@ -139,16 +88,6 @@ func (h *KnowledgeDomainHandler) OpenFields(c *gin.Context) {
 }
 
 // MapField godoc
-// @Summary Map an open field to a template field alias
-// @Tags Knowledge domains
-// @Accept json
-// @Produce json
-// @Param id path string true "Domain ID"
-// @Param request body types.DomainFieldMapping true "Field mapping"
-// @Success 200 {object} map[string]interface{}
-// @Security Bearer
-// @Security ApiKeyAuth
-// @Router /knowledge-domains/{id}/field-mappings [post]
 func (h *KnowledgeDomainHandler) MapField(c *gin.Context) {
 	var input types.DomainFieldMapping
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -164,16 +103,6 @@ func (h *KnowledgeDomainHandler) MapField(c *gin.Context) {
 }
 
 // AddField godoc
-// @Summary Add an open field as a template field
-// @Tags Knowledge domains
-// @Accept json
-// @Produce json
-// @Param id path string true "Domain ID"
-// @Param request body types.DomainField true "New template field"
-// @Success 200 {object} map[string]interface{}
-// @Security Bearer
-// @Security ApiKeyAuth
-// @Router /knowledge-domains/{id}/fields [post]
 func (h *KnowledgeDomainHandler) AddField(c *gin.Context) {
 	var input types.DomainField
 	if err := c.ShouldBindJSON(&input); err != nil {

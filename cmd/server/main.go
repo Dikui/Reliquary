@@ -1,25 +1,5 @@
 // Package main is the main package for the Reliquary server
 // It contains the main function and the entry point for the server
-//
-// @title           Reliquary API
-// @version         1.0
-// @description     Reliquary 知识库管理系统 API 文档
-// @termsOfService  http://swagger.io/terms/
-//
-// @contact.name   Reliquary Github
-// @contact.url    http://192.168.1.146:3000/dikui/reliquary
-//
-// @BasePath  /api/v1
-//
-// @securityDefinitions.apikey Bearer
-// @in header
-// @name Authorization
-// @description 用户登录认证：输入 Bearer {token} 格式的 JWT 令牌
-
-// @securityDefinitions.apikey ApiKeyAuth
-// @in header
-// @name X-API-Key
-// @description API Key 认证：以唯一用户身份访问个人空间
 package main
 
 import (

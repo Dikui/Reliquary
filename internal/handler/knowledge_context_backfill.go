@@ -33,15 +33,6 @@ func backfillTarget(c *gin.Context) types.KnowledgeContextBackfillTarget {
 }
 
 // BackfillEstimate returns eligible messages and the current batch call estimate.
-// @Summary Estimate historical message backfill
-// @Tags Knowledge Context
-// @Produce json
-// @Security Bearer
-// @Param entity_id query string false "Starred object ID"
-// @Param topic_id query string false "Concrete topic tag ID"
-// @Success 200 {object} KnowledgeContextBackfillEstimateResponse "Backfill estimate"
-// @Failure 400 {object} map[string]interface{}
-// @Router /knowledge-context/backfill/estimate [get]
 func (h *KnowledgeContextHandler) BackfillEstimate(c *gin.Context) {
 	if h.backfill == nil {
 		c.Error(werrors.NewInternalServerError("backfill unavailable"))
@@ -56,15 +47,6 @@ func (h *KnowledgeContextHandler) BackfillEstimate(c *gin.Context) {
 }
 
 // StartBackfill manually queues up to 200 of the newest eligible snapshots.
-// @Summary Backfill historical messages for a starred object or topic
-// @Tags Knowledge Context
-// @Accept json
-// @Produce json
-// @Security Bearer
-// @Param request body types.KnowledgeContextBackfillTarget true "One starred object or topic"
-// @Success 202 {object} KnowledgeContextBackfillBatchResponse "Backfill batch"
-// @Failure 400 {object} map[string]interface{}
-// @Router /knowledge-context/backfill [post]
 func (h *KnowledgeContextHandler) StartBackfill(c *gin.Context) {
 	if h.backfill == nil {
 		c.Error(werrors.NewInternalServerError("backfill unavailable"))
@@ -84,15 +66,6 @@ func (h *KnowledgeContextHandler) StartBackfill(c *gin.Context) {
 }
 
 // BackfillBatches lists recent batches for the requested object or topic.
-// @Summary List historical message backfill batches
-// @Tags Knowledge Context
-// @Produce json
-// @Security Bearer
-// @Param entity_id query string false "Object ID"
-// @Param topic_id query string false "Concrete topic tag ID"
-// @Success 200 {object} KnowledgeContextBackfillBatchesResponse "Recent backfill batches"
-// @Failure 400 {object} map[string]interface{}
-// @Router /knowledge-context/backfill/batches [get]
 func (h *KnowledgeContextHandler) BackfillBatches(c *gin.Context) {
 	if h.backfill == nil {
 		c.Error(werrors.NewInternalServerError("backfill unavailable"))
@@ -107,14 +80,6 @@ func (h *KnowledgeContextHandler) BackfillBatches(c *gin.Context) {
 }
 
 // GetBackfillBatch includes terminal errors and per-message results.
-// @Summary Get a historical message backfill batch
-// @Tags Knowledge Context
-// @Produce json
-// @Security Bearer
-// @Param batch_id path string true "Batch ID"
-// @Success 200 {object} KnowledgeContextBackfillBatchResponse "Backfill batch and message results"
-// @Failure 404 {object} map[string]interface{}
-// @Router /knowledge-context/backfill/batches/{batch_id} [get]
 func (h *KnowledgeContextHandler) GetBackfillBatch(c *gin.Context) {
 	if h.backfill == nil {
 		c.Error(werrors.NewInternalServerError("backfill unavailable"))

@@ -308,11 +308,7 @@ type KnowledgeFactCorrection struct {
 	CorrectionNote string     `json:"correction_note"`
 }
 
-// NormalizeKnowledgeContextScope accepts the historical all-knowledge-base scope alias.
+// NormalizeKnowledgeContextScope removes surrounding whitespace from the query scope.
 func NormalizeKnowledgeContextScope(scope string) string {
-	scope = strings.TrimSpace(scope)
-	if scope == "team" {
-		return "all"
-	}
-	return scope
+	return strings.TrimSpace(scope)
 }

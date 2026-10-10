@@ -4,17 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 
 	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/require"
 	"reliquary/internal/agent/tools"
+	werrors "reliquary/internal/errors"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 )
 
-func TestKnowledgeContextAllScopeAcceptsLegacyTeamAlias(t *testing.T) {
+func TestKnowledgeContextScopesRejectLegacyTeamAlias(t *testing.T) {
 	db, ctx, svc := p2ContextFixture(t)
 	require.NoError(t, db.Create(&types.KnowledgeEntity{ID: "acme", TenantID: 9, CanonicalName: "Acme", NormalizedName: "acme"}).Error)
 	for i, kbID := range []string{"kb", "energy-one", "energy-two"} {
@@ -23,15 +25,26 @@ func TestKnowledgeContextAllScopeAcceptsLegacyTeamAlias(t *testing.T) {
 		require.NoError(t, db.Create(&types.KnowledgeEvidence{ID: id, TenantID: 9, KnowledgeBaseID: kbID, KnowledgeID: id, Version: 1, BodyHash: strings.Repeat(fmt.Sprint(i), 64), Body: "Acme has ten workers.", Status: types.KnowledgeEvidenceCurrent}).Error)
 		require.NoError(t, db.Create(&types.KnowledgeFact{ID: id, TenantID: 9, KnowledgeBaseID: kbID, SubjectEntityID: "acme", Kind: types.KnowledgeFactAttribute, Predicate: "workers", Value: types.JSON(`10`), ValueType: "number", EvidenceID: id, Quote: "Acme has ten workers.", Status: types.KnowledgeFactCurrent}).Error)
 	}
-	all, err := svc.Query(ctx, "kb", types.KnowledgeContextQuery{Scope: "all", EntityID: "acme"})
-	require.NoError(t, err)
-	require.Len(t, all.Facts, 3)
-	legacy, err := svc.Query(ctx, "kb", types.KnowledgeContextQuery{Scope: "team", EntityID: "acme"})
-	require.NoError(t, err)
-	require.Equal(t, all, legacy)
+	for _, tc := range []struct {
+		scope string
+		count int
+	}{{"knowledge_base", 1}, {"domain", 2}, {"all", 3}} {
+		t.Run(tc.scope, func(t *testing.T) {
+			result, err := svc.Query(ctx, "kb", types.KnowledgeContextQuery{Scope: tc.scope, DomainID: "energy", EntityID: "acme"})
+			require.NoError(t, err)
+			require.Len(t, result.Facts, tc.count)
+		})
+	}
+	result, err := svc.Query(ctx, "kb", types.KnowledgeContextQuery{Scope: "team", EntityID: "acme"})
+	require.Nil(t, result)
+	var parameterError *werrors.AppError
+	require.ErrorAs(t, err, &parameterError)
+	require.Equal(t, werrors.ErrBadRequest, parameterError.Code)
+	require.Equal(t, http.StatusBadRequest, parameterError.HTTPCode)
+	require.Equal(t, "scope must be knowledge_base, domain or all", parameterError.Message)
 }
 
-func TestKnowledgeWorkflowWritesAllAndRunsLegacyTeamSnapshot(t *testing.T) {
+func TestKnowledgeWorkflowWritesAllAndRejectsLegacyTeamScope(t *testing.T) {
 	db := workflowTestDB(t)
 	require.NoError(t, db.AutoMigrate(&types.KnowledgeEntity{}, &types.KnowledgeEntityAlias{}, &types.KnowledgeEvidenceEntity{}, &types.KnowledgeFact{}, &types.KnowledgeEvent{}, &types.KnowledgeEventEvidence{}, &types.KnowledgeEventEntity{}, &types.KnowledgeEventEvidenceEntity{}, &types.KnowledgeAttention{}))
 	kb := &workflowTestKBService{kb: &types.KnowledgeBase{ID: "kb", TenantID: 1, DomainID: "ai"}}
@@ -40,10 +53,10 @@ func TestKnowledgeWorkflowWritesAllAndRunsLegacyTeamSnapshot(t *testing.T) {
 	queue := &workflowTestTaskQueue{}
 	svc := NewKnowledgeWorkflowService(db, kb, nil, NewKnowledgeContextService(db, nil), nil, queue)
 	ctx := workflowTestContext("owner", 1)
-	input := types.KnowledgeWorkflowInput{Name: "Scope compatibility", Enabled: true, Steps: []types.KnowledgeWorkflowStep{{ID: "facts", Type: types.WorkflowStepFactQuery, Config: map[string]any{"scope": "team", "predicate": "workers"}}}}
+	input := types.KnowledgeWorkflowInput{Name: "All scope", Enabled: true, Steps: []types.KnowledgeWorkflowStep{{ID: "facts", Type: types.WorkflowStepFactQuery, Config: map[string]any{"scope": "all", "predicate": "workers"}}}}
 	wf, err := svc.Create(ctx, "kb", input)
 	require.NoError(t, err)
-	require.Equal(t, "team", input.Steps[0].Config["scope"], "normalization must not mutate caller-owned maps")
+	require.Equal(t, "all", input.Steps[0].Config["scope"], "normalization must not mutate caller-owned maps")
 	var saved types.KnowledgeWorkflow
 	require.NoError(t, db.First(&saved, "id = ?", wf.ID).Error)
 	require.Equal(t, "all", saved.Steps[0].Config["scope"])
@@ -52,13 +65,12 @@ func TestKnowledgeWorkflowWritesAllAndRunsLegacyTeamSnapshot(t *testing.T) {
 	require.NoError(t, db.First(&saved, "id = ?", wf.ID).Error)
 	require.Equal(t, "all", saved.Steps[0].Config["scope"])
 
-	// Emulate both an old saved definition and an already queued old run.
-	saved.Steps[0].Config["scope"] = "team"
+	saved.Steps[0].Config["scope"] = "all"
 	require.NoError(t, db.Save(&saved).Error)
 	run, err := svc.Run(ctx, "kb", wf.ID, "manual")
 	require.NoError(t, err)
 	require.Equal(t, "all", run.WorkflowSnapshot[0].Config["scope"])
-	run.WorkflowSnapshot[0].Config["scope"] = "team"
+	run.WorkflowSnapshot[0].Config["scope"] = "all"
 	require.NoError(t, db.Save(run).Error)
 	require.NoError(t, svc.Handle(ctx, queue.tasks[0].task))
 	run, err = svc.GetRun(ctx, "kb", run.ID)
@@ -66,6 +78,30 @@ func TestKnowledgeWorkflowWritesAllAndRunsLegacyTeamSnapshot(t *testing.T) {
 	require.Equal(t, types.WorkflowStatusCompleted, run.Status)
 	require.Len(t, run.Steps, 1)
 	require.Equal(t, types.WorkflowStepSucceeded, run.Steps[0].Status)
+
+	input.Steps[0].Config["scope"] = "team"
+	_, err = svc.Create(ctx, "kb", input)
+	require.ErrorIs(t, err, ErrWorkflowInvalid)
+	require.ErrorContains(t, err, "scope must be knowledge_base, domain or all")
+	_, err = svc.Update(ctx, "kb", wf.ID, input)
+	require.ErrorIs(t, err, ErrWorkflowInvalid)
+	require.ErrorContains(t, err, "scope must be knowledge_base, domain or all")
+	require.Equal(t, "team", input.Steps[0].Config["scope"], "validation must not mutate caller-owned maps")
+	require.NoError(t, db.First(&saved, "id = ?", wf.ID).Error)
+	require.Equal(t, "all", saved.Steps[0].Config["scope"])
+
+	// An already queued snapshot using the removed scope fails with a parameter error.
+	run, err = svc.Run(ctx, "kb", wf.ID, "manual")
+	require.NoError(t, err)
+	run.WorkflowSnapshot[0].Config["scope"] = "team"
+	require.NoError(t, db.Save(run).Error)
+	require.ErrorContains(t, svc.Handle(ctx, queue.tasks[1].task), "scope must be knowledge_base, domain or all")
+	run, err = svc.GetRun(ctx, "kb", run.ID)
+	require.NoError(t, err)
+	require.Equal(t, types.WorkflowStatusFailed, run.Status)
+	require.Len(t, run.Steps, 1)
+	require.Equal(t, types.WorkflowStepFailed, run.Steps[0].Status)
+	require.Contains(t, run.Error, "scope must be knowledge_base, domain or all")
 }
 
 type contextQueueRecorder struct {

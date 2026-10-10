@@ -139,8 +139,8 @@ func TestQueryKnowledgeContextFailsClosedOutsideScope(t *testing.T) {
 	require.False(t, called)
 }
 
-func TestQueryKnowledgeContextAllAndLegacyTeamAndDomainScopes(t *testing.T) {
-	for _, scope := range []string{"all", "team", "domain"} {
+func TestQueryKnowledgeContextAllAndDomainScopes(t *testing.T) {
+	for _, scope := range []string{"all", "domain"} {
 		t.Run(scope, func(t *testing.T) {
 			calls := 0
 			tool := NewQueryKnowledgeContextTool(nil).WithContextQuery(func(ctx context.Context, kbID string, q types.KnowledgeContextQuery) (*types.KnowledgeContextResult, error) {
@@ -159,6 +159,21 @@ func TestQueryKnowledgeContextAllAndLegacyTeamAndDomainScopes(t *testing.T) {
 			require.Contains(t, result.Output, "Second")
 		})
 	}
+}
+
+func TestQueryKnowledgeContextRejectsLegacyTeamScope(t *testing.T) {
+	called := false
+	tool := NewQueryKnowledgeContextTool(nil).WithContextQuery(func(context.Context, string, types.KnowledgeContextQuery) (*types.KnowledgeContextResult, error) {
+		called = true
+		return &types.KnowledgeContextResult{}, nil
+	})
+	args, err := json.Marshal(QueryKnowledgeContextInput{Scope: "team", Query: "Acme"})
+	require.NoError(t, err)
+	result, err := tool.Execute(context.Background(), args)
+	require.ErrorContains(t, err, "scope must be knowledge_base, domain or all")
+	require.False(t, result.Success)
+	require.Contains(t, result.Error, "scope must be knowledge_base, domain or all")
+	require.False(t, called)
 }
 
 func TestQueryKnowledgeContextAllScopePreservesTargetsAndDeduplicatesObjects(t *testing.T) {

@@ -38,17 +38,6 @@ func NewMCPServiceHandler(
 }
 
 // CreateMCPService godoc
-// @Summary      创建MCP服务
-// @Description  创建新的MCP服务配置
-// @Tags         MCP服务
-// @Accept       json
-// @Produce      json
-// @Param        request  body      types.MCPService  true  "MCP服务配置"
-// @Success      200      {object}  map[string]interface{}  "创建的MCP服务"
-// @Failure      400      {object}  errors.AppError         "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /mcp-services [post]
 func (h *MCPServiceHandler) CreateMCPService(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -96,16 +85,6 @@ func (h *MCPServiceHandler) CreateMCPService(c *gin.Context) {
 }
 
 // ListMCPServices godoc
-// @Summary      获取MCP服务列表
-// @Description  获取当前空间的所有MCP服务
-// @Tags         MCP服务
-// @Accept       json
-// @Produce      json
-// @Success      200  {object}  map[string]interface{}  "MCP服务列表"
-// @Failure      400  {object}  errors.AppError         "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /mcp-services [get]
 func (h *MCPServiceHandler) ListMCPServices(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -130,17 +109,6 @@ func (h *MCPServiceHandler) ListMCPServices(c *gin.Context) {
 }
 
 // GetMCPService godoc
-// @Summary      获取MCP服务详情
-// @Description  根据ID获取MCP服务详情
-// @Tags         MCP服务
-// @Accept       json
-// @Produce      json
-// @Param        id   path      string  true  "MCP服务ID"
-// @Success      200  {object}  map[string]interface{}  "MCP服务详情"
-// @Failure      404  {object}  errors.AppError         "服务不存在"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /mcp-services/{id} [get]
 func (h *MCPServiceHandler) GetMCPService(c *gin.Context) {
 	ctx := c.Request.Context()
 	serviceID := secutils.SanitizeForLog(c.Param("id"))
@@ -169,18 +137,6 @@ func (h *MCPServiceHandler) GetMCPService(c *gin.Context) {
 }
 
 // UpdateMCPService godoc
-// @Summary      更新MCP服务
-// @Description  更新MCP服务配置
-// @Tags         MCP服务
-// @Accept       json
-// @Produce      json
-// @Param        id       path      string  true  "MCP服务ID"
-// @Param        request  body      object  true  "更新字段"
-// @Success      200      {object}  map[string]interface{}  "更新后的MCP服务"
-// @Failure      400      {object}  errors.AppError         "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /mcp-services/{id} [put]
 func (h *MCPServiceHandler) UpdateMCPService(c *gin.Context) {
 	ctx := c.Request.Context()
 	serviceID := secutils.SanitizeForLog(c.Param("id"))
@@ -367,17 +323,6 @@ func (h *MCPServiceHandler) UpdateMCPService(c *gin.Context) {
 }
 
 // DeleteMCPService godoc
-// @Summary      删除MCP服务
-// @Description  删除指定的MCP服务
-// @Tags         MCP服务
-// @Accept       json
-// @Produce      json
-// @Param        id   path      string  true  "MCP服务ID"
-// @Success      200  {object}  map[string]interface{}  "删除成功"
-// @Failure      500  {object}  errors.AppError         "服务器错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /mcp-services/{id} [delete]
 func (h *MCPServiceHandler) DeleteMCPService(c *gin.Context) {
 	ctx := c.Request.Context()
 	serviceID := secutils.SanitizeForLog(c.Param("id"))
@@ -403,17 +348,6 @@ func (h *MCPServiceHandler) DeleteMCPService(c *gin.Context) {
 }
 
 // TestMCPService godoc
-// @Summary      测试MCP服务连接
-// @Description  测试MCP服务是否可以正常连接
-// @Tags         MCP服务
-// @Accept       json
-// @Produce      json
-// @Param        id   path      string  true  "MCP服务ID"
-// @Success      200  {object}  map[string]interface{}  "测试结果"
-// @Failure      400  {object}  errors.AppError         "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /mcp-services/{id}/test [post]
 func (h *MCPServiceHandler) TestMCPService(c *gin.Context) {
 	ctx := c.Request.Context()
 	serviceID := secutils.SanitizeForLog(c.Param("id"))
@@ -448,17 +382,6 @@ func (h *MCPServiceHandler) TestMCPService(c *gin.Context) {
 }
 
 // GetMCPServiceTools godoc
-// @Summary      获取MCP服务工具列表
-// @Description  获取MCP服务提供的工具列表
-// @Tags         MCP服务
-// @Accept       json
-// @Produce      json
-// @Param        id   path      string  true  "MCP服务ID"
-// @Success      200  {object}  map[string]interface{}  "工具列表"
-// @Failure      500  {object}  errors.AppError         "服务器错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /mcp-services/{id}/tools [get]
 func (h *MCPServiceHandler) GetMCPServiceTools(c *gin.Context) {
 	ctx := c.Request.Context()
 	serviceID := secutils.SanitizeForLog(c.Param("id"))
@@ -484,17 +407,6 @@ func (h *MCPServiceHandler) GetMCPServiceTools(c *gin.Context) {
 }
 
 // GetMCPServiceResources godoc
-// @Summary      获取MCP服务资源列表
-// @Description  获取MCP服务提供的资源列表
-// @Tags         MCP服务
-// @Accept       json
-// @Produce      json
-// @Param        id   path      string  true  "MCP服务ID"
-// @Success      200  {object}  map[string]interface{}  "资源列表"
-// @Failure      500  {object}  errors.AppError         "服务器错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /mcp-services/{id}/resources [get]
 func (h *MCPServiceHandler) GetMCPServiceResources(c *gin.Context) {
 	ctx := c.Request.Context()
 	serviceID := secutils.SanitizeForLog(c.Param("id"))
@@ -554,20 +466,6 @@ type setMCPToolApprovalBody struct {
 // SetMCPToolApproval sets whether a tool requires human approval before the agent may call it.
 //
 // SetMCPToolApproval godoc
-// @Summary      设置 MCP 工具人工审批策略
-// @Description  为指定 MCP 服务下的某个工具设置/更新审批要求
-// @Tags         MCP服务
-// @Accept       json
-// @Produce      json
-// @Param        id         path      string                  true  "MCP 服务 ID"
-// @Param        tool_name  path      string                  true  "工具名"
-// @Param        request    body      map[string]interface{}  true  "{require_approval: bool}"
-// @Success      200        {object}  map[string]interface{}  "更新结果"
-// @Failure      400        {object}  errors.AppError         "请求参数错误"
-// @Failure      404        {object}  errors.AppError         "MCP 服务或工具不存在"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /mcp-services/{id}/tool-approvals/{tool_name} [put]
 func (h *MCPServiceHandler) SetMCPToolApproval(c *gin.Context) {
 	ctx := c.Request.Context()
 	serviceID := secutils.SanitizeForLog(c.Param("id"))
@@ -604,19 +502,6 @@ type resolveToolApprovalBody struct {
 // ResolveToolApproval completes a pending MCP tool approval (agent execution resumes).
 //
 // ResolveToolApproval godoc
-// @Summary      处理 MCP 工具调用待审批请求
-// @Description  用户审批通过或驳回一次工具调用（用于 Agent 阻塞等待审批的场景）
-// @Tags         MCP服务
-// @Accept       json
-// @Produce      json
-// @Param        pending_id  path      string                  true  "待审批记录 ID"
-// @Param        request     body      map[string]interface{}  true  "{decision: \"approve\"|\"reject\", reason?: string, modified_args?: object}"
-// @Success      200         {object}  map[string]interface{}  "审批结果"
-// @Failure      400         {object}  errors.AppError         "请求参数错误"
-// @Failure      404         {object}  errors.AppError         "待审批记录不存在"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /agent/tool-approvals/{pending_id} [post]
 func (h *MCPServiceHandler) ResolveToolApproval(c *gin.Context) {
 	ctx := c.Request.Context()
 	pendingID := c.Param("pending_id")

@@ -11,13 +11,6 @@ slices back at query time. The way a document is sliced — chunk size,
 overlap, where the cuts fall — directly drives retrieval recall and the
 quality of the answers your LLM produces.
 
-Empirically (Vecta Feb-2026 benchmark across 50 academic papers):
-recursive splitting at ~512 tokens with ~15% overlap is the strongest
-single-knob baseline at 69% end-to-end accuracy, beating semantic
-chunking and over-engineered hybrids. Reliquary uses that as the
-foundation and layers smarter strategies on top when the document gives
-us structural cues.
-
 ## Adaptive 3-tier chunking
 
 Set per knowledge base via the editor's **Chunking** sidebar (or the
@@ -153,10 +146,6 @@ form too and additionally takes a `text` field for the sample to chunk.
 
 ## Known trade-offs
 
-- **Tier-1 heading-aware chunking** prepends the section breadcrumb to
-  the embedding input, costing ~5% more tokens per chunk in exchange
-  for ~30–50% fewer chunks on structured documents (net token savings
-  on storage and at query time).
 - **Strategy switches do not auto-reindex** existing documents. After
   changing a KB's strategy, re-upload affected files (or trigger
   re-indexing via the UI) to apply the new chunking.

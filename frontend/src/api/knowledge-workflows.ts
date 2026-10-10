@@ -1,5 +1,6 @@
 import { get, getDown, post, put } from '@/utils/request'
 import type { KnowledgeContextEnvelope } from './knowledge-context'
+import { normalizeKnowledgeContextScope, type KnowledgeContextScope } from './knowledge-context-scope'
 
 export type KnowledgeWorkflowStepType =
   | 'search'
@@ -123,9 +124,12 @@ export const listKnowledgeWorkflows = (kbId: string) =>
   get<KnowledgeContextEnvelope<KnowledgeWorkflow[]>>(workflowBase(kbId))
 
 export function normalizeKnowledgeWorkflowInput(input: KnowledgeWorkflowInput): KnowledgeWorkflowInput {
-  return { ...input, steps: input.steps.map(step => ({ ...step, config: { ...step.config,
-    ...(step.config.scope === 'team' ? { scope: 'all' } : {}),
-  } })) }
+  return { ...input, steps: input.steps.map(step => {
+    if (step.type === 'fact_query' && typeof step.config.scope === 'string' && step.config.scope.trim() !== '') {
+      normalizeKnowledgeContextScope(step.config.scope.trim() as KnowledgeContextScope)
+    }
+    return { ...step, config: { ...step.config } }
+  }) }
 }
 
 export const createKnowledgeWorkflow = (kbId: string, input: KnowledgeWorkflowInput) =>

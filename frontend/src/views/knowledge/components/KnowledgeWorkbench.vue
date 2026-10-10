@@ -1668,7 +1668,7 @@ function editWorkflow(workflow: KnowledgeWorkflow) {
     enabled: workflow.enabled,
     schedule: { ...workflow.schedule },
     steps: workflow.steps.map(step => {
-      const config: Record<string, unknown> = { ...step.config, ...(step.config.scope === 'team' ? { scope: 'all' } : {}) }
+      const config: Record<string, unknown> = { ...step.config }
       return {
         ...step,
         depends_on: [...(step.depends_on || [])],
@@ -1735,7 +1735,7 @@ function normalizeWorkflowInput(draft: KnowledgeWorkflowInput): KnowledgeWorkflo
     description: draft.description?.trim() || '',
     schedule: { cron: draft.schedule.cron?.trim() || '', timezone: draft.schedule.timezone?.trim() || 'Asia/Shanghai' },
     steps: draft.steps.map(step => {
-      const config: Record<string, unknown> = { ...step.config, ...(step.config.scope === 'team' ? { scope: 'all' } : {}) }
+      const config: Record<string, unknown> = { ...step.config }
       if (step.type === 'fact_query' && config.scope === 'domain' && !config.domain_id) throw new Error(t('knowledgeDomains.domainRequired'))
       return {
         id: step.id.trim(), type: step.type,

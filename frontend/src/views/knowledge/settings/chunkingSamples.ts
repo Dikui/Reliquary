@@ -100,10 +100,9 @@ Agent 引擎执行经典 ReAct 循环：
 
 ## 进一步阅读
 
-- API 文档：\`docs/api/README.md\`
 - 配置项清单：\`config/config.yaml\` 与 \`.env.example\`
 - 故障排查：\`docs/QA.md\`
-- 路线图：\`docs/ROADMAP.md\``
+- 项目决策：\`docs/adr/\``
 
 const SUPPORT_SAMPLE = `# Reliquary 部署与使用 使用指南
 
@@ -256,7 +255,7 @@ docker compose up -d
 
 4.1 升级流程
 
-蓝绿或滚动均可。升级前必看 CHANGELOG 中是否有 schema 变更，迁移先于业务镜像替换。
+蓝绿或滚动均可。升级前检查 migrations/versioned 是否有 schema 变更，迁移先于业务镜像替换。
 
 4.2 备份与恢复
 

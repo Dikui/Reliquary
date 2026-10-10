@@ -108,7 +108,7 @@ func TestIssue06TrackingDerivesObjectConditionsAndEffectiveQueryScope(t *testing
 	focusWorkflow(t, db, "subject", true, map[string]any{"entity_id": "object"})
 	focusWorkflow(t, db, "relation-object", true, map[string]any{"predicate": "license", "object_entity_id": "object"})
 	focusWorkflow(t, db, "alias", true, map[string]any{"entity": "北极"})
-	focusWorkflow(t, db, "name", true, map[string]any{"entity": "AURORA", "scope": "team"})
+	focusWorkflow(t, db, "name", true, map[string]any{"entity": "AURORA", "scope": "all"})
 	focusWorkflow(t, db, "domain", true, map[string]any{"entity_id": "object", "scope": "domain", "domain_id": "p3-domain"})
 	focusWorkflow(t, db, "foreign-base", true, map[string]any{"entity_id": "other", "knowledge_base_id": "second-kb"})
 	focusWorkflow(t, db, "field-only", true, map[string]any{"predicate": "license"})
@@ -146,7 +146,7 @@ func TestIssue06FocusScopeIsolatesTenantAndConcreteTopics(t *testing.T) {
 	topic := focusTopic(t, db, "Models", types.TagKindTopic)
 	focusTopic(t, db, "描述", types.TagKindNature)
 	require.NoError(t, svc.SetTopicStar(ctx, topic.ID, true))
-	for _, q := range []types.KnowledgeContextQuery{{Scope: "team"}, {Scope: "knowledge_base", KnowledgeBaseID: "p3-kb"}, {Scope: "domain", DomainID: "p3-domain"}} {
+	for _, q := range []types.KnowledgeContextQuery{{Scope: "all"}, {Scope: "knowledge_base", KnowledgeBaseID: "p3-kb"}, {Scope: "domain", DomainID: "p3-domain"}} {
 		focus, err := svc.FocusScope(ctx, "", q)
 		require.NoError(t, err)
 		require.Len(t, focus.StarredEntities, 1)
@@ -157,7 +157,7 @@ func TestIssue06FocusScopeIsolatesTenantAndConcreteTopics(t *testing.T) {
 	foreign := context.WithValue(ctx, types.TenantIDContextKey, uint64(2))
 	require.Error(t, svc.SetEntityStar(foreign, entity.ID, true))
 	require.Error(t, svc.SetTopicStar(foreign, topic.ID, true))
-	focus, err := svc.FocusScope(foreign, "", types.KnowledgeContextQuery{Scope: "team"})
+	focus, err := svc.FocusScope(foreign, "", types.KnowledgeContextQuery{Scope: "all"})
 	require.NoError(t, err)
 	require.Empty(t, focus.StarredEntities)
 	require.Empty(t, focus.StarredTopics)
@@ -168,8 +168,8 @@ func TestIssue06FocusScopeIsolatesTenantAndConcreteTopics(t *testing.T) {
 	private := p3Entity("private", "Private object", "model")
 	require.NoError(t, db.Create(&private).Error)
 	require.NoError(t, svc.SetEntityStar(ctx, private.ID, true))
-	focusWorkflow(t, db, "private-tracking", true, map[string]any{"entity_id": private.ID, "scope": "team"})
-	focus, err = svc.FocusScope(ctx, "", types.KnowledgeContextQuery{Scope: "team"})
+	focusWorkflow(t, db, "private-tracking", true, map[string]any{"entity_id": private.ID, "scope": "all"})
+	focus, err = svc.FocusScope(ctx, "", types.KnowledgeContextQuery{Scope: "all"})
 	require.NoError(t, err)
 	require.Len(t, focus.StarredEntities, 2)
 	require.Len(t, focus.TrackedEntities, 1)
@@ -224,7 +224,7 @@ func TestIssue06GlobalObjectStarsRemainVisibleAcrossFocusScopes(t *testing.T) {
 	for _, q := range []types.KnowledgeContextQuery{
 		{Scope: "knowledge_base", KnowledgeBaseID: "new-kb"},
 		{Scope: "domain", DomainID: domain.ID},
-		{Scope: "team"},
+		{Scope: "all"},
 	} {
 		focus, err := svc.FocusScope(ctx, "", q)
 		require.NoError(t, err)

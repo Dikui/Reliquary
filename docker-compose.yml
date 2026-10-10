@@ -75,7 +75,7 @@ services:
       - LLM_DEBUG_LOG=${LLM_DEBUG_LOG:-false}
       # ========== 运行时基础 ==========
       # gin mod
-      # 可选值: debug(开发模式，有详细日志), release(生产模式，禁用Swagger文档)
+      # 可选值: debug(开发模式，有详细日志), release(生产模式)
       - GIN_MODE=${GIN_MODE:-release}
       # 时区，默认为Asia/Shanghai
       - TZ=${TZ:-Asia/Shanghai}

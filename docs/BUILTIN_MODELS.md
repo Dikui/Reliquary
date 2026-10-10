@@ -1,19 +1,11 @@
 # 内置模型管理指南
 
-## 概述
-
-内置模型是系统级别的模型配置，对所有空间可见。普通空间用户（包括空间管理员）看到的敏感信息会被隐藏，且不能修改；系统管理员可以在「模型管理」界面编辑配置和凭据。内置模型通常用于提供系统默认的模型配置，确保所有空间都能使用统一的模型服务。
-
 ## 内置模型特性
 
-- **所有空间可见**：内置模型对所有空间都可见，无需单独配置
-- **安全保护**：API Key 等凭据永远不会明文返回；只有系统管理员能看到 Base URL 等管理信息和凭据是否已配置
-- **权限保护**：普通空间用户只能查看；系统管理员可以编辑配置和凭据
-- **统一管理**：内置模型对所有空间生效；删除仍通过 YAML 或 SQL 管理，避免部署配置与运行时状态冲突
+- **安全保护**：API Key 等凭据永远不会明文返回；登录后可查看 Base URL 等管理信息和凭据是否已配置
+- **统一管理**：删除仍通过 YAML 或 SQL 管理，避免部署配置与运行时状态冲突
 
 ## 在管理界面编辑
-
-系统管理员可直接在「设置 → 模型管理」中点击内置模型，修改模型参数或更新凭据。普通空间管理员仍然只能查看。
 
 首次通过管理界面保存 YAML 托管的内置模型后，该行会转为运行时托管（`managed_by` 清空），后续应用启动不会再用同 ID 的 YAML 条目覆盖它。这样可以保证界面保存的结果在重启后仍然有效。若希望重新交给 YAML 管理，需要由部署管理员在数据库中把该行的 `managed_by` 恢复为 `yaml`，或移除运行时覆盖后重新启动。
 
@@ -27,14 +19,14 @@ Reliquary 支持两种方式添加内置模型：**推荐**使用 YAML 声明式
 
 默认路径是 `config/builtin_models.yaml`（与 `config.yaml`、`builtin_agents.yaml` 同目录）。如需挂载到其他位置，设置环境变量 `BUILTIN_MODELS_CONFIG=/absolute/path/builtin_models.yaml` 覆盖。
 
-文件不存在时启动期会跳过、不报错；解析失败仅记录 Warning、不影响主流程。每次应用启动会重新读取并按 `id` 字段 UPSERT 到 `models` 表（保留 `created_at`，刷新其他字段）。如果同 ID 模型已经由系统管理员在界面保存并转为运行时托管，则保留运行时配置，不再由 YAML 覆盖。
+文件不存在时启动期会跳过、不报错；解析失败仅记录 Warning、不影响主流程。每次应用启动会重新读取并按 `id` 字段 UPSERT 到 `models` 表（保留 `created_at`，刷新其他字段）。如果同 ID 模型已经在界面保存并转为运行时托管，则保留运行时配置，不再由 YAML 覆盖。
 
 #### Schema
 
 ```yaml
 builtin_models:
   - id: <required, stable, UPSERT key>
-    tenant_id: <int, default 10000>          # 与 tenants_id_seq 起点对齐
+    tenant_id: <int, default 10000>
     name: <string>
     type: KnowledgeQA | Embedding | Rerank | VLLM | ASR
     source: <string, default "remote">       # local | remote | aliyun | ...
@@ -273,10 +265,10 @@ DELETE FROM models WHERE id = '模型ID';
 ## 注意事项
 
 1. **ID 命名规范**：建议使用 `builtin-{type}-{slug}` 的格式，例如 `builtin-openai-chat`、`builtin-rerank`
-2. **空间ID**：内置模型可以属于任意空间，默认 `10000`（与 `tenants_id_seq` 起点一致）
+2. **空间ID**：YAML 省略 `tenant_id` 时默认 `10000`
 3. **YAML 与 SQL 并存**：两种方式可以同时使用，loader 只动 `managed_by='yaml'` 的行；通过 SQL 插入的 builtin 行对 loader 完全不可见
 4. **`is_default` 单一保证**：YAML 中将某条 entry 标记 `is_default: true` 时，loader 会先把同 `(tenant_id, type)` 下的其它默认模型置为 `false`，避免 API 路径维护的"每类型一个默认模型"语义被破坏
 5. **重启即生效**：修改 YAML 后 `docker compose restart app` 即可让新配置生效
 6. **加密**：API Key 在 `parameters` JSONB 中以加密形式存储（若 `SYSTEM_AES_KEY` 已配置），未配置时降级为明文兼容路径
-7. **安全性**：前端会自动隐藏内置模型的 API Key 和 Base URL，但数据库中的原始数据仍然存在，请妥善保管数据库访问权限
+7. **安全性**：前端会自动隐藏内置模型的 API Key，但数据库中的原始数据仍然存在，请妥善保管数据库访问权限
 8. **解析错误自我保护**：YAML 解析失败时 loader 仅打 warning 并跳过 reconcile，**不会**执行 drift sweep，确保一个手抖的 YAML 改动不会大规模软删既有内置模型

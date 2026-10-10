@@ -62,20 +62,6 @@ func (h *MessageHandler) resolveResourceRewriter(c *gin.Context) (*storageurl.Re
 }
 
 // LoadMessages godoc
-// @Summary      加载消息历史
-// @Description  加载会话的消息历史，支持分页和时间筛选
-// @Tags         消息
-// @Accept       json
-// @Produce      json
-// @Param        session_id     path      string  true   "会话ID"
-// @Param        limit          query     int     false  "返回数量"  default(20)
-// @Param        before_time    query     string  false  "在此时间之前的消息（RFC3339Nano格式）"
-// @Param        resource_urls  query     string  false  "文件引用形式，public 返回可加载直链"  Enums(handle, public)  default(handle)
-// @Success      200            {object}  map[string]interface{}  "消息列表"
-// @Failure      400          {object}  errors.AppError         "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /messages/{session_id}/load [get]
 func (h *MessageHandler) LoadMessages(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -174,18 +160,6 @@ func (h *MessageHandler) LoadMessages(c *gin.Context) {
 }
 
 // DeleteMessage godoc
-// @Summary      删除消息
-// @Description  从会话中删除指定消息
-// @Tags         消息
-// @Accept       json
-// @Produce      json
-// @Param        session_id  path      string  true  "会话ID"
-// @Param        id          path      string  true  "消息ID"
-// @Success      200         {object}  map[string]interface{}  "删除成功"
-// @Failure      500         {object}  errors.AppError         "服务器错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /messages/{session_id}/{id} [delete]
 func (h *MessageHandler) DeleteMessage(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -229,17 +203,6 @@ func (h *MessageHandler) DeleteMessage(c *gin.Context) {
 }
 
 // SearchMessages godoc
-// @Summary      搜索历史对话
-// @Description  通过关键词和/或向量相似度搜索历史对话记录，支持关键词、向量、混合三种模式
-// @Tags         消息
-// @Accept       json
-// @Produce      json
-// @Param        request  body      SearchMessagesRequest  true  "搜索请求"
-// @Success      200      {object}  map[string]interface{}  "搜索结果"
-// @Failure      400      {object}  errors.AppError         "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /messages/search [post]
 func (h *MessageHandler) SearchMessages(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -295,15 +258,6 @@ type SearchMessagesRequest struct {
 }
 
 // GetChatHistoryKBStats godoc
-// @Summary      获取聊天历史知识库统计
-// @Description  获取聊天历史知识库的统计信息（已索引消息数、知识库大小等）
-// @Tags         消息
-// @Accept       json
-// @Produce      json
-// @Success      200  {object}  map[string]interface{}  "统计信息"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /messages/chat-history-stats [get]
 func (h *MessageHandler) GetChatHistoryKBStats(c *gin.Context) {
 	ctx := c.Request.Context()
 

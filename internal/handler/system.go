@@ -95,13 +95,6 @@ var (
 )
 
 // GetSystemInfo godoc
-// @Summary      获取系统信息
-// @Description  获取系统版本、构建信息和引擎配置
-// @Tags         系统
-// @Accept       json
-// @Produce      json
-// @Success      200  {object}  GetSystemInfoResponse  "系统信息"
-// @Router       /system/info [get]
 func (h *SystemHandler) GetSystemInfo(c *gin.Context) {
 	ctx := logger.CloneContext(c.Request.Context())
 
@@ -156,11 +149,6 @@ func (h *SystemHandler) GetSystemInfo(c *gin.Context) {
 
 // ListParserEngines returns available document parser engines.
 // Lists the four retained parser engines with their availability.
-// @Summary      列出可用的文档解析引擎
-// @Tags         系统
-// @Produce      json
-// @Success      200  {object}  map[string]interface{}  "解析引擎列表"
-// @Router       /system/parser-engines [get]
 func (h *SystemHandler) ListParserEngines(c *gin.Context) {
 	var overrides map[string]string
 	if v, exists := c.Get(types.TenantInfoContextKey.String()); exists {
@@ -177,13 +165,6 @@ func (h *SystemHandler) ListParserEngines(c *gin.Context) {
 
 // CheckParserEngines runs availability check with the given config overrides (e.g. current form values).
 // Used to test engine availability without saving; body shape matches ParserEngineConfig.
-// @Summary      使用当前参数检测解析引擎可用性
-// @Tags         系统
-// @Accept       json
-// @Produce      json
-// @Param        body  body  object  true  "解析引擎配置（与保存接口同结构）"
-// @Success      200
-// @Router       /system/parser-engines/check [post]
 func (h *SystemHandler) CheckParserEngines(c *gin.Context) {
 	var body types.ParserEngineConfig
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -257,12 +238,6 @@ func sameQueueWeights(left, right map[string]int) bool {
 }
 
 // GetRuntimeQueues godoc
-// @Summary      获取解析任务队列运行时状态
-// @Description  返回各 asynq 队列的实时深度（pending/active/scheduled/retry 等）与 worker 并发配置，供登录用户查看
-// @Tags         系统管理
-// @Produce      json
-// @Success      200  {object}  RuntimeQueuesResponse
-// @Router       /system/runtime/queues [get]
 func (h *SystemHandler) GetRuntimeQueues(c *gin.Context) {
 	ctx := logger.CloneContext(c.Request.Context())
 	var allocation types.WorkerPoolConcurrency
@@ -397,15 +372,6 @@ func (h *SystemHandler) listRuntimeTasks(c *gin.Context, state types.RuntimeTask
 
 // ListRuntimeTasks returns one live task-state page for the unified operator
 // drawer. Raw task payloads are never included.
-// @Summary      List runtime queue tasks by state
-// @Tags         System
-// @Produce      json
-// @Param        queue path string true "Queue name"
-// @Param        state query string true "Task state" Enums(pending,active,scheduled,retry,archived,completed)
-// @Param        cursor query string false "Opaque continuation cursor"
-// @Param        page_size query int false "Page size" default(20)
-// @Success      200 {object} RuntimeTasksResponse
-// @Router       /system/runtime/queues/{queue}/tasks [get]
 func (h *SystemHandler) ListRuntimeTasks(c *gin.Context) {
 	h.listRuntimeTasks(c, types.RuntimeTaskState(c.Query("state")))
 }
@@ -535,14 +501,6 @@ func (h *SystemHandler) purgeOrphanRuntimeTask(
 
 // MutateRuntimeTask executes a backend-advertised action after re-reading the
 // current task state to close click/race windows.
-// @Summary      Run a safe runtime task action
-// @Tags         System
-// @Produce      json
-// @Param        queue path string true "Queue name"
-// @Param        task_id path string true "Task ID"
-// @Param        action path string true "Action" Enums(cancel,run_now,delete)
-// @Success      200 {object} map[string]bool
-// @Router       /system/runtime/queues/{queue}/tasks/{task_id}/actions/{action} [post]
 func (h *SystemHandler) MutateRuntimeTask(c *gin.Context) {
 	h.mutateRuntimeTask(c, types.RuntimeTaskAction(c.Param("action")))
 }
@@ -552,12 +510,6 @@ func (h *SystemHandler) MutateRuntimeTask(c *gin.Context) {
 // scheduled/retry tasks are untouched — and mirrors single-record delete
 // semantics by leaving business state as-is (archived tasks already had their
 // document status flipped to "failed" on their last retry).
-// @Summary      Purge all archived tasks in a queue
-// @Tags         System
-// @Produce      json
-// @Param        queue path string true "Queue name"
-// @Success      200 {object} map[string]interface{}
-// @Router       /system/runtime/queues/{queue}/archived [delete]
 func (h *SystemHandler) PurgeArchivedRuntimeTasks(c *gin.Context) {
 	queue := c.Param("queue")
 	if !isKnownRuntimeQueue(queue) {
@@ -583,13 +535,6 @@ func (h *SystemHandler) PurgeArchivedRuntimeTasks(c *gin.Context) {
 }
 
 // ListSystemSettings godoc
-// @Summary      List system settings
-// @Tags         System
-// @Produce      json
-// @Success      200 {array} types.SystemSetting
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /system/settings [get]
 func (h *SystemHandler) ListSystemSettings(c *gin.Context) {
 	ctx := logger.CloneContext(c.Request.Context())
 	rows, err := h.systemSettingSvc.List(ctx)
@@ -656,16 +601,6 @@ func (h *SystemHandler) enrichSettingsModifiedBy(ctx context.Context, rows []*ty
 }
 
 // GetSystemSetting godoc
-// @Summary      Get a single system setting by key
-// @Description  Returns the row matching :key. 404 when the key is unknown
-// @Description  to the registry; 200 with the row when known.
-// @Tags         System
-// @Produce      json
-// @Param        key path string true "Setting key (e.g. file.max_size_mb)"
-// @Success      200 {object} types.SystemSetting "the setting row"
-// @Failure      400 {object} map[string]interface{} "Unknown key"
-// @Failure      404 {object} map[string]interface{} "Key registered but DB row absent"
-// @Router       /system/settings/{key} [get]
 func (h *SystemHandler) GetSystemSetting(c *gin.Context) {
 	ctx := logger.CloneContext(c.Request.Context())
 	key := c.Param("key")
@@ -685,16 +620,6 @@ func (h *SystemHandler) GetSystemSetting(c *gin.Context) {
 }
 
 // UpdateSystemSetting godoc
-// @Summary      Update a system setting
-// @Tags         System
-// @Accept       json
-// @Produce      json
-// @Param        key path string true "Setting key"
-// @Param        request body UpdateSystemSettingRequest true "Setting value"
-// @Success      200 {object} types.SystemSetting
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /system/settings/{key} [put]
 func (h *SystemHandler) UpdateSystemSetting(c *gin.Context) {
 	ctx := logger.CloneContext(c.Request.Context())
 	key := c.Param("key")
@@ -722,17 +647,6 @@ func (h *SystemHandler) UpdateSystemSetting(c *gin.Context) {
 }
 
 // ResetSystemSetting godoc
-// @Summary      Reset a system setting to ENV / built-in default
-// @Description  Removes the DB override for :key so the 3-tier resolver
-// @Description  falls back to the environment variable (when configured)
-// @Description  or the in-code default. Idempotent — resetting a key
-// @Description  that was never persisted returns 200.
-// @Tags         System
-// @Param        key path string true "Setting key"
-// @Success      200 {object} map[string]interface{} "Reset acknowledged"
-// @Failure      400 {object} map[string]interface{} "Unknown key"
-// @Failure      500 {object} map[string]interface{} "DB write failed"
-// @Router       /system/settings/{key} [delete]
 func (h *SystemHandler) ResetSystemSetting(c *gin.Context) {
 	ctx := logger.CloneContext(c.Request.Context())
 	key := c.Param("key")

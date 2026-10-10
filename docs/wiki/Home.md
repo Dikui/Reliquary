@@ -10,12 +10,6 @@ aliases: [Home, Index, wiki首页]
 
 ---
 
-## 项目概述
-
-| 页面 | 简介 |
-|------|------|
-| [版本路线图](项目概述/版本路线图.md) | 产品规划与计划方向 |
-
 ## 核心功能
 
 | 页面 | 简介 |
@@ -49,28 +43,17 @@ aliases: [Home, Index, wiki首页]
 |------|------|
 | [常见问题](运维排障/常见问题.md) | 部署与使用中的 FAQ |
 
-## API 参考
-
-| 页面 | 简介 |
-|------|------|
-| [API文档概览](API参考/API文档概览.md) | RESTful API 基础信息与分类索引 |
-
----
-
 ## 知识上下文
 
 ```mermaid
 graph TB
     Home[Reliquary Wiki]
-    Home --> 项目概述
     Home --> 核心功能
     Home --> 集成扩展
     Home --> 安全认证
     Home --> 开发部署
     Home --> 运维排障
-    Home --> API参考
 
-    项目概述 --> ROADMAP[版本路线图]
 
     核心功能 --> KG[知识上下文]
     核心功能 --> MCP[MCP功能使用说明]
@@ -86,9 +69,7 @@ graph TB
 
     运维排障 --> FAQ[常见问题]
 
-    API参考 --> APIOverview[API文档概览]
 
-    KG -.-> KGSetup
     MCP -.-> BuiltinMCP
     BuiltinMCP -.-> BuiltinModel
     DevGuide -.-> QuickDev

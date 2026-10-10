@@ -72,7 +72,7 @@ func (t *QueryKnowledgeContextTool) Execute(ctx context.Context, args json.RawMe
 	input.Scope = types.NormalizeKnowledgeContextScope(input.Scope)
 	broad := input.Scope == "domain" || input.Scope == "all"
 	if input.Scope != "" && input.Scope != "knowledge_base" && !broad {
-		return fail(fmt.Errorf("invalid query scope"))
+		return fail(fmt.Errorf("scope must be knowledge_base, domain or all"))
 	}
 	if input.Scope == "domain" && strings.TrimSpace(input.DomainID) == "" {
 		return fail(fmt.Errorf("domain_id is required"))

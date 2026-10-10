@@ -47,11 +47,11 @@ func TestTemplateOnlyCoverageAcrossQueryScopes(t *testing.T) {
 	}{
 		{types.KnowledgeContextQuery{Scope: "knowledge_base", KnowledgeBaseID: "p3-kb", EntityID: "acme"}, 1},
 		{types.KnowledgeContextQuery{Scope: "domain", DomainID: "p3-domain", EntityID: "acme"}, 2},
-		{types.KnowledgeContextQuery{Scope: "team", EntityID: "acme", IncludeHistory: true, Limit: 1, Offset: 10}, 3},
-		{types.KnowledgeContextQuery{Scope: "team", Entity: "Acme", Predicate: "unextracted field"}, 3},
-		{types.KnowledgeContextQuery{Scope: "team", Entity: "Absent"}, 0},
-		{types.KnowledgeContextQuery{Scope: "team", KnowledgeIDs: []string{"coverage-source-0"}}, 1},
-		{types.KnowledgeContextQuery{Scope: "team"}, 3},
+		{types.KnowledgeContextQuery{Scope: "all", EntityID: "acme", IncludeHistory: true, Limit: 1, Offset: 10}, 3},
+		{types.KnowledgeContextQuery{Scope: "all", Entity: "Acme", Predicate: "unextracted field"}, 3},
+		{types.KnowledgeContextQuery{Scope: "all", Entity: "Absent"}, 0},
+		{types.KnowledgeContextQuery{Scope: "all", KnowledgeIDs: []string{"coverage-source-0"}}, 1},
+		{types.KnowledgeContextQuery{Scope: "all"}, 3},
 	} {
 		result, err := svc.Query(ctx, "", test.q)
 		require.NoError(t, err)
@@ -67,12 +67,12 @@ func TestTemplateOnlyCoverageAcrossQueryScopes(t *testing.T) {
 	// Failed latest evidence is still a timeline gap; disabled sources are hidden.
 	require.NoError(t, db.Model(&types.Knowledge{}).Where("id = ?", "coverage-source-1").Update("enable_status", "disabled").Error)
 	require.NoError(t, db.Model(&types.KnowledgeEvidence{}).Where("id = ?", "coverage-source-2").Update("extraction_status", types.KnowledgeExtractionFailed).Error)
-	result, err = svc.Query(ctx, "", types.KnowledgeContextQuery{Scope: "team", EntityID: "acme"})
+	result, err = svc.Query(ctx, "", types.KnowledgeContextQuery{Scope: "all", EntityID: "acme"})
 	require.NoError(t, err)
 	require.Equal(t, 2, result.TemplateOnlyMessageCount)
 	require.Equal(t, contextEventsCoverageNotice, result.EventsCoverageNotice)
 	until := time.Date(2026, 10, 6, 23, 59, 59, 0, time.UTC)
-	result, err = svc.Query(ctx, "", types.KnowledgeContextQuery{Scope: "team", EntityID: "acme", Until: &until})
+	result, err = svc.Query(ctx, "", types.KnowledgeContextQuery{Scope: "all", EntityID: "acme", Until: &until})
 	require.NoError(t, err)
 	require.Zero(t, result.TemplateOnlyMessageCount)
 }
@@ -101,7 +101,7 @@ func TestTemplateOnlyEventCoverageUsesVisibleSourceObjects(t *testing.T) {
 		require.NoError(t, db.Create(&types.KnowledgeEventEvidence{ID: evidenceID, TenantID: 1, KnowledgeBaseID: "p3-kb", EventID: "coverage-event", EvidenceID: evidenceID}).Error)
 		require.NoError(t, db.Create(&types.KnowledgeEventEvidenceEntity{TenantID: 1, EventID: "coverage-event", EvidenceID: evidenceID, EntityID: entityID}).Error)
 	}
-	result, err := svc.Query(ctx, "", types.KnowledgeContextQuery{Scope: "team", EventID: "coverage-event"})
+	result, err := svc.Query(ctx, "", types.KnowledgeContextQuery{Scope: "all", EventID: "coverage-event"})
 	require.NoError(t, err)
 	require.Equal(t, 1, result.TemplateOnlyMessageCount, "the disabled event source must not add its objects to relevance")
 }

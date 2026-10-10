@@ -97,20 +97,6 @@ func (h *KnowledgeBaseHandler) buildKBListResponse(kbs []*types.KnowledgeBase) [
 }
 
 // HybridSearch godoc
-// @Summary      混合搜索
-// @Description  在知识库中执行向量和关键词混合搜索。推荐使用 POST；GET 携带 JSON 请求体仍受支持（兼容旧客户端）。
-// @Tags         知识库
-// @Accept       json
-// @Produce      json
-// @Param        id             path      string             true   "知识库ID"
-// @Param        request        body      types.SearchParams true   "搜索参数"
-// @Param        resource_urls  query     string  false  "文件引用形式，public 返回可加载直链"  Enums(handle, public)  default(handle)
-// @Success      200            {object}  map[string]interface{}  "搜索结果"
-// @Failure      400            {object}  errors.AppError         "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge-bases/{id}/hybrid-search [post]
-// @Router       /knowledge-bases/{id}/hybrid-search [get]
 func (h *KnowledgeBaseHandler) HybridSearch(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -171,17 +157,6 @@ func (h *KnowledgeBaseHandler) HybridSearch(c *gin.Context) {
 }
 
 // CreateKnowledgeBase godoc
-// @Summary      创建知识库
-// @Description  创建新的知识库
-// @Tags         知识库
-// @Accept       json
-// @Produce      json
-// @Param        request  body      types.KnowledgeBase  true  "知识库信息"
-// @Success      201      {object}  map[string]interface{}  "创建的知识库"
-// @Failure      400      {object}  errors.AppError         "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge-bases [post]
 func (h *KnowledgeBaseHandler) CreateKnowledgeBase(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -366,17 +341,6 @@ func pickUserDisplayName(u *types.User) string {
 }
 
 // TogglePinKnowledgeBase godoc
-// @Summary      置顶/取消置顶知识库
-// @Description  切换知识库的置顶状态
-// @Tags         知识库
-// @Accept       json
-// @Produce      json
-// @Param        id  path      string  true  "知识库ID"
-// @Success      200  {object}  map[string]interface{}  "更新后的知识库"
-// @Failure      404  {object}  errors.AppError         "知识库不存在"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge-bases/{id}/pin [put]
 func (h *KnowledgeBaseHandler) TogglePinKnowledgeBase(c *gin.Context) {
 	ctx := c.Request.Context()
 	id := c.Param("id")
@@ -411,18 +375,6 @@ type UpdateKnowledgeBaseRequest struct {
 }
 
 // UpdateKnowledgeBase godoc
-// @Summary      更新知识库
-// @Description  更新知识库的名称、描述和配置
-// @Tags         知识库
-// @Accept       json
-// @Produce      json
-// @Param        id       path      string                     true  "知识库ID"
-// @Param        request  body      UpdateKnowledgeBaseRequest true  "更新请求"
-// @Success      200      {object}  map[string]interface{}     "更新后的知识库"
-// @Failure      400      {object}  errors.AppError            "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge-bases/{id} [put]
 func (h *KnowledgeBaseHandler) UpdateKnowledgeBase(c *gin.Context) {
 	ctx := c.Request.Context()
 	logger.Info(ctx, "Start updating knowledge base")
@@ -486,17 +438,6 @@ func (h *KnowledgeBaseHandler) UpdateKnowledgeBase(c *gin.Context) {
 }
 
 // DeleteKnowledgeBase godoc
-// @Summary      删除知识库
-// @Description  删除指定的知识库及其所有内容
-// @Tags         知识库
-// @Accept       json
-// @Produce      json
-// @Param        id   path      string  true  "知识库ID"
-// @Success      200  {object}  map[string]interface{}  "删除成功"
-// @Failure      400  {object}  errors.AppError         "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge-bases/{id} [delete]
 func (h *KnowledgeBaseHandler) DeleteKnowledgeBase(c *gin.Context) {
 	ctx := c.Request.Context()
 	logger.Info(ctx, "Start deleting knowledge base")
@@ -554,17 +495,6 @@ type DuplicateKnowledgeBaseResponse struct {
 }
 
 // CopyKnowledgeBase godoc
-// @Summary      复制知识库
-// @Description  将一个知识库的内容复制到另一个知识库（异步任务）
-// @Tags         知识库
-// @Accept       json
-// @Produce      json
-// @Param        request  body      CopyKnowledgeBaseRequest   true  "复制请求"
-// @Success      200      {object}  map[string]interface{}     "任务ID"
-// @Failure      400      {object}  errors.AppError            "请求参数错误"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge-bases/copy [post]
 func (h *KnowledgeBaseHandler) CopyKnowledgeBase(c *gin.Context) {
 	ctx := c.Request.Context()
 	var req CopyKnowledgeBaseRequest
@@ -759,17 +689,6 @@ func (h *KnowledgeBaseHandler) DuplicateKnowledgeBase(c *gin.Context) {
 }
 
 // GetKBCloneProgress godoc
-// @Summary      获取知识库复制进度
-// @Description  获取知识库复制任务的进度
-// @Tags         知识库
-// @Accept       json
-// @Produce      json
-// @Param        task_id  path      string  true  "任务ID"
-// @Success      200      {object}  map[string]interface{}  "进度信息"
-// @Failure      404      {object}  errors.AppError         "任务不存在"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge-bases/copy/progress/{task_id} [get]
 func (h *KnowledgeBaseHandler) GetKBCloneProgress(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -808,17 +727,6 @@ func validateKnowledgeBasePromptInstructions(kb *types.KnowledgeBase) error {
 // Filters: same Type, same EmbeddingModelID, different ID, not temporary.
 //
 // ListMoveTargets godoc
-// @Summary      获取可移动目标知识库列表
-// @Description  返回与源知识库 Type 一致、EmbeddingModelID 一致、非临时且不是自身的目标知识库列表
-// @Tags         知识库
-// @Produce      json
-// @Param        id   path      string                  true  "源知识库 ID"
-// @Success      200  {object}  map[string]interface{}  "可移动目标列表"
-// @Failure      400  {object}  errors.AppError         "请求参数错误"
-// @Failure      404  {object}  errors.AppError         "知识库不存在"
-// @Security     Bearer
-// @Security     ApiKeyAuth
-// @Router       /knowledge-bases/{id}/move-targets [get]
 func (h *KnowledgeBaseHandler) ListMoveTargets(c *gin.Context) {
 	ctx := c.Request.Context()
 

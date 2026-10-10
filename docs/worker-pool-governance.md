@@ -64,7 +64,7 @@ required workers = ceil(peak task arrival rate * mean task runtime / 0.70)
 ```
 
 Use task arrival rate after fan-out. One parsed document can create one summary,
-multiple question batches, one knowledge context task per chunk, and multiple image tasks.
+multiple question batches, one knowledge context task per message, and multiple image tasks.
 Queue count is not a capacity signal.
 
 The runtime dashboard reports:

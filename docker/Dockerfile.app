@@ -90,17 +90,7 @@ RUN if [ -n "$APK_MIRROR_ARG" ]; then \
     fi && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
-        build-essential postgresql-client tzdata sed curl bash vim wget \
-        python3 python3-pip python3-dev libffi-dev libssl-dev \
-        nodejs npm \
-        gosu \
-        ffmpeg && \
-    python3 -m pip install --break-system-packages --upgrade pip setuptools wheel && \
-    mkdir -p /home/appuser/.local/bin && \
-    curl -LsSf https://astral.sh/uv/install.sh | CARGO_HOME=/home/appuser/.cargo UV_INSTALL_DIR=/home/appuser/.local/bin sh && \
-    chown -R appuser:appuser /home/appuser && \
-    ln -sf /home/appuser/.local/bin/uvx /usr/local/bin/uvx && \
-    chmod +x /usr/local/bin/uvx && \
+        libstdc++6 postgresql-client tzdata sed curl bash python3 gosu && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

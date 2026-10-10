@@ -34,16 +34,6 @@ func NewAuthHandler(userService interfaces.UserService, tenantService interfaces
 }
 
 // Register godoc
-// @Summary      用户注册
-// @Description  注册新用户账号
-// @Tags         认证
-// @Accept       json
-// @Produce      json
-// @Param        request  body      types.RegisterRequest  true  "注册请求参数"
-// @Success      201      {object}  types.RegisterResponse
-// @Failure      400      {object}  errors.AppError  "请求参数错误"
-// @Failure      403      {object}  errors.AppError  "注册功能已禁用"
-// @Router       /auth/register [post]
 func (h *AuthHandler) Register(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -115,15 +105,6 @@ func (h *AuthHandler) Register(c *gin.Context) {
 }
 
 // Login godoc
-// @Summary      用户登录
-// @Description  用户登录并获取访问令牌
-// @Tags         认证
-// @Accept       json
-// @Produce      json
-// @Param        request  body      types.LoginRequest  true  "登录请求参数"
-// @Success      200      {object}  types.LoginResponse
-// @Failure      401      {object}  errors.AppError  "认证失败"
-// @Router       /auth/login [post]
 func (h *AuthHandler) Login(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -169,15 +150,6 @@ func (h *AuthHandler) Login(c *gin.Context) {
 }
 
 // Logout godoc
-// @Summary      用户登出
-// @Description  撤销当前访问令牌并登出
-// @Tags         认证
-// @Accept       json
-// @Produce      json
-// @Success      200  {object}  map[string]interface{}  "登出成功"
-// @Failure      400  {object}  errors.AppError         "请求参数错误"
-// @Security     Bearer
-// @Router       /auth/logout [post]
 func (h *AuthHandler) Logout(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -221,15 +193,6 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 }
 
 // RefreshToken godoc
-// @Summary      刷新令牌
-// @Description  使用刷新令牌获取新的访问令牌
-// @Tags         认证
-// @Accept       json
-// @Produce      json
-// @Param        request  body      object{refreshToken=string}  true  "刷新令牌"
-// @Success      200      {object}  map[string]interface{}       "新令牌"
-// @Failure      401      {object}  errors.AppError              "令牌无效"
-// @Router       /auth/refresh [post]
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -265,15 +228,6 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 }
 
 // GetCurrentUser godoc
-// @Summary      获取当前用户信息
-// @Description  获取当前登录用户的详细信息
-// @Tags         认证
-// @Accept       json
-// @Produce      json
-// @Success      200  {object}  map[string]interface{}  "用户信息"
-// @Failure      401  {object}  errors.AppError         "未授权"
-// @Security     Bearer
-// @Router       /auth/me [get]
 func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -310,16 +264,6 @@ func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
 }
 
 // ChangePassword godoc
-// @Summary      修改密码
-// @Description  修改当前用户的登录密码。新密码须满足 8–32 位且同时包含字母与数字；开启复杂密码后还需包含大小写与特殊字符。成功后所有会话被撤销，需重新登录。
-// @Tags         认证
-// @Accept       json
-// @Produce      json
-// @Param        request  body      object{old_password=string,new_password=string}  true  "密码修改请求"
-// @Success      200      {object}  map[string]interface{}                           "修改成功"
-// @Failure      400      {object}  errors.AppError                                  "请求参数错误"
-// @Security     Bearer
-// @Router       /auth/change-password [post]
 func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -383,13 +327,6 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 }
 
 // GetAuthConfig godoc
-// @Summary      获取认证配置
-// @Description  返回当前部署的注册模式与密码复杂度开关，供前端决定是否展示注册入口以及密码校验规则
-// @Tags         认证
-// @Accept       json
-// @Produce      json
-// @Success      200  {object}  map[string]interface{}  "认证配置"
-// @Router       /auth/config [get]
 //
 // GetAuthConfig is intentionally a no-auth endpoint: the frontend reads
 // it on app load to decide whether to show the Register tab and which
@@ -409,15 +346,6 @@ func tenantNameOrEmpty(t *types.Tenant) string {
 }
 
 // ValidateToken godoc
-// @Summary      验证令牌
-// @Description  验证访问令牌是否有效
-// @Tags         认证
-// @Accept       json
-// @Produce      json
-// @Success      200  {object}  map[string]interface{}  "令牌有效"
-// @Failure      401  {object}  errors.AppError         "令牌无效"
-// @Security     Bearer
-// @Router       /auth/validate [get]
 func (h *AuthHandler) ValidateToken(c *gin.Context) {
 	ctx := c.Request.Context()
 
