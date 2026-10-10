@@ -15,7 +15,7 @@ test('commands and sidebar expose knowledge and settings navigation', () => {
   const menu = readFileSync(new URL('../../stores/menu.ts', import.meta.url), 'utf8')
   const palette = readFileSync(new URL('../GlobalCommandPalette.vue', import.meta.url), 'utf8')
   for (const source of [sidebar, menu, palette]) assert.doesNotMatch(source, /menu\.(?:agents|newChat|newSession|myChats)|commandPalette\.(?:quick\.(?:newChat|agents)|group\.(?:agents|messages|sessionsByTitle))/)
-  assert.match(sidebar, /commandPaletteStore\.openPalette/)
+  assert.match(sidebar, /navigate\('knowledge-search'\)/)
   assert.match(menu, /knowledge/)
   assert.match(palette, /flatChunkItems\.value/)
 })

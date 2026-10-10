@@ -4,14 +4,12 @@ import (
 	"encoding/json"
 	stderrors "errors"
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	"reliquary/internal/application/repository"
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
-	"reliquary/internal/storageurl"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	secutils "reliquary/internal/utils"
@@ -20,37 +18,10 @@ import (
 // KnowledgeBaseHandler defines the HTTP handler for knowledge base operations
 type KnowledgeBaseHandler struct {
 	service interfaces.KnowledgeBaseService
-	// fileService back the optional `resource_urls=public`
-	// mode on hybrid-search. Both may be nil in tests, in which case only the
-	// default handle mode is available.
-	fileService interfaces.FileService
 }
 
-// NewKnowledgeBaseHandler creates a new knowledge base handler instance
-func NewKnowledgeBaseHandler(
-	service interfaces.KnowledgeBaseService,
-	fileService interfaces.FileService,
-) *KnowledgeBaseHandler {
-	return &KnowledgeBaseHandler{
-		service:     service,
-		fileService: fileService,
-	}
-}
-
-// resolveResourceRewriter builds the storage-reference rewriter for one response
-// from the request's `resource_urls` parameter, falling back to the deployment
-// default. The returned error is already an AppError the caller can hand to
-// c.Error: a rejected scope is a 403, a typo in the parameter is a 400.
-func (h *KnowledgeBaseHandler) resolveResourceRewriter(c *gin.Context) (*storageurl.Rewriter, error) {
-	ctx := c.Request.Context()
-	mode, err := storageurl.ResolveMode(ctx, c.Query(storageurl.QueryParam))
-	if err != nil {
-		if stderrors.Is(err, storageurl.ErrPublicModeForbidden) {
-			return nil, apperrors.NewForbiddenError(err.Error())
-		}
-		return nil, apperrors.NewBadRequestError(err.Error())
-	}
-	return storageurl.NewRequestRewriter(ctx, mode, h.fileService), nil
+func NewKnowledgeBaseHandler(service interfaces.KnowledgeBaseService) *KnowledgeBaseHandler {
+	return &KnowledgeBaseHandler{service: service}
 }
 
 func buildKBResponse(
@@ -72,61 +43,13 @@ func buildKBResponse(
 	return m
 }
 
-// HybridSearch godoc
+// HybridSearch keeps the old route explicit while callers adopt article retrieval.
 func (h *KnowledgeBaseHandler) HybridSearch(c *gin.Context) {
-	ctx := c.Request.Context()
-
-	logger.Info(ctx, "Start hybrid search")
-
-	// Validate and check permission for knowledge base access
-	_, id, effectiveTenantID, err := h.validateAndGetKnowledgeBase(c)
-	if err != nil {
+	if _, _, _, err := h.validateAndGetKnowledgeBase(c); err != nil {
 		c.Error(err)
 		return
 	}
-
-	// Parse request body
-	var req types.SearchParams
-	if err := c.ShouldBindJSON(&req); err != nil {
-		logger.Error(ctx, "Failed to parse request parameters", err)
-		c.Error(apperrors.NewBadRequestError("Invalid request parameters").WithDetails(err.Error()))
-		return
-	}
-	precomputedVectorOnly := len(req.QueryEmbedding) > 0 && req.DisableKeywordsMatch && !req.DisableVectorMatch
-	if strings.TrimSpace(req.QueryText) == "" && !precomputedVectorOnly {
-		_ = c.Error(apperrors.NewBadRequestError("query_text is required"))
-		return
-	}
-
-	logger.Infof(ctx, "Executing hybrid search, knowledge base ID: %s, query: %s, effectiveTenantID: %d",
-		secutils.SanitizeForLog(id), secutils.SanitizeForLog(req.QueryText), effectiveTenantID)
-
-	// Resolve before retrieving so a typo or a rejected scope costs nothing.
-	rewriter, err := h.resolveResourceRewriter(c)
-	if err != nil {
-		logger.Warnf(ctx, "Rejected resource URL mode: %v", err)
-		_ = c.Error(err)
-		return
-	}
-
-	results, err := h.service.HybridSearch(ctx, id, req)
-	if err != nil {
-		// Preserve typed application errors from the service.
-		if appErr, ok := apperrors.IsAppError(err); ok {
-			c.Error(appErr)
-			return
-		}
-		logger.ErrorWithFields(ctx, err, nil)
-		c.Error(apperrors.NewInternalServerError(err.Error()))
-		return
-	}
-
-	logger.Infof(ctx, "Hybrid search completed, knowledge base ID: %s, result count: %d",
-		secutils.SanitizeForLog(id), len(results))
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    rewriter.CopyReferences(ctx, results),
-	})
+	c.Error(apperrors.NewBadRequestError("chunk search and knowledge base scope are no longer supported; use POST /api/v1/knowledge-search with query and article filters"))
 }
 
 func (h *KnowledgeBaseHandler) validateAndGetKnowledgeBase(c *gin.Context) (*types.KnowledgeBase, string, uint64, error) {

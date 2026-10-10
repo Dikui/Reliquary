@@ -39,11 +39,15 @@
       <div class="token-value"><t-input :value="createdToken" type="password" readonly /><t-button variant="outline" @click="copy(createdToken)">{{ t('integrations.api.copy') }}</t-button></div>
     </SettingDrawer>
     <SettingDrawer v-model:visible="playgroundVisible" :title="t('integrations.api.playgroundTitle')" :confirm-text="t('integrations.api.playgroundRun')" :confirm-loading="running" storage-key="setting-drawer:width:api-playground" width="680px" @confirm="runQuery">
-      <t-form :data="playground" layout="vertical" label-align="top" @submit.prevent>
+      <t-form :data="playground" layout="vertical" label-align="top" novalidate @submit.prevent>
         <t-form-item :label="t('integrations.api.apiKeyValue')"><t-input v-model="playground.apiKey" type="password" autocomplete="off" :disabled="running" /></t-form-item>
 
         <t-form-item :label="t('integrations.api.playgroundQuestion')"><SafeTextarea v-model="playground.query" :autosize="{ minRows: 3, maxRows: 8 }" :disabled="running" /></t-form-item>
+        <KnowledgeSearchFilters v-model="playgroundFilters" :options="searchOptions" :loading="searchOptionsLoading" :disabled="running" />
       </t-form>
+      <t-alert v-if="searchOptionsError" theme="error" :message="searchOptionsError"><template #operation><t-button variant="text" @click="loadSearchOptions">{{ t('common.retry') }}</t-button></template></t-alert>
+      <strong class="request-preview-label">{{ t('knowledgeSearch.requestPreview') }}</strong>
+      <pre class="query-result request-preview">{{ playgroundRequestPreview }}</pre>
       <t-alert v-if="playgroundError" theme="error" :message="playgroundError" />
       <pre v-if="playgroundResult" class="query-result">{{ playgroundResult }}</pre>
     </SettingDrawer>
@@ -56,6 +60,10 @@ import { DialogPlugin, MessagePlugin, type DateValue, type DateMultipleValue } f
 import { useI18n } from 'vue-i18n'
 import SettingDrawer from '@/components/settings/SettingDrawer.vue'
 import SafeTextarea from '@/components/SafeTextarea.vue'
+import KnowledgeSearchFilters from '@/components/KnowledgeSearchFilters.vue'
+import { getKnowledgeSearchOptions } from '@/api/knowledge-search'
+import type { KnowledgeSearchOptions } from '@/types/knowledgeSearch'
+import { buildKnowledgeSearchRequest, knowledgeSearchErrorMessage, knowledgeSearchErrorCode, defaultSearchFilters } from '@/utils/knowledgeSearch'
 import { apiKeyErrorMessage } from '@/utils/personalServerError'
 import { getApiBaseUrl } from '@/utils/api-base'
 import { copyWithToast } from '@/utils/clipboard'
@@ -88,6 +96,10 @@ const createdVisible = ref(false)
 const createdToken = ref('')
 const playgroundVisible = ref(false)
 const playground = reactive({ apiKey: '', query: '' })
+const playgroundFilters = ref(defaultSearchFilters())
+const searchOptions = ref<KnowledgeSearchOptions>({ entities: [], topics: [] })
+const searchOptionsLoading = ref(false), searchOptionsError = ref('')
+const playgroundRequestPreview = computed(() => JSON.stringify(buildKnowledgeSearchRequest(playground.query, playgroundFilters.value), null, 2))
 const running = ref(false)
 const playgroundError = ref('')
 const playgroundResult = ref('')
@@ -141,18 +153,31 @@ function revoke(key: TenantAPIKey) {
     },
   })
 }
-function openPlayground() { playgroundVisible.value = true; playgroundError.value = '' }
+function openPlayground() { playgroundVisible.value = true; playgroundError.value = ''; void loadSearchOptions() }
+async function loadSearchOptions() {
+  searchOptionsLoading.value = true
+  searchOptionsError.value = ''
+  try {
+    const response = await getKnowledgeSearchOptions()
+    if (!response.success) throw new Error(response.message)
+    searchOptions.value = response.data
+  } catch { searchOptionsError.value = t('knowledgeSearch.optionsFailed') }
+  finally { searchOptionsLoading.value = false }
+}
 async function runQuery() {
   if (running.value) return
   if (!playground.apiKey.trim() || !playground.query.trim()) { playgroundError.value = t('integrations.api.playgroundNeedQuestionAndKey'); return }
+  if (playgroundFilters.value.published_from && playgroundFilters.value.published_to && playgroundFilters.value.published_from > playgroundFilters.value.published_to) { playgroundError.value = t('knowledgeSearch.invalidDateRange'); return }
+  if (!Number.isInteger(playgroundFilters.value.limit) || playgroundFilters.value.limit < 1 || playgroundFilters.value.limit > 100) { playgroundError.value = t('knowledgeSearch.invalidLimit'); return }
   running.value = true
   playgroundError.value = ''
   try {
-    const response = await fetch(`${apiBaseUrl.value}/api/v1/knowledge-search`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': playground.apiKey.trim() }, body: JSON.stringify({ query: playground.query.trim() }) })
+    playgroundResult.value = ''
+    const response = await fetch(`${apiBaseUrl.value}/api/v1/knowledge-search`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': playground.apiKey.trim() }, body: JSON.stringify(buildKnowledgeSearchRequest(playground.query, playgroundFilters.value)) })
     const body = await response.json()
-    if (!response.ok) throw new Error(body.message || body.error?.message || t('integrations.api.playgroundRunFailed'))
+    if (!response.ok || body.success === false) throw body
     playgroundResult.value = JSON.stringify(body, null, 2)
-  } catch (e: any) { playgroundError.value = apiKeyErrorMessage(e, t, 'integrations.api.playgroundRunFailed') }
+  } catch (e: any) { const code = knowledgeSearchErrorCode(e); playgroundError.value = `${code === undefined ? '' : `${code}: `}${knowledgeSearchErrorMessage(e, t)}` }
   finally { running.value = false }
 }
 onMounted(load)
@@ -172,6 +197,7 @@ onMounted(load)
 .token-value { margin-top: 16px; }
 code { overflow-wrap: anywhere; }
 .query-result { overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.request-preview-label { display: block; margin-top: 20px; font-weight: 500; }
 @media (max-width: 600px) { .setting-row { align-items: flex-start; flex-direction: column; } }
 
 .settings-responsive-rows();

@@ -96,6 +96,9 @@ func (s *VaultDocumentService) Rebuild(ctx context.Context) (*VaultRebuildResult
 				return err
 			}
 		}
+		if err := indexArticleEmbedding(ctx, s.db, s.models, kb, knowledge); err != nil {
+			return fmt.Errorf("index rebuilt article summary %s: %w", rel, err)
+		}
 		result.Articles++
 		return nil
 	})

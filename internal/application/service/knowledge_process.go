@@ -377,15 +377,12 @@ func (s *knowledgeService) processChunks(ctx context.Context,
 		s.beginStage(ctx, knowledge.ID, types.StageEmbedding, embedInput)
 		// Create index information, only for child/flat chunks, NOT parent chunks.
 		// Parent chunks are stored for context retrieval but do not need vector embeddings.
-		// Prepend the document title to improve semantic alignment between
-		// question-style queries and statement-style chunk content.
+		// Supply the article source prefix only to the vector input.
 		indexInfoList := make([]*types.IndexInfo, 0, len(textChunks))
 		for _, chunk := range textChunks {
-			// chunk.EmbeddingContent prepends ContextHeader (heading breadcrumb)
-			// when the chunker populated it during Tier-1 splitting; falls back
-			// to plain Content otherwise. The document title sits outermost;
-			// custom metadata remains document-scoped model context.
-			indexContent := buildKnowledgeIndexContent(knowledge, chunk.EmbeddingContent())
+			// Heading breadcrumbs remain stored separately. Vector inputs use
+			// exactly one article prefix line followed by the chunk body.
+			indexContent := buildKnowledgeIndexContent(knowledge, chunk.Content)
 			indexInfoList = append(indexInfoList, &types.IndexInfo{
 				Content:         indexContent,
 				SourceID:        chunk.ID,

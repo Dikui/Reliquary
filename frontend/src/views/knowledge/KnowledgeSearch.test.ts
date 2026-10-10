@@ -1,0 +1,221 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import test from 'node:test'
+import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc'
+import { renderToString } from '@vue/server-renderer'
+import { createSSRApp, defineComponent, h, onServerPrefetch } from 'vue'
+import { createI18n } from 'vue-i18n'
+import ts from 'typescript'
+import zh from '../../i18n/locales/zh-CN'
+import en from '../../i18n/locales/en-US'
+import { CONTENT_TYPES } from '../../types/knowledgeClassification'
+import { SEARCH_SOURCES, type KnowledgeSearchArticle, type KnowledgeSearchRequest } from '../../types/knowledgeSearch'
+import * as helpers from '../../utils/knowledgeSearch'
+import * as highlight from '../../components/GlobalCommandPalette/useHighlight'
+
+const require = createRequire(import.meta.url)
+const messages = { 'zh-CN': zh, 'en-US': en }
+const moduleOf = (value: any) => ({ __esModule: true, default: value })
+const stub = defineComponent({ setup: (_props, { attrs, slots }) => () => h('div', attrs, [slots.default?.(), slots.operation?.()]) })
+function evaluate(code: string, modules: Record<string, unknown>) {
+  const compiled = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+  const module = { exports: {} as any }
+  new Function('require', 'module', 'exports', compiled)((name: string) => modules[name] ?? require(name), module, module.exports)
+  return module.exports
+}
+function component(path: string, modules: Record<string, unknown>) {
+  const filename = path.split('/').at(-1)!
+  const { descriptor, errors } = parse(readFileSync(new URL(path, import.meta.url), 'utf8'), { filename })
+  assert.deepEqual(errors, [])
+  const script = compileScript(descriptor, { id: filename })
+  const template = compileTemplate({ id: filename, filename, source: descriptor.template!.content, ssr: true, ssrCssVars: [], compilerOptions: { bindingMetadata: script.bindings } })
+  assert.deepEqual(template.errors, [])
+  const result = evaluate(script.content, modules).default
+  result.ssrRender = evaluate(template.code, modules).ssrRender
+  return result
+}
+async function render(value: any, props: Record<string, unknown>, locale: keyof typeof messages, action?: (state: any) => Promise<void>, controls?: Record<string, any>) {
+  if (action) {
+    const setup = value.setup
+    value.setup = (props: object, context: object) => {
+      const state = setup(props, context)
+      onServerPrefetch(() => action(state))
+      return state
+    }
+  }
+  const app = createSSRApp(value, props)
+  app.use(createI18n({ legacy: false, locale, messages }))
+  app.component('KnowledgeSearchArticle', value)
+  for (const name of ['t-tag', 't-icon', 't-button', 't-select', 't-switch', 't-date-picker', 't-input-number', 't-alert', 't-loading', 't-empty']) app.component(name, controls?.[name] || stub)
+  const warnings: string[] = [], errors: unknown[] = []
+  app.config.warnHandler = warning => warnings.push(warning)
+  app.config.errorHandler = error => errors.push(error)
+  const html = await renderToString(app)
+  assert.deepEqual(warnings, []); assert.deepEqual(errors, [])
+  return html
+}
+const classificationModules = { '@/types/knowledgeClassification': { CONTENT_TYPES }, '@/utils/security': { isValidURL: (url: string) => /^https?:\/\//.test(url) } }
+function articleComponent() {
+  return component('../../components/KnowledgeSearchArticle.vue', {
+    './KnowledgeClassification.vue': moduleOf(component('../../components/KnowledgeClassification.vue', classificationModules)),
+    './GlobalCommandPalette/useHighlight': highlight,
+  })
+}
+const article: KnowledgeSearchArticle = {
+  article_id: 'a', title: 'Launch article', source: 'article', published_at: '2026-10-11T08:00:00Z',
+  content_type: 'research', processing_mode: 'summary_only', summary: { overview: 'Launch overview', points: ['Useful point'], key_terms: ['Launch term'] },
+  entities: [{ id: 'e1', canonical_name: 'Launch Labs', entity_type: 'company', aliases: ['LL'] }], topics: [{ id: 't1', name: 'Releases' }],
+  snippets: [0, 1, 2, 3].map(index => ({ chunk_id: `c${index}`, chunk_index: index, content: `Launch snippet ${index} <script>`, score: 0.9, match_type: 'keyword' })),
+  score: 0.9, similar_reports: [], vault_path: 'articles/2026-10/a.md', original_url: 'https://example.com/a',
+}
+
+test('search requests and URL state preserve all filters without old scope parameters', () => {
+  const filters = { ...helpers.defaultSearchFilters(), content_types: ['research', 'event'] as const, entity_ids: ['e1', 'e2'], topic_ids: ['t1'], sources: ['article', 'mine'] as const, published_from: '2026-10-01', published_to: '2026-10-11', collapse_similar: false, limit: 50 }
+  const mutable = { ...filters, content_types: [...filters.content_types], sources: [...filters.sources] }
+  assert.deepEqual(helpers.buildKnowledgeSearchRequest('  Launch  ', mutable), { query: 'Launch', ...mutable })
+  assert.deepEqual(helpers.searchStateFromURL(helpers.searchStateToURL('Launch', mutable)), { query: 'Launch', filters: mutable })
+  assert.deepEqual(helpers.buildKnowledgeSearchRequest('Launch', helpers.defaultSearchFilters()), { query: 'Launch', collapse_similar: true, limit: 20 })
+  const invalid = helpers.searchStateFromURL({ content_types: 'event,removed', sources: 'mine,removed', limit: '200' })
+  assert.deepEqual(invalid.filters.content_types, ['event']); assert.deepEqual(invalid.filters.sources, ['mine']); assert.equal(invalid.filters.limit, 20)
+})
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: article results show summary, attribution, safe link and at most three highlighted snippets`, async () => {
+    const html = await render(articleComponent(), { article, query: 'Launch' }, locale)
+    for (const text of ['Launch article', 'Launch overview', 'Useful point', 'Launch term', 'Launch Labs', 'Releases', article.vault_path, messages[locale].knowledgeSearch.sources.article]) assert.ok(html.includes(text), text)
+    assert.match(html, /href="https:\/\/example.com\/a"/)
+    assert.match(html, /<mark class="search-highlight">Launch<\/mark> snippet 0 &lt;script&gt;/)
+    assert.doesNotMatch(html, /snippet 3|<script>/)
+  })
+  test(`${locale}: similar reports start collapsed and the disclosure exposes its expanded state and nested articles`, async () => {
+    const grouped = { ...article, similar_reports: [{ ...article, article_id: 'b', title: 'Similar launch', similar_reports: [] }] }
+    const closed = await render(articleComponent(), { article: grouped, query: 'Launch' }, locale)
+    assert.match(closed, /aria-expanded="false"/); assert.match(closed, /aria-controls="similar-reports-a"/)
+    assert.doesNotMatch(closed, /data-article-id="b"/)
+    const opened = await render(articleComponent(), { article: grouped, query: 'Launch' }, locale, async state => { state.expanded.value = true })
+    assert.match(opened, /aria-expanded="true"/); assert.match(opened, /id="similar-reports-a"/); assert.match(opened, /data-article-id="b"/)
+  })
+  test(`${locale}: user documents show their source and missing date without article classification`, async () => {
+    const html = await render(articleComponent(), { article: { ...article, source: 'mine', summary: null, published_at: null, original_url: '' }, query: 'Launch' }, locale)
+    assert.ok(html.includes(messages[locale].knowledgeSearch.sources.mine)); assert.ok(html.includes(messages[locale].knowledgeSearch.missingPublishedAt))
+    assert.doesNotMatch(html, /knowledge-classification/)
+  })
+  test(`${locale}: filters offer six content types, three sources and ID-valued entity and topic options`, async () => {
+    const filtersComponent = component('../../components/KnowledgeSearchFilters.vue', { '@/types/knowledgeClassification': { CONTENT_TYPES }, '@/types/knowledgeSearch': { SEARCH_SOURCES } })
+    const selects: any[] = [], dates: any[] = []
+    const select = defineComponent({ props: ['modelValue', 'options', 'multiple', 'clearable', 'filterable', 'disabled', 'loading'], setup: (props, { attrs }) => { selects.push(props); return () => h('div', attrs) } })
+    const date = defineComponent({ props: ['modelValue', 'format', 'valueType', 'clearable', 'allowInput'], setup: (props, { attrs }) => { dates.push(props); return () => h('div', attrs) } })
+    const html = await render(filtersComponent, { modelValue: helpers.defaultSearchFilters(), options: { entities: article.entities, topics: article.topics } }, locale, undefined, { 't-select': select, 't-date-picker': date })
+    assert.deepEqual(selects[0].options.map((option: any) => option.value), CONTENT_TYPES)
+    assert.deepEqual(selects[1].options, [{ value: 'e1', label: 'Launch Labs' }]); assert.deepEqual(selects[2].options, [{ value: 't1', label: 'Releases' }])
+    assert.deepEqual(selects[3].options.map((option: any) => option.value), SEARCH_SOURCES)
+    assert.ok(selects.every(select => select.multiple !== undefined))
+    assert.ok(dates.every(date => date.valueType === 'YYYY-MM-DD'))
+    assert.ok(html.includes(messages[locale].knowledgeSearch.filterHint))
+  })
+}
+
+async function pageScenario(action: (state: any, calls: KnowledgeSearchRequest[], pushes: any[]) => Promise<void>, search?: (request: KnowledgeSearchRequest) => Promise<any>, locale: keyof typeof messages = 'zh-CN') {
+  const calls: KnowledgeSearchRequest[] = [], pushes: any[] = []
+  const page = component('./KnowledgeSearch.vue', {
+    'vue-router': { useRoute: () => ({ query: {} }), useRouter: () => ({ replace: (value: unknown) => Promise.resolve(pushes.push(value)), push: (value: unknown) => Promise.resolve(pushes.push(value)) }) },
+    '@/api/knowledge-search': { searchKnowledgeArticles: (request: KnowledgeSearchRequest) => { calls.push(request); return search ? search(request) : Promise.resolve({ success: true, data: { results: [article], excluded_missing_published_at: 2 } }) }, getKnowledgeSearchOptions: async () => ({ success: true, data: { entities: article.entities, topics: article.topics } }) },
+    '@/components/KnowledgeSearchFilters.vue': moduleOf(stub), '@/components/KnowledgeSearchArticle.vue': moduleOf(articleComponent()), '@/utils/knowledgeSearch': helpers,
+  })
+  const html = await render(page, {}, locale, state => action(state, calls, pushes))
+  return { calls, pushes, html }
+}
+test('search page submits all filters, renders exclusion count and opens the article detail', async () => {
+  const result = await pageScenario(async (state, calls, pushes) => {
+    state.query.value = ' Launch '
+    state.filters.value = { ...helpers.defaultSearchFilters(), content_types: ['research'], entity_ids: ['e1'], topic_ids: ['t1'], sources: ['article'], published_from: '2026-10-01', published_to: '2026-10-11', collapse_similar: false }
+    await state.runSearch()
+    await state.loadOptions()
+    assert.equal(calls.length, 1); assert.equal(calls[0].collapse_similar, false); assert.deepEqual(calls[0].entity_ids, ['e1'])
+    assert.deepEqual(state.options.value.topics, article.topics)
+    state.openArticle(article)
+    assert.deepEqual(pushes.at(-1), { path: '/platform/knowledge', query: { knowledge_id: 'a' } })
+  })
+  assert.ok(result.html.includes('已排除 2 篇缺失发布时间的文章。')); assert.match(result.html, /data-article-id="a"/)
+})
+test('search page rejects invalid date order and ignores an older response after a new query', async () => {
+  let resolveOld!: (value: any) => void
+  const old = new Promise(resolve => { resolveOld = resolve })
+  await pageScenario(async (state, calls) => {
+    state.query.value = 'invalid'
+    state.filters.value.published_from = '2026-10-12'; state.filters.value.published_to = '2026-10-11'
+    await state.runSearch(); assert.equal(calls.length, 0); assert.equal(state.error.value, zh.knowledgeSearch.invalidDateRange)
+    state.filters.value = helpers.defaultSearchFilters()
+    state.query.value = 'old'
+    const first = state.runSearch()
+    state.query.value = 'new'
+    await state.runSearch()
+    resolveOld({ success: true, data: { results: [{ ...article, article_id: 'old' }], excluded_missing_published_at: 99 } })
+    await first
+    assert.equal(state.results.value[0].article_id, 'a'); assert.equal(state.excludedMissingPublishedAt.value, 0)
+    state.clearQuery(); assert.equal(state.results.value.length, 0); assert.equal(state.hasSearched.value, false)
+  }, request => request.query === 'old' ? old : Promise.resolve({ success: true, data: { results: [article], excluded_missing_published_at: 0 } }))
+})
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: dependency failures render a localized message and retain retry without upstream text`, async () => {
+    let attempts = 0
+    const result = await pageScenario(async state => {
+      state.query.value = 'Launch'
+      await state.runSearch()
+      assert.equal(state.error.value, messages[locale].knowledgeSearch.unavailable)
+    }, async () => { attempts++; throw { error: { code: 2400, message: '<html>EmbedBatch upstream secret</html>' } } }, locale)
+    assert.ok(result.html.includes(messages[locale].knowledgeSearch.unavailable))
+    assert.ok(result.html.includes(messages[locale].common.retry))
+    assert.doesNotMatch(result.html, /EmbedBatch|upstream|html&gt;/)
+    assert.equal(attempts, 1)
+    await pageScenario(async state => {
+      state.query.value = 'Launch'; await state.runSearch()
+      assert.equal(state.error.value, messages[locale].knowledgeSearch.searchFailed)
+      await state.runSearch(); assert.equal(state.error.value, ''); assert.equal(state.results.value.length, 1)
+    }, async () => { if (attempts++ === 1) throw new Error('<html>upstream secret</html>'); return { success: true, data: { results: [article] } } }, locale)
+  })
+}
+for (const count of [1, 2]) {
+  test(`English quantities use correct article and report nouns for ${count}`, async () => {
+    const reports = Array.from({ length: count }, (_, index) => ({ ...article, article_id: `b${index}`, similar_reports: [] }))
+    const closed = await render(articleComponent(), { article: { ...article, similar_reports: reports }, query: 'Launch' }, 'en-US')
+    const opened = await render(articleComponent(), { article: { ...article, similar_reports: reports }, query: 'Launch' }, 'en-US', async state => { state.expanded.value = true })
+    const noun = count === 1 ? 'report' : 'reports'
+    assert.ok(closed.includes(`Show ${count} similar ${noun}`)); assert.ok(opened.includes(`Hide ${count} similar ${noun}`))
+    const result = await pageScenario(async state => { state.query.value = 'Launch'; await state.runSearch() }, async () => ({ success: true, data: { results: reports, excluded_missing_published_at: count } }), 'en-US')
+    const articleNoun = count === 1 ? 'article' : 'articles'
+    assert.ok(result.html.includes(`Showing ${count} ${articleNoun}`))
+    assert.ok(result.html.includes(`Excluded ${count} ${articleNoun} without a publication date.`))
+    if (count === 1) assert.doesNotMatch(closed + opened + result.html, /1 (?:articles|similar reports)/)
+  })
+}
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: command palette failure is localized and retry restores article results`, async () => {
+    let attempts = 0
+    const hook = evaluate(readFileSync(new URL('../../components/GlobalCommandPalette/useSearch.ts', import.meta.url), 'utf8'), {
+      '@/utils/knowledgeSearch': helpers,
+      '@/api/knowledge-search': { searchKnowledgeArticles: async () => {
+        if (attempts++ === 0) throw { error: { code: 2400, message: '<html>upstream secret</html>' } }
+        return { success: true, data: { results: [article] } }
+      } },
+    })
+    const palette = defineComponent({ setup() {
+      const state = hook.useCmdkSearch({})
+      onServerPrefetch(async () => {
+        state.query.value = 'Launch'
+        await state.retry()
+        assert.equal(state.searchError.value, messages[locale].knowledgeSearch.unavailable)
+        assert.equal(state.loading.value, false)
+        await state.retry()
+        assert.equal(state.searchError.value, '')
+        assert.equal(state.fileGroups.value[0].knowledgeId, article.article_id)
+      })
+      return () => h('div', state.searchError.value)
+    } })
+    const html = await render(palette, {}, locale)
+    assert.doesNotMatch(html, /upstream|html&gt;/)
+    assert.equal(attempts, 2)
+  })
+}

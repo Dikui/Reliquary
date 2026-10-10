@@ -1,5 +1,8 @@
-import { ref, watch } from 'vue'
-import { knowledgeSemanticSearch } from '@/api/knowledge-base'
+import { knowledgeSearchErrorMessage } from '@/utils/knowledgeSearch'
+import { useI18n } from 'vue-i18n'
+import { onUnmounted, ref, watch } from 'vue'
+import { searchKnowledgeArticles } from '@/api/knowledge-search'
+import type { KnowledgeSearchArticle } from '@/types/knowledgeSearch'
 
 export interface CmdkChunk {
   id: string
@@ -18,6 +21,20 @@ export interface CmdkFileGroup {
   kbId: string
   title: string
   chunks: CmdkChunk[]
+  source?: KnowledgeSearchArticle['source']
+  similarCount?: number
+}
+
+export function articleFileGroups(articles: KnowledgeSearchArticle[]): CmdkFileGroup[] {
+  return articles.map(article => ({
+    knowledgeId: article.article_id, kbId: '', title: article.title, source: article.source,
+    similarCount: article.similar_reports?.length || 0,
+    chunks: (article.snippets?.length ? article.snippets : [{ chunk_id: article.article_id, chunk_index: 0, content: article.summary?.overview || '', match_type: 'article', score: article.score }]).map(snippet => ({
+      id: snippet.chunk_id, chunk_index: snippet.chunk_index, knowledge_id: article.article_id,
+      knowledge_base_id: '', knowledge_title: article.title, content: snippet.content,
+      match_type: snippet.match_type, score: article.score,
+    })),
+  }))
 }
 
 /** Knowledge search with debouncing and protection against stale responses. */
@@ -27,8 +44,11 @@ export function useCmdkSearch(options: {
   /** Debounce delay in ms. */
   debounceMs?: number
 }) {
+  const { t } = useI18n()
+  const searchError = ref('')
   const debounceMs = options.debounceMs ?? 350
   const query = ref('')
+  const composing = ref(false)
   const loading = ref(false)
   const hasSearched = ref(false)
 
@@ -43,49 +63,35 @@ export function useCmdkSearch(options: {
     fileGroups.value = []
     totalChunks.value = 0
     hasSearched.value = false
+    searchError.value = ''
   }
 
   const runSearch = async (q: string, seq: number) => {
     loading.value = true
     hasSearched.value = true
 
-    const chunks = await knowledgeSemanticSearch({ query: q }).then((res: any) => res?.success && res.data ? res.data : []).catch(error => { console.error('[cmdk] knowledge search failed', error); return [] })
+    searchError.value = ''
+    const articles = await searchKnowledgeArticles({ query: q }).then(res => {
+      if (!res?.success) throw res
+      return res.data.results
+    }).catch(error => {
+      if (seq === requestSeq) searchError.value = knowledgeSearchErrorMessage(error, t)
+      return []
+    })
 
     // Stale response guard.
     if (seq !== requestSeq) return
 
-    // Group chunks by knowledge_id.
-    const fmap = new Map<string, CmdkFileGroup>()
-    for (const item of chunks as any[]) {
-      const kid = item.knowledge_id || 'unknown'
-      if (!fmap.has(kid)) {
-        fmap.set(kid, {
-          knowledgeId: kid,
-          kbId: item.knowledge_base_id || '',
-          title: item.knowledge_title || item.knowledge_filename || kid,
-          chunks: [],
-        })
-      }
-      fmap.get(kid)!.chunks.push({
-        id: item.id,
-        chunk_index: item.chunk_index,
-        knowledge_id: kid,
-        knowledge_base_id: item.knowledge_base_id || '',
-        knowledge_title: item.knowledge_title || '',
-        content: item.content || '',
-        matched_content: item.matched_content,
-        match_type: item.match_type || 'vector',
-        score: item.score || 0,
-      })
-    }
-    fileGroups.value = Array.from(fmap.values())
-    totalChunks.value = (chunks as any[]).length
+    fileGroups.value = articleFileGroups(articles)
+    totalChunks.value = articles.reduce((count, article) => count + article.snippets.length, 0)
 
     loading.value = false
   }
 
-  watch(query, val => {
+  watch([query, composing], ([val, isComposing]) => {
+    requestSeq++
     if (debounceTimer) clearTimeout(debounceTimer)
+    loading.value = false
     const trimmed = (val as string).trim()
     if (!trimmed) {
       requestSeq++ // cancel in-flight
@@ -93,14 +99,20 @@ export function useCmdkSearch(options: {
       clearResults()
       return
     }
+    if (isComposing) return
     debounceTimer = setTimeout(() => {
       const seq = ++requestSeq
       runSearch(trimmed, seq)
     }, debounceMs)
   })
 
+  onUnmounted(() => { requestSeq++; if (debounceTimer) clearTimeout(debounceTimer) })
+
   return {
+    searchError,
+    retry: () => runSearch(query.value.trim(), ++requestSeq),
     query,
+    composing,
     loading,
     hasSearched,
     fileGroups,

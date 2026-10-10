@@ -426,6 +426,7 @@ func (s *knowledgeService) UpdateKnowledge(ctx context.Context, knowledge *types
 		logger.Errorf(ctx, "Failed to get knowledge record: %v", err)
 		return err
 	}
+	previousTitle := record.Title
 	// if need other fields update, please add here
 	if knowledge.Title != "" {
 		record.Title = knowledge.Title
@@ -465,8 +466,22 @@ func (s *knowledgeService) UpdateKnowledge(ctx context.Context, knowledge *types
 		record.CustomMetadata = knowledge.CustomMetadata
 	}
 
-	// Update knowledge record in the repository
-	if err := s.repo.UpdateKnowledge(ctx, record); err != nil {
+	if s.db != nil && record.Title != previousTitle && record.SourceKind != "mine" && record.SourceKind != "report" &&
+		record.StructuredSummary != nil && record.ParseStatus == types.ParseStatusCompleted {
+		kb, err := s.kbService.GetKnowledgeBaseByID(ctx, record.KnowledgeBaseID)
+		if err != nil {
+			return err
+		}
+		// Keep a title change and its vector atomic when the provider fails.
+		if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			if err := repository.NewKnowledgeRepository(tx).UpdateKnowledge(ctx, record); err != nil {
+				return err
+			}
+			return indexArticleEmbedding(ctx, tx, s.modelService, kb, record)
+		}); err != nil {
+			return err
+		}
+	} else if err := s.repo.UpdateKnowledge(ctx, record); err != nil {
 		logger.Errorf(ctx, "Failed to update knowledge: %v", err)
 		return err
 	}

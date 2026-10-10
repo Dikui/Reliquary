@@ -126,6 +126,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 			v1.GET("/knowledge/:id/vault-attachment", accessGuards.KBExistsFromKnowledgeIDParam("id"), params.VaultHandler.Attachment)
 		}
 		v1.POST("/knowledge-search", params.KnowledgeSearchHandler.SearchKnowledge)
+		v1.GET("/knowledge-search/options", params.KnowledgeSearchHandler.Options)
 		RegisterEntityRoutes(v1, params.EntityHandler)
 		RegisterChunkRoutes(v1, params.ChunkHandler, accessGuards)
 		RegisterModelRoutes(v1, params.ModelHandler, params.ModelCredentialsHandler, accessGuards)

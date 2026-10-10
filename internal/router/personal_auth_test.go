@@ -74,7 +74,7 @@ func newPersonalAuthFixture(t *testing.T) *personalAuthFixture {
 	params := RouterParams{
 		Config: cfg, UserService: users, TenantService: tenantSvc,
 		TenantAPIKeyService: keys, KBService: kb, KnowledgeService: knowledge,
-		KBHandler:              handler.NewKnowledgeBaseHandler(kb, nil),
+		KBHandler:              handler.NewKnowledgeBaseHandler(kb),
 		KnowledgeHandler:       handler.NewKnowledgeHandler(cfg, knowledge, kb, nil, nil),
 		KnowledgeSearchHandler: &handler.KnowledgeSearchHandler{},
 		ModelHandler:           handler.NewModelHandler(models),

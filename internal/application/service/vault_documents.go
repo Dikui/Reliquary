@@ -474,8 +474,8 @@ func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, kb *types.K
 		if strings.TrimSpace(part.Content) == "" {
 			continue
 		}
-		// The breadcrumb is part of semantic content even when literal text is unchanged.
-		hash := vaultContentHash(part.EmbeddingContent())
+		// The prefix affects the vector even when the body is unchanged.
+		hash := vaultContentHash(buildKnowledgeIndexContent(knowledge, part.Content))
 		var chunk *types.Chunk
 		if matches := byHash[hash]; len(matches) > 0 {
 			chunk = matches[0]
@@ -519,7 +519,7 @@ func (s *VaultDocumentService) indexVaultChunks(ctx context.Context, kb *types.K
 	if embedder != nil && len(added) > 0 {
 		indices := make([]*types.IndexInfo, 0, len(added))
 		for _, chunk := range added {
-			indices = append(indices, &types.IndexInfo{Content: chunk.EmbeddingContent(), SourceID: chunk.ID,
+			indices = append(indices, &types.IndexInfo{Content: buildKnowledgeIndexContent(knowledge, chunk.Content), SourceID: chunk.ID,
 				SourceType: types.ChunkSourceType, ChunkID: chunk.ID, KnowledgeID: knowledge.ID,
 				KnowledgeBaseID: kb.ID, IsEnabled: true})
 		}

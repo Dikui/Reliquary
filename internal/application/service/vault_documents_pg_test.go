@@ -298,6 +298,9 @@ func TestVaultRebuildRestoresGeneratedArticlesMetadataAndSearchWithoutWritingFil
 		require.Equal(t, original.ProcessingMode, restored.ProcessingMode)
 		require.Equal(t, original.StructuredSummary, restored.StructuredSummary)
 		require.Equal(t, original.Description, restored.Description)
+		var articleVectors int64
+		require.NoError(t, fresh.db.Table("article_embeddings").Where("knowledge_id=?", restored.ID).Count(&articleVectors).Error)
+		require.EqualValues(t, 1, articleVectors, "both full and summary-only articles restore their summary vector")
 		require.Equal(t, original.Starred, restored.Starred)
 		require.Equal(t, original.CollectReason, restored.CollectReason)
 		require.Equal(t, original.VaultPath, restored.VaultPath)

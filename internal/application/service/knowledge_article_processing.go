@@ -341,7 +341,6 @@ func (s *knowledgeService) processArticleBody(ctx context.Context, kb *types.Kno
 			return err
 		}
 		s.skipStage(ctx, k.ID, types.StageChunking, "summary_only")
-		s.skipStage(ctx, k.ID, types.StageEmbedding, "summary_only")
 		finalizeIndexedKnowledgeState(k, 0, time.Now())
 		if err := s.repo.UpdateKnowledge(ctx, k); err != nil {
 			return err
@@ -356,6 +355,19 @@ func (s *knowledgeService) processArticleBody(ctx context.Context, kb *types.Kno
 		s.processChunks(ctx, kb, k, chunks, options)
 		if k.ParseStatus == types.ParseStatusFailed {
 			return errors.New(k.ErrorMessage)
+		}
+	}
+	if k.ProcessingMode == types.ProcessingModeSummaryOnly && kb.IndexingStrategy.VectorEnabled {
+		s.beginStage(ctx, k.ID, types.StageEmbedding, types.JSONMap{"article_vectors": 1})
+	}
+	if err := indexArticleEmbedding(ctx, s.db, s.modelService, kb, k); err != nil {
+		return err
+	}
+	if k.ProcessingMode == types.ProcessingModeSummaryOnly {
+		if kb.IndexingStrategy.VectorEnabled {
+			s.endStage(ctx, k.ID, types.StageEmbedding, types.JSONMap{"article_vectors": 1})
+		} else {
+			s.skipStage(ctx, k.ID, types.StageEmbedding, "vector_disabled")
 		}
 	}
 	if s.vault != nil {

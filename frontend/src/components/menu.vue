@@ -12,7 +12,7 @@
     </div>
     <nav class="menu_top" :aria-label="t('menu.knowledgeBase')">
       <t-tooltip :content="t('menu.search')" placement="right" :disabled="!sidebarCollapsed">
-        <button type="button" class="menu_item" :aria-label="t('menu.search')" @click="commandPaletteStore.openPalette('')">
+        <button type="button" :class="['menu_item', { menu_item_active: active('knowledge-search') }]" :aria-label="t('menu.search')" :aria-current="active('knowledge-search') ? 'page' : undefined" @click="navigate('knowledge-search')">
           <t-icon name="search" size="20px" /><span v-if="!sidebarCollapsed" class="menu_title">{{ t('menu.search') }}</span>
         </button>
       </t-tooltip>
@@ -32,13 +32,12 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useMenuStore } from '@/stores/menu'
 import { useUIStore } from '@/stores/ui'
-import { useCommandPaletteStore } from '@/stores/commandPalette'
 import UserMenu from '@/components/UserMenu.vue'
 const props = defineProps<{ mobileOverlay?: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 const { t } = useI18n()
 const route = useRoute(), router = useRouter()
-const uiStore = useUIStore(), commandPaletteStore = useCommandPaletteStore()
+const uiStore = useUIStore()
 const { visibleMenuArr } = storeToRefs(useMenuStore())
 const sidebarCollapsed = computed(() => !props.mobileOverlay && uiStore.sidebarCollapsed)
 const active = (path: string) => path === 'knowledge'

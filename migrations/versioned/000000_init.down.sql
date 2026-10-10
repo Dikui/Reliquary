@@ -4,6 +4,21 @@ DROP INDEX IF EXISTS public.idx_knowledge_bases_active_tenant;
 
 BEGIN;
 DROP INDEX IF EXISTS public.knowledges_vault_path_unique;
+DROP TRIGGER IF EXISTS set_knowledge_search_header ON public.knowledges;
+DROP TRIGGER IF EXISTS sync_article_search_entities ON public.knowledge_entities;
+DROP TRIGGER IF EXISTS sync_article_search_topics ON public.knowledge_topics;
+DROP TRIGGER IF EXISTS sync_article_search_entity ON public.entities;
+DROP TRIGGER IF EXISTS sync_article_search_alias ON public.entity_aliases;
+DROP TRIGGER IF EXISTS sync_article_search_topic ON public.topics;
+DROP FUNCTION IF EXISTS public.set_knowledge_search_header();
+DROP FUNCTION IF EXISTS public.sync_article_search_links();
+DROP FUNCTION IF EXISTS public.sync_article_search_entity();
+DROP FUNCTION IF EXISTS public.sync_article_search_alias();
+DROP FUNCTION IF EXISTS public.sync_article_search_topic();
+DROP FUNCTION IF EXISTS public.refresh_knowledge_search_text(bigint, text);
+DROP FUNCTION IF EXISTS public.build_knowledge_search_text(text, bigint, text, text, jsonb, jsonb);
+DROP FUNCTION IF EXISTS public.search_published_at(text);
+DROP TABLE IF EXISTS public.article_embeddings;
 
 
 DROP TABLE IF EXISTS public.knowledge_repost_sources;

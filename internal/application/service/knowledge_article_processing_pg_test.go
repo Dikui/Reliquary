@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -488,7 +487,7 @@ func TestArticleProcessingDefaultLimitsAndTableInput(t *testing.T) {
 	require.Len(t, h.queue.tasks, 1, "table preparation uses the document worker without a separate task")
 }
 
-func TestSummaryOnlyProcessingDoesNotResolveEmbeddingAndCleansPreviousFull(t *testing.T) {
+func TestSummaryOnlyProcessingEmbedsArticleAndCleansPreviousFull(t *testing.T) {
 	h := newArticleProcessingHarness(t, true)
 	full := h.upload(t, "change-mode", "An original announcement with a supporting image.\n\n![image]("+articleImageDataURI(t, 70)+")")
 	h.processor.output = validProcessingFixture("tutorial")
@@ -497,17 +496,18 @@ func TestSummaryOnlyProcessingDoesNotResolveEmbeddingAndCleansPreviousFull(t *te
 	calls := 0
 	current := h.service.modelService.(articleProcessingModels)
 	current.embeddingCalls = &calls
-	current.embeddingErr = errors.New("embedding model is unavailable")
 	h.service.modelService = current
 	h.drain(t)
 	article := h.article(t, full.ID)
 	require.Equal(t, "summary_only", article.ProcessingMode)
 	require.Equal(t, types.ParseStatusCompleted, article.ParseStatus)
-	require.Zero(t, calls, "summary-only processing must not depend on an embedding model")
+	require.Positive(t, calls, "summary-only processing generates an article vector")
 	require.Empty(t, h.service.fileSvc.(*articleProcessingFiles).saved)
 	var count int64
 	require.NoError(t, h.db.Table("embeddings").Where("knowledge_id=?", full.ID).Count(&count).Error)
 	require.Zero(t, count)
 	require.NoError(t, h.db.Model(&types.Chunk{}).Where("knowledge_id=?", full.ID).Count(&count).Error)
 	require.Zero(t, count)
+	require.NoError(t, h.db.Table("article_embeddings").Where("knowledge_id=?", full.ID).Count(&count).Error)
+	require.EqualValues(t, 1, count)
 }

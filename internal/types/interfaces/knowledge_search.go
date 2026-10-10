@@ -6,5 +6,6 @@ import (
 )
 
 type KnowledgeSearchService interface {
-	SearchKnowledge(ctx context.Context, knowledgeIDs []string, query string) ([]*types.SearchResult, error)
+	Search(ctx context.Context, request types.ArticleSearchRequest) (*types.ArticleSearchResponse, error)
+	Options(ctx context.Context) (*types.ArticleSearchOptions, error)
 }

@@ -435,6 +435,8 @@ CREATE TABLE public.knowledges (
 	 starred boolean DEFAULT false NOT NULL,
 	 collect_reason text DEFAULT '' NOT NULL,
     structured_summary jsonb,
+    search_text text DEFAULT '' NOT NULL,
+    search_published_at timestamp with time zone,
     source character varying(2048) NOT NULL,
     parse_status character varying(50) DEFAULT 'unprocessed'::character varying NOT NULL,
     enable_status character varying(50) DEFAULT 'enabled'::character varying NOT NULL,
@@ -1241,13 +1243,14 @@ CREATE INDEX chunks_search_idx ON public.chunks USING bm25
         "metadata": {"tokenizer": {"type": "chinese_lindera"}}
     }');
 
--- Article summaries remain searchable without a stored body chunk or vector.
+-- Article headers remain searchable without a stored body chunk.
 CREATE UNIQUE INDEX idx_knowledges_search_seq_id ON public.knowledges (search_seq_id);
 CREATE INDEX knowledges_summary_search_idx ON public.knowledges USING bm25
-    (search_seq_id, tenant_id, knowledge_base_id, id, deleted_at, parse_status, enable_status, title, description)
+    (search_seq_id, tenant_id, knowledge_base_id, id, deleted_at, parse_status, enable_status, title, description, search_text)
     WITH (key_field=search_seq_id, text_fields='{
         "title": {"tokenizer": {"type": "chinese_lindera"}},
-        "description": {"tokenizer": {"type": "chinese_lindera"}}
+        "description": {"tokenizer": {"type": "chinese_lindera"}},
+        "search_text": {"tokenizer": {"type": "chinese_lindera"}}
     }');
 
 
@@ -1713,6 +1716,160 @@ CREATE TABLE public.knowledge_topics (
     FOREIGN KEY (tenant_id, topic_id) REFERENCES public.topics (tenant_id, id) ON DELETE CASCADE
 );
 CREATE INDEX idx_knowledge_topics_topic ON public.knowledge_topics (tenant_id, topic_id, knowledge_id);
+
+CREATE TABLE public.article_embeddings (
+    knowledge_id character varying(36) NOT NULL PRIMARY KEY,
+    tenant_id bigint NOT NULL,
+    knowledge_base_id character varying(36) NOT NULL,
+    model_id character varying(64) NOT NULL,
+    dimension integer NOT NULL CHECK (dimension > 0),
+    embedding public.halfvec NOT NULL,
+    content_hash character varying(64) NOT NULL,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CHECK (public.vector_dims(embedding) = dimension),
+    FOREIGN KEY (tenant_id, knowledge_id) REFERENCES public.knowledges (tenant_id, id) ON DELETE CASCADE
+);
+CREATE INDEX article_embeddings_tenant_model ON public.article_embeddings (tenant_id, model_id, dimension);
+CREATE INDEX article_embeddings_embedding_idx_798 ON public.article_embeddings USING hnsw
+    (((embedding)::public.halfvec(798)) public.halfvec_cosine_ops) WITH (m='16', ef_construction='64') WHERE dimension = 798;
+CREATE INDEX article_embeddings_embedding_idx_1024 ON public.article_embeddings USING hnsw
+    (((embedding)::public.halfvec(1024)) public.halfvec_cosine_ops) WITH (m='16', ef_construction='64') WHERE dimension = 1024;
+CREATE INDEX article_embeddings_embedding_idx_3584 ON public.article_embeddings USING hnsw
+    (((embedding)::public.halfvec(3584)) public.halfvec_cosine_ops) WITH (m='16', ef_construction='64') WHERE dimension = 3584;
+CREATE INDEX idx_knowledges_search_published_at ON public.knowledges (tenant_id, search_published_at);
+
+-- Only explicit source dates enter the search range. Never use collected_at.
+CREATE FUNCTION public.search_published_at(value text) RETURNS timestamp with time zone
+    LANGUAGE plpgsql IMMUTABLE AS $$
+BEGIN
+    IF value IS NULL OR value !~ '^\d{4}-\d{2}-\d{2}($|T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$)' THEN
+        RETURN NULL;
+    END IF;
+    IF length(value) = 10 THEN
+        RETURN (value::date)::timestamp AT TIME ZONE 'UTC';
+    END IF;
+    RETURN value::timestamp with time zone;
+EXCEPTION WHEN OTHERS THEN
+    RETURN NULL;
+END;
+$$;
+
+CREATE FUNCTION public.build_knowledge_search_text(article_id text, owner_id bigint,
+    article_title text, article_description text, summary jsonb, meta jsonb) RETURNS text
+    LANGUAGE sql STABLE AS $$
+    SELECT concat_ws(E'\n', article_title,
+        CASE WHEN jsonb_typeof(meta -> 'intake') = 'object' THEN meta #>> '{intake,source_info,publisher}' ELSE meta ->> 'publisher' END,
+        CASE WHEN jsonb_typeof(meta -> 'intake') = 'object' THEN meta #>> '{intake,source_info,author}' ELSE meta ->> 'author' END,
+        article_description, summary ->> 'overview', summary ->> 'points', summary ->> 'key_terms',
+        (SELECT string_agg(DISTINCT names.name, E'\n' ORDER BY names.name) FROM (
+            SELECT e.canonical_name AS name
+            FROM public.knowledge_entities ke JOIN public.entities e
+                ON e.id=ke.entity_id AND e.tenant_id=ke.tenant_id
+            WHERE ke.knowledge_id=article_id AND ke.tenant_id=owner_id
+            UNION ALL
+            SELECT ea.alias AS name
+            FROM public.knowledge_entities ke JOIN public.entity_aliases ea
+                ON ea.entity_id=ke.entity_id AND ea.tenant_id=ke.tenant_id
+            WHERE ke.knowledge_id=article_id AND ke.tenant_id=owner_id
+        ) names),
+        (SELECT string_agg(DISTINCT t.name, E'\n' ORDER BY t.name)
+            FROM public.knowledge_topics kt JOIN public.topics t ON t.id=kt.topic_id AND t.tenant_id=kt.tenant_id
+            WHERE kt.knowledge_id=article_id AND kt.tenant_id=owner_id));
+$$;
+
+CREATE FUNCTION public.set_knowledge_search_header() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+BEGIN
+    NEW.search_text := public.build_knowledge_search_text(NEW.id, NEW.tenant_id,
+        NEW.title, NEW.description, NEW.structured_summary, NEW.metadata);
+    NEW.search_published_at := CASE WHEN NEW.source_kind = 'article'
+        THEN public.search_published_at(CASE WHEN jsonb_typeof(NEW.metadata -> 'intake') = 'object'
+            THEN NEW.metadata #>> '{intake,source_info,published_at}' ELSE NEW.metadata ->> 'published_at' END)
+        ELSE NULL END;
+    IF TG_OP = 'UPDATE' AND (NEW.deleted_at IS NOT NULL OR NEW.source_kind <> 'article'
+        OR NEW.title IS DISTINCT FROM OLD.title OR NEW.structured_summary IS DISTINCT FROM OLD.structured_summary) THEN
+        DELETE FROM public.article_embeddings WHERE tenant_id=NEW.tenant_id AND knowledge_id=NEW.id;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE FUNCTION public.refresh_knowledge_search_text(owner_id bigint, article_id text) RETURNS void
+    LANGUAGE sql AS $$
+    UPDATE public.knowledges k
+    SET search_text=public.build_knowledge_search_text(k.id, k.tenant_id, k.title, k.description, k.structured_summary, k.metadata)
+    WHERE k.id=article_id AND k.tenant_id=owner_id;
+$$;
+
+CREATE FUNCTION public.sync_article_search_links() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP <> 'INSERT' THEN
+        PERFORM public.refresh_knowledge_search_text(OLD.tenant_id, OLD.knowledge_id);
+    END IF;
+    IF TG_OP <> 'DELETE' THEN
+        PERFORM public.refresh_knowledge_search_text(NEW.tenant_id, NEW.knowledge_id);
+    END IF;
+    RETURN NULL;
+END;
+$$;
+
+CREATE FUNCTION public.sync_article_search_entity() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+DECLARE link record;
+BEGIN
+    FOR link IN SELECT DISTINCT ke.tenant_id, ke.knowledge_id FROM public.knowledge_entities ke
+        WHERE (TG_OP <> 'INSERT' AND ke.tenant_id=OLD.tenant_id AND ke.entity_id=OLD.id)
+           OR (TG_OP <> 'DELETE' AND ke.tenant_id=NEW.tenant_id AND ke.entity_id=NEW.id)
+    LOOP
+        PERFORM public.refresh_knowledge_search_text(link.tenant_id, link.knowledge_id);
+    END LOOP;
+    RETURN NULL;
+END;
+$$;
+
+CREATE FUNCTION public.sync_article_search_alias() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+DECLARE link record;
+BEGIN
+    FOR link IN SELECT DISTINCT ke.tenant_id, ke.knowledge_id FROM public.knowledge_entities ke
+        WHERE (TG_OP <> 'INSERT' AND ke.tenant_id=OLD.tenant_id AND ke.entity_id=OLD.entity_id)
+           OR (TG_OP <> 'DELETE' AND ke.tenant_id=NEW.tenant_id AND ke.entity_id=NEW.entity_id)
+    LOOP
+        PERFORM public.refresh_knowledge_search_text(link.tenant_id, link.knowledge_id);
+    END LOOP;
+    RETURN NULL;
+END;
+$$;
+
+CREATE FUNCTION public.sync_article_search_topic() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+DECLARE link record;
+BEGIN
+    FOR link IN SELECT DISTINCT kt.tenant_id, kt.knowledge_id FROM public.knowledge_topics kt
+        WHERE (TG_OP <> 'INSERT' AND kt.tenant_id=OLD.tenant_id AND kt.topic_id=OLD.id)
+           OR (TG_OP <> 'DELETE' AND kt.tenant_id=NEW.tenant_id AND kt.topic_id=NEW.id)
+    LOOP
+        PERFORM public.refresh_knowledge_search_text(link.tenant_id, link.knowledge_id);
+    END LOOP;
+    RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER set_knowledge_search_header BEFORE INSERT OR UPDATE OF
+    title, description, structured_summary, metadata, source_kind, deleted_at ON public.knowledges
+    FOR EACH ROW EXECUTE FUNCTION public.set_knowledge_search_header();
+CREATE TRIGGER sync_article_search_entities AFTER INSERT OR UPDATE OR DELETE ON public.knowledge_entities
+    FOR EACH ROW EXECUTE FUNCTION public.sync_article_search_links();
+CREATE TRIGGER sync_article_search_topics AFTER INSERT OR UPDATE OR DELETE ON public.knowledge_topics
+    FOR EACH ROW EXECUTE FUNCTION public.sync_article_search_links();
+CREATE TRIGGER sync_article_search_entity AFTER INSERT OR UPDATE OR DELETE ON public.entities
+    FOR EACH ROW EXECUTE FUNCTION public.sync_article_search_entity();
+CREATE TRIGGER sync_article_search_alias AFTER INSERT OR UPDATE OR DELETE ON public.entity_aliases
+    FOR EACH ROW EXECUTE FUNCTION public.sync_article_search_alias();
+CREATE TRIGGER sync_article_search_topic AFTER INSERT OR UPDATE OR DELETE ON public.topics
+    FOR EACH ROW EXECUTE FUNCTION public.sync_article_search_topic();
 
 
 CREATE UNIQUE INDEX idx_knowledge_bases_active_tenant ON public.knowledge_bases (tenant_id) WHERE deleted_at IS NULL;

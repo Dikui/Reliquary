@@ -1,13 +1,18 @@
 import { get, put } from '@/utils/request'
 
 // RetrievalConfig represents the global retrieval/search configuration for a tenant.
-// Shared by knowledge search and message search.
+// Shared by the full search page and command palette.
 export interface RetrievalConfig {
   embedding_top_k: number
   vector_threshold: number
   keyword_threshold: number
   rerank_top_k: number
   rerank_threshold: number
+  similar_reports_threshold: number
+  similar_reports_window_days: number
+  rrf_k?: number
+  rrf_vector_weight?: number
+  rrf_keyword_weight?: number
 }
 
 // Get tenant retrieval config via KV API

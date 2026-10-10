@@ -11,6 +11,7 @@ import ts from 'typescript'
 import zh from '../i18n/locales/zh-CN'
 import en from '../i18n/locales/en-US'
 import * as personalError from '../utils/personalServerError'
+import * as searchHelpers from '../utils/knowledgeSearch'
 import { compiledSFCStyleRules, styleDeclarationsAtWidth } from '../utils/sfcStyleTestHelpers'
 
 const require = createRequire(import.meta.url)
@@ -27,6 +28,9 @@ async function componentScenario(path: string, locale: 'zh-CN' | 'en-US', module
   const t = translator(locale)
   const mocks: Record<string, unknown> = {
     '@/components/SafeTextarea.vue': safeTextareaTestModule,
+    '@/components/KnowledgeSearchFilters.vue': { default: stub, __esModule: true },
+    '@/utils/knowledgeSearch': searchHelpers,
+    '@/api/knowledge-search': { getKnowledgeSearchOptions: async () => ({ success: true, data: { entities: [], topics: [] } }) },
     'vue-i18n': { useI18n: () => ({ t, tm: () => [], locale: ref(locale) }) },
     '@/utils/personalServerError': personalError,
     '@/stores/auth': { useAuthStore: () => ({ currentTenantId: '1', isLoggedIn: false }) },

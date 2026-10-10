@@ -10,6 +10,7 @@ import ts from 'typescript'
 import zh from '../../i18n/locales/zh-CN'
 import en from '../../i18n/locales/en-US'
 import * as personalServerError from '../../utils/personalServerError'
+import * as searchHelpers from '../../utils/knowledgeSearch'
 
 const require = createRequire(import.meta.url)
 const { DatePicker, Input, ConfigProvider } = require('tdesign-vue-next')
@@ -36,6 +37,8 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any) => Promi
     '@/utils/personalServerError': personalServerError,
     '@/utils/api-base': { getApiBaseUrl: () => 'http://localhost' },
     '@/utils/clipboard': { copyWithToast() {} },
+    '@/utils/knowledgeSearch': searchHelpers,
+    '@/api/knowledge-search': { getKnowledgeSearchOptions: async () => ({ success: true, data: { entities: [], topics: [] } }) },
     '@/api/tenant': {
       listTenantAPIKeys: async () => ({ success: true, data: [] }),
       createTenantAPIKey: async (payload: object) => { requests.push({ payload }); return { success: true, data: { token: 'token' } } },
@@ -140,7 +143,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         await state.runQuery()
       })
       assert.equal(calls.length, 1)
-      assert.deepEqual(JSON.parse(calls[0].body), { query: 'question' })
+      assert.deepEqual(JSON.parse(calls[0].body), { query: 'question', collapse_similar: true, limit: 20 })
       assert.equal(calls[0].headers['X-API-Key'], 'secret')
     } finally { globalThis.fetch = originalFetch }
   })
@@ -159,5 +162,57 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
       })
       assert.equal(calls, 0)
     } finally { globalThis.fetch = originalFetch }
+  })
+  test(`${locale}: Playground sends every article filter and previews the request without the API key`, async () => {
+    const originalFetch = globalThis.fetch, calls: any[] = []
+    globalThis.fetch = async (_url, options) => { calls.push(options); return { ok: true, json: async () => ({ success: true, data: { results: [], excluded_missing_published_at: 1 } }) } as Response }
+    try {
+      const result = await scenario(locale, async state => {
+        state.openPlayground()
+        state.playground.apiKey = 'secret'
+        state.playground.query = ' Launch '
+        state.playgroundFilters.value = { ...searchHelpers.defaultSearchFilters(), content_types: ['event', 'research'], entity_ids: ['e1', 'e2'], topic_ids: ['t1'], sources: ['article', 'mine'], published_from: '2026-10-01', published_to: '2026-10-11', collapse_similar: false, limit: 50 }
+        await state.runQuery()
+        const expected = { query: 'Launch', content_types: ['event', 'research'], entity_ids: ['e1', 'e2'], topic_ids: ['t1'], sources: ['article', 'mine'], published_from: '2026-10-01', published_to: '2026-10-11', collapse_similar: false, limit: 50 }
+        assert.deepEqual(JSON.parse(calls[0].body), expected)
+        assert.deepEqual(JSON.parse(state.playgroundRequestPreview.value), expected)
+        assert.doesNotMatch(state.playgroundRequestPreview.value, /secret|apiKey/)
+        assert.equal(JSON.parse(state.playgroundResult.value).data.excluded_missing_published_at, 1)
+      })
+      assert.ok(result.html.includes((locale === 'zh-CN' ? zh : en).knowledgeSearch.requestPreview))
+    } finally { globalThis.fetch = originalFetch }
+  })
+  test(`${locale}: Playground rejects reversed publication dates before making a request`, async () => {
+    const originalFetch = globalThis.fetch
+    let calls = 0
+    globalThis.fetch = async () => { calls++; throw new Error('must not request') }
+    try {
+      await scenario(locale, async state => {
+        state.playground.apiKey = 'secret'; state.playground.query = 'Launch'
+        state.playgroundFilters.value.published_from = '2026-10-12'; state.playgroundFilters.value.published_to = '2026-10-11'
+        await state.runQuery()
+        assert.equal(state.playgroundError.value, (locale === 'zh-CN' ? zh : en).knowledgeSearch.invalidDateRange)
+      })
+      assert.equal(calls, 0)
+    } finally { globalThis.fetch = originalFetch }
+  })
+}
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: Playground failure shows safe code and localized text without upstream HTML`, async () => {
+    const originalFetch = globalThis.fetch
+    try {
+      for (const json of [async () => ({ success: false, error: { code: 2400, message: '<html>upstream secret</html>' } }), async () => { throw new SyntaxError('<html>upstream secret</html>') }]) {
+        globalThis.fetch = async () => ({ ok: false, json }) as unknown as Response
+        const result = await scenario(locale, async state => {
+          state.openPlayground(); state.playground.apiKey = 'test'; state.playground.query = 'Launch'
+          await state.runQuery()
+        })
+        assert.ok(result.state.playgroundError.value.includes(messagesFor(locale)))
+        assert.doesNotMatch(result.state.playgroundError.value + result.html, /upstream|html&gt;/)
+        assert.equal(result.state.playgroundResult.value, '')
+      }
+    } finally { globalThis.fetch = originalFetch }
+    function messagesFor(value: typeof locale) { return value === 'zh-CN' ? '检索' : 'Search' }
   })
 }

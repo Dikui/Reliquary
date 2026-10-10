@@ -54,14 +54,9 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
         },
         {
           path: "knowledge-search",
-          // 旧路径保留为重定向，打开全局命令面板（⌘K），带上可选的 q 参数
-          redirect: (to) => {
-            const q = to.query.q
-            return {
-              path: '/platform/knowledge',
-              query: typeof q === 'string' ? { cmdk: q } : { cmdk: '' },
-            }
-          },
+          name: "knowledgeSearch",
+          component: () => import('../views/knowledge/KnowledgeSearch.vue'),
+          meta: { requiresInit: true, requiresAuth: true },
         },
         {
           path: "integrations",

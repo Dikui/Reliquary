@@ -8,7 +8,8 @@
 
         <input ref="inputRef" v-model="query" type="text" class="cmdk__input"
           :placeholder="t('commandPalette.placeholder')"
-          autofocus spellcheck="false" />
+          :aria-label="t('knowledgeSearch.query')" autofocus spellcheck="false" @compositionstart="composing = true" @compositionend="composing = false" />
+        <button v-if="query" type="button" class="cmdk__icon-btn" :aria-label="t('knowledgeSearch.clearQuery')" @click="query = ''; inputRef?.focus()"><t-icon name="close" size="16px" /></button>
         <span v-if="loading" class="cmdk__input-spinner">
           <t-loading size="small" />
         </span>
@@ -44,6 +45,7 @@
 
         <!-- Active search results -->
         <template v-else>
+          <t-button variant="text" @click="openFullSearch">{{ t('knowledgeSearch.fullSearch') }}</t-button>
           <!-- Knowledge messages (one representative match each) -->
           <ResultGroup v-if="isGroupVisible('chunks') && fileGroups.length" :label="t('commandPalette.group.chunks')"
             :count="fileGroups.length">
@@ -74,8 +76,12 @@
               @hover="selectItemAt($event)" />
           </ResultGroup>
 
+          <div v-if="!loading && searchError" class="cmdk__empty" role="alert">
+            <p>{{ searchError }}</p>
+            <t-button variant="outline" size="small" @click="retry">{{ t('common.retry') }}</t-button>
+          </div>
           <!-- No results -->
-          <div v-if="!loading && !hasAnyResults && hasSearched" class="cmdk__empty">
+          <div v-if="!loading && !searchError && !hasAnyResults && hasSearched" class="cmdk__empty">
             <p>{{ t('commandPalette.empty.noResults') }}</p>
             <div class="cmdk__empty-actions">
 
@@ -132,7 +138,7 @@ const { open, initialQuery, recentQueries } = storeToRefs(commandPaletteStore)
 // Per-group display caps — keep the palette compact.
 const CHUNK_LIMIT = 5
 
-const { query, loading, hasSearched, fileGroups, clearResults } = useCmdkSearch({})
+const { query, composing, loading, hasSearched, fileGroups, clearResults, searchError, retry } = useCmdkSearch({})
 
 const drawerVisible = ref(false)
 const inputRef = ref<HTMLInputElement | null>(null)
@@ -273,7 +279,6 @@ const primaryActionForSelected = (ev?: { cmd: boolean }) => {
 const openChunk = (item: FlatChunkItem) => {
   commandPaletteStore.pushRecent(query.value)
   commandPaletteStore.closePalette()
-  if (!item.file.kbId) return
   const alreadyViewingKnowledge = route.name === 'knowledge'
   // On the articles page, router.push to the same path+query
   // is a no-op (vue-router dedupes identical navigations), so the document
@@ -291,6 +296,11 @@ const openChunk = (item: FlatChunkItem) => {
     path: '/platform/knowledge',
     query: { knowledge_id: item.file.knowledgeId },
   })
+}
+
+const openFullSearch = () => {
+  commandPaletteStore.closePalette()
+  router.push({ path: '/platform/knowledge-search', query: query.value.trim() ? { q: query.value.trim() } : {} })
 }
 
 const highlight = (text: string) => highlightText(text, query.value)
@@ -329,6 +339,7 @@ const shortcutFor = (flatIndex: number): number | undefined => {
 }
 
 const onKeyDown = (e: KeyboardEvent) => {
+  if (e.isComposing || composing.value || e.keyCode === 229) return
   if (e.key === 'ArrowDown') {
     e.preventDefault()
     moveSelection(1)
@@ -499,6 +510,7 @@ onUnmounted(() => {
     background: var(--td-bg-color-secondarycontainer);
     color: var(--td-text-color-primary);
   }
+  &:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 2px; }
 }
 
 .cmdk__results {

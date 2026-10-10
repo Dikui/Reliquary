@@ -458,6 +458,14 @@ func (h *TenantHandler) updateTenantRetrievalConfigInternal(c *gin.Context) {
 		c.Error(errors.NewBadRequestError("keyword_threshold must be between 0 and 1"))
 		return
 	}
+	if cfg.SimilarReportsThreshold < 0 || cfg.SimilarReportsThreshold > 1 {
+		c.Error(errors.NewBadRequestError("similar_reports_threshold must be between 0 and 1"))
+		return
+	}
+	if cfg.SimilarReportsWindowDays < 0 || cfg.SimilarReportsWindowDays > 365 {
+		c.Error(errors.NewBadRequestError("similar_reports_window_days must be between 0 and 365"))
+		return
+	}
 	if cfg.RerankThreshold < -10 || cfg.RerankThreshold > 10 {
 		c.Error(errors.NewBadRequestError("rerank_threshold must be between -10 and 10"))
 		return

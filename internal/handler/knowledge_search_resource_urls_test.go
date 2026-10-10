@@ -21,13 +21,10 @@ type stubKnowledgeSearchService struct {
 	interfaces.KnowledgeSearchService
 }
 
-func (s *stubKnowledgeSearchService) SearchKnowledge(
-	_ context.Context, _ []string, _ string,
-) ([]*types.SearchResult, error) {
-	return []*types.SearchResult{{
-		Content:   "chunk ![c](" + testResourceHandle + ")",
-		ImageInfo: `[{"url":"` + testResourceHandle + `"}]`,
-	}}, nil
+func (s *stubKnowledgeSearchService) Search(_ context.Context, _ types.ArticleSearchRequest) (*types.ArticleSearchResponse, error) {
+	return &types.ArticleSearchResponse{Results: []*types.ArticleSearchResult{{ArticleID: "article",
+		Snippets: []types.ArticleSearchSnippet{{Content: "chunk ![c](" + testResourceHandle + ")"}},
+	}}}, nil
 }
 
 func TestSearchKnowledge_PublicResourceURLs(t *testing.T) {
@@ -90,11 +87,9 @@ func TestSearchKnowledge_DefaultKeepsHandles(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
 
 	var resp struct {
-		Data []struct {
-			Content string `json:"content"`
-		} `json:"data"`
+		Data types.ArticleSearchResponse `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	require.Len(t, resp.Data, 1)
-	assert.Contains(t, resp.Data[0].Content, testResourceHandle)
+	require.Len(t, resp.Data.Results, 1)
+	assert.Contains(t, resp.Data.Results[0].Snippets[0].Content, testResourceHandle)
 }

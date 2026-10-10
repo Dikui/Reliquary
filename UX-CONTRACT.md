@@ -64,3 +64,5 @@ Source lists show publisher, original URL, publication time or a missing marker,
 API Key expiry uses TDesign DatePicker and the active locale. Values retain local date-time at minute precision and convert to Unix seconds on submission. Clearing expiry omits expires_at_unix.
 
 Browser inspection is handled by the user's separate task. This task records static, component, localization, type-check and build evidence without claiming browser verification.
+
+Knowledge search lives at /platform/knowledge-search. TDesign multi-select controls filter content types, entities by ID, topics by ID, and article, user document or report sources. Publication date filters exclude articles without a publication date and show the excluded count. Each result contains one article with at most three matching snippets, summary and source links. Similar reports collapse by default and expand within their leading article; a request switch disables collapse. Search requests invalidate older responses, retain readable errors and expose a retry action. The global search shortcut and API integration Playground share the article search API and supported parameters.

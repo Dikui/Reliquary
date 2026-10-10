@@ -1,6 +1,7 @@
 import { get, post, put, del, postUpload, getDown } from "../../utils/request";
 import type { ModelTierConfig } from '@/types/modelTiers';
 import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess';
+import type { KnowledgeSearchRequest } from '@/types/knowledgeSearch';
 
 export interface IntakeSourceInfo { author?: string; publisher?: string; original_url?: string; published_at?: string }
 
@@ -201,10 +202,7 @@ export function searchKnowledge(
   return get(`/api/v1/knowledge/search?${query.toString()}`);
 }
 
-export function knowledgeSemanticSearch(data: {
-  query: string;
-  knowledge_ids?: string[];
-}) {
+export function knowledgeSemanticSearch(data: KnowledgeSearchRequest) {
   return post('/api/v1/knowledge-search', data);
 }
 

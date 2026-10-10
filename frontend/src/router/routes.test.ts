@@ -123,3 +123,12 @@ test('old knowledge list and ID routes redirect to the single article page', asy
     assert.deepEqual(router.currentRoute.value.params, {})
   }
 })
+
+test('knowledge search has an independent page and preserves query and filter URLs', async () => {
+  const router = createRouter({ history: createMemoryHistory(), routes: testRoutes() })
+  await router.push('/platform/knowledge-search?q=Launch&sources=article&collapse_similar=false')
+  assert.equal(router.currentRoute.value.name, 'knowledgeSearch')
+  assert.equal(router.currentRoute.value.query.q, 'Launch')
+  assert.equal(router.currentRoute.value.query.sources, 'article')
+  assert.equal(router.currentRoute.value.query.collapse_similar, 'false')
+})
