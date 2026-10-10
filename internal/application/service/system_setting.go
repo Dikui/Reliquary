@@ -135,21 +135,13 @@ var registry = map[string]settingSpec{
 		RequiresRestart: true,
 		Description:     "文档解析、手工重解析等核心任务的每实例保底并发。可额外使用共享弹性池；修改后需重启。",
 	},
-	"asynq.postprocess_concurrency": {
-		Type:            "int",
-		EnvName:         "RELIQUARY_ASYNQ_POSTPROCESS_CONCURRENCY",
-		Default:         int64(types.DefaultPostProcessWorkerConcurrency),
-		Category:        "worker",
-		RequiresRestart: true,
-		Description:     "解析完成后的轻量编排与富化扇出专用并发，避免被长时间文档解析阻塞；修改后需重启。",
-	},
 	"asynq.enrichment_concurrency": {
 		Type:            "int",
 		EnvName:         "RELIQUARY_ASYNQ_ENRICHMENT_CONCURRENCY",
 		Default:         int64(types.DefaultEnrichmentWorkerConcurrency),
 		Category:        "worker",
 		RequiresRestart: true,
-		Description:     "摘要、图片、实体档案和问题生成的每实例保底并发。可额外使用共享弹性池；修改后需重启。",
+		Description:     "实体名称向量重建的每实例保底并发。可额外使用共享弹性池；修改后需重启。",
 	},
 	"asynq.maintenance_concurrency": {
 		Type:            "int",
@@ -169,7 +161,7 @@ var registry = map[string]settingSpec{
 	},
 
 	// model.max_concurrency is the DEFAULT per-model cap on concurrent
-	// background (ingestion/enrichment) LLM/embedding/VLM calls, keyed by
+	// background (ingestion/enrichment) generation and embedding calls, keyed by
 	// model ID within this process. Read at every gated call via the
 	// limiter governor; a runtime bridge (applyModelMaxConcurrency) pushes UI
 	// edits into limiter.SetGlobalLimit so no restart is needed. Individual
@@ -1115,7 +1107,7 @@ func encodeForType(declared string, rawValue any) (types.JSON, error) {
 //     400 body verbatim).
 func validateRegistryEntry(key string, rawValue any) error {
 	switch key {
-	case "asynq.core_concurrency", "asynq.postprocess_concurrency",
+	case "asynq.core_concurrency",
 		"asynq.enrichment_concurrency", "asynq.maintenance_concurrency",
 		"asynq.shared_concurrency":
 		n, err := coerceToPositiveInt64(rawValue)

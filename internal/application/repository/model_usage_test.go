@@ -31,7 +31,7 @@ func TestCountByModelID_KnowledgeBase(t *testing.T) {
 
 	kb2 := makeKB()
 	kb2.ID = uuid.New().String()
-	kb2.VLMConfig = types.VLMConfig{Enabled: true, ModelID: modelID}
+	kb2.ModelTiers.Generation = modelID
 	require.NoError(t, db.Create(kb2).Error)
 
 	count, err = repo.CountByModelID(ctx, 1, modelID)
@@ -54,14 +54,14 @@ func TestListModelUsages_KnowledgeBase(t *testing.T) {
 	allBindings.Name = "Zulu KB"
 	allBindings.EmbeddingModelID = modelID
 	allBindings.SummaryModelID = modelID
-	allBindings.ImageProcessingConfig = types.ImageProcessingConfig{ModelID: modelID}
-	allBindings.VLMConfig = types.VLMConfig{Enabled: true, ModelID: modelID}
+	allBindings.ModelTiers.Generation = modelID
+	allBindings.ModelTiers.Light = modelID
 	require.NoError(t, db.Create(allBindings).Error)
 
-	vlmOnly := makeKB()
-	vlmOnly.Name = "Alpha KB"
-	vlmOnly.VLMConfig = types.VLMConfig{Enabled: true, ModelID: modelID}
-	require.NoError(t, db.Create(vlmOnly).Error)
+	generationOnly := makeKB()
+	generationOnly.Name = "Alpha KB"
+	generationOnly.ModelTiers.Generation = modelID
+	require.NoError(t, db.Create(generationOnly).Error)
 
 	otherTenant := makeKB()
 	otherTenant.Name = "Other tenant"
@@ -79,13 +79,13 @@ func TestListModelUsages_KnowledgeBase(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, usages, 2)
 	assert.Equal(t, "Alpha KB", usages[0].Name)
-	assert.Equal(t, []types.ModelUsageBinding{types.ModelUsageBindingVLMModel}, usages[0].Bindings)
+	assert.Equal(t, []types.ModelUsageBinding{types.ModelUsageBinding("generation_model_tier")}, usages[0].Bindings)
 	assert.Equal(t, "Zulu KB", usages[1].Name)
 	assert.Equal(t, []types.ModelUsageBinding{
+		types.ModelUsageBinding("light_model_tier"),
+		types.ModelUsageBinding("generation_model_tier"),
 		types.ModelUsageBindingEmbeddingModel,
 		types.ModelUsageBindingSummaryModel,
-		types.ModelUsageBindingImageProcessingModel,
-		types.ModelUsageBindingVLMModel,
 	}, usages[1].Bindings)
 }
 

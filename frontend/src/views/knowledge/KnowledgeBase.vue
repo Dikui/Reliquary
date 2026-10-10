@@ -35,6 +35,7 @@ import DocumentCardView from './components/DocumentCardView.vue';
 import DocumentBatchBar from './components/DocumentBatchBar.vue';
 import KbUploadSourceDropdown from './components/KbUploadSourceDropdown.vue';
 import KnowledgeWorkbench from './components/KnowledgeWorkbench.vue';
+import { CONTENT_TYPES } from '@/types/knowledgeClassification';
 import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess';
 import { useUploadConfirmStore, type UploadConfirmResult, type IntakeSourceInfo } from '@/stores/uploadConfirm';
 import {
@@ -202,7 +203,6 @@ const applyOptimisticBatchReparse = (ids: string[]) => {
     if (!idSet.has(card.id)) continue;
     pendingReparseAck.value.add(card.id);
     card.parse_status = 'pending';
-    card.summary_status = undefined;
     card.description = '';
     delete traceAvailableById[card.id];
     traceAvailableById[card.id] = true;
@@ -267,6 +267,10 @@ const confirmBatchReparse = async () => {
 let docSearchDebounce: number | null = null;
 const docSearchKeyword = ref('');
 const selectedFileType = ref('');
+const selectedContentType = ref('');
+const contentTypeOptions = computed(() => [...CONTENT_TYPES, 'unclassified'].map(value => ({ value, label: t(`knowledgeBase.contentTypes.${value}`) })));
+const selectedEntityId = ref('');
+const openArticleEntity = (id: string) => { selectedEntityId.value = id; activeKbTab.value = 'entities'; closeDoc(); };
 const fileTypeOptions = computed(() => [
   { label: t('knowledgeBase.allFileTypes'), value: '' },
   { label: 'PDF', value: 'pdf' },
@@ -319,6 +323,7 @@ const filterParams = computed(() => {
   return {
     keyword: docSearchKeyword.value ? docSearchKeyword.value.trim() : undefined,
     file_type: selectedFileType.value || undefined,
+    content_type: selectedContentType.value || undefined,
     parse_status: selectedParseStatus.value || undefined,
     source: selectedSource.value || undefined,
     start_time: start ? `${start} 00:00:00` : undefined,
@@ -440,7 +445,7 @@ watch(selectedFileType, (newVal, oldVal) => {
 });
 
 // 监听解析状态/来源/更新时间范围筛选变化（与文件类型行为一致）
-watch([selectedParseStatus, selectedSource, updatedTimeRange], () => {
+watch([selectedContentType, selectedParseStatus, selectedSource, updatedTimeRange], () => {
   if (kbId.value) {
     resetPage();
     loadKnowledgeFiles(kbId.value);
@@ -573,7 +578,7 @@ watch(() => cardList.value, (newValue) => {
   }
 
   let analyzeList = [];
-  // Filter items that need polling: parsing in progress OR summary generation in progress
+  // Filter articles whose processing is still active.
   analyzeList = newValue.filter(needsStatusPolling);
   if (timeout !== null) {
     clearTimeout(timeout);
@@ -588,7 +593,6 @@ type KnowledgeCard = {
   id: string;
   knowledge_base_id?: string;
   parse_status: string;
-  summary_status?: string;
   description?: string;
   file_name?: string;
   original_file_name?: string;
@@ -601,12 +605,7 @@ type KnowledgeCard = {
   metadata?: any;
   error_message?: string;
 };
-// needsStatusPolling decides whether a card row is still "in flight"
-// enough that the doc list should keep refreshing it. Keep in sync with
-// the backend lifecycle: pending / processing are the primary parse
-// phase, finalizing is the post-process fan-out (summary / question /
-// context extract still running), and a `completed` row whose summary
-// hasn't landed yet keeps polling so the description fills in.
+// Poll while article processing is active.
 const needsStatusPolling = (item: KnowledgeCard) => {
   return knowledgeNeedsStatusPolling(item);
 };
@@ -640,13 +639,11 @@ const updateStatus = (analyzeList: KnowledgeCard[]) => {
           }
 
           if (cardList.value[index].parse_status !== parseStatus ||
-            cardList.value[index].summary_status !== item.summary_status ||
             cardList.value[index].description !== item.description) {
 
             // Always update the card data
             cardList.value[index].parse_status = parseStatus;
-            cardList.value[index].summary_status = item.summary_status;
-            cardList.value[index].description = item.description;
+            Object.assign(cardList.value[index], item, { parse_status: parseStatus });
             delete traceAvailableById[item.id];
             hasChanges = true;
           }
@@ -1075,19 +1072,13 @@ const handleScroll = () => {
   }
 };
 const getDoc = (page: number) => {
-  getfDetails(details.id, page)
+  getfDetails(details.id, page || 1)
 };
 
-const syncDocumentSummaryState = (state: { id?: string; summary_status?: string; description?: string }) => {
+const syncDocumentProcessingState = (state: { id?: string; [key: string]: unknown }) => {
   if (!state?.id) return;
   const card = cardList.value.find((item: KnowledgeCard) => item.id === state.id);
-  if (!card) return;
-  if (typeof state.summary_status === 'string' && state.summary_status) {
-    card.summary_status = state.summary_status;
-  }
-  if (typeof state.description === 'string') {
-    card.description = state.description;
-  }
+  if (card) Object.assign(card, state);
 };
 
 const toggleSelectRow = (id: string, checked: boolean, shiftKey?: boolean) => {
@@ -1297,7 +1288,7 @@ const handleListAction = (
 
 // Clear selection on filter/kb change to avoid acting on hidden items.
 watch(
-  [docSearchKeyword, selectedFileType, selectedParseStatus, selectedSource, updatedTimeRange, kbId],
+  [docSearchKeyword, selectedFileType, selectedContentType, selectedParseStatus, selectedSource, updatedTimeRange, kbId],
   () => {
     clearSelection();
   },
@@ -1370,7 +1361,7 @@ const refreshKnowledgeSettings = () => { if (kbId.value) void loadKnowledgeBaseI
       </div>
 
       <div v-if="activeKbTab === 'entities'" class="entity-workbench-area">
-        <KnowledgeWorkbench v-if="kbId"
+        <KnowledgeWorkbench v-if="kbId" :initial-entity-id="selectedEntityId"
           @open-source="openSourceDoc" />
       </div>
 
@@ -1390,6 +1381,9 @@ const refreshKnowledgeSettings = () => { if (kbId.value) void loadKnowledgeBaseI
                 </t-input>
                 <div class="doc-filter-bar__filters">
 
+                <div class="doc-filter-field">
+                  <t-select v-model="selectedContentType" :options="contentTypeOptions" clearable :placeholder="$t('knowledgeBase.contentTypeFilter')" :aria-label="$t('knowledgeBase.contentTypeFilter')" class="doc-type-select doc-filter-field__control" />
+                </div>
                 <div class="doc-filter-field">
                   <t-select v-model="selectedFileType" :options="fileTypeOptions"
                     :placeholder="$t('knowledgeBase.fileTypeFilter')" class="doc-type-select doc-filter-field__control"
@@ -1482,7 +1476,7 @@ const refreshKnowledgeSettings = () => { if (kbId.value) void loadKnowledgeBaseI
                 </div>
                 <template v-else-if="cardList.length && viewMode === 'grid' && selectedParseStatus !== 'rejected'">
                   <DocumentCardView
-                    :items="cardList"
+                    :items="cardList" @open-entity="openArticleEntity"
 
                     :selected-ids="selectedIds"
                     :batch-mode="batchMode"
@@ -1498,7 +1492,7 @@ const refreshKnowledgeSettings = () => { if (kbId.value) void loadKnowledgeBaseI
                   />
                 </template>
                 <template v-else-if="cardList.length && (viewMode === 'list' || selectedParseStatus === 'rejected')">
-                  <DocumentListView :items="cardList"
+                  <DocumentListView :items="cardList" @open-entity="openArticleEntity"
                     :selected-ids="selectedIds"
 
                     :trace-visible-ids="traceAvailableById"
@@ -1531,7 +1525,7 @@ const refreshKnowledgeSettings = () => { if (kbId.value) void loadKnowledgeBaseI
       <!-- Document content drawer -->
       <DocContent ref="docContentRef" :visible="isCardDetails" :details="details"
         :kbId="kbId"
-        @closeDoc="closeDoc" @getDoc="getDoc" @summaryStateChange="syncDocumentSummaryState" @intake-review="handleIntakeReview">
+        @openEntity="openArticleEntity" @closeDoc="closeDoc" @getDoc="getDoc" @processingStateChange="syncDocumentProcessingState" @intake-review="handleIntakeReview">
       </DocContent>
     </div>
 

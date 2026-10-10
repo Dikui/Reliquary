@@ -10,7 +10,6 @@ func TestQueueDefinitionsAreUniqueAndConsumable(t *testing.T) {
 
 	validPools := map[string]bool{
 		WorkerPoolCore:        true,
-		WorkerPoolPostProcess: true,
 		WorkerPoolEnrichment:  true,
 		WorkerPoolMaintenance: true,
 	}
@@ -48,11 +47,11 @@ func TestQueueDefinitionsAreUniqueAndConsumable(t *testing.T) {
 		}
 	}
 	shared := QueueWeightsForSharedPool()
-	if len(shared) == 0 || shared[QueueDefault] <= 0 || shared[QueueSummary] <= 0 {
+	if len(shared) == 0 || shared[QueueDefault] <= 0 || shared[QueueEntity] <= 0 {
 		t.Fatalf("shared pool must cover core and enrichment queues: %+v", shared)
 	}
-	if shared[QueuePostProcess] != 0 || shared[QueueMaintenance] != 0 {
-		t.Fatalf("shared pool must not consume post-process or maintenance: %+v", shared)
+	if shared[QueueMaintenance] != 0 {
+		t.Fatalf("shared pool must not consume maintenance: %+v", shared)
 	}
 }
 
@@ -65,9 +64,8 @@ func TestQueueMaintenanceKeepsLegacyPhysicalName(t *testing.T) {
 func TestEveryAsynqTaskTypeHasADeclaredQueue(t *testing.T) {
 	taskTypes := []string{
 		TypeDocumentProcess,
-		TypeQuestionGeneration, TypeSummaryGeneration,
-		TypeKnowledgeListReparse, TypeDataTableSummary,
-		TypeImageMultimodal, TypeKnowledgePostProcess, TypeManualProcess,
+		TypeKnowledgeListReparse, TypeKnowledgeListDelete,
+		TypeManualProcess, TypeDataSourceSync, TypeEntityNameEmbeddingRebuild,
 	}
 	for _, taskType := range taskTypes {
 		if _, ok := QueueForTaskType(taskType); !ok {
@@ -81,7 +79,7 @@ func TestDefaultWorkerPoolConcurrencyIsExplicitBudget(t *testing.T) {
 	if allocation.UpstreamTotal() != DefaultUpstreamWorkerConcurrency {
 		t.Fatalf("upstream total = %d, want %d", allocation.UpstreamTotal(), DefaultUpstreamWorkerConcurrency)
 	}
-	if allocation.Core < 1 || allocation.PostProcess < 1 || allocation.Enrichment < 1 ||
+	if allocation.Core < 1 || allocation.Enrichment < 1 ||
 		allocation.Maintenance < 1 || allocation.Shared < 1 {
 		t.Fatalf("every pool must have positive explicit capacity: %+v", allocation)
 	}
@@ -102,5 +100,13 @@ func TestResolveWorkerPoolConcurrencyFallsBackPerPool(t *testing.T) {
 	}
 	if allocation.Shared != DefaultSharedWorkerConcurrency {
 		t.Fatalf("shared = %d, want fallback %d", allocation.Shared, DefaultSharedWorkerConcurrency)
+	}
+}
+
+func TestReplacedProcessingTasksHaveNoQueue(t *testing.T) {
+	for _, taskType := range []string{"summary:generation", "question:generation", "image:multimodal", "knowledge:post_process", "datatable:summary"} {
+		if queue, ok := QueueForTaskType(taskType); ok {
+			t.Fatalf("removed task %q still routes to %q", taskType, queue)
+		}
 	}
 }

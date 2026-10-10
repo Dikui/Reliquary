@@ -321,9 +321,6 @@ func (h *TenantHandler) GetTenantKV(c *gin.Context) {
 	}
 
 	switch key {
-	case "prompt-templates":
-		h.GetPromptTemplates(c)
-		return
 	case "parser-engine-config":
 		h.GetTenantParserEngineConfig(c)
 		return
@@ -422,28 +419,6 @@ func (h *TenantHandler) updateTenantParserEngineConfigInternal(c *gin.Context) {
 }
 
 // GetPromptTemplates godoc
-func (h *TenantHandler) GetPromptTemplates(c *gin.Context) {
-	// Return prompt templates from config.yaml
-	templates := h.config.PromptTemplates
-	if templates == nil {
-		templates = &config.PromptTemplatesConfig{}
-	}
-
-	// Determine user language from context (set by Language middleware)
-	lang := types.LanguageFromContextOrDefault(c.Request.Context())
-
-	// Build a localized copy so the original config is never mutated
-	localized := &config.PromptTemplatesConfig{
-		GenerateSummary:   config.LocalizeTemplates(templates.GenerateSummary, lang),
-		GenerateQuestions: config.LocalizeTemplates(templates.GenerateQuestions, lang),
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    localized,
-	})
-}
-
 // GetTenantRetrievalConfig returns the tenant's global retrieval configuration.
 func (h *TenantHandler) GetTenantRetrievalConfig(c *gin.Context) {
 	ctx := c.Request.Context()

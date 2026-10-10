@@ -25,6 +25,6 @@ test('uses section navigation with inline chunking controls and advanced options
   assert.match(dialog, /chunkingMoreOpen/)
   assert.match(dialog, /class="files-panel"/)
   assert.match(dialog, /statusFull/)
-  assert.match(dialog, /data-section="multimodal"/)
+  assert.match(dialog, /data-section="parser"/)
   assert.doesNotMatch(dialog, /<KBChunkingSettings/)
 })

@@ -88,8 +88,8 @@ func TestDeleteModel_RejectsWhenReferenced(t *testing.T) {
 	svc := NewModelService(
 		&stubModelRepoForDelete{model: &types.Model{ID: modelID, TenantID: 1}},
 		&stubKBRepoForModelDelete{usages: []types.ModelUsageResource{
-			{ID: "kb-1", Name: "Product docs", Bindings: []types.ModelUsageBinding{types.ModelUsageBindingVLMModel}},
-			{ID: "kb-2", Name: "Engineering", Bindings: []types.ModelUsageBinding{types.ModelUsageBindingVLMModel}},
+			{ID: "kb-1", Name: "Product docs", Bindings: []types.ModelUsageBinding{types.ModelUsageBinding("generation_model_tier")}},
+			{ID: "kb-2", Name: "Engineering", Bindings: []types.ModelUsageBinding{types.ModelUsageBinding("generation_model_tier")}},
 		}},
 		nil, nil, nil,
 	)
@@ -105,9 +105,9 @@ func TestDeleteModel_RejectsWhenReferenced(t *testing.T) {
 	require.Len(t, details.KnowledgeBases, 2)
 	assert.Equal(t, int64(2), details.KnowledgeBaseTotal)
 	assert.Equal(t, "Product docs", details.KnowledgeBases[0].Name)
-	assert.Equal(t, []types.ModelUsageBinding{types.ModelUsageBindingVLMModel}, details.KnowledgeBases[0].Bindings)
+	assert.Equal(t, []types.ModelUsageBinding{types.ModelUsageBinding("generation_model_tier")}, details.KnowledgeBases[0].Bindings)
 	assert.Equal(t, "Engineering", details.KnowledgeBases[1].Name)
-	assert.Equal(t, []types.ModelUsageBinding{types.ModelUsageBindingVLMModel}, details.KnowledgeBases[1].Bindings)
+	assert.Equal(t, []types.ModelUsageBinding{types.ModelUsageBinding("generation_model_tier")}, details.KnowledgeBases[1].Bindings)
 }
 
 func TestDeleteModel_SucceedsWhenUnreferenced(t *testing.T) {

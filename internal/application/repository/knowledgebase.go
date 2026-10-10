@@ -105,7 +105,6 @@ func (r *knowledgeBaseRepository) ListModelUsages(
 		Select(
 			"id", "name", "embedding_model_id", "summary_model_id",
 			"model_tiers",
-			"image_processing_config", "vlm_config",
 		).
 		Where("tenant_id = ?", tenantID)
 	query = scopeKnowledgeBasesByModelID(query, modelID)

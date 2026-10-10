@@ -206,7 +206,7 @@ func TestPurgeArchivedRuntimeTasksOnlyDeletesTeamAndLegacyTasks(t *testing.T) {
 	enqueue("invalid-json", `{"tenant_id":1`, types.QueueDefault, true)
 	enqueue("invalid-tenant-type", `{"tenant_id":"1"}`, types.QueueDefault, true)
 	retained = append(retained, "invalid-json", "invalid-tenant-type")
-	enqueue("other-queue", `{"tenant_id":1}`, types.QueueMultimodal, true)
+	enqueue("other-queue", `{"tenant_id":1}`, types.QueueEntity, true)
 	liveStates := []types.RuntimeTaskState{
 		types.RuntimeTaskPending, types.RuntimeTaskActive, types.RuntimeTaskScheduled, types.RuntimeTaskRetry,
 	}
@@ -252,7 +252,7 @@ func TestPurgeArchivedRuntimeTasksOnlyDeletesTeamAndLegacyTasks(t *testing.T) {
 			t.Fatalf("live state %s affected: task=%+v err=%v", state, task, err)
 		}
 	}
-	if _, err := inspector.inspector.GetTaskInfo(types.QueueMultimodal, "other-queue"); err != nil {
+	if _, err := inspector.inspector.GetTaskInfo(types.QueueEntity, "other-queue"); err != nil {
 		t.Fatalf("purge affected another queue: %v", err)
 	}
 	if deleted, _, err := inspector.PurgeArchivedRuntimeTasks(ctx, types.QueueDefault); err != nil || deleted != 0 {

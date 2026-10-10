@@ -11,6 +11,25 @@ type markdownImageTargetSpan struct {
 	TargetEnd   int
 }
 
+// MarkdownImageReference is a destination without its optional title or angle
+// brackets. Position preserves its order relative to other body content.
+type MarkdownImageReference struct {
+	Position int
+	URL      string
+}
+
+// MarkdownImageReferences uses the same destination parser as image resolution.
+func MarkdownImageReferences(markdown string) []MarkdownImageReference {
+	var refs []MarkdownImageReference
+	for _, span := range scanMarkdownImageTargets(markdown) {
+		path, _, _, ok := splitMarkdownImageTarget(markdown[span.TargetStart:span.TargetEnd], nil)
+		if ok {
+			refs = append(refs, MarkdownImageReference{Position: span.TargetStart, URL: path})
+		}
+	}
+	return refs
+}
+
 func scanMarkdownImageTargets(markdown string) []markdownImageTargetSpan {
 	var spans []markdownImageTargetSpan
 	for i := 0; i+1 < len(markdown); i++ {
@@ -120,6 +139,9 @@ func splitMarkdownImageTarget(
 
 	titleStart, found := parseMarkdownImageTitleSuffix(trimmed)
 	if !found {
+		if refMap == nil {
+			return trimmed, start, end, true
+		}
 		return "", 0, 0, false
 	}
 
@@ -132,7 +154,7 @@ func splitMarkdownImageTarget(
 	}
 
 	path = raw[start:pathEnd]
-	if _, found := refMap[path]; !found {
+	if _, found := refMap[path]; refMap != nil && !found {
 		return "", 0, 0, false
 	}
 	return path, start, pathEnd, true
@@ -156,7 +178,7 @@ func splitAngleMarkdownImageTarget(
 	}
 
 	path = raw[start+1 : closeIdx]
-	if _, found := refMap[path]; !found {
+	if _, found := refMap[path]; refMap != nil && !found {
 		return "", 0, 0, false
 	}
 	if !isEmptyOrMarkdownImageTitleSuffix(raw[closeIdx+1 : end]) {

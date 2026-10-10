@@ -31,16 +31,10 @@ type KnowledgeBase struct {
 	CreatorID string `yaml:"creator_id"              json:"creator_id"              gorm:"type:varchar(36);index"`
 	// Chunking configuration
 	ChunkingConfig ChunkingConfig `yaml:"chunking_config"         json:"chunking_config"         gorm:"type:json"`
-	// Image processing configuration
-	ImageProcessingConfig ImageProcessingConfig `yaml:"image_processing_config" json:"image_processing_config" gorm:"type:json"`
 	// ID of the embedding model
 	EmbeddingModelID string `yaml:"embedding_model_id"      json:"embedding_model_id"`
 	// Summary model ID
 	SummaryModelID string `yaml:"summary_model_id"        json:"summary_model_id"`
-	// VLM config
-	VLMConfig VLMConfig `yaml:"vlm_config"              json:"vlm_config"              gorm:"type:json"`
-	// QuestionGenerationConfig stores question generation configuration for document knowledge bases
-	QuestionGenerationConfig *QuestionGenerationConfig `yaml:"question_generation_config" json:"question_generation_config" gorm:"column:question_generation_config;type:json"`
 	// IndexingStrategy controls which indexing pipelines are active for this knowledge base.
 	// Pipelines: vector search and keyword search.
 	IndexingStrategy IndexingStrategy `yaml:"indexing_strategy"       json:"indexing_strategy"       gorm:"column:indexing_strategy;type:json"`
@@ -64,10 +58,6 @@ type KnowledgeBaseConfig struct {
 	ModelTiers *ModelTierConfig `json:"model_tiers,omitempty"`
 	// Chunking configuration
 	ChunkingConfig *ChunkingConfig `yaml:"chunking_config"         json:"chunking_config,omitempty"`
-	// Image processing configuration
-	ImageProcessingConfig    *ImageProcessingConfig    `yaml:"image_processing_config" json:"image_processing_config,omitempty"`
-	VLMConfig                *VLMConfig                `json:"vlm_config,omitempty"`
-	QuestionGenerationConfig *QuestionGenerationConfig `json:"question_generation_config,omitempty"`
 	// IndexingStrategy controls which indexing pipelines are active.
 	// nil means "no change" when updating (preserves existing strategy).
 	IndexingStrategy *IndexingStrategy `yaml:"indexing_strategy"       json:"indexing_strategy"`
@@ -170,12 +160,6 @@ func ParseProviderScheme(filePath string) string {
 	return ""
 }
 
-// ImageProcessingConfig represents the image processing configuration
-type ImageProcessingConfig struct {
-	// Model ID
-	ModelID string `yaml:"model_id" json:"model_id"`
-}
-
 // Preserve explicit zero through API decoding and persisted JSON. Omitted
 // overlap must remain omitted when a default Go config is saved and reloaded.
 func (c *ChunkingConfig) UnmarshalJSON(data []byte) error {
@@ -215,106 +199,6 @@ func (c ChunkingConfig) Value() (driver.Value, error) {
 
 // Scan implements the sql.Scanner interface, used to convert database value to ChunkingConfig
 func (c *ChunkingConfig) Scan(value interface{}) error {
-	if value == nil {
-		return nil
-	}
-	b, ok := value.([]byte)
-	if !ok {
-		return nil
-	}
-	return json.Unmarshal(b, c)
-}
-
-// Value implements the driver.Valuer interface, used to convert ImageProcessingConfig to database value
-func (c ImageProcessingConfig) Value() (driver.Value, error) {
-	return json.Marshal(c)
-}
-
-// Scan implements the sql.Scanner interface, used to convert database value to ImageProcessingConfig
-func (c *ImageProcessingConfig) Scan(value interface{}) error {
-	if value == nil {
-		return nil
-	}
-	b, ok := value.([]byte)
-	if !ok {
-		return nil
-	}
-	return json.Unmarshal(b, c)
-}
-
-// VLMConfig represents the VLM configuration
-type VLMConfig struct {
-	Enabled bool   `yaml:"enabled"  json:"enabled"`
-	ModelID string `yaml:"model_id" json:"model_id"`
-	// DescriptionLanguage controls the language used for generated image
-	// captions. Empty means follow the document/request language.
-	DescriptionLanguage string `yaml:"description_language,omitempty" json:"description_language,omitempty"`
-	// CustomInstructions adds KB-specific image interpretation guidance without
-	// replacing the system-owned OCR and Markdown output contract.
-	CustomInstructions string `yaml:"custom_instructions,omitempty" json:"custom_instructions,omitempty"`
-
-	// 兼容老版本
-	// Model Name
-	ModelName string `yaml:"model_name" json:"model_name"`
-	// Base URL
-	BaseURL string `yaml:"base_url" json:"base_url"`
-	// API Key
-	APIKey string `yaml:"api_key" json:"api_key"`
-	// Interface Type: "ollama" or "openai"
-	InterfaceType string `yaml:"interface_type" json:"interface_type"`
-}
-
-// IsEnabled 判断多模态是否启用（兼容新老版本）
-// 新版本：Enabled && ModelID != ""
-// 老版本：ModelName != "" && BaseURL != ""
-func (c VLMConfig) IsEnabled() bool {
-	// 新版本配置
-	if c.Enabled && c.ModelID != "" {
-		return true
-	}
-	// 兼容老版本配置
-	if c.ModelName != "" && c.BaseURL != "" {
-		return true
-	}
-	return false
-}
-
-// QuestionGenerationConfig represents the question generation configuration for document knowledge bases
-// When enabled, the system will use LLM to generate questions for each chunk during document parsing
-// These generated questions will be indexed separately to improve recall
-type QuestionGenerationConfig struct {
-	Enabled bool `yaml:"enabled"  json:"enabled"`
-	// Number of questions to generate per chunk (default: 3, max: 10)
-	QuestionCount int `yaml:"question_count" json:"question_count"`
-	// CustomInstructions describes the intended audience or question style.
-	// It is appended to the stable system question-generation template.
-	CustomInstructions string `yaml:"custom_instructions,omitempty" json:"custom_instructions,omitempty"`
-}
-
-// Value implements the driver.Valuer interface
-func (c QuestionGenerationConfig) Value() (driver.Value, error) {
-	return json.Marshal(c)
-}
-
-// Scan implements the sql.Scanner interface
-func (c *QuestionGenerationConfig) Scan(value interface{}) error {
-	if value == nil {
-		return nil
-	}
-	b, ok := value.([]byte)
-	if !ok {
-		return nil
-	}
-	return json.Unmarshal(b, c)
-}
-
-// Value implements the driver.Valuer interface, used to convert VLMConfig to database value
-func (c VLMConfig) Value() (driver.Value, error) {
-	return json.Marshal(c)
-}
-
-// Scan implements the sql.Scanner interface, used to convert database value to VLMConfig
-func (c *VLMConfig) Scan(value interface{}) error {
 	if value == nil {
 		return nil
 	}
@@ -406,12 +290,4 @@ func (kb *KnowledgeBase) IsKeywordEnabled() bool {
 // Currently only vector and keyword search need embeddings.
 func (kb *KnowledgeBase) NeedsEmbeddingModel() bool {
 	return kb != nil && kb.IndexingStrategy.NeedsEmbedding()
-}
-
-// IsMultimodalEnabled 判断多模态是否启用，由 VLMConfig.IsEnabled() 决定。
-func (kb *KnowledgeBase) IsMultimodalEnabled() bool {
-	if kb == nil {
-		return false
-	}
-	return kb.VLMConfig.IsEnabled()
 }

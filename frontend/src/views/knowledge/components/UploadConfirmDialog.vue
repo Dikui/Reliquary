@@ -143,7 +143,7 @@
             <div class="config-panel">
               <div class="content-wrapper upload-confirm-content">
 
-                  <div v-show="activeSection === 'parser'" class="section">
+                  <div v-show="activeSection === 'parser'" class="section" data-section="parser">
                     <KBParserSettings
                       :relevant-extensions="batchFileExts"
                       :parser-engine-rules="uiState.chunkingConfig.parserEngineRules"
@@ -164,7 +164,7 @@
                     </div>
                   </div>
 
-                  <div v-show="activeSection === 'chunking'" class="section">
+                  <div v-show="activeSection === 'chunking'" class="section" data-section="chunking">
                     <div class="section-content">
                       <div class="section-header">
                         <h2 class="section-title">{{ t('knowledgeEditor.chunking.title') }}</h2>
@@ -303,123 +303,6 @@
                     </div>
                   </div>
 
-                  <div v-show="activeSection === 'multimodal'" class="section" data-section="multimodal">
-                    <div class="kb-settings-block">
-                      <div class="section-header">
-                        <h2 class="section-title">{{ t('knowledgeEditor.multimodal.title') }}</h2>
-                        <p class="section-desc">{{ t('knowledgeEditor.multimodal.description') }}</p>
-                      </div>
-                      <div v-if="issueSectionKeys.has('multimodal')" class="section-notice">
-                        <t-icon name="info-circle-filled" />
-                        <span>{{ t('uploadConfirm.multimodalSetupHint') }}</span>
-                      </div>
-                      <div class="settings-group">
-                        <div class="setting-row">
-                          <div class="setting-info">
-                            <label>{{ t('knowledgeEditor.advanced.multimodal.label') }}</label>
-                            <p class="desc">{{ t('knowledgeEditor.advanced.multimodal.description') }}</p>
-                          </div>
-                          <div class="setting-control">
-                            <t-switch v-model="uiState.multimodalConfig.enabled" size="medium" />
-                          </div>
-                        </div>
-                        <div v-if="uiState.multimodalConfig.enabled" class="setting-row">
-                          <div class="setting-info">
-                            <label>{{ t('knowledgeEditor.advanced.multimodal.vllmLabel') }} <span class="required">*</span></label>
-                            <p class="desc">{{ t('knowledgeEditor.advanced.multimodal.vllmDescription') }}</p>
-                          </div>
-                          <div class="setting-control">
-                            <ModelSelector
-                              model-type="VLLM"
-                              :selected-model-id="uiState.multimodalConfig.vllmModelId"
-                              :all-models="allModels"
-                              :status="showMultimodalModelError ? 'error' : 'default'"
-                              :placeholder="t('knowledgeEditor.advanced.multimodal.vllmPlaceholder')"
-                              @update:selected-model-id="handleMultimodalVLLMChange"
-                              @add-model="handleAddVLLMModel"
-                            />
-                          </div>
-                        </div>
-                        <div v-if="uiState.multimodalConfig.enabled" class="setting-row">
-                          <div class="setting-info">
-                            <label>{{ t('knowledgeEditor.advanced.multimodal.descriptionLanguageLabel') }}</label>
-                            <p class="desc">{{ t('knowledgeEditor.advanced.multimodal.descriptionLanguageDescription') }}</p>
-                          </div>
-                          <div class="setting-control">
-                            <t-select
-                              v-model="uiState.multimodalConfig.descriptionLanguage"
-                              clearable
-                              :placeholder="t('knowledgeEditor.advanced.multimodal.descriptionLanguageAuto')"
-                              :style="{ width: '280px' }"
-                            >
-                              <t-option value="Chinese" :label="t('language.zhCN')" />
-                              <t-option value="English" :label="t('language.enUS')" />
-                              <t-option value="Korean" :label="t('language.koKR')" />
-                              <t-option value="Russian" :label="t('language.ruRU')" />
-                            </t-select>
-                          </div>
-                        </div>
-                        <div v-if="uiState.multimodalConfig.enabled" class="setting-row setting-row-vertical">
-                          <div class="setting-info">
-                            <label>{{ t('knowledgeEditor.advanced.multimodal.customInstructionsLabel') }}</label>
-                            <p class="desc">{{ t('knowledgeEditor.advanced.multimodal.customInstructionsDescription') }}</p>
-                          </div>
-                          <div class="setting-control setting-control-full">
-                            <SafeTextarea
-                              v-model="uiState.multimodalConfig.customInstructions"
-                              :placeholder="t('knowledgeEditor.advanced.multimodal.customInstructionsPlaceholder')"
-                              :maxlength="4000"
-                              :autosize="{ minRows: 3, maxRows: 8 }"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div v-show="activeSection === 'question'" class="section">
-                    <div class="kb-settings-block">
-                      <div class="section-header">
-                        <h2 class="section-title">{{ t('knowledgeEditor.advanced.questionGeneration.label') }}</h2>
-                        <p class="section-desc">{{ t('knowledgeEditor.advanced.questionGeneration.description') }}</p>
-                      </div>
-                      <div class="settings-group">
-                        <div class="setting-row">
-                          <div class="setting-info">
-                            <label>{{ t('knowledgeEditor.advanced.questionGeneration.label') }}</label>
-                            <p class="desc">{{ t('knowledgeEditor.advanced.questionGeneration.countDescription') }}</p>
-                          </div>
-                          <div class="setting-control setting-control-inline">
-                            <t-input-number
-                              v-if="uiState.questionGenerationConfig.enabled"
-                              v-model="uiState.questionGenerationConfig.questionCount"
-                              :min="1"
-                              :max="10"
-                              :step="1"
-                              theme="normal"
-                              :style="{ width: '88px' }"
-                            />
-                            <t-switch v-model="uiState.questionGenerationConfig.enabled" size="medium" />
-                          </div>
-                        </div>
-                        <div v-if="uiState.questionGenerationConfig.enabled" class="setting-row setting-row-vertical">
-                          <div class="setting-info">
-                            <label>{{ t('knowledgeEditor.advanced.questionGeneration.instructionsLabel') }}</label>
-                            <p class="desc">{{ t('knowledgeEditor.advanced.questionGeneration.instructionsDescription') }}</p>
-                          </div>
-                          <div class="setting-control setting-control-full">
-                            <SafeTextarea
-                              v-model="uiState.questionGenerationConfig.customInstructions"
-                              :placeholder="t('knowledgeEditor.advanced.questionGeneration.instructionsPlaceholder')"
-                              :maxlength="4000"
-                              :autosize="{ minRows: 3, maxRows: 8 }"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
                 </div>
 
               <footer class="modal-footer">
@@ -443,11 +326,8 @@ import SafeTextarea from '@/components/SafeTextarea.vue'
 import { ref, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
-import ModelSelector from '@/components/ModelSelector.vue'
 import KBParserSettings from '../settings/KBParserSettings.vue'
-import { useResourcesStore } from '@/stores/resources'
 import { useEditorResourcesStore } from '@/stores/editorResources'
-import { useUIStore } from '@/stores/ui'
 import { formatFileSize, getFileIcon } from '@/utils/files'
 import { getUploadFileKey } from '../utils/uploadSources'
 import KbUploadSourceDropdown from './KbUploadSourceDropdown.vue'
@@ -460,10 +340,8 @@ import type {
   UploadConfirmResult,
 } from '@/stores/uploadConfirm'
 
-const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp']
 
-type ConfigSectionKey = 'parser' | 'chunking' | 'multimodal' | 'question'
-type IssueSectionKey = 'multimodal'
+type ConfigSectionKey = 'parser' | 'chunking'
 
 interface ChunkingUIConfig {
   chunkSize: number
@@ -484,8 +362,6 @@ interface ChunkingUIConfig {
 
 interface UploadUIState {
   chunkingConfig: ChunkingUIConfig
-  multimodalConfig: { enabled: boolean; vllmModelId: string; descriptionLanguage?: string; customInstructions?: string }
-  questionGenerationConfig: { enabled: boolean; questionCount: number; customInstructions?: string }
   pdfForceScanned: boolean
 }
 
@@ -516,11 +392,8 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const resources = useResourcesStore()
 const editorResources = useEditorResourcesStore()
-const uiStore = useUIStore()
 
-const allModels = ref<any[]>([])
 const localFiles = ref<File[]>([])
 const localUrls = ref<string[]>([])
 const sourceInfoByItem = ref<Record<string, IntakeSourceInfo>>({})
@@ -549,12 +422,6 @@ function fileRelativeDir(file: File): string {
 function fileDisplayTitle(file: File): string {
   const relativePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath
   return relativePath || file.name
-}
-
-function getModelName(modelId: string): string {
-  if (!modelId) return t('uploadConfirm.notSet')
-  const model = allModels.value.find((m: any) => m.id === modelId)
-  return model?.name || modelId
 }
 
 function truncateNavText(text: string, max = 18): string {
@@ -666,30 +533,6 @@ const languageOptions = computed(() => [
   { label: t('knowledgeEditor.chunking.languageOptions.zh'), value: 'zh' },
 ])
 
-const hasImages = computed(() => {
-  if (props.mode === 'manual' && props.manualPreview?.content) {
-    const content = props.manualPreview.content
-    if (/data:image\/|!\[[^\]]*\]\([^)]+\)/i.test(content)) return true
-  }
-  return batchFileExts.value.some(ext => IMAGE_EXTENSIONS.includes(ext))
-})
-
-const showMultimodalModelError = computed(() => {
-  return !hasImages.value && uiState.value.multimodalConfig.enabled && !uiState.value.multimodalConfig.vllmModelId
-})
-
-const issueSectionKeys = computed(() => {
-  const keys = new Set<IssueSectionKey>()
-  if (hasImages.value) {
-    if (!uiState.value.multimodalConfig.enabled || !uiState.value.multimodalConfig.vllmModelId) {
-      keys.add('multimodal')
-    }
-  } else if (showMultimodalModelError.value) {
-    keys.add('multimodal')
-  }
-  return keys
-})
-
 const navItems = computed(() => {
   const items: Array<{
     key: ConfigSectionKey
@@ -717,13 +560,6 @@ const navItems = computed(() => {
 
   push('parser', 'file-search', t('settings.parserEngine'))
   push('chunking', 'file-copy', t('knowledgeEditor.sidebar.chunking'))
-  push(
-    'multimodal',
-    'image',
-    t('knowledgeEditor.sidebar.multimodal'),
-    issueSectionKeys.value.has('multimodal'),
-  )
-  push('question', 'chat', t('knowledgeEditor.advanced.questionGeneration.label'))
   return items
 })
 
@@ -748,28 +584,6 @@ function getSectionNavStatus(
       }
       return { status: parts.join(' · ') }
     }
-    case 'multimodal': {
-      if (issue) {
-        return { status: t('uploadConfirm.statusNeedsSetup'), statusTone: 'error' }
-      }
-      const mm = uiState.value.multimodalConfig
-      if (!mm.enabled) {
-        return { status: t('uploadConfirm.statusOff'), statusTone: 'muted' }
-      }
-      return {
-        status: mm.vllmModelId ? getModelName(mm.vllmModelId) : t('uploadConfirm.notSet'),
-        statusTone: mm.vllmModelId ? undefined : 'warning',
-      }
-    }
-    case 'question': {
-      const question = uiState.value.questionGenerationConfig
-      if (!question.enabled) {
-        return { status: t('uploadConfirm.statusOff'), statusTone: 'muted' }
-      }
-      return {
-        status: t('uploadConfirm.summaryQuestionCountValue', { count: question.questionCount }),
-      }
-    }
     default:
       return { status: '' }
   }
@@ -778,15 +592,11 @@ function getSectionNavStatus(
 const canConfirm = computed(() => {
   if (props.mode === 'file' && batchItemCount.value === 0) return false
   if (props.mode === 'manual' && !props.manualPreview?.content?.trim()) return false
-  if (showMultimodalModelError.value) {
-    return false
-  }
   return true
 })
 
 function getDefaultSection(): ConfigSectionKey {
   if (props.mode === 'reparse') return 'parser'
-  if (issueSectionKeys.value.has('multimodal')) return 'multimodal'
   return 'parser'
 }
 
@@ -812,9 +622,7 @@ function createDefaultUIState(): UploadUIState {
       languages: [],
       tableMetadataInstructions: '',
     },
-    multimodalConfig: { enabled: false, vllmModelId: '', descriptionLanguage: '', customInstructions: '' },
-    questionGenerationConfig: { enabled: true, questionCount: 3, customInstructions: '' },
-    pdfForceScanned: false,
+        pdfForceScanned: false,
   }
 }
 
@@ -838,17 +646,6 @@ function initFromKbInfo(kb: any) {
       languages: kb.chunking_config?.languages || [],
       tableMetadataInstructions: kb.chunking_config?.table_metadata_instructions || '',
     },
-    multimodalConfig: {
-      enabled: !!kb.vlm_config?.enabled,
-      vllmModelId: kb.vlm_config?.model_id || '',
-      descriptionLanguage: kb.vlm_config?.description_language || '',
-      customInstructions: kb.vlm_config?.custom_instructions || '',
-    },
-    questionGenerationConfig: {
-      enabled: kb.question_generation_config?.enabled ?? true,
-      questionCount: kb.question_generation_config?.question_count || 3,
-      customInstructions: kb.question_generation_config?.custom_instructions || '',
-    },
     pdfForceScanned: false,
   }
 }
@@ -870,18 +667,6 @@ function buildProcessOverrides(): KnowledgeProcessOverrides {
       token_limit: chunking.tokenLimit,
       languages: chunking.languages,
       table_metadata_instructions: chunking.tableMetadataInstructions,
-    },
-    enable_multimodel: state.multimodalConfig.enabled && !!state.multimodalConfig.vllmModelId,
-    vlm_config: {
-      enabled: state.multimodalConfig.enabled && !!state.multimodalConfig.vllmModelId,
-      model_id: state.multimodalConfig.vllmModelId,
-      description_language: state.multimodalConfig.descriptionLanguage,
-      custom_instructions: state.multimodalConfig.customInstructions,
-    },
-    question_generation_config: {
-      enabled: state.questionGenerationConfig.enabled,
-      question_count: state.questionGenerationConfig.questionCount,
-      custom_instructions: state.questionGenerationConfig.customInstructions,
     },
   }
 
@@ -912,32 +697,10 @@ function applyOverridesToState(o?: KnowledgeProcessOverrides | null) {
     if (cc.parser_engine_rules) s.chunkingConfig.parserEngineRules = cc.parser_engine_rules
   }
   if (o.parser_engine_rules) s.chunkingConfig.parserEngineRules = o.parser_engine_rules
-  if (o.enable_multimodel != null) s.multimodalConfig.enabled = o.enable_multimodel
-  if (o.vlm_config) {
-    if (o.vlm_config.enabled != null) s.multimodalConfig.enabled = o.vlm_config.enabled
-    if (o.vlm_config.model_id != null) s.multimodalConfig.vllmModelId = o.vlm_config.model_id
-    if (o.vlm_config.description_language != null) s.multimodalConfig.descriptionLanguage = o.vlm_config.description_language
-    if (o.vlm_config.custom_instructions != null) s.multimodalConfig.customInstructions = o.vlm_config.custom_instructions
-  }
-  const qg = o.question_generation_config
-  if (qg) {
-    if (qg.enabled != null) s.questionGenerationConfig.enabled = qg.enabled
-    if (qg.question_count != null) s.questionGenerationConfig.questionCount = qg.question_count
-    if (qg.custom_instructions != null) s.questionGenerationConfig.customInstructions = qg.custom_instructions
-  }
   if (o.parser_engine_overrides && o.parser_engine_overrides.pdf_force_scanned === 'true') {
     s.pdfForceScanned = true
   } else {
     s.pdfForceScanned = false
-  }
-}
-
-async function loadModels() {
-  try {
-    await resources.ensureModels()
-    allModels.value = resources.allModels || []
-  } catch {
-    allModels.value = []
   }
 }
 
@@ -957,7 +720,6 @@ watch(
     }
     activeSection.value = getDefaultSection()
     chunkingMoreOpen.value = false
-    loadModels()
   },
 )
 
@@ -1008,24 +770,6 @@ const handleParserEngineRulesUpdate = (rules: Array<{
   uiState.value.chunkingConfig.parserEngineRules = rules
 }
 
-const handleMultimodalVLLMChange = (modelId: string) => {
-  uiState.value.multimodalConfig.vllmModelId = modelId
-}
-
-const handleAddVLLMModel = () => {
-  uiStore.openSettings('models', 'vllm')
-}
-
-const validateBeforeConfirm = (): boolean => {
-  if (showMultimodalModelError.value) {
-    MessagePlugin.warning(t('uploadConfirm.vlmModelSelectRequired'))
-    goToSection('multimodal')
-    return false
-  }
-
-  return true
-}
-
 const handleCancel = () => {
   emit('cancel')
   emit('update:visible', false)
@@ -1036,7 +780,6 @@ const handleConfirm = () => {
     MessagePlugin.warning(t('uploadConfirm.noItems'))
     return
   }
-  if (!validateBeforeConfirm()) return
 
   const processConfig = buildProcessOverrides()
   if (props.mode === 'manual' && props.manualPreview) {

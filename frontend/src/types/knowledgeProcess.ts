@@ -19,24 +19,8 @@ export interface ChunkingConfigOverride {
   table_metadata_instructions?: string
 }
 
-export interface VLMConfigOverride {
-  enabled?: boolean
-  model_id?: string
-  description_language?: string
-  custom_instructions?: string
-}
-
-export interface QuestionGenerationConfigOverride {
-  enabled?: boolean
-  question_count?: number
-  custom_instructions?: string
-}
-
 export interface KnowledgeProcessOverrides {
   parser_engine_rules?: ParserEngineRule[]
   chunking_config?: ChunkingConfigOverride
-  enable_multimodel?: boolean
-  vlm_config?: VLMConfigOverride
-  question_generation_config?: QuestionGenerationConfigOverride
   parser_engine_overrides?: Record<string, string>
 }

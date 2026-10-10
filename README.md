@@ -50,7 +50,7 @@ The framework supports auto-syncing RSS feeds and site adapters, handles 10+ doc
 
 ## 🏗️ Architecture
 
-Files, URLs and RSS articles pass through intake review, parsing and chunking. Summaries and retrieval indexes use configured models. PostgreSQL stores article records, entities, chunks and search indexes; local storage keeps source files and images. The Web UI retrieves knowledge without generating answers.
+Files, URLs and RSS articles pass through intake review and parsing. One processing call produces the content type, summary, entities and topics. Events, opinions and research retain the full body with chunks and vector indexes; tutorials, cases and references retain a summary and original link. PostgreSQL stores article records, entities, topics and search indexes; local storage keeps bodies, source files and images for full articles. The Web UI retrieves knowledge without generating answers.
 
 ## 🧩 Feature Overview
 
@@ -59,8 +59,9 @@ Files, URLs and RSS articles pass through intake review, parsing and chunking. S
 | Capability | Details |
 |------------|---------|
 | Knowledge Base | One automatically created document knowledge base; sign in directly to the article page |
-| Knowledge Settings | Model tiers, chunking, parser rules, image processing and indexing in one settings page |
-| Per-Upload Process Config | Override parser, chunking, multimodal images (VLM), and question generation per upload batch via upload-confirm dialog or `process_config` API; reparse with new settings |
+| Knowledge Settings | Model tiers, chunking, parser rules and indexing in one settings page; processing models with vision read body images within the same call |
+| Per-Upload Process Config | Override parser and chunking per upload batch via upload-confirm dialog or `process_config` API; reprocess with new settings |
+| Article Processing | Six content types determine full storage or a summary and link; the common summary includes an overview, points and key terms, with entity and topic associations |
 | Batch Reparse | Re-queue parsing for multiple documents at once with optional per-batch `process_config` |
 | Subscriptions | Global RSS, Atom, JSON Feed and site adapters in Settings, with incremental and full sync, schedules and logs |
 | Document Formats | PDF / Word / Txt / Markdown / EPUB / Images / CSV / Excel / PPT / JSON |
@@ -87,7 +88,7 @@ Files, URLs and RSS articles pass through intake review, parsing and chunking. S
 | Access Control | One personal user with complete access, automatic registration closure, full-access API keys and local password recovery |
 | Security | AES-256-GCM at-rest encryption for API keys and data-source credentials with graceful key rotation; Redis TLS; SSRF-safe HTTP client (data sources, URL import, redirect chains); secret redaction in responses |
 | Observability | Model usage in `model_usage`, document processing timelines, runtime task queues and worker governance |
-| Task Management | MQ async tasks with per-stage worker-pool governance (core / post-process / enrichment / maintenance + elastic shared pool) and per-model background concurrency governors; automatic database migration on version upgrade |
+| Task Management | MQ async tasks with worker-pool governance (core / enrichment / maintenance + elastic shared pool) and per-model background concurrency governors; automatic database migration on version upgrade |
 | Model Management | Centralized model tiers for the single knowledge base, declarative built-in models via YAML, per-model thinking-mode and embedding-dimension overrides, interactive model test debugger, WeKnora Cloud hosted models and parsing |
 
 ## 🧩 Chrome Extension

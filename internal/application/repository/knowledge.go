@@ -105,6 +105,11 @@ func (r *knowledgeRepository) ListKnowledgeByKnowledgeBaseID(
 // KnowledgeListFilter to a GORM query. Tenant / knowledge base scoping must be
 // applied by the caller before invoking this helper.
 func applyKnowledgeListFilter(query *gorm.DB, filter types.KnowledgeListFilter) *gorm.DB {
+	if filter.ContentType == "unclassified" {
+		query = query.Where("(content_type IS NULL OR content_type = '')")
+	} else if filter.ContentType != "" {
+		query = query.Where("content_type = ?", filter.ContentType)
+	}
 	if filter.Keyword != "" {
 		// Case-insensitive (LOWER … LIKE LOWER) so keyword search matches
 		// regardless of the stored casing — consistent with the sibling
@@ -229,6 +234,9 @@ func (r *knowledgeRepository) DeleteKnowledgeList(ctx context.Context, tenantID 
 			return err
 		}
 		if err := tx.Where("tenant_id=? AND knowledge_id IN ?", tenantID, ids).Delete(&types.KnowledgeEntity{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("tenant_id=? AND knowledge_id IN ?", tenantID, ids).Delete(&types.KnowledgeTopic{}).Error; err != nil {
 			return err
 		}
 		return tx.Where("tenant_id=? AND id IN ?", tenantID, ids).Delete(&types.Knowledge{}).Error
@@ -465,13 +473,10 @@ func (r *knowledgeRepository) FinalizeSubtask(
 }
 
 // SetFinalizing atomically transitions a row from 'processing' to
-// 'finalizing' and seeds pending_subtasks_count. Used by
-// KnowledgePostProcess.Handle as the single durable handoff between
-// the synchronous parse stage and the asynchronous enrichment fan-out.
+// 'finalizing' and seeds the generic pending_subtasks_count field.
 //
 // The transition is conditional on parse_status='processing' so a row
-// that the user cancelled / deleted between ProcessDocument finishing
-// and post-process starting will NOT get hijacked into finalizing.
+// that the user cancelled or deleted cannot be moved into finalizing.
 // Returns whether the transition happened.
 func (r *knowledgeRepository) SetFinalizing(
 	ctx context.Context, id string, expectedSubtasks int,

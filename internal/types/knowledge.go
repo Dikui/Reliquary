@@ -86,6 +86,8 @@ const (
 // KnowledgeListFilter aggregates optional filters for listing knowledge entries
 // under a knowledge base. Empty / zero fields mean "no filter on that dimension".
 type KnowledgeListFilter struct {
+	// ContentType filters the article purpose; unclassified matches an empty classification.
+	ContentType string
 	// Keyword performs a LIKE match on file_name / title when non-empty.
 	Keyword string
 	// FileType filters by file_type, or by type for the special values "manual" / "url".
@@ -117,7 +119,12 @@ type Knowledge struct {
 	// Title of the knowledge
 	Title string `json:"title"`
 	// Description of the knowledge
-	Description string `json:"description"`
+	Description       string            `json:"description"`
+	ContentType       string            `json:"content_type" gorm:"type:varchar(16)"`
+	ProcessingMode    string            `json:"processing_mode" gorm:"type:varchar(16);not null;default:'full'"`
+	StructuredSummary *KnowledgeSummary `json:"structured_summary" gorm:"type:jsonb"`
+	Entities          []Entity          `json:"entities" gorm:"-"`
+	Topics            []Topic           `json:"topics" gorm:"-"`
 	// DescriptionSpecified distinguishes an explicitly supplied empty description
 	// from an omitted field in partial update requests.
 	DescriptionSpecified bool `json:"-" gorm:"-"`

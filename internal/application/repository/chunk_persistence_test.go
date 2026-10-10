@@ -92,15 +92,6 @@ func TestListPagedChunksByKnowledgeID_FiltersEnabledState(t *testing.T) {
 	assert.Len(t, allChunks, 2)
 }
 
-func makeSuggestedDocumentChunk(t *testing.T, kbID, knowledgeID, question string) *types.Chunk {
-	t.Helper()
-	chunk := makeChunk(kbID, knowledgeID, types.ChunkTypeText)
-	require.NoError(t, chunk.SetDocumentMetadata(&types.DocumentChunkMetadata{
-		GeneratedQuestions: []types.GeneratedQuestion{{ID: uuid.NewString(), Question: question}},
-	}))
-	return chunk
-}
-
 func TestUpdateChunkPersistsContent(t *testing.T) {
 	db := setupChunkTestDB(t)
 	ctx := context.Background()

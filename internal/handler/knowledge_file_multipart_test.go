@@ -57,7 +57,7 @@ func TestKnowledgeFileMultipartAcceptsSourceAndProcessJSON(t *testing.T) {
 	require.NoError(t, err)
 	_, err = file.Write([]byte("# Complete sourced Markdown\n\nOriginal article body."))
 	require.NoError(t, err)
-	source := types.SourceInfo{Author: "Multipart author", OriginalURL: "https://example.com/article", PublishedAt: "2026-10-11"}
+	source := types.SourceInfo{Author: "Multipart author", Publisher: "Multipart publisher", OriginalURL: "https://example.com/article", PublishedAt: "2026-10-11"}
 	chunkSize := 512
 	config := types.KnowledgeProcessOverrides{ChunkingConfig: &types.ChunkingConfig{ChunkSize: chunkSize, ChunkOverlap: 32, ChunkOverlapSet: true}}
 	for key, value := range map[string]any{"source_info": source, "process_config": config} {
@@ -80,6 +80,7 @@ func TestKnowledgeFileMultipartAcceptsSourceAndProcessJSON(t *testing.T) {
 	require.True(t, result.Success)
 	require.Equal(t, "uploaded", result.Data.ID)
 	require.Equal(t, source.Author, service.metadata["author"])
+	require.Equal(t, source.Publisher, service.metadata["publisher"])
 	require.Equal(t, source.OriginalURL, service.metadata["original_url"])
 	require.Equal(t, source.PublishedAt, service.metadata["published_at"])
 	require.Equal(t, config, *service.config)

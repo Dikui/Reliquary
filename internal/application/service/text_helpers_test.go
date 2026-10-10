@@ -19,14 +19,14 @@ func TestStripImageMarkup(t *testing.T) {
 		{"html img tag stripped", `Before <img src="x.png" alt="y"/> after`, "Before  after"},
 		{
 			// Regression guard: an earlier version stripped the WHOLE
-			// <image>...</image> block (including <image_ocr> content),
-			// silently destroying successful VLM OCR results. The fix must
+			// <image>...</image> block (including <image_text> content),
+			// silently destroying successful parser image text results. The fix must
 			// preserve the inner OCR / caption text.
 			"enriched <image> block keeps inner OCR + caption text",
 			`<image url="images/page_1.png">
 <image_original>![p1](images/page_1.png)</image_original>
-<image_caption>scanned letter on letterhead</image_caption>
-<image_ocr>SEHR GEEHRTER HERR MUSTERMANN, ...</image_ocr>
+<image_description>scanned letter on letterhead</image_description>
+<image_text>SEHR GEEHRTER HERR MUSTERMANN, ...</image_text>
 </image>`,
 			"\n\nscanned letter on letterhead\nSEHR GEEHRTER HERR MUSTERMANN, ...\n",
 		},
@@ -66,16 +66,16 @@ func TestRealTextRuneCountThreshold(t *testing.T) {
 			true,
 		},
 		{
-			"image-only with successful VLM OCR (the fix)",
+			"image-only with successful parser image text (the fix)",
 			`<image url="images/p1.png">
 <image_original>![p1](images/p1.png)</image_original>
-<image_caption>scanned letter</image_caption>
-<image_ocr>Sehr geehrter Herr Mustermann, in der Sache 4711/2024 ...</image_ocr>
+<image_description>scanned letter</image_description>
+<image_text>Sehr geehrter Herr Mustermann, in der Sache 4711/2024 ...</image_text>
 </image>`,
 			true,
 		},
 		{
-			"image-only with failed VLM OCR (still rejected)",
+			"image-only with failed parser image text (still rejected)",
 			`<image url="images/p1.png">
 <image_original>![p1](images/p1.png)</image_original>
 </image>`,

@@ -3,8 +3,6 @@ export const MODEL_IN_USE_ERROR_CODE = 2300
 export const KNOWN_MODEL_USAGE_BINDINGS = [
   'embedding_model',
   'summary_model',
-  'image_processing_model',
-  'vlm_model',
   'rerank_model',
   'light_model_tier',
   'entity_resolution_model_tier',
@@ -114,13 +112,11 @@ export function modelUsageListTruncated(resources: readonly ModelUsageResource[]
 
 export type ModelUsageResourceKind = 'knowledge_base'
 
-export type KnowledgeBaseModelUsageSection = 'models' | 'multimodal'
+export type KnowledgeBaseModelUsageSection = 'models'
 
 const knowledgeBaseUsageSections: Partial<Record<KnownModelUsageBinding, KnowledgeBaseModelUsageSection>> = {
   embedding_model: 'models',
   summary_model: 'models',
-  image_processing_model: 'multimodal',
-  vlm_model: 'multimodal',
 }
 
 export function modelUsageKnowledgeBaseSection(

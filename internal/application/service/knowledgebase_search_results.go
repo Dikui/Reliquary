@@ -51,6 +51,17 @@ func (s *knowledgeBaseService) processSearchResults(ctx context.Context,
 	for _, chunk := range allChunks {
 		chunkMap[chunk.ID] = chunk
 	}
+	// Summary keyword hits represent article metadata and have no persisted chunk.
+	for _, input := range chunks {
+		knowledge := knowledgeMap[input.KnowledgeID]
+		if knowledge != nil && input.ChunkID == types.KnowledgeSummarySearchID(knowledge.ID) {
+			chunkMap[input.ChunkID] = &types.Chunk{
+				ID: input.ChunkID, TenantID: tenantID, KnowledgeID: knowledge.ID,
+				KnowledgeBaseID: knowledge.KnowledgeBaseID, Content: knowledge.Description,
+				ChunkType: types.ChunkTypeSummary, IsEnabled: true,
+			}
+		}
+	}
 
 	if !skipEnrichment {
 		additionalChunkIDs := s.collectEnrichmentChunkIDs(ctx, allChunks, index)
@@ -63,23 +74,7 @@ func (s *knowledgeBaseService) processSearchResults(ctx context.Context,
 				for _, chunk := range additionalChunks {
 					chunkMap[chunk.ID] = chunk
 				}
-				// Second round: only needed when image chunks are among primary
-				// results (image → text resolved above, now text → parent_text).
-				// For normal text-only results this is a no-op.
-				if s.hasImageChunks(allChunks) {
-					parentIDs := s.collectParentChunkIDs(additionalChunks, index)
-					if len(parentIDs) > 0 {
-						logger.Infof(ctx, "Fetching %d second-level parent chunks", len(parentIDs))
-						parentChunks, err := s.chunkRepo.ListChunksByID(ctx, tenantID, parentIDs)
-						if err != nil {
-							logger.Warnf(ctx, "Failed to fetch second-level parent chunks: %v", err)
-						} else {
-							for _, chunk := range parentChunks {
-								chunkMap[chunk.ID] = chunk
-							}
-						}
-					}
-				}
+
 			}
 		}
 	}
@@ -193,16 +188,6 @@ func (s *knowledgeBaseService) collectParentChunkIDs(
 		}
 	}
 	return ids
-}
-
-// hasImageChunks returns true if any chunk is an image_ocr or image_caption type.
-func (s *knowledgeBaseService) hasImageChunks(chunks []*types.Chunk) bool {
-	for _, c := range chunks {
-		if c.ChunkType == types.ChunkTypeImageOCR || c.ChunkType == types.ChunkTypeImageCaption {
-			return true
-		}
-	}
-	return false
 }
 
 // assembleSearchResults builds the final []*types.SearchResult from chunk data and knowledge data.
@@ -343,6 +328,5 @@ func (s *knowledgeBaseService) isSearchableChunk(chunk *types.Chunk) bool {
 	return slices.Contains([]types.ChunkType{
 		types.ChunkTypeText, types.ChunkTypeSummary,
 		types.ChunkTypeTableColumn, types.ChunkTypeTableSummary,
-		types.ChunkTypeImageOCR, types.ChunkTypeImageCaption,
 	}, chunk.ChunkType)
 }

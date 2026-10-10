@@ -3,13 +3,14 @@ import { ref, computed, nextTick, onBeforeUnmount, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { formatFileSize } from '@/utils/files';
 import DocumentActionMenu from './DocumentActionMenu.vue';
+import KnowledgeClassification from '@/components/KnowledgeClassification.vue';
+import type { ClassifiedKnowledge } from '@/types/knowledgeClassification';
 import KnowledgeProcessingTimeline from '@/components/knowledge-processing-timeline.vue';
 
-interface KnowledgeCard {
+interface KnowledgeCard extends ClassifiedKnowledge {
   id: string;
   knowledge_base_id?: string;
   parse_status: string;
-  summary_status?: string;
   description?: string;
   file_name?: string;
   original_file_name?: string;
@@ -36,6 +37,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'open', item: KnowledgeCard): void;
+  (e: 'open-entity', id: string): void;
   (e: 'toggle-checkbox', id: string, checked: boolean, ctx?: { e?: Event }): void;
   (e: 'menu-visible-change', visible: boolean, item: KnowledgeCard): void;
   (e: 'action', action: 'download' | 'edit' | 'view-trace' | 'reparse' | 'cancel-parse' | 'batch-manage' | 'delete', item: KnowledgeCard): void;
@@ -68,9 +70,6 @@ const isTraceMenuVisible = (item: KnowledgeCard): boolean => {
 
 const inFlightCardStatusText = (item: KnowledgeCard): string => {
   if (item.parse_status === 'finalizing') {
-    if (item.summary_status === 'pending' || item.summary_status === 'processing') {
-      return t('knowledgeBase.generatingSummary');
-    }
     return t('knowledgeBase.statusFinalizing');
   }
   return t('knowledgeBase.parsingInProgress');
@@ -352,16 +351,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
         <div v-else-if="item.parse_status === 'rejected'" class="card-draft">
           <t-tag size="small" theme="warning" variant="light-outline">{{ $t('knowledgeBase.intakeWaiting') }}</t-tag>
         </div>
-        <div
-          v-else-if="item.parse_status === 'completed' && (item.summary_status === 'pending' || item.summary_status === 'processing')"
-          class="card-analyze"
-        >
-          <t-icon name="loading" class="card-analyze-loading"></t-icon>
-          <span class="card-analyze-txt">{{ $t('knowledgeBase.generatingSummary') }}</span>
-        </div>
-        <div v-else-if="item.parse_status === 'completed'" class="card-content-txt">
-          {{ item.description || (item.summary_status === 'skipped' ? $t('knowledgeBase.summarySkippedNoText') : '') }}
-        </div>
+        <KnowledgeClassification v-else-if="item.parse_status === 'completed'" :knowledge="item" compact @open-entity="emit('open-entity', $event)" />
       </div>
 
       <div class="card-bottom">
@@ -407,8 +397,8 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
           {{ $t('knowledgeBase.draft') }}
         </div>
         <template v-else>
-          <div v-if="hoveredCardItem.description || hoveredCardItem.summary_status === 'skipped'" class="card-popover-desc">
-            {{ hoveredCardItem.description || $t('knowledgeBase.summarySkippedNoText') }}
+          <div v-if="hoveredCardItem.description" class="card-popover-desc">
+            {{ hoveredCardItem.description }}
           </div>
           <div v-if="(hoveredCardItem as any).source" class="card-popover-source" :title="(hoveredCardItem as any).source">
             <t-icon name="link" size="12px" /> {{ (hoveredCardItem as any).source }}
@@ -465,7 +455,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
   display: flex;
   flex-direction: column;
   border: 1px solid var(--td-component-border);
-  height: 136px;
+  min-height: 180px;
   border-radius: 8px;
   overflow: hidden;
   box-sizing: border-box;
@@ -511,7 +501,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
 
   .card-analyze {
     flex-shrink: 0;
-    height: 52px;
+    min-height: 52px;
     display: flex;
     align-items: flex-start;
   }

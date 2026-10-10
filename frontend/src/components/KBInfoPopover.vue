@@ -145,9 +145,6 @@ const capabilities = computed<Array<{ key: string; label: string; theme: Capabil
   const kb: any = props.kbInfo
   if (!kb) return []
   const items: Array<{ key: string; label: string; theme: CapabilityTheme }> = []
-  if (kb.vlm_config?.enabled) {
-    items.push({ key: 'vlm', label: 'VLM', theme: 'primary' })
-  }
   {}
   return items
 })

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"mime/multipart"
 	"net/url"
@@ -51,9 +52,6 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 	// Early reject before the whole-file hash below. resolveFileImportProcessConfig
 	// gates the same extension set and provides a clear unsupported-type error.
 	if err := validateImportFileType(getFileType(fileName)); err != nil {
-		return nil, err
-	}
-	if err := s.validateProcessVLMConfig(ctx, kb, processOverrides); err != nil {
 		return nil, err
 	}
 
@@ -110,7 +108,7 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 		return nil, werrors.NewValidationError("文件名包含非法字符")
 	}
 
-	eff, err := resolveFileImportProcessConfig(ctx, kb, getFileType(safeFilename), processOverrides, enableMultimodel)
+	_, err = resolveFileImportProcessConfig(ctx, kb, getFileType(safeFilename), processOverrides, enableMultimodel)
 	if err != nil {
 		return nil, err
 	}
@@ -178,26 +176,16 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 
 	// Enqueue document processing task to Asynq
 	logger.Info(ctx, "Enqueuing document processing task to Asynq")
-	enableMultimodelValue := eff.EnableMultimodel
-
-	enableQuestionGeneration := eff.QuestionGenerationConfig.Enabled
-	questionCount := eff.QuestionGenerationConfig.QuestionCount
-	if questionCount <= 0 {
-		questionCount = 3
-	}
 
 	lang := types.LanguageFromContextOrDefault(ctx)
 	taskPayload := types.DocumentProcessPayload{
-		TenantID:                 tenantID,
-		KnowledgeID:              knowledge.ID,
-		KnowledgeBaseID:          kbID,
-		FilePath:                 filePath,
-		FileName:                 safeFilename,
-		FileType:                 getFileType(safeFilename),
-		EnableMultimodel:         enableMultimodelValue,
-		EnableQuestionGeneration: enableQuestionGeneration,
-		QuestionCount:            questionCount,
-		Language:                 lang,
+		TenantID:        tenantID,
+		KnowledgeID:     knowledge.ID,
+		KnowledgeBaseID: kbID,
+		FilePath:        filePath,
+		FileName:        safeFilename,
+		FileType:        getFileType(safeFilename),
+		Language:        lang,
 	}
 
 	payloadBytes, err := json.Marshal(taskPayload)
@@ -227,10 +215,6 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 		info.Queue,
 		knowledge.ID,
 	)
-
-	if err := s.enqueueTierDataTableSummary(ctx, kb, knowledge.ID, safeFilename, getFileType(safeFilename)); err != nil {
-		return knowledge, err
-	}
 
 	logger.Infof(ctx, "Knowledge from file created successfully, ID: %s", knowledge.ID)
 	return knowledge, nil
@@ -279,9 +263,6 @@ func (s *knowledgeService) CreateKnowledgeFromURL(ctx context.Context,
 	}
 
 	// Validate URL format and security
-	if err := s.validateProcessVLMConfig(ctx, kb, processOverrides); err != nil {
-		return nil, err
-	}
 	logger.Info(ctx, "Validating URL")
 	if !isValidURL(url) || !secutils.IsValidURL(url) {
 		logger.Error(ctx, "Invalid or unsafe URL format")
@@ -375,7 +356,7 @@ func (s *knowledgeService) CreateKnowledgeFromURL(ctx context.Context,
 
 	// Save knowledge record
 	logger.Infof(ctx, "Saving knowledge record to database, ID: %s", knowledge.ID)
-	eff, err := ApplyKnowledgeProcessOverrides(ctx, kb, knowledge, processOverrides, []string{"html"}, enableMultimodel)
+	_, err = ApplyKnowledgeProcessOverrides(ctx, kb, knowledge, processOverrides, []string{"html"}, enableMultimodel)
 	if err != nil {
 		return nil, err
 	}
@@ -394,23 +375,14 @@ func (s *knowledgeService) CreateKnowledgeFromURL(ctx context.Context,
 
 	// Enqueue URL processing task to Asynq
 	logger.Info(ctx, "Enqueuing URL processing task to Asynq")
-	enableMultimodelValue := eff.EnableMultimodel
-	enableQuestionGeneration := eff.QuestionGenerationConfig.Enabled
-	questionCount := eff.QuestionGenerationConfig.QuestionCount
-	if questionCount <= 0 {
-		questionCount = 3
-	}
 
 	lang := types.LanguageFromContextOrDefault(ctx)
 	taskPayload := types.DocumentProcessPayload{
-		TenantID:                 tenantID,
-		KnowledgeID:              knowledge.ID,
-		KnowledgeBaseID:          kbID,
-		URL:                      url,
-		EnableMultimodel:         enableMultimodelValue,
-		EnableQuestionGeneration: enableQuestionGeneration,
-		QuestionCount:            questionCount,
-		Language:                 lang,
+		TenantID:        tenantID,
+		KnowledgeID:     knowledge.ID,
+		KnowledgeBaseID: kbID,
+		URL:             url,
+		Language:        lang,
 	}
 
 	payloadBytes, err := json.Marshal(taskPayload)
@@ -494,9 +466,6 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 	}
 
 	// Validate URL format and security (static check only, no HEAD request)
-	if err := s.validateProcessVLMConfig(ctx, kb, processOverrides); err != nil {
-		return nil, err
-	}
 	if !isValidURL(fileURL) || !secutils.IsValidURL(fileURL) {
 		logger.Error(ctx, "Invalid or unsafe file URL format")
 		return nil, ErrInvalidURL
@@ -620,7 +589,7 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 		knowledge.Title = displayName
 	}
 
-	eff, err := resolveFileImportProcessConfig(ctx, kb, fileType, processOverrides, enableMultimodel)
+	_, err = resolveFileImportProcessConfig(ctx, kb, fileType, processOverrides, enableMultimodel)
 	if err != nil {
 		return nil, err
 	}
@@ -644,25 +613,16 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 	}
 
 	// Build async task payload
-	enableMultimodelValue := eff.EnableMultimodel
-	enableQuestionGeneration := eff.QuestionGenerationConfig.Enabled
-	questionCount := eff.QuestionGenerationConfig.QuestionCount
-	if questionCount <= 0 {
-		questionCount = 3
-	}
 
 	lang := types.LanguageFromContextOrDefault(ctx)
 	taskPayload := types.DocumentProcessPayload{
-		TenantID:                 tenantID,
-		KnowledgeID:              knowledge.ID,
-		KnowledgeBaseID:          kbID,
-		FileURL:                  fileURL,
-		FileName:                 fileName,
-		FileType:                 fileType,
-		EnableMultimodel:         enableMultimodelValue,
-		EnableQuestionGeneration: enableQuestionGeneration,
-		QuestionCount:            questionCount,
-		Language:                 lang,
+		TenantID:        tenantID,
+		KnowledgeID:     knowledge.ID,
+		KnowledgeBaseID: kbID,
+		FileURL:         fileURL,
+		FileName:        fileName,
+		FileType:        fileType,
+		Language:        lang,
 	}
 
 	payloadBytes, err := json.Marshal(taskPayload)
@@ -684,10 +644,6 @@ func (s *knowledgeService) createKnowledgeFromFileURL(
 		return knowledge, nil
 	}
 	logger.Infof(ctx, "Enqueued file URL process task: id=%s queue=%s knowledge_id=%s", info.ID, info.Queue, knowledge.ID)
-
-	if err := s.enqueueTierDataTableSummary(ctx, kb, knowledge.ID, fileName, fileType); err != nil {
-		return knowledge, err
-	}
 
 	logger.Infof(ctx, "Knowledge from file URL created successfully, ID: %s", knowledge.ID)
 	return knowledge, nil
@@ -752,9 +708,6 @@ func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 	}
 
 	if status == types.ManualKnowledgeStatusPublish {
-		if err := s.validateProcessVLMConfig(ctx, kb, payload.ProcessConfig); err != nil {
-			return nil, err
-		}
 		incoming := &types.Knowledge{TenantID: tenantID, KnowledgeBaseID: kbID}
 		if len(payload.SourceMetadata) > 0 {
 			metadata, err := json.Marshal(payload.SourceMetadata)
@@ -942,25 +895,13 @@ func (s *knowledgeService) createKnowledgeFromPassageInternal(ctx context.Contex
 		tenantID := ctx.Value(types.TenantIDContextKey).(uint64)
 
 		// Check question generation config
-		enableQuestionGeneration := false
-		questionCount := 3 // default
-		if kb.QuestionGenerationConfig != nil && kb.QuestionGenerationConfig.Enabled {
-			enableQuestionGeneration = true
-			if kb.QuestionGenerationConfig.QuestionCount > 0 {
-				questionCount = kb.QuestionGenerationConfig.QuestionCount
-			}
-		}
-
 		lang := types.LanguageFromContextOrDefault(ctx)
 		taskPayload := types.DocumentProcessPayload{
-			TenantID:                 tenantID,
-			KnowledgeID:              knowledge.ID,
-			KnowledgeBaseID:          kbID,
-			Passages:                 safePassages,
-			EnableMultimodel:         false, // 文本段落不支持多模态
-			EnableQuestionGeneration: enableQuestionGeneration,
-			QuestionCount:            questionCount,
-			Language:                 lang,
+			TenantID:        tenantID,
+			KnowledgeID:     knowledge.ID,
+			KnowledgeBaseID: kbID,
+			Passages:        safePassages,
+			Language:        lang,
 		}
 
 		payloadBytes, err := json.Marshal(taskPayload)
@@ -1039,9 +980,6 @@ func (s *knowledgeService) UpdateManualKnowledge(ctx context.Context,
 		return nil, err
 	}
 	if status == types.ManualKnowledgeStatusPublish {
-		if err := s.validateProcessVLMConfig(ctx, kb, payload.ProcessConfig); err != nil {
-			return nil, err
-		}
 	}
 	intake, err := existing.IntakeMetadata()
 	if err != nil {
@@ -1260,8 +1198,8 @@ func (s *knowledgeService) bindContentResources(
 }
 
 func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
-	kb *types.KnowledgeBase, knowledge *types.Knowledge, content string, doSync bool,
-) {
+	kb *types.KnowledgeBase, knowledge *types.Knowledge, content string, _ bool,
+) error {
 	defer func() {
 		if knowledge.ParseStatus == types.ParseStatusFailed {
 			s.failIntake(ctx, knowledge)
@@ -1269,7 +1207,7 @@ func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 	}()
 	clean := strings.TrimSpace(content)
 	if clean == "" {
-		return
+		return errors.New("manual article body is empty")
 	}
 
 	// Resolve embedded data:base64 images and remote http(s) images → storage, replace URLs.
@@ -1280,13 +1218,13 @@ func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 		afterDataURI, fromDataURI, dataErr := s.imageResolver.ResolveAndStore(ctx, &types.ReadResult{MarkdownContent: clean}, fileSvc, knowledge.TenantID)
 		if err := s.recordIntakeImages(ctx, knowledge, fromDataURI); err != nil {
 			knowledge.ParseStatus = types.ParseStatusFailed
-			return
+			return errors.New("manual article processing failed")
 		}
 		if dataErr != nil {
 			if intake, _ := knowledge.IntakeMetadata(); intake != nil {
 				knowledge.ParseStatus, knowledge.ErrorMessage, knowledge.UpdatedAt = types.ParseStatusFailed, "failed to resolve intake images", time.Now()
 				_ = s.repo.UpdateKnowledge(ctx, knowledge)
-				return
+				return errors.New("manual article processing failed")
 			}
 		}
 		if len(fromDataURI) > 0 {
@@ -1297,14 +1235,14 @@ func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 		updatedContent, storedImages, resolveErr := s.imageResolver.ResolveRemoteImages(ctx, clean, fileSvc, knowledge.TenantID)
 		if err := s.recordIntakeImages(ctx, knowledge, storedImages); err != nil {
 			knowledge.ParseStatus = types.ParseStatusFailed
-			return
+			return errors.New("manual article processing failed")
 		}
 		if resolveErr != nil {
 			logger.Warnf(ctx, "Remote image resolution partially failed: %v", resolveErr)
 			if intake, _ := knowledge.IntakeMetadata(); intake != nil {
 				knowledge.ParseStatus, knowledge.ErrorMessage, knowledge.UpdatedAt = types.ParseStatusFailed, "failed to resolve intake images", time.Now()
 				_ = s.repo.UpdateKnowledge(ctx, knowledge)
-				return
+				return errors.New("manual article processing failed")
 			}
 		}
 		if updatedContent != "" {
@@ -1317,31 +1255,32 @@ func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 		if intake, _ := knowledge.IntakeMetadata(); intake != nil && docparser.HasUnstoredImages(clean) {
 			knowledge.ParseStatus, knowledge.ErrorMessage, knowledge.UpdatedAt = types.ParseStatusFailed, "intake has unstored content images", time.Now()
 			_ = s.repo.UpdateKnowledge(ctx, knowledge)
-			return
+			return errors.New("manual article processing failed")
 		}
 	}
 	if intake, _ := knowledge.IntakeMetadata(); intake != nil && intake.Decision != "approved" {
 		existing, err := s.checkMessageDuplicate(ctx, knowledge, clean)
 		if err != nil {
 			knowledge.ParseStatus = types.ParseStatusFailed
-			return
+			return errors.New("manual article processing failed")
 		}
 		if existing != nil {
 			if err := s.stopDuplicateProcessing(ctx, knowledge); err != nil {
 				knowledge.ParseStatus = types.ParseStatusFailed
+				return err
 			}
-			return
+			return nil
 		}
 	}
 
 	if intake, _ := knowledge.IntakeMetadata(); intake != nil {
 		if docparser.HasUnstoredImages(clean) {
 			knowledge.ParseStatus = types.ParseStatusFailed
-			return
+			return errors.New("manual article processing failed")
 		}
 		if err := s.saveIntakeOriginal(ctx, kb, knowledge, clean, nil); err != nil {
 			knowledge.ParseStatus = types.ParseStatusFailed
-			return
+			return errors.New("manual article processing failed")
 		}
 	}
 
@@ -1357,70 +1296,19 @@ func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 	processOverrides, _ := knowledge.ProcessOverrides()
 	eff := ResolveProcessConfig(kb, processOverrides)
 
-	// Manual content is markdown - chunk directly with Go chunker
-	chunkCfg := buildSplitterConfigFromChunking(eff.ChunkingConfig)
-
-	var parsed []types.ParsedChunk
-	opts := ProcessChunksOptions{
-		EnableMultimodel: eff.EnableMultimodel && len(resolvedImages) > 0,
-		StoredImages:     resolvedImages,
-	}
-	if eff.QuestionGenerationConfig.Enabled {
-		opts.EnableQuestionGeneration = true
-		opts.QuestionCount = eff.QuestionGenerationConfig.QuestionCount
-		if opts.QuestionCount <= 0 {
-			opts.QuestionCount = 3
-		}
-	}
-
-	if eff.ChunkingConfig.EnableParentChild {
-		parentCfg, childCfg := buildParentChildConfigs(eff.ChunkingConfig, chunkCfg)
-		pcResult := chunker.SplitParentChild(clean, parentCfg, childCfg)
-		parsed = make([]types.ParsedChunk, len(pcResult.Children))
-		for i, c := range pcResult.Children {
-			parsed[i] = types.ParsedChunk{
-				Content:       c.Content,
-				ContextHeader: c.ContextHeader,
-				Seq:           c.Seq,
-				Start:         c.Start,
-				End:           c.End,
-				ParentIndex:   c.ParentIndex,
-			}
-		}
-		parentChunks := make([]types.ParsedParentChunk, len(pcResult.Parents))
-		for i, p := range pcResult.Parents {
-			parentChunks[i] = types.ParsedParentChunk{Content: p.Content, Seq: p.Seq, Start: p.Start, End: p.End}
-		}
-		opts.ParentChunks = parentChunks
-	} else {
-		splitChunks := chunker.Split(clean, chunkCfg)
-		parsed = make([]types.ParsedChunk, len(splitChunks))
-		for i, c := range splitChunks {
-			parsed[i] = types.ParsedChunk{
-				Content:       c.Content,
-				ContextHeader: c.ContextHeader,
-				Seq:           c.Seq,
-				Start:         c.Start,
-				End:           c.End,
-			}
-		}
-	}
-
 	if intake, _ := knowledge.IntakeMetadata(); intake != nil {
 		rejected, err := s.reviewIntake(ctx, kb, knowledge, clean)
 		if err != nil {
-			knowledge.ParseStatus = types.ParseStatusFailed
-			return
+			s.markArticleProcessingFailed(ctx, knowledge, err)
+			return err
 		}
 		if rejected {
-			return
+			return nil
 		}
 	}
-	if doSync {
-		s.processChunks(ctx, kb, knowledge, parsed, opts)
-		return
+	if err := s.processArticleBody(ctx, kb, knowledge, clean, resolvedImages, eff); err != nil {
+		s.markArticleProcessingFailed(ctx, knowledge, err)
+		return err
 	}
-
-	newCtx := logger.CloneContext(ctx)
-	go s.processChunks(newCtx, kb, knowledge, parsed, opts)
+	return nil
 }

@@ -12,7 +12,7 @@ export interface ModelConfig {
   tenant_id?: number;
   name: string;
   display_name?: string;
-  type: 'KnowledgeQA' | 'Embedding' | 'Rerank' | 'VLLM';
+  type: 'KnowledgeQA' | 'Embedding' | 'Rerank';
   source: 'local' | 'remote';
   description?: string;
   parameters: {
@@ -24,18 +24,17 @@ export interface ModelConfig {
       truncate_prompt_tokens?: number;
       supports_dimension_override?: boolean;
     };
-    interface_type?: 'ollama' | 'openai'; // VLLM专用
     parameter_size?: string; // Ollama模型参数大小 (e.g., "7B", "13B", "70B")
     extra_config?: Record<string, string>; // Provider-specific configuration
     // 自定义 HTTP 请求头（类似 Python OpenAI SDK 的 extra_headers），
     // 会在调用远程模型 API 时附加到每个请求上。Authorization、Content-Type 等保留头会被忽略。
     custom_headers?: Record<string, string>;
     supports_vision?: boolean; // Whether the model accepts image/multimodal input
-    // 生成/VLM 的上下文窗口（token）。0 或不填表示使用后端默认 200000。
+    // 生成 的上下文窗口（token）。0 或不填表示使用后端默认 200000。
     context_window?: number;
     max_output_tokens?: number;
     // 后台任务（入库/富化）对该模型的并发上限，按模型 ID 全副本共享。
-    // 0 或不填表示沿用全局默认（model.max_concurrency）；仅对 chat/embedding/vllm 生效。
+    // 0 或不填表示沿用全局默认（model.max_concurrency）；仅对 chat/embedding 生效。
     max_concurrency?: number;
     app_id?: string;
     // Secret fields (api_key, app_secret) are never returned by the server in

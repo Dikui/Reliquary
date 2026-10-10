@@ -3,13 +3,12 @@ server:
   port: 8080
   host: "0.0.0.0"
 
-# Article processing prompts are resolved from prompt_templates/ YAML files.
+# Zero body limit derives a safe input budget from the generation model context.
 article_processing:
-  generate_summary_prompt_id: "default_summary"
-  generate_questions_prompt_id: "default_generate_questions"
-  summary:
-    max_input_chars: 16384
-    max_completion_tokens: 2048
+  max_body_chars: 0
+  max_images: 8
+  # Zero chooses up to 4096 output tokens within the model context and output limits.
+  max_completion_tokens: 0
 
 # Knowledge base configuration
 knowledge_base:
@@ -17,5 +16,3 @@ knowledge_base:
   chunk_overlap: 50
   split_markers: ["\n\n", "\n", "。"]
   document_process_timeout: 2h
-  image_processing:
-    enable_multimodal: true

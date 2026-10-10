@@ -82,11 +82,6 @@ type KnowledgeService interface {
 	ReviewKnowledgeIntake(ctx context.Context, id, action string, sourceInfo types.SourceInfo) (*types.Knowledge, error)
 	// UpdateKnowledge updates knowledge information.
 	UpdateKnowledge(ctx context.Context, knowledge *types.Knowledge) error
-	// RegenerateKnowledgeSummary refreshes the document description and summary retrieval chunk.
-	RegenerateKnowledgeSummary(ctx context.Context, knowledgeID string) (*types.Knowledge, error)
-	// RequestKnowledgeSummaryRefresh enqueues an async summary refresh.
-	RequestKnowledgeSummaryRefresh(ctx context.Context, knowledgeID string) error
-	RegenerateChunkQuestions(ctx context.Context, chunkID string) ([]types.GeneratedQuestion, error)
 	// UpdateManualKnowledge updates manual Markdown knowledge content.
 	UpdateManualKnowledge(
 		ctx context.Context,
@@ -115,10 +110,6 @@ type KnowledgeService interface {
 	ProcessManualUpdate(ctx context.Context, t *asynq.Task) error
 	// ProcessDocument handles Asynq document processing tasks
 	ProcessDocument(ctx context.Context, t *asynq.Task) error
-	// ProcessQuestionGeneration handles Asynq question generation tasks
-	ProcessQuestionGeneration(ctx context.Context, t *asynq.Task) error
-	// ProcessSummaryGeneration handles Asynq summary generation tasks
-	ProcessSummaryGeneration(ctx context.Context, t *asynq.Task) error
 	// ProcessKnowledgeListDelete handles Asynq knowledge list delete tasks
 	ProcessKnowledgeListDelete(ctx context.Context, t *asynq.Task) error
 	// ProcessKnowledgeListReparse handles Asynq knowledge list reparse tasks

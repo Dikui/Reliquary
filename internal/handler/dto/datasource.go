@@ -24,6 +24,7 @@ type DataSourceResponse struct {
 	KnowledgeBaseID      string               `json:"knowledge_base_id"`
 	Name                 string               `json:"name"`
 	Type                 string               `json:"type"`
+	DefaultContentType   string               `json:"default_content_type"`
 	Config               *DataSourceConfigDTO `json:"config,omitempty"`
 	SyncSchedule         string               `json:"sync_schedule"`
 	SyncMode             string               `json:"sync_mode"`
@@ -74,6 +75,7 @@ func NewDataSourceResponse(ds *types.DataSource) *DataSourceResponse {
 		KnowledgeBaseID:      ds.KnowledgeBaseID,
 		Name:                 ds.Name,
 		Type:                 ds.Type,
+		DefaultContentType:   ds.DefaultContentType,
 		Config:               cfgDTO,
 		SyncSchedule:         ds.SyncSchedule,
 		SyncMode:             ds.SyncMode,

@@ -20,8 +20,6 @@ func (runtimeTestSettings) GetInt(_ context.Context, key, _ string, def int64) i
 	switch key {
 	case "asynq.core_concurrency":
 		return 8
-	case "asynq.postprocess_concurrency":
-		return 2
 	case "asynq.enrichment_concurrency":
 		return 12
 	case "asynq.maintenance_concurrency":
@@ -67,7 +65,6 @@ func (runtimeTestInspector) QueueStats(context.Context) ([]types.QueueStat, bool
 func (runtimeTestInspector) WorkerServerStats(context.Context) ([]types.WorkerServerStat, bool, error) {
 	return []types.WorkerServerStat{
 		{Concurrency: 8, Active: 4, Status: "active", Queues: types.QueueWeightsForPool(types.WorkerPoolCore)},
-		{Concurrency: 2, Active: 1, Status: "active", Queues: types.QueueWeightsForPool(types.WorkerPoolPostProcess)},
 		{Concurrency: 12, Active: 6, Status: "active", Queues: types.QueueWeightsForPool(types.WorkerPoolEnrichment)},
 		{Concurrency: 4, Active: 1, Status: "active", Queues: types.QueueWeightsForPool(types.WorkerPoolMaintenance)},
 		{Concurrency: 6, Active: 3, Status: "active", Queues: types.QueueWeightsForSharedPool()},
@@ -226,7 +223,7 @@ func TestGetRuntimeQueuesReportsIsolatedPoolCapacity(t *testing.T) {
 	if !response.Available {
 		t.Fatal("queue inspection should be available")
 	}
-	if response.UpstreamConcurrency != 32 || response.ParseConcurrency != 32 {
+	if response.UpstreamConcurrency != 30 || response.ParseConcurrency != 30 {
 		t.Fatalf("upstream compatibility values are wrong: %+v", response)
 	}
 	want := map[string]struct {
@@ -234,10 +231,9 @@ func TestGetRuntimeQueuesReportsIsolatedPoolCapacity(t *testing.T) {
 		queueCount  int
 	}{
 		types.WorkerPoolCore:        {8, 1},
-		types.WorkerPoolPostProcess: {2, 1},
-		types.WorkerPoolEnrichment:  {12, 4},
+		types.WorkerPoolEnrichment:  {12, 1},
 		types.WorkerPoolMaintenance: {4, 2},
-		types.WorkerPoolShared:      {6, 5},
+		types.WorkerPoolShared:      {6, 2},
 	}
 	if len(response.Pools) != len(want) {
 		t.Fatalf("pool count = %d, want %d", len(response.Pools), len(want))
@@ -549,7 +545,7 @@ func TestRuntimeTaskActionsRejectForeignTenantBeforeMutation(t *testing.T) {
 func TestRuntimeTaskCancelPurgesOrphanWhenKnowledgeGone(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	inspector := &runtimeTaskTestInspector{tasks: []types.RuntimeTaskInfo{{
-		ID: "task-orphan", Queue: types.QueueMultimodal, Type: types.TypeImageMultimodal,
+		ID: "task-orphan", Queue: types.QueueEntity, Type: types.TypeEntityNameEmbeddingRebuild,
 		State: types.RuntimeTaskRetry, TenantID: types.SingleTenantID, KnowledgeID: "knowledge-gone",
 		AllowedActions: []types.RuntimeTaskAction{types.RuntimeTaskActionCancel},
 	}}}
@@ -558,7 +554,7 @@ func TestRuntimeTaskCancelPurgesOrphanWhenKnowledgeGone(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Params = gin.Params{
-		{Key: "queue", Value: types.QueueMultimodal},
+		{Key: "queue", Value: types.QueueEntity},
 		{Key: "task_id", Value: "task-orphan"},
 		{Key: "action", Value: string(types.RuntimeTaskActionCancel)},
 	}
@@ -579,7 +575,7 @@ func TestRuntimeTaskCancelPurgesOrphanAfterSiblingSweep(t *testing.T) {
 	inspector := &runtimeTaskTestInspector{
 		cancelDeleted: 2,
 		tasks: []types.RuntimeTaskInfo{{
-			ID: "task-orphan", Queue: types.QueueMultimodal, Type: types.TypeImageMultimodal,
+			ID: "task-orphan", Queue: types.QueueEntity, Type: types.TypeEntityNameEmbeddingRebuild,
 			State: types.RuntimeTaskArchived, TenantID: types.SingleTenantID, KnowledgeID: "knowledge-gone",
 			AllowedActions: []types.RuntimeTaskAction{types.RuntimeTaskActionCancel},
 		}},
@@ -589,7 +585,7 @@ func TestRuntimeTaskCancelPurgesOrphanAfterSiblingSweep(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Params = gin.Params{
-		{Key: "queue", Value: types.QueueMultimodal},
+		{Key: "queue", Value: types.QueueEntity},
 		{Key: "task_id", Value: "task-orphan"},
 		{Key: "action", Value: string(types.RuntimeTaskActionCancel)},
 	}
@@ -613,7 +609,7 @@ func TestRuntimeTaskCancelPurgesOrphanWhenSweepAlreadyRemovedTask(t *testing.T) 
 		getRuntimeErr:     errors.New("task not found"),
 		getRuntimeErrFrom: 2,
 		tasks: []types.RuntimeTaskInfo{{
-			ID: "task-orphan", Queue: types.QueueMultimodal, Type: types.TypeImageMultimodal,
+			ID: "task-orphan", Queue: types.QueueEntity, Type: types.TypeEntityNameEmbeddingRebuild,
 			State: types.RuntimeTaskRetry, TenantID: types.SingleTenantID, KnowledgeID: "knowledge-gone",
 			AllowedActions: []types.RuntimeTaskAction{types.RuntimeTaskActionCancel},
 		}},
@@ -623,7 +619,7 @@ func TestRuntimeTaskCancelPurgesOrphanWhenSweepAlreadyRemovedTask(t *testing.T) 
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Params = gin.Params{
-		{Key: "queue", Value: types.QueueMultimodal},
+		{Key: "queue", Value: types.QueueEntity},
 		{Key: "task_id", Value: "task-orphan"},
 		{Key: "action", Value: string(types.RuntimeTaskActionCancel)},
 	}

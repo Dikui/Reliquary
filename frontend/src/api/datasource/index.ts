@@ -7,6 +7,7 @@ export interface DataSource {
   tenant_id: number
   knowledge_base_id: string
   name: string
+  default_content_type?: string | null
   type: string
   config: any
   sync_schedule: string
@@ -77,6 +78,7 @@ export interface ConnectorMeta {
 export interface Resource {
   external_id: string
   name: string
+  default_content_type?: string | null
   type: string
   description: string
   url: string

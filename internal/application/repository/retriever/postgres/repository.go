@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/pgvector/pgvector-go"
@@ -68,7 +69,7 @@ func (g *pgRepository) EstimateStorageSize(
 	var totalStorageSize int64 = 0
 	for _, indexInfo := range indexInfoList {
 		embeddingDB := toDBVectorEmbedding(indexInfo, additionalParams)
-		// The indexer keys estimate-only placeholders by chunk ID, including questions.
+		// The indexer keys estimate-only placeholders by chunk ID.
 		if embeddingDB.Dimension == 0 && additionalParams != nil {
 			if embeddings, ok := additionalParams["embedding"].(map[string][]float32); ok {
 				embeddingDB.Dimension = len(embeddings[indexInfo.ChunkID])
@@ -202,15 +203,14 @@ func (g *pgRepository) KeywordsRetrieve(ctx context.Context,
 		})
 	}
 
-	// Match only searchable text, including the generated questions in metadata.
+	// Match searchable body text and article titles.
 	conds = append(conds, clause.Expr{
 		SQL: `c.seq_id @@@ paradedb.boolean(should => ARRAY[
 			paradedb.match_disjunction('content', ?),
 			paradedb.match_disjunction('context_header', ?),
-			paradedb.match_disjunction('search_title', ?),
-			paradedb.match_disjunction('metadata.generated_questions.question', ?)
+			paradedb.match_disjunction('search_title', ?)
 		])`,
-		Vars: []interface{}{params.Query, params.Query, params.Query, params.Query},
+		Vars: []interface{}{params.Query, params.Query, params.Query},
 	})
 
 	// A chunk is the source of keyword availability, even without a vector row.
@@ -220,7 +220,7 @@ func (g *pgRepository) KeywordsRetrieve(ctx context.Context,
 		SQL: `c.deleted_at IS NULL
 			AND (c.is_enabled IS NULL OR c.is_enabled = true)
 			AND c.chunk_type <> 'parent_text'
-			AND c.chunk_type IN ('text', 'summary', 'image_ocr', 'image_caption', 'table_summary', 'table_column')
+			AND c.chunk_type IN ('text', 'summary', 'table_summary', 'table_column')
 			AND k.deleted_at IS NULL AND kb.deleted_at IS NULL
 			AND (kb.indexing_strategy IS NULL OR kb.indexing_strategy->>'keyword_enabled' = 'true')`,
 	})
@@ -253,6 +253,24 @@ func (g *pgRepository) KeywordsRetrieve(ctx context.Context,
 	if err != nil {
 		logger.GetLogger(ctx).Errorf("[Postgres] Keywords retrieval failed: %v", err)
 		return nil, err
+	}
+
+	summaries, err := g.retrieveArticleSummaries(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	embeddingDBList = append(embeddingDBList, summaries...)
+	slices.SortStableFunc(embeddingDBList, func(a, b pgVectorWithScore) int {
+		if a.Score > b.Score {
+			return -1
+		}
+		if a.Score < b.Score {
+			return 1
+		}
+		return 0
+	})
+	if params.TopK > 0 && len(embeddingDBList) > params.TopK {
+		embeddingDBList = embeddingDBList[:params.TopK]
 	}
 
 	logger.GetLogger(ctx).Infof("[Postgres] Keywords retrieval found %d results", len(embeddingDBList))
@@ -401,7 +419,7 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 		WHERE candidates.distance <= $%[4]d
 			AND c.deleted_at IS NULL
 			AND (c.is_enabled IS NULL OR c.is_enabled = true)
-			AND c.chunk_type IN ('text', 'summary', 'image_ocr', 'image_caption', 'table_summary', 'table_column')
+			AND c.chunk_type IN ('text', 'summary', 'table_summary', 'table_column')
 			AND k.deleted_at IS NULL
 		ORDER BY candidates.distance ASC
 		LIMIT $%[5]d

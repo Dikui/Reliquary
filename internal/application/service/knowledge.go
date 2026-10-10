@@ -7,9 +7,7 @@ import (
 	"fmt"
 	redis "github.com/redis/go-redis/v9"
 	"io"
-	"reflect"
 	"strings"
-	"time"
 
 	"gorm.io/gorm"
 
@@ -124,8 +122,8 @@ func (s *knowledgeService) tracker() SpanTracker {
 }
 
 // attemptCtxKey scopes the per-task attempt number to a single execution.
-// Set once at the start of ProcessDocument / ProcessManualUpdate /
-// KnowledgePostProcess so every nested tracker call within the same task
+// Set once at the start of ProcessDocument / ProcessManualUpdate so
+// every nested tracker call within the same task
 // can locate the right attempt without threading it through signatures.
 type attemptCtxKey struct{}
 
@@ -148,73 +146,6 @@ func attemptFromCtx(ctx context.Context) int {
 	return 0
 }
 
-// attemptSuperseded reports whether a newer parse attempt has started for the
-// knowledge since this enrichment subtask was enqueued. Stale subtasks from a
-// previous upload/edit/reparse that is still draining must NOT touch the new
-// attempt's chunks or decrement its pending_subtasks_count — doing so would
-// race-promote the row to completed before the new attempt finishes. An attempt
-// of 0 predates attempt tracking (or tracking is disabled) and is never treated
-// as superseded.
-func attemptSuperseded(ctx context.Context, tracker SpanTracker, knowledgeID string, attempt int) bool {
-	if attempt <= 0 || knowledgeID == "" {
-		return false
-	}
-	return tracker.LatestAttempt(ctx, knowledgeID) > attempt
-}
-
-// finalizeSubtaskDetachedTimeout bounds the detached decrement so a wedged DB
-// connection can't hang a worker goroutine forever in its terminal defer.
-const finalizeSubtaskDetachedTimeout = 10 * time.Second
-
-// finalizeSubtaskDetached evaluates the drain decision for a subtask's
-// terminal exit and — when the subtask should drain — decrements
-// pending_subtasks_count using a context DETACHED from the caller's
-// cancellation.
-//
-// Decision: a subtask drains exactly once, on its terminal exit, UNLESS a newer
-// attempt superseded it. "Terminal" means either the handler succeeded
-// (retErr == nil) or it's the final asynq attempt (final). A non-final failure
-// returns without draining because asynq will retry.
-//
-// Why detach: the decrement runs after the handler body, often as the very
-// last thing a worker does. If it rode the task ctx, a cancelled ctx (graceful
-// shutdown, a worker being preempted, or the task being interrupted under
-// load) would make the DB UPDATE fail. That failure is only logged and
-// swallowed, and because enrichment handlers frequently still return success
-// (per-chunk LLM errors are tolerated, not propagated), asynq never retries —
-// so the slot is never drained and the parent knowledge is stranded in
-// "finalizing" forever with a non-zero counter. Detaching keeps the counter
-// correct across cancellation; a bounded timeout guards against a wedged DB.
-//
-// source is a free-form tag (e.g. "question_batch[3]", "summary")
-// used to attribute a decrement failure to a specific subtask in logs.
-func finalizeSubtaskDetached(
-	ctx context.Context,
-	repo interfaces.KnowledgeRepository,
-	knowledgeID, source string,
-	retErr error,
-	superseded, final bool,
-) {
-	willDrain := repo != nil && knowledgeID != "" && !superseded && (retErr == nil || final)
-	if !willDrain {
-		return
-	}
-	dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), finalizeSubtaskDetachedTimeout)
-	defer cancel()
-	_, _, err := repo.FinalizeSubtask(dctx, knowledgeID)
-	if err != nil {
-		logger.Warnf(ctx, "finalize subtask decrement failed source=%s knowledge=%s err=%v",
-			source, knowledgeID, err)
-		return
-	}
-}
-
-// beginStage / endStage / failStage / skipStage are the by-name shims
-// the pipeline uses so call sites don't have to thread *Span values
-// through the existing function signatures. Each helper looks up the
-// stage from (kid, attempt-from-ctx, stageName) at write time — costs
-// one extra DB read per terminal transition (≤ a dozen per knowledge),
-// which is dwarfed by the work the stages themselves do.
 func (s *knowledgeService) beginStage(ctx context.Context, kid, name string, input types.JSONMap) {
 	a := attemptFromCtx(ctx)
 	if a <= 0 {
@@ -262,71 +193,6 @@ func (s *knowledgeService) skipStage(ctx context.Context, kid, name, reason stri
 	s.tracker().SkipSpan(ctx, span, reason)
 }
 
-// beginPostprocessSubspan opens a subspan beneath the postprocess stage
-// span for (kid, attempt). Async post-pipeline tasks (summary, question,
-// context) call this on entry so their actual processing time shows
-// up in the trace tree under postprocess instead of the stage looking
-// like an instant ~10ms enqueue.
-//
-// Returns nil when:
-//   - attempt <= 0 (legacy in-flight task without span tracking)
-//   - the postprocess stage span is missing (parse predates tracker, or
-//     the upstream BeginStage call failed)
-//
-// Callers must tolerate nil — pair every begin with a deferred
-// endPostprocessSubspan / failPostprocessSubspan that no-ops on nil.
-func (s *knowledgeService) beginPostprocessSubspan(
-	ctx context.Context, knowledgeID string, attempt int, name string, input types.JSONMap,
-) *Span {
-	if attempt <= 0 || knowledgeID == "" || name == "" {
-		return nil
-	}
-	parent := s.tracker().LookupStage(ctx, knowledgeID, attempt, types.StagePostProcess)
-	if parent == nil {
-		return nil
-	}
-	return s.tracker().BeginSubSpan(ctx, parent, name, types.SpanKindSubSpan, input)
-}
-
-// beginQuestionBatchSubspan opens a per-batch question subspan under the
-// "postprocess.question" grouping span created by the orchestrator, falling
-// back to the postprocess stage when the group span isn't found (legacy
-// in-flight tasks or a tracker that skipped it). Mirrors beginPostprocessSubspan
-// but resolves the grouping parent first.
-func (s *knowledgeService) beginQuestionBatchSubspan(
-	ctx context.Context, knowledgeID string, attempt int, name string, input types.JSONMap,
-) *Span {
-	if attempt <= 0 || knowledgeID == "" || name == "" {
-		return nil
-	}
-	parent := s.tracker().LookupSpanByName(ctx, knowledgeID, attempt, postprocessQuestionGroupSpanName)
-	if parent == nil {
-		parent = s.tracker().LookupStage(ctx, knowledgeID, attempt, types.StagePostProcess)
-	}
-	if parent == nil {
-		return nil
-	}
-	return s.tracker().BeginSubSpan(ctx, parent, name, types.SpanKindSubSpan, input)
-}
-
-func (s *knowledgeService) endPostprocessSubspan(ctx context.Context, span *Span, output types.JSONMap) {
-	if span == nil {
-		return
-	}
-	s.tracker().EndSpan(ctx, span, output)
-}
-
-func (s *knowledgeService) failPostprocessSubspan(
-	ctx context.Context, span *Span, code, msg string, err error,
-) {
-	if span == nil {
-		return
-	}
-	s.tracker().FailSpan(ctx, span, code, msg, err)
-}
-
-// getParserEngineOverridesFromContext returns parser engine overrides from tenant in context (e.g. MinerU endpoint, API key).
-// Used when building document ReadRequest so UI-configured values take precedence over env.
 func (s *knowledgeService) getParserEngineOverridesFromContext(ctx context.Context) map[string]string {
 	if v := ctx.Value(types.TenantInfoContextKey); v != nil {
 		if tenant, ok := v.(*types.Tenant); ok && tenant != nil {
@@ -420,6 +286,9 @@ func (s *knowledgeService) GetKnowledgeByID(ctx context.Context, id string) (*ty
 		return nil, err
 	}
 	knowledge.RepostSources = reposts
+	if err := s.loadKnowledgeAssociations(ctx, tenantID, []*types.Knowledge{knowledge}); err != nil {
+		return nil, err
+	}
 
 	logger.Infof(ctx, "Knowledge retrieved successfully, ID: %s, type: %s", knowledge.ID, knowledge.Type)
 	return knowledge, nil
@@ -447,6 +316,9 @@ func (s *knowledgeService) ListPagedKnowledgeByKnowledgeBaseID(ctx context.Conte
 		return nil, err
 	}
 
+	if err := s.loadKnowledgeAssociations(ctx, types.MustTenantIDFromContext(ctx), knowledges); err != nil {
+		return nil, err
+	}
 	return types.NewPageResult(total, page, knowledges), nil
 }
 
@@ -479,6 +351,21 @@ func (s *knowledgeService) GetKnowledgeBody(ctx context.Context, id string) (io.
 }
 
 func (s *knowledgeService) getKnowledgeBody(ctx context.Context, knowledge *types.Knowledge) (io.ReadCloser, string, error) {
+
+	if knowledge.ProcessingMode == "summary_only" {
+		return nil, "", errors.New("article stores a summary and original link; parsed body has been removed")
+	}
+	var parsed struct {
+		Path string `json:"processed_body_path"`
+	}
+	if err := json.Unmarshal(knowledge.Metadata, &parsed); len(knowledge.Metadata) > 0 && err != nil {
+		return nil, "", err
+	}
+	if parsed.Path != "" {
+		kb, _ := s.kbService.GetKnowledgeBaseByID(ctx, knowledge.KnowledgeBaseID)
+		file, err := s.resolveFileServiceForPath(ctx, kb, parsed.Path).GetFile(ctx, parsed.Path)
+		return file, sanitizeManualDownloadFilename(knowledge.Title), err
+	}
 
 	// Intake originals are stored independently of the uploaded binary and DB row.
 	if intake, intakeErr := knowledge.IntakeMetadata(); intakeErr != nil {
@@ -536,7 +423,6 @@ func (s *knowledgeService) UpdateKnowledge(ctx context.Context, knowledge *types
 	} else if knowledge.Description != "" {
 		record.Description = knowledge.Description
 	}
-	metadataChanged := false
 	if knowledge.CustomMetadata != nil {
 		var custom map[string]interface{}
 		if err := json.Unmarshal(knowledge.CustomMetadata, &custom); err != nil {
@@ -559,7 +445,6 @@ func (s *knowledgeService) UpdateKnowledge(ctx context.Context, knowledge *types
 		if len(record.CustomMetadata) > 0 {
 			_ = json.Unmarshal(record.CustomMetadata, &existing)
 		}
-		metadataChanged = !reflect.DeepEqual(existing, custom)
 		record.CustomMetadata = knowledge.CustomMetadata
 	}
 
@@ -567,13 +452,6 @@ func (s *knowledgeService) UpdateKnowledge(ctx context.Context, knowledge *types
 	if err := s.repo.UpdateKnowledge(ctx, record); err != nil {
 		logger.Errorf(ctx, "Failed to update knowledge: %v", err)
 		return err
-	}
-	if metadataChanged && record.SummaryStatus != "" && record.SummaryStatus != types.SummaryStatusNone {
-		if err := enqueueSummaryRefresh(ctx, s.repo, s.task, s.kbService, s.tracker(), record); err != nil {
-			logger.Warnf(ctx, "Metadata saved but summary refresh enqueue failed for %s: %v", record.ID, err)
-		} else {
-			logger.Infof(ctx, "Enqueued summary refresh after metadata update, knowledge ID: %s", record.ID)
-		}
 	}
 	logger.Infof(ctx, "Knowledge updated successfully, ID: %s", knowledge.ID)
 	return nil
@@ -586,7 +464,14 @@ func (s *knowledgeService) GetKnowledgeBatch(ctx context.Context,
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	return s.repo.GetKnowledgeBatch(ctx, tenantID, ids)
+	articles, err := s.repo.GetKnowledgeBatch(ctx, tenantID, ids)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.loadKnowledgeAssociations(ctx, tenantID, articles); err != nil {
+		return nil, err
+	}
+	return articles, nil
 }
 
 func findKnowledgeByID(list []*types.Knowledge, id string) *types.Knowledge {

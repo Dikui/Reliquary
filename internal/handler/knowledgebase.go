@@ -226,15 +226,6 @@ func (h *KnowledgeBaseHandler) UpdateKnowledgeBase(c *gin.Context) {
 		if req.Config.ChunkingConfig != nil {
 			probe.ChunkingConfig = *req.Config.ChunkingConfig
 		}
-		if req.Config.ImageProcessingConfig != nil {
-			probe.ImageProcessingConfig = *req.Config.ImageProcessingConfig
-		}
-		if req.Config.VLMConfig != nil {
-			probe.VLMConfig = *req.Config.VLMConfig
-		}
-		if req.Config.QuestionGenerationConfig != nil {
-			probe.QuestionGenerationConfig = req.Config.QuestionGenerationConfig
-		}
 		if err := validateKnowledgeBasePromptInstructions(probe); err != nil {
 			c.Error(err)
 			return

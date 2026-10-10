@@ -23,7 +23,7 @@ for (const serialized of [false, true]) {
   test(`file upload preserves JSON parameters supplied as ${serialized ? 'strings' : 'objects'}`, async () => {
     const { upload, requests } = captureUpload()
     const source = { author: '上传作者', publisher: 'Journal', original_url: 'https://example.com/article', published_at: '2026-10-11' }
-    const config = { chunking_config: { chunk_size: 512, chunk_overlap: 32 }, enable_multimodel: false }
+    const config = { chunking_config: { chunk_size: 512, chunk_overlap: 32 } }
     const sourceJSON = JSON.stringify(source, null, 2)
     const configJSON = JSON.stringify(config, null, 2)
     const file = new File(['# Original Markdown'], 'article.md', { type: 'text/markdown' })

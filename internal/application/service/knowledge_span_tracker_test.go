@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -95,8 +94,7 @@ func TestSpanTracker_OpenAttempt_AllocatesFreshNumbers(t *testing.T) {
 // TestSpanTracker_FailSpan_CascadesDownstream verifies that failing a
 // stage flips its dependent stages to "cancelled" so the UI shows a
 // clear blast radius instead of orphan spinners. This is the central
-// guarantee of the DAG model — without it, a Chunking failure leaves
-// Embedding/Multimodal/PostProcess as pending forever.
+// guarantee of the DAG model: a Chunking failure must cancel Embedding.
 func TestSpanTracker_FailSpan_CascadesDownstream(t *testing.T) {
 	tracker, db := setupSpanTrackerTest(t)
 	ctx := context.Background()
@@ -110,79 +108,61 @@ func TestSpanTracker_FailSpan_CascadesDownstream(t *testing.T) {
 	tracker.EndSpan(ctx, docreader, nil)
 	chunking := tracker.BeginStage(ctx, "kid", attempt, types.StageChunking, nil)
 	embedding := tracker.BeginStage(ctx, "kid", attempt, types.StageEmbedding, nil)
-	multimodal := tracker.BeginStage(ctx, "kid", attempt, types.StageMultimodal, nil)
-	postprocess := tracker.BeginStage(ctx, "kid", attempt, types.StagePostProcess, nil)
 
-	// Fail Chunking. Embedding/Multimodal/PostProcess must cascade.
 	tracker.FailSpan(ctx, chunking, "CHUNKING_FAILED", "synthetic", errors.New("boom"))
-
+	var rows []types.KnowledgeProcessingSpan
+	require.NoError(t, db.Where("knowledge_id = ? AND attempt = ?", "kid", attempt).Find(&rows).Error)
 	statusBy := map[string]string{}
-	type row struct {
-		Name, Status string
-	}
-	var rows []row
-	require.NoError(t, db.Table("knowledge_processing_spans").
-		Select("name, status").
-		Where("knowledge_id = ? AND attempt = ?", "kid", attempt).
-		Find(&rows).Error)
 	for _, r := range rows {
 		statusBy[r.Name] = r.Status
 	}
-
-	assert.Equal(t, types.SpanStatusDone, statusBy[types.StageDocReader], "upstream stage stays done")
-	assert.Equal(t, types.SpanStatusFailed, statusBy[types.StageChunking], "the failed stage itself stays failed")
-	assert.Equal(t, types.SpanStatusCancelled, statusBy[types.StageEmbedding], "direct dependent must cascade")
-	assert.Equal(t, types.SpanStatusCancelled, statusBy[types.StageMultimodal], "sibling dependent must cascade")
-	assert.Equal(t, types.SpanStatusCancelled, statusBy[types.StagePostProcess], "transitive dependent must cascade")
-
-	// Quiet the unused-variable check: embedding / multimodal /
-	// postprocess pointers were used to seed the table; their state
-	// is now in statusBy. Linter still wants them "consumed".
+	assert.Equal(t, types.SpanStatusDone, statusBy[types.StageDocReader])
+	assert.Equal(t, types.SpanStatusFailed, statusBy[types.StageChunking])
+	assert.Equal(t, types.SpanStatusCancelled, statusBy[types.StageEmbedding])
 	_ = embedding
-	_ = multimodal
-	_ = postprocess
+
 }
 
 // TestSpanTracker_LookupStage_FindsAcrossProcesses simulates the
-// cross-process bridge an asynq worker uses: the upstream pipeline
-// creates the multimodal stage span, then a separate worker process
-// must locate it by (kid, attempt, name) to attach its image subspan.
+// cross-process lookup: the upstream pipeline creates the processing
+// stage span, then another process locates it by (kid, attempt, name)
+// to attach a model-call subspan.
 func TestSpanTracker_LookupStage_FindsAcrossProcesses(t *testing.T) {
 	tracker, _ := setupSpanTrackerTest(t)
 	ctx := context.Background()
 
 	_, attempt, err := tracker.OpenAttempt(ctx, "kid")
 	require.NoError(t, err)
-	mm := tracker.BeginStage(ctx, "kid", attempt, types.StageMultimodal, nil)
-	require.NotNil(t, mm)
+	processing := tracker.BeginStage(ctx, "kid", attempt, types.StageProcessing, nil)
+	require.NotNil(t, processing)
 
 	// Pretend we're a different process — the in-memory `starts`
 	// cache is the same map here, but the cross-process semantics
 	// don't depend on it; LookupStage hits the DB.
-	found := tracker.LookupStage(ctx, "kid", attempt, types.StageMultimodal)
+	found := tracker.LookupStage(ctx, "kid", attempt, types.StageProcessing)
 	require.NotNil(t, found)
-	assert.Equal(t, mm.SpanID, found.SpanID, "LookupStage must return the same span row")
+	assert.Equal(t, processing.SpanID, found.SpanID, "LookupStage must return the same span row")
 
-	// A different stage must not be confused with multimodal.
+	// A different stage must not be confused with processing.
 	other := tracker.LookupStage(ctx, "kid", attempt, types.StageEmbedding)
 	assert.Nil(t, other, "LookupStage(missing) must return nil")
 }
 
 func TestFitSpanName(t *testing.T) {
-	short := "postprocess.question.extract"
+	short := "processing.call"
 	if got := fitSpanName(short); got != short {
 		t.Fatalf("short name should pass through, got %q", got)
 	}
 
 	// Regression: names in the 65–223 char window failed under VARCHAR(64)
 	// but must pass through unchanged at VARCHAR(255).
-	mid := "postprocess.question.page[batch/" + strings.Repeat("a", 100) + "]"
+	mid := "processing.entity_resolution[" + strings.Repeat("a", 100) + "]"
 	if got := fitSpanName(mid); got != mid {
-		t.Fatalf("mid-length question batch name should pass through, got %q", got)
+		t.Fatalf("mid-length entity resolution name should pass through, got %q", got)
 	}
 
-	// Use a synthetic overlong question span name (> varchar(255)).
-	long := "postprocess.question.page[batch/" + strings.Repeat("a", 280) + "]"
+	// Use a synthetic overlong entity resolution span name (> varchar(255)).
+	long := "processing.entity_resolution[" + strings.Repeat("a", 280) + "]"
 	got := fitSpanName(long)
 	if utf8.RuneCountInString(got) > maxSpanNameLen {
 		t.Fatalf("fitted name runes=%d, want <= %d: %q", utf8.RuneCountInString(got), maxSpanNameLen, got)
@@ -197,13 +177,13 @@ func TestFitSpanName(t *testing.T) {
 		t.Fatal("fitSpanName must be deterministic")
 	}
 
-	other := "postprocess.question.page[batch/" + strings.Repeat("b", 280) + "]"
+	other := "processing.entity_resolution[" + strings.Repeat("b", 280) + "]"
 	if fitSpanName(other) == got {
 		t.Fatalf("different long names must not collapse to the same fitted name")
 	}
 
-	// CJK slugs must truncate on rune boundaries, not byte boundaries.
-	cjkLong := "postprocess.question.page[" + strings.Repeat("中", 260) + "]"
+	// CJK entity names must truncate on rune boundaries, not byte boundaries.
+	cjkLong := "processing.entity_resolution[" + strings.Repeat("中", 260) + "]"
 	cjkGot := fitSpanName(cjkLong)
 	if utf8.RuneCountInString(cjkGot) > maxSpanNameLen {
 		t.Fatalf("CJK fitted name runes=%d, want <= %d", utf8.RuneCountInString(cjkGot), maxSpanNameLen)
@@ -213,21 +193,21 @@ func TestFitSpanName(t *testing.T) {
 	}
 }
 
-// TestSpanTracker_BeginSubSpan_LongQuestionSpanName verifies question generation's
-// postprocess.question.page[<slug>] subspans persist even when the slug pushes
-// the name past varchar(255).
-func TestSpanTracker_BeginSubSpan_LongQuestionSpanName(t *testing.T) {
+// TestSpanTracker_BeginSubSpan_LongEntityResolutionSpanName verifies that
+// entity resolution subspans persist even when an entity name pushes
+// the span name past varchar(255).
+func TestSpanTracker_BeginSubSpan_LongEntityResolutionSpanName(t *testing.T) {
 	tracker, db := setupSpanTrackerTest(t)
 	ctx := context.Background()
 
 	_, attempt, err := tracker.OpenAttempt(ctx, "kid")
 	require.NoError(t, err)
-	parent := tracker.BeginStage(ctx, "kid", attempt, types.StagePostProcess, nil)
+	parent := tracker.BeginStage(ctx, "kid", attempt, types.StageProcessing, nil)
 	require.NotNil(t, parent)
 
-	rawName := "postprocess.question.page[batch/" + strings.Repeat("x", 280) + "]"
+	rawName := "processing.entity_resolution[" + strings.Repeat("x", 280) + "]"
 	sub := tracker.BeginSubSpan(ctx, parent, rawName, types.SpanKindSubSpan, types.JSONMap{
-		"slug": "batch/" + strings.Repeat("x", 280),
+		"entity_name": strings.Repeat("x", 280),
 	})
 	require.NotNil(t, sub)
 	require.LessOrEqual(t, utf8.RuneCountInString(sub.Name), maxSpanNameLen)
@@ -240,17 +220,17 @@ func TestSpanTracker_BeginSubSpan_LongQuestionSpanName(t *testing.T) {
 }
 
 // TestSpanTracker_LookupSpanByName_FitsLongName verifies cross-process
-// callers can look up a question batch subspan using the raw overlong name.
+// callers can look up an entity resolution subspan using the raw overlong name.
 func TestSpanTracker_LookupSpanByName_FitsLongName(t *testing.T) {
 	tracker, _ := setupSpanTrackerTest(t)
 	ctx := context.Background()
 
 	_, attempt, err := tracker.OpenAttempt(ctx, "kid")
 	require.NoError(t, err)
-	parent := tracker.BeginStage(ctx, "kid", attempt, types.StagePostProcess, nil)
+	parent := tracker.BeginStage(ctx, "kid", attempt, types.StageProcessing, nil)
 	require.NotNil(t, parent)
 
-	rawName := "postprocess.question.page[batch/" + strings.Repeat("y", 280) + "]"
+	rawName := "processing.entity_resolution[" + strings.Repeat("y", 280) + "]"
 	created := tracker.BeginSubSpan(ctx, parent, rawName, types.SpanKindSubSpan, nil)
 	require.NotNil(t, created)
 
@@ -260,8 +240,8 @@ func TestSpanTracker_LookupSpanByName_FitsLongName(t *testing.T) {
 	assert.Equal(t, created.Name, found.Name)
 }
 
-// TestSpanTracker_BeginSubSpan_HangsUnderParent confirms multimodal /
-// embedding fan-out subspans reference the parent stage's span_id —
+// TestSpanTracker_BeginSubSpan_HangsUnderParent confirms model-call
+// subspans reference the parent stage's span_id, preserving
 // the structural invariant the buildSpanTree handler walks.
 func TestSpanTracker_BeginSubSpan_HangsUnderParent(t *testing.T) {
 	tracker, db := setupSpanTrackerTest(t)
@@ -269,11 +249,11 @@ func TestSpanTracker_BeginSubSpan_HangsUnderParent(t *testing.T) {
 
 	_, attempt, err := tracker.OpenAttempt(ctx, "kid")
 	require.NoError(t, err)
-	parent := tracker.BeginStage(ctx, "kid", attempt, types.StageMultimodal, nil)
+	parent := tracker.BeginStage(ctx, "kid", attempt, types.StageProcessing, nil)
 	require.NotNil(t, parent)
 
-	sub := tracker.BeginSubSpan(ctx, parent, "multimodal.image[0]", types.SpanKindGeneration, types.JSONMap{
-		"image_url": "x",
+	sub := tracker.BeginSubSpan(ctx, parent, "processing.call", types.SpanKindGeneration, types.JSONMap{
+		"title": "Example article",
 	})
 	require.NotNil(t, sub)
 
@@ -283,7 +263,7 @@ func TestSpanTracker_BeginSubSpan_HangsUnderParent(t *testing.T) {
 	var rows []row
 	require.NoError(t, db.Table("knowledge_processing_spans").
 		Select("name, kind, parent_span_id").
-		Where("knowledge_id = ? AND name = ?", "kid", "multimodal.image[0]").
+		Where("knowledge_id = ? AND name = ?", "kid", "processing.call").
 		Find(&rows).Error)
 	require.Len(t, rows, 1)
 	assert.Equal(t, types.SpanKindGeneration, rows[0].Kind)
@@ -367,46 +347,40 @@ func TestSpanTracker_FailSpan_CascadesDependentSubspans(t *testing.T) {
 		"subspan under the cascaded stage must also be cancelled")
 }
 
-// TestPostprocessSubspan_AttachesUnderPostProcessStage covers the contract
-// that the async post-pipeline tasks (summary, question, context) rely on:
-// after the parsing pipeline closes the postprocess stage span, an
-// out-of-band worker can still LookupStage + BeginSubSpan to record its
-// real processing time as a child of postprocess. Without this guarantee
-// the trace viewer's postprocess row stays at the ~10ms enqueue duration
-// even when summary generation takes 20 s.
-func TestPostprocessSubspan_AttachesUnderPostProcessStage(t *testing.T) {
+// TestProcessingSubspan_AttachesUnderClosedProcessingStage verifies that
+// looking up a closed processing stage preserves its parent relationship
+// when a caller records additional entity resolution trace detail.
+func TestProcessingSubspan_AttachesUnderClosedProcessingStage(t *testing.T) {
 	tracker, db := setupSpanTrackerTest(t)
 	ctx := context.Background()
 	repo := repository.NewKnowledgeSpanRepository(db)
 
-	// Set up the parent attempt with a closed postprocess stage — the
-	// async worker must still find it via LookupStage.
+	// Set up the parent attempt with a closed processing stage.
+	// LookupStage must still recover the persisted parent handle.
 	_, attempt, err := tracker.OpenAttempt(ctx, "kid")
 	require.NoError(t, err)
 
-	post := tracker.BeginStage(ctx, "kid", attempt, types.StagePostProcess, types.JSONMap{
-		"chunks_total": 20,
+	processing := tracker.BeginStage(ctx, "kid", attempt, types.StageProcessing, types.JSONMap{
+		"title": "Example article",
 	})
-	require.NotNil(t, post)
-	tracker.EndSpan(ctx, post, types.JSONMap{"enqueued_summary": true})
+	require.NotNil(t, processing)
+	tracker.EndSpan(ctx, processing, types.JSONMap{"content_type": "event"})
 
-	// Simulate ProcessSummaryGeneration entering: lookup parent +
-	// BeginSubSpan (the same call shape as beginPostprocessSubspan).
-	parent := tracker.LookupStage(ctx, "kid", attempt, types.StagePostProcess)
+	// Recover the persisted stage and record an entity resolution subspan.
+	parent := tracker.LookupStage(ctx, "kid", attempt, types.StageProcessing)
 	require.NotNil(t, parent, "lookup must succeed even after EndSpan closed the parent")
-	assert.Equal(t, types.StagePostProcess, parent.Name)
+	assert.Equal(t, types.StageProcessing, parent.Name)
 	assert.Equal(t, types.SpanKindStage, parent.Kind)
 
-	sumSpan := tracker.BeginSubSpan(ctx, parent, "postprocess.summary", types.SpanKindSubSpan,
-		types.JSONMap{"language": "zh-CN"})
-	require.NotNil(t, sumSpan)
-	assert.Equal(t, parent.SpanID, sumSpan.ParentSpanID,
-		"subspan must hang off the postprocess stage's span_id")
-	assert.Equal(t, types.SpanKindSubSpan, sumSpan.Kind)
+	entitySpan := tracker.BeginSubSpan(ctx, parent, "processing.entity_resolution", types.SpanKindSubSpan,
+		types.JSONMap{"entity_count": 2})
+	require.NotNil(t, entitySpan)
+	assert.Equal(t, parent.SpanID, entitySpan.ParentSpanID,
+		"subspan must hang off the processing stage's span_id")
+	assert.Equal(t, types.SpanKindSubSpan, entitySpan.Kind)
 
-	tracker.EndSpan(ctx, sumSpan, types.JSONMap{
-		"text_chunks":   20,
-		"summary_chars": 142,
+	tracker.EndSpan(ctx, entitySpan, types.JSONMap{
+		"entities_resolved": 2,
 	})
 
 	// Verify the row landed under the right parent with the right name.
@@ -414,69 +388,33 @@ func TestPostprocessSubspan_AttachesUnderPostProcessStage(t *testing.T) {
 	require.NoError(t, err)
 	var found *types.KnowledgeProcessingSpan
 	for i := range rows {
-		if rows[i].Name == "postprocess.summary" {
+		if rows[i].Name == "processing.entity_resolution" {
 			cp := rows[i]
 			found = &cp
 			break
 		}
 	}
-	require.NotNil(t, found, "summary subspan row must persist")
+	require.NotNil(t, found, "processing subspan row must persist")
 	assert.Equal(t, parent.SpanID, found.ParentSpanID,
 		"persisted parent_span_id matches LookupStage result")
 	assert.Equal(t, types.SpanStatusDone, found.Status)
 	assert.NotNil(t, found.Output, "EndSpan must record the output map")
 }
 
-// TestPostprocessSubspan_MissingParentFallsThrough covers the legacy
-// path: an in-flight async task may carry attempt=0 (queued before the
-// span-tracking field was added) or hit a knowledge whose postprocess
-// stage row is missing (parse predates tracker). LookupStage returning
-// nil must NOT crash the handler — the caller is expected to skip span
-// recording and continue normal processing.
-func TestPostprocessSubspan_MissingParentFallsThrough(t *testing.T) {
+// TestProcessingSubspan_MissingParentFallsThrough verifies that absent
+// attempts and processing stage rows return nil. Callers can skip span
+// recording when no parent exists and continue normal processing.
+func TestProcessingSubspan_MissingParentFallsThrough(t *testing.T) {
 	tracker, _ := setupSpanTrackerTest(t)
 	ctx := context.Background()
 
 	// No OpenAttempt → no rows for kid. LookupStage must return nil.
-	parent := tracker.LookupStage(ctx, "kid-without-attempt", 7, types.StagePostProcess)
+	parent := tracker.LookupStage(ctx, "kid-without-attempt", 7, types.StageProcessing)
 	assert.Nil(t, parent, "missing parent attempt yields nil, not an error")
 
-	// Open an attempt but never begin postprocess. Lookup must still nil.
-	_, attempt, err := tracker.OpenAttempt(ctx, "kid-no-postprocess")
+	// Open an attempt but never begin processing. Lookup must still return nil.
+	_, attempt, err := tracker.OpenAttempt(ctx, "kid-no-processing")
 	require.NoError(t, err)
-	parent = tracker.LookupStage(ctx, "kid-no-postprocess", attempt, types.StagePostProcess)
-	assert.Nil(t, parent, "missing postprocess stage row yields nil")
-}
-
-// TestSummaryQuestionPayload_AttemptRoundTrip mirrors the above for the
-// summary + question payloads to keep the contract documented.
-func TestSummaryQuestionPayload_AttemptRoundTrip(t *testing.T) {
-	sumIn := types.SummaryGenerationPayload{
-		TenantID:        42,
-		KnowledgeBaseID: "kb-1",
-		KnowledgeID:     "kid-7",
-		Language:        "zh-CN",
-		Attempt:         5,
-		Refresh:         true,
-	}
-	sumBytes, err := json.Marshal(sumIn)
-	require.NoError(t, err)
-	var sumOut types.SummaryGenerationPayload
-	require.NoError(t, json.Unmarshal(sumBytes, &sumOut))
-	assert.Equal(t, 5, sumOut.Attempt)
-	assert.True(t, sumOut.Refresh)
-
-	qIn := types.QuestionGenerationPayload{
-		TenantID:        42,
-		KnowledgeBaseID: "kb-1",
-		KnowledgeID:     "kid-7",
-		QuestionCount:   3,
-		Language:        "zh-CN",
-		Attempt:         5,
-	}
-	qBytes, err := json.Marshal(qIn)
-	require.NoError(t, err)
-	var qOut types.QuestionGenerationPayload
-	require.NoError(t, json.Unmarshal(qBytes, &qOut))
-	assert.Equal(t, 5, qOut.Attempt)
+	parent = tracker.LookupStage(ctx, "kid-no-processing", attempt, types.StageProcessing)
+	assert.Nil(t, parent, "missing processing stage row yields nil")
 }

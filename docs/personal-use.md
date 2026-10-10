@@ -36,7 +36,7 @@ go run -tags anydoc ./cmd/server
 
 应用镜像默认以 `WITH_ANYDOC=1` 构建。普通 `go run ./cmd/server` 不链接 anydoc，PDF 和 Office 解析会提示静态库和 `-tags anydoc` 的构建要求；可以在设置中为 PDF 显式选择已配置的 MinerU。单次解析调用超时由 `PARSER_CALL_TIMEOUT` 设置，默认 30 分钟。
 
-只运行一个后端进程。模型并发与速率限制、接口限流保存在进程内存中，重启后重新计数。Redis 继续用于 Asynq 任务队列及任务检查、多模态图像任务计数，以及运行配置缓存变更通知。
+只运行一个后端进程。模型并发与速率限制、接口限流保存在进程内存中，重启后重新计数。Redis 继续用于 Asynq 任务队列及任务检查，以及运行配置缓存变更通知。
 
 按网址收录、RSS 与站点适配器继续可用，使用带 SSRF 防护的 HTTP 抓取。综合分析和报告由外部 AI 工具完成。
 

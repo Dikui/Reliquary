@@ -137,7 +137,7 @@ func TestTaskDeadLetter_ListByScope_RejectsMissingScope(t *testing.T) {
 }
 
 // TestTaskDeadLetter_ListByTaskType_FiltersAndPaginates is the cross-KB
-// view: "all summary:generation failures" regardless of which KB they
+// view: "all document:process failures" regardless of which KB they
 // belong to.
 func TestTaskDeadLetter_ListByTaskType_FiltersAndPaginates(t *testing.T) {
 	db := setupTaskDeadLetterTestDB(t)

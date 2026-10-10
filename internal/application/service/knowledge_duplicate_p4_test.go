@@ -155,7 +155,7 @@ func TestP4ParsedDuplicateStopsBeforeEnrichment(t *testing.T) {
 	require.NoError(t, incoming.SetIntakeMetadata(&types.KnowledgeIntakeMetadata{Decision: "pending", SourceInfo: types.SourceInfo{Publisher: "Reprint", OriginalURL: "https://news.example/copy"}}))
 	require.NoError(t, db.Create(&incoming).Error)
 	svc := &knowledgeService{db: db, repo: repository.NewKnowledgeRepository(db)}
-	svc.triggerManualProcessing(context.Background(), &types.KnowledgeBase{ID: "kb"}, &incoming, body, true)
+	require.NoError(t, svc.triggerManualProcessing(context.Background(), &types.KnowledgeBase{ID: "kb"}, &incoming, body, true))
 	var count int64
 	require.NoError(t, db.Model(&types.Knowledge{}).Where("id = ?", incoming.ID).Count(&count).Error)
 	require.Zero(t, count, "a duplicate parser result does not remain a separate message")

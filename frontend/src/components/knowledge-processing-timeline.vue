@@ -8,7 +8,6 @@ import { copyWithToast } from '@/utils/clipboard'
 import { getKnowledgeSpans, reparseKnowledge, cancelKnowledgeParse, getKnowledgeDetails } from '@/api/knowledge-base/index'
 import {
   knowledgeSpansPayloadHasTrace,
-  summarizePostprocessTasks,
   type KnowledgeTraceNode,
 } from '@/utils/knowledgeTrace'
 import { resolveTimelineHeaderStatus } from '@/utils/knowledgeProcessingStatus'
@@ -45,20 +44,8 @@ const props = withDefaults(
     parseStatus?: string
     autoPoll?: boolean
     compact?: boolean
-    // gracePoll selects the polling rule. See shouldPollNow() for
-    // the full semantics:
-    //   true  — follow parse_status + any running subspan + a
-    //           QUIESCE_GRACE_MS grace window after the tree quiesces.
-    //           This is what the user-visible drawer mount wants:
-    //           late-arriving asynchronous subspans
-    //           surface without forcing a manual refresh.
-    //   false — strict mode. Poll ONLY while parse_status itself is
-    //           non-terminal; ignore post-pipeline async subspans.
-    //           This is what background mounts (the hidden badge
-    //           driver in doc-content.vue) want, so they stop firing
-    //           /spans the instant parsing finishes; async
-    //           summary work doesn't keep a headless poller alive
-    //           after the user closed the trace drawer.
+    // Visible traces fetch final persisted updates briefly after completion.
+    // Background mounts stop polling when the article reaches a terminal status.
     gracePoll?: boolean
     /** Document title shown as the drawer primary heading. */
     docTitle?: string
@@ -82,7 +69,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-const STAGES = ['docreader', 'chunking', 'embedding', 'multimodal', 'postprocess'] as const
+const STAGES = ['docreader', 'processing', 'chunking', 'embedding'] as const
 const POLL_INTERVAL_MS = 2000
 
 const data = ref<SpansResponse | null>(null)
@@ -194,16 +181,13 @@ function formatRelativeTime(ts: number): string {
 }
 
 // A skipped stage did not execute. Its tiny bookkeeping interval is not
-// processing time, so do not present it as (for example) multimodal time.
+// processing time, so omit its duration.
 function formatSpanDuration(node: SpanNode): string {
   if (node.status === 'skipped' || node.status === 'pending') return '—'
   return formatDuration(node.duration_ms)
 }
 
 function isPolling(status?: string): boolean {
-  // finalizing is the post-process fan-out window — subspans
-  // (summary / question) are still actively producing
-  // events, so we must keep polling and drawing LIVE.
   return status === 'pending' || status === 'processing' || status === 'finalizing'
 }
 
@@ -215,13 +199,7 @@ function isHardTerminal(status?: string): boolean {
   return status === 'cancelled' || status === 'failed' || status === 'completed'
 }
 
-// True if any node in the trace is still running/pending. Crucial for
-// postprocess — its subspans (summary/question) run
-// asynchronously AFTER the main pipeline closes, so parse_status
-// flips to 'completed' while there's plenty of work still happening.
-// Without checking the tree we'd stop polling at that moment and
-// strand the user staring at half-rendered postprocess until they
-// manually refresh.
+// Whether any trace node is still active.
 function spanTreeActive(node?: SpanNode): boolean {
   if (!node) return false
   const s = node.status
@@ -278,9 +256,8 @@ function spanTreeLastActivity(node?: SpanNode): number {
   return max
 }
 
-// Summary and question tasks can add postprocess subspans after parsing
-// completes. Keep visible traces polling for a bounded grace window so
-// these tasks appear automatically, while old completed traces stop polling.
+// Keep visible traces polling briefly after completion so the last persisted
+// span updates appear while older completed traces stop polling.
 const QUIESCE_GRACE_MS = 2 * 60 * 1000
 
 const lastTraceActivityAt = computed<number>(() =>
@@ -294,30 +271,6 @@ const isWithinQuiesceGrace = computed<boolean>(() => {
   return nowTick.value - last < QUIESCE_GRACE_MS
 })
 
-// shouldPollNow encodes the per-tick "do I fetch?" decision. Split
-// from isLive (which also drives the LIVE badge — its semantics are
-// "trace is actually running") so the polling rules can diverge from
-// the badge rules without entangling them.
-//
-// Two modes, selected by the gracePoll prop:
-//
-//   gracePoll = true  (default — for the visible drawer mount):
-//     Follow the trace through everything the user might want to see
-//     live: the main parse pipeline (parse_status), any running
-//     subspan (traceActive), AND the QUIESCE_GRACE_MS window after
-//     the tree quiesces, allowing delayed subspans to surface automatically.
-//
-//   gracePoll = false (for background mounts e.g. doc-content's
-//     hidden badge driver):
-//     Strict mode. Poll ONLY while the parse pipeline itself is
-//     non-terminal. Post-pipeline async work (summary /
-//     question subspans) is intentionally ignored —
-//     otherwise the hidden mount would keep firing /spans every
-//     2s until those finish, even though the user has closed the
-//     trace drawer and is only looking at the header badge (whose
-//     job is "is parsing done yet?", not "is async post-work done
-//     yet?"). The next user-initiated drawer-open will get a fresh
-//     fetch via onMounted, picking up any post-pipeline progress.
 function shouldPollNow(): boolean {
   if (!data.value) return isPolling(props.parseStatus)
   if (props.gracePoll) {
@@ -643,8 +596,7 @@ const tEnd = computed<number | null>(() => {
   }
   // Extend the right edge to "now" whenever the trace is still
   // actively producing spans — this covers both parse_status mid-flight
-  // AND the postprocess-async case where the top-level status closes
-  // but subspans keep ticking. Both conditions are captured by isLive.
+  // Include any active descendant interval.
   if (isLive.value) {
     const now = nowTick.value
     candidate = candidate === null ? now : Math.max(candidate, now)
@@ -654,12 +606,7 @@ const tEnd = computed<number | null>(() => {
 
 const totalMs = computed<number>(() => {
   if (t0.value === null || tEnd.value === null) return 0
-  // The trace's own duration_ms only covers the parsing pipeline up to
-  // FinalizeAttempt. Async post-processing subspans (summary / question)
-  // keep producing rows AFTER the root closes — so the time axis
-  // must scale to the latest descendant end, otherwise their bars get
-  // clipped past the right edge. Take the max of (root duration, observed
-  // span tail) regardless of polling state.
+  // Scale the time axis to both the root duration and the latest span end.
   const observed = Math.max(0, tEnd.value - t0.value)
   const traceDur = data.value?.trace?.duration_ms
   if (typeof traceDur === 'number' && traceDur > 0) {
@@ -745,7 +692,7 @@ const flatRows = computed<FlatRow[]>(() => {
       })
       // Honour the expand/collapse state for subspans too — without
       // this gate, clicking the chevron on a subspan (e.g.
-      // postprocess.summary) only rotated the icon but the children
+      // processing.entities) only rotated the icon but the children
       // were always rendered, so the toggle looked broken.
       if (!expandedRows.value.has(key)) return
       kids.forEach((c, i) => walk(c, depth + 1, `${idxPath}/${i}`, key))
@@ -769,11 +716,6 @@ function barStyle(node: SpanNode): Record<string, string> {
   if (!total || t0.value === null) return { display: 'none' }
   const start = nodeStart(node)
   if (start === null) return { display: 'none' }
-  // For a span with no recorded finished_at, use "now" as the end
-  // whenever it's plausibly still running — either the trace overall
-  // is live, or this individual span's status says it's in flight.
-  // Without the second clause, postprocess subspans that survived past
-  // parse_status='completed' would collapse to zero width.
   const liveBar = isLive.value || node.status === 'running' || node.status === 'pending'
   const end = nodeEnd(node) ?? (liveBar ? nowTick.value : start)
   const leftPct = ((start - t0.value) / total) * 100
@@ -784,12 +726,6 @@ function barStyle(node: SpanNode): Record<string, string> {
   }
 }
 
-// Wrapping outline bar — when a span's children extend past the parent's
-// own finished_at (typical for postprocess: stage closes in ~9ms but its
-// async summary/question subspans run for tens of seconds), we render a
-// faint outline from the parent's start to the latest descendant end.
-// This makes "this stage's downstream work took N seconds total" visible
-// at a glance without conflating it with the stage's self-duration.
 function descendantMaxEnd(node: SpanNode): number | null {
   const ends: number[] = []
   for (const c of node.children || []) {
@@ -1118,12 +1054,8 @@ const viewingLatestAttempt = computed<boolean>(() => {
   return active === latest
 })
 
-// The authoritative status for the header badge. During the async
-// post-pipeline window (summary / question), the latest
-// attempt's ROOT span closes — so trace.status reads 'done' — while
-// those subspans can still be running or can later make the knowledge fail.
-// The latest knowledge row is therefore authoritative for ALL statuses,
-// including terminal ones. Historical attempts keep their own root status.
+// The latest article row owns the header status. Historical attempts retain
+// their own persisted root status.
 const headerStatus = computed(() => {
   return resolveTimelineHeaderStatus({
     parseStatus: data.value?.parse_status,
@@ -1178,10 +1110,6 @@ const stagesStatDisplay = computed(() => {
   }
 })
 
-const postprocessTaskStats = computed(() =>
-  summarizePostprocessTasks(data.value?.trace),
-)
-
 const headMetaParts = computed(() => {
   if (!data.value) return []
   const parts: string[] = [t('knowledgeStages.title')]
@@ -1190,19 +1118,6 @@ const headMetaParts = computed(() => {
   }
   const st = stagesStatDisplay.value
   parts.push(`${st.label} ${st.value}`)
-  const postprocess = postprocessTaskStats.value
-  if (postprocess.total > 0) {
-    parts.push(t('knowledgeStages.head.postprocessTasks', {
-      running: postprocess.running,
-      failed: postprocess.failed,
-      completed: postprocess.completed,
-    }))
-  }
-  if (data.value.parse_status === 'completed' && postprocess.running > 0) {
-    parts.push(t('knowledgeStages.head.completedWithActiveTrace', {
-      n: postprocess.running,
-    }, postprocess.running))
-  }
   if (attemptTabs.value.length === 0 && data.value.current_attempt) {
     parts.push(t('knowledgeStages.attempt', { n: data.value.current_attempt }))
   }
@@ -1356,15 +1271,6 @@ const processConfigLines = computed<string[]>(() => {
   const rules = o.parser_engine_rules || cc?.parser_engine_rules
   if (rules?.length) {
     lines.push(`${t('knowledgeStages.processConfig.parser')}: ${formatParserRulesForCurrentFile(rules)}`)
-  }
-
-  const mm = o.vlm_config?.enabled ?? o.enable_multimodel
-  if (mm != null) lines.push(`${t('knowledgeStages.processConfig.multimodal')}: ${onOff(mm)}`)
-
-
-  const qg = o.question_generation_config
-  if (qg?.enabled != null) {
-    lines.push(`${t('knowledgeStages.processConfig.question')}: ${qg.enabled ? t('knowledgeStages.processConfig.questionOn', { n: qg.question_count ?? 3 }) : t('knowledgeStages.processConfig.off')}`)
   }
 
   return lines.length ? lines : [t('knowledgeStages.processConfig.kbDefault')]
@@ -1561,10 +1467,7 @@ const processConfigLines = computed<string[]>(() => {
                     :style="{ left: nowMarkerPct + '%' }" />
                   <div v-if="isPlaceholder(row.node)" class="kp-bar kp-bar-placeholder" />
                   <template v-else>
-                    <!-- Wrapping outline: descendants extend past this
-                         span's own end (e.g. async postprocess subspans
-                         under a closed stage). Renders behind the solid
-                         self-bar so both are visible. -->
+
                     <div v-if="wrapStyle(row.node)" class="kp-bar-wrap" :class="['kp-bar-wrap-' + row.node.status]"
                       :style="wrapStyle(row.node) || {}">
                       <span class="kp-bar-tip">
@@ -2471,10 +2374,7 @@ const processConfigLines = computed<string[]>(() => {
   }
 }
 
-/* Wrapping outline bar — shows the full window from this span's start
-   to the latest descendant end. Used when async children extend past
-   the parent's own finished_at (e.g. postprocess stage closes fast but
-   its summary/question subspans run for a long time). */
+
 .kp-bar-wrap {
   position: absolute;
   top: 9px;

@@ -6,58 +6,6 @@
     </div>
 
     <div class="settings-group">
-      <!-- Question Generation feature (only useful for RAG indexing) -->
-      <template v-if="ragEnabled !== false">
-      <div class="setting-row">
-        <div class="setting-info">
-          <label>{{ $t('knowledgeEditor.advanced.questionGeneration.label') }}</label>
-          <p class="desc">{{ $t('knowledgeEditor.advanced.questionGeneration.description') }}</p>
-        </div>
-        <div class="setting-control">
-          <t-switch
-            v-model="localQuestionGeneration.enabled"
-            @change="handleQuestionGenerationToggle"
-            size="medium"
-          />
-        </div>
-      </div>
-
-      <!-- Question Generation configuration -->
-      <div v-if="localQuestionGeneration.enabled" class="subsection">
-        <div class="setting-row">
-          <div class="setting-info">
-            <label>{{ $t('knowledgeEditor.advanced.questionGeneration.countLabel') }}</label>
-            <p class="desc">{{ $t('knowledgeEditor.advanced.questionGeneration.countDescription') }}</p>
-          </div>
-          <div class="setting-control">
-            <t-input-number
-              v-model="localQuestionGeneration.questionCount"
-              :min="1"
-              :max="10"
-              :step="1"
-              theme="normal"
-              @change="handleQuestionGenerationChange"
-              style="width: 120px;"
-            />
-          </div>
-        </div>
-        <div class="setting-row setting-row-vertical">
-          <div class="setting-info">
-            <label>{{ $t('knowledgeEditor.advanced.questionGeneration.instructionsLabel') }}</label>
-            <p class="desc">{{ $t('knowledgeEditor.advanced.questionGeneration.instructionsDescription') }}</p>
-          </div>
-          <div class="setting-control">
-            <SafeTextarea
-              v-model="localQuestionGeneration.customInstructions"
-              :placeholder="$t('knowledgeEditor.advanced.questionGeneration.instructionsPlaceholder')"
-              :maxlength="4000"
-              :autosize="{ minRows: 3, maxRows: 8 }"
-              @change="handleQuestionGenerationChange"
-            />
-          </div>
-        </div>
-      </div>
-      </template>
 
 
 
@@ -87,18 +35,8 @@
 
 <script setup lang="ts">
 import SafeTextarea from '@/components/SafeTextarea.vue'
-import { ref, watch } from 'vue'
-
-interface QuestionGenerationConfig {
-  enabled: boolean
-  questionCount: number
-  customInstructions?: string
-}
 
 interface Props {
-  questionGeneration?: QuestionGenerationConfig
-  ragEnabled?: boolean
-  allModels?: any[]
   embedded?: boolean
   tableMetadataInstructions?: string
 }
@@ -108,33 +46,9 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{
-  'update:questionGeneration': [value: QuestionGenerationConfig]
   'update:tableMetadataInstructions': [value: string]
 }>()
 
-const localQuestionGeneration = ref<QuestionGenerationConfig>(
-  props.questionGeneration
-    ? { ...props.questionGeneration, customInstructions: props.questionGeneration.customInstructions || '' }
-    : { enabled: false, questionCount: 3, customInstructions: '' }
-)
-
-watch(() => props.questionGeneration, (newVal) => {
-  if (newVal) {
-    localQuestionGeneration.value = { customInstructions: '', ...newVal }
-  }
-}, { deep: true })
-
-
-const handleQuestionGenerationToggle = () => {
-  if (!localQuestionGeneration.value.enabled) {
-    localQuestionGeneration.value.questionCount = 3
-  }
-  emit('update:questionGeneration', localQuestionGeneration.value)
-}
-
-const handleQuestionGenerationChange = () => {
-  emit('update:questionGeneration', localQuestionGeneration.value)
-}
 </script>
 
 <style lang="less" scoped>

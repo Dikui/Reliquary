@@ -56,9 +56,9 @@ for (const locale of ['zh-CN', 'en-US']) {
     app.unmount()
   })
 
-  for (const enabled of [false, true]) {
-    for (const modelId of ['', 'vision-model']) {
-      test(`${locale}: PNG uploads with multimodal=${enabled} and model=${modelId || 'none'}`, async () => {
+  {
+    {
+      test(`${locale}: PNG uploads preserve source metadata with article processing`, async () => {
         const confirmations: any[] = []
         const component = loadComponent(new URL('./UploadConfirmDialog.vue', import.meta.url), {
           '@/components/SafeTextarea.vue': safeTextareaTestModule,
@@ -74,7 +74,7 @@ for (const locale of ['zh-CN', 'en-US']) {
           '../utils/uploadSources': {getUploadFileKey:(file:File)=>file.name},
           '@/api/knowledge-base': {listKnowledgeTags:async()=>({data:{data:[]}})},
         })
-        const props=vue.reactive({visible:false,mode:'file',files:[{name:'sample.png',size:100}],kbInfo:{id:'kb',vlm_config:{enabled,model_id:modelId},enable_multimodel:enabled},onConfirm:(result:any)=>confirmations.push(result)})
+        const props=vue.reactive({visible:false,mode:'file',files:[{name:'sample.png',size:100}],kbInfo:{id:'kb'},onConfirm:(result:any)=>confirmations.push(result)})
         const root=element('main');const app=renderer.createApp(vue.defineComponent({setup:()=>()=>vue.h(component,props)}))
         app.use(i18n());registerPrimitives(app)
         app.config.warnHandler=()=>{}
@@ -85,7 +85,6 @@ for (const locale of ['zh-CN', 'en-US']) {
         const footer=descendants(root).find(node=>node.tag==='footer')!
         const confirm=descendants(footer).filter(node=>node.tag==='button').at(-1)!
         assert.ok(confirm);assert.equal(confirm.props.disabled,false)
-        if(!enabled || !modelId) assert.ok(visibleText(root).includes(i18n().global.t('uploadConfirm.multimodalSetupHint')))
         const labels=descendants(root).filter(node=>node.tag==='label' && node.props.class==='intake-source-field')
         assert.equal(labels.length,4)
         const values=['Ada Lovelace','Personal documents','https://example.com/documents/original-image.png','2026-10-09T12:34:00Z']
@@ -98,7 +97,7 @@ for (const locale of ['zh-CN', 'en-US']) {
         for(const key of ['intakeAuthor','intakePublisher','intakeOriginalUrl','intakePublishedAt']) assert.ok(labels.some(node=>visibleText(node).includes(i18n().global.t(`knowledgeBase.${key}`))))
         confirm.props.onClick();await settle()
         assert.equal(confirmations.length,1)
-        assert.equal(confirmations[0].processConfig.enable_multimodel,enabled && !!modelId)
+        assert.deepEqual(Object.keys(confirmations[0].processConfig).sort(), ['chunking_config', 'parser_engine_rules'])
         app.unmount()
       })
     }

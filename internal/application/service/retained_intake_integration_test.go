@@ -50,7 +50,7 @@ func (m *retainedIntakeModel) Chat(ctx context.Context, messages []chat.Message,
 	stage, _ := types.LLMCallMetadataFromContext(ctx)
 	m.stages = append(m.stages, stage)
 	if stage != "intake_review" {
-		return &types.ChatResponse{Content: "Fixture publisher reports an original product announcement and its deployment capabilities."}, nil
+		return &types.ChatResponse{Content: validProcessingFixture("event")}, nil
 	}
 	m.prompts = append(m.prompts, messages[0].Content)
 	if m.malformed {
@@ -68,7 +68,6 @@ type retainedIntakeHarness struct {
 	ctx       context.Context
 	kb        *types.KnowledgeBase
 	service   *knowledgeService
-	post      *KnowledgePostProcessService
 	queue     *retainedProcessingQueue
 	model     *retainedIntakeModel
 	processed int
@@ -95,9 +94,8 @@ func newRetainedIntakeHarness(t *testing.T) *retainedIntakeHarness {
 	svc := &knowledgeService{db: db, repo: repo, chunkRepo: chunkRepo, chunkService: chunks,
 		kbService: bases, modelService: &summaryStateModelService{model: model}, task: queue,
 		tenantRepo: repository.NewTenantRepository(db), fileSvc: &retainedIntakeFiles{},
-		config: &config.Config{ArticleProcessing: &config.ArticleProcessingConfig{GenerateSummaryPrompt: "Summarize the original document."}}}
-	return &retainedIntakeHarness{db: db, ctx: ctx, kb: kb, service: svc, queue: queue, model: model,
-		post: &KnowledgePostProcessService{knowledgeRepo: repo, kbService: bases, chunkService: chunks, taskEnqueuer: queue}}
+		config: &config.Config{ArticleProcessing: &config.ArticleProcessingConfig{}}}
+	return &retainedIntakeHarness{db: db, ctx: ctx, kb: kb, service: svc, queue: queue, model: model}
 }
 
 func (h *retainedIntakeHarness) drain(t *testing.T) {
@@ -111,10 +109,6 @@ func (h *retainedIntakeHarness) drain(t *testing.T) {
 			require.NoError(t, h.service.ProcessDocument(h.ctx, task))
 		case types.TypeManualProcess:
 			require.NoError(t, h.service.ProcessManualUpdate(h.ctx, task))
-		case types.TypeKnowledgePostProcess:
-			require.NoError(t, h.post.Handle(h.ctx, task))
-		case types.TypeSummaryGeneration:
-			require.NoError(t, h.service.ProcessSummaryGeneration(h.ctx, task))
 		default:
 			t.Fatalf("unexpected ingestion task %q", task.Type())
 		}

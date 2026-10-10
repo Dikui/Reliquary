@@ -417,7 +417,7 @@ func (r *chunkRepository) DeleteChunksByKnowledgeID(ctx context.Context, tenantI
 }
 
 // ListImageInfoByKnowledgeIDs returns non-empty image_info values for the given knowledge IDs.
-// No chunk_type filter — collects from text, image_ocr, and image_caption chunks.
+// The cleanup scan includes all stored chunk types.
 func (r *chunkRepository) ListImageInfoByKnowledgeIDs(
 	ctx context.Context, tenantID uint64, knowledgeIDs []string,
 ) ([]interfaces.ChunkImageInfo, error) {

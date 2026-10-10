@@ -52,7 +52,7 @@ export function uploadKnowledgeFile(
 // 从URL创建知识
 export function createKnowledgeFromURL(
   kbId: string,
-  data: { url: string; enable_multimodel?: boolean; process_config?: KnowledgeProcessOverrides; source_info?: IntakeSourceInfo },
+  data: { url: string; process_config?: KnowledgeProcessOverrides; source_info?: IntakeSourceInfo },
 ) {
   return post(`/api/v1/knowledge-bases/${kbId}/knowledge/url`, data);
 }
@@ -78,6 +78,7 @@ export function listKnowledgeFiles(
     page_size: number;
     keyword?: string;
     file_type?: string;
+    content_type?: string;
     parse_status?: string;
     source?: string;
     start_time?: string;
@@ -89,6 +90,7 @@ export function listKnowledgeFiles(
   query.append('page_size', String(params.page_size));
   if (params.keyword) query.append('keyword', params.keyword);
   if (params.file_type) query.append('file_type', params.file_type);
+  if (params.content_type) query.append('content_type', params.content_type);
   if (params.parse_status) query.append('parse_status', params.parse_status);
   if (params.source) query.append('source', params.source);
   if (params.start_time) query.append('start_time', params.start_time);
@@ -159,33 +161,13 @@ export function updateKnowledgeMetadata(knowledgeId: string, customMetadata: Rec
   return put(`/api/v1/knowledge/${knowledgeId}`, { custom_metadata: customMetadata });
 }
 
-export function updateKnowledgeSummary(knowledgeId: string, description: string) {
-  return put(`/api/v1/knowledge/${knowledgeId}`, { description });
-}
-
-export function regenerateKnowledgeSummary(knowledgeId: string) {
-  return post(`/api/v1/knowledge/${knowledgeId}/regenerate-summary`, {});
+export function reprocessKnowledge(knowledgeId: string) {
+  return post(`/api/v1/knowledge/${knowledgeId}/reprocess`, {});
 }
 
 // Get chunk by chunk_id only (new endpoint - to be added to backend)
 export function getChunkByIdOnly(chunkId: string) {
   return get(`/api/v1/chunks/by-id/${chunkId}`);
-}
-
-// Delete a single generated question from a chunk by question ID
-export function deleteGeneratedQuestion(chunkId: string, questionId: string) {
-  return del(`/api/v1/chunks/by-id/${chunkId}/questions`, { question_id: questionId });
-}
-
-export function upsertGeneratedQuestion(chunkId: string, question: string, questionId?: string) {
-  return put(`/api/v1/chunks/by-id/${chunkId}/questions`, {
-    question_id: questionId || '',
-    question,
-  });
-}
-
-export function regenerateGeneratedQuestions(chunkId: string) {
-  return post(`/api/v1/chunks/by-id/${chunkId}/questions/regenerate`, {});
 }
 
 const buildQuery = (params?: Record<string, any>) => {

@@ -9,16 +9,15 @@ database connection limits.
 
 | Pool | Default per instance | Queues | Purpose |
 | --- | ---: | --- | --- |
-| Core | 8 | `default` | Document parsing and manual reparse guarantee |
-| Post-process | 2 | `postprocess` | Parse finalization and enrichment fan-out |
-| Enrichment | 12 | `summary`, `multimodal`, `entity`, `question` | Model-heavy enrichment guarantee |
-| Maintenance | 4 | `sync`, `low` | Source sync, batch work, move/delete/cleanup |
+| Core | 8 | `default` | Parsing, one article processing call and indexing |
+| Enrichment | 12 | `entity` | Entity name embedding rebuilds |
+| Maintenance | 4 | `sync`, `low` | Source sync, batch reprocessing and deletion |
 | Shared | 6 | Core and enrichment queues | Elastic capacity borrowed by the side with backlog |
 
-The total remains 32 workers per service instance by default.
+The total is 30 workers per service instance by default.
 
-Post-process has its own physical queue so lightweight fan-out work cannot sit
-behind long parser calls. Maintenance is intentionally excluded from the
+The article processing call runs inside the document task, before body chunking
+and indexing. Maintenance is intentionally excluded from the
 shared pool because its long-running tasks could pin elastic capacity needed by
 the user-facing pipeline.
 
@@ -30,7 +29,6 @@ the same core/enrichment queues; one task is still processed by one worker.
 All settings are available under System settings and require a service restart:
 
 - `asynq.core_concurrency` / `RELIQUARY_ASYNQ_CORE_CONCURRENCY`
-- `asynq.postprocess_concurrency` / `RELIQUARY_ASYNQ_POSTPROCESS_CONCURRENCY`
 - `asynq.enrichment_concurrency` / `RELIQUARY_ASYNQ_ENRICHMENT_CONCURRENCY`
 - `asynq.maintenance_concurrency` / `RELIQUARY_ASYNQ_MAINTENANCE_CONCURRENCY`
 - `asynq.shared_concurrency` / `RELIQUARY_ASYNQ_SHARED_CONCURRENCY`
@@ -63,8 +61,9 @@ For each pool, estimate peak required workers using:
 required workers = ceil(peak task arrival rate * mean task runtime / 0.70)
 ```
 
-Use task arrival rate after fan-out. One parsed document can create one summary,
-multiple question batches and multiple image tasks.
+Use task arrival rate for each queue. One approved article uses one processing
+call for its content type, summary, entities and topics; body images are read
+within that call when the selected model supports vision.
 Queue count is not a capacity signal.
 
 The runtime dashboard reports:
@@ -77,6 +76,6 @@ The runtime dashboard reports:
 - model concurrency and limiter waiting.
 
 Increase a pool only when backlog age grows while its downstream dependency has
-headroom. Reallocate to enrichment when core stays underutilized and fan-out
-queues grow. Reduce core admission when parser CPU, memory, or latency is the
+headroom. Reallocate to enrichment when core stays underutilized and entity
+rebuild queues grow. Reduce core admission when parser CPU, memory, or latency is the
 bottleneck.

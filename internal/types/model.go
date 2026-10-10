@@ -15,23 +15,21 @@ import (
 // ModelType represents the type of AI model
 type ModelType string
 
-// SupportsImageProcessing reports whether a model can extract image text and captions.
+// SupportsImageProcessing reports whether a model can view article images.
 func (m *Model) SupportsImageProcessing() bool {
-	return m != nil && (m.Type == ModelTypeVLLM ||
-		(m.Type == ModelTypeKnowledgeQA && m.Parameters.SupportsVision))
+	return m != nil && (m.Type == ModelTypeKnowledgeQA && m.Parameters.SupportsVision)
 }
 
 const (
 	ModelTypeEmbedding   ModelType = "Embedding"   // Embedding model
 	ModelTypeRerank      ModelType = "Rerank"      // Rerank model
 	ModelTypeKnowledgeQA ModelType = "KnowledgeQA" // KnowledgeQA model
-	ModelTypeVLLM        ModelType = "VLLM"        // VLLM model
 )
 
 // IsSupported reports whether this model type is available in this deployment.
 func (t ModelType) IsSupported() bool {
 	switch t {
-	case ModelTypeKnowledgeQA, ModelTypeEmbedding, ModelTypeRerank, ModelTypeVLLM:
+	case ModelTypeKnowledgeQA, ModelTypeEmbedding, ModelTypeRerank:
 		return true
 	default:
 		return false
@@ -54,10 +52,8 @@ type ModelUsageBinding string
 
 // Model usage binding constants identify supported model-reference roles.
 const (
-	ModelUsageBindingEmbeddingModel       ModelUsageBinding = "embedding_model"
-	ModelUsageBindingSummaryModel         ModelUsageBinding = "summary_model"
-	ModelUsageBindingImageProcessingModel ModelUsageBinding = "image_processing_model"
-	ModelUsageBindingVLMModel             ModelUsageBinding = "vlm_model"
+	ModelUsageBindingEmbeddingModel ModelUsageBinding = "embedding_model"
+	ModelUsageBindingSummaryModel   ModelUsageBinding = "summary_model"
 )
 
 // ModelUsageResource is the minimal, non-sensitive projection returned when a
@@ -133,7 +129,7 @@ type ModelParameters struct {
 	// enrichment) calls to THIS specific model, keyed by model ID and shared
 	// within this process. 0 (the default) means "fall back to the
 	// process-wide model.max_concurrency". Interactive user-facing calls are
-	// never gated. Only chat / vlm / embedding honour this (see limiter.Gate).
+	// never gated. Chat and embedding calls honor this (see limiter.Gate).
 	MaxConcurrency    int    `yaml:"max_concurrency,omitempty" json:"max_concurrency,omitempty"`
 	RequestsPerMinute int    `yaml:"requests_per_minute,omitempty" json:"requests_per_minute,omitempty"`
 	AppSecret         string `yaml:"app_secret,omitempty" json:"app_secret,omitempty"` // AES-256 加密存储，实际承载上游 API Key

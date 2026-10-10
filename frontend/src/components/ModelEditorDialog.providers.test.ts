@@ -35,7 +35,7 @@ presets.find(preset => preset.value === 'aliyun')!.defaultUrls.embedding = 'http
 
 async function renderEditor({ locale = 'zh-CN', modelType = 'chat', listProviders = async (type: string) => presets.filter(preset => preset.modelTypes.includes(type)), scenario = async () => {} }: {
   locale?: 'zh-CN' | 'en-US'
-  modelType?: 'chat' | 'embedding' | 'rerank' | 'vllm'
+  modelType?: 'chat' | 'embedding' | 'rerank'
   listProviders?: (type: string) => Promise<ModelProviderOption[]>
   scenario?: (state: any) => Promise<void>
 } = {}) {

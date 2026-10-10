@@ -19,18 +19,10 @@ func TestResolveParentChunksUsesCurrentContentAndImageURLs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	repo := &expandChunkRepo{
-		chunks: map[string]*types.Chunk{"parent": parent},
-		children: map[string][]*types.Chunk{
-			"child": {
-				{
-					ID: "image", ParentChunkID: "child", ChunkType: types.ChunkTypeImageOCR,
-					ImageInfo: string(imageInfo),
-					IsEnabled: true,
-				},
-			},
-		},
-	}
+	repo := &expandChunkRepo{chunks: map[string]*types.Chunk{
+		"parent": parent,
+		"child":  {ID: "child", ParentChunkID: "parent", ChunkType: types.ChunkTypeText, ImageInfo: string(imageInfo), IsEnabled: true},
+	}}
 	plugin := &MergeStage{chunkRepo: repo}
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
 	result := &types.SearchResult{
@@ -53,56 +45,6 @@ func TestResolveParentChunksUsesCurrentContentAndImageURLs(t *testing.T) {
 	}
 }
 
-func TestResolveImageChunkKeepsGrandparentContextWithoutCoordinateSlicing(t *testing.T) {
-	imageInfo, err := json.Marshal([]types.ImageInfo{{URL: "u1", OCRText: "matched image"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	repo := &expandChunkRepo{
-		chunks: map[string]*types.Chunk{
-			"text": {
-				ID: "text", ParentChunkID: "parent", ChunkType: types.ChunkTypeText, ChunkIndex: 4,
-				Content: "current edited text child\n\n![matched](u1)", StartAt: 900, EndAt: 910,
-			},
-			"parent": {
-				ID: "parent", ChunkType: types.ChunkTypeParentText,
-				Content: "grandparent context before\n\n![matched](u1)\n\ngrandparent context after\n\n![sibling](u2)",
-				StartAt: 0, EndAt: 100,
-			},
-		},
-		children: map[string][]*types.Chunk{
-			"text": {{
-				ID: "image", ParentChunkID: "text", ChunkType: types.ChunkTypeImageOCR,
-				ImageInfo: string(imageInfo),
-				IsEnabled: true,
-			}},
-		},
-	}
-	plugin := &MergeStage{chunkRepo: repo}
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
-	result := &types.SearchResult{
-		ID: "image", KnowledgeID: "doc", ChunkType: string(types.ChunkTypeImageOCR),
-		ParentChunkID: "text", Content: "matched image", ImageInfo: string(imageInfo),
-		StartAt: 500, EndAt: 510,
-	}
-
-	got := plugin.resolveParentChunks(ctx, &State{}, []*types.SearchResult{result})
-	if len(got) != 1 {
-		t.Fatalf("result count = %d, want 1", len(got))
-	}
-	for _, want := range []string{"grandparent context before", "grandparent context after", "current edited text child", "u1"} {
-		if !strings.Contains(got[0].Content, want) {
-			t.Fatalf("image result lost %q: %q", want, got[0].Content)
-		}
-	}
-	if strings.Contains(got[0].Content, "u2") {
-		t.Fatalf("sibling image leaked into image result: %q", got[0].Content)
-	}
-	if got[0].StartAt != 500 || got[0].EndAt != 510 {
-		t.Fatalf("source coordinates changed to [%d,%d)", got[0].StartAt, got[0].EndAt)
-	}
-}
-
 func TestCollectScopedTextChildIDs(t *testing.T) {
 	parentMap := map[string]*types.Chunk{
 		"parent-1": {ID: "parent-1", ChunkType: types.ChunkTypeParentText},
@@ -110,11 +52,10 @@ func TestCollectScopedTextChildIDs(t *testing.T) {
 	}
 	results := []*types.SearchResult{
 		{ID: "text-1", ChunkType: string(types.ChunkTypeText), ParentChunkID: "parent-1"},
-		{ID: "img-1", ChunkType: string(types.ChunkTypeImageOCR), ParentChunkID: "text-2"},
 		{ID: "text-3", ChunkType: string(types.ChunkTypeText), ParentChunkID: "text-x"}, // not parent_text
 	}
 	ids := collectScopedTextChildIDs(results, parentMap)
-	if len(ids) != 2 {
+	if len(ids) != 1 {
 		t.Fatalf("ids: %v", ids)
 	}
 }

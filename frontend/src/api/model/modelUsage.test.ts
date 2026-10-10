@@ -15,8 +15,8 @@ import {
 
 const details = {
   knowledge_bases: [
-    { id: 'kb-1', name: 'Product docs', bindings: ['vlm_model'] },
-    { id: 'kb-2', name: 'Engineering', bindings: ['vlm_model'] },
+    { id: 'kb-1', name: 'Product docs', bindings: ['generation_model_tier'] },
+    { id: 'kb-2', name: 'Engineering', bindings: ['generation_model_tier'] },
   ],
   knowledge_base_total: 2,
 }
@@ -66,7 +66,7 @@ test('rejects malformed details instead of guessing from the server message', ()
     knowledge_bases: [{ id: 'kb-1', name: 'Docs', bindings: [] }],
   }), null)
   assert.equal(parseModelUsageDetails({
-    knowledge_bases: [{ id: 'kb-1', name: 'Docs', bindings: 'vlm_model' }],
+    knowledge_bases: [{ id: 'kb-1', name: 'Docs', bindings: 'generation_model_tier' }],
   }), null)
   assert.equal(modelInUseErrorFromRequest({
     error: {
@@ -82,17 +82,17 @@ test('keeps navigation and localization stable for all resource kinds', () => {
     modelUsageResourceRoute('knowledge_base', 'kb/with slash'),
     { path: '/platform/settings', query: { section: 'knowledge', subsection: 'models' } },
   )
-  assert.equal(modelUsageBindingI18nKey('vlm_model'), 'modelSettings.usage.bindings.vlm_model')
+  assert.equal(modelUsageBindingI18nKey('generation_model_tier'), 'modelSettings.usage.bindings.generation_model_tier')
   assert.equal(modelUsageBindingI18nKey('future_binding'), 'modelSettings.usage.bindings.unknown')
 })
 
 test('maps knowledge-base bindings to the configuration section that owns them', () => {
   assert.equal(modelUsageKnowledgeBaseSection(['embedding_model']), 'models')
   assert.equal(modelUsageKnowledgeBaseSection(['summary_model']), 'models')
-  assert.equal(modelUsageKnowledgeBaseSection(['image_processing_model']), 'multimodal')
-  assert.equal(modelUsageKnowledgeBaseSection(['vlm_model']), 'multimodal')
+  assert.equal(modelUsageKnowledgeBaseSection(['generation_model_tier']), 'models')
+  assert.equal(modelUsageKnowledgeBaseSection(['generation_model_tier']), 'models')
   assert.equal(modelUsageKnowledgeBaseSection(['future_binding']), 'models')
-  assert.equal(modelUsageKnowledgeBaseSection(['summary_model', 'vlm_model']), 'models')
+  assert.equal(modelUsageKnowledgeBaseSection(['summary_model', 'generation_model_tier']), 'models')
 })
 
 test('model tier bindings stay attached to the unique knowledge settings', () => {

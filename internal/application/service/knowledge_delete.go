@@ -143,7 +143,7 @@ func (s *knowledgeService) DeleteKnowledge(ctx context.Context, id string) error
 	}
 
 	// Best-effort: purge any queued downstream tasks for this knowledge
-	// (multimodal / post-process / question / summary / context extract).
+	// associated with the active document or manual processing attempt.
 	// Worker checkpoints already drop them on the floor, but dequeuing
 	// here avoids waking workers just to no-op when the parse was still
 	// in flight at delete time. No-op in in-memory fixtures and on completed rows
@@ -168,6 +168,7 @@ func (s *knowledgeService) DeleteKnowledge(ctx context.Context, id string) error
 		imageInfoStrs = append(imageInfoStrs, ci.ImageInfo)
 	}
 	imageURLs := collectImageURLs(ctx, imageInfoStrs)
+	imageURLs = append(imageURLs, processedKnowledgeResources(knowledge)...)
 
 	wg := errgroup.Group{}
 	// Delete knowledge embeddings from PostgreSQL index.
@@ -358,6 +359,7 @@ func (s *knowledgeService) DeleteKnowledgeList(ctx context.Context, ids []string
 	kbImageURLs := make(map[string][]string) // kbID → []imageURL
 	for _, k := range knowledgeList {
 		knowledgeToKB[k.ID] = k.KnowledgeBaseID
+		kbImageURLs[k.KnowledgeBaseID] = append(kbImageURLs[k.KnowledgeBaseID], processedKnowledgeResources(k)...)
 		if intake, _ := k.IntakeMetadata(); intake != nil {
 			kbImageURLs[k.KnowledgeBaseID] = append(kbImageURLs[k.KnowledgeBaseID], intake.Images...)
 		}
@@ -569,4 +571,20 @@ func (s *knowledgeService) ProcessKnowledgeListDelete(ctx context.Context, t *as
 
 	logger.Infof(ctx, "Successfully deleted %d knowledge items", len(payload.KnowledgeIDs))
 	return nil
+}
+
+// processedKnowledgeResources includes body files and their images in normal deletion.
+func processedKnowledgeResources(k *types.Knowledge) []string {
+	var metadata struct {
+		Body   string   `json:"processed_body_path"`
+		Images []string `json:"processed_images"`
+	}
+	if len(k.Metadata) > 0 {
+		_ = json.Unmarshal(k.Metadata, &metadata)
+	}
+	refs := metadata.Images
+	if metadata.Body != "" {
+		refs = append(refs, metadata.Body)
+	}
+	return refs
 }

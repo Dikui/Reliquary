@@ -106,9 +106,4 @@ type ChunkService interface {
 	ListChunkByParentID(ctx context.Context, tenantID uint64, parentID string) ([]*types.Chunk, error)
 	// GetRepository gets the chunk repository
 	GetRepository() ChunkRepository
-	// DeleteGeneratedQuestion deletes a single generated question from a chunk by question ID
-	// This updates the chunk metadata and removes the corresponding vector index
-	DeleteGeneratedQuestion(ctx context.Context, chunkID string, questionID string) error
-	// UpsertGeneratedQuestion creates or updates a generated retrieval question.
-	UpsertGeneratedQuestion(ctx context.Context, chunkID string, questionID string, question string) (*types.GeneratedQuestion, error)
 }

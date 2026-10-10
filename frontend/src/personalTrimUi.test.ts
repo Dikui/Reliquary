@@ -67,34 +67,3 @@ test('compiled SSRF input styles reserve suffix space and keep tag close icons o
   const source = readFileSync(new URL('./views/system/SystemSettings.vue', import.meta.url), 'utf8')
   assert.match(source, /ssrf-whitelist-input"\s*excess-tags-display-type="break-line"\s*:tag-props="\{ maxWidth: '100%' \}"/)
 })
-
-test('actual generated question delete control renders for saved questions and excludes legacy questions', async () => {
-  const source = readFileSync(new URL('./components/doc-content.vue', import.meta.url), 'utf8')
-  const { descriptor } = parse(source)
-  let fragment = ''
-  function visit(node: RootNode | TemplateChildNode) {
-    if (node.type === NodeTypes.ELEMENT && node.tag === 't-popconfirm' && node.loc.source.includes('delete-question-btn')) fragment = node.loc.source
-    if (node.type === NodeTypes.ROOT || node.type === NodeTypes.ELEMENT) node.children.forEach(visit)
-  }
-  visit(parseDOM(descriptor.template!.content))
-  assert.ok(fragment)
-  const compiled = compileTemplate({ source: fragment, filename: 'question-control.vue', id: 'question-delete', ssr: true, ssrCssVars: [] })
-  assert.deepEqual(compiled.errors, [])
-  const code = ts.transpileModule(compiled.code, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
-  const module = { exports: {} as { ssrRender?: Function } }
-  new Function('require', 'module', 'exports', code)(require, module, module.exports)
-  for (const [id, visible] of [['question-a', true], ['legacy-question-a', false]] as const) {
-    const app = createSSRApp({
-      setup: () => ({ question: { id }, index: 0, chunk: { original: {} }, isDeleting: () => false, handleDeleteQuestion: () => {} }),
-      ssrRender: module.exports.ssrRender,
-    })
-    app.config.globalProperties.$t = (key: string) => key
-    const warnings: string[] = []
-    app.config.warnHandler = message => { warnings.push(message) }
-    const stub = defineComponent({ setup: (_, { slots }) => () => h('div', slots.default?.()) })
-    for (const name of ['t-popconfirm', 't-button', 't-icon']) app.component(name, stub)
-    const html = await renderToString(app)
-    assert.equal(html.includes('delete-question-btn'), visible, id)
-    assert.deepEqual(warnings, [], id)
-  }
-})

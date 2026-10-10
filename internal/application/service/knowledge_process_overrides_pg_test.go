@@ -133,14 +133,10 @@ func newProcessOverridesPGHarness(t *testing.T) *processOverridesPGHarness {
 }
 
 func processOverridesPGConfig() *types.KnowledgeProcessOverrides {
-	disabled := false
 	return &types.KnowledgeProcessOverrides{
 		ChunkingConfig: &types.ChunkingConfig{ChunkSize: 1240, ChunkOverlap: 120,
 			EnableParentChild: true, ParentChunkSize: 2480, ChildChunkSize: 400},
-		EnableMultimodel:         &disabled,
-		VLMConfig:                &types.VLMConfig{Enabled: false, DescriptionLanguage: "English", CustomInstructions: "Read image labels"},
-		QuestionGenerationConfig: &types.QuestionGenerationConfig{Enabled: true, QuestionCount: 7},
-		ParserEngineOverrides:    map[string]string{"mineru_parse_method": "ocr"},
+		ParserEngineOverrides: map[string]string{"mineru_parse_method": "ocr"},
 	}
 }
 
@@ -364,7 +360,7 @@ func TestProcessOverridesPGManualProcessingFailure(t *testing.T) {
 	want := processOverridesPGStoredConfig(t, k)
 	payload := types.ManualProcessPayload{TenantID: 1, KnowledgeID: k.ID, KnowledgeBaseID: "kb",
 		Content: "![unresolved image](https://example.org/image.png)"}
-	require.NoError(t, h.svc.ProcessManualUpdate(h.ctx, asynq.NewTask(types.TypeManualProcess,
+	require.Error(t, h.svc.ProcessManualUpdate(h.ctx, asynq.NewTask(types.TypeManualProcess,
 		[]byte(mustProcessOverridesPGJSON(t, payload)))))
 	stored := h.assertTimelineConfig(t, k.ID, want)
 	require.Equal(t, types.ParseStatusFailed, stored.ParseStatus)

@@ -30,9 +30,8 @@ test('formatContextWindow uses the default when unset', () => {
   assert.equal(formatContextWindow(128000), '128K')
 })
 
-test('modelHasContextWindow is chat and VLM only', () => {
+test('modelHasContextWindow is generation models only', () => {
   assert.equal(modelHasContextWindow('KnowledgeQA'), true)
-  assert.equal(modelHasContextWindow('VLLM'), true)
   assert.equal(modelHasContextWindow('chat'), true)
   assert.equal(modelHasContextWindow('Embedding'), false)
   assert.equal(modelHasContextWindow('Rerank'), false)

@@ -34,10 +34,7 @@ const (
 	// Model lifecycle errors (2300-2399).
 	// The dedicated code lets clients render structured usage details without
 	// parsing the backwards-compatible English error message.
-	ErrModelInUse                      ErrorCode = 2300
-	ErrImageProcessingModelUnsupported ErrorCode = 2301
-	ErrImageProcessingModelNotFound    ErrorCode = 2302
-	ErrImageProcessingModelUnavailable ErrorCode = 2303
+	ErrModelInUse ErrorCode = 2300
 
 	// Add more error codes here
 )

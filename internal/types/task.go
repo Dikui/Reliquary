@@ -5,7 +5,6 @@ package types
 // between pools instead of being only a weighted dequeue preference.
 const (
 	WorkerPoolCore        = "core"
-	WorkerPoolPostProcess = "postprocess"
 	WorkerPoolEnrichment  = "enrichment"
 	WorkerPoolMaintenance = "maintenance"
 	WorkerPoolShared      = "shared"
@@ -14,12 +13,10 @@ const (
 	// shared pool may consume core and enrichment queues, so idle capacity in
 	// either stage can be borrowed without sacrificing the dedicated minimums.
 	DefaultCoreWorkerConcurrency        = 8
-	DefaultPostProcessWorkerConcurrency = 2
 	DefaultEnrichmentWorkerConcurrency  = 12
 	DefaultMaintenanceWorkerConcurrency = 4
 	DefaultSharedWorkerConcurrency      = 6
-	DefaultUpstreamWorkerConcurrency    = DefaultCoreWorkerConcurrency +
-		DefaultPostProcessWorkerConcurrency + DefaultEnrichmentWorkerConcurrency +
+	DefaultUpstreamWorkerConcurrency    = DefaultCoreWorkerConcurrency + DefaultEnrichmentWorkerConcurrency +
 		DefaultMaintenanceWorkerConcurrency + DefaultSharedWorkerConcurrency
 )
 
@@ -28,11 +25,7 @@ const (
 // rolling deployment. New code uses the business-semantic constant.
 const (
 	QueueDefault     = "default"
-	QueuePostProcess = "postprocess"
-	QueueSummary     = "summary"
-	QueueMultimodal  = "multimodal"
 	QueueEntity      = "entity"
-	QueueQuestion    = "question"
 	QueueSync        = "sync"
 	QueueMaintenance = "low"
 )
@@ -53,15 +46,7 @@ var queueDefinitions = []QueueDefinition{
 	{Name: QueueDefault, Pool: WorkerPoolCore, Weight: 1, SharedWeight: 3, TaskTypes: []string{
 		TypeDocumentProcess, TypeManualProcess,
 	}},
-	{Name: QueuePostProcess, Pool: WorkerPoolPostProcess, Weight: 1, TaskTypes: []string{
-		TypeKnowledgePostProcess,
-	}},
-	{Name: QueueSummary, Pool: WorkerPoolEnrichment, Weight: 2, SharedWeight: 2, TaskTypes: []string{
-		TypeSummaryGeneration, TypeDataTableSummary,
-	}},
-	{Name: QueueMultimodal, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeImageMultimodal}},
 	{Name: QueueEntity, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeEntityNameEmbeddingRebuild}},
-	{Name: QueueQuestion, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeQuestionGeneration}},
 	{Name: QueueSync, Pool: WorkerPoolMaintenance, Weight: 2, TaskTypes: []string{TypeDataSourceSync}},
 	{Name: QueueMaintenance, Pool: WorkerPoolMaintenance, Weight: 1, TaskTypes: []string{
 		TypeKnowledgeListDelete, TypeKnowledgeListReparse,
@@ -105,9 +90,8 @@ func QueueWeightsForPool(pool string) map[string]int {
 }
 
 // QueueWeightsForSharedPool returns the core/enrichment queues eligible for
-// elastic capacity. Post-process and maintenance are deliberately excluded:
-// post-process needs a small latency guarantee, while long maintenance tasks
-// must not pin burst capacity intended for the user-facing pipeline.
+// elastic capacity. Long maintenance tasks are excluded so they cannot pin
+// burst capacity intended for the user-facing pipeline.
 func QueueWeightsForSharedPool() map[string]int {
 	weights := make(map[string]int)
 	for _, definition := range queueDefinitions {
@@ -122,7 +106,6 @@ func QueueWeightsForSharedPool() map[string]int {
 // Unlike the old ratio allocator, each field is independently configurable.
 type WorkerPoolConcurrency struct {
 	Core        int
-	PostProcess int
 	Enrichment  int
 	Maintenance int
 	Shared      int
@@ -131,7 +114,6 @@ type WorkerPoolConcurrency struct {
 func DefaultWorkerPoolConcurrency() WorkerPoolConcurrency {
 	return WorkerPoolConcurrency{
 		Core:        DefaultCoreWorkerConcurrency,
-		PostProcess: DefaultPostProcessWorkerConcurrency,
 		Enrichment:  DefaultEnrichmentWorkerConcurrency,
 		Maintenance: DefaultMaintenanceWorkerConcurrency,
 		Shared:      DefaultSharedWorkerConcurrency,
@@ -155,7 +137,6 @@ func ResolveWorkerPoolConcurrency(read func(key, env string, fallback int) int) 
 		return value
 	}
 	allocation.Core = positive("asynq.core_concurrency", "RELIQUARY_ASYNQ_CORE_CONCURRENCY", allocation.Core)
-	allocation.PostProcess = positive("asynq.postprocess_concurrency", "RELIQUARY_ASYNQ_POSTPROCESS_CONCURRENCY", allocation.PostProcess)
 	allocation.Enrichment = positive("asynq.enrichment_concurrency", "RELIQUARY_ASYNQ_ENRICHMENT_CONCURRENCY", allocation.Enrichment)
 	allocation.Maintenance = positive("asynq.maintenance_concurrency", "RELIQUARY_ASYNQ_MAINTENANCE_CONCURRENCY", allocation.Maintenance)
 	allocation.Shared = positive("asynq.shared_concurrency", "RELIQUARY_ASYNQ_SHARED_CONCURRENCY", allocation.Shared)
@@ -163,7 +144,7 @@ func ResolveWorkerPoolConcurrency(read func(key, env string, fallback int) int) 
 }
 
 func (c WorkerPoolConcurrency) UpstreamTotal() int {
-	return c.Core + c.PostProcess + c.Enrichment + c.Maintenance + c.Shared
+	return c.Core + c.Enrichment + c.Maintenance + c.Shared
 }
 
 // QueueStat is a read-only depth snapshot of a single asynq queue, used
@@ -211,13 +192,8 @@ type WorkerServerStat struct {
 
 const (
 	TypeDocumentProcess            = "document:process"       // 文档处理任务
-	TypeQuestionGeneration         = "question:generation"    // 问题生成任务
-	TypeSummaryGeneration          = "summary:generation"     // 摘要生成任务
 	TypeKnowledgeListDelete        = "knowledge:list_delete"  // 批量删除知识任务
 	TypeKnowledgeListReparse       = "knowledge:list_reparse" // 批量重解析知识任务
-	TypeDataTableSummary           = "datatable:summary"      // 表格摘要任务
-	TypeImageMultimodal            = "image:multimodal"       // 图片多模态处理任务（OCR + VLM Caption）
-	TypeKnowledgePostProcess       = "knowledge:post_process" // 知识后处理任务（统一调度）
 	TypeEntityNameEmbeddingRebuild = "entity:name_embedding_rebuild"
 	TypeManualProcess              = "manual:process"  // 手工知识更新任务（cleanup + 重新索引）
 	TypeDataSourceSync             = "datasource:sync" // 数据源同步任务
@@ -225,85 +201,23 @@ const (
 
 // DocumentProcessPayload represents the document process task payload
 type DocumentProcessPayload struct {
-	RequestId                string   `json:"request_id"`
-	TenantID                 uint64   `json:"tenant_id"`
-	KnowledgeID              string   `json:"knowledge_id"`
-	KnowledgeBaseID          string   `json:"knowledge_base_id"`
-	FilePath                 string   `json:"file_path,omitempty"` // 文件路径（文件导入时使用）
-	FileName                 string   `json:"file_name,omitempty"` // 文件名（文件导入时使用）
-	FileType                 string   `json:"file_type,omitempty"` // 文件类型（文件导入时使用）
-	URL                      string   `json:"url,omitempty"`       // URL（URL导入时使用）
-	FileURL                  string   `json:"file_url,omitempty"`  // 文件资源链接（file_url导入时使用）
-	Passages                 []string `json:"passages,omitempty"`  // 文本段落（文本导入时使用）
-	EnableMultimodel         bool     `json:"enable_multimodel"`
-	EnableQuestionGeneration bool     `json:"enable_question_generation"` // 是否启用问题生成
-	QuestionCount            int      `json:"question_count,omitempty"`   // 每个chunk生成的问题数量
-	Language                 string   `json:"language,omitempty"`         // Request locale for {{language}} in prompt templates
+	RequestId       string   `json:"request_id"`
+	TenantID        uint64   `json:"tenant_id"`
+	KnowledgeID     string   `json:"knowledge_id"`
+	KnowledgeBaseID string   `json:"knowledge_base_id"`
+	FilePath        string   `json:"file_path,omitempty"` // 文件路径（文件导入时使用）
+	FileName        string   `json:"file_name,omitempty"` // 文件名（文件导入时使用）
+	FileType        string   `json:"file_type,omitempty"` // 文件类型（文件导入时使用）
+	URL             string   `json:"url,omitempty"`       // URL（URL导入时使用）
+	FileURL         string   `json:"file_url,omitempty"`  // 文件资源链接（file_url导入时使用）
+	Passages        []string `json:"passages,omitempty"`  // 文本段落（文本导入时使用）
+	Language        string   `json:"language,omitempty"`  // Request locale for {{language}} in prompt templates
 	// Attempt is the per-knowledge attempt number this task belongs to.
 	// Set on enqueue (initial parse → attempt 1; reparse → max+1) so
 	// every span recorded by this task lands on the right attempt
 	// branch. Asynq retries within an attempt keep the same value so
 	// retried spans overwrite the previous attempt's row rather than
 	// fan out into a new attempt for every retry.
-	Attempt int `json:"attempt,omitempty"`
-}
-
-// QuestionGenerationPayload represents the question generation task payload
-type QuestionGenerationPayload struct {
-	TenantID        uint64 `json:"tenant_id"`
-	KnowledgeBaseID string `json:"knowledge_base_id"`
-	KnowledgeID     string `json:"knowledge_id"`
-	QuestionCount   int    `json:"question_count"`
-	// Language is the request locale (e.g. zh-CN, en-US) when the task was enqueued, used for {{language}} / {{lang}} in templates.
-	Language string `json:"language,omitempty"`
-	// Attempt links this task to the parent parse attempt so the worker
-	// can record a postprocess.question subspan under the right attempt's
-	// postprocess stage. 0 means "skip span recording" (legacy in-flight
-	// tasks queued before this field shipped, or callers without a
-	// tracker).
-	Attempt int `json:"attempt,omitempty"`
-	// ChunkIDs switches the handler into batched fan-out mode: the task
-	// generates questions for this ordered window of text chunks only.
-	// Batching (rather than one task per chunk) keeps the task count
-	// bounded for very large documents, while still giving each batch
-	// independent retry / cancellation / tracing and letting the worker
-	// do a single embedding BatchIndex per batch. Empty means the legacy
-	// whole-knowledge mode (kept for in-flight tasks queued before fan-out
-	// shipped), where the handler iterates all text chunks itself.
-	// We carry only chunk ids
-	// (not their content) so the payload stays small and the worker reads
-	// fresh content at run time.
-	ChunkIDs []string `json:"chunk_ids,omitempty"`
-	// ChunkID is the single-chunk variant of ChunkIDs, retained only so
-	// tasks enqueued by an interim per-chunk build still run (treated as a
-	// one-element batch). New enqueues use ChunkIDs.
-	ChunkID string `json:"chunk_id,omitempty"`
-	// BatchIndex is the 0-based ordinal of this batch inside the parent
-	// knowledge's text-chunk set, used as the subspan name suffix
-	// ("postprocess.question.batch[3]") so the timeline preserves order.
-	BatchIndex int `json:"batch_index,omitempty"`
-	// PrevChunkID / NextChunkID are the text chunks (by StartAt) just
-	// outside this batch window, computed at enqueue time so the worker can
-	// rebuild the same surrounding context the legacy whole-knowledge loop
-	// used at the batch boundaries, without re-listing every chunk of the
-	// knowledge. Empty when the batch is at a document boundary.
-	PrevChunkID string `json:"prev_chunk_id,omitempty"`
-	NextChunkID string `json:"next_chunk_id,omitempty"`
-}
-
-// SummaryGenerationPayload represents the summary generation task payload
-type SummaryGenerationPayload struct {
-	TenantID        uint64 `json:"tenant_id"`
-	KnowledgeBaseID string `json:"knowledge_base_id"`
-	KnowledgeID     string `json:"knowledge_id"`
-	Language        string `json:"language,omitempty"`
-	// Refresh marks an independently queued refresh after document metadata updates.
-	// Refresh tasks are not part of the parse attempt's pending
-	// subtask counter and update existing summary chunks in place.
-	Refresh bool `json:"refresh,omitempty"`
-	// Attempt links this task to the parent parse attempt so the worker
-	// can record a postprocess.summary subspan under the right attempt's
-	// postprocess stage. See QuestionGenerationPayload.Attempt notes.
 	Attempt int `json:"attempt,omitempty"`
 }
 
@@ -331,35 +245,4 @@ type ManualProcessPayload struct {
 	KnowledgeBaseID string `json:"knowledge_base_id"`
 	Content         string `json:"content"`      // cleaned markdown content
 	NeedCleanup     bool   `json:"need_cleanup"` // true for update, false for create
-}
-
-// ImageMultimodalPayload represents the image multimodal processing task payload.
-type ImageMultimodalPayload struct {
-	TenantID        uint64 `json:"tenant_id"`
-	KnowledgeID     string `json:"knowledge_id"`
-	KnowledgeBaseID string `json:"knowledge_base_id"`
-	ChunkID         string `json:"chunk_id"`         // parent text chunk
-	ImageURL        string `json:"image_url"`        // stored image reference (resource:// or local://)
-	ImageLocalPath  string `json:"image_local_path"` // deprecated: kept for backward compat with in-flight tasks
-	EnableOCR       bool   `json:"enable_ocr"`
-	EnableCaption   bool   `json:"enable_caption"`
-	Language        string `json:"language,omitempty"`          // Request locale for {{language}} in prompt templates
-	ImageSourceType string `json:"image_source_type,omitempty"` // Source type of the image (e.g., "scanned_pdf")
-	// Attempt links this image task back to the parent ProcessDocument
-	// attempt so the worker can record its image[i] subspan under the
-	// same attempt's multimodal stage span.
-	Attempt int `json:"attempt,omitempty"`
-	// ImageIndex is the 0-based ordinal of this image inside the
-	// parent's image set. Used as the subspan name suffix
-	// ("multimodal.image[3]") so the timeline preserves order.
-	ImageIndex int `json:"image_index,omitempty"`
-}
-
-// KnowledgePostProcessPayload represents the knowledge post process task payload.
-type KnowledgePostProcessPayload struct {
-	TenantID        uint64 `json:"tenant_id"`
-	KnowledgeID     string `json:"knowledge_id"`
-	KnowledgeBaseID string `json:"knowledge_base_id"`
-	Language        string `json:"language,omitempty"` // Request locale for {{language}} in prompt templates
-	Attempt         int    `json:"attempt,omitempty"`
 }

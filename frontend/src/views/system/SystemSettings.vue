@@ -360,7 +360,6 @@ const SETTINGS_SECTION_KEYS: Record<Exclude<SettingsSection, 'other'>, readonly 
   runtime: [
     'asynq.core_concurrency',
     'asynq.enrichment_concurrency',
-    'asynq.postprocess_concurrency',
     'asynq.maintenance_concurrency',
     'asynq.shared_concurrency',
     'model.max_concurrency',

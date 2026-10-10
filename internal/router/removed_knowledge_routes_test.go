@@ -12,6 +12,12 @@ func TestRemovedKnowledgeResourcesReturnNotFound(t *testing.T) {
 	t.Setenv("LOCAL_STORAGE_BASE_DIR", t.TempDir())
 	f.router = NewRouter(f.params)
 	cases := []struct{ method, path string }{
+		{http.MethodPost, "/api/v1/knowledge/article/regenerate-summary"},
+		{http.MethodPut, "/api/v1/chunks/by-id/chunk/questions"},
+		{http.MethodDelete, "/api/v1/chunks/by-id/chunk/questions"},
+		{http.MethodPost, "/api/v1/chunks/by-id/chunk/questions/regenerate"},
+		{http.MethodPost, "/api/v1/initialization/multimodal/test"},
+
 		{http.MethodPost, "/api/v1/knowledge-context/query"},
 		{http.MethodPost, "/api/v1/knowledge-context/facts/fact/correction"},
 		{http.MethodGet, "/api/v1/knowledge-context/events"},

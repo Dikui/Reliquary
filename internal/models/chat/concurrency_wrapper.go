@@ -18,7 +18,7 @@ import (
 // untouched (see types.IsBackgroundTask), so a document-ingestion storm cannot
 // exhaust the provider yet user-facing latency is never gated behind the
 // semaphore. The governor singleton itself lives in the limiter package so chat
-// and vlm share the same limiter and per-model budget.
+// uses the same limiter and per-model budget.
 
 // concurrencyChat throttles background LLM calls through a per-model
 // distributed semaphore. It is the outermost wrapper so the slot is held only

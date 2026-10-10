@@ -131,43 +131,6 @@ func calculateStr(strList ...string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func (s *knowledgeService) getVLMConfig(ctx context.Context, kb *types.KnowledgeBase) (*types.DocParserVLMConfig, error) {
-	if kb == nil {
-		return nil, nil
-	}
-	// 兼容老版本：直接使用 ModelName 和 BaseURL
-	if kb.VLMConfig.ModelName != "" && kb.VLMConfig.BaseURL != "" {
-		return &types.DocParserVLMConfig{
-			ModelName:     kb.VLMConfig.ModelName,
-			BaseURL:       kb.VLMConfig.BaseURL,
-			APIKey:        kb.VLMConfig.APIKey,
-			InterfaceType: kb.VLMConfig.InterfaceType,
-		}, nil
-	}
-
-	// 新版本：未启用或无模型ID时返回nil
-	if !kb.VLMConfig.Enabled || kb.VLMConfig.ModelID == "" {
-		return nil, nil
-	}
-
-	model, err := s.modelService.GetModelByID(ctx, kb.VLMConfig.ModelID)
-	if err != nil {
-		return nil, err
-	}
-
-	interfaceType := model.Parameters.InterfaceType
-	if interfaceType == "" {
-		interfaceType = "openai"
-	}
-
-	return &types.DocParserVLMConfig{
-		ModelName:     model.Name,
-		BaseURL:       model.Parameters.BaseURL,
-		APIKey:        model.Parameters.APIKey,
-		InterfaceType: interfaceType,
-	}, nil
-}
-
 func (s *knowledgeService) resolveFileService(ctx context.Context, kb *types.KnowledgeBase) interfaces.FileService {
 	return s.fileSvc
 }

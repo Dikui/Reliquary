@@ -8,6 +8,7 @@ interface KnowledgeItem {
   title?: string;
   type?: string;
   parse_status?: string;
+  processing_mode?: string;
 }
 
 const props = defineProps<{
@@ -39,7 +40,7 @@ const fileName = computed(() => props.item.file_name || props.item.title || prop
 <template>
   <!-- 下载原始文档 -->
   <div
-    v-if="(item.type === 'file' || item.type === 'manual')"
+    v-if="item.processing_mode !== 'summary_only' && (item.type === 'file' || item.type === 'manual')"
     class="doc-action-menu-item"
     @click.stop="emit('download')"
   >
@@ -48,7 +49,7 @@ const fileName = computed(() => props.item.file_name || props.item.title || prop
   </div>
 
   <!-- 编辑文档 -->
-  <div v-if="item.type === 'manual'" class="doc-action-menu-item" @click.stop="emit('edit')">
+  <div v-if="item.type === 'manual' && item.processing_mode !== 'summary_only'" class="doc-action-menu-item" @click.stop="emit('edit')">
     <t-icon class="icon" name="edit" />
     <span>{{ $t('knowledgeBase.editDocument') }}</span>
   </div>

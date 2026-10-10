@@ -195,6 +195,7 @@ CREATE TABLE public.data_sources (
     knowledge_base_id character varying(36) NOT NULL,
     name character varying(255) NOT NULL,
     type character varying(50) NOT NULL,
+    default_content_type character varying(16) CHECK (default_content_type IS NULL OR default_content_type IN ('', 'event', 'opinion', 'research', 'tutorial', 'case', 'reference')),
     config jsonb,
     sync_schedule character varying(100),
     sync_mode character varying(20) DEFAULT 'incremental'::character varying,
@@ -262,15 +263,12 @@ CREATE TABLE public.knowledge_bases (
     description text,
     tenant_id integer NOT NULL,
     chunking_config jsonb DEFAULT '{"chunk_size": 512, "chunk_overlap": 50, "split_markers": ["\n\n", "\n", "。"], "keep_separator": true}'::jsonb NOT NULL,
-    image_processing_config jsonb DEFAULT '{"model_id": "", "enable_multimodal": false}'::jsonb NOT NULL,
     embedding_model_id character varying(64) NOT NULL,
     summary_model_id character varying(64) NOT NULL,
-    vlm_config jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     deleted_at timestamp with time zone,
     type character varying(32) DEFAULT 'document'::character varying NOT NULL CHECK (type = 'document'),
-    question_generation_config jsonb,
     indexing_strategy jsonb,
     creator_id character varying(36)
 );
@@ -422,11 +420,15 @@ ALTER SEQUENCE public.knowledge_processing_spans_id_seq OWNED BY public.knowledg
 
 CREATE TABLE public.knowledges (
     id character varying(36) DEFAULT public.uuid_generate_v4() NOT NULL,
+    search_seq_id bigserial NOT NULL,
     tenant_id integer NOT NULL,
     knowledge_base_id character varying(36) NOT NULL,
     type character varying(50) NOT NULL,
     title character varying(255) NOT NULL,
     description text,
+    content_type character varying(16) CHECK (content_type IS NULL OR content_type IN ('', 'event', 'opinion', 'research', 'tutorial', 'case', 'reference')),
+    processing_mode character varying(16) DEFAULT 'full' NOT NULL CHECK (processing_mode IN ('full', 'summary_only')),
+    structured_summary jsonb,
     source character varying(2048) NOT NULL,
     parse_status character varying(50) DEFAULT 'unprocessed'::character varying NOT NULL,
     enable_status character varying(50) DEFAULT 'enabled'::character varying NOT NULL,
@@ -1230,6 +1232,15 @@ CREATE INDEX chunks_search_idx ON public.chunks USING bm25
         "metadata": {"tokenizer": {"type": "chinese_lindera"}}
     }');
 
+-- Article summaries remain searchable without a stored body chunk or vector.
+CREATE UNIQUE INDEX idx_knowledges_search_seq_id ON public.knowledges (search_seq_id);
+CREATE INDEX knowledges_summary_search_idx ON public.knowledges USING bm25
+    (search_seq_id, tenant_id, knowledge_base_id, id, deleted_at, parse_status, enable_status, title, description)
+    WITH (key_field=search_seq_id, text_fields='{
+        "title": {"tokenizer": {"type": "chinese_lindera"}},
+        "description": {"tokenizer": {"type": "chinese_lindera"}}
+    }');
+
 
 --
 -- Name: idx_chunks_tenant_kg; Type: INDEX; Schema: public
@@ -1672,6 +1683,27 @@ CREATE TABLE public.knowledge_entities (
     FOREIGN KEY (tenant_id, entity_id) REFERENCES public.entities (tenant_id, id) ON DELETE CASCADE
 );
 CREATE INDEX idx_knowledge_entities_entity ON public.knowledge_entities (tenant_id, entity_id, knowledge_id);
+
+CREATE TABLE public.topics (
+    id character varying(36) NOT NULL PRIMARY KEY,
+    tenant_id bigint NOT NULL,
+    name character varying(255) NOT NULL,
+    description text DEFAULT '' NOT NULL,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT uq_topics_tenant_id UNIQUE (tenant_id, id),
+    CONSTRAINT uq_topics_tenant_name UNIQUE (tenant_id, name)
+);
+CREATE TABLE public.knowledge_topics (
+    tenant_id bigint NOT NULL,
+    knowledge_id character varying(36) NOT NULL,
+    topic_id character varying(36) NOT NULL,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT uq_knowledge_topics_pair UNIQUE (knowledge_id, topic_id),
+    FOREIGN KEY (tenant_id, knowledge_id) REFERENCES public.knowledges (tenant_id, id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id, topic_id) REFERENCES public.topics (tenant_id, id) ON DELETE CASCADE
+);
+CREATE INDEX idx_knowledge_topics_topic ON public.knowledge_topics (tenant_id, topic_id, knowledge_id);
 
 
 CREATE UNIQUE INDEX idx_knowledge_bases_active_tenant ON public.knowledge_bases (tenant_id) WHERE deleted_at IS NULL;

@@ -93,7 +93,6 @@ const PARSER_ENGINE_NAMES = [
 /** Worker pools / queues use dynamic te() paths in RuntimeQueues.vue; keep in sync with internal/types/task.go. */
 const RUNTIME_WORKER_POOL_NAMES = [
   'core',
-  'postprocess',
   'enrichment',
   'maintenance',
   'shared',
@@ -101,23 +100,14 @@ const RUNTIME_WORKER_POOL_NAMES = [
 
 const RUNTIME_QUEUE_NAMES = [
   'default',
-  'postprocess',
-  'summary',
   'sync',
   'low',
-  'multimodal',
   'entity',
-  'question',
 ] as const
 
 const RUNTIME_TASK_TYPE_KEYS = [
   'documentProcess',
   'manualProcess',
-  'postProcess',
-  'summary',
-  'tableSummary',
-  'question',
-  'multimodal',
   'sync',
   'batchReparse',
   'batchDelete',

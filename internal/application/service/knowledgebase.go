@@ -195,19 +195,6 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 			}
 			kb.ChunkingConfig = *config.ChunkingConfig
 		}
-		if config.ImageProcessingConfig != nil {
-			kb.ImageProcessingConfig = *config.ImageProcessingConfig
-		}
-		if config.VLMConfig != nil {
-			if err := ValidateVLMConfig(ctx, s.modelService, *config.VLMConfig); err != nil {
-				return nil, err
-			}
-			kb.VLMConfig = *config.VLMConfig
-		}
-		if config.QuestionGenerationConfig != nil {
-			kb.QuestionGenerationConfig = config.QuestionGenerationConfig
-		}
-
 		// Update the enabled indexing strategy.
 		if config.IndexingStrategy != nil {
 			if !config.IndexingStrategy.HasAnyIndexing() {

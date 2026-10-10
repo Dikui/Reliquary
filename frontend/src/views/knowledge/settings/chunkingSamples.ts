@@ -132,7 +132,7 @@ docker pull docker.m.daocloud.io/reliquary-ui:v0.5.0
 全局默认在 \`config/config.yaml\` 的 \`knowledge.chunking\` 段；单个知识库可在 UI 的"分块设置"页覆盖。修改后仅对新上传文档生效。
 
 ### Q8: 如何启用多模态？
-在知识库的"多模态配置"中开启，并选择一个 VLM 模型（如 GPT-4o、Qwen2.5-VL）。开启后，文档中的图片会被 VLM 描述并参与检索。
+在知识库设置中选择支持视觉的生成模型。文章处理时会把正文中的图片一同发送给模型，以生成分类、摘要和实体。
 
 ### Q9: 怎么把日志改成 JSON 格式？
 设置 \`LOG_FORMAT=json LOG_LEVEL=info\`，便于接入 ELK / Loki 等日志栈。

@@ -81,6 +81,7 @@ function createEnvironment(locale = 'zh-CN') {
     '@/stores/editorResources': { useEditorResourcesStore: () => ({ parserEngines: [] }) },
     '@/stores/uploadConfirm': { useUploadConfirmStore: () => ({ open: async () => ({ manual: { sourceInfo: { publisher: 'Publisher A' } } }) }) },
     '@/utils/security': { sanitizeHTML: (value: string) => value, safeMarkdownToHTML: (value: string) => value },
+    '@/types/knowledgeClassification': { CONTENT_TYPES: ['event', 'opinion', 'research', 'tutorial', 'case', 'reference'] },
     '@/utils/knowledgeDuplicate': duplicate,
     '../utils/knowledgeDuplicate': duplicate,
     '../utils/index': { formatStringDate: (value: Date) => value.toISOString(), kbFileTypeVerification: () => false },

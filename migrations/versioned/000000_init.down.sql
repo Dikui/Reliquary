@@ -6,6 +6,8 @@ BEGIN;
 
 
 DROP TABLE IF EXISTS public.knowledge_repost_sources;
+DROP TABLE IF EXISTS public.knowledge_topics;
+DROP TABLE IF EXISTS public.topics;
 DROP TABLE IF EXISTS public.knowledge_entities;
 DROP TABLE IF EXISTS public.entity_merge_records;
 ALTER TABLE IF EXISTS public.knowledges DROP CONSTRAINT IF EXISTS uq_knowledges_tenant_id;

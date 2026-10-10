@@ -3,15 +3,16 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { formatFileSize, getFileIcon } from '@/utils/files';
 import DocumentActionMenu from './DocumentActionMenu.vue';
+import KnowledgeClassification from '@/components/KnowledgeClassification.vue';
+import type { ClassifiedKnowledge } from '@/types/knowledgeClassification';
 
-interface KnowledgeItem {
+interface KnowledgeItem extends ClassifiedKnowledge {
   id: string;
   file_name: string;
   file_type?: string;
   file_size?: number | string;
   type?: string;
   parse_status?: string;
-  summary_status?: string;
   updated_at?: string;
   source?: string;
   description?: string;
@@ -28,6 +29,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'open', item: KnowledgeItem): void;
+  (e: 'open-entity', id: string): void;
   (e: 'toggle-row', id: string, checked: boolean, shiftKey: boolean): void;
   (e: 'toggle-all', checked: boolean): void;
   (e: 'action', action: 'download' | 'edit' | 'reparse' | 'cancel-parse' | 'delete' | 'view-trace' | 'batch-manage', item: KnowledgeItem): void;
@@ -66,18 +68,7 @@ const computeStatus = (item: KnowledgeItem): StatusInfo => {
   if (item.parse_status === 'pending' || item.parse_status === 'processing') {
     return { label: t('knowledgeBase.statusProcessing'), theme: 'primary', icon: 'loading', spin: true };
   }
-  // finalizing = primary parse done, enrichment subtasks still running.
-  // While in this phase, prefer the specific "summary generating" copy
-  // when summary is what's actually outstanding (preserves the old UX
-  // where this label was tied to completed+summary_pending). Otherwise
-  // fall back to the generic "finalizing" label — covers question gen
-  // and context extract, which the user historically had no visibility on.
-  if (item.parse_status === 'finalizing') {
-    if (item.summary_status === 'pending' || item.summary_status === 'processing') {
-      return { label: t('knowledgeBase.generatingSummary'), theme: 'primary', icon: 'loading', spin: true };
-    }
-    return { label: t('knowledgeBase.statusFinalizing'), theme: 'primary', icon: 'loading', spin: true };
-  }
+  if (item.parse_status === 'finalizing') return { label: t('knowledgeBase.statusFinalizing'), theme: 'primary', icon: 'loading', spin: true };
   if (item.parse_status === 'failed') {
     return { label: t('knowledgeBase.statusFailed'), theme: 'danger', icon: 'close-circle' };
   }
@@ -89,15 +80,6 @@ const computeStatus = (item: KnowledgeItem): StatusInfo => {
   }
   if (item.parse_status === 'rejected') {
     return { label: t('knowledgeBase.intakeWaiting'), theme: 'warning' };
-  }
-  // Legacy completed+summary_pending path: kept as a defensive fallback
-  // for rows that bypassed finalizing (no enrichment configured, or
-  // upgraded mid-flight from a pre-finalizing build).
-  if (
-    item.parse_status === 'completed' &&
-    (item.summary_status === 'pending' || item.summary_status === 'processing')
-  ) {
-    return { label: t('knowledgeBase.generatingSummary'), theme: 'primary', icon: 'loading', spin: true };
   }
   if (item.parse_status === 'completed') {
     return { label: t('knowledgeBase.statusCompleted'), theme: 'success' };
@@ -200,8 +182,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
           <div class="row-file-text">
             <span class="row-file-name" :title="item.file_name">{{ item.file_name }}</span>
 
-            <span v-if="item.description" class="row-file-desc" :title="item.description">{{ item.description }}</span>
-            <span v-else-if="item.summary_status === 'skipped'" class="row-file-desc">{{ $t('knowledgeBase.summarySkippedNoText') }}</span>
+            <KnowledgeClassification :knowledge="item" compact @open-entity="emit('open-entity', $event)" />
           </div>
         </div>
 

@@ -29,6 +29,7 @@ Reliquary serves a single user collecting source material and maintaining entity
 | CRUD | Knowledge base editor, entity API and existing document detail | Entity profiles and knowledge base management | Entity merge refreshes the owning list | Entity lifecycle and editor tests |
 | Duplicate intake | KnowledgeDuplicateNotice and useKnowledgeDuplicates | Intake API 409 with optional match_method | Manual, URL and file intake | Actual SFC and hook regression tests |
 | Repost sources | RepostSources | Knowledge detail API | Document preview | Shared component and full SFC regression tests |
+| Article classification | KnowledgeClassification | Article content_type, processing_mode, structured_summary, entities and topics | Compact list and complete detail | Actual SFC render, link safety and locale tests |
 
 ## Flow ledger
 
@@ -55,6 +56,8 @@ Settings content owns vertical scrolling. Long forms keep their natural height. 
 The settings-content container stacks rows at 720px or less. Shared settings-layout.less owns that breakpoint. Existing rules below 640px remain in place.
 
 Document details fill the viewport at widths of 720px or less. Desktop drawer width remains the user's preference. Narrow details hide the desktop resize handle. Long source links wrap; code and tables may keep bounded local scrolling.
+
+Article content types filter the server list and clear hidden selections. Articles saved as a summary and link show their original link, structured summary, entities and topics; their detail view omits body preview and file download. Selecting an article entity opens its profile in the existing entity workbench. Reprocess queues the complete article processing call and polls parse_status while active, replacing the displayed classification, summary and relations on completion. Failed reprocessing keeps the readable server reason visible and allows another attempt. RSS defaults are a classification hint with six content types and an explicit unspecified option.
 
 Source lists show publisher, original URL, publication time or a missing marker, and matching method. URLs use the shared absolute HTTP(S) URL helper; unsafe values remain escaped text. Opening a different document clears old source data and ignores earlier responses.
 

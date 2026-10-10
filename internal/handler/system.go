@@ -191,7 +191,6 @@ func (h *SystemHandler) getKeywordIndexEngine() string {
 func aggregateRuntimeWorkerPools(pools []RuntimeWorkerPool, servers []types.WorkerServerStat) {
 	queueConfigs := map[string]map[string]int{
 		types.WorkerPoolCore:        types.QueueWeightsForPool(types.WorkerPoolCore),
-		types.WorkerPoolPostProcess: types.QueueWeightsForPool(types.WorkerPoolPostProcess),
 		types.WorkerPoolEnrichment:  types.QueueWeightsForPool(types.WorkerPoolEnrichment),
 		types.WorkerPoolMaintenance: types.QueueWeightsForPool(types.WorkerPoolMaintenance),
 		types.WorkerPoolShared:      types.QueueWeightsForSharedPool(),
@@ -258,7 +257,6 @@ func (h *SystemHandler) GetRuntimeQueues(c *gin.Context) {
 		ParseConcurrency:    allocation.UpstreamTotal(),
 		Pools: []RuntimeWorkerPool{
 			{Name: types.WorkerPoolCore, Concurrency: allocation.Core, QueueCount: queueCounts[types.WorkerPoolCore]},
-			{Name: types.WorkerPoolPostProcess, Concurrency: allocation.PostProcess, QueueCount: queueCounts[types.WorkerPoolPostProcess]},
 			{Name: types.WorkerPoolEnrichment, Concurrency: allocation.Enrichment, QueueCount: queueCounts[types.WorkerPoolEnrichment]},
 			{Name: types.WorkerPoolMaintenance, Concurrency: allocation.Maintenance, QueueCount: queueCounts[types.WorkerPoolMaintenance]},
 			{Name: types.WorkerPoolShared, Concurrency: allocation.Shared, QueueCount: len(types.QueueWeightsForSharedPool())},

@@ -45,7 +45,6 @@ func RegisterInitializationRoutes(r *gin.RouterGroup, handler *handler.Initializ
 	r.Handle(http.MethodPost, "/initialization/remote/check", handler.CheckRemoteModel)
 	r.Handle(http.MethodPost, "/initialization/embedding/test", handler.TestEmbeddingModel)
 	r.Handle(http.MethodPost, "/initialization/rerank/check", handler.CheckRerankModel)
-	r.Handle(http.MethodPost, "/initialization/multimodal/test", handler.TestMultimodalFunction)
 
 }
 

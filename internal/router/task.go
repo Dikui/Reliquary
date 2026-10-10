@@ -24,20 +24,16 @@ import (
 type AsynqTaskParams struct {
 	dig.In
 
-	// Dedicated servers provide minimum capacity for parse, post-process,
+	// Dedicated servers provide minimum capacity for article processing,
 	// enrichment and maintenance. The shared server subscribes to queues so stages can borrow
 	// otherwise-idle capacity without consuming the other stage's guarantee.
 	CoreServer           *asynq.Server `name:"coreAsynqServer"`
-	PostProcessServer    *asynq.Server `name:"postProcessAsynqServer"`
 	EnrichmentServer     *asynq.Server `name:"enrichmentAsynqServer"`
 	MaintenanceServer    *asynq.Server `name:"maintenanceAsynqServer"`
 	SharedServer         *asynq.Server `name:"sharedAsynqServer"`
 	KnowledgeService     interfaces.KnowledgeService
 	KnowledgeBaseService interfaces.KnowledgeBaseService
 	DataSourceService    interfaces.DataSourceService
-	DataTableSummary     interfaces.TaskHandler `name:"dataTableSummary"`
-	ImageMultimodal      interfaces.TaskHandler `name:"imageMultimodal"`
-	KnowledgePostProcess interfaces.TaskHandler `name:"knowledgePostProcess"`
 	EntityNameEmbedding  *service.EntityNameEmbeddingRebuilder
 	DeadLetterRepo       interfaces.TaskDeadLetterRepository
 	SpanTracker          service.SpanTracker
@@ -45,7 +41,7 @@ type AsynqTaskParams struct {
 
 // defaultRedisOpTimeout is the previous hard-coded read timeout. The 100ms
 // floor was tight enough to cause spurious i/o timeout errors during bursty
-// workloads (large batch uploads, multimodal counter DECRs under load), so we
+// workloads (large batch uploads), so we
 // raise the default to 500ms while still allowing operators to tune via env.
 const defaultRedisOpTimeoutMs = 500
 
@@ -152,18 +148,8 @@ func NewCoreAsynqServer(svc interfaces.SystemSettingService) *asynq.Server {
 	return newAsynqServer(allocation.Core, types.QueueWeightsForPool(types.WorkerPoolCore))
 }
 
-// NewPostProcessAsynqServer reserves capacity for the lightweight but
-// latency-sensitive fan-out stage. It cannot be trapped behind a burst of
-// long-running document parses in QueueDefault.
-func NewPostProcessAsynqServer(svc interfaces.SystemSettingService) *asynq.Server {
-	allocation := resolveWorkerPoolConcurrency(svc)
-	log.Printf("asynq postprocess-pool server starting with concurrency=%d total_upstream=%d",
-		allocation.PostProcess, allocation.UpstreamTotal())
-	return newAsynqServer(allocation.PostProcess, types.QueueWeightsForPool(types.WorkerPoolPostProcess))
-}
-
-// NewEnrichmentAsynqServer runs high-fanout summary, multimodal, context, and
-// question generation without consuming core parsing capacity.
+// NewEnrichmentAsynqServer rebuilds entity name vectors without consuming
+// article processing capacity.
 func NewEnrichmentAsynqServer(svc interfaces.SystemSettingService) *asynq.Server {
 	allocation := resolveWorkerPoolConcurrency(svc)
 	log.Printf("asynq enrichment-pool server starting with concurrency=%d total_upstream=%d",
@@ -217,24 +203,11 @@ func RunAsynqServer(params AsynqTaskParams) *asynq.ServeMux {
 	// downstream handlers (and their model calls) inherit the flag.
 	mux.Use(backgroundTaskMiddleware())
 
-	// Register extract handlers - router will dispatch to appropriate handler
-	mux.HandleFunc(types.TypeDataTableSummary, params.DataTableSummary.Handle)
-
 	// Register document processing handler
 	mux.HandleFunc(types.TypeDocumentProcess, params.KnowledgeService.ProcessDocument)
 
 	// Register manual knowledge processing handler (cleanup + re-indexing)
 	mux.HandleFunc(types.TypeManualProcess, params.KnowledgeService.ProcessManualUpdate)
-
-	// Register question generation handler
-	mux.HandleFunc(types.TypeQuestionGeneration, params.KnowledgeService.ProcessQuestionGeneration)
-
-	// Register summary generation handler
-	mux.HandleFunc(types.TypeSummaryGeneration, params.KnowledgeService.ProcessSummaryGeneration)
-
-	// Register KB clone handler
-
-	// Register knowledge move handler
 
 	// Register knowledge list delete handler
 	mux.HandleFunc(types.TypeKnowledgeListDelete, params.KnowledgeService.ProcessKnowledgeListDelete)
@@ -242,15 +215,7 @@ func RunAsynqServer(params AsynqTaskParams) *asynq.ServeMux {
 	// Register knowledge list reparse handler
 	mux.HandleFunc(types.TypeKnowledgeListReparse, params.KnowledgeService.ProcessKnowledgeListReparse)
 
-	// Register index delete handler
-
-	// Register KB delete handler
-
-	// Register image multimodal handler
-	mux.HandleFunc(types.TypeImageMultimodal, params.ImageMultimodal.Handle)
-
-	// Register knowledge post process handler
-	mux.HandleFunc(types.TypeKnowledgePostProcess, params.KnowledgePostProcess.Handle)
+	// Register entity name vector rebuild handler
 	mux.HandleFunc(types.TypeEntityNameEmbeddingRebuild, params.EntityNameEmbedding.Handle)
 
 	// Register data source sync handler
@@ -266,7 +231,6 @@ func RunAsynqServer(params AsynqTaskParams) *asynq.ServeMux {
 		}()
 	}
 	runPool("core-pool", params.CoreServer)
-	runPool("postprocess-pool", params.PostProcessServer)
 	runPool("enrichment-pool", params.EnrichmentServer)
 	runPool("maintenance-pool", params.MaintenanceServer)
 	runPool("shared-pool", params.SharedServer)
@@ -278,34 +242,17 @@ func RunAsynqServer(params AsynqTaskParams) *asynq.ServeMux {
 // depend on the full payload schema and survive future field churn.
 type deadLetterKnowledgePayload struct {
 	KnowledgeID string `json:"knowledge_id,omitempty"`
-	// Attempt threads through DocumentProcess / ManualProcess /
-	// KnowledgePostProcess payloads (added when span tracking shipped)
-	// — extracted here so the dead-letter callback can also close the
+	// Attempt threads through DocumentProcess / ManualProcess payloads
+	// so the dead-letter callback can also close the
 	// matching root span as failed. Older in-flight payloads without
 	// this field decode as 0 and the tracker call no-ops.
 	Attempt int `json:"attempt,omitempty"`
 }
 
-// taskTypesAffectingKnowledgeStatus enumerates the asynq task types whose
-// dead-letter event should flip the parent Knowledge to "failed". Only
-// terminal task types are listed here:
-//
-//   - TypeDocumentProcess: the entry point of the parsing pipeline.
-//   - TypeImageMultimodal: a single image hitting dead-letter would have
-//     been counted by isFinalAsynqAttempt (see image_multimodal.go), so
-//     the parent might still complete via remaining images. We DO NOT mark
-//     the parent failed for this case — finalize-on-last-attempt already
-//     ensures progress.
-//   - TypeKnowledgePostProcess: terminal stage; failure here strands the
-//     knowledge in "processing".
-//   - TypeManualProcess: same shape as DocumentProcess for re-indexing.
-//
-// Question/Summary generation are NOT included: they run after parse_status
-// has already become "completed" and have their own status fields.
+// Processing failures must mark the article failed when retries are exhausted.
 var taskTypesAffectingKnowledgeStatus = map[string]struct{}{
-	types.TypeDocumentProcess:      {},
-	types.TypeKnowledgePostProcess: {},
-	types.TypeManualProcess:        {},
+	types.TypeDocumentProcess: {},
+	types.TypeManualProcess:   {},
 }
 
 type deadLetterKnowledgeListDeletePayload struct {

@@ -25,20 +25,20 @@ export default {
   },
   "names": {
     "light": "轻量",
-    "generation": "生成",
+    "generation": "文章处理",
     "embedding": "向量",
     "rerank": "重排",
     "entity_resolution": "实体解析"
   },
   "uses": {
-    "light": "收录审核与实体判断",
-    "generation": "生成摘要和检索问题",
+    "light": "收录审核与转载判定",
+    "generation": "文章内容类型、结构化摘要、实体和主题",
     "embedding": "内容检索与实体名称相似度",
     "rerank": "重排检索结果",
     "entity_resolution": "判断实体候选是否属于已有实体"
   },
   "sources": {
-    "generation": "生成模型档位",
+    "generation": "文章处理模型档位",
 
     "knowledge_base": "知识库设置",
     "legacy": "已有模型配置",
@@ -49,7 +49,7 @@ export default {
   "useDefault": "选择模型",
   "effective": "当前使用：{model}（{source}）",
   "unconfigured": "未配置模型",
-  "explicitChoice": "摘要和检索问题生成使用生成模型层级。",
+  "explicitChoice": "文章分类、摘要、实体和主题使用生成模型档位。",
   "loadFailed": "无法加载模型配置，请重试。",
   "saveFailed": "模型配置保存失败，请重试。",
   "saved": "模型档位已保存",
@@ -287,6 +287,9 @@ export default {
     }
   },
   datasource: {
+    defaultContentType: "默认内容类型",
+    defaultContentTypeUnspecified: "不指定",
+    defaultContentTypeHint: "作为文章分类的参考，模型仍会根据正文判断。",
     requiredFields: '请输入名称和至少一个订阅源地址。',
     title: '数据源管理',
     description: '配置外部数据源，自动同步内容到知识库',
@@ -580,9 +583,7 @@ export default {
           rerank_model_tier: '重排档位',
 
         embedding_model: 'Embedding 模型',
-        summary_model: '摘要模型',
-        image_processing_model: '图片处理模型',
-        vlm_model: '视觉理解模型',
+        summary_model: "文章处理模型",
         rerank_model: '重排序模型',
         unknown: '其他模型配置'
       }
@@ -601,8 +602,6 @@ export default {
       queryPlaceholder: '输入要发送给模型的内容',
       embeddingInput: '待向量化文本',
       embeddingPlaceholder: '输入要生成 Embedding 的文本',
-      vlmPrompt: '图片提示词',
-      vlmPromptPlaceholder: '例如：请详细描述这张图片',
       documents: '候选文档',
       documentsPlaceholder: '每行输入一个候选文档',
       documentsHint: '每个非空行会作为一个独立文档发送给 ReRank 模型',
@@ -656,11 +655,6 @@ export default {
       copied: '模型已复制',
       copyFailed: '复制模型失败'
     },
-    vllm: {
-      title: 'VLLM 视觉模型',
-      desc: '配置用于视觉理解和多模态的视觉语言模型',
-      empty: '暂无 VLLM 视觉模型'
-    },
     rerank: {
       title: 'ReRank 模型',
       desc: '配置用于结果重排序的模型',
@@ -673,7 +667,7 @@ export default {
     },
     chat: {
       title: "生成模型",
-      desc: "配置用于审核、摘要和检索问题生成的大语言模型",
+      desc: "配置用于审核和文章处理的大语言模型",
       empty: "暂无生成模型"
     },
     source: {
@@ -689,7 +683,6 @@ export default {
       chat: "生成",
       embedding: 'Embedding',
       rerank: 'ReRank',
-      vllm: '视觉',
     }
   },
   upload: {
@@ -789,9 +782,6 @@ export default {
     languageSaved: '语言设置已保存'
   },
   model: {
-    imageProcessingUnsupported: "图片处理模型必须是 VLLM 模型或已开启视觉或多模态支持的生成模型。",
-    imageProcessingNotFound: '图片处理模型不存在，请重新选择。',
-    imageProcessingUnavailable: '图片处理模型服务不可用，请稍后重试。',
     modelName: '模型名称',
     defaultTag: '默认',
     addModelInSettings: '前往全局设置添加模型',
@@ -815,7 +805,6 @@ export default {
       displayNamePlaceholder: '例如：客服问答模型',
       displayNameDesc: '仅用于界面展示，实际调用仍使用上面的模型名称。',
       baseUrlPlaceholder: '例如：https://api.openai.com/v1',
-      baseUrlPlaceholderVllm: '例如：http://localhost:11434/v1',
       apiKeyOptional: 'API Key（可选）',
       apiKeyPlaceholder: '输入 API Key',
       customHeadersLabel: '自定义请求头（可选）',
@@ -836,7 +825,7 @@ export default {
       dimensionOverrideLabel: '自定义输出维度',
       dimensionOverrideDesc: '仅在确认该模型支持 dimensions 参数时开启；默认只使用检测到的实际维度。',
       supportsVisionLabel: '支持视觉/多模态',
-      supportsVisionDesc: '模型是否支持图片等多模态输入。开启后可在知识库中用于图片文字提取和描述。',
+      supportsVisionDesc: "模型是否接受图片输入。开启后，文章处理会把正文中的图片一同发送给生成模型。",
       contextWindowLabel: '上下文窗口',
       contextWindowPlaceholder: '默认 {value}',
       contextWindowDesc: "模型支持的最大上下文长度，按 token 计算。",
@@ -944,14 +933,11 @@ export default {
       modelNamePlaceholder: {
         local: '例如：llama2:latest',
         remote: '例如：gpt-4, claude-3-opus',
-        localVllm: '例如：llava:latest',
-        remoteVllm: '例如：gpt-4-vision-preview',
       },
       description: {
         chat: "配置用于审核和内容生成的大语言模型",
         embedding: '配置用于文本向量化的嵌入模型',
         rerank: '配置用于结果重排序的模型',
-        vllm: '配置用于视觉理解和多模态的视觉语言模型',
         default: '配置模型信息'
       }
     }
@@ -1091,8 +1077,7 @@ export default {
         },
         asynq: {
           core_concurrency: '文档解析与手工重解析的每实例保底并发，可额外借用共享弹性池；修改后需重启。',
-          postprocess_concurrency: '解析完成后的轻量收尾和富化扇出专用并发；修改后需重启。',
-          enrichment_concurrency: "摘要、图片与问题生成的每实例保底并发，可额外借用共享弹性池；修改后需重启。",
+          enrichment_concurrency: "实体名称向量重建的每实例保底并发，可额外借用共享弹性池，修改后需重启。",
           maintenance_concurrency: '数据源同步、批处理和清理任务的每实例并发，与用户面流水线硬隔离；修改后需重启。',
           shared_concurrency: '核心解析与内容富化共同使用的每实例弹性并发，由有积压的一侧自动借用；修改后需重启。',
         },
@@ -1108,7 +1093,6 @@ export default {
         },
         asynq: {
           core_concurrency: '核心解析保底并发数',
-          postprocess_concurrency: '后处理编排并发数',
           enrichment_concurrency: '内容富化保底并发数',
           maintenance_concurrency: '维护与同步并发数',
           shared_concurrency: '共享弹性并发数',
@@ -1231,11 +1215,6 @@ export default {
           taskTypes: {
             documentProcess: '文档解析',
             manualProcess: '手工重新处理',
-            postProcess: '文档后处理',
-            summary: '摘要生成',
-            tableSummary: '表格摘要生成',
-            question: '问题生成',
-            multimodal: '图片多模态处理',
             sync: '数据源同步',
             batchReparse: '批量重新解析',
             batchDelete: '批量删除',
@@ -1277,37 +1256,27 @@ export default {
         },
         pools: {
           core: '核心解析',
-          postprocess: '后处理编排',
           enrichment: '内容富化',
           maintenance: '维护与同步',
           shared: '共享弹性',
         },
         poolDescriptions: {
           core: '文档解析与手工重解析的保底容量',
-          postprocess: '解析完成后的收尾与富化扇出',
-          enrichment: "摘要、图片与问题生成",
+          enrichment: "实体名称向量重建",
           maintenance: '数据源同步、批处理与删除清理',
           shared: '由核心解析与内容富化按积压借用',
         },
         queueNames: {
           default: '文档解析',
-          postprocess: '后处理编排',
-          summary: '摘要生成',
           sync: '数据源同步',
           low: '维护与批处理',
-          multimodal: '多模态处理',
           entity: "实体",
-          question: '问题生成',
         },
         queueDescriptions: {
           default: '文档解析、手工重解析',
-          postprocess: '解析收尾、富化扇出',
-          summary: '文档摘要、表格摘要',
           sync: '手动与定时同步',
           low: "批量重解析、删除清理",
-          multimodal: '图片 OCR、视觉描述',
           entity: "实体名称向量重建",
-          question: '分块问题生成',
         },
         errors: {
           generic: '获取队列状态失败'
@@ -1414,38 +1383,12 @@ export default {
     titleEdit: '知识库设置',
     advanced: {
       title: '高级设置',
-      description: '配置问题生成等高级功能',
-      multimodal: {
-        label: '多模态功能',
-        description: '启用图片等多模态内容的理解能力',
-        vllmLabel: 'VLLM 视觉模型',
-        vllmDescription: '用于多模态理解的视觉语言模型（必选）',
-        vllmPlaceholder: '请选择 VLLM 模型（必选）',
-        descriptionLanguageLabel: '图片描述语言',
-        descriptionLanguageDescription: '留空时跟随文档语言；不再强制使用中文',
-        descriptionLanguageAuto: '自动跟随文档语言',
-        customInstructionsLabel: '图片解析要求',
-        customInstructionsDescription: '补充需要重点识别的视觉信息，OCR 和 Markdown 格式协议保持不变',
-        customInstructionsPlaceholder: '例如：重点识别设备铭牌、型号、告警代码和表格中的单位…'
-      },
+      description: "配置数据表解析摘要的补充要求",
       tableMetadataInstructions: {
         label: '表格元数据生成要求',
         description: '为 CSV/Excel 摘要补充业务背景和字段语义，帮助后续检索理解表格内容',
         placeholder: '例如：这是销售订单表，金额单位为元，status 字段使用公司内部状态码…'
       },
-      questionGeneration: {
-        label: 'AI 问题生成',
-        description: '解析文档时调用大模型为每个分块生成相关问题，提高检索召回率。启用后会增加文档解析耗时。',
-        countLabel: '生成问题数量',
-        countDescription: '每个文档分块生成的问题数量（1-10）',
-    instructionsLabel: '问题生成要求',
-        instructionsDescription: '指定问题面向的人群、场景和表达方式，系统仍维护稳定输出格式',
-        instructionsPlaceholder: '例如：生成客服用户常问的自然语言问题，避免考试题式表达…'
-      },
-    },
-    multimodal: {
-      title: '图像处理配置',
-      description: '配置图像内容理解能力，启用后支持图片等非文本内容的解析和检索'
     },
     chunking: {
       title: '分块设置',
@@ -1561,8 +1504,7 @@ export default {
       loadDataFailed: '加载知识库数据失败',
       notFound: '知识库不存在',
       nameRequired: '请输入知识库名称',
-      summaryRequired: '请选择 Summary 模型',
-      multimodalInvalid: '多模态配置验证失败',
+      summaryRequired: "请选择文章处理的生成模型",
 
       missingId: '缺少知识库 ID',
       buildDataFailed: '数据构建失败',
@@ -1600,7 +1542,6 @@ export default {
       models: '模型配置',
       chunking: '分块设置',
       advanced: '高级设置',
-      multimodal: '图像处理',
       datasource: '数据源',
     },
     navGroups: {
@@ -1971,10 +1912,6 @@ export default {
       EMBEDDING_PROVIDER_FAIL_SUGGESTION: '请检查向量模型名称、服务地址及凭证配置。',
       VECTORSTORE_WRITE_FAILED: '索引写入失败',
       VECTORSTORE_WRITE_FAILED_SUGGESTION: '请检查 PostgreSQL 连接和数据库日志，修复后重新解析。',
-      MULTIMODAL_VLM_FAILED: '图片理解失败',
-      MULTIMODAL_VLM_FAILED_SUGGESTION: '请检查图片理解模型配置及服务状态，再重试图片处理。',
-      MULTIMODAL_ALL_FAILED: '全部图片理解任务失败',
-      MULTIMODAL_ALL_FAILED_SUGGESTION: '请检查图片理解模型的配置、限额及服务状态后重新解析。',
       TASK_TIMEOUT: '处理任务重试已耗尽',
       TASK_TIMEOUT_SUGGESTION: '请查看任务错误和应用日志，修复原因后重新解析。',
       UNKNOWN: '解析失败',
@@ -1993,12 +1930,10 @@ export default {
       cancelled: '已取消'
     },
     stage: {
+    processing: "文章处理",
       docreader: '文档解析',
       chunking: '分块',
-      embedding: '向量化',
-      multimodal: '多模态识别',
-      postprocess: '后处理'
-    },
+      embedding: '向量化',},
     detail: {
       started: '开始',
       finished: '结束',
@@ -2034,8 +1969,6 @@ export default {
     head: {
       stagesDone: '主流程阶段',
       stagesProgress: '当前阶段',
-      postprocessTasks: '后台任务：运行中 {running} / 失败 {failed} / 已完成 {completed}',
-      completedWithActiveTrace: '处理已完成，但仍有 {n} 个 Trace 任务处于活动状态',
       attempt: '尝试',
       updated: '更新于'
     },
@@ -2045,13 +1978,10 @@ export default {
       chunkSize: '分块大小 {n}',
       chunking: '分块',
       parser: '解析引擎',
-      multimodal: '多模态理解',
       on: '已开启',
       off: '已关闭',
       parentChildOn: '父子分块已开启',
       parentChildOff: '父子分块已关闭',
-      question: '问题生成',
-      questionOn: '已开启，每个分块生成 {n} 个问题',
     }
   },
   uploadConfirm: {
@@ -2063,7 +1993,6 @@ export default {
     moreOptions: '更多处理选项',
     summaryParentChildShort: '父子分块',
     summaryParserForceScanned: '扫描件解析',
-    summaryQuestionCountValue: '{count} 个',
     navChunkingSummary: '分块 {size}',
     statusOn: '已开启',
     statusOff: '未开启',
@@ -2075,9 +2004,6 @@ export default {
     urlAdded: '已添加 URL',
     urlDuplicate: '该 URL 已在列表中',
     statusNeedsSetup: '待配置',
-    multimodalSetupHint: '未配置视觉模型时不会从图片提取文字，仍可上传和保存图片。',
-    vlmModelRequired: '请配置多模态模型',
-    vlmModelSelectRequired: '已启用多模态，请选择 VLM 模型',
     continueAdd: '继续添加',
 
     filesAdded: '已添加 {count} 个文件',
@@ -2095,6 +2021,18 @@ export default {
     }
   },
   knowledgeBase: {
+    contentTypes: {"event":"事件","opinion":"观点","research":"研究","tutorial":"教程","case":"案例","reference":"参考","unclassified":"未分类"},
+    processingModes: {"full":"全文保存","summary_only":"摘要加链接"},
+    contentTypeFilter: "内容类型",
+    summaryOverview: "概述",
+    summaryPoints: "要点",
+    summaryKeyTerms: "关键名词",
+    articleEntities: "实体",
+    articleTopics: "主题",
+    originalArticle: "原文链接",
+    originalLinkMissing: "没有原文链接",
+    reprocess: "重新处理",
+    reprocessQueued: "重新处理已提交，完成后会自动更新",
     title: '知识库',
     fileContent: '文件内容',
     name: '名称',
@@ -2113,7 +2051,7 @@ export default {
     uploadPartialSuccess: '上传完成：成功 {success} 个，失败 {fail} 个',
     uploadAllFailed: '所有文件上传失败',
 
-    videosFilteredNoVLM: '已跳过 {count} 个视频文件（暂不支持视频上传）',
+    videosUnsupported: '已跳过 {count} 个视频文件（暂不支持视频上传）',
     unsupportedTypesHint: '部分文档类型（{types}）暂无可用解析引擎，上传后将无法解析',
     goToParserSettings: '前往配置',
     importURL: '导入网页',
@@ -2151,11 +2089,8 @@ export default {
     chunkCount: '共 {count} 个片段',
     viewChunks: '查看分块',
     viewMerged: '全文',
-    generatedQuestions: '辅助召回问题',
     viewParentContext: '查看父块上下文',
     parentContextLoadFailed: '加载父上下文失败',
-    confirmDeleteQuestion: '确定要删除这个问题吗？删除后将同时移除对应的向量索引。',
-    legacyQuestionCannotDelete: '旧格式问题无法删除，请重新生成问题',
     customMetadata: '自定义元数据',
     metadataCapabilityHint: '用于文档总结，并在文档被召回后作为文档级上下文辅助回答；不会参与索引或影响召回排序',
     noCustomMetadata: '暂无自定义元数据',
@@ -2169,17 +2104,7 @@ export default {
     metadataKeyRequired: '元数据字段名不能为空',
     metadataKeyDuplicate: '元数据字段 {key} 重复',
     metadataNumberRequired: '元数据字段 {key} 必须是有效数字',
-    regenerateSummary: '重新生成摘要',
-    generateSummary: '生成摘要',
     noDocumentSummary: '暂无文档摘要',
-    summarySkippedNoText: '无可摘要的文字内容',
-    summaryGenerationFailed: '摘要生成失败',
-    summaryRefreshed: '摘要已更新',
-    summaryRefreshQueued: '摘要刷新已提交，完成后会自动更新',
-    addGeneratedQuestion: '添加辅助召回问题',
-    regenerateQuestions: '重新生成问题',
-    questionsRegenerated: '辅助召回问题已更新',
-    noGeneratedQuestions: '暂无辅助召回问题',
     notInitialized: '该知识库尚未完成初始化配置，请先前往设置页面配置模型信息后再上传文件',
     getInfoFailed: '获取知识库信息失败，无法上传文件',
     missingId: '缺少知识库ID',
@@ -2214,7 +2139,6 @@ export default {
 
     parsingFailed: '解析失败',
     parsingInProgress: '解析中...',
-    generatingSummary: '生成摘要中...',
     documentSummary: '摘要',
     detailSectionMeta: '基本信息',
     confirmDeleteDocument: '确认删除文档"{fileName}"，删除后将无法恢复',

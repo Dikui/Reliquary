@@ -90,23 +90,9 @@ func toDBVectorEmbedding(indexInfo *types.IndexInfo, additionalParams map[string
 func fromDBVectorEmbeddingWithScore(embedding *pgVectorWithScore, matchType types.MatchType) *types.IndexWithScore {
 	content := strings.TrimSpace(embedding.Content)
 	if embedding.SourceID != embedding.ChunkID {
-		chunk := &types.Chunk{Metadata: embedding.Metadata}
-		metadata, err := chunk.DocumentMetadata()
-		if err != nil || metadata == nil {
-			return nil
-		}
-		found := false
-		for _, question := range metadata.GeneratedQuestions {
-			if types.GeneratedQuestionSourceID(embedding.ChunkID, question.ID) == embedding.SourceID {
-				content = question.Question
-				found = true
-				break
-			}
-		}
-		if !found {
-			return nil
-		}
-	} else if embedding.ContextHeader != "" {
+		return nil
+	}
+	if embedding.ContextHeader != "" {
 		content = embedding.ContextHeader + "\n\n" + content
 	}
 	if title := strings.TrimSpace(embedding.Title); title != "" {

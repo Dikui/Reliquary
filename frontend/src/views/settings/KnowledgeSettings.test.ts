@@ -31,7 +31,7 @@ async function scenario(locale: 'zh-CN' | 'en-US', action: (state: any, requests
     '@/stores/ui': { useUIStore: () => ({ settingsInitialSubSection: null }) },
     '@/stores/resources': { useResourcesStore: () => ({ allModels: [], ensureModels: async () => {}, invalidateKnowledgeBaseDetail() { requests.push({ cacheInvalidated: true }) } }) },
     '@/api/knowledge-base': {
-      getKnowledgeBase: async () => { requests.push({ method: 'get' }); return { success: true, data: { id: 'unique-kb', name: 'Knowledge Base', model_tiers: { generation: 'generation-old', embedding: 'embedding-a' }, chunking_config: { chunk_size: 512, chunk_overlap: 0, separators: ['\n\n'], enable_parent_child: false }, indexing_strategy: { vector_enabled: true, keyword_enabled: true }, vlm_config: { enabled: false } } } },
+      getKnowledgeBase: async () => { requests.push({ method: 'get' }); return { success: true, data: { id: 'unique-kb', name: 'Knowledge Base', model_tiers: { generation: 'generation-old', embedding: 'embedding-a' }, chunking_config: { chunk_size: 512, chunk_overlap: 0, separators: ['\n\n'], enable_parent_child: false }, indexing_strategy: { vector_enabled: true, keyword_enabled: true } } } },
       listKnowledgeFiles: async (id: string) => { requests.push({ articleListId: id }); return { data: [], total: 0 } },
       updateKnowledgeBase: async (body: unknown) => { requests.push({ method: 'put', body }); return failSave ? { success: false, message: 'Save unavailable' } : { success: true } },
     },

@@ -183,15 +183,13 @@ func TestCreateKnowledgeFromImageUsesLocalStorage(t *testing.T) {
 	fileSvc := &createKnowledgeFileServiceStub{}
 	task := &createKnowledgeTaskEnqueuerStub{}
 	kb := &types.KnowledgeBase{
-		ID:        "kb-1",
-		VLMConfig: types.VLMConfig{Enabled: true, ModelID: "vlm-1"},
+		ID: "kb-1",
 	}
 	svc := &knowledgeService{
-		repo:         repo,
-		kbService:    &createKnowledgeFileKBServiceStub{kb: kb},
-		fileSvc:      fileSvc,
-		task:         task,
-		modelService: visionModelServiceStub{model: &types.Model{Type: types.ModelTypeVLLM}},
+		repo:      repo,
+		kbService: &createKnowledgeFileKBServiceStub{kb: kb},
+		fileSvc:   fileSvc,
+		task:      task,
 	}
 
 	knowledge, err := svc.CreateKnowledgeFromFile(

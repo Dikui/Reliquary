@@ -25,7 +25,7 @@ func TestErrorHandler_PreservesStructuredModelUsageDetails(t *testing.T) {
 					{
 						ID:       "kb-1",
 						Name:     "Product docs",
-						Bindings: []types.ModelUsageBinding{types.ModelUsageBindingVLMModel},
+						Bindings: []types.ModelUsageBinding{types.ModelUsageBinding("generation_model_tier")},
 					},
 					{
 						ID:   "kb-2",

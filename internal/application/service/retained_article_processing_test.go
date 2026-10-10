@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -45,7 +44,7 @@ type retainedProcessingChat struct {
 func (m *retainedProcessingChat) Chat(ctx context.Context, _ []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
 	stage, _ := types.LLMCallMetadataFromContext(ctx)
 	m.stages = append(m.stages, stage)
-	result := "Acme documents its new widget product and supported deployment options."
+	result := validProcessingFixture("event")
 	if stage == "intake_review" {
 		result = `{"approved":true,"reason":"Original source describes the product"}`
 	}
@@ -73,23 +72,18 @@ func TestMarkdownArticleCompletesWithoutRemovedBackgroundTasks(t *testing.T) {
 	bases := retainedProcessingKB{kb: kb}
 	svc := &knowledgeService{db: db, repo: repo, chunkRepo: chunkRepo, chunkService: chunks,
 		kbService: bases, modelService: models, task: queue, tenantRepo: repository.NewTenantRepository(db),
-		fileSvc: &intakeFileService{}, config: &config.Config{ArticleProcessing: &config.ArticleProcessingConfig{GenerateSummaryPrompt: "Summarize the document."}}}
+		fileSvc: &intakeFileService{}, config: &config.Config{ArticleProcessing: &config.ArticleProcessingConfig{}}}
 	article, err := svc.CreateKnowledgeFromManual(ctx, kb.ID, &types.ManualKnowledgePayload{
 		Title: "Widget announcement", Content: "# Widget\n\nAcme released its new widget product. The original announcement describes deployment choices, supported platforms and the complete product capabilities.", Status: "publish",
 		SourceInfo: types.SourceInfo{Publisher: "Acme", OriginalURL: "https://example.com/widget", PublishedAt: "2026-10-01"},
 	}, types.ChannelWeb)
 	require.NoError(t, err)
-	post := &KnowledgePostProcessService{knowledgeRepo: repo, kbService: bases, chunkService: chunks, taskEnqueuer: queue}
 	for i := 0; i < len(queue.tasks); i++ {
 		require.Less(t, i, 10, "processing should produce a bounded set of tasks")
 		task := queue.tasks[i]
 		switch task.Type() {
 		case types.TypeManualProcess:
 			require.NoError(t, svc.ProcessManualUpdate(ctx, task))
-		case types.TypeKnowledgePostProcess:
-			require.NoError(t, post.Handle(ctx, task))
-		case types.TypeSummaryGeneration:
-			require.NoError(t, svc.ProcessSummaryGeneration(ctx, task))
 		default:
 			t.Fatalf("unexpected background task %q", task.Type())
 		}
@@ -99,9 +93,8 @@ func TestMarkdownArticleCompletesWithoutRemovedBackgroundTasks(t *testing.T) {
 	require.Equal(t, types.ParseStatusCompleted, completed.ParseStatus)
 	require.Equal(t, types.SummaryStatusCompleted, completed.SummaryStatus)
 	require.Contains(t, completed.Description, "Acme")
-	encoded, err := json.Marshal(types.KnowledgePostProcessPayload{TenantID: 1, KnowledgeBaseID: kb.ID, KnowledgeID: completed.ID})
-	require.NoError(t, err)
 	queued := len(queue.tasks)
-	require.NoError(t, post.Handle(ctx, asynq.NewTask(types.TypeKnowledgePostProcess, encoded)))
-	require.Len(t, queue.tasks, queued, "duplicate post-processing must not spawn more tasks")
+	require.NoError(t, svc.ProcessManualUpdate(ctx, queue.tasks[0]))
+	require.Len(t, queue.tasks, queued, "duplicate processing must not spawn more tasks")
+	require.Equal(t, []string{"intake_review", "article_processing"}, model.stages)
 }

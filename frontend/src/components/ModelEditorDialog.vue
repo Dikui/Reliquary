@@ -251,7 +251,7 @@
       </template>
 
       <!-- Section 3 — 高级选项（仅在有内容时渲染，避免空 section 出现底部分隔线） -->
-      <section v-if="['embedding', 'chat', 'vllm'].includes(activeModelType)" class="setting-drawer__section">
+      <section v-if="['embedding', 'chat'].includes(activeModelType)" class="setting-drawer__section">
         <h4 class="setting-drawer__section-title">{{ $t('model.editor.sectionAdvanced') }}</h4>
 
         <!-- Embedding 专用：维度 -->
@@ -282,14 +282,14 @@
         </div>
 
         <!-- Text and vision model context window. -->
-        <div v-if="activeModelType === 'chat' || activeModelType === 'vllm'" class="form-item">
+        <div v-if="activeModelType === 'chat'" class="form-item">
           <label class="form-label">{{ $t('model.editor.contextWindowLabel') }}</label>
           <t-input v-model.number="formData.contextWindow" type="number" :min="1024" :max="10000000"
             :placeholder="$t('model.editor.contextWindowPlaceholder', { value: DEFAULT_MODEL_CONTEXT_WINDOW })" />
           <p class="form-desc">{{ $t('model.editor.contextWindowDesc') }}</p>
         </div>
 
-        <!-- Chat: supports vision toggle (VLLM models are inherently multimodal) -->
+        <!-- Chat: supports vision toggle -->
         <div v-if="activeModelType === 'chat'" class="form-item">
           <label class="form-label">{{ $t('model.editor.supportsVisionLabel') }}</label>
           <div class="vision-toggle">
@@ -324,7 +324,7 @@
         </div>
 
         <!--
-          Background concurrency cap for this model. Only chat / embedding / vllm
+          Background concurrency cap for this model. Only chat / embedding
           are gated by the governor (see internal/models/limiter), so we surface
           it just for those three. 0 = fall back to the global default.
         -->
@@ -383,9 +383,9 @@ interface ModelFormData {
   interfaceType?: 'ollama' | 'openai'
   isDefault: boolean
   supportsVision?: boolean
-  /** 生成/VLM 上下文窗口（token）。空/0 表示使用默认 200000。 */
+  /** 生成 上下文窗口（token）。空/0 表示使用默认 200000。 */
   contextWindow?: number
-  /** 后台任务对该模型的并发上限；0/undefined 表示沿用全局默认。仅 chat/embedding/vllm 生效。 */
+  /** 后台任务对该模型的并发上限；0/undefined 表示沿用全局默认。仅 chat/embedding 生效。 */
   maxConcurrency?: number
   /** extra_config.thinking_control maps model thinking parameters to API fields. */
   thinkingControl?: string
@@ -393,7 +393,7 @@ interface ModelFormData {
   customHeaders?: CustomHeaderItem[]
 }
 
-type EditorModelType = 'chat' | 'embedding' | 'rerank' | 'vllm'
+type EditorModelType = 'chat' | 'embedding' | 'rerank'
 
 interface Props {
   visible: boolean
@@ -426,7 +426,6 @@ const modelTypeChoices = computed(() => ([
   { value: 'chat' as const, label: t('modelSettings.typeShort.chat'), icon: 'chat' },
   { value: 'embedding' as const, label: t('modelSettings.typeShort.embedding'), icon: 'chart-bubble' },
   { value: 'rerank' as const, label: t('modelSettings.typeShort.rerank'), icon: 'filter-sort' },
-  { value: 'vllm' as const, label: t('modelSettings.typeShort.vllm'), icon: 'image' },
 ]))
 
 // API 返回的 Provider 列表
@@ -533,7 +532,6 @@ const modelTypeIcon = computed(() => {
     chat: 'chat',
     embedding: 'chart-bubble',
     rerank: 'filter-sort',
-    vllm: 'image',
   }
   return map[activeModelType.value] || 'setting'
 })
@@ -666,20 +664,12 @@ const getModalDescription = () => {
 
 // 获取模型名称占位符
 const getModelNamePlaceholder = () => {
-  if (activeModelType.value === 'vllm') {
-    return formData.value.source === 'local'
-      ? t('model.editor.modelNamePlaceholder.localVllm')
-      : t('model.editor.modelNamePlaceholder.remoteVllm')
-  }
   return formData.value.source === 'local'
     ? t('model.editor.modelNamePlaceholder.local')
     : t('model.editor.modelNamePlaceholder.remote')
 }
 
 const getBaseUrlPlaceholder = () => {
-  if (activeModelType.value === 'vllm') {
-    return t('model.editor.baseUrlPlaceholderVllm')
-  }
   return t('model.editor.baseUrlPlaceholder')
 }
 
@@ -1149,19 +1139,6 @@ const checkRemoteAPI = async () => {
         })
         break
       }
-
-      case 'vllm':
-        // VLLM 模型（多模态）
-        // VLLM 使用 checkRemoteModel 进行基础连接测试
-        result = await checkRemoteModel({
-          modelName: formData.value.modelName,
-          baseUrl: formData.value.baseUrl || '',
-          apiKey: formData.value.apiKey || '',
-          provider: formData.value.provider,
-          ...idPayload,
-          ...headerPayload,
-        })
-        break
 
       default:
         MessagePlugin.error(t('model.editor.unsupportedModelType'))

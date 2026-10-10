@@ -28,7 +28,7 @@ builtin_models:
   - id: <required, stable, UPSERT key>
     tenant_id: <int, default 10000>
     name: <string>
-    type: KnowledgeQA | Embedding | Rerank | VLLM
+    type: KnowledgeQA | Embedding | Rerank
     source: <string, default "remote">       # local | remote | aliyun | ...
     description: <string, optional>
     is_default: <bool, default false>
@@ -37,7 +37,8 @@ builtin_models:
       base_url: <string>
       api_key: <string, supports ${ENV_VAR}>
       provider: <string>                     # openai | generic | moonshot | ...
-      context_window: <int, optional>        # 生成/VLM 上下文窗口（token）；省略则默认 200000
+      context_window: <int, optional>        # 生成模型上下文窗口（token）；省略则默认 200000
+      supports_vision: <bool, default false> # 处理模型是否支持读取正文图片
       embedding_parameters:                  # 仅 Embedding 类型
         dimension: <int>
         truncate_prompt_tokens: <int>

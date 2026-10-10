@@ -110,9 +110,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewUserService))
 	must(container.Provide(service.NewSystemSettingService))
 	// Extract services - register individual extracters with names
-	must(container.Provide(service.NewDataTableSummaryService, dig.Name("dataTableSummary")))
-	must(container.Provide(service.NewImageMultimodalService, dig.Name("imageMultimodal")))
-	must(container.Provide(service.NewKnowledgePostProcessService, dig.Name("knowledgePostProcess")))
 
 	must(container.Provide(repository.NewResourceRepository))
 	must(container.Provide(service.NewResourceCatalog))
@@ -120,7 +117,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(router.NewAsyncqClient, dig.As(new(interfaces.TaskEnqueuer))))
 	// Dedicated pools guarantee capacity for each task stage.
 	must(container.Provide(router.NewCoreAsynqServer, dig.Name("coreAsynqServer")))
-	must(container.Provide(router.NewPostProcessAsynqServer, dig.Name("postProcessAsynqServer")))
 	must(container.Provide(router.NewEnrichmentAsynqServer, dig.Name("enrichmentAsynqServer")))
 	must(container.Provide(router.NewMaintenanceAsynqServer, dig.Name("maintenanceAsynqServer")))
 	must(container.Provide(router.NewSharedAsynqServer, dig.Name("sharedAsynqServer")))
@@ -158,7 +154,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewDataSourceHandler))
 	logger.Debugf(ctx, "[Container] HTTP handlers registered")
 
-	// Wire the model package's local image resolver so multimodal processing can read
+	// Wire the model package's local image resolver so image inputs can read
 	// local:// images that live under a tenant's configured storage PathPrefix
 	// (which is not encoded in the local:// URL).
 	must(container.Invoke(registerModelLocalImageResolver))
@@ -248,7 +244,7 @@ func resolveModelMaxConcurrency(ss interfaces.SystemSettingService) int {
 }
 
 // registerModelConcurrencyLimiter builds the process-local per-model background
-// concurrency governor (text generation + vlm) and installs it.
+// concurrency governor for text generation and installs it.
 func registerModelConcurrencyLimiter(ss interfaces.SystemSettingService) {
 	limit := resolveModelMaxConcurrency(ss)
 	limiter.SetGovernor(limiter.NewLocalLimiter(), limit)

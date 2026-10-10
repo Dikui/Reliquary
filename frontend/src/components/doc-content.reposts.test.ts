@@ -104,6 +104,7 @@ async function renderDetails(sources: KnowledgeRepostSource[] | null | undefined
     '@/utils/security': { isValidURL: (value: string) => Boolean(safeExternalUrl(value)) },
     '@/utils/markdownTableNormalize': {}, '@/utils/mermaidViewer': {}, '@/utils/textLineDiff': {},
     '@/stores/auth': { useAuthStore: () => ({ isLoggedIn: true }) },
+    '@/components/KnowledgeClassification.vue': emptyModule,
     '@/components/document-preview.vue': emptyModule,
     '@/components/knowledge-processing-timeline.vue': emptyModule,
     '@/views/knowledge/components/RepostSources.vue': sharedRepostModule,
@@ -120,7 +121,7 @@ async function renderDetails(sources: KnowledgeRepostSource[] | null | undefined
   return renderComponent(component, {
     visible: true, canEditKB: false, canDownloadKB: false, kbId: 'kb-a', knowledgeType: 'document',
     details: { id: 'message-a', title: 'Original source', type: 'manual', parse_status: 'completed',
-      summary_status: 'completed', md: [], total: 0, metadata: {}, repost_sources: sources, ...options.details },
+      md: [], total: 0, metadata: {}, repost_sources: sources, ...options.details },
   }, locale, options.ssrContext)
 }
 

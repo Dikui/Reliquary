@@ -157,7 +157,7 @@ const notifyFilterResult = (result: ReturnType<typeof filterUploadFiles>) => {
     MessagePlugin.warning({ content: t('knowledgeBase.parserRecoveryHint'), duration: 12000 })
   }
   if (result.videoFilteredCount > 0) {
-    MessagePlugin.warning(t('knowledgeBase.videosFilteredNoVLM', { count: result.videoFilteredCount }))
+    MessagePlugin.warning(t('knowledgeBase.videosUnsupported', { count: result.videoFilteredCount }))
   }
   return result.validFiles.length > 0
 }

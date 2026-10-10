@@ -294,19 +294,7 @@ func (h *KnowledgeHandler) CreateKnowledgeFromFile(c *gin.Context) {
 		if metadata == nil {
 			metadata = make(map[string]string)
 		}
-		metadata["author"], metadata["original_url"], metadata["published_at"] = source.Author, source.OriginalURL, source.PublishedAt
-	}
-
-	enableMultimodelForm := c.PostForm("enable_multimodel")
-	var enableMultimodel *bool
-	if enableMultimodelForm != "" {
-		parseBool, err := strconv.ParseBool(enableMultimodelForm)
-		if err != nil {
-			logger.Error(ctx, "Failed to parse enable_multimodel", err)
-			c.Error(errors.NewBadRequestError("Invalid enable_multimodel format").WithDetails(err.Error()))
-			return
-		}
-		enableMultimodel = &parseBool
+		metadata["author"], metadata["publisher"], metadata["original_url"], metadata["published_at"] = source.Author, source.Publisher, source.OriginalURL, source.PublishedAt
 	}
 
 	var processOverrides *types.KnowledgeProcessOverrides
@@ -318,18 +306,11 @@ func (h *KnowledgeHandler) CreateKnowledgeFromFile(c *gin.Context) {
 			return
 		}
 	}
-	if enableMultimodel != nil && (processOverrides == nil || processOverrides.EnableMultimodel == nil) {
-		if processOverrides == nil {
-			processOverrides = &types.KnowledgeProcessOverrides{EnableMultimodel: enableMultimodel}
-		} else {
-			processOverrides.EnableMultimodel = enableMultimodel
-		}
-	}
 
 	channel := c.PostForm("channel")
 
 	// Create knowledge entry from the file
-	knowledge, err := h.kgService.CreateKnowledgeFromFile(ctx, kbID, file, metadata, enableMultimodel, customFileName, channel, processOverrides)
+	knowledge, err := h.kgService.CreateKnowledgeFromFile(ctx, kbID, file, metadata, nil, customFileName, channel, processOverrides)
 	// Check for duplicate knowledge error
 	if err != nil {
 		if h.handleDuplicateKnowledgeError(c, err, knowledge, "file") {
@@ -373,14 +354,13 @@ func (h *KnowledgeHandler) CreateKnowledgeFromURL(c *gin.Context) {
 
 	// Parse URL from request body
 	var req struct {
-		URL              string                           `json:"url" binding:"required"`
-		FileName         string                           `json:"file_name"`
-		FileType         string                           `json:"file_type"`
-		EnableMultimodel *bool                            `json:"enable_multimodel"`
-		Title            string                           `json:"title"`
-		Channel          string                           `json:"channel"`
-		ProcessConfig    *types.KnowledgeProcessOverrides `json:"process_config"`
-		SourceInfo       types.SourceInfo                 `json:"source_info"`
+		URL           string                           `json:"url" binding:"required"`
+		FileName      string                           `json:"file_name"`
+		FileType      string                           `json:"file_type"`
+		Title         string                           `json:"title"`
+		Channel       string                           `json:"channel"`
+		ProcessConfig *types.KnowledgeProcessOverrides `json:"process_config"`
+		SourceInfo    types.SourceInfo                 `json:"source_info"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		logger.Error(ctx, "Failed to parse URL request", err)
@@ -409,7 +389,7 @@ func (h *KnowledgeHandler) CreateKnowledgeFromURL(c *gin.Context) {
 
 	// Create knowledge entry from the URL
 	knowledge, err := h.kgService.CreateKnowledgeFromURL(
-		ctx, kbID, req.URL, req.FileName, req.FileType, req.EnableMultimodel, req.Title, req.Channel, req.ProcessConfig, req.SourceInfo,
+		ctx, kbID, req.URL, req.FileName, req.FileType, nil, req.Title, req.Channel, req.ProcessConfig, req.SourceInfo,
 	)
 	// Check for duplicate knowledge error
 	if err != nil {
@@ -520,9 +500,9 @@ func (h *KnowledgeHandler) GetKnowledge(c *gin.Context) {
 
 // GetKnowledgeSpans godoc
 //
-// Always returns the canonical 5-stage timeline; missing stage rows are
-// synthesized as "pending" so the frontend timeline always renders five
-// segments. Subspans (multimodal.image[i], generation.*) ride along under
+// Always returns the canonical processing timeline; missing stage rows are
+// synthesized as "pending" so the frontend timeline always renders all
+// segments. Processing subspans ride along under
 // each stage as children when present.
 func (h *KnowledgeHandler) GetKnowledgeSpans(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -579,7 +559,7 @@ func (h *KnowledgeHandler) GetKnowledgeSpans(c *gin.Context) {
 	// Build tree: index by SpanID, then attach to parents. Stages
 	// missing from the DB are synthesized as "pending" placeholders
 	// under a synthetic (or real, if present) root so the timeline
-	// always renders five segments. parse_status threads through so
+	// always renders all processing stages. parse_status threads through so
 	// pre-tracker historical knowledge (no rows but parse_status is
 	// already terminal) renders as done/failed instead of pending —
 	// otherwise legacy completed documents would forever look like
@@ -653,7 +633,7 @@ func knowledgeSpansLastError(
 // buildSpanTree assembles a flat list of span rows into a parent-child
 // tree rooted at the (knowledge, attempt)'s root span. Missing canonical
 // stages are filled in with pending placeholders so the UI always renders
-// the five timeline segments. Returns the root, the current_stage name
+// all processing stages. Returns the root, the current_stage name
 // (the running stage if any), and the most recent failed span if one
 // exists.
 //
@@ -662,7 +642,7 @@ func knowledgeSpansLastError(
 // a fresh knowledge before the pipeline starts), the placeholder status
 // is inferred from parseStatus: completed → done, failed → failed,
 // otherwise pending. Without this, every historical knowledge would
-// render as "all 5 stages pending" forever despite having actually
+// render as "all stages pending" forever despite having actually
 // completed parsing.
 func buildSpanTree(knowledgeID string, attempt int, rows []types.KnowledgeProcessingSpan, parseStatus string) (
 	root *types.SpanTreeNode, currentStage string, lastFailure *types.KnowledgeProcessingSpan,
@@ -751,7 +731,7 @@ func buildSpanTree(knowledgeID string, attempt int, rows []types.KnowledgeProces
 	}
 
 	// Synthesize missing stage rows as children of root so the timeline
-	// always shows 5 segments. Status mirrors the synthesized root —
+	// always shows all stages. Status mirrors the synthesized root,
 	// pending while the pipeline is still running, done/failed for
 	// historical knowledge whose terminal state we know but whose
 	// per-stage timing was never recorded. Appended in AllStages order
@@ -800,10 +780,18 @@ func (h *KnowledgeHandler) ListKnowledge(c *gin.Context) {
 	}
 
 	filter := types.KnowledgeListFilter{
+		ContentType: strings.TrimSpace(c.Query("content_type")),
 		Keyword:     c.Query("keyword"),
 		FileType:    c.Query("file_type"),
 		ParseStatus: c.Query("parse_status"),
 		Source:      c.Query("source"),
+	}
+	if filter.ContentType != "" && filter.ContentType != "unclassified" && types.NormalizeContentType(filter.ContentType) == "" {
+		c.Error(errors.NewBadRequestError("invalid content_type"))
+		return
+	}
+	if filter.ContentType != "unclassified" {
+		filter.ContentType = types.NormalizeContentType(filter.ContentType)
 	}
 	if raw := c.Query("start_time"); raw != "" {
 		t, err := parseFilterTime(raw)
@@ -1350,41 +1338,6 @@ func (h *KnowledgeHandler) UpdateKnowledge(c *gin.Context) {
 		"message": "Knowledge updated successfully",
 		"data":    updated,
 	})
-}
-
-// RegenerateKnowledgeSummary refreshes a stale summary after chunk or metadata edits.
-func (h *KnowledgeHandler) RegenerateKnowledgeSummary(c *gin.Context) {
-	ctx := c.Request.Context()
-	id := secutils.SanitizeForLog(c.Param("id"))
-	if id == "" {
-		c.Error(errors.NewBadRequestError("Knowledge ID cannot be empty"))
-		return
-	}
-	_, effCtx, err := h.resolveKnowledgeAndValidateKBAccess(c, id)
-	if err != nil {
-		c.Error(err)
-		return
-	}
-	knowledge, err := h.kgService.GetKnowledgeByID(effCtx, id)
-	if err != nil {
-		logger.ErrorWithFields(ctx, err, nil)
-		c.Error(errors.NewInternalServerError(err.Error()))
-		return
-	}
-	if knowledge.SummaryStatus == "" || knowledge.SummaryStatus == types.SummaryStatusNone {
-		knowledge, err = h.kgService.RegenerateKnowledgeSummary(effCtx, id)
-	} else {
-		err = h.kgService.RequestKnowledgeSummaryRefresh(effCtx, id)
-		if err == nil {
-			knowledge, err = h.kgService.GetKnowledgeByID(effCtx, id)
-		}
-	}
-	if err != nil {
-		logger.ErrorWithFields(ctx, err, nil)
-		c.Error(errors.NewBadRequestError(err.Error()))
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": knowledge})
 }
 
 // UpdateManualKnowledge godoc

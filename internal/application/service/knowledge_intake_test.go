@@ -308,9 +308,17 @@ type intakeChat struct {
 	err      error
 }
 
-func (m intakeChat) Chat(context.Context, []chat.Message, *chat.ChatOptions) (*types.ChatResponse, error) {
+func (m intakeChat) Chat(ctx context.Context, _ []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
+	stage, _ := types.LLMCallMetadataFromContext(ctx)
+	if stage == "article_processing" {
+		return &types.ChatResponse{Content: validProcessingFixture("event")}, nil
+	}
 	return &types.ChatResponse{Content: m.response}, nil
+}
+
+func (intakeModelService) GetModelByID(_ context.Context, id string) (*types.Model, error) {
+	return &types.Model{ID: id, Type: types.ModelTypeKnowledgeQA}, nil
 }

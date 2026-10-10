@@ -509,7 +509,7 @@ func cleanPassageForRerank(text string) string {
 	return strings.TrimSpace(text)
 }
 
-// getEnrichedPassage 合并Content、ImageInfo和GeneratedQuestions的文本内容
+// getEnrichedPassage includes parser-provided image text when available.
 func getEnrichedPassage(ctx context.Context, result *types.SearchResult) string {
 	combinedText := cleanPassageForRerank(result.Content)
 	var enrichments []string
@@ -532,19 +532,6 @@ func getEnrichedPassage(ctx context.Context, result *types.SearchResult) string 
 					enrichments = append(enrichments, img.OCRText)
 				}
 			}
-		}
-	}
-
-	// 解析ChunkMetadata中的GeneratedQuestions
-	if len(result.ChunkMetadata) > 0 {
-		var docMeta types.DocumentChunkMetadata
-		err := json.Unmarshal(result.ChunkMetadata, &docMeta)
-		if err != nil {
-			pipelineWarn(ctx, "Rerank", "chunk_metadata_parse", map[string]interface{}{
-				"error": err.Error(),
-			})
-		} else if questionStrings := docMeta.GetQuestionStrings(); len(questionStrings) > 0 {
-			enrichments = append(enrichments, strings.Join(questionStrings, "; "))
 		}
 	}
 

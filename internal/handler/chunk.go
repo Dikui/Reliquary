@@ -84,7 +84,7 @@ func (h *ChunkHandler) ListKnowledgeChunks(c *gin.Context) {
 		pagination.PageSize = 100
 	}
 
-	// Default to text chunks; callers may override via ?chunk_type=image_caption etc.
+	// Default to text chunks; callers may override via ?chunk_type=parent_text.
 	chunkType := []types.ChunkType{types.ChunkTypeText}
 	if queryTypes := c.QueryArray("chunk_type"); len(queryTypes) > 0 {
 		chunkType = make([]types.ChunkType, 0, len(queryTypes))
@@ -107,77 +107,4 @@ func (h *ChunkHandler) ListKnowledgeChunks(c *gin.Context) {
 		"page":      result.Page,
 		"page_size": result.PageSize,
 	})
-}
-
-func (h *ChunkHandler) UpsertGeneratedQuestion(c *gin.Context) {
-	chunkID := secutils.SanitizeForLog(c.Param("id"))
-	if chunkID == "" {
-		c.Error(errors.NewBadRequestError("Chunk ID is required"))
-		return
-	}
-	var req UpsertGeneratedQuestionRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.Error(errors.NewBadRequestError(err.Error()))
-		return
-	}
-	item, err := h.service.UpsertGeneratedQuestion(c.Request.Context(), chunkID, req.QuestionID, req.Question)
-	if err != nil {
-		c.Error(errors.NewBadRequestError(err.Error()))
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
-}
-
-func (h *ChunkHandler) RegenerateGeneratedQuestions(c *gin.Context) {
-	chunkID := secutils.SanitizeForLog(c.Param("id"))
-	if chunkID == "" {
-		c.Error(errors.NewBadRequestError("Chunk ID is required"))
-		return
-	}
-	items, err := h.kgService.RegenerateChunkQuestions(c.Request.Context(), chunkID)
-	if err != nil {
-		c.Error(errors.NewBadRequestError(err.Error()))
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": items})
-}
-
-// DeleteGeneratedQuestion godoc
-func (h *ChunkHandler) DeleteGeneratedQuestion(c *gin.Context) {
-	ctx := c.Request.Context()
-	logger.Info(ctx, "Start deleting generated question from chunk")
-
-	chunkID := secutils.SanitizeForLog(c.Param("id"))
-	if chunkID == "" {
-		logger.Error(ctx, "Chunk ID is empty")
-		c.Error(errors.NewBadRequestError("Chunk ID cannot be empty"))
-		return
-	}
-
-	var req struct {
-		QuestionID string `json:"question_id" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		logger.Errorf(ctx, "Failed to parse request parameters: %s", secutils.SanitizeForLog(err.Error()))
-		c.Error(errors.NewBadRequestError("Question ID is required"))
-		return
-	}
-
-	if err := h.service.DeleteGeneratedQuestion(ctx, chunkID, req.QuestionID); err != nil {
-		logger.ErrorWithFields(ctx, err, nil)
-		c.Error(errors.NewBadRequestError(err.Error()))
-		return
-	}
-
-	logger.Infof(ctx, "Generated question deleted successfully, chunk ID: %s, question ID: %s",
-		secutils.SanitizeForLog(chunkID), secutils.SanitizeForLog(req.QuestionID))
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "Generated question deleted",
-	})
-}
-
-type UpsertGeneratedQuestionRequest struct {
-	QuestionID string `json:"question_id"`
-	Question   string `json:"question" binding:"required"`
 }

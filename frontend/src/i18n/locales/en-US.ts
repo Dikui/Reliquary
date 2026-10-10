@@ -25,20 +25,20 @@ export default {
   },
   "names": {
     "light": "Light",
-    "generation": "Generation",
+    "generation": "Article processing",
     "embedding": "Embedding",
     "rerank": "Rerank",
     "entity_resolution": "Entity resolution"
   },
   "uses": {
-    "light": "Intake review and entity judgment",
-    "generation": "Generate summaries and retrieval questions",
+    "light": "Intake review and repost detection",
+    "generation": "Article content type, structured summary, entities and topics",
     "embedding": "Document retrieval and entity name similarity",
     "rerank": "Rank retrieved results",
     "entity_resolution": "Determine whether entity candidates belong to existing entities"
   },
   "sources": {
-    "generation": "Generation tier",
+    "generation": "Article processing tier",
 
     "knowledge_base": "Knowledge settings",
     "legacy": "Existing model configuration",
@@ -49,7 +49,7 @@ export default {
   "useDefault": "Choose a model",
   "effective": "Current model: {model} ({source})",
   "unconfigured": "No model configured",
-  "explicitChoice": "Summaries and retrieval questions use the generation model tier.",
+  "explicitChoice": "Article classification, summaries, entities and topics use the generation tier.",
   "loadFailed": "Could not load model configuration. Try again.",
   "saveFailed": "Could not save model configuration. Try again.",
   "saved": "Model tiers saved",
@@ -187,6 +187,18 @@ export default {
     tenantTooltipWithCreator: 'Created by {creator}',
   },
   knowledgeBase: {
+    contentTypes: {"event":"Event","opinion":"Opinion","research":"Research","tutorial":"Tutorial","case":"Case","reference":"Reference","unclassified":"Unclassified"},
+    processingModes: {"full":"Full text","summary_only":"Summary and link"},
+    contentTypeFilter: "Content type",
+    summaryOverview: "Overview",
+    summaryPoints: "Key points",
+    summaryKeyTerms: "Key terms",
+    articleEntities: "Entities",
+    articleTopics: "Topics",
+    originalArticle: "Original article",
+    originalLinkMissing: "No original link",
+    reprocess: "Reprocess",
+    reprocessQueued: "Reprocessing queued; results will update automatically",
     title: 'Knowledge Base',
     fileContent: 'File Content',
     accessInfo: {
@@ -227,7 +239,7 @@ export default {
     uploadPartialSuccess: 'Upload completed: {success} succeeded, {fail} failed',
     uploadAllFailed: 'All files failed to upload',
 
-    videosFilteredNoVLM: 'Skipped {count} video file (video upload is not supported) | Skipped {count} video files (video upload is not supported)',
+    videosUnsupported: 'Skipped {count} video file (video upload is not supported) | Skipped {count} video files (video upload is not supported)',
     unsupportedTypesHint: 'Some document types ({types}) have no available parser engine and cannot be processed',
     goToParserSettings: 'Configure',
     importURL: 'Import from URL',
@@ -265,11 +277,8 @@ export default {
     chunkCount: 'Total {count} segment | Total {count} segments',
     viewChunks: 'View Chunks',
     viewMerged: 'Full Text',
-    generatedQuestions: 'Retrieval questions',
     viewParentContext: 'View Parent Context',
     parentContextLoadFailed: 'Failed to load parent context',
-    confirmDeleteQuestion: 'Are you sure you want to delete this question? The corresponding vector index will also be removed.',
-    legacyQuestionCannotDelete: 'Legacy format questions cannot be deleted. Please regenerate questions.',
     customMetadata: 'Custom metadata',
     metadataCapabilityHint: 'Used for document summaries and as document-level context after retrieval; it is not indexed and does not affect retrieval ranking',
     noCustomMetadata: 'No custom metadata',
@@ -283,17 +292,7 @@ export default {
     metadataKeyRequired: 'Metadata field name is required',
     metadataKeyDuplicate: 'Duplicate metadata field: {key}',
     metadataNumberRequired: 'Metadata field {key} must be a valid number',
-    regenerateSummary: 'Regenerate summary',
-    generateSummary: 'Generate summary',
     noDocumentSummary: 'No document summary',
-    summarySkippedNoText: 'No text content available to summarize',
-    summaryGenerationFailed: 'Summary generation failed',
-    summaryRefreshed: 'Summary refreshed',
-    summaryRefreshQueued: 'Summary refresh queued; it will update automatically when ready',
-    addGeneratedQuestion: 'Add retrieval question',
-    regenerateQuestions: 'Regenerate questions',
-    questionsRegenerated: 'Retrieval questions refreshed',
-    noGeneratedQuestions: 'No retrieval questions',
     notInitialized: 'Knowledge base is not initialized. Please configure models in settings before uploading files',
     getInfoFailed: 'Failed to get knowledge base information, file upload is not possible',
     missingId: 'Knowledge base ID is missing',
@@ -328,7 +327,6 @@ export default {
 
     parsingFailed: 'Parsing failed',
     parsingInProgress: 'Parsing...',
-    generatingSummary: 'Generating summary...',
     documentSummary: 'Summary',
     detailSectionMeta: 'Basic info',
     confirmDeleteDocument: 'Confirm deletion of document "{fileName}", recovery will be impossible after deletion',
@@ -411,7 +409,6 @@ export default {
     moreOptions: 'More processing options',
     summaryParentChildShort: 'Parent-child',
     summaryParserForceScanned: 'Scanned mode',
-    summaryQuestionCountValue: '{count}',
     navChunkingSummary: 'Chunk {size}',
     statusOn: 'On',
     statusOff: 'Off',
@@ -423,9 +420,6 @@ export default {
     urlAdded: 'URL added',
     urlDuplicate: 'This URL is already in the list',
     statusNeedsSetup: 'Needs setup',
-    multimodalSetupHint: 'Without a vision model, text will not be extracted from images. You can still upload and save them.',
-    vlmModelRequired: 'Configure a multimodal model',
-    vlmModelSelectRequired: 'Multimodal is enabled. Please select a VLM model.',
     pdfForceScanned: {
       label: 'Force scanned PDF parsing',
       description: 'Useful for web-print, scanned, or image-heavy PDFs. Every page will be rendered as an image and processed via OCR/VLM. May increase processing time and model costs.'
@@ -451,13 +445,10 @@ export default {
       chunkSize: 'Chunk size {n}',
       chunking: 'Chunking',
       parser: 'Parser engine',
-      multimodal: 'Multimodal understanding',
       on: 'Enabled',
       off: 'Disabled',
       parentChildOn: 'Parent-child chunking enabled',
       parentChildOff: 'Parent-child chunking disabled',
-      question: 'Question generation',
-      questionOn: 'Enabled, {n} questions per chunk',
     },
     attempt: 'Attempt {n}',
     retry: 'Retry parsing',
@@ -484,8 +475,6 @@ export default {
     head: {
       stagesDone: 'Main stages',
       stagesProgress: 'Current stage',
-      postprocessTasks: 'Postprocess: {running} running / {failed} failed / {completed} completed',
-      completedWithActiveTrace: 'Processing completed, but {n} trace task remains active | Processing completed, but {n} trace tasks remain active',
       attempt: 'Attempt',
       updated: 'Updated'
     },
@@ -522,12 +511,10 @@ export default {
       includingChildren: 'incl. children'
     },
     stage: {
+    processing: "Article processing",
       docreader: 'Document parsing',
       chunking: 'Chunking',
-      embedding: 'Vectorization',
-      multimodal: 'Multimodal recognition',
-      postprocess: 'Post-processing'
-    },
+      embedding: 'Vectorization',},
     status: {
       pending: 'Pending',
       running: 'Running',
@@ -585,10 +572,6 @@ export default {
       EMBEDDING_PROVIDER_FAIL_SUGGESTION: 'Check the embedding model name, service URL and credentials.',
       VECTORSTORE_WRITE_FAILED: 'Index write failed',
       VECTORSTORE_WRITE_FAILED_SUGGESTION: 'Check the PostgreSQL connection and database logs, then retry parsing after fixing the issue.',
-      MULTIMODAL_VLM_FAILED: 'Image understanding failed',
-      MULTIMODAL_VLM_FAILED_SUGGESTION: 'Check the image understanding model configuration and service status, then retry image processing.',
-      MULTIMODAL_ALL_FAILED: 'All image understanding tasks failed',
-      MULTIMODAL_ALL_FAILED_SUGGESTION: 'Check the image understanding model configuration, limits and service status before retrying parsing.',
       TASK_TIMEOUT: 'Processing task retries exhausted',
       TASK_TIMEOUT_SUGGESTION: 'Review the task error and application logs, fix the cause and retry parsing.',
       UNKNOWN: 'Parsing failed',
@@ -900,7 +883,6 @@ export default {
       models: 'Model Configuration',
       chunking: 'Chunking Settings',
       advanced: 'Advanced Settings',
-      multimodal: 'Image Processing',
       datasource: 'Data Sources',
     },
     errors: {
@@ -935,8 +917,7 @@ export default {
       loadDataFailed: 'Failed to load knowledge base data',
       notFound: 'Knowledge base not found',
       nameRequired: 'Please enter the knowledge base name',
-      summaryRequired: 'Please select a summary model',
-      multimodalInvalid: 'Multimodal configuration validation failed',
+      summaryRequired: "Select a generation model for article processing",
 
       missingId: 'Knowledge base ID is missing',
       buildDataFailed: 'Failed to construct submission data',
@@ -1051,41 +1032,14 @@ export default {
         }
       }
     },
-    multimodal: {
-      title: 'Image Processing Configuration',
-      description: 'Configure image content understanding for parsing and retrieving non-text content like images'
-    },
     advanced: {
       title: 'Advanced Settings',
-      description: 'Configure question generation and other advanced features',
-      questionGeneration: {
-        label: 'AI Question Generation',
-        description: 'Generate related questions for each chunk using LLM during document parsing to improve retrieval recall. Enabling this will increase document parsing time.',
-        countLabel: 'Question Count',
-        countDescription: 'Number of questions to generate per document chunk (1-10)',
-        instructionsLabel: 'Question Generation Instructions',
-        instructionsDescription: 'Specify audience, scenario, and wording while the system retains the stable output format',
-        instructionsPlaceholder: 'For example: generate natural customer-support questions and avoid exam-style wording…'
-      },
+      description: "Set additional instructions for table parsing summaries",
       tableMetadataInstructions: {
         label: 'Table Metadata Instructions',
         description: 'Add business context and field semantics to CSV/Excel summaries for better retrieval',
         placeholder: 'For example: this is a sales-order table, amounts are in CNY, and status uses internal codes…'
-      },
-      multimodal: {
-        label: 'Multimodal Feature',
-        description: 'Enable understanding of multimodal content such as images',
-        vllmLabel: 'VLLM Vision Model',
-        vllmDescription: 'Vision-language model required for multimodal understanding',
-        vllmPlaceholder: 'Select a VLLM model (required)',
-        descriptionLanguageLabel: 'Image Description Language',
-        descriptionLanguageDescription: 'Leave empty to follow the document language instead of forcing Chinese',
-        descriptionLanguageAuto: 'Follow document language',
-        customInstructionsLabel: 'Image Processing Instructions',
-        customInstructionsDescription: 'Add visual priorities while OCR and Markdown output contracts remain fixed',
-        customInstructionsPlaceholder: 'For example: prioritize nameplates, model numbers, alarm codes, and table units…'
-      }
-    }
+      },}
   },
   tenant: {
     title: 'Workspace Information',
@@ -1360,11 +1314,6 @@ export default {
           taskTypes: {
             documentProcess: 'Document parsing',
             manualProcess: 'Manual reprocessing',
-            postProcess: 'Document post-processing',
-            summary: 'Summary generation',
-            tableSummary: 'Table summary generation',
-            question: 'Question generation',
-            multimodal: 'Image multimodal processing',
             sync: 'Data-source sync',
             batchReparse: 'Batch reparse',
             batchDelete: 'Batch delete',
@@ -1394,37 +1343,27 @@ export default {
         },
         pools: {
           core: 'Core parsing',
-          postprocess: 'Post-process orchestration',
           enrichment: 'Enrichment',
           maintenance: 'Maintenance & sync',
           shared: 'Shared elastic',
         },
         poolDescriptions: {
           core: 'Guaranteed document and manual parsing capacity',
-          postprocess: 'Parse finalization and enrichment fan-out',
-          enrichment: "Summaries, images and question generation",
+          enrichment: "Entity name embedding rebuild",
           maintenance: 'Source sync, batch work, and deletion cleanup',
           shared: 'Borrowed by core or enrichment according to backlog',
         },
         queueNames: {
           default: 'Document parsing',
-          postprocess: 'Post-process',
-          summary: 'Summaries',
           sync: 'Source sync',
           low: 'Maintenance & batch',
-          multimodal: 'Multimodal',
           entity: "Entities",
-          question: 'Questions',
         },
         queueDescriptions: {
           default: 'Document parse, manual reparse',
-          postprocess: 'Parse finalization, enrichment fan-out',
-          summary: 'Document & table summaries',
           sync: 'Manual & scheduled sync',
           low: "Batch reparse and cleanup",
-          multimodal: 'Image OCR, vision captions',
           entity: "Entity name embedding rebuild",
-          question: 'Chunk-level question generation',
         }
       },
       keyLabels: {
@@ -1435,7 +1374,6 @@ export default {
         },
         asynq: {
           core_concurrency: 'Guaranteed core parse concurrency',
-          postprocess_concurrency: 'Post-process concurrency',
           enrichment_concurrency: 'Guaranteed enrichment concurrency',
           maintenance_concurrency: 'Maintenance concurrency',
           shared_concurrency: 'Shared elastic concurrency',
@@ -1452,8 +1390,7 @@ export default {
         },
         asynq: {
           core_concurrency: 'Guaranteed per-process concurrency for document and manual parsing. Core may also borrow the shared elastic pool. Minimum 1; requires a service restart.',
-          postprocess_concurrency: 'Dedicated per-process concurrency for lightweight parse finalization and enrichment fan-out. Minimum 1; requires a service restart.',
-          enrichment_concurrency: "Reserved concurrency per instance for summaries, images and question generation, with extra capacity from the shared pool. Restart after changing.",
+          enrichment_concurrency: "Reserved concurrency per instance for entity name embedding rebuilds, with shared capacity available. Restart after changing.",
           maintenance_concurrency: 'Per-process concurrency for source sync, batch work, and cleanup, hard-isolated from the user-facing pipeline. Minimum 1; requires a service restart.',
           shared_concurrency: 'Per-process elastic concurrency shared by core parsing and enrichment; whichever side has backlog borrows it automatically. Minimum 1; requires a service restart.',
         },
@@ -1541,9 +1478,6 @@ export default {
     }
   },
   model: {
-    imageProcessingUnsupported: "Image processing requires a VLLM model or a generation model with vision or multimodal support.",
-    imageProcessingNotFound: 'The image processing model was not found. Select another model.',
-    imageProcessingUnavailable: 'The image processing model service is unavailable. Try again later.',
     modelName: 'Model Name',
     defaultTag: 'Default',
     addModelInSettings: 'Go to global settings to add models',
@@ -1565,21 +1499,17 @@ export default {
         chat: "Configure language models for review and content generation",
         embedding: 'Configure embedding models for text vectorization',
         rerank: 'Configure models for result re-ranking',
-        vllm: 'Configure vision-language models for multimodal understanding',
         default: 'Configure model information'
       },
       modelNamePlaceholder: {
         local: 'e.g. llama2:latest',
         remote: 'e.g. gpt-4, claude-3-opus',
-        localVllm: 'e.g. llava:latest',
-        remoteVllm: 'e.g. gpt-4-vision-preview',
       },
       baseUrlLabel: 'Base URL',
       displayNameLabel: 'Display name (optional)',
       displayNamePlaceholder: 'e.g. Support QA model',
       displayNameDesc: 'Used only in the UI. Runtime calls still use the model name above.',
       baseUrlPlaceholder: 'e.g. https://api.openai.com/v1',
-      baseUrlPlaceholderVllm: 'e.g. http://localhost:11434/v1',
       apiKeyOptional: 'API Key (optional)',
       apiKeyPlaceholder: 'Enter API Key',
       customHeadersLabel: 'Custom Request Headers (optional)',
@@ -1600,7 +1530,7 @@ export default {
       dimensionOverrideLabel: 'Custom Output Dimension',
       dimensionOverrideDesc: 'Enable only if the provider documentation says this model accepts a dimensions parameter.',
       supportsVisionLabel: 'Supports Vision / Multimodal',
-      supportsVisionDesc: 'Whether the model accepts image and multimodal input. When enabled, it can extract text from images and describe them in knowledge bases.',
+      supportsVisionDesc: "Whether the model accepts images. When enabled, article processing sends body images to the generation model.",
       contextWindowLabel: 'Context Window',
       contextWindowPlaceholder: 'Default {value}',
       contextWindowDesc: "Maximum model context length in tokens.",
@@ -1811,7 +1741,6 @@ export default {
       chat: "Generation",
       embedding: 'Embedding',
       rerank: 'ReRank',
-      vllm: 'Vision',
     },
     actions: {
       addModel: 'Add Model',
@@ -1824,7 +1753,7 @@ export default {
     },
     chat: {
       title: "Generation models",
-      desc: "Configure language models for review, summaries and retrieval questions",
+      desc: "Configure language models for intake review and article processing",
       empty: "No generation models"
     },
     embedding: {
@@ -1836,11 +1765,6 @@ export default {
       title: 'ReRank Models',
       desc: 'Configure models for result re-ranking',
       empty: 'No re-rank models'
-    },
-    vllm: {
-      title: 'VLLM Vision Models',
-      desc: 'Configure vision-language models for multimodal understanding',
-      empty: 'No VLLM models'
     },
     toasts: {
       nameRequired: 'Model name cannot be empty',
@@ -1883,9 +1807,7 @@ export default {
           rerank_model_tier: 'Rerank tier',
 
         embedding_model: 'Embedding model',
-        summary_model: 'Summary model',
-        image_processing_model: 'Image processing model',
-        vlm_model: 'Vision model',
+        summary_model: "Article processing model",
         rerank_model: 'Re-ranking model',
         unknown: 'Other model setting'
       }
@@ -1904,8 +1826,6 @@ export default {
       queryPlaceholder: 'Enter the text to send to the model',
       embeddingInput: 'Text to embed',
       embeddingPlaceholder: 'Enter text to generate an embedding',
-      vlmPrompt: 'Image prompt',
-      vlmPromptPlaceholder: 'For example: Describe this image in detail',
       documents: 'Candidate documents',
       documentsPlaceholder: 'Enter one candidate document per line',
       documentsHint: 'Each non-empty line is sent as a separate document to the ReRank model',
@@ -2078,6 +1998,9 @@ export default {
     daysAgo: '{days} day ago | {days} days ago'
   },
   datasource: {
+    defaultContentType: "Default content type",
+    defaultContentTypeUnspecified: "Unspecified",
+    defaultContentTypeHint: "Used as a classification hint; the model still evaluates the article.",
     requiredFields: 'Enter a name and at least one feed URL.',
     title: 'Data Sources',
     description: 'Configure external data sources to sync content into this knowledge base',

@@ -185,65 +185,6 @@ export function checkRerankModel(modelConfig: {
     });
 }
 
-export function testMultimodalFunction(testData: {
-    image: File;
-    vlm_model: string;
-    vlm_base_url: string;
-    vlm_api_key?: string;
-    vlm_interface_type?: string;
-    chunk_size: number;
-    chunk_overlap: number;
-    separators: string[];
-}): Promise<{
-    success: boolean;
-    caption?: string;
-    ocr?: string;
-    processing_time?: number;
-    message?: string;
-}> {
-    return new Promise((resolve, reject) => {
-        const formData = new FormData();
-        formData.append('image', testData.image);
-        formData.append('vlm_model', testData.vlm_model);
-        formData.append('vlm_base_url', testData.vlm_base_url);
-        if (testData.vlm_api_key) {
-            formData.append('vlm_api_key', testData.vlm_api_key);
-        }
-        if (testData.vlm_interface_type) {
-            formData.append('vlm_interface_type', testData.vlm_interface_type);
-        }
-        formData.append('chunk_size', testData.chunk_size.toString());
-        formData.append('chunk_overlap', testData.chunk_overlap.toString());
-        formData.append('separators', JSON.stringify(testData.separators));
-
-        // 获取鉴权Token
-        const token = localStorage.getItem('reliquary_token');
-        const headers: Record<string, string> = {};
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
-
-        // 使用原生fetch因为需要发送FormData
-        fetch('/api/v1/initialization/multimodal/test', {
-            method: 'POST',
-            headers,
-            body: formData
-        })
-            .then(response => response.json())
-            .then((data: any) => {
-                if (data.success) {
-                    resolve(data.data || {});
-                } else {
-                    resolve({ success: false, message: data.message || t('error.initialization.testFailed') });
-                }
-            })
-            .catch((error: any) => {
-                console.error('Failed multimodal test:', error);
-                reject(error);
-            });
-    });
-}
-
 export interface FabriTextRequest {
     tags: string[];
     model_id: string;

@@ -61,6 +61,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import { ENTITY_TYPES, getEntity, getEntityNameEmbeddingRebuildStatus, listEntities, mergeEntities, rebuildEntityNameEmbeddings, type Entity, type EntityArticle, type EntityNameEmbeddingRebuildStatus, type EntityType } from '@/api/entities'
 import MergeSuggestions from './MergeSuggestions.vue'
 
+const props = withDefaults(defineProps<{ initialEntityId?: string }>(), { initialEntityId: '' })
 const emit = defineEmits<{ 'open-source': [knowledgeId: string] }>()
 const { t, locale } = useI18n()
 const pageSize = 50
@@ -138,6 +139,16 @@ async function rebuildNameEmbeddings() {
 }
 watch(entityFilter, scheduleEntitySearch)
 watch(entityTypeFilter, resetEntityList)
+async function selectInitialEntity(id: string) {
+  if (!id) return;
+  activeSection.value = 'entities';
+  const current = ++detailRequest;
+  entityArticles.value = []; entityDetailError.value = ''; entityDetailLoading.value = true;
+  try { const result = envelopeData(await getEntity(id)); if (current === detailRequest) { selectedEntity.value = result.entity; entityArticles.value = result.knowledge || [] } }
+  catch (cause) { if (current === detailRequest) entityDetailError.value = errorMessage(cause) }
+  finally { if (current === detailRequest) entityDetailLoading.value = false }
+}
+watch(() => props.initialEntityId, id => { void selectInitialEntity(id) }, { immediate: true })
 onMounted(() => { void refreshAll() })
 onBeforeUnmount(() => { entityRequest++; detailRequest++; mergeTargetRequest++; nameEmbeddingRequest++; clearNameEmbeddingPoll(); if (entitySearchTimer) clearTimeout(entitySearchTimer) })
 </script>

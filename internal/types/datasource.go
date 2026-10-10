@@ -51,7 +51,8 @@ type DataSource struct {
 	Name string `json:"name"`
 
 	// Connector type (rss).
-	Type string `json:"type" gorm:"type:varchar(50);index"`
+	Type               string `json:"type" gorm:"type:varchar(50);index"`
+	DefaultContentType string `json:"default_content_type" gorm:"type:varchar(16)"`
 
 	// Encrypted configuration (API credentials, tokens, etc.)
 	// Stored as JSON with AES-256-GCM encryption

@@ -46,24 +46,11 @@ var (
 	// Self-closing or attribute-only HTML <img> tags.
 	htmlImgTagRE = regexp.MustCompile(`(?i)<img\b[^>]*/?>`)
 
-	// Wrapper-style <image>, <images>, <image_caption>, <image_ocr> tags
-	// (opening or closing). Matches ONLY the tag; the text content between
-	// open and close tags is preserved. This is critical: VLM-generated OCR
-	// and caption text live inside <image_ocr>...</image_ocr> and
-	// <image_caption>...</image_caption> blocks, and stripping the content
-	// would silently destroy the very text we want to keep.
+	// Image wrapper tags are removed while parser-provided inner text is preserved.
 	imageWrapperTagRE = regexp.MustCompile(`(?i)</?image[a-z_]*\b[^>]*/?>`)
 )
 
-// stripImageMarkup removes image-only placeholders (Markdown image refs,
-// <img> tags, <image_original> redundancy blocks) and unwraps the
-// <image>/<image_caption>/<image_ocr> XML wrappers produced by the search
-// enrichment layer, leaving any OCR or caption text as plain inline text.
-//
-// This shape matters: when VLM OCR succeeds on a scanned PDF page, the
-// extracted text reaches downstream code wrapped in <image_ocr> tags inside
-// an <image> block. A naive "strip the whole <image>...</image> block"
-// approach would discard the OCR text — the exact opposite of what we want.
+// stripImageMarkup removes image placeholders and unwraps parser image text.
 func stripImageMarkup(s string) string {
 	s = imageOriginalBlockRE.ReplaceAllString(s, "")
 	s = mdImageRefRE.ReplaceAllString(s, "")

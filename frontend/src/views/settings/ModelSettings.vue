@@ -39,7 +39,6 @@
       <t-tab-panel value="embedding"
         :label="`${$t('modelSettings.typeShort.embedding')}(${countByType('embedding')})`" />
       <t-tab-panel value="rerank" :label="`${$t('modelSettings.typeShort.rerank')}(${countByType('rerank')})`" />
-      <t-tab-panel value="vllm" :label="`${$t('modelSettings.typeShort.vllm')}(${countByType('vllm')})`" />
     </t-tabs>
 
     <t-loading :loading="loading" size="small" class="model-list-loading">
@@ -101,7 +100,7 @@
                 <span class="model-card__sep">·</span>
                 <span>{{ $t('model.editor.dimensionLabel') }} {{ model.dimension }}</span>
               </template>
-              <template v-if="model._modelType === 'chat' || model._modelType === 'vllm'">
+              <template v-if="model._modelType === 'chat'">
                 <span class="model-card__sep">·</span>
                 <span
                   class="model-card__ctx"
@@ -239,7 +238,7 @@ const { t, te } = useI18n()
 const uiStore = useUIStore()
 const resources = useResourcesStore()
 const router = useRouter()
-type ModelType = 'chat' | 'embedding' | 'rerank' | 'vllm'
+type ModelType = 'chat' | 'embedding' | 'rerank'
 type FilterType = 'all' | ModelType
 
 const showDialog = ref(false)
@@ -252,7 +251,7 @@ const editingModel = ref<any>(null)
 const loading = ref(true)
 const activeTypeFilter = ref<FilterType>('all')
 
-const MODEL_TAB_TYPES: FilterType[] = ['chat', 'embedding', 'rerank', 'vllm']
+const MODEL_TAB_TYPES: FilterType[] = ['chat', 'embedding', 'rerank']
 const KNOWLEDGE_BASE_EDITOR_HOST_ROUTES = new Set([
   'home',
   'knowledgeBaseList',
@@ -276,7 +275,6 @@ const backendTypeToModelType: Record<string, ModelType> = {
   KnowledgeQA: 'chat',
   Embedding: 'embedding',
   Rerank: 'rerank',
-  VLLM: 'vllm',
 }
 
 // 将后端模型格式转换为旧的前端格式（附带 _modelType 便于渲染）
@@ -327,7 +325,6 @@ const typeIcon = (type: ModelType): string => {
     chat: 'chat',
     embedding: 'chart-bubble',
     rerank: 'filter-sort',
-    vllm: 'image',
   }
   return map[type]
 }
@@ -337,16 +334,11 @@ const typeLabel = (type: ModelType) => {
     chat: t('modelSettings.typeShort.chat'),
     embedding: t('modelSettings.typeShort.embedding'),
     rerank: t('modelSettings.typeShort.rerank'),
-    vllm: t('modelSettings.typeShort.vllm'),
   }
   return map[type]
 }
 
 const sourceLabel = (type: ModelType) => {
-  // vllm 的 remote 文案特殊，其余走通用 remote 文案
-  if (type === 'vllm') {
-    return t('modelSettings.source.openaiCompatible')
-  }
   return t('modelSettings.source.remote')
 }
 
@@ -399,7 +391,6 @@ const emptyHint = computed(() => {
     chat: t('modelSettings.chat.empty'),
     embedding: t('modelSettings.embedding.empty'),
     rerank: t('modelSettings.rerank.empty'),
-    vllm: t('modelSettings.vllm.empty'),
   }
   return map[activeTypeFilter.value as ModelType]
 })
@@ -539,17 +530,15 @@ const handleModelSave = async (modelData: any) => {
             supports_dimension_override: modelData.supportsDimensionOverride ?? false
           }
         } : {}),
-        ...(saveType === 'vllm' ? {
-          supports_vision: true
-        } : saveType === 'chat' ? {
+        ...(saveType === 'chat' ? {
           supports_vision: modelData.supportsVision ?? false
         } : {}),
-        ...((saveType === 'chat' || saveType === 'vllm')
+        ...((saveType === 'chat')
           && Number(modelData.contextWindow) >= 1024
           ? { context_window: Math.round(Number(modelData.contextWindow)) }
           : {}),
-        // 后台并发上限：仅 chat/embedding/vllm 受治理，>0 才写入（0/空沿用全局默认）。
-        ...(['chat', 'embedding', 'vllm'].includes(saveType)
+        // 后台并发上限：仅 chat/embedding 受治理，>0 才写入（0/空沿用全局默认）。
+        ...(['chat', 'embedding'].includes(saveType)
           && Number(modelData.maxConcurrency) > 0
           ? { max_concurrency: Number(modelData.maxConcurrency) }
           : {})
@@ -686,12 +675,11 @@ const copyModel = async (_type: ModelType, modelId: string) => {
 }
 
 // 获取后端模型类型
-function getModelType(type: ModelType): 'KnowledgeQA' | 'Embedding' | 'Rerank' | 'VLLM' {
+function getModelType(type: ModelType): 'KnowledgeQA' | 'Embedding' | 'Rerank' {
   const typeMap = {
     chat: 'KnowledgeQA' as const,
     embedding: 'Embedding' as const,
     rerank: 'Rerank' as const,
-    vllm: 'VLLM' as const,
   }
   return typeMap[type]
 }
@@ -942,10 +930,6 @@ onMounted(() => {
   color: #B85C00;
 }
 
-.model-card--vllm .model-card__badge {
-  background: rgba(201, 62, 62, 0.1);
-  color: #C93E3E;
-}
 
 .model-card__body {
   flex: 1;

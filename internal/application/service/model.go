@@ -13,7 +13,6 @@ import (
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/models/rerank"
 	"reliquary/internal/models/utils/ollama"
-	"reliquary/internal/models/vlm"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
 	"reliquary/internal/utils"
@@ -519,44 +518,6 @@ func (s *modelService) GetChatModel(ctx context.Context, modelId string) (chat.C
 	}
 
 	return chatModel, nil
-}
-
-// GetVLMModel retrieves and initializes a vision language model instance.
-func (s *modelService) GetVLMModel(ctx context.Context, modelId string) (vlm.VLM, error) {
-	if modelId == "" {
-		return nil, errors.New("model ID cannot be empty")
-	}
-
-	tenantID := types.MustTenantIDFromContext(ctx)
-
-	model, err := s.repo.GetByID(ctx, tenantID, modelId)
-	if err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"model_id":  modelId,
-			"tenant_id": tenantID,
-		})
-		return nil, err
-	}
-
-	if model == nil {
-		return nil, ErrModelNotFound
-	}
-
-	logger.Infof(ctx, "Getting VLM model: %s, source: %s", model.Name, model.Source)
-	if err := validateImageProcessingModel(model); err != nil {
-		return nil, err
-	}
-
-	vlmModel, err := vlm.NewVLM(vlm.ConfigFromModel(model), s.ollamaService)
-	if err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"model_id":   model.ID,
-			"model_name": model.Name,
-		})
-		return nil, err
-	}
-
-	return vlmModel, nil
 }
 
 func formatModelInUseMessage(kbCount int64) string {

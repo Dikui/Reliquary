@@ -472,19 +472,6 @@ func (h *ModelHandler) DebugModel(c *gin.Context) {
 		results, callErr := instance.Rerank(ctx, input, documents)
 		observations["result_count"] = len(results)
 		writeModelDebugResult(c, started, requestPreview, results, callErr, observations)
-	case types.ModelTypeVLLM:
-		if len(fileBytes) == 0 {
-			c.Error(errors.NewBadRequestError("image file is required"))
-			return
-		}
-		instance, callErr := h.service.GetVLMModel(ctx, id)
-		if callErr != nil {
-			writeModelDebugResult(c, started, requestPreview, nil, callErr, observations)
-			return
-		}
-		result, callErr := instance.Predict(ctx, [][]byte{fileBytes}, input)
-		observations["answer_characters"] = len([]rune(result))
-		writeModelDebugResult(c, started, requestPreview, result, callErr, observations)
 	default:
 		c.Error(errors.NewBadRequestError("unsupported model type"))
 	}
@@ -663,8 +650,6 @@ func modelTypeToFrontend(mt types.ModelType) string {
 		return "embedding"
 	case types.ModelTypeRerank:
 		return "rerank"
-	case types.ModelTypeVLLM:
-		return "vllm"
 	default:
 		return string(mt)
 	}
@@ -688,8 +673,6 @@ func (h *ModelHandler) ListModelProviders(c *gin.Context) {
 		backendModelType = types.ModelTypeEmbedding
 	case "rerank":
 		backendModelType = types.ModelTypeRerank
-	case "vllm":
-		backendModelType = types.ModelTypeVLLM
 	default:
 		backendModelType = types.ModelType(modelType)
 	}

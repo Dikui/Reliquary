@@ -559,11 +559,6 @@ const taskStates: RuntimeTaskState[] = ['active', 'pending', 'scheduled', 'retry
 const runtimeTaskTypeKeys: Record<string, string> = {
   'document:process': 'documentProcess',
   'manual:process': 'manualProcess',
-  'knowledge:post_process': 'postProcess',
-  'summary:generation': 'summary',
-  'datatable:summary': 'tableSummary',
-  'question:generation': 'question',
-  'image:multimodal': 'multimodal',
   'datasource:sync': 'sync',
   'knowledge:list_reparse': 'batchReparse',
   'knowledge:list_delete': 'batchDelete',

@@ -11,7 +11,7 @@ import (
 // its retry budget. Every registered task type shares this archive.
 //
 // Operators query by (Scope, ScopeID) — e.g. "all dead letters for KB
-// abc" — or by TaskType — e.g. "all summary:generation failures in the
+// abc", or by TaskType, e.g. "all document:process failures in the
 // last 24h". The table has no TTL; rows are kept until manually pruned.
 type TaskDeadLetter struct {
 	// Auto-increment row id.
@@ -19,7 +19,7 @@ type TaskDeadLetter struct {
 	// Tenant scope mirrored from the original task payload (best-effort:
 	// if the middleware can't decode the payload, this falls back to 0).
 	TenantID uint64 `json:"tenant_id" gorm:"index"`
-	// Task identifier (e.g. "summary:generation").
+	// Task identifier (e.g. "document:process").
 	TaskType string `json:"task_type" gorm:"type:varchar(64)"`
 	// Logical task scope. Falls back to
 	// "unknown" when the middleware doesn't recognize the task type's

@@ -64,6 +64,10 @@ func (s *DataSourceService) CreateDataSource(ctx context.Context, ds *types.Data
 	if ds == nil {
 		return nil, datasource.ErrDataSourceInvalid
 	}
+	if ds.DefaultContentType != "" && types.NormalizeContentType(ds.DefaultContentType) == "" {
+		return nil, fmt.Errorf("default_content_type must be one of event, opinion, research, tutorial, case, reference")
+	}
+	ds.DefaultContentType = types.NormalizeContentType(ds.DefaultContentType)
 
 	kb, err := s.kbService.GetKnowledgeBase(ctx)
 	if err != nil || kb == nil || kb.TenantID != ds.TenantID {
@@ -138,6 +142,10 @@ func (s *DataSourceService) UpdateDataSource(ctx context.Context, ds *types.Data
 	if ds == nil || ds.ID == "" {
 		return nil, datasource.ErrDataSourceInvalid
 	}
+	if ds.DefaultContentType != "" && types.NormalizeContentType(ds.DefaultContentType) == "" {
+		return nil, fmt.Errorf("default_content_type must be one of event, opinion, research, tutorial, case, reference")
+	}
+	ds.DefaultContentType = types.NormalizeContentType(ds.DefaultContentType)
 
 	// Verify data source exists
 	existing, err := s.dsRepo.FindByID(ctx, ds.ID)
@@ -634,8 +642,7 @@ func (s *DataSourceService) ProcessSync(ctx context.Context, task *asynq.Task) e
 		_ = s.dsRepo.Update(ctx, ds)
 		return err
 	}
-	// Surface the KB's multimodal/VLM state to the connector so it only extracts
-	// embedded images for OCR when the KB can actually ingest them (never persisted).
+	// Subscriptions collect articles published since the source was created.
 	if ds.Type == types.ConnectorTypeRSS {
 		config.IngestSince = ds.CreatedAt
 	}
@@ -906,7 +913,7 @@ func (s *DataSourceService) applyFetchedItem(
 		case item.Metadata["embedded_image"] == "true":
 			// An image extracted from a document for OCR is a best-effort
 			// enrichment, not the document itself. If the KB cannot ingest it
-			// (VLM/object-storage not configured for images, or a transient error),
+			// (local image storage failure or a transient error),
 			// skip it rather than failing the whole sync: the doc body already
 			// synced, and the image stays in SubtreeKeep for a later retry once the
 			// KB is configured.
@@ -1258,7 +1265,7 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 			ds.KnowledgeBaseID,
 			fh,
 			metadata,
-			nil,           // use KB default for multimodal
+			nil,           // unused compatibility parameter
 			item.FileName, // customFileName — must include extension for file-type validation
 			channel,
 			nil,

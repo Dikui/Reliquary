@@ -8,11 +8,11 @@ import "time"
 //   - SpanKindRoot     — the per-(knowledge, attempt) trace root. Always
 //     the parent_span_id ancestor of every other span
 //     in that attempt. UI uses it for total elapsed.
-//   - SpanKindStage    — one of the 5 canonical stages (DocReader, etc.).
+//   - SpanKindStage describes one of the four canonical stages.
 //     UI renders these as the timeline segments.
-//   - SpanKindSubSpan  — anything inside a stage (e.g. multimodal.image[i]).
+//   - SpanKindSubSpan describes work inside a stage (e.g. processing.call).
 //     UI shows them as collapsible children.
-//   - SpanKindGeneration — a SubSpan that wraps an LLM/VLM call. Same UI
+//   - SpanKindGeneration, a SubSpan that wraps a model call. Same UI
 //     treatment as SubSpan but tagged to identify model calls.
 const (
 	SpanKindRoot       = "root"
@@ -30,48 +30,25 @@ const (
 	SpanStatusRunning   = "running"
 	SpanStatusDone      = "done"
 	SpanStatusFailed    = "failed"
-	SpanStatusSkipped   = "skipped"   // intentionally not run (e.g. multimodal on a text-only doc)
+	SpanStatusSkipped   = "skipped"   // intentionally not run (e.g. embeddings for summary-only articles)
 	SpanStatusCancelled = "cancelled" // not run because an upstream span failed
 )
 
-// Stage names — the closed set the UI builds its 5-segment timeline from.
-// Adding a stage requires a coordinated frontend release. SubSpan names
-// are free-form (e.g. "multimodal.image[0]") and don't go through this
-// list.
+// Stages follow parsing, the processing call, body chunking, and embeddings.
 const (
-	StageDocReader   = "docreader"
-	StageChunking    = "chunking"
-	StageEmbedding   = "embedding"
-	StageMultimodal  = "multimodal"
-	StagePostProcess = "postprocess"
+	StageDocReader  = "docreader"
+	StageProcessing = "processing"
+	StageChunking   = "chunking"
+	StageEmbedding  = "embedding"
 )
 
-// AllStages is the canonical, ordered stage list. Used by the API layer
-// to synthesize "pending" placeholders so the timeline always renders five
-// segments even before parsing starts.
-var AllStages = []string{
-	StageDocReader,
-	StageChunking,
-	StageEmbedding,
-	StageMultimodal,
-	StagePostProcess,
-}
+var AllStages = []string{StageDocReader, StageProcessing, StageChunking, StageEmbedding}
 
-// StageDependencies declares the DAG between stages. Used by the tracker
-// to cascade-cancel dependents when a stage fails — a Chunking failure
-// silently turns Embedding/Multimodal/PostProcess into "cancelled" so the
-// timeline shows a clear blast radius instead of three pending spinners.
-//
-// Important: Multimodal does NOT depend on Embedding. They share Chunking
-// as their upstream and are otherwise independent (Multimodal kicks off
-// regardless of vector indexing config). PostProcess joins both before
-// running its handlers.
 var StageDependencies = map[string][]string{
-	StageDocReader:   nil,
-	StageChunking:    {StageDocReader},
-	StageEmbedding:   {StageChunking},
-	StageMultimodal:  {StageChunking},
-	StagePostProcess: {StageEmbedding, StageMultimodal},
+	StageDocReader:  nil,
+	StageProcessing: {StageDocReader},
+	StageChunking:   {StageProcessing},
+	StageEmbedding:  {StageChunking},
 }
 
 // KnowledgeProcessingSpan is one row in knowledge_processing_spans.

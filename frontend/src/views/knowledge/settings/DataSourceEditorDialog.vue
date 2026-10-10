@@ -4,6 +4,7 @@ import { computed, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import SettingDrawer from '@/components/settings/SettingDrawer.vue'
+import { CONTENT_TYPES } from '@/types/knowledgeClassification'
 import { createDataSource, updateDataSource, triggerSync, validateCredentials, putDataSourceCredentials, deleteDataSourceCredentials, type DataSource } from '@/api/datasource'
 
 const props = defineProps<{ dataSource: DataSource | null }>()
@@ -16,7 +17,8 @@ const error = ref('')
 const testResult = ref('')
 const configured = ref(false)
 const replaceCredentials = ref(false)
-const form = ref({ name: '', feedUrls: '', publisher: '', articlePathPrefix: '', authHeaders: '', sync_schedule: '0 0 2 * * *', sync_mode: 'incremental' as 'incremental' | 'full', sync_deletions: true })
+const form = ref({ name: '', default_content_type: '', feedUrls: '', publisher: '', articlePathPrefix: '', authHeaders: '', sync_schedule: '0 0 2 * * *', sync_mode: 'incremental' as 'incremental' | 'full', sync_deletions: true })
+const contentTypeOptions = computed(() => [{ value: '', label: t('datasource.defaultContentTypeUnspecified') }, ...CONTENT_TYPES.map(value => ({ value, label: t(`knowledgeBase.contentTypes.${value}`) }))])
 const scheduleOptions = computed(() => [
   { label: t('datasource.schedule30min'), value: '0 */30 * * * *' },
   { label: t('datasource.schedule1h'), value: '0 0 * * * *' },
@@ -52,7 +54,7 @@ watch(visible, (open) => {
   if (!open) { form.value.authHeaders = ''; return }
   const ds = props.dataSource
   const settings = ds?.config?.settings || {}
-  form.value = { name: ds?.name || '', feedUrls: settings.feed_urls || ds?.config?.resource_ids?.join('\n') || '', publisher: settings.publisher || '', articlePathPrefix: settings.article_path_prefix || '', authHeaders: '', sync_schedule: ds?.sync_schedule || '0 0 2 * * *', sync_mode: ds?.sync_mode || 'incremental', sync_deletions: ds?.sync_deletions ?? true }
+  form.value = { name: ds?.name || '', default_content_type: ds?.default_content_type || '', feedUrls: settings.feed_urls || ds?.config?.resource_ids?.join('\n') || '', publisher: settings.publisher || '', articlePathPrefix: settings.article_path_prefix || '', authHeaders: '', sync_schedule: ds?.sync_schedule || '0 0 2 * * *', sync_mode: ds?.sync_mode || 'incremental', sync_deletions: ds?.sync_deletions ?? true }
   configured.value = ds?.credentials?.credentials?.configured === true
   replaceCredentials.value = false
   error.value = ''
@@ -79,7 +81,7 @@ async function save() {
   try {
     const credentials = form.value.authHeaders.trim() ? { auth_headers: form.value.authHeaders } : {}
     const settings = { feed_urls: form.value.feedUrls.trim(), publisher: form.value.publisher, article_path_prefix: form.value.articlePathPrefix }
-    const payload: Partial<DataSource> = { name: form.value.name.trim(), type: 'rss', config: { credentials: props.dataSource ? {} : credentials, settings, resource_ids: [] }, sync_schedule: form.value.sync_schedule, sync_mode: form.value.sync_mode, sync_deletions: form.value.sync_deletions, status: 'active' }
+    const payload: Partial<DataSource> = { name: form.value.name.trim(), type: 'rss', default_content_type: form.value.default_content_type, config: { credentials: props.dataSource ? {} : credentials, settings, resource_ids: [] }, sync_schedule: form.value.sync_schedule, sync_mode: form.value.sync_mode, sync_deletions: form.value.sync_deletions, status: 'active' }
     if (props.dataSource) {
       if (replaceCredentials.value) await putDataSourceCredentials(props.dataSource.id, credentials)
       await updateDataSource(props.dataSource.id, payload)
@@ -105,6 +107,7 @@ async function save() {
       <div class="rss-presets"><t-button v-for="[name, url, publisher, prefix] in rssPresets" :key="url" variant="outline" size="small" :disabled="submitting" @click="selectPreset(name, url, publisher, prefix)">{{ name }}</t-button></div>
       <t-form-item :label="t('datasource.field.feedUrls')" name="feedUrls"><SafeTextarea v-model="form.feedUrls" :autosize="{ minRows: 3, maxRows: 8 }" :disabled="submitting" /><p>{{ t('datasource.field.feedUrlsHint') }}</p></t-form-item>
       <t-form-item :label="t('datasource.field.feedPublisher')" name="publisher"><t-input v-model="form.publisher" :disabled="submitting" /></t-form-item>
+      <t-form-item :label="t('datasource.defaultContentType')" name="default_content_type"><t-select v-model="form.default_content_type" :options="contentTypeOptions" :disabled="submitting" :aria-label="t('datasource.defaultContentType')" /><p>{{ t('datasource.defaultContentTypeHint') }}</p></t-form-item>
       <t-form-item :label="t('datasource.field.articlePathPrefix')" name="articlePathPrefix"><t-input v-model="form.articlePathPrefix" :disabled="submitting" /><p>{{ t('datasource.field.articlePathPrefixHint') }}</p></t-form-item>
       <div v-if="configured && !replaceCredentials" class="credential-actions"><span>{{ t('credential.configured') }}</span><t-button variant="text" @click="replaceCredentials = true">{{ t('credential.update') }}</t-button><t-popconfirm :content="t('credential.confirmRemovePrompt')" @confirm="removeCredentials"><t-button variant="text" theme="danger">{{ t('credential.remove') }}</t-button></t-popconfirm></div>
       <t-form-item v-else :label="t('datasource.field.authHeaders')" name="authHeaders"><t-input v-model="form.authHeaders" type="password" :disabled="submitting" :placeholder="t('datasource.field.authHeadersHint')" /></t-form-item>

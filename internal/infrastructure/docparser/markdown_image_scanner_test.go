@@ -7,6 +7,22 @@ import (
 	"reliquary/internal/types"
 )
 
+func TestMarkdownImageReferencesReturnDestinationsInOrder(t *testing.T) {
+	body := `\![escaped](local://ignored.png) ![first](local://figure(1).png "Chart (first)") ![second](<resource://stored-id> 'Chart two') ![last](local://last.png)`
+	refs := MarkdownImageReferences(body)
+	if len(refs) != 3 {
+		t.Fatalf("expected three image destinations, got %#v", refs)
+	}
+	for i, want := range []string{"local://figure(1).png", "resource://stored-id", "local://last.png"} {
+		if refs[i].URL != want {
+			t.Errorf("destination %d = %q, want %q", i, refs[i].URL, want)
+		}
+		if i > 0 && refs[i].Position <= refs[i-1].Position {
+			t.Errorf("destination positions do not follow the body order: %#v", refs)
+		}
+	}
+}
+
 func TestScanMarkdownImageTargets(t *testing.T) {
 	tests := []struct {
 		name    string

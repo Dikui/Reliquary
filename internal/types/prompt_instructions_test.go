@@ -34,10 +34,10 @@ func TestValidateKnowledgeBasePromptInstructions(t *testing.T) {
 
 func TestNormalizeKnowledgeBasePromptInstructions(t *testing.T) {
 	kb := &KnowledgeBase{
-		VLMConfig: VLMConfig{CustomInstructions: "  focus labels  "},
+		ChunkingConfig: ChunkingConfig{TableMetadataInstructions: "  focus table columns  "},
 	}
 	NormalizeKnowledgeBasePromptInstructions(kb)
-	if kb.VLMConfig.CustomInstructions != "focus labels" {
-		t.Fatalf("got %q", kb.VLMConfig.CustomInstructions)
+	if kb.ChunkingConfig.TableMetadataInstructions != "focus table columns" {
+		t.Fatalf("got %q", kb.ChunkingConfig.TableMetadataInstructions)
 	}
 }

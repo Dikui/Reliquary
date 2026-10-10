@@ -19,9 +19,6 @@ func RegisterChunkRoutes(r *gin.RouterGroup, handler *handler.ChunkHandler, g *a
 	{
 		chunkRead.GET("/:knowledge_id", g.KBExistsFromKnowledgeIDParam("knowledge_id"), handler.ListKnowledgeChunks)
 		chunkRead.GET("/by-id/:id", g.KBExistsFromChunkIDParam("id"), handler.GetChunkByIDOnly)
-		chunks.DELETE("/by-id/:id/questions", g.KBExistsFromChunkIDParam("id"), handler.DeleteGeneratedQuestion)
-		chunks.PUT("/by-id/:id/questions", g.KBExistsFromChunkIDParam("id"), handler.UpsertGeneratedQuestion)
-		chunks.POST("/by-id/:id/questions/regenerate", g.KBExistsFromChunkIDParam("id"), handler.RegenerateGeneratedQuestions)
 	}
 }
 
@@ -47,7 +44,7 @@ func RegisterKnowledgeRoutes(r *gin.RouterGroup, handler *handler.KnowledgeHandl
 		kRead.GET("/:id/spans", g.KBExistsFromKnowledgeIDParam("id"), handler.GetKnowledgeSpans)
 		k.DELETE("/:id", g.KBExistsFromKnowledgeIDParam("id"), handler.DeleteKnowledge)
 		k.PUT("/:id", g.KBExistsFromKnowledgeIDParam("id"), handler.UpdateKnowledge)
-		k.POST("/:id/regenerate-summary", g.KBExistsFromKnowledgeIDParam("id"), handler.RegenerateKnowledgeSummary)
+		k.POST("/:id/reprocess", g.KBExistsFromKnowledgeIDParam("id"), handler.ReparseKnowledge)
 		k.PUT("/manual/:id", g.KBExistsFromKnowledgeIDParam("id"), handler.UpdateManualKnowledge)
 		k.POST("/:id/reparse", g.KBExistsFromKnowledgeIDParam("id"), handler.ReparseKnowledge)
 		k.POST("/:id/cancel-parse", g.KBExistsFromKnowledgeIDParam("id"), handler.CancelKnowledgeParse)

@@ -41,7 +41,6 @@ func singletonIntakeSettings(t *testing.T, h *retainedIntakeHarness) *knowledgeB
 	require.NoError(t, h.db.Model(h.kb).Update("embedding_model_id", "saved-embedding").Error)
 	bases := &knowledgeBaseService{db: h.db, repo: repository.NewKnowledgeBaseRepository(h.db), kgRepo: h.service.repo}
 	h.service.kbService = bases
-	h.post.kbService = bases
 	return bases
 }
 

@@ -45,7 +45,7 @@ func NewAsynqTaskInspector(inspector *asynq.Inspector, redisClient *redis.Client
 
 // knowledgeIDProbe is the minimal payload shape we need to filter
 // tasks. All pipeline payload types embed a json:"knowledge_id" field,
-// so a single struct covers Document / ImageMultimodal / PostProcess /
+// so a single struct covers Document / ManualProcess /
 // Question / Summary / Extract / Manual.
 type knowledgeIDProbe struct {
 	KnowledgeID string `json:"knowledge_id,omitempty"`
@@ -66,8 +66,7 @@ type runtimeTaskPayloadProbe struct {
 // queuesScanned is the fixed set of queue names this codebase enqueues
 // into. Kept tight on purpose — we never scan user-defined queues.
 // MUST include every queue any cancelable task type can land in; the
-// multimodal queue is required here so cancelling a knowledge also purges
-// its (potentially hundreds of) pending image:multimodal tasks.
+// Article task cancellation scans the retained processing task types.
 var queuesScanned = func() []string {
 	queues := make([]string, 0, len(types.QueueDefinitions()))
 	for _, definition := range types.QueueDefinitions() {
@@ -77,12 +76,8 @@ var queuesScanned = func() []string {
 }()
 
 var taskTypesForKnowledgeCancel = map[string]struct{}{
-	types.TypeDocumentProcess:      {},
-	types.TypeManualProcess:        {},
-	types.TypeImageMultimodal:      {},
-	types.TypeKnowledgePostProcess: {},
-	types.TypeQuestionGeneration:   {},
-	types.TypeSummaryGeneration:    {},
+	types.TypeDocumentProcess: {},
+	types.TypeManualProcess:   {},
 }
 
 // listPageSize caps each Redis LIST call. Asynq pages tasks, so we

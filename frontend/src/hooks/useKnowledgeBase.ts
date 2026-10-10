@@ -12,6 +12,7 @@ import {
 import { knowledgeStore } from "@/stores/knowledge";
 import { useI18n } from 'vue-i18n';
 import type { KnowledgeRepostSource } from '@/api/knowledge-base/index';
+import type { ClassifiedKnowledge, StructuredSummary, KnowledgeTopic } from '@/types/knowledgeClassification';
 import { useResourcesStore } from '@/stores/resources';
 import { useKnowledgeDuplicates } from './useKnowledgeDuplicates';
 
@@ -32,7 +33,11 @@ export default function (knowledgeBaseId?: string) {
     channel: "",
     file_type: "",
     description: "",
-    summary_status: "",
+    content_type: '',
+    processing_mode: 'full' as 'full' | 'summary_only',
+    structured_summary: null as StructuredSummary | null,
+    entities: [] as NonNullable<ClassifiedKnowledge['entities']>,
+    topics: [] as KnowledgeTopic[],
     parse_status: "",
     error_message: "",
 	metadata: {} as Record<string, any>,
@@ -50,6 +55,7 @@ export default function (knowledgeBaseId?: string) {
       page_size: number;
       keyword?: string;
       file_type?: string;
+      content_type?: string;
       parse_status?: string;
       source?: string;
       start_time?: string;
@@ -180,7 +186,11 @@ export default function (knowledgeBaseId?: string) {
       channel: "",
       file_type: "",
       description: "",
-      summary_status: "",
+      content_type: '',
+      processing_mode: 'full',
+      structured_summary: null,
+      entities: [],
+      topics: [],
       parse_status: "",
       error_message: "",
 	  metadata: {},
@@ -202,7 +212,11 @@ export default function (knowledgeBaseId?: string) {
             channel: data.channel || '',
             file_type: data.file_type || '',
             description: data.description || '',
-            summary_status: data.summary_status || '',
+            content_type: data.content_type || '',
+            processing_mode: data.processing_mode || 'full',
+            structured_summary: data.structured_summary || null,
+            entities: Array.isArray(data.entities) ? data.entities : [],
+            topics: Array.isArray(data.topics) ? data.topics : [],
             parse_status: data.parse_status || '',
             error_message: data.error_message || '',
 			metadata: data.metadata || {},

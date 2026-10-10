@@ -6,7 +6,6 @@ import (
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/models/rerank"
-	"reliquary/internal/models/vlm"
 	"reliquary/internal/types"
 )
 
@@ -37,8 +36,6 @@ type ModelService interface {
 	GetRerankModel(ctx context.Context, modelId string) (rerank.Reranker, error)
 	// GetChatModel gets a chat model
 	GetChatModel(ctx context.Context, modelId string) (chat.Chat, error)
-	// GetVLMModel gets a vision language model
-	GetVLMModel(ctx context.Context, modelId string) (vlm.VLM, error)
 }
 
 // ModelRepository defines the model repository interface

@@ -1,6 +1,6 @@
 export type ModelEditorSource = 'local' | 'remote'
 
-export type ModelEditorType = 'chat' | 'embedding' | 'rerank' | 'vllm'
+export type ModelEditorType = 'chat' | 'embedding' | 'rerank'
 
 export function shouldShowOllamaUnavailableTip(
   source: ModelEditorSource,

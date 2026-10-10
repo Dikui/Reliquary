@@ -315,12 +315,12 @@ func TestIngestItem_NoSweepWhenFlagUnset(t *testing.T) {
 }
 
 // TestApplyFetchedItem_EmbeddedImageIngestFailureCountsAsSkip verifies that an
-// embedded image extracted for OCR is best-effort: if the KB cannot ingest it
-// (e.g. VLM/object-storage not configured for images), the failure is counted as
+// embedded image intake is best-effort: if the KB cannot ingest it
+// (e.g. object storage is not configured), the failure is counted as
 // Skipped, not Failed, so it never marks the whole document sync as failed. A
 // non-image item with the same error must still count as Failed.
 func TestApplyFetchedItem_EmbeddedImageIngestFailureCountsAsSkip(t *testing.T) {
-	ingestErr := errors.New("上传图片文件需要设置VLM模型")
+	ingestErr := errors.New("图片对象存储未配置")
 	ds := &types.DataSource{ID: "ds-1", Type: "test-subtree", TenantID: 7, KnowledgeBaseID: "kb-1"}
 	newItem := func(extID string, meta map[string]string) *types.FetchedItem {
 		return &types.FetchedItem{
