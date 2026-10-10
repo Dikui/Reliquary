@@ -20,12 +20,11 @@
                 <h2 class="sidebar-title">{{ editorMode === 'create' ? $t('agent.editor.createTitle') :
                   $t('agent.editor.editTitle') }}</h2>
               </div>
-              <div class="settings-nav" data-guide="agent-editor-sidebar">
+              <div class="settings-nav">
                 <template v-for="group in navGroups" :key="group.key">
                   <div class="nav-group-title">{{ group.label }}</div>
                   <div v-for="(item, index) in group.items" :key="index"
-                    :class="['nav-item', { 'active': currentSection === item.key }]"
-                    :data-guide="`agent-editor-nav-${item.key}`" @click="currentSection = item.key">
+                    :class="['nav-item', { 'active': currentSection === item.key }]" @click="currentSection = item.key">
                     <t-icon :name="item.icon" class="nav-icon" />
                     <span class="nav-label">{{ item.label }}</span>
                     <span v-if="item.key === 'prompts' && promptNavItems.length > 1" class="nav-badge">
@@ -81,7 +80,7 @@
                           $t('agent.editor.normalDesc') }}</p>
                       </div>
                       <div class="setting-control">
-                        <t-radio-group v-model="agentMode" :disabled="isBuiltinAgent" data-guide="agent-create-mode">
+                        <t-radio-group v-model="agentMode" :disabled="isBuiltinAgent">
                           <t-radio-button value="quick-answer">
                             {{ $t('agent.type.normal') }}
                           </t-radio-button>
@@ -93,8 +92,7 @@
                     </div>
 
                     <!-- 智能体类型（仅智能推理模式下显示） -->
-                    <div v-if="isAgentMode && agentTypePresets.length > 0" class="setting-row setting-row--emphasize"
-                      data-guide="agent-create-agent-type">
+                    <div v-if="isAgentMode && agentTypePresets.length > 0" class="setting-row setting-row--emphasize">
                       <div class="setting-info">
                         <label>{{ $t('agentEditor.agentType.label') }}</label>
                         <p class="desc">{{ $t('agentEditor.agentType.desc') }}</p>
@@ -116,7 +114,7 @@
                     </div>
 
                     <!-- 名称 -->
-                    <div class="setting-row" data-guide="agent-create-name">
+                    <div class="setting-row">
                       <div class="setting-info">
                         <label>{{ $t('agent.editor.name') }} <span v-if="!isBuiltinAgent"
                             class="required">*</span></label>
@@ -148,7 +146,6 @@
                           :autosize="{ minRows: 2, maxRows: 4 }" :disabled="isBuiltinAgent" />
                       </div>
                     </div>
-
 
                   </div>
                 </div>
@@ -549,7 +546,6 @@
                     <!-- 模型选择 -->
                     <div
                       class="setting-row"
-                      data-guide="agent-create-model"
                       data-agent-field="summary_model"
                       :class="{ 'setting-row--field-highlight': highlightedField === 'summary_model' }"
                     >
@@ -713,7 +709,7 @@
 
                   <div class="settings-group">
                     <!-- 图片上传 -->
-                    <div class="setting-row" data-guide="agent-create-multimodal">
+                    <div class="setting-row">
                       <div class="setting-info">
                         <label>{{ $t('agentEditor.imageUpload.label') }}</label>
                         <p class="desc">{{ $t('agentEditor.imageUpload.desc') }}</p>
@@ -760,33 +756,6 @@
                         <t-input-number v-model="formData.config.attachment_ocr_max_pages" :min="0" :max="64"
                           :step="1" theme="normal" style="width: 160px;"
                           :placeholder="$t('agentEditor.imageUpload.useGlobalDefault')" />
-                      </div>
-                    </div>
-
-                    <!-- 音频上传开关 -->
-                    <div class="setting-row">
-                      <div class="setting-info">
-                        <label>{{ $t('agentEditor.audioUpload.label') }}</label>
-                        <p class="desc">{{ $t('agentEditor.audioUpload.desc') }}</p>
-                      </div>
-                      <div class="setting-control">
-                        <t-switch v-model="formData.config.audio_upload_enabled" />
-                      </div>
-                    </div>
-
-                    <!-- ASR 模型（音频上传启用时） -->
-                    <div v-if="formData.config.audio_upload_enabled" class="setting-row">
-                      <div class="setting-info">
-                        <label>{{ $t('agentEditor.audioUpload.asrModel') }}</label>
-                        <p class="desc">{{ $t('agentEditor.audioUpload.asrModelDesc') }}</p>
-                      </div>
-                      <div class="setting-control">
-                        <ModelSelector model-type="ASR" :selected-model-id="formData.config.asr_model_id"
-                          :all-models="allModels"
-                          clearable
-                          @update:selected-model-id="(val: string) => formData.config.asr_model_id = val"
-                          @add-model="handleAddModel('asr')"
-                          :placeholder="$t('agentEditor.audioUpload.asrModelPlaceholder')" />
                       </div>
                     </div>
 
@@ -885,14 +854,7 @@
                     <p class="section-description">{{ $t('agentEditor.questionSuggestions.description') }}</p>
                   </div>
 
-                  <t-tabs v-model="suggestionTab" class="suggestion-tabs">
-                    <t-tab-panel value="starters"
-                      :label="$t('agentEditor.questionSuggestions.startersTitle')" />
-                    <t-tab-panel value="followUps"
-                      :label="$t('agentEditor.questionSuggestions.followUpsTitle')" />
-                  </t-tabs>
-
-                  <div v-show="suggestionTab === 'starters'" class="settings-group">
+                  <div class="settings-group">
                     <div class="setting-row">
                       <div class="setting-info">
                         <label>{{ $t('agentEditor.questionSuggestions.enableStarters') }}</label>
@@ -958,107 +920,6 @@
                     </div>
                   </div>
 
-                  <div v-show="suggestionTab === 'followUps'" class="settings-group">
-                    <div class="setting-row">
-                      <div class="setting-info">
-                        <label>{{ $t('agentEditor.questionSuggestions.enableFollowUps') }}</label>
-                        <p class="desc">{{ $t('agentEditor.questionSuggestions.enableFollowUpsDesc') }}</p>
-                      </div>
-                      <div class="setting-control">
-                        <t-switch v-model="formData.config.question_suggestions.follow_ups.enabled"
-                          :aria-label="$t('agentEditor.questionSuggestions.enableFollowUps')" />
-                      </div>
-                    </div>
-
-                    <template v-if="formData.config.question_suggestions.follow_ups.enabled">
-                      <div class="setting-row">
-                        <div class="setting-info">
-                          <label>{{ $t('agentEditor.questionSuggestions.sourceMode') }}</label>
-                        </div>
-                        <div class="setting-control">
-                          <t-select v-model="formData.config.question_suggestions.follow_ups.mode"
-                            :options="followUpSuggestionModeOptions" />
-                        </div>
-                      </div>
-
-                      <div class="setting-row">
-                        <div class="setting-info">
-                          <label>{{ $t('agentEditor.questionSuggestions.count') }}</label>
-                        </div>
-                        <div class="setting-control">
-                          <t-input-number v-model="formData.config.question_suggestions.follow_ups.count"
-                            :min="1" :max="5" theme="column" />
-                        </div>
-                      </div>
-
-                      <div v-if="formData.config.question_suggestions.follow_ups.mode !== 'knowledge'"
-                        class="setting-row">
-                        <div class="setting-info">
-                          <label>{{ $t('agentEditor.questionSuggestions.model') }}</label>
-                          <p class="desc">{{ $t('agentEditor.questionSuggestions.modelDesc') }}</p>
-                        </div>
-                        <div class="setting-control">
-                          <ModelSelector model-type="KnowledgeQA"
-                            :selected-model-id="formData.config.question_suggestions.follow_ups.model_id"
-                            :all-models="allModels"
-                            clearable
-                            @update:selected-model-id="(val: string) => formData.config.question_suggestions.follow_ups.model_id = val"
-                            @add-model="handleAddModel('summary')" />
-                        </div>
-                      </div>
-
-                      <div class="suggestion-advanced-divider">
-                        <span>{{ $t('agentEditor.questionSuggestions.advancedSettings') }}</span>
-                      </div>
-
-                      <div class="setting-row">
-                        <div class="setting-info">
-                          <label>{{ $t('agentEditor.questionSuggestions.contextTurns') }}</label>
-                        </div>
-                        <div class="setting-control">
-                          <t-input-number
-                            v-model="formData.config.question_suggestions.follow_ups.max_context_turns"
-                            :min="1" :max="5" theme="column" />
-                        </div>
-                      </div>
-
-                      <div class="setting-row setting-row-vertical">
-                        <div class="setting-info">
-                          <label>{{ $t('agentEditor.questionSuggestions.categories') }}</label>
-                        </div>
-                        <div class="setting-control setting-control-full">
-                          <t-checkbox-group v-model="formData.config.question_suggestions.follow_ups.categories"
-                            :options="followUpCategoryOptions" />
-                        </div>
-                      </div>
-
-                      <div class="setting-row setting-row-vertical">
-                        <div class="setting-info">
-                          <label>{{ $t('agentEditor.questionSuggestions.instruction') }}</label>
-                        </div>
-                        <div class="setting-control setting-control-full">
-                          <t-textarea
-                            v-model="formData.config.question_suggestions.follow_ups.additional_instruction"
-                            :placeholder="$t('agentEditor.questionSuggestions.instructionPlaceholder')"
-                            :maxlength="2000" :autosize="{ minRows: 3, maxRows: 8 }" />
-                        </div>
-                      </div>
-
-                      <div class="setting-row setting-row-vertical">
-                        <div class="setting-info">
-                          <label>{{ $t('agentEditor.questionSuggestions.displayRules') }}</label>
-                        </div>
-                        <div class="setting-control setting-control-full">
-                          <div class="suggestion-checkboxes">
-                            <t-checkbox v-model="formData.config.question_suggestions.follow_ups.suppress_on_fallback">{{ $t('agentEditor.questionSuggestions.suppressFallback') }}</t-checkbox>
-                            <t-checkbox v-model="formData.config.question_suggestions.follow_ups.suppress_when_answer_asks_question">{{ $t('agentEditor.questionSuggestions.suppressQuestion') }}</t-checkbox>
-                            <t-checkbox v-model="formData.config.question_suggestions.follow_ups.knowledge_fallback">{{ $t('agentEditor.questionSuggestions.knowledgeFallback') }}</t-checkbox>
-                            <t-checkbox v-model="formData.config.question_suggestions.follow_ups.allow_regenerate">{{ $t('agentEditor.questionSuggestions.allowRegenerate') }}</t-checkbox>
-                          </div>
-                        </div>
-                      </div>
-                    </template>
-                  </div>
                 </div>
 
                 <!-- 工具配置（仅 Agent 模式） -->
@@ -1200,22 +1061,10 @@
                       </div>
                     </div>
 
-                    <!-- 授权等待超时：对话中触发 OAuth 授权时的等待秒数 -->
-                    <div v-if="mcpSelectionMode !== 'none'" class="setting-row">
-                      <div class="setting-info">
-                        <label>{{ $t('agentEditor.mcp.authWaitTimeout') }}</label>
-                        <p class="desc">{{ $t('agentEditor.mcp.authWaitTimeoutDesc') }}</p>
-                      </div>
-                      <div class="setting-control">
-                        <t-input-number v-model="formData.config.mcp_auth_wait_timeout" :min="5" :max="3600"
-                          theme="column" :placeholder="$t('agentEditor.mcp.authWaitTimeoutPlaceholder')" />
-                      </div>
-                    </div>
                   </div>
                 </div>
 
                 <!-- 技能：脚本跑在所选沙箱里，可用列表也来自这份配置 -->
-
 
                 <!-- 知识库配置 -->
                 <div v-show="currentSection === 'knowledge'" class="section">
@@ -1226,7 +1075,7 @@
 
                   <div class="settings-group">
                     <!-- 关联知识库 -->
-                    <div class="setting-row" data-guide="agent-create-knowledge">
+                    <div class="setting-row">
                       <div class="setting-info">
                         <label>{{ $t('agent.editor.knowledgeBases') }}</label>
                         <p class="desc">{{ $t('agentEditor.desc.kbScope') }}</p>
@@ -1383,7 +1232,6 @@
                       </div>
                     </div>
 
-
                     <!-- 表格数据分析（仅普通模式，命中 CSV/Excel 时会多一次 LLM 调用生成 SQL） -->
                     <div v-if="!isAgentMode" class="setting-row">
                       <div class="setting-info">
@@ -1412,7 +1260,7 @@
                   <t-button variant="outline" @click="handleClose">{{ props.readOnly ? $t('common.close') :
                     $t('common.cancel')
                     }}</t-button>
-                  <t-button v-if="!props.readOnly" theme="primary" data-guide="agent-create-submit" :loading="saving"
+                  <t-button v-if="!props.readOnly" theme="primary" :loading="saving"
                     :disabled="editorInitializing"
                     @click="handleSave">{{
                     saveButtonLabel
@@ -1426,19 +1274,15 @@
     </Transition>
   </Teleport>
 
-
-  <AgentCreateContextualGuide :when="visible && editorMode === 'create'" :is-agent-mode="isAgentMode" />
 </template>
 
 <script setup lang="ts">
 import { normalizeToolNames } from '@/utils/toolNames';
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
-import AgentCreateContextualGuide from '@/components/AgentCreateContextualGuide.vue';
 import {
   AGENT_EDITOR_FOCUS_SECTION_EVENT,
-  markContextualGuideDone,
-} from '@/config/contextualGuides';
+} from '@/config/editorNavigation';
 import { useI18n } from 'vue-i18n';
 import { selectInitialModelId } from '@/utils/modelDefaults';
 import { copyWithToast } from '@/utils/clipboard';
@@ -1528,7 +1372,6 @@ function resolveEditorSection(section?: string | null): string {
 }
 
 const currentSection = ref(resolveEditorSection(props.initialSection));
-const suggestionTab = ref<'starters' | 'followUps'>('starters');
 const contentWrapperRef = ref<HTMLElement | null>(null);
 const highlightedField = ref<AgentNotReadyReasonKey | null>(null);
 let highlightClearTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1682,7 +1525,7 @@ const defaultMaxCompletionTokensFor = (mode: string) => mode === 'smart-reasonin
   : defaultQuickAnswerMaxCompletionTokens;
 
 // 知识库相关工具列表（用于 watch(hasKnowledgeBase) 从"无"变"有"时 seed 默认工具）
-const knowledgeBaseTools = ['grep_chunks', 'knowledge_search', 'list_knowledge_chunks', 'query_knowledge_context', 'get_document_info', 'database_query', 'knowledge_report_anomaly', 'knowledge_import_url', 'knowledge_apply_anomaly'];
+const knowledgeBaseTools = ['grep_chunks', 'knowledge_search', 'list_knowledge_chunks', 'query_knowledge_context', 'get_document_info', 'knowledge_report_anomaly', 'knowledge_import_url', 'knowledge_apply_anomaly'];
 
 // 初始化标志，防止初始化时触发 watch 自动添加工具
 const isInitializing = ref(false);
@@ -1708,7 +1551,6 @@ const allTools = computed(() => [
   { value: 'list_knowledge_chunks', label: t('agentEditor.tools.listChunks'), description: t('agentEditor.tools.listChunksDesc'), group: 'rag' },
   { value: 'query_knowledge_context', label: t('agentEditor.tools.queryContext'), description: t('agentEditor.tools.queryContextDesc'), group: 'rag' },
   { value: 'get_document_info', label: t('agentEditor.tools.getDocInfo'), description: t('agentEditor.tools.getDocInfoDesc'), group: 'rag' },
-  { value: 'database_query', label: t('agentEditor.tools.dbQuery'), description: t('agentEditor.tools.dbQueryDesc'), group: 'rag' },
   { value: 'knowledge_report_anomaly', label: t('agentEditor.tools.knowledgeReportAnomaly'), description: t('agentEditor.tools.knowledgeReportAnomalyDesc'), group: 'rag' },
   { value: 'knowledge_import_url', label: t('agentEditor.tools.knowledgeImportURL'), description: t('agentEditor.tools.knowledgeImportURLDesc'), group: 'rag' },
   { value: 'knowledge_apply_anomaly', label: t('agentEditor.tools.knowledgeApplyAnomaly'), description: t('agentEditor.tools.knowledgeApplyAnomalyDesc'), group: 'rag', danger: true },
@@ -2008,8 +1850,6 @@ const defaultFormData = {
     // MCP 服务设置
     mcp_selection_mode: 'none' as 'all' | 'selected' | 'none',
     mcp_services: [] as string[],
-    // 对话中触发 OAuth 授权时的等待超时（秒），默认 600
-    mcp_auth_wait_timeout: 600,
     // 知识库设置：新建智能体默认选择 "全部知识库"，
     // 让用户无需先去勾选 KB 即可上手；如有需要可改为 "selected" / "none"。
     kb_selection_mode: 'all' as 'all' | 'selected' | 'none',
@@ -2060,19 +1900,6 @@ const defaultFormData = {
         items: [] as string[],
         count: 6,
       },
-      follow_ups: {
-        enabled: false,
-        mode: 'hybrid' as 'generated' | 'knowledge' | 'hybrid',
-        count: 3,
-        model_id: '',
-        additional_instruction: '',
-        categories: ['clarify', 'deepen', 'action'] as Array<'clarify' | 'deepen' | 'action'>,
-        max_context_turns: 2,
-        suppress_on_fallback: true,
-        suppress_when_answer_asks_question: true,
-        knowledge_fallback: true,
-        allow_regenerate: false,
-      },
     },
     // 已废弃字段（保留兼容）
     welcome_message: '',
@@ -2085,16 +1912,6 @@ const starterSuggestionModeOptions = computed(() => [
   { value: 'curated', label: t('agentEditor.questionSuggestions.modeCurated') },
   { value: 'knowledge', label: t('agentEditor.questionSuggestions.modeKnowledge') },
   { value: 'hybrid', label: t('agentEditor.questionSuggestions.modeHybrid') },
-]);
-const followUpSuggestionModeOptions = computed(() => [
-  { value: 'generated', label: t('agentEditor.questionSuggestions.modeGenerated') },
-  { value: 'knowledge', label: t('agentEditor.questionSuggestions.modeKnowledge') },
-  { value: 'hybrid', label: t('agentEditor.questionSuggestions.modeHybrid') },
-]);
-const followUpCategoryOptions = computed(() => [
-  { value: 'clarify', label: t('agentEditor.questionSuggestions.categoryClarify') },
-  { value: 'deepen', label: t('agentEditor.questionSuggestions.categoryDeepen') },
-  { value: 'action', label: t('agentEditor.questionSuggestions.categoryAction') },
 ]);
 
 const addStarterSuggestion = () => {
@@ -2253,7 +2070,6 @@ watch(currentSection, (section) => {
     syncActivePromptAnchor();
   }
 });
-
 
 const filteredIntentPlaceholders = computed(() => {
   if (!intentPromptPopup.value.prefix) {
@@ -2641,21 +2457,12 @@ watch(() => props.visible, async (val) => {
           ...(agentData.config.question_suggestions?.starters || {}),
           items: agentData.config.question_suggestions?.starters?.items || [],
         },
-        follow_ups: {
-          ...defaultFormData.config.question_suggestions.follow_ups,
-          ...(agentData.config.question_suggestions?.follow_ups || {}),
-          categories: agentData.config.question_suggestions?.follow_ups?.categories
-            || [...defaultFormData.config.question_suggestions.follow_ups.categories],
-        },
       };
       // 确保数组字段存在
       if (!agentData.config.knowledge_bases) agentData.config.knowledge_bases = [];
       agentData.config.allowed_tools = normalizeToolNames(agentData.config.allowed_tools || []);
       if (!agentData.config.mcp_services) agentData.config.mcp_services = [];
       // 授权等待超时：旧数据缺省时用默认 600 秒
-      if (agentData.config.mcp_auth_wait_timeout == null || agentData.config.mcp_auth_wait_timeout <= 0) {
-        agentData.config.mcp_auth_wait_timeout = 600;
-      }
       if (!agentData.config.supported_file_types) agentData.config.supported_file_types = [];
       if (!agentData.config.chat_parser_engine_rules) agentData.config.chat_parser_engine_rules = [];
       // 附件解析调优字段：旧数据缺省时置 0（表示使用全局默认）
@@ -2869,7 +2676,6 @@ watch(agentMode, (val, _oldVal) => {
           'list_knowledge_chunks',
           'query_knowledge_context',
           'get_document_info',
-          'database_query',
         );
       }
 
@@ -3942,7 +3748,6 @@ const handleSave = async () => {
       }
       savedAgent.value = created;
       formData.value.id = created.id;
-      markContextualGuideDone('agentCreate')
       currentSection.value = 'basic';
       MessagePlugin.success(t('agent.messages.created'));
       emit('success', created);
@@ -4770,48 +4575,6 @@ const handleSave = async () => {
   }
 }
 
-// 开场 / 回答后推荐用顶部 tab 区分（参照模型管理），避免整块包围框
-.suggestion-tabs {
-  margin-bottom: 4px;
-
-  :deep(.t-tabs__nav-item) {
-    font-size: 14px;
-  }
-
-  :deep(.t-tabs__operations) {
-    display: none;
-  }
-
-  // 只用 tab 作导航，内容自行渲染在下方
-  :deep(.t-tabs__content) {
-    display: none;
-  }
-}
-
-.suggestion-advanced-divider {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 4px 0 2px;
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-  line-height: 18px;
-
-  &::before,
-  &::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: var(--td-component-stroke);
-  }
-
-  span {
-    flex-shrink: 0;
-    color: var(--td-text-color-secondary);
-    font-weight: 500;
-  }
-}
-
 // 计数徽标紧贴标签，避免在整宽行里被 space-between 甩开
 // 需与基础 `.setting-info .setting-info-header`（space-between）同等特异性才能覆盖
 .setting-info-header.setting-info-header--inline {
@@ -4832,12 +4595,6 @@ const handleSave = async () => {
   color: var(--td-text-color-secondary);
 }
 
-.suggestion-checkboxes {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: 100%;
-}
 
 // ===== 工具配置：overview 面板 =====
 .tools-overview {

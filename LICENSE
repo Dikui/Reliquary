@@ -1096,10 +1096,6 @@ Copyright (c) 2001-2014 Python Software Foundation,  All Rights Reserved, Copyri
 Copyright (c) go.opentelemetry.io/otel/sdk authors.
 You may obtain the source code and detailed information about this component at go.opentelemetry.io/otel/sdk.
 
-30. github.com/go-json-experiment/json-0.0.0-20250725192818-e39067aee2d2
-Copyright (c) github.com/go-json-experiment/json authors.
-You may obtain the source code and detailed information about this component at github.com/go-json-experiment/json.
-
 31. github.com/puerkitobio/goquery-1.10.3
 Copyright (c) github.com/puerkitobio/goquery authors.
 You may obtain the source code and detailed information about this component at github.com/puerkitobio/goquery.
@@ -1866,10 +1862,6 @@ Copyright (c) Stephen Sugden <me@stephensugden.com> (stephensugden.com)
 Copyright (c) github.com/sourcegraph/conc authors.
 You may obtain the source code and detailed information about this component at github.com/sourcegraph/conc.
 
-46. github.com/gobwas/httphead-0.1.0
-Copyright (c) github.com/gobwas/httphead authors.
-You may obtain the source code and detailed information about this component at github.com/gobwas/httphead.
-
 47. github.com/invopop/jsonschema-0.13.0
 Copyright (c) github.com/invopop/jsonschema authors.
 You may obtain the source code and detailed information about this component at github.com/invopop/jsonschema.
@@ -2113,14 +2105,6 @@ You may obtain the source code and detailed information about this component at 
 112. source-map-0.3.10
 Copyright (c) source-map authors.
 You may obtain the source code and detailed information about this component at https://github.com/jridgewell/sourcemaps/tree/main/packages/source-map.
-
-113. github.com/chromedp/sysutil-1.1.0
-Copyright (c) github.com/chromedp/sysutil authors.
-You may obtain the source code and detailed information about this component at github.com/chromedp/sysutil.
-
-114. github.com/chromedp/chromedp-0.14.2
-Copyright (c) github.com/chromedp/chromedp authors.
-You may obtain the source code and detailed information about this component at github.com/chromedp/chromedp.
 
 115. docreader-1.0
 Copyright (c) docreader authors.
@@ -2510,10 +2494,6 @@ You may obtain the source code and detailed information about this component at 
 Copyright (c) webpack authors.
 You may obtain the source code and detailed information about this component at https://github.com/webpack/webpack.
 
-217. github.com/chromedp/cdproto-0.0.0-20250724212937-08a3db8b4327
-Copyright (c) github.com/chromedp/cdproto authors.
-You may obtain the source code and detailed information about this component at github.com/chromedp/cdproto.
-
 218. compiler-dom-3.5.17
 Copyright (c) compiler-dom authors.
 You may obtain the source code and detailed information about this component at https://github.com/vuejs/core/tree/main/packages/compiler-dom#readme.
@@ -2682,10 +2662,6 @@ You may obtain the source code and detailed information about this component at 
 Copyright (c) helper-numbers authors.
 You may obtain the source code and detailed information about this component at https://github.com/xtuc/webassemblyjs#readme.
 
-264. github.com/gobwas/ws-1.4.0
-Copyright (c) github.com/gobwas/ws authors.
-You may obtain the source code and detailed information about this component at github.com/gobwas/ws.
-
 265. @webassemblyjs/floating-point-hex-parser-1.13.2
 Copyright (c) 2017 Mauro Bringolf
 
@@ -2695,10 +2671,6 @@ You may obtain the source code and detailed information about this component at 
 
 267. copy-anything-3.0.5
 Copyright (c) 2018 Luca Ban
-
-268. github.com/gobwas/pool-0.2.1
-Copyright (c) github.com/gobwas/pool authors.
-You may obtain the source code and detailed information about this component at github.com/gobwas/pool.
 
 269. trace-mapping-0.3.29
 Copyright (c) trace-mapping authors.

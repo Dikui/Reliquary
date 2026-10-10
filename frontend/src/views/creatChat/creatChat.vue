@@ -47,8 +47,6 @@
         </div>
     </div>
 
-    <ContextualGuide tour="chat" :when="showChatContextualGuide" />
-
     <!-- 知识库编辑器（创建/编辑统一组件） -->
     <KnowledgeBaseEditorModal :visible="uiStore.showKBEditorModal" :mode="uiStore.kbEditorMode"
         :kb-id="uiStore.currentKBId || undefined" :initial-type="uiStore.kbEditorType"
@@ -56,7 +54,6 @@
 </template>
 <script setup lang="ts">
 import { ref, watch, onMounted, nextTick, computed } from 'vue';
-import ContextualGuide from '@/components/ContextualGuide.vue';
 import InputField from '@/components/Input-field.vue';
 import { createSessions } from "@/api/chat/index";
 import { getSuggestedQuestions } from "@/api/agent/index";
@@ -77,10 +74,6 @@ const settingsStore = useSettingsStore();
 const uiStore = useUIStore();
 const { t } = useI18n();
 const { navigateToKnowledgeBaseList } = useKnowledgeBaseCreationNavigation();
-
-const showChatContextualGuide = computed(() => {
-    return route.name === 'globalCreatChat' || route.name === 'kbCreatChat';
-});
 
 // ===== 推荐问题 =====
 const suggestedQuestions = ref<SuggestedQuestion[]>([]);

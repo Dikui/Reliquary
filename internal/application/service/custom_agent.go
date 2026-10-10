@@ -465,8 +465,6 @@ func (s *customAgentService) CopyAgent(ctx context.Context, id string) (*types.C
 	return newAgent, nil
 }
 
-// GetSuggestedQuestions returns suggested questions for the agent based on its
-// associated knowledge bases.
 func (s *customAgentService) GetSuggestedQuestions(
 	ctx context.Context,
 	agentID string,
@@ -474,29 +472,6 @@ func (s *customAgentService) GetSuggestedQuestions(
 	knowledgeIDs []string,
 	tagScopes []types.TagScope,
 	limit int,
-) ([]types.SuggestedQuestion, error) {
-	return s.getSuggestedQuestions(ctx, agentID, kbIDs, knowledgeIDs, tagScopes, limit, true)
-}
-
-func (s *customAgentService) GetKnowledgeSuggestedQuestions(
-	ctx context.Context,
-	agentID string,
-	kbIDs []string,
-	knowledgeIDs []string,
-	tagScopes []types.TagScope,
-	limit int,
-) ([]types.SuggestedQuestion, error) {
-	return s.getSuggestedQuestions(ctx, agentID, kbIDs, knowledgeIDs, tagScopes, limit, false)
-}
-
-func (s *customAgentService) getSuggestedQuestions(
-	ctx context.Context,
-	agentID string,
-	kbIDs []string,
-	knowledgeIDs []string,
-	tagScopes []types.TagScope,
-	limit int,
-	includeCurated bool,
 ) ([]types.SuggestedQuestion, error) {
 	// A non-positive limit means "unspecified": fall back to the agent's
 	// configured Starters.Count (below) or the default. An explicit limit is
@@ -526,34 +501,32 @@ func (s *customAgentService) getSuggestedQuestions(
 	var curated []types.SuggestedQuestion
 	starterMode := types.SuggestionModeKnowledge
 
-	if includeCurated {
-		suggestionConfig := agent.Config.QuestionSuggestions
-		if suggestionConfig == nil || !suggestionConfig.Starters.Enabled {
-			return []types.SuggestedQuestion{}, nil
-		}
-		// Starters.Count is the agent-author default, applied only when the
-		// caller did not request a specific limit. An explicit limit stays
-		// authoritative so ?limit=N actually changes how many are returned.
-		if !limitProvided && suggestionConfig.Starters.Count > 0 {
-			limit = suggestionConfig.Starters.Count
-		}
-		starterMode = suggestionConfig.Starters.Mode
-		// Add curated agent prompts first (highest priority).
-		if suggestionConfig.Starters.Mode == types.SuggestionModeCurated ||
-			suggestionConfig.Starters.Mode == types.SuggestionModeHybrid {
-			for _, prompt := range suggestionConfig.Starters.Items {
-				if strings.TrimSpace(prompt) == "" {
-					continue
-				}
-				curated = append(curated, types.SuggestedQuestion{
-					Question: prompt,
-					Source:   "agent_config",
-				})
+	suggestionConfig := agent.Config.QuestionSuggestions
+	if suggestionConfig == nil || !suggestionConfig.Starters.Enabled {
+		return []types.SuggestedQuestion{}, nil
+	}
+	// Starters.Count is the agent-author default, applied only when the
+	// caller did not request a specific limit. An explicit limit stays
+	// authoritative so ?limit=N actually changes how many are returned.
+	if !limitProvided && suggestionConfig.Starters.Count > 0 {
+		limit = suggestionConfig.Starters.Count
+	}
+	starterMode = suggestionConfig.Starters.Mode
+	// Add curated agent prompts first (highest priority).
+	if suggestionConfig.Starters.Mode == types.SuggestionModeCurated ||
+		suggestionConfig.Starters.Mode == types.SuggestionModeHybrid {
+		for _, prompt := range suggestionConfig.Starters.Items {
+			if strings.TrimSpace(prompt) == "" {
+				continue
 			}
+			curated = append(curated, types.SuggestedQuestion{
+				Question: prompt,
+				Source:   "agent_config",
+			})
 		}
-		if suggestionConfig.Starters.Mode == types.SuggestionModeCurated {
-			return s.truncateQuestions(curated, limit), nil
-		}
+	}
+	if suggestionConfig.Starters.Mode == types.SuggestionModeCurated {
+		return s.truncateQuestions(curated, limit), nil
 	}
 
 	resolvedTags := resolvedSuggestionTagScopes{}

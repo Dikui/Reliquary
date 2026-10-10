@@ -6,10 +6,8 @@ import (
 	stderrors "errors"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hibiken/asynq"
 
 	"reliquary/internal/application/repository"
 	"reliquary/internal/errors"
@@ -18,15 +16,12 @@ import (
 	"reliquary/internal/storageurl"
 	"reliquary/internal/types"
 	"reliquary/internal/types/interfaces"
-	"reliquary/internal/utils"
 	secutils "reliquary/internal/utils"
 )
 
 // KnowledgeBaseHandler defines the HTTP handler for knowledge base operations
 type KnowledgeBaseHandler struct {
-	service          interfaces.KnowledgeBaseService
-	knowledgeService interfaces.KnowledgeService
-	asynqClient      interfaces.TaskEnqueuer
+	service interfaces.KnowledgeBaseService
 	// userService 仅在 list 类接口里用于批量回填 creator_name；
 	// 真正的鉴权由 RBAC 中间件 + Lookup 完成，这里不参与决策。
 	userService interfaces.UserService
@@ -39,17 +34,13 @@ type KnowledgeBaseHandler struct {
 // NewKnowledgeBaseHandler creates a new knowledge base handler instance
 func NewKnowledgeBaseHandler(
 	service interfaces.KnowledgeBaseService,
-	knowledgeService interfaces.KnowledgeService,
-	asynqClient interfaces.TaskEnqueuer,
 	userService interfaces.UserService,
 	fileService interfaces.FileService,
 ) *KnowledgeBaseHandler {
 	return &KnowledgeBaseHandler{
-		service:          service,
-		knowledgeService: knowledgeService,
-		asynqClient:      asynqClient,
-		userService:      userService,
-		fileService:      fileService,
+		service:     service,
+		userService: userService,
+		fileService: fileService,
 	}
 }
 
@@ -209,8 +200,6 @@ func (h *KnowledgeBaseHandler) validateAndGetKnowledgeBase(c *gin.Context) (*typ
 		return nil, "", 0, apperrors.NewUnauthorizedError("Unauthorized")
 	}
 
-	userID, userExists := c.Get(types.UserIDContextKey.String())
-
 	// Get knowledge base ID from URL parameter
 	id := secutils.SanitizeForLog(c.Param("id"))
 	if id == "" {
@@ -223,7 +212,7 @@ func (h *KnowledgeBaseHandler) validateAndGetKnowledgeBase(c *gin.Context) (*typ
 	if err != nil {
 		// repo.GetKnowledgeBaseByID surfaces ErrKnowledgeBaseNotFound for
 		// missing or cross-tenant rows. Map it to 404 here so the four
-		// callers (Get / Update / Delete / TogglePin / Copy / Hybrid-search
+		// callers (Get / Update / Delete / TogglePin / Hybrid-search
 		// path) don't have to wrap NewInternalServerError into a 500 for
 		// every probe of a non-existent id.
 		if stderrors.Is(err, repository.ErrKnowledgeBaseNotFound) {
@@ -237,9 +226,6 @@ func (h *KnowledgeBaseHandler) validateAndGetKnowledgeBase(c *gin.Context) (*typ
 	if kb.TenantID == tenantID.(uint64) {
 		return kb, id, tenantID.(uint64), nil
 	}
-
-	_ = userID
-	_ = userExists
 
 	// No permission: not owner and no shared access
 	logger.Warnf(
@@ -473,164 +459,11 @@ func (h *KnowledgeBaseHandler) DeleteKnowledgeBase(c *gin.Context) {
 	})
 }
 
-type CopyKnowledgeBaseRequest struct {
-	TaskID   string `json:"task_id"`
-	SourceID string `json:"source_id" binding:"required"`
-	TargetID string `json:"target_id"`
-}
-
-// CopyKnowledgeBaseResponse defines the response for copy knowledge base
-type CopyKnowledgeBaseResponse struct {
-	TaskID   string `json:"task_id"`
-	SourceID string `json:"source_id"`
-	TargetID string `json:"target_id"`
-	Message  string `json:"message"`
-}
-
 type DuplicateKnowledgeBaseResponse struct {
 	SourceID      string      `json:"source_id"`
 	TargetID      string      `json:"target_id"`
 	Message       string      `json:"message"`
 	KnowledgeBase interface{} `json:"knowledge_base"`
-}
-
-// CopyKnowledgeBase godoc
-func (h *KnowledgeBaseHandler) CopyKnowledgeBase(c *gin.Context) {
-	ctx := c.Request.Context()
-	var req CopyKnowledgeBaseRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		logger.Error(ctx, "Failed to parse request parameters", err)
-		c.Error(apperrors.NewBadRequestError("Invalid request parameters").WithDetails(err.Error()))
-		return
-	}
-
-	// Get tenant ID from context
-	tenantID, exists := c.Get(types.TenantIDContextKey.String())
-	if !exists {
-		logger.Error(ctx, "Failed to get tenant ID")
-		c.Error(apperrors.NewUnauthorizedError("Unauthorized"))
-		return
-	}
-	kbIDs := []string{req.SourceID}
-	if req.TargetID != "" {
-		kbIDs = append(kbIDs, req.TargetID)
-	}
-
-	// Validate source knowledge base exists and belongs to caller's tenant (prevent cross-tenant clone)
-	sourceKB, err := h.service.GetKnowledgeBaseByID(ctx, req.SourceID)
-	if err != nil {
-		if stderrors.Is(err, repository.ErrKnowledgeBaseNotFound) {
-			c.Error(errors.NewNotFoundError("Source knowledge base not found"))
-			return
-		}
-		logger.ErrorWithFields(ctx, err, nil)
-		c.Error(errors.NewInternalServerError(err.Error()))
-		return
-	}
-	if sourceKB.TenantID != tenantID.(uint64) {
-		logger.Warnf(ctx,
-			"Copy rejected: source knowledge base belongs to another tenant, source_id: %s, caller_tenant: %d, kb_tenant: %d",
-			secutils.SanitizeForLog(req.SourceID), tenantID.(uint64), sourceKB.TenantID)
-		c.Error(errors.NewForbiddenError("No permission to copy this knowledge base"))
-		return
-	}
-
-	// If target_id provided, validate target belongs to caller's tenant
-	// and run the pre-flight defenses synchronously so a mismatched
-	// clone is rejected with 400 before the task is enqueued. The same
-	// checks are re-applied inside the async worker (service.CopyKnowledgeBase)
-	// as defense in depth.
-	if req.TargetID != "" {
-		targetKB, err := h.service.GetKnowledgeBaseByID(ctx, req.TargetID)
-		if err != nil {
-			if stderrors.Is(err, repository.ErrKnowledgeBaseNotFound) {
-				c.Error(errors.NewNotFoundError("Target knowledge base not found"))
-				return
-			}
-			logger.ErrorWithFields(ctx, err, nil)
-			c.Error(errors.NewInternalServerError(err.Error()))
-			return
-		}
-		if targetKB.TenantID != tenantID.(uint64) {
-			logger.Warnf(ctx, "Copy rejected: target knowledge base belongs to another tenant, target_id: %s",
-				secutils.SanitizeForLog(req.TargetID))
-			c.Error(errors.NewForbiddenError("No permission to copy to this knowledge base"))
-			return
-		}
-		// Pre-flight defense 1: embedding model must match.
-		// Without this check the async clone would run with incompatible
-		// vector spaces and produce semantically broken results.
-		if sourceKB.EmbeddingModelID != targetKB.EmbeddingModelID {
-			c.Error(apperrors.NewBadRequestError(
-				"source and target knowledge bases use different embedding models; " +
-					"clone into a target with the same embedding model"))
-			return
-		}
-		// between stores, which is not yet supported.
-
-	}
-
-	// Generate task ID if not provided
-	taskID := req.TaskID
-	if taskID == "" {
-		taskID = utils.GenerateTaskID("kb_clone", tenantID.(uint64), req.SourceID)
-	}
-
-	// Create KB clone payload
-	payload := types.KBClonePayload{
-		TenantID:  tenantID.(uint64),
-		TaskID:    taskID,
-		SourceID:  req.SourceID,
-		TargetID:  req.TargetID,
-		Initiator: types.TaskInitiatorFromContext(ctx),
-	}
-
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		logger.Errorf(ctx, "Failed to marshal KB clone payload: %v", err)
-		c.Error(apperrors.NewInternalServerError("Failed to create task"))
-		return
-	}
-
-	// Enqueue KB clone task to Asynq
-	task := asynq.NewTask(types.TypeKBClone, payloadBytes,
-		asynq.TaskID(taskID), asynq.Queue(types.QueueMaintenance),
-		asynq.MaxRetry(3), asynq.Timeout(2*time.Hour))
-	info, err := h.asynqClient.Enqueue(task)
-	if err != nil {
-		logger.Errorf(ctx, "Failed to enqueue KB clone task: %v", err)
-		c.Error(apperrors.NewInternalServerError("Failed to enqueue task"))
-		return
-	}
-
-	logger.Infof(ctx, "KB clone task enqueued: %s, asynq task ID: %s, source: %s, target: %s",
-		taskID, info.ID, secutils.SanitizeForLog(req.SourceID), secutils.SanitizeForLog(req.TargetID))
-
-	// Save initial progress to Redis so frontend can query immediately
-	initialProgress := &types.KBCloneProgress{
-		TaskID:    taskID,
-		SourceID:  req.SourceID,
-		TargetID:  req.TargetID,
-		Status:    types.KBCloneStatusPending,
-		Progress:  0,
-		Message:   "Task queued, waiting to start...",
-		CreatedAt: time.Now().Unix(),
-		UpdatedAt: time.Now().Unix(),
-	}
-	if err := h.knowledgeService.SaveKBCloneProgress(ctx, initialProgress); err != nil {
-		logger.Warnf(ctx, "Failed to save initial KB clone progress: %v", err)
-		// Don't fail the request, task is already enqueued
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data": CopyKnowledgeBaseResponse{
-			TaskID:   taskID,
-			SourceID: req.SourceID,
-			TargetID: req.TargetID,
-			Message:  "Knowledge base copy task started",
-		},
-	})
 }
 
 func (h *KnowledgeBaseHandler) DuplicateKnowledgeBase(c *gin.Context) {
@@ -685,34 +518,6 @@ func (h *KnowledgeBaseHandler) DuplicateKnowledgeBase(c *gin.Context) {
 			Message:       "Knowledge base duplicate created",
 			KnowledgeBase: buildKBResponse(targetKB, nil),
 		},
-	})
-}
-
-// GetKBCloneProgress godoc
-func (h *KnowledgeBaseHandler) GetKBCloneProgress(c *gin.Context) {
-	ctx := c.Request.Context()
-
-	taskID := c.Param("task_id")
-	if taskID == "" {
-		logger.Error(ctx, "Task ID is empty")
-		c.Error(apperrors.NewBadRequestError("Task ID cannot be empty"))
-		return
-	}
-	if err := requireTaskProgressTenant(ctx, taskID); err != nil {
-		c.Error(err)
-		return
-	}
-
-	progress, err := h.knowledgeService.GetKBCloneProgress(ctx, taskID)
-	if err != nil {
-		logger.ErrorWithFields(ctx, err, nil)
-		c.Error(err)
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    progress,
 	})
 }
 

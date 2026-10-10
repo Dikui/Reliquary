@@ -62,7 +62,6 @@ var ToolCapabilityRequirements = map[string]ToolRequirement{
 	"list_knowledge_chunks":   {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
 	ToolQueryKnowledgeContext: {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
 	"get_document_info":       {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
-	"database_query":          {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},
 
 	// ---- Data analysis (reads table summary/column chunks from RAG ingest) ----
 	"data_analysis": {AnyOf: []KBCapability{CapVector, CapKeyword}, ConsumesFiles: true},

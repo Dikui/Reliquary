@@ -48,7 +48,7 @@ are decoded centrally through a tool-name plus JSON-field allowlist. The
 `sourceKeySpaces` table is the single source of truth for which keys are
 ID-bearing and which handle space they register into; per-tool `sourceIDKeys`
 contracts gate which of those keys each tool may use.
-`database_query.sql` and `data_analysis.sql` have an explicit policy because
+`data_analysis.sql` has an explicit policy because
 source handles can be embedded inside quoted SQL values; unquoted SQL aliases
 and arbitrary prose are never rewritten.
 

@@ -219,9 +219,6 @@ const formatLength = (length: number): string => {
 
 const formatMethod = (method: string): string => {
   if (!method) return '';
-  if (method.toLowerCase() === 'chromedp') {
-    return 'Chromedp';
-  }
   if (method.toLowerCase() === 'http') {
     return 'HTTP';
   }

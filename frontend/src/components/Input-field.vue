@@ -401,7 +401,6 @@ const knowledgeBases = computed(() => chatResources.validKnowledgeBases);
 const fileList = ref<Array<{ id: string; name: string }>>([]);
 const selectedKbs = computed(() => knowledgeBases.value.filter(kb => selectedKbIds.value.includes(kb.id)));
 
-
 const selectedFiles = computed(() => {
   // If we have file details in fileList, use them.
   // Otherwise we might show ID or Loading...
@@ -2038,7 +2037,7 @@ defineExpose({
     <input ref="imageInputRef" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple
       style="display:none" @change="handleImageSelect" />
     <!-- 富文本输入框容器 -->
-    <div class="rich-input-container" data-guide="chat-input">
+    <div class="rich-input-container">
       <!-- 图片预览区域 -->
       <div v-if="uploadedImages.length > 0" class="image-preview-bar">
         <div v-for="(img, idx) in uploadedImages" :key="idx" class="image-preview-item">
@@ -2152,7 +2151,7 @@ defineExpose({
                   allSelectedItems.length
               }) : $t('input.knowledgeBase') }}</span>
             </template>
-            <div ref="atButtonRef" class="control-btn kb-btn" data-guide="chat-kb-mention" :class="{
+            <div ref="atButtonRef" class="control-btn kb-btn" :class="{
               'active': allSelectedItems.length > 0,
               'disabled': isMentionDisabled
             }" @click.stop @mousedown.prevent="triggerMention">
@@ -2238,7 +2237,7 @@ defineExpose({
           </t-tooltip>
 
           <!-- 发送按钮 -->
-          <div v-if="!isReplying" @click="createSession(query)" class="control-btn send-btn" data-guide="chat-send"
+          <div v-if="!isReplying" @click="createSession(query)" class="control-btn send-btn"
             :class="{ 'disabled': !query.length }">
             <img src="../assets/img/sending-aircraft.svg" :alt="$t('input.send')" />
           </div>

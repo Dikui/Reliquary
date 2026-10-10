@@ -5,11 +5,9 @@ export const KNOWN_MODEL_USAGE_BINDINGS = [
   'summary_model',
   'image_processing_model',
   'vlm_model',
-  'asr_model',
   'chat_model',
   'rerank_model',
   'query_understand_model',
-  'follow_up_model',
   'light_model_tier',
   'extraction_model_tier',
   'generation_model_tier',
@@ -136,16 +134,15 @@ export function modelUsageListTruncated(resources: readonly ModelUsageResource[]
 
 export type ModelUsageResourceKind = 'knowledge_base' | 'agent'
 
-export type KnowledgeBaseModelUsageSection = 'models' | 'multimodal' | 'asr'
+export type KnowledgeBaseModelUsageSection = 'models' | 'multimodal'
 
-export type AgentModelUsageSection = 'model' | 'multimodal' | 'suggestions'
+export type AgentModelUsageSection = 'model' | 'multimodal'
 
 const knowledgeBaseUsageSections: Partial<Record<KnownModelUsageBinding, KnowledgeBaseModelUsageSection>> = {
   embedding_model: 'models',
   summary_model: 'models',
   image_processing_model: 'multimodal',
   vlm_model: 'multimodal',
-  asr_model: 'asr',
 }
 
 const agentUsageSections: Partial<Record<KnownModelUsageBinding, AgentModelUsageSection>> = {
@@ -153,8 +150,6 @@ const agentUsageSections: Partial<Record<KnownModelUsageBinding, AgentModelUsage
   rerank_model: 'model',
   query_understand_model: 'model',
   vlm_model: 'multimodal',
-  asr_model: 'multimodal',
-  follow_up_model: 'suggestions',
 }
 
 export function modelUsageKnowledgeBaseSection(

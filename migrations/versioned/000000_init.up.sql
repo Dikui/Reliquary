@@ -271,7 +271,7 @@ CREATE TABLE public.chunks (
 -- Name: COLUMN chunks.video_info; Type: COMMENT; Schema: public
 --
 
-COMMENT ON COLUMN public.chunks.video_info IS 'Video information in JSON format: {"url": string, "frame_count": int, "has_vlm_analysis": bool, "has_asr": bool, "video_summary": string, "asr_text": string, "frame_descriptions": string[]}';
+COMMENT ON COLUMN public.chunks.video_info IS 'Video information in JSON format: {"url": string, "frame_count": int, "has_vlm_analysis": bool, "video_summary": string, "frame_descriptions": string[]}';
 
 
 --
@@ -438,7 +438,6 @@ CREATE TABLE public.knowledge_bases (
     question_generation_config jsonb,
     is_pinned boolean DEFAULT false NOT NULL,
     pinned_at timestamp with time zone,
-    asr_config jsonb,
     indexing_strategy jsonb,
     creator_id character varying(36),
     auto_tag_config jsonb
@@ -453,12 +452,6 @@ CREATE INDEX idx_knowledge_bases_domain ON public.knowledge_bases (tenant_id, do
 
 COMMENT ON COLUMN public.knowledge_bases.is_temporary IS 'Whether this knowledge base is temporary (ephemeral) and should be hidden from UI';
 
-
---
--- Name: COLUMN knowledge_bases.asr_config; Type: COMMENT; Schema: public
---
-
-COMMENT ON COLUMN public.knowledge_bases.asr_config IS 'ASR (Automatic Speech Recognition) configuration: {"enabled": bool, "model_id": string, "language": string}';
 
 
 --
@@ -957,44 +950,6 @@ CREATE INDEX idx_knowledge_simhash_candidates ON public.knowledges (tenant_id, k
 
 
 --
--- Name: mcp_oauth_clients; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.mcp_oauth_clients (
-    id character varying(36) NOT NULL,
-    tenant_id integer NOT NULL,
-    service_id character varying(36) NOT NULL,
-    client_id character varying(512) NOT NULL,
-    client_secret text,
-    redirect_uri character varying(1024),
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
-);
-
-
---
--- Name: mcp_oauth_tokens; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.mcp_oauth_tokens (
-    id character varying(36) NOT NULL,
-    tenant_id integer NOT NULL,
-    user_id character varying(512) NOT NULL,
-    service_id character varying(36) NOT NULL,
-    access_token text,
-    refresh_token text,
-    token_type character varying(32),
-    expires_at timestamp without time zone,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    principal_type character varying(32) NOT NULL,
-    principal_id character varying(512) NOT NULL,
-    refresh_lease_id character varying(36),
-    refresh_lease_until timestamp with time zone
-);
-
-
---
 -- Name: mcp_services; Type: TABLE; Schema: public
 --
 
@@ -1041,70 +996,6 @@ CREATE TABLE public.mcp_tool_approvals (
 
 
 --
--- Name: message_suggestion_events; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.message_suggestion_events (
-    id bigint NOT NULL,
-    tenant_id integer NOT NULL,
-    session_id character varying(36) NOT NULL,
-    suggestion_set_id character varying(36) NOT NULL,
-    question_id character varying(64) DEFAULT ''::character varying NOT NULL,
-    event_type character varying(32) NOT NULL,
-    actor_id character varying(512) DEFAULT ''::character varying NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
-);
-
-
---
--- Name: message_suggestion_events_id_seq; Type: SEQUENCE; Schema: public
---
-
-CREATE SEQUENCE public.message_suggestion_events_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: message_suggestion_events_id_seq; Type: SEQUENCE OWNED BY; Schema: public
---
-
-ALTER SEQUENCE public.message_suggestion_events_id_seq OWNED BY public.message_suggestion_events.id;
-
-
---
--- Name: message_suggestion_sets; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.message_suggestion_sets (
-    id character varying(36) DEFAULT public.uuid_generate_v4() NOT NULL,
-    tenant_id integer NOT NULL,
-    session_id character varying(36) NOT NULL,
-    assistant_message_id character varying(36) NOT NULL,
-    agent_id character varying(36) DEFAULT ''::character varying NOT NULL,
-    placement character varying(32) NOT NULL,
-    config_hash character varying(64) NOT NULL,
-    locale character varying(16) DEFAULT ''::character varying NOT NULL,
-    status character varying(16) NOT NULL,
-    allow_regenerate boolean DEFAULT false NOT NULL,
-    suppression_reason character varying(64) DEFAULT ''::character varying NOT NULL,
-    questions jsonb DEFAULT '[]'::jsonb NOT NULL,
-    model_id character varying(64) DEFAULT ''::character varying NOT NULL,
-    prompt_tokens integer DEFAULT 0 NOT NULL,
-    completion_tokens integer DEFAULT 0 NOT NULL,
-    latency_ms bigint DEFAULT 0 NOT NULL,
-    error_code character varying(64) DEFAULT ''::character varying NOT NULL,
-    lease_until timestamp with time zone,
-    generated_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
-);
-
-
---
 -- Name: messages; Type: TABLE; Schema: public
 --
 
@@ -1130,7 +1021,6 @@ CREATE TABLE public.messages (
     attachments jsonb DEFAULT '[]'::jsonb,
     agent_id character varying(36) DEFAULT ''::character varying NOT NULL,
     model_id character varying(64) DEFAULT ''::character varying NOT NULL,
-    execution_context jsonb DEFAULT '{}'::jsonb NOT NULL,
     artifacts jsonb DEFAULT '[]'::jsonb,
     used_memories jsonb,
     usage jsonb
@@ -1579,23 +1469,10 @@ ALTER SEQUENCE public.tenants_id_seq OWNED BY public.tenants.id;
 
 
 --
--- Name: user_kb_pins; Type: TABLE; Schema: public
+-- Name: resource_favorites; Type: TABLE; Schema: public
 --
 
-CREATE TABLE public.user_kb_pins (
-    tenant_id bigint NOT NULL,
-    user_id character varying(36) NOT NULL,
-    kb_id character varying(36) NOT NULL,
-    pinned_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
-);
-
-
---
--- Name: user_resource_favorites; Type: TABLE; Schema: public
---
-
-CREATE TABLE public.user_resource_favorites (
-    user_id character varying(36) NOT NULL,
+CREATE TABLE public.resource_favorites (
     tenant_id bigint NOT NULL,
     resource_type character varying(16) NOT NULL,
     resource_id character varying(64) NOT NULL,
@@ -1690,13 +1567,6 @@ ALTER TABLE ONLY public.embeddings ALTER COLUMN id SET DEFAULT nextval('public.e
 --
 
 ALTER TABLE ONLY public.knowledge_processing_spans ALTER COLUMN id SET DEFAULT nextval('public.knowledge_processing_spans_id_seq'::regclass);
-
-
---
--- Name: message_suggestion_events id; Type: DEFAULT; Schema: public
---
-
-ALTER TABLE ONLY public.message_suggestion_events ALTER COLUMN id SET DEFAULT nextval('public.message_suggestion_events_id_seq'::regclass);
 
 
 --
@@ -1960,22 +1830,6 @@ ALTER TABLE ONLY public.knowledges
 
 
 --
--- Name: mcp_oauth_clients mcp_oauth_clients_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.mcp_oauth_clients
-    ADD CONSTRAINT mcp_oauth_clients_pkey PRIMARY KEY (id);
-
-
---
--- Name: mcp_oauth_tokens mcp_oauth_tokens_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.mcp_oauth_tokens
-    ADD CONSTRAINT mcp_oauth_tokens_pkey PRIMARY KEY (id);
-
-
---
 -- Name: mcp_services mcp_services_pkey; Type: CONSTRAINT; Schema: public
 --
 
@@ -1989,22 +1843,6 @@ ALTER TABLE ONLY public.mcp_services
 
 ALTER TABLE ONLY public.mcp_tool_approvals
     ADD CONSTRAINT mcp_tool_approvals_pkey PRIMARY KEY (id);
-
-
---
--- Name: message_suggestion_events message_suggestion_events_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.message_suggestion_events
-    ADD CONSTRAINT message_suggestion_events_pkey PRIMARY KEY (id);
-
-
---
--- Name: message_suggestion_sets message_suggestion_sets_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.message_suggestion_sets
-    ADD CONSTRAINT message_suggestion_sets_pkey PRIMARY KEY (id);
 
 
 --
@@ -2144,19 +1982,11 @@ ALTER TABLE ONLY public.knowledge_processing_spans
 
 
 --
--- Name: user_kb_pins user_kb_pins_pkey; Type: CONSTRAINT; Schema: public
+-- Name: resource_favorites resource_favorites_pkey; Type: CONSTRAINT; Schema: public
 --
 
-ALTER TABLE ONLY public.user_kb_pins
-    ADD CONSTRAINT user_kb_pins_pkey PRIMARY KEY (tenant_id, user_id, kb_id);
-
-
---
--- Name: user_resource_favorites user_resource_favorites_pkey; Type: CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.user_resource_favorites
-    ADD CONSTRAINT user_resource_favorites_pkey PRIMARY KEY (user_id, tenant_id, resource_type, resource_id);
+ALTER TABLE ONLY public.resource_favorites
+    ADD CONSTRAINT resource_favorites_pkey PRIMARY KEY (tenant_id, resource_type, resource_id);
 
 
 --
@@ -2793,48 +2623,6 @@ CREATE INDEX idx_kwstep_status ON public.knowledge_workflow_step_runs USING btre
 
 
 --
--- Name: idx_mcp_oauth_clients_service_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_mcp_oauth_clients_service_id ON public.mcp_oauth_clients USING btree (service_id);
-
-
---
--- Name: idx_mcp_oauth_clients_tenant_svc; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_mcp_oauth_clients_tenant_svc ON public.mcp_oauth_clients USING btree (tenant_id, service_id);
-
-
---
--- Name: idx_mcp_oauth_tokens_principal; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_mcp_oauth_tokens_principal ON public.mcp_oauth_tokens USING btree (principal_type, principal_id);
-
-
---
--- Name: idx_mcp_oauth_tokens_service_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_mcp_oauth_tokens_service_id ON public.mcp_oauth_tokens USING btree (service_id);
-
-
---
--- Name: idx_mcp_oauth_tokens_tenant_principal_svc; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_mcp_oauth_tokens_tenant_principal_svc ON public.mcp_oauth_tokens USING btree (tenant_id, principal_type, principal_id, service_id);
-
-
---
--- Name: idx_mcp_oauth_tokens_user_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_mcp_oauth_tokens_user_id ON public.mcp_oauth_tokens USING btree (user_id);
-
-
---
 -- Name: idx_mcp_services_deleted_at; Type: INDEX; Schema: public
 --
 
@@ -2874,48 +2662,6 @@ CREATE INDEX idx_mcp_tool_approvals_service_id ON public.mcp_tool_approvals USIN
 --
 
 CREATE UNIQUE INDEX idx_mcp_tool_approvals_tenant_svc_tool ON public.mcp_tool_approvals USING btree (tenant_id, service_id, tool_name);
-
-
---
--- Name: idx_message_suggestion_events_session; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_message_suggestion_events_session ON public.message_suggestion_events USING btree (tenant_id, session_id, created_at);
-
-
---
--- Name: idx_message_suggestion_events_set; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_message_suggestion_events_set ON public.message_suggestion_events USING btree (suggestion_set_id, created_at);
-
-
---
--- Name: idx_message_suggestion_events_type; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_message_suggestion_events_type ON public.message_suggestion_events USING btree (event_type, created_at);
-
-
---
--- Name: idx_message_suggestion_sets_cache_key; Type: INDEX; Schema: public
---
-
-CREATE UNIQUE INDEX idx_message_suggestion_sets_cache_key ON public.message_suggestion_sets USING btree (tenant_id, assistant_message_id, placement, config_hash, locale);
-
-
---
--- Name: idx_message_suggestion_sets_session; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_message_suggestion_sets_session ON public.message_suggestion_sets USING btree (tenant_id, session_id, created_at DESC);
-
-
---
--- Name: idx_message_suggestion_sets_status; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_message_suggestion_sets_status ON public.message_suggestion_sets USING btree (status, lease_until);
 
 
 --
@@ -3164,24 +2910,17 @@ CREATE INDEX idx_tenants_status ON public.tenants USING btree (status);
 
 
 --
--- Name: idx_user_kb_pins_user_tenant_pinned_at; Type: INDEX; Schema: public
+-- Name: idx_resource_favorites_tenant_id; Type: INDEX; Schema: public
 --
 
-CREATE INDEX idx_user_kb_pins_user_tenant_pinned_at ON public.user_kb_pins USING btree (tenant_id, user_id, pinned_at DESC);
-
-
---
--- Name: idx_user_resource_favorites_tenant_id; Type: INDEX; Schema: public
---
-
-CREATE INDEX idx_user_resource_favorites_tenant_id ON public.user_resource_favorites USING btree (tenant_id);
+CREATE INDEX idx_resource_favorites_tenant_id ON public.resource_favorites USING btree (tenant_id);
 
 
 --
--- Name: idx_user_resource_favorites_user_tenant_type_created_at; Type: INDEX; Schema: public
+-- Name: idx_resource_favorites_tenant_type_created_at; Type: INDEX; Schema: public
 --
 
-CREATE INDEX idx_user_resource_favorites_user_tenant_type_created_at ON public.user_resource_favorites USING btree (user_id, tenant_id, resource_type, created_at DESC);
+CREATE INDEX idx_resource_favorites_tenant_type_created_at ON public.resource_favorites USING btree (tenant_id, resource_type, created_at DESC);
 
 
 --
@@ -3265,51 +3004,11 @@ ALTER TABLE ONLY public.users
 
 
 --
--- Name: mcp_oauth_clients mcp_oauth_clients_service_id_fkey; Type: FK CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.mcp_oauth_clients
-    ADD CONSTRAINT mcp_oauth_clients_service_id_fkey FOREIGN KEY (service_id) REFERENCES public.mcp_services(id) ON DELETE CASCADE;
-
-
---
--- Name: mcp_oauth_tokens mcp_oauth_tokens_service_id_fkey; Type: FK CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.mcp_oauth_tokens
-    ADD CONSTRAINT mcp_oauth_tokens_service_id_fkey FOREIGN KEY (service_id) REFERENCES public.mcp_services(id) ON DELETE CASCADE;
-
-
---
 -- Name: mcp_tool_approvals mcp_tool_approvals_service_id_fkey; Type: FK CONSTRAINT; Schema: public
 --
 
 ALTER TABLE ONLY public.mcp_tool_approvals
     ADD CONSTRAINT mcp_tool_approvals_service_id_fkey FOREIGN KEY (service_id) REFERENCES public.mcp_services(id) ON DELETE CASCADE;
-
-
---
--- Name: message_suggestion_events message_suggestion_events_suggestion_set_id_fkey; Type: FK CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.message_suggestion_events
-    ADD CONSTRAINT message_suggestion_events_suggestion_set_id_fkey FOREIGN KEY (suggestion_set_id) REFERENCES public.message_suggestion_sets(id) ON DELETE CASCADE;
-
-
---
--- Name: message_suggestion_events message_suggestion_events_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.message_suggestion_events
-    ADD CONSTRAINT message_suggestion_events_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
-
-
---
--- Name: message_suggestion_sets message_suggestion_sets_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public
---
-
-ALTER TABLE ONLY public.message_suggestion_sets
-    ADD CONSTRAINT message_suggestion_sets_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
 
 
 --
@@ -3349,11 +3048,12 @@ SELECT pg_catalog.setval('public.chunks_seq_id_seq', 100000000, false);
 SELECT pg_catalog.setval('public.embeddings_id_seq', 1, false);
 SELECT pg_catalog.setval('public.knowledge_processing_spans_id_seq', 1, false);
 SELECT pg_catalog.setval('public.knowledge_tags_seq_id_seq', 10000000, false);
-SELECT pg_catalog.setval('public.message_suggestion_events_id_seq', 1, false);
 SELECT pg_catalog.setval('public.system_settings_id_seq', 1, false);
 SELECT pg_catalog.setval('public.task_dead_letters_id_seq', 1, false);
 SELECT pg_catalog.setval('public.task_pending_ops_id_seq', 1, false);
 SELECT pg_catalog.setval('public.tenant_api_keys_id_seq', 1, false);
 SELECT pg_catalog.setval('public.tenants_id_seq', 10000, false);
+
+CREATE INDEX idx_knowledge_bases_pinned ON public.knowledge_bases (tenant_id, is_pinned DESC, pinned_at DESC, created_at DESC);
 
 COMMIT;

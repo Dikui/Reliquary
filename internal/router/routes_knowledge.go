@@ -99,10 +99,7 @@ func RegisterKnowledgeBaseRoutes(r *gin.RouterGroup, handler *handler.KnowledgeB
 		kb.PUT("/:id/pin", g.KBExists("id"), handler.TogglePinKnowledgeBase)
 		kb.POST("/:id/hybrid-search", g.KBExists("id"), handler.HybridSearch)
 		kb.GET("/:id/hybrid-search", g.KBExists("id"), handler.HybridSearch)
-		kbManagement.POST("/copy", handler.CopyKnowledgeBase)
 		kbManagement.POST("/:id/duplicate", g.KBExists("id"), handler.DuplicateKnowledgeBase)
-		kb.
-			GET("/copy/progress/:task_id", handler.GetKBCloneProgress)
 		kb.GET("/:id/move-targets", g.KBExists("id"), handler.ListMoveTargets)
 	}
 }

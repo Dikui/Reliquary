@@ -70,9 +70,9 @@ Fully modular pipeline from document parsing, vectorization, and retrieval to LL
 |------------|---------|
 | Intelligent Reasoning | ReACT progressive multi-step reasoning, autonomously orchestrating knowledge retrieval, MCP tools and data analysis |
 | Quick Q&A | RAG-based Q&A over knowledge bases for fast and accurate answers |
-| Tool Calling | Built-in tools, MCP tools (incl. OAuth2 remote services, mid-conversation OAuth); `@MCP` mentions to scope the agent runtime per turn |
+| Tool Calling | Built-in tools, MCP tools (no authentication, API Key, or Bearer); `@MCP` mentions to scope the agent runtime per turn |
 | Conversation Strategy | Online Prompt editing, retrieval threshold tuning, multi-turn context awareness, per-agent citation output toggle |
-| Suggested Questions | Auto-generated question suggestions and after-answer follow-ups based on knowledge base content |
+| Suggested Questions | Agent questions shown before a conversation, using curated or generated starters |
 | Temporary Attachments | Session-scoped image / document uploads with async parsing for one-off Q&A, with a combined image + attachment limit |
 | Citations & RAG Progress | Inline citation popovers and a references drawer, shared markdown rendering, and stage-by-stage RAG pipeline progress in chat |
 | Session Management | Browse sidebar sessions with inline session-title rename |
@@ -84,7 +84,7 @@ Fully modular pipeline from document parsing, vectorization, and retrieval to LL
 | Knowledge Base Types | Document with folder import, URL import, multi-tag management, and online entry |
 | Folder Tree | Folder uploads keep their original directory structure, with a sidebar tree for browsing, folder rename, and re-filing documents into another folder |
 | Chunk Editing & Revisions | Edit retrieval chunks directly in the UI with per-version snapshots, diff and one-click rollback, and automatic reindexing after an edit; generated questions can be added, edited, deleted and regenerated; custom document metadata supported |
-| Per-Upload Process Config | Override parser, chunking, multimodal (VLM / ASR), and question generation per upload batch via upload-confirm dialog or `process_config` API; reparse with new settings |
+| Per-Upload Process Config | Override parser, chunking, multimodal images (VLM), and question generation per upload batch via upload-confirm dialog or `process_config` API; reparse with new settings |
 | Batch Reparse | Re-queue parsing for multiple documents at once with optional per-batch `process_config` |
 | Data Source Import | RSS, Atom, JSON Feed and site adapters with incremental and full sync |
 | Document Formats | PDF / Word / Txt / Markdown / EPUB / Images / CSV / Excel / PPT / JSON |

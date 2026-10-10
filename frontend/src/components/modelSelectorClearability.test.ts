@@ -34,8 +34,6 @@ test('智能体中允许继承或关闭的可选模型可以恢复为空', () =>
   const rerank = modelSelectorTag(agentEditor, 'formData.config.rerank_model_id')
   assert.match(rerank, /:clearable="!needsRerankModel"/)
   assertClearable(modelSelectorTag(agentEditor, 'formData.config.query_understand_model_id'))
-  assertClearable(modelSelectorTag(agentEditor, 'formData.config.asr_model_id'))
-  assertClearable(modelSelectorTag(agentEditor, 'formData.config.question_suggestions.follow_ups.model_id'))
 })
 
 test('必填模型继续保持不可清空', () => {
@@ -44,7 +42,5 @@ test('必填模型继续保持不可清空', () => {
   assertNotClearable(modelSelectorTag(agentEditor, 'formData.config.vlm_model_id'))
   assertNotClearable(modelSelectorTag(kbModelConfig, 'config.llmModelId'))
   assertNotClearable(modelSelectorTag(kbEditor, 'formData.multimodalConfig.vllmModelId'))
-  assertNotClearable(modelSelectorTag(kbEditor, 'formData.asrConfig.modelId'))
   assertNotClearable(modelSelectorTag(uploadConfirm, 'uiState.multimodalConfig.vllmModelId'))
-  assertNotClearable(modelSelectorTag(uploadConfirm, 'uiState.asrConfig.modelId'))
 })

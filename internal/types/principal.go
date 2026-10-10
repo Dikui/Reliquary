@@ -53,15 +53,6 @@ func PrincipalFromContext(ctx context.Context) (Principal, bool) {
 	return Principal{}, false
 }
 
-// MCPOAuthPrincipalFromContext resolves the OAuth token principal for ctx.
-func MCPOAuthPrincipalFromContext(ctx context.Context) Principal {
-	p, ok := PrincipalFromContext(ctx)
-	if !ok {
-		return Principal{}
-	}
-	return p.Normalize()
-}
-
 // SessionOwnerIDFromContext resolves the authenticated user for session ownership.
 func SessionOwnerIDFromContext(ctx context.Context) string {
 	userID, _ := UserIDFromContext(ctx)

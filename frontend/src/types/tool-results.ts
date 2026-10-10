@@ -20,7 +20,6 @@ export type DisplayType =
     | 'graph_query_results'
     | 'thinking'
     | 'plan'
-    | 'database_query'
     | 'web_fetch_results'
     | 'grep_results'
     | 'knowledge_chunks_list';
@@ -173,12 +172,6 @@ export interface PlanData {
 }
 
 // Database query data
-export interface DatabaseQueryData {
-    display_type: 'database_query';
-    columns: string[];
-    rows: Array<Record<string, any>>;
-    row_count: number;
-}
 
 // Web fetch result item
 export interface WebFetchResultItem {
@@ -273,7 +266,6 @@ export type ToolResultData =
     | ContextQueryResultsData
     | ThinkingData
     | PlanData
-    | DatabaseQueryData
     | WebFetchResultsData
     | GrepResultsData
     | KnowledgeChunksListData;

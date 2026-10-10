@@ -17,6 +17,7 @@ import (
 	werrors "reliquary/internal/errors"
 	"reliquary/internal/infrastructure/chunker"
 	"reliquary/internal/infrastructure/docparser"
+	webfetch "reliquary/internal/infrastructure/web_fetch"
 	"reliquary/internal/logger"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
@@ -25,92 +26,6 @@ import (
 	"reliquary/internal/types/interfaces"
 	secutils "reliquary/internal/utils"
 )
-
-func (s *knowledgeService) cloneKnowledge(
-	ctx context.Context,
-	src *types.Knowledge,
-	targetKB *types.KnowledgeBase,
-) (err error) {
-	if src.ParseStatus != "completed" {
-		logger.GetLogger(ctx).WithField("knowledge_id", src.ID).Errorf("MoveKnowledge parse status is not completed")
-		return nil
-	}
-	tenantInfo := ctx.Value(types.TenantInfoContextKey).(*types.Tenant)
-	dst := &types.Knowledge{
-		ID:               uuid.New().String(),
-		TenantID:         targetKB.TenantID,
-		KnowledgeBaseID:  targetKB.ID,
-		Type:             src.Type,
-		Channel:          src.Channel,
-		Title:            src.Title,
-		Description:      src.Description,
-		Source:           src.Source,
-		ParseStatus:      "processing",
-		EnableStatus:     "disabled",
-		EmbeddingModelID: src.EmbeddingModelID,
-		FileName:         src.FileName,
-		FolderPath:       src.FolderPath,
-		FileType:         src.FileType,
-		FileSize:         src.FileSize,
-		FileHash:         src.FileHash,
-		FilePath:         src.FilePath,
-		StorageSize:      src.StorageSize,
-		Metadata:         src.Metadata,
-	}
-
-	// Deep-copy the source document file into an object owned by the destination
-	// knowledge. Without this the clone only shares the source's storage path, so
-	// deleting the source knowledge would destroy the clone's file too. The new
-	// object is tracked for cleanup if the clone fails downstream.
-	var copiedFilePaths []string
-	if src.FilePath != "" {
-		srcKB, kbErr := s.kbService.GetKnowledgeBaseByID(ctx, src.KnowledgeBaseID)
-		if kbErr != nil {
-			return fmt.Errorf("clone knowledge: failed to load source knowledge base: %w", kbErr)
-		}
-		srcSvc := s.resolveFileServiceForPath(ctx, srcKB, src.FilePath)
-		dstSvc := s.resolveFileService(ctx, targetKB)
-		newPath, copyErr := copyOwnedObject(ctx, srcSvc, dstSvc, src.FilePath, targetKB.TenantID, dst.ID)
-		if copyErr != nil {
-			return fmt.Errorf("clone knowledge file copy failed: %w", copyErr)
-		}
-		dst.FilePath = newPath
-		copiedFilePaths = append(copiedFilePaths, newPath)
-	}
-
-	defer func() {
-		if err != nil {
-			if len(copiedFilePaths) > 0 {
-				cleanupCopiedObjects(ctx, s.resolveFileService(ctx, targetKB), copiedFilePaths)
-			}
-			dst.ParseStatus = "failed"
-			dst.ErrorMessage = err.Error()
-			_ = s.repo.UpdateKnowledge(ctx, dst)
-			logger.GetLogger(ctx).WithField("error", err).Errorf("MoveKnowledge failed to move knowledge")
-		} else {
-			dst.ParseStatus = "completed"
-			dst.EnableStatus = "enabled"
-			_ = s.repo.UpdateKnowledge(ctx, dst)
-			logger.GetLogger(ctx).WithField("knowledge_id", dst.ID).Infof("MoveKnowledge move knowledge successfully")
-		}
-	}()
-
-	if err = s.repo.CreateKnowledge(ctx, dst); err != nil {
-		logger.GetLogger(ctx).WithField("error", err).Errorf("MoveKnowledge create knowledge failed")
-		return
-	}
-	tenantInfo.StorageUsed += dst.StorageSize
-	if err = s.tenantRepo.AdjustStorageUsed(ctx, tenantInfo.ID, dst.StorageSize); err != nil {
-		logger.GetLogger(ctx).WithField("error", err).Errorf("MoveKnowledge update tenant storage used failed")
-		return
-	}
-	if err = s.CloneChunk(ctx, src, dst); err != nil {
-		logger.GetLogger(ctx).WithField("knowledge_id", dst.ID).
-			WithField("error", err).Errorf("MoveKnowledge move chunks failed")
-		return
-	}
-	return
-}
 
 // processDocumentFromPassage handles asynchronous processing of text passages
 func (s *knowledgeService) processDocumentFromPassage(ctx context.Context,
@@ -3348,12 +3263,9 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) (
 	}
 	ctx = withAttempt(ctx, attempt)
 
-	// 检查音频ASR配置（仅对文件导入）
-	if payload.FilePath != "" && IsAudioType(payload.FileType) && !eff.ASRConfig.IsASREnabled() {
-		logger.GetLogger(ctx).WithField("knowledge_id", knowledge.ID).
-			Errorf("processDocument audio without ASR model configured")
-		knowledge.ParseStatus = "failed"
-		knowledge.ErrorMessage = "上传音频文件需要设置ASR语音识别模型"
+	if payload.FilePath != "" && IsAudioType(payload.FileType) {
+		knowledge.ParseStatus = types.ParseStatusFailed
+		knowledge.ErrorMessage = fmt.Sprintf("不支持上传音频文件: %s", normalizeFileExtension(payload.FileType))
 		knowledge.UpdatedAt = time.Now()
 		s.repo.UpdateKnowledge(ctx, knowledge)
 		return nil
@@ -3496,59 +3408,6 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) (
 		if convertResult == nil {
 			return nil
 		}
-	}
-
-	// Step 1.5: ASR transcription for audio files
-	if convertResult != nil && convertResult.IsAudio && len(convertResult.AudioData) > 0 {
-		if !eff.ASRConfig.IsASREnabled() {
-			logger.Error(ctx, "Audio file detected but ASR is not configured")
-			knowledge.ParseStatus = "failed"
-			knowledge.ErrorMessage = "ASR model is not configured for audio transcription"
-			knowledge.UpdatedAt = time.Now()
-			s.repo.UpdateKnowledge(ctx, knowledge)
-			return nil
-		}
-
-		logger.Infof(ctx, "[ASR] Starting audio transcription for knowledge %s, audio size=%d bytes",
-			knowledge.ID, len(convertResult.AudioData))
-
-		asrModel, err := s.modelService.GetASRModel(ctx, eff.ASRConfig.ModelID)
-		if err != nil {
-			logger.Errorf(ctx, "[ASR] Failed to get ASR model: %v", err)
-			knowledge.ParseStatus = "failed"
-			knowledge.ErrorMessage = fmt.Sprintf("failed to get ASR model: %v", err)
-			knowledge.UpdatedAt = time.Now()
-			s.repo.UpdateKnowledge(ctx, knowledge)
-			return nil
-		}
-
-		transcriptionResult, err := asrModel.Transcribe(ctx, convertResult.AudioData, knowledge.FileName)
-		if err != nil {
-			logger.Errorf(ctx, "[ASR] Transcription failed: %v", err)
-			if isLastRetry {
-				knowledge.ParseStatus = "failed"
-				knowledge.ErrorMessage = fmt.Sprintf("audio transcription failed: %v", err)
-				knowledge.UpdatedAt = time.Now()
-				s.repo.UpdateKnowledge(ctx, knowledge)
-			}
-			return fmt.Errorf("audio transcription failed: %w", err)
-		}
-
-		var transcribedText string
-		if transcriptionResult != nil {
-			transcribedText = transcriptionResult.Text
-		}
-
-		if transcribedText == "" {
-			logger.Warn(ctx, "[ASR] Transcription returned empty text")
-			transcribedText = "[No speech detected in audio file]"
-		}
-
-		logger.Infof(ctx, "[ASR] Transcription completed, text length=%d", len(transcribedText))
-		// Replace the audio placeholder with the transcribed text
-		convertResult.MarkdownContent = transcribedText
-		convertResult.IsAudio = false
-		convertResult.AudioData = nil
 	}
 
 	// Step 2: Store images and update markdown references
@@ -3815,6 +3674,18 @@ func (s *knowledgeService) convert(
 
 	result, err := s.callDocReaderWithTimeout(ctx, reader, req)
 	if err != nil {
+		var fetchErr *webfetch.FetchError
+		if isURL && errors.As(err, &fetchErr) &&
+			(fetchErr.Code == webfetch.ErrorJavaScriptRequired || fetchErr.Code == webfetch.ErrorEmptyContent) {
+			knowledge.ParseStatus = types.ParseStatusFailed
+			knowledge.ErrorMessage = fetchErr.Error()
+			knowledge.UpdatedAt = time.Now()
+			if updateErr := s.repo.UpdateKnowledge(ctx, knowledge); updateErr != nil {
+				return nil, updateErr
+			}
+			s.failStage(ctx, knowledge.ID, types.StageDocReader, string(fetchErr.Code), knowledge.ErrorMessage, err)
+			return nil, nil
+		}
 		// Distinguish DocReader timeout (a knowable user-facing
 		// failure) from generic read errors so the UI can suggest
 		// "split this large file" specifically when relevant.
@@ -3841,7 +3712,6 @@ func (s *knowledgeService) convert(
 	docOutput := types.JSONMap{
 		"text_length":  len(result.MarkdownContent),
 		"images_found": len(result.ImageRefs),
-		"is_audio":     result.IsAudio,
 	}
 	if pages := result.Metadata["pages"]; pages != "" {
 		docOutput["pages"] = pages

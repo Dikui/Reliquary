@@ -75,10 +75,6 @@ type AgentConfig struct {
 	// MCP service selection
 	MCPSelectionMode string   `json:"mcp_selection_mode"` // MCP selection mode: "all", "selected", "none"
 	MCPServices      []string `json:"mcp_services"`       // Selected MCP service IDs (when mode is "selected")
-	// MCPAuthWaitTimeout is how many seconds an agent run waits for
-	// in-conversation OAuth authorization before skipping. <=0 falls back to
-	// the gate's configured timeout. The wait is always bounded (no leak).
-	MCPAuthWaitTimeout int `json:"mcp_auth_wait_timeout,omitempty"`
 	// Whether to enable thinking mode (for models that support extended thinking)
 	Thinking *bool `json:"thinking"`
 	// Whether final answers include knowledge/web source citations. Nil defaults to true.

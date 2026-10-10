@@ -28,7 +28,7 @@ const (
 	defaultLLMStallTimeout = 120 * time.Second
 
 	// defaultToolExecTimeout is the default maximum time for a single tool execution.
-	// Prevents long-running tools (web_fetch, database_query) from hanging indefinitely.
+	// Prevents long-running tools (web_fetch, data_analysis) from hanging indefinitely.
 	defaultToolExecTimeout = 60 * time.Second
 
 	// maxLLMRetries is the maximum number of retries for transient LLM errors.

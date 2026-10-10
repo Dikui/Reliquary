@@ -331,13 +331,11 @@ func TestChunkVectorSearchRestoresGeneratedQuestionMatchedContent(t *testing.T) 
 	require.Equal(t, buildKnowledgeIndexContent(knowledge, chunk.EmbeddingContent()), hits[0].Content)
 }
 
-func TestChunkKeywordSearchCloneAndMoveKnowledge(t *testing.T) {
+func TestChunkKeywordSearchMoveKnowledge(t *testing.T) {
 	f := newChunkSearchFixture(t, true)
 	sourceKB := f.createKB(t, true, true)
-	targetKB := f.createKB(t, true, true)
 	movedKB := f.createKB(t, true, true)
 	source := f.createKnowledge(t, sourceKB, "Source title sourcetitlemarker")
-	target := f.createKnowledge(t, targetKB, "Target title targettitlemarker")
 	var sourceChunks []*types.Chunk
 	for _, chunkType := range []string{
 		types.ChunkTypeText, types.ChunkTypeSummary, types.ChunkTypeImageOCR,
@@ -367,42 +365,6 @@ func TestChunkKeywordSearchCloneAndMoveKnowledge(t *testing.T) {
 		db: f.db, repo: f.knowledge, chunkRepo: f.chunks,
 		kbService: chunkSearchKBReader{repo: f.kbs}, modelService: chunkSearchModels{}, retrieveEngine: f.retrieval,
 	}
-	require.NoError(t, service.CloneChunk(f.ctx, source, target))
-	targetChunks, err := f.chunks.ListChunksByKnowledgeIDAndTypes(f.ctx, types.SingleTenantID, target.ID,
-		[]string{types.ChunkTypeText, types.ChunkTypeSummary, types.ChunkTypeImageOCR,
-			types.ChunkTypeImageCaption, types.ChunkTypeTableSummary, types.ChunkTypeTableColumn})
-	require.NoError(t, err)
-	require.Len(t, targetChunks, len(sourceChunks)+1)
-	targetIDs := hitsForKnowledge(t, f, target.ID)
-	f.assertKeywordHits(t, targetKB.ID, "Copybodymarker", targetIDs...)
-	f.assertKeywordHits(t, targetKB.ID, "Copysectionmarker", targetIDs...)
-	f.assertKeywordHits(t, targetKB.ID, "targettitlemarker", targetIDs...)
-	f.assertKeywordHits(t, targetKB.ID, "sourcetitlemarker")
-	var targetQuestionChunk *types.Chunk
-	var targetDisabledChunk *types.Chunk
-	for _, chunk := range targetChunks {
-		metadata, err := chunk.DocumentMetadata()
-		require.NoError(t, err)
-		if metadata != nil && len(metadata.GeneratedQuestions) > 0 {
-			targetQuestionChunk = chunk
-		}
-		if !chunk.IsEnabled {
-			targetDisabledChunk = chunk
-		}
-	}
-	require.NotNil(t, targetQuestionChunk)
-	f.assertKeywordHits(t, targetKB.ID, "Copyquestionmarker", targetQuestionChunk.ID)
-	var copiedQuestionCount int64
-	require.NoError(t, f.db.Table("embeddings").Where("knowledge_base_id = ? AND source_id = ?", targetKB.ID,
-		types.GeneratedQuestionSourceID(targetQuestionChunk.ID, questionID)).Count(&copiedQuestionCount).Error)
-	require.Equal(t, int64(1), copiedQuestionCount)
-	require.NotNil(t, targetDisabledChunk)
-	var disabledVectorCount int64
-	require.NoError(t, f.db.Table("embeddings").Where("knowledge_base_id = ? AND source_id = ? AND is_enabled = false",
-		targetKB.ID, targetDisabledChunk.ID).Count(&disabledVectorCount).Error)
-	require.Equal(t, int64(1), disabledVectorCount)
-	f.assertKeywordHits(t, targetKB.ID, "Copydisabledmarker")
-
 	require.NoError(t, service.moveOneKnowledge(f.ctx, source.ID, sourceKB, movedKB, "reuse_vectors"))
 	f.assertKeywordHits(t, sourceKB.ID, "Copybodymarker")
 	sourceIDs := make([]string, len(sourceChunks))

@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -19,24 +18,24 @@ import (
 type mcpServiceService struct {
 	mcpServiceRepo interfaces.MCPServiceRepository
 	mcpManager     *mcp.MCPManager
-	oauthRepo      interfaces.MCPOAuthRepository
 }
 
 // NewMCPServiceService creates a new MCP service service
 func NewMCPServiceService(
 	mcpServiceRepo interfaces.MCPServiceRepository,
 	mcpManager *mcp.MCPManager,
-	oauthRepo interfaces.MCPOAuthRepository,
 ) interfaces.MCPServiceService {
 	return &mcpServiceService{
 		mcpServiceRepo: mcpServiceRepo,
 		mcpManager:     mcpManager,
-		oauthRepo:      oauthRepo,
 	}
 }
 
 // CreateMCPService creates a new MCP service
 func (s *mcpServiceService) CreateMCPService(ctx context.Context, service *types.MCPService) error {
+	if err := service.AuthConfig.Validate(); err != nil {
+		return err
+	}
 	// Stdio transport is disabled for security reasons
 	if service.TransportType == types.MCPTransportStdio {
 		return fmt.Errorf("stdio transport is disabled for security reasons; please use SSE or HTTP Streamable transport instead")
@@ -124,6 +123,9 @@ func (s *mcpServiceService) UpdateMCPService(
 	service *types.MCPService,
 	updateFields map[string]bool,
 ) error {
+	if err := service.AuthConfig.Validate(); err != nil {
+		return err
+	}
 	// Check if service exists
 	existing, err := s.mcpServiceRepo.GetByID(ctx, service.TenantID, service.ID)
 	if err != nil {
@@ -189,9 +191,6 @@ func (s *mcpServiceService) UpdateMCPService(
 	// CustomHeaders flows through main PUT (it's structural, not a secret) —
 	// nil preserves, non-nil replaces. Other AuthConfig fields (APIKey/Token)
 	// are never accepted via main PUT; the handler strips them up front.
-	//
-	// auth_type / scopes / auth_server_metadata_url are non-secret OAuth
-	// configuration and also flow through here.
 	if service.AuthConfig != nil {
 		if existing.AuthConfig == nil {
 			existing.AuthConfig = &types.MCPAuthConfig{}
@@ -199,22 +198,14 @@ func (s *mcpServiceService) UpdateMCPService(
 		if service.AuthConfig.CustomHeaders != nil {
 			existing.AuthConfig.CustomHeaders = service.AuthConfig.CustomHeaders
 		}
-		// Only overwrite OAuth config when explicitly provided, so a partial
-		// PUT that carries only custom_headers does not wipe an existing
-		// auth_type / scopes. (Empty/absent is treated as "no change".)
+		// Preserve the authentication strategy when omitted in a partial update.
 		if service.AuthConfig.AuthType != types.MCPAuthNone {
 			existing.AuthConfig.AuthType = service.AuthConfig.AuthType
 		}
 		// APIKeyHeader is non-secret; empty means "use default X-API-Key", so a
-		// partial PUT that omits it is treated as no-change (mirrors scopes).
+		// partial PUT that omits it is treated as no-change.
 		if service.AuthConfig.APIKeyHeader != "" {
 			existing.AuthConfig.APIKeyHeader = service.AuthConfig.APIKeyHeader
-		}
-		if service.AuthConfig.Scopes != nil {
-			existing.AuthConfig.Scopes = service.AuthConfig.Scopes
-		}
-		if service.AuthConfig.AuthServerMetadataURL != "" {
-			existing.AuthConfig.AuthServerMetadataURL = service.AuthConfig.AuthServerMetadataURL
 		}
 	}
 
@@ -348,27 +339,15 @@ func (s *mcpServiceService) DeleteMCPService(ctx context.Context, tenantID uint6
 	return nil
 }
 
-// TestMCPService tests the connection to an MCP service and returns available tools/resources
-// mcpTestFailure builds a failed MCPTestResult, upgrading a generic connection
-// error into an explicit "OAuth required" signal when the server answered with
-// an RFC 9728 OAuth challenge. This lets the UI guide the user to switch the
-// auth strategy to OAuth instead of showing a bare 401.
+// mcpTestFailure builds a failed MCP connection test result.
 func mcpTestFailure(err error, prefix string) *types.MCPTestResult {
-	var oerr *mcp.OAuthRequiredError
-	if errors.As(err, &oerr) {
-		return &types.MCPTestResult{
-			Success:       false,
-			OAuthRequired: true,
-			Message: "This MCP server requires OAuth authorization. " +
-				"Switch the auth method to OAuth 2.0 and authorize.",
-		}
-	}
 	return &types.MCPTestResult{
 		Success: false,
 		Message: fmt.Sprintf("%s: %v", prefix, err),
 	}
 }
 
+// TestMCPService tests the connection and returns available tools and resources.
 func (s *mcpServiceService) TestMCPService(
 	ctx context.Context,
 	tenantID uint64,
@@ -383,20 +362,7 @@ func (s *mcpServiceService) TestMCPService(
 		return nil, fmt.Errorf("MCP service not found")
 	}
 
-	// Create temporary client for testing. For OAuth services, wire the
-	// per-user token store so the test connects with the current user's
-	// authorization (and surfaces an authorization-required message when the
-	// user has not authorized yet).
-	config := &mcp.ClientConfig{
-		Service: service,
-	}
-	if service.AuthConfig.IsOAuth() {
-		config.OAuthRepo = s.oauthRepo
-		config.TenantID, _ = types.TenantIDFromContext(ctx)
-		config.Principal, _ = types.PrincipalFromContext(ctx)
-	}
-
-	client, err := mcp.NewMCPClient(config)
+	client, err := mcp.NewMCPClient(&mcp.ClientConfig{Service: service})
 	if err != nil {
 		return &types.MCPTestResult{
 			Success: false,

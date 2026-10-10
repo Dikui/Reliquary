@@ -43,8 +43,6 @@ type KnowledgeBase struct {
 	SummaryModelID string `yaml:"summary_model_id"        json:"summary_model_id"`
 	// VLM config
 	VLMConfig VLMConfig `yaml:"vlm_config"              json:"vlm_config"              gorm:"type:json"`
-	// ASR config (Automatic Speech Recognition)
-	ASRConfig ASRConfig `yaml:"asr_config"              json:"asr_config"              gorm:"type:json"`
 	// Extract config
 	// QuestionGenerationConfig stores question generation configuration for document knowledge bases
 	QuestionGenerationConfig *QuestionGenerationConfig `yaml:"question_generation_config" json:"question_generation_config" gorm:"column:question_generation_config;type:json"`
@@ -53,18 +51,10 @@ type KnowledgeBase struct {
 	// IndexingStrategy controls which indexing pipelines are active for this knowledge base.
 	// Pipelines: vector search and keyword search.
 	IndexingStrategy IndexingStrategy `yaml:"indexing_strategy"       json:"indexing_strategy"       gorm:"column:indexing_strategy;type:json"`
-	// IsPinned and PinnedAt are computed per-caller from user_kb_pins
-	// (see the baseline migration). They used to be stored on the row itself,
-	// which made pinning a workspace-wide ordering decision gated behind
-	// the kb-edit RBAC guard. The columns are still present in legacy
-	// schemas for rollback safety but are no longer read or written by
-	// the application — both fields are tagged `gorm:"-"` so GORM
-	// ignores them on every CRUD call and the list handler stamps them
-	// after enriching with the caller's pin set.
-	IsPinned bool `yaml:"is_pinned"               json:"is_pinned"               gorm:"-"`
-	// PinnedAt records when the current caller pinned this knowledge
-	// base; nil when they have not.
-	PinnedAt *time.Time `yaml:"pinned_at"               json:"pinned_at"               gorm:"-"`
+	// Pin state belongs to the personal space and is shared by all API callers.
+	IsPinned bool `yaml:"is_pinned" json:"is_pinned" gorm:"default:false"`
+	PinnedAt *time.Time `yaml:"pinned_at" json:"pinned_at"`
+
 	// Creation time of the knowledge base
 	CreatedAt time.Time `yaml:"created_at"              json:"created_at"`
 	// Last updated time of the knowledge base
@@ -409,35 +399,6 @@ func (c VLMConfig) Value() (driver.Value, error) {
 
 // Scan implements the sql.Scanner interface, used to convert database value to VLMConfig
 func (c *VLMConfig) Scan(value interface{}) error {
-	if value == nil {
-		return nil
-	}
-	b, ok := value.([]byte)
-	if !ok {
-		return nil
-	}
-	return json.Unmarshal(b, c)
-}
-
-// ASRConfig represents the ASR (Automatic Speech Recognition) configuration
-type ASRConfig struct {
-	Enabled  bool   `yaml:"enabled"  json:"enabled"`
-	ModelID  string `yaml:"model_id" json:"model_id"`
-	Language string `yaml:"language" json:"language"` // optional: language hint for transcription
-}
-
-// IsASREnabled checks if ASR is enabled with a valid model
-func (c ASRConfig) IsASREnabled() bool {
-	return c.Enabled && c.ModelID != ""
-}
-
-// Value implements the driver.Valuer interface, used to convert ASRConfig to database value
-func (c ASRConfig) Value() (driver.Value, error) {
-	return json.Marshal(c)
-}
-
-// Scan implements the sql.Scanner interface, used to convert database value to ASRConfig
-func (c *ASRConfig) Scan(value interface{}) error {
 	if value == nil {
 		return nil
 	}

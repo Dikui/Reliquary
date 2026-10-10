@@ -96,7 +96,6 @@ const RUNTIME_TASK_TYPE_KEYS = [
   'batchDelete',
   'move',
   'indexDelete',
-  'kbClone',
   'kbDelete',
 ] as const
 

@@ -10,7 +10,6 @@ import (
 
 	apperrors "reliquary/internal/errors"
 	"reliquary/internal/logger"
-	"reliquary/internal/models/asr"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/models/rerank"
@@ -77,6 +76,9 @@ func (s *modelService) decryptAppSecret(encrypted string) string {
 // For local models, it initiates an asynchronous download process
 // Remote models are immediately set to active status
 func (s *modelService) CreateModel(ctx context.Context, model *types.Model) error {
+	if !model.Type.IsSupported() {
+		return apperrors.NewValidationError(fmt.Sprintf("不支持的模型类型: %s", model.Type))
+	}
 	logger.Infof(ctx, "Creating model: %s, type: %s, source: %s", model.Name, model.Type, model.Source)
 
 	// Handle remote models (e.g., OpenAI, Azure)
@@ -205,6 +207,9 @@ func (s *modelService) ListModels(ctx context.Context) ([]*types.Model, error) {
 
 // UpdateModel updates an existing model in the repository
 func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) error {
+	if model.Type != "" && !model.Type.IsSupported() {
+		return apperrors.NewValidationError(fmt.Sprintf("不支持的模型类型: %s", model.Type))
+	}
 	logger.Info(ctx, "Start updating model")
 	logger.Infof(ctx, "Updating model ID: %s, name: %s", model.ID, model.Name)
 
@@ -598,41 +603,6 @@ func (s *modelService) GetVLMModel(ctx context.Context, modelId string) (vlm.VLM
 	}
 
 	return vlmModel, nil
-}
-
-// GetASRModel retrieves and initializes an automatic speech recognition model instance.
-func (s *modelService) GetASRModel(ctx context.Context, modelId string) (asr.ASR, error) {
-	if modelId == "" {
-		return nil, errors.New("model ID cannot be empty")
-	}
-
-	tenantID := types.MustTenantIDFromContext(ctx)
-
-	model, err := s.repo.GetByID(ctx, tenantID, modelId)
-	if err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"model_id":  modelId,
-			"tenant_id": tenantID,
-		})
-		return nil, err
-	}
-
-	if model == nil {
-		return nil, ErrModelNotFound
-	}
-
-	logger.Infof(ctx, "Getting ASR model: %s, source: %s", model.Name, model.Source)
-
-	sttModel, err := asr.NewASR(asr.ConfigFromModel(model))
-	if err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"model_id":   model.ID,
-			"model_name": model.Name,
-		})
-		return nil, err
-	}
-
-	return sttModel, nil
 }
 
 func formatModelInUseMessage(kbCount, agentCount int64) string {

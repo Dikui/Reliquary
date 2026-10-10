@@ -49,7 +49,6 @@ type sessionService struct {
 	agentService         interfaces.AgentService         // Service for agent operations
 	knowledgeService     interfaces.KnowledgeService     // Service for knowledge operations
 	chunkService         interfaces.ChunkService         // Service for chunk operations
-	suggestionRepo       interfaces.MessageSuggestionRepository
 }
 
 // NewSessionService creates a new session service instance with all required dependencies
@@ -63,7 +62,6 @@ func NewSessionService(cfg *config.Config,
 	tenantService interfaces.TenantService,
 	eventManager *chatpipeline.EventManager,
 	agentService interfaces.AgentService,
-	suggestionRepo interfaces.MessageSuggestionRepository,
 	db *gorm.DB,
 ) interfaces.SessionService {
 	return &sessionService{
@@ -78,7 +76,6 @@ func NewSessionService(cfg *config.Config,
 		tenantService:        tenantService,
 		eventManager:         eventManager,
 		agentService:         agentService,
-		suggestionRepo:       suggestionRepo,
 	}
 }
 
@@ -364,12 +361,6 @@ func (s *sessionService) DeleteSession(ctx context.Context, id string) error {
 		}
 	}()
 
-	if s.suggestionRepo != nil {
-		if err := s.suggestionRepo.DeleteBySessionID(ctx, tenantID, id); err != nil {
-			logger.Warnf(ctx, "Failed to delete suggestions for session %s: %v", id, err)
-		}
-	}
-
 	// Delete session from repository
 	rows, err := s.sessionRepo.Delete(ctx, tenantID, userID, id)
 	if err != nil {
@@ -438,13 +429,6 @@ func (s *sessionService) BatchDeleteSessions(ctx context.Context, ids []string) 
 		})
 		return err
 	}
-	if s.suggestionRepo != nil {
-		for _, id := range visibleIDs {
-			if err := s.suggestionRepo.DeleteBySessionID(ctx, tenantID, id); err != nil {
-				logger.Warnf(ctx, "Failed to delete suggestions for session %s: %v", id, err)
-			}
-		}
-	}
 
 	return nil
 }
@@ -485,13 +469,6 @@ func (s *sessionService) DeleteAllSessions(ctx context.Context) error {
 			"tenant_id": tenantID,
 		})
 		return err
-	}
-	if s.suggestionRepo != nil && sessions != nil {
-		for _, session := range sessions {
-			if err := s.suggestionRepo.DeleteBySessionID(ctx, tenantID, session.ID); err != nil {
-				logger.Warnf(ctx, "Failed to delete suggestions for session %s: %v", session.ID, err)
-			}
-		}
 	}
 
 	logger.Infof(ctx, "All sessions deleted for tenant %d", tenantID)

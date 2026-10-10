@@ -1,7 +1,7 @@
 <template>
   <div class="user-menu" :class="{ 'user-menu--collapsed': sidebarCollapsed }" ref="menuRef">
     <!-- 用户按钮 -->
-    <div class="user-button" data-guide="user-menu" @click="toggleMenu">
+    <div class="user-button" @click="toggleMenu">
       <div class="user-avatar">
         <img v-if="userAvatar" :src="userAvatar" :alt="$t('common.avatar')" />
         <span v-else class="avatar-placeholder">{{ userInitial }}</span>
@@ -30,12 +30,6 @@
           <div class="dropdown-user-meta">
             <div class="dropdown-user-name-row">
               <span class="dropdown-user-name">{{ userName }}</span>
-              <t-tooltip :content="$t('newUserGuide.reopen')" placement="top">
-                <button type="button" class="dropdown-guide-btn" :aria-label="$t('newUserGuide.reopen')"
-                  @click.stop="reopenGuide">
-                  <t-icon name="help-circle" size="14px" />
-                </button>
-              </t-tooltip>
             </div>
             <span v-if="userEmail" class="dropdown-user-email">{{ userEmail }}</span>
           </div>
@@ -117,7 +111,6 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import { getCurrentUser, logout as logoutApi, userInfoFromApi } from '@/api/auth'
 import { useI18n } from 'vue-i18n'
 import { getRootZoom, rectToCssPx, cssViewportSize } from '@/utils/zoom'
-import { openNewUserGuide } from '@/config/contextualGuides'
 
 const { t } = useI18n()
 
@@ -184,11 +177,6 @@ const handleSystem = () => {
 // slipping off briefly onto the gap between menu item and submenu pane.
 const closeAll = () => {
   menuVisible.value = false
-}
-
-const reopenGuide = () => {
-  menuVisible.value = false
-  openNewUserGuide()
 }
 
 const openDocs = () => {
@@ -515,27 +503,6 @@ onUnmounted(() => {
     text-overflow: ellipsis;
   }
 
-  .dropdown-guide-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    width: 20px;
-    height: 20px;
-    margin: 0;
-    padding: 0;
-    border: none;
-    border-radius: 4px;
-    background: transparent;
-    color: var(--td-text-color-placeholder);
-    cursor: pointer;
-    transition: background-color 0.2s ease, color 0.2s ease;
-
-    &:hover {
-      background: var(--td-bg-color-container-hover);
-      color: var(--td-text-color-secondary);
-    }
-  }
 }
 
 // 下拉 — 当前工作区：与下方 .menu-item 同款对齐（左 16px 图标槽 + 文案列 + 右侧操作图标）

@@ -76,14 +76,6 @@ func (s *stubKnowledgeBaseService) ResolveEmbeddingModelKeys(context.Context, []
 	return nil
 }
 
-func (s *stubKnowledgeBaseService) CopyKnowledgeBase(
-	context.Context,
-	string,
-	string,
-) (*types.KnowledgeBase, *types.KnowledgeBase, error) {
-	return nil, nil, nil
-}
-
 func (s *stubKnowledgeBaseService) DuplicateKnowledgeBase(
 	context.Context,
 	string,

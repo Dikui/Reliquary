@@ -6,7 +6,6 @@ package interfaces
 
 import (
 	"context"
-	"time"
 
 	"github.com/hibiken/asynq"
 	"reliquary/internal/types"
@@ -96,16 +95,6 @@ type KnowledgeBaseService interface {
 	// Returns a map from KB ID to model identity key string.
 	ResolveEmbeddingModelKeys(ctx context.Context, kbs []*types.KnowledgeBase) map[string]string
 
-	// CopyKnowledgeBase copies a knowledge base
-	// Parameters:
-	//   - ctx: Context information
-	//   - sourceID: Source knowledge base ID
-	//   - targetID: Target knowledge base ID
-	// Returns:
-	//   - Copied knowledge base object
-	//   - Possible errors such as not existing, insufficient permissions, etc.
-	CopyKnowledgeBase(ctx context.Context, src string, dst string) (*types.KnowledgeBase, *types.KnowledgeBase, error)
-
 	DuplicateKnowledgeBase(ctx context.Context, src string) (*types.KnowledgeBase, error)
 
 	// GetRepository gets the knowledge base repository
@@ -191,6 +180,9 @@ type KnowledgeBaseRepository interface {
 	//   - Possible errors such as record not existing, database errors, etc.
 	UpdateKnowledgeBase(ctx context.Context, kb *types.KnowledgeBase) error
 
+	// UpdateKnowledgeBasePin persists only pin state without changing updated_at.
+	UpdateKnowledgeBasePin(ctx context.Context, kb *types.KnowledgeBase) error
+
 	// DeleteKnowledgeBase deletes a knowledge base record
 	// Parameters:
 	//   - ctx: Context information
@@ -200,27 +192,11 @@ type KnowledgeBaseRepository interface {
 	DeleteKnowledgeBase(ctx context.Context, id string) error
 
 	// CountByModelID counts active KBs in the tenant that reference the given
-	// model ID in any model-binding field (embedding, summary, VLM, ASR, etc.).
+	// model ID in any model-binding field (embedding, summary, VLM, etc.).
 	CountByModelID(ctx context.Context, tenantID uint64, modelID string) (int64, error)
 	// ListModelUsages returns the minimal active KB projections that reference
 	// the model, with every matching binding merged per object. Implementations
 	// must cap the result at types.ModelUsageListLimit; callers that need the
 	// untruncated size should use CountByModelID.
 	ListModelUsages(ctx context.Context, tenantID uint64, modelID string) ([]types.ModelUsageResource, error)
-	// SetUserKBPin inserts or removes a row in user_kb_pins for the given
-	// (tenant, user, kb) triple. Returns the resulting pinned_at (nil when
-	// pinned=false) and an error. The tenant_id is captured to support
-	// efficient "wipe a tenant" cleanups even though (user_id, kb_id)
-	// alone would be unique in practice.
-	SetUserKBPin(
-		ctx context.Context, tenantID uint64, userID string, kbID string, pinned bool,
-	) (pinnedAt *time.Time, err error)
-
-	// ListUserKBPinIDs returns the kb_id → pinned_at map of every KB the
-	// given user has personally pinned in this tenant. Used by the list
-	// path to stamp KnowledgeBase.IsPinned / PinnedAt without a per-row
-	// roundtrip.
-	ListUserKBPinIDs(
-		ctx context.Context, tenantID uint64, userID string,
-	) (map[string]time.Time, error)
 }

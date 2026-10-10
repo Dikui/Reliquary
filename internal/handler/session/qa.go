@@ -2,7 +2,6 @@ package session
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -32,30 +31,29 @@ const (
 
 // qaRequestContext holds all the common data needed for QA requests
 type qaRequestContext struct {
-	ctx                   context.Context
-	c                     *gin.Context
-	sessionID             string
-	requestID             string
-	receivedAt            time.Time // Wall-clock time the handler started processing the request
-	query                 string
-	session               *types.Session
-	customAgent           *types.CustomAgent
-	assistantMessage      *types.Message
-	knowledgeBaseIDs      []string
-	knowledgeIDs          []string
-	tagScopes             []types.TagScope
-	tagIDs                []string
-	mcpServiceIDs         []string
-	summaryModelID        string
-	mentionedItems        types.MentionedItems
-	images                []ImageAttachment        // Uploaded images with analysis text
-	userMessageID         string                   // Created user message ID (populated after createUserMessage)
-	userCreatedAt         time.Time                // Persisted user message timestamp, echoed on agent_query
-	channel               string                   // Source channel: "web", "api", "im", etc.
-	attachments           types.MessageAttachments // Processed base64 file attachments (legacy inline uploads)
-	attachmentIDs         []string                 // Pre-uploaded session-scoped document IDs, resolved after SSE starts
-	attachmentMetas       types.MessageAttachments // Metadata-only view of attachmentIDs for the persisted user message
-	suggestionAttribution *types.SuggestionAttribution
+	ctx              context.Context
+	c                *gin.Context
+	sessionID        string
+	requestID        string
+	receivedAt       time.Time // Wall-clock time the handler started processing the request
+	query            string
+	session          *types.Session
+	customAgent      *types.CustomAgent
+	assistantMessage *types.Message
+	knowledgeBaseIDs []string
+	knowledgeIDs     []string
+	tagScopes        []types.TagScope
+	tagIDs           []string
+	mcpServiceIDs    []string
+	summaryModelID   string
+	mentionedItems   types.MentionedItems
+	images           []ImageAttachment        // Uploaded images with analysis text
+	userMessageID    string                   // Created user message ID (populated after createUserMessage)
+	userCreatedAt    time.Time                // Persisted user message timestamp, echoed on agent_query
+	channel          string                   // Source channel: "web", "api", "im", etc.
+	attachments      types.MessageAttachments // Processed base64 file attachments (legacy inline uploads)
+	attachmentIDs    []string                 // Pre-uploaded session-scoped document IDs, resolved after SSE starts
+	attachmentMetas  types.MessageAttachments // Metadata-only view of attachmentIDs for the persisted user message
 	// resourceRewriter turns internal storage references in the outbound stream
 	// into directly loadable URLs when the caller asks for `resource_urls=public`.
 	// Disabled (a pass-through) in the default handle mode.
@@ -122,11 +120,6 @@ func (h *Handler) parseQARequest(c *gin.Context, logPrefix string) (*qaRequestCo
 	if err != nil {
 		logger.Warnf(ctx, "Rejected resource URL mode: %v", err)
 		return nil, nil, err
-	}
-	if h.suggestionService != nil && request.SuggestionAttribution != nil {
-		if err := h.suggestionService.ValidateAttribution(ctx, sessionID, request.Query, request.SuggestionAttribution); err != nil {
-			return nil, nil, errors.NewBadRequestError("invalid suggestion attribution")
-		}
 	}
 
 	// SSRF protection: strip client-supplied URL/Caption fields from image attachments.
@@ -200,12 +193,6 @@ func (h *Handler) parseQARequest(c *gin.Context, logPrefix string) (*qaRequestCo
 		tenantID := c.GetUint64(types.TenantIDContextKey.String())
 		attachmentRuntimeCtx := ctx
 
-		// Use ASR only when the agent has audio upload enabled.
-		asrModelID := ""
-		if customAgent != nil && customAgent.Config.AudioUploadEnabled && customAgent.Config.ASRModelID != "" {
-			asrModelID = customAgent.Config.ASRModelID
-		}
-
 		// Resolve the agent's chat parser engine from attachment file types
 		if customAgent != nil {
 			for _, att := range request.AttachmentUploads {
@@ -228,7 +215,7 @@ func (h *Handler) parseQARequest(c *gin.Context, logPrefix string) (*qaRequestCo
 				defer wg.Done()
 
 				processed, err := h.attachmentProcessor.ProcessAttachment(
-					attachmentRuntimeCtx, decodedAttachments[idx], att.FileName, int64(len(decodedAttachments[idx])), tenantID, asrModelID,
+					attachmentRuntimeCtx, decodedAttachments[idx], att.FileName, int64(len(decodedAttachments[idx])), tenantID,
 				)
 				if err != nil {
 					errChan <- fmt.Errorf("attachment %d processing failed: %w", idx+1, err)
@@ -294,16 +281,7 @@ func (h *Handler) parseQARequest(c *gin.Context, logPrefix string) (*qaRequestCo
 	tagScopes := mergeTagScopesFromRequestIDs(mentionScopes, requestTagIDs, secutils.SanitizeForLogArray(kbIDs))
 	tagIDs := dedupRequestStrings(append(request.TagIDs, mentionedIDsByType(request.MentionedItems, "tag")...))
 	mcpServiceIDs := dedupRequestStrings(append(request.MCPServiceIDs, mentionedIDsByType(request.MentionedItems, "mcp")...))
-	executionContext, agentID, modelID := buildMessageExecutionContext(
-		ctx,
-		customAgent,
-		request.SummaryModelID,
-		secutils.SanitizeForLogArray(kbIDs),
-		secutils.SanitizeForLogArray(knowledgeIDs),
-		secutils.SanitizeForLogArray(tagIDs),
-		tagScopes,
-		secutils.SanitizeForLogArray(mcpServiceIDs),
-	)
+	agentID, modelID := messageModelBinding(customAgent, request.SummaryModelID)
 
 	// Build request context
 	reqCtx := &qaRequestContext{
@@ -316,31 +294,29 @@ func (h *Handler) parseQARequest(c *gin.Context, logPrefix string) (*qaRequestCo
 		session:     session,
 		customAgent: customAgent,
 		assistantMessage: &types.Message{
-			SessionID:        sessionID,
-			Role:             "assistant",
-			RequestID:        c.GetString(types.RequestIDContextKey.String()),
-			IsCompleted:      false,
-			Channel:          request.Channel,
-			AgentID:          agentID,
-			ModelID:          modelID,
-			ExecutionContext: executionContext,
+			SessionID:   sessionID,
+			Role:        "assistant",
+			RequestID:   c.GetString(types.RequestIDContextKey.String()),
+			IsCompleted: false,
+			Channel:     request.Channel,
+			AgentID:     agentID,
+			ModelID:     modelID,
 		},
-		knowledgeBaseIDs:      secutils.SanitizeForLogArray(kbIDs),
-		knowledgeIDs:          secutils.SanitizeForLogArray(knowledgeIDs),
-		tagScopes:             tagScopes,
-		tagIDs:                secutils.SanitizeForLogArray(tagIDs),
-		mcpServiceIDs:         secutils.SanitizeForLogArray(mcpServiceIDs),
-		summaryModelID:        secutils.SanitizeForLog(request.SummaryModelID),
-		mentionedItems:        convertMentionedItems(request.MentionedItems),
-		images:                request.Images,
-		channel:               request.Channel,
-		attachments:           processedAttachments,
-		attachmentIDs:         attachmentIDs,
-		attachmentMetas:       attachmentMetas,
-		suggestionAttribution: request.SuggestionAttribution,
-		reqAgentEnabled:       request.AgentEnabled,
-		reqAgentID:            request.AgentID,
-		resourceRewriter:      resourceRewriter,
+		knowledgeBaseIDs: secutils.SanitizeForLogArray(kbIDs),
+		knowledgeIDs:     secutils.SanitizeForLogArray(knowledgeIDs),
+		tagScopes:        tagScopes,
+		tagIDs:           secutils.SanitizeForLogArray(tagIDs),
+		mcpServiceIDs:    secutils.SanitizeForLogArray(mcpServiceIDs),
+		summaryModelID:   secutils.SanitizeForLog(request.SummaryModelID),
+		mentionedItems:   convertMentionedItems(request.MentionedItems),
+		images:           request.Images,
+		channel:          request.Channel,
+		attachments:      processedAttachments,
+		attachmentIDs:    attachmentIDs,
+		attachmentMetas:  attachmentMetas,
+		reqAgentEnabled:  request.AgentEnabled,
+		reqAgentID:       request.AgentID,
+		resourceRewriter: resourceRewriter,
 	}
 
 	return reqCtx, &request, nil
@@ -372,85 +348,6 @@ func decodeAndValidateAttachmentUploads(
 		decoded[i] = data
 	}
 	return decoded, nil
-}
-
-func buildMessageExecutionContext(
-	ctx context.Context,
-	agent *types.CustomAgent,
-	modelOverride string,
-	knowledgeBaseIDs []string,
-	knowledgeIDs []string,
-	tagIDs []string,
-	tagScopes []types.TagScope,
-	mcpServiceIDs []string,
-) (types.MessageExecutionContext, string, string) {
-	locale := types.LanguageFromContextOrDefault(ctx)
-
-	snapshot := types.MessageExecutionContext{
-		KnowledgeBaseIDs: knowledgeBaseIDs,
-		KnowledgeIDs:     knowledgeIDs,
-		TagIDs:           tagIDs,
-		TagScopes:        cloneTagScopes(tagScopes),
-		MCPServiceIDs:    mcpServiceIDs,
-		Locale:           locale,
-	}
-	if agent == nil {
-		return snapshot, "", modelOverride
-	}
-
-	modelID := modelOverride
-	if modelID == "" {
-		modelID = agent.Config.ModelID
-	}
-
-	// Marshal/unmarshal gives the snapshot independent backing slices, so a
-	// later agent edit cannot mutate an in-flight message context.
-	if agent.Config.QuestionSuggestions != nil {
-		if encoded, err := json.Marshal(agent.Config.QuestionSuggestions); err == nil {
-			var suggestions types.QuestionSuggestionConfig
-			if json.Unmarshal(encoded, &suggestions) == nil {
-				snapshot.QuestionSuggestions = &suggestions
-			}
-		}
-	}
-	hashInput := struct {
-		QuestionSuggestions *types.QuestionSuggestionConfig `json:"question_suggestions,omitempty"`
-		KnowledgeBaseIDs    []string                        `json:"knowledge_base_ids,omitempty"`
-		KnowledgeIDs        []string                        `json:"knowledge_ids,omitempty"`
-		TagIDs              []string                        `json:"tag_ids,omitempty"`
-		TagScopes           []types.TagScope                `json:"tag_scopes,omitempty"`
-		ModelID             string                          `json:"model_id,omitempty"`
-	}{
-		QuestionSuggestions: snapshot.QuestionSuggestions,
-		KnowledgeBaseIDs:    knowledgeBaseIDs,
-		KnowledgeIDs:        knowledgeIDs,
-		TagIDs:              tagIDs,
-		TagScopes:           snapshot.TagScopes,
-		ModelID:             modelID,
-	}
-	if encoded, err := json.Marshal(hashInput); err == nil {
-		hash := sha256.Sum256(encoded)
-		snapshot.AgentConfigHash = fmt.Sprintf("%x", hash[:])
-	}
-
-	return snapshot, agent.ID, modelID
-}
-
-func cloneTagScopes(scopes []types.TagScope) []types.TagScope {
-	if len(scopes) == 0 {
-		return nil
-	}
-	cloned := make([]types.TagScope, 0, len(scopes))
-	for _, scope := range scopes {
-		if scope.KnowledgeBaseID == "" || len(scope.TagIDs) == 0 {
-			continue
-		}
-		cloned = append(cloned, types.TagScope{
-			KnowledgeBaseID: scope.KnowledgeBaseID,
-			TagIDs:          append([]string(nil), scope.TagIDs...),
-		})
-	}
-	return cloned
 }
 
 func (h *Handler) resolveAgent(ctx context.Context, c *gin.Context, agentID string) *types.CustomAgent {
@@ -759,7 +656,7 @@ func (h *Handler) executeQA(reqCtx *qaRequestContext, mode qaMode, generateTitle
 	if len(reqCtx.attachmentMetas) > 0 {
 		userMessageAttachments = append(append(types.MessageAttachments{}, reqCtx.attachments...), reqCtx.attachmentMetas...)
 	}
-	userMsg, err := h.createUserMessage(ctx, sessionID, reqCtx.query, reqCtx.requestID, reqCtx.mentionedItems, convertImageAttachments(reqCtx.images), userMessageAttachments, reqCtx.channel, reqCtx.suggestionAttribution)
+	userMsg, err := h.createUserMessage(ctx, sessionID, reqCtx.query, reqCtx.requestID, reqCtx.mentionedItems, convertImageAttachments(reqCtx.images), userMessageAttachments, reqCtx.channel)
 	if err != nil {
 		reqCtx.c.Error(errors.NewInternalServerError(err.Error()))
 		return
@@ -1105,7 +1002,7 @@ func (h *Handler) resolveTemporaryAttachments(streamCtx *sseStreamContext, reqCt
 // attachments back onto the stored user message so multi-turn history can
 // replay it. Entries are matched by their temporary-document ID; only those
 // present on the message are enriched. Failures are logged but never bubble up
-// — losing the write only degrades follow-up context, it must not fail the turn.
+// Failures only affect later conversation history; they must not fail this turn.
 func (h *Handler) persistResolvedAttachmentContent(
 	ctx context.Context, reqCtx *qaRequestContext, resolved types.MessageAttachments,
 ) {
@@ -1274,13 +1171,15 @@ func (h *Handler) completeAssistantMessage(
 	// Use WithoutCancel so the goroutine survives after the HTTP request context is done.
 	bgCtx := context.WithoutCancel(ctx)
 	go h.messageService.IndexMessageToKB(bgCtx, userQuery, assistantMessage.Content, assistantMessage.ID, assistantMessage.SessionID)
-	if userQuery != "" && h.suggestionService != nil {
-		go func() {
-			if _, err := h.suggestionService.EnsureFollowUps(
-				bgCtx, assistantMessage.SessionID, assistantMessage.ID, false,
-			); err != nil {
-				logger.Warnf(bgCtx, "follow-up suggestion generation failed for message %s: %v", assistantMessage.ID, err)
-			}
-		}()
+
+}
+
+func messageModelBinding(agent *types.CustomAgent, modelOverride string) (string, string) {
+	if agent == nil {
+		return "", modelOverride
 	}
+	if modelOverride == "" {
+		modelOverride = agent.Config.ModelID
+	}
+	return agent.ID, modelOverride
 }

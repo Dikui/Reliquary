@@ -83,7 +83,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
         '@/stores/ui': { useUIStore: () => ({}) },
         '@/stores/chatResources': { useChatResourcesStore: () => ({ allModels: [] }) },
         '@/stores/editorResources': { useEditorResourcesStore: () => ({}) },
-        '@/config/contextualGuides': {}, '@/utils/modelDefaults': {}, '@/utils/clipboard': {},
+        '@/config/editorNavigation': {}, '@/utils/modelDefaults': {}, '@/utils/clipboard': {},
         '@/utils/modelTiers': modelTiers,
         'tdesign-vue-next': { MessagePlugin: {
           error: (message: string) => notifications.push(message),

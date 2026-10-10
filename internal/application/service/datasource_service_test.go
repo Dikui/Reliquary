@@ -166,10 +166,6 @@ func (s *processSyncKBService) ResolveEmbeddingModelKeys(context.Context, []*typ
 	return nil
 }
 
-func (s *processSyncKBService) CopyKnowledgeBase(context.Context, string, string) (*types.KnowledgeBase, *types.KnowledgeBase, error) {
-	return nil, nil, nil
-}
-
 func (s *processSyncKBService) DuplicateKnowledgeBase(context.Context, string) (*types.KnowledgeBase, error) {
 	return nil, nil
 }

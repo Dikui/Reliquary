@@ -10,13 +10,12 @@ import (
 )
 
 var noAuthAPI = map[string][]string{
-	"/health":                    {"GET"},
-	"/api/v1/auth/register":      {"POST"},
-	"/api/v1/auth/login":         {"POST"},
-	"/api/v1/auth/config":        {"GET"},
-	"/api/v1/auth/refresh":       {"POST"},
-	"/api/v1/mcp-oauth/callback": {"GET"},
-	"/api/v1/files/presigned":    {"GET", "HEAD"},
+	"/health":                 {"GET"},
+	"/api/v1/auth/register":   {"POST"},
+	"/api/v1/auth/login":      {"POST"},
+	"/api/v1/auth/config":     {"GET"},
+	"/api/v1/auth/refresh":    {"POST"},
+	"/api/v1/files/presigned": {"GET", "HEAD"},
 }
 
 func isNoAuthAPI(path, method string) bool {

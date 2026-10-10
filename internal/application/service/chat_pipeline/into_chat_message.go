@@ -64,7 +64,7 @@ func (p *PluginIntoChatMessage) OnEvent(ctx context.Context,
 		if chatManage.ImageDescription != "" && !chatManage.ChatModelSupportsVision {
 			userContent += "\n\n[用户上传图片内容]\n" + chatManage.ImageDescription
 		}
-		// Inject attachment content (documents, audio transcripts, etc.)
+		// Inject attachment content (documents, images, etc.)
 		if len(chatManage.Attachments) > 0 {
 			userContent += chatManage.Attachments.BuildPrompt()
 		}
@@ -125,7 +125,7 @@ func (p *PluginIntoChatMessage) OnEvent(ctx context.Context,
 	if chatManage.ImageDescription != "" && !chatManage.ChatModelSupportsVision {
 		userContent += "\n\n[用户上传图片内容]\n" + chatManage.ImageDescription
 	}
-	// Inject attachment content (documents, audio transcripts, etc.)
+	// Inject attachment content (documents, images, etc.)
 	if len(chatManage.Attachments) > 0 {
 		userContent += chatManage.Attachments.BuildPrompt()
 	}

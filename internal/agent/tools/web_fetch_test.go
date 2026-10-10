@@ -94,6 +94,23 @@ func TestWebFetchToolAllFailuresReturnStructuredFallback(t *testing.T) {
 	assert.Contains(t, result.Output, "Answer only from other available evidence")
 }
 
+func TestWebFetchToolReportsJavaScriptRenderingFailure(t *testing.T) {
+	const rawURL = "https://example.com/application"
+	const message = "该页面需要 JavaScript 渲染，无法抓取正文"
+	fetcher := newStubWebContentFetcher(nil, map[string]error{
+		rawURL: fetchFailure(webfetch.ErrorJavaScriptRequired, false, message),
+	})
+	result, err := newWebFetchTool(nil, fetcher).Execute(context.Background(), webFetchArgs(
+		WebFetchItem{URL: rawURL, Prompt: "extract facts"},
+	))
+	require.NoError(t, err)
+	require.False(t, result.Success)
+	items := result.Data["results"].([]map[string]interface{})
+	require.Equal(t, "javascript_required", items[0]["error_code"])
+	require.Equal(t, message, items[0]["error_message"])
+	require.Equal(t, false, items[0]["retryable"])
+}
+
 func TestWebFetchToolDeduplicatesURLsWithinBatch(t *testing.T) {
 	const rawURL = "https://example.com/page#section"
 	const duplicateURL = "https://example.com/page"

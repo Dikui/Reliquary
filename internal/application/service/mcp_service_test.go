@@ -2,13 +2,18 @@ package service
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	protocol "github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"reliquary/internal/mcp"
 	"reliquary/internal/types"
+	secutils "reliquary/internal/utils"
 )
 
 // fakeMCPRepo is a minimal in-memory implementation of
@@ -111,8 +116,7 @@ func newTestService() (*mcpServiceService, *fakeMCPRepo) {
 	repo := newFakeMCPRepo()
 	svc := &mcpServiceService{
 		mcpServiceRepo: repo,
-		mcpManager:     mcp.NewMCPManager(nil),
-		oauthRepo:      nil,
+		mcpManager:     mcp.NewMCPManager(),
 	}
 	return svc, repo
 }
@@ -446,4 +450,83 @@ func TestListMCPServices_ReturnsRawCredentials(t *testing.T) {
 	require.Len(t, got, 1)
 	assert.Equal(t, "real-api", got[0].AuthConfig.APIKey)
 	assert.Equal(t, "real-token", got[0].AuthConfig.Token)
+}
+
+func TestMCPServiceSupportedAuthentication(t *testing.T) {
+	t.Setenv("SSRF_WHITELIST", "127.0.0.1")
+	secutils.ResetSSRFWhitelistForTest()
+	t.Cleanup(secutils.ResetSSRFWhitelistForTest)
+	for _, transportType := range []types.MCPTransportType{types.MCPTransportSSE, types.MCPTransportHTTPStreamable} {
+		for _, tc := range []struct {
+			name   string
+			auth   *types.MCPAuthConfig
+			apiKey string
+			bearer string
+		}{
+			{name: "none"},
+			{name: "api_key", auth: &types.MCPAuthConfig{AuthType: types.MCPAuthAPIKey, APIKey: "test-key"}, apiKey: "test-key"},
+			{name: "bearer", auth: &types.MCPAuthConfig{AuthType: types.MCPAuthBearer, Token: "test-token"}, bearer: "Bearer test-token"},
+		} {
+			t.Run(string(transportType)+"/"+tc.name, func(t *testing.T) {
+				mcpServer := server.NewMCPServer("auth-test", "1.0")
+				mcpServer.AddTool(protocol.NewTool("echo"), func(_ context.Context, req protocol.CallToolRequest) (*protocol.CallToolResult, error) {
+					return protocol.NewToolResultText(req.GetString("text", "")), nil
+				})
+				var upstream http.Handler = server.NewStreamableHTTPServer(mcpServer)
+				if transportType == types.MCPTransportSSE {
+					upstream = server.NewSSEServer(mcpServer)
+				}
+				httpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if r.Header.Get("X-API-Key") != tc.apiKey || r.Header.Get("Authorization") != tc.bearer {
+						http.Error(w, "invalid authentication", http.StatusUnauthorized)
+						return
+					}
+					upstream.ServeHTTP(w, r)
+				}))
+				t.Cleanup(httpServer.Close)
+				svc, repo := newTestService()
+				t.Cleanup(svc.mcpManager.Shutdown)
+				serviceURL := httpServer.URL
+				if transportType == types.MCPTransportSSE {
+					serviceURL += "/sse"
+				}
+				service := &types.MCPService{
+					ID: "auth-" + tc.name, TenantID: 1, Name: "auth-" + tc.name, Enabled: true,
+					TransportType: transportType, URL: &serviceURL, AuthConfig: tc.auth,
+				}
+				require.NoError(t, svc.CreateMCPService(t.Context(), service))
+				require.Contains(t, repo.store, service.ID)
+				result, err := svc.TestMCPService(t.Context(), 1, service.ID)
+				require.NoError(t, err)
+				require.True(t, result.Success, result.Message)
+				require.Len(t, result.Tools, 1)
+				require.Equal(t, "echo", result.Tools[0].Name)
+				client, err := svc.mcpManager.GetOrCreateClient(t.Context(), service)
+				require.NoError(t, err)
+				toolResult, err := client.CallTool(t.Context(), "echo", map[string]any{"text": "hello"})
+				require.NoError(t, err)
+				require.False(t, toolResult.IsError)
+				require.Len(t, toolResult.Content, 1)
+				require.Equal(t, "hello", toolResult.Content[0].Text)
+			})
+		}
+	}
+}
+
+func TestMCPServiceRejectsUnsupportedAuthentication(t *testing.T) {
+	svc, repo := newTestService()
+	t.Cleanup(svc.mcpManager.Shutdown)
+	service := &types.MCPService{
+		ID: "unsupported", TenantID: 1, Name: "unsupported", Enabled: true,
+		TransportType: types.MCPTransportHTTPStreamable,
+		AuthConfig:    &types.MCPAuthConfig{AuthType: types.MCPAuthType("oauth")},
+	}
+	err := svc.CreateMCPService(t.Context(), service)
+	require.ErrorContains(t, err, `unsupported MCP authentication type "oauth"`)
+	require.Empty(t, repo.store)
+	id := seedService(t, repo, "original-key", "")
+	service.ID = id
+	err = svc.UpdateMCPService(t.Context(), service, nil)
+	require.ErrorContains(t, err, `unsupported MCP authentication type "oauth"`)
+	require.Equal(t, "original-key", repo.store[id].AuthConfig.APIKey)
 }

@@ -12,19 +12,6 @@ export interface QuestionSuggestionConfig {
     items: string[];
     count: number;
   };
-  follow_ups: {
-    enabled: boolean;
-    mode: 'generated' | 'knowledge' | 'hybrid';
-    count: number;
-    model_id?: string;
-    additional_instruction?: string;
-    categories: Array<'clarify' | 'deepen' | 'action'>;
-    max_context_turns: number;
-    suppress_on_fallback: boolean;
-    suppress_when_answer_asks_question: boolean;
-    knowledge_fallback: boolean;
-    allow_regenerate: boolean;
-  };
 }
 
 export interface CustomAgentConfig {
@@ -52,10 +39,7 @@ export interface CustomAgentConfig {
   reflection_enabled?: boolean;     // 是否启用反思
   // MCP服务选择模式：all=全部启用的MCP服务, selected=指定服务, none=不使用MCP
   mcp_selection_mode?: 'all' | 'selected' | 'none';
-  mcp_services?: string[];          // 选择的MCP服务ID列表
-  // 对话中触发 OAuth 授权时的等待超时（秒）：到点后自动跳过授权提示。
-  // <=0 时使用服务端默认超时。仅对使用 OAuth 的 MCP 服务生效。
-  mcp_auth_wait_timeout?: number;
+  mcp_services?: string[];
 
   // ===== 知识库设置 =====
   // 知识库选择模式：all=全部知识库, selected=指定知识库, none=不使用知识库
@@ -69,8 +53,6 @@ export interface CustomAgentConfig {
   // ===== 图片上传/多模态设置 =====
   image_upload_enabled?: boolean;    // 是否启用图片上传（默认: false）
   vlm_model_id?: string;            // VLM模型ID（图片分析用）
-  audio_upload_enabled?: boolean;    // 是否启用音频上传/ASR转录（默认: false）
-  asr_model_id?: string;            // ASR模型ID（音频转录用）
   // 附件图片理解 / 扫描件 OCR 开关（默认: false，开启会增加解析耗时）
   attachment_image_understanding?: boolean;
   // 扫描件 OCR 最大页数（0 = 使用全局默认 RELIQUARY_CHAT_ATTACHMENT_OCR_MAX_PAGES）

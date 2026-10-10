@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	werrors "reliquary/internal/errors"
-	"reliquary/internal/logger"
 	"reliquary/internal/types"
 )
 
@@ -19,7 +18,6 @@ func ResolveProcessConfig(kb *types.KnowledgeBase, overrides *types.KnowledgePro
 		ChunkingConfig:           kb.ChunkingConfig,
 		EnableMultimodel:         kb.IsMultimodalEnabled(),
 		VLMConfig:                kb.VLMConfig,
-		ASRConfig:                kb.ASRConfig,
 		QuestionGenerationConfig: defaultQuestionGenerationConfig(kb),
 	}
 	if overrides == nil {
@@ -45,9 +43,6 @@ func ResolveProcessConfig(kb *types.KnowledgeBase, overrides *types.KnowledgePro
 			eff.VLMConfig.CustomInstructions = base.CustomInstructions
 		}
 	}
-	if overrides.ASRConfig != nil {
-		eff.ASRConfig = *overrides.ASRConfig
-	}
 	if overrides.QuestionGenerationConfig != nil {
 		base := eff.QuestionGenerationConfig
 		eff.QuestionGenerationConfig = *overrides.QuestionGenerationConfig
@@ -58,26 +53,8 @@ func ResolveProcessConfig(kb *types.KnowledgeBase, overrides *types.KnowledgePro
 	return eff
 }
 
-// validateDefaultFileImportRequirements enforces the ASR prerequisites that
-// ValidateProcessOverrides would otherwise cover, for imports that ship no
-// per-import overrides and therefore fall back to the KB defaults.
-func validateDefaultFileImportRequirements(
-	ctx context.Context,
-	kb *types.KnowledgeBase,
-	eff types.EffectiveProcessConfig,
-	fileType string,
-) error {
-	fileType = normalizeFileExtension(fileType)
-	if IsAudioType(fileType) && !kb.ASRConfig.IsASREnabled() {
-		logger.Error(ctx, "ASR model is not configured")
-		return werrors.NewBadRequestError("上传音频文件需要设置ASR语音识别模型")
-	}
-	return nil
-}
-
 // resolveFileImportProcessConfig is the single gate every file import passes
-// through: it rejects unsupported extensions, enforces the ASR
-// prerequisites for the resolved type, and returns the effective processing
+// through: it rejects unsupported extensions and returns the effective processing
 // config for task enqueue. Persisting overrides onto the knowledge record stays
 // with the caller, which owns the record's lifecycle.
 func resolveFileImportProcessConfig(
@@ -100,8 +77,6 @@ func resolveFileImportProcessConfig(
 		if err := ValidateProcessOverrides(ctx, kb, processOverrides, []string{fileType}); err != nil {
 			return eff, err
 		}
-	} else if err := validateDefaultFileImportRequirements(ctx, kb, eff, fileType); err != nil {
-		return eff, err
 	}
 
 	if IsImageType(fileType) && !eff.VLMConfig.IsEnabled() {
@@ -121,19 +96,7 @@ func ValidateProcessOverrides(
 		return nil
 	}
 
-	hasAudio := false
-	for _, ft := range fileTypes {
-		if IsAudioType(ft) {
-			hasAudio = true
-		}
-	}
-
 	eff := ResolveProcessConfig(kb, overrides)
-
-	if hasAudio && !eff.ASRConfig.IsASREnabled() {
-		return werrors.NewBadRequestError("上传音频文件需要设置ASR语音识别模型")
-	}
-
 	if err := types.ValidateEffectiveProcessPromptInstructions(eff); err != nil {
 		return werrors.NewBadRequestError(err.Error())
 	}

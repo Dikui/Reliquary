@@ -6,7 +6,6 @@ type KnowledgeProcessOverrides struct {
 	ChunkingConfig           *ChunkingConfig           `json:"chunking_config,omitempty"`
 	EnableMultimodel         *bool                     `json:"enable_multimodel,omitempty"`
 	VLMConfig                *VLMConfig                `json:"vlm_config,omitempty"`
-	ASRConfig                *ASRConfig                `json:"asr_config,omitempty"`
 	QuestionGenerationConfig *QuestionGenerationConfig `json:"question_generation_config,omitempty"`
 	// ParserEngineOverrides passes key-value configuration to document parsers
 	// (e.g. mineru_parse_method=ocr). Merged with workspace-level overrides in the
@@ -19,6 +18,5 @@ type EffectiveProcessConfig struct {
 	ChunkingConfig           ChunkingConfig
 	EnableMultimodel         bool
 	VLMConfig                VLMConfig
-	ASRConfig                ASRConfig
 	QuestionGenerationConfig QuestionGenerationConfig
 }

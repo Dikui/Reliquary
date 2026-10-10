@@ -45,18 +45,15 @@ func (h *Handler) UploadTemporaryDocument(c *gin.Context) {
 		return
 	}
 	ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(fileHeader.Filename)), ".")
+	if isAudioExtension(ext) {
+		c.Error(apperrors.NewBadRequestError(fmt.Sprintf("不支持上传音频文件: %s", ext)))
+		return
+	}
 	options := types.TemporaryDocumentCreateOptions{ParserEngine: strings.TrimSpace(c.PostForm("parser_engine"))}
 	if agent != nil {
 		if len(agent.Config.SupportedFileTypes) > 0 && !containsFileType(agent.Config.SupportedFileTypes, ext) {
 			c.Error(apperrors.NewBadRequestError("file type is not supported by this agent"))
 			return
-		}
-		if isAudioExtension(ext) {
-			if !agent.Config.AudioUploadEnabled || agent.Config.ASRModelID == "" {
-				c.Error(apperrors.NewBadRequestError("audio upload is not enabled or no ASR model is configured"))
-				return
-			}
-			options.ASRModelID = agent.Config.ASRModelID
 		}
 		// Resolve the parser engine from the agent's chat rules when the caller
 		// did not pass an explicit engine. Tenant-level rules remain the final

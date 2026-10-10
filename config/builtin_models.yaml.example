@@ -31,7 +31,7 @@ builtin_models: []
 #
 # builtin_models:
 #   - id: builtin-llm-default
-#     type: KnowledgeQA          # KnowledgeQA | Embedding | Rerank | VLLM | ASR
+#     type: KnowledgeQA          # KnowledgeQA | Embedding | Rerank | VLLM
 #     source: remote             # remote (default) | local | ...
 #     is_default: true
 #     name: ${LLM_MODEL_NAME}

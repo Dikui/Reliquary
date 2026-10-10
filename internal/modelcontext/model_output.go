@@ -39,8 +39,6 @@ func (r *sourceRegistry) ModelOutput(result *types.ToolResult) string {
 		return r.modelDocumentInfoOutput(mapsValue(result.Data["documents"]), result.Output)
 	case "context_query_results", "graph_query_results":
 		return r.modelKnowledgeOutput("context", mapsValue(result.Data["results"]), result.Output)
-	case "database_query":
-		return r.modelDatabaseQueryOutput(mapsValue(result.Data["rows"]), result.Output)
 	default:
 		r.registerLabeledReferences(result.Output)
 		r.registerStructuredReferences(result.Output)
@@ -86,17 +84,6 @@ func (r *sourceRegistry) registerStructuredReferences(raw string) {
 		}
 	}
 	walk("", value)
-}
-
-func (r *sourceRegistry) modelDatabaseQueryOutput(rows []map[string]interface{}, fallback string) string {
-	for _, row := range rows {
-		for key, raw := range row {
-			if value, ok := raw.(string); ok {
-				r.registerSourceIDByKey(key, value)
-			}
-		}
-	}
-	return r.CompactKnownText(fallback)
 }
 
 func (r *sourceRegistry) modelDocumentInfoOutput(rows []map[string]interface{}, fallback string) string {

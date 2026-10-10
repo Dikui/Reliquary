@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,6 +32,17 @@ func TestFetcherFetchSuccess(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Contains(t, content, "official specifications")
+}
+
+func TestFetcherKeepsReadableServerRenderedPageWithScripts(t *testing.T) {
+	body := strings.Repeat("Server rendered article explains a loading... indicator. ", 10)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		_, _ = writer.Write([]byte(`<html><body><div id="root">` + body + `</div><script>hydrate()</script></body></html>`))
+	}))
+	defer server.Close()
+	content, err := newTestFetcher(server.Client()).Fetch(context.Background(), server.URL)
+	require.NoError(t, err)
+	assert.Equal(t, strings.TrimSpace(body), content)
 }
 
 func TestFetcherClassifiesHTTPStatus(t *testing.T) {
@@ -102,7 +114,7 @@ func TestFetcherClassifiesDNSFailureDuringSSRFValidation(t *testing.T) {
 
 func TestFetcherRejectsEmptyContent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
-		_, _ = writer.Write([]byte("<html><body><script>ignored()</script></body></html>"))
+		_, _ = writer.Write([]byte("<html><body></body></html>"))
 	}))
 	defer server.Close()
 
@@ -112,24 +124,26 @@ func TestFetcherRejectsEmptyContent(t *testing.T) {
 	assert.False(t, retryable)
 }
 
-func TestFetcherUsesBrowserFallbackForClientRenderedPage(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
-		_, _ = writer.Write([]byte(`<html><body><div id="app">Loading...</div><script>render()</script></body></html>`))
-	}))
-	defer server.Close()
-
-	fetcher := newTestFetcher(server.Client())
-	fetcher.resolveIPs = func(context.Context, string) ([]net.IP, error) {
-		return []net.IP{net.ParseIP("93.184.216.34")}, nil
+func TestFetcherRejectsJavaScriptRenderingShell(t *testing.T) {
+	for _, shell := range []string{
+		`<html><body><script>render()</script></body></html>`,
+		`<html><body><div id="app">Loading...</div><script>render()</script></body></html>`,
+		`<html><body><div id="root"></div><script>render()</script></body></html>`,
+		`<html><body>Please enable JavaScript to view this page</body></html>`,
+	} {
+		t.Run(shell, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+				_, _ = writer.Write([]byte(shell))
+			}))
+			defer server.Close()
+			content, err := newTestFetcher(server.Client()).Fetch(context.Background(), server.URL)
+			code, retryable, message := ErrorDetails(err)
+			assert.Empty(t, content)
+			assert.Equal(t, ErrorJavaScriptRequired, code)
+			assert.False(t, retryable)
+			assert.Equal(t, "该页面需要 JavaScript 渲染，无法抓取正文", message)
+		})
 	}
-	fetcher.renderBrowser = func(context.Context, pinnedTarget) (string, error) {
-		return `<html><body><main>rendered product specifications</main></body></html>`, nil
-	}
-
-	content, err := fetcher.Fetch(context.Background(), server.URL)
-
-	require.NoError(t, err)
-	assert.Contains(t, content, "rendered product specifications")
 }
 
 func TestNewFetcherKeepsAgentCompatibleTimeout(t *testing.T) {
@@ -139,27 +153,6 @@ func TestNewFetcherKeepsAgentCompatibleTimeout(t *testing.T) {
 func TestNewPipelineFetcherUsesHTTPOnlyAndLegacyTimeout(t *testing.T) {
 	fetcher := NewPipelineFetcher()
 	assert.Equal(t, 15*time.Second, fetcher.timeout)
-	assert.Nil(t, fetcher.renderBrowser)
-}
-
-func TestFetcherReturnsErrorWhenBrowserFallbackFailsOnSPA(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
-		_, _ = writer.Write([]byte(`<html><body><div id="app">Loading...</div><script>render()</script></body></html>`))
-	}))
-	defer server.Close()
-
-	fetcher := newTestFetcher(server.Client())
-	fetcher.resolveIPs = func(context.Context, string) ([]net.IP, error) {
-		return []net.IP{net.ParseIP("93.184.216.34")}, nil
-	}
-	fetcher.renderBrowser = func(context.Context, pinnedTarget) (string, error) {
-		return "", errors.New("browser unavailable")
-	}
-
-	_, err := fetcher.Fetch(context.Background(), server.URL)
-	code, retryable, _ := ErrorDetails(err)
-	assert.Equal(t, ErrorEmptyContent, code)
-	assert.False(t, retryable)
 }
 
 func TestFetcherClassifiesInvalidAndSSRFURLs(t *testing.T) {

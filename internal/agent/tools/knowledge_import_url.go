@@ -3,8 +3,10 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 
+	webfetch "reliquary/internal/infrastructure/web_fetch"
 	"reliquary/internal/types"
 )
 
@@ -41,6 +43,12 @@ func (t *knowledgeImportURLTool) Execute(ctx context.Context, args json.RawMessa
 	}
 	err := t.importURL(ctx, input)
 	if err != nil {
+		var fetchErr *webfetch.FetchError
+		if errors.As(err, &fetchErr) {
+			return &types.ToolResult{Success: false, Error: fetchErr.Error(), Data: map[string]interface{}{
+				"error_code": string(fetchErr.Code), "retryable": fetchErr.Retryable,
+			}}, nil
+		}
 		return &types.ToolResult{Success: false, Error: err.Error()}, nil
 	}
 	return &types.ToolResult{Success: true, Output: "Original-page intake queued. It is not formal evidence until review completes."}, nil

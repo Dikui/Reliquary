@@ -134,8 +134,6 @@ type KnowledgeService interface {
 	// is already cancelled. Returns an error when the knowledge is in a
 	// terminal state (completed / failed) or being deleted.
 	CancelKnowledgeParse(ctx context.Context, knowledgeID string) (*types.Knowledge, error)
-	// CloneKnowledgeBase clones knowledge to another knowledge base.
-	CloneKnowledgeBase(ctx context.Context, srcID, dstID string) error
 	// UpdateImageInfo updates image information for a knowledge chunk.
 	UpdateImageInfo(ctx context.Context, knowledgeID string, chunkID string, imageInfo string) error
 	// UpdateKnowledgeTagBatch updates tag for document knowledge items in batch.
@@ -156,18 +154,12 @@ type KnowledgeService interface {
 	ProcessQuestionGeneration(ctx context.Context, t *asynq.Task) error
 	// ProcessSummaryGeneration handles Asynq summary generation tasks
 	ProcessSummaryGeneration(ctx context.Context, t *asynq.Task) error
-	// ProcessKBClone handles Asynq knowledge base clone tasks
-	ProcessKBClone(ctx context.Context, t *asynq.Task) error
 	// ProcessKnowledgeMove handles Asynq knowledge move tasks
 	ProcessKnowledgeMove(ctx context.Context, t *asynq.Task) error
 	// ProcessKnowledgeListDelete handles Asynq knowledge list delete tasks
 	ProcessKnowledgeListDelete(ctx context.Context, t *asynq.Task) error
 	// ProcessKnowledgeListReparse handles Asynq knowledge list reparse tasks
 	ProcessKnowledgeListReparse(ctx context.Context, t *asynq.Task) error
-	// GetKBCloneProgress retrieves the progress of a knowledge base clone task
-	GetKBCloneProgress(ctx context.Context, taskID string) (*types.KBCloneProgress, error)
-	// SaveKBCloneProgress saves the progress of a knowledge base clone task
-	SaveKBCloneProgress(ctx context.Context, progress *types.KBCloneProgress) error
 	// GetKnowledgeMoveProgress retrieves the progress of a knowledge move task
 	GetKnowledgeMoveProgress(ctx context.Context, taskID string) (*types.KnowledgeMoveProgress, error)
 	// SaveKnowledgeMoveProgress saves the progress of a knowledge move task
@@ -232,10 +224,6 @@ type KnowledgeRepository interface {
 		from string,
 		to string,
 	) (int64, error)
-	// AminusB returns the IDs of knowledge in A that have no counterpart in B,
-	// comparing file_hash as a multiset (so duplicate-count differences and
-	// NULL/empty hashes are handled correctly, letting a clone converge).
-	AminusB(ctx context.Context, Atenant uint64, A string, Btenant uint64, B string) ([]string, error)
 	UpdateKnowledgeColumn(ctx context.Context, id string, column string, value interface{}) error
 	// UpdateKnowledgeColumns updates multiple columns of a knowledge row in a single
 	// statement so callers that flip several related fields (e.g. parse_status +

@@ -49,8 +49,6 @@
             </div>
         </t-tooltip>
 
-
-
         <!-- 折叠时右侧拖拽展开手柄 -->
         <div v-if="sidebarCollapsed" class="sidebar-drag-handle" @mousedown="onDragHandleMouseDown" />
 
@@ -78,7 +76,7 @@
                 v-for="(item, index) in topMenuItems" :key="index">
                 <t-tooltip :content="item.title" placement="right" :disabled="!sidebarCollapsed">
                     <div @click="handleMenuClick(item.path)" @mouseenter="mouseenteMenu(item.path)"
-                        @mouseleave="mouseleaveMenu(item.path)" :data-guide="`nav-${item.path}`"
+                        @mouseleave="mouseleaveMenu(item.path)"
                         :class="['menu_item', item.childrenPath && item.childrenPath == currentpath ? 'menu_item_c_active' : isMenuItemActive(item.path) ? 'menu_item_active' : '']">
                         <div class="menu_item-box">
                             <div class="menu_icon">
@@ -844,7 +842,6 @@ async function loadCurrentKbInfo(kbId: string) {
         currentKbInfo.value = null
     }
 }
-
 
 const handleSessionMutation = (event: Event) => {
     const detail = (event as CustomEvent<SessionMutationDetail>).detail;

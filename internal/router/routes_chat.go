@@ -22,7 +22,6 @@ func RegisterMessageRoutes(r *gin.RouterGroup, handler *handler.MessageHandler, 
 func RegisterSessionRoutes(
 	r *gin.RouterGroup,
 	handler *session.Handler,
-	suggestionHandler *handler.MessageSuggestionHandler,
 	g *accessGuards) {
 	sessions := r.Group("/sessions")
 	{
@@ -48,13 +47,6 @@ func RegisterSessionRoutes(
 		sessions.DELETE("/:id/pin", handler.UnpinSession)
 		// 继续接收活跃流
 		sessions.GET("/continue-stream/:session_id", handler.ContinueStream)
-		if suggestionHandler != nil {
-			// Gin requires wildcard names to be identical within the same HTTP-method
-			// radix tree. Existing GET session routes use :id, so keep that name here.
-			sessions.GET("/:id/messages/:message_id/suggestions", suggestionHandler.Get)
-			sessions.POST("/:session_id/messages/:message_id/suggestions", suggestionHandler.Ensure)
-			sessions.POST("/:session_id/suggestion-events", suggestionHandler.RecordEvent)
-		}
 
 		// Persisted message file artifacts. The list endpoints only expose
 		// metadata; the actual bytes are streamed via /artifacts/:index/download

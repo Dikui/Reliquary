@@ -57,15 +57,6 @@ const EXTRA_PREFIXES = [
   'system.globalSettings.keyDescriptions.',
   'system.globalSettings.enumLabels.',
   'system.globalSettings.audit.actorRole.',
-  'newUserGuide.steps.',
-  'contextualGuide.kbList.steps.',
-  'contextualGuide.kbCreate.steps.',
-  'contextualGuide.tenantModels.steps.',
-  'contextualGuide.tenantModels.stepsAgent.',
-  'contextualGuide.kbDetail.steps.',
-  'contextualGuide.chat.steps.',
-  'contextualGuide.agentList.steps.',
-  'contextualGuide.agentCreate.steps.',
   'datasource.syncError.',
   'kbSettings.parser.engines.',
   'model.editor.description.',
@@ -82,11 +73,8 @@ const EXTRA_PREFIXES = [
 
 /** Keys that must survive pruning even when static analysis misses them. */
 export const CRITICAL_LOCALE_KEYS = [
-  'newUserGuide.steps.welcome.title',
-  'contextualGuide.kbList.steps.create.title',
   'modelSettings.builtinModels.descriptionAdmin',
   'model.editor.description.chat',
-  'model.editor.description.asr',
 ] as const
 
 function addPrefix(usage: I18nUsage, prefix: string): void {

@@ -46,7 +46,6 @@ type RouterParams struct {
 	ChunkHandler                 *handler.ChunkHandler
 	SessionHandler               *session.Handler
 	MessageHandler               *handler.MessageHandler
-	MessageSuggestionHandler     *handler.MessageSuggestionHandler
 	ModelHandler                 *handler.ModelHandler
 	ModelCredentialsHandler      *handler.ModelCredentialsHandler
 	AuthHandler                  *handler.AuthHandler
@@ -54,11 +53,10 @@ type RouterParams struct {
 	SystemHandler                *handler.SystemHandler
 	MCPServiceHandler            *handler.MCPServiceHandler
 	MCPCredentialsHandler        *handler.MCPCredentialsHandler
-	MCPOAuthHandler              *handler.MCPOAuthHandler
 	ResourceCatalog              interfaces.ResourceCatalog
 	TagHandler                   *handler.TagHandler
 	CustomAgentHandler           *handler.CustomAgentHandler
-	UserFavoriteHandler          *handler.UserResourceFavoriteHandler
+	UserFavoriteHandler          *handler.ResourceFavoriteHandler
 	RedisClient                  *redis.Client
 	DataSourceHandler            *handler.DataSourceHandler
 	DataSourceCredentialsHandler *handler.DataSourceCredentialsHandler
@@ -152,14 +150,14 @@ func NewRouter(params RouterParams) *gin.Engine {
 		}
 		RegisterKnowledgeWorkflowRoutes(v1, params.KnowledgeWorkflowHandler, accessGuards)
 		RegisterChunkRoutes(v1, params.ChunkHandler, accessGuards)
-		RegisterSessionRoutes(v1, params.SessionHandler, params.MessageSuggestionHandler, accessGuards)
+		RegisterSessionRoutes(v1, params.SessionHandler, accessGuards)
 		RegisterChatRoutes(v1, params.SessionHandler, accessGuards)
 		RegisterMessageRoutes(v1, params.MessageHandler, accessGuards)
 		RegisterModelRoutes(v1, params.ModelHandler, params.ModelCredentialsHandler, accessGuards)
 		RegisterInitializationRoutes(v1, params.InitializationHandler, accessGuards)
 		params.SystemHandler.BindDeploymentCapabilities(deploymentCapabilitiesFromRouter(params))
 		RegisterSystemRoutes(v1, params.SystemHandler, accessGuards)
-		RegisterMCPServiceRoutes(v1, params.MCPServiceHandler, params.MCPCredentialsHandler, params.MCPOAuthHandler, accessGuards)
+		RegisterMCPServiceRoutes(v1, params.MCPServiceHandler, params.MCPCredentialsHandler, accessGuards)
 		RegisterCustomAgentRoutes(v1, params.CustomAgentHandler, accessGuards)
 		RegisterUserFavoriteRoutes(v1, params.UserFavoriteHandler, accessGuards)
 		RegisterDataSourceRoutes(v1, params.DataSourceHandler, params.DataSourceCredentialsHandler, accessGuards)

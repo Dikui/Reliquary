@@ -22,14 +22,13 @@
               <t-select v-model="currentSection" class="mobile-section-select"
                 :aria-label="$t('general.settings')"
                 :options="navItems.map(item => ({ value: item.key, label: item.label }))" />
-              <div class="settings-nav" data-guide="kb-editor-sidebar">
+              <div class="settings-nav">
                 <template v-for="group in navGroups" :key="group.key">
                   <div class="nav-group-title">{{ group.label }}</div>
                   <div
                     v-for="(item, index) in group.items"
                     :key="index"
                     :class="['nav-item', { 'active': currentSection === item.key }]"
-                    :data-guide="`kb-editor-nav-${item.key}`"
                     @click="currentSection = item.key"
                   >
                     <t-icon :name="item.icon" class="nav-icon" />
@@ -70,7 +69,6 @@
                         <t-radio-group
                           v-model="formData.type"
                           :disabled="editorMode === 'edit'"
-                          data-guide="kb-create-type"
                         >
                           <t-radio-button value="document">{{ $t('knowledgeEditor.basic.typeDocument') }}</t-radio-button>
 
@@ -82,8 +80,7 @@
                       <div  class="form-item">
                         <label class="form-label required">{{ $t('knowledgeEditor.indexing.title') }}</label>
                         <p class="form-tip">{{ $t('knowledgeEditor.indexing.description') }}</p>
-                        <div class="indexing-checks" :class="{ 'is-locked': isIndexingLocked }"
-                          data-guide="kb-create-indexing">
+                        <div class="indexing-checks" :class="{ 'is-locked': isIndexingLocked }">
                           <div
                             class="indexing-check-item"
                             :class="{ 'is-checked': formData.indexingStrategy.vectorEnabled, 'is-disabled': isIndexingLocked }"
@@ -103,7 +100,6 @@
                         </p>
                       </div>
 
-
                       <div class="form-item">
                         <label class="form-label required">{{ $t('knowledgeDomains.title') }}</label>
                         <t-select v-model="formData.domainId" :options="domainOptions" filterable
@@ -113,7 +109,7 @@
                         <p class="form-tip">{{ $t('knowledgeDomains.kbDomainHint') }}</p>
                         <p v-if="domainsError" class="form-tip" role="alert">{{ domainsError }} <t-button variant="text" @click="loadDomains">{{ $t('knowledgeDomains.retry') }}</t-button></p>
                       </div>
-                      <div class="form-item" data-guide="kb-create-name">
+                      <div class="form-item">
                         <label class="form-label required">{{ $t('knowledgeEditor.basic.nameLabel') }}</label>
                         <t-input
                           v-model="formData.name"
@@ -130,7 +126,6 @@
                           :autosize="{ minRows: 3, maxRows: 6 }"
                         />
                       </div>
-
 
                     </div>
                   </div>
@@ -149,7 +144,6 @@
                   />
                   <ModelTierEditor v-if="formData" v-model="formData.modelTiers" scope="knowledge_base" :domain-id="formData.domainId" :all-models="allModels" :legacy-tiers="{ light: formData.autoTagConfig.modelId || formData.modelConfig.llmModelId, extraction: formData.modelConfig.llmModelId, generation: formData.modelConfig.llmModelId, embedding: formData.modelConfig.embeddingModelId }" :disabled="saving" :embedding-locked="hasFiles && kbCreateNeedsEmbedding" @resolved="resolvedModelTiers = $event" />
                 </div>
-
 
                 <!-- 解析引擎 -->
                 <div v-if="formData && currentSection === 'parser'" class="section">
@@ -180,7 +174,7 @@
 
                     <div class="settings-group">
                       <!-- 多模态开关 -->
-                      <div class="setting-row" data-guide="kb-create-multimodal-toggle">
+                      <div class="setting-row">
                         <div class="setting-info">
                           <label>{{ $t('knowledgeEditor.advanced.multimodal.label') }}</label>
                           <p class="desc">{{ $t('knowledgeEditor.advanced.multimodal.description') }}</p>
@@ -195,8 +189,7 @@
                       </div>
 
                       <!-- VLLM 模型选择（多模态启用时） -->
-                      <div v-if="formData.multimodalConfig.enabled" class="setting-row"
-                        data-guide="kb-create-multimodal-vllm">
+                      <div v-if="formData.multimodalConfig.enabled" class="setting-row">
                         <div class="setting-info">
                           <label>{{ $t('knowledgeEditor.advanced.multimodal.vllmLabel') }} <span class="required">*</span></label>
                           <p class="desc">{{ $t('knowledgeEditor.advanced.multimodal.vllmDescription') }}</p>
@@ -244,50 +237,6 @@
                   </div>
                 </div>
 
-                <!-- 音频处理（ASR）设置 -->
-                <div  v-show="currentSection === 'asr'" class="section">
-                  <div v-if="formData" class="kb-multimodal-settings">
-                    <div class="section-header">
-                      <h2>{{ $t('knowledgeEditor.asr.title') }}</h2>
-                      <p class="section-description">{{ $t('knowledgeEditor.asr.description') }}</p>
-                    </div>
-
-                    <div class="settings-group">
-                      <!-- ASR 开关 -->
-                      <div class="setting-row">
-                        <div class="setting-info">
-                          <label>{{ $t('knowledgeEditor.asr.label') }}</label>
-                          <p class="desc">{{ $t('knowledgeEditor.asr.desc') }}</p>
-                        </div>
-                        <div class="setting-control">
-                          <t-switch
-                            v-model="formData.asrConfig.enabled"
-                            size="medium"
-                          />
-                        </div>
-                      </div>
-
-                      <!-- ASR 模型选择 -->
-                      <div v-if="formData.asrConfig.enabled" class="setting-row">
-                        <div class="setting-info">
-                          <label>{{ $t('knowledgeEditor.asr.modelLabel') }} <span class="required">*</span></label>
-                          <p class="desc">{{ $t('knowledgeEditor.asr.modelDescription') }}</p>
-                        </div>
-                        <div class="setting-control">
-                          <ModelSelector
-                            model-type="ASR"
-                            :selected-model-id="formData.asrConfig.modelId"
-                            :all-models="allModels"
-                            @update:selected-model-id="(val: string) => { if (formData) formData.asrConfig.modelId = val }"
-                            @add-model="handleAddASRModel"
-                            :placeholder="$t('knowledgeEditor.asr.modelPlaceholder')"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
                 <!-- 高级设置 -->
                 <div  v-show="currentSection === 'advanced'" class="section">
                   <KBAdvancedSettings
@@ -323,7 +272,7 @@
                   <t-button theme="default" variant="outline" @click="handleClose">
                     {{ $t('common.cancel') }}
                   </t-button>
-                  <t-button theme="primary" data-guide="kb-create-submit" @click="handleSubmit" :loading="saving"
+                  <t-button theme="primary" @click="handleSubmit" :loading="saving"
                     :disabled="loading">
                     {{ saveButtonLabel }}
                   </t-button>
@@ -336,14 +285,11 @@
     </Transition>
   </Teleport>
 
-  <KbCreateContextualGuide :when="visible && editorMode === 'create'"
-    :needs-embedding="kbCreateNeedsEmbedding" />
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import KbCreateContextualGuide from '@/components/KbCreateContextualGuide.vue'
-import { KB_EDITOR_FOCUS_SECTION_EVENT, markContextualGuideDone } from '@/config/contextualGuides'
+import { KB_EDITOR_FOCUS_SECTION_EVENT } from '@/config/editorNavigation'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { createKnowledgeBase, getKnowledgeBaseById, listKnowledgeFiles, updateKnowledgeBase, rebuildKBIndex } from '@/api/knowledge-base'
 import { listKnowledgeDomains, type KnowledgeDomain } from '@/api/knowledge-domains'
@@ -460,7 +406,6 @@ const navItems = computed(() => {
     items.push(
       { key: 'parser', icon: 'file-search', label: t('settings.parserEngine') },
       { key: 'multimodal', icon: 'image', label: t('knowledgeEditor.sidebar.multimodal') },
-      { key: 'asr', icon: 'sound', label: t('knowledgeEditor.sidebar.asr') },
       { key: 'chunking', icon: 'file-copy', label: t('knowledgeEditor.sidebar.chunking') },
       { key: 'advanced', icon: 'setting', label: t('knowledgeEditor.sidebar.advanced') }
     )
@@ -485,7 +430,7 @@ const navGroups = computed(() => {
     {
       key: 'processing',
       label: t('knowledgeEditor.navGroups.processing'),
-      items: pickItems(['parser', 'chunking', 'multimodal', 'asr', 'advanced']),
+      items: pickItems(['parser', 'chunking', 'multimodal', 'advanced']),
     },
     {
       key: 'data',
@@ -566,11 +511,6 @@ const initFormData = (type: 'document' = 'document') => {
       vllmModelId: '',
       descriptionLanguage: '',
       customInstructions: ''
-    },
-    asrConfig: {
-      enabled: false,
-      modelId: '',
-      language: ''
     },
     questionGenerationConfig: {
       enabled: true,
@@ -671,11 +611,6 @@ const loadKBData = async (
         descriptionLanguage: kb.vlm_config?.description_language || '',
         customInstructions: kb.vlm_config?.custom_instructions || ''
       },
-      asrConfig: {
-        enabled: !!kb.asr_config?.enabled,
-        modelId: kb.asr_config?.model_id || '',
-        language: kb.asr_config?.language || ''
-      },
       questionGenerationConfig: {
         enabled: kb.question_generation_config?.enabled,
         questionCount: kb.question_generation_config?.question_count || 3,
@@ -754,11 +689,6 @@ const handleMultimodalVLLMChange = (modelId: string) => {
 const handleAddVLLMModel = () => {
   uiStore.openSettings('models', 'vllm')
 }
-
-const handleAddASRModel = () => {
-  uiStore.openSettings('models', 'asr')
-}
-
 
 const handleQuestionGenerationUpdate = (config: any) => {
   if (formData.value) {
@@ -860,14 +790,6 @@ const buildSubmitData = () => {
     custom_instructions: formData.value.multimodalConfig.customInstructions || ''
   }
 
-  // 添加ASR语音识别配置
-  data.asr_config = {
-    enabled: formData.value.asrConfig?.enabled,
-    model_id: formData.value.asrConfig?.enabled
-      ? (formData.value.asrConfig?.modelId || '')
-      : '',
-    language: formData.value.asrConfig?.language || ''
-  }
 
 
   // 添加问题生成配置
@@ -935,7 +857,6 @@ const doSubmit = async () => {
       currentSection.value = 'basic'
       await loadKBData(createdKbId)
       MessagePlugin.success(t('knowledgeEditor.messages.createSuccess'))
-      markContextualGuideDone('kbCreate')
       emit('success', createdKbId)
     } else {
       // 编辑模式：分别更新基本信息和配置
@@ -967,7 +888,6 @@ const doSubmit = async () => {
         llmModelId: data.summary_model_id,
         embeddingModelId: data.embedding_model_id,
         vlm_config: data.vlm_config,
-        asr_config: data.asr_config,
         documentSplitting: {
           chunkSize: data.chunking_config.chunk_size,
           chunkOverlap: data.chunking_config.chunk_overlap,

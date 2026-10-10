@@ -9,8 +9,7 @@ import (
 )
 
 const (
-	toolDatabaseQuery = "database_query"
-	toolDataAnalysis  = "data_analysis"
+	toolDataAnalysis = "data_analysis"
 )
 
 // sourceKeySpace identifies which source-handle space an ID-bearing JSON key
@@ -57,7 +56,6 @@ var toolHandlePolicies = map[string]toolHandlePolicy{
 	"query_knowledge_context": {sourceIDKeys: map[string]struct{}{"knowledge_base_ids": {}}, sourceOutput: true},
 	// Historical conversations retain this tool name.
 	"query_knowledge_graph":    {sourceIDKeys: map[string]struct{}{"knowledge_base_ids": {}}, sourceOutput: true},
-	toolDatabaseQuery:          {sourceTextKeys: map[string]struct{}{"sql": {}}, sourceOutput: true},
 	toolDataAnalysis:           {sourceIDKeys: map[string]struct{}{"knowledge_id": {}}, sourceTextKeys: map[string]struct{}{"sql": {}}},
 	"data_schema":              {sourceIDKeys: map[string]struct{}{"knowledge_id": {}}},
 	"web_fetch":                {sourceIDKeys: map[string]struct{}{"url": {}, "urls": {}}, sourceOutput: true},

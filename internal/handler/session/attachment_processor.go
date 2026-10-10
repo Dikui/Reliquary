@@ -30,19 +30,16 @@ const (
 type AttachmentProcessor struct {
 	fileService   interfaces.FileService
 	imageResolver *docparser.ImageResolver
-	modelService  interfaces.ModelService // used to obtain the ASR model
 }
 
 // NewAttachmentProcessor creates an AttachmentProcessor with the given dependencies.
 func NewAttachmentProcessor(
 	fileService interfaces.FileService,
 	imageResolver *docparser.ImageResolver,
-	modelService interfaces.ModelService,
 ) *AttachmentProcessor {
 	return &AttachmentProcessor{
 		fileService:   fileService,
 		imageResolver: imageResolver,
-		modelService:  modelService,
 	}
 }
 
@@ -54,7 +51,6 @@ func (p *AttachmentProcessor) ProcessAttachment(
 	fileName string,
 	fileSize int64,
 	tenantID uint64,
-	asrModelID string, // optional; enables audio transcription when set
 ) (*types.MessageAttachment, error) {
 	logger.Infof(ctx, "processing attachment: fileName=%s, fileSize=%d", secutils.SanitizeForLog(fileName), fileSize)
 
@@ -74,6 +70,9 @@ func (p *AttachmentProcessor) ProcessAttachment(
 		ext = ".txt"
 	}
 
+	if docparser.IsAudioFormat(ext) {
+		return nil, fmt.Errorf("不支持上传音频文件: %s", strings.TrimPrefix(ext, "."))
+	}
 	if !isValidFileType(baseName) {
 		return nil, fmt.Errorf("unsupported file type: %s", ext)
 	}
@@ -97,11 +96,6 @@ func (p *AttachmentProcessor) ProcessAttachment(
 		if err := p.processTextFile(ctx, data, attachment); err != nil {
 			logger.Warnf(ctx, "text file processing failed: %v", err)
 			attachment.Content = fmt.Sprintf("<error><message>Failed to process text file</message><details>%v</details></error>", err)
-		}
-	} else if docparser.IsAudioFormat(ext) {
-		if err := p.processAudioFile(ctx, data, baseName, attachment, asrModelID); err != nil {
-			logger.Warnf(ctx, "audio transcription failed: %v, keeping placeholder", err)
-			attachment.Content = fmt.Sprintf("<error><message>Failed to transcribe audio file</message><details>%v</details></error>", err)
 		}
 	} else if docparser.IsSimpleFormat(ext) {
 		if err := p.processWithDocParser(ctx, data, baseName, ext, attachment, tenantID); err != nil {
@@ -189,37 +183,6 @@ func (p *AttachmentProcessor) processWithDocParser(
 	return nil
 }
 
-// processAudioFile transcribes audio via ASR. Falls back to a placeholder when no ASR model is configured.
-func (p *AttachmentProcessor) processAudioFile(
-	ctx context.Context,
-	data []byte,
-	fileName string,
-	attachment *types.MessageAttachment,
-	asrModelID string,
-) error {
-	if asrModelID == "" || p.modelService == nil {
-		attachment.Content = fmt.Sprintf("<audio_file name=\"%s\" transcription=\"unsupported\" />", fileName)
-		logger.Infof(ctx, "no ASR model configured, keeping audio placeholder")
-		return nil
-	}
-
-	asrInstance, err := p.modelService.GetASRModel(ctx, asrModelID)
-	if err != nil {
-		return fmt.Errorf("failed to get ASR model: %w", err)
-	}
-
-	logger.Infof(ctx, "starting audio transcription: fileName=%s, size=%d", fileName, len(data))
-	res, err := asrInstance.Transcribe(ctx, data, fileName)
-	if err != nil {
-		return fmt.Errorf("audio transcription failed: %w", err)
-	}
-	transcript := res.Text
-
-	p.applyLineTruncation(ctx, transcript, attachment)
-	logger.Infof(ctx, "audio transcription done: textLen=%d", len(transcript))
-	return nil
-}
-
 // processWithParser extracts content from complex formats (pdf, docx, xlsx, etc.).
 func (p *AttachmentProcessor) processWithParser(
 	ctx context.Context,
@@ -302,8 +265,6 @@ func isValidFileType(fileName string) bool {
 		"md", "markdown", "txt", "csv", "json", "xml", "yaml", "yml", "log",
 		// images
 		"jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp",
-		// audio
-		"mp3", "wav", "m4a", "flac", "ogg", "aac",
 	}
 
 	for _, t := range supportedTypes {

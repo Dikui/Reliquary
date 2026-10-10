@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -60,5 +61,37 @@ func TestResolveToolApprovalRejectsNullWithoutResolvingPendingCall(t *testing.T)
 		require.Empty(t, d.ModifiedArgs)
 	case <-ctx.Done():
 		t.Fatal("valid approval did not resolve the pending call")
+	}
+}
+
+func TestMCPServiceRejectsOAuthAuthenticationWithValidationError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(middleware.ErrorHandler(), func(c *gin.Context) {
+		c.Set(types.TenantIDContextKey.String(), uint64(1))
+		c.Next()
+	})
+	h := NewMCPServiceHandler(nil, nil, nil)
+	r.POST("/mcp-services", h.CreateMCPService)
+	r.PUT("/mcp-services/:id", h.UpdateMCPService)
+	for _, tc := range []struct{ method, path string }{
+		{http.MethodPost, "/mcp-services"},
+		{http.MethodPut, "/mcp-services/service-1"},
+	} {
+		t.Run(tc.method, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			r.ServeHTTP(response, httptest.NewRequest(tc.method, tc.path, strings.NewReader(`{"auth_config":{"auth_type":"oauth"}}`)))
+			require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
+			var body struct {
+				Error struct {
+					Code    int    `json:"code"`
+					Message string `json:"message"`
+				} `json:"error"`
+			}
+			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+			require.Equal(t, 1010, body.Error.Code)
+			require.Contains(t, body.Error.Message, `unsupported MCP authentication type "oauth"`)
+			require.Contains(t, body.Error.Message, "none, api_key or bearer")
+		})
 	}
 }

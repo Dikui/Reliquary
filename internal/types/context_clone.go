@@ -48,8 +48,7 @@ var contextCloneAcrossDetach = map[ContextKey]bool{
 	// what vectorises every chunk. Dropping the mark there would let exactly
 	// the ingestion storm the governor exists to contain run past it. Keeping
 	// it can only over-throttle a context that is background by definition.
-	BackgroundTaskContextKey:         true,
-	MCPOAuthNonInteractiveContextKey: true,
+	BackgroundTaskContextKey: true,
 
 	// ---- Deliberately does not survive a detach ----
 	//

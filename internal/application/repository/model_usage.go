@@ -22,9 +22,6 @@ func knowledgeBaseModelUsageBindings(kb *types.KnowledgeBase, modelID string) []
 	if kb.VLMConfig.ModelID == modelID {
 		bindings = append(bindings, types.ModelUsageBindingVLMModel)
 	}
-	if kb.ASRConfig.ModelID == modelID {
-		bindings = append(bindings, types.ModelUsageBindingASRModel)
-	}
 	return bindings
 }
 
@@ -39,15 +36,8 @@ func customAgentModelUsageBindings(agent *types.CustomAgent, modelID string) []t
 	if agent.Config.VLMModelID == modelID {
 		bindings = append(bindings, types.ModelUsageBindingVLMModel)
 	}
-	if agent.Config.ASRModelID == modelID {
-		bindings = append(bindings, types.ModelUsageBindingASRModel)
-	}
 	if agent.Config.QueryUnderstandModelID == modelID {
 		bindings = append(bindings, types.ModelUsageBindingQueryUnderstandModel)
-	}
-	if agent.Config.QuestionSuggestions != nil &&
-		agent.Config.QuestionSuggestions.FollowUps.ModelID == modelID {
-		bindings = append(bindings, types.ModelUsageBindingFollowUpModel)
 	}
 	return bindings
 }
@@ -59,10 +49,9 @@ func scopeKnowledgeBasesByModelID(db *gorm.DB, modelID string) *gorm.DB {
 		"embedding_model_id = ? OR summary_model_id = ? OR "+
 			"image_processing_config->>'model_id' = ? OR "+
 			"vlm_config->>'model_id' = ? OR "+
-			"asr_config->>'model_id' = ? OR "+
 			"auto_tag_config->>'model_id' = ? OR "+
 			"model_tiers->>'light' = ? OR model_tiers->>'extraction' = ? OR model_tiers->>'generation' = ? OR model_tiers->>'embedding' = ? OR model_tiers->>'rerank' = ?",
-		modelID, modelID, modelID, modelID, modelID, modelID, modelID, modelID, modelID, modelID, modelID,
+		modelID, modelID, modelID, modelID, modelID, modelID, modelID, modelID, modelID, modelID,
 	)
 }
 
@@ -71,9 +60,8 @@ func scopeKnowledgeBasesByModelID(db *gorm.DB, modelID string) *gorm.DB {
 func scopeCustomAgentsByModelID(db *gorm.DB, modelID string) *gorm.DB {
 	return db.Where(
 		"config->>'model_id' = ? OR config->>'rerank_model_id' = ? OR "+
-			"config->>'vlm_model_id' = ? OR config->>'asr_model_id' = ? OR "+
-			"config->>'query_understand_model_id' = ? OR "+
-			"config->'question_suggestions'->'follow_ups'->>'model_id' = ?",
-		modelID, modelID, modelID, modelID, modelID, modelID,
+			"config->>'vlm_model_id' = ? OR "+
+			"config->>'query_understand_model_id' = ?",
+		modelID, modelID, modelID, modelID,
 	)
 }

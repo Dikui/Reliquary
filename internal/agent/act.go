@@ -25,16 +25,9 @@ var toolDisplayNames = map[string]string{
 	agenttools.ToolListKnowledgeChunks:   "查看文档分块",
 	agenttools.ToolQueryKnowledgeContext: "查询知识上下文",
 	agenttools.ToolGetDocumentInfo:       "获取文档信息",
-	agenttools.ToolDatabaseQuery:         "查询数据",
 	agenttools.ToolDataAnalysis:          "数据分析",
 	agenttools.ToolDataSchema:            "查看数据结构",
 	agenttools.ToolWebFetch:              "获取网页",
-}
-
-// toolHintSensitiveArgs lists tools whose arguments should NOT be shown in hints
-// (e.g., database_query exposes raw SQL which leaks implementation details).
-var toolHintSensitiveArgs = map[string]bool{
-	agenttools.ToolDatabaseQuery: true,
 }
 
 // formatToolHint returns a concise human-readable hint for a tool call, e.g. `搜索网页("query text")`.
@@ -46,7 +39,7 @@ func formatToolHint(name string, args map[string]any) string {
 		displayName = dn
 	}
 
-	if len(args) == 0 || toolHintSensitiveArgs[name] {
+	if len(args) == 0 {
 		return displayName
 	}
 	for _, v := range args {

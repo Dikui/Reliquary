@@ -23,7 +23,7 @@ func TestParseTaskID_CompoundTaskType(t *testing.T) {
 }
 
 func TestTaskTenantID(t *testing.T) {
-	taskID := GenerateTaskID("kb_clone", 7, "source-kb")
+	taskID := GenerateTaskID("knowledge_move", 7, "source-kb")
 	got, err := TaskTenantID(taskID)
 	if err != nil {
 		t.Fatalf("TaskTenantID failed: %v", err)

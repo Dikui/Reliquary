@@ -64,6 +64,10 @@ func (h *ModelHandler) CreateModel(c *gin.Context) {
 		c.Error(errors.NewBadRequestError(err.Error()))
 		return
 	}
+	if !req.Type.IsSupported() {
+		c.Error(errors.NewValidationError(fmt.Sprintf("不支持的模型类型: %s", req.Type)))
+		return
+	}
 	tenantID := c.GetUint64(types.TenantIDContextKey.String())
 	if tenantID == 0 {
 		logger.Error(ctx, "Tenant ID is empty")
@@ -481,22 +485,6 @@ func (h *ModelHandler) DebugModel(c *gin.Context) {
 		result, callErr := instance.Predict(ctx, [][]byte{fileBytes}, input)
 		observations["answer_characters"] = len([]rune(result))
 		writeModelDebugResult(c, started, requestPreview, result, callErr, observations)
-	case types.ModelTypeASR:
-		if len(fileBytes) == 0 {
-			c.Error(errors.NewBadRequestError("audio file is required"))
-			return
-		}
-		instance, callErr := h.service.GetASRModel(ctx, id)
-		if callErr != nil {
-			writeModelDebugResult(c, started, requestPreview, nil, callErr, observations)
-			return
-		}
-		result, callErr := instance.Transcribe(ctx, fileBytes, fileName)
-		if result != nil {
-			observations["text_characters"] = len([]rune(result.Text))
-			observations["segment_count"] = len(result.Segments)
-		}
-		writeModelDebugResult(c, started, requestPreview, result, callErr, observations)
 	default:
 		c.Error(errors.NewBadRequestError("unsupported model type"))
 	}
@@ -530,6 +518,11 @@ func (h *ModelHandler) UpdateModel(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		logger.Error(ctx, "Failed to parse request parameters", err)
 		c.Error(errors.NewBadRequestError(err.Error()))
+		return
+	}
+
+	if req.Type != "" && !req.Type.IsSupported() {
+		c.Error(errors.NewValidationError(fmt.Sprintf("不支持的模型类型: %s", req.Type)))
 		return
 	}
 
@@ -670,8 +663,6 @@ func modelTypeToFrontend(mt types.ModelType) string {
 		return "rerank"
 	case types.ModelTypeVLLM:
 		return "vllm"
-	case types.ModelTypeASR:
-		return "asr"
 	default:
 		return string(mt)
 	}
@@ -697,8 +688,6 @@ func (h *ModelHandler) ListModelProviders(c *gin.Context) {
 		backendModelType = types.ModelTypeRerank
 	case "vllm":
 		backendModelType = types.ModelTypeVLLM
-	case "asr":
-		backendModelType = types.ModelTypeASR
 	default:
 		backendModelType = types.ModelType(modelType)
 	}

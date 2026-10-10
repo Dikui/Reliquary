@@ -571,7 +571,6 @@ const runtimeTaskTypeKeys: Record<string, string> = {
   'knowledge:list_delete': 'batchDelete',
   'knowledge:move': 'move',
   'index:delete': 'indexDelete',
-  'kb:clone': 'kbClone',
   'kb:delete': 'kbDelete',
 }
 
@@ -696,8 +695,6 @@ function runtimeTaskMeta(task: RuntimeTask): RuntimeTaskMeta[] {
       value: task.task_id,
     })
   }
-  if (task.source_id) refs.push({ key: 'source', label: t('system.globalSettings.runtime.tasks.sourceLabel'), value: task.source_id })
-  if (task.target_id) refs.push({ key: 'target', label: t('system.globalSettings.runtime.tasks.targetLabel'), value: task.target_id })
   if (task.source_kb_id) refs.push({ key: 'source-kb', label: t('system.globalSettings.runtime.tasks.sourceKBLabel'), value: task.source_kb_id })
   if (task.target_kb_id) refs.push({ key: 'target-kb', label: t('system.globalSettings.runtime.tasks.targetKBLabel'), value: task.target_kb_id })
   if (task.data_source_id) refs.push({ key: 'datasource', label: t('system.globalSettings.runtime.tasks.dataSourceLabel'), value: task.data_source_id })

@@ -40,12 +40,12 @@ func TestMCPToolExecuteUsesOnlyApprovedArguments(t *testing.T) {
 	})
 	httpServer := httptest.NewServer(server.NewStreamableHTTPServer(mcpServer))
 	t.Cleanup(httpServer.Close)
-	manager := mcp.NewMCPManager(nil)
+	manager := mcp.NewMCPManager()
 	t.Cleanup(manager.CloseAll)
 	tool := NewMCPTool(&types.MCPService{
 		ID: "approval-test", Name: "approval-test", Enabled: true,
 		TransportType: types.MCPTransportHTTPStreamable, URL: &httpServer.URL,
-	}, &types.MCPTool{Name: "read_file"}, manager, modifiedArgsApproval{}, 0)
+	}, &types.MCPTool{Name: "read_file"}, manager, modifiedArgsApproval{})
 	ctx := WithToolExecContext(t.Context(), &ToolExecContext{EventBus: event.NewEventBus()})
 	result, err := tool.Execute(ctx, json.RawMessage(`{"path":"original.txt","recursive":true}`))
 	require.NoError(t, err)

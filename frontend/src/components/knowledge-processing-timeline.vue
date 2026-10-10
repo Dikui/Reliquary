@@ -1362,7 +1362,6 @@ const processConfigLines = computed<string[]>(() => {
   const mm = o.vlm_config?.enabled ?? o.enable_multimodel
   if (mm != null) lines.push(`${t(k('multimodal'))}: ${onOff(mm)}`)
 
-  if (o.asr_config?.enabled != null) lines.push(`${t(k('asr'))}: ${onOff(o.asr_config.enabled)}`)
 
   const qg = o.question_generation_config
   if (qg?.enabled != null) {

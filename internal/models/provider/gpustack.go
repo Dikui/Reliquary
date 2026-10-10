@@ -31,14 +31,12 @@ func (p *GPUStackProvider) Info() ProviderInfo {
 			types.ModelTypeEmbedding:   GPUStackBaseURL,
 			types.ModelTypeRerank:      GPUStackRerankBaseURL,
 			types.ModelTypeVLLM:        GPUStackBaseURL,
-			types.ModelTypeASR:         GPUStackBaseURL,
 		},
 		ModelTypes: []types.ModelType{
 			types.ModelTypeKnowledgeQA,
 			types.ModelTypeEmbedding,
 			types.ModelTypeRerank,
 			types.ModelTypeVLLM,
-			types.ModelTypeASR,
 		},
 		RequiresAuth: true, // GPUStack 需要 API Key
 	}

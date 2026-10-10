@@ -73,7 +73,7 @@ var queueDefinitions = []QueueDefinition{
 	{Name: QueueQuestion, Pool: WorkerPoolEnrichment, Weight: 1, SharedWeight: 1, TaskTypes: []string{TypeQuestionGeneration}},
 	{Name: QueueSync, Pool: WorkerPoolMaintenance, Weight: 2, TaskTypes: []string{TypeDataSourceSync}},
 	{Name: QueueMaintenance, Pool: WorkerPoolMaintenance, Weight: 1, TaskTypes: []string{
-		TypeKnowledgeWorkflowRun, TypeKBClone, TypeKBDelete,
+		TypeKnowledgeWorkflowRun, TypeKBDelete,
 		TypeKnowledgeListDelete, TypeKnowledgeListReparse, TypeKnowledgeMove,
 		TypeKnowledgeContextBackfill,
 	}},
@@ -224,7 +224,6 @@ const (
 	TypeDocumentProcess             = "document:process"       // 文档处理任务
 	TypeQuestionGeneration          = "question:generation"    // 问题生成任务
 	TypeSummaryGeneration           = "summary:generation"     // 摘要生成任务
-	TypeKBClone                     = "kb:clone"               // 知识库复制任务
 	TypeKBDelete                    = "kb:delete"              // 知识库删除任务
 	TypeKnowledgeListDelete         = "knowledge:list_delete"  // 批量删除知识任务
 	TypeKnowledgeListReparse        = "knowledge:list_reparse" // 批量重解析知识任务
@@ -326,15 +325,6 @@ type SummaryGenerationPayload struct {
 	Attempt int `json:"attempt,omitempty"`
 }
 
-// KBClonePayload represents the knowledge base clone task payload
-type KBClonePayload struct {
-	TenantID  uint64        `json:"tenant_id"`
-	TaskID    string        `json:"task_id"`
-	SourceID  string        `json:"source_id"`
-	TargetID  string        `json:"target_id"`
-	Initiator TaskInitiator `json:"initiator,omitempty"`
-}
-
 // KBDeletePayload represents the knowledge base delete task payload
 type KBDeletePayload struct {
 	TenantID        uint64   `json:"tenant_id"`
@@ -370,18 +360,18 @@ type KnowledgeMovePayload struct {
 
 // KnowledgeMoveProgress represents the progress of a knowledge move task
 type KnowledgeMoveProgress struct {
-	TaskID     string            `json:"task_id"`
-	SourceKBID string            `json:"source_kb_id"`
-	TargetKBID string            `json:"target_kb_id"`
-	Status     KBCloneTaskStatus `json:"status"`
-	Progress   int               `json:"progress"`   // 0-100
-	Total      int               `json:"total"`      // 总知识数
-	Processed  int               `json:"processed"`  // 已处理数
-	Failed     int               `json:"failed"`     // 失败数
-	Message    string            `json:"message"`    // 状态消息
-	Error      string            `json:"error"`      // 错误信息
-	CreatedAt  int64             `json:"created_at"` // 任务创建时间
-	UpdatedAt  int64             `json:"updated_at"` // 最后更新时间
+	TaskID     string                  `json:"task_id"`
+	SourceKBID string                  `json:"source_kb_id"`
+	TargetKBID string                  `json:"target_kb_id"`
+	Status     KnowledgeMoveTaskStatus `json:"status"`
+	Progress   int                     `json:"progress"`   // 0-100
+	Total      int                     `json:"total"`      // 总知识数
+	Processed  int                     `json:"processed"`  // 已处理数
+	Failed     int                     `json:"failed"`     // 失败数
+	Message    string                  `json:"message"`    // 状态消息
+	Error      string                  `json:"error"`      // 错误信息
+	CreatedAt  int64                   `json:"created_at"` // 任务创建时间
+	UpdatedAt  int64                   `json:"updated_at"` // 最后更新时间
 }
 
 // ManualProcessPayload represents the manual knowledge processing task payload.
@@ -436,27 +426,12 @@ type KnowledgeAutoTagPayload struct {
 	Attempt         int    `json:"attempt,omitempty"`
 }
 
-// KBCloneTaskStatus represents the status of a knowledge base clone task
-type KBCloneTaskStatus string
+// KnowledgeMoveTaskStatus represents the status of a knowledge move task
+type KnowledgeMoveTaskStatus string
 
 const (
-	KBCloneStatusPending    KBCloneTaskStatus = "pending"
-	KBCloneStatusProcessing KBCloneTaskStatus = "processing"
-	KBCloneStatusCompleted  KBCloneTaskStatus = "completed"
-	KBCloneStatusFailed     KBCloneTaskStatus = "failed"
+	KnowledgeMoveStatusPending    KnowledgeMoveTaskStatus = "pending"
+	KnowledgeMoveStatusProcessing KnowledgeMoveTaskStatus = "processing"
+	KnowledgeMoveStatusCompleted  KnowledgeMoveTaskStatus = "completed"
+	KnowledgeMoveStatusFailed     KnowledgeMoveTaskStatus = "failed"
 )
-
-// KBCloneProgress represents the progress of a knowledge base clone task
-type KBCloneProgress struct {
-	TaskID    string            `json:"task_id"`
-	SourceID  string            `json:"source_id"`
-	TargetID  string            `json:"target_id"`
-	Status    KBCloneTaskStatus `json:"status"`
-	Progress  int               `json:"progress"`   // 0-100
-	Total     int               `json:"total"`      // 总知识数
-	Processed int               `json:"processed"`  // 已处理数
-	Message   string            `json:"message"`    // 状态消息
-	Error     string            `json:"error"`      // 错误信息
-	CreatedAt int64             `json:"created_at"` // 任务创建时间
-	UpdatedAt int64             `json:"updated_at"` // 最后更新时间
-}

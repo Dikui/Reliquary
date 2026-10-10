@@ -3,6 +3,7 @@ package rss
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -14,6 +15,7 @@ import (
 
 	readability "codeberg.org/readeck/go-readability/v2"
 	"github.com/PuerkitoBio/goquery"
+	webfetch "reliquary/internal/infrastructure/web_fetch"
 	"reliquary/internal/types"
 	"reliquary/internal/utils"
 )
@@ -201,6 +203,15 @@ func (c *client) extractArticleBody(ctx context.Context, body []byte, articleURL
 	recovered, failures := c.adapterRegistry().recover(ctx, page)
 	if ctx.Err() != nil {
 		return extractedArticle{failures: failures}, ctx.Err()
+	}
+	if strings.TrimSpace(recovered.ContentHTML) == "" {
+		var fetchErr *webfetch.FetchError
+		if err := webfetch.ValidateReadableHTML([]byte(genericHTML)); errors.As(err, &fetchErr) {
+			if fetchErr.Code == webfetch.ErrorJavaScriptRequired ||
+				(fetchErr.Code == webfetch.ErrorEmptyContent && genericContent.Find("img").Length() == 0) {
+				return extractedArticle{failures: failures}, err
+			}
+		}
 	}
 	if genericErr != nil && strings.TrimSpace(recovered.ContentHTML) == "" {
 		return extractedArticle{failures: failures}, genericErr

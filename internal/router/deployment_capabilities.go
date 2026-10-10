@@ -9,7 +9,6 @@ func deploymentCapabilitiesFromRouter(params RouterParams) handler.DeploymentCap
 		Agents: params.CustomAgentHandler != nil,
 		API:    params.TenantHandler != nil && params.TenantAPIKeyService != nil,
 		MCP: params.MCPServiceHandler != nil &&
-			params.MCPCredentialsHandler != nil &&
-			params.MCPOAuthHandler != nil,
+			params.MCPCredentialsHandler != nil,
 	})
 }

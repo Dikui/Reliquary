@@ -31,7 +31,6 @@ var supportedImportFileExtensions = map[string]struct{}{
 	"png": {}, "jpg": {}, "jpeg": {}, "gif": {}, "bmp": {}, "tiff": {}, "webp": {},
 	"csv": {}, "xlsx": {}, "xls": {}, "pptx": {}, "ppt": {}, "json": {},
 	"docm": {}, "odt": {}, "rtf": {}, "pptm": {}, "odp": {}, "xlsm": {}, "ods": {},
-	"mp3": {}, "wav": {}, "m4a": {}, "flac": {}, "ogg": {},
 }
 
 // dataTableFileExtensions are the spreadsheet formats that get an extra
@@ -73,6 +72,9 @@ func validateImportFileType(fileType string) error {
 	fileType = normalizeFileExtension(fileType)
 	if fileType == "" || fileType == unknownFileType {
 		return werrors.NewBadRequestError("无法确定文件类型")
+	}
+	if IsAudioType(fileType) {
+		return werrors.NewBadRequestError(fmt.Sprintf("不支持上传音频文件: %s", fileType))
 	}
 	if IsVideoType(fileType) {
 		return werrors.NewBadRequestError("暂不支持上传视频文件")
@@ -186,7 +188,7 @@ func IsImageType(fileType string) bool {
 // IsAudioType checks if a file type is an audio format
 func IsAudioType(fileType string) bool {
 	switch strings.ToLower(fileType) {
-	case "mp3", "wav", "m4a", "flac", "ogg":
+	case "mp3", "wav", "m4a", "flac", "ogg", "aac":
 		return true
 	default:
 		return false

@@ -56,6 +56,11 @@ func (h *MCPServiceHandler) CreateMCPService(c *gin.Context) {
 	}
 	service.TenantID = tenantID
 
+	if err := service.AuthConfig.Validate(); err != nil {
+		c.Error(errors.NewValidationError(err.Error()))
+		return
+	}
+
 	// SSRF validation for MCP service URL
 	if service.URL != nil && *service.URL != "" {
 		if err := secutils.ValidateURLForSSRF(*service.URL); err != nil {
@@ -260,8 +265,7 @@ func (h *MCPServiceHandler) UpdateMCPService(c *gin.Context) {
 			}
 			service.AuthConfig.CustomHeaders = headers
 		}
-		// auth_type and scopes are non-secret OAuth configuration; allow them
-		// through the main PUT so a service can be switched to/from OAuth.
+		// Authentication strategy is non-secret configuration.
 		if authType, ok := authConfig["auth_type"].(string); ok {
 			service.AuthConfig.AuthType = types.MCPAuthType(authType)
 		}
@@ -270,18 +274,10 @@ func (h *MCPServiceHandler) UpdateMCPService(c *gin.Context) {
 		if apiKeyHeader, ok := authConfig["api_key_header"].(string); ok {
 			service.AuthConfig.APIKeyHeader = apiKeyHeader
 		}
-		if scopes, ok := authConfig["scopes"].([]interface{}); ok {
-			list := make([]string, 0, len(scopes))
-			for _, s := range scopes {
-				if str, ok := s.(string); ok {
-					list = append(list, str)
-				}
-			}
-			service.AuthConfig.Scopes = list
-		}
-		if metaURL, ok := authConfig["auth_server_metadata_url"].(string); ok {
-			service.AuthConfig.AuthServerMetadataURL = metaURL
-		}
+	}
+	if err := service.AuthConfig.Validate(); err != nil {
+		c.Error(errors.NewValidationError(err.Error()))
+		return
 	}
 	if advancedConfig, ok := updateData["advanced_config"].(map[string]interface{}); ok {
 		service.AdvancedConfig = &types.MCPAdvancedConfig{}

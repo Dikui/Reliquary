@@ -606,17 +606,10 @@ export default {
       waitTimeoutLabel: '附件解析等待超时（秒）',
       waitTimeoutDesc: '单轮问答等待附件解析完成的最长时间，超时后未完成的附件会被跳过。大文件 / 扫描件可调大。0 表示使用全局默认。'
     },
-    audioUpload: {
-      label: '语音上传',
-      desc: '启用后用户可在对话中上传音频文件，系统将使用 ASR 模型自动转录为文字',
-      asrModel: 'ASR 模型',
-      asrModelDesc: '用于音频转录的语音识别模型，未配置时音频文件将以占位符形式传递',
-      asrModelPlaceholder: '请选择 ASR 模型'
-    },
     imageUpload: {
       navLabel: '附件上传',
       sectionTitle: '附件上传',
-      sectionDesc: '配置对话中图片、文档、音频等附件的上传、解析及对应模型',
+      sectionDesc: '配置对话中图片和文档附件的上传、解析及对应模型',
       label: '图片上传',
       desc: '启用后用户可在对话中上传图片并由 VLM 理解',
       vlmModel: 'VLM 模型',
@@ -642,9 +635,6 @@ export default {
       selectLabel: '选择 MCP 服务',
       selectDesc: '选择要启用的 MCP 服务',
       selectPlaceholder: '选择 MCP 服务',
-      authWaitTimeout: '授权等待超时（秒）',
-      authWaitTimeoutDesc: '对话中触发 OAuth 授权时，等待你完成授权的最长秒数，超时后自动跳过授权提示（仅对使用 OAuth 的 MCP 服务生效）。',
-      authWaitTimeoutPlaceholder: '默认 600 秒',
       unavailableService: '不可用服务'
     },
     agentType: {
@@ -674,8 +664,6 @@ export default {
       queryContextDesc: '从知识上下文中查询关系',
       getDocInfo: '获取文档信息',
       getDocInfoDesc: '查看文档元数据',
-      dbQuery: '查询数据库',
-      dbQueryDesc: '查询数据库中的信息',
       dataAnalysis: '数据分析',
       dataAnalysisDesc: '理解数据文件并进行数据分析',
       dataSchema: '查看数据元信息',
@@ -765,37 +753,18 @@ export default {
     questionSuggestions: {
       navLabel: '问题推荐',
       title: '对话问题推荐',
-      description: '统一配置开场问题与回答后的上下文追问；渠道可关闭展示，但不能改写智能体策略。',
+      description: '配置首次提问前展示的推荐问题，可使用预设问题、知识库或混合来源。',
       startersTitle: '开场推荐',
-      followUpsTitle: '回答后推荐',
       enableStarters: '展示开场问题',
       enableStartersDesc: '在用户首次提问前展示，可使用运营配置、知识库或混合来源。',
-      enableFollowUps: '生成回答后推荐',
-      enableFollowUpsDesc: '每次完整回答结束后异步生成，不阻塞主回答。启用后会产生额外模型调用。',
       sourceMode: '内容来源',
       count: '展示数量',
       curatedItems: '运营配置问题',
       curatedItemsDesc: '用于开场推荐；混合模式下优先展示。',
       addItem: '添加问题',
-      model: '生成模型',
-      modelDesc: '留空时使用本轮对话模型。',
-      advancedSettings: '高级生成设置',
-      displayRules: '展示与兜底规则',
-      contextTurns: '上下文轮数',
-      categories: '问题类型',
-      instruction: '附加生成要求',
-      instructionPlaceholder: '例如：优先推荐能帮助用户落地执行的问题，避免宽泛问题或重复当前回答…',
-      suppressFallback: '兜底回答后不展示',
-      suppressQuestion: '回答本身以提问结尾时不展示',
-      knowledgeFallback: '模型生成失败时使用知识库候选',
-      allowRegenerate: '允许用户换一批',
       modeCurated: '运营配置',
       modeKnowledge: '知识库',
-      modeGenerated: '模型生成',
       modeHybrid: '混合',
-      categoryClarify: '澄清',
-      categoryDeepen: '深入',
-      categoryAction: '下一步'
     },
     navGroups: {
       basic: '基础',
@@ -895,25 +864,6 @@ export default {
       queryKnowledgeContext: '知识上下文查询',
       dataAnalysis: '数据分析',
       dataSchema: '数据结构',
-      databaseQuery: '数据库查询'
-    },
-    mcpOAuth: {
-      waiting: '等待授权 · {target}',
-      waitingStatus: '等待授权',
-      targetWithTool: '{service} › {tool}',
-      titleWithService: 'OAuth 授权 · {service}',
-      titleWithTool: 'OAuth 授权 · {service} › {tool}',
-      desc: '点击授权将打开新窗口完成登录，授权成功后会自动继续本次工具调用。',
-      authorize: '去授权',
-      skip: '跳过',
-      countdownShort: '{seconds}s',
-      authorizedTag: '已授权',
-      timedOutTag: '授权超时',
-      canceledTag: '已取消',
-      authorizedToast: '授权成功，正在继续',
-      startFailed: '发起授权失败',
-      resumeFailed: '恢复执行失败，请重试',
-      skipFailed: '跳过失败，请重试'
     },
     toolApproval: {
       waiting: '等待审核 · {target}',
@@ -951,7 +901,6 @@ export default {
       fileTypeText: '纯文本',
       fileTypeJson: 'JSON 文件',
       fileTypeImage: '图片',
-      fileTypeAudiovisual: '音频',
       engines: {
         mineru_cloud: {
           name: 'MinerU Cloud',
@@ -1006,7 +955,6 @@ export default {
       knowledgeBases: '打开知识库',
       agents: '打开智能体',
       settings: '打开设置',
-      productTour: '新手引导'
     },
     match: {
       vector: '向量',
@@ -1071,9 +1019,6 @@ export default {
     authType: '认证方式',
     authTypeNone: '无 / 自定义 Header',
     authTypeApiKey: 'API Key / Token',
-    authTypeOAuth: 'OAuth 2.0（首次连接授权）',
-    oauthRefreshable: 'Token 已过期，将在下次使用时自动刷新',
-    oauthAuthorizeHint: '点击「去授权」会先自动保存当前配置，再发起授权（每个用户独立授权）。',
     apiKeyHeader: '请求头名称',
     apiKeyHeaderDesc: '留空默认 X-API-Key。Bearer 方式请填 Authorization，并在下方密钥值中写 “Bearer <token>”；需要裸 token 时填 Authorization 并直接填入 token。',
     credentialValue: '密钥值 / Token',
@@ -1111,7 +1056,6 @@ export default {
       updated: 'MCP 服务已更新',
       createFailed: '创建 MCP 服务失败',
       updateFailed: '更新 MCP 服务失败',
-      oauthRequired: '该服务需要 OAuth 授权，已自动切换为 OAuth 2.0，请保存后点击「去授权」。'
     },
     rules: {
       nameRequired: '请输入服务名称',
@@ -1185,11 +1129,9 @@ export default {
         summary_model: '摘要模型',
         image_processing_model: '图片处理模型',
         vlm_model: '视觉理解模型',
-        asr_model: '语音识别模型',
         chat_model: '对话模型',
         rerank_model: '重排序模型',
         query_understand_model: '问题理解模型',
-        follow_up_model: '追问模型',
         unknown: '其他模型配置'
       }
     },
@@ -1213,7 +1155,6 @@ export default {
       documentsPlaceholder: '每行输入一个候选文档',
       documentsHint: '每个非空行会作为一个独立文档发送给 ReRank 模型',
       imageFile: '图片文件',
-      audioFile: '音频文件',
       chooseFile: '选择文件',
       parameters: '请求参数',
       thinking: '思考模式',
@@ -1237,8 +1178,6 @@ export default {
         answerChars: '回答字符数',
         reasoningChars: '推理字符数',
         reasoningReturned: '返回推理内容',
-        textChars: '转写字符数',
-        segmentCount: '分段数量'
       }
     },
     builtinModels: {
@@ -1264,11 +1203,6 @@ export default {
       builtinCannotCopy: '内置模型不能复制',
       copied: '模型已复制',
       copyFailed: '复制模型失败'
-    },
-    asr: {
-      title: 'ASR 语音模型',
-      desc: '配置用于语音识别和音频转录的语音转文本模型（如 OpenAI Whisper）',
-      empty: '暂无 ASR 语音模型'
     },
     vllm: {
       title: 'VLLM 视觉模型',
@@ -1304,7 +1238,6 @@ export default {
       embedding: 'Embedding',
       rerank: 'ReRank',
       vllm: '视觉',
-      asr: '语音'
     }
   },
   mcpSettings: {
@@ -1542,7 +1475,6 @@ export default {
       displayNameDesc: '仅用于界面展示，实际调用仍使用上面的模型名称。',
       baseUrlPlaceholder: '例如：https://api.openai.com/v1',
       baseUrlPlaceholderVllm: '例如：http://localhost:11434/v1',
-      baseUrlPlaceholderAsr: '例如：https://api.openai.com/v1',
       apiKeyOptional: 'API Key（可选）',
       apiKeyPlaceholder: '输入 API Key',
       customHeadersLabel: '自定义请求头（可选）',
@@ -1746,14 +1678,12 @@ export default {
         remote: '例如：gpt-4, claude-3-opus',
         localVllm: '例如：llava:latest',
         remoteVllm: '例如：gpt-4-vision-preview',
-        remoteAsr: '例如：whisper-1'
       },
       description: {
         chat: '配置用于对话的大语言模型',
         embedding: '配置用于文本向量化的嵌入模型',
         rerank: '配置用于结果重排序的模型',
         vllm: '配置用于视觉理解和多模态的视觉语言模型',
-        asr: '配置用于语音识别和音频转录的语音转文本模型',
         default: '配置模型信息'
       }
     }
@@ -1764,6 +1694,7 @@ export default {
     tokenRefreshFailed: 'Token刷新失败',
     pleaseRelogin: '请重新登录',
     fileSizeExceeded: '文件大小不能超过 {size}M！',
+    unsupportedAudioUpload: '不支持上传音频文件。',
     unsupportedFileType: '不支持的文件类型！',
     invalidFileType: '文件类型错误！',
     invalidImageLink: '无效的图片链接',
@@ -1993,8 +1924,6 @@ export default {
           knowledgeLabel: '文档 ID',
           taskIDLabel: '业务任务 ID',
           tenantLabel: '空间 ID',
-          sourceLabel: '来源 ID',
-          targetLabel: '目标 ID',
           sourceKBLabel: '来源知识库',
           targetKBLabel: '目标知识库',
           dataSourceLabel: '数据源 ID',
@@ -2060,7 +1989,6 @@ export default {
             batchDelete: '批量删除',
             move: '文档移动',
             indexDelete: '索引删除',
-            kbClone: '知识库复制',
             kbDelete: '知识库删除',
           }
         },
@@ -2232,8 +2160,6 @@ export default {
   },
   chat: {
     suggestedQuestions: '你可以这样问我',
-    followUpQuestions: '继续问',
-    followUpQuestionsLoading: '加载推荐问题',
     refreshSuggestedQuestions: '换一批',
     thinking: '思考中...',
     thinkingAlt: '正在思考',
@@ -2341,7 +2267,7 @@ export default {
     imageTooMany: '最多上传5张图片',
     imageTypeSizeError: '仅支持 JPG/PNG/GIF/WEBP 格式，单张不超过 10MB',
     imageUploadTooltip: '上传图片（支持粘贴/拖拽）',
-    attachmentUploadTooltip: '上传附件（文档、音频等）',
+    attachmentUploadTooltip: '上传附件（文档）',
     attachmentWithCount: '已上传 {count} 个附件',
     attachmentTooMany: '最多上传 {max} 个附件',
     attachmentTotalTooMany: '图片和附件合计最多 {max} 个',
@@ -2401,18 +2327,6 @@ export default {
         policyDescription: '用于已审核消息的内容性质及主题、对象、事件识别；固定类别和输出格式不能更改。',
         policyPlaceholder: '例如：优先识别明确发生的事件，避免把预测写成已发生事件。'
       }
-    },
-    asr: {
-      title: '音频语音识别',
-      description: '配置语音识别（ASR），启用后可上传音频文件并整段转写为文本（常见格式：mp3、wav、m4a、flac、ogg 等）。暂不支持视频上传。',
-      label: '启用音频语音识别',
-      desc: '启用后可上传音频到知识库，系统自动将语音转写为文本并参与解析与检索',
-      modelLabel: 'ASR 模型',
-      modelDescription: '用于音频中语音转文本的识别模型（如 OpenAI Whisper）',
-      modelPlaceholder: '请选择 ASR 模型',
-      languageLabel: '音频语言提示',
-      languageDescription: '可选；指定主要语种可提高部分 ASR 模型的识别稳定性，留空时自动检测',
-      languagePlaceholder: '例如 zh、en，留空自动检测'
     },
     multimodal: {
       title: '图像处理配置',
@@ -2584,7 +2498,6 @@ export default {
       chunking: '分块设置',
       advanced: '高级设置',
       multimodal: '图像处理',
-      asr: '音频处理',
       datasource: '数据源',
     },
     navGroups: {
@@ -3318,11 +3231,8 @@ export default {
     urlDuplicate: '该 URL 已在列表中',
     statusNeedsSetup: '待配置',
     multimodalSetupHint: '未配置视觉模型时不会从图片提取文字，仍可上传和保存图片。',
-    asrSetupHint: '含音频内容，请启用语音识别并选择模型',
     vlmModelRequired: '请配置多模态模型',
-    asrModelRequired: '请配置语音识别模型',
     vlmModelSelectRequired: '已启用多模态，请选择 VLM 模型',
-    asrModelSelectRequired: '已启用语音识别，请选择 ASR 模型',
     continueAdd: '继续添加',
     destinationLabel: '上传位置',
     destinationChange: '更改上传位置',
@@ -3722,235 +3632,6 @@ export default {
     deleteAllConfirmBody: '确定要删除所有对话吗？此操作无法恢复。',
     deleteSuccess: '删除成功',
     deleteFailed: '删除失败，请稍后再试'
-  },
-  contextualGuide: {
-    stepOf: '{current} / {total}',
-    skip: '跳过',
-    prev: '上一步',
-    next: '下一步',
-    done: '知道了',
-    interactHint: '请直接点击高亮区域继续',
-    chat: {
-      steps: {
-        done: {
-          title: '开始探索吧',
-          desc: '试试提一个与已上传文档相关的问题，体验带引用的精准回答。'
-        },
-        send: {
-          title: '发送开始对话',
-          desc: '发送后将创建新会话，AI 会结合知识库内容作答，并标注引用片段。'
-        },
-        input: {
-          title: '输入你的问题',
-          desc: '直接描述你想了解的内容；也可点击上方推荐问题快速开始。'
-        },
-        kb: {
-          title: '选择知识范围',
-          desc: '点击 {\'@\'} 可指定一个或多个知识库/文件，仅基于选中内容回答；不选则按当前智能体配置检索。'
-        }
-      }
-    },
-    kbDetail: {
-      steps: {
-        done: {
-          title: '解析完成后即可使用',
-          desc: '文档解析入库后，可在对话中 {\'@\'} 本知识库提问，回答会附带引用来源。'
-        },
-        upload: {
-          title: '添加文档',
-          desc: '点击此处上传文件、文件夹，或导入网页与在线编辑内容。'
-        },
-        intro: {
-          title: '知识库还是空的',
-          desc: '添加第一份资料后，才能基于它进行检索与对话。支持拖拽上传多种文档格式。'
-        }
-      }
-    },
-    agentCreate: {
-      steps: {
-        submit: {
-          title: '保存智能体',
-          desc: '确认配置后点击高亮的「确定」完成创建，即可在对话中选择该智能体。'
-        },
-        navTools: {
-          title: '工具与 MCP（可选）',
-          desc: '智能推理模式下可勾选内置工具、MCP 服务等，扩展搜索、计算等能力。'
-        },
-        multimodal: {
-          title: '启用附件上传',
-          desc: '可分别配置图片、音频上传及附件解析策略；启用图片上传时需在下方选择 VLM 模型。'
-        },
-        navMultimodal: {
-          title: '附件上传（可选）',
-          desc: '开启后，对话中可上传图片、文档、音频等附件；图片理解需先在系统设置中配置 VLLM 模型。'
-        },
-        knowledge: {
-          title: '知识库范围',
-          desc: '「全部」适合通用助手；「指定」可限定专业领域；「不关联」则仅依赖模型自身能力。'
-        },
-        navKnowledge: {
-          title: '关联知识库',
-          desc: '决定智能体可检索哪些知识。默认「全部知识库」，也可改为指定库或暂不关联。'
-        },
-        model: {
-          title: '选择模型',
-          desc: '从下拉列表选择已配置的对话模型；没有合适模型时请先到系统设置添加。'
-        },
-        navModel: {
-          title: '绑定对话模型',
-          desc: '每个智能体必须指定一个 KnowledgeQA 模型作为推理引擎。'
-        },
-        name: {
-          title: '命名与描述',
-          desc: '取一个易识别的名称。智能推理模式下系统可能已预填默认名称，可按需修改。'
-        },
-        agentType: {
-          title: '选择智能体类型',
-          desc: '预设类型会自动填充系统提示词、推荐工具与知识库范围（如问答、数据分析等）。可按场景切换，名称与描述会随之更新。'
-        },
-        mode: {
-          title: '选择运行模式',
-          desc: '「普通模式」适合固定流程的快速问答；「智能推理」可调用工具、多步思考，适合复杂任务。'
-        }
-      }
-    },
-    agentList: {
-      steps: {
-        create: {
-          title: '创建你的智能体',
-          desc: '智能体把模型、知识库、工具与提示词组合成可复用的对话助手。点击下方高亮的「创建智能体」开始配置。'
-        }
-      }
-    },
-    kbCreate: {
-      steps: {
-        submit: {
-          title: '创建知识库',
-          desc: '确认类型、名称与模型已选好后，点击高亮的「创建」按钮。创建成功后将引导你上传第一份文档。'
-        },
-        multimodalVllm: {
-          title: '选择 VLM 模型',
-          desc: '开启多模态后需指定 VLM（视觉语言模型）。若列表为空，请先在系统设置中添加 VLLM 类型模型。'
-        },
-        multimodalToggle: {
-          title: '开启多模态解析',
-          desc: '启用后，上传的图片类文档将使用视觉语言模型提取内容，便于检索与问答。'
-        },
-        navMultimodal: {
-          title: '多模态 / 图片理解（可选）',
-          desc: '若文档含大量图表、扫描件或需理解图片内容，可在此开启多模态并选择 VLM 模型。'
-        },
-        chunking: {
-          title: '分块策略（可选）',
-          desc: '决定文档如何切分为检索片段。默认分块大小已针对 RAG 优化，一般无需修改。'
-        },
-        parser: {
-          title: '解析引擎（可选）',
-          desc: '控制 PDF、Office 等文件的解析方式。默认配置适用于大多数场景，有 OCR 需求时可在此调整。'
-        },
-        embedding: {
-          title: 'Embedding 模型',
-          desc: '将文本转为向量以支持语义检索。与上方索引策略中的「向量/关键词检索」配合使用。'
-        },
-        llm: {
-          title: '对话 / 摘要模型',
-          desc: '用于文档摘要、问答生成等。若列表为空，请通过下拉菜单前往系统设置添加模型。'
-        },
-        navModels: {
-          title: '配置模型（必填）',
-          desc: '知识库必须绑定对话模型；开启检索时还需 Embedding 模型。点击左侧「模型配置」进入。'
-        },
-        indexing: {
-          title: '选择索引能力',
-          desc: '默认已开启向量与关键词检索。至少保留一种检索方式。'
-        },
-        name: {
-          title: '填写名称',
-          desc: "取一个便于识别的名称，例如「产品手册」或「服务指南」。描述可选填。"
-        },
-        type: {
-          title: '选择知识库类型',
-          desc: "文档知识库支持 PDF、Word 等文件解析，创建后可按需配置检索。"
-        }
-      }
-    },
-    tenantModels: {
-      needChatModelFirst: '请先添加对话模型（KnowledgeQA），再创建智能体。',
-      stepsAgent: {
-        done: {
-          title: '然后创建智能体',
-          desc: '保存并关闭设置后，点击「创建智能体」，向导会带你配置模式、知识库与附件上传等选项。'
-        },
-        addModel: {
-          title: '添加对话模型',
-          desc: '点击「添加模型」，选择 KnowledgeQA 类型并填写接入信息。'
-        },
-        intro: {
-          title: '需要先配置对话模型',
-          desc: '创建智能体至少需要一种 KnowledgeQA（对话）模型。请先在系统设置中添加；Embedding 模型仅创建知识库时需要。'
-        }
-      },
-      steps: {
-        done: {
-          title: '添加完成后继续',
-          desc: '模型保存后关闭设置页，即可点击「新建知识库」；创建向导会引导你完成类型、索引与模型绑定。'
-        },
-        addModel: {
-          title: '添加模型',
-          desc: '点击「添加模型」，分别配置 KnowledgeQA（对话）与 Embedding 类型。可使用 Ollama 拉取本地模型。'
-        },
-        intro: {
-          title: '需要先配置模型',
-          desc: '创建文档知识库至少需要：一个对话模型（用于摘要与问答）和一个 Embedding 模型（用于向量检索）。请先在系统设置中添加。'
-        }
-      }
-    },
-    kbList: {
-      steps: {
-        create: {
-          title: '创建第一个知识库',
-          desc: "知识库用来收录文档和网页。点击下方高亮的「新建知识库」按钮，我们会带你完成表单填写。"
-        }
-      }
-    }
-  },
-  newUserGuide: {
-    stepOf: '{current} / {total}',
-    skip: '跳过引导',
-    prev: '上一步',
-    next: '下一步',
-    done: '完成',
-    reopen: '新手引导',
-    steps: {
-      done: {
-        title: '一切就绪',
-        desc: '你已经了解了核心功能，现在就开始构建你的知识助手吧！随时可点击菜单顶部昵称旁的帮助按钮重新查看引导。'
-      },
-      models: {
-        title: '配置你的模型',
-        desc: '这是关键一步：在模型管理中添加对话、向量等模型，知识库与对话功能才能正常工作。点击「添加模型」即可开始配置。'
-      },
-      settings: {
-        title: '账户与设置入口',
-        desc: '点开这里可以管理账户与系统设置。需要再次查看本引导时，可点击菜单顶部昵称旁的帮助按钮重新打开。'
-      },
-      agents: {
-        title: '打造专属智能体',
-        desc: '把知识库、提示词与工具组合成可复用的智能体，沉淀你的专业能力。'
-      },
-      chat: {
-        title: '发起智能对话',
-        desc: '基于知识库内容向 AI 提问，获得带引用来源的精准回答。点击这里开始新对话。'
-      },
-      knowledge: {
-        title: '创建你的知识库',
-        desc: "知识库是一切的起点：收录文档或网页，Reliquary 会自动解析并建立索引。点击这里进入知识库。"
-      },
-      welcome: {
-        title: '欢迎使用 Reliquary',
-        desc: '只需几步，带你快速了解知识库、对话与智能体的核心用法。点击「下一步」开始。'
-      }
-    }
   },
   chatHeader: {
     moreActions: '更多对话操作',

@@ -1,15 +1,3 @@
-// useResourcePins – per-(user, tenant) favorites + per-user recents for
-// KBs and custom agents.
-//
-// Favorites are DB-backed so they sync across devices and survive logout.
-// The server scopes favorites to each user.
-//
-// Recents stay in localStorage. They're a personal navigation aid, not a
-// shareable resource; round-tripping every card click through the
-// network would add latency for marginal value. If the product later
-// needs cross-device recents we can promote them to a server-side
-// from scratch.
-
 import { ref, computed, watch, type ComputedRef, type Ref } from 'vue'
 import {
   listFavorites,
@@ -17,7 +5,7 @@ import {
   removeFavorite,
   type FavoriteResourceType,
 } from '@/api/user-favorites'
-import { safeGetItem, safeSetItem, readUserId } from './preferenceStorage'
+import { safeGetItem, safeSetItem } from './preferenceStorage'
 import { useAuthStore } from '@/stores/auth'
 
 export type ResourceType = FavoriteResourceType
@@ -32,18 +20,6 @@ export interface PinEntry {
 const RECENTS_SUFFIX = 'resource_recents'
 const RECENTS_CAP = 30
 
-// Recents are scoped by (user, tenant) — same rationale as favorites. The
-// hydration step in the list views joins recent entries against the
-// current tenant's KB/Agent index, so a recent from tenant A would
-// silently drop out of the rendered list but still count in the sidebar
-// badge ("最近 (2)" but empty body). Keying the storage by tenant
-// prevents that mismatch entirely.
-//
-// `tenantSegmentForKey` returns "" when no tenant is resolvable (e.g.
-// during the very first render before auth state hydrates); the resulting
-// key is still per-user, so we never accidentally read another user's
-// recents. Once the tenant id resolves, the tenant watcher below bumps
-// the revision so views pick up the right namespace.
 function tenantSegmentForKey(): string {
   try {
     const authStore = useAuthStore()
@@ -55,7 +31,7 @@ function tenantSegmentForKey(): string {
 }
 
 function recentsKey(): string {
-  return `Reliquary_${readUserId()}_${tenantSegmentForKey()}${RECENTS_SUFFIX}`
+  return `Reliquary_${tenantSegmentForKey()}${RECENTS_SUFFIX}`
 }
 
 function readRecents(): PinEntry[] {

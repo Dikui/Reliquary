@@ -443,61 +443,6 @@
                     </div>
                   </div>
 
-                  <div v-show="activeSection === 'asr'" class="section" data-section="asr">
-                    <div class="kb-settings-block">
-                      <div class="section-header">
-                        <h2 class="section-title">{{ t('knowledgeEditor.asr.title') }}</h2>
-                        <p class="section-desc">{{ t('knowledgeEditor.asr.description') }}</p>
-                      </div>
-                      <div v-if="issueSectionKeys.has('asr')" class="section-notice">
-                        <t-icon name="info-circle-filled" />
-                        <span>{{ t('uploadConfirm.asrSetupHint') }}</span>
-                      </div>
-                      <div class="settings-group">
-                        <div class="setting-row">
-                          <div class="setting-info">
-                            <label>{{ t('knowledgeEditor.asr.label') }}</label>
-                            <p class="desc">{{ t('knowledgeEditor.asr.desc') }}</p>
-                          </div>
-                          <div class="setting-control">
-                            <t-switch v-model="uiState.asrConfig.enabled" size="medium" />
-                          </div>
-                        </div>
-                        <div v-if="uiState.asrConfig.enabled" class="setting-row">
-                          <div class="setting-info">
-                            <label>{{ t('knowledgeEditor.asr.modelLabel') }} <span class="required">*</span></label>
-                            <p class="desc">{{ t('knowledgeEditor.asr.modelDescription') }}</p>
-                          </div>
-                          <div class="setting-control">
-                            <ModelSelector
-                              model-type="ASR"
-                              :selected-model-id="uiState.asrConfig.modelId"
-                              :all-models="allModels"
-                              :status="showAsrModelError ? 'error' : 'default'"
-                              :placeholder="t('knowledgeEditor.asr.modelPlaceholder')"
-                              @update:selected-model-id="(val: string) => { uiState.asrConfig.modelId = val }"
-                              @add-model="handleAddASRModel"
-                            />
-                          </div>
-                        </div>
-                        <div v-if="uiState.asrConfig.enabled" class="setting-row">
-                          <div class="setting-info">
-                            <label>{{ t('knowledgeEditor.asr.languageLabel') }}</label>
-                            <p class="desc">{{ t('knowledgeEditor.asr.languageDescription') }}</p>
-                          </div>
-                          <div class="setting-control">
-                            <t-input
-                              v-model="uiState.asrConfig.language"
-                              clearable
-                              :placeholder="t('knowledgeEditor.asr.languagePlaceholder')"
-                              :style="{ width: '280px' }"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
                   <div v-show="activeSection === 'question'" class="section">
                     <div class="kb-settings-block">
                       <div class="section-header">
@@ -584,10 +529,9 @@ import type {
 } from '@/stores/uploadConfirm'
 
 const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp']
-const AUDIO_EXTENSIONS = ['mp3', 'wav', 'm4a', 'flac', 'ogg']
 
-type ConfigSectionKey = 'tags' | 'parser' | 'chunking' | 'multimodal' | 'asr' | 'question'
-type IssueSectionKey = 'multimodal' | 'asr'
+type ConfigSectionKey = 'tags' | 'parser' | 'chunking' | 'multimodal' | 'question'
+type IssueSectionKey = 'multimodal'
 
 interface ChunkingUIConfig {
   chunkSize: number
@@ -609,7 +553,6 @@ interface ChunkingUIConfig {
 interface UploadUIState {
   chunkingConfig: ChunkingUIConfig
   multimodalConfig: { enabled: boolean; vllmModelId: string; descriptionLanguage?: string; customInstructions?: string }
-  asrConfig: { enabled: boolean; modelId: string; language: string }
   questionGenerationConfig: { enabled: boolean; questionCount: number; customInstructions?: string }
   pdfForceScanned: boolean
 }
@@ -855,16 +798,8 @@ const hasImages = computed(() => {
   return batchFileExts.value.some(ext => IMAGE_EXTENSIONS.includes(ext))
 })
 
-const hasAudio = computed(() => {
-  return batchFileExts.value.some(ext => AUDIO_EXTENSIONS.includes(ext))
-})
-
 const showMultimodalModelError = computed(() => {
   return !hasImages.value && uiState.value.multimodalConfig.enabled && !uiState.value.multimodalConfig.vllmModelId
-})
-
-const showAsrModelError = computed(() => {
-  return uiState.value.asrConfig.enabled && !uiState.value.asrConfig.modelId
 })
 
 const issueSectionKeys = computed(() => {
@@ -875,13 +810,6 @@ const issueSectionKeys = computed(() => {
     }
   } else if (showMultimodalModelError.value) {
     keys.add('multimodal')
-  }
-  if (hasAudio.value) {
-    if (!uiState.value.asrConfig.enabled || !uiState.value.asrConfig.modelId) {
-      keys.add('asr')
-    }
-  } else if (showAsrModelError.value) {
-    keys.add('asr')
   }
   return keys
 })
@@ -921,12 +849,6 @@ const navItems = computed(() => {
     'image',
     t('knowledgeEditor.sidebar.multimodal'),
     issueSectionKeys.value.has('multimodal'),
-  )
-  push(
-    'asr',
-    'sound',
-    t('knowledgeEditor.sidebar.asr'),
-    issueSectionKeys.value.has('asr'),
   )
   push('question', 'chat', t('knowledgeEditor.advanced.questionGeneration.label'))
   return items
@@ -973,19 +895,6 @@ function getSectionNavStatus(
         statusTone: mm.vllmModelId ? undefined : 'warning',
       }
     }
-    case 'asr': {
-      if (issue) {
-        return { status: t('uploadConfirm.statusNeedsSetup'), statusTone: 'error' }
-      }
-      const asr = uiState.value.asrConfig
-      if (!asr.enabled) {
-        return { status: t('uploadConfirm.statusOff'), statusTone: 'muted' }
-      }
-      return {
-        status: asr.modelId ? getModelName(asr.modelId) : t('uploadConfirm.notSet'),
-        statusTone: asr.modelId ? undefined : 'warning',
-      }
-    }
     case 'question': {
       const question = uiState.value.questionGenerationConfig
       if (!question.enabled) {
@@ -1003,12 +912,7 @@ function getSectionNavStatus(
 const canConfirm = computed(() => {
   if (props.mode === 'file' && batchItemCount.value === 0) return false
   if (props.mode === 'manual' && !props.manualPreview?.content?.trim()) return false
-  if (hasAudio.value) {
-    if (!uiState.value.asrConfig.enabled || !uiState.value.asrConfig.modelId) {
-      return false
-    }
-  }
-  if (showMultimodalModelError.value || showAsrModelError.value) {
+  if (showMultimodalModelError.value) {
     return false
   }
   return true
@@ -1017,7 +921,6 @@ const canConfirm = computed(() => {
 function getDefaultSection(): ConfigSectionKey {
   if (props.mode === 'reparse') return 'parser'
   if (issueSectionKeys.value.has('multimodal')) return 'multimodal'
-  if (issueSectionKeys.value.has('asr')) return 'asr'
   return 'tags'
 }
 
@@ -1044,7 +947,6 @@ function createDefaultUIState(): UploadUIState {
       tableMetadataInstructions: '',
     },
     multimodalConfig: { enabled: false, vllmModelId: '', descriptionLanguage: '', customInstructions: '' },
-    asrConfig: { enabled: false, modelId: '', language: '' },
     questionGenerationConfig: { enabled: true, questionCount: 3, customInstructions: '' },
     pdfForceScanned: false,
   }
@@ -1075,11 +977,6 @@ function initFromKbInfo(kb: any) {
       vllmModelId: kb.vlm_config?.model_id || '',
       descriptionLanguage: kb.vlm_config?.description_language || '',
       customInstructions: kb.vlm_config?.custom_instructions || '',
-    },
-    asrConfig: {
-      enabled: !!kb.asr_config?.enabled,
-      modelId: kb.asr_config?.model_id || '',
-      language: kb.asr_config?.language || '',
     },
     questionGenerationConfig: {
       enabled: kb.question_generation_config?.enabled ?? true,
@@ -1114,11 +1011,6 @@ function buildProcessOverrides(): KnowledgeProcessOverrides {
       model_id: state.multimodalConfig.vllmModelId,
       description_language: state.multimodalConfig.descriptionLanguage,
       custom_instructions: state.multimodalConfig.customInstructions,
-    },
-    asr_config: {
-      enabled: state.asrConfig.enabled,
-      model_id: state.asrConfig.modelId,
-      language: state.asrConfig.language,
     },
     question_generation_config: {
       enabled: state.questionGenerationConfig.enabled,
@@ -1160,11 +1052,6 @@ function applyOverridesToState(o?: KnowledgeProcessOverrides | null) {
     if (o.vlm_config.model_id != null) s.multimodalConfig.vllmModelId = o.vlm_config.model_id
     if (o.vlm_config.description_language != null) s.multimodalConfig.descriptionLanguage = o.vlm_config.description_language
     if (o.vlm_config.custom_instructions != null) s.multimodalConfig.customInstructions = o.vlm_config.custom_instructions
-  }
-  if (o.asr_config) {
-    if (o.asr_config.enabled != null) s.asrConfig.enabled = o.asr_config.enabled
-    if (o.asr_config.model_id != null) s.asrConfig.modelId = o.asr_config.model_id
-    if (o.asr_config.language != null) s.asrConfig.language = o.asr_config.language
   }
   const qg = o.question_generation_config
   if (qg) {
@@ -1289,10 +1176,6 @@ const handleAddVLLMModel = () => {
   uiStore.openSettings('models', 'vllm')
 }
 
-const handleAddASRModel = () => {
-  uiStore.openSettings('models', 'asr')
-}
-
 const validateBeforeConfirm = (): boolean => {
   if (showMultimodalModelError.value) {
     MessagePlugin.warning(t('uploadConfirm.vlmModelSelectRequired'))
@@ -1300,18 +1183,6 @@ const validateBeforeConfirm = (): boolean => {
     return false
   }
 
-  if (hasAudio.value) {
-    if (!uiState.value.asrConfig.enabled || !uiState.value.asrConfig.modelId) {
-      MessagePlugin.warning(t('uploadConfirm.asrModelRequired'))
-      uiState.value.asrConfig.enabled = true
-      goToSection('asr')
-      return false
-    }
-  } else if (showAsrModelError.value) {
-    MessagePlugin.warning(t('uploadConfirm.asrModelSelectRequired'))
-    goToSection('asr')
-    return false
-  }
   return true
 }
 

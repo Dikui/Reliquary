@@ -54,7 +54,7 @@ func TestIssue06StarChangesPreserveHistoricalStructuredData(t *testing.T) {
 		require.EqualValues(t, 1, count)
 	}
 	var count int64
-	require.NoError(t, db.Model(&types.UserResourceFavorite{}).Count(&count).Error)
+	require.NoError(t, db.Model(&types.ResourceFavorite{}).Count(&count).Error)
 	require.Zero(t, count, "structured focus must not use resource favorites")
 }
 

@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/chromedp/chromedp"
 	"reliquary/internal/logger"
 	"reliquary/internal/utils"
 )
@@ -30,20 +29,21 @@ const (
 type ErrorCode string
 
 const (
-	ErrorInvalidURL       ErrorCode = "invalid_url"
-	ErrorDNS              ErrorCode = "dns_failed"
-	ErrorTimeout          ErrorCode = "connection_timeout"
-	ErrorTLS              ErrorCode = "tls_failed"
-	ErrorHTTP403          ErrorCode = "http_403"
-	ErrorHTTP429          ErrorCode = "http_429"
-	ErrorHTTP5xx          ErrorCode = "http_5xx"
-	ErrorHTTPStatus       ErrorCode = "http_status"
-	ErrorSSRFRejected     ErrorCode = "ssrf_rejected"
-	ErrorRedirectRejected ErrorCode = "redirect_rejected"
-	ErrorRead             ErrorCode = "read_failed"
-	ErrorHTMLParse        ErrorCode = "html_parse_failed"
-	ErrorEmptyContent     ErrorCode = "empty_content"
-	ErrorConnection       ErrorCode = "connection_failed"
+	ErrorInvalidURL         ErrorCode = "invalid_url"
+	ErrorDNS                ErrorCode = "dns_failed"
+	ErrorTimeout            ErrorCode = "connection_timeout"
+	ErrorTLS                ErrorCode = "tls_failed"
+	ErrorHTTP403            ErrorCode = "http_403"
+	ErrorHTTP429            ErrorCode = "http_429"
+	ErrorHTTP5xx            ErrorCode = "http_5xx"
+	ErrorHTTPStatus         ErrorCode = "http_status"
+	ErrorSSRFRejected       ErrorCode = "ssrf_rejected"
+	ErrorRedirectRejected   ErrorCode = "redirect_rejected"
+	ErrorRead               ErrorCode = "read_failed"
+	ErrorHTMLParse          ErrorCode = "html_parse_failed"
+	ErrorEmptyContent       ErrorCode = "empty_content"
+	ErrorJavaScriptRequired ErrorCode = "javascript_required"
+	ErrorConnection         ErrorCode = "connection_failed"
 )
 
 // FetchError carries stable, machine-readable failure details.
@@ -84,49 +84,35 @@ func ErrorDetails(err error) (ErrorCode, bool, string) {
 
 // Fetcher fetches and extracts public web pages through an SSRF-safe client.
 type Fetcher struct {
-	client        *http.Client
-	timeout       time.Duration
-	maxBodySize   int64
-	validateURL   func(string) error
-	resolveIPs    func(context.Context, string) ([]net.IP, error)
-	dialContext   func(context.Context, string, string) (net.Conn, error)
-	renderBrowser func(context.Context, pinnedTarget) (string, error)
-}
-
-type pinnedTarget struct {
-	URL  *url.URL
-	Host string
-	Port string
-	IP   net.IP
-}
-
-type httpFetchResult struct {
-	body     []byte
-	finalURL string
+	client      *http.Client
+	timeout     time.Duration
+	maxBodySize int64
+	validateURL func(string) error
+	resolveIPs  func(context.Context, string) ([]net.IP, error)
+	dialContext func(context.Context, string, string) (net.Conn, error)
 }
 
 // NewFetcher creates a production fetcher with DNS and redirect SSRF guards.
 func NewFetcher() *Fetcher {
-	return newFetcher(fetchTimeout, renderWithChromium)
+	return newFetcher(fetchTimeout)
 }
 
 // NewPipelineFetcher creates an HTTP-only fetcher for the chat pipeline.
-// It keeps the pre-refactor 15s timeout and does not launch Chromium.
+// It keeps the chat pipeline's 15s timeout.
 func NewPipelineFetcher() *Fetcher {
-	return newFetcher(pipelineFetchTimeout, nil)
+	return newFetcher(pipelineFetchTimeout)
 }
 
-func newFetcher(timeout time.Duration, renderBrowser func(context.Context, pinnedTarget) (string, error)) *Fetcher {
+func newFetcher(timeout time.Duration) *Fetcher {
 	config := utils.SSRFSafeHTTPClientConfig{
 		Timeout:      timeout,
 		MaxRedirects: 10,
 	}
 	fetcher := &Fetcher{
-		timeout:       timeout,
-		maxBodySize:   maxBodySize,
-		validateURL:   utils.ValidateURLForSSRF,
-		resolveIPs:    lookupPublicDNS,
-		renderBrowser: renderBrowser,
+		timeout:     timeout,
+		maxBodySize: maxBodySize,
+		validateURL: utils.ValidateURLForSSRF,
+		resolveIPs:  lookupPublicDNS,
 	}
 	transport := utils.NewSSRFSafeTransport(config)
 	transport.DialContext = fetcher.pinnedDialContext()
@@ -157,46 +143,22 @@ func (f *Fetcher) Fetch(ctx context.Context, rawURL string) (string, error) {
 
 	requestCtx, cancel := context.WithTimeout(ctx, f.timeout)
 	defer cancel()
-	httpResult, httpErr := f.fetchHTTP(requestCtx, rawURL, parsedURL)
-	if httpErr == nil {
-		content, parseErr := htmlToText(string(httpResult.body))
-		requiresBrowser := parseErr == nil && needsBrowserFallback(content, httpResult.body)
-		if parseErr == nil && strings.TrimSpace(content) != "" && !requiresBrowser {
-			logger.Infof(ctx, "[WebFetch] fetched %s → %d chars", rawURL, len(content))
-			return content, nil
-		}
-		if f.renderBrowser != nil {
-			browserURL := firstNonEmpty(httpResult.finalURL, rawURL)
-			if rendered, browserErr := f.fetchWithBrowser(requestCtx, browserURL); browserErr == nil {
-				content, browserParseErr := htmlToText(rendered)
-				if browserParseErr == nil && strings.TrimSpace(content) != "" {
-					logger.Infof(ctx, "[WebFetch] rendered %s → %d chars", rawURL, len(content))
-					return content, nil
-				}
-			}
-		}
-		if parseErr != nil {
-			return "", parseErr
-		}
-		if strings.TrimSpace(content) == "" || requiresBrowser {
-			return "", newFetchError(ErrorEmptyContent, false, "page contains no readable text")
-		}
-		return content, nil
+	body, err := f.fetchHTTP(requestCtx, rawURL, parsedURL)
+	if err != nil {
+		return "", err
 	}
-
-	if f.renderBrowser != nil && canRenderAfterHTTPError(httpErr) {
-		if rendered, browserErr := f.fetchWithBrowser(requestCtx, rawURL); browserErr == nil {
-			content, browserParseErr := htmlToText(rendered)
-			if browserParseErr == nil && strings.TrimSpace(content) != "" {
-				logger.Infof(ctx, "[WebFetch] rendered %s → %d chars", rawURL, len(content))
-				return content, nil
-			}
-		}
+	content, err := htmlToText(string(body))
+	if err != nil {
+		return "", err
 	}
-	return "", httpErr
+	if err := validateReadableContent(content, body); err != nil {
+		return "", err
+	}
+	logger.Infof(ctx, "[WebFetch] fetched %s → %d chars", rawURL, len(content))
+	return content, nil
 }
 
-func (f *Fetcher) fetchHTTP(ctx context.Context, rawURL string, parsedURL *url.URL) (*httpFetchResult, error) {
+func (f *Fetcher) fetchHTTP(ctx context.Context, rawURL string, parsedURL *url.URL) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, newFetchError(ErrorInvalidURL, false, "invalid URL: %v", err)
@@ -214,11 +176,7 @@ func (f *Fetcher) fetchHTTP(ctx context.Context, rawURL string, parsedURL *url.U
 	if err != nil {
 		return nil, newFetchError(ErrorRead, true, "read failed: %v", err)
 	}
-	finalURL := rawURL
-	if resp.Request != nil && resp.Request.URL != nil {
-		finalURL = resp.Request.URL.String()
-	}
-	return &httpFetchResult{body: body, finalURL: finalURL}, nil
+	return body, nil
 }
 
 func (f *Fetcher) pinnedDialContext() func(context.Context, string, string) (net.Conn, error) {
@@ -250,107 +208,35 @@ func (f *Fetcher) pinnedDialContext() func(context.Context, string, string) (net
 	}
 }
 
-func (f *Fetcher) fetchWithBrowser(ctx context.Context, rawURL string) (string, error) {
-	target, err := f.resolvePinnedTarget(ctx, rawURL)
-	if err != nil {
-		return "", err
-	}
-	return f.renderBrowser(ctx, target)
-}
-
-func (f *Fetcher) resolvePinnedTarget(ctx context.Context, rawURL string) (pinnedTarget, error) {
-	parsedURL, err := url.Parse(rawURL)
-	if err != nil {
-		return pinnedTarget{}, newFetchError(ErrorInvalidURL, false, "invalid URL: %v", err)
-	}
-	port := parsedURL.Port()
-	if port == "" {
-		port = "443"
-		if parsedURL.Scheme == "http" {
-			port = "80"
-		}
-	}
-	ips, err := f.resolveIPs(ctx, parsedURL.Hostname())
-	if err != nil {
-		return pinnedTarget{}, newFetchError(ErrorDNS, true, "DNS lookup failed for %s: %v", parsedURL.Hostname(), err)
-	}
-	if len(ips) == 0 {
-		return pinnedTarget{}, newFetchError(ErrorDNS, true, "DNS lookup returned no addresses for %s", parsedURL.Hostname())
-	}
-	if !utils.IsSSRFWhitelisted(parsedURL.Hostname()) {
-		for _, ip := range ips {
-			if !utils.IsPublicIP(ip) {
-				return pinnedTarget{}, newFetchError(ErrorSSRFRejected, false, "host resolves to restricted IP %s", ip)
-			}
-		}
-	}
-	return pinnedTarget{URL: parsedURL, Host: parsedURL.Hostname(), Port: port, IP: ips[0]}, nil
-}
-
 func lookupPublicDNS(ctx context.Context, host string) ([]net.IP, error) {
 	return net.DefaultResolver.LookupIP(ctx, "ip", host)
 }
 
-func renderWithChromium(ctx context.Context, target pinnedTarget) (string, error) {
-	hostRule := fmt.Sprintf("MAP %s %s, MAP * ~NOTFOUND", target.Host, target.IP.String())
-	opts := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.Flag("host-resolver-rules", hostRule),
-		chromedp.Flag("headless", true),
-		chromedp.Flag("disable-setuid-sandbox", true),
-		chromedp.Flag("disable-dev-shm-usage", true),
-		chromedp.Flag("disable-gpu", true),
-		chromedp.Flag("disable-blink-features", "AutomationControlled"),
-	)
-	allocatorCtx, cancelAllocator := chromedp.NewExecAllocator(ctx, opts...)
-	defer cancelAllocator()
-	browserCtx, cancelBrowser := chromedp.NewContext(allocatorCtx)
-	defer cancelBrowser()
-	browserCtx, cancelTimeout := context.WithTimeout(browserCtx, fetchTimeout)
-	defer cancelTimeout()
-	var html string
-	if err := chromedp.Run(browserCtx,
-		chromedp.Navigate(target.URL.String()),
-		chromedp.WaitReady("body", chromedp.ByQuery),
-		chromedp.OuterHTML("html", &html),
-	); err != nil {
-		return "", fmt.Errorf("chromium render failed: %w", err)
+// ValidateReadableHTML classifies an empty page or a JavaScript rendering shell.
+// Callers with site-specific recovery should validate only after that recovery fails.
+func ValidateReadableHTML(html []byte) error {
+	content, err := htmlToText(string(html))
+	if err != nil {
+		return err
 	}
-	return string(limitBytes([]byte(html), maxBodySize)), nil
+	return validateReadableContent(content, html)
 }
 
-func limitBytes(value []byte, max int64) []byte {
-	if int64(len(value)) <= max {
-		return value
-	}
-	return value[:max]
-}
-
-func needsBrowserFallback(content string, html []byte) bool {
+func validateReadableContent(content string, html []byte) error {
 	trimmed := strings.TrimSpace(strings.ToLower(content))
-	if trimmed == "" || strings.Contains(trimmed, "enable javascript") || strings.Contains(trimmed, "loading...") {
-		return true
-	}
-	if len([]rune(trimmed)) >= 200 {
-		return false
-	}
+	shortContent := len([]rune(trimmed)) < 200
 	lowerHTML := strings.ToLower(string(html))
 	hasAppRoot := strings.Contains(lowerHTML, `id="app"`) || strings.Contains(lowerHTML, `id='app'`) ||
 		strings.Contains(lowerHTML, `id="root"`) || strings.Contains(lowerHTML, `id='root'`)
-	return hasAppRoot && strings.Contains(lowerHTML, "<script")
-}
-
-func canRenderAfterHTTPError(err error) bool {
-	code, _, _ := ErrorDetails(err)
-	return code == ErrorHTTP403 || code == ErrorEmptyContent
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
-		}
+	if (shortContent && (strings.Contains(trimmed, "enable javascript") || strings.Contains(trimmed, "loading..."))) ||
+		(hasAppRoot && strings.Contains(lowerHTML, "<script") && shortContent) ||
+		(trimmed == "" && strings.Contains(lowerHTML, "<script")) {
+		return newFetchError(ErrorJavaScriptRequired, false, "该页面需要 JavaScript 渲染，无法抓取正文")
 	}
-	return ""
+	if trimmed == "" {
+		return newFetchError(ErrorEmptyContent, false, "该页面没有可抓取的正文 (page contains no readable text)")
+	}
+	return nil
 }
 
 func setBrowserHeaders(req *http.Request, parsedURL *url.URL) {

@@ -189,7 +189,7 @@ func (s *sessionService) AgentQA(
 		agentQuery = req.Query + "\n\n[用户上传图片内容]\n" + req.ImageDescription
 		logger.Infof(ctx, "Agent model does not support vision, appending image description (%d chars)", len(req.ImageDescription))
 	}
-	// Inject attachment content (documents, audio transcripts, etc.) so the agent
+	// Inject attachment content (documents, images, etc.) so the agent
 	// can see uploaded files. Mirrors the behavior of the KnowledgeQA pipeline
 	// (see chat_pipeline/into_chat_message.go).
 	if len(req.Attachments) > 0 {
@@ -236,7 +236,6 @@ func (s *sessionService) buildAgentConfig(
 		HistoryTurns:                customAgent.Config.HistoryTurns,
 		MCPSelectionMode:            customAgent.Config.MCPSelectionMode,
 		MCPServices:                 customAgent.Config.MCPServices,
-		MCPAuthWaitTimeout:          customAgent.Config.MCPAuthWaitTimeout,
 		Thinking:                    customAgent.Config.Thinking,
 		CitationEnabled:             customAgent.Config.CitationEnabled,
 		RetrieveKBOnlyWhenMentioned: customAgent.Config.RetrieveKBOnlyWhenMentioned,

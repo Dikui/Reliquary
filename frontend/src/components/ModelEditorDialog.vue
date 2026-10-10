@@ -361,7 +361,7 @@
 <script setup lang="ts">
 import { ref, watch, computed, onUnmounted, nextTick } from 'vue'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
-import { checkOllamaModels, checkRemoteModel, testEmbeddingModel, checkRerankModel, checkASRModel, listOllamaModels, downloadOllamaModel, getDownloadProgress, checkOllamaStatus, listModelProviders, type OllamaModelInfo, type ModelProviderOption } from '@/api/initialization'
+import { checkOllamaModels, checkRemoteModel, testEmbeddingModel, checkRerankModel, listOllamaModels, downloadOllamaModel, getDownloadProgress, checkOllamaStatus, listModelProviders, type OllamaModelInfo, type ModelProviderOption } from '@/api/initialization'
 import {
   putModelCredentials,
   deleteModelCredentialField,
@@ -415,7 +415,7 @@ interface ModelFormData {
   lkeapRegion?: string
 }
 
-type EditorModelType = 'chat' | 'embedding' | 'rerank' | 'vllm' | 'asr'
+type EditorModelType = 'chat' | 'embedding' | 'rerank' | 'vllm'
 
 interface Props {
   visible: boolean
@@ -449,7 +449,6 @@ const modelTypeChoices = computed(() => ([
   { value: 'embedding' as const, label: t('modelSettings.typeShort.embedding'), icon: 'chart-bubble' },
   { value: 'rerank' as const, label: t('modelSettings.typeShort.rerank'), icon: 'filter-sort' },
   { value: 'vllm' as const, label: t('modelSettings.typeShort.vllm'), icon: 'image' },
-  { value: 'asr' as const, label: t('modelSettings.typeShort.asr'), icon: 'sound' },
 ]))
 
 // API 返回的 Provider 列表
@@ -466,10 +465,9 @@ const fallbackProviderOptions = computed(() => [
       embedding: 'https://api.openai.com/v1',
       rerank: 'https://api.openai.com/v1',
       vllm: 'https://api.openai.com/v1',
-      asr: 'https://api.openai.com/v1'
     },
     description: t('model.editor.providers.openai.description'),
-    modelTypes: ['chat', 'embedding', 'vllm', 'asr']
+    modelTypes: ['chat', 'embedding', 'vllm']
   },
   {
     value: 'azure_openai',
@@ -478,10 +476,9 @@ const fallbackProviderOptions = computed(() => [
       chat: 'https://{resource}.openai.azure.com',
       embedding: 'https://{resource}.openai.azure.com',
       vllm: 'https://{resource}.openai.azure.com',
-      asr: 'https://{resource}.openai.azure.com'
     },
     description: t('model.editor.providers.azure_openai.description'),
-    modelTypes: ['chat', 'embedding', 'vllm', 'asr']
+    modelTypes: ['chat', 'embedding', 'vllm']
   },
   {
     value: 'aliyun',
@@ -596,7 +593,7 @@ const fallbackProviderOptions = computed(() => [
     label: t('model.editor.providers.generic.label'),
     defaultUrls: {},
     description: t('model.editor.providers.generic.description'),
-    modelTypes: ['chat', 'embedding', 'rerank', 'vllm', 'asr']
+    modelTypes: ['chat', 'embedding', 'rerank', 'vllm']
   },
 ])
 
@@ -695,7 +692,6 @@ const modelTypeIcon = computed(() => {
     embedding: 'chart-bubble',
     rerank: 'filter-sort',
     vllm: 'image',
-    asr: 'sound',
   }
   return map[activeModelType.value] || 'setting'
 })
@@ -882,9 +878,6 @@ const getModelNamePlaceholder = () => {
       ? t('model.editor.modelNamePlaceholder.localVllm')
       : t('model.editor.modelNamePlaceholder.remoteVllm')
   }
-  if (activeModelType.value === 'asr') {
-    return t('model.editor.modelNamePlaceholder.remoteAsr')
-  }
   return formData.value.source === 'local'
     ? t('model.editor.modelNamePlaceholder.local')
     : t('model.editor.modelNamePlaceholder.remote')
@@ -893,9 +886,6 @@ const getModelNamePlaceholder = () => {
 const getBaseUrlPlaceholder = () => {
   if (activeModelType.value === 'vllm') {
     return t('model.editor.baseUrlPlaceholderVllm')
-  }
-  if (activeModelType.value === 'asr') {
-    return t('model.editor.baseUrlPlaceholderAsr')
   }
   return t('model.editor.baseUrlPlaceholder')
 }
@@ -1378,18 +1368,6 @@ const checkRemoteAPI = async () => {
         // VLLM 模型（多模态）
         // VLLM 使用 checkRemoteModel 进行基础连接测试
         result = await checkRemoteModel({
-          modelName: formData.value.modelName,
-          baseUrl: formData.value.baseUrl || '',
-          apiKey: formData.value.apiKey || '',
-          provider: formData.value.provider,
-          ...idPayload,
-          ...headerPayload,
-        })
-        break
-
-      case 'asr':
-        // ASR 模型（语音识别）— 使用专用的 ASR 测试接口（/v1/audio/transcriptions）
-        result = await checkASRModel({
           modelName: formData.value.modelName,
           baseUrl: formData.value.baseUrl || '',
           apiKey: formData.value.apiKey || '',

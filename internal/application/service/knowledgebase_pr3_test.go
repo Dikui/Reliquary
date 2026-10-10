@@ -4,7 +4,6 @@ import (
 	"context"
 	stderrors "errors"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,7 +13,7 @@ import (
 )
 
 // fakeKBRepo is the smallest KnowledgeBaseRepository needed by
-// CreateKnowledgeBase + CopyKnowledgeBase tests. It stores rows in a map
+// CreateKnowledgeBase tests. It stores rows in a map
 // keyed by ID. No tenant scoping is applied — the tested paths already
 // enforce that explicitly.
 type fakeKBRepo struct {
@@ -72,14 +71,6 @@ func (r *fakeKBRepo) ListModelUsages(_ context.Context, _ uint64, _ string) ([]t
 	return []types.ModelUsageResource{}, nil
 }
 
-func (r *fakeKBRepo) SetUserKBPin(_ context.Context, _ uint64, _ string, _ string, _ bool) (*time.Time, error) {
-	return nil, nil
-}
-
-func (r *fakeKBRepo) ListUserKBPinIDs(_ context.Context, _ uint64, _ string) (map[string]time.Time, error) {
-	return map[string]time.Time{}, nil
-}
-
 // Force compile-time conformance check so any future interface change
 // surfaces as a build error here rather than at usage site.
 var _ interfaces.KnowledgeBaseRepository = (*fakeKBRepo)(nil)
@@ -90,36 +81,6 @@ func newPR3KBService(repo *fakeKBRepo) *knowledgeBaseService {
 
 func ctxWithTenant(tenantID uint64) context.Context {
 	return context.WithValue(context.Background(), types.TenantIDContextKey, tenantID)
-}
-
-func TestCopyKnowledgeBase_Defenses(t *testing.T) {
-	mkKB := func(id, model string) *types.KnowledgeBase {
-		return &types.KnowledgeBase{ID: id, Name: id, DomainID: "test-domain", TenantID: 1, EmbeddingModelID: model}
-	}
-	t.Run("new knowledge base preserves domain and embedding model", func(t *testing.T) {
-		repo := newFakeKBRepo()
-		repo.rows["src"] = mkKB("src", "embed-1")
-		source, target, err := newPR3KBService(repo).CopyKnowledgeBase(ctxWithTenant(1), "src", "")
-		require.NoError(t, err)
-		require.NotNil(t, repo.rows[target.ID])
-		assert.Equal(t, source.DomainID, target.DomainID)
-		assert.Equal(t, source.EmbeddingModelID, target.EmbeddingModelID)
-	})
-	t.Run("same embedding model succeeds", func(t *testing.T) {
-		repo := newFakeKBRepo()
-		repo.rows["src"] = mkKB("src", "embed-1")
-		repo.rows["dst"] = mkKB("dst", "embed-1")
-		_, _, err := newPR3KBService(repo).CopyKnowledgeBase(ctxWithTenant(1), "src", "dst")
-		require.NoError(t, err)
-	})
-	t.Run("different embedding models reject cloning", func(t *testing.T) {
-		repo := newFakeKBRepo()
-		repo.rows["src"] = mkKB("src", "embed-1")
-		repo.rows["dst"] = mkKB("dst", "embed-2")
-		_, _, err := newPR3KBService(repo).CopyKnowledgeBase(ctxWithTenant(1), "src", "dst")
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "different embedding models")
-	})
 }
 
 func TestDuplicateKnowledgeBase_CreatesSettingsOnlyDuplicate(t *testing.T) {
@@ -146,7 +107,6 @@ func TestDuplicateKnowledgeBase_CreatesSettingsOnlyDuplicate(t *testing.T) {
 		EmbeddingModelID:      "embed-1",
 		SummaryModelID:        "summary-1",
 		VLMConfig:             types.VLMConfig{Enabled: true, ModelID: "vlm-1"},
-		ASRConfig:             types.ASRConfig{Enabled: true, ModelID: "asr-1", Language: "zh"},
 
 		QuestionGenerationConfig: &types.QuestionGenerationConfig{Enabled: true, QuestionCount: 5},
 		IndexingStrategy: types.IndexingStrategy{
@@ -178,7 +138,6 @@ func TestDuplicateKnowledgeBase_CreatesSettingsOnlyDuplicate(t *testing.T) {
 	assert.Equal(t, source.EmbeddingModelID, target.EmbeddingModelID)
 	assert.Equal(t, source.SummaryModelID, target.SummaryModelID)
 	assert.Equal(t, source.VLMConfig, target.VLMConfig)
-	assert.Equal(t, source.ASRConfig, target.ASRConfig)
 	require.NotNil(t, target.QuestionGenerationConfig)
 	assert.Equal(t, 5, target.QuestionGenerationConfig.QuestionCount)
 	assert.Equal(t, source.IndexingStrategy, target.IndexingStrategy)
@@ -235,4 +194,8 @@ func TestDuplicateKnowledgeBase_UsesLocalizedEnglishSuffix(t *testing.T) {
 
 func ctxWithTenantInfo(tenantID uint64) context.Context {
 	return context.WithValue(ctxWithTenant(tenantID), types.TenantInfoContextKey, &types.Tenant{ID: tenantID})
+}
+
+func (r *fakeKBRepo) UpdateKnowledgeBasePin(context.Context, *types.KnowledgeBase) error {
+	return nil
 }

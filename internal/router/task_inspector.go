@@ -56,8 +56,6 @@ type runtimeTaskPayloadProbe struct {
 	KnowledgeBaseID string   `json:"knowledge_base_id,omitempty"`
 	KnowledgeID     string   `json:"knowledge_id,omitempty"`
 	TaskID          string   `json:"task_id,omitempty"`
-	SourceID        string   `json:"source_id,omitempty"`
-	TargetID        string   `json:"target_id,omitempty"`
 	SourceKBID      string   `json:"source_kb_id,omitempty"`
 	TargetKBID      string   `json:"target_kb_id,omitempty"`
 	DataSourceID    string   `json:"data_source_id,omitempty"`
@@ -326,8 +324,6 @@ func projectRuntimeTask(task *asynq.TaskInfo, worker runtimeWorkerMetadata) (typ
 		KnowledgeBaseID: kbID,
 		KnowledgeID:     probe.KnowledgeID,
 		TaskID:          probe.TaskID,
-		SourceID:        probe.SourceID,
-		TargetID:        probe.TargetID,
 		SourceKBID:      probe.SourceKBID,
 		TargetKBID:      probe.TargetKBID,
 		DataSourceID:    probe.DataSourceID,
@@ -1047,7 +1043,7 @@ func matchesKnowledge(taskType string, payload []byte, knowledgeID string) bool 
 }
 
 // matchesKnowledgeBase identifies work made obsolete by deleting a knowledge
-// base. In addition to direct KB fields, clone/move payloads carry semantic KB
+// base. In addition to direct KB fields, move payloads carry semantic KB
 // references under task-specific field names. knowledgeIDs catches tasks whose
 // payload does not carry a KB ID at all.
 func matchesKnowledgeBase(
@@ -1071,10 +1067,7 @@ func matchesKnowledgeBase(
 			return true
 		}
 		switch taskType {
-		case types.TypeKBClone:
-			if probe.SourceID == knowledgeBaseID || probe.TargetID == knowledgeBaseID {
-				return true
-			}
+
 		case types.TypeKnowledgeMove:
 			if probe.SourceKBID == knowledgeBaseID || probe.TargetKBID == knowledgeBaseID {
 				return true

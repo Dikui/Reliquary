@@ -28,7 +28,6 @@
           variant="text"
           theme="default"
           :class="['kb-upload-source-trigger', triggerClass]"
-          :data-guide="dataGuide || undefined"
           size="small"
         >
           <template #icon><t-icon :name="triggerIcon" size="16px" /></template>
@@ -72,7 +71,6 @@ const props = withDefaults(defineProps<{
   includeManual?: boolean
   triggerIcon?: string
   triggerClass?: string
-  dataGuide?: string
   tooltip?: string
   placement?: 'top' | 'bottom' | 'bottom-right' | 'bottom-left'
 }>(), {
@@ -81,7 +79,6 @@ const props = withDefaults(defineProps<{
   includeManual: false,
   triggerIcon: 'file-add',
   triggerClass: '',
-  dataGuide: '',
   tooltip: '',
   placement: 'bottom-right',
 })
@@ -150,6 +147,9 @@ const handleActionSelect = (data: { value: string }) => {
 }
 
 const notifyFilterResult = (result: ReturnType<typeof filterUploadFiles>) => {
+  if (result.audioFilteredCount > 0) {
+    MessagePlugin.warning(t('error.unsupportedAudioUpload'))
+  }
   if (result.unsupportedTypeCount > 0) {
     MessagePlugin.warning(t('error.unsupportedFileType'))
   }

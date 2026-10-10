@@ -358,235 +358,6 @@ export default {
       references: 'References'
     }
   },
-  newUserGuide: {
-    stepOf: '{current} / {total}',
-    skip: 'Skip',
-    prev: 'Back',
-    next: 'Next',
-    done: 'Done',
-    reopen: 'Product tour',
-    steps: {
-      welcome: {
-        title: 'Welcome to Reliquary',
-        desc: 'A few quick steps to get you familiar with knowledge bases, chat and agents. Click "Next" to begin.'
-      },
-      knowledge: {
-        title: 'Create your knowledge base',
-        desc: "Everything starts here: add documents or web pages and Reliquary parses and indexes them automatically. Click here to open knowledge bases."
-      },
-      chat: {
-        title: 'Start an AI chat',
-        desc: 'Ask questions grounded in your knowledge base and get accurate answers with cited sources. Click here to start a new chat.'
-      },
-      agents: {
-        title: 'Build dedicated agents',
-        desc: 'Combine knowledge bases, prompts and tools into reusable agents that capture your expertise.'
-      },
-      settings: {
-        title: 'Account & settings',
-        desc: 'Open this to manage your account and system settings. You can reopen this tour from the help button next to your name at the top of this menu.'
-      },
-      models: {
-        title: 'Configure your models',
-        desc: 'A key step: add chat, embedding and other models in Model Management so knowledge bases and chat can work. Click "Add model" to get started.'
-      },
-      done: {
-        title: 'You are all set',
-        desc: 'You now know the essentials — start building your knowledge assistant! Revisit this tour anytime from the help button next to your name in this menu.'
-      }
-    }
-  },
-  contextualGuide: {
-    stepOf: '{current} / {total}',
-    skip: 'Skip',
-    prev: 'Back',
-    next: 'Next',
-    done: 'Got it',
-    interactHint: 'Click the highlighted area to continue',
-    kbList: {
-      steps: {
-        create: {
-          title: 'Create your first knowledge base',
-          desc: "Knowledge bases hold documents and web pages. Click the highlighted \"New knowledge base\" button below and we will walk you through the form."
-        }
-      }
-    },
-    tenantModels: {
-      needChatModelFirst: 'Add a chat model (KnowledgeQA) before creating an agent.',
-      steps: {
-        intro: {
-          title: 'Configure models first',
-          desc: 'A document knowledge base needs at least one chat model (summaries and Q&A) and one Embedding model (vector search). Add them in system settings.'
-        },
-        addModel: {
-          title: 'Add models',
-          desc: 'Click "Add model" and configure KnowledgeQA (chat) and Embedding types. You can pull local models via Ollama.'
-        },
-        done: {
-          title: 'Then continue',
-          desc: 'After saving models, close settings and click "New knowledge base". The wizard will walk you through type, indexing, and model binding.'
-        }
-      },
-      stepsAgent: {
-        intro: {
-          title: 'Configure a chat model first',
-          desc: 'Creating an agent requires at least one KnowledgeQA model. Add it in system settings (Embedding is only required for knowledge bases).'
-        },
-        addModel: {
-          title: 'Add a chat model',
-          desc: 'Click "Add model" and configure a KnowledgeQA type.'
-        },
-        done: {
-          title: 'Then create an agent',
-          desc: 'After saving, close settings and click "Create agent". The wizard covers mode, knowledge bases, and attachment upload options.'
-        }
-      }
-    },
-    kbCreate: {
-      steps: {
-        type: {
-          title: 'Choose a type',
-          desc: "Document knowledge bases parse PDF, Word, and other files. Configure retrieval as needed."
-        },
-        name: {
-          title: 'Enter a name',
-          desc: "Pick a clear name such as \"Product manual\" or \"Support documents\". Description is optional."
-        },
-        indexing: {
-          title: 'Indexing capabilities',
-          desc: 'Vector and keyword search are on by default. Keep at least one search mode enabled.'
-        },
-        navModels: {
-          title: 'Model setup (required)',
-          desc: 'Every knowledge base needs a chat model; retrieval also requires an Embedding model. Open "Model configuration" on the left.'
-        },
-        llm: {
-          title: 'Chat / summary model',
-          desc: 'Used for summaries and answers. If the list is empty, use the dropdown to open settings and add a model.'
-        },
-        embedding: {
-          title: 'Embedding model',
-          desc: 'Turns text into vectors for semantic search. Works with vector/keyword indexing above.'
-        },
-        parser: {
-          title: 'Parser engine (optional)',
-          desc: 'How PDFs and Office files are parsed. Defaults work for most cases; adjust if you need OCR or special layouts.'
-        },
-        chunking: {
-          title: 'Chunking (optional)',
-          desc: 'How documents are split for retrieval. Default chunk sizes are tuned for RAG and rarely need changes.'
-        },
-        navMultimodal: {
-          title: 'Multimodal / images (optional)',
-          desc: 'Enable this if documents contain charts, scans, or image-heavy content that needs vision understanding.'
-        },
-        multimodalToggle: {
-          title: 'Enable multimodal parsing',
-          desc: 'When on, image-bearing uploads are processed with a vision-language model for better retrieval.'
-        },
-        multimodalVllm: {
-          title: 'Choose a VLM model',
-          desc: 'Multimodal requires a VLM. Add one in system settings if the list is empty.'
-        },
-        submit: {
-          title: 'Create the knowledge base',
-          desc: 'When type, name, and models look correct, click the highlighted Create button. You will then be guided to upload your first document.'
-        }
-      }
-    },
-    agentList: {
-      steps: {
-        create: {
-          title: 'Create your agent',
-          desc: 'Agents combine models, knowledge bases, tools, and prompts into reusable assistants. Click the highlighted "Create agent" button.'
-        }
-      }
-    },
-    agentCreate: {
-      steps: {
-        mode: {
-          title: 'Choose run mode',
-          desc: '"Quick answer" for straightforward Q&A; "Smart reasoning" uses tools and multi-step thinking for complex tasks.'
-        },
-        agentType: {
-          title: 'Choose an agent type',
-          desc: 'Presets fill in the system prompt, recommended tools, and knowledge scope for question answering or data analysis. The name and description update with the preset.'
-        },
-        name: {
-          title: 'Name and description',
-          desc: 'Pick a recognizable name. Smart-reasoning mode may pre-fill a default you can edit.'
-        },
-        navModel: {
-          title: 'Bind a chat model',
-          desc: 'Every agent needs a KnowledgeQA model as its reasoning engine.'
-        },
-        model: {
-          title: 'Select model',
-          desc: 'Choose from configured chat models, or add one in system settings first.'
-        },
-        navKnowledge: {
-          title: 'Link knowledge bases',
-          desc: 'Control which knowledge the agent can retrieve. Default is all knowledge bases.'
-        },
-        knowledge: {
-          title: 'Knowledge scope',
-          desc: '"All" for general assistants; "Selected" for a domain; "None" relies on the model alone.'
-        },
-        navMultimodal: {
-          title: 'Attachment upload (optional)',
-          desc: 'Lets users send images, documents, and audio in chat; image understanding requires a VLM in system settings.'
-        },
-        multimodal: {
-          title: 'Enable attachment upload',
-          desc: 'Configure image and audio upload plus attachment parse rules; select a VLM below when image upload is enabled.'
-        },
-        navTools: {
-          title: 'Tools & MCP (optional)',
-          desc: 'In smart-reasoning mode, enable built-in tools and MCP services for search, code, and more.'
-        },
-        submit: {
-          title: 'Save the agent',
-          desc: 'Click the highlighted confirm button to finish. You can then select this agent in chat.'
-        }
-      }
-    },
-    kbDetail: {
-      steps: {
-        intro: {
-          title: 'This knowledge base is empty',
-          desc: 'Add your first item so you can search and chat over it. You can also drag and drop supported file types.'
-        },
-        upload: {
-          title: 'Add documents',
-          desc: 'Use this menu to upload files or folders, import a URL, or create content online.'
-        },
-        done: {
-          title: 'Ready after parsing',
-          desc: 'Once documents are indexed, mention this knowledge base in chat with {\'@\'} to get answers with citations.'
-        }
-      }
-    },
-    chat: {
-      steps: {
-        kb: {
-          title: 'Choose knowledge scope',
-          desc: 'Click {\'@\'} to pick one or more knowledge bases or files. Answers use only the selection; otherwise the current agent settings apply.'
-        },
-        input: {
-          title: 'Type your question',
-          desc: 'Describe what you want to know, or click a suggested question above to get started quickly.'
-        },
-        send: {
-          title: 'Send to start chatting',
-          desc: 'Sending creates a new session. The AI answers using your knowledge base and shows cited passages.'
-        },
-        done: {
-          title: 'You are ready to explore',
-          desc: 'Try a question related to your uploaded documents and see grounded answers with references.'
-        }
-      }
-    }
-  },
   batchManage: {
     selectAll: 'Select All',
     cancel: 'Cancel',
@@ -996,11 +767,8 @@ export default {
     urlDuplicate: 'This URL is already in the list',
     statusNeedsSetup: 'Needs setup',
     multimodalSetupHint: 'Without a vision model, text will not be extracted from images. You can still upload and save them.',
-    asrSetupHint: 'Audio detected. Enable speech recognition and select a model.',
     vlmModelRequired: 'Configure a multimodal model',
-    asrModelRequired: 'Configure a speech recognition model',
     vlmModelSelectRequired: 'Multimodal is enabled. Please select a VLM model.',
-    asrModelSelectRequired: 'Speech recognition is enabled. Please select an ASR model.',
     pdfForceScanned: {
       label: 'Force scanned PDF parsing',
       description: 'Useful for web-print, scanned, or image-heavy PDFs. Every page will be rendered as an image and processed via OCR/VLM. May increase processing time and model costs.'
@@ -1731,7 +1499,6 @@ export default {
       chunking: 'Chunking Settings',
       advanced: 'Advanced Settings',
       multimodal: 'Image Processing',
-      asr: 'Audio',
       datasource: 'Data Sources',
     },
     errors: {
@@ -1898,18 +1665,6 @@ export default {
       title: 'Image Processing Configuration',
       description: 'Configure image content understanding for parsing and retrieving non-text content like images'
     },
-    asr: {
-      title: 'Audio Speech Recognition',
-      description: 'Configure ASR (speech-to-text). When enabled, you can upload audio files and transcribe them to text (e.g. mp3, wav, m4a, flac, ogg). Video upload is not supported.',
-      label: 'Enable audio speech recognition',
-      desc: 'When enabled, audio can be uploaded to the knowledge base; speech is transcribed to text for parsing and retrieval.',
-      modelLabel: 'ASR Model',
-      modelDescription: 'Speech-to-text model for audio (e.g. OpenAI Whisper)',
-      modelPlaceholder: 'Select an ASR model',
-      languageLabel: 'Audio language hint',
-      languageDescription: 'Optional. A primary language hint can improve some ASR models; leave empty for auto-detection.',
-      languagePlaceholder: 'For example zh or en; empty means auto-detect'
-    },
     advanced: {
       title: 'Advanced Settings',
       description: 'Configure question generation and other advanced features',
@@ -1958,8 +1713,6 @@ export default {
   },
   chat: {
     suggestedQuestions: 'You can ask me',
-    followUpQuestions: 'Keep asking',
-    followUpQuestionsLoading: 'Loading suggested questions',
     refreshSuggestedQuestions: 'More',
     thinking: 'Thinking...',
     thinkingAlt: 'Thinking in progress',
@@ -2067,7 +1820,7 @@ export default {
     imageTooMany: 'Maximum 5 images allowed',
     imageTypeSizeError: 'Only JPG/PNG/GIF/WEBP under 10MB supported',
     imageUploadTooltip: 'Upload image (paste/drop supported)',
-    attachmentUploadTooltip: 'Upload attachment (documents, audio, etc.)',
+    attachmentUploadTooltip: 'Upload attachment (documents)',
     attachmentWithCount: '{count} attachment uploaded | {count} attachments uploaded',
     attachmentTooMany: 'Maximum {max} attachment allowed | Maximum {max} attachments allowed',
     attachmentTotalTooMany: 'Images and attachments combined can be at most {max}',
@@ -2299,8 +2052,6 @@ export default {
           knowledgeLabel: 'Document ID',
           taskIDLabel: 'Business task ID',
           tenantLabel: 'Workspace ID',
-          sourceLabel: 'Source ID',
-          targetLabel: 'Target ID',
           sourceKBLabel: 'Source knowledge base',
           targetKBLabel: 'Target knowledge base',
           dataSourceLabel: 'Data source ID',
@@ -2366,7 +2117,6 @@ export default {
             batchDelete: 'Batch delete',
             move: 'Document move',
             indexDelete: 'Index deletion',
-            kbClone: 'Knowledge-base clone',
             kbDelete: 'Knowledge-base deletion',
           }
         },
@@ -2520,6 +2270,7 @@ export default {
     tokenRefreshFailed: 'Token refresh failed',
     pleaseRelogin: 'Please log in again',
     fileSizeExceeded: 'File size cannot exceed {size}MB!',
+    unsupportedAudioUpload: 'Audio file uploads are not supported.',
     unsupportedFileType: 'Unsupported file type!',
     invalidFileType: 'Invalid file type!',
     invalidImageLink: 'Invalid image link',
@@ -2578,7 +2329,6 @@ export default {
         embedding: 'Configure embedding models for text vectorization',
         rerank: 'Configure models for result re-ranking',
         vllm: 'Configure vision-language models for multimodal understanding',
-        asr: 'Configure speech-to-text models for audio transcription',
         default: 'Configure model information'
       },
       modelNamePlaceholder: {
@@ -2586,7 +2336,6 @@ export default {
         remote: 'e.g. gpt-4, claude-3-opus',
         localVllm: 'e.g. llava:latest',
         remoteVllm: 'e.g. gpt-4-vision-preview',
-        remoteAsr: 'e.g. whisper-1'
       },
       baseUrlLabel: 'Base URL',
       displayNameLabel: 'Display name (optional)',
@@ -2594,7 +2343,6 @@ export default {
       displayNameDesc: 'Used only in the UI. Runtime calls still use the model name above.',
       baseUrlPlaceholder: 'e.g. https://api.openai.com/v1',
       baseUrlPlaceholderVllm: 'e.g. http://localhost:11434/v1',
-      baseUrlPlaceholderAsr: 'e.g. https://api.openai.com/v1',
       apiKeyOptional: 'API Key (optional)',
       apiKeyPlaceholder: 'Enter API Key',
       lkeap: {
@@ -3011,7 +2759,6 @@ export default {
       embedding: 'Embedding',
       rerank: 'ReRank',
       vllm: 'Vision',
-      asr: 'Speech'
     },
     actions: {
       addModel: 'Add Model',
@@ -3041,11 +2788,6 @@ export default {
       title: 'VLLM Vision Models',
       desc: 'Configure vision-language models for multimodal understanding',
       empty: 'No VLLM models'
-    },
-    asr: {
-      title: 'ASR Speech Models',
-      desc: 'Configure speech-to-text models for audio transcription (e.g. OpenAI Whisper)',
-      empty: 'No ASR models'
     },
     toasts: {
       nameRequired: 'Model name cannot be empty',
@@ -3092,11 +2834,9 @@ export default {
         summary_model: 'Summary model',
         image_processing_model: 'Image processing model',
         vlm_model: 'Vision model',
-        asr_model: 'Speech recognition model',
         chat_model: 'Chat model',
         rerank_model: 'Re-ranking model',
         query_understand_model: 'Query understanding model',
-        follow_up_model: 'Follow-up model',
         unknown: 'Other model setting'
       }
     },
@@ -3120,7 +2860,6 @@ export default {
       documentsPlaceholder: 'Enter one candidate document per line',
       documentsHint: 'Each non-empty line is sent as a separate document to the ReRank model',
       imageFile: 'Image file',
-      audioFile: 'Audio file',
       chooseFile: 'Choose file',
       parameters: 'Request parameters',
       thinking: 'Thinking mode',
@@ -3144,8 +2883,6 @@ export default {
         answerChars: 'Answer chars',
         reasoningChars: 'Reasoning chars',
         reasoningReturned: 'Reasoning returned',
-        textChars: 'Transcript chars',
-        segmentCount: 'Segment count'
       }
     }
   },
@@ -3211,9 +2948,6 @@ export default {
     authType: 'Auth Method',
     authTypeNone: 'None / Custom Header',
     authTypeApiKey: 'API Key / Token',
-    authTypeOAuth: 'OAuth 2.0 (authorize on first connect)',
-    oauthRefreshable: 'Token expired; it will refresh automatically on next use',
-    oauthAuthorizeHint: 'Clicking "Authorize" saves the current config first, then starts authorization (each user authorizes individually).',
     apiKeyHeader: 'Header Name',
     apiKeyHeaderDesc: 'Defaults to X-API-Key. For Bearer, set Authorization and put "Bearer <token>" in the value below; for raw-token services use Authorization with the raw token.',
     credentialValue: 'Secret / Token',
@@ -3233,7 +2967,6 @@ export default {
       updated: 'MCP service updated',
       createFailed: 'Failed to create MCP service',
       updateFailed: 'Failed to update MCP service',
-      oauthRequired: 'This server requires OAuth. Switched to OAuth 2.0 — save, then click "Authorize".'
     },
     customHeaders: {
       label: 'Custom Headers (optional)',
@@ -3311,7 +3044,6 @@ export default {
       knowledgeBases: 'Open knowledge bases',
       agents: 'Open agents',
       settings: 'Open settings',
-      productTour: 'Product tour'
     },
     empty: {
       noResults: 'No matches found',
@@ -3356,7 +3088,6 @@ export default {
       fileTypeText: 'Plain Text',
       fileTypeJson: 'JSON Files',
       fileTypeImage: 'Images',
-      fileTypeAudiovisual: 'Audio',
       engines: {
         simple: {
           name: 'Simple',
@@ -3395,24 +3126,6 @@ export default {
       submitFailed: 'Submit failed',
       userRejected: 'User rejected'
     },
-    mcpOAuth: {
-      waiting: 'Awaiting authorization · {target}',
-      waitingStatus: 'Awaiting authorization',
-      targetWithTool: '{service} › {tool}',
-      titleWithService: 'OAuth · {service}',
-      titleWithTool: 'OAuth · {service} › {tool}',
-      desc: 'Authorizing opens a new window to sign in. The tool call resumes automatically once authorization succeeds.',
-      authorize: 'Authorize',
-      skip: 'Skip',
-      countdownShort: '{seconds}s',
-      authorizedTag: 'Authorized',
-      timedOutTag: 'Authorization timed out',
-      canceledTag: 'Canceled',
-      authorizedToast: 'Authorized. Resuming…',
-      startFailed: 'Failed to start authorization',
-      resumeFailed: 'Failed to resume. Please try again.',
-      skipFailed: 'Failed to skip. Please try again.'
-    },
     tools: {
       searchKnowledge: 'Knowledge Search',
       grepChunks: 'Text Pattern Search',
@@ -3429,7 +3142,6 @@ export default {
       queryKnowledgeContext: 'Knowledge Context Query',
       dataAnalysis: 'Data analysis',
       dataSchema: 'Data Schema',
-      databaseQuery: 'Database Query'
     },
     citation: {
       notFound: 'Content not found',
@@ -3517,37 +3229,18 @@ export default {
     questionSuggestions: {
       navLabel: 'Question suggestions',
       title: 'Conversation question suggestions',
-      description: 'Configure starters and contextual follow-ups in one agent-owned policy. Channels may hide them but cannot override the policy.',
+      description: 'Configure questions shown before the first message, using curated questions, knowledge bases, or both.',
       startersTitle: 'Conversation starters',
-      followUpsTitle: 'After-answer follow-ups',
       enableStarters: 'Show starter questions',
       enableStartersDesc: 'Shown before the first user message from curated, knowledge, or mixed sources.',
-      enableFollowUps: 'Generate follow-up questions',
-      enableFollowUpsDesc: 'Generated asynchronously after every completed answer. Enabling this adds model usage.',
       sourceMode: 'Source mode',
       count: 'Question count',
       curatedItems: 'Curated questions',
       curatedItemsDesc: 'Used for starters and prioritized in hybrid mode.',
       addItem: 'Add question',
-      model: 'Generation model',
-      modelDesc: 'Uses the model from the completed turn when empty.',
-      advancedSettings: 'Advanced generation settings',
-      displayRules: 'Display and fallback rules',
-      contextTurns: 'Context turns',
-      categories: 'Question types',
-      instruction: 'Additional instruction',
-      instructionPlaceholder: 'For example: prioritize practical next-step questions and avoid broad questions or repeating the answer…',
-      suppressFallback: 'Hide after fallback answers',
-      suppressQuestion: 'Hide when the answer ends with a question',
-      knowledgeFallback: 'Use knowledge candidates if generation fails',
-      allowRegenerate: 'Allow users to regenerate',
       modeCurated: 'Curated',
       modeKnowledge: 'Knowledge',
-      modeGenerated: 'Generated',
       modeHybrid: 'Hybrid',
-      categoryClarify: 'Clarify',
-      categoryDeepen: 'Deepen',
-      categoryAction: 'Next step'
     },
     placeholders: {
       available: 'Available variables: ',
@@ -3625,8 +3318,6 @@ export default {
       queryContextDesc: 'Query relationships from knowledge context',
       getDocInfo: 'Get Document Info',
       getDocInfoDesc: 'View document metadata',
-      dbQuery: 'Query Database',
-      dbQueryDesc: 'Query information from the database',
       dataAnalysis: 'Data analysis',
       dataAnalysisDesc: 'Understand data files and perform data analysis',
       dataSchema: 'View Data Schema',
@@ -3670,9 +3361,6 @@ export default {
       selectLabel: 'Select MCP Services',
       selectDesc: 'Select MCP services to enable',
       selectPlaceholder: 'Select MCP services',
-      authWaitTimeout: 'Authentication Wait Timeout (s)',
-      authWaitTimeoutDesc: 'Maximum seconds to wait for you to complete OAuth authentication when prompted during a conversation; the prompt is skipped after it elapses (only affects OAuth MCP services).',
-      authWaitTimeoutPlaceholder: 'Default 600 seconds',
       unavailableService: 'Unavailable service'
     },
     llmCallTimeout: {
@@ -3684,7 +3372,7 @@ export default {
     imageUpload: {
       navLabel: 'Attachment Upload',
       sectionTitle: 'Attachment Upload',
-      sectionDesc: 'Configure image, document, and audio attachments in chat, plus parse rules and related models',
+      sectionDesc: 'Configure image and document attachments in chat, plus parse rules and related models',
       label: 'Image Upload',
       desc: 'Allow users to upload images in chat for VLM understanding',
       vlmModel: 'VLM Model',
@@ -3697,13 +3385,6 @@ export default {
       ocrMaxPagesDesc: 'Max pages of a scanned document sent to the VLM for OCR. More pages means better coverage but slower and costlier parsing. 0 uses the global default.',
       useGlobalDefault: '0 = global default',
       notConfigured: 'Not Configured',
-    },
-    audioUpload: {
-      label: 'Audio Upload',
-      desc: 'When enabled, users can upload audio files in conversations. The system will automatically transcribe them using the ASR model.',
-      asrModel: 'ASR Model',
-      asrModelDesc: 'Speech recognition model for audio transcription. If not configured, audio files will be passed as placeholders.',
-      asrModelPlaceholder: 'Select ASR Model'
     },
     chatParser: {
       label: 'Chat Attachment Parsing Policy',

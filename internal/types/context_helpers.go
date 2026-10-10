@@ -100,20 +100,6 @@ func SessionIDFromContext(ctx context.Context) (string, bool) {
 	return v, ok && v != ""
 }
 
-func WithMCPOAuthNonInteractive(ctx context.Context) context.Context {
-	return context.WithValue(ctx, MCPOAuthNonInteractiveContextKey, true)
-}
-
-// IsMCPOAuthNonInteractive reports whether ctx was marked non-interactive for
-// MCP OAuth (see WithMCPOAuthNonInteractive).
-func IsMCPOAuthNonInteractive(ctx context.Context) bool {
-	if ctx == nil {
-		return false
-	}
-	v, _ := ctx.Value(MCPOAuthNonInteractiveContextKey).(bool)
-	return v
-}
-
 // WithBackgroundTask marks ctx as originating from an asynq background worker
 // (document parse / summary / question / context / multimodal enrichment). The
 // chat concurrency governor throttles only background LLM traffic, so this flag

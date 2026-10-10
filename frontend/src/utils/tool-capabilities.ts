@@ -54,7 +54,6 @@ export const TOOL_CAPABILITY_REQUIREMENTS: Record<string, ToolRequirement> = {
   list_knowledge_chunks: { anyOf: ['vector', 'keyword'], consumesFiles: true },
   query_knowledge_context: { anyOf: ['vector', 'keyword'], consumesFiles: true },
   get_document_info:     { anyOf: ['vector', 'keyword'], consumesFiles: true },
-  database_query:        { anyOf: ['vector', 'keyword'], consumesFiles: true },
 
   // ---- Data analysis (reads table summary/column chunks produced by RAG ingest) ----
   data_analysis: { anyOf: ['vector', 'keyword'], consumesFiles: true },

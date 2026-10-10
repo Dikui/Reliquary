@@ -21,11 +21,9 @@
                     <docInfo :session="formalSession" :embedded-mode="embeddedMode" content-only />
                 </div>
                 <AgentStreamDisplay v-if="session.isAgentMode" :session="session" :session-id="sessionId"
-                    :user-query="userQuery" :rag-mode="true" :follow-up-loading="followUpLoading"
-                    @render-complete-change="emit('render-complete-change', $event)" />
+                    :user-query="userQuery" :rag-mode="true" />
             </div>
             <template v-else>
-
 
                 <div v-if="formalReferences.length" class="knowledge-message-list">
                     <strong>{{ t('chat.referencesTitle', { count: formalMessageCount }) }}</strong>
@@ -33,8 +31,7 @@
                 </div>
                 <docInfo v-if="otherReferences.length" :session="otherSession" :embedded-mode="embeddedMode" />
                 <AgentStreamDisplay :session="session" :session-id="sessionId" :user-query="userQuery"
-                    v-if="session.isAgentMode" :follow-up-loading="followUpLoading"
-                    @render-complete-change="emit('render-complete-change', $event)" />
+                    v-if="session.isAgentMode" />
             </template>
             <deepThink :deepSession="session" v-if="session.showThink && !session.isAgentMode"></deepThink>
         </div>
@@ -82,13 +79,7 @@
                     </t-button>
                 </t-tooltip>
                 <ChatRequestInfoButton v-if="showRequestInfo" :session="session" :session-id="sessionId" />
-                <transition name="follow-up-toolbar-loading">
-                    <span v-if="followUpLoading" class="answer-toolbar__follow-up-loading" role="status"
-                        aria-live="polite">
-                        <t-icon name="lightbulb" />
-                        <span class="answer-toolbar__follow-up-label">{{ t('chat.followUpQuestionsLoading') }}</span>
-                    </span>
-                </transition>
+
             </div>
             <div v-if="isImgLoading" class="img_loading"><t-loading size="small"></t-loading><span>{{
                 $t('common.loading') }}</span></div>
@@ -164,7 +155,7 @@ const mentionTagIcon = (item) => {
     return 'file';
 };
 
-const emit = defineEmits(['scroll-bottom', 'render-complete-change'])
+const emit = defineEmits(['scroll-bottom'])
 const { t } = useI18n()
 const uiStore = useUIStore();
 let parentMd = ref()
@@ -202,10 +193,6 @@ const props = defineProps({
         type: String,
         default: ''
     },
-    followUpLoading: {
-        type: Boolean,
-        default: false
-    }
 });
 
 const formalReferences = computed(() => (props.session?.knowledge_references || [])
@@ -323,14 +310,6 @@ const { displayed: typedAnswer } = useTypewriter(
 // displayed text has caught up, so actions never appear beside a moving answer.
 const answerFullyRendered = computed(() =>
     Boolean(props.session?.is_completed) && typedAnswer.value.length >= answerText.value.length
-);
-
-watch(
-    answerFullyRendered,
-    (ready) => {
-        if (!props.session?.isAgentMode) emit('render-complete-change', ready);
-    },
-    { immediate: true },
 );
 
 // 单次渲染整个 Markdown 内容（替代 token-by-token，修复 KaTeX 公式在 streaming 时闪烁消失的问题）

@@ -19,13 +19,11 @@ import (
 
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
-	"reliquary/internal/assets"
 	"reliquary/internal/config"
 	"reliquary/internal/errors"
 	"reliquary/internal/handler/dto"
 	"reliquary/internal/infrastructure/docparser"
 	"reliquary/internal/logger"
-	"reliquary/internal/models/asr"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/models/rerank"
@@ -92,7 +90,6 @@ type KBModelConfigRequest struct {
 	LLMModelID       string           `json:"llmModelId"       binding:"required"`
 	EmbeddingModelID string           `json:"embeddingModelId"` // optional when RAG indexing is disabled
 	VLMConfig        *types.VLMConfig `json:"vlm_config"`
-	ASRConfig        *types.ASRConfig `json:"asr_config"`
 
 	// 文档分块配置
 	DocumentSplitting struct {
@@ -246,19 +243,6 @@ func (h *InitializationHandler) UpdateKBConfig(c *gin.Context) {
 	}
 	if !kb.VLMConfig.Enabled {
 		kb.VLMConfig.ModelID = ""
-	}
-
-	// 处理ASR语音识别配置
-	kb.ASRConfig = types.ASRConfig{}
-	if req.ASRConfig != nil && req.ASRConfig.Enabled && req.ASRConfig.ModelID != "" {
-		asrModel, err := h.modelService.GetModelByID(ctx, req.ASRConfig.ModelID)
-		if err != nil || asrModel == nil {
-			logger.Warn(ctx, "ASR model not found")
-		} else {
-			kb.ASRConfig.Enabled = true
-			kb.ASRConfig.ModelID = req.ASRConfig.ModelID
-			kb.ASRConfig.Language = req.ASRConfig.Language
-		}
 	}
 
 	// 更新文档分块配置
@@ -1265,7 +1249,7 @@ func (h *InitializationHandler) buildConfigResponse(ctx context.Context, models 
 
 // ModelTestRequest 统一的"测试连接"请求体。
 //
-// 四种模型（chat/embedding/rerank/asr）的测试接口共享同一份结构，以便：
+// 三种模型（chat/embedding/rerank）的测试接口共享同一份结构，以便：
 //   - 前端只需维护一份表单 → 后端映射。
 //   - 后端可以直接把请求转成 *types.Model，再调用各包的 ConfigFromModel，
 //     与生产路径（service.modelService.GetXxxModel）走完全相同的装配流程，
@@ -1339,7 +1323,7 @@ func decryptModelAppSecret(encrypted string) string {
 }
 
 // buildTestModel 把测试连接请求转成一个临时的 *types.Model（不落库），
-// 供 ConfigFromModel 使用。source 为空时按 defaultSource 兜底（chat/rerank/asr
+// 供 ConfigFromModel 使用。source 为空时按 defaultSource 兜底（chat/rerank
 // 默认 remote，embedding 会根据前端传入的 source 决定）。
 func (h *InitializationHandler) buildTestModel(
 	req *ModelTestRequest, modelType types.ModelType, defaultSource types.ModelSource,
@@ -1589,92 +1573,6 @@ func (h *InitializationHandler) CheckRerankModel(c *gin.Context) {
 	available, message := h.checkRerankModelConnection(ctx, model)
 
 	logger.Infof(ctx, "Rerank model check completed, available: %v, message: %s", available, message)
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data": gin.H{
-			"available": available,
-			"message":   message,
-		},
-	})
-}
-
-// CheckASRModel godoc
-func (h *InitializationHandler) CheckASRModel(c *gin.Context) {
-	ctx := c.Request.Context()
-
-	logger.Info(ctx, "Checking ASR model connection")
-
-	var req ModelTestRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		logger.Error(ctx, "Failed to parse ASR model check request", err)
-		c.Error(errors.NewBadRequestError(err.Error()))
-		return
-	}
-	h.fillSecretsFromStoredModel(ctx, &req)
-
-	if req.ModelName == "" || req.BaseURL == "" {
-		logger.Error(ctx, "Model name and base URL are required for ASR check")
-		c.Error(errors.NewBadRequestError("模型名称和Base URL不能为空"))
-		return
-	}
-
-	if err := utils.ValidateURLForSSRF(req.BaseURL); err != nil {
-		logger.Warnf(ctx, "SSRF validation failed for ASR BaseURL: %v", err)
-		c.Error(errors.NewBadRequestError(utils.FormatSSRFError("Base URL", req.BaseURL, err)))
-		return
-	}
-
-	// 用统一构造器生成测试模型，并发送极短的静默 WAV 验证端点可达。
-	model := h.buildTestModel(&req, types.ModelTypeASR, types.ModelSourceRemote)
-	asrInstance, err := asr.NewASR(asr.ConfigFromModel(model))
-	if err != nil {
-		logger.Errorf(ctx, "Failed to create ASR instance for check: %v", err)
-		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"data": gin.H{
-				"available": false,
-				"message":   fmt.Sprintf("创建ASR实例失败: %v", err),
-			},
-		})
-		return
-	}
-
-	res, err := asrInstance.Transcribe(ctx, assets.ASRTestWAV, "asr_test.wav")
-	var text string
-	if res != nil {
-		text = res.Text
-	}
-	available := true
-	message := "ASR连接成功"
-
-	if err != nil {
-		errMsg := err.Error()
-		// Always include the raw upstream error after the hint — see
-		// classifyConnectionError comment for rationale.
-		switch {
-		case strings.Contains(errMsg, "401") || strings.Contains(errMsg, "Unauthorized") || strings.Contains(errMsg, "authentication"):
-			available = false
-			message = fmt.Sprintf("认证失败，请检查API Key：%s", errMsg)
-		case strings.Contains(errMsg, "404") || strings.Contains(errMsg, "Not Found"):
-			available = false
-			message = fmt.Sprintf("API端点不存在，请检查Base URL：%s", errMsg)
-		case strings.Contains(errMsg, "connection refused") || strings.Contains(errMsg, "no such host") || strings.Contains(errMsg, "dial tcp"):
-			available = false
-			message = fmt.Sprintf("无法连接到服务器，请检查Base URL：%s", errMsg)
-		case strings.Contains(errMsg, "model") && strings.Contains(errMsg, "not found"):
-			available = false
-			message = fmt.Sprintf("模型不存在，请检查模型名称：%s", errMsg)
-		default:
-			logger.Infof(ctx, "ASR check got non-fatal error (endpoint reachable): %v", err)
-			available = true
-			message = fmt.Sprintf("ASR端点可达（非致命错误: %s）", errMsg)
-		}
-	} else if text != "" {
-		message = fmt.Sprintf("ASR连接成功，转写结果: %s", text)
-	}
-
-	logger.Infof(ctx, "ASR model check completed, available: %v, message: %s", available, message)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

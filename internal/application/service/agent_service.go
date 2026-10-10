@@ -152,7 +152,7 @@ func (s *agentService) CreateAgentEngine(
 	if err := s.registerTools(ctx, toolRegistry, config, rerankModel, chatModel, sessionID); err != nil {
 		return nil, fmt.Errorf("failed to register tools: %w", err)
 	}
-	s.registerMCPTools(ctx, toolRegistry, config, eventBus, sessionID, assistantMessageID)
+	s.registerMCPTools(ctx, toolRegistry, config)
 
 	// 3. Resolve knowledge base and selected document metadata
 	kbInfos, selectedDocs := s.resolveKBAndDocInfos(ctx, config)
@@ -197,8 +197,6 @@ func (s *agentService) registerMCPTools(
 	ctx context.Context,
 	toolRegistry *tools.ToolRegistry,
 	config *types.AgentConfig,
-	eventBus *event.EventBus,
-	sessionID, assistantMessageID string,
 ) {
 	tenantID := uint64(0)
 	if tid, ok := types.TenantIDFromContext(ctx); ok {
@@ -246,18 +244,8 @@ func (s *agentService) registerMCPTools(
 		}
 	}
 	if len(enabledServices) > 0 {
-		var regCtx *tools.MCPOAuthSession
-		if eventBus != nil && sessionID != "" && assistantMessageID != "" {
-			regCtx = &tools.MCPOAuthSession{
-				EventBus:               eventBus,
-				SessionID:              sessionID,
-				AssistantMessageID:     assistantMessageID,
-				ApprovalCtx:            ctx,
-				AuthWaitTimeoutSeconds: config.MCPAuthWaitTimeout,
-			}
-		}
 		registered, err := tools.RegisterMCPTools(
-			ctx, toolRegistry, enabledServices, s.mcpManager, s.toolApprovalGate, regCtx,
+			ctx, toolRegistry, enabledServices, s.mcpManager, s.toolApprovalGate,
 		)
 		if err != nil {
 			logger.Warnf(ctx, "Failed to register MCP tools: %v", err)
@@ -355,7 +343,6 @@ func (s *agentService) registerTools(
 			tools.ToolListKnowledgeChunks:    true,
 			tools.ToolQueryKnowledgeContext:  true,
 			tools.ToolGetDocumentInfo:        true,
-			tools.ToolDatabaseQuery:          true,
 			tools.ToolDataAnalysis:           true,
 			tools.ToolDataSchema:             true,
 			tools.ToolKnowledgeReportAnomaly: true,
@@ -386,7 +373,6 @@ func (s *agentService) registerTools(
 		tools.ToolListKnowledgeChunks:   true,
 		tools.ToolQueryKnowledgeContext: true,
 		tools.ToolGetDocumentInfo:       true,
-		tools.ToolDatabaseQuery:         true,
 	}
 	if !hasVectorKB {
 		filtered := make([]string, 0, len(allowedTools))
@@ -437,8 +423,6 @@ func (s *agentService) registerTools(
 				WithContextQuery(NewKnowledgeContextService(s.db, s.modelService).Query)
 		case tools.ToolGetDocumentInfo:
 			toolToRegister = tools.NewGetDocumentInfoTool(s.knowledgeService, s.chunkService, config.SearchTargets)
-		case tools.ToolDatabaseQuery:
-			toolToRegister = tools.NewDatabaseQueryTool(s.db, config.SearchTargets)
 		case tools.ToolWebFetch:
 			toolToRegister = tools.NewWebFetchTool(chatModel)
 			logger.Infof(ctx, "Registered web_fetch tool for session: %s", sessionID)

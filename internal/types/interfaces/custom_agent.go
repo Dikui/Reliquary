@@ -78,11 +78,6 @@ type CustomAgentService interface {
 	//   - List of suggested questions
 	//   - Possible errors
 	GetSuggestedQuestions(ctx context.Context, agentID string, kbIDs []string, knowledgeIDs []string, tagScopes []types.TagScope, limit int) ([]types.SuggestedQuestion, error)
-
-	// GetKnowledgeSuggestedQuestions returns only knowledge-derived candidates.
-	// It is independent of whether starter suggestions are enabled and is used
-	// as a source/fallback for contextual follow-up generation.
-	GetKnowledgeSuggestedQuestions(ctx context.Context, agentID string, kbIDs []string, knowledgeIDs []string, tagScopes []types.TagScope, limit int) ([]types.SuggestedQuestion, error)
 }
 
 // CustomAgentRepository defines the custom agent repository interface
@@ -133,7 +128,7 @@ type CustomAgentRepository interface {
 	DeleteAgent(ctx context.Context, id string, tenantID uint64) error
 
 	// CountByModelID counts active agents in the tenant whose config references
-	// the given model ID (chat, rerank, VLM, ASR, query-understand, etc.).
+	// the given model ID (chat, rerank, VLM, query-understand, etc.).
 	CountByModelID(ctx context.Context, tenantID uint64, modelID string) (int64, error)
 	// ListModelUsages returns the minimal active agent projections that
 	// reference the model, with every matching binding merged per object.

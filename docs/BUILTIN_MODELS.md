@@ -28,7 +28,7 @@ builtin_models:
   - id: <required, stable, UPSERT key>
     tenant_id: <int, default 10000>
     name: <string>
-    type: KnowledgeQA | Embedding | Rerank | VLLM | ASR
+    type: KnowledgeQA | Embedding | Rerank | VLLM
     source: <string, default "remote">       # local | remote | aliyun | ...
     description: <string, optional>
     is_default: <bool, default false>

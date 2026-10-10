@@ -431,9 +431,9 @@ func TestResponseHitContextLimitOnlyWhenShortOfItsOwnBudget(t *testing.T) {
 
 // A response cut off at the completion-token cap must not have any of its tool
 // calls executed: the arguments stop mid-serialization, and a truncated
-// database_query lands a half-written file while still reporting success.
+// data_analysis lands a half-written file while still reporting success.
 func TestExecuteToolCalls_LengthFinish_RefusesEveryCallWithoutExecuting(t *testing.T) {
-	engine, tool := newEngineWithTool(t, "database_query")
+	engine, tool := newEngineWithTool(t, "data_analysis")
 
 	step := &types.AgentStep{}
 	engine.executeToolCalls(
@@ -442,7 +442,7 @@ func TestExecuteToolCalls_LengthFinish_RefusesEveryCallWithoutExecuting(t *testi
 			FinishReason: "length",
 			ToolCalls: []types.LLMToolCall{
 				{ID: "call-1", Function: types.FunctionCall{
-					Name: "database_query", Arguments: `{"path":"/workspace/output/a.html","content":"<htm`,
+					Name: "data_analysis", Arguments: `{"path":"/workspace/output/a.html","content":"<htm`,
 				}},
 			},
 		},
@@ -459,7 +459,7 @@ func TestExecuteToolCalls_LengthFinish_RefusesEveryCallWithoutExecuting(t *testi
 // A stream that breaks mid-argument never reports finish_reason=length, so the
 // refusal has to come from the repair step noticing it closed the payload off.
 func TestExecuteToolCalls_TruncatedArgsWithoutFinishReason_Refuses(t *testing.T) {
-	engine, tool := newEngineWithTool(t, "database_query")
+	engine, tool := newEngineWithTool(t, "data_analysis")
 
 	step := &types.AgentStep{}
 	engine.executeToolCalls(
@@ -467,7 +467,7 @@ func TestExecuteToolCalls_TruncatedArgsWithoutFinishReason_Refuses(t *testing.T)
 		&types.ChatResponse{
 			ToolCalls: []types.LLMToolCall{
 				{ID: "call-1", Function: types.FunctionCall{
-					Name: "database_query", Arguments: `{"path":"/workspace/output/a.html","content":"<html><body`,
+					Name: "data_analysis", Arguments: `{"path":"/workspace/output/a.html","content":"<html><body`,
 				}},
 			},
 		},
@@ -483,7 +483,7 @@ func TestExecuteToolCalls_TruncatedArgsWithoutFinishReason_Refuses(t *testing.T)
 // Well-formed arguments must still run — the refusal keys on truncation, not on
 // having gone through the repair path at all.
 func TestExecuteToolCalls_CompleteArgs_StillExecute(t *testing.T) {
-	engine, tool := newEngineWithTool(t, "database_query")
+	engine, tool := newEngineWithTool(t, "data_analysis")
 
 	step := &types.AgentStep{}
 	engine.executeToolCalls(
@@ -492,7 +492,7 @@ func TestExecuteToolCalls_CompleteArgs_StillExecute(t *testing.T) {
 			FinishReason: "tool_calls",
 			ToolCalls: []types.LLMToolCall{
 				{ID: "call-1", Function: types.FunctionCall{
-					Name: "database_query", Arguments: `{"path":"/workspace/output/a.html","content":"<html>"}`,
+					Name: "data_analysis", Arguments: `{"path":"/workspace/output/a.html","content":"<html>"}`,
 				}},
 			},
 		},

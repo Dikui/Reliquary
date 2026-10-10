@@ -8,8 +8,8 @@ import (
 	secutils "reliquary/internal/utils"
 )
 
-// ValidateServiceOutboundURLs validates every URL that the MCP transport or
-// OAuth discovery flow may contact. It is intentionally called both at
+// ValidateServiceOutboundURLs validates every URL that the MCP transport
+// may contact. It is intentionally called both at
 // persistence boundaries and immediately before client construction so stale
 // or imported rows cannot bypass the current SSRF policy.
 func ValidateServiceOutboundURLs(service *types.MCPService) error {
@@ -21,14 +21,6 @@ func ValidateServiceOutboundURLs(service *types.MCPService) error {
 		if serviceURL != "" {
 			if err := secutils.ValidateURLForSSRF(serviceURL); err != nil {
 				return fmt.Errorf("MCP service URL failed SSRF validation: %w", err)
-			}
-		}
-	}
-	if service.AuthConfig != nil {
-		metadataURL := strings.TrimSpace(service.AuthConfig.AuthServerMetadataURL)
-		if metadataURL != "" {
-			if err := secutils.ValidateURLForSSRF(metadataURL); err != nil {
-				return fmt.Errorf("MCP OAuth metadata URL failed SSRF validation: %w", err)
 			}
 		}
 	}

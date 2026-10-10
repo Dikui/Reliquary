@@ -81,7 +81,6 @@ func TestListModelUsages_KnowledgeBase(t *testing.T) {
 	allBindings.SummaryModelID = modelID
 	allBindings.ImageProcessingConfig = types.ImageProcessingConfig{ModelID: modelID}
 	allBindings.VLMConfig = types.VLMConfig{Enabled: true, ModelID: modelID}
-	allBindings.ASRConfig = types.ASRConfig{Enabled: true, ModelID: modelID}
 	require.NoError(t, db.Create(allBindings).Error)
 
 	vlmOnly := makeKB()
@@ -112,7 +111,6 @@ func TestListModelUsages_KnowledgeBase(t *testing.T) {
 		types.ModelUsageBindingSummaryModel,
 		types.ModelUsageBindingImageProcessingModel,
 		types.ModelUsageBindingVLMModel,
-		types.ModelUsageBindingASRModel,
 	}, usages[1].Bindings)
 }
 
@@ -197,11 +195,7 @@ func TestListModelUsages_CustomAgent(t *testing.T) {
 			ModelID:                modelID,
 			RerankModelID:          modelID,
 			VLMModelID:             modelID,
-			ASRModelID:             modelID,
 			QueryUnderstandModelID: modelID,
-			QuestionSuggestions: &types.QuestionSuggestionConfig{
-				FollowUps: types.FollowUpSuggestionConfig{ModelID: modelID},
-			},
 		},
 	}
 	require.NoError(t, repo.CreateAgent(ctx, allBindings))
@@ -237,8 +231,6 @@ func TestListModelUsages_CustomAgent(t *testing.T) {
 		types.ModelUsageBindingChatModel,
 		types.ModelUsageBindingRerankModel,
 		types.ModelUsageBindingVLMModel,
-		types.ModelUsageBindingASRModel,
 		types.ModelUsageBindingQueryUnderstandModel,
-		types.ModelUsageBindingFollowUpModel,
 	}, usages[1].Bindings)
 }

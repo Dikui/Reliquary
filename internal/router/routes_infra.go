@@ -48,7 +48,6 @@ func RegisterInitializationRoutes(r *gin.RouterGroup, handler *handler.Initializ
 	r.Handle(http.MethodPost, "/initialization/remote/check", handler.CheckRemoteModel)
 	r.Handle(http.MethodPost, "/initialization/embedding/test", handler.TestEmbeddingModel)
 	r.Handle(http.MethodPost, "/initialization/rerank/check", handler.CheckRerankModel)
-	r.Handle(http.MethodPost, "/initialization/asr/check", handler.CheckASRModel)
 	r.Handle(http.MethodPost, "/initialization/multimodal/test", handler.TestMultimodalFunction)
 
 }
@@ -57,14 +56,7 @@ func RegisterMCPServiceRoutes(
 	r *gin.RouterGroup,
 	handler *handler.MCPServiceHandler,
 	credHandler *handler.MCPCredentialsHandler,
-	oauthHandler *handler.MCPOAuthHandler,
 	g *accessGuards) {
-	// MCP OAuth provider redirect. Registered OUTSIDE the /mcp-services group
-	// to avoid a static-vs-":id" route conflict, and left unauthenticated
-	// (allow-listed in middleware/auth.go) because the third-party browser
-	// redirect carries no Reliquary bearer — the single-use state authenticates.
-	r.GET("/mcp-oauth/callback", oauthHandler.Callback)
-
 	mcpServices := r.Group("/mcp-services")
 	{
 		// Create MCP service
@@ -85,18 +77,13 @@ func RegisterMCPServiceRoutes(
 		mcpServices.DELETE("/:id/credentials/:field", credHandler.DeleteField)
 		mcpServices.GET("/:id/tool-approvals", handler.ListMCPToolApprovals)
 		mcpServices.PUT("/:id/tool-approvals/:tool_name", handler.SetMCPToolApproval)
-		mcpServices.POST("/:id/oauth/authorize-url", oauthHandler.AuthorizeURL)
-		mcpServices.GET("/:id/oauth/status", oauthHandler.Status)
-		mcpServices.DELETE("/:id/oauth/token", oauthHandler.Revoke)
 	}
 
-	// /agent tool-approval + OAuth resolution are interactive human flows;
+	// /agent tool approval is an interactive human flow;
 	// not declared for API keys (default-deny).
 	agentTool := r.Group("/agent")
 	{
 		agentTool.POST("/tool-approvals/:pending_id", handler.ResolveToolApproval)
-		agentTool.POST("/mcp-oauth-resolutions/:pending_id", oauthHandler.ResolveMCPOAuth)
-		agentTool.POST("/mcp-oauth-resolutions/:pending_id/cancel", oauthHandler.CancelMCPOAuth)
 	}
 }
 

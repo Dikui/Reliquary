@@ -138,24 +138,6 @@ func TestLanguageFromContextOrDefault(t *testing.T) {
 	}
 }
 
-func TestMCPOAuthNonInteractive(t *testing.T) {
-	if IsMCPOAuthNonInteractive(nil) {
-		t.Fatal("nil context should not be non-interactive")
-	}
-	if IsMCPOAuthNonInteractive(context.Background()) {
-		t.Fatal("background context should not be non-interactive")
-	}
-
-	ctx := WithMCPOAuthNonInteractive(context.Background())
-	if !IsMCPOAuthNonInteractive(ctx) {
-		t.Fatal("marked context should be non-interactive")
-	}
-	child := context.WithValue(ctx, LanguageContextKey, "en-US")
-	if !IsMCPOAuthNonInteractive(child) {
-		t.Fatal("child context should inherit non-interactive flag")
-	}
-}
-
 func TestLanguageFromContext(t *testing.T) {
 	tests := []struct {
 		name        string

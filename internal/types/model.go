@@ -26,8 +26,17 @@ const (
 	ModelTypeRerank      ModelType = "Rerank"      // Rerank model
 	ModelTypeKnowledgeQA ModelType = "KnowledgeQA" // KnowledgeQA model
 	ModelTypeVLLM        ModelType = "VLLM"        // VLLM model
-	ModelTypeASR         ModelType = "ASR"         // ASR (Automatic Speech Recognition) model
 )
+
+// IsSupported reports whether this model type is available in this deployment.
+func (t ModelType) IsSupported() bool {
+	switch t {
+	case ModelTypeKnowledgeQA, ModelTypeEmbedding, ModelTypeRerank, ModelTypeVLLM:
+		return true
+	default:
+		return false
+	}
+}
 
 // ModelStatus represents the status of the model
 type ModelStatus string
@@ -49,11 +58,9 @@ const (
 	ModelUsageBindingSummaryModel         ModelUsageBinding = "summary_model"
 	ModelUsageBindingImageProcessingModel ModelUsageBinding = "image_processing_model"
 	ModelUsageBindingVLMModel             ModelUsageBinding = "vlm_model"
-	ModelUsageBindingASRModel             ModelUsageBinding = "asr_model"
 	ModelUsageBindingChatModel            ModelUsageBinding = "chat_model"
 	ModelUsageBindingRerankModel          ModelUsageBinding = "rerank_model"
 	ModelUsageBindingQueryUnderstandModel ModelUsageBinding = "query_understand_model"
-	ModelUsageBindingFollowUpModel        ModelUsageBinding = "follow_up_model"
 )
 
 // ModelUsageResource is the minimal, non-sensitive projection returned when a

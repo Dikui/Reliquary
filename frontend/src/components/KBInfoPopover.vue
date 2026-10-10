@@ -153,9 +153,6 @@ const capabilities = computed<Array<{ key: string; label: string; theme: Capabil
   if (kb.vlm_config?.enabled) {
     items.push({ key: 'vlm', label: 'VLM', theme: 'primary' })
   }
-  if (kb.asr_config?.enabled) {
-    items.push({ key: 'asr', label: 'ASR', theme: 'primary' })
-  }
   {}
   return items
 })

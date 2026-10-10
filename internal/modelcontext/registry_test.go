@@ -50,7 +50,7 @@ func TestRegistryDecodesKnownHandlesEmbeddedInBuiltInSQL(t *testing.T) {
 	registry.RegisterKnowledgeBase("kb-real")
 	calls := []types.LLMToolCall{{
 		Function: types.FunctionCall{
-			Name:      "database_query",
+			Name:      "data_analysis",
 			Arguments: `{"sql":"SELECT * FROM knowledges WHERE id = 'd1' AND knowledge_base_id = 'b1'"}`,
 		},
 	}}
@@ -68,7 +68,7 @@ func TestRegistryOnlyDecodesQuotedSQLHandlesAndRejectsUnknownOnes(t *testing.T) 
 
 	calls := []types.LLMToolCall{{
 		Function: types.FunctionCall{
-			Name:      "database_query",
+			Name:      "data_analysis",
 			Arguments: `{"sql":"SELECT d1.id FROM documents d1 WHERE d1.id = 'd1' AND d1.parent_id = 'd99'"}`,
 		},
 	}}
@@ -86,7 +86,7 @@ func TestRegistryReplaysStructuredHandlesWithoutAliasDrift(t *testing.T) {
 	registry.RegisterDocument("doc-real")
 	registry.RegisterKnowledgeBase("kb-real")
 	messages := []chat.Message{
-		{Role: "assistant", ToolCalls: []chat.ToolCall{{Function: chat.FunctionCall{Name: "database_query", Arguments: `{"sql":"SELECT * FROM knowledges WHERE id = 'doc-real' AND knowledge_base_id = 'kb-real'"}`}}}},
+		{Role: "assistant", ToolCalls: []chat.ToolCall{{Function: chat.FunctionCall{Name: "data_analysis", Arguments: `{"sql":"SELECT * FROM knowledges WHERE id = 'doc-real' AND knowledge_base_id = 'kb-real'"}`}}}},
 		{Role: "tool", Name: "query_knowledge_graph", Content: `{"knowledge_base_id":"kb-real","knowledge_id":"doc-real"}`},
 	}
 	first := registry.EncodeMessages(messages)
@@ -146,29 +146,6 @@ func TestRegistryCompactsKnownIDsInBuiltInValidationErrors(t *testing.T) {
 	require.Equal(t, "Error: document d1 belongs to knowledge base b1", got)
 }
 
-func TestRegistryCompactsDatabaseQueryIDColumnsForBuiltInFollowUps(t *testing.T) {
-	registry := NewRegistry(true)
-	modelOutput := registry.ModelToolResultForTool("database_query", &types.ToolResult{
-		Success: true,
-		Output:  "knowledge_id | knowledge_base_id\ndoc-real | kb-real",
-		Data: map[string]interface{}{
-			"display_type": "database_query",
-			"rows": []map[string]interface{}{{
-				"knowledge_id":      "doc-real",
-				"knowledge_base_id": "kb-real",
-			}},
-		},
-	})
-	require.Contains(t, modelOutput, "d1 | b1")
-
-	calls := []types.LLMToolCall{{Function: types.FunctionCall{
-		Name:      "list_knowledge_chunks",
-		Arguments: `{"knowledge_id":"d1"}`,
-	}}}
-	registry.DecodeToolCalls(calls)
-	require.JSONEq(t, `{"knowledge_id":"doc-real"}`, calls[0].Function.Arguments)
-}
-
 func TestRegistryDecodesCanonicalArgumentsForEveryBuiltInReferenceTool(t *testing.T) {
 	registry := NewRegistry(true)
 	registry.RegisterDocument("doc-real")
@@ -190,7 +167,6 @@ func TestRegistryDecodesCanonicalArgumentsForEveryBuiltInReferenceTool(t *testin
 		{"legacy knowledge context", "query_knowledge_graph", `{"knowledge_base_ids":["b1"],"query":"topic"}`, `{"knowledge_base_ids":["kb-real"],"query":"topic"}`},
 		{"data analysis SQL", "data_analysis", `{"knowledge_id":"d1","sql":"SELECT * FROM 'd1'"}`, `{"knowledge_id":"doc-real","sql":"SELECT * FROM 'doc-real'"}`},
 		{"data schema", "data_schema", `{"knowledge_id":"d1"}`, `{"knowledge_id":"doc-real"}`},
-		{"database SQL", "database_query", `{"sql":"SELECT * FROM chunks WHERE knowledge_base_id='b1'"}`, `{"sql":"SELECT * FROM chunks WHERE knowledge_base_id='kb-real'"}`},
 		{"web fetch", "web_fetch", `{"items":[{"url":"w1","prompt":"read"}]}`, `{"items":[{"url":"https://example.com/page","prompt":"read"}]}`},
 	}
 	for _, test := range tests {

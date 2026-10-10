@@ -2012,7 +2012,7 @@ func (h *KnowledgeHandler) MoveKnowledge(c *gin.Context) {
 		TaskID:     taskID,
 		SourceKBID: req.SourceKBID,
 		TargetKBID: req.TargetKBID,
-		Status:     types.KBCloneStatusPending,
+		Status:     types.KnowledgeMoveStatusPending,
 		Total:      len(req.KnowledgeIDs),
 		Progress:   0,
 		Message:    "Task queued, waiting to start...",

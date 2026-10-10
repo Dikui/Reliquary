@@ -118,11 +118,11 @@ docker compose restart app
 
 ## 18. 上传时如何自定义解析配置（process_config）？
 
-0.6.2 起，文件 / URL / 文件夹上传可携带 `process_config`（`KnowledgeProcessOverrides`），在**本次批次**内覆盖知识库默认的解析引擎、分块、多模态（VLM / ASR）、问题生成等设置，而不会改动 KB 全局配置。Web UI 在上传前会弹出确认对话框供调整。
+0.6.2 起，文件 / URL / 文件夹上传可携带 `process_config`（`KnowledgeProcessOverrides`），在**本次批次**内覆盖知识库默认的解析引擎、分块、图片多模态（VLM）、问题生成等设置，而不会改动 KB 全局配置。Web UI 在上传前会弹出确认对话框供调整。
 
 - **与 KB 默认配置的关系**：未传的字段沿用 KB 默认值。
 - **重新解析**：`POST /knowledge/:id/reparse` 可在 body 中传 `process_config` 以新配置重跑解析，覆盖项会写入 `knowledge.metadata.process_overrides`。
-- **图片 / 音频校验**：批次含图片时需 KB 已配置 VLM；含音频时需已配置 ASR，否则上传会被拒绝。
+- **图片校验**：批次含图片时需 KB 已配置 VLM。音频上传不受支持，会返回明确错误。
 
 ## 20. pgvector 检索变慢或刚升级后需要做什么？
 
@@ -140,9 +140,6 @@ docker compose restart app
 
 0.6.3 新增 **RSS / Atom** 连接器。在知识库 **设置 → 数据源** 中选择 RSS，填写 Feed URL 与同步策略即可全量 / 增量拉取正文入库。若部分条目失败，同步日志会展示 partial failure 详情；编辑数据源保存配置**不会**自动触发同步，需手动点同步。
 
-## 25. MCP 远程服务如何配置 OAuth2？
-
-0.6.3 支持 MCP 服务的 **OAuth2 授权**（相关结构已纳入数据库基线）。在 **设置 → MCP** 添加 HTTP 类型服务并选择 OAuth2，按向导完成授权回调；另支持自定义 HTTP Header 与 JSON **代码导入**快速粘贴配置。过期后需在 UI 重新授权。
 
 ## 26. Embedding 维度如何覆盖？
 

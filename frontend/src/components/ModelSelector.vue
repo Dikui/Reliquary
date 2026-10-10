@@ -75,7 +75,7 @@ import {
 
 interface Props {
   ariaLabel?: string
-  modelType: 'KnowledgeQA' | 'Embedding' | 'Rerank' | 'VLLM' | 'ASR'
+  modelType: 'KnowledgeQA' | 'Embedding' | 'Rerank' | 'VLLM'
   selectedModelId?: string
   disabled?: boolean
   placeholder?: string

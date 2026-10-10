@@ -15,6 +15,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/mmcdole/gofeed"
 	"reliquary/internal/datasource"
+	webfetch "reliquary/internal/infrastructure/web_fetch"
 	"reliquary/internal/logger"
 	"reliquary/internal/types"
 )
@@ -364,6 +365,7 @@ func (c *Connector) walk(
 }
 
 type resolvedFeedItem struct {
+	fetchErr    error
 	item        types.FetchedItem
 	fingerprint string
 }
@@ -416,7 +418,7 @@ func (c *Connector) resolveItem(
 			stage = "original content failed"
 		}
 		logger.Warnf(ctx, "[RSS] %s for %s: %v", stage, item.Link, err)
-		return resolvedFeedItem{item: types.FetchedItem{ExternalID: itemExternalID(feedURL, itemID), Title: title,
+		return resolvedFeedItem{fetchErr: err, item: types.FetchedItem{ExternalID: itemExternalID(feedURL, itemID), Title: title,
 			AdapterFailures: failures, Metadata: map[string]string{"error": stage + ": " + err.Error(), "channel": types.ChannelRSS}}}
 	}
 	if articleTitle != "" && (item.Title == "" || item.Custom["from_listing"] == "true") {
@@ -492,7 +494,13 @@ func (c *Connector) resolveItem(
 // evidence rules as RSS, without requiring the page to appear in a feed.
 func FetchArticle(ctx context.Context, articleURL string) (*types.FetchedItem, error) {
 	resolved := NewConnector().resolveItem(ctx, newClient(nil), &gofeed.Feed{}, &gofeed.Item{Link: articleURL}, "", articleURL, "", false)
+	if resolved.fetchErr != nil {
+		return &resolved.item, fmt.Errorf("fetch original article: %w", resolved.fetchErr)
+	}
 	if reason := resolved.item.Metadata["error"]; reason != "" {
+		if reason == "article body is empty" {
+			return &resolved.item, &webfetch.FetchError{Code: webfetch.ErrorEmptyContent, Err: fmt.Errorf("该页面没有可抓取的正文")}
+		}
 		return &resolved.item, fmt.Errorf("fetch original article: %s", reason)
 	}
 	return &resolved.item, nil

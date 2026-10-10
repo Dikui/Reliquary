@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -52,12 +51,6 @@ func (s *stubKBRepoForModelDelete) ListModelUsages(
 	context.Context, uint64, string,
 ) ([]types.ModelUsageResource, error) {
 	return s.usages, s.usageErr
-}
-func (s *stubKBRepoForModelDelete) SetUserKBPin(context.Context, uint64, string, string, bool) (*time.Time, error) {
-	return nil, nil
-}
-func (s *stubKBRepoForModelDelete) ListUserKBPinIDs(context.Context, uint64, string) (map[string]time.Time, error) {
-	return nil, nil
 }
 
 type stubAgentRepoForModelDelete struct {
@@ -163,7 +156,7 @@ func TestDeleteModel_RejectsWhenUsedByAgent(t *testing.T) {
 		&stubKBRepoForModelDelete{},
 		&stubAgentRepoForModelDelete{usages: []types.ModelUsageResource{
 			{ID: "agent-1", Name: "Support", Bindings: []types.ModelUsageBinding{types.ModelUsageBindingChatModel}},
-			{ID: "agent-2", Name: "Writer", Bindings: []types.ModelUsageBinding{types.ModelUsageBindingFollowUpModel}},
+			{ID: "agent-2", Name: "Writer", Bindings: []types.ModelUsageBinding{types.ModelUsageBindingChatModel}},
 		}},
 		nil, nil, nil,
 	)
@@ -327,4 +320,8 @@ func TestFormatModelInUseMessage(t *testing.T) {
 		formatModelInUseMessage(1, 1),
 	)
 
+}
+
+func (r *stubKBRepoForModelDelete) UpdateKnowledgeBasePin(context.Context, *types.KnowledgeBase) error {
+	return nil
 }

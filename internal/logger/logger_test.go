@@ -211,20 +211,6 @@ func TestCloneContextKeepsBackgroundWorkThrottled(t *testing.T) {
 	}
 }
 
-// An IM bot has no live client to click "Authorize", so losing this mark makes
-// the agent block on the OAuth wait for every unauthorized service instead of
-// replying with its one-shot notice.
-func TestCloneContextKeepsTheNonInteractiveOAuthMark(t *testing.T) {
-	t.Parallel()
-
-	if !types.IsMCPOAuthNonInteractive(CloneContext(types.WithMCPOAuthNonInteractive(context.Background()))) {
-		t.Fatal("IsMCPOAuthNonInteractive(cloned) = false, want the mark to survive a detach")
-	}
-	if types.IsMCPOAuthNonInteractive(CloneContext(context.Background())) {
-		t.Fatal("IsMCPOAuthNonInteractive(cloned) = true for an unmarked context, want interactive prompts to stay possible")
-	}
-}
-
 func TestCloneContextWithoutTraceDropsTheChatTrace(t *testing.T) {
 	t.Parallel()
 

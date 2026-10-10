@@ -1,46 +1,10 @@
 package mcp
 
 import (
-	"errors"
-	"fmt"
 	"testing"
 
-	"github.com/mark3labs/mcp-go/client/transport"
 	"reliquary/internal/types"
 )
-
-func TestAsOAuthRequired(t *testing.T) {
-	t.Run("nil error", func(t *testing.T) {
-		if got := asOAuthRequired(nil); got != nil {
-			t.Fatalf("got %v, want nil", got)
-		}
-	})
-
-	t.Run("401 with RFC 9728 metadata is treated as OAuth required", func(t *testing.T) {
-		meta := "https://example.com/.well-known/oauth-protected-resource"
-		err := fmt.Errorf("wrap: %w", &transport.AuthorizationRequiredError{ResourceMetadataURL: meta})
-		got := asOAuthRequired(err)
-		if got == nil {
-			t.Fatal("expected non-nil OAuthRequiredError")
-		}
-		if got.MetadataURL != meta {
-			t.Errorf("MetadataURL = %q, want %q", got.MetadataURL, meta)
-		}
-	})
-
-	t.Run("bare 401 without metadata is NOT OAuth required", func(t *testing.T) {
-		err := &transport.AuthorizationRequiredError{ResourceMetadataURL: ""}
-		if got := asOAuthRequired(err); got != nil {
-			t.Fatalf("got %v, want nil (bare 401 should not suggest OAuth)", got)
-		}
-	})
-
-	t.Run("unrelated error is ignored", func(t *testing.T) {
-		if got := asOAuthRequired(errors.New("connection refused")); got != nil {
-			t.Fatalf("got %v, want nil", got)
-		}
-	})
-}
 
 func TestApplyAuthHeaders(t *testing.T) {
 	tests := []struct {
@@ -98,11 +62,6 @@ func TestApplyAuthHeaders(t *testing.T) {
 				CustomHeaders: map[string]string{"X-Trace": "abc"},
 			},
 			want: map[string]string{"Authorization": "Bearer t1", "X-Trace": "abc"},
-		},
-		{
-			name: "oauth strategy emits no static header (handled elsewhere)",
-			ac:   &types.MCPAuthConfig{AuthType: types.MCPAuthOAuth, Token: "ignored"},
-			want: map[string]string{},
 		},
 	}
 

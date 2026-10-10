@@ -54,8 +54,6 @@ const supportedTypes = ref([
 	// Images are parsed as documents here; the dedicated image button remains
 	// available for direct multimodal chat.
 	'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp',
-  // Audio
-  '.mp3', '.wav', '.m4a', '.flac', '.ogg', '.aac',
 ]);
 
 onMounted(async () => {

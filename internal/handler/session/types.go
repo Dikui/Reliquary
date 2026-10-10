@@ -41,21 +41,20 @@ type ImageAttachment struct {
 
 // CreateKnowledgeQARequest defines the request structure for knowledge QA
 type CreateKnowledgeQARequest struct {
-	Query                 string                       `json:"query"              binding:"required"` // Query text for knowledge base search
-	KnowledgeBaseIDs      []string                     `json:"knowledge_base_ids"`                    // Selected knowledge base ID for this request
-	KnowledgeIds          []string                     `json:"knowledge_ids"`                         // Selected knowledge ID for this request
-	AgentEnabled          bool                         `json:"agent_enabled"`                         // Whether agent mode is enabled for this request
-	AgentID               string                       `json:"agent_id"`                              // Selected custom agent ID
-	SummaryModelID        string                       `json:"summary_model_id"`                      // Optional summary model ID for this request (overrides session default)
-	MCPServiceIDs         []string                     `json:"mcp_service_ids"`                       // Per-request MCP services selected via @mention
-	TagIDs                []string                     `json:"tag_ids"`                               // @mentioned tag IDs (display/debug; scoped via MentionedItems)
-	MentionedItems        []MentionedItemRequest       `json:"mentioned_items"`                       // @mentioned knowledge bases and files
-	DisableTitle          bool                         `json:"disable_title"`                         // Whether to disable auto title generation
-	Images                []ImageAttachment            `json:"images"`                                // Attached images for multimodal chat
-	AttachmentUploads     []AttachmentUpload           `json:"attachment_uploads,omitempty"`          // Attached files (documents, audio, etc.)
-	AttachmentIDs         []string                     `json:"attachment_ids,omitempty"`              // Pre-uploaded session-scoped document IDs
-	Channel               string                       `json:"channel"`                               // Source channel: "web", "api", "im", etc.
-	SuggestionAttribution *types.SuggestionAttribution `json:"suggestion_attribution,omitempty"`
+	Query             string                 `json:"query"              binding:"required"` // Query text for knowledge base search
+	KnowledgeBaseIDs  []string               `json:"knowledge_base_ids"`                    // Selected knowledge base ID for this request
+	KnowledgeIds      []string               `json:"knowledge_ids"`                         // Selected knowledge ID for this request
+	AgentEnabled      bool                   `json:"agent_enabled"`                         // Whether agent mode is enabled for this request
+	AgentID           string                 `json:"agent_id"`                              // Selected custom agent ID
+	SummaryModelID    string                 `json:"summary_model_id"`                      // Optional summary model ID for this request (overrides session default)
+	MCPServiceIDs     []string               `json:"mcp_service_ids"`                       // Per-request MCP services selected via @mention
+	TagIDs            []string               `json:"tag_ids"`                               // @mentioned tag IDs (display/debug; scoped via MentionedItems)
+	MentionedItems    []MentionedItemRequest `json:"mentioned_items"`                       // @mentioned knowledge bases and files
+	DisableTitle      bool                   `json:"disable_title"`                         // Whether to disable auto title generation
+	Images            []ImageAttachment      `json:"images"`                                // Attached images for multimodal chat
+	AttachmentUploads []AttachmentUpload     `json:"attachment_uploads,omitempty"`          // Attached files (documents, images, etc.)
+	AttachmentIDs     []string               `json:"attachment_ids,omitempty"`              // Pre-uploaded session-scoped document IDs
+	Channel           string                 `json:"channel"`                               // Source channel: "web", "api", "im", etc.
 }
 
 // AttachmentUpload represents a file attachment upload from the client

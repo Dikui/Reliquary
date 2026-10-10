@@ -6,7 +6,6 @@ import KnowledgeDuplicateNotice from '@/components/KnowledgeDuplicateNotice.vue'
 import useKnowledgeBase from '@/hooks/useKnowledgeBase';
 import { useRoute, useRouter } from 'vue-router';
 import EmptyKnowledge from '@/components/empty-knowledge.vue';
-import ContextualGuide from '@/components/ContextualGuide.vue';
 import KBInfoPopover from '@/components/KBInfoPopover.vue';
 import KBSwitcherDropdown from '@/components/KBSwitcherDropdown.vue';
 import { getSessionsList, createSessions, generateSessionsTitle } from "@/api/chat/index";
@@ -79,7 +78,7 @@ import {
 import { useI18n } from 'vue-i18n';
 import { useMarqueeSelect } from '@/hooks/useMarqueeSelect';
 import type { ParserEngineInfo } from '@/api/system';
-import { getUploadFileKey } from './utils/uploadSources';
+import { getUploadFileKey, filterUnsupportedAudioFiles } from './utils/uploadSources';
 const route = useRoute();
 const { t } = useI18n();
 const kbId = computed(() => (route.params as any).kbId as string || '');
@@ -92,7 +91,6 @@ const validTabs = ['documents', 'context'] as const
 type KbTab = typeof validTabs[number]
 const initTab = validTabs.includes(route.query.tab as any) ? (route.query.tab as KbTab) : 'documents'
 const activeKbTab = ref<KbTab>(initTab);
-
 
 const parserEngines = computed<ParserEngineInfo[]>(() => editorResources.parserEngines);
 
@@ -151,17 +149,9 @@ const goToParserSettings = () => {
   }
 }
 
-
 const knowledgeList = ref<Array<{ id: string; name: string; type?: string }>>([]);
 let { cardList, total, moreIndex, details, getKnowled, delKnowledge, openMore, onVisibleChange: _onVisibleChange, getCardDetails, getfDetails,
   duplicateNotices, showDuplicate, dismissDuplicate, clearDuplicateNotices, openDuplicate } = useKnowledgeBase(kbId.value)
-
-const showKbDetailContextualGuide = computed(() => {
-  return Boolean(kbId.value)
-
-    && !docListLoading.value
-    && cardList.value.length === 0;
-});
 
 const onVisibleChange = (visible: boolean) => {
   _onVisibleChange(visible);
@@ -1439,7 +1429,6 @@ const ensureDocumentKbReady = () => {
 };
 
 const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
-const AUDIO_EXTENSIONS = ['mp3', 'wav', 'm4a', 'flac', 'ogg'];
 
 const uploadConfirmStore = useUploadConfirmStore();
 
@@ -1661,9 +1650,12 @@ const openUploadConfirmDialog = async (files: File[], urls: string[] = []) => {
 };
 
 const handleUploadSourceFiles = (files: File[]) => {
-  if (!ensureDocumentKbReady()) return;
-  if (files.length === 0) return;
-  openUploadConfirmDialog(files);
+  const result = filterUnsupportedAudioFiles(files);
+  if (result.audioFilteredCount > 0) {
+    MessagePlugin.warning(t('error.unsupportedAudioUpload'));
+  }
+  if (result.validFiles.length === 0 || !ensureDocumentKbReady()) return;
+  openUploadConfirmDialog(result.validFiles);
 };
 
 const handleUploadSourceUrl = (url: string) => {
@@ -1740,7 +1732,6 @@ const handleViewTrace = (index: number, item: KnowledgeCard) => {
 };
 
 const confirmRebuildKnowledge = async (index: number, item: KnowledgeCard) => {
-
 
   if (!item?.id) {
     MessagePlugin.warning(t('knowledgeEditor.messages.missingId'));
@@ -2223,7 +2214,6 @@ async function createNewSession(value: string): Promise<void> {
         </div>
       </div>
 
-
       <div v-if="activeKbTab === 'context'" class="knowledge-context-area">
         <KnowledgeWorkbench v-if="kbId" :kb-id="kbId" :domain-id="kbInfo?.domain_id"
           @open-source="openSourceDoc" />
@@ -2432,7 +2422,7 @@ async function createNewSession(value: string): Promise<void> {
                   <div class="doc-filter-actions">
                     <KbUploadSourceDropdown ref="uploadSourceRef" :accept-file-types="acceptFileTypes"
                       :supported-file-types="[...supportedFileTypes]" include-manual trigger-icon="file-add"
-                      trigger-class="content-bar-icon-btn" data-guide="kb-detail-add-doc"
+                      trigger-class="content-bar-icon-btn"
                       :tooltip="t('knowledgeBase.addDocument')" placement="bottom-right" @files="handleUploadSourceFiles"
                       @url="handleUploadSourceUrl" @manual="handleManualCreate" />
                   </div>
@@ -2550,13 +2540,10 @@ async function createNewSession(value: string): Promise<void> {
       </DocContent>
     </div>
 
-
   <!-- 知识库编辑器（创建/编辑统一组件） -->
   <KnowledgeBaseEditorModal :visible="uiStore.showKBEditorModal" :mode="uiStore.kbEditorMode"
     :kb-id="uiStore.currentKBId || undefined" :initial-type="uiStore.kbEditorType"
     @update:visible="(val) => val ? null : uiStore.closeKBEditor()" @success="handleKBEditorSuccess" />
-
-  <ContextualGuide tour="kbDetail" :when="showKbDetailContextualGuide" />
 
   <!-- 标签编辑弹窗 -->
   <TagEditDialog :visible="tagEditDialogVisible"
@@ -3680,7 +3667,6 @@ async function createNewSession(value: string): Promise<void> {
   gap: 6px;
   overflow: hidden;
 }
-
 
 @media (max-width: 1250px) and (min-width: 1045px) {
   .answers-input {

@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"reliquary/internal/event"
-	"reliquary/internal/models/asr"
 	"reliquary/internal/models/chat"
 	"reliquary/internal/models/embedding"
 	"reliquary/internal/models/rerank"
@@ -124,10 +123,6 @@ func (s *stubModelService) GetChatModel(context.Context, string) (chat.Chat, err
 }
 
 func (s *stubModelService) GetVLMModel(context.Context, string) (vlm.VLM, error) {
-	return nil, nil
-}
-
-func (s *stubModelService) GetASRModel(context.Context, string) (asr.ASR, error) {
 	return nil, nil
 }
 

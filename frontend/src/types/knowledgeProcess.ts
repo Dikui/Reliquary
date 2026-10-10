@@ -26,12 +26,6 @@ export interface VLMConfigOverride {
   custom_instructions?: string
 }
 
-export interface ASRConfigOverride {
-  enabled?: boolean
-  model_id?: string
-  language?: string
-}
-
 export interface QuestionGenerationConfigOverride {
   enabled?: boolean
   question_count?: number
@@ -43,7 +37,6 @@ export interface KnowledgeProcessOverrides {
   chunking_config?: ChunkingConfigOverride
   enable_multimodel?: boolean
   vlm_config?: VLMConfigOverride
-  asr_config?: ASRConfigOverride
   question_generation_config?: QuestionGenerationConfigOverride
   parser_engine_overrides?: Record<string, string>
 }

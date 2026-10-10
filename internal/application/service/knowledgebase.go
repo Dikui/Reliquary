@@ -293,9 +293,7 @@ func (s *knowledgeBaseService) ListKnowledgeBases(ctx context.Context) ([]*types
 		}
 	}
 
-	if userID, ok := types.UserIDFromContext(ctx); ok && userID != "" {
-		s.applyUserKBPins(ctx, tenantID, userID, kbs)
-	}
+	sortKnowledgeBasePins(kbs)
 	return kbs, nil
 }
 
@@ -321,9 +319,7 @@ func (s *knowledgeBaseService) ListKnowledgeBasesByTenantID(ctx context.Context,
 		}
 	}
 
-	if userID, ok := types.UserIDFromContext(ctx); ok && userID != "" {
-		s.applyUserKBPins(ctx, tenantID, userID, kbs)
-	}
+	sortKnowledgeBasePins(kbs)
 	return kbs, nil
 }
 
@@ -438,117 +434,37 @@ func (s *knowledgeBaseService) UpdateKnowledgeBase(ctx context.Context,
 	return kb, nil
 }
 
-// TogglePinKnowledgeBase toggles whether the calling user has pinned
-// this knowledge base. Pin state is per-(user, kb) in the baseline
-// schema; previously this method flipped a tenant-wide column on the
-// KB row which broke down under RBAC (only Admin/creator could pin,
-// and the pin reordered the list for everyone in the tenant). The
-// public signature is unchanged so the HTTP handler / CLI / SDK don't
-// move.
-//
-// The KB still has to belong to the caller's tenant — the route is
-// already gated behind KBExists, but we re-check via
-// GetKnowledgeBaseByIDAndTenant so a stale param survives a tenant
-// switch cleanly.
-func (s *knowledgeBaseService) TogglePinKnowledgeBase(
-	ctx context.Context, id string,
-) (*types.KnowledgeBase, error) {
+// TogglePinKnowledgeBase changes the shared pin state in the personal space.
+func (s *knowledgeBaseService) TogglePinKnowledgeBase(ctx context.Context, id string) (*types.KnowledgeBase, error) {
 	if id == "" {
 		return nil, errors.New("knowledge base ID cannot be empty")
 	}
 	tenantID := types.MustTenantIDFromContext(ctx)
-	userID, ok := types.UserIDFromContext(ctx)
-	if !ok || userID == "" {
-		// API-key callers without a user identity can't have a personal
-		// pin set. We surface this rather than silently flipping a
-		// shared-tenant flag like the old behaviour.
-		return nil, errors.New("pin requires an authenticated user")
-	}
-
-	kb, err := s.repo.GetKnowledgeBaseByID(ctx, id)
+	kb, err := s.repo.GetKnowledgeBaseByIDAndTenant(ctx, id, tenantID)
 	if err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"knowledge_base_id": id,
-			"tenant_id":         tenantID,
-		})
 		return nil, err
 	}
-
-	// Read current pin state to decide direction. ListUserKBPinIDs is
-	// already optimised for the "many KBs at once" path; for a single-id
-	// check the round-trip is acceptable and avoids leaking a second
-	// repository method just for this.
-	pins, err := s.repo.ListUserKBPinIDs(ctx, tenantID, userID)
-	if err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"knowledge_base_id": id,
-			"tenant_id":         tenantID,
-			"user_id":           userID,
-		})
+	kb.IsPinned = !kb.IsPinned
+	kb.PinnedAt = nil
+	if kb.IsPinned {
+		now := time.Now()
+		kb.PinnedAt = &now
+	}
+	if err := s.repo.UpdateKnowledgeBasePin(ctx, kb); err != nil {
 		return nil, err
 	}
-	_, currentlyPinned := pins[id]
-
-	pinnedAt, err := s.repo.SetUserKBPin(ctx, tenantID, userID, id, !currentlyPinned)
-	if err != nil {
-		logger.ErrorWithFields(ctx, err, map[string]interface{}{
-			"knowledge_base_id": id,
-			"tenant_id":         tenantID,
-			"user_id":           userID,
-			"target_pinned":     !currentlyPinned,
-		})
-		return nil, err
-	}
-
 	kb.EnsureDefaults()
-	kb.IsPinned = !currentlyPinned
-	kb.PinnedAt = pinnedAt
-	logger.Infof(ctx, "Knowledge base pin toggled, ID: %s, user: %s, is_pinned: %v",
-		id, userID, kb.IsPinned)
 	return kb, nil
 }
 
-// applyUserKBPins stamps IsPinned / PinnedAt onto each KB in the slice
-// from the caller's perspective and sorts the slice so pinned rows
-// float to the top (newest pin first, ties broken by created_at desc).
-// Safe to call with an empty userID (no-op stamp; default sort by
-// created_at preserved).
-func (s *knowledgeBaseService) applyUserKBPins(
-	ctx context.Context, tenantID uint64, userID string, kbs []*types.KnowledgeBase,
-) {
-	if len(kbs) == 0 || userID == "" {
-		return
-	}
-	pins, err := s.repo.ListUserKBPinIDs(ctx, tenantID, userID)
-	if err != nil {
-		// Pin enrichment is best-effort: a transient DB blip here
-		// should not break listing KBs. Log and bail without altering
-		// the slice — caller still gets a valid list, just unsorted by
-		// pin.
-		logger.Warnf(ctx, "applyUserKBPins: failed to load pins for tenant=%d user=%s: %v",
-			tenantID, userID, err)
-		return
-	}
-	if len(pins) == 0 {
-		return
-	}
-	for _, kb := range kbs {
-		if ts, ok := pins[kb.ID]; ok {
-			kb.IsPinned = true
-			t := ts
-			kb.PinnedAt = &t
-		}
-	}
+func sortKnowledgeBasePins(kbs []*types.KnowledgeBase) {
 	sort.SliceStable(kbs, func(i, j int) bool {
 		a, b := kbs[i], kbs[j]
 		if a.IsPinned != b.IsPinned {
 			return a.IsPinned
 		}
-		if a.IsPinned && b.IsPinned {
-			at, bt := a.PinnedAt, b.PinnedAt
-			if at != nil && bt != nil && !at.Equal(*bt) {
-				return at.After(*bt)
-			}
+		if a.IsPinned && a.PinnedAt != nil && b.PinnedAt != nil && !a.PinnedAt.Equal(*b.PinnedAt) {
+			return a.PinnedAt.After(*b.PinnedAt)
 		}
 		return a.CreatedAt.After(b.CreatedAt)
 	})
@@ -887,59 +803,6 @@ func (s *knowledgeBaseService) SetEmbeddingModel(ctx context.Context, id string,
 	return nil
 }
 
-func (s *knowledgeBaseService) CopyKnowledgeBase(ctx context.Context,
-	srcKB string, dstKB string,
-) (*types.KnowledgeBase, *types.KnowledgeBase, error) {
-	tenantID := types.MustTenantIDFromContext(ctx)
-	// Load source KB with tenant scope to prevent cross-tenant cloning
-	sourceKB, err := s.repo.GetKnowledgeBaseByIDAndTenant(ctx, srcKB, tenantID)
-	if err != nil {
-		logger.Errorf(ctx, "Get source knowledge base failed: %v", err)
-		return nil, nil, err
-	}
-	sourceKB.EnsureDefaults()
-	var targetKB *types.KnowledgeBase
-	if dstKB != "" {
-		// Load target KB with tenant scope so we only clone into the caller's tenant
-		targetKB, err = s.repo.GetKnowledgeBaseByIDAndTenant(ctx, dstKB, tenantID)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		// Defense 1: embedding model must match. Mixing incompatible
-		// vector spaces would produce semantically broken search results.
-		if sourceKB.EmbeddingModelID != targetKB.EmbeddingModelID {
-			return nil, nil, apperrors.NewBadRequestError(
-				"source and target knowledge bases use different embedding models; " +
-					"clone into a target with the same embedding model")
-		}
-	} else {
-		targetKB = &types.KnowledgeBase{
-			ID:                    uuid.New().String(),
-			Name:                  sourceKB.Name,
-			Type:                  sourceKB.Type,
-			Description:           sourceKB.Description,
-			TenantID:              tenantID,
-			DomainID:              sourceKB.DomainID,
-			ChunkingConfig:        sourceKB.ChunkingConfig,
-			ImageProcessingConfig: sourceKB.ImageProcessingConfig,
-			EmbeddingModelID:      sourceKB.EmbeddingModelID,
-			SummaryModelID:        sourceKB.SummaryModelID,
-			ModelTiers:            sourceKB.ModelTiers,
-			VLMConfig:             sourceKB.VLMConfig,
-		}
-		// Record the authenticated user as the clone's creator.
-		if uid, ok := types.UserIDFromContext(ctx); ok {
-			targetKB.CreatorID = uid
-		}
-		targetKB.EnsureDefaults()
-		if err := s.persistKnowledgeBase(ctx, targetKB, true); err != nil {
-			return nil, nil, err
-		}
-	}
-	return sourceKB, targetKB, nil
-}
-
 func (s *knowledgeBaseService) DuplicateKnowledgeBase(
 	ctx context.Context,
 	srcKB string,
@@ -994,10 +857,6 @@ func duplicateKBCopySuffix(locale string) string {
 	switch {
 	case strings.HasPrefix(locale, "zh"):
 		return " 副本"
-	case strings.HasPrefix(locale, "ko"):
-		return " 사본"
-	case strings.HasPrefix(locale, "ru"):
-		return " копия"
 	default:
 		return " Copy"
 	}

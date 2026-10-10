@@ -97,16 +97,14 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(repository.NewKnowledgeTagRepository))
 	must(container.Provide(repository.NewSessionRepository))
 	must(container.Provide(repository.NewMessageRepository))
-	must(container.Provide(repository.NewMessageSuggestionRepository))
 	must(container.Provide(repository.NewModelRepository))
 	must(container.Provide(repository.NewUserRepository))
 	must(container.Provide(repository.NewAuthTokenRepository))
 	must(container.Provide(repository.NewSystemSettingRepository))
 	must(container.Provide(repository.NewMCPServiceRepository))
 	must(container.Provide(repository.NewMCPToolApprovalRepository))
-	must(container.Provide(repository.NewMCPOAuthRepository))
 	must(container.Provide(repository.NewCustomAgentRepository))
-	must(container.Provide(repository.NewUserResourceFavoriteRepository))
+	must(container.Provide(repository.NewResourceFavoriteRepository))
 	must(container.Provide(repository.NewDataSourceRepository))
 	must(container.Provide(repository.NewSyncLogRepository))
 	must(container.Provide(repository.NewTaskDeadLetterRepository))
@@ -114,7 +112,6 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	// MCP manager for managing MCP client connections
 	logger.Debugf(ctx, "[Container] Registering MCP manager...")
 	must(container.Provide(mcp.NewMCPManager))
-	must(container.Provide(mcp.NewOAuthManager))
 
 	// Business service layer
 	logger.Debugf(ctx, "[Container] Registering business services...")
@@ -145,11 +142,10 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewKnowledgeAutoTagService, dig.Name("knowledgeAutoTag")))
 
 	must(container.Provide(service.NewMessageService))
-	must(container.Provide(service.NewMessageSuggestionService))
 	must(container.Provide(service.NewMCPServiceService))
 	must(container.Provide(service.NewMCPToolApprovalService))
 	must(container.Provide(service.NewCustomAgentService))
-	must(container.Provide(service.NewUserResourceFavoriteService))
+	must(container.Provide(service.NewResourceFavoriteService))
 
 	must(container.Provide(repository.NewResourceRepository))
 	must(container.Provide(repository.NewTemporaryDocumentRepository))
@@ -226,18 +222,16 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewTagHandler))
 	must(container.Provide(session.NewHandler))
 	must(container.Provide(handler.NewMessageHandler))
-	must(container.Provide(handler.NewMessageSuggestionHandler))
 	must(container.Provide(handler.NewModelHandler))
 	must(container.Provide(handler.NewInitializationHandler))
 	must(container.Provide(handler.NewAuthHandler))
 	must(container.Provide(handler.NewSystemHandler))
 	must(container.Provide(handler.NewMCPServiceHandler))
 	must(container.Provide(handler.NewMCPCredentialsHandler))
-	must(container.Provide(handler.NewMCPOAuthHandler))
 	must(container.Provide(handler.NewModelCredentialsHandler))
 	must(container.Provide(handler.NewDataSourceCredentialsHandler))
 	must(container.Provide(handler.NewCustomAgentHandler))
-	must(container.Provide(handler.NewUserResourceFavoriteHandler))
+	must(container.Provide(handler.NewResourceFavoriteHandler))
 
 	// Data source handler
 	must(container.Provide(handler.NewDataSourceHandler))

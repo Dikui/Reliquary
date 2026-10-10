@@ -45,8 +45,8 @@ for (const [locale, name] of [['zh-CN', '数据分析'], ['en-US', 'Data analysi
       const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zhCN, 'en-US': enUS } })
       const t = (...args) => i18n.global.t(...args)
       const tools = toolsFor(t, scope, hasKb)
-      assert.equal(tools.length, 14)
-      assert.equal(new Set(tools.map(tool => tool.label)).size, 14)
+      assert.equal(tools.length, 13)
+      assert.equal(new Set(tools.map(tool => tool.label)).size, 13)
       assert.equal(tools.find(tool => tool.value === 'data_analysis').label, name)
       for (const tool of tools) {
         for (const key of ['requiresKb', 'requiresRagKb']) {
@@ -64,7 +64,7 @@ for (const [locale, name] of [['zh-CN', '数据分析'], ['en-US', 'Data analysi
       }))
       const html = await renderToString(app)
       const names = [...html.matchAll(/class="tool-card-name">([^<]+)<\/span>/g)].map(match => match[1])
-      assert.equal(names.length, 14)
+      assert.equal(names.length, 13)
       assert.ok(names.includes(name))
       assert.equal((html.match(/class="tool-card-hint"/g) || []).length, tools.filter(tool => tool.disabled).length)
       assert.equal(tools.some(tool => tool.disabled), !!reasonKey)

@@ -3,6 +3,7 @@ package types
 import (
 	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 	"log"
 	"time"
 
@@ -53,10 +54,6 @@ const (
 	MCPAuthAPIKey MCPAuthType = "api_key"
 	// MCPAuthBearer injects a static Authorization: Bearer <token> header.
 	MCPAuthBearer MCPAuthType = "bearer"
-	// MCPAuthOAuth performs the MCP OAuth2 authorization-code flow
-	// (discovery + dynamic client registration + PKCE) per user. Tokens are
-	// stored per (tenant, user, service) in mcp_oauth_tokens.
-	MCPAuthOAuth MCPAuthType = "oauth"
 )
 
 // MCPAuthConfig represents authentication configuration for MCP service.
@@ -66,11 +63,6 @@ const (
 // dto.MCPServiceResponse which omits them by construction. Credential
 // mutations happen through the dedicated /credentials subresource handled
 // by MCPCredentialsHandler.
-//
-// OAuth note: the OAuth strategy stores no secret in this struct. The
-// per-user access/refresh tokens live in mcp_oauth_tokens and the
-// dynamically registered client lives in mcp_oauth_clients. The fields here
-// (Scopes, AuthServerMetadataURL) are non-secret OAuth configuration.
 type MCPAuthConfig struct {
 	// AuthType selects the authentication strategy. Empty ("") is treated as
 	// none for backward compatibility with rows that pre-date this field.
@@ -85,17 +77,19 @@ type MCPAuthConfig struct {
 	APIKeyHeader  string            `json:"api_key_header,omitempty"`
 	Token         string            `json:"token,omitempty"`
 	CustomHeaders map[string]string `json:"custom_headers,omitempty"`
-	// Scopes are the OAuth scopes requested during authorization. Optional.
-	Scopes []string `json:"scopes,omitempty"`
-	// AuthServerMetadataURL optionally pins the OAuth authorization server
-	// metadata URL. When empty, the server is discovered automatically from
-	// the MCP URL (RFC 9728 / RFC 8414).
-	AuthServerMetadataURL string `json:"auth_server_metadata_url,omitempty"`
 }
 
-// IsOAuth reports whether this service uses the OAuth strategy.
-func (c *MCPAuthConfig) IsOAuth() bool {
-	return c != nil && c.AuthType == MCPAuthOAuth
+// Validate rejects authentication strategies unsupported by this deployment.
+func (c *MCPAuthConfig) Validate() error {
+	if c == nil {
+		return nil
+	}
+	switch c.AuthType {
+	case MCPAuthNone, MCPAuthAPIKey, MCPAuthBearer:
+		return nil
+	default:
+		return fmt.Errorf("unsupported MCP authentication type %q; use none, api_key or bearer", c.AuthType)
+	}
 }
 
 // MCPAdvancedConfig represents advanced configuration for MCP service
@@ -153,16 +147,11 @@ type MCPResource struct {
 
 // MCPTestResult represents the result of testing an MCP service connection
 type MCPTestResult struct {
-	Success     bool   `json:"success"`
-	Message     string `json:"message,omitempty"`
-	Description string `json:"description,omitempty"`
-	// OAuthRequired is true when the connection failed because the server
-	// requires OAuth authorization (RFC 9728), even though the service was not
-	// configured for OAuth. The UI uses it to guide the user to switch the auth
-	// strategy to OAuth.
-	OAuthRequired bool           `json:"oauth_required,omitempty"`
-	Tools         []*MCPTool     `json:"tools,omitempty"`
-	Resources     []*MCPResource `json:"resources,omitempty"`
+	Success     bool           `json:"success"`
+	Message     string         `json:"message,omitempty"`
+	Description string         `json:"description,omitempty"`
+	Tools       []*MCPTool     `json:"tools,omitempty"`
+	Resources   []*MCPResource `json:"resources,omitempty"`
 }
 
 // BeforeCreate is a GORM hook that runs before creating a new MCP service

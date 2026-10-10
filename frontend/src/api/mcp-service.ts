@@ -10,10 +10,7 @@ export interface MCPService {
   url?: string // Optional: required for SSE/HTTP Streamable
   headers?: Record<string, string>
   auth_config?: {
-    // Authentication strategy. Empty/absent means none. "oauth" enables the
-    // per-user OAuth2 authorization-code flow (zero-config: discovery +
-    // dynamic client registration).
-    auth_type?: '' | 'api_key' | 'bearer' | 'oauth'
+    auth_type?: '' | 'api_key' | 'bearer'
     // Secret fields (api_key, token) are NEVER returned by the server in
     // this shape — they live behind the /credentials subresource. The
     // optional-property typing remains so create-mode payloads can still
@@ -25,9 +22,6 @@ export interface MCPService {
     api_key_header?: string
     token?: string
     custom_headers?: Record<string, string>
-    // OAuth-only, non-secret configuration.
-    scopes?: string[]
-    auth_server_metadata_url?: string
   }
   advanced_config?: {
     timeout?: number
@@ -42,7 +36,7 @@ export interface MCPService {
   is_builtin?: boolean // Whether this is a builtin MCP service
   // Per-field "configured?" map embedded on the main response (server-side
   // dto.MCPServiceResponse.Credentials). Drives the CredentialResource card
-  // without a follow-up GET. Absent for builtin services.
+  // without an additional GET. Absent for builtin services.
   credentials?: Record<McpCredentialField, CredentialFieldMetadata>
   created_at?: string
   updated_at?: string
@@ -74,9 +68,6 @@ export interface MCPTestResult {
   success: boolean
   message?: string
   description?: string
-  // Set when the server requires OAuth (RFC 9728) but the service was not
-  // configured for it — the UI guides the user to switch to OAuth 2.0.
-  oauth_required?: boolean
   tools?: MCPTool[]
   resources?: MCPResource[]
 }
@@ -181,94 +172,9 @@ export async function deleteMCPCredentialField(
   await del(`/api/v1/mcp-services/${serviceId}/credentials/${field}`)
 }
 
-// ----------------------------------------------------------------------------
-// Per-user OAuth2 authorization-code flow.
-//
-// The user authorizes a service once; the backend stores their access/refresh
-// token (per tenant + user + service) and refreshes it transparently. The
-// callback is a public backend route that the third-party authorization
-// server redirects to.
-// ----------------------------------------------------------------------------
-
-// Path of the public backend OAuth callback (registered outside /mcp-services
-// to avoid a route conflict, and allow-listed for no-auth in the backend).
-export const MCP_OAUTH_CALLBACK_PATH = '/api/v1/mcp-oauth/callback'
-
-export interface MCPOAuthAuthorization {
-  authorizationUrl: string
-  authorizationAttempt: string
-}
-
-export type MCPOAuthTokenState = 'authorized' | 'refreshable' | 'reauth_required' | 'pending'
-
-export interface MCPOAuthStatus {
-  authorized: boolean
-  state: MCPOAuthTokenState
-  refresh_available: boolean
-  expires_at?: string
-}
-
-// Begin authorization for the current user. The attempt id binds polling to
-// this popup, so an older stored token cannot be mistaken for fresh consent.
-export async function getMCPOAuthAuthorizeURL(
-  serviceId: string,
-  body: { redirect_uri: string; frontend_redirect?: string }
-): Promise<MCPOAuthAuthorization> {
-  const response: any = await post(`/api/v1/mcp-services/${serviceId}/oauth/authorize-url`, body)
-  const data = response.data ?? response
-  return {
-    authorizationUrl: data?.authorization_url ?? '',
-    authorizationAttempt: data?.authorization_attempt ?? '',
-  }
-}
-
-// Whether the current user has authorized this service.
-export async function getMCPOAuthStatus(
-  serviceId: string,
-  authorizationAttempt?: string,
-): Promise<boolean> {
-  const query = authorizationAttempt
-    ? `?authorization_attempt=${encodeURIComponent(authorizationAttempt)}`
-    : ''
-  const response: any = await get(`/api/v1/mcp-services/${serviceId}/oauth/status${query}`)
-  return Boolean((response.data ?? response)?.authorized)
-}
-
-// Full lifecycle status for management surfaces. Expired access tokens with a
-// refresh token are "refreshable", not falsely presented as already usable.
-export async function getMCPOAuthAuthorizationStatus(serviceId: string): Promise<MCPOAuthStatus> {
-  const response: any = await get(`/api/v1/mcp-services/${serviceId}/oauth/status`)
-  const data = response.data ?? response
-  return {
-    authorized: Boolean(data?.authorized),
-    state: data?.state ?? 'reauth_required',
-    refresh_available: Boolean(data?.refresh_available),
-    expires_at: data?.expires_at,
-  }
-}
-
-// Revoke the current user's token (forces re-authorization).
-export async function revokeMCPOAuthToken(serviceId: string): Promise<void> {
-  await del(`/api/v1/mcp-services/${serviceId}/oauth/token`)
-}
-
 export async function resolveToolApproval(
   pendingId: string,
   body: { decision: 'approve' | 'reject'; modified_args?: Record<string, unknown>; reason?: string }
 ): Promise<void> {
   await post(`/api/v1/agent/tool-approvals/${encodeURIComponent(pendingId)}`, body)
-}
-
-// Resume an agent run that paused on an in-conversation MCP OAuth prompt.
-// Call after the per-user authorization popup completes; the backend verifies
-// the token exists before unblocking the paused tool call.
-export async function resolveMCPOAuth(
-  pendingId: string,
-  body: { service_id: string; decision?: 'authorize' | 'cancel' }
-): Promise<void> {
-  await post(`/api/v1/agent/mcp-oauth-resolutions/${encodeURIComponent(pendingId)}`, body)
-}
-
-export async function cancelMCPOAuth(pendingId: string): Promise<void> {
-  await post(`/api/v1/agent/mcp-oauth-resolutions/${encodeURIComponent(pendingId)}/cancel`, {})
 }

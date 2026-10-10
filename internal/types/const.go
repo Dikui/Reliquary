@@ -37,7 +37,6 @@ const (
 	// LLMPromptPrefixFingerprintContextKey carries a non-sensitive hash of the
 	// intended reusable prompt prefix for cache diagnostics.
 	LLMPromptPrefixFingerprintContextKey ContextKey = "LLMPromptPrefixFingerprint"
-	MCPOAuthNonInteractiveContextKey     ContextKey = "MCPOAuthNonInteractive"
 	// ChatParserEngineContextKey carries the resolved parser engine
 	// from the agent's ChatParserEngineRules for chat attachment processing.
 	ChatParserEngineContextKey ContextKey = "ChatParserEngine"

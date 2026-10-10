@@ -44,11 +44,6 @@ export function createKnowledgeBase(data: {
     description_language?: string;
     custom_instructions?: string;
   };
-  asr_config?: {
-    enabled: boolean;
-    model_id?: string;
-    language?: string;
-  };
   indexing_strategy?: {
     vector_enabled: boolean;
     keyword_enabled: boolean;
@@ -89,11 +84,6 @@ export function rebuildKBIndex(kbId: string) {
 export function deleteKnowledgeBase(id: string) {
   return del(`/api/v1/knowledge-bases/${id}`);
 }
-
-export function copyKnowledgeBase(data: { source_id: string; target_id?: string }) {
-  return post(`/api/v1/knowledge-bases/copy`, data);
-}
-
 export function duplicateKnowledgeBase(id: string) {
   return post(`/api/v1/knowledge-bases/${id}/duplicate`);
 }

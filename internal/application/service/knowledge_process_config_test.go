@@ -104,7 +104,6 @@ func TestResolveProcessConfig_NilOverridesUsesKBDefaults(t *testing.T) {
 	kb := &types.KnowledgeBase{
 		ChunkingConfig: types.ChunkingConfig{ChunkSize: 512, ChunkOverlap: 50},
 		VLMConfig:      types.VLMConfig{Enabled: true, ModelID: "vlm-1"},
-		ASRConfig:      types.ASRConfig{Enabled: true, ModelID: "asr-1"},
 		QuestionGenerationConfig: &types.QuestionGenerationConfig{
 			Enabled:       true,
 			QuestionCount: 3,
@@ -117,7 +116,6 @@ func TestResolveProcessConfig_NilOverridesUsesKBDefaults(t *testing.T) {
 	require.Equal(t, 50, eff.ChunkingConfig.ChunkOverlap)
 	require.True(t, eff.EnableMultimodel)
 	require.Equal(t, "vlm-1", eff.VLMConfig.ModelID)
-	require.Equal(t, "asr-1", eff.ASRConfig.ModelID)
 	require.True(t, eff.QuestionGenerationConfig.Enabled)
 	require.Equal(t, 3, eff.QuestionGenerationConfig.QuestionCount)
 }
@@ -269,29 +267,6 @@ func TestValidateProcessOverrides_ImageWithEffectiveVLM(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestValidateProcessOverrides_AudioRequiresASR(t *testing.T) {
-	t.Parallel()
-
-	kb := &types.KnowledgeBase{
-		ASRConfig: types.ASRConfig{Enabled: false},
-	}
-	err := ValidateProcessOverrides(context.Background(), kb, &types.KnowledgeProcessOverrides{}, []string{"mp3"})
-	require.Error(t, err)
-}
-
-func TestValidateProcessOverrides_AudioWithEffectiveASR(t *testing.T) {
-	t.Parallel()
-
-	kb := &types.KnowledgeBase{
-		ASRConfig: types.ASRConfig{Enabled: false},
-	}
-	overrides := &types.KnowledgeProcessOverrides{
-		ASRConfig: &types.ASRConfig{Enabled: true, ModelID: "asr-1"},
-	}
-	err := ValidateProcessOverrides(context.Background(), kb, overrides, []string{"wav"})
-	require.NoError(t, err)
-}
-
 func TestValidateProcessOverrides_NonMediaFileTypes(t *testing.T) {
 	t.Parallel()
 
@@ -319,16 +294,6 @@ func TestResolveFileImportProcessConfig_ImageWithoutVLMAllowed(t *testing.T) {
 	}
 	_, err := resolveFileImportProcessConfig(context.Background(), kb, "png", nil, nil)
 	require.NoError(t, err)
-}
-
-func TestResolveFileImportProcessConfig_AudioRequiresASR(t *testing.T) {
-	t.Parallel()
-
-	kb := &types.KnowledgeBase{
-		ASRConfig: types.ASRConfig{Enabled: false},
-	}
-	_, err := resolveFileImportProcessConfig(context.Background(), kb, "mp3", nil, nil)
-	require.Error(t, err)
 }
 
 // The regression behind #2447: spreadsheets must clear the shared import gate

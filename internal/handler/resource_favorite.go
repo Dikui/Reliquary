@@ -12,54 +12,34 @@ import (
 	"reliquary/internal/types/interfaces"
 )
 
-// UserResourceFavoriteHandler exposes the per-user starred-resource API.
-//
-// Authorization model: a user can only manipulate *their own* favorites in
-// the tenant they're currently scoped into (TenantIDContextKey from the
-// auth middleware). Cross-user or cross-tenant access is not allowed —
-// callers cannot pass a user_id or tenant_id query param. This matches
-// the data-model rationale: favorites are personal navigation aids, not
-// shareable resources, so there's no value in admin-style listing.
-type UserResourceFavoriteHandler struct {
-	service interfaces.UserResourceFavoriteService
+type ResourceFavoriteHandler struct {
+	service interfaces.ResourceFavoriteService
 }
 
-func NewUserResourceFavoriteHandler(svc interfaces.UserResourceFavoriteService) *UserResourceFavoriteHandler {
-	return &UserResourceFavoriteHandler{service: svc}
+func NewResourceFavoriteHandler(svc interfaces.ResourceFavoriteService) *ResourceFavoriteHandler {
+	return &ResourceFavoriteHandler{service: svc}
 }
 
-// favoriteContext resolves the (userID, tenantID) pair the handler will
-// scope all queries to. Centralised so the three endpoints stay short
-// and consistent in their error shape.
-func favoriteContext(c *gin.Context) (string, uint64, bool) {
-	uidVal, ok := c.Get(types.UserIDContextKey.String())
-	if !ok {
-		c.Error(apperrors.NewUnauthorizedError("user ID not found"))
-		return "", 0, false
-	}
-	userID, _ := uidVal.(string)
-	if userID == "" {
-		c.Error(apperrors.NewUnauthorizedError("user ID not found"))
-		return "", 0, false
-	}
+// favoriteContext scopes favorites to the personal space for login and API Key callers.
+func favoriteContext(c *gin.Context) (uint64, bool) {
 	tenantID := c.GetUint64(types.TenantIDContextKey.String())
 	if tenantID == 0 {
 		c.Error(apperrors.NewUnauthorizedError("workspace ID not found"))
-		return "", 0, false
+		return 0, false
 	}
-	return userID, tenantID, true
+	return tenantID, true
 }
 
 // ListFavorites godoc
-func (h *UserResourceFavoriteHandler) ListFavorites(c *gin.Context) {
+func (h *ResourceFavoriteHandler) ListFavorites(c *gin.Context) {
 	ctx := c.Request.Context()
-	userID, tenantID, ok := favoriteContext(c)
+	tenantID, ok := favoriteContext(c)
 	if !ok {
 		return
 	}
 	resourceType := c.Query("type")
 
-	list, err := h.service.List(ctx, userID, tenantID, resourceType)
+	list, err := h.service.List(ctx, tenantID, resourceType)
 	if err != nil {
 		if stderrors.Is(err, service.ErrFavoriteInvalidType) {
 			c.Error(apperrors.NewBadRequestError(err.Error()))
@@ -81,9 +61,9 @@ type AddFavoriteRequest struct {
 }
 
 // AddFavorite godoc
-func (h *UserResourceFavoriteHandler) AddFavorite(c *gin.Context) {
+func (h *ResourceFavoriteHandler) AddFavorite(c *gin.Context) {
 	ctx := c.Request.Context()
-	userID, tenantID, ok := favoriteContext(c)
+	tenantID, ok := favoriteContext(c)
 	if !ok {
 		return
 	}
@@ -92,7 +72,7 @@ func (h *UserResourceFavoriteHandler) AddFavorite(c *gin.Context) {
 		c.Error(apperrors.NewBadRequestError("invalid request body").WithDetails(err.Error()))
 		return
 	}
-	if err := h.service.Add(ctx, userID, tenantID, req.ResourceType, req.ResourceID); err != nil {
+	if err := h.service.Add(ctx, tenantID, req.ResourceType, req.ResourceID); err != nil {
 		if stderrors.Is(err, service.ErrFavoriteInvalidType) || stderrors.Is(err, service.ErrFavoriteEmptyID) || stderrors.Is(err, service.ErrFavoriteInvalidTag) {
 			c.Error(apperrors.NewBadRequestError(err.Error()))
 			return
@@ -105,16 +85,16 @@ func (h *UserResourceFavoriteHandler) AddFavorite(c *gin.Context) {
 }
 
 // RemoveFavorite godoc
-func (h *UserResourceFavoriteHandler) RemoveFavorite(c *gin.Context) {
+func (h *ResourceFavoriteHandler) RemoveFavorite(c *gin.Context) {
 	ctx := c.Request.Context()
-	userID, tenantID, ok := favoriteContext(c)
+	tenantID, ok := favoriteContext(c)
 	if !ok {
 		return
 	}
 	resourceType := c.Param("type")
 	resourceID := c.Param("id")
 
-	if err := h.service.Remove(ctx, userID, tenantID, resourceType, resourceID); err != nil {
+	if err := h.service.Remove(ctx, tenantID, resourceType, resourceID); err != nil {
 		if stderrors.Is(err, service.ErrFavoriteInvalidType) || stderrors.Is(err, service.ErrFavoriteEmptyID) {
 			c.Error(apperrors.NewBadRequestError(err.Error()))
 			return

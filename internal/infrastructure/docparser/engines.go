@@ -26,7 +26,7 @@ func init() {
 	RegisterEngine(&mineruCloudEngine{})
 }
 
-// simple parses text, images and audio in this process.
+// simple parses text and images in this process.
 type simpleEngine struct{}
 
 func (e *simpleEngine) Name() string { return SimpleEngineName }
@@ -39,7 +39,6 @@ func (e *simpleEngine) FileTypes() []string {
 	return []string{
 		"md", "markdown", "txt", "text", "csv", "json",
 		"jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp",
-		"mp3", "wav", "m4a", "flac", "ogg",
 	}
 }
 

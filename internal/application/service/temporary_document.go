@@ -87,7 +87,6 @@ var temporaryDocumentExtensions = map[string]struct{}{
 	".xlsx": {}, ".xls": {},
 	".md": {}, ".markdown": {}, ".txt": {}, ".csv": {}, ".json": {}, ".xml": {}, ".yaml": {}, ".yml": {}, ".log": {},
 	".jpg": {}, ".jpeg": {}, ".png": {}, ".gif": {}, ".bmp": {}, ".tiff": {}, ".webp": {},
-	".mp3": {}, ".wav": {}, ".m4a": {}, ".flac": {}, ".ogg": {}, ".aac": {},
 }
 
 var temporaryTextExtensions = map[string]struct{}{
@@ -150,6 +149,9 @@ func (s *temporaryDocumentService) Create(
 	}
 	ext := strings.ToLower(filepath.Ext(baseName))
 
+	if docparser.IsAudioFormat(ext) {
+		return nil, fmt.Errorf("不支持上传音频文件: %s", strings.TrimPrefix(ext, "."))
+	}
 	if !s.supportsExtension(ctx, tenantID, ext) {
 		return nil, fmt.Errorf("unsupported file type: %s", ext)
 	}
@@ -332,20 +334,6 @@ func (s *temporaryDocumentService) parse(ctx context.Context, document *types.Te
 	}
 	if _, ok := temporaryTextExtensions[ext]; ok && (options.ParserEngine == "" || options.ParserEngine == "auto") {
 		return string(data), nil, map[string]string{"parser": "plain_text"}, nil
-	}
-	if docparser.IsAudioFormat(ext) {
-		if options.ASRModelID == "" {
-			return "", nil, nil, fmt.Errorf("audio transcription model is not configured")
-		}
-		asrModel, err := s.modelService.GetASRModel(ctx, options.ASRModelID)
-		if err != nil {
-			return "", nil, nil, fmt.Errorf("load ASR model: %w", err)
-		}
-		result, err := asrModel.Transcribe(ctx, data, document.FileName)
-		if err != nil {
-			return "", nil, nil, fmt.Errorf("transcribe audio: %w", err)
-		}
-		return result.Text, nil, map[string]string{"parser": "asr"}, nil
 	}
 
 	parserEngine := strings.TrimSpace(options.ParserEngine)

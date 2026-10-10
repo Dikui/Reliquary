@@ -190,7 +190,7 @@
         </div>
       </section>
 
-      <!-- Section 3 — 认证配置（无 / API Key / Bearer Token / OAuth） -->
+      <!-- Section 3: 认证配置（无 / API Key / Bearer Token） -->
       <section class="setting-drawer__section">
         <h4 class="setting-drawer__section-title">{{ t('mcpServiceDialog.authConfig') }}</h4>
 
@@ -204,62 +204,20 @@
               type="button"
               class="source-option"
               :class="{ 'is-active': formData.auth_config.auth_type === opt.value }"
-              @click="formData.auth_config.auth_type = opt.value as '' | 'api_key' | 'bearer' | 'oauth'"
+              @click="formData.auth_config.auth_type = opt.value as '' | 'api_key' | 'bearer'"
             >
               <span class="source-option__label">{{ opt.label }}</span>
             </button>
           </div>
         </div>
 
-        <!-- OAuth 2.0：零配置（自动发现 + 动态客户端注册），按用户授权 -->
-        <template v-if="isOAuth">
-          <div class="form-item">
-            <label class="form-label">{{ t('mcpServiceDialog.oauthScopes', 'Scopes（可选，空格分隔）') }}</label>
-            <t-input v-model="oauthScopesText" :placeholder="t('mcpServiceDialog.optional')" />
-          </div>
-          <div class="form-item">
-            <label class="form-label">{{ t('mcpServiceDialog.oauthAuthorization', '授权状态') }}</label>
-            <div class="oauth-status">
-              <t-tag v-if="oauthTokenState === 'authorized'" theme="success" variant="light">
-                {{ t('mcpServiceDialog.oauthAuthorized', '已授权') }}
-              </t-tag>
-              <t-tag v-else-if="oauthTokenState === 'refreshable'" theme="primary" variant="light">
-                {{ t('mcpServiceDialog.oauthRefreshable', 'Token 已过期，将自动刷新') }}
-              </t-tag>
-              <t-tag v-else theme="warning" variant="light">
-                {{ t('mcpServiceDialog.oauthUnauthorized', '未授权') }}
-              </t-tag>
-              <t-button
-                size="small"
-                theme="primary"
-                :loading="oauthAuthorizing || oauthChecking || submitting"
-                @click="handleAuthorize"
-              >
-                {{ oauthTokenState === 'reauth_required' ? t('mcpServiceDialog.oauthAuthorize', '去授权') : t('mcpServiceDialog.oauthReauthorize', '重新授权') }}
-              </t-button>
-              <t-button
-                v-if="oauthTokenState !== 'reauth_required' && props.service?.id"
-                size="small"
-                theme="danger"
-                variant="outline"
-                @click="handleRevokeOAuth"
-              >
-                {{ t('mcpServiceDialog.oauthRevoke', '撤销授权') }}
-              </t-button>
-            </div>
-            <p class="form-desc">
-              {{ t('mcpServiceDialog.oauthAuthorizeHint', '点击「去授权」会先自动保存当前配置，再发起授权（每个用户独立授权）。') }}
-            </p>
-          </div>
-        </template>
-
         <!--
-          非 OAuth：Edit 模式下凭证由 CredentialResource 管理（独立的
+          Edit 模式下凭证由 CredentialResource 管理（独立的
           /credentials 子资源调用）；Create 模式下用 plain password input。
           两个字段都是 optional — MCP 服务可能完全不需要鉴权。
         -->
         <!-- 凭证 Header 策略：请求头名称 + 密钥值（其余 auth_type 不展示密钥字段） -->
-        <template v-else-if="formData.auth_config.auth_type === 'api_key'">
+        <template v-if="formData.auth_config.auth_type === 'api_key'">
           <!-- 请求头名称（非密钥）：默认 X-API-Key，Bearer/裸 token 场景填 Authorization。 -->
           <div class="form-item">
             <label class="form-label">{{ t('mcpServiceDialog.apiKeyHeader', '请求头名称') }}</label>
@@ -376,15 +334,9 @@ import {
   putMCPCredentials,
   deleteMCPCredentialField,
   testMCPService,
-  getMCPOAuthAuthorizeURL,
-  getMCPOAuthAuthorizationStatus,
-  getMCPOAuthStatus,
-  revokeMCPOAuthToken,
-  MCP_OAUTH_CALLBACK_PATH,
   type MCPService,
   type McpCredentialField,
   type MCPTestResult,
-  type MCPOAuthTokenState,
 } from '@/api/mcp-service'
 import SettingDrawer from '@/components/settings/SettingDrawer.vue'
 import McpTestResultBody from './McpTestResultBody.vue'
@@ -433,16 +385,13 @@ const formData = ref({
   headers: [] as { key: string; value: string }[],
   auth_config: {
     // Authentication strategy. UI exposes '' (none) | 'api_key' (credential
-    // header) | 'oauth'. Legacy 'bearer' is normalised to 'api_key' on load.
-    auth_type: '' as '' | 'api_key' | 'bearer' | 'oauth',
+    // header). Legacy 'bearer' is normalised to 'api_key' on load.
+    auth_type: '' as '' | 'api_key' | 'bearer',
     // Only used in add-mode; in edit-mode the CredentialResource owns these.
     api_key: '',
     // Non-secret: header name for the api_key value (default X-API-Key).
     api_key_header: '',
     token: '',
-    // OAuth-only, non-secret config.
-    scopes: [] as string[],
-    auth_server_metadata_url: '',
   },
   advanced_config: {
     timeout: 30,
@@ -522,7 +471,6 @@ function applyServerConfig(name: string, cfg: Record<string, unknown>) {
   formData.value.auth_config.token = ''
   formData.value.auth_config.api_key = apiKey
   formData.value.auth_config.api_key_header = apiKeyHeader
-  formData.value.auth_config.scopes = []
 
   return true
 }
@@ -587,19 +535,6 @@ const handleCodeImport = () => {
   }
 }
 
-// Comma/space separated text binding for OAuth scopes.
-const oauthScopesText = computed({
-  get: () => (formData.value.auth_config.scopes || []).join(' '),
-  set: (val: string) => {
-    formData.value.auth_config.scopes = val
-      .split(/[\s,]+/)
-      .map((s) => s.trim())
-      .filter(Boolean)
-  },
-})
-
-const isOAuth = computed(() => formData.value.auth_config.auth_type === 'oauth')
-
 // API Key / Bearer are unified into one "credential header" strategy now that
 // the header name is configurable (Bearer is just Authorization + a "Bearer "
 // value prefix). "None" stays as the default for services that need no auth or
@@ -607,119 +542,7 @@ const isOAuth = computed(() => formData.value.auth_config.auth_type === 'oauth')
 const authTypeOptions = computed(() => [
   { value: '', label: t('mcpServiceDialog.authTypeNone', '无 / 自定义 Header') },
   { value: 'api_key', label: t('mcpServiceDialog.authTypeApiKey', 'API Key / Token') },
-  { value: 'oauth', label: t('mcpServiceDialog.authTypeOAuth', 'OAuth 2.0（首次连接授权）') },
 ])
-
-// ---- OAuth authorization state (edit mode only) ----
-const oauthAuthorized = ref(false)
-const oauthTokenState = ref<MCPOAuthTokenState>('reauth_required')
-const oauthChecking = ref(false)
-const oauthAuthorizing = ref(false)
-
-async function refreshOAuthStatus() {
-  if (props.mode !== 'edit' || !props.service?.id || !isOAuth.value) return
-  oauthChecking.value = true
-  try {
-    const status = await getMCPOAuthAuthorizationStatus(props.service.id)
-    oauthAuthorized.value = status.authorized
-    oauthTokenState.value = status.state
-  } catch (e) {
-    console.error('Failed to query MCP OAuth status:', e)
-  } finally {
-    oauthChecking.value = false
-  }
-}
-
-// Open the OAuth popup for an already-persisted service and poll for
-// completion against that service id (independent of props, which may be
-// re-bound by the parent after a save).
-async function startAuthorize(serviceId: string) {
-  if (!serviceId) return
-  oauthAuthorizing.value = true
-  try {
-    const redirectUri = window.location.origin + MCP_OAUTH_CALLBACK_PATH
-    // After the backend completes the exchange it bounces the popup here. The
-    // app root is harmless; the popup is closed by the opener below once the
-    // authorization status flips, so this page is only shown briefly.
-    const frontendRedirect = window.location.origin + '/'
-    const authorization = await getMCPOAuthAuthorizeURL(serviceId, {
-      redirect_uri: redirectUri,
-      frontend_redirect: frontendRedirect,
-    })
-    if (!authorization.authorizationUrl || !authorization.authorizationAttempt) {
-      MessagePlugin.error(t('mcpServiceDialog.toasts.authorizeFailed', '发起授权失败') as string)
-      oauthAuthorizing.value = false
-      return
-    }
-    const popup = window.open(authorization.authorizationUrl, 'mcp_oauth', 'width=600,height=720')
-    // Poll for completion: either the popup closes or the status flips.
-    const timer = window.setInterval(async () => {
-      const closed = !popup || popup.closed
-      try {
-        oauthAuthorized.value = await getMCPOAuthStatus(serviceId, authorization.authorizationAttempt)
-        if (oauthAuthorized.value) oauthTokenState.value = 'authorized'
-      } catch { /* keep polling */ }
-      if (oauthAuthorized.value || closed) {
-        window.clearInterval(timer)
-        oauthAuthorizing.value = false
-        if (oauthAuthorized.value) {
-          try { popup?.close() } catch { /* cross-origin close may throw */ }
-          MessagePlugin.success(t('mcpServiceDialog.toasts.authorized', '授权成功') as string)
-        }
-      }
-    }, 1500)
-  } catch (e) {
-    console.error('Failed to start MCP OAuth authorization:', e)
-    MessagePlugin.error(t('mcpServiceDialog.toasts.authorizeFailed', '发起授权失败') as string)
-    oauthAuthorizing.value = false
-  }
-}
-
-// Authorize ALWAYS persists the current form first (create or update), so the
-// backend sees auth_type=oauth before issuing the authorization request.
-// Without this, a brand-new service or one just switched to OAuth fails with
-// "MCP service is not configured to use OAuth". The drawer stays open the whole
-// time — the parent re-binds the (now saved) service via the `created` event.
-async function handleAuthorize() {
-  const valid = await formRef.value?.validate()
-  if (!valid) return
-
-  submitting.value = true
-  let serviceId = ''
-  try {
-    const hasId = !!props.service?.id
-    const data = buildPayload(!hasId)
-    if (hasId) {
-      await updateMCPService(props.service!.id, data)
-      serviceId = props.service!.id
-      emit('created', { ...(props.service as MCPService), ...data } as MCPService)
-    } else {
-      const created = await createMCPService(data)
-      serviceId = created.id
-      emit('created', created)
-    }
-  } catch (e) {
-    MessagePlugin.error(t('mcpServiceDialog.toasts.updateFailed') as string)
-    console.error('Failed to save before authorize:', e)
-    submitting.value = false
-    return
-  }
-  submitting.value = false
-  await startAuthorize(serviceId)
-}
-
-async function handleRevokeOAuth() {
-  if (!props.service?.id) return
-  try {
-    await revokeMCPOAuthToken(props.service.id)
-    oauthAuthorized.value = false
-    oauthTokenState.value = 'reauth_required'
-    MessagePlugin.success(t('mcpServiceDialog.toasts.revoked', '已撤销授权') as string)
-  } catch (e) {
-    console.error('Failed to revoke MCP OAuth token:', e)
-    MessagePlugin.error(t('mcpServiceDialog.toasts.revokeFailed', '撤销失败') as string)
-  }
-}
 
 // Header icon name + transport label, mirrored from McpSettings list cards
 // so the list-card → drawer hand-off stays visually continuous.
@@ -735,7 +558,7 @@ const transportLabel = computed(() => {
 // MCP so other resources don't accidentally inherit "API Key" / "Bearer
 // Token" labels via the shared component.
 // The unified credential strategy stores its secret in the api_key field
-// (placed verbatim into the configured header). None / OAuth carry no static
+// (placed verbatim into the configured header). None carry no static
 // secret, so the credential card is only shown for the api_key strategy.
 const credentialFields = computed<CredentialFieldDef<McpCredentialField>[]>(() => {
   if (formData.value.auth_config.auth_type === 'api_key') {
@@ -841,18 +664,6 @@ async function handleTestConnection() {
     if (safe.success === true && discoveredDescription) {
       formData.value.description = discoveredDescription
     }
-    // Server told us it needs OAuth (RFC 9728): guide the user by switching the
-    // auth strategy to OAuth. We intentionally do NOT prefill
-    // auth_server_metadata_url — the discovered URL is the RFC 9728
-    // protected-resource metadata (not the RFC 8414 authorization-server
-    // metadata), and the client library discovers the right endpoints from the
-    // base URL on its own.
-    if (safe.oauth_required === true && formData.value.auth_config.auth_type !== 'oauth') {
-      formData.value.auth_config.auth_type = 'oauth'
-      MessagePlugin.warning(
-        t('mcpServiceDialog.toasts.oauthRequired', '该服务需要 OAuth 授权，已自动切换为 OAuth 2.0，请保存后点击「去授权」。') as string,
-      )
-    }
     scrollToTestResult()
   } catch (error: any) {
     MessagePlugin.closeAll()
@@ -923,7 +734,7 @@ const resetForm = () => {
     transport_type: 'sse',
     url: '',
     headers: [],
-    auth_config: { auth_type: '', api_key: '', api_key_header: '', token: '', scopes: [], auth_server_metadata_url: '' },
+    auth_config: { auth_type: '', api_key: '', api_key_header: '', token: '', },
     advanced_config: { timeout: 30, retry_count: 3, retry_delay: 1 },
   }
   formRef.value?.clearValidate()
@@ -957,12 +768,10 @@ watch(
           // (none) and the rest are preserved.
           auth_type: service.auth_config?.auth_type === 'bearer'
             ? 'api_key'
-            : ((service.auth_config?.auth_type as '' | 'api_key' | 'oauth') || ''),
+            : ((service.auth_config?.auth_type as '' | 'api_key') || ''),
           api_key: '',
           api_key_header: service.auth_config?.api_key_header || '',
           token: '',
-          scopes: service.auth_config?.scopes ? [...service.auth_config.scopes] : [],
-          auth_server_metadata_url: service.auth_config?.auth_server_metadata_url || '',
         },
         advanced_config: {
           timeout: service.advanced_config?.timeout || 30,
@@ -970,9 +779,6 @@ watch(
           retry_delay: service.advanced_config?.retry_delay || 1,
         },
       }
-      oauthAuthorized.value = false
-      oauthTokenState.value = 'reauth_required'
-      refreshOAuthStatus()
     } else {
       resetForm()
     }
@@ -1003,20 +809,14 @@ function buildPayload(asCreate: boolean): Partial<MCPService> {
     headers: headersMap,
   }
 
-  // Non-secret auth config (strategy + OAuth params) flows through the main body.
+  // Authentication strategy flows through the main body.
   const auth: NonNullable<MCPService['auth_config']> = {
     auth_type: formData.value.auth_config.auth_type,
   }
   if (formData.value.auth_config.auth_type === 'api_key' && formData.value.auth_config.api_key_header) {
     auth.api_key_header = formData.value.auth_config.api_key_header.trim()
   }
-  if (isOAuth.value) {
-    auth.scopes = formData.value.auth_config.scopes
-    if (formData.value.auth_config.auth_server_metadata_url) {
-      auth.auth_server_metadata_url = formData.value.auth_config.auth_server_metadata_url
-    }
-  }
-  if (asCreate && !isOAuth.value) {
+  if (asCreate) {
     if (formData.value.auth_config.api_key) auth.api_key = formData.value.auth_config.api_key
     if (formData.value.auth_config.token) auth.token = formData.value.auth_config.token
   }
@@ -1034,10 +834,6 @@ const handleSubmit = async () => {
     if (props.mode === 'add') {
       const created = await createMCPService(data)
       MessagePlugin.success(t('mcpServiceDialog.toasts.created'))
-      // Keep the drawer open and hand back the new service so the parent can
-      // flip it into edit mode in place — OAuth authorization and "test
-      // connection" both need a saved service id, so transitioning here lets
-      // the user do them immediately instead of save → reopen.
       emit('created', created)
     } else {
       await updateMCPService(props.service!.id, data)
@@ -1156,12 +952,6 @@ const handleClose = () => {
   }
 }
 
-.oauth-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
 
 .test-result-header {
   display: flex;
@@ -1178,12 +968,6 @@ const handleClose = () => {
   }
 }
 
-.oauth-hint {
-  margin: 0;
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-  line-height: 1.5;
-}
 
 .form-label {
   display: block;

@@ -288,7 +288,7 @@ func TestTagFavoriteOnlyAcceptsConcreteReferents(t *testing.T) {
 	kbID, _, topicID, natureID := seedKnowledgeTagFixture(t, db)
 	require.NoError(t, db.Exec("UPDATE knowledge_tags SET kind = ? WHERE id = ? AND knowledge_base_id = ?", types.TagKindTopic, topicID, kbID).Error)
 	require.NoError(t, db.Exec("UPDATE knowledge_tags SET kind = ? WHERE id = ? AND knowledge_base_id = ?", types.TagKindNature, natureID, kbID).Error)
-	repo := &userResourceFavoriteRepository{db: db}
+	repo := &resourceFavoriteRepository{db: db}
 	valid, err := repo.IsConcreteTag(context.Background(), 1, topicID)
 	require.NoError(t, err)
 	assert.True(t, valid)

@@ -24,13 +24,11 @@ func (p *AzureOpenAIProvider) Info() ProviderInfo {
 			types.ModelTypeEmbedding:   "https://{resource}.openai.azure.com",
 			types.ModelTypeRerank:      "https://{resource}.openai.azure.com",
 			types.ModelTypeVLLM:        "https://{resource}.openai.azure.com",
-			types.ModelTypeASR:         "https://{resource}.openai.azure.com",
 		},
 		ModelTypes: []types.ModelType{
 			types.ModelTypeKnowledgeQA,
 			types.ModelTypeEmbedding,
 			types.ModelTypeVLLM,
-			types.ModelTypeASR,
 		},
 		RequiresAuth: true,
 		ExtraFields: []ExtraFieldConfig{

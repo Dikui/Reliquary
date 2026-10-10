@@ -113,16 +113,6 @@
                   :resolve-reason="event.resolve_reason"  />
               </div>
 
-              <!-- MCP OAuth in-conversation authorization prompt -->
-              <div v-else-if="event.type === 'mcp_oauth_required'" class="tool-event">
-                <McpOAuthCard :pending-id="event.pending_id" :service-id="event.service_id || ''"
-                  :service-name="event.service_name || ''" :mcp-tool-name="event.mcp_tool_name || ''"
-                  :timeout-seconds="event.timeout_seconds" :requested-at="event.requested_at"
-                  :resolved="event.resolved" :authorized="event.authorized"
-                  :resolve-reason="event.resolve_reason" :timed-out="event.timed_out" :canceled="event.canceled"
-                   />
-              </div>
-
               <!-- Tool Call Event (non-thinking) -->
               <div v-else-if="event.type === 'tool_call'" class="tool-event">
                 <div class="action-card" :class="{
@@ -151,7 +141,6 @@
 
                     </div>
                   </div>
-
 
                   <div v-if="!event.pending && event.tool_name === 'todo_write' && event.tool_data?.steps"
                     class="plan-status-summary-fixed">
@@ -229,7 +218,6 @@
         'is-streaming-timeline': showStreamingTimeline
       }">
 
-
       <template v-for="(event, index) in displayEvents" :key="getEventKey(event, index)">
         <div v-if="event && event.type" class="event-item" :class="{
           'event-answer': event.type === 'answer',
@@ -303,15 +291,6 @@
                 :approved="event.approved" :resolve-reason="event.resolve_reason"  />
             </div>
 
-            <!-- MCP OAuth in-conversation authorization prompt -->
-            <div v-else-if="event.type === 'mcp_oauth_required'" class="tool-event">
-              <McpOAuthCard :pending-id="event.pending_id" :service-id="event.service_id || ''"
-                :service-name="event.service_name || ''" :mcp-tool-name="event.mcp_tool_name || ''"
-                :timeout-seconds="event.timeout_seconds" :requested-at="event.requested_at" :resolved="event.resolved"
-                :authorized="event.authorized" :resolve-reason="event.resolve_reason" :timed-out="event.timed_out"
-                :canceled="event.canceled"  />
-            </div>
-
             <!-- Thinking Tool Call -->
             <div v-else-if="event.type === 'tool_call' && event.tool_name === 'thinking'" class="tool-event">
               <div class="action-card"
@@ -377,13 +356,7 @@
                 </t-tooltip>
                 <ChatRequestInfoButton v-if="showRequestInfo && isConversationDone" :session="session"
                   :session-id="sessionId" />
-                <transition name="follow-up-toolbar-loading">
-                  <span v-if="followUpLoading" class="answer-toolbar__follow-up-loading" role="status"
-                    aria-live="polite">
-                    <t-icon name="lightbulb" />
-                    <span class="answer-toolbar__follow-up-label">{{ t('chat.followUpQuestionsLoading') }}</span>
-                  </span>
-                </transition>
+
               </div>
             </div>
 
@@ -416,7 +389,6 @@
 
                   </div>
                 </div>
-
 
                 <div v-if="!event.pending && event.tool_name === 'todo_write' && event.tool_data?.steps"
                   class="plan-status-summary-fixed">
@@ -498,7 +470,6 @@
   <!-- Image Preview -->
   <picturePreview :reviewImg="imagePreviewVisible" :reviewUrl="imagePreviewUrl" @closePreImg="closeImagePreview" />
 
-
   <ChatArtifactsDrawer
     v-if="hasArtifacts && sessionIdForArtifacts && messageIdForArtifacts"
     v-model:visible="showArtifactDrawer"
@@ -518,7 +489,6 @@ import { marked } from 'marked';
 import 'katex/dist/katex.min.css';
 import ToolResultRenderer from './ToolResultRenderer.vue';
 import ToolApprovalCard from './ToolApprovalCard.vue';
-import McpOAuthCard from './McpOAuthCard.vue';
 import ChatRequestInfoButton from '@/components/ChatRequestInfoButton.vue';
 import ChatCitationFloat from '@/components/ChatCitationFloat.vue';
 import picturePreview from '@/components/picture-preview.vue';
@@ -603,7 +573,6 @@ const TOOL_NAME_KEYS: Record<string, string> = {
   query_knowledge_context: 'agentStream.tools.queryKnowledgeContext',
   data_analysis: 'agentStream.tools.dataAnalysis',
   data_schema: 'agentStream.tools.dataSchema',
-  database_query: 'agentStream.tools.databaseQuery',
 };
 
 const getLocalizedToolName = (toolName?: string | null): string => {
@@ -720,11 +689,6 @@ const props = defineProps<{
   userQuery?: string;
   embeddedMode?: boolean;
   ragMode?: boolean;
-  followUpLoading?: boolean;
-}>();
-
-const emit = defineEmits<{
-  (event: 'render-complete-change', ready: boolean): void;
 }>();
 
 const showRequestInfo = computed(
@@ -1253,7 +1217,6 @@ const answerFullyRendered = computed(
   () => isConversationDone.value && typedAnswer.value.length >= activeAnswerMarkdown.value.length,
 );
 watch(answerFullyRendered, (ready) => {
-  emit('render-complete-change', ready);
   if (!ready) return;
   // Clear before this reactive update renders, so a source that returned 404
   // mid-stream gets one real final-attempt <img> node instead of remaining
@@ -1266,7 +1229,7 @@ watch(answerFullyRendered, (ready) => {
 }, { immediate: true });
 
 // Whether any currently visible step is actively pending (a running tool, or a
-// blocking approval/OAuth prompt). A pending step shimmers on its own, so we
+// blocking approval prompt). A pending step shimmers on its own, so we
 // don't stack a placeholder on top of it.
 const hasPendingStreamingActivity = computed(() => {
   return displayEvents.value.some((event: any) => {
@@ -1278,7 +1241,7 @@ const hasPendingStreamingActivity = computed(() => {
     ) {
       return true;
     }
-    return event.type === 'tool_approval_required' || event.type === 'mcp_oauth_required';
+    return event.type === 'tool_approval_required';
   });
 });
 
@@ -1720,9 +1683,6 @@ const getEventKey = (event: any, index: number): string => {
   if (event.tool_call_id) return `tool-${event.tool_call_id}`;
   if (event.type === 'tool_approval_required' && event.pending_id) {
     return `approval-${event.pending_id}`;
-  }
-  if (event.type === 'mcp_oauth_required' && event.pending_id) {
-    return `mcp-oauth-${event.pending_id}`;
   }
   return `event-${index}-${event.type || 'unknown'}`;
 };
@@ -2274,7 +2234,6 @@ const getToolTitle = (event: any): string => {
       return t('agentStream.toolStatus.attachmentParsing');
     }
 
-
     const localizedName = getLocalizedToolName(event.tool_name);
     return t('agentStream.toolStatus.calling', { name: localizedName });
   }
@@ -2348,7 +2307,6 @@ const getToolDescription = (event: any): string => {
     if (event.tool_name === 'query_understand') {
       return t('agentStream.toolStatus.queryUnderstanding');
     }
-
 
     const localizedName = getLocalizedToolName(event.tool_name);
     return t('agentStream.toolStatus.calling', { name: localizedName });

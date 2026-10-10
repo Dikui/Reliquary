@@ -41,10 +41,6 @@ func (s *resolveOwnAgentStub) CopyAgent(context.Context, string) (*types.CustomA
 func (s *resolveOwnAgentStub) GetSuggestedQuestions(context.Context, string, []string, []string, []types.TagScope, int) ([]types.SuggestedQuestion, error) {
 	panic("not implemented")
 }
-func (s *resolveOwnAgentStub) GetKnowledgeSuggestedQuestions(context.Context, string, []string, []string, []types.TagScope, int) ([]types.SuggestedQuestion, error) {
-	panic("not implemented")
-}
-
 func newResolveAgentTestContext(tenantID uint64) (*gin.Context, context.Context) {
 	gin.SetMode(gin.TestMode)
 	rec := httptest.NewRecorder()

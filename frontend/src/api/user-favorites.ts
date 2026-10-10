@@ -1,15 +1,9 @@
-// API client for per-user starred resources stored in the database.
-//
-// The backend authoritatively scopes favorites to the active (user, tenant)
-// pair from the auth context, so these helpers do not pass user_id or tenant_id.
-
 import { get, post, del } from '@/utils/request'
 
 export type FavoriteResourceType = 'kb' | 'agent'
 type FavoriteTargetType = FavoriteResourceType | 'tag'
 
 export interface FavoriteEntry {
-  user_id: string
   tenant_id: number
   resource_type: FavoriteTargetType
   resource_id: string

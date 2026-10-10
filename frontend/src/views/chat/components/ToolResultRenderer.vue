@@ -26,7 +26,6 @@
     <PlanDisplay v-else-if="displayType === 'plan'" :data="toolData as PlanData" />
 
     <!-- Database Query Display -->
-    <DatabaseQuery v-else-if="displayType === 'database_query'" :data="toolData as DatabaseQueryData" />
 
     <!-- Web Fetch Results Display -->
     <WebFetchResults v-else-if="displayType === 'web_fetch_results'" :data="toolData as WebFetchResultsData" />
@@ -37,7 +36,6 @@
     <!-- Knowledge Chunks List -->
     <KnowledgeChunksList v-else-if="displayType === 'knowledge_chunks_list'"
       :data="toolData as KnowledgeChunksListData" />
-
 
     <!-- Fallback: Display raw output -->
     <div v-else class="fallback-output">
@@ -63,7 +61,6 @@ import type {
   ContextQueryResultsData,
   ThinkingData,
   PlanData,
-  DatabaseQueryData,
   WebFetchResultsData,
   GrepResultsData,
   KnowledgeChunksListData,
@@ -77,7 +74,6 @@ import DocumentInfo from './tool-results/DocumentInfo.vue';
 import ContextQueryResults from './tool-results/ContextQueryResults.vue';
 import ThinkingDisplay from './tool-results/ThinkingDisplay.vue';
 import PlanDisplay from './tool-results/PlanDisplay.vue';
-import DatabaseQuery from './tool-results/DatabaseQuery.vue';
 import WebFetchResults from './tool-results/WebFetchResults.vue';
 import GrepResults from './tool-results/GrepResults.vue';
 import KnowledgeChunksList from './tool-results/KnowledgeChunksList.vue';

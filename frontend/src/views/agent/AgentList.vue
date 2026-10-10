@@ -8,8 +8,7 @@
           <div class="title-row">
             <h2>{{ $t('agent.title') }}</h2>
             <t-tooltip :content="$t('agent.createAgent')" placement="bottom">
-              <t-button variant="text" theme="default" size="small" class="header-action-btn"
-                data-guide="agent-list-create" @click="handleCreateAgent">
+              <t-button variant="text" theme="default" size="small" class="header-action-btn" @click="handleCreateAgent">
                 <template #icon>
                   <span class="btn-icon-wrapper">
                     <svg class="sparkles-icon" width="19" height="19" viewBox="0 0 20 20" fill="none"
@@ -138,7 +137,6 @@
                 <div class="bottom-left">
                   <div class="feature-badges">
 
-
                     <t-tooltip
                       :content="agent.config?.agent_mode === 'smart-reasoning' ? $t('agent.mode.agent') : $t('agent.mode.normal')"
                       placement="top">
@@ -183,15 +181,12 @@
 
         <!-- 我的智能体 -->
 
-
-
         <!-- 空状态：全部（保留创建 CTA） -->
         <div v-if="spaceSelection === 'all' && filteredAgents.length === 0 && !loading" class="empty-state">
           <img class="empty-img" src="@/assets/img/upload.svg" alt="">
           <span class="empty-txt">{{ $t('agent.empty.title') }}</span>
           <span class="empty-desc">{{ $t('agent.empty.description') }}</span>
-          <t-button class="agent-create-btn empty-state-btn"
-            data-guide="agent-list-create" @click="handleCreateAgent">
+          <t-button class="agent-create-btn empty-state-btn" @click="handleCreateAgent">
             <template #icon>
               <span class="btn-icon-wrapper">
                 <svg class="sparkles-icon" width="18" height="18" viewBox="0 0 20 20" fill="none"
@@ -251,16 +246,12 @@
       </div>
     </t-dialog>
 
-
-
     <!-- 智能体编辑器弹窗 -->
     <AgentEditorModal :visible="editorVisible" :mode="editorMode" :agent="editingAgent"
       :initialSection="editorInitialSection"
       :initialHighlightField="editorInitialHighlightField"
       @update:visible="editorVisible = $event" @success="handleEditorSuccess" />
 
-    <TenantModelsGuide :when="showAgentTenantModelsGuide" variant="agent" />
-    <ContextualGuide tour="agentList" :when="showAgentListContextualGuide" />
   </div>
 </template>
 
@@ -276,9 +267,7 @@ import { createSessions } from '@/api/chat/index'
 import { useSettingsStore } from '@/stores/settings'
 import { useMenuStore } from '@/stores/menu'
 import AgentEditorModal from './AgentEditorModal.vue'
-import ContextualGuide from '@/components/ContextualGuide.vue'
-import TenantModelsGuide from '@/components/TenantModelsGuide.vue'
-import { focusAgentEditorSection, markContextualGuideDone } from '@/config/contextualGuides'
+import { focusAgentEditorSection } from '@/config/editorNavigation'
 import { useTenantModelReadiness } from '@/composables/useTenantModelReadiness'
 import { useUIStore } from '@/stores/ui'
 import AgentAvatar from '@/components/AgentAvatar.vue'
@@ -295,7 +284,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 const uiStore = useUIStore()
 const chatResources = useChatResourcesStore()
-const { loaded: modelsReadyLoaded, isReadyForAgent } = useTenantModelReadiness()
+const { isReadyForAgent } = useTenantModelReadiness()
 
 interface AgentWithUI extends CustomAgent {
   showMore?: boolean
@@ -309,7 +298,7 @@ const { scope: spaceSelection } = useListUrlState({
   defaultScope,
 })
 
-// Per-user favorites + recents (localStorage-backed). See useResourcePins.
+// Favorites and local recents are shared within the personal space.
 const pins = useResourcePins()
 const agentFavoritesCount = computed(
   () => pins.favorites.value.filter((e) => e.type === 'agent').length
@@ -335,20 +324,6 @@ const editorInitialSection = ref<string>('basic')
 const editorInitialHighlightField = ref<string>('')
 /** 当前打开三点菜单的卡片 agent.id（用于受控弹出层，避免 computed 项无持久引用导致菜单不响应） */
 const openMoreAgentId = ref<string | null>(null)
-
-const showAgentListEmpty = computed(() => {
-  if (loading.value) return false
-  if (spaceSelection.value === 'all' && filteredAgents.value.length === 0) return true
-  return false
-})
-
-const showAgentTenantModelsGuide = computed(
-  () => modelsReadyLoaded.value && showAgentListEmpty.value && !isReadyForAgent.value,
-)
-
-const showAgentListContextualGuide = computed(
-  () => showAgentListEmpty.value && isReadyForAgent.value && !editorVisible.value,
-)
 
 const applyAgentListData = (res: { data: CustomAgent[] }) => {
   agents.value = (res.data || []).map((agent: CustomAgent) => ({
@@ -428,7 +403,6 @@ const handleOpenAgentEditor = (event: CustomEvent) => {
   }
 }
 
-
 onMounted(() => {
   fetchList()
   window.addEventListener('openAgentEditor', handleOpenAgentEditor as EventListener)
@@ -487,7 +461,6 @@ function agentOriginVariant(agent: { created_by?: string }): 'mine' | 'creator' 
 function showAgentOriginBadge(_agent: { created_by?: string; creator_name?: string }): boolean { return true }
 
 function showAgentBuiltinBadge(agent: { is_builtin?: boolean }): boolean { return !!agent.is_builtin }
-
 
 const handleDelete = (agent: AgentWithUI) => {
   openMoreAgentId.value = null
@@ -551,11 +524,10 @@ const openCreateModal = () => {
 // 创建智能体
 const handleCreateAgent = () => {
   if (!isReadyForAgent.value) {
-    MessagePlugin.warning(t('contextualGuide.tenantModels.needChatModelFirst'))
+    MessagePlugin.warning(t('agentEditor.messages.chatModelRequired'))
     uiStore.openSettings('models')
     return
   }
-  markContextualGuideDone('agentList')
   openCreateModal()
 }
 
@@ -1391,32 +1363,5 @@ defineExpose({
 
 <style lang="less">
 /* 下拉菜单样式已统一至 @/assets/dropdown-menu.less */
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 </style>

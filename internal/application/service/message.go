@@ -22,13 +22,12 @@ var regThinkIndex = regexp.MustCompile(`(?s)<think>.*?</think>`)
 // It reads the chat history knowledge base configuration from the tenant's ChatHistoryConfig,
 // which is managed via the settings UI.
 type messageService struct {
-	messageRepo    interfaces.MessageRepository    // Repository for message storage operations
-	sessionRepo    interfaces.SessionRepository    // Repository for session validation
-	tenantService  interfaces.TenantService        // Service for tenant operations (read ChatHistoryConfig)
-	kbService      interfaces.KnowledgeBaseService // Service for knowledge base operations (search chat history KB)
-	knowService    interfaces.KnowledgeService     // Service for knowledge operations (index/delete passages)
-	modelService   interfaces.ModelService         // Service for model operations (rerank model)
-	suggestionRepo interfaces.MessageSuggestionRepository
+	messageRepo   interfaces.MessageRepository    // Repository for message storage operations
+	sessionRepo   interfaces.SessionRepository    // Repository for session validation
+	tenantService interfaces.TenantService        // Service for tenant operations (read ChatHistoryConfig)
+	kbService     interfaces.KnowledgeBaseService // Service for knowledge base operations (search chat history KB)
+	knowService   interfaces.KnowledgeService     // Service for knowledge operations (index/delete passages)
+	modelService  interfaces.ModelService         // Service for model operations (rerank model)
 }
 
 // NewMessageService creates a new message service instance with the required repositories
@@ -38,16 +37,14 @@ func NewMessageService(messageRepo interfaces.MessageRepository,
 	kbService interfaces.KnowledgeBaseService,
 	knowService interfaces.KnowledgeService,
 	modelService interfaces.ModelService,
-	suggestionRepo interfaces.MessageSuggestionRepository,
 ) interfaces.MessageService {
 	return &messageService{
-		messageRepo:    messageRepo,
-		sessionRepo:    sessionRepo,
-		tenantService:  tenantService,
-		kbService:      kbService,
-		knowService:    knowService,
-		modelService:   modelService,
-		suggestionRepo: suggestionRepo,
+		messageRepo:   messageRepo,
+		sessionRepo:   sessionRepo,
+		tenantService: tenantService,
+		kbService:     kbService,
+		knowService:   knowService,
+		modelService:  modelService,
 	}
 }
 
@@ -274,11 +271,6 @@ func (s *messageService) DeleteMessage(ctx context.Context, sessionID string, me
 		})
 		return err
 	}
-	if s.suggestionRepo != nil {
-		if err := s.suggestionRepo.DeleteByMessageID(ctx, tenantID, sessionID, messageID); err != nil {
-			logger.Warnf(ctx, "Failed to delete suggestions for message %s: %v", messageID, err)
-		}
-	}
 
 	// Async cleanup: delete the associated Knowledge entry from the chat history KB.
 	// Use WithoutCancel so the goroutine survives after the HTTP request context is done.
@@ -319,11 +311,6 @@ func (s *messageService) ClearSessionMessages(ctx context.Context, sessionID str
 				logger.Warnf(bgCtx, "Failed to batch delete chat history knowledge for session %s: %v", sessionID, err)
 			}
 		}()
-	}
-	if s.suggestionRepo != nil {
-		if err := s.suggestionRepo.DeleteBySessionID(ctx, tenantID, sessionID); err != nil {
-			logger.Warnf(ctx, "Failed to delete suggestions for session %s: %v", sessionID, err)
-		}
 	}
 
 	logger.Infof(ctx, "All messages cleared for session: %s", sessionID)

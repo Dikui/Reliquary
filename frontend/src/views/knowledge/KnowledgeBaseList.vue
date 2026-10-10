@@ -8,8 +8,7 @@
           <div class="title-row">
             <h2>{{ $t('knowledgeBase.title') }}</h2>
             <t-tooltip :content="$t('knowledgeList.create')" placement="bottom">
-              <t-button variant="text" theme="default" size="small" class="header-action-btn"
-                data-guide="kb-list-create" @click="handleCreateKnowledgeBase">
+              <t-button variant="text" theme="default" size="small" class="header-action-btn" @click="handleCreateKnowledgeBase">
                 <template #icon><t-icon name="folder-add" size="16px" /></template>
               </t-button>
             </t-tooltip>
@@ -113,10 +112,6 @@
 
                   <span class="card-title-text">{{ kb.name }}</span>
                 </span>
-                <!-- The card menu always exists when the card is visible: pin
-                     is now per-user and available to anyone who can see the KB
-                     (backend route only requires KB read access). Settings /
-                     Every action is available to the signed-in user. -->
                 <t-popup overlayClassName="card-more-popup" trigger="click" destroy-on-close
                   placement="bottom-right">
                   <div class="more-wrap" @click.stop>
@@ -158,7 +153,6 @@
                 <div class="bottom-left">
                   <div class="feature-badges">
 
-
                     <t-tooltip v-if="kb.vlm_config?.enabled" :content="$t('knowledgeList.features.multimodal')"
                       placement="top">
                       <div class="feature-badge multimodal">
@@ -180,18 +174,15 @@
               </div>
             </div>
 
-
           </template>
         </div>
-
 
         <!-- 全部空状态：保留「新建知识库」CTA，因为是空间没有任何 KB 的真空场景 -->
         <div v-if="spaceSelection === 'all' && filteredKnowledgeBases.length === 0 && !loading" class="empty-state">
           <img class="empty-img" src="@/assets/img/upload.svg" alt="">
           <span class="empty-txt">{{ $t('knowledgeList.empty.title') }}</span>
           <span class="empty-desc">{{ $t('knowledgeList.empty.description') }}</span>
-          <t-button class="kb-create-btn empty-state-btn"
-            data-guide="kb-list-create" @click="handleCreateKnowledgeBase">
+          <t-button class="kb-create-btn empty-state-btn" @click="handleCreateKnowledgeBase">
             <template #icon><t-icon name="folder-add" /></template>
             {{ $t('knowledgeList.create') }}
           </t-button>
@@ -214,7 +205,6 @@
         </div>
 
         <!-- 我的知识库空状态 -->
-
 
         <!-- 空间下知识库空状态 -->
 
@@ -245,12 +235,10 @@
       :kb-id="uiStore.currentKBId || undefined" :initial-type="uiStore.kbEditorType"
       @update:visible="(val) => val ? null : uiStore.closeKBEditor()" @success="handleKBEditorSuccess" />
 
-
     <Teleport to="body">
 
     </Teleport>
 
-    <ContextualGuide tour="kbList" :when="showKbListContextualGuide" />
   </div>
 </template>
 
@@ -266,8 +254,6 @@ import { useAuthStore } from '@/stores/auth'
 import KnowledgeBaseEditorModal from './KnowledgeBaseEditorModal.vue'
 import ListSpaceSidebar from '@/components/ListSpaceSidebar.vue'
 import ResourceOriginBadge from '@/components/ResourceOriginBadge.vue'
-import ContextualGuide from '@/components/ContextualGuide.vue'
-import { isContextualGuideDone, markContextualGuideDone } from '@/config/contextualGuides'
 import { useTenantModelReadiness } from '@/composables/useTenantModelReadiness'
 import { useI18n } from 'vue-i18n'
 import { useListUrlState } from '@/composables/useListUrlState'
@@ -287,7 +273,7 @@ const { scope: spaceSelection } = useListUrlState({
   defaultScope,
 })
 
-// Per-user favorites + recents (localStorage-backed). isFavorite & touchRecent
+// Favorites and local recents. isFavorite & touchRecent
 // are wired into card render and click handlers below.
 const pins = useResourcePins()
 const kbFavoritesCount = computed(
@@ -345,9 +331,6 @@ const showKbListEmpty = computed(() => {
   return false
 })
 
-const showKbListContextualGuide = computed(
-  () => showKbListEmpty.value && !uiStore.showKBEditorModal,
-)
 
 interface UploadTaskState {
   uploadId: string
@@ -377,7 +360,6 @@ const applyKbListData = (data: any[]) => {
   }))
 }
 const fetchList = (force = false) => chatResources.fetchKnowledgeBasesForList(force).then(applyKbListData)
-
 
 onMounted(() => {
   fetchList().then(() => {
@@ -664,8 +646,7 @@ const ensureUploadTaskEntry = (detail?: UploadEventDetail) => {
 }
 
 const handleCardClick = (kb: KB) => {
-  // Track this open in the per-user "recent" list before navigating —
-  // matches the user mental model "this is what I last worked on".
+  // Record the recent knowledge base before navigating.
   pins.touchRecent('kb', kb.id)
   if (isInitialized(kb)) {
     goDetail(kb.id)
@@ -694,7 +675,6 @@ const goSettings = (id: string) => {
 
 // 创建知识库
 const handleCreateKnowledgeBase = () => {
-  markContextualGuideDone('kbList')
   // 无模型时仍打开创建向导，并定位到模型配置页；用户可在向导内添加模型，无需先跳转系统设置
   const initialSection =
     modelsReadyLoaded.value && !isReadyForDocumentKb.value ? 'models' : undefined
@@ -704,13 +684,9 @@ const handleCreateKnowledgeBase = () => {
 // 知识库编辑器成功回调（创建或编辑成功）
 const handleKBEditorSuccess = (kbId: string) => {
   console.log('[KnowledgeBaseList] knowledge operation success:', kbId)
-  const shouldOpenDetailForUploadGuide = !isContextualGuideDone('kbDetail')
   // 列表页编辑同样要让单 KB 详情缓存失效，否则侧栏 / 详情页 60s 内仍显示旧信息
   chatResources.invalidateKnowledgeBaseDetail(kbId)
   fetchList(true).then(() => {
-    if (shouldOpenDetailForUploadGuide && kbId && !uiStore.showKBEditorModal) {
-      goDetail(kbId)
-    }
     // 如果是从路由参数中获取的高亮ID，触发闪烁效果
     if (route.query.highlightKbId === kbId) {
       triggerHighlightFlash(kbId)

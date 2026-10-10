@@ -20,7 +20,7 @@ const details = {
     { id: 'kb-2', name: 'Engineering', bindings: ['vlm_model'] },
   ],
   agents: [
-    { id: 'agent-1', name: 'Support', bindings: ['chat_model', 'follow_up_model'] },
+    { id: 'agent-1', name: 'Support', bindings: ['chat_model'] },
   ],
   knowledge_base_total: 2,
   agent_total: 1,
@@ -102,10 +102,6 @@ test('keeps navigation and localization stable for all resource kinds', () => {
     modelUsageResourceRoute('agent', 'agent-1', ['vlm_model']),
     { path: '/platform/agents', query: { edit: 'agent-1', section: 'multimodal' } },
   )
-  assert.deepEqual(
-    modelUsageResourceRoute('agent', 'agent-1', ['follow_up_model']),
-    { path: '/platform/agents', query: { edit: 'agent-1', section: 'suggestions' } },
-  )
   assert.equal(modelUsageBindingI18nKey('vlm_model'), 'modelSettings.usage.bindings.vlm_model')
   assert.equal(modelUsageBindingI18nKey('future_binding'), 'modelSettings.usage.bindings.unknown')
 })
@@ -115,7 +111,6 @@ test('maps knowledge-base bindings to the configuration section that owns them',
   assert.equal(modelUsageKnowledgeBaseSection(['summary_model']), 'models')
   assert.equal(modelUsageKnowledgeBaseSection(['image_processing_model']), 'multimodal')
   assert.equal(modelUsageKnowledgeBaseSection(['vlm_model']), 'multimodal')
-  assert.equal(modelUsageKnowledgeBaseSection(['asr_model']), 'asr')
   assert.equal(modelUsageKnowledgeBaseSection(['future_binding']), 'models')
   assert.equal(modelUsageKnowledgeBaseSection(['summary_model', 'vlm_model']), 'models')
 })
@@ -125,11 +120,8 @@ test('maps agent bindings to the configuration section that owns them', () => {
   assert.equal(modelUsageAgentSection(['rerank_model']), 'model')
   assert.equal(modelUsageAgentSection(['query_understand_model']), 'model')
   assert.equal(modelUsageAgentSection(['vlm_model']), 'multimodal')
-  assert.equal(modelUsageAgentSection(['asr_model']), 'multimodal')
-  assert.equal(modelUsageAgentSection(['follow_up_model']), 'suggestions')
   assert.equal(modelUsageAgentSection(['future_binding']), 'model')
   assert.equal(modelUsageAgentSection(['chat_model', 'vlm_model']), 'model')
-  assert.equal(modelUsageAgentSection(['vlm_model', 'follow_up_model']), 'multimodal')
 })
 
 test('tier-only model usage prevents deletion and preserves global and domain references', () => {

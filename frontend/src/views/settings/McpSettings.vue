@@ -17,7 +17,6 @@
         <p>{{ $t('mcpSettings.manageAndTest') }}</p>
       </div>
 
-
       <div class="services-grid">
         <!-- 与 ModelSettings / ModelSettings 同形的卡片：左侧 transport 徽章 +
              标题 / 副标题 / url 三段式。开关挂在标题行右侧，三点菜单 hover 才出现。
@@ -157,7 +156,6 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-
 const onServiceCardClick = (event: Event, service: MCPService) => {
   if (event.type === 'keydown') {
     const ke = event as KeyboardEvent
@@ -183,7 +181,7 @@ const handleDialogSuccess = () => {
 }
 
 // Handle first create: keep the drawer open and flip it to edit mode bound to
-// the newly created service, so OAuth authorization and "test connection"
+// the newly created service, so "test connection"
 // (both of which need a saved service id) are usable right away. The list is
 // refreshed in the background; we prefer the freshly-fetched record so the
 // edit form sees server-side fields (e.g. credential metadata).

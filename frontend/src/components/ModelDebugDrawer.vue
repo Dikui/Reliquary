@@ -76,7 +76,7 @@
       <template v-if="selectedModel">
         <section class="setting-drawer__section">
           <h4 class="setting-drawer__section-title">{{ $t('modelSettings.debug.groupInput') }}</h4>
-          <div v-if="selectedModel.type !== 'ASR'" class="form-item">
+          <div class="form-item">
             <label class="form-label">{{ inputLabel }}</label>
             <t-textarea
               v-model="input"
@@ -102,7 +102,7 @@
                 ref="fileInputRef"
                 class="file-picker__input"
                 type="file"
-                :accept="selectedModel.type === 'VLLM' ? 'image/*' : 'audio/*'"
+                accept="image/*"
                 @change="onNativeFileChange"
               >
               <t-button variant="outline" size="small" @click="fileInputRef?.click()">
@@ -252,12 +252,11 @@ const selectedModel = computed(() => props.models.find(model => model.id === sel
 const filteredModels = computed(() => props.models.filter(model => model.type === selectedModelType.value))
 const isChat = computed(() => selectedModel.value?.type === 'KnowledgeQA')
 const supportsThinking = computed(() => selectedModel.value ? modelSupportsThinking(selectedModel.value) : false)
-const needsFile = computed(() => ['VLLM', 'ASR'].includes(selectedModel.value?.type || ''))
+const needsFile = computed(() => selectedModel.value?.type === 'VLLM')
 const documents = computed(() => documentsText.value.split('\n').map(item => item.trim()).filter(Boolean))
 const canRun = computed(() => {
   if (!selectedModel.value) return false
   if (needsFile.value && !file.value) return false
-  if (selectedModel.value.type === 'ASR') return true
   if (selectedModel.value.type === 'Rerank') return !!input.value.trim() && documents.value.length > 0
   return !!input.value.trim()
 })
@@ -268,7 +267,6 @@ const allModelTypeOptions = computed(() => {
     Embedding: { short: 'embedding', icon: 'chart-bubble' },
     Rerank: { short: 'rerank', icon: 'filter-sort' },
     VLLM: { short: 'vllm', icon: 'image' },
-    ASR: { short: 'asr', icon: 'sound' },
   }
   return (Object.keys(keys) as DebugModelType[]).map(value => ({
     value,
@@ -306,11 +304,7 @@ const inputPlaceholder = computed(() => {
   return t('modelSettings.debug.queryPlaceholder')
 })
 
-const fileLabel = computed(() =>
-  selectedModel.value?.type === 'VLLM'
-    ? t('modelSettings.debug.imageFile')
-    : t('modelSettings.debug.audioFile'),
-)
+const fileLabel = computed(() => t('modelSettings.debug.imageFile'))
 
 const formattedResult = computed(() => {
   if (!result.value) return ''
@@ -326,8 +320,6 @@ const OBSERVATION_LABELS: Record<string, string> = {
   answer_characters: 'modelSettings.debug.metrics.answerChars',
   reasoning_characters: 'modelSettings.debug.metrics.reasoningChars',
   reasoning_returned: 'modelSettings.debug.metrics.reasoningReturned',
-  text_characters: 'modelSettings.debug.metrics.textChars',
-  segment_count: 'modelSettings.debug.metrics.segmentCount',
 }
 
 const resultMetrics = computed(() => {

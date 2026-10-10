@@ -271,7 +271,7 @@ func isFileURL(rawURL, fileName, fileType string) bool {
 	u, err := url.Parse(rawURL)
 	if err == nil {
 		ext := strings.ToLower(strings.TrimPrefix(path.Ext(u.Path), "."))
-		if ext != "" && isSupportedImportExtension(ext) {
+		if ext != "" && (isSupportedImportExtension(ext) || IsAudioType(ext)) {
 			return true
 		}
 	}

@@ -287,8 +287,6 @@ export interface RuntimeTask {
   knowledge_base_id?: string
   knowledge_id?: string
   task_id?: string
-  source_id?: string
-  target_id?: string
   source_kb_id?: string
   target_kb_id?: string
   data_source_id?: string

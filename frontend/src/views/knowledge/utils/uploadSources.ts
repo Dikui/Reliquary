@@ -1,6 +1,13 @@
 import { fileSizeVerification } from '@/utils'
 import { shouldRejectKnowledgeFileType } from '@/utils/fileTypeVerification'
 
+const UNSUPPORTED_AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'm4a', 'flac', 'ogg', 'aac'])
+
+export function filterUnsupportedAudioFiles(files: File[]): { validFiles: File[]; audioFilteredCount: number } {
+  const validFiles = files.filter(file => !UNSUPPORTED_AUDIO_EXTENSIONS.has(getUploadFileExt(file)))
+  return { validFiles, audioFilteredCount: files.length - validFiles.length }
+}
+
 export const UPLOAD_VIDEO_EXTENSIONS = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'wmv', 'flv']
 
 export function getUploadFileExt(file: File): string {
@@ -26,6 +33,7 @@ export interface FilterUploadFilesResult {
   videoFilteredCount: number
   hiddenFileCount: number
   unsupportedTypeCount: number
+  audioFilteredCount: number
   unavailableEngineCount: number
   oversizedCount: number
 }
@@ -50,6 +58,7 @@ export function filterUploadFiles(
   let videoFilteredCount = 0
   let hiddenFileCount = 0
   let unsupportedTypeCount = 0
+  let audioFilteredCount = 0
   let unavailableEngineCount = 0
   let oversizedCount = 0
   const multiFile = options.multiFile ?? list.length > 1
@@ -64,6 +73,11 @@ export function filterUploadFiles(
     }
 
     const fileExt = getUploadFileExt(file)
+    if (UNSUPPORTED_AUDIO_EXTENSIONS.has(fileExt)) {
+      audioFilteredCount++
+      skippedCount++
+      continue
+    }
     if (UPLOAD_VIDEO_EXTENSIONS.includes(fileExt)) {
       videoFilteredCount++
       continue
@@ -88,5 +102,5 @@ export function filterUploadFiles(
     validFiles.push(file)
   }
 
-  return { validFiles, skippedCount, videoFilteredCount, hiddenFileCount, unsupportedTypeCount, unavailableEngineCount, oversizedCount }
+  return { validFiles, skippedCount, videoFilteredCount, hiddenFileCount, unsupportedTypeCount, audioFilteredCount, unavailableEngineCount, oversizedCount }
 }

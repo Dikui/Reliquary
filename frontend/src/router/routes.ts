@@ -136,12 +136,5 @@ export function createApplicationRoutes(development = false): RouteRecordRaw[] {
       component: notFound,
       meta: { requiresAuth: false, requiresInit: false },
     },
-    // Dev-only markdown rendering test page
-    ...(development ? [{
-      path: '/platform/dev/markdown',
-      name: 'markdownTest',
-      component: () => import('../views/dev/MarkdownTestPage.vue'),
-      meta: { requiresAuth: false, requiresInit: false }
-    }] : []),
   ]
 }

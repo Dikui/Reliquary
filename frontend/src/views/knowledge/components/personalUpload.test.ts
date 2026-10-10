@@ -19,9 +19,9 @@ function loadFilter() {
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
   const module = { exports: {} as any }
   new Function('require', 'module', 'exports', code)((name: string) => name === '@/utils' ? { fileSizeVerification: (file: File) => file.size > 50 * 1024 * 1024 } : name === '@/utils/fileTypeVerification' ? { shouldRejectKnowledgeFileType } : require(name), module, module.exports)
-  return module.exports.filterUploadFiles
+  return module.exports
 }
-const filterUploadFiles = loadFilter()
+const { filterUploadFiles, filterUnsupportedAudioFiles } = loadFilter()
 
 test('upload filtering separates unavailable PDF/Office from unsupported HTML and oversized files', () => {
   const files = ['sample.pdf', 'sample.docx', 'page.html', 'notes.md'].map(name => ({ name, size: 12 }))
@@ -128,3 +128,64 @@ test('desktop source fields keep full labels and one full-width input per row', 
   assert.match(fields,/box-sizing:\s*border-box/)
   assert.match(css,/\.intake-source-field span\s*\{[^}]*white-space:\s*normal/)
 })
+
+
+test('audio rejection precedes engine availability for every supported audio suffix', () => {
+  const files = ['MP3', 'wav', 'm4a', 'flac', 'ogg', 'aac'].map(ext => ({ name: `audio.${ext}`, size: 1 }))
+  for (const supportedFileTypes of [undefined, [], ['md'], ['mp3', 'wav', 'm4a', 'flac', 'ogg', 'aac']]) {
+    const result = filterUploadFiles(files, { supportedFileTypes })
+    assert.equal(result.validFiles.length, 0)
+    assert.equal(result.audioFilteredCount, files.length)
+    assert.equal(result.unavailableEngineCount, 0)
+    assert.equal(result.unsupportedTypeCount, 0)
+  }
+})
+
+for (const locale of ['zh-CN', 'en-US']) {
+  test(`${locale}: file and folder selections reject audio without parser recovery advice`, async () => {
+    const warnings: string[] = []
+    const emitted: File[][] = []
+    const component = loadComponent(new URL('./KbUploadSourceDropdown.vue', import.meta.url), {
+      '../utils/uploadSources': { filterUploadFiles },
+      'tdesign-vue-next': { MessagePlugin: { warning: (message: any) => warnings.push(typeof message === 'string' ? message : message.content) }, Icon: nullComponent },
+    })
+    const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zh, 'en-US': en } })
+    const root = element('main')
+    const app = renderer.createApp(component, { supportedFileTypes: ['md'], onFiles: (files: File[]) => emitted.push(files) })
+    app.use(i18n); registerPrimitives(app); app.mount(root)
+    const inputs = descendants(root).filter(node => node.tag === 'input')
+    assert.equal(inputs.length, 2)
+    for (const input of inputs) {
+      warnings.length = 0
+      input.props.onChange({ target: { files: [{ name: 'sample.mp3', size: 1, webkitRelativePath: 'folder/sample.mp3' }], value: 'x' } })
+      assert.deepEqual(warnings, [i18n.global.t('error.unsupportedAudioUpload')])
+      assert.equal(emitted.length, 0)
+      for (const word of ['Docker', 'anydoc', 'MinerU']) assert.ok(!warnings[0].includes(word))
+      warnings.length = 0
+      input.props.onChange({ target: { files: [{ name: 'sample.pdf', size: 1, webkitRelativePath: 'folder/sample.pdf' }], value: 'x' } })
+      assert.deepEqual(warnings, [i18n.global.t('knowledgeBase.parserRecoveryHint')])
+    }
+    app.unmount()
+  })
+
+  test(`${locale}: the knowledge page rejects dropped audio before opening upload confirmation`, () => {
+    const source = readFileSync(new URL('../KnowledgeBase.vue', import.meta.url), 'utf8')
+    const handler = source.match(/const handleUploadSourceFiles = \(files: File\[\]\) => \{[\s\S]*?\n\};/)![0]
+    const code = ts.transpileModule(handler, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
+    const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zh, 'en-US': en } })
+    const warnings: string[] = []
+    const confirmations: File[][] = []
+    const invoke = new Function('filterUnsupportedAudioFiles', 'MessagePlugin', 't', 'ensureDocumentKbReady', 'openUploadConfirmDialog', code + '\nreturn handleUploadSourceFiles;')(
+      filterUnsupportedAudioFiles, { warning: (message: string) => warnings.push(message) },
+      i18n.global.t, () => true, (files: File[]) => confirmations.push(files),
+    )
+    invoke([{ name: 'sample.mp3', size: 1 }])
+    assert.deepEqual(warnings, [i18n.global.t('error.unsupportedAudioUpload')])
+    assert.equal(confirmations.length, 0)
+    warnings.length = 0
+    const markdown = { name: 'notes.md', size: 1 }
+    invoke([{ name: 'sample.wav', size: 1 }, markdown])
+    assert.deepEqual(warnings, [i18n.global.t('error.unsupportedAudioUpload')])
+    assert.deepEqual(confirmations, [[markdown]])
+  })
+}

@@ -27,8 +27,6 @@ func TestMatchesKnowledgeBase(t *testing.T) {
 		want     bool
 	}{
 		{name: "knowledge base id", taskType: types.TypeDocumentProcess, payload: `{"knowledge_base_id":"kb-1"}`, want: true},
-		{name: "clone source", taskType: types.TypeKBClone, payload: `{"source_id":"kb-1"}`, want: true},
-		{name: "clone target", taskType: types.TypeKBClone, payload: `{"target_id":"kb-1"}`, want: true},
 		{name: "source id is task specific", taskType: types.TypeDocumentProcess, payload: `{"source_id":"kb-1"}`},
 		{name: "move source", taskType: types.TypeKnowledgeMove, payload: `{"source_kb_id":"kb-1"}`, want: true},
 		{name: "move target", taskType: types.TypeKnowledgeMove, payload: `{"target_kb_id":"kb-1"}`, want: true},
@@ -73,9 +71,6 @@ func TestMatchesKnowledgeBase(t *testing.T) {
 func TestMatchesKnowledgePreservesPerKnowledgeAllowList(t *testing.T) {
 	if !matchesKnowledge(types.TypeDocumentProcess, []byte(`{"knowledge_id":"knowledge-1"}`), "knowledge-1") {
 		t.Fatal("document task should remain cancellable by knowledge ID")
-	}
-	if matchesKnowledge(types.TypeKBClone, []byte(`{"knowledge_id":"knowledge-1"}`), "knowledge-1") {
-		t.Fatal("KB clone must not become cancellable through the per-knowledge API")
 	}
 }
 

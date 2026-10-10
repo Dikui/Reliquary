@@ -33,14 +33,13 @@
       </div>
     </div>
 
-    <t-tabs v-model="activeTypeFilter" class="model-type-tabs" data-guide="settings-models">
+    <t-tabs v-model="activeTypeFilter" class="model-type-tabs">
       <t-tab-panel value="all" :label="`${$t('common.all')}(${allLegacyModels.length})`" />
       <t-tab-panel value="chat" :label="`${$t('modelSettings.typeShort.chat')}(${countByType('chat')})`" />
       <t-tab-panel value="embedding"
         :label="`${$t('modelSettings.typeShort.embedding')}(${countByType('embedding')})`" />
       <t-tab-panel value="rerank" :label="`${$t('modelSettings.typeShort.rerank')}(${countByType('rerank')})`" />
       <t-tab-panel value="vllm" :label="`${$t('modelSettings.typeShort.vllm')}(${countByType('vllm')})`" />
-      <t-tab-panel value="asr" :label="`${$t('modelSettings.typeShort.asr')}(${countByType('asr')})`" />
     </t-tabs>
 
     <t-loading :loading="loading" size="small" class="model-list-loading">
@@ -124,7 +123,6 @@
 
           type="button"
           class="model-card model-card--add"
-          data-guide="settings-add-model"
           @click="openAddDialog"
         >
           <span class="model-card--add__icon" aria-hidden="true">
@@ -235,7 +233,6 @@
             <ul><li v-for="resource in usageConflict.model_tiers" :key="`${resource.scope}:${resource.id}`"><div class="model-usage-resource"><strong>{{ resource.name }}</strong><div class="model-usage-bindings"><t-tag v-for="binding in resource.bindings" :key="binding" size="small" variant="light">{{ $t(modelUsageBindingI18nKey(binding)) }}</t-tag></div></div><t-button variant="text" @click="openTierUsageResource(resource.scope)">{{ $t(resource.scope === 'global' ? 'modelTiers.configureGlobal' : 'modelTiers.configureDomains') }}</t-button></li></ul>
           </section>
 
-
         </div>
 
         <div class="model-usage-dialog__actions">
@@ -276,7 +273,7 @@ import {
   type ModelUsageResourceKind,
 } from '@/api/model'
 import { useUIStore } from '@/stores/ui'
-import { focusKbEditorSection } from '@/config/contextualGuides'
+import { focusKbEditorSection } from '@/config/editorNavigation'
 import { useChatResourcesStore } from '@/stores/chatResources'
 import {
   formatContextWindow,
@@ -288,7 +285,7 @@ const { t, te } = useI18n()
 const uiStore = useUIStore()
 const chatResources = useChatResourcesStore()
 const router = useRouter()
-type ModelType = 'chat' | 'embedding' | 'rerank' | 'vllm' | 'asr'
+type ModelType = 'chat' | 'embedding' | 'rerank' | 'vllm'
 type FilterType = 'all' | ModelType
 
 const showDialog = ref(false)
@@ -302,7 +299,7 @@ const editingModel = ref<any>(null)
 const loading = ref(true)
 const activeTypeFilter = ref<FilterType>('all')
 
-const MODEL_TAB_TYPES: FilterType[] = ['chat', 'embedding', 'rerank', 'vllm', 'asr']
+const MODEL_TAB_TYPES: FilterType[] = ['chat', 'embedding', 'rerank', 'vllm']
 const KNOWLEDGE_BASE_EDITOR_HOST_ROUTES = new Set([
   'home',
   'knowledgeBaseList',
@@ -330,7 +327,6 @@ const backendTypeToModelType: Record<string, ModelType> = {
   Embedding: 'embedding',
   Rerank: 'rerank',
   VLLM: 'vllm',
-  ASR: 'asr'
 }
 
 // 将后端模型格式转换为旧的前端格式（附带 _modelType 便于渲染）
@@ -383,7 +379,6 @@ const typeIcon = (type: ModelType): string => {
     embedding: 'chart-bubble',
     rerank: 'filter-sort',
     vllm: 'image',
-    asr: 'sound',
   }
   return map[type]
 }
@@ -394,14 +389,13 @@ const typeLabel = (type: ModelType) => {
     embedding: t('modelSettings.typeShort.embedding'),
     rerank: t('modelSettings.typeShort.rerank'),
     vllm: t('modelSettings.typeShort.vllm'),
-    asr: t('modelSettings.typeShort.asr')
   }
   return map[type]
 }
 
 const sourceLabel = (type: ModelType) => {
-  // vllm / asr 的 remote 文案特殊，其余走通用 remote 文案
-  if (type === 'vllm' || type === 'asr') {
+  // vllm 的 remote 文案特殊，其余走通用 remote 文案
+  if (type === 'vllm') {
     return t('modelSettings.source.openaiCompatible')
   }
   return t('modelSettings.source.remote')
@@ -456,7 +450,6 @@ const emptyHint = computed(() => {
     embedding: t('modelSettings.embedding.empty'),
     rerank: t('modelSettings.rerank.empty'),
     vllm: t('modelSettings.vllm.empty'),
-    asr: t('modelSettings.asr.empty')
   }
   return map[activeTypeFilter.value as ModelType]
 })
@@ -781,13 +774,12 @@ const copyModel = async (_type: ModelType, modelId: string) => {
 }
 
 // 获取后端模型类型
-function getModelType(type: ModelType): 'KnowledgeQA' | 'Embedding' | 'Rerank' | 'VLLM' | 'ASR' {
+function getModelType(type: ModelType): 'KnowledgeQA' | 'Embedding' | 'Rerank' | 'VLLM' {
   const typeMap = {
     chat: 'KnowledgeQA' as const,
     embedding: 'Embedding' as const,
     rerank: 'Rerank' as const,
     vllm: 'VLLM' as const,
-    asr: 'ASR' as const
   }
   return typeMap[type]
 }
@@ -1041,10 +1033,6 @@ onMounted(() => {
   color: #C93E3E;
 }
 
-.model-card--asr .model-card__badge {
-  background: rgba(17, 128, 83, 0.1);
-  color: #118053;
-}
 
 .model-card__body {
   flex: 1;

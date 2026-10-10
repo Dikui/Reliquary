@@ -20,7 +20,7 @@ func TestRequireTaskProgressTenant_RejectsCrossTenant(t *testing.T) {
 }
 
 func TestRequireTaskProgressTenant_AllowsOwnTenant(t *testing.T) {
-	taskID := utils.GenerateTaskID("kb_clone", 1, "kb-source")
+	taskID := utils.GenerateTaskID("knowledge_move", 1, "kb-source")
 	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(1))
 
 	if err := requireTaskProgressTenant(ctx, taskID); err != nil {

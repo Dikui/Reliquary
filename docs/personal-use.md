@@ -20,7 +20,7 @@ go run ./cmd/server reset-password
 
 文件访问继续使用带鉴权的 `/files` 代理与 `/files/presigned`。配置 `APP_EXTERNAL_URL` 并代理 `/r/` 后，可生成限时匿名文件链接。
 
-解析保留 `simple`、`anydoc`、`mineru` 和 `mineru_cloud`。文本、Markdown、图片和音频使用 simple；PDF、Office 和 EPUB 默认使用进程内 anydoc，CSV 默认使用 simple，也可显式选择 anydoc；扫描件和复杂排版可以在解析引擎设置中选择已配置的 MinerU。HTML、HTM、MHTML、XMind 文件上传返回明确的不支持错误，按网址收录继续使用现有抓取能力。
+解析保留 `simple`、`anydoc`、`mineru` 和 `mineru_cloud`。文本、Markdown 和图片使用 simple；PDF、Office 和 EPUB 默认使用进程内 anydoc，CSV 默认使用 simple，也可显式选择 anydoc；扫描件和复杂排版可以在解析引擎设置中选择已配置的 MinerU。HTML、HTM、MHTML、XMind 和音频文件上传返回明确的不支持错误，按网址收录使用 HTTP 抓取；需要 JavaScript 渲染的页面返回无法抓取正文的失败原因。
 
 本地开发需先安装 Rust 工具链，然后在仓库根目录执行：
 
@@ -32,7 +32,7 @@ go run -tags anydoc ./cmd/server
 
 应用镜像默认以 `WITH_ANYDOC=1` 构建。普通 `go run ./cmd/server` 不链接 anydoc，PDF 和 Office 解析会提示静态库和 `-tags anydoc` 的构建要求；可以在设置中为 PDF 显式选择已配置的 MinerU。单次解析调用超时由 `PARSER_CALL_TIMEOUT` 设置，默认 30 分钟。
 
-只运行一个后端进程。流式事件、模型并发与速率限制、接口限流、工具审批和 MCP OAuth state 保存在进程内存中，重启后不保留未完成的流式事件或审批；OAuth state 为单次使用，10 分钟过期。Redis 继续用于 Asynq 任务队列及任务检查、多模态图像任务计数、知识库克隆与知识移动进度，以及运行配置缓存变更通知。
+只运行一个后端进程。流式事件、模型并发与速率限制、接口限流、工具审批保存在进程内存中，重启后不保留未完成的流式事件或审批。Redis 继续用于 Asynq 任务队列及任务检查、多模态图像任务计数、知识移动进度，以及运行配置缓存变更通知。
 
 当前版本不提供联网搜索：普通问答仅检索知识库，Agent 不提供搜索互联网的工具，工作流不提供网页研究步骤和专题调研模板。抓取指定网址的 `web_fetch`、Agent 按网址收录的 `knowledge_import_url`、RSS 与站点适配器继续可用。主动调研的后续计划见 [ADR 0007](adr/0007-personal-single-user.md) 和 `.scratch/web-research/issues/01-active-research.md`。
 
@@ -43,8 +43,10 @@ Docker Compose 和开发脚本可在 `.env` 中设置自定义 `SSRF_WHITELIST_E
 `SSRF_WHITELIST_EXTRA` 始终与设置页的 SSRF 白名单合并，设置页保存为空列表或修改白名单不会覆盖部署配置。要关闭 fake-ip 放行，应在部署环境中将该变量显式设为空，同时从设置页白名单移除自行添加的同一网段。
 
 
-工作流只提供 `search`、`fact_query`、`report`，每日与每周模板可继续使用。运行期间禁用工作流会暂停，可在重新启用后恢复；失败运行可重试。Wiki、Agent 长期记忆与历史对话搜索、RAG 评测、沙箱、技能及个人环境变量已删除。对话历史、MCP/OAuth、数据分析、数据库查询、知识上下文、策略评测、待审区与消息纠错继续保留。内置模型配置的环境变量展开独立保留。
+工作流只提供 `search`、`fact_query`、`report`，每日与每周模板可继续使用。运行期间禁用工作流会暂停，可在重新启用后恢复；失败运行可重试。Wiki、Agent 长期记忆与历史对话搜索、RAG 评测、沙箱、技能及个人环境变量已删除。对话历史、MCP（无鉴权、API Key、Bearer）、数据分析、知识上下文、策略评测、待审区与消息纠错继续保留。内置模型配置的环境变量展开独立保留。
 
 空间信息与 API Key 使用 `/api/v1/space` 及其子路径，系统设置与队列使用 `/api/v1/system/settings` 和 `/api/v1/system/runtime/queues`。已用空间继续统计，不设存储限额。
 
 未设置 `SYSTEM_AES_KEY` 时，MCP 凭据和模型 API Key 将以明文保存；启动日志输出警告，系统信息页显示凭据加密状态。设置有效的 32 字节密钥后按现有行为加密保存。
+
+知识库置顶与资源收藏保存在个人空间中，登录用户和 API Key 看到相同结果。知识库列表中的复制只创建相同配置的空知识库，移动知识及其进度继续保留。回答后不再生成追问推荐，智能体对话开始前的推荐问题继续保留。

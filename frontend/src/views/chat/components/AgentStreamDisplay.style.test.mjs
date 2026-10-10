@@ -98,7 +98,7 @@ test('agent mode shows a native placeholder before answer whenever nothing is pe
   assert.match(source, /return !hasPendingStreamingActivity\.value/)
   assert.match(source, /const hasPendingStreamingActivity = computed/)
   assert.match(source, /event\.thinking === true \|\| isThinkingActive\(event\.event_id\)/)
-  assert.match(source, /event\.type === 'tool_approval_required' \|\| event\.type === 'mcp_oauth_required'/)
+  assert.match(source, /event\.type === 'tool_approval_required'/)
   assert.match(source, /class="action-card action-pending"/)
   assert.match(source, /t\('chat\.thinkingAlt'\)/)
   assert.match(source, /chat-timeline-loading\.less/)

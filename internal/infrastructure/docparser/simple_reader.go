@@ -13,7 +13,7 @@ import (
 	"reliquary/internal/types"
 )
 
-// simpleFormats lists text, image and audio extensions parsed in this process.
+// simpleFormats lists text and image extensions parsed in this process.
 var simpleFormats = map[string]bool{
 	"md": true, "markdown": true,
 	"txt": true, "text": true,
@@ -27,14 +27,11 @@ var imageFormats = map[string]bool{
 }
 
 var audioFormats = map[string]bool{
-	"mp3": true, "wav": true, "m4a": true, "flac": true, "ogg": true,
+	"mp3": true, "wav": true, "m4a": true, "flac": true, "ogg": true, "aac": true,
 }
 
 func init() {
 	for k := range imageFormats {
-		simpleFormats[k] = true
-	}
-	for k := range audioFormats {
 		simpleFormats[k] = true
 	}
 }
@@ -88,8 +85,6 @@ func (b *SimpleFormatReader) Read(ctx context.Context, req *types.ReadRequest) (
 		return &types.ReadResult{MarkdownContent: md}, nil
 	case imageFormats[ft]:
 		return imageToResult(req.FileName, req.FileContent), nil
-	case audioFormats[ft]:
-		return audioToResult(req.FileName, req.FileContent), nil
 	default:
 		return nil, fmt.Errorf("unsupported simple format: %s", ft)
 	}
@@ -128,23 +123,6 @@ func IsImageFormat(fileType string) bool {
 // IsAudioFormat returns true if the file type is a recognized audio format.
 func IsAudioFormat(fileType string) bool {
 	return audioFormats[strings.ToLower(strings.TrimPrefix(fileType, "."))]
-}
-
-// audioToResult wraps a standalone audio file. The actual transcription is
-// handled by the ASR model in the knowledge service pipeline. Here we just
-// return a placeholder markdown with the raw bytes preserved for upstream
-// processing.
-func audioToResult(fileName string, data []byte) *types.ReadResult {
-	if fileName == "" {
-		fileName = "audio.mp3"
-	}
-	// Return a placeholder; the knowledge service will replace this with
-	// the ASR transcription result.
-	return &types.ReadResult{
-		MarkdownContent: fmt.Sprintf("[Audio file: %s]", fileName),
-		IsAudio:         true,
-		AudioData:       data,
-	}
 }
 
 // ensureOriginalImageRef checks whether the input file is an image and, if the

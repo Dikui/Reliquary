@@ -2,7 +2,7 @@ package types
 
 import "time"
 
-// Resource type constants for UserResourceFavorite. Extensible — adding a
+// Resource type constants for ResourceFavorite. Extensible — adding a
 // new favoritable resource is just a new constant string + a frontend hook,
 // no schema change required.
 const (
@@ -11,11 +11,10 @@ const (
 	ResourceTypeTag   = "tag"
 )
 
-// UserResourceFavorite is a per-(user, tenant) star on a single resource.
+// ResourceFavorite is a per-tenant star on a single resource.
 // See the baseline migration for the schema rationale (composite key, no FK,
 // tenant-scoped on purpose).
-type UserResourceFavorite struct {
-	UserID       string    `json:"user_id"       gorm:"type:varchar(36);primaryKey"`
+type ResourceFavorite struct {
 	TenantID     uint64    `json:"tenant_id"     gorm:"primaryKey"`
 	ResourceType string    `json:"resource_type" gorm:"type:varchar(16);primaryKey"`
 	ResourceID   string    `json:"resource_id"   gorm:"type:varchar(64);primaryKey"`
@@ -24,8 +23,8 @@ type UserResourceFavorite struct {
 
 // TableName pins the table to the migration's exact name so GORM's
 // pluraliser doesn't drift if we ever rename the struct.
-func (UserResourceFavorite) TableName() string {
-	return "user_resource_favorites"
+func (ResourceFavorite) TableName() string {
+	return "resource_favorites"
 }
 
 // IsValidFavoriteResourceType returns true for resource types this product

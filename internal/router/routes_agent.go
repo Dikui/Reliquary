@@ -27,8 +27,8 @@ func RegisterCustomAgentRoutes(r *gin.RouterGroup, agentHandler *handler.CustomA
 	r.Handle(http.MethodGet, "/agents/:id/suggested-questions", agentHandler.GetSuggestedQuestions)
 }
 
-func RegisterUserFavoriteRoutes(r *gin.RouterGroup, h *handler.UserResourceFavoriteHandler, g *accessGuards) {
-	// Favorites are per-user; not declared for API keys (default-deny).
+func RegisterUserFavoriteRoutes(r *gin.RouterGroup, h *handler.ResourceFavoriteHandler, g *accessGuards) {
+	// Favorites are shared by login and API Key callers in the personal space.
 	favs := r.Group("/user/favorites")
 	{
 		favs.GET("", h.ListFavorites)

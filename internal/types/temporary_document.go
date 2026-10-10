@@ -92,7 +92,6 @@ type TemporaryDocumentTaskPayload struct {
 }
 
 type TemporaryDocumentCreateOptions struct {
-	ASRModelID   string `json:"asr_model_id,omitempty"`
 	ParserEngine string `json:"parser_engine,omitempty"`
 	// VLMModelID enables image understanding (caption/OCR) during async parse.
 	// Images use it to produce real text content; scanned/image-only documents
