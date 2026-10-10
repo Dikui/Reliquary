@@ -65,7 +65,7 @@
               :class="{ 'is-active': formData.source === 'remote' }"
               role="radio"
               :aria-checked="formData.source === 'remote'"
-              @click="formData.source = 'remote'"
+              @click="handleSourceChange('remote')"
             >
               <t-icon name="cloud" class="source-option__icon" />
               <span class="source-option__label">{{ $t('model.editor.sourceRemote') }}</span>
@@ -77,7 +77,7 @@
               :disabled="ollamaServiceStatus === false || activeModelType === 'rerank'"
               role="radio"
               :aria-checked="formData.source === 'local'"
-              @click="formData.source = 'local'"
+              @click="handleSourceChange('local')"
             >
               <t-icon name="server" class="source-option__icon" />
               <span class="source-option__label">{{ $t('model.editor.sourceLocal') }}</span>
@@ -156,7 +156,7 @@
           <div class="form-item">
             <label class="form-label">{{ $t('model.editor.providerLabel') }}</label>
             <t-select v-model="formData.provider" :placeholder="$t('model.editor.providerPlaceholder')"
-              @change="handleProviderChange" :popup-props="{ overlayClassName: 'provider-select-popup' }">
+              :loading="loadingProviders" @change="handleProviderChange" :popup-props="{ overlayClassName: 'provider-select-popup' }">
               <!--
                 show-overflow-tooltip=false: TDesign 默认在 hover 时给选项浮一个
                 完整 label 的小气泡，但这里选项本身就是双行（主名 + 描述），不会
@@ -190,9 +190,7 @@
           </div>
 
           <div class="form-item">
-            <label class="form-label">{{
-              isSignedRerank ? signedRerankAccessKeyLabel : $t('model.editor.apiKeyOptional')
-            }}</label>
+            <label class="form-label">{{ $t('model.editor.apiKeyOptional') }}</label>
             <!--
               Edit mode: credentials live behind the /credentials subresource
               of the model — managed by the shared CredentialResource card,
@@ -207,7 +205,7 @@
             <CredentialResource v-if="isEdit && props.modelData?.id" :api="credentialApi" :fields="credentialFields"
               :meta="credentialMeta" />
             <t-input v-else v-model="formData.apiKey" :type="showApiKey ? 'text' : 'password'"
-              :placeholder="isSignedRerank ? signedRerankAccessKeyPlaceholder : apiKeyPlaceholder"
+              :placeholder="apiKeyPlaceholder"
               class="api-key-input" autocomplete="off" spellcheck="false">
               <template #prefix-icon><t-icon name="lock-on" /></template>
               <template #suffix-icon>
@@ -219,22 +217,6 @@
                 />
               </template>
             </t-input>
-            <p v-if="isSignedRerank" class="form-desc">{{ signedRerankCredentialHint }}</p>
-          </div>
-
-          <!-- AK/SK Rerank 创建模式：SecretKey（编辑模式由 CredentialResource 管理） -->
-          <div v-if="isSignedRerank && !isEdit" class="form-item">
-            <label class="form-label required">{{ signedRerankSecretKeyLabel }}</label>
-            <t-input v-model="formData.appSecret" type="password"
-              :placeholder="signedRerankSecretKeyPlaceholder" autocomplete="off" spellcheck="false">
-              <template #prefix-icon><t-icon name="lock-on" /></template>
-            </t-input>
-          </div>
-
-          <div v-if="isLkeapRerank" class="form-item">
-            <label class="form-label">{{ $t('model.editor.lkeap.regionLabel') }}</label>
-            <t-input v-model="formData.lkeapRegion" :placeholder="$t('model.editor.lkeap.regionPlaceholder')" />
-            <p class="form-desc">{{ $t('model.editor.lkeap.regionDesc') }}</p>
           </div>
 
           <!-- 自定义 HTTP Header（类似 OpenAI Python SDK 的 extra_headers） -->
@@ -409,10 +391,6 @@ interface ModelFormData {
   thinkingControl?: string
   // 自定义 HTTP 请求头（类似 OpenAI Python SDK 的 extra_headers）
   customHeaders?: CustomHeaderItem[]
-  /** LKEAP Rerank：腾讯云 SecretKey（创建时写入 app_secret） */
-  appSecret?: string
-  /** LKEAP Rerank：地域，如 ap-guangzhou */
-  lkeapRegion?: string
 }
 
 type EditorModelType = 'chat' | 'embedding' | 'rerank' | 'vllm'
@@ -455,183 +433,47 @@ const modelTypeChoices = computed(() => ([
 const apiProviderOptions = ref<ModelProviderOption[]>([])
 const loadingProviders = ref(false)
 
-// 硬编码的后备 Provider 配置 (当 API 不可用时使用)
-const fallbackProviderOptions = computed(() => [
-  {
-    value: 'openai',
-    label: t('model.editor.providers.openai.label'),
-    defaultUrls: {
-      chat: 'https://api.openai.com/v1',
-      embedding: 'https://api.openai.com/v1',
-      rerank: 'https://api.openai.com/v1',
-      vllm: 'https://api.openai.com/v1',
-    },
-    description: t('model.editor.providers.openai.description'),
-    modelTypes: ['chat', 'embedding', 'vllm']
-  },
-  {
-    value: 'azure_openai',
-    label: t('model.editor.providers.azure_openai.label'),
-    defaultUrls: {
-      chat: 'https://{resource}.openai.azure.com',
-      embedding: 'https://{resource}.openai.azure.com',
-      vllm: 'https://{resource}.openai.azure.com',
-    },
-    description: t('model.editor.providers.azure_openai.description'),
-    modelTypes: ['chat', 'embedding', 'vllm']
-  },
-  {
-    value: 'aliyun',
-    label: t('model.editor.providers.aliyun.label'),
-    defaultUrls: {
-      chat: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-      embedding: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-      rerank: 'https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank',
-      vllm: 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-    },
-    description: t('model.editor.providers.aliyun.description'),
-    modelTypes: ['chat', 'embedding', 'rerank', 'vllm']
-  },
-  {
-    value: 'zhipu',
-    label: t('model.editor.providers.zhipu.label'),
-    defaultUrls: {
-      chat: 'https://open.bigmodel.cn/api/paas/v4',
-      embedding: 'https://open.bigmodel.cn/api/paas/v4/embeddings',
-      vllm: 'https://open.bigmodel.cn/api/paas/v4'
-    },
-    description: t('model.editor.providers.zhipu.description'),
-    modelTypes: ['chat', 'embedding', 'vllm']
-  },
-  {
-    value: 'openrouter',
-    label: t('model.editor.providers.openrouter.label'),
-    defaultUrls: {
-      chat: 'https://openrouter.ai/api/v1',
-      embedding: 'https://openrouter.ai/api/v1'
-    },
-    description: t('model.editor.providers.openrouter.description'),
-    modelTypes: ['chat', 'embedding']
-  },
-  {
-    value: 'litellm',
-    label: t('model.editor.providers.litellm.label'),
-    defaultUrls: {
-      chat: 'http://your_litellm_proxy/v1',
-      embedding: 'http://your_litellm_proxy/v1',
-      vllm: 'http://your_litellm_proxy/v1'
-    },
-    description: t('model.editor.providers.litellm.description'),
-    modelTypes: ['chat', 'embedding', 'vllm']
-  },
-  {
-    value: 'requesty',
-    label: t('model.editor.providers.requesty.label'),
-    defaultUrls: {
-      chat: 'https://router.requesty.ai/v1',
-      embedding: 'https://router.requesty.ai/v1'
-    },
-    description: t('model.editor.providers.requesty.description'),
-    modelTypes: ['chat', 'embedding']
-  },
-  {
-    value: 'gemini',
-    label: t('model.editor.providers.gemini.label'),
-    defaultUrls: {
-      chat: 'https://generativelanguage.googleapis.com/v1beta/openai',
-      embedding: 'https://generativelanguage.googleapis.com/v1beta'
-    },
-    description: t('model.editor.providers.gemini.description'),
-    modelTypes: ['chat', 'embedding']
-  },
-  {
-    value: 'siliconflow',
-    label: t('model.editor.providers.siliconflow.label'),
-    defaultUrls: {
-      chat: 'https://api.siliconflow.cn/v1',
-      embedding: 'https://api.siliconflow.cn/v1',
-      rerank: 'https://api.siliconflow.cn/v1'
-    },
-    description: t('model.editor.providers.siliconflow.description'),
-    modelTypes: ['chat', 'embedding', 'rerank']
-  },
-  {
-    value: 'jina',
-    label: t('model.editor.providers.jina.label'),
-    defaultUrls: {
-      embedding: 'https://api.jina.ai/v1',
-      rerank: 'https://api.jina.ai/v1'
-    },
-    description: t('model.editor.providers.jina.description'),
-    modelTypes: ['embedding', 'rerank']
-  },
-  {
-    value: 'nvidia',
-    label: t('model.editor.providers.nvidia.label'),
-    defaultUrls: {
-      chat: 'https://integrate.api.nvidia.com/v1',
-      embedding: 'https://integrate.api.nvidia.com/v1',
-      rerank: 'https://ai.api.nvidia.com/v1/retrieval/nvidia/reranking',
-      vllm: 'https://integrate.api.nvidia.com/v1',
-    },
-    description: t('model.editor.providers.nvidia.description'),
-    modelTypes: ['chat', 'embedding', 'rerank', 'vllm']
-  },
-  {
-    value: 'novita',
-    label: t('model.editor.providers.novita.label'),
-    defaultUrls: {
-      chat: 'https://api.novita.ai/openai/v1',
-      embedding: 'https://api.novita.ai/openai/v1',
-      vllm: 'https://api.novita.ai/openai/v1',
-    },
-    description: t('model.editor.providers.novita.description'),
-    modelTypes: ['chat', 'embedding', 'vllm']
-  },
-  {
-    value: 'generic',
-    label: t('model.editor.providers.generic.label'),
-    defaultUrls: {},
-    description: t('model.editor.providers.generic.description'),
-    modelTypes: ['chat', 'embedding', 'rerank', 'vllm']
-  },
-])
-
 // 从 API 获取 Provider 列表
+let providerRequestVersion = 0
 const loadProviders = async () => {
+  const requestVersion = ++providerRequestVersion
+  const modelType = activeModelType.value
   loadingProviders.value = true
+  apiProviderOptions.value = []
   try {
-    const providers = await listModelProviders(activeModelType.value)
-    if (providers.length > 0) {
+    const providers = await listModelProviders(modelType)
+    if (requestVersion === providerRequestVersion) {
       apiProviderOptions.value = providers
+      if (
+        formData.value.provider
+        && !providers.some(p => p.value === formData.value.provider)
+        && providers.some(p => p.value === 'generic')
+      ) {
+        formData.value.provider = 'generic'
+      }
     }
   } catch (error) {
-    console.error('Failed to load providers from API, using fallback', error)
+    console.error('Failed to load providers from API', error)
   } finally {
-    loadingProviders.value = false
+    if (requestVersion === providerRequestVersion) {
+      loadingProviders.value = false
+    }
   }
 }
 
-// 根据当前模型类型过滤的 Provider 列表
-// API 返回的 defaultUrls/modelTypes 数据优先，但 label/description 使用 i18n
-const providerOptions = computed(() => {
-  // API 数据可用时，用 API 的结构数据 + i18n 的显示文本
-  if (apiProviderOptions.value.length > 0) {
-    return apiProviderOptions.value.map(p => ({
-      ...p,
-      label: te(`model.editor.providers.${p.value}.label`)
-        ? t(`model.editor.providers.${p.value}.label`)
-        : p.label,
-      description: te(`model.editor.providers.${p.value}.description`)
-        ? t(`model.editor.providers.${p.value}.description`)
-        : p.description,
-    }))
-  }
-  // 回退到硬编码值，按 modelTypes 过滤
-  return fallbackProviderOptions.value.filter(p =>
-    p.modelTypes.includes(activeModelType.value)
-  )
-})
+// 地址和支持类型由后端预设表提供，显示文本使用现有 i18n。
+const providerOptions = computed(() => apiProviderOptions.value
+  .filter(p => p.modelTypes.includes(activeModelType.value))
+  .map(p => ({
+    ...p,
+    label: te(`model.editor.providers.${p.value}.label`)
+      ? t(`model.editor.providers.${p.value}.label`)
+      : p.label,
+    description: te(`model.editor.providers.${p.value}.description`)
+      ? t(`model.editor.providers.${p.value}.description`)
+      : p.description,
+  }))
+)
 
 const dialogVisible = computed({
   get: () => props.visible,
@@ -696,56 +538,10 @@ const modelTypeIcon = computed(() => {
   return map[activeModelType.value] || 'setting'
 })
 
-const isLkeapRerank = computed(
-  () => activeModelType.value === 'rerank' && formData.value.provider === 'lkeap',
-)
-const isVolcengineRerank = computed(
-  () => activeModelType.value === 'rerank' && formData.value.provider === 'volcengine',
-)
-const isSignedRerank = computed(
-  () => isLkeapRerank.value || isVolcengineRerank.value,
-)
-const signedRerankAccessKeyLabel = computed(() => (
-  isVolcengineRerank.value
-    ? t('model.editor.volcengine.accessKeyLabel')
-    : t('model.editor.lkeap.secretIdLabel')
-))
-const signedRerankAccessKeyPlaceholder = computed(() => (
-  isVolcengineRerank.value
-    ? t('model.editor.volcengine.accessKeyPlaceholder')
-    : t('model.editor.lkeap.secretIdPlaceholder')
-))
-const signedRerankSecretKeyLabel = computed(() => (
-  isVolcengineRerank.value
-    ? t('model.editor.volcengine.secretKeyLabel')
-    : t('model.editor.lkeap.secretKeyLabel')
-))
-const signedRerankSecretKeyPlaceholder = computed(() => (
-  isVolcengineRerank.value
-    ? t('model.editor.volcengine.secretKeyPlaceholder')
-    : t('model.editor.lkeap.secretKeyPlaceholder')
-))
-const signedRerankCredentialHint = computed(() => (
-  isVolcengineRerank.value
-    ? t('model.editor.volcengine.rerankCredentialHint')
-    : t('model.editor.lkeap.rerankCredentialHint')
-))
-
 // Credential resource binding for the shared <CredentialResource> component.
-const credentialFields = computed<CredentialFieldDef<ModelCredentialField>[]>(() => {
-  const fields: CredentialFieldDef<ModelCredentialField>[] = [
-    {
-      key: 'api_key',
-      label: (isSignedRerank.value
-        ? signedRerankAccessKeyLabel.value
-        : t('model.editor.apiKeyOptional')) as string,
-    },
-  ]
-  if (isSignedRerank.value) {
-    fields.push({ key: 'app_secret', label: signedRerankSecretKeyLabel.value as string })
-  }
-  return fields
-})
+const credentialFields = computed<CredentialFieldDef<ModelCredentialField>[]>(() => [
+  { key: 'api_key', label: t('model.editor.apiKeyOptional') },
+])
 
 const credentialApi = computed<CredentialResourceApi<ModelCredentialField>>(() => {
   const id = props.modelData?.id ?? ''
@@ -765,7 +561,6 @@ const credentialApi = computed<CredentialResourceApi<ModelCredentialField>>(() =
 // renders the correct "Configured" state on dialog open.
 const credentialMeta = computed(() => (props.modelData as any)?.credentials ?? {
   api_key: { configured: false },
-  app_secret: { configured: false },
 })
 
 // Placeholder hint for the create-mode API key input. Edit mode replaces
@@ -821,8 +616,6 @@ const formData = ref<ModelFormData>({
   maxConcurrency: undefined,
   thinkingControl: defaultThinkingControl('generic', ''),
   customHeaders: [],
-  appSecret: '',
-  lkeapRegion: 'ap-guangzhou',
 })
 
 const rules = computed(() => ({
@@ -907,7 +700,7 @@ const checkOllamaServiceStatus = async () => {
 
   // Ollama 不可用时，新增场景下默认切换到 remote
   if (ollamaServiceStatus.value === false && !isEdit.value && formData.value.source === 'local') {
-    formData.value.source = 'remote'
+    await handleSourceChange('remote')
   }
 }
 
@@ -938,7 +731,7 @@ const selectModelType = async (type: EditorModelType) => {
   draftModelType.value = type
 
   if (type === 'rerank') {
-    formData.value.source = 'remote'
+    await handleSourceChange('remote')
   }
   if (type !== 'embedding') {
     formData.value.dimension = undefined
@@ -961,7 +754,7 @@ const selectModelType = async (type: EditorModelType) => {
     formData.value.provider = 'generic'
     formData.value.baseUrl = ''
   } else {
-    handleProviderChange(formData.value.provider || 'generic')
+    await handleProviderChange(formData.value.provider || 'generic')
   }
   if (showThinkingControlField.value && !isEdit.value) {
     thinkingControlManual.value = false
@@ -974,9 +767,6 @@ watch(() => props.visible, (val) => {
   if (val) {
     // 检查Ollama服务状态
     checkOllamaServiceStatus()
-
-    // 从 API 加载 Model Provider 列表
-    loadProviders()
 
     // 每次打开都清理上一次遗留的校验/检测结果，避免编辑别的模型时
     // 直接显示上一次的“连接成功”
@@ -991,6 +781,8 @@ watch(() => props.visible, (val) => {
 
     const currentId = props.modelData?.id ?? null
     draftModelType.value = props.modelType
+    // 按当前类型加载，避免打开抽屉时沿用上一次的类型。
+    loadProviders()
 
     hydratingForm.value = true
     try {
@@ -1052,8 +844,6 @@ const resetForm = () => {
     maxConcurrency: undefined,
     thinkingControl: defaultThinkingControl('generic', ''),
     customHeaders: [],
-    appSecret: '',
-    lkeapRegion: 'ap-guangzhou',
   }
   modelChecked.value = false
   modelAvailable.value = false
@@ -1067,7 +857,7 @@ const resetForm = () => {
 }
 
 // 处理厂商选择变化 (自动填充默认 URL)
-const handleProviderChange = (value: string) => {
+const handleProviderChange = async (value: string) => {
   const provider = providerOptions.value.find(opt => opt.value === value)
   if (provider && provider.defaultUrls) {
     // 根据当前模型类型获取对应的默认 URL
@@ -1075,16 +865,14 @@ const handleProviderChange = (value: string) => {
     if (defaultUrl) {
       formData.value.baseUrl = defaultUrl
     }
-    if (value === 'lkeap' && activeModelType.value === 'rerank' && !formData.value.modelName?.trim()) {
-      formData.value.modelName = 'lke-reranker-base'
-    }
-    if (value === 'volcengine' && activeModelType.value === 'rerank' && !formData.value.modelName?.trim()) {
-      formData.value.modelName = 'doubao-seed-rerank'
-    }
     // 重置校验状态
     remoteChecked.value = false
     remoteAvailable.value = false
     remoteMessage.value = ''
+  }
+  if (value === 'ollama') {
+    await handleSourceChange('local')
+    return
   }
   if (hydratingForm.value) return
   if (activeModelType.value !== 'chat' || formData.value.source !== 'remote') return
@@ -1181,6 +969,19 @@ const loadOllamaModels = async () => {
     MessagePlugin.error(t('model.editor.loadModelListFailed'))
   } finally {
     loadingOllamaModels.value = false
+  }
+}
+
+const handleSourceChange = async (source: 'local' | 'remote') => {
+  if (source === 'remote' && formData.value.provider === 'ollama') {
+    formData.value.provider = 'generic'
+    formData.value.interfaceType = undefined
+    formData.value.baseUrl = ''
+  }
+  formData.value.source = source
+  if (source === 'local') {
+    formData.value.interfaceType = 'ollama'
+    await loadOllamaModels()
   }
 }
 
@@ -1338,20 +1139,6 @@ const checkRemoteAPI = async () => {
         break
 
       case 'rerank': {
-        const signedRerankExtra = isSignedRerank.value
-          ? {
-              ...(isLkeapRerank.value
-                ? {
-                    extraConfig: {
-                      region: (formData.value.lkeapRegion || 'ap-guangzhou').trim(),
-                    },
-                  }
-                : {}),
-              ...(formData.value.appSecret?.trim()
-                ? { appSecret: formData.value.appSecret.trim() }
-                : {}),
-            }
-          : {}
         result = await checkRerankModel({
           modelName: formData.value.modelName,
           baseUrl: formData.value.baseUrl || '',
@@ -1359,7 +1146,6 @@ const checkRemoteAPI = async () => {
           provider: formData.value.provider,
           ...idPayload,
           ...headerPayload,
-          ...signedRerankExtra,
         })
         break
       }

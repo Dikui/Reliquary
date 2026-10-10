@@ -81,7 +81,7 @@ func (s *modelService) CreateModel(ctx context.Context, model *types.Model) erro
 	}
 	logger.Infof(ctx, "Creating model: %s, type: %s, source: %s", model.Name, model.Type, model.Source)
 
-	// Handle remote models (e.g., OpenAI, Azure)
+	// Handle remote models (e.g., OpenAI)
 	if model.Source == types.ModelSourceRemote {
 		logger.Info(ctx, "Remote model detected, setting status to active")
 		model.Status = types.ModelStatusActive

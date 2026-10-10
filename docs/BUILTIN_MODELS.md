@@ -161,7 +161,9 @@ services:
 
 ### 方式二：直接 SQL 插入
 
-支持的 provider：`generic`（自定义）、`openai`、`aliyun`、`zhipu`、`volcengine`、`hunyuan`、`deepseek`、`minimax`、`mimo`、`siliconflow`、`jina`、`openrouter`、`litellm`、`requesty`、`gemini`、`modelscope`、`moonshot`、`qianfan`、`qiniu`、`longcat`、`gpustack`
+服务商预设标识：`generic`（通用 OpenAI 兼容）、`openai`、`anthropic`、`deepseek`、`aliyun`、`zhipu`、`moonshot`、`siliconflow`、`volcengine`、`openrouter`、`gemini`、`ollama`。服务商下拉框按模型类型显示支持的预设，其他兼容服务填写 `provider: generic` 和相应地址。
+
+对话实现为 OpenAI 兼容、Anthropic 原生和 Ollama。嵌入实现为 OpenAI 兼容和 Ollama；阿里云文本嵌入使用 `https://dashscope.aliyuncs.com/compatible-mode/v1`。重排实现为通用 `/rerank` 格式和阿里云百炼，Jina 等兼容服务使用 `generic`。Gemini 默认使用 `https://generativelanguage.googleapis.com/v1beta/openai/`。
 
 ```sql
 -- 示例：LLM 内置模型
@@ -209,7 +211,7 @@ INSERT INTO models (
     'Rerank',
     'remote',
     '系统内置 Rerank 模型',
-    '{"base_url": "https://api.jina.ai/v1", "api_key": "jina-xxx", "provider": "jina"}'::jsonb,
+    '{"base_url": "https://api.jina.ai/v1", "api_key": "jina-xxx", "provider": "generic"}'::jsonb,
     false,
     'active',
     true

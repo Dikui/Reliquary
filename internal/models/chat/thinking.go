@@ -25,7 +25,7 @@ type QwenChatCompletionRequest struct {
 }
 
 // ThinkingConfig is the `{ "type": "enabled"|"disabled" }` block used by
-// LKEAP / Volcengine style providers.
+// Volcengine style providers.
 type ThinkingConfig struct {
 	Type string `json:"type"`
 }
@@ -86,7 +86,7 @@ func (s enableThinking) Apply(req *openai.ChatCompletionRequest, opts *ChatOptio
 }
 
 // thinkingTypeField encodes thinking via the `{ "thinking": { "type": ... } }`
-// object (LKEAP / Volcengine). Emits nothing when opts.Thinking is unset.
+// object (Volcengine). Emits nothing when opts.Thinking is unset.
 type thinkingTypeField struct{}
 
 func (thinkingTypeField) Apply(req *openai.ChatCompletionRequest, opts *ChatOptions, _ bool) (any, bool) {
@@ -103,7 +103,7 @@ func (thinkingTypeField) Apply(req *openai.ChatCompletionRequest, opts *ChatOpti
 }
 
 // chatTemplateKwargs encodes thinking via the standard request's
-// `chat_template_kwargs.enable_thinking` (vLLM / NVIDIA / generic local
+// `chat_template_kwargs.enable_thinking` (vLLM / generic local
 // deployments). Emits nothing when opts.Thinking is unset.
 type chatTemplateKwargs struct{}
 
@@ -151,10 +151,7 @@ func EffectiveThinkingControl(config *ChatConfig) string {
 	if override := parseThinkingOverride(config.ExtraConfig); override != nil {
 		return thinkingStrategyName(override)
 	}
-	providerName := provider.ProviderName(config.Provider)
-	if providerName == "" {
-		providerName = provider.DetectProvider(config.BaseURL)
-	}
+	providerName := provider.Resolve(provider.ProviderName(config.Provider), config.BaseURL)
 	return thinkingStrategyName(resolveProvider(providerName, config.ModelName).Thinking())
 }
 

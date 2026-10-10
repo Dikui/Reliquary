@@ -2345,23 +2345,6 @@ export default {
       baseUrlPlaceholderVllm: 'e.g. http://localhost:11434/v1',
       apiKeyOptional: 'API Key (optional)',
       apiKeyPlaceholder: 'Enter API Key',
-      lkeap: {
-        secretIdLabel: 'SecretId',
-        secretIdPlaceholder: 'Tencent Cloud API SecretId',
-        secretKeyLabel: 'SecretKey',
-        secretKeyPlaceholder: 'Tencent Cloud API SecretKey',
-        regionLabel: 'Region',
-        regionPlaceholder: 'ap-guangzhou',
-        regionDesc: 'RunRerank supports ap-beijing, ap-guangzhou, etc. Default: ap-guangzhou',
-        rerankCredentialHint: 'Rerank uses Tencent Cloud API signature (not the OpenAI-style LKEAP API key). Create SecretId/SecretKey in the CAM console.'
-      },
-      volcengine: {
-        accessKeyLabel: 'Access Key ID',
-        accessKeyPlaceholder: 'Volcengine Access Key ID',
-        secretKeyLabel: 'Secret Access Key',
-        secretKeyPlaceholder: 'Volcengine Secret Access Key',
-        rerankCredentialHint: 'Rerank uses VikingDB AK/SK signing, not an Ark API key. Recommended model: doubao-seed-rerank.'
-      },
       customHeadersLabel: 'Custom Request Headers (optional)',
       customHeadersDesc: 'Extra HTTP headers appended to requests to the remote model API (e.g. for enterprise gateway auth or tracing). Reserved headers like Authorization / Content-Type are ignored.',
       customHeadersAdd: 'Add Header',
@@ -2398,7 +2381,7 @@ export default {
         },
         chatTemplateKwargs: {
           label: 'chat_template_kwargs',
-          hint: 'Custom OpenAI-compatible gateways, NVIDIA NIM, vLLM / local Qwen'
+          hint: 'Generic OpenAI-compatible endpoints, vLLM / local Qwen'
         },
         enableThinking: {
           label: 'enable_thinking',
@@ -2406,7 +2389,7 @@ export default {
         },
         thinkingType: {
           label: 'thinking.type',
-          hint: 'Volcengine Ark; Tencent LKEAP (DeepSeek V3, etc.; default for LKEAP; use “Do not send” for R1)'
+          hint: 'Volcengine Ark chat models'
         }
       },
       dimensionHint: 'Model selected. Click "Detect Dimension" to fetch the vector dimension automatically.',
@@ -2436,109 +2419,53 @@ export default {
       providerLabel: 'Provider',
       providerPlaceholder: 'Select model provider',
       providers: {
+        generic: {
+          label: 'Generic OpenAI-compatible',
+          description: 'Custom OpenAI-compatible endpoints for chat, text embeddings and generic reranking'
+        },
         openai: {
           label: 'OpenAI',
-          description: 'gpt-5.2, gpt-5-mini, etc.'
+          description: 'gpt-5.2, gpt-5-mini, text-embedding-3-small, etc.'
         },
         anthropic: {
           label: 'Anthropic',
-          description: 'Claude models via native Anthropic Messages API'
-        },
-        azure_openai: {
-          label: 'Azure OpenAI',
-          description: 'OpenAI service hosted on Microsoft Azure'
-        },
-        aliyun: {
-          label: 'Aliyun DashScope',
-          description: 'qwen-plus, tongyi-embedding-vision-plus, qwen3-rerank, etc.'
-        },
-        zhipu: {
-          label: 'Zhipu BigModel',
-          description: 'glm-4.7, embedding-3, rerank, etc.'
-        },
-        openrouter: {
-          label: 'OpenRouter',
-          description: 'openai/gpt-5.2-chat, google/gemini-3-flash-preview, etc.'
-        },
-        litellm: {
-          label: 'LiteLLM',
-          description: 'Self-hosted proxy to 100+ providers (OpenAI, Anthropic, Gemini, Bedrock, etc.). Replace the placeholder URL; loopback hosts need SSRF_WHITELIST.'
-        },
-        requesty: {
-          label: 'Requesty',
-          description: 'openai/gpt-4o-mini, anthropic/claude-sonnet-4-5, etc.'
-        },
-        generic: {
-          label: 'Custom (OpenAI-compatible)',
-          description: 'Generic API endpoint'
-        },
-        siliconflow: {
-          label: 'SiliconFlow',
-          description: 'deepseek-ai/DeepSeek-V3.1, etc.'
-        },
-        jina: {
-          label: 'Jina',
-          description: 'jina-clip-v1, jina-embeddings-v2-base-zh, etc.'
-        },
-        volcengine: {
-          label: 'Volcengine',
-          description: 'doubao-1-5-pro-32k-250115, doubao-embedding-vision-250615, etc.'
+          description: 'Claude chat models via the native Anthropic Messages API'
         },
         deepseek: {
           label: 'DeepSeek',
           description: 'deepseek-chat, deepseek-reasoner, etc.'
         },
-        hunyuan: {
-          label: 'Hunyuan',
-          description: 'hunyuan-pro, hunyuan-standard, hunyuan-embedding, etc.'
+        aliyun: {
+          label: 'Aliyun Bailian',
+          description: 'qwen-plus, text-embedding-v4, qwen3-rerank, etc.'
         },
-        minimax: {
-          label: 'MiniMax',
-          description: 'MiniMax-M3, MiniMax-M2.7, MiniMax-M2.7-highspeed, etc.'
-        },
-        mimo: {
-          label: 'MiMo',
-          description: 'mimo-v2-flash'
-        },
-        gemini: {
-          label: 'Google Gemini',
-          description: 'gemini-3-flash-preview, gemini-2.5-pro, etc.'
-        },
-        gpustack: {
-          label: 'GPUStack',
-          description: 'Choose your deployed model on GPUStack'
-        },
-        modelscope: {
-          label: 'ModelScope',
-          description: 'Qwen/Qwen3-8B, Qwen/Qwen3-Embedding-8B, etc.'
-        },
-        qiniu: {
-          label: 'Qiniu Cloud',
-          description: 'deepseek/deepseek-v3.2-251201, z-ai/glm-4.7, etc.'
+        zhipu: {
+          label: 'Zhipu BigModel',
+          description: 'glm-4.7, embedding-3, etc.'
         },
         moonshot: {
           label: 'Moonshot',
           description: 'kimi-k2-turbo-preview, moonshot-v1-8k-vision-preview, etc.'
         },
-        qianfan: {
-          label: 'Baidu Qianfan',
-          description: 'ernie-5.0-thinking-preview, embedding-v1, bce-reranker-base, etc.'
+        siliconflow: {
+          label: 'SiliconFlow',
+          description: 'Chat, text embedding and generic reranking models'
         },
-        longcat: {
-          label: 'LongCat AI',
-          description: 'LongCat-Flash-Chat, LongCat-Flash-Thinking, etc.'
+        volcengine: {
+          label: 'Volcengine Ark',
+          description: 'Doubao chat and vision models via the OpenAI-compatible API'
         },
-        lkeap: {
-          label: 'Tencent Cloud LKEAP',
-          description: 'DeepSeek-R1, DeepSeek-V3, lke-reranker-base, etc.'
+        openrouter: {
+          label: 'OpenRouter',
+          description: 'openai/gpt-5.2-chat, google/gemini-3-flash-preview, etc.'
         },
-        nvidia: {
-          label: 'NVIDIA',
-          description: 'deepseek-ai-deepseek-v3_1, nv-embed-v1, rerank-qa-mistral-4b, etc.'
+        gemini: {
+          label: 'Google Gemini',
+          description: 'Gemini models via the official OpenAI-compatible API'
         },
-        novita: {
-          label: 'Novita AI',
-          description: 'moonshotai/kimi-k2.5, zai-org/glm-5, minimax/minimax-m2.7, qwen/qwen3-embedding-0.6b, etc.'
+        ollama: {
+          label: 'Ollama',
+          description: 'Local chat, embedding and vision models with model listing and pulling'
         }
       }
     },

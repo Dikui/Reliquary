@@ -14,7 +14,7 @@ import (
 )
 
 // TestResolveProvider pins the provider+model routing table, including the
-// sub-model matchers (reasoning models, Qwen thinking, LKEAP DeepSeek V3) and
+// sub-model matchers (reasoning models and Qwen thinking) and
 // the baseProvider fallback for everything else.
 func TestResolveProvider(t *testing.T) {
 	cases := []struct {
@@ -24,18 +24,12 @@ func TestResolveProvider(t *testing.T) {
 		want  providerAdapter
 	}{
 		{"deepseek", provider.ProviderDeepSeek, "deepseek-chat", deepseekProvider{}},
-		{"lkeap v3", provider.ProviderLKEAP, "deepseek-v3.1", lkeapProvider{}},
-		{"lkeap r1 falls back", provider.ProviderLKEAP, "deepseek-r1", baseProvider{}},
 		{"qwen thinking", provider.ProviderAliyun, "qwen3-32b", qwenThinkingProvider{}},
 		{"generic", provider.ProviderGeneric, "anything", genericProvider{}},
-		{"litellm", provider.ProviderLiteLLM, "anything", liteLLMProvider{}},
 		{"gemini", provider.ProviderGemini, "gemini-3-flash-preview", geminiProvider{}},
-		{"nvidia", provider.ProviderNvidia, "anything", nvidiaProvider{}},
 		{"volcengine", provider.ProviderVolcengine, "doubao", volcengineProvider{}},
 		{"openai non-reasoning falls back", provider.ProviderOpenAI, "gpt-4o", baseProvider{}},
 		{"openai reasoning", provider.ProviderOpenAI, "gpt-5", openAIReasoningProvider{}},
-		{"azure non-reasoning", provider.ProviderAzureOpenAI, "gpt-4", azureProvider{}},
-		{"azure reasoning", provider.ProviderAzureOpenAI, "gpt-5-mini", azureReasoningProvider{}},
 		{"moonshot fixed temp", provider.ProviderMoonshot, "moonshot-v1-8k", moonshotProvider{}},
 		{"moonshot other falls back", provider.ProviderMoonshot, "kimi-latest", baseProvider{}},
 		{"unknown falls back", provider.ProviderName("nope"), "x", baseProvider{}},
@@ -122,22 +116,6 @@ func TestBuildOutbound_Thinking(t *testing.T) {
 		assert.Contains(t, js, `"enabled"`)
 	})
 
-	t.Run("lkeap deepseek-v3 emits thinking type", func(t *testing.T) {
-		c := newOutboundChat(t, string(provider.ProviderLKEAP), "deepseek-v3.1", nil)
-		body, _, useRaw, err := c.buildOutbound(context.Background(), msgs, &ChatOptions{Thinking: ptrBool(false)}, true)
-		require.NoError(t, err)
-		require.True(t, useRaw)
-		assert.Contains(t, mustJSON(t, body), `"thinking"`)
-	})
-
-	t.Run("lkeap r1 left untouched", func(t *testing.T) {
-		c := newOutboundChat(t, string(provider.ProviderLKEAP), "deepseek-r1", nil)
-		body, _, useRaw, err := c.buildOutbound(context.Background(), msgs, &ChatOptions{Thinking: ptrBool(false)}, true)
-		require.NoError(t, err)
-		assert.False(t, useRaw)
-		_, ok := body.(*openai.ChatCompletionRequest)
-		assert.True(t, ok)
-	})
 }
 
 // TestBuildOutbound_ShapeRequest covers the param-shaping providers that used

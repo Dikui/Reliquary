@@ -183,11 +183,8 @@ func NewChat(config *ChatConfig, ollamaService *ollama.OllamaService) (Chat, err
 // Anthropic 走独立的 Messages 协议实现；其余 OpenAI 兼容供应商统一由
 // RemoteAPIChat 处理，provider 特定行为在构造时通过 providerAdapter 解析。
 func NewRemoteChat(config *ChatConfig) (Chat, error) {
-	providerName := provider.ProviderName(config.Provider)
-	if providerName == "" {
-		providerName = provider.DetectProvider(config.BaseURL)
-	}
-	if providerName == provider.ProviderAnthropic {
+	providerName := provider.Resolve(provider.ProviderName(config.Provider), config.BaseURL)
+	if provider.GetOrDefault(providerName).Implementations[types.ModelTypeKnowledgeQA] == "anthropic" {
 		return NewAnthropicChat(config)
 	}
 	return NewRemoteAPIChat(config)

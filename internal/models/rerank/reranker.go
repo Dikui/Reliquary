@@ -86,7 +86,7 @@ type RerankerConfig struct {
 	ModelName         string
 	Source            types.ModelSource
 	ModelID           string
-	Provider          string // Provider identifier: openai, aliyun, zhipu, siliconflow, jina, generic
+	Provider          string // Provider preset identifier
 	ExtraConfig       map[string]string
 	// CustomHeaders 允许在调用远程 API 时附加自定义 HTTP 请求头（类似 OpenAI Python SDK 的 extra_headers）。
 	CustomHeaders map[string]string
@@ -95,7 +95,7 @@ type RerankerConfig struct {
 
 // ConfigFromModel 根据 types.Model 构造 RerankerConfig。
 // 生产路径（从 DB 拉起）和测试连接路径（临时表单）共享这份映射。
-// appSecret 提供需要二级密钥的供应商签名凭证。
+// appSecret 保留现有模型配置的映射，不参与当前重排请求。
 func ConfigFromModel(m *types.Model, appSecret string) *RerankerConfig {
 	if m == nil {
 		return nil
@@ -133,10 +133,10 @@ type customHeaderSetter interface {
 }
 
 func newReranker(config *RerankerConfig) (Reranker, error) {
-	// Use provider field if set, otherwise detect from URL using provider registry
-	providerName := provider.ProviderName(config.Provider)
-	if providerName == "" {
-		providerName = provider.DetectProvider(config.BaseURL)
+	providerName := provider.Resolve(provider.ProviderName(config.Provider), config.BaseURL)
+	resolved := *config
+	if resolved.BaseURL == "" {
+		resolved.BaseURL = provider.GetOrDefault(providerName).Info().GetDefaultURL(types.ModelTypeRerank)
 	}
 
 	var (
@@ -145,19 +145,9 @@ func newReranker(config *RerankerConfig) (Reranker, error) {
 	)
 	switch providerName {
 	case provider.ProviderAliyun:
-		reranker, err = NewAliyunReranker(config)
-	case provider.ProviderZhipu:
-		reranker, err = NewZhipuReranker(config)
-	case provider.ProviderJina:
-		reranker, err = NewJinaReranker(config)
-	case provider.ProviderNvidia:
-		reranker, err = NewNvidiaReranker(config)
-	case provider.ProviderLKEAP:
-		reranker, err = NewLKEAPReranker(config)
-	case provider.ProviderVolcengine:
-		reranker, err = NewVolcengineReranker(config)
+		reranker, err = NewAliyunReranker(&resolved)
 	default:
-		reranker, err = NewOpenAIReranker(config)
+		reranker, err = NewOpenAIReranker(&resolved)
 	}
 	if err != nil {
 		return nil, err

@@ -18,6 +18,10 @@ go run ./cmd/server reset-password
 
 检索直接查询同一个 PostgreSQL（ParadeDB）数据库，保留 pgvector 与 BM25 混合检索、融合和重排。知识库可以选择嵌入模型，文件统一保存到 `LOCAL_STORAGE_BASE_DIR` 指定的本地目录。备份需包含 PostgreSQL 数据和该目录。
 
+对话模型只使用三种接口：OpenAI 兼容、Anthropic 原生和 Ollama 本地。服务商下拉框从后端预设表读取，包含通用 OpenAI 兼容、OpenAI、Anthropic、DeepSeek、阿里云百炼、智谱、月之暗面、硅基流动、火山方舟、OpenRouter、Google Gemini 和 Ollama。其他服务可选择通用 OpenAI 兼容并填写地址。Gemini 使用官方兼容地址 `https://generativelanguage.googleapis.com/v1beta/openai/`。Ollama 模型列表和拉取管理继续保留。
+
+嵌入使用 OpenAI 兼容接口或 Ollama。阿里云文本嵌入默认地址为 `https://dashscope.aliyuncs.com/compatible-mode/v1`，智谱和硅基流动嵌入也使用兼容接口。重排使用通用 `/rerank` 格式或阿里云百炼原生接口；硅基流动、Jina、vLLM 和 Xinference 等兼容服务可使用通用格式。服务商预设按模型类型筛选，具体模型需支持相应接口。模型测试调用、思考模式、并发与速率限制、模型分级和路由继续保留。
+
 文件访问继续使用带鉴权的 `/files` 代理与 `/files/presigned`。配置 `APP_EXTERNAL_URL` 并代理 `/r/` 后，可生成限时匿名文件链接。
 
 解析保留 `simple`、`anydoc`、`mineru` 和 `mineru_cloud`。文本、Markdown 和图片使用 simple；PDF、Office 和 EPUB 默认使用进程内 anydoc，CSV 默认使用 simple，也可显式选择 anydoc；扫描件和复杂排版可以在解析引擎设置中选择已配置的 MinerU。HTML、HTM、MHTML、XMind 和音频文件上传返回明确的不支持错误，按网址收录使用 HTTP 抓取；需要 JavaScript 渲染的页面返回无法抓取正文的失败原因。

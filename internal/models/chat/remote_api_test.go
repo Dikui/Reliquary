@@ -131,20 +131,16 @@ func TestBuildChatCompletionRequest_MCPToolsFormat(t *testing.T) {
 
 // TestBuildChatCompletionRequest_GPT5MaxCompletionTokens 验证 GPT-5 / o-series
 // 模型的 MaxTokens 自动迁移到 MaxCompletionTokens，且采样参数被剔除。
-// 见 issue #1283：Azure OpenAI 的 gpt-5 系列模型不再支持 max_tokens 字段。
+// 见 issue #1283：GPT-5 系列模型不再支持 max_tokens 字段。
 func TestBuildChatCompletionRequest_GPT5MaxCompletionTokens(t *testing.T) {
 	build := func(t *testing.T, providerName, modelName string) *RemoteAPIChat {
 		t.Helper()
 		c, err := NewRemoteAPIChat(&ChatConfig{
 			Source:    types.ModelSourceRemote,
-			BaseURL:   "https://example.openai.azure.com",
 			ModelName: modelName,
 			APIKey:    "test-key",
 			ModelID:   modelName,
 			Provider:  providerName,
-			ExtraConfig: map[string]string{
-				"api_version": "2025-04-01-preview",
-			},
 		})
 		require.NoError(t, err)
 		return c
@@ -158,14 +154,11 @@ func TestBuildChatCompletionRequest_GPT5MaxCompletionTokens(t *testing.T) {
 		model             string
 		shouldRewriteMaxT bool
 	}{
-		{"AzureOpenAI gpt-5.2", "azure_openai", "gpt-5.2", true},
-		{"AzureOpenAI gpt-5-mini", "azure_openai", "gpt-5-mini", true},
 		{"OpenAI gpt-5", "openai", "gpt-5", true},
 		{"OpenAI o1-mini", "openai", "o1-mini", true},
 		{"OpenAI o3", "openai", "o3", true},
 		{"OpenAI o4-mini", "openai", "o4-mini", true},
 		{"OpenAI gpt-4o (unchanged)", "openai", "gpt-4o", false},
-		{"AzureOpenAI gpt-4 (unchanged)", "azure_openai", "gpt-4", false},
 	}
 
 	for _, tc := range cases {

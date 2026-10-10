@@ -27,6 +27,15 @@
 
 builtin_models: []
 
+# Provider presets: generic, openai, anthropic, deepseek, aliyun, zhipu,
+# moonshot, siliconflow, volcengine, openrouter, gemini, ollama.
+# Other compatible services use generic with their own base_url.
+# Chat uses OpenAI-compatible APIs, native Anthropic, or Ollama.
+# Embeddings use OpenAI-compatible APIs or Ollama; Alibaba Cloud text
+# embeddings use https://dashscope.aliyuncs.com/compatible-mode/v1.
+# Reranking uses generic /rerank APIs or Alibaba Cloud Bailian.
+# Gemini uses https://generativelanguage.googleapis.com/v1beta/openai/.
+
 # ----- Example: env-driven entries — uncomment and adapt --------------------
 #
 # builtin_models:

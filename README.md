@@ -37,7 +37,7 @@ Go 主模块为 `reliquary`；
 
 Reliquary provides **RAG-based Quick Q&A**, a **ReAct Agent** with knowledge retrieval, MCP tools and in-process data analysis, and scheduled knowledge reports. Folder import, chunk editing with revision history, RSS feeds, site adapters, full-access API keys and model integrations support personal knowledge management. Data remains in PostgreSQL and local file storage.
 
-The framework supports auto-syncing RSS feeds and site adapters, handles 10+ document formats including PDF, Word, images, Excel and EPUB. It is compatible with major LLM providers including OpenAI, DeepSeek, Qwen (Alibaba Cloud), Zhipu, Hunyuan, Gemini, MiniMax, NVIDIA, LiteLLM, and Ollama. Office files can be parsed in-process with **anydoc**. Its fully modular design supports configurable LLMs, PostgreSQL retrieval, and local file storage, with support for local and private cloud deployment ensuring complete data sovereignty. Model usage is recorded in the `model_usage` table.
+The framework supports auto-syncing RSS feeds and site adapters, handles 10+ document formats including PDF, Word, images, Excel and EPUB. Chat models use OpenAI-compatible APIs, the native Anthropic API, or local Ollama. Provider presets cover OpenAI, Anthropic, DeepSeek, Alibaba Cloud, Zhipu, Moonshot, SiliconFlow, Volcengine, OpenRouter, Google Gemini and Ollama, plus a generic OpenAI-compatible option for other services. Office files can be parsed in-process with **anydoc**. Its fully modular design supports configurable LLMs, PostgreSQL retrieval, and local file storage, with support for local and private cloud deployment ensuring complete data sovereignty. Model usage is recorded in the `model_usage` table.
 
 
 ## 📱 Interface Showcase
@@ -96,8 +96,9 @@ Fully modular pipeline from document parsing, vectorization, and retrieval to LL
 
 | Capability | Details |
 |------------|---------|
-| LLMs | OpenAI / Azure OpenAI / Anthropic (Claude) / DeepSeek / Qwen (Alibaba Cloud) / Zhipu / Hunyuan / Doubao (Volcengine) / Gemini / MiniMax / NVIDIA / Novita AI / SiliconFlow / OpenRouter / Requesty / LiteLLM / Ollama |
-| Embeddings | Ollama / BGE / GTE / Zhipu / OpenAI-compatible APIs |
+| Model Presets | Generic OpenAI-compatible / OpenAI / Anthropic / DeepSeek / Alibaba Cloud / Zhipu / Moonshot / SiliconFlow / Volcengine / OpenRouter / Google Gemini / Ollama |
+| Embeddings | OpenAI-compatible APIs and Ollama; Alibaba Cloud text embeddings, Zhipu and SiliconFlow use the compatible API |
+| Reranking | Generic `/rerank` APIs and Alibaba Cloud Bailian |
 | Vector DB | PostgreSQL (ParadeDB: pgvector + pg_search) |
 | Object Storage | Local filesystem |
 | API Integration | Full-access API keys with an API integration playground; `resource_urls=public` returns directly loadable file/image URLs |

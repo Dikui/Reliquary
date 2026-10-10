@@ -260,8 +260,6 @@ interface BaseModelTestPayload {
     customHeaders?: Record<string, string>;
     extraConfig?: Record<string, string>;
     interfaceType?: string;
-    /** 第二段密钥（如 LKEAP Rerank 的腾讯云 SecretKey） */
-    appSecret?: string;
 }
 
 // 检查远程API模型
@@ -459,7 +457,7 @@ export function listModelProviders(modelType?: string): Promise<ModelProviderOpt
             })
             .catch((error: any) => {
                 console.error('Failed to list model providers:', error);
-                resolve([]); // 失败时返回空数组，前端可以回退到默认值
+                resolve([]); // 失败时返回空数组，不生成另一份预设数据
             });
     });
 }

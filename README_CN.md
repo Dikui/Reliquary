@@ -43,7 +43,7 @@
 
 框架提供 **RAG 快速问答**、编排知识检索与 MCP 工具的 **ReAct Agent 智能推理**、进程内数据分析以及定时知识报告。树形文件夹、分块编辑与版本历史、RSS 订阅、站点适配器、完整访问 API Key 和模型集成共同支持个人知识管理。数据统一保存在 PostgreSQL 与本地磁盘。
 
-框架支持从 RSS 订阅和站点适配器自动同步知识，覆盖 PDF、Word、图片、Excel、EPUB 等十余种文档格式。模型层面兼容 OpenAI、DeepSeek、Qwen（阿里云）、智谱、混元、Gemini、MiniMax、NVIDIA、LiteLLM、Ollama 等主流厂商。Office 文档可由 **anydoc** 在 Go 进程内解析。全流程模块化设计，大模型可灵活配置，检索统一使用 PostgreSQL，存储支持本地磁盘，支持本地与私有云部署，数据完全自主可控。模型用量继续记录在 `model_usage` 表中。
+框架支持从 RSS 订阅和站点适配器自动同步知识，覆盖 PDF、Word、图片、Excel、EPUB 等十余种文档格式。对话模型使用 OpenAI 兼容接口、Anthropic 原生接口或本地 Ollama。服务商预设包括 OpenAI、Anthropic、DeepSeek、阿里云百炼、智谱、月之暗面、硅基流动、火山方舟、OpenRouter、Google Gemini 和 Ollama，其他服务可通过通用 OpenAI 兼容选项填写地址使用。Office 文档可由 **anydoc** 在 Go 进程内解析。全流程模块化设计，大模型可灵活配置，检索统一使用 PostgreSQL，存储支持本地磁盘，支持本地与私有云部署，数据完全自主可控。模型用量继续记录在 `model_usage` 表中。
 
 ## 📱 功能展示
 
@@ -101,9 +101,10 @@
 
 | 能力 | 详情 |
 |------|------|
-| 模型厂商 | OpenAI / Azure OpenAI / Anthropic（Claude）/ DeepSeek / Qwen（阿里云）/ 智谱 / 混元 / 豆包（火山引擎）/ Gemini / MiniMax / NVIDIA / Novita AI / SiliconFlow / OpenRouter / Requesty / LiteLLM / Ollama |
+| 模型预设 | 通用 OpenAI 兼容 / OpenAI / Anthropic / DeepSeek / 阿里云百炼 / 智谱 / 月之暗面 / 硅基流动 / 火山方舟 / OpenRouter / Google Gemini / Ollama |
 | 向量数据库 | PostgreSQL（ParadeDB：pgvector + pg_search）|
-| Embedding | Ollama / BGE / GTE / 智谱 / OpenAI 兼容接口 |
+| Embedding | OpenAI 兼容接口与 Ollama；阿里云文本嵌入、智谱、硅基流动使用兼容接口 |
+| 重排 | 通用 `/rerank` 接口与阿里云百炼 |
 | 对象存储 | 本地文件系统|
 | API 集成 | 完整访问 API Key 与 API 集成调试台；`resource_urls=public` 直接返回可加载的文件与图片直链 |
 

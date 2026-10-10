@@ -53,30 +53,11 @@ func NewRemoteAPIVLM(config *Config) (*RemoteAPIVLM, error) {
 		return nil, err
 	}
 
-	providerName := provider.ProviderName(config.Provider)
-	if providerName == "" {
-		providerName = provider.DetectProvider(config.BaseURL)
+	apiCfg := openai.DefaultConfig(config.APIKey)
+	if config.BaseURL != "" {
+		apiCfg.BaseURL = config.BaseURL
 	}
 
-	var apiCfg openai.ClientConfig
-	if providerName == provider.ProviderAzureOpenAI {
-		apiCfg = openai.DefaultAzureConfig(config.APIKey, config.BaseURL)
-		apiCfg.AzureModelMapperFunc = func(model string) string {
-			return model
-		}
-		if config.Extra != nil {
-			if v, ok := config.Extra["api_version"]; ok {
-				if vs, ok := v.(string); ok && vs != "" {
-					apiCfg.APIVersion = vs
-				}
-			}
-		}
-	} else {
-		apiCfg = openai.DefaultConfig(config.APIKey)
-		if config.BaseURL != "" {
-			apiCfg.BaseURL = config.BaseURL
-		}
-	}
 	httpClient := newVLMHTTPClient(vlmHTTPTimeout())
 
 	// 注入用户自定义 HTTP header（类似 OpenAI Python SDK 的 extra_headers）

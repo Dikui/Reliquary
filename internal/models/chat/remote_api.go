@@ -46,29 +46,13 @@ func NewRemoteAPIChat(chatConfig *ChatConfig) (*RemoteAPIChat, error) {
 	}
 
 	apiKey := chatConfig.APIKey
-	providerName := provider.ProviderName(chatConfig.Provider)
-	if providerName == "" {
-		providerName = provider.DetectProvider(chatConfig.BaseURL)
-	}
+	providerName := provider.Resolve(provider.ProviderName(chatConfig.Provider), chatConfig.BaseURL)
 
-	var config openai.ClientConfig
-	if providerName == provider.ProviderAzureOpenAI {
-		config = openai.DefaultAzureConfig(apiKey, chatConfig.BaseURL)
-		config.AzureModelMapperFunc = func(model string) string {
-			return model
-		}
-		if chatConfig.ExtraConfig != nil {
-			if v, ok := chatConfig.ExtraConfig["api_version"]; ok {
-				config.APIVersion = v
-			}
-		}
-	} else {
-		config = openai.DefaultConfig(apiKey)
-		if baseURL := chatConfig.BaseURL; baseURL != "" {
-			config.BaseURL = baseURL
-		} else if providerName == provider.ProviderDeepSeek {
-			config.BaseURL = provider.DeepSeekBaseURL
-		}
+	config := openai.DefaultConfig(apiKey)
+	if baseURL := chatConfig.BaseURL; baseURL != "" {
+		config.BaseURL = strings.TrimRight(baseURL, "/")
+	} else if defaultURL := provider.GetOrDefault(providerName).GetDefaultURL(types.ModelTypeKnowledgeQA); defaultURL != "" {
+		config.BaseURL = strings.TrimRight(defaultURL, "/")
 	}
 
 	// The SDK must use the same SSRF-safe transport as the raw HTTP paths.

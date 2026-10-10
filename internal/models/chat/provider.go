@@ -3,7 +3,6 @@ package chat
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 
 	"github.com/sashabaranov/go-openai"
 
@@ -84,18 +83,6 @@ func (qwenThinkingProvider) Thinking() ThinkingStrategy {
 	return enableThinking{alwaysSend: true, disableOnNonStream: true}
 }
 
-// --- LKEAP: thinking via { "thinking": { "type": ... } }, only for DeepSeek V3.x ---
-// R1 series enables chain-of-thought by default and is left untouched (falls
-// back to baseProvider). See https://cloud.tencent.com/document/product/1772/115963
-
-type lkeapProvider struct{ baseProvider }
-
-func (lkeapProvider) Name() provider.ProviderName { return provider.ProviderLKEAP }
-func (lkeapProvider) Matches(model string) bool {
-	return strings.Contains(strings.ToLower(model), "deepseek-v3")
-}
-func (lkeapProvider) Thinking() ThinkingStrategy { return thinkingTypeField{} }
-
 // --- DeepSeek: does not support tool_choice ---
 
 type deepseekProvider struct{ baseProvider }
@@ -111,22 +98,12 @@ func (deepseekProvider) ShapeRequest(req *openai.ChatCompletionRequest, opts *Ch
 	}
 }
 
-// --- Generic (vLLM) / NVIDIA / LiteLLM: thinking via chat_template_kwargs ---
+// Generic (vLLM): thinking via chat_template_kwargs.
 
 type genericProvider struct{ baseProvider }
 
 func (genericProvider) Name() provider.ProviderName { return provider.ProviderGeneric }
 func (genericProvider) Thinking() ThinkingStrategy  { return chatTemplateKwargs{} }
-
-type nvidiaProvider struct{ baseProvider }
-
-func (nvidiaProvider) Name() provider.ProviderName { return provider.ProviderNvidia }
-func (nvidiaProvider) Thinking() ThinkingStrategy  { return chatTemplateKwargs{} }
-
-type liteLLMProvider struct{ baseProvider }
-
-func (liteLLMProvider) Name() provider.ProviderName { return provider.ProviderLiteLLM }
-func (liteLLMProvider) Thinking() ThinkingStrategy  { return chatTemplateKwargs{} }
 
 // --- Gemini OpenAI compatibility: tool thought signatures live in extra_content ---
 
@@ -168,24 +145,6 @@ type volcengineProvider struct{ baseProvider }
 
 func (volcengineProvider) Name() provider.ProviderName { return provider.ProviderVolcengine }
 func (volcengineProvider) Thinking() ThinkingStrategy  { return thinkingTypeField{} }
-
-// --- Azure OpenAI: api-key auth (reasoning variant also strips sampling params) ---
-
-type azureProvider struct{ baseProvider }
-
-func (azureProvider) Name() provider.ProviderName { return provider.ProviderAzureOpenAI }
-func (azureProvider) Auth(req *http.Request, creds authCreds, _ []byte) {
-	req.Header.Set("api-key", creds.APIKey)
-}
-
-type azureReasoningProvider struct{ azureProvider }
-
-func (azureReasoningProvider) Matches(model string) bool {
-	return provider.IsOpenAIReasoningOrGPT5Model(model)
-}
-func (azureReasoningProvider) ShapeRequest(req *openai.ChatCompletionRequest, _ *ChatOptions, _ bool) {
-	shapeOpenAIReasoning(req)
-}
 
 // --- OpenAI reasoning / GPT-5: no sampling params, must use max_completion_tokens ---
 
@@ -233,15 +192,10 @@ func shapeOpenAIReasoning(req *openai.ChatCompletionRequest) {
 // Matches predicate) must precede the generic catch-all for the same provider.
 var providerRegistry = []providerAdapter{
 	qwenThinkingProvider{},
-	lkeapProvider{},
 	deepseekProvider{},
 	genericProvider{},
-	liteLLMProvider{},
 	geminiProvider{},
 	volcengineProvider{},
-	nvidiaProvider{},
-	azureReasoningProvider{},
-	azureProvider{},
 	openAIReasoningProvider{},
 	moonshotProvider{},
 }

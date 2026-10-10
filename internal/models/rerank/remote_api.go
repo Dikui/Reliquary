@@ -64,6 +64,7 @@ func NewOpenAIReranker(config *RerankerConfig) (*OpenAIReranker, error) {
 	if url := config.BaseURL; url != "" {
 		baseURL = url
 	}
+	baseURL = strings.TrimRight(baseURL, "/")
 	if err := validateRerankBaseURL(baseURL); err != nil {
 		return nil, err
 	}

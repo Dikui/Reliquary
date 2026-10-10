@@ -1525,109 +1525,53 @@ export default {
       providerLabel: '服务商',
       providerPlaceholder: '选择模型服务商',
       providers: {
-        novita: {
-          label: 'Novita AI',
-          description: 'moonshotai/kimi-k2.5, zai-org/glm-5, minimax/minimax-m2.7, qwen/qwen3-embedding-0.6b 等'
-        },
-        nvidia: {
-          label: 'NVIDIA',
-          description: 'deepseek-ai-deepseek-v3_1, nv-embed-v1, rerank-qa-mistral-4b, etc.'
-        },
-        lkeap: {
-          label: '腾讯云 LKEAP',
-          description: 'DeepSeek-R1、DeepSeek-V3、lke-reranker-base 等'
-        },
-        longcat: {
-          label: 'LongCat AI',
-          description: 'LongCat-Flash-Chat, LongCat-Flash-Thinking, etc.'
-        },
-        qianfan: {
-          label: '百度千帆 Baidu Cloud',
-          description: 'ernie-5.0-thinking-preview, embedding-v1, bce-reranker-base, etc.'
-        },
-        moonshot: {
-          label: '月之暗面 Moonshot',
-          description: 'kimi-k2-turbo-preview, moonshot-v1-8k-vision-preview, etc.'
-        },
-        qiniu: {
-          label: '七牛云 Qiniu',
-          description: 'deepseek/deepseek-v3.2-251201, z-ai/glm-4.7, etc.'
-        },
-        modelscope: {
-          label: '魔搭 ModelScope',
-          description: 'Qwen/Qwen3-8B, Qwen/Qwen3-Embedding-8B, etc.'
-        },
-        gpustack: {
-          label: 'GPUStack',
-          description: 'Choose your deployed model on GPUStack'
-        },
-        gemini: {
-          label: 'Google Gemini',
-          description: 'gemini-3-flash-preview, gemini-2.5-pro 等'
-        },
-        mimo: {
-          label: '小米 MiMo',
-          description: 'mimo-v2-flash'
-        },
-        minimax: {
-          label: 'MiniMax',
-          description: 'MiniMax-M3, MiniMax-M2.7, MiniMax-M2.7-highspeed 等'
-        },
-        hunyuan: {
-          label: '腾讯混元 Hunyuan',
-          description: 'hunyuan-pro, hunyuan-standard, hunyuan-embedding, etc.'
-        },
-        deepseek: {
-          label: 'DeepSeek',
-          description: 'deepseek-chat, deepseek-reasoner 等'
-        },
-        volcengine: {
-          label: '火山引擎 Volcengine',
-          description: 'doubao-1-5-pro-32k-250115, doubao-embedding-vision-250615, etc.'
-        },
-        jina: {
-          label: 'Jina',
-          description: 'jina-clip-v1, jina-embeddings-v2-base-zh, etc.'
-        },
-        siliconflow: {
-          label: '硅基流动 SiliconFlow',
-          description: 'deepseek-ai/DeepSeek-V3.1, etc.'
-        },
         generic: {
-          label: '自定义 (OpenAI兼容接口)',
-          description: 'Generic API endpoint (OpenAI-compatible)'
-        },
-        requesty: {
-          label: 'Requesty',
-          description: 'openai/gpt-4o-mini, anthropic/claude-sonnet-4-5, etc.'
-        },
-        openrouter: {
-          label: 'OpenRouter',
-          description: 'openai/gpt-5.2-chat, google/gemini-3-flash-preview, etc.'
-        },
-        litellm: {
-          label: 'LiteLLM',
-          description: '自托管代理，统一接入 OpenAI、Anthropic、Gemini、Bedrock 等 100+ 厂商。请将占位 URL 换成可访问地址；localhost 需加入 SSRF_WHITELIST。'
-        },
-        zhipu: {
-          label: '智谱 BigModel',
-          description: 'glm-4.7, embedding-3, rerank, etc.'
-        },
-        aliyun: {
-          label: '阿里云 DashScope',
-          description: 'qwen-plus, tongyi-embedding-vision-plus, qwen3-rerank, etc.'
-        },
-        azure_openai: {
-          label: 'Azure OpenAI',
-          description: 'Microsoft Azure 上的 OpenAI 服务'
-        },
-        anthropic: {
-          label: 'Anthropic',
-          description: 'Claude models via native Anthropic Messages API'
+          label: '通用 OpenAI 兼容',
+          description: '填写 OpenAI 兼容地址，支持对话、文本嵌入和通用重排接口'
         },
         openai: {
           label: 'OpenAI',
-          description: 'gpt-5.2, gpt-5-mini, etc.'
+          description: 'gpt-5.2、gpt-5-mini、text-embedding-3-small 等'
+        },
+        anthropic: {
+          label: 'Anthropic',
+          description: '使用原生 Anthropic Messages API 的 Claude 对话模型'
+        },
+        deepseek: {
+          label: 'DeepSeek',
+          description: 'deepseek-chat、deepseek-reasoner 等'
+        },
+        aliyun: {
+          label: '阿里云百炼',
+          description: 'qwen-plus、text-embedding-v4、qwen3-rerank 等'
+        },
+        zhipu: {
+          label: '智谱 BigModel',
+          description: 'glm-4.7、embedding-3 等'
+        },
+        moonshot: {
+          label: '月之暗面 Moonshot',
+          description: 'kimi-k2-turbo-preview、moonshot-v1-8k-vision-preview 等'
+        },
+        siliconflow: {
+          label: '硅基流动 SiliconFlow',
+          description: '对话、文本嵌入和通用重排模型'
+        },
+        volcengine: {
+          label: '火山方舟',
+          description: '使用 OpenAI 兼容接口的豆包对话和视觉模型'
+        },
+        openrouter: {
+          label: 'OpenRouter',
+          description: 'openai/gpt-5.2-chat、google/gemini-3-flash-preview 等'
+        },
+        gemini: {
+          label: 'Google Gemini',
+          description: '使用官方 OpenAI 兼容接口的 Gemini 模型'
+        },
+        ollama: {
+          label: 'Ollama',
+          description: '本地对话、嵌入和视觉模型，支持模型列表与拉取'
         }
       },
       validation: {
@@ -1641,7 +1585,7 @@ export default {
       thinkingControl: {
         thinkingType: {
           label: 'thinking.type',
-          hint: '火山引擎 Ark；腾讯云 LKEAP（DeepSeek V3 等，选 LKEAP 时默认此项；R1 请改「不写入」）'
+          hint: '火山方舟对话模型'
         },
         enableThinking: {
           label: 'enable_thinking',
@@ -1649,29 +1593,12 @@ export default {
         },
         chatTemplateKwargs: {
           label: 'chat_template_kwargs',
-          hint: '自定义 OpenAI 兼容、NVIDIA NIM、vLLM / 本地 Qwen 部署'
+          hint: '通用 OpenAI 兼容接口、vLLM / 本地 Qwen 部署'
         },
         none: {
           label: '不写入思考参数',
           hint: '智能体「思考模式」开关不生效，不会在请求中写入思考相关参数'
         }
-      },
-      volcengine: {
-        accessKeyLabel: 'Access Key ID',
-        accessKeyPlaceholder: '火山引擎访问密钥 Access Key ID',
-        secretKeyLabel: 'Secret Access Key',
-        secretKeyPlaceholder: '火山引擎访问密钥 Secret Access Key',
-        rerankCredentialHint: 'Rerank 使用 VikingDB AK/SK 签名（非方舟 API Key），模型建议填写 doubao-seed-rerank。'
-      },
-      lkeap: {
-        secretIdLabel: 'SecretId',
-        secretIdPlaceholder: '腾讯云 API 密钥 SecretId',
-        secretKeyLabel: 'SecretKey',
-        secretKeyPlaceholder: '腾讯云 API 密钥 SecretKey',
-        regionLabel: '地域',
-        regionPlaceholder: 'ap-guangzhou',
-        regionDesc: 'RunRerank 支持 ap-beijing、ap-guangzhou 等，默认 ap-guangzhou',
-        rerankCredentialHint: 'Rerank 使用腾讯云 API 签名（非 OpenAI API Key）。请在云 API 密钥控制台创建 SecretId/SecretKey。'
       },
       modelNamePlaceholder: {
         local: '例如：llama2:latest',

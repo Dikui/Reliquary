@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"reliquary/internal/logger"
@@ -53,6 +54,8 @@ func NewOpenAIEmbedder(apiKey, baseURL, modelName string,
 	if baseURL == "" {
 		baseURL = "https://api.openai.com/v1"
 	}
+
+	baseURL = strings.TrimRight(baseURL, "/")
 
 	if modelName == "" {
 		return nil, fmt.Errorf("model name is required")

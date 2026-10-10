@@ -1268,7 +1268,7 @@ type ModelTestRequest struct {
 	SupportsDimensionOverride bool              `json:"supportsDimensionOverride,omitempty"`
 	CustomHeaders             map[string]string `json:"customHeaders,omitempty"`
 	ExtraConfig               map[string]string `json:"extraConfig,omitempty"`
-	// AppSecret 用于 LKEAP / Volcengine Rerank 等需要第二段密钥的场景（对应模型 Parameters.AppSecret）。
+	// AppSecret 保留模型凭据的存储与测试请求兼容。
 	AppSecret string `json:"appSecret,omitempty"`
 	// ModelID, when set, instructs the handler to substitute any missing
 	// secrets (APIKey, AppSecret via ExtraConfig) from the stored model

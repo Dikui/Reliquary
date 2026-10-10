@@ -9,11 +9,6 @@ export function isQwenThinkingModel(modelName: string): boolean {
   )
 }
 
-/** Mirrors backend internal/models/provider.IsLKEAPDeepSeekR1Model */
-export function isLkeapDeepSeekR1Model(modelName: string): boolean {
-  return modelName.toLowerCase().includes('deepseek-r1')
-}
-
 export type ThinkingControlValue =
   | 'none'
   | 'chat_template_kwargs'
@@ -41,20 +36,21 @@ export function defaultThinkingControl(
   switch (p) {
     case 'aliyun':
       return isQwenThinkingModel(model) ? 'enable_thinking' : 'none'
-    case 'lkeap':
-      // R1 系列后端不发 thinking 参数；其余（含未填模型名）按 LKEAP 的 thinking.type 格式预选
-      if (model && isLkeapDeepSeekR1Model(model)) return 'none'
-      return 'thinking_type'
-    case 'generic':
-    case 'nvidia':
-    case 'litellm':
-      return 'chat_template_kwargs'
     case 'volcengine':
       return 'thinking_type'
-    default:
-      // openai, azure_openai, anthropic, zhipu, deepseek, gemini, siliconflow,
-      // hunyuan, moonshot, openrouter, … → baseProvider / noThinking
+    case 'openai':
+    case 'anthropic':
+    case 'zhipu':
+    case 'deepseek':
+    case 'gemini':
+    case 'siliconflow':
+    case 'moonshot':
+    case 'openrouter':
+    case 'ollama':
       return 'none'
+    default:
+      // 通用兼容接口和已删除的服务商标识使用相同默认值。
+      return 'chat_template_kwargs'
   }
 }
 

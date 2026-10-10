@@ -353,7 +353,6 @@ function convertToLegacyFormat(model: ModelConfig) {
     customHeaders: model.parameters.custom_headers
       ? Object.entries(model.parameters.custom_headers).map(([key, value]) => ({ key, value: String(value) }))
       : [],
-    lkeapRegion: model.parameters.extra_config?.region || 'ap-guangzhou',
     // 原始存库值，编辑弹窗内再 resolve（避免打开时被推断值覆盖）
     thinkingControl: model.parameters.extra_config?.thinking_control,
     _modelType: backendTypeToModelType[model.type] || 'chat' as ModelType,
@@ -410,14 +409,15 @@ const providerLabel = (model: any): string => {
   const id = model.provider
   if (!id) return ''
   const key = `model.editor.providers.${id}.label`
-  return te(key) ? t(key) : id
+  // Unknown preset ids use the same generic display name as the editor.
+  return te(key) ? t(key) : t('model.editor.providers.generic.label')
 }
 
 // What the vendor chip on a card shows. Keeps the chip text uniformly
 // short so cards line up:
 //   local  → "Ollama"
-//   remote → provider's localized short name (e.g. "腾讯云 LKEAP",
-//            "阿里云 DashScope"). For the catch-all "generic" provider
+//   remote → provider's localized short name (e.g. "OpenAI",
+//            "阿里云百炼"). For the catch-all "generic" provider
 //            we render a single short word ("自定义" / "Custom") — the
 //            editor dropdown's longer "自定义 (OpenAI兼容接口)" label
 //            blows out the card chip row, and the "OpenAI 兼容" framing
@@ -559,13 +559,7 @@ const handleModelSave = async (modelData: any) => {
     const trimmedApiKey = (modelData.apiKey ?? '').trim()
     const apiKeyFields: { api_key?: string } =
       !editingModel.value && trimmedApiKey ? { api_key: trimmedApiKey } : {}
-    const trimmedAppSecret = (modelData.appSecret ?? '').trim()
-    const appSecretFields: { app_secret?: string } =
-      !editingModel.value && trimmedAppSecret ? { app_secret: trimmedAppSecret } : {}
     const extraConfig: Record<string, string> = {}
-    if (modelData.provider === 'lkeap' && saveType === 'rerank') {
-      extraConfig.region = (modelData.lkeapRegion || 'ap-guangzhou').trim()
-    }
     if (
       saveType === 'chat'
       && modelData.source === 'remote'
@@ -586,7 +580,6 @@ const handleModelSave = async (modelData: any) => {
       parameters: {
         base_url: modelData.baseUrl?.trim() || '',
         ...apiKeyFields,
-        ...appSecretFields,
         provider: modelData.provider || '',
         ...extraConfigFields,
         ...(Object.keys(customHeadersMap).length > 0 ? { custom_headers: customHeadersMap } : {}),
