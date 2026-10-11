@@ -51,16 +51,17 @@ type TopicBackfillJob struct {
 func (TopicBackfillJob) TableName() string { return "topic_backfill_jobs" }
 
 type TopicBackfillBatch struct {
-	ID           string    `json:"id" gorm:"type:varchar(36);primaryKey"`
-	JobID        string    `json:"-"`
-	Ordinal      int       `json:"ordinal"`
-	KnowledgeIDs JSON      `json:"-" gorm:"type:jsonb"`
-	ArticleCount int       `json:"article_count"`
-	Status       string    `json:"status"`
-	Attempts     int       `json:"attempts"`
-	Error        string    `json:"error"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	RetryAt      *time.Time `json:"retry_at,omitempty"`
+	ID           string     `json:"id" gorm:"type:varchar(36);primaryKey"`
+	JobID        string     `json:"-"`
+	Ordinal      int        `json:"ordinal"`
+	KnowledgeIDs JSON       `json:"-" gorm:"type:jsonb"`
+	ArticleCount int        `json:"article_count"`
+	Status       string     `json:"status"`
+	Attempts     int        `json:"attempts"`
+	Error        string     `json:"error"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
 func (TopicBackfillBatch) TableName() string { return "topic_backfill_batches" }

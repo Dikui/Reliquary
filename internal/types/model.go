@@ -96,6 +96,7 @@ const (
 	ModelSourceVolcengine  ModelSource = "volcengine"  // Volcengine model
 	ModelSourceDeepseek    ModelSource = "deepseek"    // Deepseek model
 	ModelSourceOpenAI      ModelSource = "openai"      // OpenAI model
+	ModelSourceChatGPT     ModelSource = "chatgpt"     // ChatGPT subscription via the app's own OAuth grant
 	ModelSourceGemini      ModelSource = "gemini"      // Gemini model
 	ModelSourceSiliconFlow ModelSource = "siliconflow" // SiliconFlow model
 	ModelSourceOpenRouter  ModelSource = "openrouter"  // OpenRouter model

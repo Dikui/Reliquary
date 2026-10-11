@@ -13,7 +13,7 @@ export interface ModelConfig {
   name: string;
   display_name?: string;
   type: 'KnowledgeQA' | 'Embedding' | 'Rerank';
-  source: 'local' | 'remote';
+  source: 'local' | 'remote' | 'chatgpt';
   description?: string;
   parameters: {
     base_url?: string;

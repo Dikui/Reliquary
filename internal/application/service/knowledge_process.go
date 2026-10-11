@@ -1062,6 +1062,10 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) (
 			return nil
 		}
 		defer func() {
+			if types.IsChatGPTDeferred(returnErr) {
+				s.markArticleProcessingFailed(ctx, knowledge, returnErr)
+				return
+			}
 			if returnErr != nil && refetchingOriginal {
 				s.markArticleProcessingFailed(ctx, knowledge, fmt.Errorf("cannot refetch original article for reprocessing: %w", returnErr))
 			}

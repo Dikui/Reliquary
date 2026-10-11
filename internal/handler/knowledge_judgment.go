@@ -2,8 +2,10 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	werrors "reliquary/internal/errors"
@@ -56,6 +58,9 @@ func (h *KnowledgeHandler) ResolveProcessingReview(c *gin.Context) {
 	}
 	item, err := editor.ResolveProcessingReview(c.Request.Context(), c.Param("id"), input.Action, input.ContentType, input.ConfirmRemoveBody)
 	if err != nil {
+		if writeChatGPTSynchronousPause(c, err) {
+			return
+		}
 		c.Error(err)
 		return
 	}
@@ -103,8 +108,28 @@ func (h *KnowledgeHandler) CorrectContentType(c *gin.Context) {
 	}
 	item, err := editor.CorrectContentType(c.Request.Context(), c.Param("id"), input.ContentType, input.ConfirmRemoveBody)
 	if err != nil {
+		if writeChatGPTSynchronousPause(c, err) {
+			return
+		}
 		c.Error(err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": item})
+}
+
+// These user decisions commit synchronously. Keep the old article and require
+// an explicit retry after recovery, rather than applying a stale choice later.
+func writeChatGPTSynchronousPause(c *gin.Context, err error) bool {
+	var paused *types.ChatGPTDeferredError
+	if !errors.As(err, &paused) {
+		return false
+	}
+	seconds := max(int((time.Until(paused.RetryAt)+time.Second-1)/time.Second), 1)
+	c.Header("Retry-After", strconv.Itoa(seconds))
+	c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": gin.H{
+		"code":    "chatgpt_generation_paused",
+		"message": "ChatGPT generation is paused. The article is unchanged. Restore availability in model settings, then retry this operation.",
+		"details": gin.H{"reason": paused.Reason, "retry_at": paused.RetryAt, "manual_retry_required": true},
+	}})
+	return true
 }

@@ -674,7 +674,16 @@ func classifyConnectionError(errMsg string) string {
 func (h *InitializationHandler) checkChatModelConnection(
 	ctx context.Context, model *types.Model,
 ) (bool, string) {
-	chatInstance, err := chat.NewChat(chat.ConfigFromModel(model), h.ollamaService)
+	var chatInstance chat.Chat
+	var err error
+	if model.Source == types.ModelSourceChatGPT {
+		if model.ID == "" {
+			return false, "Save the ChatGPT model before testing the connection"
+		}
+		chatInstance, err = h.modelService.GetChatModel(ctx, model.ID)
+	} else {
+		chatInstance, err = chat.NewChat(chat.ConfigFromModel(model), h.ollamaService)
+	}
 	if err != nil {
 		return false, fmt.Sprintf("创建聊天实例失败: %v", err)
 	}

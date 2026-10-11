@@ -43,6 +43,7 @@ async function renderEditor({ locale = 'zh-CN', modelType = 'chat', modelData = 
 } = {}) {
   const requests: string[] = []
   const confirmed: any[] = []
+  const chatgptRequests: string[] = []
   const i18n = createI18n({ legacy: false, locale, messages: { 'zh-CN': zhCN, 'en-US': enUS } })
   const stub = defineComponent({ setup: (_, { attrs, slots }) => () => h('div', attrs, slots.default?.()) })
   const modules: Record<string, unknown> = {
@@ -54,6 +55,10 @@ async function renderEditor({ locale = 'zh-CN', modelType = 'chat', modelData = 
       testEmbeddingModel: testEmbedding,
     },
     '@/api/model': {},
+    '@/utils/request': { get: async (path: string) => {
+      chatgptRequests.push(path)
+      return { success: true, data: path.endsWith('/accounts') ? { accounts: [{ id: 'chatgpt-account', email: 'user@example.com', subject: 'subject', client_id: 'oaiapp_workspace_a', status: 'connected', scopes: [], expires_at: '', welcome_acknowledged: true }], encryption_ready: true, callback_url: 'http://127.0.0.1:8080/auth/chatgpt/callback' } : [{ slug: 'chatgpt-model-slug', display_name: 'Account model' }] }
+    } },
     '@/stores/ui': { useUIStore: () => ({}) },
     '@/utils/thinkingControl': { defaultThinkingControl, resolveThinkingControl },
     '@/utils/contextWindow': { DEFAULT_MODEL_CONTEXT_WINDOW },
@@ -67,6 +72,7 @@ async function renderEditor({ locale = 'zh-CN', modelType = 'chat', modelData = 
     new Function('require', 'module', 'exports', output)((name: string) => modules[name] ?? require(name), module, module.exports)
     return module.exports
   }
+  modules['@/api/chatgpt'] = evaluate(readFileSync(new URL('../api/chatgpt.ts', import.meta.url), 'utf8'))
   const component = evaluate(script.content).default
   component.ssrRender = evaluate(template.code).ssrRender
   const setup = component.setup
@@ -89,7 +95,7 @@ async function renderEditor({ locale = 'zh-CN', modelType = 'chat', modelData = 
     props: ['value', 'label'],
     setup: (props, { slots }) => () => h('div', { 'data-option-value': props.value }, [props.label, slots.default?.()]),
   }))
-  return { html: await renderToString(app), state, requests, confirmed }
+  return { html: await renderToString(app), state, requests, confirmed, chatgptRequests }
 }
 
 for (const locale of ['zh-CN', 'en-US'] as const) {
@@ -198,4 +204,29 @@ test('a response from a previous model type cannot overwrite the active preset l
   })
   assert.deepEqual(state.providerOptions.value.map((preset: ModelProviderOption) => preset.value), rerankIds)
   assert.equal(state.loadingProviders.value, false)
+})
+
+for (const locale of ['zh-CN', 'en-US'] as const) {
+  test(`${locale}: ChatGPT source loads account-specific model names through the real API and validates the selected slug`, async () => {
+    const { state, html, confirmed, chatgptRequests } = await renderEditor({ locale, scenario: async state => {
+      state.formData.value.apiKey = 'old-secret'; state.formData.value.baseUrl = 'https://old.example'; state.formData.value.customHeaders = [{ key: 'Secret', value: 'old-header' }]
+      await state.handleSourceChange('chatgpt')
+      state.formData.value.modelName = 'chatgpt-model-slug'; state.selectChatGPTModel()
+      await state.handleConfirm()
+      await state.handleSourceChange('chatgpt')
+    } })
+    assert.deepEqual(chatgptRequests.slice(0, 2), ['/api/v1/chatgpt/accounts', '/api/v1/chatgpt/accounts/chatgpt-account/models'])
+    assert.equal(confirmed[0].source, 'chatgpt'); assert.equal(confirmed[0].chatgptAccountID, 'chatgpt-account')
+    assert.equal(confirmed[0].modelName, 'chatgpt-model-slug'); assert.equal(confirmed[0].displayName, 'Account model')
+    assert.equal(confirmed[0].apiKey, ''); assert.equal(confirmed[0].baseUrl, ''); assert.deepEqual(confirmed[0].customHeaders, [])
+    assert.match(html, /Account model/); assert.match(html, /Using ChatGPT plan/)
+    assert.equal(state.showThinkingControlField.value, false)
+  })
+}
+test('ChatGPT is unavailable to embedding and rerank model sources', async () => {
+  for (const modelType of ['embedding', 'rerank'] as const) {
+    const { state, html, chatgptRequests } = await renderEditor({ modelType, scenario: async state => { await state.handleSourceChange('chatgpt') } })
+    assert.notEqual(state.formData.value.source, 'chatgpt'); assert.deepEqual(chatgptRequests, [])
+    assert.doesNotMatch(html, /chatgpt-model-account/)
+  }
 })

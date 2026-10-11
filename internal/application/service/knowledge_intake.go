@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/hibiken/asynq"
 	"gorm.io/gorm"
 	"io"
 	"net/url"
@@ -284,7 +285,7 @@ func (s *knowledgeService) ReviewKnowledgeIntake(ctx context.Context, id, action
 		return nil, err
 	}
 	defer func() {
-		if reviewErr != nil {
+		if reviewErr != nil && !types.IsChatGPTDeferred(reviewErr) {
 			s.failIntake(ctx, knowledge)
 		}
 	}()
@@ -303,6 +304,12 @@ func (s *knowledgeService) ReviewKnowledgeIntake(ctx context.Context, id, action
 		}
 		if action == "supplement_url" {
 			rejected, err := s.reviewIntake(ctx, kb, knowledge, string(body))
+			var deferred *types.ChatGPTDeferredError
+			if errors.As(err, &deferred) {
+				s.markArticleProcessingFailed(ctx, knowledge, err)
+				_, enqueueErr := s.enqueueManualProcessing(ctx, knowledge, string(body), false, asynq.ProcessAt(deferred.RetryAt))
+				return knowledge, enqueueErr
+			}
 			if err != nil || rejected {
 				return knowledge, err
 			}

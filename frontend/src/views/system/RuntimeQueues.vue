@@ -31,6 +31,13 @@
       </div>
     </header>
 
+    <ChatGPTUsageStatus v-if="chatgptPolicy?.paused || chatgptAccounts.some(account => account.status === 'needs_login')" :policy="chatgptPolicy" :accounts="chatgptAccounts" :busy="chatgptResuming" :error="chatgptError" settings-link @resume="resumeChatGPTUsage" />
+
+    <div v-if="chatgptError && !chatgptPolicy" class="rq-state rq-state--error" role="alert">
+      <div class="rq-state-copy"><strong>{{ t('chatgpt.loadFailed') }}</strong><span>{{ chatgptError }}</span></div>
+      <t-button size="small" variant="outline" @click="loadChatGPTStatus">{{ t('system.globalSettings.runtime.retry') }}</t-button>
+    </div>
+
     <div v-if="loading && !loadedOnce" class="rq-loading" aria-live="polite">
       <div class="rq-loading-metrics">
         <t-skeleton
@@ -512,6 +519,8 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import SettingDrawer from '@/components/settings/SettingDrawer.vue'
+import ChatGPTUsageStatus from '@/components/ChatGPTUsageStatus.vue'
+import { getChatGPTAccounts, getChatGPTPolicy, resumeChatGPT, type ChatGPTAccount, type ChatGPTPolicy } from '@/api/chatgpt'
 import { mergeRuntimeTaskPage } from './runtimeTaskPagination'
 import {
   getRuntimeTasks,
@@ -527,6 +536,25 @@ import {
 } from '@/api/system'
 
 const { t, te, locale } = useI18n()
+
+const chatgptPolicy = ref<ChatGPTPolicy | null>(null), chatgptAccounts = ref<ChatGPTAccount[]>([])
+const chatgptResuming = ref(false), chatgptError = ref('')
+let chatgptRequestVersion = 0
+async function loadChatGPTStatus() {
+  const version = ++chatgptRequestVersion
+  try {
+    const [accounts, policy] = await Promise.all([getChatGPTAccounts(), getChatGPTPolicy()])
+    if (version !== chatgptRequestVersion) return
+    chatgptAccounts.value = accounts.accounts; chatgptPolicy.value = policy; chatgptError.value = ''
+  } catch (err: any) { if (version === chatgptRequestVersion) chatgptError.value = err?.message || t('chatgpt.loadFailed') }
+}
+async function resumeChatGPTUsage() {
+  if (chatgptResuming.value) return
+  chatgptResuming.value = true; chatgptError.value = ''
+  try { chatgptPolicy.value = await resumeChatGPT() }
+  catch (err: any) { chatgptError.value = err?.message || t('chatgpt.resumeFailed') }
+  finally { chatgptResuming.value = false }
+}
 
 const POLL_INTERVAL_MS = 5000
 
@@ -886,6 +914,7 @@ async function purgeArchivedTasks() {
 }
 
 async function load(showSpinner: boolean) {
+  loadChatGPTStatus()
   if (showSpinner) loading.value = true
   try {
     const resp = await getRuntimeQueues()
@@ -954,6 +983,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  chatgptRequestVersion++
   stopPolling()
   detachTasksScrollObserver()
 })

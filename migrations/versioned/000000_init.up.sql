@@ -2046,3 +2046,27 @@ CREATE TRIGGER sync_article_search_topic AFTER INSERT OR UPDATE OR DELETE ON pub
 CREATE UNIQUE INDEX idx_knowledge_bases_active_tenant ON public.knowledge_bases (tenant_id) WHERE deleted_at IS NULL;
 
 COMMIT;
+
+CREATE TABLE public.chatgpt_hosts (
+ id integer PRIMARY KEY CHECK (id = 1), ext_agent_host_id text NOT NULL UNIQUE,
+ created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE public.chatgpt_accounts (
+ id uuid PRIMARY KEY, client_id text NOT NULL UNIQUE, issuer text NOT NULL, subject text NOT NULL,
+ email text NOT NULL DEFAULT '', credentials text NOT NULL DEFAULT '', scopes text NOT NULL DEFAULT '',
+ expires_at timestamptz, earliest_refresh_at timestamptz,
+ status text NOT NULL DEFAULT 'signed_out' CHECK (status IN ('connected','signed_out','needs_login')),
+ last_error text NOT NULL DEFAULT '', welcome_acknowledged boolean NOT NULL DEFAULT false, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE public.chatgpt_login_attempts (
+ state text PRIMARY KEY, nonce text NOT NULL, verifier text NOT NULL,
+ callback_url text NOT NULL, client_id text NOT NULL,
+ account_id uuid REFERENCES public.chatgpt_accounts(id), expires_at timestamptz NOT NULL
+);
+CREATE TABLE public.chatgpt_policy (
+ id integer PRIMARY KEY CHECK (id = 1), daily_limit integer CHECK (daily_limit > 0),
+ daily_used integer NOT NULL DEFAULT 0 CHECK (daily_used >= 0), day text NOT NULL,
+ paused boolean NOT NULL DEFAULT false, reason text NOT NULL DEFAULT '', retry_at timestamptz,
+ fallback_model_id varchar(64) NOT NULL DEFAULT '', updated_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.topic_backfill_batches ADD COLUMN retry_at timestamptz;

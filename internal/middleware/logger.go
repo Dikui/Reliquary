@@ -59,6 +59,9 @@ var sensitiveQueryFields = map[string]struct{}{
 	"authorization_attempt": {},
 	"code":                  {},
 	"id_token":              {},
+	"id_token_hint":         {},
+	"nonce":                 {},
+	"code_verifier":         {},
 	"refresh_token":         {},
 	"state":                 {},
 	"token":                 {},
@@ -157,6 +160,9 @@ func Logger() gin.HandlerFunc {
 		start := time.Now()
 		path := c.Request.URL.Path
 		raw := c.Request.URL.RawQuery
+		// OAuth pages can contain fresh continuation state. Their status and
+		// sanitized request path remain useful, but their response body is secret.
+		omitOAuthResponse := path == "/auth/callback" || path == "/auth/chatgpt/continue"
 
 		if strings.HasPrefix(path, "/assets/") {
 			c.Next()
@@ -204,7 +210,9 @@ func Logger() gin.HandlerFunc {
 
 		// 读取响应体
 		responseBodyStr := ""
-		if responseBody.Len() > 0 {
+		if omitOAuthResponse {
+			responseBodyStr = "[OAuth response omitted]"
+		} else if responseBody.Len() > 0 {
 			contentType := c.Writer.Header().Get("Content-Type")
 			if strings.Contains(contentType, "text/event-stream") {
 				responseBodyStr = "[SSE流式响应，已跳过]"

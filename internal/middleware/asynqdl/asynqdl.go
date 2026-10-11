@@ -1,5 +1,5 @@
-// Package asynqdl provides an asynq middleware that records every task
-// whose retry budget is exhausted into the generic task_dead_letters table.
+// Package asynqdl provides an asynq middleware that records exhausted tasks
+// and permanent ChatGPT request failures in the task_dead_letters table.
 //
 // The middleware is the catch-all observability path for asynq failures:
 // without it, archived tasks live only inside Redis with the asynq
@@ -35,12 +35,11 @@ import (
 //   - Tasks that succeed (handler returns nil) are passed through with
 //     zero overhead besides the function call.
 //
-//   - Tasks that fail (handler returns non-nil) trigger an inspection of
-//     asynq's retry counters. We only record on the FINAL retry —
-//     i.e. when GetRetryCount(ctx) >= GetMaxRetry(ctx). Earlier failures
-//     are still reported up to asynq for backoff/retry but do not
-//     create dead-letter rows; otherwise we'd write one row per
-//     transient hiccup.
+//   - Tasks that fail trigger an inspection of asynq's retry counters.
+//     We record when GetRetryCount(ctx) >= GetMaxRetry(ctx), or immediately
+//     for a permanent ChatGPT request error. Earlier transient failures are
+//     reported to asynq for backoff/retry without creating dead-letter rows.
+//     Quota deferrals never create dead letters.
 //
 //   - Insert is best-effort: a DB error is logged and swallowed. The
 //     middleware never alters the task error returned to the caller.
@@ -66,10 +65,10 @@ func MiddlewareWithCallback(repo interfaces.TaskDeadLetterRepository, cb OnDeadL
 	return func(next asynq.Handler) asynq.Handler {
 		return asynq.HandlerFunc(func(ctx context.Context, t *asynq.Task) error {
 			err := next.ProcessTask(ctx, t)
-			if err == nil {
-				return nil
+			if err == nil || types.IsChatGPTDeferred(err) {
+				return err
 			}
-			if !isFinalAttempt(ctx) {
+			if !isFinalAttempt(ctx) && !types.IsChatGPTPermanentError(err) {
 				return err
 			}
 			attempts := 0

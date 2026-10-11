@@ -193,7 +193,7 @@ func (s *TopicService) runBackfillJob(ctx context.Context, job types.TopicBackfi
 			return ctx.Err()
 		}
 		var batch types.TopicBackfillBatch
-		err := s.db.WithContext(ctx).Where("job_id=? AND status='pending'", job.ID).Order("ordinal").First(&batch).Error
+		err := s.db.WithContext(ctx).Where("job_id=? AND status='pending' AND (retry_at IS NULL OR retry_at <= ?)", job.ID, time.Now()).Order("ordinal").First(&batch).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil
 		}
@@ -213,6 +213,11 @@ func (s *TopicService) runBackfillJob(ctx context.Context, job types.TopicBackfi
 		matched, callErr := s.judgeBatch(ctx, job, batch)
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+		if types.IsChatGPTDeferred(callErr) {
+			var deferred *types.ChatGPTDeferredError
+			errors.As(callErr, &deferred)
+			return s.db.WithContext(ctx).Model(&batch).Updates(map[string]any{"status": "pending", "error": deferred.Error(), "retry_at": deferred.RetryAt, "attempts": gorm.Expr("GREATEST(attempts-1,0)"), "updated_at": time.Now()}).Error
 		}
 		if err := s.finishBatch(ctx, job, batch, matched, callErr); err != nil {
 			return err

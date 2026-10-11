@@ -54,6 +54,32 @@ go run ./cmd/server reset-password
 
 只运行一个后端进程。模型并发、速率和接口限流由该进程维护；Redis 保存 Asynq 后台队列及配置通知。迁移前先等运行队列完成，数据库备份不包含 Redis 中未完成的任务。
 
+## 使用 ChatGPT 订阅
+
+Reliquary 可以通过自己的 OpenID Connect 登录，使用符合条件的 ChatGPT Plus 或 Pro 账号完成收录审核、文章处理、主题历史归入和实体判断。此方式适用于开源、本地部署应用，具体模型和权限以账号授权结果为准。它不会读取 ChatGPT 对话，也不会读取 Codex 的本地凭据。Embedding 和 rerank 继续配置其他模型来源。参考 [官方快速开始](https://developers.openai.com/siwc/quickstart) 和 [开源应用说明](https://developers.openai.com/siwc/token-sharing-open-source)。
+
+1. 在 `.env` 设置恰好 32 字节的 `SYSTEM_AES_KEY`。访问令牌、刷新令牌和保留的 ID token 都以 AES-256-GCM 加密后存入 PostgreSQL，没有明文降级。数据库备份需要保留同一密钥。
+2. 配置 `CHATGPT_CALLBACK_URL=http://127.0.0.1:8080/auth/callback`，其中 `8080` 应与 Docker Compose 的 `APP_PORT` 后端映射端口一致。回调通过宿主机浏览器访问映射端口进入容器中已启动的后端；容器监听地址无需改成回环地址。回调必须使用 `127.0.0.1`，不能替换为 `localhost`，路径固定 `/auth/callback`。浏览器应运行在这台 Mac mini 上；其他电脑的 `127.0.0.1` 指向它自己，如需跨电脑操作，先建立访问该后端端口的本地 SSH 隧道。`CHATGPT_SETTINGS_URL` 设置成功页面返回模型设置的链接，默认前端地址为 `http://127.0.0.1/platform/settings?section=models`，前端端口变化时同步修改。参考 [官方登录流程](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)。
+3. 在现有 SSRF 白名单配置中保留已用条目，并追加 `auth.openai.com,api.openai.com`。例如已有本地 Ollama 白名单时设置 `SSRF_WHITELIST=host.docker.internal,auth.openai.com,api.openai.com`。授权发现、JWKS、令牌刷新和撤销使用 `auth.openai.com`，模型目录和 Responses 使用 `api.openai.com`；所有请求沿用现有 SSRF 防护。
+4. 重启后端，进入“设置 → 模型设置”，点击 **Continue with ChatGPT**。在新标签页完成账号、工作区和使用订阅额度的授权，确认回调页成功，再回到原设置页。首次使用会显示订阅用量确认。首次注册的客户端 ID 与部署主机 ID 都会保存，重启和再次登录继续使用；多个账号注册分别显示和保存。
+5. 新建聊天模型，选择“用 ChatGPT 登录”，选择已登录的账号和从该账号目录加载的模型。显示名称来自服务端 `display_name`，调用使用 `slug`。将模型分配给生成、轻量审核或实体判断层级。选中支持图片的模型时，可以启用现有视觉能力选项。参考 [模型与推理](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference) 和 [预览限制](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)。
+
+设置中可配置每日调用次数上限，留空表示不限。此计数统计 Reliquary 的生成调用尝试，失败也会计入；每天 UTC 00:00 清零，北京时间为 08:00，不是 OpenAI 的 token 余额。达到上限后暂停，次日自动恢复，也可提高或移除上限。手动恢复不会清零今日次数。
+
+OpenAI 返回 `subscription_sharing_usage_limit_exceeded` 时，设置与运行队列显示额度暂停，并提供 **Manage usage** 链接到 [ChatGPT 用量设置](https://chatgpt.com/settings/usage)。该错误可能对应应用上限，不能仅凭错误码推断全部订阅耗尽或具体重置时间；调整额度或等待官方用量页显示恢复后，点击“手动恢复”。`subscription_sharing_usage_unavailable` 表示暂时无法确认用量，保留凭据并在五分钟后再试。暂停期间未完成的任务延后执行，额度暂停不消耗普通失败重试次数，文章的原始内容保留，主题批次保持待处理。参考 [错误与恢复](https://developers.openai.com/siwc/token-sharing-open-source/errors-and-recovery)。
+
+修改文章内容类型或处理复核中的摘要转全文操作保持同步确认语义。生成暂停时返回可重试的 HTTP 503 与 `Retry-After`，保留原文章、分类、索引和复核状态；恢复后需要用户再次发起操作，系统不会稍后自动应用这次选择。
+
+手动恢复解除生成暂停，已经延后的任务会在原定重试时间运行；需要立即重试文章时，在运行队列对相应任务点击“立即运行”。主题历史归入由后台轮询按批次恢复。
+
+可明确选择一个已启用的本地 Ollama 聊天模型作为额度不足时的备用。配置后，暂停期间的调用使用该备用模型，包括触发额度错误的当前调用；没有备用时只暂停。备用模型同样需要具备任务所需的文本或图片能力。服务器不会自动改用其他付费 API。已发出的并发调用可能在暂停被记录前完成。
+
+与 Codex 开发共用同一 ChatGPT 账号时，需要一起留意订阅用量。官方说明 Plus 的五小时额度在使用订阅的各应用之间共享，Pro 不适用这项五小时上限；各模型、应用及账号权限仍以用量页为准。Reliquary 的每日调用次数限制只限制本应用，不能显示或控制 Codex 的用量。参考 [账号、会话与用量](https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions)。
+
+访问令牌接近过期时自动刷新并原子保存轮换后的凭据。刷新失败会显示“需要重新登录”；临时网络或服务器失败保留加密凭据并允许之后重试，不可用的刷新令牌会清除。点击对应账号的 **Continue with ChatGPT** 重新授权，模型仍关联该账号注册。参考 [令牌说明](https://developers.openai.com/siwc/token-sharing-open-source/token-reference)。
+
+退出时，在模型设置中点击该账号的“退出登录”。后端先尝试撤销可续期会话，再清除本地访问、刷新及 ID token，保留账号与客户端映射、主机 ID。若未确认远程撤销，界面会提示到 ChatGPT 设置断开应用。退出后该账号不再发起生成请求，重新登录后可继续使用原模型配置。
+
 ## 关注与简报
 
 在实体页、主题页，或文章详情的实体与主题标签旁点击“关注”，再次点击即可取消。关注与取消关注会写入操作日志。文章星标继续作为书签，可独立使用。

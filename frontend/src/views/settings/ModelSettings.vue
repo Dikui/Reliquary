@@ -33,6 +33,8 @@
       </div>
     </div>
 
+    <ChatGPTSettings :models="allModels" />
+
     <t-tabs v-model="activeTypeFilter" class="model-type-tabs">
       <t-tab-panel value="all" :label="`${$t('common.all')}(${allLegacyModels.length})`" />
       <t-tab-panel value="chat" :label="`${$t('modelSettings.typeShort.chat')}(${countByType('chat')})`" />
@@ -116,6 +118,7 @@
                 </span>
               </template>
             </p>
+            <a v-if="model.source === 'chatgpt'" class="model-card__usage" href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" @click.stop @keydown.enter.stop>{{ $t('chatgpt.manageUsage') }}</a>
           </div>
         </div>
         <button
@@ -211,6 +214,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import ModelEditorDialog from '@/components/ModelEditorDialog.vue'
 import ModelDebugDrawer from '@/components/ModelDebugDrawer.vue'
+import ChatGPTSettings from './ChatGPTSettings.vue'
 import {
   listModels,
   createModel,
@@ -286,7 +290,8 @@ function convertToLegacyFormat(model: ModelConfig) {
   return {
     id: model.id!,
     name: model.name,
-    displayName: model.display_name || '',
+    displayName: model.display_name || model.parameters.extra_config?.chatgpt_display_name || '',
+    chatgptAccountID: model.parameters.extra_config?.chatgpt_account_id || '',
     source: model.source,
     modelName: model.name,
     baseUrl: model.parameters.base_url || '',
@@ -369,6 +374,7 @@ const providerLabel = (model: any): string => {
 //            want OpenAI compatibility", they just pasted a base URL).
 const vendorLabel = (model: any): string => {
   if (model.source === 'local') return 'Ollama'
+  if (model.source === 'chatgpt') return t('chatgpt.usingPlan')
   if (model.provider === 'generic') {
     return t('modelSettings.source.custom')
   }
@@ -509,6 +515,14 @@ const handleModelSave = async (modelData: any) => {
     ) {
       extraConfig.thinking_control = modelData.thinkingControl
     }
+    if (modelData.source === 'chatgpt') {
+      if (saveType !== 'chat' || !modelData.chatgptAccountID) {
+        MessagePlugin.warning(t('chatgpt.accountRequired'))
+        return
+      }
+      extraConfig.chatgpt_account_id = modelData.chatgptAccountID
+      extraConfig.chatgpt_display_name = modelData.displayName || modelData.modelName
+    }
     const extraConfigFields = Object.keys(extraConfig).length > 0
       ? { extra_config: extraConfig }
       : {}
@@ -520,11 +534,13 @@ const handleModelSave = async (modelData: any) => {
       source: modelData.source,
       description: '',
       parameters: {
-        base_url: modelData.baseUrl?.trim() || '',
-        ...apiKeyFields,
-        provider: modelData.provider || '',
+        ...(modelData.source === 'chatgpt' ? {} : {
+          base_url: modelData.baseUrl?.trim() || '',
+          ...apiKeyFields,
+          provider: modelData.provider || '',
+        }),
         ...extraConfigFields,
-        ...(Object.keys(customHeadersMap).length > 0 ? { custom_headers: customHeadersMap } : {}),
+        ...(modelData.source !== 'chatgpt' && Object.keys(customHeadersMap).length > 0 ? { custom_headers: customHeadersMap } : {}),
         ...(saveType === 'embedding' && modelData.dimension ? {
           embedding_parameters: {
             dimension: modelData.dimension,
@@ -1005,6 +1021,13 @@ onMounted(() => {
 .model-card__sep {
   margin: 0 4px;
   color: var(--td-text-color-placeholder);
+}
+
+.model-card__usage {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--td-brand-color);
 }
 
 .model-card__vision {

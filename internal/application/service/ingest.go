@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	werrors "reliquary/internal/errors"
@@ -193,22 +195,32 @@ func (s *knowledgeService) Ingest(ctx context.Context, request *types.IngestRequ
 	}
 	s.bindContentResources(ctx, tenantID, article.ID, body)
 	rejected, err := s.reviewIntake(ctx, kb, article, body)
+	var deferred *types.ChatGPTDeferredError
+	var processOptions []asynq.Option
 	if err != nil {
 		s.markArticleProcessingFailed(ctx, article, err)
-		s.failIntake(ctx, article)
-		return nil, err
+		if !errors.As(err, &deferred) {
+			s.failIntake(ctx, article)
+			return nil, err
+		}
+		// Collection has committed. Keep its unreviewed original and let the
+		// worker repeat the same review after the generation pause.
+		processOptions = append(processOptions, asynq.ProcessAt(deferred.RetryAt))
 	}
 	if rejected {
 		intake, _ = article.IntakeMetadata()
 		result.ArticleID, result.Status, result.Message, result.Reason = article.ID, "pending_review", "等待收录审核", intake.Reason
 		return result, nil
 	}
-	if _, err := s.enqueueManualProcessing(ctx, article, body, false); err != nil {
+	if _, err := s.enqueueManualProcessing(ctx, article, body, false, processOptions...); err != nil {
 		s.markKnowledgeEnqueueFailed(ctx, article)
 		result.ArticleID, result.Status, result.Message = article.ID, types.ParseStatusFailed, "处理入队失败"
 		return result, nil
 	}
 	result.ArticleID, result.Status, result.Message = article.ID, types.ParseStatusPending, "已收录，正在处理"
+	if deferred != nil {
+		result.Message = "已收录，等待模型恢复后处理"
+	}
 	return result, nil
 }
 

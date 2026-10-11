@@ -24,6 +24,7 @@ import (
 	"reliquary/internal/application/repository"
 	"reliquary/internal/application/service"
 	"reliquary/internal/application/service/file"
+	"reliquary/internal/chatgpt"
 	"reliquary/internal/common"
 	"reliquary/internal/config"
 	"reliquary/internal/database"
@@ -110,7 +111,9 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewEntityNameEmbeddingRebuilder))
 	must(container.Provide(service.NewEmbeddingRebuilder))
 	must(container.Provide(embedding.NewBatchEmbedder))
-	must(container.Provide(service.NewModelServiceWithRoutingDB))
+	must(container.Provide(func(db *gorm.DB) *chatgpt.Manager { return chatgpt.NewManager(db) }))
+	must(container.Provide(service.NewChatGPTPolicyService))
+	must(container.Provide(service.NewModelServiceWithChatGPT))
 	must(container.Provide(service.NewUserService))
 	must(container.Provide(service.NewSystemSettingService))
 	must(container.Provide(service.NewVaultService))
@@ -156,6 +159,8 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(newMCPHandler))
 	must(container.Provide(handler.NewChunkHandler))
 	must(container.Provide(handler.NewModelHandler))
+	must(container.Provide(handler.NewChatGPTHandler))
+	must(container.Provide(handler.NewChatGPTPolicyHandler))
 	must(container.Provide(handler.NewInitializationHandler))
 	must(container.Provide(handler.NewAuthHandler))
 	must(container.Provide(handler.NewSystemHandler))

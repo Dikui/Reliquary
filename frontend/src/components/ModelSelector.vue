@@ -32,6 +32,7 @@
         <div class="model-option">
           <t-icon name="check-circle-filled" class="model-icon" />
           <span class="model-name">{{ modelDisplayName(model) }}</span>
+          <t-tag v-if="model.source === 'chatgpt'" size="small">{{ $t('chatgpt.usingPlan') }}</t-tag>
           <span v-if="model.display_name" class="model-raw-name">{{ model.name }}</span>
           <t-tag v-if="model.is_builtin" size="small" theme="primary">{{ $t('model.builtinTag') }}</t-tag>
           <t-tag v-if="model.is_default" size="small" theme="success">{{ $t('model.defaultTag') }}</t-tag>
@@ -56,6 +57,7 @@
         </div>
       </t-option>
     </t-select>
+    <p v-if="selectedModel?.source === 'chatgpt'" class="model-plan-usage">{{ $t('chatgpt.usingPlan') }} · <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer">{{ $t('chatgpt.manageUsage') }}</a></p>
   </div>
 </template>
 
@@ -107,7 +109,7 @@ const placeholderText = computed(() => {
 })
 
 const modelDisplayName = (model: ModelConfig) => {
-  const displayName = model.display_name?.trim()
+  const displayName = model.display_name?.trim() || model.parameters.extra_config?.chatgpt_display_name?.trim()
   return displayName || model.name
 }
 
@@ -257,4 +259,11 @@ onMounted(() => {
     white-space: nowrap;
   }
 }
+</style>
+
+<style scoped>
+.model-plan-usage { margin: 6px 0 0; font-size: 12px; color: var(--td-text-color-secondary); line-height: 1.5; }
+.model-plan-usage a { color: var(--td-brand-color); text-decoration: none; }
+.model-plan-usage a:hover { text-decoration: underline; }
+.model-plan-usage a:focus-visible { outline: 2px solid var(--td-brand-color); outline-offset: 3px; }
 </style>

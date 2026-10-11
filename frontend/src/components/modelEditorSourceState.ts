@@ -1,4 +1,4 @@
-export type ModelEditorSource = 'local' | 'remote'
+export type ModelEditorSource = 'local' | 'remote' | 'chatgpt'
 
 export type ModelEditorType = 'chat' | 'embedding' | 'rerank'
 

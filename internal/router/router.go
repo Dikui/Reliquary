@@ -44,6 +44,8 @@ type RouterParams struct {
 	TenantService                interfaces.TenantService
 	TenantAPIKeyService          interfaces.TenantAPIKeyService
 	ChunkHandler                 *handler.ChunkHandler
+	ChatGPTHandler               *handler.ChatGPTHandler       `optional:"true"`
+	ChatGPTPolicyHandler         *handler.ChatGPTPolicyHandler `optional:"true"`
 	ModelHandler                 *handler.ModelHandler
 	ModelCredentialsHandler      *handler.ModelCredentialsHandler
 	AuthHandler                  *handler.AuthHandler
@@ -97,6 +99,10 @@ func NewRouter(params RouterParams) *gin.Engine {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
+	if params.ChatGPTHandler != nil {
+		r.GET("/auth/callback", params.ChatGPTHandler.Callback)
+		r.GET("/auth/chatgpt/continue", params.ChatGPTHandler.ContinueLogin)
+	}
 	serveResourceGrants(r, params.ResourceCatalog, params.TenantService, params.FileService)
 
 	// 认证中间件
@@ -148,6 +154,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 			v1.GET("/operation-logs", params.OperationLogHandler.List)
 		}
 		RegisterChunkRoutes(v1, params.ChunkHandler, accessGuards)
+		RegisterChatGPTRoutes(v1, params.ChatGPTHandler, params.ChatGPTPolicyHandler)
 		RegisterModelRoutes(v1, params.ModelHandler, params.ModelCredentialsHandler, accessGuards)
 		RegisterInitializationRoutes(v1, params.InitializationHandler, accessGuards)
 		params.SystemHandler.BindDeploymentCapabilities(deploymentCapabilitiesFromRouter(params))

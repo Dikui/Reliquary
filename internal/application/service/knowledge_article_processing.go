@@ -290,6 +290,11 @@ func (s *knowledgeService) callArticleProcessing(ctx context.Context, kb *types.
 }
 
 func (s *knowledgeService) markArticleProcessingFailed(ctx context.Context, k *types.Knowledge, err error) {
+	if types.IsChatGPTDeferred(err) {
+		k.ParseStatus, k.SummaryStatus, k.ErrorMessage, k.UpdatedAt = types.ParseStatusPending, types.SummaryStatusPending, err.Error(), time.Now()
+		_ = s.repo.UpdateKnowledge(ctx, k)
+		return
+	}
 	k.ParseStatus, k.SummaryStatus, k.ErrorMessage, k.UpdatedAt = types.ParseStatusFailed, types.SummaryStatusFailed, err.Error(), time.Now()
 	_ = s.repo.UpdateKnowledge(ctx, k)
 	s.failStage(ctx, k.ID, types.StageProcessing, "ARTICLE_PROCESSING_FAILED", err.Error(), err)

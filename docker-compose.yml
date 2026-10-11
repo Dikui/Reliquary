@@ -132,6 +132,9 @@ services:
       # （TENANT_AES_KEY / CRYPTO_MASTER_KEY / CRYPTO_SALT 已废弃：v0.4.0 起加密统一
       #   改用 SYSTEM_AES_KEY，Go 主应用不再读取这三个变量。）
       - SYSTEM_AES_KEY=${SYSTEM_AES_KEY:-}
+      # ChatGPT 授权回调使用宿主机映射的 API 端口，返回链接使用网页端口。
+      - CHATGPT_CALLBACK_URL=${CHATGPT_CALLBACK_URL:-http://127.0.0.1:8080/auth/callback}
+      - CHATGPT_SETTINGS_URL=${CHATGPT_SETTINGS_URL:-http://127.0.0.1/platform/settings?section=models}
       - SSRF_WHITELIST=${SSRF_WHITELIST:-}
       # 默认放行本机代理 fake-ip 使用的基准测试保留网段；显式设为空字符串即关闭。
       - SSRF_WHITELIST_EXTRA=${SSRF_WHITELIST_EXTRA-198.18.0.0/15}

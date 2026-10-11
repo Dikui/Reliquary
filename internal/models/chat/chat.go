@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"reliquary/internal/models/provider"
@@ -119,6 +120,12 @@ type ChatConfig struct {
 	ExtraConfig       map[string]string
 	// CustomHeaders 允许在调用远程 OpenAI 兼容 API 时附加自定义 HTTP 请求头（类似 OpenAI Python SDK 的 extra_headers）。
 	CustomHeaders map[string]string
+	// ChatGPTToken obtains the current credential from the app's OAuth session.
+	// Credentials are never copied into persistent model parameters.
+	ChatGPTToken func(context.Context) (string, error)
+	// ChatGPTHTTPClient is injected by the credential service. Nil uses the
+	// existing SSRF-safe client; tests can supply a local httptest transport.
+	ChatGPTHTTPClient *http.Client
 }
 
 // ConfigFromModel 根据 types.Model 构造 ChatConfig。
@@ -151,6 +158,8 @@ func NewChat(config *ChatConfig, ollamaService *ollama.OllamaService) (Chat, err
 		c, err = NewOllamaChat(config, ollamaService)
 	case string(types.ModelSourceRemote):
 		c, err = NewRemoteChat(config)
+	case string(types.ModelSourceChatGPT):
+		c, err = NewChatGPTChat(config)
 	default:
 		return nil, fmt.Errorf("unsupported chat model source: %s", config.Source)
 	}

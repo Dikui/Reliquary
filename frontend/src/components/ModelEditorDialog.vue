@@ -26,7 +26,7 @@
       </span>
     </template>
 
-    <t-form ref="formRef" :data="formData" :rules="rules" layout="vertical">
+    <t-form ref="formRef" :data="formData" :rules="rules" layout="vertical" novalidate>
 
       <section v-if="!isEdit" class="setting-drawer__section">
         <h4 class="setting-drawer__section-title">{{ $t('model.editor.sectionType') }}</h4>
@@ -82,6 +82,9 @@
               <t-icon name="server" class="source-option__icon" />
               <span class="source-option__label">{{ $t('model.editor.sourceLocal') }}</span>
             </button>
+            <button v-if="activeModelType === 'chat'" type="button" class="source-option" :class="{ 'is-active': formData.source === 'chatgpt' }" role="radio" :aria-checked="formData.source === 'chatgpt'" @click="handleSourceChange('chatgpt')">
+              <span class="source-option__label">{{ $t('chatgpt.source') }}</span>
+            </button>
           </div>
 
           <!-- ReRank模型不支持Ollama的提示信息 -->
@@ -101,6 +104,28 @@
             </t-button>
           </div>
         </div>
+
+        <template v-if="formData.source === 'chatgpt'">
+          <p class="form-desc">{{ $t('chatgpt.usingPlan') }} · <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer">{{ $t('chatgpt.manageUsage') }}</a></p>
+          <div class="form-item">
+            <label for="chatgpt-model-account" class="form-label required">{{ $t('chatgpt.account') }}</label>
+            <t-select id="chatgpt-model-account" v-model="formData.chatgptAccountID" :loading="loadingChatGPT" :placeholder="$t('chatgpt.selectAccount')" :aria-label="$t('chatgpt.account')" @change="loadChatGPTModels">
+              <t-option v-for="account in chatgptAccounts" :key="account.id" :value="account.id" :label="chatGPTAccountLabel(account)" :disabled="account.status !== 'connected'" />
+            </t-select>
+          </div>
+          <div class="form-item">
+            <label for="chatgpt-model-slug" class="form-label required">{{ $t('model.modelName') }}</label>
+            <t-select id="chatgpt-model-slug" v-model="formData.modelName" :loading="loadingChatGPT" :placeholder="$t('chatgpt.selectModel')" :aria-label="$t('model.modelName')" @change="selectChatGPTModel">
+              <t-option v-for="model in chatgptModels" :key="model.slug" :value="model.slug" :label="model.display_name" />
+            </t-select>
+            <t-button variant="text" size="small" class="refresh-btn" :loading="loadingChatGPT" :disabled="loadingChatGPT || !formData.chatgptAccountID" @click="loadChatGPTModels">
+              <t-icon name="refresh" />
+              {{ loadingChatGPT ? $t('common.loading') : $t('chatgpt.refreshModels') }}
+            </t-button>
+          </div>
+          <p v-if="chatgptError" class="form-desc form-desc--warn" role="alert">{{ chatgptError }}</p>
+          <t-button variant="text" size="small" @click="goToChatGPTSettings">{{ $t('chatgpt.openSettings') }}</t-button>
+        </template>
 
         <!-- Ollama 本地模型选择器 -->
         <div v-if="formData.source === 'local'" class="form-item">
@@ -378,6 +403,7 @@ import CredentialResource, {
   type CredentialResourceApi,
 } from '@/components/credentials/CredentialResource.vue'
 import { shouldShowOllamaUnavailableTip } from '@/components/modelEditorSourceState'
+import { getChatGPTAccounts, listChatGPTModels, chatGPTAccountLabel, type ChatGPTAccount, type ChatGPTModel } from '@/api/chatgpt'
 
 interface CustomHeaderItem {
   key: string
@@ -387,7 +413,8 @@ interface CustomHeaderItem {
 interface ModelFormData {
   id: string
   name: string
-  source: 'local' | 'remote'
+  source: 'local' | 'remote' | 'chatgpt'
+  chatgptAccountID?: string
   provider?: string // Provider identifier: openai, aliyun, zhipu, generic, etc.
   modelName: string
   displayName?: string
@@ -653,12 +680,13 @@ const rules = computed(() => ({
   ],
   baseUrl: [
     {
-      required: true,
+      required: formData.value.source === 'remote',
       message: t('model.editor.validation.baseUrlRequired'),
       trigger: 'blur'
     },
     {
       validator: (val: string) => {
+        if (formData.value.source !== 'remote') return { result: true }
         if (!val || !val.trim()) {
           return { result: false, message: t('model.editor.validation.baseUrlEmpty') }
         }
@@ -739,7 +767,7 @@ const selectModelType = async (type: EditorModelType) => {
   if (isEdit.value || draftModelType.value === type) return
   draftModelType.value = type
 
-  if (type === 'rerank') {
+  if (type === 'rerank' || (type !== 'chat' && formData.value.source === 'chatgpt')) {
     await handleSourceChange('remote')
   }
   if (type !== 'embedding') {
@@ -817,6 +845,7 @@ watch(() => props.visible, (val) => {
       }
       // 否则：连续两次"新增"打开（中间是点遮罩/ESC 关闭的）→ 保留上次填写
 
+      if (formData.value.source === 'chatgpt') loadChatGPTAccounts()
       lastOpenedModelId.value = currentId
 
       // ReRank 模型强制使用 remote 来源（Ollama 不支持 ReRank）
@@ -987,19 +1016,64 @@ const loadOllamaModels = async () => {
   }
 }
 
-const handleSourceChange = async (source: 'local' | 'remote') => {
+const handleSourceChange = async (source: 'local' | 'remote' | 'chatgpt') => {
+  if (source === 'chatgpt' && activeModelType.value !== 'chat') return
+  if (formData.value.source !== source && source === 'chatgpt') {
+    formData.value.modelName = ''
+    formData.value.displayName = ''
+    formData.value.baseUrl = ''
+    formData.value.apiKey = ''
+    formData.value.customHeaders = []
+    formData.value.thinkingControl = undefined
+  }
   if (source === 'remote' && formData.value.provider === 'ollama') {
     formData.value.provider = 'generic'
     formData.value.interfaceType = undefined
     formData.value.baseUrl = ''
   }
   formData.value.source = source
+  if (source === 'chatgpt') await loadChatGPTAccounts()
   if (source === 'local') {
     formData.value.supportsImages = false
     formData.value.interfaceType = 'ollama'
     await loadOllamaModels()
   }
 }
+
+const chatgptAccounts = ref<ChatGPTAccount[]>([])
+const chatgptModels = ref<ChatGPTModel[]>([])
+const loadingChatGPT = ref(false), chatgptError = ref('')
+let chatgptRequestVersion = 0
+async function loadChatGPTAccounts() {
+  const version = ++chatgptRequestVersion
+  loadingChatGPT.value = true; chatgptError.value = ''
+  try {
+    const result = await getChatGPTAccounts()
+    if (version !== chatgptRequestVersion || formData.value.source !== 'chatgpt') return
+    chatgptAccounts.value = result.accounts
+    if (!formData.value.chatgptAccountID) formData.value.chatgptAccountID = result.accounts.find(account => account.status === 'connected')?.id
+    await loadChatGPTModels()
+  } catch (err: any) { if (version === chatgptRequestVersion) chatgptError.value = err?.message || t('chatgpt.loadFailed') }
+  finally { if (version === chatgptRequestVersion) loadingChatGPT.value = false }
+}
+async function loadChatGPTModels() {
+  const version = ++chatgptRequestVersion, accountID = formData.value.chatgptAccountID
+  chatgptModels.value = []; chatgptError.value = ''
+  if (!accountID) { loadingChatGPT.value = false; return }
+  loadingChatGPT.value = true
+  try {
+    const models = await listChatGPTModels(accountID)
+    if (version !== chatgptRequestVersion || formData.value.source !== 'chatgpt') return
+    chatgptModels.value = models
+    if (!models.some(model => model.slug === formData.value.modelName)) formData.value.modelName = ''
+    if (!models.length) chatgptError.value = t('chatgpt.noModels')
+  } catch (err: any) { if (version === chatgptRequestVersion) chatgptError.value = err?.message || t('chatgpt.loadFailed') }
+  finally { if (version === chatgptRequestVersion) loadingChatGPT.value = false }
+}
+function selectChatGPTModel() {
+  formData.value.displayName = chatgptModels.value.find(model => model.slug === formData.value.modelName)?.display_name || ''
+}
+function goToChatGPTSettings() { dialogVisible.value = false; uiStore.openSettings('models') }
 
 // 刷新模型列表
 const refreshOllamaModels = async () => {
@@ -1231,6 +1305,10 @@ const handleConfirm = async () => {
       }
     }
 
+    if (formData.value.source === 'chatgpt' && (!formData.value.chatgptAccountID || !chatgptModels.value.some(model => model.slug === formData.value.modelName))) {
+      MessagePlugin.warning(t('chatgpt.accountRequired'))
+      return
+    }
     // 执行表单验证
     await formRef.value?.validate()
 
@@ -1350,6 +1428,7 @@ const startDownload = async (modelName: string) => {
 
 // 组件卸载时清理定时器
 onUnmounted(() => {
+  chatgptRequestVersion++
   if (downloadInterval) {
     clearInterval(downloadInterval)
   }
@@ -1357,6 +1436,7 @@ onUnmounted(() => {
 
 // 监听来源变化，清理所有状态
 watch(() => formData.value.source, () => {
+  if (formData.value.source !== 'chatgpt') chatgptRequestVersion++
   // 重置校验状态
   modelChecked.value = false
   modelAvailable.value = false
@@ -1490,6 +1570,7 @@ const handleCancel = () => {
 // 选中按钮通过实色背景 + 主题色描边浮出，未选中态接近透明，节省纵向空间。
 .source-options {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
   padding: 3px;

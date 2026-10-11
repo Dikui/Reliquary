@@ -1,3 +1,7 @@
+DROP TABLE IF EXISTS public.chatgpt_policy;
+DROP TABLE IF EXISTS public.chatgpt_login_attempts;
+DROP TABLE IF EXISTS public.chatgpt_accounts;
+DROP TABLE IF EXISTS public.chatgpt_hosts;
 DROP INDEX IF EXISTS public.idx_knowledge_bases_active_tenant;
 -- PostgreSQL baseline compacted on 2026-10-07 from migrations 000000-000098.
 -- Source: 45daf07. Existing databases must be rebuilt before applying this baseline.

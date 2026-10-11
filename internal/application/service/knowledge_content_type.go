@@ -107,6 +107,9 @@ func (s *knowledgeService) correctContentType(ctx context.Context, id, contentTy
 		}
 		result, err = s.callArticleProcessing(ctx, kb, &fetched, body, images)
 		if err != nil {
+			if types.IsChatGPTDeferred(err) {
+				return before, err
+			}
 			return before, werrors.NewBadRequestError("could not process the full article: " + err.Error())
 		}
 	}
@@ -177,6 +180,9 @@ func (s *knowledgeService) correctContentType(ctx context.Context, id, contentTy
 			if rollbackErr := fileChange.rollback(); rollbackErr != nil {
 				err = errors.Join(err, fmt.Errorf("restore article file: %w", rollbackErr))
 			}
+		}
+		if types.IsChatGPTDeferred(err) {
+			return before, err
 		}
 		return before, werrors.NewBadRequestError("could not correct the article content type: " + err.Error())
 	}

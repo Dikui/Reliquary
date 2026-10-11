@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"net/http"
+	"reliquary/internal/chatgpt"
 	"strings"
 
 	apperrors "reliquary/internal/errors"
@@ -24,6 +26,9 @@ var ErrModelNotFound = errors.New("model not found")
 
 // modelService implements the model service interface
 type modelService struct {
+	chatGPT                *chatgpt.Manager
+	chatGPTPolicy          *ChatGPTPolicyService
+	chatGPTHTTPClient      *http.Client
 	db                     *gorm.DB
 	repo                   interfaces.ModelRepository
 	kbRepo                 interfaces.KnowledgeBaseRepository
@@ -75,13 +80,16 @@ func (s *modelService) CreateModel(ctx context.Context, model *types.Model) erro
 	if !model.Type.IsSupported() {
 		return apperrors.NewValidationError(fmt.Sprintf("不支持的模型类型: %s", model.Type))
 	}
+	if err := s.validateChatGPTModel(ctx, model); err != nil {
+		return err
+	}
 	if err := validateImageEmbeddingModel(model); err != nil {
 		return err
 	}
 	logger.Infof(ctx, "Creating model: %s, type: %s, source: %s", model.Name, model.Type, model.Source)
 
 	// Handle remote models (e.g., OpenAI)
-	if model.Source == types.ModelSourceRemote {
+	if model.Source == types.ModelSourceRemote || model.Source == types.ModelSourceChatGPT {
 		logger.Info(ctx, "Remote model detected, setting status to active")
 		model.Status = types.ModelStatusActive
 
@@ -209,8 +217,20 @@ func (s *modelService) UpdateModel(ctx context.Context, model *types.Model) erro
 	if model.Type != "" && !model.Type.IsSupported() {
 		return apperrors.NewValidationError(fmt.Sprintf("不支持的模型类型: %s", model.Type))
 	}
+	if err := s.validateChatGPTModel(ctx, model); err != nil {
+		return err
+	}
 	if err := validateImageEmbeddingModel(model); err != nil {
 		return err
+	}
+	if model.Source != types.ModelSourceLocal || model.Type != types.ModelTypeKnowledgeQA || model.Status != types.ModelStatusActive {
+		inUse, err := s.chatGPTFallbackInUse(ctx, model.ID)
+		if err != nil {
+			return err
+		}
+		if inUse {
+			return apperrors.NewBadRequestError("remove the ChatGPT fallback selection before changing this model's source, type or active status")
+		}
 	}
 	logger.Info(ctx, "Start updating model")
 	logger.Infof(ctx, "Updating model ID: %s, name: %s", model.ID, model.Name)
@@ -313,6 +333,9 @@ func (s *modelService) UpdateModelCredentials(
 	if existing == nil {
 		return nil, ErrModelNotFound
 	}
+	if existing.Source == types.ModelSourceChatGPT {
+		return nil, apperrors.NewBadRequestError("Use ChatGPT sign-in to manage this model's credentials")
+	}
 	if existing.IsBuiltin && !types.IsAuthenticatedFromContext(ctx) {
 		return nil, apperrors.NewForbiddenError(
 			"an authenticated user is required to modify builtin model credentials")
@@ -406,6 +429,11 @@ func (s *modelService) DeleteModel(ctx context.Context, id string) error {
 	if existingModel.IsBuiltin {
 		logger.Warnf(ctx, "Attempted to delete builtin model: %s", id)
 		return apperrors.NewBadRequestError("builtin models cannot be deleted")
+	}
+	if inUse, err := s.chatGPTFallbackInUse(ctx, id); err != nil {
+		return err
+	} else if inUse {
+		return apperrors.NewBadRequestError("remove the ChatGPT fallback selection before deleting this model")
 	}
 
 	usage, err := s.getModelUsageDetails(ctx, tenantID, id)
@@ -548,6 +576,9 @@ func (s *modelService) GetChatModel(ctx context.Context, modelId string) (chat.C
 
 	logger.Infof(ctx, "Getting chat model: %s, source: %s", model.Name, model.Source)
 
+	if model.Source == types.ModelSourceChatGPT {
+		return s.chatGPTModel(ctx, model)
+	}
 	chatModel, err := chat.NewChat(chat.ConfigFromModel(model), s.ollamaService)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{

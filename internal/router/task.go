@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -36,6 +37,8 @@ type AsynqTaskParams struct {
 	DataSourceService    interfaces.DataSourceService
 	EntityNameEmbedding  *service.EntityNameEmbeddingRebuilder
 	EmbeddingRebuild     *service.EmbeddingRebuilder
+	TaskEnqueuer         interfaces.TaskEnqueuer `optional:"true"`
+	Inspector            *asynq.Inspector        `optional:"true"`
 	DeadLetterRepo       interfaces.TaskDeadLetterRepository
 	SpanTracker          service.SpanTracker
 }
@@ -101,7 +104,8 @@ func newAsynqServer(concurrency int, queues map[string]int) *asynq.Server {
 		asynq.Config{
 			Concurrency:    concurrency,
 			Queues:         queues,
-			RetryDelayFunc: asynq.DefaultRetryDelayFunc,
+			RetryDelayFunc: chatGPTTaskRetryDelay,
+			IsFailure:      chatGPTTaskIsFailure,
 		})
 }
 
@@ -196,6 +200,7 @@ func RunAsynqServer(params AsynqTaskParams) *asynq.ServeMux {
 	// "processing" until housekeeping cron caught it minutes later — the
 	// UI signal users actually see.
 	knowledgeFailer := newDeadLetterKnowledgeFailer(params.KnowledgeService, params.SpanTracker)
+	mux.Use(chatGPTFinalDeferralMiddleware(params.TaskEnqueuer, params.Inspector))
 	mux.Use(asynqdl.MiddlewareWithCallback(params.DeadLetterRepo, knowledgeFailer))
 
 	// Mark every asynq worker execution as a background task so the generation
@@ -351,3 +356,13 @@ func markKnowledgeListDeleteFailed(
 		logger.Infof(ctx, "dead-letter callback: marked knowledge %s as failed after delete task exhausted retries", knowledgeID)
 	}
 }
+
+func chatGPTTaskRetryDelay(n int, err error, task *asynq.Task) time.Duration {
+	var deferred *types.ChatGPTDeferredError
+	if errors.As(err, &deferred) {
+		return max(time.Minute, time.Until(deferred.RetryAt))
+	}
+	return asynq.DefaultRetryDelayFunc(n, err, task)
+}
+
+func chatGPTTaskIsFailure(err error) bool { return !types.IsChatGPTDeferred(err) }

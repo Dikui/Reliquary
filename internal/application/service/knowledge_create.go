@@ -1101,7 +1101,7 @@ func mergeSourceInfo(old, updated types.SourceInfo) types.SourceInfo {
 
 // enqueueManualProcessing enqueues a manual:process Asynq task for async cleanup + re-indexing.
 func (s *knowledgeService) enqueueManualProcessing(ctx context.Context,
-	knowledge *types.Knowledge, content string, needCleanup bool,
+	knowledge *types.Knowledge, content string, needCleanup bool, extraOptions ...asynq.Option,
 ) (string, error) {
 	requestID, _ := types.RequestIDFromContext(ctx)
 	payload := types.ManualProcessPayload{
@@ -1118,8 +1118,8 @@ func (s *knowledgeService) enqueueManualProcessing(ctx context.Context,
 		return "", fmt.Errorf("failed to marshal manual process payload: %w", err)
 	}
 
-	task := asynq.NewTask(types.TypeManualProcess, payloadBytes,
-		asynq.Queue(types.QueueDefault), asynq.MaxRetry(3), asynq.Timeout(30*time.Minute))
+	options := append([]asynq.Option{asynq.Queue(types.QueueDefault), asynq.MaxRetry(3), asynq.Timeout(30 * time.Minute)}, extraOptions...)
+	task := asynq.NewTask(types.TypeManualProcess, payloadBytes, options...)
 	info, err := s.task.Enqueue(task)
 	if err != nil {
 		return "", fmt.Errorf("failed to enqueue manual process task: %w", err)

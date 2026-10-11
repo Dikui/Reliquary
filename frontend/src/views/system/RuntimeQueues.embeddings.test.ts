@@ -37,7 +37,7 @@ for (const locale of ['zh-CN', 'en-US'] as const) {
     } : require(name), api, api.exports)
     const drawer = defineComponent({ props: ['visible'], setup: (props, { slots }) => () => props.visible ? h('section', { role: 'dialog' }, slots.default?.()) : null })
     const component = loadComponent(new URL('./RuntimeQueues.vue', import.meta.url), {
-      '@/api/system': api.exports, '@/components/settings/SettingDrawer.vue': moduleOf(drawer),
+      '@/api/system': api.exports, '@/api/chatgpt': { getChatGPTAccounts: async () => ({ accounts: [] }), getChatGPTPolicy: async () => ({ paused: false }) }, '@/components/ChatGPTUsageStatus.vue': moduleOf(defineComponent({ setup: () => () => null })), '@/components/settings/SettingDrawer.vue': moduleOf(drawer),
       '@/i18n/countCopy': countCopy, './runtimeTaskPagination': pagination,
       'tdesign-vue-next': { MessagePlugin: {} },
     })
